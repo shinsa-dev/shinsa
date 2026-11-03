@@ -119,6 +119,40 @@ describe('checking the setup before any agent starts', () => {
     expect(harness.send({ type: 'config.record', taskId: 'gone', problems: [] }).events).toEqual([]);
   });
 
+  test('a repository Shinsa started says so in the activity, before the setup goes on', () => {
+    const { harness, taskId } = triaged();
+    harness.send({
+      type: 'config.record',
+      taskId,
+      problems: [],
+      started: { branch: 'main', initialized: false, pushed: false },
+    });
+    expect(harness.task(taskId).activity.map((entry) => entry.text)).toContain(
+      'Started the repository with an empty first commit on main'
+    );
+    expect(harness.task(taskId).stageReason).toBe('setting up the worktree');
+  });
+
+  test('a folder made a repository and pushed to an empty origin says both', () => {
+    const { harness, taskId } = triaged();
+    harness.send({
+      type: 'config.record',
+      taskId,
+      problems: [],
+      started: { branch: 'trunk', initialized: true, pushed: true },
+    });
+    expect(harness.task(taskId).activity.map((entry) => entry.text)).toContain(
+      'Made the folder a git repository and started it with an empty first commit on trunk, and pushed it to origin'
+    );
+  });
+
+  test('a late start for a task that moved on records nothing', () => {
+    const { harness, taskId } = triaged();
+    verifySetup(harness, taskId);
+    const started = { branch: 'main', initialized: false, pushed: false };
+    expect(harness.send({ type: 'config.record', taskId, problems: [], started }).events).toEqual([]);
+  });
+
   test('a late worktree never starts planning past an open setup gate', () => {
     const { harness, taskId } = triaged();
     verifySetup(harness, taskId, [MISSING_BRANCH]);

@@ -159,6 +159,15 @@ export class ScopeRefused extends Schema.TaggedError<ScopeRefused, { readonly br
   static readonly status = 403;
 }
 
+export class NotMachineOwner extends Schema.TaggedError<NotMachineOwner, { readonly brand: unique symbol }>()(
+  'NotMachineOwner',
+  { message: Schema.String },
+  { httpApiStatus: 403 }
+) {
+  static readonly code = 'not_owner';
+  static readonly status = 403;
+}
+
 export class ConnectRefused extends Schema.TaggedError<ConnectRefused, { readonly brand: unique symbol }>()(
   'ConnectRefused',
   { message: Schema.String },

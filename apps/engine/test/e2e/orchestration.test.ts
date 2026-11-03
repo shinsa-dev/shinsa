@@ -1,4 +1,6 @@
 import { afterEach, describe, expect, setDefaultTimeout, test } from 'bun:test';
+import { realpathSync } from 'node:fs';
+import { join } from 'node:path';
 import { isDelegatedRun, listChildRuns, listOpenGates, type Run } from '@shinsa/core';
 import { Transcripts } from '../../src/agents/index.ts';
 import { createGitRepo } from '../helpers/index.ts';
@@ -394,6 +396,40 @@ describe('filing work in another repository', () => {
     expect(docs?.projectId).toBe(projectId);
     const courier = Object.values(w.state.tasks).find((task) => task.createdBy?.kind === 'courier');
     expect(courier?.repoId).toBe(docs?.id);
+    expect(reply).toContain('Created.');
+  });
+
+  test('an agent starts a new repository in the project folder and files the work there', async () => {
+    const w = await open();
+    await w.engine.dispatch({
+      type: 'project.write',
+      project: { name: 'Superwall', color: 'blue', folders: [w.root] },
+    });
+    const projectId = Object.keys(w.state.projects)[0] ?? '';
+    let reply = '';
+    w.agents.queue('plan', async (agent) => {
+      reply = await agent.call('create_task', {
+        request: 'Build the islands app.',
+        repository: 'islands',
+        new_repository: true,
+      });
+      await agent.call('propose_plan', toolPlan(PLAN));
+    });
+    await w.engine.dispatch({
+      type: 'task.create',
+      request: 'Plan the islands',
+      repoId: w.repoId,
+      projectId,
+    });
+    await w.until('the courier', () => reply.length > 0);
+    const islands = Object.values(w.state.repos).find((repo) => repo.name === 'islands');
+    expect(islands).toMatchObject({
+      projectId,
+      defaultBranch: 'main',
+      path: join(realpathSync(w.root), 'islands'),
+    });
+    const courier = Object.values(w.state.tasks).find((task) => task.createdBy?.kind === 'courier');
+    expect(courier?.repoId).toBe(islands?.id);
     expect(reply).toContain('Created.');
   });
 });

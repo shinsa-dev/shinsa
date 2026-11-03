@@ -21,6 +21,7 @@ import type {
   Project,
   PullRequest,
   Repo,
+  RepoStart,
   ReviewComment,
   ReviewEscalation,
   Round,
@@ -333,6 +334,7 @@ type EventBody =
     }
   | { type: 'config.verified'; taskId: string; problems: ConfigProblem[] }
   | { type: 'task.repo_bound'; taskId: string; repoId: string; projectId?: string | null }
+  | { type: 'task.repo_started'; taskId: string; start: RepoStart }
   | { type: 'budget.acknowledged'; taskId: string; spentUsd?: number; spentPercent?: number }
   | { type: 'task.account_bound'; taskId: string; account: RunAccount | null; by?: 'you' | 'shinsa' }
   | {

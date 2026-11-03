@@ -55,8 +55,9 @@ function CommandDialog({
       <DialogContent
         finalFocus={finalFocus}
         overlayClassName={COMMAND_SCRIM_MOTION}
+        bodyClassName='gap-0 overflow-hidden p-0'
         className={cn(
-          'top-[max(3rem,14vh)] w-[min(32.5rem,calc(100vw-2rem))] translate-y-0 gap-0 overflow-hidden rounded-popup bg-popover p-0 *:data-[slot=command]:bg-transparent',
+          'top-[max(3rem,14vh)] w-[min(32.5rem,calc(100vw-2rem))] translate-y-0 overflow-hidden rounded-popup bg-popover *:data-[slot=command]:bg-transparent',
           COMMAND_MOTION,
           className
         )}

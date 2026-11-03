@@ -9,9 +9,11 @@ import type {
   TaskGuest,
 } from '@shinsa/core';
 import {
+  type ConnectChannel,
   type ConnectClaim,
   DomainError,
   type GuestActor,
+  MACHINE_FEATURES,
   type HandshakeKeys,
   MAX_INSTANCE_GUESTS,
   MAX_INSTANCE_MEMBERS,
@@ -35,7 +37,6 @@ import {
   RemoteControl,
   selectRemoteFailureTag,
 } from './client/index.ts';
-import { isOwnerOnlyRoute } from './local-only.ts';
 import { listTeamEntries, RemoteStore, type StoredHandoff, type StoredLink } from './store.ts';
 import { Tunnel, type TunnelConnectorLayer, type TunnelPing } from './tunnel/index.ts';
 
@@ -46,7 +47,6 @@ export { TunnelConnectFailed } from './connector/schema.ts';
 export { TunnelConnector } from './connector/service.ts';
 export type { TunnelConnectorLayer } from './tunnel/index.ts';
 export { RemoteControl } from './client/index.ts';
-export { isTunnelRequest, resolveChannelOriginRefusal, resolveTunnelRoute } from './guard.ts';
 export { REMOTE_FILE, RemoteStore } from './store.ts';
 
 const REMOTE_ACCESS_CHANGED = 'Remote access to this machine changed.';
@@ -72,7 +72,10 @@ export interface RemoteOptions {
   openUrl: (url: string) => Promise<void>;
 }
 
-type ChannelParts = Pick<ChannelHost, 'hub' | 'respond'>;
+interface ChannelParts {
+  readonly hub: ChannelHost['hub'];
+  readonly respond: (request: Request, guest: GuestActor | null, userId: string) => Promise<Response>;
+}
 
 export type HandoffClaimer = (taskId: string, guest: TaskGuest) => Promise<string | null>;
 
@@ -111,6 +114,7 @@ export class Remote {
   readonly #options: RemoteOptions;
   readonly #now: () => number;
   readonly #channels = new Map<RemoteChannel, () => void>();
+  readonly #spentConnects = new Map<string, number>();
   readonly #listeners = new Set<() => void>();
   readonly #waiters = new Map<string, ((approved: boolean) => void)[]>();
   #pairing: { view: PairingView; run: PairingRun } | null = null;
@@ -196,10 +200,11 @@ export class Remote {
       name: this.#options.machineName,
       publicKey: machine.publicKey,
       version: this.#options.version,
+      features: [...MACHINE_FEATURES],
     });
     const pairing = {
       view: { claimCode: start.claimCode, url: start.url, expiresAt: start.expiresAt },
-      run: this.control.startPairing(start),
+      run: this.control.startPairing(start, machine),
     };
     this.#pairing = pairing;
     this.#publish();
@@ -706,16 +711,26 @@ export class Remote {
     this.#publish();
   }
 
-  verifyConnect(token: string | null): Promise<ConnectClaim | null> {
+  verifyConnect(token: string | null, channel: ConnectChannel): Promise<ConnectClaim | null> {
     const credentials = this.store.file.credentials;
     if (!(token && credentials && this.isEnabled)) return Promise.resolve(null);
-    return verifyConnectToken(credentials.connectKey, token, credentials.instanceId, this.#now());
+    const audience = { instanceId: credentials.instanceId, channel };
+    return verifyConnectToken(credentials.connectKey, token, audience, this.#now());
+  }
+
+  spendConnect(claim: ConnectClaim) {
+    const now = this.#now();
+    for (const [nonce, expiresAt] of this.#spentConnects)
+      if (expiresAt <= now) this.#spentConnects.delete(nonce);
+    if (claim.expiresAt <= now || this.#spentConnects.has(claim.nonce)) return false;
+    this.#spentConnects.set(claim.nonce, claim.expiresAt);
+    return true;
   }
 
   openChannel(peer: ChannelPeer, parts: ChannelParts, userId: string) {
     const channel = new RemoteChannel(peer, {
       ...parts,
-      respond: (request, guest) => this.#respondAs(request, guest, parts, userId),
+      respond: (request, guest) => parts.respond(request, guest, userId),
       resolveMachineKey: () => this.store.resolveMachineKey(),
       isEnrolled: (device) => this.#admits(device, userId),
       resolveGuest: (device) => this.#resolveGuest(device),
@@ -729,18 +744,6 @@ export class Remote {
     });
     this.#channels.set(channel, release);
     return channel;
-  }
-
-  #respondAs(request: Request, guest: GuestActor | null, parts: ChannelParts, userId: string) {
-    const path = new URL(request.url).pathname;
-    if (isOwnerOnlyRoute(request.method, path) && this.store.file.access?.owner.id !== userId)
-      return Promise.resolve(
-        Response.json(
-          { error: { code: 'not_owner', message: 'Only this machine’s owner can join a team from it.' } },
-          { status: 403 }
-        )
-      );
-    return parts.respond(request, guest);
   }
 
   closeChannel(channel: RemoteChannel) {

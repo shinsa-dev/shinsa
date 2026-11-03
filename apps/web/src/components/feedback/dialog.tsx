@@ -261,7 +261,7 @@ export function FeedbackDialog({
       }}
     >
       <DialogContent>
-        <DialogHeader className='px-6'>
+        <DialogHeader className='px-10'>
           <DialogTitle>Review the issue</DialogTitle>
           <DialogDescription>
             It opens as a public issue on <span className='whitespace-nowrap'>{FEEDBACK_REPOSITORY}</span>{' '}

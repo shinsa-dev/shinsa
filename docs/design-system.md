@@ -1622,8 +1622,9 @@ Exports: `AlertDialog`, `AlertDialogTrigger`, `AlertDialogPortal`, `AlertDialogO
 | Part | `data-slot` | Classes |
 | --- | --- | --- |
 | Overlay | `alert-dialog-overlay` (also `data-reduced-motion="fade"`) | `fixed inset-0 isolate z-50 bg-black/10 dark:bg-black/55` + `DIALOG_SCRIM_MOTION` |
-| Content | `alert-dialog-content` (also `data-reduced-motion="fade"`, `data-size`) | `group/alert-dialog-content corner-superellipse/1.125 fixed top-1/2 left-1/2 z-50 grid max-h-[calc(100dvh-2rem)] -translate-x-1/2 -translate-y-1/2 gap-3 overflow-y-auto rounded-xl bg-background p-4 text-fg-3 shadow-md outline-none data-[size=default]:w-[min(26.25rem,calc(100vw-2rem))] data-[size=sm]:w-[min(20rem,calc(100vw-2rem))]` + `DIALOG_MOTION` |
-| Header | `alert-dialog-header` | `flex flex-col items-center gap-px text-center` |
+| Content | `alert-dialog-content` (also `data-reduced-motion="fade"`, `data-size`) | `group/alert-dialog-content corner-superellipse/1.125 fixed top-1/2 left-1/2 z-50 flex max-h-[calc(100dvh-2rem)] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-xl bg-background text-fg-3 shadow-md outline-none data-[size=default]:w-[min(26.25rem,calc(100vw-2rem))] data-[size=sm]:w-[min(20rem,calc(100vw-2rem))]` + `DIALOG_MOTION` |
+| Body | `alert-dialog-body` | `grid min-h-0 flex-1 gap-3 overflow-y-auto p-4` |
+| Header | `alert-dialog-header` | `flex flex-col items-center gap-px text-center` + `DIALOG_HEADER_STICKY` |
 | Footer | `alert-dialog-footer` | `flex w-full gap-2 *:flex-1` |
 | Title | `alert-dialog-title` | `text-balance text-center font-medium text-fg-4 text-sm leading-tighter` |
 | Description | `alert-dialog-description` | `text-pretty text-center text-fg-2 text-xs *:[a]:underline *:[a]:underline-offset-3 *:[a]:hover:text-fg-4 *:[a]:active:text-fg-4` |
@@ -1636,7 +1637,7 @@ Exports: `AlertDialog`, `AlertDialogTrigger`, `AlertDialogPortal`, `AlertDialogO
 | --- | --- |
 | Width, `default` | `min(420px, 100vw − 32px)`, fixed: never set by content, so text that loads late cannot change it |
 | Width, `sm` | `min(320px, 100vw − 32px)` |
-| Max height | `100dvh − 32px`, then the popup scrolls (`overflow-y-auto`) |
+| Max height | `100dvh − 32px`, then only its body scrolls (`alert-dialog-body`, `overflow-y-auto`), the header sticking at the top with the same fade as `Dialog` |
 | Padding | 16px on every side |
 | Gap between header, body and footer | 12px (`grid gap-3`) |
 | Title to description | 1px (`gap-px`) |
@@ -2294,8 +2295,9 @@ Wraps Base UI `Dialog` (`@base-ui/react/dialog`). Base UI sets `data-starting-st
 ```
 Dialog (Root)
 ├─ DialogTrigger
-└─ DialogContent (showCloseButton?, overlayClassName?)   → DialogPortal > DialogOverlay + Popup
-   ├─ DialogHeader
+└─ DialogContent (showCloseButton?, bodyClassName?, overlayClassName?)
+   │                              → DialogPortal > DialogOverlay + Popup > body (the part that scrolls)
+   ├─ DialogHeader               (sticks to the top of the body, a fade under it)
    │  ├─ DialogTitle
    │  └─ DialogDescription
    ├─ (body: a <form className='w-full'> with Fields)
@@ -2305,14 +2307,14 @@ Dialog (Root)
    └─ DialogCloseButton          (when showCloseButton)
 ```
 
-Exports: `Dialog`, `DialogTrigger`, `DialogPortal`, `DialogClose`, `DialogOverlay`, `DialogContent`, `DialogCloseButton`, `DialogHeader`, `DialogFooter`, `DialogTitle`, `DialogDescription`, and the motion strings `DIALOG_MOTION`, `DIALOG_SCRIM_MOTION`.
+Exports: `Dialog`, `DialogTrigger`, `DialogPortal`, `DialogClose`, `DialogOverlay`, `DialogContent`, `DialogCloseButton`, `DialogHeader`, `DialogFooter`, `DialogTitle`, `DialogDescription`, the motion strings `DIALOG_MOTION`, `DIALOG_SCRIM_MOTION`, and the layout strings `DIALOG_BODY` (the body that scrolls) and `DIALOG_HEADER_STICKY` (the header that stays).
 
 **Props**
 
 | Part | Props | Default |
 | --- | --- | --- |
 | `Dialog` | `open`, `defaultOpen`, `onOpenChange`, `onOpenChangeComplete`, `modal`, … | |
-| `DialogContent` | Popup props, `showCloseButton?: boolean`, `overlayClassName?: string`, `initialFocus`, `finalFocus` | `showCloseButton=false` |
+| `DialogContent` | Popup props, `showCloseButton?: boolean`, `bodyClassName?: string` (such as `p-0` for content that scrolls on its own), `overlayClassName?: string`, `initialFocus`, `finalFocus` | `showCloseButton=false` |
 | `DialogFooter` | `div` props, `showCloseButton?: boolean` (appends a `secondary` "Close") | `false` |
 | `DialogCloseButton` | Close props, `className` | |
 
@@ -2321,9 +2323,10 @@ Exports: `Dialog`, `DialogTrigger`, `DialogPortal`, `DialogClose`, `DialogOverla
 | Part | `data-slot` | Classes |
 | --- | --- | --- |
 | Overlay | `dialog-overlay`, `data-reduced-motion="fade"` | `fixed inset-0 isolate z-50 bg-black/10 dark:bg-black/55` + `DIALOG_SCRIM_MOTION` + `overlayClassName` |
-| Content | `dialog-content`, `data-reduced-motion="fade"` | `corner-superellipse/1.125 fixed top-1/2 left-1/2 z-50 flex max-h-[calc(100dvh-2rem)] w-[min(26.25rem,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-3 overflow-y-auto rounded-xl bg-background p-4 text-fg-3 shadow-md outline-none` + `DIALOG_MOTION` |
+| Content | `dialog-content`, `data-reduced-motion="fade"` | `corner-superellipse/1.125 fixed top-1/2 left-1/2 z-50 flex max-h-[calc(100dvh-2rem)] w-[min(26.25rem,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-xl bg-background text-fg-3 shadow-md outline-none` + `DIALOG_MOTION` |
+| Body | `dialog-body` | `DIALOG_BODY`: `flex min-h-0 w-full flex-1 flex-col items-center gap-3 overflow-y-auto p-4` + `bodyClassName` |
 | `DialogCloseButton` | `dialog-close`, `aria-label="Close"` | `Button variant='secondary' size='icon-sm'` with `absolute top-3 right-3`, child `<Icon name='IconCrossMedium' />` (14px) |
-| Header | `dialog-header` | `flex w-full flex-col items-center gap-px text-center` |
+| Header | `dialog-header` | `flex w-full flex-col items-center gap-px text-center` + `DIALOG_HEADER_STICKY` (`sticky -top-4 z-10 -mx-4 -mt-4 w-auto self-stretch bg-background px-4 pt-4 dialog-header-fade`) |
 | Footer | `dialog-footer` | `flex w-full gap-2 *:flex-1` |
 | Title | `dialog-title` | `text-balance text-center font-medium text-fg-4 text-sm leading-tighter` |
 | Description | `dialog-description` | `text-pretty text-center text-fg-2 text-xs *:[a]:underline *:[a]:underline-offset-3 *:[a]:hover:text-fg-4 *:[a]:active:text-fg-4` |
@@ -2334,7 +2337,7 @@ Exports: `Dialog`, `DialogTrigger`, `DialogPortal`, `DialogClose`, `DialogOverla
 | | Value |
 | --- | --- |
 | Width | `min(420px, 100vw − 32px)`, fixed from the first frame; never set by content |
-| Max height | `100dvh − 32px`, then scrolls |
+| Max height | `100dvh − 32px`, then only the body scrolls: the header and the corner close button stay, with a fade under the header once the body has scrolled |
 | Position | centred on both axes |
 | Padding | 16px |
 | Children | a centred column, 12px apart |
@@ -6584,7 +6587,7 @@ Example: moving the pointer down Home's In progress card, one grey block glides 
 - Every section holds only the focus project's tasks: the focus is the filter; to see other work, switch focus. Only a search of every task reaches past it.
 - A task shows in one section only. Sections that summarise (Recently finished, Recent conversations) leave out tasks another section holds, but not the tasks the page's guide names; their own counts (five at most) are picked after that.
 - Wide (Home): under the composer, each section a `text-2xs` label over a `rounded-xl` list card; each row a 20px gate or stage tile, title, status line, age. The guide above summarises these sections; a task it names is still listed in its section.
-- A queue row is a small overview card on two lines: the title, then one summary line laid out across the row: the handle and status (the stage, not "Waiting to check in again", which the row's tile already shows), a mini track, then what is happening. The mini track is the task's steps as 6px dots joined by 8px hairlines (`h-px w-2`), `bg-green-4` done, a blue pulse current, `bg-amber-4` waiting on you, a dashed `fg-2` ring skipped, a `bg-a3` ring not started; one image labelled "Step 4 of 7: Build 1/2", no tooltip per dot. After it, while an agent works and no decision is open, the agent's latest action in the present tense, shimmering (still when the run is paused); otherwise the current step's count when it has one and the status does not already name the step ("Checks 2/5"), and nothing more. No static description or stage reason: the status and the dots already say it. While the steps can still change a spinner stands in for the dots, then the planning agent's latest action or "Working out the steps".
+- A queue row is a small overview card on two lines: the title, then one summary line laid out across the row: the handle and status (the stage, not "Waiting to check in again", which the row's tile already shows), followed in `fg-2` tabular numbers by the current step's count when the status is the stage ("Building 3/6"), a mini track, then what is happening. The mini track is the task's steps as 6px dots joined by 8px hairlines (`h-px w-2`), `bg-green-4` done, a blue pulse current, `bg-amber-4` waiting on you, a dashed `fg-2` ring skipped, a `bg-a3` ring not started; one image labelled "Step 4 of 7: Build 1/2", no tooltip per dot. After it, while an agent works and no decision is open, the agent's latest action in the present tense, shimmering (still when the run is paused); otherwise nothing. No static description or stage reason: the status and the dots already say it. While the steps can still change a spinner stands in for the dots, then the planning agent's latest action or "Working out the steps".
 - Home order: greeting, guide, composer, then Needs you, In progress, Recently finished (merged or done in the last 24 hours, five at most), Recent conversations (latest agent message of five tasks, opening their chat), Waiting on another task. Reason: what needs you, what is moving, what just happened, then the long tail, so a long list never pushes the timely ones off screen.
 - Compact (sidebar and queue popover): collapsible `h-6` headers, the whole header folds. Header: `w-full gap-2 rounded-control ps-1.5 pe-1 font-medium text-2xs text-fg-2 hover:text-fg-4 active:text-fg-4`; a 14px section icon in its tone in a 20px slot; the title truncating; the count in `font-normal tabular-nums`; the chevron shown only on hover (`opacity-0 group-hover/disclosure:opacity-100`) 6px after the count (`gap-1.5`), 5px from the header's top and bottom, never at the header's end: the chevron belongs to what it folds, and the end is where a section's action goes. Section: `flex flex-col border-border border-t px-2 py-1.5`, no top border on the first; rows `pt-0.5` below the header; the same rows as wide without the age; empty text `py-1 ps-8.5 pe-2.5 text-2xs text-fg-2`.
 - Open and closed state is shared by sidebar and popover through `localStorage` (key per section). A section can always be collapsed, including the one holding the task on screen. Until you have toggled a section yourself it opens when it holds the task on screen; after that your choice wins everywhere.

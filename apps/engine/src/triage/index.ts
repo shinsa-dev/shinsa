@@ -27,13 +27,14 @@ import {
 } from '../agents/quick/decide.ts';
 import type { QuickJson } from '../agents/quick/index.ts';
 import { BRANCH_PATTERN, COMMIT_TYPES, slugify } from '../git/index.ts';
-import { type LocalRepo, listLocalRepos, resolveContainingRepo } from '../repos/index.ts';
+import { type LocalRepo, listLocalRepos, REPOSITORY_NAME, resolveContainingRepo } from '../repos/index.ts';
 import { parseAnswerText, SHAPE_QUESTION } from './decisions.ts';
 import { resolveTeammateCheck, type TeammateCheck, type TeammateTask, type TeamReader } from './team.ts';
 
 export interface TriageResult {
   title: string;
   repoPath: string | null;
+  newRepo?: string;
   size: TaskSize;
   branch: string;
   waitsOn: Task[];
@@ -48,6 +49,7 @@ export interface TriageResult {
 interface TriageAnswer {
   title?: unknown;
   repo?: unknown;
+  new_repo?: unknown;
   size?: unknown;
   branch?: unknown;
   waits_on?: unknown;
@@ -82,6 +84,8 @@ const WHY_LIMIT = 120;
 
 const TITLE_LIMIT = 60;
 
+const NEW_REPO_LIMIT = 100;
+
 export const NO_REPOSITORY = 'none';
 
 export const REPOSITORY_RULE = `Never pick a repository only because it is the only one listed or because it was worked on recently; pick one when the request names it or clearly needs its code. "The repo", "the code" or "the project" alone names none. A request that names a repository that is not listed gets "${NO_REPOSITORY}".`;
@@ -93,6 +97,7 @@ const TRIAGE_SYSTEM = [
   `repo: the exact name of the repository the work belongs in, or "${NO_REPOSITORY}".`,
   `Answer "${NO_REPOSITORY}" when the request needs no repository: a greeting, small talk, a general question, a question about the state Shinsa keeps (its tasks, projects or settings, or what it knows) rather than code, a request to set up a Shinsa automation (a schedule, a trigger or a watch of an integration such as “watch #feedback for bugs, hourly”) rather than code such as a cron job in a repository, or planning that names no code.`,
   REPOSITORY_RULE,
+  `new_repo: "" unless the request asks to start a new repository or project that is not listed (for example “start a new app called native-islands”); then the new repository’s folder name, short kebab-case, and repo is "${NO_REPOSITORY}". Never for a repository that is listed or one the request only mentions.`,
   `branch: <type>/<short-kebab-slug>, type one of ${COMMIT_TYPES.join(', ')}, the conventional commit type of the work.`,
   'The decisions: answer each only with its options.',
   `Each field ending in _why says in one plain sentence of at most ${WHY_LIMIT} characters why you answered its decision that way.`,
@@ -190,6 +195,12 @@ export function describeRepoCandidates(candidates: LocalRepo[]) {
   ];
 }
 
+function parseNewRepoAnswer(candidates: LocalRepo[], value: unknown) {
+  if (typeof value !== 'string' || !REPOSITORY_NAME.test(value) || value.endsWith('.git')) return null;
+  const listed = candidates.find((candidate) => candidate.name === value);
+  return listed ? { path: listed.path } : { name: value };
+}
+
 export function parseRepoAnswer(candidates: LocalRepo[], value: unknown, optional: boolean) {
   if (optional && value === NO_REPOSITORY) return null;
   return candidates.find((candidate) => candidate.name === value)?.path;
@@ -200,6 +211,15 @@ function resolveTriageSchema(plan: TriagePlan): JsonSchema {
   const properties: Record<string, unknown> = {
     title: { type: 'string', maxLength: TITLE_LIMIT },
     repo: resolveRepoProperty(plan.candidates, plan.optional),
+    ...(plan.optional
+      ? {
+          new_repo: {
+            type: 'string',
+            maxLength: NEW_REPO_LIMIT,
+            pattern: `^$|${REPOSITORY_NAME.source}`,
+          },
+        }
+      : {}),
     size: resolveDecisionProperty(SIZE_QUESTION),
     branch: { type: 'string', pattern: BRANCH_PATTERN.source },
   };
@@ -543,7 +563,8 @@ function parseDuplicate(state: ShinsaState, plan: TriagePlan, answer: TriageAnsw
 function parseTriageAnswer(state: ShinsaState, plan: TriagePlan, answer: TriageAnswer): TriageResult {
   const { asks, fallback } = plan;
   const answered = parseRepoAnswer(plan.candidates, answer.repo, plan.optional);
-  const repoPath = answered === undefined ? fallback.repoPath : answered;
+  const created = answered === null ? parseNewRepoAnswer(plan.candidates, answer.new_repo) : null;
+  const repoPath = created?.path ?? (answered === undefined ? fallback.repoPath : answered);
   const branch =
     typeof answer.branch === 'string' && BRANCH_PATTERN.test(answer.branch) ? answer.branch : null;
   const { waitsOn, kept } = parseWaitsOn(state, plan, answer, repoPath);
@@ -556,6 +577,7 @@ function parseTriageAnswer(state: ShinsaState, plan: TriagePlan, answer: TriageA
   return {
     title: parseAnswerText(answer.title, TITLE_LIMIT) ?? fallback.title,
     repoPath,
+    ...(created?.name ? { newRepo: created.name } : {}),
     size: large ? 'large' : 'small',
     branch: branch ?? fallback.branch,
     waitsOn,

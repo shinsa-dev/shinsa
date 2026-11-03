@@ -4,6 +4,7 @@ import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
 import { RefreshButton } from '@/components/accounts/refresh-button.tsx';
 import { SelectField } from '@/components/controls/select-field.tsx';
+import { CHANGELOG_COPY, CHANGELOG_ICON, openChangelog, useChangelogAvailable } from '@/lib/changelog.ts';
 import { type EngineStatus, resolveEngineView, useEngineFailure } from '@/lib/connection/engine.ts';
 import { useServerHealth } from '@/lib/connection/health.ts';
 import {
@@ -75,19 +76,33 @@ function EngineRow({ engine }: { engine: EngineStatus }) {
   );
 }
 
+function ChangelogRow() {
+  return (
+    <div className={SETTING_ROW}>
+      <RowText title={CHANGELOG_COPY.row} detail={CHANGELOG_COPY.rowDetail} />
+      <Button variant='secondary' size='sm' icon={CHANGELOG_ICON} onClick={() => openChangelog()}>
+        {CHANGELOG_COPY.open}
+      </Button>
+    </div>
+  );
+}
+
 export function UpdatesGroup({
   app,
   engine = null,
+  changelog = false,
   actions,
 }: {
   app: { version: string; channel: UpdateChannel; update: DesktopUpdate } | null;
   engine?: EngineStatus | null;
+  changelog?: boolean;
   actions: UpdateActions;
 }) {
   if (!app) {
     return (
       <SettingsGroup title={UPDATES_SECTION}>
         <SettingsEmpty>{UPDATES_LABEL.browser}</SettingsEmpty>
+        {changelog && <ChangelogRow />}
       </SettingsGroup>
     );
   }
@@ -134,6 +149,7 @@ export function UpdatesGroup({
           onValueChange={actions.changeChannel}
         />
       </div>
+      {changelog && <ChangelogRow />}
     </SettingsGroup>
   );
 }
@@ -146,5 +162,6 @@ export function UpdateSettings() {
   const failure = useEngineFailure();
   const app = build && channel ? { version: build.version, channel, update } : null;
   const engine = resolveEngineView(build, health, failure).status;
-  return <UpdatesGroup app={app} engine={engine} actions={UPDATE_ACTIONS} />;
+  const changelog = useChangelogAvailable();
+  return <UpdatesGroup app={app} engine={engine} changelog={changelog} actions={UPDATE_ACTIONS} />;
 }

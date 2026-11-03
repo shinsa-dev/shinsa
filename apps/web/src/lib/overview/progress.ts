@@ -124,9 +124,8 @@ export function describeStep(step: Step) {
   return step.count ? `${step.label} ${step.count}` : step.label;
 }
 
-export function describeStepCount(step: Step | null, status: string) {
-  if (!step?.count || status.split(' · ')[0] === step.label) return null;
-  return describeStep(step);
+export function describeStatusCount(step: Step | null, status: string, stage: string) {
+  return status === stage ? (step?.count ?? null) : null;
 }
 
 export function describeTrackPosition(steps: Step[]) {

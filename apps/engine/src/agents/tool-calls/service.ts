@@ -12,7 +12,7 @@ import {
   type WatchdogSpec,
 } from '@shinsa/core';
 import { resolveHead } from '../../git/index.ts';
-import { upsertProjectFolderRepo } from '../../repos/index.ts';
+import { createProjectRepository, upsertProjectFolderRepo } from '../../repos/index.ts';
 import { awaitDelegation } from '../delegations/delivery.ts';
 import {
   assertHeldSourcesUsed,
@@ -255,7 +255,8 @@ export class ToolCalls {
       state: () => engine.state,
       dispatch,
       resolveBaseCommit: () => resolveHead(this.#findCurrent(runId, attemptId).task.worktreePath ?? ''),
-      registerRepo: (task, repoName) => upsertProjectFolderRepo(engine, task, repoName),
+      registerRepo: (projectId, repoName) => upsertProjectFolderRepo(engine, projectId, repoName),
+      createRepo: (projectId, repoName) => createProjectRepository(engine, projectId, repoName),
       hasProvider: (id) => providers.select(id) !== null,
       awaitDelegation: (childRunId, timeoutMs, waitSignal) =>
         awaitDelegation(engine, childRunId, timeoutMs, waitSignal),

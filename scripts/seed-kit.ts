@@ -127,6 +127,7 @@ export interface SeedTask {
   timed?: TimedSeedEvent[];
   provider?: 'codex';
   revision?: { afterRun: number; response: string };
+  review?: { minutes: number };
   script?: (push: Push, clock: SeedClock) => void;
 }
 

@@ -1,5 +1,6 @@
 import type { CommandOf } from '../commands/index.ts';
 import { DELEGATION_LIMITS, DomainError, type Run, type Task, type TaskCreator } from '../domain/index.ts';
+import { resolveTaskProject } from '../state/queries.ts';
 import type { Decider } from './decider.ts';
 import { changeDependencies } from './dependencies.ts';
 import { findCurrentRun } from './runs.ts';
@@ -40,6 +41,7 @@ function assertOneOrder(command: CommandOf<'agent.create_task'>) {
 
 interface SpawnOptions {
   parent: boolean;
+  projectId?: string;
   forkOf?: string;
   waitsOn?: string[];
   stacksOn?: string;
@@ -60,6 +62,7 @@ function spawnTask(
       type: 'task.create',
       request,
       repoId: source.repoId,
+      ...(options.projectId ? { projectId: options.projectId } : {}),
       priority: source.priority,
       origin: source.origin,
       ...(options.forkOf ? { forkOf: options.forkOf } : {}),
@@ -75,6 +78,13 @@ function waitOn(decider: Decider, task: Task, ids: string[]) {
   changeDependencies(decider, task.id, [...task.waitsOn, ...ids], 'shinsa');
 }
 
+function resolveCourierRepo(decider: Decider, task: Task, command: CommandOf<'agent.create_task'>) {
+  if (command.repoId) return command.repoId;
+  const elsewhere =
+    command.projectId !== undefined && command.projectId !== resolveTaskProject(decider.state, task);
+  return elsewhere ? null : task.repoId;
+}
+
 export function createCourierTask(decider: Decider, command: CommandOf<'agent.create_task'>) {
   const { run, task } = findCurrentRun(decider, command.runId, 'create_task');
   if (selectCreated(decider, task, command.requestKey)) return;
@@ -82,11 +92,12 @@ export function createCourierTask(decider: Decider, command: CommandOf<'agent.cr
   if (command.thisWaits) assertCanWait(run);
   const createdId = spawnTask(
     decider,
-    command.repoId ? { ...task, repoId: command.repoId } : task,
+    { ...task, repoId: resolveCourierRepo(decider, task, command) },
     command.request,
     { kind: 'courier', taskId: task.id, runId: run.id, requestKey: command.requestKey },
     {
       parent: false,
+      ...(command.projectId ? { projectId: command.projectId } : {}),
       ...(command.forkOf ? { forkOf: command.forkOf } : {}),
       ...(command.afterThis ? { waitsOn: [task.id] } : {}),
       ...(command.stackOnThis ? { stacksOn: task.id } : {}),

@@ -31,7 +31,7 @@ describe('POST /api/commands', () => {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(change),
     };
-    const remote = await send('/api/commands', init, { via: 'channel', guest: null });
+    const remote = await send('/api/commands', init, { via: 'channel', guest: null, userId: null });
     expect(remote.status).toBe(400);
     expect(await remote.json()).toEqual({ error: { code: 'local_only', message: LOCAL_ONLY_MESSAGE } });
     expect((await send('/api/commands', init)).status).toBe(200);

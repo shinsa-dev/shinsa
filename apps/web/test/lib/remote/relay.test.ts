@@ -39,6 +39,41 @@ describe('the service worker relay', () => {
     );
   });
 
+  it('never relays a navigation, so nothing a machine answers opens as a page of this site', () => {
+    const address = 'https://app.shinsa.dev/api/evidence/a.svg';
+    const opened = Object.defineProperty(new Request(address), 'mode', { value: 'navigate' });
+    expect(isRelayedRequest(new Request(address), 'https://app.shinsa.dev')).toBe(true);
+    expect(isRelayedRequest(opened, 'https://app.shinsa.dev')).toBe(false);
+  });
+
+  it('sandboxes every relayed answer whatever headers the machine sent', async () => {
+    const { clients, stop } = createPage(() =>
+      Promise.resolve(
+        new Response('<svg onload="alert(1)"/>', {
+          headers: {
+            'content-type': 'image/svg+xml',
+            'content-security-policy': "script-src 'unsafe-inline'",
+          },
+        })
+      )
+    );
+    const answer = await relayRequest(
+      new Request('https://app.shinsa.dev/api/evidence/a.svg'),
+      'page',
+      clients
+    );
+    expect(answer.headers.get('content-security-policy')).toBe("sandbox; default-src 'none'");
+    expect(answer.headers.get('x-content-type-options')).toBe('nosniff');
+    expect(answer.headers.get('content-type')).toBe('image/svg+xml');
+    const empty = await relayRequest(
+      new Request('https://app.shinsa.dev/api/x'),
+      'page',
+      createPage(() => Promise.resolve(new Response(null, { status: 204 }))).clients
+    );
+    expect(empty.headers.get('content-security-policy')).toBe("sandbox; default-src 'none'");
+    stop();
+  });
+
   it('hands a request to the page and streams the page’s answer back', async () => {
     const seen: string[] = [];
     const { clients, stop } = createPage(async (request) => {

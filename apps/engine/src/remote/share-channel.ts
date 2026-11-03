@@ -14,6 +14,7 @@ import {
 } from '@shinsa/core';
 import { describeError, log } from '../log/index.ts';
 import type { ChannelPeer } from './channel.ts';
+import { EgressGate } from './egress/service.ts';
 
 export const SHARE_GONE_REASON = 'This task is no longer shared, or the link is wrong.';
 
@@ -144,7 +145,7 @@ export class ShareChannel<Subject = string> {
     const key = serializeViewKey(live.view);
     if (key !== this.#lastView) {
       this.#lastView = key;
-      await this.#send({ t: 'view', data: JSON.stringify(live.view) });
+      await this.#send({ t: 'view', data: EgressGate.serializeView(live.view) });
     }
     for (const file of live.files) {
       if (this.#sent.get(file.id) === file.version) continue;

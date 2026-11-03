@@ -1,8 +1,13 @@
 import { describe, expect, it, mock } from 'bun:test';
 import { act, fireEvent, render, screen } from '@testing-library/react';
-import { AlertDialog, AlertDialogContent, AlertDialogTitle } from '../../src/components/alert-dialog';
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '../../src/components/alert-dialog';
 import { Command, CommandDialog, CommandInput } from '../../src/components/command';
-import { Dialog, DialogContent, DialogTitle } from '../../src/components/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../../src/components/dialog';
 import { Sheet, SheetContent, SheetTitle } from '../../src/components/sheet';
 import { flush } from '../support/layout';
 
@@ -116,5 +121,57 @@ describe('the command menu’s entry', () => {
     expect(classes(menuScrim)).not.toContain('data-ending-style:duration-100');
     expect(classes(dialog)).toEqual(expect.arrayContaining(['duration-150', 'starting:scale-96']));
     expect(classes(dialogScrim)).toContain('duration-150');
+  });
+});
+
+describe('a long dialog', () => {
+  it('scrolls only its body, keeping its header and its close button in place, with a fade under the header', async () => {
+    render(
+      <>
+        <Dialog open>
+          <DialogContent showCloseButton>
+            <DialogHeader>
+              <DialogTitle>What’s new</DialogTitle>
+            </DialogHeader>
+          </DialogContent>
+        </Dialog>
+        <AlertDialog open>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Remove?</AlertDialogTitle>
+            </AlertDialogHeader>
+          </AlertDialogContent>
+        </AlertDialog>
+      </>
+    );
+    await act(() => flush());
+    for (const kind of ['dialog', 'alert-dialog']) {
+      const popup = document.querySelector<HTMLElement>(`[data-slot="${kind}-content"]`);
+      const body = document.querySelector<HTMLElement>(`[data-slot="${kind}-body"]`);
+      const header = document.querySelector<HTMLElement>(`[data-slot="${kind}-header"]`);
+      expect(popup?.className.split(' ')).toContain('overflow-hidden');
+      expect(popup?.className).not.toContain('overflow-y-auto');
+      expect(body?.parentElement).toBe(popup);
+      expect(body?.className.split(' ')).toContain('overflow-y-auto');
+      expect(body?.className).not.toMatch(/\b(relative|absolute)\b/);
+      expect(header?.className.split(' ')).toEqual(expect.arrayContaining(['sticky', 'dialog-header-fade']));
+    }
+    const close = document.querySelector<HTMLElement>('[data-slot="dialog-close"]');
+    expect(close?.getAttribute('aria-label')).toBe('Close');
+    expect(close?.className.split(' ')).toEqual(expect.arrayContaining(['absolute', 'z-20']));
+  });
+
+  it('lets the command menu’s list scroll on its own, with no padding around it', async () => {
+    render(
+      <CommandDialog open>
+        <Command>
+          <CommandInput placeholder='Search' />
+        </Command>
+      </CommandDialog>
+    );
+    await act(() => flush());
+    const body = document.querySelector<HTMLElement>('[data-slot="dialog-body"]');
+    expect(body?.className.split(' ')).toEqual(expect.arrayContaining(['p-0', 'gap-0', 'overflow-hidden']));
+    expect(body?.className.split(' ')).not.toContain('overflow-y-auto');
   });
 });

@@ -1,0 +1,3 @@
+ALTER TABLE instances ADD COLUMN features TEXT NOT NULL DEFAULT '[]';
+
+ALTER TABLE pair_sessions ADD COLUMN features TEXT NOT NULL DEFAULT '[]';

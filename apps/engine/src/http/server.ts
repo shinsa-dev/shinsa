@@ -1,42 +1,30 @@
-import {
-  type GuestActor,
-  parseTeamViewTarget,
-  REMOTE_CONNECT_PARAM,
-  SHARE_CHANNEL_PARAM,
-  TEAM_VIEW_PATH,
-} from '@shinsa/core';
+import { type GuestActor, parseTeamViewTarget, TEAM_VIEW_PATH } from '@shinsa/core';
 import { serializeEngineFailure } from '@shinsa/core/engine-api/errors';
 import {
-  ConnectRefused,
   ENGINE_BODY_LIMIT_BYTES,
   RequestForbidden,
   RouteNotFound,
   ROUTE_NOT_FOUND_MESSAGE,
 } from '@shinsa/core/engine-api/schema';
 import type { ServerWebSocket } from 'bun';
-import { Context, Effect, Exit, Predicate, Scope } from 'effect';
+import { Context, Effect, Exit, Layer, Predicate, Scope } from 'effect';
 import { createServerInstance } from '../instance/index.ts';
-import {
-  type ChannelPeer,
-  isTunnelRequest,
-  type RemoteChannel,
-  resolveChannelOriginRefusal,
-  resolveTunnelRoute,
-} from '../remote/index.ts';
+import type { UpgradeRefusal } from '../remote/gate/schema.ts';
+import { TunnelGate } from '../remote/gate/service.ts';
+import type { ChannelPeer, RemoteChannel } from '../remote/index.ts';
 import type { PreviewRelay, PreviewUpgrade } from '../remote/previews.ts';
 import { edgeRuntime } from '../runtime/edge.ts';
 import { ATTACHMENT_REQUEST_LIMIT_BYTES } from '../store/index.ts';
 import { createTerminalSockets, readTerminalSocketId, type TerminalSocketData } from '../terminals/index.ts';
 import { makeEngineHandler } from './app.ts';
 import { resolveAllowedHosts, resolveRefusal, resolveUpgradeRefusal } from './guard.ts';
-import { type HttpContext, PORT_TAKEN, PortInUse, RequestSource } from './schema.ts';
+import { FIXED_FAILURES, type HttpContext, PORT_TAKEN, PortInUse, RequestSource } from './schema.ts';
+import { HttpServices } from './services/service.ts';
 import { createSocketHub, type SocketData } from './socket.ts';
 
 export type { HttpContext } from './schema.ts';
 
 const SOCKET_BACKPRESSURE_LIMIT_BYTES = 128 * 1024 * 1024;
-
-const CONNECT_REFUSED_MESSAGE = 'The connect token is missing, wrong or expired.';
 
 interface RemoteSocketData {
   kind: 'remote';
@@ -126,6 +114,10 @@ function respondNotFound() {
   return respondRefusal(RouteNotFound, ROUTE_NOT_FOUND_MESSAGE);
 }
 
+function respondUpgradeRefusal(refusal: UpgradeRefusal) {
+  return respondRefusal(FIXED_FAILURES[refusal._tag], refusal.message);
+}
+
 type Hub = ReturnType<typeof createSocketHub>;
 
 type TerminalSockets = ReturnType<typeof createTerminalSockets>;
@@ -189,20 +181,27 @@ const serveHttp = Effect.fn('serveHttp')(function* (context: HttpContext) {
   );
   const handle = web.handler as (request: Request, services: Context.Context<never>) => Promise<Response>;
   const terminalSockets = terminals ? createTerminalSockets(terminals) : null;
+  const gate = yield* Effect.gen(function* () {
+    return yield* TunnelGate;
+  }).pipe(Effect.provide(TunnelGate.layer.pipe(Layer.provide(HttpServices.layer(context)))));
 
-  function respondInsideChannel(request: Request, guest: GuestActor | null) {
-    return handle(request, Context.make(RequestSource, { via: 'channel', guest }));
+  function respondInsideChannel(request: Request, guest: GuestActor | null, userId: string) {
+    return handle(request, Context.make(RequestSource, { via: 'channel', guest, userId }));
   }
 
   function upgrade(request: Request, bunServer: Bun.Server<ServerSocketData>, data: ServerSocketData) {
     const upgradeRefusal = resolveUpgradeRefusal(request);
     if (upgradeRefusal) return respondRefusal(RequestForbidden, upgradeRefusal);
-    if (bunServer.upgrade(request, { data })) return undefined;
-    return new Response('Upgrade failed', { status: 400 });
+    return upgradeAdmitted(request, bunServer, data);
   }
 
-  function upgradeLive(request: Request, bunServer: Bun.Server<ServerSocketData>, data: LiveSocketData) {
-    if (bunServer.upgrade(request, { data })) return undefined;
+  function upgradeAdmitted(
+    request: Request,
+    bunServer: Bun.Server<ServerSocketData>,
+    data: ServerSocketData,
+    headers?: Record<string, string>
+  ) {
+    if (bunServer.upgrade(request, { data, ...(headers ? { headers } : {}) })) return undefined;
     return new Response('Upgrade failed', { status: 400 });
   }
 
@@ -258,16 +257,11 @@ const serveHttp = Effect.fn('serveHttp')(function* (context: HttpContext) {
     const [protocol] = answer.upgrade.protocols;
     const headers = protocol ? { 'Sec-WebSocket-Protocol': protocol } : undefined;
     const data: PreviewSocketData = { kind: 'preview', upgrade: answer.upgrade, relay: null };
-    if (bunServer.upgrade(request, { data, ...(headers ? { headers } : {}) })) return undefined;
-    return new Response('Upgrade failed', { status: 400 });
+    return upgradeAdmitted(request, bunServer, data, headers);
   });
 
-  function respondShareChannel(request: Request, url: URL, bunServer: Bun.Server<ServerSocketData>) {
-    if (!(remote && shares)) return respondNotFound();
-    const originRefusal = resolveChannelOriginRefusal(request, remote.appOrigin);
-    if (originRefusal) return respondRefusal(RequestForbidden, originRefusal);
-    const shareId = url.searchParams.get(SHARE_CHANNEL_PARAM) ?? '';
-    if (!shares.acceptsShare(shareId)) return respondNotFound();
+  function openShareChannel(request: Request, bunServer: Bun.Server<ServerSocketData>, shareId: string) {
+    if (!shares) return respondNotFound();
     const open = (peer: ChannelPeer) => {
       const channel = shares.openChannel(peer, shareId);
       return {
@@ -275,47 +269,24 @@ const serveHttp = Effect.fn('serveHttp')(function* (context: HttpContext) {
         close: () => shares.closeChannel(channel),
       };
     };
-    return upgradeLive(request, bunServer, { kind: 'live', open, channel: null });
+    return upgradeAdmitted(request, bunServer, { kind: 'live', open, channel: null });
   }
 
-  const respondTeamChannel = Effect.fn('serveHttp.respondTeamChannel')(function* (
-    request: Request,
-    url: URL,
-    bunServer: Bun.Server<ServerSocketData>
-  ) {
-    if (!(remote && teams?.acceptsViewer())) return respondNotFound();
-    const originRefusal = resolveChannelOriginRefusal(request, remote.appOrigin);
-    if (originRefusal) return respondRefusal(RequestForbidden, originRefusal);
-    const claim = yield* Effect.promise(() =>
-      remote.verifyConnect(url.searchParams.get(REMOTE_CONNECT_PARAM))
-    );
-    if (!claim) return respondRefusal(ConnectRefused, CONNECT_REFUSED_MESSAGE);
+  function openTeamChannel(request: Request, bunServer: Bun.Server<ServerSocketData>, userId: string) {
+    if (!teams) return respondNotFound();
     const open = (peer: ChannelPeer) => {
-      const channel = teams.openChannel(peer, claim.userId);
+      const channel = teams.openChannel(peer, userId);
       return {
         receive: (raw: string | Buffer) => channel.receive(raw),
         close: () => teams.closeChannel(channel),
       };
     };
-    return upgradeLive(request, bunServer, { kind: 'live', open, channel: null });
-  });
+    return upgradeAdmitted(request, bunServer, { kind: 'live', open, channel: null });
+  }
 
-  const respondRemoteChannel = Effect.fn('serveHttp.respondRemoteChannel')(function* (
-    request: Request,
-    url: URL,
-    bunServer: Bun.Server<ServerSocketData>,
-    channelRemote: NonNullable<typeof remote>
-  ) {
-    const originRefusal = resolveChannelOriginRefusal(request, channelRemote.appOrigin);
-    if (originRefusal) return respondRefusal(RequestForbidden, originRefusal);
-    const claim = yield* Effect.promise(() =>
-      channelRemote.verifyConnect(url.searchParams.get(REMOTE_CONNECT_PARAM))
-    );
-    if (!claim) return respondRefusal(ConnectRefused, CONNECT_REFUSED_MESSAGE);
-    if (bunServer.upgrade(request, { data: { kind: 'remote', channel: null, userId: claim.userId } }))
-      return undefined;
-    return new Response('Upgrade failed', { status: 400 });
-  });
+  function openRemoteChannel(request: Request, bunServer: Bun.Server<ServerSocketData>, userId: string) {
+    return upgradeAdmitted(request, bunServer, { kind: 'remote', channel: null, userId });
+  }
 
   function respondTeamView(request: Request, url: URL, bunServer: Bun.Server<ServerSocketData>) {
     const { teamFeeds } = context;
@@ -339,11 +310,13 @@ const serveHttp = Effect.fn('serveHttp')(function* (context: HttpContext) {
     url: URL,
     bunServer: Bun.Server<ServerSocketData>
   ) {
-    const route = remote?.isEnabled ? resolveTunnelRoute(request, url) : null;
-    if (route === 'share') return respondShareChannel(request, url, bunServer);
-    if (route === 'team') return yield* respondTeamChannel(request, url, bunServer);
-    if (route === 'preview') return yield* respondPreview(request, url, bunServer);
-    if (route === 'channel' && remote) return yield* respondRemoteChannel(request, url, bunServer, remote);
+    const admitted = yield* gate.admitUpgrade(request, url).pipe(Effect.result);
+    if (admitted._tag === 'Failure') return respondUpgradeRefusal(admitted.failure);
+    const admission = admitted.success;
+    if (admission.route === 'share') return openShareChannel(request, bunServer, admission.shareId);
+    if (admission.route === 'team') return openTeamChannel(request, bunServer, admission.userId);
+    if (admission.route === 'channel') return openRemoteChannel(request, bunServer, admission.userId);
+    if (admission.route === 'preview') return yield* respondPreview(request, url, bunServer);
     return yield* Effect.promise(() => handle(request, Context.empty()));
   });
 
@@ -375,8 +348,7 @@ const serveHttp = Effect.fn('serveHttp')(function* (context: HttpContext) {
         maxRequestBodySize: ATTACHMENT_REQUEST_LIMIT_BYTES,
         fetch(request, bunServer) {
           const url = new URL(request.url);
-          if (remote && isTunnelRequest(request, remote.tunnelHost))
-            return run(respondTunnelSocket(request, url, bunServer));
+          if (gate.isTunnel(request)) return run(respondTunnelSocket(request, url, bunServer));
           return respondLocalSocket(request, url, bunServer) ?? handle(request, Context.empty());
         },
         websocket: {

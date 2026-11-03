@@ -28,6 +28,7 @@ function courier(
     key?: string;
     request?: string;
     repoId?: string | null;
+    projectId?: string;
     thisWaits?: boolean;
     afterThis?: boolean;
     stackOnThis?: boolean;
@@ -42,6 +43,7 @@ function courier(
     requestKey: options.key ?? 'courier-1',
     request: options.request ?? 'Add the same banner to the settings page in the admin app.',
     repoId: options.repoId ?? null,
+    ...(options.projectId ? { projectId: options.projectId } : {}),
     thisWaits: options.thisWaits ?? false,
     afterThis: options.afterThis ?? false,
     ...(options.stackOnThis ? { stackOnThis: true } : {}),
@@ -58,6 +60,27 @@ function split(harness: Harness, runId: string, requests: string[], thisWaits = 
 }
 
 describe('a courier task', () => {
+  test('filed in another project leaves the repository to triage in that project', () => {
+    const { harness, taskId } = building();
+    harness.send({ type: 'project.write', project: { name: 'Islands', color: 'green', key: 'ISL' } });
+    const islands = Object.values(harness.state.projects).find((project) => project.name === 'Islands');
+    const [task] = courier(harness, harness.activeRun(taskId).id, { projectId: islands?.id ?? '' });
+    expect(task).toMatchObject({ repoId: null, projectId: islands?.id, handle: 'ISL-1' });
+  });
+
+  test('filed in its own project, or in a named repository, keeps that repository', () => {
+    const { harness, taskId } = building();
+    const source = harness.task(taskId);
+    const builder = harness.activeRun(taskId);
+    const [same] = courier(harness, builder.id, { key: 'same', projectId: source.projectId ?? '' });
+    expect(same).toMatchObject({ repoId: source.repoId, projectId: source.projectId });
+    harness.send({ type: 'project.write', project: { name: 'Islands', color: 'green', key: 'ISL' } });
+    const islands = Object.values(harness.state.projects).find((project) => project.name === 'Islands');
+    const repoId = registerRepo(harness, 'native-islands', 'Islands');
+    const [named] = courier(harness, builder.id, { key: 'named', repoId, projectId: islands?.id ?? '' });
+    expect(named).toMatchObject({ repoId, projectId: islands?.id });
+  });
+
   test('stands on its own, starts at once and is linked to the task that created it', () => {
     const { harness, taskId } = building();
     const builder = harness.activeRun(taskId);

@@ -474,6 +474,16 @@ whose choice is not clear binds none, and its work asks at the setup gate when i
   bound; the task keeps its own project, and its agents' brief says the task works in a repository outside it.
   Without the model the task binds none, unless it was created with a repository or from inside one. `task.triage`
   then carries `repoId: null` and nothing is registered.
+- **Triage may start a new repository.** When the task has no repository pinned, the classifier also answers
+  `new_repo`: empty, unless the request asks to start a repository or project that is not listed ("start a new app
+  called native-islands"), when it names the folder and answers `repo` none. A name that is listed binds that
+  repository, and an unsafe one (`..`, a slash, a leading dot, `.git` at the end) starts nothing
+  (`parseNewRepoAnswer`). Before `task.triage`, `TaskSetup` creates it with `createRepository`, the function
+  `create_task` uses: in the project's first folder, else beside the project's first repository, else in the first
+  folder Shinsa looks in (`resolveTaskRepoTarget`), registered under `<effect key>:repo.register` into the task's
+  project (a task in none gets the project registering gives it, Projects and task identity). With no folder, or a
+  folder that already holds files, it logs a warning and the task is triaged without a repository, so the setup gate
+  asks. Like a repository `create_task` makes, it has no remote until you add one.
 - **It runs without one.** An answer or research with no repository skips the setup step entirely (`startWork`:
   no `config.verify`, no "verifying the setup", no Find the repository step in the strip) and runs read-only in a
   scratch folder of its own, `data/scratch/<task id>` (`RunSupervisor`, made again before every run), never a
@@ -662,8 +672,19 @@ them in the order they need:
   repository's name or, failing that, the folder name of a git repository directly inside one of the task's project
   folders (`upsertProjectFolderRepo` in `repos/index.ts`, through `OrchestrationCall.registerRepo`): it is registered
   into that project the way triage registers one (`upsertRepo`), and the new task works there. A name found in
-  neither is refused with the repositories Shinsa knows. The guide sits in the brief, the user turn, so the session's cached prefix
+  neither is refused with the repositories Shinsa knows, unless the call sets `new_repository`. The guide sits in the brief, the user turn, so the session's cached prefix
   does not change (Caching).
+- **A new repository is created when asked.** `create_task` with `new_repository` and a `repository` name nothing
+  matches creates `<folder>/<name>` (`createProjectRepository` in `repos/index.ts`, through
+  `OrchestrationCall.createRepo`): the folder is the project's first folder or, with none, the folder that holds the
+  project's first repository; with neither the call is refused and points at `projects_add_folder`. `RepoSetup.create`
+  makes the folder (refused when it already holds files, or when the name is more than letters, digits, `.`, `-` and
+  `_`), starts it on git's `init.defaultBranch` (`main` when unset) with the empty first commit setup makes (Setup
+  verification), and registers it into the project. A name that already matches is used as it is, so a repeated call
+  creates nothing. The repository has no remote, so its task cannot open a pull request until you add one.
+- **Another project.** `create_task`'s `project` (a key, name or id) files the task in that project (`projectId` on
+  `agent.create_task`): `repository` is then looked up among that project's repositories and folders, and without one
+  the new task leaves its repository to triage in that project instead of taking this task's.
 - **The order is a wait.** `this_task_waits` makes this task wait on the new one (this task needs the other part
   merged first); only a building or fixing run may set it, since a planning task that starts waiting stops planning
   (`cannot_wait`, whose message points a planner at its first phase or at `after_this`). `after_this` makes the new
@@ -2114,6 +2135,16 @@ note (you, or report_feedback) ──► drafting ── quick call ──► dr
   whose steps need one finds it first (A task without a repository, above), and the problem when none is found is
   `no_repository`. Checks are not part of it: a task's checks come from its plan, and a repository without its own
   commands runs nothing extra, so nothing about them can be missing (Checks, above).
+- **A new repository is started first.** When the task needs a worktree, `RepoSetup.prepare` runs before the
+  checks and acts only where nothing can be lost: a repository with no refs at all (no branch, tag or remote branch)
+  gets an empty first commit (`chore: start the repository`, written on git's empty tree without the index, so staged and untracked files stay as they were) on its
+  default branch, and an empty folder that is not a repository yet is `git init`ed on that branch first. With an
+  origin it acts only when `git ls-remote --heads origin` answers and lists no branch, then pushes the commit there; an
+  unreachable origin, or one with history, leaves the repository as it was for the checks to describe. A folder with
+  files that is not a repository, a repository with any ref, and a default branch git would read as an option are
+  never touched. What it did rides on `config.record` (`started`: the branch, `initialized`, `pushed`) and core records
+  it once (`task.repo_started`, "Started the repository with an empty first commit on main", "…, and pushed it to
+  origin"). Doing it again finds the commit and does nothing, so the effect stays replay safe.
 - Problems open their own `configuration` gate, not a failure: nothing ran. Its title names the problem ("The
   repository is missing", or "The setup has 2 problems") and its body lists what is wrong and how to fix each; the
   web labels the task "Setup incomplete". Verify again (`approve`) verifies the setup again; Cancel ends the task. A
@@ -2834,13 +2865,50 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   lease on it. Turning access off, a revocation or removing the machine ends the scope, which closes every one of them
   at once with its own close reason; a channel that ends by itself gives its lease back. The keys stay in `remote.json`
   alone: the scope holds only what closes a socket.
-- **The tunnel entry point** (`guard.ts`, `http/ingress/`): a request with `cf-connecting-ip`, which Cloudflare
-  stamps on everything the tunnel forwards, or with the tunnel host as its Host, is a tunnel request and is decided
-  before the local guard. It sees `GET /health`, a webhook (`/api/hooks/<schedule>/<token>`, with its own checks) and
-  `GET /remote`; everything else, and everything while remote access is off, is 404. `/remote` needs an Origin of
-  app.shinsa.dev (403) and a valid connect token in `?token=` (401): an HMAC with the connect key over the instance,
-  the GitHub user and an expiry at most 60 seconds out, minted by app.shinsa.dev. The token only keeps random traffic
-  off the endpoint; trust rests on the handshake.
+- **The tunnel entry point** (`TunnelGate`, `remote/gate/`): the one gate for everything that arrives through the
+  tunnel, and the only place that decides it. A request with `cf-connecting-ip`, which Cloudflare stamps on
+  everything the tunnel forwards, or with the tunnel host as its Host, is a tunnel request (`isTunnel`) and is decided
+  before the local guard. Its route table (`TUNNEL_ROUTES`, `remote/gate/schema.ts`) names every path with its
+  methods: `GET /health`, a webhook (`/api/hooks/<schedule>/<token>`, with its own checks), Slack's two `POST`s, and
+  the sockets `GET /remote`, `/share`, `/team` and `/__preview/<id>/…`; anything else, and everything while remote
+  access is off, is 404 before any handler runs. Sockets open only as an upgrade in `http/server.ts`, which asks
+  `admitUpgrade` and opens what it answers; a plain request to a socket path is 404 (`admitRequest`). `/remote`,
+  `/share` and `/team` need an Origin of app.shinsa.dev (403); `/remote` and `/team` need a valid connect token in
+  `?token=` (401): an HMAC with the connect key over the label `shinsa-connect-v1`, the instance, the GitHub user, the
+  channel it opens (`remote` or `team`), a random 16-byte nonce and an expiry at most 60 seconds out, minted by
+  app.shinsa.dev, and the user it names is the channel's principal. A token opens only its own channel, so a team
+  token never opens `/remote`, and only once: the gate checks the token, refuses a request that is not a WebSocket
+  upgrade (404, the token kept), then spends the nonce (`Remote.spendConnect`, held until the token expires), so a
+  token seen in a log or on the wire opens nothing (401). The token only keeps random traffic off the endpoint; trust
+  rests on the handshake. Every engine names what it speaks in each heartbeat and pairing start (`features`:
+  `bound-connect-tokens`, `sealed-pairing`, `MACHINE_FEATURES` in core), and app.shinsa.dev mints these tokens and
+  seals pairing credentials only for a machine that named them; an engine that predates them, which names nothing,
+  still gets the old unlabelled token over the instance, user and expiry and its credentials in the clear, so the
+  Worker can deploy before every machine has updated. This engine only accepts the new token and refuses clear
+  credentials, so naming nothing downgrades only an older engine. Webhooks and Slack are refused in inspect mode, and `/health` and
+  Slack's paths do not exist on the local address.
+- **Inside the channel** the same gate decides every request (`admitRequest` in `Ingress`, `admitEndpoint` in
+  `EngineGate`), from the request's principal (`RequestSource`: the channel's user and, for a guest, the task handed
+  to them) and the endpoint's annotations in core's `EngineApi`: only `/api/` paths and never an extension's sign-in
+  callback, a guest only its own task's reads (`GuestRoute`), never a `localOnly` route (403 `local_only`), an
+  `ownerOnly` route only for the machine's owner (403 `not_owner`, joining a team from this machine), and no write in
+  inspect mode. A command's own fields are checked once more in `dispatchUserCommand` (core's `isLocalOnlyCommand`
+  and, for a guest, `resolveScopedRefusal`), the one path both the socket and `POST /api/commands` take.
+- **The way out** (`EgressGate`, `remote/egress/`): the one gate for what this machine sends to anyone but its own
+  browsers. Core's `resolveSharedTask` and `listTeamTasks` choose what a share preset or a team may see; the gate
+  bounds it: every view a share link or a team channel sends (`ShareChannel`, both kinds) and the team list this
+  machine signs is encoded through an allowlist schema (`ShareView`, `TeamListView`, `TeamTask` in
+  `remote/egress/schema.ts`), so a field no schema names is dropped, however a redaction spreads a record. A field that
+  must leave empty (a worktree path, a run's session id, a waiting run's account, a repository's path, a project's
+  folders, a gate's answer, a delegation's brief) is a `Null`, `''` or empty tuple there: a view that carries one is
+  refused, and the channel closes (1008) instead of sending it. A preview's answer keeps the app's own headers (its
+  `WWW-Authenticate`, the counts its code reads, its framework's cache headers) but drops the hop-by-hop ones and every
+  one that describes the machine rather than the page (`PREVIEW_DROPPED_HEADERS`: `Server`, `X-Powered-By`,
+  `Server-Timing`, a source map's local path, a framework's debug token), and turns a `Location` at the local origin
+  back into a path. A header list is a blocklist here, not an allowlist, because the previewed app is one the owner
+  chose to share, and its headers are part of the page. Slack posts,
+  like every call to app.shinsa.dev, leave only through `RemoteClient`, whose payloads are core's `RemoteApi`
+  schemas (`SlackRelayPost`), so that is their gate. `test/remote/gate.test.ts` refuses each kind of leak.
 - **The sealed channel** (`RemoteChannel`): the browser's first message is the hello; a device key that is not
   added is refused unless the hello carries a proof made with the machine's link secret, which turns it into
   an access request, or the key already has a request waiting under the same GitHub account (a browser that asked,
@@ -2858,8 +2926,9 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   makes the machine's key if it has none, asks app.shinsa.dev for a claim code with the machine's name (its host name
   without `.local`, an all-capitals one such as `MAC` written `Mac`), its public key and the engine's version, and opens the pairing page in your browser (`open`),
   where you sign in with GitHub and approve. The engine polls every 2 seconds (`PairPollInterval`, a forked fiber cancelled with the pairing) with a poll secret that never leaves it,
-  through failed polls, until the instance is claimed (the credentials and the GitHub login are written to
-  `remote.json`, enabled, and the tunnel starts), the code expires, or you cancel. A paired machine is refused
+  through failed polls, until the instance is claimed (the credentials arrive sealed to the machine's own key, which
+  only it opens (`openPairingCredentials`; a seal that does not open ends the pairing as expired and is logged), and
+  with the GitHub login are written to `remote.json`, enabled, and the tunnel starts), the code expires, or you cancel. A paired machine is refused
   (`remote_paired`): remove it first.
 - **The invite link and access requests** (`Remote.createLink`, `removeLink`, `acceptRequest`, `declineRequest`):
   a machine has one link, for your own devices and for other people alike, since nobody gets in until you accept
@@ -2965,10 +3034,8 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   transcript to the machine of its run; the rest goes to the first machine. With more than one machine in the account (this device need not reach them all), a task shows its machine in
   its facts row and on the roadmap. A service worker (`/sw.js`, scope `/`, from
   `src/remote-sw.ts`) hands every `/api/` request of the page, `fetch` and `<img src>` alike, to the page, which
-  sends it to the right machine and streams the answer back (`relay.ts`). A dropped channel closes that machine's socket and
-  its connection's retry opens a fresh channel, with the connect token it already holds while that token has more than
-  20 seconds left (`CONNECT_TOKEN_MARGIN_MS`; a token is good for 60), else a new one, and a channel that fails to
-  open drops the token it used. The page builds the hello's keys while Shinsa Cloud's connect call runs
+  sends it to the right machine and streams the answer back (`relay.ts`). It never relays a navigation, and every answer it relays carries `content-security-policy: sandbox; default-src 'none'` and `nosniff` over whatever the machine sent, so a file a machine serves (an agent's SVG or HTML evidence, say) never opens as a page of `app.shinsa.dev`, the origin that holds this browser's device keys (`test/lib/remote/relay.test.ts`). A dropped channel closes that machine's socket and
+  its connection's retry opens a fresh channel with a new connect token, since a token opens one channel once. The page builds the hello's keys while Shinsa Cloud's connect call runs
   (`openRemoteChannel` takes the URL as a promise). `bun scripts/perf/remote.ts` times each leg (Shinsa Cloud's
   connect call, cloudflared, the handshake, the first state, `/api` requests through the channel) on a copy of your
   log in a scratch home with a test device of its own, over loopback and Cloudflare quick tunnels on QUIC and HTTP/2
@@ -3026,9 +3093,9 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   Shinsa on <name> to use this." (the local app: "Update Shinsa to use this."). Anything else that needs a newer
   engine asks `useEngineCommand(type, id)` or `useEngineFeature(feature, id)`, a name in `ENGINE_FEATURES` (`task.share`,
   `feedback` for `GET /api/feedback`, `teams` for the team routes and `GET /api/teams/tasks`, and
-  `review.approve_after_fix` for `gate.answer`'s `thenApprove`, and `message.line_comments` for `task.message`'s
-  `comments`, today; Settings → Teams and the review's Fix and approve
-  choice show only on an engine that has them). `ENGINE_PROTOCOL` is the hard floor: a machine whose protocol differs from the page's is left out of the
+  `review.approve_after_fix` for `gate.answer`'s `thenApprove`, `message.line_comments` for `task.message`'s
+  `comments`, and `changelog` for `GET /api/changelog`, today; Settings → Teams, the review's Fix and approve choice and
+  What's new show only on an engine that has them). `ENGINE_PROTOCOL` is the hard floor: a machine whose protocol differs from the page's is left out of the
   dashboard, merges nothing and gets no command, and Settings → Machines says "Update Shinsa on <name> to reach it from
   here." in its row, as do New task's machine picker and a routing policy's on that machine's disabled entry. When every
   machine of the dashboard is on another protocol, the dashboard opens on that message instead of the app
@@ -3091,6 +3158,68 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
 - **Agents never read it.** `agents/policy.ts` refuses a command naming `data/remote.json` in an agent's shell, and
   every `shinsa remote` command but `status` is human-only. A guard rail, not a lock: an agent on the machine already
   reaches the engine, and the danger is a copy leaving the machine.
+
+### Threat model
+
+What remote access protects is a person's code, tasks, transcripts and keys. Only the machine holds them; everything
+else is a way in or a way through, and is trusted with as little as it needs:
+
+- **The machine** holds every task and every key (`remote.json`). It trusts nothing that arrives through the tunnel
+  until `TunnelGate` has admitted it, and sends nothing to anyone but its own enrolled browsers except through
+  `EgressGate`.
+- **app.shinsa.dev** (`apps/cloud`) is trusted for identity: who is signed in, which machines an account may reach,
+  and the connect tokens that say so. It is not trusted with content: it holds no key that opens a sealed channel, so
+  a Worker or a D1 copy in the wrong hands can deny service, or mint tokens naming any user, but cannot read a task. A
+  channel still needs a device key the machine enrolled, or a link proof that only turns into a request you accept.
+  What does pass through it in the clear is said where it happens: previews, webhook bodies and Slack text.
+- **Cloudflare's tunnel** carries sealed frames it cannot open, and previews and webhooks in the clear.
+- **A browser** is enrolled per machine, and its device key cannot be read out by script. The web app treats every
+  machine as hostile to the others: no machine's data runs as a page of app.shinsa.dev (the relay above).
+- **A teammate, a guest or a share link** sees only what its preset or team allows, encoded through `EgressGate`.
+- **An agent on the machine** already reaches the engine; `agents/policy.ts` keeps `remote.json` out of its shell.
+
+Every way in or out passes one gate, and each has a test that a request outside it is refused:
+
+| Gate | Where | Decides | Refusal test |
+|---|---|---|---|
+| Worker edge | `Ingress`, `PageSession` or `MachineSession`, `RequestGate` (`apps/cloud`) | every route, by caller: anonymous, signed in, machine, owner, member, guest, teammate | `apps/cloud/test/gates.test.ts` |
+| Worker to machine | `Tunnels` (`apps/cloud`, `integrations/tunnels/`) | webhooks, previews and Slack, by checked path, never following a redirect | `apps/cloud/test/hooks.test.ts` |
+| Into the machine | `TunnelGate` (`remote/gate/`) | every tunnel request, socket upgrade and channel request, by route and principal | `apps/engine/test/remote/gate.test.ts` |
+| Out of the machine | `EgressGate` (`remote/egress/`) | every share and team view and the signed team list by allowlist, a preview's headers by a list of those that reveal the machine | `apps/engine/test/remote/gate.test.ts` |
+| The sealed channel | core's `remote/` handshake and frames | which device keys open it, and every frame after | `packages/core/test/remote/handshake.test.ts`, `frames.test.ts`, `connect-token.test.ts` |
+| The browser | the service worker relay (`apps/web`, `relay.ts`) | that nothing a machine serves runs as a page | `apps/web/test/lib/remote/relay.test.ts` |
+
+What a stolen credential reaches, and how it is ended:
+
+| Stolen | Reaches | Ended by |
+|---|---|---|
+| A connect token | one channel of its kind, once, within 60 seconds, and still not past the handshake without an enrolled key | its nonce, spent on first use |
+| A session (cookie or bearer) | the account's machine list, connect tokens and private previews of machines it owns or belongs to; no task, since a channel also needs an enrolled device | signing out (the row is deleted), 30 days |
+| A session and that browser itself | everything that account reaches on the machines that browser is enrolled on | revoking the device on the machine, then signing out |
+| A share link | one task, live, read-only, at its preset | Stop sharing |
+| A team key | nothing by itself: every team view also needs a team connect token for a current member | removing the member, who then gets no token |
+| A webhook address | firing that one schedule, at most 60 a minute, and only with its signature when it has one | pausing or removing the schedule |
+| An invite or hand-off link | one claim, then an access request or the hand-off you answer | its single use, or turning the link off |
+| The machine token | the machine's own routes on app.shinsa.dev (heartbeat, invites, members, guests, Slack posts, removal); no task, which the Worker never holds | removing the machine, or pairing again |
+| The tunnel token | running a connector for that tunnel, so receiving its webhooks, previews and Slack forwards; a channel still fails, since the impostor lacks the machine's key | removing the machine, or pairing again |
+| The connect key | acting as app.shinsa.dev toward that one machine: connect tokens (still stopped by the handshake), private previews as any member, and Slack forwards | pairing again, which mints a new one |
+
+Known limits, each a decision rather than an oversight:
+
+- The connect key sits unsealed in D1, which the Worker needs to mint tokens; sealing it needs a Worker secret and a
+  rewrite of every row, a change of its own. Pairing credentials waiting in D1 are sealed to the machine's key.
+- A team key is not rotated when a member leaves; the key alone opens nothing.
+- The Worker limits only pairing start (10 waiting per address), and the engine only webhooks (60 a minute per
+  schedule); everything else leans on Cloudflare's own limits.
+- A webhook's token is never replaced; a schedule made again gets a new one.
+- Workers Logs record request URLs, so a webhook's token is in the account's own logs.
+- Expired session rows are not swept; they hold only hashes.
+- Signing out keeps this browser's device records and team keys, so you need not enroll again; without a session
+  they open nothing.
+- A preview is plain to the Worker and to Cloudflare; a task's share is not.
+- An engine that names no features in its heartbeat (one from before connect tokens were bound) still gets the old
+  token, which opens any channel and more than once within its minute, and pairs with its credentials in the clear in
+  D1 until it collects them. The old path goes once every machine names both features.
 
 ## Sharing a task
 
@@ -3354,7 +3483,7 @@ online, and the last list of it their own machine kept while it is not (Offline 
   `remote/teams.ts`, `Teams`). A viewer asks app.shinsa.dev for a team connect token
   (`POST /__remote/teams/<team>/connect { instanceId }`, signed in, from a page; `/__remote/machine/teams/<team>/connect`
   with the machine token, from your engine), which it answers only for a member or the owner and a machine of the
-  team, signed with that machine's connect key for the viewer's GitHub id (60 seconds), as `wss://t-<machine>.shinsa.dev/team?token=…`.
+  team, signed with that machine's connect key for the viewer's GitHub id and the `team` channel (60 seconds, once), as `wss://t-<machine>.shinsa.dev/team?token=…`.
   The machine upgrades it only while remote access is on and the token checks out (`verifyConnect`; 404 or 401
   otherwise). The viewer's first and only message is a team hello: the team, the view it asks for (the team's task
   list, `{ kind: 'list' }`, or one task, `{ kind: 'task', taskId }`), a fresh P-256 key and an HMAC with the team key
@@ -3557,7 +3686,7 @@ for watching; a hand-off is for steering. Teams are another matter (LOC-78).
     a chosen account, or a message or round whose text carries an attachments block ("Only the owner of the task can
     attach files to it."), so every file the task names was attached by you. Merges and operations are the guest's to approve, as yours are. What stays at the keyboard
     (Remote access → What stays at the keyboard) stays there too.
-  - **Requests.** HTTP inside its channel reaches only `isGuestRoute` (`remote/guest-routes.ts`): `GET` of
+  - **Requests.** HTTP inside its channel reaches only what `TunnelGate` lets a guest read (`remote/gate/`, the `GuestRoute` annotation): `GET` of
     `/api/health`, `/api/tasks/<its id>` and its `blob`, `chat`, `diff`, `paths`, `raw`, `refs`, `search` and `tree`, and
     the files of that task alone: evidence in its own folder (`/api/evidence/<its id>/…`) or recorded for it, an
     attachment of its request or inbox, and a tool image or a message attachment in the transcript of one of its runs;
@@ -3651,12 +3780,13 @@ browser ──https──► <label>.shinsa.page   (apps/cloud, previews.ts)
 - **Not sealed end to end.** A task's link is sealed with its key in the fragment; a preview cannot be, since a
   browser loads a dev server as plain pages. Traffic is TLS to Cloudflare, then the Worker, then the tunnel, and the
   Worker reads it in passing. The machine checks the key on every request and every WebSocket, in constant time.
-- **The proxy.** The tunnel route `/__preview/<id>/<path>` (`resolveTunnelRoute` → `preview`) finds the live share by
+- **The proxy.** The tunnel route `/__preview/<id>/<path>` (`TunnelGate`'s route table → `preview`) finds the live share by
   id for this instance, checks `x-shinsa-preview-key`, and sends the request to the task's own run of the service
   (`selectServiceTerminal`, by service and task) on `localhost:<port>`. It sets `Host` to `localhost:<port>` and
   points the origin and referrer headers at it, so Vite's and Next's host checks pass; it drops the key header, `cf-*` and
-  hop-by-hop headers, keeps the browser's other cookies (the Worker strips the preview cookie), and turns a
-  `Location` pointing at the local origin back into a path. A WebSocket (`Upgrade: websocket`, the dev server's hot
+  hop-by-hop headers, keeps the browser's other cookies (the Worker strips the preview cookie). The answer goes back
+  through `EgressGate`, which drops the headers that describe the machine (`PREVIEW_DROPPED_HEADERS`) and turns a `Location` pointing at the local origin
+  back into a path. A WebSocket (`Upgrade: websocket`, the dev server's hot
   reload) is upgraded on the engine and relayed both ways with its subprotocol, its close code passed on when it can
   be sent.
 - **When it stops.** A wrong key, a share that ended and an unknown id all get the same page, "This preview is not
@@ -3785,7 +3915,7 @@ Slack ──a choice's button──► app.shinsa.dev /slack/interactions
   thread (`threadTs`, the mention's own `ts` for a mention outside a thread: the bot always answers in a thread), the
   author with their Slack name, the text with Slack's markup turned into words and the bot's own mention dropped
   (`resolveSlackReadableText`), a permalink, and the thread's last 100 messages, bots marked. The tunnel route
-  `POST /api/slack/events` (`remote/guard.ts`) is 404 while remote access is off, refuses a body over 1 MB and a
+  `POST /api/slack/events` (`TunnelGate`, `remote/gate/`) is 404 while remote access is off, refuses a body over 1 MB and a
   forward whose `x-shinsa-slack-signature` is not an HMAC over `v1:<ms>:<body>` keyed by the machine's connect key or
   whose `x-shinsa-slack-timestamp` is more than five minutes off (`verifySlackForwardSignature`, 401), then
   dispatches `slack.mention` with command id `slack:<event id>`, so a forward that comes twice is answered by its
@@ -4873,6 +5003,28 @@ must keep up with the SDK, never the other way round.
 - **Tests never run an updater.** The service takes `locate`, `readVersion`, `minimum`, `sdk`, `latest`, `updater`
   and `run` (`VersionsOptions`, `startShinsa`'s `versions`); the one test of the default runner points it at the fake
   `claude` in `test/helpers/bin`, whose `update` does nothing.
+
+### What's new
+
+Every release carries its changelog (`docs/release.md` → The changelog), and the web app shows what changed after an
+update (`apps/web/src/lib/changelog.ts`, `components/changelog/dialog.tsx`).
+
+- **The changelog** comes from `GET /api/changelog` (`Changelog`: releases newest first, each a `version`, a `date`
+  and its entries without `internal` ones; unreleased entries have no version). A built engine serves the history
+  embedded at build; one run from a checkout reads `.changes/` at start, every entry unreleased
+  (`apps/engine/src/changelog`). The page reads it once, when it needs it, and asks `useEngineFeature('changelog')`
+  first, so a page on an engine from before it shows nothing.
+- **The last version you saw** is this browser's, in `localStorage` (`shinsa.changelog-seen`), never the engine's:
+  seen versions do not follow you to another browser. The first time a page meets a released engine it records that
+  version and shows nothing, so a fresh install has no What's new; a development engine (`0.0.0`) never records or
+  shows one.
+- **What's new** is a button in the header, the Cards top bar and the Sidebar rail alike, shown only while the
+  engine's version is newer than the one you saw and the changelog has a release between them
+  (`resolveWhatsNew`: released versions above the seen one, up to the engine's). Its hint names the version you
+  last saw. It never opens a dialog by itself.
+- **The dialog** lists those releases, each a card with its version and date and its entries under New, Improved
+  and Fixed. Opening it, from the button, ⌘K's "What's new in Shinsa" or Settings → Updates → Changelog, records the
+  engine's version as seen, so the button goes away. From ⌘K or Settings it lists every release.
 
 ## MCP servers, plugins and skills
 

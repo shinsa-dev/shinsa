@@ -44,9 +44,11 @@ export const RequestGateLive = Layer.sync(RequestGate, () => {
     const contentType = (request.headers['content-type'] ?? '').toLowerCase();
     if (!contentType.startsWith(JSON_CONTENT_TYPE))
       return yield* new ContentTypeInvalid({ message: 'Send the request body as application/json.' });
-    const body = yield* Effect.orDie(request.text);
-    if (body.length > Context.get(endpoint.annotations, BodyLimit))
-      return yield* new BodyTooLarge({ message: 'The request body is too large.' });
+    const limit = Context.get(endpoint.annotations, BodyLimit);
+    const tooLarge = new BodyTooLarge({ message: 'The request body is too large.' });
+    if (Number(request.headers['content-length'] ?? 0) > limit) return yield* tooLarge;
+    const body = yield* Effect.orDie(request.arrayBuffer);
+    if (body.byteLength > limit) return yield* tooLarge;
   });
 
   const recordServerFailure = (error: GateError) => {

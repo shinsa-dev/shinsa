@@ -27,6 +27,8 @@ One definition per term. **Code** is the name in `packages/core`; **UI** is the 
 | focus | The one project or team whose work Home, the queue and the guide show, or none for your work | `Focus` | Focus |
 | team | People who watch each other's work: a project in a team shows every task in it to every member, live and read-only, without its chat | `RemoteTeam`, `Project.teamIds` | team |
 | teammate | Another member of a team you are in, whose team tasks you see read-only | `TeamTask.owner` | teammate |
+| changelog entry | One change's line in the changelog: a `.changes/<slug>.md` file with its `kind` (`added`, `improved`, `fixed`, `internal`) and one or two sentences; the release it belongs to comes from the tags (`docs/release.md` → The changelog) | `ChangeEntry`, `ChangeKind` | New, Improved, Fixed, Behind the scenes |
+| changelog | Every release's entries, newest first, unreleased on top, as the engine serves it at `GET /api/changelog` | `Changelog`, `ChangelogRelease` | What's new, Changelog |
 | run | One agent working one step of a task (or a delegation of it), from start to end | `Run` | a run, "the agent" |
 | attempt | One execution of a run; a resume, a retry on another account or a restart is a new attempt | `RunAttempt`, `attemptId` (`<run>:<n>`) | not shown |
 | session | The provider's own conversation a run executes in; several runs and attempts can share one | `Run.sessionId` | not shown |
@@ -243,6 +245,7 @@ one reads as its empty value. The fields under Triage and shape, Plan and build,
 | `duplicate?` | `{ of, by, why, teammate? }` \| null | closed as a duplicate of task `of`, by `you` or by triage (`shinsa`), with triage's reason; the stage stays `cancelled` and the page shows Duplicate. `teammate` (`TeammateOriginal`: `{ teamId, machineId, taskId, handle, title, owner }`, `owner` a `TeammateOwner` `{ login, name, avatarUrl }` or null) when the original is a teammate's task, `of` then holding its id on their machine. A shared task and a team listing carry `duplicate` with the status fields, so the original's owner sees what was kept over it |
 | `priority` | `urgent` \| `high` \| `normal` \| `low` | how high its decisions sit in Needs you; never what runs |
 | `waitsOn` | string[] | task ids it waits on |
+| `timing?` | `TaskTiming` | what the turnaround statistics measure, folded from events (`state/timing.ts`): `paused`, the `TimingSpan`s (`{ from, to }`) it was snoozed, in the backlog, waiting on other tasks or waiting for a usage limit, merged where they overlap, with `pausedSince` while one is open; `needsYou`, each `NeedsYouSpan` from the first open gate to the last one closing, `answered` when you answered it rather than it being withdrawn, with `needsYouSince` and the `openGates` while one is open. These are not the Paused step |
 | `stacksOn?` | string \| null | the task it stacks on as a bundle (Bundles in `docs/engine.md`) |
 | `stackBase?` | string \| null | the branch of the task below, recorded once that task is ready; `resolveRoundBase` returns it when no round of its own is stacked |
 | `bundleReady?` | `{ commit }` \| null | ready to merge with its bundle at head `commit`; a task stacked on another has it in place of a merge gate of its own |
@@ -925,7 +928,7 @@ role without the tool (`hasTool`).
 | `agent.acknowledge_delegation` | `delegation_status` | marks a finished result read |
 | `agent.file_report` | `file_report` | in a watch's read or a watchdog check only: files a task from one report (`title`, `request`, `reportId` or `link`, `author`, `postedAt`, `text`, `repoId`, `forkOf`); refuses a report the project already has a task for (`report_filed`) and a repository of another project (`repo_project`); a watchdog's always forks the shipped task (`fork_watchdog`), and links a report another watch or watchdog filed first (`watchdog.report_linked`) rather than refusing it |
 | `agent.report_read` | `report_read` | ends a read with its `summary`, as not finished with `reached: false`: a watch's next read covers the same time, a watchdog's check is missed; a watchdog check that filed a report trips it, one that filed none is healthy, and `live` answers a watchdog waiting for production; the task rests again |
-| `agent.create_task` | `create_task` | files a courier task from its `request`, optionally waiting on it (`thisWaits`), waiting on this task (`afterThis`, never with `thisWaits`), in the backlog (`backlog`), stacked on this task as a bundle (`stackOnThis`, never with `thisWaits` or `afterThis`) or forked from a task (`forkOf`) |
+| `agent.create_task` | `create_task` | files a courier task from its `request`, optionally waiting on it (`thisWaits`), waiting on this task (`afterThis`, never with `thisWaits`), in the backlog (`backlog`), stacked on this task as a bundle (`stackOnThis`, never with `thisWaits` or `afterThis`) or forked from a task (`forkOf`), in another project (`projectId`, from `project`; without a repository, triage picks one there); `new_repository` makes the engine create and register the named repository first |
 | `agent.split_task` | `split_task` | splits the approved plan into tasks (`requests`) |
 | `agent.set_schedule` | `set_schedule` | writes one of its task's schedules; `source` names an integration of the task's project to watch: a new watch is recorded as a suggested watch for you to accept (origin the task and run, in its activity), at most 10 open at once (`suggestion_limit`) |
 | `agent.delete_schedule` | `delete_schedule` | deletes one |
@@ -946,7 +949,7 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | --- | --- | --- |
 | `task.triage` | `task.triage` effect (`triage/`) | records title, repository, size, branch, waits on, and the Auto parts; a `duplicateOf` naming an open task, or a `duplicateOfTeammate` (`TeammateOriginal`), closes it as that task's duplicate before any work (a local one wins when both come); `unreached` lists the team machines the duplicate check could not read |
 | `repo.register` | `repos/index.ts` | registers a repository on first use |
-| `config.record` | `config.verify` effect | records what setup verification found, with the repository it found (`repoId`) for a task that had none |
+| `config.record` | `config.verify` effect | records what setup verification found, with the repository it found (`repoId`) for a task that had none, and how it started a repository with no commits (`started`: `branch`, `initialized`, `pushed`) |
 | `worktree.ready`, `worktree.gone` | worktree effects | the worktree exists (with the branch a main checkout was on, `returnBranch`), or is gone |
 | `task.record_edit` | the file route after a save from the Code tab (`http/routes/tasks`) | you saved `path`; `changed` says whether it now differs from the checkout's commit. Records the edit (once per file) or drops it, and steers a running agent of the task |
 | `task.commit_edits` | the push effect before it pushes, and the checks effect when the review was approved with edits | Shinsa committed your uncommitted edits (`treeHash`); clears `editedPaths` |
@@ -1018,6 +1021,7 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `task.created` | a task is created (`request`, `planFirst`; with its handle when it has a project; `createdBy`, `scheduleId` and `sourceReport` for one a watch's read filed; `watchHome` for a watch's home) |
 | `task.triaged` | triage set title, repository (or none), size, branch, handle, pipeline, decisions (always) |
 | `task.repo_bound` | a task with no repository got the one the setup check found (`repoId`, and `projectId` when it had none) |
+| `task.repo_started` | the setup check started a repository with no commits: an empty first commit on the default branch (`start`: `branch`, `initialized` when it ran `git init` on an empty folder, `pushed` when it pushed to an origin with no branches) |
 | `task.reshaped` | the pipeline changed (`by` you, agent or Shinsa, with a reason) |
 | `task.shared`, `task.unshared` | you shared a task by link or changed how long or what it shows (`limit`, `endsAt`, `preset`; the first adds an activity entry), or sharing stopped (`reason`: `you`, `done` when a task shared `until_done` settled, `expired`; each adds an activity entry) |
 | `share.recorded`, `share.failed` | the engine made the link (`url`, null when unchanged), or could not (`detail`) |
@@ -1313,7 +1317,7 @@ offers nothing an engine cannot do (`docs/engine.md` → Remote access, What eac
 | `version` | The engine's build, `0.0.0` in development (`DEVELOPMENT_VERSION`) |
 | `protocol` | `ENGINE_PROTOCOL`, raised only when an older page and this engine cannot talk at all (a changed state shape) |
 | `commands` | Every user command type it parses, `USER_COMMAND_TYPES` itself, so a new command is announced the moment it exists |
-| `features` | The named capabilities in `ENGINE_FEATURES` (`task.share`, `feedback`, `teams`, `review.approve_after_fix` and `message.line_comments` today) that are not a command, such as a route or a setting an older engine ignores |
+| `features` | The named capabilities in `ENGINE_FEATURES` (`task.share`, `feedback`, `teams`, `review.approve_after_fix`, `message.line_comments` and `changelog` today) that are not a command, such as a route or a setting an older engine ignores |
 
 `ENGINE_BASELINE_COMMANDS` is frozen: the commands every engine has had since before the `engine` message, which a page
 sends to any engine, one that never announced included (`resolveEngineCommands(null)`). A command added since is
@@ -1363,7 +1367,7 @@ A **state patch** (`StatePatch`, `packages/core/src/protocol/patch.ts`; `resolve
 | --- | --- |
 | `from`, `to` | The log position the patch applies to and the one it reaches; equal for a change that is not an event (a new Home guide, `docs/engine.md` → The briefing) |
 | `fields` | `focus`, `settings`, `onBehalfActions` when they changed, each a `ValueChange` |
-| `records` | Per record of the state (`tasks`, `runs`, `gates`, `repos`, `projects`, `taskNumbers`, `evidence`, `briefings`, `schedules`, `sessionUsage`), the entries that changed by id, each an `EntryChange` |
+| `records` | Per record of the state (`tasks`, `runs`, `gates`, `repos`, `projects`, `taskNumbers`, `evidence`, `briefings`, `schedules`, `sessionUsage`, `presence`), the entries that changed by id, each an `EntryChange` |
 
 An `EntryChange` is `{ put }` (a new or replaced entry), `{ remove: true }` or `{ fields, unset }` (the fields whose
 value changed, each a `ValueChange`, and the ones that went away). A `ValueChange` is `{ put }` or `{ drop, append }`:
@@ -1570,6 +1574,25 @@ What the engine, the Worker on app.shinsa.dev and the web share for the Slack bo
 | `SlackMessage` (`blocks.ts`) | `text`, the notification's fallback, and `blocks` (`header`, `section` with text or fields, `context`, `actions` of buttons) within Slack's limits (`SLACK_BLOCK_LIMITS`: 50 blocks, 3,000 characters a section, 150 a header, 75 a button, 10 fields) |
 | `SlackAnswer` (`answers.ts`, `parseSlackAnswer`) | `interactionId`, `teamId`, `channelId`, `threadTs`, `messageTs`, `userId`, `gateId`, `choice` (the index into the gate's choices; a button's value is `{ gateId, choice }`, `serializeSlackAnswerValue`) |
 | `SlackSnapshot` (the engine's `GET /api/slack`) | `remote`, `connectUrl`, `links`, `problem` |
+
+## The changelog
+
+Core's `changelog` folder (`schema.ts`, `changelog.ts`) holds the shapes the release scripts, the engine and the web app
+share; the rules for writing an entry and the release it belongs to are `docs/release.md` → The changelog, and how the
+app shows it `docs/engine.md` → What's new.
+
+| Shape | Holds |
+| --- | --- |
+| `ChangeEntry` | `slug` (the file name without `.md`, at most `CHANGE_SLUG_LIMIT`, 80), `kind` (`ChangeKind`) and `text` (at most `CHANGE_TEXT_LIMIT`, 280) |
+| `ReleasedChange` | An entry with the `version` and `date` (`YYYY-MM-DD`) of the release it belongs to, both `null` while unreleased |
+| `ChangelogRelease` | A `version` (`null` for unreleased), its `date` and its `changes`, in `CHANGE_KINDS` order |
+| `Changelog` | `releases`, newest first: what `GET /api/changelog` answers, behind the `changelog` engine feature |
+
+`parseChangeEntry(slug, source)` reads one file and returns `{ ok, entry }` or every problem as a sentence
+(`CHANGE_MESSAGES`); `resolveChangelog` groups `ReleasedChange`s into a `Changelog`; `resolvePublicChangelog` drops
+`internal` entries and the releases left empty; `listUnseenReleases(changelog, seen)` gives the releases newer than
+a version; `serializeReleaseNotes` writes a release's sections under `CHANGE_KIND_TITLE` (New, Improved, Fixed,
+Behind the scenes).
 
 ## Where it lives
 

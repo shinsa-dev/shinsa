@@ -920,6 +920,44 @@
   }
 }
 
+/* The fade under a dialog's sticky header (`DIALOG_HEADER_STICKY`): the
+   content scrolling up fades into the dialog's own surface before it reaches
+   the header. It grows over the first 1.5rem of scroll, from the body's own
+   scroll timeline (the header's nearest scroller), so a dialog at rest or one
+   that does not scroll shows none. The dialog's surface is the one colour
+   behind its content, so a gradient of it reads the same as a mask would, and
+   it leaves the header itself unmasked. Browsers without scroll timelines
+   keep the fixed header and show no fade. */
+@utility dialog-header-fade {
+  &::after {
+    content: "";
+    position: absolute;
+    inset-inline: 0;
+    top: 100%;
+    height: 1.5rem;
+    pointer-events: none;
+    background: linear-gradient(to bottom, var(--background), transparent);
+    opacity: 0;
+  }
+
+  @supports (animation-timeline: scroll()) {
+    &::after {
+      animation: dialog-header-fade linear both;
+      animation-timeline: scroll(nearest block);
+      animation-range: 0 1.5rem;
+    }
+  }
+}
+
+@keyframes dialog-header-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
 /* ── Superellipse corners (squircle) — progressive enhancement ─────────────
    Also applied to ::before/::after so background layers (the press
    ::before pattern) keep the same corner shape as their element. */

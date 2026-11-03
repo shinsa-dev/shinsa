@@ -13,6 +13,7 @@ import {
   type RemoteTeam,
   resolveMachineTeamPath,
   resolveTeamJoinUrl,
+  type ShareLiveView,
   type ShareMessage,
   type ShinsaState,
   serializeBase64Url,
@@ -28,7 +29,7 @@ import { createRefusedConnector } from '../../src/remote/connector/refused.ts';
 import { Remote } from '../../src/remote/index.ts';
 import { TEAM_GONE_REASON, TEAM_REMOTE_CHANGED, Teams, type TeamsOptions } from '../../src/remote/teams.ts';
 import { createTempDir, until } from '../helpers/index.ts';
-import { createRepo, createStubEngine, createTask } from '../helpers/state.ts';
+import { createRepo, createShareView, createStubEngine, createTask, readSentView } from '../helpers/state.ts';
 import { createKeyPair, startHandshake } from './client.ts';
 import { type FakeControlPlane, refuse, startFakeControlPlane } from './control-plane.ts';
 
@@ -127,7 +128,7 @@ function setUp(options: SetUp = {}) {
     state.tasks['task-2'] = createTask({ id: 'task-2', repoId: null, activity: [] });
     options.patch?.(state);
   });
-  const live = { view: { live: true }, files: [] };
+  const live = { view: createShareView({ title: 'Live' }), files: [] };
   const transcriptListeners: ((runId: string) => void)[] = [];
   const teams = new Teams({
     engine: stub.engine,
@@ -240,6 +241,32 @@ describe('a team view of this machine', () => {
     });
   });
 
+  test('a field the redaction does not name leaves neither in the list nor in its signed snapshot', async () => {
+    const { teams, remote } = setUp({
+      patch: (state) => {
+        state.tasks['task-1'] = createTask({
+          repoId: 'repo-1',
+          activity: [],
+          pullRequest: {
+            number: 7,
+            url: 'https://github.com/acme/app/pull/7',
+            state: 'open',
+            checks: 'passing',
+            unresolvedComments: 0,
+            mergeable: true,
+            updatedAt: 1,
+            reviewToken: 'ghp_secret',
+          } as never,
+        });
+      },
+    });
+    const [view] = (await openViewer(teams, KAI.id, LIST)).views() as TeamListView[];
+    expect(view?.tasks[0]?.task.pullRequest).not.toHaveProperty('reviewToken');
+    const { publicKey } = await remote.store.resolveSigningKey();
+    if (!view?.snapshot) throw new Error('The list view carries no snapshot');
+    expect(JSON.stringify(await verifyTeamSnapshot(publicKey, view.snapshot))).not.toContain('ghp_secret');
+  });
+
   test('a machine with no credentials signs nothing, since no teammate could tell which machine it is', async () => {
     const { teams } = setUp({ file: { credentials: null } });
     const [view] = (await openViewer(teams, KAI.id, LIST)).views() as TeamListView[];
@@ -283,7 +310,7 @@ describe('a team view of this machine', () => {
   test('a task view streams the task the way a share link does', async () => {
     const { teams } = setUp();
     const viewer = await openViewer(teams, MONA.id, TASK_VIEW);
-    expect(viewer.views()).toEqual([{ live: true }]);
+    expect(viewer.views()).toEqual([readSentView(createShareView({ title: 'Live' }))]);
   });
 
   test('a task view is pushed again when one of its runs writes to its transcript, and no other is', async () => {
@@ -295,7 +322,7 @@ describe('a team view of this machine', () => {
       },
       resolveLive: () => {
         pushes += 1;
-        return Promise.resolve({ view: { push: pushes }, files: [] } as never);
+        return Promise.resolve({ view: createShareView({ title: `Push ${pushes}` }), files: [] } as never);
       },
     });
     const viewer = await openViewer(teams, MONA.id, TASK_VIEW);
@@ -305,7 +332,10 @@ describe('a team view of this machine', () => {
     writeTranscript('gone');
     writeTranscript('run-1');
     await until('the view is pushed again', () => viewer.views().length === 2);
-    expect(viewer.views()).toEqual([{ push: 1 }, { push: 2 }]);
+    expect(viewer.views().map((view) => (view as ShareLiveView).shared.task.title)).toEqual([
+      'Push 1',
+      'Push 2',
+    ]);
     expect(list.views()).toHaveLength(listed);
   });
 

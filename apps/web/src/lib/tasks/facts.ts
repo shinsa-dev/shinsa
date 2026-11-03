@@ -201,6 +201,16 @@ export function resolveFiledByFact(state: ShinsaState, task: Task): FiledByFact 
       target,
     };
   }
+  if (creator.kind === 'courier' && task.forkOf === filer.id) {
+    return {
+      icon: 'IconFork',
+      verb: 'Forked from',
+      handle: filer.handle ?? null,
+      name: filer.title,
+      hint: `The agent of ${label} filed this task and forked it from its own conversation.`,
+      target,
+    };
+  }
   if (creator.kind === 'courier') {
     return {
       icon: 'IconAgents',

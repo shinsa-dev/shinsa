@@ -2,7 +2,7 @@ import { describe, expect, it } from 'bun:test';
 import { type PhaseProgress, resolveTaskProgress, type Task, type TaskProgress } from '@shinsa/core';
 import {
   describeStep,
-  describeStepCount,
+  describeStatusCount,
   describeTrackPosition,
   isStepReached,
   resolveLabelFold,
@@ -466,15 +466,24 @@ describe('the current step', () => {
     expect(describeTrackPosition(review)).toBe('Step 2 of 2: Your review');
   });
 
-  it('names a step only when it has a count', () => {
-    expect(describeStepCount(sampleStep('Build', 'current', '1/2'), 'Building')).toBe('Build 1/2');
-    expect(describeStepCount(sampleStep('Your review', 'waiting'), 'Changes to review')).toBeNull();
-    expect(describeStepCount(null, 'Building')).toBeNull();
+  it('gives the current step’s count to show beside the stage, only when it has one', () => {
+    expect(describeStatusCount(sampleStep('Build', 'current', '3/6'), 'Building', 'Building')).toBe('3/6');
+    expect(describeStatusCount(sampleStep('Checks', 'current', '2/5'), 'Checking', 'Checking')).toBe('2/5');
+    expect(describeStatusCount(sampleStep('Build', 'current'), 'Building', 'Building')).toBeNull();
+    expect(describeStatusCount(null, 'Building', 'Building')).toBeNull();
   });
 
-  it('leaves the count out when the status already names the step', () => {
+  it('leaves the count out when the status is not the stage', () => {
     expect(
-      describeStepCount(sampleStep('Pre-merge', 'waiting', '1/2'), 'Pre-merge · 1 step left')
+      describeStatusCount(sampleStep('Build', 'current', '1/2'), 'Needs your answer', 'Building')
+    ).toBeNull();
+
+    expect(
+      describeStatusCount(
+        sampleStep('Pre-merge', 'waiting', '1/2'),
+        'Pre-merge · 1 step left',
+        'Ready to merge'
+      )
     ).toBeNull();
   });
 

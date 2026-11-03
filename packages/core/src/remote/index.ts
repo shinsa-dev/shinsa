@@ -19,8 +19,11 @@ export {
 } from './channel.ts';
 export {
   CONNECT_TOKEN_TTL_MS,
+  type ConnectAudience,
   type ConnectClaim,
   createConnectToken,
+  createLegacyConnectToken,
+  type LegacyConnectClaim,
   verifyConnectToken,
 } from './connect-token.ts';
 export {
@@ -39,6 +42,11 @@ export {
   MAX_OWNED_TEAMS,
   MAX_TEAM_MEMBERS,
   MachineCredentials,
+  MACHINE_FEATURES,
+  type MachineFeature,
+  MachineFeatures,
+  hasMachineFeature,
+  parseMachineCredentials,
   MemberRequest,
   NativeSignInTokenRequest,
   NativeSignInTokenResponse,
@@ -129,6 +137,12 @@ export {
   serializePrivateKey,
   serializePublicKey,
 } from './keys.ts';
+export {
+  openPairingCredentials,
+  PAIRING_SEAL_IV_BYTES,
+  type PairingSealInput,
+  sealPairingCredentials,
+} from './pairing-seal.ts';
 export {
   isLocalOnlyCommand,
   LOCAL_ONLY_CODE,
@@ -303,6 +317,8 @@ export {
   verifyTeamWelcome,
 } from './teams.ts';
 export {
+  CONNECT_CHANNELS,
+  ConnectChannel,
   PLACEMENT_LIMITS,
   PLACEMENT_POLICY_LIMITS,
   type PlacementCandidate,

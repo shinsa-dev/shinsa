@@ -114,7 +114,7 @@ web ──WebSocket──► shinsa engine
 |---|---|
 | `bun dev` | `shinsa engine` on :5180 and the web app on :5181 (proxies `/api` and `/ws`); the engine's `dev` and `start` scripts pass `SHINSA_PORT=5180` (an exported `SHINSA_PORT` wins), so a checkout never takes the Mac app's port |
 | `bun run build` then `bun start` | Production: `shinsa engine` serves `apps/web/dist` on :5180 |
-| `bun lint` | Oxlint, type-aware with the Effect rules (`bun lint:oxlint`: `effect-tsgo oxlint --type-aware`, the rules in `.oxlintrc.json`, the ones Oxlint lacks in the tested `shinsa` plugin in `scripts/oxlint/`), the same markup rules on the HTML pages (`bun lint:html`, `scripts/lint-html.ts`: each page read as JSX on its own lines), stylelint on the CSS (`bun lint:styles`, `.stylelintrc.json`), `bun lint:conventions` (`scripts/lint-conventions.ts`, its rule tables and messages in `scripts/lint-rules.ts`: comments outside `packages/ui`, the verb catalog, the class checks in `apps/web/src` and, for icon fades, green checkmarks, corners and focus states, `packages/ui/src` too) and `bun lint:spelling` (cspell; add a real word to `cspell.json`) |
+| `bun lint` | Oxlint, type-aware with the Effect rules (`bun lint:oxlint`: `effect-tsgo oxlint --type-aware`, the rules in `.oxlintrc.json`, the ones Oxlint lacks in the tested `shinsa` plugin in `scripts/oxlint/`), the same markup rules on the HTML pages (`bun lint:html`, `scripts/lint-html.ts`: each page read as JSX on its own lines), stylelint on the CSS (`bun lint:styles`, `.stylelintrc.json`), `bun lint:conventions` (`scripts/lint-conventions.ts`, its rule tables and messages in `scripts/lint-rules.ts`: comments outside `packages/ui`, the verb catalog, the class checks in `apps/web/src` and, for icon fades, green checkmarks, corners and focus states, `packages/ui/src` too) and `bun lint:spelling` (cspell; add a real word to `cspell.json`) and `bun lint:changelog` (`scripts/changelog.ts`: every `.changes/` entry valid, and one added when the branch changes the app) |
 | `bun format` | oxfmt checks formatting, Tailwind class order and import order (`.oxfmtrc.json`; `bun format:fix` writes) |
 | `bun check-types` | TypeScript 7 with the Effect language service in every workspace and `scripts/` (`effect-tsgo tsc --noEmit`, the severities in `tsconfig.effect.json`; an Effect error or warning fails it) |
 | `bun run test` | Unit tests (Bun) in every workspace plus `scripts/*.test.ts` (`bun run test:scripts`, the root `bunfig.toml`); each workspace and `scripts/` fails below 100% line and function coverage. Every test script runs `bun test --randomize`, which shuffles the files and the tests in each file and prints the order's `--seed=N`: tests must not depend on order, within a file or across files (rerun a failing order with `bun test --randomize --seed N` in that package) |
@@ -159,6 +159,12 @@ log. Use a scratch directory when testing: `SHINSA_HOME=/tmp/shinsa-dev bun --cw
   differs, which wins). One blue accent (`primary`) for the primary button, links, selection and checkmarks; `success`,
   `warning`, `destructive` and `info` carry state only.
 - Ternaries never wrap an awaited call; multi-line arrows get a block; no single-use constants; `.catch(() => undefined)` is not allowed.
+
+- **Every change to the app adds a changelog entry**: a new `.changes/<slug>.md` with front matter `kind: added`,
+  `improved`, `fixed` or `internal` and one or two plain sentences (at most 280 characters) on what changed for the
+  person using Shinsa, in the `copy` skill's voice. `internal` is for refactors, tests and tooling: it shows only in
+  the release notes, never in the app's What's new. Never edit another change's entry to fit yours. `bun
+  lint:changelog` fails a branch that changes the app without one (`docs/release.md` → The changelog).
 
 **Docs ship in the same change as the behaviour, or the change is not done.**
 

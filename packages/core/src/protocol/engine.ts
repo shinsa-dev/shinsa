@@ -10,6 +10,7 @@ export const ENGINE_FEATURES = [
   'teams',
   'review.approve_after_fix',
   'message.line_comments',
+  'changelog',
 ] as const;
 
 export type EngineFeature = (typeof ENGINE_FEATURES)[number];

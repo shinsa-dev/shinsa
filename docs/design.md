@@ -256,7 +256,9 @@ Only these, and they win over anything below:
    20px gate or stage tile, title, status line and age. **A row is a small overview card on two lines**, so you can tell
    where a task is without opening it: the title, then one summary line (`RowSummary`,
    `components/queue/row-summary.tsx`) laid out across the row: the handle and status (`resolveRowStatus`: the task's status, but its stage
-   while the agent waits to check in again, which the row's snooze tile already says), then `MiniTrack`
+   while the agent waits to check in again, which the row's snooze tile already says), followed in `fg-2` tabular
+   numbers by the current step's count when the status is the stage and the step has one ("Building 3/6", "Checking
+   2/5", `describeStatusCount`; never beside a gate's status such as "Needs your answer"), then `MiniTrack`
    (`components/overview/mini-track.tsx`), the Overview track's steps (`resolveSteps`) as 6px dots
    joined by 8px hairlines, green done, a blue pulse current, amber waiting on you, a dashed ring skipped
    and a hollow ring not started, one `role="img"` labelled "Step 4 of 7: Build 1/2"
@@ -265,9 +267,7 @@ Only these, and they win over anything below:
    shimmering as the work card's live feed does and still when the run is parked (`resolveLatestActivity`
    over the run's transcript, which the row follows only while it is mounted, inside `Truncate` so a long one ends in an ellipsis
    and shows in full in a tooltip, its shimmer sweeping only the characters before the ellipsis: the `Truncate` is `relative` and the
-   text `static`, so the band crosses the visible width); otherwise the current
-   step's count when it has one ("Build 1/2", "Checks 2/5", `describeStepCount`), left out when the status already names the step
-   ("Pre-merge · 1 step left"), and nothing more. That text after the dots is on Home's rows only: the rail and the
+   text `static`, so the band crosses the visible width); otherwise nothing. That text after the dots is on Home's rows only: the rail and the
    Needs you popover end at the dots (`RowSummary`'s `detail`, on for the wide queue). The
    queue rows carry no now line or stage reason: the status and the dots already say it, and a static
    description only repeats them. While the steps can still change (triage, or the agent planning
@@ -1603,6 +1603,13 @@ Only these, and they win over anything below:
       `ConfirmDialog` and `PercentDialog` keep their text. A busy button stays busy until the dialog
       is gone, `ConfirmDialog` runs its action once it has closed, and ⌘K resets to the root after it
       has faded, not while.
+    - **Only a dialog's body scrolls.** The kit's `DialogContent` and `AlertDialogContent` never scroll themselves:
+      they hold one body (`data-slot` `dialog-body`, `alert-dialog-body`) that does, so the corner close button stays
+      put, and `DialogHeader` and `AlertDialogHeader` stick to the top of that body (`DIALOG_HEADER_STICKY`), bleeding
+      over its padding, with a 1.5rem fade under them that grows as the body scrolls (`dialog-header-fade` in
+      `globals.css`, from the body's scroll timeline, so a dialog at rest shows none). Every dialog gets it from the
+      kit; a header's own `className` only sets its side padding (`px-10` where the close button sits beside the
+      title). The command menu, whose list scrolls on its own, passes `bodyClassName` to take the padding off.
     - **A dialog's description is `fg-2`**, two steps under the `fg-4` title, set once in the kit's
       `DialogDescription` and `AlertDialogDescription` (and `SheetDescription`, already `fg-2`), so every dialog,
       confirm dialog and sheet follows: the title and the fields lead, and the sentence under the title is the

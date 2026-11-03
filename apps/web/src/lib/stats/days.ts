@@ -1,4 +1,4 @@
-import { DAY_MS, type ShinsaState, type StatsWindow } from '@shinsa/core';
+import { DAY_MS, type ShinsaState, type StatsWindow, type TurnaroundWindow } from '@shinsa/core';
 
 export type StatsRange = 7 | 30 | 90 | 'all';
 
@@ -62,6 +62,15 @@ export function resolveStatsWindow(now: number, range: StatsRange, since: number
 export function resolveYearWindow(now: number): StatsWindow {
   const weekday = new Date(now).getDay();
   return resolveRangeWindow(now, (YEAR_WEEKS - 1) * 7 + weekday + 1);
+}
+
+export function resolveHourOfWeek(at: number) {
+  const date = new Date(at);
+  return date.getDay() * 24 + date.getHours();
+}
+
+export function resolveTurnaroundWindow(window: StatsWindow, now: number): TurnaroundWindow {
+  return { ...window, hourOf: resolveHourOfWeek, now };
 }
 
 export function parseStatsRange(value: string): StatsRange {

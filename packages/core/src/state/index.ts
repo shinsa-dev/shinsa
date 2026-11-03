@@ -56,5 +56,7 @@ export {
   selectTaskByHandle,
   selectTaskByReference,
 } from './queries.ts';
+export { PRESENCE_RETENTION_HOURS, resolvePresenceHour } from './presence.ts';
 export { listSchedules } from './schedules.ts';
+export { isTaskPaused, resolveTaskTiming } from './timing.ts';
 export { listOpenWatchSuggestions, listWatchSuggestions } from './watch-suggestions.ts';
