@@ -2852,6 +2852,18 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   `ownerOnly` route only for the machine's owner (403 `not_owner`, joining a team from this machine), and no write in
   inspect mode. A command's own fields are checked once more in `dispatchUserCommand` (core's `isLocalOnlyCommand`
   and, for a guest, `resolveScopedRefusal`), the one path both the socket and `POST /api/commands` take.
+- **The way out** (`EgressGate`, `remote/egress/`): the one gate for what this machine sends to anyone but its own
+  browsers. Core's `resolveSharedTask` and `listTeamTasks` choose what a share preset or a team may see; the gate
+  bounds it: every view a share link or a team channel sends (`ShareChannel`, both kinds) and the team list this
+  machine signs is encoded through an allowlist schema (`ShareView`, `TeamListView`, `TeamTask` in
+  `remote/egress/schema.ts`), so a field no schema names is dropped, however a redaction spreads a record. A field that
+  must leave empty (a worktree path, a run's session id, a waiting run's account, a repository's path, a project's
+  folders, a gate's answer, a delegation's brief) is a `Null`, `''` or empty tuple there: a view that carries one is
+  refused, and the channel closes (1008) instead of sending it. A preview's answer keeps only the headers a page needs
+  (`PREVIEW_RESPONSE_HEADERS`: content, caching, cookies, CORS, the security headers and `Location`, a local origin
+  turned back into a path), so `X-Powered-By`, `Server-Timing` or a source map's local path never leave. Slack posts,
+  like every call to app.shinsa.dev, leave only through `RemoteClient`, whose payloads are core's `RemoteApi`
+  schemas (`SlackRelayPost`), so that is their gate. `test/remote/gate.test.ts` refuses each kind of leak.
 - **The sealed channel** (`RemoteChannel`): the browser's first message is the hello; a device key that is not
   added is refused unless the hello carries a proof made with the machine's link secret, which turns it into
   an access request, or the key already has a request waiting under the same GitHub account (a browser that asked,
@@ -3665,8 +3677,9 @@ browser ──https──► <label>.shinsa.page   (apps/cloud, previews.ts)
   id for this instance, checks `x-shinsa-preview-key`, and sends the request to the task's own run of the service
   (`selectServiceTerminal`, by service and task) on `localhost:<port>`. It sets `Host` to `localhost:<port>` and
   points the origin and referrer headers at it, so Vite's and Next's host checks pass; it drops the key header, `cf-*` and
-  hop-by-hop headers, keeps the browser's other cookies (the Worker strips the preview cookie), and turns a
-  `Location` pointing at the local origin back into a path. A WebSocket (`Upgrade: websocket`, the dev server's hot
+  hop-by-hop headers, keeps the browser's other cookies (the Worker strips the preview cookie). The answer goes back
+  through `EgressGate`, which keeps only the headers a page needs and turns a `Location` pointing at the local origin
+  back into a path. A WebSocket (`Upgrade: websocket`, the dev server's hot
   reload) is upgraded on the engine and relayed both ways with its subprotocol, its close code passed on when it can
   be sent.
 - **When it stops.** A wrong key, a share that ended and an unknown id all get the same page, "This preview is not

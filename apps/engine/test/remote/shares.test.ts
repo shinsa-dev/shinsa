@@ -403,6 +403,40 @@ describe('a share link opened live', () => {
     expect(plane.calls).toEqual([]);
   });
 
+  test('a field the redaction does not name never leaves', async () => {
+    const { publisher } = sharedSetUp({
+      preset: 'full',
+      patch: (state) => {
+        const task = state.tasks['task-1'] as Task;
+        Object.assign(task.pullRequest ?? {}, { reviewToken: 'ghp_secret' });
+        state.runs['run-1'] = {
+          ...createRun(),
+          delegation: {
+            parentRunId: 'run-0',
+            depth: 1,
+            requestKey: 'key',
+            title: 'Review',
+            brief: 'the whole brief',
+            mode: 'async',
+            wake: 'result',
+            isolation: 'shared',
+            baseCommit: null,
+            delivery: 'pending',
+            question: null,
+            requestedAt: 1,
+            worktree: '/Users/mona/secret',
+          },
+        } as never;
+      },
+    });
+    const viewer = await openViewer(publisher);
+    await until('the viewer reads the view', () => viewer.views().length > 0);
+    const [view] = viewer.views();
+    expect(view?.shared.task.pullRequest).not.toHaveProperty('reviewToken');
+    expect(view?.shared.runs[0]?.delegation).not.toHaveProperty('worktree');
+    expect(view?.shared.runs[0]?.delegation?.brief).toBe('');
+  });
+
   test('pushes a change at once, sends a file again only when it changed, and reads GitHub once per head', async () => {
     const { stub, publisher, github } = sharedSetUp();
     const viewer = await openViewer(publisher);

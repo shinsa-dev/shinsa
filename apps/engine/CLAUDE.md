@@ -303,6 +303,9 @@ src/
 │                        edge), gate/ (TunnelGate in service.ts: the one gate for everything through the tunnel,
 │                        the route table, the principal and the refusals in schema.ts; Ingress, EngineGate and
 │                        the server's socket upgrades ask it and decide nothing else about the tunnel),
+│                        egress/ (EgressGate in service.ts: the one gate for what leaves, every share and team
+│                        view, the team list this machine signs and a preview's answer headers encoded through the
+│                        allowlist schemas in schema.ts; a view that breaks one is refused, never sent),
 │                        channel.ts (RemoteChannel: the handshake, sealed frames, the app socket and HTTP
 │                        inside, a lease on the access scope), placement.ts (POST /api/placement: the
 │                        classifier reads every machine's policies with a new task's request and names its machine),

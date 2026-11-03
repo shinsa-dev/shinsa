@@ -5,9 +5,11 @@ import { Context, Effect, Layer, Result } from 'effect';
 import type { ServerConfig } from '../../src/config/index.ts';
 import type { HttpContext, RequestSourceShape } from '../../src/http/schema.ts';
 import { HttpServices } from '../../src/http/services/service.ts';
+import { EgressGate } from '../../src/remote/egress/service.ts';
 import type { TunnelGate as TunnelGateService } from '../../src/remote/gate/service.ts';
 import { TunnelGate } from '../../src/remote/gate/service.ts';
 import type { Engine } from '../../src/runtime/index.ts';
+import { createGate, createRepo, createRun, createShareView, readSentView } from '../helpers/state.ts';
 import { createHttpContext } from '../helpers/web.ts';
 
 const BRIEF = '<attachments><attachment url="/api/attachments/a1/brief.png" /></attachments>';
@@ -388,5 +390,83 @@ describe('a guest’s reads inside the channel', () => {
     expect(await canRead('/api/commands', 'POST')).toBe(false);
     expect(await canRead('/api/attachments', 'POST')).toBe(false);
     expect(await canRead('/api/settings')).toBe(false);
+  });
+});
+
+describe('the outbound gate', () => {
+  const view = createShareView({ title: 'Shared' });
+  const WAIT = {
+    id: 'w1',
+    runId: 'r1',
+    role: 'agent',
+    phaseIndex: null,
+    account: null,
+    resetAt: 1,
+    armedAt: 1,
+    autoResume: true,
+    status: 'waiting',
+  };
+
+  function withTask(patch: Record<string, unknown>) {
+    return { ...view, shared: { ...view.shared, task: { ...view.shared.task, ...patch } } };
+  }
+
+  test('a waiting run leaves without its account', () => {
+    expect(JSON.parse(EgressGate.serializeView(withTask({ usageWait: WAIT }))).shared.task.usageWait).toEqual(
+      WAIT
+    );
+  });
+
+  test('a shared view leaves with only the fields its allowlist names', () => {
+    const sent = JSON.parse(EgressGate.serializeView(withTask({ inbox: [{ id: 'm1', text: 'private' }] })));
+    expect(sent).toEqual(readSentView(view));
+    expect(sent.shared.task).not.toHaveProperty('inbox');
+  });
+
+  test.each([
+    ['a worktree path', withTask({ worktreePath: '/wt/task-1' })],
+    ['a fix fingerprint', withTask({ fixSignature: 'abc' })],
+    ['a waiting account', withTask({ usageWait: { ...WAIT, account: { id: 'a1' } } })],
+    ['a session id', { ...view, shared: { ...view.shared, runs: [{ ...createRun(), sessionId: 's1' }] } }],
+    ['a repository path', { ...view, shared: { ...view.shared, repo: createRepo() } }],
+    ['a gate answer', { ...view, shared: { ...view.shared, gates: [{ ...createGate(), response: 'yes' }] } }],
+    ['a shape it does not know', { live: true }],
+  ])('a view carrying %s is refused, never sent', (_, leaky) => {
+    expect(() => EgressGate.serializeView(leaky as never)).toThrow();
+  });
+
+  test('a team listing keeps only what a teammate may see', () => {
+    const task = {
+      task: view.shared.task,
+      gates: [],
+      project: null,
+      repo: null,
+      owner: 'mona',
+      machine: 'Studio',
+    };
+    const [listed] = EgressGate.listTeamTasks([{ ...task, account: 'mona@example.com' } as never]);
+    expect(listed).toEqual(task);
+    expect(() => EgressGate.listTeamTasks([{ ...task, repo: createRepo() }])).toThrow();
+  });
+
+  test('a preview answer carries only the headers a page needs, its redirects kept on the preview', () => {
+    const headers = EgressGate.resolvePreviewHeaders(
+      new Headers({
+        'content-type': 'text/html',
+        'set-cookie': 'sid=1',
+        location: 'http://localhost:9/next',
+        'x-powered-by': 'Express',
+        'server-timing': 'db;desc="/Users/mona/app"',
+        sourcemap: '/Users/mona/app/main.js.map',
+      }),
+      ['http://localhost:9', 'http://127.0.0.1:9']
+    );
+    expect([...headers.keys()].sort()).toEqual(['content-type', 'location', 'set-cookie']);
+    expect(headers.get('location')).toBe('/next');
+    const home = EgressGate.resolvePreviewHeaders(new Headers({ location: 'http://127.0.0.1:9' }), [
+      'http://localhost:9',
+      'http://127.0.0.1:9',
+    ]);
+    expect(home.get('location')).toBe('/');
   });
 });
