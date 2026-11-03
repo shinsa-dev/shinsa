@@ -13,6 +13,7 @@ import {
   readDesktopUpdate,
   resolveSurface,
   selectDesktopBuild,
+  subscribeDesktopAway,
   subscribeDesktopNotifyFailed,
   subscribeDesktopUpdate,
   updateDesktopBadge,
@@ -38,6 +39,7 @@ describe('in a browser', () => {
     expect(notifyDesktop(NOTICE)).toBe(false);
     openDesktopNotificationSettings();
     subscribeDesktopNotifyFailed(() => undefined)();
+    subscribeDesktopAway(() => undefined)();
   });
 
   it('is a browser surface, quiet while the desktop app is connected', () => {

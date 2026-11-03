@@ -245,7 +245,7 @@ one reads as its empty value. The fields under Triage and shape, Plan and build,
 | `duplicate?` | `{ of, by, why, teammate? }` \| null | closed as a duplicate of task `of`, by `you` or by triage (`shinsa`), with triage's reason; the stage stays `cancelled` and the page shows Duplicate. `teammate` (`TeammateOriginal`: `{ teamId, machineId, taskId, handle, title, owner }`, `owner` a `TeammateOwner` `{ login, name, avatarUrl }` or null) when the original is a teammate's task, `of` then holding its id on their machine. A shared task and a team listing carry `duplicate` with the status fields, so the original's owner sees what was kept over it |
 | `priority` | `urgent` \| `high` \| `normal` \| `low` | how high its decisions sit in Needs you; never what runs |
 | `waitsOn` | string[] | task ids it waits on |
-| `timing?` | `TaskTiming` | what the turnaround statistics measure, folded from events (`state/timing.ts`): `paused`, the `TimingSpan`s (`{ from, to }`) it was snoozed, in the backlog, waiting on other tasks or waiting for a usage limit, merged where they overlap, with `pausedSince` while one is open; `needsYou`, each `NeedsYouSpan` from the first open gate to the last one closing, `answered` when you answered it rather than it being withdrawn, with `needsYouSince` and the `openGates` while one is open. These are not the Paused step |
+| `timing?` | `TaskTiming` | what the turnaround statistics measure, folded from events (`state/timing.ts`): `paused`, the `TimingSpan`s (`{ from, to }`) it was snoozed, in the backlog, waiting on other tasks or waiting for a usage limit, merged where they overlap, with `pausedSince` while one is open; `needsYou`, each `NeedsYouSpan` from the first open gate to the last one closing, `answered` when you answered it rather than it being withdrawn, with `needsYouSince` and the `openGates` while one is open; `inputs`, each `YourInput` you gave the task, `{ at, kind: 'gate', gate, decision }` for a gate you answered (not a review approved ahead) or `{ at, kind: 'message' }` for a message you sent (not a scheduled one, one kept for the next run, a new round or a separate task, nor anything sent on your behalf or by a guest), which the attention statistics count per round. These are not the Paused step |
 | `stacksOn?` | string \| null | the task it stacks on as a bundle (Bundles in `docs/engine.md`) |
 | `stackBase?` | string \| null | the branch of the task below, recorded once that task is ready; `resolveRoundBase` returns it when no round of its own is stacked |
 | `bundleReady?` | `{ commit }` \| null | ready to merge with its bundle at head `commit`; a task stacked on another has it in place of a merge gate of its own |
@@ -858,6 +858,7 @@ your behalf (`onBehalf`, `byTask`). **Human** = only you: its specs are `humanOn
 | `repo.update` | changes a repository's fields | `repos update` | agent; **human** for `checkCommands`, `workspace`, `coverage` (`HUMAN_ONLY_REPO_FIELDS`) |
 | `repo.remove` | forgets a repository | `repos remove` | agent |
 | `focus.change` | sets or clears the focus: `projectId` or `teamId`, never both (`focus_refused`), and `until` | `focus set`, `focus clear` | agent |
+| `away.record` | records a span you were away from your Mac (`from`, `to`), sent by the Mac app's page; refused when it ends before it starts, after now or lasts over 30 days (`away_refused`) | none | **human** |
 | `settings.change` | changes settings (`SETTINGS_KEYS`) | `settings set` | agent; **human** for `approvePlans`, `mergeMethod`, `taskBudgetUsd`, `taskUsageLimit`, `autoResume`, `snoozeLimited`, `accountSwitchAt`, `fastMode`, `agentFastModes`, `delegationLimit`, `shareLimit`, `sharePreset` (`HUMAN_ONLY_SETTINGS`) |
 
 Core refuses a command sent on your behalf with `human_only`, recording nothing, when it is a `gate.answer`
@@ -1016,7 +1017,8 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | --- | --- |
 | `repo.registered`, `repo.updated`, `repo.removed` | a repository is registered, changed, forgotten |
 | `project.written`, `project.removed` | a project is written, removed |
-| `focus.changed` | the focus changes |
+| `focus.changed` | the focus changes; closes the open entry of `state.focusHistory` and, with a project, opens one (`{ projectId, from, to, until }`, kept a year) |
+| `away.recorded` | the Mac app reported a span you were away (`from`, `to`), kept in `state.away` for a year; never counted as something you did |
 | `settings.changed` | settings change (the whole settings object) |
 | `task.created` | a task is created (`request`, `planFirst`; with its handle when it has a project; `createdBy`, `scheduleId` and `sourceReport` for one a watch's read filed; `watchHome` for a watch's home) |
 | `task.triaged` | triage set title, repository (or none), size, branch, handle, pipeline, decisions (always) |
@@ -1367,7 +1369,7 @@ A **state patch** (`StatePatch`, `packages/core/src/protocol/patch.ts`; `resolve
 | --- | --- |
 | `from`, `to` | The log position the patch applies to and the one it reaches; equal for a change that is not an event (a new Home guide, `docs/engine.md` → The briefing) |
 | `fields` | `focus`, `settings`, `onBehalfActions` when they changed, each a `ValueChange` |
-| `records` | Per record of the state (`tasks`, `runs`, `gates`, `repos`, `projects`, `taskNumbers`, `evidence`, `briefings`, `schedules`, `sessionUsage`, `presence`), the entries that changed by id, each an `EntryChange` |
+| `records` | Per record of the state (`tasks`, `runs`, `gates`, `repos`, `projects`, `taskNumbers`, `evidence`, `briefings`, `schedules`, `sessionUsage`, `presence`, `away`, `focusHistory`), the entries that changed by id, each an `EntryChange` |
 
 An `EntryChange` is `{ put }` (a new or replaced entry), `{ remove: true }` or `{ fields, unset }` (the fields whose
 value changed, each a `ValueChange`, and the ones that went away). A `ValueChange` is `{ put }` or `{ drop, append }`:

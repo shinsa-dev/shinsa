@@ -1,5 +1,6 @@
 import { describeCount, type Stats, type StatsDay } from '@shinsa/core';
 import { formatNumber } from '@/lib/format/count.ts';
+import { formatCompactCount } from '@/lib/format/money.ts';
 import { formatShortDay, parseDayKey } from './days.ts';
 
 export type ShippingLevel = 0 | 1 | 2 | 3 | 4;
@@ -20,6 +21,7 @@ export interface ShippingTile {
   label: string;
   value: string;
   detail: string | null;
+  hint?: string;
   changes?: { added: number; removed: number };
 }
 
@@ -109,7 +111,7 @@ export function listShippingTiles(stats: Stats, year: Stats): ShippingTile[] {
     {
       key: 'lines',
       label: `Lines merged in ${describeCount(total.changedFiles, 'file', 'files')}`,
-      value: formatNumber(total.additions + total.deletions),
+      value: formatCompactCount(total.additions + total.deletions),
       detail: null,
       changes: { added: total.additions, removed: total.deletions },
     },

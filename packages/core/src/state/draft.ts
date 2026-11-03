@@ -15,6 +15,8 @@ export const STATE_RECORDS = [
   'watchSuggestions',
   'sessionUsage',
   'presence',
+  'away',
+  'focusHistory',
 ] as const;
 
 export type StateRecordKey = (typeof STATE_RECORDS)[number];
