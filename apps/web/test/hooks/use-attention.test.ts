@@ -1,6 +1,7 @@
-import { afterEach, describe, expect, it } from 'bun:test';
+import { afterEach, describe, expect, it, spyOn } from 'bun:test';
 import { renderHook } from '@testing-library/react';
 import { useAttention } from '@/hooks/use-attention.ts';
+import { connection } from '@/lib/connection/socket.ts';
 import { NOTIFY_BLOCKED } from '@/lib/notifications/settings.ts';
 import { WELCOME_NOTICE } from '@/lib/notifications/welcome.ts';
 import { writeNotificationPreferences } from '@/lib/preferences/notifications.ts';
@@ -80,6 +81,34 @@ describe('useAttention', () => {
     expect(audio.created).toHaveLength(1);
     notifications.shown[0]?.click();
     expect(location.pathname).toBe('/tasks/t-1');
+  });
+
+  it('closes the notification of a decision once it is answered', () => {
+    const notifications = installNotifications('granted');
+    restores.push(notifications.restore);
+    writeNotificationPreferences({ notify: 'always' });
+    const { rerender } = renderHook(({ state }) => useAttention(state), {
+      initialProps: { state: withGates() },
+    });
+    rerender({ state: withGates(question('g-1')) });
+    expect(notifications.shown.map((shown) => shown.closed)).toEqual([false]);
+    rerender({ state: withGates() });
+    expect(notifications.shown.map((shown) => shown.closed)).toEqual([true]);
+  });
+
+  it('tells the machine you are using this page when it comes forward, until it unmounts', () => {
+    const report = spyOn(connection, 'reportPresence').mockImplementation(() => undefined);
+    const focus = spyOn(document, 'hasFocus').mockReturnValue(true);
+    restores.push(
+      () => report.mockRestore(),
+      () => focus.mockRestore()
+    );
+    const { unmount } = renderHook(() => useAttention(withGates()));
+    window.dispatchEvent(new Event('focus'));
+    expect(report).toHaveBeenCalledTimes(1);
+    unmount();
+    window.dispatchEvent(new Event('focus'));
+    expect(report).toHaveBeenCalledTimes(1);
   });
 
   it('in a browser or Floaty, plays no sound and shows no notification while the desktop app is connected, but keeps the count', () => {

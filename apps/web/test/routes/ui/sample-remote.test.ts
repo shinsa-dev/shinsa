@@ -102,6 +102,7 @@ describe('the /ui remote access samples', () => {
     const single = createStaticConnection(createState());
     expect(single.selectResources()).toBeNull();
     single.reportPresence();
+    single.replaceTerminals({ terminals: [], services: [], home: '' });
     expect(single.selectAttention()).toBe('nowhere');
     expect(single.listMachines()).toEqual([]);
     expect(single.listUnreachableMachines()).toEqual([]);
