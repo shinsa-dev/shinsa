@@ -4,16 +4,21 @@ import { join } from 'node:path';
 import {
   type MachineCredentials,
   REMOTE_PATHS,
-  SLACK_ANSWER_ACTION,
+  SLACK_DECIDE_ACTION,
   SLACK_FORWARD_HEADERS,
-  SLACK_QUESTION_BLOCK,
+  SLACK_GATE_BLOCK,
+  SLACK_MODAL_CALLBACK,
   SLACK_RELAY_PATHS,
+  SLACK_RESPONSE_INPUT,
+  SLACK_WRITE_ACTION,
   type SlackLinks,
   type SlackMention,
-  serializeSlackAnswerValue,
+  serializeSlackDecisionModal,
+  serializeSlackDecisionValue,
   verifySlackForwardSignature,
 } from '@shinsa/core';
 import { SLACK_BOT_SCOPES } from '../src/integrations/slack/schema.ts';
+import { SLACK_DECISION_REFUSALS } from '../src/routes/slack-events/schema.ts';
 import { SLACK_USER_SCOPES } from '../src/routes/slack-link/schema.ts';
 import { SLACK_EVENT_BODY_LIMIT_BYTES } from '../src/slack/schema.ts';
 import {
@@ -840,31 +845,38 @@ describe('what a machine does through the relay', () => {
   });
 });
 
-describe('a click on a question’s choice', () => {
-  const QUESTION = {
-    text: 'LOC-7 asks: Which format?',
+describe('deciding from the card', () => {
+  const CARD = {
+    text: 'LOC-7: Plan ready for your approval',
     blocks: [
-      { type: 'header', text: { type: 'plain_text', text: 'Question for you' } },
-      { type: 'actions', block_id: `${SLACK_QUESTION_BLOCK}.q1`, elements: [] },
+      { type: 'section', text: { type: 'mrkdwn', text: '*Plan ready for your approval*' } },
+      { type: 'actions', block_id: `${SLACK_GATE_BLOCK}.g1`, elements: [] },
       { type: 'context', elements: [{ type: 'mrkdwn', text: 'LOC-7' }] },
     ],
   };
 
-  async function questionSetup() {
+  const APPROVE = { gateId: 'g1', decision: 'approve', choice: null, planVersion: 2 } as const;
+
+  const REVISE = { gateId: 'g1', decision: 'revise', choice: null, planVersion: 2 } as const;
+
+  async function cardSetup() {
     const setup = await setUp();
+    setup.slack.answers['views.open'] = () => ({ ok: true });
     await sendEvent(setup.harness, mentionEnvelope());
     const posted = await setup.harness.post(
       SLACK_RELAY_PATHS.post,
-      { teamId: 'T1', channelId: 'C1', threadTs: '100.1', replaceTs: null, message: QUESTION },
+      { teamId: 'T1', channelId: 'C1', threadTs: '100.1', replaceTs: null, message: CARD },
       { bearer: setup.machine.machineToken, sameOrigin: false }
     );
     const { ts } = await readJson<{ ts: string }>(posted);
-    const answers: { body: Fields; headers: Headers }[] = [];
-    const reply = { answer: (): Response => Response.json({ answered: true, choice: 'JSON' }) };
+    const decisions: { url: string; body: Fields; headers: Headers }[] = [];
+    const reply = {
+      answer: (): Response => Response.json({ decided: true, text: 'approved the plan' }),
+    };
     const replies: Fields[] = [];
     setup.harness.handlers.unshift((call) => {
       if (call.url.endsWith('.shinsa.dev/api/slack/interactions')) {
-        answers.push({ body: JSON.parse(call.body) as Fields, headers: call.headers });
+        decisions.push({ url: call.url, body: JSON.parse(call.body) as Fields, headers: call.headers });
         return reply.answer();
       }
       if (call.url.startsWith('https://hooks.slack.com/')) {
@@ -873,30 +885,98 @@ describe('a click on a question’s choice', () => {
       }
       return new Response('', { status: 599 });
     });
-    return { ...setup, ts, answers, reply, replies };
+    return { ...setup, ts, decisions, reply, replies };
   }
 
-  function clickPayload(ts: string, overrides: Fields = {}) {
+  type CardSetup = Awaited<ReturnType<typeof cardSetup>>;
+
+  async function addTeammate(setup: CardSetup, role: 'member' | 'guest' | 'stranger') {
+    const { harness, slack, machine } = setup;
+    slack.answers['openid.connect.userInfo'] = () => ({
+      ok: true,
+      'https://slack.com/team_id': 'T1',
+      'https://slack.com/user_id': 'U2',
+      name: 'Mia',
+    });
+    const mia = await harness.signIn('mia', 7);
+    const laptop = await pairMachine(harness, mia, 'Laptop');
+    await connectSlack(harness, mia, laptop.instanceId);
+    await bringOnline(harness, laptop);
+    const studio = { bearer: machine.machineToken, sameOrigin: false };
+    if (role === 'member') {
+      const invite = await readJson<{ token: string }>(
+        await harness.post(REMOTE_PATHS.machineInvites, {}, studio)
+      );
+      await harness.post(REMOTE_PATHS.inviteAccept, { token: invite.token }, { session: mia });
+      await harness.post(REMOTE_PATHS.machineMemberAdd, { userId: '7' }, studio);
+    }
+    if (role === 'guest') {
+      const handoff = await readJson<{ token: string }>(
+        await harness.post(REMOTE_PATHS.machineHandoffs, {}, studio)
+      );
+      await harness.post(REMOTE_PATHS.handoffAccept, { token: handoff.token }, { session: mia });
+      await harness.post(REMOTE_PATHS.machineGuestAdd, { userId: '7' }, studio);
+    }
+    return laptop;
+  }
+
+  function clickPayload(ts: string, overrides: Fields = {}, action: Fields = {}) {
     return {
       type: 'block_actions',
       trigger_id: '13345.73847.8088',
       team: { id: 'T1' },
       user: { id: 'U1' },
       channel: { id: 'C1' },
-      message: { ts, thread_ts: '100.1', ...QUESTION },
+      message: { ts, thread_ts: '100.1', ...CARD },
       response_url: 'https://hooks.slack.com/actions/T1/1/abc',
       actions: [
         {
-          action_id: `${SLACK_ANSWER_ACTION}.1`,
-          value: serializeSlackAnswerValue('q1', 1),
+          action_id: `${SLACK_DECIDE_ACTION}.approve`,
+          value: serializeSlackDecisionValue(APPROVE),
           action_ts: '500.1',
+          ...action,
         },
       ],
       ...overrides,
     };
   }
 
-  async function sendClick(harness: Harness, payload: unknown, signature?: string) {
+  function writePayload(ts: string, overrides: Fields = {}) {
+    return clickPayload(ts, overrides, {
+      action_id: `${SLACK_WRITE_ACTION}.revise`,
+      value: serializeSlackDecisionValue(REVISE),
+    });
+  }
+
+  function submitPayload(
+    ts: string,
+    overrides: { user?: string; metadata?: string; text?: string | null } = {}
+  ) {
+    const metadata =
+      overrides.metadata ?? JSON.stringify({ ...REVISE, channelId: 'C1', threadTs: '100.1', messageTs: ts });
+    return {
+      type: 'view_submission',
+      trigger_id: '777.1',
+      team: { id: 'T1' },
+      user: { id: overrides.user ?? 'U1' },
+      view: {
+        id: 'V1',
+        callback_id: SLACK_MODAL_CALLBACK,
+        private_metadata: metadata,
+        state: {
+          values: {
+            [SLACK_RESPONSE_INPUT.block]: {
+              [SLACK_RESPONSE_INPUT.action]: {
+                value: overrides.text === undefined ? ' Use JSON ' : overrides.text,
+              },
+            },
+          },
+        },
+      },
+    };
+  }
+
+  async function sendInteraction(harness: Harness, payload: unknown, signature?: string) {
     const body = new URLSearchParams({ payload: JSON.stringify(payload) }).toString();
     const timestamp = String(Math.floor(harness.clock.now / 1000));
     const response = await harness.call(SLACK_RELAY_PATHS.interactions, {
@@ -913,101 +993,198 @@ describe('a click on a question’s choice', () => {
     return response;
   }
 
-  test('reaches the asker’s machine signed, and swaps the buttons for who answered', async () => {
-    const { harness, machine, ts, answers, replies } = await questionSetup();
-    const response = await sendClick(harness, clickPayload(ts));
+  test('a button reaches the machine that posted the card, signed, and the buttons become who decided', async () => {
+    const { harness, machine, ts, decisions, replies } = await cardSetup();
+    const response = await sendInteraction(harness, clickPayload(ts));
     expect(response.status).toBe(200);
-    const [answer] = answers;
-    expect(answer?.body).toEqual({
-      interactionId: '13345.73847.8088',
-      teamId: 'T1',
+    const [decision] = decisions;
+    expect(decision?.url).toBe(`https://t-${machine.instanceId}.shinsa.dev/api/slack/interactions`);
+    expect(decision?.body).toEqual({
+      ...APPROVE,
       channelId: 'C1',
       threadTs: '100.1',
       messageTs: ts,
+      interactionId: '13345.73847.8088',
+      teamId: 'T1',
       userId: 'U1',
-      gateId: 'q1',
-      choice: 1,
+      response: null,
     });
     const signature = {
-      signature: answer?.headers.get(SLACK_FORWARD_HEADERS.signature) ?? null,
-      timestamp: answer?.headers.get(SLACK_FORWARD_HEADERS.timestamp) ?? null,
+      signature: decision?.headers.get(SLACK_FORWARD_HEADERS.signature) ?? null,
+      timestamp: decision?.headers.get(SLACK_FORWARD_HEADERS.timestamp) ?? null,
     };
     expect(
       await verifySlackForwardSignature(
         machine.connectKey,
         signature,
-        JSON.stringify(answer?.body),
+        JSON.stringify(decision?.body),
         harness.clock.now
       )
     ).toBe(true);
     expect(replies).toEqual([
       {
         replace_original: true,
-        text: QUESTION.text,
+        text: CARD.text,
         blocks: [
-          QUESTION.blocks[0],
-          { type: 'context', elements: [{ type: 'mrkdwn', text: '<@U1> answered *JSON*' }] },
-          QUESTION.blocks[2],
+          CARD.blocks[0],
+          { type: 'context', elements: [{ type: 'mrkdwn', text: '<@U1> approved the plan' }] },
+          CARD.blocks[2],
         ],
       },
     ]);
   });
 
-  test('that Shinsa refuses tells only the person who clicked why', async () => {
-    const setup = await questionSetup();
-    setup.reply.answer = () => Response.json({ answered: false, reason: 'This question is no longer open.' });
-    await sendClick(setup.harness, clickPayload(setup.ts));
-    expect(setup.replies).toEqual([
-      { response_type: 'ephemeral', replace_original: false, text: 'This question is no longer open.' },
-    ]);
+  test('a choice is sent as its index, and the id falls back to the action’s time', async () => {
+    const setup = await cardSetup();
+    const reply = { gateId: 'g1', decision: 'reply', choice: 1, planVersion: null } as const;
+    await sendInteraction(
+      setup.harness,
+      clickPayload(
+        setup.ts,
+        { trigger_id: undefined },
+        { action_id: `${SLACK_DECIDE_ACTION}.choice.1`, value: serializeSlackDecisionValue(reply) }
+      )
+    );
+    expect(setup.decisions[0]?.body).toMatchObject({ ...reply, interactionId: '500.1', response: null });
   });
 
-  test('from someone not linked, on a post another machine made, or while the machine is offline, is refused privately', async () => {
-    const setup = await questionSetup();
-    await sendClick(setup.harness, clickPayload(setup.ts, { user: { id: 'U2' } }));
-    await sendClick(setup.harness, clickPayload('999.9'));
-    setup.reply.answer = () => new Response('', { status: 530 });
-    await sendClick(setup.harness, clickPayload(setup.ts));
-    setup.reply.answer = () => new Response('not json');
-    await sendClick(setup.harness, clickPayload(setup.ts, { trigger_id: undefined }));
-    expect(setup.replies.map((reply) => reply.text)).toEqual([
-      'Connect Slack to your own Shinsa first, then answer it in Shinsa.',
-      'This question was asked on someone else’s machine, so only they can answer it.',
-      'Studio is offline, so the answer was not sent. Try again once Shinsa runs there.',
-      'Studio is offline, so the answer was not sent. Try again once Shinsa runs there.',
+  test('a member of the posting machine decides on it, even linked to a machine of their own', async () => {
+    const setup = await cardSetup();
+    const laptop = await addTeammate(setup, 'member');
+    await sendInteraction(setup.harness, clickPayload(setup.ts, { user: { id: 'U2' } }));
+    expect(setup.decisions.map((decision) => decision.url)).toEqual([
+      `https://t-${setup.machine.instanceId}.shinsa.dev/api/slack/interactions`,
     ]);
-    expect(setup.answers.at(-1)?.body.interactionId).toBe('500.1');
+    expect(setup.decisions[0]?.url).not.toContain(laptop.instanceId);
+    expect(setup.decisions[0]?.body.userId).toBe('U2');
+  });
+
+  test('a guest, someone without access, or someone not linked is refused privately and nothing reaches the machine', async () => {
+    for (const role of ['guest', 'stranger'] as const) {
+      const setup = await cardSetup();
+      await addTeammate(setup, role);
+      await sendInteraction(setup.harness, clickPayload(setup.ts, { user: { id: 'U2' } }));
+      await sendInteraction(setup.harness, writePayload(setup.ts, { user: { id: 'U2' } }));
+      await sendInteraction(setup.harness, clickPayload(setup.ts, { user: { id: 'U9' } }));
+      expect(setup.decisions).toHaveLength(0);
+      expect(setup.slack.callsTo('views.open')).toHaveLength(0);
+      expect(setup.replies).toEqual([
+        { response_type: 'ephemeral', replace_original: false, text: SLACK_DECISION_REFUSALS.noAccess },
+        { response_type: 'ephemeral', replace_original: false, text: SLACK_DECISION_REFUSALS.noAccess },
+        { response_type: 'ephemeral', replace_original: false, text: SLACK_DECISION_REFUSALS.notLinked },
+      ]);
+    }
+  });
+
+  test('a message Shinsa did not post, an offline machine and a refusal from Shinsa are told only to the clicker', async () => {
+    const setup = await cardSetup();
+    await sendInteraction(setup.harness, clickPayload('999.9'));
+    setup.reply.answer = () =>
+      Response.json({ decided: false, reason: 'This plan changed. Decide the new one.' });
+    await sendInteraction(setup.harness, clickPayload(setup.ts));
+    setup.reply.answer = () => new Response('', { status: 530 });
+    await sendInteraction(setup.harness, clickPayload(setup.ts));
+    setup.reply.answer = () => new Response('not json');
+    await sendInteraction(setup.harness, clickPayload(setup.ts));
+    setup.harness.clock.now += 10 * 60_000;
+    await sendInteraction(setup.harness, clickPayload(setup.ts));
+    const offline = 'Studio is offline, so nothing was sent. Try again once Shinsa runs there.';
+    expect(setup.replies.map((reply) => reply.text)).toEqual([
+      SLACK_DECISION_REFUSALS.noAccess,
+      'This plan changed. Decide the new one.',
+      offline,
+      offline,
+      offline,
+    ]);
+    expect(setup.decisions).toHaveLength(3);
     expect(setup.replies.every((reply) => reply.response_type === 'ephemeral')).toBe(true);
   });
 
-  test('on a machine that stopped heartbeating is refused without asking it', async () => {
-    const setup = await questionSetup();
-    setup.harness.clock.now += 10 * 60_000;
-    await sendClick(setup.harness, clickPayload(setup.ts));
-    expect(setup.answers).toHaveLength(0);
-    expect(setup.replies[0]?.text).toBe(
-      'Studio is offline, so the answer was not sent. Try again once Shinsa runs there.'
-    );
+  test('a written decision opens a form that carries the card, and sends nothing yet', async () => {
+    const setup = await cardSetup();
+    await sendInteraction(setup.harness, writePayload(setup.ts));
+    expect(setup.decisions).toHaveLength(0);
+    expect(setup.slack.callsTo('views.open').map((call) => call.body)).toEqual([
+      {
+        trigger_id: '13345.73847.8088',
+        view: serializeSlackDecisionModal({
+          ...REVISE,
+          channelId: 'C1',
+          threadTs: '100.1',
+          messageTs: setup.ts,
+        }),
+      },
+    ]);
+    expect(setup.slack.callsTo('views.open')[0]?.token).toBe('xoxb-bot-token');
   });
 
-  test('a link button, another kind of interaction or a reply address off Slack does nothing', async () => {
-    const setup = await questionSetup();
-    const open = { action_id: 'shinsa.open', action_ts: '500.2' };
-    expect((await sendClick(setup.harness, clickPayload(setup.ts, { actions: [open] }))).status).toBe(200);
-    await sendClick(setup.harness, clickPayload(setup.ts, { type: 'view_submission' }));
-    await sendClick(setup.harness, clickPayload(setup.ts, { response_url: 'https://evil.test/x' }));
-    await sendClick(
-      setup.harness,
-      clickPayload(setup.ts, { channel: {}, team: 'T1', user: null, message: [] })
-    );
-    await sendClick(setup.harness, 'noise');
-    expect(setup.answers).toHaveLength(0);
+  test('a form Slack will not open is told to the clicker and logged', async () => {
+    const setup = await cardSetup();
+    setup.slack.answers['views.open'] = () => ({ ok: false, error: 'expired_trigger_id' });
+    await sendInteraction(setup.harness, writePayload(setup.ts));
+    expect(setup.replies.map((reply) => reply.text)).toEqual([SLACK_DECISION_REFUSALS.formFailed]);
+    expect(failures).toHaveBeenCalled();
+  });
+
+  test('a submitted form is decided with its words, and closes with nothing more to say', async () => {
+    const setup = await cardSetup();
+    const response = await sendInteraction(setup.harness, submitPayload(setup.ts));
+    expect(response.status).toBe(200);
+    expect(await response.text()).toBe('');
+    expect(setup.decisions.map((decision) => decision.body)).toEqual([
+      {
+        ...REVISE,
+        channelId: 'C1',
+        threadTs: '100.1',
+        messageTs: setup.ts,
+        interactionId: '777.1',
+        teamId: 'T1',
+        userId: 'U1',
+        response: 'Use JSON',
+      },
+    ]);
+    expect(setup.slack.callsTo('chat.postEphemeral')).toHaveLength(0);
     expect(setup.replies).toHaveLength(0);
   });
 
+  test('a submitted form that is refused tells only its author, in the thread', async () => {
+    const setup = await cardSetup();
+    setup.reply.answer = () => Response.json({ decided: false, reason: 'This is no longer open.' });
+    await sendInteraction(setup.harness, submitPayload(setup.ts));
+    await sendInteraction(setup.harness, submitPayload(setup.ts, { user: 'U9' }));
+    expect(setup.decisions).toHaveLength(1);
+    expect(setup.slack.callsTo('chat.postEphemeral').map((call) => call.body)).toEqual([
+      { channel: 'C1', user: 'U1', thread_ts: '100.1', text: 'This is no longer open.' },
+      { channel: 'C1', user: 'U9', thread_ts: '100.1', text: SLACK_DECISION_REFUSALS.notLinked },
+    ]);
+  });
+
+  test('a link button, a written decision without its form, another form or a reply address off Slack does nothing', async () => {
+    const setup = await cardSetup();
+    const open = { action_id: 'shinsa.open', value: serializeSlackDecisionValue(APPROVE) };
+    expect((await sendInteraction(setup.harness, clickPayload(setup.ts, {}, open))).status).toBe(200);
+    await sendInteraction(
+      setup.harness,
+      clickPayload(setup.ts, {}, { action_id: `${SLACK_WRITE_ACTION}.approve` })
+    );
+    await sendInteraction(setup.harness, writePayload(setup.ts, { trigger_id: undefined }));
+    await sendInteraction(setup.harness, clickPayload(setup.ts, {}, { value: 'nope' }));
+    await sendInteraction(setup.harness, clickPayload(setup.ts, { response_url: 'https://evil.test/x' }));
+    await sendInteraction(setup.harness, clickPayload(setup.ts, { channel: {}, team: 'T1', user: null }));
+    const other = submitPayload(setup.ts);
+    await sendInteraction(setup.harness, { ...other, view: { ...other.view, callback_id: 'other' } });
+    await sendInteraction(setup.harness, submitPayload(setup.ts, { metadata: '{"gateId":1}' }));
+    await sendInteraction(setup.harness, submitPayload(setup.ts, { text: '   ' }));
+    await sendInteraction(setup.harness, submitPayload(setup.ts, { text: null }));
+    await sendInteraction(setup.harness, 'noise');
+    expect(setup.decisions).toHaveLength(0);
+    expect(setup.replies).toHaveLength(0);
+    expect(setup.slack.callsTo('views.open')).toHaveLength(0);
+  });
+
   test('is refused unsigned, too large or not JSON, and a failed reply is logged', async () => {
-    const setup = await questionSetup();
-    expect((await sendClick(setup.harness, clickPayload(setup.ts), 'v0=forged')).status).toBe(401);
+    const setup = await cardSetup();
+    expect((await sendInteraction(setup.harness, clickPayload(setup.ts), 'v0=forged')).status).toBe(401);
     const large = await setup.harness.call(SLACK_RELAY_PATHS.interactions, {
       method: 'POST',
       body: 'x'.repeat(SLACK_EVENT_BODY_LIMIT_BYTES + 1),
@@ -1029,7 +1206,7 @@ describe('a click on a question’s choice', () => {
         ? Promise.reject(new Error('down'))
         : new Response('', { status: 599 })
     );
-    await sendClick(setup.harness, clickPayload(setup.ts));
+    await sendInteraction(setup.harness, clickPayload(setup.ts));
     expect(failures).toHaveBeenCalled();
   });
 });

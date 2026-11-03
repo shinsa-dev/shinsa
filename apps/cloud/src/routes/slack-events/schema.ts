@@ -1,5 +1,6 @@
-import type { SlackAnswer } from '@shinsa/core';
+import type { SlackDecision, SlackDecisionModal } from '@shinsa/core';
 import { Schema } from 'effect';
+import type { Machine } from '../../store/machines/schema.ts';
 
 export const SLACK_NAMED_USERS_LIMIT = 30;
 
@@ -82,6 +83,26 @@ export const BlockActions = Schema.Struct({
 
 export type BlockActions = typeof BlockActions.Type;
 
+const InputValues = Schema.Record(
+  Schema.String,
+  Schema.Record(Schema.String, Schema.Struct({ value: Schema.optional(Schema.NullOr(Schema.String)) }))
+);
+
+export const ViewSubmission = Schema.Struct({
+  type: Schema.Literal('view_submission'),
+  trigger_id: Schema.optional(Id),
+  team: Schema.Struct({ id: Id }),
+  user: Schema.Struct({ id: Id }),
+  view: Schema.Struct({
+    id: Id,
+    callback_id: Schema.String,
+    private_metadata: Schema.String,
+    state: Schema.Struct({ values: InputValues }),
+  }),
+});
+
+export type ViewSubmission = typeof ViewSubmission.Type;
+
 export interface MentionEvent {
   readonly eventId: string;
   readonly teamId: string;
@@ -99,8 +120,38 @@ export interface ThreadEntry {
   readonly botName: string | null;
 }
 
-export interface AnswerClick {
-  readonly answer: SlackAnswer;
-  readonly responseUrl: string;
-  readonly message: { readonly text: string; readonly blocks: ReadonlyArray<unknown> };
+export interface SlackCard {
+  readonly teamId: string;
+  readonly channelId: string;
+  readonly threadTs: string;
+  readonly messageTs: string;
+  readonly userId: string;
 }
+
+export interface CardMessage {
+  readonly responseUrl: string;
+  readonly text: string;
+  readonly blocks: ReadonlyArray<unknown>;
+}
+
+export type Interaction =
+  | { readonly kind: 'decide'; readonly decision: SlackDecision; readonly message: CardMessage }
+  | {
+      readonly kind: 'write';
+      readonly card: SlackCard;
+      readonly triggerId: string;
+      readonly modal: SlackDecisionModal;
+      readonly message: CardMessage;
+    }
+  | { readonly kind: 'submit'; readonly decision: SlackDecision };
+
+export type DeciderCheck =
+  | { readonly allowed: true; readonly machine: Machine }
+  | { readonly allowed: false; readonly reason: string };
+
+export const SLACK_DECISION_REFUSALS = {
+  notLinked:
+    'Connect Slack to Shinsa first. Only people with access to the machine that posted this can decide it.',
+  noAccess: 'Only people with access to the machine that posted this can decide it.',
+  formFailed: 'The form could not open. Try again.',
+} as const;

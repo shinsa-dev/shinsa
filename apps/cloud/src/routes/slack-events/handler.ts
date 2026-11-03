@@ -1,25 +1,33 @@
 import {
-  listSlackAnsweredBlocks,
+  isSlackWriteDecision,
+  listSlackDecidedBlocks,
   listSlackMentionedUsers,
-  parseSlackAnswerReply,
-  parseSlackAnswerValue,
+  parseSlackDecisionModal,
+  parseSlackDecisionReply,
+  parseSlackDecisionValue,
   resolveSlackReadableText,
-  SLACK_ANSWER_ACTION,
+  SLACK_DECIDE_ACTION,
   SLACK_ENGINE_EVENTS_PATH,
   SLACK_ENGINE_INTERACTIONS_PATH,
   SLACK_LIMITS,
+  SLACK_MODAL_CALLBACK,
   SLACK_RELAY_PATHS,
-  type SlackAnswer,
+  SLACK_RESPONSE_INPUT,
+  SLACK_WRITE_ACTION,
+  type SlackDecision,
+  type SlackDecisionReply,
   type SlackMention,
   type SlackMessage,
   type SlackThreadMessage,
-  serializeSlackAnsweredView,
+  serializeSlackDecidedView,
+  serializeSlackDecisionModal,
   serializeSlackLinkPrompt,
   serializeSlackOffline,
 } from '@shinsa/core';
 import { BodyInvalid } from '@shinsa/core/remote/errors';
 import { Cause, Clock, Effect, Layer, Option, type Redacted, Schema } from 'effect';
 import { HttpClient, HttpClientRequest, HttpRouter, HttpServerResponse } from 'effect/http';
+import { selectMachineRole } from '../../auth/access.ts';
 import { CloudConfig } from '../../config/service.ts';
 import { isMachineOnline } from '../../domain/machines.ts';
 import { requestOnlineMachine } from '../../http/forward.ts';
@@ -32,9 +40,11 @@ import { Machines } from '../../store/machines/service.ts';
 import type { SlackWorkspace } from '../../store/slack/schema.ts';
 import { SlackStore } from '../../store/slack/service.ts';
 import {
-  type AnswerClick,
   type BlockActions,
   BlockActions as BlockActionsSchema,
+  type CardMessage,
+  type DeciderCheck,
+  type Interaction,
   EventEnvelope,
   InteractionForm,
   JsonObject,
@@ -43,10 +53,14 @@ import {
   Permalink,
   RESPONSE_URL_ORIGIN,
   Replies,
+  SLACK_DECISION_REFUSALS,
   SLACK_NAMED_USERS_LIMIT,
+  type SlackCard,
   type ThreadEntry,
   ThreadMessage,
   UninstallEvent,
+  type ViewSubmission,
+  ViewSubmission as ViewSubmissionSchema,
 } from './schema.ts';
 
 export const SlackEventRoutes = Layer.unwrap(
@@ -64,6 +78,7 @@ export const SlackEventRoutes = Layer.unwrap(
     const decodeThreadMessage = Schema.decodeUnknownOption(ThreadMessage);
     const decodeForm = Schema.decodeUnknownOption(InteractionForm);
     const decodeBlockActions = Schema.decodeUnknownOption(BlockActionsSchema);
+    const decodeSubmission = Schema.decodeUnknownOption(ViewSubmissionSchema);
 
     const ok = () =>
       HttpServerResponse.jsonUnsafe({ ok: true }, { headers: { 'cache-control': 'no-store' } });
@@ -86,26 +101,64 @@ export const SlackEventRoutes = Layer.unwrap(
       return { ts: message.ts, userId, text: message.text ?? '', botName };
     };
 
-    const resolveAnswerClick = (actions: BlockActions): AnswerClick | null => {
+    const resolveCardMessage = (actions: BlockActions): CardMessage => ({
+      responseUrl: actions.response_url,
+      text: actions.message.text ?? '',
+      blocks: actions.message.blocks ?? [],
+    });
+
+    const resolveClick = (actions: BlockActions): Interaction | null => {
       const [action] = actions.actions;
-      const value = parseSlackAnswerValue(action.value);
+      const value = parseSlackDecisionValue(action.value);
       const interactionId = actions.trigger_id ?? action.action_ts;
-      if (!action.action_id.startsWith(`${SLACK_ANSWER_ACTION}.`) || !value || !interactionId) return null;
-      if (!actions.response_url.startsWith(RESPONSE_URL_ORIGIN)) return null;
+      if (!value || !interactionId || !actions.response_url.startsWith(RESPONSE_URL_ORIGIN)) return null;
       const { message } = actions;
+      const place = {
+        channelId: actions.channel.id,
+        threadTs: message.thread_ts || message.ts,
+        messageTs: message.ts,
+      };
+      if (action.action_id.startsWith(`${SLACK_DECIDE_ACTION}.`))
+        return {
+          kind: 'decide',
+          decision: {
+            ...value,
+            ...place,
+            interactionId: interactionId.slice(0, SLACK_LIMITS.id),
+            teamId: actions.team.id,
+            userId: actions.user.id,
+            response: null,
+          },
+          message: resolveCardMessage(actions),
+        };
+      const writes =
+        action.action_id.startsWith(`${SLACK_WRITE_ACTION}.`) && isSlackWriteDecision(value.decision);
+      if (!writes || !actions.trigger_id) return null;
       return {
-        answer: {
-          interactionId: interactionId.slice(0, SLACK_LIMITS.id),
-          teamId: actions.team.id,
-          channelId: actions.channel.id,
-          threadTs: message.thread_ts || message.ts,
-          messageTs: message.ts,
-          userId: actions.user.id,
-          gateId: value.gateId,
-          choice: value.choice,
+        kind: 'write',
+        card: { teamId: actions.team.id, ...place, userId: actions.user.id },
+        triggerId: actions.trigger_id,
+        modal: { ...value, ...place },
+        message: resolveCardMessage(actions),
+      };
+    };
+
+    const resolveSubmission = (submission: ViewSubmission): Interaction | null => {
+      const { view } = submission;
+      if (view.callback_id !== SLACK_MODAL_CALLBACK) return null;
+      const modal = parseSlackDecisionModal(view.private_metadata);
+      const text =
+        view.state.values[SLACK_RESPONSE_INPUT.block]?.[SLACK_RESPONSE_INPUT.action]?.value?.trim();
+      if (!modal || !text) return null;
+      return {
+        kind: 'submit',
+        decision: {
+          ...modal,
+          interactionId: (submission.trigger_id ?? view.id).slice(0, SLACK_LIMITS.id),
+          teamId: submission.team.id,
+          userId: submission.user.id,
+          response: text.slice(0, SLACK_LIMITS.text),
         },
-        responseUrl: actions.response_url,
-        message: { text: message.text ?? '', blocks: message.blocks ?? [] },
       };
     };
 
@@ -285,53 +338,138 @@ export const SlackEventRoutes = Layer.unwrap(
         yield* postInThread(serializeSlackOffline(machine.value.name));
     });
 
-    const requestAnswer = Effect.fn('slackEvents.requestAnswer')(function* (
-      machine: Option.Option<Machine>,
-      answer: SlackAnswer
+    const serializeOfflineRefusal = (name: string) =>
+      `${name} is offline, so nothing was sent. Try again once Shinsa runs there.`;
+
+    const checkDecider = Effect.fn('slackEvents.checkDecider')(function* (card: SlackCard) {
+      const refuse = (reason: string): DeciderCheck => ({ allowed: false, reason });
+      const link = yield* store.selectLink(card.teamId, card.userId);
+      if (Option.isNone(link)) return refuse(SLACK_DECISION_REFUSALS.notLinked);
+      const poster = yield* store.selectPoster({
+        teamId: card.teamId,
+        channelId: card.channelId,
+        ts: card.messageTs,
+      });
+      const machine = Option.isSome(poster) ? yield* machines.select(poster.value) : Option.none<Machine>();
+      if (Option.isNone(machine)) return refuse(SLACK_DECISION_REFUSALS.noAccess);
+      const role = yield* selectMachineRole(machine.value.id, machine.value.userId, link.value.userId);
+      if (Option.isNone(role) || role.value === 'guest') return refuse(SLACK_DECISION_REFUSALS.noAccess);
+      if (!isMachineOnline(machine.value, yield* Clock.currentTimeMillis))
+        return refuse(serializeOfflineRefusal(machine.value.name));
+      return { allowed: true, machine: machine.value } satisfies DeciderCheck;
+    });
+
+    const requestDecision = Effect.fn('slackEvents.requestDecision')(function* (
+      machine: Machine,
+      decision: SlackDecision
     ) {
-      const now = yield* Clock.currentTimeMillis;
-      if (Option.isNone(machine) || !isMachineOnline(machine.value, now)) return null;
       const response = yield* Effect.option(
-        requestSignedMachine(machine.value, SLACK_ENGINE_INTERACTIONS_PATH, answer)
+        requestSignedMachine(machine, SLACK_ENGINE_INTERACTIONS_PATH, decision)
       );
       if (Option.isNone(response) || !response.value.ok) return null;
       const reply = yield* Effect.option(Effect.tryPromise(() => response.value.json()));
-      return Option.match(reply, { onNone: () => null, onSome: parseSlackAnswerReply });
+      return Option.match(reply, { onNone: () => null, onSome: parseSlackDecisionReply });
     });
 
-    const handleAnswer = Effect.fn('slackEvents.handleAnswer')(function* (click: AnswerClick) {
-      const { answer } = click;
-      const respondInSlack = (body: Readonly<Record<string, unknown>>) =>
-        client.execute(
-          HttpClientRequest.post(click.responseUrl).pipe(HttpClientRequest.bodyJsonUnsafe(body))
-        );
-      const respondPrivately = (text: string) =>
-        respondInSlack({ response_type: 'ephemeral', replace_original: false, text });
-      const link = yield* store.selectLink(answer.teamId, answer.userId);
-      if (Option.isNone(link))
-        return yield* respondPrivately('Connect Slack to your own Shinsa first, then answer it in Shinsa.');
-      const asked = { teamId: answer.teamId, channelId: answer.channelId, ts: answer.messageTs };
-      if (!(yield* store.hasPost(asked, link.value.instanceId)))
-        return yield* respondPrivately(
-          'This question was asked on someone else’s machine, so only they can answer it.'
-        );
-      const machine = yield* machines.select(link.value.instanceId);
-      const reply = yield* requestAnswer(machine, answer);
-      if (!reply) {
-        const name = Option.isSome(machine) ? machine.value.name : 'Your machine';
-        return yield* respondPrivately(
-          `${name} is offline, so the answer was not sent. Try again once Shinsa runs there.`
-        );
-      }
-      if (!reply.answered) return yield* respondPrivately(reply.reason);
-      return yield* respondInSlack({
+    const respondToClick = (message: CardMessage, body: Readonly<Record<string, unknown>>) =>
+      client.execute(
+        HttpClientRequest.post(message.responseUrl).pipe(HttpClientRequest.bodyJsonUnsafe(body))
+      );
+
+    const respondPrivatelyToClick = (message: CardMessage, text: string) =>
+      respondToClick(message, { response_type: 'ephemeral', replace_original: false, text });
+
+    const respondPrivatelyInThread = Effect.fn('slackEvents.respondPrivatelyInThread')(function* (
+      decision: SlackDecision,
+      text: string
+    ) {
+      const opened = yield* selectWorkspaceToken(decision.teamId);
+      if (Option.isNone(opened)) return;
+      yield* slack.call(
+        'chat.postEphemeral',
+        {
+          token: opened.value.token,
+          body: {
+            json: {
+              channel: decision.channelId,
+              user: decision.userId,
+              thread_ts: decision.threadTs,
+              text,
+            },
+          },
+        },
+        Schema.Unknown
+      );
+    });
+
+    const sendDecision = Effect.fn('slackEvents.sendDecision')(function* (decision: SlackDecision) {
+      const check = yield* checkDecider(decision);
+      if (!check.allowed) return { decided: false, reason: check.reason } satisfies SlackDecisionReply;
+      const reply = yield* requestDecision(check.machine, decision);
+      return (
+        reply ??
+        ({ decided: false, reason: serializeOfflineRefusal(check.machine.name) } satisfies SlackDecisionReply)
+      );
+    });
+
+    const handleDecide = Effect.fn('slackEvents.handleDecide')(function* (
+      decision: SlackDecision,
+      message: CardMessage
+    ) {
+      const result = yield* sendDecision(decision);
+      if (!result.decided) return yield* respondPrivatelyToClick(message, result.reason);
+      return yield* respondToClick(message, {
         replace_original: true,
-        text: click.message.text,
-        blocks: listSlackAnsweredBlocks(
-          [...click.message.blocks],
-          serializeSlackAnsweredView(reply.choice, answer.userId)
+        text: message.text,
+        blocks: listSlackDecidedBlocks(
+          [...message.blocks],
+          serializeSlackDecidedView(result.text, decision.userId)
         ),
       });
+    });
+
+    const handleWrite = Effect.fn('slackEvents.handleWrite')(function* (
+      interaction: Extract<Interaction, { kind: 'write' }>
+    ) {
+      const check = yield* checkDecider(interaction.card);
+      if (!check.allowed) return yield* respondPrivatelyToClick(interaction.message, check.reason);
+      const opened = yield* selectWorkspaceToken(interaction.card.teamId);
+      const view = serializeSlackDecisionModal(interaction.modal);
+      if (Option.isNone(opened) || !view) return;
+      yield* slack
+        .call(
+          'views.open',
+          { token: opened.value.token, body: { json: { trigger_id: interaction.triggerId, view } } },
+          Schema.Unknown
+        )
+        .pipe(
+          Effect.catchTag('SlackCallFailed', (error) =>
+            Effect.andThen(
+              Effect.logError('[Cloud] A Slack form could not open').pipe(
+                Effect.annotateLogs({ error, teamId: interaction.card.teamId })
+              ),
+              respondPrivatelyToClick(interaction.message, SLACK_DECISION_REFUSALS.formFailed)
+            )
+          )
+        );
+    });
+
+    const handleSubmit = Effect.fn('slackEvents.handleSubmit')(function* (decision: SlackDecision) {
+      const result = yield* sendDecision(decision);
+      if (!result.decided) yield* respondPrivatelyInThread(decision, result.reason);
+    });
+
+    const handleInteraction = Effect.fn('slackEvents.handleInteraction')(function* (
+      interaction: Interaction
+    ) {
+      switch (interaction.kind) {
+        case 'decide':
+          return yield* Effect.asVoid(handleDecide(interaction.decision, interaction.message));
+        case 'write':
+          return yield* handleWrite(interaction);
+        case 'submit':
+          return yield* handleSubmit(interaction.decision);
+      }
     });
 
     const respondEvents = Effect.gen(function* () {
@@ -372,14 +510,18 @@ export const SlackEventRoutes = Layer.unwrap(
       const payload = Option.flatMap(form, (fields) => decodeJson(fields.payload));
       if (Option.isNone(payload))
         return yield* new BodyInvalid({ message: 'The Slack interaction is not JSON.' });
-      const click = Option.getOrNull(Option.map(decodeBlockActions(payload.value), resolveAnswerClick));
-      if (click)
+      const interaction = Option.getOrNull(
+        Option.orElse(Option.map(decodeBlockActions(payload.value), resolveClick), () =>
+          Option.map(decodeSubmission(payload.value), resolveSubmission)
+        )
+      );
+      if (interaction)
         yield* deferWork(
-          handleAnswer(click).pipe(
+          handleInteraction(interaction).pipe(
             Effect.asVoid,
             Effect.catchCause((cause) =>
-              Effect.logError('[Cloud] A Slack answer could not be passed on').pipe(
-                Effect.annotateLogs({ cause: Cause.pretty(cause), teamId: click.answer.teamId })
+              Effect.logError('[Cloud] A Slack decision could not be passed on').pipe(
+                Effect.annotateLogs({ cause: Cause.pretty(cause), kind: interaction.kind })
               )
             )
           )
