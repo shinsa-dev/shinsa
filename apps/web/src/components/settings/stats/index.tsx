@@ -2,6 +2,7 @@ import {
   MINUTE_MS,
   resolveProjectStatsSource,
   resolveStats,
+  resolveAttention,
   resolveTurnaround,
   type ShinsaState,
 } from '@shinsa/core';
@@ -9,6 +10,7 @@ import * as React from 'react';
 import { SelectField } from '@/components/controls/select-field.tsx';
 import { useMinute } from '@/hooks/use-minute.ts';
 import { selectFocus } from '@/lib/focus.ts';
+import { ATTENTION_DESCRIPTION, ATTENTION_SECTION, listAttentionTiles } from '@/lib/stats/attention.ts';
 import {
   DEFAULT_STATS_RANGE,
   parseDayKey,
@@ -71,14 +73,17 @@ export function StatisticsSettings({ state }: { state: ShinsaState }) {
     [source, day, range]
   );
   const stats = React.useMemo(() => resolveStats(source, rangeWindow), [source, rangeWindow]);
+  const turnaroundWindow = React.useMemo(
+    () => resolveTurnaroundWindow(rangeWindow, minute * MINUTE_MS),
+    [rangeWindow, minute]
+  );
   const turnaround = React.useMemo(
-    () =>
-      resolveTurnaround(
-        source,
-        state.presence ?? {},
-        resolveTurnaroundWindow(rangeWindow, minute * MINUTE_MS)
-      ),
-    [source, state.presence, rangeWindow, minute]
+    () => resolveTurnaround(source, state.presence ?? {}, turnaroundWindow),
+    [source, state.presence, turnaroundWindow]
+  );
+  const attention = React.useMemo(
+    () => resolveAttention(source, state.presence ?? {}, turnaroundWindow),
+    [source, state.presence, turnaroundWindow]
   );
   const scope = focus && <span className='font-normal'>Only {focus.name}, the project in focus</span>;
   const rangeLabel = STATS_RANGES.find((entry) => entry.value === `${range}`)?.label ?? '';
@@ -96,6 +101,14 @@ export function StatisticsSettings({ state }: { state: ShinsaState }) {
         className='gap-1.5'
       >
         <StatTiles tiles={listTurnaroundTiles(turnaround)} />
+      </SettingsGroup>
+      <SettingsGroup
+        title={ATTENTION_SECTION}
+        action={scope}
+        description={ATTENTION_DESCRIPTION}
+        className='gap-1.5'
+      >
+        <StatTiles tiles={listAttentionTiles(attention)} />
       </SettingsGroup>
       <SettingsGroup title={USAGE_SECTION} action={scope} className='gap-1.5'>
         <StatTiles tiles={listUsageTiles(stats)} />

@@ -109,5 +109,10 @@ describe('statistics', () => {
     expect(turnaround?.textContent).toContain('Start to finish4hOver 1 round');
     expect(turnaround?.textContent).toContain('Waiting on you0%');
     expect(turnaround?.textContent).toContain('not at all while you were away');
+    expect(titles.indexOf('settings-your-attention')).toBe(titles.indexOf('settings-turnaround') + 1);
+    const attention = view.container.querySelector('#settings-your-attention');
+    expect(attention?.textContent).toContain('Inputs per round0Over 1 round');
+    expect(attention?.textContent).toContain('Hands-off rounds100%');
+    expect(attention?.textContent).toContain('Approved first timeNoneNo reviews');
   });
 });
