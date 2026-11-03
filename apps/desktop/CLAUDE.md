@@ -31,8 +31,9 @@ src/
 │   notifications/  notice.ts (the badge text, the settings pane); Notifications (the Dock badge, banners)
 │   page-channel/   PageRequest, every IPC message the page may send, decoded by schema
 │   prefs/          Prefs: window bounds, the update channel and the kept version in userData/prefs.json
-│   server/         url.ts (which server to load); EngineServer: health and the queue through core's EngineApi
-│                   `server` group client, decoded, 1.5 s each
+│   server/         url.ts (which server to load; resolveConfigHome, the config folder launchd.ts reads too);
+│                   EngineServer: health and the queue through core's EngineApi `server` group client, decoded,
+│                   1.5 s each
 │   tray/           menu.ts (the menu bar item's status line, count and menu); StatusTray
 │   update-log/     log.ts (lines and rotation); UpdateLog, `~/Library/Logs/<app>/updater.log`
 │   updates/        state.ts (states, menu item, notices, the go-back dialog), channel.ts (the channels, their
