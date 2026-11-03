@@ -2993,7 +2993,7 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   transcript to the machine of its run; the rest goes to the first machine. With more than one machine in the account (this device need not reach them all), a task shows its machine in
   its facts row and on the roadmap. A service worker (`/sw.js`, scope `/`, from
   `src/remote-sw.ts`) hands every `/api/` request of the page, `fetch` and `<img src>` alike, to the page, which
-  sends it to the right machine and streams the answer back (`relay.ts`). A dropped channel closes that machine's socket and
+  sends it to the right machine and streams the answer back (`relay.ts`). It never relays a navigation, and every answer it relays carries `content-security-policy: sandbox; default-src 'none'` and `nosniff` over whatever the machine sent, so a file a machine serves (an agent's SVG or HTML evidence, say) never opens as a page of `app.shinsa.dev`, the origin that holds this browser's device keys (`test/lib/remote/relay.test.ts`). A dropped channel closes that machine's socket and
   its connection's retry opens a fresh channel with a new connect token, since a token opens one channel once. The page builds the hello's keys while Shinsa Cloud's connect call runs
   (`openRemoteChannel` takes the URL as a promise). `bun scripts/perf/remote.ts` times each leg (Shinsa Cloud's
   connect call, cloudflared, the handshake, the first state, `/api` requests through the channel) on a copy of your
