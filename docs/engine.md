@@ -3024,8 +3024,8 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   Shinsa on <name> to use this." (the local app: "Update Shinsa to use this."). Anything else that needs a newer
   engine asks `useEngineCommand(type, id)` or `useEngineFeature(feature, id)`, a name in `ENGINE_FEATURES` (`task.share`,
   `feedback` for `GET /api/feedback`, `teams` for the team routes and `GET /api/teams/tasks`, and
-  `review.approve_after_fix` for `gate.answer`'s `thenApprove`, today; Settings → Teams and the review's Fix and approve
-  choice show only on an engine that has them). `ENGINE_PROTOCOL` is the hard floor: a machine whose protocol differs from the page's is left out of the
+  `review.approve_after_fix` for `gate.answer`'s `thenApprove`, and `changelog` for `GET /api/changelog`, today;
+  Settings → Teams, the review's Fix and approve choice and What's new show only on an engine that has them). `ENGINE_PROTOCOL` is the hard floor: a machine whose protocol differs from the page's is left out of the
   dashboard, merges nothing and gets no command, and Settings → Machines says "Update Shinsa on <name> to reach it from
   here." in its row, as do New task's machine picker and a routing policy's on that machine's disabled entry. When every
   machine of the dashboard is on another protocol, the dashboard opens on that message instead of the app
@@ -4870,6 +4870,28 @@ must keep up with the SDK, never the other way round.
 - **Tests never run an updater.** The service takes `locate`, `readVersion`, `minimum`, `sdk`, `latest`, `updater`
   and `run` (`VersionsOptions`, `startShinsa`'s `versions`); the one test of the default runner points it at the fake
   `claude` in `test/helpers/bin`, whose `update` does nothing.
+
+### What's new
+
+Every release carries its changelog (`docs/release.md` → The changelog), and the web app shows what changed after an
+update (`apps/web/src/lib/changelog.ts`, `components/changelog/dialog.tsx`).
+
+- **The changelog** comes from `GET /api/changelog` (`Changelog`: releases newest first, each a `version`, a `date`
+  and its entries without `internal` ones; unreleased entries have no version). A built engine serves the history
+  embedded at build; one run from a checkout reads `.changes/` at start, every entry unreleased
+  (`apps/engine/src/changelog`). The page reads it once, when it needs it, and asks `useEngineFeature('changelog')`
+  first, so a page on an engine from before it shows nothing.
+- **The last version you saw** is this browser's, in `localStorage` (`shinsa.changelog-seen`), never the engine's:
+  seen versions do not follow you to another browser. The first time a page meets a released engine it records that
+  version and shows nothing, so a fresh install has no What's new; a development engine (`0.0.0`) never records or
+  shows one.
+- **What's new** is a button in the header, the Cards top bar and the Sidebar rail alike, shown only while the
+  engine's version is newer than the one you saw and the changelog has a release between them
+  (`resolveWhatsNew`: released versions above the seen one, up to the engine's). Its hint names the version you
+  last saw. It never opens a dialog by itself.
+- **The dialog** lists those releases, each a card with its version and date and its entries under New, Improved
+  and Fixed. Opening it, from the button, ⌘K's "What's new in Shinsa" or Settings → Updates → Changelog, records the
+  engine's version as seen, so the button goes away. From ⌘K or Settings it lists every release.
 
 ## MCP servers, plugins and skills
 
