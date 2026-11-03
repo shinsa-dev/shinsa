@@ -1,4 +1,4 @@
-import { launch, type Page } from './content-cdp.ts';
+import { type CdpPage, launchChromium } from '../kit/chromium/index.ts';
 import { PROBE } from './content-probe.ts';
 import { summarize } from './content-stats.ts';
 
@@ -16,17 +16,17 @@ const RUN = 'section[id^="run-"]';
 
 const NONE: Record<string, number> = {};
 
-function navigate(page: Page, path: string, ready = 'body') {
+function navigate(page: CdpPage, path: string, ready = 'body') {
   return page.evaluate<Navigation>(
     `window.__perf.navigate(${JSON.stringify(path)}, ${JSON.stringify(ready)})`
   );
 }
 
-async function settle(page: Page) {
+async function settle(page: CdpPage) {
   await page.evaluate('window.__perf.sleep(600)');
 }
 
-function pickTask(page: Page) {
+function pickTask(page: CdpPage) {
   if (Bun.env.SHINSA_PERF_TASK) return Promise.resolve(Bun.env.SHINSA_PERF_TASK);
   return page.evaluate<string>(`(() => {
     const state = JSON.parse(window.__perf.lastState).state;
@@ -36,7 +36,7 @@ function pickTask(page: Page) {
   })()`);
 }
 
-function liveRun(page: Page, taskId: string) {
+function liveRun(page: CdpPage, taskId: string) {
   return page.evaluate<string | null>(`(() => {
     const state = JSON.parse(window.__perf.lastState).state;
     const runs = Object.values(state.runs).filter((run) => run.taskId === ${JSON.stringify(taskId)});
@@ -44,7 +44,7 @@ function liveRun(page: Page, taskId: string) {
   })()`);
 }
 
-async function typeText(page: Page, text: string) {
+async function typeText(page: CdpPage, text: string) {
   for (const char of text) {
     await page.send('Input.dispatchKeyEvent', {
       type: 'keyDown',
@@ -57,7 +57,7 @@ async function typeText(page: Page, text: string) {
   }
 }
 
-const scenarios: Record<string, (page: Page, taskId: string) => Promise<Record<string, number>>> = {
+const scenarios: Record<string, (page: CdpPage, taskId: string) => Promise<Record<string, number>>> = {
   async openChat(page, taskId) {
     await navigate(page, '/');
     await settle(page);
@@ -188,7 +188,7 @@ const scenarios: Record<string, (page: Page, taskId: string) => Promise<Record<s
 async function runScenario(name: string) {
   const samples: Record<string, number>[] = [];
   for (let round = 0; round < ROUNDS; round += 1) {
-    const browser = await launch();
+    const browser = await launchChromium(1280, 900);
     try {
       const { page } = browser;
       await page.send('Page.enable');
@@ -200,7 +200,7 @@ async function runScenario(name: string) {
       await settle(page);
       const taskId = await pickTask(page);
       samples.push(
-        await (scenarios[name] as (page: Page, taskId: string) => Promise<Record<string, number>>)(
+        await (scenarios[name] as (page: CdpPage, taskId: string) => Promise<Record<string, number>>)(
           page,
           taskId
         )

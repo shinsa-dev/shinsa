@@ -3805,8 +3805,8 @@ browser ──https──► <label>.shinsa.page   (apps/cloud, previews.ts)
   `shareLimit` setting. A task that settles ends all its previews whatever their limit (`syncShares`,
   `preview.unshared` with `reason: 'done'`): its worktree and its service runs go with it.
 - **Team access** waits for teams; a preview is shared only by link for now.
-- **To try it without a deploy**, `bun run sandbox` (`scripts/sandbox.ts`) shares the seeded `web` service of one of
-  Studio's tasks (`scripts/sandbox-service.ts`, a small dev server with live updates) on
+- **To try it without a deploy**, `bun run sandbox` (`scripts/sandbox/`) shares the seeded `web` service of one of
+  Studio's tasks (`scripts/sandbox/service.ts`, a small dev server with live updates) on
   `http://<label>.localhost:5195` with the Worker's own code. Its start page, `/sandbox`, links the task in Studio's
   own app, with no sign-in, where the Services popover shows the run, Share preview and Stop sharing; then the
   preview, stopping and starting the service (`/sandbox/service/stop`, `/sandbox/service/start`), and a link that no
@@ -6202,15 +6202,15 @@ scratch copy is one directory, and the event log, worktrees and config.json only
   (`SHINSA_SEED_DIR` moves it): `data/` and the throwaway repositories under `repos/`, then prints the command that
   serves it in inspect mode. It covers tasks across shapes and stages, Codex runs, actions on your behalf, evidence, a review
   that is revised and then fixed, and operation-gate notes. Every seeded project has services to start
-  (`scripts/seed-services.ts`, written to `data/terminals/services.json`): `web` in each, `api` for Superwall, each
-  running `scripts/sandbox-service.ts` in the project's seeded repository with a preview URL; the command names the
-  script by its path in the checkout that seeded it. The evidence (`scripts/seed-evidence.ts`) is real files in
+  (`scripts/seed/services.ts`, written to `data/terminals/services.json`): `web` in each, `api` for Superwall, each
+  running `scripts/sandbox/service.ts` in the project's seeded repository with a preview URL; the command names the
+  script by its path in the checkout that seeded it. The evidence (`scripts/seed/evidence.ts`) is real files in
   `scripts/seed-media/`, taken at a device scale factor of 2 like an agent's: before and after screenshots of a
   settings page in dark mode at 1280px and 390px and of a
   crowded tab row, a WebM recording of it scrolling, a reviewer's own dark-mode shot and contrast note, screenshots of
   Shinsa's own Review tab for SMP-2, and test output for five tasks, each attached shortly before its run ended. The
   pages are rendered by `bun scripts/seed-media/generate.ts [origin]` (`shots.ts` lists every file and what it shows,
-  `shots.test.ts` checks each checked-in file is listed): it drives Chromium over CDP (`scripts/perf/shell-cdp.ts`)
+  `shots.test.ts` checks each checked-in file is listed): it drives Chromium over CDP (`scripts/kit/chromium/`)
   through the fixture pages in `scripts/seed-media/fixtures/` (the settings page, the tab row), records the tab row
   with a screencast that ffmpeg encodes to WebM, and takes the SMP-2 shots from a running seeded copy at `origin`
   (skipped without one; `SEED_MEDIA_ONLY` picks files by name). It also writes the `/ui` showcase's evidence samples
@@ -6218,8 +6218,8 @@ scratch copy is one directory, and the event log, worktrees and config.json only
   Code session `.jsonl`, replaces one task's transcript with that real session.
 - **The sample repository.** For the code views the seed also builds `repos/shinsa-sample` offline from Shinsa's own
   tree at a pinned commit, `3590252` (`SOURCE_COMMIT`; `git archive`, about 1,250 files, imported as eight commits
-  with `git fast-import`), and files it under a Sample project (`scripts/seed-code.ts`, helpers in `seed-code-kit.ts`, transcripts in
-  `seed-code-transcripts.ts`). Four tasks use it: SMP-2 at your review, on a branch with three phase commits, a fix
+  with `git fast-import`), and files it under a Sample project (`scripts/seed/code/sample.ts`, helpers in `code/kit.ts`, transcripts in
+  `code/transcripts.ts`). Four tasks use it: SMP-2 at your review, on a branch with three phase commits, a fix
   commit and one uncommitted edit, twelve changed files (a rename with edits, a deletion, two additions, a PNG,
   `bun.lock` and a 5,000-line fixture), a report of 40 points (18 spots, the key ones explained, one in a file outside the diff; 10 judgement calls with
   their alternatives, two disputed by the reviewer; 7 risks) with the Agent's walkthrough, findings of both

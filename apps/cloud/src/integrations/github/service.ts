@@ -1,4 +1,4 @@
-import { REMOTE_PATHS, type RemoteUser } from '@shinsa/core';
+import type { RemoteUser } from '@shinsa/core';
 import { SignInFailed } from '@shinsa/core/remote/errors';
 import { Context, Effect, Layer, Redacted, type Schema } from 'effect';
 import { HttpClient, type HttpClientError, HttpClientRequest, HttpClientResponse } from 'effect/http';
@@ -47,7 +47,7 @@ export class GitHub extends Context.Service<
             client_secret: Redacted.value(config.githubClientSecret),
             code,
             code_verifier: Redacted.value(verifier),
-            redirect_uri: `${config.origin}${REMOTE_PATHS.signInCallback}`,
+            redirect_uri: config.signInCallbackUrl,
           }),
           client.execute,
           Effect.flatMap(HttpClientResponse.schemaBodyJson(TokenAnswer)),

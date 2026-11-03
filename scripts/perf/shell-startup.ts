@@ -1,7 +1,7 @@
 import { rmSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { listTargets, ShellPage } from './shell-cdp.ts';
+import { CdpPage, listTargets } from '../kit/chromium/index.ts';
 import { summarize } from './shell-stats.ts';
 
 interface Paints {
@@ -48,14 +48,14 @@ async function findPage(deadline: number) {
       const target = (await listTargets(PORT)).find(
         (entry) => entry.type === 'page' && entry.url.startsWith(ORIGIN)
       );
-      if (target) return ShellPage.open(target.webSocketDebuggerUrl);
+      if (target) return CdpPage.open(target.webSocketDebuggerUrl);
     } catch {}
     await Bun.sleep(5);
   }
   throw new Error('The app never opened a page on the server.');
 }
 
-async function waitForHome(page: ShellPage, deadline: number) {
+async function waitForHome(page: CdpPage, deadline: number) {
   while (Date.now() < deadline) {
     if (await page.evaluate<boolean>(HOME_READY)) return Date.now();
     await Bun.sleep(5);

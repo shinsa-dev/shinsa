@@ -224,7 +224,8 @@ pointer (`docs/release.md` → Downloads).
   version's build never changes. Each channel file names its zip as `<version>/Shinsa-mac-arm64.zip`, relative to
   `/updates/`. Every answer carries R2's `ETag`, `Last-Modified` and `Accept-Ranges: bytes`; a single `Range` reads
   only those bytes and answers 206 (a differential update asks one range per request), a range past the end answers
-  416, a multi-range or malformed one gets the whole file, and a HEAD reads no bytes. Any other path under `/updates`
+  416, a multi-range or malformed one gets the whole file, and a HEAD reads no bytes (the same `parseRange`,
+  `answerBytes` and `answerUnsatisfiable` the downloads use, in `download.ts`). Any other path under `/updates`
   answers 404, so nothing else in the bucket can be reached; no binding or an R2 error answers 503 with
   `Cache-Control: no-store` and writes a `console.error` (`log.ts`), which Workers Logs keeps (`observability` in
   `wrangler.jsonc`), and the app checks again later. There is no fallback to GitHub (`updates.ts`).

@@ -1,6 +1,7 @@
 import { appendFileSync } from 'node:fs';
-import { createBrowser, median, type Page } from './code-cdp.ts';
+import { type CdpPage, launchChromium } from '../kit/chromium/index.ts';
 import { CODE_PROBE } from './code-probe.ts';
+import { median } from './content-stats.ts';
 
 interface Options {
   base: string;
@@ -96,7 +97,7 @@ function rowSelector(path: string) {
   return `[role=treeitem][aria-label=${JSON.stringify(path)}]`;
 }
 
-async function openPage(page: Page, url: string, width: number) {
+async function openPage(page: CdpPage, url: string, width: number) {
   await page.send('Emulation.setDeviceMetricsOverride', {
     width,
     height: 900,
@@ -112,14 +113,14 @@ async function openPage(page: Page, url: string, width: number) {
   await page.evaluate(CODE_PROBE);
 }
 
-async function pressAt(page: Page, x: number, y: number, hoverMs: number) {
+async function pressAt(page: CdpPage, x: number, y: number, hoverMs: number) {
   await page.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x, y });
   if (hoverMs > 0) await Bun.sleep(hoverMs);
   await page.send('Input.dispatchMouseEvent', { type: 'mousePressed', x, y, button: 'left', clickCount: 1 });
   await page.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x, y, button: 'left', clickCount: 1 });
 }
 
-async function waitForSelector(page: Page, selector: string, timeout = 15000) {
+async function waitForSelector(page: CdpPage, selector: string, timeout = 15000) {
   const until = Date.now() + timeout;
   while (Date.now() < until) {
     if (await page.evaluate<boolean>(`Boolean(window.__code.rect(${JSON.stringify(selector)}))`)) return true;
@@ -128,11 +129,11 @@ async function waitForSelector(page: Page, selector: string, timeout = 15000) {
   return false;
 }
 
-async function revealRow(page: Page, selector: string) {
+async function revealRow(page: CdpPage, selector: string) {
   if (await page.evaluate<boolean>(`window.__code.reveal(${JSON.stringify(selector)})`)) await Bun.sleep(100);
 }
 
-async function openRow(page: Page, path: string, snippet: string, hoverMs: number) {
+async function openRow(page: CdpPage, path: string, snippet: string, hoverMs: number) {
   await revealRow(page, rowSelector(path));
   const at = await page.evaluate<{ x: number; y: number } | null>(
     `window.__code.rect(${JSON.stringify(rowSelector(path))})`
@@ -146,7 +147,7 @@ async function openRow(page: Page, path: string, snippet: string, hoverMs: numbe
   return opened;
 }
 
-async function measureStyleFrames(page: Page, selector: string, run: () => Promise<void>) {
+async function measureStyleFrames(page: CdpPage, selector: string, run: () => Promise<void>) {
   await page.evaluate(
     `window.__style = window.__code.watchStyle(${JSON.stringify(selector)}, 'backgroundColor', 24); true`
   );
@@ -180,7 +181,7 @@ function summarizeOpens(opens: (Opened | null)[]) {
   };
 }
 
-async function measureFiles(page: Page, options: Options, head: string) {
+async function measureFiles(page: CdpPage, options: Options, head: string) {
   const tree = await requestJson<{ entries: Entry[] }>(
     `${options.base}/api/tasks/${options.task}/tree?ref=${head}&dir=${encodeURIComponent(options.folder)}`
   );
@@ -264,7 +265,7 @@ function pickChangeSnippet(head: string, base: string, others: string[]) {
     .find((line) => line.length >= 12 && others.every((text) => !text.includes(line)));
 }
 
-async function measureChanges(page: Page, options: Options, refs: { head: string; base: string }) {
+async function measureChanges(page: CdpPage, options: Options, refs: { head: string; base: string }) {
   const diff = await requestJson<{ files: ChangedFile[] }>(`${options.base}/api/tasks/${options.task}/diff`);
   const candidates = diff.files
     .filter(
@@ -314,7 +315,7 @@ async function measureChanges(page: Page, options: Options, refs: { head: string
   };
 }
 
-async function measureTree(page: Page, options: Options) {
+async function measureTree(page: CdpPage, options: Options) {
   await openPage(page, `${options.base}/tasks/${options.task}?tab=code&mode=files`, options.width);
   await waitForSelector(page, '[role=tree][aria-label=Files] [role=treeitem]');
   await Bun.sleep(2000);
@@ -387,7 +388,7 @@ async function measureTree(page: Page, options: Options) {
   };
 }
 
-async function measureBigFiles(page: Page, options: Options, head: string) {
+async function measureBigFiles(page: CdpPage, options: Options, head: string) {
   const [first, ...rest] = options.files;
   if (!first) return [];
   await openPage(
@@ -440,7 +441,7 @@ async function main() {
   const refs = await requestJson<{ head: string; base: string }>(
     `${options.base}/api/tasks/${options.task}/refs`
   );
-  const browser = await createBrowser(options.width, 900);
+  const browser = await launchChromium(options.width, 900);
   try {
     const result: Record<string, unknown> = {
       label: options.label,

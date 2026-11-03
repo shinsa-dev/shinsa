@@ -13,7 +13,7 @@ import {
 import { InvalidChallenge, InvalidRedirect, SignInFailed } from '@shinsa/core/remote/errors';
 import { Cause, Clock, Duration, Effect, Layer, Option, Redacted, Schema } from 'effect';
 import { HttpRouter, HttpServerRequest } from 'effect/http';
-import { SESSION_TTL, SIGN_IN_EXPIRED } from '../../auth/schema.ts';
+import { OAUTH_STATE_BYTES, SESSION_TTL, SIGN_IN_EXPIRED } from '../../auth/schema.ts';
 import { createSession } from '../../auth/tokens.ts';
 import { CloudConfig } from '../../config/service.ts';
 import { CloudCrypto } from '../../crypto/service.ts';
@@ -95,11 +95,11 @@ export const SignInRoutes = Layer.unwrap(
     const respondSignIn = Effect.gen(function* () {
       const url = yield* CurrentUrl;
       const native = yield* resolveNativeRequest(url);
-      const state = Redacted.value(yield* crypto.createToken(24));
+      const state = Redacted.value(yield* crypto.createToken(OAUTH_STATE_BYTES));
       const verifier = yield* crypto.createToken(32);
       const authorize = new URL(GITHUB_AUTHORIZE);
       authorize.searchParams.set('client_id', config.githubClientId);
-      authorize.searchParams.set('redirect_uri', `${config.origin}${REMOTE_PATHS.signInCallback}`);
+      authorize.searchParams.set('redirect_uri', config.signInCallbackUrl);
       authorize.searchParams.set('state', state);
       authorize.searchParams.set('code_challenge', yield* crypto.createCodeChallenge(verifier));
       authorize.searchParams.set('code_challenge_method', 'S256');

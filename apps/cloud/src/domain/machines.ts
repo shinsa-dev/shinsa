@@ -10,11 +10,14 @@ import {
   type RemoteInstance,
   type RemoteMember,
   type RemoteUser,
+  type RemoteUserId,
   resolveTeamChannelUrl,
   resolveTunnelHost,
+  type TeamMachine,
 } from '@shinsa/core';
 import { NotFound } from '@shinsa/core/remote/errors';
 import { Clock, Duration, Effect, Option, Redacted } from 'effect';
+import { NO_SUCH_MACHINE } from '../auth/schema.ts';
 import { CloudCrypto } from '../crypto/service.ts';
 import { Cloudflare } from '../integrations/cloudflare/service.ts';
 import { MachineAccess } from '../store/access/service.ts';
@@ -33,6 +36,17 @@ export function isMachineOnline(machine: Machine, now: number) {
 
 export function resolveTunnelUrl(machine: Machine) {
   return `wss://${resolveTunnelHost(machine.id)}`;
+}
+
+export function serializeTeamMachine(machine: Machine, now: number): TeamMachine {
+  return {
+    id: machine.id,
+    name: machine.name,
+    userId: machine.userId,
+    online: isMachineOnline(machine, now),
+    lastSeenAt: machine.lastSeenAt,
+    ...(machine.signingKey ? { signingKey: machine.signingKey } : {}),
+  };
 }
 
 export function serializeInstance({ machine, owner, role }: SharedMachine, now: number): RemoteInstance {
@@ -70,12 +84,14 @@ export const createConnectAnswer = Effect.fn('createConnectAnswer')(function* (
   return { url, expiresAt } satisfies ConnectResponse;
 });
 
-export const findMachineOwner = Effect.fn('findMachineOwner')(function* (machine: Machine) {
+export const findOwner = Effect.fn('findOwner')(function* (ownerId: RemoteUserId, missing: string) {
   const accounts = yield* Accounts;
-  const owner = yield* accounts.selectUser(machine.userId);
-  if (Option.isNone(owner)) return yield* new NotFound({ message: 'No such machine.' });
+  const owner = yield* accounts.selectUser(ownerId);
+  if (Option.isNone(owner)) return yield* new NotFound({ message: missing });
   return owner.value satisfies RemoteUser;
 });
+
+export const findMachineOwner = (machine: Machine) => findOwner(machine.userId, NO_SUCH_MACHINE);
 
 export const listMachinePeople = Effect.fn('listMachinePeople')(function* (machine: Machine) {
   const access = yield* MachineAccess;
