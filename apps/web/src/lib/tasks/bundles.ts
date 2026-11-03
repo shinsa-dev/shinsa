@@ -1,6 +1,7 @@
 import {
   canChangeStack,
   compareTasks,
+  describeList,
   isTaskComplete,
   isTaskSettled,
   isWatchHome,
@@ -92,7 +93,7 @@ export function listBundleRows(state: ShinsaState, task: Task): BundleRow[] {
 }
 
 function describeBuildsOn(names: string[]) {
-  return `Builds on ${names.slice(0, -1).join(', ')} and ${names.at(-1)}`;
+  return `Builds on ${describeList(names)}`;
 }
 
 export function describeBundleParents(parents: Task[]) {
