@@ -1151,6 +1151,7 @@ function applyEventBody(state: ShinsaState, event: ShinsaEvent): ShinsaState {
       break;
     case 'slack.thread_linked':
     case 'slack.status_posted':
+    case 'slack.decided':
       applySlackEvent(state, event);
       break;
     case 'memory.written':

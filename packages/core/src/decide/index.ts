@@ -136,7 +136,7 @@ import {
 } from './shares.ts';
 import { dismissSilence, recordSilence, snoozeSilence } from './silence.ts';
 import {
-  answerSlackQuestion,
+  decideSlackGate,
   receiveSlackMention,
   recordSlackStatus,
   startSlackTask,
@@ -487,8 +487,8 @@ function apply(decider: Decider, command: ShinsaCommand) {
       return startSlackTask(decider, command);
     case 'slack.record_status':
       return recordSlackStatus(decider, command);
-    case 'slack.answer':
-      return answerSlackQuestion(decider, command);
+    case 'slack.decide':
+      return decideSlackGate(decider, command);
     case 'onboarding.welcome':
       return recordWelcome(decider, command);
   }

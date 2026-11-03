@@ -381,6 +381,10 @@ describe('the Slack effects', () => {
         handled.push('post');
         return Promise.resolve();
       },
+      react: () => {
+        handled.push('react');
+        return Promise.resolve();
+      },
     } as unknown as Slack;
     const { runner } = setup(() => undefined, { slack });
     const mention = {
@@ -396,10 +400,14 @@ describe('the Slack effects', () => {
     await runner.apply({ kind: 'slack.evaluate', mention }, createContext());
     await runner.apply({ kind: 'slack.status', taskId: 't1', thread: THREAD }, createContext());
     await runner.apply(
-      { kind: 'slack.post', thread: THREAD, taskId: 't1', post: { kind: 'forwarded' } },
+      { kind: 'slack.post', thread: THREAD, taskId: 't1', post: { kind: 'result' } },
       createContext()
     );
-    expect(handled).toEqual(['evaluate', 'status', 'post']);
+    await runner.apply(
+      { kind: 'slack.react', thread: THREAD, messageTs: '1.2', reaction: 'eyes' },
+      createContext()
+    );
+    expect(handled).toEqual(['evaluate', 'status', 'post', 'react']);
   });
 
   test('fail without one, so they wait in the outbox', async () => {

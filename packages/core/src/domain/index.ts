@@ -249,6 +249,7 @@ export {
 export {
   isSameSlackThread,
   resolveSlackThreadKey,
+  type SlackDecided,
   type SlackThreadLink,
   type SlackThreadRef,
 } from './slack.ts';

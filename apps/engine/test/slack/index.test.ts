@@ -5,7 +5,7 @@ import {
   createSlackForwardSignature,
   DomainError,
   SLACK_FORWARD_HEADERS,
-  type SlackAnswer,
+  type SlackDecision,
   type SlackMention,
   type SlackThreadLink,
   serializeBase64Url,
@@ -220,14 +220,17 @@ describe('a mention app.shinsa.dev forwards', () => {
   });
 });
 
-describe('an answer from a question’s button', () => {
-  const ANSWER: SlackAnswer = {
+describe('a decision from a card’s button or modal', () => {
+  const DECISION: SlackDecision = {
     interactionId: 'I1',
     ...THREAD,
     messageTs: '200.4',
     userId: 'U1',
-    gateId: 'q1',
-    choice: 0,
+    gateId: 'p1',
+    decision: 'approve',
+    choice: null,
+    planVersion: 2,
+    response: null,
   };
 
   async function click(slack: Slack, body: string, signature?: string) {
@@ -235,54 +238,99 @@ describe('an answer from a question’s button', () => {
     return slack.handleTunnel(request, new URL(request.url));
   }
 
-  test('becomes slack.answer once per click, and says what was answered', async () => {
+  test('becomes slack.decide once per interaction, and answers what the card now says', async () => {
     const { slack, stub } = setUp();
     stub.update((state) => {
-      state.gates.q1 = { ...createGate({ id: 'q1', taskId: 't1', type: 'question' }), response: 'CSV' };
+      state.gates.p1 = createGate({ id: 'p1', taskId: 't1', type: 'plan' });
+      const task = state.tasks.t1;
+      if (task) task.slack = { ...LINK, decided: { userId: 'U1', text: 'approved the plan' } };
     });
-    const response = await click(slack, JSON.stringify(ANSWER));
-    expect(await response.json()).toEqual({ answered: true, choice: 'CSV' });
-    expect(stub.dispatched).toEqual([{ type: 'slack.answer', answer: ANSWER }]);
-    expect(stub.commandIds).toEqual(['slack-answer:I1']);
-    const gone = setUp();
-    expect(await (await click(gone.slack, JSON.stringify({ ...ANSWER, gateId: 'q2' }))).json()).toEqual({
-      answered: true,
-      choice: '',
+    const response = await click(slack, JSON.stringify(DECISION));
+    expect(await response.json()).toEqual({ decided: true, text: 'approved the plan' });
+    expect(stub.dispatched).toEqual([{ type: 'slack.decide', decision: DECISION }]);
+    expect(stub.commandIds).toEqual(['slack-decide:I1']);
+  });
+
+  test('carries a modal’s written answer, and says decided when the gate is gone', async () => {
+    const { slack, stub } = setUp();
+    const written: SlackDecision = {
+      ...DECISION,
+      decision: 'revise',
+      planVersion: null,
+      response: 'Split phase two.',
+    };
+    expect(await (await click(slack, JSON.stringify(written))).json()).toEqual({
+      decided: true,
+      text: 'decided',
+    });
+    expect(stub.dispatched).toEqual([{ type: 'slack.decide', decision: written }]);
+    stub.update((state) => {
+      state.gates.p1 = createGate({ id: 'p1', taskId: 'gone', type: 'plan' });
+    });
+    expect(await (await click(slack, JSON.stringify(DECISION))).json()).toEqual({
+      decided: true,
+      text: 'decided',
     });
   });
 
-  test('says why when Shinsa refuses it, and fails on anything else', async () => {
+  test('says why when Shinsa refuses it, such as an outdated plan, and fails on anything else', async () => {
     const { slack, stub } = setUp();
-    stub.reject(
-      () => true,
-      new DomainError({ code: 'slack_answer_closed', message: 'This question is no longer open.' })
-    );
-    expect(await (await click(slack, JSON.stringify(ANSWER))).json()).toEqual({
-      answered: false,
-      reason: 'This question is no longer open.',
+    const changed = 'The plan changed. Approve the new one.';
+    stub.reject(() => true, new DomainError({ code: 'plan_changed', message: changed }));
+    expect(await (await click(slack, JSON.stringify(DECISION))).json()).toEqual({
+      decided: false,
+      reason: changed,
     });
     const broken = setUp();
     broken.stub.reject(() => true, new Error('disk full'));
-    expect(click(broken.slack, JSON.stringify(ANSWER))).rejects.toThrow('disk full');
+    expect(click(broken.slack, JSON.stringify(DECISION))).rejects.toThrow('disk full');
   });
 
   test('is refused unsigned or missing a part', async () => {
     const { slack, stub } = setUp();
-    expect((await click(slack, JSON.stringify(ANSWER), 'v1=forged')).status).toBe(401);
-    expect((await click(slack, JSON.stringify({ ...ANSWER, choice: 'one' }))).status).toBe(400);
+    expect((await click(slack, JSON.stringify(DECISION), 'v1=forged')).status).toBe(401);
+    expect((await click(slack, JSON.stringify({ ...DECISION, decision: 'merge' }))).status).toBe(400);
+    expect((await click(slack, JSON.stringify({ ...DECISION, gateId: undefined }))).status).toBe(400);
     expect(stub.dispatched).toEqual([]);
   });
 });
 
+describe('a reaction the outbox asks for', () => {
+  test('puts the reaction on the mention, takes none off, and carries on when Slack refuses', async () => {
+    const { slack, relay, answers } = setUp();
+    const effect = {
+      kind: 'slack.react' as const,
+      thread: THREAD,
+      messageTs: '300.2',
+      reaction: 'eyes' as const,
+    };
+    await slack.react(effect);
+    expect(callsTo(relay, 'react')[0]?.body).toEqual({
+      ...THREAD,
+      messageTs: '300.2',
+      add: 'eyes',
+      remove: null,
+    });
+    expect(callsTo(relay, 'post')).toEqual([]);
+    answers['/__remote/slack/react'] = () => new Response('busy', { status: 503 });
+    await slack.react({ ...effect, reaction: 'inbox_tray' });
+    expect(warnings).toHaveBeenCalledWith('[Slack] The reaction could not be set', expect.anything());
+    const off = setUp({ enabled: false });
+    await off.slack.react(effect);
+    expect(off.relay).toEqual([]);
+  });
+});
+
 describe('a post the outbox asks for', () => {
+  const effect = {
+    kind: 'slack.post' as const,
+    thread: THREAD,
+    taskId: 't1',
+    post: { kind: 'completed' as const },
+  };
+
   test('a relay that is down or overloaded throws, so the outbox tries again', async () => {
     const { slack, answers } = setUp();
-    const effect = {
-      kind: 'slack.post' as const,
-      thread: THREAD,
-      taskId: 't1',
-      post: { kind: 'forwarded' as const },
-    };
     answers['/__remote/slack/post'] = () => new Response('busy', { status: 503 });
     const failed = slack.post(effect);
     await expect(failed).rejects.toMatchObject({ _tag: 'RemoteUnreachable', status: 503, retryable: true });
@@ -290,39 +338,21 @@ describe('a post the outbox asks for', () => {
     await expect(slack.post(effect)).rejects.toMatchObject({ _tag: 'RemoteUnreachable', status: null });
   });
 
-  test('a task’s post links to it on app.shinsa.dev', async () => {
+  test('a finished task is posted as a new message that links to it on app.shinsa.dev', async () => {
     const { slack, relay } = setUp();
-    await slack.post({
-      kind: 'slack.post',
-      thread: THREAD,
-      taskId: 't1',
-      post: { kind: 'forwarded' },
-    });
-    expect(JSON.stringify(relay[0]?.body?.message)).toContain('https://app.test/tasks/t1');
+    await slack.post(effect);
+    expect(callsTo(relay, 'post')[0]?.body).toMatchObject({ replaceTs: null });
+    const message = JSON.stringify(callsTo(relay, 'post')[0]?.body?.message);
+    expect(message).toContain('https://app.test/tasks/t1');
+    expect(message).toContain('is done.');
   });
 
-  test('posts nothing for a task or gate that is gone, or while remote access is off', async () => {
+  test('posts nothing for a task that is gone, or while remote access is off', async () => {
     const { slack, relay } = setUp();
-    await slack.post({
-      kind: 'slack.post',
-      thread: THREAD,
-      taskId: 'gone',
-      post: { kind: 'result' },
-    });
-    await slack.post({
-      kind: 'slack.post',
-      thread: THREAD,
-      taskId: 't1',
-      post: { kind: 'gate', gateId: 'missing' },
-    });
+    await slack.post({ ...effect, taskId: 'gone' });
     expect(relay).toEqual([]);
     const off = setUp({ enabled: false });
-    await off.slack.post({
-      kind: 'slack.post',
-      thread: THREAD,
-      taskId: 't1',
-      post: { kind: 'forwarded' },
-    });
+    await off.slack.post(effect);
     expect(off.relay).toEqual([]);
     expect(warnings).toHaveBeenCalledWith(
       '[Slack] Remote access is off, so nothing was posted',
@@ -373,11 +403,50 @@ describe('the status message of a task', () => {
         type: 'question',
         status: 'open',
         title: 'Which tab?',
+        body: '',
       });
     });
     await slack.status(effect, context());
     expect(callsTo(relay, 'post')).toHaveLength(2);
     expect(JSON.stringify(callsTo(relay, 'post')[1]?.body?.message)).toContain('Which tab?');
+  });
+
+  test('turns into the open gate’s card with its buttons, then back into the status with who decided', async () => {
+    const { slack, stub, relay, clock } = setUp({
+      link: { ...LINK, statusTs: '200.0', reaction: 'hammer_and_wrench' },
+    });
+    stub.update((state) => {
+      state.gates.p1 = createGate({
+        id: 'p1',
+        taskId: 't1',
+        type: 'plan',
+        title: 'Plan',
+        body: '',
+        planVersion: 3,
+      });
+    });
+    await slack.status(effect, context());
+    const card = callsTo(relay, 'post')[0]?.body;
+    expect(card).toMatchObject({ replaceTs: '200.0' });
+    const blocks = JSON.stringify(card?.message);
+    expect(blocks).toContain('Plan ready for your approval');
+    expect(blocks).toContain('"block_id":"shinsa.gate.p1"');
+    expect(blocks).toContain('"action_id":"shinsa.decide.approve"');
+    expect(blocks).toContain('"action_id":"shinsa.write.revise"');
+    expect(blocks).toContain('\\"planVersion\\":3');
+    stub.update((state) => {
+      const gate = state.gates.p1;
+      if (gate) gate.status = 'answered';
+      const task = state.tasks.t1;
+      if (task)
+        task.slack = { ...LINK, statusTs: '200.0', decided: { userId: 'U1', text: 'approved the plan' } };
+    });
+    clock.now += 10_000;
+    await slack.status(effect, context());
+    const status = callsTo(relay, 'post')[1]?.body;
+    expect(status).toMatchObject({ replaceTs: '200.0' });
+    expect(JSON.stringify(status?.message)).toContain('<@U1> approved the plan');
+    expect(JSON.stringify(status?.message)).not.toContain('shinsa.gate');
   });
 
   test('posts a new message when Slack will not edit the old one, and records it', async () => {
@@ -421,6 +490,7 @@ describe('the status message of a task', () => {
         type: 'question',
         status: 'open',
         title: 'Which tab?',
+        body: '',
       });
     });
     clock.now += 10_000;

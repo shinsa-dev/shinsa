@@ -1,5 +1,6 @@
 import { resolveSlackThreadKey, type SlackThreadRef } from '../domain/slack.ts';
 import type { BundlePullRequest } from '../domain/types.ts';
+import type { SlackMentionReaction } from '../slack/messages.ts';
 import type { SlackPost } from '../slack/posts.ts';
 import type { SlackMention } from '../slack/schema.ts';
 
@@ -38,6 +39,7 @@ export type ShinsaEffect =
   | { kind: 'slack.evaluate'; mention: SlackMention }
   | { kind: 'slack.status'; taskId: string; thread: SlackThreadRef }
   | { kind: 'slack.post'; thread: SlackThreadRef; taskId: string; post: SlackPost }
+  | { kind: 'slack.react'; thread: SlackThreadRef; messageTs: string; reaction: SlackMentionReaction }
   | { kind: 'feedback.draft'; feedbackId: string }
   | { kind: 'feedback.file'; feedbackId: string };
 
@@ -74,6 +76,7 @@ export const EFFECT_RECOVERY: Readonly<Record<ShinsaEffectKind, EffectRecovery>>
   'slack.evaluate': 'replay_safe',
   'slack.status': 'replay_safe',
   'slack.post': 'replay_safe',
+  'slack.react': 'replay_safe',
   'feedback.draft': 'replay_safe',
   'feedback.file': 'process_bound',
 };
@@ -116,6 +119,8 @@ export function resolveEffectKey(effect: ShinsaEffect, seq: number) {
       return `${effect.kind}:${effect.taskId}:${effect.serviceId}:${seq}`;
     case 'slack.post':
       return `${effect.kind}:${resolveSlackThreadKey(effect.thread)}:${seq}`;
+    case 'slack.react':
+      return `${effect.kind}:${resolveSlackThreadKey(effect.thread)}:${effect.messageTs}`;
     case 'checks.run':
       return `${effect.kind}:${effect.taskId}:${effect.round}:${seq}`;
     case 'briefing.request':
@@ -177,6 +182,7 @@ export function resolveEffectLane(effect: ShinsaEffect) {
     case 'slack.evaluate':
       return `slack:${resolveSlackThreadKey(effect.mention)}`;
     case 'slack.post':
+    case 'slack.react':
     case 'slack.status':
       return `slack:${resolveSlackThreadKey(effect.thread)}`;
     case 'task.triage':

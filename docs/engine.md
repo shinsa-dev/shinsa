@@ -3974,22 +3974,30 @@ Slack ──event──► app.shinsa.dev /slack/events
                   └─ the thread, signed ──► t-<id>.shinsa.dev
                                              /api/slack/events
                                                └─ slack.mention
-   thread holds an open task ──► task.message, "Sent to the task"
-                  └─ a gate open ──► kept in its chat, "Kept for the task"
+   thread holds an open task ──► task.message, 👀 on the mention
+                  └─ a gate open ──► kept in its chat, 📥 on the mention
    otherwise ──► slack.evaluate: ⏳ on the mention at once,
                   the model reads the thread
                   ├─ not work ──► ⏳ off, "Not a task", once per thread
                   └─ work ──► slack.start_task:
                               task.create, as from Home
-   the task moves ──► slack.status (edited) + the mention's one reaction
-   a gate opens ──► slack.post (a header, the gate, a button to Shinsa)
-   the result ──► slack.post (its start + a button to Shinsa)
+   the task moves or a gate opens or closes
+                  ──► slack.status: the one card, edited
+                      (the open gate with its buttons, else the status)
+                      + the mention's one reaction
+   the result, merged or done ──► slack.post, the only new message
                   └─ app.shinsa.dev /__remote/slack/post ──► Slack
 
-Slack ──a choice's button──► app.shinsa.dev /slack/interactions
-                  ├─ not linked, not their machine's post, offline ──► private reply
-                  └─ signed ──► /api/slack/interactions ──► slack.answer ──► gate.answer
-                                 └─ the buttons become "@you answered *choice*"
+Slack ──a card's button──► app.shinsa.dev /slack/interactions
+       └─ "Request changes…" or "Answer…" ──► views.open, a form
+          └─ Send ──► view_submission, the same path below
+                  ├─ not linked, not an owner or member of the
+                  │  machine that posted the card, offline
+                  │      ──► private reply, nothing reaches it
+                  └─ signed ──► /api/slack/interactions
+                                 └─ slack.decide ──► gate.answer
+                                    └─ the buttons become
+                                       "@you approved the plan"
 ```
 
 - **Connecting** (Settings → General → Slack, `components/settings/slack.tsx`): with remote access on, Connect
@@ -4018,10 +4026,11 @@ Slack ──a choice's button──► app.shinsa.dev /slack/interactions
   open task. A mention in a thread whose task is open (not done or cancelled) messages that task like any message you
   write (`task.message`, the author and the permalink in front, `serializeSlackMessage`): it is classified and routed
   as messages are (Messages, above), so an acknowledgement stays an acknowledgement, a correction is feedback and new
-  work a new round. The bot answers "Sent to …" in the thread. While the task has a gate open (a question, a plan, a
-  review, a failure), the mention is only recorded in its chat for its next agent (`recordHeldMessage`) and closes
-  nothing, so it never answers a question, revises a plan or sends a review back; the bot answers "Kept for …, it
-  waits on you in Shinsa" (`held`).
+  work a new round. The bot posts nothing: it puts 👀 `eyes` on that mention (`slack.react`,
+  `SLACK_MENTION_REACTIONS.forwarded`). While the task has a gate open (a question, a plan, a review, a failure), the
+  mention is only recorded in its chat for its next agent (`recordHeldMessage`) and closes nothing, so it never
+  answers a question, revises a plan or sends a review back; it gets 📥 `inbox_tray` instead (`held`). Decide the
+  gate with the card's buttons, or in Shinsa.
 - **Any other mention is read first** (`receiveSlackMention` → `slack.evaluate`, `Slack.evaluate`): the mention gets
   ⏳ at once (`hourglass_flowing_sand`, Reactions below), so you see it was picked up, and the machine asks
   the classifier model, under a fixed system prompt with the thread as data (`SLACK_EVALUATION_SYSTEM`,
@@ -4044,57 +4053,91 @@ Slack ──a choice's button──► app.shinsa.dev /slack/interactions
   (a question is an answer and ends with it) and the priority. Its request is what the person wrote (or "Do what this
   Slack thread asks for." for a bare mention), who asked with the permalink, and the thread fenced in a nonce-tagged
   `<slack-thread-…>` element marked as untrusted data (`serializeSlackRequest`). It is linked to the thread
-  (`slack.thread_linked`, "Started from a Slack thread"), and its first `slack.status` posts its status message.
-- **What is posted back** (`syncSlackThreads`, after every command, for the tasks it changed): every gate a linked
-  task opens that you decide or answer (question, secret, plan, review, proposal; `SLACK_POSTED_GATES`) and its result
-  (`task.delivered`: an answer, a diagnosis, a report, an outcome) are a `slack.post`, a new message in the thread so
-  Slack notifies; every change to the task is one `slack.status`, the status message edited in place. Each message is
-  built when it is sent, from the state then (`slack/messages.ts`, `resolveSlackPostMessage`, `serializeSlackStatus`),
-  in Block Kit with no icons (`slack/blocks.ts`): a header naming the post, the main point bold or quoted (`>`, so
-  code and links in it keep their markup), details as fields, a numbered list or a context line, a button to open
-  the task on app.shinsa.dev (`resolveSlackTaskUrl`, the primary one when it is where you decide), and a small last
-  line naming the task (its handle and title, linked) and its pull request as `PR #<number>`, linked:
-  - the status message: what the task is doing now in bold (its stage reason, else its stage, or "Needs you" with
-    the question or failure quoted under it), then the task line, with no header;
+  (`slack.thread_linked`, "Started from a Slack thread"), and its first `slack.status` posts its card.
+- **One card per thread, edited in place** (`syncSlackThreads`, after every command, for the tasks it changed): the
+  task's first `slack.status` posts one message in the thread, the card, and every later change edits it: the task
+  moving, a gate opening (any gate a person decides: a failure, a sign-in, a question, a secret, a proposal, an
+  operation, a plan, a review, a merge), a gate answered, withdrawn or superseded, and a decision made in Slack
+  (`slack.decided`). Nothing else is posted while the task runs, since the mention's reaction (below) already tells
+  its author in Slack's Activity. Two things are a new message, a `slack.post`, so the thread is notified once: the
+  result (`task.delivered`: an answer, a diagnosis, a report, an outcome) and the end of the task (merged, or done
+  without a result or merge; `SlackPost` is `result` or `completed`). Each message is built when it is sent, from the
+  state then (`slack/messages.ts`, `serializeSlackCard`, `resolveSlackPostMessage`), in Block Kit with no icons
+  (`slack/blocks.ts`): a header naming the gate, the main point bold or quoted (`>`, so code and links in it keep
+  their markup), details as fields, a numbered list or a context line, the decision buttons with a button to open the
+  task on app.shinsa.dev (`resolveSlackTaskUrl`), and a small last line naming the task (its handle and title,
+  linked) and its pull request as `PR #<number>`, linked. The card shows the first open gate in the order failure,
+  sign-in, question, secret, proposal, operation, plan, review, merge (`SLACK_CARD_GATES`); with none open it shows
+  the status:
+  - the status: what the task is doing now in bold (its stage reason, else its stage), "@someone approved the plan"
+    under it while the last decision on the task was made in Slack (`SlackThreadLink.decided`, cleared by any
+    `gate.answered` before `slack.decided` sets it again, so a decision made in Shinsa drops it), then the task
+    line, with no header;
+  - a failure: "Something failed", the failure and the first sentence of its detail, Retry; a sign-in: "Sign-in
+    needed", Open in Shinsa;
   - a question: "Question for you", the question in bold, the first sentence of its context quoted, "Recommended:"
     with the agent's recommendation, a button per choice (the recommended one primary) when it has one to five
-    choices of at most 75 characters, otherwise the choices numbered, and "Answer in Shinsa" for any other answer;
+    choices of at most 75 characters, otherwise the choices numbered, and Answer… for any other answer;
   - a secret: "Secret needed", what is needed in bold, to give it in Shinsa and never in Slack, "Give it in Shinsa";
-  - a plan: "Plan ready for your approval", its goal quoted, its phases numbered (eight at most), "Review the plan";
+  - a proposal: "Proposed change", the change quoted, Approve and Keep as is;
+  - an operation: "Ready to run", the operation, Run and Finish without it;
+  - a plan: "Plan ready for your approval", its goal quoted, its phases numbered (eight at most), Approve and Request
+    changes…, "Read the plan";
   - a review: "Ready for your review", the summary's first sentence quoted, the fields Checks (how they went) and
-    Pull request (`PR #<number>`, or "Opens once you approve"), "Review in Shinsa";
-  - a proposal: "Proposed change", the change quoted, "Decide in Shinsa";
-  - the result: "Result", the result in mrkdwn (`serializeSlackResult`), cut at 1,500 characters on a word
-    (`SLACK_RESULT_LIMIT`), and "Open in Shinsa" (or "Read the rest in Shinsa").
-  A link button still sends Slack an interaction, which app.shinsa.dev acknowledges and drops; the app's
-  Interactivity is on, with `/slack/interactions` as its request URL (`apps/cloud/slack-manifest.json`).
-- **A question's choice can be answered in Slack, and nothing else** (`slack/answers.ts`, `answerSlackQuestion`).
-  Each choice button carries `{ gateId, choice }` (`serializeSlackAnswerValue`, action `shinsa.answer.<n>`, in the
-  actions block `shinsa.question.<gate>`). A click reaches `POST /slack/interactions` on app.shinsa.dev, which checks
-  Slack's signature, acknowledges at once and then: refuses privately (an ephemeral reply through the click's
-  `response_url`, which must be on `hooks.slack.com`) a person with no link, a message their own machine did not post,
-  and a machine that is offline; otherwise it forwards a `SlackAnswer` (the click's trigger id, workspace, channel,
-  thread, message, Slack user, gate and choice) to `POST /api/slack/interactions` on that machine, signed like a
-  mention. The machine dispatches `slack.answer` (command id `slack-answer:<trigger id>`), which core accepts only for
-  an open question gate of a task started from that thread by that same Slack user, with a choice the question still
-  has, and answers as you would in Shinsa (`gate.answer`, `reply`, the choice as the response). It answers
-  `{ answered: true, choice }`, and app.shinsa.dev replaces the post's buttons with "@you answered *choice*"
-  (`listSlackAnsweredBlocks`, `serializeSlackAnsweredView`); a refusal (`slack_answer_closed`, `_refused`,
-  `_choice`) comes back as `{ answered: false, reason }` and is shown to the clicker alone. A question answered in
-  Shinsa first keeps its buttons in Slack, and a later click is told it is no longer open. Plans, reviews, merges,
-  proposals, secrets and failures are only ever decided in Shinsa, and a mention while a gate is open is kept, not
-  routed. The status refreshes on every answer (`gate.answered`), wherever it was given.
-- **The status message is edited, not reposted** (`Slack.status`): at most once every 5 seconds a task
+    Pull request (`PR #<number>`, or "Opens once you approve"), Approve and Request changes…, "Review in Shinsa";
+  - a merge: "Ready to merge", the same fields, Merge;
+  - the result, a new message: "Result", the result in mrkdwn (`serializeSlackResult`), cut at 1,500 characters on a
+    word (`SLACK_RESULT_LIMIT`), and "Open in Shinsa" (or "Read the rest in Shinsa"); the end, a new message:
+    "Merged" or "Done" (`serializeSlackCompleted`).
+  A link button (`shinsa.open`) still sends Slack an interaction, which app.shinsa.dev acknowledges and drops; the
+  app's Interactivity is on, with `/slack/interactions` as its request URL (`apps/cloud/slack-manifest.json`).
+- **Decide from Slack** (`slack/decisions.ts`, `decideSlackGate`). What each gate takes in Slack is
+  `SLACK_DECIDABLE`: a plan and a review approve or revise, a merge approves, a question replies, a proposal and an
+  operation approve or reject, a failure approves (retries). A secret, a sign-in and cancelling a task stay in
+  Shinsa. Each button carries a `SlackDecisionValue` (`{ gateId, decision, choice, planVersion }`,
+  `serializeSlackDecisionValue`; a plan's Approve carries the version it shows) in the actions block
+  `shinsa.gate.<gate>`. A button that decides at once has the action `shinsa.decide.<decision>` (a choice
+  `shinsa.decide.choice.<n>`); Request changes… and Answer… are `shinsa.write.<decision>` and open a Slack form
+  (`views.open` with the click's trigger id, `serializeSlackDecisionModal`, callback `shinsa.decision`) with one
+  text field of at most 4,000 characters, whose `private_metadata` is the value with the card's channel, thread and
+  message (`SlackDecisionModal`). A click or a form's Send reaches `POST /slack/interactions` on app.shinsa.dev,
+  which checks Slack's signature, acknowledges at once and then checks who it is:
+  - **Only the owner or a member of the machine that posted the card decides.** app.shinsa.dev finds the Shinsa
+    account linked to the Slack user, the machine that posted the message (`SlackStore.selectPoster`, from the posts
+    it relays), and that account's role on that machine. A person whose Slack is not connected, a message no
+    machine posted, a guest (a guest reaches one handed task, which the Worker cannot tell apart) and anyone else
+    are refused with a message only they see (`SLACK_DECISION_REFUSALS`), and nothing reaches the machine. So does
+    a machine that is offline, by name. A member counts wherever their own Slack link points. A form is checked
+    when it opens and again when it is sent.
+  - **Then the machine decides as you would in Shinsa.** app.shinsa.dev forwards a `SlackDecision` (the value, the
+    card's place, the click's trigger id, the workspace, the Slack user and the form's text) to `POST
+    /api/slack/interactions` on that machine, signed like a mention. The machine dispatches `slack.decide` (command
+    id `slack-decide:<trigger id>`), which core accepts only for an open gate of the task linked to that thread, a
+    decision `SLACK_DECIDABLE` allows and a choice the question still has, and answers through the same
+    `answerGate` as Shinsa (`gate.answer`), so its rules hold: a plan's Approve whose version is not the current
+    one is refused "The plan changed. Approve the new one." (`plan_changed`), a gate already answered "This has
+    already been answered." (`gate_closed`). It records who decided (`slack.decided`) and answers
+    `SlackDecisionReply`: `{ decided: true, text }` or `{ decided: false, reason }`.
+  - **The card says who decided.** For a click, app.shinsa.dev replaces the card's buttons with "@you approved the
+    plan" through the click's `response_url` (on `hooks.slack.com`; `listSlackDecidedBlocks`,
+    `serializeSlackDecidedView`), and a refusal goes to the clicker alone. A form closes as soon as it is sent,
+    since Slack waits three seconds at most; a refusal then comes as a private message in the thread
+    (`chat.postEphemeral`), and the card changes with the engine's next edit. A gate decided in Shinsa first
+    changes the card too, and a later click on an old card is refused. A decision that fails on its way after the
+    acknowledgement (the machine's answer, a Slack call) is logged as `[Cloud] A Slack decision could not be passed
+    on` with its `kind` and `teamId`, the line a watch on the Worker counts.
+- **The card is edited, not reposted** (`Slack.status`): at most once every 5 seconds a task
   (`STATUS_INTERVAL_MS`), from the state at that moment, so a burst of changes is one edit with the latest; an edit
-  that would show the same message is skipped. The first one posts the message and records its ts (`slack.record_status`
-  → `slack.status_posted`). An edit Slack will not make (a message gone) is posted as a new status message, whose ts
-  is recorded instead.
+  that would show the same message is skipped. The first one posts the card and records its ts (`slack.record_status`
+  → `slack.status_posted`). An edit Slack will not make (a message gone) is posted as a new card, whose ts is
+  recorded instead.
 - **Reactions: one state on the mention** (`resolveSlackReaction`, `SLACK_REACTIONS`, `/__remote/slack/react`): the
   message that mentioned the bot always carries one reaction, the task's state: ⏳ `hourglass_flowing_sand` while it
   is read and triaged or waits on other tasks, 🛠️ `hammer_and_wrench` while an agent works, ✋ `raised_hand` while it
   waits on you, ❌ `x` when it failed, ✅ `white_check_mark` once answered, delivered, merged or done, and ➖
   `heavy_minus_sign` when cancelled. Each status edit moves it, taking the old one off first, and records the one
-  shown with the status message's ts (`slack.record_status` → `slack.status_posted`), so a restart never leaves two.
+  shown with the card's ts (`slack.record_status` → `slack.status_posted`), so a restart never leaves two. A later
+  mention in the thread gets 👀 or 📥 of its own (above), which is never moved or taken off.
   It is best effort: a workspace that added the app before it asked for `reactions:write` answers `missing_scope`,
   app.shinsa.dev logs it and says `applied: false`, and the posts carry on. Connect Slack again grants it: connecting
   reads the scopes of the workspace's bot token (`hasSlackBotScopes`, the `x-oauth-scopes` Slack answers `auth.test`
@@ -4111,7 +4154,7 @@ Slack ──a choice's button──► app.shinsa.dev /slack/interactions
   restarts (`#sessionRefused`). Any other refusal (`channel_not_found`, `ratelimited`, `invalid_auth`) is logged and
   answered 502 `slack_failed`, which the engine logs as a warning and tries again at the next status change, so a
   passing failure never turns the status off. The posts, reactions and status message carry on as they are.
-- **Failures.** `slack.evaluate`, `slack.post` and `slack.status` are replay-safe effects in the thread's lane
+- **Failures.** `slack.evaluate`, `slack.post`, `slack.react` and `slack.status` are replay-safe effects in the thread's lane
   (`slack:<thread key>`), so a thread's posts go out in order. A post app.shinsa.dev answers with 429, a 5xx or not
   at all is retried by the outbox (the relay call through `RemoteClient` fails with `SlackFailed` or a retryable
   `RemoteUnreachable`); any other refusal, a typed failure of its own, (the thread was never sent here, the app was removed from the

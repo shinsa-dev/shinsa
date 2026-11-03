@@ -1,4 +1,4 @@
-import { identity, Option, Schema, SchemaTransformation } from 'effect';
+import { Effect, identity, Option, Schema, SchemaTransformation } from 'effect';
 
 type Decodable = Schema.Codec<unknown, unknown, never, never>;
 
@@ -22,6 +22,10 @@ export function Salvaged<S extends Decodable>(schema: S, fallback: () => S['Type
 
 export function SalvagedOrNull<S extends Decodable>(schema: S) {
   return Salvaged(Schema.NullOr(schema), () => null);
+}
+
+export function NullByDefault<S extends Schema.Top>(schema: S) {
+  return Schema.NullOr(schema).pipe(Schema.withDecodingDefault(Effect.succeed(null)));
 }
 
 export function SalvagedOrOmitted<S extends Decodable>(schema: S) {
