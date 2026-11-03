@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'bun:test';
 import { resolveStats, type Stats, type TaskTokens, type TokenLine, UNKNOWN_MODEL } from '@shinsa/core';
+import { formatPercent } from '@/lib/format/count.ts';
 import { listCalendarDays, resolveDayKey } from '@/lib/stats/days.ts';
 import {
-  formatPercent,
   listBreakdowns,
   listTaskRows,
   listTokenBars,

@@ -3,11 +3,6 @@ import { log } from '../log/index.ts';
 import { readMachineConfig } from './machine/index.ts';
 import type { MachineConfig } from './machine/schema.ts';
 
-export { createMachineConfig, parseMachineConfig, readMachineConfig } from './machine/index.ts';
-export type { MachineConfig } from './machine/schema.ts';
-
-export { writeJsonFile } from '../files/index.ts';
-
 export class ConfigStore {
   readonly path: string;
   #config: MachineConfig;

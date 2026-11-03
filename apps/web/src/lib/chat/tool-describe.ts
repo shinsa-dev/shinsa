@@ -1,4 +1,5 @@
 import {
+  describeCount,
   type ChatBrowserAction,
   type ChatTool,
   type ChatToolArgs,
@@ -7,7 +8,6 @@ import {
   type ShinsaToolName,
 } from '@shinsa/core';
 import type { IconName } from '@shinsa/ui/components/icon';
-import { formatCount } from '@/lib/format/count.ts';
 import { describeSteps } from '@/lib/tasks/shapes.ts';
 
 export interface ToolDescription {
@@ -198,7 +198,7 @@ function describeShinsaWork(name: Exclude<ShinsaToolName, PlainShinsaTool>, args
       return plain(
         'IconSplit',
         'Split the plan into',
-        formatCount(readList(args, 'tasks').length, 'task', 'tasks')
+        describeCount(readList(args, 'tasks').length, 'task', 'tasks')
       );
     case 'set_schedule':
       return plain(
@@ -244,7 +244,7 @@ function describeShinsaMessage(
       return plain('IconHourglass', 'Scheduled a check-in:', readString(args, 'notes'));
     case 'suggest_tasks': {
       const count = readList(args, 'tasks').length;
-      return plain('IconLightbulbGlow', `Suggested ${formatCount(count, 'task', 'tasks')}`);
+      return plain('IconLightbulbGlow', `Suggested ${describeCount(count, 'task', 'tasks')}`);
     }
     case 'remember':
       return plain('IconLightbulbGlow', 'Proposed a rule to remember:', readString(args, 'text'));
@@ -403,37 +403,37 @@ export function resolveRunningLabel(description: ToolDescription) {
 }
 
 const GROUP_PHRASES: Record<ToolGroupKey, (count: number) => string> = {
-  read: (count) => `read ${formatCount(count, 'file', 'files')}`,
-  edit: (count) => `edited ${formatCount(count, 'file', 'files')}`,
-  write: (count) => `wrote ${formatCount(count, 'file', 'files')}`,
-  command: (count) => `ran ${formatCount(count, 'command', 'commands')}`,
+  read: (count) => `read ${describeCount(count, 'file', 'files')}`,
+  edit: (count) => `edited ${describeCount(count, 'file', 'files')}`,
+  write: (count) => `wrote ${describeCount(count, 'file', 'files')}`,
+  command: (count) => `ran ${describeCount(count, 'command', 'commands')}`,
   search: (count) => (count === 1 ? 'searched once' : `searched ${count} times`),
-  fetch: (count) => `looked up ${formatCount(count, 'page', 'pages')}`,
+  fetch: (count) => `looked up ${describeCount(count, 'page', 'pages')}`,
   browser: (count) => (count === 1 ? 'used the browser once' : `took ${count} steps in the browser`),
-  task: (count) => `ran ${formatCount(count, 'subagent', 'subagents')}`,
+  task: (count) => `ran ${describeCount(count, 'subagent', 'subagents')}`,
   todo: () => 'updated the to-do list',
-  mcp: (count) => `used ${formatCount(count, 'connected tool', 'connected tools')}`,
-  surface: (count) => `used ${formatCount(count, 'Shinsa tool', 'Shinsa tools')}`,
-  other: (count) => `used ${formatCount(count, 'tool', 'tools')}`,
+  mcp: (count) => `used ${describeCount(count, 'connected tool', 'connected tools')}`,
+  surface: (count) => `used ${describeCount(count, 'Shinsa tool', 'Shinsa tools')}`,
+  other: (count) => `used ${describeCount(count, 'tool', 'tools')}`,
   propose_plan: () => 'proposed the plan',
   complete_phase: () => 'handed over the phase',
   complete_fix: () => 'handed over the fix',
   report_review: () => 'reported the review',
   ask: () => 'asked you a question',
-  attach_evidence: (count) => `attached ${formatCount(count, 'piece of evidence', 'pieces of evidence')}`,
+  attach_evidence: (count) => `attached ${describeCount(count, 'piece of evidence', 'pieces of evidence')}`,
   remove_evidence: (count) => (count === 1 ? 'removed evidence' : `removed evidence ${count} times`),
   find_tasks: (count) => (count === 1 ? 'looked up tasks once' : `looked up tasks ${count} times`),
-  read_task: (count) => `read ${formatCount(count, 'task', 'tasks')}`,
+  read_task: (count) => `read ${describeCount(count, 'task', 'tasks')}`,
   list_repository_work: (count) =>
     count === 1
       ? 'listed the other work in the repository'
       : `listed the other work in the repository ${count} times`,
   list_services: (count) =>
     count === 1 ? 'listed the task’s services' : `listed the task’s services ${count} times`,
-  run_service: (count) => `ran ${formatCount(count, 'service', 'services')}`,
-  add_service: (count) => `added ${formatCount(count, 'service', 'services')}`,
+  run_service: (count) => `ran ${describeCount(count, 'service', 'services')}`,
+  add_service: (count) => `added ${describeCount(count, 'service', 'services')}`,
   remove_service: (count) => (count === 1 ? 'removed services once' : `removed services ${count} times`),
-  note: (count) => `left ${formatCount(count, 'note', 'notes')}`,
+  note: (count) => `left ${describeCount(count, 'note', 'notes')}`,
   wait_for: () => 'scheduled a check-in',
   suggest_tasks: () => 'suggested tasks',
   remember: (count) => (count === 1 ? 'proposed a rule to remember' : `proposed ${count} rules to remember`),
@@ -445,17 +445,17 @@ const GROUP_PHRASES: Record<ToolGroupKey, (count: number) => string> = {
   report_outcome: () => 'reported the outcome',
   report_read: () => 'reported what it read',
   reshape_task: () => 'changed the kind of task',
-  delegate_task: (count) => `started ${formatCount(count, 'delegation', 'delegations')}`,
+  delegate_task: (count) => `started ${describeCount(count, 'delegation', 'delegations')}`,
   delegation_status: (count) => (count === 1 ? 'checked a delegation' : `checked delegations ${count} times`),
-  delegation_cancel: (count) => `stopped ${formatCount(count, 'delegation', 'delegations')}`,
+  delegation_cancel: (count) => `stopped ${describeCount(count, 'delegation', 'delegations')}`,
   delegation_answer: (count) =>
     count === 1 ? 'answered a delegated agent' : `answered delegated agents ${count} times`,
-  create_task: (count) => `created ${formatCount(count, 'task', 'tasks')}`,
-  file_report: (count) => `filed ${formatCount(count, 'report', 'reports')}`,
+  create_task: (count) => `created ${describeCount(count, 'task', 'tasks')}`,
+  file_report: (count) => `filed ${describeCount(count, 'report', 'reports')}`,
   split_task: () => 'split the plan',
-  set_schedule: (count) => `set ${formatCount(count, 'schedule', 'schedules')}`,
+  set_schedule: (count) => `set ${describeCount(count, 'schedule', 'schedules')}`,
   list_schedules: () => 'listed the schedules',
-  delete_schedule: (count) => `deleted ${formatCount(count, 'schedule', 'schedules')}`,
+  delete_schedule: (count) => `deleted ${describeCount(count, 'schedule', 'schedules')}`,
   request_secret: () => 'asked you for a secret',
 };
 

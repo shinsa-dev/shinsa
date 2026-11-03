@@ -1,4 +1,3 @@
-import { BunServices } from '@effect/platform-bun';
 import { Layer, ManagedRuntime } from 'effect';
 import { AccountsLayer } from '../accounts/layers.ts';
 import { ChecksLayer } from '../checks/layers.ts';
@@ -11,12 +10,10 @@ import { GitHubLayer } from '../github/layers.ts';
 import { JsonLogger } from '../log/service.ts';
 import { ReposLayer } from '../repos/layers.ts';
 import { SecretFiles } from '../secrets/files/service.ts';
-import { Shell } from '../shell/service.ts';
+import { ShellLayer } from '../shell/layers.ts';
 import { TerminalsLayer } from '../terminals/layers.ts';
 import { VersionsLayer } from '../versions/layers.ts';
 import { WorkspacesLayer } from '../workspaces/layers.ts';
-
-const ShellLayer = Shell.layer.pipe(Layer.provideMerge(BunServices.layer));
 
 export const edgeRuntime = ManagedRuntime.make(
   Layer.mergeAll(

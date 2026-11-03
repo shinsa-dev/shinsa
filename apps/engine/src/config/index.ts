@@ -11,7 +11,7 @@ import { BACKUP_EXCLUSION, type Env, NEVER_INDEX_MARKER, type ServerConfig } fro
 import { EngineConfig } from './service.ts';
 import { readServerAddress } from './settings.ts';
 
-export { ConfigStore, writeJsonFile } from './file.ts';
+export { ConfigStore } from './file.ts';
 export { resolveScratchPath, resolveShinsaPaths } from './paths.ts';
 export type { Env, ServerConfig } from './schema.ts';
 

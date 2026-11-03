@@ -1,4 +1,5 @@
 import {
+  describeCount,
   type AccountSummary,
   describeList,
   type Gate,
@@ -20,7 +21,7 @@ import {
   type TerminalInfo,
 } from '@shinsa/core';
 import { describeProviderLogin } from '@/lib/accounts/providers.ts';
-import { formatBytes, formatCount } from '@/lib/format/count.ts';
+import { formatBytes } from '@/lib/format/count.ts';
 import { type Route, resolveTaskPath } from '@/router.ts';
 
 interface FolderRow {
@@ -85,7 +86,7 @@ export function describeWorktreeUsage(usage: WorktreeUsage | 'failed' | null) {
   if (usage === null) return 'Measuring the worktrees…';
   if (usage === 'failed') return 'Shinsa could not measure the worktrees.';
   if (usage.worktrees === 0 && usage.bytes === 0) return 'No task has a worktree right now.';
-  const count = formatCount(usage.worktrees, 'task', 'tasks');
+  const count = describeCount(usage.worktrees, 'task', 'tasks');
   if (usage.bytes === null) return `Worktrees of ${count}; their size took too long to measure.`;
   return `${formatBytes(usage.bytes)} used by the worktrees of ${count}.`;
 }
@@ -100,7 +101,7 @@ export function listFolderSuggestions(status: OnboardingStatus, suggestions: Roo
   return suggestions.map((suggestion): FolderSuggestion => ({
     path: suggestion.path,
     label: resolveDisplayPath(suggestion.path, status.paths.userHome),
-    detail: formatCount(suggestion.repoCount, 'repository', 'repositories'),
+    detail: describeCount(suggestion.repoCount, 'repository', 'repositories'),
     chosen: chosen.has(suggestion.path),
   }));
 }

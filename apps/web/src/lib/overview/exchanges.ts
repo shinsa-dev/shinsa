@@ -1,4 +1,5 @@
 import {
+  describeCount,
   type AgentReply,
   type Gate,
   type Iteration,
@@ -9,7 +10,6 @@ import {
   type Task,
 } from '@shinsa/core';
 import type { IconName } from '@shinsa/ui/components/icon';
-import { formatCount } from '@/lib/format/count.ts';
 import type { Mention } from '@/lib/remote/users.ts';
 import { describeOwnerInSentence, resolveOwnerPossessive, type SharedOwner } from '@/lib/share/page.ts';
 
@@ -82,7 +82,7 @@ export function listEarlierReplies(task: Task, shownId: string | null): Answered
 export function describeRequestText(iteration: Iteration) {
   const texts = iteration.requests.map((request) => request.text).filter(Boolean);
   const comments = iteration.requests.reduce((sum, request) => sum + request.comments, 0);
-  const note = comments > 0 ? formatCount(comments, 'line comment', 'line comments') : null;
+  const note = comments > 0 ? describeCount(comments, 'line comment', 'line comments') : null;
   if (texts.length === 0) return note ?? '';
   const said = texts.join('\n\n');
   return note ? `${said}\nAnd ${note}.` : said;

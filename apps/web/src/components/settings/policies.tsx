@@ -4,8 +4,8 @@ import { Textarea } from '@shinsa/ui/components/textarea';
 import { Truncate } from '@shinsa/ui/components/truncate';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
+import { HintButton } from '@/components/controls/hint-button.tsx';
 import { SelectField } from '@/components/controls/select-field.tsx';
-import { Hint } from '@/components/overlays/hint.tsx';
 import { useBusy } from '@/hooks/use-busy.ts';
 import type { MachineChoice, UnreachableMachine } from '@/lib/connection/socket.ts';
 import { isCancelKey, isSubmitKey } from '@/lib/keys.ts';
@@ -119,22 +119,6 @@ function PolicyForm({
   );
 }
 
-function IconAction({
-  label,
-  icon,
-  onClick,
-}: {
-  label: string;
-  icon: 'IconPencil' | 'IconCrossSmall';
-  onClick: () => void;
-}) {
-  return (
-    <Hint label={label}>
-      <Button variant='secondary' size='icon-sm' icon={icon} aria-label={label} onClick={onClick} />
-    </Hint>
-  );
-}
-
 function PolicyRow({
   text,
   onEdit,
@@ -149,8 +133,13 @@ function PolicyRow({
     <div className={cn(SETTING_ROW, 'gap-2')}>
       <span className='min-w-0 flex-1 selectable py-1 text-xs text-fg-4'>{text}</span>
       <div className='flex shrink-0 items-center gap-1'>
-        <IconAction label='Edit' icon='IconPencil' onClick={onEdit} />
-        <IconAction label='Remove' icon='IconCrossSmall' onClick={() => void run('remove', onRemove)} />
+        <HintButton size='icon-sm' label='Edit' icon='IconPencil' onClick={onEdit} />
+        <HintButton
+          size='icon-sm'
+          label='Remove'
+          icon='IconCrossSmall'
+          onClick={() => void run('remove', onRemove)}
+        />
       </div>
     </div>
   );

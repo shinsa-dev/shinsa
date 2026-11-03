@@ -5,8 +5,6 @@ import type { HttpApi, HttpApiClient, HttpApiEndpoint, HttpApiGroup } from 'effe
 export const NOT_RUNNING =
   'Shinsa is not running. Start it with `shinsa start`, or open the Shinsa app on a Mac.';
 
-export const REQUEST_FAILED = 'request_failed';
-
 export type EngineWake = () => Promise<boolean>;
 
 export interface EngineClientOptions {

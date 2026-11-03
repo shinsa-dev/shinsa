@@ -1,9 +1,15 @@
-export function formatCount(count: number, one: string, many: string) {
-  return `${count} ${count === 1 ? one : many}`;
+import { describeCount } from '@shinsa/core';
+
+export function formatNumber(value: number) {
+  return value.toLocaleString('en-US');
+}
+
+export function formatPercent(rate: number | null) {
+  return rate === null ? 'None' : `${Math.round(rate * 100)}%`;
 }
 
 export function formatSteps(count: number) {
-  return formatCount(count, 'step', 'steps');
+  return describeCount(count, 'step', 'steps');
 }
 
 export function formatLineRange(start: number, end: number) {

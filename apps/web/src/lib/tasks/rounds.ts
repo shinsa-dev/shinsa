@@ -1,4 +1,5 @@
 import {
+  describeCount,
   canChangeRoundShipping,
   describeList,
   formatRoundLabel,
@@ -19,7 +20,7 @@ import {
 } from '@shinsa/core';
 import type { IconName } from '@shinsa/ui/components/icon';
 import { sendCommandWithToast } from '@/lib/connection/commands.ts';
-import { endSentence, flattenWhitespace, formatCount } from '@/lib/format/count.ts';
+import { endSentence, flattenWhitespace } from '@/lib/format/count.ts';
 import { formatSince } from '@/lib/format/time.ts';
 import type { Tone } from '@/lib/format/tone.ts';
 import { describeRoundRelease } from '@/lib/tasks/message-queue.ts';
@@ -154,8 +155,9 @@ function describeRoundWork(round: Round, outcome: RoundOutcome, about: string) {
   }
   const phases = outcome.phases;
   if (phases.length === 0) return null;
-  if (phases.length > SUMMARY_PHASES) return `It finished ${formatCount(phases.length, 'phase', 'phases')}.`;
-  return `It finished ${formatCount(phases.length, 'phase', 'phases')}: ${describeList(phases.map(lowerFirst))}.`;
+  if (phases.length > SUMMARY_PHASES)
+    return `It finished ${describeCount(phases.length, 'phase', 'phases')}.`;
+  return `It finished ${describeCount(phases.length, 'phase', 'phases')}: ${describeList(phases.map(lowerFirst))}.`;
 }
 
 function describeRoundEnd(round: Round) {
@@ -195,10 +197,6 @@ export function listRoundSections(task: Task, runs: Run[]): RoundSection[] {
 export function listEarlierRounds(task: Task) {
   const current = resolveCurrentRound(task).number;
   return resolveTaskRounds(task).filter((round) => round.number < current);
-}
-
-export function listWaitingRounds(task: Task) {
-  return resolveTaskRounds(task).filter((round) => round.status === 'waiting');
 }
 
 export function listShippingItems(task: Task, round: Round): ShippingItem[] | null {

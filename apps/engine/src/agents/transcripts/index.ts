@@ -1,6 +1,7 @@
 import { appendFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { CHAT_PROTOCOL_VERSION, type ChatEntry, type ChatEvent } from '@shinsa/core';
+import { NEWLINE } from '../../files/schema.ts';
 import { describeError, log } from '../../log/index.ts';
 import { readRange, readSize, repeatEverySecond, watchFile } from './file.ts';
 import { parseLines } from './lines.ts';
@@ -64,7 +65,7 @@ export class Transcripts {
     const start = file.entries.length;
     if (size <= file.offset) return { file, added: [], start };
     const appended = readRange(this.#pathOf(runId), file.offset, size);
-    const complete = appended.lastIndexOf(0x0a) + 1;
+    const complete = appended.lastIndexOf(NEWLINE) + 1;
     const added = parseLines(appended.subarray(0, complete), file.offset);
     file.offset += complete;
     file.entries.push(...added);
@@ -93,7 +94,7 @@ export class Transcripts {
     const entry = { ...event, v: CHAT_PROTOCOL_VERSION, id: Bun.randomUUIDv7(), at: Date.now() } as ChatEntry;
     const path = this.#pathOf(runId);
     const size = this.#checked.has(runId) ? 0 : readSize(path);
-    const torn = size > 0 && readRange(path, size - 1, size)[0] !== 0x0a;
+    const torn = size > 0 && readRange(path, size - 1, size)[0] !== NEWLINE;
     this.#checked.add(runId);
     appendFileSync(path, `${torn ? '\n' : ''}${JSON.stringify(entry)}\n`);
     if (!this.#files.has(runId)) {

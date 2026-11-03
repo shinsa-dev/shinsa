@@ -1,25 +1,26 @@
 import {
+  describeCount,
   capitalise,
   type Gate,
+  listOpenMergeSteps,
   listWaitsOn,
   type ShinsaState,
   selectLeadGate,
   type Task,
 } from '@shinsa/core';
-import { formatCount, formatSteps } from '@/lib/format/count.ts';
-import { countOpenSteps } from '@/lib/review/merge-steps.ts';
+import { formatSteps } from '@/lib/format/count.ts';
 import { describeWaitsOn } from '@/lib/tasks/groups.ts';
 
 export function resolveGateNow(task: Task, gate: Gate) {
   switch (gate.type) {
     case 'plan': {
       const phases = task.plan?.document?.phases.length ?? 0;
-      return phases === 0 ? 'Plan to approve' : `${formatCount(phases, 'phase', 'phases')} to approve`;
+      return phases === 0 ? 'Plan to approve' : `${describeCount(phases, 'phase', 'phases')} to approve`;
     }
     case 'review':
       return task.report?.headline ?? 'Checks passed, agent review clean';
     case 'merge': {
-      const open = countOpenSteps(task, 'pre_merge');
+      const open = listOpenMergeSteps(task, 'pre_merge').length;
       if (open > 0) return `${formatSteps(open)} to do before the merge`;
       return task.pullRequest ? `PR #${task.pullRequest.number} is clean` : 'Clean and ready to merge';
     }

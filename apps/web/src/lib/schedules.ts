@@ -1,4 +1,5 @@
 import {
+  describeCount,
   describeScheduleTarget,
   describeScheduleTrigger,
   lowerFirst,
@@ -10,7 +11,6 @@ import type { IconName } from '@shinsa/ui/components/icon';
 import { toast } from '@shinsa/ui/components/sonner';
 import { copyText, describeFailure, sendCommandWithToast } from '@/lib/connection/commands.ts';
 import { requestWebhook as requestScheduleWebhook } from '@/lib/connection/schedules.ts';
-import { formatCount } from '@/lib/format/count.ts';
 import { formatClock, formatMoment } from '@/lib/format/time.ts';
 import type { Tone } from '@/lib/format/tone.ts';
 
@@ -51,7 +51,7 @@ function countFiledTasks(state: ShinsaState, schedule: Schedule) {
 }
 
 function describeFiled(count: number) {
-  return count === 0 ? 'nothing filed yet' : `${formatCount(count, 'task', 'tasks')} filed`;
+  return count === 0 ? 'nothing filed yet' : `${describeCount(count, 'task', 'tasks')} filed`;
 }
 
 export type AutomationType = 'Watch' | 'Trigger' | 'Schedule';

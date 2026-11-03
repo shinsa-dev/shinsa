@@ -34,7 +34,7 @@ import {
   prefetchFolder,
   prefetchOtherRefs,
   prefetchPair,
-  scheduleIdle,
+  schedulePrefetch,
 } from '@/lib/code/prefetch.ts';
 import { resolveViewRef } from '@/lib/code/refs.ts';
 import { resolveFileSource } from '@/lib/code/source.ts';
@@ -116,7 +116,7 @@ export function Workbench({ task, refs, modes }: { task: Task; refs: TaskRefs; m
   const diffReady = diffValue !== null;
   React.useEffect(
     () =>
-      scheduleIdle(() => {
+      schedulePrefetch(() => {
         const { task: current, refs: currentRefs, diffValue: currentDiff } = ahead.current;
         prefetchOtherRefs(current, currentRefs, gitRef, activeFile, currentDiff, reviewing);
         if (activeFile) prefetchAncestors(current, gitRef, activeFile.path);

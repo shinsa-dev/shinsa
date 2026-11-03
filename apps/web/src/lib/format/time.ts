@@ -1,4 +1,4 @@
-import { DAY_MS, MINUTE_MS } from '@shinsa/core';
+import { DAY_MS, HOUR_MS, MINUTE_MS } from '@shinsa/core';
 
 const RELATIVE_AGE = /^\d+[mhd]$/;
 
@@ -57,14 +57,37 @@ export function formatUntil(prefix: string, at: number, now = Date.now()) {
   return `${prefix} ${describeAhead(formatGap(at - now, at))}`;
 }
 
+function formatHoursAndMinutes(minutes: number) {
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  return rest === 0 ? `${hours}h` : `${hours}h ${rest}m`;
+}
+
 export function formatDuration(ms: number) {
   const seconds = Math.max(1, Math.round(ms / 1000));
   if (seconds < 60) return `${seconds}s`;
   const minutes = Math.floor(seconds / 60);
   if (minutes < 60) return `${minutes}m`;
-  const hours = Math.floor(minutes / 60);
-  const rest = minutes % 60;
-  return rest === 0 ? `${hours}h` : `${hours}h ${rest}m`;
+  return formatHoursAndMinutes(minutes);
+}
+
+export function formatTurnaround(ms: number) {
+  if (ms < HOUR_MS) return `${Math.max(1, Math.round(ms / MINUTE_MS))}m`;
+  if (ms < DAY_MS) return formatHoursAndMinutes(Math.round(ms / MINUTE_MS));
+  return `${(ms / DAY_MS).toFixed(1).replace(/\.0$/, '')}d`;
+}
+
+export function formatWholeHours(ms: number) {
+  return `${Math.max(1, Math.ceil(ms / HOUR_MS))} h`;
+}
+
+export function formatTimeLeft(ms: number) {
+  const minutes = Math.max(1, Math.ceil(ms / MINUTE_MS));
+  return minutes < 60 ? `${minutes} min` : formatWholeHours(ms);
+}
+
+export function formatMinuteSpan(minutes: number) {
+  return minutes < 60 ? `${minutes} min` : `${Math.round(minutes / 60)} h`;
 }
 
 export function formatSpan(at: number, now = Date.now()) {

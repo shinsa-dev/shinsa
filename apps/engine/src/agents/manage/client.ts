@@ -1,6 +1,6 @@
 import { parseUserCommand, type ShinsaEvent, type UserCommand } from '@shinsa/core';
 import { createSurfaceClient } from '../../cli/api.ts';
-import type { ProjectChanges } from '../../projects/routes.ts';
+import type { ProjectChanges } from '../../projects/changes.ts';
 import type { DispatchOptions, Engine } from '../../runtime/engine.ts';
 import type { SurfaceClient, SurfaceHookSecrets } from '../../surface/index.ts';
 

@@ -4,11 +4,15 @@ import {
   formatClock,
   formatDay,
   formatDuration,
+  formatMinuteSpan,
   formatMoment,
   formatSince,
   formatSpan,
   formatTimeAgo,
+  formatTimeLeft,
+  formatTurnaround,
   formatUntil,
+  formatWholeHours,
   resolveEndOfDay,
   resolveMinute,
 } from '@/lib/format/time.ts';
@@ -105,6 +109,35 @@ describe('formatDuration', () => {
     expect(formatDuration(3 * MINUTE + 20 * SECOND)).toBe('3m');
     expect(formatDuration(2 * HOUR)).toBe('2h');
     expect(formatDuration(2 * HOUR + 5 * MINUTE)).toBe('2h 5m');
+  });
+});
+
+describe('formatTurnaround', () => {
+  it('reads minutes, hours with minutes, then days to one decimal', () => {
+    expect(formatTurnaround(10_000)).toBe('1m');
+    expect(formatTurnaround(45 * MINUTE)).toBe('45m');
+    expect(formatTurnaround(5 * HOUR)).toBe('5h');
+    expect(formatTurnaround(5 * HOUR + 20 * MINUTE)).toBe('5h 20m');
+    expect(formatTurnaround(3.2 * DAY)).toBe('3.2d');
+    expect(formatTurnaround(2 * DAY)).toBe('2d');
+  });
+});
+
+describe('spelled-out spans', () => {
+  it('rounds whole hours up, to at least one', () => {
+    expect(formatWholeHours(0)).toBe('1 h');
+    expect(formatWholeHours(41 * HOUR + MINUTE)).toBe('42 h');
+  });
+
+  it('reads the time left in minutes, then whole hours', () => {
+    expect(formatTimeLeft(10 * SECOND)).toBe('1 min');
+    expect(formatTimeLeft(59 * MINUTE)).toBe('59 min');
+    expect(formatTimeLeft(90 * MINUTE)).toBe('2 h');
+  });
+
+  it('reads a span of minutes in minutes, then rounded hours', () => {
+    expect(formatMinuteSpan(30)).toBe('30 min');
+    expect(formatMinuteSpan(1440)).toBe('24 h');
   });
 });
 

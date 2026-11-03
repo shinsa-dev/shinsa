@@ -62,10 +62,10 @@ export const LOCK_RETRY = Schedule.max([
 
 export const READ_ENV: CommandEnv = { GIT_TERMINAL_PROMPT: '0', GIT_OPTIONAL_LOCKS: '0', GIT_PAGER: 'cat' };
 
-export const NEWLINE = 10;
-
 export const NOT_STARTED_READ = 127;
 
 export const CANCELLED_READ = 130;
 
 export const CANCELLED_READ_MESSAGE = 'The read was cancelled.';
+
+export const HEAD_TIMEOUT = Duration.seconds(5);

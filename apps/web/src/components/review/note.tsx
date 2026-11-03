@@ -159,6 +159,16 @@ function NoteDetails({
   );
 }
 
+export const NOTE_ACTION = 'cursor-pointer text-2xs text-fg-2 hover:text-fg-4 active:text-fg-4';
+
+export function RemoveNoteButton({ onRemove }: { onRemove: () => void }) {
+  return (
+    <button type='button' className={NOTE_ACTION} onClick={onRemove}>
+      Remove
+    </button>
+  );
+}
+
 export function ReviewNote({
   persistId,
   item,

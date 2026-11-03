@@ -67,7 +67,7 @@ const RATE_WINDOW = Duration.minutes(1);
 
 export const RATE_WINDOW_MS = Duration.toMillis(RATE_WINDOW);
 
-export const WEBHOOK_ROUTE = /^\/api\/hooks\/([^/]+)\/([^/]+)$/;
+export const WEBHOOK_PATH = /^\/api\/hooks\/([^/]+)\/([^/]+)$/;
 
 export const PROMPT_TOO_LONG = 'The filled-in prompt is too long.';
 

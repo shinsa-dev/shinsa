@@ -1,7 +1,6 @@
-import { PROTOCOL_LIMITS, type Repo } from '@shinsa/core';
+import { describeCount, PROTOCOL_LIMITS, type Repo } from '@shinsa/core';
 import type { MenuItemIcon } from '@shinsa/ui/components/menu-icon';
 import { sendCommandWithToast } from '@/lib/connection/commands.ts';
-import { formatCount } from '@/lib/format/count.ts';
 
 export type BaselineMode = 'none' | 'commands';
 
@@ -40,7 +39,9 @@ export function listBaselineItems(repo: Pick<Repo, 'checkCommands'>): BaselineIt
     {
       value: 'commands',
       label:
-        count > 0 ? `${formatCount(count, 'command', 'commands')} before review` : 'Commands before review…',
+        count > 0
+          ? `${describeCount(count, 'command', 'commands')} before review`
+          : 'Commands before review…',
       hint: 'Your commands run before every review, beside the agent’s checks.',
       icon: 'IconConsole',
     },
@@ -60,7 +61,7 @@ export function validateBaselineCommands(commands: readonly string[]) {
 
 export function describeBaselineChange(repo: Pick<Repo, 'name'>, commands: readonly string[]) {
   if (commands.length === 0) return `No review commands in ${repo.name}.`;
-  return `${formatCount(commands.length, 'review command', 'review commands')} in ${repo.name}.`;
+  return `${describeCount(commands.length, 'review command', 'review commands')} in ${repo.name}.`;
 }
 
 export function changeBaseline(repo: Repo, commands: readonly string[]) {

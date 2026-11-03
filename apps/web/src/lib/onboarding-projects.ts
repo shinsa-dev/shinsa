@@ -1,5 +1,9 @@
-import { type OnboardingProjectChoice, type ProjectSuggestion, resolveDisplayPath } from '@shinsa/core';
-import { formatCount } from '@/lib/format/count.ts';
+import {
+  describeCount,
+  type OnboardingProjectChoice,
+  type ProjectSuggestion,
+  resolveDisplayPath,
+} from '@shinsa/core';
 
 export interface ProjectDraft {
   id: string;
@@ -71,8 +75,8 @@ function describeProjectDetail(project: ProjectSuggestion, draft: ProjectDraft, 
   const total = project.repos.length;
   const count =
     kept === total
-      ? formatCount(total, 'repository', 'repositories')
-      : `${kept} of ${formatCount(total, 'repository', 'repositories')}`;
+      ? describeCount(total, 'repository', 'repositories')
+      : `${kept} of ${describeCount(total, 'repository', 'repositories')}`;
   const [folder] = project.folders;
   if (!folder || kept !== total) return count;
   return `${count} · ${resolveDisplayPath(folder, userHome)}`;

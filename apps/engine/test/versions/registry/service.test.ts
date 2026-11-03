@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { Effect, Fiber, Layer } from 'effect';
 import { FetchHttpClient } from 'effect/http';
 import { TestClock } from 'effect/testing';
-import { NpmRegistry } from '../../src/versions/registry/service.ts';
+import { NpmRegistry } from '../../../src/versions/registry/service.ts';
 
 function provideFetch(answer: () => Promise<Response>) {
   return NpmRegistry.layer.pipe(
