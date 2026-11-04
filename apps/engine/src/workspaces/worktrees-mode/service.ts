@@ -41,6 +41,30 @@ export class WorktreeWorkspaces extends Context.Service<
         } satisfies CheckoutCommit;
       });
 
+      const logBaseUnreached = (taskId: string, base: string, error: string) =>
+        Effect.logWarning(
+          '[Workspaces] Could not take in the latest base; the round starts from the branch'
+        ).pipe(Effect.annotateLogs({ taskId, base, error }));
+
+      const mergeLatestBase = Effect.fnUntraced(function* (
+        path: string,
+        base: string,
+        branch: string,
+        taskId: string,
+        signal?: AbortSignal
+      ) {
+        const update = yield* remote.updateOntoBase(path, base, branch, Effect.void, signal).pipe(
+          Effect.catchTags({
+            PushError: (error) => Effect.as(logBaseUnreached(taskId, base, error.detail), null),
+            GitFailed: (error) => Effect.as(logBaseUnreached(taskId, base, error.message), null),
+          })
+        );
+        if (update?.status !== 'conflicted') return;
+        yield* Effect.logInfo(
+          '[Workspaces] The latest base conflicts with the branch; the push resolves it'
+        ).pipe(Effect.annotateLogs({ taskId, base, files: update.files.join(', ') }));
+      });
+
       const make = (root: WorktreeRoot['Service']): Workspace => ({
         mode: 'worktrees',
         prepare: Effect.fn('WorktreeWorkspace.prepare')(function* (
@@ -51,9 +75,10 @@ export class WorktreeWorkspaces extends Context.Service<
           const { worktreePath, branch } = task;
           const [base = null, ...others] = resolveRoundBases(task);
           if (worktreePath && branch && (yield* Effect.sync(() => existsSync(worktreePath)))) {
-            if (task.phaseReports.length === 0 && isLaterRound(task))
+            if (task.phaseReports.length === 0 && isLaterRound(task)) {
               yield* checkout.discard(worktreePath, signal);
-            else if (task.phaseReports.length === 0 && !task.pullRequest) {
+              yield* mergeLatestBase(worktreePath, base ?? repo.defaultBranch, branch, task.id, signal);
+            } else if (task.phaseReports.length === 0 && !task.pullRequest) {
               yield* checkout.refresh(repo, worktreePath, base, signal);
               yield* checkout.mergeBranches(worktreePath, branch, others, signal);
             }

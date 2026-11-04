@@ -14,6 +14,16 @@ async function startTask() {
   return { ...made, strategy, checkout, task };
 }
 
+async function pushToOrigin(root: string, origin: string, files: Record<string, string>) {
+  const clone = join(createTempDir(), 'clone');
+  await git(root, 'clone', '-q', origin, clone);
+  writeFiles(clone, files);
+  await git(clone, 'add', '-A');
+  await git(clone, 'commit', '-qm', 'main moved');
+  await git(clone, 'push', '-q', 'origin', 'main');
+  return git(clone, 'rev-parse', 'HEAD');
+}
+
 describe('worktrees', () => {
   test('a task gets a worktree of its own on a fresh branch, and commits and pushes from it', async () => {
     const { repo, origin, strategy, checkout, task } = await startTask();
@@ -68,6 +78,60 @@ describe('worktrees', () => {
     writeFiles(checkout.path, { 'kept.txt': 'x' });
     await strategy.prepare(repo, { ...task, phaseReports: [{}] as typeof task.phaseReports });
     expect(existsSync(join(checkout.path, 'kept.txt'))).toBe(true);
+  });
+
+  test('a later round takes in the latest base, and a base that conflicts is left for the push', async () => {
+    const { root, origin, repo, strategy, checkout, task } = await startTask();
+    writeFiles(checkout.path, { 'a.txt': 'task\n' });
+    await strategy.commit(repo, task, 'feat: a');
+    const later = { ...task, rounds: [createRound(), createRound({ number: 2, status: 'active' })] };
+    const moved = await pushToOrigin(root, origin, { 'b.txt': 'main\n' });
+    await strategy.prepare(repo, later);
+    expect(existsSync(join(checkout.path, 'b.txt'))).toBe(true);
+    expect(await git(checkout.path, 'rev-parse', 'HEAD^2')).toBe(moved);
+    const head = await git(checkout.path, 'rev-parse', 'HEAD');
+    await pushToOrigin(root, origin, { 'a.txt': 'main\n' });
+    await strategy.prepare(repo, later);
+    expect(await git(checkout.path, 'rev-parse', 'HEAD')).toBe(head);
+    expect(await git(checkout.path, 'status', '--porcelain')).toBe('');
+    await git(repo.path, 'remote', 'set-url', 'origin', join(root, 'gone.git'));
+    await strategy.prepare(repo, later);
+    expect(await git(checkout.path, 'rev-parse', 'HEAD')).toBe(head);
+  });
+
+  test('a fetch moves local main forward only when nothing has it checked out and it has no commits of its own', async () => {
+    const { root, origin, path, repo, strategy } = await startTask();
+    const kept = await git(path, 'rev-parse', 'main');
+    await pushToOrigin(root, origin, { 'b.txt': 'one\n' });
+    await strategy.prepare(repo, createTask({ id: 'two', branch: 'feat/two', worktreePath: null }));
+    expect(await git(path, 'rev-parse', 'main')).toBe(kept);
+
+    await git(path, 'checkout', '-q', '-b', 'elsewhere');
+    const moved = await pushToOrigin(root, origin, { 'c.txt': 'two\n' });
+    const three = await strategy.prepare(
+      repo,
+      createTask({ id: 'three', branch: 'feat/three', worktreePath: null })
+    );
+    expect(await git(path, 'rev-parse', 'main')).toBe(moved);
+    expect(await git(three.path, 'rev-parse', 'HEAD')).toBe(moved);
+
+    await git(path, 'checkout', '-q', 'main');
+    writeFiles(path, { 'own.txt': 'mine\n' });
+    await git(path, 'add', '-A');
+    await git(path, 'commit', '-qm', 'local only');
+    const own = await git(path, 'rev-parse', 'main');
+    await git(path, 'checkout', '-q', 'elsewhere');
+    await pushToOrigin(root, origin, { 'd.txt': 'three\n' });
+    await strategy.prepare(repo, createTask({ id: 'four', branch: 'feat/four', worktreePath: null }));
+    expect(await git(path, 'rev-parse', 'main')).toBe(own);
+
+    const known = await git(path, 'rev-parse', 'origin/main');
+    await git(path, 'remote', 'set-url', 'origin', join(root, 'gone.git'));
+    const offline = await strategy.prepare(
+      repo,
+      createTask({ id: 'five', branch: 'feat/five', worktreePath: null })
+    );
+    expect(await git(offline.path, 'rev-parse', 'HEAD')).toBe(known);
   });
 
   test('an untouched worktree of a task stacked later is reset onto the branch below', async () => {
