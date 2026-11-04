@@ -23,6 +23,7 @@ type StepTicker = (step: MergeStepView, done: boolean) => unknown;
 interface MergeStepsProps {
   task: Task;
   when: MergeStepTiming;
+  round?: number | null;
   waits?: MergeWaitView[];
   onTick?: StepTicker;
 }
@@ -41,6 +42,7 @@ function resolveChecklist(
   {
     task,
     when,
+    round = null,
     waits = [],
     onTick = (step, done) =>
       sendCommandWithToast({ type: 'merge_step.tick', taskId: task.id, key: step.key, done }),
@@ -48,7 +50,7 @@ function resolveChecklist(
   readOnly: boolean
 ): ChecklistProps<PreMergeItem> {
   return {
-    items: [...listTimedSteps(task, when), ...(when === 'pre_merge' ? waits : [])],
+    items: [...listTimedSteps(task, when, round), ...(when === 'pre_merge' ? waits : [])],
     ...(readOnly
       ? {}
       : {
@@ -66,8 +68,9 @@ export function MergeStepsBlock(props: MergeStepsProps) {
 
 export function MergeStepsPanel({
   persistId,
+  note = null,
   ...props
-}: MergeStepsProps & { persistId: DisclosurePersistId }) {
+}: MergeStepsProps & { persistId: DisclosurePersistId; note?: string | null }) {
   const readOnly = useReadOnly();
   const checklist = resolveChecklist(props, readOnly);
   return (
@@ -77,6 +80,7 @@ export function MergeStepsPanel({
       icon={MERGE_STEP_ICON[props.when]}
       count={checklist.items.length}
     >
+      {note && <p className='text-xs text-fg-3'>{note}</p>}
       <ItemChecklist {...checklist} />
     </Panel>
   );

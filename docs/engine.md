@@ -1659,11 +1659,14 @@ steps takes its step out again.
 - **Carry-over.** A new round archives the walkthrough, so the open steps of the round that ends move to
   `Task.carriedMergeSteps` with their round: every open post-merge step, and every open pre-merge step of a
   round that shipped onto the pull request the next round ships on too (it still blocks that merge). The post-merge
-  gate stays open across rounds until the last carried step is ticked, and the Overview shows them under Post-merge
-  steps while the later round works. Steps ticked before a round starts are dropped. While the later round works the
+  gate stays open across rounds until the last carried step is ticked, and while the later round or a follow-up works
+  the Overview shows them first, above the round's card, as Post-merge steps naming the round that left them
+  ("Round 1 merged and left these steps for you", `describePostMergeOrigin`); in the Rounds panel that round opens by
+  itself while it has a step open and lists its own steps to tick (`listTimedSteps` with the round). Steps ticked before a round starts are dropped. While the later round works the
   gate never leads the task (`selectLeadGate` picks `post_merge` only once the round is finished (answered, merged, done or watching, `isRoundFinished`; unlike `isTaskResting` it ignores `closedAt`)): the task
-  shows once on Home, as its gate row in Needs you reading "Post-merge · 1 step left" (`RowSummary` given the row's gate),
-  never also in In progress, and All tasks, its glyph and its page follow the round. `resolveQueue` gives a task one
+  shows once on Home, as its gate row in Needs you reading "SW-68 · Post-merge · 1 step left" with no round tag and no progress track
+  (`RowSummary` given the row's gate), and beside it the running agent's latest action, or its stage until it has
+  one, never also in In progress, and All tasks, its glyph and its page follow the round. `resolveQueue` gives a task one
   place: a task with an open gate is never In progress, and Post-merge gives way to any other open gate of the task
   (`listLeadingGates` in `queue/rank.ts`), so a proposal or a question of the later round is its one row. The later round's last phase is told the carried steps, so its walkthrough never lists them again.
 - **On the Overview** pre-merge steps and the tasks the merge waits on show on the merge gate's card only, never at

@@ -50,6 +50,8 @@ function resolveRowProgress(task: Task, status: string) {
   };
 }
 
+const POST_MERGE_PROGRESS = { track: null, note: null, count: null };
+
 export function RowSummary({
   state,
   task,
@@ -61,15 +63,18 @@ export function RowSummary({
   gate?: Gate | null;
   detail: boolean;
 }) {
-  const [run] = gate || selectLeadGate(state, task) ? [] : listActiveRuns(state, task.id);
+  const postMerge = gate?.type === 'post_merge';
+  const quiet = !postMerge && (gate !== null || selectLeadGate(state, task) !== null);
+  const [run] = quiet ? [] : listActiveRuns(state, task.id);
   const status = resolveRowStatus(state, task, gate);
-  const progress = resolveRowProgress(task, status.label);
+  const progress = postMerge ? POST_MERGE_PROGRESS : resolveRowProgress(task, status.label);
   const { track, count } = progress;
-  const note = progress.note ?? describeBundleWait(state, task);
+  const note =
+    progress.note ?? describeBundleWait(state, task) ?? (postMerge && run ? resolveStageLabel(task) : null);
   return (
     <span className='flex min-w-0 flex-1 items-center gap-2'>
       <span className='shrink-0'>
-        <TaskHandlePrefix task={task} />
+        <TaskHandlePrefix task={task} round={!postMerge} />
         <span className={cn('font-medium', TONE_TEXT[status.tone])}>{status.label}</span>
         {count && (
           <>

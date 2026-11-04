@@ -16,7 +16,7 @@ import { ResultPanel } from '@/components/overview/result-panel.tsx';
 import { RoundsPanel } from '@/components/overview/rounds-panel.tsx';
 import { SuggestionsPanel } from '@/components/overview/suggestions-panel.tsx';
 import { WatchdogsPanel } from '@/components/overview/watchdogs-panel.tsx';
-import { MergeStepsBlock } from '@/components/review/merge-steps.tsx';
+import { MergeStepsPanel } from '@/components/review/merge-steps.tsx';
 import { useReadOnly } from '@/components/task/read-only.tsx';
 import { TaskComposer } from '@/components/task/task-composer.tsx';
 import { InlineMarkdown, Markdown } from '@/components/text/markdown.tsx';
@@ -26,7 +26,7 @@ import { listActivityNewestFirst, resolveOverviewSummary } from '@/lib/overview/
 import { selectShownReply } from '@/lib/overview/exchanges.ts';
 import { type NowTarget, resolveNowKind, resolveResultPlace } from '@/lib/overview/now.ts';
 import { resolveOverviewPanelId } from '@/lib/preferences/disclosure.ts';
-import { MERGE_STEP_TITLE } from '@/lib/review/merge-steps.ts';
+import { describePostMergeOrigin } from '@/lib/review/merge-steps.ts';
 import { describePointCount, listReviewChapters, listReviewPoints } from '@/lib/review/report.ts';
 import { resolveMessageHint } from '@/lib/tasks/messages.ts';
 import { isCodeTask } from '@/lib/tasks/shapes.ts';
@@ -93,16 +93,12 @@ function PostMergePanel({ state, task, gate }: { state: ShinsaState; task: Task;
   const shown = gate?.type === 'post_merge' && resolveNowKind(state, task, gate) === 'gate';
   if (!open || shown) return null;
   return (
-    <Panel
+    <MergeStepsPanel
       persistId={resolveOverviewPanelId(task, 'post-merge')}
-      title={MERGE_STEP_TITLE.post_merge}
-      icon='IconChecklist'
-    >
-      <p className='text-xs text-fg-3'>
-        An earlier round merged and left these steps for you. The task is done once each is ticked.
-      </p>
-      <MergeStepsBlock task={task} when='post_merge' />
-    </Panel>
+      task={task}
+      when='post_merge'
+      note={describePostMergeOrigin(task)}
+    />
   );
 }
 
@@ -167,10 +163,10 @@ export function OverviewTab({
     <div className='flex min-h-0 flex-1 flex-col'>
       <PageScroll>
         <div className={cn(PAGE_COLUMN, 'flex flex-col gap-5 py-5')}>
+          <PostMergePanel state={state} task={task} gate={gate} />
           <NowCard key={gate?.id ?? 'now'} state={state} task={task} gate={gate} onOpen={onOpen} />
           <RequestsPanel task={task} shownId={resolveShownReplyId(state, task, gate)} />
           <SuggestionsPanel task={task} />
-          <PostMergePanel state={state} task={task} gate={gate} />
           <WatchdogsPanel state={state} task={task} />
           {resolveResultPlace(state, task, gate) === 'panel' && <ResultPanel task={task} />}
           <DelegationsPanel state={state} task={task} onOpen={(runId) => onOpen('agent', runId)} />

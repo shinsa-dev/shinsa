@@ -8,6 +8,7 @@ import {
 } from '@shinsa/core';
 import {
   describeMergeBlock,
+  describePostMergeOrigin,
   describePostMergeStatus,
   describePostMergeTitle,
   isMergeWait,
@@ -20,6 +21,7 @@ import {
   resolveWaitBlock,
 } from '@/lib/review/merge-steps.ts';
 import { createPullRequest } from '../../support/pull-request.ts';
+import { createRound } from '../../support/rounds.ts';
 import { createShinsaState, createTask } from '../../support/state.ts';
 
 const STEP: MergeStep = {
@@ -224,5 +226,44 @@ describe('the bundle on the merge gate', () => {
       )
     ).toBe('Merge #7');
     expect(resolveMergeLabel(state, createTask({ id: 'y' }), 'Merge')).toBe('Merge');
+  });
+});
+
+describe('the steps a round left after its merge', () => {
+  const carried = (round: number, title: string) => ({
+    when: 'post_merge' as const,
+    kind: 'deploy' as const,
+    title,
+    detail: 'd',
+    command: null,
+    round,
+    done: false,
+  });
+  const merged = (carriedMergeSteps: ReturnType<typeof carried>[]) =>
+    createTask({
+      id: 'merged',
+      stage: 'investigating',
+      pullRequest: createPullRequest({ number: 4, state: 'merged' }),
+      rounds: [
+        createRound({ number: 1 }),
+        createRound({ number: 2 }),
+        createRound({ number: 3, status: 'active', endedAt: null }),
+      ],
+      carriedMergeSteps,
+    });
+
+  it('lists one round’s steps and names the round that left them', () => {
+    const task = merged([carried(1, 'Deploy the API'), carried(2, 'Tell the team')]);
+    expect(listTimedSteps(task, 'post_merge', 1).map((step) => step.title)).toEqual(['Deploy the API']);
+    expect(listTimedSteps(task, 'post_merge').length).toBe(2);
+    expect(describePostMergeOrigin(merged([carried(1, 'Deploy the API')]))).toBe(
+      'Round 1 merged and left these steps for you. The task is done once each is ticked.'
+    );
+    expect(describePostMergeOrigin(task)).toBe(
+      'The merged work left these steps for you. The task is done once each is ticked.'
+    );
+    expect(describePostMergeOrigin(merged([carried(3, 'Deploy the API')]))).toBe(
+      'The merged work left these steps for you. The task is done once each is ticked.'
+    );
   });
 });

@@ -344,9 +344,10 @@ describe('a row’s summary line', () => {
     expect(row(/Build the export/).textContent).not.toContain('1/2');
   });
 
-  it('shows a later round at work apart from the steps an earlier round left for you', () => {
+  it('lists a task with steps left once, under Post-merge with no round, showing the later round at work', () => {
     const fixing = createTask({
       id: 'fix',
+      handle: 'SW-1',
       title: 'Fix the previews',
       stage: 'fixing',
       fixFor: 'review',
@@ -371,12 +372,13 @@ describe('a row’s summary line', () => {
         gates: [createGate({ id: 'g-after', taskId: 'fix', type: 'post_merge' })],
       }),
     });
+    expect(row(/Fix the previews/).textContent).toContain('Fixing');
     pushTranscript('run-fix', [createAgentEntry('Reading the review findings', 'interim')]);
-    const [steps, work] = screen.getAllByRole('button', { name: /Fix the previews/ });
-    expect(steps?.textContent).toContain('Post-merge · 1 step left');
-    expect(steps?.textContent).not.toContain('Reading the review findings');
-    expect(work?.textContent).not.toContain('Post-merge');
-    expect(work?.textContent).toContain('Reading the review findings');
+    const rows = screen.getAllByRole('button', { name: /Fix the previews/ });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.textContent).toContain('SW-1 · Post-merge · 1 step left');
+    expect(rows[0]?.textContent).not.toContain('Round 2');
+    expect(rows[0]?.textContent).toContain('Reading the review findings');
   });
 
   it('keeps a waiting agent’s action still', () => {
