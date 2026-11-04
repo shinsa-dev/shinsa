@@ -3661,8 +3661,8 @@ the read-only view. Teams need remote access on (`Remote` paired and enabled), s
   member's device is refused with `not_owner`, since joining your account to a team and sharing your projects is yours
   alone, `Remote.openChannel`), then `project.add_to_team` for each pick (`POST /api/commands`), so every machine
   holds the key and the projects are in place before the owner answers. Once the owner accepts, the team shows in Settings → Teams
-  on each of your machines, with its machines (every member's, quoted with their owner and Online, Last seen or
-  Needs the team link, `TeamMachines`, the same list on the hosted Settings); one without the key warns on the team's
+  on each of your machines, with its machines (every member's, each with its owner and Online, Last seen or
+  Needs the team link, `TeamMachines`, the same list on the hosted Settings); one without the key, a machine paired after you joined or out of reach then, warns on the team's
   card and asks for the link right there, with projects to share beside it, none required (or `shinsa teams join <url>`), which stores the key there (each of your machines needs it once). The owner sees each request in Settings → Teams with Accept and Decline (`members/add`,
   `requests/decline`; `shinsa teams accept|decline <team> --login`). A member may leave (`leave`, which also takes
   your projects out of the team) and the owner may remove a member (`members/remove`) or the team (`remove`); either

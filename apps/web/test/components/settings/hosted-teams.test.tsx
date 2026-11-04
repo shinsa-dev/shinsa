@@ -38,7 +38,7 @@ describe('Settings → Teams on a browser that reaches none of your machines', (
     expect(screen.getByText(/Own scopes/)).toBeTruthy();
   });
 
-  it('lists every machine in the team, quoted, by its owner, with its status', () => {
+  it('lists every machine in the team with its owner and status', () => {
     renderHosted(
       createTeam({
         machines: [
@@ -47,9 +47,9 @@ describe('Settings → Teams on a browser that reaches none of your machines', (
         ],
       })
     );
-    expect(screen.getByText('“Mac.lan”')).toBeTruthy();
-    expect(screen.getByText('“Studio”')).toBeTruthy();
-    expect(screen.getAllByText('by')).toHaveLength(2);
+    expect(screen.getByText('Mac.lan')).toBeTruthy();
+    expect(screen.getByText('Studio')).toBeTruthy();
+    expect(screen.getAllByText(/^Owned by/)).toHaveLength(2);
     expect(screen.getByText('Online')).toBeTruthy();
     expect(screen.getByText('Never connected')).toBeTruthy();
   });

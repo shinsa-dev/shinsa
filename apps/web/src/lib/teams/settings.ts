@@ -15,7 +15,6 @@ import {
   type UserCommand,
 } from '@shinsa/core';
 import { formatSince } from '@/lib/format/time.ts';
-import { describeMachineName } from '@/lib/remote/setup-steps.ts';
 import type { Mention } from '@/lib/remote/users.ts';
 import { isMachineOnline, resolveMachineSeenAt, selectFeedMachine } from './presence.ts';
 
@@ -73,7 +72,7 @@ export function listKeylessMachines(
 }
 
 export const TEAM_KEY_WARNING =
-  'This machine is in the team but has no key for it, so teammates cannot see its tasks. Paste the team’s join link once to fix it.';
+  'Teammates cannot see this machine’s tasks yet, because it was not added when you joined the team. Paste the team’s link here once. Its owner can copy it in Settings → Teams.';
 
 export const TEAM_LINK_PROJECTS_HINT =
   'Sharing projects is optional. Your teammates see nothing of yours until you share one.';
@@ -239,7 +238,6 @@ export type TeamMachineTone = 'online' | 'warning' | 'quiet';
 
 export interface TeamMachineRow {
   machine: TeamMachine;
-  name: string;
   tone: TeamMachineTone;
   status: string;
   owner: RemoteUser | null;
@@ -261,14 +259,12 @@ export function listTeamMachineRows(
   return team.machines.map((machine): TeamMachineRow => {
     const live = selectFeedMachine(feed, team.id, machine.id);
     const owner = selectTeamPerson(team, machine.userId);
-    const name = describeMachineName(machine.name);
     if (keyless.has(machine.id) || (live?.status === 'refused' && live.reason === TEAM_REFUSALS.key))
-      return { machine, name, tone: 'warning', status: TEAM_MACHINE_NEEDS_LINK, owner };
+      return { machine, tone: 'warning', status: TEAM_MACHINE_NEEDS_LINK, owner };
     const online = isMachineOnline(machine, live);
     const seenAt = resolveMachineSeenAt(machine, live);
     return {
       machine,
-      name,
       tone: online ? 'online' : 'quiet',
       status: describeTeamMachineStatus(online, seenAt, now),
       owner,

@@ -189,16 +189,16 @@ describe('Settings → Teams', () => {
       ],
     });
     expect(
-      listTeamMachineRows(team, NOW).map(({ name, tone, status, owner }) => [
-        name,
+      listTeamMachineRows(team, NOW).map(({ machine, tone, status, owner }) => [
+        machine.name,
         tone,
         status,
         owner?.login ?? null,
       ])
     ).toEqual([
-      ['“Studio”', 'online', 'Online', 'mona'],
-      ['“Laptop”', 'quiet', 'Last seen 2h ago', 'kai'],
-      ['“Spare”', 'quiet', 'Never connected', null],
+      ['Studio', 'online', 'Online', 'mona'],
+      ['Laptop', 'quiet', 'Last seen 2h ago', 'kai'],
+      ['Spare', 'quiet', 'Never connected', null],
     ]);
   });
 

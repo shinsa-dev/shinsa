@@ -330,7 +330,7 @@ describe('Settings → Teams', () => {
       createRemoteSnapshot({ access: ACCESS, teams: [createTeamEntry({ team, onMachine: false })] })
     );
     expect(screen.getByText(TEAM_KEY_WARNING)).toBeTruthy();
-    expect(screen.getByText('“Studio”')).toBeTruthy();
+    expect(screen.getByText('Studio')).toBeTruthy();
     expect(screen.getByText(TEAM_MACHINE_NEEDS_LINK)).toBeTruthy();
     expect(screen.getByText(TEAM_LINK_PROJECTS_HINT)).toBeTruthy();
     const input = screen.getByLabelText('Team link');
