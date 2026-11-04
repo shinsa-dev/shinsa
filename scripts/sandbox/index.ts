@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { isPreviewHost } from '../../apps/cloud/src/routes/previews/address.ts';
 import { createSandboxCloud } from './cloud.ts';
 import { respondDashboard, respondEnroll } from './dashboard.ts';
-import { createPreviewHandoffs, createPreviewTakeOver, respondSandboxSignIn } from './handoffs.ts';
+import { createPreviewHandoffs, createPreviewTeammateHandoff, respondSandboxSignIn } from './handoffs.ts';
 import { prepareMachine, seedStudio, startMachine } from './machine.ts';
 import { findRemoteStylesheet, listSandboxSections, respondStatic } from './page.ts';
 import { respondPreviewHost } from './previews.ts';
@@ -100,12 +100,12 @@ export async function startSandbox() {
     websocket: TUNNEL_SOCKET,
   });
   const handoffs = await createPreviewHandoffs(studio);
-  const takeOver = await createPreviewTakeOver(studio, studioProject);
+  const handedToTeammate = await createPreviewTeammateHandoff(studio, studioProject);
   page = serializeSandboxPage(
     [
       ...sections,
       { title: 'Handing off a task', links: handoffs },
-      { title: 'A teammate took a task over', links: takeOver },
+      { title: 'A task handed to a teammate', links: handedToTeammate },
     ],
     findRemoteStylesheet()
   );

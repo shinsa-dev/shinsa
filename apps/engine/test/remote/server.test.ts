@@ -2,7 +2,10 @@ import { afterEach, describe, expect, spyOn, test } from 'bun:test';
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
-  DEFAULT_TEAM_PERMISSIONS,
+  ACCESS_PRESETS,
+  type AccessScopes,
+  DEFAULT_TEAM_SCOPES,
+  toggleScope,
   type AgentModel,
   type Bytes,
   type ChannelMessage,
@@ -80,7 +83,7 @@ const TEAM: RemoteTeam = {
   members: [{ user: KAI, addedAt: 2 }],
   requests: [{ user: BOB, addedAt: 3 }],
   machines: [],
-  permissions: DEFAULT_TEAM_PERMISSIONS,
+  scopes: DEFAULT_TEAM_SCOPES,
   overrides: [],
   createdAt: 1,
 };
@@ -1768,12 +1771,12 @@ describe('a teammate on this machine', () => {
 
   const TEAM_KEY = serializeBase64Url(new Uint8Array(32).fill(3));
 
-  async function startTeammate(permissions = DEFAULT_TEAM_PERMISSIONS) {
+  async function startTeammate(scopes: AccessScopes = DEFAULT_TEAM_SCOPES) {
     const started = await start();
     const { engine, remote, port } = started;
     remote.store.update((file) => ({
       ...file,
-      teams: [{ ...TEAM, permissions }],
+      teams: [{ ...TEAM, scopes }],
       teamKeys: [{ teamId: TEAM.id, name: TEAM.name, key: TEAM_KEY, invite: null, addedAt: 1 }],
     }));
     await engine.dispatch({ type: 'project.write', project: { name: 'Superwall', color: 'blue' } });
@@ -1803,7 +1806,7 @@ describe('a teammate on this machine', () => {
     const state = opened.at(-1)?.state as { tasks: Record<string, unknown> };
     expect(Object.keys(state.tasks)).toEqual([taskId]);
     const { commands } = readEngineInfo(opened);
-    expect(commands).toEqual(expect.arrayContaining(['task.prioritize', 'task.take_over', 'task.share']));
+    expect(commands).toEqual(expect.arrayContaining(['task.prioritize', 'task.give_back', 'task.share']));
     expect(commands).not.toContain('task.create');
     expect(
       await sendCommand(channel, 'c1', { type: 'task.prioritize', taskId, priority: 'high' })
@@ -1821,12 +1824,9 @@ describe('a teammate on this machine', () => {
   });
 
   test('a team that keeps teammates from acting leaves them reading, and taking a project out hides it', async () => {
-    const { channel, opened, engine, taskId } = await startTeammate({
-      ...DEFAULT_TEAM_PERMISSIONS,
-      act: false,
-    });
+    const { channel, opened, engine, taskId } = await startTeammate(ACCESS_PRESETS.standard);
     const { commands } = readEngineInfo(opened);
-    expect(commands).toContain('task.take_over');
+    expect(commands).toContain('task.give_back');
     expect(await sendCommand(channel, 'c1', { type: 'task.prioritize', taskId, priority: 'high' })).toBe(
       'handoff_scope'
     );
@@ -1838,12 +1838,13 @@ describe('a teammate on this machine', () => {
     expect(await requestStatus(channel, 'h1', `/api/tasks/${taskId}`)).toBe(403);
   });
 
-  test('takes a task over in one step, messages its agent while holding it, and gives it back', async () => {
+  test('messages the agent of a task handed to them while holding it, and gives it back', async () => {
     const { channel, engine, taskId } = await startTeammate();
     expect(await sendCommand(channel, 'c1', { type: 'task.message', taskId, text: 'Hello' })).toBe(
       'handoff_scope'
     );
-    expect(await sendCommand(channel, 'c2', { type: 'task.take_over', taskId })).toBeNull();
+    expect(await sendCommand(channel, 'c2', { type: 'task.give_back', taskId })).toBeNull();
+    await engine.dispatch({ type: 'task.hand_to_teammate', taskId, teamId: TEAM.id, teammate: KAI });
     expect(engine.state.tasks[taskId]?.handoff).toMatchObject({ teamId: TEAM.id, guest: { id: KAI.id } });
     expect(await sendCommand(channel, 'c3', { type: 'task.message', taskId, text: 'Hello' })).toBeNull();
     expect(await sendCommand(channel, 'c4', { type: 'task.give_back', taskId })).toBeNull();
@@ -1862,17 +1863,15 @@ describe('a teammate on this machine', () => {
     expect(engine.state.tasks[taskId]?.share).toBeDefined();
   });
 
-  test('a team that keeps sharing and taking over to its owner refuses both', async () => {
-    const { channel, opened, taskId } = await startTeammate({
-      ...DEFAULT_TEAM_PERMISSIONS,
-      takeOver: false,
-      share: false,
-    });
+  test('a team that keeps sharing to its owner refuses it, and one that allows messaging lets them message', async () => {
+    const { channel, opened, taskId } = await startTeammate(toggleScope(DEFAULT_TEAM_SCOPES, 'share', false));
     const { commands } = readEngineInfo(opened);
-    expect(commands).not.toContain('task.take_over');
     expect(commands).not.toContain('task.share');
-    expect(await sendCommand(channel, 'c1', { type: 'task.take_over', taskId })).toBe('handoff_scope');
     expect(await sendCommand(channel, 'c2', { type: 'task.share', taskId })).toBe('handoff_scope');
+    const open = await startTeammate(ACCESS_PRESETS.full);
+    expect(
+      await sendCommand(open.channel, 'c3', { type: 'task.message', taskId: open.taskId, text: 'Hi' })
+    ).toBeNull();
   });
 
   test('removing them from the team closes their channel at once', async () => {

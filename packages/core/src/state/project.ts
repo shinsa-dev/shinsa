@@ -1151,7 +1151,6 @@ function applyEventBody(state: ShinsaState, event: ShinsaEvent): ShinsaState {
     case 'handoff.removed':
     case 'handoff.left':
     case 'task.handed_to_teammate':
-    case 'task.taken_over':
       applyHandoffEvent(state, event);
       break;
     case 'slack.thread_linked':

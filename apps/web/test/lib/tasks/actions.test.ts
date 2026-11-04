@@ -1,5 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
-import { ENGINE_BASELINE_COMMANDS, type Task, USER_COMMAND_TYPES } from '@shinsa/core';
+import {
+  ACCESS_PRESETS,
+  DEFAULT_TEAM_SCOPES,
+  ENGINE_BASELINE_COMMANDS,
+  type Task,
+  USER_COMMAND_TYPES,
+} from '@shinsa/core';
 import { listTaskActions, runTaskAction, TASK_ACTION, TASK_ACTION_COMMAND } from '@/lib/tasks/actions.ts';
 import { spyOnCommands } from '../../support/commands.ts';
 import { createTask, NOW } from '../../support/state.ts';
@@ -40,9 +46,11 @@ describe('listTaskActions', () => {
     expect(TASK_ACTION_COMMAND.unshare).toBe('task.unshare');
   });
 
-  it('offers a teammate Take over, Give it back once they hold it, and neither to the owner', () => {
+  it('offers a teammate Give it back once they hold a task, and Fork only when their scopes include it', () => {
     const kai = { id: 'u3', login: 'kai', name: 'Kai Tan', avatarUrl: null };
-    const teammate = { owner: { id: 'u2', login: 'mona', name: null, avatarUrl: null }, viewerId: kai.id };
+    const owner = { id: 'u2', login: 'mona', name: null, avatarUrl: null };
+    const teammate = { owner, viewerId: kai.id, scopes: DEFAULT_TEAM_SCOPES };
+    const watcher = { owner, viewerId: kai.id, scopes: ACCESS_PRESETS.standard };
     const open = createTask({ id: 'open' });
     const held = createTask({
       id: 'held',
@@ -52,15 +60,11 @@ describe('listTaskActions', () => {
       id: 'other',
       handoff: { at: 1, url: null, guest: { ...kai, id: 'u9' }, claimedAt: 1, teamId: 'team-1' },
     });
-    expect(listTaskActions(open, ALL_COMMANDS, NOW, teammate)[0]).toEqual(['takeOver']);
+    expect(listTaskActions(open, ALL_COMMANDS, NOW, teammate).flat()).not.toContain('giveBack');
     expect(listTaskActions(held, ALL_COMMANDS, NOW, teammate)[0]).toEqual(['giveBack']);
-    expect(listTaskActions(othersHold, ALL_COMMANDS, NOW, teammate).flat()).not.toContain('takeOver');
-    expect(
-      listTaskActions(createTask({ id: 'done', stage: 'merged' }), ALL_COMMANDS, NOW, teammate).flat()
-    ).not.toContain('takeOver');
-    expect(listTaskActions(open, ALL_COMMANDS).flat()).not.toContain('takeOver');
-    expect(listTaskActions(open, new Set(), NOW, teammate).flat()).not.toContain('takeOver');
+    expect(listTaskActions(othersHold, ALL_COMMANDS, NOW, teammate).flat()).not.toContain('giveBack');
     expect(listTaskActions(open, new Set(), NOW, teammate).flat()).toContain('fork');
+    expect(listTaskActions(open, ALL_COMMANDS, NOW, watcher).flat()).not.toContain('fork');
     expect(listTaskActions(open, new Set()).flat()).not.toContain('fork');
     expect(listTaskActions(open, ALL_COMMANDS).flat()).toContain('fork');
   });
@@ -206,11 +210,9 @@ describe('runTaskAction', () => {
     ]);
   });
 
-  it('takes a teammate’s task over and gives it back, with a toast for each', () => {
-    runTaskAction(FULL, 'takeOver');
+  it('gives a teammate’s task back, with a toast', () => {
     runTaskAction(FULL, 'giveBack');
     expect(spies.sent.mock.calls).toEqual([
-      [{ type: 'task.take_over', taskId: 'full' }, 'You took this task over.'],
       [{ type: 'task.give_back', taskId: 'full' }, 'You gave this task back.'],
     ]);
   });

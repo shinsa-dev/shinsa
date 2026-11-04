@@ -1,4 +1,5 @@
 import {
+  type AccessScopes,
   type AccountsSnapshot,
   type AttentionPlace,
   applyStatePatch,
@@ -71,6 +72,7 @@ type Incoming = { patch: StatePatch } | { detail: TaskDetail };
 export interface TeammateMachine {
   owner: RemoteUser;
   viewerId: string;
+  scopes: AccessScopes;
 }
 
 export interface MachineView {

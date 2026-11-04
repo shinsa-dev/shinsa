@@ -2,7 +2,8 @@ import { afterEach, describe, expect, spyOn, test } from 'bun:test';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
-  DEFAULT_TEAM_PERMISSIONS,
+  ACCESS_PRESETS,
+  DEFAULT_TEAM_SCOPES,
   type Bytes,
   createFrameOpener,
   createTeamHello,
@@ -69,7 +70,7 @@ function createTeam(overrides: Partial<RemoteTeam> = {}): RemoteTeam {
     members: [{ user: KAI, addedAt: 2 }],
     requests: [{ user: BOB, addedAt: 3 }],
     machines: [],
-    permissions: DEFAULT_TEAM_PERMISSIONS,
+    scopes: DEFAULT_TEAM_SCOPES,
     overrides: [],
     createdAt: 1,
     ...overrides,
@@ -609,40 +610,40 @@ describe('the members of a team', () => {
     await expect(teams.removeMember('team1', BOB.id)).rejects.toMatchObject({ code: 'member_not_found' });
   });
 
-  test('the owner changes the team’s rights or one member’s, and the snapshot follows at once', async () => {
+  test('the owner changes the team’s scopes or one member’s, and the snapshot follows at once', async () => {
     const { teams, plane, remote } = setUp();
-    const path = resolveMachineTeamPath('team1', 'permissions');
+    const path = resolveMachineTeamPath('team1', 'scopes');
     const narrowed = createTeam({
-      permissions: { ...DEFAULT_TEAM_PERMISSIONS, share: false },
-      overrides: [{ userId: KAI.id, permissions: { message: true } }],
+      scopes: ACCESS_PRESETS.standard,
+      overrides: [{ userId: KAI.id, scopes: ACCESS_PRESETS.full }],
     });
     plane.answers.set(path, () => Response.json(narrowed));
-    await teams.updatePermissions('team1', null, { share: false });
-    await teams.updatePermissions('team1', KAI.id, { message: true });
+    await teams.updateScopes('team1', null, ACCESS_PRESETS.standard);
+    await teams.updateScopes('team1', KAI.id, null);
     expect(plane.calls.filter((call) => call.path === path).map((call) => call.body)).toEqual([
-      { permissions: { share: false } },
-      { userId: KAI.id, permissions: { message: true } },
+      { scopes: ACCESS_PRESETS.standard },
+      { userId: KAI.id, scopes: null },
     ]);
     const team = remote.snapshot().teams[0]?.team;
-    expect(team?.permissions.share).toBe(false);
-    expect(team?.overrides).toEqual([{ userId: KAI.id, permissions: { message: true } }]);
+    expect(team?.scopes).toEqual(ACCESS_PRESETS.standard);
+    expect(team?.overrides).toEqual([{ userId: KAI.id, scopes: ACCESS_PRESETS.full }]);
   });
 
   test('refuses rights for someone not in the team, a team it does not own, and says why the cloud refused', async () => {
     const { teams, plane } = setUp();
-    await expect(teams.updatePermissions('team1', BOB.id, { act: false })).rejects.toMatchObject({
+    await expect(teams.updateScopes('team1', BOB.id, [])).rejects.toMatchObject({
       code: 'member_not_found',
     });
-    const path = resolveMachineTeamPath('team1', 'permissions');
+    const path = resolveMachineTeamPath('team1', 'scopes');
     plane.answers.set(path, () => refuse(NotFound));
-    await expect(teams.updatePermissions('team1', KAI.id, { act: false })).rejects.toMatchObject({
+    await expect(teams.updateScopes('team1', KAI.id, [])).rejects.toMatchObject({
       code: 'member_not_found',
     });
-    await expect(teams.updatePermissions('team1', null, { act: false })).rejects.toMatchObject({
+    await expect(teams.updateScopes('team1', null, [])).rejects.toMatchObject({
       code: 'team_not_found',
     });
     const member = setUp({ file: { teams: [createTeam({ role: 'member' })] } });
-    await expect(member.teams.updatePermissions('team1', null, { act: false })).rejects.toMatchObject({
+    await expect(member.teams.updateScopes('team1', null, [])).rejects.toMatchObject({
       code: 'not_owner',
     });
   });
@@ -896,10 +897,24 @@ describe('team access to this machine', () => {
     expect(keyless.remote.resolveTeamGrant(BOB.id, 'team1')).toBeNull();
   });
 
+  test('this machine forks a teammate’s task only while its owner’s scopes in that team include fork', () => {
+    const kaiTeam = (overrides: Partial<RemoteTeam>) =>
+      createTeam({ owner: KAI, role: 'member', members: [{ user: MONA, addedAt: 2 }], ...overrides });
+    const allowed = setUp({ file: { teams: [kaiTeam({})] } });
+    expect(allowed.remote.canForkTeamTask('team1')).toBe(true);
+    expect(allowed.remote.canForkTeamTask('gone')).toBe(false);
+    const watching = setUp({ file: { teams: [kaiTeam({ scopes: ACCESS_PRESETS.standard })] } });
+    expect(watching.remote.canForkTeamTask('team1')).toBe(false);
+    const own = setUp({
+      file: { teams: [kaiTeam({ overrides: [{ userId: MONA.id, scopes: ACCESS_PRESETS.full }] })] },
+    });
+    expect(own.remote.canForkTeamTask('team1')).toBe(true);
+  });
+
   test('a teammate’s browser gets in with their grant, scoped to the team with their rights', async () => {
     const team = createTeam({
-      permissions: { ...DEFAULT_TEAM_PERMISSIONS, share: false },
-      overrides: [{ userId: KAI.id, permissions: { message: true } }],
+      scopes: ACCESS_PRESETS.standard,
+      overrides: [{ userId: KAI.id, scopes: ACCESS_PRESETS.full }],
     });
     const { remote } = setUp({ file: { teams: [team] } });
     const secret = remote.resolveTeamGrant(KAI.id, 'team1') ?? '';
@@ -913,7 +928,7 @@ describe('team access to this machine', () => {
       scope: {
         kind: 'team',
         teamId: 'team1',
-        permissions: { ...DEFAULT_TEAM_PERMISSIONS, share: false, message: true },
+        scopes: ACCESS_PRESETS.full,
       },
     });
   });
@@ -926,11 +941,13 @@ describe('team access to this machine', () => {
     remote.store.recordTeams([createTeam({ name: 'Platform team' })]);
     remote.publish();
     expect(kai.isClosed()).toBe(false);
-    remote.store.recordTeams([createTeam({ overrides: [{ userId: KAI.id, permissions: { act: false } }] })]);
+    remote.store.recordTeams([
+      createTeam({ overrides: [{ userId: KAI.id, scopes: ACCESS_PRESETS.standard }] }),
+    ]);
     remote.publish();
     expect(kai.closedWith()).toBe('Remote access to this machine changed.');
     const back = await enter(remote, KAI.id, secret);
-    expect((await back.ask('r2'))?.scope).toMatchObject({ permissions: { act: false } });
+    expect((await back.ask('r2'))?.scope).toMatchObject({ scopes: ACCESS_PRESETS.standard });
   });
 
   test('leaving the team ends their access at once: the grant, the device and the open channel', async () => {

@@ -7,7 +7,7 @@ import {
   type SlackRelayReaction,
   type SlackRelaySession,
   type TeamId,
-  type TeamPermissionsRequest,
+  type TeamScopesRequest,
 } from '@shinsa/core';
 import { serializeRemoteFailure } from '@shinsa/core/remote/errors';
 import { Effect, Exit, Fiber, Layer, ManagedRuntime, Predicate, Redacted } from 'effect';
@@ -175,10 +175,8 @@ export class RemoteControl {
     return this.#run((client) => client.teams.leave(Redacted.make(machineToken), teamId as TeamId));
   }
 
-  requestTeamPermissions(machineToken: string, teamId: string, request: TeamPermissionsRequest) {
-    return this.#run((client) =>
-      client.teams.permissions(Redacted.make(machineToken), teamId as TeamId, request)
-    );
+  requestTeamScopes(machineToken: string, teamId: string, request: TeamScopesRequest) {
+    return this.#run((client) => client.teams.scopes(Redacted.make(machineToken), teamId as TeamId, request));
   }
 
   requestTeamRemoval(machineToken: string, teamId: string) {

@@ -102,11 +102,8 @@ export {
   TeamJoinResponse,
   TeamJoinStatus,
   TeamMachine,
-  TeamMemberPermissions,
-  TeamPermissions,
-  TeamPermissionsChange,
-  TeamPermissionsPatch,
-  TeamPermissionsRequest,
+  TeamScopeOverride,
+  TeamScopesRequest,
   TeamPreviewResponse,
 } from './contract.ts';
 export {
@@ -289,13 +286,9 @@ export type {
   TunnelStatus,
 } from './status.ts';
 export {
-  DEFAULT_TEAM_PERMISSIONS,
-  FULL_TEAM_PERMISSIONS,
+  DEFAULT_TEAM_SCOPES,
   isTeamPerson,
-  resolveMemberPermissions,
-  resolveTeamPermissions,
-  TEAM_PERMISSION_NAMES,
-  type TeamPermission,
+  resolveMemberScopes,
   createTeamHello,
   createTeamWelcome,
   deriveTeamSessionKey,

@@ -28,7 +28,7 @@ describe('teams', () => {
       id: CREW,
       userId: MONA.id,
       name: 'Crew',
-      permissions: {},
+      scopes: null,
       createdAt: TEST_NOW,
     });
     expect(found).toEqual(Option.some(created));

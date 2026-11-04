@@ -7,5 +7,4 @@ export type HandoffEventBody =
   | { type: 'handoff.claimed'; taskId: string; guest: TaskGuest }
   | { type: 'handoff.removed'; taskId: string; guest: TaskGuest | null }
   | { type: 'handoff.left'; taskId: string; guest: TaskGuest }
-  | { type: 'task.handed_to_teammate'; taskId: string; teamId: string; guest: TaskGuest }
-  | { type: 'task.taken_over'; taskId: string; teamId: string; guest: TaskGuest };
+  | { type: 'task.handed_to_teammate'; taskId: string; teamId: string; guest: TaskGuest };

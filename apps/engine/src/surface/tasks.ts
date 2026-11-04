@@ -542,20 +542,8 @@ export const TASK_SPECS: SurfaceSpec[] = [
     done: () => 'Handed over. Take it back with `shinsa tasks hand-off-remove`.',
   }),
   defineCommand({
-    path: ['tasks', 'take-over'],
-    summary: 'Take over a teammate’s task from the team’s tasks in Shinsa Cloud, so it is yours to steer.',
-    command: 'task.take_over',
-    humanOnly: true,
-    fields: [TASK_FIELD],
-    build: async (values, client) => ({
-      type: 'task.take_over',
-      taskId: await findTaskId(client, readValue(values, 'task')),
-    }),
-    done: () => 'It is yours to steer now.',
-  }),
-  defineCommand({
     path: ['tasks', 'give-back'],
-    summary: 'Give a task you took over back to the teammate who owns it.',
+    summary: 'Give a task a teammate handed you back to them.',
     command: 'task.give_back',
     humanOnly: true,
     fields: [TASK_FIELD],

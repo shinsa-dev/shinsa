@@ -1,4 +1,4 @@
-import { type RemoteInstance, resolveMachineLoad, type Task } from '@shinsa/core';
+import { type AccessScopes, type RemoteInstance, resolveMachineLoad, type Task } from '@shinsa/core';
 import { Connection, type MachineChoice, resolveSocketTransport } from '@/lib/connection/socket.ts';
 import { formatSince } from '@/lib/format/time.ts';
 import { describeMachineLoad } from '@/lib/new-task.ts';
@@ -82,6 +82,7 @@ export async function listMachineRows(
 export interface FleetMemberOptions {
   dashboard: Pick<DashboardClient, 'requestConnect'>;
   viewerId: string;
+  teammateScopes?: AccessScopes;
   onRefused: (instanceId: string, error: ChannelError) => void;
   onRemoved?: (instanceId: string) => void;
   createConnection?: (transport: SocketTransport) => Connection;
@@ -110,7 +111,13 @@ export function createFleetMember(
     online: instance.online,
     ...(instance.role === 'guest' ? { guest: true as const, handedBy: instance.owner } : {}),
     ...(instance.role === 'teammate'
-      ? { teammate: { owner: instance.owner, viewerId: options.viewerId } }
+      ? {
+          teammate: {
+            owner: instance.owner,
+            viewerId: options.viewerId,
+            scopes: options.teammateScopes ?? [],
+          },
+        }
       : {}),
     connection,
     fetch: (request) => link.fetch(request),

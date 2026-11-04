@@ -1,5 +1,7 @@
 import { isRecord, parseJsonRecord } from '../domain/records.ts';
 import { DAY_MS } from '../domain/time.ts';
+import { ACCESS_PRESETS } from '../scopes/index.ts';
+import { ACCESS_SCOPES, type AccessScopes } from '../scopes/schema.ts';
 import type { TeamTask } from '../share/teams.ts';
 import { encodeText, hasBytes, parseBase64Url, serializeBase64Url, URL_SAFE_SEGMENT } from './bytes.ts';
 import {
@@ -8,8 +10,6 @@ import {
   REMOTE_PATHS,
   type RemoteTeam,
   type TeamAction,
-  type TeamPermissions,
-  type TeamPermissionsPatch,
 } from './contract.ts';
 import { REMOTE_PROTOCOL_VERSION } from './handshake.ts';
 import { parseSigningPublicKey, serializePublicKey } from './keys.ts';
@@ -35,32 +35,7 @@ export const TEAM_TASKS_PATH = '/api/teams/tasks';
 
 export const TEAM_VIEW_PATH = '/api/teams/view';
 
-export const TEAM_PERMISSION_NAMES = ['act', 'takeOver', 'share', 'services', 'message'] as const;
-
-export type TeamPermission = (typeof TEAM_PERMISSION_NAMES)[number];
-
-export const DEFAULT_TEAM_PERMISSIONS: TeamPermissions = {
-  act: true,
-  takeOver: true,
-  share: true,
-  services: true,
-  message: false,
-};
-
-export function resolveTeamPermissions(
-  team: TeamPermissionsPatch | null | undefined,
-  member: TeamPermissionsPatch | null | undefined = null
-): TeamPermissions {
-  return { ...DEFAULT_TEAM_PERMISSIONS, ...team, ...member };
-}
-
-export const FULL_TEAM_PERMISSIONS: TeamPermissions = {
-  act: true,
-  takeOver: true,
-  share: true,
-  services: true,
-  message: true,
-};
+export const DEFAULT_TEAM_SCOPES: AccessScopes = ACCESS_PRESETS.collaborate;
 
 type TeamPeople = Pick<RemoteTeam, 'owner' | 'members'>;
 
@@ -68,13 +43,12 @@ export function isTeamPerson(team: TeamPeople, userId: string) {
   return team.owner.id === userId || team.members.some((member) => member.user.id === userId);
 }
 
-export function resolveMemberPermissions(
-  team: TeamPeople & Pick<RemoteTeam, 'permissions' | 'overrides'>,
+export function resolveMemberScopes(
+  team: TeamPeople & Pick<RemoteTeam, 'scopes' | 'overrides'>,
   userId: string
-): TeamPermissions {
-  if (team.owner.id === userId) return FULL_TEAM_PERMISSIONS;
-  const override = team.overrides.find((entry) => entry.userId === userId);
-  return { ...team.permissions, ...override?.permissions };
+): AccessScopes {
+  if (team.owner.id === userId) return ACCESS_SCOPES;
+  return team.overrides.find((entry) => entry.userId === userId)?.scopes ?? team.scopes;
 }
 
 export interface TeamJoinFragment {

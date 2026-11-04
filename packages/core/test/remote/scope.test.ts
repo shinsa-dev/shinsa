@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import {
-  DEFAULT_TEAM_PERMISSIONS,
+  type ActionScope,
+  DEFAULT_TEAM_SCOPES,
   isTaskInScope,
   OWNER_ONLY_MESSAGE,
   REMOTE_APP_ORIGIN,
@@ -12,7 +13,7 @@ import {
   SCOPE_MESSAGES,
   SCOPED_COMMANDS,
   TEAM_SCOPE_MESSAGES,
-  type TeamPermissions,
+  toggleScope,
   USER_COMMAND_TYPES,
 } from '../../src/index.ts';
 import { createHarness, createTask, linkSession, proposePlan, registerRepo } from '../harness.ts';
@@ -258,16 +259,18 @@ test('resolveScopedEngineInfo lists only the commands a guest may send', () => {
   expect(info.commands).not.toContain('task.hand_off');
 });
 
-function teamScope(permissions: Partial<TeamPermissions> = {}) {
-  return {
-    kind: 'team' as const,
-    teamId: 'team-1',
-    permissions: { ...DEFAULT_TEAM_PERMISSIONS, ...permissions },
-  };
+type ScopeChanges = Partial<Record<ActionScope, boolean>>;
+
+function teamScope(changes: ScopeChanges = {}) {
+  const scopes = Object.entries(changes).reduce(
+    (current, [scope, on]) => toggleScope(current, scope as ActionScope, on),
+    DEFAULT_TEAM_SCOPES
+  );
+  return { kind: 'team' as const, teamId: 'team-1', scopes };
 }
 
-function teammate(permissions: Partial<TeamPermissions> = {}) {
-  return { ...KAI, scope: teamScope(permissions) };
+function teammate(changes: ScopeChanges = {}) {
+  return { ...KAI, scope: teamScope(changes) };
 }
 
 function createTeamTasks() {
@@ -317,22 +320,26 @@ describe('a teammate’s scope', () => {
     );
   });
 
-  test('takes over, gives back and shares by default, and is refused each one its team turned off', () => {
-    const { harness, shared } = createTeamTasks();
+  test('shares, answers gates and gives back by default, and is refused each scope its team turned off', () => {
+    const { harness, shared, gate } = createTeamTasks();
     const state = harness.state;
     const share = { type: 'task.share', taskId: shared } as const;
     const preview = { type: 'preview.share', taskId: shared, serviceId: 'svc' } as const;
-    const takeOver = { type: 'task.take_over', taskId: shared } as const;
-    expect(resolveScopedRefusal(state, teammate(), takeOver)).toBeNull();
+    const answer = { type: 'gate.answer', gateId: gate.id, decision: 'approve', response: null } as const;
     expect(resolveScopedRefusal(state, teammate(), share)).toBeNull();
     expect(resolveScopedRefusal(state, teammate(), preview)).toBeNull();
-    expect(resolveScopedRefusal(state, teammate({ takeOver: false }), takeOver)).toBe(
-      TEAM_SCOPE_MESSAGES.takeOver
-    );
+    expect(resolveScopedRefusal(state, teammate({ gates: false }), answer)).toBe(TEAM_SCOPE_MESSAGES.gates);
+    expect(
+      resolveScopedRefusal(state, teammate({ gates: false }), {
+        type: 'task.prioritize',
+        taskId: shared,
+        priority: 'high',
+      })
+    ).toBeNull();
     expect(resolveScopedRefusal(state, teammate({ share: false }), share)).toBe(TEAM_SCOPE_MESSAGES.share);
     expect(resolveScopedRefusal(state, teammate({ share: false }), preview)).toBe(TEAM_SCOPE_MESSAGES.share);
     expect(
-      resolveScopedRefusal(state, teammate({ act: false }), { type: 'task.give_back', taskId: shared })
+      resolveScopedRefusal(state, teammate({ actions: false }), { type: 'task.give_back', taskId: shared })
     ).toBeNull();
   });
 
@@ -344,12 +351,12 @@ describe('a teammate’s scope', () => {
     expect(resolveScopedRefusal(harness.state, teammate(), update)).toBe(TEAM_SCOPE_MESSAGES.message);
     expect(resolveScopedRefusal(harness.state, teammate({ message: true }), message)).toBeNull();
     const pause = { type: 'task.snooze', taskId: shared } as const;
-    expect(resolveScopedRefusal(harness.state, teammate({ act: false }), pause)).toBe(
-      TEAM_SCOPE_MESSAGES.act
+    expect(resolveScopedRefusal(harness.state, teammate({ actions: false }), pause)).toBe(
+      TEAM_SCOPE_MESSAGES.actions
     );
     holdBy(harness, shared);
     expect(resolveScopedRefusal(harness.state, teammate(), message)).toBeNull();
-    expect(resolveScopedRefusal(harness.state, teammate({ act: false }), pause)).toBeNull();
+    expect(resolveScopedRefusal(harness.state, teammate({ actions: false }), pause)).toBeNull();
     const robin = { ...teammate(), id: 'u-robin', login: 'robin' };
     expect(resolveScopedRefusal(harness.state, robin, message)).toBe(TEAM_SCOPE_MESSAGES.message);
     expect(
@@ -423,15 +430,13 @@ describe('a teammate’s scope', () => {
 
   test('resolveScopedEngineInfo announces what the team allows', () => {
     const open = resolveScopedEngineInfo('1.2.3', teamScope()).commands;
-    expect(open).toContain('task.take_over');
     expect(open).toContain('task.share');
     expect(open).toContain('task.give_back');
     expect(open).toContain('task.message');
     expect(open).not.toContain('task.hand_off');
-    const closed = resolveScopedEngineInfo('1.2.3', teamScope({ takeOver: false, share: false })).commands;
-    expect(closed).not.toContain('task.take_over');
+    const closed = resolveScopedEngineInfo('1.2.3', teamScope({ share: false })).commands;
     expect(closed).not.toContain('preview.share');
     expect(closed).toContain('task.give_back');
-    expect(resolveScopedEngineInfo('1.2.3', taskScope('t1')).commands).not.toContain('task.take_over');
+    expect(resolveScopedEngineInfo('1.2.3', taskScope('t1')).commands).not.toContain('task.give_back');
   });
 });

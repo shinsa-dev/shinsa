@@ -3,14 +3,14 @@ import type { UserCommand } from '../commands/index.ts';
 import type { Gate, GateType, Run, RunAccount, Task, TaskGuest } from '../domain/index.ts';
 import { resolveEngineInfo } from '../protocol/engine.ts';
 import { resolveStatePatch, type StatePatch } from '../protocol/patch.ts';
+import { hasScope } from '../scopes/index.ts';
+import type { AccessScopes, ActionScope } from '../scopes/schema.ts';
 import { isTeamTask } from '../share/teams.ts';
 import type { StateChanges } from '../state/draft.ts';
 import { createState, type ShinsaState } from '../state/project.ts';
-import type { TeamPermissions } from './contract.ts';
 import { OWNER_ONLY_MESSAGE } from './local-only.ts';
-import type { TeamPermission } from './teams.ts';
 
-type CommandPermission = Exclude<TeamPermission, 'services'>;
+type CommandScope = Exclude<ActionScope, 'services' | 'fork'>;
 
 export const SCOPED_COMMANDS = [
   'task.prioritize',
@@ -41,7 +41,6 @@ export const SCOPED_COMMANDS = [
 ] as const satisfies readonly UserCommand['type'][];
 
 export const TEAM_COMMANDS = [
-  'task.take_over',
   'task.give_back',
   'task.share',
   'task.unshare',
@@ -56,7 +55,7 @@ type ScopedCommand = Extract<
 
 export type ActorScope =
   | { kind: 'task'; taskId: string }
-  | { kind: 'team'; teamId: string; permissions: TeamPermissions };
+  | { kind: 'team'; teamId: string; scopes: AccessScopes };
 
 export interface ScopedActor extends TaskGuest {
   scope: ActorScope;
@@ -72,6 +71,8 @@ const MESSAGE_COMMANDS: ReadonlySet<string> = new Set<ScopedCommand['type']>([
   'round.send',
   'suggestion.keep',
 ]);
+
+const GATE_COMMANDS: ReadonlySet<string> = new Set<ScopedCommand['type']>(['gate.answer', 'merge_step.tick']);
 
 const SHARE_COMMANDS: ReadonlySet<string> = new Set<ScopedCommand['type']>([
   'task.share',
@@ -94,10 +95,10 @@ export const SCOPE_MESSAGES = {
 export const TEAM_SCOPE_MESSAGES = {
   command: 'This stays with the owner of the machine. Teammates work on the tasks of the team’s projects.',
   task: 'This task is not in a project your team sees.',
-  act: 'Your team’s owner has not let teammates act on tasks. Take it over to work on it.',
-  takeOver: 'Your team’s owner has not let you take tasks over.',
+  gates: 'Your team’s owner has not let you answer this task’s gates.',
+  actions: 'Your team’s owner has not let you act on tasks.',
   share: 'Your team’s owner has not let you share tasks.',
-  message: 'Your team’s owner has not let you message agents. Take the task over to message its agent.',
+  message: 'Your team’s owner has not let you message agents. Ask them to hand you the task.',
 } as const;
 
 function isScopeCommand(scope: ActorScope, type: string) {
@@ -131,24 +132,24 @@ export function isHeldBy(task: Task | undefined, actor: Pick<ScopedActor, 'id'>)
   return task?.handoff?.teamId != null && task.handoff.guest?.id === actor.id;
 }
 
-function resolveTeamPermission(command: ScopedCommand): CommandPermission {
-  if (command.type === 'task.take_over') return 'takeOver';
-  if (SHARE_COMMANDS.has(command.type)) return 'share';
-  if (MESSAGE_COMMANDS.has(command.type)) return 'message';
-  return 'act';
+export function resolveCommandScope(type: string): CommandScope {
+  if (SHARE_COMMANDS.has(type)) return 'share';
+  if (MESSAGE_COMMANDS.has(type)) return 'message';
+  if (GATE_COMMANDS.has(type)) return 'gates';
+  return 'actions';
 }
 
 function resolveTeamRefusal(
   state: ShinsaState,
   actor: ScopedActor,
-  permissions: TeamPermissions,
+  scopes: AccessScopes,
   command: ScopedCommand,
   taskId: string
 ) {
   if (command.type === 'task.give_back') return null;
-  const permission = resolveTeamPermission(command);
-  const held = permission !== 'takeOver' && permission !== 'share' && isHeldBy(state.tasks[taskId], actor);
-  return permissions[permission] || held ? null : TEAM_SCOPE_MESSAGES[permission];
+  const scope = resolveCommandScope(command.type);
+  const held = scope !== 'share' && isHeldBy(state.tasks[taskId], actor);
+  return hasScope(scopes, scope) || held ? null : TEAM_SCOPE_MESSAGES[scope];
 }
 
 export function resolveScopedRefusal(state: ShinsaState, actor: ScopedActor, command: UserCommand) {
@@ -162,7 +163,7 @@ export function resolveScopedRefusal(state: ShinsaState, actor: ScopedActor, com
     return SCOPE_MESSAGES.attachments;
   const gate = command.type === 'gate.answer' ? state.gates[command.gateId] : undefined;
   if (gate && KEYBOARD_GATES.has(gate.type)) return SCOPE_MESSAGES.gate;
-  return scope.kind === 'team' ? resolveTeamRefusal(state, actor, scope.permissions, command, taskId) : null;
+  return scope.kind === 'team' ? resolveTeamRefusal(state, actor, scope.scopes, command, taskId) : null;
 }
 
 function redactAccount<T extends RunAccount | null | undefined>(account: T): T {
@@ -170,7 +171,7 @@ function redactAccount<T extends RunAccount | null | undefined>(account: T): T {
 }
 
 function seesShares(scope: ActorScope) {
-  return scope.kind === 'team' && scope.permissions.share;
+  return scope.kind === 'team' && hasScope(scope.scopes, 'share');
 }
 
 function redactShares(task: Task, scope: ActorScope): Task {
@@ -270,8 +271,7 @@ export function resolveScopedPatch(
 function isAnnounced(scope: ActorScope, command: string) {
   if (!isScopeCommand(scope, command)) return false;
   if (scope.kind === 'task') return true;
-  if (command === 'task.take_over') return scope.permissions.takeOver;
-  return SHARE_COMMANDS.has(command) ? scope.permissions.share : true;
+  return SHARE_COMMANDS.has(command) ? hasScope(scope.scopes, 'share') : true;
 }
 
 export function resolveScopedEngineInfo(version: string, scope: ActorScope) {

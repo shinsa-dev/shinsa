@@ -1,49 +1,13 @@
 import type { SharePreset } from '../domain/settings.ts';
+import { ACCESS_PRESETS, listViewScopes } from '../scopes/index.ts';
+import type { ViewScope } from '../scopes/schema.ts';
 
-export type ShareGroup =
-  | 'identity'
-  | 'description'
-  | 'requests'
-  | 'progress'
-  | 'summary'
-  | 'people'
-  | 'plan'
-  | 'reports'
-  | 'review'
-  | 'evidence'
-  | 'checks'
-  | 'pull_request'
-  | 'activity'
-  | 'code'
-  | 'runs'
-  | 'live'
-  | 'messages';
-
-const STATUS_GROUPS: readonly ShareGroup[] = ['identity', 'description', 'progress'];
-
-const STANDARD_GROUPS: readonly ShareGroup[] = [
-  ...STATUS_GROUPS,
-  'summary',
-  'requests',
-  'people',
-  'plan',
-  'reports',
-  'review',
-  'evidence',
-  'checks',
-  'pull_request',
-  'activity',
-  'code',
-  'runs',
-  'live',
-];
-
-const FULL_GROUPS: readonly ShareGroup[] = [...STANDARD_GROUPS, 'messages'];
+export type ShareGroup = ViewScope;
 
 export const SHARE_PRESET_GROUPS: Readonly<Record<SharePreset, readonly ShareGroup[]>> = {
-  status: STATUS_GROUPS,
-  standard: STANDARD_GROUPS,
-  full: FULL_GROUPS,
+  status: listViewScopes(ACCESS_PRESETS.status),
+  standard: listViewScopes(ACCESS_PRESETS.standard),
+  full: listViewScopes(ACCESS_PRESETS.full),
 };
 
 export function hasShareGroup(preset: SharePreset, group: ShareGroup) {

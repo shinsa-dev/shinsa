@@ -223,14 +223,13 @@ test/                gates.test.ts reads every RemoteApi route with HttpApi.refl
   and a machine of one of them, as `wss://t-<instance>.shinsa.dev/team?token=…`, signed with that machine's connect
   key for the account that asked; the machine then checks the account against its own copy of the members and the
   team key's proof. Removing a user, a team or a machine cascades its rows.
-  What teammates may do on each other's machines (`0008_team_permissions.sql`) is the team's `permissions` and each
-  member's own (`team_members.permissions`), both a JSON `TeamPermissionsPatch` of `act`, `takeOver`, `share`,
-  `services` and `message`. Only the owner's machine changes them, with `POST /__remote/machine/teams/<team>/permissions
-  { userId?, permissions }` (403 `not_owner` for anyone else, 404 for a `userId` that is not a member): without a
-  `userId` it sets the team's, with one that member's, and `null` for a right clears it, back to the default or the
-  team's. It answers the team. Every `RemoteTeam` carries the team's resolved over `DEFAULT_TEAM_PERMISSIONS`
-  (everything but `message`) as `permissions`, and each member set apart as `overrides`; a removed member's go with
-  their row. The Worker only keeps them: each machine enforces them for its own tasks.
+  What teammates may do on each other's machines (`0008_team_scopes.sql`) is the team's `scopes` and each member's
+  own (`team_members.scopes`), both a JSON list of core's `AccessScope`s, null for the default or the team's. Only the
+  owner's machine changes them, with `POST /__remote/machine/teams/<team>/scopes { userId?, scopes }` (403 `not_owner`
+  for anyone else, 404 for a `userId` that is not a member, 400 for a scope core does not know): without a `userId`
+  it sets the team's, with one that member's, and `null` puts the default or the team's back. It answers the team.
+  Every `RemoteTeam` carries the team's list, or `DEFAULT_TEAM_SCOPES` (Collaborate: everything but `message`), as
+  `scopes`, and each member set apart as `overrides`; a removed member's go with their row. The Worker only keeps them: each machine enforces them for its own tasks.
 - **Signing keys** (`instances.signing_key`, `0006_signing_keys.sql`). Each machine's heartbeat may send
   `signingKey`, its ECDSA P-256 public key (raw, base64url; anything else is 400 `body_invalid`, and one left out keeps
   the stored key), and the team listing returns it on each machine (`TeamMachine.signingKey`). Teammates verify a

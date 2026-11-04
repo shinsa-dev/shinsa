@@ -82,14 +82,14 @@ export function isTaskHandedOff(task: Task) {
 
 type TaskMachine = Pick<MachineView, 'handedBy' | 'teammate'> | null;
 
-function isTakenByViewer(task: Task, machine: TaskMachine) {
+function isHeldByViewer(task: Task, machine: TaskMachine) {
   return Boolean(machine?.teammate && isHeldBy(task, { id: machine.teammate.viewerId }));
 }
 
 export function describeHandoffMark(task: Task, machine: TaskMachine) {
   if (machine?.handedBy) return `Handed to you by ${resolveFirstName(machine.handedBy)}`;
-  if (machine?.teammate && isTakenByViewer(task, machine))
-    return `You took this over from ${resolveFirstName(machine.teammate.owner)}`;
+  if (machine?.teammate && isHeldByViewer(task, machine))
+    return `Handed to you by ${resolveFirstName(machine.teammate.owner)}`;
   const guest = task.handoff?.guest;
   return guest ? `Handed to ${resolveFirstName(guest)}` : 'Hand-off link not opened yet';
 }
@@ -111,9 +111,9 @@ export function resolveHandoffFact(task: Task, machine: TaskMachine): HandoffFac
       hint: 'The task stays theirs and runs on their machine',
     };
   if (machine?.teammate)
-    return isTakenByViewer(task, machine)
+    return isHeldByViewer(task, machine)
       ? {
-          verb: 'Taken over from',
+          verb: 'Handed to you by',
           user: machine.teammate.owner,
           hint: 'It runs on their machine. Give it back from the task’s actions.',
         }

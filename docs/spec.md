@@ -447,13 +447,14 @@ when they were last updated, from the copy each teammate's machine keeps and pas
 (`docs/engine.md` → Teams → Offline teammates).
 On app.shinsa.dev a teammate does more than watch: their browser reaches the team's tasks on every member's machine
 by itself, with no invite and no Give machine access, and sees nothing outside the team's projects. The team's owner
-sets What teammates can do in Settings → Teams, for the team and for each person: act on tasks, take over, share and
-open services are on by default, messaging agents is off. A teammate presses Take over and the task is theirs to
-steer, its gates in their Needs you, until they give it back or you take it back; you hand a task to a teammate from
-Share task with no link. They open a team task's running services at its private address and make share links for
-it. Every person and machine shows Online, Away or Offline with when they were last seen, and leaving the team,
-taking a project out of it or narrowing someone's rights ends their access at once (`docs/engine.md` → Teams →
-Teammates act on team tasks).
+sets What teammates can do in Settings → Teams, for the team and for each person: a preset (View only, Collaborate,
+Full access) over six scopes, answering gates, acting on tasks, messaging agents, forking, sharing and opening
+services. Collaborate is the default: everything but messaging agents. Share links use the same scopes and presets.
+You hand a task to a teammate from Share task → Hand off with no link: it is theirs to steer, its gates in their
+Needs you, until they give it back or you take it back. They open a team task's running services at its private
+address, fork it onto their own machine and make share links for it. Every person and machine shows Online, Away or
+Offline with when they were last seen, and leaving the team, taking a project out of it or narrowing someone's scopes
+ends their access at once (`docs/engine.md` → Teams → Teammates act on team tasks).
 Share preview, on a task's running service with a preview URL, does the same for the dev server itself: a link,
 `<label>.shinsa.page/?key=…`, that opens the running service in any browser through the machine's tunnel, hot reload
 included, each preview its own origin on a domain apart from shinsa.dev. It has the same time limits, ends with the
@@ -1228,12 +1229,17 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
   for a teammate gave them every project on the machine, so nobody granted it. Team access is the hand-off guest's
   scope widened from one task to the team's projects: the same sealed channel, state and refusals, keyed by a device
   each member's browser enrols with by itself.
-- **Generous by default, the owner's to narrow.** Act, take over, share and services are on, messaging agents is off,
-  since a message steers someone else's agent. One switch per right for the whole team, and each person's own value
-  beside it, so a large team changes one setting and a small one picks people. Only the team's owner changes them,
-  from their own machine; a machine's owner cannot override them for their own machine yet.
-- **Take over is a hand-off without the link.** It reuses `TaskHandoff`, so the banner and its Remove, Needs you and activity
-  work as they do for a link, and the holder may message the agent whatever the team's setting.
+- **One scope system, presets on top.** Share links and teams read the same list of scopes (`scopes/`): view scopes
+  for what a person sees, action scopes for what they may do, so a single feature such as forking can be turned off
+  on its own. Presets are named lists, Status, Standard, Collaborate and Full; a share link picks among the view ones
+  and a team among View only, Collaborate and Full, or ticks its own. A large team picks one preset, a small one sets
+  people apart. Collaborate is the default, everything but messaging agents, since a message steers someone else's
+  agent. Only the team's owner changes them, from their own machine; a machine's owner cannot override them for
+  their own machine yet.
+- **The owner hands a task over; nobody takes one.** Who steers a task is its owner's call, so a teammate never takes
+  one on their own: the owner hands it to a teammate under Share task → Hand off, reusing `TaskHandoff`, so the banner
+  and its Remove, Needs you and activity work as they do for a link, and the holder may message the agent whatever
+  the team's scopes. A team where anyone may steer anything gives everyone `message` instead.
 - **Presence from what is live.** A machine is offline when its channel drops, and a person is online while a page
   of theirs is in use or they have a teammate's team view open; app.shinsa.dev's five-minute heartbeat is only the
   fallback.

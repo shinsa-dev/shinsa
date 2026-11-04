@@ -1,4 +1,4 @@
-import { RemoteUserId, TeamId, type TeamPermissionsPatch } from '@shinsa/core';
+import { type AccessScopes, RemoteUserId, TeamId } from '@shinsa/core';
 import { Clock, Context, Effect, Layer, Option, Schema } from 'effect';
 import { SqlClient, SqlSchema } from 'effect/sql';
 import { MACHINE_COLUMNS, Machine } from '../machines/schema.ts';
@@ -6,7 +6,7 @@ import { createInvites } from '../shared/invites.ts';
 import { createMembership } from '../shared/membership.ts';
 import { Count, Found, type Invites, type Membership } from '../shared/schema.ts';
 
-import { MemberPermissionsRow, NewTeam, StoredPermissions, TEAM_COLUMNS, Team } from './schema.ts';
+import { MemberScopesRow, NewTeam, StoredScopes, TEAM_COLUMNS, Team } from './schema.ts';
 
 export class Teams extends Context.Service<
   Teams,
@@ -18,13 +18,9 @@ export class Teams extends Context.Service<
     remove(id: TeamId): Effect.Effect<void>;
     shareTeam(userId: RemoteUserId, otherId: RemoteUserId): Effect.Effect<boolean>;
     listMachines(id: TeamId): Effect.Effect<ReadonlyArray<Machine>>;
-    replacePermissions(id: TeamId, permissions: TeamPermissionsPatch): Effect.Effect<void>;
-    listMemberPermissions(id: TeamId): Effect.Effect<ReadonlyArray<MemberPermissionsRow>>;
-    replaceMemberPermissions(
-      id: TeamId,
-      userId: RemoteUserId,
-      permissions: TeamPermissionsPatch
-    ): Effect.Effect<void>;
+    replaceScopes(id: TeamId, scopes: AccessScopes | null): Effect.Effect<void>;
+    listMemberScopes(id: TeamId): Effect.Effect<ReadonlyArray<MemberScopesRow>>;
+    replaceMemberScopes(id: TeamId, userId: RemoteUserId, scopes: AccessScopes | null): Effect.Effect<void>;
     readonly invites: Invites<TeamId>;
     readonly requesters: Membership<TeamId>;
     readonly members: Membership<TeamId>;
@@ -74,26 +70,26 @@ export class Teams extends Context.Service<
           sql`SELECT ${sql.literal(MACHINE_COLUMNS)} FROM instances WHERE user_id IN (SELECT user_id FROM teams WHERE id = ${id} UNION SELECT user_id FROM team_members WHERE team_id = ${id}) ORDER BY created_at, id`,
       });
 
-      const teamPermissions = SqlSchema.void({
-        Request: Schema.Struct({ id: TeamId, permissions: StoredPermissions }),
-        execute: (row) => sql`UPDATE teams SET permissions = ${row.permissions} WHERE id = ${row.id}`,
+      const teamScopes = SqlSchema.void({
+        Request: Schema.Struct({ id: TeamId, scopes: StoredScopes }),
+        execute: (row) => sql`UPDATE teams SET scopes = ${row.scopes} WHERE id = ${row.id}`,
       });
-      const memberPermissions = SqlSchema.findAll({
+      const memberScopes = SqlSchema.findAll({
         Request: TeamId,
-        Result: MemberPermissionsRow,
+        Result: MemberScopesRow,
         execute: (id) =>
-          sql`SELECT user_id, permissions FROM team_members WHERE team_id = ${id} AND permissions != '{}' ORDER BY added_at, user_id`,
+          sql`SELECT user_id, scopes FROM team_members WHERE team_id = ${id} AND scopes IS NOT NULL ORDER BY added_at, user_id`,
       });
-      const memberPermissionsUpdate = SqlSchema.void({
-        Request: Schema.Struct({ id: TeamId, userId: RemoteUserId, permissions: StoredPermissions }),
+      const memberScopesUpdate = SqlSchema.void({
+        Request: Schema.Struct({ id: TeamId, userId: RemoteUserId, scopes: StoredScopes }),
         execute: (row) =>
-          sql`UPDATE team_members SET permissions = ${row.permissions} WHERE team_id = ${row.id} AND user_id = ${row.userId}`,
+          sql`UPDATE team_members SET scopes = ${row.scopes} WHERE team_id = ${row.id} AND user_id = ${row.userId}`,
       });
 
       const create = Effect.fn('Teams.create')(function* (team: Omit<NewTeam, 'createdAt'>) {
         const created = { ...team, createdAt: yield* Clock.currentTimeMillis };
         yield* insert(created);
-        return { ...created, permissions: {} } satisfies Team;
+        return { ...created, scopes: null } satisfies Team;
       }, Effect.orDie);
 
       return Teams.of({
@@ -111,17 +107,14 @@ export class Teams extends Context.Service<
           Effect.orDie
         ),
         listMachines: Effect.fn('Teams.listMachines')((id: TeamId) => machines(id), Effect.orDie),
-        replacePermissions: Effect.fn('Teams.replacePermissions')(
-          (id: TeamId, permissions: TeamPermissionsPatch) => teamPermissions({ id, permissions }),
+        replaceScopes: Effect.fn('Teams.replaceScopes')(
+          (id: TeamId, scopes: AccessScopes | null) => teamScopes({ id, scopes }),
           Effect.orDie
         ),
-        listMemberPermissions: Effect.fn('Teams.listMemberPermissions')(
-          (id: TeamId) => memberPermissions(id),
-          Effect.orDie
-        ),
-        replaceMemberPermissions: Effect.fn('Teams.replaceMemberPermissions')(
-          (id: TeamId, userId: RemoteUserId, permissions: TeamPermissionsPatch) =>
-            memberPermissionsUpdate({ id, userId, permissions }),
+        listMemberScopes: Effect.fn('Teams.listMemberScopes')((id: TeamId) => memberScopes(id), Effect.orDie),
+        replaceMemberScopes: Effect.fn('Teams.replaceMemberScopes')(
+          (id: TeamId, userId: RemoteUserId, scopes: AccessScopes | null) =>
+            memberScopesUpdate({ id, userId, scopes }),
           Effect.orDie
         ),
         invites: createInvites(sql, TeamId, {

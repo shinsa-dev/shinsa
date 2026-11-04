@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { DEFAULT_TEAM_PERMISSIONS, serializeTaskDetail, type TaskGuest } from '../../src/index.ts';
+import { DEFAULT_TEAM_SCOPES, serializeTaskDetail, type TaskGuest, toggleScope } from '../../src/index.ts';
 import {
   parseCommand,
   createHarness,
@@ -280,8 +280,8 @@ function teamTask(harness: Harness) {
 }
 
 function asTeammate(person: TaskGuest = KAI, message = false) {
-  const permissions = { ...DEFAULT_TEAM_PERMISSIONS, message };
-  return { guest: { ...person, scope: { kind: 'team' as const, teamId: 'team-1', permissions } } };
+  const scopes = toggleScope(DEFAULT_TEAM_SCOPES, 'message', message);
+  return { guest: { ...person, scope: { kind: 'team' as const, teamId: 'team-1', scopes } } };
 }
 
 function lastPrompt(harness: Harness) {
@@ -352,36 +352,21 @@ describe('handing a task to a teammate', () => {
   });
 });
 
-describe('taking a task over', () => {
-  test('makes the teammate its holder in one step, and once is enough', () => {
+describe('a task handed to a teammate', () => {
+  test('is the owner’s to give: a teammate cannot give back a task they do not hold', () => {
     const harness = createHarness();
     const taskId = teamTask(harness);
-    harness.send({ type: 'task.take_over', taskId }, asTeammate());
-    expect(harness.task(taskId).handoff).toMatchObject({ guest: KAI, teamId: 'team-1', url: null });
-    expect(harness.task(taskId).activity.at(-1)).toMatchObject({
-      actor: 'shinsa',
-      text: 'Kai took this task over',
-    });
-    expect(harness.send({ type: 'task.take_over', taskId }, asTeammate()).events).toEqual([]);
-    expect(() => harness.send({ type: 'task.take_over', taskId }, asTeammate(ROBIN))).toThrow(
-      'Kai has this task. Its owner takes it back first.'
-    );
-  });
-
-  test('is a teammate’s alone: the owner and a guest of one task cannot take over', () => {
-    const harness = createHarness();
-    const taskId = teamTask(harness);
-    const refusal = 'Only a teammate takes a task over, from the team’s tasks in Shinsa Cloud.';
-    expect(() => harness.send({ type: 'task.take_over', taskId })).toThrow(refusal);
+    const refusal = 'Only the teammate who holds this task can give it back.';
     expect(() => harness.send({ type: 'task.give_back', taskId })).toThrow(refusal);
+    expect(harness.send({ type: 'task.give_back', taskId }, asTeammate()).events).toEqual([]);
   });
 
-  test('a teammate who holds the task messages its agent as its holder, and others as a teammate', () => {
+  test('its holder messages its agent as its holder, and others as a teammate', () => {
     const harness = createHarness();
     const taskId = teamTask(harness);
     harness.send({ type: 'task.message', taskId, text: 'Look at the tabs.' }, asTeammate(ROBIN, true));
     expect(lastPrompt(harness)).toContain('From robin, a teammate of the human:');
-    harness.send({ type: 'task.take_over', taskId }, asTeammate());
+    harness.send({ type: 'task.hand_to_teammate', taskId, teamId: 'team-1', teammate: KAI });
     harness.send({ type: 'task.message', taskId, text: 'Use the new tab API.' }, asTeammate());
     expect(lastPrompt(harness)).toContain('From Kai, who the human handed this task to:');
   });
@@ -389,7 +374,7 @@ describe('taking a task over', () => {
   test('the holder gives it back, and nobody else can', () => {
     const harness = createHarness();
     const taskId = teamTask(harness);
-    harness.send({ type: 'task.take_over', taskId }, asTeammate());
+    harness.send({ type: 'task.hand_to_teammate', taskId, teamId: 'team-1', teammate: KAI });
     expect(harness.send({ type: 'task.give_back', taskId }, asTeammate(ROBIN)).events).toEqual([]);
     const decision = harness.send({ type: 'task.give_back', taskId }, asTeammate());
     expect(decision.effects.filter((effect) => effect.kind === 'handoff.revoke')).toEqual([]);

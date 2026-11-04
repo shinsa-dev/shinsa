@@ -1,6 +1,5 @@
 import type { Engine } from '../../apps/engine/src/runtime/index.ts';
 import {
-  DEFAULT_TEAM_PERMISSIONS,
   isTaskSettled,
   resolveFirstName,
   resolveTaskProject,
@@ -84,7 +83,7 @@ export async function createPreviewHandoffs(studio: StartedMachine) {
   ];
 }
 
-export async function createPreviewTakeOver(studio: StartedMachine, projectId: string | undefined) {
+export async function createPreviewTeammateHandoff(studio: StartedMachine, projectId: string | undefined) {
   const { engine } = studio;
   const task = Object.values(engine.state.tasks).find(
     (entry) =>
@@ -96,15 +95,16 @@ export async function createPreviewTakeOver(studio: StartedMachine, projectId: s
       resolveTaskProject(engine.state, entry) === projectId
   );
   if (!task?.handle) return [];
-  const kai = {
-    ...TEAMMATE,
-    scope: { kind: 'team' as const, teamId: TEAM.id, permissions: DEFAULT_TEAM_PERMISSIONS },
-  };
-  await engine.dispatch({ type: 'task.take_over', taskId: task.id }, { guest: kai });
+  await engine.dispatch({
+    type: 'task.hand_to_teammate',
+    taskId: task.id,
+    teamId: TEAM.id,
+    teammate: TEAMMATE,
+  });
   const at = `http://${HOST}:${studio.machine.port}/tasks/${task.handle}`;
   return [
     {
-      label: `Studio: ${task.handle}, taken over by ${resolveFirstName(TEAMMATE)}, with Remove in its banner`,
+      label: `Studio: ${task.handle}, handed to ${resolveFirstName(TEAMMATE)}, with Remove in its banner`,
       url: at,
     },
     {

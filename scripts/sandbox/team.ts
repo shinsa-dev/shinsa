@@ -1,12 +1,13 @@
 import type { ServerWebSocket } from 'bun';
 import {
-  DEFAULT_TEAM_PERMISSIONS,
+  ACCESS_PRESETS,
+  DEFAULT_TEAM_SCOPES,
   REMOTE_PATHS,
   type RemoteTeam,
   type RemoteUser,
   type TeamJoinResponse,
-  type TeamPermissionsPatch,
-  type TeamPermissionsRequest,
+  type TeamScopesRequest,
+  toggleScope,
   type TeamPreviewResponse,
 } from '../../packages/core/src/index.ts';
 import { DAY, HOUR } from '../kit/time.ts';
@@ -34,8 +35,8 @@ export const TEAM: Omit<RemoteTeam, 'role'> = {
     { id: 'laptop', name: 'Laptop', userId: USER.id, online: true, lastSeenAt: Date.now() },
     { id: 'kai', name: 'Kai’s MacBook', userId: TEAMMATE.id, online: true, lastSeenAt: Date.now() },
   ],
-  permissions: DEFAULT_TEAM_PERMISSIONS,
-  overrides: [{ userId: TEAMMATE.id, permissions: { message: true } }],
+  scopes: DEFAULT_TEAM_SCOPES,
+  overrides: [{ userId: TEAMMATE.id, scopes: ACCESS_PRESETS.full }],
   createdAt: Date.now() - 7 * DAY,
 };
 
@@ -60,7 +61,7 @@ const OTHER_TEAMS: Omit<RemoteTeam, 'role'>[] = [
     })),
     requests: [],
     machines: [{ id: 'kai', name: 'Kai’s MacBook', userId: TEAMMATE.id, online: false, lastSeenAt: null }],
-    permissions: { ...DEFAULT_TEAM_PERMISSIONS, services: false },
+    scopes: toggleScope(DEFAULT_TEAM_SCOPES, 'services', false),
     overrides: [],
     createdAt: Date.now() - 30 * DAY,
   },
@@ -71,13 +72,13 @@ const OTHER_TEAMS: Omit<RemoteTeam, 'role'>[] = [
     members: [],
     requests: [],
     machines: TEAM.machines.filter((machine) => machine.userId === USER.id),
-    permissions: DEFAULT_TEAM_PERMISSIONS,
+    scopes: DEFAULT_TEAM_SCOPES,
     overrides: [],
     createdAt: Date.now() - DAY,
   },
 ];
 
-const TEAM_PERMISSIONS_PATH = new RegExp(`^${REMOTE_PATHS.machineTeams}/([^/]+)/permissions$`);
+const TEAM_SCOPES_PATH = new RegExp(`^${REMOTE_PATHS.machineTeams}/([^/]+)/scopes$`);
 
 const REQUESTED_TEAM = { id: 'growth', name: 'Growth' };
 
@@ -85,39 +86,22 @@ const PREVIEW_TEAM_KEYS: Record<string, string> = Object.fromEntries(
   [...OTHER_TEAMS, REQUESTED_TEAM].map((team) => [team.id, createRandomKey(32)])
 );
 
-const TEAM_RIGHTS = new Map<string, Pick<RemoteTeam, 'permissions' | 'overrides'>>(
-  [TEAM, ...OTHER_TEAMS].map((team) => [
-    team.id,
-    { permissions: team.permissions, overrides: team.overrides },
-  ])
+const TEAM_SCOPES = new Map<string, Pick<RemoteTeam, 'scopes' | 'overrides'>>(
+  [TEAM, ...OTHER_TEAMS].map((team) => [team.id, { scopes: team.scopes, overrides: team.overrides }])
 );
 
-function resolveRightsPatch(base: TeamPermissionsPatch, change: TeamPermissionsRequest['permissions']) {
-  const patch: Record<string, boolean> = { ...base };
-  for (const [name, value] of Object.entries(change)) {
-    if (value === null || value === undefined) delete patch[name];
-    else patch[name] = value;
-  }
-  return patch;
-}
-
-async function respondRightsChange(request: Request, teamId: string) {
-  const rights = TEAM_RIGHTS.get(teamId);
-  if (!rights)
+async function respondScopesChange(request: Request, teamId: string) {
+  const current = TEAM_SCOPES.get(teamId);
+  if (!current)
     return Response.json({ error: { code: 'not_found', message: 'No such team.' } }, { status: 404 });
-  const { userId, permissions } = (await request.json()) as TeamPermissionsRequest;
+  const { userId, scopes } = (await request.json()) as TeamScopesRequest;
   if (!userId) {
-    TEAM_RIGHTS.set(teamId, {
-      ...rights,
-      permissions: { ...rights.permissions, ...resolveRightsPatch({}, permissions) },
-    });
+    TEAM_SCOPES.set(teamId, { ...current, scopes: scopes ?? DEFAULT_TEAM_SCOPES });
     return Response.json({ ok: true });
   }
-  const current = rights.overrides.find((entry) => entry.userId === userId)?.permissions ?? {};
-  const patch = resolveRightsPatch(current, permissions);
-  const others = rights.overrides.filter((entry) => entry.userId !== userId);
-  const overrides = Object.keys(patch).length === 0 ? others : [...others, { userId, permissions: patch }];
-  TEAM_RIGHTS.set(teamId, { ...rights, overrides });
+  const others = current.overrides.filter((entry) => entry.userId !== userId);
+  const overrides = scopes ? [...others, { userId, scopes }] : others;
+  TEAM_SCOPES.set(teamId, { ...current, overrides });
   return Response.json({ ok: true });
 }
 
@@ -145,8 +129,8 @@ export function resolvePreviewTeams(owner: RemoteUser): RemoteTeam[] {
             }
           : machine
       );
-      const rights = TEAM_RIGHTS.get(team.id) ?? team;
-      return { ...team, ...rights, role, machines, requests: role === 'owner' ? team.requests : [] };
+      const access = TEAM_SCOPES.get(team.id) ?? team;
+      return { ...team, ...access, role, machines, requests: role === 'owner' ? team.requests : [] };
     });
 }
 
@@ -198,8 +182,8 @@ export function respondTeams(request: Request, url: URL, teammates: Machine[]) {
   const owner = MACHINE_OWNERS[readBearerMachine(request)] ?? null;
   if (owner && pathname === `${REMOTE_PATHS.machineTeams}/${TEAM.id}/connect`)
     return respondTeamConnect(request, owner, teammates);
-  const rights = TEAM_PERMISSIONS_PATH.exec(pathname);
-  if (owner && rights) return respondRightsChange(request, rights[1] ?? '');
+  const scopes = TEAM_SCOPES_PATH.exec(pathname);
+  if (owner && scopes) return respondScopesChange(request, scopes[1] ?? '');
   if (owner && pathname.startsWith(`${REMOTE_PATHS.machineTeams}/`)) return Response.json({ ok: true });
   return null;
 }

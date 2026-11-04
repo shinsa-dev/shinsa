@@ -1,7 +1,9 @@
 import type { AccessRequest, RemoteDevice, RemoteTeamEntry, SharedPerson } from '@shinsa/core';
 import {
+  ACCESS_SCOPES,
+  type AccessScope,
+  DEFAULT_TEAM_SCOPES,
   isTeamKey,
-  resolveTeamPermissions,
   type MachineCredentials,
   parsePrivateKey,
   parseSigningPrivateKey,
@@ -13,9 +15,7 @@ import {
   SIGNING_KEY_ALGORITHM,
   serializePrivateKey,
   serializePublicKey,
-  TEAM_PERMISSION_NAMES,
-  type TeamMemberPermissions,
-  type TeamPermissionsPatch,
+  type TeamScopeOverride,
 } from '@shinsa/core';
 import { readJsonFile, writeJsonFile } from '../files/index.ts';
 import { log } from '../log/index.ts';
@@ -190,18 +190,19 @@ function readTeamMachines(value: unknown): RemoteTeam['machines'] {
   });
 }
 
-function readPermissions(value: unknown): TeamPermissionsPatch {
-  if (!isFields(value)) return {};
-  return Object.fromEntries(
-    TEAM_PERMISSION_NAMES.flatMap((name) => (typeof value[name] === 'boolean' ? [[name, value[name]]] : []))
-  );
+const SCOPE_NAMES: ReadonlySet<unknown> = new Set(ACCESS_SCOPES);
+
+function readScopes(value: unknown): AccessScope[] | null {
+  if (!Array.isArray(value)) return null;
+  return value.filter((scope): scope is AccessScope => SCOPE_NAMES.has(scope));
 }
 
-function readOverrides(value: unknown): TeamMemberPermissions[] {
+function readOverrides(value: unknown): TeamScopeOverride[] {
   if (!Array.isArray(value)) return [];
   return value.flatMap((entry) => {
-    if (!(isFields(entry) && typeof entry.userId === 'string')) return [];
-    return [{ userId: entry.userId, permissions: readPermissions(entry.permissions) }];
+    const scopes = isFields(entry) ? readScopes(entry.scopes) : null;
+    if (!(isFields(entry) && typeof entry.userId === 'string' && scopes)) return [];
+    return [{ userId: entry.userId, scopes }];
   });
 }
 
@@ -218,7 +219,7 @@ function readTeam(value: unknown): RemoteTeam | null {
     members: readMembers(value.members),
     requests: readMembers(value.requests),
     machines: readTeamMachines(value.machines),
-    permissions: resolveTeamPermissions(readPermissions(value.permissions)),
+    scopes: readScopes(value.scopes) ?? DEFAULT_TEAM_SCOPES,
     overrides: readOverrides(value.overrides),
     createdAt,
   };

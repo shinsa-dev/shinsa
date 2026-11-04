@@ -46,7 +46,7 @@ import {
   TeamInviteResponse,
   TeamJoinRequest,
   TeamJoinResponse,
-  TeamPermissionsRequest,
+  TeamScopesRequest,
   TeamPreviewResponse,
 } from './contract.ts';
 import {
@@ -350,9 +350,9 @@ class MachineTeamsGroup extends HttpApiGroup.make('machineTeams')
       success: ConnectResponse,
       error: wire(NotFound),
     }),
-    HttpApiEndpoint.post('permissions', machineTeamPath('permissions'), {
+    HttpApiEndpoint.post('scopes', machineTeamPath('scopes'), {
       params: TeamParams,
-      payload: TeamPermissionsRequest,
+      payload: TeamScopesRequest,
       success: RemoteTeam,
       error: OWNER_FAILURES,
     })

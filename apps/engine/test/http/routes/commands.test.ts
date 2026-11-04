@@ -62,7 +62,7 @@ describe('POST /api/commands', () => {
           clientId: null,
           classify: null,
           origin: 'remote',
-          guest: { taskId: 'task-1' } as never,
+          guest: { scope: { kind: 'task', taskId: 'task-1' } } as never,
         })
       )
     );

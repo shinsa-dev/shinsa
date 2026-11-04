@@ -32,11 +32,12 @@ import type { ServiceSuggestion } from '../protocol/services.ts';
 import type { TerminalsSnapshot } from '../protocol/terminals.ts';
 import type { UpdateOutcome, VersionsSnapshot } from '../protocol/versions.ts';
 import type { QueueSummary } from '../queue/types.ts';
-import { TeamPermissionsChange, type TeamJoinStatus } from '../remote/contract.ts';
+import type { TeamJoinStatus } from '../remote/contract.ts';
 import type { PlacementAnswer } from '../remote/placement.ts';
 import type { RemoteSnapshot } from '../remote/status.ts';
 import type { TeamFeedSnapshot } from '../remote/teams.ts';
 import type { MergeStepView } from '../report/merge-steps.ts';
+import { AccessScopes } from '../scopes/schema.ts';
 import type { SlackSnapshot } from '../slack/relay.ts';
 import type { CoverageDetection } from '../test-coverage/types.ts';
 
@@ -364,10 +365,10 @@ export const TeamBody = Schema.Struct({ teamId: FilledText });
 
 export const TeamMemberBody = Schema.Struct({ teamId: FilledText, userId: FilledText });
 
-export const TeamPermissionsBody = Schema.Struct({
+export const TeamScopesBody = Schema.Struct({
   teamId: FilledText,
   userId: Schema.optionalKey(FilledText),
-  permissions: TeamPermissionsChange,
+  scopes: Schema.NullOr(AccessScopes),
 });
 
 export const ProjectPathBody = Schema.Struct({ path: LoosePath });

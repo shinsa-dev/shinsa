@@ -1,4 +1,5 @@
 import { Option, Schema } from 'effect';
+import { AccessScopes } from '../scopes/schema.ts';
 import { URL_SAFE_SEGMENT } from './bytes.ts';
 import { isSigningPublicKey } from './keys.ts';
 
@@ -225,47 +226,17 @@ export const TEAM_ACTIONS = [
   'leave',
   'remove',
   'connect',
-  'permissions',
+  'scopes',
 ] as const;
 
 export type TeamAction = (typeof TEAM_ACTIONS)[number];
 
-export const TeamPermissions = Schema.Struct({
-  act: Schema.Boolean,
-  takeOver: Schema.Boolean,
-  share: Schema.Boolean,
-  services: Schema.Boolean,
-  message: Schema.Boolean,
-});
-
-export type TeamPermissions = typeof TeamPermissions.Type;
-
-export const TeamPermissionsPatch = Schema.Struct({
-  act: Schema.optionalKey(Schema.Boolean),
-  takeOver: Schema.optionalKey(Schema.Boolean),
-  share: Schema.optionalKey(Schema.Boolean),
-  services: Schema.optionalKey(Schema.Boolean),
-  message: Schema.optionalKey(Schema.Boolean),
-});
-
-export type TeamPermissionsPatch = typeof TeamPermissionsPatch.Type;
-
-export const TeamPermissionsChange = Schema.Struct({
-  act: Schema.optionalKey(Schema.NullOr(Schema.Boolean)),
-  takeOver: Schema.optionalKey(Schema.NullOr(Schema.Boolean)),
-  share: Schema.optionalKey(Schema.NullOr(Schema.Boolean)),
-  services: Schema.optionalKey(Schema.NullOr(Schema.Boolean)),
-  message: Schema.optionalKey(Schema.NullOr(Schema.Boolean)),
-});
-
-export type TeamPermissionsChange = typeof TeamPermissionsChange.Type;
-
-export const TeamMemberPermissions = Schema.Struct({
+export const TeamScopeOverride = Schema.Struct({
   userId: Schema.String,
-  permissions: TeamPermissionsPatch,
+  scopes: AccessScopes,
 });
 
-export type TeamMemberPermissions = typeof TeamMemberPermissions.Type;
+export type TeamScopeOverride = typeof TeamScopeOverride.Type;
 
 export const TeamMachine = Schema.Struct({
   id: Schema.String,
@@ -286,8 +257,8 @@ export const RemoteTeam = Schema.Struct({
   members: Schema.Array(RemoteMember),
   requests: Schema.Array(RemoteMember),
   machines: Schema.Array(TeamMachine),
-  permissions: TeamPermissions,
-  overrides: Schema.Array(TeamMemberPermissions),
+  scopes: AccessScopes,
+  overrides: Schema.Array(TeamScopeOverride),
   createdAt: Schema.Number,
 });
 
@@ -420,12 +391,12 @@ export const TeamConnectRequest = Schema.Struct({ instanceId: InstanceId });
 
 export type TeamConnectRequest = typeof TeamConnectRequest.Type;
 
-export const TeamPermissionsRequest = Schema.Struct({
+export const TeamScopesRequest = Schema.Struct({
   userId: Schema.optionalKey(RemoteUserId),
-  permissions: TeamPermissionsChange,
+  scopes: Schema.NullOr(AccessScopes),
 });
 
-export type TeamPermissionsRequest = typeof TeamPermissionsRequest.Type;
+export type TeamScopesRequest = typeof TeamScopesRequest.Type;
 
 export function resolveTunnelHost(instanceId: string) {
   return `t-${instanceId}.${REMOTE_TUNNEL_DOMAIN}`;

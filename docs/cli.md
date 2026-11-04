@@ -457,23 +457,9 @@ Yours alone: no agent has a tool for it, and an agent’s shell may not run it. 
 | `--team` | text, required | The team’s name or id, from `shinsa teams list`. |
 | `--login` | text, required | Their GitHub login, from `shinsa teams list`. |
 
-#### shinsa tasks take-over
-
-Take over a teammate’s task from the team’s tasks in Shinsa Cloud, so it is yours to steer.
-
-```
-shinsa tasks take-over <task> [--json]
-```
-
-Yours alone: no agent has a tool for it, and an agent’s shell may not run it. Sends `task.take_over`.
-
-| Argument | Kind | What it is |
-| --- | --- | --- |
-| `<task>` | text, required | The task: its handle (SW-142), its id, the start of its id, or its exact title. |
-
 #### shinsa tasks give-back
 
-Give a task you took over back to the teammate who owns it.
+Give a task a teammate handed you back to them.
 
 ```
 shinsa tasks give-back <task> [--json]
@@ -2605,12 +2591,12 @@ Yours alone: no agent has a tool for it, and an agent’s shell may not run it.
 | `<team>` | text, required | The team’s name or id, from `shinsa teams list`. |
 | `--login` | text, required | Their GitHub login, from `shinsa teams list`. |
 
-#### shinsa teams permissions
+#### shinsa teams scopes
 
-Change what teammates may do on each other’s machines, for the whole team you own or, with --login, one member.
+Change what teammates may do on each other’s machines, for the whole team you own or, with --login, one member: a preset, then scopes to allow or deny.
 
 ```
-shinsa teams permissions <team> [--login <text>] [--act <on|off|default>] [--take-over <on|off|default>] [--share <on|off|default>] [--services <on|off|default>] [--message <on|off|default>] [--json]
+shinsa teams scopes <team> [--login <text>] [--preset <standard|collaborate|full|default>] [--allow <list>] [--deny <list>] [--json]
 ```
 
 Yours alone: no agent has a tool for it, and an agent’s shell may not run it.
@@ -2619,11 +2605,9 @@ Yours alone: no agent has a tool for it, and an agent’s shell may not run it.
 | --- | --- | --- |
 | `<team>` | text, required | The team’s name or id, from `shinsa teams list`. |
 | `--login` | text, optional | One member’s GitHub login. Leave out to change the team’s. |
-| `--act` | choice, optional | Answer gates and run actions on the team’s tasks: on, off or default. |
-| `--take-over` | choice, optional | Take a task over and steer it: on, off or default. |
-| `--share` | choice, optional | Make share links for the team’s tasks: on, off or default. |
-| `--services` | choice, optional | Open a team task’s running services: on, off or default. |
-| `--message` | choice, optional | Message the agents of tasks they did not take over: on, off or default. |
+| `--preset` | choice, optional | standard (see the work), collaborate (act on it, but not message agents), full (everything) or default (the team’s, or Collaborate for the team). |
+| `--allow` | list, optional | A scope to allow, such as message or fork. Repeat for each. |
+| `--deny` | list, optional | A scope to deny, such as share or services. Repeat for each. |
 
 #### shinsa teams leave
 

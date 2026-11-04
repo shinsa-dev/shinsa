@@ -135,7 +135,6 @@ const GATED_COMMANDS: EngineCommand[] = [
   'task.hand_off',
   'handoff.remove',
   'task.hand_to_teammate',
-  'task.take_over',
   'task.give_back',
 ];
 

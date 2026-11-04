@@ -9,7 +9,8 @@ import {
   type RemoteMember,
   type RemoteTeam,
   type RemoteUser,
-  DEFAULT_TEAM_PERMISSIONS,
+  ACCESS_PRESETS,
+  DEFAULT_TEAM_SCOPES,
   resolveInstanceConnectPath,
   resolveMachineTeamPath,
   resolveTeamConnectPath,
@@ -390,79 +391,56 @@ describe('each machine’s signing key', () => {
 });
 
 describe('what teammates can do', () => {
-  test('a new team allows everything but messaging agents, with no one set apart', async () => {
+  const VIEW_ONLY = ACCESS_PRESETS.standard;
+  const FULL = ACCESS_PRESETS.full;
+
+  test('a new team gets the Collaborate scopes, with no one set apart', async () => {
     const { harness, mona, team } = await startTeam();
-    expect(team.permissions).toEqual(DEFAULT_TEAM_PERMISSIONS);
+    expect(team.scopes).toEqual(DEFAULT_TEAM_SCOPES);
     expect(team.overrides).toEqual([]);
-    expect((await listTeams(harness, mona))[0]?.permissions.message).toBe(false);
+    expect((await listTeams(harness, mona))[0]?.scopes).not.toContain('message');
   });
 
-  test('the owner changes the team’s defaults, and every machine’s heartbeat carries them', async () => {
+  test('the owner changes the team’s scopes, every heartbeat carries them, and null puts the default back', async () => {
     const { harness, kai, studio, laptop, team } = await joinedTeam();
-    const changed = await act(harness, studio, team.id, 'permissions', {
-      permissions: { message: true, share: false },
-    });
-    expect((await readJson<RemoteTeam>(changed)).permissions).toEqual({
-      ...DEFAULT_TEAM_PERMISSIONS,
-      message: true,
-      share: false,
-    });
+    const changed = await act(harness, studio, team.id, 'scopes', { scopes: VIEW_ONLY });
+    expect((await readJson<RemoteTeam>(changed)).scopes).toEqual(VIEW_ONLY);
     const beat = await readJson<HeartbeatResponse>(await heartbeat(harness, laptop));
-    expect(beat.teams[0]?.permissions).toMatchObject({ message: true, share: false });
-    expect((await listTeams(harness, kai))[0]?.permissions.share).toBe(false);
-    const reset = await act(harness, studio, team.id, 'permissions', { permissions: { share: null } });
-    expect((await readJson<RemoteTeam>(reset)).permissions).toEqual({
-      ...DEFAULT_TEAM_PERMISSIONS,
-      message: true,
-    });
+    expect(beat.teams[0]?.scopes).toEqual(VIEW_ONLY);
+    expect((await listTeams(harness, kai))[0]?.scopes).toEqual(VIEW_ONLY);
+    const reset = await act(harness, studio, team.id, 'scopes', { scopes: null });
+    expect((await readJson<RemoteTeam>(reset)).scopes).toEqual(DEFAULT_TEAM_SCOPES);
   });
 
-  test('the owner sets one person apart, and clearing each right puts them back on the team’s', async () => {
+  test('the owner gives one person their own scopes, and null puts them back on the team’s', async () => {
     const { harness, studio, laptop, team } = await joinedTeam();
-    const set = await act(harness, studio, team.id, 'permissions', {
-      userId: KAI.id,
-      permissions: { message: true, services: false },
-    });
-    expect((await readJson<RemoteTeam>(set)).overrides).toEqual([
-      { userId: KAI.id, permissions: { message: true, services: false } },
-    ]);
-    await act(harness, studio, team.id, 'permissions', { userId: KAI.id, permissions: { act: true } });
+    const set = await act(harness, studio, team.id, 'scopes', { userId: KAI.id, scopes: FULL });
+    expect((await readJson<RemoteTeam>(set)).overrides).toEqual([{ userId: KAI.id, scopes: FULL }]);
     const beat = await readJson<HeartbeatResponse>(await heartbeat(harness, laptop));
-    expect(beat.teams[0]?.overrides).toEqual([
-      { userId: KAI.id, permissions: { message: true, services: false, act: true } },
-    ]);
-    const cleared = await act(harness, studio, team.id, 'permissions', {
-      userId: KAI.id,
-      permissions: { message: null, services: null, act: null },
-    });
+    expect(beat.teams[0]?.overrides).toEqual([{ userId: KAI.id, scopes: FULL }]);
+    const cleared = await act(harness, studio, team.id, 'scopes', { userId: KAI.id, scopes: null });
     expect((await readJson<RemoteTeam>(cleared)).overrides).toEqual([]);
   });
 
-  test('a removed member’s rights go with them, and coming back starts from the team’s', async () => {
+  test('a removed member’s scopes go with them, and coming back starts from the team’s', async () => {
     const { harness, kai, studio, team, invite } = await joinedTeam();
-    await act(harness, studio, team.id, 'permissions', { userId: KAI.id, permissions: { message: true } });
+    await act(harness, studio, team.id, 'scopes', { userId: KAI.id, scopes: FULL });
     await act(harness, studio, team.id, 'members/remove', { userId: KAI.id });
     await joinTeam(harness, kai, invite);
     await act(harness, studio, team.id, 'members/add', { userId: KAI.id });
     expect((await listTeams(harness, kai))[0]?.overrides).toEqual([]);
   });
 
-  test('only the owner changes them, only for a member, and only with a right it knows', async () => {
+  test('only the owner changes them, only for a member, and only with scopes it knows', async () => {
     const { harness, studio, laptop, team } = await joinedTeam();
-    const notOwner = await act(harness, laptop, team.id, 'permissions', { permissions: { message: true } });
+    const notOwner = await act(harness, laptop, team.id, 'scopes', { scopes: FULL });
     expect(notOwner.status).toBe(403);
     expect(await readCode(notOwner)).toBe('not_owner');
-    const stranger = await act(harness, studio, team.id, 'permissions', {
-      userId: '9',
-      permissions: { message: true },
-    });
+    const stranger = await act(harness, studio, team.id, 'scopes', { userId: '9', scopes: FULL });
     expect(stranger.status).toBe(404);
-    const owner = await act(harness, studio, team.id, 'permissions', {
-      userId: MONA.id,
-      permissions: { message: true },
-    });
+    const owner = await act(harness, studio, team.id, 'scopes', { userId: MONA.id, scopes: FULL });
     expect(owner.status).toBe(404);
-    const wrong = await act(harness, studio, team.id, 'permissions', { permissions: { message: 'yes' } });
+    const wrong = await act(harness, studio, team.id, 'scopes', { scopes: ['everything'] });
     expect(wrong.status).toBe(400);
     expect(await readCode(wrong)).toBe('body_invalid');
   });

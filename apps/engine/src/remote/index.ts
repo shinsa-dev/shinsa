@@ -22,7 +22,8 @@ import {
   type TunnelStatus,
   resolveClaimUrl,
   resolveEnrollUrl,
-  resolveMemberPermissions,
+  hasScope,
+  resolveMemberScopes,
   resolveRemoteHookUrl,
   serializeBase64Url,
   verifyConnectToken,
@@ -178,6 +179,12 @@ export class Remote {
 
   isOwner(userId: string | null) {
     return userId !== null && this.store.file.access?.owner.id === userId;
+  }
+
+  canForkTeamTask(teamId: string) {
+    const ownerId = this.store.file.access?.owner.id;
+    const team = this.store.file.teams.find((entry) => entry.id === teamId);
+    return Boolean(ownerId && team && hasScope(resolveMemberScopes(team, ownerId), 'fork'));
   }
 
   snapshot(): RemoteSnapshot {
@@ -495,7 +502,7 @@ export class Remote {
   resolveTeamScope(userId: string, teamId: string): TeamScope | null {
     const team = this.#selectTeamAccess(userId, teamId);
     if (!team) return null;
-    return { kind: 'team', teamId: team.id, permissions: resolveMemberPermissions(team, userId) };
+    return { kind: 'team', teamId: team.id, scopes: resolveMemberScopes(team, userId) };
   }
 
   listTeamScopes(userId: string) {

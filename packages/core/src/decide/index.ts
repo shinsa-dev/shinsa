@@ -62,7 +62,6 @@ import {
   leaveHandoff,
   recordHandoff,
   removeHandoff,
-  takeOverTask,
 } from './handoffs.ts';
 import { enforceLiveness } from './liveness.ts';
 import { acceptMemory, rememberRule, removeMemory, writeMemory } from './memory.ts';
@@ -325,8 +324,6 @@ function apply(decider: Decider, command: ShinsaCommand) {
       return removeHandoff(decider, command);
     case 'task.hand_to_teammate':
       return handToTeammate(decider, command);
-    case 'task.take_over':
-      return takeOverTask(decider, command);
     case 'task.give_back':
       return giveBackTask(decider, command);
     case 'handoff.record':

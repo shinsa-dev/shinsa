@@ -27,8 +27,8 @@ import { ConfirmDialog } from '@/components/overlays/confirm-dialog.tsx';
 import { MentionText } from '@/components/people/user-tag.tsx';
 import { LoadingLine } from '@/components/status/loading-line.tsx';
 import { NewTeamDialog } from '@/components/teams/new-team-dialog.tsx';
-import { MemberRightsDialog, TeamPermissionsBlock } from '@/components/teams/permissions.tsx';
 import { ProjectsSelect } from '@/components/teams/projects-select.tsx';
+import { MemberScopesDialog, TeamScopesBlock } from '@/components/teams/scopes.tsx';
 import { useNow } from '@/hooks/use-now.ts';
 import { useTeamPresence } from '@/hooks/use-team-presence.ts';
 import { confirmDone, requestWithToast } from '@/lib/connection/commands.ts';
@@ -40,8 +40,8 @@ import { createDisclosureId } from '@/lib/preferences/disclosure.ts';
 import { describeMemberSince } from '@/lib/remote-access.ts';
 import { MACHINE_ICON } from '@/lib/remote/mode.ts';
 import { resolveFirstName } from '@/lib/remote/users.ts';
-import { hasOwnRights } from '@/lib/teams/permissions.ts';
 import { describePresence } from '@/lib/teams/presence.ts';
+import { hasOwnScopes } from '@/lib/teams/scopes.ts';
 import {
   canUseTeams,
   describePeopleCount,
@@ -83,7 +83,7 @@ type TeamsDialog =
   | { kind: 'leave'; entry: RemoteTeamEntry }
   | { kind: 'delete'; entry: RemoteTeamEntry }
   | { kind: 'member'; team: RemoteTeam; user: RemoteUser }
-  | { kind: 'rights'; teamId: string; user: RemoteUser }
+  | { kind: 'scopes'; teamId: string; user: RemoteUser }
   | { kind: 'grant'; team: RemoteTeam; user: RemoteUser; machine: GrantMachine };
 
 function TeamLinkDialog({
@@ -339,9 +339,9 @@ function TeammateActions({
         <Button
           variant='secondary'
           size='sm'
-          onClick={() => onDialog({ kind: 'rights', teamId: team.id, user })}
+          onClick={() => onDialog({ kind: 'scopes', teamId: team.id, user })}
         >
-          Rights
+          Scopes
         </Button>
       )}
       {!granted && snapshot.enabled && (
@@ -374,7 +374,7 @@ function describePerson(
   now: number
 ) {
   const parts = [presence ? describePresence(presence, now) : null, base];
-  if (hasOwnRights(team, user.id)) parts.push('Own rights');
+  if (hasOwnScopes(team, user.id)) parts.push('Own scopes');
   if (hasMachineAccess(snapshot, user.id)) parts.push(`Can reach ${snapshot.machineName}`);
   return parts.filter((part) => part !== null).join(' · ');
 }
@@ -520,7 +520,7 @@ function TeamCard({
       </SettingRow>
       {needsTeamLink(entry) && <TeamLinkRow state={state} entry={entry} actions={actions} />}
       {team && <TeamRequests team={team} actions={actions} />}
-      {team && rights && <TeamPermissionsBlock team={team} onUpdate={actions.updatePermissions} />}
+      {team && rights && <TeamScopesBlock team={team} onUpdate={actions.updateScopes} />}
       {team && <TeamPeople team={team} snapshot={snapshot} rights={rights} onDialog={onDialog} />}
     </SettingsCard>
   );
@@ -576,16 +576,11 @@ function TeamsDialogs({
           actions={actions}
         />
       );
-    case 'rights': {
+    case 'scopes': {
       const team = snapshot?.teams.find((entry) => entry.id === value.teamId)?.team;
       if (!team) return null;
       return (
-        <MemberRightsDialog
-          control={control}
-          team={team}
-          user={value.user}
-          onUpdate={actions.updatePermissions}
-        />
+        <MemberScopesDialog control={control} team={team} user={value.user} onUpdate={actions.updateScopes} />
       );
     }
     case 'leave':

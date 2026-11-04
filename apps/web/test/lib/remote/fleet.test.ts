@@ -16,7 +16,9 @@ import {
   ENGINE_PROTOCOL,
   NO_TEAM_FEED,
   resolveEngineInfo,
+  DEFAULT_TEAM_SCOPES,
   resolveScopedEngineInfo,
+  toggleScope,
   SCOPE_MESSAGES,
   TEAM_SCOPE_MESSAGES,
 } from '@shinsa/core';
@@ -867,12 +869,15 @@ describe('a machine that handed you one task', () => {
 describe('a teammate’s machine reached through a team', () => {
   const MONA = { id: 'u2', login: 'mona', name: 'Mona Lisa', avatarUrl: null };
   const KAI = { id: 'u3', login: 'kai', name: 'Kai Tan', avatarUrl: null };
-  const PERMISSIONS = { act: true, takeOver: true, share: false, services: true, message: false };
+  const SCOPES = toggleScope(DEFAULT_TEAM_SCOPES, 'share', false);
 
   function createTeamFleet() {
     const theirs = createMember('m4', 'Mona’s Studio');
     const own = createMember('m1', 'Studio');
-    const fleet = new Fleet([{ ...theirs.member, teammate: { owner: MONA, viewerId: KAI.id } }, own.member]);
+    const fleet = new Fleet([
+      { ...theirs.member, teammate: { owner: MONA, viewerId: KAI.id, scopes: [] } },
+      own.member,
+    ]);
     const open = createTask({ id: 'task-theirs', title: 'Theirs' });
     const held = createTask({
       id: 'task-held',
@@ -882,7 +887,7 @@ describe('a teammate’s machine reached through a team', () => {
     theirs.connection.engine = resolveScopedEngineInfo('1.2.0', {
       kind: 'team',
       teamId: 'team-1',
-      permissions: PERMISSIONS,
+      scopes: SCOPES,
     });
     theirs.connection.push({
       state: createWire(2, {
@@ -921,7 +926,7 @@ describe('a teammate’s machine reached through a team', () => {
 
   it('marks a lone teammate machine’s tasks too', () => {
     const theirs = createMember('m4', 'Mona’s Studio');
-    const fleet = new Fleet([{ ...theirs.member, teammate: { owner: MONA, viewerId: KAI.id } }]);
+    const fleet = new Fleet([{ ...theirs.member, teammate: { owner: MONA, viewerId: KAI.id, scopes: [] } }]);
     theirs.connection.push({
       state: createWire(1, { tasks: { t: createTask({ id: 't' }) } }),
       status: 'open',
@@ -935,7 +940,7 @@ describe('a teammate’s machine reached through a team', () => {
     expect(fleet.command({ type: 'task.share', taskId: 'task-theirs', limit: 'day' })).rejects.toThrow(
       TEAM_SCOPE_MESSAGES.command
     );
-    await fleet.command({ type: 'task.take_over', taskId: 'task-theirs' });
-    expect(theirs.connection.commands.map((command) => command.type)).toEqual(['task.take_over']);
+    await fleet.command({ type: 'task.give_back', taskId: 'task-theirs' });
+    expect(theirs.connection.commands.map((command) => command.type)).toEqual(['task.give_back']);
   });
 });

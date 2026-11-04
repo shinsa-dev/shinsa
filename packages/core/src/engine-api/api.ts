@@ -100,7 +100,7 @@ import {
   TeamKeysAnswer,
   TeamLinkAnswer,
   TeamMemberBody,
-  TeamPermissionsBody,
+  TeamScopesBody,
   TeamTasksAnswer,
   TeamTasksQuery,
   TerminalsAnswer,
@@ -540,8 +540,8 @@ class TeamsGroup extends HttpApiGroup.make('teams')
   .add(HttpApiEndpoint.get('tasks', '/api/teams/tasks', { query: TeamTasksQuery, success: TeamTasksAnswer }))
   .annotateEndpoints(EngineFeatureRoute, 'teams')
   .add(
-    HttpApiEndpoint.post('permissions', '/api/remote/teams/permissions', {
-      payload: TeamPermissionsBody,
+    HttpApiEndpoint.post('scopes', '/api/remote/teams/scopes', {
+      payload: TeamScopesBody,
       success: RemoteAnswer,
     })
       .annotate(RouteFieldFailures, TEAM_FAILURES)

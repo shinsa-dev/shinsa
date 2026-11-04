@@ -267,7 +267,6 @@ export const UserCommand = Schema.Union([
   Command('task.hand_off', { taskId: TaskId }),
   Command('handoff.remove', { taskId: TaskId }),
   Command('task.hand_to_teammate', { taskId: TaskId, teamId: IdText, teammate: Teammate }),
-  Command('task.take_over', { taskId: TaskId }),
   Command('task.give_back', { taskId: TaskId }),
 ]);
 

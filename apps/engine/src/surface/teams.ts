@@ -2,9 +2,14 @@ import {
   DomainError,
   type RemoteTeamEntry,
   type RemoteUser,
-  TEAM_PERMISSION_NAMES,
-  type TeamPermission,
-  type TeamPermissionsChange,
+  ACCESS_PRESETS,
+  ACCESS_SCOPES,
+  type AccessScope,
+  type AccessScopes,
+  resolveMemberScopes,
+  TEAM_PRESET_NAMES,
+  type TeamPreset,
+  toggleScope,
 } from '@shinsa/core';
 import type { EngineCalls } from '../cli/client/schema.ts';
 import type { RemoteSnapshot } from '../remote/index.ts';
@@ -123,30 +128,35 @@ function defineMemberAction(
   });
 }
 
-const PERMISSION_CHOICES = ['on', 'off', 'default'] as const;
+const DEFAULT_CHOICE = 'default';
 
-const PERMISSION_DESCRIPTIONS: Record<TeamPermission, string> = {
-  act: 'Answer gates and run actions on the team’s tasks: on, off or default.',
-  takeOver: 'Take a task over and steer it: on, off or default.',
-  share: 'Make share links for the team’s tasks: on, off or default.',
-  services: 'Open a team task’s running services: on, off or default.',
-  message: 'Message the agents of tasks they did not take over: on, off or default.',
-};
+const PRESET_CHOICES = [...TEAM_PRESET_NAMES, DEFAULT_CHOICE] as const;
 
-const PERMISSION_VALUES: Record<string, boolean | null> = { on: true, off: false, default: null };
+const SCOPE_NAMES: ReadonlySet<string> = new Set(ACCESS_SCOPES);
 
-function readPermissionsChange(values: Record<string, unknown>) {
-  const change: { -readonly [Name in TeamPermission]?: boolean | null } = {};
-  for (const name of TEAM_PERMISSION_NAMES) {
-    const value = PERMISSION_VALUES[readValue(values, name)];
-    if (value !== undefined) change[name] = value;
-  }
-  if (Object.keys(change).length === 0)
+function readScopeNames(values: Record<string, unknown>, name: string): AccessScope[] {
+  return ((values[name] as string[] | undefined) ?? []).map((raw) => {
+    if (SCOPE_NAMES.has(raw)) return raw as AccessScope;
     throw new DomainError({
       code: 'arguments_invalid',
-      message: 'Name at least one right to change, such as `--message on`.',
+      message: `${raw} is not a scope. The scopes are ${ACCESS_SCOPES.join(', ')}.`,
     });
-  return change satisfies TeamPermissionsChange;
+  });
+}
+
+export function resolveScopesChange(current: AccessScopes, values: Record<string, unknown>) {
+  const preset = readValue(values, 'preset');
+  const allow = readScopeNames(values, 'allow');
+  const deny = readScopeNames(values, 'deny');
+  if (!preset && allow.length === 0 && deny.length === 0)
+    throw new DomainError({
+      code: 'arguments_invalid',
+      message: 'Name a preset or a scope to change, such as `--preset full` or `--allow message`.',
+    });
+  if (preset === DEFAULT_CHOICE) return null;
+  const base = preset ? ACCESS_PRESETS[preset as TeamPreset] : current;
+  const allowed = allow.reduce((scopes, scope) => toggleScope(scopes, scope, true), base);
+  return deny.reduce((scopes, scope) => toggleScope(scopes, scope, false), allowed);
 }
 
 function describeLink(url: string) {
@@ -255,9 +265,9 @@ export const TEAM_SPECS: SurfaceSpec[] = [
     'They can reach this machine now. Take it back with `shinsa remote remove-member`.'
   ),
   defineAction({
-    path: ['teams', 'permissions'],
+    path: ['teams', 'scopes'],
     summary:
-      'Change what teammates may do on each other’s machines, for the whole team you own or, with --login, one member.',
+      'Change what teammates may do on each other’s machines, for the whole team you own or, with --login, one member: a preset, then scopes to allow or deny.',
     humanOnly: true,
     fields: [
       TEAM_FIELD,
@@ -266,24 +276,39 @@ export const TEAM_SPECS: SurfaceSpec[] = [
         required: false,
         description: 'One member’s GitHub login. Leave out to change the team’s.',
       },
-      ...TEAM_PERMISSION_NAMES.map((name) => ({
-        name,
-        kind: 'choice' as const,
-        choices: PERMISSION_CHOICES,
-        description: PERMISSION_DESCRIPTIONS[name],
-      })),
+      {
+        name: 'preset',
+        kind: 'choice',
+        choices: PRESET_CHOICES,
+        description:
+          'standard (see the work), collaborate (act on it, but not message agents), full (everything) or default (the team’s, or Collaborate for the team).',
+      },
+      {
+        name: 'allow',
+        kind: 'list',
+        description: 'A scope to allow, such as message or fork. Repeat for each.',
+      },
+      {
+        name: 'deny',
+        kind: 'list',
+        description: 'A scope to deny, such as share or services. Repeat for each.',
+      },
     ],
     act: async (client, values) => {
       const teamId = await findTeamId(client, readValue(values, 'team'));
-      const permissions = readPermissionsChange(values);
+      const snapshot = await client.api.remote.snapshot();
+      const team = snapshot.teams.find((entry) => entry.id === teamId)?.team;
       const login = readValue(values, 'login');
       if (!login) {
-        const data = await client.api.teams.permissions({ payload: { teamId, permissions } });
-        return { data, text: 'The team’s rights are changed.' };
+        const scopes = resolveScopesChange(team?.scopes ?? ACCESS_PRESETS.collaborate, values);
+        const data = await client.api.teams.scopes({ payload: { teamId, scopes } });
+        return { data, text: 'The team’s scopes are changed.' };
       }
       const user = await findTeamUser(client, teamId, login, 'members');
-      const data = await client.api.teams.permissions({ payload: { teamId, userId: user.id, permissions } });
-      return { data, text: 'Their rights are changed.' };
+      const current = team ? resolveMemberScopes(team, user.id) : ACCESS_PRESETS.collaborate;
+      const scopes = resolveScopesChange(current, values);
+      const data = await client.api.teams.scopes({ payload: { teamId, userId: user.id, scopes } });
+      return { data, text: 'Their scopes are changed.' };
     },
   }),
   defineTeamAction(

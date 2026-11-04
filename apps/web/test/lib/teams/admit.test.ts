@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import {
-  DEFAULT_TEAM_PERMISSIONS,
+  DEFAULT_TEAM_SCOPES,
   type RemoteInstance,
   type RemoteTeam,
   resolveKeyFingerprint,
@@ -41,7 +41,7 @@ const TEAM: RemoteTeam = {
   members: [{ user: KAI, addedAt: 1 }],
   requests: [],
   machines: [{ id: 'studio', name: 'Studio', userId: MONA.id, online: true, lastSeenAt: 1 }],
-  permissions: DEFAULT_TEAM_PERMISSIONS,
+  scopes: DEFAULT_TEAM_SCOPES,
   overrides: [],
   createdAt: 1,
 };

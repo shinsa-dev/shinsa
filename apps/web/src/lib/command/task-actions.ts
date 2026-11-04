@@ -14,7 +14,6 @@ import {
 import { resolveMessageHint } from '@/lib/tasks/messages.ts';
 
 const ACTION_KEYWORDS: Record<Exclude<TaskActionKey, 'open'>, string[]> = {
-  takeOver: ['teammate', 'handoff', 'mine', 'steer'],
   giveBack: ['teammate', 'handoff', 'return', 'owner'],
   pullRequest: ['pr', 'github', 'browser'],
   branch: ['git', 'clipboard', 'checkout'],

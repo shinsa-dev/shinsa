@@ -1,7 +1,7 @@
 import { describe, expect, spyOn, test } from 'bun:test';
 import { readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { DEFAULT_TEAM_PERMISSIONS } from '@shinsa/core';
+import { DEFAULT_TEAM_SCOPES } from '@shinsa/core';
 import { log } from '../../src/log/index.ts';
 import { RemoteStore, readRemoteFile, readTeams, resolveOwnerProfile } from '../../src/remote/store.ts';
 import { createTempDir } from '../helpers/index.ts';
@@ -320,22 +320,19 @@ describe('readTeams', () => {
           name: 'Platform',
           owner,
           createdAt: 1,
-          permissions: { message: true, share: false, act: 'yes' },
+          scopes: ['message', 'share', 'everything'],
           overrides: [
-            { userId: '2', permissions: { services: false, takeOver: 1 } },
+            { userId: '2', scopes: ['services', 7] },
             { userId: '3' },
-            { permissions: { act: false } },
+            { scopes: ['fork'] },
             'nope',
           ],
         },
-        { id: 'team-2', name: 'Design', owner, createdAt: 2, permissions: 'all', overrides: {} },
+        { id: 'team-2', name: 'Design', owner, createdAt: 2, scopes: 'all', overrides: {} },
       ]) ?? [];
-    expect(team?.permissions).toEqual({ ...DEFAULT_TEAM_PERMISSIONS, message: true, share: false });
-    expect(team?.overrides).toEqual([
-      { userId: '2', permissions: { services: false } },
-      { userId: '3', permissions: {} },
-    ]);
-    expect(bare?.permissions).toEqual(DEFAULT_TEAM_PERMISSIONS);
+    expect(team?.scopes).toEqual(['message', 'share']);
+    expect(team?.overrides).toEqual([{ userId: '2', scopes: ['services'] }]);
+    expect(bare?.scopes).toEqual(DEFAULT_TEAM_SCOPES);
     expect(bare?.overrides).toEqual([]);
   });
 });

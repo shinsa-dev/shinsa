@@ -151,7 +151,11 @@ describe('teammates’ task lists', () => {
     expect(resolveTeamTaskTarget(entry)).toEqual({ teamId: 'team1', instanceId: 'p7m2', taskId: 'kai-task' });
     expect(resolveTeamTaskPath({ teamId: 'a b', instanceId: 'm', taskId: 't' })).toBe('/teams/a%20b/m/t');
     const task = createTask({ id: 'kai-task', handle: 'LOC-4' });
-    const teammate = { owner: { id: 'u1', login: 'kai', name: null, avatarUrl: null }, viewerId: 'u2' };
+    const teammate = {
+      owner: { id: 'u1', login: 'kai', name: null, avatarUrl: null },
+      viewerId: 'u2',
+      scopes: [],
+    };
     expect(resolveFleetTeamTaskPath(resolveTeamTaskTarget(entry), task, { id: 'p7m2', teammate })).toBe(
       '/tasks/LOC-4'
     );
@@ -186,7 +190,11 @@ describe('teammates’ task lists', () => {
 
 describe('machines the dashboard reaches in full', () => {
   it('leaves a teammate’s machine out, so its tasks stay listed as theirs', () => {
-    const teammate = { owner: { id: 'u1', login: 'kai', name: null, avatarUrl: null }, viewerId: 'u2' };
+    const teammate = {
+      owner: { id: 'u1', login: 'kai', name: null, avatarUrl: null },
+      viewerId: 'u2',
+      scopes: [],
+    };
     const reachable = listFullMachineIds([{ id: 'studio' }, { id: 'kai', teammate }]);
     expect([...reachable]).toEqual(['studio']);
     const feed = {

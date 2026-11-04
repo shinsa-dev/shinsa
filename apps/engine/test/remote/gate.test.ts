@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import {
   type ChatEntry,
   createState,
-  DEFAULT_TEAM_PERMISSIONS,
+  DEFAULT_TEAM_SCOPES,
   type ScopedActor,
   type ShinsaState,
 } from '@shinsa/core';
@@ -175,7 +175,7 @@ function annotate(entries: {
 
 const TEAMMATE: ScopedActor = {
   ...GUEST,
-  scope: { kind: 'team', teamId: 'team1', permissions: DEFAULT_TEAM_PERMISSIONS },
+  scope: { kind: 'team', teamId: 'team1', scopes: DEFAULT_TEAM_SCOPES },
 };
 
 function createTeamState(): ShinsaState {

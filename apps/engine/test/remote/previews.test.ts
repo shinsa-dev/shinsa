@@ -3,7 +3,8 @@ import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   createPreviewAccessToken,
-  DEFAULT_TEAM_PERMISSIONS,
+  DEFAULT_TEAM_SCOPES,
+  toggleScope,
   type RemoteTeam,
   PREVIEW_ACCESS_HEADER,
   PREVIEW_ACCESS_TTL_MS,
@@ -641,8 +642,8 @@ describe('a private address for every running service', () => {
       ],
       requests: [],
       machines: [],
-      permissions: DEFAULT_TEAM_PERMISSIONS,
-      overrides: [{ userId: VIEWER.id, permissions: { services: false } }],
+      scopes: DEFAULT_TEAM_SCOPES,
+      overrides: [{ userId: VIEWER.id, scopes: toggleScope(DEFAULT_TEAM_SCOPES, 'services', false) }],
       createdAt: 1,
     };
     remote.store.update((file) => ({

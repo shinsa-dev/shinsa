@@ -110,7 +110,7 @@ describe('handing a task off', () => {
 
   it('names a teammate task’s owner, and says when you took it over or a teammate holds it', () => {
     const MONA = { id: 'u5', login: 'mona', name: 'Mona Lisa', avatarUrl: null };
-    const viewer = { teammate: { owner: MONA, viewerId: KAI.id } };
+    const viewer = { teammate: { owner: MONA, viewerId: KAI.id, scopes: [] } };
     const open = createTask({ id: 't1' });
     const taken = createTask({
       id: 't1',
@@ -122,9 +122,11 @@ describe('handing a task off', () => {
       icon: 'IconUser',
     });
     expect(resolveHandoffFact(taken, viewer)?.icon).toBeUndefined();
-    expect(resolveHandoffFact(taken, viewer)).toMatchObject({ verb: 'Taken over from', user: MONA });
-    expect(describeHandoffMark(taken, viewer)).toBe('You took this over from Mona');
-    expect(describeHandoffMark(taken, { teammate: { owner: MONA, viewerId: 'u9' } })).toBe('Handed to Kai');
+    expect(resolveHandoffFact(taken, viewer)).toMatchObject({ verb: 'Handed to you by', user: MONA });
+    expect(describeHandoffMark(taken, viewer)).toBe('Handed to you by Mona');
+    expect(describeHandoffMark(taken, { teammate: { owner: MONA, viewerId: 'u9', scopes: [] } })).toBe(
+      'Handed to Kai'
+    );
     expect(resolveHandoffFact(taken, null)).toMatchObject({
       verb: 'Handed to',
       user: KAI,

@@ -172,7 +172,7 @@ describe('a machine in the dashboard', () => {
           transport: Layer.succeed(Socket.WebSocketConstructor, () => new WebSocket('ws://x')),
         }),
     });
-    expect(teammate.teammate).toEqual({ owner: STUDIO.owner, viewerId: '2' });
+    expect(teammate.teammate).toEqual({ owner: STUDIO.owner, viewerId: '2', scopes: [] });
     expect([teammate.guest, teammate.openTerminal]).toEqual([undefined, undefined]);
     teammate.close();
     const terminal = member.openTerminal?.('term-1');

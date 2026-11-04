@@ -19,7 +19,7 @@ import {
   leaveTeam,
   replaceInvite,
   serializeTeam,
-  updateTeamPermissions,
+  updateTeamScopes,
 } from '../../domain/teams.ts';
 import { Accounts } from '../../store/accounts/service.ts';
 import { Teams } from '../../store/teams/service.ts';
@@ -126,11 +126,11 @@ export const MachineTeamsHandlers = HttpApiBuilder.group(
         Effect.flatMap(MachineOwner, (owner) => connectTeam(owner.id, params.teamId, payload.instanceId))
       )
       .handle(
-        'permissions',
-        Effect.fn('machineTeams.permissions')(function* ({ params, payload }) {
+        'scopes',
+        Effect.fn('machineTeams.scopes')(function* ({ params, payload }) {
           const owner = yield* MachineOwner;
           const team = yield* findOwnTeam(owner.id, params.teamId);
-          return yield* serializeTeam(yield* updateTeamPermissions(team, payload), owner.id);
+          return yield* serializeTeam(yield* updateTeamScopes(team, payload), owner.id);
         })
       );
   })

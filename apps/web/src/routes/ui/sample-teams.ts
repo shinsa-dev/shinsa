@@ -1,5 +1,6 @@
 import {
-  DEFAULT_TEAM_PERMISSIONS,
+  ACCESS_PRESETS,
+  DEFAULT_TEAM_SCOPES,
   createState,
   type Project,
   type RemoteSnapshot,
@@ -42,8 +43,8 @@ export function createSampleTeams(now: number) {
     members: [{ user: KAI, addedAt: now - 30 * HOUR_MS }],
     requests: [{ user: BOB, addedAt: now - 4 * 60_000 }],
     machines: [],
-    permissions: DEFAULT_TEAM_PERMISSIONS,
-    overrides: [{ userId: KAI.id, permissions: { message: true } }],
+    scopes: DEFAULT_TEAM_SCOPES,
+    overrides: [{ userId: KAI.id, scopes: ACCESS_PRESETS.full }],
     createdAt: now - 72 * HOUR_MS,
   };
   const paywalls: RemoteTeam = {
@@ -57,7 +58,7 @@ export function createSampleTeams(now: number) {
     ],
     requests: [],
     machines: [],
-    permissions: DEFAULT_TEAM_PERMISSIONS,
+    scopes: DEFAULT_TEAM_SCOPES,
     overrides: [],
     createdAt: now - 240 * HOUR_MS,
   };
@@ -150,7 +151,7 @@ export function createSampleTeamActions(): TeamActions {
     leave: refuse,
     remove: refuse,
     grantAccess: refuse,
-    updatePermissions: refuse,
+    updateScopes: refuse,
   };
 }
 

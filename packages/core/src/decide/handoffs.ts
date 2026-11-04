@@ -128,19 +128,8 @@ function resolveTeammate(decider: Decider) {
   }
   throw new DomainError({
     code: 'handoff_refused',
-    message: 'Only a teammate takes a task over, from the team’s tasks in Shinsa Cloud.',
+    message: 'Only the teammate who holds this task can give it back.',
   });
-}
-
-export function takeOverTask(decider: Decider, command: CommandOf<'task.take_over'>) {
-  assertHumanHandsOff(decider);
-  const { person, teamId } = resolveTeammate(decider);
-  const task = decider.task(command.taskId);
-  if (isHeldByTeammate(task, teamId, person)) return;
-  assertHandsOff(task);
-  assertNotHeld(task, person);
-  endHandoffLink(decider, task);
-  decider.emit({ type: 'task.taken_over', taskId: task.id, teamId, guest: person });
 }
 
 export function giveBackTask(decider: Decider, command: CommandOf<'task.give_back'>) {

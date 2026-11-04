@@ -73,8 +73,8 @@ describe('forking a teammate’s task', () => {
     expect(resolveForkRepo(state, task)).toBe('pay');
     expect(resolveForkRepo(state, { ...task, repoId: null })).toBe('site');
     expect(resolveForkRepo({ ...state, repos: {} }, task)).toBeNull();
-    expect(resolveOwnerName({ owner: KAI, viewerId: 'u1' })).toBe('Kai Lee');
-    expect(resolveOwnerName({ owner: { ...KAI, name: null }, viewerId: 'u1' })).toBe('kai');
+    expect(resolveOwnerName({ owner: KAI, viewerId: 'u1', scopes: [] })).toBe('Kai Lee');
+    expect(resolveOwnerName({ owner: { ...KAI, name: null }, viewerId: 'u1', scopes: [] })).toBe('kai');
     expect(describeTeammateFork('Kai')).toContain('from what Kai’s task was asked and did');
   });
 
@@ -94,11 +94,11 @@ describe('forking a teammate’s task', () => {
     const state = createShinsaState({ tasks: [task], repos: [createRepo({ id: 'pay', projectId: 'p' })] });
     await forkTeammateTask(state, task, 'Retry twice', 'pay', {
       id: 'kai',
-      teammate: { owner: KAI, viewerId: 'u1' },
+      teammate: { owner: KAI, viewerId: 'u1', scopes: [] },
     });
     await forkTeammateTask(state, task, 'Again', 'gone', {
       id: 'kai',
-      teammate: { owner: KAI, viewerId: 'u1' },
+      teammate: { owner: KAI, viewerId: 'u1', scopes: [] },
     });
     const [first, second] = spies.sent.mock.calls;
     expect(first?.[0]).toMatchObject({

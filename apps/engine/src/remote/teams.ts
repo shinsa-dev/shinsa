@@ -13,7 +13,7 @@ import {
   type RemoteTeam,
   type RemoteUserId,
   type Task,
-  type TeamPermissionsChange,
+  type AccessScopes,
   resolveTeamJoinUrl,
   serializeBase64Url,
   serializePublicKey,
@@ -315,16 +315,13 @@ export class Teams implements TeamLinks {
     this.#replaceTeam({ ...team, members: withoutUser(team.members, userId) });
   }
 
-  async updatePermissions(teamId: string, userId: string | null, permissions: TeamPermissionsChange) {
+  async updateScopes(teamId: string, userId: string | null, scopes: AccessScopes | null) {
     const team = this.#findOwnTeam(teamId);
     if (userId !== null && !team.members.some((member) => member.user.id === userId)) throw MEMBER_NOT_FOUND;
-    const request = userId === null ? { permissions } : { userId: userId as RemoteUserId, permissions };
-    const answer = await this.#action(
-      (control, token) => control.requestTeamPermissions(token, teamId, request),
-      {
-        NotFound: userId === null ? TEAM_GONE : MEMBER_NOT_FOUND,
-      }
-    );
+    const request = userId === null ? { scopes } : { userId: userId as RemoteUserId, scopes };
+    const answer = await this.#action((control, token) => control.requestTeamScopes(token, teamId, request), {
+      NotFound: userId === null ? TEAM_GONE : MEMBER_NOT_FOUND,
+    });
     this.#replaceTeam(answer);
   }
 

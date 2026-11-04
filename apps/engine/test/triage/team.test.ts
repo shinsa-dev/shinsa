@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import {
-  DEFAULT_TEAM_PERMISSIONS,
+  DEFAULT_TEAM_SCOPES,
   type Project,
   type RemoteTeam,
   type TeamFeedMachine,
@@ -36,7 +36,7 @@ function createTeam(id: string): RemoteTeam {
     members: [{ user: KAI, addedAt: 2 }],
     requests: [],
     machines: [],
-    permissions: DEFAULT_TEAM_PERMISSIONS,
+    scopes: DEFAULT_TEAM_SCOPES,
     overrides: [],
     createdAt: 1,
   };

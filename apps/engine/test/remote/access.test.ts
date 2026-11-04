@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from 'bun:test';
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
-  DEFAULT_TEAM_PERMISSIONS,
+  DEFAULT_TEAM_SCOPES,
   type RemoteTeam,
   resolveMachineTeamPath,
   serializeBase64Url,
@@ -36,7 +36,7 @@ const TEAM: RemoteTeam = {
   members: [{ user: KAI, addedAt: 2 }],
   requests: [],
   machines: [LAPTOP],
-  permissions: DEFAULT_TEAM_PERMISSIONS,
+  scopes: DEFAULT_TEAM_SCOPES,
   overrides: [],
   createdAt: 1,
 };

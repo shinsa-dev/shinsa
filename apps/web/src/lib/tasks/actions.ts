@@ -1,4 +1,5 @@
 import {
+  hasScope,
   type EngineCommand,
   isHeldBy,
   isTaskSettled,
@@ -25,7 +26,6 @@ import { navigate, resolveTaskPath } from '@/router.ts';
 
 export type TaskActionKey =
   | 'open'
-  | 'takeOver'
   | 'giveBack'
   | 'pullRequest'
   | 'branch'
@@ -47,7 +47,6 @@ export type TaskActionKey =
 
 export const TASK_ACTION: Record<TaskActionKey, { label: string; icon: IconName }> = {
   open: { label: 'Open task', icon: 'IconArrowUpRight' },
-  takeOver: { label: 'Take over', icon: 'IconHandshake' },
   giveBack: { label: 'Give it back', icon: 'IconArrowUndoUp' },
   pullRequest: { label: 'Open the pull request on GitHub', icon: 'IconGithub' },
   branch: { label: 'Copy branch name', icon: 'IconBranch' },
@@ -70,7 +69,6 @@ export const TASK_ACTION: Record<TaskActionKey, { label: string; icon: IconName 
 
 export const TASK_ACTION_COMMAND: Record<TaskActionKey, EngineCommand | null> = {
   open: null,
-  takeOver: 'task.take_over',
   giveBack: 'task.give_back',
   pullRequest: null,
   branch: null,
@@ -96,10 +94,18 @@ function isActionSpoken(key: TaskActionKey, commands: ReadonlySet<string>) {
   return command === null || commands.has(command);
 }
 
+function isActionAllowed(
+  key: TaskActionKey,
+  commands: ReadonlySet<string>,
+  teammate: TeammateMachine | null
+) {
+  if (key === 'fork' && teammate) return hasScope(teammate.scopes, 'fork');
+  return isActionSpoken(key, commands);
+}
+
 function listTeammateActions(task: Task, teammate: TeammateMachine | null): TaskActionKey[] {
   if (!teammate) return [];
-  if (isHeldBy(task, { id: teammate.viewerId })) return ['giveBack'];
-  return isTaskSettled(task) || task.handoff?.guest ? [] : ['takeOver'];
+  return isHeldBy(task, { id: teammate.viewerId }) ? ['giveBack'] : [];
 }
 
 export function listTaskActions(
@@ -125,7 +131,7 @@ export function listTaskActions(
     listLaterActions(task),
     lifecycle,
   ]
-    .map((group) => group.filter((key) => (key === 'fork' && teammate) || isActionSpoken(key, commands)))
+    .map((group) => group.filter((key) => isActionAllowed(key, commands, teammate)))
     .filter((group) => group.length > 0);
 }
 
@@ -150,9 +156,6 @@ export function runTaskAction(task: Task, key: TaskActionKey) {
   switch (key) {
     case 'open':
       navigate(resolveTaskPath(task));
-      return;
-    case 'takeOver':
-      void sendCommandWithToast({ type: 'task.take_over', taskId: task.id }, 'You took this task over.');
       return;
     case 'giveBack':
       void sendCommandWithToast({ type: 'task.give_back', taskId: task.id }, 'You gave this task back.');

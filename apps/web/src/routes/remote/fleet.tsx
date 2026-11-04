@@ -17,6 +17,7 @@ import type { RemoteServices } from '@/lib/remote/services.ts';
 import { admitTeamMachines } from '@/lib/teams/admit.ts';
 import { HostedTeamFeeds } from '@/lib/teams/feeds.ts';
 import { syncOwnTeamKeys } from '@/lib/teams/own-keys.ts';
+import { resolveTeammateScopes } from '@/lib/teams/scopes.ts';
 import { navigate } from '@/router.ts';
 import { RemoteBenefits, RemoteCheckAgain, RemoteHero, RemoteLoading, RemoteSteps } from './shell.tsx';
 
@@ -122,6 +123,14 @@ function FleetReady({
   return shell(<OutdatedPage machines={fleet.members.map((member) => member.name)} />);
 }
 
+async function listFleetTeams(services: RemoteServices) {
+  try {
+    return await services.dashboard.listTeams();
+  } catch {
+    return [];
+  }
+}
+
 export function FleetApp({
   services,
   viewer,
@@ -150,6 +159,7 @@ export function FleetApp({
           selectTeamKey: services.teamKeys.selectTeamKey,
           name: resolveDeviceName(navigator.userAgent, navigator.maxTouchPoints > 1, null),
         });
+        const teams = await listFleetTeams(services);
         const added = rows.flatMap((row) =>
           row.device && !row.device.waiting ? [{ instance: row.instance, device: row.device }] : []
         );
@@ -179,6 +189,7 @@ export function FleetApp({
           createFleetMember(instance, device, {
             dashboard: services.dashboard,
             viewerId: viewer.id,
+            teammateScopes: resolveTeammateScopes(teams, instance.id, viewer.id),
             onRemoved: (instanceId) => {
               void services.devices.removeDevice(instanceId);
               fleet?.removeMachine(instanceId);

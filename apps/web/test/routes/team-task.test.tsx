@@ -120,7 +120,7 @@ describe('a teammate’s task on a machine the dashboard reaches', () => {
       id: 'p7m2',
       name: 'Studio',
       current: false,
-      teammate: { owner, viewerId: '1' },
+      teammate: { owner, viewerId: '1', scopes: [] },
     });
     act(() =>
       pushState(

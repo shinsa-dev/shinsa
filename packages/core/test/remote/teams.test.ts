@@ -1,16 +1,14 @@
 import { describe, expect, test } from 'bun:test';
+import { ACCESS_PRESETS, ACCESS_SCOPES, DEFAULT_TEAM_SCOPES, listActionScopes } from '../../src/index.ts';
 import { decodeText, encodeText, serializeBase64Url } from '../../src/remote/bytes.ts';
 import { createFrameOpener, createFrameSealer } from '../../src/remote/frames.ts';
 import { REMOTE_PROTOCOL_VERSION } from '../../src/remote/handshake.ts';
 import { SIGNING_KEY_ALGORITHM, serializePublicKey } from '../../src/remote/keys.ts';
 import {
-  DEFAULT_TEAM_PERMISSIONS,
-  FULL_TEAM_PERMISSIONS,
   isTeamPerson,
   mergeTeamPresence,
   resolveTeamPresence,
-  resolveMemberPermissions,
-  resolveTeamPermissions,
+  resolveMemberScopes,
   createTeamHello,
   createTeamWelcome,
   deriveTeamSessionKey,
@@ -201,31 +199,14 @@ describe('a signed team snapshot', () => {
   });
 });
 
-describe('resolveTeamPermissions', () => {
-  test('lets teammates act, take over, share and open services, but not message agents, by default', () => {
-    expect(resolveTeamPermissions(null)).toEqual(DEFAULT_TEAM_PERMISSIONS);
-    expect(DEFAULT_TEAM_PERMISSIONS).toEqual({
-      act: true,
-      takeOver: true,
-      share: true,
-      services: true,
-      message: false,
-    });
-  });
-
-  test('a team’s choice changes the default, and one person’s choice wins over the team’s', () => {
-    const team = { message: true, share: false };
-    expect(resolveTeamPermissions(team)).toMatchObject({ message: true, share: false, act: true });
-    expect(resolveTeamPermissions(team, { share: true, act: false })).toMatchObject({
-      message: true,
-      share: true,
-      act: false,
-    });
-    expect(resolveTeamPermissions(undefined, { services: false }).services).toBe(false);
+describe('DEFAULT_TEAM_SCOPES', () => {
+  test('is the Collaborate preset: the standard view and every action but messaging agents', () => {
+    expect(DEFAULT_TEAM_SCOPES).toEqual(ACCESS_PRESETS.collaborate);
+    expect(listActionScopes(DEFAULT_TEAM_SCOPES)).toEqual(['gates', 'actions', 'fork', 'share', 'services']);
   });
 });
 
-describe('resolveMemberPermissions', () => {
+describe('resolveMemberScopes', () => {
   const user = (id: string) => ({ id, login: id, name: null, avatarUrl: null });
   const team = {
     owner: user('mona'),
@@ -233,14 +214,14 @@ describe('resolveMemberPermissions', () => {
       { user: user('kai'), addedAt: 1 },
       { user: user('lee'), addedAt: 1 },
     ],
-    permissions: { ...DEFAULT_TEAM_PERMISSIONS, share: false },
-    overrides: [{ userId: 'kai', permissions: { message: true } }],
+    scopes: ACCESS_PRESETS.standard,
+    overrides: [{ userId: 'kai', scopes: ACCESS_PRESETS.full }],
   };
 
   test('gives the team’s owner every right, a member the team’s, and a member set apart their own', () => {
-    expect(resolveMemberPermissions(team, 'mona')).toEqual(FULL_TEAM_PERMISSIONS);
-    expect(resolveMemberPermissions(team, 'lee')).toEqual({ ...DEFAULT_TEAM_PERMISSIONS, share: false });
-    expect(resolveMemberPermissions(team, 'kai')).toMatchObject({ message: true, share: false });
+    expect(resolveMemberScopes(team, 'mona')).toEqual(ACCESS_SCOPES);
+    expect(resolveMemberScopes(team, 'lee')).toEqual(ACCESS_PRESETS.standard);
+    expect(resolveMemberScopes(team, 'kai')).toEqual(ACCESS_PRESETS.full);
   });
 
   test('counts the owner and the members as the team’s people, and no one else', () => {

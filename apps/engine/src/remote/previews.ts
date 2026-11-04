@@ -1,5 +1,6 @@
 import { timingSafeEqual } from 'node:crypto';
 import {
+  hasScope,
   PREVIEW_ACCESS_HEADER,
   PREVIEW_GONE,
   PREVIEW_ID_BYTES,
@@ -291,7 +292,7 @@ export class Previews implements PreviewEffects, PreviewLinks {
     if (!task) return false;
     return this.#remote
       .listTeamScopes(userId)
-      .some((scope) => scope.permissions.services && isTeamTask(state, task, scope.teamId));
+      .some((scope) => hasScope(scope.scopes, 'services') && isTeamTask(state, task, scope.teamId));
   }
 
   #selectConnectKey() {

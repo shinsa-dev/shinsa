@@ -3,14 +3,10 @@ import {
   type RemoteRole,
   type RemoteTeam,
   type RemoteUserId,
-  resolveTeamPermissions,
-  TEAM_PERMISSION_NAMES,
+  DEFAULT_TEAM_SCOPES,
   type TeamId,
   type TeamJoinStatus,
-  type TeamPermission,
-  type TeamPermissionsChange,
-  type TeamPermissionsPatch,
-  type TeamPermissionsRequest,
+  type TeamScopesRequest,
 } from '@shinsa/core';
 import { InviteInvalid, NotFound, OwnerCannotLeave } from '@shinsa/core/remote/errors';
 import { Clock, Effect, Option, Redacted } from 'effect';
@@ -34,41 +30,25 @@ export const serializeTeam = Effect.fn('serializeTeam')(function* (team: Team, u
     members: yield* teams.members.list(team.id),
     requests: role === 'owner' ? yield* teams.requesters.list(team.id) : [],
     machines,
-    permissions: resolveTeamPermissions(team.permissions),
-    overrides: yield* teams.listMemberPermissions(team.id),
+    scopes: team.scopes ?? DEFAULT_TEAM_SCOPES,
+    overrides: yield* teams.listMemberScopes(team.id),
     createdAt: team.createdAt,
   } satisfies RemoteTeam;
 });
 
-export function applyPermissionsChange(current: TeamPermissionsPatch, change: TeamPermissionsChange) {
-  const next: Partial<Record<TeamPermission, boolean>> = { ...current };
-  for (const name of TEAM_PERMISSION_NAMES) {
-    const value = change[name];
-    if (value === null) delete next[name];
-    else if (value !== undefined) next[name] = value;
-  }
-  return next satisfies TeamPermissionsPatch;
-}
-
-export const updateTeamPermissions = Effect.fn('teams.updatePermissions')(function* (
+export const updateTeamScopes = Effect.fn('teams.updateScopes')(function* (
   team: Team,
-  request: TeamPermissionsRequest
+  request: TeamScopesRequest
 ) {
   const teams = yield* Teams;
   const userId = request.userId;
   if (userId === undefined) {
-    const permissions = applyPermissionsChange(team.permissions, request.permissions);
-    yield* teams.replacePermissions(team.id, permissions);
-    return { ...team, permissions };
+    yield* teams.replaceScopes(team.id, request.scopes);
+    return { ...team, scopes: request.scopes };
   }
   if (!(yield* teams.members.has(team.id, userId)))
     return yield* new NotFound({ message: 'That person is not a member of this team.' });
-  const current = (yield* teams.listMemberPermissions(team.id)).find((row) => row.userId === userId);
-  yield* teams.replaceMemberPermissions(
-    team.id,
-    userId,
-    applyPermissionsChange(current?.permissions ?? {}, request.permissions)
-  );
+  yield* teams.replaceMemberScopes(team.id, userId, request.scopes);
   return team;
 });
 

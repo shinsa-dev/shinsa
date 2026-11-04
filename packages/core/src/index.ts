@@ -53,6 +53,7 @@ export {
 export * from './protocol/index.ts';
 export * from './queue/index.ts';
 export * from './remote/index.ts';
+export * from './scopes/index.ts';
 export {
   ATTACHED_EVIDENCE_KINDS,
   ATTENTION_LEVELS,
