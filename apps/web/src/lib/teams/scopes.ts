@@ -31,12 +31,12 @@ export const PRESET_LABELS: Record<TeamScopeChoice, { label: string; hint: strin
 };
 
 export const SCOPE_ROWS: Readonly<Record<ActionScope, { title: string; hint: string }>> = {
-  gates: { title: 'Answer gates', hint: 'Approve plans, reviews and merges.' },
-  actions: { title: 'Act on tasks', hint: 'Retry, snooze, prioritize and cancel.' },
-  message: { title: 'Message agents', hint: 'Send messages to a task’s agent.' },
-  fork: { title: 'Fork tasks', hint: 'Fork a task onto their own machine.' },
-  share: { title: 'Share tasks', hint: 'Make share links, status shares included.' },
-  services: { title: 'Open services', hint: 'Open a task’s running services.' },
+  gates: { title: 'Answer gates', hint: 'Approve plans and merges' },
+  actions: { title: 'Act on tasks', hint: 'Retry, snooze and cancel' },
+  message: { title: 'Message agents', hint: 'Send messages to agents' },
+  fork: { title: 'Fork tasks', hint: 'Fork onto their machine' },
+  share: { title: 'Share tasks', hint: 'Create task share links' },
+  services: { title: 'Open services', hint: 'Open a task’s services' },
 };
 
 export function resolveTeamChoice(scopes: AccessScopes): TeamScopeChoice {
@@ -116,8 +116,8 @@ export function listExtraRows(team: RemoteTeam, extra: AccessScopes, userId: str
 }
 
 export function describeExtraHint(row: ExtraRow) {
-  if (row.fromTeam) return 'From the team.';
-  if (row.locked) return 'Set by the team, since a fork runs on their own machine.';
+  if (row.fromTeam) return 'Given by the team';
+  if (row.locked) return 'Forks run on their machine';
   return SCOPE_ROWS[row.scope].hint;
 }
 

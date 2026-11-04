@@ -6,7 +6,7 @@ import { StatusCardPage } from '@/components/share/status-card.tsx';
 import { LoadingLine } from '@/components/status/loading-line.tsx';
 import { useSharedView } from '@/hooks/use-shared-view.ts';
 import { openShareStream } from '@/lib/share/live.ts';
-import { SHARED_READ_ONLY_NOTE } from '@/lib/share/page.ts';
+import { isStatusShare, SHARED_READ_ONLY_NOTE } from '@/lib/share/page.ts';
 import { SHARE_GONE } from '@/lib/share/sources.ts';
 import { requestViewerLogin } from '@/lib/share/viewer.ts';
 
@@ -34,6 +34,6 @@ function LiveSharePage({ link }: { link: ShareLink }) {
       />
     );
   }
-  if (load.view.shared.preset === 'status') return <StatusCardPage view={load.view} />;
+  if (isStatusShare(load.view.shared)) return <StatusCardPage view={load.view} />;
   return <SharedTaskPage view={load.view} note={SHARED_READ_ONLY_NOTE} viewer={viewer} />;
 }

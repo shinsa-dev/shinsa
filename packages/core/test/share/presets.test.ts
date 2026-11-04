@@ -1,11 +1,18 @@
 import { describe, expect, test } from 'bun:test';
 import {
+  CUSTOM_PRESET,
   hasShareGroup,
   resolveSharedTask,
-  SHARE_PRESET_GROUPS,
+  resolveShareScopes,
+  resolveShareScopesPreset,
+  SHARE_PRESET_SCOPES,
   SHARE_PRESETS,
+  type SharedTask,
   type SharedTaskContext,
   type SharePreset,
+  type Task,
+  VIEW_SCOPES,
+  type ViewScope,
 } from '../../src/index.ts';
 import {
   approve,
@@ -23,9 +30,9 @@ import {
 const REQUEST =
   'Fix the scroll in tab groups\n\n<attachments>\n<attachment kind="image" display_name="shot.png" path="/data/attachments/01b/shot.png" url="/api/attachments/01b/shot.png" />\n</attachments>';
 
-function context(preset: SharePreset): SharedTaskContext {
+function context(shown: SharePreset | readonly ViewScope[]): SharedTaskContext {
   return {
-    preset,
+    scopes: typeof shown === 'string' ? SHARE_PRESET_SCOPES[shown] : shown,
     owner: 'mona',
     ownerProfile: { name: 'Mona Lisa', avatarUrl: null },
     machine: 'Studio',
@@ -66,14 +73,15 @@ function share(harness: Harness, taskId: string, preset: SharePreset) {
 describe('share presets', () => {
   test('each preset is a list of field groups, and Default holds every group Status has and the live output', () => {
     expect(SHARE_PRESETS).toEqual(['status', 'standard', 'full']);
-    expect(SHARE_PRESET_GROUPS.standard.every((group) => hasShareGroup('full', group))).toBe(true);
-    expect(hasShareGroup('full', 'messages')).toBe(true);
-    expect(hasShareGroup('standard', 'messages')).toBe(false);
-    expect(SHARE_PRESET_GROUPS.status.every((group) => hasShareGroup('standard', group))).toBe(true);
-    expect(hasShareGroup('standard', 'live')).toBe(true);
-    expect(hasShareGroup('status', 'live')).toBe(false);
-    expect(hasShareGroup('status', 'requests')).toBe(false);
-    expect(hasShareGroup('status', 'code')).toBe(false);
+    const { status, standard, full } = SHARE_PRESET_SCOPES;
+    expect(standard.every((group) => hasShareGroup(full, group))).toBe(true);
+    expect(hasShareGroup(full, 'messages')).toBe(true);
+    expect(hasShareGroup(standard, 'messages')).toBe(false);
+    expect(status.every((group) => hasShareGroup(standard, group))).toBe(true);
+    expect(hasShareGroup(standard, 'live')).toBe(true);
+    expect(hasShareGroup(status, 'live')).toBe(false);
+    expect(hasShareGroup(status, 'requests')).toBe(false);
+    expect(hasShareGroup(status, 'code')).toBe(false);
   });
 
   test('Status keeps the title, the written description, where the task stands and a customer update, and no request, headline, who or where', () => {
@@ -82,7 +90,7 @@ describe('share presets', () => {
     const task = harness.task(taskId);
     const status = share(harness, taskId, 'status');
     expect(status).toMatchObject({
-      preset: 'status',
+      scopes: SHARE_PRESET_SCOPES.status,
       owner: null,
       ownerProfile: null,
       machine: null,
@@ -157,7 +165,7 @@ describe('share presets', () => {
           at: 1,
           url: null,
           limit: 'none' as const,
-          preset: 'status' as const,
+          scopes: SHARE_PRESET_SCOPES.status,
           endsAt: null,
           description: links,
         },
@@ -178,7 +186,7 @@ describe('share presets', () => {
     const taskId = reachPullRequest(harness);
     const full = share(harness, taskId, 'standard');
     expect(full).toMatchObject({
-      preset: 'standard',
+      scopes: SHARE_PRESET_SCOPES.standard,
       owner: 'mona',
       ownerProfile: { name: 'Mona Lisa', avatarUrl: null },
       machine: 'Studio',
@@ -300,5 +308,95 @@ describe('share presets', () => {
       expect(shared[0]?.detail).toBe('Fix the pane.');
       expect(JSON.stringify(shared)).not.toContain('/Users/me/secret');
     }
+  });
+});
+
+const FINDING = {
+  severity: 'optional' as const,
+  file: 'src/scroll.ts',
+  line: 4,
+  message: 'Clamp the offset.',
+};
+
+const MESSAGE = {
+  at: 1,
+  actor: 'you' as const,
+  kind: 'message' as const,
+  text: 'Try the left pane.',
+  detail: 'Try the left pane.',
+  evidenceId: null,
+};
+
+function createWholeTask(harness: Harness): Task {
+  const task = harness.task(reachPullRequest(harness));
+  return {
+    ...task,
+    summary: 'Tab groups scroll again.',
+    findings: [FINDING],
+    share: {
+      at: 1,
+      url: null,
+      limit: 'none',
+      scopes: SHARE_PRESET_SCOPES.full,
+      endsAt: null,
+      description: 'It scrolls.',
+    },
+  };
+}
+
+const SCOPE_PROBES: Readonly<Record<ViewScope, (shared: SharedTask, task: Task) => boolean>> = {
+  identity: (shared, task) => shared.task.title === task.title && shared.task.handle === task.handle,
+  description: (shared) => shared.description !== null,
+  requests: (shared) => shared.task.request !== '',
+  progress: (shared) => shared.update !== null && shared.task.phases.length > 0,
+  summary: (shared) => shared.task.summary !== null,
+  people: (shared) => shared.owner !== null && shared.task.repoId !== null && shared.repo !== null,
+  plan: (shared) => Boolean(shared.task.plan?.document?.approach),
+  reports: (shared) => shared.task.phaseReports.length > 0,
+  review: (shared) => shared.task.findings.length > 0,
+  evidence: (shared) => shared.evidence.length > 0,
+  checks: (shared) => shared.task.checkResults !== null,
+  pull_request: (shared) => shared.task.pullRequest !== null,
+  activity: (shared) => shared.task.activity.some((entry) => entry.kind !== 'message'),
+  code: (shared) => shared.code,
+  runs: (shared) => shared.runs.length > 0,
+  live: (shared) => shared.scopes.includes('live'),
+  messages: (shared) => shared.task.activity.some((entry) => entry.kind === 'message'),
+};
+
+describe('custom share scopes', () => {
+  test('each view scope on its own shows its own fields and nothing another scope holds', () => {
+    const harness = createHarness();
+    const whole = createWholeTask(harness);
+    const task = { ...whole, activity: [...whole.activity, MESSAGE] };
+    for (const scope of VIEW_SCOPES) {
+      const scopes: readonly ViewScope[] = scope === 'messages' ? ['activity', 'messages'] : [scope];
+      const shared = resolveSharedTask(harness.state, task, context(scopes));
+      const shown = VIEW_SCOPES.filter((probe) => SCOPE_PROBES[probe](shared, task));
+      expect({ scope, shown }).toEqual({ scope, shown: [...resolveShareScopes(scopes)] });
+    }
+  });
+
+  test('the full set shows every scope, and a share always shows the title', () => {
+    const harness = createHarness();
+    const whole = createWholeTask(harness);
+    const task = { ...whole, activity: [...whole.activity, MESSAGE] };
+    const every = resolveSharedTask(harness.state, task, context(VIEW_SCOPES));
+    expect(VIEW_SCOPES.filter((probe) => SCOPE_PROBES[probe](every, task))).toEqual([...VIEW_SCOPES]);
+    const none = resolveSharedTask(harness.state, task, context([]));
+    expect(none.scopes).toEqual(['identity']);
+    expect(none.task.title).toBe(task.title);
+    expect(none.task.request).toBe('');
+  });
+
+  test('a scope list is kept in order, once, and named by the preset it matches or Custom', () => {
+    expect(resolveShareScopes(['code', 'plan', 'code'])).toEqual(['identity', 'plan', 'code']);
+    for (const preset of SHARE_PRESETS) {
+      expect(resolveShareScopesPreset([...SHARE_PRESET_SCOPES[preset]].reverse())).toBe(preset);
+    }
+    expect(resolveShareScopesPreset(SHARE_PRESET_SCOPES.standard.filter((scope) => scope !== 'code'))).toBe(
+      CUSTOM_PRESET
+    );
+    expect(resolveShareScopesPreset(['description', 'progress'])).toBe('status');
   });
 });

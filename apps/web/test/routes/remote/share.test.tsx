@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, mock, spyOn } from 'bun:test';
+import { SHARE_PRESET_SCOPES } from '@shinsa/core';
 import type { ShareLiveView, Task } from '@shinsa/core';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { READ_ONLY_REFUSAL, selectReadOnlyRefusal } from '@/lib/connection/read-only.ts';
@@ -142,7 +143,7 @@ describe('the shared page on app.shinsa.dev', () => {
   it('a Status link shows a small status card with its written description, and no request, plan, names, tabs or code', async () => {
     const machine = connect();
     const view = liveView({
-      preset: 'status',
+      scopes: [...SHARE_PRESET_SCOPES.status],
       owner: null,
       machine: null,
       repository: null,
@@ -176,7 +177,7 @@ describe('the shared page on app.shinsa.dev', () => {
 
   it('a Default link has a Chat tab with the agents’ streamed output and nothing to type in', async () => {
     const machine = connect();
-    const view = liveView({ preset: 'standard' });
+    const view = liveView({ scopes: [...SHARE_PRESET_SCOPES.standard] });
     view.shared = { ...view.shared, task: { ...view.shared.task, id: 'task-everything' } };
     view.files = { ...view.files, 'transcript-run-1-0': { version: '1', type: 'text/plain' } };
     await open(machine, view);

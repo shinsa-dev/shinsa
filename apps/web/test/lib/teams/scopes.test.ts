@@ -104,11 +104,11 @@ describe('a machine’s extra scopes in settings', () => {
     ]);
     const narrow = { ...TEAM, scopes: ACCESS_PRESETS.standard };
     const fork = listExtraRows(narrow, [], '8').find((row) => row.scope === 'fork');
-    expect(fork && describeExtraHint(fork)).toBe('Set by the team, since a fork runs on their own machine.');
+    expect(fork && describeExtraHint(fork)).toBe('Forks run on their machine');
     const gates = listExtraRows(TEAM, [], '8')[0];
-    expect(gates && describeExtraHint(gates)).toBe('From the team.');
+    expect(gates && describeExtraHint(gates)).toBe('Given by the team');
     const message = listExtraRows(narrow, [], '8').find((row) => row.scope === 'message');
-    expect(message && describeExtraHint(message)).toBe('Send messages to a task’s agent.');
+    expect(message && describeExtraHint(message)).toBe('Send messages to agents');
   });
 
   it('reads what this machine gave someone, or nothing', () => {

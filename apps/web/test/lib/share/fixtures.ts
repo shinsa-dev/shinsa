@@ -1,3 +1,4 @@
+import { SHARE_PRESET_SCOPES } from '@shinsa/core';
 import type { Evidence, SharedTask } from '@shinsa/core';
 import { createTask } from '../../support/state.ts';
 
@@ -27,7 +28,7 @@ function createSharedEvidence(overrides: Partial<Evidence> & { id: string }): Ev
 
 export function createSharedTask(overrides: Partial<SharedTask> = {}): SharedTask {
   return {
-    preset: 'standard',
+    scopes: [...SHARE_PRESET_SCOPES.standard],
     task: createTask({
       id: 'task-1',
       handle: 'SW-34',
