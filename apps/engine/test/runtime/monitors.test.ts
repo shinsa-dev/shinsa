@@ -1,9 +1,19 @@
-import { describe, expect, test } from 'bun:test';
-import { createState, DomainError, type Monitor, type ShinsaCommand, type ShinsaState } from '@shinsa/core';
-import type { Engine } from '../../src/runtime/engine.ts';
+import { afterEach, describe, expect, test } from 'bun:test';
+import { createState, DomainError, type Monitor, type ShinsaState } from '@shinsa/core';
+import { Duration, Layer } from 'effect';
+import { MAX_CLOCK_DELAY } from '../../src/runtime/clock/schema.ts';
+import { EngineStopped } from '../../src/runtime/engine/schema.ts';
 import { MonitorClock } from '../../src/runtime/index.ts';
-import { until } from '../helpers/index.ts';
+import { MonitorClockTimings } from '../../src/runtime/monitors/schema.ts';
+import { captureLogs } from '../helpers/index.ts';
 import { createTask } from '../helpers/state.ts';
+import { createFakeEngineCore, openClock } from './harness.ts';
+
+const open: { close: () => Promise<void> }[] = [];
+
+afterEach(async () => {
+  for (const harness of open.splice(0)) await harness.close();
+});
 
 function createMonitor(overrides: Partial<Monitor> = {}): Monitor {
   return {
@@ -25,39 +35,24 @@ function createMonitor(overrides: Partial<Monitor> = {}): Monitor {
 function createFakeEngine(patch: (state: ShinsaState) => void) {
   const state = createState();
   patch(state);
-  const listeners = new Set<() => void>();
-  const sent: { command: ShinsaCommand; id: string | undefined }[] = [];
   let failNext = false;
   let refuseAll = false;
   let applyFires = false;
   let answerNothing = false;
-  const engine = {
-    state,
-    subscribe: (listener: () => void) => {
-      listeners.add(listener);
-      return () => listeners.delete(listener);
-    },
-    dispatch: (command: ShinsaCommand, options: { id?: string } = {}) => {
-      sent.push({ command, id: options.id });
-      if (failNext) {
-        failNext = false;
-        return Promise.reject(new Error('log full'));
-      }
-      if (refuseAll)
-        return Promise.reject(new DomainError({ code: 'monitor_stale', message: 'That check is not due.' }));
-      const task = command.type === 'monitor.fire' ? state.tasks[command.taskId] : undefined;
-      if (task?.monitor && applyFires) task.monitor = { ...task.monitor, status: 'fired' };
-      if (answerNothing || command.type !== 'monitor.fire') return Promise.resolve([]);
-      return Promise.resolve([{ ...command, type: 'monitor.fired' }]);
-    },
-  };
+  const fake = createFakeEngineCore(state, (command) => {
+    if (failNext) {
+      failNext = false;
+      return new EngineStopped({ message: 'log full' });
+    }
+    if (refuseAll) return new DomainError({ code: 'monitor_stale', message: 'That check is not due.' });
+    const task = command.type === 'monitor.fire' ? state.tasks[command.taskId] : undefined;
+    if (task?.monitor && applyFires) task.monitor = { ...task.monitor, status: 'fired' };
+    if (answerNothing || command.type !== 'monitor.fire') return [];
+    return [{ ...command, type: 'monitor.fired' }];
+  });
   return {
-    engine: engine as unknown as Engine,
+    ...fake,
     state,
-    sent,
-    notify: () => {
-      for (const listener of listeners) listener();
-    },
     failOnce: () => {
       failNext = true;
     },
@@ -71,13 +66,26 @@ function createFakeEngine(patch: (state: ShinsaState) => void) {
     applyFires: () => {
       applyFires = true;
     },
-    listeners,
   };
+}
+
+async function openMonitors(fake: ReturnType<typeof createFakeEngine>, now: number, minDelayMs?: number) {
+  const timings =
+    minDelayMs === undefined
+      ? Layer.empty
+      : Layer.succeed(MonitorClockTimings, {
+          minDelay: Duration.millis(minDelayMs),
+          maxDelay: MAX_CLOCK_DELAY,
+        });
+  const clock = await openClock(MonitorClock, MonitorClock.layer.pipe(Layer.provide(timings)), fake.core, {
+    now,
+  });
+  open.push(clock);
+  return clock;
 }
 
 describe('the monitor clock', () => {
   test('fires each due monitor once with the next attempt, keyed so a repeat is the same command', async () => {
-    let now = 5_000;
     const fake = createFakeEngine((state) => {
       state.tasks['task-1'] = createTask({ monitor: createMonitor({ attempts: 1 }) });
       state.tasks['task-2'] = createTask({
@@ -90,7 +98,7 @@ describe('the monitor clock', () => {
       });
       state.tasks['task-4'] = createTask({ id: 'task-4' });
     });
-    const clock = new MonitorClock(fake.engine, { now: () => now });
+    const clock = await openMonitors(fake, 5_000);
     await clock.fireDue();
     expect(fake.sent).toEqual([
       {
@@ -98,7 +106,7 @@ describe('the monitor clock', () => {
         id: 'monitor:m-1:2',
       },
     ]);
-    now = 9_500;
+    await clock.setTime(9_500);
     await clock.fireDue();
     expect(fake.sent.map((entry) => entry.id)).toEqual(['monitor:m-1:2', 'monitor:m-1:2', 'monitor:m-2:1']);
   });
@@ -109,7 +117,7 @@ describe('the monitor clock', () => {
         monitor: createMonitor({ nextCheckAt: 50_000, timeoutAt: 2_000 }),
       });
     });
-    await new MonitorClock(fake.engine, { now: () => 3_000 }).fireDue();
+    await (await openMonitors(fake, 3_000)).fireDue();
     expect(fake.sent).toHaveLength(1);
   });
 
@@ -118,19 +126,20 @@ describe('the monitor clock', () => {
       state.tasks['task-1'] = createTask({ monitor: createMonitor({ nextCheckAt: 0, timeoutAt: 60_000 }) });
     });
     fake.applyFires();
-    const clock = new MonitorClock(fake.engine, { minDelayMs: 0 });
-    clock.start();
-    clock.start();
+    const clock = await openMonitors(fake, 0, 0);
+    await clock.start();
+    await clock.start();
     expect(fake.listeners.size).toBe(1);
-    fake.notify();
-    await until('the fire', () => fake.sent.length === 1);
-    fake.state.tasks['task-1'] = createTask({ monitor: null });
-    fake.notify();
-    clock.stop();
-    clock.stop();
-    expect(fake.listeners.size).toBe(0);
-    fake.notify();
+    await clock.adjust(1);
     expect(fake.sent).toHaveLength(1);
+    fake.state.tasks['task-1'] = createTask({ monitor: createMonitor({ nextCheckAt: 5_000 }) });
+    fake.notify();
+    await clock.stop();
+    await clock.stop();
+    await clock.adjust(10_000);
+    expect(fake.sent).toHaveLength(1);
+    await clock.close();
+    expect(fake.listeners.size).toBe(0);
   });
 
   test('a fire the engine refuses is not sent again while the monitor stays the same', async () => {
@@ -138,11 +147,9 @@ describe('the monitor clock', () => {
       state.tasks['task-1'] = createTask({ monitor: createMonitor({ nextCheckAt: 0 }) });
     });
     fake.refuse();
-    const clock = new MonitorClock(fake.engine, { now: () => 5_000 });
-    clock.start();
+    const clock = await openMonitors(fake, 5_000);
     await clock.fireDue();
     await clock.fireDue();
-    clock.stop();
     expect(fake.sent.map((entry) => entry.id)).toEqual(['monitor:m-1:1']);
     fake.update((state) => {
       const task = state.tasks['task-1'];
@@ -157,11 +164,9 @@ describe('the monitor clock', () => {
       state.tasks['task-1'] = createTask({ monitor: createMonitor({ nextCheckAt: 0 }) });
     });
     fake.answerNothing();
-    const clock = new MonitorClock(fake.engine, { now: () => 5_000 });
-    clock.start();
+    const clock = await openMonitors(fake, 5_000);
     await clock.fireDue();
     await clock.fireDue();
-    clock.stop();
     expect(fake.sent.map((entry) => entry.id)).toEqual(['monitor:m-1:1']);
     fake.update((state) => {
       const task = state.tasks['task-1'];
@@ -177,10 +182,18 @@ describe('the monitor clock', () => {
     });
     fake.failOnce();
     fake.applyFires();
-    const clock = new MonitorClock(fake.engine, { minDelayMs: 5 });
-    clock.start();
-    await until('two tries', () => fake.sent.length === 2);
-    clock.stop();
+    const logs = captureLogs();
+    try {
+      const clock = await openMonitors(fake, 0, 5);
+      await clock.start();
+      await clock.adjust(5);
+      expect(fake.sent).toHaveLength(1);
+      await clock.adjust(5);
+      expect(fake.sent).toHaveLength(2);
+      expect(logs.fieldsOf('[Monitors] Could not wake a waiting task')).toEqual([{ error: 'log full' }]);
+    } finally {
+      logs.restore();
+    }
     expect(fake.state.tasks['task-1']?.monitor?.status).toBe('fired');
   });
 });

@@ -21,7 +21,7 @@ const USAGE = describeHelp();
 describe('shinsa help', () => {
   test('opens with the commands that open Shinsa and hand it work, then the engine, then every group by section', () => {
     const lines = USAGE.split('\n');
-    const term = (text: string) => text.padEnd(25);
+    const term = (text: string) => text.padEnd(24);
     expect(lines.slice(0, 7)).toEqual([
       'Shinsa hands coding work to agents and brings back only the decisions. (0.0.0)',
       '',
@@ -59,18 +59,18 @@ describe('shinsa help', () => {
     );
     expect(lines).toContain('\u001b[1mOpen Shinsa and hand it work\u001b[22m');
     expect(lines).toContain(
-      `  \u001b[36mshinsa do\u001b[39m \u001b[2m<request...>\u001b[22m   Create a task from a request; Shinsa picks the kind of work and runs it.`
+      `  \u001b[36mshinsa do\u001b[39m \u001b[2m<request...>\u001b[22m  Create a task from a request; Shinsa picks the kind of work and runs it.`
     );
     expect(lines.at(-1)).toContain('\u001b[36mshinsa help --all\u001b[39m');
   });
 
   test('descriptions wrap to the terminal with a hanging indent', () => {
     const lines = describeHelp({ style: PLAIN_STYLE, width: 60 }).split('\n');
-    const at = lines.indexOf(`  ${'shinsa [folder]'.padEnd(25)}Open the app; in a repository,`);
+    const at = lines.indexOf(`  ${'shinsa [folder]'.padEnd(24)}Open the app; in a repository,`);
     expect(at).toBeGreaterThan(0);
     expect(lines.slice(at + 1, at + 3)).toEqual([
-      `${' '.repeat(27)}open it on that repository’s`,
-      `${' '.repeat(27)}project.`,
+      `${' '.repeat(26)}open it on that repository’s`,
+      `${' '.repeat(26)}project.`,
     ]);
     expect(lines.every((line) => line.length <= 60)).toBe(true);
   });

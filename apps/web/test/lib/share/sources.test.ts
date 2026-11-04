@@ -1,4 +1,6 @@
 import { afterEach, describe, expect, it, mock } from 'bun:test';
+import { runApp } from '@/lib/runtime/app.ts';
+import { SHARED_TEXT_FAILED } from '@/lib/share/schema.ts';
 import { requestSharedText, SHARE_GONE, ShareGoneError } from '@/lib/share/sources.ts';
 import { requestViewerLogin } from '@/lib/share/viewer.ts';
 import { answerFetch } from '../../support/fetch-fake.ts';
@@ -8,10 +10,6 @@ afterEach(() => {
   mock.restore();
 });
 
-function answer(response: Response | Error): typeof fetch {
-  return (() => (response instanceof Error ? Promise.reject(response) : Promise.resolve(response))) as never;
-}
-
 describe('a shared file', () => {
   it('says plainly when a link no longer works', () => {
     expect(new ShareGoneError().message).toBe(SHARE_GONE);
@@ -19,10 +17,20 @@ describe('a shared file', () => {
   });
 
   it('reads the diff as text, and fails in words when it does not load', async () => {
-    expect(await requestSharedText('/diff', answer(new Response(DIFF)))).toBe(DIFF);
-    await expect(requestSharedText('/diff', answer(new Response('', { status: 404 })))).rejects.toThrow(
-      'The code did not load. Reload the page to try again.'
-    );
+    const answers: (Response | Error)[] = [
+      new Response(DIFF),
+      new Response('', { status: 404 }),
+      new Error('offline'),
+    ];
+    const requests = answerFetch(() => {
+      const next = answers.shift() as Response | Error;
+      if (next instanceof Error) throw next;
+      return next;
+    });
+    expect(await runApp(requestSharedText('/diff'))).toBe(DIFF);
+    await expect(runApp(requestSharedText('/diff'))).rejects.toThrow(SHARED_TEXT_FAILED);
+    await expect(runApp(requestSharedText('/diff'))).rejects.toThrow(SHARED_TEXT_FAILED);
+    expect(requests.map(({ path }) => path)).toEqual(Array(3).fill('/diff'));
   });
 });
 

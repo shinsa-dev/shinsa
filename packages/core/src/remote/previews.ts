@@ -1,3 +1,4 @@
+import { Effect, Option } from 'effect';
 import { parseJsonRecord } from '../domain/records.ts';
 import { HOUR_MS, MINUTE_MS } from '../domain/time.ts';
 import {
@@ -12,7 +13,7 @@ import {
   serializeBase64Url,
   URL_SAFE_SEGMENT,
 } from './bytes.ts';
-import { createSignedToken, importHmacKey, signHmac, verifySignedToken } from './tokens.ts';
+import { createSignedToken, findHmacKey, signHmac, verifySignedToken } from './tokens.ts';
 
 export const PREVIEW_ORIGIN = 'https://shinsa.page';
 
@@ -41,6 +42,8 @@ const ACCESS_CONTEXT = encodeText('shinsa-preview-access\n');
 const PRIVATE_ID_CONTEXT = 'shinsa-private-preview\n';
 
 const LABEL_LIMIT = 63;
+
+const selectText = Option.liftThrowable(decodeText);
 
 export interface PreviewAddress {
   instanceId: string;
@@ -78,13 +81,9 @@ export function parsePreviewLabel(label: string): PreviewAddress | null {
   if (label.length > LABEL_LIMIT) return null;
   const bytes = parseBase32(label);
   if (!bytes || bytes.length <= PREVIEW_ID_BYTES) return null;
-  try {
-    const instanceId = decodeText(bytes.slice(PREVIEW_ID_BYTES));
-    if (!URL_SAFE_SEGMENT.test(instanceId)) return null;
-    return { instanceId, previewId: serializeBase64Url(bytes.slice(0, PREVIEW_ID_BYTES)) };
-  } catch {
-    return null;
-  }
+  const instanceId = Option.getOrNull(selectText(bytes.slice(PREVIEW_ID_BYTES)));
+  if (instanceId === null || !URL_SAFE_SEGMENT.test(instanceId)) return null;
+  return { instanceId, previewId: serializeBase64Url(bytes.slice(0, PREVIEW_ID_BYTES)) };
 }
 
 export function resolvePreviewOrigin(address: PreviewAddress, zoneOrigin = PREVIEW_ORIGIN) {
@@ -105,17 +104,13 @@ export function parsePreviewHost(host: string, zoneOrigin = PREVIEW_ORIGIN): Pre
 }
 
 export function parsePreviewUrl(url: string | null, zoneOrigin = PREVIEW_ORIGIN): PreviewLink | null {
-  if (!url) return null;
-  try {
-    const parsed = new URL(url);
-    if (parsed.protocol !== new URL(zoneOrigin).protocol) return null;
-    const address = parsePreviewHost(parsed.host, zoneOrigin);
-    const key = parsed.searchParams.get(PREVIEW_KEY_PARAM);
-    if (!(address && key && isPreviewKey(key))) return null;
-    return { ...address, key };
-  } catch {
-    return null;
-  }
+  if (!url || !URL.canParse(url)) return null;
+  const parsed = new URL(url);
+  if (parsed.protocol !== new URL(zoneOrigin).protocol) return null;
+  const address = parsePreviewHost(parsed.host, zoneOrigin);
+  const key = parsed.searchParams.get(PREVIEW_KEY_PARAM);
+  if (!(address && key && isPreviewKey(key))) return null;
+  return { ...address, key };
 }
 
 export function resolvePreviewTunnelPath(previewId: string, path: string) {
@@ -131,13 +126,15 @@ export function parsePreviewTunnelPath(pathname: string) {
   return { previewId, path: slash === -1 ? '/' : rest.slice(slash) };
 }
 
-export async function resolvePrivatePreviewId(connectKey: string, run: PrivatePreviewRun) {
-  const key = await importHmacKey(connectKey);
-  if (!key) throw new Error('The connect key is not valid.');
+export const resolvePrivatePreviewId = Effect.fn('resolvePrivatePreviewId')(function* (
+  connectKey: string,
+  run: PrivatePreviewRun
+) {
+  const key = yield* findHmacKey(connectKey, 'The connect key is not valid.');
   const message = encodeText(`${PRIVATE_ID_CONTEXT}${run.serviceId}\n${run.taskId ?? ''}`);
-  const digest = await signHmac(key, message);
+  const digest = yield* signHmac(key, message);
   return serializeBase64Url(digest.slice(0, PREVIEW_ID_BYTES));
-}
+});
 
 export function resolvePrivatePreviewUrl(
   address: PreviewAddress,
@@ -149,36 +146,35 @@ export function resolvePrivatePreviewUrl(
 }
 
 function readAccessClaim(payload: Bytes): PreviewAccessClaim | null {
-  try {
-    const fields = parseJsonRecord(decodeText(payload));
-    if (typeof fields?.i !== 'string' || typeof fields.p !== 'string') return null;
-    if (typeof fields.u !== 'string' || typeof fields.e !== 'number') return null;
-    return { instanceId: fields.i, previewId: fields.p, userId: fields.u, expiresAt: fields.e };
-  } catch {
-    return null;
-  }
+  const text = Option.getOrNull(selectText(payload));
+  const fields = text === null ? null : parseJsonRecord(text);
+  if (typeof fields?.i !== 'string' || typeof fields.p !== 'string') return null;
+  if (typeof fields.u !== 'string' || typeof fields.e !== 'number') return null;
+  return { instanceId: fields.i, previewId: fields.p, userId: fields.u, expiresAt: fields.e };
 }
 
-export async function createPreviewAccessToken(connectKey: string, claim: PreviewAccessClaim) {
-  const key = await importHmacKey(connectKey);
-  if (!key) throw new Error('The connect key is not valid.');
+export const createPreviewAccessToken = Effect.fn('createPreviewAccessToken')(function* (
+  connectKey: string,
+  claim: PreviewAccessClaim
+) {
+  const key = yield* findHmacKey(connectKey, 'The connect key is not valid.');
   const payload = encodeText(
     JSON.stringify({ i: claim.instanceId, p: claim.previewId, u: claim.userId, e: claim.expiresAt })
   );
-  return createSignedToken(key, ACCESS_CONTEXT, payload);
-}
+  return yield* createSignedToken(key, ACCESS_CONTEXT, payload);
+});
 
-export async function verifyPreviewAccessToken(
+export const verifyPreviewAccessToken = Effect.fn('verifyPreviewAccessToken')(function* (
   connectKey: string,
   token: string,
   address: PreviewAddress,
   now: number,
   ttlMs = PREVIEW_ACCESS_TTL_MS
-): Promise<PreviewAccessClaim | null> {
-  const payload = await verifySignedToken(connectKey, ACCESS_CONTEXT, token);
+) {
+  const payload = yield* verifySignedToken(connectKey, ACCESS_CONTEXT, token);
   if (!payload) return null;
   const claim = readAccessClaim(payload);
   if (!claim || claim.instanceId !== address.instanceId || claim.previewId !== address.previewId) return null;
   if (claim.expiresAt <= now || claim.expiresAt > now + ttlMs) return null;
   return claim;
-}
+});

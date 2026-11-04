@@ -6,12 +6,15 @@ import {
   type ScheduleTarget,
   TASK_PRIORITIES,
   type TaskPriority,
+  type UserCommand,
   validateScheduleRequest,
   type WatchSuggestion,
 } from '@shinsa/core';
+import { Clock, DateTime, Effect } from 'effect';
 import type { CommandReceipt, SurfaceClient } from './client.ts';
 import type { FieldSpec, Values } from './fields.ts';
 import { findProjectId, findTaskId, resolveOptionalRepoId } from './resolve.ts';
+import type { SurfaceFailure } from './schema.ts';
 import { defineAction, defineCommand, defineRead, readValue, type SurfaceSpec } from './spec.ts';
 
 const SCHEDULE_FIELD: FieldSpec = {
@@ -32,7 +35,9 @@ const SUGGESTION_FIELD: FieldSpec = {
 
 function describeSchedule(schedule: Schedule, titleOf: (taskId: string) => string | null) {
   const state = schedule.stopped ? 'finished' : schedule.enabled ? 'on' : 'paused';
-  const next = schedule.nextRunAt ? ` · next ${new Date(schedule.nextRunAt).toISOString()}` : '';
+  const next = schedule.nextRunAt
+    ? ` · next ${DateTime.formatIso(DateTime.makeUnsafe(schedule.nextRunAt))}`
+    : '';
   return `${schedule.id}  ${schedule.name}  (${state}) ${describeScheduleTrigger(schedule.trigger)} · ${describeScheduleTarget(schedule, titleOf)}${next}`;
 }
 
@@ -73,78 +78,95 @@ function resolveTrigger(values: Values, now: number) {
     webhook: resolveWebhookInput(values),
   };
   const result = validateScheduleRequest(input, now);
-  if (!result.ok) throw new DomainError({ code: 'schedule_invalid', message: result.errors.join(' ') });
-  return result.value.trigger;
+  if (!result.ok)
+    return Effect.fail(new DomainError({ code: 'schedule_invalid', message: result.errors.join(' ') }));
+  return Effect.succeed(result.value.trigger);
 }
 
-async function resolveTarget(client: SurfaceClient, values: Values): Promise<ScheduleTarget | null> {
+const resolveTarget = Effect.fn('Surface.scheduleTarget')(function* (
+  client: SurfaceClient,
+  values: Values
+): Effect.fn.Return<ScheduleTarget | null, SurfaceFailure> {
   const task = readValue(values, 'task');
   if (task && values.newTask)
-    throw new DomainError({ code: 'schedule_invalid', message: 'Give --new-task or --task, not both.' });
-  if (task) return { kind: 'task', taskId: await findTaskId(client, task) };
+    return yield* new DomainError({
+      code: 'schedule_invalid',
+      message: 'Give --new-task or --task, not both.',
+    });
+  if (task) return { kind: 'task', taskId: yield* findTaskId(client, task) };
   if (!values.newTask) return null;
   return {
     kind: 'new_task',
-    repoId: await resolveOptionalRepoId(client, readValue(values, 'repo')),
+    repoId: yield* resolveOptionalRepoId(client, readValue(values, 'repo')),
     priority: (values.priority as TaskPriority | undefined) ?? 'normal',
     mode: values.justAnswer ? 'ask' : 'build',
   };
-}
+});
 
-function assertHookSecret(client: SurfaceClient, values: Values) {
+const assertHookSecret = Effect.fn('Surface.assertHookSecret')(function* (
+  client: SurfaceClient,
+  values: Values
+) {
   const ref = readValue(values, 'signatureSecretRef');
   const signed = Boolean(values.webhook && readValue(values, 'signatureHeader'));
   if (ref && !client.hookSecrets) {
-    throw new DomainError({
+    return yield* new DomainError({
       code: 'schedule_invalid',
       message:
         '--signature-secret-ref is for agents. Set the signing secret with `shinsa schedules webhook-secret`.',
     });
   }
   if (ref && !signed) {
-    throw new DomainError({
+    return yield* new DomainError({
       code: 'schedule_invalid',
       message: 'Give --signature-secret-ref with --webhook and --signature-header.',
     });
   }
-  if (signed) client.hookSecrets?.assertSecret(readValue(values, 'id') || null, ref || null);
-}
+  const secrets = client.hookSecrets;
+  if (signed && secrets) yield* secrets.assertSecret(readValue(values, 'id') || null, ref || null);
+});
 
 function writeHookSecret(values: Values, receipt: CommandReceipt, client: SurfaceClient) {
   const ref = readValue(values, 'signatureSecretRef');
   const scheduleId = receipt.scheduleId ?? readValue(values, 'id');
-  if (!ref || !scheduleId || !client.hookSecrets) return null;
+  if (!ref || !scheduleId || !client.hookSecrets) return Effect.succeed(null);
   return client.hookSecrets.writeSecret(scheduleId, ref);
 }
 
-async function resolveSource(client: SurfaceClient, values: Values) {
+const resolveSource = Effect.fn('Surface.scheduleSource')(function* (client: SurfaceClient, values: Values) {
   const server = readValue(values, 'source');
   const project = readValue(values, 'project');
   if (!server) {
     if (project)
-      throw new DomainError({ code: 'schedule_invalid', message: 'Give --project only with --source.' });
+      return yield* new DomainError({
+        code: 'schedule_invalid',
+        message: 'Give --project only with --source.',
+      });
     return null;
   }
   if (!project) {
-    throw new DomainError({
+    return yield* new DomainError({
       code: 'schedule_invalid',
       message: 'Name the project whose data source it reads with --project.',
     });
   }
-  return { projectId: await findProjectId(client, project), server };
-}
+  return { projectId: yield* findProjectId(client, project), server };
+});
 
-async function resolveTimeZone(client: SurfaceClient, values: Values) {
+const resolveTimeZone = Effect.fn('Surface.scheduleTimeZone')(function* (
+  client: SurfaceClient,
+  values: Values
+) {
   const given = readValue(values, 'timeZone');
   if (given) return given;
   const id = readValue(values, 'id');
   if (id) {
-    const { schedules } = await client.api.state.schedules();
+    const { schedules } = yield* client.api.state.schedules();
     const existing = schedules.find((schedule) => schedule.id === id);
     if (existing) return existing.timeZone;
   }
   return Intl.DateTimeFormat().resolvedOptions().timeZone;
-}
+});
 
 export const SCHEDULE_SPECS: SurfaceSpec[] = [
   defineRead({
@@ -229,21 +251,23 @@ export const SCHEDULE_SPECS: SurfaceSpec[] = [
         description: 'IANA time zone for --daily-at. The machine’s by default.',
       },
     ],
-    build: async (values, client) => {
-      assertHookSecret(client, values);
-      return {
+    build: Effect.fn('Surface.scheduleWrite')(function* (values, client) {
+      yield* assertHookSecret(client, values);
+      const trigger = yield* resolveTrigger(values, yield* Clock.currentTimeMillis);
+      const command: UserCommand = {
         type: 'schedule.write',
         scheduleId: readValue(values, 'id') || null,
         name: readValue(values, 'name') || null,
         text: readValue(values, 'message') || null,
-        trigger: resolveTrigger(values, Date.now()),
-        target: await resolveTarget(client, values),
-        source: await resolveSource(client, values),
+        trigger,
+        target: yield* resolveTarget(client, values),
+        source: yield* resolveSource(client, values),
         enabled: typeof values.enabled === 'boolean' ? values.enabled : null,
         maxRuns: typeof values.maxRuns === 'number' ? values.maxRuns : null,
-        timeZone: await resolveTimeZone(client, values),
+        timeZone: yield* resolveTimeZone(client, values),
       };
-    },
+      return command;
+    }),
     done: (values) =>
       values.id ? 'Saved the schedule.' : 'Created the schedule. `shinsa schedules list` shows it.',
     after: writeHookSecret,
@@ -330,12 +354,13 @@ export const SCHEDULE_SPECS: SurfaceSpec[] = [
       SCHEDULE_FIELD,
       { name: 'secret', kind: 'text', positional: 'one', required: true, description: 'The signing secret.' },
     ],
-    act: async (client, values) => {
-      const data = await client.api.secrets.writeWebhookSecret({
-        params: { scheduleId: readValue(values, 'schedule') },
-        payload: { secret: readValue(values, 'secret') },
-      });
-      return { data, text: 'Saved the signing secret.' };
-    },
+    act: (client, values) =>
+      Effect.map(
+        client.api.secrets.writeWebhookSecret({
+          params: { scheduleId: readValue(values, 'schedule') },
+          payload: { secret: readValue(values, 'secret') },
+        }),
+        (data) => ({ data, text: 'Saved the signing secret.' })
+      ),
   }),
 ];

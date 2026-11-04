@@ -72,18 +72,6 @@ const OPEN_COMMANDS: CliCommand[] = [
     ],
     examples: ['shinsa do "fix the scroll in tab groups"', 'shinsa do "add search to the docs" --plan-first'],
   },
-  {
-    name: 'import',
-    usage: 'shinsa import <session> [--in <folder>] [--urgent | --high]',
-    summary: 'Create a task from a Claude Code session, starting with a plan to approve.',
-    detail:
-      'Takes a session file (.jsonl) or a session id. The task starts with a plan for you to approve, so nothing builds until you have looked.',
-    options: [
-      { flag: '--in <folder>', text: 'Work in this folder instead of the one the session ran in.' },
-      ...PRIORITY_OPTIONS,
-    ],
-    examples: ['shinsa import 0b9c2f4e-6a8d', 'shinsa import ~/session.jsonl --in ~/Developer/shop'],
-  },
 ];
 
 const ENGINE_COMMANDS: CliCommand[] = [

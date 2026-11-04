@@ -1,6 +1,7 @@
 import type { Repo, Task } from '@shinsa/core';
 import { Context, Effect, Layer } from 'effect';
 import type { EffectAttempt } from '../../engine/schema.ts';
+import { resolveEffectFailure } from '../../failures/classify.ts';
 import type { EffectFailure } from '../../failures/schema.ts';
 import { EDITS_COMMIT_MESSAGE } from '../schema.ts';
 import { EffectWorld } from '../world/service.ts';
@@ -20,8 +21,9 @@ export class EditCommits extends Context.Service<
         attempt: EffectAttempt
       ) {
         if ((task.editedPaths ?? []).length === 0) return;
-        const committed = yield* world.bridge(() =>
-          world.workspaces.resolve(task).commit(repo, task, EDITS_COMMIT_MESSAGE)
+        const committed = yield* Effect.mapError(
+          world.workspaces.resolve(task).commit(repo, task, EDITS_COMMIT_MESSAGE),
+          resolveEffectFailure
         );
         yield* world.dispatch(
           { type: 'task.commit_edits', taskId: task.id, treeHash: committed.treeHash },

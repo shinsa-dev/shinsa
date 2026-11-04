@@ -2,12 +2,15 @@ import { describe, expect, test } from 'bun:test';
 import { chmodSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { AgentModel, OnboardingFlow, OnboardingStepId } from '@shinsa/core';
-import { ConfigStore } from '../../src/config/index.ts';
-import { type ClaudeAccount, type CommandRunner, Onboarding } from '../../src/onboarding/index.ts';
-import { Roots } from '../../src/repos/index.ts';
-import { Engine } from '../../src/runtime/index.ts';
-import { EventLog } from '../../src/store/index.ts';
+import { Effect } from 'effect';
+import type { ConfigStore } from '../../src/config/index.ts';
+import type { ClaudeAccount } from '../../src/onboarding/index.ts';
+import { readMachineConfig } from '../helpers/config.ts';
+import { Engine } from '../helpers/engine.ts';
+import { openEventLog } from '../helpers/event-log.ts';
 import { captureLogs, createTempDir, createTestConfig } from '../helpers/index.ts';
+import { createTestMachine } from '../helpers/machine.ts';
+import { createPromisedOnboarding, type FakeCommand, type TestOnboarding } from './harness.ts';
 
 const MODELS: AgentModel[] = [
   { id: 'opus', label: 'Opus 5.5', description: '' },
@@ -16,7 +19,7 @@ const MODELS: AgentModel[] = [
 
 const ME: ClaudeAccount = { id: 'a-1', email: 'me@example.com', signedIn: true };
 
-const ALL_OK: CommandRunner = (command) =>
+const ALL_OK: FakeCommand = (command) =>
   Promise.resolve({
     ok: true,
     code: 0,
@@ -28,29 +31,33 @@ const ALL_OK: CommandRunner = (command) =>
     timedOut: false,
   });
 
-const NO_CLAUDE: CommandRunner = (command) =>
+const NO_CLAUDE: FakeCommand = (command) =>
   command[0] === 'claude'
     ? Promise.resolve({ ok: false, code: 127, stdout: '', stderr: 'claude: not found', timedOut: false })
     : ALL_OK(command, '');
 
-const NO_BUN: CommandRunner = (command) =>
+const NO_BUN: FakeCommand = (command) =>
   command[0] === 'bun'
     ? Promise.resolve({ ok: false, code: 127, stdout: '', stderr: 'bun: not found', timedOut: false })
     : ALL_OK(command, '');
 
 interface Setup {
   accounts?: ClaudeAccount[];
-  run?: CommandRunner;
+  run?: FakeCommand;
   suggestions?: boolean;
   refused?: boolean;
   inspect?: boolean;
   models?: AgentModel[];
 }
 
+function runUpdate(store: ConfigStore['Service'], patch: Parameters<ConfigStore['Service']['update']>[0]) {
+  return Effect.runSync(store.update(patch));
+}
+
 function setup(options: Setup = {}) {
   const root = createTempDir();
   const config = createTestConfig(root, { roots: [], inspect: options.inspect ?? false });
-  const engine = new Engine(new EventLog(config.databasePath));
+  const engine = new Engine(openEventLog(config.databasePath));
   const developer = join(root, 'Developer');
   const work = join(root, 'work');
   const documents = join(root, 'Documents');
@@ -60,30 +67,28 @@ function setup(options: Setup = {}) {
   mkdirSync(documents, { recursive: true });
   const accounts = [...(options.accounts ?? [ME])];
   function open() {
-    const store = new ConfigStore(config.configPath);
-    const roots = new Roots([], store, root, () =>
-      Promise.resolve({
-        candidates:
-          options.suggestions === false
-            ? []
-            : [
-                { path: developer, repoCount: 3, repos: ['app'] },
-                { path: work, repoCount: 1, repos: ['site'] },
-              ],
-        truncated: false,
-        refused: options.refused ? [documents] : [],
-      })
-    );
-    const onboarding = new Onboarding({
+    const machine = { ...config, machine: readMachineConfig(config.configPath) };
+    const { store, context } = createTestMachine(engine, machine, {
+      discover: () =>
+        Promise.resolve({
+          candidates:
+            options.suggestions === false
+              ? []
+              : [
+                  { path: developer, repoCount: 3, repos: ['app'] },
+                  { path: work, repoCount: 1, repos: ['site'] },
+                ],
+          truncated: false,
+          refused: options.refused ? [documents] : [],
+        }),
+    });
+    const onboarding = createPromisedOnboarding({
       engine,
       config,
-      store,
-      roots,
-      resolveLogin: () => Promise.resolve(null),
-      ask: () => Promise.resolve(null),
+      machine: context,
       run: options.run ?? ALL_OK,
-      models: { listModels: () => Promise.resolve(options.models ?? MODELS) },
-      accounts: () => Promise.resolve([...accounts]),
+      models: { listModels: Effect.succeed(options.models ?? MODELS) },
+      accounts: Effect.sync(() => [...accounts]),
     });
     return { onboarding, store };
   }
@@ -91,16 +96,16 @@ function setup(options: Setup = {}) {
   return { root, config, engine, developer, work, documents, accounts, open, ...first };
 }
 
-function answer(onboarding: Onboarding, stepId: OnboardingStepId, ...values: string[]) {
+function answer(onboarding: TestOnboarding, stepId: OnboardingStepId, ...values: string[]) {
   return onboarding.setup.reply({ type: 'answer', stepId, values });
 }
 
-async function answerFolders(onboarding: Onboarding, ...roots: string[]) {
+async function answerFolders(onboarding: TestOnboarding, ...roots: string[]) {
   await answer(onboarding, 'roots', ...roots);
   return onboarding.setup.reply({ type: 'answer', stepId: 'projects', values: ['continue'], projects: [] });
 }
 
-function openStep(onboarding: Onboarding, stepId: OnboardingStepId) {
+function openStep(onboarding: TestOnboarding, stepId: OnboardingStepId) {
   return onboarding.setup.reply({ type: 'open', stepId });
 }
 
@@ -151,7 +156,7 @@ describe('the setup steps', () => {
     expect(flow.step?.options).toEqual([]);
     expect(flow.step?.description).toContain('found no repositories');
     const next = await answer(onboarding, 'roots', work);
-    expect(store.config.roots).toEqual([work]);
+    expect(Effect.runSync(store.config).roots).toEqual([work]);
     expect(next.step?.id).toBe('projects');
     expect(next.steps[0]?.summary).toMatch(/work$/);
     const back = await openStep(onboarding, 'roots');
@@ -163,7 +168,7 @@ describe('the setup steps', () => {
   test('the defaults come with the recommended choices picked, and Continue saves all three at once', async () => {
     const { onboarding, engine, store, developer, work } = setup();
     const defaults = await answerFolders(onboarding, developer, work);
-    expect(store.config.roots).toEqual([developer, work]);
+    expect(Effect.runSync(store.config).roots).toEqual([developer, work]);
     expect(defaults.step).toMatchObject({ id: 'defaults', title: 'How should agents work?', options: [] });
     expect(defaults.step?.groups.map((group) => [group.id, group.label])).toEqual([
       ['model', 'Model'],
@@ -252,11 +257,11 @@ describe('the setup steps', () => {
       expect(blocked.step).toMatchObject({ id: 'roots', problem: null, access: [work] });
       expect(listChosen(blocked)).toEqual([developer, work]);
       expect(listChosen(await world.open().onboarding.setup.resolve())).toEqual([developer, work]);
-      expect(store.config.roots).toEqual([]);
+      expect(Effect.runSync(store.config).roots).toEqual([]);
       chmodSync(work, 0o755);
       const allowed = await answer(onboarding, 'roots', developer, work);
       expect(allowed.step).toMatchObject({ id: 'projects', access: [] });
-      expect(store.config.roots).toEqual([developer, work]);
+      expect(Effect.runSync(store.config).roots).toEqual([developer, work]);
     } finally {
       chmodSync(work, 0o755);
     }
@@ -275,7 +280,7 @@ describe('the setup steps', () => {
       const blocked = await answer(onboarding, 'roots', developer, documents);
       expect(blocked.step).toMatchObject({ id: 'roots', problem: null, access: [documents] });
       expect(listChosen(blocked)).toEqual([developer, documents]);
-      expect(store.config.roots).toEqual([]);
+      expect(Effect.runSync(store.config).roots).toEqual([]);
     } finally {
       chmodSync(documents, 0o755);
     }
@@ -291,7 +296,7 @@ describe('the setup steps', () => {
       await answer(onboarding, 'roots', work);
       const next = await answer(onboarding, 'roots', developer);
       expect(next.step?.id).toBe('projects');
-      expect(store.config.roots).toEqual([developer]);
+      expect(Effect.runSync(store.config).roots).toEqual([developer]);
     } finally {
       chmodSync(work, 0o755);
     }
@@ -438,11 +443,11 @@ describe('finishing', () => {
         problem: 'Install the missing tools first. Setup finishes once every one is there.',
       },
     });
-    expect(world.store.config.onboardedAt).toBeNull();
+    expect(Effect.runSync(world.store.config).onboardedAt).toBeNull();
     bun = true;
     const done = await answer(world.onboarding, 'prerequisites', 'continue');
     expect(done).toMatchObject({ index: 5, step: null });
-    expect(world.store.config.onboardedAt).not.toBeNull();
+    expect(Effect.runSync(world.store.config).onboardedAt).not.toBeNull();
     expect((await world.open().onboarding.setup.resolve()).step).toBeNull();
     await expect(openStep(world.onboarding, 'roots')).rejects.toMatchObject({ code: 'setup_finished' });
   });
@@ -485,7 +490,7 @@ describe('the saved setup', () => {
     await reachAccounts(world);
     await answer(world.onboarding, 'accounts', 'continue');
     await answer(world.onboarding, 'prerequisites', 'continue');
-    world.store.update({ onboardedAt: null });
+    runUpdate(world.store, { onboardedAt: null });
     expect((await world.open().onboarding.setup.resolve()).step?.id).toBe('roots');
   });
 
@@ -531,7 +536,7 @@ describe('the saved setup', () => {
     const world = setup({ inspect: true });
     expect((await world.onboarding.setup.resolve()).step?.id).toBe('roots');
     expect(() => readFileSync(join(world.config.dataDir, 'onboarding.json'))).toThrow();
-    world.store.update({ onboardedAt: 1 });
+    runUpdate(world.store, { onboardedAt: 1 });
     const inspected = world.open().onboarding;
     expect((await inspected.setup.reply({ type: 'open', stepId: 'accounts' })).step?.id).toBe('accounts');
   });

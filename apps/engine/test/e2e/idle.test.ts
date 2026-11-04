@@ -2,13 +2,15 @@ import { describe, expect, setDefaultTimeout, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { type Gate, listOpenGates } from '@shinsa/core';
-import { resolveCompactionWindow } from '../../src/agents/compaction.ts';
+import { Effect } from 'effect';
+import { resolveCompactionWindow } from '../../src/agents/compaction/window.ts';
 import type { ModelSource } from '../../src/agents/index.ts';
 import { CLAUDE_CAPABILITIES } from '../../src/agents/providers/claude/index.ts';
-import { type AgentProvider, type AgentSession, ProviderRegistry } from '../../src/agents/providers/index.ts';
-import { inspectRepo } from '../../src/git/index.ts';
-import { type Shinsa, startShinsa } from '../../src/serve.ts';
+import type { AgentProvider } from '../../src/agents/providers/index.ts';
+import { inspectRepo } from '../helpers/git.ts';
 import { createGitRepo, createTempDir, createTestConfig, until } from '../helpers/index.ts';
+import { adaptSession, createTestProviders } from '../helpers/providers.ts';
+import { type Shinsa, startShinsa } from '../helpers/serve.ts';
 import { FakeAgents, PLAN, toolPlan } from './harness.ts';
 
 setDefaultTimeout(30_000);
@@ -17,7 +19,7 @@ const MINUTE = 60_000;
 
 const HOUR = 60 * MINUTE;
 
-const models = { listModels: () => Promise.resolve([]) } as unknown as ModelSource;
+const models = { listModels: Effect.succeed([]) } as unknown as ModelSource;
 
 interface Boot {
   shinsa: Shinsa;
@@ -38,38 +40,39 @@ function createProvider(agents: FakeAgents, compactions: string[], compacted: ()
   return {
     ...base,
     capabilities: { ...CLAUDE_CAPABILITIES, compaction: true },
-    startSession: (input) => {
-      const session = base.startSession(input);
-      if (!isLastPhase(input.prompt)) return session;
-      const context = {
-        usedTokens: 170_000,
-        maxTokens: 200_000,
-        cacheExpiresAt: Date.now() + 2 * MINUTE + 150,
-        backgroundWork: false,
-      };
-      return { ...session, done: session.done.then((result) => ({ ...result, context })) };
-    },
-    compactSession: (input): AgentSession => {
-      compactions.push(input.resume ?? '');
-      compacted();
-      input.onEntry({
-        type: 'notice',
-        notice: { kind: 'compaction', trigger: 'manual', preTokens: 150_000, summary: null },
-      });
-      input.onEntry({ type: 'agent', phase: 'final', text: 'Compacted.' });
-      const usage = {
-        inputTokens: 10,
-        outputTokens: 5,
-        cacheReadTokens: 150_000,
-        cacheWriteTokens: 0,
-        costUsd: 0.05,
-      };
-      return {
-        done: Promise.resolve({ outcome: 'completed', summary: null, usage }),
-        steer: () => false,
-        cancel: () => Promise.resolve(),
-      };
-    },
+    startSession: (input) =>
+      Effect.map(base.startSession(input), (session) => {
+        if (!isLastPhase(input.prompt)) return session;
+        const context = {
+          usedTokens: 170_000,
+          maxTokens: 200_000,
+          cacheExpiresAt: Date.now() + 2 * MINUTE + 150,
+          backgroundWork: false,
+        };
+        return { ...session, done: Effect.map(session.done, (result) => ({ ...result, context })) };
+      }),
+    compactSession: (input) =>
+      Effect.sync(() => {
+        compactions.push(input.resume ?? '');
+        compacted();
+        input.onEntry({
+          type: 'notice',
+          notice: { kind: 'compaction', trigger: 'manual', preTokens: 150_000, summary: null },
+        });
+        input.onEntry({ type: 'agent', phase: 'final', text: 'Compacted.' });
+        const usage = {
+          inputTokens: 10,
+          outputTokens: 5,
+          cacheReadTokens: 150_000,
+          cacheWriteTokens: 0,
+          costUsd: 0.05,
+        };
+        return adaptSession({
+          done: Promise.resolve({ outcome: 'completed', summary: null, usage }),
+          steer: () => false,
+          cancel: () => Promise.resolve(),
+        });
+      }),
   };
 }
 
@@ -82,9 +85,9 @@ async function boot(options: { idleMs?: number; compaction?: boolean }): Promise
   const shinsa = await startShinsa(config, {
     models,
     resolveLogin: () => Promise.resolve(null),
-    providers: new ProviderRegistry([createProvider(agents, compactions, compacted.resolve)]),
+    providers: createTestProviders([createProvider(agents, compactions, compacted.resolve)]),
     triage: (_state, task) =>
-      Promise.resolve({
+      Effect.succeed({
         title: task.request.split('\n')[0]?.slice(0, 40) ?? 'Task',
         repoPath: repo.path,
         size: 'small',

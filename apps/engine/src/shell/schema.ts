@@ -28,6 +28,15 @@ export type Argv = readonly [string, ...string[]];
 
 export type CommandEnv = Record<string, string | undefined>;
 
+export interface CommandOptions {
+  readonly input?: string;
+  readonly env?: CommandEnv;
+  readonly timeoutMs?: number | null;
+  readonly signal?: AbortSignal;
+  readonly onLine?: (line: string) => void;
+  readonly onSpawn?: (pid: number) => void;
+}
+
 export interface CommandRequest {
   readonly argv: Argv;
   readonly cwd: string;

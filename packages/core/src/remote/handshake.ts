@@ -1,8 +1,10 @@
+import { Effect } from 'effect';
 import { parseJsonRecord } from '../domain/records.ts';
 import { type Bytes, concatBytes, encodeText, parseBase64Url, serializeBase64Url } from './bytes.ts';
 import { CHANNEL_COMPRESSION, type ChannelCompression } from './frames.ts';
 import { parsePublicKey, serializePublicKey } from './keys.ts';
-import { importHmacKey, signHmac } from './tokens.ts';
+import { RemoteKeyInvalid } from './schema.ts';
+import { findHmacKey, importHmacKey, signHmac, verifyHmac } from './tokens.ts';
 
 export const REMOTE_PROTOCOL_VERSION = 1;
 
@@ -92,101 +94,117 @@ export function parseServerHello(text: string): ServerHello | null {
   return null;
 }
 
-async function deriveShared(privateKey: CryptoKey, publicKey: CryptoKey): Promise<Bytes> {
-  return new Uint8Array(await crypto.subtle.deriveBits({ name: 'ECDH', public: publicKey }, privateKey, 256));
+function deriveShared(privateKey: CryptoKey, publicKey: CryptoKey) {
+  return Effect.promise(() =>
+    crypto.subtle.deriveBits({ name: 'ECDH', public: publicKey }, privateKey, 256)
+  ).pipe(Effect.map((bits): Bytes => new Uint8Array(bits)));
 }
 
-async function resolveTranscript(keys: HandshakeKeys): Promise<Bytes> {
+function resolveTranscript(keys: HandshakeKeys) {
   const text = [PROTOCOL_LABEL, keys.machine, keys.device, keys.clientEphemeral, keys.serverEphemeral].join(
     '\n'
   );
-  return new Uint8Array(await crypto.subtle.digest('SHA-256', encodeText(text)));
-}
-
-function deriveDirectionKey(secret: CryptoKey, transcript: Bytes, direction: string) {
-  return crypto.subtle.deriveKey(
-    { name: 'HKDF', hash: 'SHA-256', salt: transcript, info: encodeText(`${PROTOCOL_LABEL} ${direction}`) },
-    secret,
-    SESSION_KEY,
-    false,
-    ['encrypt', 'decrypt']
+  return Effect.promise(() => crypto.subtle.digest('SHA-256', encodeText(text))).pipe(
+    Effect.map((digest): Bytes => new Uint8Array(digest))
   );
 }
 
-async function deriveSessionKeys(keys: HandshakeKeys, ee: Bytes, es: Bytes, se: Bytes) {
-  const secret = await crypto.subtle.importKey('raw', concatBytes(ee, es, se), 'HKDF', false, ['deriveKey']);
-  const transcript = await resolveTranscript(keys);
+function deriveDirectionKey(secret: CryptoKey, transcript: Bytes, direction: string) {
+  return Effect.promise(() =>
+    crypto.subtle.deriveKey(
+      { name: 'HKDF', hash: 'SHA-256', salt: transcript, info: encodeText(`${PROTOCOL_LABEL} ${direction}`) },
+      secret,
+      SESSION_KEY,
+      false,
+      ['encrypt', 'decrypt']
+    )
+  );
+}
+
+const deriveSessionKeys = Effect.fn('deriveSessionKeys')(function* (
+  keys: HandshakeKeys,
+  ee: Bytes,
+  es: Bytes,
+  se: Bytes
+) {
+  const secret = yield* Effect.promise(() =>
+    crypto.subtle.importKey('raw', concatBytes(ee, es, se), 'HKDF', false, ['deriveKey'])
+  );
+  const transcript = yield* resolveTranscript(keys);
   return {
-    clientToServer: await deriveDirectionKey(secret, transcript, 'client-to-server'),
-    serverToClient: await deriveDirectionKey(secret, transcript, 'server-to-client'),
+    clientToServer: yield* deriveDirectionKey(secret, transcript, 'client-to-server'),
+    serverToClient: yield* deriveDirectionKey(secret, transcript, 'server-to-client'),
   };
-}
+});
 
-async function parseHandshakeKey(text: string) {
-  const key = await parsePublicKey(text);
-  if (!key) throw new Error('A handshake key is not a P-256 public key.');
+const findHandshakeKey = Effect.fn('findHandshakeKey')(function* (text: string) {
+  const key = yield* parsePublicKey(text);
+  if (!key) return yield* new RemoteKeyInvalid({ message: 'A handshake key is not a P-256 public key.' });
   return key;
-}
+});
 
-export async function deriveClientSession(input: ClientSessionInput): Promise<SessionKeys> {
-  const serverEphemeral = await parseHandshakeKey(input.keys.serverEphemeral);
-  const ee = await deriveShared(input.clientEphemeralPrivateKey, serverEphemeral);
-  const es = await deriveShared(input.clientEphemeralPrivateKey, input.machinePublicKey);
-  const se = await deriveShared(input.devicePrivateKey, serverEphemeral);
-  const keys = await deriveSessionKeys(input.keys, ee, es, se);
-  return { send: keys.clientToServer, receive: keys.serverToClient };
-}
+export const deriveClientSession = Effect.fn('deriveClientSession')(function* (input: ClientSessionInput) {
+  const serverEphemeral = yield* findHandshakeKey(input.keys.serverEphemeral);
+  const ee = yield* deriveShared(input.clientEphemeralPrivateKey, serverEphemeral);
+  const es = yield* deriveShared(input.clientEphemeralPrivateKey, input.machinePublicKey);
+  const se = yield* deriveShared(input.devicePrivateKey, serverEphemeral);
+  const keys = yield* deriveSessionKeys(input.keys, ee, es, se);
+  return { send: keys.clientToServer, receive: keys.serverToClient } satisfies SessionKeys;
+});
 
-export async function deriveServerSession(input: ServerSessionInput): Promise<SessionKeys> {
-  const clientEphemeral = await parseHandshakeKey(input.keys.clientEphemeral);
-  const device = await parseHandshakeKey(input.keys.device);
-  const ee = await deriveShared(input.serverEphemeralPrivateKey, clientEphemeral);
-  const es = await deriveShared(input.machinePrivateKey, clientEphemeral);
-  const se = await deriveShared(input.serverEphemeralPrivateKey, device);
-  const keys = await deriveSessionKeys(input.keys, ee, es, se);
-  return { send: keys.serverToClient, receive: keys.clientToServer };
-}
+export const deriveServerSession = Effect.fn('deriveServerSession')(function* (input: ServerSessionInput) {
+  const clientEphemeral = yield* findHandshakeKey(input.keys.clientEphemeral);
+  const device = yield* findHandshakeKey(input.keys.device);
+  const ee = yield* deriveShared(input.serverEphemeralPrivateKey, clientEphemeral);
+  const es = yield* deriveShared(input.machinePrivateKey, clientEphemeral);
+  const se = yield* deriveShared(input.serverEphemeralPrivateKey, device);
+  const keys = yield* deriveSessionKeys(input.keys, ee, es, se);
+  return { send: keys.serverToClient, receive: keys.clientToServer } satisfies SessionKeys;
+});
 
 function resolveEnrollMessage(machine: string, device: string, clientEphemeral: string) {
   return encodeText([ENROLL_LABEL, machine, device, clientEphemeral].join('\n'));
 }
 
-export async function createEnrollProof(
+export const createEnrollProof = Effect.fn('createEnrollProof')(function* (
   secret: string,
   keys: Pick<HandshakeKeys, 'machine' | 'device' | 'clientEphemeral'>
 ) {
-  const key = await importHmacKey(secret);
-  if (!key) throw new Error('The enrollment secret is not valid.');
+  const key = yield* findHmacKey(secret, 'The enrollment secret is not valid.');
   const message = resolveEnrollMessage(keys.machine, keys.device, keys.clientEphemeral);
-  return serializeBase64Url(await signHmac(key, message));
-}
+  return serializeBase64Url(yield* signHmac(key, message));
+});
 
-export async function verifyEnrollProof(
+export const verifyEnrollProof = Effect.fn('verifyEnrollProof')(function* (
   secret: string,
   proof: string,
   keys: Pick<HandshakeKeys, 'machine' | 'device' | 'clientEphemeral'>
 ) {
-  const key = await importHmacKey(secret);
+  const key = yield* importHmacKey(secret);
   const signature = parseBase64Url(proof);
   if (!key || !signature) return false;
-  const message = resolveEnrollMessage(keys.machine, keys.device, keys.clientEphemeral);
-  return crypto.subtle.verify('HMAC', key, signature, message);
-}
+  return yield* verifyHmac(
+    key,
+    signature,
+    resolveEnrollMessage(keys.machine, keys.device, keys.clientEphemeral)
+  );
+});
 
-export async function createClientHello(
+export const createClientHello = Effect.fn('createClientHello')(function* (
   device: CryptoKey,
   ephemeral: CryptoKey,
   enroll: string | null,
   name: string | null = null,
   compression: ChannelCompression[] = []
-): Promise<ClientHello> {
-  return {
+) {
+  const hello: ClientHello = {
     type: 'hello',
     version: REMOTE_PROTOCOL_VERSION,
-    device: await serializePublicKey(device),
-    ephemeral: await serializePublicKey(ephemeral),
+    device: yield* serializePublicKey(device),
+    ephemeral: yield* serializePublicKey(ephemeral),
     enroll,
     name,
     compression,
   };
-}
+  return hello;
+});

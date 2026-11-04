@@ -10,6 +10,7 @@ import {
   WORKING_REF,
 } from '@shinsa/core';
 import { Context, Effect, Layer } from 'effect';
+import { ObjectCache } from '../objects/service.ts';
 import type { GitRead } from '../schema.ts';
 import { Git } from '../service.ts';
 import { decodeText, splitRecords } from '../text.ts';
@@ -30,7 +31,7 @@ import {
   type BlobRef,
   CodeReadFailed,
   LIST_BYTES,
-  ObjectReaderStopped,
+  type ObjectReaderStopped,
   SEARCH_BYTES,
   type SearchQuery,
   VERIFIED_LIMIT,
@@ -66,6 +67,18 @@ export class CodeFiles extends Context.Service<
       signal?: AbortSignal,
       reader?: BatchReader
     ): Effect.Effect<Uint8Array, CodeReadFailed | ObjectReaderStopped>;
+    readCommitFile(
+      repoPath: string,
+      sha: string,
+      path: string,
+      reader?: BatchReader
+    ): Effect.Effect<FileContent, CodeReadFailed | ObjectReaderStopped>;
+    readCommitBytes(
+      repoPath: string,
+      sha: string,
+      path: string,
+      reader?: BatchReader
+    ): Effect.Effect<Uint8Array | null, CodeReadFailed | ObjectReaderStopped>;
     readWorkingBytes(absolute: string): Effect.Effect<Uint8Array | null>;
     readWorkingFile(absolute: string, path: string): Effect.Effect<FileContent>;
     search(
@@ -81,6 +94,7 @@ export class CodeFiles extends Context.Service<
     CodeFiles,
     Effect.gen(function* () {
       const git = yield* Git;
+      const cache = yield* ObjectCache;
       const verified = new Set<string>();
 
       const assertRead = (read: GitRead, what: string) => {
@@ -97,13 +111,6 @@ export class CodeFiles extends Context.Service<
           })
         );
       };
-
-      const ask = <A>(call: () => Promise<A>) =>
-        Effect.tryPromise({
-          try: call,
-          catch: (error) =>
-            new ObjectReaderStopped({ message: error instanceof Error ? error.message : String(error) }),
-        });
 
       const assertCommit = Effect.fn('CodeFiles.assertCommit')(function* (
         repoPath: string,
@@ -168,15 +175,15 @@ export class CodeFiles extends Context.Service<
       });
 
       const listBatchTree = Effect.fnUntraced(function* (sha: string, dir: string, reader: BatchReader) {
-        const info = yield* ask(() => reader.info(`${sha}:${dir}`));
+        const info = yield* reader.info(`${sha}:${dir}`);
         if (info?.type !== 'tree') return { ref: sha, dir, entries: [] } satisfies RepoTree;
-        const contents = yield* ask(() => reader.contents(info.object));
+        const contents = yield* reader.contents(info.object);
         const records = parseTreeObject(contents, dir, info.object.length / 2);
         const sizes = yield* Effect.forEach(
           records,
           (record) =>
             record.entry.kind === 'file' || record.entry.kind === 'symlink'
-              ? ask(() => reader.info(record.object))
+              ? reader.info(record.object)
               : Effect.succeed(null),
           { concurrency: 'unbounded' }
         );
@@ -216,7 +223,7 @@ export class CodeFiles extends Context.Service<
       ) {
         const name = `${sha}:${path}`;
         if (reader && isBatchName(name)) {
-          const info = yield* ask(() => reader.info(name));
+          const info = yield* reader.info(name);
           return info?.type === 'blob' ? { object: info.object, size: info.size } : null;
         }
         const read = yield* assertRead(
@@ -234,12 +241,40 @@ export class CodeFiles extends Context.Service<
         signal?: AbortSignal,
         reader?: BatchReader
       ) {
-        if (reader) return yield* ask(() => reader.contents(object));
+        if (reader) return yield* reader.contents(object);
         const read = yield* git.read(['cat-file', 'blob', object], repoPath, {
           signal,
           maxBytes: CODE_LIMITS.blobBytes,
         });
         return (yield* assertRead(read, 'the file')).bytes;
+      });
+
+      const readCommitFile = Effect.fn('CodeFiles.readCommitFile')(function* (
+        repoPath: string,
+        sha: string,
+        path: string,
+        reader?: BatchReader
+      ) {
+        const blob = yield* selectBlob(repoPath, sha, path, undefined, reader);
+        if (!blob) return describeAbsent(sha, path, 0, false);
+        if (blob.size > CODE_LIMITS.blobBytes) return describeAbsent(sha, path, blob.size, true);
+        const bytes = yield* cache.read(
+          `${repoPath}\0blob\0${blob.object}`,
+          readObject(repoPath, blob.object, undefined, reader),
+          (value) => value.length
+        );
+        return describeBytes(sha, path, bytes, blob.size);
+      });
+
+      const readCommitBytes = Effect.fn('CodeFiles.readCommitBytes')(function* (
+        repoPath: string,
+        sha: string,
+        path: string,
+        reader?: BatchReader
+      ) {
+        const blob = yield* selectBlob(repoPath, sha, path, undefined, reader);
+        if (!blob || blob.size > CODE_LIMITS.blobBytes) return null;
+        return yield* readObject(repoPath, blob.object, undefined, reader);
       });
 
       const statPath = (absolute: string) =>
@@ -338,6 +373,8 @@ export class CodeFiles extends Context.Service<
         listCommitTree,
         selectBlob,
         readObject,
+        readCommitFile,
+        readCommitBytes,
         readWorkingBytes,
         readWorkingFile,
         search,

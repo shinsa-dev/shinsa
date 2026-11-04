@@ -1,6 +1,6 @@
 ---
 name: effect
-description: How Shinsa writes Effect 4 — load before writing or reviewing any code that imports `effect` (apps/cloud, and every app as it moves to Effect). The one way to write effects, schemas, errors, services and layers, resources and retries, time and ids, HTTP APIs and clients, SQL, running and tests, with right/wrong pairs and the lint rules that enforce them. Every pattern here is compiled and tested in `scripts/effect-guide/`.
+description: How Shinsa writes Effect 4 — load before writing or reviewing any code that imports `effect` (apps/engine, apps/cloud, apps/desktop and the I/O helpers of apps/web). The one way to write effects, schemas, errors, services and layers, resources and retries, time and ids, HTTP APIs and clients, SQL, running and tests, with right/wrong pairs and the lint rules that enforce them. Every pattern here is compiled and tested in `scripts/effect-guide/`.
 ---
 
 # Effect in Shinsa
@@ -282,3 +282,7 @@ Three tools check Effect code, and each catches what the others cannot:
 | `JSON.parse` | `Schema.fromJsonString(Shape)` |
 | anything beside the one export of a `handler.ts`, `service.ts` or `middleware.ts` | its steps inside the export's body, its shapes and constants in `schema.ts` |
 | a function or an effect in a `schema.ts` | a schema transform, or the step next to the code that runs it |
+
+It also checks every `.ts` file that does not import `effect` under `apps/*/src`, `packages/*/src` and `scripts/` (never tests, never `.tsx` components): an `await`, an `async` function, a `new Promise` or a promise chain there fails as Promise I/O outside Effect (`isPromiseIoSource`, `PROMISE_IO_MESSAGE`). Write the module as a service with Effect.fn steps and enter the promise API with `Effect.tryPromise`; a runtime runs it only at an edge: the engine's `main.ts` (`BunRuntime.runMain`), a script's last line (`BunRuntime.runMain`), the web app's `runApp`/`forkApp`, a Worker's `fetch`, an Astro endpoint, or a test. React components stay plain React and reach I/O through those edges.
+
+Every engine source file but `main.ts` is also checked for running effects itself: `ManagedRuntime`, `edgeRuntime`, a `.runPromise`, `.runSync`, `.runFork` or `.runCallback` call, and an exported class that is not a `Context.Service`, a `Context.Reference`, a schema class or an `Error` fail (`listEngineRuntimeLines`). A module is a service with its layer, its dependencies are yielded, and a callback from outside Effect (a Bun socket handler, a PTY event, an SDK callback) enters with `Effect.runForkWith(context)` or `Effect.runPromiseWith(context)` on the context its layer captured.

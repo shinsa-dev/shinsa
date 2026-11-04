@@ -1,4 +1,5 @@
 import {
+  type DomainError,
   FEEDBACK_LIMITS,
   FEEDBACK_REPOSITORY,
   MEMORY_LIMITS,
@@ -7,14 +8,11 @@ import {
   type ShinsaCommand,
   type ShinsaEvent,
 } from '@shinsa/core';
+import type { Effect } from 'effect';
 import { limitedText } from '../fields.ts';
-import type { ToolSpec } from '../schema.ts';
+import type { ToolCallFailed, ToolSpec } from '../schema.ts';
 
 const L = PROTOCOL_LIMITS;
-
-function minutes(description: string, maximum: number) {
-  return { type: 'integer', minimum: 1, maximum, description };
-}
 
 export const CHOICES_SPEC = {
   choices: {
@@ -34,15 +32,22 @@ export const PROCESS_TOOL_SPECS = {
     inputSchema: {
       type: 'object',
       properties: {
-        check_in_minutes: minutes('Minutes until the next check-in.', L.waitCheckMinutes),
+        check_in_minutes: {
+          type: 'integer',
+          minimum: 1,
+          maximum: L.waitCheckMinutes,
+          description: 'Minutes until the next check-in.',
+        },
         notes: limitedText(
           'What you are waiting for and how to tell it is ready. Shinsa gives it back to you at every check-in.',
           L.waitNotes
         ),
-        timeout_minutes: minutes(
-          'Give up after this many minutes from now. Defaults to a day.',
-          L.waitTimeoutMinutes
-        ),
+        timeout_minutes: {
+          type: 'integer',
+          minimum: 1,
+          maximum: L.waitTimeoutMinutes,
+          description: 'Give up after this many minutes from now. Defaults to a day.',
+        },
         max_attempts: {
           type: 'integer',
           minimum: 1,
@@ -129,7 +134,7 @@ export const PROCESS_TOOL_SPECS = {
 } satisfies Record<string, ToolSpec>;
 
 export interface ProcessToolCall {
-  runId: string;
-  attemptId: string;
-  dispatch: (command: ShinsaCommand) => Promise<ShinsaEvent[]>;
+  readonly runId: string;
+  readonly attemptId: string;
+  readonly dispatch: (command: ShinsaCommand) => Effect.Effect<ShinsaEvent[], ToolCallFailed | DomainError>;
 }

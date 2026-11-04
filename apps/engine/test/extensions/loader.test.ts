@@ -1,24 +1,61 @@
-import { afterEach, describe, expect, spyOn, test } from 'bun:test';
+import { afterEach, describe, expect, test } from 'bun:test';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
+import { Effect, Fiber, Layer, ManagedRuntime } from 'effect';
+import { TestClock } from 'effect/testing';
+import { ClaudeSessionEnded } from '../../src/agents/providers/claude/session/schema.ts';
 import type { McpDefinition } from '../../src/extensions/definitions.ts';
-import {
-  type DeferredServer,
-  ExtensionLoader,
-  type LoadableExtensions,
-  resolveSkillBody,
-} from '../../src/extensions/loader.ts';
-import { log } from '../../src/log/index.ts';
+import { McpClients } from '../../src/extensions/health/service.ts';
+import { resolveSkillBody } from '../../src/extensions/loader/names.ts';
+import type {
+  DeferredServer,
+  HotLoadSession,
+  LoadableExtensions,
+} from '../../src/extensions/loader/schema.ts';
+import { ExtensionLoader } from '../../src/extensions/loader/service.ts';
+import { McpServerFailed } from '../../src/extensions/schema.ts';
+import { JsonLogger } from '../../src/log/service.ts';
+import { captureLogs } from '../helpers/logs.ts';
 import { writeSkill } from './fixtures.ts';
 
 const STDIO_SERVER = resolve(import.meta.dirname, '../helpers/mcp/stdio-server.ts');
 
-const open: ExtensionLoader[] = [];
+const open: { close: () => Promise<void>; dispose: () => Promise<void> }[] = [];
 
 afterEach(async () => {
-  for (const loader of open.splice(0)) await loader.close();
+  for (const loader of open.splice(0)) {
+    await loader.close();
+    await loader.dispose();
+  }
 });
+
+type OpenClient = McpClients['Service']['open'];
+
+function openLoader(extensions: LoadableExtensions, openClient?: OpenClient) {
+  const clients = openClient
+    ? Layer.effect(
+        McpClients,
+        Effect.gen(function* () {
+          return McpClients.of({ ...(yield* McpClients), open: openClient });
+        })
+      ).pipe(Layer.provide(McpClients.layer))
+    : McpClients.layer;
+  const runtime = ManagedRuntime.make(
+    ExtensionLoader.layer.pipe(Layer.provide(clients), Layer.provideMerge(JsonLogger))
+  );
+  const loader = runtime.runSync(ExtensionLoader.use((loaders) => loaders.create(extensions)));
+  const handle = {
+    listSpecs: () => loader.specs,
+    isLoaderTool: (name: string) => loader.specs.some((spec) => spec.name === name),
+    attach: (session: HotLoadSession) => runtime.runSync(loader.attach(session)),
+    handle: (name: string, input: Record<string, unknown>) => runtime.runPromise(loader.handle(name, input)),
+    close: () => runtime.runPromise(loader.close),
+    dispose: () => runtime.dispose(),
+  };
+  open.push(handle);
+  return handle;
+}
 
 function stdio(env: Record<string, string> = {}): McpDefinition {
   return {
@@ -40,7 +77,7 @@ function createServer(name: string, definition = stdio()): DeferredServer {
 function createLoader(extensions: Partial<LoadableExtensions> = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'shinsa-loader-'));
   writeSkill(dir, 'release', 'Cuts a release.');
-  const loader = new ExtensionLoader({
+  return openLoader({
     deferred: [
       createServer('echo'),
       { ...createServer('plugin_docs_context'), claudeName: 'plugin:docs:context' },
@@ -51,8 +88,6 @@ function createLoader(extensions: Partial<LoadableExtensions> = {}) {
     loadedNames: ['linear'],
     ...extensions,
   });
-  open.push(loader);
-  return loader;
 }
 
 describe('loading what a run left out', () => {
@@ -82,10 +117,11 @@ describe('loading what a run left out', () => {
     const loader = createLoader();
     const asked: DeferredServer[][] = [];
     loader.attach({
-      loadMcpServers: (servers) => {
-        asked.push(servers);
-        return Promise.resolve({ 'plugin:docs:context': null });
-      },
+      loadMcpServers: (servers) =>
+        Effect.sync(() => {
+          asked.push(servers);
+          return { 'plugin:docs:context': null };
+        }),
     });
     expect(await loader.handle('load_mcp_server', { name: 'MCP__plugin:docs:context' })).toBe(
       'Loaded plugin_docs_context. Its tools are available to you now as mcp__plugin_docs_context__<tool>. Its tools: echo.'
@@ -95,7 +131,7 @@ describe('loading what a run left out', () => {
       'plugin_docs_context is already loaded in this run.'
     );
     const quiet = createLoader({ deferred: [{ ...createServer('quiet'), tools: [] }] });
-    quiet.attach({ loadMcpServers: () => Promise.resolve({}) });
+    quiet.attach({ loadMcpServers: () => Effect.succeed({}) });
     expect(await quiet.handle('load_mcp_server', { name: 'quiet' })).toBe(
       'Loaded quiet. Its tools are available to you now as mcp__quiet__<tool>.'
     );
@@ -146,19 +182,19 @@ describe('loading what a run left out', () => {
   });
 
   test('falls back to connecting through Shinsa when the session refuses or fails to load it, and tells the session it gave up', async () => {
-    const warn = spyOn(log, 'warn');
+    const logs = captureLogs();
     const refused = createLoader();
-    refused.attach({ loadMcpServers: () => Promise.resolve({ echo: 'It would not start.' }) });
+    refused.attach({ loadMcpServers: () => Effect.succeed({ echo: 'It would not start.' }) });
     expect(await refused.handle('load_mcp_server', { name: 'echo' })).toStartWith(
       'Connected to echo through Shinsa.'
     );
     const broken = createLoader();
     const given: AbortSignal[] = [];
     broken.attach({
-      loadMcpServers: (_servers, abandoned) => {
-        given.push(abandoned);
-        return Promise.reject(new Error('The session has ended.'));
-      },
+      loadMcpServers: (_servers, abandoned) =>
+        Effect.sync(() => given.push(abandoned)).pipe(
+          Effect.andThen(Effect.fail(new ClaudeSessionEnded({ message: 'The session has ended.' })))
+        ),
     });
     expect(await broken.handle('load_mcp_server', { name: 'echo' })).toStartWith(
       'Connected to echo through Shinsa.'
@@ -169,30 +205,68 @@ describe('loading what a run left out', () => {
     expect(await unable.handle('load_mcp_server', { name: 'echo' })).toStartWith(
       'Connected to echo through Shinsa.'
     );
-    expect(warn).toHaveBeenCalledWith(
-      '[Extensions] A server did not load into the session; connecting through Shinsa',
-      { server: 'echo', error: 'It would not start.' }
+    logs.restore();
+    expect(
+      logs.fieldsOf('[Extensions] A server did not load into the session; connecting through Shinsa')
+    ).toEqual([{ server: 'echo', error: 'It would not start.' }]);
+    expect(
+      logs.fieldsOf('[Extensions] Could not load a server into the session; connecting through Shinsa')
+    ).toEqual([{ server: 'echo', error: 'The session has ended.' }]);
+  });
+
+  test('a session that does not load the server in time is given up on, and Shinsa connects instead', async () => {
+    const given: AbortSignal[] = [];
+    const quick: OpenClient = () =>
+      Effect.succeed({
+        client: { listTools: () => Promise.resolve({ tools: [] }) } as never,
+        stderr: () => '',
+      });
+    const clients = Layer.effect(
+      McpClients,
+      Effect.gen(function* () {
+        return McpClients.of({ ...(yield* McpClients), open: quick });
+      })
+    ).pipe(Layer.provide(McpClients.layer));
+    const reply = await Effect.runPromise(
+      Effect.gen(function* () {
+        const loader = yield* ExtensionLoader.use((loaders) =>
+          loaders.create({ deferred: [createServer('echo')], deferredSkills: [], loadedNames: [] })
+        );
+        yield* loader.attach({
+          loadMcpServers: (_servers, abandoned) =>
+            Effect.andThen(
+              Effect.sync(() => given.push(abandoned)),
+              Effect.never
+            ),
+        });
+        const loading = yield* Effect.forkChild(loader.handle('load_mcp_server', { name: 'echo' }));
+        yield* TestClock.adjust('20 seconds');
+        const answer = yield* Fiber.join(loading);
+        yield* loader.close;
+        return answer;
+      }).pipe(
+        Effect.provide(
+          Layer.mergeAll(ExtensionLoader.layer.pipe(Layer.provide(clients)), JsonLogger, TestClock.layer())
+        )
+      )
     );
-    expect(warn).toHaveBeenCalledWith(
-      '[Extensions] Could not load a server into the session; connecting through Shinsa',
-      { server: 'echo', error: 'The session has ended.' }
-    );
-    warn.mockRestore();
+    expect(reply).toStartWith('Connected to echo through Shinsa.');
+    expect(given.map((signal) => signal.aborted)).toEqual([true]);
   });
 
   test('a server that fails to answer while connecting through Shinsa is closed again', async () => {
     let closed = 0;
-    const loader = new ExtensionLoader(
-      { deferred: [createServer('echo')], deferredSkills: [], loadedNames: [] },
-      () =>
-        Promise.resolve({
+    const loader = openLoader({ deferred: [createServer('echo')], deferredSkills: [], loadedNames: [] }, () =>
+      Effect.addFinalizer(() =>
+        Effect.sync(() => {
+          closed += 1;
+        })
+      ).pipe(
+        Effect.as({
           client: { listTools: () => Promise.reject(new Error('No tools today.')) } as never,
           stderr: () => '',
-          close: () => {
-            closed += 1;
-            return Promise.resolve();
-          },
         })
+      )
     );
     await expect(loader.handle('load_mcp_server', { name: 'echo' })).rejects.toThrow('No tools today.');
     expect(closed).toBe(1);
@@ -204,24 +278,36 @@ describe('loading what a run left out', () => {
     ).rejects.toThrow('no key');
   });
 
+  test('a server it cannot open is refused with the reason', async () => {
+    const loader = openLoader({ deferred: [createServer('echo')], deferredSkills: [], loadedNames: [] }, () =>
+      Effect.fail(new McpServerFailed({ message: 'It would not start.', unauthorized: false }))
+    );
+    await expect(loader.handle('load_mcp_server', { name: 'echo' })).rejects.toThrow('It would not start.');
+  });
+
   test('every connection it opens is closed when the run ends, even one still connecting', async () => {
     const opening = Promise.withResolvers<void>();
     let opened = 0;
     let closed = 0;
-    const loader = new ExtensionLoader(
+    const loader = openLoader(
       { deferred: [createServer('echo'), createServer('other')], deferredSkills: [], loadedNames: [] },
-      async () => {
-        opened += 1;
-        await opening.promise;
-        return {
-          client: { listTools: () => Promise.resolve({ tools: [] }) } as never,
-          stderr: () => '',
-          close: () => {
-            closed += 1;
-            return Promise.resolve();
-          },
-        };
-      }
+      () =>
+        Effect.sync(() => {
+          opened += 1;
+        }).pipe(
+          Effect.andThen(Effect.promise(() => opening.promise)),
+          Effect.andThen(
+            Effect.addFinalizer(() =>
+              Effect.sync(() => {
+                closed += 1;
+              })
+            )
+          ),
+          Effect.as({
+            client: { listTools: () => Promise.resolve({ tools: [] }) } as never,
+            stderr: () => '',
+          })
+        )
     );
     const loads = Promise.allSettled([
       loader.handle('load_mcp_server', { name: 'echo' }),

@@ -1,6 +1,4 @@
-import { afterEach, describe, expect, spyOn, test } from 'bun:test';
-import { writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { afterEach, describe, expect, test } from 'bun:test';
 import {
   createPreviewAccessToken,
   PREVIEW_ACCESS_HEADER,
@@ -23,24 +21,23 @@ import {
   type TerminalInfo,
   type TerminalsSnapshot,
 } from '@shinsa/core';
-import { log } from '../../src/log/index.ts';
-import { RemoteControl } from '../../src/remote/client/index.ts';
-import { createRefusedConnector } from '../../src/remote/connector/refused.ts';
-import { Remote } from '../../src/remote/index.ts';
+import { Clock, Effect, Layer } from 'effect';
+import { resolveCloseCode, resolveForwardHeaders } from '../../src/remote/previews/forwarding.ts';
 import {
   PREVIEW_LINK_LOST,
   PREVIEW_NO_URL,
   PREVIEW_NOT_PAIRED,
   type PreviewAnswer,
   type PreviewPeer,
-  Previews,
-  resolveCloseCode,
-  resolveForwardHeaders,
-} from '../../src/remote/previews.ts';
-import { EffectFailed } from '../../src/runtime/failures/schema.ts';
-import { createTempDir, until } from '../helpers/index.ts';
+} from '../../src/remote/previews/schema.ts';
+import { RandomBytes } from '../../src/remote/schema.ts';
+import type { RemoteUrlSource } from '../../src/terminals/schema.ts';
+import { createFixedClock } from '../helpers/clock.ts';
+import { until } from '../helpers/index.ts';
+import { captureLogs } from '../helpers/logs.ts';
 import { createStubEngine, createTask } from '../helpers/state.ts';
 import { type FakeControlPlane, startFakeControlPlane } from './control-plane.ts';
+import { adaptPreviews, adaptRemote, createRemoteTest } from './harness.ts';
 
 const ORIGIN = 'https://shinsa.page';
 
@@ -124,45 +121,60 @@ interface SetUp {
 
 function setUp(options: SetUp = {}) {
   plane = startFakeControlPlane();
-  const dir = createTempDir();
-  const path = join(dir, 'remote.json');
-  if (options.paired ?? true)
-    writeFileSync(
-      path,
-      JSON.stringify({
-        credentials: { ...CREDENTIALS, connectKey: options.connectKey ?? CREDENTIALS.connectKey },
-        enabled: true,
-        owner: 'mona',
-        access: ACCESS,
-      })
-    );
-  const remote = new Remote({
-    path,
-    control: new RemoteControl({ origin: plane.origin }),
-    connector: createRefusedConnector('no tunnel in this test'),
-    localUrl: () => 'http://127.0.0.1:1',
-    version: '1',
-    maxBodyBytes: 1024,
-    machineName: 'Studio',
-    openUrl: () => Promise.resolve(),
-  });
   const stub = createStubEngine((state) => {
     const preview = options.preview === undefined ? createPreview() : options.preview;
     state.tasks['task-1'] = createTask({ previews: preview ? [preview] : [] });
     options.patch?.(state);
   });
   const snapshot: TerminalsSnapshot = { terminals: [createRun()], services: [createService()], home: '/tmp' };
+  const urls: { source: RemoteUrlSource | null } = { source: null };
   let fill = 7;
-  const previews = new Previews({
-    engine: stub.engine,
-    remote,
-    services: { snapshot: () => snapshot },
-    origin: ORIGIN,
-    ...(options.seeded === false ? {} : { random: (bytes: number) => new Uint8Array(bytes).fill(fill++) }),
-    ...(options.now ? { now: options.now } : {}),
+  const machine = createRemoteTest({
+    ...((options.paired ?? true)
+      ? {
+          file: {
+            credentials: { ...CREDENTIALS, connectKey: options.connectKey ?? CREDENTIALS.connectKey },
+            enabled: true,
+            owner: 'mona',
+            access: ACCESS,
+          },
+        }
+      : {}),
+    origin: plane.origin,
+    engine: stub.engine.core,
+    config: { previewOrigin: ORIGIN },
+    terminals: {
+      snapshot: Effect.sync(() => snapshot),
+      applyRemoteUrls: (source) =>
+        Effect.sync(() => {
+          urls.source = source;
+        }),
+    },
+    layers: Layer.mergeAll(
+      options.seeded === false
+        ? Layer.empty
+        : Layer.succeed(RandomBytes, (bytes: number) => new Uint8Array(bytes).fill(fill++)),
+      options.now ? Layer.succeed(Clock.Clock, createFixedClock(options.now)) : Layer.empty
+    ),
   });
-  return { stub, remote, previews, snapshot };
+  stops.push(() => machine.close());
+  const adapted = adaptPreviews(machine);
+  const source = () => {
+    if (!urls.source) throw new Error('the previews gave Terminals no remote URLs');
+    return urls.source;
+  };
+  const previews = {
+    ...adapted,
+    resolveRemoteUrl: (info: TerminalInfo, service: ServiceDefinition) =>
+      machine.runSync(source().resolveRemoteUrl(info, service)),
+    subscribe: (listener: () => void) => {
+      source().subscribe(listener);
+    },
+  };
+  return { stub, remote: adaptRemote(machine), previews, snapshot };
 }
+
+type Previews = ReturnType<typeof setUp>['previews'];
 
 function ask(previews: Previews, path: string, init: RequestInit & { key?: string | null } = {}) {
   const { key = KEY, ...rest } = init;
@@ -291,12 +303,17 @@ describe('making a preview link', () => {
 
   test('an unpaired machine and a service without a preview URL cannot make one, and say why', async () => {
     const unpaired = setUp({ paired: false });
-    const refused = unpaired.previews.link('task-1', 'web', CONTEXT);
-    await expect(refused).rejects.toThrow(EffectFailed);
-    await expect(refused).rejects.toThrow(PREVIEW_NOT_PAIRED);
+    await expect(unpaired.previews.link('task-1', 'web', CONTEXT)).rejects.toMatchObject({
+      _tag: 'EffectFailed',
+      message: PREVIEW_NOT_PAIRED,
+      retryable: false,
+    });
     const plain = setUp();
     plain.snapshot.services[0] = createService({ previewUrl: null });
-    await expect(plain.previews.link('task-1', 'web', CONTEXT)).rejects.toThrow(PREVIEW_NO_URL);
+    await expect(plain.previews.link('task-1', 'web', CONTEXT)).rejects.toMatchObject({
+      _tag: 'EffectFailed',
+      message: PREVIEW_NO_URL,
+    });
   });
 
   test('unpairing marks every live link as lost, and a failure to say so is logged', async () => {
@@ -309,15 +326,18 @@ describe('making a preview link', () => {
       },
     });
     stub.reject((command) => command.type === 'preview.fail', new Error('log closed'));
-    const logged = spyOn(log, 'error').mockImplementation(() => undefined);
+    const logs = captureLogs();
     await remote.disable();
     expect(stub.dispatched).toEqual([]);
     await remote.remove();
-    await until('the lost link is reported', () => logged.mock.calls.length === 1);
+    const lost = () => logs.fieldsOf('[Preview] Could not mark a link as lost');
+    await until('the lost link is reported', () => lost().length === 1);
+    logs.restore();
     expect(stub.dispatched).toEqual([
       { type: 'preview.fail', taskId: 'task-1', serviceId: 'web', detail: PREVIEW_LINK_LOST },
     ]);
-    logged.mockRestore();
+    expect(lost()).toEqual([{ taskId: 'task-1', serviceId: 'web', error: 'log closed' }]);
+    expect(logs.entries.find((entry) => entry.message.startsWith('[Preview]'))?.level).toBe('error');
   });
 });
 
@@ -403,13 +423,15 @@ describe('answering a preview request', () => {
     const closedPort = refused.port as number;
     await refused.stop(true);
     snapshot.terminals[0] = createRun({ port: closedPort });
-    const warned = spyOn(log, 'warn').mockImplementation(() => undefined);
+    const logs = captureLogs();
     const down = readResponse(await ask(previews, '/'));
+    logs.restore();
     expect(down.status).toBe(502);
     expect(down.headers.get(PREVIEW_PAGE_HEADER)).toBe('1');
     expect(await down.text()).toContain(PREVIEW_STOPPED);
-    expect(warned).toHaveBeenCalledTimes(1);
-    warned.mockRestore();
+    expect(logs.fieldsOf('[Preview] Could not reach the service')).toEqual([
+      { target: `http://localhost:${closedPort}/`, error: expect.any(String) },
+    ]);
   });
 });
 
@@ -514,12 +536,14 @@ function resolvePrivateId(url: string) {
 }
 
 async function createAccess(previewId: string, userId: string, expiresAt = 10 + PREVIEW_ACCESS_TTL_MS) {
-  return createPreviewAccessToken(CREDENTIALS.connectKey, {
-    instanceId: 'inst1',
-    previewId,
-    userId,
-    expiresAt,
-  });
+  return Effect.runPromise(
+    createPreviewAccessToken(CREDENTIALS.connectKey, {
+      instanceId: 'inst1',
+      previewId,
+      userId,
+      expiresAt,
+    })
+  );
 }
 
 function askPrivately(
@@ -539,13 +563,14 @@ describe('a private address for every running service', () => {
   test('a running service gets its own address on the preview origin, kept the same, once remote access is on', async () => {
     const { previews } = setUp({ preview: null, now: () => 10 });
     const published: number[] = [];
-    const unsubscribe = previews.subscribe(() => published.push(1));
+    previews.subscribe(() => published.push(1));
     const url = await resolvePrivateUrl(previews, createRun({ port: 4123 }));
     expect(published.length).toBe(1);
-    unsubscribe();
     const previewId = resolvePrivateId(url);
     expect(previewId).toBe(
-      await resolvePrivatePreviewId(CREDENTIALS.connectKey, { serviceId: 'web', taskId: 'task-1' })
+      await Effect.runPromise(
+        resolvePrivatePreviewId(CREDENTIALS.connectKey, { serviceId: 'web', taskId: 'task-1' })
+      )
     );
     expect(url).toBe(`${new URL(url).origin}/`);
     expect(
@@ -569,13 +594,19 @@ describe('a private address for every running service', () => {
     expect(setUp({ paired: false }).previews.resolveRemoteUrl(createRun(), SERVICE)).toBeNull();
   });
 
-  test('a connect key that cannot sign makes no address, and says so once', async () => {
-    const warned = spyOn(log, 'warn').mockImplementation(() => undefined);
+  test('a connect key that cannot sign makes no address, says so once, and lets no one in', async () => {
+    const logs = captureLogs();
     const { previews } = setUp({ preview: null, connectKey: '!!' });
     expect(previews.resolveRemoteUrl(createRun(), SERVICE)).toBeNull();
-    await until('the failure is logged', () => warned.mock.calls.length === 1);
-    expect(warned.mock.calls[0]?.[0]).toBe('[Preview] Could not make a private address');
-    warned.mockRestore();
+    await until('the failure is logged', () =>
+      logs.entries.some((entry) => entry.message.startsWith('[Preview]'))
+    );
+    logs.restore();
+    expect(logs.fieldsOf('[Preview] Could not make a private address')).toEqual([
+      { serviceId: 'web', taskId: 'task-1', error: expect.any(String) },
+    ]);
+    const access = await createAccess(PREVIEW_ID, OWNER.id);
+    expect(readResponse(await askPrivately(previews, PREVIEW_ID, '/', { access })).status).toBe(404);
   });
 
   test('the owner and a member get in with their access; anyone else, a forged, stale or missing one do not', async () => {
@@ -608,17 +639,21 @@ describe('a private address for every running service', () => {
 
   test('an address made before a restart still opens, a stopped run says so, and a run gone is not shared', async () => {
     const { previews, snapshot } = setUp({ preview: null, now: () => 10 });
-    const previewId = await resolvePrivatePreviewId(CREDENTIALS.connectKey, {
-      serviceId: 'web',
-      taskId: 'task-1',
-    });
+    const previewId = await Effect.runPromise(
+      resolvePrivatePreviewId(CREDENTIALS.connectKey, {
+        serviceId: 'web',
+        taskId: 'task-1',
+      })
+    );
     snapshot.terminals[0] = createRun({ status: 'exited', port: null });
     const stopped = readResponse(
       await askPrivately(previews, previewId, '/', { access: await createAccess(previewId, OWNER.id) })
     );
     expect(stopped.status).toBe(503);
     expect(await stopped.text()).toContain(PREVIEW_STOPPED);
-    const other = await resolvePrivatePreviewId(CREDENTIALS.connectKey, { serviceId: 'api', taskId: null });
+    const other = await Effect.runPromise(
+      resolvePrivatePreviewId(CREDENTIALS.connectKey, { serviceId: 'api', taskId: null })
+    );
     snapshot.terminals.push(createRun({ id: 'term-2', serviceId: null }));
     expect(
       readResponse(await askPrivately(previews, other, '/', { access: await createAccess(other, OWNER.id) }))

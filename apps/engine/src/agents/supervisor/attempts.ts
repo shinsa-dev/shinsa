@@ -1,6 +1,5 @@
 import { RUN_AGENT_ROLE, resolveAgentModel, type RunAccount } from '@shinsa/core';
 import { Effect } from 'effect';
-import { describeError } from '../../log/index.ts';
 import { resolveCapabilities } from '../providers/index.ts';
 import type { TurnPlan } from '../turns/schema.ts';
 import { LeaseFailed, type RecordedAttempt, type Turn } from './schema.ts';
@@ -21,10 +20,9 @@ export const leaseAttempt = Effect.fn('RunSupervisor.leaseAttempt')(function* ({
   const { leasing } = yield* RunWorld;
   const renewing = active.renewing;
   active.renewing = null;
-  return yield* Effect.tryPromise({
-    try: () => leasing.leaseAttempt(run, [...active.rejected], renewing),
-    catch: (error) => new LeaseFailed({ message: describeError(error) }),
-  });
+  return yield* leasing
+    .leaseAttempt(run, [...active.rejected], renewing)
+    .pipe(Effect.mapError((error) => new LeaseFailed({ message: error.message })));
 });
 
 export const recordAttempt = Effect.fn('RunSupervisor.recordAttempt')(function* (turn: Turn, plan: TurnPlan) {
@@ -53,7 +51,7 @@ export const recordAttempt = Effect.fn('RunSupervisor.recordAttempt')(function* 
   );
   if (plan.record) {
     const { reason, fromProvider, totalEntries, includedEntries } = plan.record;
-    world.transcripts.record(run.id, {
+    yield* world.transcripts.record(run.id, {
       type: 'notice',
       notice: {
         kind: 'handoff',

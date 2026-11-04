@@ -3,7 +3,16 @@ import { join, relative } from 'node:path';
 import { parse } from '@babel/parser';
 import { listDialogViolations } from './lint-dialog.ts';
 import { listDisclosureViolations } from './lint-disclosure.ts';
-import { isEffectSource, listEffectViolations } from './lint-effect.ts';
+import {
+  PROMISE_IO_MESSAGE,
+  ENGINE_RUNTIME_MESSAGE,
+  isEngineRuntimeSource,
+  listEngineRuntimeLines,
+  isPromiseIoSource,
+  isEffectSource,
+  listEffectViolations,
+  listPromiseLines,
+} from './lint-effect.ts';
 import {
   APP,
   APP_AND_KIT,
@@ -545,6 +554,18 @@ function collectClassViolations(file: string, source: string, violations: Violat
   });
 }
 
+function collectPromiseIoViolations(file: string, source: string, violations: Violation[]): void {
+  if (!isPromiseIoSource(file, source)) return;
+  for (const line of listPromiseLines(file, source))
+    violations.push({ file, line, message: PROMISE_IO_MESSAGE });
+}
+
+function collectEngineRuntimeViolations(file: string, source: string, violations: Violation[]): void {
+  if (!isEngineRuntimeSource(file)) return;
+  for (const line of listEngineRuntimeLines(file, source))
+    violations.push({ file, line, message: ENGINE_RUNTIME_MESSAGE });
+}
+
 function parseSource(file: string, source: string) {
   return parse(source, {
     sourceType: 'module',
@@ -576,6 +597,8 @@ function checkFile(file: string, violations: Violation[], appSources: Record<str
   if (isEffectSource(file, source)) {
     for (const violation of listEffectViolations(file, source)) violations.push({ file, ...violation });
   }
+  collectPromiseIoViolations(file, source, violations);
+  collectEngineRuntimeViolations(file, source, violations);
   if (isUnder(file, VERB_CHECK_ROOTS)) collectVerbViolations(file, parsed.program, violations);
   if (isUnder(file, APP)) appSources[file] = source;
 }

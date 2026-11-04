@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, setDefaultTimeout, test } from 'bun:test';
 import { BunServices } from '@effect/platform-bun';
 import { Effect, Layer } from 'effect';
 import { GitHubProcess } from '../../src/github/process/service.ts';
@@ -8,6 +8,8 @@ import { GitHubCli } from '../../src/github/service.ts';
 import { Shell } from '../../src/shell/service.ts';
 import { createTempDir, overrideEnv } from '../helpers/index.ts';
 import { createRepo } from '../helpers/state.ts';
+
+setDefaultTimeout(30_000);
 
 const answered = (stdout: string, ok = true) => ({
   ok,

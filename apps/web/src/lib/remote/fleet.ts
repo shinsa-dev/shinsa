@@ -12,6 +12,7 @@ import {
   type UserCommand,
   type WireState,
 } from '@shinsa/core';
+import { Effect, Option, Result, Schema } from 'effect';
 import {
   type ConnectionStatus,
   type MachineAccess,
@@ -29,6 +30,8 @@ import {
   type UnreachableMachine,
 } from '@/lib/connection/socket.ts';
 import { describeOutdatedMachine } from '@/lib/remote/mode.ts';
+import { NO_MACHINE_CONNECTED, NoMachineConnected } from '@/lib/remote/schema.ts';
+import { runApp } from '@/lib/runtime/app.ts';
 import type { SocketTransport } from '@/lib/runtime/socket/schema.ts';
 import { createSignal } from '@/lib/signal.ts';
 import { mergeTeamFeeds, type TeamFeedSource } from '@/lib/teams/feeds.ts';
@@ -184,13 +187,12 @@ export function resolveCommandOwner(command: UserCommand, owners: ReadonlyMap<st
 
 export function resolveRequestOwner(url: URL, owners: ReadonlyMap<string, string>) {
   const values = [
-    ...url.pathname.split('/').map((segment) => {
-      try {
-        return decodeURIComponent(segment);
-      } catch {
-        return segment;
-      }
-    }),
+    ...url.pathname.split('/').map((segment) =>
+      Result.getOrElse(
+        Result.try(() => decodeURIComponent(segment)),
+        () => segment
+      )
+    ),
     ...url.searchParams.values(),
   ];
   for (const value of values) {
@@ -220,13 +222,12 @@ function isBodyRouted(request: Request, url: URL) {
   );
 }
 
-async function readRequestJson(request: Request): Promise<unknown> {
-  try {
-    return JSON.parse(await request.clone().text());
-  } catch {
-    return null;
-  }
-}
+const decodeRequestJson = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Unknown));
+
+const readRequestJson = Effect.fn('Fleet.readRequestJson')(function* (request: Request) {
+  const text = yield* Effect.option(Effect.tryPromise(() => request.clone().text()));
+  return Option.getOrNull(Option.flatMap(text, decodeRequestJson));
+});
 
 const NO_SHARED_HANDLES: ReadonlySet<string> = new Set();
 
@@ -603,7 +604,7 @@ export class Fleet implements ShinsaConnection {
     const outdated = this.#outdatedMember(machineId);
     if (outdated) return Promise.reject(new Error(describeOutdatedMachine(outdated.name)));
     const member = this.#memberOf(machineId ?? resolveCommandOwner(command, this.#owners));
-    if (!member) return Promise.reject(new Error('No machine is connected.'));
+    if (!member) return Promise.reject(new Error(NO_MACHINE_CONNECTED));
     if (!selectEngineCommands(member.connection.selectEngine()).has(command.type))
       return Promise.reject(
         new Error(member.guest ? SCOPE_MESSAGES.command : resolveUpdateMessage(member.name))
@@ -611,21 +612,26 @@ export class Fleet implements ShinsaConnection {
     return member.connection.command(command);
   };
 
-  fetch = async (request: Request) => {
+  fetch = (request: Request) => {
     this.snapshot();
-    const member = this.#memberOf(await this.#resolveFetchOwner(request));
-    if (!member) throw new Error('No machine is connected.');
-    return member.fetch(request);
-  };
-
-  async #resolveFetchOwner(request: Request) {
     const url = new URL(request.url);
     const terminalOwners = this.#mergeTerminals().owners;
     const owner = resolveRequestOwner(url, this.#owners) ?? resolveRequestOwner(url, terminalOwners);
-    if (owner || !isBodyRouted(request, url)) return owner;
-    const body = await readRequestJson(request);
-    return findOwner(body, this.#owners, SCAN_DEPTH) ?? findOwner(body, terminalOwners, SCAN_DEPTH);
-  }
+    const routed =
+      owner || !isBodyRouted(request, url)
+        ? Effect.succeed(owner)
+        : Effect.map(
+            readRequestJson(request),
+            (body) => findOwner(body, this.#owners, SCAN_DEPTH) ?? findOwner(body, terminalOwners, SCAN_DEPTH)
+          );
+    return runApp(
+      Effect.flatMap(routed, (machineId) => {
+        const member = this.#memberOf(machineId);
+        if (!member) return Effect.fail(new NoMachineConnected({ message: NO_MACHINE_CONNECTED }));
+        return Effect.promise(() => member.fetch(request));
+      })
+    );
+  };
 
   reset = () => {
     for (const entry of this.#entries) entry.member.connection.reset();

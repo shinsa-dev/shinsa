@@ -1,9 +1,10 @@
 import { listTerminalPlaces, SERVICE_LIMITS, type ServiceDefinition } from '@shinsa/core';
 import { EngineApi } from '@shinsa/core/engine-api';
 import { RequestFailed, RouteNotFound, ROUTE_NOT_FOUND_MESSAGE } from '@shinsa/core/engine-api/schema';
-import { Effect } from 'effect';
+import { Effect, Option } from 'effect';
 import { HttpApiBuilder } from 'effect/http-api';
 import { isFolder } from '../../../files/paths.ts';
+import { EngineCore } from '../../../runtime/engine/service.ts';
 import type { ServiceRun } from '../../../terminals/index.ts';
 import {
   readOptionalText,
@@ -18,9 +19,10 @@ import {
   resolveServicePlaceIn,
   resolveServiceRunIn,
 } from '../../../terminals/places.ts';
-import { requestPromise, requestSync } from '../../failures.ts';
+import { ServiceRefiner } from '../../../terminals/refine/service.ts';
+import { Terminals } from '../../../terminals/service.ts';
+import { requestSync, resolveRequestFailure } from '../../failures.ts';
 import { PROJECT_GONE, PROJECT_ID_LIMIT } from '../../schema.ts';
-import { HttpServices } from '../../services/service.ts';
 import {
   NO_MAIN_PLACE,
   NO_TASK_PLACE,
@@ -34,19 +36,25 @@ export const ServicesHandlers = HttpApiBuilder.group(
   EngineApi,
   'services',
   Effect.fn('ServicesHandlers')(function* (handlers) {
-    const { engine, terminals: given, refiner } = yield* HttpServices;
+    const engine = yield* EngineCore;
+    const given = Option.getOrUndefined(yield* Effect.serviceOption(Terminals));
+    const refiner = Option.getOrUndefined(yield* Effect.serviceOption(ServiceRefiner));
     const terminals = given
       ? Effect.succeed(given)
       : Effect.fail(new RouteNotFound({ message: ROUTE_NOT_FOUND_MESSAGE }));
     type Found = NonNullable<typeof given>;
+    const request = <A, E>(effect: Effect.Effect<A, E>) => Effect.mapError(effect, resolveRequestFailure);
 
-    const findPlaces = (projectId: string) =>
-      engine.state.projects[projectId]
-        ? Effect.succeed(listTerminalPlaces(engine.state, projectId))
-        : Effect.fail(new RequestFailed(PROJECT_GONE));
+    const findPlaces = Effect.fn('ServicesHandlers.findPlaces')(function* (projectId: string) {
+      const state = yield* engine.state;
+      if (!state.projects[projectId]) return yield* new RequestFailed(PROJECT_GONE);
+      return listTerminalPlaces(state, projectId);
+    });
 
     const listOthers = (found: Found, projectId: string, except: string | null) =>
-      found.snapshot().services.filter((each) => each.projectId === projectId && each.id !== except);
+      Effect.map(found.snapshot, (snapshot) =>
+        snapshot.services.filter((each) => each.projectId === projectId && each.id !== except)
+      );
 
     const readProjectId = (payload: Readonly<Record<string, unknown>>) =>
       requestSync(() => readText(payload, 'projectId', PROJECT_ID_LIMIT));
@@ -56,9 +64,9 @@ export const ServicesHandlers = HttpApiBuilder.group(
       serviceId: string,
       taskId: string | null
     ) {
-      const service = yield* requestSync(() => found.findService(serviceId));
-      if (taskId !== null && !engine.state.tasks[taskId]) return yield* new RequestFailed(TASK_GONE);
-      const run: ServiceRun | null = resolveServiceRunIn(engine.state, service, taskId, found);
+      const service = yield* request(found.findService(serviceId));
+      if (taskId !== null && !(yield* engine.state).tasks[taskId]) return yield* new RequestFailed(TASK_GONE);
+      const run: ServiceRun | null = resolveServiceRunIn(yield* engine.state, service, taskId, found);
       if (!run) return yield* new RequestFailed(taskId === null ? NO_MAIN_PLACE : NO_TASK_PLACE);
       if (!isFolder(run.cwd)) return yield* new RequestFailed(PLACE_GONE);
       return run;
@@ -73,12 +81,12 @@ export const ServicesHandlers = HttpApiBuilder.group(
         Effect.fn('ServicesHandlers.suggestions')(function* ({ query }) {
           const found = yield* terminals;
           const projectId = query.projectId ?? '';
-          const others = () => listOthers(found, projectId, null);
-          const suggestions = listNewSuggestions(yield* findPlaces(projectId), others());
+          const others = listOthers(found, projectId, null);
+          const suggestions = listNewSuggestions(yield* findPlaces(projectId), yield* others);
           if (!(refiner && query.refine === '1')) return { suggestions, refined: false };
-          const answer = yield* requestPromise(() => refiner.refine(projectId, suggestions));
+          const answer = yield* request(refiner.refine(projectId, suggestions));
           return {
-            suggestions: listNewServiceSuggestions(answer.suggestions, others()),
+            suggestions: listNewServiceSuggestions(answer.suggestions, yield* others),
             refined: answer.refined,
           };
         })
@@ -89,11 +97,10 @@ export const ServicesHandlers = HttpApiBuilder.group(
           const found = yield* terminals;
           const projectId = yield* readProjectId(payload);
           const places = yield* findPlaces(projectId);
-          return yield* requestSync(() => {
-            const input = readServiceInput(payload, listOthers(found, projectId, null), places, found.home);
-            const service = found.addService(projectId, input);
-            return { service, ...found.snapshot() };
-          });
+          const others = yield* listOthers(found, projectId, null);
+          const input = yield* requestSync(() => readServiceInput(payload, others, places, found.home));
+          const service = yield* request(found.addService(projectId, input));
+          return { service, ...(yield* found.snapshot) };
         })
       )
       .handle(
@@ -102,22 +109,22 @@ export const ServicesHandlers = HttpApiBuilder.group(
           const found = yield* terminals;
           const projectId = yield* readProjectId(payload);
           const places = yield* findPlaces(projectId);
-          const inputs = yield* requestSync(() =>
-            readServiceBatch(payload, listOthers(found, projectId, null), places, found.home)
-          );
-          if (found.snapshot().services.length + inputs.length > SERVICE_LIMITS.services)
+          const others = yield* listOthers(found, projectId, null);
+          const inputs = yield* requestSync(() => readServiceBatch(payload, others, places, found.home));
+          if ((yield* found.snapshot).services.length + inputs.length > SERVICE_LIMITS.services)
             return yield* new RequestFailed(SERVICE_LIMIT);
-          const added = inputs.map((input) => found.addService(projectId, input));
-          return { added, ...found.snapshot() };
+          const added = yield* request(Effect.forEach(inputs, (input) => found.addService(projectId, input)));
+          return { added, ...(yield* found.snapshot) };
         })
       )
-      .handle('remove', ({ payload }) =>
-        Effect.flatMap(terminals, (found) =>
-          requestSync(() => {
-            found.removeServices(readServiceIds(payload));
-            return found.snapshot();
-          })
-        )
+      .handle(
+        'remove',
+        Effect.fn('ServicesHandlers.remove')(function* ({ payload }) {
+          const found = yield* terminals;
+          const ids = yield* requestSync(() => readServiceIds(payload));
+          yield* request(found.removeServices(ids));
+          return yield* found.snapshot;
+        })
       )
       .handle(
         'startAll',
@@ -125,24 +132,24 @@ export const ServicesHandlers = HttpApiBuilder.group(
           const found = yield* terminals;
           const projectId = yield* readProjectId(payload);
           yield* findPlaces(projectId);
-          for (const service of listOthers(found, projectId, null)) {
-            const place = resolveServicePlaceIn(engine.state, service, found.home);
-            if (place) found.startService(service.id, { cwd: service.cwd, place, taskId: null });
+          for (const service of yield* listOthers(found, projectId, null)) {
+            const place = resolveServicePlaceIn(yield* engine.state, service, found.home);
+            if (place)
+              yield* request(found.startService(service.id, { cwd: service.cwd, place, taskId: null }));
           }
-          return found.snapshot();
+          return yield* found.snapshot;
         })
       )
       .handle(
         'update',
         Effect.fn('ServicesHandlers.update')(function* ({ params, payload }) {
           const found = yield* terminals;
-          const service: ServiceDefinition = yield* requestSync(() => found.findService(params.serviceId));
+          const service: ServiceDefinition = yield* request(found.findService(params.serviceId));
           const places = yield* findPlaces(service.projectId);
-          return yield* requestSync(() => {
-            const others = listOthers(found, service.projectId, service.id);
-            found.updateService(service.id, readServiceInput(payload, others, places, found.home));
-            return found.snapshot();
-          });
+          const others = yield* listOthers(found, service.projectId, service.id);
+          const input = yield* requestSync(() => readServiceInput(payload, others, places, found.home));
+          yield* request(found.updateService(service.id, input));
+          return yield* found.snapshot;
         })
       )
       .handle(
@@ -151,8 +158,8 @@ export const ServicesHandlers = HttpApiBuilder.group(
           const found = yield* terminals;
           const taskId = yield* readTaskId(payload);
           const run = yield* resolveRun(found, params.serviceId, taskId);
-          const terminal = yield* requestSync(() => found.startService(params.serviceId, run));
-          return { terminal, ...found.snapshot() };
+          const terminal = yield* request(found.startService(params.serviceId, run));
+          return { terminal, ...(yield* found.snapshot) };
         })
       )
       .handle(
@@ -160,8 +167,8 @@ export const ServicesHandlers = HttpApiBuilder.group(
         Effect.fn('ServicesHandlers.stop')(function* ({ params, payload }) {
           const found = yield* terminals;
           const taskId = yield* readTaskId(payload);
-          yield* requestPromise(() => found.stopService(params.serviceId, taskId));
-          return found.snapshot();
+          yield* request(found.stopService(params.serviceId, taskId));
+          return yield* found.snapshot;
         })
       )
       .handle(
@@ -170,8 +177,8 @@ export const ServicesHandlers = HttpApiBuilder.group(
           const found = yield* terminals;
           const taskId = yield* readTaskId(payload);
           const run = yield* resolveRun(found, params.serviceId, taskId);
-          const terminal = yield* requestPromise(() => found.restartService(params.serviceId, run));
-          return { terminal, ...found.snapshot() };
+          const terminal = yield* request(found.restartService(params.serviceId, run));
+          return { terminal, ...(yield* found.snapshot) };
         })
       );
   })

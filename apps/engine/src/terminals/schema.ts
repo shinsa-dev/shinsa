@@ -5,13 +5,13 @@ import {
   SERVICE_PORT_VARIABLE,
   type ServiceDefinition,
   type ServiceSuggestion,
-  type ShinsaState,
   TERMINAL_STREAM_CLOSE,
+  type TerminalColors,
   type TerminalInfo,
   type TerminalPlaceKind,
+  type TerminalsSnapshot,
 } from '@shinsa/core';
-import { Duration, Effect, Schedule, Schema } from 'effect';
-import type { TerminalViewer } from './session.ts';
+import { Context, Duration, Effect, Schedule, Schema } from 'effect';
 
 export class PortUnavailable extends Schema.TaggedError<PortUnavailable, { readonly brand: unique symbol }>()(
   'PortUnavailable',
@@ -104,45 +104,75 @@ export interface TerminalSpawnOptions {
   onData: (data: Uint8Array) => void;
 }
 
-export type TerminalSpawner = (command: string[], options: TerminalSpawnOptions) => TerminalProcess;
+type TerminalSpawner = (
+  command: readonly string[],
+  options: TerminalSpawnOptions
+) => Effect.Effect<TerminalProcess>;
 
 export type PortListener = (port: number) => number | null;
 
-type PortPicker = (preferred: number | null, taken: ReadonlySet<number>) => number;
-
-type ForegroundReader = (pid: number) => Promise<string | null>;
-
-interface TerminalTask {
-  handle: string | null;
-  settled: boolean;
+export interface TerminalViewer {
+  send: (data: string | Uint8Array) => number;
+  buffered: () => number;
+  end: () => void;
 }
 
-export type TaskDescriber = (taskId: string) => TerminalTask | null;
-
-interface TaskStateSource {
-  readonly state: ShinsaState;
+export interface SessionStart {
+  command: string[];
+  env: Record<string, string>;
+  spawn: TerminalSpawner;
 }
 
-export interface TerminalHolder {
-  taskId: string | null;
-  service: string | null;
+export interface SessionOptions {
+  info: TerminalInfo;
+  saved: string | null;
+  now: Effect.Effect<number>;
+  onChange: Effect.Effect<void>;
+  onScreen: (session: TerminalSession) => Effect.Effect<void>;
 }
 
-export interface TerminalsOptions {
-  dataDir: string;
-  home: string;
+export interface TerminalSession {
+  info: TerminalInfo;
+  readonly running: boolean;
+  readonly pid: number | null;
+  readonly viewers: number;
+  start(start: SessionStart): Effect.Effect<void>;
+  attach(viewer: TerminalViewer): void;
+  detach(viewer: TerminalViewer): void;
+  drain(viewer: TerminalViewer): void;
+  input(data: string | Uint8Array): void;
+  type(command: string): void;
+  resize(cols: number, rows: number): void;
+  clear(): void;
+  replaceColors(colors: TerminalColors): void;
+  readonly serializeScreen: Effect.Effect<string>;
+  readOutput(lines: number): Effect.Effect<string[]>;
+  hangUp(): void;
+  readonly stop: Effect.Effect<void>;
+  dispose(): void;
+}
+
+export const TerminalHolder = Schema.Struct({
+  taskId: Schema.NullOr(Schema.String),
+  service: Schema.NullOr(Schema.String),
+});
+export type TerminalHolder = typeof TerminalHolder.Type;
+
+export interface TerminalsInput {
   version: string;
-  readOnly?: boolean;
-  env?: Env;
-  spawn?: TerminalSpawner;
-  readForeground?: ForegroundReader;
-  engine?: TaskStateSource;
-  pickPort?: PortPicker;
-  now?: () => number;
-  newId?: () => string;
-  notifyMs?: number;
-  screenMs?: number;
+  env: Env;
 }
+
+export const TerminalTimings = Context.Reference<{
+  readonly notify: Duration.Duration;
+  readonly screen: Duration.Duration;
+}>('shinsa/engine/terminals/TerminalTimings', {
+  defaultValue: () => ({ notify: Duration.millis(50), screen: Duration.seconds(2) }),
+});
+
+export const TerminalIds = Context.Reference<Effect.Effect<string>>('shinsa/engine/terminals/TerminalIds', {
+  defaultValue: () => Effect.sync(() => Bun.randomUUIDv7()),
+});
 
 export interface TerminalStart {
   projectId: string;
@@ -168,7 +198,7 @@ export interface ServiceInput {
 }
 
 export interface RemoteUrlSource {
-  resolveRemoteUrl(info: TerminalInfo, service: ServiceDefinition): string | null;
+  resolveRemoteUrl(info: TerminalInfo, service: ServiceDefinition): Effect.Effect<string | null>;
   subscribe(listener: () => void): unknown;
 }
 
@@ -183,11 +213,6 @@ export interface FolderDigest {
   dependencies: string[];
 }
 
-export interface CachedRefinement {
-  fingerprint: string;
-  answer: Promise<ServiceSuggestion[] | null>;
-}
-
 export const TERMINALS_DIR = 'terminals';
 
 export const TERMINALS_FILE = 'terminals.json';
@@ -195,10 +220,6 @@ export const TERMINALS_FILE = 'terminals.json';
 export const SERVICES_FILE = 'services.json';
 
 export const SCREEN_MODE = 0o600;
-
-export const NOTIFY_MS = 50;
-
-export const SCREEN_MS = 2_000;
 
 export const DROPPED_KEYS =
   /^(?:TERM_PROGRAM|TERM_PROGRAM_VERSION|TERM_SESSION_ID|GHOSTTY_.*|ITERM_.*|SHINSA_SERVICE|COLUMNS|LINES)$/;
@@ -231,3 +252,5 @@ export interface TerminalSocketData {
 export const TERMINAL_SOCKET_PATH = /^\/ws\/terminals\/([A-Za-z0-9-]{1,64})$/;
 
 export const SOCKET_CLOSED = TERMINAL_STREAM_CLOSE.gone;
+
+export type TerminalsListener = (snapshot: TerminalsSnapshot) => void;

@@ -9,6 +9,7 @@ import {
   type TeamMachine,
   type TeamSnapshotBody,
 } from '@shinsa/core';
+import { Effect } from 'effect';
 import {
   describeTeamTaskOwner,
   describeTeamTaskPlace,
@@ -322,7 +323,10 @@ describe('the hosted dashboard’s team feeds', () => {
       'sign',
       'verify',
     ])) as CryptoKeyPair;
-    return { privateKey: pair.privateKey, signingKey: await serializePublicKey(pair.publicKey) };
+    return {
+      privateKey: pair.privateKey,
+      signingKey: await Effect.runPromise(serializePublicKey(pair.publicKey)),
+    };
   }
 
   async function createRelayed(options: { now?: () => number; laptopOnline?: boolean } = {}) {
@@ -363,7 +367,7 @@ describe('the hosted dashboard’s team feeds', () => {
 
   it('shows an offline machine’s tasks from a teammate’s copy once its own key verifies it', async () => {
     const { feeds, laptop, body, relay } = await createRelayed();
-    await relay([await signTeamSnapshot(laptop.privateKey, body())]);
+    await relay([await Effect.runPromise(signTeamSnapshot(laptop.privateKey, body()))]);
     expect(feeds.snapshot().tasks.map((entry) => [entry.instanceId, entry.task.id])).toEqual([
       ['q1', 'laptop-task'],
     ]);
@@ -372,7 +376,9 @@ describe('the hosted dashboard’s team feeds', () => {
       status: 'offline',
       updatedAt: 900,
     });
-    await relay([await signTeamSnapshot(laptop.privateKey, body({ updatedAt: 800, tasks: [] }))]);
+    await relay([
+      await Effect.runPromise(signTeamSnapshot(laptop.privateKey, body({ updatedAt: 800, tasks: [] }))),
+    ]);
     expect(feeds.snapshot().tasks).toHaveLength(1);
   });
 
@@ -381,10 +387,14 @@ describe('the hosted dashboard’s team feeds', () => {
     const { feeds, laptop, stranger, body, relay } = await createRelayed({ now: () => now });
     const fresh = now - 10;
     await relay([
-      await signTeamSnapshot(stranger.privateKey, body({ updatedAt: fresh })),
-      await signTeamSnapshot(laptop.privateKey, body({ teamId: 'team2', updatedAt: fresh })),
-      await signTeamSnapshot(laptop.privateKey, body({ instanceId: 'r2', updatedAt: fresh })),
-      await signTeamSnapshot(laptop.privateKey, body()),
+      await Effect.runPromise(signTeamSnapshot(stranger.privateKey, body({ updatedAt: fresh }))),
+      await Effect.runPromise(
+        signTeamSnapshot(laptop.privateKey, body({ teamId: 'team2', updatedAt: fresh }))
+      ),
+      await Effect.runPromise(
+        signTeamSnapshot(laptop.privateKey, body({ instanceId: 'r2', updatedAt: fresh }))
+      ),
+      await Effect.runPromise(signTeamSnapshot(laptop.privateKey, body())),
       { body: 'not json', signature: 'x' },
     ]);
     expect(feeds.snapshot().tasks).toEqual([]);
@@ -393,7 +403,7 @@ describe('the hosted dashboard’s team feeds', () => {
   it('lets a copy expire 30 days after its machine last updated it', async () => {
     let now = 1_000;
     const { feeds, laptop, body, relay } = await createRelayed({ now: () => now });
-    await relay([await signTeamSnapshot(laptop.privateKey, body())]);
+    await relay([await Effect.runPromise(signTeamSnapshot(laptop.privateKey, body()))]);
     expect(feeds.snapshot().tasks).toHaveLength(1);
     now = 900 + TEAM_SNAPSHOT_TTL_MS + 1;
     await relay([]);
@@ -404,10 +414,10 @@ describe('the hosted dashboard’s team feeds', () => {
   it('never lets a copy replace a machine that is live, nor take one once stopped', async () => {
     const { feeds, opened, laptop, body, relay } = await createRelayed({ laptopOnline: true });
     opened[1]?.handlers.onMessage({ t: 'view', data: JSON.stringify({ tasks: [], updatedAt: 500 }) });
-    await relay([await signTeamSnapshot(laptop.privateKey, body())]);
+    await relay([await Effect.runPromise(signTeamSnapshot(laptop.privateKey, body()))]);
     expect(feeds.snapshot().tasks).toEqual([]);
     opened[1]?.handlers.onEnd({ reason: 'Offline.', gone: false });
-    const copy = await signTeamSnapshot(laptop.privateKey, body());
+    const copy = await Effect.runPromise(signTeamSnapshot(laptop.privateKey, body()));
     opened[0]?.handlers.onMessage({
       t: 'view',
       data: JSON.stringify({ tasks: [], updatedAt: 950, held: [copy] }),

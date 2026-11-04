@@ -1,22 +1,22 @@
 import type { McpServerConfig } from '@anthropic-ai/claude-agent-sdk';
 import type { RunFailure, RunUsage } from '@shinsa/core';
 import { Duration, type Effect, Schema } from 'effect';
-import type { DeferredServer } from '../../../../extensions/loader.ts';
+import type { DeferredServer } from '../../../../extensions/loader/schema.ts';
 import type { AgentSessionResult } from '../../types.ts';
 import type { TurnEvidence, TurnVerdict } from '../classify.ts';
-import type { ClaudeProcess } from '../process.ts';
-import type { EunoeLink } from '../route.ts';
-import type { ClaudeRuntime } from '../sdk.ts';
+import type { ClaudeProcessHandle } from '../process/schema.ts';
+import type { EunoeLink } from '../route/schema.ts';
+import type { ClaudeRuntime } from '../sdk/schema.ts';
 
 export interface ClaudeSessionOptions {
-  runtime?: ClaudeRuntime;
-  eunoe?: EunoeLink | null;
-  foldedTurnMs?: number;
-  contextTimeoutMs?: number;
-  exitGraceMs?: number;
-  interruptTimeoutMs?: number;
-  createProcess?: () => ClaudeProcess;
-  now?: () => number;
+  readonly runtime: ClaudeRuntime;
+  readonly eunoe?: EunoeLink | null;
+  readonly foldedTurnMs?: number;
+  readonly contextTimeoutMs?: number;
+  readonly exitGraceMs?: number;
+  readonly interruptTimeoutMs?: number;
+  readonly createProcess?: () => ClaudeProcessHandle;
+  readonly now?: () => number;
 }
 
 export interface PendingPrompt {

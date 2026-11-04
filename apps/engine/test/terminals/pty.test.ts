@@ -1,15 +1,30 @@
 import { describe, expect, it } from 'bun:test';
+import { Effect, Layer } from 'effect';
+import { ShellLayer } from '../../src/shell/layers.ts';
 import { resolveDefaultShell } from '../../src/shell/login.ts';
 import {
   listenOnce,
   PORT_PROBE_SOCKET,
-  pickFreePort,
   resolveLoginShell,
   resolveShellCommand,
   resolveTerminalEnv,
-  spawnTerminalProcess,
 } from '../../src/terminals/pty.ts';
-import { createTempDir, until } from '../helpers/index.ts';
+import { TerminalPty } from '../../src/terminals/pty/service.ts';
+import type { PortListener, TerminalSpawnOptions } from '../../src/terminals/schema.ts';
+
+const PTY = TerminalPty.layer.pipe(Layer.provide(ShellLayer));
+
+function spawnTerminalProcess(command: string[], options: TerminalSpawnOptions) {
+  return Effect.runSync(TerminalPty.use((pty) => pty.spawn(command, options)).pipe(Effect.provide(PTY)));
+}
+
+function pickFreePort(preferred: number | null, taken: ReadonlySet<number>, listen: PortListener) {
+  return Effect.runSync(
+    TerminalPty.use((pty) => pty.pickPort(preferred, taken, listen)).pipe(Effect.provide(PTY))
+  );
+}
+import { createTempDir } from '../helpers/temp.ts';
+import { until } from '../helpers/until.ts';
 
 function spawnShell(onText: (text: string) => void) {
   const decoder = new TextDecoder();
@@ -22,7 +37,7 @@ function spawnShell(onText: (text: string) => void) {
   });
 }
 
-describe('spawnTerminalProcess', () => {
+describe('TerminalPty.spawn', () => {
   it('runs a real shell in a pseudo-terminal: it echoes, resizes and reports its exit code', async () => {
     let output = '';
     const shell = spawnShell((text) => {
@@ -99,7 +114,7 @@ describe('resolveTerminalEnv', () => {
   });
 });
 
-describe('pickFreePort', () => {
+describe('TerminalPty.pickPort', () => {
   it('keeps the port it is given while it is free and no other run holds it', () => {
     const listen = (port: number) => (port === 0 ? 6001 : port);
     expect(pickFreePort(4100, new Set(), listen)).toBe(4100);

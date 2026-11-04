@@ -8,80 +8,58 @@ import {
   type TerminalPlaceKind,
   type TerminalsSnapshot,
 } from '@shinsa/core';
-import { Terminals, type TerminalsOptions } from '../../src/terminals/index.ts';
+import { Duration, Effect } from 'effect';
+import { PortUnavailable, TerminalIds, TerminalTimings } from '../../src/terminals/schema.ts';
 import { TYPE_LIMITS } from '../../src/terminals/session.ts';
 import { parseStoredService, parseStoredTerminal } from '../../src/terminals/store.ts';
-import { captureLogs, createTempDir, until } from '../helpers/index.ts';
-import { createFakeSpawner, createFakeViewer, createInfo } from './fakes.ts';
+import { captureLogs } from '../helpers/logs.ts';
+import { createTempDir } from '../helpers/temp.ts';
+import { until } from '../helpers/until.ts';
+import { createFakeViewer, createInfo } from './fakes.ts';
+import { createTerminals, run, runAsync } from './harness.ts';
 
 const START = { projectId: 'p1', cwd: '/code/web', place: 'repository', taskId: null } as const;
-
-function createTerminals(options: Partial<TerminalsOptions> = {}) {
-  const dataDir = options.dataDir ?? createTempDir();
-  const fake = createFakeSpawner();
-  let id = 0;
-  const terminals = new Terminals({
-    dataDir,
-    home: '/home/ada',
-    version: '1.0.0',
-    env: { SHELL: '/bin/fish', PATH: '/bin' },
-    spawn: fake.spawn,
-    readForeground: () => Promise.resolve('vim'),
-    now: () => 100,
-    newId: () => `term-${++id}`,
-    pickPort: (preferred, taken) => {
-      if (preferred !== null && !taken.has(preferred)) return preferred;
-      let port = 5001;
-      while (taken.has(port)) port++;
-      return port;
-    },
-    notifyMs: 1,
-    screenMs: 1,
-    ...options,
-  });
-  return { terminals, fake, dataDir };
-}
 
 describe('Terminals', () => {
   it('opens your login shell in the folder, with the terminal’s environment', () => {
     const { terminals, fake } = createTerminals();
-    const terminal = terminals.create(START);
+    const terminal = run(terminals.create(START));
     expect(terminal).toMatchObject({ id: 'term-1', cwd: '/code/web', status: 'running', startedAt: 100 });
     expect(fake.spawned[0]?.command).toEqual(['/bin/fish', '-l']);
     expect(fake.spawned[0]?.options.env).toMatchObject({
       TERM_PROGRAM: 'Shinsa',
       TERM_PROGRAM_VERSION: '1.0.0',
     });
-    expect(terminals.snapshot()).toEqual({ terminals: [terminal], services: [], home: '/home/ada' });
+    expect(run(terminals.snapshot)).toEqual({ terminals: [terminal], services: [], home: '/home/ada' });
   });
 
   it('tells its listeners and saves the list on every change', async () => {
     const { terminals, dataDir } = createTerminals();
     const seen: TerminalsSnapshot[] = [];
-    const stop = terminals.subscribe((snapshot) => seen.push(snapshot));
-    const first = terminals.create(START);
-    terminals.rename(first.id, '  Server  ');
+    const stop = run(terminals.subscribe((snapshot) => seen.push(snapshot)));
+    const first = run(terminals.create(START));
+    run(terminals.rename(first.id, '  Server  '));
     expect(seen.at(-1)?.terminals[0]?.name).toBe('Server');
-    terminals.rename(first.id, '   ');
-    expect(terminals.find(first.id).info.name).toBeNull();
-    terminals.rename(first.id, 'x'.repeat(80));
-    expect(terminals.find(first.id).info.name).toHaveLength(TERMINAL_LIMITS.name);
+    run(terminals.rename(first.id, '   '));
+    expect(run(terminals.find(first.id)).info.name).toBeNull();
+    run(terminals.rename(first.id, 'x'.repeat(80)));
+    expect(run(terminals.find(first.id)).info.name).toHaveLength(TERMINAL_LIMITS.name);
     const saved = JSON.parse(readFileSync(join(dataDir, 'terminals/terminals.json'), 'utf8'));
     expect(saved.terminals[0].id).toBe(first.id);
-    stop();
-    terminals.rename(first.id, null);
+    run(stop);
+    run(terminals.rename(first.id, null));
     expect(seen.at(-1)?.terminals[0]?.name).toHaveLength(TERMINAL_LIMITS.name);
-    await terminals.stop();
+    await runAsync(terminals.stop);
   });
 
   it('puts a project’s terminals in the order you give, leaving other projects where they are', () => {
     const { terminals } = createTerminals();
-    const a = terminals.create(START);
-    const other = terminals.create({ ...START, projectId: 'p2' });
-    const b = terminals.create(START);
-    const c = terminals.create(START);
-    terminals.reorder('p1', [c.id, 'unknown', a.id]);
-    expect(terminals.snapshot().terminals.map((each) => each.id)).toEqual([c.id, other.id, a.id, b.id]);
+    const a = run(terminals.create(START));
+    const other = run(terminals.create({ ...START, projectId: 'p2' }));
+    const b = run(terminals.create(START));
+    const c = run(terminals.create(START));
+    run(terminals.reorder('p1', [c.id, 'unknown', a.id]));
+    expect(run(terminals.snapshot).terminals.map((each) => each.id)).toEqual([c.id, other.id, a.id, b.id]);
   });
 
   it('types into a shell that never goes quiet once the wait is over, and never into one that ended', async () => {
@@ -89,12 +67,12 @@ describe('Terminals', () => {
     TYPE_LIMITS.waitMs = 200;
     try {
       const { terminals, fake } = createTerminals();
-      const silent = terminals.create(START);
-      terminals.run(silent.id, 'ls');
+      const silent = run(terminals.create(START));
+      run(terminals.run(silent.id, 'ls'));
       await until('typed after the wait', () => fake.spawned[0]?.written.length === 2);
       expect(fake.spawned[0]?.written).toEqual(['ls', '\r']);
-      const ending = terminals.create(START);
-      terminals.run(ending.id, 'ls');
+      const ending = run(terminals.create(START));
+      run(terminals.run(ending.id, 'ls'));
       fake.spawned[1]?.exit(0);
       await Bun.sleep(400);
       expect(fake.spawned[1]?.written).toEqual([]);
@@ -105,44 +83,44 @@ describe('Terminals', () => {
 
   it('runs a command you asked for, starts an ended shell again and closes one for good', async () => {
     const { terminals, fake, dataDir } = createTerminals();
-    const terminal = terminals.create(START);
-    terminals.run(terminal.id, 'bun dev');
+    const terminal = run(terminals.create(START));
+    run(terminals.run(terminal.id, 'bun dev'));
     expect(fake.spawned[0]?.written).toEqual([]);
     fake.spawned[0]?.emit('~ ⟩ ');
     await until('the command is typed', () => fake.spawned[0]?.written.length === 2);
     expect(fake.spawned[0]?.written).toEqual(['bun dev', '\r']);
-    expect(terminals.restart(terminal.id).status).toBe('running');
+    expect(run(terminals.restart(terminal.id)).status).toBe('running');
     expect(fake.spawned).toHaveLength(1);
     fake.spawned[0]?.emit('output');
     fake.spawned[0]?.exit(0);
-    await until('the shell ends', () => terminals.find(terminal.id).info.status === 'exited');
-    expect(() => terminals.run(terminal.id, 'ls')).toThrow('That terminal has ended.');
-    expect(terminals.restart(terminal.id).status).toBe('running');
+    await until('the shell ends', () => run(terminals.find(terminal.id)).info.status === 'exited');
+    expect(() => run(terminals.run(terminal.id, 'ls'))).toThrow('That terminal has ended.');
+    expect(run(terminals.restart(terminal.id)).status).toBe('running');
     expect(fake.spawned).toHaveLength(2);
     await until(
       'the screen is saved',
-      () => terminals.select(terminal.id) !== null && hasScreen(dataDir, terminal.id)
+      () => run(terminals.select(terminal.id)) !== null && hasScreen(dataDir, terminal.id)
     );
     const viewer = createFakeViewer();
-    terminals.attach(terminal.id, viewer);
-    terminals.close(terminal.id);
+    run(terminals.attach(terminal.id, viewer));
+    run(terminals.close(terminal.id));
     expect(viewer.ended).toBe(true);
     expect(fake.spawned[1]?.hungUp).toBe(true);
-    expect(terminals.select(terminal.id)).toBeNull();
+    expect(run(terminals.select(terminal.id))).toBeNull();
     expect(hasScreen(dataDir, terminal.id)).toBe(false);
-    expect(() => terminals.find(terminal.id)).toThrow('That terminal is closed.');
+    expect(() => run(terminals.find(terminal.id))).toThrow('That terminal is closed.');
   });
 
   it('keeps a terminal’s last screen across a restart of the engine, as stopped', async () => {
     const { terminals, fake, dataDir } = createTerminals();
-    const terminal = terminals.create(START);
+    const terminal = run(terminals.create(START));
     fake.spawned[0]?.emit('dev server on :3000\r\n');
-    await terminals.stop();
+    await runAsync(terminals.stop);
     const again = createTerminals({ dataDir }).terminals;
-    const restored = again.find(terminal.id);
+    const restored = run(again.find(terminal.id));
     expect(restored.info).toMatchObject({ status: 'stopped', endedAt: 100 });
-    expect(await restored.serializeScreen()).toContain('dev server on :3000');
-    expect(again.snapshot().terminals).toHaveLength(1);
+    expect(await runAsync(restored.serializeScreen)).toContain('dev server on :3000');
+    expect(run(again.snapshot).terminals).toHaveLength(1);
   });
 
   it('marks a terminal still running in the saved list as stopped when the engine comes back', () => {
@@ -159,7 +137,7 @@ describe('Terminals', () => {
       })
     );
     const { terminals } = createTerminals({ dataDir });
-    expect(terminals.snapshot().terminals.map((each) => [each.id, each.status, each.endedAt])).toEqual([
+    expect(run(terminals.snapshot).terminals.map((each) => [each.id, each.status, each.endedAt])).toEqual([
       ['kept', 'stopped', 100],
       ['done', 'exited', 5],
     ]);
@@ -170,37 +148,31 @@ describe('Terminals', () => {
     mkdirSync(join(dataDir, 'terminals'));
     writeFileSync(join(dataDir, 'terminals/terminals.json'), '{');
     const logs = captureLogs();
-    expect(createTerminals({ dataDir }).terminals.snapshot().terminals).toEqual([]);
+    expect(run(createTerminals({ dataDir }).terminals.snapshot).terminals).toEqual([]);
     logs.restore();
     expect(logs.fieldsOf('[Terminals] Could not read the saved terminals')).toHaveLength(1);
     writeFileSync(join(dataDir, 'terminals/terminals.json'), 'null');
-    expect(createTerminals({ dataDir }).terminals.snapshot().terminals).toEqual([]);
+    expect(run(createTerminals({ dataDir }).terminals.snapshot).terminals).toEqual([]);
   });
 
   it('refuses more terminals than the limit, and any change while Shinsa only shows saved state', () => {
     const { terminals } = createTerminals();
-    for (let index = 0; index < TERMINAL_LIMITS.terminals; index++) terminals.create(START);
-    expect(() => terminals.create(START)).toThrow(
+    for (let index = 0; index < TERMINAL_LIMITS.terminals; index++) run(terminals.create(START));
+    expect(() => run(terminals.create(START))).toThrow(
       `Shinsa keeps ${TERMINAL_LIMITS.terminals} terminals at most, and all of them run. ${TERMINAL_LIMITS.terminals} are yours. Stop a service or close a terminal to free one.`
     );
-    expect(terminals.snapshot().terminals).toHaveLength(TERMINAL_LIMITS.terminals);
+    expect(run(terminals.snapshot).terminals).toHaveLength(TERMINAL_LIMITS.terminals);
     const readOnly = createTerminals({ readOnly: true }).terminals;
-    expect(() => readOnly.create(START)).toThrow('Terminals are off');
+    expect(() => run(readOnly.create(START))).toThrow('Terminals are off');
   });
 
   it('says what runs in a shell in front of it, and nothing for an ended one', async () => {
     const { terminals, fake } = createTerminals();
-    const terminal = terminals.create(START);
-    expect(await terminals.readForeground(terminal.id)).toEqual({ program: 'vim' });
+    const terminal = run(terminals.create(START));
+    expect(await runAsync(terminals.readForeground(terminal.id))).toEqual({ program: 'vim' });
     fake.spawned[0]?.exit(0);
-    await until('the shell ends', () => terminals.find(terminal.id).info.status === 'exited');
-    expect(await terminals.readForeground(terminal.id)).toEqual({ program: null });
-  });
-
-  it('reads your environment from the engine when it is given none', () => {
-    const { terminals, fake } = createTerminals({ env: undefined });
-    terminals.create(START);
-    expect(fake.spawned[0]?.options.env.PATH).toBe(process.env.PATH ?? '');
+    await until('the shell ends', () => run(terminals.find(terminal.id)).info.status === 'exited');
+    expect(await runAsync(terminals.readForeground(terminal.id))).toEqual({ program: null });
   });
 });
 
@@ -226,12 +198,12 @@ function main(place: TerminalPlaceKind, cwd = SERVICE.cwd) {
 describe('Terminals services', () => {
   it('runs a service’s command in your login shell, with its variables, in a terminal of its own', async () => {
     const { terminals, fake, dataDir } = createTerminals();
-    const service = terminals.addService('p1', SERVICE);
+    const service = run(terminals.addService('p1', SERVICE));
     expect(service).toEqual({ id: 'term-1', projectId: 'p1', ...SERVICE });
     expect(JSON.parse(readFileSync(join(dataDir, 'terminals/services.json'), 'utf8')).services).toEqual([
       service,
     ]);
-    const terminal = terminals.startService(service.id, main('repository'));
+    const terminal = run(terminals.startService(service.id, main('repository')));
     expect(terminal).toMatchObject({
       serviceId: service.id,
       name: 'api',
@@ -240,139 +212,147 @@ describe('Terminals services', () => {
     });
     expect(fake.spawned[0]?.command).toEqual(['/bin/fish', '-l', '-c', 'bun run dev']);
     expect(fake.spawned[0]?.options.env).toMatchObject({ PORT: '4000', PATH: '/bin' });
-    expect(terminals.startService(service.id, main('repository')).id).toBe(terminal.id);
+    expect(run(terminals.startService(service.id, main('repository'))).id).toBe(terminal.id);
     expect(fake.spawned).toHaveLength(1);
-    expect(await terminals.readForeground(terminal.id)).toEqual({ program: 'api' });
-    await terminals.stopService(service.id, null);
-    expect(terminals.find(terminal.id).info.status).toBe('stopped');
+    expect(await runAsync(terminals.readForeground(terminal.id))).toEqual({ program: 'api' });
+    await runAsync(terminals.stopService(service.id, null));
+    expect(run(terminals.find(terminal.id)).info.status).toBe('stopped');
     expect(fake.spawned[0]?.hungUp).toBe(true);
-    terminals.startService(service.id, main('folder'));
-    expect(terminals.find(terminal.id).info).toMatchObject({ status: 'running', place: 'folder' });
+    run(terminals.startService(service.id, main('folder')));
+    expect(run(terminals.find(terminal.id)).info).toMatchObject({ status: 'running', place: 'folder' });
     expect(fake.spawned).toHaveLength(2);
   });
 
   it('reads the last lines a service printed, and nothing for one that has not run', async () => {
     const { terminals, fake } = createTerminals();
-    const service = terminals.addService('p1', SERVICE);
-    expect(await terminals.readServiceOutput(service.id, null, 10)).toEqual([]);
-    terminals.startService(service.id, main('repository'));
+    const service = run(terminals.addService('p1', SERVICE));
+    expect(await runAsync(terminals.readServiceOutput(service.id, null, 10))).toEqual([]);
+    run(terminals.startService(service.id, main('repository')));
     fake.spawned[0]?.emit('listening on 4000\r\nready\r\n');
-    expect(await terminals.readServiceOutput(service.id, null, 1)).toEqual(['ready']);
-    expect(await terminals.readServiceOutput(service.id, null, 10)).toEqual(['listening on 4000', 'ready']);
+    expect(await runAsync(terminals.readServiceOutput(service.id, null, 1))).toEqual(['ready']);
+    expect(await runAsync(terminals.readServiceOutput(service.id, null, 10))).toEqual([
+      'listening on 4000',
+      'ready',
+    ]);
   });
 
   it('restarts a running service, stopping it first, and starts a stopped one', async () => {
     const { terminals, fake } = createTerminals();
-    const service = terminals.addService('p1', SERVICE);
-    await terminals.restartService(service.id, main('repository'));
+    const service = run(terminals.addService('p1', SERVICE));
+    await runAsync(terminals.restartService(service.id, main('repository')));
     expect(fake.spawned).toHaveLength(1);
-    const again = await terminals.restartService(service.id, main('repository'));
+    const again = await runAsync(terminals.restartService(service.id, main('repository')));
     expect(fake.spawned).toHaveLength(2);
     expect(fake.spawned[0]?.hungUp).toBe(true);
     expect(again.status).toBe('running');
     fake.spawned[1]?.exit(1);
-    await until('it fails', () => terminals.find(again.id).info.exitCode === 1);
-    expect(terminals.find(again.id).info.status).toBe('exited');
+    await until('it fails', () => run(terminals.find(again.id)).info.exitCode === 1);
+    expect(run(terminals.find(again.id)).info.status).toBe('exited');
   });
 
   it('renames a service’s terminal with it, and removing it closes the terminal', async () => {
     const { terminals, fake } = createTerminals();
-    const service = terminals.addService('p1', SERVICE);
-    terminals.updateService(service.id, { ...SERVICE, name: 'backend' });
-    const terminal = terminals.startService(service.id, main('repository'));
+    const service = run(terminals.addService('p1', SERVICE));
+    run(terminals.updateService(service.id, { ...SERVICE, name: 'backend' }));
+    const terminal = run(terminals.startService(service.id, main('repository')));
     expect(terminal.name).toBe('backend');
-    terminals.updateService(service.id, { ...SERVICE, name: 'server', command: 'bun start' });
-    expect(terminals.find(terminal.id).info.name).toBe('server');
-    terminals.removeServices([service.id]);
+    run(terminals.updateService(service.id, { ...SERVICE, name: 'server', command: 'bun start' }));
+    expect(run(terminals.find(terminal.id)).info.name).toBe('server');
+    run(terminals.removeServices([service.id]));
     expect(fake.spawned[0]?.hungUp).toBe(true);
-    expect(terminals.snapshot()).toMatchObject({ services: [], terminals: [] });
-    expect(() => terminals.findService(service.id)).toThrow('That service is not there anymore.');
-    terminals.removeServices([terminals.addService('p1', SERVICE).id]);
-    await terminals.stopService(terminals.addService('p1', SERVICE).id, null);
+    expect(run(terminals.snapshot)).toMatchObject({ services: [], terminals: [] });
+    expect(() => run(terminals.findService(service.id))).toThrow('That service is not there anymore.');
+    run(terminals.removeServices([run(terminals.addService('p1', SERVICE)).id]));
+    await runAsync(terminals.stopService(run(terminals.addService('p1', SERVICE)).id, null));
   });
 
   it('starts again the services that ran when the engine stopped, where their folder still is', async () => {
     const { terminals, dataDir } = createTerminals();
-    const kept = terminals.addService('p1', SERVICE);
-    const moved = terminals.addService('p1', { ...SERVICE, name: 'web', cwd: '/elsewhere' });
-    const idle = terminals.addService('p1', { ...SERVICE, name: 'docs' });
-    terminals.startService(kept.id, main('repository'));
-    terminals.startService(moved.id, main('repository', '/elsewhere'));
-    terminals.startService(idle.id, main('repository'));
-    await terminals.stopService(idle.id, null);
-    terminals.create(START);
-    await terminals.stop();
+    const kept = run(terminals.addService('p1', SERVICE));
+    const moved = run(terminals.addService('p1', { ...SERVICE, name: 'web', cwd: '/elsewhere' }));
+    const idle = run(terminals.addService('p1', { ...SERVICE, name: 'docs' }));
+    run(terminals.startService(kept.id, main('repository')));
+    run(terminals.startService(moved.id, main('repository', '/elsewhere')));
+    run(terminals.startService(idle.id, main('repository')));
+    await runAsync(terminals.stopService(idle.id, null));
+    run(terminals.create(START));
+    await runAsync(terminals.stop);
     const again = createTerminals({ dataDir });
-    again.terminals.resumeServices(STATE);
+    run(again.terminals.resumeServices(STATE));
     expect(again.fake.spawned.map((each) => each.options.cwd)).toEqual([SERVICE.cwd]);
-    expect(again.terminals.snapshot().terminals.map((each) => each.status)).toEqual([
+    expect(run(again.terminals.snapshot).terminals.map((each) => each.status)).toEqual([
       'running',
       'stopped',
       'stopped',
       'stopped',
     ]);
-    again.terminals.resumeServices(STATE);
+    run(again.terminals.resumeServices(STATE));
     expect(again.fake.spawned).toHaveLength(1);
     const readOnly = createTerminals({ dataDir, readOnly: true });
-    readOnly.terminals.resumeServices(STATE);
+    run(readOnly.terminals.resumeServices(STATE));
     expect(readOnly.fake.spawned).toHaveLength(0);
   });
 
   it('runs a service for a task beside its main run, each in a tab of its own', async () => {
     const { terminals, fake } = createTerminals();
-    const service = terminals.addService('p1', SERVICE);
-    const onMain = terminals.startService(service.id, main('repository'));
-    const forTask = terminals.startService(service.id, {
-      cwd: '/wt/a/apps/api',
-      place: 'worktree',
-      taskId: 'a',
-    });
+    const service = run(terminals.addService('p1', SERVICE));
+    const onMain = run(terminals.startService(service.id, main('repository')));
+    const forTask = run(
+      terminals.startService(service.id, {
+        cwd: '/wt/a/apps/api',
+        place: 'worktree',
+        taskId: 'a',
+      })
+    );
     expect(forTask).toMatchObject({ name: 'api', serviceId: service.id, taskId: 'a', cwd: '/wt/a/apps/api' });
     expect(forTask.id).not.toBe(onMain.id);
     expect(fake.spawned.map((each) => each.options.cwd)).toEqual([SERVICE.cwd, '/wt/a/apps/api']);
-    await terminals.stopService(service.id, 'a');
-    expect(terminals.find(forTask.id).info.status).toBe('stopped');
-    expect(terminals.find(onMain.id).info.status).toBe('running');
-    terminals.updateService(service.id, { ...SERVICE, name: 'backend' });
-    expect([onMain.id, forTask.id].map((id) => terminals.find(id).info.name)).toEqual(['backend', 'backend']);
-    terminals.removeServices([service.id]);
-    expect(terminals.snapshot().terminals).toEqual([]);
+    await runAsync(terminals.stopService(service.id, 'a'));
+    expect(run(terminals.find(forTask.id)).info.status).toBe('stopped');
+    expect(run(terminals.find(onMain.id)).info.status).toBe('running');
+    run(terminals.updateService(service.id, { ...SERVICE, name: 'backend' }));
+    expect([onMain.id, forTask.id].map((id) => run(terminals.find(id)).info.name)).toEqual([
+      'backend',
+      'backend',
+    ]);
+    run(terminals.removeServices([service.id]));
+    expect(run(terminals.snapshot).terminals).toEqual([]);
   });
 
   it('closes a task’s service runs and ended shells, and leaves its running shells and other runs alone', async () => {
     const { terminals, fake } = createTerminals();
     const seen: TerminalsSnapshot[] = [];
-    terminals.subscribe((snapshot) => seen.push(snapshot));
-    const service = terminals.addService('p1', SERVICE);
-    terminals.startService(service.id, main('repository'));
-    terminals.startService(service.id, { cwd: '/wt/a', place: 'worktree', taskId: 'a' });
-    terminals.startService(service.id, { cwd: '/wt/b', place: 'worktree', taskId: 'b' });
-    const shell = terminals.create({ ...START, cwd: '/wt/a', place: 'worktree', taskId: 'a' });
-    const ended = terminals.create({ ...START, cwd: '/wt/a', place: 'worktree', taskId: 'a' });
+    run(Effect.asVoid(terminals.subscribe((snapshot) => seen.push(snapshot))));
+    const service = run(terminals.addService('p1', SERVICE));
+    run(terminals.startService(service.id, main('repository')));
+    run(terminals.startService(service.id, { cwd: '/wt/a', place: 'worktree', taskId: 'a' }));
+    run(terminals.startService(service.id, { cwd: '/wt/b', place: 'worktree', taskId: 'b' }));
+    const shell = run(terminals.create({ ...START, cwd: '/wt/a', place: 'worktree', taskId: 'a' }));
+    const ended = run(terminals.create({ ...START, cwd: '/wt/a', place: 'worktree', taskId: 'a' }));
     fake.spawned[4]?.exit(0);
-    await until('the shell ends', () => terminals.find(ended.id).info.status === 'exited');
+    await until('the shell ends', () => run(terminals.find(ended.id)).info.status === 'exited');
     const before = seen.length;
-    terminals.closeTaskTerminals('a');
+    run(terminals.closeTaskTerminals('a'));
     expect(fake.spawned[1]?.hungUp).toBe(true);
-    expect(terminals.snapshot().terminals.map((each) => [each.taskId, each.serviceId])).toEqual([
+    expect(run(terminals.snapshot).terminals.map((each) => [each.taskId, each.serviceId])).toEqual([
       [null, service.id],
       ['b', service.id],
       ['a', null],
     ]);
     expect(seen.length).toBe(before + 1);
-    terminals.closeTaskTerminals('gone');
+    run(terminals.closeTaskTerminals('gone'));
     expect(seen.length).toBe(before + 1);
-    expect(terminals.find(shell.id).info.status).toBe('running');
-    expect(terminals.listTerminalPids()).toEqual([1003]);
-    expect(terminals.listServiceProcesses()).toEqual([{ taskId: 'b', pid: 1002 }]);
+    expect(run(terminals.find(shell.id)).info.status).toBe('running');
+    expect(run(terminals.listTerminalPids)).toEqual([1003]);
+    expect(run(terminals.listServiceProcesses)).toEqual([{ taskId: 'b', pid: 1002 }]);
   });
 
   it('starts a task’s run again after a restart only while the task is open', async () => {
     const { terminals, dataDir } = createTerminals();
-    const service = terminals.addService('p1', SERVICE);
+    const service = run(terminals.addService('p1', SERVICE));
     for (const taskId of ['open', 'merged', 'gone'])
-      terminals.startService(service.id, { cwd: `/wt/${taskId}`, place: 'worktree', taskId });
-    await terminals.stop();
+      run(terminals.startService(service.id, { cwd: `/wt/${taskId}`, place: 'worktree', taskId }));
+    await runAsync(terminals.stop);
     const state = {
       ...STATE,
       tasks: {
@@ -381,16 +361,16 @@ describe('Terminals services', () => {
       },
     } as unknown as ShinsaState;
     const again = createTerminals({ dataDir });
-    again.terminals.resumeServices(state);
+    run(again.terminals.resumeServices(state));
     expect(again.fake.spawned.map((each) => each.options.cwd)).toEqual(['/wt/open/apps/api']);
   });
 
   it('drops the ended terminals of finished and unknown tasks on start, and keeps yours and open tasks’', async () => {
     const { terminals, dataDir } = createTerminals();
     for (const taskId of ['open', 'merged', 'done', 'cancelled', 'gone'])
-      terminals.create({ ...START, cwd: `/wt/${taskId}`, place: 'worktree', taskId });
-    terminals.create(START);
-    await terminals.stop();
+      run(terminals.create({ ...START, cwd: `/wt/${taskId}`, place: 'worktree', taskId }));
+    run(terminals.create(START));
+    await runAsync(terminals.stop);
     const stages = { open: 'building', merged: 'merged', done: 'done', cancelled: 'cancelled' };
     const state = {
       ...STATE,
@@ -398,14 +378,14 @@ describe('Terminals services', () => {
     } as unknown as ShinsaState;
     const again = createTerminals({ dataDir });
     const seen: TerminalsSnapshot[] = [];
-    again.terminals.subscribe((snapshot) => seen.push(snapshot));
-    again.terminals.resumeServices(state);
-    expect(again.terminals.snapshot().terminals.map((each) => each.taskId)).toEqual(['open', null]);
+    run(Effect.asVoid(again.terminals.subscribe((snapshot) => seen.push(snapshot))));
+    run(again.terminals.resumeServices(state));
+    expect(run(again.terminals.snapshot).terminals.map((each) => each.taskId)).toEqual(['open', null]);
     const before = seen.length;
-    again.terminals.resumeServices(state);
+    run(again.terminals.resumeServices(state));
     expect(seen.length).toBe(before);
     const reread = createTerminals({ dataDir });
-    expect(reread.terminals.snapshot().terminals.map((each) => each.taskId)).toEqual(['open', null]);
+    expect(run(reread.terminals.snapshot).terminals.map((each) => each.taskId)).toEqual(['open', null]);
   });
 
   it('forgets the service of a saved terminal whose service is gone', () => {
@@ -420,26 +400,29 @@ describe('Terminals services', () => {
     const { terminals } = createTerminals({ dataDir });
     logs.restore();
     expect(logs.fieldsOf('[Terminals] Could not read the saved services')).toHaveLength(1);
-    expect(terminals.snapshot().terminals[0]).toMatchObject({ serviceId: null, status: 'stopped' });
+    expect(run(terminals.snapshot).terminals[0]).toMatchObject({ serviceId: null, status: 'stopped' });
   });
 
   it('adds the address a running service is reached at from elsewhere, publishes it again when asked, and never saves it', async () => {
     const { terminals, dataDir } = createTerminals();
-    const service = terminals.addService('p1', { ...SERVICE, previewUrl: 'http://localhost:{port}/' });
-    const terminal = terminals.startService(service.id, main('repository'));
-    terminals.create(START);
+    const service = run(terminals.addService('p1', { ...SERVICE, previewUrl: 'http://localhost:{port}/' }));
+    const terminal = run(terminals.startService(service.id, main('repository')));
+    run(terminals.create(START));
     let address = 'https://one.shinsa.page/';
     const asked: string[] = [];
     const published: TerminalsSnapshot[] = [];
-    terminals.subscribe((snapshot) => published.push(snapshot));
+    run(Effect.asVoid(terminals.subscribe((snapshot) => published.push(snapshot))));
     const changed = new Set<() => void>();
-    terminals.applyRemoteUrls({
-      resolveRemoteUrl: (info, each) => {
-        asked.push(`${info.id} ${each.id}`);
-        return address;
-      },
-      subscribe: (listener) => changed.add(listener),
-    });
+    run(
+      terminals.applyRemoteUrls({
+        resolveRemoteUrl: (info, each) =>
+          Effect.sync(() => {
+            asked.push(`${info.id} ${each.id}`);
+            return address;
+          }),
+        subscribe: (listener) => changed.add(listener),
+      })
+    );
     await until('the snapshot goes out again', () => published.length === 1);
     expect(published[0]?.terminals.find((each) => each.id === terminal.id)?.remoteUrl).toBe(address);
     expect(published[0]?.terminals.find((each) => each.id !== terminal.id)?.remoteUrl).toBeUndefined();
@@ -455,75 +438,99 @@ describe('Terminals services', () => {
   it('gives each task run a free port of its own in the service’s port variable', async () => {
     const { terminals, fake } = createTerminals();
     const preview = { ...SERVICE, previewUrl: 'http://localhost:{port}/tasks', portVariable: 'APP_PORT' };
-    const service = terminals.addService('p1', preview);
-    const run = (taskId: string) =>
-      terminals.startService(service.id, { cwd: `/wt/${taskId}`, place: 'worktree', taskId });
-    const [a, b] = [run('a'), run('b')];
+    const service = run(terminals.addService('p1', preview));
+    const runFor = (taskId: string) =>
+      run(terminals.startService(service.id, { cwd: `/wt/${taskId}`, place: 'worktree', taskId }));
+    const [a, b] = [runFor('a'), runFor('b')];
     expect([a.port, b.port]).toEqual([5001, 5002]);
     expect(fake.spawned.map((each) => each.options.env.APP_PORT)).toEqual(['5001', '5002']);
     expect(fake.spawned[0]?.options.env.PORT).toBe('4000');
-    await terminals.stopService(service.id, 'a');
-    run('c');
-    expect(terminals.find(a.id).info.port).toBe(5001);
-    expect(run('a').port).toBe(5003);
+    await runAsync(terminals.stopService(service.id, 'a'));
+    runFor('c');
+    expect(run(terminals.find(a.id)).info.port).toBe(5001);
+    expect(runFor('a').port).toBe(5003);
   });
 
   it('gives a task run its own variables, under the service’s, and keeps them across a restart', async () => {
     const { terminals, fake } = createTerminals();
-    const service = terminals.addService('p1', {
-      ...SERVICE,
-      env: { PORT: '4000', TURBO_CACHE_DIR: '/mine' },
-    });
-    const plain = terminals.addService('p1', { ...SERVICE, name: 'api', env: {} });
+    const service = run(
+      terminals.addService('p1', {
+        ...SERVICE,
+        env: { PORT: '4000', TURBO_CACHE_DIR: '/mine' },
+      })
+    );
+    const plain = run(terminals.addService('p1', { ...SERVICE, name: 'api', env: {} }));
     const forTask = {
       cwd: '/wt/a',
       place: 'worktree',
       taskId: 'a',
       env: { TURBO_CACHE_DIR: '/shared', A: '1' },
     } as const;
-    terminals.startService(plain.id, forTask);
+    run(terminals.startService(plain.id, forTask));
     expect(fake.spawned[0]?.options.env).toMatchObject({ TURBO_CACHE_DIR: '/shared', A: '1' });
-    terminals.startService(service.id, forTask);
+    run(terminals.startService(service.id, forTask));
     expect(fake.spawned[1]?.options.env).toMatchObject({ TURBO_CACHE_DIR: '/mine', A: '1' });
-    await terminals.restartService(plain.id, { cwd: '/wt/a', place: 'worktree', taskId: 'a' });
+    await runAsync(terminals.restartService(plain.id, { cwd: '/wt/a', place: 'worktree', taskId: 'a' }));
     expect(fake.spawned[2]?.options.env.TURBO_CACHE_DIR).toBeUndefined();
   });
 
   it('keeps a task run’s port across a restart while no other run holds it', async () => {
     const { terminals } = createTerminals();
-    const service = terminals.addService('p1', SERVICE);
+    const service = run(terminals.addService('p1', SERVICE));
     const forTask = { cwd: '/wt/a', place: 'worktree', taskId: 'a' } as const;
-    const first = terminals.startService(service.id, forTask);
-    expect((await terminals.restartService(service.id, forTask)).port).toBe(first.port);
+    const first = run(terminals.startService(service.id, forTask));
+    expect((await runAsync(terminals.restartService(service.id, forTask))).port).toBe(first.port);
   });
 
   it('leaves your run’s port to its command unless the service has a preview URL', () => {
     const { terminals, fake } = createTerminals();
-    const plain = terminals.addService('p1', { ...SERVICE, env: {} });
-    expect(terminals.startService(plain.id, main('repository')).port).toBeNull();
+    const plain = run(terminals.addService('p1', { ...SERVICE, env: {} }));
+    expect(run(terminals.startService(plain.id, main('repository'))).port).toBeNull();
     expect(fake.spawned[0]?.options.env.PORT).toBeUndefined();
-    const fixed = terminals.addService('p1', {
-      ...SERVICE,
-      name: 'web',
-      previewUrl: 'http://localhost:{port}',
-    });
-    expect(terminals.startService(fixed.id, main('repository')).port).toBe(4000);
+    const fixed = run(
+      terminals.addService('p1', {
+        ...SERVICE,
+        name: 'web',
+        previewUrl: 'http://localhost:{port}',
+      })
+    );
+    expect(run(terminals.startService(fixed.id, main('repository'))).port).toBe(4000);
     expect(fake.spawned[1]?.options.env.PORT).toBe('4000');
-    const picked = terminals.addService('p1', {
-      ...SERVICE,
-      name: 'docs',
-      env: {},
-      previewUrl: 'http://localhost:{port}',
-    });
-    expect(terminals.startService(picked.id, main('repository')).port).toBe(5001);
+    const picked = run(
+      terminals.addService('p1', {
+        ...SERVICE,
+        name: 'docs',
+        env: {},
+        previewUrl: 'http://localhost:{port}',
+      })
+    );
+    expect(run(terminals.startService(picked.id, main('repository'))).port).toBe(5001);
     expect(fake.spawned[2]?.options.env.PORT).toBe('5001');
+  });
+
+  it('says so when the machine has no free port for a task’s run', async () => {
+    const { terminals, fake } = createTerminals({
+      pty: {
+        readForeground: () => Effect.succeed(null),
+        pickPort: () => Effect.fail(new PortUnavailable({ message: 'No free port for the service.' })),
+      },
+    });
+    const service = run(terminals.addService('p1', { ...SERVICE, previewUrl: 'http://localhost:{port}' }));
+    const failure = await runAsync(
+      Effect.flip(terminals.startService(service.id, { cwd: '/wt/a', place: 'worktree', taskId: 'a' }))
+    );
+    expect(failure).toMatchObject({
+      code: 'service_port_unavailable',
+      message: 'No free port for the service.',
+    });
+    expect(fake.spawned).toHaveLength(0);
   });
 
   it('refuses more services than the limit', () => {
     const { terminals } = createTerminals();
-    for (let index = 0; index < SERVICE_LIMITS.services; index++) terminals.addService('p1', SERVICE);
-    expect(() => terminals.addService('p1', SERVICE)).toThrow('services at most.');
-    expect(() => createTerminals({ readOnly: true }).terminals.addService('p1', SERVICE)).toThrow(
+    for (let index = 0; index < SERVICE_LIMITS.services; index++) run(terminals.addService('p1', SERVICE));
+    expect(() => run(terminals.addService('p1', SERVICE))).toThrow('services at most.');
+    expect(() => run(createTerminals({ readOnly: true }).terminals.addService('p1', SERVICE))).toThrow(
       'Terminals are off'
     );
   });
@@ -586,100 +593,109 @@ function hasScreen(dataDir: string, id: string) {
   }
 }
 
-const ENGINE = {
-  state: {
-    tasks: { open: { handle: 'LOC-169', stage: 'building' }, done: { handle: 'LOC-28', stage: 'merged' } },
-  } as unknown as ShinsaState,
-};
+describe('the terminals’ defaults', () => {
+  it('publishes changes after 50 ms, saves screens every 2 s and names terminals with UUIDv7 ids', () => {
+    const { timings, id } = run(
+      Effect.gen(function* () {
+        return { timings: yield* TerminalTimings, id: yield* yield* TerminalIds };
+      })
+    );
+    expect([timings.notify, timings.screen].map(Duration.toMillis)).toEqual([50, 2_000]);
+    expect(id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[0-9a-f]{4}-[0-9a-f]{12}$/);
+  });
+});
+
+const TASKS = {
+  open: { handle: 'LOC-169', stage: 'building' },
+  done: { handle: 'LOC-28', stage: 'merged' },
+} as unknown as ShinsaState['tasks'];
 
 describe('Terminals at the limit', () => {
   it('closes ended terminals to make room: finished tasks first, then services, task shells and your own, oldest first', async () => {
     let clock = 100;
-    const { terminals, fake } = createTerminals({
-      now: () => clock,
-      engine: ENGINE,
-    });
-    const service = terminals.addService('p1', SERVICE);
+    const { terminals, fake } = createTerminals({ now: () => clock, tasks: TASKS });
+    const service = run(terminals.addService('p1', SERVICE));
     const ending = [
-      terminals.create(START),
-      terminals.create({ ...START, taskId: 'open' }),
-      terminals.startService(service.id, { ...main('repository'), taskId: 'open' }),
-      terminals.create({ ...START, taskId: 'gone' }),
-      terminals.create({ ...START, taskId: 'done' }),
+      run(terminals.create(START)),
+      run(terminals.create({ ...START, taskId: 'open' })),
+      run(terminals.startService(service.id, { ...main('repository'), taskId: 'open' })),
+      run(terminals.create({ ...START, taskId: 'gone' })),
+      run(terminals.create({ ...START, taskId: 'done' })),
     ];
     for (const [index, terminal] of ending.entries()) {
       clock = 200 - index;
-      if (terminal.serviceId) await terminals.stopService(service.id, 'open');
+      if (terminal.serviceId) await runAsync(terminals.stopService(service.id, 'open'));
       else fake.spawned[index]?.exit(0);
-      await until('it ends', () => terminals.find(terminal.id).info.status !== 'running');
+      await until('it ends', () => run(terminals.find(terminal.id)).info.status !== 'running');
     }
-    while (terminals.snapshot().terminals.length < TERMINAL_LIMITS.terminals) terminals.create(START);
+    while (run(terminals.snapshot).terminals.length < TERMINAL_LIMITS.terminals) run(terminals.create(START));
     const [yours, taskShell, stopped, gone, done] = ending.map((terminal) => terminal.id);
-    const left = () => terminals.snapshot().terminals.map((terminal) => terminal.id);
+    const left = () => run(terminals.snapshot).terminals.map((terminal) => terminal.id);
     for (const reclaimed of [done, gone, stopped, taskShell, yours]) {
-      terminals.create(START);
+      run(terminals.create(START));
       expect(left()).not.toContain(reclaimed);
       expect(left()).toHaveLength(TERMINAL_LIMITS.terminals);
     }
     expect(left()).toEqual(expect.not.arrayContaining(ending.map((terminal) => terminal.id)));
-    expect(() => terminals.create(START)).toThrow('all of them run.');
-    await terminals.stop();
+    expect(() => run(terminals.create(START))).toThrow('all of them run.');
+    await runAsync(terminals.stop);
   });
 
   it('starts a service in a full list by closing an ended terminal', async () => {
     const { terminals, fake } = createTerminals();
-    const service = terminals.addService('p1', SERVICE);
-    const ended = terminals.create(START);
+    const service = run(terminals.addService('p1', SERVICE));
+    const ended = run(terminals.create(START));
     fake.spawned[0]?.exit(1);
-    await until('the shell ends', () => terminals.find(ended.id).info.status === 'exited');
-    while (terminals.snapshot().terminals.length < TERMINAL_LIMITS.terminals) terminals.create(START);
-    const started = terminals.startService(service.id, { ...main('repository'), taskId: 'open' });
+    await until('the shell ends', () => run(terminals.find(ended.id)).info.status === 'exited');
+    while (run(terminals.snapshot).terminals.length < TERMINAL_LIMITS.terminals) run(terminals.create(START));
+    const started = run(terminals.startService(service.id, { ...main('repository'), taskId: 'open' }));
     expect(started.status).toBe('running');
-    expect(terminals.snapshot().terminals.map((terminal) => terminal.id)).not.toContain(ended.id);
-    await terminals.stop();
+    expect(run(terminals.snapshot).terminals.map((terminal) => terminal.id)).not.toContain(ended.id);
+    await runAsync(terminals.stop);
   });
 
   it('names the tasks and services that hold every running terminal when it refuses', async () => {
-    const { terminals } = createTerminals({ engine: ENGINE });
-    const seeded = terminals.addService('p1', { ...SERVICE, name: 'seeded' });
-    const sandbox = terminals.addService('p1', { ...SERVICE, name: 'sandbox' });
-    terminals.startService(seeded.id, { ...main('repository'), taskId: 'open' });
-    terminals.startService(sandbox.id, { ...main('repository'), taskId: 'open' });
-    terminals.create({ ...START, taskId: 'open' });
-    terminals.create({ ...START, taskId: 'gone' });
-    terminals.create({ ...START, taskId: 'gone' });
-    terminals.create(START);
-    while (terminals.snapshot().terminals.length < TERMINAL_LIMITS.terminals - 1) terminals.create(START);
-    terminals.create({ ...START, taskId: 'done' });
-    expect(() => terminals.create(START)).toThrow(
+    const { terminals } = createTerminals({ tasks: TASKS });
+    const seeded = run(terminals.addService('p1', { ...SERVICE, name: 'seeded' }));
+    const sandbox = run(terminals.addService('p1', { ...SERVICE, name: 'sandbox' }));
+    run(terminals.startService(seeded.id, { ...main('repository'), taskId: 'open' }));
+    run(terminals.startService(sandbox.id, { ...main('repository'), taskId: 'open' }));
+    run(terminals.create({ ...START, taskId: 'open' }));
+    run(terminals.create({ ...START, taskId: 'gone' }));
+    run(terminals.create({ ...START, taskId: 'gone' }));
+    run(terminals.create(START));
+    while (run(terminals.snapshot).terminals.length < TERMINAL_LIMITS.terminals - 1)
+      run(terminals.create(START));
+    run(terminals.create({ ...START, taskId: 'done' }));
+    expect(() => run(terminals.create(START))).toThrow(
       `Shinsa keeps ${TERMINAL_LIMITS.terminals} terminals at most, and all of them run. LOC-169 runs seeded, sandbox, and a shell. Another task runs 2 shells. LOC-28 runs a shell. ${TERMINAL_LIMITS.terminals - 6} are yours. Stop a service or close a terminal to free one.`
     );
-    await terminals.stop();
+    await runAsync(terminals.stop);
   });
 
   it('counts a single terminal of yours in the singular', async () => {
-    const { terminals } = createTerminals({ engine: ENGINE });
-    terminals.create(START);
-    while (terminals.snapshot().terminals.length < TERMINAL_LIMITS.terminals)
-      terminals.create({ ...START, taskId: 'open' });
-    expect(() => terminals.create(START)).toThrow(
+    const { terminals } = createTerminals({ tasks: TASKS });
+    run(terminals.create(START));
+    while (run(terminals.snapshot).terminals.length < TERMINAL_LIMITS.terminals)
+      run(terminals.create({ ...START, taskId: 'open' }));
+    expect(() => run(terminals.create(START))).toThrow(
       `all of them run. LOC-169 runs ${TERMINAL_LIMITS.terminals - 1} shells. 1 is yours.`
     );
-    await terminals.stop();
+    await runAsync(terminals.stop);
   });
 
   it('keeps a service that waits to resume after a restart, and closes an ended shell instead', async () => {
     const dataDir = createTempDir();
     const first = createTerminals({ dataDir }).terminals;
-    const service = first.addService('p1', SERVICE);
-    const waiting = first.startService(service.id, { ...main('repository'), taskId: 'open' });
-    while (first.snapshot().terminals.length < TERMINAL_LIMITS.terminals) first.create(START);
-    await first.stop();
-    const again = createTerminals({ dataDir, newId: () => 'fresh' }).terminals;
-    again.create(START);
-    const left = again.snapshot().terminals.map((terminal) => terminal.id);
+    const service = run(first.addService('p1', SERVICE));
+    const waiting = run(first.startService(service.id, { ...main('repository'), taskId: 'open' }));
+    while (run(first.snapshot).terminals.length < TERMINAL_LIMITS.terminals) run(first.create(START));
+    await runAsync(first.stop);
+    const again = createTerminals({ dataDir, idPrefix: 'fresh' }).terminals;
+    run(again.create(START));
+    const left = run(again.snapshot).terminals.map((terminal) => terminal.id);
     expect(left).toContain(waiting.id);
-    expect(left).toContain('fresh');
+    expect(left).toContain('fresh-1');
     expect(left).toHaveLength(TERMINAL_LIMITS.terminals);
   });
 });

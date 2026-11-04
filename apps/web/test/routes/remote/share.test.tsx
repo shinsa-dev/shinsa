@@ -65,10 +65,11 @@ function connect(session: Response | null = null) {
     return url;
   }) as never);
   spyOn(globalThis, 'fetch').mockImplementation(((target: string | URL) => {
+    const href = String(target);
+    if (href.startsWith('blob:'))
+      return (blobs.get(href) ?? Promise.resolve('')).then((text) => new Response(text));
     const input = target instanceof URL ? target.pathname : target;
     if (input === '/__remote/session') return Promise.resolve(session ?? new Response('', { status: 401 }));
-    if (input.startsWith('blob:'))
-      return (blobs.get(input) ?? Promise.resolve('')).then((text) => new Response(text));
     return machine.options.fetch(new Request(new URL(input, location.href)));
   }) as never);
   return machine;

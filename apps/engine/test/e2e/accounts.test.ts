@@ -1,27 +1,28 @@
 import { afterEach, describe, expect, setDefaultTimeout, setSystemTime, test } from 'bun:test';
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { listOpenGates, type RunFailure } from '@shinsa/core';
-import { Cswap } from '../../src/accounts/cswap.ts';
-import { Accounts, UsageResumeClock } from '../../src/accounts/index.ts';
-import { resolveResumeCommandId } from '../../src/accounts/resume.ts';
-import type { StoredAccount } from '../../src/accounts/store.ts';
-import { Transcripts } from '../../src/agents/index.ts';
-import type { CommandResult } from '../../src/shell/index.ts';
+import { type AccountsSnapshot, listOpenGates, type RunFailure } from '@shinsa/core';
+import { Accounts, UsageResume } from '../../src/accounts/index.ts';
+import { resolveResumeCommandId } from '../../src/accounts/resume/command.ts';
+import type { StoredAccount } from '../../src/accounts/schema.ts';
+import { AccountStore } from '../../src/accounts/store/service.ts';
+import type { CommandResult } from '../../src/shell/schema.ts';
+import { type AccountsHarness, buildAccountsNow } from '../accounts/harness.ts';
+import { createSyncTranscripts } from '../helpers/transcripts.ts';
 import { AgentFailure, PLAN, toolPlan, World } from './harness.ts';
 
 setDefaultTimeout(30_000);
 
 const worlds: World[] = [];
 
-const clocks: UsageResumeClock[] = [];
+const harnesses: AccountsHarness[] = [];
 
 const RESET_IN_MS = 60_000;
 
 afterEach(async () => {
   setSystemTime();
-  for (const clock of clocks.splice(0)) clock.stop();
   for (const world of worlds.splice(0)) await world.dispose();
+  for (const harness of harnesses.splice(0)) await harness.close();
 });
 
 function failure(overrides: Partial<RunFailure>): RunFailure {
@@ -41,44 +42,58 @@ function ok(stdout: string): CommandResult {
 
 interface Bench {
   world: World;
-  accounts: Accounts;
+  accounts: {
+    snapshot: () => AccountsSnapshot;
+    startLogin: (accountId: string) => Promise<AccountsSnapshot>;
+  };
   added: StoredAccount[];
-  clock: UsageResumeClock;
+  clock: { fireDue: () => Promise<void> };
 }
 
 async function createBench(emails: string[]): Promise<Bench> {
-  let accounts: Accounts | null = null;
+  let harness: AccountsHarness | null = null;
   const world = await World.create({
     supervise: (current, engine) => {
       const shared = join(current.root, 'claude');
       mkdirSync(join(shared, 'projects'), { recursive: true });
-      accounts = new Accounts({
-        engine,
+      const opened = buildAccountsNow({
+        engine: engine.core,
         config: current.config,
         env: { CLAUDE_CONFIG_DIR: shared },
+        liveClock: true,
+        resume: { graceMs: 0 },
         run: (command, _cwd, options) => {
           const dir = options.env?.CLAUDE_CONFIG_DIR ?? '';
-          const email = accounts?.store.list().find((account) => account.configDir === dir)?.email;
+          const email = opened
+            .runSync(opened.service(AccountStore).list)
+            .find((account) => account.configDir === dir)?.email;
           if (command[1] === 'auth' && command[2] === 'status') {
             return Promise.resolve(ok(JSON.stringify({ loggedIn: true, email, subscriptionType: 'max' })));
           }
           return Promise.resolve(ok(''));
         },
-        readSecret: () => Promise.resolve(null),
-        cswap: new Cswap({ run: () => Promise.resolve(ok('')), which: () => null }),
-        resolveClaude: () => Promise.resolve('claude'),
-        spawnLogin: () => ({ write: () => undefined, kill: () => undefined, exited: Promise.resolve(0) }),
       });
-      return { accounts, onRejection: accounts.onRejection, onNotice: accounts.onNotice };
+      harness = opened;
+      harnesses.push(opened);
+      return { accountRoster: opened.service(Accounts) };
     },
   });
   worlds.push(world);
-  const ready = accounts as unknown as Accounts;
-  const added = emails.map((email) => ready.store.create({ email, plan: 'max' }));
-  const clock = new UsageResumeClock(world.engine, { graceMs: 0 });
-  clocks.push(clock);
-  clock.start();
-  return { world, accounts: ready, added, clock };
+  const ready = harness as unknown as AccountsHarness;
+  const store = ready.service(AccountStore);
+  const roster = ready.service(Accounts);
+  const resume = ready.service(UsageResume);
+  const added = emails.map((email) => ready.runSync(store.create({ email, plan: 'max' })));
+  await ready.run(resume.start);
+  return {
+    world,
+    accounts: {
+      snapshot: () => ready.runSync(roster.snapshot),
+      startLogin: (accountId) => ready.run(roster.startLogin(accountId)),
+    },
+    added,
+    clock: { fireDue: () => ready.run(resume.fireDue) },
+  };
 }
 
 function limitAt(resetAt: number) {
@@ -87,7 +102,7 @@ function limitAt(resetAt: number) {
   };
 }
 
-async function passReset(clock: UsageResumeClock, resetAt: number) {
+async function passReset(clock: Bench['clock'], resetAt: number) {
   setSystemTime(new Date(resetAt + 1));
   await clock.fireDue();
 }
@@ -103,7 +118,7 @@ function listAttemptEmails(world: World, runId: string) {
 }
 
 function readNotices(world: World, runId: string) {
-  return new Transcripts(world.config.transcriptsDir)
+  return createSyncTranscripts(world.config.transcriptsDir)
     .listEntries(runId)
     .flatMap((entry) =>
       entry.type === 'notice' && entry.notice.kind === 'account_switched' ? [entry.notice] : []

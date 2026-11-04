@@ -1,9 +1,10 @@
-import { describe, expect, spyOn, test } from 'bun:test';
+import { describe, expect, test } from 'bun:test';
 import type { Repo, ShinsaCommand, Task } from '@shinsa/core';
+import { Effect, Layer } from 'effect';
 import { RepositoryWork } from '../../src/agents/repository-work/service.ts';
-import { createWorktree } from '../../src/git/index.ts';
-import { log } from '../../src/log/index.ts';
-import { createGitRepo, createTempDir, git, writeFiles } from '../helpers/index.ts';
+import { EngineCore } from '../../src/runtime/engine/service.ts';
+import { createWorktree, runGit } from '../helpers/git.ts';
+import { captureLogs, createGitRepo, createTempDir, git, writeFiles } from '../helpers/index.ts';
 import { createRun, createStubEngine, createTask } from '../helpers/state.ts';
 
 async function commitAll(path: string, message: string) {
@@ -30,7 +31,15 @@ async function setup(tasks: (repo: Repo) => Promise<Task[]>) {
     state.repos[repo.id] = repo;
     for (const task of created) state.tasks[task.id] = task;
   });
-  return { repo, stub, work: new RepositoryWork(stub.engine) };
+  const layer = RepositoryWork.layer.pipe(Layer.provide(Layer.succeed(EngineCore, stub.engine.core)));
+  const use = <A>(step: (work: RepositoryWork['Service']) => Effect.Effect<A>) =>
+    runGit(RepositoryWork.use(step).pipe(Effect.provide(layer)));
+  const work = {
+    describe: (taskId: string) => use((found) => found.describe(taskId)),
+    recordOverlaps: (taskId: string, planned: string[]) =>
+      use((found) => found.recordOverlaps(taskId, planned)),
+  };
+  return { repo, stub, work };
 }
 
 function overlapsOf(dispatched: ShinsaCommand[]) {
@@ -55,14 +64,13 @@ describe('the other work in a task’s repository', () => {
       await createWorkingTask(created, 'mine', { 'src/a.ts': '1\n' }),
     ]);
     stub.state.tasks.broken = createTask({ id: 'broken', title: 'Broken', worktreePath: createTempDir() });
-    const warn = spyOn(log, 'warn').mockImplementation(() => undefined);
+    const logs = captureLogs();
     const text = await work.describe('mine');
+    logs.restore();
     expect(text).toContain('  Changed files: not known.');
-    expect(warn).toHaveBeenCalledWith(
-      '[RepositoryWork] Could not list the files a task changed',
-      expect.objectContaining({ taskId: 'broken' })
-    );
-    warn.mockRestore();
+    expect(logs.fieldsOf('[RepositoryWork] Could not list the files a task changed')).toEqual([
+      expect.objectContaining({ taskId: 'broken' }),
+    ]);
   });
 
   test('records the files two tasks both change for each of them, the plan’s named files included', async () => {
@@ -102,12 +110,11 @@ describe('the other work in a task’s repository', () => {
       await createWorkingTask(repo, 'theirs', { 'src/a.ts': '2\n' }),
     ]);
     pair.stub.reject((command) => command.type === 'task.record_overlaps');
-    const warn = spyOn(log, 'warn').mockImplementation(() => undefined);
+    const logs = captureLogs();
     await pair.work.recordOverlaps('mine', []);
-    expect(warn).toHaveBeenCalledWith(
-      '[RepositoryWork] Could not record the files another task changes too',
-      expect.objectContaining({ taskId: 'mine' })
+    logs.restore();
+    expect(logs.fieldsOf('[RepositoryWork] Could not record the files another task changes too')).toEqual(
+      expect.arrayContaining([expect.objectContaining({ taskId: 'mine' })])
     );
-    warn.mockRestore();
   });
 });

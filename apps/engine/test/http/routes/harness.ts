@@ -1,7 +1,7 @@
 import type { ServerConfig } from '../../../src/config/index.ts';
 import { ApiRoutes } from '../../../src/http/app.ts';
 import type { RequestSourceShape } from '../../../src/http/schema.ts';
-import type { HttpContext } from '../../../src/http/server.ts';
+import type { HttpContext } from '../../helpers/web.ts';
 import { createHttpContext, createWebHandler } from '../../helpers/web.ts';
 
 const BASE = 'http://127.0.0.1:5180';

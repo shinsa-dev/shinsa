@@ -1,8 +1,8 @@
 import type { FastModeAvailability } from '@shinsa/core';
-import { Schema } from 'effect';
+import { Context, type Effect, Schema } from 'effect';
 import type { JsonSchema } from '../providers/index.ts';
 
-export type QuickJson = <T>(system: string, prompt: string, schema?: JsonSchema) => Promise<T | null>;
+export type QuickJson = <T>(system: string, prompt: string, schema?: JsonSchema) => Effect.Effect<T | null>;
 
 export type QuickMode = 'structured' | 'text';
 
@@ -17,7 +17,14 @@ export interface QuickResult<T> {
   failures: QuickFailure[];
 }
 
-export type FastModeReader = (provider: string) => Promise<FastModeAvailability>;
+export type FastModeReader = (provider: string) => Effect.Effect<FastModeAvailability>;
+
+export const QuickFastMode = Context.Reference<FastModeReader | null>(
+  'shinsa/engine/agents/quick/QuickFastMode',
+  {
+    defaultValue: () => null,
+  }
+);
 
 export interface QuickRequest<T> {
   task: string;

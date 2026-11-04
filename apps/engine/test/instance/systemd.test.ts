@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, test } from 'bun:test';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { Effect } from 'effect';
 import {
   createSystemdService,
   resolveUnit,
@@ -8,7 +9,13 @@ import {
   type ServiceResult,
   SYSTEMD_UNIT,
 } from '../../src/instance/index.ts';
+import type { Shell } from '../../src/shell/service.ts';
+import { testRuntime } from '../helpers/runtime.ts';
 import { createTempDir, removeTempDirs } from '../helpers/temp.ts';
+
+function run<A, E>(effect: Effect.Effect<A, E, Shell>) {
+  return testRuntime.runPromise(effect);
+}
 
 afterEach(removeTempDirs);
 
@@ -26,13 +33,13 @@ function createFake(home: string, fake: FakeSystemd = {}) {
     user: 'dev',
     systemctl: (args) => {
       calls.push(args);
-      if (args[0] === 'show-environment') return Promise.resolve({ ok: fake.reachable ?? true, output: '' });
+      if (args[0] === 'show-environment') return Effect.succeed({ ok: fake.reachable ?? true, output: '' });
       const refused = args[0] === fake.refuse;
-      return Promise.resolve({ ok: !refused, output: refused ? 'Access denied' : '' });
+      return Effect.succeed({ ok: !refused, output: refused ? 'Access denied' : '' });
     },
     loginctl: (args) => {
       calls.push(['loginctl', ...args]);
-      return Promise.resolve(fake.linger ?? { ok: true, output: 'yes\n' });
+      return Effect.succeed(fake.linger ?? { ok: true, output: 'yes\n' });
     },
   });
   return { service, calls, path: join(home, '.config/systemd/user', SYSTEMD_UNIT) };
@@ -83,7 +90,7 @@ describe('the systemd unit', () => {
 describe('the systemd service', () => {
   test('the first start writes the unit, reloads systemd and enables it', async () => {
     const { service, calls, path } = createFake(createTempDir());
-    expect(await service.prepare()).toBeNull();
+    expect(await run(service.prepare)).toBeNull();
     expect(readFileSync(path, 'utf8')).toBe(resolveUnit('/opt/shinsa/bin/shinsa', {}));
     expect(calls).toEqual([
       ['show-environment'],
@@ -95,51 +102,51 @@ describe('the systemd service', () => {
 
   test('a later start leaves a current unit alone and rewrites a stale one', async () => {
     const { service, calls, path } = createFake(createTempDir());
-    await service.prepare();
+    await run(service.prepare);
     calls.length = 0;
-    await service.prepare();
+    await run(service.prepare);
     expect(calls.map((call) => call[0])).toEqual(['show-environment', 'enable', 'loginctl']);
     writeFileSync(path, 'ExecStart=/old/shinsa engine\n');
     calls.length = 0;
-    await service.prepare();
+    await run(service.prepare);
     expect(calls.map((call) => call[0])).toEqual(['show-environment', 'daemon-reload', 'enable', 'loginctl']);
     expect(readFileSync(path, 'utf8')).toContain('ExecStart="/opt/shinsa/bin/shinsa" engine');
   });
 
   test('says how to keep the engine running after logout when lingering is off', async () => {
     const off = createFake(createTempDir(), { linger: { ok: true, output: 'no\n' } });
-    expect(await off.service.prepare()).toBe(
+    expect(await run(off.service.prepare)).toBe(
       'It stops when you log out. To keep it running and start it at boot, turn on lingering: `sudo loginctl enable-linger dev`.'
     );
     const unknown = createFake(createTempDir(), { linger: { ok: false, output: 'no' } });
-    expect(await unknown.service.prepare()).toBeNull();
+    expect(await run(unknown.service.prepare)).toBeNull();
   });
 
   test('refuses where there is no user manager, and reports a systemctl that fails', async () => {
     const missing = createFake(createTempDir(), { reachable: false });
-    await expect(missing.service.prepare()).rejects.toThrow(
+    await expect(run(missing.service.prepare)).rejects.toThrow(
       'This machine has no systemd user manager to keep the engine running. Log in as this user over SSH rather than with `su`, or run `shinsa engine` under a process manager of your own.'
     );
     expect(existsSync(missing.path)).toBe(false);
     const denied = createFake(createTempDir(), { refuse: 'enable' });
-    await expect(denied.service.prepare()).rejects.toThrow('systemctl enable failed: Access denied');
+    await expect(run(denied.service.prepare)).rejects.toThrow('systemctl enable failed: Access denied');
   });
 
   test('every action goes to the unit once it is installed', async () => {
     const { service, calls } = createFake(createTempDir());
-    await expect(service.assertInstalled()).rejects.toThrow(
+    await expect(run(service.assertInstalled)).rejects.toThrow(
       'The engine is not set up as a service yet. `shinsa start` sets it up.'
     );
-    expect(await service.kick()).toBe(false);
+    expect(await run(service.kick)).toBe(false);
     expect(calls).toEqual([]);
-    await service.prepare();
+    await run(service.prepare);
     calls.length = 0;
-    await service.assertInstalled();
-    await service.start();
-    await service.stop();
-    await service.kill();
-    await service.restart();
-    expect(await service.kick()).toBe(true);
+    await run(service.assertInstalled);
+    await run(service.start);
+    await run(service.stop);
+    await run(service.kill);
+    await run(service.restart);
+    expect(await run(service.kick)).toBe(true);
     expect(calls).toEqual([
       ['start', SYSTEMD_UNIT],
       ['stop', '--no-block', SYSTEMD_UNIT],

@@ -1,7 +1,9 @@
 import type { TimingSpan, UserCommand } from '@shinsa/core';
+import { Effect } from 'effect';
 import { CommandRefused } from '@/lib/connection/engine-socket/schema.ts';
 import { connection, hasEngineCommand, sendCommand } from '@/lib/connection/socket.ts';
 import { subscribeDesktopAway } from '@/lib/desktop.ts';
+import { forkApp } from '@/lib/runtime/app.ts';
 
 interface AwayRelayPorts {
   canSend: () => boolean;
@@ -14,13 +16,14 @@ function isNotConnected(error: unknown) {
 
 export function createAwayRelay(ports: AwayRelayPorts) {
   const pending: TimingSpan[] = [];
+  const sendSpan = (span: TimingSpan) =>
+    Effect.tryPromise({
+      try: () => ports.send({ type: 'away.record', ...span }),
+      catch: isNotConnected,
+    }).pipe(Effect.catch((notConnected) => Effect.sync(() => notConnected && pending.push(span))));
   const flush = () => {
     if (pending.length === 0 || !ports.canSend()) return;
-    for (const span of pending.splice(0)) {
-      void ports.send({ type: 'away.record', ...span }).then(undefined, (error: unknown) => {
-        if (isNotConnected(error)) pending.push(span);
-      });
-    }
+    forkApp(Effect.forEach(pending.splice(0), sendSpan, { concurrency: 'unbounded', discard: true }));
   };
   const record = (span: TimingSpan) => {
     pending.push(span);

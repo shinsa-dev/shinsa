@@ -2,76 +2,32 @@ import {
   type AgentModel,
   DomainError,
   describeList,
-  type OnboardingCheck,
   type OnboardingChoiceGroup,
   type OnboardingChoiceGroupId,
   type OnboardingOption,
-  type OnboardingProjectChoice,
-  type OnboardingStepId,
-  PLAN_SIZE_LIMITS,
   type PlanApproval,
-  type ProjectSuggestion,
   parseChoiceValue,
-  type RootSuggestions,
   resolveDisplayPath,
   resolveModelLabel,
   type Settings,
   serializeChoiceValue,
 } from '@shinsa/core';
-import type { AccountSource, ClaudeAccount } from './accounts.ts';
-import type { PrerequisiteReport } from './prerequisites.ts';
+import { Effect } from 'effect';
+import type { ClaudeAccount } from './accounts.ts';
+import { resolveOnboardingFailure } from './failures.ts';
 import { resolveChosenRoots } from './roots.ts';
-
-export interface SetupPatch {
-  roots?: string[];
-  defaultModel?: string | null;
-  mergeMethod?: Settings['mergeMethod'];
-  approvePlans?: PlanApproval;
-}
-
-interface StepContext {
-  userHome: string;
-  settings: Settings;
-  roots: string[];
-  projectCount: number;
-  suggestRoots: () => Promise<RootSuggestions>;
-  suggestProjects: () => Promise<ProjectSuggestion[]>;
-  listFiledProjects: () => ProjectSuggestion[];
-  listModels: () => Promise<AgentModel[]>;
-  listAccounts: AccountSource;
-  checkPrerequisites: () => Promise<PrerequisiteReport>;
-  save: (patch: SetupPatch) => Promise<void>;
-  createProjects: (choices: OnboardingProjectChoice[] | undefined) => Promise<void>;
-}
-
-export type StepReadContext = Omit<StepContext, 'save' | 'createProjects'>;
-
-interface StepView {
-  title: string;
-  description: string;
-  multiple: boolean;
-  options: OnboardingOption[];
-  groups: OnboardingChoiceGroup[];
-  projects: ProjectSuggestion[];
-  filed: ProjectSuggestion[];
-  checks: OnboardingCheck[];
-  ready: boolean;
-  submitLabel: string;
-}
-
-export interface StepDefinition {
-  id: OnboardingStepId;
-  label: string;
-  view: (context: StepReadContext, answered: boolean, picked: string[]) => Promise<StepView>;
-  summarize: (context: StepReadContext) => Promise<string | null>;
-  answer: (values: string[], context: StepContext, projects?: OnboardingProjectChoice[]) => Promise<void>;
-}
-
-const MAX_SUGGESTIONS = 8;
-
-const CONTINUE = 'continue';
-
-const ROLE_MODELS = ':roles';
+import {
+  CONTINUE,
+  MAX_SUGGESTIONS,
+  MERGE_OPTIONS,
+  PLAN_OPTIONS,
+  RECOMMENDED_MERGE,
+  RECOMMENDED_PLANS,
+  ROLE_MODELS,
+  type StepDefinition,
+  type StepReadContext,
+  type StepView,
+} from './steps/schema.ts';
 
 function createOption(
   value: string,
@@ -102,16 +58,15 @@ function describeRepoCount(count: number) {
 }
 
 function assertContinue(values: string[]) {
-  if (values.length !== 1 || values[0] !== CONTINUE) {
-    throw new DomainError({ code: 'answer_invalid', message: 'Continue to the next step.' });
-  }
+  if (values.length === 1 && values[0] === CONTINUE) return Effect.void;
+  return Effect.fail(new DomainError({ code: 'answer_invalid', message: 'Continue to the next step.' }));
 }
 
 const ROOTS: StepDefinition = {
   id: 'roots',
   label: 'Folders',
-  view: async (context, _answered, picked) => {
-    const { suggestions, refused } = await context.suggestRoots();
+  view: Effect.fn('OnboardingSteps.roots.view')(function* (context, _answered, picked) {
+    const { suggestions, refused } = yield* context.suggestRoots;
     const configured = new Set(picked.length > 0 ? picked : context.roots);
     const options = suggestions
       .slice(0, MAX_SUGGESTIONS)
@@ -147,14 +102,18 @@ const ROOTS: StepDefinition = {
       multiple: true,
       options,
     });
-  },
+  }),
   summarize: (context) => {
     const [first = null, ...rest] = context.roots.map((root) => resolveDisplayPath(root, context.userHome));
-    return Promise.resolve(rest.length === 0 ? first : `${first} and ${rest.length} more`);
+    return Effect.succeed(rest.length === 0 ? first : `${first} and ${rest.length} more`);
   },
-  answer: async (values, context) => {
-    await context.save({ roots: resolveChosenRoots(values, context.userHome) });
-  },
+  answer: Effect.fn('OnboardingSteps.roots.answer')(function* (values, context) {
+    const roots = yield* Effect.try({
+      try: () => resolveChosenRoots(values, context.userHome),
+      catch: resolveOnboardingFailure,
+    });
+    yield* context.save({ roots });
+  }),
 };
 
 function describeProjectCount(count: number) {
@@ -164,9 +123,9 @@ function describeProjectCount(count: number) {
 const PROJECTS: StepDefinition = {
   id: 'projects',
   label: 'Projects',
-  view: async (context) => {
-    const projects = await context.suggestProjects();
-    const filed = context.listFiledProjects();
+  view: Effect.fn('OnboardingSteps.projects.view')(function* (context) {
+    const projects = yield* context.suggestProjects;
+    const filed = yield* context.listFiledProjects;
     if (projects.length === 0) {
       return createView({
         title: 'Your projects',
@@ -185,13 +144,13 @@ const PROJECTS: StepDefinition = {
       filed,
       submitLabel: projects.length === 1 ? 'Create the project' : `Create ${projects.length} projects`,
     });
-  },
+  }),
   summarize: (context) =>
-    Promise.resolve(context.projectCount === 0 ? null : describeProjectCount(context.projectCount)),
-  answer: async (values, context, projects) => {
-    assertContinue(values);
-    await context.createProjects(projects);
-  },
+    Effect.succeed(context.projectCount === 0 ? null : describeProjectCount(context.projectCount)),
+  answer: Effect.fn('OnboardingSteps.projects.answer')(function* (values, context, projects) {
+    yield* assertContinue(values);
+    yield* context.createProjects(projects);
+  }),
 };
 
 function resolveModelMeaning(model: AgentModel) {
@@ -210,8 +169,7 @@ function createChoice(
   return createOption(serializeChoiceValue(group, value), label, detail, picked === value, recommended);
 }
 
-async function listModelChoices(context: StepReadContext) {
-  const models = await context.listModels();
+function listModelChoices(context: StepReadContext, models: AgentModel[]) {
   const current = context.settings.defaultModel;
   const picked = current ?? ROLE_MODELS;
   const options = models.map((model) =>
@@ -232,18 +190,6 @@ async function listModelChoices(context: StepReadContext) {
   return options;
 }
 
-const RECOMMENDED_MERGE: Settings['mergeMethod'] = 'squash';
-
-const MERGE_OPTIONS: { value: Settings['mergeMethod']; label: string; detail: string }[] = [
-  { value: 'squash', label: 'Squash', detail: 'Every pull request lands as one commit.' },
-  { value: 'merge', label: 'Merge commit', detail: 'Every commit is kept, joined by a merge commit.' },
-  {
-    value: 'rebase',
-    label: 'Rebase',
-    detail: 'The commits are replayed onto the default branch, with no merge commit.',
-  },
-];
-
 function listMergeChoices(context: StepReadContext, answered: boolean) {
   const picked = answered ? context.settings.mergeMethod : RECOMMENDED_MERGE;
   return MERGE_OPTIONS.map((option) =>
@@ -257,29 +203,6 @@ function listMergeChoices(context: StepReadContext, answered: boolean) {
     )
   );
 }
-
-const RECOMMENDED_PLANS: PlanApproval = 'large';
-
-const PLAN_OPTIONS: { value: PlanApproval; label: string; detail: string; summary: string }[] = [
-  {
-    value: 'large',
-    label: 'Show me large plans first',
-    detail: `Before building a plan with more than ${PLAN_SIZE_LIMITS.phases} phases or ${PLAN_SIZE_LIMITS.files} files, the agent waits for you to approve it.`,
-    summary: 'Large plans first',
-  },
-  {
-    value: 'always',
-    label: 'Show me every plan first',
-    detail: 'The agent waits for you to approve every plan before it builds.',
-    summary: 'Every plan first',
-  },
-  {
-    value: 'when_asked',
-    label: 'Start building',
-    detail: 'Agents plan on their own and show you a plan only when you ask for one.',
-    summary: 'Start building',
-  },
-];
 
 function listPlanChoices(context: StepReadContext, answered: boolean) {
   const picked = answered ? (context.settings.approvePlans ?? 'when_asked') : RECOMMENDED_PLANS;
@@ -299,29 +222,34 @@ function resolvePlanLabel(approval: PlanApproval | undefined) {
   return PLAN_OPTIONS.find((option) => option.value === (approval ?? 'when_asked'))?.summary as string;
 }
 
-async function listDefaultGroups(
+const listDefaultGroups = Effect.fn('OnboardingSteps.listDefaultGroups')(function* (
   context: StepReadContext,
   answered: boolean
-): Promise<OnboardingChoiceGroup[]> {
-  return [
-    { id: 'model', label: 'Model', options: await listModelChoices(context) },
+) {
+  const models = yield* context.listModels;
+  const groups: OnboardingChoiceGroup[] = [
+    { id: 'model', label: 'Model', options: listModelChoices(context, models) },
     { id: 'merge', label: 'Merging', options: listMergeChoices(context, answered) },
     { id: 'plans', label: 'Plans', options: listPlanChoices(context, answered) },
   ];
-}
+  return groups;
+});
 
-function findGroupValue(group: OnboardingChoiceGroup, values: string[]) {
+const findGroupValue = Effect.fn('OnboardingSteps.findGroupValue')(function* (
+  group: OnboardingChoiceGroup,
+  values: string[]
+) {
   const picks = values.filter((value) => parseChoiceValue(value)?.group === group.id);
   const option = group.options.find((entry) => entry.value === picks[0]);
   if (picks.length !== 1 || !option) {
     const labels = group.options.map((entry) => entry.label);
-    throw new DomainError({
+    return yield* new DomainError({
       code: 'answer_invalid',
       message: `Pick one ${group.label.toLowerCase()} option: ${describeList(labels, 'or')}.`,
     });
   }
   return parseChoiceValue(option.value)?.value as string;
-}
+});
 
 function resolveMergeLabel(method: Settings['mergeMethod']) {
   return MERGE_OPTIONS.find((option) => option.value === method)?.label as string;
@@ -330,13 +258,14 @@ function resolveMergeLabel(method: Settings['mergeMethod']) {
 const DEFAULTS: StepDefinition = {
   id: 'defaults',
   label: 'Defaults',
-  view: async (context, answered) =>
-    createView({
+  view: Effect.fn('OnboardingSteps.defaults.view')(function* (context, answered) {
+    return createView({
       title: 'How should agents work?',
       description:
         'The recommended choices are picked. Continue to keep them; you can change any of them in Settings.',
-      groups: await listDefaultGroups(context, answered),
-    }),
+      groups: yield* listDefaultGroups(context, answered),
+    });
+  }),
   summarize: (context) => {
     const { defaultModel, mergeMethod, approvePlans } = context.settings;
     const parts = [
@@ -344,18 +273,17 @@ const DEFAULTS: StepDefinition = {
       resolveMergeLabel(mergeMethod),
       resolvePlanLabel(approvePlans),
     ];
-    return Promise.resolve(parts.join(' · '));
+    return Effect.succeed(parts.join(' · '));
   },
-  answer: async (values, context) => {
-    const [model, merge, plans] = (await listDefaultGroups(context, false)).map((group) =>
-      findGroupValue(group, values)
-    );
-    await context.save({
+  answer: Effect.fn('OnboardingSteps.defaults.answer')(function* (values, context) {
+    const groups = yield* listDefaultGroups(context, false);
+    const [model, merge, plans] = yield* Effect.forEach(groups, (group) => findGroupValue(group, values));
+    yield* context.save({
       defaultModel: model === ROLE_MODELS ? null : (model as string),
       mergeMethod: merge as Settings['mergeMethod'],
       approvePlans: plans as PlanApproval,
     });
-  },
+  }),
 };
 
 function describeAccountCount(accounts: ClaudeAccount[]) {
@@ -374,8 +302,10 @@ function describeAccountsStep(installed: boolean, signedIn: boolean) {
 const ACCOUNTS: StepDefinition = {
   id: 'accounts',
   label: 'Claude',
-  view: async (context) => {
-    const [accounts, report] = await Promise.all([context.listAccounts(), context.checkPrerequisites()]);
+  view: Effect.fn('OnboardingSteps.accounts.view')(function* (context) {
+    const [accounts, report] = yield* Effect.all([context.listAccounts, context.checkPrerequisites], {
+      concurrency: 'unbounded',
+    });
     const checks = report.checks.filter((check) => check.id === 'claude');
     const installed = checks.every((check) => check.ok);
     const signedIn = accounts.some((account) => account.signedIn);
@@ -385,25 +315,25 @@ const ACCOUNTS: StepDefinition = {
       checks,
       ready: installed && signedIn,
     });
-  },
-  summarize: async (context) => describeAccountCount(await context.listAccounts()),
-  answer: async (values, context) => {
-    assertContinue(values);
-    const accounts = await context.listAccounts();
+  }),
+  summarize: (context) => Effect.map(context.listAccounts, describeAccountCount),
+  answer: Effect.fn('OnboardingSteps.accounts.answer')(function* (values, context) {
+    yield* assertContinue(values);
+    const accounts = yield* context.listAccounts;
     if (!accounts.some((account) => account.signedIn)) {
-      throw new DomainError({
+      return yield* new DomainError({
         code: 'account_required',
         message: 'Sign in to a Claude account first. Agents work under it.',
       });
     }
-  },
+  }),
 };
 
 const PREREQUISITES: StepDefinition = {
   id: 'prerequisites',
   label: 'Tools',
-  view: async (context) => {
-    const report = await context.checkPrerequisites();
+  view: Effect.fn('OnboardingSteps.prerequisites.view')(function* (context) {
+    const report = yield* context.checkPrerequisites;
     return createView({
       title: 'The tools Shinsa runs',
       description: report.ready
@@ -413,17 +343,17 @@ const PREREQUISITES: StepDefinition = {
       ready: report.ready,
       submitLabel: 'Finish setup',
     });
-  },
-  summarize: () => Promise.resolve(null),
-  answer: async (values, context) => {
-    assertContinue(values);
-    if (!(await context.checkPrerequisites()).ready) {
-      throw new DomainError({
+  }),
+  summarize: () => Effect.succeed(null),
+  answer: Effect.fn('OnboardingSteps.prerequisites.answer')(function* (values, context) {
+    yield* assertContinue(values);
+    if (!(yield* context.checkPrerequisites).ready) {
+      return yield* new DomainError({
         code: 'tools_missing',
         message: 'Install the missing tools first. Setup finishes once every one is there.',
       });
     }
-  },
+  }),
 };
 
 export const ONBOARDING_STEPS: readonly StepDefinition[] = [

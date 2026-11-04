@@ -1,7 +1,12 @@
 import { describe, expect, test } from 'bun:test';
 import { deflateRawSync } from 'node:zlib';
+import { Effect } from 'effect';
 import { openTask } from '../../src/lib/content';
 import { readOpenPage } from '../../src/lib/open-page';
+
+function readPage(search: string, hash: string, now: number) {
+  return Effect.runPromise(readOpenPage(search, hash, now));
+}
 import { OPEN_TASK_ID } from '../../src/lib/open-scene';
 
 function encode(value: unknown) {
@@ -30,7 +35,7 @@ const review = {
 
 describe('readOpenPage', () => {
   test('builds the whole review page from the fragment, with the task link from the query', async () => {
-    const page = await readOpenPage('?task=id-1&handle=LOC-44', `#review=${encode(review)}`, 1_000);
+    const page = await readPage('?task=id-1&handle=LOC-44', `#review=${encode(review)}`, 1_000);
     if (!('scene' in page)) throw new Error('expected a review page');
     expect(page.scene.link).toBe('shinsa://task/id-1');
     expect(page.scene.payload.task.title).toBe('Render the open page at once');
@@ -39,13 +44,13 @@ describe('readOpenPage', () => {
   });
 
   test('keeps the review page without a task link when the query names no task', async () => {
-    const page = await readOpenPage('', `#review=${encode(review)}`, 1_000);
+    const page = await readPage('', `#review=${encode(review)}`, 1_000);
     if (!('scene' in page)) throw new Error('expected a review page');
     expect(page.scene.link).toBeNull();
   });
 
   test('falls back to the invite header when the link carries no review', async () => {
-    expect(await readOpenPage('?task=id-1&handle=LOC-44&title=Fix+tabs', '', 1_000)).toEqual({
+    expect(await readPage('?task=id-1&handle=LOC-44&title=Fix+tabs', '', 1_000)).toEqual({
       header: {
         title: 'Fix tabs',
         description: '',
@@ -53,7 +58,7 @@ describe('readOpenPage', () => {
         link: 'shinsa://task/id-1',
       },
     });
-    expect(await readOpenPage('', '#review=AAAA', 1_000)).toMatchObject({
+    expect(await readPage('', '#review=AAAA', 1_000)).toMatchObject({
       header: { title: openTask.missingTitle, link: null },
     });
   });

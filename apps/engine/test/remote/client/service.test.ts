@@ -1,17 +1,26 @@
 import { afterEach, describe, expect, test } from 'bun:test';
-import { REMOTE_APP_ORIGIN, REMOTE_PATHS, resolveMachineTeamPath, SLACK_RELAY_PATHS } from '@shinsa/core';
+import {
+  type InstanceId,
+  REMOTE_APP_ORIGIN,
+  type RemoteUserId,
+  type TeamId,
+  REMOTE_PATHS,
+  resolveMachineTeamPath,
+  SLACK_RELAY_PATHS,
+} from '@shinsa/core';
 import { BodyInvalid, MembersFull, Revoked } from '@shinsa/core/remote/errors';
 import { Effect, Fiber, Layer, Redacted } from 'effect';
 import { FetchHttpClient } from 'effect/http';
 import { TestClock } from 'effect/testing';
-import {
-  isRemoteRetryable,
-  RemoteControl,
-  selectRemoteFailureTag,
-} from '../../../src/remote/client/index.ts';
 import { RemoteOrigin } from '../../../src/remote/client/schema.ts';
 import { RemoteClient } from '../../../src/remote/client/service.ts';
 import { type FakeControlPlane, refuse, startFakeControlPlane } from '../control-plane.ts';
+
+const USER_ID = 'u1' as RemoteUserId;
+
+const TEAM_ID = 'team1' as TeamId;
+
+const INSTANCE_ID = 'k3x9' as InstanceId;
 
 const USER = { id: 'u1', login: 'kai', name: null, avatarUrl: null };
 
@@ -39,11 +48,11 @@ afterEach(async () => {
 
 function start() {
   current = startFakeControlPlane();
-  return { plane: current, control: new RemoteControl({ origin: current.origin }) };
+  return { plane: current };
 }
 
 function callClient<A, E>(
-  plane: FakeControlPlane,
+  plane: { origin: string },
   call: (client: RemoteClient['Service']) => Effect.Effect<A, E>
 ) {
   return Effect.runPromise(
@@ -66,12 +75,20 @@ function answer(plane: FakeControlPlane, path: string, body: unknown) {
 
 describe('the client for app.shinsa.dev', () => {
   test('defaults to app.shinsa.dev', () => {
-    expect(new RemoteControl().origin).toBe(REMOTE_APP_ORIGIN);
+    expect(
+      Effect.runSync(
+        Effect.gen(function* () {
+          return yield* RemoteOrigin;
+        })
+      )
+    ).toBe(REMOTE_APP_ORIGIN);
   });
 
   test('starts and polls pairing without a token', async () => {
-    const { plane, control } = start();
-    expect(await control.requestPairStart({ name: 'Mac', publicKey: 'p', version: '1' })).toMatchObject({
+    const { plane } = start();
+    expect(
+      await callClient(plane, (client) => client.pairing.start({ name: 'Mac', publicKey: 'p', version: '1' }))
+    ).toMatchObject({
       claimCode: 'c',
     });
     expect(plane.calls.map((call) => [call.path, call.token, call.body])).toEqual([
@@ -80,7 +97,7 @@ describe('the client for app.shinsa.dev', () => {
   });
 
   test('sends every machine call with the machine token and decodes its answer', async () => {
-    const { plane, control } = start();
+    const { plane } = start();
     answer(plane, REMOTE_PATHS.heartbeat, HEARTBEAT);
     answer(plane, REMOTE_PATHS.machineRequester, USER);
     answer(plane, REMOTE_PATHS.machineMemberAdd, MEMBER);
@@ -90,16 +107,26 @@ describe('the client for app.shinsa.dev', () => {
       HEARTBEAT
     );
     await callClient(plane, (client) => client.machine.offline(Redacted.make('m')));
-    await control.requestRemoval('m');
-    expect(await control.requestInvite('m')).toEqual({ token: 'invite-token' });
-    await control.requestInviteRemoval('m');
-    expect(await control.requestRequester('m', 'u1')).toEqual(USER);
-    expect(await control.requestMemberAddition('m', 'u1')).toEqual(MEMBER);
-    await control.requestMemberRemoval('m', 'u1');
-    expect(await control.requestHandoff('m')).toEqual({ token: 'handoff-token' });
-    await control.requestHandoffRemoval('m', 'handoff-token');
-    expect(await control.requestGuestAddition('m', 'u1')).toEqual(MEMBER);
-    await control.requestGuestRemoval('m', 'u1');
+    await callClient(plane, (client) => client.machine.remove(Redacted.make('m')));
+    expect(await callClient(plane, (client) => client.machine.createInvite(Redacted.make('m')))).toEqual({
+      token: 'invite-token',
+    });
+    await callClient(plane, (client) => client.machine.removeInvite(Redacted.make('m')));
+    expect(
+      await callClient(plane, (client) => client.machine.findRequester(Redacted.make('m'), USER_ID))
+    ).toEqual(USER);
+    expect(
+      await callClient(plane, (client) => client.machine.addMember(Redacted.make('m'), USER_ID))
+    ).toEqual(MEMBER);
+    await callClient(plane, (client) => client.machine.removeMember(Redacted.make('m'), USER_ID));
+    expect(await callClient(plane, (client) => client.machine.createHandoff(Redacted.make('m')))).toEqual({
+      token: 'handoff-token',
+    });
+    await callClient(plane, (client) => client.machine.removeHandoff(Redacted.make('m'), 'handoff-token'));
+    expect(await callClient(plane, (client) => client.machine.addGuest(Redacted.make('m'), USER_ID))).toEqual(
+      MEMBER
+    );
+    await callClient(plane, (client) => client.machine.removeGuest(Redacted.make('m'), USER_ID));
     expect(plane.calls.every((call) => call.token === 'm')).toBe(true);
     expect(plane.calls.map((call) => [call.path, call.body])).toEqual([
       [REMOTE_PATHS.heartbeat, { localUrl: 'http://127.0.0.1:7446', version: '1' }],
@@ -118,7 +145,7 @@ describe('the client for app.shinsa.dev', () => {
   });
 
   test('sends every team call to its team’s path', async () => {
-    const { plane, control } = start();
+    const { plane } = start();
     answer(plane, REMOTE_PATHS.machineTeams, { team: TEAM, invite: 'i' });
     answer(plane, REMOTE_PATHS.machineTeamJoin, {
       status: 'member',
@@ -129,16 +156,22 @@ describe('the client for app.shinsa.dev', () => {
     answer(plane, resolveMachineTeamPath('team1', 'invite'), { invite: 'i2' });
     answer(plane, resolveMachineTeamPath('team1', 'members/add'), MEMBER);
     answer(plane, resolveMachineTeamPath('team1', 'connect'), { url: 'wss://x', expiresAt: 1 });
-    await control.requestTeamCreation('m', 'Growth');
-    await control.requestTeamJoin('m', 'i');
-    expect(await control.requestTeamInvite('m', 'team1')).toEqual({ invite: 'i2' });
-    await control.requestTeamInviteRemoval('m', 'team1');
-    expect(await control.requestTeamMemberAddition('m', 'team1', 'u1')).toEqual(MEMBER);
-    await control.requestTeamMemberRemoval('m', 'team1', 'u1');
-    await control.requestTeamDecline('m', 'team1', 'u1');
-    await control.requestTeamLeave('m', 'team1');
-    await control.requestTeamRemoval('m', 'team1');
-    expect(await control.requestTeamConnect('m', 'team1', 'k3x9')).toEqual({ url: 'wss://x', expiresAt: 1 });
+    await callClient(plane, (client) => client.teams.create(Redacted.make('m'), 'Growth'));
+    await callClient(plane, (client) => client.teams.join(Redacted.make('m'), 'i'));
+    expect(await callClient(plane, (client) => client.teams.invite(Redacted.make('m'), TEAM_ID))).toEqual({
+      invite: 'i2',
+    });
+    await callClient(plane, (client) => client.teams.removeInvite(Redacted.make('m'), TEAM_ID));
+    expect(
+      await callClient(plane, (client) => client.teams.addMember(Redacted.make('m'), TEAM_ID, USER_ID))
+    ).toEqual(MEMBER);
+    await callClient(plane, (client) => client.teams.removeMember(Redacted.make('m'), TEAM_ID, USER_ID));
+    await callClient(plane, (client) => client.teams.declineRequest(Redacted.make('m'), TEAM_ID, USER_ID));
+    await callClient(plane, (client) => client.teams.leave(Redacted.make('m'), TEAM_ID));
+    await callClient(plane, (client) => client.teams.remove(Redacted.make('m'), TEAM_ID));
+    expect(
+      await callClient(plane, (client) => client.teams.connect(Redacted.make('m'), TEAM_ID, INSTANCE_ID))
+    ).toEqual({ url: 'wss://x', expiresAt: 1 });
     expect(plane.calls.map((call) => [call.path, call.body])).toEqual([
       [REMOTE_PATHS.machineTeams, { name: 'Growth' }],
       [REMOTE_PATHS.machineTeamJoin, { invite: 'i' }],
@@ -154,7 +187,7 @@ describe('the client for app.shinsa.dev', () => {
   });
 
   test('reads a refusal as its typed failure, revoked included', async () => {
-    const { plane, control } = start();
+    const { plane } = start();
     plane.answers.set(REMOTE_PATHS.heartbeat, () => refuse(Revoked, 'Removed.'));
     await expect(
       callClient(plane, (client) => client.machine.heartbeat(Redacted.make('m'), BEAT))
@@ -163,33 +196,41 @@ describe('the client for app.shinsa.dev', () => {
       message: 'Removed.',
     });
     plane.answers.set(REMOTE_PATHS.machineMemberAdd, () => refuse(MembersFull));
-    const full = await control.requestMemberAddition('m', 'u1').catch((error: unknown) => error);
-    expect(selectRemoteFailureTag(full)).toBe('MembersFull');
-    expect(isRemoteRetryable(full)).toBe(false);
-    expect(selectRemoteFailureTag(new Error('plain'))).toBeNull();
+    await expect(
+      callClient(plane, (client) => client.machine.addMember(Redacted.make('m'), USER_ID))
+    ).rejects.toMatchObject({ _tag: 'MembersFull' });
   });
 
   test('says app.shinsa.dev is unreachable for any answer the API does not declare', async () => {
-    const { plane, control } = start();
+    const { plane } = start();
     plane.answers.set(REMOTE_PATHS.machineRemove, () => new Response('busy', { status: 503 }));
-    await expect(control.requestRemoval('m')).rejects.toMatchObject({
+    await expect(
+      callClient(plane, (client) => client.machine.remove(Redacted.make('m')))
+    ).rejects.toMatchObject({
       _tag: 'RemoteUnreachable',
       status: 503,
       retryable: true,
     });
     plane.answers.set(REMOTE_PATHS.machineInvites, () => Response.json({ token: 7 }));
-    await expect(control.requestInvite('m')).rejects.toMatchObject({ status: null, retryable: true });
+    await expect(
+      callClient(plane, (client) => client.machine.createInvite(Redacted.make('m')))
+    ).rejects.toMatchObject({ status: null, retryable: true });
     plane.answers.set(REMOTE_PATHS.machineInviteRemove, () => refuse(BodyInvalid));
-    await expect(control.requestInviteRemoval('m')).rejects.toMatchObject({ status: 400, retryable: false });
+    await expect(
+      callClient(plane, (client) => client.machine.removeInvite(Redacted.make('m')))
+    ).rejects.toMatchObject({ status: 400, retryable: false });
     plane.answers.set(REMOTE_PATHS.machineRequester, () => new Response('', { status: 401 }));
-    await expect(control.requestRequester('m', 'u1')).rejects.toMatchObject({
+    await expect(
+      callClient(plane, (client) => client.machine.findRequester(Redacted.make('m'), USER_ID))
+    ).rejects.toMatchObject({
       status: 401,
       retryable: false,
     });
-    const down = new RemoteControl({ origin: 'http://127.0.0.1:1' });
-    const unreachable = await down.requestTeamLeave('m', 'team1').catch((error: unknown) => error);
-    expect(unreachable).toMatchObject({ _tag: 'RemoteUnreachable', status: null });
-    expect(isRemoteRetryable(unreachable)).toBe(true);
+    const down = { origin: 'http://127.0.0.1:1' };
+    const unreachable = await callClient(down, (client) =>
+      client.teams.leave(Redacted.make('m'), TEAM_ID)
+    ).catch((error: unknown) => error);
+    expect(unreachable).toMatchObject({ _tag: 'RemoteUnreachable', status: null, retryable: true });
   });
 
   test('gives up on a call app.shinsa.dev does not answer in time', async () => {
@@ -211,23 +252,35 @@ describe('the client for app.shinsa.dev', () => {
   });
 
   test('reaches the Slack relay with the machine token', async () => {
-    const { plane, control } = start();
+    const { plane } = start();
     const thread = { teamId: 'T1', channelId: 'C1', threadTs: '1.1' };
     answer(plane, SLACK_RELAY_PATHS.links, { links: [] });
     answer(plane, SLACK_RELAY_PATHS.post, { ts: '2.1' });
     answer(plane, SLACK_RELAY_PATHS.session, { applied: true });
     answer(plane, SLACK_RELAY_PATHS.react, { applied: false });
-    expect(await control.requestSlackLinks('m')).toEqual({ links: [] });
-    await control.requestSlackUnlink('m');
+    expect(await callClient(plane, (client) => client.slack.links(Redacted.make('m')))).toEqual({
+      links: [],
+    });
+    await callClient(plane, (client) => client.slack.unlink(Redacted.make('m')));
     const message = { text: 'Hi', blocks: [] };
-    expect(await control.requestSlackPost('m', { ...thread, replaceTs: null, message })).toEqual({
+    expect(
+      await callClient(plane, (client) =>
+        client.slack.post(Redacted.make('m'), { ...thread, replaceTs: null, message })
+      )
+    ).toEqual({
       ts: '2.1',
     });
-    expect(await control.requestSlackSession('m', { ...thread, status: 'processing' })).toEqual({
+    expect(
+      await callClient(plane, (client) =>
+        client.slack.session(Redacted.make('m'), { ...thread, status: 'processing' })
+      )
+    ).toEqual({
       applied: true,
     });
     expect(
-      await control.requestSlackReaction('m', { ...thread, messageTs: '1.2', add: 'eyes', remove: null })
+      await callClient(plane, (client) =>
+        client.slack.react(Redacted.make('m'), { ...thread, messageTs: '1.2', add: 'eyes', remove: null })
+      )
     ).toEqual({ applied: false });
     expect(plane.calls.map((call) => [call.path, call.token])).toEqual([
       [SLACK_RELAY_PATHS.links, 'm'],
@@ -239,7 +292,7 @@ describe('the client for app.shinsa.dev', () => {
   });
 
   test('a Slack post leaves with only the fields its schema names', async () => {
-    const { plane, control } = start();
+    const { plane } = start();
     answer(plane, SLACK_RELAY_PATHS.post, { ts: '2.1' });
     const post = {
       teamId: 'T1',
@@ -249,7 +302,7 @@ describe('the client for app.shinsa.dev', () => {
       message: { text: 'Hi', blocks: [], worktree: '/wt/task-1' },
       machineToken: 'm',
     };
-    await control.requestSlackPost('m', post as never);
+    await callClient(plane, (client) => client.slack.post(Redacted.make('m'), post as never));
     expect(plane.calls.map((call) => call.body)).toEqual([
       {
         teamId: 'T1',

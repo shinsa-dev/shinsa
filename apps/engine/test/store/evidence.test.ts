@@ -1,24 +1,36 @@
 import { describe, expect, test } from 'bun:test';
 import { mkdirSync, readFileSync, truncateSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import {
-  EVIDENCE_COPY_LIMIT_BYTES,
-  EVIDENCE_ROUTE,
-  resolveEvidenceFolder,
-} from '../../src/store/evidence/index.ts';
-import { EvidenceStore } from '../../src/store/index.ts';
+import { Effect } from 'effect';
+import { resolveFolderPath } from '../../src/store/evidence/folder.ts';
+import { EVIDENCE_COPY_LIMIT_BYTES, EVIDENCE_ROUTE } from '../../src/store/evidence/index.ts';
+import { createTestEvidence } from '../helpers/evidence.ts';
 import { createTempDir } from '../helpers/index.ts';
 
 const FOLDER = { taskId: 'task-1', round: 1 };
+
+function openStore(dir: string) {
+  const evidence = createTestEvidence(dir);
+  const run = <A, E>(effect: Effect.Effect<A, E>) => Effect.runSync(effect);
+  return {
+    writeImage: (base64: string, mediaType: string) => run(evidence.writeImage(base64, mediaType)),
+    writeText: (text: string, folder: typeof FOLDER, title: string, extension: 'txt' | 'md' = 'txt') =>
+      run(evidence.writeText(text, folder, title, extension)),
+    copyFile: (source: string, folder: typeof FOLDER, title: string) =>
+      run(evidence.copyFile(source, folder, title)),
+    selectFile: (name: string) =>
+      run(evidence.selectFile(name)).pipe((found) => (found._tag === 'Some' ? found.value : null)),
+  };
+}
 
 function nameOf(uri: string) {
   return uri.slice(EVIDENCE_ROUTE.length);
 }
 
-describe('EvidenceStore', () => {
+describe('Evidence', () => {
   test('chat images stay at the top, attached evidence goes under its task and round', () => {
     const dir = createTempDir();
-    const store = new EvidenceStore(dir);
+    const store = openStore(dir);
     const image = store.writeImage(Buffer.from('png').toString('base64'), 'image/png');
     const odd = store.writeImage('', 'image/');
     const text = store.writeText('all green', FOLDER, 'Unit tests: all pass!');
@@ -40,7 +52,7 @@ describe('EvidenceStore', () => {
   });
 
   test('copying something that is not a file, or too large, is refused', () => {
-    const store = new EvidenceStore(createTempDir());
+    const store = openStore(createTempDir());
     const folder = createTempDir();
     expect(() => store.copyFile(join(folder, 'missing.png'), FOLDER, 'x')).toThrow('No file at');
     expect(() => store.copyFile(folder, FOLDER, 'x')).toThrow('No file at');
@@ -51,8 +63,8 @@ describe('EvidenceStore', () => {
   });
 
   test('a task id that cannot name a folder is refused', () => {
-    expect(resolveEvidenceFolder({ taskId: 'abc', round: 2 })).toBe('abc/round-2');
-    expect(() => resolveEvidenceFolder({ taskId: '../x', round: 1 })).toThrow(
+    expect(Effect.runSync(resolveFolderPath({ taskId: 'abc', round: 2 }))).toBe('abc/round-2');
+    expect(Effect.runSync(Effect.flip(resolveFolderPath({ taskId: '../x', round: 1 }))).message).toContain(
       'cannot name an evidence folder'
     );
   });
@@ -64,7 +76,7 @@ describe('EvidenceStore', () => {
     writeFileSync(join(dir, 'seed-image-1.png'), 'x');
     writeFileSync(join(dir, 'nested', 'x'), 'x');
     writeFileSync(join(dir, 'task-1', 'round-1', 'shot.png'), 'x');
-    const store = new EvidenceStore(dir);
+    const store = openStore(dir);
     expect(store.selectFile('seed-image-1.png')).toBe(join(dir, 'seed-image-1.png'));
     expect(store.selectFile('task-1/round-1/shot.png')).toBe(join(dir, 'task-1', 'round-1', 'shot.png'));
     expect(store.selectFile('missing.png')).toBeNull();

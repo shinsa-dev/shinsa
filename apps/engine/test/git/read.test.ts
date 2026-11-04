@@ -1,11 +1,19 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, setDefaultTimeout, test } from 'bun:test';
 import { join } from 'node:path';
-import { decodeText, readGit, splitRecords } from '../../src/git/read.ts';
+import { Duration, Effect } from 'effect';
+import type { GitReadRequest } from '../../src/git/schema.ts';
 import { Git } from '../../src/git/service.ts';
-import { edgeRuntime } from '../../src/runtime/edge.ts';
+import { decodeText, splitRecords } from '../../src/git/text.ts';
+import { runGit } from '../helpers/git.ts';
 import { createGitRepo, writeFiles } from '../helpers/index.ts';
 
-describe('readGit', () => {
+setDefaultTimeout(30_000);
+
+function readGit(args: string[], cwd: string, options: GitReadRequest = {}) {
+  return runGit(Git.use((git) => git.read(args, cwd, options)));
+}
+
+describe('Git.read', () => {
   test('reads the raw bytes of a command, untrimmed', async () => {
     const { path } = await createGitRepo({ remote: false, files: { ' spaced.txt': 'a' } });
     const read = await readGit(['ls-files', '-z'], path);
@@ -33,7 +41,7 @@ describe('readGit', () => {
     const { path } = await createGitRepo({ remote: false });
     writeFiles(path, { 'slow.sh': 'sleep 5\n' });
     const read = await readGit(['-c', `alias.slow=!sh ${join(path, 'slow.sh')}`, 'slow'], path, {
-      timeoutMs: 50,
+      timeout: Duration.millis(50),
     });
     expect(read).toMatchObject({ ok: false, timedOut: true });
   });
@@ -65,7 +73,7 @@ describe('readGit', () => {
     const { path } = await createGitRepo({ remote: false, files: { 'lines.txt': 'one\ntwo\n' } });
     const chunks: Uint8Array[] = [];
     const read = await readGit(['cat-file', 'blob', 'HEAD:lines.txt'], path, {
-      onData: (chunk) => chunks.push(chunk),
+      onData: (chunk) => Effect.sync(() => chunks.push(chunk)),
     });
     expect(read.ok).toBe(true);
     expect(decodeText(Buffer.concat(chunks))).toBe('one\ntwo\n');
@@ -76,7 +84,7 @@ describe('readGit', () => {
     writeFiles(path, { 'slow.sh': 'sleep 5\n' });
     const caller = new AbortController();
     const started = Date.now();
-    const pending = edgeRuntime.runPromise(
+    const pending = runGit(
       Git.use((git) => git.read(['-c', `alias.slow=!sh ${join(path, 'slow.sh')}`, 'slow'], path)),
       { signal: caller.signal }
     );

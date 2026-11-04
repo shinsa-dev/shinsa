@@ -7,10 +7,7 @@ import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import type { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { type ChatNotice, resolveCurrentRound, resolveTaskRounds } from '@shinsa/core';
 import { resolveClaudeProjectName } from '../../src/agents/providers/claude/artifacts.ts';
-import { createClaudeProvider } from '../../src/agents/providers/claude/index.ts';
-import { ProviderRegistry } from '../../src/agents/providers/index.ts';
-import { Transcripts } from '../../src/agents/transcripts/index.ts';
-import { EunoeServer } from '../../src/eunoe/index.ts';
+import { type OpenEunoe, openEunoe } from '../eunoe/harness.ts';
 import {
   createMessagesBody,
   type FakeAnthropic,
@@ -18,7 +15,9 @@ import {
   startFakeAnthropic,
 } from '../helpers/anthropic.ts';
 import { createTempDir } from '../helpers/index.ts';
+import { buildClaudeProvider, createTestProviders } from '../helpers/providers.ts';
 import { createFakeQuery, createFakeRuntime, type QueryParams, sdkMessage } from '../helpers/query.ts';
+import { createSyncTranscripts } from '../helpers/transcripts.ts';
 import { World } from './harness.ts';
 
 setDefaultTimeout(60_000);
@@ -29,13 +28,13 @@ const RESTART_AT = 4;
 
 let world: World | null = null;
 
-let eunoe: EunoeServer | null = null;
+let eunoe: OpenEunoe | null = null;
 
 let upstream: FakeAnthropic | null = null;
 
 afterEach(async () => {
   await world?.dispose();
-  await eunoe?.stop();
+  await eunoe?.close();
   await upstream?.stop();
   world = null;
   eunoe = null;
@@ -159,24 +158,23 @@ async function* agentTurn(
 
 async function openWorld() {
   const home = createTempDir();
-  const dir = join(createTempDir(), 'eunoe');
   const turns: Turn[] = [];
   let calls = 0;
   const fake = createFakeQuery((params) => agentTurn(params, calls++, home, turns));
   upstream = startFakeAnthropic();
-  eunoe = new EunoeServer({
-    dir,
+  eunoe = openEunoe({
     upstream: upstream.url,
     window: () => Promise.resolve(4_000),
     foldFloor: 0,
   });
-  const provider = createClaudeProvider(createFakeRuntime(fake.query), { env: {}, home, eunoe });
-  world = await World.create({ checks: ['true'], providers: () => new ProviderRegistry([provider]) });
+  const { dir } = eunoe;
+  const provider = buildClaudeProvider(createFakeRuntime(fake.query), { env: {}, home, eunoe: eunoe.server });
+  world = await World.create({ checks: ['true'], providers: () => createTestProviders([provider]) });
   return { w: world, turns, dir };
 }
 
 function listNotices(w: World, runId: string): ChatNotice[] {
-  return new Transcripts(w.config.transcriptsDir)
+  return createSyncTranscripts(w.config.transcriptsDir)
     .listEntries(runId)
     .flatMap((entry) => (entry.type === 'notice' ? [entry.notice] : []));
 }

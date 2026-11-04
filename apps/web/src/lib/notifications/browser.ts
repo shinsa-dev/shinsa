@@ -1,7 +1,10 @@
+import { Effect } from 'effect';
 import { isDesktop, notifyDesktop } from '@/lib/desktop.ts';
 import { readNotificationPreferences } from '@/lib/preferences/notifications.ts';
+import { forkApp } from '@/lib/runtime/app.ts';
 import type { DecisionNotice } from './attention.ts';
-import { type NotificationWorker, selectNotificationWorker } from './worker.ts';
+import type { NotificationWorker } from './schema.ts';
+import { selectNotificationWorker } from './worker.ts';
 
 type NotificationPermissionState = NotificationPermission | 'unsupported';
 
@@ -45,8 +48,15 @@ function showBrowserNotification(
 ) {
   const options = { body: notice.body, tag: notice.tag };
   if (worker) {
-    void worker.ready.then((registration) =>
-      registration.showNotification(notice.title, { ...options, data: { path: notice.path } })
+    forkApp(
+      Effect.promise(() => worker.ready).pipe(
+        Effect.flatMap((registration) =>
+          Effect.tryPromise(() =>
+            registration.showNotification(notice.title, { ...options, data: { path: notice.path } })
+          )
+        ),
+        Effect.ignore
+      )
     );
     return;
   }
@@ -82,7 +92,17 @@ export function dismissDecisionNotification(gateId: string, worker = selectNotif
   shown.get(gateId)?.close();
   shown.delete(gateId);
   if (!worker) return;
-  void worker.ready.then(async (registration) => {
-    for (const notification of await registration.getNotifications({ tag: gateId })) notification.close();
-  });
+  forkApp(
+    Effect.promise(() => worker.ready).pipe(
+      Effect.flatMap((registration) =>
+        Effect.tryPromise(() => registration.getNotifications({ tag: gateId }))
+      ),
+      Effect.flatMap((notifications) =>
+        Effect.forEach(notifications, (notification) => Effect.sync(() => notification.close()), {
+          discard: true,
+        })
+      ),
+      Effect.ignore
+    )
+  );
 }

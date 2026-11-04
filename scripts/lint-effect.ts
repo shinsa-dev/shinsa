@@ -1,6 +1,5 @@
 import { parse } from '@babel/parser';
-
-type Node = { type: string; loc?: { start: { line: number } }; [key: string]: unknown };
+import { type AstNode, listChildren } from './lint-ast.ts';
 
 export const EFFECT_IMPORT = /from\s+['"](?:effect(?:\/[\w-]+)?|@effect\/[\w-]+)['"]/;
 
@@ -40,6 +39,29 @@ export const EFFECT_LOGIC_FILE_MESSAGE =
 export const EFFECT_SCHEMA_FILE_MESSAGE =
   'A schema file holds schemas, types and constants only. Move this function or effect next to the code that runs it (the effect skill → File layout)';
 
+export const PROMISE_IO_MESSAGE =
+  'Promise I/O outside Effect. Write the module as a Context.Service provided by a Layer (a script as one Effect program run once with BunRuntime.runMain), with Effect.fn and Effect.tryPromise around the promise API; only React components (.tsx) keep plain promises, and reach I/O through the app runtime (the effect skill → Services and layers)';
+
+export const ENGINE_RUNTIME_MESSAGE =
+  'A runtime or a Promise class in the engine. Write the module as a Context.Service with its Layer, yield what it needs, and run effects only at the process edge, main.ts; a callback from outside enters with Effect.runForkWith on the context the layer captured (the effect skill → Services and layers)';
+
+const ENGINE_SOURCE = /^apps\/engine\/src\//;
+
+const PROMISE_IO_SOURCE = /^(?:apps\/[\w-]+\/src|packages\/[\w-]+\/src|scripts)\//;
+
+const ENGINE_EDGE = 'apps/engine/src/main.ts';
+
+const RUN_METHODS = new Set([
+  'runPromise',
+  'runPromiseExit',
+  'runSync',
+  'runSyncExit',
+  'runFork',
+  'runCallback',
+]);
+
+const SERVICE_BASES = /^(?:Context\.Service|Context\.Reference|Schema\.\w+|Error|TypeError|RangeError)$/;
+
 const LOGIC_FILES = /(?:^|\/)(?:handler|service|middleware)\.tsx?$/;
 
 const SCHEMA_FILE = /(?:^|\/)schema\.tsx?$/;
@@ -47,15 +69,11 @@ const SCHEMA_FILE = /(?:^|\/)schema\.tsx?$/;
 const SCHEMA_PARSER =
   /^(?:(?:decode|encode)(?:Unknown)?(?:Sync|Option|Effect|Exit|Promise|Result)?|is|asserts)$/;
 
-function listChildren(node: Node): Node[] {
-  return Object.values(node).flatMap((value) =>
-    (Array.isArray(value) ? value : [value]).filter(
-      (child): child is Node => Boolean(child) && typeof child === 'object' && 'type' in child
-    )
-  );
-}
-
-function walk(node: Node, visit: (node: Node, ancestors: Node[]) => void, ancestors: Node[] = []) {
+function walk(
+  node: AstNode,
+  visit: (node: AstNode, ancestors: AstNode[]) => void,
+  ancestors: AstNode[] = []
+) {
   visit(node, ancestors);
   const next = [...ancestors, node];
   for (const child of listChildren(node)) walk(child, visit, next);
@@ -67,13 +85,13 @@ function readName(node: unknown) {
 }
 
 function isMember(node: unknown, object: string, properties: ReadonlySet<string>) {
-  const member = node as Node | null;
+  const member = node as AstNode | null;
   if (member?.type !== 'MemberExpression') return false;
   const property = readName(member.property);
   return readName(member.object) === object && property !== null && properties.has(property);
 }
 
-function isFunction(node: Node) {
+function isFunction(node: AstNode) {
   return (
     node.type === 'ArrowFunctionExpression' ||
     node.type === 'FunctionExpression' ||
@@ -83,29 +101,29 @@ function isFunction(node: Node) {
   );
 }
 
-function isBridgeCall(node: Node | undefined) {
+function isBridgeCall(node: AstNode | undefined) {
   return node?.type === 'CallExpression' && isMember(node.callee, 'Effect', PROMISE_BRIDGES);
 }
 
-function isTryKey(node: Node | undefined) {
+function isTryKey(node: AstNode | undefined) {
   return readName(node?.key) === 'try';
 }
 
-function isBridgedFunction(chain: Node[], index: number) {
+function isBridgedFunction(chain: AstNode[], index: number) {
   const [parent, grandparent, greatGrandparent] = [chain[index - 1], chain[index - 2], chain[index - 3]];
-  const node = chain[index] as Node;
-  if (parent && isBridgeCall(parent)) return (parent.arguments as Node[]).includes(node);
+  const node = chain[index] as AstNode;
+  if (parent && isBridgeCall(parent)) return (parent.arguments as AstNode[]).includes(node);
   if (node.type === 'ObjectMethod') return isTryKey(node) && isBridgeCall(grandparent);
   return parent?.type === 'ObjectProperty' && isTryKey(parent) && isBridgeCall(greatGrandparent);
 }
 
-function isInsideBridge(chain: Node[]) {
+function isInsideBridge(chain: AstNode[]) {
   return chain.some((node, index) => isFunction(node) && isBridgedFunction(chain, index));
 }
 
-function isPromiseChain(node: Node) {
+function isPromiseChain(node: AstNode) {
   if (node.type !== 'CallExpression') return false;
-  const callee = node.callee as Node;
+  const callee = node.callee as AstNode;
   if (callee.type !== 'MemberExpression') return false;
   const method = readName(callee.property);
   const module = readName(callee.object);
@@ -113,7 +131,7 @@ function isPromiseChain(node: Node) {
   return method !== null && PROMISE_METHODS.has(method) && !isModule;
 }
 
-function isPromiseNode(node: Node) {
+function isPromiseNode(node: AstNode) {
   if (node.type === 'AwaitExpression') return true;
   if (isFunction(node) && node.async === true) return true;
   if (node.type === 'NewExpression' && readName(node.callee) === 'Promise') return true;
@@ -121,38 +139,38 @@ function isPromiseNode(node: Node) {
 }
 
 function isEffectGen(node: unknown) {
-  const call = node as Node | null;
+  const call = node as AstNode | null;
   return call?.type === 'CallExpression' && isMember(call.callee, 'Effect', new Set(['gen']));
 }
 
-function returnsOnlyEffectGen(node: Node) {
+function returnsOnlyEffectGen(node: AstNode) {
   if (!isFunction(node) || node.type === 'ClassMethod') return false;
-  const body = node.body as Node;
+  const body = node.body as AstNode;
   if (isEffectGen(body)) return true;
-  const statements = body.type === 'BlockStatement' ? (body.body as Node[]) : [];
+  const statements = body.type === 'BlockStatement' ? (body.body as AstNode[]) : [];
   const [only] = statements;
   return statements.length === 1 && only?.type === 'ReturnStatement' && isEffectGen(only.argument);
 }
 
 function isSchemaParser(node: unknown) {
-  const call = node as Node | null;
+  const call = node as AstNode | null;
   if (call?.type !== 'CallExpression') return false;
-  const callee = call.callee as Node;
+  const callee = call.callee as AstNode;
   if (callee.type !== 'MemberExpression' || readName(callee.object) !== 'Schema') return false;
   return SCHEMA_PARSER.test(readName(callee.property) ?? '');
 }
 
 function isEffectFnCall(node: unknown) {
-  const call = node as Node | null;
+  const call = node as AstNode | null;
   if (call?.type !== 'CallExpression') return false;
-  const inner = call.callee as Node;
+  const inner = call.callee as AstNode;
   const builder = inner.type === 'CallExpression' ? inner.callee : inner;
   return isMember(builder, 'Effect', new Set(['fn', 'fnUntraced']));
 }
 
-function isPipeAfterFn(node: Node) {
+function isPipeAfterFn(node: AstNode) {
   if (node.type !== 'CallExpression') return false;
-  const callee = node.callee as Node;
+  const callee = node.callee as AstNode;
   return (
     callee.type === 'MemberExpression' &&
     readName(callee.property) === 'pipe' &&
@@ -160,20 +178,20 @@ function isPipeAfterFn(node: Node) {
   );
 }
 
-function isDataError(node: Node) {
+function isDataError(node: AstNode) {
   return isMember(node, 'Data', new Set(['Error']));
 }
 
-function isWallClock(node: Node) {
+function isWallClock(node: AstNode) {
   if (node.type === 'NewExpression') return TIME_SOURCES.has(readName(node.callee) ?? '');
   return node.type === 'CallExpression' && isMember(node.callee, 'Date', new Set(['now']));
 }
 
-function isJsonParse(node: Node) {
+function isJsonParse(node: AstNode) {
   return node.type === 'CallExpression' && isMember(node.callee, 'JSON', new Set(['parse']));
 }
 
-function listMessages(node: Node, ancestors: Node[]) {
+function listMessages(node: AstNode, ancestors: AstNode[]) {
   const bridged = isInsideBridge([...ancestors, node]);
   const checks: [boolean, string][] = [
     [node.type === 'ThrowStatement' && !bridged, EFFECT_THROW_MESSAGE],
@@ -193,21 +211,79 @@ export function isEffectSource(file: string, source: string) {
   return !isTest && EFFECT_IMPORT.test(source);
 }
 
-function isFunctionValue(node: Node) {
-  const declaration = (node.declaration as Node | undefined) ?? node;
+export function isPromiseIoSource(file: string, source: string) {
+  const isTest = /\.test\.ts$/.test(file) || /(?:^|\/)test\//.test(file);
+  return PROMISE_IO_SOURCE.test(file) && file.endsWith('.ts') && !isTest && !EFFECT_IMPORT.test(source);
+}
+
+export function isEngineRuntimeSource(file: string) {
+  return ENGINE_SOURCE.test(file) && file !== ENGINE_EDGE && !/\.test\.tsx?$/.test(file);
+}
+
+function readCalleeBase(node: unknown): string | null {
+  const current = node as AstNode | null;
+  if (!current) return null;
+  if (current.type === 'Identifier') return current.name as string;
+  if (current.type === 'CallExpression') return readCalleeBase(current.callee);
+  if (current.type === 'MemberExpression') {
+    const object = readCalleeBase(current.object);
+    const property = readName(current.property);
+    return object && property ? `${object}.${property}` : null;
+  }
+  return null;
+}
+
+function isRuntimeNode(node: AstNode) {
+  if (node.type === 'Identifier' && (node.name === 'ManagedRuntime' || node.name === 'edgeRuntime'))
+    return true;
+  if (node.type === 'CallExpression') {
+    const callee = node.callee as AstNode;
+    if (callee.type !== 'MemberExpression') return false;
+    const property = readName(callee.property);
+    return property !== null && RUN_METHODS.has(property);
+  }
+  if (node.type !== 'ExportNamedDeclaration') return false;
+  const declaration = node.declaration as AstNode | undefined;
+  if (declaration?.type !== 'ClassDeclaration') return false;
+  const base = readCalleeBase(declaration.superClass);
+  return base === null || !SERVICE_BASES.test(base);
+}
+
+export function listEngineRuntimeLines(file: string, source: string) {
+  const plugins: ('typescript' | 'jsx')[] = file.endsWith('.tsx') ? ['typescript', 'jsx'] : ['typescript'];
+  const program = parse(source, { sourceType: 'module', plugins }).program as unknown as AstNode;
+  const lines = new Set<number>();
+  walk(program, (node) => {
+    if (isRuntimeNode(node)) lines.add(node.loc?.start.line ?? 0);
+  });
+  return [...lines];
+}
+
+export function listPromiseLines(file: string, source: string) {
+  const plugins: ('typescript' | 'jsx')[] = file.endsWith('.tsx') ? ['typescript', 'jsx'] : ['typescript'];
+  const program = parse(source, { sourceType: 'module', plugins }).program as unknown as AstNode;
+  const lines: number[] = [];
+  walk(program, (node) => {
+    if (isPromiseNode(node)) lines.push(node.loc?.start.line ?? 0);
+  });
+  return lines;
+}
+
+function isFunctionValue(node: AstNode) {
+  const declaration = (node.declaration as AstNode | undefined) ?? node;
   if (declaration.type === 'FunctionDeclaration') return true;
   if (declaration.type !== 'VariableDeclaration') return false;
-  return (declaration.declarations as Node[]).some((declarator) => {
-    const init = declarator.init as Node | undefined;
+  return (declaration.declarations as AstNode[]).some((declarator) => {
+    const init = declarator.init as AstNode | undefined;
     return Boolean(
       init && (isFunction(init) || isEffectGen(init) || isEffectFnCall(init) || isSchemaParser(init))
     );
   });
 }
 
-function listLayoutViolations(file: string, program: Node) {
-  const statements = (program.body as Node[]).filter((node) => node.type !== 'ImportDeclaration');
-  const lineOf = (node: Node) => node.loc?.start.line ?? 0;
+function listLayoutViolations(file: string, program: AstNode) {
+  const statements = (program.body as AstNode[]).filter((node) => node.type !== 'ImportDeclaration');
+  const lineOf = (node: AstNode) => node.loc?.start.line ?? 0;
   if (LOGIC_FILES.test(file)) {
     const [first, ...rest] = statements;
     const stray = first && first.type !== 'ExportNamedDeclaration' ? [first, ...rest] : rest;
@@ -222,7 +298,7 @@ function listLayoutViolations(file: string, program: Node) {
 
 export function listEffectViolations(file: string, source: string) {
   const plugins: ('typescript' | 'jsx')[] = file.endsWith('.tsx') ? ['typescript', 'jsx'] : ['typescript'];
-  const program = parse(source, { sourceType: 'module', plugins }).program as unknown as Node;
+  const program = parse(source, { sourceType: 'module', plugins }).program as unknown as AstNode;
   const violations: { line: number; message: string }[] = listLayoutViolations(file, program);
   walk(program, (node, ancestors) => {
     const line = node.loc?.start.line ?? 0;

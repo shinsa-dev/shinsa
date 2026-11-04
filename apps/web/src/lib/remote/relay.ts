@@ -1,3 +1,6 @@
+import { Effect, Predicate, Stream } from 'effect';
+import { RELAY_FAILED, RELAY_NO_PAGE, RelayFailed } from './schema.ts';
+
 const RELAY_REQUEST = 'shinsa-remote-request';
 
 const RELAYED_PREFIX = '/api/';
@@ -35,6 +38,14 @@ function resolveRelayedHeaders(source: [string, string][]) {
   return headers;
 }
 
+function resolveRelayFailure(error: unknown) {
+  return new RelayFailed({ message: Predicate.isError(error) ? error.message : RELAY_FAILED });
+}
+
+function enterRelay<A>(step: () => Promise<A>) {
+  return Effect.tryPromise({ try: step, catch: resolveRelayFailure });
+}
+
 export function isRelayedRequest(request: Request, origin: string) {
   const url = new URL(request.url);
   return request.mode !== 'navigate' && url.origin === origin && url.pathname.startsWith(RELAYED_PREFIX);
@@ -47,32 +58,17 @@ function respondUnavailable(message: string) {
   });
 }
 
-export async function relayRequest(request: Request, clientId: string, clients: RelayClients) {
-  if (!clientId) return respondUnavailable('This request came from no open Shinsa page.');
-  const client = await clients.get(clientId);
-  if (!client) return respondUnavailable('This request came from no open Shinsa page.');
-  let body: ArrayBuffer | null = null;
-  if (request.method !== 'GET' && request.method !== 'HEAD') body = await request.arrayBuffer();
-  const { port1, port2 } = new MessageChannel();
-  const message: RelayedRequest = {
-    type: RELAY_REQUEST,
-    method: request.method,
-    url: request.url,
-    headers: [...request.headers.entries()],
-    body,
-  };
-  client.postMessage(message, body ? [port2, body] : [port2]);
-  request.signal.addEventListener('abort', () => port1.postMessage({ type: 'abort' }), { once: true });
-  return new Promise<Response>((resolve) => {
+function awaitRelayAnswer(port: MessagePort) {
+  return Effect.callback<Response>((resume) => {
     let stream: ReadableStreamDefaultController<Uint8Array> | null = null;
-    port1.onmessage = (event: MessageEvent<RelayAnswer>) => {
+    port.onmessage = (event: MessageEvent<RelayAnswer>) => {
       const answer = event.data;
       switch (answer.type) {
         case 'head': {
           const headers = resolveRelayedHeaders(answer.headers);
           if (NULL_BODY_STATUSES.has(answer.status)) {
-            port1.close();
-            resolve(new Response(null, { status: answer.status, headers }));
+            port.close();
+            resume(Effect.succeed(new Response(null, { status: answer.status, headers })));
             return;
           }
           const streamed = new ReadableStream<Uint8Array>({
@@ -80,11 +76,11 @@ export async function relayRequest(request: Request, clientId: string, clients: 
               stream = controller;
             },
             cancel: () => {
-              port1.postMessage({ type: 'abort' });
-              port1.close();
+              port.postMessage({ type: 'abort' });
+              port.close();
             },
           });
-          resolve(new Response(streamed, { status: answer.status, headers }));
+          resume(Effect.succeed(new Response(streamed, { status: answer.status, headers })));
           return;
         }
         case 'chunk':
@@ -92,23 +88,45 @@ export async function relayRequest(request: Request, clientId: string, clients: 
           return;
         case 'end':
           stream?.close();
-          port1.close();
+          port.close();
           return;
         case 'error':
           if (stream) stream.error(new Error(answer.message));
-          else resolve(respondUnavailable(answer.message));
-          port1.close();
+          else resume(Effect.succeed(respondUnavailable(answer.message)));
+          port.close();
           return;
       }
     };
   });
 }
 
+export const relayRequest = Effect.fn('Relay.relayRequest')(
+  function* (request: Request, clientId: string, clients: RelayClients) {
+    if (!clientId) return respondUnavailable(RELAY_NO_PAGE);
+    const client = yield* enterRelay(() => clients.get(clientId));
+    if (!client) return respondUnavailable(RELAY_NO_PAGE);
+    const hasBody = request.method !== 'GET' && request.method !== 'HEAD';
+    const body = hasBody ? yield* enterRelay(() => request.arrayBuffer()) : null;
+    const { port1, port2 } = new MessageChannel();
+    const message: RelayedRequest = {
+      type: RELAY_REQUEST,
+      method: request.method,
+      url: request.url,
+      headers: [...request.headers.entries()],
+      body,
+    };
+    client.postMessage(message, body ? [port2, body] : [port2]);
+    request.signal.addEventListener('abort', () => port1.postMessage({ type: 'abort' }), { once: true });
+    return yield* awaitRelayAnswer(port1);
+  },
+  Effect.catchTag('RelayFailed', (error) => Effect.succeed(respondUnavailable(error.message)))
+);
+
 function isRelayedMessage(value: unknown): value is RelayedRequest {
-  return value !== null && typeof value === 'object' && (value as { type?: unknown }).type === RELAY_REQUEST;
+  return Predicate.hasProperty(value, 'type') && value.type === RELAY_REQUEST;
 }
 
-async function answerRelayed(
+function answerRelayed(
   request: RelayedRequest,
   port: MessagePort,
   respond: (request: Request) => Promise<Response>
@@ -117,56 +135,65 @@ async function answerRelayed(
   port.onmessage = (event: MessageEvent<{ type?: string }>) => {
     if (event.data.type === 'abort') controller.abort();
   };
-  try {
-    const response = await respond(
-      new Request(request.url, {
-        method: request.method,
-        headers: request.headers,
-        ...(request.body ? { body: request.body } : {}),
-        signal: controller.signal,
-      })
+  return Effect.gen(function* () {
+    const response = yield* enterRelay(() =>
+      respond(
+        new Request(request.url, {
+          method: request.method,
+          headers: request.headers,
+          ...(request.body ? { body: request.body } : {}),
+          signal: controller.signal,
+        })
+      )
     );
     port.postMessage({ type: 'head', status: response.status, headers: [...response.headers.entries()] });
-    if (response.body) {
-      for await (const bytes of response.body) {
-        if (controller.signal.aborted) break;
-        const copy = bytes.slice();
-        port.postMessage({ type: 'chunk', bytes: copy }, [copy.buffer]);
-      }
+    const body = response.body;
+    if (body) {
+      yield* Stream.fromReadableStream({ evaluate: () => body, onError: resolveRelayFailure }).pipe(
+        Stream.takeWhile(() => !controller.signal.aborted),
+        Stream.runForEach((bytes) =>
+          Effect.sync(() => {
+            const copy = bytes.slice();
+            port.postMessage({ type: 'chunk', bytes: copy }, [copy.buffer]);
+          })
+        )
+      );
     }
     port.postMessage({ type: 'end' });
-  } catch (error) {
-    port.postMessage({
-      type: 'error',
-      message: error instanceof Error ? error.message : 'The request to your machine failed.',
-    });
-  } finally {
-    port.close();
-  }
+  }).pipe(
+    Effect.catchTag('RelayFailed', (error) =>
+      Effect.sync(() => port.postMessage({ type: 'error', message: error.message }))
+    ),
+    Effect.ensuring(Effect.sync(() => port.close()))
+  );
 }
 
-export function serveRelayedRequests(
+export const serveRelayedRequests = Effect.fn('Relay.serveRelayedRequests')(function* (
   target: Pick<ServiceWorkerContainer, 'addEventListener' | 'removeEventListener'>,
   respond: (request: Request) => Promise<Response>
 ) {
+  const run = Effect.runForkWith(yield* Effect.context<never>());
   const listener = (event: MessageEvent) => {
     const port = event.ports[0];
     if (!(isRelayedMessage(event.data) && port)) return;
-    void answerRelayed(event.data, port, respond);
+    run(answerRelayed(event.data, port, respond));
   };
-  target.addEventListener('message', listener as EventListener);
-  return () => target.removeEventListener('message', listener as EventListener);
-}
+  return yield* Effect.acquireUseRelease(
+    Effect.sync(() => target.addEventListener('message', listener as EventListener)),
+    () => Effect.never,
+    () => Effect.sync(() => target.removeEventListener('message', listener as EventListener))
+  );
+});
 
-export async function startServiceWorker(
+export const startServiceWorker = Effect.fn('Relay.startServiceWorker')(function* (
   container: Pick<ServiceWorkerContainer, 'register' | 'ready' | 'controller' | 'addEventListener'>,
   url: string,
   scope: string
 ) {
-  await container.register(url, { scope, type: 'module' });
-  await container.ready;
+  yield* enterRelay(() => container.register(url, { scope, type: 'module' }));
+  yield* enterRelay(() => container.ready);
   if (container.controller) return;
-  await new Promise<void>((resolve) => {
-    container.addEventListener('controllerchange', () => resolve(), { once: true });
+  yield* Effect.callback<void>((resume, signal) => {
+    container.addEventListener('controllerchange', () => resume(Effect.void), { once: true, signal });
   });
-}
+});

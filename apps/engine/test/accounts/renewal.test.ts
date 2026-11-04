@@ -1,8 +1,17 @@
-import { describe, expect, test } from 'bun:test';
+import { afterEach, describe, expect, test } from 'bun:test';
 import type { RunFailure } from '@shinsa/core';
 import { resolveKeychainService } from '../../src/accounts/paths.ts';
-import { describeExpiredLogin, isTokenFailure, LoginRenewal } from '../../src/accounts/renewal.ts';
-import type { StoredAccount } from '../../src/accounts/store.ts';
+import { describeExpiredLogin, isTokenFailure } from '../../src/accounts/renewal/failures.ts';
+import { LoginRenewal } from '../../src/accounts/renewal/service.ts';
+import type { StoredAccount } from '../../src/accounts/schema.ts';
+import { createTempDir, createTestConfig } from '../helpers/index.ts';
+import { type AccountsHarness, buildUnitAccounts } from './harness.ts';
+
+const open: AccountsHarness[] = [];
+
+afterEach(async () => {
+  for (const harness of open.splice(0)) await harness.close();
+});
 
 const NOW = 1_000_000;
 
@@ -27,16 +36,23 @@ function login(refreshToken: string, expiresAt = NOW - HOUR) {
   return JSON.stringify({ claudeAiOauth: { accessToken: `at-${refreshToken}`, refreshToken, expiresAt } });
 }
 
-function createRenewal() {
+async function createRenewal() {
   const secrets = new Map<string, string>();
-  const renewal = new LoginRenewal({
+  const harness = await buildUnitAccounts({
     env: { USER: 'me' },
-    userHome: '/nowhere',
+    config: { ...createTestConfig(createTempDir()), userHome: '/nowhere' },
     readSecret: (service) => Promise.resolve(secrets.get(service) ?? null),
-    now: () => NOW,
+    now: NOW,
   });
+  open.push(harness);
+  const service = harness.service(LoginRenewal);
   return {
-    renewal,
+    renewal: {
+      renew: (stored: StoredAccount) => harness.run(service.renew(stored)),
+      recordFailed: (stored: StoredAccount) => harness.run(service.recordFailed(stored)),
+      listRenewed: (accounts: StoredAccount[]) => harness.run(service.listRenewed(accounts)),
+      clear: (accountId: string) => harness.run(service.clear(accountId)),
+    },
     store: (dir: string | null, value: string) => secrets.set(resolveKeychainService(dir), value),
   };
 }
@@ -58,7 +74,7 @@ describe('which failures a fresh login can fix', () => {
 
 describe('reading a login again', () => {
   test('only a stored login that has not expired is worth another try, whatever its account’s origin', async () => {
-    const world = createRenewal();
+    const world = await createRenewal();
     world.store('/accounts/acc-1', login('dead'));
     expect(await world.renewal.renew(account())).toBe(false);
     world.store('/accounts/acc-1', login('refreshed', NOW + HOUR));
@@ -67,13 +83,13 @@ describe('reading a login again', () => {
     expect(await world.renewal.renew(account({ origin: 'login' }))).toBe(false);
     world.store(null, login('mine', NOW + HOUR));
     expect(await world.renewal.renew(account({ origin: 'claude', configDir: null }))).toBe(true);
-    expect(await createRenewal().renewal.renew(account())).toBe(false);
+    expect(await (await createRenewal()).renewal.renew(account())).toBe(false);
   });
 });
 
 describe('noticing a login that works again', () => {
   test('only an account that failed, and only once its stored login changes', async () => {
-    const world = createRenewal();
+    const world = await createRenewal();
     const failed = account({ origin: 'login' });
     const other = account({ id: 'acc-2', origin: 'login', configDir: '/accounts/acc-2' });
     world.store('/accounts/acc-1', login('dead'));
@@ -87,10 +103,10 @@ describe('noticing a login that works again', () => {
   });
 
   test('a login that is gone is not back, and a cleared account is not watched', async () => {
-    const gone = createRenewal();
+    const gone = await createRenewal();
     await gone.renewal.recordFailed(account());
     expect(await gone.renewal.listRenewed([account()])).toEqual([]);
-    gone.renewal.clear('acc-1');
+    await gone.renewal.clear('acc-1');
     gone.store('/accounts/acc-1', login('new', NOW + HOUR));
     expect(await gone.renewal.listRenewed([account()])).toEqual([]);
   });

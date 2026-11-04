@@ -1,3 +1,4 @@
+import { Effect } from 'effect';
 import type { FieldSpec } from './fields.ts';
 import { findProject, findProjectId, findRepoId, findWatchdog, selectProject } from './resolve.ts';
 import { defineCommand, defineRead, readValue, type SurfaceSpec } from './spec.ts';
@@ -39,10 +40,10 @@ export const WATCHDOG_SPECS: SurfaceSpec[] = [
     summary: 'Stop a watchdog that watches a merged change.',
     command: 'watchdog.stop',
     fields: [TASK_FIELD, WATCHDOG_FIELD],
-    build: async (values, client) => {
-      const found = await findWatchdog(client, readValue(values, 'task'), readValue(values, 'watchdog'));
-      return { type: 'watchdog.stop', taskId: found.taskId, watchdogId: found.watchdog.id };
-    },
+    build: Effect.fn('Surface.watchdogStop')(function* (values, client) {
+      const found = yield* findWatchdog(client, readValue(values, 'task'), readValue(values, 'watchdog'));
+      return { type: 'watchdog.stop' as const, taskId: found.taskId, watchdogId: found.watchdog.id };
+    }),
     done: () => 'Stopped the watchdog.',
   }),
   defineCommand({
@@ -61,16 +62,16 @@ export const WATCHDOG_SPECS: SurfaceSpec[] = [
         description: 'What the server holds that the check reads.',
       },
     ],
-    build: async (values, client) => {
-      const found = await findWatchdog(client, readValue(values, 'task'), readValue(values, 'watchdog'));
+    build: Effect.fn('Surface.watchdogConnect')(function* (values, client) {
+      const found = yield* findWatchdog(client, readValue(values, 'task'), readValue(values, 'watchdog'));
       return {
-        type: 'watchdog.connect',
+        type: 'watchdog.connect' as const,
         taskId: found.taskId,
         watchdogId: found.watchdog.id,
         server: readValue(values, 'server'),
         data: readValue(values, 'data'),
       };
-    },
+    }),
     done: () => 'Connected the source; the watchdog starts watching.',
   }),
   defineRead({
@@ -103,18 +104,20 @@ export const WATCHDOG_SPECS: SurfaceSpec[] = [
       { name: 'data', kind: 'text', required: true, description: 'What the server holds.' },
       { name: 'repos', kind: 'list', description: 'The repositories it covers. Left out, every one.' },
     ],
-    build: async (values, client) => {
-      const project = await findProject(client, readValue(values, 'project'));
+    build: Effect.fn('Surface.sourceWrite')(function* (values, client) {
+      const project = yield* findProject(client, readValue(values, 'project'));
       const refs = (values.repos as string[] | undefined) ?? [];
-      const repoIds = await Promise.all(refs.map((ref) => findRepoId(client, ref)));
+      const repoIds = yield* Effect.forEach(refs, (ref) => findRepoId(client, ref), {
+        concurrency: 'unbounded',
+      });
       return {
-        type: 'watch_source.write',
+        type: 'watch_source.write' as const,
         projectId: project.id,
         server: readValue(values, 'server'),
         data: readValue(values, 'data'),
         repoIds,
       };
-    },
+    }),
     done: () => 'Saved the data source.',
   }),
   defineCommand({
@@ -122,10 +125,12 @@ export const WATCHDOG_SPECS: SurfaceSpec[] = [
     summary: 'Remove a data source from a project.',
     command: 'watch_source.remove',
     fields: [PROJECT_FIELD, SERVER_FIELD],
-    build: async (values, client) => ({
-      type: 'watch_source.remove',
-      projectId: await findProjectId(client, readValue(values, 'project')),
-      server: readValue(values, 'server'),
+    build: Effect.fn('Surface.sourceRemove')(function* (values, client) {
+      return {
+        type: 'watch_source.remove' as const,
+        projectId: yield* findProjectId(client, readValue(values, 'project')),
+        server: readValue(values, 'server'),
+      };
     }),
     done: () => 'Removed the data source.',
   }),

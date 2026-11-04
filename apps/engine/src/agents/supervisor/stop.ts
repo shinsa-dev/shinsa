@@ -2,6 +2,7 @@ import { Duration, Effect, Fiber, Option } from 'effect';
 import { describeError } from '../../log/index.ts';
 import type { ActiveRun } from '../active/schema.ts';
 import { RunHost } from './host/service.ts';
+import { stopSession } from './session.ts';
 import { RunWorld } from './world/service.ts';
 
 function listEarlier(active: ReadonlyMap<string, ActiveRun>, taskId: string, except: string | undefined) {
@@ -26,8 +27,11 @@ export const stopWithin = Effect.fn('RunSupervisor.stopWithin')(function* (
   settled: Effect.Effect<void>
 ) {
   const host = yield* RunHost;
-  const cancelled = Effect.promise(() =>
-    Promise.allSettled(runs.map(([, active]) => active.session?.cancel()))
+  const cancelled = Effect.forEach(
+    runs,
+    ([runId, active]) =>
+      active.session ? stopSession(runId, active.session, '[Runs] Could not stop a run') : Effect.void,
+    { concurrency: 'unbounded', discard: true }
   );
   const stopped = yield* Effect.all([cancelled, settled], { concurrency: 'unbounded' }).pipe(
     Effect.timeoutOption(Duration.millis(host.limits.stopMs))

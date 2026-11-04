@@ -1,6 +1,8 @@
 import { PLACEMENT_POLICY_LIMITS } from '@shinsa/core';
+import { Effect } from 'effect';
 import { sendCommandWithToast } from '@/lib/connection/commands.ts';
 import type { MachineChoice, UnreachableMachine } from '@/lib/connection/socket.ts';
+import { runApp } from '@/lib/runtime/app.ts';
 import { describeUnreachableMachine, resolveMachineLabel } from './mode.ts';
 
 export const POLICIES_SECTION = 'Routing policies';
@@ -112,16 +114,20 @@ export interface PolicyActions {
   write: (writes: PolicyWrite[], done: string) => Promise<boolean>;
 }
 
-export const POLICY_ACTIONS: PolicyActions = {
-  write: async (writes, done) => {
-    for (const [index, write] of writes.entries()) {
-      const sent = await sendCommandWithToast(
+const writePolicies = Effect.fn('Policies.write')(function* (writes: PolicyWrite[], done: string) {
+  for (const [index, write] of writes.entries()) {
+    const sent = yield* Effect.promise(() =>
+      sendCommandWithToast(
         { type: 'settings.change', patch: { placementPolicies: write.policies } },
         index === writes.length - 1 ? done : undefined,
         write.machineId
-      );
-      if (!sent) return false;
-    }
-    return true;
-  },
+      )
+    );
+    if (!sent) return false;
+  }
+  return true;
+});
+
+export const POLICY_ACTIONS: PolicyActions = {
+  write: (writes, done) => runApp(writePolicies(writes, done)),
 };

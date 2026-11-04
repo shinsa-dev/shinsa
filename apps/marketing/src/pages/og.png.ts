@@ -1,5 +1,10 @@
 import type { APIRoute } from 'astro';
+import { Effect } from 'effect';
 import { renderOgImage } from '../lib/og';
 
-export const GET: APIRoute = async () =>
-  new Response(new Uint8Array(await renderOgImage()), { headers: { 'Content-Type': 'image/png' } });
+const program = Effect.map(
+  Effect.promise(() => renderOgImage()),
+  (png) => new Response(new Uint8Array(png), { headers: { 'Content-Type': 'image/png' } })
+);
+
+export const GET: APIRoute = () => Effect.runPromise(program);

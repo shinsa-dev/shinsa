@@ -1,7 +1,10 @@
 import { type ChatEntry, isChatEntry } from '@shinsa/core';
+import { Effect, Option, Schema } from 'effect';
 import { useSyncExternalStore } from 'react';
+import { runApp } from '@/lib/runtime/app.ts';
 import { requestSharedText } from '@/lib/share/sources.ts';
 import { createSignal } from '@/lib/signal.ts';
+import { type SharedTextReader, SharedTranscriptText } from './schema.ts';
 
 const signal = createSignal();
 
@@ -13,14 +16,13 @@ const pages = new Map<string, ChatEntry[]>();
 
 const listed = new Map<string, readonly string[]>();
 
+const decodeTranscript = Schema.decodeUnknownOption(SharedTranscriptText);
+
 export function parseSharedTranscript(text: string): ChatEntry[] {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(text);
-  } catch {
-    return [];
-  }
-  return Array.isArray(parsed) ? parsed.filter(isChatEntry) : [];
+  return Option.match(decodeTranscript(text), {
+    onNone: () => [],
+    onSome: (parsed) => parsed.filter(isChatEntry),
+  });
 }
 
 export function selectSharedTranscript(runId: string | null) {
@@ -31,35 +33,44 @@ export function useSharedTranscript(runId: string | null) {
   return useSyncExternalStore(signal.subscribe, () => selectSharedTranscript(runId));
 }
 
-async function readPage(url: string, readText: (url: string) => Promise<string>) {
+const readPage = Effect.fn('SharedTranscripts.readPage')(function* (url: string, readText: SharedTextReader) {
   const known = pages.get(url);
   if (known) return known;
-  const entries = parseSharedTranscript(await readText(url));
+  const entries = parseSharedTranscript(yield* readText(url));
   pages.set(url, entries);
   return entries;
-}
+});
 
-export async function syncSharedTranscripts(
-  urls: Readonly<Record<string, readonly string[]>>,
-  readText: (url: string) => Promise<string> = requestSharedText
+const syncRun = Effect.fn('SharedTranscripts.syncRun')(function* (
+  runId: string,
+  list: readonly string[],
+  readText: SharedTextReader
 ) {
-  await Promise.all(
-    Object.entries(urls).map(async ([runId, list]) => {
-      const key = list.join('\n');
-      if (read.get(runId) === key) return;
-      read.set(runId, key);
-      let entries: ChatEntry[][];
-      try {
-        entries = await Promise.all(list.map((url) => readPage(url, readText)));
-      } catch {
-        if (read.get(runId) === key) read.delete(runId);
-        return;
-      }
-      if (read.get(runId) !== key) return;
-      for (const url of listed.get(runId) ?? []) if (!list.includes(url)) pages.delete(url);
-      listed.set(runId, list);
-      transcripts.set(runId, entries.flat());
-      signal.publish();
+  const key = list.join('\n');
+  if (read.get(runId) === key) return;
+  read.set(runId, key);
+  const entries = yield* Effect.option(
+    Effect.forEach(list, (url) => readPage(url, readText), { concurrency: 'unbounded' })
+  );
+  if (Option.isNone(entries)) {
+    if (read.get(runId) === key) read.delete(runId);
+    return;
+  }
+  if (read.get(runId) !== key) return;
+  for (const url of listed.get(runId) ?? []) if (!list.includes(url)) pages.delete(url);
+  listed.set(runId, list);
+  transcripts.set(runId, entries.value.flat());
+  signal.publish();
+});
+
+export function syncSharedTranscripts(
+  urls: Readonly<Record<string, readonly string[]>>,
+  readText: SharedTextReader = requestSharedText
+) {
+  return runApp(
+    Effect.forEach(Object.entries(urls), ([runId, list]) => syncRun(runId, list, readText), {
+      concurrency: 'unbounded',
+      discard: true,
     })
   );
 }

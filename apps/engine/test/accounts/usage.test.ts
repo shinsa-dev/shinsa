@@ -1,13 +1,31 @@
-import { describe, expect, test } from 'bun:test';
+import { afterEach, describe, expect, test } from 'bun:test';
+import { UsageReadings } from '../../src/accounts/readings/service.ts';
+import { AccountStore } from '../../src/accounts/store/service.ts';
 import {
   parseResetTime,
   parseUsageWindows,
   readRetryAfter,
-  requestUsage,
   resolveClaudeFastMode,
   USAGE_URL,
   type UsageRequester,
 } from '../../src/accounts/usage.ts';
+import { type AccountsHarness, buildUnitAccounts } from './harness.ts';
+
+const open: AccountsHarness[] = [];
+
+afterEach(async () => {
+  for (const harness of open.splice(0)) await harness.close();
+});
+
+async function requestUsage(accessToken: string, requestHttp: UsageRequester) {
+  const harness = await buildUnitAccounts({
+    requestHttp,
+    readSecret: () => Promise.resolve(JSON.stringify({ claudeAiOauth: { accessToken } })),
+  });
+  open.push(harness);
+  const account = await harness.run(harness.service(AccountStore).create());
+  return harness.run(harness.service(UsageReadings).readAccount(account.id));
+}
 
 const SESSION_RESET = '2026-10-23T00:20:00.302718+00:00';
 const WEEKLY_RESET = '2026-10-28T09:00:00+00:00';
@@ -180,7 +198,7 @@ describe('resolveClaudeFastMode', () => {
   });
 });
 
-describe('requestUsage', () => {
+describe('reading an account’s usage from Claude', () => {
   test('asks the usage endpoint with the account’s token and reads the windows', async () => {
     const { requestHttp, calls } = respondWith(Response.json(BODY));
     const read = await requestUsage('token-1', requestHttp);

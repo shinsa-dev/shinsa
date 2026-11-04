@@ -1,7 +1,11 @@
 import { afterEach, describe, expect, it } from 'bun:test';
+import { Effect } from 'effect';
 import {
+  NOTIFICATION_FAILED,
   NOTIFICATION_OPEN,
   type NotificationClients,
+} from '@/lib/notifications/schema.ts';
+import {
   openNotificationTarget,
   readNotificationPath,
   selectNotificationWorker,
@@ -49,7 +53,7 @@ describe('a notification’s click in the service worker', () => {
 
   it('brings the focused page forward and tells it which task to open', async () => {
     const page = createClients([{ focused: false }, { focused: true }]);
-    await openNotificationTarget('/tasks/SW-1', '/', page.clients);
+    await Effect.runPromise(openNotificationTarget('/tasks/SW-1', '/', page.clients));
     expect(page.focused).toEqual([1]);
     expect(page.messages).toEqual([{ index: 1, message: { type: NOTIFICATION_OPEN, path: '/tasks/SW-1' } }]);
     expect(page.opened).toEqual([]);
@@ -57,16 +61,31 @@ describe('a notification’s click in the service worker', () => {
 
   it('takes the first page when none has focus, and only focuses it for a test notification', async () => {
     const page = createClients([{ focused: false }, { focused: false }]);
-    await openNotificationTarget(null, '/', page.clients);
+    await Effect.runPromise(openNotificationTarget(null, '/', page.clients));
     expect(page.focused).toEqual([0]);
     expect(page.messages).toEqual([]);
   });
 
   it('opens the task in a new window when every page is closed, or the dashboard for a test', async () => {
     const page = createClients([]);
-    await openNotificationTarget('/tasks/SW-1', '/', page.clients);
-    await openNotificationTarget(null, 'https://app.shinsa.dev/', page.clients);
+    await Effect.runPromise(openNotificationTarget('/tasks/SW-1', '/', page.clients));
+    await Effect.runPromise(openNotificationTarget(null, 'https://app.shinsa.dev/', page.clients));
     expect(page.opened).toEqual(['/tasks/SW-1', 'https://app.shinsa.dev/']);
+  });
+});
+
+describe('a notification’s click that fails', () => {
+  it('fails with what the browser said, or a sentence of its own', async () => {
+    const failing = (reason: unknown): NotificationClients => ({
+      matchAll: () => Promise.reject(reason),
+      openWindow: () => Promise.resolve(),
+    });
+    const said = await Effect.runPromise(
+      Effect.flip(openNotificationTarget(null, '/', failing(new Error('No windows here.'))))
+    );
+    expect(said).toMatchObject({ _tag: 'NotificationFailed', message: 'No windows here.' });
+    const unsaid = await Effect.runPromise(Effect.flip(openNotificationTarget(null, '/', failing('gone'))));
+    expect(unsaid.message).toBe(NOTIFICATION_FAILED);
   });
 });
 

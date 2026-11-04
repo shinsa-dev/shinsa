@@ -1,11 +1,10 @@
 import { afterEach, describe, expect, setDefaultTimeout, test } from 'bun:test';
 import { realpathSync, rmSync } from 'node:fs';
 import type { ServerMessage, TerminalInfo, TerminalsSnapshot } from '@shinsa/core';
-import { createSocketHandlers } from '../../src/http/server.ts';
-import { Terminals } from '../../src/terminals/index.ts';
+import { Effect } from 'effect';
+import { createSocketHandlers } from '../../src/http/server/sockets.ts';
 import type { TerminalSocketData } from '../../src/terminals/schema.ts';
 import { createTerminalSockets } from '../../src/terminals/sockets.ts';
-import { createTempDir, until } from '../helpers/index.ts';
 import {
   attachTerminal as attach,
   ORIGIN,
@@ -13,7 +12,9 @@ import {
   startTerminalServer as start,
   stopTerminalServers,
 } from '../helpers/terminals.ts';
-import { createFakeSpawner, createFakeViewer } from './fakes.ts';
+import { until } from '../helpers/until.ts';
+import { createFakeViewer } from './fakes.ts';
+import { createTerminals, run } from './harness.ts';
 
 setDefaultTimeout(30_000);
 
@@ -48,8 +49,8 @@ describe('terminals over HTTP and their socket', () => {
     await until('the shell is in the folder', () => view.state.output.includes(realpathSync(repoPath)));
 
     view.socket.send(new TextEncoder().encode('exit 7\r'));
-    await until('the exit is recorded', () => terminals.select(terminal.id)?.info.status === 'exited');
-    expect(terminals.select(terminal.id)?.info.exitCode).toBe(7);
+    await until('the exit is recorded', () => run(terminals.select(terminal.id))?.info.status === 'exited');
+    expect(run(terminals.select(terminal.id))?.info.exitCode).toBe(7);
 
     const again = attach(base, terminal.id);
     await again.opened;
@@ -123,7 +124,7 @@ describe('terminals over HTTP and their socket', () => {
     expect(await (await post('/api/terminals', { projectId, path: repoPath })).json()).toMatchObject({
       error: { code: 'terminal_place_missing' },
     });
-    expect(terminals.snapshot().terminals).toEqual([]);
+    expect(run(terminals.snapshot).terminals).toEqual([]);
     await expect(attach(base, 'some-id', null).opened).rejects.toThrow('socket refused');
     const unknown = attach(base, 'some-id');
     await unknown.opened;
@@ -139,8 +140,8 @@ describe('terminals over HTTP and their socket', () => {
     const view = attach(base, terminal.id);
     await view.opened;
     await until('the screen arrives', () => view.state.controls.length > 0);
-    const session = terminals.find(terminal.id);
-    terminals.select = () => null;
+    const session = run(terminals.find(terminal.id));
+    terminals.select = () => Effect.succeed(null);
     view.socket.send('{"type":"resize","cols":90,"rows":20}');
     view.socket.close();
     await until('the socket closes', () => view.state.closed !== null);
@@ -150,18 +151,11 @@ describe('terminals over HTTP and their socket', () => {
 
 describe('createTerminalSockets', () => {
   test('a socket that drains catches up with the screen, and one without a viewer is skipped', () => {
-    const fake = createFakeSpawner();
-    const terminals = new Terminals({
-      dataDir: createTempDir(),
-      home: '/home/ada',
-      version: '1',
-      spawn: fake.spawn,
-      env: {},
-    });
-    const terminal = terminals.create({ projectId: 'p1', cwd: '/tmp', place: 'folder', taskId: null });
-    const sockets = createTerminalSockets(terminals);
+    const { terminals, fake } = createTerminals();
+    const terminal = run(terminals.create({ projectId: 'p1', cwd: '/tmp', place: 'folder', taskId: null }));
+    const sockets = run(createTerminalSockets(terminals));
     const viewer = createFakeViewer();
-    terminals.attach(terminal.id, viewer);
+    run(terminals.attach(terminal.id, viewer));
     viewer.bufferedBytes = Number.MAX_SAFE_INTEGER;
     fake.spawned[0]?.emit('x'.repeat(300_000));
     viewer.bufferedBytes = 0;

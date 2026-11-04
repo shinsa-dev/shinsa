@@ -1,6 +1,8 @@
+import { Effect } from 'effect';
 import type { CommandResult } from '../shell/index.ts';
 import type { InstallScripts } from './install.ts';
-import { type CommandRunner, type PrerequisiteId, resolveInstallCommand } from './prerequisites.ts';
+import { resolveInstallCommand } from './prerequisites/catalog.ts';
+import type { CommandRunner, PrerequisiteId } from './schema.ts';
 
 type SimulatedId = PrerequisiteId | 'gh_auth';
 
@@ -49,7 +51,7 @@ export function createSetupSimulation(ids: readonly string[], run: CommandRunner
     run: (command, cwd, options) => {
       const id = CHECK_COMMANDS[command.join(' ')];
       if (!(id && missing.has(id))) return run(command, cwd, options);
-      return Promise.resolve({ ok: false, timedOut: false, ...(MISSING_OUTPUT[id] ?? NOT_FOUND) });
+      return Effect.succeed({ ok: false, timedOut: false, ...(MISSING_OUTPUT[id] ?? NOT_FOUND) });
     },
     scripts: {
       resolve: (id) => {

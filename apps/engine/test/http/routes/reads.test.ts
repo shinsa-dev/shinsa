@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, setSystemTime, test } from 'bun:test';
 import type { ChatEvent } from '@shinsa/core';
-import type { Engine } from '../../../src/runtime/index.ts';
+import { Effect } from 'effect';
+import type { Engine } from '../../helpers/engine.ts';
 import { createRepo, createRun, createStubEngine, createTask } from '../../helpers/state.ts';
 import { disposeWebHandlers } from '../../helpers/web.ts';
 import { startRoutes } from './harness.ts';
@@ -232,7 +233,7 @@ describe('GET /api/tasks/:ref/chat', () => {
       { type: 'error', text: 'The tool failed.' } as unknown as ChatEvent,
       { type: 'user', from: 'you', text: 'Use flexbox.', attachments: [] },
     ];
-    for (const entry of entries) server.transcripts.record(server.runId, entry);
+    for (const entry of entries) Effect.runSync(server.transcripts.record(server.runId, entry));
     return server;
   }
 

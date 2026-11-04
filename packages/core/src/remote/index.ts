@@ -109,7 +109,6 @@ export {
   type ChannelCompression,
   createFrameOpener,
   createFrameSealer,
-  FrameError,
 } from './frames.ts';
 export {
   type ClientHello,
@@ -322,10 +321,12 @@ export {
 export {
   CONNECT_CHANNELS,
   ConnectChannel,
+  FrameError,
   PLACEMENT_LIMITS,
   PLACEMENT_POLICY_LIMITS,
   type PlacementCandidate,
   type PlacementProject,
   type PlacementQuestion,
+  RemoteKeyInvalid,
   type ResourceSummary,
 } from './schema.ts';

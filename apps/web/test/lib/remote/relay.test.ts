@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'bun:test';
+import { Effect } from 'effect';
 import {
   isRelayedRequest,
   type RelayClients,
@@ -9,7 +10,8 @@ import {
 
 function createPage(respond: (request: Request) => Promise<Response>) {
   const target = new EventTarget();
-  const stop = serveRelayedRequests(target as unknown as ServiceWorkerContainer, respond);
+  const serving = Effect.runFork(serveRelayedRequests(target as unknown as ServiceWorkerContainer, respond));
+  const stop = () => serving.interruptUnsafe();
   const clients: RelayClients = {
     get: (id) =>
       Promise.resolve(
@@ -24,6 +26,14 @@ function createPage(respond: (request: Request) => Promise<Response>) {
       ),
   };
   return { clients, stop, target };
+}
+
+function relay(request: Request, clientId: string, clients: RelayClients) {
+  return Effect.runPromise(relayRequest(request, clientId, clients));
+}
+
+function startWorker(container: unknown) {
+  return Effect.runPromise(startServiceWorker(container as ServiceWorkerContainer, '/sw.js', '/'));
 }
 
 describe('the service worker relay', () => {
@@ -57,15 +67,11 @@ describe('the service worker relay', () => {
         })
       )
     );
-    const answer = await relayRequest(
-      new Request('https://app.shinsa.dev/api/evidence/a.svg'),
-      'page',
-      clients
-    );
+    const answer = await relay(new Request('https://app.shinsa.dev/api/evidence/a.svg'), 'page', clients);
     expect(answer.headers.get('content-security-policy')).toBe("sandbox; default-src 'none'");
     expect(answer.headers.get('x-content-type-options')).toBe('nosniff');
     expect(answer.headers.get('content-type')).toBe('image/svg+xml');
-    const empty = await relayRequest(
+    const empty = await relay(
       new Request('https://app.shinsa.dev/api/x'),
       'page',
       createPage(() => Promise.resolve(new Response(null, { status: 204 }))).clients
@@ -80,7 +86,7 @@ describe('the service worker relay', () => {
       seen.push(`${request.method} ${request.url} ${await request.text()}`);
       return new Response('hello from the machine', { status: 201, headers: { 'x-mac': '1' } });
     });
-    const response = await relayRequest(
+    const response = await relay(
       new Request('https://shinsa.dev/api/commands', { method: 'POST', body: 'payload' }),
       'page',
       clients
@@ -89,34 +95,41 @@ describe('the service worker relay', () => {
     expect(response.headers.get('x-mac')).toBe('1');
     expect(await response.text()).toBe('hello from the machine');
     expect(seen).toEqual(['POST https://shinsa.dev/api/commands payload']);
-    const image = await relayRequest(new Request('https://shinsa.dev/api/evidence/a.png'), 'page', clients);
+    const image = await relay(new Request('https://shinsa.dev/api/evidence/a.png'), 'page', clients);
     expect(await image.text()).toBe('hello from the machine');
     stop();
   });
 
   it('answers 503 when no page sent it or the page could not reach the machine', async () => {
     const { clients } = createPage(() => Promise.reject(new Error('Couldn’t reach your machine.')));
-    const orphan = await relayRequest(new Request('https://shinsa.dev/api/x'), '', clients);
+    const orphan = await relay(new Request('https://shinsa.dev/api/x'), '', clients);
     expect(orphan.status).toBe(503);
-    const gone = await relayRequest(new Request('https://shinsa.dev/api/x'), 'closed-tab', clients);
+    const gone = await relay(new Request('https://shinsa.dev/api/x'), 'closed-tab', clients);
     expect(gone.status).toBe(503);
-    const failed = await relayRequest(new Request('https://shinsa.dev/api/x'), 'page', clients);
+    const failed = await relay(new Request('https://shinsa.dev/api/x'), 'page', clients);
     expect(failed.status).toBe(503);
     expect(await failed.json()).toEqual({
       error: { code: 'remote_unavailable', message: 'Couldn’t reach your machine.' },
     });
     const { clients: thrown } = createPage(() => Promise.reject('no reason'));
-    const unnamed = await relayRequest(new Request('https://shinsa.dev/api/x'), 'page', thrown);
+    const unnamed = await relay(new Request('https://shinsa.dev/api/x'), 'page', thrown);
     expect(((await unnamed.json()) as { error: { message: string } }).error.message).toBe(
       'The request to your machine failed.'
     );
   });
 
+  it('answers 503 when the worker cannot look up the page that sent it', async () => {
+    const lost: RelayClients = { get: () => Promise.reject(new Error('The page is gone.')) };
+    const answer = await relay(new Request('https://shinsa.dev/api/x'), 'page', lost);
+    expect(answer.status).toBe(503);
+    expect(await answer.json()).toEqual({
+      error: { code: 'remote_unavailable', message: 'The page is gone.' },
+    });
+  });
+
   it('keeps a body-less status bodiless, and fails a stream that breaks halfway', async () => {
     const empty = createPage(() => Promise.resolve(new Response(null, { status: 204 })));
-    expect((await relayRequest(new Request('https://shinsa.dev/api/x'), 'page', empty.clients)).status).toBe(
-      204
-    );
+    expect((await relay(new Request('https://shinsa.dev/api/x'), 'page', empty.clients)).status).toBe(204);
     const broken = createPage(() =>
       Promise.resolve(
         new Response(
@@ -129,7 +142,7 @@ describe('the service worker relay', () => {
         )
       )
     );
-    const response = await relayRequest(new Request('https://shinsa.dev/api/x'), 'page', broken.clients);
+    const response = await relay(new Request('https://shinsa.dev/api/x'), 'page', broken.clients);
     await expect(response.text()).rejects.toThrow('broke');
   });
 
@@ -150,7 +163,7 @@ describe('the service worker relay', () => {
       );
     });
     const controller = new AbortController();
-    const response = await relayRequest(
+    const response = await relay(
       new Request('https://shinsa.dev/api/stream', { signal: controller.signal }),
       'page',
       clients
@@ -190,18 +203,22 @@ describe('starting the service worker', () => {
 
   it('registers it for the dashboard’s path and goes on at once when it already controls the page', async () => {
     const { container, registered } = createContainer(true);
-    await startServiceWorker(container as unknown as ServiceWorkerContainer, '/sw.js', '/');
+    await startWorker(container);
     expect(registered).toEqual(['/sw.js /']);
+  });
+
+  it('fails with the browser’s reason when it cannot register', async () => {
+    const { container } = createContainer(true);
+    const refused = { ...container, register: () => Promise.reject(new Error('Service workers are off.')) };
+    await expect(startWorker(refused)).rejects.toThrow('Service workers are off.');
   });
 
   it('waits for it to take control of a page it does not control yet', async () => {
     const { container, target } = createContainer(false);
     let started = false;
-    const starting = startServiceWorker(container as unknown as ServiceWorkerContainer, '/sw.js', '/').then(
-      () => {
-        started = true;
-      }
-    );
+    const starting = startWorker(container).then(() => {
+      started = true;
+    });
     await Bun.sleep(1);
     expect(started).toBe(false);
     target.dispatchEvent(new Event('controllerchange'));

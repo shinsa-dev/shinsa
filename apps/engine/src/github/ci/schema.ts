@@ -1,5 +1,4 @@
-import type { Repo, RepoCi } from '@shinsa/core';
-import { Duration, type Effect, Schema } from 'effect';
+import { Duration, Schema } from 'effect';
 
 const WorkflowEntry = Schema.Struct({
   name: Schema.String,
@@ -48,10 +47,6 @@ export const BranchRules = Schema.Array(
     ),
   })
 );
-
-export interface RepoCiCache {
-  resolve(repo: Repo, base: string, signal?: AbortSignal): Effect.Effect<RepoCi>;
-}
 
 export const CI_QUERY = `query($owner:String!,$name:String!,$workflows:String!,$base:String!){repository(owner:$owner,name:$name){workflows:object(expression:$workflows){... on Tree{entries{name object{... on Blob{text}}}}} base:object(expression:$base){... on Commit{statusCheckRollup{state}}}}}`;
 

@@ -1,3 +1,4 @@
+import { runApp } from '@/lib/runtime/app.ts';
 import { listCodeModes } from '@/lib/tasks/tabs.ts';
 import { CodeTab } from '@/routes/task/code.tsx';
 import { primeReview } from '../../lib/review-prime.ts';
@@ -8,7 +9,7 @@ import { DemoRoot, Window } from './frame.tsx';
 const task = createReviewTask(Date.now());
 const state = createHomeScene(Date.now());
 
-await primeReview(task);
+await runApp(primeReview(task));
 
 export function CodeDemo() {
   return (

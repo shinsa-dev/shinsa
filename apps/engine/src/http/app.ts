@@ -1,9 +1,11 @@
 import { EngineApi } from '@shinsa/core/engine-api';
-import { Layer } from 'effect';
+import { type Context, Layer } from 'effect';
 import { HttpRouter, HttpServer } from 'effect/http';
 import { HttpApiBuilder } from 'effect/http-api';
+import { GitLayer } from '../git/layers.ts';
 import { JsonLogger } from '../log/service.ts';
 import { TunnelGate } from '../remote/gate/service.ts';
+import { ShellLayer } from '../shell/layers.ts';
 import { EngineGateLive } from './gate/middleware.ts';
 import { Ingress } from './ingress/middleware.ts';
 import { AccountsHandlers } from './routes/accounts/handler.ts';
@@ -28,8 +30,6 @@ import { TerminalsHandlers } from './routes/terminals/handler.ts';
 import { TunnelRoutes } from './routes/tunnel/handler.ts';
 import { VersionsHandlers } from './routes/versions/handler.ts';
 import { WebhookRoutes } from './routes/webhooks/handler.ts';
-import type { HttpServicesShape } from './schema.ts';
-import { HttpServices } from './services/service.ts';
 
 export const ApiRoutes = HttpApiBuilder.layer(EngineApi).pipe(
   Layer.provide([
@@ -58,13 +58,19 @@ export const ApiRoutes = HttpApiBuilder.layer(EngineApi).pipe(
 
 const EngineRoutes = Layer.mergeAll(ApiRoutes, WebhookRoutes, SignInRoutes, TunnelRoutes);
 
-export const makeEngineHandler = (services: HttpServicesShape) =>
+const EngineHandlerLayer = Layer.mergeAll(EngineRoutes, Ingress).pipe(
+  Layer.provide(TunnelGate.layer),
+  Layer.provide(GitLayer.pipe(Layer.provide(ShellLayer))),
+  Layer.provide(HttpServer.layerServices)
+);
+
+export type EngineHandlerServices = Exclude<
+  Layer.Services<typeof EngineHandlerLayer>,
+  HttpRouter.HttpRouter | HttpRouter.Request<'Requires' | 'Error' | 'GlobalRequires' | 'GlobalError', unknown>
+>;
+
+export const makeEngineHandler = (services: Context.Context<EngineHandlerServices>) =>
   HttpRouter.toWebHandler(
-    Layer.mergeAll(EngineRoutes, Ingress).pipe(
-      Layer.provide(TunnelGate.layer),
-      Layer.provide(HttpServices.layer(services)),
-      Layer.provide(HttpServer.layerServices),
-      Layer.provideMerge(JsonLogger)
-    ),
+    EngineHandlerLayer.pipe(Layer.provide(Layer.succeedContext(services)), Layer.provideMerge(JsonLogger)),
     { disableLogger: true }
   );

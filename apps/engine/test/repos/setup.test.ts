@@ -1,9 +1,9 @@
 import { describe, expect, test } from 'bun:test';
 import { chmodSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { prepareSetup, verifySetup } from '../../src/repos/index.ts';
-import { runCommandOrThrow } from '../../src/shell/index.ts';
 import { createGitRepo, createTempDir, git } from '../helpers/index.ts';
+import { runCommandOrThrow } from '../helpers/shell.ts';
+import { prepareSetup, verifySetup } from './harness.ts';
 
 const BUILD = { defaultBranch: true };
 

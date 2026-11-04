@@ -9,7 +9,7 @@ import {
   isShinsaToolName,
   splitMessageAttachments,
 } from '@shinsa/core';
-import { resolveServerLabel } from '../../../extensions/usage.ts';
+import { resolveServerLabel } from '../../../extensions/usage/names.ts';
 import { MAX_TEXT } from '../schema.ts';
 import type { ImageStore } from '../types.ts';
 

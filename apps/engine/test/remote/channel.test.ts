@@ -6,7 +6,6 @@ import {
   type ChannelCompression,
   type ChannelMessage,
   encodeText,
-  type GuestActor,
   MAX_TERMINAL_STREAMS,
   parseBodyChunk,
   REMOTE_KEY_ALGORITHM,
@@ -14,15 +13,38 @@ import {
   serializePublicKey,
   TERMINAL_STREAM_CLOSE,
 } from '@shinsa/core';
+import type { GuestActor } from '@shinsa/core';
+import { Effect } from 'effect';
 import type { HubSocket } from '../../src/http/socket.ts';
+import { describeError } from '../../src/log/redact.ts';
+import { JsonLogger } from '../../src/log/service.ts';
 import {
   type AccessAnswer,
-  type ChannelHost,
-  RemoteChannel,
+  ChannelBroken,
+  type ChannelHub,
+  type ChannelPeer,
+  type ChannelRaw,
+  type ProofKeys,
   TERMINAL_STREAM_MESSAGES,
-} from '../../src/remote/channel.ts';
-import type { TerminalSession, TerminalViewer } from '../../src/terminals/session.ts';
+} from '../../src/remote/channel/schema.ts';
+import { makeRemoteChannel } from '../../src/remote/channel/service.ts';
+import type { MachineKeyPair } from '../../src/remote/pairing/schema.ts';
+import type { TerminalSession, TerminalViewer } from '../../src/terminals/schema.ts';
 import { createKeyPair, serializeDeviceKey, startHandshake, type TestSession } from './client.ts';
+
+interface ChannelHost {
+  resolveMachineKey: () => Promise<MachineKeyPair>;
+  isEnrolled: (device: string) => boolean;
+  resolveGuest: (device: string) => GuestActor | null;
+  isOwner: () => boolean;
+  requestAccess: (proof: string, keys: ProofKeys, name: string | null) => Promise<AccessAnswer>;
+  resumeAccess: (device: string) => AccessAnswer | null;
+  recordSeen: (device: string) => void;
+  hub: ChannelHub;
+  terminals: { select: (id: string) => TerminalSession | null };
+  respond: (request: Request, guest: GuestActor | null) => Promise<Response>;
+  maxBodyBytes: number;
+}
 
 interface FakeTerminal {
   attached: TerminalViewer[];
@@ -55,10 +77,62 @@ function createFakeTerminal(): FakeTerminal & TerminalSession {
   }) as unknown as FakeTerminal & TerminalSession;
 }
 
+const toBroken = (error: unknown) => new ChannelBroken({ message: describeError(error) });
+
+function run<A, E>(effect: Effect.Effect<A, E>) {
+  return Effect.runPromise(effect.pipe(Effect.provide(JsonLogger)));
+}
+
+function runSync<A, E>(effect: Effect.Effect<A, E>) {
+  return Effect.runSync(effect.pipe(Effect.provide(JsonLogger)));
+}
+
+function openChannel(peer: ChannelPeer, host: ChannelHost) {
+  const handle = runSync(
+    makeRemoteChannel({
+      send: (data) => Effect.sync(() => peer.send(data)),
+      buffered: peer.buffered,
+      closePeer: (code, reason) => Effect.sync(() => peer.close(code, reason)),
+      machineKey: Effect.tryPromise({ try: () => host.resolveMachineKey(), catch: toBroken }),
+      isEnrolled: (device) => Effect.sync(() => host.isEnrolled(device)),
+      resolveGuest: (device) => Effect.sync(() => host.resolveGuest(device)),
+      isOwner: Effect.sync(() => host.isOwner()),
+      requestAccess: (proof, keys, name) =>
+        Effect.tryPromise({ try: () => host.requestAccess(proof, keys, name), catch: toBroken }),
+      resumeAccess: (device) => Effect.sync(() => host.resumeAccess(device)),
+      recordSeen: (device) => Effect.sync(() => host.recordSeen(device)),
+      openSocket: (socket) => Effect.sync(() => host.hub.open(socket)),
+      closeSocket: (socket) => Effect.sync(() => host.hub.close(socket)),
+      receiveSocket: (socket, raw) => Effect.sync(() => host.hub.message(socket, raw)),
+      terminals: { select: (id) => Effect.sync(() => host.terminals.select(id)) },
+      respond: (request, guest) =>
+        Effect.tryPromise({ try: () => host.respond(request, guest), catch: toBroken }),
+      maxBodyBytes: host.maxBodyBytes,
+    })
+  );
+  return {
+    handle,
+    get device() {
+      return runSync(handle.device);
+    },
+    get isOpen() {
+      return runSync(handle.isOpen);
+    },
+    receive: (raw: ChannelRaw) => run(handle.receive(raw)),
+    fail: (reason: string, error?: unknown) =>
+      runSync(handle.fail(reason, error ? describeError(error) : undefined)),
+    drain: () => runSync(handle.drain),
+    close: () => runSync(handle.close),
+  };
+}
+
+type TestChannel = ReturnType<typeof openChannel>;
+
 interface Harness {
   terminals: Map<string, FakeTerminal & TerminalSession>;
   guest: GuestActor | null;
-  channel: RemoteChannel;
+  owner: boolean;
+  channel: TestChannel;
   sent: (string | Bytes)[];
   dropping: boolean;
   closed: { code: number; reason: string }[];
@@ -69,7 +143,6 @@ interface Harness {
   machineKey: string;
   enrolled: Set<string>;
   seen: string[];
-  owner: boolean;
   access: { answer: AccessAnswer; asked: (string | null)[]; waiting: AccessAnswer | null };
 }
 
@@ -81,7 +154,7 @@ async function createHarness(
   const machine = (await crypto.subtle.generateKey(REMOTE_KEY_ALGORITHM, true, [
     'deriveBits',
   ])) as CryptoKeyPair;
-  const machineKey = await serializePublicKey(machine.publicKey);
+  const machineKey = await Effect.runPromise(serializePublicKey(machine.publicKey));
   const harness = {
     sent: [],
     dropping: false,
@@ -124,7 +197,7 @@ async function createHarness(
     terminals: { select: (id) => harness.terminals.get(id) ?? null },
     maxBodyBytes,
   };
-  harness.channel = new RemoteChannel(
+  harness.channel = openChannel(
     {
       send: (data) => (harness.dropping ? 0 : harness.sent.push(data)),
       close: (code, reason) => harness.closed.push({ code, reason }),
@@ -175,8 +248,6 @@ describe('the sealed channel', () => {
     await harness.channel.receive(await session.seal({ t: 'ready' }));
     expect(harness.hubOpened).toHaveLength(1);
     expect(harness.hubOpened[0]?.data.origin).toBe('remote');
-    harness.owner = true;
-    expect(harness.hubOpened[0]?.data.origin).toBe('owner');
     await until(() => harness.sent.length >= 3);
     expect(await readFrom(harness, session, 2)).toEqual([{ t: 'socket', data: '{"type":"state"}' }]);
     await harness.channel.receive(await session.seal({ t: 'socket', data: '{"type":"state.sync"}' }));
@@ -241,7 +312,10 @@ describe('the sealed channel', () => {
     const decided = new Promise<boolean>((resolve) => {
       decide = resolve;
     });
-    return { answer: { kind: 'waiting', decided } satisfies AccessAnswer, decide };
+    return {
+      answer: { kind: 'waiting', decided: Effect.promise(() => decided) } satisfies AccessAnswer,
+      decide,
+    };
   }
 
   test('a new device with a link proof asks for access, waits, and is let in once accepted', async () => {
@@ -402,6 +476,20 @@ describe('the sealed channel', () => {
     expect(messages.filter((message) => message.t === 'end')).toHaveLength(2);
   });
 
+  test('a route that crashes inside the channel still answers 500', async () => {
+    const harness = await createHarness(() => Promise.resolve(null as unknown as Response));
+    const { session } = await connect(harness);
+    await harness.channel.receive(
+      await session.seal({ t: 'request', id: 'c', method: 'GET', path: '/api/crash', headers: [] })
+    );
+    await harness.channel.receive(await session.seal({ t: 'end', id: 'c' }));
+    await until(() => harness.sent.length >= 4);
+    expect(await readFrom(harness, session, 2)).toEqual([
+      { t: 'response', id: 'c', status: 500, headers: [] },
+      { t: 'end', id: 'c' },
+    ]);
+  });
+
   test('refuses a body over the limit, a duplicate id and an unsafe path', async () => {
     const harness = await createHarness(undefined, 4);
     const { session } = await connect(harness);
@@ -472,6 +560,24 @@ describe('the sealed channel', () => {
     expect(messages.map((message) => message.t)).toEqual(['response', 'body']);
   });
 
+  test('answers nothing for a request that failed after the browser aborted it', async () => {
+    const harness = await createHarness(
+      (request) =>
+        new Promise((_resolve, reject) => {
+          request.signal.addEventListener('abort', () => reject(new Error('aborted')), { once: true });
+        })
+    );
+    const { session } = await connect(harness);
+    await harness.channel.receive(
+      await session.seal({ t: 'request', id: 'q', method: 'GET', path: '/api/slow', headers: [] })
+    );
+    await harness.channel.receive(await session.seal({ t: 'end', id: 'q' }));
+    await until(() => harness.requests.length === 1);
+    await harness.channel.receive(await session.seal({ t: 'abort', id: 'q' }));
+    await Bun.sleep(5);
+    expect(harness.sent).toHaveLength(2);
+  });
+
   test('fails a handshake that lost a race with close', async () => {
     const harness = await createHarness();
     const device = await createKeyPair();
@@ -506,6 +612,12 @@ describe('terminal streams in the sealed channel', () => {
     return { harness, terminal, send, next };
   }
 
+  test('opens the owner’s page socket as the owner’s', async () => {
+    const { harness, send } = await connectAs(true);
+    await send({ t: 'ready' });
+    expect(harness.hubOpened[0]?.data.origin).toBe('owner');
+  });
+
   test('streams a terminal to the owner and takes its keys, resizes and clears', async () => {
     const { harness, terminal, send, next } = await connectAs(true);
     await send({ t: 'terminal-open', id: 's1', terminal: 'term-1' });
@@ -522,7 +634,9 @@ describe('terminal streams in the sealed channel', () => {
     expect(terminal.typed).toEqual([encodeText('ls\r')]);
     expect(terminal.sizes).toEqual([[100, 30]]);
     expect(terminal.cleared).toBe(1);
+    const drained = terminal.drained;
     harness.channel.drain();
+    expect(terminal.drained).toBe(drained + 1);
     expect(terminal.attached[0]?.buffered()).toBe(0);
     await send({ t: 'terminal-close', id: 's1', code: TERMINAL_STREAM_CLOSE.normal, reason: '' });
     expect(terminal.attached).toHaveLength(0);
@@ -564,7 +678,7 @@ describe('terminal streams in the sealed channel', () => {
       },
     ]);
     expect(member.terminal.attached).toHaveLength(0);
-    const guest = await connectAs(true, { taskId: 'task-1', login: 'kai' });
+    const guest = await connectAs(true, { taskId: 'task-1', login: 'kai' } as GuestActor);
     await guest.send({ t: 'terminal-open', id: 's', terminal: 'term-1' });
     expect((await guest.next(1))[0]).toMatchObject({ code: TERMINAL_STREAM_CLOSE.refused });
     expect(guest.terminal.attached).toHaveLength(0);

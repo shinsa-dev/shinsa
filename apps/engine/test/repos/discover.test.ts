@@ -2,8 +2,8 @@ import { describe, expect, test } from 'bun:test';
 import { chmodSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Duration } from 'effect';
-import { discoverRoots } from '../../src/repos/index.ts';
 import { createTempDir } from '../helpers/index.ts';
+import { discoverRoots } from './harness.ts';
 
 function createRepo(path: string, gitFile = false) {
   mkdirSync(path, { recursive: true });
