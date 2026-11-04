@@ -326,7 +326,15 @@ describe('the relay to a teammate’s machine', () => {
     const peers: ChannelPeer[] = [];
     let closed = 0;
     const relay = {
-      list: Effect.succeed([{ instanceId: 'kai-mac', teamId: 'team1', name: 'Kai’s Mac', userId: '7' }]),
+      list: Effect.succeed([
+        {
+          instanceId: 'kai-mac',
+          teamId: 'team1',
+          name: 'Kai’s Mac',
+          userId: '7',
+          appOrigin: 'https://app.shinsa.dev',
+        },
+      ]),
       request: (instanceId: string, path: string, request: Request) =>
         Effect.promise(async () => {
           calls.push({ instanceId, path, url: request.url, body: await request.text() });
@@ -373,7 +381,15 @@ describe('the relay to a teammate’s machine', () => {
     expect(crossSite.status).toBe(403);
     expect((await call('/api/teams/relays')).status).toBe(200);
     expect(await (await call('/api/teams/relays')).json()).toEqual({
-      relays: [{ instanceId: 'kai-mac', teamId: 'team1', name: 'Kai’s Mac', userId: '7' }],
+      relays: [
+        {
+          instanceId: 'kai-mac',
+          teamId: 'team1',
+          name: 'Kai’s Mac',
+          userId: '7',
+          appOrigin: 'https://app.shinsa.dev',
+        },
+      ],
     });
   });
 
