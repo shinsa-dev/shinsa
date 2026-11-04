@@ -12,8 +12,8 @@ export function TaskHandle({ task, className }: { task: Task; className?: string
   );
 }
 
-export function TaskHandlePrefix({ task }: { task: Task }) {
-  const text = resolveHandleText(task);
+export function TaskHandlePrefix({ task, round = true }: { task: Task; round?: boolean }) {
+  const text = resolveHandleText(task, round);
   if (!text) return null;
   return (
     <span data-task={task.id} className='tabular-nums'>

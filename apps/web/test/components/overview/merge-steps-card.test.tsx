@@ -15,6 +15,7 @@ import { CommandRunnerProvider } from '@/components/text/code-block.tsx';
 import { OverviewTab } from '@/routes/task/overview.tsx';
 import { findTooltipText } from '../../support/hover.ts';
 import { createPullRequest } from '../../support/pull-request.ts';
+import { createRound } from '../../support/rounds.ts';
 import { listSentCommands, pushState, startFakeServer, stopFakeServer } from '../../support/server.ts';
 import { createGate, createRun, createShinsaState, createTask } from '../../support/state.ts';
 
@@ -146,10 +147,27 @@ describe('the steps around the merge on the Overview', () => {
     const run = createRun({ id: 'run-1', taskId: 'task-1' });
     const view = renderOverview(createShinsaState({ tasks: [task], gates: [gate], runs: [run] }), task);
     expect(
-      view.getByText(
-        'An earlier round merged and left these steps for you. The task is done once each is ticked.'
-      )
+      view.getByText('The merged work left these steps for you. The task is done once each is ticked.')
     ).toBeTruthy();
     expect(view.getByRole('checkbox', { name: 'Run the migration' })).toBeTruthy();
+  });
+
+  it('puts the steps an earlier round left above the later round’s work, naming that round', () => {
+    const task = createTask({
+      id: 'task-1',
+      stage: 'investigating',
+      rounds: [createRound({ number: 1 }), createRound({ number: 3, status: 'active', endedAt: null })],
+      carriedMergeSteps: [{ ...MIGRATION, round: 1, done: false }],
+    });
+    const gate = createGate({ id: 'gate-1', taskId: 'task-1', type: 'post_merge' });
+    const run = createRun({ id: 'run-1', taskId: 'task-1' });
+    const view = renderOverview(createShinsaState({ tasks: [task], gates: [gate], runs: [run] }), task);
+    const note = view.getByText(
+      'Round 1 merged and left these steps for you. The task is done once each is ticked.'
+    );
+    const [steps] = view.getAllByRole('checkbox', { name: 'Run the migration' });
+    const first = view.container.querySelector('[class*="flex-col gap-5"]')?.firstElementChild;
+    expect(first?.contains(note)).toBe(true);
+    expect(steps && first?.contains(steps)).toBe(true);
   });
 });

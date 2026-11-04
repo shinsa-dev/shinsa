@@ -271,7 +271,7 @@ describe('the steps around the merge', () => {
     });
     const left = {
       code: 'task_open',
-      message: '1 post-merge step is left.',
+      message: "1 post-merge step is left. Tick each one under Post-merge steps on the task's Overview.",
     };
     expect(refusal(() => harness.send({ type: 'task.complete', taskId }, { onBehalf: true }))).toEqual(left);
     expect(refusal(() => harness.send({ type: 'task.complete', taskId }))).toEqual(left);
@@ -306,10 +306,12 @@ describe('the steps around the merge', () => {
       ['Run the migration', 1, true, false],
     ]);
     expect(resolveTaskPipeline(harness.task(taskId))).not.toContain('post_merge');
-    expect(resolveQueue(harness.state, harness.now).working.map((task) => task.id)).toEqual([taskId]);
+    const queue = resolveQueue(harness.state, harness.now);
+    expect(queue.ready.map((entry) => [entry.task.id, entry.gate.type])).toEqual([[taskId, 'post_merge']]);
+    expect(queue.working).toHaveLength(0);
   });
 
-  test('steps carried into a working round wait in Needs you without leading the task, and lead again once it rests', () => {
+  test('steps carried into a working round keep the task in Needs you only, without leading it, and lead again once it rests', () => {
     const { harness, taskId } = reachMergeGate([MIGRATION]);
     approve(harness, taskId);
     merge(harness, taskId);
@@ -324,7 +326,7 @@ describe('the steps around the merge', () => {
     expect(selectLeadGate(harness.state, harness.task(taskId))).toBeNull();
     const queue = resolveQueue(harness.state, harness.now);
     expect(queue.ready.map((entry) => [entry.task.id, entry.gate.type])).toEqual([[taskId, 'post_merge']]);
-    expect(queue.working.map((task) => task.id)).toEqual([taskId]);
+    expect(queue.working).toHaveLength(0);
     expect(resolvePhaseInstruction(harness.task(taskId), null, 0)).toContain(
       'These steps after the merge of an earlier round still wait on the human. They stay on the task until ticked, so never list them again in the walkthrough’s `steps`:\n- Run the migration'
     );

@@ -85,7 +85,7 @@ export function assertNoMergeStepsLeft(task: Task) {
   if (open.length === 0) return;
   throw new DomainError({
     code: 'task_open',
-    message: `${describeCount(open.length, 'post-merge step is', 'post-merge steps are')} left.`,
+    message: `${describeCount(open.length, 'post-merge step is', 'post-merge steps are')} left. Tick each one under Post-merge steps on the task's Overview.`,
   });
 }
 

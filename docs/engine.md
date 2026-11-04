@@ -732,20 +732,27 @@ predicates) and `state/rounds.ts` (the folds); the classifier is `apps/engine/sr
   except where you decide (below): one quick call on the classifier model reads your message against the task's rounds (each with its kind of work, its
   status and what it did: the result, the report's headline or the plan's goal) and where the current round is, and
   answers `acknowledge`, `feedback`, `new_round` or `separate_task`. Most messages are no new work: thanks, "ok" or
-  small talk is `acknowledge`, and a question about what a round did is `feedback`; only a message that asks for
-  something to be done that has not been done is a new round (on a resting task a correction to finished work is one).
+  small talk is `acknowledge`, and a question about what a round did, or a request to check, confirm, verify or look
+  into it (its deploy, its logs, its live data), is `feedback`; only a message that asks for a new change or operation
+  that has not been done is a new round (on a resting task a correction to finished work is one).
   You override it by saying what the message is (`shinsa tasks message --as new_round`, an agent's `tasks_message`
   with `as`), which skips the classifier. A new round sent that way without a `shape`, and a suggestion kept as the
   next round of a resting task (`suggestion.keep` without one), still gets its kind of task: the server asks the classifier the same
   shape question (`TriageClassifier.shape` in `triage/message/service.ts`, the task's rounds as context) before it dispatches, and
   the answer travels on the command like a classified message's, so replay never asks again. Only when the model is
   off or gives no usable answer does the round fall back to `change`.
-  The question has three forms (`resolveKindQuestion`): nothing in progress (a resting task: a correction to
-  finished work is a new round), a round in progress (an agent at work: new work is what the round does not cover),
-  and a round whose work is finished and waits for your review or your merge (stage `awaiting_review` or
-  `awaiting_merge`; the prompt's Now line says so). In the last, anything about that round is `feedback`: a change
-  to it, something to run or start so you can try it ("start the dev server so I can test the UI"), something to
-  check, or a question about it; only the next piece of work, a code change of its own, is `new_round`. In every
+  The question has four forms (`resolveKindQuestion`): nothing in progress (a resting task: a correction to
+  finished work is a new round, checking or confirming it is not), merged with post-merge steps still open (below),
+  a round in progress (an agent at work: new work is what the round does not cover), and a round whose work is
+  finished and waits for your review or your merge (stage `awaiting_review` or `awaiting_merge`; the prompt's Now
+  line says so). In the last, anything about that round is `feedback`: a change to it, something to run or start so
+  you can try it ("start the dev server so I can test the UI"), something to check, or a question about it; only the
+  next piece of work, a code change of its own, is `new_round`. While post-merge steps are open
+  (`POST_MERGE_KIND_QUESTION`, a resting task with `listDuePostMergeSteps`; the Now line says the steps are open), the
+  task stays on Post-merge: how to deploy or do a step, confirming or verifying a deploy (pasted command output
+  included), "is it live?", monitoring it, reading its logs, traces or live data ("have purchases worked since?") and
+  any question are `feedback`, a follow-up answered in the merged round; only a new code change or operation of its
+  own (changing how the merged work behaves, a fix to it, a new idea) is `new_round`. In every
   form, a message about the round's own work (its files, its steps around the merge, the part it needs in another
   repository) is never `separate_task`, even when it names another checkout: pasting a step's paths and branches
   back to the agent is feedback, not another goal.
@@ -1645,18 +1652,23 @@ steps takes its step out again.
   it shows in Needs you below the decision gates, the task's status reads "Post-merge · 2 steps left", the
   progress shows Post-merge as current and its Overview opens on the steps. The gate takes no decision: ticking
   the last step withdraws it, and unticking one opens it again. The round rests as merged meanwhile, so a new round can
-  start, but the task is not done until each is ticked: neither you nor an agent marks it done (`task_open`).
+  start, but the task is not done until each is ticked: neither you nor an agent marks it done (`task_open`, whose message says to tick them under Post-merge steps on
+  the task's Overview).
   An operation after the merge runs before these steps: they are what is left for you once Shinsa's work on the round
   is over, and something the operation needs first belongs before the merge or in the operation gate's notes.
 - **Carry-over.** A new round archives the walkthrough, so the open steps of the round that ends move to
   `Task.carriedMergeSteps` with their round: every open post-merge step, and every open pre-merge step of a
   round that shipped onto the pull request the next round ships on too (it still blocks that merge). The post-merge
-  gate stays open across rounds until the last carried step is ticked, and the Overview shows them under Post-merge
-  steps while the later round works. Steps ticked before a round starts are dropped. While the later round works the
+  gate stays open across rounds until the last carried step is ticked, and while the later round or a follow-up works
+  the Overview shows them first, above the round's card, as Post-merge steps naming the round that left them
+  ("Round 1 merged and left these steps for you", `describePostMergeOrigin`); in the Rounds panel that round opens by
+  itself while it has a step open and lists its own steps to tick (`listTimedSteps` with the round). Steps ticked before a round starts are dropped. While the later round works the
   gate never leads the task (`selectLeadGate` picks `post_merge` only once the round is finished (answered, merged, done or watching, `isRoundFinished`; unlike `isTaskResting` it ignores `closedAt`)): the task
-  shows twice on Home, its gate row in Needs you reading "Post-merge · 1 step left" (`RowSummary` given the row's gate)
-  and its row in In progress with the round's stage and the agent's latest action, and All tasks, its glyph and its page
-  follow the round. The later round's last phase is told the carried steps, so its walkthrough never lists them again.
+  shows once on Home, as its gate row in Needs you reading "SW-68 · Post-merge · 1 step left" with no round tag and no progress track
+  (`RowSummary` given the row's gate), and beside it the running agent's latest action, or its stage until it has
+  one, never also in In progress, and All tasks, its glyph and its page follow the round. `resolveQueue` gives a task one
+  place: a task with an open gate is never In progress, and Post-merge gives way to any other open gate of the task
+  (`listLeadingGates` in `queue/rank.ts`), so a proposal or a question of the later round is its one row. The later round's last phase is told the carried steps, so its walkthrough never lists them again.
 - **On the Overview** pre-merge steps and the tasks the merge waits on show on the merge gate's card only, never at
   your review; a step's title and detail are Markdown with live links (a shinsa:// task with its hover card, a URL,
   names such as `API_KEY` set in code), and the step schema asks the Agent for backticks and full links.

@@ -180,20 +180,91 @@ describe('reading what a message asks for', () => {
     await resolveMessageClass(task, `whats this for? ${step.detail}`, ask);
     const [read] = asked;
     expect(read).toContain(
-      'Now: round 1 is done and nothing is in progress.\nSteps left for the human after the merge (the human does these, not an agent):\n- Submit `shinsa.page` to the Public Suffix List: Open a pull request on publicsuffix/list. Until it is listed'
+      'Now: round 1 is done and nothing is in progress; steps left for the human after the merge are still open.\nSteps left for the human after the merge (the human does these, not an agent):\n- Submit `shinsa.page` to the Public Suffix List: Open a pull request on publicsuffix/list. Until it is listed'
     );
     expect(read).toContain('…\n\nMessage:');
     expect(read).not.toContain('Rotate the key');
     expect(read).toContain(
-      'or about one of the steps left for the human after the merge, even one that quotes the step ("what is this for? <the step>")'
+      'The work of this task merged, and steps the human does after the merge (listed above) are still open. Nothing else is in progress. What is this message?'
     );
-    expect(read).toContain(
-      'a step left for the human after the merge, quoted or asked about, is not this, since the human does it'
-    );
+    expect(read).toContain('how to deploy it or do a step, confirming or verifying a deploy');
+    expect(read).toContain('not something needed to deploy, check or finish this round');
+    expect(read).not.toContain('Nothing is in progress in this task. What is this message?');
 
     asked.length = 0;
     await resolveMessageClass(createTask({ stage: 'merged', stageReason: 'merged' }), 'why?', ask);
     expect(asked[0]).not.toContain('Steps left for the human');
+    expect(asked[0]).toContain('Now: round 1 is done and nothing is in progress.\n');
+    expect(asked[0]).toContain('Nothing is in progress in this task. What is this message?');
+  });
+
+  test.each([
+    'deployment "stg-subscriptions-api" successfully rolled out\n\nconfirm it pls',
+    'IS IT LIVE',
+    'yes lets monitor like really ready the watchdogs and all. have there been already purchases that now already work?',
+  ])(
+    'after a merge with steps open, %p is read against the post-merge question, where checking it is feedback',
+    async (text) => {
+      const asked: string[] = [];
+      const ask: QuickJson = <T>(_system: string, prompt: string) => {
+        asked.push(prompt);
+        return Effect.succeed({
+          why: 'Checks the deploy.',
+          kind: 'feedback',
+          shape: 'answer',
+          title: 'Deploy',
+        } as T);
+      };
+      const deploy = {
+        when: 'post_merge' as const,
+        kind: 'deploy' as const,
+        title: 'Deploy `subscriptions-api` with the merged commit',
+        detail: 'Manual deploy from `deploy-next`.',
+        command: null,
+      };
+      const task = createTask({
+        stage: 'done',
+        stageReason: 'done',
+        rounds: [
+          createRound({ status: 'merged', pipeline: [...SHAPE_PIPELINES.change], outcome: null }),
+          createRound({
+            number: 2,
+            title: 'Confirm the staging deploy',
+            pipeline: ['answer'],
+            outcome: null,
+          }),
+        ],
+        carriedMergeSteps: [{ ...deploy, round: 1, done: false }],
+      });
+      expect(await resolveMessageClass(task, text, ask)).toEqual({
+        kind: 'feedback',
+        title: 'Deploy',
+        why: 'Checks the deploy.',
+        shape: 'answer',
+      });
+      const [read] = asked;
+      expect(read).toContain(`Message:\n${text}\n`);
+      expect(read).toContain('- Deploy `subscriptions-api` with the merged commit: Manual deploy');
+      expect(read).toContain(
+        'reading its logs, traces or live data ("have purchases worked since?"), something to run or check for it, or any question'
+      );
+      expect(read).toContain('changing how the merged work behaves');
+    }
+  );
+
+  test('a resting task with no steps open reads a request to check or verify as feedback, and only new changes as a round', async () => {
+    const asked: string[] = [];
+    const ask: QuickJson = <T>(system: string, prompt: string) => {
+      asked.push(`${system}\n${prompt}`);
+      return Effect.succeed({ why: 'A check.', kind: 'feedback', shape: 'answer', title: 'Check' } as T);
+    };
+    await resolveMessageClass(createTask({ stage: 'merged', stageReason: 'merged' }), 'is it live?', ask);
+    const [read] = asked;
+    expect(read).toContain(
+      'a question, or a request to check, confirm, verify or look into what a round did (its deploy, its logs, its live data), is answered in that round'
+    );
+    expect(read).toContain('a request to check, confirm or verify it ("is it live?", "confirm it worked")');
+    expect(read).toContain('checking, confirming or looking into finished work is not this');
   });
 
   test('an answer outside the options, or none, leaves the message to Shinsa’s default', async () => {
