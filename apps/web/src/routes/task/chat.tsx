@@ -11,6 +11,7 @@ import { ROW, RunSection } from '@/components/chat/run-section.tsx';
 import { UserMessage } from '@/components/chat/user-message.tsx';
 import { PAGE_COLUMN } from '@/components/layout/page/column.ts';
 import { CHAT_COLUMN } from '@/components/layout/surface/card.ts';
+import { TaskScrollHeader } from '@/components/task/header.tsx';
 import { useReadOnly } from '@/components/task/read-only.tsx';
 import { TaskComposer } from '@/components/task/task-composer.tsx';
 import { useOutbox } from '@/hooks/use-outbox.ts';
@@ -166,6 +167,7 @@ export function ChatTab({
           className='min-h-0 flex-1'
           viewportClassName='overscroll-y-contain'
         >
+          <TaskScrollHeader />
           <TaskEvidence.Provider value={evidence}>
             <OpenDelegations.Provider value={opened}>
               <DisclosureScope value={resolveTaskDisclosureId(task.id, 'chat')}>

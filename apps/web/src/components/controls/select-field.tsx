@@ -44,7 +44,9 @@ function SelectFieldValue<Value extends string>({
   return (
     <>
       {renderMenuIcon(item.icon, 'inline-start')}
-      <span className='truncate'>{item.label}</span>
+      <span data-select-text={item.icon ? '' : undefined} className='truncate'>
+        {item.label}
+      </span>
     </>
   );
 }

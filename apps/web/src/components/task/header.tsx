@@ -13,12 +13,65 @@ import { useTaskPageCommands } from '@/hooks/use-task-page-commands.ts';
 import type { TaskView } from '@/hooks/use-task-view.ts';
 import { TASK_TAB, type TaskTab } from '@/lib/tasks/tabs.ts';
 
-function TaskPageCommands({ state, task, view }: { state: ShinsaState; task: Task; view: TaskView }) {
+export function TaskPageCommands({ state, task, view }: { state: ShinsaState; task: Task; view: TaskView }) {
   useTaskPageCommands(state, task, view);
   return null;
 }
 
-export function TaskHeader({
+export const TaskScrollHeaderSlot = React.createContext<React.ReactNode>(null);
+
+export function TaskScrollHeader() {
+  return React.useContext(TaskScrollHeaderSlot);
+}
+
+function TaskTabChoice({ view, onTabIntent }: { view: TaskView; onTabIntent?: (tab: TaskTab) => void }) {
+  return (
+    <Choice
+      label='Task view'
+      items={view.tabs.map((tab) => ({ value: tab, label: TASK_TAB[tab].label }))}
+      value={view.tab}
+      onValueChange={view.applyTab}
+      onItemIntent={onTabIntent}
+      scrolls
+    />
+  );
+}
+
+export function TaskCompactHeader({
+  task,
+  view,
+  onTabIntent,
+  className,
+}: {
+  task: Task;
+  view: TaskView;
+  onTabIntent?: (tab: TaskTab) => void;
+  className?: string;
+}) {
+  return (
+    <div data-task-compact-header className={cn('flex min-w-0 items-center gap-3', className)}>
+      <h2 className='min-w-0 flex-1 truncate text-sm leading-tight font-medium text-fg-4'>{task.title}</h2>
+      <div className='max-w-full shrink-0'>
+        <TaskTabChoice view={view} onTabIntent={onTabIntent} />
+      </div>
+    </div>
+  );
+}
+
+export function useHeaderOutOfView() {
+  const [out, setOut] = React.useState(false);
+  const observe = React.useCallback((element: HTMLElement | null) => {
+    if (!element) return;
+    const observer = new IntersectionObserver(([entry]) => setOut(!!entry && entry.intersectionRatio < 1), {
+      threshold: [0, 1],
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+  return { out, observe };
+}
+
+export function TaskScrollingHeader({
   state,
   task,
   view,
@@ -31,6 +84,47 @@ export function TaskHeader({
   onTabIntent?: (tab: TaskTab) => void;
   className?: string;
 }) {
+  const { out, observe } = useHeaderOutOfView();
+  return (
+    <>
+      <div className='sticky top-0 z-20 h-0'>
+        <div
+          data-shown={out || undefined}
+          aria-hidden={!out}
+          inert={!out}
+          className='pointer-events-none border-b border-border bg-background py-2 opacity-0 transition-opacity duration-150 data-shown:pointer-events-auto data-shown:opacity-100'
+        >
+          <TaskCompactHeader task={task} view={view} onTabIntent={onTabIntent} className={className} />
+        </div>
+      </div>
+      <TaskHeader
+        state={state}
+        task={task}
+        view={view}
+        onTabIntent={onTabIntent}
+        tabsRef={observe}
+        className={cn(className, 'pt-2 pb-1')}
+      />
+    </>
+  );
+}
+
+export function TaskHeader({
+  state,
+  task,
+  view,
+  onTabIntent,
+  tabsRef,
+  className,
+}: {
+  state: ShinsaState;
+  task: Task;
+  view: TaskView;
+  onTabIntent?: (tab: TaskTab) => void;
+  tabsRef?: React.Ref<HTMLDivElement>;
+  className?: string;
+}) {
+  const scrolling = !!tabsRef;
   const readOnly = useReadOnly();
   const note = useReadOnlyNote();
   const phone = useMediaQuery(PHONE_QUERY);
@@ -40,17 +134,11 @@ export function TaskHeader({
       {note}
       {!readOnly && <SharingBanner task={task} />}
       {!readOnly && <HandoffBanner task={task} />}
-      {!readOnly && <TaskPageCommands state={state} task={task} view={view} />}
+      {!(readOnly || scrolling) && <TaskPageCommands state={state} task={task} view={view} />}
       <div className='flex flex-wrap items-start gap-x-4 gap-y-2'>
         <TaskHeading task={task} className='min-w-60 flex-1 py-0.5' />
-        <div data-task-tabs className='max-w-full shrink-0 overflow-x-auto'>
-          <Choice
-            label='Task view'
-            items={view.tabs.map((tab) => ({ value: tab, label: TASK_TAB[tab].label }))}
-            value={view.tab}
-            onValueChange={view.applyTab}
-            onItemIntent={onTabIntent}
-          />
+        <div ref={tabsRef} data-task-tabs className='max-w-full shrink-0'>
+          <TaskTabChoice view={view} onTabIntent={onTabIntent} />
         </div>
       </div>
       <div className='flex items-start gap-2'>

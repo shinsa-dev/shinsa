@@ -39,18 +39,21 @@ export function Choice<V extends string>({
   scrolls?: boolean;
   className?: string;
 }) {
-  const root = React.useRef<HTMLDivElement>(null);
+  const list = React.useRef<HTMLDivElement>(null);
   React.useEffect(() => {
-    if (scrolls && root.current) revealActiveItem(root.current);
+    if (scrolls && list.current) revealActiveItem(list.current);
   }, [scrolls, value]);
   return (
     <Tabs
-      ref={root}
       value={value}
       onValueChange={(next) => onValueChange(next as V)}
-      className={cn(scrolls && 'max-w-full overflow-x-auto', className)}
+      className={cn(scrolls && 'max-w-full', className)}
     >
-      <TabsList aria-label={label}>
+      <TabsList
+        ref={list}
+        aria-label={label}
+        className={cn(scrolls && 'max-w-full justify-start overflow-x-auto overscroll-x-contain')}
+      >
         {items.map((item) => {
           const trigger = (
             <TabsTrigger

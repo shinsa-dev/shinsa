@@ -1,4 +1,4 @@
 ---
 kind: improved
 ---
-Shinsa now works on a phone: the top bar keeps what you use most with the rest under More, task pages, Home and Settings use the full width, every menu and dialog fits the screen, and setup and the remote pages clear the notch.
+Shinsa now works on a phone: a task's header scrolls away under a slim title bar, rows and settings stay on one line, menus and dialogs fit the screen, and tapping a button no longer opens its tooltip. In a browser, the top bar shows a Home button beside the logo.

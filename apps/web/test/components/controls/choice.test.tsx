@@ -47,7 +47,7 @@ describe('revealActiveItem', () => {
 });
 
 describe('Choice', () => {
-  it('scrolls its strip sideways when it scrolls', () => {
+  it('scrolls its tabs inside the strip, never the strip, when it scrolls', () => {
     const view = render(
       <Choice
         label='Settings sections'
@@ -57,9 +57,9 @@ describe('Choice', () => {
         scrolls
       />
     );
-    expect(view.getByRole('tablist', { name: 'Settings sections' }).parentElement?.className).toContain(
-      'overflow-x-auto'
-    );
+    const list = view.getByRole('tablist', { name: 'Settings sections' });
+    expect(list.className).toContain('overflow-x-auto');
+    expect(list.parentElement?.className).not.toContain('overflow-x-auto');
     view.unmount();
   });
 
@@ -67,9 +67,7 @@ describe('Choice', () => {
     const view = render(
       <Choice label='Task view' items={[...ITEMS]} value='automations' onValueChange={() => {}} />
     );
-    expect(view.getByRole('tablist', { name: 'Task view' }).parentElement?.className).not.toContain(
-      'overflow-x-auto'
-    );
+    expect(view.getByRole('tablist', { name: 'Task view' }).className).not.toContain('overflow-x-auto');
     view.unmount();
   });
 });

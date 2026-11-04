@@ -448,23 +448,29 @@ Only these, and they win over anything below:
     **On a phone both layouts share one bar and one More sheet.** Both Desk and Shelf show `CompactBar` below `md`
     (768px; Desk reads `COMPACT_BAR_QUERY` with `useMediaQuery`, so only one bar is mounted, because its full bar
     needs about 720px), and Desk's full bar lets the Focus name truncate rather than clip when What's new or Update
-    joins it. The bar (`components/layout/sidebar/compact-bar.tsx`) holds the Shinsa logo (Home), Tasks as an icon alone, the queue button
+    joins it. The bar (`components/layout/sidebar/compact-bar.tsx`) holds Home and Tasks as icons alone (no logo: `HomeLink` `variant='icon'`), the queue button
     where it shows, the connection status, then Feedback as its icon and count (so ⌘K's Send feedback still has a
-    trigger to open from), search and More (`IconDotGrid1x3Horizontal`). More opens the rail as a sheet from the
-    right (`Rail` with `variant='sheet'`): New task, Tasks, Services, Settings, Feedback, Focus, and What's new,
+    trigger to open from), search and More (`IconBarsTwo`). More opens the rail as a sheet from the
+    right (`Rail` with `variant='sheet'`), the one place a phone shows the Shinsa logo and wordmark (`HomeLink` `variant='brand'`, `BrandLink`): New task, Tasks, Services, Settings, Feedback, Focus, and What's new,
     Update and Agent usage in its header, without the queue and search the bar already has; its Services and
     Feedback popovers open below their rows instead of beside them. The sheet closes on any change of route. The
     bars and the sheet keep clear of the notch and the home bar with the safe-area insets (`SAFE_AREA_TOP`,
     `SAFE_AREA_SIDES`, `viewport-fit=cover` in `index.html`), and the page column's gutter is 16px below `sm`
-    (`PAGE_COLUMN`), its top 16px (`PAGE_TOP`); the task page in Desk drops its frame's own padding below `sm`, so it
-    is 16px there too (the framed Code tab keeps it). **The task page on a phone** shows the handle, the round, the
+    (`PAGE_COLUMN`), its top 8px (`PAGE_TOP`); the task page in Desk drops its frame's own padding below `sm`, so it
+    is 16px there too (the framed Code tab keeps it). **The task page on a phone** (`PhoneTaskPage`, below `sm`) puts its header inside the tab's own scroll
+    (`TaskScrollHeaderSlot`, rendered by each tab with `TaskScrollHeader`), so it scrolls away with the content;
+    once the tabs leave the view (`useHeaderOutOfView`, an `IntersectionObserver`), a slim bar sticks at the top
+    with the title on one line and the tabs (`TaskCompactHeader`), the full header coming back as you scroll up. The
+    Code tab, which has no page scroll, shows only that slim bar. The header shows the handle, the round, the
     status and the pull request (or the checks) and folds every other fact behind a Details fact at the row's end
     (`TaskFacts` `fold`, opened per page view, never stored), which opens them in their usual order with Fewer
-    details at the end. Its tabs scroll sideways in place. A now card's actions go under its title (`NowFrame`), a
+    details at the end. Its tabs scroll sideways inside their own strip. A now card's actions go under its title (`NowFrame`), a
     finding's Fix / Dismiss sit on its label row with the issue at full width under both (`FindingNote`, a grid), a
     suggested task's controls go under its text, a watchdog's title wraps instead of truncating, and the queued
-    messages over the composer stop at 96px. On the Review tab a point's header bar grows to two lines instead of
-    cutting its title, keeps its label whole and drops the plan section (`NoteBar`); a check row puts Show the output
+    messages over the composer stop at 96px. On the Review tab a point's header bar stays one line: the title truncates,
+    the label shows as its coloured dot alone (`ToneLabel` `dotOnPhone`) and the plan section drops (`NoteBar`); a
+    checklist's titles (merge steps, How to test) stay on one line below `sm`, and a bundled task's row is its title
+    with "Merges with this one" under it; a check row puts Show the output
     under the check and keeps its outcome at the right, so the command and the detail use the row's width
     (`CheckRowItem`, a grid below `sm`). A run's header in the chat wraps the same way (`ChatLine` `wraps`): the role
     stays whole and the headline and the account go on to a second line. The Code tab's file sheet keeps clear of the
@@ -475,11 +481,14 @@ Only these, and they win over anything below:
     instead of a few letters; a row with nothing after it keeps the track, and so does the queue menu. A select's
     list never grows wider than the room beside it (`max-w-(--available-width)`), its hints truncating instead, and
     the guide's list of other running tasks scrolls inside a popover no taller than the room. **Settings on a phone**:
-    the section tabs scroll sideways and bring the open one into view (`Choice` `scrolls`). A row with a label
+    the section tabs scroll sideways inside their strip, which keeps its width, and bring the open one into view
+    (`Choice` `scrolls`: the `TabsList` scrolls, never the box around it; anything that overflows sideways scrolls
+    its items, not its frame). A row with a label
     (`SettingRow`, `PathRow`, the model rows) wraps below `sm` (`SETTING_ROW_WRAPS`): the label keeps its own width
     (`SETTING_LABEL`, never less than its text unless that is the whole row) and the control goes to the next line
     when both do not fit, so "Play a sound" stays whole over its select, a model row's description runs the full
-    width over its two selects, and a repository's three controls wrap as one group under its name and path. A row
+    width over its two selects, and a repository row is one line (`PathRow` `dense`): its name, then each setting as the icon of its
+    value alone (`data-select-text` hidden), its edit button and Remove, the path left out. A row
     that is a form (a field and its button) never wraps. **Menus and dialogs on a phone**: every popup in the kit
     (popover, menu, select, preview card) keeps 12px from the viewport edge (`POPUP_COLLISION_PADDING`) and is never
     wider than the room it has (`max-w-(--available-width)`; a menu with a cap of its own writes it as
@@ -750,7 +759,8 @@ Only these, and they win over anything below:
         only when the text really is clipped. Text that is already a popover or menu trigger (the Focus menu, the
         repository and branch facts) keeps a plain `truncate`, so two overlays never stack.
     - **Instant: nothing.** No tooltip opens the moment the pointer arrives. Keyboard focus is not hover: a
-      tooltip opens on a keyboard focus at once, and on a tap where there is no hover.
+      tooltip opens on a keyboard focus at once, and, where there is no hover (a phone), on a tap of a label
+      only: a trigger that is an action (a button, a link, a tab, a field) runs it and never shows its tooltip.
 
     **One delay, in the kit.** `TOOLTIP_DELAY` (600ms) is how long the pointer rests on a trigger before its
     tooltip opens; `TOOLTIP_SKIP_DELAY` (400ms) is how long after one closes the next still opens at once, with no
@@ -773,7 +783,7 @@ Only these, and they win over anything below:
       `Hint`, a time, a clipped `Truncate` or a `TooltipTrigger` is just its own element, registered by a ref and
       marked `data-tooltip-trigger` (`useTooltipTrigger` in `@shinsa/ui/components/tooltip`). The provider opens
       the tooltip on hover after `TOOLTIP_DELAY` (at once within `TOOLTIP_SKIP_DELAY` of the last one), on
-      keyboard focus, and on a tap where there is no hover; it closes it when the pointer leaves, on a press of the
+      keyboard focus, and on a tap of a label that is not an action where there is no hover (`ACTION_TRIGGER`); it closes it when the pointer leaves, on a press of the
       trigger, on Escape and when focus leaves. A tooltip closed by a press or Escape stays closed until the pointer
       leaves its trigger. What it shows is built when it opens, so a time's exact moment is formatted only then.
       While it is open the trigger carries `aria-describedby` (the tooltip) and `data-popup-open`. A trigger costs
@@ -2080,9 +2090,11 @@ Only these, and they win over anything below:
       Dock already say Shinsa), so in the app the Shinsa wordmark is a Home button: `HomeLink`
       (`components/layout/home-link.tsx`) renders a `NavButton` there, as Tasks and Settings are (secondary `sm`, `IconHomeRoundDoor` and the word Home; on Home itself
       `IconHomeRoundDoorFilled` in `fg-4` with `aria-current="page"`; the tooltip "Home ⇧⌘H") and `BrandLink` in a browser and Floaty, in the Cards top bar, the rail's
-      header and the compact bar alike. The site's demos (`apps/marketing`, which never have the bridge) ask for the
+      header and the compact bar alike. In a browser it is the logo mark alone (no wordmark, `aria-hidden`) followed by
+      the same Home button, in the Cards top bar and the rail's header; the phone's compact bar shows the Home icon
+      alone and the More sheet keeps the logo with the wordmark (`variant`: `bar`, `icon`, `brand`). The site's demos (`apps/marketing`, which never have the bridge) ask for the
       app's look with the `DesktopChrome` context (`lib/desktop.ts`) and render the bar at the demo's page with
-      `RouteScope` (`router.ts`); nothing else reads either. In the Cards top bar the wordmark, which has no padding of its own, keeps 8px after it (`brandClassName`, `me-2`), so what it draws sits as far from Tasks as every other pair in the bar sits apart: 19px between what one button draws and the next, Home in the app, Tasks, Services and the queue on the left and Settings, usage and Focus on the right included; the icon-only Settings keeps 2px more after it (`me-0.5`), since a square icon button pads its glyph less than a labelled button does (measured from the pixels at 1440 and 900, light and dark, in the browser and the app: every gap 19px, the browser's Services to the queue 18px). The Go menu has the matching keys: Back ⌘[ and Forward ⌘] step through
+      `RouteScope` (`router.ts`); nothing else reads either. In a browser the logo mark keeps 4px after it (`me-1`) before Home, and every pair in the bar sits as far apart: 19px between what one button draws and the next, Home in the app, Tasks, Services and the queue on the left and Settings, usage and Focus on the right included; the icon-only Settings keeps 2px more after it (`me-0.5`), since a square icon button pads its glyph less than a labelled button does (measured from the pixels at 1440 and 900, light and dark, in the browser and the app: every gap 19px, the browser's Services to the queue 18px). The Go menu has the matching keys: Back ⌘[ and Forward ⌘] step through
       the page's own history (`MainWindow.step`, which never steps onto the waiting page,
       `resolveHistoryStep`), and Home ⇧⌘H opens `/`, as in Finder and Safari. The code editor keeps ⌘[ and ⌘] for
       indent and outdent while it has focus, since the page sees the key before the menu does.

@@ -39,7 +39,7 @@ export function Rail({
   return (
     <nav className='flex h-full w-full flex-col bg-sidebar select-none'>
       <div data-window-drag className='flex h-11 shrink-0 items-center gap-2 ps-3.5 pe-2 desktop:ps-20'>
-        <HomeLink onNavigate={onNavigate} />
+        <HomeLink variant={sheet ? 'brand' : 'bar'} onNavigate={onNavigate} />
         <ErrorBoundary size='icon' resetKey={resetKey}>
           <ConnectionStatus />
         </ErrorBoundary>

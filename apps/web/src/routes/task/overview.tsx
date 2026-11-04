@@ -17,6 +17,7 @@ import { RoundsPanel } from '@/components/overview/rounds-panel.tsx';
 import { SuggestionsPanel } from '@/components/overview/suggestions-panel.tsx';
 import { WatchdogsPanel } from '@/components/overview/watchdogs-panel.tsx';
 import { MergeStepsBlock } from '@/components/review/merge-steps.tsx';
+import { TaskScrollHeader } from '@/components/task/header.tsx';
 import { useReadOnly } from '@/components/task/read-only.tsx';
 import { TaskComposer } from '@/components/task/task-composer.tsx';
 import { InlineMarkdown, Markdown } from '@/components/text/markdown.tsx';
@@ -166,6 +167,7 @@ export function OverviewTab({
   return (
     <div className='flex min-h-0 flex-1 flex-col'>
       <PageScroll>
+        <TaskScrollHeader />
         <div className={cn(PAGE_COLUMN, 'flex flex-col gap-5 py-5')}>
           <NowCard key={gate?.id ?? 'now'} state={state} task={task} gate={gate} onOpen={onOpen} />
           <RequestsPanel task={task} shownId={resolveShownReplyId(state, task, gate)} />

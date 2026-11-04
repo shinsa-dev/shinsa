@@ -40,6 +40,7 @@ function RepoRow({ repo, action }: { repo: Repo; action?: React.ReactNode }) {
       title={repo.name}
       path={repo.path}
       action={action}
+      dense={!!action}
     />
   );
 }

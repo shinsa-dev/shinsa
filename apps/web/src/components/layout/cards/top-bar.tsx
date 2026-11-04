@@ -37,7 +37,7 @@ export function CardsTopBar({ state, onMore }: { state: ShinsaState; onMore: () 
         <CompactBar state={state} onMore={onMore} className={CARDS_FRAME} />
       ) : (
         <div className={cn(CARDS_FRAME, 'flex h-11 items-center gap-1')}>
-          <HomeLink brandClassName='me-2' />
+          <HomeLink />
           {route.name !== 'onboarding' && (
             <>
               <NavButton

@@ -62,14 +62,15 @@ describe('New task', () => {
     });
   }
 
-  it('goes Home from the compact bar’s Shinsa', () => {
+  it('goes Home from the compact bar’s Home icon, with no logo beside it', () => {
     act(() => navigate('/tasks/SW-1'));
     render(
       <TooltipProvider>
         <CompactBar state={STATE} onMore={() => {}} />
       </TooltipProvider>
     );
-    act(() => fireEvent.click(screen.getByRole('button', { name: /Shinsa/ })));
+    expect(document.body.textContent).not.toContain('Shinsa');
+    act(() => fireEvent.click(screen.getByRole('button', { name: 'Home' })));
     expect(location.pathname).toBe('/');
   });
 

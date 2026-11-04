@@ -38,7 +38,7 @@ export function CompactBar({
   const setup = route.name === 'onboarding';
   return (
     <div className={cn('flex h-11 items-center gap-1', className)}>
-      <HomeLink brandClassName='me-1' />
+      <HomeLink variant='icon' />
       {!setup && (
         <NavButton
           page='tasks'
@@ -67,7 +67,7 @@ export function CompactBar({
             <Button
               variant='secondary'
               size='icon-sm'
-              icon='IconDotGrid1x3Horizontal'
+              icon='IconBarsTwo'
               aria-label='More'
               onClick={onMore}
             />

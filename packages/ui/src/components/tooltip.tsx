@@ -17,6 +17,10 @@ import * as React from 'react';
  * is no per-trigger delay. Once one has shown, the next trigger the pointer
  * reaches within `TOOLTIP_SKIP_DELAY` opens at once and without its entrance,
  * so running along a row of hints reads as one tooltip moving.
+ *
+ * Without hover (a phone), a tap opens the tooltip of a label only: a trigger
+ * that is itself an action (a button, a link, a tab, a field) runs its action
+ * and shows nothing, so a tap never opens a popover and a tooltip at once.
  */
 
 /** How long the pointer rests on a trigger before its tooltip opens, in milliseconds. */
@@ -64,6 +68,10 @@ type OpenedBy = 'pointer' | 'focus' | 'tap';
 type TriggerElement = React.ReactElement<Record<string, unknown>>;
 
 const TRIGGER_ATTRIBUTE = 'data-tooltip-trigger';
+
+/** Triggers that act when tapped; without hover their tooltips never open. */
+const ACTION_TRIGGER =
+  'button, a[href], input, select, textarea, summary, [role="button"], [role="link"], [role="tab"], [role="menuitem"], [role="checkbox"], [role="switch"], [role="combobox"]';
 
 const CLOSED: TooltipView = { open: false, options: null, anchor: null, instant: false };
 
@@ -256,7 +264,8 @@ class TooltipStore {
     }
     const wasOpen = this.#view.open && this.#current?.element === trigger.element;
     this.hide();
-    if (!wasOpen) this.#open(trigger.element, trigger.record, 'tap');
+    if (!wasOpen && !trigger.element.matches(ACTION_TRIGGER))
+      this.#open(trigger.element, trigger.record, 'tap');
   };
 
   #onFocusIn = (event: FocusEvent) => {

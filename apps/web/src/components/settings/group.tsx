@@ -89,25 +89,44 @@ export function PathRow({
   title,
   path,
   action,
+  dense = false,
 }: {
   icon: IconName;
   iconLabel: string;
   title: string;
   path?: string;
   action?: React.ReactNode;
+  dense?: boolean;
 }) {
   return (
-    <div className={cn(SETTING_ROW, SETTING_ROW_WRAPS, 'gap-2')}>
+    <div className={cn(SETTING_ROW, !dense && SETTING_ROW_WRAPS, 'gap-2')}>
       <Hint label={iconLabel}>
         <span className='grid size-3.5 shrink-0 place-items-center'>
           <Icon size='sm' name={icon} />
         </span>
       </Hint>
-      <span className={cn(SETTING_LABEL, 'flex items-baseline gap-1.5')}>
-        <Truncate className='min-w-0 shrink-0 text-xs text-fg-4'>{title}</Truncate>
-        {path && <Truncate className='min-w-0 text-2xs text-fg-2 max-sm:w-0 max-sm:grow'>{path}</Truncate>}
+      <span className={cn(SETTING_LABEL, 'flex items-baseline gap-1.5', dense && 'max-sm:flex-1')}>
+        <Truncate className={cn('min-w-0 shrink-0 text-xs text-fg-4', dense && 'max-sm:shrink')}>
+          {title}
+        </Truncate>
+        {path && (
+          <Truncate
+            className={cn('min-w-0 text-2xs text-fg-2 max-sm:w-0 max-sm:grow', dense && 'max-sm:hidden')}
+          >
+            {path}
+          </Truncate>
+        )}
       </span>
-      {action && <span className='flex min-w-0 flex-wrap items-center gap-2'>{action}</span>}
+      {action && (
+        <span
+          className={cn(
+            'flex min-w-0 items-center gap-2',
+            dense ? 'max-sm:shrink-0 max-sm:gap-1 max-sm:**:data-select-text:sr-only' : 'flex-wrap'
+          )}
+        >
+          {action}
+        </span>
+      )}
     </div>
   );
 }

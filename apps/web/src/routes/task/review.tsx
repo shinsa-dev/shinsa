@@ -25,6 +25,7 @@ import { PointIndex } from '@/components/review/point-index.tsx';
 import { TestingPanel } from '@/components/review/testing.tsx';
 import { FindingVerdictChoice } from '@/components/review/verdict-choice.tsx';
 import { LoadingLine } from '@/components/status/loading-line.tsx';
+import { TaskScrollHeader, TaskScrollHeaderSlot } from '@/components/task/header.tsx';
 import { TaskComposer } from '@/components/task/task-composer.tsx';
 import { ChangeSnippet } from '@/components/text/change-snippet.tsx';
 import { prepareCodeDiff } from '@/components/text/code-diff.tsx';
@@ -671,6 +672,7 @@ export function ReviewTab({
     const next = stepReviewItem(stops, selection.readCurrent(), delta);
     if (next) select(next.key);
   };
+  const scrollHeader = React.useContext(TaskScrollHeaderSlot);
   useReviewKeys(step);
   useStopInView(viewport, stops, selection);
   useRegisterCommands([listReviewCommands({ taskId: task.id, count: stops.length, step })]);
@@ -678,6 +680,7 @@ export function ReviewTab({
     return (
       <div className='flex min-h-0 flex-1 flex-col'>
         <PageScroll>
+          <TaskScrollHeader />
           <div className={cn(PAGE_COLUMN, 'flex flex-col gap-5 py-5')}>
             <p className='text-xs text-fg-2'>{diff.message}</p>
             <EvidenceSection state={state} task={task} showEmpty />
@@ -689,20 +692,26 @@ export function ReviewTab({
   }
   if (!report) {
     return (
-      <div className={cn(PAGE_COLUMN, 'flex items-center gap-2 py-5 text-xs text-fg-2')}>
-        <LoadingLine label='Reading the changes' />
+      <div className='flex min-h-0 flex-1 flex-col'>
+        <TaskScrollHeader />
+        <div className={cn(PAGE_COLUMN, 'flex items-center gap-2 py-5 text-xs text-fg-2')}>
+          <LoadingLine label='Reading the changes' />
+        </div>
       </div>
     );
   }
+  const index = stops.length > 0 && (
+    <div className={cn(PAGE_COLUMN, 'shrink-0 pt-5 pb-1')}>
+      <PointIndex chapters={chapters} stops={stops} selection={selection} onSelect={select} />
+    </div>
+  );
   return (
     <div className='flex min-h-0 flex-1 flex-col'>
       <FollowSpot viewport={viewport} selection={selection} />
-      {stops.length > 0 && (
-        <div className={cn(PAGE_COLUMN, 'shrink-0 pt-5 pb-1')}>
-          <PointIndex chapters={chapters} stops={stops} selection={selection} onSelect={select} />
-        </div>
-      )}
+      {!scrollHeader && index}
       <PageScroll viewportRef={viewport}>
+        {scrollHeader}
+        {scrollHeader && index}
         <div className={cn(PAGE_COLUMN, 'flex flex-col gap-5 pt-4 pb-5', stops.length === 0 && 'pt-5')}>
           {summary ?? (
             <ReviewSummary

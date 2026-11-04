@@ -34,16 +34,42 @@ afterEach(() => {
 });
 
 describe('the way home', () => {
-  it('is the Shinsa wordmark in a browser', () => {
+  it('is the logo mark and a Home button in a browser, never the wordmark', () => {
     act(() => navigate('/tasks/SW-1'));
-    render(
+    const view = render(
       <TooltipProvider>
         <HomeLink />
+      </TooltipProvider>
+    );
+    expect(view.container.querySelector('[aria-hidden] svg')).toBeTruthy();
+    expect(view.container.textContent).toBe('Home');
+    act(() => fireEvent.click(screen.getByRole('button', { name: 'Home' })));
+    expect(location.pathname).toBe('/');
+  });
+
+  it('is the Shinsa wordmark only in the phone’s More sheet', () => {
+    act(() => navigate('/tasks/SW-1'));
+    let navigated = 0;
+    render(
+      <TooltipProvider>
+        <HomeLink variant='brand' onNavigate={() => navigated++} />
       </TooltipProvider>
     );
     expect(screen.queryByRole('button', { name: 'Home' })).toBeNull();
     act(() => fireEvent.click(screen.getByRole('button', { name: /Shinsa/ })));
     expect(location.pathname).toBe('/');
+    expect(navigated).toBe(1);
+  });
+
+  it('is the Home button in the Mac app’s sheet too', () => {
+    fake = installDesktop();
+    render(
+      <TooltipProvider>
+        <HomeLink variant='brand' />
+      </TooltipProvider>
+    );
+    expect(screen.getByRole('button', { name: 'Home' })).toBeTruthy();
+    expect(screen.queryByText('Shinsa')).toBeNull();
   });
 
   it('is a Home button with its menu shortcut in the Mac app, never the wordmark', async () => {
@@ -106,7 +132,7 @@ describe('the way home', () => {
     );
     const bar = screen.getByRole('banner');
     expect([...bar.querySelectorAll('button')].map((button) => button.textContent).slice(0, 3)).toEqual([
-      'Shinsa',
+      'Home',
       'Tasks',
       'Services',
     ]);
@@ -160,7 +186,7 @@ describe('the way home', () => {
       [...bar.querySelectorAll('button')].map(
         (button) => button.getAttribute('aria-label') ?? button.textContent
       )
-    ).toEqual(['Shinsa', 'Tasks', 'Nothing needs you', 'Search and actions', 'More']);
+    ).toEqual(['Home', 'Tasks', 'Nothing needs you', 'Search and actions', 'More']);
     act(() => fireEvent.click(screen.getByRole('button', { name: 'More' })));
     expect(more).toBe(1);
   });
