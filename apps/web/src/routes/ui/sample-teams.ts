@@ -44,7 +44,10 @@ export function createSampleTeams(now: number) {
     role: 'owner',
     members: [{ user: KAI, addedAt: now - 30 * HOUR_MS }],
     requests: [{ user: BOB, addedAt: now - 4 * 60_000 }],
-    machines: [],
+    machines: [
+      { id: 'k3x9', name: 'Studio', userId: MONA.id, online: true, lastSeenAt: now },
+      { id: 'p7m2', name: 'Mac.lan', userId: KAI.id, online: false, lastSeenAt: now - 3 * HOUR_MS },
+    ],
     scopes: DEFAULT_TEAM_SCOPES,
     overrides: [{ userId: KAI.id, scopes: ACCESS_PRESETS.full }],
     createdAt: now - 72 * HOUR_MS,
@@ -59,7 +62,10 @@ export function createSampleTeams(now: number) {
       { user: KAI, addedAt: now - 6 * HOUR_MS },
     ],
     requests: [],
-    machines: [],
+    machines: [
+      { id: 'w2c8', name: 'Lee’s iMac', userId: LEE.id, online: true, lastSeenAt: now },
+      { id: 'k3x9', name: 'Studio', userId: MONA.id, online: true, lastSeenAt: now },
+    ],
     scopes: DEFAULT_TEAM_SCOPES,
     overrides: [],
     createdAt: now - 240 * HOUR_MS,
@@ -106,7 +112,7 @@ export function createSampleTeams(now: number) {
     scenes: [
       {
         label:
-          'TeamsGroup · a team you own with a request waiting, a team you are in, and a request you sent',
+          'TeamsGroup · a team you own with a request waiting, a team you are in whose key this machine lacks, and a request you sent',
         snapshot: {
           ...base,
           teams: [
@@ -123,7 +129,7 @@ export function createSampleTeams(now: number) {
               id: paywalls.id,
               name: paywalls.name,
               status: 'member',
-              onMachine: true,
+              onMachine: false,
               invite: false,
               team: paywalls,
               extras: [],

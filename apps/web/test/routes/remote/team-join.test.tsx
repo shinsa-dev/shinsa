@@ -200,10 +200,10 @@ describe('the team join page on app.shinsa.dev', () => {
         request={requested()}
       />
     );
-    expect(await screen.findByText('Projects to share from Studio')).toBeTruthy();
+    expect(await screen.findByText('Projects to share from “Studio”')).toBeTruthy();
     expect(screen.queryByText('Projects to share from Empty')).toBeNull();
     expect(screen.getByText(/Teammates see the projects you pick below/)).toBeTruthy();
-    fireEvent.click(screen.getByRole('combobox', { name: 'Projects to share from Studio' }));
+    fireEvent.click(screen.getByRole('combobox', { name: 'Projects to share from “Studio”' }));
     await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
     const option = within(screen.getAllByRole('listbox').at(-1) as HTMLElement).getByRole('option', {
       name: 'Web',

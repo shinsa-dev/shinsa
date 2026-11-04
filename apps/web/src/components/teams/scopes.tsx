@@ -25,6 +25,7 @@ import { SelectField } from '@/components/controls/select-field.tsx';
 import { FoldingBlock, SETTING_ROW } from '@/components/settings/group.tsx';
 import { requestWithToast } from '@/lib/connection/commands.ts';
 import { createDisclosureId } from '@/lib/preferences/disclosure.ts';
+import { describeMachineName } from '@/lib/remote/setup-steps.ts';
 import { resolveFirstName } from '@/lib/remote/users.ts';
 import {
   describeExtraHint,
@@ -235,9 +236,9 @@ export function MachineExtraDialog({
     <Dialog {...control}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{`What ${name} can do on ${machineName}`}</DialogTitle>
+          <DialogTitle>{`What ${name} can do on ${describeMachineName(machineName)}`}</DialogTitle>
           <DialogDescription>
-            {`Give ${name} more than ${team.name} gives, on ${machineName} only.`}
+            {`Give ${name} more than ${team.name} gives, on ${describeMachineName(machineName)} only.`}
           </DialogDescription>
         </DialogHeader>
         <div className='-mx-2 grid grid-cols-1 gap-x-4 gap-y-2 px-3 py-2 sm:grid-cols-2'>
@@ -247,7 +248,7 @@ export function MachineExtraDialog({
         </div>
         <DialogFooter>
           <Button variant='secondary' onClick={onFullAccess}>
-            {`Give full access to ${machineName}`}
+            {`Give full access to ${describeMachineName(machineName)}`}
           </Button>
           <DialogClose render={<Button />}>Done</DialogClose>
         </DialogFooter>

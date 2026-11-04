@@ -2,14 +2,11 @@ import type { AccessScopes, RemoteTeam, RemoteUser } from '@shinsa/core';
 import { Button } from '@shinsa/ui/components/button';
 import { Truncate } from '@shinsa/ui/components/truncate';
 import { useDialogState } from '@shinsa/ui/hooks/use-dialog-state';
-import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
 import { MentionText } from '@/components/people/user-tag.tsx';
 import { MemberScopesDialog, TeamScopesBlock } from '@/components/teams/scopes.tsx';
 import { useNow } from '@/hooks/use-now.ts';
 import { useTeamPresence } from '@/hooks/use-team-presence.ts';
-import { useTeamFeed } from '@/lib/connection/socket.ts';
-import { TONE_TEXT } from '@/lib/format/tone.ts';
 import { createDisclosureId } from '@/lib/preferences/disclosure.ts';
 import { describeMemberSince } from '@/lib/remote-access.ts';
 import { RemoteServicesContext } from '@/lib/remote/services.ts';
@@ -24,7 +21,6 @@ import {
   type HostedTeams,
   showsKeyNote,
   replaceHostedTeam,
-  listTeamMachineRows,
   listTeamPeople,
   TEAM_KEY_MISSING,
   TEAMS_DESCRIPTION,
@@ -32,38 +28,8 @@ import {
   TEAMS_SECTION,
 } from '@/lib/teams/settings.ts';
 import { FoldingBlock, SETTING_ROW, SettingsCard, SettingsEmpty, SettingsSection } from './group.tsx';
+import { TeamMachines } from './team-machines.tsx';
 import { UserRow } from './user-row.tsx';
-
-function TeamMachines({ team }: { team: RemoteTeam }) {
-  const now = useNow();
-  const feed = useTeamFeed();
-  const rows = listTeamMachineRows(team, now, feed);
-  return (
-    <FoldingBlock
-      persistId={createDisclosureId('settings', 'teams', team.id, 'machines')}
-      title='Machines'
-      detail={String(rows.length)}
-      startsOpen
-    >
-      {rows.length === 0 && <SettingsEmpty>No machine in this team is on yet.</SettingsEmpty>}
-      {rows.map(({ machine, online, status, owner }) => (
-        <div key={machine.id} className={SETTING_ROW}>
-          <div className='flex min-w-0 flex-1 flex-col'>
-            <div className='flex min-w-0 items-center gap-1.5 text-xs leading-4'>
-              <Truncate className='font-medium text-fg-4'>{machine.name}</Truncate>
-              <span className={cn('shrink-0', online ? TONE_TEXT.green : 'text-fg-2')}>{status}</span>
-            </div>
-            {owner && (
-              <Truncate className='text-2xs leading-4 text-fg-2'>
-                <MentionText mention={['Owned by ', { user: owner }]} />
-              </Truncate>
-            )}
-          </div>
-        </div>
-      ))}
-    </FoldingBlock>
-  );
-}
 
 type UpdateScopes = (teamId: string, userId: string | null, scopes: AccessScopes | null) => Promise<unknown>;
 

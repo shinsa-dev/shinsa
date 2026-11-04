@@ -8,7 +8,12 @@ import { ProjectsSelect } from '@/components/teams/projects-select.tsx';
 import { describeFailure } from '@/lib/connection/commands.ts';
 import type { DashboardClient } from '@/lib/remote/dashboard.ts';
 import { MACHINE_ICON, type RemotePoint } from '@/lib/remote/mode.ts';
-import { describeMachineNames, listAddDeviceSteps, PAIR_STEPS } from '@/lib/remote/setup-steps.ts';
+import {
+  describeMachineName,
+  describeMachineNames,
+  listAddDeviceSteps,
+  PAIR_STEPS,
+} from '@/lib/remote/setup-steps.ts';
 import type { UserProfile } from '@/lib/remote/users.ts';
 import {
   countJoinPicks,
@@ -169,10 +174,12 @@ function ProjectPicks({
       {machines.map((machine) => (
         <div key={machine.id} className='flex items-center justify-between gap-3 px-2.5 py-1.5'>
           <span className='min-w-0 truncate text-xs text-fg-4'>
-            {single ? 'Projects to share' : `Projects to share from ${machine.name}`}
+            {single ? 'Projects to share' : `Projects to share from ${describeMachineName(machine.name)}`}
           </span>
           <ProjectsSelect
-            label={single ? 'Projects to share' : `Projects to share from ${machine.name}`}
+            label={
+              single ? 'Projects to share' : `Projects to share from ${describeMachineName(machine.name)}`
+            }
             projects={machine.projects}
             chosen={picks[machine.id] ?? []}
             variant='default'

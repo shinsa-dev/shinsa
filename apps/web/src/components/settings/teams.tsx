@@ -39,6 +39,7 @@ import { formatSince } from '@/lib/format/time.ts';
 import { createDisclosureId } from '@/lib/preferences/disclosure.ts';
 import { describeMemberSince } from '@/lib/remote-access.ts';
 import { MACHINE_ICON } from '@/lib/remote/mode.ts';
+import { describeMachineName } from '@/lib/remote/setup-steps.ts';
 import { resolveFirstName } from '@/lib/remote/users.ts';
 import { describePresence } from '@/lib/teams/presence.ts';
 import { hasOwnScopes, selectExtra } from '@/lib/teams/scopes.ts';
@@ -62,7 +63,9 @@ import {
   TEAMS_SECTION,
   validateTeamLink,
   scopeStateToProjects,
-  validateTeamLinkProjects,
+  TEAM_KEY_WARNING,
+  TEAM_LINK_PROJECTS_HINT,
+  listKeylessMachines,
 } from '@/lib/teams/settings.ts';
 import {
   FoldingBlock,
@@ -76,6 +79,7 @@ import {
 } from './group.tsx';
 import { HostedTeamsSettings } from './hosted-teams.tsx';
 import { LinkView } from './remote-access.tsx';
+import { TeamMachines } from './team-machines.tsx';
 import { UserRow } from './user-row.tsx';
 
 type TeamsDialog =
@@ -169,15 +173,20 @@ function GrantDialog({
   const name = resolveFirstName(user);
   const target = choices.find((choice) => (choice.id ?? '') === picked) ?? machine;
   const title =
-    choices.length > 1 ? `Give ${name} access to a machine?` : `Give ${name} access to ${machine.name}?`;
+    choices.length > 1
+      ? `Give ${name} access to a machine?`
+      : `Give ${name} access to ${describeMachineName(machine.name)}?`;
 
   async function grant() {
     setBusy(true);
     const through = target.id === machine.id ? actions : createTeamActions(target.id);
-    await requestWithToast(async () => {
-      await through.grantAccess(team.id, user.id);
-      control.onOpenChange(false);
-    }, `${name} can reach ${target.name} now.`);
+    await requestWithToast(
+      async () => {
+        await through.grantAccess(team.id, user.id);
+        control.onOpenChange(false);
+      },
+      `${name} can reach ${describeMachineName(target.name)} now.`
+    );
     setBusy(false);
   }
 
@@ -187,7 +196,7 @@ function GrantDialog({
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>
-            {`${name} gets full control of ${choices.length > 1 ? 'the machine you pick' : machine.name} in Shinsa Cloud. Take it back under Remote access.`}
+            {`${name} gets full control of ${choices.length > 1 ? 'the machine you pick' : describeMachineName(machine.name)} in Shinsa Cloud. Take it back under Remote access.`}
           </DialogDescription>
         </DialogHeader>
         {choices.length > 1 && (
@@ -226,7 +235,7 @@ function TeamLinkRow({
   const projects = listProjectChoices(state);
 
   async function add() {
-    const problem = validateTeamLink(entry.id, url) ?? validateTeamLinkProjects(projects, projectIds);
+    const problem = validateTeamLink(entry.id, url);
     setError(problem);
     if (problem) return;
     setBusy(true);
@@ -245,9 +254,10 @@ function TeamLinkRow({
         void add();
       }}
     >
-      <span className='text-xs text-fg-2'>
-        This machine has no key for the team yet. Paste the team’s link and pick the projects to share.
-      </span>
+      <div className='flex items-start gap-1.5 text-xs text-fg-3'>
+        <Icon size='sm' name='IconExclamationTriangle' className='mt-px text-orange-text' />
+        <span className='min-w-0 text-pretty'>{TEAM_KEY_WARNING}</span>
+      </div>
       <div className='flex items-center gap-1.5'>
         <Input
           aria-label='Team link'
@@ -273,7 +283,11 @@ function TeamLinkRow({
           Add link
         </Button>
       </div>
-      {error && <span className='text-destructive-text text-xs'>{error}</span>}
+      {error ? (
+        <span className='text-destructive-text text-xs'>{error}</span>
+      ) : (
+        projectIds.length === 0 && <span className='text-2xs text-fg-2'>{TEAM_LINK_PROJECTS_HINT}</span>
+      )}
     </form>
   );
 }
@@ -360,7 +374,7 @@ function TeammateActions({
             })
           }
         >
-          {`On ${snapshot.machineName}`}
+          {`On ${describeMachineName(snapshot.machineName)}`}
         </Button>
       )}
       {team.role === 'owner' && (
@@ -383,8 +397,10 @@ function describePerson(
   const parts = [presence ? describePresence(presence, now) : null, base];
   if (hasOwnScopes(team, user.id)) parts.push('Own scopes');
   const extra = snapshot.teams.find((entry) => entry.id === team.id)?.extras ?? [];
-  if (selectExtra(extra, user.id).length > 0) parts.push(`More on ${snapshot.machineName}`);
-  if (hasMachineAccess(snapshot, user.id)) parts.push(`Can reach ${snapshot.machineName}`);
+  if (selectExtra(extra, user.id).length > 0)
+    parts.push(`More on ${describeMachineName(snapshot.machineName)}`);
+  if (hasMachineAccess(snapshot, user.id))
+    parts.push(`Can reach ${describeMachineName(snapshot.machineName)}`);
   return parts.filter((part) => part !== null).join(' · ');
 }
 
@@ -529,6 +545,7 @@ function TeamCard({
       </SettingRow>
       {needsTeamLink(entry) && <TeamLinkRow state={state} entry={entry} actions={actions} />}
       {team && <TeamRequests team={team} actions={actions} />}
+      {team && <TeamMachines team={team} keyless={listKeylessMachines(entry, snapshot)} />}
       {team && rights && <TeamScopesBlock team={team} onUpdate={actions.updateScopes} />}
       {team && <TeamPeople team={team} snapshot={snapshot} rights={rights} onDialog={onDialog} />}
     </SettingsCard>
@@ -801,7 +818,9 @@ export function MachineTeamsSettings({
           state={state}
           machine={machine}
           owned={machines}
-          title={machines.length > 1 ? `${TEAMS_SECTION} on ${machine.name}` : TEAMS_SECTION}
+          title={
+            machines.length > 1 ? `${TEAMS_SECTION} on ${describeMachineName(machine.name)}` : TEAMS_SECTION
+          }
         />
       ))}
     </>

@@ -25,6 +25,7 @@ import {
   type TeamListView,
   type TeamTask,
   verifyTeamHello,
+  TEAM_REFUSALS,
 } from '@shinsa/core';
 import { Clock, Context, Effect, Layer, Redacted, Ref } from 'effect';
 import { Transcripts } from '../../agents/transcripts/service.ts';
@@ -48,7 +49,6 @@ import { RemoteStore } from '../store/service.ts';
 import { TeamFeeds } from '../team-feeds/service.ts';
 import {
   TEAM_DOMAIN_ERRORS,
-  TEAM_REFUSALS,
   TEAM_REMOTE_CHANGED,
   type TeamChannel,
   TeamCommandFailed,

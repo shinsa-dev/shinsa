@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'bun:test';
+import { TEAM_REFUSALS } from '@shinsa/core';
 import {
   canUseTeams,
   createTeamDraft,
@@ -18,10 +19,11 @@ import {
   NO_HOSTED_TEAM,
   needsTeamLink,
   resolveProjectPick,
-  TEAM_PROJECTS_REQUIRED,
+  listKeylessMachines,
+  selectTeamPerson,
+  TEAM_MACHINE_NEEDS_LINK,
   validateTeamDraft,
   validateTeamLink,
-  validateTeamLinkProjects,
 } from '@/lib/teams/settings.ts';
 import { createRemoteSnapshot } from '../../support/remote-access.ts';
 import { createProject, createShinsaState } from '../../support/state.ts';
@@ -102,12 +104,18 @@ describe('Settings → Teams', () => {
     expect(validateTeamLink('team1', ` ${TEAM_URL} `)).toBeNull();
   });
 
-  it('asks for a project to share when a machine has any', () => {
-    const projects = [{ id: 'web', name: 'Web', color: 'blue' }];
-    expect(validateTeamLinkProjects([], [])).toBeNull();
-    expect(validateTeamLinkProjects(projects, [])).toBe(TEAM_PROJECTS_REQUIRED);
-    expect(validateTeamLinkProjects(projects, ['gone'])).toBe(TEAM_PROJECTS_REQUIRED);
-    expect(validateTeamLinkProjects(projects, ['web'])).toBeNull();
+  it('flags this machine as keyless only when it is in the team without the key', () => {
+    const snapshot = createRemoteSnapshot({ instanceId: 'm1' });
+    expect([...listKeylessMachines(createTeamEntry({ onMachine: false }), snapshot)]).toEqual(['m1']);
+    expect([...listKeylessMachines(createTeamEntry(), snapshot)]).toEqual([]);
+    expect([...listKeylessMachines(createTeamEntry({ onMachine: false }), { instanceId: null })]).toEqual([]);
+  });
+
+  it('finds a person of a team by id, owner or member', () => {
+    const team = createTeam({ owner: MONA, members: [{ user: KAI, addedAt: 1 }] });
+    expect(selectTeamPerson(team, MONA.id)).toBe(MONA);
+    expect(selectTeamPerson(team, KAI.id)).toBe(KAI);
+    expect(selectTeamPerson(team, 'gone')).toBeNull();
   });
 
   it('says who in a team can reach this machine', () => {
@@ -180,13 +188,43 @@ describe('Settings → Teams', () => {
         { id: 'm3', name: 'Spare', userId: 'gone', online: false, lastSeenAt: null },
       ],
     });
-    expect(listTeamMachineRows(team, NOW).map(({ status, owner }) => [status, owner?.login ?? null])).toEqual(
-      [
-        ['Online', 'mona'],
-        ['Last seen 2h ago', 'kai'],
-        ['Never connected', null],
-      ]
-    );
+    expect(
+      listTeamMachineRows(team, NOW).map(({ name, tone, status, owner }) => [
+        name,
+        tone,
+        status,
+        owner?.login ?? null,
+      ])
+    ).toEqual([
+      ['“Studio”', 'online', 'Online', 'mona'],
+      ['“Laptop”', 'quiet', 'Last seen 2h ago', 'kai'],
+      ['“Spare”', 'quiet', 'Never connected', null],
+    ]);
+  });
+
+  it('says a machine needs the team link when it holds no key, here or as its feed reports', () => {
+    const team = createTeam({
+      machines: [
+        { id: 'm1', name: 'Studio', userId: MONA.id, online: true, lastSeenAt: NOW },
+        { id: 'm2', name: 'Mac.lan', userId: KAI.id, online: true, lastSeenAt: NOW },
+        { id: 'm3', name: 'Spare', userId: KAI.id, online: true, lastSeenAt: NOW },
+      ],
+    });
+    const refused = { teamId: team.id, name: '', userId: KAI.id, status: 'refused' as const };
+    const feed = {
+      tasks: [],
+      machines: [
+        { ...refused, instanceId: 'm2', reason: TEAM_REFUSALS.key },
+        { ...refused, instanceId: 'm3', reason: TEAM_REFUSALS.member },
+      ],
+    };
+    expect(
+      listTeamMachineRows(team, NOW, feed, new Set(['m1'])).map(({ tone, status }) => [tone, status])
+    ).toEqual([
+      ['warning', TEAM_MACHINE_NEEDS_LINK],
+      ['warning', TEAM_MACHINE_NEEDS_LINK],
+      ['quiet', 'Last seen just now'],
+    ]);
   });
 
   it('turns a machine offline the moment its live channel drops, and online as soon as it answers', () => {
@@ -212,10 +250,10 @@ describe('Settings → Teams', () => {
         { ...machine, instanceId: 'm3', userId: KAI.id, status: 'connecting' as const },
       ],
     };
-    expect(listTeamMachineRows(team, NOW, feed).map(({ online, status }) => [online, status])).toEqual([
-      [false, 'Last seen 1m ago'],
-      [true, 'Online'],
-      [true, 'Online'],
+    expect(listTeamMachineRows(team, NOW, feed).map(({ tone, status }) => [tone, status])).toEqual([
+      ['quiet', 'Last seen 1m ago'],
+      ['online', 'Online'],
+      ['online', 'Online'],
     ]);
   });
 

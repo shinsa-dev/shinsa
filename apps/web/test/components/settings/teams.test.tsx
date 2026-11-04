@@ -11,6 +11,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import { TeamsGroup } from '@/components/settings/teams.tsx';
 import { connection } from '@/lib/connection/socket.ts';
 import type { TeamActions } from '@/lib/connection/teams.ts';
+import { TEAM_KEY_WARNING, TEAM_LINK_PROJECTS_HINT, TEAM_MACHINE_NEEDS_LINK } from '@/lib/teams/settings.ts';
 import { spyOnToasts } from '../../support/commands.ts';
 import { createRemoteSnapshot } from '../../support/remote-access.ts';
 import { createProject, createShinsaState } from '../../support/state.ts';
@@ -240,9 +241,9 @@ describe('Settings → Teams', () => {
 
   it('gives a teammate more on this machine than the team does, with the team’s scopes locked on', async () => {
     const actions = renderOwnedTeam();
-    fireEvent.click(screen.getByRole('button', { name: 'On Studio' }));
+    fireEvent.click(screen.getByRole('button', { name: 'On “Studio”' }));
     const dialog = await screen.findByRole('dialog');
-    expect(within(dialog).getByText('What Kai can do on Studio')).toBeTruthy();
+    expect(within(dialog).getByText('What Kai can do on “Studio”')).toBeTruthy();
     const gates = within(dialog).getByRole('checkbox', { name: 'Answer gates for Kai' });
     expect(gates.getAttribute('aria-disabled')).toBe('true');
     const message = within(dialog).getByRole('checkbox', { name: 'Message agents for Kai' });
@@ -255,29 +256,29 @@ describe('Settings → Teams', () => {
     renderOwnedTeam({
       teams: [createTeamEntry({ extras: [{ userId: KAI.id, scopes: ['message'] }] })],
     });
-    expect(screen.getByText(/More on Studio/)).toBeTruthy();
+    expect(screen.getByText(/More on “Studio”/)).toBeTruthy();
   });
 
   it('gives a teammate full access to this machine without them asking, after saying what it means', async () => {
     const actions = renderOwnedTeam();
-    fireEvent.click(screen.getByRole('button', { name: 'On Studio' }));
-    fireEvent.click(await screen.findByRole('button', { name: 'Give full access to Studio' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Give Kai access to Studio?' });
-    expect(within(dialog).getByText('Give Kai access to Studio?')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'On “Studio”' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Give full access to “Studio”' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Give Kai access to “Studio”?' });
+    expect(within(dialog).getByText('Give Kai access to “Studio”?')).toBeTruthy();
     fireEvent.click(within(dialog).getByRole('button', { name: 'Give access' }));
     await waitFor(() => expect(actions.grantAccess).toHaveBeenCalledWith('team1', KAI.id));
-    expect(toasts.success).toHaveBeenCalledWith('Kai can reach Studio now.');
+    expect(toasts.success).toHaveBeenCalledWith('Kai can reach “Studio” now.');
   });
 
   it('says who can reach this machine already, with no grant offered to them', () => {
     renderOwnedTeam({ access: { owner: MONA, members: [{ user: KAI, addedAt: 1 }] } });
-    expect(screen.getByText(/Can reach Studio/)).toBeTruthy();
-    expect(screen.queryByRole('button', { name: 'On Studio' })).toBeNull();
+    expect(screen.getByText(/Can reach “Studio”/)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'On “Studio”' })).toBeNull();
   });
 
   it('offers no grant while remote access is paused', () => {
     renderOwnedTeam({ enabled: false });
-    expect(screen.queryByRole('button', { name: 'On Studio' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'On “Studio”' })).toBeNull();
   });
 
   it('turns off the link of a team you own', async () => {
@@ -315,28 +316,33 @@ describe('Settings → Teams', () => {
     expect(owned.textContent).toStartWith('Owned by KKai · 2 people');
     expect(owned.querySelector('a')?.getAttribute('href')).toBe('https://github.com/kai');
     expect(screen.queryByRole('button', { name: 'Remove' })).toBeNull();
-    expect(screen.getByRole('button', { name: 'On Studio' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'On “Studio”' })).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Leave' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Leave team' }));
     await waitFor(() => expect(actions.leave).toHaveBeenCalledWith('team1'));
   });
 
-  it('asks for the team’s link and the projects to share right in the card on a machine without its key', async () => {
+  it('warns a machine in the team without its key, lists it as needing the link and joins without projects', async () => {
+    const team = createTeam({
+      machines: [{ id: 'k3x9', name: 'Studio', userId: MONA.id, online: true, lastSeenAt: Date.now() }],
+    });
     const actions = renderTeams(
-      createRemoteSnapshot({ access: ACCESS, teams: [createTeamEntry({ onMachine: false })] })
+      createRemoteSnapshot({ access: ACCESS, teams: [createTeamEntry({ team, onMachine: false })] })
     );
-    expect(screen.getByText(/This machine has no key for the team yet/)).toBeTruthy();
+    expect(screen.getByText(TEAM_KEY_WARNING)).toBeTruthy();
+    expect(screen.getByText('“Studio”')).toBeTruthy();
+    expect(screen.getByText(TEAM_MACHINE_NEEDS_LINK)).toBeTruthy();
+    expect(screen.getByText(TEAM_LINK_PROJECTS_HINT)).toBeTruthy();
     const input = screen.getByLabelText('Team link');
     fireEvent.change(input, { target: { value: 'https://x.dev' } });
     fireEvent.click(screen.getByRole('button', { name: 'Add link' }));
     expect(await screen.findByText(/not a team link/)).toBeTruthy();
+    expect(screen.queryByText(TEAM_LINK_PROJECTS_HINT)).toBeNull();
     fireEvent.change(input, { target: { value: TEAM_URL } });
-    expect(screen.queryByText(/not a team link/)).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Add link' }));
-    expect(await screen.findByText('Pick at least one project to share with the team.')).toBeTruthy();
-    expect(actions.join).not.toHaveBeenCalled();
+    await waitFor(() => expect(actions.join).toHaveBeenCalledWith(STATE, TEAM_URL, []));
     await toggleProject('Projects to share', 'Api');
-    expect(screen.queryByText('Pick at least one project to share with the team.')).toBeNull();
+    expect(screen.queryByText(TEAM_LINK_PROJECTS_HINT)).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Add link' }));
     await waitFor(() => expect(actions.join).toHaveBeenCalledWith(STATE, TEAM_URL, ['api']));
     expect(toasts.success).toHaveBeenCalledWith('Platform’s tasks show here now.');

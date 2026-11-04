@@ -4,6 +4,7 @@ import {
   SIGNING_KEY_ALGORITHM,
   serializePublicKey,
   signTeamSnapshot,
+  TEAM_REFUSALS,
   TEAM_SNAPSHOT_TTL_MS,
   type TeamFeedMachine,
   type TeamMachine,
@@ -15,6 +16,7 @@ import {
   describeTeamTaskPlace,
   HostedTeamFeeds,
   listHeldTeamMachines,
+  describeTeamFeedRefusals,
   listTeamFeedRefusals,
   listHeldTaskIds,
   listFullMachineIds,
@@ -29,7 +31,7 @@ import {
 } from '@/lib/teams/feeds.ts';
 import type { TeamChannelHandlers, TeamChannelTarget } from '@/lib/teams/team-socket/schema.ts';
 import { createGate, createProject, createRepo, createTask } from '../../support/state.ts';
-import { createTeam } from '../../support/teams.ts';
+import { createTeam, KAI, MONA } from '../../support/teams.ts';
 import { createTeamFeedTask, TEAM_KEY } from './machine.ts';
 
 function createMachine(overrides: Partial<TeamFeedMachine> = {}): TeamFeedMachine {
@@ -90,15 +92,56 @@ describe('teammates’ task lists', () => {
       tasks: [],
     };
     const teams = [
-      { id: 'team1', name: 'Platform' },
-      { id: 'team2', name: 'Design' },
+      { id: 'team1', name: 'Platform', team: null },
+      { id: 'team2', name: 'Design', team: null },
     ];
     const refusals = listTeamFeedRefusals(feed, teams, new Set(['mine']), null);
     expect(refusals.map((refusal) => [refusal.machine, refusal.team, refusal.reason])).toEqual([
-      ['Basement', 'Platform', TEAM_FEED_REFUSED],
-      ['Mac.lan', 'Platform', 'Not listed yet.'],
+      ['“Basement”', 'Platform', TEAM_FEED_REFUSED],
+      ['“Mac.lan”', 'Platform', 'Not listed yet.'],
     ]);
     expect(listTeamFeedRefusals(feed, teams, new Set(), 'team2')).toEqual([]);
+  });
+
+  it('names the owner of a refused machine and says when it only needs the team link', () => {
+    const team = createTeam({ owner: MONA, members: [{ user: KAI, addedAt: 1 }] });
+    const feed = {
+      machines: [
+        createMachine({
+          instanceId: 'jake',
+          name: 'Mac.lan',
+          userId: KAI.id,
+          status: 'refused',
+          reason: TEAM_REFUSALS.key,
+        }),
+      ],
+      tasks: [],
+    };
+    const teams = [{ id: 'team1', name: 'Superwall', team }];
+    const refusals = listTeamFeedRefusals(feed, teams, new Set(), null);
+    expect(refusals.map(({ owner, needsLink }) => [owner, needsLink])).toEqual([[KAI, true]]);
+    expect(describeTeamFeedRefusals(refusals)).toEqual({
+      label: ['“Mac.lan”', ' by ', { user: KAI }, ' in Superwall needs the team link'],
+      detail: TEAM_REFUSALS.key,
+    });
+    const quiet = listTeamFeedRefusals(
+      {
+        machines: [createMachine({ name: 'Attic', userId: 'gone', status: 'refused', reason: 'Gone.' })],
+        tasks: [],
+      },
+      teams,
+      new Set(),
+      null
+    );
+    expect(describeTeamFeedRefusals(quiet)).toEqual({
+      label: ['“Attic”', ' in Superwall is not listing its tasks'],
+      detail: 'Gone.',
+    });
+    expect(describeTeamFeedRefusals([...refusals, ...quiet])).toEqual({
+      label: ['2 teammate machines are not listing their tasks'],
+      detail: `“Mac.lan” (Kai): ${TEAM_REFUSALS.key} “Attic”: Gone.`,
+    });
+    expect(describeTeamFeedRefusals([])).toBeNull();
   });
 
   it('knows which tasks come from a snapshot, and since when', () => {

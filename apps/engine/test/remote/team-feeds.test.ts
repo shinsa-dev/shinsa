@@ -18,6 +18,7 @@ import {
   type TeamMachine,
   type TeamSnapshot,
   type TeamTask,
+  TEAM_REFUSALS,
 } from '@shinsa/core';
 import { NotFound } from '@shinsa/core/remote/errors';
 import { Clock, Effect, Layer } from 'effect';
@@ -31,7 +32,6 @@ import {
 } from '../../src/remote/team-feeds/schema.ts';
 import { TEAM_SNAPSHOTS_FILE } from '../../src/remote/team-snapshots/schema.ts';
 import { TEAM_VIEWS_DIR } from '../../src/remote/team-views/schema.ts';
-import { TEAM_REFUSALS } from '../../src/remote/teams/schema.ts';
 import { createFixedClock } from '../helpers/clock.ts';
 import { until } from '../helpers/index.ts';
 import { captureLogs } from '../helpers/logs.ts';
