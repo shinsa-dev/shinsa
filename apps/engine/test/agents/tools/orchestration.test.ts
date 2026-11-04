@@ -10,6 +10,8 @@ import {
   type ShinsaCommand,
   type ShinsaEvent,
   type ShinsaState,
+  type Task,
+  type TeamFeedTask,
 } from '@shinsa/core';
 import { Duration, Effect, Result } from 'effect';
 import { handleOrchestrationTool as handleTool } from '../../../src/agents/tools/orchestration/handler.ts';
@@ -113,6 +115,7 @@ interface Options {
   requestKey?: string;
   registerRepo?: RegisterRepo;
   createRepo?: CreateRepo;
+  teamTasks?: () => readonly TeamFeedTask[];
 }
 
 function createCall(core: ReturnType<typeof createCore>, runId: string, options: Options = {}) {
@@ -131,6 +134,7 @@ function createCall(core: ReturnType<typeof createCore>, runId: string, options:
     signal: new AbortController().signal,
     minute: Duration.millis(2),
     state: Effect.sync(state),
+    teamTasks: Effect.sync(options.teamTasks ?? (() => [])),
     dispatch: (command, id) => {
       ids.push(id ?? null);
       return attempt(() => core.dispatch(command));
@@ -444,6 +448,43 @@ describe('create_task and split_task', () => {
     await expect(
       handleOrchestrationTool('create_task', { request: 'Do it.', fork_from: 'LOC-999' }, call)
     ).rejects.toThrow('There is no task "LOC-999" to fork.');
+  });
+
+  test('create_task forks a teammate’s task onto this machine, into the repository with its remote', async () => {
+    const { core, run, taskId } = await building();
+    const source = core.state.tasks[taskId];
+    const theirs = { ...(source as Task), id: 'kai-task', handle: 'PAY-1', title: 'Retry payments' };
+    const repo = core.state.repos[source?.repoId ?? ''] ?? null;
+    const teamTask = (remote: string | null, name: string) => ({
+      task: theirs,
+      gates: [],
+      project: null,
+      repo: repo ? { ...repo, id: 'kai-repo', name, remote } : null,
+      owner: 'kai',
+      ownerProfile: { name: 'Kai', avatarUrl: null },
+      machine: 'Kai’s MacBook',
+      teamId: 'core',
+      instanceId: 'kai-macbook',
+    });
+    const { call } = createCall(core, run.id, { teamTasks: () => [teamTask(null, 'app')] });
+    await handleOrchestrationTool(
+      'create_task',
+      { request: 'Retry twice.', fork_from: 'pay-1', client_request_id: 't1' },
+      call
+    );
+    const fork = Object.values(core.state.tasks).find((task) => task.request === 'Retry twice.');
+    expect(fork?.forkOf).toBeUndefined();
+    expect(fork?.teammateFork).toMatchObject({ instanceId: 'kai-macbook', taskId: 'kai-task', owner: 'Kai' });
+    expect(fork?.repoId).toBe(source?.repoId ?? '');
+    const elsewhere = createCall(core, run.id, { teamTasks: () => [teamTask(null, 'admin')] });
+    await handleOrchestrationTool(
+      'create_task',
+      { request: 'Retry thrice.', fork_from: 'kai-task', client_request_id: 't2' },
+      elsewhere.call
+    );
+    const admin = Object.values(core.state.tasks).find((task) => task.request === 'Retry thrice.');
+    expect(admin?.teammateFork?.taskId).toBe('kai-task');
+    expect(core.state.repos[admin?.repoId ?? '']?.name).toBe('admin');
   });
 
   test('create_task with after_this makes the new task wait for this one to merge', async () => {

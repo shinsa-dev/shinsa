@@ -1,8 +1,15 @@
-import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test';
-import type { RemoteSnapshot } from '@shinsa/core';
+import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
+import {
+  ACCESS_PRESETS,
+  type AccessScopes,
+  DEFAULT_TEAM_SCOPES,
+  type RemoteSnapshot,
+  toggleScope,
+} from '@shinsa/core';
 import { TooltipProvider } from '@shinsa/ui/components/tooltip';
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { TeamsGroup } from '@/components/settings/teams.tsx';
+import { connection } from '@/lib/connection/socket.ts';
 import type { TeamActions } from '@/lib/connection/teams.ts';
 import { spyOnToasts } from '../../support/commands.ts';
 import { createRemoteSnapshot } from '../../support/remote-access.ts';
@@ -38,6 +45,8 @@ function createActions() {
     leave: mock((_teamId: string) => snapshot()),
     remove: mock((_teamId: string) => snapshot()),
     grantAccess: mock((_teamId: string, _userId: string) => snapshot()),
+    updateScopes: mock((_teamId: string, _userId: string | null, _scopes: AccessScopes | null) => snapshot()),
+    updateExtra: mock((_teamId: string, _userId: string, _scopes: AccessScopes) => snapshot()),
   } satisfies TeamActions;
 }
 
@@ -65,11 +74,20 @@ async function toggleProject(label: string, option: string) {
   await settle();
 }
 
-function renderTeams(snapshot: RemoteSnapshot | null, failure: string | null = null) {
+async function chooseOption(label: string, option: string, scope: HTMLElement = document.body) {
+  fireEvent.click(within(scope).getByRole('combobox', { name: label }));
+  await settle();
+  const list = screen.getAllByRole('listbox').at(-1) as HTMLElement;
+  const item = within(list).getByRole('option', { name: (name) => name.startsWith(option) });
+  fireEvent.pointerDown(item, { pointerType: 'mouse' });
+  fireEvent.click(item);
+}
+
+function renderTeams(snapshot: RemoteSnapshot | null, failure: string | null = null, rights = false) {
   const actions = createActions();
   render(
     <TooltipProvider>
-      <TeamsGroup state={STATE} snapshot={snapshot} failure={failure} actions={actions} />
+      <TeamsGroup state={STATE} snapshot={snapshot} failure={failure} actions={actions} rights={rights} />
     </TooltipProvider>
   );
   return actions;
@@ -134,6 +152,84 @@ describe('Settings → Teams', () => {
     await waitFor(() => expect(actions.removeMember).toHaveBeenCalledWith('team1', KAI.id));
   });
 
+  it('lets the owner pick a preset or a scope for the team, and for one person', async () => {
+    const team = createTeam({ overrides: [{ userId: KAI.id, scopes: ACCESS_PRESETS.full }] });
+    const actions = renderTeams(
+      createRemoteSnapshot({ access: ACCESS, teams: [createTeamEntry({ team })] }),
+      null,
+      true
+    );
+    expect(screen.getByText('Collaborate · 5 of 6 scopes')).toBeTruthy();
+    expect(screen.getByText(/Own scopes/)).toBeTruthy();
+    fireEvent.click(screen.getByText('What teammates can do'));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Message agents' }));
+    await waitFor(() =>
+      expect(actions.updateScopes).toHaveBeenCalledWith(
+        'team1',
+        null,
+        toggleScope(DEFAULT_TEAM_SCOPES, 'message', true)
+      )
+    );
+    await chooseOption('Preset for the team', 'View only');
+    await waitFor(() =>
+      expect(actions.updateScopes).toHaveBeenCalledWith('team1', null, ACCESS_PRESETS.standard)
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Scopes' }));
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByText('What Kai can do')).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole('checkbox', { name: 'Fork tasks for Kai' }));
+    await waitFor(() =>
+      expect(actions.updateScopes).toHaveBeenCalledWith(
+        'team1',
+        KAI.id,
+        toggleScope(ACCESS_PRESETS.full, 'fork', false)
+      )
+    );
+    await chooseOption('Preset for Kai', 'Team’s (Collaborate)', dialog);
+    await waitFor(() => expect(actions.updateScopes).toHaveBeenCalledWith('team1', KAI.id, null));
+  });
+
+  it('shows a member the team’s scopes without letting them change any, and hides them from an older engine', () => {
+    const team = createTeam({
+      owner: KAI,
+      role: 'member',
+      members: [{ user: MONA, addedAt: 1 }],
+      requests: [],
+    });
+    renderTeams(createRemoteSnapshot({ access: ACCESS, teams: [createTeamEntry({ team })] }), null, true);
+    fireEvent.click(screen.getByText('What teammates can do'));
+    expect(screen.getByText('Only Kai Lane changes these.')).toBeTruthy();
+    expect(
+      (screen.getByRole('checkbox', { name: 'Act on tasks' }) as HTMLElement).getAttribute('aria-disabled')
+    ).toBe('true');
+    expect(screen.queryByRole('button', { name: 'Scopes' })).toBeNull();
+    cleanup();
+    renderOwnedTeam();
+    expect(screen.queryByText('What teammates can do')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Scopes' })).toBeNull();
+  });
+
+  it('says whether each teammate is online, away or offline, from the team’s live channels', () => {
+    const feed = spyOn(connection, 'selectTeams').mockReturnValue({
+      tasks: [],
+      machines: [
+        {
+          teamId: 'team1',
+          instanceId: 'm1',
+          name: 'Studio',
+          userId: KAI.id,
+          status: 'live',
+          reason: null,
+          presence: [{ userId: KAI.id, status: 'away', seenAt: Date.now() - 120_000 }],
+        },
+      ],
+    });
+    renderOwnedTeam();
+    expect(screen.getByText(/^Seen 2m ago · /)).toBeTruthy();
+    expect(screen.getByRole('img', { name: 'Away' })).toBeTruthy();
+    feed.mockRestore();
+  });
+
   it('picks the projects a team sees in the card, starting from those it sees now', async () => {
     const actions = renderOwnedTeam();
     const picker = screen.getByRole('combobox', { name: 'Projects shared with Platform' });
@@ -142,10 +238,31 @@ describe('Settings → Teams', () => {
     await waitFor(() => expect(actions.writeProjects).toHaveBeenCalledWith(STATE, 'team1', ['web', 'api']));
   });
 
-  it('gives a teammate access to this machine without them asking, after saying what it means', async () => {
+  it('gives a teammate more on this machine than the team does, with the team’s scopes locked on', async () => {
     const actions = renderOwnedTeam();
-    fireEvent.click(screen.getByRole('button', { name: 'Give machine access' }));
+    fireEvent.click(screen.getByRole('button', { name: 'On Studio' }));
     const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByText('What Kai can do on Studio')).toBeTruthy();
+    const gates = within(dialog).getByRole('checkbox', { name: 'Answer gates for Kai' });
+    expect(gates.getAttribute('aria-disabled')).toBe('true');
+    const message = within(dialog).getByRole('checkbox', { name: 'Message agents for Kai' });
+    expect(message.getAttribute('aria-disabled')).not.toBe('true');
+    fireEvent.click(within(dialog).getByRole('checkbox', { name: 'Message agents for Kai' }));
+    await waitFor(() => expect(actions.updateExtra).toHaveBeenCalledWith('team1', KAI.id, ['message']));
+  });
+
+  it('says a teammate has more on this machine', () => {
+    renderOwnedTeam({
+      teams: [createTeamEntry({ extras: [{ userId: KAI.id, scopes: ['message'] }] })],
+    });
+    expect(screen.getByText(/More on Studio/)).toBeTruthy();
+  });
+
+  it('gives a teammate full access to this machine without them asking, after saying what it means', async () => {
+    const actions = renderOwnedTeam();
+    fireEvent.click(screen.getByRole('button', { name: 'On Studio' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Give full access to Studio' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Give Kai access to Studio?' });
     expect(within(dialog).getByText('Give Kai access to Studio?')).toBeTruthy();
     fireEvent.click(within(dialog).getByRole('button', { name: 'Give access' }));
     await waitFor(() => expect(actions.grantAccess).toHaveBeenCalledWith('team1', KAI.id));
@@ -155,12 +272,12 @@ describe('Settings → Teams', () => {
   it('says who can reach this machine already, with no grant offered to them', () => {
     renderOwnedTeam({ access: { owner: MONA, members: [{ user: KAI, addedAt: 1 }] } });
     expect(screen.getByText(/Can reach Studio/)).toBeTruthy();
-    expect(screen.queryByRole('button', { name: 'Give machine access' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'On Studio' })).toBeNull();
   });
 
   it('offers no grant while remote access is paused', () => {
     renderOwnedTeam({ enabled: false });
-    expect(screen.queryByRole('button', { name: 'Give machine access' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'On Studio' })).toBeNull();
   });
 
   it('turns off the link of a team you own', async () => {
@@ -198,7 +315,7 @@ describe('Settings → Teams', () => {
     expect(owned.textContent).toStartWith('Owned by KKai · 2 people');
     expect(owned.querySelector('a')?.getAttribute('href')).toBe('https://github.com/kai');
     expect(screen.queryByRole('button', { name: 'Remove' })).toBeNull();
-    expect(screen.getByRole('button', { name: 'Give machine access' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'On Studio' })).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Leave' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Leave team' }));
     await waitFor(() => expect(actions.leave).toHaveBeenCalledWith('team1'));

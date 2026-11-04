@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test } from 'bun:test';
 import {
+  DEFAULT_TEAM_SCOPES,
   type InstanceId,
   REMOTE_APP_ORIGIN,
   type RemoteUserId,
@@ -30,10 +31,12 @@ const TEAM = {
   id: 'team1',
   name: 'Growth',
   owner: USER,
-  role: 'owner',
+  role: 'owner' as const,
   members: [],
   requests: [],
   machines: [],
+  scopes: DEFAULT_TEAM_SCOPES,
+  overrides: [],
   createdAt: 1,
 };
 
@@ -156,6 +159,7 @@ describe('the client for app.shinsa.dev', () => {
     answer(plane, resolveMachineTeamPath('team1', 'invite'), { invite: 'i2' });
     answer(plane, resolveMachineTeamPath('team1', 'members/add'), MEMBER);
     answer(plane, resolveMachineTeamPath('team1', 'connect'), { url: 'wss://x', expiresAt: 1 });
+    answer(plane, resolveMachineTeamPath('team1', 'scopes'), TEAM);
     await callClient(plane, (client) => client.teams.create(Redacted.make('m'), 'Growth'));
     await callClient(plane, (client) => client.teams.join(Redacted.make('m'), 'i'));
     expect(await callClient(plane, (client) => client.teams.invite(Redacted.make('m'), TEAM_ID))).toEqual({
@@ -172,6 +176,11 @@ describe('the client for app.shinsa.dev', () => {
     expect(
       await callClient(plane, (client) => client.teams.connect(Redacted.make('m'), TEAM_ID, INSTANCE_ID))
     ).toEqual({ url: 'wss://x', expiresAt: 1 });
+    expect(
+      await callClient(plane, (client) =>
+        client.teams.scopes(Redacted.make('m'), TEAM_ID, { scopes: ['message'] })
+      )
+    ).toEqual(TEAM);
     expect(plane.calls.map((call) => [call.path, call.body])).toEqual([
       [REMOTE_PATHS.machineTeams, { name: 'Growth' }],
       [REMOTE_PATHS.machineTeamJoin, { invite: 'i' }],
@@ -183,6 +192,7 @@ describe('the client for app.shinsa.dev', () => {
       [resolveMachineTeamPath('team1', 'leave'), null],
       [resolveMachineTeamPath('team1', 'remove'), null],
       [resolveMachineTeamPath('team1', 'connect'), { instanceId: 'k3x9' }],
+      [resolveMachineTeamPath('team1', 'scopes'), { scopes: ['message'] }],
     ]);
   });
 

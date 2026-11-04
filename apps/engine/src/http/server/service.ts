@@ -1,4 +1,4 @@
-import { parseTeamViewTarget, TEAM_VIEW_PATH, type GuestActor } from '@shinsa/core';
+import { parseTeamViewTarget, TEAM_VIEW_PATH, type ScopedActor } from '@shinsa/core';
 import { ENGINE_BODY_LIMIT_BYTES, RequestForbidden } from '@shinsa/core/engine-api/schema';
 import { Context, Effect, Layer, Option, Predicate } from 'effect';
 import { Accounts } from '../../accounts/roster/service.ts';
@@ -8,6 +8,7 @@ import { createServerInstance } from '../../instance/index.ts';
 import type { ChannelPeer } from '../../remote/channel/schema.ts';
 import { TunnelGate } from '../../remote/gate/service.ts';
 import { Remote } from '../../remote/machine/service.ts';
+import { Presence } from '../../remote/presence/service.ts';
 import { Previews } from '../../remote/previews/service.ts';
 import { POLICY_VIOLATION } from '../../remote/schema.ts';
 import { Shares } from '../../remote/shares/service.ts';
@@ -56,6 +57,7 @@ export class EngineServer extends Context.Service<
       const shares = Option.getOrUndefined(yield* Effect.serviceOption(Shares));
       const teams = Option.getOrUndefined(yield* Effect.serviceOption(Teams));
       const previews = Option.getOrUndefined(yield* Effect.serviceOption(Previews));
+      const presence = Option.getOrUndefined(yield* Effect.serviceOption(Presence));
       const allowedHosts = resolveAllowedHosts(config.allowedHosts);
       const handle = (request: Request, context: Context.Context<never>): Promise<Response> =>
         (web.handler as (request: Request, context: Context.Context<never>) => Promise<Response>)(
@@ -75,11 +77,13 @@ export class EngineServer extends Context.Service<
         teamFeeds,
         version: instance.version,
         resources,
+        teams: remote,
+        presence,
       });
       const terminalSockets = terminals ? yield* createTerminalSockets(terminals) : null;
       const gate = yield* TunnelGate.pipe(Effect.provide(TunnelGate.layer));
 
-      function respondInsideChannel(request: Request, guest: GuestActor | null, userId: string) {
+      function respondInsideChannel(request: Request, guest: ScopedActor | null, userId: string) {
         return Effect.promise(() =>
           handle(request, Context.make(RequestSource, { via: 'channel', guest, userId }))
         );

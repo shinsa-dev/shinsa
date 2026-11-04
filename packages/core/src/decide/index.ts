@@ -1,7 +1,12 @@
 import { identity, Result } from 'effect';
 import { isAgentCommand, isUserCommand, type ShinsaCommand } from '../commands/index.ts';
 import { DomainError } from '../domain/index.ts';
-import { resolveScopedRefusal, SCOPE_MESSAGES, SCOPE_REFUSAL_CODE } from '../remote/scope.ts';
+import {
+  resolveScopedRefusal,
+  SCOPE_MESSAGES,
+  SCOPE_REFUSAL_CODE,
+  type ScopedActor,
+} from '../remote/scope.ts';
 import { sealDraft } from '../state/draft.ts';
 import type { ShinsaState } from '../state/project.ts';
 import {
@@ -51,7 +56,9 @@ import { answerGate, assertGatesStayOpen, assertHumanDecides } from './gates.ts'
 import {
   claimHandoff,
   failHandoff,
+  giveBackTask,
   handOffTask,
+  handToTeammate,
   leaveHandoff,
   recordHandoff,
   removeHandoff,
@@ -168,7 +175,7 @@ import {
   writeWatchSource,
 } from './watchdogs.ts';
 
-export type { DecideContext, Decision, GuestActor } from './decider.ts';
+export type { DecideContext, Decision } from './decider.ts';
 export { describeFeedbackLeaks } from './feedback.ts';
 export { type MessageEffect, needsMessageKind, resolveMessageEffect } from './messages.ts';
 export { type RoundRelease, resolveRoundRelease } from './rounds.ts';
@@ -316,6 +323,10 @@ function apply(decider: Decider, command: ShinsaCommand) {
       return handOffTask(decider, command);
     case 'handoff.remove':
       return removeHandoff(decider, command);
+    case 'task.hand_to_teammate':
+      return handToTeammate(decider, command);
+    case 'task.give_back':
+      return giveBackTask(decider, command);
     case 'handoff.record':
       return recordHandoff(decider, command);
     case 'handoff.fail':
@@ -497,8 +508,8 @@ function apply(decider: Decider, command: ShinsaCommand) {
   }
 }
 
-function resolveGuestRefusal(state: ShinsaState, command: ShinsaCommand, taskId: string) {
-  return isUserCommand(command) ? resolveScopedRefusal(state, taskId, command) : SCOPE_MESSAGES.command;
+function resolveGuestRefusal(state: ShinsaState, command: ShinsaCommand, guest: ScopedActor) {
+  return isUserCommand(command) ? resolveScopedRefusal(state, guest, command) : SCOPE_MESSAGES.command;
 }
 
 function resolveDomainFailure(error: unknown) {
@@ -511,7 +522,7 @@ export function decide(
   command: ShinsaCommand,
   context: DecideContext
 ): Result.Result<Decision, DomainError> {
-  const refusal = context.guest ? resolveGuestRefusal(state, command, context.guest.taskId) : null;
+  const refusal = context.guest ? resolveGuestRefusal(state, command, context.guest) : null;
   if (refusal) return Result.fail(new DomainError({ code: SCOPE_REFUSAL_CODE, message: refusal }));
   return Result.try({ try: () => resolveDecision(state, command, context), catch: resolveDomainFailure });
 }

@@ -160,26 +160,26 @@ describe('the Worker gates every route by who asks', () => {
     }
   });
 
-  test('a machine’s routes answer its owner, its members and its guests by role, and nobody else', async () => {
+  test('a machine’s routes answer its owner, its members, its guests and its owner’s teammates by role, and nobody else', async () => {
     const world = await createWorld();
     const { harness, studio } = world;
     const post = (path: string, session: string) => harness.post(path, {}, { session });
     const connect = resolveInstanceConnectPath(studio.instanceId);
-    for (const session of [world.mona, world.kai, world.gus])
+    for (const session of [world.mona, world.kai, world.gus, world.tess])
       expect((await post(connect, session)).status).toBe(200);
-    for (const session of [world.tess, world.eve]) {
-      const refused = await post(connect, session);
-      expect([refused.status, await readCode(refused)]).toEqual([404, 'not_found']);
-    }
+    const refused = await post(connect, world.eve);
+    expect([refused.status, await readCode(refused)]).toEqual([404, 'not_found']);
     const remove = resolveInstanceRemovePath(studio.instanceId);
     for (const session of [world.kai, world.gus]) {
-      const refused = await post(remove, session);
-      expect([refused.status, await readCode(refused)]).toEqual([403, 'not_owner']);
+      const notOwner = await post(remove, session);
+      expect([notOwner.status, await readCode(notOwner)]).toEqual([403, 'not_owner']);
     }
-    expect((await post(remove, world.eve)).status).toBe(404);
+    for (const session of [world.tess, world.eve]) expect((await post(remove, session)).status).toBe(404);
     const leave = resolveInstanceLeavePath(studio.instanceId);
     expect((await post(leave, world.eve)).status).toBe(404);
     expect(await readCode(await post(leave, world.mona))).toBe('owner_cannot_leave');
+    const unknown = await post(resolveInstanceLeavePath('gone'), world.mona);
+    expect([unknown.status, await readCode(unknown)]).toEqual([404, 'not_found']);
   });
 
   test('a team’s routes answer its owner and its members, and nobody else', async () => {

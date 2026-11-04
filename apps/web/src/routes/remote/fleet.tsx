@@ -1,4 +1,4 @@
-import { describeList } from '@shinsa/core';
+import { describeList, type RemoteUser } from '@shinsa/core';
 import * as React from 'react';
 import { replaceConnection } from '@/lib/connection/socket.ts';
 import { serveNotificationOpens } from '@/lib/notifications/worker.ts';
@@ -17,6 +17,8 @@ import type { RemoteServices } from '@/lib/remote/services.ts';
 import { forkApp, runApp } from '@/lib/runtime/app.ts';
 import { admitTeamMachines } from '@/lib/teams/admit.ts';
 import { HostedTeamFeeds } from '@/lib/teams/feeds.ts';
+import { syncOwnTeamKeys } from '@/lib/teams/own-keys.ts';
+import { resolveTeammateScopes } from '@/lib/teams/scopes.ts';
 import { navigate } from '@/router.ts';
 import { RemoteBenefits, RemoteCheckAgain, RemoteHero, RemoteLoading, RemoteSteps } from './shell.tsx';
 
@@ -122,12 +124,22 @@ function FleetReady({
   return shell(<OutdatedPage machines={fleet.members.map((member) => member.name)} />);
 }
 
+async function listFleetTeams(services: RemoteServices) {
+  try {
+    return await services.dashboard.listTeams();
+  } catch {
+    return [];
+  }
+}
+
 export function FleetApp({
   services,
+  viewer,
   shell,
   children,
 }: {
   services: RemoteServices;
+  viewer: RemoteUser;
   shell: (content: React.ReactNode) => React.ReactNode;
   children: React.ReactNode;
 }) {
@@ -137,18 +149,18 @@ export function FleetApp({
     const release: (() => void)[] = [];
     void (async () => {
       try {
-        const rows = await admitTeamMachines(
-          await settleWaitingRows(
-            await runApp(listMachineRows(services.dashboard, services.devices)),
-            services
-          ),
-          {
-            dashboard: services.dashboard,
-            devices: services.devices,
-            selectTeamKey: services.teamKeys.selectTeamKey,
-            name: resolveDeviceName(navigator.userAgent, navigator.maxTouchPoints > 1, null),
-          }
+        const settled = await settleWaitingRows(
+          await runApp(listMachineRows(services.dashboard, services.devices)),
+          services
         );
+        await syncOwnTeamKeys(settled, { dashboard: services.dashboard, teamKeys: services.teamKeys });
+        const rows = await admitTeamMachines(settled, {
+          dashboard: services.dashboard,
+          devices: services.devices,
+          selectTeamKey: services.teamKeys.selectTeamKey,
+          name: resolveDeviceName(navigator.userAgent, navigator.maxTouchPoints > 1, null),
+        });
+        const teams = await listFleetTeams(services);
         const added = rows.flatMap((row) =>
           row.device && !row.device.waiting ? [{ instance: row.instance, device: row.device }] : []
         );
@@ -164,7 +176,12 @@ export function FleetApp({
           setState(
             waiting.length > 0
               ? { kind: 'waiting', machines: waiting }
-              : { kind: 'empty', machines: rows.map((row) => row.instance.name) }
+              : {
+                  kind: 'empty',
+                  machines: rows.flatMap((row) =>
+                    row.instance.role === 'teammate' ? [] : [row.instance.name]
+                  ),
+                }
           );
           return;
         }
@@ -172,6 +189,8 @@ export function FleetApp({
         const members = added.map(({ instance, device }) =>
           createFleetMember(instance, device, {
             dashboard: services.dashboard,
+            viewerId: viewer.id,
+            teammateScopes: resolveTeammateScopes(teams, instance.id, viewer.id),
             onRemoved: (instanceId) => {
               void services.devices.removeDevice(instanceId);
               fleet?.removeMachine(instanceId);
@@ -196,7 +215,9 @@ export function FleetApp({
         fleet = new Fleet(
           members,
           rows.flatMap((row) =>
-            row.device && !row.device.waiting ? [] : [{ id: row.instance.id, name: row.instance.name }]
+            (row.device && !row.device.waiting) || row.instance.role === 'teammate'
+              ? []
+              : [{ id: row.instance.id, name: row.instance.name }]
           ),
           hostedTeams
         );
@@ -224,7 +245,7 @@ export function FleetApp({
       live = false;
       for (const step of release.splice(0).reverse()) step();
     };
-  }, [services]);
+  }, [services, viewer]);
   switch (state.kind) {
     case 'starting':
       return shell(<RemoteLoading label='Connecting to your machines' />);

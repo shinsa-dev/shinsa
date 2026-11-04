@@ -1,6 +1,6 @@
 import type { SharePreset } from '../domain/settings.ts';
 import { isTaskSettled } from '../domain/stages.ts';
-import type { Gate, Task } from '../domain/types.ts';
+import type { ActivityPerson, Gate, Task } from '../domain/types.ts';
 import type { ShinsaState } from '../state/project.ts';
 import { resolveTaskProject } from '../state/queries.ts';
 import { resolveSharedListing, type SharedListing, type SharedPerson } from './index.ts';
@@ -17,6 +17,12 @@ export interface TeamTaskContext {
 
 export interface TeamTask extends SharedListing, Omit<TeamTaskContext, 'ownerProfile'> {
   ownerProfile?: SharedPerson | null;
+  heldBy?: ActivityPerson | null;
+}
+
+function resolveHolder(task: Task, teamId: string): ActivityPerson | null {
+  const guest = task.handoff?.teamId === teamId ? task.handoff.guest : null;
+  return guest ? { login: guest.login, name: guest.name, avatarUrl: guest.avatarUrl } : null;
 }
 
 export function listTeamProjectIds(state: ShinsaState, teamId: string) {
@@ -57,5 +63,6 @@ export function listTeamTasks(state: ShinsaState, teamId: string, context: TeamT
     owner: context.owner,
     ownerProfile: context.ownerProfile,
     machine: context.machine,
+    heldBy: resolveHolder(task, teamId),
   }));
 }

@@ -1,4 +1,4 @@
-import type { Bytes, ChannelHeaders, FrameError, GuestActor, HandshakeKeys } from '@shinsa/core';
+import type { Bytes, ChannelHeaders, FrameError, ScopedActor, HandshakeKeys } from '@shinsa/core';
 import { type Effect, Schema } from 'effect';
 import type { HubSocket } from '../../http/socket.ts';
 import type { TerminalSession, TerminalViewer } from '../../terminals/schema.ts';
@@ -73,7 +73,7 @@ export interface ChannelDefinition {
   readonly closePeer: (code: number, reason: string) => Effect.Effect<void>;
   readonly machineKey: Effect.Effect<MachineKeyPair, ChannelBroken>;
   readonly isEnrolled: (device: string) => Effect.Effect<boolean>;
-  readonly resolveGuest: (device: string) => Effect.Effect<GuestActor | null>;
+  readonly resolveGuest: (device: string) => Effect.Effect<ScopedActor | null>;
   readonly isOwner: Effect.Effect<boolean>;
   readonly requestAccess: (
     proof: string,
@@ -86,7 +86,7 @@ export interface ChannelDefinition {
   readonly closeSocket: (socket: HubSocket) => Effect.Effect<void>;
   readonly receiveSocket: (socket: HubSocket, raw: string) => Effect.Effect<void>;
   readonly terminals: ChannelTerminals | null;
-  readonly respond: (request: Request, guest: GuestActor | null) => Effect.Effect<Response, ChannelBroken>;
+  readonly respond: (request: Request, guest: ScopedActor | null) => Effect.Effect<Response, ChannelBroken>;
   readonly maxBodyBytes: number;
 }
 
@@ -107,7 +107,7 @@ export interface OpenRequest {
   readonly size: number;
   readonly controller: AbortController;
   readonly sent: boolean;
-  readonly guest: GuestActor | null;
+  readonly guest: ScopedActor | null;
 }
 
 export type ChannelState =
@@ -115,7 +115,7 @@ export type ChannelState =
   | {
       readonly kind: 'open';
       readonly device: string;
-      readonly guest: GuestActor | null;
+      readonly guest: ScopedActor | null;
       readonly seal: (plain: Bytes) => Effect.Effect<Bytes>;
       readonly open: (frame: Bytes) => Effect.Effect<Bytes, FrameError>;
       readonly socket: HubSocket | null;

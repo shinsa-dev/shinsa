@@ -1,5 +1,11 @@
 import { describe, expect, test } from 'bun:test';
-import type { Project, RemoteTeam, TeamFeedMachine, TeamFeedTask } from '@shinsa/core';
+import {
+  DEFAULT_TEAM_SCOPES,
+  type Project,
+  type RemoteTeam,
+  type TeamFeedMachine,
+  type TeamFeedTask,
+} from '@shinsa/core';
 import { resolveTeammateCheck, TEAMMATE_TEXT_LIMIT } from '../../src/triage/team.ts';
 import { createRepo, createTask } from '../helpers/state.ts';
 
@@ -30,6 +36,8 @@ function createTeam(id: string): RemoteTeam {
     members: [{ user: KAI, addedAt: 2 }],
     requests: [],
     machines: [],
+    scopes: DEFAULT_TEAM_SCOPES,
+    overrides: [],
     createdAt: 1,
   };
 }

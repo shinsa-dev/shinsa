@@ -16,15 +16,25 @@ import {
   TEAM_TASK_LIST_COLUMNS,
 } from '@/components/tasks/row.tsx';
 import { TimeAgo } from '@/components/text/time-ago.tsx';
-import { useMachines, useRemoteSnapshot, useTeamFeed } from '@/lib/connection/socket.ts';
+import { useShinsaSelector } from '@/lib/connection/selectors.ts';
+import {
+  type MachineView,
+  useMachine,
+  useMachines,
+  useRemoteSnapshot,
+  useTeamFeed,
+} from '@/lib/connection/socket.ts';
 import { type FocusTeam, listFocusTeams } from '@/lib/focus.ts';
 import { PRIORITY_LABEL } from '@/lib/format/labels.ts';
 import { formatSince } from '@/lib/format/time.ts';
 import type { TeamEntry } from '@/lib/tasks/groups.ts';
 import {
+  listFullMachineIds,
+  listHeldTaskIds,
   listHeldTeamMachines,
   listTeamFeedRefusals,
   listTeamFeedTasks,
+  resolveFleetTeamTaskPath,
   resolveTeamTaskPath,
   resolveTeamTaskState,
   resolveTeamTaskTarget,
@@ -42,18 +52,19 @@ export function useTeamTasks(): TeamTasks {
   const teams = React.useMemo(() => listFocusTeams(remote), [remote]);
   const feed = useTeamFeed();
   const machines = useMachines();
+  const listed = useShinsaSelector(listHeldTaskIds);
   const entries = React.useMemo(() => {
     if (teams.length === 0) return [];
     const held = listHeldTeamMachines(feed);
     const teamIds = new Set(teams.map((team) => team.id));
-    return listTeamFeedTasks(feed, teamIds, new Set(machines.map((machine) => machine.id))).map(
+    return listTeamFeedTasks(feed, teamIds, listFullMachineIds(machines), listed ?? undefined).map(
       (entry): TeamEntry => ({
         entry,
         state: resolveTeamTaskState(entry),
         heldAt: selectTeamTaskHeldAt(held, entry),
       })
     );
-  }, [feed, teams, machines]);
+  }, [feed, teams, machines, listed]);
   return { teams, entries };
 }
 
@@ -65,7 +76,7 @@ export function TeamFeedRefusals({ state }: { state: ShinsaState }) {
   const refusals = listTeamFeedRefusals(
     feed,
     teams,
-    new Set(machines.map((machine) => machine.id)),
+    listFullMachineIds(machines),
     resolveFocusTeam(state, Date.now())
   );
   const [first] = refusals;
@@ -90,8 +101,9 @@ export function TeamFeedRefusals({ state }: { state: ShinsaState }) {
   );
 }
 
-function openTeamTask(entry: TeamFeedTask) {
-  navigate(resolveTeamTaskPath(resolveTeamTaskTarget(entry)));
+function resolveTeamRowPath(entry: TeamFeedTask, machine: MachineView | null) {
+  const target = resolveTeamTaskTarget(entry);
+  return resolveFleetTeamTaskPath(target, entry.task, machine) ?? resolveTeamTaskPath(target);
 }
 
 export function OfflineBadge({ heldAt }: { heldAt: number }) {
@@ -123,16 +135,18 @@ export const TeamTaskListRow = React.memo(function TeamTaskListRowItem({ team }:
   const { entry, state, heldAt } = team;
   const { task } = entry;
   const repo = task.repoId ? state.repos[task.repoId] : undefined;
+  const machine = useMachine(task.id);
+  const openTeamTask = () => navigate(resolveTeamRowPath(entry, machine));
   return (
     // oxlint-disable-next-line shinsa/use-semantic-elements -- the row holds a pull request link, so it cannot be a button
     <div
       role='button'
       tabIndex={0}
       onClick={(event) => {
-        if (event.currentTarget.contains(event.target as Node)) openTeamTask(entry);
+        if (event.currentTarget.contains(event.target as Node)) openTeamTask();
       }}
       onKeyDown={(event) => {
-        if (event.key === 'Enter' && event.target === event.currentTarget) openTeamTask(entry);
+        if (event.key === 'Enter' && event.target === event.currentTarget) openTeamTask();
       }}
       className={`${TASK_LIST_ROW} ${TEAM_TASK_LIST_COLUMNS}`}
     >

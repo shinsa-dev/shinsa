@@ -8,12 +8,13 @@ import { AccountSubmenu } from '@/components/accounts/account-items.tsx';
 import { OptionsTrigger } from '@/components/controls/options-trigger.tsx';
 import { TaskActionItems } from '@/components/task/action-items.tsx';
 import { DependencyItems } from '@/components/task/dependency-items.tsx';
-import { useEngineCommands } from '@/lib/connection/socket.ts';
+import { useEngineCommands, useMachine } from '@/lib/connection/socket.ts';
 import { listTaskActions } from '@/lib/tasks/actions.ts';
 
 export function TaskMenu({ state, task }: { state: ShinsaState; task: Task }) {
   const commands = useEngineCommands(task.id);
-  if (listTaskActions(task, commands).length === 0) return null;
+  const teammate = useMachine(task.id)?.teammate ?? null;
+  if (listTaskActions(task, commands, Date.now(), teammate).length === 0) return null;
   return (
     <DropdownMenu>
       <OptionsTrigger label='Task actions' />

@@ -668,7 +668,7 @@ export const TOOL_SPECS = {
   find_tasks: {
     name: 'find_tasks',
     description:
-      'Find tasks in any project, to link them for the human. Returns each task as a ready shinsa:// markdown link with its status, repository, branch and pull request. Use those links verbatim; never guess an id.',
+      'Find tasks in any project, to link them for the human. Returns each task as a ready shinsa:// markdown link with its status, repository, branch and pull request. Use those links verbatim; never guess an id. Your teammates’ tasks in a team follow, by id, for `fork_from`.',
     inputSchema: {
       type: 'object',
       properties: {

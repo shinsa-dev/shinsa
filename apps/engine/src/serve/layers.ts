@@ -10,6 +10,7 @@ import { ClaudeProviderOptions } from '../agents/providers/claude/index.ts';
 import { ProgramVersions } from '../agents/providers/versions/service.ts';
 import { QuickCalls, QuickFastMode } from '../agents/quick/index.ts';
 import { RunSupervisorLayer } from '../agents/supervisor/layers.ts';
+import { TeammateTasks } from '../agents/tool-calls/schema.ts';
 import { BriefingWriter } from '../briefing/service.ts';
 import { resolveEngineChangelog } from '../changelog/index.ts';
 import { ChecksLayer } from '../checks/layers.ts';
@@ -349,7 +350,15 @@ function createRunsLayer(options: ShinsaOptions) {
         maxPinMs: options.idle.maxPinMs ?? MAX_IDLE_PIN_MS,
       })
     : Layer.empty;
-  return RunSupervisorLayer.pipe(Layer.provide(Layer.mergeAll(access, broker, hooks, idle)));
+  const teammates = Layer.effect(
+    TeammateTasks,
+    Effect.gen(function* () {
+      const feeds = yield* TeamFeeds;
+      const remote = yield* Remote;
+      return Effect.flatMap(feeds.listTasks({}), Effect.filter(remote.canForkTeamTask));
+    })
+  );
+  return RunSupervisorLayer.pipe(Layer.provide(Layer.mergeAll(access, broker, hooks, idle, teammates)));
 }
 
 function createEffectsLayer(options: ShinsaOptions, instance: ServerInstance) {

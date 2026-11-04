@@ -23,6 +23,7 @@ import {
   type ResolvedKey,
   type StoredTeamKey,
   type TeamGrant,
+  type TeammateExtra,
 } from './schema.ts';
 
 export class RemoteStore extends Context.Service<RemoteStore, RemoteStoreHandle>()(
@@ -31,6 +32,10 @@ export class RemoteStore extends Context.Service<RemoteStore, RemoteStoreHandle>
   static readonly layer = Layer.effect(
     RemoteStore,
     Effect.gen(function* () {
+      const isSameGrant = (
+        grant: Pick<TeamGrant, 'userId' | 'teamId'>,
+        other: Pick<TeamGrant, 'userId' | 'teamId'>
+      ) => grant.userId === other.userId && grant.teamId === other.teamId;
       const json = yield* JsonFile;
       const config = yield* EngineConfig;
       const path = join(config.dataDir, REMOTE_FILE);
@@ -115,13 +120,10 @@ export class RemoteStore extends Context.Service<RemoteStore, RemoteStoreHandle>
           }))
         );
 
-      const removeDevicesOutside = Effect.fn('RemoteStore.removeDevicesOutside')(function* (
-        userIds: ReadonlySet<string>,
-        guestIds: ReadonlySet<string>
+      const removeDevicesWhere = Effect.fn('RemoteStore.removeDevicesWhere')(function* (
+        match: (device: RemoteDevice) => boolean
       ) {
-        const removed = (yield* file).devices.filter(
-          (device) => !(device.taskId ? guestIds : userIds).has(device.userId)
-        );
+        const removed = (yield* file).devices.filter(match);
         if (removed.length === 0) return [];
         yield* update((stored) => ({
           ...stored,
@@ -129,6 +131,11 @@ export class RemoteStore extends Context.Service<RemoteStore, RemoteStoreHandle>
         }));
         return removed.map((device) => device.publicKey);
       });
+
+      const removeDevicesOutside = (userIds: ReadonlySet<string>, guestIds: ReadonlySet<string>) =>
+        removeDevicesWhere(
+          (device) => !device.teamId && !(device.taskId ? guestIds : userIds).has(device.userId)
+        );
 
       const removeDevice = Effect.fn('RemoteStore.removeDevice')(function* (publicKey: string) {
         const before = (yield* file).devices.length;
@@ -171,21 +178,45 @@ export class RemoteStore extends Context.Service<RemoteStore, RemoteStoreHandle>
         Effect.asVoid(
           update((stored) => ({
             ...stored,
-            grants: [...stored.grants.filter((entry) => entry.userId !== grant.userId), grant],
+            grants: [...stored.grants.filter((entry) => !isSameGrant(entry, grant)), grant],
           }))
         );
 
-      const selectGrant = (userId: string) =>
-        Effect.map(file, (stored) => stored.grants.find((grant) => grant.userId === userId) ?? null);
+      const selectGrant = (userId: string, teamId: string) =>
+        Effect.map(
+          file,
+          (stored) => stored.grants.find((grant) => isSameGrant(grant, { userId, teamId })) ?? null
+        );
 
-      const removeGrantsOutside = Effect.fn('RemoteStore.removeGrantsOutside')(function* (
-        userIds: ReadonlySet<string>
+      const listGrants = (userId: string) =>
+        Effect.map(file, (stored) => stored.grants.filter((grant) => grant.userId === userId));
+
+      const removeGrantsWhere = Effect.fn('RemoteStore.removeGrantsWhere')(function* (
+        match: (grant: TeamGrant) => boolean
       ) {
-        if ((yield* file).grants.every((grant) => userIds.has(grant.userId))) return;
-        yield* update((stored) => ({
-          ...stored,
-          grants: stored.grants.filter((grant) => userIds.has(grant.userId)),
-        }));
+        if (!(yield* file).grants.some(match)) return;
+        yield* update((stored) => ({ ...stored, grants: stored.grants.filter((grant) => !match(grant)) }));
+      });
+
+      const selectExtra = (userId: string, teamId: string) =>
+        Effect.map(
+          file,
+          (stored) => stored.extras.find((extra) => isSameGrant(extra, { userId, teamId })) ?? null
+        );
+
+      const writeExtra = (extra: TeammateExtra) =>
+        Effect.asVoid(
+          update((stored) => {
+            const others = stored.extras.filter((entry) => !isSameGrant(entry, extra));
+            return { ...stored, extras: extra.scopes.length > 0 ? [...others, extra] : others };
+          })
+        );
+
+      const removeExtrasWhere = Effect.fn('RemoteStore.removeExtrasWhere')(function* (
+        match: (extra: TeammateExtra) => boolean
+      ) {
+        if (!(yield* file).extras.some(match)) return;
+        yield* update((stored) => ({ ...stored, extras: stored.extras.filter((extra) => !match(extra)) }));
       });
 
       const removeTeam = (teamId: string) =>
@@ -218,6 +249,7 @@ export class RemoteStore extends Context.Service<RemoteStore, RemoteStoreHandle>
         selectDevice,
         upsertDevice,
         removeDevicesOutside,
+        removeDevicesWhere,
         removeDevice,
         recordTeams,
         selectTeamKey,
@@ -225,7 +257,11 @@ export class RemoteStore extends Context.Service<RemoteStore, RemoteStoreHandle>
         upsertTeamKey,
         writeGrant,
         selectGrant,
-        removeGrantsOutside,
+        listGrants,
+        removeGrantsWhere,
+        selectExtra,
+        writeExtra,
+        removeExtrasWhere,
         removeTeam,
         recordDeviceSeen,
       });

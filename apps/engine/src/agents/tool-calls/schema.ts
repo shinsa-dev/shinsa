@@ -1,6 +1,6 @@
 import type { RequestId } from '@modelcontextprotocol/sdk/types.js';
-import type { CommandOf, DomainError, ShinsaCommand, ShinsaEvent } from '@shinsa/core';
-import { Context, Duration, type Effect } from 'effect';
+import type { CommandOf, DomainError, ShinsaCommand, ShinsaEvent, TeamFeedTask } from '@shinsa/core';
+import { Context, Duration, Effect } from 'effect';
 import type { ToolCallFailed } from '../tools/schema.ts';
 
 export interface ToolCall {
@@ -25,4 +25,11 @@ export type EffectCallDispatch = (
 export const DelegationMinute = Context.Reference<Duration.Duration>(
   'shinsa/engine/agents/tool-calls/DelegationMinute',
   { defaultValue: () => Duration.minutes(1) }
+);
+
+const NO_TEAMMATE_TASKS: readonly TeamFeedTask[] = [];
+
+export const TeammateTasks = Context.Reference<Effect.Effect<readonly TeamFeedTask[]>>(
+  'shinsa/engine/agents/tool-calls/TeammateTasks',
+  { defaultValue: () => Effect.succeed(NO_TEAMMATE_TASKS) }
 );

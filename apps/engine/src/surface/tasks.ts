@@ -26,6 +26,7 @@ import {
 } from './resolve.ts';
 import type { SurfaceClient } from './schema.ts';
 import { defineAction, defineCommand, defineRead, readValue, type SurfaceSpec } from './spec.ts';
+import { findTeamId, findTeamUser, LOGIN_FIELD, TEAM_FIELD } from './teams.ts';
 
 export const TASK_FIELD: FieldSpec = {
   name: 'task',
@@ -540,6 +541,44 @@ export const TASK_SPECS: SurfaceSpec[] = [
       };
     }),
     done: () => 'Taken back.',
+  }),
+  defineCommand({
+    path: ['tasks', 'hand-to-teammate'],
+    summary:
+      'Hand a task to someone in a team that sees its project. It is theirs to steer at once, with no link.',
+    command: 'task.hand_to_teammate',
+    humanOnly: true,
+    fields: [TASK_FIELD, { ...TEAM_FIELD, positional: undefined }, LOGIN_FIELD],
+    build: Effect.fn('Surface.tasksHandToTeammate')(function* (values, client) {
+      const teamId = yield* findTeamId(client, readValue(values, 'team'));
+      const { id, login, name, avatarUrl } = yield* findTeamUser(
+        client,
+        teamId,
+        readValue(values, 'login'),
+        'teammates'
+      );
+      return {
+        type: 'task.hand_to_teammate' as const,
+        taskId: yield* findTaskId(client, readValue(values, 'task')),
+        teamId,
+        teammate: { id, login, name, avatarUrl },
+      };
+    }),
+    done: () => 'Handed over. Take it back with `shinsa tasks hand-off-remove`.',
+  }),
+  defineCommand({
+    path: ['tasks', 'give-back'],
+    summary: 'Give a task a teammate handed you back to them.',
+    command: 'task.give_back',
+    humanOnly: true,
+    fields: [TASK_FIELD],
+    build: Effect.fn('Surface.tasksGiveBack')(function* (values, client) {
+      return {
+        type: 'task.give_back' as const,
+        taskId: yield* findTaskId(client, readValue(values, 'task')),
+      };
+    }),
+    done: () => 'Given back.',
   }),
   defineCommand({
     path: ['tasks', 'duplicate'],

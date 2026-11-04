@@ -2,12 +2,13 @@ import {
   type ChatEntry,
   type ParsedClientMessage,
   DEVELOPMENT_VERSION,
-  type GuestActor,
+  type ScopedActor,
   listSummarizedTasks,
   parseClientMessage,
   type RemoteSnapshot,
   type RequestOrigin,
   resolveEngineInfo,
+  isTaskInScope,
   resolveScopedEngineInfo,
   resolveScopedPatch,
   resolveScopedState,
@@ -24,6 +25,8 @@ import { Cause, Effect, type Scope } from 'effect';
 import type { Accounts } from '../accounts/index.ts';
 import type { Transcripts } from '../agents/transcripts/service.ts';
 import { describeError, log } from '../log/index.ts';
+import type { RemoteHandle } from '../remote/machine/schema.ts';
+import type { Presence } from '../remote/presence/service.ts';
 import type { ResourceMonitor } from '../resources/index.ts';
 import type { EngineCore } from '../runtime/engine/service.ts';
 import type { Terminals } from '../terminals/index.ts';
@@ -37,7 +40,7 @@ export interface SocketData {
   transcripts: Map<string, Effect.Effect<void>>;
   surface: Surface | null;
   origin: RequestOrigin;
-  guest: GuestActor | null;
+  guest: ScopedActor | null;
 }
 
 interface FeedSource<T> {
@@ -55,6 +58,8 @@ export interface SocketHubInput {
   readonly teamFeeds?: FeedSource<TeamFeedSnapshot> | undefined;
   readonly version?: string | undefined;
   readonly resources?: ResourceMonitor['Service'] | undefined;
+  readonly teams?: Pick<RemoteHandle, 'resolveTeamScope'> | undefined;
+  readonly presence?: Presence['Service'] | undefined;
 }
 
 export interface HubSocket {
@@ -84,7 +89,7 @@ const TRANSCRIPT_PAGE = 500;
 const COMMAND_FAILED = 'command_failed';
 
 export const makeSocketHub = Effect.fn('SocketHub.make')(function* (input: SocketHubInput) {
-  const { engine, transcripts, accounts, terminals, remote, teamFeeds, resources } = input;
+  const { engine, transcripts, accounts, terminals, remote, teamFeeds, resources, teams, presence } = input;
   const router = input.router ?? null;
   const version = input.version ?? DEVELOPMENT_VERSION;
   const context = yield* Effect.context<never>();
@@ -94,11 +99,11 @@ export const makeSocketHub = Effect.fn('SocketHub.make')(function* (input: Socke
   const sockets = new Set<Socket>();
   const views = new WeakMap<SocketData, ReadonlySet<string>>();
   const engineInfo = resolveEngineInfo(version);
-  const scopedEngineInfo = resolveScopedEngineInfo(version);
   let desktopConnected = false;
   let unsubscribeResources: Effect.Effect<void> | null = null;
-  const attention = yield* makeAttentionTracker<Socket>((socket, where) =>
-    send(socket, { type: 'attention', where })
+  const attention = yield* makeAttentionTracker<Socket>(
+    (socket, where) => send(socket, { type: 'attention', where }),
+    presence ? presence.recordOwner : null
   );
 
   function broadcast(message: ServerMessage) {
@@ -108,7 +113,9 @@ export const makeSocketHub = Effect.fn('SocketHub.make')(function* (input: Socke
 
   function isVisibleRun(socket: Socket, runId: string) {
     const { guest } = socket.data;
-    return !guest || readState().runs[runId]?.taskId === guest.taskId;
+    if (!guest) return true;
+    const state = readState();
+    return isTaskInScope(state, guest.scope, state.runs[runId]?.taskId ?? null);
   }
 
   function selectView(socket: Socket): ReadonlySet<string> {
@@ -119,7 +126,7 @@ export const makeSocketHub = Effect.fn('SocketHub.make')(function* (input: Socke
     const { guest } = socket.data;
     const state = readState();
     if (guest) {
-      send(socket, { type: 'state', state: serializeState(resolveScopedState(state, guest.taskId)) });
+      send(socket, { type: 'state', state: serializeState(resolveScopedState(state, guest.scope)) });
       return;
     }
     const summarized = listSummarizedTasks(state);
@@ -199,7 +206,7 @@ export const makeSocketHub = Effect.fn('SocketHub.make')(function* (input: Socke
       if (guest) {
         send(socket, {
           type: 'state.patch',
-          patch: resolveScopedPatch(previous, state, changes, guest.taskId),
+          patch: resolveScopedPatch(previous, state, changes, guest.scope),
         });
         continue;
       }
@@ -252,6 +259,7 @@ export const makeSocketHub = Effect.fn('SocketHub.make')(function* (input: Socke
           router,
           origin: socket.data.origin,
           guest: socket.data.guest,
+          teams: teams ?? null,
         }).pipe(
           Effect.as(null),
           Effect.catch((failure) =>
@@ -292,7 +300,7 @@ export const makeSocketHub = Effect.fn('SocketHub.make')(function* (input: Socke
       sockets.add(socket);
       send(socket, { type: 'surfaces', desktop: desktopConnected });
       if (socket.data.guest) {
-        send(socket, { type: 'engine', engine: scopedEngineInfo });
+        send(socket, { type: 'engine', engine: resolveScopedEngineInfo(version, socket.data.guest.scope) });
         sendState(socket);
         return;
       }

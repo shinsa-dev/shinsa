@@ -5,6 +5,7 @@ import {
   isTaskSettled,
   resolveCurrentRound,
   serializeTaskReferences,
+  serializeTeamTaskReferences,
   validateEvidenceRemoval,
   validateFixHandOver,
   validatePhaseHandOver,
@@ -47,6 +48,7 @@ import { Transcripts } from '../transcripts/service.ts';
 import {
   type CommitHandOver,
   DelegationMinute,
+  TeammateTasks,
   type EffectCallDispatch,
   type HandOverTool,
   type ToolCall,
@@ -72,6 +74,7 @@ export class ToolCalls extends Context.Service<
       const checkout = yield* Checkout;
       const registry = yield* RepoRegistry;
       const minute = yield* DelegationMinute;
+      const teamTasks = yield* TeammateTasks;
       const services = yield* Effect.serviceOption(Terminals);
       const schedules = yield* Effect.serviceOption(ScheduleTools);
       const access = yield* Effect.serviceOption(ManageAccess);
@@ -297,6 +300,12 @@ export class ToolCalls extends Context.Service<
         return yield* tool.pipe(Effect.catchTag('ScheduleToolRefused', (refused) => refuse(refused.message)));
       });
 
+      const findTasks = Effect.fn('ToolCalls.findTasks')(function* (query: string) {
+        const own = serializeTaskReferences(yield* engine.state, query);
+        const theirs = serializeTeamTaskReferences(yield* teamTasks, query);
+        return theirs ? `${own}\n\n${theirs}` : own;
+      });
+
       const orchestrate = (name: string, call: ToolCall, dispatch: EffectCallDispatch) => {
         const { runId, attemptId, input, signal, requestId } = call;
         const worktreePath = Effect.map(findCurrent(runId, attemptId), ({ task }) => task.worktreePath ?? '');
@@ -307,6 +316,7 @@ export class ToolCalls extends Context.Service<
           signal,
           minute,
           state: engine.state,
+          teamTasks,
           dispatch,
           resolveBaseCommit: worktreePath.pipe(
             Effect.flatMap((path) => Effect.mapError(checkout.head(path), fail))
@@ -361,7 +371,7 @@ export class ToolCalls extends Context.Service<
           case 'remove_evidence':
             return yield* removeEvidence(call, dispatch);
           case 'find_tasks':
-            return serializeTaskReferences(yield* engine.state, readString(input, 'query') ?? '');
+            return yield* findTasks(readString(input, 'query') ?? '');
           case 'read_task':
             return yield* readTask(input);
           case 'list_repository_work':

@@ -26,7 +26,16 @@ describe('decide returns a Result', () => {
     const result = decide(
       createState(),
       { type: 'settings.change', patch: { maxFixRounds: 4 } },
-      { ...CONTEXT, guest: { taskId: 't1', login: 'kai' } }
+      {
+        ...CONTEXT,
+        guest: {
+          id: 'u-kai',
+          login: 'kai',
+          name: null,
+          avatarUrl: null,
+          scope: { kind: 'task', taskId: 't1' },
+        },
+      }
     );
     const failure = Result.isFailure(result) ? result.failure : null;
     expect(failure?.code).toBe('handoff_scope');

@@ -18,6 +18,7 @@ export function createRemoteFile(): RemoteFile {
     teams: [],
     teamKeys: [],
     grants: [],
+    extras: [],
   };
 }
 
@@ -30,6 +31,9 @@ export function listTeamEntries(file: RemoteFile): RemoteTeamEntry[] {
     onMachine: keys.has(team.id),
     invite: team.role === 'owner' && Boolean(keys.get(team.id)?.invite),
     team,
+    extras: file.extras
+      .filter((extra) => extra.teamId === team.id)
+      .map(({ userId, scopes }) => ({ userId, scopes })),
   }));
   const asked = file.teamKeys
     .filter((stored) => !file.teams.some((team) => team.id === stored.teamId))
@@ -40,6 +44,7 @@ export function listTeamEntries(file: RemoteFile): RemoteTeamEntry[] {
       onMachine: true,
       invite: false,
       team: null,
+      extras: [],
     }));
   return [...known, ...asked];
 }

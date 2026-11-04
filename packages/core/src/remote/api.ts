@@ -46,6 +46,7 @@ import {
   TeamInviteResponse,
   TeamJoinRequest,
   TeamJoinResponse,
+  TeamScopesRequest,
   TeamPreviewResponse,
 } from './contract.ts';
 import {
@@ -237,6 +238,12 @@ class TeamsGroup extends HttpApiGroup.make('teams')
       payload: TeamConnectRequest,
       success: ConnectResponse,
       error: wire(NotFound),
+    }),
+    HttpApiEndpoint.post('scopes', `${REMOTE_PATHS.teams}/:teamId/scopes`, {
+      params: TeamParams,
+      payload: TeamScopesRequest,
+      success: RemoteTeam,
+      error: [wire(NotFound), wire(NotOwner)],
     })
   )
   .middleware(RequestGate)
@@ -348,6 +355,12 @@ class MachineTeamsGroup extends HttpApiGroup.make('machineTeams')
       payload: TeamConnectRequest,
       success: ConnectResponse,
       error: wire(NotFound),
+    }),
+    HttpApiEndpoint.post('scopes', machineTeamPath('scopes'), {
+      params: TeamParams,
+      payload: TeamScopesRequest,
+      success: RemoteTeam,
+      error: OWNER_FAILURES,
     })
   )
   .middleware(RequestGate)

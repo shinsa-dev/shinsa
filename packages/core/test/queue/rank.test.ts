@@ -54,6 +54,24 @@ describe('attention', () => {
     harness.send({ type: 'focus.change', projectId: superwall, until: null });
     expect(resolveQueue(harness.state, 2_000).ready.map((entry) => entry.task.id)).toEqual([taskId]);
   });
+  test('a teammate’s task the fleet marks as theirs stays out of your decisions and lists', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    const backlogged = createTask(harness, { request: 'Later' });
+    harness.send({ type: 'task.move_to_backlog', taskId: backlogged });
+    harness.send({
+      type: 'agent.ask',
+      runId: harness.activeRun(taskId).id,
+      gateId: 'q1',
+      question: 'Which tab?',
+      context: null,
+    });
+    const theirs = { ...harness.state, teammateTasks: { [taskId]: true, [backlogged]: true } as const };
+    const queue = resolveQueue(theirs, 0);
+    expect(queue.ready).toHaveLength(0);
+    expect(queue.backlog).toHaveLength(0);
+    expect(resolveQueue(harness.state, 0).ready.map((entry) => entry.task.id)).toEqual([taskId]);
+  });
 });
 
 describe('ranking decisions', () => {

@@ -1,4 +1,4 @@
-import type { Changelog, GuestActor } from '@shinsa/core';
+import type { Changelog, ScopedActor } from '@shinsa/core';
 import {
   BodyTooLarge,
   type FieldFailure,
@@ -23,7 +23,7 @@ type RequestVia = (typeof REQUEST_VIAS)[number];
 
 export interface RequestSourceShape {
   readonly via: RequestVia;
-  readonly guest: GuestActor | null;
+  readonly guest: ScopedActor | null;
   readonly userId: string | null;
 }
 

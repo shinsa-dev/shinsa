@@ -51,6 +51,8 @@ export function readTeamMachineGrant(target: TeamChannelTarget, open: OpenTeam =
   });
 }
 
+const ADMITTED_ROLES: ReadonlySet<MachineRow['instance']['role']> = new Set(['member', 'teammate']);
+
 export function admitTeamMachines(rows: MachineRow[], options: TeamAdmitOptions) {
   const enroll = Effect.fn('TeamAdmit.enroll')(function* (
     row: MachineRow,
@@ -104,7 +106,7 @@ export function admitTeamMachines(rows: MachineRow[], options: TeamAdmitOptions)
   });
 
   const candidates = rows.filter(
-    (row) => row.instance.role === 'member' && !row.device && row.instance.online
+    (row) => ADMITTED_ROLES.has(row.instance.role) && !row.device && row.instance.online
   );
   return runApp(
     Effect.gen(function* () {

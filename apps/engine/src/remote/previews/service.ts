@@ -1,5 +1,7 @@
 import {
+  hasScope,
   isSameSecret,
+  isTeamTask,
   PREVIEW_ACCESS_HEADER,
   PREVIEW_GONE,
   PREVIEW_ID_BYTES,
@@ -118,11 +120,16 @@ export class Previews extends Context.Service<Previews, PreviewsHandle>()(
         for (const listener of [...listeners]) listener();
       });
 
-      const isAllowed = (remote: PreviewRemote, userId: string) => {
-        const { access } = remote;
-        if (!access) return false;
-        return access.owner.id === userId || access.members.some((member) => member.user.id === userId);
-      };
+      const isAllowed = Effect.fn('Previews.isAllowed')(function* (userId: string, run: PrivateRun) {
+        if (yield* remoteAccess.hasAccess(userId)) return true;
+        const state = yield* engine.state;
+        const task = run.taskId ? state.tasks[run.taskId] : undefined;
+        if (!task) return false;
+        const scopes = yield* remoteAccess.listTeamScopes(userId);
+        return scopes.some(
+          (scope) => hasScope(scope.scopes, 'services') && isTeamTask(state, task, scope.teamId)
+        );
+      });
 
       const selectConnectKey = Effect.gen(function* () {
         const remote = yield* readRemote;
@@ -163,8 +170,9 @@ export class Previews extends Context.Service<Previews, PreviewsHandle>()(
 
       const isStillOpen = Effect.fn('Previews.isStillOpen')(function* (socket: LiveSocket) {
         if (socket.userId === null) return (yield* resolveShare(socket.previewId)) !== null;
-        if ((yield* selectPrivateRun(socket.previewId)) === null) return false;
-        return isAllowed(yield* readRemote, socket.userId);
+        const run = yield* selectPrivateRun(socket.previewId);
+        if (run === null) return false;
+        return yield* isAllowed(socket.userId, run);
       });
 
       const syncSockets = Effect.gen(function* () {
@@ -293,9 +301,9 @@ export class Previews extends Context.Service<Previews, PreviewsHandle>()(
         if (!(token && instanceId && connectKey)) return null;
         const now = yield* Clock.currentTimeMillis;
         const claim = yield* verifyPreviewAccessToken(connectKey, token, { instanceId, previewId }, now);
-        if (!(claim && isAllowed(yield* readRemote, claim.userId))) return null;
+        if (!claim) return null;
         const run = yield* findPrivateRun(previewId);
-        if (!run) return null;
+        if (!(run && (yield* isAllowed(claim.userId, run)))) return null;
         const target: PreviewTarget = { ...run, userId: claim.userId };
         return target;
       });

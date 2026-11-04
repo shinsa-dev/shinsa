@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { DEFAULT_TEAM_SCOPES } from '@shinsa/core';
 import { readTeams } from '../../src/remote/store/decode.ts';
 import { listTeamEntries, resolveOwnerProfile } from '../../src/remote/store/derive.ts';
 import { createTempDir } from '../helpers/index.ts';
@@ -51,6 +52,7 @@ describe('remote.json', () => {
           },
           { publicKey: 'd2', name: 'Laptop', enrolledAt: 3, userId: null },
           { publicKey: 'd4', name: 'Guest', enrolledAt: 4, userId: '9', taskId: 't1' },
+          { publicKey: 'd5', name: 'Teammate', enrolledAt: 5, userId: '8', teamId: 'team-1' },
           { publicKey: 'd3', name: 'Broken' },
           'nope',
         ],
@@ -90,6 +92,12 @@ describe('remote.json', () => {
           'nope',
         ],
         grants: [{ userId: '7', teamId: 't1', secret: 'g1' }, { userId: '8', teamId: 't1' }, 'nope'],
+        extras: [
+          { teamId: 't1', userId: '7', scopes: ['message', 'teleport'] },
+          { teamId: 't1', scopes: ['message'] },
+          { teamId: 't1', userId: '8', scopes: 'message' },
+          'nope',
+        ],
       })
     );
     expect(readRemoteFile(path)).toEqual({
@@ -97,6 +105,7 @@ describe('remote.json', () => {
       teams: [],
       teamKeys: [],
       grants: [{ userId: '7', teamId: 't1', secret: 'g1' }],
+      extras: [{ teamId: 't1', userId: '7', scopes: ['message'] }],
       machine: { publicKey: 'p', privateKey: 'k' },
       signing: null,
       credentials: CREDENTIALS,
@@ -105,6 +114,7 @@ describe('remote.json', () => {
       devices: [
         { publicKey: 'd1', name: 'Phone', enrolledAt: 1, lastSeenAt: 2, userId: '7' },
         { publicKey: 'd4', name: 'Guest', enrolledAt: 4, lastSeenAt: null, userId: '9', taskId: 't1' },
+        { publicKey: 'd5', name: 'Teammate', enrolledAt: 5, lastSeenAt: null, userId: '8', teamId: 'team-1' },
       ],
       access: {
         owner: { id: '1', login: 'mona', name: 'Mona Lisa', avatarUrl: null },
@@ -200,22 +210,41 @@ describe('the remote store', () => {
     store.upsertDevice({ ...device, publicKey: 'mine', userId: '1' });
     store.upsertDevice({ ...device, publicKey: 'kai', userId: '7' });
     store.upsertDevice({ ...device, publicKey: 'guest', userId: '9', taskId: 't1' });
+    store.upsertDevice({ ...device, publicKey: 'teammate', userId: '8', teamId: 'team-1' });
     expect(store.removeDevicesOutside(new Set(['1', '7']), new Set(['9']))).toEqual([]);
     expect(store.removeDevicesOutside(new Set(['1', '9']), new Set(['1']))).toEqual(['kai', 'guest']);
-    expect(store.file.devices.map((entry) => entry.publicKey)).toEqual(['mine']);
+    expect(store.file.devices.map((entry) => entry.publicKey)).toEqual(['mine', 'teammate']);
+    expect(store.removeDevicesWhere((entry) => entry.teamId === 'team-1')).toEqual(['teammate']);
+    expect(store.removeDevicesWhere((entry) => entry.teamId === 'team-1')).toEqual([]);
   });
 
-  test('keeps one grant per teammate and drops the grants of people no longer in a team', () => {
+  test('keeps one grant per teammate and team, and drops the ones asked for', () => {
     const store = openTestStore(createPath());
     store.writeGrant({ userId: '7', teamId: 't1', secret: 'first' });
     store.writeGrant({ userId: '8', teamId: 't1', secret: 'other' });
     store.writeGrant({ userId: '7', teamId: 't2', secret: 'again' });
-    expect(store.selectGrant('7')).toEqual({ userId: '7', teamId: 't2', secret: 'again' });
-    store.removeGrantsOutside(new Set(['7', '8']));
-    expect(store.file.grants).toHaveLength(2);
-    store.removeGrantsOutside(new Set(['8']));
+    store.writeGrant({ userId: '7', teamId: 't1', secret: 'renewed' });
+    expect(store.selectGrant('7', 't1')).toEqual({ userId: '7', teamId: 't1', secret: 'renewed' });
+    expect(store.listGrants('7').map((grant) => grant.teamId)).toEqual(['t2', 't1']);
+    store.removeGrantsWhere((grant) => grant.userId === 'nobody');
+    expect(store.file.grants).toHaveLength(3);
+    store.removeGrantsWhere((grant) => grant.userId === '7');
     expect(store.file.grants.map((grant) => grant.userId)).toEqual(['8']);
-    expect(store.selectGrant('7')).toBeNull();
+    expect(store.selectGrant('7', 't2')).toBeNull();
+  });
+
+  test('keeps one set of extra scopes per teammate and team, and drops an empty one', () => {
+    const store = openTestStore(createPath());
+    store.writeExtra({ teamId: 't1', userId: '7', scopes: ['message'] });
+    store.writeExtra({ teamId: 't1', userId: '8', scopes: ['share'] });
+    store.writeExtra({ teamId: 't1', userId: '7', scopes: ['message', 'services'] });
+    expect(store.selectExtra('7', 't1')?.scopes).toEqual(['message', 'services']);
+    expect(store.selectExtra('7', 't2')).toBeNull();
+    store.writeExtra({ teamId: 't1', userId: '8', scopes: [] });
+    expect(store.file.extras.map((extra) => extra.userId)).toEqual(['7']);
+    store.removeExtrasWhere((extra) => extra.userId === 'nobody');
+    store.removeExtrasWhere((extra) => extra.userId === '7');
+    expect(store.file.extras).toEqual([]);
   });
 
   test('creates the machine key once and reads it back after a restart', async () => {
@@ -314,6 +343,31 @@ describe('readTeams', () => {
     ]);
     expect(readTeams('none')).toBeNull();
   });
+
+  test('reads what teammates may do and who is set apart, dropping what it cannot read', () => {
+    const owner = { id: '1', login: 'mona' };
+    const [team, bare] =
+      readTeams([
+        {
+          id: 'team-1',
+          name: 'Platform',
+          owner,
+          createdAt: 1,
+          scopes: ['message', 'share', 'everything'],
+          overrides: [
+            { userId: '2', scopes: ['services', 7] },
+            { userId: '3' },
+            { scopes: ['fork'] },
+            'nope',
+          ],
+        },
+        { id: 'team-2', name: 'Design', owner, createdAt: 2, scopes: 'all', overrides: {} },
+      ]) ?? [];
+    expect(team?.scopes).toEqual(['message', 'share']);
+    expect(team?.overrides).toEqual([{ userId: '2', scopes: ['services'] }]);
+    expect(bare?.scopes).toEqual(DEFAULT_TEAM_SCOPES);
+    expect(bare?.overrides).toEqual([]);
+  });
 });
 
 describe('the team keys', () => {
@@ -326,6 +380,8 @@ describe('the team keys', () => {
     members: [],
     requests: [],
     machines: [],
+    scopes: DEFAULT_TEAM_SCOPES,
+    overrides: [],
     createdAt: 1,
   };
   const key = 'A'.repeat(43);
@@ -346,6 +402,11 @@ describe('the team keys', () => {
     expect(listTeamEntries(store.file).map((entry) => [entry.id, entry.status, entry.invite])).toEqual([
       ['team-1', 'member', true],
       ['team-2', 'requested', false],
+    ]);
+    store.writeExtra({ teamId: 'team-1', userId: '7', scopes: ['message'] });
+    expect(listTeamEntries(store.file).map((entry) => entry.extras)).toEqual([
+      [{ userId: '7', scopes: ['message'] }],
+      [],
     ]);
     store.removeTeam('team-1');
     expect(store.selectTeam('team-1')).toBeNull();

@@ -1,4 +1,4 @@
-import type { DomainError, TeamJoinStatus, TeamView } from '@shinsa/core';
+import type { AccessScopes, DomainError, TeamJoinStatus, TeamView } from '@shinsa/core';
 import type { NotFound, NotOwner, OwnerCannotLeave, Revoked, TeamsFull } from '@shinsa/core/remote/errors';
 import { Schema } from 'effect';
 import type { Effect } from 'effect';
@@ -58,6 +58,13 @@ export interface TeamSubject {
   teamId: string;
   view: TeamView;
   userId: string;
+  present?: boolean;
+}
+
+interface StoredTeamKeyView {
+  teamId: string;
+  name: string;
+  key: string;
 }
 
 export class TeamCommandFailed extends Schema.TaggedError<
@@ -91,6 +98,13 @@ export interface TeamsHandle {
   acceptRequest(teamId: string, userId: string): Effect.Effect<void, TeamFailure>;
   declineRequest(teamId: string, userId: string): Effect.Effect<void, TeamFailure>;
   removeMember(teamId: string, userId: string): Effect.Effect<void, TeamFailure>;
+  updateScopes(
+    teamId: string,
+    userId: string | null,
+    scopes: AccessScopes | null
+  ): Effect.Effect<void, TeamFailure>;
+  updateExtra(teamId: string, userId: string, scopes: AccessScopes): Effect.Effect<void, TeamFailure>;
+  readonly listKeys: Effect.Effect<StoredTeamKeyView[]>;
   leave(teamId: string): Effect.Effect<void, TeamFailure>;
   remove(teamId: string): Effect.Effect<void, TeamFailure>;
   readonly acceptsViewer: Effect.Effect<boolean>;

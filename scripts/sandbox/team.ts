@@ -1,9 +1,12 @@
 import type { ServerWebSocket } from 'bun';
 import {
+  ACCESS_PRESETS,
+  DEFAULT_TEAM_SCOPES,
   REMOTE_PATHS,
   type RemoteTeam,
   type RemoteUser,
   type TeamJoinResponse,
+  toggleScope,
   type TeamPreviewResponse,
 } from '../../packages/core/src/index.ts';
 import { DAY, HOUR } from '../kit/time.ts';
@@ -30,6 +33,8 @@ export const TEAM: Omit<RemoteTeam, 'role'> = {
     { id: 'laptop', name: 'Laptop', userId: USER.id, online: true, lastSeenAt: Date.now() },
     { id: 'kai', name: 'Kai’s MacBook', userId: TEAMMATE.id, online: true, lastSeenAt: Date.now() },
   ],
+  scopes: DEFAULT_TEAM_SCOPES,
+  overrides: [{ userId: TEAMMATE.id, scopes: ACCESS_PRESETS.full }],
   createdAt: Date.now() - 7 * DAY,
 };
 
@@ -54,6 +59,8 @@ const OTHER_TEAMS: Omit<RemoteTeam, 'role'>[] = [
     })),
     requests: [],
     machines: [{ id: 'kai', name: 'Kai’s MacBook', userId: TEAMMATE.id, online: false, lastSeenAt: null }],
+    scopes: toggleScope(DEFAULT_TEAM_SCOPES, 'services', false),
+    overrides: [],
     createdAt: Date.now() - 30 * DAY,
   },
   {
@@ -63,14 +70,24 @@ const OTHER_TEAMS: Omit<RemoteTeam, 'role'>[] = [
     members: [],
     requests: [],
     machines: TEAM.machines.filter((machine) => machine.userId === USER.id),
+    scopes: DEFAULT_TEAM_SCOPES,
+    overrides: [],
     createdAt: Date.now() - DAY,
   },
 ];
+
+export const TEAM_SCOPES_PATH = new RegExp(`^${REMOTE_PATHS.machineTeams}/([^/]+)/scopes$`);
+
+export const PAGE_SCOPES_PATH = new RegExp(`^${REMOTE_PATHS.teams}/([^/]+)/scopes$`);
 
 const REQUESTED_TEAM = { id: 'growth', name: 'Growth' };
 
 const PREVIEW_TEAM_KEYS: Record<string, string> = Object.fromEntries(
   [...OTHER_TEAMS, REQUESTED_TEAM].map((team) => [team.id, createRandomKey(32)])
+);
+
+export const TEAM_SCOPES = new Map<string, Pick<RemoteTeam, 'scopes' | 'overrides'>>(
+  [TEAM, ...OTHER_TEAMS].map((team) => [team.id, { scopes: team.scopes, overrides: team.overrides }])
 );
 
 export const teammateLink = {
@@ -97,7 +114,8 @@ export function resolvePreviewTeams(owner: RemoteUser): RemoteTeam[] {
             }
           : machine
       );
-      return { ...team, role, machines, requests: role === 'owner' ? team.requests : [] };
+      const access = TEAM_SCOPES.get(team.id) ?? team;
+      return { ...team, ...access, role, machines, requests: role === 'owner' ? team.requests : [] };
     });
 }
 

@@ -1107,9 +1107,30 @@ describe('hand-overs', () => {
   });
 
   test('evidence, notes and task lookups', async () => {
-    const { call, path, dispatched, done, running } = await handOverSetup((state) => {
-      Object.assign(state.tasks['task-1'] ?? {}, { activity: [], phases: [], findings: [] });
-    });
+    const { call, path, dispatched, done, running } = await handOverSetup(
+      (state) => {
+        Object.assign(state.tasks['task-1'] ?? {}, { activity: [], phases: [], findings: [] });
+      },
+      {
+        teamTasks: () => [
+          {
+            task: createTask({
+              id: 'kai-1',
+              handle: 'PAY-1',
+              title: 'Retry failed tab payments',
+              request: 'Retry failed tab payments',
+            }),
+            gates: [],
+            project: null,
+            repo: null,
+            owner: 'Kai',
+            machine: 'Kai’s MacBook',
+            teamId: 'core',
+            instanceId: 'kai',
+          },
+        ],
+      }
+    );
     writeFiles(path, { 'shot.png': 'png' });
     expect(await call('attach_evidence', { kind: 'screenshot', title: 'Home', path: 'shot.png' })).toBe(
       'Attached.'
@@ -1150,6 +1171,10 @@ describe('hand-overs', () => {
     expect(await call('note', { note: 'Follow up on dark mode.' })).toBe('Noted.');
     expect(call('note', {})).rejects.toThrow('note is required.');
     expect(await call('find_tasks', { query: 'tab' })).toContain('Fix the tab scroll');
+    expect(await call('find_tasks', { query: 'tab' })).toContain(
+      'PAY-1 “Retry failed tab payments” · Kai’s task'
+    );
+    expect(await call('find_tasks', { query: 'scroll' })).not.toContain('Kai’s task');
     expect(await call('find_tasks')).toContain('Fix the tab scroll');
     expect(await call('read_task', { task_id: 'task-1' })).toContain('Request: Fix the tab scroll');
     expect(await call('read_task', { task_id: 'task-9' })).toBe(
