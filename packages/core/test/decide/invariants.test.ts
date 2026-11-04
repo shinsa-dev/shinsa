@@ -915,7 +915,12 @@ function assertInvariants(state: ShinsaState, now: number) {
     seen.set(taskId, where);
   };
   for (const entry of queue.ready) {
-    if (entry.gate.type !== 'post_merge') place(entry.task.id, 'deciding');
+    place(entry.task.id, 'deciding');
+    if (entry.gate.type !== 'post_merge') continue;
+    expect(
+      queue.ready.filter((other) => other.task.id === entry.task.id),
+      `${entry.task.id} leads with Post-merge beside another gate`
+    ).toHaveLength(1);
   }
   for (const task of queue.working) place(task.id, 'working');
   for (const task of queue.waiting) place(task.id, 'waiting');

@@ -1652,7 +1652,8 @@ steps takes its step out again.
   it shows in Needs you below the decision gates, the task's status reads "Post-merge · 2 steps left", the
   progress shows Post-merge as current and its Overview opens on the steps. The gate takes no decision: ticking
   the last step withdraws it, and unticking one opens it again. The round rests as merged meanwhile, so a new round can
-  start, but the task is not done until each is ticked: neither you nor an agent marks it done (`task_open`).
+  start, but the task is not done until each is ticked: neither you nor an agent marks it done (`task_open`, whose message says to tick them under Post-merge steps on
+  the task's Overview).
   An operation after the merge runs before these steps: they are what is left for you once Shinsa's work on the round
   is over, and something the operation needs first belongs before the merge or in the operation gate's notes.
 - **Carry-over.** A new round archives the walkthrough, so the open steps of the round that ends move to
@@ -1661,9 +1662,10 @@ steps takes its step out again.
   gate stays open across rounds until the last carried step is ticked, and the Overview shows them under Post-merge
   steps while the later round works. Steps ticked before a round starts are dropped. While the later round works the
   gate never leads the task (`selectLeadGate` picks `post_merge` only once the round is finished (answered, merged, done or watching, `isRoundFinished`; unlike `isTaskResting` it ignores `closedAt`)): the task
-  shows twice on Home, its gate row in Needs you reading "Post-merge · 1 step left" (`RowSummary` given the row's gate)
-  and its row in In progress with the round's stage and the agent's latest action, and All tasks, its glyph and its page
-  follow the round. The later round's last phase is told the carried steps, so its walkthrough never lists them again.
+  shows once on Home, as its gate row in Needs you reading "Post-merge · 1 step left" (`RowSummary` given the row's gate),
+  never also in In progress, and All tasks, its glyph and its page follow the round. `resolveQueue` gives a task one
+  place: a task with an open gate is never In progress, and Post-merge gives way to any other open gate of the task
+  (`listLeadingGates` in `queue/rank.ts`), so a proposal or a question of the later round is its one row. The later round's last phase is told the carried steps, so its walkthrough never lists them again.
 - **On the Overview** pre-merge steps and the tasks the merge waits on show on the merge gate's card only, never at
   your review; a step's title and detail are Markdown with live links (a shinsa:// task with its hover card, a URL,
   names such as `API_KEY` set in code), and the step schema asks the Agent for backticks and full links.
