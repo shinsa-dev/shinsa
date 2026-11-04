@@ -3779,8 +3779,8 @@ the read-only view. Teams need remote access on (`Remote` paired and enabled), s
     is not them being here, so it never makes them Online. The page shows you Online on the page you are using
     (`markViewerPresent`), whatever an older report says. The
     page merges every machine's reports into one status per person, the best one winning and the latest last seen
-    kept (`resolveTeamPresence`), and shows it as a dot on avatars, user cards and People rows, with "Seen 2 hours ago"
-    when not online. A teammate's machine shows Offline the moment its team channel drops, not at app.shinsa.dev's
+    kept (`resolveTeamPresence`), and shows it as a dot on avatars, user cards and People rows (green Online, amber Away, grey Offline), with no
+    word for the status beside it, only "Seen 2 hours ago" when not online. A teammate's machine shows Offline the moment its team channel drops, not at app.shinsa.dev's
     five-minute heartbeat window.
 - **Settings → Teams** (`components/settings/teams.tsx`, `lib/teams/settings.ts`, on the machine, and on
   app.shinsa.dev for each machine you own, below; every change is the owner's, `OwnerOnlyRoute`): one card per team with its name and

@@ -73,11 +73,12 @@ function TeamPeople({ team, viewerId }: { team: RemoteTeam; viewerId: string | n
         const self = user.id === viewerId;
         const seen = self ? null : (presence.get(user.id) ?? null);
         const base = member ? describeMemberSince(member, now) : 'Owner';
+        const lastSeen = seen ? describePresence(seen, now) : null;
         return (
           <UserRow
             key={user.id}
             user={user}
-            detail={seen ? `${describePresence(seen, now)} · ${base}` : base}
+            detail={lastSeen ? `${lastSeen} · ${base}` : base}
             self={self}
             presence={seen}
           />

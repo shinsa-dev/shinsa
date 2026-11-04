@@ -527,7 +527,7 @@ export function SettingsSpecimens() {
               <UserRow
                 key={user.id}
                 user={user}
-                detail={`${describePresence(presence, now)} · ${base}`}
+                detail={[describePresence(presence, now), base].filter(Boolean).join(' · ')}
                 presence={presence}
               />
             ))}

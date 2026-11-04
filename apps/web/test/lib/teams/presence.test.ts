@@ -4,12 +4,12 @@ import { describePresence, markViewerPresent } from '../../../src/lib/teams/pres
 const NOW = 1_800_000_000_000;
 
 describe('describePresence', () => {
-  it('says online plainly, and when an away or offline person was last seen', () => {
-    expect(describePresence({ userId: 'u', status: 'online', seenAt: NOW }, NOW)).toBe('Online');
+  it('leaves the status to the dot and says only when an away or offline person was last seen', () => {
+    expect(describePresence({ userId: 'u', status: 'online', seenAt: NOW }, NOW)).toBeNull();
     expect(describePresence({ userId: 'u', status: 'away', seenAt: NOW - 600_000 }, NOW)).toBe(
-      'Away · Seen 10m ago'
+      'Seen 10m ago'
     );
-    expect(describePresence({ userId: 'u', status: 'offline', seenAt: null }, NOW)).toBe('Offline');
+    expect(describePresence({ userId: 'u', status: 'offline', seenAt: null }, NOW)).toBeNull();
   });
 });
 

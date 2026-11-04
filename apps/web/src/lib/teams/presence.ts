@@ -20,9 +20,8 @@ export const PRESENCE_DOT: Record<TeamPresenceStatus, string> = {
 };
 
 export function describePresence(presence: TeamPresence, now = Date.now()) {
-  const label = PRESENCE_LABELS[presence.status];
-  if (presence.status === 'online' || presence.seenAt === null) return label;
-  return `${label} · ${formatSince('Seen', presence.seenAt, now)}`;
+  if (presence.status === 'online' || presence.seenAt === null) return null;
+  return formatSince('Seen', presence.seenAt, now);
 }
 
 export function selectFeedMachine(feed: TeamFeedSnapshot, teamId: string, instanceId: string) {

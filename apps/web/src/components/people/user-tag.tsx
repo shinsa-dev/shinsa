@@ -130,6 +130,7 @@ function UserCard({
   presence: TeamPresence | null;
 }) {
   const now = useNow();
+  const seen = presence ? describePresence(presence, now) : null;
   return (
     <div className='flex flex-col gap-1.5 px-3 py-2.5'>
       <UserIdentity
@@ -148,7 +149,7 @@ function UserCard({
           </a>
         }
       />
-      {presence && <span className='ps-8.5 text-2xs text-fg-2'>{describePresence(presence, now)}</span>}
+      {seen && <span className='ps-8.5 text-2xs text-fg-2'>{seen}</span>}
       {note && <span className='ps-8.5 text-2xs text-fg-2'>{note}</span>}
     </div>
   );

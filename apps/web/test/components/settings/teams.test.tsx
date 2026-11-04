@@ -224,7 +224,7 @@ describe('Settings → Teams', () => {
       ],
     });
     renderOwnedTeam();
-    expect(screen.getByText(/^Away · Seen 2m ago · /)).toBeTruthy();
+    expect(screen.getByText(/^Seen 2m ago · /)).toBeTruthy();
     expect(screen.getByRole('img', { name: 'Away' })).toBeTruthy();
     feed.mockRestore();
   });
