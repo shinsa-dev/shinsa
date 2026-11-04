@@ -72,6 +72,7 @@ export function startSlackTask(decider: Decider, command: CommandOf<'slack.start
       userId: mention.userId,
       messageTs: mention.messageTs,
       permalink: mention.permalink,
+      channelName: mention.channelName,
       statusTs: null,
       reaction: SLACK_REACTIONS.sizing,
     },

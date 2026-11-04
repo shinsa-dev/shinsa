@@ -3,15 +3,13 @@ import { type ChatEntry, createState, type GuestActor, type ShinsaState } from '
 import { GuestRoute, LocalOnlyRoute, OwnerOnlyRoute } from '@shinsa/core/engine-api/schema';
 import { Context, Effect, Layer, Result } from 'effect';
 import type { ServerConfig } from '../../src/config/index.ts';
-import type { HttpContext, RequestSourceShape } from '../../src/http/schema.ts';
-import { HttpServices } from '../../src/http/services/service.ts';
+import type { RequestSourceShape } from '../../src/http/schema.ts';
 import { EgressGate } from '../../src/remote/egress/service.ts';
 import type { TunnelGate as TunnelGateService } from '../../src/remote/gate/service.ts';
 import { TunnelGate } from '../../src/remote/gate/service.ts';
-import { Remote } from '../../src/remote/index.ts';
-import type { Engine } from '../../src/runtime/index.ts';
+import type { Engine } from '../helpers/engine.ts';
 import { createGate, createRepo, createRun, createShareView, readSentView } from '../helpers/state.ts';
-import { createHttpContext } from '../helpers/web.ts';
+import { createHttpContext, createHttpLayer, type HttpContext } from '../helpers/web.ts';
 
 const BRIEF = '<attachments><attachment url="/api/attachments/a1/brief.png" /></attachments>';
 
@@ -62,7 +60,7 @@ const ENTRIES: Record<string, ChatEntry[]> = {
   ] as unknown as ChatEntry[],
 };
 
-const transcripts = { listEntries: (runId: string) => ENTRIES[runId] ?? [] };
+const transcripts = { listEntries: (runId: string) => Effect.succeed(ENTRIES[runId] ?? []) };
 
 const APP = 'https://app.shinsa.dev';
 
@@ -77,34 +75,41 @@ function createConnects() {
   return {
     verifyConnect: (token: string | null, channel: 'remote' | 'team') => {
       const kind = token === GOOD_TOKEN ? 'remote' : token === TEAM_TOKEN ? 'team' : null;
-      if (kind !== channel) return Promise.resolve(null);
-      return Promise.resolve({ userId: 'u-member', instanceId: 'i', channel, nonce: token, expiresAt: 0 });
+      if (kind !== channel) return Effect.succeed(null);
+      return Effect.succeed({ userId: 'u-member', instanceId: 'i', channel, nonce: token, expiresAt: 0 });
     },
-    spendConnect: (claim: { nonce: string }) => {
-      if (spent.has(claim.nonce)) return false;
-      spent.add(claim.nonce);
-      return true;
-    },
+    spendConnect: (claim: { nonce: string }) =>
+      Effect.sync(() => {
+        if (spent.has(claim.nonce)) return false;
+        spent.add(claim.nonce);
+        return true;
+      }),
   };
 }
 
-function createRemote(overrides: Record<string, unknown> = {}) {
+const OWNER_ACCESS = { owner: { id: OWNER_ID }, members: [] };
+
+function createRemote(overrides: { isEnabled?: boolean; tunnelHost?: string | null } = {}) {
   return {
-    isEnabled: true,
-    tunnelHost: 't-k3x9.shinsa.dev',
-    appOrigin: APP,
     ...createConnects(),
-    store: { file: { access: { owner: { id: OWNER_ID }, members: [] } } },
-    isOwner: Remote.prototype.isOwner,
-    ...overrides,
+    isEnabled: Effect.succeed(overrides.isEnabled ?? true),
+    tunnelHost: Effect.succeed(
+      overrides.tunnelHost === undefined ? 't-k3x9.shinsa.dev' : overrides.tunnelHost
+    ),
   } as unknown as HttpContext['remote'];
+}
+
+function createRemoteStore(access: unknown = OWNER_ACCESS) {
+  return { file: Effect.succeed({ access }) } as unknown as HttpContext['remoteStore'];
 }
 
 function createGateContext(overrides: Partial<HttpContext> = {}, config: Partial<ServerConfig> = {}) {
   return createHttpContext(
     {
       remote: createRemote(),
-      engine: { state: createGuestState() } as unknown as Engine,
+      remoteStore: createRemoteStore(),
+      remoteOrigin: APP,
+      engine: { core: { state: Effect.succeed(createGuestState()) } } as unknown as Engine,
       transcripts: transcripts as unknown as HttpContext['transcripts'],
       ...overrides,
     },
@@ -119,7 +124,7 @@ function runGate<A, E>(use: (gate: Gate) => Effect.Effect<A, E>, context = creat
     Effect.gen(function* () {
       const gate = yield* TunnelGate;
       return yield* Effect.result(use(gate));
-    }).pipe(Effect.provide(TunnelGate.layer.pipe(Layer.provide(HttpServices.layer(context)))))
+    }).pipe(Effect.provide(TunnelGate.layer.pipe(Layer.provide(createHttpLayer(context)))))
   );
 }
 
@@ -127,7 +132,7 @@ function readGate<A>(use: (gate: Gate) => A, context = createGateContext()) {
   return Effect.runSync(
     Effect.gen(function* () {
       return use(yield* TunnelGate);
-    }).pipe(Effect.provide(TunnelGate.layer.pipe(Layer.provide(HttpServices.layer(context)))))
+    }).pipe(Effect.provide(TunnelGate.layer.pipe(Layer.provide(createHttpLayer(context)))))
   );
 }
 
@@ -299,7 +304,7 @@ describe('an endpoint inside the channel', () => {
     expect(await admit(ownerOnly, channelSource(OWNER_ID), 'POST')).toBeNull();
     expect(await admit(ownerOnly, channelSource('u-member'), 'POST')).toBe('NotMachineOwner');
     expect(await admit(ownerOnly, channelSource(null), 'POST')).toBe('NotMachineOwner');
-    const unknown = createGateContext({ remote: createRemote({ store: { file: { access: null } } }) });
+    const unknown = createGateContext({ remoteStore: createRemoteStore(null) });
     expect(await admit(ownerOnly, channelSource(OWNER_ID), 'POST', unknown)).toBe('NotMachineOwner');
   });
 
@@ -319,8 +324,10 @@ describe('an endpoint inside the channel', () => {
 });
 
 describe('a socket over the tunnel', () => {
-  const shares = { acceptsShare: (id: string) => id === 's1' } as unknown as HttpContext['shares'];
-  const teams = { acceptsViewer: () => true } as unknown as HttpContext['teams'];
+  const shares = {
+    acceptsShare: (id: string) => Effect.succeed(id === 's1'),
+  } as unknown as HttpContext['shares'];
+  const teams = { acceptsViewer: Effect.succeed(true) } as unknown as HttpContext['teams'];
   const previews = {} as HttpContext['previews'];
   const full = () => createGateContext({ shares, teams, previews });
 
@@ -386,7 +393,7 @@ describe('a socket over the tunnel', () => {
       'RequestForbidden'
     );
     const lonely = createGateContext({
-      teams: { acceptsViewer: () => false } as unknown as HttpContext['teams'],
+      teams: { acceptsViewer: Effect.succeed(false) } as unknown as HttpContext['teams'],
     });
     expect(await upgrade(`/team?token=${TEAM_TOKEN}`, { origin: APP }, lonely)).toBe('RouteNotFound');
     expect(await upgrade(`/team?token=${TEAM_TOKEN}`)).toBe('RouteNotFound');

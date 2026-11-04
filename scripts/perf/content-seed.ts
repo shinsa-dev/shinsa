@@ -1,6 +1,6 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { EventLog } from '../../apps/engine/src/store/index.ts';
+import { openEventLog } from '../../apps/engine/test/helpers/event-log.ts';
 import type { ChatEvent, Run, ShinsaEvent, ShinsaEventInput } from '../../packages/core/src/index.ts';
 import { CHAT_PROTOCOL_VERSION } from '../../packages/core/src/index.ts';
 import { MINUTE } from '../kit/time.ts';
@@ -68,7 +68,7 @@ function writeTranscript(dir: string, runId: string, events: ChatEvent[], from: 
 }
 
 function seedScale() {
-  const log = new EventLog(join(DATA as string, 'shinsa.sqlite'));
+  const log = openEventLog(join(DATA as string, 'shinsa.sqlite'));
   const read = log.readEvents();
   const templates = listTemplates(read.events);
   const template = templates[0];

@@ -9,13 +9,13 @@ import { TONE_TEXT } from '@/lib/format/tone.ts';
 import { createDisclosureId } from '@/lib/preferences/disclosure.ts';
 import { describeMemberSince } from '@/lib/remote-access.ts';
 import { RemoteServicesContext } from '@/lib/remote/services.ts';
+import { listHostedTeams } from '@/lib/teams/hosted.ts';
 import {
   describeHostedTeam,
   describeHostedTeamsNotice,
   describePeopleCount,
   type HostedTeam,
   type HostedTeams,
-  listHostedTeams,
   listTeamMachineRows,
   listTeamPeople,
   TEAM_KEY_MISSING,

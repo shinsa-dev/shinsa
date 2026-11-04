@@ -1,82 +1,47 @@
-import { launchChromium } from '../kit/chromium/index.ts';
-import { PROBE } from './content-probe.ts';
+import { BunRuntime } from '@effect/platform-bun';
+import { Config, Console, Effect, Option, Schema, Stream } from 'effect';
+import { ChromiumLayer } from '../kit/chromium/index.ts';
+import { openContentPage, resolveStepExpression } from './content/page.ts';
+import { MAIN_EVENTS, SCROLL_STEP, TraceChunk } from './content/schema.ts';
 
 const BASE = Bun.argv[2] ?? 'http://localhost:5661';
 const STEPS = (Bun.argv[3] ?? '/tasks/perf-long-chat?tab=overview,/tasks/perf-long-chat?tab=chat').split(',');
 
-const MAIN_EVENTS = new Set([
-  'FunctionCall',
-  'EvaluateScript',
-  'TimerFire',
-  'RunMicrotasks',
-  'UpdateLayoutTree',
-  'Layout',
-  'PrePaint',
-  'Paint',
-  'Layerize',
-  'Commit',
-  'MinorGC',
-  'MajorGC',
-  'ParseHTML',
-  'HitTest',
-  'IntersectionObserverController::computeIntersections',
-  'ResizeObserverController::BroadcastObservations',
-]);
-
-interface TraceEvent {
-  name: string;
-  ph: string;
-  dur?: number;
-  ts: number;
-  tid: number;
-  pid: number;
-}
-
-const browser = await launchChromium(1280, 900);
-try {
-  const { page } = browser;
-  await page.send('Page.enable');
-  await page.send('Page.addScriptToEvaluateOnNewDocument', { source: PROBE });
-  await page.send('Page.navigate', { url: `${BASE}/` });
-  await page.evaluate(
-    'new Promise((resolve) => { const check = () => window.__perf?.lastState ? resolve(true) : setTimeout(check, 20); check(); })'
-  );
-  await page.evaluate('window.__perf.sleep(800)');
+const program = Effect.gen(function* () {
+  const css = yield* Config.option(Config.String('SHINSA_PERF_CSS'));
+  const decodeChunk = Schema.decodeUnknownEffect(TraceChunk);
+  const page = yield* openContentPage(BASE);
+  yield* page.evaluate('window.__perf.sleep(800)', Schema.Unknown);
   for (const step of STEPS) {
-    if (step.startsWith('scroll:')) continue;
-    await page.evaluate(`window.__perf.navigate(${JSON.stringify(step)}, 'body')`);
-    await page.evaluate('window.__perf.sleep(600)');
+    if (step.startsWith(SCROLL_STEP)) continue;
+    yield* page.evaluate(`window.__perf.navigate(${JSON.stringify(step)}, 'body')`, Schema.Unknown);
+    yield* page.evaluate('window.__perf.sleep(600)', Schema.Unknown);
   }
-  if (Bun.env.SHINSA_PERF_CSS) {
-    await page.evaluate(
-      `(() => { const style = document.createElement('style'); style.textContent = ${JSON.stringify(Bun.env.SHINSA_PERF_CSS)}; document.head.append(style); })()`
+  if (Option.isSome(css))
+    yield* page.evaluate(
+      `(() => { const style = document.createElement('style'); style.textContent = ${JSON.stringify(css.value)}; document.head.append(style); })()`,
+      Schema.Unknown
     );
-  }
-  const events: TraceEvent[] = [];
-  let complete = () => {};
-  page.listen((raw: MessageEvent) => {
-    const message = JSON.parse(String(raw.data)) as { method?: string; params?: { value?: TraceEvent[] } };
-    if (message.method === 'Tracing.dataCollected') events.push(...(message.params?.value ?? []));
-    if (message.method === 'Tracing.tracingComplete') complete();
-  });
   for (const step of STEPS) {
-    await page.send('Tracing.start', {
+    yield* page.send('Tracing.start', {
       categories: 'devtools.timeline,disabled-by-default-devtools.timeline',
       transferMode: 'ReportEvents',
     });
-    const expression = step.startsWith('scroll:')
-      ? `window.__perf.scroll(${JSON.stringify(step.slice(7))}, 'up', 150, 160)`
-      : `window.__perf.navigate(${JSON.stringify(step)}, 'body')`;
-    const result = await page.evaluate(expression);
-    await page.evaluate('window.__perf.sleep(300)');
-    events.length = 0;
-    const done = new Promise<void>((resolve) => {
-      complete = resolve;
-    });
-    await page.send('Tracing.end');
-    await done;
+    const result = yield* page.evaluate(resolveStepExpression(step), Schema.Unknown);
+    yield* page.evaluate('window.__perf.sleep(300)', Schema.Unknown);
+    const events = yield* Effect.scoped(
+      Effect.gen(function* () {
+        const traced = yield* page.subscribe('Tracing.dataCollected', 'Tracing.tracingComplete');
+        yield* page.send('Tracing.end');
+        return yield* traced.pipe(
+          Stream.takeWhile((event) => event.method !== 'Tracing.tracingComplete'),
+          Stream.mapEffect((event) => decodeChunk(event.params)),
+          Stream.runCollect
+        );
+      })
+    );
     const totals = new Map<string, number>();
-    for (const event of events) {
+    for (const event of events.flatMap((chunk) => chunk.value)) {
       if (event.ph !== 'X' || !MAIN_EVENTS.has(event.name)) continue;
       totals.set(event.name, (totals.get(event.name) ?? 0) + (event.dur ?? 0) / 1000);
     }
@@ -84,8 +49,8 @@ try {
       .sort((a, b) => b[1] - a[1])
       .map(([name, ms]) => `${name} ${ms.toFixed(1)}`)
       .join(', ');
-    console.info(step, JSON.stringify(result), '\n   ', summary);
+    yield* Console.info(step, JSON.stringify(result), '\n   ', summary);
   }
-} finally {
-  browser.close();
-}
+});
+
+program.pipe(Effect.scoped, Effect.provide(ChromiumLayer), BunRuntime.runMain);

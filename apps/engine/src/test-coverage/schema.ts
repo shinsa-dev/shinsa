@@ -19,7 +19,7 @@ export interface CoverageRequest {
   task: Task;
   commands: readonly string[];
   baseBranch: string | null;
-  signal: AbortSignal;
+  signal?: AbortSignal;
   timeoutMs?: number;
 }
 

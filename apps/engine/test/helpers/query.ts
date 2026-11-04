@@ -1,6 +1,7 @@
 import type { Query, SDKMessage } from '@anthropic-ai/claude-agent-sdk';
+import { Effect } from 'effect';
 import type { ClaudeExecutable } from '../../src/agents/providers/claude/executable.ts';
-import type { ClaudeRuntime, QueryFn } from '../../src/agents/providers/claude/sdk.ts';
+import type { ClaudeRuntime, QueryFn } from '../../src/agents/providers/claude/sdk/schema.ts';
 
 export type QueryParams = Parameters<QueryFn>[0];
 
@@ -43,7 +44,7 @@ export function createFakeRuntime(
   query: QueryFn,
   executable: ClaudeExecutable = { ok: true, path: '/bin/claude', version: null }
 ): ClaudeRuntime {
-  return { runQuery: query, resolveExecutable: () => Promise.resolve(executable) };
+  return { runQuery: query, resolveExecutable: Effect.succeed(executable) };
 }
 
 export async function* emit(...messages: unknown[]): AsyncGenerator<SDKMessage> {

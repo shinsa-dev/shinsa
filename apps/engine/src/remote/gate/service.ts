@@ -21,12 +21,22 @@ import {
   ROUTE_NOT_FOUND_MESSAGE,
   ScopeRefused,
 } from '@shinsa/core/engine-api/schema';
-import { Context, Effect, Layer } from 'effect';
+import { Context, Effect, Layer, Option } from 'effect';
+import { Transcripts } from '../../agents/transcripts/service.ts';
+import { EngineConfig } from '../../config/service.ts';
+import { Extensions } from '../../extensions/registry/service.ts';
+import { SIGN_IN_CALLBACK_PATH } from '../../extensions/sign-in.ts';
 import type { RequestSourceShape } from '../../http/schema.ts';
-import { HttpServices } from '../../http/services/service.ts';
 import { INSPECT_MESSAGE } from '../../instance/index.ts';
+import { EngineCore } from '../../runtime/engine/service.ts';
 import { ATTACHMENT_ROUTE } from '../../store/attachments/index.ts';
 import { EVIDENCE_ROUTE } from '../../store/evidence/index.ts';
+import { RemoteOrigin } from '../client/schema.ts';
+import { Remote } from '../machine/service.ts';
+import { Previews } from '../previews/service.ts';
+import { Shares } from '../shares/service.ts';
+import { RemoteStore } from '../store/service.ts';
+import { Teams } from '../teams/service.ts';
 import {
   CONNECT_REFUSED_MESSAGE,
   type EndpointRefusal,
@@ -62,8 +72,18 @@ export class TunnelGate extends Context.Service<
   static readonly layer = Layer.effect(
     TunnelGate,
     Effect.gen(function* () {
-      const { config, remote, shares, teams, previews, extensions, engine, transcripts } =
-        yield* HttpServices;
+      const config = yield* EngineConfig;
+      const remote = Option.getOrUndefined(yield* Effect.serviceOption(Remote));
+      const remoteStore = Option.getOrUndefined(yield* Effect.serviceOption(RemoteStore));
+      const remoteOrigin = yield* RemoteOrigin;
+      const shares = Option.getOrUndefined(yield* Effect.serviceOption(Shares));
+      const teams = Option.getOrUndefined(yield* Effect.serviceOption(Teams));
+      const previews = Option.getOrUndefined(yield* Effect.serviceOption(Previews));
+      const extensions = Option.getOrUndefined(yield* Effect.serviceOption(Extensions));
+      const engine = yield* EngineCore;
+      const transcripts = yield* Transcripts;
+      const runSync = Effect.runSyncWith(yield* Effect.context<never>());
+      const isEnabled = remote ? remote.isEnabled : Effect.succeed(false);
       const notFound = () => new RouteNotFound({ message: ROUTE_NOT_FOUND_MESSAGE });
 
       const readHostname = (request: Request) =>
@@ -72,7 +92,7 @@ export class TunnelGate extends Context.Service<
       const isTunnel = (request: Request) => {
         if (!remote) return false;
         if (request.headers.has(TUNNEL_HEADER)) return true;
-        const host = remote.tunnelHost;
+        const host = runSync(remote.tunnelHost);
         return host !== null && readHostname(request) === host.toLowerCase();
       };
 
@@ -96,8 +116,8 @@ export class TunnelGate extends Context.Service<
         return [];
       };
 
-      const isTaskFile = (taskId: string, path: string) => {
-        const { state } = engine;
+      const isTaskFile = Effect.fn('TunnelGate.isTaskFile')(function* (taskId: string, path: string) {
+        const state = yield* engine.state;
         if (path.startsWith(`${EVIDENCE_ROUTE}${taskId}/`)) return true;
         if (Object.values(state.evidence).some((entry) => entry.taskId === taskId && entry.uri === path))
           return true;
@@ -105,36 +125,46 @@ export class TunnelGate extends Context.Service<
         const texts = [task?.request ?? '', ...(task?.inbox ?? []).map((message) => message.text)];
         const attached = texts.flatMap((text) => splitMessageAttachments(text).attachments);
         if (attached.some((attachment) => attachment.url === path)) return true;
-        return Object.values(state.runs)
-          .filter((run) => run.taskId === taskId)
-          .some((run) =>
-            transcripts.listEntries(run.id).some((entry) => listEntryFiles(entry).includes(path))
-          );
-      };
+        for (const run of Object.values(state.runs)) {
+          if (run.taskId !== taskId) continue;
+          const entries = yield* transcripts.listEntries(run.id);
+          if (entries.some((entry) => listEntryFiles(entry).includes(path))) return true;
+        }
+        return false;
+      });
 
       const isGuestRoute = (taskId: string, { method, pathname }: GateRequest) => {
-        if (!GUEST_READ_METHODS.has(method)) return false;
-        if (pathname === GUEST_HEALTH_PATH) return true;
+        if (!GUEST_READ_METHODS.has(method)) return Effect.succeed(false);
+        if (pathname === GUEST_HEALTH_PATH) return Effect.succeed(true);
         const task = GUEST_TASK_READS.exec(pathname);
-        if (task) return decodeURIComponent(task[1] ?? '') === taskId;
-        if (!(pathname.startsWith(EVIDENCE_ROUTE) || pathname.startsWith(ATTACHMENT_ROUTE))) return false;
+        if (task) return Effect.succeed(decodeURIComponent(task[1] ?? '') === taskId);
+        if (!(pathname.startsWith(EVIDENCE_ROUTE) || pathname.startsWith(ATTACHMENT_ROUTE)))
+          return Effect.succeed(false);
         return isTaskFile(taskId, pathname);
       };
 
+      const isOwner = Effect.fn('TunnelGate.isOwner')(function* (userId: string | null) {
+        if (userId === null || !remoteStore) return false;
+        return (yield* remoteStore.file).access?.owner.id === userId;
+      });
+
       const admitChannelRequest = (url: URL, source: RequestSourceShape) => {
         if (!url.pathname.startsWith('/api/')) return Effect.fail(notFound());
-        if (!extensions?.isCallback(url.pathname)) return Effect.void;
+        if (extensions === undefined || url.pathname !== SIGN_IN_CALLBACK_PATH) return Effect.void;
         if (source.guest) return Effect.fail(new ScopeRefused({ message: SCOPE_MESSAGES.task }));
         return Effect.fail(new LocalOnly({ message: LOCAL_ONLY_MESSAGE }));
       };
 
-      const admitTunnelRequest = (request: Request, url: URL) => {
-        const route = remote?.isEnabled
+      const admitTunnelRequest = Effect.fn('TunnelGate.admitTunnelRequest')(function* (
+        request: Request,
+        url: URL
+      ) {
+        const route = (yield* isEnabled)
           ? resolveRoute({ method: request.method, pathname: url.pathname })
           : null;
-        if (route === null || !TUNNEL_HTTP_ROUTES.has(route)) return Effect.fail(notFound());
-        return WRITING_ROUTES.has(route) ? assertWritable('POST') : Effect.void;
-      };
+        if (route === null || !TUNNEL_HTTP_ROUTES.has(route)) return yield* notFound();
+        if (WRITING_ROUTES.has(route)) yield* assertWritable('POST');
+      });
 
       const admitLocalRequest = (request: Request, url: URL) => {
         const route = resolveRoute({ method: request.method, pathname: url.pathname });
@@ -156,18 +186,18 @@ export class TunnelGate extends Context.Service<
         const access = Context.get(annotations, GuestRoute);
         const admitsGuest =
           access === 'any' ||
-          (access !== 'none' && source.guest !== null && isGuestRoute(source.guest.taskId, request));
+          (access !== 'none' && source.guest !== null && (yield* isGuestRoute(source.guest.taskId, request)));
         if (source.guest && !admitsGuest) return yield* new ScopeRefused({ message: SCOPE_MESSAGES.task });
         if (Context.get(annotations, LocalOnlyRoute))
           return yield* new LocalOnly({ message: LOCAL_ONLY_MESSAGE });
-        if (Context.get(annotations, OwnerOnlyRoute) && !remote?.isOwner(source.userId))
+        if (Context.get(annotations, OwnerOnlyRoute) && !(yield* isOwner(source.userId)))
           return yield* new NotMachineOwner({ message: OWNER_ONLY_MESSAGE });
         yield* assertWritable(request.method);
       });
 
       const assertAppOrigin = (request: Request) => {
-        if (remote && request.headers.get('origin') === remote.appOrigin) return Effect.void;
-        const host = remote ? new URL(remote.appOrigin).host : '';
+        if (remote && remoteOrigin && request.headers.get('origin') === remoteOrigin) return Effect.void;
+        const host = remote && remoteOrigin ? new URL(remoteOrigin).host : '';
         return Effect.fail(new RequestForbidden({ message: `The remote channel only opens from ${host}.` }));
       };
 
@@ -180,10 +210,10 @@ export class TunnelGate extends Context.Service<
         channel: ConnectChannel
       ) {
         const token = url.searchParams.get(REMOTE_CONNECT_PARAM);
-        const claim = remote ? yield* Effect.promise(() => remote.verifyConnect(token, channel)) : null;
+        const claim = remote ? yield* remote.verifyConnect(token, channel) : null;
         if (!(remote && claim)) return yield* new ConnectRefused({ message: CONNECT_REFUSED_MESSAGE });
         if (!isSocketUpgrade(request)) return yield* notFound();
-        if (!remote.spendConnect(claim))
+        if (!(yield* remote.spendConnect(claim)))
           return yield* new ConnectRefused({ message: CONNECT_REFUSED_MESSAGE });
         return claim.userId;
       });
@@ -195,7 +225,7 @@ export class TunnelGate extends Context.Service<
         if (!shares) return yield* notFound();
         yield* assertAppOrigin(request);
         const shareId = url.searchParams.get(SHARE_CHANNEL_PARAM) ?? '';
-        if (!(shares.acceptsShare(shareId) && isSocketUpgrade(request))) return yield* notFound();
+        if (!((yield* shares.acceptsShare(shareId)) && isSocketUpgrade(request))) return yield* notFound();
         return { route: 'share', shareId };
       });
 
@@ -203,7 +233,7 @@ export class TunnelGate extends Context.Service<
         request: Request,
         url: URL
       ): Effect.fn.Return<TunnelUpgrade, UpgradeRefusal> {
-        const route = remote?.isEnabled
+        const route = (yield* isEnabled)
           ? resolveRoute({ method: request.method, pathname: url.pathname })
           : null;
         if (route === null) return yield* notFound();
@@ -214,7 +244,7 @@ export class TunnelGate extends Context.Service<
         }
         if (route === 'share') return yield* admitShare(request, url);
         if (route === 'team') {
-          if (!teams?.acceptsViewer()) return yield* notFound();
+          if (!(teams && (yield* teams.acceptsViewer))) return yield* notFound();
           yield* assertAppOrigin(request);
           return { route: 'team', userId: yield* findConnectUser(request, url, 'team') };
         }

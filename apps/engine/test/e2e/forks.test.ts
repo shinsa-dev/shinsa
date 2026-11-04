@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, setDefaultTimeout, test } from 'bun:test';
-import { ProviderRegistry } from '../../src/agents/providers/index.ts';
+import { createTestProviders } from '../helpers/providers.ts';
 import { World } from './harness.ts';
 
 setDefaultTimeout(30_000);
@@ -13,7 +13,7 @@ afterEach(async () => {
 
 async function answeredSource() {
   world = await World.create({
-    providers: (created) => new ProviderRegistry([created.agents.provider('claude', 'Claude')]),
+    providers: (created) => createTestProviders([created.agents.provider('claude', 'Claude')]),
   });
   const source = await world.createTask('Where does the greeting live?', { shape: 'answer' });
   await world.untilStage(source, 'answered');

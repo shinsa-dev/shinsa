@@ -13,6 +13,7 @@ import {
   type SaverState,
   selectSaved,
 } from '@/lib/code/edits.ts';
+import { runApp } from '@/lib/runtime/app.ts';
 
 const OPEN = { stage: 'awaiting_review', closedAt: null, worktreePath: '/w' } as const;
 
@@ -109,11 +110,11 @@ describe('FileSaver', () => {
 
   it('saves what you typed against what is on disk, and nothing when nothing changed', async () => {
     const { saver, saves, saved, type, states } = createSaver('a\n', []);
-    await saver.flush();
+    await runApp(saver.flush());
     expect(saves).toEqual([]);
     type('b\n');
     type('c\n');
-    await saver.flush();
+    await runApp(saver.flush());
     expect(saves).toEqual([{ text: 'c\n', base: 'a\n' }]);
     expect(saved).toEqual(['c\n']);
     expect(saver.disk).toBe('c\n');
@@ -141,11 +142,11 @@ describe('FileSaver', () => {
     });
     buffer.text = 'b';
     saver.edit();
-    const first = saver.flush();
+    const first = runApp(saver.flush());
     saver.reload('a', 'b');
     buffer.text = 'c';
     saver.edit();
-    const second = saver.flush();
+    const second = runApp(saver.flush());
     finish({ kind: 'saved', changed: true });
     await Promise.all([first, second]);
     expect(saves).toEqual(['b', 'c']);
@@ -157,16 +158,16 @@ describe('FileSaver', () => {
       { kind: 'changed', content: 'one\ntwo\nthree\n' },
     ]);
     type('ONE\ntwo\n');
-    await saver.flush();
+    await runApp(saver.flush());
     expect(buffer.text).toBe('ONE\ntwo\nthree\n');
-    await saver.flush();
+    await runApp(saver.flush());
     expect(saves.at(-1)).toEqual({ text: 'ONE\ntwo\nthree\n', base: 'one\ntwo\nthree\n' });
   });
 
   it('shows the disk version with a notice when your edit and the disk’s overlap', async () => {
     const { saver, buffer, states, type } = createSaver('one\n', [{ kind: 'changed', content: 'theirs\n' }]);
     type('mine\n');
-    await saver.flush();
+    await runApp(saver.flush());
     expect(buffer.text).toBe('theirs\n');
     expect(states.at(-1)?.notice).toBe(CONFLICT_NOTICE);
     type('again\n');
@@ -177,24 +178,24 @@ describe('FileSaver', () => {
   it('says so when the file was deleted on disk, and puts it back with your next edit', async () => {
     const { saver, states, saves, type } = createSaver('one\n', [{ kind: 'changed', content: null }]);
     type('two\n');
-    await saver.flush();
+    await runApp(saver.flush());
     expect(states.at(-1)?.notice).toBe(DELETED_NOTICE);
     type('three\n');
-    await saver.flush();
+    await runApp(saver.flush());
     expect(saves.at(-1)).toEqual({ text: 'three\n', base: null });
   });
 
   it('stops saving once Shinsa refuses, and says why', async () => {
     const { saver, states, saves, type } = createSaver('one\n', [new Error('This task is merged.')]);
     type('two\n');
-    await saver.flush();
+    await runApp(saver.flush());
     expect(states.at(-1)?.refusal).toBe('This task is merged.');
     type('three\n');
-    await saver.flush();
+    await runApp(saver.flush());
     expect(saves).toHaveLength(1);
     const odd = createSaver('one\n', ['offline']);
     odd.type('two\n');
-    await odd.saver.flush();
+    await runApp(odd.saver.flush());
     expect(odd.states.at(-1)?.refusal).toBe('offline');
   });
 

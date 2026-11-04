@@ -11,6 +11,7 @@ import {
   type TaskDiff,
 } from '@shinsa/core';
 import type { ChatPage, OpenTarget } from '@shinsa/core/engine-api/schema';
+import { Effect } from 'effect';
 import { type Display, describeTable, type Tone } from '../terminal/index.ts';
 import type { FieldSpec, Values } from './fields.ts';
 import {
@@ -23,6 +24,7 @@ import {
   resolveOptionalRepoId,
   type TaskView,
 } from './resolve.ts';
+import type { SurfaceClient } from './schema.ts';
 import { defineAction, defineCommand, defineRead, readValue, type SurfaceSpec } from './spec.ts';
 
 export const TASK_FIELD: FieldSpec = {
@@ -106,22 +108,28 @@ function readList(values: Values, name: string) {
   return (values[name] as string[] | undefined) ?? [];
 }
 
-async function buildProjectChoice(client: Parameters<SurfaceSpec['run']>[0], values: Values) {
+const buildProjectChoice = Effect.fn('Surface.buildProjectChoice')(function* (
+  client: SurfaceClient,
+  values: Values
+) {
   if (values.project === undefined) return {};
   const project = readValue(values, 'project');
-  return { projectId: await resolveOptionalProjectId(client, project === 'none' ? '' : project) };
-}
+  return { projectId: yield* resolveOptionalProjectId(client, project === 'none' ? '' : project) };
+});
 
-async function buildTaskCreate(values: Values, client: Parameters<SurfaceSpec['run']>[0]) {
-  const account = await resolveOptionalAccount(client, readValue(values, 'account'));
-  const waitsOn = await findTaskIds(client, readList(values, 'after'));
+const buildTaskCreate = Effect.fn('Surface.buildTaskCreate')(function* (
+  values: Values,
+  client: SurfaceClient
+) {
+  const account = yield* resolveOptionalAccount(client, readValue(values, 'account'));
+  const waitsOn = yield* findTaskIds(client, readList(values, 'after'));
   const forkFrom = readValue(values, 'forkFrom');
-  const [forkOf] = await findTaskIds(client, forkFrom ? [forkFrom] : []);
+  const [forkOf] = yield* findTaskIds(client, forkFrom ? [forkFrom] : []);
   return {
     type: 'task.create' as const,
     request: readValue(values, 'request'),
-    repoId: await resolveOptionalRepoId(client, readValue(values, 'repo')),
-    ...(await buildProjectChoice(client, values)),
+    repoId: yield* resolveOptionalRepoId(client, readValue(values, 'repo')),
+    ...(yield* buildProjectChoice(client, values)),
     ...(values.priority ? { priority: values.priority as (typeof TASK_PRIORITIES)[number] } : {}),
     ...(values.planFirst ? { planFirst: true } : {}),
     ...(values.backlog ? { backlog: true } : {}),
@@ -130,7 +138,7 @@ async function buildTaskCreate(values: Values, client: Parameters<SurfaceSpec['r
     ...(forkOf ? { forkOf } : {}),
     ...(account ? { account } : {}),
   };
-}
+});
 
 export const TASK_SPECS: SurfaceSpec[] = [
   defineRead({
@@ -206,11 +214,10 @@ export const TASK_SPECS: SurfaceSpec[] = [
     path: ['tasks', 'diff'],
     summary: 'List the files a task changed against its base branch.',
     fields: [TASK_FIELD],
-    read: async (values, client) =>
-      client.api.code.diff({
-        params: { taskRef: await findTaskId(client, readValue(values, 'task')) },
-        query: {},
-      }),
+    read: Effect.fn('Surface.tasksDiff')(function* (values, client) {
+      const taskRef = yield* findTaskId(client, readValue(values, 'task'));
+      return yield* client.api.code.diff({ params: { taskRef }, query: {} });
+    }),
     format: formatDiff,
   }),
   defineCommand({
@@ -279,15 +286,15 @@ export const TASK_SPECS: SurfaceSpec[] = [
           'feedback on the current round (a follow-up on a finished one), acknowledge for a message that needs nothing, new_round for new work in this task, or separate_task to suggest it as its own task. Left out, Shinsa decides.',
       },
     ],
-    build: async (values, client) => {
+    build: Effect.fn('Surface.tasksMessage')(function* (values, client) {
       const kind = readValue(values, 'as');
       return {
-        type: 'task.message',
-        taskId: await findTaskId(client, readValue(values, 'task')),
+        type: 'task.message' as const,
+        taskId: yield* findTaskId(client, readValue(values, 'task')),
         text: readValue(values, 'text'),
         ...(kind ? { kind: kind as MessageKind } : {}),
       };
-    },
+    }),
     done: () => 'Sent.',
   }),
   defineCommand({
@@ -313,11 +320,13 @@ export const TASK_SPECS: SurfaceSpec[] = [
         description: 'onto_pull_request or stacked.',
       },
     ],
-    build: async (values, client) => ({
-      type: 'round.ship',
-      taskId: await findTaskId(client, readValue(values, 'task')),
-      number: values.round as number,
-      shipping: readValue(values, 'how') as RoundShipping,
+    build: Effect.fn('Surface.roundsShip')(function* (values, client) {
+      return {
+        type: 'round.ship' as const,
+        taskId: yield* findTaskId(client, readValue(values, 'task')),
+        number: values.round as number,
+        shipping: readValue(values, 'how') as RoundShipping,
+      };
     }),
     done: () => 'Saved how the round ships.',
   }),
@@ -343,11 +352,13 @@ export const TASK_SPECS: SurfaceSpec[] = [
         description: 'What the round asks for instead.',
       },
     ],
-    build: async (values, client) => ({
-      type: 'round.update',
-      taskId: await findTaskId(client, readValue(values, 'task')),
-      number: values.round as number,
-      request: readValue(values, 'text'),
+    build: Effect.fn('Surface.roundsUpdate')(function* (values, client) {
+      return {
+        type: 'round.update' as const,
+        taskId: yield* findTaskId(client, readValue(values, 'task')),
+        number: values.round as number,
+        request: readValue(values, 'text'),
+      };
     }),
     done: () => 'Changed the queued round.',
   }),
@@ -366,10 +377,12 @@ export const TASK_SPECS: SurfaceSpec[] = [
         description: 'The number of a round that waits to start, from `shinsa tasks show`.',
       },
     ],
-    build: async (values, client) => ({
-      type: 'round.remove',
-      taskId: await findTaskId(client, readValue(values, 'task')),
-      number: values.round as number,
+    build: Effect.fn('Surface.roundsRemove')(function* (values, client) {
+      return {
+        type: 'round.remove' as const,
+        taskId: yield* findTaskId(client, readValue(values, 'task')),
+        number: values.round as number,
+      };
     }),
     done: () => 'Removed the queued round.',
   }),
@@ -388,10 +401,12 @@ export const TASK_SPECS: SurfaceSpec[] = [
         description: 'The number of a round that waits to start, from `shinsa tasks show`.',
       },
     ],
-    build: async (values, client) => ({
-      type: 'round.send',
-      taskId: await findTaskId(client, readValue(values, 'task')),
-      number: values.round as number,
+    build: Effect.fn('Surface.roundsSend')(function* (values, client) {
+      return {
+        type: 'round.send' as const,
+        taskId: yield* findTaskId(client, readValue(values, 'task')),
+        number: values.round as number,
+      };
     }),
     done: () => 'Sent the queued round to the current round.',
   }),
@@ -403,14 +418,14 @@ export const TASK_SPECS: SurfaceSpec[] = [
       TASK_FIELD,
       { name: 'account', kind: 'text', description: 'Run the step on this account (id or email).' },
     ],
-    build: async (values, client) => {
-      const account = await resolveOptionalAccount(client, readValue(values, 'account'));
+    build: Effect.fn('Surface.tasksRetry')(function* (values, client) {
+      const account = yield* resolveOptionalAccount(client, readValue(values, 'account'));
       return {
-        type: 'task.retry',
-        taskId: await findTaskId(client, readValue(values, 'task')),
+        type: 'task.retry' as const,
+        taskId: yield* findTaskId(client, readValue(values, 'task')),
         ...(account ? { account } : {}),
       };
-    },
+    }),
     done: () => 'Retrying.',
   }),
   defineCommand({
@@ -427,10 +442,12 @@ export const TASK_SPECS: SurfaceSpec[] = [
         description: 'The account (id or email).',
       },
     ],
-    build: async (values, client) => ({
-      type: 'task.retry',
-      taskId: await findTaskId(client, readValue(values, 'task')),
-      account: await findAccount(client, readValue(values, 'account')),
+    build: Effect.fn('Surface.tasksRerun')(function* (values, client) {
+      return {
+        type: 'task.retry' as const,
+        taskId: yield* findTaskId(client, readValue(values, 'task')),
+        account: yield* findAccount(client, readValue(values, 'account')),
+      };
     }),
     done: (values) => `Running this step again on ${readValue(values, 'account')}.`,
   }),
@@ -439,9 +456,11 @@ export const TASK_SPECS: SurfaceSpec[] = [
     summary: 'Cancel a task. Its agents stop and its worktree is removed.',
     command: 'task.cancel',
     fields: [TASK_FIELD],
-    build: async (values, client) => ({
-      type: 'task.cancel',
-      taskId: await findTaskId(client, readValue(values, 'task')),
+    build: Effect.fn('Surface.tasksCancel')(function* (values, client) {
+      return {
+        type: 'task.cancel' as const,
+        taskId: yield* findTaskId(client, readValue(values, 'task')),
+      };
     }),
     done: () => 'Cancelled.',
   }),
@@ -467,16 +486,16 @@ export const TASK_SPECS: SurfaceSpec[] = [
           "What the link shows: status (an anonymous status card), standard (the whole task with the agents' live output and tool calls, without your messages) or full (standard and your messages). Left out, the sharePreset setting.",
       },
     ],
-    build: async (values, client) => {
+    build: Effect.fn('Surface.tasksShare')(function* (values, client) {
       const limit = readValue(values, 'until');
       const preset = readValue(values, 'preset');
       return {
-        type: 'task.share',
-        taskId: await findTaskId(client, readValue(values, 'task')),
+        type: 'task.share' as const,
+        taskId: yield* findTaskId(client, readValue(values, 'task')),
         ...(limit ? { limit: limit as ShareLimit } : {}),
         ...(preset ? { preset: preset as SharePreset } : {}),
       };
-    },
+    }),
     done: () => 'Shared. Its link shows on the task in a moment.',
   }),
   defineCommand({
@@ -485,9 +504,11 @@ export const TASK_SPECS: SurfaceSpec[] = [
     command: 'task.unshare',
     humanOnly: true,
     fields: [TASK_FIELD],
-    build: async (values, client) => ({
-      type: 'task.unshare',
-      taskId: await findTaskId(client, readValue(values, 'task')),
+    build: Effect.fn('Surface.tasksUnshare')(function* (values, client) {
+      return {
+        type: 'task.unshare' as const,
+        taskId: yield* findTaskId(client, readValue(values, 'task')),
+      };
     }),
     done: () => 'No longer shared.',
   }),
@@ -498,9 +519,11 @@ export const TASK_SPECS: SurfaceSpec[] = [
     command: 'task.hand_off',
     humanOnly: true,
     fields: [TASK_FIELD],
-    build: async (values, client) => ({
-      type: 'task.hand_off',
-      taskId: await findTaskId(client, readValue(values, 'task')),
+    build: Effect.fn('Surface.tasksHandOff')(function* (values, client) {
+      return {
+        type: 'task.hand_off' as const,
+        taskId: yield* findTaskId(client, readValue(values, 'task')),
+      };
     }),
     done: () => 'Handed off. Its link shows on the task in a moment.',
   }),
@@ -510,9 +533,11 @@ export const TASK_SPECS: SurfaceSpec[] = [
     command: 'handoff.remove',
     humanOnly: true,
     fields: [TASK_FIELD],
-    build: async (values, client) => ({
-      type: 'handoff.remove',
-      taskId: await findTaskId(client, readValue(values, 'task')),
+    build: Effect.fn('Surface.tasksHandOffRemove')(function* (values, client) {
+      return {
+        type: 'handoff.remove' as const,
+        taskId: yield* findTaskId(client, readValue(values, 'task')),
+      };
     }),
     done: () => 'Taken back.',
   }),
@@ -530,10 +555,12 @@ export const TASK_SPECS: SurfaceSpec[] = [
           'The task it duplicates: its handle (SW-142), its id, the start of its id, or its exact title.',
       },
     ],
-    build: async (values, client) => ({
-      type: 'task.mark_duplicate',
-      taskId: await findTaskId(client, readValue(values, 'task')),
-      duplicateOf: await findTaskId(client, readValue(values, 'of')),
+    build: Effect.fn('Surface.tasksDuplicate')(function* (values, client) {
+      return {
+        type: 'task.mark_duplicate' as const,
+        taskId: yield* findTaskId(client, readValue(values, 'task')),
+        duplicateOf: yield* findTaskId(client, readValue(values, 'of')),
+      };
     }),
     done: () => 'Closed as a duplicate.',
   }),
@@ -542,9 +569,11 @@ export const TASK_SPECS: SurfaceSpec[] = [
     summary: 'Start a task closed as a duplicate again. One that already worked starts a fresh round.',
     command: 'task.clear_duplicate',
     fields: [TASK_FIELD],
-    build: async (values, client) => ({
-      type: 'task.clear_duplicate',
-      taskId: await findTaskId(client, readValue(values, 'task')),
+    build: Effect.fn('Surface.tasksNotDuplicate')(function* (values, client) {
+      return {
+        type: 'task.clear_duplicate' as const,
+        taskId: yield* findTaskId(client, readValue(values, 'task')),
+      };
     }),
     done: () => 'Started it again.',
   }),
@@ -553,9 +582,11 @@ export const TASK_SPECS: SurfaceSpec[] = [
     summary: 'Mark a task as done without merging it.',
     command: 'task.complete',
     fields: [TASK_FIELD],
-    build: async (values, client) => ({
-      type: 'task.complete',
-      taskId: await findTaskId(client, readValue(values, 'task')),
+    build: Effect.fn('Surface.tasksDone')(function* (values, client) {
+      return {
+        type: 'task.complete' as const,
+        taskId: yield* findTaskId(client, readValue(values, 'task')),
+      };
     }),
     done: () => 'Marked as done.',
   }),
@@ -564,10 +595,12 @@ export const TASK_SPECS: SurfaceSpec[] = [
     summary: 'Change how soon a task reaches you.',
     command: 'task.prioritize',
     fields: [TASK_FIELD, { ...PRIORITY_FIELD, positional: 'one', required: true }],
-    build: async (values, client) => ({
-      type: 'task.prioritize',
-      taskId: await findTaskId(client, readValue(values, 'task')),
-      priority: values.priority as (typeof TASK_PRIORITIES)[number],
+    build: Effect.fn('Surface.tasksPrioritize')(function* (values, client) {
+      return {
+        type: 'task.prioritize' as const,
+        taskId: yield* findTaskId(client, readValue(values, 'task')),
+        priority: values.priority as (typeof TASK_PRIORITIES)[number],
+      };
     }),
     done: (values) => `Priority set to ${readValue(values, 'priority')}.`,
   }),
@@ -585,10 +618,12 @@ export const TASK_SPECS: SurfaceSpec[] = [
         description: 'The tasks it waits on.',
       },
     ],
-    build: async (values, client) => ({
-      type: 'task.wait_on',
-      taskId: await findTaskId(client, readValue(values, 'task')),
-      waitsOn: await findTaskIds(client, readList(values, 'waitsOn')),
+    build: Effect.fn('Surface.tasksWaitOn')(function* (values, client) {
+      return {
+        type: 'task.wait_on' as const,
+        taskId: yield* findTaskId(client, readValue(values, 'task')),
+        waitsOn: yield* findTaskIds(client, readList(values, 'waitsOn')),
+      };
     }),
     done: () => 'Saved what it waits on.',
   }),
@@ -597,10 +632,12 @@ export const TASK_SPECS: SurfaceSpec[] = [
     summary: 'Stop a task waiting on other tasks.',
     command: 'task.wait_on',
     fields: [TASK_FIELD],
-    build: async (values, client) => ({
-      type: 'task.wait_on',
-      taskId: await findTaskId(client, readValue(values, 'task')),
-      waitsOn: [],
+    build: Effect.fn('Surface.tasksStopWaiting')(function* (values, client) {
+      return {
+        type: 'task.wait_on' as const,
+        taskId: yield* findTaskId(client, readValue(values, 'task')),
+        waitsOn: [],
+      };
     }),
     done: () => 'It no longer waits on other tasks.',
   }),
@@ -619,10 +656,12 @@ export const TASK_SPECS: SurfaceSpec[] = [
         description: 'The tasks it stacks on. The first one is its pull request’s base.',
       },
     ],
-    build: async (values, client) => ({
-      type: 'task.stack_on_tasks',
-      taskId: await findTaskId(client, readValue(values, 'task')),
-      stacksOn: await findTaskIds(client, readList(values, 'below')),
+    build: Effect.fn('Surface.tasksStackOn')(function* (values, client) {
+      return {
+        type: 'task.stack_on_tasks' as const,
+        taskId: yield* findTaskId(client, readValue(values, 'task')),
+        stacksOn: yield* findTaskIds(client, readList(values, 'below')),
+      };
     }),
     done: () => 'Stacked. It starts once every task below is ready to merge.',
   }),
@@ -631,10 +670,12 @@ export const TASK_SPECS: SurfaceSpec[] = [
     summary: 'Take a task out of its bundle before it starts: it no longer waits for the tasks below.',
     command: 'task.stack_on_tasks',
     fields: [TASK_FIELD],
-    build: async (values, client) => ({
-      type: 'task.stack_on_tasks',
-      taskId: await findTaskId(client, readValue(values, 'task')),
-      stacksOn: [],
+    build: Effect.fn('Surface.tasksUnstack')(function* (values, client) {
+      return {
+        type: 'task.stack_on_tasks' as const,
+        taskId: yield* findTaskId(client, readValue(values, 'task')),
+        stacksOn: [],
+      };
     }),
     done: () => 'It is no longer in a bundle.',
   }),
@@ -643,9 +684,11 @@ export const TASK_SPECS: SurfaceSpec[] = [
     summary: 'Keep a task in the backlog: its plan waits there until you start building it.',
     command: 'task.move_to_backlog',
     fields: [TASK_FIELD],
-    build: async (values, client) => ({
-      type: 'task.move_to_backlog',
-      taskId: await findTaskId(client, readValue(values, 'task')),
+    build: Effect.fn('Surface.tasksMoveToBacklog')(function* (values, client) {
+      return {
+        type: 'task.move_to_backlog' as const,
+        taskId: yield* findTaskId(client, readValue(values, 'task')),
+      };
     }),
     done: () => 'Moved to the backlog.',
   }),
@@ -654,9 +697,11 @@ export const TASK_SPECS: SurfaceSpec[] = [
     summary: 'Take a task out of the backlog: its plan waits for you in Needs you.',
     command: 'task.remove_from_backlog',
     fields: [TASK_FIELD],
-    build: async (values, client) => ({
-      type: 'task.remove_from_backlog',
-      taskId: await findTaskId(client, readValue(values, 'task')),
+    build: Effect.fn('Surface.tasksRemoveFromBacklog')(function* (values, client) {
+      return {
+        type: 'task.remove_from_backlog' as const,
+        taskId: yield* findTaskId(client, readValue(values, 'task')),
+      };
     }),
     done: () => 'Removed from the backlog. Its plan now waits for your approval.',
   }),
@@ -666,9 +711,11 @@ export const TASK_SPECS: SurfaceSpec[] = [
       'Snooze a task: it keeps its step and its work, and leaves Needs you and Home until you unsnooze it.',
     command: 'task.snooze',
     fields: [TASK_FIELD],
-    build: async (values, client) => ({
-      type: 'task.snooze',
-      taskId: await findTaskId(client, readValue(values, 'task')),
+    build: Effect.fn('Surface.tasksSnooze')(function* (values, client) {
+      return {
+        type: 'task.snooze' as const,
+        taskId: yield* findTaskId(client, readValue(values, 'task')),
+      };
     }),
     done: () => 'Snoozed. It keeps working and stays out of Needs you until you unsnooze it.',
   }),
@@ -677,9 +724,11 @@ export const TASK_SPECS: SurfaceSpec[] = [
     summary: 'Unsnooze a task: it shows again where it was, in Needs you when it waits for you.',
     command: 'task.unsnooze',
     fields: [TASK_FIELD],
-    build: async (values, client) => ({
-      type: 'task.unsnooze',
-      taskId: await findTaskId(client, readValue(values, 'task')),
+    build: Effect.fn('Surface.tasksUnsnooze')(function* (values, client) {
+      return {
+        type: 'task.unsnooze' as const,
+        taskId: yield* findTaskId(client, readValue(values, 'task')),
+      };
     }),
     done: () => 'Unsnoozed.',
   }),
@@ -697,14 +746,14 @@ export const TASK_SPECS: SurfaceSpec[] = [
         description: 'The account (id or email), or any.',
       },
     ],
-    build: async (values, client) => {
+    build: Effect.fn('Surface.tasksBind')(function* (values, client) {
       const account = readValue(values, 'account');
       return {
-        type: 'task.bind_account',
-        taskId: await findTaskId(client, readValue(values, 'task')),
-        account: await resolveOptionalAccount(client, account === 'any' ? '' : account),
+        type: 'task.bind_account' as const,
+        taskId: yield* findTaskId(client, readValue(values, 'task')),
+        account: yield* resolveOptionalAccount(client, account === 'any' ? '' : account),
       };
-    },
+    }),
     done: () => 'Saved the account.',
   }),
   defineCommand({
@@ -712,9 +761,11 @@ export const TASK_SPECS: SurfaceSpec[] = [
     summary: "Fire a waiting agent's next check-in now.",
     command: 'monitor.check_in_now',
     fields: [TASK_FIELD],
-    build: async (values, client) => ({
-      type: 'monitor.check_in_now',
-      taskId: await findTaskId(client, readValue(values, 'task')),
+    build: Effect.fn('Surface.tasksCheckInNow')(function* (values, client) {
+      return {
+        type: 'monitor.check_in_now' as const,
+        taskId: yield* findTaskId(client, readValue(values, 'task')),
+      };
     }),
     done: () => 'Checking in now.',
   }),
@@ -723,9 +774,11 @@ export const TASK_SPECS: SurfaceSpec[] = [
     summary: 'Resume a task that waits for a usage limit to reset, now.',
     command: 'usage_wait.resume_now',
     fields: [TASK_FIELD],
-    build: async (values, client) => ({
-      type: 'usage_wait.resume_now',
-      taskId: await findTaskId(client, readValue(values, 'task')),
+    build: Effect.fn('Surface.tasksResumeNow')(function* (values, client) {
+      return {
+        type: 'usage_wait.resume_now' as const,
+        taskId: yield* findTaskId(client, readValue(values, 'task')),
+      };
     }),
     done: () => 'Resuming.',
   }),
@@ -743,10 +796,12 @@ export const TASK_SPECS: SurfaceSpec[] = [
         description: 'true to resume at the reset, false to wait for you.',
       },
     ],
-    build: async (values, client) => ({
-      type: 'usage_wait.change',
-      taskId: await findTaskId(client, readValue(values, 'task')),
-      autoResume: values.resume === true,
+    build: Effect.fn('Surface.tasksAutoResume')(function* (values, client) {
+      return {
+        type: 'usage_wait.change' as const,
+        taskId: yield* findTaskId(client, readValue(values, 'task')),
+        autoResume: values.resume === true,
+      };
     }),
     done: (values) => (values.resume ? 'It resumes at the reset.' : 'It waits for you at the reset.'),
   }),
@@ -764,13 +819,13 @@ export const TASK_SPECS: SurfaceSpec[] = [
         description: 'editor (the default), terminal or finder.',
       },
     ],
-    act: async (client, values) => {
-      const detail = await readTask(client, readValue(values, 'task'));
-      const data = await client.api.tasks.open({
+    act: Effect.fn('Surface.tasksOpen')(function* (client, values) {
+      const detail = yield* readTask(client, readValue(values, 'task'));
+      const data = yield* client.api.tasks.open({
         params: { taskRef: detail.task.id },
         payload: { target: (values.in ?? 'editor') as OpenTarget },
       });
       return { data, text: data.ok ? 'Opened.' : 'Could not open it.' };
-    },
+    }),
   }),
 ];

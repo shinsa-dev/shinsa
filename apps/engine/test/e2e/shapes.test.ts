@@ -1,8 +1,9 @@
 import { afterEach, describe, expect, setDefaultTimeout, test } from 'bun:test';
 import { existsSync } from 'node:fs';
 import { TASK_PRIORITIES, TASK_SHAPES, type TaskShape } from '@shinsa/core';
+import { Effect } from 'effect';
 import type { JsonSchema } from '../../src/agents/providers/index.ts';
-import { runCommandOrThrow } from '../../src/shell/index.ts';
+import { runCommandOrThrow } from '../helpers/shell.ts';
 import { AGENT_REPLY, World } from './harness.ts';
 
 setDefaultTimeout(30_000);
@@ -38,7 +39,7 @@ function classifyAs(w: World, answer: Record<string, unknown>) {
   const repo = w.state.repos[w.repoId]?.name ?? '';
   w.classify = <T>(_system: string, prompt: string, schema?: JsonSchema) => {
     asked.push({ prompt, schema });
-    return Promise.resolve({ title: 'Why the greetings are missing', repo, size: 'small', ...answer } as T);
+    return Effect.succeed({ title: 'Why the greetings are missing', repo, size: 'small', ...answer } as T);
   };
   return asked;
 }

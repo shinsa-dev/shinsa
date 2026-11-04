@@ -1,5 +1,8 @@
+import { Effect } from 'effect';
 import * as React from 'react';
 import { describeFailure } from '@/lib/connection/commands.ts';
+import { forkApp } from '@/lib/runtime/app.ts';
+import { StepFailed } from '@/lib/runtime/schema.ts';
 
 interface MenuAnswer<Value> {
   value: Value | null;
@@ -16,13 +19,21 @@ export function useMenuAnswer<Value>(request: () => Promise<Value>) {
     if (!open) return;
     latest.current += 1;
     const asked = latest.current;
-    const settle = (next: MenuAnswer<Value>) => {
-      if (asked === latest.current) setAnswer(next);
-    };
+    const settle = (next: MenuAnswer<Value>) =>
+      Effect.sync(() => {
+        if (asked === latest.current) setAnswer(next);
+      });
     setAnswer(WAITING);
-    request().then(
-      (value) => settle({ value, failure: null }),
-      (error: unknown) => settle({ value: null, failure: describeFailure(error) })
+    forkApp(
+      Effect.tryPromise({
+        try: request,
+        catch: (error) => new StepFailed({ message: describeFailure(error) }),
+      }).pipe(
+        Effect.matchEffect({
+          onSuccess: (value) => settle({ value, failure: null }),
+          onFailure: (failed) => settle({ value: null, failure: failed.message }),
+        })
+      )
     );
   }
 

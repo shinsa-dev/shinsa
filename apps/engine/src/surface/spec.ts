@@ -1,54 +1,16 @@
-import type { ShinsaToolName, UserCommand } from '@shinsa/core';
-import { type Display, describeMark, PLAIN_DISPLAY } from '../terminal/index.ts';
-import type { CommandReceipt, SurfaceClient } from './client.ts';
-import type { FieldSpec, Values } from './fields.ts';
+import { Effect } from 'effect';
+import { describeMark, PLAIN_DISPLAY } from '../terminal/index.ts';
+import type { Values } from './fields.ts';
+import type {
+  ActionDefinition,
+  CommandDefinition,
+  CommandReceipt,
+  ReadDefinition,
+  SurfaceClient,
+  SurfaceSpec,
+} from './schema.ts';
 
-interface SurfaceResult {
-  data: unknown;
-  text: string;
-}
-
-type SurfaceAccess = 'read' | 'write';
-
-export interface SurfaceSpec {
-  path: readonly string[];
-  summary: string;
-  fields: FieldSpec[];
-  access: SurfaceAccess;
-  command?: UserCommand['type'];
-  humanOnly?: boolean;
-  agentTool?: ShinsaToolName;
-  run: (client: SurfaceClient, values: Values, display?: Display) => Promise<SurfaceResult>;
-}
-
-interface CommandDefinition {
-  path: readonly string[];
-  summary: string;
-  fields: FieldSpec[];
-  command: UserCommand['type'];
-  humanOnly?: boolean;
-  agentTool?: ShinsaToolName;
-  build: (values: Values, client: SurfaceClient) => UserCommand | Promise<UserCommand>;
-  done?: (values: Values, receipt: CommandReceipt) => string;
-  after?: (values: Values, receipt: CommandReceipt, client: SurfaceClient) => string | null;
-}
-
-interface ReadDefinition<T> {
-  path: readonly string[];
-  summary: string;
-  fields: FieldSpec[];
-  humanOnly?: boolean;
-  read: (values: Values, client: SurfaceClient) => Promise<T>;
-  format: (data: T, values: Values, display: Display) => string;
-}
-
-interface ActionDefinition {
-  path: readonly string[];
-  summary: string;
-  fields: FieldSpec[];
-  humanOnly?: boolean;
-  act: (client: SurfaceClient, values: Values, display: Display) => Promise<SurfaceResult>;
-}
+export type { SurfaceSpec } from './schema.ts';
 
 export function describeTaskLink(client: SurfaceClient, receipt: CommandReceipt) {
   const ref = receipt.handle ?? receipt.taskId;
@@ -64,19 +26,21 @@ export function defineCommand(definition: CommandDefinition): SurfaceSpec {
     command: definition.command,
     ...(definition.humanOnly ? { humanOnly: true } : {}),
     ...(definition.agentTool ? { agentTool: definition.agentTool } : {}),
-    run: async (client, values, display = PLAIN_DISPLAY) => {
-      const receipt = await client.send(await definition.build(values, client));
+    run: Effect.fn('Surface.command')(function* (client, values, display = PLAIN_DISPLAY) {
+      const built = definition.build(values, client);
+      const command = Effect.isEffect(built) ? yield* built : built;
+      const receipt = yield* client.send(command);
       const done = describeMark(
         display.style,
         'success',
         'check',
         definition.done?.(values, receipt) ?? 'Done.'
       );
-      const problem = definition.after?.(values, receipt, client) ?? null;
+      const problem = definition.after ? yield* definition.after(values, receipt, client) : null;
       const link = describeTaskLink(client, receipt);
       const text = [done, problem, link ? display.style.dim(link) : null].filter(Boolean).join('\n');
       return { data: receipt, text };
-    },
+    }),
   };
 }
 
@@ -87,10 +51,10 @@ export function defineRead<T>(definition: ReadDefinition<T>): SurfaceSpec {
     fields: definition.fields,
     access: 'read',
     ...(definition.humanOnly ? { humanOnly: true } : {}),
-    run: async (client, values, display = PLAIN_DISPLAY) => {
-      const data = await definition.read(values, client);
+    run: Effect.fn('Surface.read')(function* (client, values, display = PLAIN_DISPLAY) {
+      const data = yield* definition.read(values, client);
       return { data, text: definition.format(data, values, display) };
-    },
+    }),
   };
 }
 

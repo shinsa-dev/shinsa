@@ -2,8 +2,9 @@ import { describe, expect, test } from 'bun:test';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { parseStoredService, TerminalStore } from '../../apps/engine/src/terminals/store.ts';
+import { parseStoredService } from '../../apps/engine/src/terminals/store.ts';
 import type { Project, Repo } from '../../packages/core/src/index.ts';
+import { readTerminalServices } from '../kit/terminals.ts';
 import { listSeedServices, SANDBOX_SERVICE_COMMAND, writeSeedServices } from './services.ts';
 
 function createProject(id: string, name: string): Project {
@@ -68,7 +69,7 @@ describe('writeSeedServices', () => {
     const dir = mkdtempSync(join(tmpdir(), 'seed-services-'));
     try {
       const written = writeSeedServices(dir, PROJECTS, REPOS);
-      expect(new TerminalStore(dir).readServices()).toEqual(written);
+      expect(readTerminalServices(dir)).toEqual(written);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

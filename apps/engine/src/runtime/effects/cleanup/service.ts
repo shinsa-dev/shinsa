@@ -1,10 +1,11 @@
 import { rmSync } from 'node:fs';
 import { isTaskSettled, type Repo } from '@shinsa/core';
 import { Clock, Context, Effect, Layer } from 'effect';
-import { pruneSharedCaches } from '../../../checks/caches.ts';
+import { SharedCaches } from '../../../checks/caches/service.ts';
 import { resolveScratchPath } from '../../../config/index.ts';
-import { removeIsolatedWorktrees } from '../../../git/index.ts';
-import { stopProcessesIn } from '../../../git/processes.ts';
+import { Checkout } from '../../../git/checkout/service.ts';
+import { LeftoverProcesses } from '../../../git/leftovers/service.ts';
+import { describeError } from '../../../log/redact.ts';
 import type { EffectAttempt } from '../../engine/schema.ts';
 import { resolveEffectFailure } from '../../failures/classify.ts';
 import type { EffectFailure } from '../../failures/schema.ts';
@@ -21,23 +22,24 @@ export class Cleanup extends Context.Service<
     Cleanup,
     Effect.gen(function* () {
       const world = yield* EffectWorld;
+      const checkout = yield* Checkout;
+      const leftovers = yield* LeftoverProcesses;
+      const caches = yield* SharedCaches;
 
       const removeIsolated = Effect.fn('Cleanup.removeIsolated')(function* (repo: Repo, taskId: string) {
-        yield* world
-          .bridge(() => removeIsolatedWorktrees(repo, world.workspaces.root.path, taskId))
+        yield* checkout
+          .removeIsolated(repo, yield* world.workspaces.root.path, taskId)
           .pipe(
-            Effect.catch((failure) =>
+            Effect.catchDefect((defect) =>
               Effect.logWarning('[Effects] Could not remove the checkouts of delegations').pipe(
-                Effect.annotateLogs({ taskId, error: failure.message })
+                Effect.annotateLogs({ taskId, error: describeError(defect) })
               )
             )
           );
       });
 
       const closeTerminals = Effect.fn('Cleanup.closeTerminals')(function* (taskId: string) {
-        const services = world.services;
-        if (!services) return;
-        yield* Effect.try({ try: () => services.closeTaskTerminals(taskId), catch: resolveEffectFailure });
+        if (world.services) yield* world.services.closeTaskTerminals(taskId);
       });
 
       const removeWorktree = Effect.fn('Cleanup.removeWorktree')(function* (
@@ -53,15 +55,12 @@ export class Cleanup extends Context.Service<
         yield* closeTerminals(taskId);
         const services = world.services;
         yield* Effect.gen(function* () {
-          const workspace = yield* Effect.try({
-            try: () => world.workspaces.resolve(task),
-            catch: resolveEffectFailure,
-          });
+          const workspace = world.workspaces.resolve(task);
           if (workspace.mode === 'worktrees') {
-            const spare = services?.listTerminalPids() ?? [];
-            yield* world.bridge(() => stopProcessesIn(worktreePath, { spare }));
+            const spare = services ? yield* services.listTerminalPids : [];
+            yield* leftovers.stop(worktreePath, { spare });
           }
-          yield* world.bridge(() => workspace.remove(repo, task));
+          yield* Effect.mapError(workspace.remove(repo, task), resolveEffectFailure);
         }).pipe(
           Effect.catch((failure) =>
             Effect.logWarning('[Effects] Could not remove a worktree').pipe(
@@ -71,16 +70,15 @@ export class Cleanup extends Context.Service<
         );
         const now = yield* Clock.currentTimeMillis;
         const repoIds = Object.keys((yield* world.state).repos);
-        yield* Effect.try({
-          try: () => pruneSharedCaches(world.config.dataDir, repoIds, now),
-          catch: resolveEffectFailure,
-        }).pipe(
-          Effect.catch((failure) =>
-            Effect.logWarning('[Effects] Could not prune the shared build caches').pipe(
-              Effect.annotateLogs({ error: failure.message })
+        yield* caches
+          .prune(world.config.dataDir, repoIds, now)
+          .pipe(
+            Effect.catchDefect((defect) =>
+              Effect.logWarning('[Effects] Could not prune the shared build caches').pipe(
+                Effect.annotateLogs({ error: describeError(defect) })
+              )
             )
-          )
-        );
+          );
         yield* world.dispatch({ type: 'worktree.gone', taskId }, { id: `${attempt.key}:worktree.gone` });
       });
 
@@ -91,7 +89,7 @@ export class Cleanup extends Context.Service<
 
       const removeScratch = Effect.fn('Cleanup.removeScratch')(function* (taskId: string) {
         if (yield* isReopened(taskId)) return;
-        yield* world.bridge(() => world.runs.quiesce(taskId));
+        yield* world.runs.quiesce(taskId);
         if (yield* isReopened(taskId)) return;
         yield* closeTerminals(taskId);
         yield* Effect.try({

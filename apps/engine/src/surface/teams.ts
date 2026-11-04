@@ -1,8 +1,9 @@
-import { DomainError, type RemoteTeamEntry, type RemoteUser } from '@shinsa/core';
+import { DomainError, type RemoteSnapshot, type RemoteTeamEntry, type RemoteUser } from '@shinsa/core';
+import { Effect } from 'effect';
 import type { EngineCalls } from '../cli/client/schema.ts';
-import type { RemoteSnapshot } from '../remote/index.ts';
 import type { SurfaceClient } from './client.ts';
 import type { FieldSpec } from './fields.ts';
+import type { SurfaceFailure } from './schema.ts';
 import { defineAction, defineRead, readValue, type SurfaceSpec } from './spec.ts';
 
 const TEAM_FIELD: FieldSpec = {
@@ -43,8 +44,8 @@ function formatTeams(snapshot: RemoteSnapshot) {
   return snapshot.teams.flatMap(describeEntry).join('\n');
 }
 
-export async function findTeamId(client: SurfaceClient, ref: string) {
-  const snapshot = await client.api.remote.snapshot();
+export const findTeamId = Effect.fn('Surface.team')(function* (client: SurfaceClient, ref: string) {
+  const snapshot = yield* client.api.remote.snapshot();
   const wanted = ref.trim().toLowerCase();
   const matches = snapshot.teams.filter(
     (entry) => entry.id === ref.trim() || entry.name.toLowerCase() === wanted
@@ -53,33 +54,41 @@ export async function findTeamId(client: SurfaceClient, ref: string) {
   if (found && matches.length === 1) return found.id;
   const problem =
     matches.length > 1 ? `More than one team is called ${ref}; name it by its id` : `No team matches ${ref}`;
-  throw new DomainError({
+  return yield* new DomainError({
     code: 'team_not_found',
     message: `${problem}. See them with \`shinsa teams list\`.`,
   });
-}
+});
 
 type Among = 'members' | 'requests' | 'teammates';
 
-async function findUserId(client: SurfaceClient, teamId: string, login: string, among: Among) {
-  const snapshot = await client.api.remote.snapshot();
+const findUserId = Effect.fn('Surface.teamUser')(function* (
+  client: SurfaceClient,
+  teamId: string,
+  login: string,
+  among: Among
+) {
+  const snapshot = yield* client.api.remote.snapshot();
   const team = snapshot.teams.find((entry) => entry.id === teamId)?.team;
   const wanted = login.replace(/^@/, '').toLowerCase();
   const listed = team && (among === 'teammates' ? [{ user: team.owner }, ...team.members] : team[among]);
   const found = listed?.find((entry) => entry.user.login.toLowerCase() === wanted);
   if (!found) {
     const where = among === 'requests' ? 'has not asked to join this team' : 'is not in this team';
-    throw new DomainError({
+    return yield* new DomainError({
       code: 'member_not_found',
       message: `${wanted} ${where}. See the team with \`shinsa teams list\`.`,
     });
   }
   return found.user.id;
-}
+});
 
-type TeamRoute = (api: EngineCalls, payload: { teamId: string }) => Promise<unknown>;
+type TeamRoute = (api: EngineCalls, payload: { teamId: string }) => Effect.Effect<unknown, SurfaceFailure>;
 
-type MemberRoute = (api: EngineCalls, payload: { teamId: string; userId: string }) => Promise<unknown>;
+type MemberRoute = (
+  api: EngineCalls,
+  payload: { teamId: string; userId: string }
+) => Effect.Effect<unknown, SurfaceFailure>;
 
 function defineTeamAction(path: string, summary: string, route: TeamRoute, done: string): SurfaceSpec {
   return defineAction({
@@ -87,11 +96,11 @@ function defineTeamAction(path: string, summary: string, route: TeamRoute, done:
     summary,
     humanOnly: true,
     fields: [TEAM_FIELD],
-    act: async (client, values) => {
-      const teamId = await findTeamId(client, readValue(values, 'team'));
-      const data = await route(client.api, { teamId });
+    act: Effect.fn('Surface.teamAction')(function* (client, values) {
+      const teamId = yield* findTeamId(client, readValue(values, 'team'));
+      const data = yield* route(client.api, { teamId });
       return { data, text: done };
-    },
+    }),
   });
 }
 
@@ -107,12 +116,12 @@ function defineMemberAction(
     summary,
     humanOnly: true,
     fields: [TEAM_FIELD, LOGIN_FIELD],
-    act: async (client, values) => {
-      const teamId = await findTeamId(client, readValue(values, 'team'));
-      const userId = await findUserId(client, teamId, readValue(values, 'login'), among);
-      const data = await route(client.api, { teamId, userId });
+    act: Effect.fn('Surface.memberAction')(function* (client, values) {
+      const teamId = yield* findTeamId(client, readValue(values, 'team'));
+      const userId = yield* findUserId(client, teamId, readValue(values, 'login'), among);
+      const data = yield* route(client.api, { teamId, userId });
       return { data, text: done };
-    },
+    }),
   });
 }
 
@@ -141,14 +150,14 @@ export const TEAM_SPECS: SurfaceSpec[] = [
         description: 'The team’s name, 60 characters at most.',
       },
     ],
-    act: async (client, values) => {
-      const data = await client.api.teams.create({
+    act: Effect.fn('Surface.teamsCreate')(function* (client, values) {
+      const data = yield* client.api.teams.create({
         payload: {
           name: readValue(values, 'name'),
         },
       });
       return { data, text: describeLink(data.url) };
-    },
+    }),
   }),
   defineAction({
     path: ['teams', 'join'],
@@ -163,8 +172,8 @@ export const TEAM_SPECS: SurfaceSpec[] = [
         description: 'The team link, https://app.shinsa.dev/share/team#…',
       },
     ],
-    act: async (client, values) => {
-      const data = await client.api.teams.join({
+    act: Effect.fn('Surface.teamsJoin')(function* (client, values) {
+      const data = yield* client.api.teams.join({
         payload: {
           url: readValue(values, 'url'),
         },
@@ -174,18 +183,18 @@ export const TEAM_SPECS: SurfaceSpec[] = [
           ? 'This machine is in the team now. Add a project to it with `shinsa projects add-to-team`.'
           : 'You asked to join. The team’s owner accepts or declines.';
       return { data, text };
-    },
+    }),
   }),
   defineAction({
     path: ['teams', 'link'],
     summary: 'Show the link that asks to join a team you own, making a new one if it is off.',
     humanOnly: true,
     fields: [TEAM_FIELD],
-    act: async (client, values) => {
-      const teamId = await findTeamId(client, readValue(values, 'team'));
-      const data = await client.api.teams.link({ payload: { teamId } });
+    act: Effect.fn('Surface.teamsLink')(function* (client, values) {
+      const teamId = yield* findTeamId(client, readValue(values, 'team'));
+      const data = yield* client.api.teams.link({ payload: { teamId } });
       return { data, text: describeLink(data.url) };
-    },
+    }),
   }),
   defineTeamAction(
     'link-off',

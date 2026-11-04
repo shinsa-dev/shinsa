@@ -142,9 +142,7 @@ export class CloudCrypto extends Context.Service<
             crypto.subtle.generateKey(REMOTE_KEY_ALGORITHM, true, ['deriveBits']) as Promise<CryptoKeyPair>
         );
         const iv = createRandomBytes(PAIRING_SEAL_IV_BYTES);
-        return yield* Effect.promise(() =>
-          sealPairingCredentials({ machineKey, ephemeral, iv }, credentials)
-        );
+        return yield* sealPairingCredentials({ machineKey, ephemeral, iv }, credentials).pipe(Effect.orDie);
       });
 
       const signSlack = Effect.fn('CloudCrypto.signSlack')(function* (timestamp: string, body: string) {

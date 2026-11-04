@@ -1,27 +1,13 @@
-import type { TerminalColors, TerminalInfo, TerminalServerFrame } from '@shinsa/core';
-import { TerminalMirror } from './mirror.ts';
-import type { TerminalProcess, TerminalSpawner } from './pty.ts';
-
-export interface TerminalViewer {
-  send: (data: string | Uint8Array) => number;
-  buffered: () => number;
-  end: () => void;
-}
-
-export interface SessionStart {
-  command: string[];
-  env: Record<string, string>;
-  spawn: TerminalSpawner;
-  now: number;
-}
-
-export interface SessionOptions {
-  info: TerminalInfo;
-  saved: string | null;
-  onChange: (session: TerminalSession) => void;
-  onScreen: (session: TerminalSession) => void;
-  now: () => number;
-}
+import type { TerminalServerFrame } from '@shinsa/core';
+import { Duration, Effect, Fiber } from 'effect';
+import { createTerminalMirror } from './mirror.ts';
+import type {
+  SessionOptions,
+  SessionStart,
+  TerminalProcess,
+  TerminalSession,
+  TerminalViewer,
+} from './schema.ts';
 
 interface ViewerState {
   behind: boolean;
@@ -54,206 +40,208 @@ function joinChunks(chunks: Uint8Array[]) {
   return joined;
 }
 
-export class TerminalSession {
-  info: TerminalInfo;
-  readonly #options: SessionOptions;
-  readonly #mirror: TerminalMirror;
-  readonly #viewers = new Map<TerminalViewer, ViewerState>();
-  #process: TerminalProcess | null = null;
-  #batch: Uint8Array[] = [];
-  #batchBytes = 0;
-  #batchTimer: ReturnType<typeof setTimeout> | null = null;
-  #stopping = false;
-  #lastOutputAt: number | null = null;
-  #disposed = false;
+export const createTerminalSession = Effect.fn('TerminalSession.create')(function* (options: SessionOptions) {
+  const context = yield* Effect.context<never>();
+  const runFork = Effect.runForkWith(context);
+  const runSync = Effect.runSyncWith(context);
+  const viewers = new Map<TerminalViewer, ViewerState>();
+  let running: TerminalProcess | null = null;
+  let batch: Uint8Array[] = [];
+  let batchBytes = 0;
+  let batchFiber: Fiber.Fiber<void> | null = null;
+  let stopping = false;
+  let lastOutputAt: number | null = null;
+  let disposed = false;
 
-  constructor(options: SessionOptions) {
-    this.#options = options;
-    this.info = options.info;
-    this.#mirror = new TerminalMirror({
-      ...DEFAULT_SIZE,
-      onReply: (data) => this.#process?.write(data),
-      onTitle: (title) => this.#retitle(title),
-    });
-    if (options.saved) this.#mirror.write(ENCODER.encode(options.saved));
-  }
+  const cancelBatch = () => {
+    if (batchFiber) runFork(Fiber.interrupt(batchFiber));
+    batchFiber = null;
+  };
 
-  get running() {
-    return this.#process !== null;
-  }
-
-  get pid() {
-    return this.#process?.pid ?? null;
-  }
-
-  get viewers() {
-    return this.#viewers.size;
-  }
-
-  start({ command, env, spawn, now }: SessionStart) {
-    if (this.#process) return;
-    if (this.info.endedAt !== null) this.#receive(ENCODER.encode('\r\n'));
-    this.#lastOutputAt = null;
-    this.#stopping = false;
-    this.info = {
-      ...this.info,
-      status: 'running',
-      exitCode: null,
-      startedAt: now,
-      endedAt: null,
-      title: null,
-    };
-    const process = spawn(command, {
-      cwd: this.info.cwd,
-      cols: this.#mirror.cols,
-      rows: this.#mirror.rows,
-      env,
-      onData: (data) => this.#receive(data),
-    });
-    this.#process = process;
-    void process.exited.then((code) => this.#end(process, code));
-  }
-
-  #end(process: TerminalProcess, code: number | null) {
-    if (this.#process !== process) return;
-    this.#process = null;
-    if (this.#disposed) return;
-    this.#flushBatch();
-    const status = this.#stopping ? 'stopped' : 'exited';
-    this.info = {
-      ...this.info,
-      status,
-      exitCode: this.#stopping ? null : code,
-      endedAt: this.#options.now(),
-    };
-    this.#options.onChange(this);
-    this.#options.onScreen(this);
-  }
-
-  #retitle(title: string) {
-    const next = title.slice(0, FLOW_LIMITS.title) || null;
-    if (next === this.info.title) return;
-    this.info = { ...this.info, title: next };
-    this.#options.onChange(this);
-  }
-
-  #receive(data: Uint8Array) {
-    if (this.#disposed) return;
-    this.#lastOutputAt = performance.now();
-    this.#mirror.write(data);
-    this.#options.onScreen(this);
-    if (this.#viewers.size === 0) return;
-    this.#batch.push(data);
-    this.#batchBytes += data.length;
-    if (this.#batchBytes >= FLOW_LIMITS.batchBytes) this.#flushBatch();
-    else this.#batchTimer ??= setTimeout(() => this.#flushBatch(), FLOW_LIMITS.batchMs);
-  }
-
-  #flushBatch() {
-    if (this.#batchTimer) clearTimeout(this.#batchTimer);
-    this.#batchTimer = null;
-    if (this.#batch.length === 0) return;
-    const frame = joinChunks(this.#batch);
-    this.#batch = [];
-    this.#batchBytes = 0;
-    for (const [viewer, state] of this.#viewers) {
+  const flushBatch = () => {
+    cancelBatch();
+    if (batch.length === 0) return;
+    const frame = joinChunks(batch);
+    batch = [];
+    batchBytes = 0;
+    for (const [viewer, state] of viewers) {
       if (state.behind) continue;
       if (viewer.send(frame) === 0 || viewer.buffered() > FLOW_LIMITS.highWater) state.behind = true;
     }
-  }
+  };
 
-  #sendScreen(viewer: TerminalViewer) {
-    const reset: TerminalServerFrame = { type: 'reset', cols: this.#mirror.cols, rows: this.#mirror.rows };
+  const receive = (data: Uint8Array) => {
+    if (disposed) return;
+    lastOutputAt = performance.now();
+    mirror.write(data);
+    runSync(options.onScreen(session));
+    if (viewers.size === 0) return;
+    batch.push(data);
+    batchBytes += data.length;
+    if (batchBytes >= FLOW_LIMITS.batchBytes) flushBatch();
+    else
+      batchFiber ??= runFork(
+        Effect.sleep(Duration.millis(FLOW_LIMITS.batchMs)).pipe(
+          Effect.andThen(
+            Effect.sync(() => {
+              batchFiber = null;
+              flushBatch();
+            })
+          )
+        )
+      );
+  };
+
+  const retitle = (title: string) => {
+    const next = title.slice(0, FLOW_LIMITS.title) || null;
+    if (next === session.info.title) return;
+    session.info = { ...session.info, title: next };
+    runSync(options.onChange);
+  };
+
+  const mirror = createTerminalMirror({
+    ...DEFAULT_SIZE,
+    onReply: (data) => running?.write(data),
+    onTitle: retitle,
+  });
+  if (options.saved) mirror.write(ENCODER.encode(options.saved));
+
+  const end = Effect.fn('TerminalSession.end')(function* (process: TerminalProcess, code: number | null) {
+    if (running !== process) return;
+    running = null;
+    if (disposed) return;
+    flushBatch();
+    const status = stopping ? 'stopped' : 'exited';
+    session.info = {
+      ...session.info,
+      status,
+      exitCode: stopping ? null : code,
+      endedAt: yield* options.now,
+    };
+    yield* options.onChange;
+    yield* options.onScreen(session);
+  });
+
+  const awaitExit = (process: TerminalProcess) =>
+    Effect.promise(() => process.exited).pipe(Effect.flatMap((code) => end(process, code)));
+
+  const sendScreen = (viewer: TerminalViewer) => {
+    const reset: TerminalServerFrame = { type: 'reset', cols: mirror.cols, rows: mirror.rows };
     viewer.send(JSON.stringify(reset));
-    for (const part of this.#mirror.snapshot()) {
+    for (const part of mirror.snapshot()) {
       const bytes = typeof part === 'string' ? ENCODER.encode(part) : part;
       if (bytes.length > 0) viewer.send(bytes);
     }
     viewer.send(JSON.stringify({ type: 'live' } satisfies TerminalServerFrame));
-  }
+  };
 
-  attach(viewer: TerminalViewer) {
-    this.#flushBatch();
-    this.#viewers.set(viewer, { behind: false });
-    this.#sendScreen(viewer);
-  }
-
-  detach(viewer: TerminalViewer) {
-    this.#viewers.delete(viewer);
-  }
-
-  drain(viewer: TerminalViewer) {
-    const state = this.#viewers.get(viewer);
-    if (!state?.behind || viewer.buffered() > FLOW_LIMITS.lowWater) return;
-    this.#flushBatch();
-    state.behind = false;
-    this.#sendScreen(viewer);
-  }
-
-  input(data: string | Uint8Array) {
-    this.#process?.write(data);
-  }
-
-  type(command: string) {
-    const deadline = performance.now() + TYPE_LIMITS.waitMs;
-    const attempt = () => {
-      const process = this.#process;
-      if (!process || this.#disposed) return;
-      const settled =
-        this.#lastOutputAt !== null && performance.now() - this.#lastOutputAt >= TYPE_LIMITS.settleMs;
-      if (!settled && performance.now() < deadline) {
-        setTimeout(attempt, TYPE_LIMITS.settleMs);
-        return;
-      }
+  const typeWhenSettled = (command: string, deadline: number): Effect.Effect<void> =>
+    Effect.suspend(() => {
+      const process = running;
+      if (!process || disposed) return Effect.void;
+      const settled = lastOutputAt !== null && performance.now() - lastOutputAt >= TYPE_LIMITS.settleMs;
+      if (!settled && performance.now() < deadline)
+        return Effect.sleep(Duration.millis(TYPE_LIMITS.settleMs)).pipe(
+          Effect.andThen(typeWhenSettled(command, deadline))
+        );
       process.write(command);
-      setTimeout(() => {
-        if (this.#process === process) process.write(ENTER);
-      }, TYPE_LIMITS.keyGapMs);
+      return Effect.sleep(Duration.millis(TYPE_LIMITS.keyGapMs)).pipe(
+        Effect.andThen(
+          Effect.sync(() => {
+            if (running === process) process.write(ENTER);
+          })
+        )
+      );
+    });
+
+  const start = Effect.fn('TerminalSession.start')(function* ({ command, env, spawn }: SessionStart) {
+    if (running) return;
+    if (session.info.endedAt !== null) receive(ENCODER.encode('\r\n'));
+    lastOutputAt = null;
+    stopping = false;
+    session.info = {
+      ...session.info,
+      status: 'running',
+      exitCode: null,
+      startedAt: yield* options.now,
+      endedAt: null,
+      title: null,
     };
-    attempt();
-  }
+    const process = yield* spawn(command, {
+      cwd: session.info.cwd,
+      cols: mirror.cols,
+      rows: mirror.rows,
+      env,
+      onData: receive,
+    });
+    running = process;
+    yield* Effect.forkDetach(awaitExit(process));
+  });
 
-  resize(cols: number, rows: number) {
-    if (cols === this.#mirror.cols && rows === this.#mirror.rows) return;
-    this.#flushBatch();
-    this.#mirror.resize(cols, rows);
-    this.#process?.resize(cols, rows);
-  }
-
-  clear() {
-    this.#mirror.clear();
-  }
-
-  replaceColors(colors: TerminalColors) {
-    this.#mirror.replaceColors(colors);
-  }
-
-  async serializeScreen() {
-    await this.#mirror.flush();
-    return this.#mirror.serializeSaved();
-  }
-
-  async readOutput(lines: number) {
-    await this.#mirror.flush();
-    return this.#mirror.readLines(lines);
-  }
-
-  hangUp() {
-    this.#process?.hangUp();
-  }
-
-  stop() {
-    this.#stopping = true;
-    const process = this.#process;
-    process?.hangUp();
-    return process?.exited;
-  }
-
-  dispose() {
-    this.#disposed = true;
-    for (const viewer of this.#viewers.keys()) viewer.end();
-    if (this.#batchTimer) clearTimeout(this.#batchTimer);
-    this.#viewers.clear();
-    this.#mirror.dispose();
-  }
-}
+  const session: TerminalSession = {
+    info: options.info,
+    get running() {
+      return running !== null;
+    },
+    get pid() {
+      return running?.pid ?? null;
+    },
+    get viewers() {
+      return viewers.size;
+    },
+    start,
+    attach(viewer) {
+      flushBatch();
+      viewers.set(viewer, { behind: false });
+      sendScreen(viewer);
+    },
+    detach(viewer) {
+      viewers.delete(viewer);
+    },
+    drain(viewer) {
+      const state = viewers.get(viewer);
+      if (!state?.behind || viewer.buffered() > FLOW_LIMITS.lowWater) return;
+      flushBatch();
+      state.behind = false;
+      sendScreen(viewer);
+    },
+    input(data) {
+      running?.write(data);
+    },
+    type(command) {
+      runFork(typeWhenSettled(command, performance.now() + TYPE_LIMITS.waitMs));
+    },
+    resize(cols, rows) {
+      if (cols === mirror.cols && rows === mirror.rows) return;
+      flushBatch();
+      mirror.resize(cols, rows);
+      running?.resize(cols, rows);
+    },
+    clear() {
+      mirror.clear();
+    },
+    replaceColors(colors) {
+      mirror.replaceColors(colors);
+    },
+    serializeScreen: Effect.map(mirror.flushed, () => mirror.serializeSaved()),
+    readOutput: (lines) => Effect.map(mirror.flushed, () => mirror.readLines(lines)),
+    hangUp() {
+      running?.hangUp();
+    },
+    stop: Effect.suspend(() => {
+      stopping = true;
+      const process = running;
+      if (!process) return Effect.void;
+      process.hangUp();
+      return awaitExit(process);
+    }),
+    dispose() {
+      disposed = true;
+      for (const viewer of viewers.keys()) viewer.end();
+      cancelBatch();
+      viewers.clear();
+      mirror.dispose();
+    },
+  };
+  return session;
+});

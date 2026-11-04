@@ -4,35 +4,31 @@ import {
   PROJECT_LIMITS,
   type ProjectSuggestion,
   resolveProjectSuggestions,
+  type ShinsaState,
   type SuggestionRepo,
 } from '@shinsa/core';
-import type { ProjectChanges } from '../projects/changes.ts';
-import { type LoginResolver, listLocalRepos, readOriginRemote } from '../repos/index.ts';
-import type { Engine } from '../runtime/engine.ts';
+import { Effect } from 'effect';
+import { MAX_SUGGESTED_REPOS, type ProjectSetup } from './projects/schema.ts';
 import { applyRevision } from './revise.ts';
 import type { ProjectRevision } from './schema.ts';
-
-export interface ProjectSetup {
-  engine: Engine;
-  resolveLogin: LoginResolver;
-  changes: ProjectChanges;
-}
-
-const MAX_SUGGESTED_REPOS = 400;
 
 function isInside(path: string, roots: string[]) {
   return roots.some((root) => path.startsWith(`${root.replace(/\/+$/, '')}/`));
 }
 
-function listSuggestionRepos(engine: Engine, roots: string[]): SuggestionRepo[] {
-  const registered = new Map(Object.values(engine.state.repos).map((repo) => [repo.path, repo]));
+const listSuggestionRepos = Effect.fn('Onboarding.listSuggestionRepos')(function* (
+  setup: ProjectSetup,
+  state: ShinsaState,
+  roots: string[]
+) {
+  const registered = new Map(Object.values(state.repos).map((repo) => [repo.path, repo]));
   const repos = new Map<string, SuggestionRepo>();
-  for (const local of listLocalRepos(roots, MAX_SUGGESTED_REPOS)) {
+  for (const local of yield* setup.listLocal(roots, MAX_SUGGESTED_REPOS)) {
     const repo = registered.get(local.path);
     repos.set(local.path, {
       path: local.path,
       name: local.name,
-      remote: repo?.remote ?? readOriginRemote(local.path),
+      remote: repo?.remote ?? (yield* setup.readOrigin(local.path)),
       projectId: repo?.projectId ?? null,
     });
   }
@@ -46,27 +42,23 @@ function listSuggestionRepos(engine: Engine, roots: string[]): SuggestionRepo[] 
     });
   }
   return [...repos.values()];
-}
+});
 
-export async function listProjectSuggestions(
+export const listProjectSuggestions = Effect.fn('Onboarding.listProjectSuggestions')(function* (
   setup: ProjectSetup,
   roots: string[],
   revision: ProjectRevision | null
 ) {
-  const { engine } = setup;
-  const projects = Object.values(engine.state.projects);
-  const suggestions = resolveProjectSuggestions({
-    roots,
-    repos: listSuggestionRepos(engine, roots),
-    login: await setup.resolveLogin(),
-    projects,
-  });
+  const state = yield* setup.state;
+  const projects = Object.values(state.projects);
+  const repos = yield* listSuggestionRepos(setup, state, roots);
+  const suggestions = resolveProjectSuggestions({ roots, repos, login: yield* setup.login, projects });
   return applyRevision(suggestions, revision, projects);
-}
+});
 
-export function listFiledProjects(engine: Engine, roots: string[]): ProjectSuggestion[] {
-  const repos = Object.values(engine.state.repos).filter((repo) => isInside(repo.path, roots));
-  return Object.values(engine.state.projects).flatMap((project) => {
+export function listFiledProjects(state: ShinsaState, roots: string[]): ProjectSuggestion[] {
+  const repos = Object.values(state.repos).filter((repo) => isInside(repo.path, roots));
+  return Object.values(state.projects).flatMap((project) => {
     const filed = repos
       .filter((repo) => repo.projectId === project.id)
       .map((repo) => ({ path: repo.path, name: repo.name }))
@@ -86,65 +78,76 @@ export function listFiledProjects(engine: Engine, roots: string[]): ProjectSugge
   });
 }
 
-function resolveChoices(suggestions: ProjectSuggestion[], choices: OnboardingProjectChoice[] | undefined) {
-  if (choices === undefined) {
-    return suggestions.map((suggestion) => ({ suggestion, name: suggestion.name, repos: suggestion.repos }));
+const resolveChoice = Effect.fn('Onboarding.resolveChoice')(function* (
+  suggestions: ProjectSuggestion[],
+  choice: OnboardingProjectChoice
+) {
+  const suggestion = suggestions.find((entry) => entry.id === choice.id);
+  if (!suggestion) {
+    return yield* new DomainError({
+      code: 'projects_stale',
+      message: 'The suggestions changed. Look again.',
+    });
   }
-  return choices.map((choice) => {
-    const suggestion = suggestions.find((entry) => entry.id === choice.id);
-    if (!suggestion) {
-      throw new DomainError({ code: 'projects_stale', message: 'The suggestions changed. Look again.' });
-    }
-    const name = choice.name.trim();
-    if (name.length === 0)
-      throw new DomainError({ code: 'project_name_required', message: 'Name every project you keep.' });
-    if (name.length > PROJECT_LIMITS.name) {
-      throw new DomainError({
-        code: 'project_invalid',
-        message: `Keep the name to ${PROJECT_LIMITS.name} characters.`,
-      });
-    }
-    const repos = suggestion.repos.filter((repo) => choice.repos.includes(repo.path));
-    if (repos.length === 0) {
-      throw new DomainError({ code: 'projects_invalid', message: `Keep a repository in ${name}.` });
-    }
-    return { suggestion, name, repos };
-  });
-}
+  const name = choice.name.trim();
+  if (name.length === 0) {
+    return yield* new DomainError({ code: 'project_name_required', message: 'Name every project you keep.' });
+  }
+  if (name.length > PROJECT_LIMITS.name) {
+    return yield* new DomainError({
+      code: 'project_invalid',
+      message: `Keep the name to ${PROJECT_LIMITS.name} characters.`,
+    });
+  }
+  const repos = suggestion.repos.filter((repo) => choice.repos.includes(repo.path));
+  if (repos.length === 0) {
+    return yield* new DomainError({ code: 'projects_invalid', message: `Keep a repository in ${name}.` });
+  }
+  return { suggestion, name, repos };
+});
 
-async function writeProject(
+const writeProject = Effect.fn('Onboarding.writeProject')(function* (
   setup: ProjectSetup,
   suggestion: ProjectSuggestion,
   name: string,
   folders: string[],
   commandId: string
 ) {
-  const { engine } = setup;
-  const existing = suggestion.projectId ? engine.state.projects[suggestion.projectId] : undefined;
+  const before = yield* setup.state;
+  const existing = suggestion.projectId ? before.projects[suggestion.projectId] : undefined;
   const project = existing
     ? { ...existing, folders: [...existing.folders, ...folders] }
     : { name, color: suggestion.color, key: suggestion.key, folders };
-  await engine.dispatch({ type: 'project.write', project }, { id: `${commandId}:project:${suggestion.id}` });
-  const written = Object.values(engine.state.projects).find((entry) => entry.key === project.key);
-  if (!written) throw new Error(`Could not save the project ${name}.`);
+  yield* setup.dispatch({ type: 'project.write', project }, `${commandId}:project:${suggestion.id}`);
+  const after = yield* setup.state;
+  const written = Object.values(after.projects).find((entry) => entry.key === project.key);
+  if (!written) return yield* Effect.die(new Error(`Could not save the project ${name}.`));
   return written.id;
-}
+});
 
-export async function createChosenProjects(
+export const createChosenProjects = Effect.fn('Onboarding.createChosenProjects')(function* (
   setup: ProjectSetup,
   roots: string[],
   choices: OnboardingProjectChoice[] | undefined,
   commandId: string,
   revision: ProjectRevision | null
 ) {
-  const suggestions = await listProjectSuggestions(setup, roots, revision);
-  const chosen = resolveChoices(suggestions, choices);
+  const suggestions = yield* listProjectSuggestions(setup, roots, revision);
+  const chosen =
+    choices === undefined
+      ? suggestions.map((suggestion) => ({ suggestion, name: suggestion.name, repos: suggestion.repos }))
+      : yield* Effect.forEach(choices, (choice) => resolveChoice(suggestions, choice));
   for (const { suggestion, name, repos } of chosen) {
     const complete = repos.length === suggestion.repos.length;
-    const folders = complete ? suggestion.folders : [];
-    const projectId = await writeProject(setup, suggestion, name, folders, commandId);
+    const projectId = yield* writeProject(
+      setup,
+      suggestion,
+      name,
+      complete ? suggestion.folders : [],
+      commandId
+    );
     for (const repo of repos) {
-      await setup.changes.upsertRepo(projectId, repo.path, { id: `${commandId}:repo:${repo.path}` });
+      yield* setup.upsertRepo(projectId, repo.path, `${commandId}:repo:${repo.path}`);
     }
   }
-}
+});

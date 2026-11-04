@@ -48,7 +48,7 @@ export const PairsHandlers = HttpApiBuilder.group(
         id: instanceId,
         userId,
         name: pairing.name,
-        fingerprint: yield* Effect.promise(() => resolveKeyFingerprint(pairing.publicKey)),
+        fingerprint: yield* resolveKeyFingerprint(pairing.publicKey),
         tunnelId: tunnel.tunnelId,
         dnsRecordId: tunnel.dnsRecordId,
         machineTokenHash: yield* crypto.hashToken(machineToken),
@@ -77,7 +77,7 @@ export const PairsHandlers = HttpApiBuilder.group(
           return {
             claimCode: pairing.claimCode,
             name: pairing.name,
-            fingerprint: yield* Effect.promise(() => resolveKeyFingerprint(pairing.publicKey)),
+            fingerprint: yield* resolveKeyFingerprint(pairing.publicKey),
             expiresAt: pairing.expiresAt,
             claimed: pairing.credentials !== null,
           };

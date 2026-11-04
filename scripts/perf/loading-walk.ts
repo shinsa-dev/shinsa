@@ -1,218 +1,284 @@
-import { writeFileSync } from 'node:fs';
-import { type CdpPage, launchChromium, waitForExpression } from '../kit/chromium/index.ts';
+import { BunRuntime } from '@effect/platform-bun';
+import { Config, Console, Duration, Effect, Option, Schema } from 'effect';
+import { HttpClient, HttpClientResponse } from 'effect/http';
+import { type CdpPage, Chromium, ChromiumLayer } from '../kit/chromium/index.ts';
+import { openWithProbe } from './browser/probe.ts';
+import { ENTER, ESCAPE, HeapUsage, META, PointOrNull, SHIFT } from './browser/schema.ts';
 import { LOADING_PROBE } from './loading-probe.ts';
-import { listFailures, serializeWaitTable, summarizeWaits, type WaitSample } from './loading-stats.ts';
+import { listFailures, serializeWaitTable, summarizeWaits } from './loading-stats.ts';
+import {
+  HOME,
+  HOME_DONE,
+  LoadingStatesShown,
+  ProbedTasks,
+  SETTLE_MS,
+  TaskDiff,
+  TaskRefs,
+  WALK_HEIGHT,
+  type WaitSample,
+  WaitSamples,
+} from './loading/schema.ts';
+import { writeReport } from './report/write.ts';
 
 const ORIGIN = Bun.argv[2] ?? 'http://127.0.0.1:5720';
-const WIDTHS = (Bun.env.LOADING_WALK_WIDTHS ?? '1440,900').split(',').map(Number);
-const TASKS = Number(Bun.env.LOADING_WALK_TASKS ?? 2);
-const OUT = Bun.env.LOADING_WALK_OUT ?? null;
-const WARM_UP = Bun.env.LOADING_WALK_WARM_UP === '1';
-const SETTLE_MS = 700;
-const META = 4;
-const SHIFT = 8;
 
-const HOME = `document.querySelector('header [aria-label="Home"]') || __loading.byPrefix('header button', '^Shinsa') || __loading.byText('nav [data-highlight-item]', 'New task')`;
-const HOME_DONE = `location.pathname === '/' && !!document.querySelector('main textarea')`;
+const program = Effect.gen(function* () {
+  const widths = (yield* Config.String('LOADING_WALK_WIDTHS').pipe(Config.withDefault('1440,900')))
+    .split(',')
+    .map(Number);
+  const taskCount = yield* Config.Number('LOADING_WALK_TASKS').pipe(Config.withDefault(2));
+  const out = yield* Config.option(Config.String('LOADING_WALK_OUT'));
+  const warmUp = (yield* Config.String('LOADING_WALK_WARM_UP').pipe(Config.withDefault(''))) === '1';
+  const chosenHandles = yield* Config.option(Config.String('LOADING_WALK_HANDLES'));
+  const chromium = yield* Chromium;
+  const http = HttpClient.filterStatusOk(yield* HttpClient.HttpClient);
+  const cold = new Set<string>();
 
-const cold = new Set<string>();
-
-async function waitFor(page: CdpPage, expression: string, timeoutMs = 10_000) {
-  if (await waitForExpression(page, expression, timeoutMs)) return true;
-  console.warn(`Timed out waiting for ${expression}`);
-  return false;
-}
-
-async function typeText(page: CdpPage, text: string) {
-  for (const character of text) {
-    await page.send('Input.insertText', { text: character });
-    await Bun.sleep(60);
-  }
-}
-
-async function click(page: CdpPage, target: string) {
-  const point = await page.evaluate<{ x: number; y: number } | null>(
-    `__loading.center(${JSON.stringify(target)})`
-  );
-  if (!point) return false;
-  await page.clickPoint(point);
-  return true;
-}
-
-async function step(page: CdpPage, label: string, run: () => Promise<unknown>, settleMs = SETTLE_MS) {
-  await page.evaluate(`__loading.begin(${JSON.stringify(label)})`);
-  const ran = await run();
-  if (ran === false) console.warn(`Skipped ${label} at ${await page.evaluate<string>('location.href')}`);
-  await Bun.sleep(settleMs);
-}
-
-async function goHome(page: CdpPage, prefix: string) {
-  await step(page, `${prefix}Home`, async () => (await click(page, HOME)) && waitFor(page, HOME_DONE));
-}
-
-async function pickRef(page: CdpPage, prefix: string, label: string) {
-  await step(page, `${prefix}Code: ${label}`, async () => {
-    const trigger = `__loading.rendered('[aria-label="Show the code at"]')[0]`;
-    const options = `__loading.visible('[role=option]').length > 0`;
-    if (!(await click(page, trigger))) return false;
-    if (!(await waitFor(page, options, 2000))) {
-      await click(page, trigger);
-      await waitFor(page, options);
-    }
-    const picked = await click(
-      page,
-      `__loading.visible('[role=option]').find((option) => __loading.textOf(option).startsWith(${JSON.stringify(label)}))`
-    );
-    if (!picked) await page.pressKey({ key: 'Escape', code: 'Escape', keyCode: 27 });
-    return picked;
+  const waitFor = Effect.fn('LoadingWalk.waitFor')(function* (
+    page: CdpPage,
+    expression: string,
+    timeout: Duration.Input = Duration.seconds(10)
+  ) {
+    if (yield* page.waitForExpression(expression, timeout)) return true;
+    yield* Console.warn(`Timed out waiting for ${expression}`);
+    return false;
   });
-}
 
-async function walkCode(page: CdpPage, prefix: string) {
-  const treeItem = (index: number) =>
-    `__loading.visible('[role=tree][aria-label="Changed files"] [role=treeitem]:not([aria-expanded])')[${index}]`;
-  for (const index of [1, 2, 0])
-    await step(page, `${prefix}Code: open a changed file`, () => click(page, treeItem(index)));
-  await step(page, `${prefix}Code: Files`, () => click(page, `__loading.tab('Files')`));
-  await step(page, `${prefix}Code: open a folder`, () =>
-    click(
+  const typeText = Effect.fn('LoadingWalk.typeText')(function* (page: CdpPage, text: string) {
+    for (const character of text) {
+      yield* page.send('Input.insertText', { text: character });
+      yield* Effect.sleep(Duration.millis(60));
+    }
+  });
+
+  const click = Effect.fn('LoadingWalk.click')(function* (page: CdpPage, target: string) {
+    const point = yield* page.evaluate(`__loading.center(${JSON.stringify(target)})`, PointOrNull);
+    if (!point) return false;
+    yield* page.clickPoint(point);
+    return true;
+  });
+
+  const step = Effect.fn('LoadingWalk.step')(function* <E>(
+    page: CdpPage,
+    label: string,
+    run: Effect.Effect<unknown, E>,
+    settleMs = SETTLE_MS
+  ) {
+    yield* page.evaluate(`__loading.begin(${JSON.stringify(label)})`, Schema.Unknown);
+    const ran = yield* run;
+    if (ran === false)
+      yield* Console.warn(`Skipped ${label} at ${yield* page.evaluate('location.href', Schema.String)}`);
+    yield* Effect.sleep(Duration.millis(settleMs));
+  });
+
+  const goHome = (page: CdpPage, prefix: string) =>
+    step(
       page,
-      `__loading.visible('[role=tree][aria-label="Files"] [role=treeitem][aria-expanded="false"]')[0]`
-    )
-  );
-  for (const index of [0, 1, 2])
-    await step(page, `${prefix}Code: open a file from the tree`, () =>
-      click(
-        page,
-        `__loading.visible('[role=tree][aria-label="Files"] [role=treeitem]:not([aria-expanded])')[${index}]`
+      `${prefix}Home`,
+      Effect.flatMap(click(page, HOME), (clicked) =>
+        clicked ? waitFor(page, HOME_DONE) : Effect.succeed(false)
       )
     );
-  await step(page, `${prefix}Code: Changes`, () => click(page, `__loading.tab('Changes')`));
-  await step(page, `${prefix}Code: ⌘P`, async () => {
-    await page.pressKey({ key: 'p', code: 'KeyP', keyCode: 80, modifiers: META });
-    return waitFor(page, `!!document.querySelector('[aria-label="Go to file"]')`);
-  });
-  await step(page, `${prefix}Code: ⌘P query`, () => typeText(page, 'index'));
-  const coldPick = `${prefix}Code: open a file from ⌘P (cold)`;
-  cold.add(coldPick);
-  await step(page, coldPick, () => page.pressKey({ key: 'Enter', code: 'Enter', keyCode: 13 }));
-  if (await page.evaluate<boolean>(`!!document.querySelector('[aria-label="Go to file"]')`))
-    await page.pressKey({ key: 'Escape', code: 'Escape', keyCode: 27 });
-  for (const label of ['Base', 'Working copy', 'Head of the branch']) await pickRef(page, prefix, label);
-  await step(page, `${prefix}Code: search`, async () => {
-    await page.pressKey({ key: 'f', code: 'KeyF', keyCode: 70, modifiers: META | SHIFT });
-    return waitFor(page, `document.activeElement?.placeholder === 'Search in files'`);
-  });
-  const coldSearch = `${prefix}Code: search (cold)`;
-  cold.add(coldSearch);
-  await step(page, coldSearch, () => typeText(page, 'export'), 1500);
-  await step(page, `${prefix}Code: open a match`, () =>
-    click(
-      page,
-      `__loading.visible('[role=tree][aria-label="Search results"] [role=treeitem]:not([aria-expanded])')[0]`
-    )
-  );
-}
 
-async function walkTask(page: CdpPage, prefix: string, handle: string) {
-  await step(
-    page,
-    `${prefix}Home → All tasks`,
-    async () =>
-      (await click(
-        page,
-        `[...document.querySelectorAll('header button')].find((button) => button.textContent === 'Tasks')`
-      )) && waitFor(page, `location.pathname === '/tasks'`)
-  );
-  await step(page, `${prefix}All tasks → task`, async () => {
-    const row = `__loading.rendered('main [role=button]').find((row) => [...row.querySelectorAll('span')].some((part) => __loading.textOf(part) === ${JSON.stringify(handle)}))`;
-    if (await click(page, row)) return waitFor(page, `location.pathname.startsWith('/tasks/')`);
-    await page.pressKey({ key: 'k', code: 'KeyK', keyCode: 75, modifiers: META });
-    await waitFor(page, `!!document.querySelector('[cmdk-input]')`);
-    await typeText(page, handle);
-    await Bun.sleep(300);
-    await page.pressKey({ key: 'Enter', code: 'Enter', keyCode: 13 });
-    return waitFor(page, `location.pathname.startsWith('/tasks/')`);
-  });
-  for (const tab of ['Overview', 'Review', 'Code', 'Chat']) {
-    const present = await page.evaluate<boolean>(`!!__loading.tab(${JSON.stringify(tab)})`);
-    if (!present) continue;
-    await step(
+  const clickThenWait = (page: CdpPage, target: string, done: string) =>
+    Effect.flatMap(click(page, target), (clicked) => (clicked ? waitFor(page, done) : Effect.succeed(false)));
+
+  const pickRef = (page: CdpPage, prefix: string, label: string) =>
+    step(
       page,
-      `${prefix}Task: ${tab}`,
-      async () =>
-        (await click(page, `__loading.tab(${JSON.stringify(tab)})`)) &&
-        waitFor(page, `__loading.selectedTab(${JSON.stringify(tab)})`)
+      `${prefix}Code: ${label}`,
+      Effect.gen(function* () {
+        const trigger = `__loading.rendered('[aria-label="Show the code at"]')[0]`;
+        const options = `__loading.visible('[role=option]').length > 0`;
+        if (!(yield* click(page, trigger))) return false;
+        if (!(yield* waitFor(page, options, Duration.seconds(2)))) {
+          yield* click(page, trigger);
+          yield* waitFor(page, options);
+        }
+        const picked = yield* click(
+          page,
+          `__loading.visible('[role=option]').find((option) => __loading.textOf(option).startsWith(${JSON.stringify(label)}))`
+        );
+        if (!picked) yield* page.pressKey(ESCAPE);
+        return picked;
+      })
     );
-    if (tab === 'Code') await walkCode(page, prefix);
-  }
-  await step(page, `${prefix}Task: Overview again`, () => click(page, `__loading.tab('Overview')`));
-}
 
-async function countChangedFiles(handle: string) {
-  const task = `${ORIGIN}/api/tasks/${encodeURIComponent(handle)}`;
-  const refs = await fetch(`${task}/refs`);
-  if (!refs.ok) return 0;
-  const { base, head } = (await refs.json()) as { base: string | null; head: string };
-  if (!base) return 0;
-  const response = await fetch(`${task}/diff?base=${base}&head=${head}`);
-  if (!response.ok) return 0;
-  return ((await response.json()) as { files: unknown[] }).files.length;
-}
+  const walkCode = Effect.fn('LoadingWalk.walkCode')(function* (page: CdpPage, prefix: string) {
+    const treeItem = (index: number) =>
+      `__loading.visible('[role=tree][aria-label="Changed files"] [role=treeitem]:not([aria-expanded])')[${index}]`;
+    for (const index of [1, 2, 0])
+      yield* step(page, `${prefix}Code: open a changed file`, click(page, treeItem(index)));
+    yield* step(page, `${prefix}Code: Files`, click(page, `__loading.tab('Files')`));
+    yield* step(
+      page,
+      `${prefix}Code: open a folder`,
+      click(
+        page,
+        `__loading.visible('[role=tree][aria-label="Files"] [role=treeitem][aria-expanded="false"]')[0]`
+      )
+    );
+    for (const index of [0, 1, 2])
+      yield* step(
+        page,
+        `${prefix}Code: open a file from the tree`,
+        click(
+          page,
+          `__loading.visible('[role=tree][aria-label="Files"] [role=treeitem]:not([aria-expanded])')[${index}]`
+        )
+      );
+    yield* step(page, `${prefix}Code: Changes`, click(page, `__loading.tab('Changes')`));
+    yield* step(
+      page,
+      `${prefix}Code: ⌘P`,
+      Effect.andThen(
+        page.pressKey({ key: 'p', code: 'KeyP', keyCode: 80, modifiers: META }),
+        waitFor(page, `!!document.querySelector('[aria-label="Go to file"]')`)
+      )
+    );
+    yield* step(page, `${prefix}Code: ⌘P query`, typeText(page, 'index'));
+    const coldPick = `${prefix}Code: open a file from ⌘P (cold)`;
+    cold.add(coldPick);
+    yield* step(page, coldPick, page.pressKey(ENTER));
+    if (yield* page.evaluate(`!!document.querySelector('[aria-label="Go to file"]')`, Schema.Boolean))
+      yield* page.pressKey(ESCAPE);
+    for (const label of ['Base', 'Working copy', 'Head of the branch']) yield* pickRef(page, prefix, label);
+    yield* step(
+      page,
+      `${prefix}Code: search`,
+      Effect.andThen(
+        page.pressKey({ key: 'f', code: 'KeyF', keyCode: 70, modifiers: META | SHIFT }),
+        waitFor(page, `document.activeElement?.placeholder === 'Search in files'`)
+      )
+    );
+    const coldSearch = `${prefix}Code: search (cold)`;
+    cold.add(coldSearch);
+    yield* step(page, coldSearch, typeText(page, 'export'), 1500);
+    yield* step(
+      page,
+      `${prefix}Code: open a match`,
+      click(
+        page,
+        `__loading.visible('[role=tree][aria-label="Search results"] [role=treeitem]:not([aria-expanded])')[0]`
+      )
+    );
+  });
 
-async function pickHandles(tasks: readonly { handle: string }[]) {
-  if (Bun.env.LOADING_WALK_HANDLES) return Bun.env.LOADING_WALK_HANDLES.split(',');
-  const picked: string[] = [];
-  for (const task of tasks) {
-    if (picked.length === TASKS) break;
-    if ((await countChangedFiles(task.handle)) > 0) picked.push(task.handle);
-  }
-  const rest = tasks.map((task) => task.handle).filter((handle) => !picked.includes(handle));
-  return [...picked, ...rest].slice(0, TASKS);
-}
+  const walkTask = Effect.fn('LoadingWalk.walkTask')(function* (
+    page: CdpPage,
+    prefix: string,
+    handle: string
+  ) {
+    yield* step(
+      page,
+      `${prefix}Home → All tasks`,
+      clickThenWait(
+        page,
+        `[...document.querySelectorAll('header button')].find((button) => button.textContent === 'Tasks')`,
+        `location.pathname === '/tasks'`
+      )
+    );
+    yield* step(
+      page,
+      `${prefix}All tasks → task`,
+      Effect.gen(function* () {
+        const row = `__loading.rendered('main [role=button]').find((row) => [...row.querySelectorAll('span')].some((part) => __loading.textOf(part) === ${JSON.stringify(handle)}))`;
+        if (yield* click(page, row)) return yield* waitFor(page, `location.pathname.startsWith('/tasks/')`);
+        yield* page.pressKey({ key: 'k', code: 'KeyK', keyCode: 75, modifiers: META });
+        yield* waitFor(page, `!!document.querySelector('[cmdk-input]')`);
+        yield* typeText(page, handle);
+        yield* Effect.sleep(Duration.millis(300));
+        yield* page.pressKey(ENTER);
+        return yield* waitFor(page, `location.pathname.startsWith('/tasks/')`);
+      })
+    );
+    for (const tab of ['Overview', 'Review', 'Code', 'Chat']) {
+      const present = yield* page.evaluate(`!!__loading.tab(${JSON.stringify(tab)})`, Schema.Boolean);
+      if (!present) continue;
+      yield* step(
+        page,
+        `${prefix}Task: ${tab}`,
+        clickThenWait(
+          page,
+          `__loading.tab(${JSON.stringify(tab)})`,
+          `__loading.selectedTab(${JSON.stringify(tab)})`
+        )
+      );
+      if (tab === 'Code') yield* walkCode(page, prefix);
+    }
+    yield* step(page, `${prefix}Task: Overview again`, click(page, `__loading.tab('Overview')`));
+  });
 
-async function walk(width: number) {
-  const browser = await launchChromium(width, 1000);
-  const { page } = browser;
-  const prefix = `${width}px · `;
-  await page.send('Page.enable');
-  await page.send('Page.addScriptToEvaluateOnNewDocument', { source: LOADING_PROBE });
-  await page.send('Page.navigate', { url: `${ORIGIN}/` });
-  await waitFor(page, `window.__loading && ${HOME_DONE}`, 20_000);
-  await Bun.sleep(1500);
-  const handles = await pickHandles(await page.evaluate<{ handle: string }[]>('__loading.pickTasks()'));
-  for (const handle of handles) {
-    await walkTask(page, `${prefix}${handle} · `, handle);
-    await goHome(page, prefix);
-  }
-  await step(
-    page,
-    `${prefix}Home → Settings`,
-    async () =>
-      (await click(page, `document.querySelector('header button[aria-label="Settings"]')`)) &&
-      waitFor(page, `location.pathname === '/settings'`)
+  const countChangedFiles = Effect.fn('LoadingWalk.countChangedFiles')(
+    function* (handle: string) {
+      const task = `${ORIGIN}/api/tasks/${encodeURIComponent(handle)}`;
+      const refs = yield* http
+        .get(`${task}/refs`)
+        .pipe(Effect.flatMap(HttpClientResponse.schemaBodyJson(TaskRefs)));
+      if (!refs.base) return 0;
+      const diff = yield* http
+        .get(`${task}/diff?base=${refs.base}&head=${refs.head}`)
+        .pipe(Effect.flatMap(HttpClientResponse.schemaBodyJson(TaskDiff)));
+      return diff.files.length;
+    },
+    Effect.orElseSucceed(() => 0)
   );
-  await goHome(page, prefix);
-  const samples = await page.evaluate<WaitSample[]>('__loading.flush()');
-  for (let pass = 0; pass < 3; pass += 1) await page.send('HeapProfiler.collectGarbage');
-  const { usedSize } = await page.send<{ usedSize: number }>('Runtime.getHeapUsage');
-  console.log(`${width}px: JS heap after the walk ${(usedSize / 1024 / 1024).toFixed(1)} MB`);
-  browser.close();
-  return samples;
-}
 
-const samples: WaitSample[] = [];
-for (const width of WIDTHS) samples.push(...(await walk(width)));
-const rows = summarizeWaits(samples, cold);
-console.log(`Loading states seen on ${ORIGIN}\n\n${serializeWaitTable(rows)}`);
-if (OUT) writeFileSync(OUT, JSON.stringify({ origin: ORIGIN, rows, samples }, null, 2));
-const failures = listFailures(rows);
-if (WARM_UP) {
-  console.log(`\nWarm-up pass: ${failures.length} loading state(s) showed; this pass does not count.`);
-  process.exit(0);
-}
-if (failures.length > 0) {
-  console.error(`\n${failures.length} loading state(s) showed in normal use.`);
-  process.exit(1);
-}
-process.exit(0);
+  const pickHandles = Effect.fn('LoadingWalk.pickHandles')(function* (tasks: readonly { handle: string }[]) {
+    if (Option.isSome(chosenHandles)) return chosenHandles.value.split(',');
+    const picked: string[] = [];
+    for (const task of tasks) {
+      if (picked.length === taskCount) break;
+      if ((yield* countChangedFiles(task.handle)) > 0) picked.push(task.handle);
+    }
+    const rest = tasks.map((task) => task.handle).filter((handle) => !picked.includes(handle));
+    return [...picked, ...rest].slice(0, taskCount);
+  });
+
+  const walk = Effect.fn('LoadingWalk.walk')(function* (width: number) {
+    const page = yield* chromium.launch({ width, height: WALK_HEIGHT });
+    const prefix = `${width}px · `;
+    yield* openWithProbe(page, LOADING_PROBE, `${ORIGIN}/`);
+    yield* waitFor(page, `window.__loading && ${HOME_DONE}`, Duration.seconds(20));
+    yield* Effect.sleep(Duration.millis(1500));
+    const handles = yield* pickHandles(yield* page.evaluate('__loading.pickTasks()', ProbedTasks));
+    for (const handle of handles) {
+      yield* walkTask(page, `${prefix}${handle} · `, handle);
+      yield* goHome(page, prefix);
+    }
+    yield* step(
+      page,
+      `${prefix}Home → Settings`,
+      clickThenWait(
+        page,
+        `document.querySelector('header button[aria-label="Settings"]')`,
+        `location.pathname === '/settings'`
+      )
+    );
+    yield* goHome(page, prefix);
+    const samples = yield* page.evaluate('__loading.flush()', WaitSamples);
+    for (let pass = 0; pass < 3; pass += 1) yield* page.send('HeapProfiler.collectGarbage');
+    const { usedSize } = yield* page.request('Runtime.getHeapUsage', {}, HeapUsage);
+    yield* Console.log(`${width}px: JS heap after the walk ${(usedSize / 1024 / 1024).toFixed(1)} MB`);
+    return samples;
+  }, Effect.scoped);
+
+  const samples: WaitSample[] = (yield* Effect.forEach(widths, walk)).flat();
+  const rows = summarizeWaits(samples, cold);
+  yield* Console.log(`Loading states seen on ${ORIGIN}\n\n${serializeWaitTable(rows)}`);
+  if (Option.isSome(out))
+    yield* writeReport(out.value, JSON.stringify({ origin: ORIGIN, rows, samples }, null, 2));
+  const failures = listFailures(rows);
+  if (warmUp) {
+    yield* Console.log(
+      `\nWarm-up pass: ${failures.length} loading state(s) showed; this pass does not count.`
+    );
+    return;
+  }
+  if (failures.length > 0)
+    return yield* new LoadingStatesShown({
+      message: `${failures.length} loading state(s) showed in normal use.`,
+    });
+});
+
+program.pipe(Effect.provide(ChromiumLayer), BunRuntime.runMain);

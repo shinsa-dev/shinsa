@@ -1,7 +1,10 @@
+import { Effect } from 'effect';
 import * as React from 'react';
 import { COMMENT_COLOR, COMMENT_TAGS, type CommentSpan, scanCommentLine } from '@/lib/code/comment-tags.ts';
 import { CODE_THEME, resolveFenceGrammar, resolveGrammar } from '@/lib/code/grammar.ts';
 import { scheduleIdle } from '@/lib/idle.ts';
+import { forkApp, runApp } from '@/lib/runtime/app.ts';
+import { enterPromise } from '@/lib/runtime/promise.ts';
 
 export { CODE_THEME };
 
@@ -91,29 +94,35 @@ const cache = new Map<string, Promise<Token[][] | null>>();
 
 const resolved = new Map<string, Token[][] | null>();
 
-async function tokenize(code: string, language: string): Promise<Token[][] | null> {
-  const { codeToTokens } = await import('shiki');
-  const result = await codeToTokens(code, {
-    lang: language as Parameters<typeof codeToTokens>[1]['lang'],
-    theme: CODE_THEME,
-  });
+const tokenize = Effect.fn('Highlight.tokenize')(function* (code: string, language: string) {
+  const { codeToTokens } = yield* enterPromise(() => import('shiki'));
+  const result = yield* enterPromise(() =>
+    codeToTokens(code, {
+      lang: language as Parameters<typeof codeToTokens>[1]['lang'],
+      theme: CODE_THEME,
+    })
+  );
   return resolveTaggedTokens(result.tokens);
-}
+});
 
 function resolveKey(code: string, language: string) {
   return `${language}\u0000${code}`;
 }
 
-export function requestTokens(code: string, language: string) {
+export function requestTokens(code: string, language: string): Promise<Token[][] | null> {
   const key = resolveKey(code, language);
   const known = cache.get(key);
   if (known) return known;
-  const pending = tokenize(code, language)
-    .catch(() => null)
-    .then((tokens) => {
-      if (cache.has(key)) resolved.set(key, tokens);
-      return tokens;
-    });
+  const pending = runApp(
+    tokenize(code, language).pipe(
+      Effect.orElseSucceed(() => null),
+      Effect.tap((tokens) =>
+        Effect.sync(() => {
+          if (cache.has(key)) resolved.set(key, tokens);
+        })
+      )
+    )
+  );
   cache.set(key, pending);
   if (cache.size > CACHE_LIMIT) {
     const oldest = cache.keys().next().value ?? '';
@@ -140,9 +149,15 @@ export function useLanguageTokens(code: string | null, language: string | null) 
     let alive = true;
     const cancel = scheduleIdle(
       () => {
-        void requestTokens(code, language).then((tokens) => {
-          if (alive) setHighlighted({ code, language, tokens });
-        });
+        forkApp(
+          Effect.promise(() => requestTokens(code, language)).pipe(
+            Effect.tap((tokens) =>
+              Effect.sync(() => {
+                if (alive) setHighlighted({ code, language, tokens });
+              })
+            )
+          )
+        );
       },
       IDLE_TIMEOUT_MS,
       0

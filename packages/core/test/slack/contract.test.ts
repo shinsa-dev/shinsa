@@ -17,6 +17,7 @@ const WIRE = {
   userName: 'Christo',
   text: 'take this',
   permalink: 'https://acme.slack.com/archives/C1/p1003',
+  channelName: 'support',
   thread: [{ ts: '100.1', userId: 'U2', userName: 'Mia', text: 'It hangs.', bot: false }],
 };
 
@@ -55,6 +56,11 @@ describe('a forwarded mention', () => {
       thread: [],
       permalink: null,
     });
+    expect(parseSlackMention({ ...WIRE, channelName: undefined })?.channelName).toBeNull();
+    expect(parseSlackMention({ ...WIRE, channelName: '' })?.channelName).toBeNull();
+    expect(parseSlackMention({ ...WIRE, channelName: 'c'.repeat(200) })?.channelName).toHaveLength(
+      SLACK_LIMITS.channelName
+    );
   });
 
   test('keeps the latest messages of a long thread', () => {

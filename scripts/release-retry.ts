@@ -1,93 +1,93 @@
-export const NOTARY_SUBMIT_DELAYS = [30_000, 60_000] as const;
+import { Config, Console, Duration, Effect, Option, Redacted, Schedule, Schema } from 'effect';
+import {
+  type NotaryCredentials,
+  NotarySubmission,
+  ReleaseRefused,
+  type RetryFailure,
+} from './release/schema.ts';
 
-export const STAPLE_DELAYS = [15_000, 30_000, 60_000, 120_000] as const;
+export const NOTARY_SUBMIT_DELAYS = [Duration.seconds(30), Duration.minutes(1)];
 
-export const R2_REQUEST_DELAYS = [15_000, 30_000, 60_000] as const;
+export const STAPLE_DELAYS = [
+  Duration.seconds(15),
+  Duration.seconds(30),
+  Duration.minutes(1),
+  Duration.minutes(2),
+];
+
+export const R2_REQUEST_DELAYS = [Duration.seconds(15), Duration.seconds(30), Duration.minutes(1)];
 
 const NOTARY_SECRETS = ['APPLE_ID', 'APPLE_APP_SPECIFIC_PASSWORD', 'APPLE_TEAM_ID'] as const;
 
-export interface RetryFailure {
-  label: string;
-  attempt: number;
-  attempts: number;
-  delay: number;
-  error: unknown;
-}
+const decodeNotarySubmission = Schema.decodeUnknownEffect(Schema.fromJsonString(NotarySubmission));
 
 export interface RetryOptions {
-  label: string;
-  delays: readonly number[];
-  sleep: (milliseconds: number) => Promise<void>;
-  onRetry: (failure: RetryFailure) => void;
+  readonly label: string;
+  readonly delays: readonly Duration.Duration[];
+  readonly onRetry: (failure: RetryFailure) => Effect.Effect<void>;
 }
 
-export interface NotaryCredentials {
-  appleId: string;
-  password: string;
-  teamId: string;
-}
-
-export interface NotarySubmission {
-  id: string;
-  status: string;
-}
-
-export async function retryStep<T>(step: (attempt: number) => T | Promise<T>, options: RetryOptions) {
-  const attempts = options.delays.length + 1;
-  for (let attempt = 1; ; attempt += 1) {
-    try {
-      return await step(attempt);
-    } catch (error) {
-      const delay = options.delays[attempt - 1];
-      if (delay === undefined) throw error;
-      options.onRetry({ label: options.label, attempt, attempts, delay, error });
-      await options.sleep(delay);
-    }
-  }
-}
-
-function describeError(error: unknown) {
-  if (!(error instanceof Error)) return String(error);
-  const stderr = (error as Error & { stderr?: unknown }).stderr;
-  const detail = stderr === undefined ? '' : String(stderr).trim();
-  return detail ? `${error.message}: ${detail}` : error.message;
+export function retryStep({ label, delays, onRetry }: RetryOptions) {
+  const attempts = delays.length + 1;
+  const [first, ...rest] = delays.map((delay) => Schedule.duration(delay));
+  const waits: Schedule.Schedule<unknown> = first
+    ? rest.reduce<Schedule.Schedule<unknown>>((schedule, next) => Schedule.concat(schedule, next), first)
+    : Schedule.recurs(0);
+  return <A, E extends { readonly message: string }, R>(step: Effect.Effect<A, E, R>) =>
+    Effect.retry(
+      step,
+      waits.pipe(
+        Schedule.setInputType<E>(),
+        Schedule.tap(({ attempt, duration, input }) =>
+          onRetry({ label, attempt, attempts, delay: Duration.toMillis(duration), error: input })
+        )
+      )
+    );
 }
 
 export function describeRetryFailure(failure: RetryFailure) {
   const seconds = Math.round(failure.delay / 1000);
-  return `${failure.label} failed on attempt ${failure.attempt} of ${failure.attempts} (${describeError(failure.error)}). Trying again in ${seconds}s.`;
+  return `${failure.label} failed on attempt ${failure.attempt} of ${failure.attempts} (${failure.error.message}). Trying again in ${seconds}s.`;
 }
 
-export function serializeRetryWarning(
-  failure: RetryFailure,
-  env: Readonly<Record<string, string | undefined>>
-) {
+export function serializeRetryWarning(failure: RetryFailure, onGitHubActions: boolean) {
   const line = describeRetryFailure(failure);
-  return env.GITHUB_ACTIONS ? `::warning title=${failure.label}::${line}\n` : `${line}\n`;
+  return onGitHubActions ? `::warning title=${failure.label}::${line}\n` : `${line}\n`;
 }
 
-export function resolveNotaryCredentials(
-  env: Readonly<Record<string, string | undefined>>
-): NotaryCredentials {
-  const missing = NOTARY_SECRETS.filter((name) => !env[name]);
-  if (missing.length > 0) throw new Error(`Set ${missing.join(', ')} to notarize the app (docs/release.md).`);
-  return {
-    appleId: env.APPLE_ID as string,
-    password: env.APPLE_APP_SPECIFIC_PASSWORD as string,
-    teamId: env.APPLE_TEAM_ID as string,
-  };
-}
+export const isOnGitHubActions = Config.option(Config.String('GITHUB_ACTIONS')).pipe(
+  Config.map((value) => Option.isSome(value) && value.value !== '')
+);
 
-export function parseNotarySubmission(output: string): NotarySubmission {
-  const parsed: unknown = JSON.parse(output);
-  if (typeof parsed !== 'object' || parsed === null)
-    throw new Error('notarytool did not answer with an object.');
-  const { id, status } = parsed as Record<string, unknown>;
-  if (typeof id !== 'string' || typeof status !== 'string') {
-    throw new Error(`notarytool did not return a submission id and status: ${output.trim()}`);
-  }
-  return { id, status };
-}
+export const warnRetry = Effect.fn('warnRetry')(function* (failure: RetryFailure) {
+  const onGitHubActions = yield* Effect.orDie(isOnGitHubActions);
+  yield* Console.log(serializeRetryWarning(failure, onGitHubActions).trimEnd());
+});
+
+export const resolveNotaryCredentials = Effect.fn('resolveNotaryCredentials')(function* () {
+  const secrets = yield* Effect.orDie(
+    Config.all(NOTARY_SECRETS.map((name) => Config.String(name).pipe(Config.withDefault(''))))
+  );
+  const missing = NOTARY_SECRETS.filter((_, index) => !secrets[index]);
+  if (missing.length > 0)
+    return yield* new ReleaseRefused({
+      message: `Set ${missing.join(', ')} to notarize the app (docs/release.md).`,
+    });
+  const [appleId = '', password = '', teamId = ''] = secrets;
+  const credentials: NotaryCredentials = { appleId, password: Redacted.make(password), teamId };
+  return credentials;
+});
+
+export const parseNotarySubmission = Effect.fn('parseNotarySubmission')(function* (output: string) {
+  return yield* decodeNotarySubmission(output).pipe(
+    Effect.mapError(
+      () =>
+        new ReleaseRefused({
+          message: `notarytool did not return a submission id and status: ${output.trim()}`,
+        })
+    )
+  );
+});
 
 export function describeNotaryRejection(submission: NotarySubmission, log: string) {
   return `Apple did not accept submission ${submission.id}: its status is ${submission.status}.\n${log.trim()}`;

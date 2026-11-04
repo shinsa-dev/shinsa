@@ -1,5 +1,6 @@
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { Effect } from 'effect';
 
 export interface GuardedCommand {
   command: string;
@@ -22,8 +23,11 @@ const COMMANDS = [
   'shinsa tasks list --json',
 ];
 
-export async function listGuardedCommands(): Promise<GuardedCommand[]> {
+export const listGuardedCommands = Effect.gen(function* () {
   const policyUrl = pathToFileURL(resolve(process.cwd(), '../engine/src/agents/policy.ts')).href;
-  const policy = (await import(policyUrl)) as Policy;
-  return COMMANDS.map((command) => ({ command, refusal: policy.resolveForbiddenReason(command, 'main') }));
-}
+  const policy = yield* Effect.promise((): Promise<Policy> => import(policyUrl));
+  return COMMANDS.map((command): GuardedCommand => ({
+    command,
+    refusal: policy.resolveForbiddenReason(command, 'main'),
+  }));
+});

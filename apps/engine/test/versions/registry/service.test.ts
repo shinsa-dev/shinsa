@@ -4,7 +4,7 @@ import { FetchHttpClient } from 'effect/http';
 import { TestClock } from 'effect/testing';
 import { NpmRegistry } from '../../../src/versions/registry/service.ts';
 
-function provideFetch(answer: () => Promise<Response>) {
+function provideFetch(answer: (url: string | URL | Request) => Promise<Response>) {
   return NpmRegistry.layer.pipe(
     Layer.provide(FetchHttpClient.layer),
     Layer.provide(
@@ -13,15 +13,37 @@ function provideFetch(answer: () => Promise<Response>) {
   );
 }
 
-function readLatest(answer: () => Promise<Response>) {
+function readLatest(answer: () => Promise<Response>, name = '@openai/codex') {
   return Effect.runPromise(
-    Effect.flip(NpmRegistry.use((registry) => registry.latest('@openai/codex'))).pipe(
+    Effect.flip(NpmRegistry.use((registry) => registry.latest(name))).pipe(
       Effect.provide(provideFetch(answer))
     )
   );
 }
 
 describe('NpmRegistry', () => {
+  test('reads the latest dist-tag of a package from the npm registry', async () => {
+    const asked: string[] = [];
+    const answer = (url: string | URL | Request) => {
+      asked.push(String(url));
+      return Promise.resolve(Response.json({ name: '@openai/codex', version: '0.164.0' }));
+    };
+    const version = await Effect.runPromise(
+      NpmRegistry.use((registry) => registry.latest('@openai/codex')).pipe(
+        Effect.provide(provideFetch(answer))
+      )
+    );
+    expect(version).toBe('0.164.0');
+    expect(asked).toEqual(['https://registry.npmjs.org/@openai/codex/latest']);
+  });
+
+  test('a refusal or an answer without a version is a failed read', async () => {
+    const refused = await readLatest(() => Promise.resolve(new Response('nope', { status: 404 })), 'missing');
+    expect(refused.message).toBe('The npm registry answered 404 for missing.');
+    const empty = await readLatest(() => Promise.resolve(Response.json(null)), 'odd');
+    expect(empty.message).toBe('The npm registry gave no version for odd.');
+  });
+
   test('a registry that does not answer within ten seconds is a failed read naming the package', async () => {
     const error = await Effect.runPromise(
       Effect.gen(function* () {

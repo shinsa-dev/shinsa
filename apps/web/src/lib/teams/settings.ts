@@ -12,9 +12,7 @@ import {
   type UserCommand,
 } from '@shinsa/core';
 import { formatSince } from '@/lib/format/time.ts';
-import type { DashboardClient } from '@/lib/remote/dashboard.ts';
 import type { Mention } from '@/lib/remote/users.ts';
-import type { TeamKeyStore } from './join.ts';
 
 export const TEAMS_SECTION = 'Teams';
 
@@ -22,7 +20,7 @@ export const TEAMS_DESCRIPTION =
   'Teammates see every task in the projects you share with a team, live and read-only: its plan, review, evidence and code, never its chat. You choose the projects, and only you.';
 
 export const TEAM_LINK_COPY =
-  'Share this link with your teammates. Whoever opens it signs in with GitHub and asks to join, which you accept or decline here. It holds the team’s key, so send it only to people you would add.';
+  'Whoever opens it asks to join, which you accept here. It holds the team’s key, so share it only with people you’d add.';
 
 export interface ProjectChoice {
   id: string;
@@ -179,21 +177,6 @@ export interface HostedTeam {
 export interface HostedTeams {
   viewerId: string | null;
   teams: HostedTeam[];
-}
-
-export async function listHostedTeams(options: {
-  dashboard: Pick<DashboardClient, 'listTeams' | 'readSession'>;
-  teamKeys: Pick<TeamKeyStore, 'selectTeamKey'>;
-}): Promise<HostedTeams> {
-  const [teams, session] = await Promise.all([
-    options.dashboard.listTeams(),
-    options.dashboard.readSession(),
-  ]);
-  const keys = await Promise.all(teams.map((team) => options.teamKeys.selectTeamKey(team.id)));
-  return {
-    viewerId: session.user?.id ?? null,
-    teams: teams.map((team, index) => ({ team, hasKey: keys[index] !== null })),
-  };
 }
 
 function countOf(count: number, one: string, many: string) {

@@ -2,14 +2,18 @@ import { afterEach, describe, expect, spyOn, test } from 'bun:test';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { type AgentModel, applyStatePatch, type ServerMessage, serializeState } from '@shinsa/core';
-import { type ModelSource, Transcripts } from '../../src/agents/index.ts';
+import { Effect } from 'effect';
+import { type ModelSource } from '../../src/agents/index.ts';
 import type { ServerConfig } from '../../src/config/index.ts';
-import { type Launcher, startServer } from '../../src/http/index.ts';
+import { type Launcher } from '../../src/http/index.ts';
 import type { EngineRestarter } from '../../src/instance/index.ts';
 import { log as logger } from '../../src/log/index.ts';
-import { Engine } from '../../src/runtime/index.ts';
-import { EventLog, EvidenceStore } from '../../src/store/index.ts';
+import { Engine } from '../helpers/engine.ts';
+import { openEventLog } from '../helpers/event-log.ts';
+import { createTestEvidence } from '../helpers/evidence.ts';
 import { createTempDir, createTestConfig, createTestOnboarding, until } from '../helpers/index.ts';
+import { createSyncTranscripts } from '../helpers/transcripts.ts';
+import { startHttpServer } from '../helpers/web.ts';
 
 const running: (() => Promise<void>)[] = [];
 
@@ -22,16 +26,16 @@ function createModels(models: AgentModel[]) {
 }
 
 async function start(
-  options: { config?: Partial<ServerConfig>; launch?: Launcher; restarter?: EngineRestarter } = {}
+  options: { config?: Partial<ServerConfig>; launch?: Launcher; restarter?: EngineRestarter['Service'] } = {}
 ) {
   const config = createTestConfig(createTempDir(), options.config);
-  const engine = new Engine(new EventLog(config.databasePath));
-  const transcripts = new Transcripts(config.transcriptsDir);
-  const evidence = new EvidenceStore(config.evidenceDir);
-  const http = startServer({
+  const engine = new Engine(openEventLog(config.databasePath));
+  const transcripts = createSyncTranscripts(config.transcriptsDir);
+  const evidence = createTestEvidence(config.evidenceDir);
+  const http = startHttpServer({
     engine,
     config,
-    transcripts,
+    transcripts: transcripts.service,
     evidence,
     models: createModels([{ id: 'opus', label: 'Opus', description: 'x' }]),
     onboarding: createTestOnboarding(engine, config).onboarding,
@@ -109,14 +113,15 @@ describe('the socket', () => {
   test('state on connect, a patch on every change, acks for commands, transcripts on subscription', async () => {
     const { base, engine, transcripts } = await start();
     const unfollowed: string[] = [];
-    const follow = transcripts.follow.bind(transcripts);
-    transcripts.follow = (runId) => {
-      const unfollow = follow(runId);
-      return () => {
-        unfollowed.push(runId);
-        unfollow();
-      };
-    };
+    const service = transcripts.service;
+    const follow = service.follow;
+    service.follow = (runId) =>
+      Effect.map(follow(runId), (unfollow) => {
+        const unfollowing = Effect.sync(() => {
+          unfollowed.push(runId);
+        });
+        return Effect.andThen(unfollowing, unfollow);
+      });
     const client = connect(base);
     await client.opened;
     await until('the first state', () => client.messages.length === 3);
@@ -286,10 +291,9 @@ describe('the socket', () => {
 
   test('a socket message that fails after parsing is logged', async () => {
     const { base, transcripts } = await start();
-    const original = transcripts.readEntries.bind(transcripts);
-    transcripts.readEntries = () => {
-      throw new Error('disk gone');
-    };
+    const service = transcripts.service;
+    const original = service.readEntries;
+    service.readEntries = () => Effect.die(new Error('disk gone'));
     const error = spyOn(logger, 'error');
     try {
       const client = connect(base);
@@ -302,7 +306,7 @@ describe('the socket', () => {
       client.socket.close();
     } finally {
       error.mockRestore();
-      transcripts.readEntries = original;
+      service.readEntries = original;
     }
   });
 });

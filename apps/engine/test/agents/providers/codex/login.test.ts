@@ -1,14 +1,23 @@
 import { describe, expect, test } from 'bun:test';
-import {
-  type LoginRunner,
-  parseLoginMethod,
-  readCodexLogin,
-} from '../../../../src/agents/providers/codex/login.ts';
-import type { CodexRuntime } from '../../../../src/agents/providers/codex/session.ts';
+import { Effect } from 'effect';
+import { parseLoginMethod } from '../../../../src/agents/providers/codex/login/method.ts';
+import { readLogin } from '../../../../src/agents/providers/codex/login/service.ts';
+import type { CodexRuntime } from '../../../../src/agents/providers/codex/session/schema.ts';
+import type { CommandResult } from '../../../../src/shell/schema.ts';
 import { FakeCodex } from '../../../helpers/codex.ts';
+import { buildCodexProvider, runProvider } from '../../../helpers/providers.ts';
+
+type LoginRunner = () => Promise<CommandResult>;
+
+function readCodexLogin(runtime: CodexRuntime, run?: LoginRunner) {
+  if (!run) return runProvider(buildCodexProvider(runtime).readLogin!);
+  return Effect.runPromise(
+    readLogin({ executable: runtime.resolveExecutable, status: () => Effect.promise(run) })
+  );
+}
 
 const INSTALLED: CodexRuntime = {
-  resolveExecutable: () => Promise.resolve({ ok: true, path: '/bin/codex', version: '0.200.0' }),
+  resolveExecutable: Effect.succeed({ ok: true, path: '/bin/codex', version: '0.200.0' }),
 };
 
 function answerWith(exit: number, stdout: string, stderr = ''): LoginRunner {
@@ -16,18 +25,21 @@ function answerWith(exit: number, stdout: string, stderr = ''): LoginRunner {
 }
 
 const MISSING: CodexRuntime = {
-  resolveExecutable: () =>
-    Promise.resolve({ ok: false, reason: 'not_installed', message: 'No codex.', version: null }),
+  resolveExecutable: Effect.succeed({
+    ok: false,
+    reason: 'not_installed',
+    message: 'No codex.',
+    version: null,
+  }),
 };
 
 const OLD: CodexRuntime = {
-  resolveExecutable: () =>
-    Promise.resolve({
-      ok: false,
-      reason: 'outdated',
-      message: 'Codex 0.1.0 is too old. Update it with `npm i`.',
-      version: '0.1.0',
-    }),
+  resolveExecutable: Effect.succeed({
+    ok: false,
+    reason: 'outdated',
+    message: 'Codex 0.1.0 is too old. Update it with `npm i`.',
+    version: '0.1.0',
+  }),
 };
 
 describe('the Codex sign-in', () => {

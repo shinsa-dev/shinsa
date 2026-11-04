@@ -3,10 +3,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk';
 import type { ChatNotice, Run } from '@shinsa/core';
-import { createClaudeProvider } from '../../src/agents/providers/claude/index.ts';
-import { ProviderRegistry } from '../../src/agents/providers/index.ts';
-import { Transcripts } from '../../src/agents/transcripts/index.ts';
-import { EunoeServer, type EunoeServerOptions } from '../../src/eunoe/index.ts';
+import { type EunoeOptions, type OpenEunoe, openEunoe } from '../eunoe/harness.ts';
 import {
   createMessagesBody,
   type FakeAnthropic,
@@ -14,20 +11,22 @@ import {
   startFakeAnthropic,
 } from '../helpers/anthropic.ts';
 import { createTempDir } from '../helpers/index.ts';
+import { buildClaudeProvider, createTestProviders } from '../helpers/providers.ts';
 import { createFakeQuery, createFakeRuntime, type QueryParams, sdkMessage } from '../helpers/query.ts';
+import { createSyncTranscripts } from '../helpers/transcripts.ts';
 import { World } from './harness.ts';
 
 setDefaultTimeout(30_000);
 
 let world: World | null = null;
 
-let eunoe: EunoeServer | null = null;
+let eunoe: OpenEunoe | null = null;
 
 let upstream: FakeAnthropic | null = null;
 
 afterEach(async () => {
   await world?.dispose();
-  await eunoe?.stop();
+  await eunoe?.close();
   await upstream?.stop();
   world = null;
   eunoe = null;
@@ -46,31 +45,30 @@ async function* agentTurn(params: QueryParams, call: number, requests: number): 
 }
 
 interface WorldOptions {
-  server?: Partial<EunoeServerOptions>;
+  server?: EunoeOptions;
   requests?: number;
 }
 
 async function openWorld({ server = {}, requests = 1 }: WorldOptions = {}) {
   const params: QueryParams[] = [];
-  const dir = join(createTempDir(), 'eunoe');
   const fake = createFakeQuery((call) => {
     params.push(call);
     return agentTurn(call, params.length - 1, requests);
   });
   upstream = startFakeAnthropic();
-  eunoe = new EunoeServer({
-    dir,
+  eunoe = openEunoe({
     upstream: upstream.url,
     window: () => Promise.resolve(4_000),
     foldFloor: 0,
     ...server,
   });
-  const provider = createClaudeProvider(createFakeRuntime(fake.query), {
+  const { dir } = eunoe;
+  const provider = buildClaudeProvider(createFakeRuntime(fake.query), {
     env: {},
     home: createTempDir(),
-    eunoe,
+    eunoe: eunoe.server,
   });
-  world = await World.create({ providers: () => new ProviderRegistry([provider]) });
+  world = await World.create({ providers: () => createTestProviders([provider]) });
   return { w: world, params, dir };
 }
 
@@ -81,7 +79,7 @@ function firstRun(w: World, taskId: string): Run | undefined {
 }
 
 function listNotices(w: World, runId: string): ChatNotice[] {
-  return new Transcripts(w.config.transcriptsDir)
+  return createSyncTranscripts(w.config.transcriptsDir)
     .listEntries(runId)
     .flatMap((entry) => (entry.type === 'notice' ? [entry.notice] : []));
 }

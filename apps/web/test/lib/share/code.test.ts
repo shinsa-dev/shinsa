@@ -1,16 +1,16 @@
 import { describe, expect, it } from 'bun:test';
 import type { FileContent, TaskDiff, TaskRefs } from '@shinsa/core';
 import { renderHook, waitFor } from '@testing-library/react';
+import { Effect } from 'effect';
 import { registerCodeSource, useTaskDiff, useTaskRefs } from '@/lib/connection/code.ts';
 import {
   createSharedCodeSource,
-  NO_SHARED_CODE,
-  ONLY_CHANGES,
   resolveBaseContent,
   resolveSharedHead,
   SHARED_BASE,
   SHARED_HEAD,
 } from '@/lib/share/code.ts';
+import { NO_SHARED_CODE, ONLY_CHANGES, SharedTextFailed } from '@/lib/share/schema.ts';
 import { createTask } from '../../support/state.ts';
 import { DIFF } from './fixtures.ts';
 
@@ -36,8 +36,8 @@ const CHANGES = [
 
 function reads(diff: string | null = DIFF, code: Record<string, string> | null = { 'src/keys.ts': HEAD }) {
   return {
-    readDiff: diff === null ? null : () => Promise.resolve(diff),
-    readCode: code === null ? null : () => Promise.resolve(JSON.stringify({ files: code })),
+    readDiff: diff === null ? null : Effect.succeed(diff),
+    readCode: code === null ? null : Effect.succeed(JSON.stringify({ files: code })),
     branch: 'feat/keys',
   };
 }
@@ -51,10 +51,10 @@ describe('the shared code source', () => {
     let diffReads = 0;
     const source = createSharedCodeSource({
       ...reads(),
-      readDiff: () => {
+      readDiff: Effect.sync(() => {
         diffReads += 1;
-        return Promise.resolve(DIFF);
-      },
+        return DIFF;
+      }),
     });
     const refs = (await source('refs', new URLSearchParams())) as TaskRefs;
     expect(refs).toMatchObject({ head: SHARED_HEAD, base: SHARED_BASE, branch: 'feat/keys', working: false });
@@ -101,6 +101,22 @@ describe('the shared code source', () => {
     const source = createSharedCodeSource(reads(DIFF, null));
     expect(((await source('blob', blob(SHARED_HEAD, 'src/keys.ts'))) as FileContent).missing).toBe(true);
     expect(((await source('blob', blob(SHARED_BASE, 'src/keys.ts'))) as FileContent).missing).toBe(true);
+  });
+
+  it('fails in words when the published files cannot be read, and reads them only once', async () => {
+    let codeReads = 0;
+    const source = createSharedCodeSource({
+      ...reads(),
+      readCode: Effect.sync(() => {
+        codeReads += 1;
+        return 'not json';
+      }),
+    });
+    await expect(source('blob', blob(SHARED_HEAD, 'src/keys.ts'))).rejects.toBeInstanceOf(SharedTextFailed);
+    await expect(source('blob', blob(SHARED_BASE, 'src/keys.ts'))).rejects.toThrow(
+      'The code did not load. Reload the page to try again.'
+    );
+    expect(codeReads).toBe(1);
   });
 
   it('refuses files the task did not change, other reads, and everything when the task shares no code', async () => {

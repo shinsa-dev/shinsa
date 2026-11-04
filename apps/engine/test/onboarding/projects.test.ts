@@ -2,12 +2,12 @@ import { describe, expect, test } from 'bun:test';
 import { mkdirSync, realpathSync } from 'node:fs';
 import { join } from 'node:path';
 import type { OnboardingProjectChoice } from '@shinsa/core';
-import { ConfigStore } from '../../src/config/index.ts';
-import { Onboarding } from '../../src/onboarding/index.ts';
-import { Roots } from '../../src/repos/index.ts';
-import { Engine } from '../../src/runtime/index.ts';
-import { EventLog } from '../../src/store/index.ts';
+import { Effect } from 'effect';
+import { Engine } from '../helpers/engine.ts';
+import { openEventLog } from '../helpers/event-log.ts';
 import { createTempDir, createTestConfig, git } from '../helpers/index.ts';
+import { createTestMachine } from '../helpers/machine.ts';
+import { createPromisedOnboarding, type TestOnboarding } from './harness.ts';
 
 async function createRepo(folder: string, name: string, remote: string | null) {
   const path = join(folder, name);
@@ -26,8 +26,7 @@ async function setup(answers: unknown[] = []) {
   const asked: AskCall[] = [];
   const root = realpathSync(createTempDir());
   const config = createTestConfig(root, { roots: [] });
-  const engine = new Engine(new EventLog(config.databasePath));
-  const store = new ConfigStore(config.configPath);
+  const engine = new Engine(openEventLog(config.databasePath));
   const acme = join(root, 'Acme');
   const projects = join(root, 'Projects');
   const repos = {
@@ -36,27 +35,23 @@ async function setup(answers: unknown[] = []) {
     notes: await createRepo(projects, 'notes', 'jane/notes'),
     scratch: await createRepo(projects, 'scratch', null),
   };
-  const roots = new Roots([], store, root, () =>
-    Promise.resolve({ candidates: [], truncated: false, refused: [] })
-  );
-  const onboarding = new Onboarding({
+  const machine = createTestMachine(engine, config, {
+    resolveLogin: () => Promise.resolve('jane'),
+  });
+  const onboarding = createPromisedOnboarding({
     engine,
     config,
-    store,
-    roots,
-    resolveLogin: () => Promise.resolve('jane'),
+    machine: machine.context,
     ask: <T>(system: string, prompt: string) => {
       asked.push({ system, prompt: JSON.parse(prompt) as Record<string, unknown> });
-      return Promise.resolve((answers.shift() ?? null) as T | null);
+      return Effect.succeed((answers.shift() ?? null) as T | null);
     },
     run: () => Promise.resolve({ ok: true, code: 0, stdout: 'v1', stderr: '', timedOut: false }),
-    models: { listModels: () => Promise.resolve([]) },
-    accounts: () => Promise.resolve([]),
   });
   return { root, engine, onboarding, acme, projects, repos, asked };
 }
 
-function revise(onboarding: Onboarding, text: unknown, projects?: OnboardingProjectChoice[]) {
+function revise(onboarding: TestOnboarding, text: unknown, projects?: OnboardingProjectChoice[]) {
   return onboarding.setup.reply({
     type: 'revise',
     stepId: 'projects',
@@ -73,7 +68,7 @@ function answerFolders(world: Awaited<ReturnType<typeof setup>>) {
   });
 }
 
-function answerProjects(onboarding: Onboarding, projects?: OnboardingProjectChoice[]) {
+function answerProjects(onboarding: TestOnboarding, projects?: OnboardingProjectChoice[]) {
   return onboarding.setup.reply({
     type: 'answer',
     stepId: 'projects',

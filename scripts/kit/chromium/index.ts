@@ -1,3 +1,3 @@
-export { launchChromium, listTargets, openChromium, waitForExpression } from './browser.ts';
-export { CdpPage } from './page.ts';
-export type { Key } from './schema.ts';
+export { ChromiumLayer } from './layers.ts';
+export { CdpCommandFailed, type CdpEvent, CdpEvaluateFailed, type CdpPage, type Key } from './schema.ts';
+export { Chromium } from './service.ts';

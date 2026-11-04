@@ -155,17 +155,13 @@ export class PreviewHost extends Context.Service<
         if (Option.isNone(machine)) return respondPage('gone', 404);
         const connectKey = Redacted.value(machine.value.connectKey);
         const now = yield* Clock.currentTimeMillis;
-        const claim = yield* Effect.promise(() =>
-          verifyPreviewAccessToken(connectKey, token, address, now, PREVIEW_OPEN_TTL_MS)
-        );
+        const claim = yield* verifyPreviewAccessToken(connectKey, token, address, now, PREVIEW_OPEN_TTL_MS);
         if (!claim) return respondPage('gone', 404);
-        const access = yield* Effect.promise(() =>
-          createPreviewAccessToken(connectKey, {
-            ...address,
-            userId: claim.userId,
-            expiresAt: now + PREVIEW_ACCESS_TTL_MS,
-          })
-        );
+        const access = yield* createPreviewAccessToken(connectKey, {
+          ...address,
+          userId: claim.userId,
+          expiresAt: now + PREVIEW_ACCESS_TTL_MS,
+        }).pipe(Effect.orDie);
         return respondCookieRedirect(
           url,
           PREVIEW_ACCESS_PARAM,

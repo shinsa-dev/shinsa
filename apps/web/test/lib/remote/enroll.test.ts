@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import { serializeBase64Url, serializePublicKey } from '@shinsa/core';
-import { Schedule } from 'effect';
+import { Effect, Schedule } from 'effect';
 import { openRemoteChannel } from '@/lib/remote/channel.ts';
 import {
   claimHandoff,
@@ -71,7 +71,7 @@ describe('asking a machine for access from this browser', () => {
       enrolledAt: 42,
       onMachine: true,
     });
-    expect(mac.enrolled.has(await serializePublicKey(device.keys.publicKey))).toBe(true);
+    expect(mac.enrolled.has(await Effect.runPromise(serializePublicKey(device.keys.publicKey)))).toBe(true);
     expect(mac.last.closedWith?.code).toBe(1000);
   });
 
@@ -114,7 +114,7 @@ describe('asking a machine for access from this browser', () => {
     const { options, steps } = createOptions(mac);
     const device = await requestDeviceAccess(createInput(mac), options);
     expect(steps).toEqual(['accept tok', 'pending', 'accept tok', 'pending']);
-    expect(mac.enrolled.has(await serializePublicKey(device.keys.publicKey))).toBe(true);
+    expect(mac.enrolled.has(await Effect.runPromise(serializePublicKey(device.keys.publicKey)))).toBe(true);
   });
 
   it('remembers nothing when the machine refuses, and never retries a failure before it waited', async () => {

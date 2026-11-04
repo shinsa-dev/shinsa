@@ -1,10 +1,4 @@
-export interface WaitSample {
-  label: string;
-  step: string;
-  at: number;
-  duration: number;
-  open?: boolean;
-}
+import type { WaitSample } from './loading/schema.ts';
 
 const BLANK = 'blank: ';
 

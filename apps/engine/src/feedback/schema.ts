@@ -9,11 +9,7 @@ export interface FeedbackIssueInput {
 
 export type FiledIssue = Pick<FeedbackIssue, 'number' | 'url'>;
 
-export type FeedbackFiling = { ok: true; issue: FiledIssue } | { ok: false; detail: string };
-
 export type FeedbackIssueStates = Map<number, number | null>;
-
-export type FeedbackListing = { ok: true; states: FeedbackIssueStates } | { ok: false; detail: string };
 
 export class FeedbackAnswerInvalid extends Schema.TaggedError<
   FeedbackAnswerInvalid,

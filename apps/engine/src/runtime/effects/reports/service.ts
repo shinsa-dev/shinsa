@@ -1,7 +1,7 @@
 import type { ShinsaEffect } from '@shinsa/core';
 import { Context, Effect, Layer } from 'effect';
 import type { EffectRetry } from '../../engine/schema.ts';
-import { resolveShippingFailure } from '../../failures/classify.ts';
+import { resolveEffectFailure, resolveShippingFailure } from '../../failures/classify.ts';
 import type { EffectFailure } from '../../failures/schema.ts';
 import { FAILURE_TITLE } from '../schema.ts';
 import { EffectWorld } from '../world/service.ts';
@@ -45,7 +45,10 @@ export class EffectReports extends Context.Service<
         key: string
       ) {
         if (effect.kind === 'feedback.draft' || effect.kind === 'feedback.file') {
-          yield* world.bridge(() => world.feedback.reportExhausted(effect.feedbackId, error, key));
+          yield* Effect.mapError(
+            world.feedback.reportExhausted(effect.feedbackId, error, key),
+            resolveEffectFailure
+          );
           return;
         }
         switch (effect.kind) {

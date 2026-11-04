@@ -2,10 +2,23 @@ import { describe, expect, test } from 'bun:test';
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { CoverageSetting, Repo, Task } from '@shinsa/core';
-import { createWorktree } from '../../src/git/index.ts';
-import { listCoverageDetections, measureTaskCoverage } from '../../src/test-coverage/index.ts';
+import { Layer, ManagedRuntime } from 'effect';
+import { ChecksLayer } from '../../src/checks/layers.ts';
+import { GitLayer } from '../../src/git/layers.ts';
+import { JsonLogger } from '../../src/log/service.ts';
+import { ShellLayer } from '../../src/shell/layers.ts';
+import { type CoverageRequest, listCoverageDetections, TaskCoverage } from '../../src/test-coverage/index.ts';
+import { createWorktree } from '../helpers/git.ts';
 import { createGitRepo, createTempDir, git, until, writeFiles } from '../helpers/index.ts';
 import { createTask } from '../helpers/state.ts';
+
+const runtime = ManagedRuntime.make(
+  Layer.merge(ChecksLayer.pipe(Layer.provide(GitLayer), Layer.provide(ShellLayer)), JsonLogger)
+);
+
+function measureTaskCoverage(request: CoverageRequest) {
+  return runtime.runPromise(TaskCoverage.use((coverage) => coverage.measure(request)));
+}
 
 const SOURCE = ['export function add(a, b) {', '  return a + b;', '}', ''].join('\n');
 

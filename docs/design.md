@@ -3161,6 +3161,15 @@ Only these, and they win over anything below:
     title, a name inside a clickable header) it is the plain first name (`describeMentionText`: "Remove Kai?", "Kai
     joined."). No other avatar or name layout exists.
 
+44. **A dialog description is at most two lines** (since 2026-11-04; `packages/ui/src/components/dialog.tsx`,
+    `scripts/lint-dialog.ts`). Under a dialog's title, the description says what the dialog does in one short
+    sentence, two at most, and never runs past two lines at the dialog's 420px: "Agents read it before they start
+    work in this project." The detail goes in the field's hint, or the screen already shows it. The kit's
+    `DialogDescription` and `AlertDialogDescription` clip at two lines (`line-clamp-2`), so a third never draws, and
+    `bun lint:conventions` fails on a description longer than 120 characters: the text inside either part, a
+    `ConfirmDialog`'s `body` and a `PercentDialog`'s `description`, followed through constants, lookup tables and the
+    functions that return them, as for a toast (42), with an inserted value counted as 12.
+
 `bun lint:conventions` (`scripts/lint-conventions.ts`) checks the app (`apps/web/src`) for raw `text-[N]` sizes, a
 weight other than normal, `font-medium` and `font-semibold`, `gap-0.5` (outside `SectionLabel`), Tailwind's own
 shadows (`shadow-2xs` … `shadow-2xl`, `shadow-inner`) and raw `shadow-[…]` or `ring-[…]` (the tokens `shadow-1…4`
@@ -3180,7 +3189,8 @@ handler on its element (37). It also rejects an ad hoc selection (`select-text`,
 rejects a toast string in the app longer than 40 characters (42): the text passed to `toast.*`, `confirmDone`,
 `requestWithToast`, `sendCommandWithToast` and any function with a `done` or `sent` parameter, and every `done` or
 `sent` property, followed through constants, lookup tables, both branches of a choice and the functions that return
-it, in any file of the app; an inserted value counts as 12. A message from the server is not caught.
+it, in any file of the app; an inserted value counts as 12. A message from the server is not caught. It rejects a dialog description
+longer than 120 characters (44), followed the same way.
 
 ---
 

@@ -7,6 +7,7 @@ import * as React from 'react';
 import { PAGE_COLUMN, PAGE_TOP } from '@/components/layout/page/column.ts';
 import { PAGE_DESCRIPTION, PageHeading } from '@/components/layout/page/heading.tsx';
 import { TaskSharedFacts } from '@/components/task/facts.tsx';
+import { runApp } from '@/lib/runtime/app.ts';
 import { ReviewTab } from '@/routes/task/review.tsx';
 import { openTask } from '../../lib/content.ts';
 import { type OpenPage, type OpenScene, readOpenPage } from '../../lib/open-page.ts';
@@ -113,7 +114,7 @@ export function OpenLoading() {
 export function OpenReview() {
   const [page, setPage] = React.useState<OpenPage | null>(null);
   React.useEffect(() => {
-    void readOpenPage(window.location.search, window.location.hash, Date.now()).then(setPage);
+    void runApp(readOpenPage(window.location.search, window.location.hash, Date.now())).then(setPage);
   }, []);
   if (!page) return <OpenLoading />;
   if ('scene' in page) return <ReviewPage scene={page.scene} />;

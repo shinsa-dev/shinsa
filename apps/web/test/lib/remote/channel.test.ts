@@ -6,6 +6,7 @@ import {
   serializePublicKey,
 } from '@shinsa/core';
 import { waitFor } from '@testing-library/react';
+import { Effect } from 'effect';
 import { openRemoteChannel } from '@/lib/remote/channel.ts';
 import { ChannelError } from '@/lib/remote/remote-channel/schema.ts';
 import { createKeyPair, FakeMac, type FakeMacOptions } from './fake-mac.ts';
@@ -17,7 +18,7 @@ async function connect(
   overrides: { machineKey?: string; secret?: string } = {}
 ) {
   const device = await createKeyPair();
-  const deviceKey = await serializePublicKey(device.publicKey);
+  const deviceKey = await Effect.runPromise(serializePublicKey(device.publicKey));
   const mac = await FakeMac.create({ enrolled: [deviceKey], ...options });
   const opening = openRemoteChannel({
     url: 'wss://t-k3x9.shinsa.dev/remote?token=t',
@@ -46,7 +47,7 @@ describe('the sealed channel to a machine', () => {
     } as unknown as typeof WebSocket;
     Object.assign(globalThis.WebSocket, { CONNECTING: 0, OPEN: 1 });
     const device = await createKeyPair();
-    mac.enrolled.add(await serializePublicKey(device.publicKey));
+    mac.enrolled.add(await Effect.runPromise(serializePublicKey(device.publicKey)));
     const channel = await openRemoteChannel({
       url: 'wss://x/remote',
       machineKey: mac.machineKey,
@@ -60,7 +61,9 @@ describe('the sealed channel to a machine', () => {
 
   it('makes the hello while the connect URL is still coming, and opens only once it came', async () => {
     const device = await createKeyPair();
-    const mac = await FakeMac.create({ enrolled: [await serializePublicKey(device.publicKey)] });
+    const mac = await FakeMac.create({
+      enrolled: [await Effect.runPromise(serializePublicKey(device.publicKey))],
+    });
     const url = Promise.withResolvers<string>();
     const opening = openRemoteChannel({
       url: url.promise,
@@ -149,10 +152,13 @@ describe('the sealed channel to a machine', () => {
     const impostor = await createKeyPair();
     const { opening } = await connect(
       { tolerant: true },
-      { machineKey: await serializePublicKey(impostor.publicKey) }
+      { machineKey: await Effect.runPromise(serializePublicKey(impostor.publicKey)) }
     );
     await expect(opening).rejects.toThrow('broke');
-    const strict = await connect({}, { machineKey: await serializePublicKey(impostor.publicKey) });
+    const strict = await connect(
+      {},
+      { machineKey: await Effect.runPromise(serializePublicKey(impostor.publicKey)) }
+    );
     await expect(strict.opening).rejects.toBeInstanceOf(ChannelError);
   });
 

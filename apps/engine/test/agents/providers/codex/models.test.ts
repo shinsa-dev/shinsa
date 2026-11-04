@@ -1,8 +1,26 @@
-import { describe, expect, spyOn, test } from 'bun:test';
+import { describe, expect, test } from 'bun:test';
+import { tmpdir } from 'node:os';
 import { KNOWN_CODEX_MODELS } from '@shinsa/core';
-import { CodexModelCatalog, resolveCodexModels } from '../../../../src/agents/providers/codex/models.ts';
-import { log } from '../../../../src/log/index.ts';
+import { Duration, Effect } from 'effect';
+import { resolveCodexModels } from '../../../../src/agents/providers/codex/models/rows.ts';
+import { CATALOG_TIMEOUT_MS } from '../../../../src/agents/providers/codex/models/schema.ts';
+import { makeCodexModelCatalog } from '../../../../src/agents/providers/codex/models/service.ts';
+import type { CodexRuntime } from '../../../../src/agents/providers/codex/session/schema.ts';
 import { FakeCodex } from '../../../helpers/codex.ts';
+import { captureLogs } from '../../../helpers/logs.ts';
+import { runProvider } from '../../../helpers/providers.ts';
+
+function createCatalog(runtime: CodexRuntime, timeoutMs = CATALOG_TIMEOUT_MS) {
+  const catalog = Effect.runSync(
+    makeCodexModelCatalog({
+      executable: runtime.resolveExecutable,
+      env: runtime.env,
+      cwd: tmpdir(),
+      timeout: Duration.millis(timeoutMs),
+    })
+  );
+  return { list: () => runProvider(catalog.list) };
+}
 
 describe('the Codex model list', () => {
   test('comes from model/list, without hidden models, across pages, and is asked once', async () => {
@@ -13,7 +31,7 @@ describe('the Codex model list', () => {
         { id: 'gpt-5.6-sol', model: 'gpt-5.6-sol', displayName: '', description: 'Fast' },
       ],
     });
-    const catalog = new CodexModelCatalog(codex.runtime);
+    const catalog = createCatalog(codex.runtime);
     expect(await catalog.list()).toEqual([
       { id: 'gpt-6-astra', label: 'GPT-6-Astra', description: 'Frontier' },
       { id: 'gpt-5.6-sol', label: 'GPT-5.6-Sol', description: 'Fast' },
@@ -29,19 +47,21 @@ describe('the Codex model list', () => {
   });
 
   test('falls back to the built-in list when Codex cannot answer, and asks again next time', async () => {
-    const warn = spyOn(log, 'warn');
-    const empty = new CodexModelCatalog(new FakeCodex({ models: [] }).runtime);
+    const logs = captureLogs();
+    const empty = createCatalog(new FakeCodex({ models: [] }).runtime);
     expect(await empty.list()).toEqual(KNOWN_CODEX_MODELS);
-    const missing = new CodexModelCatalog({
-      resolveExecutable: () =>
-        Promise.resolve({ ok: false, reason: 'not_installed', message: 'No codex.', version: null }),
+    const missing = createCatalog({
+      resolveExecutable: Effect.succeed({
+        ok: false as const,
+        reason: 'not_installed' as const,
+        message: 'No codex.',
+        version: null,
+      }),
     });
     expect(await missing.list()).toEqual(KNOWN_CODEX_MODELS);
-    const slow = new CodexModelCatalog(new FakeCodex().runtime, 1);
+    const slow = createCatalog(new FakeCodex().runtime, 1);
     expect(await slow.list()).toEqual(KNOWN_CODEX_MODELS);
-    expect(warn.mock.calls.map(([message]) => message)).toContain(
-      '[Models] Falling back to the built-in Codex list'
-    );
-    warn.mockRestore();
+    logs.restore();
+    expect(logs.fieldsOf('[Models] Falling back to the built-in Codex list')).toHaveLength(3);
   });
 });

@@ -8,9 +8,8 @@ import {
   type ShinsaState,
 } from '@shinsa/core';
 import type { IconName } from '@shinsa/ui/components/icon';
-import { toast } from '@shinsa/ui/components/sonner';
-import { copyText, describeFailure, sendCommandWithToast } from '@/lib/connection/commands.ts';
-import { requestWebhook as requestScheduleWebhook } from '@/lib/connection/schedules.ts';
+import { sendCommandWithToast } from '@/lib/connection/commands.ts';
+import { requestWebhook as requestScheduleWebhook, requestWebhookCopy } from '@/lib/connection/schedules.ts';
 import { formatClock, formatMoment } from '@/lib/format/time.ts';
 import type { Tone } from '@/lib/format/tone.ts';
 
@@ -130,11 +129,6 @@ export function describeRemoval(schedule: Schedule) {
   };
 }
 
-export async function copyWebhookUrl(schedule: Schedule) {
-  try {
-    const { url } = await requestWebhook(schedule);
-    await copyText(url);
-  } catch (error) {
-    toast.error(describeFailure(error));
-  }
+export function copyWebhookUrl(schedule: Schedule) {
+  return requestWebhookCopy(() => requestWebhook(schedule));
 }

@@ -1,7 +1,10 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { Effect, Layer } from 'effect';
 import { resolveCodexExecutable } from '../../src/agents/providers/codex/executable.ts';
-import type { CodexRuntime } from '../../src/agents/providers/codex/session.ts';
+import type { CodexRuntime } from '../../src/agents/providers/codex/session/schema.ts';
+import { ProgramVersions } from '../../src/agents/providers/versions/service.ts';
+import { ShellLayer } from '../../src/shell/layers.ts';
 import { createTempDir } from './index.ts';
 
 export type FakeCodexStep = Record<string, unknown>;
@@ -52,7 +55,12 @@ export class FakeCodex {
     this.path = join(createTempDir('shinsa-codex-'), 'codex.json');
     this.write({ threads: [], scripts: {}, ...state });
     this.env = { FAKE_CODEX_STATE: this.path, ...env };
-    this.runtime = { resolveExecutable: () => resolveCodexExecutable(), env: this.env };
+    this.runtime = {
+      resolveExecutable: resolveCodexExecutable().pipe(
+        Effect.provide(ProgramVersions.layer.pipe(Layer.provide(ShellLayer)))
+      ),
+      env: this.env,
+    };
   }
 
   read(): FakeCodexState {

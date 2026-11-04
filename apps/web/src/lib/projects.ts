@@ -16,6 +16,7 @@ import {
 import type { IconName } from '@shinsa/ui/components/icon';
 import type { MenuItemIcon } from '@shinsa/ui/components/menu-icon';
 import { toast } from '@shinsa/ui/components/sonner';
+import { Effect } from 'effect';
 import type { CSSProperties } from 'react';
 import { changeBaseline } from '@/lib/baseline.ts';
 import { describeFailure, requestWithToast, sendCommandWithToast } from '@/lib/connection/commands.ts';
@@ -28,9 +29,11 @@ import {
 import { sendCommand } from '@/lib/connection/socket.ts';
 import { changeCoverage } from '@/lib/coverage.ts';
 import { formatNumber } from '@/lib/format/count.ts';
+import { runApp } from '@/lib/runtime/app.ts';
+import { StepFailed } from '@/lib/runtime/schema.ts';
 import { changeWorkspace } from '@/lib/workspaces.ts';
 
-export type ProjectField = 'name' | 'key' | 'description';
+export type ProjectField = 'name' | 'key' | 'description' | 'usageLimit';
 
 export type ProjectDialogMode = 'create' | ProjectField;
 
@@ -38,6 +41,7 @@ export interface ProjectDraft {
   name: string;
   key: string;
   description: string;
+  usageLimit: string;
 }
 
 interface ProjectDialogCopy {
@@ -79,6 +83,14 @@ export const PROJECT_DIALOG: Record<ProjectDialogMode, ProjectDialogCopy> = {
     done: 'Description saved.',
     fields: ['description'],
   },
+  usageLimit: {
+    title: 'Set usage limit',
+    description:
+      'Once this project’s tasks use this much in 24 hours, their next steps wait and start by themselves later.',
+    action: 'Save limit',
+    done: 'Usage limit saved.',
+    fields: ['usageLimit'],
+  },
 };
 
 export const PROJECT_FIELD: Record<ProjectField, { label: string; placeholder: string }> = {
@@ -88,7 +100,14 @@ export const PROJECT_FIELD: Record<ProjectField, { label: string; placeholder: s
     label: 'Description',
     placeholder: 'What the project is and how its repositories fit together',
   },
+  usageLimit: { label: 'Daily usage limit (% of a weekly limit)', placeholder: 'No limit' },
 };
+
+export const USAGE_LIMIT_RULE = 'Leave it empty for no limit.';
+
+export function describeProjectUsageLimit(project: Project) {
+  return project.usageLimit ? `${project.usageLimit}% a day` : null;
+}
 
 export const OPTIONAL_KEY_PLACEHOLDER = 'Made from the name';
 
@@ -180,7 +199,13 @@ export function createProjectDraft(project: Project | null): ProjectDraft {
     name: project?.name ?? '',
     key: project?.key ?? '',
     description: project?.description ?? '',
+    usageLimit: project?.usageLimit ? String(project.usageLimit) : '',
   };
+}
+
+function parseDraftUsageLimit(value: string) {
+  const trimmed = value.trim().replace(/%$/, '');
+  return trimmed === '' ? null : Number(trimmed);
 }
 
 function describeKeyProblem(state: ShinsaState, key: string, projectId: string | null) {
@@ -211,6 +236,14 @@ export function validateProjectDraft(
   if (fields.includes('description') && draft.description.trim().length > PROJECT_LIMITS.description) {
     errors.description = `Use ${formatNumber(PROJECT_LIMITS.description)} characters or fewer.`;
   }
+  const usageLimit = parseDraftUsageLimit(draft.usageLimit);
+  if (
+    fields.includes('usageLimit') &&
+    usageLimit !== null &&
+    !(Number.isFinite(usageLimit) && usageLimit > 0)
+  ) {
+    errors.usageLimit = 'Type a percentage above zero, like 20.';
+  }
   return { ok: Object.keys(errors).length === 0, errors };
 }
 
@@ -220,9 +253,22 @@ export function resolveDraftInput(
   project: Project | null
 ): ProjectInput {
   const key = draft.key.trim().toUpperCase();
+  const usageLimit = parseDraftUsageLimit(draft.usageLimit);
   const values = { name: draft.name.trim(), description: draft.description.trim() };
-  if (project) return resolveProjectInput(project, { ...values, key: key || project.key });
-  return { ...values, color: resolveProjectColor(state), ...(key ? { key } : {}) };
+  if (project) {
+    const changed = usageLimit !== (project.usageLimit ?? null);
+    return resolveProjectInput(project, {
+      ...values,
+      ...(changed ? { usageLimit } : {}),
+      key: key || project.key,
+    });
+  }
+  return {
+    ...values,
+    color: resolveProjectColor(state),
+    ...(key ? { key } : {}),
+    ...(usageLimit === null ? {} : { usageLimit }),
+  };
 }
 
 export function validateFolderPath(path: string) {
@@ -284,29 +330,25 @@ export interface ProjectActions {
   changeBaseline: (repo: Repo, commands: string[]) => Promise<boolean>;
 }
 
-async function saveProject(input: ProjectInput, done: string) {
-  try {
-    await sendCommand({ type: 'project.write', project: input });
-  } catch (error) {
-    return describeFailure(error);
-  }
-  toast.success(done);
-  return null;
-}
-
-async function addFolder(project: Project, path: string) {
-  try {
-    await requestAddProjectFolder(project.id, path.trim());
-  } catch (error) {
-    return describeFailure(error);
-  }
-  toast.success('Folder added.');
-  return null;
+function requestWithResult(request: () => Promise<unknown>, done: string) {
+  return runApp(
+    Effect.tryPromise({
+      try: request,
+      catch: (error) => new StepFailed({ message: describeFailure(error) }),
+    }).pipe(
+      Effect.map((): string | null => {
+        toast.success(done);
+        return null;
+      }),
+      Effect.catchTag('StepFailed', (failed) => Effect.succeed(failed.message))
+    )
+  );
 }
 
 export const PROJECT_ACTIONS: ProjectActions = {
   write: (input, done) => sendCommandWithToast({ type: 'project.write', project: input }, done),
-  save: saveProject,
+  save: (input, done) =>
+    requestWithResult(() => sendCommand({ type: 'project.write', project: input }), done),
   remove: (project, done) => sendCommandWithToast({ type: 'project.remove', projectId: project.id }, done),
   listLocalRepos: requestLocalRepos,
   addRepo: (project, path) =>
@@ -316,7 +358,8 @@ export const PROJECT_ACTIONS: ProjectActions = {
       { type: 'repo.update', repoId: repo.id, patch: { projectId: null } },
       'Repository removed from the project.'
     ),
-  addFolder,
+  addFolder: (project, path) =>
+    requestWithResult(() => requestAddProjectFolder(project.id, path.trim()), 'Folder added.'),
   removeFolder: (project, folder) =>
     sendCommandWithToast(
       {

@@ -7,11 +7,14 @@ import {
   type ServiceView,
   SHARE_LIMITS,
   type ShareLimit,
+  type UserCommand,
 } from '@shinsa/core';
+import { Clock, Effect } from 'effect';
 import { type Display, describeMark, describeTable, PLAIN_DISPLAY, type Tone } from '../terminal/index.ts';
 import type { SurfaceClient } from './client.ts';
 import type { FieldSpec, Values } from './fields.ts';
 import { findTaskId, type ProjectsRead, resolveOptionalTaskId, selectProject } from './resolve.ts';
+import type { SurfaceFailure } from './schema.ts';
 import { defineAction, defineCommand, readValue, type SurfaceSpec } from './spec.ts';
 
 const PROJECT_FIELD: FieldSpec = {
@@ -58,18 +61,21 @@ interface ServicesRead {
   taskRuns: Map<string, ServiceView[]>;
 }
 
-async function readServices(client: SurfaceClient, projectRef: string): Promise<ServicesRead> {
-  const [snapshot, { projects }] = await Promise.all([
-    client.api.terminals.list(),
-    client.api.state.projects(),
-  ]);
+const readServices = Effect.fn('Surface.readServices')(function* (
+  client: SurfaceClient,
+  projectRef: string
+): Effect.fn.Return<ServicesRead, SurfaceFailure> {
+  const [snapshot, { projects }] = yield* Effect.all(
+    [client.api.terminals.list(), client.api.state.projects()],
+    { concurrency: 'unbounded' }
+  );
   const project = projectRef ? selectProject(projects, projectRef) : null;
   if (projectRef && !project)
-    throw new DomainError({
+    return yield* new DomainError({
       code: 'project_not_found',
       message: `No project ${projectRef}. \`shinsa projects list\` lists them.`,
     });
-  const now = Date.now();
+  const now = yield* Clock.currentTimeMillis;
   const views = projects
     .filter((each) => !project || each.id === project.id)
     .flatMap((each) => listProjectServices(snapshot, each.id, now));
@@ -77,7 +83,7 @@ async function readServices(client: SurfaceClient, projectRef: string): Promise<
     views.map((view) => [view.service.id, listServiceTaskRuns(snapshot, view.service.id, now)])
   );
   return { projects, views, taskRuns };
-}
+});
 
 function describeState(view: ServiceView) {
   return view.state === 'failed' && view.exitCode !== null ? `failed (code ${view.exitCode})` : view.state;
@@ -105,26 +111,26 @@ function formatServices({ projects, views, taskRuns }: ServicesRead, display: Di
   }).join('\n');
 }
 
-async function findServiceView(client: SurfaceClient, values: Values) {
+const findServiceView = Effect.fn('Surface.serviceView')(function* (client: SurfaceClient, values: Values) {
   const reference = readValue(values, 'service');
-  const { views } = await readServices(client, readValue(values, 'project'));
+  const { views } = yield* readServices(client, readValue(values, 'project'));
   const wanted = reference.toLowerCase();
   const matches = views.filter(
     (each) => each.service.id === reference || each.service.name.toLowerCase() === wanted
   );
   if (matches.length > 1)
-    throw new DomainError({
+    return yield* new DomainError({
       code: 'service_ambiguous',
       message: `More than one project has a service called ${reference}. Name the project with --project.`,
     });
   const [view] = matches;
   if (!view)
-    throw new DomainError({
+    return yield* new DomainError({
       code: 'service_not_found',
       message: `No service ${reference}. \`shinsa services list\` lists them.`,
     });
   return view;
-}
+});
 
 function defineServiceAction(action: 'start' | 'stop' | 'restart', summary: string, done: string) {
   return defineAction({
@@ -132,11 +138,11 @@ function defineServiceAction(action: 'start' | 'stop' | 'restart', summary: stri
     summary,
     humanOnly: true,
     fields: [...SERVICE_FIELDS, TASK_RUN_FIELD],
-    act: async (client, values, display) => {
-      const { service } = await findServiceView(client, values);
+    act: Effect.fn('Surface.serviceAction')(function* (client, values, display) {
+      const { service } = yield* findServiceView(client, values);
       const taskRef = readValue(values, 'task');
-      const taskId = await resolveOptionalTaskId(client, taskRef);
-      const data = await client.api.services[action]({
+      const taskId = yield* resolveOptionalTaskId(client, taskRef);
+      const data = yield* client.api.services[action]({
         params: { serviceId: service.id },
         payload: taskId ? { taskId } : {},
       });
@@ -145,7 +151,7 @@ function defineServiceAction(action: 'start' | 'stop' | 'restart', summary: stri
         data,
         text: describeMark(display.style, 'success', 'check', `${done} ${service.name}${scope}.`),
       };
-    },
+    }),
   });
 }
 
@@ -157,10 +163,11 @@ export const SERVICE_SPECS: SurfaceSpec[] = [
     access: 'read',
     humanOnly: true,
     fields: [PROJECT_FIELD],
-    run: async (client, values, display = PLAIN_DISPLAY) => {
-      const read = await readServices(client, readValue(values, 'project'));
-      return { data: { services: read.views }, text: formatServices(read, display) };
-    },
+    run: (client, values, display = PLAIN_DISPLAY) =>
+      Effect.map(readServices(client, readValue(values, 'project')), (read) => ({
+        data: { services: read.views },
+        text: formatServices(read, display),
+      })),
   },
   defineServiceAction('start', 'Start a service in its terminal, as Start does in Shinsa.', 'Started'),
   defineServiceAction(
@@ -185,16 +192,17 @@ export const SERVICE_SPECS: SurfaceSpec[] = [
           'How long it stays shared: until_done (until the task finishes), hour, day, week or none (until you stop it or the task finishes). Left out, the shareLimit setting.',
       },
     ],
-    build: async (values, client) => {
-      const { service } = await findServiceView(client, values);
+    build: Effect.fn('Surface.serviceShare')(function* (values, client) {
+      const { service } = yield* findServiceView(client, values);
       const limit = readValue(values, 'until');
-      return {
+      const command: UserCommand = {
         type: 'preview.share',
-        taskId: await findTaskId(client, readValue(values, 'task')),
+        taskId: yield* findTaskId(client, readValue(values, 'task')),
         serviceId: service.id,
         ...(limit ? { limit: limit as ShareLimit } : {}),
       };
-    },
+      return command;
+    }),
     done: () => 'Shared. Its link shows on the task in a moment.',
   }),
   defineCommand({
@@ -203,14 +211,15 @@ export const SERVICE_SPECS: SurfaceSpec[] = [
     command: 'preview.unshare',
     humanOnly: true,
     fields: [...SERVICE_FIELDS, SHARED_TASK_FIELD],
-    build: async (values, client) => {
-      const { service } = await findServiceView(client, values);
-      return {
+    build: Effect.fn('Surface.serviceUnshare')(function* (values, client) {
+      const { service } = yield* findServiceView(client, values);
+      const command: UserCommand = {
         type: 'preview.unshare',
-        taskId: await findTaskId(client, readValue(values, 'task')),
+        taskId: yield* findTaskId(client, readValue(values, 'task')),
         serviceId: service.id,
       };
-    },
+      return command;
+    }),
     done: () => 'No longer shared.',
   }),
 ];

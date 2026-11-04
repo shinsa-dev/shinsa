@@ -17,6 +17,7 @@ import {
   serializePublicKey,
   verifyEnrollProof,
 } from '@shinsa/core';
+import { Effect } from 'effect';
 
 export async function createKeyPair() {
   return (await crypto.subtle.generateKey(REMOTE_KEY_ALGORITHM, true, ['deriveBits'])) as CryptoKeyPair;
@@ -63,7 +64,7 @@ export class FakeMac {
 
   static async create(options: FakeMacOptions = {}) {
     const machine = await createKeyPair();
-    return new FakeMac(machine, await serializePublicKey(machine.publicKey), options);
+    return new FakeMac(machine, await Effect.runPromise(serializePublicKey(machine.publicKey)), options);
   }
 
   openSocket = (url: string) => {
@@ -158,7 +159,8 @@ export class FakeMacSocket extends EventTarget {
     const keys = { machine: mac.machineKey, device: hello.device, clientEphemeral: hello.ephemeral };
     const secret = mac.options.enrollSecret;
     let redeemed = false;
-    if (hello.enroll !== null && secret) redeemed = await verifyEnrollProof(secret, hello.enroll, keys);
+    if (hello.enroll !== null && secret)
+      redeemed = await Effect.runPromise(verifyEnrollProof(secret, hello.enroll, keys));
     if (!(mac.enrolled.has(hello.device) || redeemed)) {
       this.deliver(
         JSON.stringify({ type: 'refused', reason: 'This browser is not enrolled on this machine.' })
@@ -176,15 +178,19 @@ export class FakeMacSocket extends EventTarget {
       mac.enrolled.add(hello.device);
     }
     const ephemeral = await createKeyPair();
-    const serverEphemeral = await serializePublicKey(ephemeral.publicKey);
-    const session = await deriveServerSession({
-      keys: { ...keys, serverEphemeral },
-      machinePrivateKey: mac.machine.privateKey,
-      serverEphemeralPrivateKey: ephemeral.privateKey,
-    });
+    const serverEphemeral = await Effect.runPromise(serializePublicKey(ephemeral.publicKey));
+    const session = await Effect.runPromise(
+      deriveServerSession({
+        keys: { ...keys, serverEphemeral },
+        machinePrivateKey: mac.machine.privateKey,
+        serverEphemeralPrivateKey: ephemeral.privateKey,
+      })
+    );
     const compression = mac.options.plainFrames ? null : resolveCompression(hello);
-    this.#seal = createFrameSealer(session.send, compression);
-    this.#open = createFrameOpener(session.receive, compression);
+    const seal = createFrameSealer(session.send, compression);
+    const open = createFrameOpener(session.receive, compression);
+    this.#seal = (plain) => Effect.runPromise(seal(plain));
+    this.#open = (frame) => Effect.runPromise(open(frame));
     const welcome = JSON.stringify(
       mac.options.plainFrames
         ? { type: 'welcome', ephemeral: serverEphemeral }

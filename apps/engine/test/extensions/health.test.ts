@@ -1,10 +1,22 @@
-import { afterEach, describe, expect, spyOn, test } from 'bun:test';
+import { afterAll, afterEach, describe, expect, spyOn, test } from 'bun:test';
 import { join } from 'node:path';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { Layer, ManagedRuntime } from 'effect';
 import type { McpDefinition } from '../../src/extensions/definitions.ts';
-import { createServerCheck } from '../../src/extensions/health.ts';
-import { captureLogs } from '../helpers/index.ts';
+import { McpClients } from '../../src/extensions/health/service.ts';
+import { MCP_CHECK_TIMEOUT } from '../../src/extensions/schema.ts';
+import { JsonLogger } from '../../src/log/service.ts';
+import { captureLogs } from '../helpers/logs.ts';
 import { type FakeMcpHttp, startFakeMcpHttp } from '../helpers/mcp/http.ts';
+
+const runtime = ManagedRuntime.make(Layer.merge(McpClients.layer, JsonLogger));
+
+afterAll(() => runtime.dispose());
+
+function createServerCheck(timeout: number | typeof MCP_CHECK_TIMEOUT = MCP_CHECK_TIMEOUT) {
+  return (definition: McpDefinition) =>
+    runtime.runPromise(McpClients.use((clients) => clients.check(definition, timeout)));
+}
 
 const STDIO_SERVER = join(import.meta.dirname, '..', 'helpers', 'mcp', 'stdio-server.ts');
 

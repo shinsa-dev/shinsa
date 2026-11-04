@@ -86,6 +86,8 @@ One definition per term. **Code** is the name in `packages/core`; **UI** is the 
 | schedule (automation) | A trigger (once, interval, daily, webhook) that starts a task, messages one, or watches an integration; on screen a Schedule, a Trigger or a Watch | `Schedule`, `ScheduleSource` | Settings → Automations: Schedule, Trigger, Watch |
 | monitor | An agent's armed wait (`wait_for`): its run ends and a fresh one checks in again later | `Monitor` | "Waiting to check in again" |
 | usage wait | A step paused until a usage limit resets, then resumed on the same session | `UsageWait` | "Waiting for the usage limit" |
+| pace hold | A step held before it starts because the last 24 hours reached the daily or a project's usage limit; it starts when older usage drops out | `UsageWait` with `cause: pace`, `UsagePace` | "Held at a usage limit" |
+| usage forecast | The highest steady daily pace the accounts allow without all of them running out, with each account's timeline | `UsageForecast` (`resolveUsageForecast`) | forecast |
 | account | A Claude login a run is leased on | `RunAccount` | account |
 | provider sign-in | A provider's own login (Codex), named on a Sign in gate with no account | `ProviderSignIn`, `Gate.provider` | "Paused: ‹email› needs signing in" |
 | command | A request to change state; `decide` turns it into events and effects or refuses it | `ShinsaCommand` (`UserCommand`, `AgentCommand`, `SystemCommand`) | not shown |
@@ -212,7 +214,7 @@ one reads as its empty value. The fields under Triage and shape, Plan and build,
 | `projectId?` | string \| null | the project, else none |
 | `request` | string | your request, as written |
 | `title` | string | from triage (the request's first line until then) |
-| `origin` | string \| null | the folder `shinsa do` or `shinsa import` ran in, a hint for triage; `onboarding` for the welcome task setup records |
+| `origin` | string \| null | the folder `shinsa do` ran in, a hint for triage; `onboarding` for the welcome task setup records |
 | `mode?` | `build` \| `ask` | `ask` reads as the answer shape: `tasks create --ask`, a schedule's `just_answer` target |
 | `createdAt`, `updatedAt`, `stageChangedAt` | number | times (ms) |
 
@@ -316,7 +318,7 @@ one reads as its empty value. The fields under Triage and shape, Plan and build,
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `monitor?` | `Monitor` \| null | an agent's armed wait |
-| `usageWait?` | `UsageWait` \| null | a step waiting for a usage reset |
+| `usageWait?` | `UsageWait` \| null | a step waiting for a usage reset, or held at a daily or project limit (`cause: pace`, with `pace`: `scope` `daily` or `project`, `limit`, `percent`, `projectId`, `stageReason`) |
 | `account?` | `RunAccount` \| null | the account the task is bound to |
 | `budgetAcknowledgedUsd?`, `usageAcknowledgedPercent?` | number | what you allowed past the cost and usage limits |
 | `configProblems?` | `ConfigProblem[]` | the problems setup verification found, each a `kind` (`repository`, `no_repository`, `default_branch` or `workspace`) and a `detail`; the checks are never one (`docs/engine.md` → Setup verification) |
@@ -463,6 +465,7 @@ the merge gate, so an open pull request is never left without one.
 | `description` | string | at most 1,000 characters, given to every fresh run |
 | `folders` | string[] | at most 20; every repository one level inside belongs to the project |
 | `watchSources?` | `WatchSource[]` | at most 20 integrations its agents read: `server` (an MCP server), `data`, `repoIds` (none for every repository), `addedBy` (`you` or `agent`), `addedAt`; kept by `project.write` |
+| `usageLimit?` | number | its daily usage limit, % of one account's weekly limit over the last 24 hours, above zero; absent for none; only you change it (`docs/engine.md` → Cost) |
 | `teamIds?` | string[] | the teams that see every task of the project (`docs/engine.md` → Teams); written only by `project.add_to_team` and `project.remove_from_team`, kept by `project.write`; absent for none |
 
 | `Repo` field | Type | Meaning |
@@ -757,7 +760,7 @@ unless an agent's question is open, which it then answers as feedback would. `ne
 (`round.queued`) with the steps of its `shape` (a change without one), which starts when the current one rests (Rounds, above);
 `separate_task` records a split-off suggested task instead (a new round when the task already has ten open
 suggestions). The server sets `kind` from the classifier, unless the message already carries one (`--as`)
-(`triage/message.ts`, `docs/engine.md` → Rounds). Yours is accepted first and classified after: the server turns it
+(`triage/message/service.ts`, `docs/engine.md` → Rounds). Yours is accepted first and classified after: the server turns it
 into `message.receive`, which checks it like `task.message` (`message_required`, `task_settled`) and keeps it in the
 task's `inbox` (`task.message_received`); the classifier's answer comes back as `message.route` with the same `kind`,
 `title`, `why` and `shape` (`MessageRoute`) and the ids of the messages it routes (`messageIds`, every message
@@ -859,7 +862,7 @@ your behalf (`onBehalf`, `byTask`). **Human** = only you: its specs are `humanOn
 | `repo.remove` | forgets a repository | `repos remove` | agent |
 | `focus.change` | sets or clears the focus: `projectId` or `teamId`, never both (`focus_refused`), and `until` | `focus set`, `focus clear` | agent |
 | `away.record` | records a span you were away from your Mac (`from`, `to`), sent by the Mac app's page; refused when it ends before it starts, after now or lasts over 30 days (`away_refused`) | none | **human** |
-| `settings.change` | changes settings (`SETTINGS_KEYS`) | `settings set` | agent; **human** for `approvePlans`, `mergeMethod`, `taskBudgetUsd`, `taskUsageLimit`, `autoResume`, `snoozeLimited`, `accountSwitchAt`, `fastMode`, `agentFastModes`, `delegationLimit`, `shareLimit`, `sharePreset` (`HUMAN_ONLY_SETTINGS`) |
+| `settings.change` | changes settings (`SETTINGS_KEYS`) | `settings set` | agent; **human** for `approvePlans`, `mergeMethod`, `taskBudgetUsd`, `taskUsageLimit`, `dailyUsageLimit`, `autoResume`, `snoozeLimited`, `accountSwitchAt`, `fastMode`, `agentFastModes`, `delegationLimit`, `shareLimit`, `sharePreset` (`HUMAN_ONLY_SETTINGS`) |
 
 Core refuses a command sent on your behalf with `human_only`, recording nothing, when it is a `gate.answer`
 (`assertHumanDecides`), when a gate that was open before it is no longer open after it (`assertGatesStayOpen` in
@@ -984,12 +987,12 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `run.compact` | the supervisor (idle compaction) | records an idle compaction |
 | `runs.dispatch` | the supervisor at boot | starts queued runs |
 | `run.silence` | `agents/silence.ts` | marks or clears a quiet run |
-| `message.deliver` | the supervisor, `agents/questions.ts` | redelivers a message a session never took |
-| `message.receive` | `routeUserCommand`, for your `task.message` without a `kind` | accepts the message into the task's inbox |
-| `message.route`, `message.drop` | `triage/inbox.ts` | delivers the messages waiting in an inbox, together, with the classifier's answer, or drops the ones core refused, with the reason |
+| `message.deliver` | the supervisor, `agents/questions/service.ts` | redelivers a message a session never took |
+| `message.receive` | `CommandRouter`, for your `task.message` without a `kind` | accepts the message into the task's inbox |
+| `message.route`, `message.drop` | `MessageInbox` (`triage/inbox/service.ts`) | delivers the messages waiting in an inbox, together, with the classifier's answer, or drops the ones core refused, with the reason |
 | `monitor.fire` | `MonitorClock` | wakes a monitor |
 | `watchdog.fire` | `WatchdogClock` | checks a watchdog at its `nextCheckAt` (`dueAt`), defers it while the task works, or passes it once its window ended |
-| `usage_wait.resume` | `UsageResumeClock` | resumes a step after the reset |
+| `usage_wait.resume` | `UsageResume` | resumes a step after the reset |
 | `watch_suggestion.record` | the `watch.suggest` effect | records the suggested watch for a new integration (`projectId`, `server`, the Writer's `name` and `text` or null for plain wording, `timeZone`), hourly; does nothing when the integration is gone or watched, was suggested before, or 10 suggestions are open |
 | `feedback.record_draft` | the `feedback.draft` effect | the drafted `title` and `body` of an entry still `drafting`; an empty one fails it |
 | `feedback.record_filed` | the `feedback.file` effect | the new issue's `number` and `url`, for an entry still `filing`; its `openedAt` is now and `closedAt` null |
@@ -1618,7 +1621,7 @@ Behind the scenes).
 | Which settings a run role uses | `packages/core/src/agent-models/index.ts` (`RUN_AGENT_ROLE`) |
 | Rounds, shipping, resting and closed | `packages/core/src/domain/rounds.ts`, `state/rounds.ts`, `decide/rounds.ts` |
 | Test coverage of the change: the setting, the report and diff parsers, the measurement, the summary | `packages/core/src/test-coverage/`; detection and the run in `apps/engine/src/test-coverage/` |
-| The message classifier and routing | `apps/engine/src/triage/message.ts` |
+| The message classifier and routing | `apps/engine/src/triage/message/service.ts`, `apps/engine/src/triage/router/service.ts` |
 | Human-only decisions | `packages/core/src/decide/gates.ts` (`assertHumanDecides`, `assertGatesStayOpen`), `domain/settings.ts` (`HUMAN_ONLY_SETTINGS`, `HUMAN_ONLY_REPO_FIELDS`), `decide/settings.ts` |
 | Gate predicates | `packages/core/src/domain/gates.ts` (`isPausingGate`, `isDecisionGate`, `isAgentQuestion`) |
 | Steps, gates, `validatePipeline`, `PLAN_GATE_RULE` | `packages/core/src/domain/steps.ts`; `needsPlanApproval` in `decide/lifecycle.ts` |
@@ -1644,7 +1647,7 @@ Behind the scenes).
 | Services, their states, suggestions and runs for a task | `packages/core/src/protocol/services.ts` (`ServiceView.taskId`, `ServiceView.url`, `resolveServiceUrl`, `resolveTaskServiceCwd`, `listTaskServices`, `listServiceTaskRuns`); `apps/engine/src/terminals/` (`detect.ts`, `routes.ts`), `apps/engine/src/agents/services.ts` (the agents' tools), `apps/web/src/lib/terminal/services.ts` |
 | State patches, drafts | `packages/core/src/protocol/patch.ts`, `packages/core/src/state/draft.ts` |
 | State snapshots | `apps/engine/src/store/snapshot.ts`, `apps/engine/src/store/event-log.ts` |
-| Event log, receipts, outbox | `apps/engine/src/store/event-log.ts`, `apps/engine/src/runtime/engine.ts` |
+| Event log, receipts, outbox | `apps/engine/src/store/`, `apps/engine/src/runtime/engine/service.ts` |
 | Effect handlers | `apps/engine/src/runtime/effects/` (`runner/service.ts` routes each kind to its area's service) |
 | Agent tools (MCP) | `apps/engine/src/agents/tools/`; the loader tools `apps/engine/src/extensions/loader.ts` |
 | Management tools | `apps/engine/src/agents/manage/` |

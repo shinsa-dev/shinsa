@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import type { AccountSummary } from '@shinsa/core';
+import { Effect } from 'effect';
 import { createSummaryAccountSource } from '../../src/onboarding/accounts.ts';
 
 function summary(overrides: Partial<AccountSummary>): AccountSummary {
@@ -23,13 +24,19 @@ function summary(overrides: Partial<AccountSummary>): AccountSummary {
 
 describe('createSummaryAccountSource', () => {
   test('lists Shinsa’s accounts with their email and whether each can work', async () => {
-    const list = createSummaryAccountSource(() => [
-      summary({}),
-      summary({ id: 'acc-2', email: null }),
-      summary({ id: 'acc-3', signIn: 'signed_out' }),
-      summary({ id: 'acc-4', signIn: 'unknown' }),
-    ]);
-    expect(await list()).toEqual([
+    const list = createSummaryAccountSource(
+      Effect.succeed({
+        accounts: [
+          summary({}),
+          summary({ id: 'acc-2', email: null }),
+          summary({ id: 'acc-3', signIn: 'signed_out' }),
+          summary({ id: 'acc-4', signIn: 'unknown' }),
+        ],
+        login: null,
+        imports: [],
+      })
+    );
+    expect(await Effect.runPromise(list)).toEqual([
       { id: 'acc-1', email: 'me@example.com', signedIn: true },
       { id: 'acc-2', email: null, signedIn: true },
       { id: 'acc-3', email: 'me@example.com', signedIn: false },

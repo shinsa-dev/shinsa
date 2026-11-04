@@ -22,18 +22,24 @@ function isPrivacyRefusal(error: unknown) {
 export const PRIVACY_SETTINGS_URL =
   'x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles';
 
-export class PrivateFoldersError extends DomainError {
-  declare readonly folders: string[];
-  declare readonly picked: string[];
+export interface PrivateFolders extends DomainError {
+  readonly folders: string[];
+  readonly picked: string[];
+}
 
-  static create(folders: string[], picked: string[], userHome: string) {
-    const names = folders.map((folder) => resolveDisplayPath(folder, userHome));
-    const error = new PrivateFoldersError({
-      code: 'roots_private',
-      message: `macOS keeps ${describeList(names, 'and')} private. Turn on Shinsa in System Settings → Privacy & Security → Full Disk Access, then check again.`,
-    });
-    return Object.assign(error, { folders, picked });
-  }
+const PRIVATE_CODE = 'roots_private';
+
+function createPrivateFolders(folders: string[], picked: string[], userHome: string): PrivateFolders {
+  const names = folders.map((folder) => resolveDisplayPath(folder, userHome));
+  const error = new DomainError({
+    code: PRIVATE_CODE,
+    message: `macOS keeps ${describeList(names, 'and')} private. Turn on Shinsa in System Settings → Privacy & Security → Full Disk Access, then check again.`,
+  });
+  return Object.assign(error, { folders, picked });
+}
+
+export function isPrivateFolders(error: DomainError): error is PrivateFolders {
+  return error.code === PRIVATE_CODE && 'folders' in error && 'picked' in error;
 }
 
 function isReadable(root: string, read: (path: string) => unknown) {
@@ -75,6 +81,6 @@ export function resolveChosenRoots(
     if (isReadable(root, read)) roots.push(root);
     else refused.push(root);
   }
-  if (refused.length > 0) throw PrivateFoldersError.create(refused, picked, userHome);
+  if (refused.length > 0) throw createPrivateFolders(refused, picked, userHome);
   return roots;
 }

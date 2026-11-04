@@ -12,10 +12,10 @@ import {
   CloudflaredTarget,
 } from '../../src/remote/cloudflared/schema.ts';
 import { Cloudflared } from '../../src/remote/cloudflared/service.ts';
-import { runCommand } from '../../src/shell/index.ts';
 import { CommandNotFound } from '../../src/shell/schema.ts';
 import { Shell } from '../../src/shell/service.ts';
 import { createTempDir } from '../helpers/index.ts';
+import { runCommand } from '../helpers/shell.ts';
 
 function sha256(bytes: Uint8Array) {
   return createHash('sha256').update(bytes).digest('hex');

@@ -14,7 +14,7 @@ to the daemon. The two set the pattern; Shinsa takes what works from each.
 | The daemon | `tailscaled`, its own binary, run by systemd or the macOS app | `dockerd`, run by the app inside its VM | the app's own engine, the same binary as the command, run by launchd as a login item |
 | Running the daemon by hand | `tailscaled` is not a `tailscale` command | not a `docker` command | not in the help: `shinsa engine` exists only for the launchd job and `bun dev` |
 | Daemon controls | `up`, `down`, `status` (exits 1 when stopped), `version` (with `--daemon`) | `docker desktop start`, `stop`, `restart`, `status`, `logs`, `version`, `update` | `start`, `stop`, `restart` (also `--when-idle`), `status`, `logs`, `version`, at the top level |
-| Day-to-day work | one flat list of verbs (`ping`, `ssh`, `file`, `serve`) | `docker --help` puts Common Commands first, then Management Commands (`container`, `image`, `system`…) | the commands that open Shinsa and hand it work first (`.`, `open`, `do`, `import`), then the engine's, then the groups, each section titled by what its commands do |
+| Day-to-day work | one flat list of verbs (`ping`, `ssh`, `file`, `serve`) | `docker --help` puts Common Commands first, then Management Commands (`container`, `image`, `system`…) | the commands that open Shinsa and hand it work first (`.`, `open`, `do`), then the engine's, then the groups, each section titled by what its commands do |
 | When the daemon is down | commands fail and say so | commands fail and say so | a command that needs the engine starts it through launchd and carries on; only `status` and `version` report without starting it |
 | Machine output | `--json` on some commands | `--format json` on some commands | `--json` on every command, with errors as JSON too |
 
@@ -86,6 +86,17 @@ Mac app runs the engine and it is not answering, a command asks launchd to start
 `version` only report. `start`, `stop` and `restart` work only with the `shinsa` the app puts on your PATH
 (`~/.local/bin/shinsa`, linked on every launch, in zsh, bash and fish), on the engine the app set up; from source, `bun dev` runs the engine in a terminal.
 
+## How a command runs
+
+A command is one Effect program, `executeCli(argv)` in `apps/engine/src/cli/index.ts`, which answers the exit code.
+The binary (`src/main.ts`, and `scripts/engine-main.ts` in the compiled bundle) runs it once with
+`BunRuntime.runMain` on `CliLayer` (`cli/layers.ts`: the JSON logger, `config.json`, git and the shell) and sets
+`process.exitCode` to what it answers; nothing inside `src/cli` runs an effect itself. The calls to the engine are
+core's `EngineApi` through `HttpApiClient`, the same calls the agents' management tools make, and every
+`shinsa <group> <action>` runs its surface spec inside the same program. A failure prints `Error:` and its hint and
+answers 1. Tests run the program through `runCli(args, io)` in `apps/engine/test/cli/harness.ts`, with an io that
+records what it writes.
+
 <!-- Everything below is generated from apps/engine/src/cli and apps/engine/src/surface by `bun run --cwd apps/engine docs:cli`, and a test fails when it falls behind. -->
 
 ## Open Shinsa and hand it work
@@ -124,22 +135,6 @@ $ shinsa do "add search to the docs" --plan-first
 | --- | --- |
 | `--plan-first` | Wait for you to approve a plan before building. |
 | `--backlog` | Plan it now and keep it in the backlog until you start building it. |
-| `--urgent` | Put it ahead of everything else. |
-| `--high` | Put it ahead of normal work. |
-
-### shinsa import
-
-Create a task from a Claude Code session, starting with a plan to approve. Takes a session file (.jsonl) or a session id. The task starts with a plan for you to approve, so nothing builds until you have looked.
-
-```
-shinsa import <session> [--in <folder>] [--urgent | --high]
-$ shinsa import 0b9c2f4e-6a8d
-$ shinsa import ~/session.jsonl --in ~/Developer/shop
-```
-
-| Option | What it does |
-| --- | --- |
-| `--in <folder>` | Work in this folder instead of the one the session ran in. |
 | `--urgent` | Put it ahead of everything else. |
 | `--high` | Put it ahead of normal work. |
 
@@ -1423,7 +1418,7 @@ Every task agent's tool: `settings_get` (reads).
 
 | Argument | Kind | What it is |
 | --- | --- | --- |
-| `<key>` | text, optional | One of defaultProvider, defaultModel, maxFixRounds, delegationLimit, mergeMethod, attentionLimit, approvePlans, agentModels, agentProviders, agentFastModes, taskBudgetUsd, taskUsageLimit, autoResume, snoozeLimited, accountSwitchAt, idleCompaction, compactionLeadMinutes, compaction, fastMode, watchdogHours, watchdogFirstCheckMinutes, watchdogMaxGapHours, taskCapacity, placementPolicies, shareLimit, sharePreset. |
+| `<key>` | text, optional | One of defaultProvider, defaultModel, maxFixRounds, delegationLimit, mergeMethod, attentionLimit, approvePlans, agentModels, agentProviders, agentFastModes, taskBudgetUsd, taskUsageLimit, dailyUsageLimit, autoResume, snoozeLimited, accountSwitchAt, idleCompaction, compactionLeadMinutes, compaction, fastMode, watchdogHours, watchdogFirstCheckMinutes, watchdogMaxGapHours, taskCapacity, placementPolicies, shareLimit, sharePreset. |
 
 #### shinsa settings set
 
@@ -1437,7 +1432,7 @@ Every task agent's tool: `settings_set`. Sends `settings.change`.
 
 | Argument | Kind | What it is |
 | --- | --- | --- |
-| `<key>` | text, required | One of defaultProvider, defaultModel, maxFixRounds, delegationLimit, mergeMethod, attentionLimit, approvePlans, agentModels, agentProviders, agentFastModes, taskBudgetUsd, taskUsageLimit, autoResume, snoozeLimited, accountSwitchAt, idleCompaction, compactionLeadMinutes, compaction, fastMode, watchdogHours, watchdogFirstCheckMinutes, watchdogMaxGapHours, taskCapacity, placementPolicies, shareLimit, sharePreset. Only the human changes approvePlans, mergeMethod, taskBudgetUsd, taskUsageLimit, autoResume, snoozeLimited, accountSwitchAt, fastMode, agentFastModes, delegationLimit, shareLimit, sharePreset. |
+| `<key>` | text, required | One of defaultProvider, defaultModel, maxFixRounds, delegationLimit, mergeMethod, attentionLimit, approvePlans, agentModels, agentProviders, agentFastModes, taskBudgetUsd, taskUsageLimit, dailyUsageLimit, autoResume, snoozeLimited, accountSwitchAt, idleCompaction, compactionLeadMinutes, compaction, fastMode, watchdogHours, watchdogFirstCheckMinutes, watchdogMaxGapHours, taskCapacity, placementPolicies, shareLimit, sharePreset. Only the human changes approvePlans, mergeMethod, taskBudgetUsd, taskUsageLimit, dailyUsageLimit, autoResume, snoozeLimited, accountSwitchAt, fastMode, agentFastModes, delegationLimit, shareLimit, sharePreset. |
 | `<value>` | text, required | The new value. |
 
 ### projects
@@ -1471,7 +1466,7 @@ Every task agent's tool: `projects_show` (reads).
 Create a project, or change one with --id.
 
 ```
-shinsa projects write [--id <text>] [--name <text>] [--key <text>] [--color <blue|purple|green|orange|pink|sky|amber|red>] [--description <text>] [--folders <list>] [--json]
+shinsa projects write [--id <text>] [--name <text>] [--key <text>] [--color <blue|purple|green|orange|pink|sky|amber|red>] [--description <text>] [--folders <list>] [--usage-limit <number>] [--json]
 ```
 
 Every task agent's tool: `projects_write`. Sends `project.write`.
@@ -1484,6 +1479,7 @@ Every task agent's tool: `projects_write`. Sends `project.write`.
 | `--color` | choice, optional | Its colour. |
 | `--description` | text, optional | What the project is. Agents read it. |
 | `--folders` | list, optional | Folders whose repositories all belong to it, replacing the ones it has. Repeat the option for each. |
+| `--usage-limit` | number, optional | Its daily usage limit: % of one account’s weekly limit over the last 24 hours, 0 to turn it off. Only the human changes it. |
 
 #### shinsa projects remove
 

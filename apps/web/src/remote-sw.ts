@@ -1,8 +1,6 @@
-import {
-  type NotificationClients,
-  openNotificationTarget,
-  readNotificationPath,
-} from '@/lib/notifications/worker.ts';
+import { Effect } from 'effect';
+import type { NotificationClients } from '@/lib/notifications/schema.ts';
+import { openNotificationTarget, readNotificationPath } from '@/lib/notifications/worker.ts';
 import { isRelayedRequest, type RelayClients, relayRequest } from '@/lib/remote/relay.ts';
 
 interface ExtendableEventLike extends Event {
@@ -42,11 +40,15 @@ worker.addEventListener('activate', (event) => {
 
 worker.addEventListener('fetch', (event) => {
   if (!isRelayedRequest(event.request, worker.location.origin)) return;
-  event.respondWith(relayRequest(event.request, event.clientId, worker.clients));
+  event.respondWith(Effect.runPromise(relayRequest(event.request, event.clientId, worker.clients)));
 });
 
 worker.addEventListener('notificationclick', (event) => {
   event.notification.close();
   const path = readNotificationPath(event.notification.data);
-  event.waitUntil(openNotificationTarget(path, worker.registration.scope, worker.clients));
+  event.waitUntil(
+    Effect.runPromise(
+      openNotificationTarget(path, worker.registration.scope, worker.clients).pipe(Effect.ignore)
+    )
+  );
 });

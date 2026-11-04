@@ -17,6 +17,7 @@ import {
   serializeSlackDecisionValue,
   verifySlackForwardSignature,
 } from '@shinsa/core';
+import { Effect } from 'effect';
 import { SLACK_BOT_SCOPES } from '../src/integrations/slack/schema.ts';
 import { SLACK_DECISION_REFUSALS } from '../src/routes/slack-events/schema.ts';
 import { SLACK_USER_SCOPES } from '../src/routes/slack-link/schema.ts';
@@ -78,6 +79,7 @@ function createFakeSlack(harness: Harness): FakeSlack {
       ok: true,
       permalink: `https://acme.slack.com/archives/C1/p${body.message_ts}`,
     }),
+    'conversations.info': (body) => ({ ok: true, channel: { id: body.channel, name: 'support' } }),
     'chat.postMessage': () => ({ ok: true, ts: `300.${++posted}` }),
     'chat.update': () => ({ ok: true }),
     'chat.postEphemeral': () => ({ ok: true, message_ts: '300.0' }),
@@ -294,7 +296,7 @@ describe('connecting Slack to a machine', () => {
     expect(install.origin + install.pathname).toBe('https://slack.com/oauth/v2/authorize');
     expect(install.searchParams.get('team')).toBe('T1');
     expect(install.searchParams.get('scope')).toBe(
-      'app_mentions:read,channels:history,groups:history,chat:write,reactions:write,users:read'
+      'app_mentions:read,channels:history,channels:read,groups:history,groups:read,chat:write,reactions:write,users:read'
     );
     const linked = await followAuthorize(
       harness,
@@ -551,7 +553,7 @@ describe('a mention from someone', () => {
   });
 
   test('linked reaches their machine signed with its connect key, as readable text with its own message', async () => {
-    const { harness, machine, forwards } = await setUp();
+    const { harness, machine, forwards, slack } = await setUp();
     await sendEvent(harness, mentionEnvelope({ text: '<@B0T> ask <@U2> about <#C2|ops>' }));
     expect(forwards).toHaveLength(1);
     const [forward] = forwards;
@@ -560,7 +562,9 @@ describe('a mention from someone', () => {
       timestamp: forward?.headers.get(SLACK_FORWARD_HEADERS.timestamp) ?? null,
     };
     expect(
-      await verifySlackForwardSignature(machine.connectKey, signature, forward?.body ?? '', harness.clock.now)
+      await Effect.runPromise(
+        verifySlackForwardSignature(machine.connectKey, signature, forward?.body ?? '', harness.clock.now)
+      )
     ).toBe(true);
     const mention = JSON.parse(forward?.body ?? '') as SlackMention;
     expect(mention).toMatchObject({
@@ -572,7 +576,9 @@ describe('a mention from someone', () => {
       userName: 'Christo',
       text: 'ask @Mia about #ops',
       permalink: 'https://acme.slack.com/archives/C1/p100.1',
+      channelName: 'support',
     });
+    expect(slack.callsTo('conversations.info')[0]?.body).toMatchObject({ channel: 'C1' });
     expect(mention.thread).toEqual([
       { ts: '100.1', userId: 'U1', userName: 'Christo', text: 'ask @Mia about #ops', bot: false },
     ]);
@@ -599,11 +605,13 @@ describe('a mention from someone', () => {
       ],
     });
     slack.answers['chat.getPermalink'] = () => ({ ok: false, error: 'channel_not_found' });
+    slack.answers['conversations.info'] = () => ({ ok: false, error: 'missing_scope' });
     await sendEvent(harness, mentionEnvelope({ ts: '90.9', thread_ts: '90.1' }));
     const mention = JSON.parse(forwards[0]?.body ?? '') as SlackMention;
     expect(slack.callsTo('conversations.replies')[0]?.body).toMatchObject({ channel: 'C1', ts: '90.1' });
     expect(mention.threadTs).toBe('90.1');
     expect(mention.permalink).toBeNull();
+    expect(mention.channelName).toBeNull();
     expect(mention.thread.map((message) => [message.userName, message.text, message.bot])).toEqual([
       ['Mia', 'Deploys fail since Monday.', false],
       ['CI', 'Build #12 failed.', true],
@@ -1014,11 +1022,13 @@ describe('deciding from the card', () => {
       timestamp: decision?.headers.get(SLACK_FORWARD_HEADERS.timestamp) ?? null,
     };
     expect(
-      await verifySlackForwardSignature(
-        machine.connectKey,
-        signature,
-        JSON.stringify(decision?.body),
-        harness.clock.now
+      await Effect.runPromise(
+        verifySlackForwardSignature(
+          machine.connectKey,
+          signature,
+          JSON.stringify(decision?.body),
+          harness.clock.now
+        )
       )
     ).toBe(true);
     expect(replies).toEqual([

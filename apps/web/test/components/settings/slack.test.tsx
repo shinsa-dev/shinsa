@@ -54,7 +54,7 @@ describe('Settings → General → Slack', () => {
   it('lists each connected workspace, offers another, and disconnects after asking', async () => {
     const actions = renderGroup(snapshot({ links: [LINK] }));
     expect(screen.getByText('Overclock')).toBeTruthy();
-    expect(screen.getByText(/as Christo$/)).toBeTruthy();
+    expect(screen.getByText(/^Connected /)).toBeTruthy();
     expect(screen.getByText('Connect another workspace').closest('a')?.getAttribute('href')).toBe(
       CONNECT_URL
     );

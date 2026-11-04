@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { DomainError, type StoredAttachment } from '@shinsa/core';
 import { Context, Effect, Layer, Option, Schema } from 'effect';
+import { EngineConfig } from '../../config/service.ts';
 import {
   ATTACHMENT_LIMIT_BYTES,
   ATTACHMENT_ROUTE,
@@ -20,22 +21,23 @@ export class Attachments extends Context.Service<
     selectFile(name: string): Effect.Effect<Option.Option<string>>;
   }
 >()('shinsa/engine/store/attachments/Attachments') {
-  static layer(dir: string) {
-    const isId = Schema.is(AttachmentId);
-    const isFileName = Schema.is(AttachmentFileName);
+  static readonly layer = Layer.effect(
+    Attachments,
+    Effect.gen(function* () {
+      const dir = (yield* EngineConfig).attachmentsDir;
+      const isId = Schema.is(AttachmentId);
+      const isFileName = Schema.is(AttachmentFileName);
 
-    const resolveFileName = (name: string) => {
-      const [stem = '', extension = ''] = /^(.*?)((?:\.[A-Za-z0-9]{1,10})?)$/.exec(name)?.slice(1) ?? [];
-      const safe = stem
-        .replace(/[^\w-]+/g, '-')
-        .replace(/^[-_]+|-+$/g, '')
-        .slice(0, FILE_NAME_LIMIT);
-      return `${safe || 'file'}${extension.toLowerCase()}`;
-    };
+      const resolveFileName = (name: string) => {
+        const [stem = '', extension = ''] = /^(.*?)((?:\.[A-Za-z0-9]{1,10})?)$/.exec(name)?.slice(1) ?? [];
+        const safe = stem
+          .replace(/[^\w-]+/g, '-')
+          .replace(/^[-_]+|-+$/g, '')
+          .slice(0, FILE_NAME_LIMIT);
+        return `${safe || 'file'}${extension.toLowerCase()}`;
+      };
 
-    return Layer.succeed(
-      Attachments,
-      Attachments.of({
+      return Attachments.of({
         write: Effect.fn('Attachments.write')(function* (upload) {
           const bytes = Buffer.from(upload.data, 'base64');
           if (bytes.byteLength === 0) return yield* new DomainError(EMPTY);
@@ -64,7 +66,7 @@ export class Attachments extends Context.Service<
             const path = join(dir, id, fileName);
             return existsSync(path) && statSync(path).isFile() ? Option.some(path) : Option.none();
           }),
-      })
-    );
-  }
+      });
+    })
+  );
 }

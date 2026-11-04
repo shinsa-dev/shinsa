@@ -1,5 +1,6 @@
 import {
   type Briefing,
+  type DomainError,
   createState,
   type Gate,
   type Repo,
@@ -12,7 +13,9 @@ import {
   type ShinsaState,
   type Task,
 } from '@shinsa/core';
-import type { Engine } from '../../src/runtime/index.ts';
+import { Effect } from 'effect';
+import type { EngineCore } from '../../src/runtime/engine/service.ts';
+import type { Engine } from './engine.ts';
 
 export function createRepo(overrides: Partial<Repo> = {}): Repo {
   return {
@@ -183,6 +186,25 @@ export function createStubEngine(patch: (state: ShinsaState) => void = () => und
       return Promise.resolve();
     },
   };
+  const core = {
+    readOnly: false,
+    problems: [],
+    state: Effect.sync(() => state),
+    observe: (listener: (state: ShinsaState) => void) =>
+      Effect.asVoid(
+        Effect.acquireRelease(
+          Effect.sync(() => listeners.add(listener)),
+          () => Effect.sync(() => listeners.delete(listener))
+        )
+      ),
+    dispatch: (command: ShinsaCommand, options: { id?: string } = {}) =>
+      Effect.tryPromise({
+        try: () => stub.dispatch(command, options),
+        catch: (error) => error as DomainError,
+      }),
+    replaceHandlers: () => Effect.void,
+  };
+  Object.assign(stub, { core: core as unknown as EngineCore['Service'] });
   return {
     engine: stub as unknown as Engine,
     state,

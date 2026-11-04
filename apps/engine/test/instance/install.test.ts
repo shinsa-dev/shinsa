@@ -1,6 +1,8 @@
 import { describe, expect, test } from 'bun:test';
 import { join } from 'node:path';
 import { ENGINE_PROTOCOL } from '@shinsa/core';
+import { Effect } from 'effect';
+import { GitCommands } from '../../src/git/layers.ts';
 import {
   createServerInstance,
   describeVersion,
@@ -9,6 +11,7 @@ import {
   resolveHealth,
   resolveServerInstance,
 } from '../../src/instance/index.ts';
+import { runTest } from '../harness.ts';
 import { createTempDir } from '../helpers/index.ts';
 
 describe('which Shinsa is running', () => {
@@ -19,7 +22,7 @@ describe('which Shinsa is running', () => {
 
   test('carries the package version, this process and the checkout’s commit when there is one', async () => {
     const before = Date.now();
-    const instance = await resolveServerInstance();
+    const instance = await runTest(resolveServerInstance().pipe(Effect.provide(GitCommands)));
     expect(instance).toEqual({
       version: '0.0.0',
       commit: expect.stringMatching(/^[0-9a-f]{40}$/),
@@ -28,7 +31,9 @@ describe('which Shinsa is running', () => {
       startedAt: expect.any(Number),
     });
     expect(instance.startedAt).toBeGreaterThanOrEqual(before);
-    expect((await resolveServerInstance(createTempDir())).commit).toBeNull();
+    expect(
+      (await runTest(resolveServerInstance(createTempDir()).pipe(Effect.provide(GitCommands)))).commit
+    ).toBeNull();
     expect(createServerInstance(null, 5)).toMatchObject({ commit: null, startedAt: 5 });
   });
 

@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { Effect } from 'effect';
 import { serveStatic } from '../../src/http/static.ts';
 
 const dirs: string[] = [];
@@ -22,7 +23,7 @@ afterEach(() => {
 
 describe('serveStatic', () => {
   test('lets the browser keep a hashed asset for good, so a reload and the Mac app read it from disk', async () => {
-    const response = await serveStatic(createWebDir(), '/assets/index-a1b2.js');
+    const response = await Effect.runPromise(serveStatic(createWebDir(), '/assets/index-a1b2.js'));
     expect(await response.text()).toBe('run()');
     expect(response.headers.get('cache-control')).toBe('public, max-age=31536000, immutable');
   });
@@ -30,7 +31,7 @@ describe('serveStatic', () => {
   test('has the page and unhashed files checked again every time, so a new build shows at once', async () => {
     const dir = createWebDir();
     for (const path of ['/', '/tasks/SW-1', '/favicon.svg']) {
-      expect((await serveStatic(dir, path)).headers.get('cache-control')).toBe('no-cache');
+      expect((await Effect.runPromise(serveStatic(dir, path))).headers.get('cache-control')).toBe('no-cache');
     }
   });
 });

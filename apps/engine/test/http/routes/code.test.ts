@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, test } from 'bun:test';
-import { symlinkSync, writeFileSync } from 'node:fs';
+import { rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { CODE_LIMITS, type SearchLine, type ShinsaState, type TaskDiff, type TaskRefs } from '@shinsa/core';
-import { createWorktree, removeWorktree } from '../../../src/git/index.ts';
+import { createWorktree, removeWorktree } from '../../helpers/git.ts';
 import { createGitRepo, createTempDir, git, writeFiles } from '../../helpers/index.ts';
 import { disposeWebHandlers } from '../../helpers/web.ts';
 import { startRoutes } from './harness.ts';
@@ -246,6 +246,19 @@ describe('code reads', () => {
     const task = state.tasks[taskId];
     if (task) state.tasks[taskId] = { ...task, branch: 'feat/deleted', worktreePath: null };
     expect(await (await call('refs')).json()).toMatchObject({ error: { code: 'code_unavailable' } });
+  });
+
+  test('a working copy git cannot read is a request failure, and a diff git cannot make a diff failure', async () => {
+    const { repo, worktree, call, baseSha, head } = await startWithTask();
+    const blob = await git(repo.path, 'rev-parse', `${head}:src/app.ts`);
+    rmSync(join(repo.path, '.git', 'objects', blob.slice(0, 2), blob.slice(2)));
+    expect(await (await call(`diff?base=${baseSha}&head=${head}`)).json()).toMatchObject({
+      error: { code: 'diff_failed' },
+    });
+    rmSync(join(worktree, '.git'));
+    expect(await (await call(`diff?base=${baseSha}&head=working`)).json()).toMatchObject({
+      error: { code: 'request_failed' },
+    });
   });
 
   test('a task without a repository, or no task at all, has no code', async () => {

@@ -1,5 +1,8 @@
 import { diff } from '@codemirror/merge';
 import { resolveEditRefusal, type Task, type TaskRefs, WORKING_REF } from '@shinsa/core';
+import { Deferred, Effect } from 'effect';
+import { forkApp } from '@/lib/runtime/app.ts';
+import { enterPromise } from '@/lib/runtime/promise.ts';
 
 export type FileSave = { kind: 'saved'; changed: boolean } | { kind: 'changed'; content: string | null };
 
@@ -132,7 +135,7 @@ export const DELETED_NOTICE = 'This file was deleted on disk. Your next edit put
 export class FileSaver {
   #disk: string | null;
   #timer: ReturnType<typeof setTimeout> | null = null;
-  #saving: Promise<void> | null = null;
+  #saving: Deferred.Deferred<void> | null = null;
   #again = false;
   #reloads: { previous: string | null; next: string | null }[] = [];
   #state: SaverState = { saving: false, notice: null, refusal: null };
@@ -152,17 +155,20 @@ export class FileSaver {
     this.#cancelTimer();
     this.#timer = setTimeout(() => {
       this.#timer = null;
-      void this.#save();
+      this.#start();
     }, this.#options.delayMs ?? 600);
     if (this.#state.notice) this.#update({ notice: null });
   }
 
-  async flush() {
-    if (this.#timer) {
-      this.#cancelTimer();
-      await this.#save();
-    }
-    while (this.#saving !== null) await this.#saving;
+  flush() {
+    return Effect.gen({ self: this }, function* () {
+      if (this.#timer) {
+        this.#cancelTimer();
+        const started = this.#start();
+        if (started) yield* Deferred.await(started);
+      }
+      while (this.#saving !== null) yield* Deferred.await(this.#saving);
+    });
   }
 
   reload(previous: string | null, next: string | null) {
@@ -188,38 +194,47 @@ export class FileSaver {
     this.#options.onState(this.#state);
   }
 
-  #save(): Promise<void> {
+  #start() {
     if (this.#saving !== null) {
       this.#again = true;
       return this.#saving;
     }
     const text = this.#options.read();
-    if (text === this.#disk) return Promise.resolve();
+    if (text === this.#disk) return null;
     this.#update({ saving: true });
-    this.#saving = this.#write(text).finally(() => {
+    const saving = Deferred.makeUnsafe<void>();
+    this.#saving = saving;
+    forkApp(this.#write(text).pipe(Effect.ensuring(this.#finish(saving))));
+    return saving;
+  }
+
+  #finish(saving: Deferred.Deferred<void>) {
+    const settle = Effect.sync(() => {
       this.#saving = null;
       this.#update({ saving: false });
       for (const { previous, next } of this.#reloads.splice(0)) this.reload(previous, next);
       if (!this.#again) return;
       this.#again = false;
-      void this.#save();
+      this.#start();
     });
-    return this.#saving;
+    return Effect.andThen(settle, Deferred.succeed(saving, undefined));
   }
 
-  async #write(text: string) {
+  #write(text: string) {
     const base = this.#disk;
-    try {
-      const result = await this.#options.save(text, base);
-      if (result.kind === 'saved') {
-        this.#disk = text;
-        this.#options.onSaved(text);
-      } else {
-        this.#absorb(base, result.content);
-      }
-    } catch (error) {
-      this.#update({ refusal: error instanceof Error ? error.message : String(error) });
-    }
+    return enterPromise(() => this.#options.save(text, base)).pipe(
+      Effect.match({
+        onFailure: (failed) => this.#update({ refusal: failed.message }),
+        onSuccess: (result) => {
+          if (result.kind === 'saved') {
+            this.#disk = text;
+            this.#options.onSaved(text);
+          } else {
+            this.#absorb(base, result.content);
+          }
+        },
+      })
+    );
   }
 
   #absorb(base: string | null, theirs: string | null) {

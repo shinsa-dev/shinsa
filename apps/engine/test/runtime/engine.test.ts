@@ -6,13 +6,15 @@ import { join } from 'node:path';
 import { DomainError, type Repo, type ShinsaCommand, type ShinsaEffect } from '@shinsa/core';
 import { Duration, Effect, Option, Schedule } from 'effect';
 import { log as logger } from '../../src/log/index.ts';
-import { type EffectRetry, Engine } from '../../src/runtime/engine.ts';
+import { type EffectRetry } from '../../src/runtime/engine/schema.ts';
 import { resolveEffectRetryDelay } from '../../src/runtime/failures/retry.ts';
 import { EFFECT_BACKOFF, EffectFailed, MAX_EFFECT_ATTEMPTS } from '../../src/runtime/failures/schema.ts';
-import { type CommandResult, runCommand } from '../../src/shell/index.ts';
-import { EventLog } from '../../src/store/index.ts';
+import { type CommandResult } from '../../src/shell/schema.ts';
+import { Engine } from '../helpers/engine.ts';
+import { openEventLog, type TestEventLog } from '../helpers/event-log.ts';
 import { awaitEffect, until } from '../helpers/index.ts';
 import { captureLogs } from '../helpers/logs.ts';
+import { runCommand } from '../helpers/shell.ts';
 
 const dirs: string[] = [];
 
@@ -75,7 +77,7 @@ async function startPlanning(engine: Engine) {
   return taskId;
 }
 
-function selectKey(log: EventLog, kind: string) {
+function selectKey(log: TestEventLog, kind: string) {
   const key = log.listEffectStatuses().find((row) => row.kind === kind)?.key;
   if (!key) throw new Error(`no ${kind} effect`);
   return key;
@@ -84,7 +86,7 @@ function selectKey(log: EventLog, kind: string) {
 describe('engine', () => {
   test('commands persist as events and replay into the same state', async () => {
     const path = createDatabasePath();
-    const log = new EventLog(path);
+    const log = openEventLog(path);
     const engine = new Engine(log);
     const effects: ShinsaEffect[] = [];
     engine.onEffect((effect) => {
@@ -102,13 +104,13 @@ describe('engine', () => {
     engine.stop();
     log.close();
 
-    const replayed = new Engine(new EventLog(path));
+    const replayed = new Engine(openEventLog(path));
     expect(replayed.state.seq).toBe(engine.state.seq);
     expect(replayed.state.tasks).toEqual(engine.state.tasks);
   });
 
   test('a rejected command leaves no events and keeps the queue moving', async () => {
-    const engine = new Engine(new EventLog(createDatabasePath()));
+    const engine = new Engine(openEventLog(createDatabasePath()));
     const before = engine.state.seq;
     await expect(engine.dispatch({ type: 'task.create', request: '   ', repoId: null })).rejects.toThrow(
       'Describe what you want done.'
@@ -119,7 +121,7 @@ describe('engine', () => {
   });
 
   test('a throwing listener cannot drop the effects of a committed command', async () => {
-    const log = new EventLog(createDatabasePath());
+    const log = openEventLog(createDatabasePath());
     const engine = new Engine(log);
     const seen: string[] = [];
     engine.subscribe(() => {
@@ -140,7 +142,7 @@ describe('engine', () => {
 describe('command receipts', () => {
   test('a command sent twice under one id is applied once, and the repeat answers with the same events', async () => {
     const path = createDatabasePath();
-    const engine = new Engine(new EventLog(path));
+    const engine = new Engine(openEventLog(path));
     const command: ShinsaCommand = { type: 'task.create', request: 'Fix the tab scroll', repoId: null };
     const first = await engine.dispatch(command, { id: 'client:a' });
     const seq = engine.state.seq;
@@ -148,13 +150,13 @@ describe('command receipts', () => {
     expect(again).toEqual(first);
     expect(engine.state.seq).toBe(seq);
     expect(Object.keys(engine.state.tasks)).toHaveLength(1);
-    const restarted = new Engine(new EventLog(path));
+    const restarted = new Engine(openEventLog(path));
     expect(await restarted.dispatch(command, { id: 'client:a' })).toEqual(first);
     expect(restarted.state.seq).toBe(seq);
   });
 
   test('an id already used for another command is refused, and the command it belongs to is untouched', async () => {
-    const engine = new Engine(new EventLog(createDatabasePath()));
+    const engine = new Engine(openEventLog(createDatabasePath()));
     await engine.dispatch({ type: 'focus.change', projectId: null, until: 1 }, { id: 'client:b' });
     const seq = engine.state.seq;
     await expect(
@@ -168,7 +170,7 @@ describe('command receipts', () => {
   });
 
   test('a refusal is remembered: the same id gets the same answer, even once the command would pass', async () => {
-    const engine = new Engine(new EventLog(createDatabasePath()));
+    const engine = new Engine(openEventLog(createDatabasePath()));
     await engine.dispatch({
       type: 'project.write',
       project: { name: 'Superwall', color: 'blue', key: 'SUP' },
@@ -189,7 +191,7 @@ describe('command receipts', () => {
   });
 
   test('a command that changes nothing still answers its repeat, and an unexpected failure is remembered too', async () => {
-    const engine = new Engine(new EventLog(createDatabasePath()));
+    const engine = new Engine(openEventLog(createDatabasePath()));
     expect(await engine.dispatch({ type: 'runs.dispatch' }, { id: 'client:e' })).toEqual([]);
     expect(await engine.dispatch({ type: 'runs.dispatch' }, { id: 'client:e' })).toEqual([]);
     const broken = { type: 'task.create', request: null, repoId: null } as unknown as ShinsaCommand;
@@ -204,7 +206,7 @@ describe('command receipts', () => {
 describe('a damaged event log', () => {
   test('boots with every event it can replay, reports the rest and keeps numbering after the last row', async () => {
     const path = createDatabasePath();
-    const first = new Engine(new EventLog(path));
+    const first = new Engine(openEventLog(path));
     const { taskId } = await seedTask(first);
     await first.dispatch({ type: 'focus.change', projectId: null, until: 42 });
     await first.dispatch({ type: 'task.prioritize', taskId, priority: 'high' });
@@ -216,25 +218,25 @@ describe('a damaged event log', () => {
       last,
     ]);
     db.close();
-    const engine = new Engine(new EventLog(path));
+    const engine = new Engine(openEventLog(path));
     expect(engine.state.focus.until).toBe(42);
     expect(engine.state.tasks[taskId]).toBeUndefined();
     expect(engine.state.seq).toBe(last);
     expect(engine.problems.map((problem) => problem.kind)).toEqual(['unreadable']);
     await engine.dispatch({ type: 'focus.change', projectId: null, until: 43 });
     expect(engine.state.seq).toBe(last + 1);
-    expect(new Engine(new EventLog(path)).state.focus.until).toBe(43);
+    expect(new Engine(openEventLog(path)).state.focus.until).toBe(43);
   });
 
   test('an event that cannot be applied is skipped and reported, and the ones after it still apply', async () => {
     const path = createDatabasePath();
-    const first = new Engine(new EventLog(path));
+    const first = new Engine(openEventLog(path));
     await first.dispatch({ type: 'focus.change', projectId: null, until: 1 });
     await first.dispatch({ type: 'focus.change', projectId: null, until: 2 });
     const db = new Database(path);
     db.run(`UPDATE events SET type = 'task.created', payload = '{"type":"task.created"}' WHERE seq = 1`);
     db.close();
-    const engine = new Engine(new EventLog(path));
+    const engine = new Engine(openEventLog(path));
     expect(engine.state.focus.until).toBe(2);
     expect(engine.problems).toEqual([
       expect.objectContaining({ seq: 1, type: 'task.created', kind: 'unappliable' }),
@@ -243,14 +245,14 @@ describe('a damaged event log', () => {
 
   test('problems of both kinds are reported in log order, whichever kind comes first', async () => {
     const path = createDatabasePath();
-    const first = new Engine(new EventLog(path));
+    const first = new Engine(openEventLog(path));
     for (const value of [1, 2, 3])
       await first.dispatch({ type: 'focus.change', projectId: null, until: value });
     const db = new Database(path);
     db.run(`UPDATE events SET type = 'task.created', payload = '{"type":"task.created"}' WHERE seq = 1`);
     db.run(`UPDATE events SET payload = '{"type":"focus.ch' WHERE seq = 3`);
     db.close();
-    const engine = new Engine(new EventLog(path));
+    const engine = new Engine(openEventLog(path));
     expect(engine.state.focus.until).toBe(2);
     expect(engine.problems.map((problem) => [problem.seq, problem.kind])).toEqual([
       [1, 'unappliable'],
@@ -261,7 +263,7 @@ describe('a damaged event log', () => {
 
 describe('effect outbox', () => {
   test('a failing effect is retried with backoff and settles once it succeeds', async () => {
-    const log = new EventLog(createDatabasePath());
+    const log = openEventLog(createDatabasePath());
     const engine = new Engine(log);
     let attempts = 0;
     engine.onEffect((effect) => {
@@ -281,7 +283,7 @@ describe('effect outbox', () => {
   });
 
   test('a handler that throws instead of rejecting still fails its effect, and the lane goes on', async () => {
-    const log = new EventLog(createDatabasePath());
+    const log = openEventLog(createDatabasePath());
     const engine = new Engine(log);
     let attempts = 0;
     engine.onEffect((effect) => {
@@ -301,7 +303,7 @@ describe('effect outbox', () => {
   });
 
   test('an effect waiting behind a running one in its lane lets timers fire, and runs once the lane frees', async () => {
-    const log = new EventLog(createDatabasePath());
+    const log = openEventLog(createDatabasePath());
     const engine = new Engine(log);
     const started: number[] = [];
     engine.onEffect((effect) => {
@@ -330,7 +332,7 @@ describe('effect outbox', () => {
   });
 
   test('a process-bound effect that fails is not retried and opens a failure gate', async () => {
-    const log = new EventLog(createDatabasePath());
+    const log = openEventLog(createDatabasePath());
     const engine = new Engine(log);
     let calls = 0;
     const keys: string[] = [];
@@ -366,7 +368,7 @@ describe('effect outbox', () => {
   });
 
   test('a cancel is not stuck behind the long-running session it cancels', async () => {
-    const log = new EventLog(createDatabasePath());
+    const log = openEventLog(createDatabasePath());
     const engine = new Engine(log);
     const cancelled: string[] = [];
     engine.onEffect((effect) => {
@@ -385,7 +387,7 @@ describe('effect outbox', () => {
 
   test('after a restart, work for dead processes is dropped and the rest runs again', async () => {
     const path = createDatabasePath();
-    const first = new Engine(new EventLog(path));
+    const first = new Engine(openEventLog(path));
     const started = Promise.withResolvers<void>();
     first.onEffect((effect) => {
       if (effect.kind === 'run.execute') started.resolve();
@@ -396,7 +398,7 @@ describe('effect outbox', () => {
     await started.promise;
     first.stop();
 
-    const log = new EventLog(path);
+    const log = openEventLog(path);
     const second = new Engine(log);
     const replayed: string[] = [];
     second.onEffect((effect) => {
@@ -422,7 +424,7 @@ describe('effect outbox', () => {
 
 describe('cancelling effects', () => {
   test('cancelling a task stops its running effect at once, frees the lane and ignores its late result', async () => {
-    const log = new EventLog(createDatabasePath());
+    const log = openEventLog(createDatabasePath());
     const engine = new Engine(log);
     const signals: AbortSignal[] = [];
     const late = Promise.withResolvers<void>();
@@ -446,7 +448,7 @@ describe('cancelling effects', () => {
   });
 
   test('a cancelled effect that fails afterwards is only logged, never retried or failed', async () => {
-    const log = new EventLog(createDatabasePath());
+    const log = openEventLog(createDatabasePath());
     const engine = new Engine(log);
     const late = Promise.withResolvers<void>();
     let started = false;
@@ -480,14 +482,14 @@ describe('cancelling effects', () => {
 
 describe('engine lifecycle', () => {
   test('dispatch reports the events it committed, and nothing for a no-op', async () => {
-    const engine = new Engine(new EventLog(createDatabasePath()));
+    const engine = new Engine(openEventLog(createDatabasePath()));
     const events = await engine.dispatch({ type: 'task.create', request: 'Do it', repoId: null });
     expect(events.map((event) => event.type)).toContain('task.created');
     expect(await engine.dispatch({ type: 'runs.dispatch' })).toEqual([]);
   });
 
   test('an unsubscribed listener hears nothing more', async () => {
-    const engine = new Engine(new EventLog(createDatabasePath()));
+    const engine = new Engine(openEventLog(createDatabasePath()));
     let calls = 0;
     const unsubscribe = engine.subscribe(() => {
       calls += 1;
@@ -499,7 +501,7 @@ describe('engine lifecycle', () => {
   });
 
   test('once stopped it takes no commands and leaves running effects unrecorded', async () => {
-    const log = new EventLog(createDatabasePath());
+    const log = openEventLog(createDatabasePath());
     const engine = new Engine(log);
     const release = Promise.withResolvers<void>();
     const fail = Promise.withResolvers<void>();
@@ -527,7 +529,7 @@ describe('engine lifecycle', () => {
   test('disposing releases the engine’s runtime once it has settled, and it takes no command after', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'shinsa-engine-'));
     dirs.push(dir);
-    const log = new EventLog(join(dir, 'shinsa.sqlite'));
+    const log = openEventLog(join(dir, 'shinsa.sqlite'));
     const engine = new Engine(log);
     engine.start();
     await engine.dispatch({ type: 'task.create', request: 'Do it', repoId: null });
@@ -542,7 +544,7 @@ describe('engine lifecycle', () => {
   test('stopping aborts every running effect, and settle waits until its handler has returned', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'shinsa-engine-'));
     dirs.push(dir);
-    const log = new EventLog(join(dir, 'shinsa.sqlite'));
+    const log = openEventLog(join(dir, 'shinsa.sqlite'));
     const engine = new Engine(log);
     const pidFile = join(dir, 'pid');
     let finished: CommandResult | null = null;
@@ -566,7 +568,7 @@ describe('engine lifecycle', () => {
   });
 
   test('an effect that keeps failing ends after five attempts, and a broken report is only logged', async () => {
-    const log = new EventLog(createDatabasePath());
+    const log = openEventLog(createDatabasePath());
     const engine = new Engine(log);
     const logs = captureLogs();
     engine.onEffect((effect) =>
@@ -592,7 +594,7 @@ describe('engine lifecycle', () => {
 
 describe('retries the effect reports', () => {
   test('each retry is reported with its attempt, the attempts, when it runs and the error, then the effect runs again', async () => {
-    const log = new EventLog(createDatabasePath());
+    const log = openEventLog(createDatabasePath());
     const engine = new Engine(log);
     const retries: (Omit<EffectRetry, 'error'> & { key: string; error: string; attempt: number })[] = [];
     const attempts: number[] = [];
@@ -622,7 +624,7 @@ describe('retries the effect reports', () => {
   });
 
   test('an error that says when to retry is retried then; one marked final fails at once', async () => {
-    const slow = new Engine(new EventLog(createDatabasePath()));
+    const slow = new Engine(openEventLog(createDatabasePath()));
     const retries: EffectRetry[] = [];
     slow.onEffect(() =>
       Promise.reject(new EffectFailed({ message: 'slow', detail: 'slow', retryable: true, delayMs: 60_000 }))
@@ -645,7 +647,7 @@ describe('retries the effect reports', () => {
     slow.stop();
     await slow.settle();
 
-    const log = new EventLog(createDatabasePath());
+    const log = openEventLog(createDatabasePath());
     const final = new Engine(log);
     const exhausted: string[] = [];
     final.onEffect(() =>
@@ -672,7 +674,7 @@ describe('retries the effect reports', () => {
 });
 
 test('without handlers, effects settle and a failure is only recorded', async () => {
-  const log = new EventLog(createDatabasePath());
+  const log = openEventLog(createDatabasePath());
   const engine = new Engine(log);
   engine.start();
   await engine.dispatch({ type: 'task.create', request: 'Do it', repoId: null });
@@ -687,7 +689,7 @@ test('without handlers, effects settle and a failure is only recorded', async ()
 
 describe('commands sent on your behalf', () => {
   test('name the task whose agent sent them, and a repeat under the same id is answered from its receipt', async () => {
-    const engine = new Engine(new EventLog(createDatabasePath()));
+    const engine = new Engine(openEventLog(createDatabasePath()));
     const { taskId } = await seedTask(engine);
     const options = { id: 'agent:run-1:run-1:1:call:7:1', onBehalf: true, byTask: 'task-b' };
     const command = { type: 'task.prioritize' as const, taskId, priority: 'urgent' as const };

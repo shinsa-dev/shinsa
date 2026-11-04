@@ -10,25 +10,20 @@ import {
   type ShinsaCommand,
   type ShinsaState,
 } from '@shinsa/core';
-import {
-  type RunRejection,
-  RunSupervisor,
-  type SupervisorOptions,
-  Transcripts,
-} from '../../src/agents/index.ts';
+import { Effect } from 'effect';
+import type { RunRejection } from '../../src/agents/accounts/schema.ts';
 import { CLAUDE_CAPABILITIES } from '../../src/agents/providers/claude/index.ts';
-import {
-  type AgentProvider,
-  type AgentSession,
-  type AgentSessionInput,
-  type AgentSessionResult,
-  ProviderRegistry,
-  type SessionStarter,
+import type {
+  AgentProvider,
+  AgentSessionInput,
+  AgentSessionResult,
+  SessionStarter,
 } from '../../src/agents/providers/index.ts';
-import { log } from '../../src/log/index.ts';
-import { ProcessLedger } from '../../src/resources/index.ts';
-import { Engine } from '../../src/runtime/index.ts';
-import { EventLog, EvidenceStore } from '../../src/store/index.ts';
+import { ExtensionLoadFailed } from '../../src/extensions/loader/schema.ts';
+import { McpServerFailed } from '../../src/extensions/schema.ts';
+import { Engine } from '../helpers/engine.ts';
+import { openEventLog } from '../helpers/event-log.ts';
+import { createTestEvidence } from '../helpers/evidence.ts';
 import {
   captureLogs,
   createGitRepo,
@@ -39,6 +34,12 @@ import {
   writeFiles,
 } from '../helpers/index.ts';
 import {
+  adaptSession,
+  adaptStarter,
+  createTestProviders,
+  type PromiseSession,
+} from '../helpers/providers.ts';
+import {
   createGate,
   createRepo,
   createRun,
@@ -46,7 +47,15 @@ import {
   createTask,
   type StubEngine,
 } from '../helpers/state.ts';
+import { createSyncTranscripts, type SyncTranscripts } from '../helpers/transcripts.ts';
+import { createMonitor } from '../resources/harness.ts';
 import { createInfo } from '../terminals/fakes.ts';
+import {
+  adaptInput,
+  createSupervisor,
+  type PromiseInput,
+  type SupervisorOptions,
+} from './supervisor/harness.ts';
 
 type Broker = NonNullable<SupervisorOptions['accounts']>;
 
@@ -60,8 +69,8 @@ function createBroker(lease: Broker['lease']): Broker {
 }
 
 interface FakeSession {
-  input: AgentSessionInput;
-  session: AgentSession;
+  input: PromiseInput;
+  session: PromiseSession;
   finish: (outcome?: 'completed' | 'failed', extra?: Partial<AgentSessionResult>) => void;
   steers: string[];
   cancelled: boolean;
@@ -71,11 +80,11 @@ function createSessions(
   options: { cancelFails?: boolean; throwOnStart?: boolean; refuseSteer?: boolean; wedged?: boolean } = {}
 ) {
   const started: FakeSession[] = [];
-  const startSession = (input: AgentSessionInput): AgentSession => {
+  const startPromise = (input: AgentSessionInput): PromiseSession => {
     if (options.throwOnStart) throw new Error('claude is not installed');
     const done = Promise.withResolvers<AgentSessionResult>();
     const fake: FakeSession = {
-      input,
+      input: adaptInput(input),
       steers: [],
       cancelled: false,
       finish: (outcome = 'completed', extra = {}) => done.resolve({ outcome, summary: outcome, ...extra }),
@@ -97,7 +106,7 @@ function createSessions(
     started.push(fake);
     return fake.session;
   };
-  return { started, startSession };
+  return { started, startSession: adaptStarter(startPromise) };
 }
 
 function setup(
@@ -106,9 +115,9 @@ function setup(
 ) {
   const stub = createStubEngine(patch);
   const config = createTestConfig();
-  const transcripts = new Transcripts(config.transcriptsDir);
-  const evidence = new EvidenceStore(options.evidenceDir ?? config.evidenceDir);
-  const supervisor = new RunSupervisor(stub.engine, config, transcripts, evidence, options);
+  const transcripts = createSyncTranscripts(config.transcriptsDir);
+  const evidence = createTestEvidence(options.evidenceDir ?? config.evidenceDir);
+  const supervisor = createSupervisor(stub.engine, config, transcripts.service, evidence, options);
   return { ...stub, config, transcripts, supervisor };
 }
 
@@ -186,7 +195,7 @@ describe('starting and ending runs', () => {
 
   test('counts the agent’s process toward its task until the turn ends', async () => {
     const sessions = createSessions();
-    const ledger = new ProcessLedger();
+    const { ledger } = createMonitor();
     const { supervisor } = setup(withTask(createTempDir()), {
       startSession: sessions.startSession,
       trackProcess: ledger.track,
@@ -195,10 +204,10 @@ describe('starting and ending runs', () => {
     await until('the session', () => sessions.started.length === 1);
     const { input, finish } = sessions.started[0] as FakeSession;
     input.onProcess?.(4242);
-    expect(ledger.listRoots()).toEqual([{ taskId: 'task-1', kind: 'agent', pid: 4242 }]);
+    expect(Effect.runSync(ledger.listRoots)).toEqual([{ taskId: 'task-1', kind: 'agent', pid: 4242 }]);
     finish();
     await running;
-    expect(ledger.listRoots()).toEqual([]);
+    expect(Effect.runSync(ledger.listRoots)).toEqual([]);
     const untracked = createSessions();
     const plain = setup(withTask(createTempDir()), { startSession: untracked.startSession });
     const ran = plain.supervisor.execute('run-1');
@@ -237,8 +246,8 @@ describe('starting and ending runs', () => {
     const extensions = {
       resolveSession: (place: unknown) => {
         places.push(place);
-        if (places.length > 1) return Promise.reject(new Error('extensions.json is gone'));
-        return Promise.resolve({
+        if (places.length > 1) return Effect.die(new Error('extensions.json is gone'));
+        return Effect.succeed({
           servers: [],
           skills: [],
           plugins: {},
@@ -282,7 +291,7 @@ describe('starting and ending runs', () => {
     const extensions = {
       resolveSession: (_place: unknown, pin?: unknown) => {
         pins.push(pin ?? null);
-        return Promise.resolve({
+        return Effect.succeed({
           servers: [],
           skills: [],
           plugins: {},
@@ -331,23 +340,28 @@ describe('starting and ending runs', () => {
     const attached: unknown[] = [];
     let closed = 0;
     const loader = {
-      listSpecs: () => [
-        { name: 'load_mcp_server', description: 'Load one.', inputSchema: { type: 'object' } },
-      ],
-      isLoaderTool: (name: string) => name === 'load_mcp_server',
+      specs: [{ name: 'load_mcp_server', description: 'Load one.', inputSchema: { type: 'object' } }],
       handle: (name: string, args: Record<string, unknown>) => {
-        calls.push(`${name}:${String(args.name)}`);
-        return Promise.resolve('Loaded maple.');
+        if (args.name === 'broken')
+          return Effect.fail(new ExtensionLoadFailed({ message: 'The loader broke.' }));
+        if (args.name === 'down')
+          return Effect.fail(new McpServerFailed({ message: 'The server is down.', unauthorized: false }));
+        return Effect.sync(() => {
+          calls.push(`${name}:${String(args.name)}`);
+          return 'Loaded maple.';
+        });
       },
-      attach: (session: unknown) => attached.push(session),
-      close: () => {
+      attach: (session: unknown) =>
+        Effect.sync(() => {
+          attached.push(session);
+        }),
+      close: Effect.sync(() => {
         closed += 1;
-        return Promise.resolve();
-      },
+      }),
     };
     const extensions = {
       resolveSession: () =>
-        Promise.resolve({
+        Effect.succeed({
           servers: [],
           skills: [],
           plugins: {},
@@ -357,7 +371,7 @@ describe('starting and ending runs', () => {
           deferredSkills: [],
           loaded: { servers: [], skills: [], plugins: [] },
         }),
-      createLoader: () => loader as never,
+      createLoader: () => Effect.succeed(loader as never),
     };
     const sessions = createSessions();
     const { supervisor } = setup(withTask(createTempDir()), {
@@ -375,6 +389,12 @@ describe('starting and ending runs', () => {
     await client.close();
     const signal = new AbortController().signal;
     expect(await input?.tools.handle('load_mcp_server', { name: 'maple' }, signal, 1)).toBe('Loaded maple.');
+    expect(input?.tools.handle('load_mcp_server', { name: 'broken' }, signal, 2)).rejects.toThrow(
+      'The loader broke.'
+    );
+    expect(input?.tools.handle('load_mcp_server', { name: 'down' }, signal, 3)).rejects.toThrow(
+      'The server is down.'
+    );
     expect(calls).toEqual(['load_mcp_server:maple']);
     expect(attached).toHaveLength(1);
     sessions.started[0]?.finish();
@@ -390,8 +410,8 @@ describe('starting and ending runs', () => {
       label: id,
       capabilities: CLAUDE_CAPABILITIES,
       startSession,
-      listModels: () => Promise.resolve([]),
-      complete: () => Promise.resolve(null),
+      listModels: Effect.succeed([]),
+      complete: () => Effect.succeed(null),
     });
     const { supervisor, dispatched } = setup(
       (state) => {
@@ -399,7 +419,7 @@ describe('starting and ending runs', () => {
         state.settings.defaultProvider = 'codex';
       },
       {
-        providers: new ProviderRegistry([
+        providers: createTestProviders([
           provider('claude', claude.startSession),
           provider('codex', codex.startSession),
         ]),
@@ -428,11 +448,11 @@ describe('starting and ending runs', () => {
       label: id,
       capabilities: { ...CLAUDE_CAPABILITIES, fastMode },
       startSession,
-      listModels: () => Promise.resolve([]),
-      complete: () => Promise.resolve(null),
+      listModels: Effect.succeed([]),
+      complete: () => Effect.succeed(null),
     });
     const { supervisor, update } = setup(withTask(createTempDir()), {
-      providers: new ProviderRegistry([
+      providers: createTestProviders([
         provider('claude', fast.startSession, true),
         provider('plain', plain.startSession, false),
       ]),
@@ -1146,15 +1166,13 @@ describe('hand-overs', () => {
     const services = {
       home: '/home',
       dataDir: '/data',
-      snapshot: () => ({ terminals: [], services: [], home: '/home' }),
-      startService: () => createInfo(),
-      stopService: () => Promise.resolve(),
-      restartService: () => Promise.resolve(createInfo()),
-      readServiceOutput: () => Promise.resolve([]),
-      addService: () => {
-        throw new Error('Nothing is added here.');
-      },
-      removeServices: () => undefined,
+      snapshot: Effect.succeed({ terminals: [], services: [], home: '/home' }),
+      startService: () => Effect.succeed(createInfo()),
+      stopService: () => Effect.void,
+      restartService: () => Effect.succeed(createInfo()),
+      readServiceOutput: () => Effect.succeed([]),
+      addService: () => Effect.die(new Error('Nothing is added here.')),
+      removeServices: () => Effect.void,
     };
     const agent = await handOverSetup(undefined, { services });
     expect(await agent.call('list_services')).toBe(
@@ -1198,7 +1216,7 @@ describe('hand-overs', () => {
       deferredSkills: [],
       loaded: { servers: [], skills: [], plugins: [] },
     };
-    const extensions = { resolveSession: () => Promise.resolve(session as never) };
+    const extensions = { resolveSession: () => Effect.succeed(session as never) };
     const watch = (evidence: string) => ({
       summary: 'Fixed.',
       walkthrough: {
@@ -1315,13 +1333,13 @@ function fakeProvider(
     label: id === 'claude' ? 'Claude' : 'Codex',
     capabilities: CLAUDE_CAPABILITIES,
     startSession,
-    listModels: () => Promise.resolve([]),
-    complete: () => Promise.resolve(null),
+    listModels: Effect.succeed([]),
+    complete: () => Effect.succeed(null),
     ...overrides,
   };
 }
 
-function withSessionHistory(transcripts: Transcripts, runId = 'run-0') {
+function withSessionHistory(transcripts: SyncTranscripts, runId = 'run-0') {
   transcripts.record(runId, { type: 'user', from: 'shinsa', text: 'Build phase 1.', attachments: [] });
   transcripts.record(runId, { type: 'agent', phase: 'final', text: 'Wrote a.ts.' });
 }
@@ -1388,7 +1406,7 @@ describe('provider capabilities', () => {
   test('a provider that cannot block forbidden commands is never started', async () => {
     const sessions = createSessions();
     const { supervisor, dispatched } = setup(withTask(createTempDir()), {
-      providers: new ProviderRegistry([
+      providers: createTestProviders([
         fakeProvider('claude', sessions.startSession, { capabilities: undefined }),
       ]),
     });
@@ -1404,7 +1422,7 @@ describe('provider capabilities', () => {
     const sessions = createSessions();
     const capabilities = { ...CLAUDE_CAPABILITIES, turns: { ...CLAUDE_CAPABILITIES.turns, steering: false } };
     const { supervisor, dispatched } = setup(withTask(createTempDir()), {
-      providers: new ProviderRegistry([fakeProvider('claude', sessions.startSession, { capabilities })]),
+      providers: createTestProviders([fakeProvider('claude', sessions.startSession, { capabilities })]),
     });
     const running = supervisor.execute('run-1');
     await until('the session', () => sessions.started.length === 1);
@@ -1424,7 +1442,7 @@ describe('resume fallback', () => {
     options: SupervisorOptions = {}
   ) {
     const sessions = createSessions();
-    const providers = new ProviderRegistry([
+    const providers = createTestProviders([
       fakeProvider('claude', sessions.startSession, providerOverrides),
       fakeProvider('codex', sessions.startSession),
     ]);
@@ -1455,7 +1473,7 @@ describe('resume fallback', () => {
 
   test('a session whose file is gone is marked lost and the step starts fresh with the conversation handed over', async () => {
     for (const status of ['missing', 'empty'] as const) {
-      const context = restoreSetup(() => undefined, { inspectSession: () => Promise.resolve(status) });
+      const context = restoreSetup(() => undefined, { inspectSession: () => Effect.succeed(status) });
       await runOnce(context);
       const input = context.sessions.started[0]?.input;
       expect(input?.resume).toBeNull();
@@ -1491,7 +1509,7 @@ describe('resume fallback', () => {
   });
 
   test('a session that is still there is resumed, and one the provider cannot check is resumed too', async () => {
-    const present = restoreSetup(() => undefined, { inspectSession: () => Promise.resolve('present') });
+    const present = restoreSetup(() => undefined, { inspectSession: () => Effect.succeed('present') });
     await runOnce(present);
     expect(present.sessions.started[0]?.input).toMatchObject({ resume: 'old', prompt: 'Carry on.' });
     const unchecked = restoreSetup(() => undefined, { inspectSession: undefined });
@@ -1508,7 +1526,7 @@ describe('resume fallback', () => {
       {
         inspectSession: () => {
           checked += 1;
-          return Promise.resolve('present');
+          return Effect.succeed('present');
         },
       }
     );
@@ -1618,12 +1636,12 @@ describe('resume fallback', () => {
     const rules = resolveHouseRules('answerer');
     const brief = (text: string) => `${rules}\n\nYour role: answerer. ${text}`;
 
-    function briefedSetup(provider: 'claude' | 'codex', history: (transcripts: Transcripts) => void) {
+    function briefedSetup(provider: 'claude' | 'codex', history: (transcripts: SyncTranscripts) => void) {
       const context = restoreSetup(
         (state) => {
           for (const run of Object.values(state.runs)) Object.assign(run, { role: 'answerer', provider });
         },
-        { inspectSession: () => Promise.resolve('present') },
+        { inspectSession: () => Effect.succeed('present') },
         provider
       );
       history(context.transcripts);
@@ -1646,7 +1664,7 @@ describe('resume fallback', () => {
     }
 
     function briefedWith(text: string) {
-      return (transcripts: Transcripts) => {
+      return (transcripts: SyncTranscripts) => {
         transcripts.record('run-0', { type: 'user', from: 'shinsa', text, attachments: [] });
         transcripts.record('run-0', { type: 'agent', phase: 'final', text: 'Answered.' });
       };
@@ -1697,7 +1715,7 @@ describe('resume fallback', () => {
       const fresh = briefedSetup('claude', briefedWith(brief('The question: why?')));
       fresh.state.runs['run-1'] = createRun({ role: 'answerer', sessionId: null });
       expect((await send(fresh, 'run-1', 'Why?')).prompt).toBe(brief('Why?'));
-      const lost = restoreSetup(() => undefined, { inspectSession: () => Promise.resolve('missing') });
+      const lost = restoreSetup(() => undefined, { inspectSession: () => Effect.succeed('missing') });
       briefedWith(brief('The question: why?'))(lost.transcripts);
       const running = lost.supervisor.execute('run-1', brief('Why?'));
       await until('the session', () => lost.sessions.started.length > 0);
@@ -1714,7 +1732,7 @@ describe('resume fallback', () => {
   });
 
   test('a resume the CLI refuses is retried once on a fresh session with the history', async () => {
-    const context = restoreSetup(() => undefined, { inspectSession: () => Promise.resolve('present') });
+    const context = restoreSetup(() => undefined, { inspectSession: () => Effect.succeed('present') });
     const lost = {
       class: 'session_lost',
       message: 'gone',
@@ -1744,7 +1762,7 @@ describe('resume fallback', () => {
   test('a session lost on a later attempt, after the turn moved, is also restored with the history', async () => {
     const context = restoreSetup(
       () => undefined,
-      { inspectSession: () => Promise.resolve('present') },
+      { inspectSession: () => Effect.succeed('present') },
       'claude',
       { onRejection: (rejection) => ({ retry: rejection.failure.class === 'usage_limit' }) }
     );
@@ -1777,7 +1795,7 @@ describe('resume fallback', () => {
   });
 
   test('a history too large to hand over fails the step as a full context instead of dropping it silently', async () => {
-    const context = restoreSetup(() => undefined, { inspectSession: () => Promise.resolve('missing') });
+    const context = restoreSetup(() => undefined, { inspectSession: () => Effect.succeed('missing') });
     context.transcripts.record('run-0', { type: 'agent', phase: 'final', text: 'x'.repeat(450_000) });
     await supervisorRuns(context);
     expect(context.sessions.started).toHaveLength(0);
@@ -1954,7 +1972,7 @@ describe('an overloaded provider', () => {
     resetAt: null,
   } as const;
 
-  function listRetries(transcripts: Transcripts) {
+  function listRetries(transcripts: SyncTranscripts) {
     return transcripts
       .listEntries('run-1')
       .flatMap((entry) =>
@@ -2393,7 +2411,7 @@ describe('the process tools and what a run cost', () => {
   });
 
   test('every task agent also gets the surface tools; a delegated run and a server without an address do not', async () => {
-    const listNames = async (input: AgentSessionInput) => {
+    const listNames = async (input: PromiseInput) => {
       const server = input.tools.createServer() as unknown as {
         _requestHandlers: Map<string, (request: unknown) => Promise<{ tools: { name: string }[] }>>;
       };
@@ -2427,11 +2445,11 @@ describe('the process tools and what a run cost', () => {
       for (const run of runs) state.runs[run.id] = run;
     };
     const sessions = createSessions();
-    const unused = () => Promise.reject(new Error('Not in this test.'));
+    const unused = () => Effect.die(new Error('Not in this test.'));
     const manage = {
       baseUrl: () => 'http://x',
       projects: { upsertRepo: unused, upsertFolder: unused },
-      route: () => Promise.resolve([]),
+      route: () => Effect.succeed([]),
     };
     const { supervisor } = setup(patch, { startSession: sessions.startSession, manage });
     const running = [supervisor.execute('run-1'), supervisor.execute('run-2')];
@@ -2951,11 +2969,11 @@ describe('accounts', () => {
       label: 'Claude',
       capabilities: { ...CLAUDE_CAPABILITIES, accounts: false },
       startSession: sessions.startSession,
-      listModels: () => Promise.resolve([]),
-      complete: () => Promise.resolve(null),
+      listModels: Effect.succeed([]),
+      complete: () => Effect.succeed(null),
     };
     const other = setup(withTask(createTempDir()), {
-      providers: new ProviderRegistry([legacy]),
+      providers: createTestProviders([legacy]),
       accounts: broker,
     });
     const second = other.supervisor.execute('run-1');
@@ -3349,7 +3367,7 @@ describe('secret requests, schedule tools and idle sessions', () => {
     const inputs: AgentSessionInput[] = [];
     let cancelling = false;
     const released = () => cancelling;
-    const startSession = (input: AgentSessionInput): AgentSession => {
+    const startPromise = (input: AgentSessionInput): PromiseSession => {
       inputs.push(input);
       if (inputs.length > 1)
         return {
@@ -3367,10 +3385,16 @@ describe('secret requests, schedule tools and idle sessions', () => {
         },
       };
     };
-    const context = setup(withTask(createTempDir()), { startSession, idle: { idleMs: 5 } });
+    const context = setup(withTask(createTempDir()), {
+      startSession: adaptStarter(startPromise),
+      idle: { idleMs: 5 },
+    });
     const run = context.supervisor.execute('run-1');
     await until('the session', () => inputs.length === 1);
-    void inputs[0]?.tools.handle('ask', { question: 'Blue?' }, new AbortController().signal);
+    if (inputs[0])
+      void Effect.runPromise(
+        inputs[0].tools.handle('ask', { question: 'Blue?' }, new AbortController().signal)
+      );
     const gateId = await (async () => {
       await until('the question', () => context.dispatched.some((entry) => entry.type === 'agent.ask'));
       const found = context.dispatched.find((entry) => entry.type === 'agent.ask');
@@ -3404,14 +3428,12 @@ describe('secret requests, schedule tools and idle sessions', () => {
     });
     const run = context.supervisor.execute('run-1');
     await until('the session', () => sessions.started.length === 1);
-    const warn = spyOn(log, 'warn').mockImplementation(() => undefined);
+    const logs = captureLogs();
     void sessions.started[0]?.input.tools.handle('ask', { question: 'x' }, new AbortController().signal);
     await until('the release', () => sessions.started[0]?.cancelled === true);
     await run;
-    await until('the warning', () =>
-      warn.mock.calls.some(([message]) => message === '[Runs] Could not stop an idle session')
-    );
-    warn.mockRestore();
+    await until('the warning', () => logs.fieldsOf('[Runs] Could not stop an idle session').length > 0);
+    logs.restore();
   });
 });
 
@@ -3438,30 +3460,37 @@ describe('compacting an idle session', () => {
   function compactingProvider(compacted: AgentSessionInput[], start: SessionStarter, compaction = true) {
     return fakeProvider('claude', start, {
       capabilities: { ...CLAUDE_CAPABILITIES, compaction },
-      compactSession: (input) => {
-        compacted.push({ ...input, prompt: '' });
-        input.onSession('s1');
-        refusals.push(
-          Promise.resolve()
-            .then(() => input.tools.handle('ask', {}, new AbortController().signal))
-            .catch((error: Error) => error.message)
-        );
-        input.onEntry({ type: 'agent', phase: 'final', text: 'Here is the summary.' });
-        input.onEntry({
-          type: 'notice',
-          notice: { kind: 'compaction', trigger: 'manual', preTokens: 150_000, summary: null },
-        });
-        return {
-          done: Promise.resolve({ outcome: 'completed', summary: null, usage: USAGE }),
-          steer: () => false,
-          cancel: () => Promise.resolve(),
-        };
-      },
+      compactSession: (input) =>
+        Effect.sync(() => {
+          compacted.push({ ...input, prompt: '' });
+          input.onSession('s1');
+          refusals.push(
+            Effect.runPromise(input.tools.handle('ask', {}, new AbortController().signal)).catch(
+              (error: Error) => error.message
+            )
+          );
+          input.onEntry({ type: 'agent', phase: 'final', text: 'Here is the summary.' });
+          input.onEntry({
+            type: 'notice',
+            notice: { kind: 'compaction', trigger: 'manual', preTokens: 150_000, summary: null },
+          });
+          return adaptSession({
+            done: Promise.resolve({ outcome: 'completed', summary: null, usage: USAGE }),
+            steer: () => false,
+            cancel: () => Promise.resolve(),
+          });
+        }),
     });
   }
 
   async function finishBuilder(
-    options: { compaction?: boolean; account?: boolean; compacted?: boolean; model?: string } = {}
+    options: {
+      compaction?: boolean;
+      account?: boolean;
+      compacted?: boolean;
+      model?: string;
+      failure?: 'refused' | 'crashed';
+    } = {}
   ) {
     const sessions = createSessions();
     const compacted: AgentSessionInput[] = [];
@@ -3482,8 +3511,13 @@ describe('compacting an idle session', () => {
       ],
     });
     const context = setup(withIdleCompaction(withTask(createTempDir(), [run])), {
-      providers: new ProviderRegistry([
-        compactingProvider(compacted, sessions.startSession, options.compaction ?? true),
+      providers: createTestProviders([
+        options.failure === 'crashed'
+          ? fakeProvider('claude', sessions.startSession, {
+              capabilities: { ...CLAUDE_CAPABILITIES, compaction: true },
+              compactSession: () => Effect.die(new Error('claude crashed')),
+            })
+          : compactingProvider(compacted, sessions.startSession, options.compaction ?? true),
       ]),
       accounts: createBroker((request) => {
         leases.push(request);
@@ -3491,7 +3525,9 @@ describe('compacting an idle session', () => {
       }),
       compaction: { now: () => NOW + 59 * 60_000 },
     });
-    if (options.compacted !== false) {
+    if (options.failure === 'refused') {
+      context.reject((command) => command.type === 'run.compact', new Error('the log is closed'));
+    } else if (options.compacted !== false) {
       context.respond(
         (command) => command.type === 'run.compact',
         [{ type: 'run.compacted', runId: 'run-1', sessionId: 's1', seq: 1, at: 1 }]
@@ -3540,6 +3576,22 @@ describe('compacting an idle session', () => {
     expect(await refusals.at(-1)).toBe('This turn only compacts. End it.');
   });
 
+  test('a compaction that is refused or crashes is logged, and the session is left as it was', async () => {
+    const logs = captureLogs();
+    const message = '[Compaction] An idle session could not be compacted';
+    const refused = await finishBuilder({ failure: 'refused' });
+    await until('the refusal', () => logs.fieldsOf(message).length === 1);
+    expect(refused.compacted).toEqual([]);
+    const crashed = await finishBuilder({ failure: 'crashed' });
+    await until('the crash', () => logs.fieldsOf(message).length === 2);
+    expect(crashed.compacted).toEqual([]);
+    expect(logs.fieldsOf(message).map((fields) => fields.error)).toEqual([
+      'the log is closed',
+      'claude crashed',
+    ]);
+    logs.restore();
+  });
+
   test('a session is compacted on the model its last attempt ran on', async () => {
     const context = await finishBuilder({ model: 'claude-sonnet-5' });
     await until('the compaction', () => context.compacted.length === 1);
@@ -3552,17 +3604,20 @@ describe('compacting an idle session', () => {
     const done = Promise.withResolvers<AgentSessionResult>();
     const run = createRun({ sessionId: 's1' });
     const context = setup(withIdleCompaction(withTask(createTempDir(), [run])), {
-      providers: new ProviderRegistry([
+      providers: createTestProviders([
         fakeProvider('claude', sessions.startSession, {
-          compactSession: () => ({
-            done: done.promise,
-            steer: () => false,
-            cancel: () => {
-              cancelled = true;
-              done.resolve({ outcome: 'cancelled', summary: null });
-              return Promise.reject(new Error('already gone'));
-            },
-          }),
+          compactSession: () =>
+            Effect.sync(() =>
+              adaptSession({
+                done: done.promise,
+                steer: () => false,
+                cancel: () => {
+                  cancelled = true;
+                  done.resolve({ outcome: 'cancelled', summary: null });
+                  return Promise.reject(new Error('already gone'));
+                },
+              })
+            ),
         }),
       ]),
       compaction: { now: () => NOW + 59 * 60_000 },
@@ -3757,21 +3812,34 @@ describe('the ids of the commands a run sends', () => {
 
 describe('a command a run sends twice for one cause', () => {
   function createLoggedEngine(patch: (state: ShinsaState) => void) {
-    const engine = new Engine(new EventLog(join(createTempDir(), 'db.sqlite')));
+    const engine = new Engine(openEventLog(join(createTempDir(), 'db.sqlite')));
     patch(engine.state);
     for (const task of Object.values(engine.state.tasks)) task.activity = [];
     const sent: { command: ShinsaCommand; id: string | undefined }[] = [];
     const dispatch = engine.dispatch.bind(engine);
-    spyOn(engine, 'dispatch').mockImplementation((command, options = {}) => {
-      sent.push({ command, id: options.id });
-      return dispatch(command, options);
-    });
+    const core = engine.core;
+    const logged = {
+      core: {
+        ...core,
+        state: core.state,
+        dispatch: (command: ShinsaCommand, options: { id?: string } = {}) => {
+          sent.push({ command, id: options.id });
+          return core.dispatch(command, options);
+        },
+      },
+    };
     const config = createTestConfig();
-    const transcripts = new Transcripts(config.transcriptsDir);
+    const transcripts = createSyncTranscripts(config.transcriptsDir);
     const sessions = createSessions();
-    const supervisor = new RunSupervisor(engine, config, transcripts, new EvidenceStore(config.evidenceDir), {
-      startSession: sessions.startSession,
-    });
+    const supervisor = createSupervisor(
+      logged,
+      config,
+      transcripts.service,
+      createTestEvidence(config.evidenceDir),
+      {
+        startSession: sessions.startSession,
+      }
+    );
     const resend = async (type: ShinsaCommand['type']) => {
       const first = sent.find((entry) => entry.command.type === type);
       if (!first) throw new Error(`nothing sent as ${type}`);

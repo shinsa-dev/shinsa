@@ -1,4 +1,5 @@
-import { DomainError, type TerminalInfo } from '@shinsa/core';
+import { DomainError } from '@shinsa/core';
+import { Effect } from 'effect';
 import type { Terminals } from '../terminals/index.ts';
 import {
   listMissingInstalls,
@@ -7,7 +8,7 @@ import {
   resolvePrerequisiteLabel,
 } from './prerequisites.ts';
 
-export type InstallTerminals = Pick<Terminals, 'snapshot' | 'create' | 'rename' | 'run' | 'close'>;
+export type InstallTerminals = Pick<Terminals['Service'], 'snapshot' | 'create' | 'rename' | 'run' | 'close'>;
 
 export interface InstallScripts {
   resolve(id: string): string | null;
@@ -29,48 +30,60 @@ const FENCE = /```([^\n]*)\n([\s\S]*?)```/g;
 
 const PROMPT = /^\s*[$%>]\s?/;
 
-function openSetupTerminal(terminals: InstallTerminals, name: string, script: string, home: string) {
-  for (const earlier of terminals.snapshot().terminals) {
-    if (earlier.projectId === SETUP_TERMINAL_PROJECT && earlier.name === name) terminals.close(earlier.id);
+const openSetupTerminal = Effect.fn('InstallTerminals.open')(function* (
+  terminals: InstallTerminals,
+  name: string,
+  script: string,
+  home: string
+) {
+  for (const earlier of (yield* terminals.snapshot).terminals) {
+    if (earlier.projectId === SETUP_TERMINAL_PROJECT && earlier.name === name)
+      yield* terminals.close(earlier.id);
   }
-  const terminal = terminals.create({
+  const terminal = yield* terminals.create({
     projectId: SETUP_TERMINAL_PROJECT,
     cwd: home,
     place: 'folder',
     taskId: null,
   });
-  terminals.rename(terminal.id, name);
-  terminals.run(terminal.id, script);
+  yield* terminals.rename(terminal.id, name);
+  yield* terminals.run(terminal.id, script);
   return { ...terminal, name };
-}
+});
 
-export function openInstallTerminal(
+export const openInstallTerminal = Effect.fn('InstallTerminals.openInstall')(function* (
   terminals: InstallTerminals,
   id: string,
   home: string,
   scripts: InstallScripts = INSTALL_SCRIPTS
-): TerminalInfo {
+) {
   const script = scripts.resolve(id);
   const label = resolvePrerequisiteLabel(id);
   if (!(script && label))
-    throw new DomainError({ code: 'check_unknown', message: 'Shinsa has no command that fixes that check.' });
-  return openSetupTerminal(terminals, `Set up ${label}`, `${script}; exit`, home);
-}
+    return yield* new DomainError({
+      code: 'check_unknown',
+      message: 'Shinsa has no command that fixes that check.',
+    });
+  return yield* openSetupTerminal(terminals, `Set up ${label}`, `${script}; exit`, home);
+});
 
-export function openInstallAllTerminal(
+export const openInstallAllTerminal = Effect.fn('InstallTerminals.openInstallAll')(function* (
   terminals: InstallTerminals,
   checks: readonly Prerequisite[],
   home: string,
   scripts: InstallScripts = INSTALL_SCRIPTS
-): TerminalInfo {
+) {
   const steps = listMissingInstalls(checks).flatMap((id) => {
     const script = scripts.resolve(id);
     return script ? [`{ ${script}; }`] : [];
   });
   if (steps.length === 0)
-    throw new DomainError({ code: 'nothing_missing', message: 'Every tool Shinsa needs is installed.' });
-  return openSetupTerminal(terminals, ALL_TERMINAL_NAME, `${steps.join(' && ')}; exit`, home);
-}
+    return yield* new DomainError({
+      code: 'nothing_missing',
+      message: 'Every tool Shinsa needs is installed.',
+    });
+  return yield* openSetupTerminal(terminals, ALL_TERMINAL_NAME, `${steps.join(' && ')}; exit`, home);
+});
 
 export function isReplyCommand(body: string, command: string) {
   const wanted = command
@@ -86,17 +99,22 @@ export function isReplyCommand(body: string, command: string) {
   return false;
 }
 
-export function openReplyTerminal(
+export const openReplyTerminal = Effect.fn('InstallTerminals.openReply')(function* (
   terminals: InstallTerminals,
   body: string | null,
   command: string,
   home: string,
   scripts: InstallScripts = INSTALL_SCRIPTS
-): TerminalInfo {
+) {
   if (!(body && isReplyCommand(body, command)))
-    throw new DomainError({
+    return yield* new DomainError({
       code: 'command_unknown',
       message: 'Shinsa runs only the commands the help task’s agent replied with.',
     });
-  return openSetupTerminal(terminals, REPLY_TERMINAL_NAME, `${scripts.resolveReply(command)}\nexit`, home);
-}
+  return yield* openSetupTerminal(
+    terminals,
+    REPLY_TERMINAL_NAME,
+    `${scripts.resolveReply(command)}\nexit`,
+    home
+  );
+});

@@ -1,15 +1,24 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, setDefaultTimeout, test } from 'bun:test';
 import { chmodSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import {
-  commitWorktree,
-  createWorktree,
-  refreshWorktree,
-  removeWorktree,
-  resolveWorkingDiff,
-} from '../../src/git/index.ts';
-import { prepareWorktree, resolveFreeBranch, resolveStartPoint } from '../../src/git/worktree.ts';
+import type { Repo } from '@shinsa/core';
+import { Checkout } from '../../src/git/checkout/service.ts';
+import { History } from '../../src/git/history/service.ts';
+import { commitWorktree, createWorktree, removeWorktree, runGit } from '../helpers/git.ts';
 import { createGitRepo, createTempDir, git, writeFiles } from '../helpers/index.ts';
+
+setDefaultTimeout(30_000);
+
+const refreshWorktree = (repo: Repo, path: string, baseBranch: string | null, signal?: AbortSignal) =>
+  runGit(Checkout.use((checkout) => checkout.refresh(repo, path, baseBranch, signal)));
+const resolveWorkingDiff = (worktree: string, base: string) =>
+  runGit(History.use((history) => history.workingDiff(worktree, base)));
+const prepareWorktree = (path: string, signal?: AbortSignal) =>
+  runGit(Checkout.use((checkout) => checkout.prepare(path, signal)));
+const resolveFreeBranch = (repo: Repo, branch: string, signal?: AbortSignal, head: string | null = null) =>
+  runGit(Checkout.use((checkout) => checkout.resolveFreeBranch(repo, branch, signal, head)));
+const resolveStartPoint = (repo: Repo, baseBranch: string | null, signal?: AbortSignal) =>
+  runGit(Checkout.use((checkout) => checkout.resolveStartPoint(repo, baseBranch, signal)));
 
 describe('worktrees', () => {
   test('a task gets its own worktree, its changes diff and commit there', async () => {

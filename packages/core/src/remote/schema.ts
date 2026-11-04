@@ -97,3 +97,13 @@ export const ConnectChannel = Schema.Literals(CONNECT_CHANNELS);
 export type ConnectChannel = typeof ConnectChannel.Type;
 
 export const CONNECT_NONCE_PATTERN = /^[A-Za-z0-9_-]{22,64}$/;
+
+export class RemoteKeyInvalid extends Schema.TaggedError<
+  RemoteKeyInvalid,
+  { readonly brand: unique symbol }
+>()('RemoteKeyInvalid', { message: Schema.String }) {}
+
+export class FrameError extends Schema.TaggedError<FrameError, { readonly brand: unique symbol }>()(
+  'FrameError',
+  { message: Schema.String }
+) {}

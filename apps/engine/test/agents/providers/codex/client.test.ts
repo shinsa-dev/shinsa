@@ -1,8 +1,8 @@
 import { describe, expect, test } from 'bun:test';
 import { chmodSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { Effect } from 'effect';
-import { CodexClient, CodexRequestError } from '../../../../src/agents/providers/codex/client.ts';
+import { Effect, Fiber } from 'effect';
+import { CodexRequestError } from '../../../../src/agents/providers/codex/client/schema.ts';
 import { makeCodexClient } from '../../../../src/agents/providers/codex/client/service.ts';
 import { createTempDir, until } from '../../../helpers/index.ts';
 
@@ -63,49 +63,81 @@ exec sleep 30
   return { path, cwd: dir };
 }
 
+function failureOf<A, R>(effect: Effect.Effect<A, CodexRequestError, R>) {
+  return effect.pipe(Effect.match({ onSuccess: () => 'answered', onFailure: (error) => error.message }));
+}
+
 describe('the app server client', () => {
   test('talks JSON-RPC over lines, skips noise and answers requests it has no handler for', async () => {
     const server = createServer();
-    const client = new CodexClient({ path: server.path, cwd: server.cwd });
-    expect(await client.request('echo', { value: 1 })).toEqual({ value: 1 });
-    expect(await client.request('env', {})).toEqual({ headless: 'true' });
-    await expect(client.request('refuse', {})).rejects.toThrow(
-      new CodexRequestError({ method: 'refuse', message: 'Codex refused the request.' })
+    await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const client = yield* makeCodexClient(
+            { path: server.path, cwd: server.cwd },
+            { request: () => null }
+          );
+          expect(yield* client.request('echo', { value: 1 })).toEqual({ value: 1 });
+          expect(yield* client.request('env', {})).toEqual({ headless: 'true' });
+          const refused = yield* client
+            .request('refuse', {})
+            .pipe(Effect.match({ onSuccess: () => null, onFailure: (error) => error }));
+          expect(refused).toEqual(
+            new CodexRequestError({ method: 'refuse', message: 'Codex refused the request.' })
+          );
+          yield* Effect.promise(() =>
+            until('the unanswered request to be refused', () => server.received().includes('"id":"s1"'))
+          );
+          yield* client.close;
+          yield* client.close;
+          yield* client.exited;
+        })
+      )
     );
-    await until('the unanswered request to be refused', () => server.received().includes('"id":"s1"'));
     expect(server.received()).toContain('No handler for this request.');
-    client.close();
-    client.close();
-    await client.exited;
   });
 
   test('a server that exits fails every request and reports its last words once', async () => {
     const server = createServer();
-    const client = new CodexClient({ path: server.path, cwd: server.cwd });
     const notes: string[] = [];
     const exits: string[] = [];
-    client.onNotification((method) => notes.push(method));
-    client.onExit((message) => exits.push(message));
-    const pending = client.request('never', {});
-    client.request('quit', {}).catch((error: unknown) => notes.push(String(error)));
-    await expect(pending).rejects.toThrow('bye from the server');
-    await client.exited;
+    await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const client = yield* makeCodexClient(
+            { path: server.path, cwd: server.cwd },
+            { notification: (method) => notes.push(method), exit: (message) => exits.push(message) }
+          );
+          const pending = yield* Effect.forkChild(failureOf(client.request('never', {})));
+          yield* Effect.forkChild(failureOf(client.request('quit', {})));
+          expect(yield* Fiber.join(pending)).toBe('bye from the server');
+          yield* client.exited;
+          expect(yield* failureOf(client.request('echo', {}))).toBe('Codex’s app server has stopped.');
+        })
+      )
+    );
     expect(exits).toEqual(['bye from the server']);
     expect(notes).toContain('note');
     expect(notes).toContain('last');
-    await expect(client.request('echo', {})).rejects.toThrow('Codex’s app server has stopped.');
   });
 
   test('a server that stops reading is stopped, and its requests fail with its last words', async () => {
     const server = createDeafServer();
-    const client = new CodexClient({ path: server.path, cwd: server.cwd });
     const deaf = Promise.withResolvers<void>();
     const exits: string[] = [];
-    client.onNotification(() => deaf.resolve());
-    client.onExit((message) => exits.push(message));
-    await deaf.promise;
-    await expect(client.request('echo', {})).rejects.toThrow('stopped reading');
-    await client.exited;
+    await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const client = yield* makeCodexClient(
+            { path: server.path, cwd: server.cwd },
+            { notification: () => deaf.resolve(), exit: (message) => exits.push(message) }
+          );
+          yield* Effect.promise(() => deaf.promise);
+          expect(yield* failureOf(client.request('echo', {}))).toBe('stopped reading');
+          yield* client.exited;
+        })
+      )
+    );
     expect(exits).toEqual(['stopped reading']);
   });
 });

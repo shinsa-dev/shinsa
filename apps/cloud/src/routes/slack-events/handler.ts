@@ -50,6 +50,7 @@ import {
   JsonObject,
   MentionEnvelope,
   type MentionEvent,
+  ChannelInfo,
   Permalink,
   RESPONSE_URL_ORIGIN,
   Replies,
@@ -245,6 +246,12 @@ export const SlackEventRoutes = Layer.unwrap(
           Effect.map((answer) => answer.permalink || null),
           Effect.orElseSucceed(() => null)
         );
+      const channelName = yield* slack
+        .call('conversations.info', { token, body: { form: { channel: mention.channelId } } }, ChannelInfo)
+        .pipe(
+          Effect.map((answer) => answer.channel?.name?.slice(0, SLACK_LIMITS.channelName) || null),
+          Effect.orElseSucceed(() => null)
+        );
       return {
         eventId: mention.eventId,
         teamId: mention.teamId,
@@ -255,6 +262,7 @@ export const SlackEventRoutes = Layer.unwrap(
         userName: nameOf(mention.userId),
         text: readable(mention.text),
         permalink,
+        channelName,
         thread,
       } satisfies SlackMention;
     });

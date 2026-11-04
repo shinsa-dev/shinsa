@@ -6,21 +6,28 @@ import {
   type TaskDiff,
   type TaskRefs,
 } from '@shinsa/core';
+import { Effect, Schema } from 'effect';
 import type { CodeSource } from '@/lib/connection/code.ts';
+import { runApp } from '@/lib/runtime/app.ts';
+import type { AppServices } from '@/lib/runtime/schema.ts';
+import {
+  NO_SHARED_CODE,
+  ONLY_CHANGES,
+  SHARED_TEXT_FAILED,
+  SharedCodeRefused,
+  SharedTextFailed,
+  SharedWholeFiles,
+} from './schema.ts';
 
 export const SHARED_BASE = 'shared-base';
 
 export const SHARED_HEAD = 'shared-head';
 
-export const NO_SHARED_CODE = 'This task shares no code.';
-
-export const ONLY_CHANGES = 'Only the files this task changed are shared.';
-
 const HUNK = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@/;
 
 export interface SharedCodeReads {
-  readDiff: (() => Promise<string>) | null;
-  readCode: (() => Promise<string>) | null;
+  readDiff: Effect.Effect<string, SharedTextFailed, AppServices> | null;
+  readCode: Effect.Effect<string, SharedTextFailed, AppServices> | null;
   branch: string | null;
   head?: string;
 }
@@ -97,30 +104,36 @@ export function createSharedCodeSource({
   branch,
   head = SHARED_HEAD,
 }: SharedCodeReads): CodeSource {
+  const decodeWhole = Schema.decodeUnknownEffect(SharedWholeFiles);
   let files: DiffFile[] | null = null;
-  let whole: Promise<Record<string, string>> | null = null;
-  const listFiles = async () => {
-    if (!readDiff) throw new Error(NO_SHARED_CODE);
-    files ??= parseUnifiedDiff(await readDiff());
+  let whole: Effect.Effect<Record<string, string>, SharedTextFailed, AppServices> | null = null;
+  const listFiles = Effect.gen(function* () {
+    if (!readDiff) return yield* new SharedCodeRefused({ message: NO_SHARED_CODE });
+    files ??= parseUnifiedDiff(yield* readDiff);
     return files;
-  };
-  const listWhole = () => {
-    whole ??= readCode
-      ? readCode().then((text) => (JSON.parse(text) as { files: Record<string, string> }).files)
-      : Promise.resolve({});
-    return whole;
-  };
-  const readBlob = async (ref: string, path: string) => {
-    const all = await listFiles();
+  });
+  const readWhole = readCode
+    ? readCode.pipe(
+        Effect.flatMap((text) => decodeWhole(text)),
+        Effect.map((decoded) => decoded.files),
+        Effect.mapError(() => new SharedTextFailed({ message: SHARED_TEXT_FAILED }))
+      )
+    : Effect.succeed({});
+  const listWhole = Effect.gen(function* () {
+    whole ??= yield* Effect.cached(readWhole);
+    return yield* whole;
+  });
+  const readBlob = Effect.fn('SharedCode.readBlob')(function* (ref: string, path: string) {
+    const all = yield* listFiles;
     const file = all.find((candidate) => candidate.path === path || candidate.previousPath === path);
-    if (!file) throw new Error(ONLY_CHANGES);
-    const known = await listWhole();
+    if (!file) return yield* new SharedCodeRefused({ message: ONLY_CHANGES });
+    const known = yield* listWhole;
     const content = ref === head ? resolveHeadContent(file, known) : resolveSharedBase(file, known);
     return createFileContent(ref, path, content);
-  };
-  return async (name, params) => {
+  });
+  const answer = Effect.fn('SharedCode.answer')(function* (name: string, params: URLSearchParams) {
     if (name === 'refs') {
-      await listFiles();
+      yield* listFiles;
       const refs: TaskRefs = {
         head,
         base: SHARED_BASE,
@@ -134,7 +147,7 @@ export function createSharedCodeSource({
     }
     if (name === 'diff') {
       const path = params.get('path');
-      const all = await listFiles();
+      const all = yield* listFiles;
       const diff: TaskDiff = {
         base: SHARED_BASE,
         head,
@@ -142,7 +155,8 @@ export function createSharedCodeSource({
       };
       return diff;
     }
-    if (name === 'blob') return readBlob(params.get('ref') ?? head, params.get('path') ?? '');
-    throw new Error(ONLY_CHANGES);
-  };
+    if (name === 'blob') return yield* readBlob(params.get('ref') ?? head, params.get('path') ?? '');
+    return yield* new SharedCodeRefused({ message: ONLY_CHANGES });
+  });
+  return (name, params) => runApp(answer(name, params));
 }

@@ -7,7 +7,9 @@ export const SLACK_JSON = 'application/json; charset=utf-8';
 export const SLACK_BOT_SCOPES = [
   'app_mentions:read',
   'channels:history',
+  'channels:read',
   'groups:history',
+  'groups:read',
   'chat:write',
   'reactions:write',
   'users:read',

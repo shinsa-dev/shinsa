@@ -16,7 +16,7 @@ import {
   resolveRunAccount,
   selectRerunRun,
 } from '@/lib/accounts/account.ts';
-import { describeUsageWaitToggle, isUsageWaitArmed } from '@/lib/accounts/usage-wait.ts';
+import { describeUsageWaitToggle, isPaceWait, isUsageWaitArmed } from '@/lib/accounts/usage-wait.ts';
 import { listChatRuns } from '@/lib/chat/delegations.ts';
 import { listTaskRuns } from '@/lib/chat/runs.ts';
 import { type Command, type CommandSection, RANK } from '@/lib/command/registry.ts';
@@ -78,15 +78,17 @@ export function listAccountSections(snapshot: AccountsSnapshot | null): CommandS
 export function listUsageWaitCommands(task: Task): Command[] {
   if (!isUsageWaitArmed(task)) return [];
   const wait = task.usageWait;
+  const resume: Command = {
+    kind: 'run',
+    id: `task.${task.id}.usage.resume`,
+    label: ACCOUNT_LABEL.resumeNow,
+    icon: 'IconPlay',
+    keywords: ['usage limit', 'resume', 'continue', 'wait'],
+    run: () => void resumeUsageWaitNow(task.id),
+  };
+  if (isPaceWait(wait)) return [resume];
   return [
-    {
-      kind: 'run',
-      id: `task.${task.id}.usage.resume`,
-      label: ACCOUNT_LABEL.resumeNow,
-      icon: 'IconPlay',
-      keywords: ['usage limit', 'resume', 'continue', 'wait'],
-      run: () => void resumeUsageWaitNow(task.id),
-    },
+    resume,
     {
       kind: 'run',
       id: `task.${task.id}.usage.toggle`,

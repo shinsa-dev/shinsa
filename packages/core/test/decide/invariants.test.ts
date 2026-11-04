@@ -742,7 +742,11 @@ function listProcessSystemCommands(state: ShinsaState, random: Random): ShinsaCo
 function budgetLimits(limit: number | null): ShinsaCommand {
   return {
     type: 'settings.change',
-    patch: { taskBudgetUsd: limit, taskUsageLimit: limit === null ? null : limit * 2 },
+    patch: {
+      taskBudgetUsd: limit,
+      taskUsageLimit: limit === null ? null : limit * 2,
+      dailyUsageLimit: limit === null ? null : limit * 2,
+    },
   };
 }
 
@@ -1005,7 +1009,48 @@ type SideStream =
   | 'backlog'
   | 'duplicates'
   | 'bundles'
+  | 'paces'
   | null;
+
+const PACE_LIMITS = [null, 4, 12, 40];
+
+function selectPaceCommand(state: ShinsaState, random: Random, now: number): ShinsaCommand | null {
+  const running = Object.values(state.runs).filter((run) => run.endedAt === null && run.status === 'running');
+  for (const run of running) {
+    const attempt = run.attempts?.at(-1);
+    if (!attempt)
+      return {
+        type: 'run.attempt',
+        runId: run.id,
+        attemptId: `p-${state.seq}`,
+        provider: 'claude',
+        model: null,
+        resumed: false,
+        handoff: null,
+      };
+    if (attempt.startedAt < now && !run.meters?.some((meter) => meter.attemptId === attempt.attemptId)) {
+      return {
+        type: 'run.meter',
+        runId: run.id,
+        usage: { inputTokens: 10, outputTokens: 10, cacheReadTokens: 0, cacheWriteTokens: 0, costUsd: 2 },
+        readings: [
+          { percent: 10, at: attempt.startedAt, resetsAt: null },
+          { percent: 16, at: now, resetsAt: null },
+        ],
+      };
+    }
+  }
+  if (!chance(random, ROUND_ODDS)) return null;
+  const limit = pick(random, PACE_LIMITS) ?? null;
+  const project = pick(random, Object.values(state.projects));
+  if (project && chance(random, 0.5)) {
+    return {
+      type: 'project.write',
+      project: { id: project.id, name: project.name, color: project.color, usageLimit: limit },
+    };
+  }
+  return { type: 'settings.change', patch: { dailyUsageLimit: limit } };
+}
 
 function selectBacklogCommand(state: ShinsaState, random: Random): ShinsaCommand | null {
   if (!chance(random, ROUND_ODDS)) return null;
@@ -1308,6 +1353,8 @@ function selectSideCommand(
       return selectDuplicateCommand(state, randoms.planner);
     case 'bundles':
       return selectBundleCommand(state, randoms.planner);
+    case 'paces':
+      return selectPaceCommand(state, randoms.planner, now);
     default:
       return null;
   }
@@ -1477,6 +1524,22 @@ function listComposedRoundMarks(state: ShinsaState) {
         : null,
     ];
   });
+}
+
+const PACE_HELD_SUMMARY = 'Held at a usage limit before it started.';
+
+function listPaceMarks(state: ShinsaState) {
+  const runs = Object.values(state.runs);
+  const held = new Set(runs.filter((run) => run.summary === PACE_HELD_SUMMARY).map((run) => run.id));
+  return [
+    held.size > 0 ? 'held at a usage limit' : null,
+    runs.some((run) => run.continues && held.has(run.continues)) ? 'held step started again' : null,
+    Object.values(state.tasks).some(
+      (task) => task.usageWait?.cause === 'pace' && task.usageWait.status === 'armed'
+    )
+      ? 'armed pace hold'
+      : null,
+  ];
 }
 
 function listReachedStates(state: ShinsaState) {
@@ -1745,6 +1808,23 @@ describe('decide under random command sequences', () => {
         'based on the task below',
         'merged while ready',
         'ready in its bundle',
+      ]);
+    },
+    SEEDS * 2_000
+  );
+
+  test(
+    'keeps every invariant while steps are held at the daily and project usage limits and start again',
+    () => {
+      const reached = new Set<string>();
+      const collect = (state: ShinsaState) => {
+        for (const mark of listPaceMarks(state)) if (mark) reached.add(mark);
+      };
+      for (let seed = 1; seed <= SEEDS; seed += 1) simulate(seed, STEPS, 'paces', collect);
+      expect([...reached].sort()).toEqual([
+        'armed pace hold',
+        'held at a usage limit',
+        'held step started again',
       ]);
     },
     SEEDS * 2_000

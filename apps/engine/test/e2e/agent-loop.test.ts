@@ -1,11 +1,10 @@
 import { afterEach, describe, expect, setDefaultTimeout, test } from 'bun:test';
 import type { Run, RunFailureClass } from '@shinsa/core';
-import { Transcripts } from '../../src/agents/index.ts';
 import type { ClaudeExecutable } from '../../src/agents/providers/claude/executable.ts';
-import { createClaudeProvider } from '../../src/agents/providers/claude/index.ts';
-import { ProviderRegistry } from '../../src/agents/providers/index.ts';
 import { createTempDir } from '../helpers/index.ts';
+import { buildClaudeProvider, createTestProviders } from '../helpers/providers.ts';
 import { createFakeQuery, createFakeRuntime, emit, type QueryParams } from '../helpers/query.ts';
+import { createSyncTranscripts } from '../helpers/transcripts.ts';
 import { type AgentScript, World } from './harness.ts';
 
 setDefaultTimeout(30_000);
@@ -40,8 +39,8 @@ function fakeSdk(scripts: Script[], executable?: ClaudeExecutable) {
     return emit(...(scripts[index] ?? IDLE)(index));
   });
   const runtime = createFakeRuntime(fake.query, executable);
-  const provider = createClaudeProvider(runtime, { env: {}, home: createTempDir() });
-  return { params, registry: () => new ProviderRegistry([provider]) };
+  const provider = buildClaudeProvider(runtime, { env: {}, home: createTempDir() });
+  return { params, registry: () => createTestProviders([provider]) };
 }
 
 async function openWithSdk(scripts: Script[], executable?: ClaudeExecutable) {
@@ -139,7 +138,7 @@ describe('every way a turn can end reaches core as its class', () => {
     const [first] = listRuns(w, taskId);
     await w.until('the attempt recorded', () => (w.state.runs[first?.id ?? '']?.attempts?.length ?? 0) >= 2);
     expect(w.state.runs[first?.id ?? '']?.failure ?? null).toBeNull();
-    const transcripts = new Transcripts(w.config.transcriptsDir);
+    const transcripts = createSyncTranscripts(w.config.transcriptsDir);
     const notices = transcripts.listEntries(first?.id ?? '').filter((entry) => entry.type === 'notice');
     expect(notices).toContainEqual(
       expect.objectContaining({
@@ -238,7 +237,7 @@ describe('restarts', () => {
 
   test('a session the agent no longer has is restored from the transcript instead of resumed', async () => {
     world = await World.create({
-      providers: (created) => new ProviderRegistry([created.agents.provider('claude', 'Claude')]),
+      providers: (created) => createTestProviders([created.agents.provider('claude', 'Claude')]),
     });
     const w = world;
     w.agents.queue('plan', (agent) => agent.hang());
@@ -263,7 +262,7 @@ describe('restarts', () => {
 
   test('a session lost mid-round is restored on a fresh one with the whole round: the plan, the phases done and the step at hand', async () => {
     world = await World.create({
-      providers: (created) => new ProviderRegistry([created.agents.provider('claude', 'Claude')]),
+      providers: (created) => createTestProviders([created.agents.provider('claude', 'Claude')]),
     });
     const w = world;
     w.agents.queue('build', writeFirstPhase, (agent) => agent.hang());
@@ -308,7 +307,7 @@ describe('restarts', () => {
   test('switching provider while a run is paused hands the conversation over at its next turn', async () => {
     world = await World.create({
       providers: (created) =>
-        new ProviderRegistry([
+        createTestProviders([
           created.agents.provider('claude', 'Claude'),
           created.agents.provider('codex', 'Codex'),
         ]),

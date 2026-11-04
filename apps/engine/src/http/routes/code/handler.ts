@@ -7,7 +7,6 @@ import {
   type SearchMatch,
   selectTaskByReference,
   type TaskDiff,
-  type TaskRefs,
   WORKING_REF,
 } from '@shinsa/core';
 import { EngineApi } from '@shinsa/core/engine-api';
@@ -16,26 +15,17 @@ import { Effect, Queue, Stream } from 'effect';
 import { type HttpServerRequest, HttpServerResponse } from 'effect/http';
 import { HttpApiBuilder } from 'effect/http-api';
 import { assertRepoPath, resolveInside } from '../../../files/paths.ts';
-import { CatFilePool } from '../../../git/blobs.ts';
-import { resolveCommitDiff, resolveWorkingDiff } from '../../../git/diff.ts';
-import {
-  assertCommit,
-  listCommitPaths,
-  listCommitTree,
-  listWorkingPaths,
-  listWorkingTree,
-  readCommitBytes,
-  readCommitFile,
-  readWorkingBytes,
-  readWorkingFile,
-  type SearchQuery,
-  searchFiles,
-} from '../../../git/files.ts';
-import { ObjectCache } from '../../../git/objects.ts';
-import { resolveTaskCheckout, resolveTaskRefs } from '../../../git/task-refs.ts';
-import { requestPromise, requestSync } from '../../failures.ts';
+import { CatFiles } from '../../../git/blobs/service.ts';
+import { resolveTaskCheckout } from '../../../git/history/checkout.ts';
+import { History } from '../../../git/history/service.ts';
+import { ObjectCache } from '../../../git/objects/service.ts';
+import { listWorkingTree } from '../../../git/tree/entries.ts';
+import type { SearchQuery } from '../../../git/tree/schema.ts';
+import { CodeFiles } from '../../../git/tree/service.ts';
+import { describeError } from '../../../log/redact.ts';
+import { EngineCore } from '../../../runtime/engine/service.ts';
+import { requestSync } from '../../failures.ts';
 import { REQUEST_FAILED } from '../../schema.ts';
-import { HttpServices } from '../../services/service.ts';
 import {
   CODE_MISSING_MESSAGE,
   type CodeTask,
@@ -58,16 +48,36 @@ export const CodeHandlers = HttpApiBuilder.group(
   EngineApi,
   'code',
   Effect.fn('CodeHandlers')(function* (handlers) {
-    const { engine } = yield* HttpServices;
-    const cache = new ObjectCache();
-    const blobs = yield* Effect.acquireRelease(
-      Effect.sync(() => new CatFilePool()),
-      (pool) => Effect.sync(() => pool.close())
-    );
+    const engine = yield* EngineCore;
+    const files = yield* CodeFiles;
+    const history = yield* History;
+    const cache = yield* ObjectCache;
+    const blobs = yield* CatFiles;
+
+    const toRequestFailed = (error: {
+      readonly _tag: string;
+      readonly message: string;
+      readonly code?: string;
+    }) =>
+      new RequestFailed({
+        code:
+          error._tag === 'CodeReadFailed'
+            ? (error.code ?? REQUEST_FAILED)
+            : error._tag === 'DiffFailed'
+              ? 'diff_failed'
+              : error._tag === 'CodeUnavailable'
+                ? 'code_unavailable'
+                : REQUEST_FAILED,
+        message: describeError(error),
+      });
+
+    const requestRead = <A, E extends { readonly _tag: string; readonly message: string }>(
+      effect: Effect.Effect<A, E>
+    ) => Effect.mapError(effect, toRequestFailed);
 
     const findCodeTask = Effect.fn('CodeHandlers.findCodeTask')(function* (reference: string) {
-      const task = selectTaskByReference(engine.state, reference);
-      const repo = task?.repoId ? engine.state.repos[task.repoId] : undefined;
+      const task = selectTaskByReference(yield* engine.state, reference);
+      const repo = task?.repoId ? (yield* engine.state).repos[task.repoId] : undefined;
       if (!task || !repo || !existsSync(repo.path))
         return yield* new CodeUnavailable({ message: CODE_MISSING_MESSAGE });
       const found: CodeTask = { task, repoPath: repo.path, worktree: resolveTaskCheckout(task) };
@@ -75,11 +85,9 @@ export const CodeHandlers = HttpApiBuilder.group(
     });
 
     const resolveRefs = Effect.fn('CodeHandlers.resolveRefs')(function* (found: CodeTask) {
-      const repo = engine.state.repos[found.task.repoId ?? ''];
+      const repo = (yield* engine.state).repos[found.task.repoId ?? ''];
       if (!repo) return yield* new RequestFailed(NO_REPOSITORY);
-      return yield* requestPromise((signal): Promise<TaskRefs> =>
-        resolveTaskRefs(repo, found.task, resolveRoundBase(found.task), signal)
-      );
+      return yield* requestRead(history.taskRefs(repo, found.task, resolveRoundBase(found.task)));
     });
 
     const resolveRef = Effect.fn('CodeHandlers.resolveRef')(function* (
@@ -92,29 +100,32 @@ export const CodeHandlers = HttpApiBuilder.group(
         return working;
       }
       const named = value || (yield* resolveRefs(found)).head;
-      const sha = yield* requestPromise((signal) => assertCommit(found.repoPath, named, signal));
+      const sha = yield* requestRead(files.assertCommit(found.repoPath, named));
       const commit: ResolvedRef = { kind: 'commit', sha };
       return commit;
     });
 
-    const listPaths = (found: CodeTask, ref: ResolvedRef) =>
-      requestPromise((signal) => {
-        if (ref.kind === 'working') return listWorkingPaths(ref.worktree, signal);
-        return cache.read(
+    const listPaths = (found: CodeTask, ref: ResolvedRef) => {
+      if (ref.kind === 'working') return requestRead(files.listWorkingPaths(ref.worktree));
+      return requestRead(
+        cache.read(
           `${found.repoPath}\0paths\0${ref.sha}`,
-          () => listCommitPaths(found.repoPath, ref.sha, signal),
+          files.listCommitPaths(found.repoPath, ref.sha),
           (value) => value.paths.reduce((sum, path) => sum + path.length, 0)
-        );
-      });
+        )
+      );
+    };
 
     const readTree = (found: CodeTask, ref: ResolvedRef, dir: string) => {
       if (ref.kind === 'working')
         return Effect.map(listPaths(found, ref), (paths) => listWorkingTree(paths, dir));
-      return requestPromise((signal) =>
-        cache.read(
-          `${found.repoPath}\0tree\0${ref.sha}\0${dir}`,
-          () => listCommitTree(found.repoPath, ref.sha, dir, signal, blobs.select(found.repoPath)),
-          (value) => value.entries.reduce((sum, entry) => sum + entry.path.length + 32, 0)
+      return requestRead(
+        Effect.flatMap(blobs.select(found.repoPath), (reader) =>
+          cache.read(
+            `${found.repoPath}\0tree\0${ref.sha}\0${dir}`,
+            files.listCommitTree(found.repoPath, ref.sha, dir, undefined, reader),
+            (value) => value.entries.reduce((sum, entry) => sum + entry.path.length + 32, 0)
+          )
         )
       );
     };
@@ -124,24 +135,26 @@ export const CodeHandlers = HttpApiBuilder.group(
       ref: ResolvedRef,
       path: string
     ) {
-      if (ref.kind === 'commit') {
-        const reader = blobs.select(found.repoPath);
-        return yield* requestPromise((signal) =>
-          readCommitFile(found.repoPath, ref.sha, path, cache, signal, reader)
+      if (ref.kind === 'commit')
+        return yield* requestRead(
+          Effect.flatMap(blobs.select(found.repoPath), (reader) =>
+            files.readCommitFile(found.repoPath, ref.sha, path, reader)
+          )
         );
-      }
       const absolute = resolveInside(ref.worktree, path);
       if (!absolute) return yield* new RequestFailed(PATH_LEAVES_WORKTREE);
-      return yield* requestSync(() => readWorkingFile(absolute, path));
+      return yield* files.readWorkingFile(absolute, path);
     });
 
     const readBytes = (found: CodeTask, ref: ResolvedRef, path: string) => {
       if (ref.kind === 'commit')
-        return requestPromise((signal) =>
-          readCommitBytes(found.repoPath, ref.sha, path, signal, blobs.select(found.repoPath))
+        return requestRead(
+          Effect.flatMap(blobs.select(found.repoPath), (reader) =>
+            files.readCommitBytes(found.repoPath, ref.sha, path, reader)
+          )
         );
       const absolute = resolveInside(ref.worktree, path);
-      return requestSync(() => (absolute ? readWorkingBytes(absolute) : null));
+      return absolute ? files.readWorkingBytes(absolute) : Effect.succeed(null);
     };
 
     const search = (
@@ -150,10 +163,10 @@ export const CodeHandlers = HttpApiBuilder.group(
       query: SearchQuery,
       onMatches?: (matches: SearchMatch[]) => void
     ) =>
-      requestPromise((signal) =>
+      requestRead(
         ref.kind === 'working'
-          ? searchFiles(ref.worktree, null, query, signal, onMatches)
-          : searchFiles(found.repoPath, ref.sha, query, signal, onMatches)
+          ? files.search(ref.worktree, null, query, undefined, onMatches)
+          : files.search(found.repoPath, ref.sha, query, undefined, onMatches)
       );
 
     const readSearch = Effect.fn('CodeHandlers.readSearch')(function* (query: {
@@ -249,26 +262,24 @@ export const CodeHandlers = HttpApiBuilder.group(
             ]);
       const refs = !query.base || !query.head ? yield* resolveRefs(found) : null;
       const baseRef = query.base || refs?.base || refs?.head || '';
-      const base = yield* requestPromise((signal) => assertCommit(found.repoPath, baseRef, signal));
+      const base = yield* requestRead(files.assertCommit(found.repoPath, baseRef));
       const head = yield* resolveRef(
         found,
         query.head || (found.worktree ? WORKING_REF : (refs?.head ?? null))
       );
       if (head.kind === 'working') {
-        const files = yield* requestPromise((signal) =>
-          resolveWorkingDiff(head.worktree, base, paths, signal)
-        );
-        const working: TaskDiff = { base, head: WORKING_REF, files };
+        const changed = yield* requestRead(history.workingDiff(head.worktree, base, paths));
+        const working: TaskDiff = { base, head: WORKING_REF, files: changed };
         return working;
       }
-      const files = yield* requestPromise((signal) =>
+      const changed = yield* requestRead(
         cache.read(
           `${found.repoPath}\0diff\0${base}\0${head.sha}\0${paths?.join('\0') ?? ''}`,
-          () => resolveCommitDiff(found.repoPath, base, head.sha, signal, paths),
+          history.commitDiff(found.repoPath, base, head.sha, undefined, paths),
           (value) => value.reduce((sum, file) => sum + file.patch.length + file.path.length, 0)
         )
       );
-      const pinned: TaskDiff = { base, head: head.sha, files };
+      const pinned: TaskDiff = { base, head: head.sha, files: changed };
       return pinned;
     });
 

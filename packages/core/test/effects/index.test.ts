@@ -138,6 +138,7 @@ describe('slack effects', () => {
     userName: 'A',
     text: '',
     permalink: null,
+    channelName: null,
     thread: [],
   };
 

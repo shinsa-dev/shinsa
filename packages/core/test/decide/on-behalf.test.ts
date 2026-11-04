@@ -354,6 +354,7 @@ describe('acting for the human', () => {
       mergeMethod: 'rebase',
       taskBudgetUsd: 5,
       taskUsageLimit: 50,
+      dailyUsageLimit: 30,
       autoResume: false,
       snoozeLimited: false,
       accountSwitchAt: 90,

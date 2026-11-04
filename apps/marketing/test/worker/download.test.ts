@@ -1,25 +1,23 @@
 import { describe, expect, it } from 'bun:test';
+import { parseRange } from '../../src/worker/bytes.ts';
 import {
-  type ByteRange,
-  type DownloadBucket,
-  type DownloadCache,
-  type DownloadPointer,
-  type DownloadWorld,
-  FEED_CACHE_KEY,
-  LATEST_STABLE_URL,
-  listFeedVersions,
-  parseDownloadPointer,
-  parseRange,
-  RELEASES_FEED,
-  RELEASES_PAGE,
   resolveChannel,
   resolveChannelKey,
   resolvePointerCacheKey,
   resolveReleaseKey,
   resolveVersionChannel,
-  respond,
-  selectChannelVersion,
-} from '../../src/worker/download.ts';
+} from '../../src/worker/download/paths.ts';
+import type { BucketBinding, ByteRange, CacheBinding } from '../../src/worker/platform/schema.ts';
+import { parseDownloadPointer } from '../../src/worker/releases/pointer.ts';
+import {
+  type DownloadPointer,
+  FEED_CACHE_KEY,
+  LATEST_STABLE_URL,
+  RELEASES_FEED,
+  RELEASES_PAGE,
+} from '../../src/worker/releases/schema.ts';
+import { listFeedVersions, selectChannelVersion } from '../../src/worker/releases/versions.ts';
+import { respond, type TestWorld } from './harness.ts';
 
 const DMG_BYTES = new Uint8Array([0x6b, 0x6f, 0x6c, 0x79, 0x00, 0x01, 0x02, 0x03]);
 
@@ -52,10 +50,10 @@ interface BucketCall {
 
 function createBucket(objects: Record<string, string | Uint8Array>, failure?: Error) {
   const calls: BucketCall[] = [];
-  const bucket: DownloadBucket = {
+  const bucket: BucketBinding = {
     head: async (key) => {
       calls.push({ method: 'head', key });
-      return key in objects ? {} : null;
+      return key in objects ? { size: 0, httpEtag: '', uploaded: new Date(0) } : null;
     },
     get: async (key, options) => {
       calls.push({ method: 'get', key, ...(options?.range ? { range: options.range } : {}) });
@@ -82,7 +80,7 @@ function storeChannels(channels: [StoredChannel, DownloadPointer | string][]) {
 
 function createCache() {
   const entries = new Map<string, Response>();
-  const cache: DownloadCache = {
+  const cache: CacheBinding = {
     match: async (key) => entries.get(key)?.clone(),
     put: async (key, response) => {
       entries.set(key, response);
@@ -115,13 +113,13 @@ function createWorld({
   answer = unreachable,
   cache = null,
 }: {
-  bucket?: DownloadBucket | null;
+  bucket?: BucketBinding | null;
   answer?: Answer;
-  cache?: DownloadCache | null;
+  cache?: CacheBinding | null;
 }) {
   const fetched: { url: string; init: RequestInit }[] = [];
   const pages: string[] = [];
-  const world: DownloadWorld = {
+  const world: TestWorld = {
     bucket,
     fetch: (url, init) => {
       fetched.push({ url, init });
@@ -516,6 +514,25 @@ describe('respond when the bucket cannot serve', () => {
     const failing = createCache();
     await respond(createRequest('/download/beta'), createWorld({ cache: failing.cache }).world);
     expect(failing.entries.size).toBe(0);
+  });
+
+  it('redirects and reads the feed again when the edge cache fails or holds something unreadable', async () => {
+    const broken: CacheBinding = {
+      match: () => Promise.reject(new Error('cache down')),
+      put: () => Promise.reject(new Error('cache down')),
+    };
+    const { world, fetched } = createWorld({
+      bucket: createBucket(RELEASED).bucket,
+      answer: betaOnly,
+      cache: broken,
+    });
+    await expectRedirect(await respond(createRequest('/download/beta'), world), RELEASES_PAGE);
+    expect(fetched).toHaveLength(0);
+    const { cache, entries } = createCache();
+    entries.set(FEED_CACHE_KEY, new Response('not json'));
+    entries.set(resolvePointerCacheKey('beta'), new Response('{"version":7}'));
+    const unreadable = createWorld({ bucket: createBucket(RELEASED).bucket, answer: betaOnly, cache });
+    await expectRedirect(await respond(createRequest('/download/beta'), unreadable.world), RELEASES_PAGE);
   });
 });
 

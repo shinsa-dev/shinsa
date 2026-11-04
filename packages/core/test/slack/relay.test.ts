@@ -5,11 +5,14 @@ import {
   parseSlackRelayReaction,
   parseSlackRelaySession,
   resolveSlackConnectUrl,
+  resolveSlackLastUsedAt,
   resolveSlackLinkedPath,
   resolveSlackReadableText,
   resolveSlackTaskUrl,
+  resolveSlackThreadUrl,
   SLACK_RELAY_MESSAGE_LIMITS,
 } from '../../src/index.ts';
+import { createHarness, createTask } from '../harness.ts';
 
 describe('a machine’s post through the relay', () => {
   const POST = {
@@ -126,5 +129,72 @@ describe('links back to app.shinsa.dev', () => {
       'https://app.shinsa.dev/slack/connect?instance=k3%20x'
     );
     expect(resolveSlackTaskUrl('https://app.shinsa.dev', 'id-1')).toBe('https://app.shinsa.dev/tasks/id-1');
+  });
+});
+
+describe('when a Slack account last started work on this machine', () => {
+  function stateWith(links: Record<string, { teamId: string; userId: string } | null>) {
+    const harness = createHarness();
+    const ids = Object.keys(links).map(() => createTask(harness));
+    const state = harness.state;
+    const tasks = Object.fromEntries(
+      Object.values(links).map((link, index) => {
+        const task = state.tasks[ids[index] ?? ''];
+        if (!task) throw new Error('missing task');
+        const slack = link && {
+          ...link,
+          channelId: 'C1',
+          threadTs: `${index}.1`,
+          messageTs: `${index}.1`,
+          permalink: null,
+          channelName: null,
+          statusTs: null,
+          reaction: null,
+        };
+        return [task.id, { ...task, createdAt: (index + 1) * 1_000, ...(slack ? { slack } : {}) }];
+      })
+    );
+    return { ...state, tasks };
+  }
+
+  test('is the newest task started by that user in that workspace', () => {
+    const state = stateWith({
+      first: { teamId: 'T1', userId: 'U1' },
+      newest: { teamId: 'T1', userId: 'U1' },
+      otherUser: { teamId: 'T1', userId: 'U2' },
+      otherTeam: { teamId: 'T2', userId: 'U1' },
+      typed: null,
+    });
+    expect(resolveSlackLastUsedAt(state, { teamId: 'T1', userId: 'U1' })).toBe(2_000);
+    expect(resolveSlackLastUsedAt(state, { teamId: 'T1', userId: 'U2' })).toBe(3_000);
+    expect(resolveSlackLastUsedAt(state, { teamId: 'T2', userId: 'U1' })).toBe(4_000);
+  });
+
+  test('is null for an account that has not started a task here', () => {
+    const state = stateWith({ typed: null, other: { teamId: 'T1', userId: 'U2' } });
+    expect(resolveSlackLastUsedAt(state, { teamId: 'T1', userId: 'U1' })).toBeNull();
+  });
+});
+
+describe('the Slack thread a task came from', () => {
+  const LINK = {
+    teamId: 'T1',
+    channelId: 'C1',
+    threadTs: '100.1',
+    userId: 'U1',
+    messageTs: '100.2',
+    permalink: null,
+    channelName: null,
+    statusTs: null,
+    reaction: null,
+  };
+
+  test('opens the mention’s permalink when Slack gave one', () => {
+    const permalink = 'https://acme.slack.com/archives/C1/p1002?thread_ts=100.1';
+    expect(resolveSlackThreadUrl({ ...LINK, permalink })).toBe(permalink);
+  });
+
+  test('opens the thread in Slack’s web client without one', () => {
+    expect(resolveSlackThreadUrl(LINK)).toBe('https://app.slack.com/client/T1/C1/thread/C1-100.1');
   });
 });

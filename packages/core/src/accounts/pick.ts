@@ -61,6 +61,17 @@ function rankByHeadroom(candidates: AccountCandidate[], model: string | null) {
   });
 }
 
+function resolveWeeklyResetsAt(candidate: AccountCandidate) {
+  return (
+    candidate.usage.windows.find((window) => window.kind === 'weekly')?.resetsAt ?? Number.POSITIVE_INFINITY
+  );
+}
+
+function rankBySoonestReset(candidates: AccountCandidate[], model: string | null) {
+  const ranked = rankByHeadroom(candidates, model);
+  return ranked.sort((a, b) => resolveWeeklyResetsAt(a) - resolveWeeklyResetsAt(b));
+}
+
 function rankLeastSpent(candidates: AccountCandidate[], model: string | null, now: number) {
   return [...candidates].sort((a, b) => {
     const signedIn = Number(a.signIn === 'signed_out') - Number(b.signIn === 'signed_out');
@@ -88,7 +99,7 @@ function pickUsable(request: PickRequest) {
   return (
     below.find((account) => account.id === request.previous) ??
     below.find((account) => account.isDefault) ??
-    rankByHeadroom(below, model)[0] ??
+    rankBySoonestReset(below, model)[0] ??
     rankByHeadroom(usable, model)[0] ??
     null
   );

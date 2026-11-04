@@ -360,7 +360,7 @@ function RemoteDialogs({
       <ConfirmDialog
         control={dialog.control}
         title={`Remove ${name}?`}
-        body={`${name} can no longer reach ${place} from Shinsa Cloud. Every device they added is revoked, and any page they have open closes. They can ask for access again with the invite link.`}
+        body={`${name} loses access to ${place} and every device they added. They can ask again with the invite link.`}
         action='Remove member'
         onConfirm={() =>
           void requestWithToast(() => actions.removeMember(value.user.id), `${name} was removed.`)
@@ -373,7 +373,7 @@ function RemoteDialogs({
       <ConfirmDialog
         control={dialog.control}
         title={`Revoke ${value.device.name}?`}
-        body={`It can no longer open ${place} from Shinsa Cloud, and any page it has open closes. It can ask for access again with the invite link.`}
+        body={`It can no longer open ${place}, and any page it has open closes. It can ask again with the invite link.`}
         action='Revoke device'
         onConfirm={() =>
           void requestWithToast(() => actions.revokeDevice(value.device.publicKey), 'Device revoked.')
@@ -385,7 +385,7 @@ function RemoteDialogs({
       <ConfirmDialog
         control={dialog.control}
         title='Remove remote access?'
-        body='This machine leaves Shinsa Cloud, its tunnel is deleted and every added device is revoked. You can turn it on again later.'
+        body='This machine leaves Shinsa Cloud and every added device is revoked. You can turn it on again later.'
         action='Remove remote access'
         onConfirm={() => void requestWithToast(onRemove, 'Remote access is removed.')}
       />

@@ -1,8 +1,8 @@
 import { describe, expect, test } from 'bun:test';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { readOriginRemote } from '../../src/repos/index.ts';
 import { createTempDir, git } from '../helpers/index.ts';
+import { readOriginRemote } from './harness.ts';
 
 async function createRepo(root: string, name: string, ...remotes: [string, string][]) {
   const path = join(root, name);

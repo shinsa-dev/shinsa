@@ -1,7 +1,8 @@
 import { describe, expect, test } from 'bun:test';
 import { join } from 'node:path';
+import { Effect } from 'effect';
 import { resolveSdkPackage } from '../../src/agents/providers/claude/executable.ts';
-import { resolveConfig } from '../../src/config/index.ts';
+import { GitCommands } from '../../src/git/layers.ts';
 import {
   BUNDLE,
   createServerInstance,
@@ -9,6 +10,8 @@ import {
   resolveBundlePath,
   resolveServerInstance,
 } from '../../src/instance/index.ts';
+import { runTest } from '../harness.ts';
+import { resolveConfig } from '../helpers/config.ts';
 import { createTempDir } from '../helpers/index.ts';
 
 const FACTS = {
@@ -51,7 +54,9 @@ describe('the engine bundle', () => {
     expect(config.webDir).toBe(join(bundle.root, 'web'));
     expect(resolveSdkPackage(undefined, bundle)).toEqual(bundle.sdk);
     expect(createServerInstance(null, 5, bundle).version).toBe('1.4.0');
-    const instance = await resolveServerInstance('/nowhere', bundle);
+    const instance = await runTest(
+      resolveServerInstance('/nowhere', bundle).pipe(Effect.provide(GitCommands))
+    );
     expect(instance).toMatchObject({ version: '1.4.0', commit: 'c'.repeat(40) });
   });
 });

@@ -89,7 +89,7 @@ const COVERAGE_FORMAT_LABEL: Record<CoverageFormat, string> = {
 export const COVERAGE_DIALOG = {
   title: 'Custom test coverage',
   description:
-    'After the checks, Shinsa runs this command in the task’s worktree, reads the report it writes and measures which changed lines the tests run.',
+    'After the checks, Shinsa runs this command, reads its report and measures which changed lines the tests run.',
   action: 'Save',
   fields: {
     command: { label: 'Command', placeholder: 'npm test -- --coverage' },

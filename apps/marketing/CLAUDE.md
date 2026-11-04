@@ -20,8 +20,8 @@ gives the build process the browser globals the web's modules read when they loa
 plugin in the config points every `react` import at `lib/react-snapshots.ts`, whose `useSyncExternalStore` uses the
 client snapshot as the server one, since React refuses to render or hydrate that hook without it and the web app never
 passes one. And the stand-in's transport and socket (`installDemoConnection`, `install.ts`) run at build too, so `code.tsx` and `review.tsx` can load the
-workbench's reads with a top-level await before it renders, in the build and in the browser alike: `review-prime.ts`
-reads every folder and file at both commits and the diff, and the stand-in answers at once, so the Code tab never
+workbench's reads with a top-level await before it renders, in the build and in the browser alike: `primeReview`
+(`review-prime.ts`, an effect they run with the web's `runApp`) reads every folder and file at both commits and the diff, and the stand-in answers at once, so the Code tab never
 shows a loading state. The stand-in calls `connection.flush()` after it opens, since the connection otherwise applies state on the next frame and the build would render the composer without its project. Keep a demo's first
 render a function of its sample state: anything read from the clock or the URL during render shows up as a hydration
 mismatch.
@@ -96,8 +96,8 @@ src/
                             lib/open-scene.ts on OPEN_TASK_ID, which the demo server gives no repository;
                             components/demos/open-review.tsx, the page's only content, a `client:only` island: the
                             static HTML holds only its fallback, OpenLoading, one small centred spinner, and the island
-                            keeps showing it until readOpenPage (lib/open-page.ts) has read the query and the fragment,
-                            then draws the whole page in one paint, so nothing arrives in pieces; worker/open.ts writes
+                            keeps showing it until readOpenPage (lib/open-page.ts, an effect it runs with `runApp`) has read the query and the fragment,
+                            then draws the whole page in one paint, so nothing arrives in pieces; the Worker's `OpenPage` writes
                             only the tab's title from the query before the page is sent). Without a review the page is
                             the header (resolveInviteHeader) with the handle and "This link carries no review" under it
                             and no Review tab, and Download alone and primary under "This link does
@@ -105,12 +105,20 @@ src/
                             never scrolls itself; copy in content.ts `openTask`; left out of the sitemap, never indexed (`noindex` meta and
                             `X-Robots-Tag` in public/_headers) and sends no referrer), og.png, llms.txt and design.md; public/ holds the
                             PNG icons, site.webmanifest, robots.txt, _headers and `install`, the engine's install script (below); @astrojs/sitemap writes the sitemap
-  lib/guard.ts              Runs `apps/engine/src/agents/policy.ts` at build time on a fixed list of commands
-  worker/                   The Worker in front of the assets: index.ts wires Cloudflare's globals and the R2 bucket
-                            into download.ts, which answers the download paths and `/download/version[/beta|/canary]`
-                            (the channel's version as text, for the install script), updates.ts, which serves the Mac
-                            app's update files, and open.ts, which writes the open page's tab title from the query with HTMLRewriter (tested in test/worker/ at 100%,
-                            `bun run test`)
+  lib/guard.ts              `listGuardedCommands`, an effect index.astro runs: `apps/engine/src/agents/policy.ts` at
+                            build time on a fixed list of commands
+  worker/                   The Worker in front of the assets, in Effect like apps/cloud: index.ts is its one edge,
+                            which puts Cloudflare's globals and the R2 bucket in `WorkerBindings` (platform/) and runs
+                            `respondWorker` (app.ts) with `WorkerLayer`. Its services: `Bucket` (bucket/, the R2 reads,
+                            failing with `BucketUnbound` or `BucketFailed`), `EdgeCache` (cache/, `caches.default`),
+                            `Assets`, `ReleaseFeed` (releases/, the Atom feed through `HttpClient`), and one per
+                            answer: `Downloads` (download/, the download paths and `/download/version[/beta|/canary]`,
+                            the channel's version as text, for the install script), `Updates` (updates/, the Mac app's
+                            update files) and `OpenPage` (open/, which writes the open page's tab title from the query
+                            with HTMLRewriter). The pure steps sit beside them (bytes.ts, download/paths.ts and
+                            conditions.ts, releases/versions.ts and pointer.ts, updates/files.ts); logger.ts writes
+                            Effect's logs to the console. Tested through `respondWorker` (test/worker/harness.ts) at
+                            100%, `bun run test`
 ```
 
 ## The design system file
@@ -225,10 +233,11 @@ pointer (`docs/release.md` → Downloads).
   `/updates/`. Every answer carries R2's `ETag`, `Last-Modified` and `Accept-Ranges: bytes`; a single `Range` reads
   only those bytes and answers 206 (a differential update asks one range per request), a range past the end answers
   416, a multi-range or malformed one gets the whole file, and a HEAD reads no bytes (the same `parseRange`,
-  `answerBytes` and `answerUnsatisfiable` the downloads use, in `download.ts`). Any other path under `/updates`
+  `answerBytes` and `answerUnsatisfiable` the downloads use, in `bytes.ts`). Any other path under `/updates`
   answers 404, so nothing else in the bucket can be reached; no binding or an R2 error answers 503 with
-  `Cache-Control: no-store` and writes a `console.error` (`log.ts`), which Workers Logs keeps (`observability` in
-  `wrangler.jsonc`), and the app checks again later. There is no fallback to GitHub (`updates.ts`).
+  `Cache-Control: no-store` and logs an error, which `logger.ts` writes to `console.error` and Workers Logs keeps
+  (`observability` in `wrangler.jsonc`), and the app checks again later. There is no fallback to GitHub
+  (`updates/service.ts`).
 - **Workers limits that apply.** A streamed response has no size limit, an R2 body costs no CPU time per byte, and an
   HTTP request has no wall-clock limit while the client stays connected. A download is two R2 operations (the pointer,
   on a cache miss, and the object), both Class B reads, of which ten million a month are free. Memory (128 MB) is never
