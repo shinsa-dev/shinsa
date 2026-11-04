@@ -321,9 +321,7 @@ export class HostedTeamFeeds implements TeamFeedSource {
         feed.updatedAt = view.value.updatedAt ?? now;
         feed.attempt = 0;
         this.#mark(feed, 'live', null);
-        feed.machine = view.value.presence?.length
-          ? { ...feed.machine, presence: view.value.presence }
-          : feed.machine;
+        if (view.value.presence?.length) feed.machine = { ...feed.machine, presence: view.value.presence };
         this.#publish(now);
         yield* this.#adoptHeld(feed.target.teamId, view.value.held ?? []);
       })
