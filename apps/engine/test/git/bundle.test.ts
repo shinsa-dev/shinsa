@@ -37,12 +37,45 @@ async function createBundle() {
 }
 
 const BRANCHES = [
-  { taskId: 'root', branch: 'feat/root', base: 'main' },
-  { taskId: 'middle', branch: 'feat/middle', base: 'feat/root' },
-  { taskId: 'top', branch: 'feat/top', base: 'feat/middle' },
+  { taskId: 'root', branch: 'feat/root', bases: ['main'] },
+  { taskId: 'middle', branch: 'feat/middle', bases: ['feat/root'] },
+  { taskId: 'top', branch: 'feat/top', bases: ['feat/middle'] },
+];
+
+async function createDiamond() {
+  const created = await createGitRepo({ files: { 'top.txt': 'start\n' } });
+  await commitBranch(created.path, 'feat/a', 'main', { 'a.txt': 'a\n' });
+  await commitBranch(created.path, 'feat/b', 'feat/a', { 'b.txt': 'b\n' });
+  await commitBranch(created.path, 'feat/c', 'feat/a', { 'c.txt': 'c\n' });
+  await git(created.path, 'checkout', '-q', '-B', 'feat/f', 'feat/b');
+  await git(created.path, 'merge', '-q', '--no-edit', 'feat/c');
+  await commitBranch(created.path, 'feat/f', 'feat/f', { 'f.txt': 'f\n' });
+  return created;
+}
+
+const DIAMOND = [
+  { taskId: 'a', branch: 'feat/a', bases: ['main'] },
+  { taskId: 'b', branch: 'feat/b', bases: ['feat/a'] },
+  { taskId: 'c', branch: 'feat/c', bases: ['feat/a'] },
+  { taskId: 'f', branch: 'feat/f', bases: ['feat/b', 'feat/c'] },
 ];
 
 describe('checkBundleMerge', () => {
+  test('a diamond whose fan-in branch has both parents merges cleanly', async () => {
+    const { repo } = await createDiamond();
+    expect(await checkBundleMerge(repo, DIAMOND)).toBeNull();
+  });
+
+  test('a fix pushed to one parent of a fan-in branch is found behind on that parent', async () => {
+    const { repo, path } = await createDiamond();
+    await commitBranch(path, 'feat/c', 'feat/c', { 'f.txt': 'c\n' });
+    expect(await checkBundleMerge(repo, DIAMOND)).toEqual({
+      taskId: 'f',
+      behindTaskId: 'f',
+      base: 'feat/c',
+    });
+  });
+
   test('a bundle whose branches merge cleanly into the default branch has no conflict', async () => {
     const { repo, origin, root } = await createBundle();
     expect(await checkBundleMerge(repo, BRANCHES)).toBeNull();
@@ -73,7 +106,7 @@ describe('checkBundleMerge', () => {
   test('a branch missing on the remote fails the check', async () => {
     const { repo } = await createBundle();
     await expect(
-      checkBundleMerge(repo, [...BRANCHES, { taskId: 'gone', branch: 'feat/gone', base: 'feat/top' }])
+      checkBundleMerge(repo, [...BRANCHES, { taskId: 'gone', branch: 'feat/gone', bases: ['feat/top'] }])
     ).rejects.toThrow();
   });
 
@@ -85,7 +118,7 @@ describe('checkBundleMerge', () => {
     await git(path, 'commit', '-q', '-m', 'feat: unrelated');
     await git(path, 'push', '-q', '-f', 'origin', 'feat/unrelated');
     await expect(
-      checkBundleMerge(repo, [{ taskId: 'unrelated', branch: 'feat/unrelated', base: 'main' }])
+      checkBundleMerge(repo, [{ taskId: 'unrelated', branch: 'feat/unrelated', bases: ['main'] }])
     ).rejects.toThrow('merge-tree');
   });
 });

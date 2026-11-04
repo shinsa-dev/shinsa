@@ -1,4 +1,4 @@
-import { listWaitsOn, type ShinsaState, selectStackParent, type Task } from '@shinsa/core';
+import { listStackParents, listWaitsOn, type ShinsaState, type Task } from '@shinsa/core';
 import { DropdownMenuContent } from '@shinsa/ui/components/dropdown-menu';
 import { Icon } from '@shinsa/ui/components/icon';
 import { TooltipLabel } from '@shinsa/ui/components/tooltip';
@@ -86,13 +86,18 @@ export function WaitsOnLinks({ waitsOn, stacked = false }: { waitsOn: Task[]; st
 const CHAIN_MARK =
   'grid size-5 shrink-0 cursor-pointer place-items-center rounded-control-sm text-fg-2 hover:bg-bg-a2 hover:text-fg-4 active:bg-bg-a2 active:text-fg-4 data-popup-open:bg-bg-a2 data-popup-open:text-fg-4';
 
-function StackMark({ parent }: { parent: Task }) {
+function StackMark({ parents }: { parents: Task[] }) {
+  const [first, ...rest] = parents;
+  if (!first) return null;
+  const name = first.handle ?? first.title;
   return (
-    <Hint label={<WaitsOnHint waitsOn={[parent]} label={STACKED_ON} detail={STACKED_DETAIL} />}>
+    <Hint label={<WaitsOnHint waitsOn={parents} label={STACKED_ON} detail={STACKED_DETAIL} />}>
       <a
-        href={withRouteBase(resolveTaskPath(parent))}
-        aria-label={`${STACKED_ON} ${parent.handle ?? parent.title}`}
-        onClick={(event) => openTask(event, parent)}
+        href={withRouteBase(resolveTaskPath(first))}
+        aria-label={
+          rest.length > 0 ? `${STACKED_ON} ${name} and ${rest.length} more` : `${STACKED_ON} ${name}`
+        }
+        onClick={(event) => openTask(event, first)}
         className={CHAIN_MARK}
       >
         <Icon size='sm' name={BUNDLE_ICON} />
@@ -101,39 +106,39 @@ function StackMark({ parent }: { parent: Task }) {
   );
 }
 
-function ChainHint({ parent, others }: { parent: Task | null; others: Task[] }) {
-  if (!parent) return <WaitsOnHint waitsOn={others} />;
+function ChainHint({ parents, others }: { parents: Task[]; others: Task[] }) {
+  if (parents.length === 0) return <WaitsOnHint waitsOn={others} />;
   return (
     <span className='flex flex-col gap-2'>
-      <WaitsOnHint waitsOn={[parent]} label={STACKED_ON} detail={STACKED_DETAIL} />
+      <WaitsOnHint waitsOn={parents} label={STACKED_ON} detail={STACKED_DETAIL} />
       <WaitsOnHint waitsOn={others} />
     </span>
   );
 }
 
 export function ChainArrow({ state, task }: { state: ShinsaState; task: Task }) {
-  const parent = selectStackParent(state, task);
-  const waitsOn = listWaitsOn(state, task);
-  const others = parent ? waitsOn.filter((waited) => waited.id !== parent.id) : waitsOn;
-  if (parent && others.length === 0) return <StackMark parent={parent} />;
-  const menuWaitsOn = parent ? [parent, ...others] : waitsOn;
+  const parents = listStackParents(state, task);
+  const stacked = new Set(parents.map((parent) => parent.id));
+  const others = listWaitsOn(state, task).filter((waited) => !stacked.has(waited.id));
+  const [first] = parents;
+  if (first && others.length === 0) return <StackMark parents={parents} />;
   return (
     <LazyMenu
       kind='dropdown'
       content={
         <DropdownMenuContent align='start' className='max-w-80 min-w-56'>
-          <WaitsOnItems state={state} task={task} waitsOn={menuWaitsOn} />
+          <WaitsOnItems state={state} task={task} waitsOn={[...parents, ...others]} />
         </DropdownMenuContent>
       }
     >
-      <Hint label={<ChainHint parent={parent} others={others} />}>
+      <Hint label={<ChainHint parents={parents} others={others} />}>
         <LazyMenuTrigger
           render={
             <button
               type='button'
               aria-label={
-                parent
-                  ? `${STACKED_ON} ${parent.handle ?? parent.title}, ${WAITS_ON.toLowerCase()} ${others.length} more`
+                first
+                  ? `${STACKED_ON} ${first.handle ?? first.title}, ${WAITS_ON.toLowerCase()} ${others.length} more`
                   : WAITS_ON
               }
               onClick={(event) => event.stopPropagation()}
@@ -141,7 +146,7 @@ export function ChainArrow({ state, task }: { state: ShinsaState; task: Task }) 
             />
           }
         >
-          <Icon size='sm' name={parent ? BUNDLE_ICON : 'IconArrowCornerDownRight'} />
+          <Icon size='sm' name={first ? BUNDLE_ICON : 'IconArrowCornerDownRight'} />
         </LazyMenuTrigger>
       </Hint>
     </LazyMenu>

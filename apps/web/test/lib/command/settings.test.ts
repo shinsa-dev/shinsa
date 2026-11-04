@@ -62,6 +62,7 @@ describe('Jump to', () => {
       ['Accounts', 'Agent Usage'],
       ['Limits', 'Agent Usage'],
       ['Repository folders', 'Projects'],
+      ['Worktrees', 'Projects'],
       ['Projects', 'Projects'],
       ['MCPs', 'Integrations'],
       ['Plugins', 'Integrations'],

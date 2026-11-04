@@ -27,6 +27,7 @@ export class SlackStore extends Context.Service<
     hasThread(thread: SlackThread, instanceId: InstanceId): Effect.Effect<boolean>;
     recordPost(post: SlackMessage, instanceId: InstanceId): Effect.Effect<void>;
     hasPost(post: SlackMessage, instanceId: InstanceId): Effect.Effect<boolean>;
+    selectPoster(post: SlackMessage): Effect.Effect<Option.Option<InstanceId>>;
     recordEvent(eventId: string): Effect.Effect<boolean>;
   }
 >()('shinsa/cloud/store/SlackStore') {
@@ -95,6 +96,12 @@ export class SlackStore extends Context.Service<
         Result: Found,
         execute: (row) =>
           sql`SELECT 1 AS found FROM slack_posts WHERE team_id = ${row.teamId} AND channel_id = ${row.channelId} AND ts = ${row.ts} AND instance_id = ${row.instanceId}`,
+      });
+      const posterLookup = SqlSchema.findOneOption({
+        Request: SlackMessage,
+        Result: Schema.Struct({ instanceId: InstanceId }),
+        execute: (row) =>
+          sql`SELECT instance_id FROM slack_posts WHERE team_id = ${row.teamId} AND channel_id = ${row.channelId} AND ts = ${row.ts}`,
       });
       const expiredEventsRemoval = SqlSchema.void({
         Request: Schema.Number,
@@ -166,6 +173,14 @@ export class SlackStore extends Context.Service<
         hasPost: Effect.fn('SlackStore.hasPost')(
           (post: SlackMessage, instanceId: InstanceId) =>
             Effect.map(postLookup({ ...post, instanceId }), Option.isSome),
+          Effect.orDie
+        ),
+        selectPoster: Effect.fn('SlackStore.selectPoster')(
+          (post: SlackMessage) =>
+            Effect.map(
+              posterLookup(post),
+              Option.map((row) => row.instanceId)
+            ),
           Effect.orDie
         ),
         recordEvent,

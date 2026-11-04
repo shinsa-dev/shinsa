@@ -4,7 +4,7 @@ import {
   type GateType,
   isHeldInBacklog,
   isPausingGate,
-  listActiveRuns,
+  type Run,
   type ShinsaState,
   selectLeadGate,
   type Task,
@@ -75,10 +75,22 @@ const WATCHING: Status = { label: 'Watching', tone: 'blue' };
 
 const DUPLICATE: Status = { label: 'Duplicate', tone: 'neutral' };
 
+const DELEGATION_WAITS = new WeakMap<Record<string, Run>, ReadonlySet<string>>();
+
+function resolveDelegationWaits(runs: Record<string, Run>) {
+  const known = DELEGATION_WAITS.get(runs);
+  if (known) return known;
+  const waiting = new Set<string>();
+  for (const run of Object.values(runs)) {
+    if (run.endedAt !== null || run.delegation || run.status !== 'waiting') continue;
+    if ((run.waitingOn?.delegations.length ?? 0) > 0) waiting.add(run.taskId);
+  }
+  DELEGATION_WAITS.set(runs, waiting);
+  return waiting;
+}
+
 function isWaitingForDelegations(state: ShinsaState, task: Task) {
-  return listActiveRuns(state, task.id).some(
-    (run) => run.status === 'waiting' && (run.waitingOn?.delegations.length ?? 0) > 0
-  );
+  return resolveDelegationWaits(state.runs).has(task.id);
 }
 
 export function isResolvingConflicts(task: Pick<Task, 'stage' | 'fixFor'>) {

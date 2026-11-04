@@ -27,6 +27,7 @@ import { MentionText } from '@/components/people/user-tag.tsx';
 import { useNow } from '@/hooks/use-now.ts';
 import { requestWithToast } from '@/lib/connection/commands.ts';
 import {
+  type MachineAccessActions,
   REMOTE_ACCESS_ACTIONS,
   type RemoteAccessActions,
   useRemoteAccess,
@@ -82,7 +83,7 @@ function LinkDialog({
   control: DialogControl;
   link: RemoteLink | null;
   canEnroll: boolean;
-  actions: RemoteAccessActions;
+  actions: MachineAccessActions;
 }) {
   const [busy, setBusy] = React.useState(false);
 
@@ -294,17 +295,19 @@ function DeviceRow({
 }
 
 function PeopleSection({
+  place,
   owner,
   members,
   onRemove,
 }: {
+  place: string;
   owner: RemoteUser | null;
   members: readonly RemoteMember[];
   onRemove: (user: RemoteUser) => void;
 }) {
   return (
     <>
-      <p className={SETTINGS_SUBHEADING}>People who can reach this machine</p>
+      <p className={SETTINGS_SUBHEADING}>{`People who can reach ${place}`}</p>
       {owner && <UserRow user={owner} detail='Owner' self />}
       {members.length === 0 && (
         <p className={ONLY_YOU}>Only you. Share the invite link to let someone ask for access.</p>
@@ -329,13 +332,17 @@ type RemoteDialog =
 function RemoteDialogs({
   dialog,
   snapshot,
+  place,
   canEnroll,
   actions,
+  onRemove,
 }: {
   dialog: ReturnType<typeof useDialogState<RemoteDialog>>;
   snapshot: RemoteSnapshot | null;
+  place: string;
   canEnroll: boolean;
-  actions: RemoteAccessActions;
+  actions: MachineAccessActions;
+  onRemove?: () => Promise<unknown>;
 }) {
   const { value } = dialog;
   if (value?.kind === 'link')
@@ -353,7 +360,7 @@ function RemoteDialogs({
       <ConfirmDialog
         control={dialog.control}
         title={`Remove ${name}?`}
-        body={`${name} can no longer reach this machine from Shinsa Cloud. Every device they added is revoked, and any page they have open closes. They can ask for access again with the invite link.`}
+        body={`${name} can no longer reach ${place} from Shinsa Cloud. Every device they added is revoked, and any page they have open closes. They can ask for access again with the invite link.`}
         action='Remove member'
         onConfirm={() =>
           void requestWithToast(() => actions.removeMember(value.user.id), `${name} was removed.`)
@@ -366,25 +373,79 @@ function RemoteDialogs({
       <ConfirmDialog
         control={dialog.control}
         title={`Revoke ${value.device.name}?`}
-        body='It can no longer open this machine from Shinsa Cloud, and any page it has open closes. It can ask for access again with the invite link.'
+        body={`It can no longer open ${place} from Shinsa Cloud, and any page it has open closes. It can ask for access again with the invite link.`}
         action='Revoke device'
         onConfirm={() =>
           void requestWithToast(() => actions.revokeDevice(value.device.publicKey), 'Device revoked.')
         }
       />
     );
-  if (value?.kind === 'remove')
+  if (value?.kind === 'remove' && onRemove)
     return (
       <ConfirmDialog
         control={dialog.control}
         title='Remove remote access?'
         body='This machine leaves Shinsa Cloud, its tunnel is deleted and every added device is revoked. You can turn it on again later.'
         action='Remove remote access'
-        onConfirm={() => void requestWithToast(actions.remove, 'Remote access is removed.')}
+        onConfirm={() => void requestWithToast(onRemove, 'Remote access is removed.')}
       />
     );
   return null;
 }
+
+function InviteLinkButton({ onClick }: { onClick: () => void }) {
+  return (
+    <Button variant='secondary' size='sm' icon='IconUserAdd' onClick={onClick}>
+      Invite link
+    </Button>
+  );
+}
+
+function AccessBody({
+  snapshot,
+  place,
+  actions,
+  onDialog,
+}: {
+  snapshot: RemoteSnapshot;
+  place: string;
+  actions: MachineAccessActions;
+  onDialog: (dialog: RemoteDialog) => void;
+}) {
+  return (
+    <>
+      <AccessRequestRows
+        requests={snapshot.requests}
+        access={snapshot.access}
+        viewerId={snapshot.access?.owner.id ?? null}
+        onAccept={(request) => actions.acceptRequest(request.id)}
+        onDecline={(request) => actions.declineRequest(request.id)}
+      />
+      <p className={SETTINGS_SUBHEADING}>{`Devices that can reach ${place}`}</p>
+      {snapshot.devices.length === 0 && (
+        <SettingsEmpty>
+          {`None yet. Open the invite link on the phone or browser you use away from ${place} to ask for access.`}
+        </SettingsEmpty>
+      )}
+      {snapshot.devices.map((device) => (
+        <DeviceRow
+          key={device.publicKey}
+          device={device}
+          snapshot={snapshot}
+          onRevoke={() => onDialog({ kind: 'revoke', device })}
+        />
+      ))}
+      <PeopleSection
+        place={place}
+        owner={snapshot.access?.owner ?? null}
+        members={snapshot.access?.members ?? NO_MEMBERS}
+        onRemove={(user) => onDialog({ kind: 'member', user })}
+      />
+    </>
+  );
+}
+
+const LOCAL_PLACE = 'this machine';
 
 export function RemoteAccessGroup({
   snapshot,
@@ -402,55 +463,55 @@ export function RemoteAccessGroup({
     <SettingsGroup
       title={REMOTE_ACCESS_SECTION}
       description={DESCRIPTION}
-      action={
-        canEnroll ? (
-          <Button
-            variant='secondary'
-            size='sm'
-            icon='IconUserAdd'
-            onClick={() => dialog.show({ kind: 'link' })}
-          >
-            Invite link
-          </Button>
-        ) : undefined
-      }
+      action={canEnroll ? <InviteLinkButton onClick={() => dialog.show({ kind: 'link' })} /> : undefined}
     >
       {!snapshot && <SettingsEmpty>{failure ?? 'Reading remote access…'}</SettingsEmpty>}
       {snapshot && (
         <StatusRow snapshot={snapshot} actions={actions} onRemove={() => dialog.show({ kind: 'remove' })} />
       )}
       {canAdd && (
-        <AccessRequestRows
-          requests={snapshot.requests}
-          access={snapshot.access}
-          viewerId={snapshot.access?.owner.id ?? null}
-          onAccept={(request) => actions.acceptRequest(request.id)}
-          onDecline={(request) => actions.declineRequest(request.id)}
-        />
+        <AccessBody snapshot={snapshot} place={LOCAL_PLACE} actions={actions} onDialog={dialog.show} />
       )}
-      {canAdd && <p className={SETTINGS_SUBHEADING}>Devices that can reach this machine</p>}
-      {canAdd && snapshot.devices.length === 0 && (
-        <SettingsEmpty>
-          None yet. Open the invite link on the phone or browser you use away from this machine to ask for
-          access.
-        </SettingsEmpty>
-      )}
-      {snapshot?.devices.map((device) => (
-        <DeviceRow
-          key={device.publicKey}
-          device={device}
-          snapshot={snapshot}
-          onRevoke={() => dialog.show({ kind: 'revoke', device })}
-        />
-      ))}
-      {canAdd && (
-        <PeopleSection
-          owner={snapshot.access?.owner ?? null}
-          members={snapshot.access?.members ?? NO_MEMBERS}
-          onRemove={(user) => dialog.show({ kind: 'member', user })}
-        />
-      )}
-      <RemoteDialogs dialog={dialog} snapshot={snapshot} canEnroll={canEnroll} actions={actions} />
+      <RemoteDialogs
+        dialog={dialog}
+        snapshot={snapshot}
+        place={LOCAL_PLACE}
+        canEnroll={canEnroll}
+        actions={actions}
+        onRemove={actions.remove}
+      />
+    </SettingsGroup>
+  );
+}
+
+const MACHINE_ACCESS_DESCRIPTION =
+  'Who can reach this machine through Shinsa Cloud, and from which devices. Pausing, removing or pairing it again is done on the machine itself.';
+
+export function MachineAccessGroup({
+  name,
+  snapshot,
+  actions,
+}: {
+  name: string;
+  snapshot: RemoteSnapshot;
+  actions: MachineAccessActions;
+}) {
+  const dialog = useDialogState<RemoteDialog>();
+  const canEnroll = canEnrollDevices(snapshot);
+  return (
+    <SettingsGroup
+      title={`${REMOTE_ACCESS_SECTION} on ${name}`}
+      description={MACHINE_ACCESS_DESCRIPTION}
+      action={canEnroll ? <InviteLinkButton onClick={() => dialog.show({ kind: 'link' })} /> : undefined}
+    >
+      <AccessBody snapshot={snapshot} place={name} actions={actions} onDialog={dialog.show} />
+      <RemoteDialogs
+        dialog={dialog}
+        snapshot={snapshot}
+        place={name}
+        canEnroll={canEnroll}
+        actions={actions}
+      />
     </SettingsGroup>
   );
 }

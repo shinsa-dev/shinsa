@@ -1,4 +1,11 @@
-import { type PullRequest, type Repo, resolveRoundBase, type ShippingStep, type Task } from '@shinsa/core';
+import {
+  type PullRequest,
+  type Repo,
+  resolveRoundBase,
+  resolveRoundBases,
+  type ShippingStep,
+  type Task,
+} from '@shinsa/core';
 import { Context, Effect, Layer } from 'effect';
 import { listCheckFailures } from '../../../checks/failures.ts';
 import { resolveOutputTail } from '../../../git/remote/output.ts';
@@ -41,18 +48,19 @@ export class Shipping extends Context.Service<
         step: ShippingStep,
         attempt: EffectAttempt
       ) {
+        const stepKey = step.kind === 'updating' ? `updating:${step.base}` : step.kind;
         yield* world.dispatch(
           { type: 'pull_request.record_step', taskId, step },
-          { id: `${attempt.key}:${attempt.attempt}:pull_request.record_step:${step.kind}` }
+          { id: `${attempt.key}:${attempt.attempt}:pull_request.record_step:${stepKey}` }
         );
       });
 
-      const updateOntoBase = Effect.fn('Shipping.updateOntoBase')(function* (
+      const updateOnto = Effect.fn('Shipping.updateOnto')(function* (
         task: Task,
         repo: Repo,
+        base: string,
         attempt: EffectAttempt
       ) {
-        const base = resolveRoundBase(task) ?? repo.defaultBranch;
         const update = yield* world.workspaces
           .resolve(task)
           .syncBase(repo, task, base, Effect.orDie(recordStep(task.id, { kind: 'updating', base }, attempt)))
@@ -63,6 +71,18 @@ export class Shipping extends Context.Service<
           { id: `${attempt.key}:${attempt.attempt}:pull_request.record_update_conflict` }
         );
         return false;
+      });
+
+      const updateOntoBases = Effect.fn('Shipping.updateOntoBases')(function* (
+        task: Task,
+        repo: Repo,
+        attempt: EffectAttempt
+      ) {
+        const bases = resolveRoundBases(task);
+        for (const base of bases.length > 0 ? bases : [repo.defaultBranch]) {
+          if (!(yield* updateOnto(task, repo, base, attempt))) return false;
+        }
+        return true;
       });
 
       const recordHookFailure = Effect.fn('Shipping.recordHookFailure')(function* (
@@ -111,7 +131,7 @@ export class Shipping extends Context.Service<
       ) {
         yield* world.runs.quiesce(task.id);
         yield* edits.commit(task, repo, attempt);
-        if (!(yield* updateOntoBase(task, repo, attempt))) return false;
+        if (!(yield* updateOntoBases(task, repo, attempt))) return false;
         const sha = yield* pushBranch(task, repo, attempt).pipe(Effect.mapError(asShipping('pushing')));
         if (sha === null) return false;
         yield* world.dispatch(

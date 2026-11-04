@@ -1,4 +1,10 @@
-import type { ChannelHeaders } from '@shinsa/core';
+import {
+  type Bytes,
+  type ChannelHeaders,
+  parseBase64Url,
+  serializeBase64Url,
+  TERMINAL_STREAM_CLOSE,
+} from '@shinsa/core';
 import { Deferred, Effect, Predicate, Schema } from 'effect';
 import { forkApp, runApp } from '@/lib/runtime/app.ts';
 import { CloudAnswerInvalid, CloudRefused, CloudUnreachable } from '@/lib/runtime/remote/schema.ts';
@@ -11,6 +17,7 @@ import {
   type ChannelOptions,
   type RemoteChannel,
   RequestAborted,
+  type TerminalStreamMessage,
 } from './remote-channel/schema.ts';
 import type { EnrolledDevice } from './schema.ts';
 
@@ -64,6 +71,93 @@ export class ChannelSocket extends EventTarget {
   }
 }
 
+const CHANNEL_GONE = 1006;
+
+function toArrayBuffer(bytes: Uint8Array) {
+  return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+}
+
+function toBytes(data: string | ArrayBufferLike | ArrayBufferView) {
+  if (typeof data === 'string') return null;
+  if (ArrayBuffer.isView(data)) return new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
+  return new Uint8Array(data);
+}
+
+export class ChannelTerminalSocket extends EventTarget {
+  readyState: number = CONNECTING;
+  binaryType: BinaryType = 'blob';
+  readonly #terminal: string;
+  readonly #id: string;
+  #channel: RemoteChannel | null = null;
+  readonly #release: (() => void)[] = [];
+
+  constructor(terminal: string, id: string) {
+    super();
+    this.#terminal = terminal;
+    this.#id = id;
+  }
+
+  attach(channel: RemoteChannel) {
+    if (this.readyState === CLOSED) return;
+    this.#channel = channel;
+    this.#release.push(
+      channel.subscribeTerminal((message) => this.#receive(message)),
+      channel.subscribeClose((error) => this.#finish(CHANNEL_GONE, error.message))
+    );
+    this.readyState = OPEN;
+    void channel.sendTerminal({ t: 'terminal-open', id: this.#id, terminal: this.#terminal });
+    this.dispatchEvent(new Event('open'));
+  }
+
+  #receive(message: TerminalStreamMessage) {
+    if (message.id !== this.#id) return;
+    if (message.t === 'terminal-close') {
+      this.#finish(message.code, message.reason);
+      return;
+    }
+    const data = message.t === 'terminal-text' ? message.data : parseBase64Url(message.chunk);
+    if (data === null) return;
+    this.dispatchEvent(
+      new MessageEvent('message', { data: typeof data === 'string' ? data : toArrayBuffer(data) })
+    );
+  }
+
+  send(data: string | ArrayBufferLike | ArrayBufferView) {
+    const channel = this.#channel;
+    if (this.readyState !== OPEN || !channel) return;
+    const bytes = toBytes(data);
+    void channel.sendTerminal(
+      bytes
+        ? { t: 'terminal-bytes', id: this.#id, chunk: serializeBase64Url(bytes as Bytes) }
+        : { t: 'terminal-text', id: this.#id, data: data as string }
+    );
+  }
+
+  close() {
+    const channel = this.#channel;
+    if (this.readyState === OPEN && channel)
+      void channel.sendTerminal({
+        t: 'terminal-close',
+        id: this.#id,
+        code: TERMINAL_STREAM_CLOSE.normal,
+        reason: '',
+      });
+    this.#finish(TERMINAL_STREAM_CLOSE.normal, 'Closed on this page.');
+  }
+
+  fail(reason: string) {
+    this.#finish(CHANNEL_GONE, reason);
+  }
+
+  #finish(code: number, reason: string) {
+    if (this.readyState === CLOSED) return;
+    this.readyState = CLOSED;
+    for (const release of this.#release.splice(0)) release();
+    this.#channel = null;
+    this.dispatchEvent(new CloseEvent('close', { code, reason }));
+  }
+}
+
 export interface RemoteLinkOptions {
   instanceId: string;
   device: EnrolledDevice;
@@ -97,6 +191,7 @@ export function createRemoteLink(options: RemoteLinkOptions) {
   let connecting: Deferred.Deferred<RemoteChannel, LinkFailure> | null = null;
   let current: RemoteChannel | null = null;
   let socketTaken = false;
+  let streams = 0;
 
   const forget = () => {
     connecting = null;
@@ -177,6 +272,19 @@ export function createRemoteLink(options: RemoteLinkOptions) {
       socketTaken = true;
       forkApp(
         Deferred.await(attempt).pipe(
+          Effect.match({
+            onSuccess: (channel) => socket.attach(channel),
+            onFailure: (error) => socket.fail(error.message),
+          })
+        )
+      );
+      return socket as unknown as WebSocket;
+    },
+    openTerminalSocket: (terminal: string): WebSocket => {
+      streams += 1;
+      const socket = new ChannelTerminalSocket(terminal, `t${streams}`);
+      forkApp(
+        Deferred.await(resolveAttempt(false)).pipe(
           Effect.match({
             onSuccess: (channel) => socket.attach(channel),
             onFailure: (error) => socket.fail(error.message),

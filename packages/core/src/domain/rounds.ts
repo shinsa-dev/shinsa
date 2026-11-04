@@ -65,7 +65,7 @@ type RoundSource = Pick<
   | 'branch'
   | 'pullRequest'
   | 'stage'
-  | 'stackBase'
+  | 'stackBases'
 >;
 
 type ShippingSource = RoundSource & Pick<Task, 'closedAt' | 'fixFor' | 'pushPending'>;
@@ -156,7 +156,14 @@ export function resolveRoundBase(task: RoundSource) {
       round.status === 'shipped' && round.branch === active?.base && round.pullRequest?.state === 'open'
   );
   if (active?.base && stacked) return active.base;
-  return task.stackBase ?? null;
+  return task.stackBases?.[0] ?? null;
+}
+
+export function resolveRoundBases(task: RoundSource) {
+  const base = resolveRoundBase(task);
+  if (base === null) return [];
+  const bases = task.stackBases ?? [];
+  return bases[0] === base ? [...bases] : [base];
 }
 
 export function listStackedPullRequests(task: RoundSource) {

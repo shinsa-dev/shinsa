@@ -252,6 +252,8 @@ export function parseBudget(value: string) {
 
 export const FOLDERS_TITLE = 'Repository folders';
 
+export const WORKTREES_TITLE = 'Worktrees';
+
 export const MODELS_TITLE = 'Models';
 
 export interface RootsChange {

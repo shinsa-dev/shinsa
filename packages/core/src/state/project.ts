@@ -6,6 +6,7 @@ import {
   type Evidence,
   type Feedback,
   type Focus,
+  type FocusSpan,
   formatTaskHandle,
   type Gate,
   type MemoryEntry,
@@ -29,6 +30,7 @@ import {
   type TaskDuplicate,
   type TaskShape,
   type TaskStage,
+  type TimingSpan,
   type UntoldMessage,
   type WatchSuggestion,
 } from '../domain/index.ts';
@@ -61,7 +63,7 @@ import { applyIterationEvent } from './iterations.ts';
 import { applyMemoryEvent } from './memory.ts';
 import { applyOnBehalfActed } from './on-behalf.ts';
 import { applyOverlapEvent } from './overlaps.ts';
-import { recordPresence } from './presence.ts';
+import { recordAway, recordFocus, recordPresence } from './presence.ts';
 import { applyPullRequestEvent } from './pull-requests.ts';
 import { applyRoundEvent, createFirstRound, recordRoundBranch, recordRoundStaged } from './rounds.ts';
 import { applyRunEvent } from './runs.ts';
@@ -94,6 +96,8 @@ export interface ShinsaState {
   watchSuggestions: Record<string, WatchSuggestion>;
   sessionUsage: Record<string, RunUsage>;
   presence: Record<string, number>;
+  away: Record<string, TimingSpan>;
+  focusHistory: Record<string, FocusSpan>;
   onBehalfActions: OnBehalfAction[];
 }
 
@@ -120,6 +124,8 @@ export function createState(): ShinsaState {
     watchSuggestions: {},
     sessionUsage: {},
     presence: {},
+    away: {},
+    focusHistory: {},
     onBehalfActions: [],
   };
 }
@@ -360,16 +366,16 @@ function applyWaitsOnChanged(state: ShinsaState, event: EventOf<'task.waits_on_c
 
 function applyStackChanged(state: ShinsaState, event: EventOf<'task.stack_changed'>) {
   updateTask(state, event.taskId, event.at, { stacksOn: event.stacksOn });
-  const parent = event.stacksOn === null ? null : (state.tasks[event.stacksOn]?.title ?? 'another task');
+  const parents = event.stacksOn.map((id) => state.tasks[id]?.title ?? 'another task');
   record(state, event.taskId, event.at, {
     actor: event.by ?? 'you',
     kind: 'stage',
-    text: describeStack(parent),
+    text: describeStack(parents),
   });
 }
 
 function applyStackBased(state: ShinsaState, event: EventOf<'task.stack_based'>) {
-  updateTask(state, event.taskId, event.at, { stackBase: event.base });
+  updateTask(state, event.taskId, event.at, { stackBases: event.bases });
 }
 
 function applyBundleReady(state: ShinsaState, event: EventOf<'task.bundle_ready'>) {
@@ -797,6 +803,7 @@ function applyWorkspaceEvent(state: ShinsaState, event: WorkspaceEvent) {
       return;
     case 'focus.changed':
       state.focus = { ...event.focus };
+      recordFocus(state, event.focus, event.at);
       return;
     case 'settings.changed':
       state.settings = structuredClone(event.settings);
@@ -849,6 +856,9 @@ function applyEventBody(state: ShinsaState, event: ShinsaEvent): ShinsaState {
     case 'focus.changed':
     case 'settings.changed':
       applyWorkspaceEvent(state, event);
+      break;
+    case 'away.recorded':
+      recordAway(state, event);
       break;
     case 'task.created':
       applyTaskCreated(state, event);
@@ -1141,6 +1151,7 @@ function applyEventBody(state: ShinsaState, event: ShinsaEvent): ShinsaState {
       break;
     case 'slack.thread_linked':
     case 'slack.status_posted':
+    case 'slack.decided':
       applySlackEvent(state, event);
       break;
     case 'memory.written':

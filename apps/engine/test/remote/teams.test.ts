@@ -713,6 +713,7 @@ async function knock(remote: Remote, userId: string, secret: string) {
     { send: (data) => void (typeof data === 'string' && sent.push(data)), close: () => undefined },
     {
       hub: { open: () => undefined, close: () => undefined, message: () => undefined },
+      terminals: null,
       respond: () => Promise.resolve(new Response()),
     },
     userId

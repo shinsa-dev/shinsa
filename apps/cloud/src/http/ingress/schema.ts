@@ -7,7 +7,7 @@ export const PAGE_METHODS = new Set(['GET', 'HEAD']);
 export const SECURITY_HEADERS: Record<string, string> = {
   'content-security-policy': [
     "default-src 'self'",
-    "script-src 'self'",
+    "script-src 'self' 'wasm-unsafe-eval'",
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: blob: https://avatars.githubusercontent.com",
     "font-src 'self' data:",

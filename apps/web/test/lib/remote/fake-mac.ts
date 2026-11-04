@@ -220,6 +220,19 @@ export class FakeMacSocket extends EventTarget {
       case 'abort':
         this.#mac.aborted.push(message.id);
         return;
+      case 'terminal-open':
+        await this.sealed(
+          message.terminal === 'refused'
+            ? { t: 'terminal-close', id: message.id, code: 4403, reason: 'Only the owner.' }
+            : { t: 'terminal-text', id: message.id, data: `opened:${message.terminal}` }
+        );
+        return;
+      case 'terminal-text':
+        await this.sealed({ t: 'terminal-text', id: message.id, data: `echo:${message.data}` });
+        return;
+      case 'terminal-bytes':
+        await this.sealed(message);
+        return;
       default:
         return;
     }

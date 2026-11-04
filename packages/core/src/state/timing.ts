@@ -1,5 +1,5 @@
-import type { Task, TaskTiming } from '../domain/index.ts';
-import type { ShinsaEvent } from '../events/index.ts';
+import type { Task, TaskTiming, YourInput } from '../domain/index.ts';
+import type { EventOf, ShinsaEvent } from '../events/index.ts';
 import { writeEntry } from './draft.ts';
 import type { ShinsaState } from './project.ts';
 
@@ -9,6 +9,7 @@ const EMPTY_TIMING: TaskTiming = {
   needsYou: [],
   needsYouSince: null,
   openGates: [],
+  inputs: [],
 };
 
 export function resolveTaskTiming(task: Pick<Task, 'timing'>): TaskTiming {
@@ -76,6 +77,29 @@ function closeGate(state: ShinsaState, gateId: string, answered: boolean, at: nu
   });
 }
 
+function isYours(event: ShinsaEvent) {
+  return !event.onBehalf && !event.byTask && !event.byGuest;
+}
+
+function recordInput(state: ShinsaState, taskId: string, input: YourInput) {
+  const task = state.tasks[taskId];
+  if (!task) return;
+  const timing = resolveTaskTiming(task);
+  writeTiming(state, task, { ...timing, inputs: [...timing.inputs, input] });
+}
+
+function recordAnswer(state: ShinsaState, event: EventOf<'gate.answered'>) {
+  const gate = state.gates[event.gateId];
+  if (!gate || event.ahead || !isYours(event)) return;
+  recordInput(state, gate.taskId, { at: event.at, kind: 'gate', gate: gate.type, decision: event.decision });
+}
+
+function recordMessage(state: ShinsaState, event: EventOf<'task.messaged'>) {
+  if (event.scheduleId || event.kept || !isYours(event)) return;
+  if (event.kind === 'new_round' || event.kind === 'separate_task') return;
+  recordInput(state, event.taskId, { at: event.at, kind: 'message' });
+}
+
 export function applyTimingEvent(state: ShinsaState, event: ShinsaEvent) {
   switch (event.type) {
     case 'task.created':
@@ -90,6 +114,12 @@ export function applyTimingEvent(state: ShinsaState, event: ShinsaEvent) {
       if (event.gate.status === 'open') openGate(state, event.gate.taskId, event.gate.id, event.at);
       return;
     case 'gate.answered':
+      recordAnswer(state, event);
+      closeGate(state, event.gateId, true, event.at);
+      return;
+    case 'task.messaged':
+      recordMessage(state, event);
+      return;
     case 'gate.superseded':
       closeGate(state, event.gateId, true, event.at);
       return;

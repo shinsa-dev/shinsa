@@ -157,6 +157,7 @@ export {
   resolveCurrentRound,
   resolveNextRoundNumber,
   resolveRoundBase,
+  resolveRoundBases,
   resolveRoundStamp,
   resolveRoundTitle,
   resolveSettledStatus,
@@ -248,6 +249,8 @@ export {
 export {
   isSameSlackThread,
   resolveSlackThreadKey,
+  resolveSlackThreadUrl,
+  type SlackDecided,
   type SlackThreadLink,
   type SlackThreadRef,
 } from './slack.ts';

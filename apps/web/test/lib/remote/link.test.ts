@@ -3,7 +3,7 @@ import { serializePublicKey } from '@shinsa/core';
 import { waitFor } from '@testing-library/react';
 import { Effect } from 'effect';
 import { openRemoteChannel } from '@/lib/remote/channel.ts';
-import { ChannelSocket, createRemoteLink } from '@/lib/remote/link.ts';
+import { ChannelSocket, ChannelTerminalSocket, createRemoteLink } from '@/lib/remote/link.ts';
 import { ChannelError } from '@/lib/remote/remote-channel/schema.ts';
 import type { EnrolledDevice } from '@/lib/remote/schema.ts';
 import { CloudRefused, CloudUnreachable } from '@/lib/runtime/remote/schema.ts';
@@ -184,5 +184,56 @@ describe('the link to a remote machine', () => {
       messages.push((error as ChannelError).message);
     }
     expect(messages).toEqual(['Offline.', 'The connection to your machine broke.']);
+  });
+
+  it('streams a terminal on the channel: text, bytes, its close, and what the machine sends back', async () => {
+    const { mac, link } = await createLink();
+    const socket = link.openTerminalSocket('term-1');
+    socket.binaryType = 'arraybuffer';
+    const heard: unknown[] = [];
+    socket.addEventListener('message', (event) => heard.push(event.data));
+    const closes: [number, string][] = [];
+    socket.addEventListener('close', (event) => closes.push([event.code, event.reason]));
+    await waitFor(() => expect(heard).toEqual(['opened:term-1']));
+    const [opened] = mac.received.filter((message) => message.t === 'terminal-open');
+    const id = opened?.t === 'terminal-open' ? opened.id : '';
+    socket.send('{"type":"clear"}');
+    socket.send(new TextEncoder().encode('ls'));
+    socket.send(new TextEncoder().encode('pwd').buffer);
+    await waitFor(() => expect(heard).toHaveLength(4));
+    expect(heard[1]).toBe('echo:{"type":"clear"}');
+    expect(new TextDecoder().decode(heard[2] as ArrayBuffer)).toBe('ls');
+    expect(new TextDecoder().decode(heard[3] as ArrayBuffer)).toBe('pwd');
+    await mac.last.sealed({ t: 'terminal-text', id: 'another', data: 'not ours' });
+    await mac.last.sealed({ t: 'terminal-bytes', id, chunk: '!' });
+    socket.close();
+    socket.send('ignored');
+    await waitFor(() =>
+      expect(mac.received.at(-1)).toEqual({ t: 'terminal-close', id, code: 1000, reason: '' })
+    );
+    expect(closes).toEqual([[1000, 'Closed on this page.']]);
+    expect(heard).toHaveLength(4);
+  });
+
+  it('closes a terminal socket with the machine’s code, and when its channel drops or never opens', async () => {
+    const { mac, link } = await createLink();
+    const refused = link.openTerminalSocket('refused');
+    const refusedCloses: number[] = [];
+    refused.addEventListener('close', (event) => refusedCloses.push(event.code));
+    await waitFor(() => expect(refusedCloses).toEqual([4403]));
+    const dropped = link.openTerminalSocket('term-1');
+    const droppedCloses: number[] = [];
+    dropped.addEventListener('close', (event) => droppedCloses.push(event.code));
+    await waitFor(() => expect(dropped.readyState).toBe(1));
+    mac.last.drop('The tunnel dropped.');
+    await waitFor(() => expect(droppedCloses).toEqual([1006]));
+    const early = new ChannelTerminalSocket('term-1', 't-early');
+    early.close();
+    expect(early.readyState).toBe(3);
+    const { link: refusing } = await createLink({}, false);
+    const never = refusing.openTerminalSocket('term-1');
+    const neverCloses: number[] = [];
+    never.addEventListener('close', (event) => neverCloses.push(event.code));
+    await waitFor(() => expect(neverCloses).toEqual([1006]));
   });
 });

@@ -1,15 +1,10 @@
 import { STAGE_WORDS } from '../chat/references.ts';
 import { capitalise, describeCount } from '../chat/text.ts';
 import { isTaskClosed, isTaskResting } from '../domain/rounds.ts';
-import type { Gate, Task, TaskStage } from '../domain/types.ts';
+import type { SlackDecided } from '../domain/slack.ts';
+import type { Gate, GateDecision, GateType, Task, TaskStage } from '../domain/types.ts';
 import { assembleReport } from '../report/assemble.ts';
 import type { ShinsaState } from '../state/index.ts';
-import {
-  SLACK_ANSWER_ACTION,
-  SLACK_OPEN_ACTION,
-  SLACK_QUESTION_BLOCK,
-  serializeSlackAnswerValue,
-} from './answers.ts';
 import {
   createSlackActions,
   createSlackButton,
@@ -19,11 +14,20 @@ import {
   createSlackMessage,
   createSlackSection,
   SLACK_BLOCK_LIMITS,
+  type SlackButton,
   type SlackMessage,
 } from './blocks.ts';
+import {
+  SLACK_DECIDE_ACTION,
+  SLACK_GATE_BLOCK,
+  SLACK_OPEN_ACTION,
+  SLACK_WRITE_ACTION,
+  serializeSlackDecisionValue,
+} from './decisions.ts';
 import { escapeSlackText, listSlackChunks, serializeSlackMrkdwn } from './mrkdwn.ts';
 import type { SlackPost } from './posts.ts';
 import type { SlackSessionStatus } from './relay.ts';
+import type { SlackDecisionValue } from './schema.ts';
 
 export const SLACK_RESULT_LIMIT = 1500;
 
@@ -42,6 +46,22 @@ export const SLACK_REACTIONS = {
 
 export type SlackReaction = (typeof SLACK_REACTIONS)[keyof typeof SLACK_REACTIONS];
 
+export const SLACK_MENTION_REACTIONS = { forwarded: 'eyes', held: 'inbox_tray' } as const;
+
+export type SlackMentionReaction = (typeof SLACK_MENTION_REACTIONS)[keyof typeof SLACK_MENTION_REACTIONS];
+
+const SLACK_CARD_GATES: readonly GateType[] = [
+  'failure',
+  'sign_in',
+  'question',
+  'secret',
+  'proposal',
+  'operation',
+  'plan',
+  'review',
+  'merge',
+];
+
 const NEEDS_YOU_STAGES: ReadonlySet<TaskStage> = new Set<TaskStage>([
   'awaiting_plan',
   'awaiting_review',
@@ -58,13 +78,7 @@ export interface SlackTaskRef {
   pullRequest: { number: number; url: string } | null;
 }
 
-interface SlackStatusView {
-  label: string;
-  detail: string | null;
-}
-
 interface SlackQuestionView {
-  gateId: string | null;
   question: string;
   context: string | null;
   choices: string[];
@@ -74,6 +88,7 @@ interface SlackQuestionView {
 interface SlackPlanView {
   goal: string;
   phases: string[];
+  version: number | null;
 }
 
 interface SlackReviewView {
@@ -151,35 +166,83 @@ export function resolveSlackReaction(task: Task, gates: readonly Gate[]): SlackR
   return SLACK_REACTIONS.working;
 }
 
-function resolveStatusView(task: Task, gates: readonly Gate[]): SlackStatusView {
-  const attention = resolveAttentionGate(gates);
-  if (attention) return { label: 'Needs you', detail: attention.title };
-  return { label: capitalise(task.stageReason.trim() || STAGE_WORDS[task.stage]), detail: null };
+function serializeDecided(decided: SlackDecided | null | undefined) {
+  return decided ? [createSlackContext([`<@${decided.userId}> ${decided.text}`])] : [];
 }
 
-function serializeSlackStatusView(ref: SlackTaskRef, view: SlackStatusView): SlackMessage {
-  return createSlackMessage(`${ref.label}: ${view.label}`, [
-    createSlackSection(
-      serializeLines([`*${escapeSlackText(view.label)}*`, view.detail ? serializeQuote(view.detail) : null])
-    ),
+function serializeSlackStatusView(
+  ref: SlackTaskRef,
+  label: string,
+  decided?: SlackDecided | null
+): SlackMessage {
+  return createSlackMessage(`${ref.label}: ${label}`, [
+    createSlackSection(`*${escapeSlackText(label)}*`),
+    ...serializeDecided(decided),
     serializeFooter(ref),
   ]);
 }
 
-export function serializeSlackStatus(task: Task, gates: readonly Gate[], taskUrl: string): SlackMessage {
-  return serializeSlackStatusView(resolveTaskRef(task, taskUrl), resolveStatusView(task, gates));
+function resolveStatusLabel(task: Task) {
+  return capitalise(task.stageReason.trim() || STAGE_WORDS[task.stage]);
 }
 
-function listAnswerButtons(view: SlackQuestionView) {
-  if (view.gateId === null || view.choices.length === 0 || view.choices.length > SLACK_BLOCK_LIMITS.buttons)
-    return [];
+function resolveCardGate(gates: readonly Gate[]) {
+  const open = gates.filter((gate) => gate.status === 'open');
+  for (const type of SLACK_CARD_GATES) {
+    const gate = open.find((candidate) => candidate.type === type);
+    if (gate) return gate;
+  }
+  return null;
+}
+
+export function serializeSlackCard(task: Task, gates: readonly Gate[], taskUrl: string): SlackMessage {
+  const gate = resolveCardGate(gates);
+  const view = gate ? serializeSlackGate(task, gate, taskUrl) : null;
+  return (
+    view ??
+    serializeSlackStatusView(resolveTaskRef(task, taskUrl), resolveStatusLabel(task), task.slack?.decided)
+  );
+}
+
+function resolveDecisionValue(
+  gate: Gate,
+  decision: GateDecision,
+  fields: Partial<Pick<SlackDecisionValue, 'choice' | 'planVersion'>> = {}
+): SlackDecisionValue {
+  return { gateId: gate.id, decision, choice: null, planVersion: null, ...fields };
+}
+
+function createDecideButton(label: string, value: SlackDecisionValue, primary = false) {
+  const suffix = value.choice === null ? value.decision : `choice.${value.choice}`;
+  return createSlackButton({
+    actionId: `${SLACK_DECIDE_ACTION}.${suffix}`,
+    label,
+    value: serializeSlackDecisionValue(value),
+    primary,
+  });
+}
+
+function createWriteButton(label: string, value: SlackDecisionValue, primary = false) {
+  return createSlackButton({
+    actionId: `${SLACK_WRITE_ACTION}.${value.decision}`,
+    label,
+    value: serializeSlackDecisionValue(value),
+    primary,
+  });
+}
+
+function createGateActions(gate: Gate, buttons: readonly SlackButton[]) {
+  return createSlackActions(buttons, `${SLACK_GATE_BLOCK}.${gate.id}`);
+}
+
+function listChoiceButtons(gate: Gate, view: SlackQuestionView) {
+  if (view.choices.length === 0 || view.choices.length > SLACK_BLOCK_LIMITS.buttons) return [];
   return view.choices.map((choice, index) =>
-    createSlackButton({
-      actionId: `${SLACK_ANSWER_ACTION}.${index}`,
-      label: choice,
-      value: serializeSlackAnswerValue(view.gateId ?? '', index),
-      primary: choice === view.recommendation,
-    })
+    createDecideButton(
+      choice,
+      resolveDecisionValue(gate, 'reply', { choice: index }),
+      choice === view.recommendation
+    )
   );
 }
 
@@ -190,8 +253,8 @@ function hasLongChoice(view: SlackQuestionView) {
   );
 }
 
-function serializeSlackQuestionView(ref: SlackTaskRef, view: SlackQuestionView): SlackMessage {
-  const answers = listAnswerButtons(view);
+function serializeSlackQuestionView(ref: SlackTaskRef, gate: Gate, view: SlackQuestionView): SlackMessage {
+  const answers = listChoiceButtons(gate, view);
   const choices = hasLongChoice(view)
     ? createSlackSection(
         view.choices.map((choice, index) => `*${index + 1}.*  ${escapeSlackText(choice)}`).join('\n')
@@ -206,10 +269,11 @@ function serializeSlackQuestionView(ref: SlackTaskRef, view: SlackQuestionView):
     ...(view.context ? [createSlackSection(serializeQuote(resolveLead(view.context)))] : []),
     ...(choices ? [choices] : []),
     ...(recommended ? [recommended] : []),
-    createSlackActions(
-      [...answers, createOpenButton('Answer in Shinsa', ref.url, answers.length === 0)],
-      view.gateId !== null ? `${SLACK_QUESTION_BLOCK}.${view.gateId}` : undefined
-    ),
+    createGateActions(gate, [
+      ...answers,
+      createWriteButton('Answer…', resolveDecisionValue(gate, 'reply'), answers.length === 0),
+      createOpenButton('Open in Shinsa', ref.url, false),
+    ]),
     serializeFooter(ref),
   ]);
 }
@@ -223,7 +287,14 @@ function serializeSlackSecretView(ref: SlackTaskRef, label: string): SlackMessag
   ]);
 }
 
-function serializeSlackPlanView(ref: SlackTaskRef, view: SlackPlanView): SlackMessage {
+function listApproveButtons(gate: Gate, planVersion: number | null = null) {
+  return [
+    createDecideButton('Approve', resolveDecisionValue(gate, 'approve', { planVersion }), true),
+    createWriteButton('Request changes…', resolveDecisionValue(gate, 'revise')),
+  ];
+}
+
+function serializeSlackPlanView(ref: SlackTaskRef, gate: Gate, view: SlackPlanView): SlackMessage {
   const phases = view.phases
     .slice(0, SLACK_PLAN_PHASES)
     .map((phase, index) => `*${index + 1}.*  ${escapeSlackText(phase)}`);
@@ -238,32 +309,92 @@ function serializeSlackPlanView(ref: SlackTaskRef, view: SlackPlanView): SlackMe
           ),
         ]
       : []),
-    createSlackActions([createOpenButton('Review the plan', ref.url)]),
+    createGateActions(gate, [
+      ...listApproveButtons(gate, view.version),
+      createOpenButton('Read the plan', ref.url, false),
+    ]),
     serializeFooter(ref),
   ]);
 }
 
-function serializeSlackReviewView(ref: SlackTaskRef, view: SlackReviewView): SlackMessage {
-  const pullRequest = ref.pullRequest
+function serializePullRequestField(ref: SlackTaskRef, missing: string) {
+  return ref.pullRequest
     ? serializeTrustedLink(`PR #${ref.pullRequest.number}`, ref.pullRequest.url)
-    : 'Opens once you approve';
+    : missing;
+}
+
+function serializeSlackReviewView(ref: SlackTaskRef, gate: Gate, view: SlackReviewView): SlackMessage {
   return createSlackMessage(`${ref.label} is ready for your review.`, [
     createSlackHeader('Ready for your review'),
     createSlackSection(serializeQuote(view.summary)),
     createSlackFields([
       { label: 'Checks', value: escapeSlackText(view.checks ?? 'None ran') },
-      { label: 'Pull request', value: pullRequest },
+      { label: 'Pull request', value: serializePullRequestField(ref, 'Opens once you approve') },
     ]),
-    createSlackActions([createOpenButton('Review in Shinsa', ref.url)]),
+    createGateActions(gate, [
+      ...listApproveButtons(gate),
+      createOpenButton('Review in Shinsa', ref.url, false),
+    ]),
     serializeFooter(ref),
   ]);
 }
 
-function serializeSlackProposalView(ref: SlackTaskRef, request: string): SlackMessage {
+function serializeSlackMergeView(ref: SlackTaskRef, gate: Gate, view: SlackReviewView): SlackMessage {
+  return createSlackMessage(`${ref.label} is ready to merge.`, [
+    createSlackHeader('Ready to merge'),
+    createSlackSection(serializeQuote(view.summary)),
+    createSlackFields([
+      { label: 'Checks', value: escapeSlackText(view.checks ?? 'None ran') },
+      { label: 'Pull request', value: serializePullRequestField(ref, 'Not open yet') },
+    ]),
+    createGateActions(gate, [
+      createDecideButton('Merge', resolveDecisionValue(gate, 'approve'), true),
+      createOpenButton('Open in Shinsa', ref.url, false),
+    ]),
+    serializeFooter(ref),
+  ]);
+}
+
+function serializeSlackProposalView(ref: SlackTaskRef, gate: Gate, request: string): SlackMessage {
   return createSlackMessage(`${ref.label} proposes a change.`, [
     createSlackHeader('Proposed change'),
     createSlackSection(serializeQuote(request || 'A change to the code.')),
-    createSlackActions([createOpenButton('Decide in Shinsa', ref.url)]),
+    createGateActions(gate, [
+      createDecideButton('Approve', resolveDecisionValue(gate, 'approve'), true),
+      createDecideButton('Keep as is', resolveDecisionValue(gate, 'reject')),
+      createOpenButton('Open in Shinsa', ref.url, false),
+    ]),
+    serializeFooter(ref),
+  ]);
+}
+
+function serializeGateLines(gate: Gate) {
+  const lead = gate.body.trim() ? resolveLead(gate.body) : null;
+  return serializeLines([`*${escapeSlackText(gate.title)}*`, lead ? serializeQuote(lead) : null]);
+}
+
+function serializeSlackFailureView(ref: SlackTaskRef, gate: Gate): SlackMessage {
+  const retry = gate.type === 'failure';
+  return createSlackMessage(`${ref.label} needs you: ${gate.title}`, [
+    createSlackHeader(retry ? 'Something failed' : 'Sign-in needed'),
+    createSlackSection(serializeGateLines(gate)),
+    createGateActions(gate, [
+      ...(retry ? [createDecideButton('Retry', resolveDecisionValue(gate, 'approve'), true)] : []),
+      createOpenButton('Open in Shinsa', ref.url, !retry),
+    ]),
+    serializeFooter(ref),
+  ]);
+}
+
+function serializeSlackOperationView(ref: SlackTaskRef, gate: Gate): SlackMessage {
+  return createSlackMessage(`${ref.label} is ready to run its operation.`, [
+    createSlackHeader('Ready to run'),
+    createSlackSection(serializeGateLines(gate)),
+    createGateActions(gate, [
+      createDecideButton('Run', resolveDecisionValue(gate, 'approve'), true),
+      createDecideButton('Finish without it', resolveDecisionValue(gate, 'reject')),
+      createOpenButton('Open in Shinsa', ref.url, false),
+    ]),
     serializeFooter(ref),
   ]);
 }
@@ -277,40 +408,43 @@ function describeCheckSummary(task: Task) {
   return `${failed} of ${describeCount(checks.length, 'check')} failed.`;
 }
 
-function serializeQuestion(task: Task, gate: Gate, taskUrl: string) {
-  return serializeSlackQuestionView(resolveTaskRef(task, taskUrl), {
-    gateId: gate.id,
-    question: gate.title,
-    context: gate.body.trim() || null,
-    choices: gate.choices ?? [],
-    recommendation: gate.recommendation ?? null,
-  });
+function resolveReviewView(task: Task): SlackReviewView {
+  return {
+    summary: resolveLead(task.summary?.trim() || assembleReport(task).headline),
+    checks: describeCheckSummary(task),
+  };
 }
 
 export function serializeSlackGate(task: Task, gate: Gate, taskUrl: string): SlackMessage | null {
   const ref = resolveTaskRef(task, taskUrl);
   switch (gate.type) {
     case 'question':
-      return serializeQuestion(task, gate, taskUrl);
+      return serializeSlackQuestionView(ref, gate, {
+        question: gate.title,
+        context: gate.body.trim() || null,
+        choices: gate.choices ?? [],
+        recommendation: gate.recommendation ?? null,
+      });
     case 'secret':
       return serializeSlackSecretView(ref, gate.secret?.label ?? gate.title);
     case 'plan':
-      return serializeSlackPlanView(ref, {
+      return serializeSlackPlanView(ref, gate, {
         goal: task.plan?.document?.goal ?? task.title,
         phases: (task.plan?.document?.phases ?? []).map((phase) => phase.title),
+        version: gate.planVersion ?? task.plan?.version ?? null,
       });
     case 'review':
-      return serializeSlackReviewView(ref, {
-        summary: resolveLead(task.summary?.trim() || assembleReport(task).headline),
-        checks: describeCheckSummary(task),
-      });
-    case 'proposal':
-      return serializeSlackProposalView(ref, task.proposal?.request ?? '');
+      return serializeSlackReviewView(ref, gate, resolveReviewView(task));
     case 'merge':
-    case 'operation':
+      return serializeSlackMergeView(ref, gate, resolveReviewView(task));
+    case 'proposal':
+      return serializeSlackProposalView(ref, gate, task.proposal?.request ?? '');
     case 'failure':
-    case 'configuration':
     case 'sign_in':
+      return serializeSlackFailureView(ref, gate);
+    case 'operation':
+      return serializeSlackOperationView(ref, gate);
+    case 'configuration':
     case 'post_merge':
     case 'result':
       return null;
@@ -350,25 +484,14 @@ function serializeNote(fallback: string, title: string, detail: string, ref: Sla
   ]);
 }
 
-function serializeSlackForwardedView(ref: SlackTaskRef) {
-  return serializeNote(`Sent to ${ref.label}.`, 'Sent to the task', 'Its agent reads it next.', ref);
+function serializeSlackCompletedView(ref: SlackTaskRef, merged: boolean) {
+  return merged
+    ? serializeNote(`${ref.label} is merged.`, 'Merged', 'The pull request is merged.', ref)
+    : serializeNote(`${ref.label} is done.`, 'Done', 'The task is finished.', ref);
 }
 
-export function serializeSlackForwarded(task: Task, taskUrl: string) {
-  return serializeSlackForwardedView(resolveTaskRef(task, taskUrl));
-}
-
-function serializeSlackHeldView(ref: SlackTaskRef) {
-  return serializeNote(
-    `Kept for ${ref.label}. It waits on you in Shinsa.`,
-    'Kept for the task',
-    'It waits on you in Shinsa, so its agent reads this once you decide.',
-    ref
-  );
-}
-
-export function serializeSlackHeld(task: Task, taskUrl: string) {
-  return serializeSlackHeldView(resolveTaskRef(task, taskUrl));
+export function serializeSlackCompleted(task: Task, taskUrl: string) {
+  return serializeSlackCompletedView(resolveTaskRef(task, taskUrl), task.pullRequest?.state === 'merged');
 }
 
 export function serializeSlackDeclined() {
@@ -393,10 +516,6 @@ export function serializeSlackOffline(machineName: string) {
   );
 }
 
-export function serializeSlackAnsweredView(choice: string, userId: string) {
-  return createSlackContext([`<@${userId}> answered *${escapeSlackText(choice)}*`]);
-}
-
 export function resolveSlackPostMessage(
   state: ShinsaState,
   post: SlackPost,
@@ -405,11 +524,8 @@ export function resolveSlackPostMessage(
 ): SlackMessage | null {
   const task = state.tasks[taskId];
   if (!task) return null;
-  if (post.kind === 'forwarded') return serializeSlackForwarded(task, taskUrl);
-  if (post.kind === 'held') return serializeSlackHeld(task, taskUrl);
-  if (post.kind === 'result') return serializeSlackResult(task, taskUrl);
-  const gate = state.gates[post.gateId];
-  return gate ? serializeSlackGate(task, gate, taskUrl) : null;
+  if (post.kind === 'completed') return serializeSlackCompleted(task, taskUrl);
+  return serializeSlackResult(task, taskUrl);
 }
 
 export function listSlackStatusGates(state: ShinsaState, taskId: string): Gate[] {

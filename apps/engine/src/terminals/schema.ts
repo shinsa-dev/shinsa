@@ -5,6 +5,7 @@ import {
   SERVICE_PORT_VARIABLE,
   type ServiceDefinition,
   type ServiceSuggestion,
+  TERMINAL_STREAM_CLOSE,
   type TerminalColors,
   type TerminalInfo,
   type TerminalPlaceKind,
@@ -151,6 +152,12 @@ export interface TerminalSession {
   dispose(): void;
 }
 
+export const TerminalHolder = Schema.Struct({
+  taskId: Schema.NullOr(Schema.String),
+  service: Schema.NullOr(Schema.String),
+});
+export type TerminalHolder = typeof TerminalHolder.Type;
+
 export interface TerminalsInput {
   version: string;
   env: Env;
@@ -244,6 +251,6 @@ export interface TerminalSocketData {
 
 export const TERMINAL_SOCKET_PATH = /^\/ws\/terminals\/([A-Za-z0-9-]{1,64})$/;
 
-export const SOCKET_CLOSED = 4404;
+export const SOCKET_CLOSED = TERMINAL_STREAM_CLOSE.gone;
 
 export type TerminalsListener = (snapshot: TerminalsSnapshot) => void;

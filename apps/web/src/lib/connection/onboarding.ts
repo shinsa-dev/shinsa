@@ -1,4 +1,4 @@
-import type { OnboardingReply, OnboardingStatus } from '@shinsa/core';
+import type { OnboardingReply, OnboardingStatus, WorktreeUsage } from '@shinsa/core';
 import { OpenAnswer } from '@shinsa/core/engine-api/schema';
 import { toast } from '@shinsa/ui/components/sonner';
 import { Effect } from 'effect';
@@ -48,6 +48,25 @@ const readStatus = Effect.gen(function* () {
 const writeRoots = Effect.fn('Onboarding.writeRoots')(function* (roots: string[]) {
   const engine = yield* EngineClient;
   publishStatus(yield* engine.onboarding.setup({ payload: { roots } }));
+});
+
+const writeWorktreesDir = Effect.fn('Onboarding.writeWorktreesDir')(function* (path: string | null) {
+  const engine = yield* EngineClient;
+  const next = yield* engine.onboarding.worktrees({ payload: { path } });
+  publishStatus(next);
+  return next;
+});
+
+type WorktreeUsageView = WorktreeUsage | 'failed' | null;
+
+const measureWorktrees = Effect.fn('Onboarding.measureWorktrees')(function* (
+  publish: (usage: WorktreeUsageView) => void
+) {
+  const engine = yield* EngineClient;
+  const usage: WorktreeUsageView = yield* engine.onboarding
+    .worktreeUsage()
+    .pipe(Effect.catch(() => Effect.succeed('failed' as const)));
+  publish(usage);
 });
 
 const readRootSuggestions = Effect.gen(function* () {
@@ -104,6 +123,27 @@ export function useOnboardingStatus() {
 
 export function updateRoots(roots: string[], done: string) {
   return requestWithToast(() => runApp(writeRoots(roots)), done);
+}
+
+export function updateWorktreesDir(path: string | null) {
+  return runApp(writeWorktreesDir(path));
+}
+
+export function useWorktreeUsage(folder: string) {
+  const [usage, setUsage] = React.useState<WorktreeUsageView>(null);
+  React.useEffect(() => {
+    let current = true;
+    setUsage(null);
+    void runApp(
+      measureWorktrees((next) => {
+        if (current) setUsage(next);
+      })
+    );
+    return () => {
+      current = false;
+    };
+  }, [folder]);
+  return usage;
 }
 
 export function requestRootSuggestions() {

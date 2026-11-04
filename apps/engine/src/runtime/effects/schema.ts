@@ -34,7 +34,7 @@ export interface EffectRunnerOptions {
   trackProcess?: ProcessTracker;
 }
 
-export type TaskServices = Pick<Terminals['Service'], 'closeTaskServices' | 'listTerminalPids'>;
+export type TaskServices = Pick<Terminals['Service'], 'closeTaskTerminals' | 'listTerminalPids'>;
 
 export type EffectOf<Kind extends ShinsaEffect['kind']> = Extract<ShinsaEffect, { kind: Kind }>;
 

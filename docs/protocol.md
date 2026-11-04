@@ -80,7 +80,7 @@ One definition per term. **Code** is the name in `packages/core`; **UI** is the 
 | suggested task | A task an agent proposes (or Shinsa's classifier, for a split-off); it starts nothing until you accept it | `TaskSuggestion` | Suggested tasks |
 | follow-up | A message to a finished answer, investigation or report, answered on the same session | message effect `follow_up`, `acceptsFollowUp` | follow-up |
 | waits on | The tasks a task waits for before it starts (or before its merge gate opens) | `Task.waitsOn`, stage `waiting_on_tasks` | "Waits on", "Wait for another task" |
-| bundle | A line of tasks in one repository, each stacked on the one below: each starts once the one below is ready to merge, branches off its branch and opens its pull request on it, and the root's one merge gate, on the task into the default branch, merges them all once the whole bundle merges cleanly (`docs/engine.md` → Bundles). Never a round stack, which is one task's own rounds | `Task.stacksOn`, `Task.stackBase`, `Task.bundleReady`, `Task.bundleConflict`, `resolveBundle`, `listBundleBelow`, `listBundleAbove`, `decide/bundles.ts` | "Bundle", "Stack on another task", "Take out of the bundle", "Ready, merges with its bundle" |
+| bundle | Tasks in one repository connected by stacks, a graph that fans out and back in: each task starts once every task it stacks on is ready to merge, branches off the first one's branch with the others merged in and opens its pull request on the first, and the lead's one merge gate (the earliest task that stacks on nothing) merges them all once the whole bundle merges cleanly (`docs/engine.md` → Bundles). Never a round stack, which is one task's own rounds | `Task.stacksOn`, `Task.stackBases`, `Task.bundleReady`, `Task.bundleConflict`, `resolveBundle`, `resolveBundleMembers`, `resolveBundleLead`, `listBundleFollowers`, `listStackParents`, `listStackChildren`, `decide/bundles.ts` | "Bundle", "Stack on another task", "Take out of the bundle", "Ready, merges with its bundle" |
 | backlog | Where work you want planned now and built later waits: a status of a task, never a kind; it is triaged and planned, then its plan waits out of Needs you until you start building it. Only you, or an agent you asked, put work there | `Task.backlog` (`TaskBacklog`), `task.backlog_changed`, `task.move_to_backlog`, `task.remove_from_backlog`, `isHeldInBacklog`, `queue.backlog`, plan gate reason `backlog` | Backlog, "Move to the backlog", "Remove from the backlog", "Start building" |
 | All tasks | Every task in to-do order, in status groups (the Backlog one of them), a waiting or stacked task nested under the task it builds on | `resolveTaskGroup`, `TASK_GROUPS` (web) | All tasks |
 | schedule (automation) | A trigger (once, interval, daily, webhook) that starts a task, messages one, or watches an integration; on screen a Schedule, a Trigger or a Watch | `Schedule`, `ScheduleSource` | Settings → Automations: Schedule, Trigger, Watch |
@@ -105,7 +105,7 @@ One definition per term. **Code** is the name in `packages/core`; **UI** is the 
 | The kind of task | `TaskShape`, `shape`, `reshape_task`, `task.reshaped`; UI "kind of task"; `mode: 'ask'` for an answer task asked for as one (`tasks create --ask`, a schedule's `just_answer`) |
 | Your request | `request` everywhere new; the refusal code for an empty one is still `intent_required` (`decide/tasks.ts`) |
 | Waiting on another task | `waitsOn`, `task.wait_on`, `task.waits_on_changed`, stage `waiting_on_tasks`, triage's `waits_on`; the rules in `decide/dependencies.ts` (`resolveDependencies`, `listPendingDependencies`); UI "Waits on" |
-| A bundle | `stacksOn` (on `Task`, `task.create`, `task.stack_on`), `stack_on_this` (`create_task`), `task.stack_changed`, `stackBase` and `task.stack_based`, `bundleReady` and `task.bundle_ready`, `bundleConflict`, `bundle.record_check` and `task.bundle_conflict`, `bundle` on `pull_request.merge`, `tasks stack-on` and `tasks unstack`; UI "Bundle", "Stack on another task", "Ready". Never "stack" alone on screen: that is a round stack |
+| A bundle | `stacksOn` (on `Task`, `task.create`, `task.stack_on_tasks`), `stack_on_this` and `stack_on` (`create_task`), `task.stack_changed`, `stackBases` and `task.stack_based`, the lead and its followers, `bundleReady` and `task.bundle_ready`, `bundleConflict`, `bundle.record_check` and `task.bundle_conflict`, `bundle` on `pull_request.merge`, `tasks stack-on` and `tasks unstack`; UI "Bundle", "Stack on another task", "Ready". Never "stack" alone on screen: that is a round stack |
 | Snoozing | `Task.snoozed` (`TaskSnooze`), `task.snooze_changed`, `task.snooze`, `task.unsnooze`, `queue.snoozed`, `decide/snooze.ts`, the task group and queue section `snoozed`; UI "Snooze", "Unsnooze", "Snoozed". Never "pause" for it: Paused is a step that stopped for you |
 | The backlog | `Task.backlog`, `task.backlog_changed`, `task.move_to_backlog`, `task.remove_from_backlog`, `backlog: true` on `task.create`, `suggestion.accept` and `create_task`; the rules in `domain/backlog.ts` (`canWaitInBacklog`, `resolveBacklogRefusal`) and `decide/backlog.ts`; UI "Backlog" |
 | A round that waits to start | `RoundStatus 'waiting'`; event `round.queued`, `Round.queuedAt`, `ROUND_LIMITS.queued` |
@@ -245,9 +245,9 @@ one reads as its empty value. The fields under Triage and shape, Plan and build,
 | `duplicate?` | `{ of, by, why, teammate? }` \| null | closed as a duplicate of task `of`, by `you` or by triage (`shinsa`), with triage's reason; the stage stays `cancelled` and the page shows Duplicate. `teammate` (`TeammateOriginal`: `{ teamId, machineId, taskId, handle, title, owner }`, `owner` a `TeammateOwner` `{ login, name, avatarUrl }` or null) when the original is a teammate's task, `of` then holding its id on their machine. A shared task and a team listing carry `duplicate` with the status fields, so the original's owner sees what was kept over it |
 | `priority` | `urgent` \| `high` \| `normal` \| `low` | how high its decisions sit in Needs you; never what runs |
 | `waitsOn` | string[] | task ids it waits on |
-| `timing?` | `TaskTiming` | what the turnaround statistics measure, folded from events (`state/timing.ts`): `paused`, the `TimingSpan`s (`{ from, to }`) it was snoozed, in the backlog, waiting on other tasks or waiting for a usage limit, merged where they overlap, with `pausedSince` while one is open; `needsYou`, each `NeedsYouSpan` from the first open gate to the last one closing, `answered` when you answered it rather than it being withdrawn, with `needsYouSince` and the `openGates` while one is open. These are not the Paused step |
-| `stacksOn?` | string \| null | the task it stacks on as a bundle (Bundles in `docs/engine.md`) |
-| `stackBase?` | string \| null | the branch of the task below, recorded once that task is ready; `resolveRoundBase` returns it when no round of its own is stacked |
+| `timing?` | `TaskTiming` | what the turnaround statistics measure, folded from events (`state/timing.ts`): `paused`, the `TimingSpan`s (`{ from, to }`) it was snoozed, in the backlog, waiting on other tasks or waiting for a usage limit, merged where they overlap, with `pausedSince` while one is open; `needsYou`, each `NeedsYouSpan` from the first open gate to the last one closing, `answered` when you answered it rather than it being withdrawn, with `needsYouSince` and the `openGates` while one is open; `inputs`, each `YourInput` you gave the task, `{ at, kind: 'gate', gate, decision }` for a gate you answered (not a review approved ahead) or `{ at, kind: 'message' }` for a message you sent (not a scheduled one, one kept for the next run, a new round or a separate task, nor anything sent on your behalf or by a guest), which the attention statistics count per round. These are not the Paused step |
+| `stacksOn?` | string[] | the tasks it stacks on as a bundle, the first one its pull request's base (Bundles in `docs/engine.md`) |
+| `stackBases?` | string[] | the branches of the tasks it stacks on, in the order of `stacksOn`, recorded once every one is ready, without a parent that merged or left; `resolveRoundBase` returns the first when no round of its own is stacked, `resolveRoundBases` all of them |
 | `bundleReady?` | `{ commit }` \| null | ready to merge with its bundle at head `commit`; a task stacked on another has it in place of a merge gate of its own |
 | `bundleConflict?` | `{ taskId, behindTaskId, base }` \| null | on a bundle's root: the task that conflicts with the default branch once the bundle merges, and the lowest task behind its base, updated first (null when none is) |
 | `note` | string \| null | the latest `note` an agent kept |
@@ -800,7 +800,7 @@ your behalf (`onBehalf`, `byTask`). **Human** = only you: its specs are `humanOn
 
 | Command | Does | Command line | Who |
 | --- | --- | --- | --- |
-| `task.create` | creates a task (request, project, priority, plan first, backlog, waits on, stacks on: `stacksOn`, mode, account, the task it forks: `forkOf`) | `tasks create` | you; task agents file tasks with `create_task` |
+| `task.create` | creates a task (request, project, priority, plan first, backlog, waits on, stacks on: `stacksOn`, a list, mode, account, the task it forks: `forkOf`) | `tasks create` | you; task agents file tasks with `create_task` |
 | `task.message` | your message; what it does: Messages, above; `kind` says whether it is feedback, a new round or work for another task; `comments` carries line comments (Line comments, below) | `tasks message [--as]` | agent |
 | `round.ship` | how a round ships: onto the open pull request or stacked | `rounds ship` | agent |
 | `round.update` | replaces what a round waiting to start asks for (`request`; its title becomes the request's first line); a round that started is refused (`round_started`) | `rounds update` | agent |
@@ -808,7 +808,7 @@ your behalf (`onBehalf`, `byTask`). **Human** = only you: its specs are `humanOn
 | `round.send` | sends a round waiting to start to the current round now: it leaves the queue (`round.removed`) and its request is delivered as your message, read as `feedback` (What a message does); a round that started is refused (`round_started`) | `rounds send` | agent |
 | `task.prioritize` | sets the priority | `tasks prioritize` | agent |
 | `task.wait_on` | replaces the tasks it waits on (`waitsOn`) | `tasks wait-on`, `tasks stop-waiting` | agent |
-| `task.stack_on` | stacks it on a task as a bundle (`stacksOn`), or takes it out (`null`); refused on itself (`stack_self`), a cancelled (`dependency_cancelled`) or finished task (`stack_parent_settled`), one with no pull request (`stack_no_pull_request`), in another repository (`stack_repository`) or already stacked on (`stack_taken`), a cycle (`dependency_cycle`), and once it builds (`stack_started`) | `tasks stack-on`, `tasks unstack` | agent |
+| `task.stack_on_tasks` | stacks it on tasks as a bundle (`stacksOn`, the whole list, replacing the one it has), or takes it out (`[]`); refused, for any task in the list, on itself (`stack_self`), a cancelled (`dependency_cancelled`) or finished task (`stack_parent_settled`), one with no pull request (`stack_no_pull_request`), one in another repository than the task or the others (`stack_repository`), a cycle (`dependency_cycle`), and once it builds (`stack_started`) | `tasks stack-on`, `tasks unstack` | agent |
 | `task.move_to_backlog` | puts a task in the backlog; its open plan gate becomes held ("in the backlog"); refused for a settled task (`task_settled`), an inquiry (`backlog_inquiry`) or once a plan was approved or building started (`backlog_started`); a task already there records nothing | `tasks move-to-backlog` | agent |
 | `task.remove_from_backlog` | takes it out; its plan waits in Needs you ("plan ready for you"); a task not there records nothing | `tasks remove-from-backlog` | agent |
 | `task.snooze` | snoozes an open task in any step: its gates leave `ready` and it is listed in `queue.snoozed`, nothing else changes; refused for a settled task (`task_settled`); a snoozed task records nothing | `tasks snooze` | agent |
@@ -858,6 +858,7 @@ your behalf (`onBehalf`, `byTask`). **Human** = only you: its specs are `humanOn
 | `repo.update` | changes a repository's fields | `repos update` | agent; **human** for `checkCommands`, `workspace`, `coverage` (`HUMAN_ONLY_REPO_FIELDS`) |
 | `repo.remove` | forgets a repository | `repos remove` | agent |
 | `focus.change` | sets or clears the focus: `projectId` or `teamId`, never both (`focus_refused`), and `until` | `focus set`, `focus clear` | agent |
+| `away.record` | records a span you were away from your Mac (`from`, `to`), sent by the Mac app's page; refused when it ends before it starts, after now or lasts over 30 days (`away_refused`) | none | **human** |
 | `settings.change` | changes settings (`SETTINGS_KEYS`) | `settings set` | agent; **human** for `approvePlans`, `mergeMethod`, `taskBudgetUsd`, `taskUsageLimit`, `autoResume`, `snoozeLimited`, `accountSwitchAt`, `fastMode`, `agentFastModes`, `delegationLimit`, `shareLimit`, `sharePreset` (`HUMAN_ONLY_SETTINGS`) |
 
 Core refuses a command sent on your behalf with `human_only`, recording nothing, when it is a `gate.answer`
@@ -1002,10 +1003,10 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `delegations.recover` | the supervisor at boot | releases claims and waits, claims again |
 | `schedule.fire`, `schedule.fail` | `ScheduleClock`, the webhook | fires a slot, or records a failed one |
 | `schedule.deliver` | the webhook receiver | starts the schedule's work from a delivery |
-| `slack.mention` | `POST /api/slack/events`, command id `slack:<event id>` | a signed `SlackMention`: messages the open task of its thread (kept while a gate is open), else asks for `slack.evaluate` |
+| `slack.mention` | `POST /api/slack/events`, command id `slack:<event id>` | a signed `SlackMention`: messages the open task of its thread with 👀 on the mention (kept with 📥 while a gate is open, `slack.react`), else asks for `slack.evaluate` |
 | `slack.start_task` | the `slack.evaluate` effect, when the mention is work | the mention: starts a task as Home does and links it to the thread, or messages the thread's task when one opened meanwhile |
-| `slack.record_status` | the `slack.status` effect | the ts of the task's status message and the reaction now on the mention, once Slack has them |
-| `slack.answer` | `POST /api/slack/interactions`, command id `slack-answer:<trigger id>` | a signed `SlackAnswer`: answers an open question gate with its choice (`gate.answer`, `reply`), only for the Slack user who started the task from that thread; refused `slack_answer_closed`, `slack_answer_refused` or `slack_answer_choice` |
+| `slack.record_status` | the `slack.status` effect | the ts of the task's card and the reaction now on the mention, once Slack has them |
+| `slack.decide` | `POST /api/slack/interactions`, command id `slack-decide:<trigger id>` | a signed `SlackDecision` from someone app.shinsa.dev found to be an owner or member of the machine: decides an open gate of the task linked to that thread as Shinsa does (`answerGate`, so `plan_changed` and `gate_closed` hold), for the decisions `SLACK_DECIDABLE` allows, then `slack.decided`; refused `slack_decision_closed`, `slack_decision_refused` or `slack_decision_choice` |
 
 ## Events
 
@@ -1016,7 +1017,8 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | --- | --- |
 | `repo.registered`, `repo.updated`, `repo.removed` | a repository is registered, changed, forgotten |
 | `project.written`, `project.removed` | a project is written, removed |
-| `focus.changed` | the focus changes |
+| `focus.changed` | the focus changes; closes the open entry of `state.focusHistory` and, with a project, opens one (`{ projectId, from, to, until }`, kept a year) |
+| `away.recorded` | the Mac app reported a span you were away (`from`, `to`), kept in `state.away` for a year; never counted as something you did |
 | `settings.changed` | settings change (the whole settings object) |
 | `task.created` | a task is created (`request`, `planFirst`; with its handle when it has a project; `createdBy`, `scheduleId` and `sourceReport` for one a watch's read filed; `watchHome` for a watch's home) |
 | `task.triaged` | triage set title, repository (or none), size, branch, handle, pipeline, decisions (always) |
@@ -1037,8 +1039,8 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `task.duplicated` | the task was closed as a duplicate (`duplicate: { of, by, why, teammate? }`); the `cancelled` stage follows |
 | `task.duplicate_cleared` | a triage-closed duplicate is not one after all: the mark, `closedAt` and `cancelledFrom` are cleared |
 | `task.waits_on_changed` | the tasks it waits on changed (`waitsOn`) |
-| `task.stack_changed` | the task it stacks on changed (`stacksOn`, `null` when taken out; `by` you or Shinsa) |
-| `task.stack_based` | its base became the branch of the task below (`base`), or the default branch again (`null`) once that task merged or left |
+| `task.stack_changed` | the tasks it stacks on changed (`stacksOn`, a list, empty when taken out; `by` you or Shinsa) |
+| `task.stack_based` | its bases became the branches of the tasks below (`bases`, in the order of `stacksOn`), or the default branch again (`[]`) once they all merged or left |
 | `task.bundle_ready` | it is ready to merge with its bundle (`ready: { commit }`), or no longer is (`null`) |
 | `task.bundle_conflict` | its bundle conflicts with the default branch once it merges (`conflict`), or no longer does (`null`) |
 | `task.snooze_changed` | you (or an agent for you) snoozed or unsnoozed it (`snoozed`) |
@@ -1126,7 +1128,8 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `schedule.read` | a watch's read finished with `report_read`: the next one reads from `readFrom`, when it started (`Schedule.lastReadAt`) |
 | `on_behalf.acted` | a command sent on your behalf changed something (command, task, sentence, acting task) |
 | `slack.thread_linked` | a task was started from a Slack thread (the whole `link`, `Task.slack`; "Started from a Slack thread") |
-| `slack.status_posted` | the task's status message has this `ts` and its mention this `reaction` now |
+| `slack.status_posted` | the task's card has this `ts` and its mention this `reaction` now |
+| `slack.decided` | a gate of the task was decided from Slack: the Slack user and what they did ("approved the plan"), shown on the card's status (`Task.slack.decided`) |
 
 ## Effects
 
@@ -1163,8 +1166,9 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `delegation.steer` | process_bound | `steer:<id>` | `delegation.record_delivery`, `delegation.release` |
 | `delegation.reply` | process_bound | `reply:<id>` | none: answers the child's question |
 | `slack.evaluate` | replay_safe | `slack:<thread key>` | ⏳ on the mention first; `slack.start_task` for work; otherwise ⏳ off and "Not a task, so nothing was started.", once per thread; key `slack.evaluate:<event id>` |
-| `slack.post` | replay_safe | `slack:<thread key>` | none: posts a gate, the result, "Sent to …" or "Kept for …" through app.shinsa.dev |
-| `slack.status` | replay_safe | `slack:<thread key>` | `slack.record_status` for a new status message or reaction; edits it at most every 5 s and moves the mention's reaction |
+| `slack.post` | replay_safe | `slack:<thread key>` | none: posts the result, or "Merged" or "Done" when the task ends, as a new message through app.shinsa.dev |
+| `slack.status` | replay_safe | `slack:<thread key>` | `slack.record_status` for a new card or reaction; edits the card (the open gate with its buttons, else the status) at most every 5 s and moves the mention's reaction |
+| `slack.react` | replay_safe | `slack:<thread key>` | none: 👀 or 📥 on a later mention in the thread, through `/__remote/slack/react`; key `slack.react:<thread key>:<message ts>` |
 
 Any effect that gives up sends `effect.fail`; it opens a failure gate when its kind has a title in `FAILURE_TITLE`.
 
@@ -1277,6 +1281,7 @@ or `browser` (a tab, Floaty).
 | Page → server (`ClientMessage`) | What it does |
 | --- | --- |
 | `hello { surface }` | Names the page's surface; the first message on every socket |
+| `presence { active }` | Asks where you are and, with `active`, says you are using this page now: once when the engine announces `attention` (`active` is whether the page is visible and focused), then each time you come back to it and at most every 15 s while you use it (`watchPresence`). Sent only to an engine that announces `attention` |
 | `command { id, command }` | A `UserCommand`; answered by `ack` with the same id |
 | `state.sync` | Send the whole state again: a patch did not fit the state the page holds |
 | `transcript.subscribe { runId, from }` / `transcript.unsubscribe { runId }` | Follow a run's transcript from entry `from` (the number the page holds), or stop |
@@ -1292,6 +1297,7 @@ or `browser` (a tab, Floaty).
 | `accounts { accounts }` | On connect and after every change to the accounts |
 | `surfaces { desktop }` | On connect, and when whether any desktop surface is connected changes |
 | `engine { engine }` | On connect, right after `surfaces` and before every other message: what this engine speaks, an `EngineInfo` (below) |
+| `attention { where }` | To a page that sent `presence`, and again whenever its answer changes: `here` (it is the owner's page used last), `elsewhere` (another of the owner's pages is) or `nowhere` (none was used in the last five minutes, or the page is a member's) (`AttentionPlace`, `ATTENTION_PLACES`) |
 | `terminals { terminals }` | On connect and after every change to your terminals or services: `TerminalsSnapshot` (the terminals in order, each with the service it runs if any, your services, your home folder) |
 | `resources { resources }` | On connect once sampled, then every 5 s while a page is connected: `MachineResources` (core's `remote/resources.ts`: the machine's cores, CPU percent, memory used and total, disk free and total, and each open task's agent, services and checks as CPU percent and memory, its process count and its worktree's size). An engine samples only while a socket listens, so a page that never reads it costs nothing; an older engine never sends it and an older page ignores it |
 | `remote { remote }` | On connect and after every change to remote access (a device added or forgotten, pausing, resuming, removing, the tunnel's status, a pairing, a team): `RemoteSnapshot` (Remote access, below) |
@@ -1317,7 +1323,7 @@ offers nothing an engine cannot do (`docs/engine.md` → Remote access, What eac
 | `version` | The engine's build, `0.0.0` in development (`DEVELOPMENT_VERSION`) |
 | `protocol` | `ENGINE_PROTOCOL`, raised only when an older page and this engine cannot talk at all (a changed state shape) |
 | `commands` | Every user command type it parses, `USER_COMMAND_TYPES` itself, so a new command is announced the moment it exists |
-| `features` | The named capabilities in `ENGINE_FEATURES` (`task.share`, `feedback`, `teams`, `review.approve_after_fix`, `message.line_comments` and `changelog` today) that are not a command, such as a route or a setting an older engine ignores |
+| `features` | The named capabilities in `ENGINE_FEATURES` (`task.share`, `feedback`, `teams`, `review.approve_after_fix`, `message.line_comments`, `changelog`, `remote.terminals`, `attention` and `worktree-root` today) that are not a command, such as a route or a setting an older engine ignores |
 
 `ENGINE_BASELINE_COMMANDS` is frozen: the commands every engine has had since before the `engine` message, which a page
 sends to any engine, one that never announced included (`resolveEngineCommands(null)`). A command added since is
@@ -1327,7 +1333,9 @@ development) and refuses one without a whole-number `protocol`. `hasEngineFeatur
 for one engine; an engine that sent nothing has no features and matches.
 
 `isQuietSurface(surface, desktop)` is true for a page that is not the desktop while one is connected: it plays no
-sound, shows no notification and puts no count in its title or Floaty's tags.
+sound, shows no notification and puts no count in its title or Floaty's tags. It is the fallback: a page an engine
+answers `here` always alerts and one it answers `elsewhere` never does (`isAlertQuiet` in the web); only `nowhere`
+leaves the choice to `isQuietSurface`.
 
 The page never gets a run's prompts. The state on the socket is a `WireState` (`packages/core/src/protocol/runs.ts`;
 `serializeState` makes one): the state with every run a `WireRun` (`serializeRun`), which is the `Run` without
@@ -1367,7 +1375,7 @@ A **state patch** (`StatePatch`, `packages/core/src/protocol/patch.ts`; `resolve
 | --- | --- |
 | `from`, `to` | The log position the patch applies to and the one it reaches; equal for a change that is not an event (a new Home guide, `docs/engine.md` → The briefing) |
 | `fields` | `focus`, `settings`, `onBehalfActions` when they changed, each a `ValueChange` |
-| `records` | Per record of the state (`tasks`, `runs`, `gates`, `repos`, `projects`, `taskNumbers`, `evidence`, `briefings`, `schedules`, `sessionUsage`, `presence`), the entries that changed by id, each an `EntryChange` |
+| `records` | Per record of the state (`tasks`, `runs`, `gates`, `repos`, `projects`, `taskNumbers`, `evidence`, `briefings`, `schedules`, `sessionUsage`, `presence`, `away`, `focusHistory`), the entries that changed by id, each an `EntryChange` |
 
 An `EntryChange` is `{ put }` (a new or replaced entry), `{ remove: true }` or `{ fields, unset }` (the fields whose
 value changed, each a `ValueChange`, and the ones that went away). A `ValueChange` is `{ put }` or `{ drop, append }`:
@@ -1530,13 +1538,18 @@ the tunnel in about a quarter of the time (`bun scripts/perf/remote.ts`, `docs/e
 | `{ t: 'response', id, status, headers }` | Its answer |
 | `{ t: 'body', id, chunk }` / `{ t: 'end', id }` | A body in base64url chunks of 256 KB (`CHANNEL_BODY_CHUNK_BYTES`), then its end |
 | `{ t: 'abort', id }` | The page gave up on a request |
+| `{ t: 'terminal-open', id, terminal }` | The page attaches to a terminal; `id` names the stream, at most 64 characters |
+| `{ t: 'terminal-text', id, data }` / `{ t: 'terminal-bytes', id, chunk }` | One frame of the terminal's stream either way: a control frame as text (`TerminalClientFrame`, `TerminalServerFrame`), or keys and screen bytes in base64url |
+| `{ t: 'terminal-close', id, code, reason }` | Either side ends a stream: 1000 from the page, 4403 for a device that is not the owner's or too many streams (`MAX_TERMINAL_STREAMS`, 16), 4404 for a terminal that is gone (`TERMINAL_STREAM_CLOSE`) |
 
 **One task for a guest** (`scope.ts`): a device with a task is a `GuestActor` (`taskId`, `login`). Its socket gets `resolveScopedState` and `resolveScopedPatch` (that task, its runs, gates, evidence, repository and project, accounts without their email, no share, previews or hand-off link) and `resolveScopedEngineInfo` (only `SCOPED_COMMANDS`); `resolveScopedRefusal` refuses any other command, another task's, a secret or sign-in gate's answer and a retry on a chosen account, with the code `handoff_scope` (`SCOPE_REFUSAL_CODE`, `SCOPE_MESSAGES`).
 
-**What stays at the keyboard** (`local-only.ts`): `isLocalOnlyCommand` names the user commands a remote request may
-not send (a human-only setting or repository field, `task.bind_account`); the refusal's code is `local_only`
-(`LOCAL_ONLY_CODE`, `LOCAL_ONLY_MESSAGE`). A request's `RequestOrigin` (`local` or `remote`) comes from how it
-arrived, never from the page.
+**What only the owner sends from another device** (`local-only.ts`): `isOwnerOnlyCommand` names the user commands
+that need you at the keyboard or the machine's owner on a sealed channel (a human-only setting or repository field,
+`task.bind_account`, `task.retry` on a chosen account); `resolveOwnerOnlyRefusal` refuses them to any other remote
+request with the code `not_owner` (`OWNER_ONLY_CODE`, `OWNER_ONLY_MESSAGE`). A request's `RequestOrigin` (`local`,
+`owner` or `remote`) comes from how it arrived and whose connect token opened its channel, never from the page.
+`LOCAL_ONLY_MESSAGE` is the refusal of a route that stays on the machine itself.
 
 **The engine's snapshot** (`status.ts`, `GET /api/remote`): `RemoteSnapshot` is `paired`, `enabled`, `status`
 (`TunnelStatus`: `off`, `starting`, `connected`, `reconnecting`, `revoked`), `instanceId`, `owner`, `machineName`,
@@ -1559,8 +1572,8 @@ What the engine, the Worker on app.shinsa.dev and the web share for the Slack bo
 | `GET /slack/connect?instance=<id>` | The browser, from Settings | Signs in with Slack for one of your machines (the one seen last without `instance`) |
 | `GET /slack/connect/callback`, `/slack/install/callback` | Slack | Writes the link, adding the app to the workspace first when it has none; then `/slack/linked?team=` or `?error=` (`resolveSlackLinkedPath`) |
 | `POST /slack/events` | Slack | Events API, checked against Slack's signature; a mention is answered at once and forwarded after |
-| `POST /slack/interactions` | Slack | Interactivity (`payload` form field), checked against Slack's signature and answered at once; a `shinsa.answer.<n>` click from a linked person on a message their machine posted is forwarded as a `SlackAnswer`, and the click's `response_url` (on `hooks.slack.com`) gets the answered post or a private refusal; anything else is dropped |
-| `POST https://t-<instance>.shinsa.dev/api/slack/interactions` | app.shinsa.dev | The `SlackAnswer` (`SLACK_ENGINE_INTERACTIONS_PATH`), signed as a mention is → `SlackAnswerReply`: `{ answered: true, choice }` or `{ answered: false, reason }` |
+| `POST /slack/interactions` | Slack | Interactivity (`payload` form field), checked against Slack's signature and answered at once; a `shinsa.decide.*` click, or a `shinsa.decision` form sent after a `shinsa.write.*` click opened it (`views.open`), from the owner or a member of the machine that posted the card is forwarded as a `SlackDecision`; the click's `response_url` (on `hooks.slack.com`) gets the decided card or a private refusal, a form's refusal comes as `chat.postEphemeral`; anything else is dropped |
+| `POST https://t-<instance>.shinsa.dev/api/slack/interactions` | app.shinsa.dev | The `SlackDecision` (`SLACK_ENGINE_INTERACTIONS_PATH`), signed as a mention is → `SlackDecisionReply`: `{ decided: true, text }` or `{ decided: false, reason }` |
 | `POST https://t-<instance>.shinsa.dev/api/slack/events` | app.shinsa.dev | The `SlackMention`, with `x-shinsa-slack-signature` (`v1=<hex>`, an HMAC-SHA256 over `v1:<ms>:<body>` keyed by `slack:<connect key>`) and `x-shinsa-slack-timestamp` (`SLACK_FORWARD_HEADERS`), good for five minutes (`SLACK_FORWARD_WINDOW_MS`) |
 | `POST /__remote/slack/post` | The engine, with its machine token | `SlackRelayPost` (`teamId`, `channelId`, `threadTs`, `replaceTs`, `message` of `text` and Block Kit `blocks`; `parseSlackRelayPost`) → `SlackRelayPosted` `{ ts }`; 403 for a thread not sent to it or a message it did not post, 410 when the app was removed, 502 when Slack refused |
 | `POST /__remote/slack/session` | The engine, with its machine token | `SlackRelaySession` (the thread and a `status` of `SLACK_SESSION_STATUSES`: `processing`, `suspended`, `active`, `closed`; `parseSlackRelaySession`) → `SlackRelaySessionSet` `{ applied }`: `agents.sessions.setStatus`, `applied: false` when the workspace cannot show one (`not_authorized` from an app not on Agent Sessions, `feature_disabled` from a workspace without agent features), after which the engine stops asking for that workspace until it restarts; any other refusal is 502 `slack_failed`, logged, and tried again at the next change |
@@ -1570,9 +1583,12 @@ What the engine, the Worker on app.shinsa.dev and the web share for the Slack bo
 | Shape | Fields |
 | --- | --- |
 | `SlackMention` (`contract.ts`, `parseSlackMention`) | `eventId`, `teamId`, `channelId`, `threadTs`, `messageTs`, `userId`, `userName`, `text`, `permalink`, `thread` (`SlackThreadMessage`: `ts`, `userId`, `userName`, `text`, `bot`; the last 100, at most 4,000 characters each, `SLACK_LIMITS`) |
-| `SlackPost` (`posts.ts`) | `gate` with its `gateId`, `result`, `forwarded`, `held` |
+| `SlackPost` (`posts.ts`) | `result` or `completed`, the only new messages; everything else edits the card |
 | `SlackMessage` (`blocks.ts`) | `text`, the notification's fallback, and `blocks` (`header`, `section` with text or fields, `context`, `actions` of buttons) within Slack's limits (`SLACK_BLOCK_LIMITS`: 50 blocks, 3,000 characters a section, 150 a header, 75 a button, 10 fields) |
-| `SlackAnswer` (`answers.ts`, `parseSlackAnswer`) | `interactionId`, `teamId`, `channelId`, `threadTs`, `messageTs`, `userId`, `gateId`, `choice` (the index into the gate's choices; a button's value is `{ gateId, choice }`, `serializeSlackAnswerValue`) |
+| `SlackDecisionValue` (`schema.ts`, `serializeSlackDecisionValue`, `parseSlackDecisionValue`) | a button's value: `gateId`, `decision` (`approve`, `revise`, `reject`, `reply`), `choice` (the index into a question's choices, or null), `planVersion` (the plan a plan's Approve shows, or null) |
+| `SlackDecisionModal` (`parseSlackDecisionModal`) | a form's `private_metadata`: the value with the card's `channelId`, `threadTs` and `messageTs` |
+| `SlackDecision` (`parseSlackDecision`) | the modal's fields with `interactionId`, `teamId`, `userId` and `response` (the form's text, at most 4,000 characters, or null) |
+| `SlackDecisionReply` (`parseSlackDecisionReply`) | `{ decided: true, text }` (what the card says they did) or `{ decided: false, reason }` |
 | `SlackSnapshot` (the engine's `GET /api/slack`) | `remote`, `connectUrl`, `links`, `problem` |
 
 ## The changelog

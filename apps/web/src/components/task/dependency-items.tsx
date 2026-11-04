@@ -11,6 +11,8 @@ import {
 } from '@shinsa/ui/components/dropdown-menu';
 import { Icon, type IconName } from '@shinsa/ui/components/icon';
 import { Truncate } from '@shinsa/ui/components/truncate';
+import { cn } from '@shinsa/ui/lib/utils';
+import { DepthMark, resolveDepthIndent } from '@/components/tasks/row.tsx';
 import { BUNDLE_ICON, listStackChoices, STACK_LABEL, toggleStack, unstackTask } from '@/lib/tasks/bundles.ts';
 import {
   clearDependencies,
@@ -19,6 +21,7 @@ import {
   resolveDependencyLabel,
   toggleDependency,
 } from '@/lib/tasks/dependencies.ts';
+import { orderChains } from '@/lib/tasks/groups.ts';
 import { resolveTaskMenuIcon, resolveTaskStatus } from '@/lib/tasks/status.ts';
 import { navigate, resolveTaskPath } from '@/router.ts';
 
@@ -39,7 +42,7 @@ function TaskChoiceSub({ state, icon, label, choices, isChecked, onToggle }: Tas
         {label}
       </DropdownMenuSubTrigger>
       <DropdownMenuSubContent className='max-h-80 max-w-80 overflow-y-auto'>
-        {choices.map((choice) => {
+        {orderChains(state, choices).map(({ task: choice, depth }) => {
           const choiceIcon = resolveTaskMenuIcon(state, choice);
           return (
             <DropdownMenuCheckboxItem
@@ -47,8 +50,13 @@ function TaskChoiceSub({ state, icon, label, choices, isChecked, onToggle }: Tas
               checked={isChecked(choice)}
               onCheckedChange={() => onToggle(choice)}
             >
-              <Icon name={choiceIcon.name} className={choiceIcon.className} />
-              <Truncate>{choice.title}</Truncate>
+              <span className={cn('flex min-w-0 items-center gap-2', resolveDepthIndent(depth))}>
+                {depth > 0 && <Icon name='IconArrowCornerDownRight' className='text-fg-2' />}
+                <DepthMark depth={depth} />
+                <Icon name={choiceIcon.name} className={choiceIcon.className} />
+                {choice.handle && <span className='shrink-0 text-fg-2 tabular-nums'>{choice.handle}</span>}
+                <Truncate>{choice.title}</Truncate>
+              </span>
             </DropdownMenuCheckboxItem>
           );
         })}
@@ -92,11 +100,11 @@ function StackItems({ state, task }: { state: ShinsaState; task: Task }) {
           icon={BUNDLE_ICON}
           label={STACK_LABEL}
           choices={choices}
-          isChecked={(choice) => task.stacksOn === choice.id}
+          isChecked={(choice) => task.stacksOn?.includes(choice.id) ?? false}
           onToggle={(choice) => void toggleStack(task, choice)}
         />
       )}
-      {task.stacksOn && canChangeStack(task) && (
+      {(task.stacksOn?.length ?? 0) > 0 && canChangeStack(task) && (
         <DropdownMenuItem icon='IconCrossMedium' onClick={() => void unstackTask(task)}>
           Take out of the bundle
         </DropdownMenuItem>

@@ -159,7 +159,8 @@ export const executeRun = Effect.fn('RunSupervisor.execute')(function* (
     return;
   }
   const task = state.tasks[run.taskId];
-  const workspace = task ? resolveWorkspace(state, world.config, run, task) : null;
+  const folders = { ...world.config, worktreesDir: yield* world.worktreeRoot.path };
+  const workspace = task ? resolveWorkspace(state, folders, run, task) : null;
   if (!task || !workspace) return yield* endRun(runId, { outcome: 'failed', summary: NO_RUN_WORKTREE }, null);
   const delegated = isDelegatedRun(run);
   const provider = yield* world.providers

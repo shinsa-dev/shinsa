@@ -11,6 +11,8 @@ import {
   deriveServerSession,
   encodeText,
   type GuestActor,
+  MAX_TERMINAL_STREAMS,
+  parseBase64Url,
   parseBodyChunk,
   parseChannelMessage,
   parseClientHello,
@@ -20,10 +22,13 @@ import {
   serializeBase64Url,
   serializeChannelMessage,
   serializePublicKey,
+  TERMINAL_STREAM_CLOSE,
 } from '@shinsa/core';
 import { Cause, Effect, Ref, Semaphore } from 'effect';
 import type { HubSocket } from '../../http/socket.ts';
 import { describeError } from '../../log/redact.ts';
+import type { TerminalSession } from '../../terminals/schema.ts';
+import { applyTerminalText } from '../../terminals/sockets.ts';
 import { POLICY_VIOLATION } from '../schema.ts';
 import {
   CHANNEL_REQUEST_ORIGIN,
@@ -35,15 +40,20 @@ import {
   DROPPED_HEADERS,
   MAX_INFLATED_FRAME_BYTES,
   MAX_OPEN_REQUESTS,
+  MAX_STREAM_ID_LENGTH,
   type OpenRequest,
   type ProofKeys,
   type RemoteChannelHandle,
+  SENT,
+  TERMINAL_STREAM_MESSAGES,
+  type TerminalStream,
 } from './schema.ts';
 
 export const makeRemoteChannel = Effect.fn('RemoteChannel.make')(function* (definition: ChannelDefinition) {
   const run = Effect.runForkWith(yield* Effect.context<never>());
   const state = yield* Ref.make<ChannelState>({ kind: 'hello' });
   const requests = yield* Ref.make<ReadonlyMap<string, OpenRequest>>(new Map());
+  const streams = yield* Ref.make<ReadonlyMap<string, TerminalStream>>(new Map());
   const queue = yield* Semaphore.make(1);
 
   const broken = (error: unknown) => new ChannelBroken({ message: describeError(error) });
@@ -79,11 +89,16 @@ export const makeRemoteChannel = Effect.fn('RemoteChannel.make')(function* (defi
       return rest;
     });
 
+  const selectSession = (terminalId: string): Effect.Effect<TerminalSession | null> =>
+    definition.terminals ? definition.terminals.select(terminalId) : Effect.succeed(null);
+
   const close = Effect.gen(function* () {
     const previous = yield* Ref.getAndSet(state, { kind: 'closed' });
     if (previous.kind === 'open' && previous.socket) yield* definition.closeSocket(previous.socket);
     const open = yield* Ref.getAndSet(requests, new Map());
     for (const request of open.values()) request.controller.abort();
+    for (const stream of (yield* Ref.getAndSet(streams, new Map())).values())
+      (yield* selectSession(stream.terminalId))?.detach(stream.viewer);
   }).pipe(Effect.withSpan('RemoteChannel.close'));
 
   const fail = Effect.fn('RemoteChannel.fail')(function* (reason: string, error?: string) {
@@ -183,9 +198,92 @@ export const makeRemoteChannel = Effect.fn('RemoteChannel.make')(function* (defi
     yield* post({ t: 'ready' });
   });
 
-  const createSocket = (guest: GuestActor | null): HubSocket => ({
-    data: { kind: 'hub', transcripts: new Map(), surface: null, origin: 'remote', guest },
+  const createSocket = (guest: GuestActor | null, owner: boolean): HubSocket => ({
+    data: { kind: 'hub', transcripts: new Map(), surface: null, origin: owner ? 'owner' : 'remote', guest },
     send: (payload: string) => run(send({ t: 'socket', data: payload })),
+  });
+
+  const closeStream = (id: string, code: number, reason: string) =>
+    send({ t: 'terminal-close', id, code, reason });
+
+  const removeStream = (id: string) =>
+    Ref.modify(streams, (open): [TerminalStream | null, ReadonlyMap<string, TerminalStream>] => {
+      const stream = open.get(id);
+      if (!stream) return [null, open];
+      const rest = new Map(open);
+      rest.delete(id);
+      return [stream, rest];
+    });
+
+  const drain = Effect.gen(function* () {
+    for (const stream of (yield* Ref.get(streams)).values())
+      (yield* selectSession(stream.terminalId))?.drain(stream.viewer);
+  }).pipe(Effect.withSpan('RemoteChannel.drain'));
+
+  const sendTerminal = (id: string, stream: TerminalStream, data: string | Uint8Array) => {
+    const message: ChannelMessage =
+      typeof data === 'string'
+        ? { t: 'terminal-text', id, data }
+        : { t: 'terminal-bytes', id, chunk: serializeBase64Url(data as Bytes) };
+    stream.pending += data.length;
+    run(
+      send(message).pipe(
+        Effect.ensuring(
+          Effect.gen(function* () {
+            stream.pending -= data.length;
+            if ((yield* Ref.get(streams)).get(id) === stream) yield* drain;
+          })
+        )
+      )
+    );
+    return SENT;
+  };
+
+  const openTerminal = Effect.fn('RemoteChannel.openTerminal')(function* (
+    id: string,
+    terminalId: string,
+    guest: GuestActor | null
+  ) {
+    const open = yield* Ref.get(streams);
+    if (open.has(id) || id.length > MAX_STREAM_ID_LENGTH)
+      return yield* fail('A terminal stream was not valid.');
+    if (guest || !(yield* definition.isOwner))
+      return yield* closeStream(id, TERMINAL_STREAM_CLOSE.refused, TERMINAL_STREAM_MESSAGES.ownerOnly);
+    if (open.size >= MAX_TERMINAL_STREAMS)
+      return yield* closeStream(id, TERMINAL_STREAM_CLOSE.refused, TERMINAL_STREAM_MESSAGES.tooMany);
+    const session = yield* selectSession(terminalId);
+    if (!session) return yield* closeStream(id, TERMINAL_STREAM_CLOSE.gone, TERMINAL_STREAM_MESSAGES.closed);
+    const stream: TerminalStream = {
+      terminalId,
+      pending: 0,
+      viewer: {
+        send: (data) => sendTerminal(id, stream, data),
+        buffered: () => stream.pending + (definition.buffered?.() ?? 0),
+        end: () =>
+          run(
+            Effect.gen(function* () {
+              if (!(yield* removeStream(id))) return;
+              yield* closeStream(id, TERMINAL_STREAM_CLOSE.gone, TERMINAL_STREAM_MESSAGES.closed);
+            })
+          ),
+      },
+    };
+    yield* Ref.update(streams, (current) => new Map(current).set(id, stream));
+    session.attach(stream.viewer);
+  });
+
+  const withTerminal = Effect.fn('RemoteChannel.withTerminal')(function* (
+    id: string,
+    apply: (session: TerminalSession) => void
+  ) {
+    const stream = (yield* Ref.get(streams)).get(id);
+    const session = stream ? yield* selectSession(stream.terminalId) : null;
+    if (session) apply(session);
+  });
+
+  const detachTerminal = Effect.fn('RemoteChannel.detachTerminal')(function* (id: string) {
+    const stream = yield* removeStream(id);
+    if (stream) (yield* selectSession(stream.terminalId))?.detach(stream.viewer);
   });
 
   const startRequest = Effect.fn('RemoteChannel.startRequest')(function* (
@@ -269,11 +367,11 @@ export const makeRemoteChannel = Effect.fn('RemoteChannel.make')(function* (defi
       const response = yield* definition.respond(request, open.guest);
       yield* streamResponse(id, signal, response);
     }).pipe(
-      Effect.catch((failure) =>
-        signal.aborted
+      Effect.catchCause((cause) =>
+        signal.aborted || Cause.hasInterruptsOnly(cause)
           ? Effect.void
           : Effect.logWarning('[Remote] A remote request failed').pipe(
-              Effect.annotateLogs({ path: open.path, error: failure.message }),
+              Effect.annotateLogs({ path: open.path, error: describeError(Cause.squash(cause)) }),
               Effect.andThen(respondStatus(id, 500))
             )
       ),
@@ -287,7 +385,7 @@ export const makeRemoteChannel = Effect.fn('RemoteChannel.make')(function* (defi
     switch (message.t) {
       case 'ready': {
         if (current.socket) return;
-        const socket = createSocket(current.guest);
+        const socket = createSocket(current.guest, yield* definition.isOwner);
         yield* Ref.update(state, (latest) => (latest.kind === 'open' ? { ...latest, socket } : latest));
         return yield* definition.openSocket(socket);
       }
@@ -306,6 +404,17 @@ export const makeRemoteChannel = Effect.fn('RemoteChannel.make')(function* (defi
         return yield* removeRequest(message.id);
       case 'response':
         return yield* fail('The browser cannot send a response.');
+      case 'terminal-open':
+        return yield* openTerminal(message.id, message.terminal, current.guest);
+      case 'terminal-text':
+        return yield* withTerminal(message.id, (session) => applyTerminalText(session, message.data));
+      case 'terminal-bytes': {
+        const bytes = parseBase64Url(message.chunk);
+        if (bytes) yield* withTerminal(message.id, (session) => session.input(bytes));
+        return;
+      }
+      case 'terminal-close':
+        return yield* detachTerminal(message.id);
     }
   });
 
@@ -333,6 +442,6 @@ export const makeRemoteChannel = Effect.fn('RemoteChannel.make')(function* (defi
       )
     );
 
-  const channel: RemoteChannelHandle = { device, isOpen, receive, fail, close };
+  const channel: RemoteChannelHandle = { device, isOpen, receive, fail, drain, close };
   return channel;
 });

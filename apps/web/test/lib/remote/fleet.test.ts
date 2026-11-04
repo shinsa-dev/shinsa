@@ -1,6 +1,7 @@
 import { describe, expect, it, mock } from 'bun:test';
 import type {
   AccountsSnapshot,
+  AttentionPlace,
   ChatEntry,
   EngineInfo,
   MachineResources,
@@ -18,6 +19,8 @@ import {
   resolveScopedEngineInfo,
   SCOPE_MESSAGES,
 } from '@shinsa/core';
+import { Effect } from 'effect';
+import { Socket } from 'effect/socket';
 import type { ShinsaConnection, Snapshot } from '@/lib/connection/socket.ts';
 import {
   FLEET_WAIT_MS,
@@ -30,6 +33,7 @@ import {
   resolveRequestOwner,
 } from '@/lib/remote/fleet.ts';
 import { describeOutdatedMachine } from '@/lib/remote/mode.ts';
+import type { SocketTransport } from '@/lib/runtime/socket/schema.ts';
 import { createSignal } from '@/lib/signal.ts';
 import { resolveCanonicalTaskPath, resolveTaskPath } from '@/router.ts';
 import { createMachineResources } from '../../support/resources.ts';
@@ -86,6 +90,12 @@ class FakeConnection implements ShinsaConnection {
   };
   subscribeSurfaces = (listener: () => void) => this.signal.subscribe(listener);
   isDesktopConnected = () => this.desktop;
+  attention: AttentionPlace = 'nowhere';
+  presences = 0;
+  reportPresence = () => {
+    this.presences += 1;
+  };
+  selectAttention = () => this.attention;
   subscribeTerminals = (listener: () => void) => this.signal.subscribe(listener);
   selectTerminals = () => this.terminals;
   replaceTerminals = (terminals: TerminalsSnapshot) => {
@@ -119,6 +129,14 @@ class FakeConnection implements ShinsaConnection {
   };
   flush = () => {
     this.calls.push('flush');
+  };
+}
+
+function createTerminals(home: string, serviceIds: string[], terminalIds: string[] = []): TerminalsSnapshot {
+  return {
+    home,
+    services: serviceIds.map((id) => ({ id }) as TerminalsSnapshot['services'][number]),
+    terminals: terminalIds.map((id) => ({ id }) as TerminalsSnapshot['terminals'][number]),
   };
 }
 
@@ -158,6 +176,20 @@ function createFleet() {
   });
   return { fleet, studio, laptop };
 }
+
+describe('which device you use', () => {
+  it('tells every machine you use this page, and answers for a task as the machine that runs it', () => {
+    const { fleet, studio, laptop } = createFleet();
+    fleet.reportPresence();
+    expect([studio.connection.presences, laptop.connection.presences]).toEqual([1, 1]);
+    laptop.connection.attention = 'elsewhere';
+    studio.connection.attention = 'here';
+    expect(fleet.selectAttention('task-laptop')).toBe('elsewhere');
+    expect(fleet.selectAttention('task-studio')).toBe('here');
+    expect(fleet.selectAttention()).toBe('here');
+    expect(new Fleet([]).selectAttention('task-laptop')).toBe('nowhere');
+  });
+});
 
 describe('what each machine’s engine speaks', () => {
   it('answers for the engine of the machine that owns a task, and the first machine’s otherwise', () => {
@@ -261,6 +293,18 @@ describe('merging the state of several machines', () => {
     ]);
     expect(merged?.state.presence).toEqual({ '10': 2, '11': 4 });
     expect(merged?.owners.has('10')).toBe(false);
+  });
+
+  it('keeps your time away and focus from every machine, and reads a machine that sends none as none', () => {
+    const { away: _, focusHistory: __, ...older } = createWire(1);
+    const focus = { projectId: 'p', from: 5, to: null, until: null };
+    const merged = mergeFleetStates([
+      { id: 'm1', state: createWire(1, { away: { '1': { from: 1, to: 2 } } }) },
+      { id: 'm2', state: createWire(1, { away: { '3': { from: 3, to: 4 } }, focusHistory: { '5': focus } }) },
+      { id: 'm3', state: older as WireState },
+    ]);
+    expect(merged?.state.away).toEqual({ '1': { from: 1, to: 2 }, '3': { from: 3, to: 4 } });
+    expect(merged?.state.focusHistory).toEqual({ '5': focus });
   });
 
   it('is open when any machine is, connecting while one still tries, and closed otherwise', () => {
@@ -617,16 +661,13 @@ describe('sending to the machine that owns it', () => {
     expect(resolveRequestOwner(url, merged?.owners ?? new Map())).toBe('m2');
   });
 
-  it('reads accounts, terminals and remote access from the first machine, and is quiet while any machine has its desktop app open', () => {
+  it('reads accounts and remote access from the first machine, and is quiet while any machine has its desktop app open', () => {
     const { fleet, studio, laptop } = createFleet();
     const accounts = { accounts: [] } as unknown as AccountsSnapshot;
-    const terminals = { terminals: [] } as unknown as TerminalsSnapshot;
     const remote = { devices: [] } as unknown as RemoteSnapshot;
     fleet.replaceAccounts(accounts);
-    fleet.replaceTerminals(terminals);
     fleet.replaceRemote(remote);
     expect(fleet.selectAccounts()).toBe(accounts);
-    expect(fleet.selectTerminals()).toBe(terminals);
     expect(fleet.selectRemote()).toBe(remote);
     expect(studio.connection.accounts).toBe(accounts);
     expect(studio.connection.remote).toBe(remote);
@@ -646,6 +687,88 @@ describe('sending to the machine that owns it', () => {
       });
     laptop.connection.push(laptop.connection.current);
     expect(heard).toBe(5);
+  });
+
+  it('lists every machine’s services and terminals, keeps the list until one changes, and puts an answer back on its machine', () => {
+    const { fleet, studio, laptop } = createFleet();
+    expect(fleet.selectTerminals()).toBeNull();
+    studio.connection.terminals = createTerminals('/Users/mona', ['web'], ['t1']);
+    expect(fleet.selectTerminals()).toBe(studio.connection.terminals);
+    laptop.connection.terminals = createTerminals('/Users/kai', ['api']);
+    const merged = fleet.selectTerminals();
+    expect(merged).toEqual({
+      home: '/Users/mona',
+      services: [{ id: 'web' }, { id: 'api' }],
+      terminals: [{ id: 't1' }],
+    } as unknown as TerminalsSnapshot);
+    expect(fleet.selectTerminals()).toBe(merged);
+    const answer = createTerminals('/Users/kai', ['api', 'docs']);
+    fleet.replaceTerminals(answer);
+    expect(laptop.connection.terminals).toBe(answer);
+    const unknown = createTerminals('/Users/kai', []);
+    fleet.replaceTerminals(unknown);
+    expect([studio.connection.terminals, laptop.connection.terminals]).not.toContain(unknown);
+  });
+
+  it('opens a terminal on the machine that runs it, only on a machine you own', () => {
+    const { fleet, studio, laptop } = createFleet();
+    laptop.connection.push({
+      state: createWire(7, {
+        ...laptop.connection.current.state,
+        projects: { 'p-laptop': { id: 'p-laptop' } as WireState['projects'][string] },
+      }),
+      status: 'open',
+    });
+    studio.connection.terminals = createTerminals('/Users/mona', [], ['t1']);
+    laptop.connection.terminals = createTerminals('/Users/kai', [], ['t2']);
+    const opened: string[] = [];
+    laptop.member.openTerminal = (terminalId) => {
+      opened.push(terminalId);
+      return new EventTarget() as unknown as WebSocket;
+    };
+    laptop.connection.engine = { ...resolveEngineInfo('1.2.0'), features: [] };
+    expect(fleet.canOpenTerminals('p-laptop')).toBe(false);
+    laptop.connection.engine = resolveEngineInfo('1.2.0');
+    expect(fleet.canOpenTerminals('p-laptop')).toBe(true);
+    expect(fleet.canOpenTerminals('p-studio')).toBe(false);
+    expect(fleet.resolveTerminalTransport('t1')).toBeNull();
+    const transport = fleet.resolveTerminalTransport('t2');
+    expect(transport).not.toBeNull();
+    const open = Effect.runSync(
+      Effect.provide(Socket.WebSocketConstructor.use(Effect.succeed), transport as SocketTransport)
+    );
+    open('ws://ignored');
+    expect(opened).toEqual(['t2']);
+  });
+
+  it('sends a service’s request to the machine that runs it, by its id or the project in its body', async () => {
+    const { fleet, studio, laptop } = createFleet();
+    laptop.connection.push({
+      state: createWire(7, {
+        ...laptop.connection.current.state,
+        projects: { 'p-laptop': { id: 'p-laptop' } as WireState['projects'][string] },
+      }),
+      status: 'open',
+    });
+    studio.connection.terminals = createTerminals('/Users/mona', ['svc-web']);
+    laptop.connection.terminals = createTerminals('/Users/kai', ['svc-api'], ['t2']);
+    const post = (path: string, body: unknown, type = 'application/json') =>
+      fleet.fetch(
+        new Request(`https://app.shinsa.dev${path}`, {
+          method: 'POST',
+          headers: { 'content-type': type },
+          body: typeof body === 'string' ? body : JSON.stringify(body),
+        })
+      );
+    expect(await (await post('/api/services/svc-api/start', null)).text()).toBe('Laptop');
+    expect(await (await post('/api/services/svc-web/stop', null)).text()).toBe('Studio');
+    expect(await (await post('/api/services/start-all', { projectId: 'p-laptop' })).text()).toBe('Laptop');
+    expect(await (await post('/api/services/remove', { ids: ['svc-api'] })).text()).toBe('Laptop');
+    expect(await (await post('/api/services/batch', 'not json')).text()).toBe('Studio');
+    expect(await (await post('/api/services/batch', { projectId: 'p-laptop' }, 'text/plain')).text()).toBe(
+      'Studio'
+    );
+    expect(await (await post('/api/terminals/t2/close', null)).text()).toBe('Laptop');
   });
 
   it('starts, flushes and resets every machine, and drops one that no longer accepts this browser', async () => {
@@ -673,7 +796,7 @@ describe('sending to the machine that owns it', () => {
     expect(fleet.selectRemote()).toBeNull();
     fleet.replaceRemote({ devices: [] } as unknown as RemoteSnapshot);
     fleet.replaceAccounts(null);
-    fleet.replaceTerminals({ terminals: [] } as unknown as TerminalsSnapshot);
+    fleet.replaceTerminals(createTerminals('/Users/mona', ['web']));
     fleet.watchTranscript('run')();
     fleet.requestTaskDetail('task');
     fleet.watchTaskDetail('task')();

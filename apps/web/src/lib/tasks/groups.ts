@@ -8,10 +8,11 @@ import {
   isPausingGate,
   isTaskSettled,
   isWatchHome,
+  listBundleBlockers,
   listWaitsOn,
   type ShinsaState,
   selectLeadGate,
-  selectStackParent,
+  listStackParents,
   type Task,
   type TeamFeedTask,
 } from '@shinsa/core';
@@ -150,18 +151,28 @@ export function describeWaitsOn(waitsOn: Task[]) {
   return `Waits on ${titles.slice(0, 2).join(', ')} and ${titles.length - 2} more`;
 }
 
-function listChainParents(state: ShinsaState, task: Task) {
-  const parents = listWaitsOn(state, task);
-  const below = selectStackParent(state, task);
-  if (!below || isTaskSettled(below) || parents.includes(below)) return parents;
-  return [...parents, below];
+export function describeBundleWait(state: ShinsaState, task: Task) {
+  const blockers = listBundleBlockers(state, task);
+  return blockers.length > 0 ? describeWaitsOn(blockers) : null;
 }
 
-function createChainLevels(state: ShinsaState, tasks: Task[]) {
+function listChainParents(state: ShinsaState, task: Task) {
+  const parents = listWaitsOn(state, task);
+  const below = listStackParents(state, task).filter(
+    (parent) => !isTaskSettled(parent) && !parents.includes(parent)
+  );
+  return [...parents, ...below];
+}
+
+export interface ChainOrder {
+  parents: (task: Task) => Task[];
+  compare: (a: Task, b: Task) => number;
+}
+
+function createChainLevels(tasks: Task[], order: ChainOrder) {
   const inGroup = new Map(tasks.map((task) => [task.id, task]));
   const depth = new Map<string, number>();
-  const listParents = (task: Task) =>
-    listChainParents(state, task).flatMap((parent) => inGroup.get(parent.id) ?? []);
+  const listParents = (task: Task) => order.parents(task).flatMap((parent) => inGroup.get(parent.id) ?? []);
   const resolveDepth = (task: Task, path: ReadonlySet<string>): number => {
     const known = depth.get(task.id);
     if (known !== undefined) return known;
@@ -175,8 +186,12 @@ function createChainLevels(state: ShinsaState, tasks: Task[]) {
   return { listParents, levelOf: (task: Task) => resolveDepth(task, new Set()) };
 }
 
-export function orderChains(state: ShinsaState, tasks: Task[]): ChainEntry[] {
-  const { listParents, levelOf } = createChainLevels(state, tasks);
+export function orderChains(
+  state: ShinsaState,
+  tasks: Task[],
+  order: ChainOrder = { parents: (task) => listChainParents(state, task), compare: compareTasks }
+): ChainEntry[] {
+  const { listParents, levelOf } = createChainLevels(tasks, order);
   const arrange = (rank: (task: Task) => number) => {
     const children = new Map<string, Task[]>();
     const roots: Task[] = [];
@@ -195,12 +210,12 @@ export function orderChains(state: ShinsaState, tasks: Task[]): ChainEntry[] {
       if (seen.has(task.id)) return;
       seen.add(task.id);
       ordered.push({ task, depth: levelOf(task) });
-      for (const child of (children.get(task.id) ?? []).sort(compareTasks)) visit(child);
+      for (const child of (children.get(task.id) ?? []).sort(order.compare)) visit(child);
     };
-    for (const root of roots.sort(compareTasks)) visit(root);
+    for (const root of roots.sort(order.compare)) visit(root);
     return ordered;
   };
-  const byPriority = tasks.slice().sort(compareTasks);
+  const byPriority = tasks.slice().sort(order.compare);
   const first = arrange((task) => byPriority.indexOf(task));
   const shown = first.map((entry) => entry.task.id);
   return arrange((task) => shown.indexOf(task.id));

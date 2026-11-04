@@ -16,6 +16,8 @@ function adoptChannel(link: ChannelLink): RemoteChannel {
     request: (input) => runApp(link.request(input)),
     sendSocket: (data) => runApp(link.sendSocket(data)),
     subscribeSocket: link.subscribeSocket,
+    sendTerminal: (message) => runApp(link.sendTerminal(message)),
+    subscribeTerminal: link.subscribeTerminal,
     subscribeClose: link.subscribeClose,
     close: link.close,
   };

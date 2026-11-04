@@ -31,6 +31,12 @@ export const SurfaceName = Schema.Literals(SURFACES);
 
 export type Surface = typeof SurfaceName.Type;
 
+export const ATTENTION_PLACES = ['here', 'elsewhere', 'nowhere'] as const;
+
+export const AttentionPlace = Schema.Literals(ATTENTION_PLACES);
+
+export type AttentionPlace = typeof AttentionPlace.Type;
+
 const TranscriptIndex = Schema.Number.check(
   Schema.makeFilter(Number.isSafeInteger),
   Schema.isGreaterThanOrEqualTo(0)
@@ -38,6 +44,7 @@ const TranscriptIndex = Schema.Number.check(
 
 export const ClientMessage = Schema.Union([
   Schema.Struct({ type: Schema.Literal('hello'), surface: SurfaceName }),
+  Schema.Struct({ type: Schema.Literal('presence'), active: Schema.Boolean }),
   Schema.Struct({ type: Schema.Literal('command'), id: IdText, command: Schema.optionalKey(Schema.Unknown) }),
   Schema.Struct({ type: Schema.Literal('state.sync') }),
   Schema.Struct({ type: Schema.Literal('task.detail'), taskId: TaskId }),
@@ -113,6 +120,7 @@ export const ServerMessage = Schema.Union([
   }),
   Schema.Struct({ type: Schema.Literal('accounts'), accounts: AccountsBody }),
   Schema.Struct({ type: Schema.Literal('surfaces'), desktop: Schema.Boolean }),
+  Schema.Struct({ type: Schema.Literal('attention'), where: AttentionPlace }),
   Schema.Struct({ type: Schema.Literal('engine'), engine: EngineInfo }),
   Schema.Struct({ type: Schema.Literal('terminals'), terminals: TerminalsBody }),
   Schema.Struct({ type: Schema.Literal('resources'), resources: ResourcesBody }),

@@ -2,7 +2,7 @@ import {
   type ChecklistItem,
   isTaskComplete,
   isTaskSettled,
-  listBundleAbove,
+  listBundleFollowers,
   listDuePostMergeSteps,
   listMergeSteps,
   listOpenMergeSteps,
@@ -45,7 +45,7 @@ export function listTimedSteps(task: Task, when: MergeStepTiming) {
 }
 
 export function resolveMergeLabel(state: Pick<ShinsaState, 'tasks'>, task: Task, fallback: string) {
-  const above = listBundleAbove(state, task).filter((member) => member.pullRequest).length;
+  const above = listBundleFollowers(state, task).filter((member) => member.pullRequest).length;
   if (above > 0) return `Merge ${above + 1} pull requests`;
   return task.pullRequest ? `Merge #${task.pullRequest.number}` : fallback;
 }
@@ -91,7 +91,7 @@ function linkTask(task: Task) {
 }
 
 function listBundleWaits(state: Pick<ShinsaState, 'tasks'>, task: Task): MergeWaitView[] {
-  return listBundleAbove(state, task).map((above) => {
+  return listBundleFollowers(state, task).map((above) => {
     const open = listOpenMergeSteps(above, 'pre_merge').length;
     return {
       key: `bundle:${above.id}`,

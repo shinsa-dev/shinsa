@@ -644,37 +644,37 @@ export const TASK_SPECS: SurfaceSpec[] = [
   defineCommand({
     path: ['tasks', 'stack-on'],
     summary:
-      'Stack a task on another as a bundle: it starts once that task is ready to merge, builds on its branch, and the bundle merges as one.',
-    command: 'task.stack_on',
+      'Stack a task on other tasks as a bundle: it starts once every one of them is ready to merge, builds on the first one’s branch with the others merged in, and the bundle merges as one. The list replaces the tasks it stacks on now.',
+    command: 'task.stack_on_tasks',
     fields: [
       TASK_FIELD,
       {
         name: 'below',
-        kind: 'text',
-        positional: 'one',
+        kind: 'list',
+        positional: 'rest',
         required: true,
-        description: 'The task it stacks on.',
+        description: 'The tasks it stacks on. The first one is its pull request’s base.',
       },
     ],
     build: Effect.fn('Surface.tasksStackOn')(function* (values, client) {
       return {
-        type: 'task.stack_on' as const,
+        type: 'task.stack_on_tasks' as const,
         taskId: yield* findTaskId(client, readValue(values, 'task')),
-        stacksOn: yield* findTaskId(client, readValue(values, 'below')),
+        stacksOn: yield* findTaskIds(client, readList(values, 'below')),
       };
     }),
-    done: () => 'Stacked. It starts once the task below is ready to merge.',
+    done: () => 'Stacked. It starts once every task below is ready to merge.',
   }),
   defineCommand({
     path: ['tasks', 'unstack'],
-    summary: 'Take a task out of its bundle before it starts: it no longer waits for the task below.',
-    command: 'task.stack_on',
+    summary: 'Take a task out of its bundle before it starts: it no longer waits for the tasks below.',
+    command: 'task.stack_on_tasks',
     fields: [TASK_FIELD],
     build: Effect.fn('Surface.tasksUnstack')(function* (values, client) {
       return {
-        type: 'task.stack_on' as const,
+        type: 'task.stack_on_tasks' as const,
         taskId: yield* findTaskId(client, readValue(values, 'task')),
-        stacksOn: null,
+        stacksOn: [],
       };
     }),
     done: () => 'It is no longer in a bundle.',

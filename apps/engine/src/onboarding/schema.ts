@@ -79,6 +79,14 @@ export type OnboardingFailure = DomainError | OnboardingCallFailed;
 
 export const MODEL_ID = /^[\w.[\]-]{1,100}$/;
 
+export const WORKTREES_FOLDER = 'worktrees';
+
+export const DELEGATIONS_FOLDER = 'delegations';
+
+export const KILOBYTE = 1024;
+
+export const WORKTREE_USAGE_TIMEOUT_MS = 20_000;
+
 export interface OnboardingInput {
   readonly models: ModelSource;
   readonly accounts: AccountSource;

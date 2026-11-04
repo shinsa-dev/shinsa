@@ -430,12 +430,14 @@ src/
 │                        the time from Clock), schema.ts (SlackInput, the SlackStatusInterval reference, limits and
 │                        tagged errors), index.ts the re-exports. Slack takes the mention
 │                        app.shinsa.dev forwards over the tunnel, checked against the connect key and sent as
-│                        slack.mention, and a question's choice clicked in Slack as slack.answer
-│                        (handleTunnel); slack.evaluate: ⏳ on the mention, the classifier asked, "Not a task" once
-│                        per thread or slack.start_task; the
-│                        slack.post and slack.status effects, the status message edited at most every 5 s and only
-│                        when it changes (a wait the effect's interrupt ends), the thread's status and the mention's one
-│                        reaction moved with it; GET /api/slack and POST /api/slack/disconnect; posts, reactions, the thread's status, links and
+│                        slack.mention, and a card's button or modal in Slack as slack.decide, answered with
+│                        what the card now says or why it was refused (handleTunnel); slack.evaluate: ⏳ on the
+│                        mention, the classifier asked, "Not a task" once per thread or slack.start_task; the
+│                        slack.status effect, the thread's one card (the open gate with its buttons, else the
+│                        status) edited at most every 5 s and only when it changes, the thread's status and the
+│                        mention's one reaction moved with it; slack.react, 👀 or 📥 on a later mention;
+│                        slack.post, a new message only for the result and the finished task; GET
+│                        /api/slack and POST /api/slack/disconnect); posts, reactions, the thread's status, links and
 │                        unlink go through RemoteClient's slackRelay group with the machine token, retried only
 │                        on SlackFailed or a retryable RemoteUnreachable (the relay down, busy or unreachable)
 ├── secrets/             secrets.json: webhook tokens and signing secrets, one-use secret refs, MCP sign-ins. schema.ts
@@ -520,11 +522,16 @@ src/
 ├── workspaces/          Where agents work (docs/engine.md → Where agents work): one Workspace of effects per mode
 │                        (schema.ts: prepare, commit, push, remove, writeEdit, syncBase: the merge of the base
 │                        before a push; TaskCheckoutMissing, CheckoutDirty, CheckoutOffBranch),
-│                        worktrees-mode/ (WorktreeWorkspaces: make(worktreesDir) and the commit both modes share),
+│                        worktrees-mode/ (WorktreeWorkspaces: make(root) and the commit both modes share),
+│                        root/ (WorktreeRoot in service.ts, on EngineConfig and ConfigStore: the folder new
+│                        worktrees go in, read again on every call from SHINSA_WORKTREES_DIR, then config.json's
+│                        worktreesDir, then data/worktrees; assert refuses a chosen folder that is missing, not a
+│                        folder, not writable or without the mark that mark leaves, with WorktreeRootUnavailable,
+│                        and never creates it),
 │                        main-checkout-mode/ (MainCheckoutWorkspace: the workspace and the setup check's
 │                        describeProblem); service.ts (Workspaces: resolve(task), the Workspace of the task's mode in
-│                        EngineConfig's worktreesDir, and describeProblem); layers.ts (WorkspacesLayer, and
-│                        WorkspacesServiceLayer with Workspaces on top)
+│                        the folder WorktreeRoot names, root, and describeProblem); layers.ts (WorkspacesLayer, and
+│                        WorkspacesServiceLayer with Workspaces and WorktreeRoot on top, which needs ConfigStore)
 ├── github/              `gh`, the one way the engine reaches GitHub: process/ (GitHubProcess: gh with GITHUB_TIMEOUT,
 │                        and layerTest, which plays gh in a test), service.ts (GitHubCli: run fails with
 │                        GitHubFailed, json decodes the answer with a schema or fails with GitHubAnswerInvalid),
@@ -591,8 +598,9 @@ src/
 │                        RepoWorkLayer, StandaloneRepoWorkLayer); index.ts the pure helpers and re-exports
 ├── onboarding/          Status, folder suggestions, saving the setup (service.ts: Onboarding, its layer
 │                        Onboarding.layer({ models, accounts, terminals }) on EngineConfig, EngineCore, ConfigStore,
-│                        Roots, ProjectChanges, CurrentLogin, RepoFolders, QuickCalls' writer, JsonFile, SetupCommands
-│                        and Prerequisites; index.ts the re-exports; roots.ts: the folders macOS keeps
+│                        Roots, ProjectChanges, CurrentLogin, RepoFolders, QuickCalls' writer, JsonFile, SetupCommands,
+│                        Prerequisites and WorktreeRoot; index.ts the re-exports; worktrees.ts: the worktree
+│                        folder's status, choosing one and the space its worktrees take; roots.ts: the folders macOS keeps
 │                        private, a DomainError isPrivateFolders reads, and opening Full Disk Access), the commands
 │                        setup runs (commands/: SetupCommands on Shell, a simulated machine's under SHINSA_SIMULATE_MISSING,
 │                        simulate.ts), the prerequisite checks
@@ -668,11 +676,14 @@ src/
 │                        resolveServicePlace, resolveServiceRunIn, the suggestions a project does not have yet),
 │                        sockets.ts (the /ws/terminals/<id> socket, createTerminalSockets: Bun's socket callbacks
 │                        run on the context it was made in), service.ts (Terminals, its layer
-│                        `Terminals.layer({ version, env })` over EngineConfig, TerminalFiles and TerminalPty: its
+│                        `Terminals.layer({ version, env })` over EngineConfig, TerminalFiles and TerminalPty, and
+│                        EngineCore when there is one, for the tasks the terminal limit names: its
 │                        state in Refs, the notify and screen timers as fibers (TerminalTimings), ids from TerminalIds;
 │                        the list, create, rename, reorder, restart, run, close, stop (also when its scope closes),
 │                        and the services: add, update, remove, start, stop, restart, a run per task, closing a
-│                        task's runs, resume after a restart), schema.ts, layers.ts (TerminalsLayer), index.ts the
+│                        task's runs and ended shells, resume after a restart; at the limit it closes ended terminals
+│                        first, limit.ts listReclaimable and resolveLimitMessage), schema.ts, layers.ts
+│                        (TerminalsLayer), index.ts the
 │                        barrel
 └── http/                Core's EngineApi served (docs/engine.md → The HTTP surface): server/ (EngineServer in
                          service.ts: its layer yields what the sockets need and runs Bun.serve with acquireRelease,

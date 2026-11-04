@@ -392,6 +392,7 @@ describe('the Slack effects', () => {
       evaluate: () => record('evaluate'),
       status: () => record('status'),
       post: () => record('post'),
+      react: () => record('react'),
     } as unknown as Slack['Service'];
     const { runner } = setup(() => undefined, { slack });
     const mention = {
@@ -402,15 +403,20 @@ describe('the Slack effects', () => {
       userName: 'A',
       text: '',
       permalink: null,
+      channelName: null,
       thread: [],
     };
     await runner.apply({ kind: 'slack.evaluate', mention }, createContext());
     await runner.apply({ kind: 'slack.status', taskId: 't1', thread: THREAD }, createContext());
     await runner.apply(
-      { kind: 'slack.post', thread: THREAD, taskId: 't1', post: { kind: 'forwarded' } },
+      { kind: 'slack.post', thread: THREAD, taskId: 't1', post: { kind: 'result' } },
       createContext()
     );
-    expect(handled).toEqual(['evaluate', 'status', 'post']);
+    await runner.apply(
+      { kind: 'slack.react', thread: THREAD, messageTs: '1.2', reaction: 'eyes' },
+      createContext()
+    );
+    expect(handled).toEqual(['evaluate', 'status', 'post', 'react']);
   });
 
   test('fail without one, so they wait in the outbox', async () => {
@@ -1019,7 +1025,7 @@ describe('worktrees', () => {
       stdout: 'ignore',
       stderr: 'ignore',
     });
-    const services = { closeTaskServices: () => Effect.void, listTerminalPids: Effect.succeed([shell.pid]) };
+    const services = { closeTaskTerminals: () => Effect.void, listTerminalPids: Effect.succeed([shell.pid]) };
     const { runner, dispatched } = setup(withTask({ worktreePath: worktree }, repo), { services });
     await runner.apply({ kind: 'worktree.remove', taskId: 'task-1' }, createContext());
     expect(await server.exited).not.toBe(0);
@@ -1050,7 +1056,7 @@ describe('worktrees', () => {
     const { repo, worktree } = await createShippingRepo();
     const closed: string[] = [];
     const services = {
-      closeTaskServices: (taskId: string) => Effect.sync(() => void closed.push(taskId)),
+      closeTaskTerminals: (taskId: string) => Effect.sync(() => void closed.push(taskId)),
       listTerminalPids: Effect.succeed([]),
     };
     const { runner, dispatched, commandIds } = setup(withTask({ worktreePath: worktree }, repo), {
@@ -1065,7 +1071,10 @@ describe('worktrees', () => {
       mode: 'worktrees',
       remove: () => Effect.fail(new GitFailed({ message: 'Device busy', retryable: false })),
     };
-    const workspaces = { resolve: () => failing } as unknown as Workspaces['Service'];
+    const workspaces = {
+      resolve: () => failing,
+      root: { path: Effect.succeed(createTempDir()) },
+    } as unknown as Workspaces['Service'];
     const broken = setup(withTask({ worktreePath: createTempDir() }, repo), { workspaces });
     const logs = captureLogs();
     await broken.runner.apply({ kind: 'worktree.remove', taskId: 'task-1' }, createContext());
@@ -1093,12 +1102,18 @@ describe('scratch folders', () => {
 
   test('a settled task’s scratch folder is removed once its runs stop, and removing it again is harmless', async () => {
     for (const stage of ['done', 'merged', 'cancelled'] as const) {
-      const { runner, config, calls, dispatched } = setup(withTask({ stage, repoId: null }));
+      const closed: string[] = [];
+      const services = {
+        closeTaskTerminals: (taskId: string) => Effect.sync(() => void closed.push(taskId)),
+        listTerminalPids: Effect.succeed([]),
+      };
+      const { runner, config, calls, dispatched } = setup(withTask({ stage, repoId: null }), { services });
       const scratch = writeScratch(config.dataDir);
       await runner.apply({ kind: 'scratch.remove', taskId: 'task-1' }, createContext());
       expect(existsSync(scratch)).toBe(false);
       await runner.apply({ kind: 'scratch.remove', taskId: 'task-1' }, createContext());
       expect(calls).toEqual(['quiesce:task-1', 'quiesce:task-1']);
+      expect(closed).toEqual(['task-1', 'task-1']);
       expect(dispatched).toEqual([]);
     }
     const gone = setup();
@@ -1107,10 +1122,16 @@ describe('scratch folders', () => {
   });
 
   test('a task reopened before or while its runs stop keeps its scratch folder', async () => {
-    const reopened = setup(withTask({ stage: 'answering', repoId: null }));
+    const closed: string[] = [];
+    const services = {
+      closeTaskTerminals: (taskId: string) => Effect.sync(() => void closed.push(taskId)),
+      listTerminalPids: Effect.succeed([]),
+    };
+    const reopened = setup(withTask({ stage: 'answering', repoId: null }), { services });
     const kept = writeScratch(reopened.config.dataDir);
     await reopened.runner.apply({ kind: 'scratch.remove', taskId: 'task-1' }, createContext());
     expect(existsSync(kept)).toBe(true);
+    expect(closed).toEqual([]);
     expect(reopened.calls).toEqual([]);
 
     const stub = createStubEngine(withTask({ stage: 'done', repoId: null }));
@@ -1332,6 +1353,16 @@ async function moveBase(repo: TestRepo, files: Record<string, string>) {
   await git(other, 'push', '-q', 'origin', 'main');
 }
 
+async function pushBranch(repo: TestRepo, branch: string, files: Record<string, string>) {
+  const other = join(repo.root, `other-${branch.replaceAll('/', '-')}`);
+  await git(repo.root, 'clone', '-q', repo.origin, other);
+  await git(other, 'checkout', '-q', '-b', branch);
+  writeFiles(other, files);
+  await git(other, 'add', '-A');
+  await git(other, 'commit', '-q', '-m', `feat: ${branch}`);
+  await git(other, 'push', '-q', 'origin', branch);
+}
+
 function writeHook(repo: TestRepo, script: string) {
   writeFiles(repo.path, { '.git/hooks/pre-push': `#!/bin/sh\n${script}\n` });
   chmodSync(join(repo.path, '.git/hooks/pre-push'), 0o755);
@@ -1360,7 +1391,7 @@ describe('getting the branch to GitHub', () => {
       { type: 'pull_request.record_step', taskId: 'task-1', step: { kind: 'updating', base: 'main' } },
       { type: 'pull_request.record_step', taskId: 'task-1', step: { kind: 'pushing', hook: false } },
     ]);
-    expect(commandIds[0]).toBe(`${context.key}:1:pull_request.record_step:updating`);
+    expect(commandIds[0]).toBe(`${context.key}:1:pull_request.record_step:updating:main`);
     expect(await git(shipping.worktree, 'log', '-1', '--format=%s')).toBe(
       "Merge branch 'main' into fix/tab-scroll"
     );
@@ -1369,6 +1400,59 @@ describe('getting the branch to GitHub', () => {
     expect(await git(shipping.origin, 'show', 'refs/heads/fix/tab-scroll:.husky/pre-push')).toBe(
       'bun run check-types'
     );
+    await runner.stop();
+  });
+
+  test('a branch stacked on several tasks gets every parent merged in before the push', async () => {
+    useFakeGitHub();
+    const shipping = await createShippingRepo();
+    await pushBranch(shipping, 'feat/b', { 'b.txt': 'b\n' });
+    await pushBranch(shipping, 'feat/c', { 'c.txt': 'c\n' });
+    const { runner, dispatched } = setup(
+      withTask(
+        {
+          stage: 'shipping',
+          worktreePath: shipping.worktree,
+          stacksOn: ['b', 'c'],
+          stackBases: ['feat/b', 'feat/c'],
+        },
+        shipping.repo
+      )
+    );
+    await runner.apply({ kind: 'pull_request.open', taskId: 'task-1' }, createContext());
+    expect(dispatched.slice(0, 3)).toEqual([
+      { type: 'pull_request.record_step', taskId: 'task-1', step: { kind: 'updating', base: 'feat/b' } },
+      { type: 'pull_request.record_step', taskId: 'task-1', step: { kind: 'updating', base: 'feat/c' } },
+      { type: 'pull_request.record_step', taskId: 'task-1', step: { kind: 'pushing', hook: false } },
+    ]);
+    expect(await git(shipping.worktree, 'show', 'HEAD:b.txt')).toBe('b');
+    expect(await git(shipping.worktree, 'show', 'HEAD:c.txt')).toBe('c');
+    await runner.stop();
+  });
+
+  test('a conflict with the second parent of a stacked branch goes to the agent with that parent', async () => {
+    useFakeGitHub();
+    const shipping = await createShippingRepo();
+    await pushBranch(shipping, 'feat/b', { 'b.txt': 'b\n' });
+    await pushBranch(shipping, 'feat/c', { 'a.txt': 'theirs\n' });
+    const { runner, dispatched } = setup(
+      withTask(
+        {
+          stage: 'shipping',
+          worktreePath: shipping.worktree,
+          stacksOn: ['b', 'c'],
+          stackBases: ['feat/b', 'feat/c'],
+        },
+        shipping.repo
+      )
+    );
+    await runner.apply({ kind: 'pull_request.open', taskId: 'task-1' }, createContext());
+    expect(dispatched.at(-1)).toEqual({
+      type: 'pull_request.record_update_conflict',
+      taskId: 'task-1',
+      base: 'feat/c',
+      files: ['a.txt'],
+    });
     await runner.stop();
   });
 
@@ -1856,8 +1940,8 @@ describe('merging a bundle of tasks', () => {
         title: 'Middle',
         branch: 'feat/middle',
         stage,
-        stacksOn: 'task-1',
-        stackBase: 'feat/root',
+        stacksOn: ['task-1'],
+        stackBases: ['feat/root'],
         bundleReady: ready,
         pullRequest: { ...PULL, number: 8, base: 'feat/root' },
       });
@@ -1866,8 +1950,8 @@ describe('merging a bundle of tasks', () => {
         title: 'Top',
         branch: 'feat/top',
         stage,
-        stacksOn: 'task-2',
-        stackBase: 'feat/middle',
+        stacksOn: ['task-2'],
+        stackBases: ['feat/middle'],
         bundleReady: ready,
         pullRequest: { ...PULL, number: 9, base: 'feat/middle' },
       });

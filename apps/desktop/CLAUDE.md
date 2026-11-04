@@ -14,6 +14,8 @@ src/
 │                   layout): its shapes, tagged errors, constants and named Schedules in schema.ts, its Effect service
 │                   and layer in service.ts, and its pure logic in a module named for it, Bun-tested at 100% under
 │                   test/<module>/ through the fakes in test/support/desktop.ts and TestClock
+│   away/           tracker.ts (time away: from 10 minutes after your last input, or your last input before a lock
+│                   or sleep, to your next); AwayWatch polls the idle time every 30 s and sends each span to the page
 │   app/            dev-bundle.ts (the app's name, its userData folder, the renamed Electron.app `bun run dev` runs);
 │                   AppLifecycle (shinsa:// links at launch and later, a second instance, Activate, quitting)
 │   bridge/         The bridge's types and IPC channels; PageBridge answers the page's messages
@@ -42,14 +44,14 @@ src/
 │   window/         bounds.ts, close.ts (close or hide); AppWindow (the page, navigation, Back and Forward, the
 │                   waiting page)
 │   dialogs/ files/ host/ launchctl/ login-items/ login-shell/ native-notices/ native-tray/ native-window/
-│   shell/ update-client/
+│   power-monitor/ shell/ update-client/
 │                   The outside world as services with no logic: Electron, the file system, launchctl, a login
 │                   shell, electron-updater. Their Electron events arrive as Streams; tests replace each with a fake
 ├── main/           Outside coverage: index.ts, the composition root (one ManagedRuntime, disposed on `will-quit`),
 │                   and the Electron and Node layers of the outside-world services (`*Live`)
 └── preload/        index.ts: exposes `window.shinsaDesktop` (version, protocol, update, channel, windowState,
                     updateBadge, notify, openNotificationSettings, onNotifyFailed, installUpdate, checkForUpdates, applyUpdateChannel, answerDowngrade, onNavigate,
-                    onWindowState, onUpdate) to the server's page
+                    onWindowState, onUpdate, onAway) to the server's page
                     only; `protocol` is core's ENGINE_PROTOCOL, and the page compares both with the engine's
 static/waiting.html The "Shinsa is not running" page; trayTemplate.png and @2x, the menu bar item's icon (scripts/icon.ts)
 resources/          The app icons: icon.svg (the source), icon.png (1024px), icon.icns (electron-builder's `mac.icon`),
@@ -110,7 +112,7 @@ electron-builder.shared.yml    The build settings; electron-builder.yml extends 
   composition root. Every answer from the engine and the update feed and every IPC payload is decoded by a schema;
   every expected failure is a tagged error (`EngineUnreachable`, `FileWriteFailed`, `UpdateCheckFailed`…); every
   poll, retry and repeat is a named Schedule (`START_SCHEDULE`, `LOAD_SCHEDULE`, `RETRY_SCHEDULE`,
-  `WATCH_SCHEDULE`, `UPDATE_CHECK_SCHEDULE`). One `ManagedRuntime` runs the app: the engine services are built
+  `WATCH_SCHEDULE`, `UPDATE_CHECK_SCHEDULE`, `AWAY_POLL_SCHEDULE`). One `ManagedRuntime` runs the app: the engine services are built
   first, so the first health check goes out before Electron is ready, the native window, tray and IPC layers wait
   for `app.whenReady()`, and `will-quit` disposes the runtime, which closes every listener, the watch and the update
   schedule. The engine keeps running. The main bundle imports from `@shinsa/core` only the engine API and the app's identity.

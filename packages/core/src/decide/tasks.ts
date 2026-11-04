@@ -34,7 +34,7 @@ import {
   releaseInquiryFromBacklog,
 } from './backlog.ts';
 import { type Decider, describeWaiting } from './decider.ts';
-import { changeDependencies, changeStack, resolveDependencies, resolveStackParent } from './dependencies.ts';
+import { changeDependencies, changeStack, resolveDependencies, resolveStackParents } from './dependencies.ts';
 import { closeTeammateDuplicate, closeTriageDuplicate, selectTriageDuplicate } from './duplicates.ts';
 import { settleTask, startWork } from './lifecycle.ts';
 import { assertNoMergeStepsLeft } from './merge-steps.ts';
@@ -70,16 +70,16 @@ export function createTask(decider: Decider, command: CommandOf<'task.create'>, 
   if (request.length === 0)
     throw new DomainError({ code: 'intent_required', message: 'Describe what you want done.' });
   assertRepo(decider, command.repoId);
-  const stacksOn = command.stacksOn
-    ? resolveStackParent(decider, null, command.stacksOn, command.repoId)
-    : null;
-  const waitsOn = resolveDependencies(decider, null, command.waitsOn ?? []).filter((id) => id !== stacksOn);
+  const stacksOn = resolveStackParents(decider, null, command.stacksOn ?? [], command.repoId);
+  const waitsOn = resolveDependencies(decider, null, command.waitsOn ?? []).filter(
+    (id) => !stacksOn.includes(id)
+  );
   const projectId = resolveCreatedProject(decider, command);
   if (command.forkOf !== undefined) decider.task(command.forkOf);
   const taskId = decider.context.newId();
   const auto: TaskAuto = {
     shape: command.mode === undefined && lineage.shape === undefined,
-    start: command.waitsOn === undefined && stacksOn === null,
+    start: command.waitsOn === undefined && stacksOn.length === 0,
     priority: command.priority === undefined,
   };
   decider.emit({
@@ -99,7 +99,7 @@ export function createTask(decider: Decider, command: CommandOf<'task.create'>, 
   });
   const by = lineage.createdBy ? 'shinsa' : 'you';
   if (waitsOn.length > 0) decider.emit({ type: 'task.waits_on_changed', taskId, waitsOn, by });
-  if (stacksOn) changeStack(decider, taskId, stacksOn, by);
+  if (stacksOn.length > 0) changeStack(decider, taskId, stacksOn, by);
   if (command.backlog) addToBacklog(decider, taskId);
   decider.run({ kind: 'task.triage', taskId });
   return taskId;
@@ -111,7 +111,7 @@ function inferDependencies(decider: Decider, taskId: string, ids: string[]) {
     return (
       dependency !== undefined &&
       id !== taskId &&
-      id !== decider.state.tasks[taskId]?.stacksOn &&
+      !decider.state.tasks[taskId]?.stacksOn?.includes(id) &&
       !isTaskSettled(dependency) &&
       !isDependencyOf(decider.state, taskId, id)
     );
@@ -273,7 +273,7 @@ export function readyWorktree(decider: Decider, command: CommandOf<'worktree.rea
   }
   const pending = listPendingDependencies(decider.state, task);
   if (pending.length > 0) {
-    decider.stage(task.id, 'waiting_on_tasks', describeWaiting(decider.state, task, pending));
+    decider.stage(task.id, 'waiting_on_tasks', describeWaiting(task, pending));
     return;
   }
   if (isStartingFromBacklog(task)) {

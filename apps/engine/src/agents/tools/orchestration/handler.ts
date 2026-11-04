@@ -21,7 +21,7 @@ import {
 import { Duration, Effect } from 'effect';
 import { describeError } from '../../../log/index.ts';
 import { assertToolInput } from '../attempts.ts';
-import { findForkSource } from '../forks.ts';
+import { findForkSource, findStackParent } from '../forks.ts';
 import { ToolCallFailed } from '../schema.ts';
 import { DEFAULT_ROLE, type OrchestrationCall } from './schema.ts';
 
@@ -245,6 +245,16 @@ export const handleOrchestrationTool = Effect.fn('OrchestrationTool.handle')(fun
     return { forkOf };
   });
 
+  const resolveStackOn = Effect.fn('OrchestrationTool.resolveStackOn')(function* (
+    references: readonly string[]
+  ) {
+    const state = yield* call.state;
+    return yield* Effect.try({
+      try: () => references.map((reference) => findStackParent(state, reference)),
+      catch: (error) => refuse(describeError(error)),
+    });
+  });
+
   const createCourier = Effect.fn('OrchestrationTool.createCourier')(function* () {
     const request = yield* assertToolInput(validateCourierTask(input));
     const source = yield* findTaskOf(yield* findParent());
@@ -254,6 +264,7 @@ export const handleOrchestrationTool = Effect.fn('OrchestrationTool.handle')(fun
       : resolveTaskProject(yield* call.state, source);
     const repoId = yield* resolveRepoId(source, request, projectId);
     const forkOf = yield* resolveForkOf(request.forkFrom);
+    const stackOn = yield* resolveStackOn(request.stackOn);
     yield* call.dispatch(
       {
         type: 'agent.create_task',
@@ -267,6 +278,7 @@ export const handleOrchestrationTool = Effect.fn('OrchestrationTool.handle')(fun
         thisWaits: request.thisTaskWaits,
         afterThis: request.afterThis,
         stackOnThis: request.stackOnThis,
+        stackOn,
         backlog: request.backlog,
       },
       resolveCommandId('create_task', request.requestKey)

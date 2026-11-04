@@ -118,6 +118,7 @@ export type {
   OnboardingStepId,
   RootSuggestion,
   RootSuggestions,
+  WorktreeUsage,
 } from './onboarding.ts';
 export {
   ONBOARDING_REQUEST_LIMIT,
@@ -192,6 +193,8 @@ export type {
   VersionsSnapshot,
 } from './versions.ts';
 export {
+  ATTENTION_PLACES,
+  type AttentionPlace,
   ClientMessage,
   CommandRefusal,
   DEVELOPMENT_VERSION,

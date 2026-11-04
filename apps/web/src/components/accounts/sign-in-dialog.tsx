@@ -20,6 +20,7 @@ import {
   useAccounts,
   useSignInDialog,
 } from '@/lib/connection/accounts.ts';
+import { isRemoteBuild } from '@/lib/remote/mode.ts';
 
 function CancelButton() {
   return <DialogClose render={<Button variant='secondary' />}>Cancel</DialogClose>;
@@ -72,12 +73,21 @@ function CodeStep({
   );
 }
 
-function LoginDescription({ view }: { view: LoginView }) {
+function LoginDescription({ view, remote }: { view: LoginView; remote: boolean }) {
   switch (view.phase) {
     case 'starting':
     case 'finishing':
       return null;
     case 'waiting':
+      if (remote && view.url)
+        return (
+          <DialogDescription>
+            <a href={view.url} target='_blank' rel='noreferrer'>
+              Open the sign-in page
+            </a>{' '}
+            in this browser, then paste the code it shows here.
+          </DialogDescription>
+        );
       return (
         <DialogDescription>
           A browser window opened to sign in to Claude.
@@ -147,12 +157,14 @@ export function SignInPrompt({
   onClose,
   onSubmitCode,
   onRetry,
+  remote = isRemoteBuild(),
 }: {
   open: boolean;
   view: LoginView;
   onClose: () => void;
   onSubmitCode: CodeSubmitter;
   onRetry: () => void;
+  remote?: boolean;
 }) {
   const shown = useHeldValue(view, open);
   return (
@@ -165,7 +177,7 @@ export function SignInPrompt({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{LOGIN_TITLE[shown.phase]}</DialogTitle>
-          <LoginDescription view={shown} />
+          <LoginDescription view={shown} remote={remote} />
         </DialogHeader>
         <LoginBody view={shown} onClose={onClose} onSubmitCode={onSubmitCode} onRetry={onRetry} />
       </DialogContent>

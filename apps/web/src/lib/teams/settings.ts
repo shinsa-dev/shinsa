@@ -63,6 +63,14 @@ export function listProjectChoices(state: Pick<ShinsaState, 'projects'>): Projec
     .sort((left, right) => left.name.localeCompare(right.name));
 }
 
+export function scopeStateToProjects(state: ShinsaState, projectIds: readonly string[]): ShinsaState {
+  const kept = new Set(projectIds);
+  return {
+    ...state,
+    projects: Object.fromEntries(Object.entries(state.projects).filter(([id]) => kept.has(id))),
+  };
+}
+
 export function listTeamProjectCommands(
   state: ShinsaState,
   teamId: string,
@@ -147,7 +155,7 @@ export function describePeopleCount(team: RemoteTeam) {
   return String(team.members.length + 1);
 }
 
-export const TEAMS_ON_MACHINE_NOTE = 'Teams are made, linked and changed in Settings on the machine itself.';
+export const TEAMS_ON_MACHINE_NOTE = 'Make and change a team from a machine you own.';
 
 export const TEAM_KEY_MISSING =
   'This browser has no key for the team. Open the team’s join link here once to read its tasks.';

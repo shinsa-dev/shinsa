@@ -18,6 +18,8 @@ import { MACHINE_OWNERS, respondTeams, TEAM } from './team.ts';
 
 const GUEST_MACHINES = new Set<string>();
 
+const MEMBER_MACHINES = new Set<string>();
+
 const INVITES = new Map<string, string>();
 
 const HANDOFFS = new Map<string, string>();
@@ -29,7 +31,9 @@ const decodeUserBody = Schema.decodeUnknownEffect(Schema.fromJsonString(UserBody
 const listInstances = Effect.fn('Sandbox.listInstances')(function* (machines: Machine[], user: RemoteUser) {
   const now = yield* Clock.currentTimeMillis;
   const guest = user.id === GUEST.id;
-  const listed = guest ? machines.filter((machine) => GUEST_MACHINES.has(machine.id)) : machines;
+  const listed = guest
+    ? machines.filter((machine) => GUEST_MACHINES.has(machine.id) || MEMBER_MACHINES.has(machine.id))
+    : machines;
   return yield* Effect.forEach(listed, (machine) =>
     Effect.map(resolveKeyFingerprint(machine.publicKey), (fingerprint): RemoteInstance => ({
       id: machine.id,
@@ -39,7 +43,7 @@ const listInstances = Effect.fn('Sandbox.listInstances')(function* (machines: Ma
       lastSeenAt: now,
       createdAt: now - 7 * DAY,
       owner: USER,
-      role: guest ? 'guest' : 'owner',
+      role: resolvePreviewRole(guest, machine.id),
     }))
   );
 });
@@ -78,18 +82,24 @@ const respondInviteAccept = Effect.fn('Sandbox.respondInviteAccept')(function* (
   return Response.json(answer);
 });
 
-const respondGuestChange = Effect.fn('Sandbox.respondGuestChange')(function* (
+function resolvePreviewRole(guest: boolean, machineId: string) {
+  if (!guest) return 'owner';
+  return MEMBER_MACHINES.has(machineId) ? 'member' : 'guest';
+}
+
+const respondAccessChange = Effect.fn('Sandbox.respondAccessChange')(function* (
   request: Request,
+  machineIds: Set<string>,
   add: boolean
 ) {
   const bearer = readBearerMachine(request);
   const { userId } = yield* parseRequestBody(request, decodeUserBody);
   if (userId !== GUEST.id) return Response.json({ ok: true });
   if (!add) {
-    GUEST_MACHINES.delete(bearer);
+    machineIds.delete(bearer);
     return Response.json({ ok: true });
   }
-  GUEST_MACHINES.add(bearer);
+  machineIds.add(bearer);
   const member: RemoteMember = { user: GUEST, addedAt: yield* Clock.currentTimeMillis };
   return Response.json(member);
 });
@@ -111,14 +121,16 @@ const respondAccess = Effect.fn('Sandbox.respondAccess')(function* (
   if (pathname === REMOTE_PATHS.machineHandoffs) return respondInviteCreate(request, machines, HANDOFFS);
   if (pathname === REMOTE_PATHS.handoffAccept)
     return yield* respondInviteAccept(request, machines, user, HANDOFFS, 'handoff_invalid');
-  if (pathname === REMOTE_PATHS.machineGuestAdd) return yield* respondGuestChange(request, true);
-  if (pathname === REMOTE_PATHS.machineGuestRemove) return yield* respondGuestChange(request, false);
+  if (pathname === REMOTE_PATHS.machineGuestAdd)
+    return yield* respondAccessChange(request, GUEST_MACHINES, true);
+  if (pathname === REMOTE_PATHS.machineGuestRemove)
+    return yield* respondAccessChange(request, GUEST_MACHINES, false);
   if (pathname === REMOTE_PATHS.machineRequester) return yield* respondRequester(request);
-  if (
-    pathname === REMOTE_PATHS.machineInviteRemove ||
-    pathname === REMOTE_PATHS.machineMemberRemove ||
-    pathname === REMOTE_PATHS.machineHandoffRemove
-  )
+  if (pathname === REMOTE_PATHS.machineMemberAdd)
+    return yield* respondAccessChange(request, MEMBER_MACHINES, true);
+  if (pathname === REMOTE_PATHS.machineMemberRemove)
+    return yield* respondAccessChange(request, MEMBER_MACHINES, false);
+  if (pathname === REMOTE_PATHS.machineInviteRemove || pathname === REMOTE_PATHS.machineHandoffRemove)
     return Response.json({ ok: true });
   return Response.json({ error: { code: 'not_found', message: 'No such endpoint.' } }, { status: 404 });
 });

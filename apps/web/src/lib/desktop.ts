@@ -1,5 +1,12 @@
-import { isQuietSurface, type ShinsaBuild, type Surface } from '@shinsa/core';
+import {
+  type AttentionPlace,
+  isQuietSurface,
+  type ShinsaBuild,
+  type Surface,
+  type TimingSpan,
+} from '@shinsa/core';
 import { createContext } from 'react';
+import { isRemoteBuild } from '@/lib/remote/mode.ts';
 import { createSignal } from '@/lib/signal.ts';
 
 type DesktopWindowState = 'window' | 'fullscreen';
@@ -43,6 +50,7 @@ export interface DesktopBridge {
   onNavigate: (listener: (path: string) => void) => () => void;
   onWindowState: (listener: (state: DesktopWindowState) => void) => () => void;
   onUpdate: (listener: (update: DesktopUpdate) => void) => () => void;
+  onAway: (listener: (span: TimingSpan) => void) => () => void;
 }
 
 declare global {
@@ -65,8 +73,14 @@ export function resolveSurface(): Surface {
   return isDesktop() ? 'desktop' : 'browser';
 }
 
-export function isPageQuiet(desktopConnected: boolean) {
-  return isQuietSurface(resolveSurface(), desktopConnected);
+export function isPageQuiet(desktopConnected: boolean, remote = isRemoteBuild()) {
+  return !remote && isQuietSurface(resolveSurface(), desktopConnected);
+}
+
+export function isAlertQuiet(where: AttentionPlace, desktopConnected: boolean, remote = isRemoteBuild()) {
+  if (where === 'here') return false;
+  if (where === 'elsewhere') return true;
+  return isPageQuiet(desktopConnected, remote);
 }
 
 export function applyDesktop(navigate: (path: string) => void) {
@@ -101,6 +115,10 @@ export function openDesktopNotificationSettings() {
 
 export function subscribeDesktopNotifyFailed(listener: () => void) {
   return selectDesktop()?.onNotifyFailed(listener) ?? (() => undefined);
+}
+
+export function subscribeDesktopAway(listener: (span: TimingSpan) => void) {
+  return selectDesktop()?.onAway(listener) ?? (() => undefined);
 }
 
 const NO_UPDATE: DesktopUpdate = { status: 'none' };

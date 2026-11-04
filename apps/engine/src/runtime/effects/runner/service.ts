@@ -142,6 +142,8 @@ export class EffectHandlers extends Context.Service<
             return yield* withSlack((slack) => slack.status(effect, attempt.key));
           case 'slack.post':
             return yield* withSlack((slack) => slack.post(effect));
+          case 'slack.react':
+            return yield* withSlack((slack) => slack.react(effect));
           case 'feedback.draft':
             return yield* Effect.mapError(
               world.feedback.draft(effect.feedbackId, attempt.key),

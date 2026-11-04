@@ -158,7 +158,10 @@ describe('Terminals', () => {
   it('refuses more terminals than the limit, and any change while Shinsa only shows saved state', () => {
     const { terminals } = createTerminals();
     for (let index = 0; index < TERMINAL_LIMITS.terminals; index++) run(terminals.create(START));
-    expect(() => run(terminals.create(START))).toThrow('terminals at most.');
+    expect(() => run(terminals.create(START))).toThrow(
+      `Shinsa keeps ${TERMINAL_LIMITS.terminals} terminals at most, and all of them run. ${TERMINAL_LIMITS.terminals} are yours. Stop a service or close a terminal to free one.`
+    );
+    expect(run(terminals.snapshot).terminals).toHaveLength(TERMINAL_LIMITS.terminals);
     const readOnly = createTerminals({ readOnly: true }).terminals;
     expect(() => run(readOnly.create(START))).toThrow('Terminals are off');
   });
@@ -316,7 +319,7 @@ describe('Terminals services', () => {
     expect(run(terminals.snapshot).terminals).toEqual([]);
   });
 
-  it('closes a task’s service runs and leaves its shells and other runs alone', () => {
+  it('closes a task’s service runs and ended shells, and leaves its running shells and other runs alone', async () => {
     const { terminals, fake } = createTerminals();
     const seen: TerminalsSnapshot[] = [];
     run(Effect.asVoid(terminals.subscribe((snapshot) => seen.push(snapshot))));
@@ -325,8 +328,11 @@ describe('Terminals services', () => {
     run(terminals.startService(service.id, { cwd: '/wt/a', place: 'worktree', taskId: 'a' }));
     run(terminals.startService(service.id, { cwd: '/wt/b', place: 'worktree', taskId: 'b' }));
     const shell = run(terminals.create({ ...START, cwd: '/wt/a', place: 'worktree', taskId: 'a' }));
+    const ended = run(terminals.create({ ...START, cwd: '/wt/a', place: 'worktree', taskId: 'a' }));
+    fake.spawned[4]?.exit(0);
+    await until('the shell ends', () => run(terminals.find(ended.id)).info.status === 'exited');
     const before = seen.length;
-    run(terminals.closeTaskServices('a'));
+    run(terminals.closeTaskTerminals('a'));
     expect(fake.spawned[1]?.hungUp).toBe(true);
     expect(run(terminals.snapshot).terminals.map((each) => [each.taskId, each.serviceId])).toEqual([
       [null, service.id],
@@ -334,7 +340,7 @@ describe('Terminals services', () => {
       ['a', null],
     ]);
     expect(seen.length).toBe(before + 1);
-    run(terminals.closeTaskServices('gone'));
+    run(terminals.closeTaskTerminals('gone'));
     expect(seen.length).toBe(before + 1);
     expect(run(terminals.find(shell.id)).info.status).toBe('running');
     expect(run(terminals.listTerminalPids)).toEqual([1003]);
@@ -357,6 +363,29 @@ describe('Terminals services', () => {
     const again = createTerminals({ dataDir });
     run(again.terminals.resumeServices(state));
     expect(again.fake.spawned.map((each) => each.options.cwd)).toEqual(['/wt/open/apps/api']);
+  });
+
+  it('drops the ended terminals of finished and unknown tasks on start, and keeps yours and open tasks’', async () => {
+    const { terminals, dataDir } = createTerminals();
+    for (const taskId of ['open', 'merged', 'done', 'cancelled', 'gone'])
+      run(terminals.create({ ...START, cwd: `/wt/${taskId}`, place: 'worktree', taskId }));
+    run(terminals.create(START));
+    await runAsync(terminals.stop);
+    const stages = { open: 'building', merged: 'merged', done: 'done', cancelled: 'cancelled' };
+    const state = {
+      ...STATE,
+      tasks: Object.fromEntries(Object.entries(stages).map(([id, stage]) => [id, { id, stage }])),
+    } as unknown as ShinsaState;
+    const again = createTerminals({ dataDir });
+    const seen: TerminalsSnapshot[] = [];
+    run(Effect.asVoid(again.terminals.subscribe((snapshot) => seen.push(snapshot))));
+    run(again.terminals.resumeServices(state));
+    expect(run(again.terminals.snapshot).terminals.map((each) => each.taskId)).toEqual(['open', null]);
+    const before = seen.length;
+    run(again.terminals.resumeServices(state));
+    expect(seen.length).toBe(before);
+    const reread = createTerminals({ dataDir });
+    expect(run(reread.terminals.snapshot).terminals.map((each) => each.taskId)).toEqual(['open', null]);
   });
 
   it('forgets the service of a saved terminal whose service is gone', () => {
@@ -573,5 +602,100 @@ describe('the terminals’ defaults', () => {
     );
     expect([timings.notify, timings.screen].map(Duration.toMillis)).toEqual([50, 2_000]);
     expect(id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[0-9a-f]{4}-[0-9a-f]{12}$/);
+  });
+});
+
+const TASKS = {
+  open: { handle: 'LOC-169', stage: 'building' },
+  done: { handle: 'LOC-28', stage: 'merged' },
+} as unknown as ShinsaState['tasks'];
+
+describe('Terminals at the limit', () => {
+  it('closes ended terminals to make room: finished tasks first, then services, task shells and your own, oldest first', async () => {
+    let clock = 100;
+    const { terminals, fake } = createTerminals({ now: () => clock, tasks: TASKS });
+    const service = run(terminals.addService('p1', SERVICE));
+    const ending = [
+      run(terminals.create(START)),
+      run(terminals.create({ ...START, taskId: 'open' })),
+      run(terminals.startService(service.id, { ...main('repository'), taskId: 'open' })),
+      run(terminals.create({ ...START, taskId: 'gone' })),
+      run(terminals.create({ ...START, taskId: 'done' })),
+    ];
+    for (const [index, terminal] of ending.entries()) {
+      clock = 200 - index;
+      if (terminal.serviceId) await runAsync(terminals.stopService(service.id, 'open'));
+      else fake.spawned[index]?.exit(0);
+      await until('it ends', () => run(terminals.find(terminal.id)).info.status !== 'running');
+    }
+    while (run(terminals.snapshot).terminals.length < TERMINAL_LIMITS.terminals) run(terminals.create(START));
+    const [yours, taskShell, stopped, gone, done] = ending.map((terminal) => terminal.id);
+    const left = () => run(terminals.snapshot).terminals.map((terminal) => terminal.id);
+    for (const reclaimed of [done, gone, stopped, taskShell, yours]) {
+      run(terminals.create(START));
+      expect(left()).not.toContain(reclaimed);
+      expect(left()).toHaveLength(TERMINAL_LIMITS.terminals);
+    }
+    expect(left()).toEqual(expect.not.arrayContaining(ending.map((terminal) => terminal.id)));
+    expect(() => run(terminals.create(START))).toThrow('all of them run.');
+    await runAsync(terminals.stop);
+  });
+
+  it('starts a service in a full list by closing an ended terminal', async () => {
+    const { terminals, fake } = createTerminals();
+    const service = run(terminals.addService('p1', SERVICE));
+    const ended = run(terminals.create(START));
+    fake.spawned[0]?.exit(1);
+    await until('the shell ends', () => run(terminals.find(ended.id)).info.status === 'exited');
+    while (run(terminals.snapshot).terminals.length < TERMINAL_LIMITS.terminals) run(terminals.create(START));
+    const started = run(terminals.startService(service.id, { ...main('repository'), taskId: 'open' }));
+    expect(started.status).toBe('running');
+    expect(run(terminals.snapshot).terminals.map((terminal) => terminal.id)).not.toContain(ended.id);
+    await runAsync(terminals.stop);
+  });
+
+  it('names the tasks and services that hold every running terminal when it refuses', async () => {
+    const { terminals } = createTerminals({ tasks: TASKS });
+    const seeded = run(terminals.addService('p1', { ...SERVICE, name: 'seeded' }));
+    const sandbox = run(terminals.addService('p1', { ...SERVICE, name: 'sandbox' }));
+    run(terminals.startService(seeded.id, { ...main('repository'), taskId: 'open' }));
+    run(terminals.startService(sandbox.id, { ...main('repository'), taskId: 'open' }));
+    run(terminals.create({ ...START, taskId: 'open' }));
+    run(terminals.create({ ...START, taskId: 'gone' }));
+    run(terminals.create({ ...START, taskId: 'gone' }));
+    run(terminals.create(START));
+    while (run(terminals.snapshot).terminals.length < TERMINAL_LIMITS.terminals - 1)
+      run(terminals.create(START));
+    run(terminals.create({ ...START, taskId: 'done' }));
+    expect(() => run(terminals.create(START))).toThrow(
+      `Shinsa keeps ${TERMINAL_LIMITS.terminals} terminals at most, and all of them run. LOC-169 runs seeded, sandbox, and a shell. Another task runs 2 shells. LOC-28 runs a shell. ${TERMINAL_LIMITS.terminals - 6} are yours. Stop a service or close a terminal to free one.`
+    );
+    await runAsync(terminals.stop);
+  });
+
+  it('counts a single terminal of yours in the singular', async () => {
+    const { terminals } = createTerminals({ tasks: TASKS });
+    run(terminals.create(START));
+    while (run(terminals.snapshot).terminals.length < TERMINAL_LIMITS.terminals)
+      run(terminals.create({ ...START, taskId: 'open' }));
+    expect(() => run(terminals.create(START))).toThrow(
+      `all of them run. LOC-169 runs ${TERMINAL_LIMITS.terminals - 1} shells. 1 is yours.`
+    );
+    await runAsync(terminals.stop);
+  });
+
+  it('keeps a service that waits to resume after a restart, and closes an ended shell instead', async () => {
+    const dataDir = createTempDir();
+    const first = createTerminals({ dataDir }).terminals;
+    const service = run(first.addService('p1', SERVICE));
+    const waiting = run(first.startService(service.id, { ...main('repository'), taskId: 'open' }));
+    while (run(first.snapshot).terminals.length < TERMINAL_LIMITS.terminals) run(first.create(START));
+    await runAsync(first.stop);
+    const again = createTerminals({ dataDir, idPrefix: 'fresh' }).terminals;
+    run(again.create(START));
+    const left = run(again.snapshot).terminals.map((terminal) => terminal.id);
+    expect(left).toContain(waiting.id);
+    expect(left).toContain('fresh-1');
+    expect(left).toHaveLength(TERMINAL_LIMITS.terminals);
   });
 });

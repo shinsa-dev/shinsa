@@ -353,7 +353,15 @@ Desktop-first and responsive: built for a full window, still right in a ~900px f
   Shinsa counts in full, an hour with nothing from you for 6 hours either side counts nothing, and any other hour counts
   as much as you are usually active at that hour of the week over the last 8 weeks (`state.presence`, your own actions
   per hour, kept a year; `stats/presence.ts`), so a question asked at 23:00 and answered at 08:30 is a short wait and a
-  week away counts nothing (`resolveTurnaround`, `stats/turnaround.ts`). Usage: tokens, known cost, cache hit rate and tokens per merged pull request, a stacked chart of
+  week away counts nothing (`resolveTurnaround`, `stats/turnaround.ts`). Two rules cut a wait further, both strict so
+  they never flatter you. Time away from your Mac counts nothing: the Mac app counts you away from 10 minutes after your
+  last keyboard or mouse input, or from your last input before the screen locked or the Mac slept, until your next
+  input (`AwayWatch` in `apps/desktop/src/away/`), and sends each span through the page as `away.record`
+  (`state.away`); a span in which you answered or messaged any task, from your phone say, does not count. A focus on
+  a project sets aside the tasks of every other project from 30 minutes into the focus until it ends
+  (`state.focusHistory`, `listSetAside`), so a quick switch changes nothing, and a task you answered or messaged
+  during that focus is not set aside by it. A wait set aside counts nothing on your clock, and a set-aside task does
+  not count as going at once; agent time never changes. Your attention, under it: tasks at once is the median, weighted by time on your clock, of how many tasks had a round going (a shipped round waiting for its merge counts, paused time and time with nothing going do not), with the peak beside it; then, over the same finished rounds, the median of your inputs per round (gates you answered and messages you sent, `TaskTiming.inputs`; a review approved ahead, a scheduled message, a request for new work and anything sent on your behalf or by a guest do not count), the median agent time per input, the share of hands-off rounds (only plan, review and merge approvals), the share with a question (an agent asked you something or asked for a secret), messages per round as an average (most rounds take none) and the share of rounds whose first review you approved (`resolveAttention`, `stats/attention.ts`). Usage: tokens, known cost, cache hit rate and tokens per merged pull request, a stacked chart of
   input, output, cache-read and cache-write tokens per day, tokens by role, kind of work and model, the tasks that
   used the most. Counts and costs stay compact as they grow (15.4k, 3.3B, 1.2T tokens; $12.34, then $15.4K): token
   counts everywhere drop a trailing `.0` and move up a unit rather than read 1000k, and costs keep cents under $1,000. Lines added show in green and lines removed in red, as in a diff. All of it is folded from the event log in core (`resolveStats`); lines
@@ -451,8 +459,10 @@ on app.shinsa.dev goes there, and only the machine's owner and members get in, s
 can be tested from a laptop (`docs/engine.md` → Private service addresses).
 Slack: mention the Shinsa bot in a channel or a thread and the machine of whoever mentioned it reads the thread
 and starts a task from it exactly as a request typed on Home, its project, kind and priority picked for it (anything
-that is not work gets "Not a task" once and no task: Shinsa never chats), or messages the task the thread already has; the task's status, its questions, its plan, its review and its result come back in the thread; a question's choice
-can be answered with its button there, and every other decision is made in Shinsa. One bot for everyone through app.shinsa.dev, each person connecting their Slack user to their
+that is not work gets "Not a task" once and no task: Shinsa never chats), or messages the task the thread already has; the task's status and every gate come back as one card in the thread, edited in place, with buttons to approve a plan,
+a review, a merge, a proposal or an operation, retry a failure, answer a question or request changes in a Slack form,
+pressed only by the owner or a member of the machine; only the result and the end of the task post a new message.
+Secrets, sign-in and cancelling stay in Shinsa. One bot for everyone through app.shinsa.dev, each person connecting their Slack user to their
 own machine in Settings → General → Slack (`docs/engine.md` → Slack).
 
 - **Event-sourced core** (from T3 Code): commands are decided purely, events, the effect outbox and
@@ -1139,6 +1149,21 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
   machine, and Slack spreads a socket app's events across its connections, so one shared bot needs the relay.
   Mentions while a machine is offline are not kept.
 
+### Slack: one card and its buttons (2026-11-03)
+
+- **One message per thread, always edited.** The status message is the task's card: every change, and every gate
+  that opens or closes, edits it. The reaction on your mention already notifies you, so only the result and the end
+  of the task (merged or done) post a new message, and the thread's people are pinged once. A later mention in the
+  thread gets 👀 (sent to the task) or 📥 (kept while a gate is open) instead of a reply.
+- **Decide from Slack.** A plan and a review have Approve and Request changes…, a merge Merge, a proposal Approve and
+  Keep as is, a failure Retry, an operation Run and Finish without it, a question a button per choice and Answer….
+  Request changes… and Answer… open a Slack form. The card then says who decided what. Secrets, sign-in and
+  cancelling stay in Shinsa.
+- **Only people with access to the machine.** app.shinsa.dev lets a click or a form through only from the owner or a
+  member of the machine that posted the card, found from their connected Slack; anyone else is told privately, and
+  nothing reaches the machine. The machine then decides as Shinsa does, so an outdated plan or an answered gate is
+  refused.
+
 ### Duplicates (2026-10-31)
 
 - **A duplicate is a cancel with a reason.** A task that repeats another closes as its duplicate: cancelled like any
@@ -1206,10 +1231,11 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
 
 ### Bundles (2026-11-01)
 
-- **A stack of pull requests, as tasks.** A task can stack on another (Stack on another task… in the composer's When
-  to start, the Waits on menu, `•••`, ⌘K, `shinsa tasks stack-on`, `create_task`'s `stack_on_this`): it waits until
-  that task is ready to merge, not merged, then branches off its branch, and its pull request targets that branch, so
-  GitHub shows the stack. A bundle is one line in one repository (`docs/engine.md` → Bundles).
+- **A stack of pull requests, as tasks.** A task can stack on other tasks (Stack on another task… in the composer's
+  When to start, the Waits on menu, `•••`, ⌘K, `shinsa tasks stack-on`, `create_task`'s `stack_on_this` and
+  `stack_on`): it waits until each is ready to merge, not merged, then branches off the first one's branch with the
+  others merged in, and its pull request targets the first, so GitHub shows the stack. A bundle is a graph in one
+  repository: tasks fan out from one and back in to one, as freely as waits (`docs/engine.md` → Bundles).
 - **Why not just wait.** The only difference from a dependency is that the bundle merges together. That buys three
   things: the next task starts sooner; a flaw a later task finds in the root is fixed in the root's still-open pull
   request instead of a follow-up on top of a merged one (the stacked task's agent messages the task below); and each

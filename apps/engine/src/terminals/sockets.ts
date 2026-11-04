@@ -4,6 +4,7 @@ import { Effect } from 'effect';
 import {
   SOCKET_CLOSED,
   TERMINAL_SOCKET_PATH,
+  type TerminalSession,
   type TerminalSocketData,
   type TerminalViewer,
 } from './schema.ts';
@@ -14,6 +15,13 @@ export function readTerminalSocketId(pathname: string) {
 }
 
 type TerminalSocket = ServerWebSocket<TerminalSocketData>;
+
+export function applyTerminalText(session: TerminalSession, raw: string) {
+  const frame = parseTerminalClientFrame(raw);
+  if (frame?.type === 'resize') session.resize(frame.cols, frame.rows);
+  if (frame?.type === 'colors') session.replaceColors(frame.colors);
+  if (frame?.type === 'clear') session.clear();
+}
 
 export const createTerminalSockets = Effect.fn('TerminalSockets.create')(function* (
   terminals: Terminals['Service']
@@ -42,10 +50,7 @@ export const createTerminalSockets = Effect.fn('TerminalSockets.create')(functio
         session.input(new Uint8Array(raw));
         return;
       }
-      const frame = parseTerminalClientFrame(raw);
-      if (frame?.type === 'resize') session.resize(frame.cols, frame.rows);
-      if (frame?.type === 'colors') session.replaceColors(frame.colors);
-      if (frame?.type === 'clear') session.clear();
+      applyTerminalText(session, raw);
     },
     drain(socket: TerminalSocket) {
       const { viewer } = socket.data;

@@ -108,10 +108,9 @@ export function createMachineLayer({
     SecretStore.layer.pipe(Layer.provide(SecretFiles.layer)),
     Evidence.layer,
     RepoRegistry.layer,
-    login,
-    WorkspacesServiceLayer
+    login
   );
-  return Layer.mergeAll(Roots.layer, ProjectChanges.layer).pipe(
+  return Layer.mergeAll(Roots.layer, ProjectChanges.layer, WorkspacesServiceLayer).pipe(
     Layer.provideMerge(stores),
     Layer.provideMerge(repos),
     Layer.provide(JsonFile.layer),

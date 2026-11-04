@@ -1,6 +1,6 @@
 import type { ChatEntry, ChatEntryOf, ChatNotice } from '@shinsa/core';
 import { resolveUsageTone } from '@/lib/accounts/usage.ts';
-import { formatTokenCount, formatTokens } from '@/lib/format/money.ts';
+import { formatCompactCount, formatTokens } from '@/lib/format/money.ts';
 import type { Tone } from '@/lib/format/tone.ts';
 
 type ContextNotice = Extract<ChatNotice, { kind: 'context' }>;
@@ -31,6 +31,6 @@ export function resolveContextMeter(notice: ContextNotice | null): ContextMeterV
     percent,
     tone: resolveUsageTone(percent),
     label: `Context ${percent}% full`,
-    tokens: `${formatTokenCount(notice.usedTokens)} of ${formatTokens(notice.maxTokens)}`,
+    tokens: `${formatCompactCount(notice.usedTokens)} of ${formatTokens(notice.maxTokens)}`,
   };
 }

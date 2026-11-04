@@ -152,7 +152,10 @@ function setUp() {
 describe('ending remote access', () => {
   test('turning remote access off closes the app, share and team channels and every team feed', async () => {
     const { remote, shares, teams, feeds, sockets } = setUp();
-    const parts = { hub: { open: () => undefined, close: () => undefined, message: () => undefined } };
+    const parts = {
+      hub: { open: () => undefined, close: () => undefined, message: () => undefined },
+      terminals: null,
+    };
     const respond = () => Promise.resolve(new Response(null));
     const appPeer = createPeer();
     remote.openChannel(appPeer, { ...parts, respond }, MONA.id);

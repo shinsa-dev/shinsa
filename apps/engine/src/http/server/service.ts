@@ -25,9 +25,9 @@ import { PORT_TAKEN, PortInUse, RequestSource, ServedInstance } from '../schema.
 import { makeSocketHub } from '../socket.ts';
 import {
   createSocketHandlers,
+  makeRemoteSockets,
   type PreviewSocketData,
   type PreviewSocketHandlers,
-  type RemoteSocketHandlers,
   respondNotFound,
   respondRefusal,
   respondUpgradeRefusal,
@@ -101,27 +101,12 @@ export class EngineServer extends Context.Service<
         return new Response('Upgrade failed', { status: 400 });
       }
 
-      const remoteSockets: RemoteSocketHandlers | null = remote
-        ? {
-            open: (socket) => {
-              socket.data.channel = runSync(
-                remote.openChannel(
-                  {
-                    send: (data) => socket.send(data),
-                    close: (code, reason) => socket.close(code, reason),
-                  },
-                  { hub, respond: respondInsideChannel },
-                  socket.data.userId
-                )
-              );
-            },
-            close: (socket) => {
-              if (socket.data.channel) runFork(remote.closeChannel(socket.data.channel));
-            },
-            message: (socket, raw) => {
-              if (socket.data.channel) runFork(socket.data.channel.receive(raw));
-            },
-          }
+      const remoteSockets = remote
+        ? yield* makeRemoteSockets(remote, {
+            hub,
+            terminals: terminals ?? null,
+            respond: respondInsideChannel,
+          })
         : null;
 
       const previewSockets: PreviewSocketHandlers | null = previews

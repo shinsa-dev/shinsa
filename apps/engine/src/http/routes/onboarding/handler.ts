@@ -16,6 +16,8 @@ export const OnboardingHandlers = HttpApiBuilder.group(
       .handle('status', () => answer(onboarding.resolveStatus))
       .handle('roots', ({ query }) => answer(onboarding.listSuggestions(query.refresh === '1')))
       .handle('setup', ({ payload }) => answer(onboarding.applySetup(payload)))
+      .handle('worktrees', ({ payload }) => answer(onboarding.applyWorktreesDir(payload)))
+      .handle('worktreeUsage', () => onboarding.resolveWorktreeUsage)
       .handle('prerequisites', () => answer(onboarding.resolvePrerequisites))
       .handle('privacy', () => answer(onboarding.openPrivacySettings))
       .handle('install', ({ payload }) => answer(onboarding.openInstall(payload)))

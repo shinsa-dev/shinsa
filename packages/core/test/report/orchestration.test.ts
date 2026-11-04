@@ -111,6 +111,7 @@ describe('the other orchestration tools', () => {
         thisTaskWaits: true,
         afterThis: false,
         stackOnThis: false,
+        stackOn: [],
         backlog: false,
       },
     });
@@ -126,6 +127,7 @@ describe('the other orchestration tools', () => {
         thisTaskWaits: false,
         afterThis: false,
         stackOnThis: false,
+        stackOn: [],
         backlog: false,
       },
     });
@@ -137,6 +139,11 @@ describe('the other orchestration tools', () => {
       ok: true,
       value: { stackOnThis: true, afterThis: false },
     });
+    expect(validateCourierTask({ request: 'Join them.', stack_on: ['LOC-2', 'LOC-3'] })).toMatchObject({
+      ok: true,
+      value: { stackOnThis: false, stackOn: ['LOC-2', 'LOC-3'] },
+    });
+    expect(validateCourierTask({ request: 'Join them.', stack_on: Array(9).fill('LOC-2') }).ok).toBe(false);
     expect(
       validateCourierTask({
         request: 'Start it.',

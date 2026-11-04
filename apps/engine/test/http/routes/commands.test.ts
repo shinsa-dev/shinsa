@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test';
-import { LOCAL_ONLY_MESSAGE, SCOPE_MESSAGES } from '@shinsa/core';
+import { OWNER_ONLY_MESSAGE, SCOPE_MESSAGES } from '@shinsa/core';
 import { Effect } from 'effect';
 import { dispatchUserCommand } from '../../../src/http/commands.ts';
 import { Engine } from '../../helpers/engine.ts';
@@ -23,19 +23,35 @@ describe('POST /api/commands', () => {
     });
   });
 
-  test('a command that only the machine itself may send is refused over the remote channel', async () => {
-    const { send, context } = startRoutes();
-    const change = { type: 'settings.change', patch: { mergeMethod: 'merge' } };
-    const init = {
+  test('a command for the machine’s owner is refused to a member and taken from the owner over the channel', async () => {
+    const remote = {
+      isOwner: (userId: string | null) => Effect.succeed(userId === 'u-owner'),
+      tunnelHost: Effect.succeed(null),
+      isEnabled: Effect.succeed(true),
+    };
+    const { send, context } = startRoutes({ remote: remote as never });
+    const init = (mergeMethod: string) => ({
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(change),
-    };
-    const remote = await send('/api/commands', init, { via: 'channel', guest: null, userId: null });
-    expect(remote.status).toBe(400);
-    expect(await remote.json()).toEqual({ error: { code: 'local_only', message: LOCAL_ONLY_MESSAGE } });
-    expect((await send('/api/commands', init)).status).toBe(200);
+      body: JSON.stringify({ type: 'settings.change', patch: { mergeMethod } }),
+    });
+    const member = await send('/api/commands', init('merge'), {
+      via: 'channel',
+      guest: null,
+      userId: 'u-member',
+    });
+    expect(member.status).toBe(400);
+    expect(await member.json()).toEqual({ error: { code: 'not_owner', message: OWNER_ONLY_MESSAGE } });
+    expect(context.engine.state.settings.mergeMethod).not.toBe('merge');
+    const owner = await send('/api/commands', init('merge'), {
+      via: 'channel',
+      guest: null,
+      userId: 'u-owner',
+    });
+    expect(owner.status).toBe(200);
     expect(context.engine.state.settings.mergeMethod).toBe('merge');
+    expect((await send('/api/commands', init('rebase'))).status).toBe(200);
+    expect(context.engine.state.settings.mergeMethod).toBe('rebase');
   });
 
   test('a command goes through the router when the engine has one, with the client’s id', async () => {

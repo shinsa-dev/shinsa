@@ -7,6 +7,8 @@ import { BriefingWriter as BriefingWriterTag } from '../../src/briefing/service.
 import { ChecksLayer } from '../../src/checks/layers.ts';
 import type { ServerConfig } from '../../src/config/index.ts';
 import { EngineConfig } from '../../src/config/service.ts';
+import { ConfigStore } from '../../src/config/store/service.ts';
+import { JsonFile } from '../../src/files/service.ts';
 import { GitLayer } from '../../src/git/layers.ts';
 import { GitHubLayer } from '../../src/github/layers.ts';
 import { JsonLogger } from '../../src/log/service.ts';
@@ -43,6 +45,7 @@ function createEffectRunnerLayer(
     CurrentLogin.layer.pipe(Layer.provideMerge(RepoWorkLayer)),
     WorkspacesServiceLayer
   ).pipe(
+    Layer.provideMerge(ConfigStore.layer.pipe(Layer.provide(JsonFile.layer))),
     Layer.provideMerge(Layer.mergeAll(ChecksLayer, GitHubLayer)),
     Layer.provideMerge(GitLayer),
     Layer.provideMerge(

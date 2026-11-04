@@ -33,6 +33,7 @@ import {
   resolveR2Credentials,
   TOKEN_VERIFY_URL,
 } from './release-downloads.ts';
+import { R2_REQUEST_DELAYS, retryStep, warnRetry } from './release-retry.ts';
 import { recordStepSummary } from './release/actions.ts';
 import { ScriptUsage, UploadFailed } from './release/schema.ts';
 
@@ -81,60 +82,63 @@ const program = Effect.gen(function* () {
   const resolveSize = Effect.fn('releaseUpload.size')(function* (file: string) {
     return Number((yield* Effect.sync(() => statSync(file))).size);
   });
+  const withRetry = (label: string) => retryStep({ label, delays: R2_REQUEST_DELAYS, onRetry: warnRetry });
   const requestBucket = Effect.fn('releaseUpload.bucket')(function* () {
-    const answer = yield* HttpClientRequest.get(TOKEN_VERIFY_URL).pipe(
+    const tokenId = yield* HttpClientRequest.get(TOKEN_VERIFY_URL).pipe(
       HttpClientRequest.bearerToken(Redacted.value(token)),
       client.execute,
       Effect.flatMap((response) => response.json),
       Effect.mapError(
         (error) => new UploadFailed({ message: `Could not verify CLOUDFLARE_API_TOKEN: ${error.message}` })
-      )
+      ),
+      Effect.flatMap((answer) => check(() => parseTokenId(answer))),
+      withRetry('Verify the Cloudflare token')
     );
-    const tokenId = yield* check(() => parseTokenId(answer));
     const credentials = resolveR2Credentials(Redacted.value(token), tokenId);
     return new S3Client({ ...credentials, bucket: DOWNLOADS_BUCKET, endpoint: R2_ENDPOINT });
   });
   const requestPointer = Effect.fn('releaseUpload.pointer')(function* (bucket: S3Client, key: string) {
     const file = bucket.file(key);
-    if (!(yield* request(() => file.exists()))) return null;
-    const text = yield* request(() => file.text());
-    return parseStoredPointer(text);
+    const read = Effect.gen(function* () {
+      if (!(yield* request(() => file.exists()))) return null;
+      const text = yield* request(() => file.text());
+      return yield* check(() => parseStoredPointer(text));
+    });
+    return yield* read.pipe(withRetry(`Read ${key}`));
   });
+  const writeObject = (bucket: S3Client, key: string, body: string | Blob, type: string) =>
+    request(() => bucket.write(key, body, { type })).pipe(withRetry(`Upload ${key}`));
 
   const directory = yield* createTempDirectory('shinsa-release-');
-  const view = yield* command.text([
-    'gh',
-    'release',
-    'view',
-    tag,
-    '--repo',
-    settings.repository,
-    '--json',
-    RELEASE_VIEW_FIELDS,
-  ]);
+  const view = yield* command
+    .text(['gh', 'release', 'view', tag, '--repo', settings.repository, '--json', RELEASE_VIEW_FIELDS])
+    .pipe(withRetry(`Read release ${tag}`));
   const release = yield* decodeJson(view).pipe(
     Effect.mapError(() => new UploadFailed({ message: 'gh did not describe a release.' })),
     Effect.flatMap((described) => check(() => parseDownloadRelease(described)))
   );
   const updateName = UPDATE_CHANNEL_FILES[release.channel];
-  yield* command.text([
-    'gh',
-    'release',
-    'download',
-    tag,
-    '--repo',
-    settings.repository,
-    '--pattern',
-    DMG_NAME,
-    '--pattern',
-    ZIP_NAME,
-    '--pattern',
-    BLOCKMAP_NAME,
-    '--pattern',
-    updateName,
-    '--dir',
-    directory,
-  ]);
+  yield* command
+    .text([
+      'gh',
+      'release',
+      'download',
+      tag,
+      '--repo',
+      settings.repository,
+      '--pattern',
+      DMG_NAME,
+      '--pattern',
+      ZIP_NAME,
+      '--pattern',
+      BLOCKMAP_NAME,
+      '--pattern',
+      updateName,
+      '--dir',
+      directory,
+      '--clobber',
+    ])
+    .pipe(withRetry(`Download release ${tag}`));
   const dmg = join(directory, DMG_NAME);
   const zip = join(directory, ZIP_NAME);
   const dmgFile = { size: yield* resolveSize(dmg), sha256: yield* resolveDigest(dmg, 'sha256', 'hex') };
@@ -150,23 +154,20 @@ const program = Effect.gen(function* () {
     canary: yield* requestPointer(bucket, resolveChannelKey('canary')),
   };
   const { version } = release.pointer;
-  yield* request(() =>
-    bucket.write(resolveBuildKey(version, ZIP_NAME), Bun.file(zip), { type: 'application/zip' })
+  yield* writeObject(bucket, resolveBuildKey(version, ZIP_NAME), Bun.file(zip), 'application/zip');
+  yield* writeObject(
+    bucket,
+    resolveBuildKey(version, BLOCKMAP_NAME),
+    Bun.file(join(directory, BLOCKMAP_NAME)),
+    'application/octet-stream'
   );
-  yield* request(() =>
-    bucket.write(resolveBuildKey(version, BLOCKMAP_NAME), Bun.file(join(directory, BLOCKMAP_NAME)), {
-      type: 'application/octet-stream',
-    })
-  );
-  yield* request(() =>
-    bucket.write(release.pointer.key, Bun.file(dmg), { type: 'application/x-apple-diskimage' })
-  );
+  yield* writeObject(bucket, release.pointer.key, Bun.file(dmg), 'application/x-apple-diskimage');
   const channels = resolveChannelUpdates(release, current);
   yield* Effect.forEach(listPointerUploads(release, channels), (upload) =>
-    request(() => bucket.write(upload.key, upload.body, { type: 'application/json' }))
+    writeObject(bucket, upload.key, upload.body, 'application/json')
   );
   yield* Effect.forEach(listUpdateUploads(update, channels), (upload) =>
-    request(() => bucket.write(upload.key, upload.body, { type: 'text/yaml' }))
+    writeObject(bucket, upload.key, upload.body, 'text/yaml')
   );
   const summary = `${describeDownloadUpload(release, channels, current)} ${describeUpdateUpload(release, channels)}`;
   yield* recordStepSummary(`**Downloads:** ${summary}`);

@@ -12,6 +12,7 @@ import { Checkout } from '../../../git/checkout/service.ts';
 import { describeError } from '../../../log/index.ts';
 import type { DispatchOptions } from '../../../runtime/engine/schema.ts';
 import { EngineCore } from '../../../runtime/engine/service.ts';
+import { WorktreeRoot } from '../../../workspaces/root/service.ts';
 import { AccountLeasing } from '../../accounts/service.ts';
 import { Providers } from '../../providers/index.ts';
 import { Transcripts } from '../../transcripts/service.ts';
@@ -21,6 +22,7 @@ export class RunWorld extends Context.Service<
   RunWorld,
   {
     readonly config: ServerConfig;
+    readonly worktreeRoot: WorktreeRoot['Service'];
     readonly transcripts: Transcripts['Service'];
     readonly providers: Providers['Service'];
     readonly leasing: AccountLeasing['Service'];
@@ -38,6 +40,7 @@ export class RunWorld extends Context.Service<
     Effect.gen(function* () {
       const engine = yield* EngineCore;
       const config = yield* EngineConfig;
+      const worktreeRoot = yield* WorktreeRoot;
       const transcripts = yield* Transcripts;
       const providers = yield* Providers;
       const leasing = yield* AccountLeasing;
@@ -51,6 +54,7 @@ export class RunWorld extends Context.Service<
 
       return RunWorld.of({
         config,
+        worktreeRoot,
         transcripts,
         providers,
         leasing,

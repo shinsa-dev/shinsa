@@ -19,7 +19,8 @@ export const compactSession = Effect.fn('RunSupervisor.compact')(function* (
   const run = state.runs[runId];
   const task = run ? state.tasks[run.taskId] : undefined;
   const provider = run ? world.providers.select(run.sessionProvider ?? run.provider) : null;
-  const workspace = run && task ? resolveWorkspace(state, world.config, run, task) : null;
+  const folders = { ...world.config, worktreesDir: yield* world.worktreeRoot.path };
+  const workspace = run && task ? resolveWorkspace(state, folders, run, task) : null;
   const start = provider?.compactSession;
   if (!run || !workspace || !provider || !start || !resolveCapabilities(provider).compaction) return;
   const id = `idle-compact:${runId}:${sessionId}`;

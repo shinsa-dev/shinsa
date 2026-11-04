@@ -12,6 +12,7 @@ import {
   type ShinsaCommand,
   selectWelcomeTask,
   type TerminalInfo,
+  type WorktreeUsage,
 } from '@shinsa/core';
 import { Clock, Context, Effect, Layer } from 'effect';
 import { QuickCalls } from '../agents/quick/service.ts';
@@ -26,6 +27,7 @@ import { Roots } from '../repos/roots/service.ts';
 import type { DispatchOptions } from '../runtime/engine/schema.ts';
 import { EngineCore } from '../runtime/engine/service.ts';
 import { refreshInstallFolders } from '../shell/login.ts';
+import { WorktreeRoot } from '../workspaces/root/service.ts';
 import { SetupCommands } from './commands/service.ts';
 import { resolveOnboardingFailure } from './failures.ts';
 import type { FlowContext } from './flow/schema.ts';
@@ -47,6 +49,7 @@ import {
 import { ONBOARDING_STEPS } from './steps.ts';
 import type { SetupPatch } from './steps/schema.ts';
 import { resolveHelpRequest, resolveWelcomeBody } from './welcome.ts';
+import { measureWorktreeUsage, resolveChosenWorktreesDir, resolveWorktreesStatus } from './worktrees.ts';
 
 export class Onboarding extends Context.Service<
   Onboarding,
@@ -58,6 +61,8 @@ export class Onboarding extends Context.Service<
       fields: JsonObject,
       commandId?: string
     ) => Effect.Effect<OnboardingStatus, OnboardingFailure>;
+    readonly applyWorktreesDir: (fields: JsonObject) => Effect.Effect<OnboardingStatus, OnboardingFailure>;
+    readonly resolveWorktreeUsage: Effect.Effect<WorktreeUsage>;
     readonly complete: Effect.Effect<OnboardingStatus, OnboardingFailure>;
     readonly openPrivacySettings: Effect.Effect<{ ok: boolean }>;
     readonly resolvePrerequisites: Effect.Effect<PrerequisiteReport, OnboardingFailure>;
@@ -80,6 +85,7 @@ export class Onboarding extends Context.Service<
         const quick = yield* QuickCalls;
         const commands = yield* SetupCommands;
         const prerequisites = yield* Prerequisites;
+        const worktreeRoot = yield* WorktreeRoot;
         const { terminals } = input;
         const { userHome } = config;
         const paths = { home: config.home, configPath: config.configPath, dataDir: config.dataDir, userHome };
@@ -158,6 +164,7 @@ export class Onboarding extends Context.Service<
               model: state.settings.defaultModel,
               mergeMethod: state.settings.mergeMethod,
             },
+            worktrees: yield* resolveWorktreesStatus(worktreeRoot, paths.dataDir),
             paths: {
               home: paths.home,
               configPath: paths.configPath,
@@ -196,6 +203,29 @@ export class Onboarding extends Context.Service<
           }
           yield* updateMachine({ roots: chosen });
           return yield* resolveStatus;
+        });
+
+        const applyWorktreesDir = Effect.fn('Onboarding.applyWorktreesDir')(function* (fields: JsonObject) {
+          if (config.worktreesDirFromEnvironment) {
+            return yield* new DomainError({
+              code: 'worktrees_from_environment',
+              message:
+                'SHINSA_WORKTREES_DIR chooses the worktree folder on this machine, so it cannot be changed here.',
+            });
+          }
+          yield* updateMachine({
+            worktreesDir: yield* resolveChosenWorktreesDir(worktreeRoot, fields.path, userHome),
+          });
+          return yield* resolveStatus;
+        });
+
+        const resolveWorktreeUsage = Effect.gen(function* () {
+          return yield* measureWorktreeUsage(
+            yield* worktreeRoot.path,
+            (yield* engine.state).tasks,
+            commands.run,
+            yield* Clock.currentTimeMillis
+          );
         });
 
         const resolvePrerequisites = Effect.gen(function* () {
@@ -355,6 +385,8 @@ export class Onboarding extends Context.Service<
           resolveStatus,
           listSuggestions,
           applySetup,
+          applyWorktreesDir,
+          resolveWorktreeUsage,
           complete,
           openPrivacySettings,
           resolvePrerequisites,

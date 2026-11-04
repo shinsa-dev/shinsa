@@ -78,10 +78,10 @@ describe('Stack on another task in the task menu', () => {
     });
   }
 
-  it('stacks the task on the one you tick', async () => {
-    const task = createTask({ id: 't', stage: 'planning', stacksOn: 'p' });
+  it('adds the task you tick to the ones it stacks on', async () => {
+    const task = createTask({ id: 't', stage: 'planning', stacksOn: ['p'] });
     const parent = createTask({ id: 'p', title: 'Add the schema' });
-    const other = createTask({ id: 'o', title: 'Add the API' });
+    const other = createTask({ id: 'o', handle: 'SW-7', title: 'Add the API' });
     const state = createShinsaState({ tasks: [task, parent, other] });
     pushState(state);
     render(
@@ -91,14 +91,14 @@ describe('Stack on another task in the task menu', () => {
     );
     fireEvent.click(screen.getByRole('button', { name: 'Task actions' }));
     await openSubmenu('Stack on another task');
-    fireEvent.click(await screen.findByRole('menuitemcheckbox', { name: 'Add the API' }));
+    fireEvent.click(await screen.findByRole('menuitemcheckbox', { name: 'SW-7 Add the API' }));
     await waitFor(() =>
-      expect(listSentCommands()).toEqual([{ type: 'task.stack_on', taskId: 't', stacksOn: 'o' }])
+      expect(listSentCommands()).toEqual([{ type: 'task.stack_on_tasks', taskId: 't', stacksOn: ['p', 'o'] }])
     );
   });
 
   it('takes the task out of its bundle', async () => {
-    const task = createTask({ id: 't', stage: 'triage', stacksOn: 'p' });
+    const task = createTask({ id: 't', stage: 'triage', stacksOn: ['p'] });
     const state = createShinsaState({ tasks: [task, createTask({ id: 'p', title: 'Add the schema' })] });
     pushState(state);
     render(
@@ -109,7 +109,7 @@ describe('Stack on another task in the task menu', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Task actions' }));
     fireEvent.click(await screen.findByRole('menuitem', { name: 'Take out of the bundle' }));
     await waitFor(() =>
-      expect(listSentCommands()).toEqual([{ type: 'task.stack_on', taskId: 't', stacksOn: null }])
+      expect(listSentCommands()).toEqual([{ type: 'task.stack_on_tasks', taskId: 't', stacksOn: [] }])
     );
   });
 });

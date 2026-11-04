@@ -22,7 +22,7 @@ export type BaseUpdate = typeof BaseUpdate.Type;
 export const BundleBranch = Schema.Struct({
   taskId: Schema.String,
   branch: Schema.String,
-  base: Schema.String,
+  bases: Schema.Array(Schema.String),
 });
 export type BundleBranch = typeof BundleBranch.Type;
 

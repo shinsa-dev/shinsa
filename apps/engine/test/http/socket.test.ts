@@ -437,6 +437,33 @@ describe('the socket hub', () => {
     log.close();
   });
 
+  test('tells each of the owner’s pages whether it is the one used last, and stays silent to a page that never asked', async () => {
+    const dir = createTempDir();
+    const log = openEventLog(join(dir, 'shinsa.sqlite'));
+    const engine = new Engine(log);
+    const hub = createSocketHub(engine, createTestTranscripts(join(dir, 'transcripts')));
+    const app = createSocket();
+    const laptop = createSocket();
+    const old = createSocket();
+    for (const page of [app, laptop, old]) hub.open(page.socket);
+    const heard = (sent: ServerMessage[]) =>
+      sent.flatMap((message) => (message.type === 'attention' ? [message.where] : []));
+    hub.message(app.socket, JSON.stringify({ type: 'presence', active: false }));
+    hub.message(laptop.socket, JSON.stringify({ type: 'presence', active: true }));
+    await Promise.resolve();
+    expect(heard(app.sent)).toEqual(['nowhere', 'elsewhere']);
+    expect(heard(laptop.sent)).toEqual(['here']);
+    expect(heard(old.sent)).toEqual([]);
+
+    hub.close(laptop.socket);
+    expect(heard(app.sent)).toEqual(['nowhere', 'elsewhere', 'nowhere']);
+    hub.close(app.socket);
+    hub.close(old.socket);
+    hub.stop();
+    engine.stop();
+    log.close();
+  });
+
   test('announces a development build when it is given no version', () => {
     const dir = createTempDir();
     const log = openEventLog(join(dir, 'shinsa.sqlite'));

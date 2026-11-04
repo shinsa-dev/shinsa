@@ -77,6 +77,35 @@ describe('the main checkout', () => {
     expect(await readBranch(path)).toBe('fix/scroll');
   });
 
+  test('a task stacked on several starts from the first and merges the others in, skipping one that conflicts', async () => {
+    const { repo, path } = await createGitRepo({ files: { 'a.txt': 'a\n' } });
+    for (const [branch, files] of [
+      ['feat/b', { 'b.txt': 'b\n', 'shared.txt': 'b\n' }],
+      ['feat/c', { 'c.txt': 'c\n' }],
+      ['feat/d', { 'shared.txt': 'd\n' }],
+    ] as const) {
+      await git(path, 'checkout', '-q', '-b', branch, 'main');
+      writeFiles(path, files);
+      await git(path, 'add', '-A');
+      await git(path, 'commit', '-q', '-m', `feat: ${branch}`);
+    }
+    await git(path, 'checkout', '-q', 'main');
+    const checkout = await strategy.prepare(
+      repo,
+      createTask({
+        id: 'f',
+        branch: 'feat/f',
+        worktreePath: null,
+        stackBases: ['feat/b', 'feat/c', 'feat/d'],
+      })
+    );
+    expect(checkout).toEqual({ path, branch: 'feat/f', returnBranch: 'main' });
+    expect(await git(path, 'show', 'HEAD:c.txt')).toBe('c');
+    expect(await git(path, 'show', 'HEAD:shared.txt')).toBe('b');
+    expect(await git(path, 'log', '-1', '--format=%s')).toBe("Merge branch 'feat/c' into feat/f");
+    expect(await git(path, 'status', '--porcelain')).toBe('');
+  });
+
   test('a branch name already taken gets a number', async () => {
     const { repo, path } = await createGitRepo();
     await git(path, 'branch', 'fix/scroll');

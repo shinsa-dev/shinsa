@@ -1,6 +1,7 @@
 import type { Bytes, ChannelHeaders, FrameError, GuestActor, HandshakeKeys } from '@shinsa/core';
 import { type Effect, Schema } from 'effect';
 import type { HubSocket } from '../../http/socket.ts';
+import type { TerminalSession, TerminalViewer } from '../../terminals/schema.ts';
 import type { MachineKeyPair } from '../pairing/schema.ts';
 
 export const CHANNEL_REQUEST_ORIGIN = 'http://remote.shinsa.internal';
@@ -10,6 +11,16 @@ export const MAX_OPEN_REQUESTS = 32;
 export const MAX_INFLATED_FRAME_BYTES = 64 * 1024 * 1024;
 
 export const DROPPED = 0;
+
+export const SENT = 1;
+
+export const MAX_STREAM_ID_LENGTH = 64;
+
+export const TERMINAL_STREAM_MESSAGES = {
+  ownerOnly: 'Only the owner of this machine opens its terminals from another device.',
+  tooMany: 'Close a terminal on this page to open another.',
+  closed: 'That terminal is closed.',
+} as const;
 
 export const DROPPED_HEADERS: ReadonlySet<string> = new Set([
   'host',
@@ -32,6 +43,17 @@ export type ProofKeys = Pick<HandshakeKeys, 'machine' | 'device' | 'clientEpheme
 export interface ChannelPeer {
   send: (data: string | Bytes) => unknown;
   close: (code: number, reason: string) => void;
+  buffered?: () => number;
+}
+
+export interface ChannelTerminals {
+  select(id: string): Effect.Effect<TerminalSession | null>;
+}
+
+export interface TerminalStream {
+  readonly terminalId: string;
+  readonly viewer: TerminalViewer;
+  pending: number;
 }
 
 export interface ChannelHub {
@@ -47,10 +69,12 @@ export type AccessAnswer =
 
 export interface ChannelDefinition {
   readonly send: (data: string | Bytes) => Effect.Effect<unknown>;
+  readonly buffered: (() => number) | undefined;
   readonly closePeer: (code: number, reason: string) => Effect.Effect<void>;
   readonly machineKey: Effect.Effect<MachineKeyPair, ChannelBroken>;
   readonly isEnrolled: (device: string) => Effect.Effect<boolean>;
   readonly resolveGuest: (device: string) => Effect.Effect<GuestActor | null>;
+  readonly isOwner: Effect.Effect<boolean>;
   readonly requestAccess: (
     proof: string,
     keys: ProofKeys,
@@ -61,6 +85,7 @@ export interface ChannelDefinition {
   readonly openSocket: (socket: HubSocket) => Effect.Effect<void>;
   readonly closeSocket: (socket: HubSocket) => Effect.Effect<void>;
   readonly receiveSocket: (socket: HubSocket, raw: string) => Effect.Effect<void>;
+  readonly terminals: ChannelTerminals | null;
   readonly respond: (request: Request, guest: GuestActor | null) => Effect.Effect<Response, ChannelBroken>;
   readonly maxBodyBytes: number;
 }
@@ -70,6 +95,7 @@ export interface RemoteChannelHandle {
   readonly isOpen: Effect.Effect<boolean>;
   receive(raw: ChannelRaw): Effect.Effect<void>;
   fail(reason: string, error?: string): Effect.Effect<void>;
+  readonly drain: Effect.Effect<void>;
   readonly close: Effect.Effect<void>;
 }
 

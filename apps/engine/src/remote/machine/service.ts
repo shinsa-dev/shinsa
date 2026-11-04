@@ -403,6 +403,10 @@ export class Remote extends Context.Service<Remote, RemoteHandle>()('shinsa/engi
           return current.owner.id === userId || current.members.some((member) => member.user.id === userId);
         });
 
+        const isOwner = Effect.fn('Remote.isOwner')(function* (userId: string | null) {
+          return userId !== null && (yield* file).access?.owner.id === userId;
+        });
+
         const resolveRequester = Effect.fn('Remote.resolveRequester')(function* (userId: string) {
           const { access: known, credentials } = yield* file;
           if (!(known && credentials)) return 'This machine is still connecting. Try again in a moment.';
@@ -828,10 +832,12 @@ export class Remote extends Context.Service<Remote, RemoteHandle>()('shinsa/engi
         ) {
           const channel = yield* makeRemoteChannel({
             send: (data) => Effect.sync(() => peer.send(data)),
+            buffered: peer.buffered,
             closePeer: (code, reason) => Effect.sync(() => peer.close(code, reason)),
             machineKey: store.resolveMachineKey.pipe(Effect.mapError(toBroken)),
             isEnrolled: (device) => admits(device, userId),
             resolveGuest,
+            isOwner: isOwner(userId),
             requestAccess: (proof, keys, name) =>
               requestAccess(proof, keys, name, userId).pipe(Effect.mapError(toBroken)),
             resumeAccess: (device) => resumeAccess(device, userId),
@@ -839,6 +845,7 @@ export class Remote extends Context.Service<Remote, RemoteHandle>()('shinsa/engi
             openSocket: (socket) => Effect.sync(() => parts.hub.open(socket)),
             closeSocket: (socket) => Effect.sync(() => parts.hub.close(socket)),
             receiveSocket: (socket, raw) => Effect.sync(() => parts.hub.message(socket, raw)),
+            terminals: parts.terminals,
             respond: (request, guest) => parts.respond(request, guest, userId),
             maxBodyBytes: input.maxBodyBytes,
           });
@@ -915,6 +922,7 @@ export class Remote extends Context.Service<Remote, RemoteHandle>()('shinsa/engi
           requestHeartbeat: tunnel.heartbeat,
           verifyConnect,
           spendConnect,
+          isOwner,
           openChannel,
           closeChannel,
           removeDevice,

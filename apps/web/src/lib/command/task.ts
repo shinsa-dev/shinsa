@@ -4,6 +4,7 @@ import {
   isTaskSettled,
   listDecisionOrder,
   listPendingDependencies,
+  listStackParents,
   resolveQueue,
   resolveQueueStep,
   type ShinsaState,
@@ -16,7 +17,13 @@ import {
 } from '@/lib/command/accounts.ts';
 import { type GateContext, listOpenGateCommands } from '@/lib/command/gates.ts';
 import { listProcessCommands } from '@/lib/command/process.ts';
-import { type Command, type CommandSection, type MenuPage, RANK } from '@/lib/command/registry.ts';
+import {
+  type ChoiceOption,
+  type Command,
+  type CommandSection,
+  type MenuPage,
+  RANK,
+} from '@/lib/command/registry.ts';
 import { listTaskActionCommands } from '@/lib/command/task-actions.ts';
 import type { LineComment } from '@/lib/review/draft.ts';
 import { BUNDLE_ICON, listStackChoices, STACK_LABEL, toggleStack, unstackTask } from '@/lib/tasks/bundles.ts';
@@ -26,6 +33,7 @@ import {
   resolveDependencyLabel,
   toggleDependency,
 } from '@/lib/tasks/dependencies.ts';
+import { orderChains } from '@/lib/tasks/groups.ts';
 import { resolveTaskMenuIcon } from '@/lib/tasks/status.ts';
 import { listTaskTabs, TASK_TAB, type TaskTab } from '@/lib/tasks/tabs.ts';
 import { resolveTaskPath } from '@/router.ts';
@@ -41,6 +49,17 @@ export interface TaskPageContext {
 }
 
 const NO_GATE_CONTEXT: GateContext = { comments: [], clearComments: () => {}, verdicts: {}, tab: null };
+
+function listTaskOptions(state: ShinsaState, choices: Task[]): ChoiceOption[] {
+  return orderChains(state, choices).map(({ task: choice, depth }) => ({
+    value: choice.id,
+    label: choice.title,
+    ...(choice.handle ? { hint: choice.handle } : {}),
+    icon: resolveTaskMenuIcon(state, choice),
+    keywords: [choice.handle ?? '', choice.branch ?? ''],
+    depth,
+  }));
+}
 
 function listDependencyCommands(state: ShinsaState, task: Task): Command[] {
   if (isTaskSettled(task)) return [];
@@ -60,12 +79,7 @@ function listDependencyCommands(state: ShinsaState, task: Task): Command[] {
       keywords: ['wait', 'after', 'depends', 'dependency', 'blocked', 'chain', 'order'],
       heading: 'Waits on',
       value: task.waitsOn,
-      options: choices.map((choice) => ({
-        value: choice.id,
-        label: choice.title,
-        icon: resolveTaskMenuIcon(state, choice),
-        keywords: [choice.branch ?? ''],
-      })),
+      options: listTaskOptions(state, choices),
       pick: (value) => {
         const dependency = state.tasks[value];
         if (dependency) void toggleDependency(task, dependency);
@@ -88,8 +102,8 @@ function listDependencyCommands(state: ShinsaState, task: Task): Command[] {
 
 function listStackCommands(state: ShinsaState, task: Task): Command[] {
   const id = `task.${task.id}.stack`;
-  const parent = task.stacksOn ? state.tasks[task.stacksOn] : undefined;
-  const hint = parent ? { hint: parent.title } : {};
+  const parents = listStackParents(state, task);
+  const hint = parents.length > 0 ? { hint: parents.map((parent) => parent.title).join(', ') } : {};
   const choices = listStackChoices(state, task);
   const commands: Command[] = [];
   if (choices.length > 0) {
@@ -101,20 +115,15 @@ function listStackCommands(state: ShinsaState, task: Task): Command[] {
       icon: BUNDLE_ICON,
       keywords: ['stack', 'bundle', 'stacked pull request', 'depends', 'builds on'],
       heading: 'Stacks on',
-      value: task.stacksOn ? [task.stacksOn] : [],
-      options: choices.map((choice) => ({
-        value: choice.id,
-        label: choice.title,
-        icon: resolveTaskMenuIcon(state, choice),
-        keywords: [choice.branch ?? ''],
-      })),
+      value: task.stacksOn ?? [],
+      options: listTaskOptions(state, choices),
       pick: (value) => {
         const chosen = state.tasks[value];
         if (chosen) void toggleStack(task, chosen);
       },
     });
   }
-  if (task.stacksOn && canChangeStack(task)) {
+  if ((task.stacksOn?.length ?? 0) > 0 && canChangeStack(task)) {
     commands.push({
       kind: 'run',
       id: `${id}.off`,

@@ -1,9 +1,10 @@
 import { serializeEngineFailure } from '@shinsa/core/engine-api/errors';
 import { RouteNotFound, ROUTE_NOT_FOUND_MESSAGE } from '@shinsa/core/engine-api/schema';
 import type { ServerWebSocket } from 'bun';
-import type { Effect } from 'effect';
+import { Effect } from 'effect';
 import type { ChannelPeer, RemoteChannelHandle } from '../../remote/channel/schema.ts';
 import type { UpgradeRefusal } from '../../remote/gate/schema.ts';
+import type { ChannelParts, RemoteHandle } from '../../remote/machine/schema.ts';
 import type { PreviewRelay, PreviewUpgrade } from '../../remote/previews/schema.ts';
 import type { createTerminalSockets, TerminalSocketData } from '../../terminals/index.ts';
 import { FIXED_FAILURES } from '../schema.ts';
@@ -63,7 +64,42 @@ export interface RemoteSocketHandlers {
   open: (socket: ServerWebSocket<RemoteSocketData>) => void;
   close: (socket: ServerWebSocket<RemoteSocketData>) => void;
   message: (socket: ServerWebSocket<RemoteSocketData>, raw: string | Buffer) => void;
+  drain: (socket: ServerWebSocket<RemoteSocketData>) => void;
 }
+
+export const makeRemoteSockets = Effect.fn('RemoteSockets.make')(function* (
+  remote: Pick<RemoteHandle, 'openChannel' | 'closeChannel'>,
+  parts: ChannelParts
+) {
+  const context = yield* Effect.context<never>();
+  const runSync = Effect.runSyncWith(context);
+  const runFork = Effect.runForkWith(context);
+  const handlers: RemoteSocketHandlers = {
+    open: (socket) => {
+      socket.data.channel = runSync(
+        remote.openChannel(
+          {
+            send: (data) => socket.send(data),
+            close: (code, reason) => socket.close(code, reason),
+            buffered: () => socket.getBufferedAmount(),
+          },
+          parts,
+          socket.data.userId
+        )
+      );
+    },
+    close: (socket) => {
+      if (socket.data.channel) runFork(remote.closeChannel(socket.data.channel));
+    },
+    message: (socket, raw) => {
+      if (socket.data.channel) runFork(socket.data.channel.receive(raw));
+    },
+    drain: (socket) => {
+      if (socket.data.channel) runFork(socket.data.channel.drain);
+    },
+  };
+  return handlers;
+});
 
 const LIVE_SOCKETS = {
   open: (socket: ServerWebSocket<LiveSocketData>) => {
@@ -120,6 +156,7 @@ export function createSocketHandlers(
     },
     drain: (socket: ServerSocket) => {
       if (isTerminalSocket(socket)) terminals?.drain(socket);
+      else if (isRemoteSocket(socket)) remote?.drain(socket);
     },
   };
 }

@@ -1,9 +1,10 @@
 import { EngineApi } from '@shinsa/core/engine-api';
 import { Effect, Option } from 'effect';
 import { HttpApiBuilder } from 'effect/http-api';
+import { Remote } from '../../../remote/machine/service.ts';
 import { EngineCore } from '../../../runtime/engine/service.ts';
 import { CommandRouter } from '../../../triage/router/service.ts';
-import { dispatchUserCommand } from '../../commands.ts';
+import { dispatchUserCommand, resolveRequestOrigin } from '../../commands.ts';
 import { RequestSource } from '../../schema.ts';
 
 export const CommandsHandlers = HttpApiBuilder.group(
@@ -12,6 +13,7 @@ export const CommandsHandlers = HttpApiBuilder.group(
   Effect.fn('CommandsHandlers')(function* (handlers) {
     const engine = yield* EngineCore;
     const router = Option.getOrNull(yield* Effect.serviceOption(CommandRouter));
+    const remote = Option.getOrNull(yield* Effect.serviceOption(Remote));
     return handlers.handle(
       'send',
       Effect.fn('CommandsHandlers.send')(function* ({ headers, payload }) {
@@ -19,7 +21,7 @@ export const CommandsHandlers = HttpApiBuilder.group(
         const taskId = yield* dispatchUserCommand(engine, payload, {
           clientId: headers['idempotency-key']?.trim() || null,
           router,
-          origin: source.via === 'local' ? 'local' : 'remote',
+          origin: yield* resolveRequestOrigin(source, remote),
           guest: null,
         });
         const handle = taskId ? ((yield* engine.state).tasks[taskId]?.handle ?? null) : null;

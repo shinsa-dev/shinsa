@@ -2,6 +2,7 @@ import { describe, expect, it } from 'bun:test';
 import type { Gate, ShinsaState, Task } from '@shinsa/core';
 import { filterTaskRows, listTaskRows, NO_TASK_FILTERS } from '@/lib/tasks/filters.ts';
 import {
+  describeBundleWait,
   describeTaskCounts,
   describeWaitsOn,
   listOpenTaskChoices,
@@ -498,7 +499,7 @@ describe('describeTaskCounts', () => {
 describe('the tasks of a bundle in All tasks', () => {
   it('lists a ready task with the root of its bundle, each one nested under the one below', () => {
     const root = createTask({ id: 'root', stage: 'shipping', bundleReady: { commit: 'a' } });
-    const top = createTask({ id: 'top', stage: 'building', stacksOn: 'root', priority: 'urgent' });
+    const top = createTask({ id: 'top', stage: 'building', stacksOn: ['root'], priority: 'urgent' });
     const other = createTask({ id: 'other', stage: 'building', priority: 'high' });
     const state = createShinsaState({ tasks: [root, top, other] });
     expect(resolveTaskGroup(state, root)).toBe('working');
@@ -511,8 +512,8 @@ describe('the tasks of a bundle in All tasks', () => {
   it('lists a bundle at its merge gate from its root, the tasks above nested in order', () => {
     const root = createTask({ id: 'root', stage: 'awaiting_merge' });
     const ready = { commit: 'a' };
-    const middle = createTask({ id: 'middle', stage: 'shipping', stacksOn: 'root', bundleReady: ready });
-    const top = createTask({ id: 'top', stage: 'shipping', stacksOn: 'middle', bundleReady: ready });
+    const middle = createTask({ id: 'middle', stage: 'shipping', stacksOn: ['root'], bundleReady: ready });
+    const top = createTask({ id: 'top', stage: 'shipping', stacksOn: ['middle'], bundleReady: ready });
     const state = createShinsaState({
       tasks: [top, middle, root],
       gates: [createGate({ id: 'm', taskId: 'root', type: 'merge' })],
@@ -525,10 +526,31 @@ describe('the tasks of a bundle in All tasks', () => {
     expect(merge).toEqual(['root:0', 'middle:1', 'top:2']);
   });
 
+  it('names the tasks of the bundle a ready task still waits on', () => {
+    const root = createTask({ id: 'root', stage: 'shipping', bundleReady: { commit: 'a' }, title: 'Root' });
+    const left = createTask({ id: 'left', stage: 'building', stacksOn: ['root'], title: 'Left' });
+    const right = createTask({
+      id: 'right',
+      stage: 'shipping',
+      stacksOn: ['root'],
+      bundleReady: { commit: 'b' },
+      title: 'Right',
+    });
+    const state = createShinsaState({ tasks: [root, left, right] });
+    expect(describeBundleWait(state, root)).toBe('Waits on “Left”');
+    expect(describeBundleWait(state, right)).toBe('Waits on “Left”');
+    expect(describeBundleWait(state, left)).toBeNull();
+    const done = createShinsaState({
+      tasks: [root, { ...left, stage: 'shipping', bundleReady: { commit: 'c' } }, right],
+    });
+    expect(describeBundleWait(done, right)).toBe('Waits on “Root”');
+    expect(describeBundleWait(done, root)).toBeNull();
+  });
+
   it('keeps a ready task on its own when nothing open is above it', () => {
     const root = createTask({ id: 'root', stage: 'shipping', bundleReady: { commit: 'a' } });
     const state = createShinsaState({
-      tasks: [root, createTask({ id: 'top', stage: 'cancelled', stacksOn: 'root' })],
+      tasks: [root, createTask({ id: 'top', stage: 'cancelled', stacksOn: ['root'] })],
     });
     expect(resolveTaskGroup(state, root)).toBe('working');
   });

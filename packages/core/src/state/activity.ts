@@ -91,9 +91,9 @@ export function describeDependencies(titles: string[]) {
   return `Waits on ${titles.map(quoteTitle).join(', ')}`;
 }
 
-export function describeStack(parent: string | null) {
-  if (parent === null) return 'Left its bundle';
-  return `Stacked on “${parent}” as a bundle`;
+export function describeStack(parents: string[]) {
+  if (parents.length === 0) return 'Left its bundle';
+  return `Stacked on ${describeList(parents.map((title) => `“${title}”`))} as a bundle`;
 }
 
 export function describeChecks(results: ReportCheck[]) {

@@ -62,8 +62,11 @@ export const prepareIsolation = Effect.fn('RunSupervisor.prepareIsolation')(func
 ) {
   const baseCommit = run.delegation.baseCommit;
   if (!repo || run.delegation.isolation !== 'worktree' || !baseCommit) return;
-  const { config, checkout } = yield* RunWorld;
-  yield* checkout.createIsolated(repo, config.worktreesDir, run.taskId, run.id, baseCommit).pipe(
+  const { worktreeRoot, checkout } = yield* RunWorld;
+  const worktreesDir = yield* worktreeRoot.assert.pipe(
+    Effect.mapError((unavailable) => new IsolationFailed({ message: unavailable.message }))
+  );
+  yield* checkout.createIsolated(repo, worktreesDir, run.taskId, run.id, baseCommit).pipe(
     Effect.mapError(
       (error) =>
         new IsolationFailed({

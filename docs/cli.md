@@ -525,28 +525,28 @@ Every task agent's tool: `tasks_stop_waiting`. Sends `task.wait_on`.
 
 #### shinsa tasks stack-on
 
-Stack a task on another as a bundle: it starts once that task is ready to merge, builds on its branch, and the bundle merges as one.
+Stack a task on other tasks as a bundle: it starts once every one of them is ready to merge, builds on the first one’s branch with the others merged in, and the bundle merges as one. The list replaces the tasks it stacks on now.
 
 ```
-shinsa tasks stack-on <task> <below> [--json]
+shinsa tasks stack-on <task> <below...> [--json]
 ```
 
-Every task agent's tool: `tasks_stack_on`. Sends `task.stack_on`.
+Every task agent's tool: `tasks_stack_on`. Sends `task.stack_on_tasks`.
 
 | Argument | Kind | What it is |
 | --- | --- | --- |
 | `<task>` | text, required | The task: its handle (SW-142), its id, the start of its id, or its exact title. |
-| `<below>` | text, required | The task it stacks on. |
+| `<below>` | list, required | The tasks it stacks on. The first one is its pull request’s base. |
 
 #### shinsa tasks unstack
 
-Take a task out of its bundle before it starts: it no longer waits for the task below.
+Take a task out of its bundle before it starts: it no longer waits for the tasks below.
 
 ```
 shinsa tasks unstack <task> [--json]
 ```
 
-Every task agent's tool: `tasks_unstack`. Sends `task.stack_on`.
+Every task agent's tool: `tasks_unstack`. Sends `task.stack_on_tasks`.
 
 | Argument | Kind | What it is |
 | --- | --- | --- |
@@ -1590,6 +1590,23 @@ shinsa focus clear [--json]
 ```
 
 Every task agent's tool: `focus_clear`. Sends `focus.change`.
+
+### away
+
+#### shinsa away record
+
+Record a span you were away from your Mac, so your turnaround leaves it out. The Mac app sends these itself.
+
+```
+shinsa away record --from <integer> --to <integer> [--json]
+```
+
+Yours alone: no agent has a tool for it, and an agent’s shell may not run it. Sends `away.record`.
+
+| Argument | Kind | What it is |
+| --- | --- | --- |
+| `--from` | integer, required | When you left, in milliseconds since 1970. |
+| `--to` | integer, required | When you came back, in milliseconds since 1970. |
 
 ### repos
 

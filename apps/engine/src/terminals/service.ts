@@ -1,5 +1,6 @@
 import {
   DomainError,
+  isTaskSettled,
   SERVICE_LIMITS,
   type ServiceDefinition,
   type ShinsaState,
@@ -8,8 +9,10 @@ import {
   type TerminalInfo,
   type TerminalsSnapshot,
 } from '@shinsa/core';
-import { Clock, Context, Effect, Fiber, Layer, Ref } from 'effect';
+import { Clock, Context, Effect, Fiber, Layer, Option, Ref } from 'effect';
 import { EngineConfig } from '../config/service.ts';
+import { EngineCore } from '../runtime/engine/service.ts';
+import { listReclaimable, resolveLimitMessage } from './limit.ts';
 import { resolveServiceRunIn } from './places.ts';
 import {
   listenOnce,
@@ -59,7 +62,7 @@ export class Terminals extends Context.Service<
     stopService(id: string, taskId: string | null): Effect.Effect<void, DomainError>;
     restartService(id: string, run: ServiceRun): Effect.Effect<TerminalInfo, DomainError>;
     readServiceOutput(id: string, taskId: string | null, lines: number): Effect.Effect<string[]>;
-    closeTaskServices(taskId: string): Effect.Effect<void>;
+    closeTaskTerminals(taskId: string): Effect.Effect<void>;
     readonly listServiceProcesses: Effect.Effect<{ taskId: string; pid: number }[]>;
     readonly listTerminalPids: Effect.Effect<number[]>;
     resumeServices(state: ShinsaState): Effect.Effect<void>;
@@ -77,6 +80,7 @@ export class Terminals extends Context.Service<
         const timings = yield* TerminalTimings;
         const newId = yield* TerminalIds;
         const clock = yield* Clock.Clock;
+        const engine = yield* Effect.serviceOption(EngineCore);
         const context = yield* Effect.context<never>();
         const runSync = Effect.runSyncWith(context);
         const { dataDir } = config;
@@ -272,16 +276,49 @@ export class Terminals extends Context.Service<
           yield* session.start({ command, env: runEnv, spawn: pty.spawn });
         });
 
+        const listTasks = Option.match(engine, {
+          onNone: () => Effect.succeed({}),
+          onSome: (core) => Effect.map(core.state, (state) => state.tasks),
+        });
+
+        const makeRoom = Effect.gen(function* () {
+          const all = yield* listSessions;
+          const over = all.length - TERMINAL_LIMITS.terminals + 1;
+          if (over <= 0) return;
+          const waiting = yield* Ref.get(resumable);
+          const tasks = yield* listTasks;
+          const ended = all.filter((session) => !session.running && !waiting.has(session.info.id));
+          const reclaimable = listReclaimable(
+            ended.map((session) => session.info),
+            tasks
+          );
+          if (reclaimable.length < over) {
+            const known = yield* Ref.get(services);
+            return yield* new DomainError({
+              code: 'terminal_limit',
+              message: resolveLimitMessage(
+                all
+                  .filter((session) => session.running)
+                  .map((session) => ({
+                    taskId: session.info.taskId,
+                    service: session.info.serviceId
+                      ? (known.get(session.info.serviceId)?.name ?? null)
+                      : null,
+                  })),
+                tasks
+              ),
+            });
+          }
+          const chosen = new Set(reclaimable.slice(0, over));
+          for (const session of ended) if (chosen.has(session.info.id)) yield* closeSession(session);
+        });
+
         const open = Effect.fn('Terminals.open')(function* (
           terminalStart: TerminalStart,
           service: ServiceDefinition | null,
           env: Record<string, string> = {}
         ) {
-          if ((yield* Ref.get(sessions)).size >= TERMINAL_LIMITS.terminals)
-            return yield* new DomainError({
-              code: 'terminal_limit',
-              message: `Shinsa keeps ${TERMINAL_LIMITS.terminals} terminals at most.`,
-            });
+          yield* makeRoom;
           const info: TerminalInfo = {
             id: yield* newId,
             ...terminalStart,
@@ -485,9 +522,10 @@ export class Terminals extends Context.Service<
           return yield* session.readOutput(lines);
         });
 
-        const closeTaskServices = Effect.fn('Terminals.closeTaskServices')(function* (taskId: string) {
+        const closeTaskTerminals = Effect.fn('Terminals.closeTaskTerminals')(function* (taskId: string) {
           const owned = (yield* listSessions).filter(
-            (session) => session.info.serviceId && session.info.taskId === taskId
+            (session) =>
+              session.info.taskId === taskId && (session.info.serviceId !== null || !session.running)
           );
           if (owned.length === 0) return;
           for (const session of owned) yield* closeSession(session);
@@ -505,8 +543,28 @@ export class Terminals extends Context.Service<
           all.flatMap((session) => (session.info.serviceId || session.pid === null ? [] : [session.pid]))
         );
 
+        const pruneSettled = Effect.fn('Terminals.pruneSettled')(function* (state: ShinsaState) {
+          const settled = (yield* listSessions).filter((session) => {
+            const { taskId } = session.info;
+            if (taskId === null || session.running) return false;
+            const task = state.tasks[taskId];
+            return !task || isTaskSettled(task);
+          });
+          if (settled.length === 0) return;
+          for (const session of settled) {
+            yield* Ref.update(resumable, (ids) => {
+              const next = new Set(ids);
+              next.delete(session.info.id);
+              return next;
+            });
+            yield* closeSession(session);
+          }
+          yield* changed;
+        });
+
         const resumeServices = Effect.fn('Terminals.resumeServices')(function* (state: ShinsaState) {
           if (readOnly) return;
+          yield* pruneSettled(state);
           for (const terminalId of yield* Ref.get(resumable)) {
             const info = (yield* select(terminalId))?.info;
             const service = (yield* Ref.get(services)).get(info?.serviceId ?? '');
@@ -588,7 +646,7 @@ export class Terminals extends Context.Service<
           stopService,
           restartService,
           readServiceOutput,
-          closeTaskServices,
+          closeTaskTerminals,
           listServiceProcesses,
           listTerminalPids,
           resumeServices,

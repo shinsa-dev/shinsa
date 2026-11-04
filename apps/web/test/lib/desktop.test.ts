@@ -5,6 +5,7 @@ import {
   applyDesktopChannel,
   checkDesktopUpdates,
   installDesktopUpdate,
+  isAlertQuiet,
   isDesktop,
   isPageQuiet,
   notifyDesktop,
@@ -13,6 +14,7 @@ import {
   readDesktopUpdate,
   resolveSurface,
   selectDesktopBuild,
+  subscribeDesktopAway,
   subscribeDesktopNotifyFailed,
   subscribeDesktopUpdate,
   updateDesktopBadge,
@@ -38,12 +40,24 @@ describe('in a browser', () => {
     expect(notifyDesktop(NOTICE)).toBe(false);
     openDesktopNotificationSettings();
     subscribeDesktopNotifyFailed(() => undefined)();
+    subscribeDesktopAway(() => undefined)();
   });
 
   it('is a browser surface, quiet while the desktop app is connected', () => {
     expect(resolveSurface()).toBe('browser');
     expect(isPageQuiet(true)).toBe(true);
     expect(isPageQuiet(false)).toBe(false);
+  });
+
+  it('on Shinsa Cloud never defers to a desktop app, which notifies only at its own machine', () => {
+    expect(isPageQuiet(true, true)).toBe(false);
+  });
+
+  it('alerts when it is the page you use, stays quiet when you use another, and falls back to the app rule otherwise', () => {
+    expect(isAlertQuiet('here', true)).toBe(false);
+    expect(isAlertQuiet('elsewhere', false, true)).toBe(true);
+    expect(isAlertQuiet('nowhere', true)).toBe(true);
+    expect(isAlertQuiet('nowhere', true, true)).toBe(false);
   });
 });
 

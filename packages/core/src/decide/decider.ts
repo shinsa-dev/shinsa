@@ -104,11 +104,10 @@ export function quoteTitles(tasks: Task[]) {
   return tasks.map((task) => quoteTitle(task.title)).join(', ');
 }
 
-export function describeWaiting(state: ShinsaState, task: Task, pending: Task[]) {
-  const parent = task.stacksOn ? state.tasks[task.stacksOn] : undefined;
-  const others = pending.filter((dependency) => dependency !== parent);
-  const ready =
-    parent && pending.includes(parent) ? `${quoteTitle(parent.title)} to be ready to merge` : null;
+export function describeWaiting(task: Task, pending: Task[]) {
+  const parents = pending.filter((dependency) => task.stacksOn?.includes(dependency.id));
+  const others = pending.filter((dependency) => !parents.includes(dependency));
+  const ready = parents.length > 0 ? `${quoteTitles(parents)} to be ready to merge` : null;
   const finish = others.length > 0 ? `${quoteTitles(others)} to finish` : null;
   return `waiting for ${[finish, ready].filter(Boolean).join(' and ')}`;
 }

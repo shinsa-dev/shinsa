@@ -9,7 +9,7 @@ import type {
 } from '@shinsa/core';
 import type { NotFound, RateLimited, Revoked } from '@shinsa/core/remote/errors';
 import { type Effect, Schema, type Scope } from 'effect';
-import type { ChannelHub, ChannelPeer, RemoteChannelHandle } from '../channel/schema.ts';
+import type { ChannelHub, ChannelPeer, ChannelTerminals, RemoteChannelHandle } from '../channel/schema.ts';
 import type { RemoteUnreachable } from '../client/schema.ts';
 
 export const REMOTE_ACCESS_CHANGED = 'Remote access to this machine changed.';
@@ -49,6 +49,7 @@ export interface RemoteInput {
 
 export interface ChannelParts {
   readonly hub: ChannelHub;
+  readonly terminals: ChannelTerminals | null;
   readonly respond: (request: Request, guest: GuestActor | null, userId: string) => Effect.Effect<Response>;
 }
 
@@ -95,6 +96,7 @@ export interface RemoteHandle {
   readonly requestHeartbeat: Effect.Effect<void>;
   verifyConnect(token: string | null, channel: ConnectChannel): Effect.Effect<ConnectClaim | null>;
   spendConnect(claim: ConnectClaim): Effect.Effect<boolean>;
+  isOwner(userId: string | null): Effect.Effect<boolean>;
   openChannel(peer: ChannelPeer, parts: ChannelParts, userId: string): Effect.Effect<RemoteChannelHandle>;
   closeChannel(channel: RemoteChannelHandle): Effect.Effect<void>;
   removeDevice(publicKey: string): Effect.Effect<boolean>;

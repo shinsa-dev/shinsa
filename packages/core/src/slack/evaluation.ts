@@ -1,8 +1,8 @@
 import { Option, Schema } from 'effect';
-import { SlackDecision, type SlackEvaluation, type SlackMention } from './schema.ts';
+import { SlackEvaluationReply, type SlackEvaluation, type SlackMention } from './schema.ts';
 import { serializeSlackThread } from './thread.ts';
 
-const decodeSlackDecision = Schema.decodeUnknownOption(SlackDecision);
+const decodeSlackEvaluationReply = Schema.decodeUnknownOption(SlackEvaluationReply);
 
 export const SLACK_EVALUATION_SYSTEM = [
   'Someone mentioned you, Shinsa, in a Slack thread. Shinsa does work as tasks and never chats.',
@@ -29,5 +29,5 @@ export function serializeSlackEvaluationPrompt(mention: SlackMention) {
 }
 
 export function parseSlackEvaluation(value: unknown): SlackEvaluation | null {
-  return Option.getOrNull(Option.map(decodeSlackDecision(value), ({ decision }) => decision));
+  return Option.getOrNull(Option.map(decodeSlackEvaluationReply(value), ({ decision }) => decision));
 }

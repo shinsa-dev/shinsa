@@ -1,13 +1,14 @@
 import {
   DomainError,
   listSlackStatusGates,
-  parseSlackAnswer,
+  parseSlackDecision,
   parseSlackEvaluation,
   parseSlackMention,
   resolveSlackConnectUrl,
   resolveSlackPostMessage,
   resolveSlackReaction,
   resolveSlackSessionStatus,
+  resolveSlackLastUsedAt,
   resolveSlackTaskUrl,
   resolveSlackThreadKey,
   SLACK_ENGINE_INTERACTIONS_PATH,
@@ -15,15 +16,15 @@ import {
   SLACK_EVALUATION_SYSTEM,
   SLACK_FORWARD_HEADERS,
   SLACK_REACTIONS,
-  type SlackAnswerReply,
+  type SlackDecisionReply,
   type SlackMessage,
   type SlackSessionStatus,
   type SlackSnapshot,
   type ShinsaCommand,
   type SlackThreadRef,
+  serializeSlackCard,
   serializeSlackDeclined,
   serializeSlackEvaluationPrompt,
-  serializeSlackStatus,
   verifySlackForwardSignature,
 } from '@shinsa/core';
 import { serializeRemoteFailure } from '@shinsa/core/remote/errors';
@@ -63,6 +64,7 @@ export class Slack extends Context.Service<
       key: string
     ) => Effect.Effect<void, SlackRefusal | SlackRelayFailure>;
     readonly post: (effect: SlackEffect<'slack.post'>) => Effect.Effect<void, SlackRelayFailure>;
+    readonly react: (effect: SlackEffect<'slack.react'>) => Effect.Effect<void>;
     readonly status: (
       effect: SlackEffect<'slack.status'>,
       key: string
@@ -134,22 +136,23 @@ export class Slack extends Context.Service<
         const handleInteractions = Effect.fn('Slack.handleInteractions')(function* (request: Request) {
           const read = yield* readSigned(request);
           if (read instanceof Response) return read;
-          const answer = parseSlackAnswer(read.value);
-          if (!answer) return respondJsonError('body_invalid', 'The answer is missing a part.', 400);
+          const decision = parseSlackDecision(read.value);
+          if (!decision) return respondJsonError('body_invalid', 'The decision is missing a part.', 400);
           return yield* dispatch(
-            { type: 'slack.answer', answer },
-            `slack-answer:${answer.interactionId}`
+            { type: 'slack.decide', decision },
+            `slack-decide:${decision.interactionId}`
           ).pipe(
             Effect.andThen(engine.state),
             Effect.map((state) => {
-              const answered: SlackAnswerReply = {
-                answered: true,
-                choice: state.gates[answer.gateId]?.response ?? '',
+              const taskId = state.gates[decision.gateId]?.taskId;
+              const decided: SlackDecisionReply = {
+                decided: true,
+                text: (taskId ? state.tasks[taskId]?.slack?.decided?.text : null) ?? 'decided',
               };
-              return Response.json(answered);
+              return Response.json(decided);
             }),
             Effect.catchTag('DomainError', (error) => {
-              const refused: SlackAnswerReply = { answered: false, reason: error.message };
+              const refused: SlackDecisionReply = { decided: false, reason: error.message };
               return Effect.succeed(Response.json(refused));
             })
           );
@@ -202,7 +205,7 @@ export class Slack extends Context.Service<
             );
         });
 
-        const react = Effect.fn('Slack.react')(function* (
+        const applyReaction = Effect.fn('Slack.applyReaction')(function* (
           thread: SlackThreadRef,
           messageTs: string,
           add: string | null,
@@ -277,14 +280,14 @@ export class Slack extends Context.Service<
           key: string
         ) {
           const { mention } = effect;
-          yield* react(mention, mention.messageTs, SLACK_REACTIONS.sizing, null);
+          yield* applyReaction(mention, mention.messageTs, SLACK_REACTIONS.sizing, null);
           const said = yield* quick.classify<unknown>(
             SLACK_EVALUATION_SYSTEM,
             serializeSlackEvaluationPrompt(mention),
             SLACK_EVALUATION_SCHEMA
           );
           if (parseSlackEvaluation(said) === 'none') {
-            yield* react(mention, mention.messageTs, null, SLACK_REACTIONS.sizing);
+            yield* applyReaction(mention, mention.messageTs, null, SLACK_REACTIONS.sizing);
             const threadKey = resolveSlackThreadKey(mention);
             const seen = yield* Ref.modify(declined, (keys) => [
               keys.has(threadKey),
@@ -304,6 +307,9 @@ export class Slack extends Context.Service<
           yield* send(effect.thread, null, message);
         });
 
+        const react = (effect: SlackEffect<'slack.react'>) =>
+          applyReaction(effect.thread, effect.messageTs, effect.reaction, null);
+
         const status = Effect.fn('Slack.status')(function* (
           effect: SlackEffect<'slack.status'>,
           key: string
@@ -319,7 +325,7 @@ export class Slack extends Context.Service<
           const link = task?.slack;
           if (!task || !link) return;
           const gates = listSlackStatusGates(state, task.id);
-          const message = serializeSlackStatus(task, gates, resolveTaskUrl(task.id));
+          const message = serializeSlackCard(task, gates, resolveTaskUrl(task.id));
           const shown = JSON.stringify(message);
           const reaction = resolveSlackReaction(task, gates);
           if (
@@ -335,7 +341,7 @@ export class Slack extends Context.Service<
           if (!ts) return;
           yield* Ref.update(statusShown, (messages) => new Map(messages).set(task.id, shown));
           yield* syncSession(link, task.id, resolveSlackSessionStatus(task, gates));
-          yield* react(link, link.messageTs, reaction, link.reaction);
+          yield* applyReaction(link, link.messageTs, reaction, link.reaction);
           if (ts === link.statusTs && reaction === link.reaction) return;
           yield* dispatch(
             { type: 'slack.record_status', taskId: task.id, ts, reaction },
@@ -351,7 +357,16 @@ export class Slack extends Context.Service<
           }
           const connectUrl = resolveSlackConnectUrl(input.appOrigin, credentials.instanceId);
           return yield* relay.links(token(credentials.machineToken)).pipe(
-            Effect.map(({ links }): SlackSnapshot => ({ remote: true, connectUrl, links, problem: null })),
+            Effect.andThen((answer) => Effect.map(engine.state, (state) => ({ answer, state }))),
+            Effect.map(({ answer, state }): SlackSnapshot => ({
+              remote: true,
+              connectUrl,
+              links: answer.links.map((link) => ({
+                ...link,
+                lastUsedAt: resolveSlackLastUsedAt(state, link),
+              })),
+              problem: null,
+            })),
             Effect.catch((failure) =>
               Effect.logWarning('[Slack] Could not read the Slack links').pipe(
                 Effect.annotateLogs({ error: describeError(failure) }),
@@ -384,6 +399,7 @@ export class Slack extends Context.Service<
           handleTunnel,
           evaluate,
           post,
+          react,
           status,
           snapshot,
           disconnect,

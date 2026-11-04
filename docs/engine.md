@@ -516,7 +516,7 @@ modes (`WORKSPACE_MODES`), each a service in `apps/engine/src/workspaces/` behin
 
 | Mode | A task gets | Commits | Pushes | When the task settles |
 |---|---|---|---|---|
-| **Worktrees** (`worktrees`, the default) | its own git worktree on a fresh branch (`data/worktrees/…`), made detached at the base and then named, so a crash never leaves a branch without its worktree: a worktree found unnamed is named again, taking back a local branch it left at that commit (`createWorktree`) | `git commit` in the worktree | `git push origin HEAD:<branch>` | the worktree is removed |
+| **Worktrees** (`worktrees`, the default) | its own git worktree on a fresh branch (`data/worktrees/…`, or the folder you chose, below), made detached at the base and then named, so a crash never leaves a branch without its worktree: a worktree found unnamed is named again, taking back a local branch it left at that commit (`createWorktree`) | `git commit` in the worktree | `git push origin HEAD:<branch>` | the worktree is removed |
 | **Main checkout** (`main_checkout`) | the repository's own checkout, switched to a branch Shinsa makes from the freshly fetched default branch | `git commit` on that branch, only while the checkout is on it | `git push origin refs/heads/<branch>` | the checkout goes back to the branch it was on when the task took it (`returnBranch`), or to the default branch when that branch is gone or the checkout was detached; with uncommitted changes it stays where it is |
 
 - **Core holds the mode and the invariants.** A task takes the repository's mode when it asks for its workspace
@@ -537,12 +537,33 @@ modes (`WORKSPACE_MODES`), each a service in `apps/engine/src/workspaces/` behin
 - **Agents work where the strategy puts them.** For the main checkout a task's `worktreePath` is the repository
   itself, so every role works in your checkout; a read-only agent's edits are never set aside there, as in any shared
   checkout. Checks run in the same checkout.
+- **Where the worktrees go.** New worktrees and isolated delegation checkouts go into one folder, `data/worktrees`
+  unless you choose another in Settings → Projects → Worktrees, for example a folder in an S3 or R2 bucket you mount
+  with s3fs, rclone or Mountain Duck, to keep worktrees off the local disk. The choice is `config.json`'s
+  `worktreesDir`, saved by `POST /api/onboarding/worktrees` (Onboarding API, below); `SHINSA_WORKTREES_DIR` wins over
+  it, and Settings then shows the folder as set by the environment. `WorktreeRoot` (`workspaces/root/`) reads it again
+  for every new worktree, so a change applies to the next task that sets up, with no restart; a task keeps the
+  worktree it has wherever it is, since its path is in the log (`worktree.ready`). Shinsa never creates a folder you
+  chose, only the folders inside it, so an unmounted drive is caught: before each new worktree or delegation checkout
+  `WorktreeRoot.assert` checks that the folder exists, is a folder and can be written to, and fails the setup with
+  "The worktree folder <path> does not exist. If it is on a drive you mount, mount it again, or choose another folder
+  in Settings → Projects." instead of falling back to the local disk; Settings shows the same problem under the
+  folder. Saving a folder also leaves a `.shinsa-worktrees` file in it (`WorktreeRoot.mark`), and a folder from
+  `config.json` without that file is refused too ("is not the one you chose: the drive it is on may not be
+  mounted"): a drive's own mount point, once unmounted, is an empty local folder that would pass every other check.
+  A folder written into `config.json` by hand is saved once more in Settings to get the file. Delegation checkouts are removed wherever git has them registered (`removeIsolated` lists the repository's
+  worktrees under `delegations/<task>/` of any root), so changing the folder leaves none behind.
+- **How much space they take.** Settings → Projects → Worktrees shows the space the worktrees of tasks use, the free
+  space on the drive of the folder in use, and that a task's worktree is removed as soon as it is merged, marked done
+  or cancelled (`settleTask`, below). It asks `GET /api/onboarding/worktrees/usage` each time the page opens and
+  after the folder changes; nothing measures in the background.
 - **A new worktree comes with its dependencies.** `prepareWorktree` runs the install its lockfile names
   (`resolveInstallCommand`: `bun install`, `pnpm install --frozen-lockfile` or `npm ci`; nothing for Yarn) before the
   agent is handed the worktree. A failed install runs once more at once, since a first `pnpm install` with the hoisted
   linker can fail on files it is still writing (`ERR_PNPM_EEXIST`) and pass the second time; only when that run fails
   too is it logged, and the agent sets the dependencies up itself. Base checkouts for checks are prepared the same way.
-- **A removed worktree takes its processes with it.** `worktree.remove` closes the task's service runs, then stops
+- **A removed worktree takes its processes with it.** `worktree.remove` closes the task's service runs and ended
+  shells, then stops
   every process still working inside the worktree (`stopProcessesIn` in `git/processes.ts`: `lsof -d cwd` finds each
   process whose working folder is the worktree or inside it; SIGTERM, then SIGKILL for any still alive after 3 s).
   That catches a dev server an agent started from its shell, which outlives the agent's run and would otherwise keep
@@ -1213,92 +1234,120 @@ arrow, ⌘K's Wait for another task… and Stop waiting, all `task.wait_on` with
 
 ### Bundles
 
-A bundle is a line of tasks in one repository that GitHub shows as a stack of pull requests and that merges as one. A
-task stacks on another (`Task.stacksOn`, one id), a second kind of wait next to `waitsOn` that reuses its waiting and
-release, but releases on ready instead of merged. You set it when creating the task (the composer's When to start:
-Stack on another task…), later (the Waits on menu on the task page, the task's `•••` and context menus, ⌘K's Stack on
-another task… and Take out of the bundle) or from the command line (`shinsa tasks stack-on`, `shinsa tasks unstack`),
-all `task.stack_on` (a task id, or `null` to unstack), recorded as `task.stack_changed`; an agent files the next
-piece of a bundle with `create_task`'s `stack_on_this` (`stacksOn` on `task.create`, never with `this_task_waits` or
-`after_this`). Stacking on a task it already waits on moves that wait into the stack.
+A bundle is a set of tasks in one repository, connected by stacks, that GitHub shows as stacked pull requests and
+that merges as one. A task stacks on other tasks (`Task.stacksOn`, a list of ids, the first one its pull request's
+base), a second kind of wait next to `waitsOn` that reuses its waiting and release, but releases on ready instead of
+merged. You set it when creating the task (the composer's When to start: Stack on another task…, which picks several),
+later (the Waits on menu on the task page, the task's `•••` and context menus, ⌘K's Stack on another task… and Take
+out of the bundle, each a tree of tasks with a tick on the ones it stacks on) or from the command line (`shinsa tasks
+stack-on <task> <below…>`, `shinsa tasks unstack`), all `task.stack_on_tasks` (the whole list, which replaces the one
+it has; an empty list unstacks), recorded as `task.stack_changed`. Ticking a task in a picker adds it to the end of
+the list and unticking one removes only it, so the first pick stays the base. An agent files the next piece of a
+bundle with `create_task`'s `stack_on_this` (never with `this_task_waits` or `after_this`) and adds other parents with
+`stack_on` (`stacksOn` on `task.create`, this task first). Stacking on a task it already waits on moves that
+wait into the stack.
 
-- **One line.** A task stacks on at most one task and at most one task stacks on any task, so a bundle never
-  branches: `resolveBundle` reads it from the chain of `stacksOn`, bottom first. `task.stack_on` refuses a task
-  stacking on itself (`stack_self`), on a cancelled (`dependency_cancelled`) or finished task (`stack_parent_settled`),
-  on one that opens no pull request (`stack_no_pull_request`), on one in another repository (`stack_repository`), on
-  one another task already stacks on (`stack_taken`) and a cycle (`dependency_cycle`). The bundle can change only
-  until the stacked task builds (`stack_started`: triage, waiting, planning or at the plan gate); moving it cancels
-  the planning run and plans again once released (Taking a task out, below).
+- **A graph, not a line.** A task can stack on several tasks and several tasks can stack on one, so a bundle fans out
+  and back in: A, then B, C and D on A, then F on B, C and D, then E on F. A bundle is every task connected to a task
+  by stacks, either way (`resolveBundleMembers`, `state/queries.ts`), in topological order: each task after every task
+  it stacks on, ties broken oldest first (`sortParentsFirst`). `task.stack_on_tasks` refuses, for each task in the
+  list, a task stacking on itself (`stack_self`), on a cancelled (`dependency_cancelled`) or finished task
+  (`stack_parent_settled`), on one that opens no pull request (`stack_no_pull_request`), on one in another repository
+  than the task or the other parents (`stack_repository`) and a cycle (`dependency_cycle`). The bundle can change only
+  until the stacked task builds (`stack_started`: triage, waiting, planning or at the plan gate); moving it cancels the
+  planning run and plans again once released (Taking a task out, below).
 - **Ready instead of merged.** Every task of a bundle is ready (`Task.bundleReady`, `task.bundle_ready`, with the head
   it is ready at) when the watch finds its pull request clean, where the merge gate would open, and keeps watching: a
   read that is not clean on the same head, or a new head, takes ready away and starts the usual fix (CI, comments,
-  conflicts). A task stacked on another never gets a merge gate of its own: it stays in `shipping` with "ready, merges
-  with its bundle". A ready task counts as at its merge gate for a new round, so a round sent to it starts at once
-  (Rounds, above), and that is how a flaw a later task finds in the root is fixed in the root's still-open pull
-  request: the stacked task's prompt tells its agent to message the task below with `tasks_message`
-  (`describeBundle`).
-- **Release on ready.** A stacked task waits in `waiting_on_tasks` ("waiting for ‹A› to be ready to merge") until
-  the task below is ready or has its merge gate open, or is merged or done (`isStackPending`). It then records the
-  branch below as its base (`Task.stackBase`, `task.stack_based`), which `resolveRoundBase` returns when no round of
-  its own is stacked: its worktree branches off that branch (a worktree left from before, of a task stacked while it
-  planned, is reset onto it, `refreshWorktree`) and its pull request targets it, so GitHub shows the stack. Its prompts say where it sits in the bundle, from the bottom, with each pull request.
-- **One merge gate, on the root.** The root, the task whose pull request targets the default branch, owns the merge.
-  Its merge gate opens only once every task above it is ready and the whole bundle merges into the default branch
-  without conflicts; until then it waits ("waiting for ‹A› to be ready to merge"), and a task above that stops being
-  ready withdraws the gate. The gate says it merges the whole bundle as one with each pull request, its card lists
-  every task above as a Bundle row that ticks itself when ready and its own pre-merge steps are ticked, and its button
-  says how many pull requests it merges. Approving it is refused while any task of the bundle has a pre-merge step
-  open (`assertMergeStepsDone`). Approving it puts every task above into `awaiting_merge` ("merging with its bundle")
-  and queues one `pull_request.merge` on the root with the bundle's other pull requests (`bundle`, the top first).
-  The engine checks the root's approved head and that the bundle still merges cleanly, then merges the top into its
-  base, then each one below, and the root into the default branch last, the way a round stack merges (each read
-  first and merged only when still open), and reads each again so every task ends merged. Merging the one above
-  moves the head of the one below, so only the root's head is matched, before anything merges. A failed merge lands
-  on the root, the tasks above go back to ready, and Retry opens the gate again; the ones still open form a smaller
-  bundle on the same root.
+  conflicts). Only the lead (below) gets a merge gate; every other task stays in `shipping` with "ready, merges with
+  its bundle". A ready task counts as at its merge gate for a new round, so a round sent to it starts at once (Rounds,
+  above), and that is how a flaw a later task finds in a task below is fixed in that task's still-open pull request:
+  the stacked task's prompt tells its agent to message the task below with `tasks_message` (`describeBundle`).
+- **Release on ready.** A stacked task waits in `waiting_on_tasks` ("waiting for ‹A› and ‹B› to be ready to merge")
+  until every task it stacks on is ready or has its merge gate open, or is merged or done
+  (`listPendingStackParents`). It then records their branches as its bases (`Task.stackBases`, `task.stack_based`,
+  in the order of `stacksOn`, leaving out a parent that merged or left). `resolveRoundBase` returns the first when no
+  round of its own is stacked, and `resolveRoundBases` all of them. Its branch, in a worktree or in your main checkout,
+  starts from the first and merges the others in (`Checkout.mergeBranches`; a worktree left from before, of a task stacked while it planned, is reset onto
+  the first, `refreshWorktree`, and merged the same way). A branch that conflicts there is left out, so the agent
+  starts on a clean tree, and the push brings it in (Conflicts, below). Its pull request targets the first base, so
+  GitHub shows the stack. Its prompts say where it sits in the bundle, each task it stacks on with its pull request.
+- **Several parents on GitHub.** GitHub gives a pull request one base, so a task that stacks on several shows the
+  other parents' work too until they merge. Its description says so (`serializeFanIn`, `report/pull-request.ts`).
+  Shinsa's own diff, the Review tab and the checks' comparison compare it with all its parents merged
+  (`resolveCombinedBase`, `git/history`: a `git merge-tree` of their merge bases with its head, written as one commit
+  that is never pushed), so they show only the task's own work; when the parents conflict with each other, they
+  compare with the first, as before.
+- **One merge gate, on the lead.** The lead is the bundle's first task in its order: of the tasks that stack on
+  nothing in it, whose pull requests target the default branch, the one created first (`resolveBundleLead`). It owns
+  the merge for every other task, its followers (`listBundleFollowers`), other roots included. Its merge gate opens
+  only once every follower is ready and the whole bundle merges into the default branch without conflicts; until then
+  it waits ("waiting for ‹A› to be ready to merge"), and a follower that stops being ready withdraws the gate. The gate
+  says it merges the whole bundle as one with each pull request, its card lists every follower as a Bundle row that
+  ticks itself when ready and its own pre-merge steps are ticked, and its button says how many pull requests it
+  merges. Approving it is refused while any task of the bundle has a pre-merge step open (`assertMergeStepsDone`).
+  Approving it puts every follower into `awaiting_merge` ("merging with its bundle") and queues one
+  `pull_request.merge` on the lead with the followers' pull requests (`bundle`, in reverse order, so each one merges
+  before every task it stacks on). The engine checks the lead's approved head and that the bundle still merges
+  cleanly, then merges each follower into its base in that order, other roots straight into the default branch, and
+  the lead into the default branch last, the way a round stack merges (each read first and merged only when still
+  open), and reads each again so every task ends merged. Merging one moves the head of the one below, so only the
+  lead's head is matched, before anything merges. A failed merge lands on the lead, the followers go back to ready,
+  and Retry opens the gate again; the ones still open form a smaller bundle.
 - **Conflicts with the default branch.** GitHub checks each pull request only against its own base, so a task three
   layers up can conflict with the default branch while every pull request shows clean. Each time the watch reads the
-  root while every task above is ready, the engine merges the bundle into the default branch in git, without a
-  working tree (`Remote.checkBundleMerge`, `git/remote/service.ts`: `git merge-tree` of the default branch with the root, then each
-  task above in turn), and records the result (`bundle.record_check`, `Task.bundleConflict`, `task.bundle_conflict`).
-  A conflict holds the root's gate ("‹A› conflicts with main once the bundle merges; updating ‹B› first") and brings
-  the lowest branch at or below the conflicting one that is behind its base up to date: Shinsa pushes it, which merges
-  its base in first (`updateOntoBase`); a clean merge goes up, and a conflict there becomes that task's usual conflict
-  fix with its agent. Each push makes that task ready again, which reads the root again, so the bundle is brought up
-  to date one branch at a time, bottom up, each pull request's diff staying its own work. When no branch is behind,
-  the root pauses with a failure gate, "The bundle conflicts with main". The engine runs the same check again right
-  before the merge and merges nothing when it fails.
-- **Leaving and losing a bundle.** When the task stacked on top is cancelled or turns out to ship no pull request,
-  the bundle is one task shorter; a root with nothing left above it gets its own merge gate. A task below merged
-  outside Shinsa drops out of the bundle: the task above's base becomes the default branch and the watch retargets
-  its pull request (a conflict that brings is fixed like any other), and the task above a merged root is the new root
-  and owns the merge. A task below cancelled pauses the stacked task, started or not,
-  with a failure gate, "“‹parent›” was cancelled"; Retry takes it out of the bundle and bases it on the default
-  branch, and Stack on another task… points it elsewhere while it has not started.
+  lead while every follower is ready, the engine merges the bundle into the default branch in git, without a working
+  tree (`Remote.checkBundleMerge`, `git/remote/service.ts`: `git merge-tree` of the default branch with the lead, then each follower
+  in order), and records the result (`bundle.record_check`, `Task.bundleConflict`, `task.bundle_conflict`). A
+  conflict holds the lead's gate ("‹A› conflicts with main once the bundle merges; updating ‹B› first") and brings
+  the first task, at or before the conflicting one, whose branch misses one of its bases up to date, naming that
+  base: Shinsa pushes it, which merges each of its bases in first, in order (`updateOntoBases`); a clean merge goes
+  up, and a conflict with any of them becomes that task's usual conflict fix with its agent, naming the base. Each
+  push makes that task ready again, which reads the lead again, so the bundle is brought up to date one branch at a
+  time, each pull request's diff staying its own work. When no branch is behind, the lead pauses with a failure gate,
+  "The bundle conflicts with main". The engine runs the same check again right before the merge and merges nothing
+  when it fails.
+- **Leaving and losing a bundle.** When a task with nothing stacked on it is cancelled or turns out to ship no pull
+  request, the bundle is one task smaller; a lead with no followers left gets its own merge gate. A task below merged
+  outside Shinsa drops out of the bundle: it leaves the bases of each task above, a task whose first base it was
+  is based on the next one or the default branch, and the watch retargets its pull request (a conflict that brings is
+  fixed like any other); when the lead merges, the next task in order leads. A task below cancelled pauses each task
+  stacked on it, started or not, with a failure gate, "“‹parent›” was cancelled"; Retry keeps it stacked on the
+  others, or takes it out of the bundle and bases it on the default branch when that was its only parent, and Stack on
+  another task… points it elsewhere while it has not started.
 - **Where it shows.** The task toolbar's Bundle item ("Bundle 2/3", the ready tasks of all of them) opens a popover
-  that lists each task numbered from 1, the one whose pull request targets the default branch, with its
-  state (Waiting, Working, Ready, Merging, Merged), its pull request and This task (`BundleFact`); a queue row carries
-  the same count, live, as a small mark beside the task's name, where the shared mark goes (`BundleMark`). A
-  ready task's now card says it merges when you approve the bundle on the root. All tasks files a ready task with its
-  bundle's root, the root first and each task above nested under the one below (`orderChains`). The rules run after every
-  command for the tasks in a bundle (`reviewBundles`, `decide/bundles.ts`), and the invariant walk checks that a task
-  stacked on another never has a merge gate open, and that a root's gate opens only with every task above ready and
-  no conflict recorded.
-- **Taking a task out.** Take out of the bundle (`task.stack_on` with `null`) works until the task builds. A task
-  still waiting starts at once from the default branch. A task already planning on the branch below loses its stack
-  base, its planning run is cancelled, and `worktree.create` resets its worktree onto the default branch before it
-  plans again; the task below, with nothing stacked on it any more, goes back to its own merge gate. Once the stacked
-  task builds, its commits sit on the branch below, so the bundle no longer changes; cancel the task or let the bundle
-  merge.
+  that draws the bundle as the task list's tree (`orderChains`): each task under the task it stacks on, indented with
+  the same arrow, with its state (Waiting, Working, Ready, Merging, Merged), its pull request and This task
+  (`BundleFact`). A task that stacks on several sits under the one shown last and names all of them, "Builds on ‹A›
+  and ‹B›", the full list in its tooltip. The note under it says each task builds on the tasks above it, the ones on
+  nothing target the default branch, and approving the lead merges them all from the bottom up. A queue row carries
+  the same count, live, as a small mark beside the task's name, where the shared mark goes (`BundleMark`). On Home,
+  In progress lists only the tasks of a bundle still being worked on, several at once when they run side by side; a
+  ready task, the lead included, moves to Waiting on another task while any other task of its bundle is not ready,
+  and a ready follower stays there on the lead once all are (`listBundleBlockers`, `resolveQueue`), its row naming
+  what it waits on, "Waits on ‹A›". The tree indents every level up to six
+  (`resolveDepthIndent`, the task list, the popover and the pickers alike), so a long line never reads as tasks side
+  by side; a row deeper than that sits at the sixth level with its depth beside the arrow, "‹n› steps down the chain"
+  on hover (`DepthMark`). A ready
+  task's now card says it merges when you approve the bundle on the lead. All tasks files a ready task with its
+  bundle's lead, every task nested under the tasks it stacks on (`orderChains`). The rules run after every command for
+  the tasks in a bundle (`reviewBundles`, `decide/bundles.ts`), and the invariant walk checks that a follower never
+  has a merge gate open, and that a lead's gate opens only with every follower ready and no conflict recorded.
+- **Taking a task out.** Take out of the bundle (`task.stack_on_tasks` with an empty list) and unticking a parent
+  work until the task builds. A task still waiting starts at once from what it still stacks on, or the default branch.
+  A task already planning on the branches below loses those bases, its planning run is cancelled, and
+  `worktree.create` resets its worktree before it plans again; a task below with nothing stacked on it any more goes
+  back to its own merge gate. Once the stacked task builds, its commits sit on the branches below, so the bundle no
+  longer changes; cancel the task or let the bundle merge.
 - **Stack or wait.** Neither is the default; the agent picks by what the later task needs (the `create_task`
-  description says so). Stack when the later task builds directly on this one's code in the same repository and
-  ships with it: the next piece of one feature, a schema then its API then its screen, where a flaw found in the
-  later piece should be fixed in the earlier pull request before anything merges, and where each small pull request
-  reads well only next to the one below. Wait (`after_this`, `waitsOn`) when the earlier task should ship on its own:
-  a fix or a feature that is worth merging today even if the follow-up stalls, work that needs the earlier change
-  live on the default branch first (a migration run, a deploy, a flag), work in another repository, or several tasks
-  that build on one (a bundle is one line, so fan-out is a wait). A bundle holds every merge until its last task is ready,
-  so a long bundle delays the first piece; waiting delivers each piece as it merges.
+  description says so). Stack when the later task builds directly on these tasks' code in the same repository and
+  ships with them: the next piece of one feature, a schema then its API and its screen in parallel then the screen
+  that joins them, where a flaw found in a later piece should be fixed in the earlier pull request before anything
+  merges, and where each small pull request reads well only next to the ones below. Wait (`after_this`, `waitsOn`)
+  when the earlier task should ship on its own: a fix or a feature that is worth merging today even if the follow-up
+  stalls, work that needs the earlier change live on the default branch first (a migration run, a deploy, a flag), or
+  work in another repository. A bundle holds every merge until its last task is ready, so a large bundle delays the
+  first piece; waiting delivers each piece as it merges.
 
 ### The backlog
 
@@ -2408,7 +2457,7 @@ and the run supervisor.
   run that builds or fixes may wait, others are refused with `cannot_wait`) or `after_this` making it wait on this
   task (any run; created with `waitsOn` set, so triage infers no other dependencies for it, and the wait is logged
   as Shinsa's); setting both is refused (`dependency_cycle`). `stack_on_this` files the next piece of a bundle in this
-  repository instead (`stacksOn` set to this task, Scheduling → Bundles), and is refused next to either of them. `backlog` files it for the backlog (Scheduling → The
+  repository instead (`stacksOn` set to this task, Scheduling → Bundles), and is refused next to either of them; `stack_on` stacks it on other tasks of the bundle too, by id or handle (a task that joins several parallel pieces). `backlog` files it for the backlog (Scheduling → The
   backlog), and its description tells agents to set it only when you asked to keep the work for later. It is
   exactly-once per `client_request_id`.
   `split_task` (the Agent) turns the accepted plan into one to eight tasks (`tasks[].request`), exactly once per plan
@@ -2600,7 +2649,16 @@ running when the window closes or the app quits, and a page that comes back find
   the list to every page as `terminals` on the main socket whenever it changes (coalesced over 50 ms), with your
   services and your home folder. Each
   terminal's screen is saved to `data/terminals/<id>.screen` (its last 1,000 lines, serialized) two seconds after it
-  last printed and when Shinsa stops. At most 32 terminals.
+  last printed and when Shinsa stops. At most 32 terminals (`TERMINAL_LIMITS`), counting ended ones, since each keeps
+  its screen.
+- **The limit reclaims ended terminals.** When a new terminal or service run would make 33, `Terminals`' `open`
+  first closes ended ones (`exited` or `stopped`), oldest first within each group (`listReclaimable` in `limit.ts`): a finished or
+  unknown task's (`EngineCore`'s state, with `isTaskSettled`), then stopped service
+  runs (starting the service opens a new one), then task shells, and your own last. A running terminal, or a service
+  run waiting to start again after a restart, is never closed to make room, and nothing is closed when the ended ones
+  would not free enough. When all of them run, `terminal_limit` names who holds them, each task by its handle with
+  its services and shells, and how many are yours (`resolveLimitMessage`), so an agent's `run_service` or you can free
+  one. On start, `resumeServices` drops the ended terminals of finished and unknown tasks before anything resumes.
 - **When the engine stops.** `stop()` hangs up every shell (`SIGHUP` and the PTY closed, as closing a terminal window
   does, then `SIGKILL` after 3 s), so nothing it started outlives the engine, and saves each screen. A restarted
   engine cannot have the shell back: a terminal that was running shows as `stopped`, with its last screen and Start
@@ -2697,8 +2755,9 @@ beside your run (Runs for a task, below).
   skill); Evidence's Preview group also links each active run of the task the agent did not attach
   (`docs/design.md`, 37). The preview runs while the task waits for review and the merge, and stops when the task settles:
   `settleTask` removes the worktree, and `worktree.remove` closes the task's runs (below).
-- **When a task's worktree goes.** `worktree.remove` closes the task's service runs first
-  (`Terminals.closeTaskServices`, from `EffectRunner`, the `services` option), then stops every other process Shinsa or a
+- **When a task's worktree goes.** `worktree.remove` closes the task's service runs and its ended shells first
+  (`Terminals.closeTaskTerminals`, from `EffectRunner`, the `services` option; `scratch.remove` does the same for
+  every finished task, so one without a worktree frees its terminals too), then stops every other process Shinsa or a
   finished agent left working in the worktree, such as a dev server an agent started from its shell (Where agents work → A removed
   worktree takes its processes with it), so no dev server keeps running in a deleted folder; your own shells opened
   in that worktree, and what runs in them, are left as they are.
@@ -2893,9 +2952,11 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   `EngineGate`), from the request's principal (`RequestSource`: the channel's user and, for a guest, the task handed
   to them) and the endpoint's annotations in core's `EngineApi`: only `/api/` paths and never an extension's sign-in
   callback, a guest only its own task's reads (`GuestRoute`), never a `localOnly` route (403 `local_only`), an
-  `ownerOnly` route only for the machine's owner (403 `not_owner`, joining a team from this machine), and no write in
-  inspect mode. A command's own fields are checked once more in `dispatchUserCommand` (core's `isLocalOnlyCommand`
-  and, for a guest, `resolveScopedRefusal`), the one path both the socket and `POST /api/commands` take.
+  `ownerOnly` route only for the machine's owner (403 `not_owner`, `Remote.isOwner`), and no write in
+  inspect mode. A command's own fields are checked once more in `dispatchUserCommand` (core's `isOwnerOnlyCommand`
+  and, for a guest, `resolveScopedRefusal`), the one path both the socket and `POST /api/commands` take; the origin it
+  is given (`resolveRequestOrigin`, and the channel socket's `origin`) is `owner` when the channel's account owns the
+  machine.
 - **The way out** (`EgressGate`, `remote/egress/`): the one gate for what this machine sends to anyone but its own
   browsers. Core's `resolveSharedTask` and `listTeamTasks` choose what a share preset or a team may see; the gate
   bounds it: every view a share link or a team channel sends (`makeShareChannel`, both kinds) and the team list this
@@ -2988,22 +3049,48 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   `Remote` notifies on each one (a device added or revoked, a link made or turned off, a request, pausing, resuming,
   removing, the tunnel's status, a pairing) and the socket hub sends `remote` with the whole snapshot, which the page keeps on its connection
   (`selectRemote`); a page reads `GET /api/remote` once when Settings opens, only to show a failure, and never polls.
-  The remote build leaves the section out, since every change to it but answering a request is refused from off the
-  machine; its Settings → Machines shows Access requests instead (`MachineAccessRequests`): each machine of the
-  dashboard with requests waiting, read from that machine's own `remote` push (`Fleet.listMachineAccess`), and the
-  answer sent to that machine (`?machine=<instance>` on the request, which the fleet routes by, `resolveRequestOwner`).
+  The remote build shows it per machine in Settings → Machines instead: for each machine of the dashboard you own
+  (`listOwnedMachines`: paired, and Shinsa Cloud names you its owner), Remote access on <machine>
+  (`MachineAccessGroup`) with the invite link, the requests, the devices with Revoke and the people with Remove, but
+  no Turn on, Pause, Resume or Remove, which stay at the keyboard. Each is read from that machine's own `remote` push
+  (`Fleet.listMachineAccess`), and every change goes to that machine (`createMachineAccessActions`: `?machine=<instance>`
+  on the request, which the fleet routes by, `resolveRequestOwner`), whose push then updates the page. Machines shared
+  with you show only their requests waiting, which a member may answer too (`MachineAccessRequests`).
 - **The routes** (`EngineApi`'s `remote` group): `GET /api/remote` (the snapshot: paired, enabled, the tunnel's status, instance,
   owner, the machine's name and public key, a pairing under way, the devices, who has access, the link, the requests),
   `POST /api/remote/pair`, `/pair/cancel`, `/enable`, `/disable`, `/remove`, `/link/create` and `/link/remove`,
   `/requests/accept` and `/requests/decline` (`{ requestId }`), `/members/remove` (`{ userId }`) and
   `/devices/remove` (`{ publicKey }`).
-- **What stays at the keyboard.** A remote request is refused with `local_only` ("Do this on the machine Shinsa runs
-  on.") for every command core's `isLocalOnlyCommand` names (a human-only setting or
-  repository field, binding an account), on the socket and on `POST /api/commands` alike (`dispatchUserCommand`
-  takes the origin), and for these routes (their `LocalOnlyRoute` annotation, 403): any change to remote access, accounts, MCP servers,
-  plugins and skills, onboarding, a secret (`/api/secrets/<gate>`) or a webhook's signing secret, updating the agent
-  programs, opening a task on the machine and restarting the engine; terminals and services are refused even to read.
-  Everything else, closing gates included, is you, as on the machine.
+- **What only the owner does from another device.** The machine's owner on a sealed channel counts as the keyboard;
+  a member is refused with `not_owner` ("Only this machine’s owner can do this from another device.") every command
+  core's `isOwnerOnlyCommand` names (a human-only setting or repository field, binding an account, retrying on a
+  chosen account), on the socket and on `POST /api/commands` alike, and these routes (their `OwnerOnlyRoute`
+  annotation, 403): Claude accounts (signing in takes the code the sign-in page shows, so it works from any
+  browser), MCP servers, plugins, skills and the optimizer, onboarding and folders, a secret (`/api/secrets/<gate>`)
+  or a webhook's signing secret, updating the agent programs, restarting the engine, every change to a team,
+  disconnecting Slack, remote access's invite link, members and devices, and adding, changing or removing a
+  service or asking for suggested ones (a service's command runs on the machine). Starting, stopping and restarting
+  a service is any member's, as every other task control; a request inside the channel counts as Shinsa's own
+  page for the routes only the page may call (`BrowserOnlyRoute`), since the channel opens only from
+  app.shinsa.dev. The dashboard lists every machine's services together (`mergeFleetTerminals`) and sends each
+  service's request to the machine that runs it, by the id in its path or the project in its body.
+- **Terminals from another device** are the owner's too (the `terminals` group is `OwnerOnlyRoute`). A terminal's
+  stream travels on the sealed channel itself, never a route of its own through the tunnel: the page opens one with
+  `terminal-open`, and its keys, resizes and the screen go both ways as `terminal-text` and `terminal-bytes` until
+  either side sends `terminal-close` (`RemoteChannel`, `apps/engine/src/remote/channel/service.ts`). The engine attaches the
+  stream to the terminal as one more viewer, with the same flow control as `/ws/terminals/<id>` (its backlog is the
+  frames still being sealed plus the socket's buffer, and the socket's drain sends a screen it held back); a member
+  or a guest gets `terminal-close` with 4403, a terminal that is gone 4404, and a page holds 16 streams at most
+  (`MAX_TERMINAL_STREAMS`). Closing the channel detaches them all. On the page, `ChannelTerminalSocket`
+  (`lib/remote/link.ts`) stands in for the WebSocket, and the fleet opens it on the machine that runs the terminal,
+  only for one you own whose engine announces `remote.terminals` (`Fleet.resolveTerminalTransport`,
+  `canOpenTerminals`); on another machine's project the Terminal page says terminals are for the machine's owner
+  and lists the project's services with Start, Stop, Restart and Start all (`ProjectServices`), which members may use.
+- **What stays at the keyboard.** Refused to everyone off the machine with `local_only` ("Do this on the machine
+  Shinsa runs on.", `LocalOnlyRoute`): pairing, cancelling a pairing, pausing, resuming and removing remote access
+  (each ends or replaces the channel you are using), an MCP's OAuth sign-in (the provider sends you back to the machine's own address), installing the command
+  line and opening a task on the machine (`docs/plans/remote-plan.md` → Parity with the machine). Everything else, closing gates included, is you, as on the
+  machine.
 - **Webhooks get a stable URL.** While remote access is on, a webhook schedule's URL is
   `https://app.shinsa.dev/hooks/<instance>/<schedule>/<token>` (`Remote.resolveHookUrl`, through `Schedules`'
   `hookUrl`), which app.shinsa.dev forwards to the tunnel's `/api/hooks/<schedule>/<token>`; otherwise it is this
@@ -3079,7 +3166,7 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   machine picker lists every machine of the account; one this device was not added to is shown disabled with "Add
   this device on <name> first", since its policies live on that machine's engine and only a sealed channel reaches it.
   Machines show the `IconMacbookRemote` icon everywhere (`MACHINE_ICON`). The
-  Terminal page says terminals stay on the machine.
+  Terminal page opens terminals on machines you own (Terminals from another device, above).
 - **What each machine speaks** (core's `protocol/engine.ts`, `docs/protocol.md` → The socket). The remote build is
   app.shinsa.dev's, deployed from `main`; the tunnel carries only data, so a page can be newer than a machine on the
   stable channel. Every engine sends `engine { version, protocol, commands, features }` when a socket opens, and the
@@ -3096,7 +3183,9 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   engine asks `useEngineCommand(type, id)` or `useEngineFeature(feature, id)`, a name in `ENGINE_FEATURES` (`task.share`,
   `feedback` for `GET /api/feedback`, `teams` for the team routes and `GET /api/teams/tasks`, and
   `review.approve_after_fix` for `gate.answer`'s `thenApprove`, `message.line_comments` for `task.message`'s
-  `comments`, and `changelog` for `GET /api/changelog`, today; Settings → Teams, the review's Fix and approve choice and
+  `comments`, `changelog` for `GET /api/changelog`, `remote.terminals` for terminal streams on the sealed channel,
+  `attention` for routing notifications to the device you use and `worktree-root` for the worktree folder, today;
+  Settings → Teams, the review's Fix and approve choice and
   What's new show only on an engine that has them). `ENGINE_PROTOCOL` is the hard floor: a machine whose protocol differs from the page's is left out of the
   dashboard, merges nothing and gets no command, and Settings → Machines says "Update Shinsa on <name> to reach it from
   here." in its row, as do New task's machine picker and a routing policy's on that machine's disabled entry. When every
@@ -3599,27 +3688,31 @@ online, and the last list of it their own machine kept while it is not (Offline 
     refused. Pausing remote access keeps the copies, since a paused machine cannot tell a removal from a pause, but still drops
     those past 30 days, with their full tasks, each time remote access changes and when the engine starts. Removing
     the machine from remote access, or app.shinsa.dev forgetting it, drops every copy and full task at once.
-- **Settings → Teams** (`components/settings/teams.tsx`, `lib/teams/settings.ts`, on the machine; every
-  change to it but joining is refused from off the machine like the rest of remote access, so app.shinsa.dev shows it read-only, below): one card per team with its name and
+- **Settings → Teams** (`components/settings/teams.tsx`, `lib/teams/settings.ts`, on the machine, and on
+  app.shinsa.dev for each machine you own, below; every change is the owner's, `OwnerOnlyRoute`): one card per team with its name and
   your role, Shared projects (`components/teams/projects-select.tsx`, a dropdown of your projects with their dots, as
   New task's), the link field when this machine has no key, requests with Accept and Decline, and People (a fold
   that starts closed from six people on, with a search row by name or login, `listTeamPeople`), each teammate with Give machine access (or Can reach this machine) and, for the owner, Remove; the owner has Join link,
   which shows the link as a QR code with Copy and Turn off link like Remote access's Invite link, and Delete team; a
   member has Leave. New team (`components/teams/new-team-dialog.tsx`) asks the name and which projects to share. The
-  local routes are `POST /api/remote/teams/create|join|link|link/renew|link/remove|requests/accept|requests/decline|members/remove|leave|remove`
+  owner's routes are `POST /api/remote/teams/create|join|link|link/renew|link/remove|requests/accept|requests/decline|members/remove|leave|remove`
   and `POST /api/remote/members/grant`,
   and the remote snapshot carries the teams (`RemoteSnapshot.teams`, `listTeamEntries`), so every change reaches every
   page at once.
-- **Settings → Teams on app.shinsa.dev** (`components/settings/hosted-teams.tsx`, `HostedTeamsSettings`) is read-only:
-  every change to a team is refused from off the machine, so it has no buttons and says that teams are made, linked and
-  changed in Settings on the machine itself (`TEAMS_ON_MACHINE_NOTE`). It never asks a machine: it reads your teams from
+- **Settings → Teams on app.shinsa.dev**: for each machine of the dashboard you own, the same section as on the machine
+  (`MachineTeamsSettings`, below Machines; titled Teams on <machine> when you own more than one), with that machine's
+  remote snapshot, only its projects (`scopeStateToProjects`) and every change sent to it (`createTeamActions(machineId)`;
+  its push updates the page). When you own no machine in the dashboard it falls back to a read-only view
+  (`components/settings/hosted-teams.tsx`, `HostedTeamsSettings`) with no buttons, which says to make and change a team
+  from a machine you own (`TEAMS_ON_MACHINE_NOTE`). That view never asks a machine: it reads your teams from
   app.shinsa.dev (`dashboard.listTeams()`) and this browser's team keys (`teamKeys.selectTeamKey`, `listHostedTeams`),
   so it shows even when no machine of yours is reachable. One card per team has its name, your role, its people and
   machines counts and when it was made (`describeHostedTeam`), its machines with Online, Last seen or Never connected
   (`listTeamMachineRows`, a fold that starts open) and its People (a fold that starts closed). A team this browser holds
   no key for says to open its join link here once to read its tasks (`TEAM_KEY_MISSING`, the same line the team task
-  page shows). With no team the section says how to make or join one; a failed read shows its error. Sharing stays
-  only on the machine.
+  page shows). With no team the section says how to make or join one; a failed read shows its error. Settings →
+  Sharing shows on app.shinsa.dev too, read from and written to the first machine of the dashboard, its two settings
+  the owner's (`HUMAN_ONLY_SETTINGS`).
 - **Agents read it, never change it.** `shinsa teams list` (`teams_list`) is every agent's tool; every other `teams`
   command and both project team commands are human-only.
 
@@ -3881,42 +3974,58 @@ Slack ──event──► app.shinsa.dev /slack/events
                   └─ the thread, signed ──► t-<id>.shinsa.dev
                                              /api/slack/events
                                                └─ slack.mention
-   thread holds an open task ──► task.message, "Sent to the task"
-                  └─ a gate open ──► kept in its chat, "Kept for the task"
+   thread holds an open task ──► task.message, 👀 on the mention
+                  └─ a gate open ──► kept in its chat, 📥 on the mention
    otherwise ──► slack.evaluate: ⏳ on the mention at once,
                   the model reads the thread
                   ├─ not work ──► ⏳ off, "Not a task", once per thread
                   └─ work ──► slack.start_task:
                               task.create, as from Home
-   the task moves ──► slack.status (edited) + the mention's one reaction
-   a gate opens ──► slack.post (a header, the gate, a button to Shinsa)
-   the result ──► slack.post (its start + a button to Shinsa)
+   the task moves or a gate opens or closes
+                  ──► slack.status: the one card, edited
+                      (the open gate with its buttons, else the status)
+                      + the mention's one reaction
+   the result, merged or done ──► slack.post, the only new message
                   └─ app.shinsa.dev /__remote/slack/post ──► Slack
 
-Slack ──a choice's button──► app.shinsa.dev /slack/interactions
-                  ├─ not linked, not their machine's post, offline ──► private reply
-                  └─ signed ──► /api/slack/interactions ──► slack.answer ──► gate.answer
-                                 └─ the buttons become "@you answered *choice*"
+Slack ──a card's button──► app.shinsa.dev /slack/interactions
+       └─ "Request changes…" or "Answer…" ──► views.open, a form
+          └─ Send ──► view_submission, the same path below
+                  ├─ not linked, not an owner or member of the
+                  │  machine that posted the card, offline
+                  │      ──► private reply, nothing reaches it
+                  └─ signed ──► /api/slack/interactions
+                                 └─ slack.decide ──► gate.answer
+                                    └─ the buttons become
+                                       "@you approved the plan"
 ```
 
 - **Connecting** (Settings → General → Slack, `components/settings/slack.tsx`): with remote access on, Connect
   Slack opens `https://app.shinsa.dev/slack/connect?instance=<this machine>` (`resolveSlackConnectUrl`). You sign in
   with GitHub there if you are not, then with Slack (OpenID Connect, `openid profile`); a workspace without Shinsa
-  goes on to add the app, which asks for the bot scopes `app_mentions:read`, `channels:history`, `groups:history`,
-  `chat:write`, `reactions:write` and `users:read` (`SLACK_BOT_SCOPES`, `apps/cloud/slack-manifest.json`). Either way your Slack user is
+  goes on to add the app, which asks for the bot scopes `app_mentions:read`, `channels:history`, `channels:read`,
+  `groups:history`, `groups:read`, `chat:write`, `reactions:write` and `users:read` (`SLACK_BOT_SCOPES`, `apps/cloud/slack-manifest.json`). Either way your Slack user is
   linked to that machine and you land on `/slack/linked` (`routes/remote/slack.tsx`), which names the workspace or
   says what went wrong. A machine can be linked in several workspaces; a Slack user to one machine at a time
   (connecting again from another machine moves it). The section reads `GET /api/slack` (`SlackSnapshot`: remote access
   on, the connect link, the links with workspace, user and when, or the problem when app.shinsa.dev cannot be
   reached) when Settings opens and when the window comes back. Disconnect (`POST /api/slack/disconnect`) removes every
-  link of this machine; it is refused from off the machine (`LocalOnlyRoute`, writes only). The hosted dashboard on
-  app.shinsa.dev shows the section too, below Machines, read from the first machine of the dashboard: its status,
-  Connect Slack and the connected workspaces, with a line that Disconnect is on the machine itself (`onMachine`),
-  since it is refused remotely.
+  link of this machine; from another device only its owner may (`OwnerOnlyRoute`). Each row leads with when that
+  account last started work here ("Last used 2h ago · Connected 3d ago", or "Not used yet"): the engine
+  adds `lastUsedAt` to each link from its own state (`resolveSlackLastUsedAt`, the newest task whose Slack thread
+  that user in that workspace started), so app.shinsa.dev stores nothing for it. Replies in a task's thread and
+  decisions from a card's buttons do not count. A page reaching an older engine, whose links lack the field, shows
+  "Connected 3d ago". A task started from Slack has a fact beside "Filed by" in its header, "Filed in #support"
+  (`resolveSlackFact`, `components/task/facts.tsx`), or "Filed in Slack" when the channel's name is unknown, which
+  opens the thread it came from in a new tab: the mention's permalink, or
+  `https://app.slack.com/client/<team>/<channel>/thread/<channel>-<ts>` when Slack gave none (`resolveSlackThreadUrl`);
+  a read-only shared page leaves it out. The hosted dashboard on
+  app.shinsa.dev shows the same section, below Machines, read from and sent to the first machine of the dashboard.
 - **A mention reaches the machine** as `SlackMention` (`slack/schema.ts`): the event id, the workspace, channel and
   thread (`threadTs`, the mention's own `ts` for a mention outside a thread: the bot always answers in a thread), the
   author with their Slack name, the text with Slack's markup turned into words and the bot's own mention dropped
-  (`resolveSlackReadableText`), a permalink, and the thread's last 100 messages, bots marked. The tunnel route
+  (`resolveSlackReadableText`), a permalink, the channel's name (`conversations.info`; null without `channels:read` or
+  `groups:read`, in a direct message, or when Slack refuses), and the thread's last 100 messages, bots marked. The tunnel route
   `POST /api/slack/events` (`TunnelGate`, `remote/gate/`) is 404 while remote access is off, refuses a body over 1 MB and a
   forward whose `x-shinsa-slack-signature` is not an HMAC over `v1:<ms>:<body>` keyed by the machine's connect key or
   whose `x-shinsa-slack-timestamp` is more than five minutes off (`verifySlackForwardSignature`, 401), then
@@ -3927,10 +4036,11 @@ Slack ──a choice's button──► app.shinsa.dev /slack/interactions
   open task. A mention in a thread whose task is open (not done or cancelled) messages that task like any message you
   write (`task.message`, the author and the permalink in front, `serializeSlackMessage`): it is classified and routed
   as messages are (Messages, above), so an acknowledgement stays an acknowledgement, a correction is feedback and new
-  work a new round. The bot answers "Sent to …" in the thread. While the task has a gate open (a question, a plan, a
-  review, a failure), the mention is only recorded in its chat for its next agent (`recordHeldMessage`) and closes
-  nothing, so it never answers a question, revises a plan or sends a review back; the bot answers "Kept for …, it
-  waits on you in Shinsa" (`held`).
+  work a new round. The bot posts nothing: it puts 👀 `eyes` on that mention (`slack.react`,
+  `SLACK_MENTION_REACTIONS.forwarded`). While the task has a gate open (a question, a plan, a review, a failure), the
+  mention is only recorded in its chat for its next agent (`recordHeldMessage`) and closes nothing, so it never
+  answers a question, revises a plan or sends a review back; it gets 📥 `inbox_tray` instead (`held`). Decide the
+  gate with the card's buttons, or in Shinsa.
 - **Any other mention is read first** (`receiveSlackMention` → `slack.evaluate`, `Slack.evaluate`): the mention gets
   ⏳ at once (`hourglass_flowing_sand`, Reactions below), so you see it was picked up, and the machine asks
   the classifier model, under a fixed system prompt with the thread as data (`SLACK_EVALUATION_SYSTEM`,
@@ -3953,57 +4063,91 @@ Slack ──a choice's button──► app.shinsa.dev /slack/interactions
   (a question is an answer and ends with it) and the priority. Its request is what the person wrote (or "Do what this
   Slack thread asks for." for a bare mention), who asked with the permalink, and the thread fenced in a nonce-tagged
   `<slack-thread-…>` element marked as untrusted data (`serializeSlackRequest`). It is linked to the thread
-  (`slack.thread_linked`, "Started from a Slack thread"), and its first `slack.status` posts its status message.
-- **What is posted back** (`syncSlackThreads`, after every command, for the tasks it changed): every gate a linked
-  task opens that you decide or answer (question, secret, plan, review, proposal; `SLACK_POSTED_GATES`) and its result
-  (`task.delivered`: an answer, a diagnosis, a report, an outcome) are a `slack.post`, a new message in the thread so
-  Slack notifies; every change to the task is one `slack.status`, the status message edited in place. Each message is
-  built when it is sent, from the state then (`slack/messages.ts`, `resolveSlackPostMessage`, `serializeSlackStatus`),
-  in Block Kit with no icons (`slack/blocks.ts`): a header naming the post, the main point bold or quoted (`>`, so
-  code and links in it keep their markup), details as fields, a numbered list or a context line, a button to open
-  the task on app.shinsa.dev (`resolveSlackTaskUrl`, the primary one when it is where you decide), and a small last
-  line naming the task (its handle and title, linked) and its pull request as `PR #<number>`, linked:
-  - the status message: what the task is doing now in bold (its stage reason, else its stage, or "Needs you" with
-    the question or failure quoted under it), then the task line, with no header;
+  (`slack.thread_linked`, "Started from a Slack thread"), and its first `slack.status` posts its card.
+- **One card per thread, edited in place** (`syncSlackThreads`, after every command, for the tasks it changed): the
+  task's first `slack.status` posts one message in the thread, the card, and every later change edits it: the task
+  moving, a gate opening (any gate a person decides: a failure, a sign-in, a question, a secret, a proposal, an
+  operation, a plan, a review, a merge), a gate answered, withdrawn or superseded, and a decision made in Slack
+  (`slack.decided`). Nothing else is posted while the task runs, since the mention's reaction (below) already tells
+  its author in Slack's Activity. Two things are a new message, a `slack.post`, so the thread is notified once: the
+  result (`task.delivered`: an answer, a diagnosis, a report, an outcome) and the end of the task (merged, or done
+  without a result or merge; `SlackPost` is `result` or `completed`). Each message is built when it is sent, from the
+  state then (`slack/messages.ts`, `serializeSlackCard`, `resolveSlackPostMessage`), in Block Kit with no icons
+  (`slack/blocks.ts`): a header naming the gate, the main point bold or quoted (`>`, so code and links in it keep
+  their markup), details as fields, a numbered list or a context line, the decision buttons with a button to open the
+  task on app.shinsa.dev (`resolveSlackTaskUrl`), and a small last line naming the task (its handle and title,
+  linked) and its pull request as `PR #<number>`, linked. The card shows the first open gate in the order failure,
+  sign-in, question, secret, proposal, operation, plan, review, merge (`SLACK_CARD_GATES`); with none open it shows
+  the status:
+  - the status: what the task is doing now in bold (its stage reason, else its stage), "@someone approved the plan"
+    under it while the last decision on the task was made in Slack (`SlackThreadLink.decided`, cleared by any
+    `gate.answered` before `slack.decided` sets it again, so a decision made in Shinsa drops it), then the task
+    line, with no header;
+  - a failure: "Something failed", the failure and the first sentence of its detail, Retry; a sign-in: "Sign-in
+    needed", Open in Shinsa;
   - a question: "Question for you", the question in bold, the first sentence of its context quoted, "Recommended:"
     with the agent's recommendation, a button per choice (the recommended one primary) when it has one to five
-    choices of at most 75 characters, otherwise the choices numbered, and "Answer in Shinsa" for any other answer;
+    choices of at most 75 characters, otherwise the choices numbered, and Answer… for any other answer;
   - a secret: "Secret needed", what is needed in bold, to give it in Shinsa and never in Slack, "Give it in Shinsa";
-  - a plan: "Plan ready for your approval", its goal quoted, its phases numbered (eight at most), "Review the plan";
+  - a proposal: "Proposed change", the change quoted, Approve and Keep as is;
+  - an operation: "Ready to run", the operation, Run and Finish without it;
+  - a plan: "Plan ready for your approval", its goal quoted, its phases numbered (eight at most), Approve and Request
+    changes…, "Read the plan";
   - a review: "Ready for your review", the summary's first sentence quoted, the fields Checks (how they went) and
-    Pull request (`PR #<number>`, or "Opens once you approve"), "Review in Shinsa";
-  - a proposal: "Proposed change", the change quoted, "Decide in Shinsa";
-  - the result: "Result", the result in mrkdwn (`serializeSlackResult`), cut at 1,500 characters on a word
-    (`SLACK_RESULT_LIMIT`), and "Open in Shinsa" (or "Read the rest in Shinsa").
-  A link button still sends Slack an interaction, which app.shinsa.dev acknowledges and drops; the app's
-  Interactivity is on, with `/slack/interactions` as its request URL (`apps/cloud/slack-manifest.json`).
-- **A question's choice can be answered in Slack, and nothing else** (`slack/answers.ts`, `answerSlackQuestion`).
-  Each choice button carries `{ gateId, choice }` (`serializeSlackAnswerValue`, action `shinsa.answer.<n>`, in the
-  actions block `shinsa.question.<gate>`). A click reaches `POST /slack/interactions` on app.shinsa.dev, which checks
-  Slack's signature, acknowledges at once and then: refuses privately (an ephemeral reply through the click's
-  `response_url`, which must be on `hooks.slack.com`) a person with no link, a message their own machine did not post,
-  and a machine that is offline; otherwise it forwards a `SlackAnswer` (the click's trigger id, workspace, channel,
-  thread, message, Slack user, gate and choice) to `POST /api/slack/interactions` on that machine, signed like a
-  mention. The machine dispatches `slack.answer` (command id `slack-answer:<trigger id>`), which core accepts only for
-  an open question gate of a task started from that thread by that same Slack user, with a choice the question still
-  has, and answers as you would in Shinsa (`gate.answer`, `reply`, the choice as the response). It answers
-  `{ answered: true, choice }`, and app.shinsa.dev replaces the post's buttons with "@you answered *choice*"
-  (`listSlackAnsweredBlocks`, `serializeSlackAnsweredView`); a refusal (`slack_answer_closed`, `_refused`,
-  `_choice`) comes back as `{ answered: false, reason }` and is shown to the clicker alone. A question answered in
-  Shinsa first keeps its buttons in Slack, and a later click is told it is no longer open. Plans, reviews, merges,
-  proposals, secrets and failures are only ever decided in Shinsa, and a mention while a gate is open is kept, not
-  routed. The status refreshes on every answer (`gate.answered`), wherever it was given.
-- **The status message is edited, not reposted** (`Slack.status`): at most once every 5 seconds a task
+    Pull request (`PR #<number>`, or "Opens once you approve"), Approve and Request changes…, "Review in Shinsa";
+  - a merge: "Ready to merge", the same fields, Merge;
+  - the result, a new message: "Result", the result in mrkdwn (`serializeSlackResult`), cut at 1,500 characters on a
+    word (`SLACK_RESULT_LIMIT`), and "Open in Shinsa" (or "Read the rest in Shinsa"); the end, a new message:
+    "Merged" or "Done" (`serializeSlackCompleted`).
+  A link button (`shinsa.open`) still sends Slack an interaction, which app.shinsa.dev acknowledges and drops; the
+  app's Interactivity is on, with `/slack/interactions` as its request URL (`apps/cloud/slack-manifest.json`).
+- **Decide from Slack** (`slack/decisions.ts`, `decideSlackGate`). What each gate takes in Slack is
+  `SLACK_DECIDABLE`: a plan and a review approve or revise, a merge approves, a question replies, a proposal and an
+  operation approve or reject, a failure approves (retries). A secret, a sign-in and cancelling a task stay in
+  Shinsa. Each button carries a `SlackDecisionValue` (`{ gateId, decision, choice, planVersion }`,
+  `serializeSlackDecisionValue`; a plan's Approve carries the version it shows) in the actions block
+  `shinsa.gate.<gate>`. A button that decides at once has the action `shinsa.decide.<decision>` (a choice
+  `shinsa.decide.choice.<n>`); Request changes… and Answer… are `shinsa.write.<decision>` and open a Slack form
+  (`views.open` with the click's trigger id, `serializeSlackDecisionModal`, callback `shinsa.decision`) with one
+  text field of at most 4,000 characters, whose `private_metadata` is the value with the card's channel, thread and
+  message (`SlackDecisionModal`). A click or a form's Send reaches `POST /slack/interactions` on app.shinsa.dev,
+  which checks Slack's signature, acknowledges at once and then checks who it is:
+  - **Only the owner or a member of the machine that posted the card decides.** app.shinsa.dev finds the Shinsa
+    account linked to the Slack user, the machine that posted the message (`SlackStore.selectPoster`, from the posts
+    it relays), and that account's role on that machine. A person whose Slack is not connected, a message no
+    machine posted, a guest (a guest reaches one handed task, which the Worker cannot tell apart) and anyone else
+    are refused with a message only they see (`SLACK_DECISION_REFUSALS`), and nothing reaches the machine. So does
+    a machine that is offline, by name. A member counts wherever their own Slack link points. A form is checked
+    when it opens and again when it is sent.
+  - **Then the machine decides as you would in Shinsa.** app.shinsa.dev forwards a `SlackDecision` (the value, the
+    card's place, the click's trigger id, the workspace, the Slack user and the form's text) to `POST
+    /api/slack/interactions` on that machine, signed like a mention. The machine dispatches `slack.decide` (command
+    id `slack-decide:<trigger id>`), which core accepts only for an open gate of the task linked to that thread, a
+    decision `SLACK_DECIDABLE` allows and a choice the question still has, and answers through the same
+    `answerGate` as Shinsa (`gate.answer`), so its rules hold: a plan's Approve whose version is not the current
+    one is refused "The plan changed. Approve the new one." (`plan_changed`), a gate already answered "This has
+    already been answered." (`gate_closed`). It records who decided (`slack.decided`) and answers
+    `SlackDecisionReply`: `{ decided: true, text }` or `{ decided: false, reason }`.
+  - **The card says who decided.** For a click, app.shinsa.dev replaces the card's buttons with "@you approved the
+    plan" through the click's `response_url` (on `hooks.slack.com`; `listSlackDecidedBlocks`,
+    `serializeSlackDecidedView`), and a refusal goes to the clicker alone. A form closes as soon as it is sent,
+    since Slack waits three seconds at most; a refusal then comes as a private message in the thread
+    (`chat.postEphemeral`), and the card changes with the engine's next edit. A gate decided in Shinsa first
+    changes the card too, and a later click on an old card is refused. A decision that fails on its way after the
+    acknowledgement (the machine's answer, a Slack call) is logged as `[Cloud] A Slack decision could not be passed
+    on` with its `kind` and `teamId`, the line a watch on the Worker counts.
+- **The card is edited, not reposted** (`Slack.status`): at most once every 5 seconds a task
   (`STATUS_INTERVAL_MS`), from the state at that moment, so a burst of changes is one edit with the latest; an edit
-  that would show the same message is skipped. The first one posts the message and records its ts (`slack.record_status`
-  → `slack.status_posted`). An edit Slack will not make (a message gone) is posted as a new status message, whose ts
-  is recorded instead.
+  that would show the same message is skipped. The first one posts the card and records its ts (`slack.record_status`
+  → `slack.status_posted`). An edit Slack will not make (a message gone) is posted as a new card, whose ts is
+  recorded instead.
 - **Reactions: one state on the mention** (`resolveSlackReaction`, `SLACK_REACTIONS`, `/__remote/slack/react`): the
   message that mentioned the bot always carries one reaction, the task's state: ⏳ `hourglass_flowing_sand` while it
   is read and triaged or waits on other tasks, 🛠️ `hammer_and_wrench` while an agent works, ✋ `raised_hand` while it
   waits on you, ❌ `x` when it failed, ✅ `white_check_mark` once answered, delivered, merged or done, and ➖
   `heavy_minus_sign` when cancelled. Each status edit moves it, taking the old one off first, and records the one
-  shown with the status message's ts (`slack.record_status` → `slack.status_posted`), so a restart never leaves two.
+  shown with the card's ts (`slack.record_status` → `slack.status_posted`), so a restart never leaves two. A later
+  mention in the thread gets 👀 or 📥 of its own (above), which is never moved or taken off.
   It is best effort: a workspace that added the app before it asked for `reactions:write` answers `missing_scope`,
   app.shinsa.dev logs it and says `applied: false`, and the posts carry on. Connect Slack again grants it: connecting
   reads the scopes of the workspace's bot token (`hasSlackBotScopes`, the `x-oauth-scopes` Slack answers `auth.test`
@@ -4020,7 +4164,7 @@ Slack ──a choice's button──► app.shinsa.dev /slack/interactions
   restarts (`#sessionRefused`). Any other refusal (`channel_not_found`, `ratelimited`, `invalid_auth`) is logged and
   answered 502 `slack_failed`, which the engine logs as a warning and tries again at the next status change, so a
   passing failure never turns the status off. The posts, reactions and status message carry on as they are.
-- **Failures.** `slack.evaluate`, `slack.post` and `slack.status` are replay-safe effects in the thread's lane
+- **Failures.** `slack.evaluate`, `slack.post`, `slack.react` and `slack.status` are replay-safe effects in the thread's lane
   (`slack:<thread key>`), so a thread's posts go out in order. A post app.shinsa.dev answers with 429, a 5xx or not
   at all is retried by the outbox (the relay call through `RemoteClient` fails with `SlackFailed` or a retryable
   `RemoteUnreachable`); any other refusal, a typed failure of its own, (the thread was never sent here, the app was removed from the
@@ -4329,7 +4473,8 @@ truth, and a snapshot only saves replaying it.
   only a shortcut: one that cannot be written is logged and left for the next.
 - **The log migrates forward, once, on start.** Code never reads an old shape. The log's version is SQLite's
   `user_version`; the baseline is 15 (`LOG_BASELINE`, `store/migrations/schema.ts`) and every migration after it is
-  one entry in `LOG_MIGRATIONS` (`store/migrations/list.ts`), an effect on the SQL client, in order, whose position is its version, so the current version is the baseline plus the
+  one entry in `LOG_MIGRATIONS` (`store/migrations/list.ts`; the first, `stack-lists`, turns the single `stacksOn` of
+  `task.stack_changed` and `base` of `task.stack_based` into lists; the second, `slack-channel-names`, gives every `slack.thread_linked` link from before channel names a `channelName` of null), an effect on the SQL client, in order, whose position is its version, so the current version is the baseline plus the
   list's length and no number is kept by hand. A new log is stamped with the current version when it opens empty.
   Before it replays anything, a writable engine runs `EventLog.migrate`: the migrations after the log's version run
   in one transaction, the snapshot is dropped and the version raised; a migration that fails leaves the log as it
@@ -6123,7 +6268,8 @@ update channel: a canary or a beta is the same app with the same identity (`APP_
     ├── shinsa.sqlite  The event log, the effect outbox, the command receipts, the latest state snapshot and the
     │                  Home guide per project (`briefings`)
     ├── worktrees/     One git worktree per task (`<repo>/<branch>-<id>`), and the checkouts of isolated
-    │                  delegations (`delegations/<task>/<run>`)
+    │                  delegations (`delegations/<task>/<run>`), unless `config.json`'s `worktreesDir` or
+    │                  `SHINSA_WORKTREES_DIR` names another folder (Where agents work → Where the worktrees go)
     ├── scratch/       The working folder of each task with no repository (`<task id>`), where its answerer runs;
     │                  removed when the task settles (`scratch.remove`)
     ├── check-bases/   The detached checkouts of base commits that checks compare with (Checks, above)
@@ -6170,7 +6316,7 @@ scratch copy is one directory, and the event log, worktrees and config.json only
 
 - **Overrides.** `SHINSA_HOME` moves the whole folder (tests use it). `SHINSA_DATA_DIR` is a flat layout:
   that directory is the data directory, and `config.json`, `accounts.json` and `accounts/` live inside it; scratch
-  directories and the seeded copy (`SHINSA_DATA_DIR=~/.shinsa-seed/data`) use it. `SHINSA_WORKTREES_DIR` moves only the worktrees. `SHINSA_REMOTE_ORIGIN` points remote access at
+  directories and the seeded copy (`SHINSA_DATA_DIR=~/.shinsa-seed/data`) use it. `SHINSA_WORKTREES_DIR` moves only the worktrees, and wins over `config.json`'s `worktreesDir`. `SHINSA_REMOTE_ORIGIN` points remote access at
   another app.shinsa.dev (a local `wrangler dev`, `bun run --cwd apps/cloud dev:worker`): the control calls, the
   Origin the channel opens from, and the enroll and webhook links all follow it. `SHINSA_WEB_DIR` serves
   the web app from another built folder and `SHINSA_PLUGIN_DIR` loads the agents' plugin from another folder (both
@@ -6228,7 +6374,8 @@ scratch copy is one directory, and the event log, worktrees and config.json only
   works in it (`repo.register`, `repos/index.ts`) and filed into a project by the rule in Projects and task identity,
   above.
 - **config.json versus events.** `config.json` holds what belongs to this machine and nothing replay needs: `roots`
-  (the folders that hold repositories), `port`, `hostname`, `editor`, `terminal` and `onboardedAt`. With no `port`
+  (the folders that hold repositories), `worktreesDir` (where new worktrees go, Where agents work), `port`,
+  `hostname`, `editor`, `terminal` and `onboardedAt`. With no `port`
   the engine takes 7446 (`APP_IDENTITY`), in the unassigned 7444–7470 range and away from dev servers. A port another program holds stops the engine with "Failed to start
   server. Is port 7446 in use? Quit the program on it, or set another `port` in <config.json>." (`listenOnPort` in
   `http/server/service.ts`; the Mac app shows it as Port 7446 is taken). The environment wins over it (`SHINSA_PORT`, `SHINSA_HOST`, `SHINSA_EDITOR`, `SHINSA_TERMINAL`; `SHINSA_ROOTS` adds
@@ -6430,6 +6577,13 @@ same-site Origin, `application/json` bodies; a refusal there is 403 or 415). Err
     effective: string[];       // what triage searches
   };
   defaults: { model: string | null; mergeMethod: 'squash' | 'merge' | 'rebase' };
+  worktrees: {
+    effective: string;              // where new worktrees go now
+    configured: string | null;      // config.json's worktreesDir, when SHINSA_WORKTREES_DIR does not win
+    default: string;                // data/worktrees
+    fromEnvironment: string | null; // SHINSA_WORKTREES_DIR
+    problem: string | null;         // why a chosen folder cannot take worktrees now (not mounted, not writable)
+  };
   paths: { home: string; configPath: string; dataDir: string; userHome: string };
 }
 ```
@@ -6453,6 +6607,18 @@ or after 20 seconds (`MAX_DEPTH`, `MAX_DIRS`, `DISCOVERY_BUDGET`), never into hi
 `settings.change` event, then answers like `GET /api/onboarding`. Folders may start with `~/`; each must be an
 existing folder, 1 to 50 of them, duplicates dropped. Codes: `body_invalid`, `roots_invalid`, `model_invalid`,
 `merge_method_invalid`, `plans_invalid`. It may be called again to change the folders later (Settings → Projects → Repository folders).
+
+**`POST /api/onboarding/worktrees`** with `{ path: string | null }`: saves where new worktrees go to `config.json`'s
+`worktreesDir`, then answers like `GET /api/onboarding`; `null` goes back to `data/worktrees`. The path may start
+with `~/` and must be a full path to an existing folder Shinsa can write to; anything else is `worktrees_invalid`
+with the reason, and `worktrees_from_environment` while `SHINSA_WORKTREES_DIR` sets the folder. The owner's alone off the machine (`OwnerOnlyRoute`), and
+announced as the `worktree-root` engine feature, which Settings → Projects → Worktrees asks for.
+
+**`GET /api/onboarding/worktrees/usage`**: `WorktreeUsage { folder, worktrees, bytes, freeBytes, measuredAt }`, the
+space the worktrees take (`measureWorktreeUsage`, `onboarding/worktrees.ts`). `worktrees` counts the tasks whose
+worktree still exists, wherever it is (a main-checkout task is left out); `bytes` is one `du -sk` over those worktrees
+and the folder's `delegations/`, `null` when it takes longer than 20 seconds (`USAGE_TIMEOUT_MS`), as it can on a
+mounted bucket; `freeBytes` is `statfs` of the folder, `null` when it is gone. Part of the `worktree-root` feature.
 
 **`POST /api/onboarding/privacy`** with `{}`: opens System Settings → Privacy & Security → Full Disk Access on this
 machine; answers `{ ok }`, whether `open` ran.
@@ -6673,7 +6839,27 @@ and `browser` anywhere else, Floaty included. The server keeps each socket's sur
 `surfaces { desktop }`, whether at least one desktop surface is connected: on connect, and again only when that
 changes (a desktop says hello, or the last one closes). A page that is not the desktop stays quiet while one is
 (`isQuietSurface`): it plays no sound and shows no notification, so a decision never rings twice, and keeps its
-count in the title and Floaty's tags (`docs/design.md`, 31). A message the
+count in the title and Floaty's tags (`docs/design.md`, 31); Shinsa Cloud's dashboard never stays quiet, since a
+machine's app notifies only at that machine.
+
+**The device you use notifies** (`makeAttentionTracker`, `apps/engine/src/http/attention/service.ts`). Each page of the
+owner's (a local socket, the Mac app's included, or a sealed channel whose account owns the machine) says when you
+use it with `presence { active: true }`: when it comes forward (focus, or the tab shown again) and at most every 15 s
+while you click, type, scroll or move the pointer in it, but only a page that can show you a notification: the Mac
+app, or a browser with notifications switched on and allowed (`canPageNotify`), so a tab that cannot notify never
+silences the Mac app. The tracker keeps when each one was last used and answers
+every page that asked with `attention { where }`: `here` for the page used last, `elsewhere` for the owner's others,
+and `nowhere` once that page has been idle for five minutes (`ATTENTION_IDLE_MS`, a timer that fires then), when it
+closes and none other was used in that time, or always for a member's page and never for a share link's. A page
+that hears `here` plays the sound and shows the notification, one that hears `elsewhere` stays quiet, and one that
+hears `nowhere` falls back to the rule above (`isAlertQuiet`): with no device in use every open page alerts as
+before, and a browser on the machine defers to the Mac app. The dashboard asks each machine for the task's own
+answer (`Fleet.selectAttention`), so switching between the Mac app and Shinsa Cloud on a laptop moves the
+notifications with you within a click, and a decision answered anywhere closes its notification on every page
+that showed one (`dismissDecisionNotification`; the Mac app's own stay until clicked). An engine announces it as
+`attention`; a page never sends `presence` to one that does not.
+
+A message the
 server does not recognise, including a `hello` with an unknown surface, is logged and ignored; a socket that never
 says hello counts as no desktop.
 

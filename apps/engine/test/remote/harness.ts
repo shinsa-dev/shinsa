@@ -25,6 +25,7 @@ import type {
   ChannelHub,
   ChannelPeer,
   ChannelRaw,
+  ChannelTerminals,
   RemoteChannelHandle,
 } from '../../src/remote/channel/schema.ts';
 import { RemoteOrigin } from '../../src/remote/client/schema.ts';
@@ -372,6 +373,7 @@ export function adaptRemote(test: RemoteTest) {
       peer: ChannelPeer,
       parts: {
         hub: ChannelHub;
+        terminals?: ChannelTerminals | null;
         respond: (request: Request, guest: never, userId: string) => Promise<Response>;
       },
       userId: string
@@ -383,6 +385,7 @@ export function adaptRemote(test: RemoteTest) {
             peer,
             {
               hub: parts.hub,
+              terminals: parts.terminals ?? null,
               respond: (request, guest, user) =>
                 Effect.promise(() => parts.respond(request, guest as never, user)),
             },

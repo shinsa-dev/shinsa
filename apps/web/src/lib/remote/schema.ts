@@ -63,3 +63,10 @@ export class RelayFailed extends Schema.TaggedError<RelayFailed, { readonly bran
   'RelayFailed',
   { message: Schema.String }
 ) {}
+
+export const NO_MACHINE_CONNECTED = 'No machine is connected.';
+
+export class NoMachineConnected extends Schema.TaggedError<
+  NoMachineConnected,
+  { readonly brand: unique symbol }
+>()('NoMachineConnected', { message: Schema.String }) {}

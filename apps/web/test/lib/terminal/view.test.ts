@@ -174,6 +174,13 @@ describe('TerminalView', () => {
     expect(retries).toHaveLength(1);
   });
 
+  it('stops for a terminal its machine refuses to this device', () => {
+    const { socket, retries, view } = createView();
+    socket().emit('close', { code: 4403 });
+    expect(view.connection).toBe('gone');
+    expect(retries).toHaveLength(0);
+  });
+
   it('does not reconnect once disposed', () => {
     const { socket, retries, view } = createView();
     socket().emit('close', { code: 1006 });

@@ -3,7 +3,7 @@ import { Socket } from 'effect/socket';
 import { dialSocket } from '@/lib/runtime/socket/dial.ts';
 import { keepDialing } from '@/lib/runtime/socket/reconnect.ts';
 import {
-  TERMINAL_GONE_CODE,
+  TERMINAL_FINAL_CODES,
   TERMINAL_RECONNECT,
   TERMINAL_SOCKET_PATH,
   type TerminalSession,
@@ -25,7 +25,7 @@ export class TerminalSocket extends Context.Service<
         const drop = (error: Socket.SocketError | null) =>
           Effect.suspend(() => {
             const final =
-              error?.reason._tag === 'SocketCloseError' && error.reason.code === TERMINAL_GONE_CODE;
+              error?.reason._tag === 'SocketCloseError' && TERMINAL_FINAL_CODES.has(error.reason.code);
             session.closed(final);
             return Effect.fail(new TerminalSocketClosed({ connected, final }));
           });

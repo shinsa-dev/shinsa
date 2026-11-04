@@ -9,6 +9,7 @@ import {
   parseUnifiedDiff,
   type RefCommit,
   type Repo,
+  resolveRoundBases,
   selectPatchedFiles,
   type Task,
   type TaskRefs,
@@ -23,6 +24,8 @@ import {
   ChangesUnreadable,
   CODE_UNAVAILABLE_MESSAGE,
   CodeUnavailable,
+  COMBINED_BASE_ENV,
+  COMBINED_BASE_MESSAGE,
   COMMIT_FIELD,
   DIFF_ARGS,
   DIFF_BYTES,
@@ -137,6 +140,57 @@ export class History extends Context.Service<
         return (before && (yield* resolveMergeBase(cwd, head, before, signal))) ?? head;
       });
 
+      const listBranchRefs = (branch: string) => [`refs/heads/${branch}`, `refs/remotes/origin/${branch}`];
+
+      const isAncestor = Effect.fnUntraced(function* (
+        cwd: string,
+        a: string,
+        b: string,
+        signal?: AbortSignal
+      ) {
+        const read = yield* git.read(['merge-base', '--is-ancestor', a, b], cwd, { signal });
+        return read.ok;
+      });
+
+      const combineCommits = Effect.fnUntraced(function* (
+        cwd: string,
+        a: string,
+        b: string,
+        signal?: AbortSignal
+      ) {
+        if (yield* isAncestor(cwd, b, a, signal)) return a;
+        if (yield* isAncestor(cwd, a, b, signal)) return b;
+        const merged = yield* git.read(['merge-tree', '--write-tree', a, b], cwd, { signal });
+        if (!merged.ok) return null;
+        const tree = decodeText(merged.bytes).trim().split('\n')[0] ?? '';
+        const commit = yield* git.read(
+          ['commit-tree', tree, '-p', a, '-p', b, '-m', COMBINED_BASE_MESSAGE],
+          cwd,
+          {
+            signal,
+            env: COMBINED_BASE_ENV,
+          }
+        );
+        return commit.ok ? decodeText(commit.bytes).trim() : null;
+      });
+
+      const resolveCombinedBase = Effect.fnUntraced(function* (
+        repo: Repo,
+        head: string,
+        branches: readonly string[],
+        signal?: AbortSignal
+      ) {
+        let combined: string | null = null;
+        for (const branch of branches) {
+          const target = yield* resolveFirstCommit(repo.path, listBranchRefs(branch), signal);
+          const base = target && (yield* resolveMergeBase(repo.path, head, target, signal));
+          if (!base) return null;
+          combined = combined === null ? base : yield* combineCommits(repo.path, combined, base, signal);
+          if (combined === null) return null;
+        }
+        return combined;
+      });
+
       const resolveBase = Effect.fnUntraced(function* (
         repo: Repo,
         task: Task,
@@ -145,7 +199,12 @@ export class History extends Context.Service<
         signal?: AbortSignal
       ) {
         if (!task.branch) return null;
-        const stacked = baseBranch ? [`refs/heads/${baseBranch}`, `refs/remotes/origin/${baseBranch}`] : [];
+        const bases = resolveRoundBases(task);
+        if (baseBranch && bases.length > 1 && bases[0] === baseBranch) {
+          const combined = yield* resolveCombinedBase(repo, head, bases, signal);
+          if (combined && combined !== head) return combined;
+        }
+        const stacked = baseBranch ? listBranchRefs(baseBranch) : [];
         const target = yield* resolveFirstCommit(repo.path, [...stacked, ...listDefaultRefs(repo)], signal);
         if (!target) return null;
         const base = yield* resolveMergeBase(repo.path, head, target, signal);

@@ -15,6 +15,8 @@ export const STAPLE_DELAYS = [
   Duration.minutes(2),
 ];
 
+export const R2_REQUEST_DELAYS = [Duration.seconds(15), Duration.seconds(30), Duration.minutes(1)];
+
 const NOTARY_SECRETS = ['APPLE_ID', 'APPLE_APP_SPECIFIC_PASSWORD', 'APPLE_TEAM_ID'] as const;
 
 const decodeNotarySubmission = Schema.decodeUnknownEffect(Schema.fromJsonString(NotarySubmission));

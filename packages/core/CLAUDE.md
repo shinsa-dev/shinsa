@@ -139,12 +139,12 @@ src/
 │   │                comment watermark, sticky conflict, comment-only wake limit, the per-check stall key,
 │   │                whether no checks on a head means no CI (ciAbsent: the repository's RepoCi and CI_GRACE_MS
 │   │                from the push, resolvePullRequestCi)
-│   ├── dependencies.ts   Resolving and changing what a task waits on and stacks on (task.stack_on), releasing waiting
-│   │                tasks (a stacked one once the task below is ready) and recording a stacked task's base (stackBase)
-│   ├── bundles.ts   Bundles (reviewBundles, after every command): ready in place of a merge gate above the root
-│   │                (bundleReady), the root's one merge gate for the bundle, held while the bundle conflicts with
-│   │                the default branch (bundleConflict) and the branch behind is pushed, the merge from the top
-│   │                down, and a task below that merges, leaves or is cancelled
+│   ├── dependencies.ts   Resolving and changing what a task waits on and stacks on (task.stack_on_tasks), releasing
+│   │                waiting tasks (a stacked one once every task below is ready) and recording its bases (stackBases)
+│   ├── bundles.ts   Bundles, graphs of stacks (reviewBundles, after every command): ready in place of a merge gate
+│   │                for every follower (bundleReady), the lead's one merge gate for the bundle, held while the
+│   │                bundle conflicts with the default branch (bundleConflict) and the branch behind is pushed, the
+│   │                merge from the top down, and a task below that merges, leaves or is cancelled
 │   ├── merge-steps.ts  The steps around the merge you tick (merge_step.tick, human-only), the merge gate's wait for
 │   │                the ones before it (assertMergeStepsDone), no done while one after it is open
 │   │                (assertNoMergeStepsLeft), and syncMergeSteps (after every command, for the tasks it changed:
@@ -227,12 +227,13 @@ src/
 │   │                forks of any task, a watchdog's of its own), report_read (to endIntakeRead or endWatchCheck),
 │   │                missRead (a read that gives up), isReadBusy, listSourceFiledTasks
 │   ├── secrets.ts   request_secret and the secret gate (only a ref answers it)
-│   ├── slack.ts     A Slack mention: to the open task of its thread (forwarded, or kept while a gate is open,
-│   │                said in the thread), else `slack.evaluate`; `slack.start_task` once it is work: a new task as
-│   │                Home starts one (`task.create`, triage picks the kind, project and priority), linked to the
-│   │                thread with `slack.thread_linked`; the status message's ts; and
-│   │                syncSlackThreads (after every command): a linked task's question, secret, plan, review and
-│   │                proposal gates and its result as `slack.post`, and one `slack.status` per changed task
+│   ├── slack.ts     A Slack mention: to the open task of its thread (forwarded with 👀, or kept with 📥 while a
+│   │                gate is open, `slack.react`), else `slack.evaluate`; `slack.start_task` once it is work: a new
+│   │                task as Home starts one (`task.create`, triage picks the kind, project and priority), linked to
+│   │                the thread with `slack.thread_linked`; the card's ts; `slack.decide` (decideSlackGate: a
+│   │                decision from Slack through answerGate, then `slack.decided`); and syncSlackThreads (after every
+│   │                command): one `slack.status` per changed task, the card edited, and `slack.post` only for the
+│   │                result and the finished task
 │   ├── handoffs.ts  Handing a task off (task.hand_off and handoff.remove, human-only; the handoff.link and
 │   │                handoff.revoke effects), the link the engine made (handoff.record, handoff.fail) and the one
 │   │                claim it takes (handoff.claim; another account is refused)
@@ -329,7 +330,7 @@ src/
 │                    HKDF into one AES-GCM key per direction, the enrollment proof), sealed frames (frames.ts: a
 │                    counter nonce, in order, closed after one bad frame), the channel's messages (channel.ts: the app
 │                    socket and HTTP requests and responses in chunks), connect tokens (connect-token.ts: labelled, bound to one channel, a nonce the engine spends once), a pairing's credentials sealed to the machine's key (pairing-seal.ts: ECDH with the caller's ephemeral key, HKDF, AES-GCM bound to the machine key) and what stays
-│                    at the keyboard (local-only.ts: isLocalOnlyCommand, resolveLocalOnlyRefusal), what the guest a task was
+│                    at the keyboard or for the owner (local-only.ts: isOwnerOnlyCommand, resolveOwnerOnlyRefusal), what the guest a task was
 │                    handed to sees and may send (scope.ts: resolveScopedState, resolveScopedRefusal, SCOPED_COMMANDS;
 │                    decide refuses the rest when its context names a guest), and which machine a new task
 │                    goes to and how busy it is, its shapes in schema.ts (PlacementQuestion, PlacementCandidate,
@@ -364,17 +365,21 @@ src/
 │                    thread as text with its budget, the request of a task from Slack with the thread fenced as
 │                    untrusted data, and a mention sent to a linked task (thread.ts), whether a mention is work
 │                    or not, task or none (evaluation.ts: SLACK_EVALUATION_SYSTEM, parseSlackEvaluation), and
-│                    what is posted back (posts.ts: SlackPost, SLACK_POSTED_GATES); the thread key is
+│                    what is posted as a new message (posts.ts: SlackPost, result or completed); deciding a gate
+│                    from Slack (decisions.ts: SLACK_DECIDABLE, the action ids, the button value, the form
+│                    (serializeSlackDecisionModal) and the decided line; schema.ts: SlackDecisionValue,
+│                    SlackDecisionModal, SlackDecision, SlackDecisionReply); the thread key is
 │                    domain/slack.ts (resolveSlackThreadKey, Task.slack); Markdown as Slack mrkdwn, cutting to a
 │                    limit and splitting into sections without breaking a link, an escape or a fence (mrkdwn.ts),
 │                    the Block Kit shapes and their limits (blocks.ts: SLACK_BLOCK_LIMITS: headers, sections,
 │                    fields, context and buttons), every message the bot posts, each a header, the gist, its details
 │                    and a button to Shinsa
-│                    (messages.ts: the status message edited in place, resolveSlackSessionStatus for the thread's
-│                    status, resolveSlackReaction and SLACK_REACTIONS for the one reaction on the mention, the
-│                    views (SlackTaskRef, serializeSlack*View) the posts are built from; a post per
-│                    question, secret, plan, review and proposal gate, the result in mrkdwn, the bot's own posts
-│                    (Sent to, Kept for, Not a task, Connect Slack, offline), and resolveSlackPostMessage for a
+│                    (messages.ts: serializeSlackCard, the thread's one card edited in place, the open gate with
+│                    its decision buttons or else the status, resolveSlackSessionStatus for the thread's
+│                    status, resolveSlackReaction and SLACK_REACTIONS for the one reaction on the mention,
+│                    SLACK_MENTION_REACTIONS for a later mention, the views (SlackTaskRef, serializeSlack*View)
+│                    the card is built from, the result in mrkdwn, the bot's own posts (Merged, Done, Not a task,
+│                    Connect Slack, offline), and resolveSlackPostMessage for a
 │                    `slack.post` from the outbox), and the relay's wire
 │                    contract (relay.ts: SLACK_RELAY_PATHS, a machine's post, reaction and thread status and
 │                    SlackLinks as Schemas (SlackRelayPost, SlackRelayReaction, SlackRelaySession; parseSlackRelay*

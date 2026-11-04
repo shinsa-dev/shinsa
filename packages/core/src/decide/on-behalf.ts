@@ -1,4 +1,4 @@
-import { quoteTitle } from '../chat/text.ts';
+import { describeList, quoteTitle } from '../chat/text.ts';
 import { type CommandOf, isUserCommand, type ShinsaCommand, type UserCommand } from '../commands/index.ts';
 import type { ShinsaState } from '../state/project.ts';
 import { listOpenGates } from '../state/queries.ts';
@@ -19,7 +19,8 @@ type HumanOnlyType =
   | 'preview.share'
   | 'preview.unshare'
   | 'task.hand_off'
-  | 'handoff.remove';
+  | 'handoff.remove'
+  | 'away.record';
 
 const HUMAN_ONLY_TYPES: ReadonlySet<string> = new Set<HumanOnlyType>([
   'gate.answer',
@@ -37,6 +38,7 @@ const HUMAN_ONLY_TYPES: ReadonlySet<string> = new Set<HumanOnlyType>([
   'preview.unshare',
   'task.hand_off',
   'handoff.remove',
+  'away.record',
 ]);
 
 type OnBehalfCommand = Exclude<UserCommand, { type: HumanOnlyType }>;
@@ -79,9 +81,9 @@ const DESCRIPTIONS: Descriptions = {
   'task.prioritize': (state, command) =>
     `Set the priority of ${quoteTask(state, command.taskId)} to ${command.priority}`,
   'task.wait_on': (state, command) => `Changed what ${quoteTask(state, command.taskId)} waits on`,
-  'task.stack_on': (state, command) =>
-    command.stacksOn
-      ? `Stacked ${quoteTask(state, command.taskId)} on ${quoteTask(state, command.stacksOn)}`
+  'task.stack_on_tasks': (state, command) =>
+    command.stacksOn.length > 0
+      ? `Stacked ${quoteTask(state, command.taskId)} on ${describeList(command.stacksOn.map((id) => quoteTask(state, id)))}`
       : `Took ${quoteTask(state, command.taskId)} out of its bundle`,
   'task.move_to_backlog': (state, command) => `Moved ${quoteTask(state, command.taskId)} to the backlog`,
   'task.remove_from_backlog': (state, command) =>

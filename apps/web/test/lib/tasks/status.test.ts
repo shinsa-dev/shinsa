@@ -274,6 +274,11 @@ describe('resolveTaskStatus', () => {
       label: 'Waiting for delegations',
       tone: 'neutral',
     });
+    const waits = { delegations: ['child'], since: 1, reason: 'Waiting for the survey.' };
+    const ended = createRun({ id: 'r', taskId: 't', status: 'waiting', waitingOn: waits, endedAt: 2 });
+    expect(resolveTaskStatus(createShinsaState({ tasks: [task], runs: [ended] }), task).label).toBe(
+      'Building'
+    );
     const working = createRun({ id: 'r', taskId: 't', status: 'running' });
     expect(resolveTaskStatus(createShinsaState({ tasks: [task], runs: [working] }), task).label).toBe(
       'Building'
@@ -481,7 +486,7 @@ describe('a duplicate', () => {
 describe('a task in a bundle', () => {
   it('is ready in green, merging with its bundle, with no merge gate of its own', () => {
     const ready = createTask({ id: 'r', stage: 'shipping', bundleReady: { commit: 'a' } });
-    const merging = createTask({ id: 'm', stage: 'awaiting_merge', stacksOn: 'r' });
+    const merging = createTask({ id: 'm', stage: 'awaiting_merge', stacksOn: ['r'] });
     const state = createShinsaState({ tasks: [ready, merging] });
     expect(resolveTaskStatus(state, ready)).toEqual({
       label: 'Merges with its bundle',

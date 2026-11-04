@@ -1,4 +1,6 @@
 import { describe, expect, test } from 'bun:test';
+import { writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import type { DeliveryCohort, Run, RunDelegation, ShinsaCommand, ShinsaState } from '@shinsa/core';
 import { Effect } from 'effect';
 import { CLAUDE_CAPABILITIES } from '../../src/agents/providers/claude/index.ts';
@@ -97,14 +99,14 @@ function finishedChild(patch: Partial<Run> = {}) {
   });
 }
 
-function setup(runs: Run[], options: SupervisorOptions = {}) {
+function setup(runs: Run[], options: SupervisorOptions = {}, root = createTempDir()) {
   const worktree = createTempDir();
   const stub = createStubEngine((state: ShinsaState) => {
     state.repos['repo-1'] = createRepo();
     state.tasks['task-1'] = createTask({ worktreePath: worktree });
     for (const run of runs) state.runs[run.id] = run;
   });
-  const config = createTestConfig();
+  const config = createTestConfig(root);
   const transcripts = createSyncTranscripts(config.transcriptsDir);
   const supervisor = createSupervisor(
     stub.engine,
@@ -184,6 +186,33 @@ describe('starting a delegated run', () => {
         outcome: 'failed',
         summary:
           'Shinsa could not set up its own checkout: "not-a-commit" is not a commit Shinsa will pass to git.',
+        failure: expect.objectContaining({ code: 'isolation' }),
+      }),
+    ]);
+  });
+
+  test('a delegation whose worktree folder is not mounted fails and names the folder', async () => {
+    const sessions = createSessions();
+    const missing = join(createTempDir(), 'bucket', 'worktrees');
+    const root = createTempDir();
+    writeFileSync(join(root, 'config.json'), JSON.stringify({ worktreesDir: missing }));
+    const child = finishedChild({
+      role: 'builder',
+      endedAt: null,
+      outcome: null,
+      delegation: delegation({ isolation: 'worktree', baseCommit: 'a'.repeat(40) }),
+    });
+    const { supervisor, dispatched } = setup(
+      [createRun(), child],
+      { startSession: sessions.startSession },
+      root
+    );
+    await supervisor.execute('child');
+    expect(sessions.started).toHaveLength(0);
+    expect(ofType(dispatched, 'run.end')).toEqual([
+      expect.objectContaining({
+        outcome: 'failed',
+        summary: expect.stringContaining(`The worktree folder ${missing} does not exist.`),
         failure: expect.objectContaining({ code: 'isolation' }),
       }),
     ]);

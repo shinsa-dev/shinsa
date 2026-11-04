@@ -28,6 +28,7 @@ import type { ResourceMonitor } from '../resources/index.ts';
 import type { EngineCore } from '../runtime/engine/service.ts';
 import type { Terminals } from '../terminals/index.ts';
 import type { CommandRouter } from '../triage/index.ts';
+import { makeAttentionTracker } from './attention/service.ts';
 import { dispatchUserCommand } from './commands.ts';
 import { REQUEST_FAILED } from './schema.ts';
 
@@ -96,6 +97,9 @@ export const makeSocketHub = Effect.fn('SocketHub.make')(function* (input: Socke
   const scopedEngineInfo = resolveScopedEngineInfo(version);
   let desktopConnected = false;
   let unsubscribeResources: Effect.Effect<void> | null = null;
+  const attention = yield* makeAttentionTracker<Socket>((socket, where) =>
+    send(socket, { type: 'attention', where })
+  );
 
   function broadcast(message: ServerMessage) {
     const payload = JSON.stringify(message);
@@ -240,6 +244,8 @@ export const makeSocketHub = Effect.fn('SocketHub.make')(function* (input: Socke
         socket.data.surface = message.surface;
         syncSurfaces();
         return;
+      case 'presence':
+        return yield* attention.report(socket, message.active);
       case 'command': {
         const error = yield* dispatchUserCommand(engine, message.command, {
           clientId: message.id,
@@ -302,6 +308,7 @@ export const makeSocketHub = Effect.fn('SocketHub.make')(function* (input: Socke
     },
     close(socket: Socket) {
       sockets.delete(socket);
+      runSync(attention.remove(socket));
       syncSurfaces();
       syncResources();
       for (const unfollow of socket.data.transcripts.values()) runSync(unfollow);

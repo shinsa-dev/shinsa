@@ -30,8 +30,10 @@ import type { Transcripts } from '../../../src/agents/transcripts/service.ts';
 import { Transcripts as TranscriptsService } from '../../../src/agents/transcripts/service.ts';
 import type { ServerConfig } from '../../../src/config/index.ts';
 import { EngineConfig } from '../../../src/config/service.ts';
+import { ConfigStore } from '../../../src/config/store/service.ts';
 import type { SessionExtensionSource } from '../../../src/extensions/index.ts';
 import { Extensions } from '../../../src/extensions/registry/service.ts';
+import { JsonFile } from '../../../src/files/service.ts';
 import { GitLayer } from '../../../src/git/layers.ts';
 import { JsonLogger } from '../../../src/log/service.ts';
 import { StandaloneRepoWorkLayer } from '../../../src/repos/layers.ts';
@@ -44,6 +46,7 @@ import type { Evidence } from '../../../src/store/evidence/service.ts';
 import { Evidence as EvidenceService } from '../../../src/store/evidence/service.ts';
 import { Terminals } from '../../../src/terminals/index.ts';
 import { WorkspacesServiceLayer } from '../../../src/workspaces/layers.ts';
+import { WorktreeRoot } from '../../../src/workspaces/root/service.ts';
 import { Workspaces } from '../../../src/workspaces/service.ts';
 import type { Engine } from '../../helpers/engine.ts';
 
@@ -225,9 +228,13 @@ function createSupervisorLayer(
     Layer.succeed(TranscriptsService, transcripts),
     Layer.succeed(EvidenceService, evidence)
   );
+  const machine = Layer.merge(base, ConfigStore.layer.pipe(Layer.provide(Layer.merge(base, JsonFile.layer))));
   const workspaces = options.workspaces
-    ? Layer.succeed(Workspaces, options.workspaces)
-    : WorkspacesServiceLayer.pipe(Layer.provide(base), Layer.provide(GitLayer), Layer.provide(ShellLayer));
+    ? Layer.merge(
+        Layer.succeed(Workspaces, options.workspaces),
+        WorktreeRoot.layer.pipe(Layer.provide(machine))
+      )
+    : WorkspacesServiceLayer.pipe(Layer.provide(machine), Layer.provide(GitLayer), Layer.provide(ShellLayer));
   const providers = options.providers
     ? Layer.succeed(Providers, options.providers)
     : ProvidersLayer.pipe(Layer.provide(ShellLayer));

@@ -1,16 +1,26 @@
 export {
-  listSlackAnsweredBlocks,
-  parseSlackAnswer,
-  parseSlackAnswerReply,
-  parseSlackAnswerValue,
-  SLACK_ANSWER_ACTION,
+  isSlackDecidable,
+  isSlackWriteDecision,
+  listSlackDecidedBlocks,
+  listSlackDecisions,
+  parseSlackDecision,
+  parseSlackDecisionModal,
+  parseSlackDecisionReply,
+  parseSlackDecisionValue,
+  resolveSlackDecidedText,
+  SLACK_DECIDE_ACTION,
   SLACK_ENGINE_INTERACTIONS_PATH,
+  SLACK_GATE_BLOCK,
+  SLACK_MODAL_CALLBACK,
   SLACK_OPEN_ACTION,
-  SLACK_QUESTION_BLOCK,
-  type SlackAnswer,
-  type SlackAnswerReply,
-  serializeSlackAnswerValue,
-} from './answers.ts';
+  SLACK_RESPONSE_INPUT,
+  SLACK_WRITE_ACTION,
+  type SlackModal,
+  type SlackWriteDecision,
+  serializeSlackDecidedView,
+  serializeSlackDecisionModal,
+  serializeSlackDecisionValue,
+} from './decisions.ts';
 export {
   createSlackActions,
   createSlackButton,
@@ -43,19 +53,19 @@ export {
   resolveSlackPostMessage,
   resolveSlackReaction,
   resolveSlackSessionStatus,
+  SLACK_MENTION_REACTIONS,
   SLACK_REACTIONS,
   SLACK_RESULT_LIMIT,
+  type SlackMentionReaction,
   type SlackReaction,
   type SlackTaskRef,
-  serializeSlackAnsweredView,
+  serializeSlackCard,
+  serializeSlackCompleted,
   serializeSlackDeclined,
-  serializeSlackForwarded,
   serializeSlackGate,
-  serializeSlackHeld,
   serializeSlackLinkPrompt,
   serializeSlackOffline,
   serializeSlackResult,
-  serializeSlackStatus,
 } from './messages.ts';
 export {
   escapeSlackText,
@@ -64,13 +74,14 @@ export {
   listSlackChunks,
   serializeSlackMrkdwn,
 } from './mrkdwn.ts';
-export { SLACK_POSTED_GATES, type SlackPost } from './posts.ts';
+export { type SlackPost } from './posts.ts';
 export {
   listSlackMentionedUsers,
   parseSlackRelayPost,
   parseSlackRelayReaction,
   parseSlackRelaySession,
   resolveSlackConnectUrl,
+  resolveSlackLastUsedAt,
   resolveSlackLinkedPath,
   resolveSlackReadableText,
   resolveSlackTaskUrl,
@@ -78,6 +89,7 @@ export {
   SLACK_RELAY_PATHS,
   SLACK_SESSION_STATUSES,
   SlackLink,
+  type SlackLinkUse,
   SlackLinks,
   type SlackNames,
   SlackRelayPost,
@@ -90,4 +102,14 @@ export {
   type SlackSnapshot,
 } from './relay.ts';
 export { serializeSlackMessage, serializeSlackRequest, serializeSlackThread } from './thread.ts';
-export { SLACK_LIMITS, type SlackEvaluation, type SlackMention, type SlackThreadMessage } from './schema.ts';
+export {
+  SLACK_DECISION_LIMITS,
+  SLACK_LIMITS,
+  SlackDecision,
+  SlackDecisionModal,
+  SlackDecisionReply,
+  SlackDecisionValue,
+  type SlackEvaluation,
+  type SlackMention,
+  type SlackThreadMessage,
+} from './schema.ts';

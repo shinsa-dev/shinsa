@@ -11,7 +11,6 @@ import { AppearanceSettings } from '@/components/settings/appearance.tsx';
 import { AttentionSettings } from '@/components/settings/attention.tsx';
 import { ContextSettings } from '@/components/settings/context.tsx';
 import { FolderSettings, SetupSettings } from '@/components/settings/folders.tsx';
-import { HostedTeamsSettings } from '@/components/settings/hosted-teams.tsx';
 import { IntegrationSettings } from '@/components/settings/integrations.tsx';
 import { MachinesSettings } from '@/components/settings/machines.tsx';
 import { MemorySettings } from '@/components/settings/memory.tsx';
@@ -26,6 +25,7 @@ import { TeamsSettings } from '@/components/settings/teams.tsx';
 import { UpdateSettings } from '@/components/settings/updates.tsx';
 import { LimitSettings } from '@/components/settings/usage.tsx';
 import { VersionSettings } from '@/components/settings/versions.tsx';
+import { WorktreeSettings } from '@/components/settings/worktrees.tsx';
 import { useRegisterCommands } from '@/lib/command/registry.ts';
 import { listSettingsSections } from '@/lib/command/settings.ts';
 import { useAccounts } from '@/lib/connection/accounts.ts';
@@ -75,9 +75,15 @@ function TabSections({ state, tab }: { state: ShinsaState; tab: SettingsTabId })
           <AttentionSettings settings={state.settings} />
           <NotificationSettings />
           <ContextSettings settings={state.settings} />
-          {isRemoteBuild() ? <MachinesSettings /> : <RemoteAccessSettings />}
-          {isRemoteBuild() ? <HostedTeamsSettings /> : <TeamsSettings state={state} />}
-          {!isRemoteBuild() && <SharingSettings settings={state.settings} />}
+          {isRemoteBuild() ? (
+            <MachinesSettings state={state} />
+          ) : (
+            <>
+              <RemoteAccessSettings />
+              <TeamsSettings state={state} />
+            </>
+          )}
+          <SharingSettings settings={state.settings} />
           <SlackSettings />
           <UpdateSettings />
           <SetupSettings />
@@ -104,6 +110,7 @@ function TabSections({ state, tab }: { state: ShinsaState; tab: SettingsTabId })
       return (
         <>
           <FolderSettings />
+          <WorktreeSettings />
           <ProjectSettings state={state} />
         </>
       );

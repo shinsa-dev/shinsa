@@ -1,21 +1,33 @@
 import { describe, expect, test } from 'bun:test';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { TerminalInfo } from '@shinsa/core';
 import { Effect } from 'effect';
+import type { ServerConfig } from '../../src/config/index.ts';
 import type { InstallTerminals } from '../../src/onboarding/index.ts';
 import { PRIVACY_SETTINGS_URL, resolveChosenRoots } from '../../src/onboarding/roots.ts';
+import type { CommandRunner } from '../../src/onboarding/schema.ts';
+import { measureWorktreeUsage } from '../../src/onboarding/worktrees.ts';
+import { runCommand } from '../../src/shell/command.ts';
+import { ShellLayer } from '../../src/shell/layers.ts';
+import { WORKTREE_ROOT_MARKER } from '../../src/workspaces/root/schema.ts';
 import { readMachineConfig } from '../helpers/config.ts';
 import { Engine } from '../helpers/engine.ts';
 import { openEventLog } from '../helpers/event-log.ts';
 import { createTempDir, createTestConfig, overrideEnv } from '../helpers/index.ts';
 import { createTestMachine } from '../helpers/machine.ts';
 import { promised } from '../helpers/promised.ts';
+import { createTask } from '../helpers/state.ts';
 import { createTestOnboardingService, type FakeCommand } from './harness.ts';
 
-function setup(run?: FakeCommand, terminals?: InstallTerminals, simulateMissing: string[] = []) {
+function setup(
+  run?: FakeCommand,
+  terminals?: InstallTerminals,
+  simulateMissing: string[] = [],
+  overrides: Partial<ServerConfig> = {}
+) {
   const root = createTempDir();
-  const config = createTestConfig(root, { roots: [], simulateMissing });
+  const config = createTestConfig(root, { roots: [], simulateMissing, ...overrides });
   const engine = new Engine(openEventLog(config.databasePath));
   const developer = join(root, 'Developer');
   mkdirSync(join(developer, 'app', '.git'), { recursive: true });
@@ -47,6 +59,13 @@ describe('Onboarding', () => {
       completedAt: null,
       roots: { source: 'discovered', configured: [], fromEnvironment: [], effective: [developer] },
       defaults: { model: 'opus', mergeMethod: 'squash' },
+      worktrees: {
+        effective: config.worktreesDir,
+        configured: null,
+        default: config.worktreesDir,
+        fromEnvironment: null,
+        problem: null,
+      },
       paths: {
         home: config.home,
         configPath: config.configPath,
@@ -105,6 +124,86 @@ describe('Onboarding', () => {
     }
     expect(Effect.runSync(store.config).roots).toEqual([]);
     expect((await onboarding.applySetup({ roots: [root], defaultModel: null })).defaults.model).toBeNull();
+  });
+
+  test('saves the worktree folder to config.json, and goes back to the default with null', async () => {
+    const { onboarding, store, config, root } = setup();
+    const mount = join(root, 'Bucket');
+    mkdirSync(mount);
+    const status = await onboarding.applyWorktreesDir({ path: '~/Bucket/' });
+    expect(status.worktrees).toEqual({
+      effective: mount,
+      configured: mount,
+      default: config.worktreesDir,
+      fromEnvironment: null,
+      problem: null,
+    });
+    expect(readMachineConfig(store.path).config.worktreesDir).toBe(mount);
+    expect(existsSync(join(mount, WORKTREE_ROOT_MARKER))).toBe(true);
+    rmSync(join(mount, WORKTREE_ROOT_MARKER));
+    expect((await onboarding.resolveStatus()).worktrees.problem).toContain(
+      `The worktree folder ${mount} is not the one you chose`
+    );
+    rmSync(mount, { recursive: true });
+    expect((await onboarding.resolveStatus()).worktrees.problem).toContain(
+      `The worktree folder ${mount} does not exist.`
+    );
+    const reset = await onboarding.applyWorktreesDir({ path: null });
+    expect(reset.worktrees).toMatchObject({
+      effective: config.worktreesDir,
+      configured: null,
+      problem: null,
+    });
+    expect(Effect.runSync(store.config).worktreesDir).toBeNull();
+  });
+
+  test('refuses a worktree folder it cannot use, and keeps the one it had', async () => {
+    const { onboarding, store, root } = setup();
+    const file = join(root, 'notes.txt');
+    writeFileSync(file, 'x');
+    const locked = join(root, 'Locked');
+    mkdirSync(locked);
+    chmodSync(locked, 0o500);
+    for (const [body, message] of [
+      [{}, 'Send “path” as the full path of a folder, or null to use the default.'],
+      [{ path: 3 }, 'Send “path” as the full path of a folder, or null to use the default.'],
+      [{ path: '  ' }, 'Send “path” as the full path of a folder, or null to use the default.'],
+      [{ path: 'relative/wt' }, 'relative/wt is not a full path.'],
+      [{ path: '/no/such/mount' }, 'The worktree folder /no/such/mount does not exist.'],
+      [{ path: file }, `The worktree folder ${file} is not a folder.`],
+      [{ path: locked }, `Shinsa cannot write to the worktree folder ${locked}.`],
+    ] as const) {
+      await expect(onboarding.applyWorktreesDir(body)).rejects.toThrow(message);
+    }
+    chmodSync(locked, 0o700);
+    expect(Effect.runSync(store.config).worktreesDir).toBeNull();
+  });
+
+  test('refuses a worktree folder it can see but cannot mark as its own', async () => {
+    const { onboarding, store, root } = setup();
+    const readOnly = join(root, 'ReadOnly');
+    mkdirSync(readOnly);
+    writeFileSync(join(readOnly, WORKTREE_ROOT_MARKER), '');
+    chmodSync(join(readOnly, WORKTREE_ROOT_MARKER), 0o400);
+    await expect(onboarding.applyWorktreesDir({ path: readOnly })).rejects.toThrow(
+      `Shinsa cannot write to the worktree folder ${readOnly}.`
+    );
+    expect(Effect.runSync(store.config).worktreesDir).toBeNull();
+  });
+
+  test('shows a worktree folder the environment sets, and refuses to change it', async () => {
+    const { onboarding, store, root } = setup(undefined, undefined, [], {
+      worktreesDir: join(createTempDir(), 'env-wt'),
+      worktreesDirFromEnvironment: true,
+    });
+    const status = await onboarding.resolveStatus();
+    expect(status.worktrees.fromEnvironment).toBe(status.worktrees.effective);
+    expect(status.worktrees.configured).toBeNull();
+    expect(status.worktrees.problem).toBeNull();
+    await expect(onboarding.applyWorktreesDir({ path: root })).rejects.toThrow(
+      'SHINSA_WORKTREES_DIR chooses the worktree folder on this machine, so it cannot be changed here.'
+    );
+    expect(Effect.runSync(store.config).worktreesDir).toBeNull();
   });
 
   test('checks the prerequisites with the injected runner', async () => {
@@ -230,5 +329,66 @@ describe('Onboarding', () => {
     expect(await onboarding.openPrivacySettings()).toEqual({ ok: true });
     expect(calls).toEqual([['open', PRIVACY_SETTINGS_URL]]);
     expect(PRIVACY_SETTINGS_URL).toContain('Privacy_AllFiles');
+  });
+});
+
+describe('worktree usage', () => {
+  const run: CommandRunner = (command, cwd, options) =>
+    runCommand(command, cwd, options).pipe(Effect.provide(ShellLayer));
+
+  function writeWorktree(path: string, bytes: number) {
+    mkdirSync(path, { recursive: true });
+    writeFileSync(join(path, 'file.bin'), Buffer.alloc(bytes, 1));
+    return path;
+  }
+
+  test('adds up the open worktrees and the delegation checkouts, and skips the main checkout', async () => {
+    const folder = createTempDir();
+    const first = writeWorktree(join(folder, 'app', 'feat-a'), 64 * 1024);
+    const elsewhere = writeWorktree(join(createTempDir(), 'old-root', 'feat-b'), 32 * 1024);
+    writeWorktree(join(folder, 'delegations', 'task-1', 'run-1'), 16 * 1024);
+    const main = writeWorktree(join(createTempDir(), 'main'), 512 * 1024);
+    const tasks = {
+      a: createTask({ id: 'a', worktreePath: first }),
+      b: createTask({ id: 'b', worktreePath: elsewhere }),
+      gone: createTask({ id: 'gone', worktreePath: join(folder, 'removed') }),
+      main: createTask({ id: 'main', worktreePath: main, workspace: 'main_checkout' }),
+      none: createTask({ id: 'none', worktreePath: null }),
+    };
+    const usage = await Effect.runPromise(measureWorktreeUsage(folder, tasks, run, 42));
+    expect(usage).toMatchObject({ folder, worktrees: 2, measuredAt: 42 });
+    expect(usage.bytes).toBeGreaterThanOrEqual(112 * 1024);
+    expect(usage.bytes).toBeLessThan(512 * 1024);
+    expect(usage.freeBytes).toBeGreaterThan(0);
+  });
+
+  test('measures nothing without worktrees, and has no free space for a folder that is gone', async () => {
+    const refused: CommandRunner = () => Effect.die('du should not run');
+    const usage = await Effect.runPromise(measureWorktreeUsage('/no/such/mount', {}, refused, 1));
+    expect(usage).toEqual({
+      folder: '/no/such/mount',
+      worktrees: 0,
+      bytes: 0,
+      freeBytes: null,
+      measuredAt: 1,
+    });
+  });
+
+  test('leaves the size unknown when du runs out of time', async () => {
+    const folder = createTempDir();
+    const path = writeWorktree(join(folder, 'app', 'feat-a'), 1024);
+    const timedOut: CommandRunner = () =>
+      Effect.succeed({ ok: false, code: -1, stdout: '', stderr: '', timedOut: true });
+    const usage = await Effect.runPromise(
+      measureWorktreeUsage(folder, { a: createTask({ worktreePath: path }) }, timedOut, 1)
+    );
+    expect(usage.bytes).toBeNull();
+    expect(usage.worktrees).toBe(1);
+  });
+
+  test('Onboarding measures the folder in use', async () => {
+    const { onboarding, config } = setup();
+    const usage = await onboarding.resolveWorktreeUsage();
+    expect(usage).toMatchObject({ folder: config.worktreesDir, worktrees: 0, bytes: 0 });
   });
 });

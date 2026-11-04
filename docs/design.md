@@ -797,7 +797,11 @@ Only these, and they win over anything below:
       substring; hints and keywords count at 0.7). Groups are ordered by their best match, since
       cmdk's own group sort does not work. Choices flatten into their options ("urgent", "dark",
       "cards"), every task matches by title, repository, branch and status, and the queue's
-      decisions match across tasks ("merge" finds Merge #4531 on whichever task it is). At the
+      decisions match across tasks ("merge" finds Merge #4531 on whichever task it is). Typing
+      searches every task, not only the newest 300 shown with an empty query, against an index of
+      each task's words built once per state (`resolveTaskIndex`, `lib/command/menu.ts`), and only
+      the best 20 task matches render (100 on Jump to a task, 20 per group of commands), so cmdk
+      never scores hundreds of rows a key. A closed menu works out nothing. At the
       bottom, always: "Create task: …" (starts it straight away) and "Edit it before starting"
       (Home's composer, filled in).
     - Rows: 24px. Icons are plain, never on a tile; a task's is its status icon in the status
@@ -1013,7 +1017,7 @@ Only these, and they win over anything below:
     approve, Needs your answer, Answered, Paused, In progress, Backlog, Done and Cancelled
     (both collapsed). There is no section for waiting: a task waiting on another task is filed in the section of the
     task it waits on (the first by to-do order when it waits on several) and sits nested right under it, and so does
-    a task stacked on another, so a bundle reads from its root, each task above nested under the one below. Each
+    a task stacked on others, so a bundle reads from its lead, each task nested under the tasks it stacks on. Each
     section header is a sticky
     `h-8` row: its icon in the section's status tone (see 15), the title, the count, a chevron.
     Inside a section rows sort by priority, then oldest first; Done and Cancelled show the latest
@@ -2053,6 +2057,20 @@ Only these, and they win over anything below:
       Settings → Notifications there shows one line instead of its rows: "The Shinsa app is open and handles
       notifications, so this page stays quiet." The app keeps all of it, the Dock badge included. When the app
       quits, the next decision rings in the browser again; the ones that came up while it was open never do.
+      Shinsa Cloud's dashboard is never quiet (`isPageQuiet`'s `remote`): a machine's app notifies only at that
+      machine, so the browser elsewhere rings for itself.
+    - **The device you use notifies.** That rule is the fallback. Each of the owner's pages tells its machine when
+      you use it, and the machine answers which one was used last (`attention`, `docs/engine.md` → The socket):
+      that page alone plays the sound and shows the notification, wherever it runs, the Mac app included, and the
+      others stay quiet. After five minutes without use on any of them, every open page alerts again. A member's
+      page always alerts. A decision answered anywhere closes its notification in every browser that showed it.
+      Settings → Notifications keeps its rows on every page of an engine that routes this way.
+    - **Notifications through the service worker.** A page a service worker controls (Shinsa Cloud's, whose
+      worker relays its requests) shows each notification through the worker's registration
+      (`selectNotificationWorker`, `lib/notifications/worker.ts`), the only way Android's Chrome shows one, with the
+      task's path in its data. A click (`notificationclick` in `remote-sw.ts`) brings the focused dashboard tab
+      forward, or the first one, and the page opens the task (`serveNotificationOpens`, only a path inside the
+      app); with every tab closed it opens the task in a new one, the test notification the dashboard.
     - **The Dock badge** is the tab's count: `writePageAttention` sends `floaty:badge`'s n to the app with the title
       and the meta tags, and the badge clears at 0 and while the server is unreachable.
     - **`shinsa://` links** open in the window, from any app or from inside the page: `shinsa://task/LOC-4` (a

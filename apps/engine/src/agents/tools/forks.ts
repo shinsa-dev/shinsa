@@ -5,3 +5,9 @@ export function findForkSource(state: ShinsaState, reference: string) {
   if (task) return task.id;
   throw new Error(`There is no task "${reference}" to fork. Find it with find_tasks and pass its id.`);
 }
+
+export function findStackParent(state: ShinsaState, reference: string) {
+  const task = selectTaskByReference(state, reference);
+  if (task) return task.id;
+  throw new Error(`There is no task "${reference}" to stack on. Find it with find_tasks and pass its id.`);
+}

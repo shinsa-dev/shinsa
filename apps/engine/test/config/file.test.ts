@@ -41,6 +41,7 @@ describe('parseMachineConfig', () => {
       hostname: 'box',
       editor: 'zed',
       terminal: 'Ghostty',
+      worktreesDir: '/Volumes/bucket/worktrees',
     };
     expect(parseMachineConfig(value)).toEqual({
       config: { version: 1, ...value, roots: ['/a', '/b'] },
@@ -55,6 +56,7 @@ describe('parseMachineConfig', () => {
       onboardedAt: 'yesterday',
       port: 99_999,
       hostname: 7,
+      worktreesDir: 'worktrees',
     });
     expect(config).toEqual(createMachineConfig());
     expect(problems).toEqual([
@@ -62,6 +64,7 @@ describe('parseMachineConfig', () => {
       'onboardedAt must be a time; it was ignored.',
       'port must be a port number; it was ignored.',
       'hostname must be text; it was ignored.',
+      'worktreesDir must be the full path of a folder; it was ignored.',
     ]);
     expect(parseMachineConfig([]).problems).toEqual(['The file is not a JSON object.']);
     expect(parseMachineConfig(null).config).toEqual(createMachineConfig());

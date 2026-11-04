@@ -1,5 +1,6 @@
 import {
   type EngineInfo,
+  hasEngineFeature,
   isEngineProtocolMatch,
   type MachineResources,
   NO_TEAM_FEED,
@@ -7,9 +8,11 @@ import {
   type RemoteUser,
   SCOPE_MESSAGES,
   type TeamFeedSnapshot,
+  type TerminalsSnapshot,
   type UserCommand,
   type WireState,
 } from '@shinsa/core';
+import { Effect, Option, Result, Schema } from 'effect';
 import {
   type ConnectionStatus,
   type MachineAccess,
@@ -19,6 +22,7 @@ import {
   NO_MACHINE_ACCESS,
   NO_MACHINES,
   NO_UNREACHABLE_MACHINES,
+  resolveSocketTransport,
   resolveUpdateMessage,
   type ShinsaConnection,
   type Snapshot,
@@ -26,6 +30,9 @@ import {
   type UnreachableMachine,
 } from '@/lib/connection/socket.ts';
 import { describeOutdatedMachine } from '@/lib/remote/mode.ts';
+import { NO_MACHINE_CONNECTED, NoMachineConnected } from '@/lib/remote/schema.ts';
+import { runApp } from '@/lib/runtime/app.ts';
+import type { SocketTransport } from '@/lib/runtime/socket/schema.ts';
 import { createSignal } from '@/lib/signal.ts';
 import { mergeTeamFeeds, type TeamFeedSource } from '@/lib/teams/feeds.ts';
 import { replaceSharedHandles } from '@/router.ts';
@@ -39,6 +46,7 @@ export interface FleetMember {
   handedBy?: RemoteUser;
   connection: ShinsaConnection;
   fetch: (request: Request) => Promise<Response>;
+  openTerminal?: (terminalId: string) => WebSocket;
   close?: () => void;
 }
 
@@ -80,6 +88,10 @@ function mergePresence(parts: FleetPart[]) {
   return presence;
 }
 
+function mergeKeyed<K extends 'away' | 'focusHistory'>(parts: FleetPart[], key: K) {
+  return Object.assign({}, ...parts.map((part) => part.state[key] ?? {})) as WireState[K];
+}
+
 export function listSharedHandles(parts: FleetPart[]) {
   const seen = new Map<string, string>();
   const shared = new Set<string>();
@@ -109,9 +121,47 @@ export function mergeFleetStates(parts: FleetPart[]): FleetState | null {
     taskNumbers: Object.assign({}, ...parts.map((part) => part.state.taskNumbers)),
     onBehalfActions: parts.flatMap((part) => part.state.onBehalfActions),
     presence: mergePresence(parts),
+    away: mergeKeyed(parts, 'away'),
+    focusHistory: mergeKeyed(parts, 'focusHistory'),
   };
   for (const key of FLEET_RECORDS) Object.assign(state, { [key]: mergeRecords(parts, key) });
   return { state, owners, sharedHandles };
+}
+
+interface FleetTerminalsPart {
+  id: string;
+  terminals: TerminalsSnapshot;
+}
+
+interface FleetTerminals {
+  terminals: TerminalsSnapshot | null;
+  owners: ReadonlyMap<string, string>;
+}
+
+function mergeFleetTerminals(parts: FleetTerminalsPart[]): FleetTerminals {
+  const owners = new Map<string, string>();
+  for (const part of parts)
+    for (const item of [...part.terminals.terminals, ...part.terminals.services])
+      owners.set(item.id, part.id);
+  const [home] = parts;
+  if (!home) return { terminals: null, owners };
+  if (parts.length === 1) return { terminals: home.terminals, owners };
+  return {
+    terminals: {
+      home: home.terminals.home,
+      terminals: parts.flatMap((part) => part.terminals.terminals),
+      services: parts.flatMap((part) => part.terminals.services),
+    },
+    owners,
+  };
+}
+
+function resolveTerminalsOwner(terminals: TerminalsSnapshot, owners: ReadonlyMap<string, string>) {
+  for (const item of [...terminals.terminals, ...terminals.services]) {
+    const owner = owners.get(item.id);
+    if (owner) return owner;
+  }
+  return null;
 }
 
 export function resolveFleetStatus(statuses: ConnectionStatus[]): ConnectionStatus {
@@ -137,13 +187,12 @@ export function resolveCommandOwner(command: UserCommand, owners: ReadonlyMap<st
 
 export function resolveRequestOwner(url: URL, owners: ReadonlyMap<string, string>) {
   const values = [
-    ...url.pathname.split('/').map((segment) => {
-      try {
-        return decodeURIComponent(segment);
-      } catch {
-        return segment;
-      }
-    }),
+    ...url.pathname.split('/').map((segment) =>
+      Result.getOrElse(
+        Result.try(() => decodeURIComponent(segment)),
+        () => segment
+      )
+    ),
     ...url.searchParams.values(),
   ];
   for (const value of values) {
@@ -160,6 +209,25 @@ interface FleetEntry {
 }
 
 const EMPTY_OWNERS: ReadonlyMap<string, string> = new Map();
+
+const NO_FLEET_TERMINALS: FleetTerminals = { terminals: null, owners: EMPTY_OWNERS };
+
+const BODY_ROUTED_PREFIX = '/api/services';
+
+function isBodyRouted(request: Request, url: URL) {
+  return (
+    request.method === 'POST' &&
+    url.pathname.startsWith(BODY_ROUTED_PREFIX) &&
+    (request.headers.get('content-type') ?? '').includes('json')
+  );
+}
+
+const decodeRequestJson = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Unknown));
+
+const readRequestJson = Effect.fn('Fleet.readRequestJson')(function* (request: Request) {
+  const text = yield* Effect.option(Effect.tryPromise(() => request.clone().text()));
+  return Option.getOrNull(Option.flatMap(text, decodeRequestJson));
+});
 
 const NO_SHARED_HANDLES: ReadonlySet<string> = new Set();
 
@@ -192,11 +260,14 @@ export class Fleet implements ShinsaConnection {
   #listedUnreachable: UnreachableMachine[] = NO_UNREACHABLE_MACHINES;
   #accessInputs: (RemoteSnapshot | null)[] = [];
   #access: MachineAccess[] = NO_MACHINE_ACCESS;
+  #terminalInputs: (TerminalsSnapshot | null)[] = [];
+  #terminalMembers: string[] = [];
+  #terminals: FleetTerminals = NO_FLEET_TERMINALS;
   readonly #state = createSignal();
   readonly #transcripts = createSignal();
   readonly #accounts = createSignal();
   readonly #surfaces = createSignal();
-  readonly #terminals = createSignal();
+  readonly #terminalsSignal = createSignal();
   readonly #resources = createSignal();
   readonly #remote = createSignal();
   readonly #teams = createSignal();
@@ -242,7 +313,7 @@ export class Fleet implements ShinsaConnection {
         connection.subscribeTranscripts(() => this.#transcripts.publish()),
         connection.subscribeAccounts(() => this.#accounts.publish()),
         connection.subscribeSurfaces(() => this.#surfaces.publish()),
-        connection.subscribeTerminals(() => this.#terminals.publish()),
+        connection.subscribeTerminals(() => this.#terminalsSignal.publish()),
         connection.subscribeResources(() => {
           this.#resources.publish();
           this.#state.publish();
@@ -390,12 +461,58 @@ export class Fleet implements ShinsaConnection {
 
   isDesktopConnected = () => this.#entries.some((entry) => entry.member.connection.isDesktopConnected());
 
-  subscribeTerminals = (listener: () => void) => this.#terminals.subscribe(listener);
+  reportPresence = () => {
+    for (const entry of this.#entries) entry.member.connection.reportPresence();
+  };
 
-  selectTerminals = () => this.#home?.selectTerminals() ?? null;
+  selectAttention = (taskId?: string | null) =>
+    this.#memberOf(taskId ? this.#ownerOf(taskId) : null)?.connection.selectAttention() ?? 'nowhere';
 
-  replaceTerminals = (terminals: Parameters<ShinsaConnection['replaceTerminals']>[0]) =>
-    this.#home?.replaceTerminals(terminals);
+  subscribeTerminals = (listener: () => void) => this.#terminalsSignal.subscribe(listener);
+
+  #mergeTerminals() {
+    const reachable = this.#entries.filter(isReachable);
+    const inputs = reachable.map((entry) => entry.member.connection.selectTerminals());
+    const members = reachable.map((entry) => entry.member.id);
+    if (
+      inputs.length === this.#terminalInputs.length &&
+      inputs.every((input, index) => input === this.#terminalInputs[index]) &&
+      members.every((id, index) => id === this.#terminalMembers[index])
+    )
+      return this.#terminals;
+    this.#terminalInputs = inputs;
+    this.#terminalMembers = members;
+    this.#terminals = mergeFleetTerminals(
+      reachable.flatMap((entry, index) => {
+        const terminals = inputs[index];
+        return terminals ? [{ id: entry.member.id, terminals }] : [];
+      })
+    );
+    return this.#terminals;
+  }
+
+  selectTerminals = () => this.#mergeTerminals().terminals;
+
+  #terminalOpener(machineId: string | null) {
+    const member = this.#memberOf(machineId);
+    if (!hasEngineFeature(member?.connection.selectEngine() ?? null, 'remote.terminals')) return null;
+    return member?.openTerminal ?? null;
+  }
+
+  canOpenTerminals = (projectId: string) => this.#terminalOpener(this.#ownerOf(projectId)) !== null;
+
+  resolveTerminalTransport = (terminalId: string): SocketTransport | null => {
+    const open = this.#terminalOpener(this.#mergeTerminals().owners.get(terminalId) ?? null);
+    return open ? resolveSocketTransport(() => open(terminalId)) : null;
+  };
+
+  replaceTerminals = (terminals: Parameters<ShinsaConnection['replaceTerminals']>[0]) => {
+    const reachable = this.#entries.filter(isReachable);
+    const owner =
+      resolveTerminalsOwner(terminals, this.#mergeTerminals().owners) ??
+      (reachable.length === 1 ? (reachable[0]?.member.id ?? null) : null);
+    reachable.find((entry) => entry.member.id === owner)?.member.connection.replaceTerminals(terminals);
+  };
 
   subscribeResources = (listener: () => void) => this.#resources.subscribe(listener);
 
@@ -487,7 +604,7 @@ export class Fleet implements ShinsaConnection {
     const outdated = this.#outdatedMember(machineId);
     if (outdated) return Promise.reject(new Error(describeOutdatedMachine(outdated.name)));
     const member = this.#memberOf(machineId ?? resolveCommandOwner(command, this.#owners));
-    if (!member) return Promise.reject(new Error('No machine is connected.'));
+    if (!member) return Promise.reject(new Error(NO_MACHINE_CONNECTED));
     if (!selectEngineCommands(member.connection.selectEngine()).has(command.type))
       return Promise.reject(
         new Error(member.guest ? SCOPE_MESSAGES.command : resolveUpdateMessage(member.name))
@@ -497,9 +614,23 @@ export class Fleet implements ShinsaConnection {
 
   fetch = (request: Request) => {
     this.snapshot();
-    const member = this.#memberOf(resolveRequestOwner(new URL(request.url), this.#owners));
-    if (!member) return Promise.reject(new Error('No machine is connected.'));
-    return member.fetch(request);
+    const url = new URL(request.url);
+    const terminalOwners = this.#mergeTerminals().owners;
+    const owner = resolveRequestOwner(url, this.#owners) ?? resolveRequestOwner(url, terminalOwners);
+    const routed =
+      owner || !isBodyRouted(request, url)
+        ? Effect.succeed(owner)
+        : Effect.map(
+            readRequestJson(request),
+            (body) => findOwner(body, this.#owners, SCAN_DEPTH) ?? findOwner(body, terminalOwners, SCAN_DEPTH)
+          );
+    return runApp(
+      Effect.flatMap(routed, (machineId) => {
+        const member = this.#memberOf(machineId);
+        if (!member) return Effect.fail(new NoMachineConnected({ message: NO_MACHINE_CONNECTED }));
+        return Effect.promise(() => member.fetch(request));
+      })
+    );
   };
 
   reset = () => {

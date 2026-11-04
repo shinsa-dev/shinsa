@@ -284,6 +284,14 @@ describe('projects and focus', () => {
     expect((await runSpec(open, ['focus', 'show'])).text).toBe('Focused on Home.');
   });
 
+  test('records a span you were away', async () => {
+    const fake = createFakeClient({});
+    expect((await runSpec(fake, ['away', 'record', '--from', '1000', '--to', '5000'])).text).toBe(
+      'Recorded.'
+    );
+    expect(fake.sent).toEqual([{ type: 'away.record', from: 1_000, to: 5_000 }]);
+  });
+
   test('focuses on a project for a while or until cleared', async () => {
     setSystemTime(new Date(1_000));
     try {

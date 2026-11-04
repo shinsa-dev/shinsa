@@ -3,6 +3,7 @@ import type { Repo, Task } from '@shinsa/core';
 import { History } from '../../src/git/history/service.ts';
 import { createWorktree, removeWorktree, runGit } from '../helpers/git.ts';
 import { createGitRepo, createTempDir, git, writeFiles } from '../helpers/index.ts';
+import { runCommand } from '../helpers/shell.ts';
 import { createTask } from '../helpers/state.ts';
 
 setDefaultTimeout(30_000);
@@ -42,6 +43,65 @@ describe('resolveTaskRefs', () => {
     expect(refs.commits[0]?.at).toBeGreaterThan(0);
     writeFiles(worktree.path, { 'c.ts': '3\n' });
     expect((await resolveTaskRefs(repo, task, null)).dirty).toBe(true);
+  });
+
+  test('a task stacked on several compares against all of them merged, so only its own work shows', async () => {
+    const { repo } = await createGitRepo();
+    for (const branch of ['feat/b', 'feat/c']) {
+      await git(repo.path, 'checkout', '-q', '-b', branch, 'main');
+      writeFiles(repo.path, { [`${branch.slice(5)}.ts`]: `${branch}\n` });
+      await commitAll(repo.path, `feat: ${branch}`);
+    }
+    await git(repo.path, 'checkout', '-q', 'main');
+    const worktree = await createWorktree(repo, createTempDir(), 'task-refs05', 'feat/f', 'feat/b');
+    await git(worktree.path, 'merge', '-q', '--no-edit', 'feat/c');
+    writeFiles(worktree.path, { 'f.ts': 'f\n' });
+    const own = await commitAll(worktree.path, 'feat: f');
+    const task = createTask({
+      branch: 'feat/f',
+      worktreePath: worktree.path,
+      stackBases: ['feat/b', 'feat/c'],
+    });
+    const refs = await resolveTaskRefs(repo, task, 'feat/b');
+    expect(await git(repo.path, 'diff', '--name-only', refs.base ?? '', refs.head)).toBe('f.ts');
+    expect(refs.commits.map((commit) => commit.sha)).toContain(own);
+    expect(refs.commits.map((commit) => commit.subject)).not.toContain('feat: feat/c');
+    expect((await resolveTaskRefs(repo, task, 'feat/b')).base).toBe(refs.base);
+    const single = await resolveTaskRefs(repo, { ...task, stackBases: ['feat/b'] }, 'feat/b');
+    expect(await git(repo.path, 'diff', '--name-only', single.base ?? '', single.head)).toBe('c.ts\nf.ts');
+  });
+
+  test('parents that contain each other or conflict fall back to the newest one or the first one', async () => {
+    const { repo } = await createGitRepo();
+    await git(repo.path, 'checkout', '-q', '-b', 'feat/b', 'main');
+    writeFiles(repo.path, { 'shared.ts': 'b\n' });
+    await commitAll(repo.path, 'feat: b');
+    await git(repo.path, 'checkout', '-q', '-b', 'feat/c', 'feat/b');
+    writeFiles(repo.path, { 'c.ts': 'c\n' });
+    const c = await commitAll(repo.path, 'feat: c');
+    await git(repo.path, 'checkout', '-q', '-b', 'feat/d', 'main');
+    writeFiles(repo.path, { 'shared.ts': 'd\n' });
+    await commitAll(repo.path, 'feat: d');
+    await git(repo.path, 'checkout', '-q', 'main');
+    const worktree = await createWorktree(repo, createTempDir(), 'task-refs06', 'feat/g', 'feat/c');
+    writeFiles(worktree.path, { 'g.ts': 'g\n' });
+    await commitAll(worktree.path, 'feat: g');
+    const task = createTask({
+      branch: 'feat/g',
+      worktreePath: worktree.path,
+      stackBases: ['feat/b', 'feat/c'],
+    });
+    expect((await resolveTaskRefs(repo, task, 'feat/b')).base).toBe(c);
+    expect((await resolveTaskRefs(repo, { ...task, stackBases: ['feat/c', 'feat/b'] }, 'feat/c')).base).toBe(
+      c
+    );
+    await runCommand(['git', 'merge', '-q', '--no-edit', 'feat/d'], worktree.path);
+    writeFiles(worktree.path, { 'shared.ts': 'b and d\n' });
+    await commitAll(worktree.path, 'fix: resolve conflicts');
+    const conflicting = { ...task, stackBases: ['feat/c', 'feat/d'] };
+    expect((await resolveTaskRefs(repo, conflicting, 'feat/c')).base).toBe(c);
+    const missing = { ...task, stackBases: ['feat/c', 'feat/gone'] };
+    expect((await resolveTaskRefs(repo, missing, 'feat/c')).base).toBe(c);
   });
 
   test('once the worktree is gone and the branch merged, the head and base stay pinned to the branch', async () => {

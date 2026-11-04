@@ -1,10 +1,17 @@
-import { HOUR_MS } from '../domain/time.ts';
-import type { TimingSpan } from '../domain/types.ts';
+import { HOUR_MS, MINUTE_MS } from '../domain/time.ts';
+import type { FocusSpan, Task, TimingSpan } from '../domain/types.ts';
 import { resolvePresenceHour } from '../state/presence.ts';
+import type { ShinsaState } from '../state/project.ts';
+import { resolveTaskTiming } from '../state/timing.ts';
+import { isWithin, mergeSpans, subtractSpans } from './spans.ts';
 
 export const WEEK_HOURS = 7 * 24;
 export const PRESENCE_PROFILE_WEEKS = 8;
 export const PRESENCE_REACH_HOURS = 6;
+export const FOCUS_GRACE_MS = 30 * MINUTE_MS;
+
+export type YourActivity = Pick<ShinsaState, 'tasks'> &
+  Partial<Pick<ShinsaState, 'presence' | 'away' | 'focusHistory'>>;
 
 export type HourOfWeek = (at: number) => number;
 
@@ -13,6 +20,8 @@ export interface YourClock {
   firstHour: number | null;
   profile: readonly number[];
   hourOf: HourOfWeek;
+  away: TimingSpan[];
+  focus: FocusSpan[];
 }
 
 function listActiveHours(presence: Record<string, number>) {
@@ -51,18 +60,51 @@ export function resolvePresenceProfile(presence: Record<string, number>, now: nu
   return smoothed.map((share) => Math.min(1, share / reference));
 }
 
-export function resolveYourClock(
-  presence: Record<string, number>,
-  now: number,
-  hourOf: HourOfWeek
-): YourClock {
+function listInputTimes(tasks: ShinsaState['tasks']) {
+  return Object.values(tasks)
+    .flatMap((task) => resolveTaskTiming(task).inputs.map((input) => input.at))
+    .sort((a, b) => a - b);
+}
+
+function hasTimeWithin(times: readonly number[], span: TimingSpan) {
+  let low = 0;
+  let high = times.length;
+  while (low < high) {
+    const middle = (low + high) >> 1;
+    if ((times[middle] ?? 0) <= span.from) low = middle + 1;
+    else high = middle;
+  }
+  const first = times[low];
+  return first !== undefined && isWithin(first, span);
+}
+
+function listAway(you: YourActivity) {
+  const inputs = listInputTimes(you.tasks);
+  return mergeSpans(Object.values(you.away ?? {}).filter((span) => !hasTimeWithin(inputs, span)));
+}
+
+export function resolveYourClock(you: YourActivity, now: number, hourOf: HourOfWeek): YourClock {
+  const presence = you.presence ?? {};
   const hours = listActiveHours(presence);
   return {
     activeHours: new Set(hours),
     firstHour: hours.length === 0 ? null : Math.min(...hours),
     profile: resolvePresenceProfile(presence, now, hourOf),
     hourOf,
+    away: listAway(you),
+    focus: Object.values(you.focusHistory ?? {}),
   };
+}
+
+export function listSetAside(clock: YourClock, task: Task, now: number): TimingSpan[] {
+  const inputs = resolveTaskTiming(task).inputs;
+  return clock.focus.flatMap((focus) => {
+    if (focus.projectId === task.projectId) return [];
+    const span = { from: focus.from, to: Math.min(focus.to ?? now, focus.until ?? now) };
+    if (inputs.some((input) => isWithin(input.at, span))) return [];
+    const from = span.from + FOCUS_GRACE_MS;
+    return span.to > from ? [{ from, to: span.to }] : [];
+  });
 }
 
 function isNearActivity(clock: YourClock, hour: number) {
@@ -79,12 +121,15 @@ export function resolveHourWeight(clock: YourClock, hour: number) {
   return clock.profile[clock.hourOf(hour * HOUR_MS)] ?? 0;
 }
 
-export function measureOnYourClock(clock: YourClock, span: TimingSpan) {
-  if (span.to <= span.from) return 0;
+function measureHours(clock: YourClock, span: TimingSpan) {
   let total = 0;
   for (let hour = resolvePresenceHour(span.from); hour * HOUR_MS < span.to; hour += 1) {
     const overlap = Math.min(span.to, (hour + 1) * HOUR_MS) - Math.max(span.from, hour * HOUR_MS);
     total += overlap * resolveHourWeight(clock, hour);
   }
   return total;
+}
+
+export function measureOnYourClock(clock: YourClock, span: TimingSpan) {
+  return subtractSpans(span, clock.away).reduce((total, part) => total + measureHours(clock, part), 0);
 }

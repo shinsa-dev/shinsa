@@ -1,18 +1,20 @@
 import {
   DomainError,
   type GuestActor,
-  LOCAL_ONLY_CODE,
+  OWNER_ONLY_CODE,
   parseUserCommand,
   type RequestOrigin,
-  resolveLocalOnlyRefusal,
+  resolveOwnerOnlyRefusal,
   resolveScopedRefusal,
   SCOPE_REFUSAL_CODE,
 } from '@shinsa/core';
 import { Effect, Result } from 'effect';
 import { createReadOnlyError } from '../instance/index.ts';
+import type { RemoteHandle } from '../remote/machine/schema.ts';
 import type { EngineCore } from '../runtime/engine/service.ts';
 import type { CommandRouter } from '../triage/index.ts';
 import { resolveRequestFailure } from './failures.ts';
+import type { RequestSourceShape } from './schema.ts';
 
 export interface UserCommandSource {
   readonly clientId: string | null;
@@ -20,6 +22,15 @@ export interface UserCommandSource {
   readonly origin: RequestOrigin;
   readonly guest: GuestActor | null;
 }
+
+export const resolveRequestOrigin = Effect.fn('resolveRequestOrigin')(function* (
+  source: RequestSourceShape,
+  remote: Pick<RemoteHandle, 'isOwner'> | null
+) {
+  if (source.via === 'local') return 'local' as const;
+  if (remote && (yield* remote.isOwner(source.userId))) return 'owner' as const;
+  return 'remote' as const;
+});
 
 export const dispatchUserCommand = Effect.fn('dispatchUserCommand')(function* (
   engine: EngineCore['Service'],
@@ -30,10 +41,10 @@ export const dispatchUserCommand = Effect.fn('dispatchUserCommand')(function* (
   const parsed = parseUserCommand(body);
   if (Result.isFailure(parsed)) return yield* Effect.fail(resolveRequestFailure(parsed.failure));
   const command = parsed.success;
-  const refusal = resolveLocalOnlyRefusal(source.origin, command);
+  const refusal = resolveOwnerOnlyRefusal(source.origin, command);
   if (refusal)
     return yield* Effect.fail(
-      resolveRequestFailure(new DomainError({ code: LOCAL_ONLY_CODE, message: refusal }))
+      resolveRequestFailure(new DomainError({ code: OWNER_ONLY_CODE, message: refusal }))
     );
   const outside = source.guest
     ? resolveScopedRefusal(yield* engine.state, source.guest.taskId, command)

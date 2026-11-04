@@ -148,27 +148,28 @@ export class Remote extends Context.Service<
         }
       });
 
+      const isMissing = (repo: Repo, base: string, branch: string, signal?: AbortSignal) =>
+        Effect.map(
+          git.attempt(['merge-base', '--is-ancestor', `origin/${base}`, `origin/${branch}`], repo.path, {
+            signal,
+          }),
+          (result) => !result.ok
+        );
+
       const selectBehind = Effect.fnUntraced(function* (
         repo: Repo,
         members: readonly BundleBranch[],
         signal?: AbortSignal
       ) {
+        const pairs = members.flatMap((member) => member.bases.map((base) => ({ member, base })));
         const behind = yield* Effect.forEach(
-          members,
-          (member) =>
-            Effect.map(
-              git.attempt(
-                ['merge-base', '--is-ancestor', `origin/${member.base}`, `origin/${member.branch}`],
-                repo.path,
-                {
-                  signal,
-                }
-              ),
-              (result) => !result.ok
-            ),
-          { concurrency: 'unbounded' }
+          pairs,
+          ({ member, base }) => isMissing(repo, base, member.branch, signal),
+          {
+            concurrency: 'unbounded',
+          }
         );
-        return members.find((_, index) => behind[index]) ?? null;
+        return pairs.find((_, index) => behind[index]) ?? null;
       });
 
       const mergeTrial = Effect.fnUntraced(function* (
@@ -202,7 +203,7 @@ export class Remote extends Context.Service<
         const target = yield* decodeRefName(repo.defaultBranch);
         yield* syncBundleRefs(
           repo,
-          [target, ...members.flatMap((member) => [member.base, member.branch])],
+          [target, ...members.flatMap((member) => [...member.bases, member.branch])],
           signal
         );
         let merged = yield* runTrial(repo, ['rev-parse', `origin/${target}`], signal);
@@ -212,7 +213,7 @@ export class Remote extends Context.Service<
             const behind = yield* selectBehind(repo, members.slice(0, index + 1), signal);
             return {
               taskId: member.taskId,
-              behindTaskId: behind?.taskId ?? null,
+              behindTaskId: behind?.member.taskId ?? null,
               base: behind?.base ?? target,
             };
           }
