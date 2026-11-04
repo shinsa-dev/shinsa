@@ -36,6 +36,7 @@ import {
   resolveShareModeChoice,
   resolveShareChoice,
   resolveShareChoiceScopes,
+  resolveShownShareMode,
   resolveShareScopesChoice,
   resolveShareView,
   SHARE_DESCRIPTION,
@@ -171,7 +172,7 @@ function ShareScopeCheck({
         aria-label={row.title}
         onCheckedChange={(next) => onToggle(row.scope, next)}
       />
-      <label htmlFor={id} className='flex min-w-0 flex-col gap-px'>
+      <label htmlFor={id} className='flex min-w-0 flex-col'>
         <span className='text-xs text-fg-4'>{row.title}</span>
         <span className='text-2xs text-pretty text-fg-2'>{row.hint}</span>
       </label>
@@ -432,18 +433,18 @@ function ShareContent({ task }: { task: Task }) {
     if (shared) void changeShareLimit(task, next);
     else setPicked(next);
   };
-  const [customSeen, setCustomSeen] = React.useState(false);
+  const [customPicked, setCustomPicked] = React.useState(false);
   const pickScopes = (next: readonly ViewScope[]) => {
-    if (resolveShareChoice(next) === CUSTOM_PRESET) setCustomSeen(true);
     setPickedMode(resolveShareChoice(next));
     if (shared) void changeShareScopes(task, next, scopesSupported);
     else setPickedScopes(next);
   };
   const pickMode = (next: ShareMode) => {
-    if (next === 'handoff') setPickedMode(next);
+    setCustomPicked(next === CUSTOM_PRESET);
+    if (next === 'handoff' || next === CUSTOM_PRESET) setPickedMode(next);
     else pickScopes(resolveShareChoiceScopes(next, scopes));
   };
-  const shownMode = mode === 'handoff' ? mode : resolveShareChoice(scopes);
+  const shownMode = resolveShownShareMode(mode, customPicked, scopes);
   return (
     <>
       <DialogHeader>
@@ -456,11 +457,13 @@ function ShareContent({ task }: { task: Task }) {
       {view.kind !== 'unpaired' && (
         <>
           <ShareModeRow
-            items={listShareModeItems(task, handoffSupported, customSeen || shownMode === CUSTOM_PRESET)}
+            items={listShareModeItems(task, handoffSupported, scopesSupported)}
             mode={shownMode}
             onChange={pickMode}
           />
-          {!handing && scopesSupported && <ShareScopesRow scopes={scopes} onChange={pickScopes} />}
+          {shownMode === CUSTOM_PRESET && scopesSupported && (
+            <ShareScopesRow scopes={scopes} onChange={pickScopes} />
+          )}
           {picksTeammate && <HandoffTargetRow teammates={teammates} target={target} onChange={setTarget} />}
           {handing ? (
             <HandoffBody view={handoff} />

@@ -11,6 +11,7 @@ import {
   isTaskShared,
   listShareLimitItems,
   listShareModeItems,
+  resolveShownShareMode,
   openShareDialog,
   openUnshareConfirm,
   resolveShareLimitChoice,
@@ -131,6 +132,14 @@ describe('what a shared task shows', () => {
   it('names a preset’s exact scopes by the preset, and any other set Custom', () => {
     expect(resolveShareChoice(SHARE_PRESET_SCOPES.standard)).toBe('standard');
     expect(resolveShareChoice(toggleShareScope(SHARE_PRESET_SCOPES.standard, 'code', false))).toBe('custom');
+  });
+
+  it('shows Custom once picked, a hand-off as itself, and otherwise the preset the scopes match', () => {
+    const custom = toggleShareScope(SHARE_PRESET_SCOPES.status, 'plan', true);
+    expect(resolveShownShareMode('handoff', true, custom)).toBe('handoff');
+    expect(resolveShownShareMode('standard', true, SHARE_PRESET_SCOPES.standard)).toBe('custom');
+    expect(resolveShownShareMode('standard', false, SHARE_PRESET_SCOPES.standard)).toBe('standard');
+    expect(resolveShownShareMode('status', false, custom)).toBe('custom');
   });
 
   it('fills a preset’s scopes, and keeps the current ones for Custom', () => {

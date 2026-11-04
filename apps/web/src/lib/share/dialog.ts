@@ -124,6 +124,15 @@ export function resolveShareChoiceScopes(choice: ShareChoice, current: readonly 
   return choice === CUSTOM_PRESET ? resolveShareScopes(current) : SHARE_PRESET_SCOPES[choice];
 }
 
+export function resolveShownShareMode(
+  mode: ShareMode,
+  customPicked: boolean,
+  scopes: readonly ViewScope[]
+): ShareMode {
+  if (mode === 'handoff') return mode;
+  return customPicked ? CUSTOM_PRESET : resolveShareChoice(scopes);
+}
+
 const HANDOFF_MODE_ITEM: { value: ShareMode; label: string; hint: string; icon: IconName } = {
   value: 'handoff',
   label: HANDOFF_TITLE,

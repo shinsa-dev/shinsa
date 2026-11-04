@@ -94,9 +94,11 @@ describe('the share dialog', () => {
     );
   });
 
-  it('ticks the preset’s scopes, turns Custom when a box changes and shares exactly the ticked ones', async () => {
+  it('shows the boxes only for Custom, ticked with the preset’s scopes, and shares exactly the ticked ones', async () => {
     showTask();
     await screen.findByRole('combobox', { name: 'Share as' });
+    expect(screen.queryByRole('checkbox', { name: 'Plan' })).toBeNull();
+    await choose('Share as', /^Custom/);
     const title = screen.getByRole('checkbox', { name: 'Title and status' });
     expect(title.getAttribute('aria-checked')).toBe('true');
     expect(title.hasAttribute('data-disabled') || title.getAttribute('aria-disabled') === 'true').toBe(true);
@@ -104,9 +106,7 @@ describe('the share dialog', () => {
       'false'
     );
     fireEvent.click(screen.getByRole('checkbox', { name: 'Code and diff' }));
-    await waitFor(() =>
-      expect(screen.getByRole('combobox', { name: 'Share as' }).textContent).toBe('Custom')
-    );
+    expect(screen.getByRole('combobox', { name: 'Share as' }).textContent).toBe('Custom');
     fireEvent.click(screen.getByRole('button', { name: 'Share' }));
     await waitFor(() =>
       expect(listSentCommands()).toEqual([
@@ -120,21 +120,26 @@ describe('the share dialog', () => {
     );
   });
 
-  it('fills the boxes when a preset is picked over Custom', async () => {
+  it('hides the boxes again when a preset is picked over Custom, and shares that preset', async () => {
     showTask();
     await screen.findByRole('combobox', { name: 'Share as' });
+    await choose('Share as', /^Custom/);
     fireEvent.click(screen.getByRole('checkbox', { name: 'Checks' }));
-    await waitFor(() =>
-      expect(screen.getByRole('combobox', { name: 'Share as' }).textContent).toBe('Custom')
-    );
     await choose('Share as', /^Status/);
-    expect(screen.getByRole('checkbox', { name: 'Plan' }).getAttribute('aria-checked')).toBe('false');
-    expect(screen.getByRole('checkbox', { name: 'Progress' }).getAttribute('aria-checked')).toBe('true');
+    expect(screen.queryByRole('checkbox', { name: 'Plan' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Share' }));
+    await waitFor(() =>
+      expect(listSentCommands()).toEqual([
+        { type: 'task.share', taskId: 'source', limit: 'until_done', scopes: SHARE_PRESET_SCOPES.status },
+      ])
+    );
   });
 
   it('changes a live share’s scopes at once from a box', async () => {
     showTask({ share: { ...SHARING, url: URL } });
-    fireEvent.click(await screen.findByRole('checkbox', { name: 'Live work' }));
+    await screen.findByRole('combobox', { name: 'Share as' });
+    await choose('Share as', /^Custom/);
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Live work' }));
     await waitFor(() =>
       expect(listSentCommands()).toEqual([
         {

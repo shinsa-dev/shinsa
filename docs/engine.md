@@ -3448,15 +3448,15 @@ projection and channel serve teams, always at Standard (Teams, below).
   Settings → General → Sharing, human-only, when left out) or `scopes` (any list), and stores only the resolved list.
   A preset's name is never kept: a share's label is worked out from its list (`resolveShareScopesPreset`, through
   `resolvePreset`), Status, Standard, Full access, or Custom for any other list.
-- **Custom in Share task.** Share as lists Status, Standard, Full access and Custom, then Hand off; below it every view
-  scope is a checkbox with its title and one line on what it shows (`SHARE_SCOPE_ROWS` in
-  `apps/web/src/lib/share/dialog.ts`), the same layout as Settings → Teams → What teammates can do. Picking a preset
-  ticks exactly its scopes; ticking or unticking a box turns Share as to Custom, and a list that matches a preset
-  again shows that preset. Title and status is ticked and locked. Share sends `scopes` for Custom and `preset` for a
-  preset. Custom and the checkboxes show only on a machine that announces `share.scopes` (`ENGINE_FEATURES`); an
-  older engine gets the presets alone, as before. Custom is listed once the boxes no longer match a preset, so picking
-  it never does nothing. The page built from `main` also reads a share from an older engine, which names a preset and
-  no scopes, as that preset's scopes (`resolveShareSourceScopes` in `apps/web/src/lib/share/scopes.ts`).
+- **Custom in Share task.** Share as lists Status, Standard, Full access and Custom, then Hand off. A preset shows
+  no checkboxes; picking Custom shows every view scope as a checkbox with its title and one line on what it shows
+  (`SHARE_SCOPE_ROWS` in `apps/web/src/lib/share/dialog.ts`), the same layout as Settings → Teams → What teammates can
+  do, ticked with the scopes the preset had. Ticking or unticking a box keeps Custom; picking a preset again hides the
+  boxes and fills its scopes (`resolveShownShareMode`). A live share whose scopes match no preset opens on Custom.
+  Title and status is ticked and locked. Share sends `scopes` for Custom and `preset` for a preset. Custom and the
+  checkboxes show only on a machine that announces `share.scopes` (`ENGINE_FEATURES`); an older engine gets the
+  presets alone, as before. The page built from `main` also reads a share from an older engine, which names a preset
+  and no scopes, as that preset's scopes (`resolveShareSourceScopes` in `apps/web/src/lib/share/scopes.ts`).
 - **From the command line.** `shinsa tasks share --preset standard --deny code --allow messages` starts from the
   preset (the `sharePreset` setting without `--preset`), adds each `--allow` and removes each `--deny`, and sends the
   list as `scopes`; an unknown scope is refused before anything is sent.
