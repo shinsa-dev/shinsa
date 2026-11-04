@@ -484,7 +484,11 @@ Only these, and they win over anything below:
     wider than the room it has (`max-w-(--available-width)`; a menu with a cap of its own writes it as
     `max-w-[min(24rem,var(--available-width))]`, since a plain `max-w-96` would replace the kit's). A dialog is the
     viewport less 12px a side below `sm`, and the command menu opens 12px under the notch instead of a third of the
-    way down, so the keyboard never covers it. The app has one
+    way down, so the keyboard never covers it. **Setup and the remote pages on a phone**: setup's column keeps the
+    16px phone gutter (`ONBOARDING_COLUMN`), the tools step's "Stuck on an install?" line puts its button under the
+    text, and setup's shell and the remote pages' shell (`RemoteShell`) keep clear of the notch; a shared task's page
+    also keeps clear of the home bar. The pair, enroll, claim, team join, Slack and Fleet pages are one centred
+    column and need nothing more. The app has one
     keyboard shortcut: ⌘K (Ctrl K elsewhere) opens the command menu (see 14). Nothing else is
     bound to a key, except the Code tab's ⌘P, ⇧⌘F, ⌘F and ⌘G while it is open (32), the Review tab's J and K while it is
     open (34), the Terminal page's ⌘T and ⌘W while it is open and a focused terminal's own keys (37), Enter sends in every input, and a setup step's option list takes the arrows, Home, End, Enter and
