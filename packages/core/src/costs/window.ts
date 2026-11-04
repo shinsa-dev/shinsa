@@ -1,0 +1,72 @@
+import { DAY_MS } from '../domain/time.ts';
+import type { ShinsaState } from '../state/project.ts';
+import { resolveUsageRates } from './rate.ts';
+
+export const RECENT_USAGE_MS = DAY_MS;
+
+export interface UsageSpend {
+  at: number;
+  percent: number;
+  taskId: string;
+  projectId: string | null;
+}
+
+export interface RecentUsage {
+  from: number;
+  to: number;
+  percent: number;
+  spends: UsageSpend[];
+  unmetered: number;
+}
+
+export function listRecentSpends(state: ShinsaState, now: number) {
+  const from = now - RECENT_USAGE_MS;
+  const rates = resolveUsageRates(state.runs);
+  const spends: UsageSpend[] = [];
+  let unmetered = 0;
+  for (const run of Object.values(state.runs)) {
+    for (const meter of run.meters ?? []) {
+      if (meter.to <= from || meter.to > now) continue;
+      const rate = rates.get(meter.window);
+      if (!rate || meter.usage.costUsd === null) {
+        unmetered += 1;
+        continue;
+      }
+      spends.push({
+        at: meter.to,
+        percent: meter.usage.costUsd * rate.percentPerUsd,
+        taskId: run.taskId,
+        projectId: state.tasks[run.taskId]?.projectId ?? null,
+      });
+    }
+  }
+  return { spends: spends.sort((a, b) => a.at - b.at), unmetered };
+}
+
+export function resolveRecentUsage(
+  state: ShinsaState,
+  now: number,
+  projectId: string | null = null
+): RecentUsage {
+  const listed = listRecentSpends(state, now);
+  const spends =
+    projectId === null ? listed.spends : listed.spends.filter((spend) => spend.projectId === projectId);
+  return {
+    from: now - RECENT_USAGE_MS,
+    to: now,
+    percent: spends.reduce((total, spend) => total + spend.percent, 0),
+    spends,
+    unmetered: listed.unmetered,
+  };
+}
+
+export function resolveRecentUsageFreesAt(recent: RecentUsage, limit: number) {
+  let percent = recent.percent;
+  if (percent < limit) return null;
+  const freeing =
+    recent.spends.find((spend) => {
+      percent -= spend.percent;
+      return percent < limit;
+    }) ?? recent.spends.at(-1);
+  return freeing ? freeing.at + RECENT_USAGE_MS : null;
+}

@@ -1,6 +1,14 @@
 import type { RunRole, RunUsage, Task } from '../domain/index.ts';
 import type { ShinsaState } from '../state/project.ts';
 import { resolveUsageShares, type UsageShareState } from './rate.ts';
+export {
+  listRecentSpends,
+  RECENT_USAGE_MS,
+  type RecentUsage,
+  resolveRecentUsage,
+  resolveRecentUsageFreesAt,
+  type UsageSpend,
+} from './window.ts';
 
 export {
   resolveMeterWindow,
