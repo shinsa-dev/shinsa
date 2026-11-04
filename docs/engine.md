@@ -3645,21 +3645,25 @@ the read-only view. Teams need remote access on (`Remote` paired and enabled), s
   the fragment, which no browser sends to a server, so app.shinsa.dev never sees it and cannot read a team view. The
   invite only lets someone ask; turning the link off (`invite/remove`) or making a new one (`invite`) stops the old
   one, and a member already in keeps their key.
-- **Joining works like a machine invite.** Whoever opens the join link signs in with GitHub; the page names the team
-  and its owner first (`POST /__remote/teams/preview { invite }`, which records nothing), keeps the key in the browser
-  and, on Ask to join, sends `POST /__remote/teams/join { invite }`, which records that the account asked
-  (`team_requesters`) and makes it no member. When this browser reaches machines of your own, the page reads the
-  projects of those online with one `GET /api/projects` over the sealed channel, never the whole state
-  (`lib/teams/join-machines.ts`, giving up on one after 4 s) and asks
-  which to share, one or more being required once any arrive (Ask to join stays open while they load, and joins
-  without sharing if pressed before they do);
-  Ask to join then sends each machine with a pick `POST /api/remote/teams/join { url }` (the one team route the
-  dashboard may call, and only from a device of the machine's owner: a member's device is refused with `not_owner`,
-  since joining your account to a team and sharing your projects is yours alone, `Remote.openChannel`) and
-  `project.add_to_team` for each pick (`POST /api/commands`), so the key
-  and the projects are in place before the owner answers. Once the owner accepts, the team shows in Settings → Teams
-  on each of your machines; one without the key asks for the link right in the team's card, with the projects to
-  share beside it (or `shinsa teams join <url>`), which stores the key there (each of your machines needs it once). The owner sees each request in Settings → Teams with Accept and Decline (`members/add`,
+- **Joining works like a machine invite, after remote access.** Whoever opens the join link signs in with GitHub; the
+  page names the team and its owner first (`POST /__remote/teams/preview { invite }`, which records nothing) and keeps
+  the key in the browser (and the link in `sessionStorage`, so it survives sign-in and pairing). Teams reach teammates
+  only through machines, so the page then reads your machines (`resolveJoinSetup`, `lib/teams/join-machines.ts`):
+  with none paired it shows the fleet page's steps to turn on remote access (`PAIR_STEPS`, `lib/remote/setup-steps.ts`),
+  and with paired machines this browser reaches none of, the steps to add this device (`listAddDeviceSteps`), each with
+  Check again and no Ask to join. app.shinsa.dev enforces it too: `POST /__remote/teams/join { invite }` from an
+  account with no paired machine of its own is 409 `no_machine` (`NoMachine`) and records nothing; otherwise it
+  records that the account asked (`team_requesters`) and makes it no member. The page reads the projects of each
+  machine it reaches with one `GET /api/projects` over the sealed channel, never the whole state (giving up on one
+  after 4 s), and offers them to share, none required: with none picked it says teammates see nothing of yours until
+  you share a project. Ask to join then sends every machine it reaches `POST /api/remote/teams/join { url }`, picks or
+  not (`joinFromMachines`; the one team route the dashboard may call, and only from a device of the machine's owner: a
+  member's device is refused with `not_owner`, since joining your account to a team and sharing your projects is yours
+  alone, `Remote.openChannel`), then `project.add_to_team` for each pick (`POST /api/commands`), so every machine
+  holds the key and the projects are in place before the owner answers. Once the owner accepts, the team shows in Settings → Teams
+  on each of your machines, with its machines (every member's, quoted with their owner and Online, Last seen or
+  Needs the team link, `TeamMachines`, the same list on the hosted Settings); one without the key warns on the team's
+  card and asks for the link right there, with projects to share beside it, none required (or `shinsa teams join <url>`), which stores the key there (each of your machines needs it once). The owner sees each request in Settings → Teams with Accept and Decline (`members/add`,
   `requests/decline`; `shinsa teams accept|decline <team> --login`). A member may leave (`leave`, which also takes
   your projects out of the team) and the owner may remove a member (`members/remove`) or the team (`remove`); either
   way the next heartbeat drops it from every machine and their open views close (below). Making a team asks which of
@@ -3697,7 +3701,9 @@ the read-only view. Teams need remote access on (`Remote` paired and enabled), s
   one of its members in the machine's own copy (`isTeamViewer`), a task asked for is in one of the team's projects,
   and the HMAC checks in constant time; else `refused`, with the reason for the first check that failed
   (`TEAM_REFUSALS`: the machine is not in the team, has no key for it, does not list you yet, your key does not match,
-  or the task is not shown to the team), which the viewer's All tasks shows beside that machine's name. The welcome and the session key work as a share's (`deriveTeamSessionKey`, HKDF over the team, the
+  or the task is not shown to the team), which the viewer's All tasks shows as a lock naming the machine, quoted, and its owner (“Mac.lan” by Jake in
+  Superwall is not listing its tasks, or needs the team link when the reason is the missing key, `TEAM_REFUSALS.key`,
+  in core so the page can tell it apart). The welcome and the session key work as a share's (`deriveTeamSessionKey`, HKDF over the team, the
   view and both fresh keys), so the view asked for is bound into the key: a hello for the list cannot be replayed to
   read a task. The share channel's code serves both (`makeShareChannel`, with a host that authorizes the hello).
 - **What a teammate sees.** The list view is `TeamListView`: every open task of the team's projects and the 50 most
