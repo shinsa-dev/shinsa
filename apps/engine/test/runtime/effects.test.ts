@@ -673,7 +673,7 @@ describe('triage', () => {
     });
     await runner.apply({ kind: 'task.triage', taskId: parent?.id ?? '' }, createContext());
     await runner.apply({ kind: 'task.triage', taskId: task?.id ?? '' }, createContext());
-    expect(engine.state.tasks[task?.id ?? '']?.stacksOn).toEqual([parent?.id]);
+    expect(engine.state.tasks[task?.id ?? '']?.stacksOn).toEqual([parent?.id ?? '']);
     expect(engine.state.tasks[parent?.id ?? '']?.stacksOn ?? []).toEqual([]);
   });
 
