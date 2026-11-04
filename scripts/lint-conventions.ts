@@ -32,8 +32,6 @@ import {
   SHORTCUT_MESSAGE,
   STRETCHED_TRIGGER_MESSAGE,
   TAB_BAR_MESSAGE,
-  PROMISE_IO_FILES,
-  PROMISE_IO_STALE_MESSAGE,
   TIME_MESSAGE,
   TOOLTIP_DELAY_MESSAGE,
   VERB_CATALOG,
@@ -556,18 +554,9 @@ function collectClassViolations(file: string, source: string, violations: Violat
 }
 
 function collectPromiseIoViolations(file: string, source: string, violations: Violation[]): void {
-  const lines = isPromiseIoSource(file, source) ? listPromiseLines(file, source) : [];
-  if (PROMISE_IO_FILES.has(file)) {
-    if (lines.length === 0) violations.push({ file, line: 1, message: PROMISE_IO_STALE_MESSAGE });
-    return;
-  }
-  for (const line of lines) violations.push({ file, line, message: PROMISE_IO_MESSAGE });
-}
-
-function listMissingPromiseIoFiles(): Violation[] {
-  return [...PROMISE_IO_FILES]
-    .filter((file) => !existsSync(file))
-    .map((file) => ({ file, line: 1, message: PROMISE_IO_STALE_MESSAGE }));
+  if (!isPromiseIoSource(file, source)) return;
+  for (const line of listPromiseLines(file, source))
+    violations.push({ file, line, message: PROMISE_IO_MESSAGE });
 }
 
 function collectEngineRuntimeViolations(file: string, source: string, violations: Violation[]): void {
@@ -619,7 +608,7 @@ function run(): void {
   for (const root of ROOTS.filter((candidate) => existsSync(candidate))) {
     for (const file of listSourceFiles(root)) checkFile(file, violations, appSources);
   }
-  violations.push(...listToastViolations(appSources), ...listMissingPromiseIoFiles());
+  violations.push(...listToastViolations(appSources));
   for (const sheet of APP.flatMap((root) => listStyleSheets(root)))
     collectRawSelection(sheet, readFileSync(sheet, 'utf8'), violations);
   if (violations.length === 0) return;
