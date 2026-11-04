@@ -379,8 +379,15 @@ model. The Worker's part of it:
 - The assets are `../web/dist-remote`, the web app's remote build, which `bun run build` makes (`build:remote` in
   `apps/web`): Cloudflare's Workers Builds runs it in `apps/cloud` before every deploy and preview.
 - The schema is `migrations/0001_schema.sql`, which production D1 runs and records as applied. A change to it is a
-  new numbered file beside it, applied with `bun run migrate` before the Worker that needs it deploys. A deploy from
-  a checkout runs `bun run build` first, since `wrangler deploy` refuses a missing `../web/dist-remote`.
+  new numbered file beside it, applied with `bun run migrate` before the Worker that needs it deploys. `bun run
+  deploy` builds first (`bun run build && wrangler deploy`), so a checkout without `../web/dist-remote` never fails
+  halfway and leaves the Worker before it serving a schema it cannot read.
+- A Worker and the schema it reads roll back together. Every Worker built from code before #184 (the change that
+  brought `0001_schema.sql` and renamed `instances` to `machines`) reads the old table names (`instances`,
+  `pair_sessions`). In `wrangler deployments list` those are the Worker versions deployed before 2026-11-04 21:44 UTC,
+  the first on the new schema being version `d2e271eb` (a Worker version id, not a commit). Rolling the Worker back to
+  one of them, or restoring D1 to before its rebuild (`wrangler d1 time-travel restore`), fails every request that
+  reads D1 with `no such table`. Undo one only with the other, in the same minute.
 - Before the first deploy: a D1 database `shinsa-cloud` (`wrangler d1 create shinsa-cloud`, its id in
   `wrangler.jsonc`) with the migrations applied (`bun run migrate`), a GitHub OAuth app whose callback is
   `https://app.shinsa.dev/__remote/sign-in/callback`, and the secrets `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` and
