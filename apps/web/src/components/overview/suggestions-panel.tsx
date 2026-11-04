@@ -38,13 +38,13 @@ export function SuggestionRow({
   const [start, setStart] = React.useState<SuggestionStart>(resolveSuggestionStart(suggestion));
 
   return (
-    <li className='flex items-start gap-3 py-2 first:pt-0 last:pb-0'>
+    <li className='flex flex-col gap-2 py-2 first:pt-0 last:pb-0 sm:flex-row sm:items-start sm:gap-3'>
       <div className='flex min-w-0 flex-1 flex-col gap-px text-xs'>
         <InlineMarkdown text={suggestion.title} className='leading-5 font-medium text-fg-4' />
         <InlineMarkdown text={suggestion.why} className='text-fg-3' />
       </div>
       {!readOnly && (
-        <div className='flex shrink-0 items-center gap-1.5'>
+        <div className='flex shrink-0 flex-wrap items-center gap-1.5'>
           <SelectField
             label={SUGGESTION_START_LABEL}
             size='sm'

@@ -69,7 +69,7 @@ export function Composer({
   }
 
   return (
-    <div className='sticky bottom-0 z-20 bg-background pt-1 pb-3'>
+    <div className='sticky bottom-0 z-20 bg-background pt-1 pb-[max(--spacing(3),env(safe-area-inset-bottom))]'>
       <div className={PAGE_COLUMN}>
         {dock}
         <div {...dropProps} className={cn(CARD, 'flex flex-col', dragging && 'border-primary')}>

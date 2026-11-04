@@ -667,18 +667,51 @@ export function TaskSharedFacts({
   );
 }
 
+export interface FactsFold {
+  open: boolean;
+  onToggle: () => void;
+}
+
+function FoldToggle({ fold }: { fold: FactsFold }) {
+  return (
+    <button
+      type='button'
+      aria-expanded={fold.open}
+      onClick={fold.onToggle}
+      className={cn(FACT, FACT_INTERACTIVE)}
+    >
+      {fold.open ? 'Fewer details' : 'Details'}
+      <Icon size='sm' name={fold.open ? 'IconChevronTopMedium' : 'IconChevronDownMedium'} />
+    </button>
+  );
+}
+
 export function TaskFacts({
   state,
   task,
+  fold = null,
   className,
 }: {
   state: ShinsaState;
   task: Task;
+  fold?: FactsFold | null;
   className?: string;
 }) {
   const readOnly = useReadOnly();
   const checks = resolveChecksView(state, task);
   const filedBy = resolveFiledByFact(state, task);
+  if (fold && !fold.open) {
+    return (
+      <div className={cn('-ms-1.5 flex flex-wrap items-center gap-1', className)}>
+        <HandleFact task={task} />
+        <RoundFact task={task} />
+        <StatusFact state={state} task={task} />
+        <PullRequestFact state={state} task={task} />
+        {!task.pullRequest && checks && <ChecksFact view={checks} />}
+        <FoldToggle fold={fold} />
+      </div>
+    );
+  }
   return (
     <div className={cn('-ms-1.5 flex flex-wrap items-center gap-1', className)}>
       <HandleFact task={task} />
@@ -722,6 +755,7 @@ export function TaskFacts({
         tasks={listDuplicates(state, task)}
       />
       <TeammateKeptOverFacts task={task} />
+      {fold && <FoldToggle fold={fold} />}
     </div>
   );
 }

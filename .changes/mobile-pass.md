@@ -1,4 +1,4 @@
 ---
 kind: improved
 ---
-On a phone, the top bar keeps Tasks, what needs you, Feedback and search, and a More button opens everything else. The bar and pages keep clear of the notch and the home bar.
+Shinsa now works on a phone: the top bar keeps what you use most with everything else under More, and a task page opens on its title, status and work, with the rest of its details one tap away.

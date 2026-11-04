@@ -1,6 +1,9 @@
 import type { ShinsaState, Task } from '@shinsa/core';
+import { useMediaQuery } from '@shinsa/ui/hooks/use-media-query';
 import { cn } from '@shinsa/ui/lib/utils';
+import * as React from 'react';
 import { Choice } from '@/components/controls/choice.tsx';
+import { PHONE_QUERY } from '@/components/layout/sidebar/compact-bar.tsx';
 import { TaskFacts } from '@/components/task/facts.tsx';
 import { TaskHeading } from '@/components/task/heading.tsx';
 import { TaskMenu } from '@/components/task/menu.tsx';
@@ -30,6 +33,8 @@ export function TaskHeader({
 }) {
   const readOnly = useReadOnly();
   const note = useReadOnlyNote();
+  const phone = useMediaQuery(PHONE_QUERY);
+  const [detailed, setDetailed] = React.useState(false);
   return (
     <div className={cn('flex shrink-0 flex-col gap-2.5', className)}>
       {note}
@@ -38,7 +43,7 @@ export function TaskHeader({
       {!readOnly && <TaskPageCommands state={state} task={task} view={view} />}
       <div className='flex flex-wrap items-start gap-x-4 gap-y-2'>
         <TaskHeading task={task} className='min-w-60 flex-1 py-0.5' />
-        <div data-task-tabs className='shrink-0'>
+        <div data-task-tabs className='max-w-full shrink-0 overflow-x-auto'>
           <Choice
             label='Task view'
             items={view.tabs.map((tab) => ({ value: tab, label: TASK_TAB[tab].label }))}
@@ -49,7 +54,12 @@ export function TaskHeader({
         </div>
       </div>
       <div className='flex items-start gap-2'>
-        <TaskFacts state={state} task={task} className='min-w-0 flex-1' />
+        <TaskFacts
+          state={state}
+          task={task}
+          fold={phone ? { open: detailed, onToggle: () => setDetailed((open) => !open) } : null}
+          className='min-w-0 flex-1'
+        />
         {!readOnly && (
           <div className='flex h-6 shrink-0 items-center gap-2'>
             <TaskMenu state={state} task={task} />

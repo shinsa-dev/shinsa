@@ -455,7 +455,15 @@ Only these, and they win over anything below:
     Feedback popovers open below their rows instead of beside them. The sheet closes on any change of route. The
     bars and the sheet keep clear of the notch and the home bar with the safe-area insets (`SAFE_AREA_TOP`,
     `SAFE_AREA_SIDES`, `viewport-fit=cover` in `index.html`), and the page column's gutter is 16px below `sm`
-    (`PAGE_COLUMN`), its top 16px (`PAGE_TOP`). The app has one
+    (`PAGE_COLUMN`), its top 16px (`PAGE_TOP`); the task page in Desk drops its frame's own padding below `sm`, so it
+    is 16px there too (the framed Code tab keeps it). **The task page on a phone** shows the handle, the round, the
+    status and the pull request (or the checks) and folds every other fact behind a Details fact at the row's end
+    (`TaskFacts` `fold`, opened per page view, never stored), which opens them in their usual order with Fewer
+    details at the end. Its tabs scroll sideways in place. A now card's actions go under its title (`NowFrame`), a
+    finding's Fix / Dismiss sit on its label row with the issue at full width under both (`FindingNote`, a grid), a
+    suggested task's controls go under its text, a watchdog's title wraps instead of truncating, and the queued
+    messages over the composer stop at 96px. The docked composer keeps clear of the home bar
+    (`env(safe-area-inset-bottom)`). The app has one
     keyboard shortcut: ⌘K (Ctrl K elsewhere) opens the command menu (see 14). Nothing else is
     bound to a key, except the Code tab's ⌘P, ⇧⌘F, ⌘F and ⌘G while it is open (32), the Review tab's J and K while it is
     open (34), the Terminal page's ⌘T and ⌘W while it is open and a focused terminal's own keys (37), Enter sends in every input, and a setup step's option list takes the arrows, Home, End, Enter and

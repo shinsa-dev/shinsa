@@ -133,7 +133,7 @@ function SidebarTaskPage({ state, task, view }: { state: ShinsaState; task: Task
 function CardsTaskPage({ state, task, view }: { state: ShinsaState; task: Task; view: TaskView }) {
   const coding = view.tab === 'code';
   return (
-    <div className={cn(CARDS_FRAME, 'flex min-h-0 flex-1 flex-col pb-4')}>
+    <div className={cn(CARDS_FRAME, 'flex min-h-0 flex-1 flex-col pb-4', !coding && 'max-sm:px-0')}>
       <TaskHeader
         state={state}
         task={task}
