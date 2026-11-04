@@ -81,23 +81,23 @@ const CUSTOM_MODE_ITEM: { value: ShareMode; label: string; hint: string; icon: I
 };
 
 const SHARE_SCOPE_ROWS: Readonly<Record<ViewScope, { title: string; hint: string }>> = {
-  identity: { title: 'Title and status', hint: 'Always shown' },
-  description: { title: 'Request', hint: 'What was asked, without attachments' },
+  identity: { title: 'Title and status', hint: 'Always on the link' },
+  description: { title: 'Request', hint: 'The task as first asked' },
   requests: { title: 'Later requests', hint: 'Each round’s request' },
-  progress: { title: 'Progress', hint: 'The steps and where the task is' },
-  summary: { title: 'Summary', hint: 'The agent’s summary of the work' },
-  people: { title: 'People', hint: 'Who owns it and who worked on it' },
+  progress: { title: 'Progress', hint: 'Steps and current stage' },
+  summary: { title: 'Summary', hint: 'The agent’s work summary' },
+  people: { title: 'People', hint: 'Owner and contributors' },
   plan: { title: 'Plan', hint: 'The plan and its phases' },
   reports: { title: 'Phase reports', hint: 'What each phase changed' },
-  review: { title: 'Review', hint: 'The review report and findings' },
-  evidence: { title: 'Evidence', hint: 'Screenshots, recordings and notes' },
-  checks: { title: 'Checks', hint: 'Each check and its output' },
-  pull_request: { title: 'Pull request', hint: 'The pull request and its branch' },
-  activity: { title: 'Activity', hint: 'What happened, without messages' },
-  code: { title: 'Code and diff', hint: 'The diff and the changed files' },
-  runs: { title: 'Runs', hint: 'Each agent run, without its prompt' },
-  live: { title: 'Live work', hint: 'The agents’ output and tool calls' },
-  messages: { title: 'Your messages', hint: 'What you wrote to the agents' },
+  review: { title: 'Review', hint: 'The review and findings' },
+  evidence: { title: 'Evidence', hint: 'Screenshots and notes' },
+  checks: { title: 'Checks', hint: 'Check results and output' },
+  pull_request: { title: 'Pull request', hint: 'Pull request and branch' },
+  activity: { title: 'Activity', hint: 'Events, without messages' },
+  code: { title: 'Code and diff', hint: 'The diff and its files' },
+  runs: { title: 'Runs', hint: 'Agent runs, no prompts' },
+  live: { title: 'Live work', hint: 'The agents’ live output' },
+  messages: { title: 'Your messages', hint: 'What you wrote to agents' },
 };
 
 export const SHARE_SCOPES_TITLE = 'What the link shows';
