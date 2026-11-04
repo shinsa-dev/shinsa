@@ -17,17 +17,18 @@ function createAppRuntime(transport: Layer.Layer<AppTransportServices>) {
   );
 }
 
-let appRuntime = createAppRuntime(
-  Layer.mergeAll(
-    Layer.succeed(
-      FetchHttpClient.Fetch,
-      Object.assign((input: string | URL | Request, init?: RequestInit) => globalThis.fetch(input, init), {
-        preconnect: globalThis.fetch.preconnect,
-      })
-    ),
+export function resolveAppTransport(
+  send: (input: string | URL | Request, init?: RequestInit) => Promise<Response>
+) {
+  return Layer.mergeAll(
+    Layer.succeed(FetchHttpClient.Fetch, Object.assign(send, { preconnect: globalThis.fetch.preconnect })),
     Socket.layerWebSocketConstructorGlobal
-  )
-);
+  );
+}
+
+export const GLOBAL_APP_TRANSPORT = resolveAppTransport((input, init) => globalThis.fetch(input, init));
+
+let appRuntime = createAppRuntime(GLOBAL_APP_TRANSPORT);
 
 export function replaceAppTransport(transport: Layer.Layer<AppTransportServices>) {
   appRuntime = createAppRuntime(transport);

@@ -376,6 +376,13 @@ export class Fleet implements ShinsaConnection {
     this.#remote.publish();
   }
 
+  addMember(member: FleetMember) {
+    this.#add(member);
+    this.#entries.sort((a, b) => resolveMemberRank(a.member) - resolveMemberRank(b.member));
+    member.connection.start();
+    this.#publishMembers();
+  }
+
   removeMember(id: string) {
     const entry = this.#entries.find((candidate) => candidate.member.id === id);
     if (!entry) return;
