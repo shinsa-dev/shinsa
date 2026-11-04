@@ -4,8 +4,9 @@ import { join } from 'node:path';
 import { Clock, Effect, Fiber, Ref } from 'effect';
 import { TestClock } from 'effect/testing';
 import { commitWorktree } from '../../src/git/index.ts';
-import { runGitOrThrow } from '../../src/git/run.ts';
-import { GitFailed, LOCK_RETRY } from '../../src/git/schema.ts';
+import { GitFailed, type GitRun, LOCK_RETRY } from '../../src/git/schema.ts';
+import { Git } from '../../src/git/service.ts';
+import { edgeRuntime } from '../../src/runtime/edge.ts';
 import { createGitRepo } from '../helpers/index.ts';
 
 function recordAttempts(retryable: boolean) {
@@ -24,6 +25,10 @@ function recordAttempts(retryable: boolean) {
   }).pipe(Effect.provide(TestClock.layer()));
 }
 
+function runGit(args: string[], cwd: string, options: GitRun = {}) {
+  return edgeRuntime.runPromise(Git.use((git) => git.run(args, cwd, options)));
+}
+
 describe('LOCK_RETRY', () => {
   test('waits 50 ms, then twice as long each time, and gives up after five waits', async () => {
     const attempts = await Effect.runPromise(recordAttempts(true));
@@ -37,7 +42,7 @@ describe('LOCK_RETRY', () => {
   });
 });
 
-describe('runGitOrThrow', () => {
+describe('Git.run', () => {
   test('waits out another git process holding the index lock, then goes ahead', async () => {
     const { path } = await createGitRepo({ remote: false });
     writeFileSync(join(path, 'change.txt'), 'new\n');
@@ -46,27 +51,23 @@ describe('runGitOrThrow', () => {
     const released = setTimeout(() => rmSync(lock, { force: true }), 30);
     expect(await commitWorktree(path, 'chore: change')).toEqual({ merge: null });
     clearTimeout(released);
-    expect(await runGitOrThrow(['log', '-1', '--format=%s'], path)).toBe('chore: change');
+    expect(await runGit(['log', '-1', '--format=%s'], path)).toBe('chore: change');
   });
 
   test('gives up on a lock that never goes away, and never retries other failures', async () => {
     const { path } = await createGitRepo({ remote: false });
     writeFileSync(join(path, '.git', 'index.lock'), '');
     writeFileSync(join(path, 'change.txt'), 'new\n');
-    await expect(runGitOrThrow(['add', '-A'], path)).rejects.toThrow('index.lock');
+    await expect(runGit(['add', '-A'], path)).rejects.toThrow('index.lock');
     const started = performance.now();
-    await expect(runGitOrThrow(['no-such-command'], path)).rejects.toThrow('git no-such-command failed');
+    await expect(runGit(['no-such-command'], path)).rejects.toThrow('git no-such-command failed');
     expect(performance.now() - started).toBeLessThan(1_000);
   });
 
   test('a run cancelled before it starts, or in a folder that is gone, fails without a retry', async () => {
     const cancelled = new AbortController();
     cancelled.abort();
-    await expect(runGitOrThrow(['status'], '/', { signal: cancelled.signal })).rejects.toThrow(
-      'git status failed'
-    );
-    await expect(runGitOrThrow(['status'], '/nonexistent/shinsa/folder')).rejects.toThrow(
-      'git status failed'
-    );
+    await expect(runGit(['status'], '/', { signal: cancelled.signal })).rejects.toThrow('git status failed');
+    await expect(runGit(['status'], '/nonexistent/shinsa/folder')).rejects.toThrow('git status failed');
   });
 });

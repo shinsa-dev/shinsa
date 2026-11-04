@@ -1,10 +1,43 @@
 import { afterEach, describe, expect, test } from 'bun:test';
+import { randomBytes } from 'node:crypto';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { McpOAuth } from '../../src/extensions/oauth.ts';
+import { Effect } from 'effect';
+import type { FetchLike } from '../../src/extensions/oauth/schema.ts';
+import { makeMcpOAuth } from '../../src/extensions/oauth/service.ts';
+import { SIGN_IN_PENDING_MS } from '../../src/extensions/schema.ts';
+import { edgeRuntime } from '../../src/runtime/edge.ts';
 import { SecretStore } from '../../src/secrets/store.ts';
 import { type FakeMcpHttp, startFakeMcpHttp } from '../helpers/mcp/http.ts';
+
+interface OAuthOptions {
+  redirectUrl: () => string;
+  now?: () => number;
+  fetch?: FetchLike;
+  pendingMs?: number;
+}
+
+function openOAuth(store: SecretStore, options: OAuthOptions) {
+  const handle = edgeRuntime.runSync(
+    makeMcpOAuth({
+      store,
+      redirectUrl: Effect.sync(options.redirectUrl),
+      now: Effect.sync(options.now ?? Date.now),
+      random: Effect.sync(() => randomBytes(24).toString('base64url')),
+      fetch: options.fetch,
+      pendingMs: options.pendingMs ?? SIGN_IN_PENDING_MS,
+    })
+  );
+  return {
+    isSignedIn: (serverId: string) => edgeRuntime.runSync(handle.isSignedIn(serverId)),
+    start: (serverId: string, url: string) => edgeRuntime.runPromise(handle.start(serverId, url)),
+    finish: (state: string, code: string) => edgeRuntime.runPromise(handle.finish(state, code)),
+    resolveAccessToken: (serverId: string, url: string) =>
+      edgeRuntime.runPromise(handle.resolveAccessToken(serverId, url)),
+    signOut: (serverId: string) => edgeRuntime.runSync(handle.signOut(serverId)),
+  };
+}
 
 const REDIRECT = 'http://127.0.0.1:5180/api/mcp/oauth/callback';
 
@@ -29,7 +62,7 @@ describe('signing in to a remote MCP server', () => {
   test('registers Shinsa, sends you to the server with PKCE, and keeps the tokens in the secret store', async () => {
     fake = startFakeMcpHttp({ oauth: true });
     const store = createStore();
-    const oauth = new McpOAuth(store, { redirectUrl: () => REDIRECT });
+    const oauth = openOAuth(store, { redirectUrl: () => REDIRECT });
     expect(oauth.isSignedIn('shinsa:docs')).toBe(false);
 
     const authorizationUrl = await oauth.start('shinsa:docs', fake.mcpUrl);
@@ -47,7 +80,7 @@ describe('signing in to a remote MCP server', () => {
 
   test('a sign-in nobody started here, or one used twice, is refused', async () => {
     fake = startFakeMcpHttp({ oauth: true });
-    const oauth = new McpOAuth(createStore(), { redirectUrl: () => REDIRECT });
+    const oauth = openOAuth(createStore(), { redirectUrl: () => REDIRECT });
     await expect(oauth.finish('unknown-state', 'code-1')).rejects.toThrow('This sign-in expired.');
     const authorizationUrl = await oauth.start('shinsa:docs', fake.mcpUrl);
     const { state, code } = await followAuthorization(authorizationUrl ?? '');
@@ -58,7 +91,7 @@ describe('signing in to a remote MCP server', () => {
   test('a sign-in left open past its ten minutes expires', async () => {
     fake = startFakeMcpHttp({ oauth: true });
     let now = 1_000;
-    const oauth = new McpOAuth(createStore(), { redirectUrl: () => REDIRECT, now: () => now, pendingMs: 50 });
+    const oauth = openOAuth(createStore(), { redirectUrl: () => REDIRECT, now: () => now, pendingMs: 50 });
     const { state, code } = await followAuthorization((await oauth.start('shinsa:docs', fake.mcpUrl)) ?? '');
     now += 51;
     await expect(oauth.finish(state, code)).rejects.toThrow('expired');
@@ -66,7 +99,7 @@ describe('signing in to a remote MCP server', () => {
 
   test('a code the server refuses fails the sign-in', async () => {
     fake = startFakeMcpHttp({ oauth: true });
-    const oauth = new McpOAuth(createStore(), { redirectUrl: () => REDIRECT });
+    const oauth = openOAuth(createStore(), { redirectUrl: () => REDIRECT });
     const { state } = await followAuthorization((await oauth.start('shinsa:docs', fake.mcpUrl)) ?? '');
     await expect(oauth.finish(state, 'forged')).rejects.toThrow();
     expect(oauth.isSignedIn('shinsa:docs')).toBe(false);
@@ -75,7 +108,7 @@ describe('signing in to a remote MCP server', () => {
   test('a server that no longer knows Shinsa as a client forgets every saved credential', async () => {
     fake = startFakeMcpHttp({ oauth: true, tokenError: 'invalid_client' });
     const store = createStore();
-    const oauth = new McpOAuth(store, { redirectUrl: () => REDIRECT });
+    const oauth = openOAuth(store, { redirectUrl: () => REDIRECT });
     const { state, code } = await followAuthorization((await oauth.start('shinsa:docs', fake.mcpUrl)) ?? '');
     await expect(oauth.finish(state, code)).rejects.toThrow();
     expect(store.selectMcpCredentials('shinsa:docs')).not.toHaveProperty('client');
@@ -84,7 +117,7 @@ describe('signing in to a remote MCP server', () => {
 
   test('an access token about to expire is refreshed before an agent gets it', async () => {
     fake = startFakeMcpHttp({ oauth: true, expiresIn: 30 });
-    const oauth = new McpOAuth(createStore(), { redirectUrl: () => REDIRECT });
+    const oauth = openOAuth(createStore(), { redirectUrl: () => REDIRECT });
     const { state, code } = await followAuthorization((await oauth.start('shinsa:docs', fake.mcpUrl)) ?? '');
     await oauth.finish(state, code);
     expect(await oauth.resolveAccessToken('shinsa:docs', fake.mcpUrl)).toBe('access-2');
@@ -94,7 +127,7 @@ describe('signing in to a remote MCP server', () => {
   test('a refresh the server refuses signs the server out, so it asks you to connect again', async () => {
     fake = startFakeMcpHttp({ oauth: true, expiresIn: 30 });
     const store = createStore();
-    const oauth = new McpOAuth(store, { redirectUrl: () => REDIRECT });
+    const oauth = openOAuth(store, { redirectUrl: () => REDIRECT });
     const { state, code } = await followAuthorization((await oauth.start('shinsa:docs', fake.mcpUrl)) ?? '');
     await oauth.finish(state, code);
     store.updateMcpCredentials('shinsa:docs', {
@@ -110,7 +143,7 @@ describe('signing in to a remote MCP server', () => {
       tokens: { access_token: 'old', refresh_token: 'r', token_type: 'Bearer', expires_in: 1 },
       savedAt: 1,
     });
-    const oauth = new McpOAuth(store, {
+    const oauth = openOAuth(store, {
       redirectUrl: () => REDIRECT,
       fetch: () => Promise.reject(new Error('offline')),
     });
@@ -120,7 +153,7 @@ describe('signing in to a remote MCP server', () => {
   test('no token, no access token; signing out forgets everything', async () => {
     fake = startFakeMcpHttp({ oauth: true });
     const store = createStore();
-    const oauth = new McpOAuth(store, { redirectUrl: () => REDIRECT });
+    const oauth = openOAuth(store, { redirectUrl: () => REDIRECT });
     expect(await oauth.resolveAccessToken('shinsa:docs', fake.mcpUrl)).toBeNull();
     const { state, code } = await followAuthorization((await oauth.start('shinsa:docs', fake.mcpUrl)) ?? '');
     await oauth.finish(state, code);
@@ -132,7 +165,7 @@ describe('signing in to a remote MCP server', () => {
   test('a server that needs no sign-in is authorized at once, with no page to open', async () => {
     fake = startFakeMcpHttp({ oauth: true });
     const store = createStore();
-    const oauth = new McpOAuth(store, { redirectUrl: () => REDIRECT });
+    const oauth = openOAuth(store, { redirectUrl: () => REDIRECT });
     const { state, code } = await followAuthorization((await oauth.start('shinsa:docs', fake.mcpUrl)) ?? '');
     await oauth.finish(state, code);
     expect(await oauth.start('shinsa:docs', fake.mcpUrl)).toBeNull();
@@ -142,7 +175,7 @@ describe('signing in to a remote MCP server', () => {
     fake = startFakeMcpHttp({ oauth: true });
     let redirect = REDIRECT;
     const store = createStore();
-    const oauth = new McpOAuth(store, { redirectUrl: () => redirect });
+    const oauth = openOAuth(store, { redirectUrl: () => redirect });
     await oauth.start('shinsa:docs', fake.mcpUrl);
     redirect = 'http://127.0.0.1:5300/api/mcp/oauth/callback';
     const authorizationUrl = await oauth.start('shinsa:docs', fake.mcpUrl);

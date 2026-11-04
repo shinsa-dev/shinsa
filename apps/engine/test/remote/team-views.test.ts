@@ -2,9 +2,11 @@ import { describe, expect, test } from 'bun:test';
 import { chmodSync, existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { ShareMessage } from '@shinsa/core';
-import { TEAM_VIEWS_LIMIT, TeamViewRecorder, TeamViews } from '../../src/remote/team-views.ts';
+import { TeamViewRecorder } from '../../src/remote/team-views/recorder.ts';
+import { TEAM_VIEWS_LIMIT } from '../../src/remote/team-views/schema.ts';
 import { createTempDir } from '../helpers/index.ts';
 import { captureLogs } from '../helpers/logs.ts';
+import { openTeamViews } from './kept.ts';
 
 function view(updatedAt: number, files: Record<string, string> = {}): ShareMessage {
   const listed = Object.fromEntries(
@@ -67,11 +69,11 @@ describe('recording a teammate’s task view', () => {
 describe('keeping teammates’ task views on disk', () => {
   test('writes each view to its own file with an index, reads it back after a restart, and removes them', () => {
     const dir = join(createTempDir(), 'team-views');
-    const views = new TeamViews(dir);
+    const views = openTeamViews(dir);
     expect(views.select('team1', 'inst1', 'task1')).toBeNull();
     views.write({ ...ENTRY, messages: [view(5)] });
     views.write({ ...ENTRY, taskId: 'task2', messages: [view(6)] });
-    const restarted = new TeamViews(dir);
+    const restarted = openTeamViews(dir);
     expect(restarted.list().map((entry) => entry.taskId)).toEqual(['task1', 'task2']);
     expect(restarted.selectEntry('team1', 'inst1', 'task1')).toEqual({ ...ENTRY, size: SIZE });
     expect(restarted.select('team1', 'inst1', 'task1')?.messages).toEqual([view(5)]);
@@ -84,7 +86,7 @@ describe('keeping teammates’ task views on disk', () => {
 
   test('reads a kept view that is not an object as no view', () => {
     const dir = join(createTempDir(), 'team-views');
-    const views = new TeamViews(dir);
+    const views = openTeamViews(dir);
     views.write({ ...ENTRY, messages: [view(5)] });
     const [kept] = readdirSync(dir).filter((name) => name !== 'index.json');
     writeFileSync(join(dir, String(kept)), '5');
@@ -103,29 +105,29 @@ describe('keeping teammates’ task views on disk', () => {
     mkdirSync(dir, { recursive: true });
     const logs = captureLogs();
     writeFileSync(join(dir, 'index.json'), '{');
-    expect(new TeamViews(dir).list()).toEqual([]);
+    expect(openTeamViews(dir).list()).toEqual([]);
     writeFileSync(
       join(dir, 'index.json'),
       JSON.stringify({ entries: [null, { ...ENTRY, updatedAt: 'x' }, ENTRY, { ...ENTRY, size: 1 }] })
     );
-    const views = new TeamViews(dir);
+    const views = openTeamViews(dir);
     expect(views.list()).toEqual([{ ...ENTRY, size: 1 }]);
     expect(views.select('team1', 'inst1', 'task1')).toBeNull();
     writeFileSync(join(dir, 'index.json'), JSON.stringify({ entries: 'none' }));
-    expect(new TeamViews(dir).list()).toEqual([]);
+    expect(openTeamViews(dir).list()).toEqual([]);
     writeFileSync(join(dir, 'index.json'), '[]');
-    expect(new TeamViews(dir).list()).toEqual([]);
+    expect(openTeamViews(dir).list()).toEqual([]);
     views.write({ ...ENTRY, messages: [] });
     expect(views.select('team1', 'inst1', 'task1')).toBeNull();
     const taken = join(createTempDir(), 'taken');
     writeFileSync(taken, 'a file where the folder goes');
-    new TeamViews(taken).write({ ...ENTRY, messages: [view(5)] });
+    openTeamViews(taken).write({ ...ENTRY, messages: [view(5)] });
     expect(logs.fieldsOf('[Teams] Could not keep a team task view')).toEqual([
       { dir: taken, error: expect.any(String) },
     ]);
     const blocked = join(createTempDir(), 'blocked');
     mkdirSync(join(blocked, 'index.json', 'inside'), { recursive: true });
-    new TeamViews(blocked).write({ ...ENTRY, messages: [view(5)] });
+    openTeamViews(blocked).write({ ...ENTRY, messages: [view(5)] });
     logs.restore();
     expect(logs.fieldsOf('[Teams] Could not keep the team task views')).toEqual([
       { dir: blocked, error: expect.any(String) },
@@ -137,7 +139,7 @@ describe('keeping teammates’ task views on disk', () => {
   test('logs a folder it could not remove', () => {
     const parent = createTempDir();
     const dir = join(parent, 'team-views');
-    const views = new TeamViews(dir);
+    const views = openTeamViews(dir);
     views.write({ ...ENTRY, messages: [view(5)] });
     chmodSync(parent, 0o555);
     const logs = captureLogs();
@@ -152,11 +154,11 @@ describe('keeping teammates’ task views on disk', () => {
 
   test('keeps every view under one size limit, emptying the least recently updated first', () => {
     const dir = join(createTempDir(), 'team-views');
-    const views = new TeamViews(dir, SIZE * 2);
+    const views = openTeamViews(dir, SIZE * 2);
     views.write({ ...ENTRY, taskId: 'task2', updatedAt: 6, messages: [view(5)] });
     views.write({ ...ENTRY, messages: [view(5)] });
     views.write({ ...ENTRY, taskId: 'task3', updatedAt: 4, messages: [view(5)] });
-    const restarted = new TeamViews(dir, SIZE * 2);
+    const restarted = openTeamViews(dir, SIZE * 2);
     expect(restarted.selectEntry('team1', 'inst1', 'task1')?.size).toBe(0);
     expect(restarted.select('team1', 'inst1', 'task1')).toBeNull();
     expect(restarted.select('team1', 'inst1', 'task2')?.messages).toEqual([view(5)]);

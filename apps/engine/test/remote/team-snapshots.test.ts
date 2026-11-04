@@ -1,9 +1,10 @@
 import { describe, expect, test } from 'bun:test';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { readTeamSnapshotsFile, resolveKeyDigest, TeamSnapshots } from '../../src/remote/team-snapshots.ts';
+import { resolveKeyDigest } from '../../src/remote/team-snapshots/digest.ts';
 import { createTempDir } from '../helpers/index.ts';
 import { captureLogs } from '../helpers/logs.ts';
+import { openTeamSnapshots, readTeamSnapshotsFile } from './kept.ts';
 
 const HELD = {
   teamId: 'team1',
@@ -17,10 +18,10 @@ const HELD = {
 describe('the kept team snapshots', () => {
   test('writes each list, reads it back, and removes the file with the last one', () => {
     const path = join(createTempDir(), 'team-snapshots.json');
-    const store = new TeamSnapshots(path);
+    const store = openTeamSnapshots(path);
     store.write(HELD);
     store.write({ ...HELD, instanceId: 'inst2', snapshot: null });
-    expect(new TeamSnapshots(path).list()).toEqual([HELD, { ...HELD, instanceId: 'inst2', snapshot: null }]);
+    expect(openTeamSnapshots(path).list()).toEqual([HELD, { ...HELD, instanceId: 'inst2', snapshot: null }]);
     expect(store.select('team1', 'inst1')).toEqual(HELD);
     expect(store.select('team1', 'inst9')).toBeNull();
     store.remove('team1', 'inst9');
@@ -60,7 +61,7 @@ describe('the kept team snapshots', () => {
     const path = join(dir, 'taken');
     mkdirSync(join(path, 'inside'), { recursive: true });
     const logs = captureLogs();
-    const store = new TeamSnapshots(path);
+    const store = openTeamSnapshots(path);
     store.write(HELD);
     store.remove('team1', 'inst1');
     logs.restore();

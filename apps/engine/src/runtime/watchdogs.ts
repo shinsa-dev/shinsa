@@ -1,37 +1,19 @@
-import { DomainError, type ShinsaState } from '@shinsa/core';
-import { Effect } from 'effect';
-import { describeError } from '../log/index.ts';
-import { type ClockEntry, StateClock, type StateClockOptions } from './clock.ts';
-import { edgeRuntime } from './edge.ts';
+import type { StateClockOptions } from './clock.ts';
 import type { Engine } from './engine.ts';
-import { WATCHDOG_CLOCK_DEFAULTS, WatchdogFireFailed, type WatchdogClockTick } from './watchdogs/schema.ts';
+import { TickClock } from './tick-clock.ts';
+import { WATCHDOG_CLOCK_DEFAULTS, WatchdogFireFailed } from './watchdogs/schema.ts';
 import { makeWatchdogClock } from './watchdogs/service.ts';
 
-export class WatchdogClock extends StateClock {
-  readonly #listTicks: (state: ShinsaState) => WatchdogClockTick[];
-
+export class WatchdogClock extends TickClock<WatchdogFireFailed> {
   constructor(engine: Engine, options: StateClockOptions = {}) {
-    super(engine, WATCHDOG_CLOCK_DEFAULTS, options);
-    this.#listTicks = edgeRuntime.runSync(
-      makeWatchdogClock({
-        dispatch: (command, id) =>
-          Effect.tryPromise({
-            try: () => engine.dispatch(command, { id }),
-            catch: (error) =>
-              error instanceof DomainError
-                ? error
-                : new WatchdogFireFailed({ message: describeError(error) }),
-          }),
-        refuse: (id) => Effect.sync(() => this.refuse(id)),
-      })
+    super(
+      engine,
+      {
+        defaults: WATCHDOG_CLOCK_DEFAULTS,
+        make: makeWatchdogClock,
+        fail: (message) => new WatchdogFireFailed({ message }),
+      },
+      options
     );
-  }
-
-  protected listEntries(state: ShinsaState): ClockEntry[] {
-    return this.#listTicks(state).map((tick) => ({
-      id: tick.id,
-      dueAt: tick.dueAt,
-      fire: () => edgeRuntime.runPromise(tick.fire),
-    }));
   }
 }

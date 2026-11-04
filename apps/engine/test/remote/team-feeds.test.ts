@@ -30,13 +30,14 @@ import {
   TEAM_VIEW_GONE,
   TeamFeeds,
 } from '../../src/remote/team-feeds.ts';
-import { TEAM_SNAPSHOTS_FILE } from '../../src/remote/team-snapshots.ts';
-import { TEAM_VIEWS_DIR, TeamViews } from '../../src/remote/team-views.ts';
+import { TEAM_SNAPSHOTS_FILE } from '../../src/remote/team-snapshots/schema.ts';
+import { TEAM_VIEWS_DIR } from '../../src/remote/team-views/schema.ts';
 import { TEAM_REFUSALS, Teams } from '../../src/remote/teams.ts';
 import { createTempDir, until } from '../helpers/index.ts';
 import { captureLogs } from '../helpers/logs.ts';
 import { createRepo, createShareView, createStubEngine, createTask, readSentView } from '../helpers/state.ts';
 import { type FakeControlPlane, refuse, startFakeControlPlane } from './control-plane.ts';
+import { openTeamViews } from './kept.ts';
 
 const MONA = { id: '1', login: 'mona', name: 'Mona Lisa', avatarUrl: null };
 
@@ -706,7 +707,7 @@ function createFullLive(
 }
 
 function readKeptViews(remote: Remote) {
-  return new TeamViews(join(dirname(remote.store.path), TEAM_VIEWS_DIR));
+  return openTeamViews(join(dirname(remote.store.path), TEAM_VIEWS_DIR));
 }
 
 function listKeptViewKinds(remote: Remote, taskId: string) {

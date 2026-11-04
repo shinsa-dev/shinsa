@@ -6,13 +6,6 @@ import type { PendingSignIn } from '../schema.ts';
 
 export type FetchLike = (url: string | URL, init?: RequestInit) => Promise<Response>;
 
-export interface McpOAuthOptions {
-  redirectUrl: () => string;
-  now?: () => number;
-  fetch?: FetchLike;
-  pendingMs?: number;
-}
-
 export class McpSignInFailed extends Schema.TaggedError<McpSignInFailed, { readonly brand: unique symbol }>()(
   'McpSignInFailed',
   { message: Schema.String }

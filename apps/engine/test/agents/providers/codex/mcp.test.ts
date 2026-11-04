@@ -2,16 +2,19 @@ import { afterEach, describe, expect, test } from 'bun:test';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import type { RequestId } from '@modelcontextprotocol/sdk/types.js';
-import { startToolEndpoint, type ToolEndpoint } from '../../../../src/agents/providers/codex/mcp.ts';
+import { Duration } from 'effect';
+import type { ToolEndpointHandle } from '../../../../src/agents/providers/codex/mcp/schema.ts';
+import { makeToolEndpoint } from '../../../../src/agents/providers/codex/mcp/service.ts';
 import { createShinsaTools } from '../../../../src/agents/tools/index.ts';
+import { edgeRuntime } from '../../../../src/runtime/edge.ts';
 import { until } from '../../../helpers/index.ts';
 
-const endpoints: ToolEndpoint[] = [];
+const endpoints: ToolEndpointHandle[] = [];
 const clients: Client[] = [];
 
 afterEach(async () => {
   for (const client of clients.splice(0)) await client.close();
-  for (const endpoint of endpoints.splice(0)) endpoint.close();
+  for (const endpoint of endpoints.splice(0)) edgeRuntime.runSync(endpoint.close);
 });
 
 interface Call {
@@ -27,12 +30,14 @@ function open(handle?: (call: Call) => Promise<string>) {
     calls.push(call);
     return handle ? handle(call) : Promise.resolve(`${name} done`);
   });
-  const endpoint = startToolEndpoint(tools, { heartbeatMs: 5 });
+  const endpoint = edgeRuntime.runSync(
+    makeToolEndpoint({ tools, heartbeat: Duration.millis(5), token: crypto.randomUUID() })
+  );
   endpoints.push(endpoint);
   return { endpoint, calls };
 }
 
-async function connect(endpoint: ToolEndpoint) {
+async function connect(endpoint: ToolEndpointHandle) {
   const client = new Client({ name: 'test', version: '1.0.0' });
   await client.connect(
     new StreamableHTTPClientTransport(new URL(endpoint.url), { requestInit: { headers: endpoint.headers } })
@@ -114,8 +119,8 @@ describe('the tool endpoint Codex calls', () => {
       () => outcome.push('dropped')
     );
     await until('the call to arrive', () => calls.length === 1);
-    endpoint.close();
-    endpoint.close();
+    edgeRuntime.runSync(endpoint.close);
+    edgeRuntime.runSync(endpoint.close);
     await until('the call to be stopped', () => calls[0]?.signal.aborted === true);
     expect(outcome).not.toContain('answered');
   });

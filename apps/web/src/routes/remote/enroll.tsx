@@ -1,19 +1,17 @@
 import { DEVICE_NAME_LIMIT, REMOTE_PATHS, type RemoteUser, resolveKeyFingerprint } from '@shinsa/core';
 import { Button } from '@shinsa/ui/components/button';
 import { Field } from '@shinsa/ui/components/field';
-import { Icon, type IconName } from '@shinsa/ui/components/icon';
 import { Input } from '@shinsa/ui/components/input';
 import * as React from 'react';
-import { SettingsCard } from '@/components/settings/group.tsx';
 import type { DashboardClient } from '@/lib/remote/dashboard.ts';
 import { resolveDeviceName } from '@/lib/remote/device-name.ts';
 import type { DeviceStore } from '@/lib/remote/devices.ts';
 import { type EnrollInput, requestDeviceAccess, selectWaitingDevice } from '@/lib/remote/enroll.ts';
-import { clearEnrollFragment, MACHINE_ICON } from '@/lib/remote/mode.ts';
+import { clearEnrollFragment, MACHINE_ICON, type RemotePoint } from '@/lib/remote/mode.ts';
 import type { EnrolledDevice } from '@/lib/remote/schema.ts';
 import { RemoteBenefits, RemoteHero, RemoteLoading } from './shell.tsx';
 
-const ENROLL_POINTS: { icon: IconName; title: string; detail: string }[] = [
+const ENROLL_POINTS: RemotePoint[] = [
   {
     icon: 'IconKey1',
     title: 'A key made for this device',
@@ -185,17 +183,7 @@ export function EnrollPage({
           from anywhere.
         </RemoteHero>
       )}
-      <SettingsCard className='w-full'>
-        {ENROLL_POINTS.map((point) => (
-          <div key={point.title} className='flex gap-3 px-2.5 py-2'>
-            <Icon name={point.icon} size='sm' className='mt-px shrink-0 text-fg-2' />
-            <div className='flex min-w-0 flex-col gap-px'>
-              <span className='text-xs text-fg-4'>{point.title}</span>
-              <span className='text-2xs text-pretty text-fg-2'>{point.detail}</span>
-            </div>
-          </div>
-        ))}
-      </SettingsCard>
+      <RemoteBenefits points={ENROLL_POINTS} />
       <form
         className='flex w-full flex-col items-center gap-2'
         onSubmit={(event) => {

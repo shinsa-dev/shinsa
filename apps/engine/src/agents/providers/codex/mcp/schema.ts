@@ -2,16 +2,6 @@ import type { Duration, Effect } from 'effect';
 import { Schema } from 'effect';
 import type { ShinsaTools } from '../../../tools/index.ts';
 
-export interface ToolEndpoint {
-  url: string;
-  headers: Record<string, string>;
-  close: () => void;
-}
-
-export interface ToolEndpointOptions {
-  heartbeatMs?: number;
-}
-
 export class ToolEndpointFailed extends Schema.TaggedError<
   ToolEndpointFailed,
   { readonly brand: unique symbol }

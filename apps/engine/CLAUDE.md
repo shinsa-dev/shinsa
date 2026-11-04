@@ -166,7 +166,9 @@ src/
 │                        the push's step, in schema.ts with the EFFECT_RETRY schedule; resolveEffectFailure and
 │                        resolveShippingFailure in classify.ts; retry.ts steps the schedule), StateClock (clock.ts, the
 │                        edge every timer that fires from state extends, over clock/: makeStateClock in service.ts
-│                        keeps one timer fiber in a FiberHandle, ClockTickFailed in schema.ts), MonitorClock (monitors.ts) and WatchdogClock (watchdogs.ts: a watchdog's
+│                        keeps one timer fiber in a FiberHandle, ClockTickFailed in schema.ts), TickClock (tick-clock.ts: a StateClock over a make that lists
+│                        ticks, each an Effect dispatching one command; MonitorClock, WatchdogClock and ShareClock
+│                        extend it), MonitorClock (monitors.ts) and WatchdogClock (watchdogs.ts: a watchdog's
 │                        next check)
 ├── agents/              RunSupervisor (supervisor.ts: the edge over supervisor/'s RunSupervisor service, the same
 │   │                    methods as before, through one ManagedRuntime of it; supervisor/: service.ts (the
@@ -243,7 +245,7 @@ src/
 │   │                    failing with CodexRequestError, the process group killed when its scope closes; params.ts reads
 │   │                    its loose records), the session (session/service.ts: makeCodexSession, session.ts its edge:
 │   │                    turns, steering, the agents Codex starts, compaction), the chat mapping (map.ts), failure
-│   │                    classes (classify.ts), the HTTP MCP endpoint (mcp.ts), the price table and what a turn costs
+│   │                    classes (classify.ts), the HTTP MCP endpoint (mcp/service.ts: makeToolEndpoint), the price table and what a turn costs
 │   │                    (pricing.ts, meter.ts), usage windows read like CodexBar and fast mode credits (usage.ts),
 │   │                    one-shot calls (complete.ts), models, sign-in, executable, MCP servers and skills
 │   │                    (extensions.ts)
@@ -347,8 +349,8 @@ src/
 │                        team's projects, ended the moment access ends), team-feeds.ts (TeamFeeds: a list channel
 │                        to every other machine of each team whose key this machine holds, each socket a lease on
 │                        the access scope, GET /api/teams/tasks,
-│                        the teams socket message and the /api/teams/view relay of one task), team-snapshots.ts
-│                        (TeamSnapshots: each teammate machine's last list), team-views.ts (TeamViews and
+│                        the teams socket message and the /api/teams/view relay of one task), team-snapshots/
+│                        (makeTeamSnapshots: each teammate machine's last list), team-views/ (makeTeamViews and
 │                        TeamViewRecorder: each of their tasks' last full page, replayed while the machine is
 │                        offline), handoffs.ts (Handoffs: the handoff.link and handoff.revoke effects and the claim
 │                        recorded as handoff.claim), index.ts (Remote: wires them, pairing, pausing, removing,
@@ -383,7 +385,7 @@ src/
 │                        definitions.ts, skills.ts, store.ts, health.ts (createServerCheck), usage.ts (UsageIndex over
 │                        usage-index/: makeUsageIndex, the scan a fiber, each refresh a Deferred); one row per server
 │                        however many places define it (catalog.ts), checking and redacting what you send
-│                        (input.ts), sign-in (oauth.ts over oauth/: makeMcpOAuth, McpSignInFailed, the SDK's provider in provider.ts;
+│                        (input.ts), sign-in (oauth/: makeMcpOAuth, McpSignInFailed, the SDK's provider in provider.ts;
 │                        sign-in.ts: the callback page), what a run loads and
 │                        leaves out and what it is told about it (session.ts), loading what the context optimizer
 │                        left out mid-run, by any name (loader.ts over loader/: makeExtensionLoader, one Deferred per load
@@ -391,7 +393,7 @@ src/
 │                        http/routes/extensions and sign-in)
 ├── versions/            The agent programs' versions and their updates (docs/engine.md → Versions and updates):
 │                        registry/ (NpmRegistry: the latest from the npm registry over HttpClient, decoded by
-│                        NpmLatest, NpmRegistryFailed), registry.ts its edge (requestLatestVersion), each program's own
+│                        NpmLatest, NpmRegistryFailed), each program's own
 │                        updater, found from where its binary lives (updaters.ts), the Versions service: snapshot, the 3-hour cache, updates
 │                        (service.ts: makeVersions over Shell and NpmRegistry, one lookup at a time on a Semaphore;
 │                        index.ts its edge),
@@ -433,8 +435,8 @@ src/
 │                        polled on STOP_POLL_SCHEDULE). conventional.ts (COMMIT_TYPES, BRANCH_PATTERN,
 │                        resolveCommitType, serializeConventionalSubject) and refs.ts (assertRefName, slugify) are
 │                        pure. The other files are the edges, the same exports as before for the folders not moved
-│                        yet: index.ts, run.ts (runGitOrThrow), read.ts (readGit), commit.ts, worktree.ts,
-│                        isolation.ts, push.ts, update.ts, bundle.ts, repo.ts, task-refs.ts, changed-files.ts,
+│                        yet: index.ts, commit.ts, worktree.ts,
+│                        isolation.ts, push.ts, update.ts, bundle.ts, repo.ts, task-refs.ts,
 │                        diff.ts, files.ts and processes.ts, each failure the error it threw before (a DomainError
 │                        for the Code tab's reads). blobs.ts (CatFile, CatFilePool: one long-lived
 │                        `git cat-file --batch-command` per repository, over blobs/: makeCatFile, the process, its
@@ -641,8 +643,8 @@ random points of a task's life; `test/http/fuzz.test.ts` throws malformed reques
 
   Code not moved yet keeps its old calls, which are now edges: `log.*`, `resolveConfig`, `runCommand`, the kill
   helpers, `writeJsonFile`, the functions of `git/`, `github/`, `repos/`, `checks/` and `test-coverage/`, the
-  terminals' store and PTY, the extensions' discovery, health and usage, the accounts' and secrets' stores, the npm
-  registry, Eunoe's server and threads, the resource monitor, the
+  terminals' store and PTY, the extensions' discovery, health and usage, the accounts' and secrets' stores,
+  Eunoe's server and threads, the resource monitor, the
   briefings and `Workspaces` run through `edgeRuntime` (`runtime/edge.ts`, `runSync` for logs and config,
   `runPromise` for processes); `Extensions`, `Versions`, `ResourceMonitor`, `EunoeServer`, `Accounts` and
   `Terminals` stay the objects their callers hold;

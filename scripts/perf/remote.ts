@@ -6,7 +6,6 @@ import { parseArgs } from 'node:util';
 import { Transcripts } from '../../apps/engine/src/agents/index.ts';
 import { ConfigStore, resolveConfig } from '../../apps/engine/src/config/index.ts';
 import { startServer } from '../../apps/engine/src/http/index.ts';
-import { Onboarding } from '../../apps/engine/src/onboarding/index.ts';
 import { createRefusedConnector, REMOTE_FILE, Remote } from '../../apps/engine/src/remote/index.ts';
 import { Roots } from '../../apps/engine/src/repos/index.ts';
 import { Engine } from '../../apps/engine/src/runtime/index.ts';
@@ -24,6 +23,7 @@ import {
   serializeBase64Url,
   serializePublicKey,
 } from '../../packages/core/src/index.ts';
+import { createIdleOnboarding } from '../kit/onboarding.ts';
 import {
   type ConnectSample,
   parseQuickTunnelUrl,
@@ -131,18 +131,7 @@ function startEngine(dataDir: string) {
     transcripts: new Transcripts(config.transcriptsDir),
     evidence: new EvidenceStore(config.evidenceDir),
     models: { listModels: () => Promise.resolve([]) } as never,
-    onboarding: new Onboarding({
-      engine,
-      config,
-      store,
-      roots,
-      resolveLogin: () => Promise.resolve(null),
-      ask: () => Promise.resolve(null),
-      run: (command) =>
-        Promise.resolve({ ok: true, code: 0, stdout: `${command[0]} 1.0`, stderr: '', timedOut: false }),
-      models: { listModels: () => Promise.resolve([]) },
-      accounts: () => Promise.resolve([]),
-    }),
+    onboarding: createIdleOnboarding({ engine, config, store, roots }),
     remote,
   });
   return { engine, remote, http, port: http.server.port ?? 0, bootMs };

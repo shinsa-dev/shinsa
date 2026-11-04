@@ -5,7 +5,6 @@ import { ProviderRegistry } from '../../apps/engine/src/agents/providers/index.t
 import { createQuickCalls } from '../../apps/engine/src/agents/quick/index.ts';
 import { ConfigStore, resolveConfig } from '../../apps/engine/src/config/index.ts';
 import { startServer } from '../../apps/engine/src/http/index.ts';
-import { Onboarding } from '../../apps/engine/src/onboarding/index.ts';
 import { Handoffs } from '../../apps/engine/src/remote/handoffs.ts';
 import {
   createRefusedConnector,
@@ -30,6 +29,7 @@ import {
   type MachineResources,
   type Repo,
 } from '../../packages/core/src/index.ts';
+import { createIdleOnboarding } from '../kit/onboarding.ts';
 import { createRandomKey } from './requests.ts';
 import {
   GIGABYTE,
@@ -227,18 +227,7 @@ export async function startMachine(id: string, name: string, dataDir: string) {
     transcripts,
     evidence,
     models: { listModels: () => Promise.resolve([]) } as never,
-    onboarding: new Onboarding({
-      engine,
-      config,
-      store,
-      roots,
-      resolveLogin: () => Promise.resolve(null),
-      ask: () => Promise.resolve(null),
-      run: (command) =>
-        Promise.resolve({ ok: true, code: 0, stdout: `${command[0]} 1.0`, stderr: '', timedOut: false }),
-      models: { listModels: () => Promise.resolve([]) },
-      accounts: () => Promise.resolve([]),
-    }),
+    onboarding: createIdleOnboarding({ engine, config, store, roots }),
     remote,
     place: PLACE,
     shares,

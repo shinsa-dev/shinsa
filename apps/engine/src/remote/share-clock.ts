@@ -1,35 +1,19 @@
-import { DomainError, type ShinsaState } from '@shinsa/core';
-import { Effect } from 'effect';
-import { describeError } from '../log/index.ts';
-import { type ClockEntry, StateClock, type StateClockOptions } from '../runtime/clock.ts';
-import { edgeRuntime } from '../runtime/edge.ts';
+import type { StateClockOptions } from '../runtime/clock.ts';
 import type { Engine } from '../runtime/engine.ts';
-import { SHARE_CLOCK_DEFAULTS, ShareExpireFailed, type ShareClockTick } from './share-clock/schema.ts';
+import { TickClock } from '../runtime/tick-clock.ts';
+import { SHARE_CLOCK_DEFAULTS, ShareExpireFailed } from './share-clock/schema.ts';
 import { makeShareClock } from './share-clock/service.ts';
 
-export class ShareClock extends StateClock {
-  readonly #listTicks: (state: ShinsaState) => ShareClockTick[];
-
+export class ShareClock extends TickClock<ShareExpireFailed> {
   constructor(engine: Engine, options: StateClockOptions = {}) {
-    super(engine, SHARE_CLOCK_DEFAULTS, options);
-    this.#listTicks = edgeRuntime.runSync(
-      makeShareClock({
-        dispatch: (command, id) =>
-          Effect.tryPromise({
-            try: () => engine.dispatch(command, { id }),
-            catch: (error) =>
-              error instanceof DomainError ? error : new ShareExpireFailed({ message: describeError(error) }),
-          }),
-        refuse: (id) => Effect.sync(() => this.refuse(id)),
-      })
+    super(
+      engine,
+      {
+        defaults: SHARE_CLOCK_DEFAULTS,
+        make: makeShareClock,
+        fail: (message) => new ShareExpireFailed({ message }),
+      },
+      options
     );
-  }
-
-  protected listEntries(state: ShinsaState): ClockEntry[] {
-    return this.#listTicks(state).map((tick) => ({
-      id: tick.id,
-      dueAt: tick.dueAt,
-      fire: () => edgeRuntime.runPromise(tick.fire),
-    }));
   }
 }

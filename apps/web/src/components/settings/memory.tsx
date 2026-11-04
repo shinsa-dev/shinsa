@@ -1,8 +1,6 @@
 import type { MemoryEntry, ShinsaState } from '@shinsa/core';
 import { Button } from '@shinsa/ui/components/button';
-import { Field, FieldError } from '@shinsa/ui/components/field';
 import { Icon } from '@shinsa/ui/components/icon';
-import { Textarea } from '@shinsa/ui/components/textarea';
 import { Truncate } from '@shinsa/ui/components/truncate';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
@@ -10,7 +8,6 @@ import { HintButton } from '@/components/controls/hint-button.tsx';
 import { SelectField } from '@/components/controls/select-field.tsx';
 import { ProjectDotIcon } from '@/components/status/project-dot.tsx';
 import { useBusy } from '@/hooks/use-busy.ts';
-import { isCancelKey, isSubmitKey } from '@/lib/keys.ts';
 import {
   describeProposal,
   describeRuleCount,
@@ -27,6 +24,7 @@ import {
   validateRule,
 } from '@/lib/memory.ts';
 import { ROW_INSET, SETTING_ROW, SettingsBlock, SettingsEmpty, SettingsGroup, TOKEN_TEXT } from './group.tsx';
+import { RuleField } from './rule-field.tsx';
 
 interface Draft {
   memoryId: string | null;
@@ -69,29 +67,18 @@ function RuleForm({
         void save();
       }}
     >
-      <Field data-invalid={error ? true : undefined}>
-        <Textarea
-          autoFocus
-          rows={1}
-          value={text}
-          placeholder='One short rule, such as “Keep plans to three phases or fewer.”'
-          aria-label='The rule'
-          aria-invalid={error ? true : undefined}
-          className='min-h-0 resize-none'
-          onKeyDown={(event) => {
-            if (isCancelKey(event)) onDone();
-            if (isSubmitKey(event)) {
-              event.preventDefault();
-              void save();
-            }
-          }}
-          onChange={(event) => {
-            setText(event.target.value);
-            setError(null);
-          }}
-        />
-        {error && <FieldError>{error}</FieldError>}
-      </Field>
+      <RuleField
+        text={text}
+        error={error}
+        label='The rule'
+        placeholder='One short rule, such as “Keep plans to three phases or fewer.”'
+        onChange={(next) => {
+          setText(next);
+          setError(null);
+        }}
+        onCancel={onDone}
+        onSubmit={() => void save()}
+      />
       <div className='flex items-center gap-1.5'>
         <SelectField
           label='For'

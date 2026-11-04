@@ -625,7 +625,7 @@ same files:
   recently active first: each as a `shinsa://` link with its handle, its stage, its branch, what its branch is stacked
   on (a round stacked on the task's own open pull request, `resolveRoundBase`), whether an agent works on it now (an active run) and the files it changed, marking
   those this task changes too (`serializeRepositoryWork`, `chat/repository-work.ts`). The server reads the files
-  with git (`git/changed-files.ts`): the branch's commits since its base (the default branch, or the branch it is
+  with git (`History.changedFiles`, `git/history/service.ts`): the branch's commits since its base (the default branch, or the branch it is
   stacked on), plus what its checkout has not committed. A file list git cannot read
   shows as not known. The tool text is static, so the tool list stays the same for every turn of a session.
 - **Overlaps are facts in the log.** Before a commit hand-over (`complete_phase`, `complete_fix`) dispatches, and
@@ -3552,7 +3552,7 @@ online, and the last list of it their own machine kept while it is not (Offline 
   merges what your machines watch with the channels the browser opens itself (`mergeTeamFeeds`, `HostedTeamFeeds`,
   which retries as `TeamFeeds` does: a refused channel again after 1, 2, then every 5 minutes), keeping the freshest
   copy of each task: a live machine over a kept copy, and of two kept copies the newer (`isBetterMachine`).
-- **Offline teammates** (`TeamFeeds`, `remote/team-snapshots.ts`, `remote/team-views.ts`; `HostedTeamFeeds`). A teammate's tasks stay listed
+- **Offline teammates** (`TeamFeeds`, `remote/team-snapshots/`, `remote/team-views/`; `HostedTeamFeeds`). A teammate's tasks stay listed
   while their machine is offline, since nothing can change on them until it is back: only that machine works on
   them. The copies live with the teammates, never on app.shinsa.dev, which holds and reads no task state.
   - **Where a copy lives.** Each engine writes the last list it got from each machine it watches to
@@ -5164,7 +5164,7 @@ what it costs at the start of every run, so you can turn off what you do not use
   the web asks once when Settings opens. A server is measured only by a check that lists its tools, so the web says
   why one has no estimate: "Sign in to measure", "Can’t measure while failing", "Checking…", or "Not measured while
   off" for one that is off and was never checked.
-- **Sign-in** (`oauth.ts`, the MCP SDK's `auth` with PKCE and dynamic client registration). Connect
+- **Sign-in** (`extensions/oauth/`, the MCP SDK's `auth` with PKCE and dynamic client registration). Connect
   (`/api/extensions/servers/sign-in`) answers the server's authorization URL, which the web opens in a new tab; the
   server sends you back to `/api/mcp/oauth/callback` on Shinsa's own address (outside the Origin guard, Host still
   checked), which finishes the exchange, checks the server and answers a page that tells the Settings tab on a
