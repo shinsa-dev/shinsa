@@ -498,6 +498,18 @@ export function createOverviewScene(now: number) {
         'Set the default branch in the repository settings, then verify the setup again.',
       ].join('\n'),
     }),
+    pickRepository: createSampleGate(now, {
+      id: 'pick-repository-gate',
+      taskId: 'setup',
+      type: 'configuration',
+      title: 'Which repository is this task for?',
+      body: [
+        'Shinsa could not tell which repository this task works in, and its work needs one.',
+        '',
+        'Pick one below, or say in a message which repository it is. A repository Shinsa does not know yet can be added to the project in Settings.',
+      ].join('\n'),
+      choices: ['buzzkit', 'paywall-next', 'superwall-ios'],
+    }),
     signIn: createSampleGate(now, {
       id: 'sign-in-gate',
       taskId: 'sign-in',

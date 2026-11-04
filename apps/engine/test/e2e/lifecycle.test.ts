@@ -145,12 +145,12 @@ describe('fix loops', () => {
     expect(readFileSync(join(w.task(taskId).worktreePath ?? '', 'a.txt'), 'utf8')).toBe('hello\n');
   });
 
-  test('the same failure twice stops the loop with a failure gate', async () => {
+  test('the same failure 8 times in a row stops the loop with a failure gate', async () => {
     const w = await open({ checks: ['grep -q never a.txt'] });
     const taskId = await w.createTask();
     const gate = await w.untilGate(taskId, 'failure');
     expect(gate.title).toBe('Fixing is not making progress');
-    expect(w.agents.of('fix')).toHaveLength(2);
+    expect(w.agents.of('fix')).toHaveLength(8);
     expect(w.activeRuns(taskId)).toHaveLength(0);
   });
 

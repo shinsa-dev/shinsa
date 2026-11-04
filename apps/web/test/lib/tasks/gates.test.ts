@@ -68,4 +68,15 @@ describe('replyToGate', () => {
       ],
     ]);
   });
+
+  it('sends the repository you picked as the reply to the setup question', async () => {
+    const setup = createGate({ id: 'g', taskId: 't', type: 'configuration', choices: ['paywall-next'] });
+    await replyToGate(setup, 'pickRepository', 'paywall-next');
+    expect(spies.sent.mock.calls).toEqual([
+      [
+        { type: 'gate.answer', gateId: 'g', decision: 'reply', response: 'paywall-next' },
+        'Checking that repository.',
+      ],
+    ]);
+  });
 });
