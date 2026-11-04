@@ -301,8 +301,8 @@ async function openViewer(publisher: Shares, url = SHARE_URL, shareId = SHARE_ID
   const ephemeral = (await crypto.subtle.generateKey(REMOTE_KEY_ALGORITHM, true, [
     'deriveBits',
   ])) as CryptoKeyPair;
-  const hello = await createShareHello(link.shareId, link.key, ephemeral.publicKey);
-  let open: ((frame: Bytes) => Promise<Bytes>) | null = null;
+  const hello = await Effect.runPromise(createShareHello(link.shareId, link.key, ephemeral.publicKey));
+  let open: ReturnType<typeof createFrameOpener> | null = null;
   let queue: Promise<void> = Promise.resolve();
   const viewer: Viewer = {
     messages: [],
@@ -330,17 +330,19 @@ async function openViewer(publisher: Shares, url = SHARE_URL, shareId = SHARE_ID
             const welcome = parseShareWelcome(data);
             if (welcome?.type === 'refused') viewer.refused = welcome.reason;
             if (welcome?.type !== 'welcome') return;
-            const key = await deriveShareSessionKey(
-              link.key,
-              { share: link.shareId, clientEphemeral: hello.ephemeral, serverEphemeral: welcome.ephemeral },
-              ephemeral.privateKey,
-              welcome.ephemeral
+            const key = await Effect.runPromise(
+              deriveShareSessionKey(
+                link.key,
+                { share: link.shareId, clientEphemeral: hello.ephemeral, serverEphemeral: welcome.ephemeral },
+                ephemeral.privateKey,
+                welcome.ephemeral
+              )
             );
             open = createFrameOpener(key);
             return;
           }
           if (!open) throw new Error('a frame before the welcome');
-          const message = parseShareMessage(decodeText(await open(data as Bytes)));
+          const message = parseShareMessage(decodeText(await Effect.runPromise(open(data as Bytes))));
           if (message) viewer.messages.push(message);
         });
       },

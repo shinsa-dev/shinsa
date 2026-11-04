@@ -1,6 +1,7 @@
 import { join } from 'node:path';
 import {
   type Bytes,
+  type FrameError,
   type InstanceId,
   createFrameOpener,
   createTeamHello,
@@ -220,10 +221,12 @@ export class TeamFeeds extends Context.Service<TeamFeeds, TeamFeedsHandle>()(
           const url = yield* requestTeamConnect(credentials.machineToken, target.teamId, target.instanceId);
           if (!url) return refused;
           const ephemeral = yield* createEphemeralKeys;
-          const hello = yield* Effect.tryPromise({
-            try: () => createTeamHello(target.teamId, target.key, target.view, ephemeral.publicKey),
-            catch: unreachable,
-          });
+          const hello = yield* createTeamHello(
+            target.teamId,
+            target.key,
+            target.view,
+            ephemeral.publicKey
+          ).pipe(Effect.mapError(unreachable));
           const origin = appOrigin;
           const events = yield* Queue.unbounded<FeedSocketEvent>();
           const socket = yield* Effect.acquireRelease(
@@ -242,7 +245,7 @@ export class TeamFeeds extends Context.Service<TeamFeeds, TeamFeedsHandle>()(
             }),
             (opened) => Effect.sync(() => opened.close())
           );
-          let openFrame: ((frame: Bytes) => Promise<Bytes>) | null = null;
+          let openFrame: ((frame: Bytes) => Effect.Effect<Bytes, FrameError>) | null = null;
 
           const readWelcome = Effect.fn('TeamFeeds.readWelcome')(function* (text: string) {
             const welcome = yield* Effect.try({ try: () => parseShareWelcome(text), catch: unreadable });
@@ -254,15 +257,14 @@ export class TeamFeeds extends Context.Service<TeamFeeds, TeamFeedsHandle>()(
               clientEphemeral: hello.ephemeral,
               serverEphemeral: welcome.ephemeral,
             };
-            const verified = yield* Effect.tryPromise({
-              try: () => verifyTeamWelcome(target.key, keys, welcome.proof),
-              catch: unreadable,
-            });
+            const verified = yield* verifyTeamWelcome(target.key, keys, welcome.proof);
             if (!verified) return refused;
-            const session = yield* Effect.tryPromise({
-              try: () => deriveTeamSessionKey(target.key, keys, ephemeral.privateKey, welcome.ephemeral),
-              catch: unreadable,
-            });
+            const session = yield* deriveTeamSessionKey(
+              target.key,
+              keys,
+              ephemeral.privateKey,
+              welcome.ephemeral
+            ).pipe(Effect.mapError(unreadable));
             openFrame = createFrameOpener(session);
             return null;
           });
@@ -271,7 +273,7 @@ export class TeamFeeds extends Context.Service<TeamFeeds, TeamFeedsHandle>()(
             const opener = openFrame;
             if (!(data instanceof ArrayBuffer && opener)) return offline;
             const frame = new Uint8Array(data) as Bytes;
-            const opened = yield* Effect.tryPromise({ try: () => opener(frame), catch: unreadable });
+            const opened = yield* opener(frame).pipe(Effect.mapError(unreadable));
             const message = yield* Effect.try({
               try: () => parseShareMessage(decodeText(opened)),
               catch: unreadable,
@@ -413,10 +415,7 @@ export class TeamFeeds extends Context.Service<TeamFeeds, TeamFeedsHandle>()(
           const feed = instanceId ? yield* selectFeed(resolveFeedKey(teamId, instanceId)) : null;
           const signingKey = feed?.machine.signingKey;
           if (!(feed && signingKey && canAdopt(feed))) continue;
-          const body = yield* Effect.tryPromise({
-            try: () => verifyTeamSnapshot(signingKey, snapshot),
-            catch: unreadable,
-          });
+          const body = yield* verifyTeamSnapshot(signingKey, snapshot);
           const current = yield* selectCurrent(feed.id, feed.token);
           if (
             !(

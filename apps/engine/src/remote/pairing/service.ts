@@ -27,9 +27,7 @@ export class Pairings extends Context.Service<
           );
           return { status: 'expired' } as const;
         }
-        const credentials = yield* Effect.promise(() =>
-          openPairingCredentials(machine, claimed.sealedCredentials)
-        );
+        const credentials = yield* openPairingCredentials(machine, claimed.sealedCredentials);
         if (credentials)
           return { status: 'claimed', machine: { credentials, owner: claimed.owner } } as const;
         yield* Effect.logError('[Remote] The pairing credentials did not open with this machine key');

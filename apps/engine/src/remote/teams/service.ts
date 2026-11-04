@@ -287,21 +287,20 @@ export class Teams extends Context.Service<Teams, TeamsHandle>()('shinsa/engine/
         if (refused) return { refused };
         const stored = yield* store.selectTeamKey(hello.team);
         if (!stored) return { refused: TEAM_REFUSALS.key };
-        if (!(yield* Effect.promise(() => verifyTeamHello(stored.key, hello))))
-          return { refused: TEAM_REFUSALS.mismatch };
+        if (!(yield* verifyTeamHello(stored.key, hello))) return { refused: TEAM_REFUSALS.mismatch };
         const ephemeral = yield* createEphemeralKeys;
         const keys = {
           team: hello.team,
           view: hello.view,
           clientEphemeral: hello.ephemeral,
-          serverEphemeral: yield* Effect.promise(() => serializePublicKey(ephemeral.publicKey)),
+          serverEphemeral: yield* serializePublicKey(ephemeral.publicKey),
         };
         const answer: HelloAnswer<TeamSubject> = {
           subject,
-          session: yield* Effect.promise(() =>
-            deriveTeamSessionKey(stored.key, keys, ephemeral.privateKey, hello.ephemeral)
+          session: yield* deriveTeamSessionKey(stored.key, keys, ephemeral.privateKey, hello.ephemeral).pipe(
+            Effect.orDie
           ),
-          welcome: yield* Effect.promise(() => createTeamWelcome(stored.key, keys)),
+          welcome: yield* createTeamWelcome(stored.key, keys).pipe(Effect.orDie),
         };
         return answer;
       });
@@ -314,9 +313,7 @@ export class Teams extends Context.Service<Teams, TeamsHandle>()('shinsa/engine/
         const instanceId = (yield* store.file).credentials?.instanceId;
         if (!instanceId) return null;
         const { privateKey } = yield* store.resolveSigningKey;
-        return yield* Effect.promise(() =>
-          signTeamSnapshot(privateKey, { teamId, instanceId, tasks, updatedAt })
-        );
+        return yield* signTeamSnapshot(privateKey, { teamId, instanceId, tasks, updatedAt });
       });
 
       const resolveLive = Effect.fn('Teams.resolveLive')(function* (subject: TeamSubject) {

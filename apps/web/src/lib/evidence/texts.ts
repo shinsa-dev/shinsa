@@ -1,6 +1,9 @@
+import { Effect } from 'effect';
 import { describeFailure } from '@/lib/connection/commands.ts';
 import { requestEvidenceBody } from '@/lib/connection/evidence.ts';
 import { createCache } from '@/lib/format/cache.ts';
+import { runApp } from '@/lib/runtime/app.ts';
+import { StepFailed } from '@/lib/runtime/schema.ts';
 
 export const EVIDENCE_TEXT_LIMIT = 32;
 
@@ -26,14 +29,18 @@ export function requestEvidenceText(uri: string) {
   if (known !== null) return Promise.resolve(known);
   const running = pending.get(uri);
   if (running) return running;
-  const request = requestEvidenceBody(uri).then(
-    (body) => {
-      recordEvidenceText(uri, body);
-      return body;
-    },
-    (error: unknown) => `Couldn’t read this evidence. ${describeFailure(error)}`
+  const request = runApp(
+    Effect.tryPromise({
+      try: () => requestEvidenceBody(uri),
+      catch: (error) => new StepFailed({ message: describeFailure(error) }),
+    }).pipe(
+      Effect.tap((body) => Effect.sync(() => recordEvidenceText(uri, body))),
+      Effect.catchTag('StepFailed', (failed) =>
+        Effect.succeed(`Couldn’t read this evidence. ${failed.message}`)
+      ),
+      Effect.ensuring(Effect.sync(() => pending.delete(uri)))
+    )
   );
-  const settled = request.finally(() => pending.delete(uri));
-  pending.set(uri, settled);
-  return settled;
+  pending.set(uri, request);
+  return request;
 }

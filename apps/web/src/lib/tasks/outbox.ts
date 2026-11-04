@@ -1,5 +1,7 @@
 import type { ReviewComment } from '@shinsa/core';
+import { Clock, Effect } from 'effect';
 import type { HumanMessage } from '@/lib/chat/timeline.ts';
+import { runApp } from '@/lib/runtime/app.ts';
 
 interface OutboxMessage extends HumanMessage {
   taskId: string;
@@ -36,22 +38,25 @@ export function listOutboxMessages(taskId: string) {
   return listed;
 }
 
-export async function sendThroughOutbox<T>(
+export function sendThroughOutbox<T>(
   taskId: string,
   text: string,
   send: () => Promise<T>,
   comments: ReviewComment[] = []
 ) {
-  const message: OutboxMessage = {
-    taskId,
-    text,
-    at: Date.now(),
-    ...(comments.length > 0 ? { comments } : {}),
-  };
-  replaceOutbox([...outbox, message]);
-  try {
-    return await send();
-  } finally {
-    replaceOutbox(outbox.filter((candidate) => candidate !== message));
-  }
+  return runApp(
+    Effect.acquireUseRelease(
+      Clock.currentTimeMillis.pipe(
+        Effect.map((at): OutboxMessage => ({
+          taskId,
+          text,
+          at,
+          ...(comments.length > 0 ? { comments } : {}),
+        })),
+        Effect.tap((message) => Effect.sync(() => replaceOutbox([...outbox, message])))
+      ),
+      () => Effect.promise(send),
+      (message) => Effect.sync(() => replaceOutbox(outbox.filter((candidate) => candidate !== message)))
+    )
+  );
 }

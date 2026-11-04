@@ -1,236 +1,146 @@
-import { writeFileSync } from 'node:fs';
-import { type CdpPage, type Key, openChromium, waitForExpression } from '../kit/chromium/index.ts';
+import { BunRuntime } from '@effect/platform-bun';
+import { Config, Console, Duration, Effect, Option, Schema } from 'effect';
+import { type CdpPage, Chromium, ChromiumLayer } from '../kit/chromium/index.ts';
+import { openWithProbe } from './browser/probe.ts';
+import { ESCAPE, PointOrNull } from './browser/schema.ts';
+import { writeReport } from './report/write.ts';
 import { SHELL_PROBE } from './shell-probe.ts';
 import { type StepSample, serializeStepTable, summarizeSteps } from './shell-stats.ts';
-
-interface Step {
-  label: string;
-  open?: { target: string; done: string };
-  pushes?: string;
-  target?: string;
-  key?: Key;
-  done: string;
-}
-
-interface Measured {
-  clickToPaint: number;
-  commits: number;
-  rendered: number;
-  longTasks: number;
-  longTaskTotal: number;
-}
+import {
+  HOME_DONE,
+  Measured,
+  MeasuredOrNull,
+  OPEN_SETTLE_MS,
+  Settled,
+  ShellStepTimedOut,
+  type Step,
+} from './shell/schema.ts';
+import { listNavigationSteps, listTerminalSteps } from './shell/steps.ts';
 
 const ORIGIN = Bun.argv[2] ?? 'http://127.0.0.1:5620';
-const LAPS = Number(Bun.env.SHELL_PERF_LAPS ?? 6);
-const ATTACH = Bun.env.SHELL_PERF_ATTACH ?? null;
-const OUT = Bun.env.SHELL_PERF_OUT ?? null;
-const HOVER_MS = Number(Bun.env.SHELL_PERF_HOVER_MS ?? 120);
-const META = 4;
-const OPEN_SETTLE_MS = 400;
 
-const HOME = `document.querySelector('header [aria-label="Home"]') || __shell.byPrefix('header button', '^Shinsa') || __shell.byText('nav [data-highlight-item]', 'New task')`;
-const HOME_DONE = `location.pathname === '/' && !!document.querySelector('main textarea')`;
-const TASK_ROW = String.raw`__shell.byPrefix('main button', '[A-Z]+-\\d+ ·')`;
+const program = Effect.gen(function* () {
+  const laps = yield* Config.Number('SHELL_PERF_LAPS').pipe(Config.withDefault(6));
+  const attach = yield* Config.option(Config.String('SHELL_PERF_ATTACH'));
+  const out = yield* Config.option(Config.String('SHELL_PERF_OUT'));
+  const hoverMs = yield* Config.Number('SHELL_PERF_HOVER_MS').pipe(Config.withDefault(120));
+  const cpu = yield* Config.option(Config.Number('SHELL_PERF_CPU'));
+  const settleMs = yield* Config.Number('SHELL_PERF_SETTLE_MS').pipe(Config.withDefault(0));
+  const pushesPerPage = yield* Config.Number('SHELL_PERF_PUSHES').pipe(Config.withDefault(3));
+  const tabs = (yield* Config.String('SHELL_PERF_TABS').pipe(
+    Config.withDefault('Overview,Review,Code,Chat')
+  )).split(',');
+  const [firstProject = 'Blog', secondProject = 'Shop'] = (yield* Config.String('SHELL_PERF_PROJECTS').pipe(
+    Config.withDefault('Blog,Shop')
+  )).split(',');
+  const onlyTerminal = (yield* Config.String('SHELL_PERF_STEPS').pipe(Config.withDefault(''))) === 'terminal';
+  const steps = onlyTerminal ? listTerminalSteps(firstProject, secondProject) : listNavigationSteps(tabs);
+  const hover = Duration.millis(hoverMs);
+  const chromium = yield* Chromium;
 
-function tabStep(from: string, to: string, extra = 'true'): Step {
-  return {
-    label: `${from} → ${to}`,
-    target: `__shell.tab('${to}')`,
-    done: `__shell.selectedTab('${to}') && (${extra})`,
-  };
-}
+  const waitFor = Effect.fn('ShellNavigation.waitFor')(function* (page: CdpPage, expression: string) {
+    if (!(yield* page.waitForExpression(expression)))
+      return yield* new ShellStepTimedOut({ message: `Timed out waiting for ${expression}` });
+  });
 
-const TABS = (Bun.env.SHELL_PERF_TABS ?? 'Overview,Review,Code,Chat').split(',');
-const TAB_READY: Record<string, string> = { Code: `!!document.querySelector('.cm-content')` };
+  const openFirst = Effect.fn('ShellNavigation.openFirst')(function* (
+    page: CdpPage,
+    open: NonNullable<Step['open']>
+  ) {
+    const point = yield* page.evaluate(`__shell.center(${JSON.stringify(open.target)})`, PointOrNull);
+    if (!point) return;
+    yield* page.clickPoint(point, hover);
+    yield* waitFor(page, open.done);
+    yield* Effect.sleep(Duration.millis(OPEN_SETTLE_MS));
+  });
 
-function listTabSteps() {
-  const loop = [...TABS, TABS[0] ?? 'Overview'];
-  return loop.slice(1).map((to, index) => tabStep(loop[index] ?? 'Overview', to, TAB_READY[to]));
-}
+  const runStep = Effect.fn('ShellNavigation.runStep')(function* (page: CdpPage, step: Step) {
+    if (step.open) yield* openFirst(page, step.open);
+    if (step.target) {
+      const point = yield* page.evaluate(`__shell.center(${JSON.stringify(step.target)})`, PointOrNull);
+      if (!point) return null;
+      yield* page.evaluate(`__shell.arm(${JSON.stringify(step.done)}, 'click')`, Schema.Unknown);
+      yield* page.clickPoint(point, hover);
+    } else if (step.key) {
+      yield* page.evaluate(`__shell.arm(${JSON.stringify(step.done)}, 'keydown')`, Schema.Unknown);
+      yield* page.pressKey(step.key);
+    }
+    return yield* page.evaluate('__shell.step', MeasuredOrNull);
+  });
 
-const TERMINAL_DONE = `location.pathname === '/terminal' && __shell.terminals > 0 && __shell.terminalsWaiting === 0 && [...document.querySelectorAll('.xterm')].some((terminal) => terminal.offsetParent && terminal.querySelector('.xterm-screen canvas'))`;
+  const closeMenu = Effect.fn('ShellNavigation.closeMenu')(function* (page: CdpPage) {
+    yield* page.pressKey({ ...ESCAPE, modifiers: 0 });
+    yield* waitFor(page, `!document.querySelector('[cmdk-input]')`);
+  });
 
-const TERMINAL_TAB = (index: number) =>
-  `[...document.querySelectorAll('[aria-label="Terminals"] [role=tab]')].filter((tab) => tab.offsetParent)[${index}]`;
-
-const TERMINAL_SHOWN = `[...document.querySelectorAll('.xterm')].some((terminal) => terminal.offsetParent && terminal.querySelector('.xterm-screen canvas'))`;
-
-function terminalTabStep(from: number, to: number): Step {
-  return {
-    label: `Terminal tab ${from + 1} → ${to + 1}`,
-    target: TERMINAL_TAB(to),
-    done: `${TERMINAL_TAB(to)}?.getAttribute('aria-selected') === 'true' && ${TERMINAL_SHOWN}`,
-  };
-}
-
-const PROJECT_PICKER = `[...document.querySelectorAll('main button[aria-haspopup=menu]')].find((button) => button.offsetParent)`;
-
-const [FIRST_PROJECT = 'Blog', SECOND_PROJECT = 'Shop'] = (Bun.env.SHELL_PERF_PROJECTS ?? 'Blog,Shop').split(
-  ','
-);
-
-function terminalProjectStep(from: string, to: string): Step {
-  return {
-    label: `Terminal ${from} → ${to}`,
-    open: {
-      target: PROJECT_PICKER,
-      done: `!!__shell.byText('[role=menuitemradio]', '${to}')`,
-    },
-    target: `__shell.byText('[role=menuitemradio]', '${to}')`,
-    done: `${PROJECT_PICKER}?.textContent === '${to}' && ${TERMINAL_SHOWN}`,
-  };
-}
-
-const TERMINAL_STEPS: Step[] = [
-  {
-    label: 'Home → Terminal',
-    open: {
-      target: `document.querySelector('header [data-services-trigger]')`,
-      done: `!!document.querySelector('[data-terminal-entry]')`,
-    },
-    target: `document.querySelector('[data-terminal-entry]') || document.querySelector('header button[aria-label="Terminal"]')`,
-    done: TERMINAL_DONE,
-  },
-  terminalProjectStep(FIRST_PROJECT, SECOND_PROJECT),
-  terminalTabStep(0, 1),
-  terminalTabStep(1, 2),
-  terminalTabStep(2, 0),
-  terminalProjectStep(SECOND_PROJECT, FIRST_PROJECT),
-  { label: 'Terminal → Home', target: HOME, done: HOME_DONE },
-];
-
-const NAVIGATION_STEPS: Step[] = [
-  {
-    label: 'Home → task',
-    pushes: 'State push on a task',
-    target: TASK_ROW,
-    done: `location.pathname.startsWith('/tasks/') && __shell.selectedTab('Overview')`,
-  },
-  ...listTabSteps(),
-  { label: 'Task → Home', target: HOME, done: HOME_DONE },
-  {
-    label: 'Home → All tasks',
-    pushes: 'State push on All tasks',
-    target: `__shell.byText('header button', 'Tasks') || __shell.byText('nav [data-highlight-item]', 'All tasks')`,
-    done: `location.pathname === '/tasks'`,
-  },
-  { label: 'All tasks → Home', target: HOME, done: HOME_DONE },
-  {
-    label: 'Home → Settings',
-    target: `document.querySelector('header button[aria-label="Settings"]') || __shell.byText('nav [data-highlight-item]', 'Settings')`,
-    done: `location.pathname === '/settings'`,
-  },
-  { label: 'Settings → Home', pushes: 'State push on Home', target: HOME, done: HOME_DONE },
-  {
-    label: '⌘K opens',
-    key: { key: 'k', code: 'KeyK', keyCode: 75, modifiers: META },
-    done: `!!document.querySelector('[cmdk-input]')`,
-  },
-];
-
-const STEPS = Bun.env.SHELL_PERF_STEPS === 'terminal' ? TERMINAL_STEPS : NAVIGATION_STEPS;
-
-async function waitFor(target: CdpPage, expression: string) {
-  if (!(await waitForExpression(target, expression))) throw new Error(`Timed out waiting for ${expression}`);
-}
-
-async function openFirst(target: CdpPage, open: NonNullable<Step['open']>) {
-  const point = await target.evaluate<{ x: number; y: number } | null>(
-    `__shell.center(${JSON.stringify(open.target)})`
-  );
-  if (!point) return;
-  await target.clickPoint(point, HOVER_MS);
-  await waitFor(target, open.done);
-  await Bun.sleep(OPEN_SETTLE_MS);
-}
-
-async function runStep(target: CdpPage, step: Step): Promise<Measured | null> {
-  if (step.open) await openFirst(target, step.open);
-  if (step.target) {
-    const point = await target.evaluate<{ x: number; y: number } | null>(
-      `__shell.center(${JSON.stringify(step.target)})`
+  const closeOpenMenu = Effect.fn('ShellNavigation.closeOpenMenu')(function* (page: CdpPage) {
+    yield* page.evaluate(
+      `document.querySelector('[role=menu][data-open]')?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`,
+      Schema.Unknown
     );
-    if (!point) return null;
-    await target.evaluate(`__shell.arm(${JSON.stringify(step.done)}, 'click')`);
-    await target.clickPoint(point, HOVER_MS);
-  } else if (step.key) {
-    await target.evaluate(`__shell.arm(${JSON.stringify(step.done)}, 'keydown')`);
-    await target.pressKey(step.key);
-  }
-  return target.evaluate<Measured | null>('__shell.step');
-}
+    yield* waitFor(page, `!document.querySelector('[role=menu][data-open]')`);
+  });
 
-async function closeMenu(target: CdpPage) {
-  await target.pressKey({ key: 'Escape', code: 'Escape', keyCode: 27, modifiers: 0 });
-  await waitFor(target, `!document.querySelector('[cmdk-input]')`);
-}
+  const page = yield* chromium.open(Option.getOrNull(attach), ORIGIN);
+  yield* page.send('Page.enable');
+  if (Option.isSome(cpu)) yield* page.send('Emulation.setCPUThrottlingRate', { rate: cpu.value });
+  yield* openWithProbe(page, SHELL_PROBE, `${ORIGIN}/`);
+  yield* waitFor(page, `window.__shell && ${HOME_DONE}`);
+  yield* page.evaluate('__shell.idle(1500)', Schema.Unknown);
 
-async function closeOpenMenu(target: CdpPage) {
-  await target.evaluate(
-    `document.querySelector('[role=menu][data-open]')?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`
-  );
-  await waitFor(target, `!document.querySelector('[role=menu][data-open]')`);
-}
+  const settles: { label: string; settledAt: number; maxGap: number }[] = [];
+  const cold: StepSample[] = [];
+  const warm: StepSample[] = [];
+  const pushes: StepSample[] = [];
 
-const browser = await openChromium(ATTACH, ORIGIN);
-const { page } = browser;
-await page.send('Page.enable');
-if (Bun.env.SHELL_PERF_CPU)
-  await page.send('Emulation.setCPUThrottlingRate', { rate: Number(Bun.env.SHELL_PERF_CPU) });
-await page.send('Page.addScriptToEvaluateOnNewDocument', { source: SHELL_PROBE });
-await page.send('Page.navigate', { url: `${ORIGIN}/` });
-await waitFor(page, `window.__shell && ${HOME_DONE}`);
-await page.evaluate('__shell.idle(1500)');
-
-const SETTLE_MS = Number(Bun.env.SHELL_PERF_SETTLE_MS ?? 0);
-const settles: { label: string; settledAt: number; maxGap: number }[] = [];
-const cold: StepSample[] = [];
-const warm: StepSample[] = [];
-const pushes: StepSample[] = [];
-const PUSHES_PER_PAGE = Number(Bun.env.SHELL_PERF_PUSHES ?? 3);
-for (let lap = 0; lap < LAPS; lap += 1) {
-  for (const step of STEPS) {
-    const measured = await runStep(page, step);
+  const lapStep = Effect.fn('ShellNavigation.lapStep')(function* (step: Step, lap: number) {
+    const measured = yield* runStep(page, step);
     if (measured) (lap === 0 ? cold : warm).push({ label: step.label, ...measured });
-    else console.warn(`Skipped ${step.label} on lap ${lap + 1}`);
-    if (measured && SETTLE_MS > 0)
+    else yield* Console.warn(`Skipped ${step.label} on lap ${lap + 1}`);
+    if (measured && settleMs > 0)
       settles.push({
         label: `${step.label}${lap === 0 ? ' (first)' : ''}`,
-        ...(await page.evaluate<{ settledAt: number; maxGap: number }>(`__shell.settle(${SETTLE_MS})`)),
+        ...(yield* page.evaluate(`__shell.settle(${settleMs})`, Settled)),
       });
-    if (step.key) await closeMenu(page);
-    if (step.open) await closeOpenMenu(page);
-    await page.evaluate('__shell.idle(250)');
-    for (let push = 0; measured && step.pushes && push < PUSHES_PER_PAGE; push += 1) {
-      pushes.push({ label: step.pushes, ...(await page.evaluate<Measured>('__shell.push()')) });
-      await page.evaluate('__shell.idle(100)');
+    if (step.key) yield* closeMenu(page);
+    if (step.open) yield* closeOpenMenu(page);
+    yield* page.evaluate('__shell.idle(250)', Schema.Unknown);
+    for (let push = 0; measured && step.pushes && push < pushesPerPage; push += 1) {
+      pushes.push({ label: step.pushes, ...(yield* page.evaluate('__shell.push()', Measured)) });
+      yield* page.evaluate('__shell.idle(100)', Schema.Unknown);
     }
-  }
-}
+  });
 
-const report = {
-  origin: ORIGIN,
-  laps: LAPS,
-  cold: summarizeSteps(cold),
-  warm: summarizeSteps(warm),
-  pushes: summarizeSteps(pushes),
-};
-console.log(`First visit (lap 1), ${ORIGIN}\n\n${serializeStepTable(report.cold)}\n`);
-console.log(`Revisits (laps 2–${LAPS})\n\n${serializeStepTable(report.warm)}\n`);
-console.log(
-  `State pushes (one task's priority changes; push to paint)\n\n${serializeStepTable(report.pushes)}`
-);
-if (SETTLE_MS > 0) {
-  const labels = [...new Set(settles.map((each) => each.label))];
-  const median = (values: number[]) => [...values].sort((a, b) => a - b)[Math.floor(values.length / 2)] ?? 0;
-  console.log('\nSettled (click to the last frame longer than 34 ms, and the longest frame)\n');
-  for (const label of labels) {
-    const mine = settles.filter((each) => each.label === label);
-    console.log(
-      `| ${label} | ${median(mine.map((each) => each.settledAt)).toFixed(1)} ms | ${median(mine.map((each) => each.maxGap)).toFixed(1)} ms |`
-    );
-  }
-}
-if (OUT) writeFileSync(OUT, JSON.stringify({ ...report, samples: { cold, warm, pushes } }, null, 2));
-browser.close();
-process.exit(0);
+  const printSettled = Effect.fn('ShellNavigation.printSettled')(function* () {
+    const labels = [...new Set(settles.map((each) => each.label))];
+    const median = (values: number[]) =>
+      [...values].sort((a, b) => a - b)[Math.floor(values.length / 2)] ?? 0;
+    yield* Console.log('\nSettled (click to the last frame longer than 34 ms, and the longest frame)\n');
+    for (const label of labels) {
+      const mine = settles.filter((each) => each.label === label);
+      yield* Console.log(
+        `| ${label} | ${median(mine.map((each) => each.settledAt)).toFixed(1)} ms | ${median(mine.map((each) => each.maxGap)).toFixed(1)} ms |`
+      );
+    }
+  });
+
+  for (let lap = 0; lap < laps; lap += 1) for (const step of steps) yield* lapStep(step, lap);
+
+  const report = {
+    origin: ORIGIN,
+    laps,
+    cold: summarizeSteps(cold),
+    warm: summarizeSteps(warm),
+    pushes: summarizeSteps(pushes),
+  };
+  yield* Console.log(`First visit (lap 1), ${ORIGIN}\n\n${serializeStepTable(report.cold)}\n`);
+  yield* Console.log(`Revisits (laps 2–${laps})\n\n${serializeStepTable(report.warm)}\n`);
+  yield* Console.log(
+    `State pushes (one task's priority changes; push to paint)\n\n${serializeStepTable(report.pushes)}`
+  );
+  if (settleMs > 0) yield* printSettled();
+  if (Option.isSome(out))
+    yield* writeReport(out.value, JSON.stringify({ ...report, samples: { cold, warm, pushes } }, null, 2));
+});
+
+program.pipe(Effect.scoped, Effect.provide(ChromiumLayer), BunRuntime.runMain);

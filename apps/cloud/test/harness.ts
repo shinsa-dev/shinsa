@@ -361,7 +361,7 @@ export async function pairMachine(
   auth: { session?: string; bearer?: string; sameOrigin?: boolean } = { session }
 ) {
   const pair = (await crypto.subtle.generateKey(REMOTE_KEY_ALGORITHM, true, ['deriveBits'])) as CryptoKeyPair;
-  const publicKey = await serializePublicKey(pair.publicKey);
+  const publicKey = await Effect.runPromise(serializePublicKey(pair.publicKey));
   const start = await readJson<PairStartResponse>(
     await harness.post(REMOTE_PATHS.pairStart, {
       name,
@@ -380,8 +380,11 @@ export async function pairMachine(
 export async function openClaimed(pair: CryptoKeyPair, claimed: PairPollResponse) {
   if (claimed.status !== 'claimed' || !('sealedCredentials' in claimed))
     throw new Error('Pairing was not claimed with sealed credentials.');
-  const machine = { publicKey: await serializePublicKey(pair.publicKey), privateKey: pair.privateKey };
-  const credentials = await openPairingCredentials(machine, claimed.sealedCredentials);
+  const machine = {
+    publicKey: await Effect.runPromise(serializePublicKey(pair.publicKey)),
+    privateKey: pair.privateKey,
+  };
+  const credentials = await Effect.runPromise(openPairingCredentials(machine, claimed.sealedCredentials));
   if (!credentials) throw new Error('The credentials did not open with the machine key.');
   return credentials;
 }

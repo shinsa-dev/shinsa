@@ -1,23 +1,28 @@
-import { $ } from 'bun';
-import { type RetryFailure, retryStep, STAPLE_DELAYS, serializeRetryWarning } from './release-retry.ts';
+import { BunRuntime } from '@effect/platform-bun';
+import { Console, Effect } from 'effect';
+import { Command, CommandLayer } from './kit/command/index.ts';
+import { reportFailure } from './kit/script.ts';
+import { retryStep, STAPLE_DELAYS, warnRetry } from './release-retry.ts';
+import { ScriptUsage } from './release/schema.ts';
 
-const app = Bun.argv[2];
-if (!app) throw new Error('Name the app: bun scripts/release-verify.ts release/mac-arm64/Shinsa.app');
-
-function warnRetry(failure: RetryFailure) {
-  process.stdout.write(serializeRetryWarning(failure, Bun.env));
-}
-
-await retryStep(async () => $`spctl --assess --type execute --verbose=2 ${app}`, {
-  label: 'Gatekeeper',
-  delays: STAPLE_DELAYS,
-  sleep: Bun.sleep,
-  onRetry: warnRetry,
+const program = Effect.gen(function* () {
+  const command = yield* Command;
+  const app = process.argv[2];
+  if (!app)
+    return yield* new ScriptUsage({
+      message: 'Name the app: bun scripts/release-verify.ts release/mac-arm64/Shinsa.app',
+    });
+  yield* command
+    .text(['spctl', '--assess', '--type', 'execute', '--verbose=2', app])
+    .pipe(retryStep({ label: 'Gatekeeper', delays: STAPLE_DELAYS, onRetry: warnRetry }));
+  yield* command
+    .text(['xcrun', 'stapler', 'validate', app])
+    .pipe(retryStep({ label: 'Validate the staple', delays: STAPLE_DELAYS, onRetry: warnRetry }));
+  yield* Console.log(`Gatekeeper accepts ${app} and its notarization ticket is stapled.`);
 });
-await retryStep(async () => $`xcrun stapler validate ${app}`, {
-  label: 'Validate the staple',
-  delays: STAPLE_DELAYS,
-  sleep: Bun.sleep,
-  onRetry: warnRetry,
-});
-process.stdout.write(`Gatekeeper accepts ${app} and its notarization ticket is stapled.\n`);
+
+program.pipe(
+  reportFailure,
+  Effect.provide(CommandLayer),
+  BunRuntime.runMain({ disableErrorReporting: true })
+);

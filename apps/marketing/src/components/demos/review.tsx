@@ -1,3 +1,4 @@
+import { runApp } from '@/lib/runtime/app.ts';
 import { ReviewTab } from '@/routes/task/review.tsx';
 import { primeReview } from '../../lib/review-prime.ts';
 import { createTintState } from '../../lib/tint-scene.ts';
@@ -6,7 +7,7 @@ import { useLiveElements } from './live.ts';
 
 const { state, task } = createTintState(Date.now());
 
-await primeReview(task);
+await runApp(primeReview(task));
 
 function listReviewParts(root: HTMLElement) {
   const evidence = [...root.querySelectorAll('section')].filter((section) =>

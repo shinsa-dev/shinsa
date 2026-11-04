@@ -449,7 +449,10 @@ async function createSigner() {
     'sign',
     'verify',
   ])) as CryptoKeyPair;
-  return { privateKey: pair.privateKey, signingKey: await serializePublicKey(pair.publicKey) };
+  return {
+    privateKey: pair.privateKey,
+    signingKey: await Effect.runPromise(serializePublicKey(pair.publicKey)),
+  };
 }
 
 function createHeldTask(id: string): TeamTask {
@@ -586,14 +589,20 @@ describe('keeping a teammate’s last list', () => {
     const desk = await createSigner();
     const forger = await createSigner();
     const body = { teamId: 'team1', instanceId: 'inst3', tasks: [createHeldTask('desk-1')], updatedAt: 40 };
-    const signed = await signTeamSnapshot(desk.privateKey, body);
-    const forged = await signTeamSnapshot(forger.privateKey, {
-      ...body,
-      tasks: [createHeldTask('fake')],
-      updatedAt: 45,
-    });
-    const elsewhere = await signTeamSnapshot(desk.privateKey, { ...body, teamId: 'team2', updatedAt: 46 });
-    const unknown = await signTeamSnapshot(desk.privateKey, { ...body, instanceId: 'inst9' });
+    const signed = await Effect.runPromise(signTeamSnapshot(desk.privateKey, body));
+    const forged = await Effect.runPromise(
+      signTeamSnapshot(forger.privateKey, {
+        ...body,
+        tasks: [createHeldTask('fake')],
+        updatedAt: 45,
+      })
+    );
+    const elsewhere = await Effect.runPromise(
+      signTeamSnapshot(desk.privateKey, { ...body, teamId: 'team2', updatedAt: 46 })
+    );
+    const unknown = await Effect.runPromise(
+      signTeamSnapshot(desk.privateKey, { ...body, instanceId: 'inst9' })
+    );
     const desktop: TeamMachine = {
       id: 'inst3',
       name: 'Desk',
@@ -638,17 +647,21 @@ describe('keeping a teammate’s last list', () => {
       tasks: [createHeldTask('desk-new')],
       updatedAt: 200,
     };
-    const fresh = await signTeamSnapshot(desk.privateKey, body);
-    const older = await signTeamSnapshot(desk.privateKey, {
-      ...body,
-      tasks: [createHeldTask('desk-older')],
-      updatedAt: 100,
-    });
-    const expired = await signTeamSnapshot(desk.privateKey, {
-      ...body,
-      tasks: [createHeldTask('desk-expired')],
-      updatedAt: 40,
-    });
+    const fresh = await Effect.runPromise(signTeamSnapshot(desk.privateKey, body));
+    const older = await Effect.runPromise(
+      signTeamSnapshot(desk.privateKey, {
+        ...body,
+        tasks: [createHeldTask('desk-older')],
+        updatedAt: 100,
+      })
+    );
+    const expired = await Effect.runPromise(
+      signTeamSnapshot(desk.privateKey, {
+        ...body,
+        tasks: [createHeldTask('desk-expired')],
+        updatedAt: 40,
+      })
+    );
     const desktop: TeamMachine = {
       id: 'inst3',
       name: 'Desk',
@@ -697,12 +710,14 @@ describe('keeping a teammate’s last list', () => {
 
   test('ignores a teammate’s copy for a machine with no signing key', async () => {
     const desk = await createSigner();
-    const old = await signTeamSnapshot(desk.privateKey, {
-      teamId: 'team1',
-      instanceId: 'inst3',
-      tasks: [createHeldTask('desk-1')],
-      updatedAt: 40,
-    });
+    const old = await Effect.runPromise(
+      signTeamSnapshot(desk.privateKey, {
+        teamId: 'team1',
+        instanceId: 'inst3',
+        tasks: [createHeldTask('desk-1')],
+        updatedAt: 40,
+      })
+    );
     const keyless: TeamMachine = { id: 'inst3', name: 'Desk', userId: '9', online: false, lastSeenAt: 1 };
     const { feeds } = setUp({ watcherMachines: [STUDIO, LAPTOP, keyless], held: [old] });
     feeds.start();
@@ -966,12 +981,14 @@ async function signWelcome(hello: string, key: string) {
   const server = (await crypto.subtle.generateKey(REMOTE_KEY_ALGORITHM, true, [
     'deriveBits',
   ])) as CryptoKeyPair;
-  const welcome = await createTeamWelcome(key, {
-    team: parsed.team,
-    view: parsed.view,
-    clientEphemeral: parsed.ephemeral,
-    serverEphemeral: await serializePublicKey(server.publicKey),
-  });
+  const welcome = await Effect.runPromise(
+    createTeamWelcome(key, {
+      team: parsed.team,
+      view: parsed.view,
+      clientEphemeral: parsed.ephemeral,
+      serverEphemeral: await Effect.runPromise(serializePublicKey(server.publicKey)),
+    })
+  );
   return JSON.stringify(welcome);
 }
 

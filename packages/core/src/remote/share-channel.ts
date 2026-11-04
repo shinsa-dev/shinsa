@@ -1,9 +1,11 @@
+import { Effect } from 'effect';
 import { isText, parseJsonRecord } from '../domain/records.ts';
 import { type Bytes, concatBytes, encodeText, parseBase64Url, serializeBase64Url } from './bytes.ts';
 import { REMOTE_PROTOCOL_VERSION } from './handshake.ts';
 import { parsePublicKey, serializePublicKey } from './keys.ts';
+import { RemoteKeyInvalid } from './schema.ts';
 import { SHARE_FILE_TYPES, type ShareFileType } from './shares.ts';
-import { importHmacKey, signHmac } from './tokens.ts';
+import { findHmacKey, importHmacKey, signHmac, verifyHmac } from './tokens.ts';
 
 const SHARE_HELLO_LABEL = 'shinsa-share-hello-v1';
 
@@ -36,63 +38,72 @@ interface ShareKeys {
   serverEphemeral: string;
 }
 
-export async function signChannelProof(key: string, parts: string[]) {
-  const hmac = await importHmacKey(key);
-  if (!hmac) throw new Error('The channel key is not valid.');
-  return serializeBase64Url(await signHmac(hmac, encodeText(parts.join('\n'))));
-}
+export const signChannelProof = Effect.fn('signChannelProof')(function* (key: string, parts: string[]) {
+  const hmac = yield* findHmacKey(key, 'The channel key is not valid.');
+  return serializeBase64Url(yield* signHmac(hmac, encodeText(parts.join('\n'))));
+});
 
-export async function verifyChannelProof(key: string, proof: string, parts: string[]) {
-  const hmac = await importHmacKey(key);
+export const verifyChannelProof = Effect.fn('verifyChannelProof')(function* (
+  key: string,
+  proof: string,
+  parts: string[]
+) {
+  const hmac = yield* importHmacKey(key);
   const signature = parseBase64Url(proof);
   if (!hmac || !signature) return false;
-  return crypto.subtle.verify('HMAC', hmac, signature, encodeText(parts.join('\n')));
-}
+  return yield* verifyHmac(hmac, signature, encodeText(parts.join('\n')));
+});
 
-export async function deriveChannelSessionKey(
+export const deriveChannelSessionKey = Effect.fn('deriveChannelSessionKey')(function* (
   label: string,
   key: string,
   parts: string[],
   privateKey: CryptoKey,
   peerEphemeral: string
 ) {
-  const peer = await parsePublicKey(peerEphemeral);
+  const peer = yield* parsePublicKey(peerEphemeral);
   const raw = parseBase64Url(key);
-  if (!(peer && raw)) throw new Error('A channel handshake key is not valid.');
+  if (!(peer && raw))
+    return yield* new RemoteKeyInvalid({ message: 'A channel handshake key is not valid.' });
   const shared = new Uint8Array(
-    await crypto.subtle.deriveBits({ name: 'ECDH', public: peer }, privateKey, 256)
+    yield* Effect.promise(() => crypto.subtle.deriveBits({ name: 'ECDH', public: peer }, privateKey, 256))
   ) as Bytes;
-  const secret = await crypto.subtle.importKey('raw', concatBytes(shared, raw), 'HKDF', false, ['deriveKey']);
+  const secret = yield* Effect.promise(() =>
+    crypto.subtle.importKey('raw', concatBytes(shared, raw), 'HKDF', false, ['deriveKey'])
+  );
   const salt = new Uint8Array(
-    await crypto.subtle.digest('SHA-256', encodeText([label, ...parts].join('\n')))
+    yield* Effect.promise(() => crypto.subtle.digest('SHA-256', encodeText([label, ...parts].join('\n'))))
   );
-  return crypto.subtle.deriveKey(
-    { name: 'HKDF', hash: 'SHA-256', salt, info: encodeText(label) },
-    secret,
-    { name: 'AES-GCM', length: 256 },
-    false,
-    ['encrypt', 'decrypt']
+  return yield* Effect.promise(() =>
+    crypto.subtle.deriveKey(
+      { name: 'HKDF', hash: 'SHA-256', salt, info: encodeText(label) },
+      secret,
+      { name: 'AES-GCM', length: 256 },
+      false,
+      ['encrypt', 'decrypt']
+    )
   );
-}
+});
 
 function listShareWelcomeParts(keys: ShareKeys) {
   return [SHARE_WELCOME_LABEL, keys.share, keys.clientEphemeral, keys.serverEphemeral];
 }
 
-export async function createShareHello(
+export const createShareHello = Effect.fn('createShareHello')(function* (
   share: string,
   key: string,
   ephemeral: CryptoKey
-): Promise<ShareHello> {
-  const serialized = await serializePublicKey(ephemeral);
-  return {
+) {
+  const serialized = yield* serializePublicKey(ephemeral);
+  const hello: ShareHello = {
     type: 'share-hello',
     version: REMOTE_PROTOCOL_VERSION,
     share,
     ephemeral: serialized,
-    proof: await signChannelProof(key, [SHARE_HELLO_LABEL, share, serialized]),
+    proof: yield* signChannelProof(key, [SHARE_HELLO_LABEL, share, serialized]),
   };
-}
+  return hello;
+});
 
 export function parseShareHello(text: string): ShareHello | null {
   const fields = parseJsonRecord(text);
@@ -111,13 +122,14 @@ export function verifyShareHello(key: string, hello: ShareHello) {
   return verifyChannelProof(key, hello.proof, [SHARE_HELLO_LABEL, hello.share, hello.ephemeral]);
 }
 
-export async function createShareWelcome(key: string, keys: ShareKeys): Promise<ShareWelcome> {
-  return {
+export const createShareWelcome = Effect.fn('createShareWelcome')(function* (key: string, keys: ShareKeys) {
+  const welcome: ShareWelcome = {
     type: 'welcome',
     ephemeral: keys.serverEphemeral,
-    proof: await signChannelProof(key, listShareWelcomeParts(keys)),
+    proof: yield* signChannelProof(key, listShareWelcomeParts(keys)),
   };
-}
+  return welcome;
+});
 
 export function parseShareWelcome(text: string): ShareWelcome | null {
   const fields = parseJsonRecord(text);

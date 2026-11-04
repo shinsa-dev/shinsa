@@ -1,23 +1,13 @@
-import { launchChromium } from '../kit/chromium/index.ts';
-import { PROBE } from './content-probe.ts';
+import { BunRuntime } from '@effect/platform-bun';
+import { Config, Console, Effect, Schema } from 'effect';
+import { ChromiumLayer } from '../kit/chromium/index.ts';
+import { openContentPage, resolveStepExpression } from './content/page.ts';
+import { type Profile, ProfileReply, SCROLL_STEP } from './content/schema.ts';
 
 const BASE = Bun.argv[2] ?? 'http://localhost:5665';
 const STEPS = (Bun.argv[3] ?? '/tasks/perf-long-chat?tab=chat').split(',');
-const TOP = Number(Bun.env.SHINSA_PERF_TOP ?? 30);
 
-interface ProfileNode {
-  id: number;
-  callFrame: { functionName: string; url: string; lineNumber: number };
-  children?: number[];
-}
-
-interface Profile {
-  nodes: ProfileNode[];
-  samples: number[];
-  timeDeltas: number[];
-}
-
-function rankSelfTime(profile: Profile) {
+function rankSelfTime(profile: Profile, top: number) {
   const byId = new Map(profile.nodes.map((node) => [node.id, node]));
   const self = new Map<string, number>();
   profile.samples.forEach((id, index) => {
@@ -26,10 +16,10 @@ function rankSelfTime(profile: Profile) {
     const key = `${frame.functionName || '(anonymous)'} ${frame.url.split('/').at(-1)}:${frame.lineNumber}`;
     self.set(key, (self.get(key) ?? 0) + (profile.timeDeltas[index] ?? 0) / 1000);
   });
-  return [...self.entries()].sort((a, b) => b[1] - a[1]).slice(0, TOP);
+  return [...self.entries()].sort((a, b) => b[1] - a[1]).slice(0, top);
 }
 
-function rankTotalTime(profile: Profile) {
+function rankTotalTime(profile: Profile, top: number) {
   const byId = new Map(profile.nodes.map((node) => [node.id, node]));
   const parent = new Map<number, number>();
   for (const node of profile.nodes) for (const child of node.children ?? []) parent.set(child, node.id);
@@ -47,39 +37,33 @@ function rankTotalTime(profile: Profile) {
       );
     }
   });
-  return [...total.entries()].sort((a, b) => b[1] - a[1]).slice(0, TOP);
+  return [...total.entries()].sort((a, b) => b[1] - a[1]).slice(0, top);
 }
 
-const browser = await launchChromium(1280, 900);
-try {
-  const { page } = browser;
-  await page.send('Page.enable');
-  await page.send('Page.addScriptToEvaluateOnNewDocument', { source: PROBE });
-  await page.send('Page.navigate', { url: `${BASE}/` });
-  await page.evaluate(
-    'new Promise((resolve) => { const check = () => window.__perf?.lastState ? resolve(true) : setTimeout(check, 20); check(); })'
-  );
-  await page.evaluate('window.__perf.sleep(800)');
-  await page.send('Profiler.enable');
-  await page.send('Profiler.setSamplingInterval', { interval: 100 });
+const program = Effect.gen(function* () {
+  const top = yield* Config.Number('SHINSA_PERF_TOP').pipe(Config.withDefault(30));
+  const page = yield* openContentPage(BASE);
+  const pause = page.evaluate('window.__perf.sleep(800)', Schema.Unknown);
+  yield* pause;
+  yield* page.send('Profiler.enable');
+  yield* page.send('Profiler.setSamplingInterval', { interval: 100 });
   for (const step of STEPS) {
-    if (step === 'warm' || step.startsWith('scroll:')) continue;
-    await page.evaluate(`window.__perf.navigate(${JSON.stringify(step)}, 'body')`);
-    await page.evaluate('window.__perf.sleep(800)');
+    if (step === 'warm' || step.startsWith(SCROLL_STEP)) continue;
+    yield* page.evaluate(`window.__perf.navigate(${JSON.stringify(step)}, 'body')`, Schema.Unknown);
+    yield* pause;
   }
-  await page.send('Profiler.start');
+  yield* page.send('Profiler.start');
   for (const step of STEPS) {
-    const expression = step.startsWith('scroll:')
-      ? `window.__perf.scroll(${JSON.stringify(step.slice(7))}, 'up', 150, 160)`
-      : `window.__perf.navigate(${JSON.stringify(step)}, 'body')`;
-    const result = await page.evaluate(expression);
-    console.info(step, JSON.stringify(result));
-    await page.evaluate('window.__perf.sleep(800)');
+    const result = yield* page.evaluate(resolveStepExpression(step), Schema.Unknown);
+    yield* Console.info(step, JSON.stringify(result));
+    yield* pause;
   }
-  const { profile } = await page.send<{ profile: Profile }>('Profiler.stop');
-  for (const [name, ms] of rankSelfTime(profile)) console.info(`${ms.toFixed(1).padStart(8)} ms  ${name}`);
-  console.info('--- inclusive, capitalised functions (components) ---');
-  for (const [name, ms] of rankTotalTime(profile)) console.info(`${ms.toFixed(1).padStart(8)} ms  ${name}`);
-} finally {
-  browser.close();
-}
+  const { profile } = yield* page.request('Profiler.stop', {}, ProfileReply);
+  for (const [name, ms] of rankSelfTime(profile, top))
+    yield* Console.info(`${ms.toFixed(1).padStart(8)} ms  ${name}`);
+  yield* Console.info('--- inclusive, capitalised functions (components) ---');
+  for (const [name, ms] of rankTotalTime(profile, top))
+    yield* Console.info(`${ms.toFixed(1).padStart(8)} ms  ${name}`);
+});
+
+program.pipe(Effect.scoped, Effect.provide(ChromiumLayer), BunRuntime.runMain);

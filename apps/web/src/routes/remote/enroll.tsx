@@ -9,6 +9,7 @@ import type { DeviceStore } from '@/lib/remote/devices.ts';
 import { type EnrollInput, requestDeviceAccess, selectWaitingDevice } from '@/lib/remote/enroll.ts';
 import { clearEnrollFragment, MACHINE_ICON, type RemotePoint } from '@/lib/remote/mode.ts';
 import type { EnrolledDevice } from '@/lib/remote/schema.ts';
+import { runApp } from '@/lib/runtime/app.ts';
 import { RemoteBenefits, RemoteHero, RemoteLoading } from './shell.tsx';
 
 const ENROLL_POINTS: RemotePoint[] = [
@@ -123,7 +124,7 @@ export function EnrollPage({
   const [edited, setEdited] = React.useState<string | null>(null);
   const name = edited ?? waiting?.waiting?.deviceName ?? resolveName(joining ? user : null);
   React.useEffect(() => {
-    if (link) void resolveKeyFingerprint(link.machineKey).then(setFingerprint);
+    if (link) void runApp(resolveKeyFingerprint(link.machineKey)).then(setFingerprint);
   }, [link]);
   const submit = React.useCallback(
     (input: EnrollInput, deviceName: string, device: EnrolledDevice | null) => {

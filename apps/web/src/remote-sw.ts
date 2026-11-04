@@ -1,3 +1,4 @@
+import { Effect } from 'effect';
 import { isRelayedRequest, type RelayClients, relayRequest } from '@/lib/remote/relay.ts';
 
 interface ExtendableEventLike extends Event {
@@ -29,5 +30,5 @@ worker.addEventListener('activate', (event) => {
 
 worker.addEventListener('fetch', (event) => {
   if (!isRelayedRequest(event.request, worker.location.origin)) return;
-  event.respondWith(relayRequest(event.request, event.clientId, worker.clients));
+  event.respondWith(Effect.runPromise(relayRequest(event.request, event.clientId, worker.clients)));
 });

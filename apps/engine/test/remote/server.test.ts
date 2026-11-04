@@ -240,7 +240,9 @@ async function createToken(
   channel: 'remote' | 'team' = 'remote'
 ) {
   const nonce = serializeBase64Url(crypto.getRandomValues(new Uint8Array(16)));
-  return createConnectToken(CONNECT_KEY, { instanceId: 'k3x9', userId, channel, nonce, expiresAt });
+  return Effect.runPromise(
+    createConnectToken(CONNECT_KEY, { instanceId: 'k3x9', userId, channel, nonce, expiresAt })
+  );
 }
 
 interface OpenChannel {
@@ -480,7 +482,11 @@ describe('the tunnel entry point', () => {
     const welcome = new Promise<string>((resolve) => {
       socket.addEventListener('message', (event) => resolve(String(event.data)), { once: true });
     });
-    socket.send(JSON.stringify(await createTeamHello('team1', key, { kind: 'list' }, ephemeral.publicKey)));
+    socket.send(
+      JSON.stringify(
+        await Effect.runPromise(createTeamHello('team1', key, { kind: 'list' }, ephemeral.publicKey))
+      )
+    );
     expect(JSON.parse(await welcome)).toMatchObject({ type: 'welcome' });
     const ended = new Promise<CloseEvent>((resolve) => {
       socket.addEventListener('close', resolve, { once: true });

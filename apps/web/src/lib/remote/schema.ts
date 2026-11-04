@@ -22,6 +22,13 @@ export interface KeyValueStore {
   listKeys: () => Promise<string[]>;
 }
 
+export const INDEXED_STORE_REFUSED = 'IndexedDB refused the request.';
+
+export class IndexedStoreFailed extends Schema.TaggedError<
+  IndexedStoreFailed,
+  { readonly brand: unique symbol }
+>()('IndexedStoreFailed', { message: Schema.String }) {}
+
 export const DEVICE_STORE_FAILED = 'This browser could not read the keys it keeps.';
 
 export class DeviceStoreFailed extends Schema.TaggedError<
@@ -47,3 +54,12 @@ export interface EnrollInput {
 export type WaitingAnswer = 'accepted' | 'waiting' | 'declined';
 
 export type ClaimStanding = { kind: 'ready' } | { kind: 'added' | 'busy'; machine: string };
+
+export const RELAY_NO_PAGE = 'This request came from no open Shinsa page.';
+
+export const RELAY_FAILED = 'The request to your machine failed.';
+
+export class RelayFailed extends Schema.TaggedError<RelayFailed, { readonly brand: unique symbol }>()(
+  'RelayFailed',
+  { message: Schema.String }
+) {}

@@ -39,13 +39,15 @@ export const EFFECT_LOGIC_FILE_MESSAGE =
 export const EFFECT_SCHEMA_FILE_MESSAGE =
   'A schema file holds schemas, types and constants only. Move this function or effect next to the code that runs it (the effect skill → File layout)';
 
-export const ENGINE_PROMISE_MESSAGE =
-  'Promise I/O outside Effect in the engine. Write the module as a Context.Service provided by a Layer, with Effect.fn and Effect.tryPromise around the promise API, and run it with a runtime only at the edge (the effect skill → Services and layers)';
+export const PROMISE_IO_MESSAGE =
+  'Promise I/O outside Effect. Write the module as a Context.Service provided by a Layer (a script as one Effect program run once with BunRuntime.runMain), with Effect.fn and Effect.tryPromise around the promise API; only React components (.tsx) keep plain promises, and reach I/O through the app runtime (the effect skill → Services and layers)';
 
 export const ENGINE_RUNTIME_MESSAGE =
   'A runtime or a Promise class in the engine. Write the module as a Context.Service with its Layer, yield what it needs, and run effects only at the process edge, main.ts; a callback from outside enters with Effect.runForkWith on the context the layer captured (the effect skill → Services and layers)';
 
 const ENGINE_SOURCE = /^apps\/engine\/src\//;
+
+const PROMISE_IO_SOURCE = /^(?:apps\/[\w-]+\/src|packages\/[\w-]+\/src|scripts)\//;
 
 const ENGINE_EDGE = 'apps/engine/src/main.ts';
 
@@ -209,9 +211,9 @@ export function isEffectSource(file: string, source: string) {
   return !isTest && EFFECT_IMPORT.test(source);
 }
 
-export function isEngineSource(file: string, source: string) {
-  const isTest = /\.test\.tsx?$/.test(file);
-  return ENGINE_SOURCE.test(file) && !isTest && !EFFECT_IMPORT.test(source);
+export function isPromiseIoSource(file: string, source: string) {
+  const isTest = /\.test\.ts$/.test(file) || /(?:^|\/)test\//.test(file);
+  return PROMISE_IO_SOURCE.test(file) && file.endsWith('.ts') && !isTest && !EFFECT_IMPORT.test(source);
 }
 
 export function isEngineRuntimeSource(file: string) {
@@ -257,7 +259,7 @@ export function listEngineRuntimeLines(file: string, source: string) {
   return [...lines];
 }
 
-export function listEnginePromiseLines(file: string, source: string) {
+export function listPromiseLines(file: string, source: string) {
   const plugins: ('typescript' | 'jsx')[] = file.endsWith('.tsx') ? ['typescript', 'jsx'] : ['typescript'];
   const program = parse(source, { sourceType: 'module', plugins }).program as unknown as AstNode;
   const lines: number[] = [];

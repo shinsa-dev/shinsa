@@ -1,4 +1,5 @@
 import type { ReviewPayload, ShinsaState, Task } from '@shinsa/core';
+import { Effect, Option } from 'effect';
 import { createOpenState } from './open-scene.ts';
 import { type InviteHeader, readReviewFragment, resolveInviteHeader } from './open.ts';
 
@@ -11,9 +12,13 @@ export interface OpenScene {
 
 export type OpenPage = { scene: OpenScene } | { header: InviteHeader };
 
-export async function readOpenPage(search: string, hash: string, now: number): Promise<OpenPage> {
+export const readOpenPage = Effect.fn('readOpenPage')(function* (
+  search: string,
+  hash: string,
+  now: number
+): Effect.fn.Return<OpenPage> {
   const header = resolveInviteHeader(search);
-  const payload = await readReviewFragment(hash);
-  if (!payload) return { header };
-  return { scene: { ...createOpenState(payload, now), payload, link: header.link } };
-}
+  const payload = yield* readReviewFragment(hash);
+  if (Option.isNone(payload)) return { header };
+  return { scene: { ...createOpenState(payload.value, now), payload: payload.value, link: header.link } };
+});

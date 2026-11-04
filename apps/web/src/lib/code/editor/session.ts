@@ -3,9 +3,11 @@ import type { Chunk } from '@codemirror/merge';
 import { Annotation, Compartment, EditorState, type Extension, type StateEffect } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
 import type { CommentSide } from '@shinsa/core';
+import { Effect } from 'effect';
 import { resolveCommentRange } from '@/lib/code/notes.ts';
 import type { PairSource } from '@/lib/code/pane.ts';
 import { scheduleIdle } from '@/lib/idle.ts';
+import { forkApp } from '@/lib/runtime/app.ts';
 import {
   annotationsField,
   type EditorAnnotations,
@@ -382,12 +384,18 @@ export class EditorSession {
     const idle = this.#options.idle ?? scheduleLanguage;
     idle(() => {
       if (this.#destroyed || this.#shown !== entry) return;
-      void this.#options.language(entry.path).then((support) => {
-        if (this.#destroyed || this.#shown !== entry || entry.attached) return;
-        entry.attached = true;
-        for (const view of views)
-          view.dispatch({ effects: this.language.reconfigure(support ?? indentFolding) });
-      });
+      forkApp(
+        Effect.promise(() => this.#options.language(entry.path)).pipe(
+          Effect.tap((support) =>
+            Effect.sync(() => {
+              if (this.#destroyed || this.#shown !== entry || entry.attached) return;
+              entry.attached = true;
+              for (const view of views)
+                view.dispatch({ effects: this.language.reconfigure(support ?? indentFolding) });
+            })
+          )
+        )
+      );
     });
   }
 }

@@ -1,4 +1,5 @@
 import { toast } from '@shinsa/ui/components/sonner';
+import { Effect } from 'effect';
 import * as React from 'react';
 import {
   type AttachmentDraft,
@@ -14,6 +15,8 @@ import {
 } from '@/lib/chat/task-drafts.ts';
 import { listTransferFiles, requestAttachmentUpload } from '@/lib/connection/attachments.ts';
 import { describeFailure } from '@/lib/connection/commands.ts';
+import { forkApp } from '@/lib/runtime/app.ts';
+import { StepFailed } from '@/lib/runtime/schema.ts';
 
 function useDraftPreviews(drafts: AttachmentDraft[], files: Map<string, File>) {
   const [previews, setPreviews] = React.useState<ReadonlyMap<string, string>>(new Map());
@@ -81,15 +84,27 @@ export function useAttachments(draftKey?: string) {
   );
 
   const upload = React.useCallback(
-    async (key: string, file: File) => {
-      try {
-        const stored = await requestAttachmentUpload(file);
-        setHeld((current) => current.map((draft) => (draft.key === key ? { ...draft, stored } : draft)));
-      } catch (error) {
-        toast.error(describeFailure(error));
-        remove(key);
-      }
-    },
+    (key: string, file: File) =>
+      forkApp(
+        Effect.tryPromise({
+          try: () => requestAttachmentUpload(file),
+          catch: (error) => new StepFailed({ message: describeFailure(error) }),
+        }).pipe(
+          Effect.matchEffect({
+            onSuccess: (stored) =>
+              Effect.sync(() =>
+                setHeld((current) =>
+                  current.map((draft) => (draft.key === key ? { ...draft, stored } : draft))
+                )
+              ),
+            onFailure: (failed) =>
+              Effect.sync(() => {
+                toast.error(failed.message);
+                remove(key);
+              }),
+          })
+        )
+      ),
     [remove, setHeld]
   );
 
@@ -112,7 +127,7 @@ export function useAttachments(draftKey?: string) {
       }));
       for (const { file, draft } of added) files.set(draft.key, file);
       setHeld((current) => [...current, ...added.map((entry) => entry.draft)]);
-      for (const { file, draft } of added) void upload(draft.key, file);
+      for (const { file, draft } of added) upload(draft.key, file);
     },
     [files, setHeld, upload]
   );

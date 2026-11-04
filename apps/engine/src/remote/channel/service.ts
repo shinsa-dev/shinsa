@@ -99,7 +99,7 @@ export const makeRemoteChannel = Effect.fn('RemoteChannel.make')(function* (defi
   const send = Effect.fn('RemoteChannel.send')(function* (message: ChannelMessage) {
     const current = yield* Ref.get(state);
     if (current.kind !== 'open') return;
-    const frame = yield* Effect.promise(() => current.seal(encodeText(serializeChannelMessage(message))));
+    const frame = yield* current.seal(encodeText(serializeChannelMessage(message)));
     if (!(yield* isOpen)) return;
     if ((yield* definition.send(frame)) !== DROPPED) return;
     yield* Effect.logWarning('[Remote] Dropped a sealed frame, closing the channel').pipe(
@@ -152,19 +152,12 @@ export const makeRemoteChannel = Effect.fn('RemoteChannel.make')(function* (defi
         crypto.subtle.generateKey(REMOTE_KEY_ALGORITHM, true, ['deriveBits']) as Promise<CryptoKeyPair>,
       catch: broken,
     });
-    const serverEphemeral = yield* Effect.tryPromise({
-      try: () => serializePublicKey(ephemeral.publicKey),
-      catch: broken,
-    });
-    const session = yield* Effect.tryPromise({
-      try: () =>
-        deriveServerSession({
-          keys: { ...keys, serverEphemeral },
-          machinePrivateKey: machine.privateKey,
-          serverEphemeralPrivateKey: ephemeral.privateKey,
-        }),
-      catch: broken,
-    });
+    const serverEphemeral = yield* serializePublicKey(ephemeral.publicKey);
+    const session = yield* deriveServerSession({
+      keys: { ...keys, serverEphemeral },
+      machinePrivateKey: machine.privateKey,
+      serverEphemeralPrivateKey: ephemeral.privateKey,
+    }).pipe(Effect.mapError(broken));
     const compression = resolveCompression(hello);
     const guest = yield* definition.resolveGuest(hello.device);
     const opened = yield* Ref.modify(state, (current): [boolean, ChannelState] =>
@@ -326,7 +319,7 @@ export const makeRemoteChannel = Effect.fn('RemoteChannel.make')(function* (defi
     }
     const frame = toBytes(raw);
     if (!frame) return yield* fail('A sealed channel only carries sealed frames.');
-    const plain = yield* Effect.tryPromise({ try: () => current.open(frame), catch: broken });
+    const plain = yield* current.open(frame).pipe(Effect.mapError(broken));
     const message = parseChannelMessage(decodeText(plain));
     if (!message) return yield* fail('A sealed frame held no channel message.');
     yield* handle(message);

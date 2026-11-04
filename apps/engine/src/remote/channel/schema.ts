@@ -1,4 +1,4 @@
-import type { Bytes, ChannelHeaders, GuestActor, HandshakeKeys } from '@shinsa/core';
+import type { Bytes, ChannelHeaders, FrameError, GuestActor, HandshakeKeys } from '@shinsa/core';
 import { type Effect, Schema } from 'effect';
 import type { HubSocket } from '../../http/socket.ts';
 import type { MachineKeyPair } from '../pairing/schema.ts';
@@ -90,8 +90,8 @@ export type ChannelState =
       readonly kind: 'open';
       readonly device: string;
       readonly guest: GuestActor | null;
-      readonly seal: (plain: Bytes) => Promise<Bytes>;
-      readonly open: (frame: Bytes) => Promise<Bytes>;
+      readonly seal: (plain: Bytes) => Effect.Effect<Bytes>;
+      readonly open: (frame: Bytes) => Effect.Effect<Bytes, FrameError>;
       readonly socket: HubSocket | null;
     }
   | { readonly kind: 'closed' };

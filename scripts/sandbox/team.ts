@@ -7,9 +7,8 @@ import {
   type TeamPreviewResponse,
 } from '../../packages/core/src/index.ts';
 import { DAY, HOUR } from '../kit/time.ts';
-import { respondTeamConnect } from './connect.ts';
 import { createRandomKey, readBearerMachine } from './requests.ts';
-import { TEAM_INVITE, TEAMMATE, type Machine, type TunnelData, USER } from './schema.ts';
+import { TEAM_INVITE, TEAMMATE, type TunnelData, USER } from './schema.ts';
 
 export const TEAM_KEY = createRandomKey(32);
 
@@ -129,7 +128,7 @@ export function listPreviewTeamKeys(owner: RemoteUser) {
   ];
 }
 
-export function respondTeams(request: Request, url: URL, teammates: Machine[]) {
+export function respondTeams(request: Request, url: URL) {
   const { pathname } = url;
   if (pathname === REMOTE_PATHS.teams) return Response.json(resolvePreviewTeams(USER));
   if (pathname === REMOTE_PATHS.teamJoin) {
@@ -145,11 +144,7 @@ export function respondTeams(request: Request, url: URL, teammates: Machine[]) {
     const answer: TeamPreviewResponse = { name: TEAM.name, owner: TEAM.owner };
     return Response.json(answer);
   }
-  if (pathname === `${REMOTE_PATHS.teams}/${TEAM.id}/connect`)
-    return respondTeamConnect(request, USER, teammates);
   const owner = MACHINE_OWNERS[readBearerMachine(request)] ?? null;
-  if (owner && pathname === `${REMOTE_PATHS.machineTeams}/${TEAM.id}/connect`)
-    return respondTeamConnect(request, owner, teammates);
   if (owner && pathname.startsWith(`${REMOTE_PATHS.machineTeams}/`)) return Response.json({ ok: true });
   return null;
 }

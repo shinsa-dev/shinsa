@@ -213,20 +213,19 @@ export class Shares extends Context.Service<Shares, SharesHandle>()('shinsa/engi
         const hello = parseShareHello(text);
         if (hello?.share !== shareId) return null;
         const share = yield* resolveShare(shareId);
-        if (!(share && (yield* Effect.promise(() => verifyShareHello(share.key, hello)))))
-          return { refused: SHARE_GONE_REASON };
+        if (!(share && (yield* verifyShareHello(share.key, hello)))) return { refused: SHARE_GONE_REASON };
         const ephemeral = yield* createEphemeralKeys;
         const keys = {
           share: shareId,
           clientEphemeral: hello.ephemeral,
-          serverEphemeral: yield* Effect.promise(() => serializePublicKey(ephemeral.publicKey)),
+          serverEphemeral: yield* serializePublicKey(ephemeral.publicKey),
         };
         return {
           subject: share.taskId,
-          session: yield* Effect.promise(() =>
-            deriveShareSessionKey(share.key, keys, ephemeral.privateKey, hello.ephemeral)
+          session: yield* deriveShareSessionKey(share.key, keys, ephemeral.privateKey, hello.ephemeral).pipe(
+            Effect.orDie
           ),
-          welcome: yield* Effect.promise(() => createShareWelcome(share.key, keys)),
+          welcome: yield* createShareWelcome(share.key, keys).pipe(Effect.orDie),
         };
       });
 

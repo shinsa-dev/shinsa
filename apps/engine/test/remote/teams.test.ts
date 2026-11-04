@@ -202,8 +202,8 @@ async function openViewer(teams: Teams, userId: string, view: TeamView, key = TE
   const ephemeral = (await crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, [
     'deriveBits',
   ])) as CryptoKeyPair;
-  const hello = await createTeamHello('team1', key, view, ephemeral.publicKey);
-  let open: ((frame: Bytes) => Promise<Bytes>) | null = null;
+  const hello = await Effect.runPromise(createTeamHello('team1', key, view, ephemeral.publicKey));
+  let open: ReturnType<typeof createFrameOpener> | null = null;
   let queue: Promise<void> = Promise.resolve();
   const viewer: Viewer = {
     messages: [],
@@ -228,12 +228,14 @@ async function openViewer(teams: Teams, userId: string, view: TeamView, key = TE
               serverEphemeral: welcome.ephemeral,
             };
             open = createFrameOpener(
-              await deriveTeamSessionKey(key, keys, ephemeral.privateKey, welcome.ephemeral)
+              await Effect.runPromise(
+                deriveTeamSessionKey(key, keys, ephemeral.privateKey, welcome.ephemeral)
+              )
             );
             return;
           }
           if (!open) throw new Error('a frame before the welcome');
-          const message = parseShareMessage(decodeText(await open(data as Bytes)));
+          const message = parseShareMessage(decodeText(await Effect.runPromise(open(data as Bytes))));
           if (message) viewer.messages.push(message);
         });
       },
@@ -272,7 +274,7 @@ describe('a team view of this machine', () => {
     const [view] = (await openViewer(teams, KAI.id, LIST)).views() as TeamListView[];
     const { publicKey } = await remote.store.resolveSigningKey();
     if (!view?.snapshot) throw new Error('The list view carries no snapshot');
-    const body = await verifyTeamSnapshot(publicKey, view.snapshot);
+    const body = await Effect.runPromise(verifyTeamSnapshot(publicKey, view.snapshot));
     expect(body).toEqual({
       teamId: 'team1',
       instanceId: CREDENTIALS.instanceId,
@@ -304,7 +306,9 @@ describe('a team view of this machine', () => {
     expect(view?.tasks[0]?.task.pullRequest).not.toHaveProperty('reviewToken');
     const { publicKey } = await remote.store.resolveSigningKey();
     if (!view?.snapshot) throw new Error('The list view carries no snapshot');
-    expect(JSON.stringify(await verifyTeamSnapshot(publicKey, view.snapshot))).not.toContain('ghp_secret');
+    expect(
+      JSON.stringify(await Effect.runPromise(verifyTeamSnapshot(publicKey, view.snapshot)))
+    ).not.toContain('ghp_secret');
   });
 
   test('a machine with no credentials signs nothing, since no teammate could tell which machine it is', async () => {
@@ -463,7 +467,7 @@ describe('a team view of this machine', () => {
         KAI.id
       );
       await channel.receive(
-        JSON.stringify(await createTeamHello('team1', TEAM_KEY, LIST, ephemeral.publicKey))
+        JSON.stringify(await Effect.runPromise(createTeamHello('team1', TEAM_KEY, LIST, ephemeral.publicKey)))
       );
       await remote.disable();
       await until(

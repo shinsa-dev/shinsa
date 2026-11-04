@@ -4573,7 +4573,7 @@ did not, each row is ✅, ❌ or ➖, and each risk starts with ⚠️.
   gets the header "This link does not lead to a review" with Download alone. The data rides in the fragment,
   which the browser never sends, so the page can only be drawn in the browser: until its script has read the
   fragment the page shows one small spinner and nothing else, then the whole page appears in one paint, so nothing
-  arrives in pieces. The site's Worker serves `/open` (`apps/marketing/src/worker/open.ts`) and writes only the tab's
+  arrives in pieces. The site's Worker serves `/open` (`apps/marketing/src/worker/open/service.ts`) and writes only the tab's
   title from the query before the page is sent. The data is a compact copy of the review (`serializeReviewPayload`,
   `packages/core/src/report/review-link.ts`: the task's handle, title, summary and pull request number, the facts the
   task page's header shows that are not private (the status, as its stage once the pull request is open: shipping,

@@ -96,9 +96,6 @@ export class Remote extends Context.Service<Remote, RemoteHandle>()('shinsa/engi
 
         const token = (machineToken: string) => Redacted.make(machineToken);
 
-        const verifyProof = (secret: string, proof: string, keys: ProofKeys) =>
-          Effect.promise(() => verifyEnrollProof(secret, proof, keys));
-
         const isEnabled = file.pipe(Effect.map((current) => current.enabled && current.credentials !== null));
 
         const tunnelHost = file.pipe(Effect.map((current) => current.credentials?.tunnelHost ?? null));
@@ -314,12 +311,12 @@ export class Remote extends Context.Service<Remote, RemoteHandle>()('shinsa/engi
 
         const matchesLink = Effect.fn('Remote.matchesLink')(function* (proof: string, keys: ProofKeys) {
           const { link } = yield* file;
-          return link !== null && (yield* verifyProof(link.secret, proof, keys));
+          return link !== null && (yield* verifyEnrollProof(link.secret, proof, keys));
         });
 
         const matchHandoff = Effect.fn('Remote.matchHandoff')(function* (proof: string, keys: ProofKeys) {
           for (const handoff of (yield* file).handoffs) {
-            if (yield* verifyProof(handoff.secret, proof, keys)) return handoff;
+            if (yield* verifyEnrollProof(handoff.secret, proof, keys)) return handoff;
           }
           return null;
         });
@@ -543,7 +540,7 @@ export class Remote extends Context.Service<Remote, RemoteHandle>()('shinsa/engi
             !(
               inTeam &&
               (yield* store.selectTeamKey(grant.teamId)) &&
-              (yield* verifyProof(grant.secret, proof, keys))
+              (yield* verifyEnrollProof(grant.secret, proof, keys))
             )
           )
             return false;
@@ -787,9 +784,7 @@ export class Remote extends Context.Service<Remote, RemoteHandle>()('shinsa/engi
           if (!(connectToken && credentials && (yield* isEnabled))) return null;
           const audience = { instanceId: credentials.instanceId, channel };
           const at = yield* Clock.currentTimeMillis;
-          return yield* Effect.promise(() =>
-            verifyConnectToken(credentials.connectKey, connectToken, audience, at)
-          );
+          return yield* verifyConnectToken(credentials.connectKey, connectToken, audience, at);
         });
 
         const spendConnect = Effect.fn('Remote.spendConnect')(function* (claim: ConnectClaim) {

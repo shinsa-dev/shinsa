@@ -1,6 +1,8 @@
+import { Effect } from 'effect';
 import * as React from 'react';
 import { FileSaver, rememberSaved, type SaverState, selectSaved } from '@/lib/code/edits.ts';
 import { requestFileWrite } from '@/lib/connection/code.ts';
+import { forkApp } from '@/lib/runtime/app.ts';
 
 interface Buffer {
   readText: () => string;
@@ -49,7 +51,12 @@ export function useFileSaver(input: {
   React.useEffect(
     () => () => {
       if (!current) return;
-      void current.saver.flush().finally(() => current.saver.dispose());
+      forkApp(
+        Effect.ensuring(
+          current.saver.flush(),
+          Effect.sync(() => current.saver.dispose())
+        )
+      );
     },
     [current]
   );
@@ -63,7 +70,7 @@ export function useFileSaver(input: {
       current.saver.edit();
     },
     save: () => {
-      if (current) void current.saver.flush();
+      if (current) forkApp(current.saver.flush());
     },
   };
 }

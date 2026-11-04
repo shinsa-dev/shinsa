@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { Effect } from 'effect';
 import { decodeText, encodeText, serializeBase64Url } from '../../src/remote/bytes.ts';
 import { createFrameOpener, createFrameSealer } from '../../src/remote/frames.ts';
 import { REMOTE_PROTOCOL_VERSION } from '../../src/remote/handshake.ts';
@@ -91,39 +92,46 @@ describe('the team handshake', () => {
   test('both sides derive one key for the view asked for, and only with the team key', async () => {
     const client = await createKeyPair();
     const server = await createKeyPair();
-    const hello = await createTeamHello('team-1', KEY, TASK, client.publicKey);
+    const hello = await Effect.runPromise(createTeamHello('team-1', KEY, TASK, client.publicKey));
     expect(parseTeamHello(JSON.stringify(hello))).toEqual(hello);
-    expect(await verifyTeamHello(KEY, hello)).toBe(true);
-    expect(await verifyTeamHello(OTHER_KEY, hello)).toBe(false);
-    expect(await verifyTeamHello(KEY, { ...hello, team: 'team-2' })).toBe(false);
-    expect(await verifyTeamHello(KEY, { ...hello, view: LIST })).toBe(false);
-    expect(await verifyTeamHello(KEY, { ...hello, view: { kind: 'task', taskId: 'task-2' } })).toBe(false);
+    expect(await Effect.runPromise(verifyTeamHello(KEY, hello))).toBe(true);
+    expect(await Effect.runPromise(verifyTeamHello(OTHER_KEY, hello))).toBe(false);
+    expect(await Effect.runPromise(verifyTeamHello(KEY, { ...hello, team: 'team-2' }))).toBe(false);
+    expect(await Effect.runPromise(verifyTeamHello(KEY, { ...hello, view: LIST }))).toBe(false);
+    expect(
+      await Effect.runPromise(verifyTeamHello(KEY, { ...hello, view: { kind: 'task', taskId: 'task-2' } }))
+    ).toBe(false);
     const keys = {
       team: 'team-1',
       view: TASK,
       clientEphemeral: hello.ephemeral,
-      serverEphemeral: await serializePublicKey(server.publicKey),
+      serverEphemeral: await Effect.runPromise(serializePublicKey(server.publicKey)),
     };
-    const welcome = await createTeamWelcome(KEY, keys);
-    expect(await verifyTeamWelcome(KEY, keys, welcome.proof)).toBe(true);
-    expect(await verifyTeamWelcome(OTHER_KEY, keys, welcome.proof)).toBe(false);
-    expect(await verifyTeamWelcome(KEY, { ...keys, view: LIST }, welcome.proof)).toBe(false);
-    const sending = await deriveTeamSessionKey(KEY, keys, server.privateKey, keys.clientEphemeral);
-    const receiving = await deriveTeamSessionKey(KEY, keys, client.privateKey, keys.serverEphemeral);
-    const listing = await deriveTeamSessionKey(
-      KEY,
-      { ...keys, view: LIST },
-      client.privateKey,
-      keys.serverEphemeral
+    const welcome = await Effect.runPromise(createTeamWelcome(KEY, keys));
+    expect(await Effect.runPromise(verifyTeamWelcome(KEY, keys, welcome.proof))).toBe(true);
+    expect(await Effect.runPromise(verifyTeamWelcome(OTHER_KEY, keys, welcome.proof))).toBe(false);
+    expect(await Effect.runPromise(verifyTeamWelcome(KEY, { ...keys, view: LIST }, welcome.proof))).toBe(
+      false
     );
-    const frame = await createFrameSealer(sending)(encodeText('live'));
-    expect(decodeText(await createFrameOpener(receiving)(frame))).toBe('live');
-    await expect(createFrameOpener(listing)(frame)).rejects.toThrow('A frame failed to open.');
+    const sending = await Effect.runPromise(
+      deriveTeamSessionKey(KEY, keys, server.privateKey, keys.clientEphemeral)
+    );
+    const receiving = await Effect.runPromise(
+      deriveTeamSessionKey(KEY, keys, client.privateKey, keys.serverEphemeral)
+    );
+    const listing = await Effect.runPromise(
+      deriveTeamSessionKey(KEY, { ...keys, view: LIST }, client.privateKey, keys.serverEphemeral)
+    );
+    const frame = await Effect.runPromise(createFrameSealer(sending)(encodeText('live')));
+    expect(decodeText(await Effect.runPromise(createFrameOpener(receiving)(frame)))).toBe('live');
+    await expect(Effect.runPromise(createFrameOpener(listing)(frame))).rejects.toThrow(
+      'A frame failed to open.'
+    );
   });
 
   test('refuses hellos of the wrong shape or view', async () => {
     const client = await createKeyPair();
-    const hello = await createTeamHello('team-1', KEY, LIST, client.publicKey);
+    const hello = await Effect.runPromise(createTeamHello('team-1', KEY, LIST, client.publicKey));
     expect(parseTeamHello(JSON.stringify(hello))?.view).toEqual(LIST);
     expect(parseTeamHello('{')).toBeNull();
     expect(parseTeamHello(JSON.stringify({ ...hello, type: 'share-hello' }))).toBeNull();
@@ -132,7 +140,7 @@ describe('the team handshake', () => {
     expect(parseTeamHello(JSON.stringify({ ...hello, view: { kind: 'chat' } }))).toBeNull();
     expect(parseTeamHello(JSON.stringify({ ...hello, view: { kind: 'task', taskId: '../x' } }))).toBeNull();
     expect(parseTeamHello(JSON.stringify({ ...hello, team: 1 }))).toBeNull();
-    await expect(createTeamHello('team-1', '', LIST, client.publicKey)).rejects.toThrow(
+    await expect(Effect.runPromise(createTeamHello('team-1', '', LIST, client.publicKey))).rejects.toThrow(
       'The channel key is not valid.'
     );
   });
@@ -146,38 +154,47 @@ describe('a signed team snapshot', () => {
       'sign',
       'verify',
     ])) as CryptoKeyPair;
-    return { privateKey: pair.privateKey, signingKey: await serializePublicKey(pair.publicKey) };
+    return {
+      privateKey: pair.privateKey,
+      signingKey: await Effect.runPromise(serializePublicKey(pair.publicKey)),
+    };
   }
 
   test('verifies with the machine’s own key and gives back what it signed', async () => {
     const signer = await createSigner();
-    const snapshot = await signTeamSnapshot(signer.privateKey, BODY);
-    expect(await verifyTeamSnapshot(signer.signingKey, snapshot)).toEqual(BODY);
+    const snapshot = await Effect.runPromise(signTeamSnapshot(signer.privateKey, BODY));
+    expect(await Effect.runPromise(verifyTeamSnapshot(signer.signingKey, snapshot))).toEqual(BODY);
     expect(readTeamSnapshot(JSON.parse(JSON.stringify(snapshot)))).toEqual(snapshot);
   });
 
   test('refuses another machine’s key, a changed body, a bad signature or a bad key', async () => {
     const signer = await createSigner();
     const other = await createSigner();
-    const snapshot = await signTeamSnapshot(signer.privateKey, BODY);
-    expect(await verifyTeamSnapshot(other.signingKey, snapshot)).toBeNull();
+    const snapshot = await Effect.runPromise(signTeamSnapshot(signer.privateKey, BODY));
+    expect(await Effect.runPromise(verifyTeamSnapshot(other.signingKey, snapshot))).toBeNull();
     const forged = { ...snapshot, body: JSON.stringify({ ...BODY, instanceId: 'laptop' }) };
-    expect(await verifyTeamSnapshot(signer.signingKey, forged)).toBeNull();
-    expect(await verifyTeamSnapshot(signer.signingKey, { ...snapshot, signature: '!' })).toBeNull();
-    expect(await verifyTeamSnapshot('nope', snapshot)).toBeNull();
+    expect(await Effect.runPromise(verifyTeamSnapshot(signer.signingKey, forged))).toBeNull();
+    expect(
+      await Effect.runPromise(verifyTeamSnapshot(signer.signingKey, { ...snapshot, signature: '!' }))
+    ).toBeNull();
+    expect(await Effect.runPromise(verifyTeamSnapshot('nope', snapshot))).toBeNull();
   });
 
   test('refuses a signed body that is not a snapshot', async () => {
     const signer = await createSigner();
     for (const body of [{ ...BODY, tasks: 'none' }, { ...BODY, updatedAt: 'now' }, []]) {
-      const snapshot = await signTeamSnapshot(signer.privateKey, body as unknown as TeamSnapshotBody);
-      expect(await verifyTeamSnapshot(signer.signingKey, snapshot)).toBeNull();
+      const snapshot = await Effect.runPromise(
+        signTeamSnapshot(signer.privateKey, body as unknown as TeamSnapshotBody)
+      );
+      expect(await Effect.runPromise(verifyTeamSnapshot(signer.signingKey, snapshot))).toBeNull();
     }
   });
 
   test('names the machine a snapshot says signed it, before it is verified', async () => {
     const signer = await createSigner();
-    expect(selectTeamSnapshotSigner(await signTeamSnapshot(signer.privateKey, BODY))).toBe(BODY.instanceId);
+    expect(selectTeamSnapshotSigner(await Effect.runPromise(signTeamSnapshot(signer.privateKey, BODY)))).toBe(
+      BODY.instanceId
+    );
     expect(selectTeamSnapshotSigner({ body: '{"instanceId":3}', signature: 'x' })).toBeNull();
     expect(selectTeamSnapshotSigner({ body: 'not json', signature: 'x' })).toBeNull();
   });

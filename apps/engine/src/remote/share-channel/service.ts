@@ -63,10 +63,7 @@ export const makeShareChannel = Effect.fn('ShareChannel.make')(function* <Subjec
   const send = Effect.fn('ShareChannel.send')(function* (message: ShareMessage) {
     const current = yield* Ref.get(state);
     if (current.kind !== 'open') return;
-    const frame = yield* Effect.tryPromise({
-      try: () => current.seal(encodeText(serializeShareMessage(message))),
-      catch: broke,
-    });
+    const frame = yield* current.seal(encodeText(serializeShareMessage(message)));
     if ((yield* Ref.get(state)).kind === 'open') yield* sendPeer(frame);
   });
 

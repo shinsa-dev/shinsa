@@ -16,6 +16,7 @@ import {
 } from '@/lib/remote/machines.ts';
 import type { EnrolledDevice } from '@/lib/remote/schema.ts';
 import { describeMentionText } from '@/lib/remote/users.ts';
+import { CloudRefused } from '@/lib/runtime/remote/schema.ts';
 import { createKeyPair, FakeMac } from './fake-mac.ts';
 
 const NOW = Date.UTC(2026, 9, 30, 12);
@@ -103,10 +104,12 @@ describe('a machine in the dashboard', () => {
 
   it('lists every machine of the account with this browser’s device for it', async () => {
     const device = await createDevice('key');
-    const rows = await listMachineRows(
-      { listInstances: () => Promise.resolve([STUDIO, { ...STUDIO, id: 'm2', name: 'Laptop' }]) },
-      { selectDevice: (id) => Promise.resolve(id === STUDIO.id ? device : null) },
-      NOW
+    const rows = await Effect.runPromise(
+      listMachineRows(
+        { listInstances: () => Promise.resolve([STUDIO, { ...STUDIO, id: 'm2', name: 'Laptop' }]) },
+        { selectDevice: (id) => Promise.resolve(id === STUDIO.id ? device : null) },
+        NOW
+      )
     );
     expect(rows.map((row) => [row.instance.name, row.device !== null])).toEqual([
       ['Studio', true],
@@ -117,7 +120,7 @@ describe('a machine in the dashboard', () => {
   it('becomes a fleet member whose socket and requests go over its own sealed channel', async () => {
     const keys = await createKeyPair();
     const mac = await FakeMac.create({
-      enrolled: [await serializePublicKey(keys.publicKey)],
+      enrolled: [await Effect.runPromise(serializePublicKey(keys.publicKey))],
       respond: () => new Response('from Studio'),
     });
     const device: EnrolledDevice = { instanceId: STUDIO.id, machineKey: mac.machineKey, keys, enrolledAt: 1 };
@@ -171,6 +174,24 @@ describe('a machine in the dashboard', () => {
     expect(member.connection).toBeInstanceOf(Connection);
     await expect(member.fetch(new Request('https://shinsa.dev/api/health'))).rejects.toThrow('not enrolled');
     expect(refused).toEqual(['k3x9: This browser is not enrolled on this machine.']);
+  });
+
+  it('reports the machine removed when the account no longer has it', async () => {
+    const device = await createDevice('key');
+    const removed: string[] = [];
+    const member = createFleetMember(STUDIO, device, {
+      dashboard: {
+        requestConnect: () =>
+          Promise.reject(new CloudRefused({ code: 'not_found', message: 'No such machine.', status: 404 })),
+      },
+      onRefused: () => undefined,
+      onRemoved: (instanceId) => removed.push(instanceId),
+    });
+    await expect(member.fetch(new Request('https://shinsa.dev/api/health'))).rejects.toThrow(
+      'No such machine.'
+    );
+    expect(removed).toEqual(['k3x9']);
+    member.close();
   });
 });
 

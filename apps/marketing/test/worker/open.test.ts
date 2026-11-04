@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'bun:test';
-import { isOpenPage, OPEN_HEADERS, respondOpen } from '../../src/worker/open.ts';
+import { isOpenPage } from '../../src/worker/open/paths.ts';
+import { OPEN_HEADERS } from '../../src/worker/open/schema.ts';
+import { respond } from './harness.ts';
+
+function respondOpen(request: Request, assets: (request: Request) => Promise<Response>) {
+  return respond(request, { assets });
+}
 
 const BODY = '<astro-island><div><svg data-slot="spinner" role="status"></svg></div></astro-island>';
 

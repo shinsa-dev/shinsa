@@ -66,7 +66,7 @@ export class RemoteStore extends Context.Service<RemoteStore, RemoteStoreHandle>
 
       const resolveKey = (
         slot: 'machine' | 'signing',
-        parse: (text: string) => Promise<CryptoKey | null>,
+        parse: (text: string) => Effect.Effect<CryptoKey | null>,
         generate: () => Promise<CryptoKeyPair>
       ) =>
         SynchronizedRef.modifyEffect(
@@ -74,18 +74,18 @@ export class RemoteStore extends Context.Service<RemoteStore, RemoteStoreHandle>
           Effect.fn('RemoteStore.resolveKey')(function* (parsed: ParsedKeys) {
             const stored = (yield* file)[slot];
             const known = parsed[slot];
-            const key = stored && (known ?? (yield* Effect.promise(() => parse(stored.privateKey))));
+            const key = stored && (known ?? (yield* parse(stored.privateKey)));
             if (stored && key) {
               const resolved: ResolvedKey = { publicKey: stored.publicKey, privateKey: key };
               return [resolved, { ...parsed, [slot]: key }] as const;
             }
             const pair = yield* Effect.promise(generate);
             const fresh = {
-              publicKey: yield* Effect.promise(() => serializePublicKey(pair.publicKey)),
-              privateKey: yield* Effect.promise(() => serializePrivateKey(pair.privateKey)),
+              publicKey: yield* serializePublicKey(pair.publicKey),
+              privateKey: yield* serializePrivateKey(pair.privateKey),
             };
             yield* update((before) => ({ ...before, [slot]: fresh }));
-            const privateKey = (yield* Effect.promise(() => parse(fresh.privateKey))) as CryptoKey;
+            const privateKey = (yield* parse(fresh.privateKey)) as CryptoKey;
             const resolved: ResolvedKey = { publicKey: fresh.publicKey, privateKey };
             return [resolved, { ...parsed, [slot]: privateKey }] as const;
           })

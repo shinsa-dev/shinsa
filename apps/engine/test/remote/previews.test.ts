@@ -536,12 +536,14 @@ function resolvePrivateId(url: string) {
 }
 
 async function createAccess(previewId: string, userId: string, expiresAt = 10 + PREVIEW_ACCESS_TTL_MS) {
-  return createPreviewAccessToken(CREDENTIALS.connectKey, {
-    instanceId: 'inst1',
-    previewId,
-    userId,
-    expiresAt,
-  });
+  return Effect.runPromise(
+    createPreviewAccessToken(CREDENTIALS.connectKey, {
+      instanceId: 'inst1',
+      previewId,
+      userId,
+      expiresAt,
+    })
+  );
 }
 
 function askPrivately(
@@ -566,7 +568,9 @@ describe('a private address for every running service', () => {
     expect(published.length).toBe(1);
     const previewId = resolvePrivateId(url);
     expect(previewId).toBe(
-      await resolvePrivatePreviewId(CREDENTIALS.connectKey, { serviceId: 'web', taskId: 'task-1' })
+      await Effect.runPromise(
+        resolvePrivatePreviewId(CREDENTIALS.connectKey, { serviceId: 'web', taskId: 'task-1' })
+      )
     );
     expect(url).toBe(`${new URL(url).origin}/`);
     expect(
@@ -635,17 +639,21 @@ describe('a private address for every running service', () => {
 
   test('an address made before a restart still opens, a stopped run says so, and a run gone is not shared', async () => {
     const { previews, snapshot } = setUp({ preview: null, now: () => 10 });
-    const previewId = await resolvePrivatePreviewId(CREDENTIALS.connectKey, {
-      serviceId: 'web',
-      taskId: 'task-1',
-    });
+    const previewId = await Effect.runPromise(
+      resolvePrivatePreviewId(CREDENTIALS.connectKey, {
+        serviceId: 'web',
+        taskId: 'task-1',
+      })
+    );
     snapshot.terminals[0] = createRun({ status: 'exited', port: null });
     const stopped = readResponse(
       await askPrivately(previews, previewId, '/', { access: await createAccess(previewId, OWNER.id) })
     );
     expect(stopped.status).toBe(503);
     expect(await stopped.text()).toContain(PREVIEW_STOPPED);
-    const other = await resolvePrivatePreviewId(CREDENTIALS.connectKey, { serviceId: 'api', taskId: null });
+    const other = await Effect.runPromise(
+      resolvePrivatePreviewId(CREDENTIALS.connectKey, { serviceId: 'api', taskId: null })
+    );
     snapshot.terminals.push(createRun({ id: 'term-2', serviceId: null }));
     expect(
       readResponse(await askPrivately(previews, other, '/', { access: await createAccess(other, OWNER.id) }))

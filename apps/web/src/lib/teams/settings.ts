@@ -12,9 +12,7 @@ import {
   type UserCommand,
 } from '@shinsa/core';
 import { formatSince } from '@/lib/format/time.ts';
-import type { DashboardClient } from '@/lib/remote/dashboard.ts';
 import type { Mention } from '@/lib/remote/users.ts';
-import type { TeamKeyStore } from './join.ts';
 
 export const TEAMS_SECTION = 'Teams';
 
@@ -171,21 +169,6 @@ export interface HostedTeam {
 export interface HostedTeams {
   viewerId: string | null;
   teams: HostedTeam[];
-}
-
-export async function listHostedTeams(options: {
-  dashboard: Pick<DashboardClient, 'listTeams' | 'readSession'>;
-  teamKeys: Pick<TeamKeyStore, 'selectTeamKey'>;
-}): Promise<HostedTeams> {
-  const [teams, session] = await Promise.all([
-    options.dashboard.listTeams(),
-    options.dashboard.readSession(),
-  ]);
-  const keys = await Promise.all(teams.map((team) => options.teamKeys.selectTeamKey(team.id)));
-  return {
-    viewerId: session.user?.id ?? null,
-    teams: teams.map((team, index) => ({ team, hasKey: keys[index] !== null })),
-  };
 }
 
 function countOf(count: number, one: string, many: string) {

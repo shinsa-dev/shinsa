@@ -27,7 +27,7 @@ async function createHello() {
   const ephemeral = (await crypto.subtle.generateKey(REMOTE_KEY_ALGORITHM, true, [
     'deriveBits',
   ])) as CryptoKeyPair;
-  return JSON.stringify(await createShareHello('s1', KEY, ephemeral.publicKey));
+  return JSON.stringify(await Effect.runPromise(createShareHello('s1', KEY, ephemeral.publicKey)));
 }
 
 function createPeer() {
@@ -125,11 +125,13 @@ describe('a share channel that breaks', () => {
       name: 'share link',
       authorize: async () => ({
         subject: 't1',
-        session: await deriveShareSessionKey(
-          KEY,
-          { share: 's1', clientEphemeral: 'c', serverEphemeral: 's' },
-          ephemeral.privateKey,
-          await serializePublicKey(ephemeral.publicKey)
+        session: await Effect.runPromise(
+          deriveShareSessionKey(
+            KEY,
+            { share: 's1', clientEphemeral: 'c', serverEphemeral: 's' },
+            ephemeral.privateKey,
+            await Effect.runPromise(serializePublicKey(ephemeral.publicKey))
+          )
         ),
         welcome: { type: 'welcome', ephemeral: 's', proof: 'p' },
       }),
@@ -152,11 +154,13 @@ describe('a share channel that breaks', () => {
       name: 'share link',
       authorize: async () => ({
         subject: 't1',
-        session: await deriveShareSessionKey(
-          KEY,
-          { share: 's1', clientEphemeral: 'c', serverEphemeral: 's' },
-          ephemeral.privateKey,
-          await serializePublicKey(ephemeral.publicKey)
+        session: await Effect.runPromise(
+          deriveShareSessionKey(
+            KEY,
+            { share: 's1', clientEphemeral: 'c', serverEphemeral: 's' },
+            ephemeral.privateKey,
+            await Effect.runPromise(serializePublicKey(ephemeral.publicKey))
+          )
         ),
         welcome: { type: 'welcome', ephemeral: 's', proof: 'p' },
       }),
@@ -187,11 +191,13 @@ describe('a share channel that stays open', () => {
         name: 'share link',
         authorize: async () => ({
           subject: 't1',
-          session: await deriveShareSessionKey(
-            KEY,
-            { share: 's1', clientEphemeral: 'c', serverEphemeral: 's' },
-            ephemeral.privateKey,
-            await serializePublicKey(ephemeral.publicKey)
+          session: await Effect.runPromise(
+            deriveShareSessionKey(
+              KEY,
+              { share: 's1', clientEphemeral: 'c', serverEphemeral: 's' },
+              ephemeral.privateKey,
+              await Effect.runPromise(serializePublicKey(ephemeral.publicKey))
+            )
           ),
           welcome: { type: 'welcome', ephemeral: 's', proof: 'p' },
         }),

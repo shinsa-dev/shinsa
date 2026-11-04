@@ -110,7 +110,7 @@ async function createHarness(
   const machine = (await crypto.subtle.generateKey(REMOTE_KEY_ALGORITHM, true, [
     'deriveBits',
   ])) as CryptoKeyPair;
-  const machineKey = await serializePublicKey(machine.publicKey);
+  const machineKey = await Effect.runPromise(serializePublicKey(machine.publicKey));
   const harness = {
     sent: [],
     dropping: false,

@@ -106,16 +106,14 @@ export class Slack extends Context.Service<
           if (body.length > SLACK_EVENT_BODY_LIMIT_BYTES)
             return respondJsonError('body_too_large', 'The request is over 1 MB.', 413);
           const now = yield* Clock.currentTimeMillis;
-          const signed = yield* Effect.promise(() =>
-            verifySlackForwardSignature(
-              credentials.connectKey,
-              {
-                signature: request.headers.get(SLACK_FORWARD_HEADERS.signature),
-                timestamp: request.headers.get(SLACK_FORWARD_HEADERS.timestamp),
-              },
-              body,
-              now
-            )
+          const signed = yield* verifySlackForwardSignature(
+            credentials.connectKey,
+            {
+              signature: request.headers.get(SLACK_FORWARD_HEADERS.signature),
+              timestamp: request.headers.get(SLACK_FORWARD_HEADERS.timestamp),
+            },
+            body,
+            now
           );
           if (!signed)
             return respondJsonError('unauthorized', 'The request is not signed by app.shinsa.dev.', 401);

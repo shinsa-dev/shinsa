@@ -26,7 +26,10 @@ const CREDENTIALS = {
 
 const PAIR = (await crypto.subtle.generateKey(REMOTE_KEY_ALGORITHM, true, ['deriveBits'])) as CryptoKeyPair;
 
-const MACHINE = { publicKey: await serializePublicKey(PAIR.publicKey), privateKey: PAIR.privateKey };
+const MACHINE = {
+  publicKey: await Effect.runPromise(serializePublicKey(PAIR.publicKey)),
+  privateKey: PAIR.privateKey,
+};
 
 const SEALED = await sealCredentials(MACHINE.publicKey, CREDENTIALS);
 
@@ -99,9 +102,11 @@ describe('pairing', () => {
   test('ends without pairing when the credentials were not sealed to this machine’s key', async () => {
     const logs = captureLogs();
     const other = await sealCredentials(
-      await serializePublicKey(
-        ((await crypto.subtle.generateKey(REMOTE_KEY_ALGORITHM, true, ['deriveBits'])) as CryptoKeyPair)
-          .publicKey
+      await Effect.runPromise(
+        serializePublicKey(
+          ((await crypto.subtle.generateKey(REMOTE_KEY_ALGORITHM, true, ['deriveBits'])) as CryptoKeyPair)
+            .publicKey
+        )
       ),
       CREDENTIALS
     );

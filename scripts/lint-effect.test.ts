@@ -11,9 +11,9 @@ import {
   EFFECT_THROW_MESSAGE,
   EFFECT_TRY_MESSAGE,
   isEffectSource,
-  isEngineSource,
+  isPromiseIoSource,
   listEffectViolations,
-  listEnginePromiseLines,
+  listPromiseLines,
   isEngineRuntimeSource,
   listEngineRuntimeLines,
 } from './lint-effect.ts';
@@ -149,13 +149,21 @@ describe('Effect code is held to the house style', () => {
   });
 });
 
-describe('the engine does its I/O in Effect', () => {
-  test('only engine source files without an effect import are checked, never tests', () => {
-    expect(isEngineSource('apps/engine/src/remote/teams.ts', 'export class Teams {}')).toBe(true);
-    expect(isEngineSource('apps/engine/src/remote/teams.ts', "import { Effect } from 'effect';")).toBe(false);
-    expect(isEngineSource('apps/engine/src/remote/teams.test.ts', 'export class Teams {}')).toBe(false);
-    expect(isEngineSource('apps/engine/test/remote/teams.ts', 'export class Teams {}')).toBe(false);
-    expect(isEngineSource('apps/web/src/lib/api.ts', 'export class Api {}')).toBe(false);
+describe('every workspace does its I/O in Effect', () => {
+  test('every .ts source file and script without an effect import is checked, never tests or components', () => {
+    const plain = 'export class Teams {}';
+    expect(isPromiseIoSource('apps/engine/src/remote/teams.ts', plain)).toBe(true);
+    expect(isPromiseIoSource('apps/web/src/lib/api.ts', plain)).toBe(true);
+    expect(isPromiseIoSource('packages/core/src/remote/keys.ts', plain)).toBe(true);
+    expect(isPromiseIoSource('scripts/release.ts', plain)).toBe(true);
+    expect(isPromiseIoSource('apps/engine/src/remote/teams.ts', "import { Effect } from 'effect';")).toBe(
+      false
+    );
+    expect(isPromiseIoSource('apps/web/src/components/task/row.tsx', plain)).toBe(false);
+    expect(isPromiseIoSource('apps/engine/src/remote/teams.test.ts', plain)).toBe(false);
+    expect(isPromiseIoSource('apps/engine/test/remote/teams.ts', plain)).toBe(false);
+    expect(isPromiseIoSource('scripts/lint-effect.test.ts', plain)).toBe(false);
+    expect(isPromiseIoSource('docs/notes.ts', plain)).toBe(false);
   });
 
   test('every await, async function, new Promise and promise chain is found, with its line', () => {
@@ -168,8 +176,8 @@ describe('the engine does its I/O in Effect', () => {
       'Effect.catch(run, stop);',
       'const plain = () => 1;',
     ].join('\n');
-    expect(listEnginePromiseLines('apps/engine/src/a.ts', source)).toEqual([1, 2, 4, 5]);
-    expect(listEnginePromiseLines('apps/engine/src/a.tsx', 'const v = () => <Row />;')).toEqual([]);
+    expect(listPromiseLines('apps/engine/src/a.ts', source)).toEqual([1, 2, 4, 5]);
+    expect(listPromiseLines('apps/engine/src/a.tsx', 'const v = () => <Row />;')).toEqual([]);
   });
 });
 

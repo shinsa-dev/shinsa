@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { Effect } from 'effect';
 import { parseBase32, serializeBase32, serializeBase64Url } from '../../src/remote/bytes.ts';
 import { createConnectToken } from '../../src/remote/connect-token.ts';
 import {
@@ -120,13 +121,19 @@ const NOW = 1_000_000;
 describe('a private preview', () => {
   test('has an id derived from the connect key, the service and the task, stable for the same run', async () => {
     const run = { serviceId: 'web', taskId: 'task-1' };
-    const id = await resolvePrivatePreviewId(CONNECT_KEY, run);
+    const id = await Effect.runPromise(resolvePrivatePreviewId(CONNECT_KEY, run));
     expect(isPreviewId(id)).toBe(true);
-    expect(await resolvePrivatePreviewId(CONNECT_KEY, run)).toBe(id);
-    expect(await resolvePrivatePreviewId(OTHER_KEY, run)).not.toBe(id);
-    expect(await resolvePrivatePreviewId(CONNECT_KEY, { serviceId: 'web', taskId: null })).not.toBe(id);
-    expect(await resolvePrivatePreviewId(CONNECT_KEY, { serviceId: 'api', taskId: 'task-1' })).not.toBe(id);
-    await expect(resolvePrivatePreviewId('', run)).rejects.toThrow('The connect key is not valid.');
+    expect(await Effect.runPromise(resolvePrivatePreviewId(CONNECT_KEY, run))).toBe(id);
+    expect(await Effect.runPromise(resolvePrivatePreviewId(OTHER_KEY, run))).not.toBe(id);
+    expect(
+      await Effect.runPromise(resolvePrivatePreviewId(CONNECT_KEY, { serviceId: 'web', taskId: null }))
+    ).not.toBe(id);
+    expect(
+      await Effect.runPromise(resolvePrivatePreviewId(CONNECT_KEY, { serviceId: 'api', taskId: 'task-1' }))
+    ).not.toBe(id);
+    await expect(Effect.runPromise(resolvePrivatePreviewId('', run))).rejects.toThrow(
+      'The connect key is not valid.'
+    );
   });
 
   test('keeps the local page, query and fragment on its own origin', () => {
@@ -143,49 +150,71 @@ describe('a preview access token', () => {
   const claim = { ...ADDRESS, userId: 'u1', expiresAt: NOW + PREVIEW_ACCESS_TTL_MS };
 
   test('opens its own preview for its account until it expires', async () => {
-    const token = await createPreviewAccessToken(CONNECT_KEY, claim);
-    expect(await verifyPreviewAccessToken(CONNECT_KEY, token, ADDRESS, NOW)).toEqual(claim);
-    expect(await verifyPreviewAccessToken(CONNECT_KEY, token, ADDRESS, claim.expiresAt)).toBeNull();
+    const token = await Effect.runPromise(createPreviewAccessToken(CONNECT_KEY, claim));
+    expect(await Effect.runPromise(verifyPreviewAccessToken(CONNECT_KEY, token, ADDRESS, NOW))).toEqual(
+      claim
+    );
+    expect(
+      await Effect.runPromise(verifyPreviewAccessToken(CONNECT_KEY, token, ADDRESS, claim.expiresAt))
+    ).toBeNull();
   });
 
   test('is refused for another preview, another machine, another key or a longer life than allowed', async () => {
-    const token = await createPreviewAccessToken(CONNECT_KEY, claim);
+    const token = await Effect.runPromise(createPreviewAccessToken(CONNECT_KEY, claim));
     const other = serializeBase64Url(new Uint8Array(PREVIEW_ID_BYTES).fill(8));
     expect(
-      await verifyPreviewAccessToken(CONNECT_KEY, token, { ...ADDRESS, previewId: other }, NOW)
+      await Effect.runPromise(
+        verifyPreviewAccessToken(CONNECT_KEY, token, { ...ADDRESS, previewId: other }, NOW)
+      )
     ).toBeNull();
     expect(
-      await verifyPreviewAccessToken(CONNECT_KEY, token, { ...ADDRESS, instanceId: 'other' }, NOW)
+      await Effect.runPromise(
+        verifyPreviewAccessToken(CONNECT_KEY, token, { ...ADDRESS, instanceId: 'other' }, NOW)
+      )
     ).toBeNull();
-    expect(await verifyPreviewAccessToken(OTHER_KEY, token, ADDRESS, NOW)).toBeNull();
-    expect(await verifyPreviewAccessToken(CONNECT_KEY, token, ADDRESS, NOW, PREVIEW_OPEN_TTL_MS)).toBeNull();
-    const open = await createPreviewAccessToken(CONNECT_KEY, {
-      ...claim,
-      expiresAt: NOW + PREVIEW_OPEN_TTL_MS,
-    });
+    expect(await Effect.runPromise(verifyPreviewAccessToken(OTHER_KEY, token, ADDRESS, NOW))).toBeNull();
     expect(
-      await verifyPreviewAccessToken(CONNECT_KEY, open, ADDRESS, NOW, PREVIEW_OPEN_TTL_MS)
+      await Effect.runPromise(verifyPreviewAccessToken(CONNECT_KEY, token, ADDRESS, NOW, PREVIEW_OPEN_TTL_MS))
+    ).toBeNull();
+    const open = await Effect.runPromise(
+      createPreviewAccessToken(CONNECT_KEY, {
+        ...claim,
+        expiresAt: NOW + PREVIEW_OPEN_TTL_MS,
+      })
+    );
+    expect(
+      await Effect.runPromise(verifyPreviewAccessToken(CONNECT_KEY, open, ADDRESS, NOW, PREVIEW_OPEN_TTL_MS))
     ).not.toBeNull();
   });
 
   test('is refused when tampered with, malformed, or a connect token', async () => {
-    const token = await createPreviewAccessToken(CONNECT_KEY, claim);
+    const token = await Effect.runPromise(createPreviewAccessToken(CONNECT_KEY, claim));
     const [payload, signature] = token.split('.');
     const forged = serializeBase64Url(new TextEncoder().encode(JSON.stringify({ ...claim, u: 'u2' })));
-    expect(await verifyPreviewAccessToken(CONNECT_KEY, `${forged}.${signature}`, ADDRESS, NOW)).toBeNull();
-    expect(await verifyPreviewAccessToken(CONNECT_KEY, `${token}.x`, ADDRESS, NOW)).toBeNull();
-    expect(await verifyPreviewAccessToken(CONNECT_KEY, payload as string, ADDRESS, NOW)).toBeNull();
-    expect(await verifyPreviewAccessToken(CONNECT_KEY, '!.!', ADDRESS, NOW)).toBeNull();
-    expect(await verifyPreviewAccessToken('', token, ADDRESS, NOW)).toBeNull();
-    const connect = await createConnectToken(CONNECT_KEY, {
-      instanceId: ADDRESS.instanceId,
-      userId: 'u1',
-      channel: 'remote',
-      nonce: 'n'.repeat(22),
-      expiresAt: NOW + 1,
-    });
-    expect(await verifyPreviewAccessToken(CONNECT_KEY, connect, ADDRESS, NOW)).toBeNull();
-    await expect(createPreviewAccessToken('', claim)).rejects.toThrow('The connect key is not valid.');
+    expect(
+      await Effect.runPromise(verifyPreviewAccessToken(CONNECT_KEY, `${forged}.${signature}`, ADDRESS, NOW))
+    ).toBeNull();
+    expect(
+      await Effect.runPromise(verifyPreviewAccessToken(CONNECT_KEY, `${token}.x`, ADDRESS, NOW))
+    ).toBeNull();
+    expect(
+      await Effect.runPromise(verifyPreviewAccessToken(CONNECT_KEY, payload as string, ADDRESS, NOW))
+    ).toBeNull();
+    expect(await Effect.runPromise(verifyPreviewAccessToken(CONNECT_KEY, '!.!', ADDRESS, NOW))).toBeNull();
+    expect(await Effect.runPromise(verifyPreviewAccessToken('', token, ADDRESS, NOW))).toBeNull();
+    const connect = await Effect.runPromise(
+      createConnectToken(CONNECT_KEY, {
+        instanceId: ADDRESS.instanceId,
+        userId: 'u1',
+        channel: 'remote',
+        nonce: 'n'.repeat(22),
+        expiresAt: NOW + 1,
+      })
+    );
+    expect(await Effect.runPromise(verifyPreviewAccessToken(CONNECT_KEY, connect, ADDRESS, NOW))).toBeNull();
+    await expect(Effect.runPromise(createPreviewAccessToken('', claim))).rejects.toThrow(
+      'The connect key is not valid.'
+    );
   });
 
   test('is refused when its signed payload is not a claim', async () => {
@@ -203,7 +232,9 @@ describe('a preview access token', () => {
     };
     const text = (value: string) => new TextEncoder().encode(value);
     for (const payload of [text('not json'), text('{"i":"x","p":"y"}'), Uint8Array.from([0xff, 0xfe])]) {
-      expect(await verifyPreviewAccessToken(CONNECT_KEY, await sign(payload), ADDRESS, NOW)).toBeNull();
+      expect(
+        await Effect.runPromise(verifyPreviewAccessToken(CONNECT_KEY, await sign(payload), ADDRESS, NOW))
+      ).toBeNull();
     }
   });
 });

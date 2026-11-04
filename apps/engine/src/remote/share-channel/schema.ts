@@ -41,7 +41,11 @@ export interface ShareChannelDefinition<Subject> {
 
 export type ChannelState<Subject> =
   | { readonly kind: 'hello' }
-  | { readonly kind: 'open'; readonly subject: Subject; readonly seal: (plain: Bytes) => Promise<Bytes> }
+  | {
+      readonly kind: 'open';
+      readonly subject: Subject;
+      readonly seal: (plain: Bytes) => Effect.Effect<Bytes>;
+    }
   | { readonly kind: 'closed' };
 
 export interface PushState {

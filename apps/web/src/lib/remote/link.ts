@@ -1,11 +1,16 @@
-import type { Bytes, ChannelHeaders } from '@shinsa/core';
+import type { ChannelHeaders } from '@shinsa/core';
+import { Deferred, Effect, Predicate, Schema } from 'effect';
+import { forkApp, runApp } from '@/lib/runtime/app.ts';
+import { CloudAnswerInvalid, CloudRefused, CloudUnreachable } from '@/lib/runtime/remote/schema.ts';
 import { openRemoteChannel } from './channel.ts';
 import { type DashboardClient, isMachineGone } from './dashboard.ts';
 import {
+  CHANNEL_BROKE,
   CHANNEL_REPLACED,
   ChannelError,
   type ChannelOptions,
   type RemoteChannel,
+  RequestAborted,
 } from './remote-channel/schema.ts';
 import type { EnrolledDevice } from './schema.ts';
 
@@ -68,97 +73,119 @@ export interface RemoteLinkOptions {
   onRemoved?: () => void;
 }
 
+type LinkFailure = ChannelError | RequestAborted | CloudUnreachable | CloudRefused | CloudAnswerInvalid;
+
+const isLinkFailure = Schema.is(
+  Schema.Union([ChannelError, RequestAborted, CloudUnreachable, CloudRefused, CloudAnswerInvalid])
+);
+
+function resolveLinkFailure(error: unknown): LinkFailure {
+  if (isLinkFailure(error)) return error;
+  return new ChannelError({ message: Predicate.isError(error) ? error.message : CHANNEL_BROKE });
+}
+
+function enterLink<A>(step: () => Promise<A>) {
+  return Effect.tryPromise({ try: step, catch: resolveLinkFailure });
+}
+
 function listRequestHeaders(headers: Headers): ChannelHeaders {
   return [...headers.entries()];
 }
 
-export class RemoteLink {
-  readonly #options: RemoteLinkOptions;
-  #channel: Promise<RemoteChannel> | null = null;
-  #current: RemoteChannel | null = null;
-  #socketTaken = false;
+export function createRemoteLink(options: RemoteLinkOptions) {
+  const open = options.openChannel ?? openRemoteChannel;
+  let connecting: Deferred.Deferred<RemoteChannel, LinkFailure> | null = null;
+  let current: RemoteChannel | null = null;
+  let socketTaken = false;
 
-  constructor(options: RemoteLinkOptions) {
-    this.#options = options;
-  }
+  const forget = () => {
+    connecting = null;
+    current = null;
+    socketTaken = false;
+  };
 
-  async #resolveConnectUrl() {
-    const answer = await this.#options.dashboard.requestConnect(this.#options.instanceId);
-    return answer.url;
-  }
+  const close = () => {
+    const channel = current;
+    forget();
+    channel?.close();
+  };
 
-  #connect() {
-    return (this.#options.openChannel ?? openRemoteChannel)({
-      url: this.#resolveConnectUrl(),
-      machineKey: this.#options.device.machineKey,
-      device: this.#options.device.keys,
-      enrollSecret: null,
-    });
-  }
+  const recordFailure = (attempt: Deferred.Deferred<RemoteChannel, LinkFailure>, error: LinkFailure) => {
+    if (connecting === attempt) forget();
+    if (error._tag === 'ChannelError' && error.refused) options.onRefused?.(error);
+    if (isMachineGone(error)) options.onRemoved?.();
+  };
 
-  #adopt(channel: RemoteChannel, connecting: Promise<RemoteChannel>) {
-    if (this.#channel !== connecting) {
+  const connect = Effect.fn('RemoteLink.connect')(function* (
+    attempt: Deferred.Deferred<RemoteChannel, LinkFailure>
+  ) {
+    const answer = yield* enterLink(() => options.dashboard.requestConnect(options.instanceId));
+    const channel = yield* enterLink(() =>
+      open({
+        url: answer.url,
+        machineKey: options.device.machineKey,
+        device: options.device.keys,
+        enrollSecret: null,
+      })
+    );
+    if (connecting !== attempt) {
       channel.close();
-      throw new ChannelError({ message: CHANNEL_REPLACED });
+      return yield* new ChannelError({ message: CHANNEL_REPLACED });
     }
-    this.#current = channel;
+    current = channel;
     channel.subscribeClose(() => {
-      if (this.#current === channel) this.#forget();
+      if (current === channel) forget();
     });
     return channel;
-  }
+  });
 
-  #forget() {
-    this.#channel = null;
-    this.#current = null;
-    this.#socketTaken = false;
-  }
-
-  resolveChannel(fresh = false) {
-    if (fresh) this.close();
-    if (!this.#channel) {
-      const connecting: Promise<RemoteChannel> = this.#connect().then((channel) =>
-        this.#adopt(channel, connecting)
-      );
-      this.#channel = connecting;
-      connecting.catch((error: unknown) => {
-        if (this.#channel === connecting) this.#forget();
-        if ((error as ChannelError).refused) this.#options.onRefused?.(error as ChannelError);
-        if (isMachineGone(error)) this.#options.onRemoved?.();
-      });
-    }
-    return this.#channel;
-  }
-
-  openSocket(): WebSocket {
-    const socket = new ChannelSocket();
-    const connecting = this.resolveChannel(this.#socketTaken);
-    this.#socketTaken = true;
-    connecting.then(
-      (channel) => socket.attach(channel),
-      (error: unknown) => socket.fail((error as Error).message)
+  const resolveAttempt = (fresh: boolean) => {
+    if (fresh) close();
+    if (connecting) return connecting;
+    const attempt = Deferred.makeUnsafe<RemoteChannel, LinkFailure>();
+    connecting = attempt;
+    forkApp(
+      connect(attempt).pipe(
+        Effect.tapError((error) => Effect.sync(() => recordFailure(attempt, error))),
+        Deferred.into(attempt)
+      )
     );
-    return socket as unknown as WebSocket;
-  }
+    return attempt;
+  };
 
-  async fetch(request: Request): Promise<Response> {
-    const url = new URL(request.url);
-    const hasBody = request.method !== 'GET' && request.method !== 'HEAD';
-    let body: Bytes | null = null;
-    if (hasBody) body = new Uint8Array(await request.arrayBuffer());
-    const channel = await this.resolveChannel();
-    return channel.request({
-      method: request.method,
-      path: `${url.pathname}${url.search}`,
-      headers: listRequestHeaders(request.headers),
-      body,
-      signal: request.signal,
-    });
-  }
+  const request = Effect.fn('RemoteLink.request')(function* (input: Request) {
+    const url = new URL(input.url);
+    const hasBody = input.method !== 'GET' && input.method !== 'HEAD';
+    const body = hasBody ? new Uint8Array(yield* enterLink(() => input.arrayBuffer())) : null;
+    const channel = yield* Deferred.await(resolveAttempt(false));
+    return yield* enterLink(() =>
+      channel.request({
+        method: input.method,
+        path: `${url.pathname}${url.search}`,
+        headers: listRequestHeaders(input.headers),
+        body,
+        signal: input.signal,
+      })
+    );
+  });
 
-  close() {
-    const current = this.#current;
-    this.#forget();
-    current?.close();
-  }
+  return {
+    resolveChannel: (fresh = false) => runApp(Deferred.await(resolveAttempt(fresh))),
+    openSocket: (): WebSocket => {
+      const socket = new ChannelSocket();
+      const attempt = resolveAttempt(socketTaken);
+      socketTaken = true;
+      forkApp(
+        Deferred.await(attempt).pipe(
+          Effect.match({
+            onSuccess: (channel) => socket.attach(channel),
+            onFailure: (error) => socket.fail(error.message),
+          })
+        )
+      );
+      return socket as unknown as WebSocket;
+    },
+    fetch: (input: Request) => runApp(request(input)),
+    close,
+  };
 }

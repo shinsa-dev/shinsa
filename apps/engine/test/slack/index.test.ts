@@ -150,7 +150,8 @@ async function expectWait(waiting: Promise<void>, ms: number) {
 }
 
 async function forward(body: string, timestamp = NOW, signature?: string, path = '/api/slack/events') {
-  const signed = signature ?? (await createSlackForwardSignature(CONNECT_KEY, timestamp, body));
+  const signed =
+    signature ?? (await Effect.runPromise(createSlackForwardSignature(CONNECT_KEY, timestamp, body)));
   return new Request(`https://t-k3x9.shinsa.dev${path}`, {
     method: 'POST',
     headers: {

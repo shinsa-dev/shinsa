@@ -11,12 +11,16 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { PUBLISHED_ENGINE_TARGETS, packEngine } from './release-engine.ts';
+import { ConfigProvider, Duration, Effect, Fiber, Layer } from 'effect';
+import { TestClock } from 'effect/testing';
+import { Shell } from '../../apps/engine/src/shell/index.ts';
+import { ShellLayer } from '../../apps/engine/src/shell/layers.ts';
+import { Command, CommandLayer } from '../kit/command/index.ts';
+import { PUBLISHED_ENGINE_TARGETS, packEngine } from './engine.ts';
 import {
   assertArchiveChecksum,
   createEngineManifest,
   createLauncherManifest,
-  createPublishRetry,
   isPublished,
   NPM_PUBLISH_DELAYS,
   publishNpmPackages,
@@ -24,12 +28,12 @@ import {
   resolveEnginePackageName,
   runReleaseNpm,
   summarizeNpmError,
+  warnPublishRetry,
   writeNpmPackages,
-} from './release-npm.ts';
-import type { RetryFailure } from './release-retry.ts';
-import type { CommandResult } from './run-command.ts';
+} from './npm.ts';
+import type { RetryFailure } from './schema.ts';
 
-const launcher = require('../apps/engine/npm/shinsa.js') as {
+const launcher = require('../../apps/engine/npm/shinsa.js') as {
   ENGINE_PACKAGES: Record<string, string>;
   resolveEnginePackage: (platform: string, arch: string) => string;
   resolveEngineBinary: (platform: string, arch: string, resolve: (id: string) => string) => string;
@@ -54,10 +58,20 @@ const launcher = require('../apps/engine/npm/shinsa.js') as {
 const VERSION = '1.2.0-canary.3';
 const made: string[] = [];
 
+interface NpmAnswer {
+  exitCode?: number;
+  stdout?: string;
+  stderr?: string;
+}
+
 function createDir() {
   const dir = mkdtempSync(join(tmpdir(), 'shinsa-release-npm-'));
   made.push(dir);
   return dir;
+}
+
+function runReal<A, E>(effect: Effect.Effect<A, E, Command>) {
+  return Effect.runPromise(effect.pipe(Effect.provide(CommandLayer)));
 }
 
 async function createArchives() {
@@ -74,33 +88,62 @@ async function createArchives() {
       `#!/bin/sh\n# ${target}\nprintf '%s' '{"command":{"version":"${VERSION}"}}'\n`
     );
     chmodSync(join(folder, 'bin/shinsa'), 0o755);
-    await packEngine({ target, folder, outDir: archives, version: VERSION });
+    await runReal(packEngine({ target, folder, outDir: archives, version: VERSION }));
   }
   return archives;
 }
 
-function createRunner(answers: (argv: string[]) => Partial<CommandResult> = () => ({})) {
+function createRunner(answers: (argv: string[]) => NpmAnswer = () => ({})) {
   const calls: string[][] = [];
-  const run = (argv: string[]) => {
-    calls.push(argv);
-    return { exitCode: 0, stdout: '', stderr: '', ...answers(argv) };
+  const NpmShell = Layer.effect(
+    Shell,
+    Effect.gen(function* () {
+      const real = yield* Shell;
+      return Shell.of({
+        run: (request) => {
+          if (request.argv[0] !== 'npm') return real.run(request);
+          return Effect.sync(() => {
+            const argv = [...request.argv];
+            calls.push(argv);
+            const answer = { exitCode: 0, stdout: '', stderr: '', ...answers(argv) };
+            return {
+              ok: answer.exitCode === 0,
+              code: answer.exitCode,
+              stdout: answer.stdout.trim(),
+              stderr: answer.stderr.trim(),
+              timedOut: false,
+            };
+          });
+        },
+        stopTree: real.stopTree,
+      });
+    })
+  ).pipe(Layer.provide(ShellLayer));
+  const layer = Command.layer.pipe(Layer.provide(NpmShell));
+  return {
+    calls,
+    run: <A, E>(effect: Effect.Effect<A, E, Command>, env: Record<string, string> = {}) =>
+      Effect.runPromise(
+        Effect.gen(function* () {
+          const fiber = yield* Effect.forkChild(effect);
+          yield* TestClock.adjust('10 minutes');
+          return yield* Fiber.join(fiber);
+        }).pipe(
+          Effect.provide(
+            Layer.mergeAll(layer, TestClock.layer(), ConfigProvider.layer(ConfigProvider.fromUnknown(env)))
+          )
+        )
+      ),
   };
-  return { calls, run };
 }
 
 function createRetry() {
-  const waits: number[] = [];
   const failures: RetryFailure[] = [];
-  const retry = {
-    sleep: async (milliseconds: number) => {
-      waits.push(milliseconds);
-    },
-    onRetry: (failure: RetryFailure) => {
-      failures.push(failure);
-    },
-  };
-  return { waits, failures, retry };
+  const onRetry = (failure: RetryFailure) => Effect.sync(() => failures.push(failure));
+  return { failures, onRetry, waits: () => failures.map((failure) => failure.delay) };
 }
+
+const DELAYS_MS = NPM_PUBLISH_DELAYS.map(Duration.toMillis);
 
 const TLOG_CONFLICT = [
   'npm warn Unknown user config "always-auth".',
@@ -113,11 +156,11 @@ afterEach(() => {
 });
 
 describe('the dist-tags', () => {
-  it('maps stable to latest and keeps beta and canary as they are', () => {
-    expect(resolveDistTag('stable')).toBe('latest');
-    expect(resolveDistTag('beta')).toBe('beta');
-    expect(resolveDistTag('canary')).toBe('canary');
-    expect(() => resolveDistTag('nightly')).toThrow('Unknown release channel nightly');
+  it('maps stable to latest and keeps beta and canary as they are', async () => {
+    expect(await runReal(resolveDistTag('stable'))).toBe('latest');
+    expect(await runReal(resolveDistTag('beta'))).toBe('beta');
+    expect(await runReal(resolveDistTag('canary'))).toBe('canary');
+    await expect(runReal(resolveDistTag('nightly'))).rejects.toThrow('Unknown release channel nightly');
   });
 });
 
@@ -168,7 +211,7 @@ describe('writing the packages', () => {
   it('unpacks each checked archive into its package and writes the launcher last', async () => {
     const archives = await createArchives();
     const out = createDir();
-    const packages = writeNpmPackages(archives, out, VERSION);
+    const packages = await runReal(writeNpmPackages(archives, out, VERSION));
     expect(packages.map((entry) => entry.name)).toEqual([
       '@shinsa/darwin-arm64',
       '@shinsa/linux-x64',
@@ -188,12 +231,14 @@ describe('writing the packages', () => {
   it('refuses a missing archive and one that does not match its checksum', async () => {
     const archives = await createArchives();
     rmSync(join(archives, 'shinsa-linux-arm64.tar.gz'));
-    expect(() => writeNpmPackages(archives, createDir(), VERSION)).toThrow(
+    await expect(runReal(writeNpmPackages(archives, createDir(), VERSION))).rejects.toThrow(
       'the release has no shinsa-linux-arm64'
     );
     const other = await createArchives();
     writeFileSync(join(other, 'shinsa-darwin-arm64.tar.gz'), 'not the archive');
-    expect(() => writeNpmPackages(other, createDir(), VERSION)).toThrow('does not match its checksum');
+    await expect(runReal(writeNpmPackages(other, createDir(), VERSION))).rejects.toThrow(
+      'does not match its checksum'
+    );
   });
 
   it('refuses a checksum file with no sum or for another file', async () => {
@@ -201,9 +246,9 @@ describe('writing the packages', () => {
     const archive = join(archives, 'shinsa-linux-x64.tar.gz');
     const sums = join(archives, 'shinsa-linux-x64.tar.gz.sha256');
     writeFileSync(sums, 'nope  shinsa-linux-x64.tar.gz\n');
-    expect(() => assertArchiveChecksum(archive, sums)).toThrow('holds no SHA-256');
+    await expect(runReal(assertArchiveChecksum(archive, sums))).rejects.toThrow('holds no SHA-256');
     writeFileSync(sums, `${'a'.repeat(64)}  other.tar.gz\n`);
-    expect(() => assertArchiveChecksum(archive, sums)).toThrow('names other.tar.gz');
+    await expect(runReal(assertArchiveChecksum(archive, sums))).rejects.toThrow('names other.tar.gz');
   });
 
   it('refuses an archive that will not unpack', async () => {
@@ -212,7 +257,9 @@ describe('writing the packages', () => {
     writeFileSync(archive, 'garbage');
     const sum = new Bun.CryptoHasher('sha256').update('garbage').digest('hex');
     writeFileSync(`${archive}.sha256`, `${sum}  shinsa-darwin-arm64.tar.gz\n`);
-    expect(() => writeNpmPackages(archives, createDir(), VERSION)).toThrow('Could not unpack');
+    await expect(runReal(writeNpmPackages(archives, createDir(), VERSION))).rejects.toThrow(
+      'Could not unpack'
+    );
   });
 });
 
@@ -224,27 +271,37 @@ describe('publishing', () => {
 
   it('publishes each package in order, public, under the channel’s tag', async () => {
     const { calls, run } = createRunner((argv) => (argv[1] === 'view' ? { exitCode: 1 } : {}));
-    const { waits, retry } = createRetry();
+    const retry = createRetry();
     expect(
-      await publishNpmPackages(packages, { version: VERSION, tag: 'canary', dryRun: false, run, retry })
+      await run(
+        publishNpmPackages(packages, {
+          version: VERSION,
+          tag: 'canary',
+          dryRun: false,
+          onRetry: retry.onRetry,
+        })
+      )
     ).toEqual([`Published @shinsa/linux-x64@${VERSION} as canary`, `Published shinsa@${VERSION} as canary`]);
     expect(calls.filter((argv) => argv[1] === 'publish')).toEqual([
       ['npm', 'publish', '/out/shinsa-linux-x64', '--access', 'public', '--tag', 'canary'],
       ['npm', 'publish', '/out/shinsa', '--access', 'public', '--tag', 'canary'],
     ]);
-    expect(waits).toEqual([]);
+    expect(retry.waits()).toEqual([]);
   });
 
   it('skips a version already on npm, so a rerun finishes the rest', async () => {
     const { calls, run } = createRunner((argv) =>
       argv[1] === 'view' && argv[2]?.startsWith('@shinsa/') ? { stdout: `${VERSION}\n` } : {}
     );
-    const { retry } = createRetry();
+    const retry = createRetry();
     expect(
-      await publishNpmPackages(packages, { version: VERSION, tag: 'beta', dryRun: false, run, retry })
+      await run(
+        publishNpmPackages(packages, { version: VERSION, tag: 'beta', dryRun: false, onRetry: retry.onRetry })
+      )
     ).toEqual([`@shinsa/linux-x64@${VERSION} is already on npm`, `Published shinsa@${VERSION} as beta`]);
     expect(calls.filter((argv) => argv[1] === 'publish').map((argv) => argv[2])).toEqual(['/out/shinsa']);
-    expect(isPublished('shinsa', VERSION, createRunner(() => ({ stdout: '9.9.9' })).run)).toBe(false);
+    const other = createRunner(() => ({ stdout: '9.9.9' }));
+    expect(await other.run(isPublished('shinsa', VERSION))).toBe(false);
   });
 
   it('tries a failed publish again after each delay and recovers', async () => {
@@ -254,23 +311,24 @@ describe('publishing', () => {
       publishes += 1;
       return publishes <= 2 ? { exitCode: 1, stderr: TLOG_CONFLICT } : {};
     });
-    const { waits, failures, retry } = createRetry();
+    const retry = createRetry();
     expect(
-      await publishNpmPackages(packages.slice(1), {
-        version: VERSION,
-        tag: 'canary',
-        dryRun: false,
-        run,
-        retry,
-      })
+      await run(
+        publishNpmPackages(packages.slice(1), {
+          version: VERSION,
+          tag: 'canary',
+          dryRun: false,
+          onRetry: retry.onRetry,
+        })
+      )
     ).toEqual([`Published shinsa@${VERSION} as canary`]);
-    expect(waits).toEqual([...NPM_PUBLISH_DELAYS]);
-    expect(failures.map((failure) => [failure.label, failure.attempt, failure.attempts])).toEqual([
+    expect(retry.waits()).toEqual(DELAYS_MS);
+    expect(retry.failures.map((failure) => [failure.label, failure.attempt, failure.attempts])).toEqual([
       [`Publish shinsa@${VERSION}`, 1, 3],
       [`Publish shinsa@${VERSION}`, 2, 3],
     ]);
-    expect(String(failures[0]?.error)).toContain('TLOG_CREATE_ENTRY_ERROR');
-    expect(String(failures[0]?.error)).not.toContain('always-auth');
+    expect(retry.failures[0]?.error.message).toContain('TLOG_CREATE_ENTRY_ERROR');
+    expect(retry.failures[0]?.error.message).not.toContain('always-auth');
     expect(calls.filter((argv) => argv[1] === 'view')).toHaveLength(3);
   });
 
@@ -281,17 +339,18 @@ describe('publishing', () => {
       published = true;
       return { exitCode: 1, stderr: 'npm error network socket hang up' };
     });
-    const { waits, retry } = createRetry();
+    const retry = createRetry();
     expect(
-      await publishNpmPackages(packages.slice(1), {
-        version: VERSION,
-        tag: 'canary',
-        dryRun: false,
-        run,
-        retry,
-      })
+      await run(
+        publishNpmPackages(packages.slice(1), {
+          version: VERSION,
+          tag: 'canary',
+          dryRun: false,
+          onRetry: retry.onRetry,
+        })
+      )
     ).toEqual([`shinsa@${VERSION} is already on npm`]);
-    expect(waits).toEqual([NPM_PUBLISH_DELAYS[0]]);
+    expect(retry.waits()).toEqual(DELAYS_MS.slice(0, 1));
     expect(calls.filter((argv) => argv[1] === 'publish')).toHaveLength(1);
   });
 
@@ -299,13 +358,20 @@ describe('publishing', () => {
     const { calls, run } = createRunner((argv) =>
       argv[1] === 'view' ? { exitCode: 1 } : { exitCode: 1, stderr: TLOG_CONFLICT }
     );
-    const { failures, retry } = createRetry();
+    const retry = createRetry();
     await expect(
-      publishNpmPackages(packages, { version: VERSION, tag: 'canary', dryRun: false, run, retry })
+      run(
+        publishNpmPackages(packages, {
+          version: VERSION,
+          tag: 'canary',
+          dryRun: false,
+          onRetry: retry.onRetry,
+        })
+      )
     ).rejects.toThrow(
       `npm publish of @shinsa/linux-x64@${VERSION} failed (1): npm error code TLOG_CREATE_ENTRY_ERROR`
     );
-    expect(failures).toHaveLength(2);
+    expect(retry.failures).toHaveLength(2);
     expect(calls.filter((argv) => argv[1] === 'publish').map((argv) => argv[2])).toEqual([
       '/out/shinsa-linux-x64',
       '/out/shinsa-linux-x64',
@@ -315,22 +381,25 @@ describe('publishing', () => {
 
   it('passes a dry run on to npm without asking what is published or trying again', async () => {
     const { calls, run } = createRunner();
-    const { waits, retry } = createRetry();
-    const lines = await publishNpmPackages(packages, {
-      version: VERSION,
-      tag: 'latest',
-      dryRun: true,
-      run,
-      retry,
-    });
+    const retry = createRetry();
+    const lines = await run(
+      publishNpmPackages(packages, { version: VERSION, tag: 'latest', dryRun: true, onRetry: retry.onRetry })
+    );
     expect(lines[1]).toBe(`Published shinsa@${VERSION} as latest (dry run)`);
     expect(calls.every((argv) => argv.at(-1) === '--dry-run')).toBe(true);
     const failing = createRunner(() => ({ exitCode: 1, stderr: 'npm error E403' }));
     await expect(
-      publishNpmPackages(packages, { version: VERSION, tag: 'latest', dryRun: true, run: failing.run, retry })
+      failing.run(
+        publishNpmPackages(packages, {
+          version: VERSION,
+          tag: 'latest',
+          dryRun: true,
+          onRetry: retry.onRetry,
+        })
+      )
     ).rejects.toThrow('npm error E403');
     expect(failing.calls).toHaveLength(1);
-    expect(waits).toEqual([]);
+    expect(retry.waits()).toEqual([]);
   });
 
   it('keeps only npm’s error lines, or all of stderr when it has none', () => {
@@ -340,37 +409,41 @@ describe('publishing', () => {
     expect(summarizeNpmError('  something else broke\n')).toBe('something else broke');
   });
 
-  it('writes each retry as a GitHub Actions warning', () => {
-    const written: string[] = [];
-    const retry = createPublishRetry({ GITHUB_ACTIONS: 'true' }, { write: (text) => written.push(text) });
-    retry.onRetry({
-      label: 'Publish shinsa@1.2.3',
-      attempt: 1,
-      attempts: 3,
-      delay: 30_000,
-      error: new Error('npm error code E502'),
-    });
+  it('writes each retry as a GitHub Actions warning on standard error', async () => {
+    const written: unknown[] = [];
+    const original = console.error;
+    console.error = (line: unknown) => {
+      written.push(line);
+    };
+    await createRunner().run(
+      warnPublishRetry({
+        label: 'Publish shinsa@1.2.3',
+        attempt: 1,
+        attempts: 3,
+        delay: 30_000,
+        error: { message: 'npm error code E502' },
+      }),
+      { GITHUB_ACTIONS: 'true' }
+    );
+    console.error = original;
     expect(written).toEqual([
-      '::warning title=Publish shinsa@1.2.3::Publish shinsa@1.2.3 failed on attempt 1 of 3 (npm error code E502). Trying again in 30s.\n',
+      '::warning title=Publish shinsa@1.2.3::Publish shinsa@1.2.3 failed on attempt 1 of 3 (npm error code E502). Trying again in 30s.',
     ]);
-    expect(retry.sleep).toBe(Bun.sleep);
   });
 
   it('runs the whole release from its arguments and environment', async () => {
     const archives = await createArchives();
     const out = createDir();
     const { calls, run } = createRunner((argv) => (argv[1] === 'view' ? { exitCode: 1 } : {}));
-    const { retry } = createRetry();
-    const text = await runReleaseNpm(
-      [archives, out],
-      { SHINSA_VERSION: `v${VERSION}`, RELEASE_CHANNEL: 'stable' },
-      run,
-      retry
-    );
+    const retry = createRetry();
+    const text = await run(runReleaseNpm([archives, out], retry.onRetry), {
+      SHINSA_VERSION: `v${VERSION}`,
+      RELEASE_CHANNEL: 'stable',
+    });
     expect(text.trim().split('\n')).toHaveLength(4);
     expect(calls.filter((argv) => argv[1] === 'publish').every((argv) => argv.includes('latest'))).toBe(true);
     await expect(
-      runReleaseNpm([archives], { SHINSA_VERSION: VERSION, RELEASE_CHANNEL: 'beta' }, run, retry)
+      run(runReleaseNpm([archives], retry.onRetry), { SHINSA_VERSION: VERSION, RELEASE_CHANNEL: 'beta' })
     ).rejects.toThrow('Usage:');
   });
 
@@ -380,12 +453,10 @@ describe('publishing', () => {
     process.chdir(createDir());
     try {
       const { calls, run } = createRunner((argv) => (argv[1] === 'view' ? { exitCode: 1 } : {}));
-      await runReleaseNpm(
-        ['--dry-run', archives, 'npm-packages'],
-        { SHINSA_VERSION: VERSION, RELEASE_CHANNEL: 'canary' },
-        run,
-        createRetry().retry
-      );
+      await run(runReleaseNpm(['--dry-run', archives, 'npm-packages'], createRetry().onRetry), {
+        SHINSA_VERSION: VERSION,
+        RELEASE_CHANNEL: 'canary',
+      });
       const folders = calls.filter((argv) => argv[1] === 'publish').map((argv) => argv[2]);
       expect(folders).toEqual([
         ...PUBLISHED_ENGINE_TARGETS.map((target) =>
@@ -463,7 +534,7 @@ describe('the launcher', () => {
 
   it('runs as a program under Node or Bun and fails clearly without its engine', () => {
     const result = Bun.spawnSync(
-      ['bun', join(import.meta.dirname, '../apps/engine/npm/shinsa.js'), 'version'],
+      ['bun', join(import.meta.dirname, '../../apps/engine/npm/shinsa.js'), 'version'],
       {
         stderr: 'pipe',
       }

@@ -1,5 +1,6 @@
+import { Effect, Option } from 'effect';
 import { normalizeRemote } from '../../apps/engine/src/git/remote/output.ts';
-import type { Engine } from '../../apps/engine/test/helpers/engine.ts';
+import { Shell } from '../../apps/engine/src/shell/index.ts';
 import {
   type Repo,
   SHARE_ID_BYTES,
@@ -10,12 +11,12 @@ import {
   serializeShareUrl,
   type Task,
 } from '../../packages/core/src/index.ts';
-import { recordTranscript } from '../kit/transcripts.ts';
 import type { StartedMachine } from './machine.ts';
 import { createRandomKey } from './requests.ts';
 import {
   HOST,
   type Machine,
+  GIT_TIMEOUT,
   ORIGIN,
   PORT,
   type PreviewShare,
@@ -27,115 +28,111 @@ export function createShareLink(instanceId: string): ShareLink {
   return { instanceId, shareId: createRandomKey(SHARE_ID_BYTES), key: createRandomKey(SHARE_KEY_BYTES) };
 }
 
-function countStoredEvidence(engine: Engine, taskId: string) {
-  return Object.values(engine.state.evidence).filter(
-    (item) => item.taskId === taskId && item.uri.startsWith('/api/evidence/')
-  ).length;
-}
-
-function countRuns(engine: Engine, taskId: string) {
-  return Object.values(engine.state.runs).filter((run) => run.taskId === taskId).length;
-}
-
-function hasBranch(repo: Repo, branch: string) {
-  return Bun.spawnSync(['git', '-C', repo.path, 'rev-parse', '--verify', '--quiet', branch]).exitCode === 0;
-}
-
-async function normalizeSeedRemote(engine: Engine, repo: Repo) {
-  if (!repo.remote) return repo;
-  await engine.dispatch({
-    type: 'repo.update',
-    repoId: repo.id,
-    patch: { remote: normalizeRemote(repo.remote) },
-  });
-  return engine.state.repos[repo.id] ?? repo;
-}
-
-async function createPreviewShare(
-  studio: StartedMachine,
-  task: Task,
-  label: string,
-  preset: SharePreset = 'standard'
-): Promise<PreviewShare | null> {
-  const seeded = task.repoId ? studio.engine.state.repos[task.repoId] : undefined;
-  if (!seeded) return null;
-  await normalizeSeedRemote(studio.engine, seeded);
-  const url = serializeShareUrl(ORIGIN, createShareLink(studio.machine.id));
-  if (!task.share)
-    await studio.engine.dispatch({ type: 'task.share', taskId: task.id, limit: 'none', preset });
-  await studio.engine.dispatch({ type: 'share.record', taskId: task.id, url });
-  return { url, label, handle: task.handle ?? task.id, port: studio.machine.port };
-}
-
-async function recordPushedHead(engine: Engine, task: Task) {
-  const repo = task.repoId ? engine.state.repos[task.repoId] : undefined;
-  if (!(repo && task.branch && task.pullRequest) || task.pullRequest.headSha) return task;
-  const parsed = Bun.spawnSync(['git', '-C', repo.path, 'rev-parse', task.branch]);
-  const headSha = parsed.stdout.toString().trim();
-  await engine.dispatch({
-    type: 'pull_request.record',
-    taskId: task.id,
-    pullRequest: { ...task.pullRequest, headSha },
-  });
-  return engine.state.tasks[task.id] ?? task;
-}
-
-function seedMessages(studio: StartedMachine, task: Task) {
-  const [run] = Object.values(studio.engine.state.runs)
-    .filter((entry) => entry.taskId === task.id)
-    .sort((left, right) => right.startedAt - left.startedAt);
-  if (!run) return;
-  for (const text of SEEDED_MESSAGES)
-    recordTranscript(studio.transcripts, run.id, { type: 'user', from: 'you', text, attachments: [] });
-}
-
-export async function createPreviewShares(studio: StartedMachine) {
+export const createPreviewShares = Effect.fn('Sandbox.createPreviewShares')(function* (
+  studio: StartedMachine
+) {
+  const shell = yield* Shell;
   const { engine } = studio;
-  const tasks = Object.values(engine.state.tasks).filter((entry) => entry.report && entry.repoId);
-  const coded = tasks.find((entry) => {
-    const repo = entry.repoId ? engine.state.repos[entry.repoId] : undefined;
-    return entry.pullRequest?.state === 'open' && entry.branch && repo && hasBranch(repo, entry.branch);
+  const { core } = engine;
+
+  const runGit = Effect.fn('Sandbox.runGit')(function* (repo: Repo, args: string[]) {
+    return yield* shell.run({
+      argv: ['git', '-C', repo.path, ...args],
+      cwd: repo.path,
+      timeout: GIT_TIMEOUT,
+    });
+  });
+
+  const recordPushedHead = Effect.fn('Sandbox.recordPushedHead')(function* (task: Task) {
+    const repo = task.repoId ? (yield* core.state).repos[task.repoId] : undefined;
+    if (!(repo && task.branch && task.pullRequest) || task.pullRequest.headSha) return task;
+    const parsed = yield* runGit(repo, ['rev-parse', task.branch]);
+    yield* core.dispatch({
+      type: 'pull_request.record',
+      taskId: task.id,
+      pullRequest: { ...task.pullRequest, headSha: parsed.stdout },
+    });
+    return (yield* core.state).tasks[task.id] ?? task;
+  });
+
+  const seedMessages = Effect.fn('Sandbox.seedMessages')(function* (task: Task) {
+    const [run] = Object.values((yield* core.state).runs)
+      .filter((entry) => entry.taskId === task.id)
+      .sort((left, right) => right.startedAt - left.startedAt);
+    if (!run) return;
+    for (const text of SEEDED_MESSAGES)
+      yield* studio.transcripts.record(run.id, { type: 'user', from: 'you', text, attachments: [] });
+  });
+
+  const createPreviewShare = Effect.fn('Sandbox.createPreviewShare')(function* (
+    task: Task,
+    label: string,
+    preset: SharePreset = 'standard'
+  ) {
+    const seeded = task.repoId ? (yield* core.state).repos[task.repoId] : undefined;
+    if (!seeded) return null;
+    if (seeded.remote)
+      yield* core.dispatch({
+        type: 'repo.update',
+        repoId: seeded.id,
+        patch: { remote: normalizeRemote(seeded.remote) },
+      });
+    const url = serializeShareUrl(ORIGIN, createShareLink(studio.machine.id));
+    if (!task.share) yield* core.dispatch({ type: 'task.share', taskId: task.id, limit: 'none', preset });
+    yield* core.dispatch({ type: 'share.record', taskId: task.id, url });
+    const share: PreviewShare = { url, label, handle: task.handle ?? task.id, port: studio.machine.port };
+    return share;
+  });
+
+  const state = yield* core.state;
+  const countStoredEvidence = (taskId: string) =>
+    Object.values(state.evidence).filter(
+      (item) => item.taskId === taskId && item.uri.startsWith('/api/evidence/')
+    ).length;
+  const countRuns = (taskId: string) =>
+    Object.values(state.runs).filter((run) => run.taskId === taskId).length;
+  const tasks = Object.values(state.tasks).filter((entry) => entry.report && entry.repoId);
+  const coded = yield* Effect.findFirst(tasks, (entry) => {
+    const repo = entry.repoId ? state.repos[entry.repoId] : undefined;
+    if (!(entry.pullRequest?.state === 'open' && entry.branch && repo)) return Effect.succeed(false);
+    return Effect.map(
+      runGit(repo, ['rev-parse', '--verify', '--quiet', entry.branch]),
+      (result) => result.ok
+    );
   });
   const [evidenced] = tasks.sort(
-    (left, right) => countStoredEvidence(engine, right.id) - countStoredEvidence(engine, left.id)
+    (left, right) => countStoredEvidence(right.id) - countStoredEvidence(left.id)
   );
-  const pushed = coded && (await recordPushedHead(engine, coded));
+  const pushed = Option.isSome(coded) ? yield* recordPushedHead(coded.value) : undefined;
   const taken = new Set([pushed?.id, evidenced?.id]);
-  const [talked] = tasks
+  const [talked, chatty] = tasks
     .filter((entry) => !taken.has(entry.id))
-    .sort((left, right) => countRuns(engine, right.id) - countRuns(engine, left.id));
-  const [, chatty] = tasks
-    .filter((entry) => !taken.has(entry.id))
-    .sort((left, right) => countRuns(engine, right.id) - countRuns(engine, left.id));
+    .sort((left, right) => countRuns(right.id) - countRuns(left.id));
   const status = tasks.find(
     (entry) => !taken.has(entry.id) && entry.id !== talked?.id && entry.id !== chatty?.id
   );
-  for (const task of [talked, chatty]) if (task) seedMessages(studio, task);
+  for (const task of [talked, chatty]) if (task) yield* seedMessages(task);
   const shares = [
-    pushed &&
-      (await createPreviewShare(studio, pushed, 'A shared task with an open pull request, with Code')),
+    pushed && (yield* createPreviewShare(pushed, 'A shared task with an open pull request, with Code')),
     evidenced &&
       evidenced.id !== pushed?.id &&
-      (await createPreviewShare(studio, evidenced, 'A shared task with its evidence')),
-    status &&
-      (await createPreviewShare(studio, status, 'A task shared as Status, the status card', 'status')),
+      (yield* createPreviewShare(evidenced, 'A shared task with its evidence')),
+    status && (yield* createPreviewShare(status, 'A task shared as Status, the status card', 'status')),
     talked &&
-      (await createPreviewShare(
-        studio,
+      (yield* createPreviewShare(
         talked,
         'A task shared as Standard, with the agents’ live output in Chat',
         'standard'
       )),
     chatty &&
-      (await createPreviewShare(
-        studio,
+      (yield* createPreviewShare(
         chatty,
         'A task shared as Full access, with your messages in Chat too',
         'full'
       )),
   ];
   return shares.filter((share): share is PreviewShare => Boolean(share));
-}
+});
 
 export function respondShareConnect(match: RegExpExecArray, machines: Machine[]) {
   const machine = machines.find((entry) => entry.id === match[1]);

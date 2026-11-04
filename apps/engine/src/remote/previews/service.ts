@@ -242,10 +242,8 @@ export class Previews extends Context.Service<Previews, PreviewsHandle>()(
           }
         );
         if (pending) return yield* Deferred.await(pending);
-        yield* Effect.tryPromise({
-          try: () => resolvePrivatePreviewId(connectKey, run),
-          catch: (error) => new PreviewAddressFailed({ message: describeError(error) }),
-        }).pipe(
+        yield* resolvePrivatePreviewId(connectKey, run).pipe(
+          Effect.mapError((error) => new PreviewAddressFailed({ message: describeError(error) })),
           Effect.flatMap((previewId) => recordPrivateId(connectKey, run, previewId)),
           Effect.catch((failure) =>
             Effect.andThen(
@@ -294,9 +292,7 @@ export class Previews extends Context.Service<Previews, PreviewsHandle>()(
         const connectKey = yield* selectConnectKey;
         if (!(token && instanceId && connectKey)) return null;
         const now = yield* Clock.currentTimeMillis;
-        const claim = yield* Effect.promise(() =>
-          verifyPreviewAccessToken(connectKey, token, { instanceId, previewId }, now)
-        );
+        const claim = yield* verifyPreviewAccessToken(connectKey, token, { instanceId, previewId }, now);
         if (!(claim && isAllowed(yield* readRemote, claim.userId))) return null;
         const run = yield* findPrivateRun(previewId);
         if (!run) return null;

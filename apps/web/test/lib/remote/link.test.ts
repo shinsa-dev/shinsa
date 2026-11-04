@@ -1,21 +1,22 @@
 import { describe, expect, it } from 'bun:test';
 import { serializePublicKey } from '@shinsa/core';
 import { waitFor } from '@testing-library/react';
+import { Effect } from 'effect';
 import { openRemoteChannel } from '@/lib/remote/channel.ts';
-import { ChannelSocket, RemoteLink } from '@/lib/remote/link.ts';
+import { ChannelSocket, createRemoteLink } from '@/lib/remote/link.ts';
 import { ChannelError } from '@/lib/remote/remote-channel/schema.ts';
 import type { EnrolledDevice } from '@/lib/remote/schema.ts';
-import { CloudRefused } from '@/lib/runtime/remote/schema.ts';
+import { CloudRefused, CloudUnreachable } from '@/lib/runtime/remote/schema.ts';
 import { createKeyPair, FakeMac, type FakeMacOptions } from './fake-mac.ts';
 
 async function createLink(options: FakeMacOptions = {}, enrolled = true) {
   const keys = await createKeyPair();
-  const deviceKey = await serializePublicKey(keys.publicKey);
+  const deviceKey = await Effect.runPromise(serializePublicKey(keys.publicKey));
   const mac = await FakeMac.create({ enrolled: enrolled ? [deviceKey] : [], ...options });
   const device: EnrolledDevice = { instanceId: 'k3x9', machineKey: mac.machineKey, keys, enrolledAt: 1 };
   const connects: string[] = [];
   const refusals: string[] = [];
-  const link = new RemoteLink({
+  const link = createRemoteLink({
     instanceId: 'k3x9',
     device,
     dashboard: {
@@ -152,11 +153,11 @@ describe('the link to a remote machine', () => {
       new CloudRefused({ code: 'not_found', message: 'No such machine.', status: 404 }),
       new CloudRefused({ code: 'forbidden', message: 'This request needs an Origin.', status: 403 }),
       new CloudRefused({ code: 'failed', message: 'Shinsa Cloud is down.', status: 503 }),
-      new Error('Offline.'),
+      new CloudUnreachable({ message: 'Offline.' }),
     ];
     const removed: string[] = [];
     for (const failure of failures) {
-      const link = new RemoteLink({
+      const link = createRemoteLink({
         instanceId: 'k3x9',
         device,
         dashboard: { requestConnect: () => Promise.reject(failure) },
@@ -165,5 +166,23 @@ describe('the link to a remote machine', () => {
       await expect(link.resolveChannel()).rejects.toBe(failure);
     }
     expect(removed).toEqual(['No such machine.']);
+  });
+
+  it('fails as a broken channel when connecting throws something that is not a failure it knows', async () => {
+    const keys = await createKeyPair();
+    const device: EnrolledDevice = { instanceId: 'k3x9', machineKey: 'key', keys, enrolledAt: 1 };
+    const failures = [new Error('Offline.'), 'no reason'];
+    const messages: string[] = [];
+    for (const failure of failures) {
+      const link = createRemoteLink({
+        instanceId: 'k3x9',
+        device,
+        dashboard: { requestConnect: () => Promise.reject(failure) },
+      });
+      const error = await link.resolveChannel().catch((caught: unknown) => caught);
+      expect(error).toBeInstanceOf(ChannelError);
+      messages.push((error as ChannelError).message);
+    }
+    expect(messages).toEqual(['Offline.', 'The connection to your machine broke.']);
   });
 });

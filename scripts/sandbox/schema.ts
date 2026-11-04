@@ -1,4 +1,5 @@
 import { join, resolve } from 'node:path';
+import { Duration, Schedule, Schema } from 'effect';
 import type { Terminals } from '../../apps/engine/src/terminals/index.ts';
 import type { Engine } from '../../apps/engine/test/helpers/engine.ts';
 import { REMOTE_PATHS, type RemoteUser } from '../../packages/core/src/index.ts';
@@ -160,3 +161,36 @@ export interface TunnelData {
   pending: (string | Uint8Array)[];
   headers?: Record<string, string>;
 }
+
+export class SandboxFailed extends Schema.TaggedError<SandboxFailed, { readonly brand: unique symbol }>()(
+  'SandboxFailed',
+  { message: Schema.String }
+) {}
+
+export class SandboxBodyInvalid extends Schema.TaggedError<
+  SandboxBodyInvalid,
+  { readonly brand: unique symbol }
+>()('SandboxBodyInvalid', { message: Schema.String }) {}
+
+export class PreviewPending extends Schema.TaggedError<PreviewPending, { readonly brand: unique symbol }>()(
+  'PreviewPending',
+  {}
+) {}
+
+export const TokenBody = Schema.Struct({ token: Schema.optional(Schema.String) });
+
+export const UserBody = Schema.Struct({ userId: Schema.optional(Schema.String) });
+
+export const InstanceBody = Schema.Struct({ instanceId: Schema.optional(Schema.String) });
+
+export const PREVIEW_SHARE_POLL = Schedule.spaced('100 millis').pipe(
+  Schedule.upTo({ times: 49 }),
+  Schedule.setInputType<{ readonly _tag: string }>(),
+  Schedule.while(({ input }) => input._tag === 'PreviewPending')
+);
+
+export const HANDOFF_LINK_TIMEOUT = Duration.seconds(30);
+
+export const SEED_TIMEOUT = Duration.minutes(5);
+
+export const GIT_TIMEOUT = Duration.seconds(30);

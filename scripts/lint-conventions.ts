@@ -3,14 +3,14 @@ import { join, relative } from 'node:path';
 import { parse } from '@babel/parser';
 import { listDisclosureViolations } from './lint-disclosure.ts';
 import {
-  ENGINE_PROMISE_MESSAGE,
+  PROMISE_IO_MESSAGE,
   ENGINE_RUNTIME_MESSAGE,
   isEngineRuntimeSource,
   listEngineRuntimeLines,
-  isEngineSource,
+  isPromiseIoSource,
   isEffectSource,
   listEffectViolations,
-  listEnginePromiseLines,
+  listPromiseLines,
 } from './lint-effect.ts';
 import {
   APP,
@@ -32,6 +32,8 @@ import {
   SHORTCUT_MESSAGE,
   STRETCHED_TRIGGER_MESSAGE,
   TAB_BAR_MESSAGE,
+  PROMISE_IO_FILES,
+  PROMISE_IO_STALE_MESSAGE,
   TIME_MESSAGE,
   TOOLTIP_DELAY_MESSAGE,
   VERB_CATALOG,
@@ -553,10 +555,19 @@ function collectClassViolations(file: string, source: string, violations: Violat
   });
 }
 
-function collectEnginePromiseViolations(file: string, source: string, violations: Violation[]): void {
-  if (!isEngineSource(file, source)) return;
-  for (const line of listEnginePromiseLines(file, source))
-    violations.push({ file, line, message: ENGINE_PROMISE_MESSAGE });
+function collectPromiseIoViolations(file: string, source: string, violations: Violation[]): void {
+  const lines = isPromiseIoSource(file, source) ? listPromiseLines(file, source) : [];
+  if (PROMISE_IO_FILES.has(file)) {
+    if (lines.length === 0) violations.push({ file, line: 1, message: PROMISE_IO_STALE_MESSAGE });
+    return;
+  }
+  for (const line of lines) violations.push({ file, line, message: PROMISE_IO_MESSAGE });
+}
+
+function listMissingPromiseIoFiles(): Violation[] {
+  return [...PROMISE_IO_FILES]
+    .filter((file) => !existsSync(file))
+    .map((file) => ({ file, line: 1, message: PROMISE_IO_STALE_MESSAGE }));
 }
 
 function collectEngineRuntimeViolations(file: string, source: string, violations: Violation[]): void {
@@ -596,7 +607,7 @@ function checkFile(file: string, violations: Violation[], appSources: Record<str
   if (isEffectSource(file, source)) {
     for (const violation of listEffectViolations(file, source)) violations.push({ file, ...violation });
   }
-  collectEnginePromiseViolations(file, source, violations);
+  collectPromiseIoViolations(file, source, violations);
   collectEngineRuntimeViolations(file, source, violations);
   if (isUnder(file, VERB_CHECK_ROOTS)) collectVerbViolations(file, parsed.program, violations);
   if (isUnder(file, APP)) appSources[file] = source;
@@ -608,7 +619,7 @@ function run(): void {
   for (const root of ROOTS.filter((candidate) => existsSync(candidate))) {
     for (const file of listSourceFiles(root)) checkFile(file, violations, appSources);
   }
-  violations.push(...listToastViolations(appSources));
+  violations.push(...listToastViolations(appSources), ...listMissingPromiseIoFiles());
   for (const sheet of APP.flatMap((root) => listStyleSheets(root)))
     collectRawSelection(sheet, readFileSync(sheet, 'utf8'), violations);
   if (violations.length === 0) return;
