@@ -15,12 +15,19 @@ function describeStart(state: ShinsaState, waitsOn: string[]) {
   return `Starts after ${waitsOn.length} tasks`;
 }
 
+function describeStack(state: ShinsaState, stacksOn: string[]) {
+  const [first] = stacksOn;
+  const title = first ? state.tasks[first]?.title : undefined;
+  if (stacksOn.length === 1 && title) return `Stacks on “${title}”`;
+  return `Stacks on ${stacksOn.length} tasks`;
+}
+
 function isSameList(a: string[], b: string[]) {
   return a.length === b.length && a.every((id) => b.includes(id));
 }
 
-function describeWhy(auto: boolean, decided: string, why: string, owner: string | null) {
-  if (auto) return `Shinsa chose this: ${why}`;
+function describeWhy(auto: boolean, decided: string, why: string, owner: string | null, named = false) {
+  if (auto) return named ? `Shinsa chose this. ${decided}: ${why}` : `Shinsa chose this: ${why}`;
   return `${owner ?? 'You'} changed this. Shinsa chose “${lowerFirst(decided)}”: ${why}`;
 }
 
@@ -31,6 +38,11 @@ export function resolveTriageWhy(
   owner: string | null = null
 ): string | null {
   if (fact === 'start') {
+    const stack = task.triageDecisions?.stack;
+    if (stack) {
+      const auto = isSameList(task.stacksOn ?? [], stack.value);
+      return describeWhy(auto, describeStack(state, stack.value), stack.why, owner, true);
+    }
     const decision = task.triageDecisions?.start;
     if (!decision) return null;
     const auto = isSameList(task.waitsOn, decision.value);
