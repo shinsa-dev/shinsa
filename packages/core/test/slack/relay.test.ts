@@ -147,6 +147,7 @@ describe('when a Slack account last started work on this machine', () => {
           threadTs: `${index}.1`,
           messageTs: `${index}.1`,
           permalink: null,
+          channelName: null,
           statusTs: null,
           reaction: null,
         };
@@ -183,6 +184,7 @@ describe('the Slack thread a task came from', () => {
     userId: 'U1',
     messageTs: '100.2',
     permalink: null,
+    channelName: null,
     statusTs: null,
     reaction: null,
   };

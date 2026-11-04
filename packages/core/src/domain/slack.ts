@@ -13,7 +13,7 @@ export interface SlackThreadLink extends SlackThreadRef {
   userId: string;
   messageTs: string;
   permalink: string | null;
-  channelName?: string | null;
+  channelName: string | null;
   statusTs: string | null;
   reaction: string | null;
   decided?: SlackDecided | null;

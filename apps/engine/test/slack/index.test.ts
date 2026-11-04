@@ -48,6 +48,7 @@ const LINK: SlackThreadLink = {
   userId: 'U1',
   messageTs: '100.1',
   permalink: null,
+  channelName: null,
   statusTs: null,
   reaction: 'hourglass_flowing_sand',
 };

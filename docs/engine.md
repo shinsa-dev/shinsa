@@ -4474,7 +4474,7 @@ truth, and a snapshot only saves replaying it.
 - **The log migrates forward, once, on start.** Code never reads an old shape. The log's version is SQLite's
   `user_version`; the baseline is 15 (`LOG_BASELINE`, `store/migrations/schema.ts`) and every migration after it is
   one entry in `LOG_MIGRATIONS` (`store/migrations/list.ts`; the first, `stack-lists`, turns the single `stacksOn` of
-  `task.stack_changed` and `base` of `task.stack_based` into lists), an effect on the SQL client, in order, whose position is its version, so the current version is the baseline plus the
+  `task.stack_changed` and `base` of `task.stack_based` into lists; the second, `slack-channel-names`, gives every `slack.thread_linked` link from before channel names a `channelName` of null), an effect on the SQL client, in order, whose position is its version, so the current version is the baseline plus the
   list's length and no number is kept by hand. A new log is stamped with the current version when it opens empty.
   Before it replays anything, a writable engine runs `EventLog.migrate`: the migrations after the log's version run
   in one transaction, the snapshot is dropped and the version raised; a migration that fails leaves the log as it

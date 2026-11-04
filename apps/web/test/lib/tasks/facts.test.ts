@@ -528,8 +528,5 @@ describe('resolveSlackFact', () => {
       hint: 'A mention of @Shinsa in Slack started this task. Open the thread in Slack.',
       href: 'https://app.slack.com/client/T1/C1/thread/C1-100.1',
     });
-    expect(resolveSlackFact(createTask({ id: 't', slack: { ...link, channelName: undefined } }))?.place).toBe(
-      'Slack'
-    );
   });
 });
