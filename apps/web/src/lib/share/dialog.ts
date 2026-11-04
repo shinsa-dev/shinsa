@@ -80,7 +80,7 @@ const CUSTOM_MODE_ITEM: { value: ShareMode; label: string; hint: string; icon: I
   icon: 'IconSettingsSliderHor',
 };
 
-export const SHARE_SCOPE_ROWS: Readonly<Record<ViewScope, { title: string; hint: string }>> = {
+const SHARE_SCOPE_ROWS: Readonly<Record<ViewScope, { title: string; hint: string }>> = {
   identity: { title: 'Title and status', hint: 'Always shown' },
   description: { title: 'Request', hint: 'What was asked, without attachments' },
   requests: { title: 'Later requests', hint: 'Each round’s request' },
