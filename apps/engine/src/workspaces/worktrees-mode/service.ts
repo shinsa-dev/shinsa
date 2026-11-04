@@ -53,12 +53,9 @@ export class WorktreeWorkspaces extends Context.Service<
         taskId: string,
         signal?: AbortSignal
       ) {
-        const update = yield* remote.updateOntoBase(path, base, branch, Effect.void, signal).pipe(
-          Effect.catchTags({
-            PushError: (error) => Effect.as(logBaseUnreached(taskId, base, error.detail), null),
-            GitFailed: (error) => Effect.as(logBaseUnreached(taskId, base, error.message), null),
-          })
-        );
+        const update = yield* remote
+          .updateOntoBase(path, base, branch, Effect.void, signal)
+          .pipe(Effect.catch((error) => Effect.as(logBaseUnreached(taskId, base, error.message), null)));
         if (update?.status !== 'conflicted') return;
         yield* Effect.logInfo(
           '[Workspaces] The latest base conflicts with the branch; the push resolves it'
