@@ -92,6 +92,7 @@ export interface TeamHello {
   view: TeamView;
   ephemeral: string;
   proof: string;
+  watcher?: 'machine';
 }
 
 export interface TeamKeys {
@@ -294,7 +295,8 @@ export async function createTeamHello(
   team: string,
   key: string,
   view: TeamView,
-  ephemeral: CryptoKey
+  ephemeral: CryptoKey,
+  watcher: TeamHello['watcher'] = undefined
 ): Promise<TeamHello> {
   const serialized = await serializePublicKey(ephemeral);
   return {
@@ -304,6 +306,7 @@ export async function createTeamHello(
     view,
     ephemeral: serialized,
     proof: await signChannelProof(key, listHelloParts(team, view, serialized)),
+    ...(watcher ? { watcher } : {}),
   };
 }
 
@@ -314,7 +317,15 @@ export function parseTeamHello(text: string): TeamHello | null {
   const { team, ephemeral, proof } = fields;
   if (!(view && typeof team === 'string' && typeof ephemeral === 'string' && typeof proof === 'string'))
     return null;
-  return { type: 'team-hello', version: REMOTE_PROTOCOL_VERSION, team, view, ephemeral, proof };
+  const hello: TeamHello = {
+    type: 'team-hello',
+    version: REMOTE_PROTOCOL_VERSION,
+    team,
+    view,
+    ephemeral,
+    proof,
+  };
+  return fields.watcher === 'machine' ? { ...hello, watcher: 'machine' } : hello;
 }
 
 export function verifyTeamHello(key: string, hello: TeamHello) {

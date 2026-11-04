@@ -53,6 +53,7 @@ export interface TeamSubject {
   teamId: string;
   view: TeamView;
   userId: string;
+  present?: boolean;
 }
 
 interface TeamLinks {
@@ -241,6 +242,13 @@ export class Teams implements TeamLinks {
     return { status: answer.status, teamId: answer.teamId };
   }
 
+  listKeys() {
+    const teams = new Set(this.#store.file.teams.map((team) => team.id));
+    return this.#store.file.teamKeys
+      .filter((stored) => teams.has(stored.teamId))
+      .map(({ teamId, name, key }) => ({ teamId, name, key }));
+  }
+
   async resolveJoinUrl(teamId: string) {
     this.#findOwnTeam(teamId);
     const stored = this.#store.selectTeamKey(teamId);
@@ -357,7 +365,7 @@ export class Teams implements TeamLinks {
       name: 'team view',
       authorize: async (hello) => {
         const answer = await this.#authorize(hello, userId);
-        if (answer && 'subject' in answer) this.#openViewer(channel, userId);
+        if (answer && 'subject' in answer && answer.subject.present) this.#openViewer(channel, userId);
         return answer;
       },
       resolveLive: (subject) => this.#resolveLive(subject),
@@ -415,7 +423,7 @@ export class Teams implements TeamLinks {
   async #authorize(text: string, userId: string): Promise<HelloAnswer<TeamSubject>> {
     const hello = parseTeamHello(text);
     if (!hello) return null;
-    const subject = { teamId: hello.team, view: hello.view, userId };
+    const subject = { teamId: hello.team, view: hello.view, userId, present: hello.watcher !== 'machine' };
     const refused = this.#resolveRefusal(subject);
     if (refused) return { refused };
     const stored = this.#store.selectTeamKey(hello.team);

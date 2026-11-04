@@ -171,8 +171,8 @@ describe('the Worker gates every route by who asks', () => {
     expect([refused.status, await readCode(refused)]).toEqual([404, 'not_found']);
     const remove = resolveInstanceRemovePath(studio.instanceId);
     for (const session of [world.kai, world.gus]) {
-      const refused = await post(remove, session);
-      expect([refused.status, await readCode(refused)]).toEqual([403, 'not_owner']);
+      const notOwner = await post(remove, session);
+      expect([notOwner.status, await readCode(notOwner)]).toEqual([403, 'not_owner']);
     }
     for (const session of [world.tess, world.eve]) expect((await post(remove, session)).status).toBe(404);
     const leave = resolveInstanceLeavePath(studio.instanceId);

@@ -397,6 +397,10 @@ export const RestartAnswer = Schema.Struct({ restarting: Schema.Boolean });
 
 export const TeamLinkAnswer = Schema.Struct({ url: Schema.String });
 
+export const TeamKeysAnswer = Schema.Struct({
+  keys: Schema.Array(Schema.Struct({ teamId: Schema.String, name: Schema.String, key: Schema.String })),
+});
+
 export const TeamCreateAnswer = Schema.Struct({ teamId: Schema.String, url: Schema.String });
 
 export const Bytes = Schema.Uint8Array;

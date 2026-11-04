@@ -40,3 +40,13 @@ export function resolveMachineSeenAt(machine: TeamMachine, live: TeamFeedMachine
   const seen = [machine.lastSeenAt, live?.updatedAt ?? null].filter((at): at is number => at !== null);
   return seen.length === 0 ? null : Math.max(...seen);
 }
+
+export function markViewerPresent(
+  presence: ReadonlyMap<string, TeamPresence>,
+  viewerId: string | null,
+  now: number
+): ReadonlyMap<string, TeamPresence> {
+  const known = viewerId === null ? undefined : presence.get(viewerId);
+  if (viewerId === null || !known || known.status === 'online') return presence;
+  return new Map(presence).set(viewerId, { userId: viewerId, status: 'online', seenAt: now });
+}

@@ -22,6 +22,7 @@ import { Input } from '@shinsa/ui/components/input';
 import { Truncate } from '@shinsa/ui/components/truncate';
 import { type DialogControl, useDialogState } from '@shinsa/ui/hooks/use-dialog-state';
 import * as React from 'react';
+import { SelectField } from '@/components/controls/select-field.tsx';
 import { ConfirmDialog } from '@/components/overlays/confirm-dialog.tsx';
 import { MentionText } from '@/components/people/user-tag.tsx';
 import { LoadingLine } from '@/components/status/loading-line.tsx';
@@ -46,7 +47,9 @@ import {
   describePeopleCount,
   describeTeamEntry,
   describeTeamsUnavailable,
+  type GrantMachine,
   hasMachineAccess,
+  listGrantMachines,
   listProjectChoices,
   listTeamPeople,
   needsTeamLink,
@@ -81,7 +84,7 @@ type TeamsDialog =
   | { kind: 'delete'; entry: RemoteTeamEntry }
   | { kind: 'member'; team: RemoteTeam; user: RemoteUser }
   | { kind: 'rights'; teamId: string; user: RemoteUser }
-  | { kind: 'grant'; team: RemoteTeam; user: RemoteUser; machine: string };
+  | { kind: 'grant'; team: RemoteTeam; user: RemoteUser; machine: GrantMachine };
 
 function TeamLinkDialog({
   control,
@@ -137,6 +140,13 @@ function TeamLinkDialog({
   );
 }
 
+interface GrantMachines {
+  owned: readonly MachineAccess[];
+  currentId: string | null;
+}
+
+const GrantMachinesContext = React.createContext<GrantMachines>({ owned: [], currentId: null });
+
 function GrantDialog({
   control,
   team,
@@ -147,18 +157,25 @@ function GrantDialog({
   control: DialogControl;
   team: RemoteTeam;
   user: RemoteUser;
-  machine: string;
+  machine: GrantMachine;
   actions: TeamActions;
 }) {
+  const { owned } = React.useContext(GrantMachinesContext);
+  const choices = listGrantMachines(owned, machine, user.id);
+  const [picked, setPicked] = React.useState(machine.id ?? '');
   const [busy, setBusy] = React.useState(false);
   const name = resolveFirstName(user);
+  const target = choices.find((choice) => (choice.id ?? '') === picked) ?? machine;
+  const title =
+    choices.length > 1 ? `Give ${name} access to a machine?` : `Give ${name} access to ${machine.name}?`;
 
   async function grant() {
     setBusy(true);
+    const through = target.id === machine.id ? actions : createTeamActions(target.id);
     await requestWithToast(async () => {
-      await actions.grantAccess(team.id, user.id);
+      await through.grantAccess(team.id, user.id);
       control.onOpenChange(false);
-    }, `${name} can reach ${machine} now.`);
+    }, `${name} can reach ${target.name} now.`);
     setBusy(false);
   }
 
@@ -166,11 +183,20 @@ function GrantDialog({
     <Dialog {...control}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{`Give ${name} access to ${machine}?`}</DialogTitle>
+          <DialogTitle>{title}</DialogTitle>
           <DialogDescription>
-            {`${name} gets full control of ${machine} in Shinsa Cloud. Take it back under Remote access.`}
+            {`${name} gets full control of ${choices.length > 1 ? 'the machine you pick' : machine.name} in Shinsa Cloud. Take it back under Remote access.`}
           </DialogDescription>
         </DialogHeader>
+        {choices.length > 1 && (
+          <SelectField
+            label='Machine'
+            align='start'
+            items={choices.map((choice) => ({ value: choice.id ?? '', label: choice.name }))}
+            value={picked}
+            onValueChange={setPicked}
+          />
+        )}
         <DialogFooter>
           <DialogClose render={<Button variant='secondary' />}>Cancel</DialogClose>
           <Button loading={busy} onClick={() => void grant()}>
@@ -306,6 +332,7 @@ function TeammateActions({
 }) {
   const granted = hasMachineAccess(snapshot, user.id);
   const member = user.id !== team.owner.id;
+  const machineId = React.useContext(GrantMachinesContext).currentId;
   return (
     <>
       {rights && member && team.role === 'owner' && (
@@ -322,7 +349,9 @@ function TeammateActions({
           variant='secondary'
           size='sm'
           icon={MACHINE_ICON}
-          onClick={() => onDialog({ kind: 'grant', team, user, machine: snapshot.machineName })}
+          onClick={() =>
+            onDialog({ kind: 'grant', team, user, machine: { id: machineId, name: snapshot.machineName } })
+          }
         >
           Give machine access
         </Button>
@@ -694,10 +723,12 @@ export function TeamsSettings({ state }: { state: ShinsaState }) {
 function MachineTeams({
   state,
   machine,
+  owned,
   title,
 }: {
   state: ShinsaState;
   machine: MachineAccess;
+  owned: readonly MachineAccess[];
   title: string;
 }) {
   const supported = useEngineFeature('teams', machine.id);
@@ -707,16 +738,19 @@ function MachineTeams({
   const projectKey = projectIds.join(' ');
   const scoped = React.useMemo(() => scopeStateToProjects(state, projectKey.split(' ')), [state, projectKey]);
   const actions = React.useMemo(() => createTeamActions(machine.id), [machine.id]);
+  const grant = React.useMemo(() => ({ owned, currentId: machine.id }), [owned, machine.id]);
   if (!supported) return null;
   return (
-    <TeamsGroup
-      state={scoped}
-      snapshot={machine.remote}
-      failure={null}
-      title={title}
-      actions={actions}
-      rights={rights}
-    />
+    <GrantMachinesContext.Provider value={grant}>
+      <TeamsGroup
+        state={scoped}
+        snapshot={machine.remote}
+        failure={null}
+        title={title}
+        actions={actions}
+        rights={rights}
+      />
+    </GrantMachinesContext.Provider>
   );
 }
 
@@ -735,6 +769,7 @@ export function MachineTeamsSettings({
           key={machine.id}
           state={state}
           machine={machine}
+          owned={machines}
           title={machines.length > 1 ? `${TEAMS_SECTION} on ${machine.name}` : TEAMS_SECTION}
         />
       ))}

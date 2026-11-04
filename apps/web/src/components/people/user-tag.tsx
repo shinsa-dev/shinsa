@@ -31,10 +31,10 @@ const USER_AVATAR = {
 const USER_INITIAL = { row: undefined, cell: 'scale-90', menu: 'scale-90', inline: 'scale-75' } as const;
 
 const PRESENCE_DOT_SIZE = {
-  row: 'size-2 ring-2',
-  cell: 'size-1.5 ring-1',
-  menu: 'size-1.5 ring-1',
-  inline: 'size-1.5 ring-1',
+  row: 'size-1.5 ring-2',
+  cell: 'size-1 ring-1',
+  menu: 'size-1 ring-1',
+  inline: 'size-1 ring-1',
 } as const;
 
 function AvatarFace({

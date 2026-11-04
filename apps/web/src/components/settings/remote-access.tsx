@@ -47,15 +47,13 @@ import {
 } from '@/lib/remote-access.ts';
 import { THIS_MACHINE } from '@/lib/remote/mode.ts';
 import { resolveFirstName } from '@/lib/remote/users.ts';
-import { ROW_INSET, SETTING_ROW, SETTINGS_SUBHEADING, SettingsEmpty, SettingsGroup } from './group.tsx';
+import { SETTING_ROW, SETTINGS_SUBHEADING, SettingsCard, SettingsEmpty, SettingsGroup } from './group.tsx';
 import { UserRow } from './user-row.tsx';
 
 const NO_MEMBERS: readonly RemoteMember[] = [];
 
 const DESCRIPTION =
   'Reach this machine from any device through Shinsa Cloud, behind GitHub sign-in and end to end encrypted. Your devices and other people ask for access with the invite link, and nothing opens until you accept.';
-
-const ONLY_YOU = `pt-0.5 pb-1.5 text-fg-2 text-xs ${ROW_INSET}`;
 
 function QrCode({ text }: { text: string }) {
   const image = React.useMemo(() => resolveQrImage(text), [text]);
@@ -309,9 +307,6 @@ function PeopleSection({
     <>
       <p className={SETTINGS_SUBHEADING}>{`People who can reach ${place}`}</p>
       {owner && <UserRow user={owner} detail='Owner' self />}
-      {members.length === 0 && (
-        <p className={ONLY_YOU}>Only you. Share the invite link to let someone ask for access.</p>
-      )}
       {members.map((member) => (
         <UserRow key={member.user.id} user={member.user} detail={describeMemberSince(member)}>
           <Button variant='secondary' size='sm' onClick={() => onRemove(member.user)}>
@@ -484,10 +479,10 @@ export function RemoteAccessGroup({
   );
 }
 
-const MACHINE_ACCESS_DESCRIPTION =
-  'Who can reach this machine through Shinsa Cloud, and from which devices. Pausing, removing or pairing it again is done on the machine itself.';
+export const MACHINE_ACCESS_DESCRIPTION =
+  'Who can reach each machine through Shinsa Cloud, and from which devices. Pausing, removing or pairing it again is done on the machine itself.';
 
-export function MachineAccessGroup({
+export function MachineAccessCard({
   name,
   snapshot,
   actions,
@@ -499,11 +494,11 @@ export function MachineAccessGroup({
   const dialog = useDialogState<RemoteDialog>();
   const canEnroll = canEnrollDevices(snapshot);
   return (
-    <SettingsGroup
-      title={`${REMOTE_ACCESS_SECTION} on ${name}`}
-      description={MACHINE_ACCESS_DESCRIPTION}
-      action={canEnroll ? <InviteLinkButton onClick={() => dialog.show({ kind: 'link' })} /> : undefined}
-    >
+    <SettingsCard>
+      <div className={SETTING_ROW}>
+        <Truncate className='min-w-0 flex-1 text-xs font-medium text-fg-4'>{name}</Truncate>
+        {canEnroll && <InviteLinkButton onClick={() => dialog.show({ kind: 'link' })} />}
+      </div>
       <AccessBody snapshot={snapshot} place={name} actions={actions} onDialog={dialog.show} />
       <RemoteDialogs
         dialog={dialog}
@@ -512,7 +507,7 @@ export function MachineAccessGroup({
         canEnroll={canEnroll}
         actions={actions}
       />
-    </SettingsGroup>
+    </SettingsCard>
   );
 }
 

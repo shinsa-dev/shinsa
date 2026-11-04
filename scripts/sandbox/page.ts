@@ -177,7 +177,11 @@ export function listSandboxSections(
         ...(duplicate.original
           ? [
               {
-                label: `${teammate.name}: ${duplicate.original}, which shows the task kept over on Studio`,
+                label: `The remote dashboard: Kai’s ${duplicate.original} as a full task page, with Take over in its ••• menu`,
+                url: `${ORIGIN}/tasks/${duplicate.original}`,
+              },
+              {
+                label: `${teammate.name}’s own app, signed in as Kai: ${duplicate.original}, which shows the task kept over on Studio`,
                 url: `http://${HOST}:${teammate.port}/tasks/${duplicate.original}`,
               },
             ]
@@ -188,7 +192,7 @@ export function listSandboxSections(
         },
         {
           label:
-            'The team’s join link, which gives this browser the team key so the dashboard opens Kai’s tasks too',
+            'The team’s join page (the dashboard now takes the team key from your own machines, so you no longer need it to open Kai’s tasks)',
           url: resolveTeamJoinUrl({ teamId: TEAM.id, invite: TEAM_INVITE, key: TEAM_KEY }, ORIGIN),
         },
       ],

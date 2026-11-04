@@ -3050,8 +3050,8 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   removing, the tunnel's status, a pairing) and the socket hub sends `remote` with the whole snapshot, which the page keeps on its connection
   (`selectRemote`); a page reads `GET /api/remote` once when Settings opens, only to show a failure, and never polls.
   The remote build shows it per machine in Settings → Machines instead: for each machine of the dashboard you own
-  (`listOwnedMachines`: paired, and Shinsa Cloud names you its owner), Remote access on <machine>
-  (`MachineAccessGroup`) with the invite link, the requests, the devices with Revoke and the people with Remove, but
+  (`listOwnedMachines`: paired, and Shinsa Cloud names you its owner), one Remote access section with a card per
+  machine (`MachineAccessCard`), each headed by the machine's name with its invite link, the requests, the devices with Revoke and the people with Remove, but
   no Turn on, Pause, Resume or Remove, which stay at the keyboard. Each is read from that machine's own `remote` push
   (`Fleet.listMachineAccess`), and every change goes to that machine (`createMachineAccessActions`: `?machine=<instance>`
   on the request, which the fleet routes by, `resolveRequestOwner`), whose push then updates the page. Machines shared
@@ -3636,8 +3636,11 @@ the read-only view. Teams need remote access on (`Remote` paired and enabled), s
   alone: it never lists a teammate's task. A teammate's task never waits for you, so it never counts towards Needs you, the queue, the
   guide or a notification. Opening one goes to `/teams/<team>/<machine>/<task>` (`routes/team-task.tsx`), the shared
   task page (`SharedTaskPage`, read-only, its Chat the agents' output only) fed by the engine relay in the local app and, on app.shinsa.dev, by
-  a team channel the browser opens with its own key; a browser without the key says "Add the team to this browser"
-  until you open the join link there once.
+  a team channel the browser opens with its own key. On app.shinsa.dev a teammate's machine admitted to the fleet
+  opens the task as a full task page at `/tasks/<handle>` instead, straight from the row (`resolveFleetTeamTaskPath`).
+  Your browser takes the keys of the teams your own machines hold when it opens the dashboard
+  (`GET /api/remote/teams/keys`, owner devices only, `syncOwnTeamKeys` in `lib/teams/own-keys.ts`), so you never open
+  the join link to see your own team; a browser that still has no key says "Add the team to this browser".
 - **Machines you already reach.** A teammate who also made you a member of a machine (Remote access → members) shows
   that machine's tasks as your own, with full control, through the dashboard's sealed channel; team rows from a
   machine the dashboard reaches are left out (`listTeamFeedTasks`), so no task appears twice. The hosted dashboard
@@ -3746,7 +3749,10 @@ the read-only view. Teams need remote access on (`Remote` paired and enabled), s
   - **Presence** (`remote/presence.ts`, `http/attention.ts`; core's `TeamPresence`, `mergeTeamPresence`). Each
     machine's list view carries each person it can tell about: its owner Online while one of their Shinsa pages, on
     the machine or their own browser, was used in the last five minutes (`ATTENTION_IDLE_MS`), else Away; a teammate
-    Online while they have this machine's team view open, else Offline with when they last had it (`seenAt`). The
+    Online while they have this machine's team view open, else Offline with when they last had it (`seenAt`); a view
+    their machine keeps open in the background to list your tasks (`TeamFeeds`, whose hello says `watcher: 'machine'`)
+    is not them being here, so it never makes them Online. The page shows you Online on the page you are using
+    (`markViewerPresent`), whatever an older report says. The
     page merges every machine's reports into one status per person, the best one winning and the latest last seen
     kept (`resolveTeamPresence`), and shows it as a dot on avatars, user cards and People rows, with "Seen 2 hours ago"
     when not online. A teammate's machine shows Offline the moment its team channel drops, not at app.shinsa.dev's
@@ -3755,7 +3761,7 @@ the read-only view. Teams need remote access on (`Remote` paired and enabled), s
   app.shinsa.dev for each machine you own, below; every change is the owner's, `OwnerOnlyRoute`): one card per team with its name and
   your role, Shared projects (`components/teams/projects-select.tsx`, a dropdown of your projects with their dots, as
   New task's), the link field when this machine has no key, requests with Accept and Decline, and People (a fold
-  that starts closed from six people on, with a search row by name or login, `listTeamPeople`), each teammate with their presence, Give machine access (or Can reach this machine) and, for the owner, Rights and Remove; What teammates can do lists the team's five rights as switches, the owner's to change, and a member's to read (`components/teams/permissions.tsx`, `lib/teams/permissions.ts`); Rights opens one person's, each Team, On or Off, and anyone whose rights differ from the team's reads Own rights; the owner has Join link,
+  that starts closed from six people on, with a search row by name or login, `listTeamPeople`), each teammate with their presence, Give machine access (or Can reach this machine; with more than one machine of yours it asks which, `listGrantMachines`) and, for the owner, Rights and Remove; What teammates can do lists the team's five rights as switches, the owner's to change, and a member's to read (`components/teams/permissions.tsx`, `lib/teams/permissions.ts`); Rights opens one person's, each Team, On or Off, and anyone whose rights differ from the team's reads Own rights; the owner has Join link,
   which shows the link as a QR code with Copy and Turn off link like Remote access's Invite link, and Delete team; a
   member has Leave. New team (`components/teams/new-team-dialog.tsx`) asks the name and which projects to share. The
   owner's routes are `POST /api/remote/teams/create|join|link|link/renew|link/remove|requests/accept|requests/decline|members/remove|permissions|leave|remove`

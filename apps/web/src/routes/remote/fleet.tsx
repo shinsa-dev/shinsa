@@ -16,6 +16,7 @@ import { serveRelayedRequests, startServiceWorker } from '@/lib/remote/relay.ts'
 import type { RemoteServices } from '@/lib/remote/services.ts';
 import { admitTeamMachines } from '@/lib/teams/admit.ts';
 import { HostedTeamFeeds } from '@/lib/teams/feeds.ts';
+import { syncOwnTeamKeys } from '@/lib/teams/own-keys.ts';
 import { navigate } from '@/router.ts';
 import { RemoteBenefits, RemoteCheckAgain, RemoteHero, RemoteLoading, RemoteSteps } from './shell.tsx';
 
@@ -138,15 +139,17 @@ export function FleetApp({
     const release: (() => void)[] = [];
     void (async () => {
       try {
-        const rows = await admitTeamMachines(
-          await settleWaitingRows(await listMachineRows(services.dashboard, services.devices), services),
-          {
-            dashboard: services.dashboard,
-            devices: services.devices,
-            selectTeamKey: services.teamKeys.selectTeamKey,
-            name: resolveDeviceName(navigator.userAgent, navigator.maxTouchPoints > 1, null),
-          }
+        const settled = await settleWaitingRows(
+          await listMachineRows(services.dashboard, services.devices),
+          services
         );
+        await syncOwnTeamKeys(settled, { dashboard: services.dashboard, teamKeys: services.teamKeys });
+        const rows = await admitTeamMachines(settled, {
+          dashboard: services.dashboard,
+          devices: services.devices,
+          selectTeamKey: services.teamKeys.selectTeamKey,
+          name: resolveDeviceName(navigator.userAgent, navigator.maxTouchPoints > 1, null),
+        });
         const added = rows.flatMap((row) =>
           row.device && !row.device.waiting ? [{ instance: row.instance, device: row.device }] : []
         );

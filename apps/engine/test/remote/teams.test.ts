@@ -165,11 +165,17 @@ interface Viewer {
   send: (data: string) => Promise<void>;
 }
 
-async function openViewer(teams: Teams, userId: string, view: TeamView, key = TEAM_KEY): Promise<Viewer> {
+async function openViewer(
+  teams: Teams,
+  userId: string,
+  view: TeamView,
+  key = TEAM_KEY,
+  watcher: 'machine' | undefined = undefined
+): Promise<Viewer> {
   const ephemeral = (await crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, [
     'deriveBits',
   ])) as CryptoKeyPair;
-  const hello = await createTeamHello('team1', key, view, ephemeral.publicKey);
+  const hello = await createTeamHello('team1', key, view, ephemeral.publicKey, watcher);
   let open: ((frame: Bytes) => Promise<Bytes>) | null = null;
   let queue: Promise<void> = Promise.resolve();
   const viewer: Viewer = {
@@ -431,6 +437,14 @@ describe('a team view of this machine', () => {
     });
   });
 
+  test('a teammate’s machine watching the list in the background does not make them present', async () => {
+    const presence = new Presence(() => 50);
+    const { teams } = setUp({ presence });
+    const watcher = await openViewer(teams, KAI.id, LIST, TEAM_KEY, 'machine');
+    const people = (watcher.views()[0] as TeamListView).presence ?? [];
+    expect(people.find((person) => person.userId === KAI.id)?.status ?? 'offline').not.toBe('online');
+  });
+
   test('a teammate whose views all closed shows as last seen here', async () => {
     const presence = new Presence(() => 50);
     const { teams } = setUp({ presence });
@@ -492,6 +506,7 @@ describe('making and joining teams', () => {
     ]);
     expect(JSON.stringify(remote.snapshot())).not.toContain(key);
     expect(readFileSync(path, 'utf8')).toContain(key);
+    expect(teams.listKeys()).toEqual([{ teamId: 'team2', name: 'Growth', key }]);
   });
 
   test('refuses a team without a name, one too many and a machine that is not paired', async () => {
@@ -523,6 +538,13 @@ describe('making and joining teams', () => {
     expect(await teams.join(url)).toEqual({ status: 'member', teamId: 'team1' });
     expect(heartbeat).toHaveBeenCalled();
     expect(remote.store.selectTeamKey('team1')).toMatchObject({ invite: 'invite-1', key: TEAM_KEY });
+  });
+
+  test('hands its keys only for the teams it is still in', () => {
+    const { teams } = setUp();
+    expect(teams.listKeys()).toEqual([{ teamId: 'team1', name: expect.any(String), key: TEAM_KEY }]);
+    const gone = setUp({ file: { teams: [] } });
+    expect(gone.teams.listKeys()).toEqual([]);
   });
 
   test('refuses a link that is not a team link, one turned off and one for another team', async () => {

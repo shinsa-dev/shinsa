@@ -97,6 +97,7 @@ import {
   TeamCreateBody,
   TeamJoinAnswer,
   TeamJoinBody,
+  TeamKeysAnswer,
   TeamLinkAnswer,
   TeamMemberBody,
   TeamPermissionsBody,
@@ -544,6 +545,9 @@ class TeamsGroup extends HttpApiGroup.make('teams')
       success: RemoteAnswer,
     })
       .annotate(RouteFieldFailures, TEAM_FAILURES)
+      .annotate(OwnerOnlyRoute, true)
+      .annotate(EngineFeatureRoute, 'team-access'),
+    HttpApiEndpoint.get('keys', '/api/remote/teams/keys', { success: TeamKeysAnswer })
       .annotate(OwnerOnlyRoute, true)
       .annotate(EngineFeatureRoute, 'team-access')
   )

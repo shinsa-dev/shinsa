@@ -125,6 +125,25 @@ export function hasMachineAccess(snapshot: RemoteSnapshot, userId: string) {
   return snapshot.access?.members.some((member) => member.user.id === userId) ?? false;
 }
 
+export interface GrantMachine {
+  id: string | null;
+  name: string;
+}
+
+export function listGrantMachines(
+  machines: readonly { id: string; name: string; remote: RemoteSnapshot | null }[],
+  current: GrantMachine,
+  userId: string
+): GrantMachine[] {
+  const others = machines.filter(
+    (machine) =>
+      machine.id !== current.id &&
+      machine.remote?.enabled === true &&
+      !hasMachineAccess(machine.remote, userId)
+  );
+  return [current, ...others.map((machine) => ({ id: machine.id, name: machine.name }))];
+}
+
 export function resolveProjectPick(projects: readonly ProjectChoice[], chosen: readonly string[]) {
   const picked = projects.filter((project) => chosen.includes(project.id));
   const [first, second] = picked;

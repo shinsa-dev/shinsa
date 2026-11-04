@@ -44,7 +44,7 @@ export function listJoinCommands(teamId: string, projectIds: readonly string[]):
   return [...new Set(projectIds)].map((projectId) => ({ type: 'project.add_to_team', projectId, teamId }));
 }
 
-function onMachine(member: Pick<FleetMember, 'fetch'>, origin: string) {
+export function onMachine(member: Pick<FleetMember, 'fetch'>, origin: string) {
   return <A, E>(effect: Effect.Effect<A, E, EngineClient>) =>
     effect.pipe(
       Effect.provide(EngineClient.through(HttpClientRequest.prependUrl(origin))),

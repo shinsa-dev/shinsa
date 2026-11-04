@@ -25,6 +25,7 @@ import {
   useUnreachableMachines,
 } from '@/lib/connection/socket.ts';
 import { TONE_TEXT } from '@/lib/format/tone.ts';
+import { REMOTE_ACCESS_SECTION } from '@/lib/remote-access.ts';
 import {
   listMachineRows,
   listTaskCapacityItems,
@@ -37,9 +38,9 @@ import {
 import { describeOutdatedMachine, MACHINES_SECTION } from '@/lib/remote/mode.ts';
 import { describeMachineResources, listResourceGauges, NO_RESOURCE_READING } from '@/lib/remote/resources.ts';
 import { RemoteServicesContext } from '@/lib/remote/services.ts';
-import { SETTING_ROW, SettingsEmpty, SettingsGroup } from './group.tsx';
+import { SETTING_ROW, SettingsEmpty, SettingsGroup, SettingsSection } from './group.tsx';
 import { PolicySettings } from './policies.tsx';
-import { AccessRequestRows, MachineAccessGroup } from './remote-access.tsx';
+import { AccessRequestRows, MACHINE_ACCESS_DESCRIPTION, MachineAccessCard } from './remote-access.tsx';
 import { MachineTeamsSettings } from './teams.tsx';
 
 function resolveViewerId(instances: RemoteInstance[], machineId: string) {
@@ -91,7 +92,7 @@ export function MachineAccessRequests({
 function OwnedMachineAccess({ machine }: { machine: MachineAccess }) {
   const actions = React.useMemo(() => createMachineAccessActions(machine.id), [machine.id]);
   if (!machine.remote) return null;
-  return <MachineAccessGroup name={machine.name} snapshot={machine.remote} actions={actions} />;
+  return <MachineAccessCard name={machine.name} snapshot={machine.remote} actions={actions} />;
 }
 
 const MACHINES_DESCRIPTION =
@@ -276,9 +277,15 @@ export function MachinesSettings({ state }: { state?: ShinsaState }) {
           <SettingsEmpty>Reading your machines.</SettingsEmpty>
         )}
       </SettingsGroup>
-      {owned.map((machine) => (
-        <OwnedMachineAccess key={machine.id} machine={machine} />
-      ))}
+      {owned.length > 0 && (
+        <SettingsSection title={REMOTE_ACCESS_SECTION} description={MACHINE_ACCESS_DESCRIPTION}>
+          <div className='flex flex-col gap-2'>
+            {owned.map((machine) => (
+              <OwnedMachineAccess key={machine.id} machine={machine} />
+            ))}
+          </div>
+        </SettingsSection>
+      )}
       <PolicySettings
         machines={machines}
         unreachable={(rows ?? [])

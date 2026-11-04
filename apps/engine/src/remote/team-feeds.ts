@@ -629,7 +629,13 @@ export class TeamFeeds {
         return;
       }
       const ephemeral = await createChannelEphemeral();
-      const hello = await createTeamHello(target.teamId, target.key, target.view, ephemeral.publicKey);
+      const hello = await createTeamHello(
+        target.teamId,
+        target.key,
+        target.view,
+        ephemeral.publicKey,
+        'machine'
+      );
       if (ended) return;
       const opened = this.#createSocket(url, this.#remote.appOrigin);
       socket = opened;

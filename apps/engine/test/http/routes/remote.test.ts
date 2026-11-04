@@ -62,6 +62,7 @@ function createTeams() {
     leave: record('leave', Promise.resolve()),
     remove: record('remove', Promise.resolve()),
     updatePermissions: record('updatePermissions', Promise.resolve()),
+    listKeys: () => [{ teamId: 't', name: 'Core', key: 'k' }],
   };
   return { calls, teams: teams as unknown as Teams };
 }
@@ -154,7 +155,7 @@ describe('teams over HTTP', () => {
   test('creating a team and its links answer the team link; every other change the snapshot', async () => {
     const { remote } = createRemote();
     const { calls, teams } = createTeams();
-    const { post } = startRoutes({ remote, teams });
+    const { post, send } = startRoutes({ remote, teams });
     expect(await (await post('/api/remote/teams/create', { name: 'Core' })).json()).toEqual({
       teamId: 'team-1',
       url: 'https://app.shinsa.dev/share/team#team-1',
@@ -178,6 +179,9 @@ describe('teams over HTTP', () => {
     const narrow = { teamId: 't', permissions: { share: false } };
     expect(await (await post('/api/remote/teams/permissions', narrow)).json()).toEqual(SNAPSHOT);
     await post('/api/remote/teams/permissions', { ...narrow, userId: 'u', permissions: { message: null } });
+    expect(await (await send('/api/remote/teams/keys')).json()).toEqual({
+      keys: [{ teamId: 't', name: 'Core', key: 'k' }],
+    });
     expect(calls).toEqual([
       ['create', 'Core'],
       ['join', 'https://x'],

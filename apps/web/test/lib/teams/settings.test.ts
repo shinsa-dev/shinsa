@@ -9,6 +9,7 @@ import {
   describeTeamFacts,
   describeTeamsUnavailable,
   hasMachineAccess,
+  listGrantMachines,
   listHostedTeams,
   listProjectChoices,
   scopeStateToProjects,
@@ -115,6 +116,28 @@ describe('Settings → Teams', () => {
     expect(hasMachineAccess(snapshot, KAI.id)).toBe(true);
     expect(hasMachineAccess(snapshot, BOB.id)).toBe(false);
     expect(hasMachineAccess(createRemoteSnapshot(), KAI.id)).toBe(false);
+  });
+
+  it('offers the machine you asked from first, then every other one of yours they cannot reach yet', () => {
+    const open = createRemoteSnapshot({ enabled: true });
+    const reached = createRemoteSnapshot({
+      enabled: true,
+      access: { owner: MONA, members: [{ user: KAI, addedAt: 3 }] },
+    });
+    const machines = [
+      { id: 'studio', name: 'Studio', remote: open },
+      { id: 'laptop', name: 'Laptop', remote: open },
+      { id: 'mini', name: 'Mini', remote: reached },
+      { id: 'off', name: 'Off', remote: createRemoteSnapshot({ enabled: false }) },
+      { id: 'none', name: 'None', remote: null },
+    ];
+    expect(listGrantMachines(machines, { id: 'studio', name: 'Studio' }, KAI.id)).toEqual([
+      { id: 'studio', name: 'Studio' },
+      { id: 'laptop', name: 'Laptop' },
+    ]);
+    expect(listGrantMachines([], { id: null, name: 'this machine' }, KAI.id)).toEqual([
+      { id: null, name: 'this machine' },
+    ]);
   });
 
   it('lists the owner first, then the members, and finds people by name or login', () => {
