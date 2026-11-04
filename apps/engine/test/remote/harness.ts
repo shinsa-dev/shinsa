@@ -410,7 +410,7 @@ export function adaptRemote(test: RemoteTest) {
     resolveTeamScope: (userId: string, teamId: string) => runSync(remote.resolveTeamScope(userId, teamId)),
     listTeamScopes: (userId: string) => runSync(remote.listTeamScopes(userId)),
     resolveTeamGrant: (userId: string, teamId: string) => runSync(remote.resolveTeamGrant(userId, teamId)),
-    canForkTeamTask: (teamId: string) => runSync(remote.canForkTeamTask(teamId)),
+    canForkTeamTask: (teamId: string) => runSync(remote.canForkTeamTask({ teamId })),
   };
 }
 

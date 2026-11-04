@@ -355,9 +355,7 @@ function createRunsLayer(options: ShinsaOptions) {
     Effect.gen(function* () {
       const feeds = yield* TeamFeeds;
       const remote = yield* Remote;
-      return Effect.flatMap(feeds.listTasks({}), (tasks) =>
-        Effect.filter(tasks, (entry) => remote.canForkTeamTask(entry.teamId))
-      );
+      return Effect.flatMap(feeds.listTasks({}), (tasks) => Effect.filter(tasks, remote.canForkTeamTask));
     })
   );
   return RunSupervisorLayer.pipe(Layer.provide(Layer.mergeAll(access, broker, hooks, idle, teammates)));

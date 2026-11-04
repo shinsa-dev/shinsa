@@ -518,4 +518,10 @@ describe('tasks hand-to-teammate', () => {
       runSpec(fake, ['tasks', 'hand-to-teammate', 'fix', '--team', 'platform', '--login', 'bob'])
     ).rejects.toThrow('bob is not in this team');
   });
+  test('gives back a task a teammate handed you', async () => {
+    const fake = createFakeClient(TASKS);
+    const result = await runSpec(fake, ['tasks', 'give-back', 'fix']);
+    expect(fake.sent).toEqual([{ type: 'task.give_back', taskId: 'task-123' }] as never);
+    expect(result.text).toBe('Given back.');
+  });
 });

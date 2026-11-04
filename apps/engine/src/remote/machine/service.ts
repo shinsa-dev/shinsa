@@ -54,7 +54,7 @@ import { TunnelMachine } from '../tunnel/schema.ts';
 import { TunnelSupervisor } from '../tunnel/service.ts';
 import {
   type ChannelParts,
-  GUEST_FALLBACK_LOGIN,
+  UNKNOWN_PERSON,
   type GuestLeaver,
   type HandoffClaim,
   HANDOFF_NOT_ENABLED,
@@ -523,12 +523,7 @@ export class Remote extends Context.Service<Remote, RemoteHandle>()('shinsa/engi
           const found = [...users, ...guests.map((guest) => guest.user), ...teammates].find(
             (user) => user?.id === userId
           );
-          const person: RemoteUser = found ?? {
-            id: userId,
-            login: GUEST_FALLBACK_LOGIN,
-            name: null,
-            avatarUrl: null,
-          };
+          const person: RemoteUser = found ?? { ...UNKNOWN_PERSON, id: userId };
           return person;
         });
 
@@ -564,7 +559,11 @@ export class Remote extends Context.Service<Remote, RemoteHandle>()('shinsa/engi
           return scopes.flatMap((scope) => (scope ? [scope] : []));
         });
 
-        const canForkTeamTask = Effect.fn('Remote.canForkTeamTask')(function* (teamId: string) {
+        const canForkTeamTask = Effect.fn('Remote.canForkTeamTask')(function* ({
+          teamId,
+        }: {
+          readonly teamId: string;
+        }) {
           const current = yield* file;
           const ownerId = current.access?.owner.id;
           const team = current.teams.find((entry) => entry.id === teamId);

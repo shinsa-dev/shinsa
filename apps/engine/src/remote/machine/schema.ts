@@ -23,7 +23,7 @@ export const HANDOFF_NOT_ENABLED =
 
 export const HANDOFF_UNAVAILABLE = 'This machine cannot hand off tasks right now. Try again in a moment.';
 
-export const GUEST_FALLBACK_LOGIN = 'guest';
+export const UNKNOWN_PERSON = { login: 'guest', name: null, avatarUrl: null } as const;
 
 export type TeamScope = Extract<ScopedActor['scope'], { kind: 'team' }>;
 
@@ -105,7 +105,7 @@ export interface RemoteHandle {
   resolveTeamScope(userId: string, teamId: string): Effect.Effect<TeamScope | null>;
   listTeamScopes(userId: string): Effect.Effect<TeamScope[]>;
   resolveTeamGrant(userId: string, teamId: string): Effect.Effect<string | null>;
-  canForkTeamTask(teamId: string): Effect.Effect<boolean>;
+  canForkTeamTask(task: { readonly teamId: string }): Effect.Effect<boolean>;
   openChannel(peer: ChannelPeer, parts: ChannelParts, userId: string): Effect.Effect<RemoteChannelHandle>;
   closeChannel(channel: RemoteChannelHandle): Effect.Effect<void>;
   removeDevice(publicKey: string): Effect.Effect<boolean>;
