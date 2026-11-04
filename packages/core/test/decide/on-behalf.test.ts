@@ -490,6 +490,16 @@ describe('the summary of each action', () => {
     }
   });
 
+  test('pausing a task on its behalf names the task, and its gate stays for you', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness, { request: 'Second' });
+    actOnBehalf(harness, { type: 'task.pause', taskId });
+    expect(lastAction(harness)).toMatchObject({ command: 'task.pause', summary: 'Paused “Second”', taskId });
+    expect(() => actOnBehalf(harness, { type: 'task.retry', taskId })).toThrow(
+      'This task waits for a decision only the human makes.'
+    );
+  });
+
   test('records nothing for a gate answered on its behalf, an agent’s question included', () => {
     const harness = createHarness();
     const reviewed = createTask(harness, { request: 'Reviewed' });

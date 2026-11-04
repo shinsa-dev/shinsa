@@ -61,6 +61,7 @@ describe('resolveScopedRefusal', () => {
       resolveScopedRefusal(state, guestOf(taskId), { type: 'run.dismiss_silence', runId: run.id })
     ).toBeNull();
     expect(resolveScopedRefusal(state, guestOf(taskId), { type: 'task.retry', taskId })).toBeNull();
+    expect(resolveScopedRefusal(state, guestOf(taskId), { type: 'task.pause', taskId })).toBeNull();
   });
 
   test('refuses another task, by its id, its run or its gate', () => {
