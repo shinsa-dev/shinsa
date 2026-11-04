@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { type Coverage, listActiveRuns, listOpenGates } from '../../src/index.ts';
+import { type Coverage, listActiveRuns, listOpenGates, type ReviewFinding } from '../../src/index.ts';
 import {
   buildAll,
   completePhase,
@@ -385,7 +385,6 @@ describe('review rounds that escalate to you', () => {
     }
     review(harness, taskId);
     fix(harness, taskId, 'tree-0');
-    review(harness, taskId, blocking('Still off.'));
     expect(harness.openGate(taskId).escalation).toMatchObject({ reason: 'stalled', rounds: 1 });
   });
 
@@ -549,5 +548,148 @@ describe('fix fingerprints', () => {
       'r5',
       'r6',
     ]);
+  });
+});
+
+describe('a fix that changed nothing reuses the last review', () => {
+  const blocking = [{ severity: 'blocking' as const, file: 'src/a.ts', line: 3, message: 'Off by one.' }];
+  const watchdog = [
+    { severity: 'should_fix' as const, file: null, line: null, message: 'Add a post-merge watchdog.' },
+  ];
+
+  function reachReview(harness: Harness) {
+    const taskId = createTask(harness);
+    proposePlan(harness, taskId);
+    for (let phase = 0; phase < 2; phase += 1) {
+      harness.send({
+        type: 'agent.complete_phase',
+        runId: harness.activeRun(taskId).id,
+        summary: 'x',
+        spots: [],
+        judgementCalls: [],
+        treeHash: 'tree-0',
+      });
+    }
+    harness.send({ type: 'checks.record', taskId, results: PASSING });
+    return taskId;
+  }
+
+  function review(harness: Harness, taskId: string, findings: ReviewFinding[]) {
+    harness.send({
+      type: 'agent.report_review',
+      runId: harness.activeRun(taskId).id,
+      summary: null,
+      findings,
+    });
+  }
+
+  function fix(harness: Harness, taskId: string, extra: Record<string, unknown> = {}) {
+    const runId = harness.activeRun(taskId).id;
+    harness.send({
+      type: 'agent.complete_fix',
+      runId,
+      summary: 'No code change.',
+      treeHash: 'tree-0',
+      ...extra,
+      ...resolveReply(harness, runId),
+    });
+  }
+
+  function countReviews(harness: Harness, taskId: string) {
+    return Object.values(harness.state.runs).filter((run) => run.taskId === taskId && run.role === 'reviewer')
+      .length;
+  }
+
+  test('a review stamps what it saw', () => {
+    const harness = createHarness();
+    const taskId = reachReview(harness);
+    review(harness, taskId, []);
+    expect(harness.task(taskId).reviewedInput).toMatch(/^review:[0-9a-f]{8}$/);
+  });
+
+  test('a review fix that changed nothing sends the same findings to you without a second review', () => {
+    const harness = createHarness();
+    const taskId = reachReview(harness);
+    review(harness, taskId, blocking);
+    expect(harness.activeRun(taskId)).toMatchObject({ role: 'agent', purpose: 'fix' });
+    fix(harness, taskId);
+    expect(countReviews(harness, taskId)).toBe(1);
+    expect(listActiveRuns(harness.state).filter((run) => run.taskId === taskId)).toHaveLength(0);
+    expect(harness.openGate(taskId)).toMatchObject({ type: 'review', escalation: { reason: 'stalled' } });
+    expect(harness.task(taskId).findings).toEqual(blocking);
+  });
+
+  test('fix and approve on unchanged work opens the review for you after no extra review', () => {
+    const harness = createHarness();
+    const taskId = reachReview(harness);
+    review(harness, taskId, watchdog);
+    harness.send({
+      type: 'gate.answer',
+      gateId: harness.openGate(taskId).id,
+      decision: 'revise',
+      response: null,
+      verdicts: [{ index: 0, verdict: 'fix', note: null }],
+      thenApprove: true,
+    });
+    fix(harness, taskId);
+    expect(countReviews(harness, taskId)).toBe(1);
+    expect(harness.openGate(taskId)).toMatchObject({ type: 'review', escalation: { reason: 'stalled' } });
+    expect(harness.task(taskId)).toMatchObject({ stage: 'awaiting_review', approveAfterFix: false });
+  });
+
+  test('a clean review with approve after the fix approves an unchanged fix without reviewing again', () => {
+    const harness = createHarness();
+    const taskId = reachReview(harness);
+    review(harness, taskId, []);
+    harness.send({
+      type: 'gate.answer',
+      gateId: harness.openGate(taskId).id,
+      decision: 'revise',
+      response: 'Start the dev server.',
+      thenApprove: true,
+    });
+    fix(harness, taskId);
+    expect(countReviews(harness, taskId)).toBe(1);
+    expect(harness.task(taskId)).toMatchObject({ stage: 'shipping', approveAfterFix: false });
+  });
+
+  test('a revised walkthrough on the same tree gets one fresh review', () => {
+    const harness = createHarness();
+    const taskId = reachReview(harness);
+    review(harness, taskId, watchdog);
+    harness.send({
+      type: 'gate.answer',
+      gateId: harness.openGate(taskId).id,
+      decision: 'revise',
+      response: null,
+      verdicts: [{ index: 0, verdict: 'fix', note: null }],
+    });
+    fix(harness, taskId, {
+      walkthrough: {
+        approach: 'Watch the drop-off.',
+        flow: 'merge → watch',
+        risks: [],
+        testing: { automated: [], manual: [] },
+      },
+    });
+    expect(harness.activeRun(taskId).role).toBe('reviewer');
+    review(harness, taskId, watchdog);
+    expect(countReviews(harness, taskId)).toBe(2);
+    expect(harness.openGate(taskId).type).toBe('review');
+  });
+
+  test('new evidence on the same tree gets one fresh review', () => {
+    const harness = createHarness();
+    const taskId = reachReview(harness);
+    review(harness, taskId, blocking);
+    harness.send({
+      type: 'agent.attach_evidence',
+      runId: harness.activeRun(taskId).id,
+      kind: 'screenshot',
+      title: 'the tabs',
+      uri: '/e/1.png',
+    });
+    fix(harness, taskId);
+    expect(harness.activeRun(taskId).role).toBe('reviewer');
   });
 });

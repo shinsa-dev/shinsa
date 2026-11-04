@@ -496,6 +496,7 @@ function pushTaskResults(task: SeedTask, push: Push, clock: SeedClock) {
       taskId: task.id,
       summary: task.reviewSummary ?? null,
       findings: task.findings,
+      seen: null,
       ...(task.reviewDisagreements ? { disagreements: task.reviewDisagreements } : {}),
     });
   }

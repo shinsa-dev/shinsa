@@ -62,6 +62,7 @@ export function resolveReviewFixPrompt(findings: ReviewFinding[]) {
   return [
     'The agent review found problems. Fix every blocking finding and the suggestions that are clearly right.',
     'Judge each one: if a finding is wrong, say why in your summary instead of changing code.',
+    'A finding that needs no code change, such as a missing watchdog or a step around the merge, is answered in `walkthrough` on `complete_fix`. A fix that changes neither the files nor the hand-over gets no new review: its findings go back to the human as they are.',
     '',
     describeFindingLines(findings),
     describeFixClosing(WORK_FIX_NEXT),
