@@ -23,6 +23,12 @@ export function resolveSignInUrl(returnPath: string) {
   return `${REMOTE_PATHS.signIn}?return=${encodeURIComponent(returnPath)}`;
 }
 
+export const SCOPES_INVALID = {
+  status: 400,
+  code: 'scopes_invalid',
+  message: 'Those scopes are not ones this page can send. Reload Shinsa and try again.',
+} as const;
+
 export function isMachineGone(error: unknown) {
   return error instanceof CloudRefused && error.status === CLOUD_NOT_FOUND.status;
 }
@@ -77,12 +83,11 @@ export function createDashboardClient() {
     updateTeamScopes: (teamId: string, userId: string | null, scopes: AccessScopes | null) =>
       call((remote) =>
         Effect.all([
-          decodeTeamId(teamId),
-          decodeScopesRequest(userId === null ? { scopes } : { userId, scopes }),
-        ]).pipe(
-          Effect.mapError(() => notFound),
-          Effect.flatMap(([id, payload]) => remote.teams.scopes({ params: { teamId: id }, payload }))
-        )
+          decodeTeamId(teamId).pipe(Effect.mapError(() => notFound)),
+          decodeScopesRequest(userId === null ? { scopes } : { userId, scopes }).pipe(
+            Effect.mapError(() => new CloudRefused(SCOPES_INVALID))
+          ),
+        ]).pipe(Effect.flatMap(([id, payload]) => remote.teams.scopes({ params: { teamId: id }, payload })))
       ),
     previewTeam: (invite: string) => call((remote) => remote.teams.preview({ payload: { invite } })),
     readPair: (claimCode: string) => onClaim(claimCode, (remote, params) => remote.pairs.view({ params })),
