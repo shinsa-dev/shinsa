@@ -69,6 +69,7 @@ export function listActiveTasks({ paywall, docs }: SeedRepos): SeedTask[] {
             userId: 'U01CHRISTO',
             messageTs: '1761720000.000100',
             permalink: 'https://superwall.slack.com/archives/C05MCP/p1761720000000100',
+            channelName: 'mcp',
             statusTs: null,
             reaction: null,
           },

@@ -4003,27 +4003,29 @@ Slack ──a card's button──► app.shinsa.dev /slack/interactions
 - **Connecting** (Settings → General → Slack, `components/settings/slack.tsx`): with remote access on, Connect
   Slack opens `https://app.shinsa.dev/slack/connect?instance=<this machine>` (`resolveSlackConnectUrl`). You sign in
   with GitHub there if you are not, then with Slack (OpenID Connect, `openid profile`); a workspace without Shinsa
-  goes on to add the app, which asks for the bot scopes `app_mentions:read`, `channels:history`, `groups:history`,
-  `chat:write`, `reactions:write` and `users:read` (`SLACK_BOT_SCOPES`, `apps/cloud/slack-manifest.json`). Either way your Slack user is
+  goes on to add the app, which asks for the bot scopes `app_mentions:read`, `channels:history`, `channels:read`,
+  `groups:history`, `groups:read`, `chat:write`, `reactions:write` and `users:read` (`SLACK_BOT_SCOPES`, `apps/cloud/slack-manifest.json`). Either way your Slack user is
   linked to that machine and you land on `/slack/linked` (`routes/remote/slack.tsx`), which names the workspace or
   says what went wrong. A machine can be linked in several workspaces; a Slack user to one machine at a time
   (connecting again from another machine moves it). The section reads `GET /api/slack` (`SlackSnapshot`: remote access
   on, the connect link, the links with workspace, user and when, or the problem when app.shinsa.dev cannot be
   reached) when Settings opens and when the window comes back. Disconnect (`POST /api/slack/disconnect`) removes every
   link of this machine; from another device only its owner may (`OwnerOnlyRoute`). Each row leads with when that
-  account last started work here ("Last used 2h ago as Christo · connected 3d ago", or "Not used yet"): the engine
+  account last started work here ("Last used 2h ago · Connected 3d ago", or "Not used yet"): the engine
   adds `lastUsedAt` to each link from its own state (`resolveSlackLastUsedAt`, the newest task whose Slack thread
   that user in that workspace started), so app.shinsa.dev stores nothing for it. Replies in a task's thread and
   decisions from a card's buttons do not count. A page reaching an older engine, whose links lack the field, shows
-  "Connected 3d ago as Christo" as before. A task started from Slack shows a Slack button left of its menu, "Open the
-  Slack thread" (`components/task/slack-thread.tsx`), which opens the thread it came from in a new tab: the mention's
-  permalink, or `https://app.slack.com/client/<team>/<channel>/thread/<channel>-<ts>` when Slack gave none
-  (`resolveSlackThreadUrl`); a read-only shared page leaves it out. The hosted dashboard on
+  "Connected 3d ago". A task started from Slack has a fact beside "Filed by" in its header, "Filed in #support"
+  (`resolveSlackFact`, `components/task/facts.tsx`), or "Filed in Slack" when the channel's name is unknown, which
+  opens the thread it came from in a new tab: the mention's permalink, or
+  `https://app.slack.com/client/<team>/<channel>/thread/<channel>-<ts>` when Slack gave none (`resolveSlackThreadUrl`);
+  a read-only shared page leaves it out. The hosted dashboard on
   app.shinsa.dev shows the same section, below Machines, read from and sent to the first machine of the dashboard.
 - **A mention reaches the machine** as `SlackMention` (`slack/schema.ts`): the event id, the workspace, channel and
   thread (`threadTs`, the mention's own `ts` for a mention outside a thread: the bot always answers in a thread), the
   author with their Slack name, the text with Slack's markup turned into words and the bot's own mention dropped
-  (`resolveSlackReadableText`), a permalink, and the thread's last 100 messages, bots marked. The tunnel route
+  (`resolveSlackReadableText`), a permalink, the channel's name (`conversations.info`; null without `channels:read` or
+  `groups:read`, in a direct message, or when Slack refuses), and the thread's last 100 messages, bots marked. The tunnel route
   `POST /api/slack/events` (`TunnelGate`, `remote/gate/`) is 404 while remote access is off, refuses a body over 1 MB and a
   forward whose `x-shinsa-slack-signature` is not an HMAC over `v1:<ms>:<body>` keyed by the machine's connect key or
   whose `x-shinsa-slack-timestamp` is more than five minutes off (`verifySlackForwardSignature`, 401), then

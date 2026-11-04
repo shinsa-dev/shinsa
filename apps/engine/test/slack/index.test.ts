@@ -60,6 +60,7 @@ const MENTION: SlackMention = {
   userName: 'Christo',
   text: 'the build hangs',
   permalink: null,
+  channelName: null,
   thread: [{ ts: '100.1', userId: 'U1', userName: 'Christo', text: 'the build hangs', bot: false }],
 };
 

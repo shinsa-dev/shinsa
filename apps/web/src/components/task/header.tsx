@@ -6,7 +6,6 @@ import { TaskHeading } from '@/components/task/heading.tsx';
 import { TaskMenu } from '@/components/task/menu.tsx';
 import { useReadOnly, useReadOnlyNote } from '@/components/task/read-only.tsx';
 import { HandoffBanner, SharingBanner } from '@/components/task/sharing-banner.tsx';
-import { TaskSlackThread } from '@/components/task/slack-thread.tsx';
 import { useTaskPageCommands } from '@/hooks/use-task-page-commands.ts';
 import type { TaskView } from '@/hooks/use-task-view.ts';
 import { TASK_TAB, type TaskTab } from '@/lib/tasks/tabs.ts';
@@ -53,7 +52,6 @@ export function TaskHeader({
         <TaskFacts state={state} task={task} className='min-w-0 flex-1' />
         {!readOnly && (
           <div className='flex h-6 shrink-0 items-center gap-2'>
-            <TaskSlackThread task={task} />
             <TaskMenu state={state} task={task} />
           </div>
         )}

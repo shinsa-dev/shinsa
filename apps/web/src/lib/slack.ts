@@ -48,10 +48,10 @@ export function describeSlackStatus(snapshot: SlackSnapshot): SlackStatusView {
 }
 
 export function describeSlackLink(link: SlackLinkUse, now = Date.now()) {
-  if (link.lastUsedAt === undefined)
-    return `${formatSince('Connected', link.linkedAt, now)} as ${link.userName}`;
+  const connected = formatSince('Connected', link.linkedAt, now);
+  if (link.lastUsedAt === undefined) return connected;
   const used = link.lastUsedAt === null ? 'Not used yet' : formatSince('Last used', link.lastUsedAt, now);
-  return `${used} as ${link.userName} · ${formatSince('connected', link.linkedAt, now)}`;
+  return `${used} · ${connected}`;
 }
 
 export const SLACK_POINTS: RemotePoint[] = [

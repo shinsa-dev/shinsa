@@ -43,19 +43,17 @@ describe('Slack’s status in Settings', () => {
     );
   });
 
-  it('names who each workspace is connected as and since when', () => {
-    expect(describeSlackLink({ ...LINK, linkedAt: 1_000 }, 1_000 + 2 * 3_600_000)).toBe(
-      'Connected 2h ago as Christo'
-    );
+  it('says only since when a workspace is connected when the engine does not know its last use', () => {
+    expect(describeSlackLink({ ...LINK, linkedAt: 1_000 }, 1_000 + 2 * 3_600_000)).toBe('Connected 2h ago');
   });
 
   it('leads with when the account last started a task here, then when it was connected', () => {
     const hour = 3_600_000;
     expect(describeSlackLink({ ...LINK, linkedAt: 0, lastUsedAt: 70 * hour }, 72 * hour)).toBe(
-      'Last used 2h ago as Christo · connected 3d ago'
+      'Last used 2h ago · Connected 3d ago'
     );
     expect(describeSlackLink({ ...LINK, linkedAt: 0, lastUsedAt: null }, 72 * hour)).toBe(
-      'Not used yet as Christo · connected 3d ago'
+      'Not used yet · Connected 3d ago'
     );
   });
 });

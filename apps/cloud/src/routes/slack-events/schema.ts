@@ -61,6 +61,10 @@ export const Replies = Schema.Struct({ messages: Schema.optional(Schema.Array(Sc
 
 export const Permalink = Schema.Struct({ permalink: Schema.optional(Schema.String) });
 
+export const ChannelInfo = Schema.Struct({
+  channel: Schema.optional(Schema.Struct({ name: Schema.optional(Schema.String) })),
+});
+
 export const InteractionForm = Schema.Struct({ payload: Schema.String });
 
 export const BlockActions = Schema.Struct({
