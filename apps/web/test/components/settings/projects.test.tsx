@@ -1,10 +1,18 @@
 import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
-import type { CoverageSetting, Project, ProjectInput, Repo, ShinsaState } from '@shinsa/core';
+import {
+  type CoverageSetting,
+  type Project,
+  type ProjectInput,
+  type Repo,
+  resolveEngineInfo,
+  type ShinsaState,
+} from '@shinsa/core';
 import { TooltipProvider } from '@shinsa/ui/components/tooltip';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { ProjectSettings } from '@/components/settings/projects.tsx';
 import { type CoverageDetectionMap, resetCoverageDetection } from '@/lib/connection/coverage.ts';
 import type { ProjectActions } from '@/lib/projects.ts';
+import { spyOnEngine } from '../../support/engine.ts';
 import { findTooltipText } from '../../support/hover.ts';
 import { createWatchSuggestion } from '../../support/schedules.ts';
 import { createProject, createRepo, createShinsaState } from '../../support/state.ts';
@@ -40,6 +48,7 @@ function createActions(overrides: Partial<ProjectActions> = {}) {
 let detected: CoverageDetectionMap = {};
 
 beforeEach(() => {
+  spyOnEngine();
   resetCoverageDetection();
   detected = {};
   spyOn(globalThis, 'fetch').mockImplementation((async () =>
@@ -150,6 +159,52 @@ describe('Settings → Projects', () => {
     changes.push(...observer.takeRecords());
     observer.disconnect();
     expect(changes).toEqual([]);
+  });
+
+  it('offers no usage limit on an engine that cannot hold work at one', async () => {
+    const engine = resolveEngineInfo('1.0.0');
+    spyOnEngine({
+      ...engine,
+      features: engine.features.filter((feature) => feature !== 'usage.pace_limits'),
+    });
+    renderProjects(superwallState());
+    fireEvent.click(screen.getByRole('button', { name: 'Project options' }));
+    await settle();
+    expect(screen.getByRole('menuitem', { name: 'Rename…' })).toBeDefined();
+    expect(screen.queryByRole('menuitem', { name: 'Set usage limit…' })).toBeNull();
+  });
+
+  it('sets a daily usage limit for the project, shows it beside the key and clears it when emptied', async () => {
+    const actions = renderProjects(superwallState());
+    await openMenuItem('Set usage limit…');
+    const field = screen.getByLabelText('Daily usage limit (% of a weekly limit)');
+    expect(screen.getByText('Leave it empty for no limit.')).toBeDefined();
+    fireEvent.change(field, { target: { value: '0' } });
+    fireEvent.submit(field.closest('form') as HTMLFormElement);
+    await settle();
+    expect(screen.getByText('Type a percentage above zero, like 20.')).toBeDefined();
+    expect(actions.save).not.toHaveBeenCalled();
+    fireEvent.change(field, { target: { value: '20' } });
+    fireEvent.submit(field.closest('form') as HTMLFormElement);
+    await waitFor(() => expect(actions.save).toHaveBeenCalled());
+    expect(actions.save.mock.calls[0]).toEqual([
+      expect.objectContaining({ id: 'p1', usageLimit: 20 }),
+      'Usage limit saved.',
+    ]);
+  });
+
+  it('shows a project’s usage limit and offers to change it', async () => {
+    const actions = renderProjects(createShinsaState({ projects: [{ ...SUPERWALL, usageLimit: 12.5 }] }));
+    expect(await findTooltipText(screen.getByText('12.5% a day'))).toBe(
+      'Daily usage limit for this project’s tasks'
+    );
+    await openMenuItem('Change usage limit…');
+    const field = screen.getByLabelText('Daily usage limit (% of a weekly limit)') as HTMLInputElement;
+    expect(field.value).toBe('12.5');
+    fireEvent.change(field, { target: { value: '' } });
+    fireEvent.submit(field.closest('form') as HTMLFormElement);
+    await waitFor(() => expect(actions.save).toHaveBeenCalled());
+    expect(actions.save.mock.calls[0]?.[0]).toMatchObject({ id: 'p1', usageLimit: null });
   });
 
   it('saves the description with Enter', async () => {

@@ -83,7 +83,7 @@ export function SlackGroup({
       <ConfirmDialog
         control={dialog.control}
         title='Disconnect Slack?'
-        body='Mentions of @Shinsa from your Slack accounts stop reaching this machine. Tasks already started keep running here, and you can connect again later.'
+        body='Mentions of @Shinsa stop reaching this machine. Tasks already started keep running, and you can connect again later.'
         action='Disconnect Slack'
         onConfirm={() => void requestWithToast(actions.disconnect, 'Slack is disconnected.')}
       />

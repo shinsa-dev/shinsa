@@ -64,6 +64,7 @@ import {
   listGroupModelItems,
   listGroupSpeedItems,
   listSpeedItems,
+  listDailyLimitItems,
   listUsageLimitItems,
   MERGE_ITEMS,
   MODELS_TITLE,
@@ -80,6 +81,7 @@ import {
   resolveAttentionValue,
   resolveBudgetValue,
   resolveCompactionValue,
+  resolveDailyLimitValue,
   resolveDelegationLimitValue,
   resolveFixRoundValue,
   resolveGroupModel,
@@ -96,6 +98,7 @@ import {
   USAGE_LIMIT_TITLE,
   updateSettings,
   WORKTREES_TITLE,
+  DAILY_LIMIT_TITLE,
 } from '@/lib/settings.ts';
 import { parseUpdateChannel, UPDATE_CHANNEL_ITEMS, UPDATES_LABEL } from '@/lib/updates.ts';
 import { VERSIONS_SECTION } from '@/lib/versions.ts';
@@ -415,6 +418,13 @@ function listUsageChoices(
   rates: Map<string, UsageRate | null> | null
 ): Command[] {
   const choices = [
+    settingChoice(
+      'daily-usage-limit',
+      DAILY_LIMIT_TITLE,
+      listDailyLimitItems(settings),
+      resolveDailyLimitValue(settings),
+      (value) => patchSettings({ dailyUsageLimit: parseUsageLimit(value) })
+    ),
     settingChoice(
       'usage-limit',
       USAGE_LIMIT_TITLE,

@@ -20,6 +20,7 @@ export * from './costs/index.ts';
 export * from './decide/index.ts';
 export * from './domain/index.ts';
 export * from './effects/index.ts';
+export * from './forecast/index.ts';
 export type { ShinsaEvent, ShinsaEventInput } from './events/index.ts';
 export * from './progress/index.ts';
 export {

@@ -14,6 +14,7 @@ export const ENGINE_FEATURES = [
   'remote.terminals',
   'attention',
   'worktree-root',
+  'usage.pace_limits',
 ] as const;
 
 export type EngineFeature = (typeof ENGINE_FEATURES)[number];

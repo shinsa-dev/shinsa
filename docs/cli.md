@@ -1423,7 +1423,7 @@ Every task agent's tool: `settings_get` (reads).
 
 | Argument | Kind | What it is |
 | --- | --- | --- |
-| `<key>` | text, optional | One of defaultProvider, defaultModel, maxFixRounds, delegationLimit, mergeMethod, attentionLimit, approvePlans, agentModels, agentProviders, agentFastModes, taskBudgetUsd, taskUsageLimit, autoResume, snoozeLimited, accountSwitchAt, idleCompaction, compactionLeadMinutes, compaction, fastMode, watchdogHours, watchdogFirstCheckMinutes, watchdogMaxGapHours, taskCapacity, placementPolicies, shareLimit, sharePreset. |
+| `<key>` | text, optional | One of defaultProvider, defaultModel, maxFixRounds, delegationLimit, mergeMethod, attentionLimit, approvePlans, agentModels, agentProviders, agentFastModes, taskBudgetUsd, taskUsageLimit, dailyUsageLimit, autoResume, snoozeLimited, accountSwitchAt, idleCompaction, compactionLeadMinutes, compaction, fastMode, watchdogHours, watchdogFirstCheckMinutes, watchdogMaxGapHours, taskCapacity, placementPolicies, shareLimit, sharePreset. |
 
 #### shinsa settings set
 
@@ -1437,7 +1437,7 @@ Every task agent's tool: `settings_set`. Sends `settings.change`.
 
 | Argument | Kind | What it is |
 | --- | --- | --- |
-| `<key>` | text, required | One of defaultProvider, defaultModel, maxFixRounds, delegationLimit, mergeMethod, attentionLimit, approvePlans, agentModels, agentProviders, agentFastModes, taskBudgetUsd, taskUsageLimit, autoResume, snoozeLimited, accountSwitchAt, idleCompaction, compactionLeadMinutes, compaction, fastMode, watchdogHours, watchdogFirstCheckMinutes, watchdogMaxGapHours, taskCapacity, placementPolicies, shareLimit, sharePreset. Only the human changes approvePlans, mergeMethod, taskBudgetUsd, taskUsageLimit, autoResume, snoozeLimited, accountSwitchAt, fastMode, agentFastModes, delegationLimit, shareLimit, sharePreset. |
+| `<key>` | text, required | One of defaultProvider, defaultModel, maxFixRounds, delegationLimit, mergeMethod, attentionLimit, approvePlans, agentModels, agentProviders, agentFastModes, taskBudgetUsd, taskUsageLimit, dailyUsageLimit, autoResume, snoozeLimited, accountSwitchAt, idleCompaction, compactionLeadMinutes, compaction, fastMode, watchdogHours, watchdogFirstCheckMinutes, watchdogMaxGapHours, taskCapacity, placementPolicies, shareLimit, sharePreset. Only the human changes approvePlans, mergeMethod, taskBudgetUsd, taskUsageLimit, dailyUsageLimit, autoResume, snoozeLimited, accountSwitchAt, fastMode, agentFastModes, delegationLimit, shareLimit, sharePreset. |
 | `<value>` | text, required | The new value. |
 
 ### projects
@@ -1471,7 +1471,7 @@ Every task agent's tool: `projects_show` (reads).
 Create a project, or change one with --id.
 
 ```
-shinsa projects write [--id <text>] [--name <text>] [--key <text>] [--color <blue|purple|green|orange|pink|sky|amber|red>] [--description <text>] [--folders <list>] [--json]
+shinsa projects write [--id <text>] [--name <text>] [--key <text>] [--color <blue|purple|green|orange|pink|sky|amber|red>] [--description <text>] [--folders <list>] [--usage-limit <number>] [--json]
 ```
 
 Every task agent's tool: `projects_write`. Sends `project.write`.
@@ -1484,6 +1484,7 @@ Every task agent's tool: `projects_write`. Sends `project.write`.
 | `--color` | choice, optional | Its colour. |
 | `--description` | text, optional | What the project is. Agents read it. |
 | `--folders` | list, optional | Folders whose repositories all belong to it, replacing the ones it has. Repeat the option for each. |
+| `--usage-limit` | number, optional | Its daily usage limit: % of one account’s weekly limit over the last 24 hours, 0 to turn it off. Only the human changes it. |
 
 #### shinsa projects remove
 

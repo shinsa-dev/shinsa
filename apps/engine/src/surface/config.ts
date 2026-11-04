@@ -155,6 +155,9 @@ async function buildProjectInput(client: SurfaceClient, values: Values): Promise
         ? { folders: existing.folders }
         : {}
       : { folders: folders.map((folder) => resolveProjectFolder(resolveFolderPath(folder), homedir())) }),
+    ...(typeof values.usageLimit === 'number'
+      ? { usageLimit: values.usageLimit > 0 ? values.usageLimit : null }
+      : {}),
   };
 }
 
@@ -294,6 +297,12 @@ export const CONFIG_SPECS: SurfaceSpec[] = [
         kind: 'list',
         description:
           'Folders whose repositories all belong to it, replacing the ones it has. Repeat the option for each.',
+      },
+      {
+        name: 'usageLimit',
+        kind: 'number',
+        description:
+          'Its daily usage limit: % of one account’s weekly limit over the last 24 hours, 0 to turn it off. Only the human changes it.',
       },
     ],
     build: async (values, client) => ({

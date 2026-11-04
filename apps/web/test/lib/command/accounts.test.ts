@@ -92,6 +92,13 @@ describe('usage waits', () => {
       ['t', true],
     ]);
     expect(listUsageWaitCommands(createTask({ id: 't' }))).toEqual([]);
+    const pace: UsageWait = {
+      ...WAIT,
+      cause: 'pace',
+      pace: { scope: 'daily', limit: 20, percent: 21, projectId: null, stageReason: 'building' },
+    };
+    const held = listUsageWaitCommands(createTask({ id: 't', usageWait: pace }));
+    expect(held.map((command) => command.label)).toEqual(['Resume now']);
     resume.mockRestore();
     change.mockRestore();
   });

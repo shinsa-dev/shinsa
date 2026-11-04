@@ -16,7 +16,7 @@ export const BASELINE_TITLE = 'Always run before review';
 export const BASELINE_DIALOG = {
   title: BASELINE_TITLE,
   description:
-    'Shinsa runs these commands in the task’s worktree once the last phase is built, beside the checks the agent chose, before the agent review. Leave it empty and nothing extra runs.',
+    'Shinsa runs these commands once the last phase is built, before the agent review. Leave it empty to run nothing extra.',
   label: 'Commands',
   hint: 'One per line. Keep them quick: CI runs the whole suite on the pull request.',
   placeholder: 'bun run check-types',

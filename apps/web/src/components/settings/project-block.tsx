@@ -16,6 +16,7 @@ import type { CoverageDetectionMap } from '@/lib/connection/coverage.ts';
 import {
   describeProjectKey,
   describeProjectRemoval,
+  describeProjectUsageLimit,
   FOLDER_HINT,
   listProjectRepoRows,
   NO_PLACES,
@@ -182,6 +183,7 @@ function ProjectHeader({
   onAddFolder,
 }: ProjectProps & { repoCount: number; onAddFolder: () => void }) {
   const dialog = useDialogState<ProjectDialogValue>();
+  const limit = describeProjectUsageLimit(project);
   return (
     <>
       <ProjectDotIcon color={project.color} />
@@ -191,6 +193,11 @@ function ProjectHeader({
           {project.key}
         </Badge>
       </Hint>
+      {limit && (
+        <Hint label='Daily usage limit for this project’s tasks'>
+          <span className='shrink-0 text-2xs text-fg-2 tabular-nums'>{limit}</span>
+        </Hint>
+      )}
       <span className='flex-1' />
       <AddMenu state={state} project={project} actions={actions} onAddFolder={onAddFolder} />
       <ProjectMenu project={project} actions={actions} onShow={dialog.show} />

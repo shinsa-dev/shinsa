@@ -49,6 +49,7 @@ describe('the settings a command may change', () => {
       agentFastModes: {},
       taskBudgetUsd: null,
       taskUsageLimit: null,
+      dailyUsageLimit: null,
       autoResume: true,
       snoozeLimited: false,
       accountSwitchAt: 90,
