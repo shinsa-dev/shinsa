@@ -35,8 +35,6 @@ import {
   TIME_MESSAGE,
   TOOLTIP_DELAY_MESSAGE,
   VERB_CATALOG,
-  ENGINE_RUNTIME_FILES,
-  ENGINE_RUNTIME_STALE_MESSAGE,
 } from './lint-rules.ts';
 import { RAW_SELECTION_MESSAGE, RAW_SELECTION_PATTERN } from './lint-selection.ts';
 import { listToastViolations } from './lint-toast.ts';
@@ -563,11 +561,8 @@ function collectEnginePromiseViolations(file: string, source: string, violations
 
 function collectEngineRuntimeViolations(file: string, source: string, violations: Violation[]): void {
   if (!isEngineRuntimeSource(file)) return;
-  const lines = listEngineRuntimeLines(file, source);
-  const listed = ENGINE_RUNTIME_FILES.has(file.replace(/^apps\/engine\/src\//, ''));
-  if (listed && lines.length === 0) violations.push({ file, line: 1, message: ENGINE_RUNTIME_STALE_MESSAGE });
-  if (listed) return;
-  for (const line of lines) violations.push({ file, line, message: ENGINE_RUNTIME_MESSAGE });
+  for (const line of listEngineRuntimeLines(file, source))
+    violations.push({ file, line, message: ENGINE_RUNTIME_MESSAGE });
 }
 
 function parseSource(file: string, source: string) {
