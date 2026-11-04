@@ -50,6 +50,7 @@ export {
 } from './forward.ts';
 export {
   listSlackStatusGates,
+  resolveSlackMergeMessage,
   resolveSlackPostMessage,
   resolveSlackReaction,
   resolveSlackSessionStatus,
@@ -64,6 +65,7 @@ export {
   serializeSlackDeclined,
   serializeSlackGate,
   serializeSlackLinkPrompt,
+  serializeSlackMerged,
   serializeSlackOffline,
   serializeSlackResult,
 } from './messages.ts';

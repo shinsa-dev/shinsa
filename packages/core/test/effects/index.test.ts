@@ -148,6 +148,9 @@ describe('slack effects', () => {
     expect(resolveEffectKey({ kind: 'slack.post', thread, taskId: 't', post: { kind: 'result' } }, 9)).toBe(
       'slack.post:T1:C1:100.1:9'
     );
+    expect(resolveEffectKey({ kind: 'slack.merge', thread, taskId: 't', round: 1 }, 9)).toBe(
+      'slack.merge:T1:C1:100.1:9'
+    );
     expect(resolveEffectKey({ kind: 'slack.react', thread, messageTs: '100.3', reaction: 'eyes' }, 9)).toBe(
       'slack.react:T1:C1:100.1:100.3'
     );
@@ -158,6 +161,7 @@ describe('slack effects', () => {
       resolveEffectLane({ kind: 'slack.evaluate', mention }),
       resolveEffectLane({ kind: 'slack.status', taskId: 't', thread }),
       resolveEffectLane({ kind: 'slack.post', thread, taskId: 't', post: { kind: 'completed' } }),
+      resolveEffectLane({ kind: 'slack.merge', thread, taskId: 't', round: 1 }),
       resolveEffectLane({ kind: 'slack.react', thread, messageTs: '100.3', reaction: 'inbox_tray' }),
     ];
     expect(new Set(lanes)).toEqual(new Set(['slack:T1:C1:100.1']));

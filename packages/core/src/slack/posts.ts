@@ -1,1 +1,1 @@
-export type SlackPost = { kind: 'result' } | { kind: 'completed' };
+export type SlackPost = { kind: 'result' } | { kind: 'completed' } | { kind: 'tripped'; watchdogId: string };

@@ -9,6 +9,11 @@ export interface SlackDecided {
   text: string;
 }
 
+export interface SlackMergePost {
+  round: number;
+  ts: string | null;
+}
+
 export interface SlackThreadLink extends SlackThreadRef {
   userId: string;
   messageTs: string;
@@ -17,6 +22,7 @@ export interface SlackThreadLink extends SlackThreadRef {
   statusTs: string | null;
   reaction: string | null;
   decided?: SlackDecided | null;
+  merge?: SlackMergePost | null;
 }
 
 export function resolveSlackThreadKey(thread: SlackThreadRef) {

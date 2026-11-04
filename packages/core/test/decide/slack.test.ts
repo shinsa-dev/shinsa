@@ -1,11 +1,22 @@
 import { describe, expect, test } from 'bun:test';
-import type { SlackDecision, SlackMention, TaskShape } from '../../src/index.ts';
+import {
+  type MergeStep,
+  resolveMergeStepKey,
+  type SlackDecision,
+  type SlackMention,
+  type TaskShape,
+  type WatchdogSpec,
+} from '../../src/index.ts';
 import {
   approve,
+  completePhase,
   createHarness,
   type Harness,
+  linkSession,
+  PASSING,
   proposePlan,
   pullRequest,
+  pushed,
   reachReviewGate,
   readyWorktree,
   registerRepo,
@@ -57,6 +68,81 @@ function writeProject(harness: Harness, name: string) {
 
 function postsOf(harness: Harness) {
   return harness.effectsOf('slack.post').map((effect) => effect.post);
+}
+
+function mergesOf(harness: Harness) {
+  return harness.effectsOf('slack.merge');
+}
+
+const LATENCY: WatchdogSpec = {
+  title: 'Checkout latency',
+  check: 'p95 of POST /checkout stays under 400 ms.',
+  source: { server: 'maple', data: 'OpenTelemetry traces of the API' },
+  sourceRequest: null,
+  firstCheckMinutes: 360,
+  maxGapHours: 6,
+  forHours: 48,
+  startsOn: 'merge',
+  productionCheck: null,
+};
+
+const MIGRATION: MergeStep = {
+  when: 'post_merge',
+  kind: 'migration',
+  title: 'Run the migration',
+  detail: 'Adds the invoices table.',
+  command: 'bun run db:migrate',
+};
+
+function mergeFromSlack(harness: Harness, steps: MergeStep[] = []) {
+  const taskId = startFromSlack(harness);
+  readyWorktree(harness, taskId);
+  proposePlan(harness, taskId);
+  linkSession(harness, taskId, 'agent-session');
+  completePhase(harness, taskId);
+  harness.send({
+    type: 'agent.complete_phase',
+    runId: harness.activeRun(taskId).id,
+    summary: 'Sped up checkout.',
+    spots: [],
+    judgementCalls: [],
+    walkthrough: {
+      approach: 'Cache the price lookup.',
+      flow: 'checkout → cache → price',
+      risks: [],
+      testing: { automated: [], manual: [] },
+      watchdogs: [LATENCY],
+      ...(steps.length > 0 ? { steps } : {}),
+    },
+  });
+  harness.send({ type: 'checks.record', taskId, results: PASSING });
+  harness.send({
+    type: 'agent.report_review',
+    runId: harness.activeRun(taskId).id,
+    summary: null,
+    findings: [],
+  });
+  approve(harness, taskId);
+  pushed(harness, taskId);
+  harness.send({ type: 'pull_request.record', taskId, pullRequest: pullRequest({ state: 'merged' }) });
+  return taskId;
+}
+
+function fireWatchdog(harness: Harness, taskId: string) {
+  const watchdog = harness.task(taskId).watchdogs?.[0];
+  const dueAt = watchdog?.nextCheckAt ?? 0;
+  harness.advance(dueAt - harness.now);
+  harness.send({ type: 'watchdog.fire', taskId, watchdogId: watchdog?.id ?? '', dueAt });
+}
+
+function endWatchCheck(harness: Harness, taskId: string, summary: string, reached = true) {
+  harness.send({
+    type: 'agent.report_read',
+    runId: harness.activeRun(taskId).id,
+    summary,
+    reached,
+    live: null,
+  });
 }
 
 describe('a mention in a thread no task holds', () => {
@@ -211,16 +297,18 @@ describe('what a linked task sends to its thread', () => {
     expect(postsOf(harness)).toEqual([{ kind: 'result' }]);
   });
 
-  test('a merge is a new message, and marking it done afterwards posts nothing more', () => {
+  test('a merge is one merge message, and marking it done afterwards sends nothing more', () => {
     const harness = createHarness();
     const taskId = startFromSlack(harness);
     readyWorktree(harness, taskId);
     reachReviewGate(harness, taskId);
     approve(harness, taskId);
     harness.send({ type: 'pull_request.record', taskId, pullRequest: pullRequest({ state: 'merged' }) });
-    expect(postsOf(harness)).toEqual([{ kind: 'completed' }]);
+    expect(mergesOf(harness)).toEqual([{ kind: 'slack.merge', thread: THREAD, taskId, round: 1 }]);
+    expect(harness.task(taskId).slack?.merge).toEqual({ round: 1, ts: null });
     harness.send({ type: 'task.complete', taskId });
-    expect(postsOf(harness)).toEqual([{ kind: 'completed' }]);
+    expect(mergesOf(harness)).toHaveLength(1);
+    expect(postsOf(harness)).toEqual([]);
   });
 
   test('a task done with no result and no merge is a new message once', () => {
@@ -427,5 +515,88 @@ describe('a decision from a button or a form in Slack', () => {
         decision: decision({ gateId: gate.id, decision: 'approve', choice: 0 }),
       })
     ).toThrow('That choice is no longer on the question');
+  });
+});
+
+describe('a merged task with watchdogs', () => {
+  test('posts the merge message once and edits it after each check, however many checks run', () => {
+    const harness = createHarness();
+    const taskId = mergeFromSlack(harness);
+    expect(harness.task(taskId).stage).toBe('merged');
+    expect(mergesOf(harness)).toHaveLength(1);
+    harness.send({ type: 'slack.record_merge', taskId, round: 1, ts: '300.1' });
+    expect(harness.task(taskId).slack?.merge).toEqual({ round: 1, ts: '300.1' });
+    const statuses = harness.effectsOf('slack.status').length;
+    const stages: string[] = [];
+    for (const _ of [1, 2, 3]) {
+      fireWatchdog(harness, taskId);
+      stages.push(harness.task(taskId).stage);
+      endWatchCheck(harness, taskId, 'p95 is 210 ms.');
+      stages.push(harness.task(taskId).stage);
+    }
+    expect(stages).toEqual(['watching', 'merged', 'watching', 'merged', 'watching', 'merged']);
+    expect(postsOf(harness)).toEqual([]);
+    expect(mergesOf(harness)).toHaveLength(4);
+    expect(mergesOf(harness).every((effect) => effect.round === 1)).toBe(true);
+    expect(harness.effectsOf('slack.status')).toHaveLength(statuses);
+    expect(harness.task(taskId).slack?.merge).toEqual({ round: 1, ts: '300.1' });
+  });
+
+  test('a check that cannot reach its source only edits the merge message', () => {
+    const harness = createHarness();
+    const taskId = mergeFromSlack(harness);
+    fireWatchdog(harness, taskId);
+    endWatchCheck(harness, taskId, 'Maple did not answer.', false);
+    expect(harness.task(taskId).stage).toBe('merged');
+    expect(postsOf(harness)).toEqual([]);
+    expect(mergesOf(harness)).toHaveLength(2);
+  });
+
+  test('a watchdog that finds a problem posts one new message and edits the merge message', () => {
+    const harness = createHarness();
+    const taskId = mergeFromSlack(harness);
+    fireWatchdog(harness, taskId);
+    harness.send({
+      type: 'agent.file_report',
+      runId: harness.activeRun(taskId).id,
+      title: 'Checkout is slow in Safari',
+      request: 'Fix the cache miss on Safari.',
+      reportId: null,
+      link: 'https://maple.dev/q/checkout-p95-safari',
+      author: null,
+      postedAt: null,
+      text: 'p95 is 1.8 s in Safari.',
+      forkOf: null,
+      repoId: null,
+    });
+    endWatchCheck(harness, taskId, 'p95 is 1.8 s in Safari since the merge.');
+    const watchdog = harness.task(taskId).watchdogs?.[0];
+    expect(watchdog?.status).toBe('tripped');
+    expect(postsOf(harness)).toEqual([{ kind: 'tripped', watchdogId: watchdog?.id ?? '' }]);
+    expect(mergesOf(harness)).toHaveLength(2);
+  });
+
+  test('stopping a watchdog and ticking a step after the merge edit the merge message', () => {
+    const harness = createHarness();
+    const taskId = mergeFromSlack(harness, [MIGRATION]);
+    const watchdogId = harness.task(taskId).watchdogs?.[0]?.id ?? '';
+    harness.send({ type: 'merge_step.tick', taskId, key: resolveMergeStepKey(MIGRATION), done: true });
+    expect(mergesOf(harness)).toHaveLength(2);
+    harness.send({ type: 'watchdog.stop', taskId, watchdogId });
+    expect(mergesOf(harness)).toHaveLength(3);
+    expect(postsOf(harness)).toEqual([]);
+  });
+
+  test('records the ts of the merge message only for the round it was posted for, once', () => {
+    const harness = createHarness();
+    const taskId = mergeFromSlack(harness);
+    expect(harness.send({ type: 'slack.record_merge', taskId, round: 2, ts: '300.1' }).events).toEqual([]);
+    harness.send({ type: 'slack.record_merge', taskId, round: 1, ts: '300.1' });
+    expect(harness.send({ type: 'slack.record_merge', taskId, round: 1, ts: '300.1' }).events).toEqual([]);
+    const other = createHarness();
+    const unmerged = startFromSlack(other);
+    expect(
+      other.send({ type: 'slack.record_merge', taskId: unmerged, round: 1, ts: '300.1' }).events
+    ).toEqual([]);
   });
 });

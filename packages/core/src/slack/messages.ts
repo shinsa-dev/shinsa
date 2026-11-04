@@ -3,7 +3,9 @@ import { capitalise, describeCount } from '../chat/text.ts';
 import { isTaskClosed, isTaskResting } from '../domain/rounds.ts';
 import type { SlackDecided } from '../domain/slack.ts';
 import type { Gate, GateDecision, GateType, Task, TaskStage } from '../domain/types.ts';
+import type { Watchdog, WatchdogStatus } from '../domain/watchdogs.ts';
 import { assembleReport } from '../report/assemble.ts';
+import { listOpenMergeSteps } from '../report/merge-steps.ts';
 import type { ShinsaState } from '../state/index.ts';
 import {
   createSlackActions,
@@ -148,14 +150,25 @@ function resolveAttentionGate(gates: readonly Gate[]) {
   );
 }
 
-export function resolveSlackSessionStatus(task: Task, gates: readonly Gate[]): SlackSessionStatus {
+function resolveSlackStage(task: Task): TaskStage {
+  if (task.stage !== 'watching') return task.stage;
+  return task.pullRequest?.state === 'merged' ? 'merged' : 'done';
+}
+
+function resolveSlackTask(task: Task): Task {
+  return task.stage === 'watching' ? { ...task, stage: resolveSlackStage(task) } : task;
+}
+
+export function resolveSlackSessionStatus(watched: Task, gates: readonly Gate[]): SlackSessionStatus {
+  const task = resolveSlackTask(watched);
   if (isTaskClosed(task)) return 'closed';
   if (resolveAttentionGate(gates) || NEEDS_YOU_STAGES.has(task.stage)) return 'suspended';
   if (isTaskResting(task) || task.stage === 'merged' || task.stage === 'answered') return 'active';
   return 'processing';
 }
 
-export function resolveSlackReaction(task: Task, gates: readonly Gate[]): SlackReaction {
+export function resolveSlackReaction(watched: Task, gates: readonly Gate[]): SlackReaction {
+  const task = resolveSlackTask(watched);
   if (task.stage === 'cancelled') return SLACK_REACTIONS.cancelled;
   if (isTaskClosed(task) || task.stage === 'merged' || task.stage === 'answered') return SLACK_REACTIONS.done;
   const attention = resolveAttentionGate(gates);
@@ -183,6 +196,7 @@ function serializeSlackStatusView(
 }
 
 function resolveStatusLabel(task: Task) {
+  if (task.stage === 'watching') return capitalise(STAGE_WORDS[resolveSlackStage(task)]);
   return capitalise(task.stageReason.trim() || STAGE_WORDS[task.stage]);
 }
 
@@ -484,14 +498,100 @@ function serializeNote(fallback: string, title: string, detail: string, ref: Sla
   ]);
 }
 
-function serializeSlackCompletedView(ref: SlackTaskRef, merged: boolean) {
-  return merged
-    ? serializeNote(`${ref.label} is merged.`, 'Merged', 'The pull request is merged.', ref)
-    : serializeNote(`${ref.label} is done.`, 'Done', 'The task is finished.', ref);
+export function serializeSlackCompleted(task: Task, taskUrl: string) {
+  const ref = resolveTaskRef(task, taskUrl);
+  return serializeNote(`${ref.label} is done.`, 'Done', 'The task is finished.', ref);
 }
 
-export function serializeSlackCompleted(task: Task, taskUrl: string) {
-  return serializeSlackCompletedView(resolveTaskRef(task, taskUrl), task.pullRequest?.state === 'merged');
+interface SlackMergedView {
+  watchdogs: string[];
+  steps: string[];
+}
+
+const WATCHDOG_STATE_WORDS: Record<Exclude<WatchdogStatus, 'watching' | 'passed'>, string> = {
+  needs_source: 'Waits for a data source.',
+  awaiting_production: 'Waits for the change to reach production.',
+  tripped: 'Found a problem.',
+  stopped: 'Stopped.',
+};
+
+function serializeSlackDate(at: number) {
+  return `<!date^${Math.floor(at / 1000)}^{date_short_pretty} at {time}|${new Date(at).toISOString()}>`;
+}
+
+function describeWatchdogState(watchdog: Watchdog) {
+  if (watchdog.status === 'passed')
+    return `Passed. Found nothing wrong in ${describeCount(watchdog.checks.length, 'check')}.`;
+  if (watchdog.status !== 'watching') return WATCHDOG_STATE_WORDS[watchdog.status];
+  const healthy = watchdog.checks.length > 0 ? ' Nothing wrong so far.' : '';
+  if (watchdog.nextCheckAt === null) return `Watching.${healthy}`;
+  return `Watching.${healthy} Next check ${serializeSlackDate(watchdog.nextCheckAt)}.`;
+}
+
+function serializeSlackMergedView(ref: SlackTaskRef, view: SlackMergedView): SlackMessage {
+  const watchdogs =
+    view.watchdogs.length > 0 ? [createSlackSection(serializeLines(['*Watchdogs*', ...view.watchdogs]))] : [];
+  const steps =
+    view.steps.length > 0
+      ? [createSlackSection(serializeLines(['*Still to do after the merge*', ...view.steps]))]
+      : [];
+  return createSlackMessage(`${ref.label} is merged.`, [
+    createSlackSection('*Merged*\nThe pull request is merged.'),
+    ...watchdogs,
+    ...steps,
+    serializeFooter(ref),
+  ]);
+}
+
+export function serializeSlackMerged(task: Task, round: number, taskUrl: string) {
+  return serializeSlackMergedView(resolveTaskRef(task, taskUrl), {
+    watchdogs: (task.watchdogs ?? [])
+      .filter((watchdog) => watchdog.round === round)
+      .map((watchdog) => `• *${escapeSlackText(watchdog.title)}*: ${describeWatchdogState(watchdog)}`),
+    steps: listOpenMergeSteps(task, 'post_merge')
+      .filter((step) => step.round === round)
+      .map((step) => `• ${escapeSlackText(step.title)}`),
+  });
+}
+
+interface SlackTrippedView {
+  title: string;
+  summary: string | null;
+  filed: { label: string; url: string }[];
+}
+
+function serializeSlackTrippedView(ref: SlackTaskRef, view: SlackTrippedView): SlackMessage {
+  const filed = view.filed.map((task) => `• ${serializeTrustedLink(task.label, task.url)}`);
+  return createSlackMessage(`${ref.label}: the watchdog “${view.title}” found a problem.`, [
+    createSlackHeader('Watchdog found a problem'),
+    createSlackSection(
+      serializeLines([
+        `*${escapeSlackText(view.title)}*`,
+        view.summary ? serializeQuote(resolveLead(view.summary)) : null,
+      ])
+    ),
+    ...(filed.length > 0 ? [createSlackSection(serializeLines(['*Filed as*', ...filed]))] : []),
+    serializeFooter(ref),
+  ]);
+}
+
+function serializeSlackTripped(
+  state: ShinsaState,
+  task: Task,
+  watchdogId: string,
+  resolveTaskUrl: (taskId: string) => string
+) {
+  const watchdog = task.watchdogs?.find((candidate) => candidate.id === watchdogId);
+  if (!watchdog) return null;
+  const filed = [...new Set([...watchdog.forkTaskIds, ...watchdog.linkedTaskIds])].flatMap((id) => {
+    const report = state.tasks[id];
+    return report ? [resolveTaskRef(report, resolveTaskUrl(id))] : [];
+  });
+  return serializeSlackTrippedView(resolveTaskRef(task, resolveTaskUrl(task.id)), {
+    title: watchdog.title,
+    summary: watchdog.checks.at(-1)?.summary ?? null,
+    filed,
+  });
 }
 
 export function serializeSlackDeclined() {
@@ -520,12 +620,28 @@ export function resolveSlackPostMessage(
   state: ShinsaState,
   post: SlackPost,
   taskId: string,
-  taskUrl: string
+  resolveTaskUrl: (taskId: string) => string
 ): SlackMessage | null {
   const task = state.tasks[taskId];
   if (!task) return null;
-  if (post.kind === 'completed') return serializeSlackCompleted(task, taskUrl);
-  return serializeSlackResult(task, taskUrl);
+  switch (post.kind) {
+    case 'completed':
+      return serializeSlackCompleted(task, resolveTaskUrl(taskId));
+    case 'tripped':
+      return serializeSlackTripped(state, task, post.watchdogId, resolveTaskUrl);
+    case 'result':
+      return serializeSlackResult(task, resolveTaskUrl(taskId));
+  }
+}
+
+export function resolveSlackMergeMessage(
+  state: ShinsaState,
+  taskId: string,
+  round: number,
+  taskUrl: string
+): SlackMessage | null {
+  const task = state.tasks[taskId];
+  return task ? serializeSlackMerged(task, round, taskUrl) : null;
 }
 
 export function listSlackStatusGates(state: ShinsaState, taskId: string): Gate[] {
