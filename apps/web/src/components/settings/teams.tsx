@@ -258,6 +258,7 @@ function TeamLinkRow({
       <div className='flex items-center gap-1.5'>
         <Input
           aria-label='Team link'
+          size='sm'
           value={url}
           className='min-w-0 flex-1 font-mono'
           placeholder='https://app.shinsa.dev/share/team#…'
