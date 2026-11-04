@@ -299,6 +299,7 @@ describe('a private address', () => {
     const { team, invite } = await readJson<TeamCreateResponse>(
       await harness.post(REMOTE_PATHS.machineTeams, { name: 'Payments' }, machine)
     );
+    await pairMachine(harness, kai, 'Laptop');
     await harness.post(REMOTE_PATHS.teamJoin, { invite }, { session: kai });
     expect((await harness.call(openPath(`${origin}/`), { session: kai })).status).toBe(404);
     await harness.post(resolveMachineTeamPath(team.id, 'members/add'), { userId: '2' }, machine);

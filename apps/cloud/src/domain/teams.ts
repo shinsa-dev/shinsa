@@ -8,11 +8,12 @@ import {
   type TeamJoinStatus,
   type TeamScopesRequest,
 } from '@shinsa/core';
-import { InviteInvalid, NotFound, OwnerCannotLeave } from '@shinsa/core/remote/errors';
+import { InviteInvalid, NoMachine, NotFound, OwnerCannotLeave } from '@shinsa/core/remote/errors';
 import { Clock, Effect, Option, Redacted } from 'effect';
 import { findTeamAccess, isTeamOwner, selectTeamRole } from '../auth/access.ts';
 import { NO_SUCH_TEAM } from '../auth/schema.ts';
 import { CloudCrypto } from '../crypto/service.ts';
+import { Machines } from '../store/machines/service.ts';
 import type { Team } from '../store/teams/schema.ts';
 import { Teams } from '../store/teams/service.ts';
 import { createConnectAnswer, findOwner, serializeTeamMachine } from './machines.ts';
@@ -84,6 +85,14 @@ export const joinTeam = Effect.fn('teams.join')(function* (userId: RemoteUserId,
   if (!member) yield* teams.requesters.add(team.id, userId);
   const status: TeamJoinStatus = member ? 'member' : 'requested';
   return { teamId: team.id, name: team.name, owner, status };
+});
+
+export const TEAM_NO_MACHINE =
+  'Turn on remote access on one of your machines first. Your teammates reach your work through it.';
+
+export const assertPairedMachine = Effect.fn('teams.assertPairedMachine')(function* (userId: RemoteUserId) {
+  if ((yield* (yield* Machines).countOwned(userId)) > 0) return;
+  return yield* new NoMachine({ message: TEAM_NO_MACHINE });
 });
 
 export const leaveTeam = Effect.fn('teams.leave')(function* (userId: RemoteUserId, teamId: TeamId) {

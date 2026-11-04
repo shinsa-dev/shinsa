@@ -87,6 +87,7 @@ async function createWorld() {
   const created = await readJson<TeamCreateResponse>(
     await harness.post(REMOTE_PATHS.machineTeams, { name: 'Payments' }, machineAuth(studio))
   );
+  await pairMachine(harness, tess, 'Tess');
   await harness.post(REMOTE_PATHS.teamJoin, { invite: created.invite }, { session: tess });
   await harness.post(
     resolveMachineTeamPath(created.team.id, 'members/add'),
