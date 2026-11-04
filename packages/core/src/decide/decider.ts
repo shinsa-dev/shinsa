@@ -69,6 +69,16 @@ interface StartRunOptions {
   usageWaitId?: string | null;
   account?: RunAccount | null;
   continues?: string | null;
+  told?: string | null;
+}
+
+function resolveRunLinks(options: StartRunOptions) {
+  return {
+    ...(options.feedback ? { feedback: options.feedback } : {}),
+    ...(options.monitorId ? { monitorId: options.monitorId } : {}),
+    ...(options.continues ? { continues: options.continues } : {}),
+    ...(options.usageWaitId ? { usageWaitId: options.usageWaitId } : {}),
+  };
 }
 
 interface KeptWaits {
@@ -322,7 +332,8 @@ export class Decider {
         ? resolveRoundBrief(this.state, task, placement, prompt)
         : prompt;
     const fresh = resumeFrom ? '' : this.#describeFreshContext(task, role, fork);
-    const appended = `${fresh}${resolveMemoryTold(this.state, task, role, resumeFrom)}${adoption.note}${this.#tellEdits(task.id)}${this.#tellMessages(task.id, role, purpose)}${tellOverlaps(this, task.id, role)}`;
+    const told = this.#tell(task.id, role, purpose, `${options.told ?? ''}${adoption.note}`);
+    const appended = `${fresh}${resolveMemoryTold(this.state, task, role, resumeFrom)}${told}${tellOverlaps(this, task.id, role)}`;
     const run: Run = {
       id: adoption.id ?? this.context.newId(),
       taskId: task.id,
@@ -332,6 +343,7 @@ export class Decider {
       phaseIndex: options.phaseIndex ?? null,
       prompt: `${briefed}${appended}`,
       ...(appended || briefed !== prompt ? { rolePrompt: prompt } : {}),
+      ...(told ? { told } : {}),
       resume: resumeFrom !== null,
       provider: resolveAgentProvider(this.state.settings, RUN_AGENT_ROLE[role]),
       model: resolveAgentModel(this.state.settings, RUN_AGENT_ROLE[role]),
@@ -342,15 +354,16 @@ export class Decider {
       summary: null,
       ...(resumeFrom ? resolveInheritedSession(resumeFrom) : {}),
       ...(fork ? { fork } : {}),
-      ...(options.feedback ? { feedback: options.feedback } : {}),
-      ...(options.monitorId ? { monitorId: options.monitorId } : {}),
-      ...(options.continues ? { continues: options.continues } : {}),
-      ...(options.usageWaitId ? { usageWaitId: options.usageWaitId } : {}),
+      ...resolveRunLinks(options),
       ...(account ? { account } : {}),
       ...resolveRoundStamp(task),
     };
     this.emit({ type: 'run.started', run });
     return run;
+  }
+
+  #tell(taskId: string, role: RunRole, purpose: RunPurpose | null, carried: string) {
+    return `${carried}${this.#tellEdits(taskId)}${this.#tellMessages(taskId, role, purpose)}`;
   }
 
   #tellEdits(taskId: string) {

@@ -467,7 +467,7 @@ function recentPercent(harness: Harness, projectId: string | null = null) {
   return resolveRecentUsage(harness.state, harness.now, { provider: 'claude', projectId }).percent;
 }
 
-function heldAtPace(patch: { daily?: number; project?: number }) {
+function heldAtPace(patch: { daily?: number; project?: number; edit?: string }) {
   const harness = createHarness();
   const taskId = createTask(harness);
   learnUsageRate(harness);
@@ -487,6 +487,7 @@ function heldAtPace(patch: { daily?: number; project?: number }) {
       project: { ...project, usageLimit: recentPercent(harness, projectId) + patch.project },
     });
   }
+  if (patch.edit) harness.send({ type: 'task.record_edit', taskId, path: patch.edit, changed: true });
   proposePlan(harness, taskId);
   const run = Object.values(harness.state.runs)
     .filter((candidate) => candidate.taskId === taskId)
@@ -586,6 +587,16 @@ describe('the daily usage limit', () => {
     expect(waitOf(harness, taskId).status).toBe('resumed');
     expect(harness.task(taskId).stageReason).toBe(reason as string);
     expect(harness.task(taskId).activity.some((entry) => entry.text === 'Started the held step')).toBe(true);
+  });
+
+  test('the held step tells the agent what the step it replaces was told', () => {
+    const { harness, taskId, run } = heldAtPace({ daily: -1, edit: 'src/kept.ts' });
+    expect(harness.task(taskId).untoldEdits).toEqual([]);
+    expect(harness.state.runs[run.id]?.told).toContain('src/kept.ts');
+    harness.send({ type: 'usage_wait.resume_now', taskId });
+    const [started] = listContinuations(harness, run.id);
+    expect(harness.state.runs[started as string]?.prompt).toContain('src/kept.ts');
+    expect(harness.state.runs[started as string]?.told).toContain('src/kept.ts');
   });
 
   test('holds the step again when the window is still over the limit at the reset', () => {

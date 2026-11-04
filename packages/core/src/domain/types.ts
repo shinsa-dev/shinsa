@@ -655,6 +655,7 @@ export interface Run {
   phaseIndex?: number | null;
   prompt?: string;
   rolePrompt?: string;
+  told?: string;
   resume?: boolean;
   provider: string;
   model: string | null;

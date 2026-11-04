@@ -203,6 +203,7 @@ export function releasePaceWait(decider: Decider, task: Task, wait: UsageWait) {
     usageWaitId: wait.id,
     account: held.account ?? null,
     continues: held.id,
+    told: held.told ?? null,
   });
   moveWatchCheck(decider, held.id, run.id);
 }
