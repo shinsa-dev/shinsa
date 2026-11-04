@@ -7,7 +7,7 @@ import {
   STEP_SCHEMA,
 } from '@shinsa/core';
 import { limitedText } from '../fields.ts';
-import { REPLY_SPEC } from '../reply.ts';
+import { ACTIONS_SPEC, REPLY_SPEC } from '../reply.ts';
 import type { ToolSpec } from '../schema.ts';
 
 const L = SHAPE_LIMITS;
@@ -49,6 +49,7 @@ export const SHAPE_TOOL_SPECS = {
       properties: {
         answer: limitedText('The answer in markdown.', L.answer),
         reply: REPLY_SPEC,
+        actions: ACTIONS_SPEC,
         propose_change: PROPOSE_CHANGE_SPEC,
         recommend: RECOMMEND_SPEC,
       },
@@ -66,6 +67,7 @@ export const SHAPE_TOOL_SPECS = {
           L.diagnosis
         ),
         reply: REPLY_SPEC,
+        actions: ACTIONS_SPEC,
         propose_change: PROPOSE_CHANGE_SPEC,
         recommend: RECOMMEND_SPEC,
       },
@@ -80,6 +82,7 @@ export const SHAPE_TOOL_SPECS = {
       properties: {
         report: limitedText('The report in markdown.', L.report),
         reply: REPLY_SPEC,
+        actions: ACTIONS_SPEC,
         propose_change: PROPOSE_CHANGE_SPEC,
         recommend: RECOMMEND_SPEC,
       },
@@ -97,6 +100,7 @@ export const SHAPE_TOOL_SPECS = {
           L.outcome
         ),
         reply: REPLY_SPEC,
+        actions: ACTIONS_SPEC,
       },
       required: ['outcome'],
     },

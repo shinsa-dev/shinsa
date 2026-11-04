@@ -21,7 +21,9 @@ export const handleShapeTool = Effect.fn('ShapeTool.handle')(function* (
   const withProposal = (proposal: ChangeProposalInput | null) => (proposal ? { proposal } : {});
   const step = DELIVERING_TOOLS.get(name);
   if (step) {
-    const { body, reply, proposal, recommend } = yield* assertToolInput(validateDelivery(step, input));
+    const { body, reply, proposal, recommend, actions } = yield* assertToolInput(
+      validateDelivery(step, input)
+    );
     yield* call.dispatch({
       type: 'agent.deliver',
       runId,
@@ -31,6 +33,7 @@ export const handleShapeTool = Effect.fn('ShapeTool.handle')(function* (
       ...(reply ? { reply } : {}),
       ...withProposal(proposal),
       ...(recommend ? { recommend } : {}),
+      ...(actions.length > 0 ? { actions } : {}),
     });
     return HANDED_OVER;
   }

@@ -44,7 +44,7 @@ import {
 import { listOpenGates } from '../state/queries.ts';
 import { assertEvidence } from './agents.ts';
 import type { Decider } from './decider.ts';
-import { answerIteration } from './iterations.ts';
+import { answerIteration, suggestActions } from './iterations.ts';
 import { settleTask, startPhase, startPlanning, startWork } from './lifecycle.ts';
 import { findCurrentRun } from './runs.ts';
 import { requestWorkspace } from './workspaces.ts';
@@ -382,6 +382,7 @@ export function recordDelivery(decider: Decider, command: CommandOf<'agent.deliv
   if (command.step === 'operate' && !hasStep(task, 'build'))
     assertEvidence(decider, task, 'report the outcome');
   answerIteration(decider, task, run.id, command.reply ?? null, DELIVER_TOOL[command.step]);
+  suggestActions(decider, task, run.id, command.actions);
   if (isFollowUpOnWork(task)) {
     finishFollowUp(decider, task, run);
     return;

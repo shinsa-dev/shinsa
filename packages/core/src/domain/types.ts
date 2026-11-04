@@ -20,7 +20,14 @@ import type { Round } from './rounds.ts';
 import type { GateSecret, SourceReport } from './schedules.ts';
 import type { FindingVerdict, ReviewComment, RunAccount } from './schema.ts';
 import type { ShareLimit, SharePreset } from './settings.ts';
-import type { ChangeProposal, ShapeChange, TaskAuto, TaskResult, TriageDecisions } from './shapes.ts';
+import type {
+  ChangeProposal,
+  ShapeChange,
+  SuggestedAction,
+  TaskAuto,
+  TaskResult,
+  TriageDecisions,
+} from './shapes.ts';
 import type { SlackThreadLink } from './slack.ts';
 import type { PipelineStep } from './steps.ts';
 import type { Watchdog, WatchSource } from './watchdogs.ts';
@@ -515,6 +522,7 @@ export interface Task {
   triageDecisions?: TriageDecisions | null;
   result?: TaskResult | null;
   proposal?: ChangeProposal | null;
+  suggestedActions?: SuggestedAction[];
   shapeChanges?: ShapeChange[];
   proposedBranch?: string | null;
   rounds?: Round[];

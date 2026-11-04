@@ -46,6 +46,11 @@ export interface ChangeProposal {
   at: number;
 }
 
+export interface SuggestedAction {
+  label: string;
+  message: string;
+}
+
 export interface TaskAuto {
   shape: boolean;
   start: boolean;

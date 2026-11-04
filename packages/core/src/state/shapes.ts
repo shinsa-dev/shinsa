@@ -140,6 +140,15 @@ function applyChangeProposed(state: ShinsaState, event: EventOf<'task.change_pro
   });
 }
 
+function applyActionsSuggested(state: ShinsaState, event: EventOf<'task.actions_suggested'>) {
+  updateTask(state, event.taskId, event.at, { suggestedActions: event.actions });
+}
+
+export function clearSuggestedActions(state: ShinsaState, taskId: string, at: number) {
+  if ((state.tasks[taskId]?.suggestedActions ?? []).length === 0) return;
+  updateTask(state, taskId, at, { suggestedActions: [] });
+}
+
 function applyChangeDeclined(state: ShinsaState, event: EventOf<'task.change_declined'>) {
   const proposal = state.tasks[event.taskId]?.proposal;
   if (!proposal) return;
@@ -159,6 +168,7 @@ type ShapeEvent = Extract<
       | 'task.reshaped'
       | 'task.delivered'
       | 'task.change_proposed'
+      | 'task.actions_suggested'
       | 'task.change_declined'
       | 'task.change_approved';
   }
@@ -174,6 +184,9 @@ export function applyShapeEvent(state: ShinsaState, event: ShapeEvent) {
       return;
     case 'task.change_proposed':
       applyChangeProposed(state, event);
+      return;
+    case 'task.actions_suggested':
+      applyActionsSuggested(state, event);
       return;
     case 'task.change_declined':
       applyChangeDeclined(state, event);

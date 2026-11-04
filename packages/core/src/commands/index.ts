@@ -25,6 +25,7 @@ import type {
   UnreachedTeammate,
   WeeklyReading,
   ProposalRecommendation,
+  SuggestedAction,
 } from '../domain/index.ts';
 import type {
   PullRequestCloseFailure,
@@ -86,6 +87,7 @@ type AgentCommand =
       runId: string;
       document: PlanDocument;
       reply?: AgentReply | null;
+      actions?: SuggestedAction[];
     }
   | {
       type: 'agent.complete_phase';
@@ -94,6 +96,7 @@ type AgentCommand =
       spots: CodeSpot[];
       judgementCalls: JudgementCall[];
       reply?: AgentReply | null;
+      actions?: SuggestedAction[];
       walkthrough?: ReportWalkthrough | null;
       checkChanges?: CheckChangeHandOver[];
       treeHash?: string | null;
@@ -104,6 +107,7 @@ type AgentCommand =
       runId: string;
       summary: string;
       reply?: AgentReply | null;
+      actions?: SuggestedAction[];
       walkthrough?: ReportWalkthroughRevision | null;
       checks?: string[];
       checkChanges?: CheckChangeHandOver[];
@@ -178,6 +182,7 @@ type AgentCommand =
       reply?: AgentReply | null;
       proposal?: ChangeProposalInput | null;
       recommend?: ProposalRecommendation | null;
+      actions?: SuggestedAction[];
     }
   | ({ type: 'agent.reshape'; runId: string; reason: string } & (
       | { shape: InquiryShape }

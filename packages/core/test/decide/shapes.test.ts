@@ -449,6 +449,29 @@ describe('research', () => {
     expect(harness.lastEffect('worktree.create').taskId).toBe(taskId);
   });
 
+  test('a report offers its suggested replies on the result, and closing it clears them', () => {
+    const harness = createHarness();
+    const taskId = start(harness, { shape: 'research' });
+    verifySetup(harness, taskId);
+    const actions = [{ label: 'Compare a third', message: 'Add BullMQ to the comparison.' }];
+    harness.send({
+      type: 'agent.deliver',
+      runId: harness.activeRun(taskId).id,
+      step: 'research',
+      body: 'Both work.',
+      actions,
+    });
+    expect(harness.openGate(taskId).type).toBe('result');
+    expect(harness.task(taskId).suggestedActions).toEqual(actions);
+    harness.send({
+      type: 'gate.answer',
+      gateId: harness.openGate(taskId).id,
+      decision: 'approve',
+      response: null,
+    });
+    expect(harness.task(taskId).suggestedActions).toEqual([]);
+  });
+
   test('a researcher or an investigator cannot hand over the other one’s result', () => {
     const harness = createHarness();
     const taskId = start(harness, { shape: 'research' });

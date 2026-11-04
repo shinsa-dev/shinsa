@@ -157,6 +157,27 @@ describe('the shape tools', () => {
     ] as ShinsaCommand[]);
   });
 
+  test('a hand-over passes its suggested replies on, and leaves them out when there are none', async () => {
+    const { sent, call } = createCall();
+    const actions = [{ label: 'Do the renames', message: 'Do the renames you listed.' }];
+    await runShapeTool('answer', { answer: 'Two names clash.', actions }, call);
+    expect(sent).toEqual([
+      {
+        type: 'agent.deliver',
+        runId: 'run-1',
+        attemptId: 'a-1',
+        step: 'answer',
+        body: 'Two names clash.',
+        actions,
+      },
+    ] as ShinsaCommand[]);
+  });
+
+  test('every hand-over tool takes suggested replies', () => {
+    for (const name of ['answer', 'report_diagnosis', 'submit_report', 'report_outcome'] as const)
+      expect(SHAPE_TOOL_SPECS[name].inputSchema.properties).toHaveProperty('actions');
+  });
+
   test('report_outcome hands the operation over, and never carries a proposal', async () => {
     const { sent, call } = createCall();
     await runShapeTool(

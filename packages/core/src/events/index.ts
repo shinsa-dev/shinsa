@@ -49,6 +49,7 @@ import type {
   WeeklyReading,
   WorkspaceMode,
   ProposalRecommendation,
+  SuggestedAction,
 } from '../domain/index.ts';
 import type {
   PullRequestCloseFailure,
@@ -141,6 +142,7 @@ type EventBody =
       recommend: ProposalRecommendation;
       runId: string | null;
     }
+  | { type: 'task.actions_suggested'; taskId: string; actions: SuggestedAction[]; runId: string }
   | { type: 'task.change_declined'; taskId: string }
   | { type: 'task.change_approved'; taskId: string }
   | { type: 'task.staged'; taskId: string; stage: TaskStage; reason: string; by?: 'you' }

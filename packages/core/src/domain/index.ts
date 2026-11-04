@@ -224,6 +224,7 @@ export {
   type OperationTiming,
   PROPOSAL_RECOMMENDATIONS,
   type ProposalRecommendation,
+  type SuggestedAction,
   resolveInquiryStep,
   resolveOperationTiming,
   resolvePresetOf,

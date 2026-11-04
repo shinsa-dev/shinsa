@@ -3,6 +3,7 @@ import {
   type ReplyingHandOver,
   resolveCurrentRound,
   selectOpenIteration,
+  type SuggestedAction,
   type Task,
 } from '../domain/index.ts';
 import type { AgentReply } from '../report/types.ts';
@@ -42,4 +43,9 @@ export function answerIteration(
     });
   }
   decider.emit({ type: 'iteration.answered', taskId: task.id, iterationId: open.id, reply, runId });
+}
+
+export function suggestActions(decider: Decider, task: Task, runId: string, actions: SuggestedAction[] = []) {
+  if (actions.length === 0 && (task.suggestedActions ?? []).length === 0) return;
+  decider.emit({ type: 'task.actions_suggested', taskId: task.id, actions, runId });
 }
