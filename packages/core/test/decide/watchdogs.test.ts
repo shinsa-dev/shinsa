@@ -18,6 +18,7 @@ import {
   completePhase,
   createHarness,
   createTask,
+  failing,
   type Harness,
   linkSession,
   PASSING,
@@ -1169,6 +1170,31 @@ describe('watchdogs in the prompts', () => {
     );
     expect(review).toContain(
       '- Paywall events: first check after 720 min, gaps up to 12 h, for 24 h, needs a source: Product analytics events'
+    );
+  });
+
+  test('a fix that sends only watchdogs reaches the reviewer and read_task before the merge', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    handOver(harness, taskId, []);
+    expect(serializeTaskDetail(harness.state, taskId)).not.toContain('Watchdogs');
+    harness.send({ type: 'checks.record', taskId, results: failing() });
+    harness.send({
+      type: 'agent.complete_fix',
+      runId: harness.activeRun(taskId).id,
+      summary: 'Added the watchdogs.',
+      walkthrough: { watchdogs: [LATENCY, EVENTS] },
+    });
+    harness.send({ type: 'checks.record', taskId, results: PASSING });
+    const review = readInstruction(harness.activeRun(taskId));
+    expect(review).not.toContain('The agent listed no watchdogs');
+    expect(review).toContain('- Checkout latency: first check after 360 min');
+    expect(serializeTaskDetail(harness.state, taskId)).toContain(
+      [
+        'Watchdogs for after the merge:',
+        `  1. Checkout latency from maple: ${LATENCY.check}`,
+        `  2. Paywall events, needs a data source: ${EVENTS.check}`,
+      ].join('\n')
     );
   });
 

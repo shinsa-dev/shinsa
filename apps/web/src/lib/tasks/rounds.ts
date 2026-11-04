@@ -61,9 +61,9 @@ export function resolveRoundTag(task: Task) {
   return hasRounds(task) ? formatRoundLabel(resolveCurrentRound(task)) : null;
 }
 
-export function resolveHandleText(task: Task) {
+export function resolveHandleText(task: Task, round = true) {
   if (!task.handle) return null;
-  const tag = resolveRoundTag(task);
+  const tag = round ? resolveRoundTag(task) : null;
   return tag ? `${task.handle} · ${tag}` : task.handle;
 }
 

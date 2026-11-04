@@ -9,8 +9,8 @@ import {
   LineNumber,
   ListOrRecord,
   OptionalOneOf,
+  OptionalClosedRecord,
   OptionalText,
-  OptionalWholeRecord,
   OrAbsent,
   OrOmitted,
   OneOf,
@@ -51,7 +51,7 @@ describe('the hand-over reader', () => {
       read: { count: 1, flag: false },
       errors: ['field must be an object.', 'field.count must be a whole number from 1 to 3.'],
     });
-    expect(readWith(OptionalWholeRecord(fields), 'x')).toEqual({
+    expect(readWith(OptionalClosedRecord(fields, {}), 'x')).toEqual({
       read: null,
       errors: ['field must be an object.'],
     });

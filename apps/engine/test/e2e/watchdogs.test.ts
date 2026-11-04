@@ -27,14 +27,14 @@ const WATCHDOG = {
   for_hours: 48,
 };
 
-function writePhase(phase: number, walkthrough: Record<string, unknown> | null) {
+function writePhase(phase: number, lastPhase: Record<string, unknown> | null) {
   return async (agent: AgentContext) => {
     agent.write(phase === 1 ? 'a.txt' : 'b.txt', `phase ${phase}\n`);
     await agent.call('complete_phase', {
       summary: `Wrote the file for phase ${phase}.`,
       spots: [{ file: 'a.txt', start: 1, end: 1, attention: 'normal', why: 'The new file.' }],
       judgement_calls: [],
-      ...(walkthrough ? { walkthrough } : {}),
+      ...lastPhase,
     });
   };
 }
@@ -61,7 +61,7 @@ async function merged() {
   w.agents.queue(
     'build',
     writePhase(1, null),
-    writePhase(2, { approach: 'Write two files.', flow: 'a → b', watchdogs: [WATCHDOG] })
+    writePhase(2, { walkthrough: { approach: 'Write two files.', flow: 'a → b' }, watchdogs: [WATCHDOG] })
   );
   const taskId = await w.createTask();
   const review = await w.untilGate(taskId, 'review');

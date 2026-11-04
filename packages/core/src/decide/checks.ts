@@ -16,7 +16,7 @@ import { resolveChecksFixPrompt } from '../prompts/index.ts';
 import type { CheckChange, CheckChangeHandOver, ReportCheck, TaskCheck } from '../report/types.ts';
 import type { Decider } from './decider.ts';
 import { applyEditsApproval } from './edits.ts';
-import { startFix } from './fixes.ts';
+import { isReviewInputUnchanged, reuseLastReview, startFix } from './fixes.ts';
 import { resolveCurrentPhase, startPhase, startReview } from './lifecycle.ts';
 import { shipReviewedWork } from './pull-requests.ts';
 
@@ -226,6 +226,7 @@ function proceedAfterChecks(decider: Decider, taskId: string) {
     return;
   }
   if (applyEditsApproval(decider, taskId, 'review')) shipReviewedWork(decider, taskId);
+  else if (isReviewInputUnchanged(decider, decider.task(taskId))) reuseLastReview(decider, taskId);
   else startReview(decider, taskId);
 }
 

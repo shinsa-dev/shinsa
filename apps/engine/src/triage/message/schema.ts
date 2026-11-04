@@ -14,7 +14,7 @@ export interface MessageAnswer {
 export const MESSAGE_SYSTEM = [
   'You read one message a developer wrote in the chat of a coding task and decide what it asks for.',
   'A task is a conversation that runs in rounds. Each round is one piece of work: an answer, research, an investigation, an operation, or a code change shipped as a pull request. New work for the same goal becomes the next round.',
-  'Most messages need no new work. Thanks, an acknowledgement or small talk needs nothing, and a question about what a round did or found is answered in that round. Only a message that asks for something to be done that has not been done is new work.',
+  'Most messages need no new work. Thanks, an acknowledgement or small talk needs nothing, and a question, or a request to check, confirm, verify or look into what a round did (its deploy, its logs, its live data), is answered in that round. Only a message that asks for a new change or operation that has not been done is new work.',
   'Return one JSON object with the decisions listed after the message.',
   `why: one plain sentence of at most ${ROUND_LIMITS.why} characters saying what the message asks for, and so why you decided that. Write it first.`,
   `title: what the new work does, imperative, sentence case, at most ${ROUND_LIMITS.title} characters, no trailing period; for anything else, what the message is about.`,
@@ -32,9 +32,23 @@ export const RESTING_KIND_QUESTION: ChoiceQuestion = {
   criteria: {
     acknowledge: ACKNOWLEDGE,
     feedback:
-      'a question about what the last round did, found or decided ("why did you pick X?", "where did Y go?"), or about one of the steps left for the human after the merge, even one that quotes the step ("what is this for? <the step>"), answered from the work already done; nothing new is done',
+      'a question about what the last round did, found or decided ("why did you pick X?", "where did Y go?"), a request to check, confirm or verify it ("is it live?", "confirm it worked"), or about one of the steps left for the human after the merge, even one that quotes the step ("what is this for? <the step>"), answered from the work already done; nothing new is changed',
     new_round:
-      'asks for something to be done in this task: more work, the next step (such as opening a pull request), or a change to what the last round did, even a small correction ("actually do Z instead"); a step left for the human after the merge, quoted or asked about, is not this, since the human does it',
+      'asks for new work in this task: a change to the code, the next step that changes something (such as opening a pull request), an operation to run, or a change to what the last round did, even a small correction ("actually do Z instead"); checking, confirming or looking into finished work is not this, and neither is a step left for the human after the merge, quoted or asked about, since the human does it',
+    separate_task: SEPARATE_TASK,
+  },
+};
+
+export const POST_MERGE_KIND_QUESTION: ChoiceQuestion = {
+  type: 'choice',
+  instructions:
+    'The work of this task merged, and steps the human does after the merge (listed above) are still open. Nothing else is in progress. What is this message?',
+  criteria: {
+    acknowledge: ACKNOWLEDGE,
+    feedback:
+      'about the merged work and its steps after the merge: how to deploy it or do a step, confirming or verifying a deploy (even with pasted command output), whether it is live, monitoring it, reading its logs, traces or live data ("have purchases worked since?"), something to run or check for it, or any question; answered in this round, nothing new is changed',
+    new_round:
+      'a new code change or operation of its own: changing how the merged work behaves, a fix to it or a new idea, not something needed to deploy, check or finish this round',
     separate_task: SEPARATE_TASK,
   },
 };
