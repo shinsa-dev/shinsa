@@ -163,80 +163,91 @@ const WALKTHROUGH_PARTS = {
       required: ['when', 'kind', 'title', 'detail'],
     },
   },
-  watchdogs: {
-    type: 'array',
-    description:
-      'Checks that watch the change after it merges, when something outside the tests can show it broke (logs, traces, errors, analytics, support messages). Each runs as a read-only turn of this conversation on its interval, and an issue it finds becomes a task forked from this one. Leave it out when nothing after the merge would show more than the tests did.',
-    maxItems: L.watchdogs,
-    items: {
-      type: 'object',
-      properties: {
-        title: limitedText('What it watches, in a few words. Unique in the list.', L.watchdogTitle),
-        check: limitedText(
-          'What to look at and what counts as an issue, with the numbers: "p95 of POST /checkout under 400 ms".',
-          L.watchdogCheck
-        ),
-        source: {
-          type: 'object',
-          description:
-            'An MCP server you have that reaches the data, any of them, not only the data sources listed: check with its tools first. Leave it out only when none does and give source_request.',
-          properties: {
-            server: limitedText('The MCP server, by name.', L.watchdogServer),
-            data: limitedText('What it holds that this check reads.', L.watchdogData),
-          },
-          required: ['server', 'data'],
+};
+
+const WATCHDOG_LIST = {
+  type: 'array',
+  maxItems: L.watchdogs,
+  items: {
+    type: 'object',
+    properties: {
+      title: limitedText('What it watches, in a few words. Unique in the list.', L.watchdogTitle),
+      check: limitedText(
+        'What to look at and what counts as an issue, with the numbers: "p95 of POST /checkout under 400 ms".',
+        L.watchdogCheck
+      ),
+      source: {
+        type: 'object',
+        description:
+          'An MCP server you have that reaches the data, any of them, not only the data sources listed: check with its tools first. Leave it out only when none does and give source_request.',
+        properties: {
+          server: limitedText('The MCP server, by name.', L.watchdogServer),
+          data: limitedText('What it holds that this check reads.', L.watchdogData),
         },
-        source_request: {
-          type: 'object',
-          description:
-            'Only when no server you have reaches the data, after checking each that could: what the human should connect.',
-          properties: {
-            data: limitedText('The data the check needs.', L.watchdogData),
-            evidence: limitedText(
-              'Where the code sends that data (the file and the service), and which servers you checked and why each cannot reach it.',
-              L.watchdogEvidence
-            ),
-            suggestions: textList(
-              'Servers the human could connect, by name and where they come from (an official MCP server, Composio). Never one you already have, unless evidence says “checked <server>” and why it falls short.',
-              L.watchdogSuggestions,
-              L.watchdogSuggestion
-            ),
-          },
-          required: ['data', 'evidence', 'suggestions'],
-        },
-        first_check_minutes: {
-          type: 'integer',
-          minimum: 1,
-          maximum: L.watchdogFirstCheckMinutes,
-          description:
-            'Minutes from the change going live to the first check. Left out, the setting’s default.',
-        },
-        max_gap_hours: {
-          type: 'integer',
-          minimum: 1,
-          maximum: L.watchdogMaxGapHours,
-          description:
-            'The longest gap between checks; each gap doubles up to it. Left out, the setting’s default.',
-        },
-        for_hours: {
-          type: 'integer',
-          minimum: 1,
-          maximum: L.watchdogForHours,
-          description: 'Hours it watches once the change is live. Left out, the setting’s default.',
-        },
-        starts: {
-          type: 'string',
-          enum: [...WATCHDOG_STARTS],
-          description: 'merge (the default) when merging deploys it; production when it goes live later.',
-        },
-        production_check: limitedText(
-          'With starts production: how to tell the merged change is live in production.',
-          L.watchdogProductionCheck
-        ),
+        required: ['server', 'data'],
       },
-      required: ['title', 'check'],
+      source_request: {
+        type: 'object',
+        description:
+          'Only when no server you have reaches the data, after checking each that could: what the human should connect.',
+        properties: {
+          data: limitedText('The data the check needs.', L.watchdogData),
+          evidence: limitedText(
+            'Where the code sends that data (the file and the service), and which servers you checked and why each cannot reach it.',
+            L.watchdogEvidence
+          ),
+          suggestions: textList(
+            'Servers the human could connect, by name and where they come from (an official MCP server, Composio). Never one you already have, unless evidence says “checked <server>” and why it falls short.',
+            L.watchdogSuggestions,
+            L.watchdogSuggestion
+          ),
+        },
+        required: ['data', 'evidence', 'suggestions'],
+      },
+      first_check_minutes: {
+        type: 'integer',
+        minimum: 1,
+        maximum: L.watchdogFirstCheckMinutes,
+        description:
+          'Minutes from the change going live to the first check. Left out, the setting’s default.',
+      },
+      max_gap_hours: {
+        type: 'integer',
+        minimum: 1,
+        maximum: L.watchdogMaxGapHours,
+        description:
+          'The longest gap between checks; each gap doubles up to it. Left out, the setting’s default.',
+      },
+      for_hours: {
+        type: 'integer',
+        minimum: 1,
+        maximum: L.watchdogForHours,
+        description: 'Hours it watches once the change is live. Left out, the setting’s default.',
+      },
+      starts: {
+        type: 'string',
+        enum: [...WATCHDOG_STARTS],
+        description: 'merge (the default) when merging deploys it; production when it goes live later.',
+      },
+      production_check: limitedText(
+        'With starts production: how to tell the merged change is live in production.',
+        L.watchdogProductionCheck
+      ),
     },
+    required: ['title', 'check'],
   },
+};
+
+const WATCHDOGS_ON_PHASE = {
+  ...WATCHDOG_LIST,
+  description:
+    'Checks that watch the change after it merges, when something outside the tests can show it broke (logs, traces, errors, analytics, support messages). Each runs as a read-only turn of this conversation on its interval, and an issue it finds becomes a task forked from this one. Only on the last phase, beside its walkthrough. Leave it out when nothing after the merge would show more than the tests did.',
+};
+
+const WATCHDOGS_ON_FIX = {
+  ...WATCHDOG_LIST,
+  description:
+    'Checks that watch the change after it merges, when something outside the tests can show it broke (logs, traces, errors, analytics, support messages). Each runs as a read-only turn of this conversation on its interval, and an issue it finds becomes a task forked from this one. Send it only when the fix changes them: the list replaces the earlier one whole, and an empty list removes them.',
 };
 
 const CHECK_LABEL = limitedText('What it proves, in a few words: "Paywall list tests".', L.checkLabel);
@@ -293,7 +304,7 @@ const WALKTHROUGH = {
 const WALKTHROUGH_REVISION = {
   type: 'object',
   description:
-    'Send only when the fix changes how the change works: the approach, the flow, a risk, how to test it or the steps around the merge. Give only the parts that changed; each replaces that part of the walkthrough whole. Leave it out otherwise.',
+    'Send only when the fix changes how the change works: the approach, the flow, a risk, how to test it or the steps around the merge. Give only the parts that changed; each replaces that part of the walkthrough whole. Leave it out otherwise. Watchdogs go in watchdogs, beside it.',
   properties: WALKTHROUGH_PARTS,
 };
 
@@ -450,6 +461,7 @@ export const TOOL_SPECS = {
         },
         reply: REPLY_SPEC,
         walkthrough: WALKTHROUGH,
+        watchdogs: WATCHDOGS_ON_PHASE,
         check_changes: CHECK_CHANGES,
       },
       required: ['summary', 'spots', 'judgement_calls'],
@@ -468,6 +480,7 @@ export const TOOL_SPECS = {
         ),
         reply: REPLY_SPEC,
         walkthrough: WALKTHROUGH_REVISION,
+        watchdogs: WATCHDOGS_ON_FIX,
         checks: {
           type: 'array',
           description:

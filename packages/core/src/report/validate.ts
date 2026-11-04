@@ -50,7 +50,6 @@ import type {
   FixHandOver,
   JudgementCall,
   LinkedEvidenceKind,
-  MergeStep,
   PhaseHandOver,
   PlanDocument,
   PlanHandOver,
@@ -120,40 +119,56 @@ function resolveWatchdog(watchdog: typeof Watchdog.Type): WatchdogSpec {
   };
 }
 
-function resolveParts(
-  steps: MergeStep[] | null,
+function resolveWatchdogs(
   watchdogs: (typeof Watchdog.Type)[] | null,
   empty: boolean
-): Pick<ReportWalkthrough, 'steps' | 'watchdogs'> {
-  return {
-    ...(steps !== null && (steps.length > 0 || empty) ? { steps } : {}),
-    ...(watchdogs !== null && (watchdogs.length > 0 || empty)
-      ? { watchdogs: watchdogs.map(resolveWatchdog) }
-      : {}),
-  };
+): Pick<ReportWalkthrough, 'watchdogs'> {
+  return watchdogs !== null && (watchdogs.length > 0 || empty)
+    ? { watchdogs: watchdogs.map(resolveWatchdog) }
+    : {};
 }
 
-function resolveWalkthrough(walkthrough: typeof Walkthrough.Type): ReportWalkthrough | null {
-  if (walkthrough === null) return null;
+function resolveWalkthrough(
+  reader: HandOverReader,
+  walkthrough: typeof Walkthrough.Type,
+  watchdogs: (typeof Watchdog.Type)[] | null
+): ReportWalkthrough | null {
+  if (walkthrough === null) {
+    if (watchdogs !== null) {
+      reader.refuse('watchdogs go on the last phase, with its walkthrough: send both together.');
+    }
+    return null;
+  }
   return {
     approach: walkthrough.approach,
     flow: walkthrough.flow,
     risks: walkthrough.risks.map(resolveReportRisk),
     testing: resolveTesting(walkthrough.testing),
-    ...resolveParts(walkthrough.steps, walkthrough.watchdogs, false),
+    ...(walkthrough.steps !== null && walkthrough.steps.length > 0 ? { steps: walkthrough.steps } : {}),
+    ...resolveWatchdogs(watchdogs, false),
   };
 }
 
 function resolveWalkthroughRevision(
-  revision: typeof WalkthroughRevision.Type
+  revision: typeof WalkthroughRevision.Type,
+  watchdogs: (typeof Watchdog.Type)[] | null
 ): ReportWalkthroughRevision | null {
-  if (revision === null) return null;
+  if (revision === null && watchdogs === null) return null;
+  return {
+    ...(revision === null ? {} : resolveRevisedParts(revision)),
+    ...resolveWatchdogs(watchdogs, true),
+  };
+}
+
+function resolveRevisedParts(
+  revision: NonNullable<typeof WalkthroughRevision.Type>
+): ReportWalkthroughRevision {
   return {
     ...(revision.approach === null ? {} : { approach: revision.approach }),
     ...(revision.flow === null ? {} : { flow: revision.flow }),
     ...(revision.risks === null ? {} : { risks: revision.risks.map(resolveReportRisk) }),
     ...(revision.testing === null ? {} : { testing: resolveTesting(revision.testing) }),
-    ...resolveParts(revision.steps, revision.watchdogs, true),
+    ...(revision.steps === null ? {} : { steps: revision.steps }),
   };
 }
 
@@ -175,7 +190,7 @@ function resolveReply(reply: typeof ReplyInput.Type): AgentReply | null {
 export function listHeldSourceRequests(
   watchdogs: readonly WatchdogSpec[],
   serverNames: readonly string[],
-  path = 'walkthrough.watchdogs'
+  path = 'watchdogs'
 ) {
   return watchdogs.flatMap((watchdog, index) => {
     const request = watchdog.sourceRequest;
@@ -209,7 +224,7 @@ export function validatePhaseHandOver(input: Record<string, unknown>): Validatio
     spots: handOver.spots.map(resolveSpot),
     judgementCalls: handOver.judgement_calls.map(resolveJudgementCall),
     reply: resolveReply(handOver.reply),
-    walkthrough: resolveWalkthrough(handOver.walkthrough),
+    walkthrough: resolveWalkthrough(reader, handOver.walkthrough, handOver.watchdogs),
     checkChanges: handOver.check_changes.map(resolveCheckChangeInput),
   });
 }
@@ -220,7 +235,7 @@ export function validateFixHandOver(input: Record<string, unknown>): Validation<
   return reader.result({
     summary: handOver.summary,
     reply: resolveReply(handOver.reply),
-    walkthrough: resolveWalkthroughRevision(handOver.walkthrough),
+    walkthrough: resolveWalkthroughRevision(handOver.walkthrough, handOver.watchdogs),
     checks: [...new Set(handOver.checks)],
     checkChanges: handOver.check_changes.map(resolveCheckChangeInput),
     evidenceKept: [...new Set(handOver.evidence_kept)],

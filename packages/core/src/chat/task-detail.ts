@@ -101,9 +101,21 @@ const WATCHDOG_STATE: Record<WatchdogStatus, string> = {
   stopped: 'stopped',
 };
 
+function describePlannedWatchdogs(task: Task) {
+  const planned = assembleReport(task).walkthrough?.watchdogs ?? [];
+  if (planned.length === 0) return [];
+  return [
+    'Watchdogs for after the merge:',
+    ...planned.map((watchdog, index) => {
+      const source = watchdog.source ? ` from ${watchdog.source.server}` : ', needs a data source';
+      return `  ${index + 1}. ${watchdog.title}${source}: ${watchdog.check}`;
+    }),
+  ];
+}
+
 function describeWatchdogs(task: Task) {
   const watchdogs = task.watchdogs ?? [];
-  if (watchdogs.length === 0) return [];
+  if (watchdogs.length === 0) return describePlannedWatchdogs(task);
   return [
     'Watchdogs on the merged change:',
     ...watchdogs.map((watchdog, index) => {
