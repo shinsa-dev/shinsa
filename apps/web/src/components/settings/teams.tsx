@@ -57,6 +57,7 @@ import {
   PEOPLE_SEARCH_MIN,
   type ProjectChoice,
   TEAM_LINK_COPY,
+  TEAMS_CONNECTING,
   TEAMS_DESCRIPTION,
   TEAMS_SECTION,
   validateTeamLink,
@@ -752,10 +753,21 @@ function MachineTeams({
 export function MachineTeamsSettings({
   state,
   machines,
+  connecting = false,
 }: {
   state: ShinsaState;
   machines: readonly MachineAccess[];
+  connecting?: boolean;
 }) {
+  if (machines.length === 0 && connecting) {
+    return (
+      <SettingsSection title={TEAMS_SECTION} description={TEAMS_DESCRIPTION}>
+        <SettingsCard>
+          <SettingsEmpty>{TEAMS_CONNECTING}</SettingsEmpty>
+        </SettingsCard>
+      </SettingsSection>
+    );
+  }
   if (machines.length === 0) return <HostedTeamsSettings />;
   return (
     <>

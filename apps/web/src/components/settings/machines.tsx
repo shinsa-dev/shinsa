@@ -54,6 +54,18 @@ function listOwnedMachines(machines: readonly MachineAccess[], instances: Remote
   );
 }
 
+export function isOwnMachineConnecting(rows: readonly MachineRow[], owned: readonly MachineAccess[]) {
+  const reached = new Set(owned.map((machine) => machine.id));
+  return rows.some(
+    (row) =>
+      row.instance.role === 'owner' &&
+      row.instance.online &&
+      row.device !== null &&
+      !row.device.waiting &&
+      !reached.has(row.instance.id)
+  );
+}
+
 const REQUESTS_DESCRIPTION =
   'Devices and people asking to reach machines shared with you. Accepting adds the device, and gives anyone new full control of the machine.';
 
@@ -292,7 +304,13 @@ export function MachinesSettings({ state }: { state?: ShinsaState }) {
           .filter((row) => !row.device || row.device.waiting)
           .map((row) => ({ id: row.instance.id, name: row.instance.name }))}
       />
-      {state && rows && <MachineTeamsSettings state={state} machines={owned} />}
+      {state && rows && (
+        <MachineTeamsSettings
+          state={state}
+          machines={owned}
+          connecting={isOwnMachineConnecting(rows, owned)}
+        />
+      )}
     </>
   );
 }

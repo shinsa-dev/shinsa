@@ -181,8 +181,9 @@ export function describePeopleCount(team: RemoteTeam) {
 
 export const TEAMS_ON_MACHINE_NOTE = 'Make and change a team from a machine you own.';
 
-export const TEAM_KEY_MISSING =
-  'This browser has no key for the team. Open the team’s join link here once to read its tasks.';
+export const TEAM_KEY_MISSING = 'Open the team’s join link in this browser once to read its tasks here.';
+
+export const TEAMS_CONNECTING = 'Reading your teams from your machines…';
 
 export const NO_HOSTED_TEAM =
   'You are in no team yet. Make one in Settings on a machine, or open a teammate’s join link here and sign in to ask to join.';
@@ -196,6 +197,10 @@ export function describeHostedTeamsNotice(teams: HostedTeams | null, failure: st
 export interface HostedTeam {
   team: RemoteTeam;
   hasKey: boolean;
+}
+
+export function showsKeyNote(entry: HostedTeam) {
+  return !entry.hasKey && entry.team.role !== 'owner';
 }
 
 export interface HostedTeams {

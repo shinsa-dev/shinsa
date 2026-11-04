@@ -1,5 +1,4 @@
 import type { RemoteTeam } from '@shinsa/core';
-import { Icon } from '@shinsa/ui/components/icon';
 import { Truncate } from '@shinsa/ui/components/truncate';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
@@ -20,6 +19,7 @@ import {
   describePeopleCount,
   type HostedTeam,
   type HostedTeams,
+  showsKeyNote,
   listHostedTeams,
   listTeamMachineRows,
   listTeamPeople,
@@ -105,14 +105,9 @@ function HostedTeamCard({ entry, viewerId }: { entry: HostedTeam; viewerId: stri
           <Truncate className='text-2xs text-fg-2'>
             <MentionText mention={describeHostedTeam(team, now)} />
           </Truncate>
+          {showsKeyNote(entry) && <p className='text-2xs text-pretty text-fg-2'>{TEAM_KEY_MISSING}</p>}
         </div>
       </div>
-      {!entry.hasKey && (
-        <div className={cn(SETTING_ROW, 'gap-2')}>
-          <Icon name='IconKey1' size='sm' className='shrink-0 text-fg-2' />
-          <p className='min-w-0 flex-1 text-2xs text-pretty text-fg-2'>{TEAM_KEY_MISSING}</p>
-        </div>
-      )}
       <TeamMachines team={team} />
       <TeamScopesBlock team={team} onUpdate={null} />
       <TeamPeople team={team} viewerId={viewerId} />
