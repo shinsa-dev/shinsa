@@ -462,8 +462,13 @@ Only these, and they win over anything below:
     details at the end. Its tabs scroll sideways in place. A now card's actions go under its title (`NowFrame`), a
     finding's Fix / Dismiss sit on its label row with the issue at full width under both (`FindingNote`, a grid), a
     suggested task's controls go under its text, a watchdog's title wraps instead of truncating, and the queued
-    messages over the composer stop at 96px. The docked composer keeps clear of the home bar
-    (`env(safe-area-inset-bottom)`). The app has one
+    messages over the composer stop at 96px. On the Review tab a point's header bar grows to two lines instead of
+    cutting its title, keeps its label whole and drops the plan section (`NoteBar`); a check row puts Show the output
+    under the check and keeps its outcome at the right, so the command and the detail use the row's width
+    (`CheckRowItem`, a grid below `sm`). A run's header in the chat wraps the same way (`ChatLine` `wraps`): the role
+    stays whole and the headline and the account go on to a second line. The Code tab's file sheet keeps clear of the
+    notch and the home bar. The docked composer keeps clear of the home bar
+    (`env(safe-area-inset-bottom)`, `SAFE_AREA_BOTTOM` on the sheets). The app has one
     keyboard shortcut: ⌘K (Ctrl K elsewhere) opens the command menu (see 14). Nothing else is
     bound to a key, except the Code tab's ⌘P, ⇧⌘F, ⌘F and ⌘G while it is open (32), the Review tab's J and K while it is
     open (34), the Terminal page's ⌘T and ⌘W while it is open and a focused terminal's own keys (37), Enter sends in every input, and a setup step's option list takes the arrows, Home, End, Enter and

@@ -76,9 +76,12 @@ interface LineParts {
   label: React.ReactNode;
   meta?: React.ReactNode;
   trailing?: React.ReactNode;
+  wraps?: boolean;
 }
 
-function LineBody({ icon, iconClassName, label, meta, trailing }: LineParts) {
+const LINE_WRAPS = 'max-sm:h-auto max-sm:min-h-5 max-sm:items-start';
+
+function LineBody({ icon, iconClassName, label, meta, trailing, wraps = false }: LineParts) {
   return (
     <>
       <IconSlot className='me-1'>
@@ -88,12 +91,12 @@ function LineBody({ icon, iconClassName, label, meta, trailing }: LineParts) {
           icon
         )}
       </IconSlot>
-      <span className={LINE_LABEL}>{label}</span>
+      <span className={cn(LINE_LABEL, wraps && 'max-sm:shrink-0')}>{label}</span>
       {meta && (
-        <span className={LINE_META}>
+        <span className={cn(LINE_META, wraps && 'max-sm:whitespace-normal')}>
           {React.isValidElement(meta) ? (
             <>
-              <span className='shrink-0'>{' · '}</span>
+              <span className='shrink-0 whitespace-pre'>{' · '}</span>
               {meta}
             </>
           ) : (
@@ -111,7 +114,7 @@ function LineBody({ icon, iconClassName, label, meta, trailing }: LineParts) {
 
 export function ChatLine({ className, ...parts }: LineParts & { className?: string }) {
   return (
-    <div data-chat-line className={cn(LINE, className)}>
+    <div data-chat-line className={cn(LINE, parts.wraps && LINE_WRAPS, className)}>
       <LineBody {...parts} />
     </div>
   );

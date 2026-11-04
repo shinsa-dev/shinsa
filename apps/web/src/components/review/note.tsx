@@ -111,19 +111,25 @@ function NoteBar({
       strip='band'
       chevron='box'
       action={action && <span className='flex shrink-0 items-center gap-1.5'>{action}</span>}
-      className='flex h-9 shrink-0 items-center gap-1.25 bg-bg-a1 ps-3 text-xs'
+      className='flex h-9 shrink-0 items-center gap-1.25 bg-bg-a1 ps-3 text-xs max-sm:h-auto max-sm:min-h-9 max-sm:py-1.5'
     >
       <IconSlot>
         <Icon size='sm' name={REVIEW_AUTHOR_ICON[item.author]} />
       </IconSlot>
       {heading.author && <span className='shrink-0 font-medium text-fg-4'>{heading.author}</span>}
-      {heading.title && <Truncate className='min-w-0 font-medium text-fg-4'>{heading.title}</Truncate>}
+      {heading.title && (
+        <Truncate className='min-w-0 font-medium text-fg-4 max-sm:line-clamp-2 max-sm:whitespace-normal'>
+          {heading.title}
+        </Truncate>
+      )}
       <span className='shrink-0 text-fg-2'>·</span>
-      <ToneLabel label={item.label} tone={item.tone} shrinks />
+      <span className='flex min-w-0 max-sm:shrink-0'>
+        <ToneLabel label={item.label} tone={item.tone} shrinks />
+      </span>
       {item.section && (
         <>
-          <span className='shrink-0 text-fg-2'>·</span>
-          <Truncate className='min-w-0 text-2xs text-fg-2'>{item.section}</Truncate>
+          <span className='shrink-0 text-fg-2 max-sm:hidden'>·</span>
+          <Truncate className='min-w-0 text-2xs text-fg-2 max-sm:hidden'>{item.section}</Truncate>
         </>
       )}
     </DisclosureHeader>

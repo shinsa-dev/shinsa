@@ -17,6 +17,8 @@ export const PHONE_QUERY = '(max-width: 639.98px)';
 
 export const SAFE_AREA_TOP = 'pt-[env(safe-area-inset-top)]';
 
+export const SAFE_AREA_BOTTOM = 'pb-[env(safe-area-inset-bottom)]';
+
 export const SAFE_AREA_SIDES = 'ps-[env(safe-area-inset-left)] pe-[env(safe-area-inset-right)]';
 
 export function CompactBar({

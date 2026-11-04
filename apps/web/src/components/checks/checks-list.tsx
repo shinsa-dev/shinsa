@@ -57,6 +57,11 @@ const STATUS_TEXT: Record<CheckStageStatus, string> = {
   idle: 'text-fg-2',
 };
 
+const CHECK_ROW_GRID = cn(
+  'group/check flex min-w-0 items-center gap-2 has-[[data-facts]]:items-start',
+  'max-sm:grid max-sm:grid-cols-[auto_minmax(0,1fr)_auto] max-sm:items-start max-sm:gap-y-1.5'
+);
+
 export function CheckStateIcon({ state }: { state: CheckState }) {
   const label = CHECK_STATE_LABEL[state];
   if (state === 'running') return <Spinner size='sm' aria-label={label} className='text-primary-4' />;
@@ -134,9 +139,9 @@ export function CheckRowItem({
   const { open, toggle } = useDisclosure(resolveTaskDisclosureId(taskId, 'checks', row.key, 'output'), false);
   return (
     <li className='flex min-w-0 flex-col gap-1.5 px-3 py-2'>
-      <div className='group/check flex min-w-0 items-center gap-2 has-[[data-facts]]:items-start'>
+      <div className={CHECK_ROW_GRID}>
         <CheckGlyph state={row.state} className='group-has-[[data-facts]]/check:mt-px' />
-        <div className='flex min-w-0 flex-1 flex-col gap-px'>
+        <div className='flex min-w-0 flex-1 flex-col gap-px max-sm:col-start-2 max-sm:row-start-1'>
           <span className='flex min-w-0 flex-wrap items-baseline gap-x-1.5'>
             <RowLabel row={row} />
             <span className='text-2xs text-fg-2'>{row.meta}</span>
@@ -144,9 +149,17 @@ export function CheckRowItem({
           <RowFacts row={row} />
           {children}
         </div>
-        <span className='flex shrink-0 items-center gap-1'>
-          {row.output && <OutputToggle open={open} onToggle={toggle} />}
-          <span className={cn('text-2xs', STATE_TEXT[row.state])}>{CHECK_STATE_LABEL[row.state]}</span>
+        <span className='flex shrink-0 items-center gap-1 max-sm:contents'>
+          {row.output && (
+            <OutputToggle
+              open={open}
+              onToggle={toggle}
+              className='max-sm:col-start-2 max-sm:row-start-2 max-sm:ms-0 max-sm:justify-self-start'
+            />
+          )}
+          <span className={cn('text-2xs max-sm:col-start-3 max-sm:row-start-1', STATE_TEXT[row.state])}>
+            {CHECK_STATE_LABEL[row.state]}
+          </span>
         </span>
       </div>
       {open && row.output && <CheckOutput evidence={row.output} />}

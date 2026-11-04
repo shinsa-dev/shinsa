@@ -9,7 +9,7 @@ import type { LayoutPreference } from '@/lib/preferences/layout.ts';
 import { useRailWidth } from '@/lib/preferences/rail-width.ts';
 import { useRoute } from '@/router.ts';
 import { CardsTopBar } from './cards/top-bar.tsx';
-import { CompactBar, SAFE_AREA_SIDES, SAFE_AREA_TOP } from './sidebar/compact-bar.tsx';
+import { CompactBar, SAFE_AREA_BOTTOM, SAFE_AREA_SIDES, SAFE_AREA_TOP } from './sidebar/compact-bar.tsx';
 import { Rail } from './sidebar/rail.tsx';
 import { ResizeHandle } from './sidebar/resize-handle.tsx';
 
@@ -45,7 +45,7 @@ export function AppFrame({
         <SheetContent
           side='right'
           showCloseButton={false}
-          className={cn('w-72 gap-0 p-0 pb-[env(safe-area-inset-bottom)]', SAFE_AREA_TOP)}
+          className={cn('w-72 gap-0 p-0', SAFE_AREA_TOP, SAFE_AREA_BOTTOM)}
         >
           <SheetTitle className='sr-only'>More</SheetTitle>
           <Rail state={state} variant='sheet' onNavigate={() => setMoreOpen(false)} />
