@@ -356,6 +356,12 @@ class MachineTeamsGroup extends HttpApiGroup.make('machineTeams')
       success: ConnectResponse,
       error: wire(NotFound),
     }),
+    HttpApiEndpoint.post('remoteConnect', machineTeamPath('connect/remote'), {
+      params: TeamParams,
+      payload: TeamConnectRequest,
+      success: ConnectResponse,
+      error: wire(NotFound),
+    }),
     HttpApiEndpoint.post('scopes', machineTeamPath('scopes'), {
       params: TeamParams,
       payload: TeamScopesRequest,
