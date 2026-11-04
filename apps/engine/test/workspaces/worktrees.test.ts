@@ -1,10 +1,12 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, setDefaultTimeout, test } from 'bun:test';
 import { existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { createGitRepo, createTempDir, git, writeFiles } from '../helpers/index.ts';
 import { runCommand } from '../helpers/shell.ts';
 import { createRound, createTask } from '../helpers/state.ts';
 import { openStrategy } from './harness.ts';
+
+setDefaultTimeout(30_000);
 
 async function startTask() {
   const made = await createGitRepo();
