@@ -3,10 +3,12 @@ import {
   isOverBudget,
   listOpenGates,
   type RunUsage,
+  RECENT_USAGE_MS,
+  resolveRecentUsage,
   resolveTaskCost,
   USAGE_RATE_LIMITS,
 } from '../../src/index.ts';
-import { createHarness, createTask, type Harness, proposePlan } from '../harness.ts';
+import { createHarness, createTask, type Harness, proposePlan, registerRepo } from '../harness.ts';
 
 function usage(costUsd: number | null, tokens = 1_000): RunUsage {
   return { inputTokens: tokens, outputTokens: tokens, cacheReadTokens: 0, cacheWriteTokens: 0, costUsd };
@@ -457,5 +459,237 @@ describe('delegated work', () => {
       ['reviewer', 0.7],
     ]);
     expect(isOverBudget(harness.state, task)).toBe(true);
+  });
+});
+
+function recentPercent(harness: Harness, projectId: string | null = null) {
+  return resolveRecentUsage(harness.state, harness.now, projectId).percent;
+}
+
+function heldAtPace(patch: { daily?: number; project?: number }) {
+  const harness = createHarness();
+  const taskId = createTask(harness);
+  learnUsageRate(harness);
+  const projectId = harness.task(taskId).projectId as string;
+  meterWeekly(harness, taskId, 6);
+  if (patch.daily !== undefined) {
+    harness.send({
+      type: 'settings.change',
+      patch: { dailyUsageLimit: recentPercent(harness) + patch.daily },
+    });
+  }
+  if (patch.project !== undefined) {
+    const project = harness.state.projects[projectId];
+    if (!project) throw new Error('no project');
+    harness.send({
+      type: 'project.write',
+      project: { ...project, usageLimit: recentPercent(harness, projectId) + patch.project },
+    });
+  }
+  proposePlan(harness, taskId);
+  return { harness, taskId, projectId, run: harness.activeRun(taskId) };
+}
+
+function isDispatched(harness: Harness, runId: string) {
+  return harness.effectsOf('run.execute').some((effect) => effect.runId === runId);
+}
+
+function waitOf(harness: Harness, taskId: string) {
+  const wait = harness.task(taskId).usageWait;
+  if (!wait) throw new Error('no usage wait');
+  return wait;
+}
+
+describe('the daily usage limit', () => {
+  test('is off by default, and must be above zero', () => {
+    const harness = createHarness();
+    expect(harness.state.settings.dailyUsageLimit).toBeNull();
+    expect(() => harness.send({ type: 'settings.change', patch: { dailyUsageLimit: 0 } })).toThrow(
+      'The daily usage limit must be above zero.'
+    );
+    expect(() =>
+      harness.send({ type: 'settings.change', patch: { dailyUsageLimit: Number.POSITIVE_INFINITY } })
+    ).toThrow('The daily usage limit must be above zero.');
+    harness.send({ type: 'settings.change', patch: { dailyUsageLimit: 12.5 } });
+    expect(harness.state.settings.dailyUsageLimit).toBe(12.5);
+  });
+
+  test('holds the next step once the last 24 hours reach it, and says why', () => {
+    const { harness, taskId, run } = heldAtPace({ daily: -1 });
+    expect(run.status).toBe('queued');
+    expect(isDispatched(harness, run.id)).toBe(false);
+    const wait = waitOf(harness, taskId);
+    expect(wait).toMatchObject({
+      runId: run.id,
+      cause: 'pace',
+      status: 'armed',
+      autoResume: true,
+      account: null,
+      pace: { scope: 'daily', projectId: null },
+    });
+    expect(wait.pace?.percent).toBeCloseTo(recentPercent(harness));
+    expect(wait.resetAt).toBeGreaterThan(harness.now);
+    expect(wait.resetAt).toBeLessThanOrEqual(harness.now + RECENT_USAGE_MS);
+    expect(harness.task(taskId).stageReason).toBe('held at the daily usage limit');
+    expect(harness.task(taskId).activity.at(-1)?.text).toBe(
+      'Held the next step at the daily usage limit; it starts when the last 24 hours drop below it'
+    );
+    const before = harness.events.length;
+    harness.send({ type: 'settings.change', patch: { autoResume: false } });
+    expect(harness.events.slice(before).filter((event) => event.type === 'usage_wait.armed')).toHaveLength(0);
+  });
+
+  test('a step under the limit starts as usual', () => {
+    const { harness, taskId, run } = heldAtPace({ daily: 50 });
+    expect(isDispatched(harness, run.id)).toBe(true);
+    expect(harness.task(taskId).usageWait ?? null).toBeNull();
+  });
+
+  test('starts the held step by itself once older usage drops out of the window', () => {
+    const { harness, taskId, run } = heldAtPace({ daily: -1 });
+    const wait = waitOf(harness, taskId);
+    const reason = wait.pace?.stageReason;
+    harness.send({ type: 'usage_wait.resume', taskId, waitId: wait.id });
+    expect(isDispatched(harness, run.id)).toBe(false);
+    harness.advance(wait.resetAt - harness.now);
+    harness.send({ type: 'usage_wait.resume', taskId, waitId: wait.id });
+    expect(isDispatched(harness, run.id)).toBe(true);
+    expect(waitOf(harness, taskId).status).toBe('resumed');
+    expect(harness.task(taskId).stageReason).toBe(reason as string);
+    expect(harness.task(taskId).activity.some((entry) => entry.text === 'Started the held step')).toBe(true);
+  });
+
+  test('holds the step again when the window is still over the limit at the reset', () => {
+    const { harness, taskId, run } = heldAtPace({ daily: -1 });
+    const first = waitOf(harness, taskId);
+    const reason = first.pace?.stageReason;
+    harness.send({ type: 'settings.change', patch: { dailyUsageLimit: 0.5 } });
+    expect(waitOf(harness, taskId).id).toBe(first.id);
+    harness.advance(first.resetAt - harness.now);
+    harness.send({ type: 'usage_wait.resume', taskId, waitId: first.id });
+    const second = waitOf(harness, taskId);
+    expect(second.id).not.toBe(first.id);
+    expect(second).toMatchObject({ status: 'armed', cause: 'pace', runId: run.id });
+    expect(second.resetAt).toBeGreaterThan(first.resetAt);
+    expect(second.pace?.stageReason).toBe(reason);
+    expect(isDispatched(harness, run.id)).toBe(false);
+  });
+
+  test('Resume now starts the held step at once, over the limit or not', () => {
+    const { harness, taskId, run } = heldAtPace({ daily: -1 });
+    harness.send({ type: 'usage_wait.resume_now', taskId });
+    expect(isDispatched(harness, run.id)).toBe(true);
+    expect(harness.task(taskId).activity.some((entry) => entry.text === 'Started the held step early')).toBe(
+      true
+    );
+  });
+
+  test('raising or clearing the limit starts held steps right away', () => {
+    const { harness, taskId, run } = heldAtPace({ daily: -1 });
+    harness.send({ type: 'settings.change', patch: { dailyUsageLimit: null } });
+    expect(isDispatched(harness, run.id)).toBe(true);
+    expect(waitOf(harness, taskId).status).toBe('resumed');
+  });
+
+  test('a held step always starts by itself, so it cannot be set to wait', () => {
+    const { harness, taskId } = heldAtPace({ daily: -1 });
+    expect(() => harness.send({ type: 'usage_wait.change', taskId, autoResume: false })).toThrow(
+      'A step held at a usage limit always starts by itself. Resume it now, or raise the limit.'
+    );
+  });
+
+  test('holds a task whose project was removed too', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    learnUsageRate(harness);
+    meterWeekly(harness, taskId, 6);
+    harness.send({ type: 'project.remove', projectId: harness.task(taskId).projectId as string });
+    harness.send({ type: 'settings.change', patch: { dailyUsageLimit: recentPercent(harness) - 1 } });
+    proposePlan(harness, taskId);
+    expect(waitOf(harness, taskId).pace?.scope).toBe('daily');
+  });
+
+  test('never holds work an agent delegates within a step that already started', () => {
+    const { harness, run } = heldAtPace({ daily: 50 });
+    harness.send({ type: 'settings.change', patch: { dailyUsageLimit: 0.1 } });
+    const before = new Set(Object.keys(harness.state.runs));
+    harness.send({
+      type: 'agent.delegate',
+      runId: run.id,
+      requestKey: 'pace-child',
+      title: 'Check the copy',
+      brief: 'Read the strings in src/copy.ts and report any that break the copy rules.',
+      role: 'reviewer',
+      mode: 'async',
+      isolation: 'shared',
+      baseCommit: null,
+      provider: null,
+      model: null,
+    });
+    const childId = Object.keys(harness.state.runs).find((id) => !before.has(id));
+    expect(childId).toBeDefined();
+    expect(isDispatched(harness, childId as string)).toBe(true);
+  });
+
+  test('only you change it', () => {
+    const harness = createHarness();
+    expect(() =>
+      harness.send({ type: 'settings.change', patch: { dailyUsageLimit: 20 } }, { onBehalf: true })
+    ).toThrow('Only the human changes the settings dailyUsageLimit.');
+  });
+});
+
+describe('a project’s usage limit', () => {
+  test('holds only that project’s tasks, and says which limit', () => {
+    const { harness, taskId, projectId, run } = heldAtPace({ project: -1 });
+    expect(harness.state.projects[projectId]?.usageLimit).toBeGreaterThan(0);
+    expect(waitOf(harness, taskId)).toMatchObject({ runId: run.id, pace: { scope: 'project', projectId } });
+    expect(harness.task(taskId).stageReason).toBe('held at the project’s usage limit');
+    expect(harness.task(taskId).activity.at(-1)?.text).toBe(
+      'Held the next step at the project’s usage limit; it starts when the last 24 hours drop below it'
+    );
+    const otherRepo = registerRepo(harness, 'marketing', 'Marketing');
+    const other = createTask(harness, { repoId: otherRepo });
+    expect(isDispatched(harness, harness.activeRun(other).id)).toBe(true);
+  });
+
+  test('when both limits hold a step, it waits for the later one', () => {
+    const daily = heldAtPace({ daily: -1 }).harness;
+    const both = heldAtPace({ daily: -1, project: -5.5 });
+    const dailyOnly = Object.values(daily.state.tasks)[0]?.usageWait?.resetAt ?? 0;
+    expect(waitOf(both.harness, both.taskId).pace?.scope).toBe('project');
+    expect(waitOf(both.harness, both.taskId).resetAt).toBeGreaterThanOrEqual(dailyOnly);
+  });
+
+  test('clearing it starts the held step', () => {
+    const { harness, projectId, run } = heldAtPace({ project: -1 });
+    const project = harness.state.projects[projectId];
+    if (!project) throw new Error('no project');
+    harness.send({ type: 'project.write', project: { ...project, usageLimit: null } });
+    expect(harness.state.projects[projectId]?.usageLimit).toBeUndefined();
+    expect(isDispatched(harness, run.id)).toBe(true);
+  });
+
+  test('is above zero, only you change it, and an agent may write the project without touching it', () => {
+    const { harness, projectId } = heldAtPace({ project: 50 });
+    const project = harness.state.projects[projectId];
+    if (!project) throw new Error('no project');
+    expect(() => harness.send({ type: 'project.write', project: { ...project, usageLimit: -2 } })).toThrow(
+      'The usage limit must be above zero.'
+    );
+    expect(() =>
+      harness.send({ type: 'project.write', project: { ...project, usageLimit: 3 } }, { onBehalf: true })
+    ).toThrow('Only the human changes a project’s usage limit. Tell them what you would change and why.');
+    harness.send(
+      { type: 'project.write', project: { ...project, description: 'The paywall editor' } },
+      { onBehalf: true }
+    );
+    expect(harness.state.projects[projectId]).toMatchObject({
+      description: 'The paywall editor',
+      usageLimit: project.usageLimit,
+    });
+    const { usageLimit: _kept, ...withoutLimit } = project;
+    harness.send({ type: 'project.write', project: { ...withoutLimit, description: 'Paywalls' } });
+    expect(harness.state.projects[projectId]?.usageLimit).toBe(project.usageLimit);
   });
 });

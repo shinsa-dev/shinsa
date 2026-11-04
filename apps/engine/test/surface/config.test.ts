@@ -178,6 +178,16 @@ describe('projects and focus', () => {
     ]);
   });
 
+  test('sets a project’s usage limit, and 0 turns it off', async () => {
+    const fake = createFakeClient({ '/api/projects': PROJECTS });
+    await runSpec(fake, ['projects', 'write', '--name', 'Play', '--usage-limit', '12.5']);
+    await runSpec(fake, ['projects', 'write', '--name', 'Play', '--usage-limit', '0']);
+    expect(fake.sent).toEqual([
+      { type: 'project.write', project: { name: 'Play', color: 'purple', usageLimit: 12.5 } },
+      { type: 'project.write', project: { name: 'Play', color: 'purple', usageLimit: null } },
+    ]);
+  });
+
   test('a new project needs a name, and a project to change must exist', async () => {
     const fake = createFakeClient({ '/api/projects': PROJECTS });
     await expect(runSpec(fake, ['projects', 'write', '--key', 'NEW'])).rejects.toThrow(

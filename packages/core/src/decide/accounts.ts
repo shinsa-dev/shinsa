@@ -14,6 +14,7 @@ import {
 } from '../domain/index.ts';
 import { resolveUsageResumeNudge } from '../prompts/session.ts';
 import { listOpenGates } from '../state/queries.ts';
+import { releasePaceWait } from './costs.ts';
 import type { Decider } from './decider.ts';
 import { retryTask } from './retry.ts';
 import { moveWatchCheck } from './watchdogs.ts';
@@ -112,6 +113,10 @@ export function resumeUsageWait(decider: Decider, command: CommandOf<'usage_wait
   const wait = task?.usageWait;
   if (!task || !RUN_STAGES.has(task.stage) || wait?.id !== command.waitId || wait.status !== 'armed') return;
   if (decider.context.now < wait.resetAt) return;
+  if (wait.cause === 'pace') {
+    releasePaceWait(decider, task, wait);
+    return;
+  }
   if (wait.autoResume) {
     resumeFromWait(decider, task, wait);
     return;
@@ -122,11 +127,21 @@ export function resumeUsageWait(decider: Decider, command: CommandOf<'usage_wait
 
 export function resumeUsageWaitNow(decider: Decider, command: CommandOf<'usage_wait.resume_now'>) {
   const { task, wait } = findArmedWait(decider, command.taskId);
+  if (wait.cause === 'pace') {
+    releasePaceWait(decider, task, wait);
+    return;
+  }
   resumeFromWait(decider, task, wait);
 }
 
 export function changeUsageWait(decider: Decider, command: CommandOf<'usage_wait.change'>) {
   const { task, wait } = findArmedWait(decider, command.taskId);
+  if (wait.cause === 'pace') {
+    throw new DomainError({
+      code: 'usage_wait_pace',
+      message: 'A step held at a usage limit always starts by itself. Resume it now, or raise the limit.',
+    });
+  }
   if (wait.autoResume === command.autoResume) return;
   const changed: UsageWait = { ...wait, id: decider.context.newId(), autoResume: command.autoResume };
   decider.emit({ type: 'usage_wait.armed', taskId: task.id, wait: changed });

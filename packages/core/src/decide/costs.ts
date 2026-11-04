@@ -3,11 +3,22 @@ import {
   describeBudgetAmount,
   isOverBudget,
   listSpentBudgets,
+  resolvePaceHold,
   resolveUsageDelta,
   selectSpentBudget,
   type TaskBudget,
 } from '../costs/index.ts';
-import { DomainError, type Gate, type Run, type RunUsage, type WeeklyReading } from '../domain/index.ts';
+import {
+  DomainError,
+  type Gate,
+  isDelegatedRun,
+  type Run,
+  type RunUsage,
+  type Task,
+  type UsagePaceScope,
+  type UsageWait,
+  type WeeklyReading,
+} from '../domain/index.ts';
 import { listOpenGates } from '../state/queries.ts';
 import type { Decider } from './decider.ts';
 import { retryTask } from './retry.ts';
@@ -127,4 +138,59 @@ export function releaseBudgetHolds(decider: Decider) {
     (gate) => gate.cause === 'budget' && !isOverBudget(decider.state, decider.task(gate.taskId))
   );
   for (const gate of released) retryTask(decider, gate.taskId, null);
+}
+
+const PACE_REASON: Record<UsagePaceScope, string> = {
+  daily: 'held at the daily usage limit',
+  project: 'held at the project’s usage limit',
+};
+
+function resolveHeldReason(task: Task, wait: UsageWait | null | undefined, run: Run) {
+  return wait?.runId === run.id && wait.pace ? wait.pace.stageReason : task.stageReason;
+}
+
+export function holdForPace(decider: Decider, run: Run) {
+  if (isDelegatedRun(run)) return false;
+  const task = decider.task(run.taskId);
+  const wait = task.usageWait;
+  const { now } = decider.context;
+  if (wait?.cause === 'pace' && wait.status === 'armed') return true;
+  if (wait?.cause === 'pace' && wait.runId === run.id && now < wait.resetAt) return false;
+  const hold = resolvePaceHold(decider.state, task, now);
+  if (!hold) return false;
+  const { freesAt, ...limit } = hold;
+  decider.emit({
+    type: 'usage_wait.armed',
+    taskId: task.id,
+    wait: {
+      id: decider.context.newId(),
+      runId: run.id,
+      role: run.role,
+      phaseIndex: run.phaseIndex ?? null,
+      account: null,
+      resetAt: freesAt,
+      armedAt: now,
+      autoResume: true,
+      status: 'armed',
+      provider: run.provider,
+      cause: 'pace',
+      pace: { ...limit, stageReason: resolveHeldReason(task, wait, run) },
+    },
+  });
+  decider.stage(task.id, task.stage, PACE_REASON[hold.scope]);
+  return true;
+}
+
+export function releasePaceWait(decider: Decider, task: Task, wait: UsageWait) {
+  decider.emit({ type: 'usage_wait.ended', taskId: task.id, waitId: wait.id, status: 'resumed' });
+  if (wait.pace) decider.stage(task.id, task.stage, wait.pace.stageReason);
+}
+
+export function releasePaceHolds(decider: Decider) {
+  const { now } = decider.context;
+  for (const task of Object.values(decider.state.tasks)) {
+    const wait = task.usageWait;
+    if (wait?.cause !== 'pace' || wait.status !== 'armed') continue;
+    if (resolvePaceHold(decider.state, task, now) === null) releasePaceWait(decider, task, wait);
+  }
 }

@@ -231,6 +231,7 @@ export interface Project {
   folders: string[];
   watchSources?: WatchSource[];
   teamIds?: string[];
+  usageLimit?: number | null;
 }
 
 export interface Focus {

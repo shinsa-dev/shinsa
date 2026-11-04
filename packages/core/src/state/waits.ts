@@ -1,3 +1,4 @@
+import type { UsagePaceScope, UsageWait } from '../domain/index.ts';
 import type { EventOf, ShinsaEvent } from '../events/index.ts';
 import type { ShinsaState } from './project.ts';
 import { record, updateTask } from './write.ts';
@@ -36,11 +37,27 @@ function applyUsageWaitArmed(state: ShinsaState, event: EventOf<'usage_wait.arme
   record(state, event.taskId, event.at, {
     actor: 'shinsa',
     kind: 'account',
-    text: event.wait.autoResume
-      ? 'Hit the usage limit; resumes when it resets'
-      : 'Hit the usage limit; waits for it to reset',
+    text: describeArmed(event.wait),
     runId: event.wait.runId,
   });
+}
+
+const PACE_ARMED: Record<UsagePaceScope, string> = {
+  daily: 'Held the next step at the daily usage limit; it starts when the last 24 hours drop below it',
+  project: 'Held the next step at the project’s usage limit; it starts when the last 24 hours drop below it',
+};
+
+function describeArmed(wait: UsageWait) {
+  if (wait.pace) return PACE_ARMED[wait.pace.scope];
+  return wait.autoResume
+    ? 'Hit the usage limit; resumes when it resets'
+    : 'Hit the usage limit; waits for it to reset';
+}
+
+function describeResumed(wait: UsageWait, at: number) {
+  if (wait.cause === 'pace')
+    return at >= wait.resetAt ? 'Started the held step' : 'Started the held step early';
+  return at >= wait.resetAt ? 'Resumed after the usage limit reset' : 'Resumed before the usage limit reset';
 }
 
 function applyUsageWaitEnded(state: ShinsaState, event: EventOf<'usage_wait.ended'>) {
@@ -63,10 +80,7 @@ function applyUsageWaitEnded(state: ShinsaState, event: EventOf<'usage_wait.ende
   record(state, event.taskId, event.at, {
     actor: 'shinsa',
     kind: 'account',
-    text:
-      event.at >= wait.resetAt
-        ? 'Resumed after the usage limit reset'
-        : 'Resumed before the usage limit reset',
+    text: describeResumed(wait, event.at),
   });
 }
 

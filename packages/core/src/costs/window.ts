@@ -1,3 +1,4 @@
+import type { Task, UsagePaceScope } from '../domain/index.ts';
 import { DAY_MS } from '../domain/time.ts';
 import type { ShinsaState } from '../state/project.ts';
 import { resolveUsageRates } from './rate.ts';
@@ -17,6 +18,14 @@ export interface RecentUsage {
   percent: number;
   spends: UsageSpend[];
   unmetered: number;
+}
+
+export interface PaceHold {
+  scope: UsagePaceScope;
+  limit: number;
+  percent: number;
+  projectId: string | null;
+  freesAt: number;
 }
 
 export function listRecentSpends(state: ShinsaState, now: number) {
@@ -69,4 +78,34 @@ export function resolveRecentUsageFreesAt(recent: RecentUsage, limit: number) {
       return percent < limit;
     }) ?? recent.spends.at(-1);
   return freeing ? freeing.at + RECENT_USAGE_MS : null;
+}
+
+function resolveScopeHold(
+  recent: RecentUsage,
+  scope: UsagePaceScope,
+  limit: number | null | undefined,
+  projectId: string | null
+): PaceHold | null {
+  if (limit === null || limit === undefined) return null;
+  const freesAt = resolveRecentUsageFreesAt(recent, limit);
+  return freesAt === null ? null : { scope, limit, percent: recent.percent, projectId, freesAt };
+}
+
+export function resolvePaceHold(state: ShinsaState, task: Task, now: number): PaceHold | null {
+  const daily = state.settings.dailyUsageLimit;
+  const projectId = task.projectId ?? null;
+  const project = projectId === null ? null : (state.projects[projectId] ?? null);
+  if ((daily === null || daily === undefined) && !project?.usageLimit) return null;
+  const holds = [
+    resolveScopeHold(resolveRecentUsage(state, now), 'daily', daily, null),
+    project
+      ? resolveScopeHold(
+          resolveRecentUsage(state, now, project.id),
+          'project',
+          project.usageLimit,
+          project.id
+        )
+      : null,
+  ].filter((hold) => hold !== null);
+  return holds.sort((a, b) => b.freesAt - a.freesAt)[0] ?? null;
 }

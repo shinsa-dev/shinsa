@@ -3,9 +3,11 @@ import type { ShinsaState } from '../state/project.ts';
 import { resolveUsageShares, type UsageShareState } from './rate.ts';
 export {
   listRecentSpends,
+  type PaceHold,
   RECENT_USAGE_MS,
   type RecentUsage,
   resolveRecentUsage,
+  resolvePaceHold,
   resolveRecentUsageFreesAt,
   type UsageSpend,
 } from './window.ts';

@@ -130,6 +130,7 @@ const FEATURE_ROUTES = {
   'remote.terminals': [],
   attention: [],
   'worktree-root': ['POST /api/onboarding/worktrees', 'GET /api/onboarding/worktrees/usage'],
+  'usage.pace_limits': [],
 };
 
 const LOCAL_ONLY = [
