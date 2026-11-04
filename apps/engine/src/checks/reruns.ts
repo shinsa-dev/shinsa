@@ -1,7 +1,8 @@
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { dirname, isAbsolute, join, relative } from 'node:path';
-import { listDependencyNames, listWorkspacePatterns, readPackageManifest } from '../files/manifest.ts';
-import { isFolder, isInside } from '../files/paths.ts';
+import { Effect, Option } from 'effect';
+import { listDependencyNames, listWorkspacePatterns, selectPackageManifest } from '../files/manifest.ts';
+import { isInside } from '../files/paths.ts';
+import { isFolder, isPresent, listEntries, selectText } from '../files/probe.ts';
 import { PACKAGE_MANIFEST } from '../files/schema.ts';
 import type { FailedTestCase, FailedTestGroup, FailedTests, TestRunner } from './schema.ts';
 
@@ -57,60 +58,72 @@ const UNATTRIBUTED =
 
 const COVERAGE_TOTAL = /All files\s*\|\s*([\d.]+)\s*\|\s*([\d.]+)/;
 
-function listPatterns(root: string) {
-  const manifest = readPackageManifest(root);
-  const patterns = manifest ? listWorkspacePatterns(manifest) : [];
-  const pnpm = join(root, 'pnpm-workspace.yaml');
-  if (!existsSync(pnpm)) return patterns;
-  const lines = readFileSync(pnpm, 'utf8').split('\n');
-  return [...patterns, ...lines.flatMap((line) => /^\s*-\s*['"]?([^'"#\s]+)['"]?/.exec(line)?.[1] ?? [])];
-}
+const PNPM_ITEM = /^\s*-\s*['"]?([^'"#\s]+)['"]?/;
 
-function listWorkspaceDirs(root: string) {
-  return listPatterns(root).flatMap((pattern) => {
-    if (!pattern.includes('*')) return [join(root, pattern)];
-    if (!pattern.endsWith('/*') || pattern.slice(0, -2).includes('*')) return [];
+const listPatterns = Effect.fn('Reruns.listPatterns')(function* (root: string) {
+  const manifest = yield* selectPackageManifest(root);
+  const patterns = Option.match(manifest, { onNone: () => [], onSome: listWorkspacePatterns });
+  const pnpm = yield* selectText(join(root, 'pnpm-workspace.yaml'));
+  if (Option.isNone(pnpm)) return patterns;
+  return [...patterns, ...pnpm.value.split('\n').flatMap((line) => PNPM_ITEM.exec(line)?.[1] ?? [])];
+});
+
+const listWorkspaceDirs = Effect.fn('Reruns.listWorkspaceDirs')(function* (root: string) {
+  const dirs: string[] = [];
+  for (const pattern of yield* listPatterns(root)) {
+    if (!pattern.includes('*')) {
+      dirs.push(join(root, pattern));
+      continue;
+    }
+    if (!pattern.endsWith('/*') || pattern.slice(0, -2).includes('*')) continue;
     const parent = join(root, pattern.slice(0, -2));
-    if (!isFolder(parent)) return [];
-    return readdirSync(parent)
-      .map((name) => join(parent, name))
-      .filter(isFolder);
-  });
-}
+    if (!(yield* isFolder(parent))) continue;
+    for (const name of yield* listEntries(parent))
+      if (yield* isFolder(join(parent, name))) dirs.push(join(parent, name));
+  }
+  return dirs;
+});
 
-function resolvePackageDir(file: string, root: string) {
+const selectPackageDir = Effect.fn('Reruns.selectPackageDir')(function* (file: string, root: string) {
   for (let dir = dirname(file); isInside(root, dir); dir = dirname(dir)) {
-    if (existsSync(join(dir, PACKAGE_MANIFEST))) return dir;
+    if (yield* isPresent(join(dir, PACKAGE_MANIFEST))) return Option.some(dir);
     if (dir === root) break;
   }
-  return null;
-}
+  return Option.none<string>();
+});
 
-function readPackageName(dir: string) {
-  return readPackageManifest(dir)?.name ?? null;
-}
+const isNamedFor = Effect.fn('Reruns.isNamedFor')(function* (file: string, root: string, prefix: string) {
+  const dir = yield* selectPackageDir(file, root);
+  if (Option.isNone(dir)) return false;
+  const manifest = yield* selectPackageManifest(dir.value);
+  const name = Option.flatMap(manifest, (each) => Option.fromNullishOr(each.name));
+  return Option.isSome(name) && prefix.includes(name.value);
+});
 
-function resolveTestFile(root: string, dirs: readonly string[], failed: FailedFile) {
-  if (isAbsolute(failed.path))
-    return isInside(root, failed.path) && existsSync(failed.path) ? failed.path : null;
-  const found = [...new Set([root, ...dirs].map((dir) => join(dir, failed.path)))].filter(existsSync);
-  if (found.length <= 1) return found[0] ?? null;
-  const named = found.filter((file) => {
-    const dir = resolvePackageDir(file, root);
-    const name = dir ? readPackageName(dir) : null;
-    return name !== null && failed.prefix.includes(name);
-  });
-  return named.length === 1 ? (named[0] ?? null) : null;
-}
+const selectTestFile = Effect.fn('Reruns.selectTestFile')(function* (
+  root: string,
+  dirs: readonly string[],
+  failed: FailedFile
+) {
+  if (isAbsolute(failed.path)) {
+    const found = isInside(root, failed.path) && (yield* isPresent(failed.path));
+    return found ? Option.some(failed.path) : Option.none<string>();
+  }
+  const candidates = [...new Set([root, ...dirs].map((dir) => join(dir, failed.path)))];
+  const found = yield* Effect.filter(candidates, isPresent);
+  if (found.length <= 1) return Option.fromNullishOr(found[0]);
+  const named = yield* Effect.filter(found, (file) => isNamedFor(file, root, failed.prefix));
+  return named.length === 1 ? Option.fromNullishOr(named[0]) : Option.none<string>();
+});
 
-function resolveRunner(packageDir: string): TestRunner | null {
-  const manifest = readPackageManifest(packageDir);
+const selectRunner = Effect.fn('Reruns.selectRunner')(function* (packageDir: string) {
+  const manifest = Option.getOrNull(yield* selectPackageManifest(packageDir));
   const names = manifest ? listDependencyNames(manifest) : [];
   const words = [...names, manifest?.scripts?.test ?? ''].join(' ');
-  if (/\bvitest\b/.test(words)) return 'vitest';
-  if (/\bjest\b/.test(words)) return 'jest';
-  return null;
-}
+  if (/\bvitest\b/.test(words)) return Option.some<TestRunner>('vitest');
+  if (/\bjest\b/.test(words)) return Option.some<TestRunner>('jest');
+  return Option.none<TestRunner>();
+});
 
 function parseBunLine(line: string, current: Map<string, string | null>, parsed: ParsedOutput) {
   const header = BUN_HEADER.exec(line);
@@ -194,38 +207,44 @@ function groupFiles(files: readonly ResolvedFile[]) {
   return [...groups.values()];
 }
 
-function resolveFailures(output: string, root: string): ResolvedFailures {
+const resolveFailures = Effect.fn('Reruns.resolveFailures')(function* (output: string, root: string) {
   const parsed = parseOutput(output);
-  if (!parsed.attributed) return { kind: 'unknown' };
-  if (parsed.files.length === 0) return parsed.bun ? { kind: 'clean' } : { kind: 'none' };
-  const dirs = listWorkspaceDirs(root);
-  const resolved: ResolvedFile[] = [];
+  if (!parsed.attributed) return { kind: 'unknown' } satisfies ResolvedFailures;
+  if (parsed.files.length === 0)
+    return (parsed.bun ? { kind: 'clean' } : { kind: 'none' }) satisfies ResolvedFailures;
+  const dirs = yield* listWorkspaceDirs(root);
+  const files: ResolvedFile[] = [];
   for (const failed of parsed.files) {
-    const file = resolveTestFile(root, dirs, failed);
-    const packageDir = file ? resolvePackageDir(file, root) : null;
-    const runner = packageDir ? (failed.runner ?? resolveRunner(packageDir)) : null;
-    if (!file || !packageDir || !runner) return { kind: 'unknown' };
-    resolved.push({ runner, packageDir, file, test: failed.test });
+    const file = yield* selectTestFile(root, dirs, failed);
+    if (Option.isNone(file)) return { kind: 'unknown' } satisfies ResolvedFailures;
+    const packageDir = yield* selectPackageDir(file.value, root);
+    if (Option.isNone(packageDir)) return { kind: 'unknown' } satisfies ResolvedFailures;
+    const runner = failed.runner ? Option.some(failed.runner) : yield* selectRunner(packageDir.value);
+    if (Option.isNone(runner)) return { kind: 'unknown' } satisfies ResolvedFailures;
+    files.push({ runner: runner.value, packageDir: packageDir.value, file: file.value, test: failed.test });
   }
-  return { kind: 'files', files: resolved };
-}
+  return { kind: 'files', files } satisfies ResolvedFailures;
+});
 
-export function listFailedTests(output: string, root: string): FailedTests {
-  const failures = resolveFailures(output, root);
-  if (failures.kind !== 'files') return failures;
-  return { kind: 'files', groups: groupFiles(failures.files) };
-}
+export const listFailedTests = Effect.fn('Reruns.listFailedTests')(function* (output: string, root: string) {
+  const failures: ResolvedFailures = yield* resolveFailures(output, root);
+  if (failures.kind !== 'files') return failures satisfies FailedTests;
+  return { kind: 'files', groups: groupFiles(failures.files) } satisfies FailedTests;
+});
 
-export function listFailedTestCases(output: string, root: string): FailedTestCase[] | null {
-  const failures = resolveFailures(output, root);
-  if (failures.kind !== 'files') return null;
+export const selectFailedTestCases = Effect.fn('Reruns.selectFailedTestCases')(function* (
+  output: string,
+  root: string
+) {
+  const failures: ResolvedFailures = yield* resolveFailures(output, root);
+  if (failures.kind !== 'files') return Option.none<FailedTestCase[]>();
   const cases = new Map<string, FailedTestCase>();
   for (const { file, test } of failures.files) {
     const path = relative(root, file);
     cases.set(`${path}\n${test}`, { file: path, test });
   }
-  return [...cases.values()];
-}
+  return Option.some([...cases.values()]);
+});
 
 export function isCoverageFloorOnly(output: string) {
   const parsed = parseOutput(output);
@@ -234,22 +253,26 @@ export function isCoverageFloorOnly(output: string) {
   return hasBunCoverageMiss(output) && lines.some((line) => BUN_FAIL_COUNT.exec(line)?.[1] === '0');
 }
 
-function selectBin(packageDir: string, root: string, name: string) {
+const selectBin = Effect.fn('Reruns.selectBin')(function* (packageDir: string, root: string, name: string) {
   for (let dir = packageDir; isInside(root, dir); dir = dirname(dir)) {
     const bin = join(dir, 'node_modules', '.bin', name);
-    if (existsSync(bin)) return bin;
+    if (yield* isPresent(bin)) return Option.some(bin);
     if (dir === root) break;
   }
-  return null;
-}
+  return Option.none<string>();
+});
 
-export function resolveRerunCommand(group: FailedTestGroup, root: string): string[] | null {
-  if (group.runner === 'bun') return ['bun', 'test', ...group.files.map((file) => `./${file}`)];
-  const bin = selectBin(group.packageDir, root, group.runner);
-  if (!bin) return null;
-  if (group.runner === 'vitest') return [bin, 'run', '--coverage.enabled=false', ...group.files];
-  return [bin, '--coverage=false', '--runTestsByPath', ...group.files];
-}
+export const selectRerunCommand = Effect.fn('Reruns.selectRerunCommand')(function* (
+  group: FailedTestGroup,
+  root: string
+) {
+  if (group.runner === 'bun') return Option.some(['bun', 'test', ...group.files.map((file) => `./${file}`)]);
+  const bin = yield* selectBin(group.packageDir, root, group.runner);
+  if (Option.isNone(bin)) return Option.none<string[]>();
+  if (group.runner === 'vitest')
+    return Option.some([bin.value, 'run', '--coverage.enabled=false', ...group.files]);
+  return Option.some([bin.value, '--coverage=false', '--runTestsByPath', ...group.files]);
+});
 
 export function isRerunPassed(runner: TestRunner, output: string, ok: boolean) {
   if (runner !== 'bun') return ok;

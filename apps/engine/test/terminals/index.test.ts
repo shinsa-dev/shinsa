@@ -361,7 +361,7 @@ describe('Terminals services', () => {
       },
     } as unknown as ShinsaState;
     const again = createTerminals({ dataDir });
-    run(again.terminals.resumeServices(state));
+    await runAsync(again.terminals.resumeServices(state));
     expect(again.fake.spawned.map((each) => each.options.cwd)).toEqual(['/wt/open/apps/api']);
   });
 
@@ -379,10 +379,10 @@ describe('Terminals services', () => {
     const again = createTerminals({ dataDir });
     const seen: TerminalsSnapshot[] = [];
     run(Effect.asVoid(again.terminals.subscribe((snapshot) => seen.push(snapshot))));
-    run(again.terminals.resumeServices(state));
+    await runAsync(again.terminals.resumeServices(state));
     expect(run(again.terminals.snapshot).terminals.map((each) => each.taskId)).toEqual(['open', null]);
     const before = seen.length;
-    run(again.terminals.resumeServices(state));
+    await runAsync(again.terminals.resumeServices(state));
     expect(seen.length).toBe(before);
     const reread = createTerminals({ dataDir });
     expect(run(reread.terminals.snapshot).terminals.map((each) => each.taskId)).toEqual(['open', null]);

@@ -14,7 +14,7 @@ import {
   type ShinsaCommand,
   type WatchdogSpec,
 } from '@shinsa/core';
-import { Clock, Context, Effect, Layer, Option } from 'effect';
+import { Clock, Context, Effect, FileSystem, Layer, Option } from 'effect';
 import { Checkout } from '../../git/checkout/service.ts';
 import { describeError } from '../../log/index.ts';
 import { RepoRegistry } from '../../repos/registry/service.ts';
@@ -64,6 +64,7 @@ export class ToolCalls extends Context.Service<
     ToolCalls,
     Effect.gen(function* () {
       const engine = yield* EngineCore;
+      const withFiles = Effect.provideService(FileSystem.FileSystem, yield* FileSystem.FileSystem);
       const questions = yield* Questions;
       const work = yield* RepositoryWork;
       const runs = yield* LiveRuns;
@@ -231,12 +232,13 @@ export class ToolCalls extends Context.Service<
         yield* assertCalled(() => assertRunTool(run, name));
         if (Option.isNone(services))
           return yield* refuse(`${name} is not available while Shinsa runs without terminals.`);
-        return yield* runServiceTool(name, input, {
+        const context = {
           state: yield* engine.state,
           task,
           runner: services.value,
           now: yield* Clock.currentTimeMillis,
-        });
+        };
+        return yield* withFiles(runServiceTool(name, input, context));
       });
 
       const note = Effect.fn('ToolCalls.note')(function* (

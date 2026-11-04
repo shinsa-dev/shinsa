@@ -36,9 +36,9 @@ import {
   type Task,
   verifyShareHello,
 } from '@shinsa/core';
-import { Clock, Context, Effect, Layer, Option, Ref } from 'effect';
+import { Clock, Context, Effect, FileSystem, Layer, Option, Ref } from 'effect';
 import { Transcripts } from '../../agents/transcripts/service.ts';
-import { resolveTaskCheckout } from '../../git/history/checkout.ts';
+import { selectTaskCheckout } from '../../git/history/checkout.ts';
 import { History } from '../../git/history/service.ts';
 import { resolveRepoSlug } from '../../github/index.ts';
 import { PullRequests } from '../../github/pulls/service.ts';
@@ -102,6 +102,7 @@ export class Shares extends Context.Service<Shares, SharesHandle>()('shinsa/engi
       const origin = yield* RemoteOrigin;
       const randomBytes = yield* RandomBytes;
       const sources = yield* ShareSources;
+      const withFiles = Effect.provideService(FileSystem.FileSystem, yield* FileSystem.FileSystem);
       const context = yield* Effect.context<never>();
       const runSync = Effect.runSyncWith(context);
       const hashes = yield* Ref.make<ReadonlyMap<string, HashedFile>>(new Map());
@@ -461,8 +462,9 @@ export class Shares extends Context.Service<Shares, SharesHandle>()('shinsa/engi
         const pullRequest = task.pullRequest;
         if (pullRequest && PULL_REQUEST_CODE.has(pullRequest.state))
           return yield* listPullRequestFiles(task, repo, pullRequest);
-        const checkout = resolveTaskCheckout(task);
-        return checkout ? yield* listWorkingFiles(task, repo, checkout) : [];
+        const checkout = yield* withFiles(selectTaskCheckout(task));
+        if (Option.isNone(checkout)) return [];
+        return yield* listWorkingFiles(task, repo, checkout.value);
       });
 
       const listLiveCodeFiles = (shared: SharedTask, task: Task, repo: Repo | null) =>

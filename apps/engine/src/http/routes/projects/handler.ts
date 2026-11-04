@@ -1,6 +1,6 @@
 import { EngineApi } from '@shinsa/core/engine-api';
 import { RouteNotFound, ROUTE_NOT_FOUND_MESSAGE } from '@shinsa/core/engine-api/schema';
-import { Effect, Option } from 'effect';
+import { Effect, FileSystem, Option } from 'effect';
 import { HttpApiBuilder } from 'effect/http-api';
 import { listLocalRepoViews } from '../../../projects/changes.ts';
 import { ProjectChanges } from '../../../projects/changes/service.ts';
@@ -14,6 +14,7 @@ export const ProjectsHandlers = HttpApiBuilder.group(
   'projects',
   Effect.fn('ProjectsHandlers')(function* (handlers) {
     const engine = yield* EngineCore;
+    const withFiles = Effect.provideService(FileSystem.FileSystem, yield* FileSystem.FileSystem);
     const givenRoots = Option.getOrUndefined(yield* Effect.serviceOption(Roots));
     const givenProjects = Option.getOrUndefined(yield* Effect.serviceOption(ProjectChanges));
     const notFound = new RouteNotFound({ message: ROUTE_NOT_FOUND_MESSAGE });
@@ -30,7 +31,8 @@ export const ProjectsHandlers = HttpApiBuilder.group(
       )
       .handle('coverage', () =>
         Effect.andThen(roots, engine.state).pipe(
-          Effect.map((state) => ({ detected: listCoverageDetections(Object.values(state.repos)) }))
+          Effect.flatMap((state) => withFiles(listCoverageDetections(Object.values(state.repos)))),
+          Effect.map((detected) => ({ detected }))
         )
       )
       .handle('addRepo', ({ params, payload }) =>

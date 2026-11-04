@@ -1,4 +1,3 @@
-import { existsSync } from 'node:fs';
 import {
   CODE_LIMITS,
   resolveImageType,
@@ -11,12 +10,14 @@ import {
 } from '@shinsa/core';
 import { EngineApi } from '@shinsa/core/engine-api';
 import { CodeUnavailable, FileMissing, RequestFailed } from '@shinsa/core/engine-api/schema';
-import { Effect, Queue, Stream } from 'effect';
+import { Effect, FileSystem, Option, Queue, Stream } from 'effect';
 import { type HttpServerRequest, HttpServerResponse } from 'effect/http';
 import { HttpApiBuilder } from 'effect/http-api';
-import { assertRepoPath, resolveInside } from '../../../files/paths.ts';
+import { selectInside } from '../../../files/inside.ts';
+import { assertRepoPath } from '../../../files/paths.ts';
+import { isPresent } from '../../../files/probe.ts';
 import { CatFiles } from '../../../git/blobs/service.ts';
-import { resolveTaskCheckout } from '../../../git/history/checkout.ts';
+import { selectTaskCheckout } from '../../../git/history/checkout.ts';
 import { History } from '../../../git/history/service.ts';
 import { ObjectCache } from '../../../git/objects/service.ts';
 import { listWorkingTree } from '../../../git/tree/entries.ts';
@@ -49,6 +50,7 @@ export const CodeHandlers = HttpApiBuilder.group(
   'code',
   Effect.fn('CodeHandlers')(function* (handlers) {
     const engine = yield* EngineCore;
+    const withFiles = Effect.provideService(FileSystem.FileSystem, yield* FileSystem.FileSystem);
     const files = yield* CodeFiles;
     const history = yield* History;
     const cache = yield* ObjectCache;
@@ -78,9 +80,10 @@ export const CodeHandlers = HttpApiBuilder.group(
     const findCodeTask = Effect.fn('CodeHandlers.findCodeTask')(function* (reference: string) {
       const task = selectTaskByReference(yield* engine.state, reference);
       const repo = task?.repoId ? (yield* engine.state).repos[task.repoId] : undefined;
-      if (!task || !repo || !existsSync(repo.path))
+      if (!task || !repo || !(yield* withFiles(isPresent(repo.path))))
         return yield* new CodeUnavailable({ message: CODE_MISSING_MESSAGE });
-      const found: CodeTask = { task, repoPath: repo.path, worktree: resolveTaskCheckout(task) };
+      const worktree = Option.getOrNull(yield* withFiles(selectTaskCheckout(task)));
+      const found: CodeTask = { task, repoPath: repo.path, worktree };
       return found;
     });
 
@@ -141,9 +144,9 @@ export const CodeHandlers = HttpApiBuilder.group(
             files.readCommitFile(found.repoPath, ref.sha, path, reader)
           )
         );
-      const absolute = resolveInside(ref.worktree, path);
-      if (!absolute) return yield* new RequestFailed(PATH_LEAVES_WORKTREE);
-      return yield* files.readWorkingFile(absolute, path);
+      const absolute = yield* withFiles(selectInside(ref.worktree, path));
+      if (Option.isNone(absolute)) return yield* new RequestFailed(PATH_LEAVES_WORKTREE);
+      return yield* files.readWorkingFile(absolute.value, path);
     });
 
     const readBytes = (found: CodeTask, ref: ResolvedRef, path: string) => {
@@ -153,8 +156,10 @@ export const CodeHandlers = HttpApiBuilder.group(
             files.readCommitBytes(found.repoPath, ref.sha, path, reader)
           )
         );
-      const absolute = resolveInside(ref.worktree, path);
-      return absolute ? files.readWorkingBytes(absolute) : Effect.succeed(null);
+      return Effect.flatMap(
+        withFiles(selectInside(ref.worktree, path)),
+        Option.match({ onNone: () => Effect.succeed(null), onSome: files.readWorkingBytes })
+      );
     };
 
     const search = (

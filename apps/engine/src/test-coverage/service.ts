@@ -11,12 +11,12 @@ import {
   resolveCustomFormat,
   resolveRepoCoverage,
 } from '@shinsa/core';
-import { Context, Effect, Layer } from 'effect';
+import { Context, Effect, FileSystem, Layer, Option } from 'effect';
 import { CheckRunner } from '../checks/runner/service.ts';
 import { CHECK_TIMEOUT_MS } from '../checks/schema.ts';
 import { History } from '../git/history/service.ts';
 import { describeError } from '../log/redact.ts';
-import { resolveCoverageRun, resolveGoModule } from './detect.ts';
+import { resolveCoverageRun, selectGoModule } from './detect.ts';
 import {
   COVERAGE_DIR_PREFIX,
   type CoverageRequest,
@@ -35,6 +35,7 @@ export class TaskCoverage extends Context.Service<
     Effect.gen(function* () {
       const runner = yield* CheckRunner;
       const history = yield* History;
+      const withFiles = Effect.provideService(FileSystem.FileSystem, yield* FileSystem.FileSystem);
 
       const resolveUnavailable = (command: string, reason: string): Coverage => ({
         status: 'unavailable',
@@ -138,12 +139,13 @@ export class TaskCoverage extends Context.Service<
         const refs = yield* history.taskRefs(request.repo, request.task, request.baseBranch, signal);
         if (!refs.base) return resolveUnavailable(command, NO_BASE_COMMIT);
         const changed = parseChangedLines(yield* history.changedLinesPatch(worktree, refs.base, signal));
+        const modulePath = Option.getOrNull(yield* withFiles(selectGoModule(worktree)));
         return measureCoverage({
           command: command.slice(0, COVERAGE_LIMITS.command),
           changed,
           hits: collected.hits,
           roots: listRoots(worktree),
-          modulePath: resolveGoModule(worktree),
+          modulePath,
         });
       });
 

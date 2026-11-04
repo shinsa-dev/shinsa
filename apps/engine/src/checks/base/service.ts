@@ -1,14 +1,14 @@
 import { existsSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
 import { isAbsolute, join } from 'node:path';
 import type { Repo } from '@shinsa/core';
-import { Cause, Context, Effect, Layer } from 'effect';
+import { Cause, Context, Effect, FileSystem, Layer, Option } from 'effect';
 import { EngineConfig } from '../../config/service.ts';
 import { COMMIT_ID } from '../../git/checkout/schema.ts';
 import { Checkout } from '../../git/checkout/service.ts';
 import { slugify } from '../../git/refs.ts';
 import { Git } from '../../git/service.ts';
 import { describeError } from '../../log/redact.ts';
-import { listCheckFailures, resolveFailureDiff } from '../failures.ts';
+import { resolveFailureDiff, selectCheckFailures } from '../failures.ts';
 import { CheckRunner } from '../runner/service.ts';
 import {
   type BaseCheckout,
@@ -30,6 +30,7 @@ export class BaseCheckouts extends Context.Service<
       const runner = yield* CheckRunner;
       const dir = (yield* EngineConfig).checkBasesDir;
       const keep = yield* KeptCheckouts;
+      const withFiles = Effect.provideService(FileSystem.FileSystem, yield* FileSystem.FileSystem);
       const checkouts = new Map<string, BaseCheckout>();
       const results = new Map<string, Effect.Effect<BaseResult | null>>();
 
@@ -116,10 +117,8 @@ export class BaseCheckouts extends Context.Service<
         });
         if (signal?.aborted || result.timedOut) return null;
         if (result.ok) return { failed: false, failures: [] } satisfies BaseResult;
-        return {
-          failed: true,
-          failures: listCheckFailures(`${result.stdout}\n${result.stderr}`, path),
-        } satisfies BaseResult;
+        const failures = yield* withFiles(selectCheckFailures(`${result.stdout}\n${result.stderr}`, path));
+        return { failed: true, failures: Option.getOrNull(failures) } satisfies BaseResult;
       });
 
       const runOnBase = Effect.fn('BaseCheckouts.runOnBase')(function* (

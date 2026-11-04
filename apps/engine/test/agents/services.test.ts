@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { BunServices } from '@effect/platform-bun';
 import { DomainError, type ShinsaState, type Task } from '@shinsa/core';
 import { Effect } from 'effect';
 import { SERVICE_OUTPUT_LINES, type ServiceToolName } from '../../src/agents/services/schema.ts';
@@ -45,7 +46,11 @@ function setup(options: { services?: boolean; worktree?: boolean } = {}) {
     run(runner.addService('p1', { name: 'notes', cwd: root, command: 'ls', env: {}, ...NO_PREVIEW }));
   }
   const call = (name: ServiceToolName, input: Record<string, unknown> = {}, on: Task = task) =>
-    runAsync(runServiceTool(name, input, { state, task: on, runner, now: 200_000 }));
+    runAsync(
+      runServiceTool(name, input, { state, task: on, runner, now: 200_000 }).pipe(
+        Effect.provide(BunServices.layer)
+      )
+    );
   return { call, runner, fake, worktree, repoPath, root, other };
 }
 

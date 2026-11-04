@@ -9,11 +9,12 @@ import {
   ROUTE_NOT_FOUND_MESSAGE,
   WorktreeMissing,
 } from '@shinsa/core/engine-api/schema';
-import { Effect, Layer, Option, Predicate, Schema } from 'effect';
+import { Effect, FileSystem, Layer, Option, Predicate, Schema } from 'effect';
 import { HttpApiBuilder } from 'effect/http-api';
 import { Transcripts } from '../../../agents/transcripts/service.ts';
 import { EngineConfig } from '../../../config/service.ts';
-import { assertRepoPath, resolveInside, resolveWritableInside } from '../../../files/paths.ts';
+import { selectInside, selectWritableInside } from '../../../files/inside.ts';
+import { assertRepoPath } from '../../../files/paths.ts';
 import { GitCommands } from '../../../git/layers.ts';
 import { Git } from '../../../git/service.ts';
 import { EngineCore } from '../../../runtime/engine/service.ts';
@@ -55,6 +56,7 @@ export const TasksHandlers = HttpApiBuilder.group(
   'tasks',
   Effect.fn('TasksHandlers')(function* (handlers) {
     const engine = yield* EngineCore;
+    const withFiles = Effect.provideService(FileSystem.FileSystem, yield* FileSystem.FileSystem);
     const config = yield* EngineConfig;
     const transcripts = yield* Transcripts;
     const workspaces = Option.getOrUndefined(yield* Effect.serviceOption(Workspaces));
@@ -165,7 +167,7 @@ export const TasksHandlers = HttpApiBuilder.group(
           const worktreePath = task?.worktreePath;
           if (!worktreePath || !repo)
             return yield* new WorktreeMissing({ message: WORKTREE_MISSING_MESSAGE });
-          const file = payload.path ? resolveInside(worktreePath, payload.path) : null;
+          const file = Option.getOrNull(yield* withFiles(selectInside(worktreePath, payload.path ?? '')));
           const location = file && payload.line ? `${file}:${payload.line}` : file;
           const command = resolveOpenCommand(payload.target, worktreePath, location);
           const result = yield* open(command, worktreePath);
@@ -189,9 +191,10 @@ export const TasksHandlers = HttpApiBuilder.group(
           );
           const content = yield* readText(payload.content, 'content');
           const base = payload.base === null ? null : yield* readText(payload.base, 'base');
-          const absolute = resolveWritableInside(root, path);
-          if (!absolute)
+          const writable = yield* withFiles(selectWritableInside(root, path));
+          if (Option.isNone(writable))
             return yield* new RequestFailed({ code: 'path_invalid', message: PATH_LEAVES_WORKTREE });
+          const absolute = writable.value;
           const disk: { current: string | null; written: boolean } = { current: null, written: false };
           yield* workspaces
             .resolve(task)

@@ -199,7 +199,7 @@ suite is CI's job on the pull request, never a check's, so no task runs the whol
   in a detached checkout of it (`BaseCheckouts` in `checks/base/service.ts`; cached per base commit and command, the last few
   checkouts kept under `data/check-bases/`, each with its dependencies installed once). A command failing on the base
   is not enough: Shinsa compares the failures themselves (`checks/failures.ts`). It reads each output into failures
-  with an identity (`listCheckFailures`):
+  with an identity (`selectCheckFailures`):
   - a test run (Bun, Vitest, Jest, read as in the re-run above): each failing test, keyed by its file (relative to the
     checkout) and its full name, durations dropped; a file that failed without a named test is keyed by the file;
   - otherwise each diagnostic: tsc (`file(line,col): error TS2322: …` and the pretty `file:line:col - error …`, a
@@ -268,7 +268,7 @@ or modifies, the ones the report marks executable, and of those the ones a test 
 
   Each run writes into its own fresh temporary folder (`<dir>`) that Shinsa removes afterwards, so a stale report is
   never read, and the reports are merged; a custom report is deleted before its command runs.
-  `GET /api/repos/coverage` says which runner Auto found in each repository (`resolveCoverageDetection`), for
+  `GET /api/repos/coverage` says which runner Auto found in each repository (`selectCoverageDetection`), for
   Settings.
 - **The run** shares the checks' environment, timeout (15 minutes) and cancellation, while the task still holds its
   workspace. A command that exits non-zero but leaves a report still counts (a coverage floor fails the run, not the
@@ -574,7 +574,7 @@ modes (`WORKSPACE_MODES`), each a service in `apps/engine/src/workspaces/` behin
   or cancelled (`settleTask`, below). It asks `GET /api/onboarding/worktrees/usage` each time the page opens and
   after the folder changes; nothing measures in the background.
 - **A new worktree comes with its dependencies.** `prepareWorktree` runs the install its lockfile names
-  (`resolveInstallCommand`: `bun install`, `pnpm install --frozen-lockfile` or `npm ci`; nothing for Yarn) before the
+  (`selectInstallCommand`: `bun install`, `pnpm install --frozen-lockfile` or `npm ci`; nothing for Yarn) before the
   agent is handed the worktree. A failed install runs once more at once, since a first `pnpm install` with the hoisted
   linker can fail on files it is still writing (`ERR_PNPM_EEXIST`) and pass the second time; only when that run fails
   too is it logged, and the agent sets the dependencies up itself. Base checkouts for checks are prepared the same way.
@@ -611,7 +611,7 @@ every commit.
   (`FileWrite`): the file's new text and the text the editor last knew on disk (`null` for none). It writes into the
   task's checkout, `worktreePath`, which each strategy sets: the worktree, or the repository itself for the main
   checkout. The path passes `assertRepoPath` and must stay inside the checkout with its nearest existing
-  folder's real path (`resolveWritableInside`), so neither `..` nor a symlinked folder leads out. A text over 2 MB is
+  folder's real path (`selectWritableInside`), so neither `..` nor a symlinked folder leads out. A text over 2 MB is
   refused (`file_too_large`), and so is a task core will not let you edit (`edit_refused`, `resolveEditRefusal`: merged,
   cancelled or done, or no checkout). Inspect mode refuses it with every other write.
 - **Never over someone else's write.** When the file on disk is not `base`, nothing is written and the answer is
@@ -2689,7 +2689,7 @@ file you edit, is `POST /api/tasks/<id>/file` (Where agents work → Your edits)
 | `GET /api/tasks/<id>/refs` | `TaskRefs`: the head commit, the base, the branch, the default branch, whether a working copy exists and has uncommitted edits, and the commits between base and head (100 at most) | the worktree's `HEAD`; without a worktree the branch, then the pull request's head, then the last pushed commit; a task without a branch reads the default branch (`origin` first). The base is the merge base with the round's base branch or the default branch; once the branch is merged, the merge base with the commit before the merge, so a merged task keeps its diff |
 | `GET /api/tasks/<id>/paths?ref=` | `RepoPaths`: every file path (200,000 at most, `truncated`) | `git ls-tree -r`; the working copy `git ls-files --cached --others --exclude-standard` without the deleted ones |
 | `GET /api/tasks/<id>/tree?ref=&dir=` | `RepoTree`: one folder's entries, folders first | the folder's tree object through the same long-lived reader as `blob` (`info <commit>:<dir>`, `contents`, then `info` for each file's size), kept in the cache by commit and folder (a cold folder of paywall-next went from about 27 ms to 2 to 10 ms); a path git cannot take on one line falls back to `git ls-tree --long`; the working copy from its paths |
-| `GET /api/tasks/<id>/blob?ref=&path=` | `FileContent`: the text, or `binary` (a NUL in the first 8 KB, with the image type for an image), `tooLarge` (over 2 MB) or `missing` | one long-lived `git cat-file --batch-command` per repository (`git/blobs/service.ts`, `CatFiles`): `info <commit>:<path>` for the object and its size, then `contents <object>`, so a file costs no process (a cold read went from about 40 ms, three `git` processes, to 1 to 2 ms); the reader stops after 30 s idle or a 5 s stall and starts again on the next read; a path git cannot take on one line falls back to `git ls-tree` and `git cat-file blob`; the working copy through `resolveInside` |
+| `GET /api/tasks/<id>/blob?ref=&path=` | `FileContent`: the text, or `binary` (a NUL in the first 8 KB, with the image type for an image), `tooLarge` (over 2 MB) or `missing` | one long-lived `git cat-file --batch-command` per repository (`git/blobs/service.ts`, `CatFiles`): `info <commit>:<path>` for the object and its size, then `contents <object>`, so a file costs no process (a cold read went from about 40 ms, three `git` processes, to 1 to 2 ms); the reader stops after 30 s idle or a 5 s stall and starts again on the next read; a path git cannot take on one line falls back to `git ls-tree` and `git cat-file blob`; the working copy through `selectInside` |
 | `GET /api/tasks/<id>/raw?ref=&path=` | an image's bytes, with `default-src 'none'` and `nosniff`; anything but an image is refused | as `blob` |
 | `GET /api/tasks/<id>/search?ref=&q=&regex=1&case=1&word=1&glob=` | `SearchResult`: up to 2,000 matches with path, line, column and text, `truncated` and `timedOut`; asked with `Accept: application/x-ndjson` (the web does), a stream of `SearchLine`s instead: `matches` lines as git finds them, then one `done` line with how it ended (or one `failed` line), `no-store` | `git grep -n -I --column`: a plain search that ignores case is `-E` with each letter folded into a class (`[cC][oO]…`, the rest escaped; `-i` made git grep up to twenty times slower), a case-sensitive one `-F`, `regex=1` is `-E` with `-i` unless `case=1`, `-w` with `word=1`, the glob as a `:(glob)` pathspec (`**/` in front when it names no folder); the working copy adds `--untracked`. git is stopped at the 2,001st line, so a common word answers at once |
 | `GET /api/tasks/<id>/diff?base=&head=&path=&previous=` | `TaskDiff` with both ends: every changed file with its status, counts and risk, and the patch of the small ones only; the rest have `patch: ''` and `patchOmitted` (with `path`, and `previous` for a rename, the named file alone with its whole patch) | `git diff --raw --numstat -z --find-renames base head` for the list (`parseDiffSummary`), then one `git diff` over the files that fit the patch budget, in risk order (`selectPatchedFiles`, `mergeDiffPatches`: none over 2,000 changed lines or 256 KB, 20,000 lines and 1 MB in all, 400 files; a named file up to 2 MB); `head=working` diffs the working copy through a copy of its index (below). Without both ends it is the task's base against its working copy, or its head once the worktree is gone (what `shinsa tasks diff` reads) |
@@ -2701,7 +2701,7 @@ file you edit, is `POST /api/tasks/<id>/file` (Where agents work → Your edits)
   commit once found is remembered per repository (`assertCommit`), so later reads at it start no process. Leaving `ref` out
   reads the head and is never cached.
 - **Paths.** Relative, without an empty, `.` or `..` segment, a leading `/` or a NUL (`path_invalid`); they reach git
-  after `--` and with `GIT_LITERAL_PATHSPECS`, and the working copy is read through `resolveInside`, so a symlink
+  after `--` and with `GIT_LITERAL_PATHSPECS`, and the working copy is read through `selectInside`, so a symlink
   cannot leave it. A search glob may not start with `-` or `:`, and the query is at most 500 characters.
 - **Limits.** Each read runs with argv only, in its own process group, for 5 s (30 s for a diff) and stops when the
   client goes away; output is capped (64 MB for listings and diffs, 4 MB or 2,000 lines for a search, 2 MB for a
@@ -2846,8 +2846,8 @@ beside your run (Runs for a task, below).
   run for a task that is settled, has no worktree of its own (one that works in the repository's own checkout uses
   your run), belongs to another project, or whose repository does not hold the service's folder (a project folder
   outside every repository). `listTaskServices` lists what a task can run, `listServiceTaskRuns` every task's run of
-  one service. Start, stop and restart take an optional `{ taskId }` in their body (`resolveServiceRunIn` in
-  `terminals/places.ts`; no body is your run, as before); an unknown task is `task_not_found`, a service the task cannot run
+  one service. Start, stop and restart take an optional `{ taskId }` in their body (`selectServiceRunIn` in
+  `terminals/runs.ts`; no body is your run, as before); an unknown task is `task_not_found`, a service the task cannot run
   `service_place_invalid`, a worktree without the folder `terminal_place_missing`. Renaming a service renames every
   run's tab and removing one closes them all.
 - **A port per run.** Every task run gets a port of its own, chosen as it starts (`Terminals.#resolvePort`,
@@ -2872,7 +2872,7 @@ beside your run (Runs for a task, below).
   finished agent left working in the worktree, such as a dev server an agent started from its shell (Where agents work → A removed
   worktree takes its processes with it), so no dev server keeps running in a deleted folder; your own shells opened
   in that worktree, and what runs in them, are left as they are.
-- **A task run's own variables.** `resolveServiceRunIn` gives a task's run the shared Turbo cache in a Turbo
+- **A task run's own variables.** `selectServiceRunIn` gives a task's run the shared Turbo cache in a Turbo
   repository (`ServiceRun.env`, Where agents work → Turbo's cache is shared per repository), kept for the run's
   restarts and under the service's own variables and its port.
 - **Across a restart of the engine.** `Terminals.stop()` saves a service that was running as running, and the next
@@ -4884,7 +4884,7 @@ reason (`describeShippingStep`) while the task ships with a push pending and no 
    authentication failure), `hook` (a hook is there and git refused with no rejected ref), or `other`.
    - **A hook rejection is deterministic and never retried.** The effect sends
      `pull_request.record_hook_failure` with the last 80 lines of the output (6000 characters at most) and the
-     failures `listCheckFailures` reads from it (failing tests by file and name, or diagnostics), and settles. Core
+     failures `selectCheckFailures` reads from it (failing tests by file and name, or diagnostics), and settles. Core
      starts a fix round (`fixFor: 'hook'`, "fixing what the pre-push hook found") with the output and the failures, and
      tells the agent to run only those tests or checks, scoped to their files, never the whole suite the hook runs.
      After the fix the touched checks run and Shinsa pushes again, which runs the hook again. Its failure identity is

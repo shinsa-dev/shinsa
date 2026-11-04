@@ -1,10 +1,11 @@
 import { listTerminalPlaces, TERMINAL_LIMITS } from '@shinsa/core';
 import { EngineApi } from '@shinsa/core/engine-api';
 import { RequestFailed, RouteNotFound, ROUTE_NOT_FOUND_MESSAGE } from '@shinsa/core/engine-api/schema';
-import { Effect, Option, Predicate } from 'effect';
+import { Effect, FileSystem, Option, Predicate } from 'effect';
 import { HttpApiBuilder } from 'effect/http-api';
 import { PATH_LIMIT } from '../../../files/schema.ts';
 import { EngineCore } from '../../../runtime/engine/service.ts';
+import { assertFolderPresent } from '../../../terminals/folders.ts';
 import { readOptionalText, readText } from '../../../terminals/input.ts';
 import { resolveTerminalStart } from '../../../terminals/places.ts';
 import { Terminals } from '../../../terminals/service.ts';
@@ -16,6 +17,7 @@ export const TerminalsHandlers = HttpApiBuilder.group(
   'terminals',
   Effect.fn('TerminalsHandlers')(function* (handlers) {
     const engine = yield* EngineCore;
+    const withFiles = Effect.provideService(FileSystem.FileSystem, yield* FileSystem.FileSystem);
     const given = Option.getOrUndefined(yield* Effect.serviceOption(Terminals));
     const terminals = given
       ? Effect.succeed(given)
@@ -42,6 +44,7 @@ export const TerminalsHandlers = HttpApiBuilder.group(
             const places = listTerminalPlaces(state, projectId);
             return { start: resolveTerminalStart(places, projectId, path, found.home), command: typed };
           });
+          yield* request(withFiles(assertFolderPresent(start.cwd)));
           const terminal = yield* request(found.create(start));
           if (command) yield* request(found.run(terminal.id, command));
           return { terminal, ...(yield* found.snapshot) };

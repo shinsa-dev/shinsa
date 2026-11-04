@@ -10,6 +10,7 @@ import {
   readFolderDigest,
   resolveRefinedSuggestions,
 } from '../../src/terminals/refine.ts';
+import { runFiles } from '../harness.ts';
 import { createTempDir } from '../helpers/temp.ts';
 import { createTestRefiner } from '../helpers/terminals.ts';
 
@@ -53,22 +54,22 @@ function createProject() {
 }
 
 describe('reading a folder for the refiner', () => {
-  test('gives its scripts and dependency names, capped', () => {
+  test('gives its scripts and dependency names, capped', async () => {
     const { root, web } = createProject();
-    expect(readFolderDigest(web)).toEqual({
+    expect(await runFiles(readFolderDigest(web))).toEqual({
       folder: web,
       scripts: { dev: 'vite', build: 'vite build' },
       dependencies: ['react', 'vite'],
     });
-    expect(readFolderDigest(root)).toEqual({ folder: root, scripts: {}, dependencies: [] });
+    expect(await runFiles(readFolderDigest(root))).toEqual({ folder: root, scripts: {}, dependencies: [] });
     const long = createTempDir();
     const scripts = Object.fromEntries(Array.from({ length: 20 }, (_, i) => [`s${i}`, 'x'.repeat(500)]));
     writeFileSync(join(long, 'package.json'), JSON.stringify({ scripts, dependencies: [1, 2] }));
-    const digest = readFolderDigest(long);
+    const digest = await runFiles(readFolderDigest(long));
     expect(Object.keys(digest.scripts)).toHaveLength(REFINE_LIMITS.scripts);
     expect(digest.scripts.s0).toHaveLength(REFINE_LIMITS.script);
     writeFileSync(join(long, 'package.json'), '[]');
-    expect(readFolderDigest(long).scripts).toEqual({});
+    expect((await runFiles(readFolderDigest(long))).scripts).toEqual({});
   });
 });
 

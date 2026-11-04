@@ -261,8 +261,8 @@ Three tools check Effect code, and each catches what the others cannot:
   types, so it catches an effect nobody runs (`floatingEffect`), a missing `yield*`, an error or a service left out of
   a signature (`missingEffectError`, `missingEffectContext`, `missingLayerContext`), `any` or `unknown` in an error
   channel, a schema class without its brand, an unstable API outside the allowed list (`effect/http`,
-  `effect/http-api`, `effect/sql` and the SQL drivers, and the engine's `effect/process`, `effect/PlatformError` and
-  `@effect/platform-bun`), and `Data.TaggedError` (`preferSchemaTaggedError`).
+  `effect/http-api`, `effect/sql` and the SQL drivers, and the engine's `effect/process`, `effect/FileSystem`,
+  `effect/PlatformError` and `@effect/platform-bun`), and `Data.TaggedError` (`preferSchemaTaggedError`).
 - **Oxlint**, run type-aware as `effect-tsgo oxlint --type-aware` (`bun lint:oxlint`), for the house rules every file
   meets: `no-console`, `require-yield`, `no-shadow-restricted-names`, floating promises and the rest of
   `.oxlintrc.json`.

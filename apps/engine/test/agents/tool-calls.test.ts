@@ -80,7 +80,7 @@ function createToolCalls({ config, engine }: Setup, extra: Layer.Layer<never> = 
     Layer.succeed(Providers, createTestProviders([])),
     Layer.succeed(EngineCore, engine.core),
     Layer.succeed(DelegationMinute, Duration.millis(5)),
-    GitLayer.pipe(Layer.provide(ShellLayer)),
+    GitLayer.pipe(Layer.provideMerge(ShellLayer)),
     extra
   );
   return (name: string, call: Omit<ToolCall, 'signal'>) =>

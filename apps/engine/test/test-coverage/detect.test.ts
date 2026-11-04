@@ -1,11 +1,17 @@
 import { describe, expect, test } from 'bun:test';
 import { join } from 'node:path';
+import { Option } from 'effect';
 import {
-  resolveCoverageDetection,
   resolveCoverageRun,
-  resolveGoModule,
+  selectCoverageDetection,
+  selectGoModule,
 } from '../../src/test-coverage/detect.ts';
+import { runFiles } from '../harness.ts';
 import { createTempDir, writeFiles } from '../helpers/index.ts';
+
+const detectionOf = async (path: string) => Option.getOrNull(await runFiles(selectCoverageDetection(path)));
+
+const goModuleOf = async (path: string) => Option.getOrNull(await runFiles(selectGoModule(path)));
 
 const DIR = '/tmp/report';
 
@@ -97,39 +103,39 @@ describe('turning a test check into its coverage run', () => {
 });
 
 describe('the coverage tool Settings names for Auto', () => {
-  test('a JavaScript repository names Vitest with a provider, Jest, or a bun test script', () => {
+  test('a JavaScript repository names Vitest with a provider, Jest, or a bun test script', async () => {
     const vitest = createProject({
       'package.json': manifest({ devDependencies: { vitest: '^3', '@vitest/coverage-v8': '^3' } }),
     });
-    expect(resolveCoverageDetection(vitest)).toEqual({
+    expect(await detectionOf(vitest)).toEqual({
       tool: 'Vitest',
       command: "The test checks of each task, run once more with Vitest's coverage report.",
     });
     const jest = createProject({ 'package.json': manifest({ dependencies: { jest: '^29' } }) });
-    expect(resolveCoverageDetection(jest)?.tool).toBe('Jest');
+    expect((await detectionOf(jest))?.tool).toBe('Jest');
     const bun = createProject({ 'package.json': manifest({ scripts: { test: 'bun test --timeout 2000' } }) });
-    expect(resolveCoverageDetection(bun)?.tool).toBe("Bun's test runner");
+    expect((await detectionOf(bun))?.tool).toBe("Bun's test runner");
   });
 
-  test('a package.json with no known runner, or one that is not JSON, names nothing', () => {
+  test('a package.json with no known runner, or one that is not JSON, names nothing', async () => {
     const bare = createProject({ 'package.json': manifest({ devDependencies: { vitest: '^3' } }) });
-    expect(resolveCoverageDetection(bare)).toBeNull();
-    expect(resolveCoverageDetection(createProject({ 'package.json': 'null' }))).toBeNull();
-    expect(resolveCoverageDetection(createProject({ 'package.json': '{ not json' }))).toBeNull();
+    expect(await detectionOf(bare)).toBeNull();
+    expect(await detectionOf(createProject({ 'package.json': 'null' }))).toBeNull();
+    expect(await detectionOf(createProject({ 'package.json': '{ not json' }))).toBeNull();
   });
 
-  test('pytest-cov in a manifest or a requirements file, or a go.mod, names its tool', () => {
-    expect(
-      resolveCoverageDetection(createProject({ 'requirements-dev.txt': 'pytest-cov==5.0\n' }))?.tool
-    ).toBe('pytest-cov');
-    expect(resolveCoverageDetection(createProject({ 'pyproject.toml': '[project]\n' }))).toBeNull();
+  test('pytest-cov in a manifest or a requirements file, or a go.mod, names its tool', async () => {
+    expect((await detectionOf(createProject({ 'requirements-dev.txt': 'pytest-cov==5.0\n' })))?.tool).toBe(
+      'pytest-cov'
+    );
+    expect(await detectionOf(createProject({ 'pyproject.toml': '[project]\n' }))).toBeNull();
     const go = createProject({ 'go.mod': 'module github.com/acme/app\n\ngo 1.22\n' });
-    expect(resolveCoverageDetection(go)?.tool).toBe('go test');
-    expect(resolveGoModule(go)).toBe('github.com/acme/app');
-    expect(resolveGoModule(createProject({}))).toBeNull();
+    expect((await detectionOf(go))?.tool).toBe('go test');
+    expect(await goModuleOf(go)).toBe('github.com/acme/app');
+    expect(await goModuleOf(createProject({}))).toBeNull();
   });
 
-  test('a folder that is gone or has nothing to go on names nothing', () => {
-    expect(resolveCoverageDetection(join(createTempDir(), 'gone'))).toBeNull();
+  test('a folder that is gone or has nothing to go on names nothing', async () => {
+    expect(await detectionOf(join(createTempDir(), 'gone'))).toBeNull();
   });
 });
