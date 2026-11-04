@@ -1,5 +1,6 @@
 import type { TaskCreator } from '../domain/delegations.ts';
 import type {
+  AutoShipDue,
   BacklogCause,
   BundleConflict,
   BundleReady,
@@ -253,6 +254,8 @@ type EventBody =
       autoShip?: string;
     }
   | { type: 'gate.withdrawn'; gateId: string }
+  | { type: 'auto_ship.scheduled'; gateId: string; due: AutoShipDue | null }
+  | { type: 'task.escalated'; taskId: string; reason: string }
   | { type: 'gate.noted'; gateId: string; notes: string | null }
   | { type: 'run.started'; run: Run }
   | { type: 'run.dispatched'; runId: string }

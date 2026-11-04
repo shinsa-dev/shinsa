@@ -1,12 +1,22 @@
 import { describe, expect, test } from 'bun:test';
-import type { AutoShipPolicy, ReviewFinding, ReviewRatings, TaskPriority } from '../../src/index.ts';
+import {
+  type AutoShipPolicy,
+  type MergeStep,
+  MINUTE_MS,
+  type ReviewFinding,
+  type ReviewRatings,
+  type TaskPriority,
+} from '../../src/index.ts';
 import { listOpenGates } from '../../src/state/queries.ts';
 import {
+  approve,
   buildAll,
+  completePhase,
   createHarness,
   createTask,
   type Harness,
   PASSING,
+  proposePlan,
   pullRequest,
   pushed,
   resolveReply,
@@ -181,5 +191,258 @@ describe('the Auto-ship setting', () => {
     expect(() =>
       harness.send({ type: 'settings.change', patch: { autoShip: { urgentWaitMinutes: minutes } } })
     ).toThrow('An urgent change waits 1 to 1440 minutes.');
+  });
+});
+
+const SECRET: MergeStep = {
+  when: 'pre_merge',
+  kind: 'secret',
+  title: 'Set STRIPE_WEBHOOK_SECRET',
+  detail: 'In production.',
+  command: null,
+};
+
+const WAIT = 60 * MINUTE_MS;
+
+const WAITED = 'Urgent, and the merge waited 60 minutes for you.';
+
+function handOverWithSteps(harness: Harness, taskId: string, steps: MergeStep[]) {
+  proposePlan(harness, taskId);
+  completePhase(harness, taskId);
+  harness.send({
+    type: 'agent.complete_phase',
+    runId: harness.activeRun(taskId).id,
+    summary: 'Wired the webhook.',
+    spots: [],
+    judgementCalls: [],
+    walkthrough: {
+      approach: 'Verify, then record.',
+      flow: 'webhook → verify → store',
+      risks: [],
+      testing: { automated: [], manual: [] },
+      steps,
+    },
+  });
+}
+
+interface MergeSetup {
+  policy: Partial<AutoShipPolicy>;
+  priority?: TaskPriority;
+  ratings?: ReviewRatings;
+  steps?: MergeStep[];
+}
+
+function reachMerge({ policy, priority = 'normal', ratings = HIGH_LOW, steps }: MergeSetup) {
+  const harness = createHarness();
+  harness.send({ type: 'settings.change', patch: { autoShip: { enabled: true, ...policy } } });
+  const taskId = createTask(harness, { priority });
+  if (steps) handOverWithSteps(harness, taskId, steps);
+  else buildAll(harness, taskId);
+  harness.send({ type: 'checks.record', taskId, results: PASSING });
+  review(harness, taskId, ratings);
+  if (harness.task(taskId).stage === 'awaiting_review') approve(harness, taskId);
+  pushed(harness, taskId);
+  harness.send({ type: 'pull_request.record', taskId, pullRequest: pullRequest() });
+  return { harness, taskId };
+}
+
+function mergeGate(harness: Harness, taskId: string) {
+  return Object.values(harness.state.gates)
+    .filter((gate) => gate.taskId === taskId && gate.type === 'merge')
+    .at(-1);
+}
+
+function expectMerging(harness: Harness, taskId: string, reason: string) {
+  expect(mergeGate(harness, taskId)).toMatchObject({ status: 'answered', decision: 'approve' });
+  expect(harness.task(taskId)).toMatchObject({ stage: 'awaiting_merge', stageReason: 'merging' });
+  expect(harness.lastEffect('pull_request.merge')).toMatchObject({ taskId });
+  const entry = harness
+    .task(taskId)
+    .activity.filter((found) => found.text.startsWith('Approved the merge'))
+    .at(-1);
+  expect(entry).toMatchObject({
+    actor: 'shinsa',
+    text: `Approved the merge for you by Auto-ship: ${harness.task(taskId).title}`,
+    detail: reason,
+  });
+}
+
+function expectMergeWaits(harness: Harness, taskId: string) {
+  expect(harness.openGate(taskId)).toMatchObject({ type: 'merge', status: 'open' });
+  expect(harness.task(taskId).stage).toBe('awaiting_merge');
+  expect(harness.effectsOf('pull_request.merge')).toHaveLength(0);
+}
+
+function fire(harness: Harness, taskId: string, dueAt = mergeGate(harness, taskId)?.autoShipDue?.at ?? 0) {
+  harness.advance(Math.max(0, dueAt - harness.now));
+  return harness.send({
+    type: 'auto_ship.fire',
+    taskId,
+    gateId: mergeGate(harness, taskId)?.id ?? '',
+    dueAt,
+  });
+}
+
+describe('Auto-ship at the merge', () => {
+  test('never merges by default, and sets no deadline on a change that is not urgent', () => {
+    const { harness, taskId } = reachMerge({ policy: {} });
+    expectMergeWaits(harness, taskId);
+    expect(harness.openGate(taskId).autoShipDue ?? null).toBeNull();
+  });
+
+  test('merges a change it approved as soon as the pull request is clean', () => {
+    const { harness, taskId } = reachMerge({ policy: { merge: 'approved', approveUpTo: 'medium' } });
+    expectMerging(harness, taskId, 'High confidence, low risk.');
+    expect(harness.task(taskId).autoShipped?.reason).toBe('High confidence, low risk.');
+  });
+
+  test('with the low-risk rule, merges a low-risk change and leaves a medium-risk one for you', () => {
+    const low = reachMerge({ policy: { merge: 'low_risk' } });
+    expectMerging(low.harness, low.taskId, 'High confidence, low risk.');
+    const medium = reachMerge({
+      policy: { merge: 'low_risk', approveUpTo: 'medium' },
+      ratings: { confidence: 'high', risk: 'medium' },
+    });
+    expectMergeWaits(medium.harness, medium.taskId);
+  });
+
+  test('never merges a change whose review you approved yourself', () => {
+    const { harness, taskId } = reachMerge({
+      policy: { merge: 'approved' },
+      ratings: { confidence: 'medium', risk: 'low' },
+    });
+    expectMergeWaits(harness, taskId);
+  });
+
+  test('never merges while a pre-merge step is not ticked', () => {
+    const { harness, taskId } = reachMerge({ policy: { merge: 'approved' }, steps: [SECRET] });
+    expectMergeWaits(harness, taskId);
+  });
+
+  test.each(['wait', 'escalate'] as const)(
+    'sets no deadline on an urgent change when the urgent rule is %s and Auto-ship is off',
+    (urgent) => {
+      const { harness, taskId } = reachMerge({ policy: { urgent }, priority: 'urgent' });
+      if (urgent === 'wait') expect(harness.openGate(taskId).autoShipDue ?? null).toBeNull();
+      harness.send({ type: 'settings.change', patch: { autoShip: { enabled: false } } });
+      harness.send({
+        type: 'gate.answer',
+        gateId: harness.openGate(taskId).id,
+        decision: 'revise',
+        response: 'x',
+      });
+      fix(harness, taskId, 'tree-2');
+      review(harness, taskId);
+      approve(harness, taskId);
+      pushed(harness, taskId);
+      harness.send({ type: 'pull_request.record', taskId, pullRequest: pullRequest() });
+      expect(harness.openGate(taskId).autoShipDue ?? null).toBeNull();
+    }
+  );
+
+  test('escalates an urgent change whose merge waited, once, and clears it when the merge is answered', () => {
+    const { harness, taskId } = reachMerge({ policy: { urgent: 'escalate' }, priority: 'urgent' });
+    const opened = harness.now;
+    expect(harness.openGate(taskId).autoShipDue).toEqual({ at: opened + WAIT, action: 'escalate' });
+    expect(fire(harness, taskId, opened).events).toEqual([]);
+    fire(harness, taskId);
+    expect(harness.task(taskId).escalation).toEqual({ at: harness.now, reason: WAITED });
+    expect(harness.openGate(taskId).autoShipDue).toBeNull();
+    expect(harness.task(taskId).activity.at(-1)).toMatchObject({
+      actor: 'shinsa',
+      text: 'Escalated by Auto-ship',
+      detail: WAITED,
+    });
+    expect(harness.effectsOf('pull_request.merge')).toHaveLength(0);
+    approve(harness, taskId);
+    expect(harness.task(taskId).escalation).toBeNull();
+  });
+
+  test('merges an urgent change it approved once the merge waited', () => {
+    const { harness, taskId } = reachMerge({ policy: { urgent: 'merge' }, priority: 'urgent' });
+    expectMergeWaits(harness, taskId);
+    expect(harness.openGate(taskId).autoShipDue?.action).toBe('merge');
+    fire(harness, taskId);
+    expectMerging(harness, taskId, WAITED);
+  });
+
+  test('escalates instead of merging an urgent change whose review you approved', () => {
+    const { harness, taskId } = reachMerge({
+      policy: { urgent: 'merge' },
+      priority: 'urgent',
+      ratings: { confidence: 'medium', risk: 'low' },
+    });
+    fire(harness, taskId);
+    expectMergeWaits(harness, taskId);
+    expect(harness.task(taskId).escalation?.reason).toBe(`${WAITED} You approved the review yourself.`);
+  });
+
+  test('escalates instead of merging an urgent change with a pre-merge step left', () => {
+    const { harness, taskId } = reachMerge({
+      policy: { urgent: 'merge' },
+      priority: 'urgent',
+      steps: [SECRET],
+    });
+    fire(harness, taskId);
+    expectMergeWaits(harness, taskId);
+    expect(harness.task(taskId).escalation?.reason).toBe(`${WAITED} A pre-merge step is not ticked yet.`);
+  });
+
+  test('escalates, then merges after a second wait', () => {
+    const { harness, taskId } = reachMerge({ policy: { urgent: 'escalate_then_merge' }, priority: 'urgent' });
+    fire(harness, taskId);
+    expect(harness.task(taskId).escalation?.reason).toBe(WAITED);
+    expect(harness.openGate(taskId).autoShipDue).toEqual({ at: harness.now + WAIT, action: 'merge' });
+    fire(harness, taskId);
+    expectMerging(harness, taskId, WAITED);
+    expect(harness.task(taskId).escalation).toBeNull();
+  });
+
+  test('escalates only, when it would not merge the change after the second wait', () => {
+    const { harness, taskId } = reachMerge({
+      policy: { urgent: 'escalate_then_merge' },
+      priority: 'urgent',
+      ratings: { confidence: 'medium', risk: 'low' },
+    });
+    fire(harness, taskId);
+    expect(harness.task(taskId).escalation?.reason).toBe(WAITED);
+    expect(harness.openGate(taskId).autoShipDue).toBeNull();
+  });
+
+  test('does nothing but clear the deadline once Auto-ship is off or the task is no longer urgent', () => {
+    const off = reachMerge({ policy: { urgent: 'merge' }, priority: 'urgent' });
+    off.harness.send({ type: 'settings.change', patch: { autoShip: { enabled: false } } });
+    fire(off.harness, off.taskId);
+    expectMergeWaits(off.harness, off.taskId);
+    expect(off.harness.openGate(off.taskId).autoShipDue).toBeNull();
+    expect(off.harness.task(off.taskId).escalation ?? null).toBeNull();
+    const calm = reachMerge({ policy: { urgent: 'escalate' }, priority: 'urgent' });
+    calm.harness.send({ type: 'task.prioritize', taskId: calm.taskId, priority: 'normal' });
+    fire(calm.harness, calm.taskId);
+    expect(calm.harness.task(calm.taskId).escalation ?? null).toBeNull();
+  });
+
+  test('ignores a fire for a gate that closed, another task or nothing it knows', () => {
+    const { harness, taskId } = reachMerge({ policy: { urgent: 'escalate' }, priority: 'urgent' });
+    const gate = harness.openGate(taskId);
+    const dueAt = gate.autoShipDue?.at ?? 0;
+    expect(harness.send({ type: 'auto_ship.fire', taskId: 'gone', gateId: gate.id, dueAt }).events).toEqual(
+      []
+    );
+    expect(harness.send({ type: 'auto_ship.fire', taskId, gateId: 'gone', dueAt }).events).toEqual([]);
+    harness.send({ type: 'gate.answer', gateId: gate.id, decision: 'revise', response: 'Rename it.' });
+    expect(harness.send({ type: 'auto_ship.fire', taskId, gateId: gate.id, dueAt }).events).toEqual([]);
+  });
+
+  test('an escalated change that is sent back is no longer escalated', () => {
+    const { harness, taskId } = reachMerge({ policy: { urgent: 'escalate' }, priority: 'urgent' });
+    fire(harness, taskId);
+    harness.send({
+      type: 'gate.answer',
+      gateId: harness.openGate(taskId).id,
+      decision: 'revise',
+      response: 'x',
+    });
+    expect(harness.task(taskId).escalation).toBeNull();
   });
 });

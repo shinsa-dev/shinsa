@@ -1,6 +1,7 @@
 import { type Gate, isAgentQuestion, isPausingGate } from '../domain/index.ts';
 import type { EventOf, ShinsaEvent } from '../events/index.ts';
 import { describeDecision } from './activity.ts';
+import { clearEscalation } from './auto-ship.ts';
 import { writeEntry } from './draft.ts';
 import type { ShinsaState } from './project.ts';
 import { applyVerdicts } from './reviews.ts';
@@ -18,6 +19,8 @@ function writeApproveAfterFix(state: ShinsaState, taskId: string, at: number, ap
 
 function describeAnswer(gate: Gate, event: EventOf<'gate.answered'>) {
   if (gate.type === 'result') return 'Closed the task';
+  if (event.autoShip && gate.type === 'merge')
+    return `Approved the merge for you by Auto-ship: ${gate.title}`;
   if (event.autoShip) return `Approved for you by Auto-ship: ${gate.title}`;
   if (event.ahead) return `Approved after the fix, as you asked: ${gate.title}`;
   if (event.thenApprove) return `Asked for changes and to approve after the fix: ${gate.title}`;
@@ -68,8 +71,9 @@ function applyGateAnswered(state: ShinsaState, event: EventOf<'gate.answered'>) 
   if (!gate) return;
   if (event.verdicts) applyVerdicts(state, gate.taskId, event.at, event.verdicts);
   clearSlackDecided(state, gate.taskId, event.at);
+  clearMergeEscalation(state, gate.id, event.at);
   if (gate.type === 'review') writeApproveAfterFix(state, gate.taskId, event.at, event.thenApprove === true);
-  if (event.autoShip)
+  if (event.autoShip && gate.type === 'review')
     updateTask(state, gate.taskId, event.at, { autoShipped: { at: event.at, reason: event.autoShip } });
   record(state, gate.taskId, event.at, {
     actor: event.autoShip ? 'shinsa' : 'you',
@@ -78,6 +82,16 @@ function applyGateAnswered(state: ShinsaState, event: EventOf<'gate.answered'>) 
     detail: event.autoShip ?? event.response,
     ...(event.comments ? { comments: event.comments } : {}),
   });
+}
+
+function clearMergeEscalation(state: ShinsaState, gateId: string, at: number) {
+  const gate = state.gates[gateId];
+  if (gate?.type === 'merge') clearEscalation(state, gate.taskId, at);
+}
+
+function applyGateWithdrawn(state: ShinsaState, event: EventOf<'gate.withdrawn'>) {
+  updateGate(state, event.gateId, { status: 'withdrawn', answeredAt: event.at });
+  clearMergeEscalation(state, event.gateId, event.at);
 }
 
 function applyGateSuperseded(state: ShinsaState, event: EventOf<'gate.superseded'>) {
@@ -100,7 +114,7 @@ export function applyGateEvent(state: ShinsaState, event: GateEvent) {
       applyGateAnswered(state, event);
       return;
     case 'gate.withdrawn':
-      updateGate(state, event.gateId, { status: 'withdrawn', answeredAt: event.at });
+      applyGateWithdrawn(state, event);
       return;
     case 'gate.noted':
       updateGate(state, event.gateId, { notes: event.notes });

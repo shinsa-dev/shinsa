@@ -440,6 +440,18 @@ export interface AutoShipped {
   reason: string;
 }
 
+export type AutoShipAction = 'escalate' | 'merge';
+
+export interface AutoShipDue {
+  at: number;
+  action: AutoShipAction;
+}
+
+export interface TaskEscalation {
+  at: number;
+  reason: string;
+}
+
 export interface Task {
   id: string;
   handle?: string | null;
@@ -499,6 +511,7 @@ export interface Task {
   reviewDisagreements?: ReviewDisagreement[];
   reviewRatings?: ReviewRatings | null;
   autoShipped?: AutoShipped | null;
+  escalation?: TaskEscalation | null;
   reviewedInput?: string | null;
   monitor?: Monitor | null;
   treeHash?: string | null;
@@ -737,6 +750,7 @@ export interface Gate {
   cause?: GateCause;
   escalation?: ReviewEscalation;
   autoShipHeld?: string;
+  autoShipDue?: AutoShipDue | null;
   verdicts?: FindingVerdict[];
   supersededBy?: string | null;
   provider?: string;
