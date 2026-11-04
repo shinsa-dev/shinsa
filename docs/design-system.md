@@ -1588,7 +1588,7 @@ Do: pass icons through `icon`, never as a hand-placed `<Icon>` child, so `data-i
 
 #### AlertDialog
 
-**For:** a confirmation that interrupts: "Cancel this task?", "Remove this account?". It has the ARIA role `alertdialog`, and unlike `Dialog` a press outside it does not close it; only its two buttons and Escape do. In Shinsa every confirmation goes through one app composite, `ConfirmDialog`, built on these parts (title, one sentence, "Keep it" and a destructive action named verb plus object). **Not for:** forms or anything that takes input (use `Dialog`), information without a decision (use a toast or a popover).
+**For:** a confirmation that interrupts: "Cancel this task?", "Remove this account?". It has the ARIA role `alertdialog`, and unlike `Dialog` a press outside it does not close it; only its two buttons and Escape do. In Shinsa every confirmation goes through one app composite, `ConfirmDialog`, built on these parts (title, one sentence of at most two lines, "Keep it" and a destructive action named verb plus object). **Not for:** forms or anything that takes input (use `Dialog`), information without a decision (use a toast or a popover).
 
 Wraps Base UI `AlertDialog` (`@base-ui/react/alert-dialog`). Motion and scrim are shared with `Dialog` (`DIALOG_MOTION`, `DIALOG_SCRIM_MOTION`, below).
 
@@ -2378,7 +2378,7 @@ Plain CSS:
 
 **Composition rules**
 
-- A dialog that takes a typed value is one pattern: header (title, one-sentence description), the field in a `<form className='w-full'>` (Enter submits), and a footer of `DialogClose render={<Button variant='secondary' />}` "Cancel" then a primary submit button named for what it does ("Save limit"), wired with `type='submit' form={formId}`. A value the dialog can check itself shows as the field's `FieldError`; a value the server refuses comes back as an error toast and stays in the field. The submit button shows `loading` while saving and the dialog closes only on success.
+- A dialog that takes a typed value is one pattern: header (title, a one-sentence description of at most two lines), the field in a `<form className='w-full'>` (Enter submits), and a footer of `DialogClose render={<Button variant='secondary' />}` "Cancel" then a primary submit button named for what it does ("Save limit"), wired with `type='submit' form={formId}`. A value the dialog can check itself shows as the field's `FieldError`; a value the server refuses comes back as an error toast and stays in the field. The submit button shows `loading` while saving and the dialog closes only on success.
 - A page's dialog mounts from `useDialogState` and closes without a visible change (see `AlertDialog`).
 - `showCloseButton` only for a dialog without a footer (a read-only panel).
 

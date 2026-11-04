@@ -223,6 +223,10 @@ describe('resolveRunningVerb', () => {
     expect(resolveRunningVerb(createTask({ id: 'usage', stage: 'building', usageWait: usage }))).toBe(
       'waiting for the usage limit on'
     );
+    const pace = { id: 'w', status: 'armed', cause: 'pace', pace: {} } as Task['usageWait'];
+    expect(resolveRunningVerb(createTask({ id: 'pace', stage: 'building', usageWait: pace }))).toBe(
+      'held at a usage limit on'
+    );
     expect(resolveRunningVerb(createTask({ id: 'fix', stage: 'fixing', fixFor: 'checks' }))).toBe('fixing');
     expect(resolveRunningVerb(createTask({ id: 'conflict', stage: 'fixing', fixFor: 'conflict' }))).toBe(
       'resolving conflicts on'

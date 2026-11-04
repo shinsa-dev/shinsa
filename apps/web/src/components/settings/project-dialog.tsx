@@ -24,6 +24,7 @@ import {
   type ProjectDraft,
   type ProjectField,
   resolveDraftInput,
+  USAGE_LIMIT_RULE,
   validateProjectDraft,
 } from '@/lib/projects.ts';
 
@@ -68,10 +69,12 @@ function DraftField({
           {...common}
           placeholder={field === 'key' && mode === 'create' ? OPTIONAL_KEY_PLACEHOLDER : placeholder}
           className={field === 'key' ? 'font-mono uppercase' : undefined}
+          inputMode={field === 'usageLimit' ? 'decimal' : undefined}
           onChange={(event) => onChange(event.target.value)}
         />
       )}
       {field === 'key' && !error && <FieldDescription>{KEY_RULE}</FieldDescription>}
+      {field === 'usageLimit' && !error && <FieldDescription>{USAGE_LIMIT_RULE}</FieldDescription>}
       {error && <FieldError>{error}</FieldError>}
     </Field>
   );

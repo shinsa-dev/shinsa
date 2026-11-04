@@ -17,6 +17,7 @@ import { OptionsTrigger } from '@/components/controls/options-trigger.tsx';
 import { SelectedMark } from '@/components/status/check-mark.tsx';
 import { ProjectDotIcon } from '@/components/status/project-dot.tsx';
 import { useMenuAnswer } from '@/hooks/use-menu-answer.ts';
+import { useEngineFeature } from '@/lib/connection/socket.ts';
 import {
   listRepoChoiceGroups,
   type ProjectActions,
@@ -110,6 +111,7 @@ export function ProjectMenu({
   actions: ProjectActions;
   onShow: (value: ProjectDialogValue) => void;
 }) {
+  const paced = useEngineFeature('usage.pace_limits');
   return (
     <DropdownMenu>
       <OptionsTrigger label='Project options' />
@@ -124,6 +126,11 @@ export function ProjectMenu({
           <DropdownMenuItem icon='IconTextEdit' onClick={() => onShow('description')}>
             {project.description ? 'Edit description…' : 'Add description…'}
           </DropdownMenuItem>
+          {paced && (
+            <DropdownMenuItem icon='IconGauge' onClick={() => onShow('usageLimit')}>
+              {project.usageLimit ? 'Change usage limit…' : 'Set usage limit…'}
+            </DropdownMenuItem>
+          )}
           <ColourSubmenu project={project} actions={actions} />
         </DropdownMenuGroup>
         <DropdownMenuSeparator />

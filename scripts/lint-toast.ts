@@ -7,19 +7,24 @@ import {
   TOAST_UNCHECKED_MESSAGE,
 } from './lint-rules.ts';
 
-type Node = { type: string; loc?: { start: { line: number } }; [key: string]: unknown };
+export type Node = { type: string; loc?: { start: { line: number } }; [key: string]: unknown };
 
-type Text = { file: string; line: number; length: number | null };
+export type Text = { file: string; line: number; length: number | null };
 
-type Source = { file: string; program: Node; constants: Map<string, Node>; imports: Map<string, string> };
+export type Source = {
+  file: string;
+  program: Node;
+  constants: Map<string, Node>;
+  imports: Map<string, string>;
+};
 
 type Definition = { source: Source; params: string[]; returns: Node[] };
 
 type Exported = { source: Source; value: Node };
 
-type Index = { definitions: Map<string, Definition[]>; exported: Map<string, Exported[]> };
+export type Index = { definitions: Map<string, Definition[]>; exported: Map<string, Exported[]> };
 
-type Context = Index & { source: Source; seen: Set<Node> };
+export type Context = Index & { source: Source; seen: Set<Node> };
 
 type Argument = { node: Node; strict: boolean };
 
@@ -56,12 +61,12 @@ function children(node: Node): Node[] {
   );
 }
 
-function visit(node: Node, onNode: (node: Node) => void) {
+export function visit(node: Node, onNode: (node: Node) => void) {
   onNode(node);
   for (const child of children(node)) visit(child, onNode);
 }
 
-function readName(node: unknown) {
+export function readName(node: unknown) {
   const named = node as { type?: string; name?: string; value?: unknown } | null;
   if (named?.type === 'Identifier') return named.name ?? null;
   if (named?.type === 'StringLiteral' && typeof named.value === 'string') return named.value;
@@ -108,7 +113,7 @@ function readFunction(node: Node): [string, Node] | null {
   return name && fn && FUNCTION_TYPES.has(fn.type) ? [name, fn] : null;
 }
 
-function readSource(file: string, text: string): Source {
+export function readSource(file: string, text: string): Source {
   const program = parse(text, { sourceType: 'module', plugins: ['typescript', 'jsx'] })
     .program as unknown as Node;
   const constants = new Map<string, Node>();
@@ -133,7 +138,7 @@ function readSource(file: string, text: string): Source {
   return { file, program, constants, imports };
 }
 
-function indexSources(sources: Source[]): Index {
+export function indexSources(sources: Source[]): Index {
   const definitions = new Map<string, Definition[]>();
   const exported = new Map<string, Exported[]>();
   for (const source of sources) {
@@ -217,7 +222,7 @@ function resolveFound(found: Exported[], context: Context) {
   return found.flatMap(({ source, value }) => resolveTexts(value, { ...context, source }));
 }
 
-function resolveTexts(node: Node | null, context: Context): Text[] {
+export function resolveTexts(node: Node | null, context: Context): Text[] {
   if (!node || context.seen.has(node)) return [];
   context.seen.add(node);
   const at = { file: context.source.file, line: node.loc?.start.line ?? 0 };

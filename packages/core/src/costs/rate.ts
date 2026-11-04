@@ -1,3 +1,4 @@
+import { CLAUDE_PROVIDER } from '../agent-models/index.ts';
 import type { Run, RunAttempt, RunMeter } from '../domain/index.ts';
 import { DAY_MS, MINUTE_MS } from '../domain/time.ts';
 
@@ -50,8 +51,14 @@ interface WindowLog {
 const RATES = new WeakMap<Record<string, Run>, Map<string, UsageRate | null>>();
 const SHARES = new WeakMap<Record<string, Run>, Map<string, UsageShareState>>();
 
+const PROVIDER_WINDOW = 'provider:';
+
 export function resolveMeterWindow(attempt: Pick<RunAttempt, 'account' | 'provider'>) {
-  return attempt.account ? `account:${attempt.account.id}` : `provider:${attempt.provider}`;
+  return attempt.account ? `account:${attempt.account.id}` : `${PROVIDER_WINDOW}${attempt.provider}`;
+}
+
+export function resolveWindowProvider(window: string) {
+  return window.startsWith(PROVIDER_WINDOW) ? window.slice(PROVIDER_WINDOW.length) : CLAUDE_PROVIDER;
 }
 
 function isInFlight(run: Run) {

@@ -118,6 +118,7 @@ describe('Change a setting', () => {
       ['Classifier speed', 'Standard'],
       ['Writer model', 'Sonnet'],
       ['Writer speed', 'Standard'],
+      ['Daily usage limit', 'No limit'],
       ['Usage limit per task', 'No limit'],
       ['Switch accounts at', '90%'],
       ['After a usage limit', 'Resume automatically'],
@@ -289,6 +290,7 @@ describe('Change a setting', () => {
     pick(sections, 'settings.model.reviewer', 'claude:sonnet');
     pick(sections, 'settings.model.quick', 'codex:gpt-6-astra');
     pick(sections, 'settings.model.task', 'mixed');
+    pick(sections, 'settings.daily-usage-limit', '20');
     pick(sections, 'settings.usage-limit', '10');
     pick(sections, 'settings.usage-limit', 'off');
     pick(sections, 'settings.switch-at', '95');
@@ -331,6 +333,7 @@ describe('Change a setting', () => {
         },
         'Saved.',
       ],
+      [{ type: 'settings.change', patch: { dailyUsageLimit: 20 } }, 'Saved.'],
       [{ type: 'settings.change', patch: { taskUsageLimit: 10 } }, 'Saved.'],
       [{ type: 'settings.change', patch: { taskUsageLimit: null } }, 'Saved.'],
       [{ type: 'settings.change', patch: { accountSwitchAt: 95 } }, 'Saved.'],

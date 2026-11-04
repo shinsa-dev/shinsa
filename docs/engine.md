@@ -2024,6 +2024,54 @@ checks it ran.
   10%" or "Allow another $5.00") acknowledges what was used of every limit it passed (`budget.acknowledged` with
   `spentPercent` and `spentUsd`, `task.usageAcknowledgedPercent` and `budgetAcknowledgedUsd`) and allows one more
   of each; raising or switching off a limit releases held tasks by itself.
+- **Usage over the last 24 hours** (`costs/window.ts`). `listRecentSpends` turns every run meter that ended in the
+  last 24 hours (`RECENT_USAGE_MS`) into a spend: its cost times its window's rate (`resolveUsageRates`, early
+  estimates included), at the meter's end, with its task's project. A meter with no price or no rate yet is counted
+  as `unmetered` and left out. Each spend has its provider (`resolveWindowProvider`: an account's window is Claude's,
+  `provider:<id>` that provider's), and `resolveRecentUsage` sums one provider's spends, overall or for one project, and
+  `resolveRecentUsageFreesAt` is the time a limit frees up: the oldest spends drop out 24 hours after they ended,
+  one by one, until the rest is below the limit. The window rolls, so no limit needs a time zone.
+- **Daily and project limits** (`holdForPace`, both off by default, both only yours: `dailyUsageLimit` is in
+  `HUMAN_ONLY_SETTINGS`, and `project.write` sent on your behalf is refused when it changes `Project.usageLimit`).
+  Both are a percentage of one account's weekly limit, like the task limit, any amount above zero, so a pool of
+  accounts can allow more than 100 a day. Each provider counts only its own usage against them: a step on Claude
+  is held by Claude's last 24 hours, a step on Codex by Codex's, since a percentage of one provider's weekly limit
+  means nothing on another. Settings → Agent usage → Limits, Daily usage limit counts every task; a
+  project's usage limit (its dialog, or `shinsa projects write --usage-limit`, 0 for off) counts only its tasks.
+  Like the task limit they are checked when a step would start (`dispatchRuns`, after the task limit), never
+  mid-turn, and never for work an agent delegates within a step that already started. When the last 24 hours
+  reach a limit (`resolvePaceHold`; with both reached, the one that frees up later), the queued step ends before it starts
+  (`cancelled`, "Held at a usage limit before it started."), so no run stays queued and none is active while the
+  wait is armed, and the task arms a pace hold: a usage wait with `cause: pace`, `runId` the held step, `pace` (the scope `daily` or `project`, the limit,
+  the usage when it held, the project and the stage reason it had), `resetAt` the time the window frees up and
+  `autoResume` always on. The stage reason is "held at the daily usage limit" or "held at the project's usage
+  limit". The same `UsageResumeClock` dispatches `usage_wait.resume` at that time: the hold ends, the stage reason
+  comes back, and the held step starts again through `startRun` (`releasePaceWait`: its role prompt, session, role,
+  phase, feedback and account as they were, `continues` the held run, `usageWaitId` the wait), so it starts, or is held again under a new wait when other
+  work filled the window meanwhile. Resume now (`usage_wait.resume_now`) starts it at once, over the limit or
+  not; a pace hold cannot be switched to waiting for you (`usage_wait.change` is refused); raising, clearing or
+  changing either limit starts every held step that is now under it.
+- **The usage forecast** (`forecast/`, `resolveUsageForecast`, pure; the web runs it on the accounts it reads).
+  It answers how fast you can go without every account running out, not how fast you went. Each unpaused,
+  signed-in account is a budget that expires: what is left of its weekly window now lasts until its reset, and
+  every reset gives 100% for another week (an account with no known reset keeps what it has for the whole
+  horizon). For a steady pace (percent of one weekly limit per day) it simulates 7 days, spending each moment
+  from the account that resets soonest, which is the best order for budgets that expire. A binary search finds
+  the highest pace that never runs every account dry, rounded down to a tenth (`FORECAST_LIMITS`). That pace is
+  the recommendation, which you can apply as the daily limit; the forecast also names the tightest reset (the one
+  the pool must reach before it runs dry at a faster pace), the timeline of each account, and when the pool would
+  run dry at the pace of the last 24 hours, shown only to compare. An account out of usage only until a shorter
+  limit resets (its 5-hour window) keeps its weekly budget; only one spent until its weekly reset counts as empty.
+  The account picker follows the same order when it switches: past the switch threshold, the account whose weekly
+  limit resets soonest takes over (Accounts and usage limits, below). Settings → Agent usage → Forecast draws one block per provider (`components/settings/forecast.tsx`,
+  `lib/accounts/forecast.ts`): every Claude account together, and each other provider's own login alone, each with
+  its pace, a lane per account across the week (blue while the account has usage at the timeline's pace, grey once
+  it runs out, a thin tick at each reset, and an orange band wherever every account is out at once: `outages`), drawn at a
+  pace you pick (`resolveForecastTimeline`: the safe pace, the last 24 hours, or one and a half or twice the safe pace;
+  the last 24 hours first when it is faster), a dashed amber line at the tightest point when the safe pace is drawn,
+  the tightest point in words and the last 24 hours of that provider (meters on an account's window for
+  Claude, `provider:<id>` for the rest). Use as daily limit sends `settings.change` with `dailyUsageLimit` set to the
+  pace; the forecast is worked out again on every accounts refresh and every minute.
 
 ### Silent runs
 
@@ -3184,7 +3232,8 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   `feedback` for `GET /api/feedback`, `teams` for the team routes and `GET /api/teams/tasks`, and
   `review.approve_after_fix` for `gate.answer`'s `thenApprove`, `message.line_comments` for `task.message`'s
   `comments`, `changelog` for `GET /api/changelog`, `remote.terminals` for terminal streams on the sealed channel,
-  `attention` for routing notifications to the device you use and `worktree-root` for the worktree folder, today;
+  `attention` for routing notifications to the device you use, `worktree-root` for the worktree folder and
+  `usage.pace_limits` for `dailyUsageLimit` and `Project.usageLimit`, today;
   Settings → Teams, the review's Fix and approve choice and
   What's new show only on an engine that has them). `ENGINE_PROTOCOL` is the hard floor: a machine whose protocol differs from the page's is left out of the
   dashboard, merges nothing and gets no command, and Settings → Machines says "Update Shinsa on <name> to reach it from
@@ -4203,8 +4252,9 @@ plainly what protects what.
     answer`, `gates answer`, `command`, which can send any gate answer);
   - giving or declining a secret (`gates secret`, `gates decline-secret`, `schedules webhook-secret`);
   - the settings that spend money, merge, share or decide for you (`HUMAN_ONLY_SETTINGS` in `domain/settings.ts`:
-    `approvePlans`, `mergeMethod`, `taskBudgetUsd`, `taskUsageLimit`, `autoResume`, `snoozeLimited`,
-    `accountSwitchAt`, `fastMode`, `agentFastModes`, `delegationLimit`, `shareLimit`) and a repository's own check commands,
+    `approvePlans`, `mergeMethod`, `taskBudgetUsd`, `taskUsageLimit`, `dailyUsageLimit`, `autoResume`,
+    `snoozeLimited`, `accountSwitchAt`, `fastMode`, `agentFastModes`, `delegationLimit`, `shareLimit`), a
+    project's usage limit (`Project.usageLimit`) and a repository's own check commands,
     workspace and coverage (`HUMAN_ONLY_REPO_FIELDS`: `checkCommands`, `workspace`, `coverage`); agents keep the rest
     (models, providers, fix rounds, attention, compaction), and a task's own checks are the agent's (Checks, above);
   - signing in and the accounts Shinsa runs on (`accounts sign-in`, `sign-in-code`, `import`, `remove`);
@@ -5976,7 +6026,8 @@ Agent usage glance in the top bar, which shows every connected provider (`docs/d
   reset), minus the ones this execution already tried (`exclude` on the lease request). Among those below their
   switch threshold (the account's own `switchAt`, else `settings.accountSwitchAt`, default 90%, any whole
   percentage; an account with no reading counts as below it) the task's last account stays, then the default
-  account, then the most headroom; above the threshold, the most headroom. Headroom is 100 minus the highest
+  account, then the one whose weekly limit resets soonest (what an account has left is lost at its reset, so it is
+  spent first, the order the usage forecast assumes), then the most headroom; above the threshold, the most headroom. Headroom is 100 minus the highest
   relevant window: the session and weekly windows, and a model window for runs on that model family or on an
   unknown model; an account with no reading ranks after every account that has one. When nothing qualifies the
   least spent account is tried anyway, so a stale reading cannot strand work. The attempt records its account
@@ -6042,7 +6093,8 @@ Agent usage glance in the top bar, which shows every connected provider (`docs/d
   waits at least 15 minutes more instead of looping at once. The web titles the wait "Waiting for usage: continues at
   3:40 PM on a@b.com" (`docs/design.md` → Waiting for the usage limit). `usage_wait.change` (auto-resume on or off) replaces the
   wait under a new id, so a resume already on its way does nothing; `usage_wait.resume_now`, a retry, a message,
-  cancelling or any new step end the wait.
+  cancelling or any new step end the wait. A daily or project limit arms the same wait with `cause: pace` before
+  a step starts (Cost → Daily and project limits, above).
 - **The Sign in gate.** An `auth` failure with a known account opens a `sign_in` gate naming its provider
   (`Gate.provider`, `claude`) and the account (`Gate.account`), titled "Paused: ‹email› needs signing in" (the
   provider's name, "Paused: Claude needs signing in", when the email is not known), one status for the one cause. Its body says what stopped (the classifier's reason when it is

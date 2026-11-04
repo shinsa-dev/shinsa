@@ -20,7 +20,7 @@ import {
   startFakeServer,
   stopFakeServer,
 } from '../../support/server.ts';
-import { createGate, createRun, createShinsaState, createTask } from '../../support/state.ts';
+import { createGate, createProject, createRun, createShinsaState, createTask } from '../../support/state.ts';
 
 function DraftComment() {
   const draft = useReviewDraft();
@@ -1025,6 +1025,33 @@ describe('NowCard about an account', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Resume at the reset' }));
       await waitFor(() =>
         expect(listSentCommands()).toEqual([{ type: 'usage_wait.change', taskId: 't', autoResume: true }])
+      );
+    });
+
+    it('says a step held at a project’s limit starts by itself, with Resume now and no toggle', async () => {
+      const project = createProject({ id: 'p', name: 'Superwall' });
+      const task = createTask({
+        id: 't',
+        projectId: 'p',
+        usageWait: wait({
+          cause: 'pace',
+          account: null,
+          pace: { scope: 'project', limit: 20, percent: 21, projectId: 'p', stageReason: 'building' },
+        }),
+      });
+      renderOverview(createShinsaState({ tasks: [task], projects: [project] }), task, undefined);
+      expect(screen.getByText('Held at a usage limit')).toBeTruthy();
+      expect(screen.getByText(/^Held at a usage limit: starts at /)).toBeTruthy();
+      expect(screen.getByText('Starts in 3h')).toBeTruthy();
+      expect(
+        screen.getByText(
+          'The last 24 hours used 21%, which reached Superwall’s usage limit of 20% a day, so the next step did not start.'
+        )
+      ).toBeTruthy();
+      expect(screen.queryByRole('button', { name: 'Don’t resume automatically' })).toBeNull();
+      fireEvent.click(screen.getByRole('button', { name: 'Resume now' }));
+      await waitFor(() =>
+        expect(listSentCommands()).toEqual([{ type: 'usage_wait.resume_now', taskId: 't' }])
       );
     });
 

@@ -65,6 +65,7 @@ export interface Settings {
   agentFastModes?: Partial<Record<AgentRole, boolean>>;
   taskBudgetUsd?: number | null;
   taskUsageLimit?: number | null;
+  dailyUsageLimit?: number | null;
   autoResume?: boolean;
   snoozeLimited?: boolean;
   accountSwitchAt?: number;
@@ -94,6 +95,7 @@ export const SETTINGS_KEYS = [
   'agentFastModes',
   'taskBudgetUsd',
   'taskUsageLimit',
+  'dailyUsageLimit',
   'autoResume',
   'snoozeLimited',
   'accountSwitchAt',
@@ -115,6 +117,7 @@ export const HUMAN_ONLY_SETTINGS = [
   'mergeMethod',
   'taskBudgetUsd',
   'taskUsageLimit',
+  'dailyUsageLimit',
   'autoResume',
   'snoozeLimited',
   'accountSwitchAt',
@@ -162,6 +165,7 @@ const DEFAULT_SETTINGS: Settings = {
   agentFastModes: {},
   taskBudgetUsd: null,
   taskUsageLimit: null,
+  dailyUsageLimit: null,
   autoResume: true,
   snoozeLimited: true,
   accountSwitchAt: DEFAULT_ACCOUNT_SWITCH_AT,
