@@ -44,6 +44,10 @@ function describeFixClosing(next: string) {
   ].join('\n');
 }
 
+export function describeRepeatedFailure(stalled: number) {
+  return `This came back after ${describeCount(stalled, 'fix round')} that did not clear it. Do not repeat what you tried: find the cause another way, such as reading the full output, running the failing test alone or questioning your earlier fix, before you change the code again.`;
+}
+
 const WORK_FIX_NEXT =
   'Afterwards Shinsa runs those checks, then the agent review where the task has one, and then the human reviews the work.';
 

@@ -77,6 +77,16 @@ export function OverviewSpecimens() {
           <SetupCard state={state} task={tasks.setup} gate={gates.setup} onReply={acknowledgeSample} />
         </Card>
       </Specimen>
+      <Specimen label='SetupCard · no repository: pick one of the known repositories'>
+        <Card>
+          <SetupCard
+            state={state}
+            task={tasks.setup}
+            gate={gates.pickRepository}
+            onReply={acknowledgeSample}
+          />
+        </Card>
+      </Specimen>
       <Specimen label='SignInCard · sign in needed'>
         <Card>
           <SignInCard

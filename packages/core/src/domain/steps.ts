@@ -642,8 +642,19 @@ const HARD_GATES = {
     strength: 'hard',
     decidedBy: 'you',
     title: 'Setup incomplete',
-    shows: ['each setup problem', 'how to fix it'],
-    decisions: [{ decision: 'approve', does: 'Verifies the setup again.' }, CANCEL],
+    shows: [
+      'each setup problem',
+      'how to fix it',
+      'the repositories to pick from, when the repository is the only problem',
+    ],
+    decisions: [
+      { decision: 'approve', does: 'Verifies the setup again.' },
+      {
+        decision: 'reply',
+        does: 'Points the task at the repository you picked, then verifies the setup again.',
+      },
+      CANCEL,
+    ],
     refusal: 'Verify the setup again, or cancel.',
     pauses: true,
   },

@@ -110,6 +110,7 @@ export class TaskSetup extends Context.Service<
             size: triaged.size,
             branch: triaged.branch,
             waitsOn: triaged.waitsOn.map((dependency) => dependency.id),
+            ...(triaged.stacksOn?.length ? { stacksOn: triaged.stacksOn.map((parent) => parent.id) } : {}),
             duplicateOf: triaged.duplicateOf,
             duplicateOfTeammate: triaged.duplicateOfTeammate,
             unreached: triaged.unreached,

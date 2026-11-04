@@ -869,3 +869,98 @@ describe('a bundle on Home', () => {
     expect(listBundleBlockers(harness.state, harness.task(root))).toEqual([]);
   });
 });
+
+function triageNew(
+  harness: Harness,
+  options: { request: string; stacksOn: string[]; waitsOn?: string[]; repoId?: string; shape?: 'answer' }
+) {
+  const repoId = options.repoId ?? Object.keys(harness.state.repos)[0] ?? registerRepo(harness);
+  const before = new Set(Object.keys(harness.state.tasks));
+  harness.send({ type: 'task.create', request: options.request, repoId });
+  const taskId = Object.keys(harness.state.tasks).find((id) => !before.has(id)) ?? '';
+  harness.send({
+    type: 'task.triage',
+    taskId,
+    title: options.request,
+    repoId,
+    size: 'large',
+    branch: `feat/${taskId}`,
+    waitsOn: options.waitsOn ?? [],
+    stacksOn: options.stacksOn,
+    ...(options.shape ? { shape: options.shape } : {}),
+    reasons: { start: 'It needs no other task.', stack: 'It is the next piece of the rewrite.' },
+  });
+  return taskId;
+}
+
+describe('triage stacking a new task', () => {
+  test('stacks the next piece of an open change, records why, and moves a wait on it into the bundle', () => {
+    const harness = createHarness();
+    const parent = createTask(harness, { request: 'Rewrite the store in Effect' });
+    const other = createTask(harness, { request: 'Add the share preset' });
+    const child = triageNew(harness, {
+      request: 'Move the outbox onto the new store',
+      stacksOn: [parent],
+      waitsOn: [parent, other],
+    });
+    const task = harness.task(child);
+    expect(task.stacksOn).toEqual([parent]);
+    expect(task.waitsOn).toEqual([other]);
+    expect(task.triageDecisions?.stack).toEqual({
+      value: [parent],
+      why: 'It is the next piece of the rewrite.',
+    });
+    expect(task.triageDecisions?.start?.value).toEqual([other]);
+    expect(task.stage).toBe('waiting_on_tasks');
+    expect(task.activity.map((entry) => entry.text)).toContain(
+      'Stacked on “Rewrite the store in Effect” as a bundle'
+    );
+  });
+
+  test('an empty stack records no stack decision and starts at once', () => {
+    const harness = createHarness();
+    createTask(harness, { request: 'Parent' });
+    const child = triageNew(harness, { request: 'Child', stacksOn: [] });
+    expect(harness.task(child).stacksOn ?? []).toEqual([]);
+    expect(harness.task(child).triageDecisions?.stack).toBeUndefined();
+    expect(harness.task(child).stage).toBe('triage');
+  });
+
+  test('is dropped across repositories, for work that opens no pull request, and on a finished task', () => {
+    const harness = createHarness();
+    const parent = createTask(harness, { request: 'Parent' });
+    const elsewhere = registerRepo(harness, 'other');
+    const across = triageNew(harness, { request: 'Across', stacksOn: [parent], repoId: elsewhere });
+    expect(harness.task(across).stacksOn ?? []).toEqual([]);
+    const question = triageNew(harness, {
+      request: 'How does it work?',
+      stacksOn: [parent],
+      shape: 'answer',
+    });
+    expect(harness.task(question).stacksOn ?? []).toEqual([]);
+    const finished = createTask(harness, { request: 'Finished' });
+    harness.send({ type: 'task.cancel', taskId: finished });
+    const late = triageNew(harness, { request: 'Late', stacksOn: [finished, 'missing'] });
+    expect(harness.task(late).stacksOn ?? []).toEqual([]);
+    expect(harness.task(late).triageDecisions?.stack).toBeUndefined();
+  });
+
+  test('never stacks a task whose start you chose', () => {
+    const harness = createHarness();
+    const parent = createTask(harness, { request: 'Parent' });
+    const repoId = harness.task(parent).repoId ?? '';
+    harness.send({ type: 'task.create', request: 'Mine', repoId, waitsOn: [] });
+    const mine = Object.values(harness.state.tasks).find((task) => task.request === 'Mine')?.id ?? '';
+    harness.send({
+      type: 'task.triage',
+      taskId: mine,
+      title: 'Mine',
+      repoId,
+      size: 'small',
+      branch: 'fix/mine',
+      waitsOn: [],
+      stacksOn: [parent],
+    });
+    expect(harness.task(mine).stacksOn ?? []).toEqual([]);
+  });
+});

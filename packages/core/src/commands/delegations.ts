@@ -38,7 +38,7 @@ export type DelegationAgentCommand =
       forkOf?: string;
       teammateFork?: TeammateFork;
     }
-  | { type: 'agent.split_task'; runId: string; requests: string[]; thisWaits: boolean };
+  | { type: 'agent.split_task'; runId: string; requests: string[]; thisWaits: boolean; stacked?: boolean };
 
 export type DelegationSystemCommand =
   | { type: 'delegation.record_delivery'; runId: string; generation: number; items: string[] }

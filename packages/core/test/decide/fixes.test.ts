@@ -31,6 +31,15 @@ const COVERAGE = {
   files: [{ path: 'src/a.ts', covered: 3, executable: 4, uncovered: [[7, 7]] }],
 } as const;
 
+function repeatFailingChecks(harness: Harness, taskId: string, rounds: number) {
+  for (let round = 0; round < rounds; round += 1) {
+    if (harness.task(taskId).stage === 'fixing') {
+      harness.send({ type: 'agent.complete_fix', runId: harness.activeRun(taskId).id, summary: 'Tried.' });
+    }
+    harness.send({ type: 'checks.record', taskId, results: failing() });
+  }
+}
+
 describe('coverage of the changed lines', () => {
   test('is recorded with the checks, and read by the reviewer', () => {
     const harness = createHarness();
@@ -159,22 +168,40 @@ describe('checks and agent review', () => {
     });
   });
 
-  test('the same failure twice in a row stops the loop with a failure gate', () => {
+  test('the same failure keeps the agent fixing until it came back 8 times', () => {
     const harness = createHarness();
     const taskId = createTask(harness);
     buildAll(harness, taskId);
-    for (let round = 0; round < 3; round += 1) {
-      harness.send({ type: 'checks.record', taskId, results: failing() });
-      if (harness.task(taskId).stage !== 'fixing') break;
-      harness.send({ type: 'agent.complete_fix', runId: harness.activeRun(taskId).id, summary: 'Tried.' });
-    }
+    repeatFailingChecks(harness, taskId, 8);
+    expect(harness.task(taskId).stage).toBe('fixing');
+    expect(listOpenGates(harness.state, taskId)).toHaveLength(0);
+    repeatFailingChecks(harness, taskId, 1);
     const gate = harness.openGate(taskId);
     expect(gate.type).toBe('failure');
     expect(gate.title).toBe('Fixing is not making progress');
     expect(gate.body).toBe(
-      'The failing checks came back after 2 fix rounds. Steer the agent in the chat, or retry.'
+      'The failing checks came back after 8 fix rounds. Steer the agent in the chat, or retry.'
     );
+    expect(harness.task(taskId).fixRounds).toBe(8);
     expect(listActiveRuns(harness.state, taskId)).toHaveLength(0);
+  });
+
+  test('a repeated failure tells the agent it came back and to find the cause another way', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    buildAll(harness, taskId);
+    harness.send({ type: 'checks.record', taskId, results: failing() });
+    expect(harness.activeRun(taskId).prompt).not.toContain('This came back after');
+    harness.send({ type: 'agent.complete_fix', runId: harness.activeRun(taskId).id, summary: 'Tried.' });
+    harness.send({ type: 'checks.record', taskId, results: failing() });
+    expect(harness.activeRun(taskId).prompt).toContain(
+      'This came back after 1 fix round that did not clear it. Do not repeat what you tried'
+    );
+    harness.send({ type: 'agent.complete_fix', runId: harness.activeRun(taskId).id, summary: 'Tried.' });
+    harness.send({ type: 'checks.record', taskId, results: failing() });
+    expect(harness.activeRun(taskId).prompt).toContain(
+      'This came back after 2 fix rounds that did not clear it.'
+    );
   });
 
   test('a different failure each round keeps fixing until the round cap', () => {
@@ -220,37 +247,23 @@ describe('checks and agent review', () => {
 });
 
 describe('fix loop limits', () => {
-  test('alternating failures still stop: a failure seen twice before ends the loop', () => {
+  test('alternating failures still stop: a failure seen 8 times before ends the loop', () => {
     const harness = createHarness();
     createManyChecks(harness);
     const taskId = createTask(harness);
     buildAll(harness, taskId);
-    const finding = (message: string) => ({
-      severity: 'blocking' as const,
-      file: 'src/a.ts',
-      line: 1,
-      message,
-    });
-    for (let round = 0; round < 3; round += 1) {
-      harness.send({ type: 'checks.record', taskId, results: failing('r1') });
-      if (harness.task(taskId).stage !== 'fixing') break;
-      harness.send({ type: 'agent.complete_fix', runId: harness.activeRun(taskId).id, summary: 'x' });
-      harness.send({ type: 'checks.record', taskId, results: PASSING });
-      harness.send({
-        type: 'agent.report_review',
-        runId: harness.activeRun(taskId).id,
-        summary: null,
-        findings: [finding(`wording ${round}`)],
-      });
+    for (let round = 0; round < 20; round += 1) {
+      harness.send({ type: 'checks.record', taskId, results: failing(round % 2 === 0 ? 'r3' : 'r4') });
       if (harness.task(taskId).stage !== 'fixing') break;
       harness.send({
         type: 'agent.complete_fix',
         runId: harness.activeRun(taskId).id,
-        summary: 'y',
-        checks: ['r1'],
+        summary: 'x',
+        treeHash: `t${round}`,
       });
     }
     expect(harness.openGate(taskId).title).toBe('Fixing is not making progress');
+    expect(harness.task(taskId).fixRounds).toBe(16);
   });
 
   test('"until clean" has no round cap while each round brings something new', () => {
@@ -289,11 +302,7 @@ describe('the automatic fix budget', () => {
     const harness = createHarness();
     const taskId = createTask(harness);
     buildAll(harness, taskId);
-    for (let round = 0; round < 3; round += 1) {
-      harness.send({ type: 'checks.record', taskId, results: failing() });
-      if (harness.task(taskId).stage !== 'fixing') break;
-      harness.send({ type: 'agent.complete_fix', runId: harness.activeRun(taskId).id, summary: 'Tried.' });
-    }
+    repeatFailingChecks(harness, taskId, 9);
     expect(harness.openGate(taskId).title).toBe('Fixing is not making progress');
     harness.send({ type: 'task.retry', taskId });
     harness.send({ type: 'checks.record', taskId, results: failing() });
@@ -522,9 +531,17 @@ describe('fix fingerprints', () => {
     harness.send({ type: 'agent.complete_fix', runId: harness.activeRun(taskId).id, summary: 'Same.' });
     harness.send({ type: 'checks.record', taskId, results: failing('r5') });
     expect(harness.task(taskId).stalledFixes).toBe(1);
-    harness.send({ type: 'agent.complete_fix', runId: harness.activeRun(taskId).id, summary: 'Same again.' });
-    harness.send({ type: 'checks.record', taskId, results: failing('r6') });
+    for (let round = 6; round < 20; round += 1) {
+      harness.send({
+        type: 'agent.complete_fix',
+        runId: harness.activeRun(taskId).id,
+        summary: 'Same again.',
+      });
+      harness.send({ type: 'checks.record', taskId, results: failing(`r${round}`) });
+      if (harness.task(taskId).stage !== 'fixing') break;
+    }
     expect(harness.openGate(taskId).title).toBe('Fixing is not making progress');
+    expect(harness.task(taskId).fixRounds).toBe(9);
   });
 
   test('a round that changed the code and moved the failure keeps going', () => {
