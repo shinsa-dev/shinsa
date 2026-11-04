@@ -25,3 +25,9 @@ export function resolveSlackThreadKey(thread: SlackThreadRef) {
 export function isSameSlackThread(left: SlackThreadRef, right: SlackThreadRef) {
   return resolveSlackThreadKey(left) === resolveSlackThreadKey(right);
 }
+
+export function resolveSlackThreadUrl(link: SlackThreadLink) {
+  if (link.permalink) return link.permalink;
+  const thread = `${link.channelId}-${link.threadTs}`;
+  return `https://app.slack.com/client/${link.teamId}/${link.channelId}/thread/${thread}`;
+}

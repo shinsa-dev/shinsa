@@ -58,6 +58,22 @@ export function listActiveTasks({ paywall, docs }: SeedRepos): SeedTask[] {
       branch: 'feat/mcp-stream-tools',
       ageHours: 1,
       runs: [{ role: 'agent', purpose: 'build', minutes: 4, summary: 'Streaming the tool results.' }],
+      extra: [
+        {
+          type: 'slack.thread_linked',
+          taskId: 'task-stream-tools',
+          link: {
+            teamId: 'T02SUPERWALL',
+            channelId: 'C05MCP',
+            threadTs: '1761720000.000100',
+            userId: 'U01CHRISTO',
+            messageTs: '1761720000.000100',
+            permalink: 'https://superwall.slack.com/archives/C05MCP/p1761720000000100',
+            statusTs: null,
+            reaction: null,
+          },
+        },
+      ],
     },
     {
       id: 'task-effect-orm',

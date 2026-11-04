@@ -4015,7 +4015,10 @@ Slack ──a card's button──► app.shinsa.dev /slack/interactions
   adds `lastUsedAt` to each link from its own state (`resolveSlackLastUsedAt`, the newest task whose Slack thread
   that user in that workspace started), so app.shinsa.dev stores nothing for it. Replies in a task's thread and
   decisions from a card's buttons do not count. A page reaching an older engine, whose links lack the field, shows
-  "Connected 3d ago as Christo" as before. The hosted dashboard on
+  "Connected 3d ago as Christo" as before. A task started from Slack shows a Slack button left of its menu, "Open the
+  Slack thread" (`components/task/slack-thread.tsx`), which opens the thread it came from in a new tab: the mention's
+  permalink, or `https://app.slack.com/client/<team>/<channel>/thread/<channel>-<ts>` when Slack gave none
+  (`resolveSlackThreadUrl`); a read-only shared page leaves it out. The hosted dashboard on
   app.shinsa.dev shows the same section, below Machines, read from and sent to the first machine of the dashboard.
 - **A mention reaches the machine** as `SlackMention` (`slack/schema.ts`): the event id, the workspace, channel and
   thread (`threadTs`, the mention's own `ts` for a mention outside a thread: the bot always answers in a thread), the

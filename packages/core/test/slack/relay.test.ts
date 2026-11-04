@@ -9,6 +9,7 @@ import {
   resolveSlackLinkedPath,
   resolveSlackReadableText,
   resolveSlackTaskUrl,
+  resolveSlackThreadUrl,
   SLACK_RELAY_MESSAGE_LIMITS,
 } from '../../src/index.ts';
 import { createHarness, createTask } from '../harness.ts';
@@ -171,5 +172,27 @@ describe('when a Slack account last started work on this machine', () => {
   test('is null for an account that has not started a task here', () => {
     const state = stateWith({ typed: null, other: { teamId: 'T1', userId: 'U2' } });
     expect(resolveSlackLastUsedAt(state, { teamId: 'T1', userId: 'U1' })).toBeNull();
+  });
+});
+
+describe('the Slack thread a task came from', () => {
+  const LINK = {
+    teamId: 'T1',
+    channelId: 'C1',
+    threadTs: '100.1',
+    userId: 'U1',
+    messageTs: '100.2',
+    permalink: null,
+    statusTs: null,
+    reaction: null,
+  };
+
+  test('opens the mention’s permalink when Slack gave one', () => {
+    const permalink = 'https://acme.slack.com/archives/C1/p1002?thread_ts=100.1';
+    expect(resolveSlackThreadUrl({ ...LINK, permalink })).toBe(permalink);
+  });
+
+  test('opens the thread in Slack’s web client without one', () => {
+    expect(resolveSlackThreadUrl(LINK)).toBe('https://app.slack.com/client/T1/C1/thread/C1-100.1');
   });
 });
