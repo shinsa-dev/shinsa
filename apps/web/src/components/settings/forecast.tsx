@@ -161,7 +161,10 @@ function Timeline({ forecast, timeline }: { forecast: UsageForecast; timeline: F
   return (
     <div className={cn('flex flex-col gap-1.5 py-2.5', ROW_INSET)}>
       <div className='relative flex flex-col gap-1.5'>
-        <div className='pointer-events-none absolute inset-y-0 right-0 left-[calc(--spacing(24)+--spacing(3))] sm:left-[calc(--spacing(36)+--spacing(3))]'>
+        <div
+          data-overlay
+          className='pointer-events-none absolute inset-y-0 right-0 left-[calc(--spacing(24)+--spacing(3))] z-10 sm:left-[calc(--spacing(36)+--spacing(3))]'
+        >
           <Outages forecast={forecast} timeline={timeline} />
           {atSafePace && timeline.outages.length === 0 && <TightestMark forecast={forecast} />}
         </div>
