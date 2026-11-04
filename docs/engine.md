@@ -5919,13 +5919,13 @@ Agent usage glance in the top bar, which shows every connected provider (`docs/d
 
 ## The Effect runtime
 
-The engine moves to Effect 4 one piece at a time (the `effect` skill is how it is written). Its foundation already
-has: the configuration, the log, the shell, the event log and the files beside it, the data folder lock and the
+The engine is written in Effect 4 (the `effect` skill is how it is written), and `bun lint:conventions` fails any engine
+file that does Promise I/O outside it. Its foundation has: the configuration, the log, the shell, the event log and the files beside it, the data folder lock and the
 start and stop of the engine itself. On top of it every folder that does I/O is a set of services: the JSON files the
 engine keeps, git, GitHub, repositories and workspaces, checks and coverage, terminals, extensions, accounts and
 secrets, versions, Eunoe, resources, schedules, onboarding, triage and the briefing. Each is a service with a layer
-(`apps/engine/CLAUDE.md` → Rules has the table); the agent runs, the HTTP surface and the CLI have not moved yet and
-call them through an edge.
+(`apps/engine/CLAUDE.md` → Rules has the table), and the agent runs, the HTTP surface, the surface specs and the CLI
+yield them as Effects.
 
 ```
 startShinsa ──► ManagedRuntime(Serve.layer)              one per engine
@@ -6094,10 +6094,10 @@ unmoved code ──► edges ──► edgeRuntime(JsonLogger, Shell, JsonFile, 
   runtime, the log, then the lock. The two runtimes go only once HTTP has stopped, since a request still answers from
   the engine until then. A start that fails partway disposes it as well, so
   nothing it took stays held, and a second `stop()` waits for the first.
-- **The edge.** Code that has not moved keeps the calls it made: `log.*`, `resolveConfig`, `runCommand` and the kill
+- **The edge.** The objects other code holds keep the calls they made: `log.*`, `resolveConfig`, `runCommand` and the kill
   helpers, `writeJsonFile`, the functions of `git/`, `github/`, `repos/`, `checks/` and `test-coverage/`, the
   terminals' store and PTY, the extensions' discovery, health and usage, the accounts' and secrets' files, the npm
-  registry, Eunoe's server and threads, the resource monitor, triage's timeout and the briefings
+  registry, Eunoe's server and threads, the resource monitor and the briefings
   run the services through `edgeRuntime`, a `ManagedRuntime` of the logger, the shell, `JsonFile`, git's,
   GitHub's, the repositories', the workspaces', the checks', the terminals', the extensions', the accounts', the
   secrets' and the versions' services for the process; `Extensions`, `Versions`, `ResourceMonitor` and

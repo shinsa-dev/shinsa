@@ -140,7 +140,7 @@ log. Use a scratch directory when testing: `SHINSA_HOME=/tmp/shinsa-dev bun --cw
   (core's `decide`, the folds) stays plain functions over those schemas, never wrapped in an effect. The `effect`
   skill is the one way to write it, every pattern compiled and tested in `scripts/effect-guide/`; the Effect language
   service in `bun check-types` and `bun lint:conventions` (`scripts/lint-effect.ts`, on every file that imports
-  `effect`) check it. The apps move one service at a time; code not yet moved keeps its current style until its task. Every package and app keeps the one
+  `effect`, and every engine source file, which may do no Promise I/O outside Effect) check it. Every package and app keeps the one
   layout the skill gives (a folder per module, its shapes in `schema.ts`, its logic beside it), and a move rewrites into Effect's own
   shapes (schemas, tagged errors, services, scopes, schedules, streams) instead of wrapping the old code.
 - **Skills** (`.claude/skills`): `conventions` is the pattern catalog, load it before writing code; `effect` before any code that imports `effect`; `review` is the method for a cleanup or review pass (scope the diff, prove every finding by reverting its fix); `copy` for any string a person or an agent reads; `design` for UI.

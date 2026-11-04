@@ -42,9 +42,6 @@ export const EFFECT_SCHEMA_FILE_MESSAGE =
 export const ENGINE_PROMISE_MESSAGE =
   'Promise I/O outside Effect in the engine. Write the module as a Context.Service provided by a Layer, with Effect.fn and Effect.tryPromise around the promise API, and run it with a runtime only at the edge (the effect skill → Services and layers)';
 
-export const ENGINE_PROMISE_STALE_MESSAGE =
-  'This file no longer does Promise I/O outside Effect. Remove it from ENGINE_PROMISE_FILES in scripts/lint-rules.ts';
-
 const ENGINE_SOURCE = /^apps\/engine\/src\//;
 
 const LOGIC_FILES = /(?:^|\/)(?:handler|service|middleware)\.tsx?$/;
