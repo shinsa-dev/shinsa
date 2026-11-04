@@ -12,10 +12,13 @@ import {
 } from '@shinsa/core/engine-api/schema';
 import { Cause, Effect, Option, Predicate, Schema, type Types } from 'effect';
 import { HttpRouter, HttpServerError, HttpServerRequest, HttpServerResponse } from 'effect/http';
+import { EngineConfig } from '../../config/service.ts';
+import { Extensions } from '../../extensions/registry/service.ts';
+import { SIGN_IN_CALLBACK_PATH } from '../../extensions/sign-in.ts';
 import { INSPECT_MESSAGE } from '../../instance/index.ts';
 import { describeError } from '../../log/index.ts';
 import { TunnelGate } from '../../remote/gate/service.ts';
-import { isWebhookPath } from '../../schedules/webhook.ts';
+import { isWebhookPath } from '../../schedules/webhook/path.ts';
 import {
   resolveAllowedHosts,
   resolveBodyRefusal,
@@ -25,13 +28,12 @@ import {
 } from '../guard.ts';
 import { respondFailure } from '../responses.ts';
 import { IngressFailure, REQUEST_FAILED, RequestSource, type RequestSourceShape } from '../schema.ts';
-import { HttpServices } from '../services/service.ts';
 import { serveStatic } from '../static.ts';
 
 export const Ingress = HttpRouter.middleware(
   Effect.gen(function* () {
-    const services = yield* HttpServices;
-    const { config, extensions } = services;
+    const config = yield* EngineConfig;
+    const extensions = Option.getOrUndefined(yield* Effect.serviceOption(Extensions));
     const gate = yield* TunnelGate;
     const allowedHosts = resolveAllowedHosts(config.allowedHosts);
     const isIngressFailure = Schema.is(IngressFailure);
@@ -50,10 +52,7 @@ export const Ingress = HttpRouter.middleware(
     };
 
     const respondPage = (pathname: string) =>
-      Effect.map(
-        Effect.promise(() => serveStatic(config.webDir, pathname)),
-        HttpServerResponse.raw
-      );
+      Effect.map(serveStatic(config.webDir, pathname), HttpServerResponse.raw);
 
     const respondMissing = Effect.fn('Ingress.respondMissing')(function* (
       web: Request,
@@ -97,7 +96,7 @@ export const Ingress = HttpRouter.middleware(
     const admitLocal = Effect.fn('Ingress.admitLocal')(function* (web: Request, url: URL) {
       yield* gate.admitRequest(web, url, { via: 'local', guest: null, userId: null });
       if (isWebhookPath(url.pathname)) return yield* assertWritable();
-      if (web.method === 'GET' && extensions?.isCallback(url.pathname)) {
+      if (web.method === 'GET' && extensions !== undefined && url.pathname === SIGN_IN_CALLBACK_PATH) {
         yield* assertWritable();
         const hostRefusal = resolveHostRefusal(web, allowedHosts);
         if (hostRefusal) return yield* new RequestForbidden({ message: hostRefusal });

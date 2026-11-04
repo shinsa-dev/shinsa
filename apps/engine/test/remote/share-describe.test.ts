@@ -1,6 +1,21 @@
 import { describe, expect, test } from 'bun:test';
 import type { Task } from '@shinsa/core';
-import { createShareDescriber, describeSharePrompt } from '../../src/remote/share-describe.ts';
+import { Effect, Layer } from 'effect';
+import type { QuickJson } from '../../src/agents/quick/schema.ts';
+import { QuickCalls } from '../../src/agents/quick/service.ts';
+import { describeSharePrompt } from '../../src/remote/share-describe/prompt.ts';
+import { ShareDescriber } from '../../src/remote/share-describe/service.ts';
+
+function createShareDescriber(write: QuickJson) {
+  const describer = Effect.runSync(
+    ShareDescriber.pipe(
+      Effect.provide(
+        ShareDescriber.layer.pipe(Layer.provide(Layer.succeed(QuickCalls, { classify: write, write })))
+      )
+    )
+  );
+  return (task: Task) => Effect.runPromise(describer.describe(task));
+}
 
 const TASK = {
   title: 'Scroll tab groups horizontally',
@@ -12,7 +27,7 @@ function createAsk(answer: unknown) {
   const calls: { system: string; prompt: string; schema: unknown }[] = [];
   const ask = <T>(system: string, prompt: string, schema?: unknown) => {
     calls.push({ system, prompt, schema });
-    return Promise.resolve(answer as T | null);
+    return Effect.succeed(answer as T | null);
   };
   return { ask, calls };
 }
@@ -34,5 +49,12 @@ describe('describing a shared task', () => {
     expect(await createShareDescriber(createAsk({ description: '  ' }).ask)(TASK)).toBeNull();
     expect(await createShareDescriber(createAsk({ description: 4 }).ask)(TASK)).toBeNull();
     expect(await createShareDescriber(createAsk({ description: 'x'.repeat(401) }).ask)(TASK)).toBeNull();
+  });
+
+  test('a writer that fails passes its failure on', async () => {
+    const describer = createShareDescriber(
+      <T>() => Effect.die(new Error('writer down')) as Effect.Effect<T | null>
+    );
+    await expect(describer(TASK)).rejects.toThrow('writer down');
   });
 });

@@ -6,6 +6,7 @@ import {
   type ShinsaState,
   type Task,
 } from '@shinsa/core';
+import { Effect } from 'effect';
 import { ACCOUNT_LABEL } from '@/lib/accounts/account.ts';
 import { describeSignInCheck, resolveSignInProvider } from '@/lib/accounts/sign-in.ts';
 import { type Command, type MenuPage, RANK } from '@/lib/command/registry.ts';
@@ -28,6 +29,7 @@ import {
   MERGE_STEP_TITLE,
   resolveMergeLabel,
 } from '@/lib/review/merge-steps.ts';
+import { runApp } from '@/lib/runtime/app.ts';
 import { declineSecret, resolveSecretLabel } from '@/lib/secrets.ts';
 import { describePlanCard } from '@/lib/tasks/backlog.ts';
 import {
@@ -235,25 +237,41 @@ function createReviseCommand(gate: Gate, context: GateContext): Command {
       'Request changes',
       'Say what should change. The agent fixes it.',
       'Send the changes',
-      async (text) => {
+      (text) => {
         const extras = count > 0 ? { comments: serializeComments(context.comments) } : {};
-        const sent = await replyToGate(gate, 'requestChanges', text, extras);
-        if (sent) context.clearComments();
-        return sent;
+        return runApp(
+          Effect.promise(() => replyToGate(gate, 'requestChanges', text, extras)).pipe(
+            Effect.tap((sent) =>
+              Effect.sync(() => {
+                if (sent) context.clearComments();
+              })
+            )
+          )
+        );
       }
     ),
   };
 }
 
-async function sendVerdicts(
+function sendVerdicts(
   task: Task,
   gate: Gate,
   action: VerdictAction,
   extras: AnswerExtras,
   context: GateContext
 ) {
-  const sent = await replyToGate(gate, resolveApprovalReply(task, gate, action.reply), null, extras);
-  if (sent && extras.comments) context.clearComments();
+  return runApp(
+    Effect.promise(() =>
+      replyToGate(gate, resolveApprovalReply(task, gate, action.reply), null, extras)
+    ).pipe(
+      Effect.tap((sent) =>
+        Effect.sync(() => {
+          if (sent && extras.comments) context.clearComments();
+        })
+      ),
+      Effect.asVoid
+    )
+  );
 }
 
 function resolveVerdictCommand(task: Task, gate: Gate, context: GateContext, thenApprove: boolean) {

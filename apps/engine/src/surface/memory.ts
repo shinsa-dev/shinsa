@@ -1,7 +1,8 @@
 import type { MemoryEntry } from '@shinsa/core';
-import type { SurfaceClient } from './client.ts';
+import { Effect } from 'effect';
 import type { FieldSpec } from './fields.ts';
 import { findProjectId } from './resolve.ts';
+import type { SurfaceClient } from './schema.ts';
 import { defineCommand, defineRead, readValue, type SurfaceSpec } from './spec.ts';
 
 type MemoryView = MemoryEntry & { project: string | null };
@@ -20,12 +21,16 @@ function describeMemory(entry: MemoryView) {
   return `${entry.id}  (${status}, ${scope}) ${entry.text}`;
 }
 
-async function resolveScope(client: SurfaceClient, memoryId: string | null, project: string) {
-  if (project) return await findProjectId(client, project);
+const resolveScope = Effect.fn('Surface.resolveMemoryScope')(function* (
+  client: SurfaceClient,
+  memoryId: string | null,
+  project: string
+) {
+  if (project) return yield* findProjectId(client, project);
   if (!memoryId) return null;
-  const { memory } = await client.api.state.memory();
+  const { memory } = yield* client.api.state.memory();
   return memory.find((entry) => entry.id === memoryId)?.projectId ?? null;
-}
+});
 
 export const MEMORY_SPECS: SurfaceSpec[] = [
   defineRead({
@@ -51,15 +56,15 @@ export const MEMORY_SPECS: SurfaceSpec[] = [
       },
       { name: 'text', kind: 'text', positional: 'rest', required: true, description: 'The rule.' },
     ],
-    build: async (values, client) => {
+    build: Effect.fn('Surface.memoryWrite')(function* (values, client) {
       const memoryId = readValue(values, 'id') || null;
       return {
-        type: 'memory.write',
+        type: 'memory.write' as const,
         memoryId,
-        projectId: await resolveScope(client, memoryId, readValue(values, 'project')),
+        projectId: yield* resolveScope(client, memoryId, readValue(values, 'project')),
         text: readValue(values, 'text'),
       };
-    },
+    }),
     done: () => 'Agents remember it.',
   }),
   defineCommand({

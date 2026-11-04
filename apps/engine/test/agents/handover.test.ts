@@ -2,14 +2,14 @@ import { describe, expect, test } from 'bun:test';
 import { readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Run, Task } from '@shinsa/core';
-import {
-  assertProtocol,
-  HANDED_OVER,
-  resolveCommitMessage,
-  storeEvidence,
-} from '../../src/agents/handover.ts';
-import { EvidenceStore } from '../../src/store/index.ts';
+import { Effect } from 'effect';
+import { storeEvidence as storeEvidenceEffect } from '../../src/agents/evidence.ts';
+import { assertProtocol, HANDED_OVER, resolveCommitMessage } from '../../src/agents/handover.ts';
+import { createTestEvidence } from '../helpers/evidence.ts';
 import { createTempDir, writeFiles } from '../helpers/index.ts';
+
+const storeEvidence = (...args: Parameters<typeof storeEvidenceEffect>) =>
+  Effect.runSync(storeEvidenceEffect(...args));
 
 describe('commits', () => {
   const task = {
@@ -86,7 +86,7 @@ describe('storeEvidence', () => {
   test('a relative path is read from the worktree into the task and round folder, with its facts', () => {
     const worktree = createTempDir();
     writeFiles(worktree, { 'shots/home.png': 'png' });
-    const evidence = new EvidenceStore(createTempDir());
+    const evidence = createTestEvidence(createTempDir());
     const stored = storeEvidence(
       {
         kind: 'screenshot',
@@ -126,7 +126,7 @@ describe('storeEvidence', () => {
   });
 
   test('a URL must be a web address, text is written to a file and a note to a markdown file', () => {
-    const evidence = new EvidenceStore(createTempDir());
+    const evidence = createTestEvidence(createTempDir());
     expect(
       storeEvidence({ kind: 'preview', title: 'Preview', url: 'https://preview.dev' }, null, evidence, FOLDER)
     ).toMatchObject({ uri: 'https://preview.dev' });
@@ -145,7 +145,7 @@ describe('storeEvidence', () => {
   });
 
   test('a test or check links a check by id, and anything else given with it is refused', () => {
-    const evidence = new EvidenceStore(createTempDir());
+    const evidence = createTestEvidence(createTempDir());
     expect(
       storeEvidence({ kind: 'test', check: 'c2', detail: 'The new file is read.' }, null, evidence, FOLDER)
     ).toEqual({
@@ -163,7 +163,7 @@ describe('storeEvidence', () => {
   test('a comparison copies each part, a video as a recording, and names each file by its part', () => {
     const worktree = createTempDir();
     writeFiles(worktree, { 'before.png': 'png', 'after.webm': 'webm' });
-    const evidence = new EvidenceStore(createTempDir());
+    const evidence = createTestEvidence(createTempDir());
     const stored = storeEvidence(
       {
         kind: 'comparison',
@@ -212,13 +212,13 @@ describe('storeEvidence', () => {
       { path: 'gone.png', stage: 'after' },
     ];
     expect(() =>
-      storeEvidence({ kind: 'comparison', title: 'Tabs', parts }, worktree, new EvidenceStore(dir), FOLDER)
+      storeEvidence({ kind: 'comparison', title: 'Tabs', parts }, worktree, createTestEvidence(dir), FOLDER)
     ).toThrow(`No file at ${join(worktree, 'gone.png')}.`);
     expect(readdirSync(dir)).toEqual([]);
   });
 
   test('a hand-over that breaks the protocol is refused with every reason', () => {
-    const evidence = new EvidenceStore(createTempDir());
+    const evidence = createTestEvidence(createTempDir());
     expect(() => storeEvidence({ kind: 'virus', text: 'x' }, null, evidence, FOLDER)).toThrow(
       'Shinsa did not attach it. Fix these and call `attach_evidence` again:\n- kind must be one of screenshot, recording, test, check, note, preview, comparison.\n- title is required.'
     );

@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it } from 'bun:test';
 import { act, renderHook } from '@testing-library/react';
+import { Effect } from 'effect';
+import { SharedTextFailed } from '@/lib/share/schema.ts';
 import {
   parseSharedTranscript,
   resetSharedTranscripts,
@@ -24,7 +26,7 @@ describe('the transcripts an Everything share streams', () => {
     const reads: string[] = [];
     const readText = (url: string) => {
       reads.push(url);
-      return Promise.resolve(JSON.stringify([ENTRY]));
+      return Effect.succeed(JSON.stringify([ENTRY]));
     };
     const { result } = renderHook(() => useSharedTranscript('run-1'));
     expect(result.current).toBeNull();
@@ -39,15 +41,16 @@ describe('the transcripts an Everything share streams', () => {
     let fail = true;
     const readText = (url: string) =>
       fail
-        ? Promise.reject(new Error('gone'))
-        : Promise.resolve(JSON.stringify(url === 'blob:2' ? [ENTRY] : []));
+        ? Effect.fail(new SharedTextFailed({ message: 'gone' }))
+        : Effect.succeed(JSON.stringify(url === 'blob:2' ? [ENTRY] : []));
     await syncSharedTranscripts({ 'run-1': ['blob:1'] }, readText);
     expect(selectSharedTranscript('run-1')).toBeNull();
     fail = false;
     let release: (text: string) => void = () => undefined;
-    const slow = syncSharedTranscripts(
-      { 'run-1': ['blob:1'] },
-      () => new Promise((resolve) => (release = resolve))
+    const slow = syncSharedTranscripts({ 'run-1': ['blob:1'] }, () =>
+      Effect.callback<string>((resume) => {
+        release = (text) => resume(Effect.succeed(text));
+      })
     );
     await syncSharedTranscripts({ 'run-1': ['blob:2'] }, readText);
     release('[]');
@@ -65,7 +68,7 @@ describe('the transcripts an Everything share streams', () => {
     };
     const readText = (url: string) => {
       reads.push(url);
-      return Promise.resolve(texts[url] ?? '[]');
+      return Effect.succeed(texts[url] ?? '[]');
     };
     await syncSharedTranscripts({ 'run-1': ['blob:a', 'blob:b1'] }, readText);
     expect(selectSharedTranscript('run-1')).toEqual([ENTRY, second]);
@@ -76,7 +79,7 @@ describe('the transcripts an Everything share streams', () => {
   });
 
   it('keeps nothing once reset', async () => {
-    await syncSharedTranscripts({ 'run-1': ['blob:1'] }, () => Promise.resolve(JSON.stringify([ENTRY])));
+    await syncSharedTranscripts({ 'run-1': ['blob:1'] }, () => Effect.succeed(JSON.stringify([ENTRY])));
     resetSharedTranscripts();
     expect(selectSharedTranscript('run-1')).toBeNull();
   });

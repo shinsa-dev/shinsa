@@ -1,8 +1,9 @@
 import { describe, expect, test } from 'bun:test';
 import type { ShinsaState, Task } from '@shinsa/core';
-import type { RunSupervisor } from '../../src/agents/index.ts';
-import type { Briefings } from '../../src/briefing/index.ts';
-import { EffectRunner } from '../../src/runtime/index.ts';
+import { Effect } from 'effect';
+import type { RunSupervisor } from '../../src/agents/supervisor/service.ts';
+import { BriefingWriter } from '../../src/briefing/service.ts';
+import { EffectRunner } from '../helpers/effects.ts';
 import {
   createGitRepo,
   createTempDir,
@@ -15,9 +16,9 @@ import {
 } from '../helpers/index.ts';
 import { createRepo, createStubEngine, createTask } from '../helpers/state.ts';
 
-const RUNS = { quiesce: () => Promise.resolve() } as unknown as RunSupervisor;
+const RUNS = { quiesce: () => Effect.void } as unknown as RunSupervisor['Service'];
 
-const BRIEFINGS = { schedule: () => undefined } as unknown as Briefings;
+const BRIEFINGS = BriefingWriter.of({ schedule: Effect.void, stop: Effect.void });
 
 let effects = 0;
 
@@ -37,7 +38,7 @@ function setup(task: Partial<Task>, repo: Partial<ReturnType<typeof createRepo>>
     previews: NO_PREVIEWS,
     handoffs: NO_HANDOFFS,
     resolveLogin: () => Promise.resolve(null),
-    triage: () => Promise.resolve(null),
+    triage: () => Effect.succeed(null),
   });
   return { ...stub, runner, config };
 }

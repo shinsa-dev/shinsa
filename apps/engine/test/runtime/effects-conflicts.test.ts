@@ -2,9 +2,10 @@ import { afterEach, describe, expect, test } from 'bun:test';
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Repo, ShinsaState, Task } from '@shinsa/core';
-import type { RunSupervisor } from '../../src/agents/index.ts';
-import type { Briefings } from '../../src/briefing/index.ts';
-import { EffectRunner } from '../../src/runtime/index.ts';
+import { Effect } from 'effect';
+import type { RunSupervisor } from '../../src/agents/supervisor/service.ts';
+import { BriefingWriter } from '../../src/briefing/service.ts';
+import { EffectRunner } from '../helpers/effects.ts';
 import {
   captureLogs,
   createGitRepo,
@@ -19,9 +20,9 @@ import {
 } from '../helpers/index.ts';
 import { createRepo, createStubEngine, createTask } from '../helpers/state.ts';
 
-const RUNS = { quiesce: () => Promise.resolve() } as unknown as RunSupervisor;
+const RUNS = { quiesce: () => Effect.void } as unknown as RunSupervisor['Service'];
 
-const BRIEFINGS = { schedule: () => undefined } as unknown as Briefings;
+const BRIEFINGS = BriefingWriter.of({ schedule: Effect.void, stop: Effect.void });
 
 const restores: (() => void)[] = [];
 
@@ -46,7 +47,7 @@ function setup(tasks: Partial<Task>[], repo: Partial<Repo>) {
     previews: NO_PREVIEWS,
     handoffs: NO_HANDOFFS,
     resolveLogin: () => Promise.resolve(null),
-    triage: () => Promise.resolve(null),
+    triage: () => Effect.succeed(null),
   });
   return { ...stub, runner };
 }

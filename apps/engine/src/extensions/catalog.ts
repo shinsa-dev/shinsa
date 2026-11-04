@@ -6,8 +6,7 @@ import {
   type PluginSummary,
 } from '@shinsa/core';
 import type { McpDefinition } from './definitions.ts';
-import type { ClaudePlugin } from './discover.ts';
-import type { FoundSkill } from './skills.ts';
+import type { ClaudePlugin, FoundSkill } from './schema.ts';
 
 export interface CatalogServer {
   id: string;

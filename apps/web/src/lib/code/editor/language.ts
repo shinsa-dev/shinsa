@@ -1,7 +1,13 @@
 import { LanguageDescription, type LanguageSupport } from '@codemirror/language';
 import { languages } from '@codemirror/language-data';
+import { Effect } from 'effect';
+import { runApp } from '@/lib/runtime/app.ts';
 
 const loaded = new Map<string, Promise<LanguageSupport | null>>();
+
+const readLanguage = Effect.fn('Language.read')(function* (description: LanguageDescription) {
+  return yield* Effect.tryPromise(() => description.load()).pipe(Effect.orElseSucceed(() => null));
+});
 
 export function selectLanguageDescription(path: string, list: readonly LanguageDescription[] = languages) {
   const name = path.slice(path.lastIndexOf('/') + 1);
@@ -13,10 +19,10 @@ export function requestLanguage(
   list: readonly LanguageDescription[] = languages
 ): Promise<LanguageSupport | null> {
   const description = selectLanguageDescription(path, list);
-  if (!description) return Promise.resolve(null);
+  if (!description) return runApp(Effect.succeed(null));
   const known = loaded.get(description.name);
   if (known) return known;
-  const pending = description.load().catch(() => null);
+  const pending = runApp(readLanguage(description));
   loaded.set(description.name, pending);
   return pending;
 }

@@ -8,18 +8,13 @@ import {
   type Task,
 } from '@shinsa/core';
 import { Context, Effect, Layer } from 'effect';
-import {
-  createRepository,
-  listCandidateRepos,
-  prepareSetup,
-  resolveTaskRepoTarget,
-  upsertRepo,
-  verifySetup,
-} from '../../../repos/index.ts';
+import { RepoFolders } from '../../../repos/folders/service.ts';
+import { resolveTaskRepoTarget } from '../../../repos/index.ts';
+import { RepoRegistry } from '../../../repos/registry/service.ts';
+import { RepoSetup } from '../../../repos/setup/service.ts';
 import { resolveRepoProject, type TriageResult } from '../../../triage/index.ts';
-import { describeWorkspaceProblem } from '../../../workspaces/index.ts';
 import type { EffectAttempt } from '../../engine/schema.ts';
-import { createEffectFailed } from '../../failures/classify.ts';
+import { createEffectFailed, resolveEffectFailure } from '../../failures/classify.ts';
 import type { EffectFailure } from '../../failures/schema.ts';
 import { NO_TRIAGE } from '../schema.ts';
 import { EffectWorld } from '../world/service.ts';
@@ -36,10 +31,12 @@ export class TaskSetup extends Context.Service<
     TaskSetup,
     Effect.gen(function* () {
       const world = yield* EffectWorld;
+      const folders = yield* RepoFolders;
+      const registry = yield* RepoRegistry;
+      const setup = yield* RepoSetup;
 
       const listCandidates = Effect.fn('TaskSetup.listCandidates')(function* (task: Task) {
-        const roots = yield* world.bridge(() => world.roots.listRoots());
-        return yield* world.bridge(() => listCandidateRepos(roots, task.origin));
+        return yield* folders.listCandidates(yield* world.roots.listRoots, task.origin);
       });
 
       const registerRepo = Effect.fn('TaskSetup.registerRepo')(function* (
@@ -49,11 +46,9 @@ export class TaskSetup extends Context.Service<
       ) {
         if (!path) return null;
         const projectId = resolveRepoProject(yield* world.state, task, path);
-        return yield* world.bridge(() =>
-          upsertRepo(world.engine, path, world.resolveLogin, projectId, {
-            id: `${attempt.key}:repo.register`,
-          })
-        );
+        return yield* registry
+          .upsert(path, world.resolveLogin, projectId, { id: `${attempt.key}:repo.register` })
+          .pipe(Effect.mapError(resolveEffectFailure));
       });
 
       const createTriagedRepo = Effect.fn('TaskSetup.createTriagedRepo')(function* (
@@ -61,7 +56,7 @@ export class TaskSetup extends Context.Service<
         name: string,
         attempt: EffectAttempt
       ) {
-        const roots = yield* world.bridge(() => world.roots.listRoots());
+        const roots = yield* world.roots.listRoots;
         const target = resolveTaskRepoTarget(yield* world.state, task, name, roots);
         if (!target) {
           yield* Effect.logWarning(
@@ -69,14 +64,13 @@ export class TaskSetup extends Context.Service<
           ).pipe(Effect.annotateLogs({ taskId: task.id, name }));
           return null;
         }
-        return yield* world
-          .bridge(() =>
-            createRepository(world.engine, target.parent, name, target.projectId, {
-              resolveLogin: world.resolveLogin,
-              from: { id: `${attempt.key}:repo.register` },
-            })
-          )
+        return yield* registry
+          .create(target.parent, name, target.projectId, {
+            login: world.resolveLogin,
+            from: { id: `${attempt.key}:repo.register` },
+          })
           .pipe(
+            Effect.mapError(resolveEffectFailure),
             Effect.catch((failure) =>
               Effect.logWarning('[Triage] Could not create the new repository triage named').pipe(
                 Effect.annotateLogs({ taskId: task.id, name, error: failure.message }),
@@ -102,7 +96,9 @@ export class TaskSetup extends Context.Service<
         const task = state.tasks[taskId];
         if (!task || isTaskSettled(task) || task.size !== null) return;
         const candidates = yield* listCandidates(task);
-        const triaged = yield* world.bridge(() => world.triage(state, task, candidates));
+        const triaged = yield* world
+          .triage(state, task, candidates)
+          .pipe(Effect.mapError(resolveEffectFailure));
         if (!triaged) return yield* createEffectFailed(NO_TRIAGE);
         const repo = yield* resolveTriagedRepo(task, triaged, attempt);
         yield* world.dispatch(
@@ -132,17 +128,13 @@ export class TaskSetup extends Context.Service<
         bind: boolean
       ) {
         const pipeline = resolveTaskPipeline(task);
-        const started = needsWorktree(pipeline)
-          ? yield* world.bridge((signal) => prepareSetup(repo, signal))
-          : null;
-        const problems = yield* world.bridge((signal) =>
-          verifySetup(repo, { defaultBranch: needsWorktree(pipeline) }, signal)
-        );
+        const started = needsWorktree(pipeline) ? yield* setup.prepare(repo) : null;
+        const problems = yield* setup.verify(repo, { defaultBranch: needsWorktree(pipeline) });
         if (needsWorktree(pipeline) && problems.every((problem) => problem.kind !== 'repository')) {
           const mode = resolveTaskWorkspace(yield* world.state, task);
-          const workspace = yield* world.bridge((signal) =>
-            describeWorkspaceProblem(repo, mode, task.worktreePath !== null, signal)
-          );
+          const workspace = yield* world.workspaces
+            .describeProblem(repo, mode, task.worktreePath !== null)
+            .pipe(Effect.mapError(resolveEffectFailure));
           if (workspace) problems.push(workspace);
         }
         yield* world.dispatch(
@@ -161,7 +153,9 @@ export class TaskSetup extends Context.Service<
         if (!needsRepository(resolveTaskPipeline(task))) return null;
         const candidates = yield* listCandidates(task);
         const state = yield* world.state;
-        return yield* world.bridge(() => world.findRepository(state, task, candidates));
+        return yield* world
+          .findRepository(state, task, candidates)
+          .pipe(Effect.mapError(resolveEffectFailure));
       });
 
       const verifyUnbound = Effect.fn('TaskSetup.verifyUnbound')(function* (
@@ -194,9 +188,10 @@ export class TaskSetup extends Context.Service<
       ) {
         const { task, repo } = yield* world.findTask(taskId);
         if (task.stage !== 'triage' || !task.branch) return;
-        const worktree = yield* world.bridge((signal) =>
-          world.workspaces.resolve(task).prepare(repo, task, signal)
-        );
+        const worktree = yield* world.workspaces
+          .resolve(task)
+          .prepare(repo, task)
+          .pipe(Effect.mapError(resolveEffectFailure));
         yield* world.dispatch(
           {
             type: 'worktree.ready',

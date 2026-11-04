@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, setDefaultTimeout, test } from 'bun:test';
 import { rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { runCommand, runCommandOrThrow } from '../../src/shell/index.ts';
+import { runCommand, runCommandOrThrow } from '../helpers/shell.ts';
 import { PLAN, toolPlan, World } from './harness.ts';
 
 setDefaultTimeout(30_000);

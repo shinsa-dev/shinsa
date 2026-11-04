@@ -1,6 +1,7 @@
 import { copyFileSync, existsSync, mkdirSync, statSync, writeFileSync } from 'node:fs';
 import { extname, join } from 'node:path';
 import { Context, Effect, Layer, Option } from 'effect';
+import { EngineConfig } from '../../config/service.ts';
 import { isEvidencePath, resolveFolderPath } from './folder.ts';
 import {
   EVIDENCE_COPY_LIMIT_BYTES,
@@ -33,10 +34,45 @@ export class Evidence extends Context.Service<
     selectFile(name: string): Effect.Effect<Option.Option<string>>;
   }
 >()('shinsa/engine/store/evidence/Evidence') {
-  static layer(dir: string) {
-    return Layer.succeed(
-      Evidence,
-      Evidence.of({
+  static readonly layer = Layer.effect(
+    Evidence,
+    Effect.gen(function* () {
+      const dir = (yield* EngineConfig).evidenceDir;
+
+      const resolveExtension = (text: string, fallback: string) => {
+        const extension = text
+          .toLowerCase()
+          .replace(/[^a-z0-9]/g, '')
+          .slice(0, 8);
+        return extension || fallback;
+      };
+
+      const resolveSlug = (title: string) => {
+        const slug = title
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, '-')
+          .replace(/^-+/, '')
+          .slice(0, SLUG_LIMIT)
+          .replace(/-+$/, '');
+        return slug || 'evidence';
+      };
+
+      const writeEvidence = (
+        folder: string | null,
+        base: string,
+        extension: string,
+        write: (path: string) => void
+      ) =>
+        Effect.sync(() => {
+          const id = Bun.randomUUIDv7().replace(/-/g, '').slice(-NAME_ID_LENGTH);
+          const name = `${base}${id}.${extension}`;
+          const relative = folder ? `${folder}/${name}` : name;
+          if (folder) mkdirSync(join(dir, folder), { recursive: true });
+          write(join(dir, relative));
+          return `${EVIDENCE_ROUTE}${relative}`;
+        });
+
+      return Evidence.of({
         writeImage: (base64, mediaType) =>
           Effect.suspend(() => {
             const extension = resolveExtension(mediaType.split('/')[1] ?? '', 'png');
@@ -74,41 +110,7 @@ export class Evidence extends Context.Service<
             const path = join(dir, ...segments);
             return existsSync(path) && statSync(path).isFile() ? Option.some(path) : Option.none();
           }),
-      })
-    );
-
-    function resolveExtension(text: string, fallback: string) {
-      const extension = text
-        .toLowerCase()
-        .replace(/[^a-z0-9]/g, '')
-        .slice(0, 8);
-      return extension || fallback;
-    }
-
-    function resolveSlug(title: string) {
-      const slug = title
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, '-')
-        .replace(/^-+/, '')
-        .slice(0, SLUG_LIMIT)
-        .replace(/-+$/, '');
-      return slug || 'evidence';
-    }
-
-    function writeEvidence(
-      folder: string | null,
-      base: string,
-      extension: string,
-      write: (path: string) => void
-    ) {
-      return Effect.sync(() => {
-        const id = Bun.randomUUIDv7().replace(/-/g, '').slice(-NAME_ID_LENGTH);
-        const name = `${base}${id}.${extension}`;
-        const relative = folder ? `${folder}/${name}` : name;
-        if (folder) mkdirSync(join(dir, folder), { recursive: true });
-        write(join(dir, relative));
-        return `${EVIDENCE_ROUTE}${relative}`;
       });
-    }
-  }
+    })
+  );
 }

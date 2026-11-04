@@ -1,3 +1,6 @@
+import { Cause, Effect, Exit, type Fiber } from 'effect';
+import { forkApp, runApp } from '@/lib/runtime/app.ts';
+
 export const RECHECK_INTERVAL_MS = 60_000;
 
 export const RECHECK_FRESH_MS = 5_000;
@@ -35,18 +38,27 @@ export function createUsageRecheck(options: UsageRecheckOptions) {
   let running: Promise<RecheckResult> | null = null;
   let checkedAt = Number.NEGATIVE_INFINITY;
   let watchers = 0;
-  let timer: ReturnType<typeof setTimeout> | null = null;
+  let timer: Fiber.Fiber<void> | null = null;
   let stopListening: (() => void) | null = null;
 
   function clear() {
-    if (timer !== null) clearTimeout(timer);
+    timer?.interruptUnsafe();
     timer = null;
   }
 
   function schedule() {
     clear();
     if (watchers === 0 || running !== null || !page.isVisible()) return;
-    timer = setTimeout(() => void start(read), Math.max(0, checkedAt + intervalMs - now()));
+    timer = forkApp(
+      Effect.sleep(Math.max(0, checkedAt + intervalMs - now())).pipe(
+        Effect.andThen(
+          Effect.sync(() => {
+            timer = null;
+            void start(read);
+          })
+        )
+      )
+    );
   }
 
   function settle(result: RecheckResult) {
@@ -58,9 +70,12 @@ export function createUsageRecheck(options: UsageRecheckOptions) {
 
   function start(request: () => Promise<unknown>) {
     clear();
-    running ??= request().then(
-      (): RecheckResult => settle({ ok: true }),
-      (error: unknown): RecheckResult => settle({ ok: false, error })
+    running ??= runApp(
+      Effect.exit(Effect.promise(request)).pipe(
+        Effect.map((exit) =>
+          settle(Exit.isSuccess(exit) ? { ok: true } : { ok: false, error: Cause.squash(exit.cause) })
+        )
+      )
     );
     return running;
   }

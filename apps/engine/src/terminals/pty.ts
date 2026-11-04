@@ -1,12 +1,7 @@
 import { userInfo } from 'node:os';
-import { DomainError } from '@shinsa/core';
-import { Effect, Option } from 'effect';
-import { edgeRuntime } from '../runtime/edge.ts';
+import { Option } from 'effect';
 import { resolveDefaultShell } from '../shell/login.ts';
-import { TerminalPty } from './pty/service.ts';
-import { DROPPED_KEYS, LOCALE_KEYS, type PortListener, type TerminalSpawnOptions } from './schema.ts';
-
-export type { PortListener, TerminalProcess, TerminalSpawner, TerminalSpawnOptions } from './schema.ts';
+import { DROPPED_KEYS, LOCALE_KEYS } from './schema.ts';
 
 type Env = Record<string, string | undefined>;
 
@@ -41,24 +36,6 @@ export function listenOnce(port: number) {
   return Option.getOrNull(bindOnce(port));
 }
 
-export function pickFreePort(
-  preferred: number | null,
-  taken: ReadonlySet<number>,
-  listen: PortListener = listenOnce
-) {
-  return edgeRuntime.runSync(
-    TerminalPty.use((pty) => pty.pickPort(preferred, taken, listen)).pipe(
-      Effect.catchTag('PortUnavailable', (missing) =>
-        Effect.fail(new DomainError({ code: 'service_port_unavailable', message: missing.message }))
-      )
-    )
-  );
-}
-
-export function readForegroundProgram(pid: number) {
-  return edgeRuntime.runPromise(TerminalPty.use((pty) => pty.readForeground(pid)));
-}
-
 export function resolveTerminalEnv(env: Env, version: string): Record<string, string> {
   const next: Record<string, string> = {};
   for (const [key, value] of Object.entries(env)) {
@@ -70,8 +47,4 @@ export function resolveTerminalEnv(env: Env, version: string): Record<string, st
   next.TERM_PROGRAM_VERSION = version;
   if (!LOCALE_KEYS.some((key) => next[key])) next.LANG = 'en_US.UTF-8';
   return next;
-}
-
-export function spawnTerminalProcess(command: string[], options: TerminalSpawnOptions) {
-  return edgeRuntime.runSync(TerminalPty.use((pty) => pty.spawn(command, options)));
 }

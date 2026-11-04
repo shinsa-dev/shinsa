@@ -1,4 +1,5 @@
 import { parse } from '@babel/parser';
+import { type AstNode, listChildren, visit } from './lint-ast.ts';
 import {
   TOAST_LIMIT,
   TOAST_MESSAGE,
@@ -7,26 +8,24 @@ import {
   TOAST_UNCHECKED_MESSAGE,
 } from './lint-rules.ts';
 
-export type Node = { type: string; loc?: { start: { line: number } }; [key: string]: unknown };
-
 export type Text = { file: string; line: number; length: number | null };
 
 export type Source = {
   file: string;
-  program: Node;
-  constants: Map<string, Node>;
+  program: AstNode;
+  constants: Map<string, AstNode>;
   imports: Map<string, string>;
 };
 
-type Definition = { source: Source; params: string[]; returns: Node[] };
+type Definition = { source: Source; params: string[]; returns: AstNode[] };
 
-type Exported = { source: Source; value: Node };
+type Exported = { source: Source; value: AstNode };
 
 export type Index = { definitions: Map<string, Definition[]>; exported: Map<string, Exported[]> };
 
-export type Context = Index & { source: Source; seen: Set<Node> };
+type Context = Index & { source: Source; seen: Set<AstNode> };
 
-type Argument = { node: Node; strict: boolean };
+type Argument = { node: AstNode; strict: boolean };
 
 const TOAST_METHODS = new Set(['success', 'error', 'info', 'warning', 'message', 'loading']);
 
@@ -53,53 +52,40 @@ const SERVER_TEXT = 'message';
 
 const PASSED_ON = new Set([...TOAST_NAMES, SERVER_TEXT, 'undefined']);
 
-function children(node: Node): Node[] {
-  return Object.values(node).flatMap((value) =>
-    (Array.isArray(value) ? value : [value]).filter(
-      (child): child is Node => Boolean(child) && typeof child === 'object' && 'type' in child
-    )
-  );
-}
-
-export function visit(node: Node, onNode: (node: Node) => void) {
-  onNode(node);
-  for (const child of children(node)) visit(child, onNode);
-}
-
-export function readName(node: unknown) {
+function readName(node: unknown) {
   const named = node as { type?: string; name?: string; value?: unknown } | null;
   if (named?.type === 'Identifier') return named.name ?? null;
   if (named?.type === 'StringLiteral' && typeof named.value === 'string') return named.value;
   return null;
 }
 
-function readParam(node: Node) {
+function readParam(node: AstNode) {
   return readName(node.type === 'AssignmentPattern' ? node.left : node) ?? '';
 }
 
-function unwrap(node: Node): Node {
+function unwrap(node: AstNode): AstNode {
   if (
     node.type === 'TSAsExpression' ||
     node.type === 'TSSatisfiesExpression' ||
     node.type === 'TSNonNullExpression'
   )
-    return unwrap(node.expression as Node);
+    return unwrap(node.expression as AstNode);
   return node;
 }
 
-function listReturns(fn: Node) {
-  const body = fn.body as Node;
+function listReturns(fn: AstNode) {
+  const body = fn.body as AstNode;
   if (body.type !== 'BlockStatement') return [body];
-  const returns: Node[] = [];
-  const walk = (node: Node) => {
-    if (node.type === 'ReturnStatement' && node.argument) returns.push(node.argument as Node);
-    for (const child of children(node)) if (!FUNCTION_TYPES.has(child.type)) walk(child);
+  const returns: AstNode[] = [];
+  const walk = (node: AstNode) => {
+    if (node.type === 'ReturnStatement' && node.argument) returns.push(node.argument as AstNode);
+    for (const child of listChildren(node)) if (!FUNCTION_TYPES.has(child.type)) walk(child);
   };
   walk(body);
   return returns;
 }
 
-function readFunction(node: Node): [string, Node] | null {
+function readFunction(node: AstNode): [string, AstNode] | null {
   if (node.type === 'FunctionDeclaration') return node.id ? [readName(node.id) ?? '', node] : null;
   if (node.type === 'ObjectMethod') return [readName(node.key) ?? '', node];
   const [key, value] =
@@ -109,20 +95,20 @@ function readFunction(node: Node): [string, Node] | null {
         ? [node.key, node.value]
         : [];
   const name = readName(key);
-  const fn = value as Node | null | undefined;
+  const fn = value as AstNode | null | undefined;
   return name && fn && FUNCTION_TYPES.has(fn.type) ? [name, fn] : null;
 }
 
 export function readSource(file: string, text: string): Source {
   const program = parse(text, { sourceType: 'module', plugins: ['typescript', 'jsx'] })
-    .program as unknown as Node;
-  const constants = new Map<string, Node>();
+    .program as unknown as AstNode;
+  const constants = new Map<string, AstNode>();
   const imports = new Map<string, string>();
   visit(program, (node) => {
     const name = node.type === 'VariableDeclarator' ? readName(node.id) : null;
-    if (name && node.init) constants.set(name, node.init as Node);
-    const pattern = node.type === 'VariableDeclarator' && node.init ? (node.id as Node) : null;
-    for (const property of pattern?.type === 'ObjectPattern' ? (pattern.properties as Node[]) : []) {
+    if (name && node.init) constants.set(name, node.init as AstNode);
+    const pattern = node.type === 'VariableDeclarator' && node.init ? (node.id as AstNode) : null;
+    for (const property of pattern?.type === 'ObjectPattern' ? (pattern.properties as AstNode[]) : []) {
       const local = property.type === 'ObjectProperty' ? readName(property.value) : null;
       if (local)
         constants.set(local, {
@@ -142,41 +128,45 @@ export function indexSources(sources: Source[]): Index {
   const definitions = new Map<string, Definition[]>();
   const exported = new Map<string, Exported[]>();
   for (const source of sources) {
-    for (const statement of source.program.body as Node[]) {
+    for (const statement of source.program.body as AstNode[]) {
       const declaration =
-        statement.type === 'ExportNamedDeclaration' ? (statement.declaration as Node | null) : null;
+        statement.type === 'ExportNamedDeclaration' ? (statement.declaration as AstNode | null) : null;
       if (declaration?.type !== 'VariableDeclaration') continue;
-      for (const declarator of declaration.declarations as Node[]) {
+      for (const declarator of declaration.declarations as AstNode[]) {
         const name = readName(declarator.id);
         if (name && declarator.init)
-          exported.set(name, [...(exported.get(name) ?? []), { source, value: declarator.init as Node }]);
+          exported.set(name, [...(exported.get(name) ?? []), { source, value: declarator.init as AstNode }]);
       }
     }
     visit(source.program, (node) => {
       const found = readFunction(node);
       if (!found?.[0]) return;
       const [name, fn] = found;
-      const definition = { source, params: (fn.params as Node[]).map(readParam), returns: listReturns(fn) };
+      const definition = {
+        source,
+        params: (fn.params as AstNode[]).map(readParam),
+        returns: listReturns(fn),
+      };
       definitions.set(name, [...(definitions.get(name) ?? []), definition]);
     });
   }
   return { definitions, exported };
 }
 
-function readProperty(object: Node, key: string) {
-  const property = (object.properties as Node[]).find(
+function readProperty(object: AstNode, key: string) {
+  const property = (object.properties as AstNode[]).find(
     (candidate) => candidate.type === 'ObjectProperty' && readName(candidate.key) === key
   );
-  return (property?.value as Node | undefined) ?? null;
+  return (property?.value as AstNode | undefined) ?? null;
 }
 
-function listValues(object: Node) {
-  return (object.properties as Node[]).flatMap((property) =>
-    property.type === 'ObjectProperty' ? [property.value as Node] : []
+function listValues(object: AstNode) {
+  return (object.properties as AstNode[]).flatMap((property) =>
+    property.type === 'ObjectProperty' ? [property.value as AstNode] : []
   );
 }
 
-function readCalleeName(callee: Node) {
+function readCalleeName(callee: AstNode) {
   return readName(callee.type === 'MemberExpression' ? callee.property : callee);
 }
 
@@ -187,7 +177,7 @@ function resolveName(name: string, context: Context): Exported[] {
   return imported ? (context.exported.get(imported) ?? []) : [];
 }
 
-function resolveMember(expression: Node, context: Context): Exported[] {
+function resolveMember(expression: AstNode, context: Context): Exported[] {
   return resolveName(readName(expression.object) ?? '', context).flatMap(({ source, value }) => {
     const owner = unwrap(value);
     if (owner.type !== 'ObjectExpression') return [];
@@ -197,7 +187,7 @@ function resolveMember(expression: Node, context: Context): Exported[] {
   });
 }
 
-function resolveObjects(node: Node, context: Context): Exported[] {
+function resolveObjects(node: AstNode, context: Context): Exported[] {
   const expression = unwrap(node);
   if (expression.type === 'ObjectExpression') return [{ source: context.source, value: expression }];
   if (expression.type === 'Identifier')
@@ -205,14 +195,14 @@ function resolveObjects(node: Node, context: Context): Exported[] {
       resolveObjects(value, { ...context, source })
     );
   if (expression.type !== 'CallExpression') return [];
-  return (context.definitions.get(readCalleeName(expression.callee as Node) ?? '') ?? []).flatMap(
+  return (context.definitions.get(readCalleeName(expression.callee as AstNode) ?? '') ?? []).flatMap(
     (definition) =>
       definition.returns.flatMap((value) => resolveObjects(value, { ...context, source: definition.source }))
   );
 }
 
-function resolvePicked(expression: Node, context: Context): Exported[] {
-  return resolveObjects(expression.from as Node, context).flatMap(({ source, value }) => {
+function resolvePicked(expression: AstNode, context: Context): Exported[] {
+  return resolveObjects(expression.from as AstNode, context).flatMap(({ source, value }) => {
     const found = readProperty(value, expression.key as string);
     return found ? [{ source, value: found }] : [];
   });
@@ -222,12 +212,12 @@ function resolveFound(found: Exported[], context: Context) {
   return found.flatMap(({ source, value }) => resolveTexts(value, { ...context, source }));
 }
 
-export function resolveTexts(node: Node | null, context: Context): Text[] {
+export function resolveTexts(node: AstNode | null, context: Context): Text[] {
   if (!node || context.seen.has(node)) return [];
   context.seen.add(node);
   const at = { file: context.source.file, line: node.loc?.start.line ?? 0 };
   const expression = unwrap(node);
-  const resolve = (next: Node | null) => resolveTexts(next, context);
+  const resolve = (next: AstNode | null) => resolveTexts(next, context);
   const unchecked = [{ ...at, length: null }];
   if (NOT_TEXT.has(expression.type)) return [];
   switch (expression.type) {
@@ -236,13 +226,13 @@ export function resolveTexts(node: Node | null, context: Context): Text[] {
     case 'TemplateLiteral': {
       const parts = expression.quasis as { value: { cooked: string | null; raw: string } }[];
       const fixed = parts.reduce((sum, part) => sum + (part.value.cooked ?? part.value.raw).length, 0);
-      const inserted = (expression.expressions as Node[]).length * TOAST_PLACEHOLDER_LENGTH;
+      const inserted = (expression.expressions as AstNode[]).length * TOAST_PLACEHOLDER_LENGTH;
       return [{ ...at, length: fixed + inserted }];
     }
     case 'ConditionalExpression':
-      return [...resolve(expression.consequent as Node), ...resolve(expression.alternate as Node)];
+      return [...resolve(expression.consequent as AstNode), ...resolve(expression.alternate as AstNode)];
     case 'LogicalExpression':
-      return [...resolve(expression.left as Node), ...resolve(expression.right as Node)];
+      return [...resolve(expression.left as AstNode), ...resolve(expression.right as AstNode)];
     case 'BinaryExpression': {
       if (expression.operator !== '+') return unchecked;
       const longest = (texts: Text[]) =>
@@ -250,7 +240,8 @@ export function resolveTexts(node: Node | null, context: Context): Text[] {
       return [
         {
           ...at,
-          length: longest(resolve(expression.left as Node)) + longest(resolve(expression.right as Node)),
+          length:
+            longest(resolve(expression.left as AstNode)) + longest(resolve(expression.right as AstNode)),
         },
       ];
     }
@@ -271,7 +262,7 @@ export function resolveTexts(node: Node | null, context: Context): Text[] {
     case 'ObjectExpression':
       return TOAST_OPTIONS.flatMap((key) => resolve(readProperty(expression, key)));
     case 'CallExpression': {
-      const name = readCalleeName(expression.callee as Node) ?? '';
+      const name = readCalleeName(expression.callee as AstNode) ?? '';
       if (TOAST_PASSTHROUGH.has(name)) return [];
       const found = context.definitions.get(name) ?? [];
       if (found.length === 0) return unchecked;
@@ -287,9 +278,9 @@ export function resolveTexts(node: Node | null, context: Context): Text[] {
   }
 }
 
-function listCallArguments(node: Node, definitions: Map<string, Definition[]>) {
-  const callee = node.callee as Node;
-  const args = node.arguments as Node[];
+function listCallArguments(node: AstNode, definitions: Map<string, Definition[]>) {
+  const callee = node.callee as AstNode;
+  const args = node.arguments as AstNode[];
   if (callee.type === 'MemberExpression' && readName(callee.object) === 'toast')
     return TOAST_METHODS.has(readName(callee.property) ?? '') ? args.slice(0, 2) : [];
   const name = readCalleeName(callee) ?? '';
@@ -299,7 +290,7 @@ function listCallArguments(node: Node, definitions: Map<string, Definition[]>) {
   return listDoneArguments(name, args, definitions);
 }
 
-function listDoneArguments(name: string, args: Node[], definitions: Map<string, Definition[]>) {
+function listDoneArguments(name: string, args: AstNode[], definitions: Map<string, Definition[]>) {
   const positions = new Set(
     (definitions.get(name) ?? []).flatMap((definition) =>
       definition.params.flatMap((param, index) => (TOAST_NAMES.has(param) ? [index] : []))
@@ -308,13 +299,13 @@ function listDoneArguments(name: string, args: Node[], definitions: Map<string, 
   return [...positions].flatMap((index) => (args[index] ? [args[index]] : []));
 }
 
-function listToastArguments(node: Node, definitions: Map<string, Definition[]>): Argument[] {
+function listToastArguments(node: AstNode, definitions: Map<string, Definition[]>): Argument[] {
   if (node.type === 'ObjectProperty' && TOAST_NAMES.has(readName(node.key) ?? ''))
-    return [{ node: node.value as Node, strict: false }];
+    return [{ node: node.value as AstNode, strict: false }];
   if (node.type !== 'CallExpression') return [];
-  const name = readCalleeName(node.callee as Node) ?? '';
+  const name = readCalleeName(node.callee as AstNode) ?? '';
   const direct = listCallArguments(node, definitions);
-  const passed = new Set(listDoneArguments(name, node.arguments as Node[], definitions));
+  const passed = new Set(listDoneArguments(name, node.arguments as AstNode[], definitions));
   return direct.map((argument) => ({ node: argument, strict: !passed.has(argument) }));
 }
 

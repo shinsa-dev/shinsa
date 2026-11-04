@@ -1,7 +1,7 @@
 import type { ProgramId, UpdateOutcome } from '@shinsa/core';
 import { Duration, Schema } from 'effect';
-import type { ProgramLocation } from '../agents/providers/versions.ts';
-import type { CommandResult } from '../shell/schema.ts';
+import type { Effect } from 'effect';
+import type { Argv } from '../shell/schema.ts';
 
 export const ProgramIdInput = Schema.Literals(['claude', 'codex']);
 
@@ -14,8 +14,13 @@ export class NpmRegistryFailed extends Schema.TaggedError<
   { readonly brand: unique symbol }
 >()('NpmRegistryFailed', { packageName: Schema.String, message: Schema.String }) {}
 
+export class VersionsCallFailed extends Schema.TaggedError<
+  VersionsCallFailed,
+  { readonly brand: unique symbol }
+>()('VersionsCallFailed', { message: Schema.String }) {}
+
 export interface Updater {
-  command: string[];
+  command: Argv;
   label: string;
   env?: Record<string, string>;
 }
@@ -27,25 +32,15 @@ export interface UpdaterDeps {
 
 export type LineListener = (line: string) => void;
 
-export type UpdateRunner = (
-  updater: Updater,
-  onLine: LineListener,
-  signal: AbortSignal
-) => Promise<CommandResult>;
+export interface SdkVersions {
+  version: string;
+  claudeCodeVersion: string;
+}
 
-export type UpdateRun = (onLine: LineListener) => Promise<UpdateOutcome>;
+export type UpdateRun = (onLine: LineListener) => Effect.Effect<UpdateOutcome, VersionsCallFailed>;
 
-export interface VersionsOptions {
-  inspect?: boolean;
-  locate?: (program: ProgramId) => ProgramLocation;
-  readVersion?: (program: ProgramId, path: string) => Promise<string | null>;
-  minimum?: (program: ProgramId) => string;
-  sdk?: () => { version: string; claudeCodeVersion: string };
-  latest?: (name: string) => Promise<string>;
-  updater?: (program: ProgramId, path: string) => Updater;
-  run?: UpdateRunner;
-  onUpdated?: (program: ProgramId) => Promise<unknown>;
-  now?: () => number;
+export interface VersionsInput {
+  readonly onUpdated: (program: ProgramId) => Effect.Effect<void, VersionsCallFailed>;
 }
 
 export const NPM_REGISTRY_URL = 'https://registry.npmjs.org';
@@ -56,9 +51,7 @@ const LATEST_TTL = Duration.hours(3);
 
 export const LATEST_TTL_MS = Duration.toMillis(LATEST_TTL);
 
-const UPDATE_TIMEOUT = Duration.minutes(10);
-
-export const UPDATE_TIMEOUT_MS = Duration.toMillis(UPDATE_TIMEOUT);
+export const UPDATE_TIMEOUT = Duration.minutes(10);
 
 export const SDK_PACKAGE = '@anthropic-ai/claude-agent-sdk';
 

@@ -3,31 +3,20 @@ import { afterEach, describe, expect, setDefaultTimeout, spyOn, test } from 'bun
 import { existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { AccountsSnapshot } from '@shinsa/core';
-import { Effect, Layer } from 'effect';
-import { Cswap } from '../src/accounts/cswap.ts';
+import { Duration, Effect, Layer } from 'effect';
+import { AccountsEnv, ClaudeCommandPath } from '../src/accounts/index.ts';
+import { KeychainPlatform } from '../src/accounts/keychain/schema.ts';
 import type { ModelSource } from '../src/agents/index.ts';
-import { RunSupervisor } from '../src/agents/index.ts';
-import {
-  type AgentProvider,
-  type CompletionRequest,
-  ProviderRegistry,
-} from '../src/agents/providers/index.ts';
-import { resolveConfig } from '../src/config/index.ts';
-import { EunoeServer } from '../src/eunoe/index.ts';
+import { type AgentProvider, type CompletionRequest, Providers } from '../src/agents/providers/index.ts';
 import { SIGN_IN_CALLBACK_PATH } from '../src/extensions/sign-in.ts';
-import { inspectRepo } from '../src/git/index.ts';
-import {
-  createServerInstance,
-  INSTALL_PATH,
-  LOCK_FILE,
-  resolveBootedAt,
-  selectLockHolder,
-} from '../src/instance/index.ts';
-import { log } from '../src/log/index.ts';
+import { createServerInstance, INSTALL_PATH, LOCK_FILE, resolveBootedAt } from '../src/instance/index.ts';
 import { REMOTE_FILE, TunnelConnectFailed, TunnelConnector } from '../src/remote/index.ts';
-import { EffectRunner, Engine } from '../src/runtime/index.ts';
-import { type Shinsa, startShinsa } from '../src/serve.ts';
-import { EventLog, resolveStateVersion } from '../src/store/index.ts';
+import { Shell } from '../src/shell/service.ts';
+import { resolveStateVersion } from '../src/store/index.ts';
+import { TerminalPty } from '../src/terminals/pty/service.ts';
+import { resolveConfig } from './helpers/config.ts';
+import { openEventLog } from './helpers/event-log.ts';
+import { inspectRepo } from './helpers/git.ts';
 import {
   captureLogs,
   createGitRepo,
@@ -36,6 +25,19 @@ import {
   overrideEnv,
   until,
 } from './helpers/index.ts';
+import { selectLockHolder } from './helpers/lock.ts';
+import { adaptStarter } from './helpers/providers.ts';
+import { type Shinsa, startShinsa } from './helpers/serve.ts';
+
+function spyOnLog(listeners: Record<string, () => unknown>) {
+  const write = process.stdout.write.bind(process.stdout);
+  return spyOn(process.stdout, 'write').mockImplementation((chunk: unknown, ...rest: unknown[]) => {
+    for (const [message, listener] of Object.entries(listeners)) {
+      if (String(chunk).includes(`"message":"${message}"`)) listener();
+    }
+    return write(chunk as string, ...(rest as []));
+  });
+}
 
 setDefaultTimeout(30_000);
 
@@ -45,14 +47,14 @@ afterEach(async () => {
   for (const shinsa of started.splice(0)) await shinsa.stop();
 });
 
-const models = { listModels: () => Promise.resolve([]) } as unknown as ModelSource;
+const models = { listModels: Effect.succeed([]) } as unknown as ModelSource;
 
 describe('startShinsa', () => {
   test('inspect mode serves the data of a running server beside it and refuses every command', async () => {
     const root = createTempDir();
     const live = await startShinsa(createTestConfig(root), {
       models,
-      triage: () => Promise.resolve(null),
+      triage: () => Effect.succeed(null),
       resolveLogin: () => Promise.resolve(null),
     });
     started.push(live);
@@ -108,35 +110,20 @@ describe('startShinsa', () => {
   test('stopping aborts the running effects and pull request syncs and waits for them before closing the log', async () => {
     const shinsa = await startShinsa(createTestConfig(createTempDir(), { roots: [createTempDir()] }), {
       models,
-      triage: () => Promise.resolve(null),
+      triage: () => Effect.succeed(null),
       resolveLogin: () => Promise.resolve(null),
     });
     const order: string[] = [];
-    const { stop: stopSyncs } = EffectRunner.prototype;
-    const { stop: stopEngine, settle } = Engine.prototype;
-    const { close } = EventLog.prototype;
-    const spies = [
-      spyOn(EffectRunner.prototype, 'stop').mockImplementation(function (this: EffectRunner) {
-        order.push('syncs stopped');
-        return stopSyncs.call(this);
-      }),
-      spyOn(Engine.prototype, 'stop').mockImplementation(function (this: Engine) {
-        order.push('effects aborted');
-        stopEngine.call(this);
-      }),
-      spyOn(Engine.prototype, 'settle').mockImplementation(function (this: Engine) {
-        order.push('effects settled');
-        return settle.call(this);
-      }),
-      spyOn(EventLog.prototype, 'close').mockImplementation(function (this: EventLog) {
-        order.push('log closed');
-        close.call(this);
-      }),
-    ];
+    const spy = spyOnLog({
+      '[Serve] Stopped the pull request syncs': () => order.push('syncs stopped'),
+      '[Serve] Stopped the running effects': () => order.push('effects aborted'),
+      '[Serve] Every running effect has settled': () => order.push('effects settled'),
+      '[Serve] Closed the event log': () => order.push('log closed'),
+    });
     try {
       await shinsa.stop();
     } finally {
-      for (const spy of spies) spy.mockRestore();
+      spy.mockRestore();
     }
     expect(order).toEqual(['syncs stopped', 'effects aborted', 'effects settled', 'log closed']);
   });
@@ -145,7 +132,7 @@ describe('startShinsa', () => {
     const config = createTestConfig(createTempDir());
     const options = {
       models,
-      triage: () => Promise.resolve(null),
+      triage: () => Effect.succeed(null),
       resolveLogin: () => Promise.resolve(null),
     };
     const first = await startShinsa(config, options);
@@ -153,7 +140,7 @@ describe('startShinsa', () => {
     await first.engine.dispatch({ type: 'focus.change', projectId: null, until: 1 });
     const seq = first.engine.state.seq;
     await first.stop();
-    const reader = new EventLog(config.databasePath);
+    const reader = openEventLog(config.databasePath);
     expect(reader.selectSnapshot(resolveStateVersion() ?? '')).toMatchObject({ ok: true, seq });
     reader.close();
     expect(seq).toBeGreaterThan(1);
@@ -170,7 +157,7 @@ describe('startShinsa', () => {
     const config = createTestConfig(createTempDir(), { roots: [createTempDir()] });
     const shinsa = await startShinsa(config, {
       models,
-      triage: () => Promise.resolve(null),
+      triage: () => Effect.succeed(null),
       resolveLogin: () => Promise.resolve(null),
       startSession: () => {
         throw new Error('no agents here');
@@ -187,7 +174,7 @@ describe('startShinsa', () => {
     const shinsa = await startShinsa(config, {
       models,
       triage: () =>
-        Promise.resolve({ title: 'Fix it', repoPath: null, size: 'small', branch: 'fix/it', waitsOn: [] }),
+        Effect.succeed({ title: 'Fix it', repoPath: null, size: 'small', branch: 'fix/it', waitsOn: [] }),
       resolveLogin: () => Promise.resolve(null),
     });
     started.push(shinsa);
@@ -199,7 +186,7 @@ describe('startShinsa', () => {
   test('a broken config.json is kept aside once and its problem logged once, however often it is read', async () => {
     const home = createTempDir();
     writeFileSync(join(home, 'config.json'), '{ broken');
-    const warn = spyOn(log, 'warn');
+    const logs = captureLogs();
     try {
       const shinsa = await startShinsa(
         resolveConfig({ SHINSA_HOME: home, HOME: home, SHINSA_PORT: '0', SHINSA_INSPECT: '1' }),
@@ -207,11 +194,9 @@ describe('startShinsa', () => {
       );
       started.push(shinsa);
       expect(readdirSync(home).filter((name) => name.startsWith('config.json.unreadable-'))).toHaveLength(1);
-      expect(
-        warn.mock.calls.filter(([message]) => message === '[Config] Part of config.json was not used')
-      ).toHaveLength(1);
+      expect(logs.fieldsOf('[Config] Part of config.json was not used')).toHaveLength(1);
     } finally {
-      warn.mockRestore();
+      logs.restore();
     }
   });
 
@@ -235,17 +220,17 @@ describe('startShinsa', () => {
       },
       complete: (request) => {
         asked.push(request);
-        return Promise.resolve(
+        return Effect.succeed(
           '{"title":"Fix the injected title","repo":"app","size":{"choice":"small"},"branch":"fix/injected","waits_on":[]}'
         );
       },
-      listModels: () => Promise.resolve([]),
+      listModels: Effect.succeed([]),
     };
     const restore = overrideEnv({ SHINSA_QUICK: undefined });
     try {
       const shinsa = await startShinsa(createTestConfig(createTempDir(), { roots: [repo.root] }), {
         models,
-        providers: new ProviderRegistry([provider]),
+        providers: Providers.make([provider]),
         resolveLogin: () => Promise.resolve(null),
         startSession: () => {
           throw new Error('no agents here');
@@ -273,15 +258,17 @@ describe('startShinsa', () => {
     const shinsa = await startShinsa(createTestConfig(createTempDir(), { roots: [repo.root] }), {
       models,
       resolveLogin: () => Promise.resolve(null),
-      startSession: (input) => {
+      startSession: adaptStarter((input) => {
         const signal = new AbortController().signal;
         const done = (async () => {
-          replies.push(await input.tools.handle('tasks_list', { status: 'all' }, signal, 1));
-          await input.tools.handle('answer', { answer: 'Listed them.' }, signal, 2);
+          replies.push(
+            await Effect.runPromise(input.tools.handle('tasks_list', { status: 'all' }, signal, 1))
+          );
+          await Effect.runPromise(input.tools.handle('answer', { answer: 'Listed them.' }, signal, 2));
           return { outcome: 'completed' as const, summary: null };
         })();
         return { done, steer: () => false, cancel: () => done.then(() => undefined) };
-      },
+      }),
     });
     started.push(shinsa);
     const candidate = await inspectRepo(repo.path);
@@ -300,7 +287,7 @@ describe('startShinsa', () => {
     const codes: number[] = [];
     const shinsa = await startShinsa(createTestConfig(createTempDir()), {
       models,
-      triage: () => Promise.resolve(null),
+      triage: () => Effect.succeed(null),
       resolveLogin: () => Promise.resolve(null),
       byService: true,
       exit: (code) => codes.push(code),
@@ -367,6 +354,13 @@ describe('startShinsa', () => {
     expect(((await webhook.json()) as { url: string }).url).toStartWith(
       `${config.remoteOrigin}/hooks/k3x9/${written.schedule.id}/`
     );
+    const mention = await fetch(`${shinsa.url}/api/slack/events`, {
+      method: 'POST',
+      headers: { 'cf-connecting-ip': '203.0.113.9', 'content-type': 'application/json' },
+      body: '{}',
+    });
+    expect(mention.status).toBe(401);
+    expect(await mention.json()).toMatchObject({ error: { code: 'unauthorized' } });
   });
 
   test('the default model catalog is used when none is given', async () => {
@@ -436,14 +430,20 @@ describe('one Shinsa per data directory', () => {
   test('a Shinsa whose start fails after it listens stops what it started and gives the port and the lock back', async () => {
     const config = createTestConfig(createTempDir());
     const broken = new Error('recovery broke');
-    const recover = spyOn(RunSupervisor.prototype, 'recover').mockRejectedValue(broken);
-    const close = spyOn(EventLog.prototype, 'close');
+    let closed = 0;
+    const spy = spyOnLog({
+      '[Serve] Ready': () => {
+        throw broken;
+      },
+      '[Serve] Closed the event log': () => {
+        closed += 1;
+      },
+    });
     try {
       await expect(startShinsa(config, { models })).rejects.toBe(broken);
-      expect(close).toHaveBeenCalledTimes(1);
+      expect(closed).toBe(1);
     } finally {
-      recover.mockRestore();
-      close.mockRestore();
+      spy.mockRestore();
     }
     expect(existsSync(join(config.dataDir, LOCK_FILE))).toBe(false);
     const again = await startShinsa(config, { models });
@@ -453,76 +453,43 @@ describe('one Shinsa per data directory', () => {
 
   test('stopping releases the effects, then Eunoe, then the server, then the log, then the lock', async () => {
     const config = createTestConfig(createTempDir());
-    const shinsa = await startShinsa(config, { models });
     const order: string[] = [];
-    const { settle } = Engine.prototype;
-    const { stop: stopEunoe } = EunoeServer.prototype;
-    const { close } = EventLog.prototype;
+    const serve = Bun.serve;
+    const serving = spyOn(Bun, 'serve').mockImplementation(((options: Parameters<typeof Bun.serve>[0]) => {
+      const server = serve(options);
+      const stop = server.stop.bind(server);
+      return Object.assign(server, {
+        stop: (closeActive?: boolean) => {
+          order.push('server stopped');
+          return stop(closeActive);
+        },
+      });
+    }) as typeof Bun.serve);
+    const shinsa = await startShinsa(config, { models }).finally(() => serving.mockRestore());
     const isListening = () =>
       fetch(`${shinsa.url}/api/health`).then(
         () => true,
         () => false
       );
-    const spies = [
-      spyOn(Engine.prototype, 'settle').mockImplementation(function (this: Engine) {
-        order.push('effects settled');
-        return settle.call(this);
-      }),
-      spyOn(EunoeServer.prototype, 'stop').mockImplementation(async function (this: EunoeServer) {
-        order.push(`eunoe stopped while serving: ${await isListening()}`);
-        return stopEunoe.call(this);
-      }),
-      spyOn(EventLog.prototype, 'close').mockImplementation(function (this: EventLog) {
-        order.push(`log closed with the lock held: ${existsSync(join(config.dataDir, LOCK_FILE))}`);
-        close.call(this);
-      }),
-    ];
+    const spy = spyOnLog({
+      '[Serve] Every running effect has settled': () => order.push('effects settled'),
+      '[Eunoe] Stopped the forwarder': () => order.push('eunoe stopped'),
+      '[Serve] Closed the event log': () =>
+        order.push(`log closed with the lock held: ${existsSync(join(config.dataDir, LOCK_FILE))}`),
+    });
     try {
       await shinsa.stop();
     } finally {
-      for (const spy of spies) spy.mockRestore();
+      spy.mockRestore();
     }
     expect(order).toEqual([
       'effects settled',
-      'eunoe stopped while serving: true',
+      'eunoe stopped',
+      'server stopped',
       'log closed with the lock held: true',
     ]);
     expect(await isListening()).toBe(false);
     expect(existsSync(join(config.dataDir, LOCK_FILE))).toBe(false);
-  });
-
-  test('stopping releases the engine’s and the effects’ runtimes after the server stops and before the log closes', async () => {
-    const config = createTestConfig(createTempDir());
-    const shinsa = await startShinsa(config, { models });
-    const order: string[] = [];
-    const { dispose: disposeEngine } = Engine.prototype;
-    const { dispose: disposeEffects } = EffectRunner.prototype;
-    const { close } = EventLog.prototype;
-    const isListening = () =>
-      fetch(`${shinsa.url}/api/health`).then(
-        () => true,
-        () => false
-      );
-    const spies = [
-      spyOn(EffectRunner.prototype, 'dispose').mockImplementation(async function (this: EffectRunner) {
-        order.push(`effects released while serving: ${await isListening()}`);
-        return disposeEffects.call(this);
-      }),
-      spyOn(Engine.prototype, 'dispose').mockImplementation(function (this: Engine) {
-        order.push('engine released');
-        return disposeEngine.call(this);
-      }),
-      spyOn(EventLog.prototype, 'close').mockImplementation(function (this: EventLog) {
-        order.push('log closed');
-        close.call(this);
-      }),
-    ];
-    try {
-      await shinsa.stop();
-    } finally {
-      for (const spy of spies) spy.mockRestore();
-    }
-    expect(order).toEqual(['effects released while serving: false', 'engine released', 'log closed']);
   });
 
   test('inspect mode takes no lock, so it reads the data of a Shinsa that is running', async () => {
@@ -554,68 +521,71 @@ describe('one Shinsa per data directory', () => {
   });
 });
 
+function createAccountLayer(root: string, delay: Duration.Duration) {
+  const signedOut = { ok: false, code: 1, stdout: '{"loggedIn": false}', stderr: '', timedOut: false };
+  return Layer.mergeAll(
+    Layer.succeed(
+      Shell,
+      Shell.of({
+        run: (request) =>
+          Effect.sleep(delay).pipe(
+            Effect.andThen(
+              request.argv[0] === 'cswap' ? Effect.die(new Error('cswap broke')) : Effect.succeed(signedOut)
+            )
+          ),
+        stopTree: () => Effect.void,
+      })
+    ),
+    Layer.succeed(
+      TerminalPty,
+      TerminalPty.of({
+        spawn: () => Effect.die('not used'),
+        readForeground: () => Effect.succeed(null),
+        pickPort: () => Effect.die('not used'),
+      })
+    ),
+    Layer.succeed(AccountsEnv, { CLAUDE_CONFIG_DIR: join(root, 'claude') }),
+    Layer.succeed(KeychainPlatform, 'linux'),
+    Layer.succeed(ClaudeCommandPath, Effect.succeed('claude'))
+  );
+}
+
 describe('startShinsa with Claude accounts', () => {
   test('stopping waits for the account check, so it never reaches a released engine', async () => {
     const root = createTempDir();
     const config = createTestConfig(root, { roots: [createTempDir()] });
-    const warn = spyOn(log, 'warn');
+    const logs = captureLogs();
     const shinsa = await startShinsa(config, {
       models,
-      triage: () => Promise.resolve(null),
+      triage: () => Effect.succeed(null),
       resolveLogin: () => Promise.resolve(null),
-      accountOptions: {
-        env: { CLAUDE_CONFIG_DIR: join(root, 'claude') },
-        run: () =>
-          Bun.sleep(200).then(() => ({
-            ok: false,
-            code: 1,
-            stdout: '{"loggedIn": false}',
-            stderr: '',
-            timedOut: false,
-          })),
-        readSecret: () => Promise.resolve(null),
-        cswap: new Cswap({
-          run: () => Bun.sleep(200).then(() => Promise.reject(new Error('cswap broke'))),
-          which: () => '/bin/cswap',
-        }),
-        resolveClaude: () => Promise.resolve('claude'),
-      },
+      accountLayer: createAccountLayer(root, Duration.millis(200)),
     });
     try {
       await shinsa.stop();
       await Bun.sleep(300);
-      expect(
-        warn.mock.calls.filter(([, fields]) =>
-          String((fields as { error?: string } | undefined)?.error).includes('disposed')
-        )
-      ).toEqual([]);
+      expect(logs.entries.filter((entry) => String(entry.error).includes('disposed'))).toEqual([]);
     } finally {
-      warn.mockRestore();
+      logs.restore();
     }
   });
 
   test('serves the accounts and pushes them over the socket, even when checking them failed', async () => {
     const root = createTempDir();
     const config = createTestConfig(root, { roots: [createTempDir()] });
-    const warn = spyOn(log, 'warn');
+    const logs = captureLogs();
     const shinsa = await startShinsa(config, {
       models,
-      triage: () => Promise.resolve(null),
+      triage: () => Effect.succeed(null),
       resolveLogin: () => Promise.resolve(null),
-      accountOptions: {
-        env: { CLAUDE_CONFIG_DIR: join(root, 'claude') },
-        run: () =>
-          Promise.resolve({ ok: false, code: 1, stdout: '{"loggedIn": false}', stderr: '', timedOut: false }),
-        readSecret: () => Promise.resolve(null),
-        cswap: new Cswap({ run: () => Promise.reject(new Error('cswap broke')), which: () => '/bin/cswap' }),
-        resolveClaude: () => Promise.resolve('claude'),
-      },
+      accountLayer: createAccountLayer(root, Duration.zero),
     });
     started.push(shinsa);
-    await until('the failed check to be logged', () =>
-      warn.mock.calls.some(([message]) => message === '[Serve] Could not check the Claude accounts')
+    await until(
+      'the failed check to be logged',
+      () => logs.fieldsOf('[Serve] Could not check the Claude accounts').length > 0
     );
-    warn.mockRestore();
+    logs.restore();
     expect(await (await fetch(`${shinsa.url}/api/accounts`)).json()).toMatchObject({
       accounts: [],
       login: null,

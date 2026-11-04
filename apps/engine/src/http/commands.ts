@@ -10,29 +10,30 @@ import {
 } from '@shinsa/core';
 import { Effect, Result } from 'effect';
 import { createReadOnlyError } from '../instance/index.ts';
-import type { Remote } from '../remote/index.ts';
-import type { Engine } from '../runtime/engine.ts';
-import { type Classifier, routeUserCommand } from '../triage/message.ts';
-import { requestPromise, resolveRequestFailure } from './failures.ts';
+import type { RemoteHandle } from '../remote/machine/schema.ts';
+import type { EngineCore } from '../runtime/engine/service.ts';
+import type { CommandRouter } from '../triage/index.ts';
+import { resolveRequestFailure } from './failures.ts';
 import type { RequestSourceShape } from './schema.ts';
 
 export interface UserCommandSource {
   readonly clientId: string | null;
-  readonly classify: Classifier | null;
+  readonly router: CommandRouter['Service'] | null;
   readonly origin: RequestOrigin;
   readonly guest: GuestActor | null;
 }
 
-export function resolveRequestOrigin(
+export const resolveRequestOrigin = Effect.fn('resolveRequestOrigin')(function* (
   source: RequestSourceShape,
-  remote: Pick<Remote, 'isOwner'> | null | undefined
-): RequestOrigin {
-  if (source.via === 'local') return 'local';
-  return remote?.isOwner(source.userId) ? 'owner' : 'remote';
-}
+  remote: Pick<RemoteHandle, 'isOwner'> | null
+) {
+  if (source.via === 'local') return 'local' as const;
+  if (remote && (yield* remote.isOwner(source.userId))) return 'owner' as const;
+  return 'remote' as const;
+});
 
 export const dispatchUserCommand = Effect.fn('dispatchUserCommand')(function* (
-  engine: Engine,
+  engine: EngineCore['Service'],
   body: unknown,
   source: UserCommandSource
 ) {
@@ -45,20 +46,20 @@ export const dispatchUserCommand = Effect.fn('dispatchUserCommand')(function* (
     return yield* Effect.fail(
       resolveRequestFailure(new DomainError({ code: OWNER_ONLY_CODE, message: refusal }))
     );
-  const outside = source.guest ? resolveScopedRefusal(engine.state, source.guest.taskId, command) : null;
+  const outside = source.guest
+    ? resolveScopedRefusal(yield* engine.state, source.guest.taskId, command)
+    : null;
   if (outside)
     return yield* Effect.fail(
       resolveRequestFailure(new DomainError({ code: SCOPE_REFUSAL_CODE, message: outside }))
     );
-  const events = yield* requestPromise(() =>
-    routeUserCommand(
-      engine,
-      command,
-      source.clientId ? `client:${source.clientId}` : null,
-      source.classify,
-      source.guest ? { guest: source.guest } : {}
-    )
-  );
+  const from = {
+    ...(source.clientId ? { id: `client:${source.clientId}` } : {}),
+    ...(source.guest ? { guest: source.guest } : {}),
+  };
+  const events = yield* (
+    source.router ? source.router.route(command, from) : engine.dispatch(command, from)
+  ).pipe(Effect.mapError(resolveRequestFailure));
   const created = events.find((event) => event.type === 'task.created');
   return created?.type === 'task.created' ? created.taskId : null;
 });

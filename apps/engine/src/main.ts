@@ -1,4 +1,16 @@
 #!/usr/bin/env bun
-import { runCli } from './cli/index.ts';
+import { BunRuntime } from '@effect/platform-bun';
+import { Effect } from 'effect';
+import { executeCli } from './cli/index.ts';
+import { CliLayer } from './cli/layers.ts';
 
-process.exitCode = await runCli(Bun.argv.slice(2));
+BunRuntime.runMain(
+  executeCli(Bun.argv.slice(2)).pipe(
+    Effect.tap((code) =>
+      Effect.sync(() => {
+        process.exitCode = code;
+      })
+    ),
+    Effect.provide(CliLayer)
+  )
+);

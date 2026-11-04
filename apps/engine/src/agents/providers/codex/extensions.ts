@@ -1,5 +1,5 @@
 import type { McpDefinition } from '../../../extensions/definitions.ts';
-import type { SessionExtensions } from '../../../extensions/index.ts';
+import type { SessionExtensions } from '../../../extensions/session.ts';
 
 type Params = Record<string, unknown>;
 

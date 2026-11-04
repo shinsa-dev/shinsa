@@ -6,17 +6,18 @@ import {
   type AgentSessionResult,
 } from '../../../src/agents/providers/index.ts';
 
-function createSession() {
+function createSession(cancel?: Effect.Effect<void>) {
   const ended = Promise.withResolvers<AgentSessionResult>();
   const calls: string[] = [];
   const session: AgentSession = {
-    done: ended.promise,
-    steer: () => true,
-    cancel: () => {
-      calls.push('cancel');
-      ended.resolve({ outcome: 'cancelled', summary: null });
-      return Promise.resolve();
-    },
+    done: Effect.promise(() => ended.promise),
+    steer: () => Effect.succeed(true),
+    cancel:
+      cancel ??
+      Effect.sync(() => {
+        calls.push('cancel');
+        ended.resolve({ outcome: 'cancelled', summary: null });
+      }),
   };
   return { session, calls, finish: (result: AgentSessionResult) => ended.resolve(result) };
 }
@@ -27,7 +28,7 @@ describe('an agent session as a scoped resource', () => {
     const result = await Effect.runPromise(
       Effect.scoped(
         Effect.gen(function* () {
-          const scoped = yield* acquireAgentSession(() => fake.session);
+          const scoped = yield* acquireAgentSession(Effect.succeed(fake.session));
           expect(scoped.session).toBe(fake.session);
           fake.finish({ outcome: 'completed', summary: 'Done.' });
           return yield* scoped.done;
@@ -42,7 +43,7 @@ describe('an agent session as a scoped resource', () => {
     const fake = createSession();
     const scope = Effect.runSync(Scope.make());
     const scoped = await Effect.runPromise(
-      acquireAgentSession(() => fake.session).pipe(Scope.provide(scope))
+      acquireAgentSession(Effect.succeed(fake.session)).pipe(Scope.provide(scope))
     );
     await Effect.runPromise(Scope.close(scope, Exit.void));
     expect(fake.calls).toEqual(['cancel']);
@@ -53,10 +54,7 @@ describe('an agent session as a scoped resource', () => {
     const fake = createSession();
     const fiber = Effect.runFork(
       Effect.scoped(
-        Effect.flatMap(
-          acquireAgentSession(() => fake.session),
-          (scoped) => scoped.done
-        )
+        Effect.flatMap(acquireAgentSession(Effect.succeed(fake.session)), (scoped) => scoped.done)
       )
     );
     await Promise.resolve();
@@ -64,11 +62,10 @@ describe('an agent session as a scoped resource', () => {
     expect(fake.calls).toEqual(['cancel']);
   });
 
-  test('a session whose cancel fails still lets its scope close', async () => {
-    const fake = createSession();
-    fake.session.cancel = () => Promise.reject(new Error('gone'));
+  test('a session whose cancel dies still lets its scope close', async () => {
+    const fake = createSession(Effect.die(new Error('gone')));
     const scope = Effect.runSync(Scope.make());
-    await Effect.runPromise(acquireAgentSession(() => fake.session).pipe(Scope.provide(scope)));
+    await Effect.runPromise(acquireAgentSession(Effect.succeed(fake.session)).pipe(Scope.provide(scope)));
     await Effect.runPromise(Scope.close(scope, Exit.void));
     fake.finish({ outcome: 'completed', summary: null });
   });

@@ -1,5 +1,6 @@
 import type { AgentModel, ProviderLogin } from '@shinsa/core';
 import { type Effect, Schema } from 'effect';
+import type { ProviderCallFailed } from '../schema.ts';
 import type { AgentProvider, ProviderUsageReading } from '../types.ts';
 
 export class NoAgentProvider extends Schema.TaggedError<NoAgentProvider, { readonly brand: unique symbol }>()(
@@ -9,7 +10,7 @@ export class NoAgentProvider extends Schema.TaggedError<NoAgentProvider, { reado
 
 export interface ProviderUsageSource {
   readonly id: string;
-  readonly read: () => Promise<ProviderUsageReading>;
+  readonly read: Effect.Effect<ProviderUsageReading, ProviderCallFailed>;
 }
 
 interface ProviderListing {

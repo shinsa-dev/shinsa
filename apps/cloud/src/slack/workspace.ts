@@ -26,9 +26,7 @@ export const requestSignedMachine = Effect.fn('requestSignedMachine')(function* 
   const tunnels = yield* Tunnels;
   const body = JSON.stringify(payload);
   const timestamp = yield* Clock.currentTimeMillis;
-  const signature = yield* Effect.promise(() =>
-    createSlackForwardSignature(Redacted.value(machine.connectKey), timestamp, body)
-  );
+  const signature = yield* createSlackForwardSignature(Redacted.value(machine.connectKey), timestamp, body);
   return yield* tunnels.request(machine.id, path, {
     method: 'POST',
     headers: {

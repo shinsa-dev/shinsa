@@ -1,5 +1,4 @@
 import type { OAuthDiscoveryState } from '@modelcontextprotocol/sdk/client/auth.js';
-import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import type { OAuthClientInformationMixed } from '@modelcontextprotocol/sdk/shared/auth.js';
 import { type McpServerStatus, type McpSource, OPTIMIZER_LIMITS, type SkillSource } from '@shinsa/core';
 import { Duration, Effect, Predicate, Schema } from 'effect';
@@ -335,12 +334,6 @@ export interface PluginParts {
   skills: number;
   servers: number;
   skillTokens: number;
-}
-
-export interface OpenedClient {
-  client: Client;
-  stderr: () => string;
-  close: () => Promise<void>;
 }
 
 const OAuthTokens = Schema.Struct({

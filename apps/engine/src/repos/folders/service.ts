@@ -1,5 +1,5 @@
 import type { Dirent } from 'node:fs';
-import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from 'node:fs';
+import { readFileSync, statSync } from 'node:fs';
 import { readdir } from 'node:fs/promises';
 import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
 import { Clock, Context, Duration, Effect, Layer, Option } from 'effect';
@@ -16,7 +16,6 @@ import {
   type LocalRepo,
   MAX_DEPTH,
   MAX_DIRS,
-  MAX_LOCAL_REPOS,
   ORIGIN_SECTION,
   REFUSED_CODES,
   SAMPLE_REPOS,
@@ -24,6 +23,7 @@ import {
   SKIPPED_DIRS,
   URL_LINE,
 } from '../schema.ts';
+import { listLocalRepos } from './local.ts';
 
 export class RepoFolders extends Context.Service<
   RepoFolders,
@@ -89,13 +89,6 @@ export class RepoFolders extends Context.Service<
         return null;
       };
 
-      const selectLocalRepo = (path: string, name: string) =>
-        attempt((): LocalRepo | null => {
-          const stats = statSync(path);
-          if (!stats.isDirectory() || !existsSync(join(path, '.git'))) return null;
-          return { path: realpathSync(path), name, touchedAt: stats.mtimeMs };
-        });
-
       const recordEntries = (scan: DiscoveryScan, dir: string, entries: Dirent[], descend: boolean) => {
         if (dir !== scan.home && isRepo(entries)) {
           const parent = dirname(dir);
@@ -154,20 +147,8 @@ export class RepoFolders extends Context.Service<
         } satisfies Discovery;
       });
 
-      const listLocal = Effect.fn('RepoFolders.listLocal')(function* (
-        roots: readonly string[],
-        limit = MAX_LOCAL_REPOS
-      ) {
-        const found = new Map<string, LocalRepo>();
-        for (const root of roots) {
-          const entries = yield* attempt(() => (statSync(root).isDirectory() ? readdirSync(root) : []));
-          for (const entry of entries ?? []) {
-            const repo = yield* selectLocalRepo(join(root, entry), entry);
-            if (repo && !found.has(repo.path)) found.set(repo.path, repo);
-          }
-        }
-        return [...found.values()].sort((a, b) => b.touchedAt - a.touchedAt).slice(0, limit);
-      });
+      const listLocal = (roots: readonly string[], limit?: number) =>
+        Effect.sync(() => listLocalRepos(roots, limit));
 
       const listCandidates = Effect.fn('RepoFolders.listCandidates')(function* (
         roots: readonly string[],

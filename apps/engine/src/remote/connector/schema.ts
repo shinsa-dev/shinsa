@@ -1,4 +1,5 @@
-import { Context, type Duration, type Effect, type Redacted, Schema, type Scope } from 'effect';
+import { Context, type Duration, type Effect, type Layer, type Redacted, Schema, type Scope } from 'effect';
+import type { TunnelConnector } from './service.ts';
 
 export const CONNECTED_PATTERN = /Registered tunnel connection/;
 
@@ -26,3 +27,5 @@ export type OpenTunnel = (
   tunnelToken: Redacted.Redacted<string>,
   localUrl: string
 ) => Effect.Effect<TunnelConnection, TunnelConnectFailed, Scope.Scope>;
+
+export type TunnelConnectorLayer = Layer.Layer<TunnelConnector>;

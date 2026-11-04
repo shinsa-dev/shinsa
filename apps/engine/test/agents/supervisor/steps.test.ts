@@ -1,19 +1,27 @@
 import { describe, expect, test } from 'bun:test';
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { Effect, Exit, Option } from 'effect';
-import { AccountLeasing } from '../../../src/agents/accounts.ts';
+import { DomainError, type ShinsaCommand } from '@shinsa/core';
+import { Effect, Exit, Layer, Option } from 'effect';
+import { AccountBroker, AccountBrokerFailed } from '../../../src/agents/accounts/schema.ts';
+import { AccountLeasing } from '../../../src/agents/accounts/service.ts';
 import { createActiveRun } from '../../../src/agents/active/run.ts';
 import { CLAUDE_CAPABILITIES } from '../../../src/agents/providers/claude/index.ts';
-import { ProviderRegistry } from '../../../src/agents/providers/index.ts';
+import { Providers } from '../../../src/agents/providers/index.ts';
 import { leaseAttempt } from '../../../src/agents/supervisor/attempts.ts';
 import { isOverloadRetry, resolveOverloadDelay } from '../../../src/agents/supervisor/overload.ts';
 import { prepareWorkspace } from '../../../src/agents/supervisor/workspace.ts';
 import { RunWorld } from '../../../src/agents/supervisor/world/service.ts';
-import { Transcripts } from '../../../src/agents/transcripts/index.ts';
-import { WorktreeRoot } from '../../../src/workspaces/index.ts';
+import { EngineConfig } from '../../../src/config/service.ts';
+import { ConfigStore } from '../../../src/config/store/service.ts';
+import { JsonFile } from '../../../src/files/service.ts';
+import { GitLayer } from '../../../src/git/layers.ts';
+import { EngineCore } from '../../../src/runtime/engine/service.ts';
+import { ShellLayer } from '../../../src/shell/layers.ts';
+import { WorktreeRoot } from '../../../src/workspaces/root/service.ts';
 import { createTempDir, createTestConfig } from '../../helpers/index.ts';
 import { createRun, createStubEngine } from '../../helpers/state.ts';
+import { createTranscriptsLayer } from '../../helpers/transcripts.ts';
 
 const overloaded = {
   class: 'overloaded' as const,
@@ -23,26 +31,33 @@ const overloaded = {
   resetAt: null,
 };
 
-function provideWorld(lease: () => Promise<null>) {
-  const stub = createStubEngine();
+function provideWorld(lease: () => Promise<null>, stub = createStubEngine()) {
   const config = createTestConfig();
-  const transcripts = new Transcripts(config.transcriptsDir);
   const broker = {
-    lease,
-    readWeeklyReading: () => Promise.resolve(null),
-    readProviderWeeklyReading: () => Promise.resolve(null),
-    readFastMode: () => Promise.resolve('available' as const),
+    lease: () =>
+      Effect.tryPromise({
+        try: lease,
+        catch: (error) => new AccountBrokerFailed({ message: (error as Error).message }),
+      }),
+    readWeeklyReading: () => Effect.succeed(null),
+    readProviderWeeklyReading: () => Effect.succeed(null),
+    readFastMode: () => Effect.succeed('available' as const),
   };
   return Effect.provide(
-    RunWorld.layer({
-      engine: stub.engine,
-      config,
-      worktreeRoot: new WorktreeRoot({ defaultDir: config.worktreesDir }),
-      transcripts,
-      providers: new ProviderRegistry(),
-      leasing: new AccountLeasing(broker, () => stub.state, transcripts),
-      recordEntry: (runId, entry) => transcripts.record(runId, entry),
-    })
+    RunWorld.layer.pipe(
+      Layer.provide(AccountLeasing.layer),
+      Layer.provide(WorktreeRoot.layer.pipe(Layer.provide(ConfigStore.layer), Layer.provide(JsonFile.layer))),
+      Layer.provideMerge(
+        Layer.mergeAll(
+          createTranscriptsLayer(config.transcriptsDir),
+          Layer.succeed(EngineCore, stub.engine.core),
+          Layer.succeed(EngineConfig, config),
+          Layer.succeed(Providers, Providers.make([])),
+          Layer.succeed(AccountBroker, broker),
+          GitLayer.pipe(Layer.provide(ShellLayer))
+        )
+      )
+    )
   );
 }
 
@@ -95,8 +110,8 @@ describe('the steps of a turn', () => {
       startSession: () => {
         throw new Error('not started');
       },
-      listModels: () => Promise.resolve([]),
-      complete: () => Promise.resolve(null),
+      listModels: Effect.succeed([]),
+      complete: () => Effect.succeed(null),
     };
     const turn = {
       run: createRun(),
@@ -114,5 +129,28 @@ describe('the steps of a turn', () => {
     expect(exit).toMatchObject(
       Exit.fail(expect.objectContaining({ _tag: 'LeaseFailed', message: 'cswap broke' }))
     );
+  });
+
+  test('a dispatch the engine refuses keeps its DomainError, and any other failure is RunDispatchFailed', async () => {
+    const stub = createStubEngine();
+    stub.reject(
+      (command) => command.type === 'run.end',
+      new DomainError({ code: 'run_gone', message: 'Gone.' })
+    );
+    stub.reject((command) => command.type === 'run.link', new Error('the log is closed'));
+    const dispatch = (command: ShinsaCommand) =>
+      Effect.runPromise(
+        Effect.flip(RunWorld.use((world) => world.dispatch(command))).pipe(
+          provideWorld(() => Promise.resolve(null), stub)
+        )
+      );
+    expect(
+      await dispatch({ type: 'run.end', runId: 'run-1', outcome: 'completed', summary: null })
+    ).toMatchObject({
+      code: 'run_gone',
+    });
+    expect(
+      await dispatch({ type: 'run.link', runId: 'run-1', sessionId: 's', attemptId: 'a', provider: 'claude' })
+    ).toMatchObject({ _tag: 'RunDispatchFailed', message: 'the log is closed' });
   });
 });

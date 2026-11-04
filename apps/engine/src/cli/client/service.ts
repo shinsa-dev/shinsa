@@ -27,7 +27,7 @@ export class EngineClient extends Context.Service<
       EngineClient,
       Effect.gen(function* () {
         const notRunning = new EngineNotRunning({ message: NOT_RUNNING });
-        const wake = Effect.promise(() => options.wake?.() ?? Promise.resolve(false));
+        const wake = options.wake ?? Effect.succeed(false);
         const reach = (
           sent: Effect.Effect<HttpClientResponse.HttpClientResponse, HttpClientError.HttpClientError>
         ) =>

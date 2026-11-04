@@ -1,5 +1,5 @@
 import type { RunUsage, WeeklyReading } from '@shinsa/core';
-import { Effect } from 'effect';
+import { Effect, Fiber } from 'effect';
 import type { AgentSessionResult } from '../providers/index.ts';
 import type { Turn } from './schema.ts';
 import { RunWorld } from './world/service.ts';
@@ -31,14 +31,12 @@ export const meterAttempt = Effect.fn('RunSupervisor.meterAttempt')(function* (
   attemptId: string,
   sessionId: string | null,
   result: AgentSessionResult,
-  weeklyBefore: Promise<WeeklyReading | null>
+  weeklyBefore: Fiber.Fiber<WeeklyReading | null>
 ) {
   const { leasing } = yield* RunWorld;
   if (result.usage) {
-    const before = yield* Effect.promise(() => weeklyBefore);
-    const after = yield* Effect.promise(() =>
-      leasing.readWeeklyReading(run.id, active.lease, provider.id, true)
-    );
+    const before = yield* Fiber.join(weeklyBefore);
+    const after = yield* leasing.readWeeklyReading(run.id, active.lease, provider.id, true);
     const readings = [before, after].filter((reading) => reading !== null);
     yield* meter(run.id, sessionId, result.usage, `run.meter:${attemptId}`, readings);
   }

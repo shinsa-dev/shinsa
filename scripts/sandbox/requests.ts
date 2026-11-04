@@ -1,5 +1,6 @@
+import { Effect, type Schema } from 'effect';
 import { serializeBase64Url } from '../../packages/core/src/index.ts';
-import { AS_COOKIE, GUEST, USER } from './schema.ts';
+import { AS_COOKIE, GUEST, SandboxBodyInvalid, USER } from './schema.ts';
 
 export function createRandomKey(bytes: number) {
   return serializeBase64Url(crypto.getRandomValues(new Uint8Array(bytes)));
@@ -21,3 +22,16 @@ export function readPreviewUser(request: Request) {
   const cookie = request.headers.get('cookie') ?? '';
   return cookie.includes(`${AS_COOKIE}=${GUEST.login}`) ? GUEST : USER;
 }
+
+export const parseRequestBody = Effect.fn('Sandbox.parseRequestBody')(function* <A>(
+  request: Request,
+  decode: (text: string) => Effect.Effect<A, Schema.SchemaError>
+) {
+  const text = yield* Effect.tryPromise({
+    try: () => request.text(),
+    catch: () => new SandboxBodyInvalid({ message: 'The request body could not be read.' }),
+  });
+  return yield* decode(text).pipe(
+    Effect.mapError((error) => new SandboxBodyInvalid({ message: error.message }))
+  );
+});

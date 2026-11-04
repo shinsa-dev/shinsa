@@ -1,18 +1,10 @@
+import { type AstNode as Node, visit } from './lint-ast.ts';
 import {
   DIALOG_DESCRIPTION_LIMIT,
   DIALOG_DESCRIPTION_MESSAGE,
   TOAST_PLACEHOLDER_LENGTH,
 } from './lint-rules.ts';
-import {
-  type Index,
-  indexSources,
-  type Node,
-  readSource,
-  resolveTexts,
-  type Source,
-  type Text,
-  visit,
-} from './lint-toast.ts';
+import { type Index, indexSources, readSource, resolveTexts, type Source, type Text } from './lint-toast.ts';
 
 type Violation = { file: string; line: number; message: string };
 

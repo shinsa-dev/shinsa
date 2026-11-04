@@ -1,34 +1,39 @@
 import type { UpdateStreamLine } from '@shinsa/core';
 import { EngineApi } from '@shinsa/core/engine-api';
 import { RouteNotFound, ROUTE_NOT_FOUND_MESSAGE } from '@shinsa/core/engine-api/schema';
-import { Effect, Queue, Stream } from 'effect';
+import { Effect, Option, Queue, Stream } from 'effect';
 import { HttpServerResponse } from 'effect/http';
 import { HttpApiBuilder } from 'effect/http-api';
-import { requestPromise, requestSync, type resolveRequestFailure } from '../../failures.ts';
-import { HttpServices } from '../../services/service.ts';
+import { Versions } from '../../../versions/service.ts';
+import { resolveRequestFailure } from '../../failures.ts';
 import { UPDATE_STREAM_HEADERS, UPDATE_STREAM_TYPE } from './schema.ts';
 
 export const VersionsHandlers = HttpApiBuilder.group(
   EngineApi,
   'versions',
   Effect.fn('VersionsHandlers')(function* (handlers) {
-    const { versions: given } = yield* HttpServices;
+    const given = Option.getOrUndefined(yield* Effect.serviceOption(Versions));
     const versions = given
       ? Effect.succeed(given)
       : Effect.fail(new RouteNotFound({ message: ROUTE_NOT_FOUND_MESSAGE }));
 
     return handlers
-      .handle('snapshot', () => Effect.flatMap(versions, (found) => requestPromise(() => found.snapshot())))
-      .handle('refresh', () => Effect.flatMap(versions, (found) => requestPromise(() => found.refresh())))
+      .handle('snapshot', () =>
+        Effect.flatMap(versions, (found) => Effect.mapError(found.snapshot, resolveRequestFailure))
+      )
+      .handle('refresh', () =>
+        Effect.flatMap(versions, (found) => Effect.mapError(found.refresh, resolveRequestFailure))
+      )
       .handle(
         'update',
         Effect.fn('VersionsHandlers.update')(function* ({ payload, request }) {
           const found = yield* versions;
-          const run = yield* requestSync(() => found.startUpdate(payload.program));
+          const run = yield* found.startUpdate(payload.program).pipe(Effect.mapError(resolveRequestFailure));
           if (!request.headers.accept?.includes(UPDATE_STREAM_TYPE))
-            return yield* requestPromise(() => run(() => undefined));
+            return yield* run(() => undefined).pipe(Effect.mapError(resolveRequestFailure));
           const lines = Stream.callback<UpdateStreamLine, ReturnType<typeof resolveRequestFailure>>((queue) =>
-            requestPromise(() => run((line) => Queue.offerUnsafe(queue, { type: 'output', line }))).pipe(
+            run((line) => Queue.offerUnsafe(queue, { type: 'output', line })).pipe(
+              Effect.mapError(resolveRequestFailure),
               Effect.tap((outcome) => Queue.offer(queue, { type: 'done', ...outcome })),
               Effect.tapError((failure) =>
                 Effect.logWarning('[Versions] The update stream failed').pipe(

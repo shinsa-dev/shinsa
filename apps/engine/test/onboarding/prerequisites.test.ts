@@ -1,18 +1,37 @@
 import { describe, expect, test } from 'bun:test';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { Effect, Layer } from 'effect';
+import { SetupCommands } from '../../src/onboarding/commands/service.ts';
+import { INSTALL_SCRIPTS } from '../../src/onboarding/install.ts';
 import {
-  type CommandRunner,
   isBunUsed,
   listMissingInstalls,
   type Prerequisite,
+  type PrerequisiteNeeds,
+  Prerequisites,
   resolveInstallCommand,
   resolveInstallScript,
   resolvePrerequisiteLabel,
-  resolvePrerequisites,
 } from '../../src/onboarding/prerequisites.ts';
-import type { CommandResult } from '../../src/shell/index.ts';
+import type { CommandResult } from '../../src/shell/schema.ts';
 import { createTempDir } from '../helpers/index.ts';
+import type { FakeCommand } from './harness.ts';
+
+function resolvePrerequisites(cwd: string, run: FakeCommand, needs: PrerequisiteNeeds = { bun: true }) {
+  const commands = Layer.succeed(
+    SetupCommands,
+    SetupCommands.of({
+      run: (command, folder, options) => Effect.promise(() => run(command, folder, options)),
+      scripts: INSTALL_SCRIPTS,
+    })
+  );
+  return Effect.runPromise(
+    Prerequisites.use((prerequisites) => prerequisites.resolve(cwd, needs)).pipe(
+      Effect.provide(Prerequisites.layer.pipe(Layer.provide(commands)))
+    )
+  );
+}
 
 const HOME = '/Users/me';
 
@@ -22,7 +41,7 @@ function result(ok: boolean, stdout = '', stderr = '', timedOut = false, code = 
 
 const MISSING = result(false, '', 'Executable not found in $PATH', false, 127);
 
-function createRunner(answers: Record<string, CommandResult>): CommandRunner {
+function createRunner(answers: Record<string, CommandResult>): FakeCommand {
   return (command, cwd) => {
     expect(cwd).toBe(HOME);
     return Promise.resolve(answers[command.join(' ')] ?? MISSING);

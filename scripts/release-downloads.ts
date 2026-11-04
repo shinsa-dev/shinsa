@@ -1,12 +1,12 @@
+import { resolveChannelKey, resolveReleaseKey } from '../apps/marketing/src/worker/download/paths.ts';
+import { parseDownloadPointer } from '../apps/marketing/src/worker/releases/pointer.ts';
 import {
   type Channel,
   DMG_NAME,
   type DownloadPointer,
-  parseDownloadPointer,
-  resolveChannelKey,
-  resolveReleaseKey,
-} from '../apps/marketing/src/worker/download.ts';
-import { resolveUpdateKey, UPDATE_CHANNEL_FILES, ZIP_NAME } from '../apps/marketing/src/worker/updates.ts';
+} from '../apps/marketing/src/worker/releases/schema.ts';
+import { resolveUpdateKey } from '../apps/marketing/src/worker/updates/files.ts';
+import { UPDATE_CHANNEL_FILES, ZIP_NAME } from '../apps/marketing/src/worker/updates/schema.ts';
 import { resolveReleaseChannel, resolveVersionOrder } from '../packages/core/src/protocol/engine.ts';
 
 export interface DownloadRelease {

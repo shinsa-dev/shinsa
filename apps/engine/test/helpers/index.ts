@@ -1,16 +1,12 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import type { Repo, ShinsaEffect, ShinsaEventInput } from '@shinsa/core';
-import { ConfigStore, type ServerConfig } from '../../src/config/index.ts';
-import type { CommandRunner } from '../../src/onboarding/index.ts';
-import { Onboarding } from '../../src/onboarding/index.ts';
-import type { HandoffEffects } from '../../src/remote/handoffs.ts';
-import type { PreviewEffects } from '../../src/remote/previews.ts';
-import type { ShareEffects } from '../../src/remote/shares.ts';
-import { Roots } from '../../src/repos/index.ts';
-import type { Engine } from '../../src/runtime/index.ts';
-import { runCommandOrThrow } from '../../src/shell/index.ts';
-import type { EventLog } from '../../src/store/index.ts';
+import { Effect } from 'effect';
+import type { ServerConfig } from '../../src/config/index.ts';
+import { HandoffCallFailed, type HandoffEffects } from '../../src/remote/handoffs/schema.ts';
+import { PreviewDispatchFailed, type PreviewEffects } from '../../src/remote/previews/schema.ts';
+import { ShareDispatchFailed, type ShareEffects } from '../../src/remote/shares/schema.ts';
+import { EffectFailed } from '../../src/runtime/failures/schema.ts';
 import {
   type Display,
   NO_PROGRESS,
@@ -19,14 +15,20 @@ import {
   type Progress,
   type Terminal,
 } from '../../src/terminal/index.ts';
+import { createTestOnboardingService, type FakeCommand } from '../onboarding/harness.ts';
 import { createConfigAt } from './config.ts';
+import type { Engine } from './engine.ts';
+import type { TestEventLog } from './event-log.ts';
+import { createTestMachine } from './machine.ts';
+import { runCommandOrThrow } from './shell.ts';
 import { createTempDir } from './temp.ts';
+import { until } from './until.ts';
 
 export { createTempDir };
 export { captureLogs } from './logs.ts';
 
 export function commitEvents(
-  log: EventLog,
+  log: TestEventLog,
   events: ShinsaEventInput[],
   effects: ShinsaEffect[],
   fromSeq: number,
@@ -91,19 +93,9 @@ export async function createGitRepo(
   };
 }
 
-export async function until(
-  describe: string,
-  predicate: () => boolean | Promise<boolean>,
-  timeoutMs = 5_000
-) {
-  const deadline = performance.now() + timeoutMs;
-  while (!(await predicate())) {
-    if (performance.now() > deadline) throw new Error(`Timed out waiting for ${describe}.`);
-    await Bun.sleep(10);
-  }
-}
+export { until };
 
-export function awaitEffect(log: Pick<EventLog, 'selectEffectStatus'>, key: string, timeoutMs = 5_000) {
+export function awaitEffect(log: Pick<TestEventLog, 'selectEffectStatus'>, key: string, timeoutMs = 5_000) {
   return until(
     `the effect ${key} to settle`,
     () => {
@@ -129,28 +121,17 @@ export function overrideEnv(values: Record<string, string | undefined>) {
   };
 }
 
-const FAKE_RUN: CommandRunner = (command) =>
+const FAKE_RUN: FakeCommand = (command) =>
   Promise.resolve({ ok: true, code: 0, stdout: `${command[0]} 1.0`, stderr: '', timedOut: false });
 
-export function createTestOnboarding(engine: Engine, config: ServerConfig, run: CommandRunner = FAKE_RUN) {
-  const store = new ConfigStore(config.configPath);
-  const roots = new Roots(config.roots, store, config.userHome, () =>
-    Promise.resolve({ candidates: [], truncated: false, refused: [] })
-  );
+export function createTestOnboarding(engine: Engine, config: ServerConfig, run: FakeCommand = FAKE_RUN) {
+  const machine = createTestMachine(engine, config);
+  const { store, roots } = machine;
   return {
     store,
     roots,
-    onboarding: new Onboarding({
-      engine,
-      config,
-      store,
-      roots,
-      resolveLogin: () => Promise.resolve(null),
-      ask: () => Promise.resolve(null),
-      run,
-      models: { listModels: () => Promise.resolve([]) },
-      accounts: () => Promise.resolve([]),
-    }),
+    machine,
+    onboarding: createTestOnboardingService({ engine, config, machine: machine.context, run }),
   };
 }
 
@@ -167,14 +148,22 @@ export function createTestTerminal(
 }
 
 export const NO_SHARES: ShareEffects = {
-  link: () => Promise.reject(new Error('This test shares no task.')),
+  link: () => Effect.fail(new ShareDispatchFailed({ message: 'This test shares no task.' })),
 };
 
 export const NO_PREVIEWS: PreviewEffects = {
-  link: () => Promise.reject(new Error('This test shares no preview.')),
+  link: () => Effect.fail(new PreviewDispatchFailed({ message: 'This test shares no preview.' })),
 };
 
 export const NO_HANDOFFS: HandoffEffects = {
-  link: () => Promise.reject(new Error('This test hands off no task.')),
-  revoke: () => Promise.reject(new Error('This test hands off no task.')),
+  link: () =>
+    Effect.fail(
+      new EffectFailed({
+        message: 'This test hands off no task.',
+        detail: 'This test hands off no task.',
+        retryable: false,
+        delayMs: null,
+      })
+    ),
+  revoke: () => Effect.fail(new HandoffCallFailed({ message: 'This test hands off no task.' })),
 };

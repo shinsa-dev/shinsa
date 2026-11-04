@@ -17,9 +17,8 @@ import {
   serializeChannelMessage,
   serializePublicKey,
 } from '@shinsa/core';
-import { Context, Deferred, Effect, Exit, Fiber, Layer, Queue, Stream } from 'effect';
+import { Context, Deferred, Effect, Exit, Fiber, Layer, Option, Queue, Stream } from 'effect';
 import { Socket } from 'effect/socket';
-import { enterPromiseOr } from '@/lib/runtime/promise.ts';
 import { dialSocket } from '@/lib/runtime/socket/dial.ts';
 import type { SocketFrame } from '@/lib/runtime/socket/schema.ts';
 import {
@@ -58,32 +57,30 @@ export class RemoteChannels extends Context.Service<
     Effect.gen(function* () {
       const makeWebSocket = yield* Socket.WebSocketConstructor;
       const refuse = (message: string) => new ChannelError({ message });
-      function enter<A>(step: () => Promise<A>, message = CHANNEL_BROKE) {
-        return enterPromiseOr(
-          step,
-          Effect.suspend(() => Effect.fail(refuse(message)))
-        );
-      }
-
       const prepareHello = Effect.fn('RemoteChannels.prepareHello')(function* (options: ChannelOptions) {
-        const machinePublicKey = yield* enter(() => parsePublicKey(options.machineKey), CHANNEL_KEY_INVALID);
+        const machinePublicKey = yield* parsePublicKey(options.machineKey);
         if (!machinePublicKey) return yield* refuse(CHANNEL_KEY_INVALID);
-        const ephemeral = yield* enter(
+        const ephemeral = yield* Effect.promise(
           () =>
             crypto.subtle.generateKey(REMOTE_KEY_ALGORITHM, true, ['deriveBits']) as Promise<CryptoKeyPair>
         );
-        const device = yield* enter(() => serializePublicKey(options.device.publicKey));
-        const clientEphemeral = yield* enter(() => serializePublicKey(ephemeral.publicKey));
+        const device = yield* serializePublicKey(options.device.publicKey);
+        const clientEphemeral = yield* serializePublicKey(ephemeral.publicKey);
         const secret = options.enrollSecret;
         let enroll: string | null = null;
-        if (secret)
-          enroll = yield* enter(() =>
+        if (secret) {
+          const proof = yield* Effect.option(
             createEnrollProof(secret, { machine: options.machineKey, device, clientEphemeral })
           );
-        const hello = yield* enter(() =>
-          createClientHello(options.device.publicKey, ephemeral.publicKey, enroll, options.name ?? null, [
-            CHANNEL_COMPRESSION,
-          ])
+          if (Option.isNone(proof)) return yield* refuse(CHANNEL_BROKE);
+          enroll = proof.value;
+        }
+        const hello = yield* createClientHello(
+          options.device.publicKey,
+          ephemeral.publicKey,
+          enroll,
+          options.name ?? null,
+          [CHANNEL_COMPRESSION]
         );
         const prepared: ChannelHello = { machinePublicKey, ephemeral, device, clientEphemeral, hello };
         return prepared;
@@ -98,8 +95,8 @@ export class RemoteChannels extends Context.Service<
         const self = yield* Effect.withFiber((fiber) => Effect.succeed(fiber));
         let phase: 'hello' | 'open' | 'closed' = 'hello';
         let confirmed = false;
-        let seal: ((plain: Uint8Array<ArrayBuffer>) => Promise<Uint8Array<ArrayBuffer>>) | null = null;
-        let open: ((frame: Uint8Array<ArrayBuffer>) => Promise<Uint8Array<ArrayBuffer>>) | null = null;
+        let seal: ReturnType<typeof createFrameSealer> | null = null;
+        let open: ReturnType<typeof createFrameOpener> | null = null;
         let nextId = 0;
         const pending = new Map<string, PendingResponse>();
         const outstanding = new Set<Outgoing>();
@@ -250,7 +247,7 @@ export class RemoteChannels extends Context.Service<
             return;
           }
           if (!welcome) return yield* refuse(CHANNEL_HANDSHAKE_UNKNOWN);
-          const session = yield* enter(() =>
+          const derived = yield* Effect.option(
             deriveClientSession({
               keys: {
                 machine: options.machineKey,
@@ -263,6 +260,8 @@ export class RemoteChannels extends Context.Service<
               clientEphemeralPrivateKey: prepared.ephemeral.privateKey,
             })
           );
+          if (Option.isNone(derived)) return yield* refuse(CHANNEL_BROKE);
+          const session = derived.value;
           if (phase === 'closed') return;
           seal = createFrameSealer(session.send, welcome.compression);
           open = createFrameOpener(session.receive, welcome.compression);
@@ -277,7 +276,9 @@ export class RemoteChannels extends Context.Service<
           }
           const opener = open;
           if (typeof frame === 'string' || !opener) return yield* refuse(CHANNEL_UNSEALED);
-          const plain = yield* enter(() => opener(frame));
+          const opened = yield* Effect.option(opener(frame));
+          if (Option.isNone(opened)) return yield* refuse(CHANNEL_BROKE);
+          const plain = opened.value;
           const message = parseChannelMessage(decodeText(plain));
           if (!message) return yield* refuse(CHANNEL_MESSAGE_UNKNOWN);
           return yield* handle(message);
@@ -289,7 +290,7 @@ export class RemoteChannels extends Context.Service<
             const sealer = seal;
             const sent = Effect.gen(function* () {
               if (phase !== 'open' || !sealer) return yield* refuse(CHANNEL_CLOSED);
-              const frame = yield* enter(() => sealer(encodeText(serializeChannelMessage(item.message))));
+              const frame = yield* sealer(encodeText(serializeChannelMessage(item.message)));
               if (phase === 'open') yield* socket.send(frame);
             });
             const exit = yield* Effect.exit(sent);

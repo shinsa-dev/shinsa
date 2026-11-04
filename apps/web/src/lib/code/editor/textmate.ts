@@ -1,5 +1,8 @@
+import { Deferred, Effect } from 'effect';
 import { COMMENT_CLASS, COMMENT_TAGS, type CommentSpan, scanCommentLine } from '@/lib/code/comment-tags.ts';
 import { resolveTokenClass } from '@/lib/code/grammar.ts';
+import { runApp } from '@/lib/runtime/app.ts';
+import type { StepFailed } from '@/lib/runtime/schema.ts';
 
 export interface LineState {
   equals: (other: LineState) => boolean;
@@ -15,7 +18,7 @@ export interface LineGrammar {
 
 export interface GrammarEngine {
   initial: LineState;
-  load: (grammar: string, text: string) => Promise<LineGrammar | null>;
+  load: (grammar: string, text: string) => Effect.Effect<LineGrammar | null, StepFailed>;
   colors: () => readonly string[];
 }
 
@@ -62,7 +65,7 @@ interface Plan {
 
 interface Job {
   priority: number;
-  done: Promise<void>;
+  done: Deferred.Deferred<void>;
 }
 
 interface DocState {
@@ -139,35 +142,38 @@ export function unpackLines(offsets: Uint32Array, data: Uint32Array) {
 export function createTokenizer(
   engine: GrammarEngine,
   post: (answer: TokenAnswer) => void,
-  pause: () => Promise<void> = () => new Promise((resolve) => setTimeout(resolve, 0)),
+  pause: Effect.Effect<void> = Effect.sleep(0),
   now: () => number = () => performance.now()
 ) {
   const docs = new Map<string, DocState>();
   const latest = new Map<string, number>();
-  const waiting: { job: Job; start: () => void }[] = [];
+  const waiting: { job: Job; start: Deferred.Deferred<void> }[] = [];
   const jobs = new Map<string, Job>();
   let running = false;
 
-  function queue(entry: { job: Job; start: () => void }) {
+  function queue(entry: { job: Job; start: Deferred.Deferred<void> }) {
     const at = waiting.findIndex((each) => each.job.priority < entry.job.priority);
     waiting.splice(at < 0 ? waiting.length : at, 0, entry);
   }
 
-  function takeTurn(job: Job) {
+  const takeTurn = Effect.fn('Tokenizer.takeTurn')(function* (job: Job) {
     if (!running) {
       running = true;
-      return Promise.resolve();
+      return;
     }
-    return new Promise<void>((start) => queue({ job, start }));
-  }
+    const start = yield* Deferred.make<void>();
+    queue({ job, start });
+    yield* Deferred.await(start);
+  });
 
-  function release() {
-    void pause().then(() => {
-      const next = waiting.shift();
-      if (next) next.start();
-      else running = false;
-    });
-  }
+  const startNext = Effect.suspend(() => {
+    const next = waiting.shift();
+    if (next) return Deferred.succeed(next.start, undefined);
+    running = false;
+    return Effect.void;
+  });
+
+  const release = Effect.asVoid(Effect.forkDetach(Effect.andThen(pause, startNext)));
 
   function bump(job: Job, priority: number) {
     if (job.priority >= priority) return;
@@ -265,9 +271,9 @@ export function createTokenizer(
     });
   }
 
-  async function tokenize(request: TokenRequest) {
+  const tokenize = Effect.fn('Tokenizer.tokenize')(function* (request: TokenRequest) {
     latest.set(request.doc, request.id);
-    const grammar = await engine.load(request.grammar, request.text).catch(() => null);
+    const grammar = yield* engine.load(request.grammar, request.text).pipe(Effect.orElseSucceed(() => null));
     if (!grammar) {
       post({ id: request.id, doc: request.doc, version: request.version, failed: 'no grammar' });
       return;
@@ -276,21 +282,16 @@ export function createTokenizer(
     const twin = jobs.get(key);
     if (twin && !request.known) {
       bump(twin, request.priority);
-      await twin.done;
+      yield* Deferred.await(twin.done);
     }
-    const job: Job = { priority: request.priority, done: Promise.resolve() };
-    job.done = (async () => {
-      await takeTurn(job);
-      try {
-        await run(request, grammar, job);
-      } finally {
-        release();
-      }
-    })();
+    const job: Job = { priority: request.priority, done: yield* Deferred.make<void>() };
     jobs.set(key, job);
-    await job.done;
+    yield* takeTurn(job).pipe(
+      Effect.andThen(Effect.ensuring(run(request, grammar, job), release)),
+      Effect.ensuring(Deferred.succeed(job.done, undefined))
+    );
     if (jobs.get(key) === job) jobs.delete(key);
-  }
+  });
 
   function prepare(request: TokenRequest): Plan {
     const lines = splitLines(request.text);
@@ -344,7 +345,7 @@ export function createTokenizer(
     return result.ruleStack;
   }
 
-  async function run(request: TokenRequest, grammar: LineGrammar, job: Job) {
+  const run = Effect.fn('Tokenizer.run')(function* (request: TokenRequest, grammar: LineGrammar, job: Job) {
     if (latest.get(request.doc) !== request.id) return;
     const plan = prepare(request);
     const { lines, state } = plan;
@@ -365,8 +366,8 @@ export function createTokenizer(
       send(request, sent, state.tokens.slice(sent, index + 1), lines.length, false);
       sent = index + 1;
       remember(request.doc, state);
-      release();
-      await takeTurn(job);
+      yield* release;
+      yield* takeTurn(job);
       if (latest.get(request.doc) !== request.id) return;
       sliceStart = now();
       sliceLines = 0;
@@ -376,10 +377,10 @@ export function createTokenizer(
       ? Math.max(end, Math.min(request.need?.to ?? 0, state.tokens.length))
       : state.tokens.length;
     send(request, sent, state.tokens.slice(sent, last), lines.length, true);
-  }
+  });
 
   return {
-    tokenize,
+    tokenize: (request: TokenRequest) => runApp(tokenize(request)),
     forget: (doc: string) => {
       docs.delete(doc);
       latest.delete(doc);

@@ -1,6 +1,4 @@
 import { Button } from '@shinsa/ui/components/button';
-import { Field, FieldError } from '@shinsa/ui/components/field';
-import { Textarea } from '@shinsa/ui/components/textarea';
 import { Truncate } from '@shinsa/ui/components/truncate';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
@@ -8,7 +6,6 @@ import { HintButton } from '@/components/controls/hint-button.tsx';
 import { SelectField } from '@/components/controls/select-field.tsx';
 import { useBusy } from '@/hooks/use-busy.ts';
 import type { MachineChoice, UnreachableMachine } from '@/lib/connection/socket.ts';
-import { isCancelKey, isSubmitKey } from '@/lib/keys.ts';
 import { resolveMachineLabel } from '@/lib/remote/mode.ts';
 import {
   describePolicyCount,
@@ -26,6 +23,7 @@ import {
   validatePolicy,
 } from '@/lib/remote/policies.ts';
 import { ROW_INSET, SETTING_ROW, SettingsBlock, SettingsEmpty, SettingsGroup, TOKEN_TEXT } from './group.tsx';
+import { RuleField } from './rule-field.tsx';
 
 interface Draft {
   editing: PolicyRef | null;
@@ -72,29 +70,18 @@ function PolicyForm({
         void save();
       }}
     >
-      <Field data-invalid={error ? true : undefined}>
-        <Textarea
-          autoFocus
-          rows={1}
-          value={text}
-          placeholder={POLICY_PLACEHOLDER}
-          aria-label='The routing policy'
-          aria-invalid={error ? true : undefined}
-          className='min-h-0 resize-none'
-          onKeyDown={(event) => {
-            if (isCancelKey(event)) onDone();
-            if (isSubmitKey(event)) {
-              event.preventDefault();
-              void save();
-            }
-          }}
-          onChange={(event) => {
-            setText(event.target.value);
-            setError(null);
-          }}
-        />
-        {error && <FieldError>{error}</FieldError>}
-      </Field>
+      <RuleField
+        text={text}
+        error={error}
+        label='The routing policy'
+        placeholder={POLICY_PLACEHOLDER}
+        onChange={(next) => {
+          setText(next);
+          setError(null);
+        }}
+        onCancel={onDone}
+        onSubmit={() => void save()}
+      />
       <div className='flex items-center gap-1.5'>
         <SelectField
           label='Runs on'

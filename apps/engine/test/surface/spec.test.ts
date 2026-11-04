@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { Effect } from 'effect';
 import {
   defineAction,
   defineCommand,
@@ -7,7 +8,7 @@ import {
   encode,
   readValue,
 } from '../../src/surface/spec.ts';
-import { BASE, createFakeClient } from './fixtures.ts';
+import { BASE, createFakeClient, runSurfaceSpec } from './fixtures.ts';
 
 describe('defining surface specs', () => {
   test('a command sends what it builds and says Done. with the task link when there is a task', async () => {
@@ -21,12 +22,12 @@ describe('defining surface specs', () => {
     });
     expect(spec).toMatchObject({ access: 'write', command: 'task.cancel', humanOnly: true });
     const withTask = createFakeClient({}, 'task-1');
-    expect(await spec.run(withTask.client, {})).toEqual({
+    expect(await runSurfaceSpec(spec, withTask.client)).toEqual({
       data: { ok: true, taskId: 'task-1' },
       text: `Done.\n${BASE}/tasks/task-1`,
     });
     const without = createFakeClient();
-    expect((await spec.run(without.client, {})).text).toBe('Done.');
+    expect((await runSurfaceSpec(spec, without.client)).text).toBe('Done.');
     expect(without.sent).toEqual([{ type: 'task.cancel', taskId: 'task-1' }]);
   });
 
@@ -40,7 +41,7 @@ describe('defining surface specs', () => {
       done: () => 'Marked.',
     });
     expect(spec).not.toHaveProperty('humanOnly');
-    expect((await spec.run(createFakeClient().client, {})).text).toBe('Marked.');
+    expect((await runSurfaceSpec(spec, createFakeClient().client)).text).toBe('Marked.');
   });
 
   test('a read formats what the server answered; humanOnly marks it hidden from task agents', async () => {
@@ -54,26 +55,40 @@ describe('defining surface specs', () => {
     });
     expect(spec).toMatchObject({ access: 'read', humanOnly: true });
     const fake = createFakeClient({ '/api/memory': { memory: [1, 2, 3] } });
-    expect(await spec.run(fake.client, {})).toEqual({ data: { memory: [1, 2, 3] }, text: '3 things.' });
+    expect(await runSurfaceSpec(spec, fake.client)).toEqual({
+      data: { memory: [1, 2, 3] },
+      text: '3 things.',
+    });
     expect(fake.reads).toEqual(['/api/memory']);
     const shown = defineRead({
       path: ['y'],
       summary: 'Y.',
       fields: [],
-      read: () => Promise.resolve(null),
+      read: () => Effect.succeed(null),
       format: () => '',
     });
     expect(shown).not.toHaveProperty('humanOnly');
   });
 
   test('an action runs as written and is a write', async () => {
-    const act = () => Promise.resolve({ data: null, text: 'Acted.' });
-    expect(defineAction({ path: ['a'], summary: 'A.', fields: [], humanOnly: true, act })).toMatchObject({
-      access: 'write',
-      humanOnly: true,
-      run: act,
-    });
+    const act = () => Effect.succeed({ data: null, text: 'Acted.' });
+    const spec = defineAction({ path: ['a'], summary: 'A.', fields: [], humanOnly: true, act });
+    expect(spec).toMatchObject({ access: 'write', humanOnly: true });
+    expect(await runSurfaceSpec(spec, createFakeClient().client)).toEqual({ data: null, text: 'Acted.' });
     expect(defineAction({ path: ['a'], summary: 'A.', fields: [], act })).not.toHaveProperty('humanOnly');
+  });
+
+  test('a command can build its command with an effect', async () => {
+    const spec = defineCommand({
+      path: ['x', 'cancel'],
+      summary: 'Cancel.',
+      fields: [],
+      command: 'task.cancel',
+      build: () => Effect.succeed({ type: 'task.cancel' as const, taskId: 'task-2' }),
+    });
+    const fake = createFakeClient();
+    await runSurfaceSpec(spec, fake.client);
+    expect(fake.sent).toEqual([{ type: 'task.cancel', taskId: 'task-2' }]);
   });
 
   test('helpers: a task link only when there is a task, by its handle when it has one, text values only, and URL-safe parts', () => {

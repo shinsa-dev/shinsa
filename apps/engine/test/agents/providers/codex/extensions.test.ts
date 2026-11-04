@@ -1,15 +1,60 @@
 import { describe, expect, test } from 'bun:test';
 import type { ChatEvent } from '@shinsa/core';
+import { Duration, Effect } from 'effect';
 import {
   resolveCodexServerConfig,
   resolveCodexSkillInstructions,
 } from '../../../../src/agents/providers/codex/extensions.ts';
-import { startCodexSession } from '../../../../src/agents/providers/codex/session.ts';
-import { createShinsaTools } from '../../../../src/agents/tools/index.ts';
+import { HEARTBEAT_MS } from '../../../../src/agents/providers/codex/mcp/schema.ts';
+import {
+  COMPACT_GRACE,
+  type CodexRuntime,
+  type CodexSessionMode,
+  REQUEST_TIMEOUT,
+} from '../../../../src/agents/providers/codex/session/schema.ts';
+import { makeCodexSession } from '../../../../src/agents/providers/codex/session/service.ts';
+import type { AgentSessionInput } from '../../../../src/agents/providers/types.ts';
 import type { McpDefinition } from '../../../../src/extensions/definitions.ts';
-import type { SessionExtensions } from '../../../../src/extensions/index.ts';
+import type { SessionExtensions } from '../../../../src/extensions/session.ts';
 import { FakeCodex } from '../../../helpers/codex.ts';
 import { createTempDir } from '../../../helpers/index.ts';
+import { startScopedSession } from '../../../helpers/providers.ts';
+import { createTestTools } from '../../../helpers/tools.ts';
+
+interface CodexSessionOptions {
+  runtime: CodexRuntime;
+  requestTimeoutMs?: number;
+  heartbeatMs?: number;
+  compactGraceMs?: number;
+  now?: () => number;
+}
+
+function startCodexSession(
+  input: AgentSessionInput,
+  options: CodexSessionOptions,
+  mode: CodexSessionMode = 'turns'
+) {
+  return startScopedSession(
+    makeCodexSession({
+      input,
+      mode,
+      executable: options.runtime.resolveExecutable,
+      env: options.runtime.env,
+      now: Effect.sync(options.now ?? Date.now),
+      requestTimeout:
+        options.requestTimeoutMs === undefined ? REQUEST_TIMEOUT : Duration.millis(options.requestTimeoutMs),
+      compactGrace:
+        options.compactGraceMs === undefined ? COMPACT_GRACE : Duration.millis(options.compactGraceMs),
+      heartbeat: Duration.millis(options.heartbeatMs ?? HEARTBEAT_MS),
+      token: Effect.sync(() => crypto.randomUUID()),
+    }).pipe(
+      Effect.map((handle) => ({
+        ...handle,
+        steer: (text: string, from: 'you' | 'shinsa' = 'you') => handle.steer(text, from),
+      }))
+    )
+  );
+}
 
 function definition(overrides: Partial<McpDefinition>): McpDefinition {
   return {
@@ -113,7 +158,7 @@ describe('what a Codex agent is given', () => {
         model: 'gpt-6-astra',
         resume: null,
         defaultBranch: 'main',
-        tools: createShinsaTools('agent', (name) => Promise.resolve(`${name} accepted.`)),
+        tools: createTestTools('agent', (name) => Promise.resolve(`${name} accepted.`)),
         pluginDir: '/plugin',
         onSession: () => undefined,
         onEntry: (entry) => entries.push(entry),
@@ -151,7 +196,7 @@ describe('what a Codex agent is given', () => {
         model: 'gpt-6-astra',
         resume: null,
         defaultBranch: 'main',
-        tools: createShinsaTools('agent', (name) => Promise.resolve(`${name} accepted.`)),
+        tools: createTestTools('agent', (name) => Promise.resolve(`${name} accepted.`)),
         pluginDir: '/plugin',
         onSession: () => undefined,
         onEntry: (entry) => entries.push(entry),
@@ -176,7 +221,7 @@ describe('what a Codex agent is given', () => {
         model: 'gpt-6-astra',
         resume: null,
         defaultBranch: 'main',
-        tools: createShinsaTools('agent', (name) => Promise.resolve(`${name} accepted.`)),
+        tools: createTestTools('agent', (name) => Promise.resolve(`${name} accepted.`)),
         pluginDir: '/plugin',
         onSession: () => undefined,
         onEntry: () => undefined,

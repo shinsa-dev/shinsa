@@ -1,20 +1,26 @@
 import { describe, expect, spyOn, test } from 'bun:test';
-import type { HookInput, Options, SDKMessage, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
+import type {
+  HookInput,
+  Options,
+  SDKMessage,
+  SDKUserMessage,
+  SpawnedProcess,
+} from '@anthropic-ai/claude-agent-sdk';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import type { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import type { ChatEvent, ChatNotice, RunRole } from '@shinsa/core';
+import { Effect } from 'effect';
 import { appendStderr } from '../../../../src/agents/providers/claude/classify.ts';
 import type { ClaudeExecutable } from '../../../../src/agents/providers/claude/executable.ts';
 import type { EunoeLink, EunoeWatcher } from '../../../../src/agents/providers/claude/index.ts';
-import type { ClaudeProcess } from '../../../../src/agents/providers/claude/process.ts';
-import { startClaudeSession } from '../../../../src/agents/providers/claude/session.ts';
+import type { ClaudeProcessHandle } from '../../../../src/agents/providers/claude/process/schema.ts';
 import type { AgentSessionInput } from '../../../../src/agents/providers/index.ts';
 import { SHINSA_INSTRUCTIONS } from '../../../../src/agents/providers/instructions.ts';
-import { createShinsaTools } from '../../../../src/agents/tools/index.ts';
 import { createMessageFeed } from '../../../helpers/feed.ts';
 import { overrideEnv, until } from '../../../helpers/index.ts';
 import { captureLogs } from '../../../helpers/logs.ts';
+import { startClaudeSession } from '../../../helpers/providers.ts';
 import {
   createFakeQuery,
   createFakeRuntime,
@@ -22,6 +28,7 @@ import {
   type FakeQueryControls,
   sdkMessage,
 } from '../../../helpers/query.ts';
+import { createTestTools } from '../../../helpers/tools.ts';
 
 const ECHOING: ClaudeExecutable = { ok: true, path: '/bin/claude', version: '2.1.300' };
 
@@ -39,7 +46,7 @@ function createInput(overrides: Partial<AgentSessionInput> = {}) {
     model: null,
     resume: null,
     defaultBranch: 'main',
-    tools: createShinsaTools('agent', handleTool),
+    tools: createTestTools('agent', handleTool),
     pluginDir: '/plugin',
     onSession: (id) => sessions.push(id),
     onEntry: (entry) => entries.push(entry),
@@ -241,7 +248,7 @@ describe('starting a session', () => {
       },
     });
     const session = startClaudeSession(createInput().input, {
-      runtime: { runQuery: fake.query, resolveExecutable: () => executable.promise },
+      runtime: { runQuery: fake.query, resolveExecutable: Effect.promise(() => executable.promise) },
     });
     session.steer('before the start');
     await session.cancel();
@@ -567,7 +574,7 @@ describe('how a turn ends', () => {
 });
 
 interface FakeProcess {
-  process: ClaudeProcess;
+  process: ClaudeProcessHandle;
   terminated: () => number;
 }
 
@@ -575,14 +582,11 @@ function createFakeProcess(stderr = ''): FakeProcess {
   let terminated = 0;
   return {
     process: {
-      spawn: () => {
-        throw new Error('not spawned in tests');
-      },
-      readStderr: () => stderr,
-      terminate: () => {
+      spawn: () => Effect.die(new Error('not spawned in tests')),
+      readStderr: Effect.succeed(stderr),
+      terminate: Effect.sync(() => {
         terminated += 1;
-        return Promise.resolve();
-      },
+      }),
     },
     terminated: () => terminated,
   };
@@ -607,6 +611,58 @@ function startWedged(controls: FakeQueryControls = {}, child = createFakeProcess
 }
 
 describe('a process that outlives its turn', () => {
+  test('the SDK starts claude through the session’s own process', async () => {
+    const spawned: string[] = [];
+    const child = createFakeProcess();
+    const process: ClaudeProcessHandle = {
+      ...child.process,
+      spawn: (options) =>
+        Effect.sync(() => {
+          spawned.push(options.command);
+          return {} as SpawnedProcess;
+        }),
+    };
+    const fake = createFakeQuery((params) => {
+      params.options?.spawnClaudeCodeProcess?.({
+        command: '/bin/claude',
+        args: [],
+        env: {},
+        signal: new AbortController().signal,
+      });
+      return emit(init, success('Started.'));
+    });
+    const session = startClaudeSession(createInput().input, {
+      runtime: createFakeRuntime(fake.query),
+      contextTimeoutMs: 20,
+      exitGraceMs: 20,
+      createProcess: () => process,
+      now: () => 1_000,
+    });
+    expect(await session.done).toMatchObject({ outcome: 'completed', summary: 'Started.' });
+    expect(spawned).toEqual(['/bin/claude']);
+  });
+
+  test('without a process of its own a session starts the real one and reports its pid', async () => {
+    const pids: number[] = [];
+    const fake = createFakeQuery((params) => {
+      params.options?.spawnClaudeCodeProcess?.({
+        command: 'true',
+        args: [],
+        cwd: '/',
+        env: { PATH: Bun.env.PATH },
+        signal: new AbortController().signal,
+      });
+      return emit(init, success('Started.'));
+    });
+    const session = startClaudeSession(createInput({ onProcess: (pid) => pids.push(pid) }).input, {
+      runtime: createFakeRuntime(fake.query),
+      contextTimeoutMs: 20,
+      exitGraceMs: 20,
+    });
+    expect(await session.done).toMatchObject({ outcome: 'completed' });
+    expect(pids).toHaveLength(1);
+  });
+
   test('a process still running after its turn ended is stopped, and the turn keeps its outcome', async () => {
     const logs = captureLogs();
     try {
@@ -915,26 +971,27 @@ function createEunoe(up = true) {
   const watching: { sessionId: string; watcher: EunoeWatcher; stopped: boolean }[] = [];
   const folds: { sessionId: string; warm: boolean; released: boolean }[] = [];
   const link: EunoeLink = {
-    ensure: () =>
-      Promise.resolve(
-        up
-          ? { ok: true as const, url: 'http://127.0.0.1:40001', dir: '/data/eunoe' }
-          : { ok: false as const, reason: 'eunoe did not start within 15 s.' }
-      ),
-    watch: (sessionId, watcher) => {
-      const entry = { sessionId, watcher, stopped: false };
-      watching.push(entry);
-      return () => {
-        entry.stopped = true;
-      };
-    },
-    fold: (sessionId, warm) => {
-      const entry = { sessionId, warm, released: false };
-      folds.push(entry);
-      return () => {
-        entry.released = true;
-      };
-    },
+    ensure: Effect.succeed(
+      up
+        ? { ok: true as const, url: 'http://127.0.0.1:40001', dir: '/data/eunoe' }
+        : { ok: false as const, reason: 'eunoe did not start within 15 s.' }
+    ),
+    watch: (sessionId, watcher) =>
+      Effect.sync(() => {
+        const entry = { sessionId, watcher, stopped: false };
+        watching.push(entry);
+        return Effect.sync(() => {
+          entry.stopped = true;
+        });
+      }),
+    fold: (sessionId, warm) =>
+      Effect.sync(() => {
+        const entry = { sessionId, warm, released: false };
+        folds.push(entry);
+        return Effect.sync(() => {
+          entry.released = true;
+        });
+      }),
   };
   return { link, watching, folds };
 }
@@ -1146,7 +1203,7 @@ describe('the cached prefix of a task’s session', () => {
     ];
     const prefixes = new Set<string>();
     for (const turn of turns) {
-      const tools = createShinsaTools(turn.role, () => Promise.resolve('ok'));
+      const tools = createTestTools(turn.role, () => Promise.resolve('ok'));
       const scripted = startScripted(createInput({ ...turn, tools, resume: 'sess-0' }).input);
       scripted.messages.push(success('ok'));
       await scripted.session.done;

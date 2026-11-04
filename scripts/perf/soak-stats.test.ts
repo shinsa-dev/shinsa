@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'bun:test';
-import { type SoakSample, serializeSoakTable } from './soak-stats.ts';
+import { serializeSoakTable } from './soak-stats.ts';
+import type { SoakSample } from './soak/schema.ts';
 
 const SAMPLE: SoakSample = {
   lap: 10,

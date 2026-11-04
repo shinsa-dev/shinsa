@@ -8,6 +8,7 @@ import {
   resolveTerminalLabel,
   type VersionsSnapshot,
 } from '@shinsa/core';
+import { DateTime, Effect } from 'effect';
 import { describeVersion, type ServerHealth } from '../instance/index.ts';
 import {
   type Display,
@@ -62,6 +63,10 @@ function describeAccount(account: AccountSummary) {
   return `${account.id}  ${account.email ?? 'unknown email'}  ${account.plan ?? ''}  ${Math.round(highest)}% used${flags.length > 0 ? `  (${flags.join(', ')})` : ''}`;
 }
 
+function describeInstant(at: number) {
+  return DateTime.formatIso(DateTime.makeUnsafe(at));
+}
+
 function formatAccounts(snapshot: AccountsSnapshot) {
   const lines = snapshot.accounts.map(describeAccount);
   if (snapshot.login)
@@ -80,12 +85,12 @@ function formatUsage(snapshot: AccountsSnapshot) {
   if (snapshot.accounts.length === 0) return 'No Claude accounts.';
   return snapshot.accounts
     .flatMap((account) => [
-      `${account.email ?? account.id}${account.spentUntil ? ` (out of usage until ${new Date(account.spentUntil).toISOString()})` : ''}`,
+      `${account.email ?? account.id}${account.spentUntil ? ` (out of usage until ${describeInstant(account.spentUntil)})` : ''}`,
       ...(account.usage.windows.length === 0
         ? [`  ${account.usage.detail ?? 'No usage reported yet.'}`]
         : account.usage.windows.map(
             (window) =>
-              `  ${window.label}: ${Math.round(window.usedPercent)}%${window.resetsAt ? `, resets ${new Date(window.resetsAt).toISOString()}` : ''}`
+              `  ${window.label}: ${Math.round(window.usedPercent)}%${window.resetsAt ? `, resets ${describeInstant(window.resetsAt)}` : ''}`
           )),
     ])
     .join('\n');
@@ -177,10 +182,10 @@ export const SYSTEM_SPECS: SurfaceSpec[] = [
     path: ['accounts', 'refresh'],
     summary: 'Check every account’s sign-in and usage again.',
     fields: [],
-    act: async (client) => {
-      const data = await client.api.accounts.refresh({ payload: {} });
+    act: Effect.fn('Surface.accountsRefresh')(function* (client) {
+      const data = yield* client.api.accounts.refresh({ payload: {} });
       return { data, text: formatAccounts(data) };
-    },
+    }),
   }),
   defineAction({
     path: ['accounts', 'sign-in'],
@@ -194,15 +199,15 @@ export const SYSTEM_SPECS: SurfaceSpec[] = [
         description: 'An account to sign in again (id or email).',
       },
     ],
-    act: async (client, values) => {
-      const account = await resolveOptionalAccount(client, readValue(values, 'account'));
-      const data = await client.api.accounts.login({
+    act: Effect.fn('Surface.accountsSignIn')(function* (client, values) {
+      const account = yield* resolveOptionalAccount(client, readValue(values, 'account'));
+      const data = yield* client.api.accounts.login({
         payload: {
           accountId: account?.id ?? null,
         },
       });
       return { data, text: describeSignInStart(data) };
-    },
+    }),
   }),
   defineAction({
     path: ['accounts', 'sign-in-code'],
@@ -212,15 +217,15 @@ export const SYSTEM_SPECS: SurfaceSpec[] = [
       { name: 'login', kind: 'text', positional: 'one', required: true, description: 'The sign-in id.' },
       { name: 'code', kind: 'text', positional: 'one', required: true, description: 'The code.' },
     ],
-    act: async (client, values) => {
-      const data = await client.api.accounts.loginCode({
+    act: Effect.fn('Surface.accountsSignInCode')(function* (client, values) {
+      const data = yield* client.api.accounts.loginCode({
         payload: {
           loginId: readValue(values, 'login'),
           code: readValue(values, 'code'),
         },
       });
       return { data, text: formatAccounts(data) };
-    },
+    }),
   }),
   defineAction({
     path: ['accounts', 'import'],
@@ -235,15 +240,15 @@ export const SYSTEM_SPECS: SurfaceSpec[] = [
         description: 'The account’s email in claude-swap.',
       },
     ],
-    act: async (client, values) => {
-      const data = await client.api.accounts.import({
+    act: Effect.fn('Surface.accountsImport')(function* (client, values) {
+      const data = yield* client.api.accounts.import({
         payload: {
           origin: 'cswap',
           email: readValue(values, 'email'),
         },
       });
       return { data, text: describeSignInStart(data) };
-    },
+    }),
   }),
   defineAction({
     path: ['accounts', 'update'],
@@ -264,27 +269,27 @@ export const SYSTEM_SPECS: SurfaceSpec[] = [
       },
       { name: 'position', kind: 'integer', description: 'Its place in the list, from 0.' },
     ],
-    act: async (client, values) => {
-      const account = await findAccount(client, readValue(values, 'account'));
-      const data = await client.api.accounts.update({
+    act: Effect.fn('Surface.accountsUpdate')(function* (client, values) {
+      const account = yield* findAccount(client, readValue(values, 'account'));
+      const data = yield* client.api.accounts.update({
         payload: {
           accountId: account.id,
           patch: buildAccountPatch(values),
         },
       });
       return { data, text: formatAccounts(data) };
-    },
+    }),
   }),
   defineAction({
     path: ['accounts', 'remove'],
     summary: 'Remove an account from Shinsa. Your own Claude Code login is never signed out.',
     humanOnly: true,
     fields: [ACCOUNT_FIELD],
-    act: async (client, values) => {
-      const account = await findAccount(client, readValue(values, 'account'));
-      const data = await client.api.accounts.remove({ payload: { accountId: account.id } });
+    act: Effect.fn('Surface.accountsRemove')(function* (client, values) {
+      const account = yield* findAccount(client, readValue(values, 'account'));
+      const data = yield* client.api.accounts.remove({ payload: { accountId: account.id } });
       return { data, text: formatAccounts(data) };
-    },
+    }),
   }),
   defineRead({
     path: ['usage'],
@@ -328,10 +333,10 @@ export const SYSTEM_SPECS: SurfaceSpec[] = [
         description: 'claude or codex.',
       },
     ],
-    act: async (client, values) => {
-      const data = await client.api.versions.update({ payload: { program: values.program } });
+    act: Effect.fn('Surface.versionsUpdate')(function* (client, values) {
+      const data = yield* client.api.versions.update({ payload: { program: values.program } });
       return { data, text: `${data.message}\n${formatVersions(data.versions)}` };
-    },
+    }),
   }),
   defineRead({
     path: ['terminals', 'list'],
@@ -353,8 +358,7 @@ export const SYSTEM_SPECS: SurfaceSpec[] = [
     path: ['health'],
     summary: 'Check that Shinsa loaded its log cleanly, and which Shinsa is running.',
     fields: [],
-    read: async (_values, client): Promise<ServerHealth> =>
-      (await client.api.server.health()) as ServerHealth,
+    read: (_values, client) => Effect.map(client.api.server.health(), (health) => health as ServerHealth),
     format: (health) =>
       [
         ...(health.ok
@@ -387,7 +391,7 @@ export const SYSTEM_SPECS: SurfaceSpec[] = [
         : actions
             .map((action) => {
               const from = action.byTask ? `  (the agent of ${action.byTask})` : '';
-              return `${new Date(action.at).toISOString()}  ${action.summary}${from}`;
+              return `${describeInstant(action.at)}  ${action.summary}${from}`;
             })
             .join('\n'),
   }),
@@ -407,8 +411,8 @@ export const SYSTEM_SPECS: SurfaceSpec[] = [
     path: ['setup', 'check'],
     summary: 'Check the tools Shinsa needs: git, gh, claude and bun.',
     fields: [],
-    read: async (_values, client): Promise<Prerequisites> =>
-      (await client.api.onboarding.prerequisites()) as Prerequisites,
+    read: (_values, client) =>
+      Effect.map(client.api.onboarding.prerequisites(), (result) => result as Prerequisites),
     format: (result, _values, display) =>
       result.checks.map((check) => describeCheck(check, display)).join('\n'),
   }),

@@ -2,9 +2,14 @@ import { describe, expect, test } from 'bun:test';
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Effect, Option, Schema } from 'effect';
-import { keepJsonFileAside, writeJsonFile } from '../../src/files/index.ts';
 import { JsonFile } from '../../src/files/service.ts';
 import { createTempDir } from '../helpers/index.ts';
+
+const writeJsonFile = (path: string, value: unknown) =>
+  Effect.runSync(JsonFile.use((file) => file.write(path, value)).pipe(Effect.provide(JsonFile.layer)));
+
+const keepJsonFileAside = (path: string) =>
+  Effect.runSync(JsonFile.use((file) => file.keepAside(path)).pipe(Effect.provide(JsonFile.layer)));
 
 const Counter = Schema.Struct({ count: Schema.Number });
 

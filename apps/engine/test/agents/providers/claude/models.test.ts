@@ -1,8 +1,17 @@
 import { describe, expect, test } from 'bun:test';
 import type { ModelInfo } from '@anthropic-ai/claude-agent-sdk';
 import { KNOWN_AGENT_MODELS } from '@shinsa/core';
-import { ModelCatalog, resolveModels } from '../../../../src/agents/providers/claude/models.ts';
+import { Duration, Effect } from 'effect';
+import { resolveModels } from '../../../../src/agents/providers/claude/models/families.ts';
+import { CATALOG_TIMEOUT_MS } from '../../../../src/agents/providers/claude/models/schema.ts';
+import { makeModelCatalog } from '../../../../src/agents/providers/claude/models/service.ts';
+import type { ClaudeRuntime } from '../../../../src/agents/providers/claude/sdk/schema.ts';
 import { createFakeQuery, createFakeRuntime } from '../../../helpers/query.ts';
+
+function createCatalog(runtime: ClaudeRuntime, timeoutMs = CATALOG_TIMEOUT_MS) {
+  const catalog = Effect.runSync(makeModelCatalog({ runtime, timeout: Duration.millis(timeoutMs) }));
+  return { list: () => Effect.runPromise(catalog.list) };
+}
 
 const ROWS = [
   { value: 'default', displayName: 'Default', description: 'Recommended' },
@@ -27,14 +36,14 @@ describe('resolveModels', () => {
   });
 });
 
-describe('ModelCatalog', () => {
+describe('the model catalog', () => {
   test('asks the SDK once and keeps the answer', async () => {
     let asked = 0;
     const fake = createCatalogQuery(() => {
       asked += 1;
       return Promise.resolve(ROWS);
     });
-    const catalog = new ModelCatalog(createFakeRuntime(fake.query));
+    const catalog = createCatalog(createFakeRuntime(fake.query));
     expect((await catalog.list()).map((model) => model.id)).toEqual(['opus', 'haiku']);
     await catalog.list();
     expect(asked).toBe(1);
@@ -46,7 +55,7 @@ describe('ModelCatalog', () => {
       asked += 1;
       return Promise.resolve(asked === 1 ? [] : Promise.reject(new Error('no claude')));
     });
-    const catalog = new ModelCatalog(createFakeRuntime(empty.query));
+    const catalog = createCatalog(createFakeRuntime(empty.query));
     expect(await catalog.list()).toEqual(KNOWN_AGENT_MODELS);
     expect(await catalog.list()).toEqual(KNOWN_AGENT_MODELS);
     expect(asked).toBe(2);
@@ -69,10 +78,6 @@ describe('ModelCatalog', () => {
           }),
       }
     );
-    expect(await new ModelCatalog(createFakeRuntime(slow.query), 5).list()).toEqual(KNOWN_AGENT_MODELS);
-  });
-
-  test('the default catalog uses the real SDK', () => {
-    expect(new ModelCatalog()).toBeInstanceOf(ModelCatalog);
+    expect(await createCatalog(createFakeRuntime(slow.query), 5).list()).toEqual(KNOWN_AGENT_MODELS);
   });
 });

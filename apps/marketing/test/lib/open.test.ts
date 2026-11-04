@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { deflateRawSync } from 'node:zlib';
+import { Effect, Option } from 'effect';
 import { openTask } from '../../src/lib/content';
 import {
   readReviewFragment,
@@ -7,6 +8,10 @@ import {
   resolveInviteHeader,
   resolveTaskInvite,
 } from '../../src/lib/open';
+
+function readFragment(hash: string) {
+  return Effect.runPromise(readReviewFragment(hash)).then(Option.getOrNull);
+}
 
 function encode(value: unknown) {
   return deflateRawSync(Buffer.from(JSON.stringify(value))).toString('base64url');
@@ -79,17 +84,17 @@ describe('readReviewFragment', () => {
   };
 
   test('reads the review the pull request link carries in its fragment', async () => {
-    expect(await readReviewFragment(`#review=${encode(review)}`)).toEqual({ ...review, v: 1 });
+    expect(await readFragment(`#review=${encode(review)}`)).toEqual({ ...review, v: 1 });
   });
 
   test('reads nothing from a missing, malformed or foreign fragment', async () => {
-    expect(await readReviewFragment('')).toBeNull();
-    expect(await readReviewFragment('#review=not+base64')).toBeNull();
-    expect(await readReviewFragment('#review=AAAA')).toBeNull();
-    expect(await readReviewFragment(`#review=${encode({ v: 9 })}`)).toBeNull();
+    expect(await readFragment('')).toBeNull();
+    expect(await readFragment('#review=not+base64')).toBeNull();
+    expect(await readFragment('#review=AAAA')).toBeNull();
+    expect(await readFragment(`#review=${encode({ v: 9 })}`)).toBeNull();
     const whole = encode(review);
     for (const cut of [1, 10, Math.floor(whole.length / 2), whole.length - 1]) {
-      expect(await readReviewFragment(`#review=${whole.slice(0, cut)}`)).toBeNull();
+      expect(await readFragment(`#review=${whole.slice(0, cut)}`)).toBeNull();
     }
   });
 });

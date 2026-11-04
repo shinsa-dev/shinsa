@@ -1,48 +1,51 @@
 import { EngineApi } from '@shinsa/core/engine-api';
 import { RequestFailed, RouteNotFound, ROUTE_NOT_FOUND_MESSAGE } from '@shinsa/core/engine-api/schema';
-import { Effect } from 'effect';
+import { Effect, Option } from 'effect';
 import { HttpApiBuilder } from 'effect/http-api';
-import { requestPromise } from '../../failures.ts';
-import { HttpServices } from '../../services/service.ts';
+import { Remote } from '../../../remote/machine/service.ts';
+import { resolveRequestFailure } from '../../failures.ts';
 import { DEVICE_NOT_FOUND } from './schema.ts';
 
 export const RemoteHandlers = HttpApiBuilder.group(
   EngineApi,
   'remote',
   Effect.fn('RemoteHandlers')(function* (handlers) {
-    const { remote: given } = yield* HttpServices;
+    const given = Option.getOrUndefined(yield* Effect.serviceOption(Remote));
     const remote = given
       ? Effect.succeed(given)
       : Effect.fail(new RouteNotFound({ message: ROUTE_NOT_FOUND_MESSAGE }));
-    const act = Effect.fn('RemoteHandlers.act')(function* (
-      run: (found: NonNullable<typeof given>) => unknown
+    type Found = NonNullable<typeof given>;
+    const act = Effect.fn('RemoteHandlers.act')(function* <E>(
+      run: (found: Found) => Effect.Effect<unknown, E>
     ) {
       const found = yield* remote;
-      yield* requestPromise(() => Promise.resolve(run(found)));
-      return found.snapshot();
+      yield* run(found).pipe(Effect.mapError(resolveRequestFailure));
+      return yield* found.snapshot;
     });
 
     return handlers
-      .handle('snapshot', () => Effect.map(remote, (found) => found.snapshot()))
-      .handle('pair', () => act((found) => found.startPairing()))
-      .handle('cancelPairing', () => act((found) => found.cancelPairing()))
-      .handle('enable', () => act((found) => found.enable()))
-      .handle('disable', () => act((found) => found.disable()))
-      .handle('remove', () => act((found) => found.remove()))
-      .handle('createLink', () => act((found) => found.createLink()))
-      .handle('removeLink', () => act((found) => found.removeLink()))
+      .handle('snapshot', () => Effect.flatMap(remote, (found) => found.snapshot))
+      .handle('pair', () => act((found) => found.startPairing))
+      .handle('cancelPairing', () => act((found) => found.cancelPairing))
+      .handle('enable', () => act((found) => found.enable))
+      .handle('disable', () => act((found) => found.disable))
+      .handle('remove', () => act((found) => found.remove))
+      .handle('createLink', () => act((found) => found.createLink))
+      .handle('removeLink', () => act((found) => found.removeLink))
       .handle('acceptRequest', ({ payload }) => act((found) => found.acceptRequest(payload.requestId)))
       .handle('declineRequest', ({ payload }) => act((found) => found.declineRequest(payload.requestId)))
       .handle('grantMember', ({ payload }) =>
         act((found) => found.grantTeammate(payload.userId, payload.teamId))
       )
       .handle('removeMember', ({ payload }) => act((found) => found.removeMember(payload.userId)))
-      .handle('removeDevice', ({ payload }) =>
-        Effect.flatMap(remote, (found) =>
-          found.removeDevice(payload.publicKey)
-            ? Effect.sync(() => found.snapshot())
-            : Effect.fail(new RequestFailed(DEVICE_NOT_FOUND))
-        )
+      .handle(
+        'removeDevice',
+        Effect.fn('RemoteHandlers.removeDevice')(function* ({ payload }) {
+          const found = yield* remote;
+          if (!(yield* found.removeDevice(payload.publicKey)))
+            return yield* new RequestFailed(DEVICE_NOT_FOUND);
+          return yield* found.snapshot;
+        })
       );
   })
 );

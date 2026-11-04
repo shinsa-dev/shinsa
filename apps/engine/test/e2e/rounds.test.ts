@@ -2,11 +2,11 @@ import { afterEach, describe, expect, setDefaultTimeout, test } from 'bun:test';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { type MessageKind, resolveCurrentRound, resolveTaskRounds, type TaskShape } from '@shinsa/core';
+import { Effect } from 'effect';
 import type { JsonSchema } from '../../src/agents/providers/index.ts';
 import type { QuickJson } from '../../src/agents/quick/index.ts';
-import { runCommandOrThrow } from '../../src/shell/index.ts';
-import { MessageInbox } from '../../src/triage/inbox.ts';
-import { type Classifier, createClassifier, routeUserCommand } from '../../src/triage/message.ts';
+import { runCommandOrThrow } from '../helpers/shell.ts';
+import { type Classifier, createClassifier, createInbox, routeUserCommand } from '../triage/harness.ts';
 import { AGENT_REPLY, type AgentScript, World } from './harness.ts';
 
 setDefaultTimeout(30_000);
@@ -39,15 +39,15 @@ async function open() {
 }
 
 function answerAs(kind: MessageKind, title: string, shape: TaskShape = 'change'): QuickJson {
-  return <T>() => Promise.resolve({ kind, shape, title, why: `The message reads as ${kind}.` } as T);
+  return <T>() => Effect.succeed({ kind, shape, title, why: `The message reads as ${kind}.` } as T);
 }
 
 async function send(w: World, taskId: string, text: string, classify: Classifier | null) {
-  const inbox = classify ? new MessageInbox(w.engine, classify.message) : null;
-  inbox?.start();
+  const inbox = classify ? createInbox(w.engine, classify.message) : null;
+  await inbox?.start();
   await routeUserCommand(w.engine, { type: 'task.message', taskId, text }, null, classify);
   await inbox?.settle();
-  inbox?.stop();
+  await inbox?.stop();
 }
 
 async function shipRound(w: World, taskId: string) {
@@ -218,7 +218,7 @@ describe('a task that runs in rounds', () => {
     const ask: QuickJson = <T>(_system: string, prompt: string, schema?: JsonSchema) => {
       asked.push({ prompt, schema });
       const idea = prompt.includes('dark mode');
-      return Promise.resolve({
+      return Effect.succeed({
         kind: idea ? 'new_round' : 'feedback',
         shape: 'change',
         title: idea ? 'Add a dark mode toggle' : 'Use tabs',
@@ -276,7 +276,7 @@ describe('a task that runs in rounds', () => {
     const asked: string[] = [];
     const classify = createClassifier(<T>(_system: string, prompt: string) => {
       asked.push(prompt);
-      return Promise.resolve({
+      return Effect.succeed({
         kind: 'new_round',
         shape: 'change',
         title: 'Group projects',
@@ -316,10 +316,10 @@ describe('a task that runs in rounds', () => {
     const message = { type: 'task.message', taskId, text } as const;
     await routeUserCommand(w.engine, message, null, classify);
     await routeUserCommand(w.engine, message, null, classify);
-    const inbox = new MessageInbox(w.engine, classify.message);
-    inbox.start();
+    const inbox = createInbox(w.engine, classify.message);
+    await inbox.start();
     await inbox.settle();
-    inbox.stop();
+    await inbox.stop();
     await w.until('the revised plan', () =>
       w.gates(taskId).some((gate) => gate.type === 'plan' && gate.id !== first.id)
     );
@@ -398,7 +398,7 @@ describe('a task with no repository', () => {
     w.classify = <T>(system: string) => {
       systems.push(system);
       if (system.startsWith('You route a request')) {
-        return Promise.resolve({
+        return Effect.succeed({
           title: 'Hey',
           repo: 'none',
           size: 'small',
@@ -406,7 +406,7 @@ describe('a task with no repository', () => {
           shape: 'answer',
         } as T);
       }
-      return Promise.resolve({ repo: 'app' } as T);
+      return Effect.succeed({ repo: 'app' } as T);
     };
     await w.engine.dispatch({ type: 'task.create', request: 'Hey', repoId: null });
     const taskId = Object.keys(w.state.tasks)[0] ?? '';

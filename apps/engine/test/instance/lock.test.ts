@@ -1,34 +1,50 @@
 import { afterEach, describe, expect, test } from 'bun:test';
 import { chmodSync, existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { Effect, Exit, Scope } from 'effect';
 import {
-  acquireDataDirLock,
   createServerInstance,
-  type DataDirLock,
   isProcessAlive,
   LOCK_FILE,
   type LockHolder,
   resolveBootedAt,
-  selectLockHolder,
 } from '../../src/instance/index.ts';
+import { resolveLockError } from '../../src/instance/lock/index.ts';
+import type { LockOptions } from '../../src/instance/lock/schema.ts';
+import { ServeLock } from '../../src/instance/lock/service.ts';
+import { runTest } from '../harness.ts';
 import { captureLogs, createTempDir } from '../helpers/index.ts';
+import { selectLockHolder } from '../helpers/lock.ts';
 
 const BOOTED_AT = 1_000_000;
 
-const held: DataDirLock[] = [];
+const held: Scope.Closeable[] = [];
 
-afterEach(() => {
-  for (const lock of held.splice(0)) lock.release();
+afterEach(async () => {
+  for (const scope of held.splice(0)) await Effect.runPromise(Scope.close(scope, Exit.void));
 });
 
 function createOwner(port = 5180) {
   return { ...createServerInstance('c'.repeat(40), 42), port, url: `http://127.0.0.1:${port}` };
 }
 
-function acquire(dataDir: string, options: Parameters<typeof acquireDataDirLock>[2] = {}) {
-  const lock = acquireDataDirLock(dataDir, createOwner(), { bootedAt: BOOTED_AT, ...options });
-  held.push(lock);
-  return lock;
+function acquireIn(scope: Scope.Closeable, dataDir: string, options: LockOptions = {}) {
+  return runTest(
+    ServeLock.acquire(dataDir, createOwner(), { bootedAt: BOOTED_AT, ...options }).pipe(
+      Effect.mapError(resolveLockError),
+      Scope.provide(scope)
+    )
+  );
+}
+
+function acquire(dataDir: string, options: LockOptions = {}) {
+  const scope = Scope.makeUnsafe();
+  held.push(scope);
+  return acquireIn(scope, dataDir, options);
+}
+
+function release(scope: Scope.Closeable) {
+  return Effect.runPromise(Scope.close(scope, Exit.void));
 }
 
 function writeHolder(dataDir: string, overrides: Partial<LockHolder> = {}) {
@@ -45,50 +61,64 @@ function writeHolder(dataDir: string, overrides: Partial<LockHolder> = {}) {
   return holder;
 }
 
-function quietly<T>(work: () => T) {
+async function quietly<T>(work: () => Promise<T>) {
   const logs = captureLogs();
   try {
-    return { result: work(), warnings: logs.entries.map((entry) => entry.message) };
+    return { result: await work(), warnings: logs.entries.map((entry) => entry.message) };
   } finally {
     logs.restore();
   }
 }
 
 describe('the data directory lock', () => {
-  test('records who holds it, and a second server on the same folder is refused with the first one’s address', () => {
+  test('records who holds it, and a second server on the same folder is refused with the first one’s address', async () => {
     const dataDir = createTempDir();
-    const lock = acquire(dataDir);
+    const lock = await acquire(dataDir);
     expect(selectLockHolder(dataDir)).toEqual({ ...createOwner(), bootedAt: BOOTED_AT });
-    lock.update({ port: 6123, url: 'http://127.0.0.1:6123' });
-    expect(lock.holder()).toMatchObject({ port: 6123, url: 'http://127.0.0.1:6123' });
+    await runTest(lock.update({ port: 6123, url: 'http://127.0.0.1:6123' }));
+    expect(await runTest(lock.holder)).toMatchObject({ port: 6123, url: 'http://127.0.0.1:6123' });
     expect(selectLockHolder(dataDir)).toMatchObject({ port: 6123, pid: process.pid });
-    expect(() => acquire(dataDir)).toThrow(
+    await expect(acquire(dataDir)).rejects.toThrow(
       `Shinsa is already running on ${dataDir}: http://127.0.0.1:6123 (pid ${process.pid}, version 0.0.0 (ccccccc)). Stop it first, or set SHINSA_HOME to another folder.`
     );
     expect(readdirSync(dataDir)).toEqual([LOCK_FILE]);
   });
 
-  test('a live process in another program holds it too', () => {
+  test('a live process in another program holds it too, and the refusal names it', async () => {
     const dataDir = createTempDir();
     writeHolder(dataDir, { commit: null });
-    expect(() => acquire(dataDir, { isAlive: (pid) => pid === 999_999 })).toThrow(
-      'http://127.0.0.1:5190 (pid 999999, version 0.0.1)'
+    const scope = Scope.makeUnsafe();
+    const refused = await runTest(
+      Effect.flip(
+        ServeLock.acquire(dataDir, createOwner(), {
+          bootedAt: BOOTED_AT,
+          isAlive: (pid) => pid === 999_999,
+        }).pipe(Effect.mapError(resolveLockError), Scope.provide(scope))
+      )
     );
+    expect(refused).toMatchObject({
+      _tag: 'ServerRunningError',
+      dataDir,
+      holder: { pid: 999_999 },
+    });
+    expect(refused.message).toContain('http://127.0.0.1:5190 (pid 999999, version 0.0.1)');
   });
 
-  test('releasing removes it, so the next server starts; releasing twice or after another took it changes nothing', () => {
+  test('releasing removes it, so the next server starts; releasing twice or after another took it changes nothing', async () => {
     const dataDir = createTempDir();
-    const first = acquire(dataDir);
-    first.release();
+    const first = Scope.makeUnsafe();
+    await acquireIn(first, dataDir);
+    await release(first);
     expect(existsSync(join(dataDir, LOCK_FILE))).toBe(false);
-    first.release();
-    const second = acquire(dataDir);
+    await release(first);
+    const second = Scope.makeUnsafe();
+    await acquireIn(second, dataDir);
     writeHolder(dataDir, { pid: process.pid, startedAt: 1 });
-    second.release();
+    await release(second);
     expect(selectLockHolder(dataDir)?.startedAt).toBe(1);
   });
 
-  test('a lock a stopped server left behind is taken over: a dead pid, another boot, this pid from before, or garbage', () => {
+  test('a lock a stopped server left behind is taken over: a dead pid, another boot, this pid from before, or garbage', async () => {
     const cases: [string, () => void][] = [
       ['a dead pid', () => writeHolder(dir)],
       ['another boot', () => writeHolder(dir, { bootedAt: BOOTED_AT - 3_600_000 })],
@@ -100,14 +130,14 @@ describe('the data directory lock', () => {
     for (const [name, leave] of cases) {
       dir = createTempDir();
       leave();
-      const { result, warnings } = quietly(() => acquire(dir, { isAlive: (pid) => pid !== 999_999 }));
-      expect({ name, pid: result.holder().pid }).toEqual({ name, pid: process.pid });
+      const { result, warnings } = await quietly(() => acquire(dir, { isAlive: (pid) => pid !== 999_999 }));
+      expect({ name, pid: (await runTest(result.holder)).pid }).toEqual({ name, pid: process.pid });
       expect(warnings).toEqual(['[Serve] Took over the lock a stopped Shinsa left behind']);
       expect(selectLockHolder(dir)?.pid).toBe(process.pid);
     }
   });
 
-  test('gives up when another server keeps replacing the lock while this one starts', () => {
+  test('gives up when another server keeps replacing the lock while this one starts', async () => {
     const dataDir = createTempDir();
     writeHolder(dataDir);
     let replaced = 0;
@@ -116,18 +146,18 @@ describe('the data directory lock', () => {
       writeHolder(dataDir, { startedAt: replaced });
       return false;
     };
-    expect(() => acquire(dataDir, { isAlive })).toThrow(
+    await expect(acquire(dataDir, { isAlive })).rejects.toThrow(
       `Another Shinsa kept taking the lock on ${dataDir} while this one started. Try again.`
     );
     expect(replaced).toBe(3);
   });
 
-  test('a lock it cannot read stops the start instead of being taken over', () => {
+  test('a lock it cannot read stops the start instead of being taken over', async () => {
     const dataDir = createTempDir();
     writeHolder(dataDir);
     chmodSync(join(dataDir, LOCK_FILE), 0o000);
     try {
-      expect(() => acquire(dataDir)).toThrow('EACCES');
+      await expect(acquire(dataDir)).rejects.toThrow('EACCES');
       expect(() => selectLockHolder(dataDir)).toThrow('EACCES');
     } finally {
       chmodSync(join(dataDir, LOCK_FILE), 0o600);
@@ -139,8 +169,8 @@ describe('the data directory lock', () => {
     expect(selectLockHolder(createTempDir())).toBeNull();
   });
 
-  test('a missing folder is an error, not a lock', () => {
-    expect(() => acquire(join(createTempDir(), 'missing'))).toThrow('ENOENT');
+  test('a missing folder is an error, not a lock', async () => {
+    await expect(acquire(join(createTempDir(), 'missing'))).rejects.toThrow('ENOENT');
   });
 });
 

@@ -13,10 +13,6 @@ export function resolveRequestFailure(error: unknown) {
   });
 }
 
-export function requestPromise<A>(run: (signal: AbortSignal) => PromiseLike<A>) {
-  return Effect.tryPromise({ try: run, catch: resolveRequestFailure });
-}
-
 export function requestSync<A>(run: () => A) {
   return Effect.try({ try: run, catch: resolveRequestFailure });
 }

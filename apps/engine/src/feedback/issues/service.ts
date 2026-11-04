@@ -18,13 +18,9 @@ export class FeedbackIssues extends Context.Service<
   {
     file(
       input: FeedbackIssueInput,
-      cwd: string,
-      signal?: AbortSignal
+      cwd: string
     ): Effect.Effect<FiledIssue, GitHubFailed | FeedbackAnswerInvalid>;
-    listStates(
-      cwd: string,
-      signal?: AbortSignal
-    ): Effect.Effect<FeedbackIssueStates, GitHubFailed | FeedbackAnswerInvalid>;
+    listStates(cwd: string): Effect.Effect<FeedbackIssueStates, GitHubFailed | FeedbackAnswerInvalid>;
   }
 >()('shinsa/engine/feedback/issues/FeedbackIssues') {
   static readonly layer = Layer.effect(
@@ -32,25 +28,18 @@ export class FeedbackIssues extends Context.Service<
     Effect.gen(function* () {
       const github = yield* GitHubCli;
 
-      const file = Effect.fn('FeedbackIssues.file')(function* (
-        input: FeedbackIssueInput,
-        cwd: string,
-        signal?: AbortSignal
-      ) {
+      const file = Effect.fn('FeedbackIssues.file')(function* (input: FeedbackIssueInput, cwd: string) {
         const output = yield* github.run(
           ['issue', 'create', '--repo', FEEDBACK_REPOSITORY, `--title=${input.title}`, '--body-file', '-'],
           cwd,
-          { input: serializeFeedbackBody(input), signal }
+          { input: serializeFeedbackBody(input) }
         );
         const issue = parseIssueUrl(output);
         if (!issue) return yield* new FeedbackAnswerInvalid({ message: `${MISSING_LINK}${output}` });
         return issue;
       });
 
-      const listStates = Effect.fn('FeedbackIssues.listStates')(function* (
-        cwd: string,
-        signal?: AbortSignal
-      ) {
+      const listStates = Effect.fn('FeedbackIssues.listStates')(function* (cwd: string) {
         const output = yield* github.run(
           [
             'issue',
@@ -66,8 +55,7 @@ export class FeedbackIssues extends Context.Service<
             '--json',
             'number,state,closedAt',
           ],
-          cwd,
-          { signal }
+          cwd
         );
         const states = parseIssueStates(output);
         if (!states) return yield* new FeedbackAnswerInvalid({ message: `${MISSING_LIST}${output}` });

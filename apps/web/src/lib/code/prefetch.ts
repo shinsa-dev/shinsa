@@ -1,4 +1,5 @@
 import { type FileContent, type Task, type TaskDiff, type TaskRefs, WORKING_REF } from '@shinsa/core';
+import { Effect } from 'effect';
 import { TOKEN_PRIORITY, tokenClient } from '@/lib/code/editor/tokens.ts';
 import { type CodeFileRef, type CodeMode, parseCodeLocation } from '@/lib/code/location.ts';
 import { type PairSource, resolvePaneContent, resolvePaneKey, resolveTextGuard } from '@/lib/code/pane.ts';
@@ -16,6 +17,8 @@ import {
   resolveRefsVersion,
 } from '@/lib/connection/code.ts';
 import { scheduleIdle } from '@/lib/idle.ts';
+import { forkApp, runApp } from '@/lib/runtime/app.ts';
+import { enterPromise } from '@/lib/runtime/promise.ts';
 import { listCodeModes } from '@/lib/tasks/tabs.ts';
 
 function selectFirstFile(mode: CodeMode, diff: TaskDiff | null): CodeFileRef | null {
@@ -23,14 +26,18 @@ function selectFirstFile(mode: CodeMode, diff: TaskDiff | null): CodeFileRef | n
   return changed ? { kind: 'diff', path: changed.path } : null;
 }
 
-function requestText(task: Task, ref: string, path: string, priority: number) {
-  return requestFileContent(task, ref, path).then((file) => {
-    if (file.content !== null) tokenClient.prefetch(path, file.content, priority);
-    return file;
-  });
-}
+const readText = Effect.fn('CodePrefetch.readText')(function* (
+  task: Task,
+  ref: string,
+  path: string,
+  priority: number
+) {
+  const file = yield* enterPromise(() => requestFileContent(task, ref, path));
+  if (file.content !== null) tokenClient.prefetch(path, file.content, priority);
+  return file;
+});
 
-function requestFile(
+const readFile = Effect.fn('CodePrefetch.readFile')(function* (
   task: Task,
   refs: TaskRefs,
   ref: string,
@@ -40,41 +47,48 @@ function requestFile(
 ) {
   const source = resolveFileSource(file, diff);
   const basePath = source.basePath ?? source.baselinePath;
-  return Promise.all([
-    source.headPath ? requestText(task, ref, source.headPath, priority) : null,
-    basePath && refs.base ? requestText(task, refs.base, basePath, priority) : null,
-  ]);
-}
+  return yield* Effect.all(
+    [
+      source.headPath ? readText(task, ref, source.headPath, priority) : Effect.succeed(null),
+      basePath && refs.base ? readText(task, refs.base, basePath, priority) : Effect.succeed(null),
+    ],
+    { concurrency: 'unbounded' }
+  );
+});
 
-function skipFailure() {
-  return null;
-}
+const readTree = Effect.fn('CodePrefetch.readTree')(function* (task: Task, ref: string, dir: string) {
+  return yield* enterPromise(() => requestRepoTree(task, ref, dir));
+});
 
-export function prefetchFile(
+const readDiff = Effect.fn('CodePrefetch.readDiff')(function* (task: Task, base: string, head: string) {
+  return yield* enterPromise(() => requestTaskDiff(task, base, head));
+});
+
+const readAncestors = Effect.fn('CodePrefetch.readAncestors')(function* (
   task: Task,
-  refs: TaskRefs,
   ref: string,
-  file: CodeFileRef,
-  diff: TaskDiff | null,
-  priority: number = TOKEN_PRIORITY.prefetch
+  path: string
 ) {
-  void requestFile(task, refs, ref, file, diff, priority).then(undefined, skipFailure);
-}
+  return yield* Effect.all(
+    listAncestors(path).map((dir) => readTree(task, ref, dir)),
+    { concurrency: 'unbounded' }
+  );
+});
 
 function resolveLoaded(file: FileContent | null): Loaded<FileContent> {
   return file ? { status: 'ready', value: file } : { status: 'idle' };
 }
 
-export async function requestPairSource(
+const readPairSource = Effect.fn('CodePrefetch.readPairSource')(function* (
   task: Task,
   refs: TaskRefs,
   ref: string,
   file: CodeFileRef,
   diff: TaskDiff | null
-): Promise<PairSource | null> {
+) {
   const source = resolveFileSource(file, diff);
   if (!source.change || hasOneSide(source)) return null;
-  const [head, base] = await requestFile(task, refs, ref, file, diff);
+  const [head, base] = yield* readFile(task, refs, ref, file, diff);
   const content = resolvePaneContent({
     headPath: source.headPath,
     basePath: source.basePath,
@@ -84,12 +98,80 @@ export async function requestPairSource(
   });
   if (content.kind !== 'text' || content.original === null) return null;
   if (resolveTextGuard(file.path, [content.content, content.original])) return null;
-  return {
+  const pair: PairSource = {
     key: resolvePaneKey(ref, file),
     path: file.path,
     content: content.content,
     original: content.original,
   };
+  return pair;
+});
+
+const readTaskCode = Effect.fn('CodePrefetch.readTaskCode')(function* (task: Task, search: string) {
+  const params = new URLSearchParams(search);
+  const location = parseCodeLocation((name) => params.get(name), listCodeModes(task));
+  const refs = yield* enterPromise(() => requestTaskRefs(task));
+  const ref = resolveViewRef(location.ref, refs);
+  const reviewing = listCodeModes(task).includes('changes');
+  const [diff] = yield* Effect.all(
+    [
+      reviewing && refs.base ? readDiff(task, refs.base, ref) : Effect.succeed(null),
+      refs.base && ref !== refs.head ? readDiff(task, refs.base, refs.head) : Effect.succeed(null),
+      readTree(task, ref, ''),
+      enterPromise(() => requestRepoPaths(task, ref)),
+    ],
+    { concurrency: 'unbounded' }
+  );
+  const file = location.active ?? selectFirstFile(location.mode, diff);
+  if (!file) return null;
+  yield* Effect.all([readFile(task, refs, ref, file, diff), readAncestors(task, ref, file.path)], {
+    concurrency: 'unbounded',
+  });
+  return file.path;
+});
+
+const readSnippets = Effect.fn('CodePrefetch.readSnippets')(function* (task: Task, paths: readonly string[]) {
+  const refs = yield* enterPromise(() => requestTaskRefs(task));
+  const base = refs.base;
+  if (!base) return;
+  const diff = yield* readDiff(task, base, refs.head);
+  yield* Effect.forEach(
+    [...new Set(paths)].slice(0, SNIPPET_PREFETCH_LIMIT),
+    (path) => {
+      const listed = diff.files.find((file) => file.path === path);
+      return Effect.all(
+        [
+          enterPromise(() => requestFileContent(task, refs.head, path)),
+          listed && !listed.patchOmitted
+            ? Effect.succeed(null)
+            : enterPromise(() => requestFileDiff(task, base, refs.head, path)),
+        ],
+        { concurrency: 'unbounded' }
+      );
+    },
+    { concurrency: 'unbounded', discard: true }
+  );
+});
+
+export function prefetchFile(
+  task: Task,
+  refs: TaskRefs,
+  ref: string,
+  file: CodeFileRef,
+  diff: TaskDiff | null,
+  priority: number = TOKEN_PRIORITY.prefetch
+) {
+  forkApp(Effect.ignore(readFile(task, refs, ref, file, diff, priority)));
+}
+
+export function requestPairSource(
+  task: Task,
+  refs: TaskRefs,
+  ref: string,
+  file: CodeFileRef,
+  diff: TaskDiff | null
+) {
+  return runApp(readPairSource(task, refs, ref, file, diff));
 }
 
 export function prefetchPair(
@@ -100,9 +182,16 @@ export function prefetchPair(
   diff: TaskDiff | null,
   build: (source: PairSource) => void
 ) {
-  void requestPairSource(task, refs, ref, file, diff).then((source) => {
-    if (source) schedulePrefetch(() => build(source));
-  }, skipFailure);
+  forkApp(
+    readPairSource(task, refs, ref, file, diff).pipe(
+      Effect.tap((source) =>
+        Effect.sync(() => {
+          if (source) schedulePrefetch(() => build(source));
+        })
+      ),
+      Effect.ignore
+    )
+  );
 }
 
 const NEIGHBOUR_DELAY_MS = 300;
@@ -112,15 +201,11 @@ export function schedulePrefetch(run: () => void) {
 }
 
 export function prefetchFolder(task: Task, ref: string, dir: string) {
-  void requestRepoTree(task, ref, dir).then(undefined, skipFailure);
-}
-
-function requestAncestors(task: Task, ref: string, path: string) {
-  return Promise.all(listAncestors(path).map((dir) => requestRepoTree(task, ref, dir)));
+  forkApp(Effect.ignore(readTree(task, ref, dir)));
 }
 
 export function prefetchAncestors(task: Task, ref: string, path: string) {
-  void requestAncestors(task, ref, path).then(undefined, skipFailure);
+  forkApp(Effect.ignore(readAncestors(task, ref, path)));
 }
 
 export function listOtherRefs(refs: TaskRefs, ref: string) {
@@ -137,54 +222,31 @@ export function prefetchOtherRefs(
   reviewing: boolean
 ) {
   for (const other of listOtherRefs(refs, ref)) {
-    void Promise.all([
-      requestRepoTree(task, other, ''),
-      reviewing && refs.base ? requestTaskDiff(task, refs.base, other) : null,
-      file ? requestFile(task, refs, other, file, diff) : null,
-      file ? requestAncestors(task, other, file.path) : null,
-    ]).then(undefined, skipFailure);
+    forkApp(
+      Effect.ignore(
+        Effect.all(
+          [
+            readTree(task, other, ''),
+            reviewing && refs.base ? readDiff(task, refs.base, other) : Effect.void,
+            file ? readFile(task, refs, other, file, diff) : Effect.void,
+            file ? readAncestors(task, other, file.path) : Effect.void,
+          ],
+          { concurrency: 'unbounded' }
+        )
+      )
+    );
   }
 }
 
-export async function prefetchTaskCode(task: Task, search: string): Promise<string | null> {
-  const params = new URLSearchParams(search);
-  const location = parseCodeLocation((name) => params.get(name), listCodeModes(task));
-  const refs = await requestTaskRefs(task);
-  const ref = resolveViewRef(location.ref, refs);
-  const reviewing = listCodeModes(task).includes('changes');
-  const [diff] = await Promise.all([
-    reviewing && refs.base ? requestTaskDiff(task, refs.base, ref) : null,
-    refs.base && ref !== refs.head ? requestTaskDiff(task, refs.base, refs.head) : null,
-    requestRepoTree(task, ref, ''),
-    requestRepoPaths(task, ref),
-  ]);
-  const file = location.active ?? selectFirstFile(location.mode, diff);
-  if (!file) return null;
-  await Promise.all([requestFile(task, refs, ref, file, diff), requestAncestors(task, ref, file.path)]);
-  return file.path;
+export function prefetchTaskCode(task: Task, search: string): Promise<string | null> {
+  return runApp(readTaskCode(task, search));
 }
 
 export const SNIPPET_PREFETCH_LIMIT = 8;
 
-async function requestSnippets(task: Task, paths: readonly string[]) {
-  const refs = await requestTaskRefs(task);
-  if (!refs.base) return;
-  const diff = await requestTaskDiff(task, refs.base, refs.head);
-  const base = refs.base;
-  await Promise.all(
-    [...new Set(paths)].slice(0, SNIPPET_PREFETCH_LIMIT).map((path) => {
-      const listed = diff.files.find((file) => file.path === path);
-      return Promise.all([
-        requestFileContent(task, refs.head, path),
-        listed && !listed.patchOmitted ? null : requestFileDiff(task, base, refs.head, path),
-      ]);
-    })
-  );
-}
-
 export function prefetchSnippets(task: Task, paths: readonly string[]) {
   if (paths.length === 0) return;
-  void requestSnippets(task, paths).then(undefined, skipFailure);
+  forkApp(Effect.ignore(readSnippets(task, paths)));
 }
 
 const prefetched = new Set<string>();

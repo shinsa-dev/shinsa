@@ -1,4 +1,7 @@
+import { Effect } from 'effect';
 import type { AlertPreference, SoundId } from '@/lib/preferences/notifications.ts';
+import { runApp } from '@/lib/runtime/app.ts';
+import { StepFailed } from '@/lib/runtime/schema.ts';
 
 type FocusDocument = Pick<Document, 'visibilityState' | 'hasFocus'>;
 
@@ -65,23 +68,24 @@ function playNote(audio: AudioContext, wave: OscillatorType, note: Note) {
   oscillator.stop(at + note.length + 0.02);
 }
 
-async function resumeAudio(audio: AudioContext) {
-  try {
-    await audio.resume();
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-export async function playSound(soundId: SoundId, count = 1) {
-  if (typeof AudioContext === 'undefined' || count <= 0) return false;
-  const audio = resolveContext();
-  if (audio.state === 'suspended' && !(await resumeAudio(audio))) return false;
-  const sound = SOUNDS[soundId];
-  for (let index = 0; index < Math.min(count, 3); index += 1) {
-    const offset = (index * BURST_GAP_MS) / 1000;
-    for (const note of sound.notes) playNote(audio, sound.wave, { ...note, start: note.start + offset });
-  }
-  return true;
+export function playSound(soundId: SoundId, count = 1) {
+  return runApp(
+    Effect.gen(function* () {
+      if (typeof AudioContext === 'undefined' || count <= 0) return false;
+      const audio = resolveContext();
+      const resumed =
+        audio.state !== 'suspended' ||
+        (yield* Effect.tryPromise({
+          try: () => audio.resume(),
+          catch: () => new StepFailed({ message: 'The browser kept audio suspended.' }),
+        }).pipe(Effect.match({ onSuccess: () => true, onFailure: () => false })));
+      if (!resumed) return false;
+      const sound = SOUNDS[soundId];
+      for (let index = 0; index < Math.min(count, 3); index += 1) {
+        const offset = (index * BURST_GAP_MS) / 1000;
+        for (const note of sound.notes) playNote(audio, sound.wave, { ...note, start: note.start + offset });
+      }
+      return true;
+    })
+  );
 }

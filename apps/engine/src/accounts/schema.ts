@@ -1,11 +1,16 @@
 import type {
   AccountOrigin as CoreAccountOrigin,
   AccountSignIn,
+  ChatNotice,
+  DomainError,
+  ProviderLogin,
   FastModeAvailability,
   UsageWindow,
   UsageWindowKind,
 } from '@shinsa/core';
-import { Duration, Effect, Schema } from 'effect';
+import { Context, Duration, Effect, Schema } from 'effect';
+import type { ProviderUsageReading } from '../agents/providers/types.ts';
+import type { Env } from './paths.ts';
 
 const Text = Schema.Trim.pipe(Schema.decodeTo(Schema.NonEmptyString));
 
@@ -217,9 +222,7 @@ export type SpentMark = typeof SpentMark.Type;
 
 export const SpentMarksFields = Schema.Struct({ marks: LenientRecord });
 
-const USAGE_TTL = Duration.minutes(1);
-
-export const USAGE_TTL_MS = Duration.toMillis(USAGE_TTL);
+export const USAGE_TTL = Duration.minutes(1);
 
 const LIMITED_BACKOFF = Duration.minutes(5);
 
@@ -231,29 +234,21 @@ export const UNKNOWN_RESET_MS = Duration.toMillis(UNKNOWN_RESET);
 
 const REFRESH_INTERVAL = Duration.minutes(5);
 
-export const REFRESH_INTERVAL_MS = Duration.toMillis(REFRESH_INTERVAL);
-
-const KEYCHAIN_TIMEOUT = Duration.seconds(5);
-
-export const KEYCHAIN_TIMEOUT_MS = Duration.toMillis(KEYCHAIN_TIMEOUT);
+export const KEYCHAIN_TIMEOUT = Duration.seconds(5);
 
 export const KEYCHAIN_COMMAND = '/usr/bin/security';
 
 export const KEYCHAIN_NOT_FOUND = 44;
 
-const STATUS_TIMEOUT = Duration.seconds(15);
+export const STATUS_TIMEOUT = Duration.seconds(15);
 
 export const STATUS_TIMEOUT_MS = Duration.toMillis(STATUS_TIMEOUT);
 
 export const CSWAP_BINARIES = ['cswap', 'claude-swap'];
 
-const CSWAP_TIMEOUT = Duration.seconds(30);
+export const CSWAP_TIMEOUT = Duration.seconds(30);
 
-export const CSWAP_TIMEOUT_MS = Duration.toMillis(CSWAP_TIMEOUT);
-
-const CSWAP_LIST_TTL = Duration.minutes(10);
-
-export const CSWAP_LIST_TTL_MS = Duration.toMillis(CSWAP_LIST_TTL);
+export const CSWAP_LIST_TTL = Duration.minutes(10);
 
 const LOGIN_EXPIRY_MARGIN = Duration.minutes(1);
 
@@ -275,16 +270,70 @@ export const LOGIN_COLUMNS = 200;
 
 export const LOGIN_ROWS = 50;
 
-const USAGE_RESUME_GRACE = Duration.seconds(5);
+export const USAGE_RESUME_GRACE = Duration.seconds(5);
 
-export const USAGE_RESUME_GRACE_MS = Duration.toMillis(USAGE_RESUME_GRACE);
-
-const USAGE_RESUME_RETRY = Duration.minutes(1);
-
-export const USAGE_RESUME_RETRY_MS = Duration.toMillis(USAGE_RESUME_RETRY);
+export const USAGE_RESUME_RETRY = Duration.minutes(1);
 
 export const ACCOUNT_DIR_MODE = 0o700;
 
 export const ACCOUNT_CONFIG_FILE = '.claude.json';
 
 export const CREDENTIALS_FILE = '.credentials.json';
+
+export interface SignInState {
+  readonly signIn: AccountSignIn;
+  readonly detail: string | null;
+}
+
+export const AccountsEnv = Context.Reference<Env>('shinsa/engine/accounts/AccountsEnv', {
+  defaultValue: (): Env => Bun.env,
+});
+
+export const NewAccountId = Context.Reference<Effect.Effect<string>>('shinsa/engine/accounts/NewAccountId', {
+  defaultValue: () => Effect.sync(() => crypto.randomUUID().slice(0, 8)),
+});
+
+export const AccountsRefreshInterval = Context.Reference<Duration.Duration>(
+  'shinsa/engine/accounts/AccountsRefreshInterval',
+  { defaultValue: () => REFRESH_INTERVAL }
+);
+
+export class AccountStepFailed extends Schema.TaggedError<
+  AccountStepFailed,
+  { readonly brand: unique symbol }
+>()('AccountStepFailed', { message: Schema.String }) {}
+
+export type AccountsFailure = AccountStepFailed | DomainError;
+
+interface AccountUsageSource {
+  readonly id: string;
+  readonly read: Effect.Effect<ProviderUsageReading, { readonly message: string }>;
+}
+
+export interface AccountsInputShape {
+  readonly usageSources: readonly AccountUsageSource[];
+  readonly listProviderLogins: Effect.Effect<ProviderLogin[], AccountsFailure>;
+  readonly forward: (runId: string, notice: ChatNotice) => Effect.Effect<void>;
+}
+
+export const AccountsInput = Context.Reference<AccountsInputShape>('shinsa/engine/accounts/AccountsInput', {
+  defaultValue: (): AccountsInputShape => ({
+    usageSources: [],
+    listProviderLogins: Effect.succeed([]),
+    forward: () => Effect.void,
+  }),
+});
+
+export const ClaudeCommandPath = Context.Reference<Effect.Effect<string, AccountsFailure> | null>(
+  'shinsa/engine/accounts/ClaudeCommandPath',
+  { defaultValue: () => null }
+);
+
+export const UsageTtl = Context.Reference<Duration.Duration>('shinsa/engine/accounts/UsageTtl', {
+  defaultValue: () => USAGE_TTL,
+});
+
+export interface ProviderIdentity {
+  readonly email: string | null;
+  readonly plan: string | null;
+}

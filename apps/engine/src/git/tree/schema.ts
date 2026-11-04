@@ -1,5 +1,5 @@
 import type { RepoEntry, RepoEntryKind } from '@shinsa/core';
-import { Schema } from 'effect';
+import { type Effect, Schema } from 'effect';
 
 const CodeReadCode = Schema.Literals(['read_timeout', 'read_failed', 'ref_invalid', 'ref_unknown']);
 
@@ -17,8 +17,8 @@ export const ObjectInfo = Schema.Struct({ object: Schema.String, type: Schema.St
 export type ObjectInfo = typeof ObjectInfo.Type;
 
 export interface BatchReader {
-  info(name: string): Promise<ObjectInfo | null>;
-  contents(object: string): Promise<Uint8Array>;
+  readonly info: (name: string) => Effect.Effect<ObjectInfo | null, ObjectReaderStopped>;
+  readonly contents: (object: string) => Effect.Effect<Uint8Array, ObjectReaderStopped>;
 }
 
 export interface SearchQuery {

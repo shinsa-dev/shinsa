@@ -11,7 +11,11 @@ import {
   EFFECT_THROW_MESSAGE,
   EFFECT_TRY_MESSAGE,
   isEffectSource,
+  isPromiseIoSource,
   listEffectViolations,
+  listPromiseLines,
+  isEngineRuntimeSource,
+  listEngineRuntimeLines,
 } from './lint-effect.ts';
 
 const messages = (source: string) =>
@@ -142,5 +146,66 @@ describe('Effect code is held to the house style', () => {
     expect(listEffectViolations('a/schema.ts', 'export const Row = Other.decode(Schema.String);')).toEqual(
       []
     );
+  });
+});
+
+describe('every workspace does its I/O in Effect', () => {
+  test('every .ts source file and script without an effect import is checked, never tests or components', () => {
+    const plain = 'export class Teams {}';
+    expect(isPromiseIoSource('apps/engine/src/remote/teams.ts', plain)).toBe(true);
+    expect(isPromiseIoSource('apps/web/src/lib/api.ts', plain)).toBe(true);
+    expect(isPromiseIoSource('packages/core/src/remote/keys.ts', plain)).toBe(true);
+    expect(isPromiseIoSource('scripts/release.ts', plain)).toBe(true);
+    expect(isPromiseIoSource('apps/engine/src/remote/teams.ts', "import { Effect } from 'effect';")).toBe(
+      false
+    );
+    expect(isPromiseIoSource('apps/web/src/components/task/row.tsx', plain)).toBe(false);
+    expect(isPromiseIoSource('apps/engine/src/remote/teams.test.ts', plain)).toBe(false);
+    expect(isPromiseIoSource('apps/engine/test/remote/teams.ts', plain)).toBe(false);
+    expect(isPromiseIoSource('scripts/lint-effect.test.ts', plain)).toBe(false);
+    expect(isPromiseIoSource('docs/notes.ts', plain)).toBe(false);
+  });
+
+  test('every await, async function, new Promise and promise chain is found, with its line', () => {
+    const source = [
+      'export async function join() {',
+      '  await request();',
+      '}',
+      'const later = new Promise(() => {});',
+      'run().then(done);',
+      'Effect.catch(run, stop);',
+      'const plain = () => 1;',
+    ].join('\n');
+    expect(listPromiseLines('apps/engine/src/a.ts', source)).toEqual([1, 2, 4, 5]);
+    expect(listPromiseLines('apps/engine/src/a.tsx', 'const v = () => <Row />;')).toEqual([]);
+  });
+});
+
+describe('the engine runs effects only at its edge', () => {
+  test('every engine source file but main.ts is checked, effect imports included, never tests', () => {
+    expect(isEngineRuntimeSource('apps/engine/src/remote/teams.ts')).toBe(true);
+    expect(isEngineRuntimeSource('apps/engine/src/main.ts')).toBe(false);
+    expect(isEngineRuntimeSource('apps/engine/src/remote/teams.test.ts')).toBe(false);
+    expect(isEngineRuntimeSource('apps/engine/test/harness.ts')).toBe(false);
+    expect(isEngineRuntimeSource('apps/web/src/lib/api.ts')).toBe(false);
+  });
+
+  test('a runtime, a run call and a class that is not a service are found, with their lines', () => {
+    const source = [
+      "import { Effect, ManagedRuntime } from 'effect';",
+      'export class Teams {',
+      '  create = () => edgeRuntime.runPromise(make);',
+      '}',
+      'Effect.runSync(step);',
+      'runtime.runFork(step);',
+      'export class Clock extends StateClock {}',
+      'Effect.runForkWith(context)(step);',
+      "export class Teams2 extends Context.Service<Teams2, Shape>()('shinsa/engine/Teams') {}",
+      "export class Gone extends Schema.TaggedError<Gone>()('Gone', {}) {}",
+      'export class Broken extends Error {}',
+      'class Local {}',
+      'export class Odd extends (class {}) {}',
+    ].join('\n');
+    expect(listEngineRuntimeLines('apps/engine/src/a.ts', source)).toEqual([1, 2, 3, 5, 6, 7, 13]);
   });
 });

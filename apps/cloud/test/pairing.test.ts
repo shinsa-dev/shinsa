@@ -11,7 +11,7 @@ import {
   resolvePairPath,
   serializePublicKey,
 } from '@shinsa/core';
-import { Duration } from 'effect';
+import { Effect, Duration } from 'effect';
 import { MAX_PENDING_PAIRS_PER_ADDRESS, PAIR_TTL } from '../src/routes/pairing/schema.ts';
 import { MAX_INSTANCES_PER_USER } from '../src/routes/pairs/schema.ts';
 import { createHarness, type Harness, openClaimed, readJson } from './harness.ts';
@@ -20,12 +20,12 @@ const PAIR_TTL_MS = Duration.toMillis(PAIR_TTL);
 
 async function createMachineKey() {
   const pair = (await crypto.subtle.generateKey(REMOTE_KEY_ALGORITHM, true, ['deriveBits'])) as CryptoKeyPair;
-  return serializePublicKey(pair.publicKey);
+  return Effect.runPromise(serializePublicKey(pair.publicKey));
 }
 
 async function startPair(harness: Harness, name = 'Studio', features: readonly string[] = MACHINE_FEATURES) {
   const pair = (await crypto.subtle.generateKey(REMOTE_KEY_ALGORITHM, true, ['deriveBits'])) as CryptoKeyPair;
-  const publicKey = await serializePublicKey(pair.publicKey);
+  const publicKey = await Effect.runPromise(serializePublicKey(pair.publicKey));
   const response = await harness.post(
     REMOTE_PATHS.pairStart,
     { name, publicKey, version: '1.2.0', ...(features.length > 0 ? { features } : {}) },
@@ -78,7 +78,7 @@ describe('pairing a machine', () => {
     expect(view).toEqual({
       claimCode: start.claimCode,
       name: 'Studio',
-      fingerprint: await resolveKeyFingerprint(publicKey),
+      fingerprint: await Effect.runPromise(resolveKeyFingerprint(publicKey)),
       expiresAt: start.expiresAt,
       claimed: false,
     });

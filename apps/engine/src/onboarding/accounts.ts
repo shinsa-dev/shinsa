@@ -1,4 +1,5 @@
-import type { AccountSummary } from '@shinsa/core';
+import type { AccountsSnapshot } from '@shinsa/core';
+import { Effect } from 'effect';
 
 export interface ClaudeAccount {
   id: string;
@@ -6,15 +7,14 @@ export interface ClaudeAccount {
   signedIn: boolean;
 }
 
-export type AccountSource = () => Promise<ClaudeAccount[]>;
+export type AccountSource = Effect.Effect<ClaudeAccount[]>;
 
-export function createSummaryAccountSource(list: () => AccountSummary[]): AccountSource {
-  return () =>
-    Promise.resolve(
-      list().map((account) => ({
-        id: account.id,
-        email: account.email,
-        signedIn: account.signIn === 'signed_in',
-      }))
-    );
+export function createSummaryAccountSource(snapshot: Effect.Effect<AccountsSnapshot>): AccountSource {
+  return Effect.map(snapshot, ({ accounts }) =>
+    accounts.map((account) => ({
+      id: account.id,
+      email: account.email,
+      signedIn: account.signIn === 'signed_in',
+    }))
+  );
 }

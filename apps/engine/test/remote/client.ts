@@ -16,6 +16,7 @@ import {
   serializeChannelMessage,
   serializePublicKey,
 } from '@shinsa/core';
+import { Effect } from 'effect';
 
 export function createKeyPair() {
   return crypto.subtle.generateKey(REMOTE_KEY_ALGORITHM, true, ['deriveBits']) as Promise<CryptoKeyPair>;
@@ -41,48 +42,54 @@ export async function startHandshake(input: {
   compression?: ChannelCompression[];
 }): Promise<HandshakeStart> {
   const ephemeral = await createKeyPair();
-  const hello = await createClientHello(
-    input.device.publicKey,
-    ephemeral.publicKey,
-    null,
-    input.name ?? null,
-    input.compression ?? []
+  const hello = await Effect.runPromise(
+    createClientHello(
+      input.device.publicKey,
+      ephemeral.publicKey,
+      null,
+      input.name ?? null,
+      input.compression ?? []
+    )
   );
   if (input.enrollSecret) {
-    hello.enroll = await createEnrollProof(input.enrollSecret, {
-      machine: input.machineKey,
-      device: hello.device,
-      clientEphemeral: hello.ephemeral,
-    });
+    hello.enroll = await Effect.runPromise(
+      createEnrollProof(input.enrollSecret, {
+        machine: input.machineKey,
+        device: hello.device,
+        clientEphemeral: hello.ephemeral,
+      })
+    );
   }
   return {
     hello: JSON.stringify(hello),
     finish: async (text) => {
       const welcome = parseServerHello(text);
       if (welcome?.type !== 'welcome') throw new Error(`Refused: ${text}`);
-      const session = await deriveClientSession({
-        keys: {
-          machine: input.machineKey,
-          device: hello.device,
-          clientEphemeral: hello.ephemeral,
-          serverEphemeral: welcome.ephemeral,
-        },
-        machinePublicKey: (await parsePublicKey(input.machineKey)) as CryptoKey,
-        devicePrivateKey: input.device.privateKey,
-        clientEphemeralPrivateKey: ephemeral.privateKey,
-      });
+      const session = await Effect.runPromise(
+        deriveClientSession({
+          keys: {
+            machine: input.machineKey,
+            device: hello.device,
+            clientEphemeral: hello.ephemeral,
+            serverEphemeral: welcome.ephemeral,
+          },
+          machinePublicKey: (await Effect.runPromise(parsePublicKey(input.machineKey))) as CryptoKey,
+          devicePrivateKey: input.device.privateKey,
+          clientEphemeralPrivateKey: ephemeral.privateKey,
+        })
+      );
       const sealFrame = createFrameSealer(session.send, welcome.compression);
       const openFrame = createFrameOpener(session.receive, welcome.compression);
       return {
         compression: welcome.compression,
-        seal: (message) => sealFrame(encodeText(serializeChannelMessage(message))),
-        sealText: (plain) => sealFrame(encodeText(plain)),
-        open: async (frame) => parseChannelMessage(decodeText(await openFrame(frame))),
+        seal: (message) => Effect.runPromise(sealFrame(encodeText(serializeChannelMessage(message)))),
+        sealText: (plain) => Effect.runPromise(sealFrame(encodeText(plain))),
+        open: async (frame) => parseChannelMessage(decodeText(await Effect.runPromise(openFrame(frame)))),
       };
     },
   };
 }
 
 export async function serializeDeviceKey(device: CryptoKeyPair) {
-  return serializePublicKey(device.publicKey);
+  return Effect.runPromise(serializePublicKey(device.publicKey));
 }

@@ -10,7 +10,7 @@ import {
 import { Clock, Effect, FiberSet, Scope } from 'effect';
 import { isSameExtensionSet } from '../../extensions/index.ts';
 import { describeError } from '../../log/index.ts';
-import type { AccountLease } from '../accounts.ts';
+import type { AccountLease } from '../accounts/schema.ts';
 import type { ActiveRun } from '../active/schema.ts';
 import { listSurfaceToolSpecs } from '../manage/index.ts';
 import {
@@ -21,18 +21,13 @@ import {
 } from '../providers/index.ts';
 import { acquireAgentSession } from '../providers/session/service.ts';
 import { createShinsaTools, type ToolHandler } from '../tools/index.ts';
+import { ToolCallFailed } from '../tools/schema.ts';
 import { isSessionCacheWarm, resolveTurnFold, resolveTurnPrompt } from '../turns/plan.ts';
 import type { TurnContext, TurnPlan } from '../turns/schema.ts';
 import { recordAttempt, resolveModel } from './attempts.ts';
 import { RunHost } from './host/service.ts';
 import { meterAttempt } from './meter.ts';
-import {
-  ExtensionsUnavailable,
-  ImageNotKept,
-  type RunHostShape,
-  SessionStopFailed,
-  type Turn,
-} from './schema.ts';
+import { ExtensionsUnavailable, ImageNotKept, type RunHostShape, type Turn } from './schema.ts';
 import { RunWorld } from './world/service.ts';
 
 export const recordSessionLost = Effect.fn('RunSupervisor.recordSessionLost')(function* (
@@ -57,9 +52,7 @@ export const resolveTurnContext = Effect.fn('RunSupervisor.resolveTurnContext')(
     transcripts: world.transcripts,
     labelOf: (id) => world.providers.select(id)?.label ?? id,
     recordLost: (sessionId) =>
-      Effect.runPromise(
-        recordSessionLost(turn.run.id, sessionId).pipe(Effect.provideService(RunWorld, world))
-      ),
+      recordSessionLost(turn.run.id, sessionId).pipe(Effect.provideService(RunWorld, world), Effect.orDie),
   };
   return context;
 });
@@ -69,12 +62,9 @@ export const stopSession = Effect.fn('RunSupervisor.stopSession')(function* (
   session: AgentSession,
   failure: string
 ) {
-  yield* Effect.tryPromise({
-    try: () => session.cancel(),
-    catch: (error) => new SessionStopFailed({ message: describeError(error) }),
-  }).pipe(
-    Effect.catchTag('SessionStopFailed', (stop) =>
-      Effect.logWarning(failure).pipe(Effect.annotateLogs({ runId, error: stop.message }))
+  yield* session.cancel.pipe(
+    Effect.catchDefect((error) =>
+      Effect.logWarning(failure).pipe(Effect.annotateLogs({ runId, error: describeError(error) }))
     )
   );
 });
@@ -89,10 +79,10 @@ const resolveExtensions = Effect.fn('RunSupervisor.resolveExtensions')(function*
   const task = state.tasks[run.taskId];
   const repo = task?.repoId ? state.repos[task.repoId] : undefined;
   const place = { repoPath: repo?.path ?? null, project: task ? resolveTaskProject(state, task) : null };
-  return yield* Effect.tryPromise({
-    try: () => source.resolveSession(place, pin),
-    catch: (error) => new ExtensionsUnavailable({ message: describeError(error) }),
-  }).pipe(
+  return yield* source.resolveSession(place, pin).pipe(
+    Effect.catchDefect((defect) =>
+      Effect.fail(new ExtensionsUnavailable({ message: describeError(defect) }))
+    ),
     Effect.catchTag('ExtensionsUnavailable', (failure) =>
       Effect.logWarning('[Runs] Could not resolve the MCP servers and skills for a run').pipe(
         Effect.annotateLogs({ runId: run.id, error: failure.message }),
@@ -123,7 +113,7 @@ export const resolveSpeed = Effect.fn('RunSupervisor.resolveSpeed')(function* (
   const state = yield* world.state;
   const options = resolveSessionOptions(state.settings, provider, RUN_AGENT_ROLE[run.role]);
   if (!options.fastMode) return options;
-  const availability = yield* Effect.promise(() => world.leasing.readFastMode(lease, provider.id));
+  const availability = yield* world.leasing.readFastMode(lease, provider.id).pipe(Effect.orDie);
   if (availability === 'available') return options;
   if (notify) {
     const reason = availability === 'needs_credits' ? 'needs_credits' : 'credits_unknown';
@@ -137,7 +127,8 @@ export const resolveSpeed = Effect.fn('RunSupervisor.resolveSpeed')(function* (
 
 export const readSessionUsage = Effect.fn('RunSupervisor.readSessionUsage')(function* () {
   const world = yield* RunWorld;
-  return (sessionId: string) => Effect.runSync(world.state).sessionUsage[sessionId] ?? null;
+  const runSync = Effect.runSyncWith(yield* Effect.context<never>());
+  return (sessionId: string) => runSync(world.state).sessionUsage[sessionId] ?? null;
 });
 
 const steerWaiting = Effect.fn('RunSupervisor.steerWaiting')(function* (
@@ -147,13 +138,13 @@ const steerWaiting = Effect.fn('RunSupervisor.steerWaiting')(function* (
 ) {
   const host = yield* RunHost;
   for (const text of active.queued.splice(0)) {
-    if (!session.steer(text)) active.unsent.push(text);
+    if (!(yield* session.steer(text))) active.unsent.push(text);
   }
   for (const text of active.resteered.splice(0)) {
-    if (!session.steer(text, 'shinsa')) active.unsteered.push(text);
+    if (!(yield* session.steer(text, 'shinsa'))) active.unsteered.push(text);
   }
   for (const delivery of active.held.splice(0)) {
-    yield* Effect.promise(() => host.deliveries.steer(runId, active, delivery));
+    yield* host.deliveries.steer(runId, active, delivery);
   }
 });
 
@@ -180,10 +171,8 @@ const linkSession = Effect.fn('RunSupervisor.linkSession')(function* (
 });
 
 const storeImage = (host: RunHostShape) => (data: string, mediaType: string) => {
-  const stored = Effect.try({
-    try: () => host.evidence.writeImage(data, mediaType),
-    catch: (error) => new ImageNotKept({ message: describeError(error) }),
-  }).pipe(
+  const stored = host.evidence.writeImage(data, mediaType).pipe(
+    Effect.catchDefect((error) => Effect.fail(new ImageNotKept({ message: describeError(error) }))),
     Effect.catchTag('ImageNotKept', (failure) =>
       Effect.logWarning('[Runs] Could not keep a tool image').pipe(
         Effect.annotateLogs({ error: failure.message }),
@@ -201,18 +190,35 @@ export const attemptTurn = Effect.fn('RunSupervisor.attempt')(function* (turn: T
   const { run, active, provider } = turn;
   const firstAttempt = ((yield* world.state).runs[run.id]?.attempts ?? []).length === 0;
   const { attemptId, account } = yield* recordAttempt(turn, plan);
-  const weeklyBefore = world.leasing.readWeeklyReading(run.id, active.lease, provider.id, false);
-  const pin = plan.resume ? host.extensionSets.select(plan.resume) : null;
+  const weeklyBefore = yield* Effect.forkChild(
+    world.leasing.readWeeklyReading(run.id, active.lease, provider.id, false)
+  );
+  const pin = plan.resume ? yield* host.extensionSets.select(plan.resume) : null;
   const extensions = yield* resolveExtensions(run, pin);
-  const loader = extensions ? (host.hooks.extensions?.createLoader?.(extensions) ?? null) : null;
+  const createLoader = host.hooks.extensions?.createLoader;
+  const loader = yield* Effect.suspend(() =>
+    extensions && createLoader ? createLoader(extensions) : Effect.succeed(null)
+  );
+  const context = yield* Effect.context<never>();
+  const runSync = Effect.runSyncWith(context);
   const handleTool: ToolHandler = (name, input, signal, requestId) => {
-    if (loader?.isLoaderTool(name)) return loader.handle(name, input);
+    if (loader?.specs.some((spec) => spec.name === name))
+      return loader.handle(name, input).pipe(
+        Effect.catchTags({
+          ExtensionLoadFailed: (failure) => Effect.fail(new ToolCallFailed({ message: failure.message })),
+          McpServerFailed: (failure) => Effect.fail(new ToolCallFailed({ message: failure.message })),
+        })
+      );
     return host.tools.handle(name, { runId: run.id, attemptId, input, signal, requestId });
   };
+  const tools = yield* createShinsaTools(run.role, handleTool, run.delegation?.depth ?? 0, [
+    ...(host.hooks.manages && !isDelegatedRun(run) ? listSurfaceToolSpecs() : []),
+    ...(loader?.specs ?? []),
+  ]);
   const startSession = host.hooks.startSession ?? provider.startSession;
   let sessionId = plan.fork ? null : plan.resume;
   const options = yield* resolveSpeed(run, provider, active.lease, true);
-  const releases: (() => void)[] = [];
+  const releases: Effect.Effect<void>[] = [];
   const fold = resolveTurnFold({
     run,
     plan,
@@ -220,8 +226,8 @@ export const attemptTurn = Effect.fn('RunSupervisor.attempt')(function* (turn: T
     firstAttempt,
     folds: resolveCapabilities(provider).folds && isFoldingCompaction(options.compaction ?? 'off'),
   });
-  const context = yield* resolveTurnContext(turn);
-  const prompt = resolveTurnPrompt(context, plan, turn.prompt, turn.brief, fold);
+  const turnContext = yield* resolveTurnContext(turn);
+  const prompt = yield* resolveTurnPrompt(turnContext, plan, turn.prompt, turn.brief, fold);
   const model = yield* resolveModel(turn);
   const now = yield* Clock.currentTimeMillis;
   const usageBaseline = yield* readSessionUsage();
@@ -232,49 +238,46 @@ export const attemptTurn = Effect.fn('RunSupervisor.attempt')(function* (turn: T
     parentRunId: run.delegation?.parentRunId ?? null,
     fiber: active.fiber,
   });
-  const start = () =>
-    startSession({
-      role: run.role,
-      readOnly: isReadOnlyRun(run),
-      cwd: turn.cwd,
-      prompt,
-      model,
-      resume: plan.resume,
-      fork: plan.fork,
-      defaultBranch: turn.defaultBranch,
-      pluginDir: world.config.pluginDir,
-      tools: createShinsaTools(run.role, handleTool, run.delegation?.depth ?? 0, [
-        ...(host.hooks.manages && !isDelegatedRun(run) ? listSurfaceToolSpecs() : []),
-        ...(loader?.listSpecs() ?? []),
-      ]),
-      ...(extensions
-        ? { extensions, announceExtensions: !pin || !isSameExtensionSet(pin, extensions.loaded) }
-        : {}),
-      ...options,
-      ...(fold && plan.resume ? { fold, cacheWarm: isSessionCacheWarm(context, plan.resume, now) } : {}),
-      ...(active.lease ? { account: { id: active.lease.id, configDir: active.lease.configDir } } : {}),
-      usageBaseline,
-      onSession: (linked) => {
-        sessionId = linked;
-        if (extensions) host.extensionSets.record(linked, extensions.loaded);
-        fork(linkSession(run, attemptId, provider.id, linked));
-        host.deliveries.confirmWake(run.id, active);
-      },
-      onEntry: (entry) => Effect.runSync(world.recordEntry(run.id, entry)),
-      onActivity: () => host.questions.touch(run.id),
-      onProcess: (pid) => {
-        if (host.hooks.trackProcess) releases.push(host.hooks.trackProcess(run.taskId, 'agent', pid));
-      },
-      storeImage: (data, mediaType) => Effect.runSync(keep(data, mediaType)),
-    });
-  const scoped = yield* acquireAgentSession(start).pipe(Scope.provide(scope));
+  const start = startSession({
+    role: run.role,
+    readOnly: isReadOnlyRun(run),
+    cwd: turn.cwd,
+    prompt,
+    model,
+    resume: plan.resume,
+    fork: plan.fork,
+    defaultBranch: turn.defaultBranch,
+    pluginDir: world.config.pluginDir,
+    tools,
+    ...(extensions
+      ? { extensions, announceExtensions: !pin || !isSameExtensionSet(pin, extensions.loaded) }
+      : {}),
+    ...options,
+    ...(fold && plan.resume ? { fold, cacheWarm: isSessionCacheWarm(turnContext, plan.resume, now) } : {}),
+    ...(active.lease ? { account: { id: active.lease.id, configDir: active.lease.configDir } } : {}),
+    usageBaseline,
+    onSession: (linked) => {
+      sessionId = linked;
+      if (extensions) runSync(host.extensionSets.record(linked, extensions.loaded));
+      fork(linkSession(run, attemptId, provider.id, linked));
+      runSync(host.deliveries.confirmWake(run.id, active));
+    },
+    onEntry: (entry) => runSync(world.recordEntry(run.id, entry)),
+    onActivity: () => runSync(host.questions.touch(run.id)),
+    onProcess: (pid) => {
+      if (host.hooks.trackProcess) releases.push(runSync(host.hooks.trackProcess(run.taskId, 'agent', pid)));
+    },
+    storeImage: (data, mediaType) => runSync(keep(data, mediaType)),
+  });
+  const resources = yield* Scope.fork(scope);
+  const scoped = yield* acquireAgentSession(start.pipe(Scope.provide(resources))).pipe(Scope.provide(scope));
   active.session = scoped.session;
-  loader?.attach(scoped.session);
+  if (loader) yield* loader.attach(scoped.session);
   const closeAttempt = Effect.gen(function* () {
     active.session = null;
     yield* host.scopes.close(run.id);
-    for (const release of releases) release();
-    if (loader) yield* Effect.promise(() => loader.close());
+    for (const release of releases) yield* release;
+    if (loader) yield* loader.close;
   });
   const driven = Effect.gen(function* () {
     yield* steerWaiting(run.id, active, scoped.session);

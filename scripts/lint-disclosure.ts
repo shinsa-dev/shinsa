@@ -1,6 +1,5 @@
 import { parse } from '@babel/parser';
-
-type Node = { type: string; loc?: { start: { line: number } }; [key: string]: unknown };
+import { type AstNode, visit } from './lint-ast.ts';
 
 export const COLLAPSIBLE_PRIMITIVES = new Set([
   'Panel',
@@ -29,50 +28,37 @@ export const FOLD_STATE_MESSAGE =
 export const DISCLOSURE_HEADER_MESSAGE =
   'DisclosureHeader takes a `disclosure` from useDisclosure, never its own open state (docs/design.md → Where Shinsa differs, 40)';
 
-function children(node: Node): Node[] {
-  return Object.values(node).flatMap((value) =>
-    (Array.isArray(value) ? value : [value]).filter(
-      (child): child is Node => Boolean(child) && typeof child === 'object' && 'type' in child
-    )
-  );
-}
-
-function visit(node: Node, onNode: (node: Node) => void) {
-  onNode(node);
-  for (const child of children(node)) visit(child, onNode);
-}
-
 function readName(node: unknown) {
   const named = node as { type?: string; name?: string } | null;
   return named?.type === 'JSXIdentifier' || named?.type === 'Identifier' ? (named.name ?? null) : null;
 }
 
-function listAttributes(element: Node) {
-  return (element.attributes as Node[]).flatMap((attribute) => {
+function listAttributes(element: AstNode) {
+  return (element.attributes as AstNode[]).flatMap((attribute) => {
     const name = attribute.type === 'JSXAttribute' ? readName(attribute.name) : null;
     return name ? [name] : [];
   });
 }
 
-function isUseState(node: Node) {
-  const callee = node.callee as Node;
+function isUseState(node: AstNode) {
+  const callee = node.callee as AstNode;
   if (callee.type === 'MemberExpression') return readName(callee.property) === 'useState';
   return readName(callee) === 'useState';
 }
 
-function readFoldState(node: Node) {
+function readFoldState(node: AstNode) {
   if (node.type !== 'VariableDeclarator') return null;
-  const init = node.init as Node | null;
-  const id = node.id as Node;
+  const init = node.init as AstNode | null;
+  const id = node.id as AstNode;
   if (init?.type !== 'CallExpression' || !isUseState(init) || id.type !== 'ArrayPattern') return null;
-  const [first] = id.elements as (Node | null)[];
+  const [first] = id.elements as (AstNode | null)[];
   const name = readName(first);
   return name && FOLD_STATE.test(name) ? name : null;
 }
 
 export function listDisclosureViolations(source: string): { line: number; message: string }[] {
   const program = parse(source, { sourceType: 'module', plugins: ['typescript', 'jsx'] })
-    .program as unknown as Node;
+    .program as unknown as AstNode;
   const violations: { line: number; message: string }[] = [];
   const foldStates: number[] = [];
   let folds = false;

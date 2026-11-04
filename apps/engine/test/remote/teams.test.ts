@@ -1,8 +1,8 @@
-import { afterEach, describe, expect, spyOn, test } from 'bun:test';
-import { readFileSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { afterEach, describe, expect, test } from 'bun:test';
+import { readFileSync } from 'node:fs';
 import {
   type Bytes,
+  DomainError,
   createFrameOpener,
   createTeamHello,
   decodeText,
@@ -23,15 +23,16 @@ import {
   verifyTeamSnapshot,
 } from '@shinsa/core';
 import { InviteInvalid, MembersFull, NotFound, NotOwner, TeamsFull } from '@shinsa/core/remote/errors';
-import { log } from '../../src/log/index.ts';
-import { RemoteControl } from '../../src/remote/client/index.ts';
-import { createRefusedConnector } from '../../src/remote/connector/refused.ts';
-import { Remote } from '../../src/remote/index.ts';
-import { TEAM_REFUSALS, TEAM_REMOTE_CHANGED, Teams, type TeamsOptions } from '../../src/remote/teams.ts';
-import { createTempDir, until } from '../helpers/index.ts';
+import { Clock, Effect, Layer } from 'effect';
+import { RandomBytes } from '../../src/remote/schema.ts';
+import { TEAM_REFUSALS, TEAM_REMOTE_CHANGED } from '../../src/remote/teams/schema.ts';
+import { EngineStopped } from '../../src/runtime/engine/schema.ts';
+import { createFixedClock } from '../helpers/clock.ts';
+import { captureLogs, until } from '../helpers/index.ts';
 import { createRepo, createShareView, createStubEngine, createTask, readSentView } from '../helpers/state.ts';
 import { createKeyPair, startHandshake } from './client.ts';
 import { type FakeControlPlane, refuse, startFakeControlPlane } from './control-plane.ts';
+import { adaptRemote, adaptTeams, createRemoteTest } from './harness.ts';
 
 const CREDENTIALS = {
   instanceId: 'inst1',
@@ -80,39 +81,22 @@ afterEach(async () => {
   running = null;
 });
 
+interface HeldLists {
+  listHeld: (teamId: string) => TeamSnapshot[];
+  subscribeHeld: (listener: () => void) => void;
+}
+
 interface SetUp {
   file?: Record<string, unknown>;
   patch?: (state: ShinsaState) => void;
   resolveLive?: () => Promise<never>;
-  held?: TeamsOptions['held'];
+  held?: HeldLists;
+  defaults?: boolean;
 }
 
 function setUp(options: SetUp = {}) {
   const plane = startFakeControlPlane();
   running = plane;
-  const path = join(createTempDir(), 'remote.json');
-  writeFileSync(
-    path,
-    JSON.stringify({
-      credentials: CREDENTIALS,
-      enabled: true,
-      owner: 'mona',
-      access: { owner: MONA, members: [] },
-      teams: [createTeam()],
-      teamKeys: [STORED_KEY],
-      ...options.file,
-    })
-  );
-  const remote = new Remote({
-    path,
-    control: new RemoteControl({ origin: plane.origin }),
-    connector: createRefusedConnector('no tunnel in this test'),
-    localUrl: () => 'http://127.0.0.1:1',
-    version: '1',
-    maxBodyBytes: 1024,
-    machineName: 'Studio',
-    openUrl: () => Promise.resolve(),
-  });
   const stub = createStubEngine((state) => {
     state.projects.p1 = {
       id: 'p1',
@@ -129,26 +113,82 @@ function setUp(options: SetUp = {}) {
     options.patch?.(state);
   });
   const live = { view: createShareView({ title: 'Live' }), files: [] };
+  const resolveLive = options.resolveLive ?? (() => Promise.resolve(live as never));
   const transcriptListeners: ((runId: string) => void)[] = [];
-  const teams = new Teams({
-    engine: stub.engine,
-    remote,
-    shares: { resolveLive: options.resolveLive ?? (() => Promise.resolve(live as never)) },
-    transcripts: {
-      subscribe: (listener) => {
-        transcriptListeners.push(listener);
-        return () => undefined;
-      },
+  const heartbeats = { count: 0 };
+  const { held } = options;
+  const machine = createRemoteTest({
+    file: {
+      credentials: CREDENTIALS,
+      enabled: true,
+      owner: 'mona',
+      access: { owner: MONA, members: [] },
+      teams: [createTeam()],
+      teamKeys: [STORED_KEY],
+      ...options.file,
     },
-    ...(options.held ? { held: options.held } : {}),
-    now: () => 50,
-    random: (bytes) => new Uint8Array(bytes).fill(6),
+    origin: plane.origin,
+    engine: stub.engine.core,
+    transcripts: {
+      subscribe: (listener) =>
+        Effect.sync(() => {
+          transcriptListeners.push((runId) => listener(runId, [], null));
+          return Effect.void;
+        }),
+    },
+    remote: (remote) => ({
+      ...remote,
+      requestHeartbeat: Effect.sync(() => {
+        heartbeats.count += 1;
+      }),
+    }),
+    shares: (shares) => ({
+      ...shares,
+      resolveLive: () =>
+        Effect.tryPromise({
+          try: resolveLive,
+          catch: (error) => new DomainError({ code: 'share_unreadable', message: (error as Error).message }),
+        }),
+    }),
+    ...(held
+      ? {
+          teamFeeds: (feeds) => ({
+            ...feeds,
+            listHeld: (teamId) => Effect.sync(() => held.listHeld(teamId)),
+            observeHeld: (listener) =>
+              Effect.sync(() => {
+                held.subscribeHeld(() => machine.runSync(listener));
+              }),
+          }),
+        }
+      : {}),
+    layers: options.defaults
+      ? Layer.empty
+      : Layer.merge(
+          Layer.succeed(
+            Clock.Clock,
+            createFixedClock(() => 50)
+          ),
+          Layer.succeed(RandomBytes, (bytes: number) => new Uint8Array(bytes).fill(6))
+        ),
   });
   const writeTranscript = (runId: string) => {
     for (const listener of transcriptListeners) listener(runId);
   };
-  return { plane, stub, remote, teams, path, writeTranscript };
+  return {
+    plane,
+    stub,
+    remote: adaptRemote(machine),
+    teams: adaptTeams(machine),
+    path: machine.path,
+    heartbeats,
+    writeTranscript,
+  };
 }
+
+type Teams = ReturnType<typeof setUp>['teams'];
+
+type Remote = ReturnType<typeof setUp>['remote'];
 
 interface Viewer {
   messages: ShareMessage[];
@@ -162,8 +202,8 @@ async function openViewer(teams: Teams, userId: string, view: TeamView, key = TE
   const ephemeral = (await crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, [
     'deriveBits',
   ])) as CryptoKeyPair;
-  const hello = await createTeamHello('team1', key, view, ephemeral.publicKey);
-  let open: ((frame: Bytes) => Promise<Bytes>) | null = null;
+  const hello = await Effect.runPromise(createTeamHello('team1', key, view, ephemeral.publicKey));
+  let open: ReturnType<typeof createFrameOpener> | null = null;
   let queue: Promise<void> = Promise.resolve();
   const viewer: Viewer = {
     messages: [],
@@ -188,12 +228,14 @@ async function openViewer(teams: Teams, userId: string, view: TeamView, key = TE
               serverEphemeral: welcome.ephemeral,
             };
             open = createFrameOpener(
-              await deriveTeamSessionKey(key, keys, ephemeral.privateKey, welcome.ephemeral)
+              await Effect.runPromise(
+                deriveTeamSessionKey(key, keys, ephemeral.privateKey, welcome.ephemeral)
+              )
             );
             return;
           }
           if (!open) throw new Error('a frame before the welcome');
-          const message = parseShareMessage(decodeText(await open(data as Bytes)));
+          const message = parseShareMessage(decodeText(await Effect.runPromise(open(data as Bytes))));
           if (message) viewer.messages.push(message);
         });
       },
@@ -232,7 +274,7 @@ describe('a team view of this machine', () => {
     const [view] = (await openViewer(teams, KAI.id, LIST)).views() as TeamListView[];
     const { publicKey } = await remote.store.resolveSigningKey();
     if (!view?.snapshot) throw new Error('The list view carries no snapshot');
-    const body = await verifyTeamSnapshot(publicKey, view.snapshot);
+    const body = await Effect.runPromise(verifyTeamSnapshot(publicKey, view.snapshot));
     expect(body).toEqual({
       teamId: 'team1',
       instanceId: CREDENTIALS.instanceId,
@@ -264,7 +306,9 @@ describe('a team view of this machine', () => {
     expect(view?.tasks[0]?.task.pullRequest).not.toHaveProperty('reviewToken');
     const { publicKey } = await remote.store.resolveSigningKey();
     if (!view?.snapshot) throw new Error('The list view carries no snapshot');
-    expect(JSON.stringify(await verifyTeamSnapshot(publicKey, view.snapshot))).not.toContain('ghp_secret');
+    expect(
+      JSON.stringify(await Effect.runPromise(verifyTeamSnapshot(publicKey, view.snapshot)))
+    ).not.toContain('ghp_secret');
   });
 
   test('a machine with no credentials signs nothing, since no teammate could tell which machine it is', async () => {
@@ -283,7 +327,6 @@ describe('a team view of this machine', () => {
         listHeld: (teamId) => (teamId === 'team1' ? held : []),
         subscribeHeld: (listener) => {
           heldListeners.push(listener);
-          return () => true;
         },
       },
     });
@@ -408,30 +451,71 @@ describe('a team view of this machine', () => {
   });
 
   test('logs a view it could not close cleanly', async () => {
-    const warn = spyOn(log, 'warn').mockImplementation(() => undefined);
-    const { teams, remote } = setUp();
-    const channel = teams.openChannel(
-      {
-        send: (data) => {
-          if (typeof data !== 'string') throw new Error('the socket is gone');
+    const logs = captureLogs();
+    try {
+      const { teams, remote } = setUp();
+      const ephemeral = (await crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, [
+        'deriveBits',
+      ])) as CryptoKeyPair;
+      const channel = teams.openChannel(
+        {
+          send: () => undefined,
+          close: () => {
+            throw new Error('closed twice');
+          },
         },
-        close: () => undefined,
-      },
-      KAI.id
-    );
-    const ephemeral = (await crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, [
-      'deriveBits',
-    ])) as CryptoKeyPair;
-    await channel.receive(
-      JSON.stringify(await createTeamHello('team1', TEAM_KEY, LIST, ephemeral.publicKey))
-    );
+        KAI.id
+      );
+      await channel.receive(
+        JSON.stringify(await Effect.runPromise(createTeamHello('team1', TEAM_KEY, LIST, ephemeral.publicKey)))
+      );
+      await remote.disable();
+      await until(
+        'the failure is logged',
+        () => logs.fieldsOf('[Teams] Could not close a team view').length > 0
+      );
+      expect(logs.fieldsOf('[Teams] Could not close a team view')).toEqual([{ error: 'closed twice' }]);
+    } finally {
+      logs.restore();
+    }
+  });
+});
+
+describe('a team view that ends on this machine’s side', () => {
+  test('a view the socket closed is no longer ended when access goes off', async () => {
+    const { teams, remote } = setUp();
+    const viewer = await openViewer(teams, KAI.id, LIST);
+    const channel = teams.openChannel({ send: () => undefined, close: () => undefined }, KAI.id);
     teams.closeChannel(channel);
-    const other = teams.openChannel({ send: () => undefined, close: () => undefined }, KAI.id);
-    await other.receive(JSON.stringify(await createTeamHello('team1', TEAM_KEY, LIST, ephemeral.publicKey)));
-    spyOn(other, 'end').mockImplementation(() => Promise.reject(new Error('closed twice')));
     await remote.disable();
-    await until('the failure is logged', () => warn.mock.calls.length > 0);
-    warn.mockRestore();
+    await until('the open view ends', () => viewer.closed !== null);
+    expect(viewer.closed?.reason).toBe(TEAM_REMOTE_CHANGED);
+  });
+
+  test('a task view whose share cannot be read breaks', async () => {
+    const logs = captureLogs();
+    try {
+      const { teams } = setUp({ resolveLive: () => Promise.reject(new Error('the task moved')) });
+      const viewer = await openViewer(teams, KAI.id, TASK_VIEW);
+      expect(viewer.closed).toEqual({ code: 1008, reason: 'The team view broke.' });
+      expect(logs.fieldsOf('[Share] Closing a live view')).toEqual([
+        { reason: 'The team view broke.', error: 'the task moved' },
+      ]);
+    } finally {
+      logs.restore();
+    }
+  });
+
+  test('removing a team passes on a project change that breaks', async () => {
+    const { teams, stub } = setUp();
+    stub.reject(
+      (command) => command.type === 'project.remove_from_team',
+      new EngineStopped({ message: 'disk full' })
+    );
+    await expect(teams.remove('team1')).rejects.toMatchObject({
+      _tag: 'TeamCommandFailed',
+      message: 'disk full',
+    });
   });
 });
 
@@ -465,7 +549,7 @@ describe('making and joining teams', () => {
   });
 
   test('joining asks the owner and keeps the key; a member is refreshed at once', async () => {
-    const { teams, plane, remote } = setUp({ file: { teams: [], teamKeys: [] } });
+    const { teams, plane, remote, heartbeats } = setUp({ file: { teams: [], teamKeys: [] } });
     const url = resolveTeamJoinUrl({ teamId: 'team1', invite: 'invite-1', key: TEAM_KEY }, plane.origin);
     plane.answers.set(REMOTE_PATHS.machineTeamJoin, () =>
       Response.json({ teamId: 'team1', name: 'Platform', owner: KAI, status: 'requested' })
@@ -478,9 +562,9 @@ describe('making and joining teams', () => {
     plane.answers.set(REMOTE_PATHS.machineTeamJoin, () =>
       Response.json({ teamId: 'team1', name: 'Platform', owner: MONA, status: 'member' })
     );
-    const heartbeat = spyOn(remote, 'requestHeartbeat').mockResolvedValue();
+    expect(heartbeats.count).toBe(0);
     expect(await teams.join(url)).toEqual({ status: 'member', teamId: 'team1' });
-    expect(heartbeat).toHaveBeenCalled();
+    expect(heartbeats.count).toBe(1);
     expect(remote.store.selectTeamKey('team1')).toMatchObject({ invite: 'invite-1', key: TEAM_KEY });
   });
 
@@ -544,6 +628,21 @@ describe('the members of a team', () => {
     plane.answers.set(path, () => refuse(NotOwner));
     await expect(teams.acceptRequest('team1', BOB.id)).rejects.toMatchObject({ code: 'not_owner' });
     await expect(teams.removeMember('team1', BOB.id)).rejects.toMatchObject({ code: 'member_not_found' });
+    plane.answers.set(resolveMachineTeamPath('team1', 'invite'), () => refuse(NotFound));
+    await expect(teams.renewInvite('team1')).rejects.toMatchObject({ code: 'team_not_found' });
+    plane.answers.set(resolveMachineTeamPath('team1', 'invite'), () => refuse(NotOwner));
+    await expect(teams.renewInvite('team1')).rejects.toMatchObject({ code: 'not_owner' });
+  });
+
+  test('a new team’s key is random when no source is given', async () => {
+    const { teams, plane, remote } = setUp({ file: { teams: [], teamKeys: [] }, defaults: true });
+    const team = createTeam({ id: 'team2', name: 'Growth', members: [], requests: [] });
+    plane.answers.set(REMOTE_PATHS.machineTeams, () => Response.json({ team, invite: 'invite-2' }));
+    await teams.create('Growth');
+    const stored = remote.store.selectTeamKey('team2');
+    expect(stored?.key).toHaveLength(43);
+    expect(stored?.key).not.toBe(serializeBase64Url(new Uint8Array(32).fill(6)));
+    expect(stored?.addedAt).toBeGreaterThan(50);
   });
 
   test('leaving forgets the key and takes the team off every project, even when the cloud forgot it first', async () => {
@@ -575,6 +674,10 @@ describe('the members of a team', () => {
     );
     await expect(failing.teams.remove('team1')).rejects.toThrow('status 500');
     expect(failing.remote.store.selectTeamKey('team1')).not.toBeNull();
+    const forgotten = setUp();
+    forgotten.plane.answers.set(resolveMachineTeamPath('team1', 'remove'), () => refuse(NotFound));
+    await forgotten.teams.remove('team1');
+    expect(forgotten.remote.store.selectTeamKey('team1')).toBeNull();
   });
 });
 

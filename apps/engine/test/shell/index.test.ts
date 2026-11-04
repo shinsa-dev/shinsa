@@ -1,15 +1,14 @@
 import { describe, expect, spyOn, test } from 'bun:test';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
-import {
-  describeFailure,
-  killProcessGroup,
-  killProcessTree,
-  listDescendants,
-  runCommand,
-  runCommandOrThrow,
-} from '../../src/shell/index.ts';
+import { Effect } from 'effect';
+import { describeFailure, listDescendants, Shell } from '../../src/shell/index.ts';
+import { stopProcessGroup } from '../../src/shell/processes.ts';
+import { runTest } from '../harness.ts';
 import { captureLogs, createTempDir, overrideEnv, until } from '../helpers/index.ts';
+import { runCommand, runCommandOrThrow } from '../helpers/shell.ts';
+
+const killProcessTree = (pid: number) => runTest(Shell.use((shell) => shell.stopTree(pid)));
 
 function readProcessState(pid: number) {
   return Bun.spawnSync(['ps', '-o', 'stat=', '-p', String(pid)])
@@ -170,7 +169,7 @@ describe('killProcessGroup', () => {
     await until('the leader to exit', () => readProcessState(pid).startsWith('Z'));
     const logs = captureLogs();
     try {
-      killProcessGroup(pid);
+      Effect.runSync(stopProcessGroup(pid));
       expect(logs.entries).toEqual([]);
     } finally {
       logs.restore();

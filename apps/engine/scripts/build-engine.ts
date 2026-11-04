@@ -1,7 +1,9 @@
 import { cpSync, existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { Effect } from 'effect';
 import { resolveBuildChangelog } from '../../../scripts/changelog-history.ts';
+import { CommandLayer } from '../../../scripts/kit/command/index.ts';
 import { resolveBuildFolder, resolveBuildTarget } from '../src/instance/targets.ts';
 import { resolveStateVersion } from '../src/store/snapshot/version.ts';
 
@@ -44,7 +46,9 @@ const sdkPackage = JSON.parse(
 const stateVersion = resolveStateVersion();
 if (!stateVersion) throw new Error('Could not read the state version from @shinsa/core');
 
-const changelog = await resolveBuildChangelog(resolve(engineDir, '../..'), version);
+const changelog = await Effect.runPromise(
+  resolveBuildChangelog(resolve(engineDir, '../..'), version).pipe(Effect.provide(CommandLayer))
+);
 
 rmSync(outDir, { recursive: true, force: true });
 mkdirSync(join(outDir, 'bin'), { recursive: true });

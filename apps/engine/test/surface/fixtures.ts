@@ -1,6 +1,14 @@
 import type { UserCommand } from '@shinsa/core';
+import { Effect } from 'effect';
 import { createEngineCalls } from '../../src/cli/client/index.ts';
-import { readArgv, type SurfaceClient, type SurfaceSpec, selectSpec } from '../../src/surface/index.ts';
+import {
+  readArgv,
+  type SurfaceClient,
+  type SurfaceResult,
+  type SurfaceSpec,
+  selectSpec,
+  type Values,
+} from '../../src/surface/index.ts';
 import type { Display } from '../../src/terminal/index.ts';
 import { createStyle, UNICODE_SYMBOLS } from '../../src/terminal/style.ts';
 
@@ -52,7 +60,7 @@ export function createFakeClient(
     }),
     send: (command) => {
       sent.push(command);
-      return Promise.resolve({ ok: true, taskId, ...(handle ? { handle } : {}) });
+      return Effect.succeed({ ok: true as const, taskId, ...(handle ? { handle } : {}) });
     },
   };
   return { client, reads, posts, sent };
@@ -64,10 +72,19 @@ export function findSpec(words: string[]): SurfaceSpec {
   return found.spec;
 }
 
+export function runSurfaceSpec(
+  spec: SurfaceSpec,
+  client: SurfaceClient,
+  values: Values = {},
+  display?: Display
+): Promise<SurfaceResult> {
+  return Effect.runPromise(spec.run(client, values, display));
+}
+
 export function runSpec(fake: FakeClient, words: string[], display?: Display) {
   const found = selectSpec(words);
   if (!found) throw new Error(`No spec for ${words.join(' ')}`);
-  return found.spec.run(fake.client, readArgv(found.spec.fields, found.rest).values, display);
+  return runSurfaceSpec(found.spec, fake.client, readArgv(found.spec.fields, found.rest).values, display);
 }
 
 export const COLOR_DISPLAY: Display = {

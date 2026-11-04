@@ -16,8 +16,6 @@ export interface TeamReading {
   self: string | null;
 }
 
-export type TeamReader = () => TeamReading;
-
 export interface TeammateTask {
   key: string;
   original: TeammateOriginal;

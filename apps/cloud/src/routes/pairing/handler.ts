@@ -30,7 +30,7 @@ export const PairingHandlers = HttpApiBuilder.group(
       .handle(
         'start',
         Effect.fn('pairing.start')(function* ({ payload }) {
-          if (!(yield* Effect.promise(() => parsePublicKey(payload.publicKey))))
+          if (!(yield* parsePublicKey(payload.publicKey)))
             return yield* new BodyInvalid({ message: 'The machine key is not a P-256 public key.' });
           yield* pairings.removeExpired;
           const request = yield* HttpServerRequest.HttpServerRequest;

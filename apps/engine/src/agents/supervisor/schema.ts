@@ -1,29 +1,28 @@
 import type { ChatNotice, DomainError, Repo, Run } from '@shinsa/core';
-import { Duration, Effect, type Fiber, type FiberSet, type Ref, Schedule, Schema, type Scope } from 'effect';
-import type { ServerConfig } from '../../config/index.ts';
+import {
+  Context,
+  Duration,
+  Effect,
+  type Fiber,
+  type FiberSet,
+  type Ref,
+  Schedule,
+  Schema,
+  type Scope,
+} from 'effect';
 import type { SessionExtensionSource } from '../../extensions/index.ts';
 import type { ProcessTracker } from '../../resources/index.ts';
-import type { Engine } from '../../runtime/engine.ts';
-import type { EvidenceStore } from '../../store/index.ts';
-import type { Workspaces } from '../../workspaces/index.ts';
-import type { RejectionHandler } from '../accounts.ts';
-import type { AccountBroker } from '../accounts.ts';
+import type { EngineStopped } from '../../runtime/engine/schema.ts';
+import type { Evidence } from '../../store/evidence/service.ts';
+import type { RejectionHandler } from '../accounts/schema.ts';
 import type { ActiveRun } from '../active/schema.ts';
-import type { ClockTimers } from '../clock.ts';
-import type { IdleCompaction } from '../compaction.ts';
-import type { IdleCompactionOptions } from '../compaction.ts';
+import type { IdleCompaction } from '../compaction/service.ts';
 import type { Delivery } from '../delegations/schema.ts';
 import type { Deliveries } from '../deliveries/service.ts';
-import type { SessionExtensionSets } from '../extension-sets.ts';
-import type { IdleReleaseOptions } from '../idle.ts';
-import type { ManageAccess } from '../manage/index.ts';
+import type { SessionExtensionSets } from '../extension-sets/service.ts';
 import type { AgentProvider, AgentSessionResult, SessionStarter } from '../providers/index.ts';
-import type { ProviderRegistry } from '../providers/index.ts';
-import type { Questions } from '../questions.ts';
-import type { TaskServiceRunner } from '../services.ts';
-import type { ScheduleToolHandler } from '../tool-calls/schema.ts';
+import type { Questions } from '../questions/service.ts';
 import type { ToolCalls } from '../tool-calls/service.ts';
-import type { Transcripts } from '../transcripts/index.ts';
 import type { TurnPlan } from '../turns/schema.ts';
 
 interface TaskScope {
@@ -138,27 +137,37 @@ export const UNGUARDED =
 export const UNREADONLY =
   'This agent provider cannot keep a read-only agent from changing files, so Shinsa will not run a read-only task on it.';
 
-export type NoticeListener = (runId: string, notice: ChatNotice) => void;
+export type NoticeListener = (runId: string, notice: ChatNotice) => Effect.Effect<void>;
 
 export interface RunControl {
   readonly shuttingDown: boolean;
-  readonly holding: (() => void) | null;
+  readonly holding: Effect.Effect<void> | null;
   readonly held: ReadonlySet<string>;
 }
 
 export const OPEN_CONTROL: RunControl = { shuttingDown: false, holding: null, held: new Set() };
 
-interface RunLimits {
+export interface RunLimitsShape {
   readonly maxRunMs: number;
-  readonly clockTimers: ClockTimers | undefined;
   readonly quiesceMs: number;
   readonly stopMs: number;
 }
 
-interface RunHooks {
+export const RunLimits = Context.Reference<RunLimitsShape>('shinsa/engine/agents/supervisor/RunLimits', {
+  defaultValue: () => ({ maxRunMs: MAX_RUN_MS, quiesceMs: QUIESCE_MS, stopMs: STOP_MS }),
+});
+
+export interface RunHooksShape {
   readonly startSession: SessionStarter | null;
   readonly onRejection: RejectionHandler | null;
   readonly onNotice: NoticeListener | null;
+}
+
+export const RunHooks = Context.Reference<RunHooksShape>('shinsa/engine/agents/supervisor/RunHooks', {
+  defaultValue: () => ({ startSession: null, onRejection: null, onNotice: null }),
+});
+
+interface RunSurroundings {
   readonly trackProcess: ProcessTracker | null;
   readonly extensions: SessionExtensionSource | null;
   readonly manages: boolean;
@@ -166,14 +175,14 @@ interface RunHooks {
 
 export interface RunParts {
   readonly active: Map<string, ActiveRun>;
-  readonly questions: Questions;
-  readonly deliveries: Deliveries;
-  readonly compaction: IdleCompaction;
-  readonly tools: ToolCalls;
-  readonly extensionSets: SessionExtensionSets;
-  readonly evidence: EvidenceStore;
-  readonly limits: RunLimits;
-  readonly hooks: RunHooks;
+  readonly questions: Questions['Service'];
+  readonly deliveries: Deliveries['Service'];
+  readonly compaction: IdleCompaction['Service'];
+  readonly tools: ToolCalls['Service'];
+  readonly extensionSets: SessionExtensionSets['Service'];
+  readonly evidence: Evidence['Service'];
+  readonly limits: RunLimitsShape;
+  readonly hooks: RunHooksShape & RunSurroundings;
 }
 
 export interface RunHostShape extends RunParts {
@@ -193,11 +202,6 @@ export class ExtensionsUnavailable extends Schema.TaggedError<
   { readonly brand: unique symbol }
 >()('ExtensionsUnavailable', { message: Schema.String }) {}
 
-export class SessionStopFailed extends Schema.TaggedError<
-  SessionStopFailed,
-  { readonly brand: unique symbol }
->()('SessionStopFailed', { message: Schema.String }) {}
-
 export class EditsNotSetAside extends Schema.TaggedError<
   EditsNotSetAside,
   { readonly brand: unique symbol }
@@ -208,42 +212,12 @@ export class ImageNotKept extends Schema.TaggedError<ImageNotKept, { readonly br
   { message: Schema.String }
 ) {}
 
-export interface SupervisorOptions {
-  providers?: ProviderRegistry;
-  startSession?: SessionStarter;
-  maxRunMs?: number;
-  clockTimers?: ClockTimers;
-  quiesceMs?: number;
-  stopMs?: number;
-  onRejection?: RejectionHandler;
-  onNotice?: NoticeListener;
-  accounts?: AccountBroker;
-  minuteMs?: number;
-  schedules?: ScheduleToolHandler;
-  idle?: IdleReleaseOptions;
-  compaction?: IdleCompactionOptions;
-  extensions?: SessionExtensionSource;
-  manage?: ManageAccess;
-  workspaces?: Workspaces;
-  services?: TaskServiceRunner;
-  trackProcess?: ProcessTracker;
-}
-
-export interface SupervisorInput {
-  readonly engine: Engine;
-  readonly config: ServerConfig;
-  readonly transcripts: Transcripts;
-  readonly evidence: EvidenceStore;
-  readonly workspaces: Workspaces;
-  readonly options: SupervisorOptions;
-}
-
 export interface RunSupervisorShape {
   readonly execute: (
     runId: string,
     override: string | null,
     delivery: Delivery | null
-  ) => Effect.Effect<void, DomainError | RunDispatchFailed | WorkspaceUnavailable>;
+  ) => Effect.Effect<void, DomainError | RunDispatchFailed | WorkspaceUnavailable | EngineStopped>;
   readonly quiesce: (taskId: string, except?: string) => Effect.Effect<void>;
   readonly steer: (
     runId: string,
@@ -252,13 +226,13 @@ export interface RunSupervisorShape {
     from?: 'shinsa'
   ) => Effect.Effect<void, DomainError | RunDispatchFailed | WorkspaceUnavailable>;
   readonly cancel: (runId: string) => Effect.Effect<void>;
-  readonly holdNewRuns: (onHeld: () => void) => Effect.Effect<void>;
+  readonly holdNewRuns: (onHeld: Effect.Effect<void>) => Effect.Effect<void>;
   readonly releaseHeldRuns: Effect.Effect<void>;
   readonly isHeld: (runId: string) => Effect.Effect<boolean>;
   readonly interruptForShutdown: Effect.Effect<void>;
   readonly recover: Effect.Effect<void, DomainError | RunDispatchFailed>;
-  readonly resolveQuestion: (gateId: string) => Effect.Effect<void>;
+  readonly resolveQuestion: (gateId: string) => Effect.Effect<void, DomainError | EngineStopped>;
   readonly replyToDelegate: (runId: string, questionId: string) => Effect.Effect<void>;
-  readonly deliver: (runId: string, generation: number) => Effect.Effect<void>;
-  readonly wake: (runId: string, generation: number) => Effect.Effect<void>;
+  readonly deliver: (runId: string, generation: number) => Effect.Effect<void, DomainError | EngineStopped>;
+  readonly wake: (runId: string, generation: number) => Effect.Effect<void, DomainError | EngineStopped>;
 }

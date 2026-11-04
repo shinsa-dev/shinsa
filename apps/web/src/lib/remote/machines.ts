@@ -1,12 +1,14 @@
 import { type RemoteInstance, resolveMachineLoad, type Task } from '@shinsa/core';
+import { Clock, Effect } from 'effect';
 import { Connection, type MachineChoice, resolveSocketTransport } from '@/lib/connection/socket.ts';
 import { formatSince } from '@/lib/format/time.ts';
 import { describeMachineLoad } from '@/lib/new-task.ts';
+import { enterPromise } from '@/lib/runtime/promise.ts';
 import type { SocketTransport } from '@/lib/runtime/socket/schema.ts';
 import type { DashboardClient } from './dashboard.ts';
 import type { DeviceStore } from './devices.ts';
 import type { FleetMember } from './fleet.ts';
-import { RemoteLink, type RemoteLinkOptions } from './link.ts';
+import { createRemoteLink, type RemoteLinkOptions } from './link.ts';
 import { resolveMachineLabel } from './mode.ts';
 import type { ChannelError } from './remote-channel/schema.ts';
 import type { EnrolledDevice } from './schema.ts';
@@ -32,7 +34,7 @@ function describeSharer(instance: RemoteInstance) {
 export function describeMachine(
   instance: RemoteInstance,
   device: EnrolledDevice | null,
-  now = Date.now()
+  now: number
 ): MachineRow {
   const seen =
     instance.lastSeenAt === null ? 'Never connected' : formatSince('Last seen', instance.lastSeenAt, now);
@@ -66,16 +68,22 @@ export function resolveMachineDetail(
   return titles.length > 0 ? [...row.access, ` · ${titles.join(', ')}`] : row.access;
 }
 
-export async function listMachineRows(
+export const listMachineRows = Effect.fn('Machines.listMachineRows')(function* (
   dashboard: Pick<DashboardClient, 'listInstances'>,
   devices: Pick<DeviceStore, 'selectDevice'>,
-  now = Date.now()
+  now?: number
 ) {
-  const instances = await dashboard.listInstances();
-  return Promise.all(
-    instances.map(async (instance) => describeMachine(instance, await devices.selectDevice(instance.id), now))
+  const at = now ?? (yield* Clock.currentTimeMillis);
+  const instances = yield* enterPromise(() => dashboard.listInstances());
+  return yield* Effect.forEach(
+    instances,
+    (instance) =>
+      enterPromise(() => devices.selectDevice(instance.id)).pipe(
+        Effect.map((device) => describeMachine(instance, device, at))
+      ),
+    { concurrency: 'unbounded' }
   );
-}
+});
 
 export interface FleetMemberOptions {
   dashboard: Pick<DashboardClient, 'requestConnect'>;
@@ -90,7 +98,7 @@ export function createFleetMember(
   device: EnrolledDevice,
   options: FleetMemberOptions
 ) {
-  const link = new RemoteLink({
+  const link = createRemoteLink({
     instanceId: instance.id,
     device,
     dashboard: options.dashboard,
@@ -107,7 +115,7 @@ export function createFleetMember(
     online: instance.online,
     ...(instance.role === 'guest' ? { guest: true as const, handedBy: instance.owner } : {}),
     connection,
-    fetch: (request) => link.fetch(request),
+    fetch: link.fetch,
     ...(instance.role === 'owner'
       ? { openTerminal: (terminalId: string) => link.openTerminalSocket(terminalId) }
       : {}),

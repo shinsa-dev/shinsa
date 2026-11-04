@@ -117,7 +117,7 @@ export class TaskCoverage extends Context.Service<
         const hits: CoverageHits = new Map();
         const problems: string[] = [];
         for (const run of runs) {
-          if (request.signal.aborted) return null;
+          if (request.signal?.aborted) return null;
           const read = yield* runCoverage(request, worktree, run);
           if (typeof read === 'string') problems.push(read);
           else mergeHits(hits, run, read);
@@ -133,7 +133,7 @@ export class TaskCoverage extends Context.Service<
         const { signal } = request;
         const command = runs.map((run) => run.command).join('\n');
         const collected = yield* collectHits(request, worktree, runs);
-        if (!collected || signal.aborted) return null;
+        if (!collected || signal?.aborted) return null;
         if (collected.hits.size === 0) return resolveUnavailable(command, collected.problems.join(' '));
         const refs = yield* history.taskRefs(request.repo, request.task, request.baseBranch, signal);
         if (!refs.base) return resolveUnavailable(command, NO_BASE_COMMIT);
@@ -149,7 +149,7 @@ export class TaskCoverage extends Context.Service<
 
       const measure = Effect.fn('TaskCoverage.measure')(function* (request: CoverageRequest) {
         const worktree = request.task.worktreePath;
-        if (!worktree || request.signal.aborted) return null;
+        if (!worktree || request.signal?.aborted) return null;
         const dir = yield* Effect.acquireRelease(
           Effect.sync(() => mkdtempSync(join(tmpdir(), COVERAGE_DIR_PREFIX))),
           (made) => Effect.sync(() => rmSync(made, { recursive: true, force: true }))

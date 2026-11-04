@@ -8,7 +8,7 @@ import {
   type TerminalPlace,
   type TerminalPlaceKind,
 } from '@shinsa/core';
-import { resolveSharedCacheEnv } from '../checks/caches.ts';
+import { resolveSharedCacheEnv } from '../checks/caches/paths.ts';
 import { isFolder, isInside } from '../files/paths.ts';
 import { listServiceSuggestions } from './detect.ts';
 import type { ServiceMachine, ServiceRun, TerminalStart } from './schema.ts';

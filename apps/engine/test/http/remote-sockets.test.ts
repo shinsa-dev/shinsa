@@ -1,17 +1,16 @@
 import { describe, expect, test } from 'bun:test';
 import type { ServerWebSocket } from 'bun';
-import { createRemoteSockets, type RemoteSocketData } from '../../src/http/server.ts';
-import type { ChannelPeer, RemoteChannel } from '../../src/remote/index.ts';
+import { Effect } from 'effect';
+import { makeRemoteSockets, type RemoteSocketData } from '../../src/http/server/sockets.ts';
+import type { ChannelPeer, RemoteChannelHandle } from '../../src/remote/channel/schema.ts';
+import type { ChannelParts } from '../../src/remote/machine/schema.ts';
 
 function createFakeChannel() {
   const calls: string[] = [];
   const channel = {
-    receive: (raw: string) => {
-      calls.push(`receive ${raw}`);
-      return Promise.resolve();
-    },
-    drain: () => calls.push('drain'),
-  } as unknown as RemoteChannel;
+    receive: (raw: string) => Effect.sync(() => calls.push(`receive ${raw}`)),
+    drain: Effect.sync(() => calls.push('drain')),
+  } as unknown as RemoteChannelHandle;
   return { channel, calls };
 }
 
@@ -19,22 +18,25 @@ describe('the remote sockets', () => {
   test('open a channel whose peer is the socket, and pass messages, drains and closes to it', () => {
     const { channel, calls } = createFakeChannel();
     const peers: ChannelPeer[] = [];
-    const closed: RemoteChannel[] = [];
-    const parts = {
+    const closed: RemoteChannelHandle[] = [];
+    const parts: ChannelParts = {
       hub: { open: () => undefined, close: () => undefined, message: () => undefined },
       terminals: null,
-      respond: () => Promise.resolve(new Response()),
+      respond: () => Effect.succeed(new Response()),
     };
-    const sockets = createRemoteSockets(
-      {
-        openChannel: (peer, given, userId) => {
-          peers.push(peer);
-          expect([given, userId]).toEqual([parts, 'u-mona']);
-          return channel;
+    const sockets = Effect.runSync(
+      makeRemoteSockets(
+        {
+          openChannel: (peer, given, userId) =>
+            Effect.sync(() => {
+              peers.push(peer);
+              expect([given, userId]).toEqual([parts, 'u-mona']);
+              return channel;
+            }),
+          closeChannel: (each) => Effect.sync(() => void closed.push(each)),
         },
-        closeChannel: (each) => closed.push(each),
-      },
-      parts
+        parts
+      )
     );
     const sent: unknown[] = [];
     const socket = {
@@ -44,6 +46,7 @@ describe('the remote sockets', () => {
       getBufferedAmount: () => 42,
     } as unknown as ServerWebSocket<RemoteSocketData>;
     sockets.drain(socket);
+    sockets.message(socket, 'early');
     sockets.close(socket);
     sockets.open(socket);
     expect(socket.data.channel).toBe(channel);

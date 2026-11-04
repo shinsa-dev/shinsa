@@ -1,6 +1,6 @@
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { EventLog } from '../../apps/engine/src/store/index.ts';
+import { openEventLog, type TestEventLog } from '../../apps/engine/test/helpers/event-log.ts';
 import {
   applyEvent,
   CHAT_PROTOCOL_VERSION,
@@ -69,9 +69,9 @@ class Writer {
   state: ShinsaState = createState();
   clock = Date.UTC(2026, 8, 1);
   counter = 0;
-  readonly log: EventLog;
+  readonly log: TestEventLog;
 
-  constructor(log: EventLog) {
+  constructor(log: TestEventLog) {
     this.log = log;
   }
 
@@ -311,7 +311,7 @@ function writeTranscript(dir: string, runId: string, entries: number) {
 export function writeSyntheticData(dataDir: string, options: SyntheticOptions = LARGE) {
   rmSync(dataDir, { recursive: true, force: true });
   mkdirSync(join(dataDir, 'transcripts'), { recursive: true });
-  const log = new EventLog(join(dataDir, 'shinsa.sqlite'));
+  const log = openEventLog(join(dataDir, 'shinsa.sqlite'));
   const writer = new Writer(log);
   const random = createRandom(7);
   const taskIds = createTasks(writer, options.tasks);

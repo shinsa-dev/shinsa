@@ -4,7 +4,7 @@ import { HttpClientRequest } from 'effect/http';
 import { runApp } from '@/lib/runtime/app.ts';
 import { EngineClient } from '@/lib/runtime/engine/service.ts';
 import { sendThrough } from '@/lib/runtime/fetch.ts';
-import { enterPromise } from '@/lib/runtime/promise.ts';
+import { enterPromise, enterPromiseOr } from '@/lib/runtime/promise.ts';
 import { answerFetch } from '../../support/fetch-fake.ts';
 
 const readProjects = Effect.gen(function* () {
@@ -44,5 +44,13 @@ describe('a promise entered into Effect code', () => {
       _tag: 'StepFailed',
       message: 'closed',
     });
+  });
+
+  it('fails with the given failure instead when it is given one', async () => {
+    const offline = Effect.fail('offline' as const);
+    expect(await runApp(enterPromiseOr(() => Promise.resolve(4), offline))).toBe(4);
+    expect(await runApp(Effect.flip(enterPromiseOr(() => Promise.reject(new Error('Gone.')), offline)))).toBe(
+      'offline'
+    );
   });
 });
