@@ -18,6 +18,7 @@ function mention(overrides: Partial<SlackMention> = {}): SlackMention {
     userName: 'Christo',
     text: ' take this ',
     permalink: 'https://acme.slack.com/archives/C1/p1003',
+    channelName: null,
     thread: [
       { ts: '100.1', userId: 'U2', userName: 'Mia', text: 'Export hangs.', bot: false },
       { ts: '100.2', userId: 'B1', userName: 'CI', text: 'Build failed.', bot: true },

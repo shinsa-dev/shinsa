@@ -131,6 +131,7 @@ describe('the status message', () => {
       userId: 'U1',
       messageTs: '1.2',
       permalink: null,
+      channelName: null,
       statusTs: null,
       reaction: null,
       decided: { userId: 'U7', text: 'approved the plan' },

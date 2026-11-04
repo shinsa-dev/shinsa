@@ -1,4 +1,4 @@
-import type { SlackLink, SlackSnapshot } from '@shinsa/core';
+import type { SlackLinkUse, SlackSnapshot } from '@shinsa/core';
 import { Button } from '@shinsa/ui/components/button';
 import { useDialogState } from '@shinsa/ui/hooks/use-dialog-state';
 import { cn } from '@shinsa/ui/lib/utils';
@@ -41,7 +41,7 @@ function StatusRow({ snapshot }: { snapshot: SlackSnapshot }) {
   );
 }
 
-function LinkRow({ link }: { link: SlackLink }) {
+function LinkRow({ link }: { link: SlackLinkUse }) {
   return (
     <div className={SETTING_ROW}>
       <div className='flex min-w-0 flex-1 flex-col'>
