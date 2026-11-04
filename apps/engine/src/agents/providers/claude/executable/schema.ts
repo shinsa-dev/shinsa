@@ -5,14 +5,12 @@ export type ClaudeExecutable =
   | { ok: true; path: string; version: string | null }
   | { ok: false; reason: 'not_installed' | 'outdated'; message: string };
 
-type VersionReader = (path: string) => Promise<string | null>;
-
 export interface ExecutableDeps extends LocateDeps {
-  readVersion?: VersionReader;
+  readVersion?: (path: string) => Effect.Effect<string | null>;
   minimumVersion?: string;
 }
 
-export type ExecutableResolver = () => Promise<ClaudeExecutable>;
+export type ExecutableResolver = Effect.Effect<ClaudeExecutable>;
 
 export interface ClaudeExecutableDefinition {
   readonly location: ProgramLocation;

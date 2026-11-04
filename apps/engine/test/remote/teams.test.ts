@@ -1,8 +1,8 @@
-import { afterEach, describe, expect, spyOn, test } from 'bun:test';
-import { readFileSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { afterEach, describe, expect, test } from 'bun:test';
+import { readFileSync } from 'node:fs';
 import {
   type Bytes,
+  DomainError,
   createFrameOpener,
   createTeamHello,
   decodeText,
@@ -23,14 +23,16 @@ import {
   verifyTeamSnapshot,
 } from '@shinsa/core';
 import { InviteInvalid, MembersFull, NotFound, NotOwner, TeamsFull } from '@shinsa/core/remote/errors';
-import { RemoteControl } from '../../src/remote/client/index.ts';
-import { createRefusedConnector } from '../../src/remote/connector/refused.ts';
-import { Remote } from '../../src/remote/index.ts';
-import { TEAM_REFUSALS, TEAM_REMOTE_CHANGED, Teams, type TeamsOptions } from '../../src/remote/teams.ts';
-import { captureLogs, createTempDir, until } from '../helpers/index.ts';
+import { Clock, Effect, Layer } from 'effect';
+import { RandomBytes } from '../../src/remote/schema.ts';
+import { TEAM_REFUSALS, TEAM_REMOTE_CHANGED } from '../../src/remote/teams/schema.ts';
+import { EngineStopped } from '../../src/runtime/engine/schema.ts';
+import { createFixedClock } from '../helpers/clock.ts';
+import { captureLogs, until } from '../helpers/index.ts';
 import { createRepo, createShareView, createStubEngine, createTask, readSentView } from '../helpers/state.ts';
 import { createKeyPair, startHandshake } from './client.ts';
 import { type FakeControlPlane, refuse, startFakeControlPlane } from './control-plane.ts';
+import { adaptRemote, adaptTeams, createRemoteTest } from './harness.ts';
 
 const CREDENTIALS = {
   instanceId: 'inst1',
@@ -79,40 +81,22 @@ afterEach(async () => {
   running = null;
 });
 
+interface HeldLists {
+  listHeld: (teamId: string) => TeamSnapshot[];
+  subscribeHeld: (listener: () => void) => void;
+}
+
 interface SetUp {
   file?: Record<string, unknown>;
   patch?: (state: ShinsaState) => void;
   resolveLive?: () => Promise<never>;
-  held?: TeamsOptions['held'];
+  held?: HeldLists;
   defaults?: boolean;
 }
 
 function setUp(options: SetUp = {}) {
   const plane = startFakeControlPlane();
   running = plane;
-  const path = join(createTempDir(), 'remote.json');
-  writeFileSync(
-    path,
-    JSON.stringify({
-      credentials: CREDENTIALS,
-      enabled: true,
-      owner: 'mona',
-      access: { owner: MONA, members: [] },
-      teams: [createTeam()],
-      teamKeys: [STORED_KEY],
-      ...options.file,
-    })
-  );
-  const remote = new Remote({
-    path,
-    control: new RemoteControl({ origin: plane.origin }),
-    connector: createRefusedConnector('no tunnel in this test'),
-    localUrl: () => 'http://127.0.0.1:1',
-    version: '1',
-    maxBodyBytes: 1024,
-    machineName: 'Studio',
-    openUrl: () => Promise.resolve(),
-  });
   const stub = createStubEngine((state) => {
     state.projects.p1 = {
       id: 'p1',
@@ -129,25 +113,82 @@ function setUp(options: SetUp = {}) {
     options.patch?.(state);
   });
   const live = { view: createShareView({ title: 'Live' }), files: [] };
+  const resolveLive = options.resolveLive ?? (() => Promise.resolve(live as never));
   const transcriptListeners: ((runId: string) => void)[] = [];
-  const teams = new Teams({
-    engine: stub.engine,
-    remote,
-    shares: { resolveLive: options.resolveLive ?? (() => Promise.resolve(live as never)) },
-    transcripts: {
-      subscribe: (listener) => {
-        transcriptListeners.push(listener);
-        return () => undefined;
-      },
+  const heartbeats = { count: 0 };
+  const { held } = options;
+  const machine = createRemoteTest({
+    file: {
+      credentials: CREDENTIALS,
+      enabled: true,
+      owner: 'mona',
+      access: { owner: MONA, members: [] },
+      teams: [createTeam()],
+      teamKeys: [STORED_KEY],
+      ...options.file,
     },
-    ...(options.held ? { held: options.held } : {}),
-    ...(options.defaults ? {} : { now: () => 50, random: (bytes) => new Uint8Array(bytes).fill(6) }),
+    origin: plane.origin,
+    engine: stub.engine.core,
+    transcripts: {
+      subscribe: (listener) =>
+        Effect.sync(() => {
+          transcriptListeners.push((runId) => listener(runId, [], null));
+          return Effect.void;
+        }),
+    },
+    remote: (remote) => ({
+      ...remote,
+      requestHeartbeat: Effect.sync(() => {
+        heartbeats.count += 1;
+      }),
+    }),
+    shares: (shares) => ({
+      ...shares,
+      resolveLive: () =>
+        Effect.tryPromise({
+          try: resolveLive,
+          catch: (error) => new DomainError({ code: 'share_unreadable', message: (error as Error).message }),
+        }),
+    }),
+    ...(held
+      ? {
+          teamFeeds: (feeds) => ({
+            ...feeds,
+            listHeld: (teamId) => Effect.sync(() => held.listHeld(teamId)),
+            observeHeld: (listener) =>
+              Effect.sync(() => {
+                held.subscribeHeld(() => machine.runSync(listener));
+              }),
+          }),
+        }
+      : {}),
+    layers: options.defaults
+      ? Layer.empty
+      : Layer.merge(
+          Layer.succeed(
+            Clock.Clock,
+            createFixedClock(() => 50)
+          ),
+          Layer.succeed(RandomBytes, (bytes: number) => new Uint8Array(bytes).fill(6))
+        ),
   });
   const writeTranscript = (runId: string) => {
     for (const listener of transcriptListeners) listener(runId);
   };
-  return { plane, stub, remote, teams, path, writeTranscript };
+  return {
+    plane,
+    stub,
+    remote: adaptRemote(machine),
+    teams: adaptTeams(machine),
+    path: machine.path,
+    heartbeats,
+    writeTranscript,
+  };
 }
+
+type Teams = ReturnType<typeof setUp>['teams'];
+
+type Remote = ReturnType<typeof setUp>['remote'];
 
 interface Viewer {
   messages: ShareMessage[];
@@ -282,7 +323,6 @@ describe('a team view of this machine', () => {
         listHeld: (teamId) => (teamId === 'team1' ? held : []),
         subscribeHeld: (listener) => {
           heldListeners.push(listener);
-          return () => true;
         },
       },
     });
@@ -464,7 +504,10 @@ describe('a team view that ends on this machine’s side', () => {
 
   test('removing a team passes on a project change that breaks', async () => {
     const { teams, stub } = setUp();
-    stub.reject((command) => command.type === 'project.remove_from_team', new Error('disk full'));
+    stub.reject(
+      (command) => command.type === 'project.remove_from_team',
+      new EngineStopped({ message: 'disk full' })
+    );
     await expect(teams.remove('team1')).rejects.toMatchObject({
       _tag: 'TeamCommandFailed',
       message: 'disk full',
@@ -502,7 +545,7 @@ describe('making and joining teams', () => {
   });
 
   test('joining asks the owner and keeps the key; a member is refreshed at once', async () => {
-    const { teams, plane, remote } = setUp({ file: { teams: [], teamKeys: [] } });
+    const { teams, plane, remote, heartbeats } = setUp({ file: { teams: [], teamKeys: [] } });
     const url = resolveTeamJoinUrl({ teamId: 'team1', invite: 'invite-1', key: TEAM_KEY }, plane.origin);
     plane.answers.set(REMOTE_PATHS.machineTeamJoin, () =>
       Response.json({ teamId: 'team1', name: 'Platform', owner: KAI, status: 'requested' })
@@ -515,9 +558,9 @@ describe('making and joining teams', () => {
     plane.answers.set(REMOTE_PATHS.machineTeamJoin, () =>
       Response.json({ teamId: 'team1', name: 'Platform', owner: MONA, status: 'member' })
     );
-    const heartbeat = spyOn(remote, 'requestHeartbeat').mockResolvedValue();
+    expect(heartbeats.count).toBe(0);
     expect(await teams.join(url)).toEqual({ status: 'member', teamId: 'team1' });
-    expect(heartbeat).toHaveBeenCalled();
+    expect(heartbeats.count).toBe(1);
     expect(remote.store.selectTeamKey('team1')).toMatchObject({ invite: 'invite-1', key: TEAM_KEY });
   });
 
@@ -535,19 +578,6 @@ describe('making and joining teams', () => {
       Response.json({ teamId: 'other', name: 'Other', owner: KAI, status: 'member' })
     );
     await expect(teams.join(url)).rejects.toMatchObject({ code: 'team_link_invalid' });
-  });
-
-  test('a join whose heartbeat fails says so', async () => {
-    const { teams, plane, remote } = setUp();
-    spyOn(remote, 'requestHeartbeat').mockRejectedValue(new Error('tunnel down'));
-    const url = resolveTeamJoinUrl({ teamId: 'team1', invite: 'invite-1', key: TEAM_KEY }, plane.origin);
-    plane.answers.set(REMOTE_PATHS.machineTeamJoin, () =>
-      Response.json({ teamId: 'team1', name: 'Platform', owner: MONA, status: 'member' })
-    );
-    await expect(teams.join(url)).rejects.toMatchObject({
-      _tag: 'TeamHeartbeatFailed',
-      message: 'tunnel down',
-    });
   });
 
   test('the owner renews or turns off the link; a member cannot', async () => {

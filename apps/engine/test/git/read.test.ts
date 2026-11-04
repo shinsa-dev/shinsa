@@ -4,11 +4,11 @@ import { Duration, Effect } from 'effect';
 import type { GitReadRequest } from '../../src/git/schema.ts';
 import { Git } from '../../src/git/service.ts';
 import { decodeText, splitRecords } from '../../src/git/text.ts';
-import { edgeRuntime } from '../../src/runtime/edge.ts';
+import { runGit } from '../helpers/git.ts';
 import { createGitRepo, writeFiles } from '../helpers/index.ts';
 
 function readGit(args: string[], cwd: string, options: GitReadRequest = {}) {
-  return edgeRuntime.runPromise(Git.use((git) => git.read(args, cwd, options)));
+  return runGit(Git.use((git) => git.read(args, cwd, options)));
 }
 
 describe('Git.read', () => {
@@ -82,7 +82,7 @@ describe('Git.read', () => {
     writeFiles(path, { 'slow.sh': 'sleep 5\n' });
     const caller = new AbortController();
     const started = Date.now();
-    const pending = edgeRuntime.runPromise(
+    const pending = runGit(
       Git.use((git) => git.read(['-c', `alias.slow=!sh ${join(path, 'slow.sh')}`, 'slow'], path)),
       { signal: caller.signal }
     );

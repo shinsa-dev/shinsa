@@ -1,6 +1,6 @@
 import type { McpServerConfig } from '@anthropic-ai/claude-agent-sdk';
 import type { McpDefinition } from '../../../extensions/definitions.ts';
-import { resolveDeferredInstructions, type SessionExtensions } from '../../../extensions/index.ts';
+import { resolveDeferredInstructions, type SessionExtensions } from '../../../extensions/session.ts';
 import { SHINSA_SKILL_NAMES } from '../instructions.ts';
 
 interface ClaudeExtensions {

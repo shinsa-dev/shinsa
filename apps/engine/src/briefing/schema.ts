@@ -1,47 +1,12 @@
-import { BRIEFING_LIMITS, type ShinsaState } from '@shinsa/core';
-import { Duration, Schema } from 'effect';
-import type { Effect } from 'effect';
-import type { JsonSchema } from '../agents/providers/index.ts';
-import type { QuickJson } from '../agents/quick/index.ts';
-import type { WrittenBriefing } from '../runtime/engine/schema.ts';
+import { BRIEFING_LIMITS } from '@shinsa/core';
+import { Context, Duration } from 'effect';
 
-export interface BriefingOptions {
-  ask: QuickJson;
-  debounceMs?: number;
-}
-
-export class BriefingAskFailed extends Schema.TaggedError<
-  BriefingAskFailed,
-  { readonly brand: unique symbol }
->()('BriefingAskFailed', { message: Schema.String }) {}
-
-export class BriefingWriteFailed extends Schema.TaggedError<
-  BriefingWriteFailed,
-  { readonly brand: unique symbol }
->()('BriefingWriteFailed', { message: Schema.String }) {}
-
-export type BriefingAsk = (
-  system: string,
-  prompt: string,
-  schema: JsonSchema
-) => Effect.Effect<unknown, BriefingAskFailed>;
-
-export interface BriefingsDefinition {
-  readonly state: Effect.Effect<ShinsaState>;
-  readonly ask: BriefingAsk;
-  readonly write: (
-    projectId: string | null,
-    written: WrittenBriefing
-  ) => Effect.Effect<void, BriefingWriteFailed>;
-  readonly debounce: Duration.Duration;
-}
-
-export interface BriefingsHandle {
-  readonly schedule: Effect.Effect<void>;
-  readonly stop: Effect.Effect<void>;
-}
-
-export const BRIEFING_DEBOUNCE = Duration.seconds(4);
+export const BriefingDebounce = Context.Reference<Duration.Duration>(
+  'shinsa/engine/briefing/BriefingDebounce',
+  {
+    defaultValue: () => Duration.seconds(4),
+  }
+);
 
 export const HOUR_MS = 60 * 60 * 1000;
 

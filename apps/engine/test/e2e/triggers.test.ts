@@ -3,11 +3,12 @@ import { createHmac } from 'node:crypto';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { type Gate, listOpenGates, type Task } from '@shinsa/core';
+import { Duration, Effect } from 'effect';
 import type { ModelSource } from '../../src/agents/index.ts';
-import { ProviderRegistry } from '../../src/agents/providers/index.ts';
-import { inspectRepo } from '../../src/git/index.ts';
-import { type Shinsa, startShinsa } from '../../src/serve.ts';
+import { inspectRepo } from '../helpers/git.ts';
 import { createGitRepo, createTempDir, createTestConfig, until } from '../helpers/index.ts';
+import { createTestProviders } from '../helpers/providers.ts';
+import { type Shinsa, startShinsa } from '../helpers/serve.ts';
 import { type AgentScript, FakeAgents, PLAN, toolPlan } from './harness.ts';
 
 setDefaultTimeout(30_000);
@@ -39,9 +40,9 @@ async function boot(): Promise<Boot> {
   const shinsa = await startShinsa(config, {
     models,
     resolveLogin: () => Promise.resolve(null),
-    providers: new ProviderRegistry([agents.provider('claude', 'Claude')]),
+    providers: createTestProviders([agents.provider('claude', 'Claude')]),
     triage: (_state, task) =>
-      Promise.resolve({
+      Effect.succeed({
         title: task.request.split('\n')[0]?.slice(0, 40) ?? 'Task',
         repoPath: repo.path,
         size: 'small',
@@ -49,7 +50,7 @@ async function boot(): Promise<Boot> {
         waitsOn: [],
       }),
     timeZone: 'UTC',
-    scheduleClock: { minDelayMs: 0, maxDelayMs: 20 },
+    scheduleClock: { minDelay: Duration.zero, maxDelay: Duration.millis(20) },
   });
   agents.state = () => shinsa.engine.state;
   const candidate = await inspectRepo(repo.path);

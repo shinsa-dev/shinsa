@@ -1,6 +1,4 @@
 import { afterEach, describe, expect, test } from 'bun:test';
-import { writeFileSync } from 'node:fs';
-import { join } from 'node:path';
 import {
   createPreviewAccessToken,
   PREVIEW_ACCESS_HEADER,
@@ -23,24 +21,23 @@ import {
   type TerminalInfo,
   type TerminalsSnapshot,
 } from '@shinsa/core';
-import { RemoteControl } from '../../src/remote/client/index.ts';
-import { createRefusedConnector } from '../../src/remote/connector/refused.ts';
-import { Remote } from '../../src/remote/index.ts';
+import { Clock, Effect, Layer } from 'effect';
+import { resolveCloseCode, resolveForwardHeaders } from '../../src/remote/previews/forwarding.ts';
 import {
   PREVIEW_LINK_LOST,
   PREVIEW_NO_URL,
   PREVIEW_NOT_PAIRED,
   type PreviewAnswer,
   type PreviewPeer,
-  Previews,
-  resolveCloseCode,
-  resolveForwardHeaders,
-} from '../../src/remote/previews.ts';
-import { EffectFailed } from '../../src/runtime/failures/schema.ts';
-import { createTempDir, until } from '../helpers/index.ts';
+} from '../../src/remote/previews/schema.ts';
+import { RandomBytes } from '../../src/remote/schema.ts';
+import type { RemoteUrlSource } from '../../src/terminals/schema.ts';
+import { createFixedClock } from '../helpers/clock.ts';
+import { until } from '../helpers/index.ts';
 import { captureLogs } from '../helpers/logs.ts';
 import { createStubEngine, createTask } from '../helpers/state.ts';
 import { type FakeControlPlane, startFakeControlPlane } from './control-plane.ts';
+import { adaptPreviews, adaptRemote, createRemoteTest } from './harness.ts';
 
 const ORIGIN = 'https://shinsa.page';
 
@@ -124,45 +121,60 @@ interface SetUp {
 
 function setUp(options: SetUp = {}) {
   plane = startFakeControlPlane();
-  const dir = createTempDir();
-  const path = join(dir, 'remote.json');
-  if (options.paired ?? true)
-    writeFileSync(
-      path,
-      JSON.stringify({
-        credentials: { ...CREDENTIALS, connectKey: options.connectKey ?? CREDENTIALS.connectKey },
-        enabled: true,
-        owner: 'mona',
-        access: ACCESS,
-      })
-    );
-  const remote = new Remote({
-    path,
-    control: new RemoteControl({ origin: plane.origin }),
-    connector: createRefusedConnector('no tunnel in this test'),
-    localUrl: () => 'http://127.0.0.1:1',
-    version: '1',
-    maxBodyBytes: 1024,
-    machineName: 'Studio',
-    openUrl: () => Promise.resolve(),
-  });
   const stub = createStubEngine((state) => {
     const preview = options.preview === undefined ? createPreview() : options.preview;
     state.tasks['task-1'] = createTask({ previews: preview ? [preview] : [] });
     options.patch?.(state);
   });
   const snapshot: TerminalsSnapshot = { terminals: [createRun()], services: [createService()], home: '/tmp' };
+  const urls: { source: RemoteUrlSource | null } = { source: null };
   let fill = 7;
-  const previews = new Previews({
-    engine: stub.engine,
-    remote,
-    services: { snapshot: () => snapshot },
-    origin: ORIGIN,
-    ...(options.seeded === false ? {} : { random: (bytes: number) => new Uint8Array(bytes).fill(fill++) }),
-    ...(options.now ? { now: options.now } : {}),
+  const machine = createRemoteTest({
+    ...((options.paired ?? true)
+      ? {
+          file: {
+            credentials: { ...CREDENTIALS, connectKey: options.connectKey ?? CREDENTIALS.connectKey },
+            enabled: true,
+            owner: 'mona',
+            access: ACCESS,
+          },
+        }
+      : {}),
+    origin: plane.origin,
+    engine: stub.engine.core,
+    config: { previewOrigin: ORIGIN },
+    terminals: {
+      snapshot: Effect.sync(() => snapshot),
+      applyRemoteUrls: (source) =>
+        Effect.sync(() => {
+          urls.source = source;
+        }),
+    },
+    layers: Layer.mergeAll(
+      options.seeded === false
+        ? Layer.empty
+        : Layer.succeed(RandomBytes, (bytes: number) => new Uint8Array(bytes).fill(fill++)),
+      options.now ? Layer.succeed(Clock.Clock, createFixedClock(options.now)) : Layer.empty
+    ),
   });
-  return { stub, remote, previews, snapshot };
+  stops.push(() => machine.close());
+  const adapted = adaptPreviews(machine);
+  const source = () => {
+    if (!urls.source) throw new Error('the previews gave Terminals no remote URLs');
+    return urls.source;
+  };
+  const previews = {
+    ...adapted,
+    resolveRemoteUrl: (info: TerminalInfo, service: ServiceDefinition) =>
+      machine.runSync(source().resolveRemoteUrl(info, service)),
+    subscribe: (listener: () => void) => {
+      source().subscribe(listener);
+    },
+  };
+  return { stub, remote: adaptRemote(machine), previews, snapshot };
 }
+
+type Previews = ReturnType<typeof setUp>['previews'];
 
 function ask(previews: Previews, path: string, init: RequestInit & { key?: string | null } = {}) {
   const { key = KEY, ...rest } = init;
@@ -291,12 +303,17 @@ describe('making a preview link', () => {
 
   test('an unpaired machine and a service without a preview URL cannot make one, and say why', async () => {
     const unpaired = setUp({ paired: false });
-    const refused = unpaired.previews.link('task-1', 'web', CONTEXT);
-    await expect(refused).rejects.toThrow(EffectFailed);
-    await expect(refused).rejects.toThrow(PREVIEW_NOT_PAIRED);
+    await expect(unpaired.previews.link('task-1', 'web', CONTEXT)).rejects.toMatchObject({
+      _tag: 'EffectFailed',
+      message: PREVIEW_NOT_PAIRED,
+      retryable: false,
+    });
     const plain = setUp();
     plain.snapshot.services[0] = createService({ previewUrl: null });
-    await expect(plain.previews.link('task-1', 'web', CONTEXT)).rejects.toThrow(PREVIEW_NO_URL);
+    await expect(plain.previews.link('task-1', 'web', CONTEXT)).rejects.toMatchObject({
+      _tag: 'EffectFailed',
+      message: PREVIEW_NO_URL,
+    });
   });
 
   test('unpairing marks every live link as lost, and a failure to say so is logged', async () => {
@@ -544,10 +561,9 @@ describe('a private address for every running service', () => {
   test('a running service gets its own address on the preview origin, kept the same, once remote access is on', async () => {
     const { previews } = setUp({ preview: null, now: () => 10 });
     const published: number[] = [];
-    const unsubscribe = previews.subscribe(() => published.push(1));
+    previews.subscribe(() => published.push(1));
     const url = await resolvePrivateUrl(previews, createRun({ port: 4123 }));
     expect(published.length).toBe(1);
-    unsubscribe();
     const previewId = resolvePrivateId(url);
     expect(previewId).toBe(
       await resolvePrivatePreviewId(CREDENTIALS.connectKey, { serviceId: 'web', taskId: 'task-1' })

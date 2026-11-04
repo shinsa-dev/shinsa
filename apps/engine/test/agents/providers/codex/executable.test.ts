@@ -1,12 +1,26 @@
 import { describe, expect, test } from 'bun:test';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
+import { Effect, Layer, ManagedRuntime } from 'effect';
 import {
   CODEX_MINIMUM_VERSION,
   parseCodexVersion,
-  readCodexVersion,
-  resolveCodexExecutable,
+  readCodexVersion as readVersionEffect,
+  resolveCodexExecutable as resolveEffect,
 } from '../../../../src/agents/providers/codex/executable.ts';
+import type { CodexExecutableDeps } from '../../../../src/agents/providers/codex/executable.ts';
+import { ProgramVersions } from '../../../../src/agents/providers/versions/service.ts';
+import { ShellLayer } from '../../../../src/shell/layers.ts';
+
+const runtime = ManagedRuntime.make(ProgramVersions.layer.pipe(Layer.provide(ShellLayer)));
+
+function readCodexVersion(path: string) {
+  return runtime.runPromise(readVersionEffect(path));
+}
+
+function resolveCodexExecutable(deps: CodexExecutableDeps = {}) {
+  return runtime.runPromise(resolveEffect(deps));
+}
 
 const FAKE = join(import.meta.dirname, '../../../helpers/bin/codex');
 
@@ -21,7 +35,7 @@ describe('the codex Shinsa runs', () => {
   test('CODEX_EXECUTABLE wins, with ~ expanded, and is still version-checked', async () => {
     const resolved = await resolveCodexExecutable({
       env: { CODEX_EXECUTABLE: '~/bin/codex' },
-      readVersion: () => Promise.resolve(null),
+      readVersion: () => Effect.succeed(null),
     });
     expect(resolved).toEqual({ ok: true, path: join(homedir(), 'bin/codex'), version: null });
   });
@@ -36,7 +50,7 @@ describe('the codex Shinsa runs', () => {
     const resolved = await resolveCodexExecutable({
       env: {},
       which: () => '/bin/codex',
-      readVersion: () => Promise.resolve('0.100.0'),
+      readVersion: () => Effect.succeed('0.100.0'),
     });
     expect(resolved).toEqual({
       ok: false,

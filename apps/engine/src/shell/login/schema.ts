@@ -4,22 +4,16 @@ import type { Argv, CommandResult } from '../schema.ts';
 
 export type Env = Record<string, string | undefined>;
 
-type ShellRunner = (command: string[], cwd: string) => Promise<CommandResult>;
-
 export interface LoginEnvOptions {
-  shell?: string;
-  home?: string;
-  timeoutMs?: number;
-  run?: ShellRunner;
+  readonly shell?: string;
+  readonly home?: string;
+  readonly timeout?: Duration.Duration;
+  readonly run?: (argv: Argv, cwd: string) => Effect.Effect<CommandResult>;
 }
 
 export interface TerminalStreams {
   stdin: { isTTY?: boolean };
   stdout: { isTTY?: boolean };
-}
-
-export interface LoginEnvReader {
-  read: () => Promise<Record<string, string> | null>;
 }
 
 export interface LoginEnvDefinition {

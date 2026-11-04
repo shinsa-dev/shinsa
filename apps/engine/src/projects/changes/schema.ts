@@ -1,37 +1,13 @@
-import type { DomainError, Project, Repo, ShinsaCommand, ShinsaState } from '@shinsa/core';
-import { type Effect, Schema } from 'effect';
-import type { DispatchOptions } from '../../runtime/engine.ts';
+import type { DomainError } from '@shinsa/core';
+import { Schema } from 'effect';
+import type { RegistryFailure } from '../../repos/registry/schema.ts';
 
 export class ProjectChangeFailed extends Schema.TaggedError<
   ProjectChangeFailed,
   { readonly brand: unique symbol }
 >()('ProjectChangeFailed', { message: Schema.String }) {}
 
-type ProjectChangeFailure = DomainError | ProjectChangeFailed;
-
-export interface ProjectChangesDefinition {
-  state: Effect.Effect<ShinsaState>;
-  userHome: string;
-  dispatch: (command: ShinsaCommand, from: DispatchOptions) => Effect.Effect<void, ProjectChangeFailure>;
-  registerRepo: (
-    path: string,
-    projectId: string,
-    from: DispatchOptions
-  ) => Effect.Effect<Repo, ProjectChangeFailure>;
-}
-
-export interface ProjectChanges {
-  upsertRepo: (
-    projectId: string,
-    path: string,
-    from?: DispatchOptions
-  ) => Effect.Effect<{ repo: Repo }, ProjectChangeFailure>;
-  upsertFolder: (
-    projectId: string,
-    path: string,
-    from?: DispatchOptions
-  ) => Effect.Effect<{ project: Project }, ProjectChangeFailure>;
-}
+export type ProjectChangeFailure = DomainError | ProjectChangeFailed | RegistryFailure;
 
 export interface LocalRepoView {
   path: string;

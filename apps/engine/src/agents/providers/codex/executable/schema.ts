@@ -12,11 +12,11 @@ export type CodexExecutable =
   | { ok: false; reason: 'not_installed' | 'outdated'; message: string; version: string | null };
 
 export interface CodexExecutableDeps extends LocateDeps {
-  readVersion?: (path: string) => Promise<string | null>;
+  readVersion?: (path: string) => Effect.Effect<string | null>;
   minimumVersion?: string;
 }
 
-export type CodexExecutableResolver = () => Promise<CodexExecutable>;
+export type CodexExecutableResolver = Effect.Effect<CodexExecutable>;
 
 export interface CodexExecutableDefinition {
   readonly path: string | null;

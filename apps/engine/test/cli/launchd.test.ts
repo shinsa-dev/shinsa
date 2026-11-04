@@ -4,12 +4,12 @@ import { join } from 'node:path';
 import { Effect } from 'effect';
 import { createLaunchdService, isAppJob, resolveLaunchAgent } from '../../src/cli/launchd.ts';
 import type { ServiceRunner } from '../../src/instance/index.ts';
-import { edgeRuntime } from '../../src/runtime/edge.ts';
 import type { Shell } from '../../src/shell/service.ts';
 import { createTempDir } from '../helpers/index.ts';
+import { testRuntime } from '../helpers/runtime.ts';
 
 function run<A, E>(effect: Effect.Effect<A, E, Shell>) {
-  return edgeRuntime.runPromise(effect);
+  return testRuntime.runPromise(effect);
 }
 
 const TARGET = 'gui/501/studio.overclock.shinsa.engine';

@@ -1,14 +1,14 @@
 import { describe, expect, test } from 'bun:test';
 import { readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { SecretStore } from '../../src/secrets/index.ts';
 import { captureLogs, createTempDir } from '../helpers/index.ts';
+import { openTestSecrets } from '../helpers/secrets.ts';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-function createStore(now = () => 1_000) {
+function createStore() {
   const path = join(createTempDir(), 'secrets.json');
-  return { path, store: new SecretStore(path, { now }) };
+  return { path, store: openTestSecrets(path) };
 }
 
 describe('one-use secret refs', () => {
@@ -22,7 +22,7 @@ describe('one-use secret refs', () => {
     expect(JSON.parse(readFileSync(path, 'utf8')).refs[ref]).toEqual({
       value: 'hunter2',
       taskId: 'task-1',
-      savedAt: 1_000,
+      savedAt: 0,
     });
   });
 
@@ -42,24 +42,22 @@ describe('one-use secret refs', () => {
     expect(() => store.removeRef('secret-ref:nope', 'task-1')).toThrow('That is not a secret ref');
   });
 
-  test('a ref older than a day is refused and removed', () => {
-    let now = 1_000;
-    const { store } = createStore(() => now);
+  test('a ref older than a day is refused and removed', async () => {
+    const { store } = createStore();
     const ref = store.writeRef('gate-1', 'task-1', 'value');
-    now += DAY_MS + 1;
+    await store.setTime(DAY_MS + 1);
     expect(() => store.removeRef(ref, 'task-1')).toThrow('expired');
     expect(() => store.removeRef(ref, 'task-1')).toThrow('has been used');
   });
 
-  test('removing expired refs drops them and keeps fresh ones', () => {
-    let now = 1_000;
-    const { path, store } = createStore(() => now);
+  test('removing expired refs drops them and keeps fresh ones', async () => {
+    const { path, store } = createStore();
     const old = store.writeRef('gate-1', 'task-1', 'old');
-    now += DAY_MS;
+    await store.setTime(DAY_MS);
     const fresh = store.writeRef('gate-2', 'task-1', 'fresh');
     store.removeExpiredRefs();
     expect(Object.keys(JSON.parse(readFileSync(path, 'utf8')).refs)).toEqual([old, fresh]);
-    now += 2;
+    await store.setTime(DAY_MS + 2);
     store.removeExpiredRefs();
     expect(Object.keys(JSON.parse(readFileSync(path, 'utf8')).refs)).toEqual([fresh]);
     expect(store.removeRef(fresh, 'task-1')).toBe('fresh');
@@ -101,8 +99,8 @@ describe('reading the store', () => {
         hooks: { s1: { token: 't1', secret: 's' }, s2: { token: 't2' }, s3: { secret: 'x' }, s4: 3 },
       })
     );
-    const store = new SecretStore(path);
-    expect(store.resolveRef('g')).toBe(new SecretStore(path).resolveRef('g'));
+    const store = openTestSecrets(path);
+    expect(store.resolveRef('g')).toBe(openTestSecrets(path).resolveRef('g'));
     expect(store.selectHook('s1')).toEqual({ token: 't1', secret: 's' });
     expect(store.selectHook('s2')).toEqual({ token: 't2', secret: null });
     expect(store.selectHook('s3')).toBeNull();
@@ -114,7 +112,7 @@ describe('reading the store', () => {
       const dir = createTempDir();
       const path = join(dir, 'secrets.json');
       writeFileSync(path, content);
-      const store = new SecretStore(path);
+      const store = openTestSecrets(path);
       expect(store.selectHook('s1')).toBeNull();
       store.upsertHook('s2');
       const kept = readdirSync(dir).filter((name) => name.startsWith('secrets.json.unreadable-'));
@@ -135,19 +133,19 @@ describe('reading the store', () => {
       path,
       JSON.stringify({ salt: 'abc', refs: 'x', hooks: { s1: { token: 't1', secret: 5 } }, mcp: 'junk' })
     );
-    const store = new SecretStore(path);
+    const store = openTestSecrets(path);
     expect(store.hasRef('x')).toBe(false);
     expect(store.selectHook('s1')).toEqual({ token: 't1', secret: null });
     expect(store.selectMcpCredentials('junk')).toEqual({});
     writeFileSync(path, JSON.stringify({ salt: 'abc', hooks: [] }));
-    expect(new SecretStore(path).selectHook('0')).toBeNull();
+    expect(openTestSecrets(path).selectHook('0')).toBeNull();
   });
 
   test('a store without refs or hooks reads as empty', () => {
     const dir = createTempDir();
     const path = join(dir, 'secrets.json');
     writeFileSync(path, JSON.stringify({ salt: 'abc' }));
-    const store = new SecretStore(path);
+    const store = openTestSecrets(path);
     expect(store.selectHook('s1')).toBeNull();
     expect(() => store.removeRef(store.resolveRef('g'), 't')).toThrow('has been used');
   });
@@ -159,22 +157,22 @@ describe('MCP sign-ins', () => {
     store.updateMcpCredentials('claude:linear', { tokens: { access_token: 'a' } });
     store.updateMcpCredentials('claude:linear', { verifier: 'v' });
     expect(statSync(path).mode & 0o777).toBe(0o600);
-    const reread = new SecretStore(path);
+    const reread = openTestSecrets(path);
     expect(reread.selectMcpCredentials('claude:linear')).toEqual({
       tokens: { access_token: 'a' },
       verifier: 'v',
     });
     reread.removeMcpCredentials('claude:linear');
-    expect(new SecretStore(path).selectMcpCredentials('claude:linear')).toEqual({});
+    expect(openTestSecrets(path).selectMcpCredentials('claude:linear')).toEqual({});
   });
 
   test('a damaged entry is dropped and the rest is kept', () => {
     const path = join(createTempDir(), 'secrets.json');
     writeFileSync(path, JSON.stringify({ salt: 'abc', mcp: { ok: { verifier: 'v' }, bad: 'junk' } }));
-    const store = new SecretStore(path);
+    const store = openTestSecrets(path);
     expect(store.selectMcpCredentials('ok')).toEqual({ verifier: 'v' });
     expect(store.selectMcpCredentials('bad')).toEqual({});
     writeFileSync(path, JSON.stringify({ salt: 'abc', mcp: [] }));
-    expect(new SecretStore(path).selectMcpCredentials('ok')).toEqual({});
+    expect(openTestSecrets(path).selectMcpCredentials('ok')).toEqual({});
   });
 });

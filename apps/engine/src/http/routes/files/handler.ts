@@ -1,30 +1,32 @@
 import { basename } from 'node:path';
 import { EngineApi } from '@shinsa/core/engine-api';
 import { FileNotFound } from '@shinsa/core/engine-api/schema';
-import { Effect } from 'effect';
+import { Effect, Layer } from 'effect';
 import { HttpApiBuilder } from 'effect/http-api';
+import { EngineConfig } from '../../../config/service.ts';
 import { Attachments } from '../../../store/attachments/service.ts';
 import { parseAttachmentUpload } from '../../../store/attachments/upload.ts';
+import { Evidence } from '../../../store/evidence/service.ts';
 import { resolveRequestFailure } from '../../failures.ts';
 import { resolveAttachmentHeaders, respondFile } from '../../files.ts';
-import { HttpServices } from '../../services/service.ts';
 
 export const FilesHandlers = HttpApiBuilder.group(
   EngineApi,
   'files',
   Effect.fn('FilesHandlers')(function* (handlers) {
-    const { config, evidence } = yield* HttpServices;
+    const config = yield* EngineConfig;
+    const evidence = yield* Evidence;
     const attachments = yield* Attachments.use(Effect.succeed).pipe(
-      Effect.provide(Attachments.layer(config.attachmentsDir))
+      Effect.provide(Attachments.layer.pipe(Layer.provide(Layer.succeed(EngineConfig, config))))
     );
 
     return handlers
       .handle(
         'evidence',
         Effect.fn('FilesHandlers.evidence')(function* ({ params, request }) {
-          const path = evidence.selectFile(params['*']);
-          if (!path) return yield* new FileNotFound();
-          return respondFile(Bun.file(path), request.headers.range);
+          const path = yield* evidence.selectFile(params['*']);
+          if (path._tag === 'None') return yield* new FileNotFound();
+          return respondFile(Bun.file(path.value), request.headers.range);
         })
       )
       .handle('uploadAttachment', ({ payload }) =>

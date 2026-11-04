@@ -4,16 +4,8 @@ import type { CodexTurnError } from '../classify.ts';
 import type { CodexExecutable, CodexExecutableResolver } from '../executable/schema.ts';
 
 export interface CodexRuntime {
-  resolveExecutable: CodexExecutableResolver;
-  env?: Record<string, string | undefined>;
-}
-
-export interface CodexSessionOptions {
-  runtime?: CodexRuntime;
-  requestTimeoutMs?: number;
-  heartbeatMs?: number;
-  compactGraceMs?: number;
-  now?: () => number;
+  readonly resolveExecutable: CodexExecutableResolver;
+  readonly env?: Record<string, string | undefined>;
 }
 
 export type CodexSessionMode = 'turns' | 'compact';

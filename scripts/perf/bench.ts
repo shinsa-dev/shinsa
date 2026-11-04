@@ -1,15 +1,18 @@
 import { appendFileSync, cpSync, mkdirSync, readdirSync, rmSync, statSync } from 'node:fs';
 import { join } from 'node:path';
-import { Transcripts } from '../../apps/engine/src/agents/transcripts/index.ts';
-import { createSocketHub, type SocketData } from '../../apps/engine/src/http/socket.ts';
-import { Engine } from '../../apps/engine/src/runtime/engine.ts';
-import { EventLog, resolveStateVersion } from '../../apps/engine/src/store/index.ts';
+import type { Transcripts } from '../../apps/engine/src/agents/transcripts/service.ts';
+import type { SocketData } from '../../apps/engine/src/http/socket.ts';
+import { resolveStateVersion } from '../../apps/engine/src/store/index.ts';
+import { Engine } from '../../apps/engine/test/helpers/engine.ts';
+import { openEventLog } from '../../apps/engine/test/helpers/event-log.ts';
+import { createSocketHub } from '../../apps/engine/test/helpers/socket-hub.ts';
 import {
   type ShinsaState,
   serializeState,
   type TaskPriority,
   type UserCommand,
 } from '../../packages/core/src/index.ts';
+import { createPlainTranscripts } from '../kit/transcripts.ts';
 
 interface PageConnection {
   start: () => void;
@@ -60,7 +63,7 @@ function sizeOf(path: string) {
 
 function timeBoot(dir: string, stateVersion: string | null) {
   const started = performance.now();
-  const log = new EventLog(join(dir, 'shinsa.sqlite'));
+  const log = openEventLog(join(dir, 'shinsa.sqlite'));
   const engine = new Engine(log, { stateVersion });
   const ms = performance.now() - started;
   return { engine, log, ms };
@@ -72,7 +75,12 @@ function pickTask(state: ShinsaState) {
   return task.id;
 }
 
-async function measureServer(engine: Engine, transcripts: Transcripts, taskId: string, clicks: number) {
+async function measureServer(
+  engine: Engine,
+  transcripts: Transcripts['Service'],
+  taskId: string,
+  clicks: number
+) {
   const hub = createSocketHub(engine, transcripts);
   const sent: number[] = [];
   const payloads: string[] = [];
@@ -114,7 +122,7 @@ async function measureServer(engine: Engine, transcripts: Transcripts, taskId: s
   };
 }
 
-function startSocketServer(engine: Engine, transcripts: Transcripts) {
+function startSocketServer(engine: Engine, transcripts: Transcripts['Service']) {
   const hub = createSocketHub(engine, transcripts);
   const server = Bun.serve<SocketData>({
     port: 0,
@@ -162,7 +170,12 @@ function selectProject(state: ShinsaState) {
   return project;
 }
 
-async function measureRoundTrip(engine: Engine, transcripts: Transcripts, taskId: string, clicks: number) {
+async function measureRoundTrip(
+  engine: Engine,
+  transcripts: Transcripts['Service'],
+  taskId: string,
+  clicks: number
+) {
   const server = startSocketServer(engine, transcripts);
   const connectStarted = performance.now();
   const connection = await createPageConnection({
@@ -209,7 +222,7 @@ async function measureRoundTrip(engine: Engine, transcripts: Transcripts, taskId
 }
 
 async function measureTranscripts(dir: string) {
-  const transcripts = new Transcripts(join(dir, 'transcripts'));
+  const transcripts = createPlainTranscripts(join(dir, 'transcripts'));
   const files = readdirSync(join(dir, 'transcripts'))
     .map((name) => ({ name, size: sizeOf(join(dir, 'transcripts', name)) }))
     .sort((a, b) => b.size - a.size);
@@ -312,7 +325,7 @@ export async function runBench(source: string, scratch: string, clicks = 60) {
   Bun.gc(true);
   const engine = warm.engine;
   const taskId = pickTask(engine.state);
-  const transcripts = new Transcripts(join(scratch, 'transcripts'));
+  const transcripts = createPlainTranscripts(join(scratch, 'transcripts')).service;
   const result = {
     events: engine.state.seq,
     tasks: Object.keys(engine.state.tasks).length,

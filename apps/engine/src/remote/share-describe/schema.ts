@@ -1,25 +1,6 @@
-import type { Task } from '@shinsa/core';
 import { Schema, SchemaTransformation } from 'effect';
-import type { Effect } from 'effect';
 import { identity } from 'effect/Function';
 import type { JsonSchema } from '../../agents/providers/index.ts';
-
-export type ShareDescriber = (task: Task) => Promise<string | null>;
-
-export class ShareDescribeFailed extends Schema.TaggedError<
-  ShareDescribeFailed,
-  { readonly brand: unique symbol }
->()('ShareDescribeFailed', {
-  message: Schema.String,
-}) {}
-
-export interface ShareDescribeDefinition {
-  readonly ask: (
-    system: string,
-    prompt: string,
-    schema: JsonSchema
-  ) => Effect.Effect<unknown, ShareDescribeFailed>;
-}
 
 const DESCRIPTION_LIMIT = 400;
 

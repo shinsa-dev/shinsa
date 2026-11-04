@@ -1,8 +1,23 @@
 import { describe, expect, test } from 'bun:test';
 import { join } from 'node:path';
-import { commitWorktree, PushError, updateOntoBase } from '../../src/git/index.ts';
-import { runCommand } from '../../src/shell/index.ts';
+import { Effect } from 'effect';
+import { PushError } from '../../src/git/remote/schema.ts';
+import { Remote } from '../../src/git/remote/service.ts';
+import { commitWorktree, runGit } from '../helpers/git.ts';
 import { createGitRepo, git, writeFiles } from '../helpers/index.ts';
+import { runCommand } from '../helpers/shell.ts';
+
+const updateOntoBase = (
+  path: string,
+  base: string,
+  branch: string,
+  options: { signal?: AbortSignal; onBehind: () => Promise<void> }
+) =>
+  runGit(
+    Remote.use((remote) =>
+      remote.updateOntoBase(path, base, branch, Effect.promise(options.onBehind), options.signal)
+    )
+  );
 
 async function moveMain(origin: string, root: string, files: Record<string, string>) {
   const other = join(root, `other-${Object.keys(files).join('-').replace(/\W/g, '')}`);

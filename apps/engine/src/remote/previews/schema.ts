@@ -3,17 +3,11 @@ import {
   PREVIEW_ACCESS_HEADER,
   PREVIEW_KEY_HEADER,
   type RemoteAccess,
-  type ServiceDefinition,
-  type ShinsaCommand,
-  type ShinsaState,
-  type TerminalInfo,
-  type TerminalsSnapshot,
 } from '@shinsa/core';
-import { Schema } from 'effect';
+import { Context, Schema } from 'effect';
 import type { Deferred, Effect } from 'effect';
-import type { Engine, EffectContext } from '../../runtime/engine.ts';
+import type { EffectAttempt } from '../../runtime/engine/schema.ts';
 import type { EffectFailed } from '../../runtime/failures/schema.ts';
-import type { Remote } from '../index.ts';
 
 export const PREVIEW_NOT_PAIRED =
   'Turn on remote access in Settings → General to share this preview. Its link works once this machine is paired.';
@@ -70,12 +64,12 @@ export class PreviewAddressFailed extends Schema.TaggedError<
   message: Schema.String,
 }) {}
 
-interface PreviewServices {
-  snapshot: () => TerminalsSnapshot;
-}
-
 export interface PreviewEffects {
-  link: (taskId: string, serviceId: string, context: EffectContext) => Promise<void>;
+  link(
+    taskId: string,
+    serviceId: string,
+    attempt: EffectAttempt
+  ): Effect.Effect<void, EffectFailed | PreviewDispatchFailed>;
 }
 
 export interface PreviewUpgrade {
@@ -101,21 +95,9 @@ export interface PreviewRelay {
 }
 
 export interface PreviewLinks {
-  answer: (request: Request, url: URL) => Promise<PreviewAnswer>;
-  openSocket: (peer: PreviewPeer, upgrade: PreviewUpgrade) => PreviewRelay;
+  answer(request: Request, url: URL): Effect.Effect<PreviewAnswer>;
+  openSocket(peer: PreviewPeer, upgrade: PreviewUpgrade): Effect.Effect<PreviewRelay>;
 }
-
-export interface PreviewsOptions {
-  engine: Engine;
-  remote: Remote;
-  services: PreviewServices;
-  origin: string;
-  now?: () => number;
-  random?: (bytes: number) => Uint8Array<ArrayBuffer>;
-  fetch?: typeof fetch;
-}
-
-type PreviewFetchInit = BunFetchRequestInit;
 
 export interface PreviewRemote {
   readonly enabled: boolean;
@@ -154,27 +136,8 @@ export interface PrivateAddresses {
   readonly pending: ReadonlyMap<string, Deferred.Deferred<void>>;
 }
 
-export interface PreviewsDefinition {
-  readonly origin: string;
-  readonly now: Effect.Effect<number>;
-  readonly random: (bytes: number) => Effect.Effect<Uint8Array<ArrayBuffer>>;
-  readonly state: Effect.Effect<ShinsaState>;
-  readonly remote: Effect.Effect<PreviewRemote>;
-  readonly snapshot: Effect.Effect<TerminalsSnapshot>;
-  readonly dispatch: (command: ShinsaCommand, id?: string) => Effect.Effect<void, PreviewDispatchFailed>;
-  readonly fetch: (target: string, init: PreviewFetchInit) => Effect.Effect<Response, PreviewUnreachable>;
-}
+export const PreviewFetch = Context.Reference<typeof fetch>('shinsa/engine/remote/previews/PreviewFetch', {
+  defaultValue: () => fetch,
+});
 
-export interface PreviewsHandle {
-  readonly subscribe: (listener: () => void) => Effect.Effect<() => void>;
-  readonly syncRemote: Effect.Effect<void>;
-  readonly syncSockets: Effect.Effect<void>;
-  readonly resolveRemoteUrl: (info: TerminalInfo, service: ServiceDefinition) => Effect.Effect<string | null>;
-  readonly link: (
-    taskId: string,
-    serviceId: string,
-    context: EffectContext
-  ) => Effect.Effect<void, EffectFailed | PreviewDispatchFailed>;
-  readonly answer: (request: Request, url: URL) => Effect.Effect<PreviewAnswer>;
-  readonly openSocket: (peer: PreviewPeer, upgrade: PreviewUpgrade) => Effect.Effect<PreviewRelay>;
-}
+export interface PreviewsHandle extends PreviewEffects, PreviewLinks {}

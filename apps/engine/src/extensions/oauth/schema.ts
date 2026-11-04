@@ -1,7 +1,5 @@
-import type { DomainError } from '@shinsa/core';
 import { Schema } from 'effect';
 import type { Effect } from 'effect';
-import type { SecretStore } from '../../secrets/store.ts';
 import type { PendingSignIn } from '../schema.ts';
 
 export type FetchLike = (url: string | URL, init?: RequestInit) => Promise<Response>;
@@ -18,21 +16,11 @@ export interface ProviderGrant {
   readonly savedAt: number;
 }
 
-export interface McpOAuthDefinition {
-  readonly store: SecretStore;
+export interface McpOAuthInput {
   readonly redirectUrl: Effect.Effect<string>;
-  readonly now: Effect.Effect<number>;
-  readonly random: Effect.Effect<string>;
-  readonly fetch: FetchLike | undefined;
-  readonly pendingMs: number;
+  readonly fetch?: FetchLike | undefined;
 }
 
 export type PendingSignIns = ReadonlyMap<string, PendingSignIn>;
 
-export interface McpOAuthHandle {
-  readonly isSignedIn: (serverId: string) => Effect.Effect<boolean>;
-  readonly start: (serverId: string, url: string) => Effect.Effect<string | null, McpSignInFailed>;
-  readonly finish: (state: string, code: string) => Effect.Effect<string, McpSignInFailed | DomainError>;
-  readonly resolveAccessToken: (serverId: string, url: string) => Effect.Effect<string | null>;
-  readonly signOut: (serverId: string) => Effect.Effect<void>;
-}
+export const SIGN_IN_NOT_STARTED = 'The sign-in was not started from this Shinsa.';

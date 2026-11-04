@@ -1,8 +1,11 @@
 import { describe, expect, test } from 'bun:test';
 import { join } from 'node:path';
-import { inspectRepo, resolveRepoRoot } from '../../src/git/index.ts';
-import { normalizeRemote } from '../../src/git/repo.ts';
+import { normalizeRemote } from '../../src/git/remote/output.ts';
+import { Remote } from '../../src/git/remote/service.ts';
+import { inspectRepo, runGit } from '../helpers/git.ts';
 import { createGitRepo, createTempDir, git } from '../helpers/index.ts';
+
+const resolveRepoRoot = (path: string) => runGit(Remote.use((remote) => remote.resolveRoot(path)));
 
 describe('normalizeRemote', () => {
   test('ssh, https and credentialed remotes become host/owner/name', () => {

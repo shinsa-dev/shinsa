@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { DomainError } from '@shinsa/core';
-import { resolveConfig } from '../config/index.ts';
+import { resolveShinsaPaths } from '../config/paths.ts';
 import {
   type Display,
   PLAIN_STYLE,
@@ -79,7 +79,7 @@ function readLineCount(raw: string | undefined) {
 export function printLogs(args: string[], io: LogsIo) {
   const { flags, values } = parseArgs(args);
   const count = readLineCount(values.get('--lines'));
-  const path = join(resolveConfig(io.env).dataDir, ENGINE_LOG);
+  const path = join(resolveShinsaPaths(io.env).dataDir, ENGINE_LOG);
   let text: string;
   try {
     text = readFileSync(path, 'utf8');

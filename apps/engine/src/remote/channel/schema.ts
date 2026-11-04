@@ -45,18 +45,6 @@ export type AccessAnswer =
   | { kind: 'admitted' }
   | { kind: 'waiting'; decided: Effect.Effect<boolean> };
 
-export interface ChannelHost {
-  resolveMachineKey: () => Promise<MachineKeyPair>;
-  isEnrolled: (device: string) => boolean;
-  resolveGuest: (device: string) => GuestActor | null;
-  requestAccess: (proof: string, keys: ProofKeys, name: string | null) => Promise<AccessAnswer>;
-  resumeAccess: (device: string) => AccessAnswer | null;
-  recordSeen: (device: string) => void;
-  hub: ChannelHub;
-  respond: (request: Request, guest: GuestActor | null) => Promise<Response>;
-  maxBodyBytes: number;
-}
-
 export interface ChannelDefinition {
   readonly send: (data: string | Bytes) => Effect.Effect<unknown>;
   readonly closePeer: (code: number, reason: string) => Effect.Effect<void>;

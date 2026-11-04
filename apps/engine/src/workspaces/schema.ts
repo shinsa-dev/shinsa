@@ -66,31 +66,6 @@ export interface Workspace {
   ): Effect.Effect<BaseUpdate, WorkspaceFailure>;
 }
 
-export interface WorkspaceCommit {
-  treeHash: string | null;
-  files: string[];
-  undo: () => Promise<void>;
-}
-
-export interface UpdateOptions {
-  signal?: AbortSignal;
-  onBehind: () => Promise<void>;
-}
-
-export interface WorkspaceStrategy {
-  readonly mode: WorkspaceMode;
-  prepare(repo: Repo, task: Task, signal?: AbortSignal): Promise<WorkspaceCheckout>;
-  commit(repo: Repo, task: Task, message: string): Promise<WorkspaceCommit>;
-  push(repo: Repo, task: Task, signal?: AbortSignal): Promise<string>;
-  remove(repo: Repo, task: Task): Promise<void>;
-  writeEdit(repo: Repo, task: Task, path: string, write: () => boolean): Promise<void>;
-  syncBase(repo: Repo, task: Task, base: string, options: UpdateOptions): Promise<BaseUpdate>;
-}
-
-export interface WorkspacesOptions {
-  worktreesDir: string;
-}
-
 export const NO_WORKTREE = 'The task has no worktree.';
 
 export const NO_BRANCH_YET = 'The task has no branch yet.';

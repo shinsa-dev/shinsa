@@ -1,7 +1,6 @@
 import { DomainError, type ExtensionScope, MCP_NAME_PATTERN, type ShinsaState } from '@shinsa/core';
 import { redactSecrets } from '../log/index.ts';
 import { isFields, type McpDefinition } from './definitions.ts';
-import { parseScope } from './store.ts';
 
 const RESERVED_NAMES = new Set(['shinsa']);
 
@@ -128,8 +127,7 @@ export function parseServerName(value: unknown, isTaken: (name: string) => boole
   return name;
 }
 
-export function parseServerScope(value: unknown, state: ShinsaState): ExtensionScope {
-  const scope = parseScope(value);
+export function parseServerScope(scope: ExtensionScope | null, state: ShinsaState): ExtensionScope {
   if (!scope)
     throw new DomainError({ code: 'scope_invalid', message: 'Pick all, a project or a repository.' });
   if (scope.kind === 'project' && !state.projects[scope.project]) {

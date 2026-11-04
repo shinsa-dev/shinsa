@@ -1,11 +1,36 @@
-import { describe, expect, spyOn, test } from 'bun:test';
+import { describe, expect, test } from 'bun:test';
 import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { ConfigStore } from '../../src/config/file.ts';
+import { dirname } from 'node:path';
+import { Effect, Layer } from 'effect';
 import { createMachineConfig, parseMachineConfig } from '../../src/config/machine/decode.ts';
-import { readMachineConfig } from '../../src/config/machine/index.ts';
-import { log } from '../../src/log/index.ts';
-import { createTempDir } from '../helpers/index.ts';
+import type { MachineConfigRead } from '../../src/config/machine/schema.ts';
+import { EngineConfig } from '../../src/config/service.ts';
+import { ConfigStore } from '../../src/config/store/service.ts';
+import { JsonFile } from '../../src/files/service.ts';
+import { JsonLogger } from '../../src/log/service.ts';
+import { createConfigAt, readMachineConfig } from '../helpers/config.ts';
+import { captureLogs, createTempDir } from '../helpers/index.ts';
+
+function openStore(path: string, read: MachineConfigRead = readMachineConfig(path)) {
+  const config = { ...createConfigAt(dirname(path)), configPath: path, machine: read };
+  const store = Effect.runSync(
+    ConfigStore.pipe(
+      Effect.provide(
+        ConfigStore.layer.pipe(
+          Layer.provide(Layer.mergeAll(Layer.succeed(EngineConfig, config), JsonFile.layer, JsonLogger))
+        )
+      )
+    )
+  );
+  return {
+    path: store.path,
+    get config() {
+      return Effect.runSync(store.config);
+    },
+    update: (patch: Parameters<typeof store.update>[0]) => Effect.runSync(store.update(patch)),
+  };
+}
 
 describe('parseMachineConfig', () => {
   test('keeps every valid field', () => {
@@ -63,11 +88,11 @@ describe('readMachineConfig', () => {
 describe('ConfigStore', () => {
   test('writes atomically, privately, and reads back what it wrote', () => {
     const path = join(createTempDir(), 'nested', 'config.json');
-    const store = new ConfigStore(path);
+    const store = openStore(path);
     expect(store.config.roots).toEqual([]);
     store.update({ roots: ['/code'] });
     expect(store.config.roots).toEqual(['/code']);
-    expect(new ConfigStore(path).config.roots).toEqual(['/code']);
+    expect(openStore(path).config.roots).toEqual(['/code']);
     expect(statSync(path).mode & 0o777).toBe(0o600);
     expect(existsSync(`${path}.writing-${process.pid}`)).toBe(false);
   });
@@ -77,27 +102,24 @@ describe('ConfigStore', () => {
     const path = join(dir, 'config.json');
     writeFileSync(path, '{"roots": [');
     const read = readMachineConfig(path);
-    const warn = spyOn(log, 'warn');
+    const logs = captureLogs();
     try {
-      const store = new ConfigStore(path, read);
+      const store = openStore(path, read);
       expect(store.config).toEqual(createMachineConfig());
       const copies = readdirSync(dir).filter((name) => name.startsWith('config.json.unreadable-'));
       expect(copies).toHaveLength(1);
       expect(readFileSync(join(dir, copies[0] ?? ''), 'utf8')).toBe('{"roots": [');
-      expect(warn.mock.calls).toEqual([
-        [
-          '[Config] Part of config.json was not used',
-          { path, problem: read.problems[0], copy: join(dir, copies[0] ?? '') },
-        ],
+      expect(logs.fieldsOf('[Config] Part of config.json was not used')).toEqual([
+        { path, problem: read.problems[0], copy: join(dir, copies[0] ?? '') },
       ]);
     } finally {
-      warn.mockRestore();
+      logs.restore();
     }
   });
 
   test('loads a config.json with problems and keeps the good parts', () => {
     const path = join(createTempDir(), 'config.json');
     writeFileSync(path, JSON.stringify({ roots: ['/code'], port: 'x' }));
-    expect(new ConfigStore(path).config).toMatchObject({ roots: ['/code'], port: null });
+    expect(openStore(path).config).toMatchObject({ roots: ['/code'], port: null });
   });
 });

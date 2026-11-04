@@ -8,13 +8,13 @@ import { until } from '../helpers/index.ts';
 function createSession(background: () => boolean = () => false) {
   let checks = 0;
   const session: AgentSession = {
-    done: Promise.resolve({ outcome: 'completed', summary: null }),
-    steer: () => true,
-    cancel: () => Promise.resolve(),
-    hasPendingBackgroundWork: () => {
+    done: Effect.succeed({ outcome: 'completed', summary: null }),
+    steer: () => Effect.succeed(true),
+    cancel: Effect.void,
+    hasPendingBackgroundWork: Effect.sync(() => {
       checks += 1;
       return background();
-    },
+    }),
   };
   return { session, checks: () => checks };
 }
@@ -105,9 +105,9 @@ describe('releasing an idle session', () => {
   test('a session that cannot say whether work is pending is released, and stops waiting', async () => {
     const { idle, released } = track();
     const session: AgentSession = {
-      done: Promise.resolve({ outcome: 'completed', summary: null }),
-      steer: () => true,
-      cancel: () => Promise.resolve(),
+      done: Effect.succeed({ outcome: 'completed', summary: null }),
+      steer: () => Effect.succeed(true),
+      cancel: Effect.void,
     };
     idle.wait('run-1', session);
     expect(idle.isWaiting('run-1', session)).toBe(true);

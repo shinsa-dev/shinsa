@@ -1,4 +1,4 @@
-import type { Deferred, Effect, Exit } from 'effect';
+import { Context, type Deferred, type Exit } from 'effect';
 
 export interface CachedEntry {
   readonly value: Deferred.Deferred<Exit.Exit<unknown, unknown>>;
@@ -10,17 +10,8 @@ export interface CachedObjects {
   readonly bytes: number;
 }
 
-export interface ObjectCacheDefinition {
-  readonly limit: number;
-}
+const OBJECT_CACHE_BYTES = 64 * 1024 * 1024;
 
-export interface ObjectCacheHandle {
-  readonly size: Effect.Effect<number>;
-  readonly read: <A, E>(
-    key: string,
-    create: Effect.Effect<A, E>,
-    measure: (value: A) => number
-  ) => Effect.Effect<A, E>;
-}
-
-export const OBJECT_CACHE_BYTES = 64 * 1024 * 1024;
+export const ObjectCacheBytes = Context.Reference<number>('shinsa/engine/git/objects/ObjectCacheBytes', {
+  defaultValue: () => OBJECT_CACHE_BYTES,
+});

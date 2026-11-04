@@ -86,6 +86,17 @@ Mac app runs the engine and it is not answering, a command asks launchd to start
 `version` only report. `start`, `stop` and `restart` work only with the `shinsa` the app puts on your PATH
 (`~/.local/bin/shinsa`, linked on every launch, in zsh, bash and fish), on the engine the app set up; from source, `bun dev` runs the engine in a terminal.
 
+## How a command runs
+
+A command is one Effect program, `executeCli(argv)` in `apps/engine/src/cli/index.ts`, which answers the exit code.
+The binary (`src/main.ts`, and `scripts/engine-main.ts` in the compiled bundle) runs it once with
+`BunRuntime.runMain` on `CliLayer` (`cli/layers.ts`: the JSON logger, `config.json`, git and the shell) and sets
+`process.exitCode` to what it answers; nothing inside `src/cli` runs an effect itself. The calls to the engine are
+core's `EngineApi` through `HttpApiClient`, the same calls the agents' management tools make, and every
+`shinsa <group> <action>` runs its surface spec inside the same program. A failure prints `Error:` and its hint and
+answers 1. Tests run the program through `runCli(args, io)` in `apps/engine/test/cli/harness.ts`, with an io that
+records what it writes.
+
 <!-- Everything below is generated from apps/engine/src/cli and apps/engine/src/surface by `bun run --cwd apps/engine docs:cli`, and a test fails when it falls behind. -->
 
 ## Open Shinsa and hand it work

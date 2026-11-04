@@ -1,8 +1,7 @@
-import type { DomainError, ProgramId, UpdateOutcome, VersionsSnapshot } from '@shinsa/core';
+import type { ProgramId, UpdateOutcome } from '@shinsa/core';
 import { Duration, Schema } from 'effect';
 import type { Effect } from 'effect';
-import type { ProgramLocation } from '../agents/providers/versions.ts';
-import type { Argv, CommandResult } from '../shell/schema.ts';
+import type { Argv } from '../shell/schema.ts';
 
 export const ProgramIdInput = Schema.Literals(['claude', 'codex']);
 
@@ -33,52 +32,15 @@ export interface UpdaterDeps {
 
 export type LineListener = (line: string) => void;
 
-export type UpdateRunner = (
-  updater: Updater,
-  onLine: LineListener,
-  signal: AbortSignal
-) => Promise<CommandResult>;
-
-export type UpdateRun = (onLine: LineListener) => Promise<UpdateOutcome>;
-
-export interface VersionsOptions {
-  inspect?: boolean;
-  locate?: (program: ProgramId) => ProgramLocation;
-  readVersion?: (program: ProgramId, path: string) => Promise<string | null>;
-  minimum?: (program: ProgramId) => string;
-  sdk?: () => { version: string; claudeCodeVersion: string };
-  latest?: (name: string) => Promise<string>;
-  updater?: (program: ProgramId, path: string) => Updater;
-  run?: UpdateRunner;
-  onUpdated?: (program: ProgramId) => Promise<unknown>;
-  now?: () => number;
+export interface SdkVersions {
+  version: string;
+  claudeCodeVersion: string;
 }
 
-type UpdateEffect = (onLine: LineListener) => Effect.Effect<UpdateOutcome, VersionsCallFailed>;
+export type UpdateRun = (onLine: LineListener) => Effect.Effect<UpdateOutcome, VersionsCallFailed>;
 
-export interface VersionsDefinition {
-  readonly inspect: boolean;
-  readonly now: Effect.Effect<number>;
-  readonly locate: (program: ProgramId) => ProgramLocation;
-  readonly readVersion: (
-    program: ProgramId,
-    path: string
-  ) => Effect.Effect<string | null, VersionsCallFailed>;
-  readonly minimum: (program: ProgramId) => string;
-  readonly sdk: () => { version: string; claudeCodeVersion: string };
-  readonly latest: ((name: string) => Effect.Effect<string, NpmRegistryFailed>) | null;
-  readonly updater: (program: ProgramId, path: string) => Updater;
-  readonly run:
-    | ((updater: Updater, onLine: LineListener) => Effect.Effect<CommandResult, VersionsCallFailed>)
-    | null;
+export interface VersionsInput {
   readonly onUpdated: (program: ProgramId) => Effect.Effect<void, VersionsCallFailed>;
-  readonly cancel: Effect.Effect<void>;
-}
-
-export interface VersionsHandle {
-  readonly snapshot: Effect.Effect<VersionsSnapshot, VersionsCallFailed>;
-  readonly refresh: Effect.Effect<VersionsSnapshot, VersionsCallFailed>;
-  readonly startUpdate: (program: unknown) => Effect.Effect<UpdateEffect, DomainError>;
 }
 
 export const NPM_REGISTRY_URL = 'https://registry.npmjs.org';

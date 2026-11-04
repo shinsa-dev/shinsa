@@ -1,35 +1,61 @@
-import { describe, expect, test } from 'bun:test';
-import { homedir } from 'node:os';
+import { afterEach, describe, expect, test } from 'bun:test';
 import { join } from 'node:path';
+import { parseStoredLogin } from '../../src/accounts/answers.ts';
+import { StoredLogins } from '../../src/accounts/credentials/service.ts';
+import { Keychain } from '../../src/accounts/keychain/service.ts';
+import { captureLogs, createTempDir, createTestConfig, writeFiles } from '../helpers/index.ts';
 import {
-  createKeychainReader,
-  parseStoredLogin,
-  readStoredLogin,
-  type SecretReader,
-  type SecretRunner,
-} from '../../src/accounts/credentials.ts';
-import type { CommandResult } from '../../src/shell/index.ts';
-import { captureLogs, createTempDir, writeFiles } from '../helpers/index.ts';
+  type AccountsHarness,
+  type AccountsHarnessOptions,
+  buildUnitAccounts,
+  type FakeSecretReader,
+} from './harness.ts';
 
-function createRunner(result: Partial<CommandResult>) {
-  const calls: { command: string[]; cwd: string; timeoutMs: number }[] = [];
-  const run: SecretRunner = (command, cwd, options) => {
-    calls.push({ command, cwd, ...options });
-    return Promise.resolve({ ok: false, code: 0, stdout: '', stderr: '', timedOut: false, ...result });
-  };
-  return { run, calls };
+const open: AccountsHarness[] = [];
+
+afterEach(async () => {
+  for (const harness of open.splice(0)) await harness.close();
+});
+
+async function build(options: Partial<AccountsHarnessOptions>) {
+  const harness = await buildUnitAccounts(options);
+  open.push(harness);
+  return harness;
+}
+
+async function readKeychain(options: Partial<AccountsHarnessOptions>, service: string, account: string) {
+  const harness = await build(options);
+  return harness.run(harness.service(Keychain).read(service, account));
 }
 
 function serializeLogin(oauth: Record<string, unknown>) {
   return JSON.stringify({ claudeAiOauth: oauth });
 }
 
+async function readLogin(
+  configDir: string | null,
+  options: { env: Record<string, string>; userHome: string; readSecret: FakeSecretReader }
+) {
+  const root = createTempDir();
+  const harness = await build({
+    config: { ...createTestConfig(root), userHome: options.userHome },
+    env: options.env,
+    readSecret: options.readSecret,
+  });
+  return harness.run(harness.service(StoredLogins).read(configDir));
+}
+
 describe('keychain reader', () => {
   test('asks security for the password of the service and account on a Mac', async () => {
-    const { run, calls } = createRunner({ ok: true, stdout: '{"secret":1}' });
-    const read = createKeychainReader(run, 'darwin');
-    expect(await read('Claude Code-credentials', 'christo')).toBe('{"secret":1}');
-    expect(calls).toEqual([
+    const userHome = createTempDir();
+    const harness = await build({
+      config: { ...createTestConfig(createTempDir()), userHome },
+      readSecret: () => Promise.resolve('{"secret":1}'),
+    });
+    expect(await harness.run(harness.service(Keychain).read('Claude Code-credentials', 'christo'))).toBe(
+      '{"secret":1}'
+    );
+    expect(harness.calls).toEqual([
       {
         command: [
           '/usr/bin/security',
@@ -40,26 +66,52 @@ describe('keychain reader', () => {
           'Claude Code-credentials',
           '-w',
         ],
-        cwd: homedir(),
+        cwd: userHome,
         timeoutMs: 5_000,
       },
     ]);
   });
 
+  test('reads the secret security answers, under a five second timeout', async () => {
+    const asked: [string, string][] = [];
+    const secret = await readKeychain(
+      {
+        readSecret: (service, account) => {
+          asked.push([service, account]);
+          return Promise.resolve('{"secret":1}');
+        },
+      },
+      'Claude Code-credentials',
+      'christo'
+    );
+    expect(secret).toBe('{"secret":1}');
+    expect(asked).toEqual([['Claude Code-credentials', 'christo']]);
+  });
+
   test('there is no keychain off a Mac, so nothing is run', async () => {
-    const { run, calls } = createRunner({ ok: true, stdout: 'x' });
-    expect(await createKeychainReader(run, 'linux')('service', 'me')).toBeNull();
-    expect(calls).toHaveLength(0);
+    const asked: string[] = [];
+    const secret = await readKeychain(
+      {
+        platform: 'linux',
+        readSecret: (service) => {
+          asked.push(service);
+          return Promise.resolve('x');
+        },
+      },
+      'service',
+      'me'
+    );
+    expect(secret).toBeNull();
+    expect(asked).toEqual([]);
   });
 
   test('a missing entry is quietly nothing; a keychain that does not answer is logged', async () => {
     const logs = captureLogs();
     try {
-      const missing = createKeychainReader(createRunner({ code: 44 }).run, 'darwin');
-      expect(await missing('service', 'me')).toBeNull();
+      expect(await readKeychain({ readSecret: () => Promise.resolve(null) }, 'service', 'me')).toBeNull();
       expect(logs.fieldsOf('[Accounts] The keychain did not answer')).toEqual([]);
-      const locked = createKeychainReader(createRunner({ code: 51 }).run, 'darwin');
-      expect(await locked('service', 'me')).toBeNull();
+      const locked = { ok: false, code: 51, stdout: '', stderr: '', timedOut: false };
+      expect(await readKeychain({ readSecret: () => Promise.resolve(locked) }, 'service', 'me')).toBeNull();
       expect(logs.fieldsOf('[Accounts] The keychain did not answer')).toEqual([
         { service: 'service', code: 51 },
       ]);
@@ -67,10 +119,24 @@ describe('keychain reader', () => {
       logs.restore();
     }
   });
+});
 
-  test('reads the keychain of the platform Shinsa runs on by default', async () => {
-    const read = createKeychainReader(createRunner({ code: 44 }).run);
-    expect(await read('service', 'me')).toBeNull();
+describe('the platform Shinsa runs on', () => {
+  test('decides whether there is a keychain to read', async () => {
+    const asked: string[] = [];
+    const secret = await readKeychain(
+      {
+        platform: 'host',
+        readSecret: (service) => {
+          asked.push(service);
+          return Promise.resolve('x');
+        },
+      },
+      'service',
+      'me'
+    );
+    expect(secret).toBe(process.platform === 'darwin' ? 'x' : null);
+    expect(asked).toHaveLength(process.platform === 'darwin' ? 1 : 0);
   });
 });
 
@@ -96,15 +162,13 @@ describe('stored login', () => {
 
   test('an account folder is looked up under its hashed keychain service first', async () => {
     const asked: [string, string][] = [];
-    const readSecret: SecretReader = (service, account) => {
-      asked.push([service, account]);
-      return Promise.resolve(serializeLogin({ accessToken: 'from-keychain' }));
-    };
-    const login = await readStoredLogin({
-      configDir: '/Users/christo/.claude',
+    const login = await readLogin('/Users/christo/.claude', {
       env: { USER: 'christo' },
       userHome: '/Users/christo',
-      readSecret,
+      readSecret: (service, account) => {
+        asked.push([service, account]);
+        return Promise.resolve(serializeLogin({ accessToken: 'from-keychain' }));
+      },
     });
     expect(login?.accessToken).toBe('from-keychain');
     expect(asked).toEqual([['Claude Code-credentials-09ac30cc', 'christo']]);
@@ -112,14 +176,13 @@ describe('stored login', () => {
 
   test('the Claude Code login follows an inherited CLAUDE_CONFIG_DIR, else the default service', async () => {
     const asked: string[] = [];
-    const readSecret: SecretReader = (service) => {
+    const readSecret: FakeSecretReader = (service) => {
       asked.push(service);
       return Promise.resolve(null);
     };
     const userHome = createTempDir();
-    await readStoredLogin({ configDir: null, env: { USER: 'me' }, userHome, readSecret });
-    await readStoredLogin({
-      configDir: null,
+    await readLogin(null, { env: { USER: 'me' }, userHome, readSecret });
+    await readLogin(null, {
       env: { USER: 'me', CLAUDE_CONFIG_DIR: '/Users/christo/.claude' },
       userHome,
       readSecret,
@@ -132,8 +195,7 @@ describe('stored login', () => {
     writeFiles(dir, {
       '.credentials.json': serializeLogin({ accessToken: 'from-file', subscriptionType: 'pro' }),
     });
-    const login = await readStoredLogin({
-      configDir: dir,
+    const login = await readLogin(dir, {
       env: { USER: 'me' },
       userHome: '/nowhere',
       readSecret: () => Promise.resolve('garbage'),
@@ -144,8 +206,7 @@ describe('stored login', () => {
   test('without a config dir the file fallback is ~/.claude/.credentials.json', async () => {
     const home = createTempDir();
     writeFiles(home, { '.claude/.credentials.json': serializeLogin({ accessToken: 'home-file' }) });
-    const login = await readStoredLogin({
-      configDir: null,
+    const login = await readLogin(null, {
       env: { USER: 'me' },
       userHome: home,
       readSecret: () => Promise.resolve(null),
@@ -153,20 +214,8 @@ describe('stored login', () => {
     expect(login?.accessToken).toBe('home-file');
   });
 
-  test('a keychain reader that breaks fails the read with its reason', async () => {
-    await expect(
-      readStoredLogin({
-        configDir: null,
-        env: { USER: 'me' },
-        userHome: '/nowhere',
-        readSecret: () => Promise.reject(new Error('keychain locked')),
-      })
-    ).rejects.toMatchObject({ _tag: 'SecretReadFailed', message: 'keychain locked' });
-  });
-
   test('no keychain entry and no file means no login', async () => {
-    const login = await readStoredLogin({
-      configDir: join(createTempDir(), 'missing'),
+    const login = await readLogin(join(createTempDir(), 'missing'), {
       env: { USER: 'me' },
       userHome: '/nowhere',
       readSecret: () => Promise.resolve(null),

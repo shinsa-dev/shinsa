@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, spyOn, test } from 'bun:test';
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import {
   createTeamWelcome,
@@ -19,24 +19,30 @@ import {
   type TeamTask,
 } from '@shinsa/core';
 import { NotFound } from '@shinsa/core/remote/errors';
-import { RemoteControl } from '../../src/remote/client/index.ts';
-import { createRefusedConnector } from '../../src/remote/connector/refused.ts';
+import { Clock, Effect, Layer } from 'effect';
 import { EgressGate } from '../../src/remote/egress/service.ts';
-import { Remote } from '../../src/remote/index.ts';
 import {
   type FeedSocket,
   TEAM_FEED_OFFLINE,
   TEAM_FEED_REFUSED,
   TEAM_VIEW_GONE,
-  TeamFeeds,
-} from '../../src/remote/team-feeds.ts';
+  TeamFeedSettings,
+} from '../../src/remote/team-feeds/schema.ts';
 import { TEAM_SNAPSHOTS_FILE } from '../../src/remote/team-snapshots/schema.ts';
 import { TEAM_VIEWS_DIR } from '../../src/remote/team-views/schema.ts';
-import { TEAM_REFUSALS, Teams } from '../../src/remote/teams.ts';
-import { createTempDir, until } from '../helpers/index.ts';
+import { TEAM_REFUSALS } from '../../src/remote/teams/schema.ts';
+import { createFixedClock } from '../helpers/clock.ts';
+import { until } from '../helpers/index.ts';
 import { captureLogs } from '../helpers/logs.ts';
 import { createRepo, createShareView, createStubEngine, createTask, readSentView } from '../helpers/state.ts';
 import { type FakeControlPlane, refuse, startFakeControlPlane } from './control-plane.ts';
+import {
+  adaptRemote,
+  adaptTeamFeeds,
+  adaptTeams,
+  createRemoteTest,
+  type RemoteTestOptions,
+} from './harness.ts';
 import { openTeamViews } from './kept.ts';
 
 const MONA = { id: '1', login: 'mona', name: 'Mona Lisa', avatarUrl: null };
@@ -78,23 +84,22 @@ afterEach(async () => {
   running = null;
 });
 
-function writeRemoteFile(file: Record<string, unknown>) {
-  const path = join(createTempDir(), 'remote.json');
-  writeFileSync(path, JSON.stringify({ enabled: true, ...file }));
-  return path;
+function createMachine(
+  plane: FakeControlPlane,
+  file: Record<string, unknown>,
+  options: RemoteTestOptions = {}
+) {
+  const machine = createRemoteTest({
+    file: { enabled: true, ...file },
+    origin: plane.origin,
+    engine: createStubEngine().engine.core,
+    ...options,
+  });
+  return { machine, remote: adaptRemote(machine) };
 }
 
-function createRemote(path: string, plane: FakeControlPlane) {
-  return new Remote({
-    path,
-    control: new RemoteControl({ origin: plane.origin }),
-    connector: createRefusedConnector('no tunnel in this test'),
-    localUrl: () => 'http://127.0.0.1:1',
-    version: '1',
-    maxBodyBytes: 1024,
-    machineName: 'Studio',
-    openUrl: () => Promise.resolve(),
-  });
+function fixClock(now: () => number) {
+  return Layer.succeed(Clock.Clock, createFixedClock(now));
 }
 
 function credentials(instanceId: string) {
@@ -126,21 +131,28 @@ interface SetUp {
   live?: unknown;
 }
 
+interface Restart {
+  now?: () => number;
+  createSocket?: (url: string, origin: string) => FeedSocket;
+}
+
+function createWait(waits: (() => void)[]) {
+  return () =>
+    Effect.callback<void>((resume) => {
+      const run = () => resume(Effect.void);
+      waits.push(run);
+      return Effect.sync(() => {
+        const at = waits.indexOf(run);
+        if (at >= 0) waits.splice(at, 1);
+      });
+    });
+}
+
 function setUp(options: SetUp = {}) {
   const plane = startFakeControlPlane();
   running = plane;
   plane.answers.set(CONNECT_PATH, () =>
     Response.json({ url: 'wss://t-inst1.shinsa.dev/team?token=t', expiresAt: 1 })
-  );
-  const studio = createRemote(
-    writeRemoteFile({
-      credentials: credentials('inst1'),
-      owner: 'mona',
-      access: { owner: MONA, members: [] },
-      teams: [createTeam()],
-      teamKeys: [createKey()],
-    }),
-    plane
   );
   const stub = createStubEngine((state) => {
     state.projects.p1 = {
@@ -157,30 +169,31 @@ function setUp(options: SetUp = {}) {
     state.tasks['task-2'] = createTask({ id: 'task-2', repoId: 'repo-1', stage: 'merged', activity: [] });
   });
   const live = { view: createShareView({ title: 'Live' }), files: [] };
-  const teams = new Teams({
-    engine: stub.engine,
-    remote: studio,
-    shares: { resolveLive: () => Promise.resolve((options.live ?? live) as never) },
-    transcripts: { subscribe: () => () => undefined },
-    held: { listHeld: () => options.held ?? [], subscribeHeld: () => () => true },
-    now: () => 50,
-  });
-  const laptop = createRemote(
-    writeRemoteFile({
-      credentials: credentials('inst2'),
-      owner: 'kai',
-      access: { owner: KAI, members: [] },
-      teams: [
-        createTeam({
-          role: 'member',
-          ...(options.watcherMachines ? { machines: options.watcherMachines } : {}),
-        }),
-      ],
-      teamKeys: [createKey(options.watcherKey)],
-      ...options.watcherFile,
-    }),
-    plane
+  const studioMachine = createMachine(
+    plane,
+    {
+      credentials: credentials('inst1'),
+      owner: 'mona',
+      access: { owner: MONA, members: [] },
+      teams: [createTeam()],
+      teamKeys: [createKey()],
+    },
+    {
+      engine: stub.engine.core,
+      shares: (shares) => ({
+        ...shares,
+        resolveLive: () => Effect.succeed((options.live ?? live) as never),
+      }),
+      teamFeeds: (held) => ({
+        ...held,
+        listHeld: () => Effect.succeed(options.held ?? []),
+        observeHeld: () => Effect.void,
+      }),
+      layers: fixClock(() => 50),
+    }
   );
+  const studio = studioMachine.remote;
+  const teams = adaptTeams(studioMachine.machine);
   const sockets: FakeFeedSocket[] = [];
   const waits: (() => void)[] = [];
   const viewWaits: (() => void)[] = [];
@@ -227,26 +240,57 @@ function setUp(options: SetUp = {}) {
     queueMicrotask(() => emit('open'));
     return socket;
   };
-  const feeds = new TeamFeeds({
-    remote: laptop,
-    createSocket,
-    now: options.now ?? (() => 60),
-    wait: (_ms, run) => {
-      waits.push(run);
-      return () => waits.splice(waits.indexOf(run), 1);
-    },
-    waitForViews: (_ms, run) => {
-      viewWaits.push(run);
-      return () => {
-        const at = viewWaits.indexOf(run);
-        if (at >= 0) viewWaits.splice(at, 1);
-      };
-    },
+  const laptopFile = {
+    credentials: credentials('inst2'),
+    owner: 'kai',
+    access: { owner: KAI, members: [] },
+    teams: [
+      createTeam({
+        role: 'member',
+        ...(options.watcherMachines ? { machines: options.watcherMachines } : {}),
+      }),
+    ],
+    teamKeys: [createKey(options.watcherKey)],
+    ...options.watcherFile,
+  };
+  const laptopMachine = createMachine(plane, laptopFile, {
+    layers: Layer.merge(
+      fixClock(options.now ?? (() => 60)),
+      Layer.succeed(TeamFeedSettings, {
+        createSocket,
+        wait: createWait(waits),
+        waitForViews: createWait(viewWaits),
+      })
+    ),
   });
-  return { plane, stub, studio, laptop, teams, feeds, sockets, waits, viewWaits };
+  const laptop = laptopMachine.remote;
+  const feeds = adaptTeamFeeds(laptopMachine.machine);
+  const restart = (restarted: Restart = {}) => {
+    const again = createRemoteTest({
+      dataDir: dirname(laptop.store.path),
+      origin: plane.origin,
+      engine: createStubEngine().engine.core,
+      layers: Layer.merge(
+        restarted.now ? fixClock(restarted.now) : Layer.empty,
+        restarted.createSocket
+          ? Layer.succeed(TeamFeedSettings, {
+              createSocket: restarted.createSocket,
+              wait: Effect.sleep,
+              waitForViews: Effect.sleep,
+            })
+          : Layer.empty
+      ),
+    });
+    return adaptTeamFeeds(again);
+  };
+  return { plane, stub, studio, laptop, teams, feeds, sockets, waits, viewWaits, restart };
 }
 
-function listMachineStatus(feeds: TeamFeeds) {
+type Feeds = ReturnType<typeof setUp>['feeds'];
+
+type Remote = ReturnType<typeof setUp>['laptop'];
+
+function listMachineStatus(feeds: Feeds) {
   return feeds.snapshot().machines.map((machine) => [machine.instanceId, machine.status, machine.reason]);
 }
 
@@ -275,7 +319,7 @@ describe('watching teammates’ machines', () => {
     expect(feeds.listTasks({ teamId: 'other' })).toEqual([]);
     expect(changes.length).toBeGreaterThan(1);
     unsubscribe();
-    expect(feeds.subscribeHeld(() => undefined)()).toBe(true);
+    feeds.subscribeHeld(() => undefined)();
     const heard = changes.length;
     feeds.sync();
     expect(changes).toHaveLength(heard);
@@ -414,7 +458,7 @@ function createHeldTask(id: string): TeamTask {
 
 describe('keeping a teammate’s last list', () => {
   test('keeps it on disk, signed, and shows it after a restart while the machine is offline', async () => {
-    const { feeds, laptop } = setUp();
+    const { feeds, laptop, restart } = setUp();
     feeds.start();
     await until('the list arrives', () => feeds.snapshot().tasks.length === 2);
     const kept = readKeptFile(resolveKeptPath(laptop));
@@ -424,7 +468,7 @@ describe('keeping a teammate’s last list', () => {
     expect(kept?.lists[0]?.snapshot?.signature).toEqual(expect.any(String));
     feeds.stop();
     laptop.store.recordTeams([createTeam({ role: 'member', machines: [OFFLINE_STUDIO, LAPTOP] })]);
-    const restarted = new TeamFeeds({ remote: laptop, now: () => 60 });
+    const restarted = restart({ now: () => 60 });
     restarted.start();
     expect(restarted.snapshot().machines).toEqual([
       expect.objectContaining({ instanceId: 'inst1', status: 'offline', updatedAt: 50 }),
@@ -436,12 +480,12 @@ describe('keeping a teammate’s last list', () => {
   });
 
   test('drops it after 30 days, and when the team key changes', async () => {
-    const { feeds, laptop } = setUp();
+    const { feeds, laptop, restart } = setUp();
     feeds.start();
     await until('the list arrives', () => feeds.snapshot().tasks.length === 2);
     feeds.stop();
     laptop.store.recordTeams([createTeam({ role: 'member', machines: [OFFLINE_STUDIO, LAPTOP] })]);
-    const late = new TeamFeeds({ remote: laptop, now: () => 51 + TEAM_SNAPSHOT_TTL_MS });
+    const late = restart({ now: () => 51 + TEAM_SNAPSHOT_TTL_MS });
     late.start();
     expect(late.snapshot().tasks).toEqual([]);
     expect(late.snapshot().machines[0]?.updatedAt).toBeUndefined();
@@ -577,7 +621,7 @@ describe('keeping a teammate’s last list', () => {
     expect(feeds.snapshot().machines.find((machine) => machine.instanceId === 'inst3')?.updatedAt).toBe(40);
     expect(feeds.listHeld('team1')).toEqual([signed]);
     expect(heard.length).toBeGreaterThan(0);
-    expect(stopHearing()).toBe(true);
+    stopHearing();
     expect(
       readKeptFile(resolveKeptPath(laptop))
         ?.lists.map((list) => list.instanceId)
@@ -693,7 +737,7 @@ function createPeer(): RelayPeer {
 const FULL_VIEW_AT = 10_000_000_000_000;
 
 function createFullLive(
-  read: () => Promise<Uint8Array> = () => Promise.resolve(new TextEncoder().encode('diff'))
+  read: Effect.Effect<Uint8Array> = Effect.sync(() => new TextEncoder().encode('diff'))
 ) {
   return {
     view: {
@@ -777,7 +821,7 @@ describe('keeping a teammate’s full tasks', () => {
   });
 
   test('keeps the view of a task opened live, and nothing of a fetch that ran out of time before its view came', async () => {
-    const { feeds, laptop, viewWaits } = setUp({ live: createFullLive(() => new Promise(() => undefined)) });
+    const { feeds, laptop, viewWaits } = setUp({ live: createFullLive(Effect.never) });
     feeds.start();
     await until('the list arrives', () => feeds.snapshot().tasks.length === 2);
     const peer = createPeer();
@@ -935,8 +979,8 @@ describe('a teammate’s machine that cannot be trusted or read', () => {
   const TARGET = { teamId: 'team1', instanceId: 'inst1', key: TEAM_KEY, view: { kind: 'list' as const } };
 
   function openScripted(script: Script) {
-    const { plane, laptop } = setUp();
-    const feeds = new TeamFeeds({ remote: laptop, createSocket: createScriptedSocket(script) });
+    const { plane, restart } = setUp();
+    const feeds = restart({ createSocket: createScriptedSocket(script) });
     const ends: { reason: string; gone: boolean }[] = [];
     const messages: ShareMessage[] = [];
     feeds.openStream(TARGET, {
@@ -982,10 +1026,9 @@ describe('a teammate’s machine that cannot be trusted or read', () => {
   });
 
   test('ends offline when the socket cannot be made', async () => {
-    const { laptop } = setUp();
+    const { restart } = setUp();
     const logs = captureLogs();
-    const feeds = new TeamFeeds({
-      remote: laptop,
+    const feeds = restart({
       createSocket: () => {
         throw new Error('no socket');
       },
@@ -1001,8 +1044,8 @@ describe('a teammate’s machine that cannot be trusted or read', () => {
   });
 
   test('stops a stream before it ends without telling its handlers', async () => {
-    const { plane, laptop } = setUp();
-    const feeds = new TeamFeeds({ remote: laptop });
+    const { plane, restart } = setUp();
+    const feeds = restart();
     const ends: { reason: string; gone: boolean }[] = [];
     const stop = feeds.openStream(TARGET, { onMessage: () => undefined, onEnd: (end) => ends.push(end) });
     stop();
@@ -1014,9 +1057,9 @@ describe('a teammate’s machine that cannot be trusted or read', () => {
   });
 
   test('is refused once this machine is no longer paired', async () => {
-    const { laptop } = setUp();
+    const { laptop, restart } = setUp();
     laptop.store.update((file) => ({ ...file, credentials: null }));
-    const feeds = new TeamFeeds({ remote: laptop });
+    const feeds = restart();
     const ends: { reason: string; gone: boolean }[] = [];
     feeds.openStream(TARGET, { onMessage: () => undefined, onEnd: (end) => ends.push(end) });
     await until('it ends', () => ends.length === 1);
@@ -1036,11 +1079,11 @@ describe('a teammate’s machine that cannot be trusted or read', () => {
       websocket: { message: (socket) => socket.close(), open: () => undefined },
     });
     try {
-      const { plane, laptop } = setUp();
+      const { plane, restart } = setUp();
       plane.answers.set(CONNECT_PATH, () =>
         Response.json({ url: `ws://127.0.0.1:${tunnel.port}/team?token=t`, expiresAt: 1 })
       );
-      const feeds = new TeamFeeds({ remote: laptop });
+      const feeds = restart();
       feeds.start();
       await until(
         'the machine is offline after the drop',

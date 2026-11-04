@@ -14,6 +14,8 @@ import {
   isEngineSource,
   listEffectViolations,
   listEnginePromiseLines,
+  isEngineRuntimeSource,
+  listEngineRuntimeLines,
 } from './lint-effect.ts';
 
 const messages = (source: string) =>
@@ -168,5 +170,34 @@ describe('the engine does its I/O in Effect', () => {
     ].join('\n');
     expect(listEnginePromiseLines('apps/engine/src/a.ts', source)).toEqual([1, 2, 4, 5]);
     expect(listEnginePromiseLines('apps/engine/src/a.tsx', 'const v = () => <Row />;')).toEqual([]);
+  });
+});
+
+describe('the engine runs effects only at its edge', () => {
+  test('every engine source file but main.ts is checked, effect imports included, never tests', () => {
+    expect(isEngineRuntimeSource('apps/engine/src/remote/teams.ts')).toBe(true);
+    expect(isEngineRuntimeSource('apps/engine/src/main.ts')).toBe(false);
+    expect(isEngineRuntimeSource('apps/engine/src/remote/teams.test.ts')).toBe(false);
+    expect(isEngineRuntimeSource('apps/engine/test/harness.ts')).toBe(false);
+    expect(isEngineRuntimeSource('apps/web/src/lib/api.ts')).toBe(false);
+  });
+
+  test('a runtime, a run call and a class that is not a service are found, with their lines', () => {
+    const source = [
+      "import { Effect, ManagedRuntime } from 'effect';",
+      'export class Teams {',
+      '  create = () => edgeRuntime.runPromise(make);',
+      '}',
+      'Effect.runSync(step);',
+      'runtime.runFork(step);',
+      'export class Clock extends StateClock {}',
+      'Effect.runForkWith(context)(step);',
+      "export class Teams2 extends Context.Service<Teams2, Shape>()('shinsa/engine/Teams') {}",
+      "export class Gone extends Schema.TaggedError<Gone>()('Gone', {}) {}",
+      'export class Broken extends Error {}',
+      'class Local {}',
+      'export class Odd extends (class {}) {}',
+    ].join('\n');
+    expect(listEngineRuntimeLines('apps/engine/src/a.ts', source)).toEqual([1, 2, 3, 5, 6, 7, 13]);
   });
 });

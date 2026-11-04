@@ -10,7 +10,7 @@ import type {
   TriageReasons,
   UnreachedTeammate,
 } from '@shinsa/core';
-import { Duration, Schema } from 'effect';
+import { Schema } from 'effect';
 import type { Effect } from 'effect';
 import type { JsonSchema } from '../agents/providers/index.ts';
 import type { LocalRepo } from '../repos/index.ts';
@@ -45,7 +45,7 @@ export type TriageResolver = (
   state: ShinsaState,
   task: Task,
   local: LocalRepo[]
-) => Promise<TriageResult | null>;
+) => Effect.Effect<TriageResult | null, ClassifierFailed>;
 
 export interface MessageClass {
   kind: MessageKind;
@@ -54,16 +54,11 @@ export interface MessageClass {
   shape: TaskShape | null;
 }
 
-export type MessageClassifier = (task: Task, text: string) => Promise<MessageClass | null>;
-
-export type ShapeClassifier = (task: Task, request: string) => Promise<TaskShape | null>;
-
-export type RepositoryFinder = (state: ShinsaState, task: Task, local: LocalRepo[]) => Promise<string | null>;
-
-export interface Classifier {
-  message: MessageClassifier;
-  shape: ShapeClassifier;
-}
+export type RepositoryFinder = (
+  state: ShinsaState,
+  task: Task,
+  local: LocalRepo[]
+) => Effect.Effect<string | null, ClassifierFailed>;
 
 export interface CandidatePool {
   project: Project | null;
@@ -76,9 +71,5 @@ export interface CandidatePool {
 export const NO_REPOSITORY = 'none';
 
 export const REPOSITORY_RULE = `Never pick a repository only because it is the only one listed or because it was worked on recently; pick one when the request names it or clearly needs its code. "The repo", "the code" or "the project" alone names none. A request that names a repository that is not listed gets "${NO_REPOSITORY}".`;
-
-const CLASSIFY_TIMEOUT = Duration.seconds(30);
-
-export const CLASSIFY_TIMEOUT_MS = Duration.toMillis(CLASSIFY_TIMEOUT);
 
 export const UNDELIVERED_REASON = 'Shinsa could not deliver it. Send it again.';

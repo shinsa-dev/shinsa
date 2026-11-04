@@ -2,9 +2,25 @@ import { describe, expect, test } from 'bun:test';
 import { utimesSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { DIFF_PATCH_LIMITS } from '@shinsa/core';
-import { readWorkingPatch } from '../../src/git/diff.ts';
-import { createWorktree, resolveCommitDiff, resolveWorkingDiff } from '../../src/git/index.ts';
+import { History } from '../../src/git/history/service.ts';
+import { createWorktree, runGit } from '../helpers/git.ts';
 import { createGitRepo, createTempDir, git, writeFiles } from '../helpers/index.ts';
+
+const resolveCommitDiff = (
+  repoPath: string,
+  base: string,
+  head: string,
+  signal?: AbortSignal,
+  paths: readonly string[] | null = null
+) => runGit(History.use((history) => history.commitDiff(repoPath, base, head, signal, paths)));
+const resolveWorkingDiff = (
+  worktree: string,
+  base: string,
+  paths: readonly string[] | null = null,
+  signal?: AbortSignal
+) => runGit(History.use((history) => history.workingDiff(worktree, base, paths, signal)));
+const readWorkingPatch = (worktree: string, base: string, signal?: AbortSignal) =>
+  runGit(History.use((history) => history.workingPatch(worktree, base, signal)));
 
 describe('resolveWorkingDiff', () => {
   test('shows new files without touching the index an agent may be using', async () => {
@@ -96,7 +112,7 @@ describe('resolveCommitDiff', () => {
     const { path } = await createGitRepo({ remote: false });
     const head = await git(path, 'rev-parse', 'HEAD');
     await expect(resolveCommitDiff(path, head, 'f'.repeat(40))).rejects.toMatchObject({
-      code: 'diff_failed',
+      _tag: 'DiffFailed',
     });
   });
 });

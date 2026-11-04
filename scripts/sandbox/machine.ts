@@ -1,35 +1,15 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { Transcripts } from '../../apps/engine/src/agents/index.ts';
-import { ProviderRegistry } from '../../apps/engine/src/agents/providers/index.ts';
-import { createQuickCalls } from '../../apps/engine/src/agents/quick/index.ts';
-import { ConfigStore, resolveConfig } from '../../apps/engine/src/config/index.ts';
-import { startServer } from '../../apps/engine/src/http/index.ts';
-import { Handoffs } from '../../apps/engine/src/remote/handoffs.ts';
-import {
-  createRefusedConnector,
-  REMOTE_FILE,
-  Remote,
-  RemoteControl,
-} from '../../apps/engine/src/remote/index.ts';
-import { createPlacementAsker } from '../../apps/engine/src/remote/placement.ts';
-import { Previews } from '../../apps/engine/src/remote/previews.ts';
-import { ShareClock } from '../../apps/engine/src/remote/share-clock.ts';
-import { createShareDescriber } from '../../apps/engine/src/remote/share-describe.ts';
-import { type ShareGitHub, Shares } from '../../apps/engine/src/remote/shares.ts';
-import { TeamFeeds } from '../../apps/engine/src/remote/team-feeds.ts';
-import { Teams } from '../../apps/engine/src/remote/teams.ts';
-import { Roots } from '../../apps/engine/src/repos/index.ts';
-import { Engine } from '../../apps/engine/src/runtime/index.ts';
-import { EventLog, EvidenceStore } from '../../apps/engine/src/store/index.ts';
-import { Terminals } from '../../apps/engine/src/terminals/index.ts';
-import {
-  createSettings,
-  isTaskSettled,
-  type MachineResources,
-  type Repo,
-} from '../../packages/core/src/index.ts';
-import { createIdleOnboarding } from '../kit/onboarding.ts';
+import { REMOTE_FILE } from '../../apps/engine/src/remote/index.ts';
+import { resolveConfig } from '../../apps/engine/test/helpers/config.ts';
+import { Engine } from '../../apps/engine/test/helpers/engine.ts';
+import { openEventLog } from '../../apps/engine/test/helpers/event-log.ts';
+import { createTestEvidence } from '../../apps/engine/test/helpers/evidence.ts';
+import { isTaskSettled, type MachineResources } from '../../packages/core/src/index.ts';
+import { startRemoteServices } from '../kit/remote.ts';
+import { startIdleServer } from '../kit/server.ts';
+import { createFixedResources, startTerminals } from '../kit/terminals.ts';
+import { createTranscripts } from '../kit/transcripts.ts';
 import { createRandomKey } from './requests.ts';
 import {
   GIGABYTE,
@@ -44,12 +24,6 @@ import {
   USER,
 } from './schema.ts';
 import { listPreviewTeamKeys, MACHINE_OWNERS, resolvePreviewTeams } from './team.ts';
-
-const QUICK = createQuickCalls(new ProviderRegistry(), createSettings);
-
-const PLACE = createPlacementAsker(QUICK.classify);
-
-const DESCRIBE = createShareDescriber(QUICK.write);
 
 export type StartedMachine = Awaited<ReturnType<typeof startMachine>>;
 
@@ -123,53 +97,7 @@ function createPreviewResources(engine: Engine, load: PreviewLoad) {
         worktreeBytes: (0.8 + index / 2) * GIGABYTE,
       })),
   });
-  return { snapshot, subscribe: () => () => undefined };
-}
-
-function acceptEveryRequest(remote: Remote) {
-  const accepting = new Set<string>();
-  remote.subscribe(() => {
-    for (const request of remote.snapshot().requests) {
-      if (accepting.has(request.id)) continue;
-      accepting.add(request.id);
-      void remote.acceptRequest(request.id).catch((error: unknown) => {
-        console.error(`Could not accept ${request.deviceName}: ${String(error)}`);
-      });
-    }
-  });
-}
-
-function readBranchDiff(repo: Repo, base: string, branch: string) {
-  const diff = Bun.spawnSync(['git', '-C', repo.path, 'diff', `${base}...${branch}`]);
-  if (diff.exitCode !== 0) throw new Error(`git diff ${base}...${branch} failed in ${repo.path}.`);
-  return diff.stdout.toString();
-}
-
-function createPreviewGitHub(engine: Engine): ShareGitHub {
-  return {
-    readDiff: (repo, number) => {
-      const task = Object.values(engine.state.tasks).find(
-        (entry) => entry.repoId === repo.id && entry.pullRequest?.number === number
-      );
-      return Promise.resolve(readBranchDiff(repo, repo.defaultBranch, task?.branch ?? repo.defaultBranch));
-    },
-    readFile: (repo, ref, path) => {
-      const task = Object.values(engine.state.tasks).find(
-        (entry) => entry.repoId === repo.id && entry.pullRequest?.headSha === ref
-      );
-      const shown = Bun.spawnSync(['git', '-C', repo.path, 'show', `${task?.branch ?? ref}:${path}`]);
-      if (shown.exitCode !== 0) return Promise.reject(new Error(`git show failed for ${path}.`));
-      return Promise.resolve(shown.stdout.toString());
-    },
-  };
-}
-
-async function describePreviewShare(engine: Engine, taskId: string, key: string) {
-  const task = engine.state.tasks[taskId];
-  if (!task?.share) return;
-  const description = await DESCRIBE(task);
-  if (!description) return;
-  await engine.dispatch({ type: 'share.describe', taskId, description }, { id: `${key}:share.describe` });
+  return createFixedResources(snapshot);
 }
 
 export async function startMachine(id: string, name: string, dataDir: string) {
@@ -185,76 +113,42 @@ export async function startMachine(id: string, name: string, dataDir: string) {
   });
   for (const dir of [config.worktreesDir, config.evidenceDir, config.transcriptsDir])
     mkdirSync(dir, { recursive: true });
-  const engine = new Engine(new EventLog(config.databasePath));
-  const store = new ConfigStore(config.configPath);
-  const roots = new Roots(config.roots, store, config.userHome, () =>
-    Promise.resolve({ candidates: [], truncated: false, refused: [] })
-  );
-  const remote = new Remote({
-    path: join(dataDir, REMOTE_FILE),
-    control: new RemoteControl({ origin: ORIGIN }),
-    connector: createRefusedConnector('The preview runs no tunnel.'),
-    localUrl: () => ORIGIN,
+  const engine = new Engine(openEventLog(config.databasePath));
+  const evidence = createTestEvidence(config.evidenceDir);
+  const transcripts = createTranscripts(config.transcriptsDir);
+  const terminals = await startTerminals(config, 'preview');
+  const remote = await startRemoteServices({
+    engine,
+    config,
+    evidence,
+    transcripts,
+    terminals,
+    refusal: 'The preview runs no tunnel.',
+    localUrl: ORIGIN,
     version: 'preview',
     maxBodyBytes: 32 * 1024 * 1024,
     machineName: name,
-    openUrl: () => Promise.resolve(),
   });
-  acceptEveryRequest(remote);
-  const evidence = new EvidenceStore(config.evidenceDir);
-  const transcripts = new Transcripts(config.transcriptsDir);
-  const terminals = new Terminals({ dataDir, home: config.userHome, version: 'preview' });
-  const shares = new Shares({
-    engine,
-    remote,
-    evidence,
-    transcripts,
-    github: createPreviewGitHub(engine),
-  });
-  const teams = new Teams({ engine, remote, shares, transcripts });
-  const teamFeeds = new TeamFeeds({ remote });
-  const previews = new Previews({
-    engine,
-    remote,
-    services: terminals,
-    origin: config.previewOrigin,
-  });
-  const handoffs = new Handoffs({ engine, remote });
-  terminals.applyRemoteUrls(previews);
-  const http = startServer({
+  const http = startIdleServer({
     engine,
     config,
     transcripts,
     evidence,
-    models: { listModels: () => Promise.resolve([]) } as never,
-    onboarding: createIdleOnboarding({ engine, config, store, roots }),
-    remote,
-    place: PLACE,
-    shares,
+    remoteOrigin: config.remoteOrigin,
+    ...remote.services,
     resources: PREVIEW_LOADS[id] ? createPreviewResources(engine, PREVIEW_LOADS[id]) : undefined,
-    teams,
-    teamFeeds,
-    previews,
     terminals,
   });
-  engine.onEffect(async (effect, context) => {
-    if (effect.kind === 'share.link') await shares.link(effect.taskId, context);
-    if (effect.kind === 'share.describe') await describePreviewShare(engine, effect.taskId, context.key);
-    if (effect.kind === 'preview.link') await previews.link(effect.taskId, effect.serviceId, context);
-    if (effect.kind === 'handoff.link') await handoffs.link(effect.taskId, context);
-    if (effect.kind === 'handoff.revoke') await handoffs.revoke(effect.taskId, effect.guestId);
-  });
+  engine.onEffect(remote.applyEffect);
   engine.start();
-  new ShareClock(engine).start();
-  teamFeeds.start();
-  const key = await remote.store.resolveMachineKey();
+  await remote.start();
   const machine: Machine = {
     id,
     name,
     remote,
     port: http.server.port ?? 0,
     connectKey,
-    publicKey: key.publicKey,
+    publicKey: await remote.resolveMachineKey(),
   };
   return { machine, engine, evidence, transcripts, terminals };
 }

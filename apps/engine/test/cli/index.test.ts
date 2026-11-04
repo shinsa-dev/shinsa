@@ -1,9 +1,8 @@
 import { afterEach, describe, expect, setDefaultTimeout, spyOn, test } from 'bun:test';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { Effect } from 'effect';
+import { Effect, Fiber } from 'effect';
 import type { ModelSource } from '../../src/agents/index.ts';
-import { Transcripts } from '../../src/agents/index.ts';
 import { NOT_RUNNING } from '../../src/cli/api.ts';
 import { ENGINE_STOPPED } from '../../src/cli/engine.ts';
 import { describeHelp, describeHelpAll } from '../../src/cli/help.ts';
@@ -13,25 +12,23 @@ import {
   createPlatformService,
   createProcessIo,
   createWakeEngine,
-  runCli,
-  stopForSignal,
+  stopEngineFiber,
   trimEngineLog,
   writeOutputTo,
 } from '../../src/cli/index.ts';
 import { createLaunchdService } from '../../src/cli/launchd.ts';
-import { CliFailed } from '../../src/cli/schema.ts';
-import { startServer } from '../../src/http/index.ts';
+import { CliLayer } from '../../src/cli/layers.ts';
+import { CliFailed, type ProcessOptions } from '../../src/cli/schema.ts';
 import {
   createServerInstance,
   resolveBundle,
   SERVICE_MARKER,
-  ServerRunningError,
+  createServerRunningError,
 } from '../../src/instance/index.ts';
-import { edgeRuntime } from '../../src/runtime/edge.ts';
-import { Engine } from '../../src/runtime/index.ts';
-import type { Shinsa } from '../../src/serve.ts';
-import { EventLog, EvidenceStore } from '../../src/store/index.ts';
 import { createStyle, UNICODE_SYMBOLS } from '../../src/terminal/style.ts';
+import { Engine } from '../helpers/engine.ts';
+import { openEventLog } from '../helpers/event-log.ts';
+import { createTestEvidence } from '../helpers/evidence.ts';
 import {
   createTempDir,
   createTestConfig,
@@ -42,6 +39,10 @@ import {
   until,
   writeFiles,
 } from '../helpers/index.ts';
+import { startShinsa } from '../helpers/serve.ts';
+import { createTestTranscripts } from '../helpers/transcripts.ts';
+import { startHttpServer } from '../helpers/web.ts';
+import { runCli, runCliEffect } from './harness.ts';
 
 setDefaultTimeout(30_000);
 
@@ -57,12 +58,12 @@ afterEach(async () => {
 
 function startTestServer() {
   const config = createTestConfig(createTempDir(), { home: HOME_DIR });
-  const engine = new Engine(new EventLog(config.databasePath));
-  const http = startServer({
+  const engine = new Engine(openEventLog(config.databasePath));
+  const http = startHttpServer({
     engine,
     config,
-    transcripts: new Transcripts(config.transcriptsDir),
-    evidence: new EvidenceStore(config.evidenceDir),
+    transcripts: createTestTranscripts(config.transcriptsDir),
+    evidence: createTestEvidence(config.evidenceDir),
     models: { listModels: () => Promise.resolve([]) } as unknown as ModelSource,
     onboarding: createTestOnboarding(engine, config).onboarding,
   });
@@ -84,7 +85,7 @@ function createIo(port: string, overrides: Partial<CliIo> = {}) {
         opened.push(link);
       }),
     readRepoRoot: () => Effect.succeed(null),
-    wakeEngine: () => Promise.resolve(false),
+    wakeEngine: Effect.succeed(false),
     engine: {
       bundled: false,
       service: createLaunchdService({
@@ -94,7 +95,6 @@ function createIo(port: string, overrides: Partial<CliIo> = {}) {
       }),
     },
     runEngine: () => Effect.die(new Error('not in this test')),
-    onShutdown: () => undefined,
     terminal: createTestTerminal(),
     ...overrides,
   };
@@ -246,24 +246,17 @@ describe('the engine commands', () => {
 });
 
 describe('shinsa engine', () => {
-  test('stops on shutdown', async () => {
-    let stopped = false;
-    let registered: (() => Promise<void>) | null = null;
-    const shinsa = {
-      stop: () => {
-        stopped = true;
-        return Promise.resolve();
-      },
-    } as Shinsa;
-    const { io } = createIo('1', {
-      runEngine: () => Effect.succeed(shinsa),
-      onShutdown: (stop) => {
-        registered = stop;
-      },
+  test('answers 0 once the engine has stopped', async () => {
+    let ran = false;
+    const { io, errors } = createIo('1', {
+      runEngine: () =>
+        Effect.sync(() => {
+          ran = true;
+        }),
     });
     expect(await runCli(['engine'], io)).toBe(0);
-    await (registered as unknown as () => Promise<void>)();
-    expect(stopped).toBe(true);
+    expect(ran).toBe(true);
+    expect(errors).toEqual([]);
   });
 
   const holder = {
@@ -279,7 +272,7 @@ describe('shinsa engine', () => {
     try {
       const { io, errors } = createIo('1', {
         env: { [SERVICE_MARKER]: '1' },
-        runEngine: () => Effect.fail(ServerRunningError.create('/data', holder)),
+        runEngine: () => Effect.fail(createServerRunningError('/data', holder)),
       });
       expect(await runCli(['engine'], io)).toBe(0);
       expect(errors).toEqual([]);
@@ -293,7 +286,7 @@ describe('shinsa engine', () => {
 
   test('from a terminal the same lock is an error, and so is any other failure under the service', async () => {
     const running = createIo('1', {
-      runEngine: () => Effect.fail(ServerRunningError.create('/data', holder)),
+      runEngine: () => Effect.fail(createServerRunningError('/data', holder)),
     });
     expect(await runCli(['engine'], running.io)).toBe(1);
     expect(running.errors).toEqual([
@@ -477,10 +470,10 @@ describe('shinsa status and open', () => {
   test('status says the engine is not running, and never starts it', async () => {
     let woken = false;
     const { io, out } = createIo('1', {
-      wakeEngine: () => {
+      wakeEngine: Effect.sync(() => {
         woken = true;
-        return Promise.resolve(true);
-      },
+        return true;
+      }),
     });
     expect(await runCli(['status'], io)).toBe(1);
     expect(await runCli(['status', '--json'], io)).toBe(1);
@@ -542,7 +535,7 @@ describe('opening the app', () => {
   test('a browser that cannot be started is an error naming the command', async () => {
     const restore = overrideEnv({ PATH: createTempDir() });
     try {
-      const failure = await edgeRuntime.runPromise(
+      const failure = await runCliEffect(
         Effect.flip(
           createOpenApp('http://127.0.0.1:7446', {
             write: () => undefined,
@@ -564,15 +557,15 @@ describe('opening the app', () => {
     const printed: string[] = [];
     const write = (line: string) => printed.push(line);
     try {
-      await edgeRuntime.runPromise(
+      await runCliEffect(
         createOpenApp('http://127.0.0.1:7446', { write, inApp: true, platform: 'darwin' })('shinsa://home')
       );
-      await edgeRuntime.runPromise(
+      await runCliEffect(
         createOpenApp('http://127.0.0.1:7446', { write, inApp: false, platform: 'darwin', env: {} })(
           'shinsa://task/SW-1'
         )
       );
-      await edgeRuntime.runPromise(
+      await runCliEffect(
         createOpenApp('http://127.0.0.1:7446', {
           write,
           inApp: true,
@@ -580,7 +573,7 @@ describe('opening the app', () => {
           env: { DISPLAY: ':0' },
         })('shinsa://home')
       );
-      await edgeRuntime.runPromise(
+      await runCliEffect(
         createOpenApp('http://127.0.0.1:7446', { write, inApp: true, platform: 'linux', env: {} })(
           'shinsa://task/SW-1'
         )
@@ -599,25 +592,48 @@ describe('opening the app', () => {
   });
 });
 
+const INSPECT_READY = '[Serve] Inspect mode: agents, pull request sync and recovery are off';
+
+function createInspectEnv(dataDir = join(createTempDir(), 'data')) {
+  return { SHINSA_DATA_DIR: dataDir, SHINSA_PORT: '0', SHINSA_INSPECT: '1' };
+}
+
+async function runProcessEngine(
+  options: ProcessOptions,
+  env: Record<string, string | undefined>,
+  started: () => boolean
+) {
+  const codes: number[] = [];
+  const fiber = Effect.runFork(
+    createProcessIo({ ...options, exit: (code) => codes.push(code) }).pipe(
+      Effect.flatMap((io) => io.runEngine(env)),
+      Effect.provide(CliLayer)
+    )
+  );
+  await until('the engine to start', started);
+  await Effect.runPromise(Fiber.interrupt(fiber));
+  return codes;
+}
+
 describe('the process io', () => {
   test('writes to stdout and stderr, opens the page in a checkout and finds a repository root', async () => {
     const stdout = spyOn(process.stdout, 'write').mockImplementation(() => true);
     const stderr = spyOn(process.stderr, 'write').mockImplementation(() => true);
     try {
-      const io = createProcessIo();
+      const io = await runCliEffect(createProcessIo());
       io.write();
       io.write('hello');
       io.writeError('oops');
       expect(stdout.mock.calls.map((call) => call[0])).toEqual(['\n', 'hello\n']);
       expect(stderr.mock.calls.map((call) => call[0])).toEqual(['oops\n']);
-      await edgeRuntime.runPromise(io.openApp('shinsa://task/SW-1'));
-      expect(await io.wakeEngine()).toBe(false);
+      await runCliEffect(io.openApp('shinsa://task/SW-1'));
+      expect(await runCliEffect(io.wakeEngine)).toBe(false);
       const repo = createTempDir();
       Bun.spawnSync(['git', 'init', '-q'], { cwd: repo });
-      expect(await edgeRuntime.runPromise(io.readRepoRoot(join(repo, '.')))).toBe(
+      expect(await runCliEffect(io.readRepoRoot(join(repo, '.')))).toBe(
         Bun.spawnSync(['git', '-C', repo, 'rev-parse', '--show-toplevel']).stdout.toString().trim()
       );
-      expect(await edgeRuntime.runPromise(io.readRepoRoot(createTempDir()))).toBeNull();
+      expect(await runCliEffect(io.readRepoRoot(createTempDir()))).toBeNull();
       expect(await runCli(['help'])).toBe(0);
     } finally {
       stdout.mockRestore();
@@ -628,18 +644,18 @@ describe('the process io', () => {
   test('the engine reads the login shell’s environment first, so the agents find the user’s tools', async () => {
     const restore = overrideEnv({ FAKE_LOGIN_SHELL_EXPORT: '1', FAKE_LOGIN_VAR: undefined });
     const path = process.env.PATH;
+    const logs = captureLogs();
     try {
-      const shinsa = await edgeRuntime.runPromise(
-        createProcessIo({ isTerminal: () => false }).runEngine({
-          SHINSA_DATA_DIR: join(createTempDir(), 'data'),
-          SHINSA_PORT: '0',
-          SHINSA_INSPECT: '1',
-        })
+      const codes = await runProcessEngine(
+        { isTerminal: () => false },
+        createInspectEnv(),
+        () => logs.fieldsOf(INSPECT_READY).length === 1
       );
-      stops.push(shinsa.stop);
+      expect(codes).toEqual([0]);
       expect(process.env.FAKE_LOGIN_VAR).toBe('from the login shell');
       expect(process.env.PATH?.split(':')).toContain('/fake/login/bin');
     } finally {
+      logs.restore();
       restore();
       process.env.PATH = path;
     }
@@ -650,14 +666,11 @@ describe('the process io', () => {
     const path = process.env.PATH;
     const logs = captureLogs();
     try {
-      const shinsa = await edgeRuntime.runPromise(
-        createProcessIo({ isTerminal: () => true }).runEngine({
-          SHINSA_DATA_DIR: join(createTempDir(), 'data'),
-          SHINSA_PORT: '0',
-          SHINSA_INSPECT: '1',
-        })
+      await runProcessEngine(
+        { isTerminal: () => true },
+        createInspectEnv(),
+        () => logs.fieldsOf(INSPECT_READY).length === 1
       );
-      stops.push(shinsa.stop);
       expect(process.env.FAKE_LOGIN_VAR).toBeUndefined();
       expect(process.env.PATH).toBe(path);
       expect(
@@ -671,49 +684,61 @@ describe('the process io', () => {
 
   test('the engine drops the service’s marker, so nothing it runs thinks launchd started it', async () => {
     const restore = overrideEnv({ [SERVICE_MARKER]: '1' });
+    const logs = captureLogs();
     try {
-      const shinsa = await edgeRuntime.runPromise(
-        createProcessIo({ isTerminal: () => true }).runEngine({
-          SHINSA_DATA_DIR: join(createTempDir(), 'data'),
-          SHINSA_PORT: '0',
-          SHINSA_INSPECT: '1',
-        })
+      await runProcessEngine(
+        { isTerminal: () => true },
+        createInspectEnv(),
+        () => logs.fieldsOf(INSPECT_READY).length === 1
       );
-      stops.push(shinsa.stop);
       expect(process.env[SERVICE_MARKER]).toBeUndefined();
     } finally {
+      logs.restore();
       restore();
     }
   });
 
-  test('the engine starts Shinsa from the environment and a signal stops it', async () => {
-    const exit = spyOn(process, 'exit').mockImplementation(() => undefined as never);
+  test('a signal interrupts the engine, which stops and exits 0 so its service leaves it stopped', async () => {
+    const logs = captureLogs();
     try {
-      const io = createProcessIo();
-      const shinsa = await edgeRuntime.runPromise(
-        io.runEngine({
-          SHINSA_DATA_DIR: join(createTempDir(), 'data'),
-          SHINSA_PORT: '0',
-          SHINSA_INSPECT: '1',
-        })
+      const codes = await runProcessEngine(
+        { isTerminal: () => true },
+        createInspectEnv(),
+        () => logs.fieldsOf(INSPECT_READY).length === 1
       );
-      let attempts = 0;
-      stops.push(async () => {
-        if (attempts === 0) await shinsa.stop();
-      });
-      io.onShutdown(() => {
-        attempts += 1;
-        if (attempts === 1) return shinsa.stop();
-        return Promise.reject(new Error('already stopped'));
-      });
-      process.emit('SIGTERM');
-      await until('the first stop to exit', () => exit.mock.calls.length === 1);
-      process.emit('SIGINT');
-      await until('the second stop to exit', () => exit.mock.calls.length === 2);
-      expect(attempts).toBe(2);
-      expect(exit.mock.calls).toEqual([[0], [1]]);
+      expect(codes).toEqual([0]);
+      expect(logs.fieldsOf('[Serve] Stopping')).toEqual([{}]);
+      expect(logs.fieldsOf('[Serve] Closed the event log')).toEqual([{}]);
     } finally {
-      exit.mockRestore();
+      logs.restore();
+    }
+  });
+
+  test('an engine whose data folder another engine holds answers who holds it', async () => {
+    const config = createTestConfig(createTempDir());
+    const running = await startShinsa(config, { models: { listModels: Effect.succeed([]) } as never });
+    try {
+      const io = await runCliEffect(createProcessIo({ isTerminal: () => true }));
+      const failure = await runCliEffect(
+        Effect.flip(io.runEngine({ SHINSA_DATA_DIR: config.dataDir, SHINSA_PORT: '0' }))
+      );
+      expect(failure).toMatchObject({ _tag: 'ServerRunningError' });
+    } finally {
+      await running.stop();
+    }
+  });
+
+  test('an engine whose port is taken answers why, and the command says it', async () => {
+    const taken = Bun.serve({ hostname: '127.0.0.1', port: 0, fetch: () => new Response('') });
+    try {
+      const io = await runCliEffect(createProcessIo({ isTerminal: () => true }));
+      const failure = await runCliEffect(
+        Effect.flip(io.runEngine({ ...createInspectEnv(), SHINSA_PORT: String(taken.port) }))
+      );
+      expect(failure).toBeInstanceOf(CliFailed);
+      expect(failure.message).toContain(String(taken.port));
+    } finally {
+      await taken.stop(true);
     }
   });
 });
@@ -723,19 +748,29 @@ describe('waking the engine', () => {
     const { port } = startTestServer();
     const live = `http://127.0.0.1:${port}`;
     const kicked = Effect.succeed(true);
-    expect(await createWakeEngine(live, { bundled: false, kick: kicked })()).toBe(false);
-    expect(await createWakeEngine(live, { bundled: true, kick: Effect.succeed(false) })()).toBe(false);
-    expect(await createWakeEngine(live, { bundled: true, kick: kicked })()).toBe(true);
-    expect(await createWakeEngine('http://127.0.0.1:1', { bundled: true, kick: kicked, waitMs: 300 })()).toBe(
+    expect(await runCliEffect(Effect.flatten(createWakeEngine(live, { bundled: false, kick: kicked })))).toBe(
       false
     );
+    expect(
+      await runCliEffect(
+        Effect.flatten(createWakeEngine(live, { bundled: true, kick: Effect.succeed(false) }))
+      )
+    ).toBe(false);
+    expect(await runCliEffect(Effect.flatten(createWakeEngine(live, { bundled: true, kick: kicked })))).toBe(
+      true
+    );
+    expect(
+      await runCliEffect(
+        Effect.flatten(createWakeEngine('http://127.0.0.1:1', { bundled: true, kick: kicked, waitMs: 300 }))
+      )
+    ).toBe(false);
   });
 
   test('the platform picks systemd on Linux and launchd elsewhere, which leaves a job it does not own alone', async () => {
     expect(createPlatformService('linux', { HOME: '/home/dev' }).manager).toBe('systemd');
     const launchd = createPlatformService('darwin');
     expect(launchd.manager).toBe('launchd');
-    expect(await edgeRuntime.runPromise(launchd.kick)).toBe(false);
+    expect(await runCliEffect(launchd.kick)).toBe(false);
   });
 
   test('the engine the app starts writes to its log file and finds the shinsa command on its PATH', async () => {
@@ -749,17 +784,15 @@ describe('waking the engine', () => {
     const stderr = process.stderr.write;
     const path = process.env.PATH;
     const restore = overrideEnv({ [SERVICE_MARKER]: '1' });
+    const log = join(dataDir, 'engine.log');
+    const readLog = () => (existsSync(log) ? readFileSync(log, 'utf8') : '');
     try {
-      const shinsa = await edgeRuntime.runPromise(
-        createProcessIo({ isTerminal: () => true, bundle }).runEngine({
-          [SERVICE_MARKER]: '1',
-          SHINSA_DATA_DIR: dataDir,
-          SHINSA_PORT: '0',
-          SHINSA_INSPECT: '1',
-        })
+      await runProcessEngine(
+        { isTerminal: () => true, bundle },
+        { [SERVICE_MARKER]: '1', ...createInspectEnv(dataDir) },
+        () => readLog().includes(INSPECT_READY)
       );
-      stops.push(shinsa.stop);
-      expect(readFileSync(join(dataDir, 'engine.log'), 'utf8')).toContain('[Serve] Started from a terminal');
+      expect(readLog()).toContain('[Serve] Started from a terminal');
       expect(process.env.PATH?.split(':')[0]).toBe(join(root, 'bin'));
     } finally {
       process.stdout.write = stdout;
@@ -775,11 +808,11 @@ describe('the engine log', () => {
     const dir = createTempDir();
     const path = join(dir, 'engine.log');
     writeFiles(dir, { 'engine.log': 'x'.repeat(100) });
-    edgeRuntime.runSync(trimEngineLog(path, 40));
+    Effect.runSync(trimEngineLog(path, 40));
     expect(Bun.file(path).size).toBe(20);
-    edgeRuntime.runSync(trimEngineLog(join(dir, 'missing.log'), 40));
+    Effect.runSync(trimEngineLog(join(dir, 'missing.log'), 40));
     const stream = { write: (() => true) as NodeJS.WriteStream['write'] } as NodeJS.WriteStream;
-    const close = edgeRuntime.runSync(writeOutputTo(path, [stream]));
+    const close = Effect.runSync(writeOutputTo(path, [stream]));
     stream.write('hello\n');
     stream.write(new TextEncoder().encode('bytes\n'));
     close();
@@ -886,21 +919,23 @@ describe('stopping on a signal', () => {
   test('exits 0 once stopped or once the deadline passes, so launchd leaves it stopped, and 1 when the stop fails', async () => {
     const logs = captureLogs();
     try {
-      const codes: number[] = [];
-      const exit = (code: number) => {
-        codes.push(code);
+      const stop = async (engine: Effect.Effect<never>, deadlineMs = 1000) => {
+        const codes: number[] = [];
+        const fiber = Effect.runFork(engine);
+        await Effect.runPromise(Effect.yieldNow);
+        await runCliEffect(stopEngineFiber(fiber, (code) => codes.push(code), deadlineMs));
+        return codes;
       };
-      const stopFor = (signal: string, stop: () => Promise<void>) =>
-        edgeRuntime.runPromise(stopForSignal(signal, stop, exit, 20));
-      await stopFor('SIGTERM', () => Promise.resolve());
-      await stopFor('SIGTERM', () => new Promise<void>(() => undefined));
-      await stopFor('SIGINT', () => Promise.reject(new Error('log closed')));
-      expect(codes).toEqual([0, 0, 1]);
-      expect(logs.fieldsOf('[Serve] Stopping')).toEqual([
-        { signal: 'SIGTERM' },
-        { signal: 'SIGTERM' },
-        { signal: 'SIGINT' },
+      expect(await stop(Effect.never)).toEqual([0]);
+      expect(await stop(Effect.never.pipe(Effect.ensuring(Effect.sleep('80 millis'))), 20)).toEqual([0, 0]);
+      expect(await stop(Effect.never.pipe(Effect.ensuring(Effect.die(new Error('log closed')))))).toEqual([
+        1,
       ]);
+      expect(logs.fieldsOf('[Serve] Stopping')).toHaveLength(3);
+      expect(logs.fieldsOf('[Engine] Did not stop in time, so it exits anyway')).toEqual([
+        { deadlineMs: 20 },
+      ]);
+      expect(logs.fieldsOf('[Engine] Could not stop cleanly')).toEqual([{ error: 'log closed' }]);
     } finally {
       logs.restore();
     }

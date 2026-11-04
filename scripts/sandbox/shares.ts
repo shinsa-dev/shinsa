@@ -1,5 +1,5 @@
-import { normalizeRemote } from '../../apps/engine/src/git/repo.ts';
-import type { Engine } from '../../apps/engine/src/runtime/index.ts';
+import { normalizeRemote } from '../../apps/engine/src/git/remote/output.ts';
+import type { Engine } from '../../apps/engine/test/helpers/engine.ts';
 import {
   type Repo,
   SHARE_ID_BYTES,
@@ -10,6 +10,7 @@ import {
   serializeShareUrl,
   type Task,
 } from '../../packages/core/src/index.ts';
+import { recordTranscript } from '../kit/transcripts.ts';
 import type { StartedMachine } from './machine.ts';
 import { createRandomKey } from './requests.ts';
 import {
@@ -85,7 +86,7 @@ function seedMessages(studio: StartedMachine, task: Task) {
     .sort((left, right) => right.startedAt - left.startedAt);
   if (!run) return;
   for (const text of SEEDED_MESSAGES)
-    studio.transcripts.record(run.id, { type: 'user', from: 'you', text, attachments: [] });
+    recordTranscript(studio.transcripts, run.id, { type: 'user', from: 'you', text, attachments: [] });
 }
 
 export async function createPreviewShares(studio: StartedMachine) {

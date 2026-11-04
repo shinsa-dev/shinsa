@@ -1,7 +1,7 @@
 import type { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import type { CallToolResult, RequestId } from '@modelcontextprotocol/sdk/types.js';
-import type { RunRole } from '@shinsa/core';
-import { Schema } from 'effect';
+import type { DomainError, RunRole } from '@shinsa/core';
+import { type Effect, Schema } from 'effect';
 
 export interface ToolSpec {
   name: string;
@@ -15,7 +15,7 @@ export type ToolHandler = (
   input: Record<string, unknown>,
   signal: AbortSignal,
   requestId?: RequestId
-) => Promise<string>;
+) => Effect.Effect<string, ToolCallFailed | DomainError>;
 
 export interface ToolServerOptions {
   scope?: () => string;

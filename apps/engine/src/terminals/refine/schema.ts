@@ -1,7 +1,6 @@
 import type { ServiceSuggestion } from '@shinsa/core';
 import { type Effect, Schema } from 'effect';
 import type { JsonSchema } from '../../agents/providers/index.ts';
-import type { RefinedSuggestions } from '../schema.ts';
 
 export class ServiceRefineFailed extends Schema.TaggedError<
   ServiceRefineFailed,
@@ -13,17 +12,6 @@ type RefineAnswer = Effect.Effect<ServiceSuggestion[] | null, ServiceRefineFaile
 export interface CachedRefinement {
   fingerprint: string;
   answer: RefineAnswer;
-}
-
-export interface ServiceRefinerDefinition {
-  ask: (system: string, prompt: string, schema: JsonSchema) => Effect.Effect<unknown, ServiceRefineFailed>;
-}
-
-export interface ServiceRefinerHandle {
-  refine: (
-    projectId: string,
-    candidates: ServiceSuggestion[]
-  ) => Effect.Effect<RefinedSuggestions, ServiceRefineFailed>;
 }
 
 export const REFINE_SYSTEM = [

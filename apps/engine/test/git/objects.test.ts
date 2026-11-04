@@ -1,77 +1,95 @@
 import { describe, expect, test } from 'bun:test';
-import { ObjectCache } from '../../src/git/objects.ts';
+import { Deferred, Effect, Fiber } from 'effect';
+import { ObjectCacheBytes } from '../../src/git/objects/schema.ts';
+import { ObjectCache } from '../../src/git/objects/service.ts';
 
-function text(value: string) {
-  return () => Promise.resolve(value);
+function runCache<A, E>(effect: Effect.Effect<A, E, ObjectCache>, limit?: number) {
+  const cached = effect.pipe(Effect.provide(ObjectCache.layer));
+  return Effect.runPromise(
+    limit === undefined ? cached : Effect.provideService(cached, ObjectCacheBytes, limit)
+  );
 }
+
+const length = (value: string) => value.length;
 
 describe('ObjectCache', () => {
   test('serves a second read of the same key from memory', async () => {
-    const cache = new ObjectCache();
-    let reads = 0;
-    const create = () => {
-      reads += 1;
-      return Promise.resolve('value');
-    };
-    expect(await cache.read('a', create, (value) => value.length)).toBe('value');
-    expect(await cache.read('a', create, (value) => value.length)).toBe('value');
-    expect(reads).toBe(1);
+    await runCache(
+      Effect.gen(function* () {
+        const cache = yield* ObjectCache;
+        let reads = 0;
+        const create = Effect.sync(() => {
+          reads += 1;
+          return 'value';
+        });
+        expect(yield* cache.read('a', create, length)).toBe('value');
+        expect(yield* cache.read('a', create, length)).toBe('value');
+        expect(reads).toBe(1);
+      })
+    );
   });
 
   test('drops the least recently used entries once over its byte budget, never the newest', async () => {
-    const cache = new ObjectCache(10);
-    await cache.read('a', text('aaaa'), (value) => value.length);
-    await cache.read('b', text('bbbb'), (value) => value.length);
-    await cache.read('a', text('unused'), (value) => value.length);
-    await cache.read('c', text('cccc'), (value) => value.length);
-    expect(cache.size).toBe(2);
-    expect(await cache.read('a', text('again'), (value) => value.length)).toBe('aaaa');
-    expect(await cache.read('b', text('fresh'), (value) => value.length)).toBe('fresh');
-    await cache.read('huge', text('x'.repeat(50)), (value) => value.length);
-    expect(cache.size).toBe(1);
+    await runCache(
+      Effect.gen(function* () {
+        const cache = yield* ObjectCache;
+        yield* cache.read('a', Effect.succeed('aaaa'), length);
+        yield* cache.read('b', Effect.succeed('bbbb'), length);
+        yield* cache.read('a', Effect.succeed('unused'), length);
+        yield* cache.read('c', Effect.succeed('cccc'), length);
+        expect(yield* cache.size).toBe(2);
+        expect(yield* cache.read('a', Effect.succeed('again'), length)).toBe('aaaa');
+        expect(yield* cache.read('b', Effect.succeed('fresh'), length)).toBe('fresh');
+        yield* cache.read('huge', Effect.succeed('x'.repeat(50)), length);
+        expect(yield* cache.size).toBe(1);
+      }),
+      10
+    );
   });
 
   test('forgets a failed read, so the next one tries again', async () => {
-    const cache = new ObjectCache();
-    await expect(
-      cache.read(
-        'a',
-        () => Promise.reject(new Error('gone')),
-        () => 0
-      )
-    ).rejects.toThrow('gone');
-    expect(cache.size).toBe(0);
-    expect(await cache.read('a', text('back'), (value) => value.length)).toBe('back');
+    await runCache(
+      Effect.gen(function* () {
+        const cache = yield* ObjectCache;
+        expect(yield* Effect.flip(cache.read('a', Effect.fail('gone'), () => 0))).toBe('gone');
+        expect(yield* cache.size).toBe(0);
+        expect(yield* cache.read('a', Effect.succeed('back'), length)).toBe('back');
+      })
+    );
   });
 
   test('an entry evicted while it loads is not counted when it lands', async () => {
-    const cache = new ObjectCache(4);
-    let finish: (value: string) => void = () => {};
-    const slow = cache.read(
-      'slow',
-      () => new Promise<string>((resolve) => (finish = resolve)),
-      (value) => value.length
+    await runCache(
+      Effect.gen(function* () {
+        const cache = yield* ObjectCache;
+        const finish = yield* Deferred.make<string>();
+        const slow = yield* Effect.forkChild(cache.read('slow', Deferred.await(finish), length));
+        yield* Effect.yieldNow;
+        yield* cache.read('a', Effect.succeed('aaaa'), length);
+        yield* cache.read('b', Effect.succeed('bbbb'), length);
+        yield* Deferred.succeed(finish, 'late');
+        expect(yield* Fiber.join(slow)).toBe('late');
+        expect(yield* cache.size).toBe(1);
+      }),
+      4
     );
-    await cache.read('a', text('aaaa'), (value) => value.length);
-    await cache.read('b', text('bbbb'), (value) => value.length);
-    finish('late');
-    expect(await slow).toBe('late');
-    expect(cache.size).toBe(1);
   });
 
   test('a failure for an entry another read replaced leaves that read alone', async () => {
-    const cache = new ObjectCache(4);
-    let fail: (error: Error) => void = () => {};
-    const failing = cache.read(
-      'x',
-      () => new Promise<string>((_, reject) => (fail = reject)),
-      () => 0
+    await runCache(
+      Effect.gen(function* () {
+        const cache = yield* ObjectCache;
+        const fail = yield* Deferred.make<string, string>();
+        const failing = yield* Effect.forkChild(Effect.flip(cache.read('x', Deferred.await(fail), () => 0)));
+        yield* Effect.yieldNow;
+        yield* cache.read('a', Effect.succeed('aaaa'), length);
+        yield* cache.read('b', Effect.succeed('bbbb'), length);
+        yield* cache.read('x', Effect.succeed('xx'), length);
+        yield* Deferred.fail(fail, 'late');
+        expect(yield* Fiber.join(failing)).toBe('late');
+        expect(yield* cache.read('x', Effect.succeed('other'), length)).toBe('xx');
+      }),
+      4
     );
-    await cache.read('a', text('aaaa'), (value) => value.length);
-    await cache.read('b', text('bbbb'), (value) => value.length);
-    await cache.read('x', text('xx'), (value) => value.length);
-    fail(new Error('late'));
-    await expect(failing).rejects.toThrow('late');
-    expect(await cache.read('x', text('other'), (value) => value.length)).toBe('xx');
   });
 });

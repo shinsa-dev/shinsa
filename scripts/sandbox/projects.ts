@@ -1,6 +1,6 @@
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
-import type { Engine } from '../../apps/engine/src/runtime/index.ts';
+import type { Engine } from '../../apps/engine/test/helpers/engine.ts';
 import { resolveTaskProject, type Task } from '../../packages/core/src/index.ts';
 import { type SeedProject, TEAMMATE } from './schema.ts';
 import { TEAM } from './team.ts';

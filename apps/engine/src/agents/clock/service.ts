@@ -12,24 +12,28 @@ export const makeRunClock = Effect.fn('RunClock.make')(function* (
     armed: false,
     stopped: false,
   });
+  const clock = yield* Clock.Clock;
   const timer = yield* FiberHandle.make<void>();
 
   const arm = Effect.gen(function* () {
     const current = yield* Ref.get(state);
     if (current.stopped) return;
-    yield* Ref.set(state, { ...current, startedAt: yield* Clock.currentTimeMillis, armed: true });
+    yield* Ref.set(state, { ...current, startedAt: yield* clock.currentTimeMillis, armed: true });
     yield* FiberHandle.run(
       timer,
-      Effect.andThen(Effect.sleep(Duration.millis(Math.max(0, current.remaining))), expire),
+      Effect.andThen(clock.sleep(Duration.millis(Math.max(0, current.remaining))), expire),
       { startImmediately: true }
     );
   });
 
   const pause = Effect.gen(function* () {
-    const current = yield* Ref.updateAndGet(state, (clock) => ({ ...clock, pauses: clock.pauses + 1 }));
+    const current = yield* Ref.updateAndGet(state, (previous) => ({
+      ...previous,
+      pauses: previous.pauses + 1,
+    }));
     if (current.pauses > 1 || !current.armed) return;
     yield* FiberHandle.clear(timer);
-    const now = yield* Clock.currentTimeMillis;
+    const now = yield* clock.currentTimeMillis;
     yield* Ref.set(state, {
       ...current,
       armed: false,
@@ -45,7 +49,7 @@ export const makeRunClock = Effect.fn('RunClock.make')(function* (
   });
 
   const stop = Effect.andThen(
-    Ref.update(state, (clock) => ({ ...clock, stopped: true, armed: false })),
+    Ref.update(state, (current) => ({ ...current, stopped: true, armed: false })),
     FiberHandle.clear(timer)
   );
 

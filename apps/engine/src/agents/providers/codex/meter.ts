@@ -49,29 +49,24 @@ function createUsage(): RunUsage {
   return { ...EMPTY, costUsd: 0 };
 }
 
-export class CodexMeter {
-  readonly #baseline: UsageBaseline;
-  readonly #threads = new Map<string, ThreadMeter>();
+export function createCodexMeter(baseline: UsageBaseline = () => null) {
+  const threads = new Map<string, ThreadMeter>();
 
-  constructor(baseline: UsageBaseline = () => null) {
-    this.#baseline = baseline;
-  }
-
-  #thread(threadId: string): ThreadMeter {
-    const known = this.#threads.get(threadId);
+  const selectThread = (threadId: string): ThreadMeter => {
+    const known = threads.get(threadId);
     if (known) return known;
-    const baseline = this.#baseline(threadId);
-    const thread = baseline
-      ? { previous: { ...EMPTY, ...baseline }, usage: { ...baseline } }
+    const recorded = baseline(threadId);
+    const thread = recorded
+      ? { previous: { ...EMPTY, ...recorded }, usage: { ...recorded } }
       : { previous: EMPTY, usage: createUsage() };
-    this.#threads.set(threadId, thread);
+    threads.set(threadId, thread);
     return thread;
-  }
+  };
 
-  record(threadId: string, tokenUsage: Params, model: string | null, fast: boolean) {
+  const record = (threadId: string, tokenUsage: Params, model: string | null, fast: boolean) => {
     const total = tokenUsage.total;
     if (!total || typeof total !== 'object') return;
-    const thread = this.#thread(threadId);
+    const thread = selectThread(threadId);
     const current = readCodexTokens(total as Params);
     const delta = subtract(current, thread.previous);
     thread.previous = current;
@@ -87,17 +82,18 @@ export class CodexMeter {
       outputTokens: usage.outputTokens + delta.outputTokens,
       costUsd: usage.costUsd === null || cost === null ? null : usage.costUsd + cost,
     };
-  }
+  };
 
-  usage(threadId: string): RunUsage | null {
-    const usage = this.#threads.get(threadId)?.usage;
-    return usage && countTokens(usage) > 0 ? usage : null;
-  }
+  const usage = (threadId: string): RunUsage | null => {
+    const recorded = threads.get(threadId)?.usage;
+    return recorded && countTokens(recorded) > 0 ? recorded : null;
+  };
 
-  listOthers(threadId: string | null): MeteredThread[] {
-    return [...this.#threads.keys()].flatMap((sessionId) => {
-      const usage = sessionId === threadId ? null : this.usage(sessionId);
-      return usage ? [{ sessionId, usage }] : [];
+  const listOthers = (threadId: string | null): MeteredThread[] =>
+    [...threads.keys()].flatMap((sessionId) => {
+      const recorded = sessionId === threadId ? null : usage(sessionId);
+      return recorded ? [{ sessionId, usage: recorded }] : [];
     });
-  }
+
+  return { record, usage, listOthers };
 }

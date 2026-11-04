@@ -1,7 +1,6 @@
-import type { OnboardingCheck, OnboardingFlow, OnboardingProjectChoice } from '@shinsa/core';
+import type { OnboardingCheck, OnboardingProjectChoice } from '@shinsa/core';
 import { Schema } from 'effect';
 import type { Effect } from 'effect';
-import type { JsonObject } from '../../http/schema.ts';
 import type { OnboardingFailure, ProjectRevision } from '../schema.ts';
 import type { SetupPatch, StepDefinition, StepReadContext } from '../steps/schema.ts';
 
@@ -28,12 +27,6 @@ export interface FlowDefinition {
   readonly complete: Effect.Effect<void, OnboardingFailure>;
   readonly requestHelp: (checks: OnboardingCheck[]) => Effect.Effect<string | null, OnboardingFailure>;
   readonly selectWelcome: Effect.Effect<string | null>;
-}
-
-export interface OnboardingSetupHandle {
-  readonly resolve: Effect.Effect<OnboardingFlow, OnboardingFailure>;
-  readonly selectHelp: Effect.Effect<string | null>;
-  readonly reply: (fields: JsonObject) => Effect.Effect<OnboardingFlow, OnboardingFailure>;
 }
 
 const MAX_VALUES = 50;

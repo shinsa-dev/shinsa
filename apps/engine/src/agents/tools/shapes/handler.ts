@@ -7,7 +7,7 @@ import {
 } from '@shinsa/core';
 import { Effect } from 'effect';
 import { HANDED_OVER } from '../../handover.ts';
-import { assertToolInput, requestToolCall } from '../attempts.ts';
+import { assertToolInput } from '../attempts.ts';
 import type { ProcessToolCall } from '../process/schema.ts';
 import { DELIVERING_TOOLS, UNCHANGED_SHAPE } from './schema.ts';
 
@@ -22,29 +22,25 @@ export const handleShapeTool = Effect.fn('ShapeTool.handle')(function* (
   const step = DELIVERING_TOOLS.get(name);
   if (step) {
     const { body, reply, proposal } = yield* assertToolInput(validateDelivery(step, input));
-    yield* requestToolCall(() =>
-      call.dispatch({
-        type: 'agent.deliver',
-        runId,
-        attemptId,
-        step,
-        body,
-        ...(reply ? { reply } : {}),
-        ...withProposal(proposal),
-      })
-    );
+    yield* call.dispatch({
+      type: 'agent.deliver',
+      runId,
+      attemptId,
+      step,
+      body,
+      ...(reply ? { reply } : {}),
+      ...withProposal(proposal),
+    });
     return HANDED_OVER;
   }
   if (name === 'report_read') {
     const read = yield* assertToolInput(validateReadReport(input));
-    yield* requestToolCall(() => call.dispatch({ type: 'agent.report_read', runId, attemptId, ...read }));
+    yield* call.dispatch({ type: 'agent.report_read', runId, attemptId, ...read });
     return HANDED_OVER;
   }
   if (name === 'reshape_task') {
     const reshape = yield* assertToolInput(validateReshape(input));
-    const events = yield* requestToolCall(() =>
-      call.dispatch({ type: 'agent.reshape', runId, attemptId, ...reshape })
-    );
+    const events = yield* call.dispatch({ type: 'agent.reshape', runId, attemptId, ...reshape });
     return hasReshaped(events) ? HANDED_OVER : UNCHANGED_SHAPE;
   }
   return null;

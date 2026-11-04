@@ -1,25 +1,42 @@
-import { afterEach, describe, expect, setSystemTime, spyOn, test } from 'bun:test';
-import { createState, DomainError, type Schedule, type ShinsaCommand } from '@shinsa/core';
-import { log } from '../../src/log/index.ts';
-import type { Engine } from '../../src/runtime/engine.ts';
-import { ScheduleClock } from '../../src/schedules/clock.ts';
+import { afterEach, describe, expect, setSystemTime, test } from 'bun:test';
+import { createState, DomainError, type Schedule } from '@shinsa/core';
+import { Effect, Layer } from 'effect';
+import { EngineStopped } from '../../src/runtime/engine/schema.ts';
+import type { EngineCore } from '../../src/runtime/engine/service.ts';
+import { ScheduleClock } from '../../src/schedules/clock/service.ts';
 import { captureLogs, until } from '../helpers/index.ts';
+import { createFakeEngineCore, openClock, type ServicesOptions } from '../runtime/harness.ts';
 import { addSchedule, createWorld } from './fixtures.ts';
+import { createClockTimings } from './harness.ts';
 
 const MINUTE = 60_000;
 
 const START = Date.parse('2026-10-23T12:00:00Z');
 
-afterEach(() => {
+const open: { close: () => Promise<void> }[] = [];
+
+afterEach(async () => {
+  for (const harness of open.splice(0)) await harness.close();
   setSystemTime();
 });
+
+async function openSchedule(
+  engine: EngineCore['Service'],
+  options: ServicesOptions & { timings?: { minDelayMs: number; maxDelayMs: number } } = { liveClock: true }
+) {
+  const { timings, ...rest } = options;
+  const layer = ScheduleClock.layer.pipe(Layer.provide(timings ? createClockTimings(timings) : Layer.empty));
+  const clock = await openClock(ScheduleClock, layer, engine, rest);
+  open.push(clock);
+  return clock;
+}
 
 describe('the schedule clock', () => {
   test('fires a due schedule once under its slot’s id, and a missed run once on wake', async () => {
     setSystemTime(START);
     const world = await createWorld();
     const schedule = await addSchedule(world, { kind: 'interval', everyMinutes: 10 });
-    const clock = new ScheduleClock(world.engine);
+    const clock = await openSchedule(world.engine.core);
     await clock.fireDue();
     expect(world.engine.state.schedules[schedule.id]?.runs).toEqual([]);
 
@@ -38,17 +55,21 @@ describe('the schedule clock', () => {
     const first = await addSchedule(world, { kind: 'interval', everyMinutes: 1 });
     const second = await addSchedule(world, { kind: 'interval', everyMinutes: 1 }, { text: 'Second.' });
     setSystemTime((second.nextRunAt ?? 0) + MINUTE);
-    const dispatch = world.engine.dispatch.bind(world.engine);
+    const core = world.engine.core;
     const sent: string[] = [];
-    world.engine.dispatch = async (command, options) => {
-      sent.push(command.type);
-      const events = await dispatch(command, options);
-      if (command.type === 'schedule.fire' && command.scheduleId === first.id) {
-        await dispatch({ type: 'schedule.enable', scheduleId: second.id, enabled: false });
-      }
-      return events;
-    };
-    await new ScheduleClock(world.engine).fireDue();
+    const clock = await openSchedule({
+      ...core,
+      dispatch: (command, options) =>
+        Effect.gen(function* () {
+          sent.push(command.type);
+          const events = yield* core.dispatch(command, options);
+          if (command.type === 'schedule.fire' && command.scheduleId === first.id) {
+            yield* core.dispatch({ type: 'schedule.enable', scheduleId: second.id, enabled: false });
+          }
+          return events;
+        }),
+    });
+    await clock.fireDue();
     expect(sent).toEqual(['schedule.fire']);
     expect(world.engine.state.schedules[second.id]?.runs).toEqual([]);
   });
@@ -62,32 +83,29 @@ describe('the schedule clock', () => {
     } as Schedule;
     state.schedules.s1 = schedule;
     state.schedules.s2 = { ...schedule, id: 's2' };
-    const sent: { command: ShinsaCommand; id: string | undefined }[] = [];
     let refusals = [
       new DomainError({ code: 'task_settled', message: 'This task is finished.' }),
-      new Error('disk full'),
+      new EngineStopped({ message: 'disk full' }),
     ];
-    const engine = {
-      state,
-      subscribe: () => () => undefined,
-      dispatch: (command: ShinsaCommand, options: { id?: string } = {}) => {
-        sent.push({ command, id: options.id });
-        const [refusal, ...rest] = refusals;
-        if (command.type === 'schedule.fire' && refusal) {
-          refusals = rest;
-          return Promise.reject(refusal);
-        }
-        return Promise.resolve([]);
-      },
-    } as unknown as Engine;
+    const fake = createFakeEngineCore(state, (command) => {
+      const [refusal, ...rest] = refusals;
+      if (command.type === 'schedule.fire' && refusal) {
+        refusals = rest;
+        return refusal;
+      }
+      return [];
+    });
     const logs = captureLogs();
-    await new ScheduleClock(engine, { now: () => 2_000 }).fireDue();
-    logs.restore();
+    try {
+      await (await openSchedule(fake.core, { now: 2_000 })).fireDue();
+    } finally {
+      logs.restore();
+    }
     expect(logs.fieldsOf('[Schedules] A schedule could not run; recording the failure')).toEqual([
       { scheduleId: 's1', error: 'This task is finished.' },
       { scheduleId: 's2', error: 'disk full' },
     ]);
-    expect(sent).toEqual([
+    expect(fake.sent).toEqual([
       { command: { type: 'schedule.fire', scheduleId: 's1', dueAt: 1_000 }, id: 'schedule:s1:1000' },
       {
         command: {
@@ -118,13 +136,17 @@ describe('the schedule clock', () => {
     const world = await createWorld();
     const schedule = await addSchedule(world, { kind: 'interval', everyMinutes: 10 });
     const fires: (number | null)[] = [];
-    const dispatch = world.engine.dispatch.bind(world.engine);
-    world.engine.dispatch = (command, options) => {
-      if (command.type === 'schedule.fire') fires.push(command.dueAt);
-      return dispatch(command, options);
-    };
-    let clockNow = (schedule.nextRunAt ?? 0) + 1;
-    const clock = new ScheduleClock(world.engine, { now: () => clockNow });
+    const core = world.engine.core;
+    const clock = await openSchedule(
+      {
+        ...core,
+        dispatch: (command, options) => {
+          if (command.type === 'schedule.fire') fires.push(command.dueAt);
+          return core.dispatch(command, options);
+        },
+      },
+      { now: (schedule.nextRunAt ?? 0) + 1 }
+    );
     await clock.fireDue();
     await clock.fireDue();
     expect(fires).toEqual([schedule.nextRunAt]);
@@ -133,7 +155,7 @@ describe('the schedule clock', () => {
     await world.engine.dispatch({ type: 'schedule.enable', scheduleId: schedule.id, enabled: false });
     await world.engine.dispatch({ type: 'schedule.enable', scheduleId: schedule.id, enabled: true });
     const changed = world.engine.state.schedules[schedule.id];
-    clockNow = (changed?.nextRunAt ?? 0) + 1;
+    await clock.setTime((changed?.nextRunAt ?? 0) + 1);
     await clock.fireDue();
     await clock.fireDue();
     expect(fires).toEqual([schedule.nextRunAt, changed?.nextRunAt ?? null]);
@@ -143,34 +165,32 @@ describe('the schedule clock', () => {
     setSystemTime(START);
     const world = await createWorld();
     const schedule = await addSchedule(world, { kind: 'interval', everyMinutes: 1 });
-    const clock = new ScheduleClock(world.engine, { minDelayMs: 0, maxDelayMs: 5 });
-    clock.start();
-    clock.start();
+    const clock = await openSchedule(world.engine.core, {
+      liveClock: true,
+      timings: { minDelayMs: 0, maxDelayMs: 5 },
+    });
+    await clock.start();
+    await clock.start();
     setSystemTime((schedule.nextRunAt ?? 0) + 1);
     await until('the fire', () => (world.engine.state.schedules[schedule.id]?.runs.length ?? 0) === 1);
     await world.engine.dispatch({ type: 'schedule.remove', scheduleId: schedule.id });
-    clock.stop();
-    clock.stop();
+    await clock.stop();
+    await clock.stop();
     expect(world.engine.state.schedules).toEqual({});
   });
 
   test('a failing pass is logged', async () => {
     const state = createState();
     state.schedules.s1 = { id: 's1', enabled: true, nextRunAt: 0 } as Schedule;
-    const engine = {
-      state,
-      subscribe: () => () => undefined,
-      dispatch: () => Promise.reject(new Error('gone')),
-    } as unknown as Engine;
+    const fake = createFakeEngineCore(state, () => new EngineStopped({ message: 'gone' }));
     const logs = captureLogs();
-    const warn = spyOn(log, 'warn').mockImplementation(() => undefined);
-    const clock = new ScheduleClock(engine, { minDelayMs: 0 });
-    clock.start();
-    await until('the warning', () =>
-      warn.mock.calls.some(([message]) => message === '[Schedules] Could not run the due schedules')
-    );
-    clock.stop();
-    warn.mockRestore();
-    logs.restore();
+    try {
+      const clock = await openSchedule(fake.core, { now: 0, timings: { minDelayMs: 0, maxDelayMs: 5 } });
+      await clock.start();
+      await clock.adjust(1);
+      expect(logs.fieldsOf('[Schedules] Could not run the due schedules')).toEqual([{ error: 'gone' }]);
+    } finally {
+      logs.restore();
+    }
   });
 });

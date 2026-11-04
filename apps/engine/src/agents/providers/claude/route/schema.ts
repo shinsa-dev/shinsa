@@ -1,4 +1,5 @@
 import type { ChatNotice } from '@shinsa/core';
+import type { Effect } from 'effect';
 
 export const DIRECT_BASE_URL = 'https://api.anthropic.com';
 
@@ -16,9 +17,9 @@ export interface EunoeWatcher {
 }
 
 export interface EunoeLink {
-  ensure: () => Promise<EunoeStatus>;
-  watch: (sessionId: string, watcher: EunoeWatcher) => () => void;
-  fold: (sessionId: string, warm: boolean) => () => void;
+  readonly ensure: Effect.Effect<EunoeStatus>;
+  readonly watch: (sessionId: string, watcher: EunoeWatcher) => Effect.Effect<Effect.Effect<void>>;
+  readonly fold: (sessionId: string, warm: boolean) => Effect.Effect<Effect.Effect<void>>;
 }
 
 export interface ClaudeRoute {

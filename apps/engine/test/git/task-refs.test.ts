@@ -1,8 +1,12 @@
 import { describe, expect, test } from 'bun:test';
-import { createWorktree, removeWorktree } from '../../src/git/index.ts';
-import { resolveTaskRefs } from '../../src/git/task-refs.ts';
+import type { Repo, Task } from '@shinsa/core';
+import { History } from '../../src/git/history/service.ts';
+import { createWorktree, removeWorktree, runGit } from '../helpers/git.ts';
 import { createGitRepo, createTempDir, git, writeFiles } from '../helpers/index.ts';
 import { createTask } from '../helpers/state.ts';
+
+const resolveTaskRefs = (repo: Repo, task: Task, baseBranch: string | null, signal?: AbortSignal) =>
+  runGit(History.use((history) => history.taskRefs(repo, task, baseBranch, signal)));
 
 async function commitAll(path: string, message: string) {
   await git(path, 'add', '-A');
@@ -107,7 +111,7 @@ describe('resolveTaskRefs', () => {
   test('a task whose code is nowhere is a refusal', async () => {
     const { repo } = await createGitRepo({ remote: false });
     const task = createTask({ branch: 'feat/never', worktreePath: '/nowhere/at/all' });
-    await expect(resolveTaskRefs(repo, task, null)).rejects.toMatchObject({ code: 'code_unavailable' });
+    await expect(resolveTaskRefs(repo, task, null)).rejects.toMatchObject({ _tag: 'CodeUnavailable' });
   });
 
   test('a base branch that is gone leaves the task without a base', async () => {

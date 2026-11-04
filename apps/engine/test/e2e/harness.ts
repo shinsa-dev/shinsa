@@ -18,26 +18,35 @@ import {
   type Task,
   type TaskShape,
 } from '@shinsa/core';
-import { RunSupervisor, type SupervisorOptions, Transcripts } from '../../src/agents/index.ts';
+import { Context, Effect, Exit, Layer, Scope } from 'effect';
 import { CLAUDE_CAPABILITIES, mapClaudeTool } from '../../src/agents/providers/claude/index.ts';
-import {
-  type AgentProvider,
-  type AgentSession,
-  type AgentSessionInput,
-  ProviderRegistry,
-  type SessionArtifactStatus,
+import type {
+  AgentProvider,
+  AgentSessionInput,
+  Providers,
+  SessionArtifactStatus,
 } from '../../src/agents/providers/index.ts';
-import { createQuickCalls, type QuickJson } from '../../src/agents/quick/index.ts';
-import { Briefings } from '../../src/briefing/index.ts';
+import type { QuickJson } from '../../src/agents/quick/index.ts';
+import { QuickCalls } from '../../src/agents/quick/service.ts';
+import { BriefingWriter } from '../../src/briefing/service.ts';
 import type { ServerConfig } from '../../src/config/index.ts';
-import { inspectRepo } from '../../src/git/index.ts';
-import { EffectRunner, Engine } from '../../src/runtime/index.ts';
-import { runCommandOrThrow } from '../../src/shell/index.ts';
-import { EventLog, EvidenceStore } from '../../src/store/index.ts';
-import { resolveTriage } from '../../src/triage/index.ts';
-import { resolveRoundRepository } from '../../src/triage/message.ts';
+import { EngineCore } from '../../src/runtime/engine/service.ts';
+import { TaskTriage, TriageClassifier } from '../../src/triage/index.ts';
+import {
+  createSupervisor,
+  type PromiseSupervisor,
+  type SupervisorOptions,
+} from '../agents/supervisor/harness.ts';
 import { createConfigAt } from '../helpers/config.ts';
+import { EffectRunner } from '../helpers/effects.ts';
+import { Engine } from '../helpers/engine.ts';
+import { openEventLog, type TestEventLog } from '../helpers/event-log.ts';
+import { createTestEvidence } from '../helpers/evidence.ts';
+import { inspectRepo } from '../helpers/git.ts';
 import { NO_HANDOFFS, NO_PREVIEWS, NO_SHARES } from '../helpers/index.ts';
+import { adaptStarter, createTestQuickCalls, type PromiseSession } from '../helpers/providers.ts';
+import { runCommandOrThrow } from '../helpers/shell.ts';
+import { createTestTranscripts } from '../helpers/transcripts.ts';
 
 export const PLAN: PlanDocument = {
   goal: 'Add the two greeting files.',
@@ -289,18 +298,18 @@ export class FakeAgents {
     for (const controller of this.#controllers) controller.abort();
   }
 
-  inspect = (query: { sessionId: string }): Promise<SessionArtifactStatus> =>
-    Promise.resolve(this.lost.has(query.sessionId) ? 'missing' : 'present');
+  inspect = (query: { sessionId: string }): Effect.Effect<SessionArtifactStatus> =>
+    Effect.sync(() => (this.lost.has(query.sessionId) ? 'missing' : 'present'));
 
   provider(id: string, label: string): AgentProvider {
     return {
       id,
       label,
       capabilities: CLAUDE_CAPABILITIES,
-      startSession: this.start,
+      startSession: this.startSession,
       inspectSession: this.inspect,
-      listModels: () => Promise.resolve([]),
-      complete: () => Promise.resolve(null),
+      listModels: Effect.succeed([]),
+      complete: () => Effect.succeed(null),
     };
   }
 
@@ -308,7 +317,7 @@ export class FakeAgents {
     return this.sessions.filter((session) => session.key === key);
   }
 
-  start = (input: AgentSessionInput): AgentSession => {
+  start = (input: AgentSessionInput): PromiseSession => {
     const state = input.role === 'agent' ? (this.state?.() ?? null) : null;
     const run = state ? selectAgentRun(state, input) : null;
     const sessionId =
@@ -368,7 +377,7 @@ export class FakeAgents {
           tool: mapClaudeTool(`mcp__shinsa__${name}`, toolInput),
         });
         const result = await Promise.race([
-          input.tools.handle(name, toolInput, controller.signal, requestId),
+          Effect.runPromise(input.tools.handle(name, toolInput, controller.signal, requestId)),
           whenCancelled(),
         ]);
         input.onEntry({
@@ -438,6 +447,8 @@ export class FakeAgents {
       },
     };
   };
+
+  startSession = adaptStarter(this.start);
 }
 
 export interface FakePullRequest {
@@ -528,9 +539,9 @@ async function git(cwd: string, ...args: string[]) {
 
 interface Daemon {
   engine: Engine;
-  runs: RunSupervisor;
+  runs: PromiseSupervisor;
   effects: EffectRunner;
-  log: EventLog;
+  log: TestEventLog;
   isStopped: () => boolean;
   stop: () => void;
   close: () => Promise<void>;
@@ -545,7 +556,7 @@ export class World {
   readonly agents = new FakeAgents();
   readonly github: FakeGitHub;
   daemon!: Daemon;
-  providers: ProviderRegistry | null = null;
+  providers: Providers['Service'] | null = null;
   supervise: ((engine: Engine) => Partial<SupervisorOptions>) | null = null;
   dependOn: string[] = [];
   readonly #shapes = new Map<string, TaskShape>();
@@ -573,7 +584,7 @@ export class World {
       checks?: string[];
       live?: boolean;
       files?: Record<string, string>;
-      providers?: (world: World) => ProviderRegistry;
+      providers?: (world: World) => Providers['Service'];
       supervise?: (world: World, engine: Engine) => Partial<SupervisorOptions>;
     } = {}
   ) {
@@ -633,33 +644,54 @@ export class World {
   }
 
   boot() {
-    const log = new EventLog(this.config.databasePath);
+    const log = openEventLog(this.config.databasePath);
     const engine = new Engine(log);
     this.agents.state = () => engine.state;
-    const transcripts = new Transcripts(this.config.transcriptsDir);
-    const evidence = new EvidenceStore(this.config.evidenceDir);
-    const runs = new RunSupervisor(engine, this.config, transcripts, evidence, {
-      startSession: this.live || this.providers ? undefined : this.agents.start,
+    const transcripts = createTestTranscripts(this.config.transcriptsDir);
+    const evidence = createTestEvidence(this.config.evidenceDir);
+    const runs = createSupervisor(engine, this.config, transcripts, evidence, {
+      startSession: this.live || this.providers ? undefined : this.agents.startSession,
       providers: this.providers ?? undefined,
       ...this.supervise?.(engine),
     });
-    const quick = createQuickCalls(this.providers ?? new ProviderRegistry(), () => engine.state.settings);
-    const briefings = new Briefings(engine, { ask: quick.write });
-    const effects = new EffectRunner(engine, this.config, runs, briefings, {
+    const quick = createTestQuickCalls(engine, this.providers ?? undefined);
+    const briefingScope = Scope.makeUnsafe();
+    const briefings = Effect.runSync(
+      Layer.buildWithScope(
+        BriefingWriter.layer.pipe(
+          Layer.provide(Layer.merge(Layer.succeed(EngineCore, engine.core), Layer.succeed(QuickCalls, quick)))
+        ),
+        briefingScope
+      ).pipe(Effect.map((context) => Context.get(context, BriefingWriter)))
+    );
+    const classify: QuickJson = <T>(system: string, prompt: string, schema?: Parameters<QuickJson>[2]) =>
+      (this.classify ?? quick.classify)<T>(system, prompt, schema);
+    const triageContext = Effect.runSync(
+      Layer.buildWithScope(
+        Layer.merge(TaskTriage.layer, TriageClassifier.layer).pipe(
+          Layer.provide(Layer.succeed(QuickCalls, QuickCalls.of({ classify, write: quick.write })))
+        ),
+        briefingScope
+      )
+    );
+    const triage = Context.get(triageContext, TaskTriage);
+    const classifier = Context.get(triageContext, TriageClassifier);
+    const effects = new EffectRunner(engine, this.config, runs.service, briefings, {
       shares: NO_SHARES,
       previews: NO_PREVIEWS,
       handoffs: NO_HANDOFFS,
       resolveLogin: () => Promise.resolve(null),
-      triage: async (state, task, local) => {
+      triage: (state, task, local) => {
         const waitsOn = this.dependOn.flatMap((id) => state.tasks[id] ?? []);
         const shape = this.#shapes.get(task.request);
         this.dependOn = [];
-        const result = await resolveTriage(state, task, local, this.classify ?? quick.classify);
-        if (!result || !shape) return result ? { ...result, waitsOn } : result;
-        return { ...result, waitsOn, shape, reasons: { ...result.reasons, shape: 'The test chose it.' } };
+        return Effect.map(triage.resolve(state, task, local), (result) =>
+          shape
+            ? { ...result, waitsOn, shape, reasons: { ...result.reasons, shape: 'The test chose it.' } }
+            : { ...result, waitsOn }
+        );
       },
-      findRepository: (state, task, local) =>
-        resolveRoundRepository(state, task, local, this.classify ?? quick.classify),
+      findRepository: classifier.repository,
     });
     engine.onEffect((effect, context) => effects.apply(effect, context));
     engine.onEffectExhausted((effect, error, key) => effects.reportExhausted(effect, error, key));
@@ -674,11 +706,11 @@ export class World {
       isStopped: () => stopped,
       stop: () => {
         stopped = true;
-        briefings.stop();
+        Effect.runSync(briefings.stop);
         engine.stop();
       },
       close: async () => {
-        briefings.stop();
+        await Effect.runPromise(Scope.close(briefingScope, Exit.void));
         await effects.stop();
         engine.stop();
         await engine.settle();

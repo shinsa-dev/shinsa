@@ -1,6 +1,6 @@
 import { type ChatEvent, resolveSteerPrompt, type RunFailure } from '@shinsa/core';
 import { Deferred, Effect, FiberSet, Option, Ref, Result, Scope } from 'effect';
-import { resolveDeferredInstructions } from '../../../../extensions/index.ts';
+import { resolveDeferredInstructions } from '../../../../extensions/session.ts';
 import { describeError } from '../../../../log/index.ts';
 import { resolveForbiddenReason } from '../../../policy.ts';
 import { resolveSkillInstructions, SHINSA_INSTRUCTIONS } from '../../instructions.ts';
@@ -20,7 +20,7 @@ import { resolveCodexServerConfig, resolveCodexSkillInstructions } from '../exte
 import { type CodexItem, type CodexPlanStep, createCodexRecorder } from '../map.ts';
 import type { ToolEndpointHandle } from '../mcp/schema.ts';
 import { makeToolEndpoint } from '../mcp/service.ts';
-import { CodexMeter } from '../meter.ts';
+import { createCodexMeter } from '../meter.ts';
 import { readRecord } from '../params.ts';
 import { resolveCacheLifetimeMs } from '../pricing.ts';
 import { CODEX_WINDOW_KEYS } from '../usage/schema.ts';
@@ -49,7 +49,7 @@ export const makeCodexSession = Effect.fn('CodexSession.make')(function* (
   const runPromise = Effect.runPromiseWith(services);
   const compacting = mode === 'compact';
   const recorder = createCodexRecorder(input.onEntry, input.storeImage, compacting ? 'manual' : 'auto');
-  const meter = new CodexMeter(input.usageBaseline);
+  const meter = createCodexMeter(input.usageBaseline);
   const queue = yield* Ref.make<readonly QueuedPrompt[]>(
     compacting ? [] : [{ text: input.prompt, wire: input.prompt, steer: false }]
   );
@@ -530,7 +530,7 @@ export const makeCodexSession = Effect.fn('CodexSession.make')(function* (
     };
   });
 
-  const done = Effect.gen(function* () {
+  const run = Effect.gen(function* () {
     const result = yield* Effect.ensuring(start, release);
     const thread = yield* Ref.get(threadId);
     const usage = thread ? meter.usage(thread) : null;
@@ -602,6 +602,12 @@ export const makeCodexSession = Effect.fn('CodexSession.make')(function* (
     });
   }
 
-  const handle: CodexSessionHandle = { done, steer, cancel };
+  const ended = yield* Deferred.make<AgentSessionResult>();
+  yield* Effect.forkIn(
+    Effect.flatMap(run, (result) => Deferred.succeed(ended, result)),
+    scope
+  );
+
+  const handle: CodexSessionHandle = { done: Deferred.await(ended), steer, cancel };
   return handle;
 });

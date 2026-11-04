@@ -119,10 +119,14 @@ describe('the surface client', () => {
     const { base } = serve(() => Response.json({ ok: true }));
     let wakes = 0;
     const wakeOnto = (target: string) => {
-      const client = createSurfaceClient(target, 'k', () => {
-        wakes += 1;
-        return Promise.resolve(target === base ? true : wakes > 1);
-      });
+      const client = createSurfaceClient(
+        target,
+        'k',
+        Effect.sync(() => {
+          wakes += 1;
+          return target === base ? true : wakes > 1;
+        })
+      );
       return client;
     };
     expect<unknown>(await Effect.runPromise(wakeOnto(base).api.server.health())).toEqual({ ok: true });
@@ -133,7 +137,7 @@ describe('the surface client', () => {
       NOT_RUNNING
     );
     expect(wakes).toBe(2);
-    expect(createApiClient(base, () => Promise.resolve(false)).base).toBe(base);
+    expect(createApiClient(base, Effect.succeed(false)).base).toBe(base);
   });
 });
 

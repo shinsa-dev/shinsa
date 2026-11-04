@@ -5,16 +5,16 @@ import type { RequestId } from '@modelcontextprotocol/sdk/types.js';
 import { Duration } from 'effect';
 import type { ToolEndpointHandle } from '../../../../src/agents/providers/codex/mcp/schema.ts';
 import { makeToolEndpoint } from '../../../../src/agents/providers/codex/mcp/service.ts';
-import { createShinsaTools } from '../../../../src/agents/tools/index.ts';
-import { edgeRuntime } from '../../../../src/runtime/edge.ts';
 import { until } from '../../../helpers/index.ts';
+import { testRuntime } from '../../../helpers/runtime.ts';
+import { createTestTools } from '../../../helpers/tools.ts';
 
 const endpoints: ToolEndpointHandle[] = [];
 const clients: Client[] = [];
 
 afterEach(async () => {
   for (const client of clients.splice(0)) await client.close();
-  for (const endpoint of endpoints.splice(0)) edgeRuntime.runSync(endpoint.close);
+  for (const endpoint of endpoints.splice(0)) testRuntime.runSync(endpoint.close);
 });
 
 interface Call {
@@ -25,12 +25,12 @@ interface Call {
 
 function open(handle?: (call: Call) => Promise<string>) {
   const calls: Call[] = [];
-  const tools = createShinsaTools('agent', (name, _input, signal, requestId) => {
+  const tools = createTestTools('agent', (name, _input, signal, requestId) => {
     const call = { name, requestId, signal };
     calls.push(call);
     return handle ? handle(call) : Promise.resolve(`${name} done`);
   });
-  const endpoint = edgeRuntime.runSync(
+  const endpoint = testRuntime.runSync(
     makeToolEndpoint({ tools, heartbeat: Duration.millis(5), token: crypto.randomUUID() })
   );
   endpoints.push(endpoint);
@@ -119,8 +119,8 @@ describe('the tool endpoint Codex calls', () => {
       () => outcome.push('dropped')
     );
     await until('the call to arrive', () => calls.length === 1);
-    edgeRuntime.runSync(endpoint.close);
-    edgeRuntime.runSync(endpoint.close);
+    testRuntime.runSync(endpoint.close);
+    testRuntime.runSync(endpoint.close);
     await until('the call to be stopped', () => calls[0]?.signal.aborted === true);
     expect(outcome).not.toContain('answered');
   });

@@ -42,7 +42,23 @@ export const EFFECT_SCHEMA_FILE_MESSAGE =
 export const ENGINE_PROMISE_MESSAGE =
   'Promise I/O outside Effect in the engine. Write the module as a Context.Service provided by a Layer, with Effect.fn and Effect.tryPromise around the promise API, and run it with a runtime only at the edge (the effect skill → Services and layers)';
 
+export const ENGINE_RUNTIME_MESSAGE =
+  'A runtime or a Promise class in the engine. Write the module as a Context.Service with its Layer, yield what it needs, and run effects only at the process edge, main.ts; a callback from outside enters with Effect.runForkWith on the context the layer captured (the effect skill → Services and layers)';
+
 const ENGINE_SOURCE = /^apps\/engine\/src\//;
+
+const ENGINE_EDGE = 'apps/engine/src/main.ts';
+
+const RUN_METHODS = new Set([
+  'runPromise',
+  'runPromiseExit',
+  'runSync',
+  'runSyncExit',
+  'runFork',
+  'runCallback',
+]);
+
+const SERVICE_BASES = /^(?:Context\.Service|Context\.Reference|Schema\.\w+|Error|TypeError|RangeError)$/;
 
 const LOGIC_FILES = /(?:^|\/)(?:handler|service|middleware)\.tsx?$/;
 
@@ -196,6 +212,49 @@ export function isEffectSource(file: string, source: string) {
 export function isEngineSource(file: string, source: string) {
   const isTest = /\.test\.tsx?$/.test(file);
   return ENGINE_SOURCE.test(file) && !isTest && !EFFECT_IMPORT.test(source);
+}
+
+export function isEngineRuntimeSource(file: string) {
+  return ENGINE_SOURCE.test(file) && file !== ENGINE_EDGE && !/\.test\.tsx?$/.test(file);
+}
+
+function readCalleeBase(node: unknown): string | null {
+  const current = node as AstNode | null;
+  if (!current) return null;
+  if (current.type === 'Identifier') return current.name as string;
+  if (current.type === 'CallExpression') return readCalleeBase(current.callee);
+  if (current.type === 'MemberExpression') {
+    const object = readCalleeBase(current.object);
+    const property = readName(current.property);
+    return object && property ? `${object}.${property}` : null;
+  }
+  return null;
+}
+
+function isRuntimeNode(node: AstNode) {
+  if (node.type === 'Identifier' && (node.name === 'ManagedRuntime' || node.name === 'edgeRuntime'))
+    return true;
+  if (node.type === 'CallExpression') {
+    const callee = node.callee as AstNode;
+    if (callee.type !== 'MemberExpression') return false;
+    const property = readName(callee.property);
+    return property !== null && RUN_METHODS.has(property);
+  }
+  if (node.type !== 'ExportNamedDeclaration') return false;
+  const declaration = node.declaration as AstNode | undefined;
+  if (declaration?.type !== 'ClassDeclaration') return false;
+  const base = readCalleeBase(declaration.superClass);
+  return base === null || !SERVICE_BASES.test(base);
+}
+
+export function listEngineRuntimeLines(file: string, source: string) {
+  const plugins: ('typescript' | 'jsx')[] = file.endsWith('.tsx') ? ['typescript', 'jsx'] : ['typescript'];
+  const program = parse(source, { sourceType: 'module', plugins }).program as unknown as AstNode;
+  const lines = new Set<number>();
+  walk(program, (node) => {
+    if (isRuntimeNode(node)) lines.add(node.loc?.start.line ?? 0);
+  });
+  return [...lines];
 }
 
 export function listEnginePromiseLines(file: string, source: string) {

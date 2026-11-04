@@ -1,5 +1,7 @@
 import { expect, test } from 'bun:test';
-import { createClaudeProcess } from '../../../../src/agents/providers/claude/process.ts';
+import { Effect, ManagedRuntime } from 'effect';
+import { makeClaudeProcess } from '../../../../src/agents/providers/claude/process/service.ts';
+import { ShellLayer } from '../../../../src/shell/layers.ts';
 import { createTempDir, until } from '../../../helpers/index.ts';
 
 function isAlive(pid: number) {
@@ -11,18 +13,27 @@ function isAlive(pid: number) {
 
 test('the process keeps the tail of its stderr and is stopped with the background work it started', async () => {
   const pids: number[] = [];
-  const claude = createClaudeProcess((pid) => pids.push(pid));
+  const runtime = ManagedRuntime.make(ShellLayer);
+  const handle = await runtime.runPromise(
+    makeClaudeProcess({ onSpawn: (pid) => Effect.sync(() => pids.push(pid)) })
+  );
+  const claude = {
+    terminate: () => runtime.runPromise(handle.terminate),
+    readStderr: () => runtime.runSync(handle.readStderr),
+  };
   await claude.terminate();
-  const spawned = claude.spawn({
-    command: 'perl',
-    args: [
-      '-e',
-      '$| = 1; print STDERR "starting up\\n"; my $pid = fork(); if ($pid == 0) { setpgrp(0, 0); sleep 30; exit 0 } print "$pid\\n"; sleep 30',
-    ],
-    cwd: createTempDir(),
-    env: { PATH: Bun.env.PATH },
-    signal: new AbortController().signal,
-  });
+  const spawned = runtime.runSync(
+    handle.spawn({
+      command: 'perl',
+      args: [
+        '-e',
+        '$| = 1; print STDERR "starting up\\n"; my $pid = fork(); if ($pid == 0) { setpgrp(0, 0); sleep 30; exit 0 } print "$pid\\n"; sleep 30',
+      ],
+      cwd: createTempDir(),
+      env: { PATH: Bun.env.PATH },
+      signal: new AbortController().signal,
+    })
+  );
   const exited = new Promise<void>((resolve) => spawned.once('exit', () => resolve()));
   const background = await new Promise<number>((resolve) =>
     spawned.stdout.once('data', (chunk: Buffer) => resolve(Number(chunk.toString().trim())))
@@ -34,4 +45,5 @@ test('the process keeps the tail of its stderr and is stopped with the backgroun
   await exited;
   await until('the background work to stop', () => !isAlive(background));
   await claude.terminate();
+  await runtime.dispose();
 });

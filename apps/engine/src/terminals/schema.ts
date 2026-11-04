@@ -1,19 +1,16 @@
 import {
-  type DomainError,
   isServiceEnvKey,
   isServicePreviewUrl,
   SERVICE_LIMITS,
   SERVICE_PORT_VARIABLE,
   type ServiceDefinition,
   type ServiceSuggestion,
-  type ShinsaState,
-  type TerminalForeground,
+  type TerminalColors,
   type TerminalInfo,
   type TerminalPlaceKind,
   type TerminalsSnapshot,
 } from '@shinsa/core';
-import { Duration, Effect, Schedule, Schema } from 'effect';
-import type { TerminalSession, TerminalViewer } from './session.ts';
+import { Context, Duration, Effect, Schedule, Schema } from 'effect';
 
 export class PortUnavailable extends Schema.TaggedError<PortUnavailable, { readonly brand: unique symbol }>()(
   'PortUnavailable',
@@ -106,28 +103,69 @@ export interface TerminalSpawnOptions {
   onData: (data: Uint8Array) => void;
 }
 
-export type TerminalSpawner = (command: string[], options: TerminalSpawnOptions) => TerminalProcess;
+type TerminalSpawner = (
+  command: readonly string[],
+  options: TerminalSpawnOptions
+) => Effect.Effect<TerminalProcess>;
 
 export type PortListener = (port: number) => number | null;
 
-type PortPicker = (preferred: number | null, taken: ReadonlySet<number>) => number;
-
-type ForegroundReader = (pid: number) => Promise<string | null>;
-
-export interface TerminalsOptions {
-  dataDir: string;
-  home: string;
-  version: string;
-  readOnly?: boolean;
-  env?: Env;
-  spawn?: TerminalSpawner;
-  readForeground?: ForegroundReader;
-  pickPort?: PortPicker;
-  now?: () => number;
-  newId?: () => string;
-  notifyMs?: number;
-  screenMs?: number;
+export interface TerminalViewer {
+  send: (data: string | Uint8Array) => number;
+  buffered: () => number;
+  end: () => void;
 }
+
+export interface SessionStart {
+  command: string[];
+  env: Record<string, string>;
+  spawn: TerminalSpawner;
+}
+
+export interface SessionOptions {
+  info: TerminalInfo;
+  saved: string | null;
+  now: Effect.Effect<number>;
+  onChange: Effect.Effect<void>;
+  onScreen: (session: TerminalSession) => Effect.Effect<void>;
+}
+
+export interface TerminalSession {
+  info: TerminalInfo;
+  readonly running: boolean;
+  readonly pid: number | null;
+  readonly viewers: number;
+  start(start: SessionStart): Effect.Effect<void>;
+  attach(viewer: TerminalViewer): void;
+  detach(viewer: TerminalViewer): void;
+  drain(viewer: TerminalViewer): void;
+  input(data: string | Uint8Array): void;
+  type(command: string): void;
+  resize(cols: number, rows: number): void;
+  clear(): void;
+  replaceColors(colors: TerminalColors): void;
+  readonly serializeScreen: Effect.Effect<string>;
+  readOutput(lines: number): Effect.Effect<string[]>;
+  hangUp(): void;
+  readonly stop: Effect.Effect<void>;
+  dispose(): void;
+}
+
+export interface TerminalsInput {
+  version: string;
+  env: Env;
+}
+
+export const TerminalTimings = Context.Reference<{
+  readonly notify: Duration.Duration;
+  readonly screen: Duration.Duration;
+}>('shinsa/engine/terminals/TerminalTimings', {
+  defaultValue: () => ({ notify: Duration.millis(50), screen: Duration.seconds(2) }),
+});
+
+export const TerminalIds = Context.Reference<Effect.Effect<string>>('shinsa/engine/terminals/TerminalIds', {
+  defaultValue: () => Effect.sync(() => Bun.randomUUIDv7()),
+});
 
 export interface TerminalStart {
   projectId: string;
@@ -153,7 +191,7 @@ export interface ServiceInput {
 }
 
 export interface RemoteUrlSource {
-  resolveRemoteUrl(info: TerminalInfo, service: ServiceDefinition): string | null;
+  resolveRemoteUrl(info: TerminalInfo, service: ServiceDefinition): Effect.Effect<string | null>;
   subscribe(listener: () => void): unknown;
 }
 
@@ -175,10 +213,6 @@ export const TERMINALS_FILE = 'terminals.json';
 export const SERVICES_FILE = 'services.json';
 
 export const SCREEN_MODE = 0o600;
-
-export const NOTIFY_MS = 50;
-
-export const SCREEN_MS = 2_000;
 
 export const DROPPED_KEYS =
   /^(?:TERM_PROGRAM|TERM_PROGRAM_VERSION|TERM_SESSION_ID|GHOSTTY_.*|ITERM_.*|SHINSA_SERVICE|COLUMNS|LINES)$/;
@@ -213,47 +247,3 @@ export const TERMINAL_SOCKET_PATH = /^\/ws\/terminals\/([A-Za-z0-9-]{1,64})$/;
 export const SOCKET_CLOSED = 4404;
 
 export type TerminalsListener = (snapshot: TerminalsSnapshot) => void;
-
-export interface TerminalsDefinition {
-  dataDir: string;
-  home: string;
-  version: string;
-  readOnly: boolean;
-  env: Env;
-  spawn?: TerminalSpawner;
-  readForeground?: (pid: number) => Effect.Effect<string | null>;
-  pickPort?: (preferred: number | null, taken: ReadonlySet<number>) => Effect.Effect<number>;
-  now: Effect.Effect<number>;
-  newId: Effect.Effect<string>;
-  notifyMs: Duration.Duration;
-  screenMs: Duration.Duration;
-}
-
-export interface TerminalsHandle {
-  find: (id: string) => Effect.Effect<TerminalSession, DomainError>;
-  select: (id: string) => Effect.Effect<TerminalSession | null>;
-  snapshot: Effect.Effect<TerminalsSnapshot>;
-  applyRemoteUrls: (source: RemoteUrlSource) => Effect.Effect<void>;
-  subscribe: (listener: TerminalsListener) => Effect.Effect<() => void>;
-  create: (start: TerminalStart) => Effect.Effect<TerminalInfo, DomainError>;
-  rename: (id: string, name: string | null) => Effect.Effect<void, DomainError>;
-  reorder: (projectId: string, ids: string[]) => Effect.Effect<void, DomainError>;
-  restart: (id: string) => Effect.Effect<TerminalInfo, DomainError>;
-  run: (id: string, command: string) => Effect.Effect<void, DomainError>;
-  readForeground: (id: string) => Effect.Effect<TerminalForeground, DomainError>;
-  close: (id: string) => Effect.Effect<void, DomainError>;
-  findService: (id: string) => Effect.Effect<ServiceDefinition, DomainError>;
-  addService: (projectId: string, input: ServiceInput) => Effect.Effect<ServiceDefinition, DomainError>;
-  updateService: (id: string, input: ServiceInput) => Effect.Effect<ServiceDefinition, DomainError>;
-  removeServices: (ids: string[]) => Effect.Effect<void, DomainError>;
-  startService: (id: string, run: ServiceRun) => Effect.Effect<TerminalInfo, DomainError>;
-  stopService: (id: string, taskId: string | null) => Effect.Effect<void, DomainError>;
-  restartService: (id: string, run: ServiceRun) => Effect.Effect<TerminalInfo, DomainError>;
-  readServiceOutput: (id: string, taskId: string | null, lines: number) => Effect.Effect<string[]>;
-  closeTaskServices: (taskId: string) => Effect.Effect<void>;
-  listServiceProcesses: Effect.Effect<{ taskId: string; pid: number }[]>;
-  listTerminalPids: Effect.Effect<number[]>;
-  resumeServices: (state: ShinsaState) => Effect.Effect<void>;
-  attach: (id: string, viewer: TerminalViewer) => Effect.Effect<void, DomainError>;
-  stop: Effect.Effect<void>;
-}

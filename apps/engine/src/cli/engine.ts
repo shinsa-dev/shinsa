@@ -40,7 +40,8 @@ export const readHealth = Effect.fn('Cli.readHealth')(function* (base: string) {
       const response = await fetch(`${base}/api/health`, {
         signal: AbortSignal.any([signal, AbortSignal.timeout(HEALTH_TIMEOUT_MS)]),
       });
-      return response.ok ? ((await response.json()) as ServerHealth) : null;
+      if (!response.ok) return null;
+      return (await response.json()) as ServerHealth;
     },
     catch: (error) => new CliFailed({ message: describeError(error) }),
   }).pipe(Effect.catch(() => Effect.succeed(null)));

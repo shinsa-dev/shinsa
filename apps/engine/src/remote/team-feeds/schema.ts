@@ -9,10 +9,8 @@ import type {
   TeamView,
   TeamViewTarget,
 } from '@shinsa/core';
-import { Duration, Schedule, Schema } from 'effect';
-import type { Effect } from 'effect';
-import type { ChannelPeer } from '../channel.ts';
-import type { RemoteFile } from '../store/schema.ts';
+import { Context, Duration, Effect, Schedule, Schema, type Scope } from 'effect';
+import type { ChannelPeer } from '../channel/schema.ts';
 
 export const TEAM_FEED_OFFLINE = 'The teammate’s machine is offline.';
 
@@ -87,15 +85,23 @@ export interface TeamStreamTarget {
   view: TeamView;
 }
 
-export interface TeamFeedsInput<Remote> {
-  remote: Remote;
-  createSocket?: (url: string, origin: string) => FeedSocket;
-  wait?: (ms: number, run: () => void) => () => void;
-  waitForViews?: (ms: number, run: () => void) => () => void;
-  snapshotsPath?: string;
-  viewsDir?: string;
-  now?: () => number;
+export interface TeamFeedSettingsShape {
+  readonly createSocket: (url: string, origin: string) => FeedSocket;
+  readonly wait: (delay: Duration.Duration) => Effect.Effect<void>;
+  readonly waitForViews: (delay: Duration.Duration) => Effect.Effect<void>;
 }
+
+export const TeamFeedSettings = Context.Reference<TeamFeedSettingsShape>(
+  'shinsa/engine/remote/team-feeds/TeamFeedSettings',
+  {
+    defaultValue: () => ({
+      createSocket: (url, origin) =>
+        new WebSocket(url, { headers: { Origin: origin } }) as unknown as FeedSocket,
+      wait: Effect.sleep,
+      waitForViews: Effect.sleep,
+    }),
+  }
+);
 
 export interface Feed {
   readonly id: string;
@@ -123,32 +129,12 @@ export interface TeamRelay {
   readonly close: Effect.Effect<void>;
 }
 
-export interface TeamFeedsDefinition {
-  readonly file: Effect.Effect<RemoteFile>;
-  readonly isEnabled: Effect.Effect<boolean>;
-  readonly appOrigin: Effect.Effect<string>;
-  readonly now: Effect.Effect<number>;
-  readonly createEphemeral: Effect.Effect<CryptoKeyPair>;
-  requestTeamConnect(
-    token: string,
-    teamId: string,
-    instanceId: string
-  ): Effect.Effect<string, TeamConnectFailed>;
-  acquireAccess(close: Effect.Effect<void>): Effect.Effect<Effect.Effect<void>>;
-  createSocket(url: string, origin: string): FeedSocket;
-  wait(delay: Duration.Duration): Effect.Effect<void>;
-  waitForViews(delay: Duration.Duration): Effect.Effect<void>;
-  readonly snapshotsPath: string;
-  readonly viewsDir: string;
-}
-
 export interface TeamFeedsHandle {
   readonly start: Effect.Effect<void>;
   readonly stop: Effect.Effect<void>;
-  readonly changed: Effect.Effect<void>;
   readonly sync: Effect.Effect<void>;
-  subscribe(listener: () => void): Effect.Effect<() => boolean>;
-  subscribeHeld(listener: () => void): Effect.Effect<() => boolean>;
+  observe(listener: Effect.Effect<void>): Effect.Effect<void, never, Scope.Scope>;
+  observeHeld(listener: Effect.Effect<void>): Effect.Effect<void, never, Scope.Scope>;
   listTasks(filter: TeamTaskFilter): Effect.Effect<TeamFeedTask[]>;
   listHeld(teamId: string): Effect.Effect<TeamSnapshot[]>;
   readonly snapshot: Effect.Effect<TeamFeedSnapshot>;

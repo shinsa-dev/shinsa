@@ -2,39 +2,41 @@ import { afterEach, describe, expect, test } from 'bun:test';
 import { listActiveRuns, type ShinsaCommand, type ShinsaEvent } from '@shinsa/core';
 import { Effect } from 'effect';
 import { createManageClient } from '../../src/agents/manage/client.ts';
-import { Schedules } from '../../src/schedules/index.ts';
-import { findHookUrl } from '../../src/schedules/tools.ts';
+import type { ScheduleToolCall } from '../../src/schedules/index.ts';
 import { readArgv, selectSpec } from '../../src/surface/index.ts';
 import { createWorld, startTask, type World } from './fixtures.ts';
+import { openSchedules, type SchedulesHarness, type SchedulesHarnessOptions } from './harness.ts';
 
 const NOW = Date.now();
 
-const started: Schedules[] = [];
+const started: SchedulesHarness[] = [];
 
-afterEach(() => {
-  for (const schedules of started.splice(0)) schedules.stop();
+afterEach(async () => {
+  for (const harness of started.splice(0)) await harness.close();
 });
 
-function setUp(world: World) {
-  const schedules = new Schedules(world.engine, world.secrets, {
-    baseUrl: () => 'http://127.0.0.1:5180',
-    timeZone: 'Europe/Berlin',
-    now: () => NOW,
-  });
-  schedules.start();
-  started.push(schedules);
-  const call = {
+async function openTools(world: World, options: SchedulesHarnessOptions) {
+  const harness = await openSchedules(world.engine.core, world.secrets.store, { now: NOW, ...options });
+  started.push(harness);
+  return harness;
+}
+
+async function setUp(world: World) {
+  const harness = await openTools(world, { timeZone: 'Europe/Berlin' });
+  await harness.start();
+  const call: ScheduleToolCall = {
     runId: world.runId,
     attemptId: 'a1',
-    state: () => world.engine.state,
-    dispatch: (command: Parameters<typeof world.engine.dispatch>[0]) => world.engine.dispatch(command),
+    dispatch: (command: ShinsaCommand) => world.engine.core.dispatch(command),
   };
+  const handle = (name: string, input: Record<string, unknown>, toolCall: ScheduleToolCall) =>
+    harness.tool(name, input, toolCall);
   const tool = (name: string, input: Record<string, unknown> = {}) => {
-    const reply = schedules.handleTool(name, input, call);
+    const reply = handle(name, input, call);
     if (!reply) throw new Error(`${name} is not a schedule tool`);
     return reply;
   };
-  return { schedules, call, tool };
+  return { harness, schedules: harness.schedules, call, handle, tool };
 }
 
 function only(world: World) {
@@ -46,7 +48,7 @@ function only(world: World) {
 describe('set_schedule', () => {
   test('saves a daily schedule in the machine’s time zone and says when it runs next', async () => {
     const world = await createWorld();
-    const { tool } = setUp(world);
+    const { tool } = await setUp(world);
     const reply = await tool('set_schedule', {
       message: 'Check the build.',
       daily_at: '09:00',
@@ -61,7 +63,7 @@ describe('set_schedule', () => {
 
   test('a paused schedule for new tasks says so', async () => {
     const world = await createWorld();
-    const { tool } = setUp(world);
+    const { tool } = await setUp(world);
     const reply = await tool('set_schedule', {
       message: 'Audit.',
       every_minutes: 60,
@@ -91,7 +93,7 @@ describe('set_schedule', () => {
       data: 'The #feedback channel',
       repoIds: [],
     });
-    const { tool } = setUp(world);
+    const { tool } = await setUp(world);
     const watch = {
       name: 'Feedback bugs',
       message: 'Bug reports and feature requests.',
@@ -114,14 +116,14 @@ describe('set_schedule', () => {
   test('a message into another task names it', async () => {
     const world = await createWorld();
     const other = await startTask(world.engine, world.repoId, world.dir, 'Another task');
-    const { tool } = setUp(world);
+    const { tool } = await setUp(world);
     const reply = await tool('set_schedule', { message: 'Nudge.', every_minutes: 30, task_id: other.taskId });
     expect(reply).toContain('Messages “Another task”.');
   });
 
   test('a webhook gets a URL, and its signing secret comes from a one-use ref', async () => {
     const world = await createWorld();
-    const { tool } = setUp(world);
+    const { tool } = await setUp(world);
     const ref = world.secrets.writeRef('gate-1', world.taskId, 'shh');
     const reply = await tool('set_schedule', {
       message: 'A push: {{body.ref}}',
@@ -138,7 +140,7 @@ describe('set_schedule', () => {
 
   test('a signature check without a secret is refused until a ref is given', async () => {
     const world = await createWorld();
-    const { tool } = setUp(world);
+    const { tool } = await setUp(world);
     const signed = { webhook: { signature: { header: 'x-sig' } }, message: 'Hook' };
     await expect(tool('set_schedule', signed)).rejects.toThrow('request_secret');
     expect(world.engine.state.schedules).toEqual({});
@@ -146,7 +148,7 @@ describe('set_schedule', () => {
 
   test('a used ref still saves the schedule and says how to set the secret', async () => {
     const world = await createWorld();
-    const { tool } = setUp(world);
+    const { tool } = await setUp(world);
     const reply = await tool('set_schedule', {
       message: 'Hook',
       webhook: { signature: { header: 'x-sig', secret_ref: `secret-ref:${'0'.repeat(32)}` } },
@@ -158,15 +160,15 @@ describe('set_schedule', () => {
 
   test('a repeat of the same set_schedule call with its spent ref is answered as the first was', async () => {
     const world = await createWorld();
-    const { schedules, call } = setUp(world);
+    const { handle, call } = await setUp(world);
     const repeated = {
       ...call,
-      dispatch: (command: ShinsaCommand) => world.engine.dispatch(command, { id: 'mcp:7' }),
+      dispatch: (command: ShinsaCommand) => world.engine.core.dispatch(command, { id: 'mcp:7' }),
     };
     const ref = world.secrets.writeRef('gate-1', world.taskId, 'shh');
     const input = { message: 'Hook', webhook: { signature: { header: 'x-sig', secret_ref: ref } } };
-    const first = await schedules.handleTool('set_schedule', input, repeated);
-    const again = await schedules.handleTool('set_schedule', input, repeated);
+    const first = await handle('set_schedule', input, repeated);
+    const again = await handle('set_schedule', input, repeated);
     expect(again).toBe(first ?? '');
     expect(again).not.toContain('was not');
     expect(world.secrets.selectHook(only(world).id)?.secret).toBe('shh');
@@ -174,7 +176,7 @@ describe('set_schedule', () => {
 
   test('changing a signed webhook keeps its secret without a new ref', async () => {
     const world = await createWorld();
-    const { tool } = setUp(world);
+    const { tool } = await setUp(world);
     const ref = world.secrets.writeRef('gate-1', world.taskId, 'shh');
     await tool('set_schedule', {
       message: 'Hook',
@@ -192,7 +194,7 @@ describe('set_schedule', () => {
 
   test('an edit that does not restate the time zone keeps the schedule’s own zone', async () => {
     const world = await createWorld();
-    const { tool } = setUp(world);
+    const { tool } = await setUp(world);
     await tool('set_schedule', { message: 'Standup', daily_at: '09:00', time_zone: 'Asia/Tokyo' });
     const id = only(world).id;
     const reply = await tool('set_schedule', { schedule_id: id, name: 'Morning standup' });
@@ -202,7 +204,7 @@ describe('set_schedule', () => {
 
   test('a change that changes nothing describes the schedule as it is', async () => {
     const world = await createWorld();
-    const { tool } = setUp(world);
+    const { tool } = await setUp(world);
     await tool('set_schedule', { message: 'Ping', in_minutes: 30 });
     const id = only(world).id;
     expect(await tool('set_schedule', { schedule_id: id })).toContain(`(schedule_id ${id}). Once.`);
@@ -210,24 +212,24 @@ describe('set_schedule', () => {
 
   test('refuses a broken request with every problem, and a run that is gone', async () => {
     const world = await createWorld();
-    const { schedules, call } = setUp(world);
-    await expect(
-      schedules.handleTool('set_schedule', { in_minutes: 1, every_minutes: 1 }, call)
-    ).rejects.toThrow('not several');
-    await expect(
-      schedules.handleTool('set_schedule', { in_minutes: 1 }, { ...call, runId: 'gone' })
-    ).rejects.toThrow('This run no longer exists');
+    const { handle, call } = await setUp(world);
+    await expect(handle('set_schedule', { in_minutes: 1, every_minutes: 1 }, call)).rejects.toThrow(
+      'not several'
+    );
+    await expect(handle('set_schedule', { in_minutes: 1 }, { ...call, runId: 'gone' })).rejects.toThrow(
+      'This run no longer exists'
+    );
   });
 
   test('reports a schedule that a write did not save', async () => {
     const world = await createWorld();
-    const { schedules, call } = setUp(world);
-    const reply = schedules.handleTool(
+    const { handle, call } = await setUp(world);
+    const reply = handle(
       'set_schedule',
       { message: 'x', in_minutes: 5 },
       {
         ...call,
-        dispatch: () => Promise.resolve([]),
+        dispatch: () => Effect.succeed([]),
       }
     );
     await expect(reply).rejects.toThrow('Nothing was saved.');
@@ -237,7 +239,7 @@ describe('set_schedule', () => {
 describe('set_schedule refuses what it would drop', () => {
   test('signature fields on webhook itself are refused and point at webhook.signature', async () => {
     const world = await createWorld();
-    const { tool } = setUp(world);
+    const { tool } = await setUp(world);
     const misplaced = {
       message: 'Hook',
       webhook: { header: 'x-sig', secret_ref: `secret-ref:${'0'.repeat(32)}` },
@@ -270,7 +272,7 @@ describe('set_schedule with new_task in a repository it names', () => {
   test('by name or by id, and the calling task’s repository when it names none', async () => {
     const world = await createWorld();
     const webId = await registerWeb(world, null);
-    const { tool } = setUp(world);
+    const { tool } = await setUp(world);
     const audit = { message: 'Audit.', every_minutes: 60, new_task: true };
     await tool('set_schedule', { ...audit, repository: 'web' });
     expect(repoOf(world)).toBe(webId);
@@ -287,7 +289,7 @@ describe('set_schedule with new_task in a repository it names', () => {
     const webId = await registerWeb(base, 'Paywalls');
     const reader = await startTask(base.engine, webId, base.dir, 'Read the paywall reports');
     const world = { ...base, ...reader };
-    const { tool } = setUp(world);
+    const { tool } = await setUp(world);
     await expect(
       tool('set_schedule', { message: 'Audit.', every_minutes: 60, new_task: true, repository: 'app' })
     ).rejects.toThrow('There is no repository "app". Name one of: web.');
@@ -295,7 +297,7 @@ describe('set_schedule with new_task in a repository it names', () => {
 
   test('an unknown repository, or one without new_task, is refused', async () => {
     const world = await createWorld();
-    const { tool } = setUp(world);
+    const { tool } = await setUp(world);
     const audit = { message: 'Audit.', every_minutes: 60 };
     await expect(tool('set_schedule', { ...audit, new_task: true, repository: 'nope' })).rejects.toThrow(
       'There is no repository "nope". Name one of: app.'
@@ -308,9 +310,9 @@ describe('set_schedule with new_task in a repository it names', () => {
 });
 
 describe('a schedule an agent writes with schedules_write', () => {
-  function writeThroughSurface(world: World, schedules: Schedules, words: string[]) {
+  function writeThroughSurface(world: World, schedules: SchedulesHarness['schedules'], words: string[]) {
     const client = createManageClient({
-      engine: world.engine,
+      engine: world.engine.core,
       base: 'http://127.0.0.1:1',
       key: null,
       byTask: world.taskId,
@@ -323,7 +325,7 @@ describe('a schedule an agent writes with schedules_write', () => {
 
   test('is that task’s, so set_schedule and delete_schedule can change it', async () => {
     const world = await createWorld();
-    const { schedules, tool } = setUp(world);
+    const { schedules, tool } = await setUp(world);
     await writeThroughSurface(world, schedules, [
       '--message',
       'Audit.',
@@ -343,7 +345,7 @@ describe('a schedule an agent writes with schedules_write', () => {
 
   test('its signing secret comes from the ref, as with set_schedule', async () => {
     const world = await createWorld();
-    const { schedules } = setUp(world);
+    const { schedules } = await setUp(world);
     const ref = world.secrets.writeRef('gate-1', world.taskId, 'shh');
     const hook = [
       '--message',
@@ -371,7 +373,7 @@ describe('a schedule an agent writes with schedules_write', () => {
 
   test('a spent ref still saves the schedule and says how to set the secret', async () => {
     const world = await createWorld();
-    const { schedules } = setUp(world);
+    const { schedules } = await setUp(world);
     const result = await writeThroughSurface(world, schedules, [
       '--message',
       'Push',
@@ -390,9 +392,9 @@ describe('a schedule an agent writes with schedules_write', () => {
 
   test('a secret for a schedule that is gone is not written', async () => {
     const world = await createWorld();
-    const { schedules } = setUp(world);
+    const { harness, schedules } = await setUp(world);
     const ref = world.secrets.writeRef('gate-1', world.taskId, 'shh');
-    expect(schedules.hookSecrets(world.taskId).writeSecret('gone', ref)).toBeNull();
+    expect(await harness.run(schedules.hookSecrets(world.taskId).writeSecret('gone', ref))).toBeNull();
     expect(world.secrets.hasRef(ref)).toBe(true);
   });
 });
@@ -400,7 +402,7 @@ describe('a schedule an agent writes with schedules_write', () => {
 describe('list_schedules and delete_schedule', () => {
   test('lists every schedule with its last runs, and the URL only of this task’s webhooks', async () => {
     const world = await createWorld();
-    const { tool } = setUp(world);
+    const { tool } = await setUp(world);
     await tool('set_schedule', { message: 'Hook', webhook: true });
     const hook = only(world);
     await world.engine.dispatch({
@@ -430,17 +432,15 @@ describe('list_schedules and delete_schedule', () => {
       ],
     });
     const other = await startTask(world.engine, world.repoId, world.dir, 'Another task');
-    const { schedules, call } = setUp(world);
-    const theirs = JSON.parse(
-      (await schedules.handleTool('list_schedules', {}, { ...call, runId: other.runId })) ?? ''
-    );
+    const { handle, call } = await setUp(world);
+    const theirs = JSON.parse((await handle('list_schedules', {}, { ...call, runId: other.runId })) ?? '');
     expect(theirs.schedules[0].yours).toBe(false);
     expect(theirs.schedules[0].url).toBeUndefined();
   });
 
   test('deletes a schedule and forgets its webhook credentials', async () => {
     const world = await createWorld();
-    const { tool } = setUp(world);
+    const { tool } = await setUp(world);
     await tool('set_schedule', { message: 'Hook', name: 'The hook', webhook: true });
     const id = only(world).id;
     expect(await tool('delete_schedule', { schedule_id: id })).toBe('Deleted “The hook”.');
@@ -450,8 +450,8 @@ describe('list_schedules and delete_schedule', () => {
 
   test('other tools are not schedule tools', async () => {
     const world = await createWorld();
-    const { schedules, call } = setUp(world);
-    expect(schedules.handleTool('ask', {}, call)).toBeNull();
+    const { handle, call } = await setUp(world);
+    expect(handle('ask', {}, call)).toBeNull();
   });
 });
 
@@ -506,7 +506,7 @@ describe('file_report', () => {
   test('files the report as a task, a fork of the task it names by handle, in the repository it names', async () => {
     const world = await createWorld();
     const read = await startIntakeRead(world);
-    const { tool } = setUp({ ...world, runId: read.runId });
+    const { tool } = await setUp({ ...world, runId: read.runId });
     const shipped = world.engine.state.tasks[world.taskId];
     const reply = await tool('file_report', {
       ...report,
@@ -528,7 +528,7 @@ describe('file_report', () => {
   test('refuses a broken report, a task or repository it cannot find, and a call that files nothing', async () => {
     const world = await createWorld();
     const read = await startIntakeRead(world);
-    const { tool, call } = setUp({ ...world, runId: read.runId });
+    const { tool, call } = await setUp({ ...world, runId: read.runId });
     await expect(tool('file_report', { title: 'x' })).rejects.toThrow('report_id or link');
     await expect(tool('file_report', { ...report, fork_from: 'LOC-999' })).rejects.toThrow(
       'There is no task "LOC-999" to fork.'
@@ -536,34 +536,26 @@ describe('file_report', () => {
     await expect(tool('file_report', { ...report, repository: 'app' })).rejects.toThrow(
       'There is no repository "app". Name one of: web.'
     );
-    const silent = new Schedules(world.engine, world.secrets, {
-      baseUrl: () => '',
-      timeZone: 'UTC',
-      now: () => NOW,
-    });
-    const reply = silent.handleTool('file_report', report, { ...call, dispatch: async () => [] });
+    const silent = await openTools(world, { baseUrl: '', timeZone: 'UTC' });
+    const reply = silent.tool('file_report', report, { ...call, dispatch: () => Effect.succeed([]) });
     await expect(reply ?? Promise.resolve('')).rejects.toThrow('Nothing was filed.');
   });
 
   test('a report another watch filed first is counted by the watchdog that finds it, not filed again', async () => {
     const world = await createWorld();
     const read = await startIntakeRead(world);
-    const { call } = setUp({ ...world, runId: read.runId });
+    const { call } = await setUp({ ...world, runId: read.runId });
     const known = world.engine.state.tasks[world.taskId];
-    const linked = new Schedules(world.engine, world.secrets, {
-      baseUrl: () => '',
-      timeZone: 'UTC',
-      now: () => NOW,
-    });
+    const linked = await openTools(world, { baseUrl: '', timeZone: 'UTC' });
     const event = {
       type: 'watchdog.report_linked',
       taskId: 't',
       watchdogId: 'w',
       reportTaskId: world.taskId,
     };
-    const reply = linked.handleTool('file_report', report, {
+    const reply = linked.tool('file_report', report, {
       ...call,
-      dispatch: async () => [event] as unknown as ShinsaEvent[],
+      dispatch: () => Effect.succeed([event] as unknown as ShinsaEvent[]),
     });
     await expect(reply ?? Promise.resolve('')).resolves.toBe(
       `This report was already filed as ${known?.handle} “${known?.title}”, so the watchdog counts it. Go on with the next report.`
@@ -574,13 +566,13 @@ describe('file_report', () => {
 describe('a webhook’s URL', () => {
   test('is the local route with its token, and a schedule without a webhook has none', async () => {
     const world = await createWorld();
-    const { schedules, tool } = setUp(world);
+    const { harness, tool } = await setUp(world);
     await tool('set_schedule', { message: 'Hook', webhook: {} });
     const schedule = only(world);
     const hook = world.secrets.selectHook(schedule.id);
-    expect(findHookUrl(schedules.context, schedule.id)).toBe(
+    expect(await harness.findHookUrl(schedule.id)).toBe(
       `http://127.0.0.1:5180/api/hooks/${schedule.id}/${hook?.token}`
     );
-    expect(() => findHookUrl(schedules.context, 'nope')).toThrow('This schedule has no webhook.');
+    await expect(harness.findHookUrl('nope')).rejects.toThrow('This schedule has no webhook.');
   });
 });

@@ -19,8 +19,8 @@ import {
   resolveTaskLink,
 } from '../../src/cli/app.ts';
 import { type CommandIo, openApp } from '../../src/cli/commands.ts';
-import { edgeRuntime } from '../../src/runtime/edge.ts';
 import { PLAIN_DISPLAY } from '../../src/terminal/index.ts';
+import { testRuntime } from '../helpers/runtime.ts';
 
 function createRepo(fields: Partial<Repo>): Repo {
   return {
@@ -86,14 +86,14 @@ describe('links into the app', () => {
 describe('shinsa <folder>', () => {
   test('focuses on the project of the repository the folder is in, then opens Home', async () => {
     const { io, opened, sent } = createIo([createRepo({})], '/code/shop');
-    await edgeRuntime.runPromise(openApp(['.'], io));
+    await testRuntime.runPromise(openApp(['.'], io));
     expect(sent).toEqual([{ type: 'focus.change', projectId: 'p1', until: null }]);
     expect(opened).toEqual(['shinsa://home']);
   });
 
   test('a repository in no project opens Home without changing the focus', async () => {
     const { io, opened, sent, out } = createIo([createRepo({ projectId: null })], '/code/shop');
-    await edgeRuntime.runPromise(openApp(['.'], io));
+    await testRuntime.runPromise(openApp(['.'], io));
     expect(sent).toEqual([]);
     expect(out).toEqual([]);
     expect(opened).toEqual(['shinsa://home']);

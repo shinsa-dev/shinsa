@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import {
   applyEvent,
+  type ChatEvent,
   createState,
   decide,
   type Run,
@@ -9,20 +10,22 @@ import {
   type ShinsaEvent,
   type ShinsaState,
 } from '@shinsa/core';
-import { Result } from 'effect';
-import { Transcripts } from '../../src/agents/index.ts';
+import { Effect, Layer, Result } from 'effect';
 import { CLAUDE_CAPABILITIES } from '../../src/agents/providers/claude/index.ts';
 import type { AgentProvider } from '../../src/agents/providers/index.ts';
+import { Transcripts } from '../../src/agents/transcripts/service.ts';
 import {
   isSessionCacheWarm,
   resolveRestorePlan,
   resolveTurnBrief,
   resolveTurnFold,
   resolveTurnPlan,
-  resolveTurnPrompt,
+  resolveTurnPrompt as resolvePrompt,
 } from '../../src/agents/turns/plan.ts';
 import { type TurnContext } from '../../src/agents/turns/schema.ts';
-import { createTempDir } from '../helpers/index.ts';
+import { EngineConfig } from '../../src/config/service.ts';
+import { runTest } from '../harness.ts';
+import { createTestConfig } from '../helpers/index.ts';
 import { createGate, createRepo, createRound, createRun, createTask } from '../helpers/state.ts';
 
 function provider(overrides: Partial<AgentProvider> = {}): AgentProvider {
@@ -33,10 +36,26 @@ function provider(overrides: Partial<AgentProvider> = {}): AgentProvider {
     startSession: () => {
       throw new Error('not used');
     },
-    listModels: () => Promise.resolve([]),
-    complete: () => Promise.resolve(null),
+    listModels: Effect.succeed([]),
+    complete: () => Effect.succeed(null),
     ...overrides,
   };
+}
+
+function createTranscripts() {
+  return Effect.runSync(
+    Transcripts.use(Effect.succeed).pipe(
+      Effect.provide(Transcripts.layer.pipe(Layer.provide(Layer.succeed(EngineConfig, createTestConfig()))))
+    )
+  );
+}
+
+function record(transcripts: Transcripts['Service'], runId: string, entry: ChatEvent) {
+  Effect.runSync(transcripts.record(runId, entry));
+}
+
+function resolveTurnPrompt(...input: Parameters<typeof resolvePrompt>) {
+  return Effect.runSync(resolvePrompt(...input));
 }
 
 function context(
@@ -52,12 +71,9 @@ function context(
     run,
     provider: provider(),
     cwd: '/work',
-    transcripts: new Transcripts(createTempDir()),
+    transcripts: createTranscripts(),
     labelOf: (id) => id,
-    recordLost: (sessionId) => {
-      lost.push(sessionId);
-      return Promise.resolve();
-    },
+    recordLost: (sessionId) => Effect.sync(() => void lost.push(sessionId)),
     lost,
     ...overrides,
   };
@@ -65,7 +81,7 @@ function context(
 
 describe('resolveTurnPlan', () => {
   test('a run without a session starts fresh', async () => {
-    expect(await resolveTurnPlan(context(createRun(), []))).toEqual({
+    expect(await runTest(resolveTurnPlan(context(createRun(), [])))).toEqual({
       resume: null,
       fork: false,
       handoff: null,
@@ -83,9 +99,9 @@ describe('resolveTurnPlan', () => {
     ];
     const turn = context(run, runs);
     for (const id of ['r1', 'r2', 'other-session', 'other-task']) {
-      turn.transcripts.record(id, { type: 'user', from: 'shinsa', text: `brief of ${id}`, attachments: [] });
+      record(turn.transcripts, id, { type: 'user', from: 'shinsa', text: `brief of ${id}`, attachments: [] });
     }
-    const plan = await resolveTurnPlan(turn);
+    const plan = await runTest(resolveTurnPlan(turn));
     const text = plan.handoff?.text ?? '';
     expect(text.indexOf('brief of r1')).toBeLessThan(text.indexOf('brief of r2'));
     expect(text).not.toContain('other-session');
@@ -98,17 +114,17 @@ describe('resolveTurnPlan', () => {
     const run = createRun({ sessionId: 's' });
     const turn = context(run, [], {
       provider: provider({
-        inspectSession: () => Promise.reject(new Error('The session store is unreadable.')),
+        inspectSession: () => Effect.die(new Error('The session store is unreadable.')),
       }),
     });
-    await expect(resolveTurnPlan(turn)).rejects.toThrow('The session store is unreadable.');
+    await expect(runTest(resolveTurnPlan(turn))).rejects.toThrow('The session store is unreadable.');
   });
 
   test('a provider that is no longer registered is named by its id', async () => {
     const run = createRun({ sessionId: 's', sessionProvider: 'gemini' });
     const turn = context(run, [], { labelOf: (id) => (id === 'claude' ? 'Claude' : id) });
-    turn.transcripts.record(run.id, { type: 'user', from: 'shinsa', text: 'Brief.', attachments: [] });
-    const plan = await resolveTurnPlan(turn);
+    record(turn.transcripts, run.id, { type: 'user', from: 'shinsa', text: 'Brief.', attachments: [] });
+    const plan = await runTest(resolveTurnPlan(turn));
     expect(plan.handoff?.text).toContain('from another coding agent (gemini)');
   });
 });
@@ -136,7 +152,7 @@ describe('forking a task', () => {
 
   function forkContext(overrides: Partial<TurnContext> = {}) {
     const turn = context(createRun({ id: 'forked-run', fork, startedAt: 30 }), [source], overrides);
-    turn.transcripts.record('source-run', {
+    record(turn.transcripts, 'source-run', {
       type: 'user',
       from: 'shinsa',
       text: 'The source task’s brief.',
@@ -151,11 +167,11 @@ describe('forking a task', () => {
       provider: provider({
         inspectSession: (query) => {
           inspected.push(query.sessionId);
-          return Promise.resolve('present');
+          return Effect.succeed('present');
         },
       }),
     });
-    expect(await resolveTurnPlan(turn)).toEqual({
+    expect(await runTest(resolveTurnPlan(turn))).toEqual({
       resume: 'source-session',
       fork: true,
       handoff: null,
@@ -165,13 +181,13 @@ describe('forking a task', () => {
   });
 
   test('a provider that cannot check its sessions forks without checking', async () => {
-    const plan = await resolveTurnPlan(forkContext());
+    const plan = await runTest(resolveTurnPlan(forkContext()));
     expect(plan).toMatchObject({ resume: 'source-session', fork: true });
   });
 
   test('a source session the provider lost is restored from the source task’s transcript', async () => {
-    const turn = forkContext({ provider: provider({ inspectSession: () => Promise.resolve('missing') }) });
-    const plan = await resolveTurnPlan(turn);
+    const turn = forkContext({ provider: provider({ inspectSession: () => Effect.succeed('missing') }) });
+    const plan = await runTest(resolveTurnPlan(turn));
     expect(plan).toMatchObject({ resume: null, fork: false });
     expect(plan.handoff?.text).toContain('The source task’s brief.');
     expect(plan.handoff?.text).toContain('the task this task was forked from');
@@ -181,33 +197,37 @@ describe('forking a task', () => {
 
   test('a provider that cannot fork gets the source task’s conversation as a handoff', async () => {
     const capabilities = { ...CLAUDE_CAPABILITIES, sessions: { resume: true, inspect: true, fork: false } };
-    const plan = await resolveTurnPlan(forkContext({ provider: provider({ capabilities }) }));
+    const plan = await runTest(resolveTurnPlan(forkContext({ provider: provider({ capabilities }) })));
     expect(plan.record).toMatchObject({ reason: 'fork', fromProvider: 'claude' });
   });
 
   test('a source session on another provider is handed over instead of forked', async () => {
     const turn = forkContext({ provider: provider({ id: 'codex', label: 'Codex' }) });
-    const plan = await resolveTurnPlan(turn);
+    const plan = await runTest(resolveTurnPlan(turn));
     expect(plan).toMatchObject({ resume: null, fork: false });
     expect(plan.record).toMatchObject({ reason: 'fork', fromProvider: 'claude' });
   });
 
-  test('a fork the provider refuses mid-start is restored from the source task’s transcript', () => {
+  test('a fork the provider refuses mid-start is restored from the source task’s transcript', async () => {
     const turn = forkContext();
-    const plan = resolveRestorePlan(
-      turn,
-      { resume: 'source-session', fork: true, handoff: null, record: null },
-      'source-session'
+    const plan = await runTest(
+      resolveRestorePlan(
+        turn,
+        { resume: 'source-session', fork: true, handoff: null, record: null },
+        'source-session'
+      )
     );
     expect(plan.record).toMatchObject({ reason: 'fork', totalEntries: 1 });
-    const own = resolveRestorePlan(turn, { resume: 's', fork: false, handoff: null, record: null }, 's');
+    const own = await runTest(
+      resolveRestorePlan(turn, { resume: 's', fork: false, handoff: null, record: null }, 's')
+    );
     expect(own).toMatchObject({ resume: null, handoff: null });
   });
 
   test('the forked turn reads the source session’s house rules and is told where it works now', () => {
     const rules = resolveHouseRules('agent');
     const turn = forkContext();
-    turn.transcripts.record('source-run', { type: 'user', from: 'shinsa', text: rules, attachments: [] });
+    record(turn.transcripts, 'source-run', { type: 'user', from: 'shinsa', text: rules, attachments: [] });
     const plan = { resume: 'source-session', fork: true, handoff: null, record: null };
     const prompt = resolveTurnPrompt(
       turn,
@@ -254,7 +274,7 @@ describe('a message kept for the next agent', () => {
     if (!fix) throw new Error('no fix run');
     expect(fix).toMatchObject({ purpose: 'fix', resume: true, sessionId: 'session-1' });
     const turn = context(fix, [built], { state });
-    turn.transcripts.record('built-run', { type: 'user', from: 'shinsa', text: rules, attachments: [] });
+    record(turn.transcripts, 'built-run', { type: 'user', from: 'shinsa', text: rules, attachments: [] });
     const plan = { resume: 'session-1', fork: false, handoff: null, record: null };
     const prompt = resolveTurnPrompt(turn, plan, fix.prompt ?? '', resolveTurnBrief(state, fix, null));
     expect(prompt.startsWith(rules)).toBe(false);
@@ -308,7 +328,7 @@ describe('folding at a step boundary', () => {
     const run = createRun({ id: 'run-2', sessionId: 'session-1', role: 'agent', purpose: 'build' });
     const earlier = createRun({ id: 'run-1', sessionId: 'session-1', role: 'agent', purpose: 'plan' });
     const turn = context(run, [earlier]);
-    turn.transcripts.record('run-1', { type: 'user', from: 'shinsa', text: rules, attachments: [] });
+    record(turn.transcripts, 'run-1', { type: 'user', from: 'shinsa', text: rules, attachments: [] });
     const prompt = `${rules}\n\nNow build phase 1 of 2.`;
     const brief = `${rules}\n\nThe plan in full.\n\nNow build phase 1 of 2.`;
     expect(resolveTurnPrompt(turn, resumed, prompt, brief)).toBe('Now build phase 1 of 2.');
@@ -345,14 +365,14 @@ describe('folding at a step boundary', () => {
       startedAt: 2,
     });
     const turn = context(run, [plan, build]);
-    turn.transcripts.record('run-1', { type: 'user', from: 'shinsa', text: rules, attachments: [] });
+    record(turn.transcripts, 'run-1', { type: 'user', from: 'shinsa', text: rules, attachments: [] });
     const fold = { kind: 'compaction' as const, trigger: 'fold' as const, preTokens: null, summary: null };
-    turn.transcripts.record('run-2', { type: 'notice', notice: { ...fold, by: 'eunoe' as const } });
+    record(turn.transcripts, 'run-2', { type: 'notice', notice: { ...fold, by: 'eunoe' as const } });
     const prompt = `${rules}\n\nNow build phase 2 of 2.`;
     const brief = `${rules}\n\nThe plan in full.\n\nNow build phase 2 of 2.`;
     const folded = 'The plan in full.\n\nNow build phase 2 of 2.';
     expect(resolveTurnPrompt(turn, resumed, prompt, brief, true)).toBe(folded);
-    turn.transcripts.record('run-2', { type: 'notice', notice: { ...fold, trigger: 'auto' as const } });
+    record(turn.transcripts, 'run-2', { type: 'notice', notice: { ...fold, trigger: 'auto' as const } });
     expect(resolveTurnPrompt(turn, resumed, prompt, brief, true)).toBe(brief);
   });
 });

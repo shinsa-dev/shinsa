@@ -1,15 +1,44 @@
-import { Effect } from 'effect';
+import type { ShinsaState, Task } from '@shinsa/core';
+import { Context, Effect, Layer } from 'effect';
+import { QuickCalls } from '../../agents/quick/service.ts';
+import type { LocalRepo } from '../../repos/index.ts';
+import { resolveQuickAsk } from '../classify.ts';
+import type { ClassifierFailed, TriageResult } from '../schema.ts';
 import { describeTriagePrompt, parseTriageAnswer, resolveTriagePlan, resolveTriageSchema } from './plan.ts';
-import { TRIAGE_SYSTEM, type TriageAnswer, type TriageDefinition } from './schema.ts';
+import { TRIAGE_SYSTEM, type TriageAnswer, TriageTeam } from './schema.ts';
 
-export const requestTriage = Effect.fn('Triage.request')(function* (definition: TriageDefinition) {
-  const { state, task, local, ask, team } = definition;
-  const plan = resolveTriagePlan(state, task, local, team);
-  const answer = yield* ask<TriageAnswer>(
-    TRIAGE_SYSTEM,
-    describeTriagePrompt(state, plan),
-    resolveTriageSchema(plan)
+export class TaskTriage extends Context.Service<
+  TaskTriage,
+  {
+    readonly resolve: (
+      state: ShinsaState,
+      task: Task,
+      local: LocalRepo[]
+    ) => Effect.Effect<TriageResult, ClassifierFailed>;
+  }
+>()('shinsa/engine/triage/task/TaskTriage') {
+  static readonly layer = Layer.effect(
+    TaskTriage,
+    Effect.gen(function* () {
+      const ask = resolveQuickAsk((yield* QuickCalls).classify);
+      const team = yield* TriageTeam;
+
+      const resolve = Effect.fn('TaskTriage.resolve')(function* (
+        state: ShinsaState,
+        task: Task,
+        local: LocalRepo[]
+      ) {
+        const plan = resolveTriagePlan(state, task, local, team ? yield* team : null);
+        const answer = yield* ask<TriageAnswer>(
+          TRIAGE_SYSTEM,
+          describeTriagePrompt(state, plan),
+          resolveTriageSchema(plan)
+        );
+        if (!answer) return plan.fallback;
+        return parseTriageAnswer(state, plan, answer);
+      });
+
+      return TaskTriage.of({ resolve });
+    })
   );
-  if (!answer) return plan.fallback;
-  return parseTriageAnswer(state, plan, answer);
-});
+}

@@ -1,10 +1,29 @@
 import { describe, expect, test } from 'bun:test';
-import {
-  readStructuredOutput,
-  requestClaudeCompletion,
-  requestClaudeStructured,
-} from '../../../../src/agents/providers/claude/complete.ts';
+import { Duration, Effect } from 'effect';
+import { readStructuredOutput } from '../../../../src/agents/providers/claude/complete/output.ts';
+import { makeClaudeCompletions } from '../../../../src/agents/providers/claude/complete/service.ts';
+import type { ClaudeRuntime } from '../../../../src/agents/providers/claude/sdk/schema.ts';
+import { COMPLETION_TIMEOUT_MS } from '../../../../src/agents/providers/schema.ts';
+import type { CompletionRequest, StructuredRequest } from '../../../../src/agents/providers/types.ts';
 import { createFakeQuery, createFakeRuntime, emit, sdkMessage } from '../../../helpers/query.ts';
+
+function requestClaudeCompletion(
+  request: CompletionRequest,
+  runtime: ClaudeRuntime,
+  timeoutMs = COMPLETION_TIMEOUT_MS
+) {
+  return Effect.runPromise(
+    Effect.flatMap(makeClaudeCompletions(runtime), (completions) =>
+      completions.text(request, Duration.millis(timeoutMs))
+    )
+  );
+}
+
+function requestClaudeStructured(request: StructuredRequest, runtime: ClaudeRuntime) {
+  return Effect.runPromise(
+    Effect.flatMap(makeClaudeCompletions(runtime), (completions) => completions.structured(request))
+  );
+}
 
 const REQUEST = { system: 'system', prompt: 'prompt', model: 'haiku' };
 

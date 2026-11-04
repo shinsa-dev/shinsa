@@ -1,8 +1,15 @@
-import { describe, expect, test } from 'bun:test';
-import { createState, DomainError, type ShinsaCommand, type Watchdog } from '@shinsa/core';
-import type { Engine } from '../../src/runtime/engine.ts';
+import { afterEach, describe, expect, test } from 'bun:test';
+import { createState, DomainError, type Watchdog } from '@shinsa/core';
+import { EngineStopped } from '../../src/runtime/engine/schema.ts';
 import { WatchdogClock } from '../../src/runtime/index.ts';
 import { createTask } from '../helpers/state.ts';
+import { createFakeEngineCore, openClock } from './harness.ts';
+
+const open: { close: () => Promise<void> }[] = [];
+
+afterEach(async () => {
+  for (const harness of open.splice(0)) await harness.close();
+});
 
 function createWatchdog(overrides: Partial<Watchdog> = {}): Watchdog {
   return {
@@ -35,19 +42,18 @@ function createWatchdog(overrides: Partial<Watchdog> = {}): Watchdog {
 function createFakeEngine(watchdogs: Watchdog[], answer: 'events' | 'nothing' | 'failure' | 'refusal') {
   const state = createState();
   state.tasks['task-1'] = createTask({ watchdogs });
-  const sent: { command: ShinsaCommand; id: string | undefined }[] = [];
-  const engine = {
-    state,
-    subscribe: () => () => undefined,
-    dispatch: (command: ShinsaCommand, options: { id?: string } = {}) => {
-      sent.push({ command, id: options.id });
-      if (answer === 'failure') return Promise.reject(new Error('log full'));
-      if (answer === 'refusal')
-        return Promise.reject(new DomainError({ code: 'watchdog_stale', message: 'That check is not due.' }));
-      return Promise.resolve(answer === 'events' ? [{ ...command, type: 'watchdog.checking' }] : []);
-    },
-  };
-  return { engine: engine as unknown as Engine, sent };
+  return createFakeEngineCore(state, (command) => {
+    if (answer === 'failure') return new EngineStopped({ message: 'log full' });
+    if (answer === 'refusal')
+      return new DomainError({ code: 'watchdog_stale', message: 'That check is not due.' });
+    return answer === 'events' ? [{ ...command, type: 'watchdog.checking' }] : [];
+  });
+}
+
+async function openWatchdogs(fake: ReturnType<typeof createFakeEngine>) {
+  const clock = await openClock(WatchdogClock, WatchdogClock.layer, fake.core, { now: 5_000 });
+  open.push(clock);
+  return clock;
 }
 
 describe('the watchdog clock', () => {
@@ -62,7 +68,7 @@ describe('the watchdog clock', () => {
       ],
       'events'
     );
-    await new WatchdogClock(fake.engine, { now: () => 5_000 }).fireDue();
+    await (await openWatchdogs(fake)).fireDue();
     expect(fake.sent).toEqual([
       {
         command: { type: 'watchdog.fire', taskId: 'task-1', watchdogId: 'w-1', dueAt: 1_000 },
@@ -73,7 +79,7 @@ describe('the watchdog clock', () => {
 
   test('a fire answered with no events is not sent again until the watchdog changes', async () => {
     const fake = createFakeEngine([createWatchdog()], 'nothing');
-    const clock = new WatchdogClock(fake.engine, { now: () => 5_000 });
+    const clock = await openWatchdogs(fake);
     await clock.fireDue();
     await clock.fireDue();
     expect(fake.sent).toHaveLength(1);
@@ -81,12 +87,12 @@ describe('the watchdog clock', () => {
 
   test('a fire that fails is tried again, and one core refuses is not', async () => {
     const failing = createFakeEngine([createWatchdog()], 'failure');
-    const retried = new WatchdogClock(failing.engine, { now: () => 5_000 });
+    const retried = await openWatchdogs(failing);
     await retried.fireDue();
     await retried.fireDue();
     expect(failing.sent).toHaveLength(2);
     const refusing = createFakeEngine([createWatchdog()], 'refusal');
-    const refused = new WatchdogClock(refusing.engine, { now: () => 5_000 });
+    const refused = await openWatchdogs(refusing);
     await refused.fireDue();
     await refused.fireDue();
     expect(refusing.sent).toHaveLength(1);

@@ -2,16 +2,20 @@ import { afterEach, describe, expect, test } from 'bun:test';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
-import type { CommandResult } from '../../src/shell/index.ts';
+import { Duration, Effect, Layer, ManagedRuntime } from 'effect';
+import { JsonLogger } from '../../src/log/service.ts';
+import { ShellLayer } from '../../src/shell/layers.ts';
 import {
   applyLoginEnv,
-  createLoginEnvReader,
+  createLoginEnvReader as createReader,
   isStartedFromTerminal,
   mergePathLists,
   parseLoginEnv,
   refreshInstallFolders,
   resolveDefaultShell,
 } from '../../src/shell/login.ts';
+import type { LoginEnvOptions } from '../../src/shell/login/schema.ts';
+import type { CommandResult } from '../../src/shell/schema.ts';
 import { createTempDir, overrideEnv } from '../helpers/index.ts';
 import { captureLogs } from '../helpers/logs.ts';
 
@@ -29,6 +33,21 @@ afterEach(() => {
 
 function withShellEnv(values: Record<string, string>) {
   restores.push(overrideEnv(values));
+}
+
+const runtime = ManagedRuntime.make(Layer.merge(ShellLayer, JsonLogger));
+
+function createLoginEnvReader(env: Record<string, string | undefined>, options: LoginEnvOptions = {}) {
+  const read = runtime.runSync(createReader(env, options));
+  return { read: () => runtime.runPromise(read) };
+}
+
+function apply(
+  env: Record<string, string | undefined>,
+  reader: { read: () => Promise<Record<string, string> | null> },
+  home?: string
+) {
+  return runtime.runPromise(applyLoginEnv(env, Effect.promise(reader.read), home));
 }
 
 function answer(stdout: string, ok = true): CommandResult {
@@ -183,10 +202,11 @@ describe('the login shell environment', () => {
     const reader = createLoginEnvReader(
       {},
       {
-        run: (command, cwd) => {
-          runs.push({ command, cwd });
-          return Promise.resolve(answer('__SHINSA_LOGIN_ENV__A=1\0'));
-        },
+        run: (command, cwd) =>
+          Effect.sync(() => {
+            runs.push({ command: [...command], cwd });
+            return answer('__SHINSA_LOGIN_ENV__A=1\0');
+          }),
       }
     );
     expect(await reader.read()).toEqual({ A: '1' });
@@ -204,7 +224,10 @@ describe('the login shell environment', () => {
     const logs = captureLogs();
     try {
       withShellEnv({ FAKE_LOGIN_SHELL_HANG: '1' });
-      const hung = createLoginEnvReader({ SHELL: FAKE_SHELL, HOME: createTempDir() }, { timeoutMs: 200 });
+      const hung = createLoginEnvReader(
+        { SHELL: FAKE_SHELL, HOME: createTempDir() },
+        { timeout: Duration.millis(200) }
+      );
       expect(await hung.read()).toBeNull();
       expect(logs.fieldsOf('[Serve] Could not read the login shell environment').at(-1)).toEqual({
         shell: FAKE_SHELL,
@@ -237,7 +260,7 @@ describe('applying it to the server’s environment', () => {
       read: () =>
         Promise.resolve({ PATH: '/opt/homebrew/bin:/usr/bin', TOKEN: 'theirs', GH_HOST: 'github.com' }),
     };
-    expect(await applyLoginEnv(env, reader)).toEqual(['GH_HOST']);
+    expect(await apply(env, reader)).toEqual(['GH_HOST']);
     expect(env).toEqual({
       PATH: '/usr/bin:/bin:/opt/homebrew/bin',
       TOKEN: 'mine',
@@ -245,7 +268,7 @@ describe('applying it to the server’s environment', () => {
       GH_HOST: 'github.com',
     });
     const withoutPath: Record<string, string | undefined> = {};
-    await applyLoginEnv(withoutPath, { read: () => Promise.resolve({ A: '1' }) }, '/home/me');
+    await apply(withoutPath, { read: () => Promise.resolve({ A: '1' }) }, '/home/me');
     expect(withoutPath).toEqual({ A: '1', PATH: '' });
   });
 
@@ -253,11 +276,11 @@ describe('applying it to the server’s environment', () => {
     const home = createTempDir();
     for (const dir of ['.bun/bin', '.local/bin']) mkdirSync(join(home, dir), { recursive: true });
     const env: Record<string, string | undefined> = { PATH: '/usr/bin:/bin', HOME: home };
-    expect(await applyLoginEnv(env, { read: () => Promise.resolve(null) })).toEqual([]);
+    expect(await apply(env, { read: () => Promise.resolve(null) })).toEqual([]);
     const path = env.PATH?.split(':') ?? [];
     expect(path.slice(0, 4)).toEqual(['/usr/bin', '/bin', join(home, '.bun/bin'), join(home, '.local/bin')]);
     const bare: Record<string, string | undefined> = {};
-    await applyLoginEnv(bare, { read: () => Promise.resolve(null) }, join(home, 'missing'));
+    await apply(bare, { read: () => Promise.resolve(null) }, join(home, 'missing'));
     expect(bare.PATH?.includes('missing')).toBe(false);
   });
 

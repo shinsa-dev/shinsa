@@ -1,21 +1,10 @@
-import {
-  type ShinsaState,
-  TASK_PRIORITIES,
-  type Task,
-  type TaskPriority,
-  type TaskShape,
-} from '@shinsa/core';
+import { TASK_PRIORITIES, type Task, type TaskPriority, type TaskShape } from '@shinsa/core';
+import { Context, type Effect } from 'effect';
 import type { ChoiceQuestion, ChoicesQuestion } from '../../agents/quick/decide.ts';
 import { COMMIT_TYPES } from '../../git/index.ts';
 import type { LocalRepo } from '../../repos/index.ts';
-import {
-  type CandidatePool,
-  NO_REPOSITORY,
-  type QuickAsk,
-  REPOSITORY_RULE,
-  type TriageResult,
-} from '../schema.ts';
-import type { TeammateCheck, TeamReader } from '../team.ts';
+import { type CandidatePool, NO_REPOSITORY, REPOSITORY_RULE, type TriageResult } from '../schema.ts';
+import type { TeammateCheck, TeamReading } from '../team.ts';
 
 export interface TriageAnswer {
   title?: unknown;
@@ -64,13 +53,10 @@ export interface TriagePlan {
   fallback: TriageResult;
 }
 
-export interface TriageDefinition {
-  readonly state: ShinsaState;
-  readonly task: Task;
-  readonly local: LocalRepo[];
-  readonly ask: QuickAsk;
-  readonly team: TeamReader | null;
-}
+export const TriageTeam = Context.Reference<Effect.Effect<TeamReading> | null>(
+  'shinsa/engine/triage/task/TriageTeam',
+  { defaultValue: () => null }
+);
 
 export const WHY_LIMIT = 120;
 

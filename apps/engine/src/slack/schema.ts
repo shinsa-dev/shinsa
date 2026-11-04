@@ -1,67 +1,35 @@
-import type { MachineCredentials, ShinsaCommand, ShinsaEffect, ShinsaState, DomainError } from '@shinsa/core';
-import { Duration, Schema } from 'effect';
+import type { DomainError, MachineCredentials, ShinsaEffect } from '@shinsa/core';
+import type { NotFound, Revoked, SlackFailed } from '@shinsa/core/remote/errors';
+import { Context, Duration, Schema } from 'effect';
 import type { Effect } from 'effect';
-import type { JsonSchema } from '../agents/providers/index.ts';
-import type { QuickJson } from '../agents/quick/index.ts';
-import type { SlackRelayCalls, Token } from '../remote/client/schema.ts';
-import type { Remote } from '../remote/index.ts';
-import type { Engine } from '../runtime/engine.ts';
+import type { RemoteUnreachable } from '../remote/client/schema.ts';
+import type { EngineStopped } from '../runtime/engine/schema.ts';
 
 export const SLACK_EVENT_BODY_LIMIT_BYTES = 1024 * 1024;
-
-export const STATUS_INTERVAL = Duration.seconds(5);
 
 export const SlackBodyText = Schema.fromJsonString(Schema.Unknown);
 
 export type SlackEffect<Kind extends ShinsaEffect['kind']> = Extract<ShinsaEffect, { kind: Kind }>;
 
-export type Sleep = (ms: number, signal: AbortSignal) => Promise<void>;
-
-export interface SlackOptions {
-  engine: Engine;
-  remote: Remote;
-  ask: QuickJson;
-  now?: () => number;
-  sleep?: Sleep;
-  statusIntervalMs?: number;
+export interface SlackInput {
+  readonly credentials: Effect.Effect<MachineCredentials | null>;
+  readonly appOrigin: string;
 }
 
-export class SlackCommandFailed extends Schema.TaggedError<
-  SlackCommandFailed,
-  { readonly brand: unique symbol }
->()('SlackCommandFailed', { message: Schema.String }) {}
-
-export class SlackAskFailed extends Schema.TaggedError<SlackAskFailed, { readonly brand: unique symbol }>()(
-  'SlackAskFailed',
-  { message: Schema.String }
-) {}
-
-export class SlackWaitStopped extends Schema.TaggedError<
-  SlackWaitStopped,
-  { readonly brand: unique symbol }
->()('SlackWaitStopped', { message: Schema.String }) {}
+export const SlackStatusInterval = Context.Reference<Duration.Duration>(
+  'shinsa/engine/slack/SlackStatusInterval',
+  {
+    defaultValue: () => Duration.seconds(5),
+  }
+);
 
 export class SlackRequestUnreadable extends Schema.TaggedError<
   SlackRequestUnreadable,
   { readonly brand: unique symbol }
 >()('SlackRequestUnreadable', { message: Schema.String }) {}
 
-export interface SlackDefinition {
-  readonly state: Effect.Effect<ShinsaState>;
-  readonly dispatch: (
-    command: ShinsaCommand,
-    id: string
-  ) => Effect.Effect<void, DomainError | SlackCommandFailed>;
-  readonly credentials: Effect.Effect<MachineCredentials | null>;
-  readonly appOrigin: Effect.Effect<string>;
-  readonly relay: SlackRelayCalls;
-  readonly token: (machineToken: string) => Token;
-  readonly ask: (
-    system: string,
-    prompt: string,
-    schema: JsonSchema
-  ) => Effect.Effect<unknown, SlackAskFailed>;
-  readonly now: Effect.Effect<number>;
-  readonly sleep: ((ms: number, signal: AbortSignal) => Effect.Effect<void, SlackWaitStopped>) | null;
-  readonly statusInterval: Duration.Duration;
-}
+export type SlackRefusal = DomainError | EngineStopped;
+
+export type SlackRelayFailure = RemoteUnreachable | SlackFailed;
+
+export type SlackLinksFailure = DomainError | NotFound | RemoteUnreachable | Revoked;

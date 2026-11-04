@@ -32,7 +32,7 @@ import {
   resolveRepoProperty,
 } from '../repositories.ts';
 import type { TriageResult } from '../schema.ts';
-import { resolveTeammateCheck, type TeammateCheck, type TeammateTask, type TeamReader } from '../team.ts';
+import { resolveTeammateCheck, type TeammateCheck, type TeammateTask, type TeamReading } from '../team.ts';
 import {
   type KeptDependencies,
   LARGE_HINT,
@@ -237,7 +237,7 @@ export function resolveTriagePlan(
   state: ShinsaState,
   task: Task,
   local: LocalRepo[],
-  team: TeamReader | null
+  team: TeamReading | null
 ): TriagePlan {
   const pinned = task.repoId ? state.repos[task.repoId] : undefined;
   const pool = resolveCandidatePool(state, task, local);
@@ -250,7 +250,7 @@ export function resolveTriagePlan(
   const size = resolveFallbackSize(task);
   const title = resolveRoundTitle(task.request).slice(0, TITLE_LIMIT).trim() || 'Untitled task';
   const open = listOpenTasks(state, task, pool.project);
-  const teammates = team ? resolveTeammateCheck(pool.project, team()) : null;
+  const teammates = team ? resolveTeammateCheck(pool.project, team) : null;
   return {
     task,
     asks,

@@ -1,30 +1,48 @@
 import { afterEach, describe, expect, test } from 'bun:test';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { Round, Task } from '@shinsa/core';
+import type { Repo, Round, Settings, Task } from '@shinsa/core';
 import {
-  closePullRequest,
-  createPullRequest,
-  mergePullRequest,
   type PullRequestDetails,
-  readPullRequest,
-  readPullRequestDiff,
-  readRepoFile,
-  readStackedPullRequest,
   resolveCheckRuns,
   resolveCheckRunsState,
   resolveChecks,
   resolveRemarks,
   resolveRepoSlug,
-  resolveRepositoryId,
-  retargetPullRequest,
   serializePullRequest,
   serializePullRequestTitle,
-  uploadAttachment,
-  writePullRequestBlock,
 } from '../../src/github/index.ts';
+import type { Attachment } from '../../src/github/pulls/schema.ts';
+import { PullRequests } from '../../src/github/pulls/service.ts';
+import { runGit } from '../helpers/git.ts';
 import { createGitRepo, createTempDir, git, overrideEnv } from '../helpers/index.ts';
 import { createRepo, createTask } from '../helpers/state.ts';
+
+const readPullRequest = (repo: Repo, task: Task) =>
+  runGit(PullRequests.use((pulls) => pulls.read(repo, task)));
+const readStackedPullRequest = (repo: Repo, number: number) =>
+  runGit(PullRequests.use((pulls) => pulls.readStacked(repo, number)));
+const resolveRepositoryId = (repo: Repo) => runGit(PullRequests.use((pulls) => pulls.repositoryId(repo)));
+const readRepoFile = (repo: Repo, ref: string, path: string) =>
+  runGit(PullRequests.use((pulls) => pulls.readFile(repo, ref, path)));
+const readPullRequestDiff = (repo: Repo, number: number) =>
+  runGit(PullRequests.use((pulls) => pulls.readDiff(repo, number)));
+const uploadAttachment = (repo: Repo, repositoryId: number, attachment: Attachment) =>
+  runGit(PullRequests.use((pulls) => pulls.upload(repo, repositoryId, attachment)));
+const writePullRequestBlock = (repo: Repo, number: number, block: string) =>
+  runGit(PullRequests.use((pulls) => pulls.writeBlock(repo, number, block)));
+const createPullRequest = (repo: Repo, task: Task, baseBranch: string | null, body: string) =>
+  runGit(PullRequests.use((pulls) => pulls.create(repo, task, baseBranch, body)));
+const retargetPullRequest = (repo: Repo, number: number, base: string) =>
+  runGit(PullRequests.use((pulls) => pulls.retarget(repo, number, base)));
+const closePullRequest = (repo: Repo, number: number, comment: string) =>
+  runGit(PullRequests.use((pulls) => pulls.close(repo, number, comment)));
+const mergePullRequest = (
+  repo: Repo,
+  number: number,
+  method: Settings['mergeMethod'],
+  headSha: string | null
+) => runGit(PullRequests.use((pulls) => pulls.merge(repo, number, method, headSha)));
 
 let restore: (() => void) | null = null;
 

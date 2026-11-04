@@ -1,30 +1,9 @@
-import type { DomainError, ShinsaCommand } from '@shinsa/core';
-import { Schema } from 'effect';
-import type { Effect } from 'effect';
+import { Context } from 'effect';
+import { CLOCK_MIN_DELAY, type ClockTimings, MAX_CLOCK_DELAY } from '../../runtime/clock/schema.ts';
 
-export class ShareExpireFailed extends Schema.TaggedError<
-  ShareExpireFailed,
-  { readonly brand: unique symbol }
->()('ShareExpireFailed', { message: Schema.String }) {}
-
-type ShareExpireFailure = ShareExpireFailed | DomainError;
-
-export interface ShareClockDefinition {
-  readonly dispatch: (
-    command: ShinsaCommand,
-    id: string
-  ) => Effect.Effect<readonly unknown[], ShareExpireFailure>;
-  readonly refuse: (id: string) => Effect.Effect<void>;
-}
-
-export interface ShareClockTick {
-  readonly id: string;
-  readonly dueAt: number;
-  readonly fire: Effect.Effect<void, ShareExpireFailure>;
-}
-
-export const SHARE_CLOCK_DEFAULTS = {
-  area: 'Share',
-  failure: 'Could not end a share that ran out',
-  minDelayMs: 1_000,
-};
+export const ShareClockTimings = Context.Reference<ClockTimings>(
+  'shinsa/engine/remote/share-clock/ShareClockTimings',
+  {
+    defaultValue: (): ClockTimings => ({ minDelay: CLOCK_MIN_DELAY, maxDelay: MAX_CLOCK_DELAY }),
+  }
+);

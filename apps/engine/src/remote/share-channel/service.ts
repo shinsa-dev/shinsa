@@ -72,7 +72,7 @@ export const makeShareChannel = Effect.fn('ShareChannel.make')(function* <Subjec
 
   const sendFile = Effect.fn('ShareChannel.sendFile')(function* (file: LiveFile) {
     yield* send({ t: 'file', id: file.id, version: file.version, type: file.type });
-    const bytes = yield* Effect.tryPromise({ try: () => file.read(), catch: broke });
+    const bytes = yield* file.read;
     for (let offset = 0; offset < bytes.length; offset += CHANNEL_BODY_CHUNK_BYTES) {
       const chunk = serializeBase64Url(bytes.slice(offset, offset + CHANNEL_BODY_CHUNK_BYTES));
       yield* send({ t: 'body', id: file.id, chunk });

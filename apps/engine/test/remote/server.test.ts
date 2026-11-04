@@ -1,6 +1,4 @@
 import { afterEach, describe, expect, spyOn, test } from 'bun:test';
-import { writeFileSync } from 'node:fs';
-import { join } from 'node:path';
 import {
   type AgentModel,
   type Bytes,
@@ -17,31 +15,34 @@ import {
   resolveMachineTeamPath,
   serializeBase64Url,
 } from '@shinsa/core';
+import { DomainError } from '@shinsa/core';
 import { GuestsFull, MembersFull, NotFound, Revoked } from '@shinsa/core/remote/errors';
-import { Effect, Layer } from 'effect';
-import { type ModelSource, Transcripts } from '../../src/agents/index.ts';
+import { Context, Effect, Layer } from 'effect';
+import type { ModelSource } from '../../src/agents/index.ts';
 import type { ServerConfig } from '../../src/config/index.ts';
-import { startServer } from '../../src/http/index.ts';
-import { log } from '../../src/log/index.ts';
-import { Handoffs } from '../../src/remote/handoffs.ts';
+import { EngineConfig } from '../../src/config/service.ts';
+import { JsonFileWriteFailed } from '../../src/files/schema.ts';
+import { Handoffs } from '../../src/remote/handoffs/service.ts';
 import {
-  RemoteControl,
-  createUrlOpener,
-  openRemoteUrl,
-  Remote,
+  BrowserCommand,
   type RemoteSnapshot,
+  RemoteStore,
+  RemoteUrlOpener,
+  Teams,
   TunnelConnector,
   resolveMachineName,
 } from '../../src/remote/index.ts';
-import type { PreviewLinks, PreviewPeer } from '../../src/remote/previews.ts';
-import type { ShareChannel } from '../../src/remote/share-channel.ts';
-import type { ShareLinks } from '../../src/remote/shares.ts';
-import type { TeamFeeds } from '../../src/remote/team-feeds.ts';
-import { Teams } from '../../src/remote/teams.ts';
-import { Engine } from '../../src/runtime/index.ts';
+import type { PreviewLinks, PreviewPeer } from '../../src/remote/previews/schema.ts';
+import type { ShareChannelHandle } from '../../src/remote/share-channel/schema.ts';
+import type { ShareLinks } from '../../src/remote/shares/schema.ts';
+import type { TeamFeeds } from '../../src/remote/team-feeds/service.ts';
+import { EngineStopped } from '../../src/runtime/engine/schema.ts';
 import type { Schedules } from '../../src/schedules/index.ts';
+import { ShellLayer } from '../../src/shell/layers.ts';
 import type { Slack } from '../../src/slack/index.ts';
-import { EventLog, EvidenceStore } from '../../src/store/index.ts';
+import { Engine } from '../helpers/engine.ts';
+import { openEventLog } from '../helpers/event-log.ts';
+import { createTestEvidence } from '../helpers/evidence.ts';
 import {
   createTempDir,
   createTestConfig,
@@ -50,8 +51,11 @@ import {
   until,
 } from '../helpers/index.ts';
 import { captureLogs } from '../helpers/logs.ts';
+import { createTestTranscripts } from '../helpers/transcripts.ts';
+import { startHttpServer } from '../helpers/web.ts';
 import { createKeyPair, serializeDeviceKey, startHandshake, type TestSession } from './client.ts';
 import { type FakeControlPlane, refuse, sealCredentials, startFakeControlPlane } from './control-plane.ts';
+import { adaptRemote, createRemoteTest } from './harness.ts';
 
 const CONNECT_KEY = serializeBase64Url(new Uint8Array(32).fill(9));
 
@@ -89,23 +93,22 @@ afterEach(async () => {
 });
 
 function createModels(models: AgentModel[]) {
-  return { listModels: () => Promise.resolve(models) } as unknown as ModelSource;
+  return { listModels: Effect.succeed(models) } as unknown as ModelSource;
 }
 
 function createFakeSlack() {
   return {
-    handleTunnel: () => Promise.resolve(new Response('mentioned', { status: 202 })),
-    routes: () => [],
-  } as unknown as Slack;
+    handleTunnel: () => Effect.succeed(new Response('mentioned', { status: 202 })),
+  } as unknown as Slack['Service'];
 }
 
 function createFakeSchedules() {
   return {
-    isWebhook: (path: string) => path.startsWith('/api/hooks/'),
-    handleWebhook: () => Promise.resolve(new Response('hooked', { status: 202 })),
-    routes: () => [],
-  } as unknown as Schedules;
+    handleWebhook: () => Effect.sync(() => new Response('hooked', { status: 202 })),
+  } as unknown as Schedules['Service'];
 }
+
+type StartedRemote = ReturnType<typeof adaptRemote>;
 
 async function start(
   options: {
@@ -116,29 +119,33 @@ async function start(
     openUrl?: (url: string) => Promise<void>;
     shares?: ShareLinks;
     teams?: boolean;
-    teamFeeds?: TeamFeeds;
+    teamFeeds?: TeamFeeds['Service'];
     previews?: PreviewLinks;
+    handoffs?: boolean;
+    store?: (store: RemoteStore['Service']) => RemoteStore['Service'];
   } = {}
 ) {
   const config = createTestConfig(createTempDir(), options.config);
   const plane = startFakeControlPlane();
   running.push(plane.stop);
-  const path = join(config.dataDir, 'remote.json');
-  if (options.paired ?? true)
-    writeFileSync(
-      path,
-      JSON.stringify({
-        credentials: CREDENTIALS,
-        enabled: options.enabled ?? true,
-        owner: 'mona',
-        access: options.access === undefined ? ACCESS : options.access,
-      })
-    );
   const opened: string[] = [];
   const connectors: { stopped: boolean }[] = [];
-  const remote = new Remote({
-    path,
-    control: new RemoteControl({ origin: plane.origin, pairPollMs: 1 }),
+  const engine = new Engine(openEventLog(config.databasePath));
+  const machine = createRemoteTest({
+    dataDir: config.dataDir,
+    config,
+    ...((options.paired ?? true)
+      ? {
+          file: {
+            credentials: CREDENTIALS,
+            enabled: options.enabled ?? true,
+            owner: 'mona',
+            access: options.access === undefined ? ACCESS : options.access,
+          },
+        }
+      : {}),
+    origin: plane.origin,
+    pairPollMs: 1,
     connector: Layer.succeed(TunnelConnector, {
       open: () =>
         Effect.acquireRelease(
@@ -154,37 +161,36 @@ async function start(
         ).pipe(Effect.as({ exited: Effect.never })),
     }),
     ping: () => Effect.succeed(true),
-    localUrl: () => 'http://127.0.0.1:1',
-    version: '1',
     maxBodyBytes: 1024 * 1024,
-    machineName: 'Studio',
     openUrl:
       options.openUrl ??
       ((url) => {
         opened.push(url);
         return Promise.resolve();
       }),
+    engine: engine.core,
+    handoffs: options.handoffs ?? true,
+    ...(options.store ? { store: options.store } : {}),
+    shares: (shares) => ({
+      ...shares,
+      resolveLive: () => Effect.fail(new DomainError({ code: 'task_not_found', message: 'no task' })),
+    }),
   });
-  const engine = new Engine(new EventLog(config.databasePath));
-  const teams = options.teams
-    ? new Teams({
-        engine,
-        remote,
-        shares: { resolveLive: () => Promise.reject(new Error('no task')) },
-        transcripts: { subscribe: () => () => undefined },
-      })
-    : null;
-  const http = startServer({
+  const remote = adaptRemote(machine);
+  const handoffs = Context.getOrUndefined(machine.context as Context.Context<Handoffs>, Handoffs);
+  const http = startHttpServer({
     engine,
     config,
-    transcripts: new Transcripts(config.transcriptsDir),
-    evidence: new EvidenceStore(config.evidenceDir),
+    transcripts: createTestTranscripts(config.transcriptsDir),
+    evidence: createTestEvidence(config.evidenceDir),
     models: createModels([]),
     onboarding: createTestOnboarding(engine, config).onboarding,
     schedules: createFakeSchedules(),
-    remote,
+    remote: remote.service,
+    remoteOrigin: plane.origin,
+    remoteStore: machine.get(RemoteStore as never) as RemoteStore['Service'],
     ...(options.shares ? { shares: options.shares } : {}),
-    ...(teams ? { teams } : {}),
+    ...(options.teams ? { teams: machine.get(Teams as never) as Teams['Service'] } : {}),
     ...(options.teamFeeds ? { teamFeeds: options.teamFeeds } : {}),
     ...(options.previews ? { previews: options.previews } : {}),
     slack: createFakeSlack(),
@@ -192,6 +198,7 @@ async function start(
   running.push(async () => {
     await remote.stop();
     await http.stop();
+    await machine.close();
   });
   const base = `http://127.0.0.1:${http.server.port}`;
   const tunnel = (route: string, init: RequestInit = {}) =>
@@ -202,7 +209,29 @@ async function start(
         ? {}
         : { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }),
     });
-  return { remote, engine, base, tunnel, local, port: http.server.port, plane, connectors, opened };
+  return {
+    remote,
+    engine,
+    base,
+    tunnel,
+    local,
+    port: http.server.port,
+    plane,
+    connectors,
+    opened,
+    handoffs: {
+      link: (taskId: string, attempt: { key: string }) =>
+        machine.runPromise(
+          Effect.flatMap(Effect.fromNullishOr(handoffs), (found) =>
+            found.link(taskId, { attempt: 1, ...attempt })
+          )
+        ),
+      revoke: (taskId: string, guestId: string | null) =>
+        machine.runPromise(
+          Effect.flatMap(Effect.fromNullishOr(handoffs), (found) => found.revoke(taskId, guestId))
+        ),
+    },
+  };
 }
 
 async function createToken(
@@ -291,7 +320,7 @@ function settleChannel(opening: Promise<OpenChannel>) {
   );
 }
 
-async function addDevice(remote: Remote, userId = OWNER.id) {
+async function addDevice(remote: StartedRemote, userId = OWNER.id) {
   const device = await createKeyPair();
   remote.store.upsertDevice({
     publicKey: await serializeDeviceKey(device),
@@ -391,24 +420,28 @@ describe('the tunnel entry point', () => {
   test('opens a share link only from app.shinsa.dev and only for a task that is shared, and the machine closes it', async () => {
     const received: string[] = [];
     const closed: string[] = [];
-    const shares = {
-      acceptsShare: (shareId: string) => shareId === 's1',
-      openChannel: (
-        peer: { send: (data: string) => void; close: (code: number, reason: string) => void },
-        shareId: string
-      ) => {
-        peer.send(`hello ${shareId}`);
-        return {
-          receive: (raw: string) => {
-            received.push(raw);
-            peer.close(1008, 'A share link accepts nothing.');
-            return Promise.resolve();
-          },
-          close: () => closed.push(shareId),
-        } as unknown as ShareChannel;
-      },
-      closeChannel: (channel: ShareChannel) => channel.close(),
-    } as unknown as ShareLinks;
+    const shares: ShareLinks = {
+      acceptsShare: (shareId) => Effect.succeed(shareId === 's1'),
+      openChannel: (peer, shareId) =>
+        Effect.sync(() => {
+          peer.send(`hello ${shareId}`);
+          return {
+            subject: Effect.succeed(shareId),
+            receive: (raw) =>
+              Effect.sync(() => {
+                received.push(String(raw));
+                peer.close(1008, 'A share link accepts nothing.');
+              }),
+            push: Effect.void,
+            end: () => Effect.void,
+            fail: () => Effect.void,
+            close: Effect.sync(() => {
+              closed.push(shareId);
+            }),
+          } satisfies ShareChannelHandle<string>;
+        }),
+      closeChannel: (channel) => channel.close,
+    };
     const { tunnel, port, plane } = await start({ shares });
     expect((await tunnel('/share?id=s1')).status).toBe(403);
     expect((await tunnel('/share?id=nope', { headers: { origin: plane.origin } })).status).toBe(404);
@@ -460,19 +493,20 @@ describe('the tunnel entry point', () => {
     const targets: unknown[] = [];
     let relayClosed = 0;
     const feeds = {
-      openRelay: (peer: { send: (data: string) => void }, target: unknown) => {
-        targets.push(target);
-        peer.send('{"t":"view","data":"{}"}');
-        return {
-          close: () => {
-            relayClosed += 1;
-          },
-        };
-      },
-      listTasks: () => [{ task: { id: 'task-9' } }],
-      snapshot: () => ({ machines: [{ instanceId: 'inst9' }], tasks: [] }),
-      subscribe: () => () => undefined,
-    } as unknown as TeamFeeds;
+      openRelay: (peer: { send: (data: string) => void }, target: unknown) =>
+        Effect.sync(() => {
+          targets.push(target);
+          peer.send('{"t":"view","data":"{}"}');
+          return {
+            close: Effect.sync(() => {
+              relayClosed += 1;
+            }),
+          };
+        }),
+      listTasks: () => Effect.succeed([{ task: { id: 'task-9' } }]),
+      snapshot: Effect.succeed({ machines: [{ instanceId: 'inst9' }], tasks: [] }),
+      observe: () => Effect.void,
+    } as unknown as TeamFeeds['Service'];
     const { local, tunnel, port, base } = await start({ teamFeeds: feeds });
     expect((await local('/api/teams/view?team=t1')).status).toBe(404);
     expect((await tunnel('/api/teams/view?team=t1&machine=m1&task=x')).status).toBe(404);
@@ -554,7 +588,7 @@ describe('the tunnel entry point', () => {
       answer: (request, url) => {
         asked.push(`${request.method} ${url.pathname}`);
         if (request.headers.get('upgrade') !== 'websocket')
-          return Promise.resolve({ kind: 'response', response: new Response('page', { status: 203 }) });
+          return Effect.succeed({ kind: 'response', response: new Response('page', { status: 203 }) });
         const upgrade = {
           previewId: 'p1',
           userId: null,
@@ -562,19 +596,20 @@ describe('the tunnel entry point', () => {
           headers: {},
           protocols: ['vite-hmr'],
         };
-        return Promise.resolve({ kind: 'upgrade', upgrade });
+        return Effect.succeed({ kind: 'upgrade', upgrade });
       },
-      openSocket: (opened) => {
-        peer = opened;
-        opened.send('ready');
-        return {
-          send: (data) => {
-            relayed.push(typeof data === 'string' ? data : `bytes:${data.length}`);
-            if (data === 'bye') opened.close(4000, 'done');
-          },
-          close: () => relayed.push('closed'),
-        };
-      },
+      openSocket: (opened) =>
+        Effect.sync(() => {
+          peer = opened;
+          opened.send('ready');
+          return {
+            send: (data) => {
+              relayed.push(typeof data === 'string' ? data : `bytes:${data.length}`);
+              if (data === 'bye') opened.close(4000, 'done');
+            },
+            close: () => relayed.push('closed'),
+          };
+        }),
     };
     const { tunnel, port } = await start({ previews });
     const page = await tunnel('/__preview/p1/index.html', { method: 'POST', body: 'x' });
@@ -719,8 +754,22 @@ describe('the sealed channel over the tunnel', () => {
 });
 
 describe('the remote service', () => {
+  test('a machine key that cannot be kept fails pairing with the reason', async () => {
+    const { remote } = await start({
+      paired: false,
+      store: (store) => ({
+        ...store,
+        resolveMachineKey: Effect.fail(
+          new JsonFileWriteFailed({ path: 'remote.json', message: 'disk full' })
+        ),
+      }),
+    });
+    const unreadable = { _tag: 'RemoteKeyUnreadable', message: 'disk full' };
+    await expect(remote.startPairing()).rejects.toMatchObject(unreadable);
+    expect(remote.snapshot().pairing).toBeNull();
+  });
+
   test('reports its state, starts only when enabled and forgets its credentials when revoked', async () => {
-    const warn = spyOn(log, 'warn').mockImplementation(() => undefined);
     const { remote, plane, connectors } = await start();
     const changes: number[] = [];
     const unsubscribe = remote.subscribe(() => changes.push(1));
@@ -743,7 +792,6 @@ describe('the remote service', () => {
     remote.start();
     expect(connectors).toHaveLength(1);
     expect(remote.tunnelHost).toBeNull();
-    warn.mockRestore();
   });
 });
 
@@ -828,7 +876,6 @@ describe('pairing this machine', () => {
 
 describe('managing remote access on the machine', () => {
   test('pauses, resumes and removes the instance through its routes', async () => {
-    const warn = spyOn(log, 'warn').mockImplementation(() => undefined);
     const { remote, local, plane, connectors } = await start();
     remote.start();
     await until('connected', () => remote.snapshot().status === 'connected');
@@ -848,7 +895,6 @@ describe('managing remote access on the machine', () => {
       expect(await readError(await local(route, {}))).toBe('remote_not_paired');
     }
     expect(await readError(await local('/api/remote/link/create', {}))).toBe('remote_not_paired');
-    warn.mockRestore();
   });
 
   test('refuses from a remote device what stays at the keyboard, over HTTP as over the socket', async () => {
@@ -897,11 +943,11 @@ describe('links, access requests and members', () => {
     return () => Response.json({ ok: true, ...access, guests: [], teams: [] });
   }
 
-  function readLink(remote: Remote) {
+  function readLink(remote: StartedRemote) {
     return parseEnrollFragment(new URL(remote.snapshot().link?.url ?? 'https://x').hash);
   }
 
-  async function waitForRequest(remote: Remote) {
+  async function waitForRequest(remote: StartedRemote) {
     await until('the request', () => remote.snapshot().requests.length > 0);
     return remote.snapshot().requests[0]?.id ?? '';
   }
@@ -1127,7 +1173,6 @@ describe('links, access requests and members', () => {
   });
 
   test('a request is refused when the machine cannot check who asked', async () => {
-    const warn = spyOn(log, 'warn').mockImplementation(() => undefined);
     const { remote, local, port, plane } = await start();
     plane.answers.set(REMOTE_PATHS.machineRequester, () => refuse(NotFound));
     await local('/api/remote/link/create', {});
@@ -1137,7 +1182,6 @@ describe('links, access requests and members', () => {
         userId: KAI.id,
       })
     ).rejects.toThrow('could not check who you are');
-    warn.mockRestore();
   });
 
   test('approving works from a device that reaches the machine remotely, and links stay at the keyboard', async () => {
@@ -1215,8 +1259,14 @@ describe('links, access requests and members', () => {
   });
 
   test('a signing key that cannot be read is logged and the heartbeat goes without it', async () => {
-    const { remote, plane } = await start();
-    spyOn(remote.store, 'resolveSigningKey').mockRejectedValue(new Error('disk full'));
+    const { remote, plane } = await start({
+      store: (store) => ({
+        ...store,
+        resolveSigningKey: Effect.fail(
+          new JsonFileWriteFailed({ path: 'remote.json', message: 'disk full' })
+        ),
+      }),
+    });
     const logs = captureLogs();
     try {
       remote.start();
@@ -1304,8 +1354,7 @@ describe('handing off a task', () => {
 
   async function startHandoff() {
     const started = await start();
-    const { engine, remote, plane } = started;
-    const handoffs = new Handoffs({ engine, remote });
+    const { engine, remote, plane, handoffs } = started;
     plane.answers.set(REMOTE_PATHS.machineHandoffs, () => Response.json({ token: 'handoff-token' }));
     plane.answers.set(REMOTE_PATHS.machineRequester, () => Response.json(KAI));
     plane.answers.set(REMOTE_PATHS.machineGuestAdd, () => Response.json(GUEST_MEMBER));
@@ -1315,7 +1364,7 @@ describe('handing off a task', () => {
     await engine.dispatch({ type: 'task.hand_off', taskId: taskId as string });
     await handoffs.link(taskId as string, { key: 'link' } as never);
     const machine = await remote.store.resolveMachineKey();
-    return { ...started, handoffs, taskId: taskId as string, otherId: otherId as string, machine };
+    return { ...started, taskId: taskId as string, otherId: otherId as string, machine };
   }
 
   function readClaim(engine: Engine, taskId: string) {
@@ -1500,7 +1549,6 @@ describe('handing off a task', () => {
   test('a link someone else took, a full machine and a failing Shinsa Cloud are refused with a reason', async () => {
     const { remote, engine, port, plane, taskId, machine } = await startHandoff();
     const secret = readClaim(engine, taskId)?.secret ?? '';
-    const warn = spyOn(log, 'warn').mockImplementation(() => undefined);
     const claimAs = () =>
       settleChannel(openChannel(remote.appOrigin, port, secret, machine.publicKey, { userId: KAI.id }));
     plane.answers.set(REMOTE_PATHS.machineGuestAdd, () => refuse(GuestsFull));
@@ -1516,11 +1564,10 @@ describe('handing off a task', () => {
     await engine.dispatch({ type: 'handoff.claim', taskId, guest: { ...OWNER } });
     expect(await claimAs()).toContain('Someone else already opened this hand-off link');
     expect(engine.state.tasks[taskId]?.handoff?.guest?.login).toBe('mona');
-    warn.mockRestore();
   });
 
   test('a machine that hands off nothing refuses the claim, and a forgotten machine forgets its links', async () => {
-    const started = await start();
+    const started = await start({ handoffs: false });
     const { remote, port, plane } = started;
     plane.answers.set(REMOTE_PATHS.machineHandoffs, () => Response.json({ token: 'handoff-token' }));
     plane.answers.set(REMOTE_PATHS.machineRequester, () => Response.json(KAI));
@@ -1549,8 +1596,8 @@ describe('handing off a task', () => {
       handoffs: [{ taskId, secret, invite: 'handoff-token', createdAt: 1 }],
     }));
     const logs = captureLogs();
-    const dispatch = spyOn(engine, 'dispatch').mockImplementation(() =>
-      Promise.reject(new Error('disk full'))
+    const dispatch = spyOn(engine.core, 'dispatch').mockImplementation(() =>
+      Effect.fail(new EngineStopped({ message: 'disk full' }))
     );
     try {
       expect(
@@ -1660,8 +1707,8 @@ describe('handing off a task', () => {
     await engine.dispatch({ type: 'handoff.claim', taskId, guest: { ...KAI } });
     remote.store.update((file) => ({ ...file, guests: [GUEST_MEMBER] }));
     const logs = captureLogs();
-    const dispatch = spyOn(engine, 'dispatch').mockImplementation(() =>
-      Promise.reject(new Error('disk full'))
+    const dispatch = spyOn(engine.core, 'dispatch').mockImplementation(() =>
+      Effect.fail(new EngineStopped({ message: 'disk full' }))
     );
     try {
       plane.answers.set(REMOTE_PATHS.heartbeat, () =>
@@ -1686,18 +1733,34 @@ describe('naming and opening', () => {
     expect(resolveMachineName()).not.toBe('');
   });
 
-  test('opens a page with the system opener and reports when it fails', async () => {
+  test('opens a page with the system opener in the user’s home, opens nothing without a display, and reports a failure', async () => {
     const restore = overrideEnv({ DISPLAY: ':0' });
     try {
-      await openRemoteUrl('https://app.shinsa.dev/pair', createTempDir());
-      await expect(openRemoteUrl('fail', createTempDir())).rejects.toThrow();
-      await expect(createUrlOpener(createTempDir())('fail')).rejects.toThrow();
+      const open = (url: string, command?: (url: string) => string[] | null) =>
+        Effect.runPromise(
+          RemoteUrlOpener.use((opener) => opener.open(url)).pipe(
+            Effect.provide(
+              RemoteUrlOpener.layer.pipe(
+                Layer.provide(
+                  Layer.mergeAll(
+                    Layer.succeed(EngineConfig, { userHome: createTempDir() } as ServerConfig),
+                    command ? Layer.succeed(BrowserCommand, command) : Layer.empty,
+                    ShellLayer
+                  )
+                )
+              )
+            )
+          )
+        );
+      await open('https://app.shinsa.dev/pair');
+      const failed = await open('fail', () => ['false']).then(
+        () => null,
+        (error: unknown) => error
+      );
+      expect(failed).toMatchObject({ _tag: 'RemoteUrlUnopened' });
+      await open('fail', () => null);
     } finally {
       restore();
     }
-  });
-
-  test('opens nothing on a machine without a display, since the command prints the pairing page', async () => {
-    await openRemoteUrl('fail', createTempDir(), null);
   });
 });

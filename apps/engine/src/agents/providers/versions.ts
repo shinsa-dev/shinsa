@@ -1,12 +1,7 @@
 import { homedir } from 'node:os';
-import { Effect } from 'effect';
-import { edgeRuntime } from '../../runtime/edge.ts';
-import type { LocateDeps, ProgramLocation, VersionParser } from './versions/schema.ts';
-import { makeProgramVersions } from './versions/service.ts';
+import type { LocateDeps, ProgramLocation } from './versions/schema.ts';
 
 export type { LocateDeps, ProgramLocation } from './versions/schema.ts';
-
-const programVersions = Effect.runSync(makeProgramVersions());
 
 function splitVersion(version: string) {
   return version.split('.').map((part) => Number.parseInt(part, 10) || 0);
@@ -20,10 +15,6 @@ export function compareVersions(left: string, right: string) {
     if (difference !== 0) return Math.sign(difference);
   }
   return 0;
-}
-
-export function readProgramVersion(path: string, parse: VersionParser) {
-  return edgeRuntime.runPromise(programVersions.read(path, parse));
 }
 
 export function whichOnPath(command: string) {

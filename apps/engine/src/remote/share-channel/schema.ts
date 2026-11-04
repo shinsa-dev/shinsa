@@ -1,7 +1,7 @@
 import type { Bytes, ShareFileType, ShareLiveView, ShareWelcome, TeamListView } from '@shinsa/core';
 import { Schema } from 'effect';
 import type { Effect } from 'effect';
-import type { ChannelPeer } from '../channel.ts';
+import type { ChannelPeer } from '../channel/schema.ts';
 
 export const SHARE_GONE_REASON = 'This task is no longer shared, or the link is wrong.';
 
@@ -9,7 +9,7 @@ export interface LiveFile {
   id: string;
   version: string;
   type: ShareFileType;
-  read: () => Promise<Bytes>;
+  read: Effect.Effect<Bytes, ShareChannelBroke>;
 }
 
 export interface LiveShare<View = ShareLiveView | TeamListView> {
@@ -24,12 +24,6 @@ interface ChannelGrant<Subject> {
 }
 
 export type HelloAnswer<Subject> = ChannelGrant<Subject> | { refused: string } | null;
-
-export interface ShareChannelHost<Subject> {
-  name: string;
-  authorize: (hello: string) => Promise<HelloAnswer<Subject>>;
-  resolveLive: (subject: Subject) => Promise<LiveShare>;
-}
 
 export type ChannelInput = string | Bytes | ArrayBuffer | Uint8Array;
 

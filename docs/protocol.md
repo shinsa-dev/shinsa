@@ -757,7 +757,7 @@ unless an agent's question is open, which it then answers as feedback would. `ne
 (`round.queued`) with the steps of its `shape` (a change without one), which starts when the current one rests (Rounds, above);
 `separate_task` records a split-off suggested task instead (a new round when the task already has ten open
 suggestions). The server sets `kind` from the classifier, unless the message already carries one (`--as`)
-(`triage/message.ts`, `docs/engine.md` → Rounds). Yours is accepted first and classified after: the server turns it
+(`triage/message/service.ts`, `docs/engine.md` → Rounds). Yours is accepted first and classified after: the server turns it
 into `message.receive`, which checks it like `task.message` (`message_required`, `task_settled`) and keeps it in the
 task's `inbox` (`task.message_received`); the classifier's answer comes back as `message.route` with the same `kind`,
 `title`, `why` and `shape` (`MessageRoute`) and the ids of the messages it routes (`messageIds`, every message
@@ -983,12 +983,12 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `run.compact` | the supervisor (idle compaction) | records an idle compaction |
 | `runs.dispatch` | the supervisor at boot | starts queued runs |
 | `run.silence` | `agents/silence.ts` | marks or clears a quiet run |
-| `message.deliver` | the supervisor, `agents/questions.ts` | redelivers a message a session never took |
-| `message.receive` | `routeUserCommand`, for your `task.message` without a `kind` | accepts the message into the task's inbox |
-| `message.route`, `message.drop` | `triage/inbox.ts` | delivers the messages waiting in an inbox, together, with the classifier's answer, or drops the ones core refused, with the reason |
+| `message.deliver` | the supervisor, `agents/questions/service.ts` | redelivers a message a session never took |
+| `message.receive` | `CommandRouter`, for your `task.message` without a `kind` | accepts the message into the task's inbox |
+| `message.route`, `message.drop` | `MessageInbox` (`triage/inbox/service.ts`) | delivers the messages waiting in an inbox, together, with the classifier's answer, or drops the ones core refused, with the reason |
 | `monitor.fire` | `MonitorClock` | wakes a monitor |
 | `watchdog.fire` | `WatchdogClock` | checks a watchdog at its `nextCheckAt` (`dueAt`), defers it while the task works, or passes it once its window ended |
-| `usage_wait.resume` | `UsageResumeClock` | resumes a step after the reset |
+| `usage_wait.resume` | `UsageResume` | resumes a step after the reset |
 | `watch_suggestion.record` | the `watch.suggest` effect | records the suggested watch for a new integration (`projectId`, `server`, the Writer's `name` and `text` or null for plain wording, `timeZone`), hourly; does nothing when the integration is gone or watched, was suggested before, or 10 suggestions are open |
 | `feedback.record_draft` | the `feedback.draft` effect | the drafted `title` and `body` of an entry still `drafting`; an empty one fails it |
 | `feedback.record_filed` | the `feedback.file` effect | the new issue's `number` and `url`, for an entry still `filing`; its `openedAt` is now and `closedAt` null |
@@ -1602,7 +1602,7 @@ Behind the scenes).
 | Which settings a run role uses | `packages/core/src/agent-models/index.ts` (`RUN_AGENT_ROLE`) |
 | Rounds, shipping, resting and closed | `packages/core/src/domain/rounds.ts`, `state/rounds.ts`, `decide/rounds.ts` |
 | Test coverage of the change: the setting, the report and diff parsers, the measurement, the summary | `packages/core/src/test-coverage/`; detection and the run in `apps/engine/src/test-coverage/` |
-| The message classifier and routing | `apps/engine/src/triage/message.ts` |
+| The message classifier and routing | `apps/engine/src/triage/message/service.ts`, `apps/engine/src/triage/router/service.ts` |
 | Human-only decisions | `packages/core/src/decide/gates.ts` (`assertHumanDecides`, `assertGatesStayOpen`), `domain/settings.ts` (`HUMAN_ONLY_SETTINGS`, `HUMAN_ONLY_REPO_FIELDS`), `decide/settings.ts` |
 | Gate predicates | `packages/core/src/domain/gates.ts` (`isPausingGate`, `isDecisionGate`, `isAgentQuestion`) |
 | Steps, gates, `validatePipeline`, `PLAN_GATE_RULE` | `packages/core/src/domain/steps.ts`; `needsPlanApproval` in `decide/lifecycle.ts` |
@@ -1628,7 +1628,7 @@ Behind the scenes).
 | Services, their states, suggestions and runs for a task | `packages/core/src/protocol/services.ts` (`ServiceView.taskId`, `ServiceView.url`, `resolveServiceUrl`, `resolveTaskServiceCwd`, `listTaskServices`, `listServiceTaskRuns`); `apps/engine/src/terminals/` (`detect.ts`, `routes.ts`), `apps/engine/src/agents/services.ts` (the agents' tools), `apps/web/src/lib/terminal/services.ts` |
 | State patches, drafts | `packages/core/src/protocol/patch.ts`, `packages/core/src/state/draft.ts` |
 | State snapshots | `apps/engine/src/store/snapshot.ts`, `apps/engine/src/store/event-log.ts` |
-| Event log, receipts, outbox | `apps/engine/src/store/event-log.ts`, `apps/engine/src/runtime/engine.ts` |
+| Event log, receipts, outbox | `apps/engine/src/store/`, `apps/engine/src/runtime/engine/service.ts` |
 | Effect handlers | `apps/engine/src/runtime/effects/` (`runner/service.ts` routes each kind to its area's service) |
 | Agent tools (MCP) | `apps/engine/src/agents/tools/`; the loader tools `apps/engine/src/extensions/loader.ts` |
 | Management tools | `apps/engine/src/agents/manage/` |

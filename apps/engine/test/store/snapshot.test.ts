@@ -3,12 +3,13 @@ import { describe, expect, test } from 'bun:test';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { createState, type ShinsaState } from '@shinsa/core';
-import { EventLog, resolveStateVersion } from '../../src/store/index.ts';
+import { resolveStateVersion } from '../../src/store/index.ts';
+import { openEventLog } from '../helpers/event-log.ts';
 import { commitEvents, createTempDir } from '../helpers/index.ts';
 
 function openLog() {
   const path = join(createTempDir(), 'shinsa.sqlite');
-  return { path, log: new EventLog(path) };
+  return { path, log: openEventLog(path) };
 }
 
 function stateAt(seq: number): ShinsaState {

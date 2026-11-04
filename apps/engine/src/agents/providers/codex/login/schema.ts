@@ -1,10 +1,7 @@
 import type { ProviderLogin } from '@shinsa/core';
 import type { Effect } from 'effect';
-import type { runCommand } from '../../../../shell/index.ts';
 import type { CommandResult } from '../../../../shell/schema.ts';
 import type { CodexExecutable } from '../executable/schema.ts';
-
-export type LoginRunner = typeof runCommand;
 
 export type LoginPatch = Partial<ProviderLogin> & Pick<ProviderLogin, 'status'>;
 

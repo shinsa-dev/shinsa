@@ -13,15 +13,15 @@ import {
 } from '../../src/cli/engine.ts';
 import { createLaunchdService, type LaunchdOptions } from '../../src/cli/launchd.ts';
 import { type EngineService, resolveBundle } from '../../src/instance/index.ts';
-import { edgeRuntime } from '../../src/runtime/edge.ts';
 import type { Shell } from '../../src/shell/service.ts';
 import { NO_PROGRESS, PLAIN_DISPLAY } from '../../src/terminal/index.ts';
 import { createStyle, UNICODE_SYMBOLS } from '../../src/terminal/style.ts';
+import { testRuntime } from '../helpers/runtime.ts';
 
 const COLOR = { style: createStyle({ color: true, symbols: UNICODE_SYMBOLS }), width: 80 };
 
 function run<A, E>(effect: Effect.Effect<A, E, Shell>) {
-  return edgeRuntime.runPromise(effect);
+  return testRuntime.runPromise(effect);
 }
 
 const TARGET = 'gui/501/studio.overclock.shinsa.engine';

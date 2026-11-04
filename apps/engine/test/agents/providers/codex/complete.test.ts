@@ -1,9 +1,17 @@
 import { describe, expect, test } from 'bun:test';
-import {
-  requestCodexCompletion,
-  requestCodexStructured,
-} from '../../../../src/agents/providers/codex/complete.ts';
+import { Effect } from 'effect';
+import type { CodexRuntime } from '../../../../src/agents/providers/codex/session/schema.ts';
+import type { CompletionRequest, StructuredRequest } from '../../../../src/agents/providers/types.ts';
 import { FakeCodex } from '../../../helpers/codex.ts';
+import { buildCodexProvider, runProvider } from '../../../helpers/providers.ts';
+
+function requestCodexCompletion(request: CompletionRequest, runtime: CodexRuntime) {
+  return runProvider(buildCodexProvider(runtime).complete(request));
+}
+
+function requestCodexStructured(request: StructuredRequest, runtime: CodexRuntime) {
+  return runProvider(buildCodexProvider(runtime).completeStructured!(request));
+}
 
 const REQUEST = { system: 'You classify.', prompt: 'Is this small?', model: 'gpt-5.6-luna' };
 
@@ -56,13 +64,12 @@ describe('one-shot calls on Codex', () => {
 
   test('a missing codex throws without starting anything', async () => {
     const missing = {
-      resolveExecutable: () =>
-        Promise.resolve({
-          ok: false as const,
-          reason: 'not_installed' as const,
-          message: 'No codex.',
-          version: null,
-        }),
+      resolveExecutable: Effect.succeed({
+        ok: false as const,
+        reason: 'not_installed' as const,
+        message: 'No codex.',
+        version: null,
+      }),
     };
     await expect(requestCodexCompletion(REQUEST, missing)).rejects.toThrow('No codex.');
   });

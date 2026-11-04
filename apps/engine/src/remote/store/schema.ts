@@ -81,10 +81,6 @@ export interface ParsedKeys {
   readonly signing: CryptoKey | null;
 }
 
-export interface RemoteStoreDefinition {
-  readonly path: string;
-}
-
 export interface RemoteStoreHandle {
   readonly file: Effect.Effect<RemoteFile>;
   update(change: (file: RemoteFile) => RemoteFile): Effect.Effect<RemoteFile, JsonFileWriteFailed>;

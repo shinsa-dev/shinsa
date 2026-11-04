@@ -6,7 +6,6 @@ import type { CodexExecutable } from '../executable/schema.ts';
 export interface CodexUsageOptions {
   requestHttp?: UsageRequester;
   env?: Record<string, string | undefined>;
-  now?: () => number;
   timeoutMs?: number;
 }
 

@@ -1,7 +1,9 @@
 import { describe, expect, test } from 'bun:test';
 import type { Repo, ShinsaCommand, Task } from '@shinsa/core';
-import { RepositoryWork } from '../../src/agents/repository-work.ts';
-import { createWorktree } from '../../src/git/index.ts';
+import { Effect, Layer } from 'effect';
+import { RepositoryWork } from '../../src/agents/repository-work/service.ts';
+import { EngineCore } from '../../src/runtime/engine/service.ts';
+import { createWorktree, runGit } from '../helpers/git.ts';
 import { captureLogs, createGitRepo, createTempDir, git, writeFiles } from '../helpers/index.ts';
 import { createRun, createStubEngine, createTask } from '../helpers/state.ts';
 
@@ -29,7 +31,15 @@ async function setup(tasks: (repo: Repo) => Promise<Task[]>) {
     state.repos[repo.id] = repo;
     for (const task of created) state.tasks[task.id] = task;
   });
-  return { repo, stub, work: new RepositoryWork(stub.engine) };
+  const layer = RepositoryWork.layer.pipe(Layer.provide(Layer.succeed(EngineCore, stub.engine.core)));
+  const use = <A>(step: (work: RepositoryWork['Service']) => Effect.Effect<A>) =>
+    runGit(RepositoryWork.use(step).pipe(Effect.provide(layer)));
+  const work = {
+    describe: (taskId: string) => use((found) => found.describe(taskId)),
+    recordOverlaps: (taskId: string, planned: string[]) =>
+      use((found) => found.recordOverlaps(taskId, planned)),
+  };
+  return { repo, stub, work };
 }
 
 function overlapsOf(dispatched: ShinsaCommand[]) {

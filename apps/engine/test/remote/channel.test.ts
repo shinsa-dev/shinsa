@@ -11,13 +11,84 @@ import {
   serializeBase64Url,
   serializePublicKey,
 } from '@shinsa/core';
+import type { GuestActor } from '@shinsa/core';
 import { Effect } from 'effect';
 import type { HubSocket } from '../../src/http/socket.ts';
-import { type AccessAnswer, type ChannelHost, RemoteChannel } from '../../src/remote/channel.ts';
+import { describeError } from '../../src/log/redact.ts';
+import { JsonLogger } from '../../src/log/service.ts';
+import {
+  type AccessAnswer,
+  ChannelBroken,
+  type ChannelHub,
+  type ChannelPeer,
+  type ChannelRaw,
+  type ProofKeys,
+} from '../../src/remote/channel/schema.ts';
+import { makeRemoteChannel } from '../../src/remote/channel/service.ts';
+import type { MachineKeyPair } from '../../src/remote/pairing/schema.ts';
 import { createKeyPair, serializeDeviceKey, startHandshake, type TestSession } from './client.ts';
 
+interface ChannelHost {
+  resolveMachineKey: () => Promise<MachineKeyPair>;
+  isEnrolled: (device: string) => boolean;
+  resolveGuest: (device: string) => GuestActor | null;
+  requestAccess: (proof: string, keys: ProofKeys, name: string | null) => Promise<AccessAnswer>;
+  resumeAccess: (device: string) => AccessAnswer | null;
+  recordSeen: (device: string) => void;
+  hub: ChannelHub;
+  respond: (request: Request, guest: GuestActor | null) => Promise<Response>;
+  maxBodyBytes: number;
+}
+
+const toBroken = (error: unknown) => new ChannelBroken({ message: describeError(error) });
+
+function run<A, E>(effect: Effect.Effect<A, E>) {
+  return Effect.runPromise(effect.pipe(Effect.provide(JsonLogger)));
+}
+
+function runSync<A, E>(effect: Effect.Effect<A, E>) {
+  return Effect.runSync(effect.pipe(Effect.provide(JsonLogger)));
+}
+
+function openChannel(peer: ChannelPeer, host: ChannelHost) {
+  const handle = runSync(
+    makeRemoteChannel({
+      send: (data) => Effect.sync(() => peer.send(data)),
+      closePeer: (code, reason) => Effect.sync(() => peer.close(code, reason)),
+      machineKey: Effect.tryPromise({ try: () => host.resolveMachineKey(), catch: toBroken }),
+      isEnrolled: (device) => Effect.sync(() => host.isEnrolled(device)),
+      resolveGuest: (device) => Effect.sync(() => host.resolveGuest(device)),
+      requestAccess: (proof, keys, name) =>
+        Effect.tryPromise({ try: () => host.requestAccess(proof, keys, name), catch: toBroken }),
+      resumeAccess: (device) => Effect.sync(() => host.resumeAccess(device)),
+      recordSeen: (device) => Effect.sync(() => host.recordSeen(device)),
+      openSocket: (socket) => Effect.sync(() => host.hub.open(socket)),
+      closeSocket: (socket) => Effect.sync(() => host.hub.close(socket)),
+      receiveSocket: (socket, raw) => Effect.sync(() => host.hub.message(socket, raw)),
+      respond: (request, guest) =>
+        Effect.tryPromise({ try: () => host.respond(request, guest), catch: toBroken }),
+      maxBodyBytes: host.maxBodyBytes,
+    })
+  );
+  return {
+    handle,
+    get device() {
+      return runSync(handle.device);
+    },
+    get isOpen() {
+      return runSync(handle.isOpen);
+    },
+    receive: (raw: ChannelRaw) => run(handle.receive(raw)),
+    fail: (reason: string, error?: unknown) =>
+      runSync(handle.fail(reason, error ? describeError(error) : undefined)),
+    close: () => runSync(handle.close),
+  };
+}
+
+type TestChannel = ReturnType<typeof openChannel>;
+
 interface Harness {
-  channel: RemoteChannel;
+  channel: TestChannel;
   sent: (string | Bytes)[];
   dropping: boolean;
   closed: { code: number; reason: string }[];
@@ -77,7 +148,7 @@ async function createHarness(
     },
     maxBodyBytes,
   };
-  harness.channel = new RemoteChannel(
+  harness.channel = openChannel(
     {
       send: (data) => (harness.dropping ? 0 : harness.sent.push(data)),
       close: (code, reason) => harness.closed.push({ code, reason }),

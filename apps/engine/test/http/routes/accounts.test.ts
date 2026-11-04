@@ -1,4 +1,6 @@
 import { afterEach, describe, expect, test } from 'bun:test';
+import { DomainError } from '@shinsa/core';
+import { Effect } from 'effect';
 import type { Accounts } from '../../../src/accounts/index.ts';
 import { disposeWebHandlers } from '../../helpers/web.ts';
 import { readFailure, startRoutes } from './harness.ts';
@@ -7,24 +9,30 @@ afterEach(disposeWebHandlers);
 
 function createAccounts() {
   const calls: [string, ...unknown[]][] = [];
-  const record =
-    (name: string, answer: unknown) =>
-    (...args: unknown[]) => {
+  const answer = (name: string, value: unknown, args: unknown[] = []) =>
+    Effect.sync(() => {
       calls.push([name, ...args]);
-      return answer;
-    };
+      return value;
+    });
+  const record =
+    (name: string, value: unknown) =>
+    (...args: unknown[]) =>
+      answer(name, value, args);
   const accounts = {
-    snapshot: record('snapshot', { accounts: [], defaultAccountId: null }),
-    refresh: record('refresh', Promise.resolve({ refreshed: true })),
-    refreshUsage: record('refreshUsage', Promise.resolve({ usageRefreshed: true })),
-    startLogin: record('startLogin', Promise.resolve({ id: 'login-1', phase: 'starting' })),
+    snapshot: answer('snapshot', { accounts: [], defaultAccountId: null }),
+    refresh: answer('refresh', { refreshed: true }),
+    refreshUsage: answer('refreshUsage', { usageRefreshed: true }),
+    startLogin: record('startLogin', { id: 'login-1', phase: 'starting' }),
     submitLoginCode: record('submitLoginCode', { submitted: true }),
     cancelLogin: record('cancelLogin', { cancelled: true }),
-    importAccount: record('importAccount', Promise.resolve({ id: 'acc-2' })),
-    update: record('update', { updated: true }),
-    remove: record('remove', Promise.resolve({ removed: true })),
+    importAccount: record('importAccount', { id: 'acc-2' }),
+    update: (...args: unknown[]) =>
+      args[0] === 'gone'
+        ? Effect.fail(new DomainError({ code: 'account_not_found', message: 'That account was removed.' }))
+        : answer('update', { updated: true }, args),
+    remove: record('remove', { removed: true }),
   };
-  const routes = startRoutes({ accounts: accounts as unknown as Accounts });
+  const routes = startRoutes({ accounts: accounts as unknown as Accounts['Service'] });
   const post = async (path: string, body: string) =>
     (
       await routes.send(path, { method: 'POST', headers: { 'content-type': 'application/json' }, body })
@@ -73,6 +81,15 @@ describe('account routes', () => {
       ['update', 'acc-1', { paused: true }],
       ['remove', 'acc-1'],
     ]);
+  });
+
+  test('a change the accounts refuse answers with their code and reason', async () => {
+    const { refuse } = createAccounts();
+    expect(await refuse('/api/accounts/update', '{"accountId":"gone","patch":{}}')).toEqual({
+      status: 400,
+      code: 'account_not_found',
+      message: 'That account was removed.',
+    });
   });
 
   test('signing in without an account adds a new one', async () => {

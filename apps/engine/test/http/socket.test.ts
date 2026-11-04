@@ -12,12 +12,13 @@ import {
   type TeamFeedSnapshot,
   type WireState,
 } from '@shinsa/core';
-import { Transcripts } from '../../src/agents/index.ts';
-import { createSocketHub, type SocketData } from '../../src/http/socket.ts';
-import type { Remote } from '../../src/remote/index.ts';
-import { Engine } from '../../src/runtime/index.ts';
-import { EventLog } from '../../src/store/index.ts';
+import { Effect } from 'effect';
+import type { SocketData } from '../../src/http/socket.ts';
+import { Engine } from '../helpers/engine.ts';
+import { openEventLog } from '../helpers/event-log.ts';
 import { createTempDir } from '../helpers/index.ts';
+import { createSocketHub } from '../helpers/socket-hub.ts';
+import { createTestTranscripts } from '../helpers/transcripts.ts';
 
 function createSocket() {
   const sent: ServerMessage[] = [];
@@ -84,9 +85,9 @@ async function startPlanning(engine: Engine) {
 describe('the socket hub', () => {
   test('sends runs without their prompts, on connect, in every patch and on a sync', async () => {
     const dir = createTempDir();
-    const log = new EventLog(join(dir, 'shinsa.sqlite'));
+    const log = openEventLog(join(dir, 'shinsa.sqlite'));
     const engine = new Engine(log);
-    const hub = createSocketHub(engine, new Transcripts(join(dir, 'transcripts')));
+    const hub = createSocketHub(engine, createTestTranscripts(join(dir, 'transcripts')));
     const { socket, sent } = createSocket();
     await startPlanning(engine);
     const run = Object.values(engine.state.runs)[0];
@@ -119,9 +120,9 @@ describe('the socket hub', () => {
 
   test('a new Home guide reaches every socket as a patch at the same position in the log', async () => {
     const dir = createTempDir();
-    const log = new EventLog(join(dir, 'shinsa.sqlite'));
+    const log = openEventLog(join(dir, 'shinsa.sqlite'));
     const engine = new Engine(log);
-    const hub = createSocketHub(engine, new Transcripts(join(dir, 'transcripts')));
+    const hub = createSocketHub(engine, createTestTranscripts(join(dir, 'transcripts')));
     const { socket, sent } = createSocket();
     hub.open(socket);
     await engine.dispatch({ type: 'focus.change', projectId: null, until: 1 });
@@ -142,7 +143,7 @@ describe('the socket hub', () => {
 
   test('remote access reaches a socket on connect and again on every change', () => {
     const dir = createTempDir();
-    const log = new EventLog(join(dir, 'shinsa.sqlite'));
+    const log = openEventLog(join(dir, 'shinsa.sqlite'));
     const engine = new Engine(log);
     const listeners = new Set<() => void>();
     let snapshot = { paired: true, devices: [] } as unknown as RemoteSnapshot;
@@ -152,10 +153,10 @@ describe('the socket hub', () => {
         listeners.add(listener);
         return () => listeners.delete(listener);
       },
-    } as unknown as Remote;
+    };
     const hub = createSocketHub(
       engine,
-      new Transcripts(join(dir, 'transcripts')),
+      createTestTranscripts(join(dir, 'transcripts')),
       undefined,
       null,
       undefined,
@@ -178,7 +179,7 @@ describe('the socket hub', () => {
 
   test('teammates’ task lists reach a socket on connect and again on every change', () => {
     const dir = createTempDir();
-    const log = new EventLog(join(dir, 'shinsa.sqlite'));
+    const log = openEventLog(join(dir, 'shinsa.sqlite'));
     const engine = new Engine(log);
     const listeners = new Set<() => void>();
     let teams: TeamFeedSnapshot = { machines: [], tasks: [] };
@@ -191,7 +192,7 @@ describe('the socket hub', () => {
     };
     const hub = createSocketHub(
       engine,
-      new Transcripts(join(dir, 'transcripts')),
+      createTestTranscripts(join(dir, 'transcripts')),
       undefined,
       null,
       undefined,
@@ -223,11 +224,11 @@ describe('the socket hub', () => {
 
   test('tells every socket on connect which build it talks to and what it speaks', () => {
     const dir = createTempDir();
-    const log = new EventLog(join(dir, 'shinsa.sqlite'));
+    const log = openEventLog(join(dir, 'shinsa.sqlite'));
     const engine = new Engine(log);
     const hub = createSocketHub(
       engine,
-      new Transcripts(join(dir, 'transcripts')),
+      createTestTranscripts(join(dir, 'transcripts')),
       undefined,
       null,
       undefined,
@@ -249,20 +250,23 @@ describe('the socket hub', () => {
 
   test('samples resources only while a socket is open, and sends the last sample on connect', () => {
     const dir = createTempDir();
-    const log = new EventLog(join(dir, 'shinsa.sqlite'));
+    const log = openEventLog(join(dir, 'shinsa.sqlite'));
     const engine = new Engine(log);
     const listeners = new Set<(resources: MachineResources) => void>();
     let latest: MachineResources | null = null;
     const resources = {
-      snapshot: () => latest,
-      subscribe: (listener: (resources: MachineResources) => void) => {
-        listeners.add(listener);
-        return () => listeners.delete(listener);
-      },
+      snapshot: Effect.sync(() => latest),
+      subscribe: (listener: (resources: MachineResources) => void) =>
+        Effect.sync(() => {
+          listeners.add(listener);
+          return Effect.sync(() => void listeners.delete(listener));
+        }),
+      refresh: Effect.void,
+      measureDisk: Effect.void,
     };
     const hub = createSocketHub(
       engine,
-      new Transcripts(join(dir, 'transcripts')),
+      createTestTranscripts(join(dir, 'transcripts')),
       undefined,
       null,
       undefined,
@@ -308,9 +312,9 @@ describe('the socket hub', () => {
 
   test('closes a socket whose message was dropped, and keeps the others', async () => {
     const dir = createTempDir();
-    const log = new EventLog(join(dir, 'shinsa.sqlite'));
+    const log = openEventLog(join(dir, 'shinsa.sqlite'));
     const engine = new Engine(log);
-    const hub = createSocketHub(engine, new Transcripts(join(dir, 'transcripts')));
+    const hub = createSocketHub(engine, createTestTranscripts(join(dir, 'transcripts')));
     let closed = 0;
     const full = {
       data: {
@@ -341,9 +345,9 @@ describe('the socket hub', () => {
 
   test('sends settled tasks as summaries, and each socket its own patch for them', async () => {
     const dir = createTempDir();
-    const log = new EventLog(join(dir, 'shinsa.sqlite'));
+    const log = openEventLog(join(dir, 'shinsa.sqlite'));
     const engine = new Engine(log);
-    const hub = createSocketHub(engine, new Transcripts(join(dir, 'transcripts')));
+    const hub = createSocketHub(engine, createTestTranscripts(join(dir, 'transcripts')));
     const { open, settled } = await createSettledTask(engine);
     const summary = createSocket();
     const detail = createSocket();
@@ -387,9 +391,9 @@ describe('the socket hub', () => {
 
   test('sends a guest its own task whole, scoped patches and no detail', async () => {
     const dir = createTempDir();
-    const log = new EventLog(join(dir, 'shinsa.sqlite'));
+    const log = openEventLog(join(dir, 'shinsa.sqlite'));
     const engine = new Engine(log);
-    const hub = createSocketHub(engine, new Transcripts(join(dir, 'transcripts')));
+    const hub = createSocketHub(engine, createTestTranscripts(join(dir, 'transcripts')));
     const { settled } = await createSettledTask(engine);
     const guest = createSocket();
     guest.socket.data.guest = { taskId: settled, login: 'kai' };
@@ -412,9 +416,9 @@ describe('the socket hub', () => {
 
   test('answers a detail request for a task it no longer has, and ignores one without a task', async () => {
     const dir = createTempDir();
-    const log = new EventLog(join(dir, 'shinsa.sqlite'));
+    const log = openEventLog(join(dir, 'shinsa.sqlite'));
     const engine = new Engine(log);
-    const hub = createSocketHub(engine, new Transcripts(join(dir, 'transcripts')));
+    const hub = createSocketHub(engine, createTestTranscripts(join(dir, 'transcripts')));
     const { socket, sent } = createSocket();
     hub.open(socket);
     hub.message(socket, JSON.stringify({ type: 'task.detail', taskId: 'gone' }));
@@ -435,9 +439,9 @@ describe('the socket hub', () => {
 
   test('announces a development build when it is given no version', () => {
     const dir = createTempDir();
-    const log = new EventLog(join(dir, 'shinsa.sqlite'));
+    const log = openEventLog(join(dir, 'shinsa.sqlite'));
     const engine = new Engine(log);
-    const hub = createSocketHub(engine, new Transcripts(join(dir, 'transcripts')));
+    const hub = createSocketHub(engine, createTestTranscripts(join(dir, 'transcripts')));
     const { socket, sent } = createSocket();
     hub.open(socket);
     const announced = sent.find((message) => message.type === 'engine');

@@ -21,7 +21,7 @@ import {
   Stream,
 } from 'effect';
 import { resolveAccountEnv } from '../../../../accounts/paths.ts';
-import type { DeferredServer } from '../../../../extensions/loader.ts';
+import type { DeferredServer } from '../../../../extensions/loader/schema.ts';
 import { describeError } from '../../../../log/redact.ts';
 import { SHINSA_INSTRUCTIONS } from '../../instructions.ts';
 import type { AgentSessionInput, AgentSessionResult } from '../../types.ts';
@@ -39,11 +39,11 @@ import {
 } from '../classify.ts';
 import { listBackgroundWork, resolveCacheExpiry } from '../context.ts';
 import { resolveClaudeExtensions, serializeClaudeServer } from '../extensions.ts';
-import { createClaudeProcess } from '../process.ts';
+import { makeClaudeProcess } from '../process/service.ts';
 import { resolveUsageSnapshot } from '../recorder.ts';
 import { createClaudeRecorder } from '../recorder.ts';
-import { resolveClaudeRoute } from '../route.ts';
-import { CLAUDE_RUNTIME, resolveClaudeProcess } from '../sdk.ts';
+import { resolveRoute } from '../route/service.ts';
+import { resolveClaudeLaunch } from '../sdk/launch.ts';
 import { resolveClaudeUsage } from '../usage.ts';
 import { createDetachedClock } from './clock.ts';
 import {
@@ -88,7 +88,7 @@ export const makeClaudeSession = Effect.fn('ClaudeSession.make')(function* (
   const detached = createDetachedClock(clock);
   const detach = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
     Effect.provideService(effect, Clock.Clock, detached);
-  const runtime = options.runtime ?? CLAUDE_RUNTIME;
+  const runtime = options.runtime;
   const now = options.now ?? (() => clock.currentTimeMillisUnsafe());
   const within = (ms: number | undefined, fallback: Duration.Duration) =>
     ms === undefined ? fallback : Duration.millis(ms);
@@ -99,7 +99,9 @@ export const makeClaudeSession = Effect.fn('ClaudeSession.make')(function* (
   const callFailed = (error: unknown) => new ClaudeCallFailed({ message: describeError(error) });
   const startFailed = (error: unknown) => new ClaudeStartFailed({ message: describeError(error) });
   const recorder = createClaudeRecorder(input.onEntry, input.storeImage);
-  const child = (options.createProcess ?? createClaudeProcess)(input.onProcess);
+  const child = options.createProcess
+    ? options.createProcess()
+    : yield* makeClaudeProcess({ onSpawn: (pid) => Effect.sync(() => input.onProcess?.(pid)) });
   const extensions = resolveClaudeExtensions(input.extensions);
   const hasServers = Object.keys(extensions.servers).length > 0;
   const appended = [SHINSA_INSTRUCTIONS, extensions.instructions].filter(Boolean).join('\n\n');
@@ -110,7 +112,10 @@ export const makeClaudeSession = Effect.fn('ClaudeSession.make')(function* (
   const folded = yield* FiberHandle.make<void>();
   const exiting = yield* FiberHandle.make<void>();
   const query = yield* Ref.make<Query | null>(null);
-  const links = yield* Ref.make<{ unwatch: (() => void) | null; releaseFold: (() => void) | null }>({
+  const links = yield* Ref.make<{
+    unwatch: Effect.Effect<void> | null;
+    releaseFold: Effect.Effect<void> | null;
+  }>({
     unwatch: null,
     releaseFold: null,
   });
@@ -139,10 +144,7 @@ export const makeClaudeSession = Effect.fn('ClaudeSession.make')(function* (
       { ...current, terminated: true },
     ]);
     if (!first) return;
-    yield* Effect.tryPromise({
-      try: () => child.terminate(),
-      catch: callFailed,
-    }).pipe(Effect.ignore);
+    yield* child.terminate;
     (yield* Ref.get(query))?.close();
   });
 
@@ -213,8 +215,8 @@ export const makeClaudeSession = Effect.fn('ClaudeSession.make')(function* (
     const eunoe = options.eunoe;
     if (!(yield* Ref.get(state)).eunoe || !eunoe) return;
     const current = yield* Ref.get(links);
-    current.unwatch?.();
-    const unwatch = eunoe.watch(message.session_id, {
+    if (current.unwatch) yield* current.unwatch;
+    const unwatch = yield* eunoe.watch(message.session_id, {
       notice: recorder.notify,
       stuck: () => {
         Effect.runForkWith(services)(stopStuck);
@@ -403,7 +405,7 @@ export const makeClaudeSession = Effect.fn('ClaudeSession.make')(function* (
       };
       return failed;
     }
-    return endEarly(current, cleanProcessError(appendStderr(message, child.readStderr())), undelivered);
+    return endEarly(current, cleanProcessError(appendStderr(message, yield* child.readStderr)), undelivered);
   });
 
   const consume = (active: Query) =>
@@ -443,22 +445,16 @@ export const makeClaudeSession = Effect.fn('ClaudeSession.make')(function* (
   const gatedFeed = Stream.unwrap(Effect.as(Deferred.await(released), promptFeed));
 
   const start = Effect.gen(function* () {
-    const process = yield* Effect.tryPromise({
-      try: () => resolveClaudeProcess(runtime.resolveExecutable),
-      catch: startFailed,
-    });
+    const process = yield* resolveClaudeLaunch(runtime.resolveExecutable).pipe(Effect.mapError(startFailed));
     yield* Ref.update(state, (current) => ({
       ...current,
       ledger: { ...current.ledger, echoes: process.version !== null },
     }));
-    const route = yield* Effect.tryPromise({
-      try: () => resolveClaudeRoute(input.compaction ?? 'provider', options.eunoe ?? null),
-      catch: startFailed,
-    });
+    const route = yield* resolveRoute(input.compaction ?? 'provider', options.eunoe?.ensure ?? null);
     if (route.notice) recorder.notify(route.notice);
     yield* Ref.update(state, (current) => ({ ...current, eunoe: route.eunoe }));
     if (route.eunoe && options.eunoe && input.fold && input.resume && !input.fork) {
-      const releaseFold = options.eunoe.fold(input.resume, input.cacheWarm ?? false);
+      const releaseFold = yield* options.eunoe.fold(input.resume, input.cacheWarm ?? false);
       yield* Ref.update(links, (current) => ({ ...current, releaseFold }));
     }
     const queryOptions = resolveQueryOptions(
@@ -468,7 +464,7 @@ export const makeClaudeSession = Effect.fn('ClaudeSession.make')(function* (
       route,
       process,
       resolveAccountEnv(input.account?.configDir ?? null),
-      child.spawn
+      (spawnOptions) => Effect.runSyncWith(services)(child.spawn(spawnOptions))
     );
     return yield* Effect.try({
       try: () =>
@@ -507,7 +503,7 @@ export const makeClaudeSession = Effect.fn('ClaudeSession.make')(function* (
     if (hasServers) yield* connectServers(active);
     yield* Effect.forkIn(recordAccount(active), scope);
     const ended = yield* consume(active).pipe(
-      Effect.ensuring(Effect.flatMap(Ref.get(links), (latest) => Effect.sync(() => latest.unwatch?.())))
+      Effect.ensuring(Effect.flatMap(Ref.get(links), (latest) => latest.unwatch ?? Effect.void))
     );
     const last = yield* Ref.get(state);
     const withUsage: AgentSessionResult = last.usage ? { ...ended, usage: last.usage } : ended;
@@ -527,7 +523,7 @@ export const makeClaudeSession = Effect.fn('ClaudeSession.make')(function* (
 
   const cleanup = Effect.andThen(
     FiberHandle.clear(exiting),
-    Effect.flatMap(Ref.get(links), (latest) => Effect.sync(() => latest.releaseFold?.()))
+    Effect.flatMap(Ref.get(links), (latest) => latest.releaseFold ?? Effect.void)
   );
 
   yield* send(input.prompt, input.prompt, false);

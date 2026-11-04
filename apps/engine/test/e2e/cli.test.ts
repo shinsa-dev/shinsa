@@ -1,12 +1,13 @@
 import { afterEach, describe, expect, setDefaultTimeout, test } from 'bun:test';
 import { Effect } from 'effect';
 import type { ModelSource } from '../../src/agents/index.ts';
-import { Transcripts } from '../../src/agents/index.ts';
-import { type CliIo, runCli } from '../../src/cli/index.ts';
+import type { CliIo } from '../../src/cli/index.ts';
 import { createLaunchdService } from '../../src/cli/launchd.ts';
-import { startServer } from '../../src/http/index.ts';
-import { EvidenceStore } from '../../src/store/index.ts';
+import { runCli } from '../cli/harness.ts';
+import { createTestEvidence } from '../helpers/evidence.ts';
 import { createTestOnboarding, createTestTerminal } from '../helpers/index.ts';
+import { createTestTranscripts } from '../helpers/transcripts.ts';
+import { startHttpServer } from '../helpers/web.ts';
 import { World } from './harness.ts';
 
 setDefaultTimeout(30_000);
@@ -23,11 +24,11 @@ afterEach(async () => {
 
 async function open() {
   world = await World.create();
-  const http = startServer({
+  const http = startHttpServer({
     engine: world.engine,
     config: world.config,
-    transcripts: new Transcripts(world.config.transcriptsDir),
-    evidence: new EvidenceStore(world.config.evidenceDir),
+    transcripts: createTestTranscripts(world.config.transcriptsDir),
+    evidence: createTestEvidence(world.config.evidenceDir),
     models: { listModels: () => Promise.resolve([]) } as unknown as ModelSource,
     onboarding: createTestOnboarding(world.engine, world.config).onboarding,
   });
@@ -45,7 +46,7 @@ async function shinsa(port: string, ...args: string[]) {
     writeError: (line) => errors.push(line),
     openApp: () => Effect.void,
     readRepoRoot: () => Effect.succeed(null),
-    wakeEngine: () => Promise.resolve(false),
+    wakeEngine: Effect.succeed(false),
     engine: {
       bundled: false,
       service: createLaunchdService({
@@ -55,7 +56,6 @@ async function shinsa(port: string, ...args: string[]) {
       }),
     },
     runEngine: () => Effect.die(new Error('not in this test')),
-    onShutdown: () => undefined,
     terminal: createTestTerminal(),
   };
   const code = await runCli(args, io);

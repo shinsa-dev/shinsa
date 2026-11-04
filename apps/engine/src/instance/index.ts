@@ -11,25 +11,25 @@ export {
   type ServerInstance,
 } from './install.ts';
 export {
-  acquireDataDirLock,
-  type DataDirLock,
+  createServerRunningError,
   isProcessAlive,
   LOCK_FILE,
   type LockHolder,
   resolveBootedAt,
   ServerRunningError,
-  selectLockHolder,
 } from './lock/index.ts';
+export { isEngineBusy, resolveEngineActivity } from './restart/busy.ts';
 export {
-  createServiceRestarter,
-  EngineRestarter,
+  type EngineRestartInput,
   EXIT_RESTART,
-  isEngineBusy,
   type RestartDrain,
-  resolveEngineActivity,
+  RestartDelay,
+  RestartDrainWindow,
+  type ServiceRestart,
   STOP_DEADLINE_MS,
-  stopWithin,
-} from './restart.ts';
+} from './restart/schema.ts';
+export { EngineRestarter } from './restart/service.ts';
+export { createServiceRestart, stopWithin } from './restart/stop.ts';
 export {
   type EngineService,
   isStartedByService,

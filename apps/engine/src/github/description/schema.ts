@@ -1,21 +1,9 @@
-import type { Evidence, EvidenceUpload, Repo, Task } from '@shinsa/core';
-import type { Effect } from 'effect';
+import type { EvidenceUpload } from '@shinsa/core';
 
-interface PullRequestDescription {
+export interface PullRequestDescription {
   readonly body: string;
   readonly uploads: EvidenceUpload[];
 }
-
-export interface DescriptionWriter {
-  describe(
-    repo: Repo,
-    task: Task,
-    evidence: readonly Evidence[],
-    signal?: AbortSignal
-  ): Effect.Effect<PullRequestDescription>;
-}
-
-export type EvidenceFiles = (relative: string) => string | null;
 
 const MEGABYTE = 1024 * 1024;
 

@@ -3,10 +3,9 @@ import { rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Clock, Effect, Fiber, Ref } from 'effect';
 import { TestClock } from 'effect/testing';
-import { commitWorktree } from '../../src/git/index.ts';
 import { GitFailed, type GitRun, LOCK_RETRY } from '../../src/git/schema.ts';
 import { Git } from '../../src/git/service.ts';
-import { edgeRuntime } from '../../src/runtime/edge.ts';
+import { commitWorktree, runGit } from '../helpers/git.ts';
 import { createGitRepo } from '../helpers/index.ts';
 
 function recordAttempts(retryable: boolean) {
@@ -25,8 +24,8 @@ function recordAttempts(retryable: boolean) {
   }).pipe(Effect.provide(TestClock.layer()));
 }
 
-function runGit(args: string[], cwd: string, options: GitRun = {}) {
-  return edgeRuntime.runPromise(Git.use((git) => git.run(args, cwd, options)));
+function runArgs(args: string[], cwd: string, options: GitRun = {}) {
+  return runGit(Git.use((git) => git.run(args, cwd, options)));
 }
 
 describe('LOCK_RETRY', () => {
@@ -51,23 +50,23 @@ describe('Git.run', () => {
     const released = setTimeout(() => rmSync(lock, { force: true }), 30);
     expect(await commitWorktree(path, 'chore: change')).toEqual({ merge: null });
     clearTimeout(released);
-    expect(await runGit(['log', '-1', '--format=%s'], path)).toBe('chore: change');
+    expect(await runArgs(['log', '-1', '--format=%s'], path)).toBe('chore: change');
   });
 
   test('gives up on a lock that never goes away, and never retries other failures', async () => {
     const { path } = await createGitRepo({ remote: false });
     writeFileSync(join(path, '.git', 'index.lock'), '');
     writeFileSync(join(path, 'change.txt'), 'new\n');
-    await expect(runGit(['add', '-A'], path)).rejects.toThrow('index.lock');
+    await expect(runArgs(['add', '-A'], path)).rejects.toThrow('index.lock');
     const started = performance.now();
-    await expect(runGit(['no-such-command'], path)).rejects.toThrow('git no-such-command failed');
+    await expect(runArgs(['no-such-command'], path)).rejects.toThrow('git no-such-command failed');
     expect(performance.now() - started).toBeLessThan(1_000);
   });
 
   test('a run cancelled before it starts, or in a folder that is gone, fails without a retry', async () => {
     const cancelled = new AbortController();
     cancelled.abort();
-    await expect(runGit(['status'], '/', { signal: cancelled.signal })).rejects.toThrow('git status failed');
-    await expect(runGit(['status'], '/nonexistent/shinsa/folder')).rejects.toThrow('git status failed');
+    await expect(runArgs(['status'], '/', { signal: cancelled.signal })).rejects.toThrow('git status failed');
+    await expect(runArgs(['status'], '/nonexistent/shinsa/folder')).rejects.toThrow('git status failed');
   });
 });

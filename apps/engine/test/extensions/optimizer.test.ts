@@ -1,30 +1,28 @@
-import { describe, expect, spyOn, test } from 'bun:test';
+import { afterEach, describe, expect, test } from 'bun:test';
 import { join } from 'node:path';
 import { createState, type McpServerSummary, type ShinsaState } from '@shinsa/core';
-import {
-  Extensions,
-  isSameExtensionSet,
-  resolveDeferredInstructions,
-  type ServerCheck,
-} from '../../src/extensions/index.ts';
-import { UsageIndex } from '../../src/extensions/usage.ts';
-import { SecretStore } from '../../src/secrets/store.ts';
-import { captureLogs, until } from '../helpers/index.ts';
+import { Effect } from 'effect';
+import { isSameExtensionSet, resolveDeferredInstructions } from '../../src/extensions/index.ts';
+import { captureLogs } from '../helpers/logs.ts';
+import { until } from '../helpers/until.ts';
 import { createFakeMachine, serializeClaudeToolUse, writeFile, writeSkill } from './fixtures.ts';
+import { disposeExtensionWorlds, type ExtensionsWorldOptions, openExtensions } from './harness.ts';
 
 const DAY = 86_400_000;
 
 const NOW = Date.parse('2026-10-20T12:00:00Z');
 
-const check: ServerCheck = () =>
-  Promise.resolve({
-    state: 'connected',
+afterEach(disposeExtensionWorlds);
+
+const check = () =>
+  Effect.succeed({
+    state: 'connected' as const,
     error: null,
     tools: [{ name: 'search', description: null }],
     tokens: 4000,
   });
 
-function createWorld() {
+function createWorld(faults: Pick<ExtensionsWorldOptions, 'discovery' | 'usage'> = {}) {
   const machine = createFakeMachine();
   writeFile(
     machine.claudeConfig,
@@ -66,25 +64,18 @@ function createWorld() {
     checkCommands: [],
   };
   let now = NOW;
-  const usage = new UsageIndex({
-    sources: [{ dir: join(machine.claudeDir, 'projects'), kind: 'claude' }],
-    cachePath: null,
-    now: () => now,
-  });
-  const extensions = new Extensions({
-    state: () => state,
+  const extensions = openExtensions({
     config: { home: machine.shinsaHome, userHome: machine.userHome, pluginDir: machine.pluginDir },
-    secrets: new SecretStore(join(machine.shinsaHome, 'secrets.json')),
-    baseUrl: () => 'http://127.0.0.1:5180',
+    state: () => state,
     env: machine.env,
     check,
     now: () => now,
-    usage,
+    ...faults,
   });
   return {
     machine,
     extensions,
-    usage,
+    usage: { refresh: extensions.refreshUsage },
     advance: (ms: number) => {
       now += ms;
     },
@@ -197,7 +188,7 @@ describe('the context optimizer', () => {
     ]);
     expect(resolveDeferredInstructions({ deferred: [], deferredSkills: [] })).toBeNull();
     const loader = extensions.createLoader(session);
-    expect(loader?.listSpecs().map((spec) => spec.name)).toEqual([
+    expect(loader?.specs.map((spec) => spec.name)).toEqual([
       'load_mcp_server',
       'call_mcp_tool',
       'load_skill',
@@ -297,14 +288,14 @@ describe('Shinsa’s own skills', () => {
 
 describe('reading usage in the background', () => {
   test('a read that fails is logged, and stopping waits for the read', async () => {
-    const { extensions, usage } = createWorld();
-    const refresh = spyOn(usage, 'refresh').mockImplementation(() => Promise.reject(new Error('disk gone')));
+    const { extensions } = createWorld({
+      usage: () => ({ scan: () => Effect.die(new Error('disk gone')) }),
+    });
     const logs = captureLogs();
     await extensions.syncUsage().finally(() => logs.restore());
     expect(logs.fieldsOf('[Extensions] Could not read which servers and skills agents used')).toEqual([
       { error: 'disk gone' },
     ]);
-    refresh.mockRestore();
     expect(await extensions.stop()).toBeUndefined();
   });
 });
@@ -324,35 +315,50 @@ describe('the snapshot Settings reads', () => {
   });
 
   test('is read again once the usage is, and a refresh that fails is logged', async () => {
-    const state: { fail: boolean } = { fail: false };
-    const { extensions, usage } = createWorld();
+    const state = { fail: false, failed: false };
+    const { extensions, usage } = createWorld({
+      discovery: (real) => ({
+        ...real,
+        listPlugins: (paths) =>
+          state.fail
+            ? Effect.sync(() => {
+                state.failed = true;
+              }).pipe(Effect.andThen(Effect.die(new Error('disk gone'))))
+            : real.listPlugins(paths),
+      }),
+    });
     const before = extensions.snapshot();
     await usage.refresh();
     await extensions.syncUsage();
     await until('the snapshot carries the usage', () => extensions.readSnapshot().usage.readAt !== null);
     expect(before.usage.readAt).toBeNull();
     const logs = captureLogs();
-    const catalog = spyOn(extensions, 'snapshot').mockImplementation(() => {
-      state.fail = true;
-      throw new Error('disk gone');
-    });
+    state.fail = true;
     extensions.syncSnapshot();
-    await until('the refresh ran', () => state.fail).finally(() => logs.restore());
+    await until('the refresh ran', () => state.failed).finally(() => logs.restore());
     expect(logs.fieldsOf('[Extensions] Could not refresh the MCPs, plugins and skills')).toEqual([
       { error: 'disk gone' },
     ]);
-    catalog.mockRestore();
+    state.fail = false;
     await extensions.stop();
     extensions.syncSnapshot();
   });
 
   test('is ready before anyone asks once Shinsa warms it', async () => {
-    const { extensions } = createWorld();
-    const read = spyOn(extensions, 'snapshot');
+    let reads = 0;
+    const { extensions } = createWorld({
+      discovery: (real) => ({
+        ...real,
+        listPlugins: (paths) =>
+          Effect.suspend(() => {
+            reads += 1;
+            return real.listPlugins(paths);
+          }),
+      }),
+    });
     extensions.syncSnapshot();
     extensions.syncSnapshot();
-    await until('the snapshot is warm', () => read.mock.calls.length > 0);
-    read.mockRestore();
+    await until('the snapshot is warm', () => reads > 0);
     const warm = extensions.readSnapshot();
     expect(extensions.readSnapshot()).toBe(warm);
     await extensions.stop();

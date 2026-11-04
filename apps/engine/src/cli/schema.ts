@@ -1,8 +1,13 @@
 import type { DomainError } from '@shinsa/core';
 import { Duration, type Effect, Schedule, Schema } from 'effect';
+import type { MachineConfigFile } from '../config/machine/service.ts';
 import type { Remote } from '../git/remote/service.ts';
-import type { EngineService, ServiceCommandFailed, ShinsaBundle } from '../instance/index.ts';
-import type { Shinsa } from '../serve.ts';
+import type {
+  EngineService,
+  ServerRunningError,
+  ServiceCommandFailed,
+  ShinsaBundle,
+} from '../instance/index.ts';
 import type { Shell } from '../shell/service.ts';
 import type { SurfaceFailure } from '../surface/schema.ts';
 import type { Display, Progress, Terminal } from '../terminal/index.ts';
@@ -16,9 +21,9 @@ export class CliFailed extends Schema.TaggedError<CliFailed, { readonly brand: u
   }
 ) {}
 
-export type CliServices = Shell | Remote;
+export type CliServices = Shell | Remote | MachineConfigFile;
 
-export type CliFailure = SurfaceFailure | CliFailed | ServiceCommandFailed;
+export type CliFailure = SurfaceFailure | CliFailed | ServiceCommandFailed | ServerRunningError;
 
 export interface EngineControl {
   bundled: boolean;
@@ -57,8 +62,9 @@ export interface CliIo {
   readRepoRoot: (dir: string) => Effect.Effect<string | null, never, CliServices>;
   wakeEngine: EngineWake;
   engine: EngineControl;
-  runEngine: (env: Record<string, string | undefined>) => Effect.Effect<Shinsa, DomainError | CliFailed>;
-  onShutdown: (stop: () => Promise<void>) => void;
+  runEngine: (
+    env: Record<string, string | undefined>
+  ) => Effect.Effect<void, DomainError | ServerRunningError | CliFailed, CliServices>;
   terminal: Terminal;
 }
 
@@ -78,6 +84,7 @@ export interface WakeOptions {
 export interface ProcessOptions {
   isTerminal?: () => boolean;
   bundle?: ShinsaBundle | null;
+  exit?: (code: number) => void;
 }
 
 export const HUMAN_ONLY_ENGINE_COMMANDS = ['stop', 'restart', 'engine'] as const;

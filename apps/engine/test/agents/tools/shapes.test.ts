@@ -34,7 +34,7 @@ function createCall(events: ShinsaEvent[] = []) {
       attemptId: 'a-1',
       dispatch: (command: ShinsaCommand) => {
         sent.push(command);
-        return Promise.resolve(events);
+        return Effect.succeed(events);
       },
     },
   };

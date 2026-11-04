@@ -9,7 +9,7 @@ import {
 } from '@shinsa/core';
 import { Effect } from 'effect';
 import { resolveScratchPath, type ServerConfig } from '../../config/index.ts';
-import { createIsolatedWorktree, resolveIsolatedPath } from '../../git/index.ts';
+import { resolveIsolatedPath } from '../../git/checkout/paths.ts';
 import { describeError } from '../../log/index.ts';
 import { IsolationFailed, SCRATCH_BRANCH, type Workspace, WorkspaceUnavailable } from './schema.ts';
 import { RunWorld } from './world/service.ts';
@@ -62,10 +62,13 @@ export const prepareIsolation = Effect.fn('RunSupervisor.prepareIsolation')(func
 ) {
   const baseCommit = run.delegation.baseCommit;
   if (!repo || run.delegation.isolation !== 'worktree' || !baseCommit) return;
-  const { config } = yield* RunWorld;
-  yield* Effect.tryPromise({
-    try: () => createIsolatedWorktree(repo, config.worktreesDir, run.taskId, run.id, baseCommit),
-    catch: (error) =>
-      new IsolationFailed({ message: `Shinsa could not set up its own checkout: ${describeError(error)}` }),
-  });
+  const { config, checkout } = yield* RunWorld;
+  yield* checkout.createIsolated(repo, config.worktreesDir, run.taskId, run.id, baseCommit).pipe(
+    Effect.mapError(
+      (error) =>
+        new IsolationFailed({
+          message: `Shinsa could not set up its own checkout: ${describeError(error)}`,
+        })
+    )
+  );
 });

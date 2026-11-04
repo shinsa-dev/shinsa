@@ -4,11 +4,12 @@ import {
   listMemory,
   listWatchSuggestions,
   SETTINGS_KEYS,
+  type ShinsaState,
 } from '@shinsa/core';
 import { EngineApi } from '@shinsa/core/engine-api';
 import { Effect } from 'effect';
 import { HttpApiBuilder } from 'effect/http-api';
-import { HttpServices } from '../../services/service.ts';
+import { EngineCore } from '../../../runtime/engine/service.ts';
 import { findTaskByRef } from '../../task-lookup.ts';
 import { listActionViews, listProjectViews, resolveRunView } from '../../task-views.ts';
 
@@ -16,41 +17,40 @@ export const StateHandlers = HttpApiBuilder.group(
   EngineApi,
   'state',
   Effect.fn('StateHandlers')(function* (handlers) {
-    const { engine } = yield* HttpServices;
+    const engine = yield* EngineCore;
+    const read = <A>(view: (state: ShinsaState) => A) => Effect.map(engine.state, view);
 
     return handlers
-      .handle('settings', () => Effect.sync(() => ({ settings: engine.state.settings, keys: SETTINGS_KEYS })))
-      .handle('repos', () => Effect.sync(() => ({ repos: Object.values(engine.state.repos) })))
-      .handle('projects', () =>
-        Effect.sync(() => ({ projects: listProjectViews(engine.state), focus: engine.state.focus }))
-      )
+      .handle('settings', () => read((state) => ({ settings: state.settings, keys: SETTINGS_KEYS })))
+      .handle('repos', () => read((state) => ({ repos: Object.values(state.repos) })))
+      .handle('projects', () => read((state) => ({ projects: listProjectViews(state), focus: state.focus })))
       .handle('schedules', () =>
-        Effect.sync(() => ({
-          schedules: Object.values(engine.state.schedules),
-          suggestions: listWatchSuggestions(engine.state),
+        read((state) => ({
+          schedules: Object.values(state.schedules),
+          suggestions: listWatchSuggestions(state),
         }))
       )
       .handle('memory', () =>
-        Effect.sync(() => ({
-          memory: listMemory(engine.state).map((entry) => ({
+        read((state) => ({
+          memory: listMemory(state).map((entry) => ({
             ...entry,
-            project: entry.projectId ? (engine.state.projects[entry.projectId]?.name ?? null) : null,
+            project: entry.projectId ? (state.projects[entry.projectId]?.name ?? null) : null,
           })),
         }))
       )
       .handle('feedback', () =>
-        Effect.sync(() => ({
-          feedback: listFeedback(engine.state).map((entry) => ({
+        read((state) => ({
+          feedback: listFeedback(state).map((entry) => ({
             ...entry,
-            task: entry.taskId ? (engine.state.tasks[entry.taskId]?.handle ?? null) : null,
-            leaks: entry.title && entry.body ? listFeedbackEntryLeaks(engine.state, entry) : [],
+            task: entry.taskId ? (state.tasks[entry.taskId]?.handle ?? null) : null,
+            leaks: entry.title && entry.body ? listFeedbackEntryLeaks(state, entry) : [],
           })),
         }))
       )
       .handle(
         'delegations',
         Effect.fn('StateHandlers.delegations')(function* ({ query }) {
-          const state = engine.state;
+          const state = yield* engine.state;
           const taskId = query.task ? (yield* findTaskByRef(state, query.task)).id : null;
           const delegations = Object.values(state.runs)
             .filter((run) => run.delegation && (!taskId || run.taskId === taskId))
@@ -59,6 +59,6 @@ export const StateHandlers = HttpApiBuilder.group(
           return { delegations };
         })
       )
-      .handle('activity', () => Effect.sync(() => ({ actions: listActionViews(engine.state) })));
+      .handle('activity', () => read((state) => ({ actions: listActionViews(state) })));
   })
 );

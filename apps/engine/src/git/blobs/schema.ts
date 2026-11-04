@@ -1,19 +1,13 @@
 import { CODE_LIMITS } from '@shinsa/core';
-import { Duration } from 'effect';
+import { Context, Duration } from 'effect';
 import type { Deferred, Effect, Fiber } from 'effect';
-import type { ObjectInfo, ObjectReaderStopped } from '../tree/schema.ts';
+import type { BatchReader, ObjectInfo, ObjectReaderStopped } from '../tree/schema.ts';
 
 export interface BatchChild {
   pid: number;
   stdin: { write: (text: string) => unknown; flush: () => unknown };
   stdout: ReadableStream<Uint8Array>;
   exited: Promise<number>;
-}
-
-export interface CatFileOptions {
-  idleMs?: number;
-  timeoutMs?: number;
-  spawn?: (repoPath: string) => BatchChild;
 }
 
 export type BatchReply = { kind: 'info'; info: ObjectInfo | null } | { kind: 'contents'; bytes: Uint8Array };
@@ -30,22 +24,26 @@ export interface BatchSession {
   readonly fibers: readonly Fiber.Fiber<unknown, unknown>[];
 }
 
-export interface CatFileDefinition {
-  readonly repoPath: string;
-  readonly idle: Duration.Duration;
-  readonly timeout: Duration.Duration;
-  readonly spawn: (repoPath: string) => BatchChild;
+export interface CatFile extends BatchReader {
+  readonly running: Effect.Effect<boolean>;
+  readonly close: Effect.Effect<void>;
 }
 
-export interface CatFileHandle {
-  readonly running: Effect.Effect<boolean>;
-  readonly info: (name: string) => Effect.Effect<ObjectInfo | null, ObjectReaderStopped>;
-  readonly contents: (object: string) => Effect.Effect<Uint8Array, ObjectReaderStopped>;
-  readonly close: Effect.Effect<void>;
+export interface CatFileSettingsShape {
+  readonly idle: Duration.Duration;
+  readonly timeout: Duration.Duration;
+  readonly spawn: ((repoPath: string) => BatchChild) | null;
 }
 
 export const BATCH_IDLE = Duration.seconds(30);
 
 export const BATCH_TIMEOUT = Duration.millis(CODE_LIMITS.readMs);
+
+export const CatFileSettings = Context.Reference<CatFileSettingsShape>(
+  'shinsa/engine/git/blobs/CatFileSettings',
+  {
+    defaultValue: (): CatFileSettingsShape => ({ idle: BATCH_IDLE, timeout: BATCH_TIMEOUT, spawn: null }),
+  }
+);
 
 export const READER_STOPPED = 'The object reader stopped.';

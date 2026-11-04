@@ -1,31 +1,18 @@
 import type { ExtensionUsageRead } from '@shinsa/core';
-import type { Deferred, Effect } from 'effect';
-import type { UsageSource } from '../schema.ts';
-
-export interface UsageIndexOptions {
-  sources: UsageSource[];
-  cachePath: string | null;
-  now?: () => number;
-  horizonDays?: number;
-  chunkBytes?: number;
-}
-
-export interface UsageIndexDefinition {
-  readonly sources: readonly UsageSource[];
-  readonly cachePath: string | null;
-  readonly now: Effect.Effect<number>;
-  readonly horizonDays: number;
-  readonly chunkBytes: number;
-}
+import { Context, type Deferred } from 'effect';
+import { USAGE_CHUNK_BYTES, USAGE_HORIZON_DAYS } from '../schema.ts';
 
 export type UsageRefresh = Deferred.Deferred<void>;
 
-export interface UsageIndexHandle {
-  readonly read: Effect.Effect<ExtensionUsageRead>;
-  readonly selectServer: (runtimeName: string) => Effect.Effect<number | null>;
-  readonly selectSkill: (name: string) => Effect.Effect<number | null>;
-  readonly isStale: (maxAgeMs: number) => Effect.Effect<boolean>;
-  readonly refresh: Effect.Effect<UsageRefresh>;
-  readonly join: (refresh: UsageRefresh) => Effect.Effect<void>;
-  readonly stop: Effect.Effect<void>;
+export class UsageIndexLimits extends Context.Reference<{
+  readonly horizonDays: number;
+  readonly chunkBytes: number;
+}>('shinsa/engine/extensions/usage-index/UsageIndexLimits', {
+  defaultValue: () => ({ horizonDays: USAGE_HORIZON_DAYS, chunkBytes: USAGE_CHUNK_BYTES }),
+}) {}
+
+export interface UsageView {
+  readonly read: ExtensionUsageRead;
+  readonly selectServer: (runtimeName: string) => number | null;
+  readonly selectSkill: (name: string) => number | null;
 }

@@ -2,8 +2,8 @@ import { Duration, Effect, Option, Stream } from 'effect';
 import { describeError } from '../../../../log/index.ts';
 import { STRUCTURED_TIMEOUT_MS } from '../../schema.ts';
 import type { CompletionRequest, StructuredRequest } from '../../types.ts';
+import { resolveClaudeLaunch } from '../sdk/launch.ts';
 import type { ClaudeRuntime } from '../sdk/schema.ts';
-import { resolveClaudeLaunch } from '../sdk/service.ts';
 import { readCompletionText, readStructuredOutput } from './output.ts';
 import { ClaudeCallFailed, ClaudeTimedOut } from './schema.ts';
 

@@ -1,8 +1,9 @@
 import { afterEach, describe, expect, setDefaultTimeout, test } from 'bun:test';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { LOCK_FILE, type ServerHealth, selectLockHolder } from '../../src/instance/index.ts';
+import { LOCK_FILE, type ServerHealth } from '../../src/instance/index.ts';
 import { createTempDir, until } from '../helpers/index.ts';
+import { selectLockHolder } from '../helpers/lock.ts';
 
 setDefaultTimeout(30_000);
 

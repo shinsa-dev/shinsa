@@ -2,23 +2,30 @@ import { describe, expect, test } from 'bun:test';
 import { mkdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { CODE_LIMITS, WORKING_REF } from '@shinsa/core';
-import { CatFile } from '../../src/git/blobs.ts';
-import {
-  assertCommit,
-  listCommitPaths,
-  listCommitTree,
-  listWorkingPaths,
-  listWorkingTree,
-  parseTreeObject,
-  readCommitBytes,
-  readCommitFile,
-  readWorkingBytes,
-  readWorkingFile,
-  resolveGrepPattern,
-  searchFiles,
-} from '../../src/git/files.ts';
-import { ObjectCache } from '../../src/git/objects.ts';
+import { Effect } from 'effect';
+import { CatFiles } from '../../src/git/blobs/service.ts';
+import { ObjectCache } from '../../src/git/objects/service.ts';
+import { listWorkingTree, parseTreeObject, resolveGrepPattern } from '../../src/git/tree/entries.ts';
+import { type BatchReader, ObjectReaderStopped, type SearchQuery } from '../../src/git/tree/schema.ts';
+import { CodeFiles } from '../../src/git/tree/service.ts';
+import { runGit } from '../helpers/git.ts';
 import { createGitRepo, git, writeFiles } from '../helpers/index.ts';
+
+const assertCommit = (path: string, sha: string) =>
+  runGit(CodeFiles.use((files) => files.assertCommit(path, sha)));
+const listCommitPaths = (path: string, sha: string) =>
+  runGit(CodeFiles.use((files) => files.listCommitPaths(path, sha)));
+const listWorkingPaths = (path: string) => runGit(CodeFiles.use((files) => files.listWorkingPaths(path)));
+const listCommitTree = (path: string, sha: string, dir: string, reader?: BatchReader) =>
+  runGit(CodeFiles.use((files) => files.listCommitTree(path, sha, dir, undefined, reader)));
+const readCommitBytes = (path: string, sha: string, file: string) =>
+  runGit(CodeFiles.use((files) => files.readCommitBytes(path, sha, file)));
+const readWorkingFile = (absolute: string, path: string) =>
+  runGit(CodeFiles.use((files) => files.readWorkingFile(absolute, path)));
+const readWorkingBytes = (absolute: string) =>
+  runGit(CodeFiles.use((files) => files.readWorkingBytes(absolute)));
+const searchFiles = (cwd: string, sha: string | null, search: SearchQuery) =>
+  runGit(CodeFiles.use((files) => files.search(cwd, sha, search)));
 
 const PNG = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13]);
 
@@ -77,13 +84,17 @@ describe('listing files', () => {
     const src = await listCommitTree(path, sha, 'src');
     expect(src.entries.map((entry) => entry.path)).toEqual(['src/lib', 'src/app.ts']);
     expect((await listCommitTree(path, sha, 'missing')).entries).toEqual([]);
-    const reader = new CatFile(path);
-    expect(await listCommitTree(path, sha, '', undefined, reader)).toEqual(root);
-    expect(await listCommitTree(path, sha, 'src', undefined, reader)).toEqual(src);
-    expect((await listCommitTree(path, sha, 'missing', undefined, reader)).entries).toEqual([]);
-    expect((await listCommitTree(path, sha, 'big.txt', undefined, reader)).entries).toEqual([]);
-    expect((await listCommitTree(path, sha, 'a\nb', undefined, reader)).entries).toEqual([]);
-    reader.close();
+    await runGit(
+      Effect.gen(function* () {
+        const files = yield* CodeFiles;
+        const reader = yield* (yield* CatFiles).select(path);
+        expect(yield* files.listCommitTree(path, sha, '', undefined, reader)).toEqual(root);
+        expect(yield* files.listCommitTree(path, sha, 'src', undefined, reader)).toEqual(src);
+        expect((yield* files.listCommitTree(path, sha, 'missing', undefined, reader)).entries).toEqual([]);
+        expect((yield* files.listCommitTree(path, sha, 'big.txt', undefined, reader)).entries).toEqual([]);
+        expect((yield* files.listCommitTree(path, sha, 'a\nb', undefined, reader)).entries).toEqual([]);
+      })
+    );
   });
 
   test('reads a tree object’s entries, a submodule among them, and stops at a broken one', () => {
@@ -144,70 +155,74 @@ describe('listing files', () => {
 describe('reading a file', () => {
   test('reads text, marks binary images and refuses what is too large', async () => {
     const { path, sha } = await createSampleRepo();
-    const cache = new ObjectCache();
-    expect(await readCommitFile(path, sha, 'src/app.ts', cache)).toMatchObject({
-      ref: sha,
-      content: 'export const greeting = "hello";\nexport const other = "Hello";\n',
-      binary: false,
-      missing: false,
-    });
-    expect(cache.size).toBe(1);
-    await readCommitFile(path, sha, 'src/app.ts', cache);
-    expect(cache.size).toBe(1);
-    expect(await readCommitFile(path, sha, 'logo.png', cache)).toMatchObject({
-      content: null,
-      binary: true,
-      image: 'image/png',
-      size: PNG.length,
-    });
-    expect(await readCommitFile(path, sha, 'big.txt', cache)).toMatchObject({
-      tooLarge: true,
-      missing: false,
-      content: null,
-    });
-    expect(await readCommitFile(path, sha, 'link.ts', cache)).toMatchObject({ content: 'src/app.ts' });
-    expect(await readCommitFile(path, sha, 'src', cache)).toMatchObject({ missing: true });
-    expect(await readCommitFile(path, sha, 'nope.ts', cache)).toMatchObject({ missing: true });
+    await runGit(
+      Effect.gen(function* () {
+        const files = yield* CodeFiles;
+        const cache = yield* ObjectCache;
+        expect(yield* files.readCommitFile(path, sha, 'src/app.ts')).toMatchObject({
+          ref: sha,
+          content: 'export const greeting = "hello";\nexport const other = "Hello";\n',
+          binary: false,
+          missing: false,
+        });
+        expect(yield* cache.size).toBe(1);
+        yield* files.readCommitFile(path, sha, 'src/app.ts');
+        expect(yield* cache.size).toBe(1);
+        expect(yield* files.readCommitFile(path, sha, 'logo.png')).toMatchObject({
+          content: null,
+          binary: true,
+          image: 'image/png',
+          size: PNG.length,
+        });
+        expect(yield* files.readCommitFile(path, sha, 'big.txt')).toMatchObject({
+          tooLarge: true,
+          missing: false,
+          content: null,
+        });
+        expect(yield* files.readCommitFile(path, sha, 'link.ts')).toMatchObject({ content: 'src/app.ts' });
+        expect(yield* files.readCommitFile(path, sha, 'src')).toMatchObject({ missing: true });
+        expect(yield* files.readCommitFile(path, sha, 'nope.ts')).toMatchObject({ missing: true });
+      })
+    );
     expect(await readCommitBytes(path, sha, 'logo.png')).toEqual(PNG);
     expect(await readCommitBytes(path, sha, 'big.txt')).toBeNull();
   });
 
   test('reads the same through one long-lived git, and falls back for a name it cannot send', async () => {
     const { path, sha } = await createSampleRepo();
-    const cache = new ObjectCache();
-    const reader = new CatFile(path);
-    expect(await readCommitFile(path, sha, 'src/app.ts', cache, undefined, reader)).toMatchObject({
-      content: 'export const greeting = "hello";\nexport const other = "Hello";\n',
-    });
-    expect(await readCommitFile(path, sha, 'big.txt', cache, undefined, reader)).toMatchObject({
-      tooLarge: true,
-    });
-    expect(await readCommitFile(path, sha, 'link.ts', cache, undefined, reader)).toMatchObject({
-      content: 'src/app.ts',
-    });
-    expect(await readCommitFile(path, sha, 'src', cache, undefined, reader)).toMatchObject({ missing: true });
-    expect(await readCommitFile(path, sha, 'a\nb', cache, undefined, reader)).toMatchObject({
-      missing: true,
-    });
-    expect(await readCommitBytes(path, sha, 'logo.png', undefined, reader)).toEqual(PNG);
-    reader.close();
+    await runGit(
+      Effect.gen(function* () {
+        const files = yield* CodeFiles;
+        const reader = yield* (yield* CatFiles).select(path);
+        expect(yield* files.readCommitFile(path, sha, 'src/app.ts', reader)).toMatchObject({
+          content: 'export const greeting = "hello";\nexport const other = "Hello";\n',
+        });
+        expect(yield* files.readCommitFile(path, sha, 'big.txt', reader)).toMatchObject({ tooLarge: true });
+        expect(yield* files.readCommitFile(path, sha, 'link.ts', reader)).toMatchObject({
+          content: 'src/app.ts',
+        });
+        expect(yield* files.readCommitFile(path, sha, 'src', reader)).toMatchObject({ missing: true });
+        expect(yield* files.readCommitFile(path, sha, 'a\nb', reader)).toMatchObject({ missing: true });
+        expect(yield* files.readCommitBytes(path, sha, 'logo.png', reader)).toEqual(PNG);
+      })
+    );
   });
 
   test('reads the working copy as it is on disk', async () => {
     const { path } = await createSampleRepo();
     writeFiles(path, { 'src/app.ts': 'changed\n' });
     mkdirSync(join(path, 'empty'));
-    expect(readWorkingFile(join(path, 'src/app.ts'), 'src/app.ts')).toMatchObject({
+    expect(await readWorkingFile(join(path, 'src/app.ts'), 'src/app.ts')).toMatchObject({
       ref: WORKING_REF,
       content: 'changed\n',
     });
-    expect(readWorkingFile(join(path, 'link.ts'), 'link.ts')).toMatchObject({ content: 'src/app.ts' });
-    expect(readWorkingFile(join(path, 'big.txt'), 'big.txt')).toMatchObject({ tooLarge: true });
-    expect(readWorkingFile(join(path, 'empty'), 'empty')).toMatchObject({ missing: true });
-    expect(readWorkingFile(join(path, 'gone.ts'), 'gone.ts')).toMatchObject({ missing: true });
-    expect(readWorkingBytes(join(path, 'logo.png'))).toEqual(PNG);
-    expect(readWorkingBytes(join(path, 'big.txt'))).toBeNull();
-    expect(readWorkingBytes(join(path, 'gone.png'))).toBeNull();
+    expect(await readWorkingFile(join(path, 'link.ts'), 'link.ts')).toMatchObject({ content: 'src/app.ts' });
+    expect(await readWorkingFile(join(path, 'big.txt'), 'big.txt')).toMatchObject({ tooLarge: true });
+    expect(await readWorkingFile(join(path, 'empty'), 'empty')).toMatchObject({ missing: true });
+    expect(await readWorkingFile(join(path, 'gone.ts'), 'gone.ts')).toMatchObject({ missing: true });
+    expect(await readWorkingBytes(join(path, 'logo.png'))).toEqual(PNG);
+    expect(await readWorkingBytes(join(path, 'big.txt'))).toBeNull();
+    expect(await readWorkingBytes(join(path, 'gone.png'))).toBeNull();
   });
 });
 
@@ -341,8 +356,8 @@ describe('searchFiles', () => {
 
   test('a blob reader that stopped fails the read with its reason', async () => {
     const { path, sha } = await createSampleRepo();
-    const stopped = () => Promise.reject(new Error('The reader stopped.'));
-    const reader = { info: stopped, contents: stopped } as unknown as CatFile;
-    await expect(listCommitTree(path, sha, 'src', undefined, reader)).rejects.toThrow('The reader stopped.');
+    const stopped = () => Effect.fail(new ObjectReaderStopped({ message: 'The reader stopped.' }));
+    const reader: BatchReader = { info: stopped, contents: stopped };
+    await expect(listCommitTree(path, sha, 'src', reader)).rejects.toThrow('The reader stopped.');
   });
 });

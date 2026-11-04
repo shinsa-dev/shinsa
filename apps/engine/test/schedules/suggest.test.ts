@@ -1,12 +1,13 @@
 import { describe, expect, test } from 'bun:test';
 import { SCHEDULE_LIMITS } from '@shinsa/core';
+import { Effect } from 'effect';
 import { createWatchWriter, describeWatchPrompt } from '../../src/schedules/suggest.ts';
 
 function createAsk(answer: unknown) {
   const calls: { system: string; prompt: string; schema: unknown }[] = [];
   const ask = <T>(system: string, prompt: string, schema?: unknown) => {
     calls.push({ system, prompt, schema });
-    return Promise.resolve(answer as T | null);
+    return Effect.succeed(answer as T | null);
   };
   return { ask, calls };
 }
@@ -17,7 +18,7 @@ describe('wording a suggested watch', () => {
       name: ' Bugs in #feedback ',
       text: 'File a task for each new bug in #feedback.\nAnd more.',
     });
-    expect(await createWatchWriter(ask)('slack', 'Bug reports in #feedback')).toEqual({
+    expect(await Effect.runPromise(createWatchWriter(ask)('slack', 'Bug reports in #feedback'))).toEqual({
       name: 'Bugs in #feedback',
       text: 'File a task for each new bug in #feedback.',
     });
@@ -28,17 +29,23 @@ describe('wording a suggested watch', () => {
   });
 
   test('leaves out what the writer did not give, gave empty or made too long, for core to word plainly', async () => {
-    expect(await createWatchWriter(createAsk(null).ask)('maple', 'Errors')).toEqual({
+    expect(await Effect.runPromise(createWatchWriter(createAsk(null).ask)('maple', 'Errors'))).toEqual({
       name: null,
       text: null,
     });
     const long = 'x'.repeat(SCHEDULE_LIMITS.name + 1);
-    expect(await createWatchWriter(createAsk({ name: long, text: '   ' }).ask)('maple', 'Errors')).toEqual({
+    expect(
+      await Effect.runPromise(
+        createWatchWriter(createAsk({ name: long, text: '   ' }).ask)('maple', 'Errors')
+      )
+    ).toEqual({
       name: null,
       text: null,
     });
     expect(
-      await createWatchWriter(createAsk({ name: 3, text: 'x'.repeat(201) }).ask)('maple', 'Errors')
+      await Effect.runPromise(
+        createWatchWriter(createAsk({ name: 3, text: 'x'.repeat(201) }).ask)('maple', 'Errors')
+      )
     ).toEqual({
       name: null,
       text: null,
@@ -46,10 +53,9 @@ describe('wording a suggested watch', () => {
   });
 
   test('a writer that fails passes its failure on', async () => {
-    const ask = () => Promise.reject(new Error('the writer is down'));
-    await expect(createWatchWriter(ask)('slack', 'Bug reports')).rejects.toMatchObject({
-      _tag: 'WatchWordingFailed',
-      message: 'the writer is down',
-    });
+    const ask = () => Effect.die(new Error('the writer is down'));
+    await expect(Effect.runPromise(createWatchWriter(ask)('slack', 'Bug reports'))).rejects.toThrow(
+      'the writer is down'
+    );
   });
 });

@@ -1,15 +1,11 @@
 import { describe, expect, test } from 'bun:test';
 import { readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import {
-  listTeamEntries,
-  RemoteStore,
-  readRemoteFile,
-  readTeams,
-  resolveOwnerProfile,
-} from '../../src/remote/store.ts';
+import { readTeams } from '../../src/remote/store/decode.ts';
+import { listTeamEntries, resolveOwnerProfile } from '../../src/remote/store/derive.ts';
 import { createTempDir } from '../helpers/index.ts';
 import { captureLogs } from '../helpers/logs.ts';
+import { openTestStore, readRemoteFile } from './harness.ts';
 
 const CREDENTIALS = {
   instanceId: 'k3x9',
@@ -171,7 +167,7 @@ describe('remote.json', () => {
 
 describe('the remote store', () => {
   test('writes with mode 600 and keeps devices by public key', () => {
-    const store = new RemoteStore(createPath());
+    const store = openTestStore(createPath());
     store.upsertDevice({
       publicKey: 'd1',
       name: 'Phone',
@@ -195,11 +191,11 @@ describe('the remote store', () => {
     expect(store.selectDevice('d1')?.name).toBe('Phone again');
     expect(store.removeDevice('d1')).toBe(true);
     expect(store.removeDevice('d1')).toBe(false);
-    expect(new RemoteStore(store.path).file.devices).toEqual([]);
+    expect(openTestStore(store.path).file.devices).toEqual([]);
   });
 
   test('forgets only the devices of accounts that lost access', () => {
-    const store = new RemoteStore(createPath());
+    const store = openTestStore(createPath());
     const device = { name: 'Phone', enrolledAt: 1, lastSeenAt: null };
     store.upsertDevice({ ...device, publicKey: 'mine', userId: '1' });
     store.upsertDevice({ ...device, publicKey: 'kai', userId: '7' });
@@ -210,7 +206,7 @@ describe('the remote store', () => {
   });
 
   test('keeps one grant per teammate and drops the grants of people no longer in a team', () => {
-    const store = new RemoteStore(createPath());
+    const store = openTestStore(createPath());
     store.writeGrant({ userId: '7', teamId: 't1', secret: 'first' });
     store.writeGrant({ userId: '8', teamId: 't1', secret: 'other' });
     store.writeGrant({ userId: '7', teamId: 't2', secret: 'again' });
@@ -224,16 +220,16 @@ describe('the remote store', () => {
 
   test('creates the machine key once and reads it back after a restart', async () => {
     const path = createPath();
-    const store = new RemoteStore(path);
+    const store = openTestStore(path);
     const first = await store.resolveMachineKey();
     expect(await store.resolveMachineKey()).toEqual(first);
-    const again = await new RemoteStore(path).resolveMachineKey();
+    const again = await openTestStore(path).resolveMachineKey();
     expect(again.publicKey).toBe(first.publicKey);
     expect(readFileSync(path, 'utf8')).toContain(first.publicKey);
   });
 
   test('makes one machine key when two callers ask for it at once', async () => {
-    const store = new RemoteStore(createPath());
+    const store = openTestStore(createPath());
     const [first, second] = await Promise.all([store.resolveMachineKey(), store.resolveMachineKey()]);
     expect(second.publicKey).toBe(first.publicKey);
     expect(store.file.machine?.publicKey).toBe(first.publicKey);
@@ -242,18 +238,18 @@ describe('the remote store', () => {
   test('makes a new machine key when the stored one cannot be read', async () => {
     const path = createPath();
     writeFileSync(path, JSON.stringify({ machine: { publicKey: 'p', privateKey: '{' } }));
-    const store = new RemoteStore(path);
+    const store = openTestStore(path);
     const key = await store.resolveMachineKey();
     expect(key.publicKey).not.toBe('p');
   });
 
   test('keeps a signing key apart from the machine key, made once and read back after a restart', async () => {
     const path = createPath();
-    const store = new RemoteStore(path);
+    const store = openTestStore(path);
     const first = await store.resolveSigningKey();
     expect(await store.resolveSigningKey()).toEqual(first);
     expect(first.publicKey).not.toBe((await store.resolveMachineKey()).publicKey);
-    const again = await new RemoteStore(path).resolveSigningKey();
+    const again = await openTestStore(path).resolveSigningKey();
     expect(again.publicKey).toBe(first.publicKey);
     expect(again.privateKey.algorithm.name).toBe('ECDSA');
   });
@@ -261,7 +257,7 @@ describe('the remote store', () => {
   test('makes a new signing key when the stored one cannot be read', async () => {
     const path = createPath();
     writeFileSync(path, JSON.stringify({ signing: { publicKey: 'p', privateKey: '{' } }));
-    expect((await new RemoteStore(path).resolveSigningKey()).publicKey).not.toBe('p');
+    expect((await openTestStore(path).resolveSigningKey()).publicKey).not.toBe('p');
   });
 });
 
@@ -335,7 +331,7 @@ describe('the team keys', () => {
   const key = 'A'.repeat(43);
 
   test('keeps a key per team, renames it with its team, and lists asked teams as requested', () => {
-    const store = new RemoteStore(createPath());
+    const store = openTestStore(createPath());
     store.upsertTeamKey({ teamId: 'team-1', name: 'Old', key, invite: 'join', addedAt: 1 });
     store.upsertTeamKey({ teamId: 'team-2', name: 'Asked', key, invite: null, addedAt: 2 });
     expect(store.recordTeams([team])).toBe(true);
@@ -343,7 +339,7 @@ describe('the team keys', () => {
     expect(store.selectTeam('team-1')?.name).toBe('Platform');
     expect(store.selectTeam('team-9')).toBeNull();
     expect(store.selectTeamKey('team-1')?.name).toBe('Platform');
-    expect(new RemoteStore(store.path).file.teamKeys.map((stored) => stored.teamId)).toEqual([
+    expect(openTestStore(store.path).file.teamKeys.map((stored) => stored.teamId)).toEqual([
       'team-1',
       'team-2',
     ]);

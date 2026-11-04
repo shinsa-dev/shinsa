@@ -1,10 +1,10 @@
 import { describe, expect, test } from 'bun:test';
 import type { Task } from '@shinsa/core';
-import { MainCheckoutStrategy } from '../../src/workspaces/main-checkout.ts';
 import { captureLogs, createGitRepo, git, writeFiles } from '../helpers/index.ts';
 import { createTask } from '../helpers/state.ts';
+import { openStrategy } from './harness.ts';
 
-const strategy = new MainCheckoutStrategy();
+const strategy = openStrategy('main_checkout');
 
 async function startTask(branch = 'fix/scroll', from?: string) {
   const made = await createGitRepo({ files: { 'a.txt': 'a\n' } });

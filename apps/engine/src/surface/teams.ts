@@ -1,7 +1,6 @@
-import { DomainError, type RemoteTeamEntry, type RemoteUser } from '@shinsa/core';
+import { DomainError, type RemoteSnapshot, type RemoteTeamEntry, type RemoteUser } from '@shinsa/core';
 import { Effect } from 'effect';
 import type { EngineCalls } from '../cli/client/schema.ts';
-import type { RemoteSnapshot } from '../remote/index.ts';
 import type { SurfaceClient } from './client.ts';
 import type { FieldSpec } from './fields.ts';
 import type { SurfaceFailure } from './schema.ts';

@@ -1,28 +1,63 @@
 import { describe, expect, test } from 'bun:test';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { Duration, Effect } from 'effect';
 import type { UsageRequester } from '../../../../src/accounts/usage.ts';
-import type { CodexRuntime } from '../../../../src/agents/providers/codex/session.ts';
+import type { CodexRuntime } from '../../../../src/agents/providers/codex/session/schema.ts';
+import { selectCodexOAuthLogin } from '../../../../src/agents/providers/codex/usage/auth.ts';
 import {
   createCodexWindow,
   parseChatGptBaseUrl,
   parseCodexOAuthUsage,
   parseCodexRateLimits,
-  readCodexOAuthLogin,
-  readCodexUsage,
   resolveCodexFastMode,
   resolveCodexHome,
   resolveCodexUsageUrl,
-} from '../../../../src/agents/providers/codex/usage.ts';
+} from '../../../../src/agents/providers/codex/usage/readings.ts';
+import {
+  type CodexUsageOptions,
+  CodexUsageUnreachable,
+  USAGE_TIMEOUT_MS,
+} from '../../../../src/agents/providers/codex/usage/schema.ts';
+import { readUsage } from '../../../../src/agents/providers/codex/usage/service.ts';
+import { describeError } from '../../../../src/log/redact.ts';
 import { FakeCodex } from '../../../helpers/codex.ts';
 import { createTempDir } from '../../../helpers/index.ts';
 
 const NOW = 1_800_000_000_000;
 
+function readCodexOAuthLogin(home: string) {
+  return Effect.runSync(selectCodexOAuthLogin(home));
+}
+
+function readCodexUsage(runtime: CodexRuntime, options: CodexUsageOptions & { now?: () => number } = {}) {
+  const request = options.requestHttp ?? fetch;
+  return Effect.runPromise(
+    readUsage({
+      home: resolveCodexHome({ ...Bun.env, ...options.env }),
+      now: Effect.sync(options.now ?? Date.now),
+      requestHttp: (url, init) =>
+        Effect.tryPromise({
+          try: (signal) => request(url, { ...init, signal }),
+          catch: (error) => new CodexUsageUnreachable({ message: describeError(error) }),
+        }),
+      executable: runtime.resolveExecutable,
+      env: runtime.env,
+      cwd: tmpdir(),
+      timeout: Duration.millis(options.timeoutMs ?? USAGE_TIMEOUT_MS),
+    })
+  );
+}
+
 const MISSING: CodexRuntime = {
-  resolveExecutable: () =>
-    Promise.resolve({ ok: false, reason: 'not_installed', message: 'No codex.', version: null }),
+  resolveExecutable: Effect.succeed({
+    ok: false,
+    reason: 'not_installed',
+    message: 'No codex.',
+    version: null,
+  }),
 };
 
 const OAUTH_BODY = {

@@ -2,7 +2,7 @@ import { closeSync, mkdirSync, openSync, readFileSync, statSync, writeFileSync, 
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { DomainError } from '@shinsa/core';
-import { Cause, Effect } from 'effect';
+import { Cause, Duration, Effect, Exit, Fiber } from 'effect';
 import { resolveKeychainAccount } from '../accounts/paths.ts';
 import { resolveServerAddress } from '../config/index.ts';
 import { EngineConfig } from '../config/service.ts';
@@ -18,11 +18,10 @@ import {
   ServerRunningError,
   type ServiceRunner,
   type ShinsaBundle,
-  stopWithin,
+  STOP_DEADLINE_MS,
 } from '../instance/index.ts';
 import { describeError } from '../log/index.ts';
-import { edgeRuntime } from '../runtime/edge.ts';
-import { startShinsa } from '../serve.ts';
+import { runEngine as runEngineLayer } from '../serve/run.ts';
 import { resolveBrowserCommand } from '../shell/browser.ts';
 import { describeFailure } from '../shell/index.ts';
 import {
@@ -61,12 +60,6 @@ export type { CliIo, OpenAppOptions, WakeOptions } from './schema.ts';
 const MANAGED_PLATFORMS: string[] = ['darwin', 'linux'];
 
 const IS_BUNDLED = Boolean(BUNDLE) && MANAGED_PLATFORMS.includes(process.platform);
-
-const SHUTDOWN_SIGNALS = ['SIGINT', 'SIGTERM'] as const;
-
-function toCliFailure(error: unknown) {
-  return error instanceof DomainError ? error : new CliFailed({ message: describeError(error) });
-}
 
 const runProgram = Effect.fn('Cli.runProgram')(function* (argv: Argv) {
   const shell = yield* Shell;
@@ -142,34 +135,48 @@ export function createPlatformService(
 
 const PLATFORM_SERVICE = createPlatformService();
 
-export function createWakeEngine(
+export const createWakeEngine = Effect.fn('Cli.createWakeEngine')(function* (
   base: string,
   options: WakeOptions = { bundled: IS_BUNDLED, kick: PLATFORM_SERVICE.kick }
 ) {
-  const wake = Effect.gen(function* () {
+  const shell = yield* Shell;
+  return Effect.gen(function* () {
     if (!options.bundled || !(yield* options.kick)) return false;
     const health = yield* waitFor(options, readHealth(base));
     return health !== null;
-  });
-  return () => edgeRuntime.runPromise(wake);
-}
-
-export const stopForSignal = Effect.fn('Cli.stopForSignal')(function* (
-  signal: string,
-  stop: () => Promise<void>,
-  exit: (code: number) => void = (code) => process.exit(code),
-  deadlineMs?: number
-) {
-  yield* Effect.logInfo('[Serve] Stopping').pipe(Effect.annotateLogs({ signal }));
-  const outcome = yield* stopWithin(stop, deadlineMs);
-  yield* Effect.sync(() => exit(outcome === 'failed' ? 1 : 0));
+  }).pipe(Effect.provideService(Shell, shell));
 });
 
-function stopOnSignal(stop: () => Promise<void>) {
-  for (const signal of SHUTDOWN_SIGNALS) {
-    process.once(signal, () => edgeRuntime.runFork(stopForSignal(signal, stop)));
+const exitProcess = (code: number) => process.exit(code);
+
+export const stopEngineFiber = Effect.fn('Cli.stopEngineFiber')(function* <E>(
+  engine: Fiber.Fiber<unknown, E>,
+  exit: (code: number) => void = exitProcess,
+  deadlineMs: number = STOP_DEADLINE_MS
+) {
+  yield* Effect.logInfo('[Serve] Stopping');
+  const deadline = yield* Effect.forkDetach(
+    Effect.sleep(Duration.millis(deadlineMs)).pipe(
+      Effect.andThen(
+        Effect.logError('[Engine] Did not stop in time, so it exits anyway').pipe(
+          Effect.annotateLogs({ deadlineMs })
+        )
+      ),
+      Effect.andThen(Effect.sync(() => exit(0)))
+    )
+  );
+  yield* Fiber.interrupt(engine);
+  const stopped = yield* Fiber.await(engine);
+  yield* Fiber.interrupt(deadline);
+  if (Exit.isSuccess(stopped) || Cause.hasInterruptsOnly(stopped.cause)) {
+    yield* Effect.sync(() => exit(0));
+    return;
   }
-}
+  yield* Effect.logError('[Engine] Could not stop cleanly').pipe(
+    Effect.annotateLogs({ error: describeError(Cause.squash(stopped.cause)) })
+  );
+  yield* Effect.sync(() => exit(1));
+});
 
 export const trimEngineLog = Effect.fn('Cli.trimEngineLog')(function* (
   path: string,
@@ -205,7 +212,8 @@ export const writeOutputTo = Effect.fn('Cli.writeOutputTo')(function* (
 const startEngineProcess = Effect.fn('Cli.startEngineProcess')(function* (
   env: Record<string, string | undefined>,
   isTerminal: () => boolean,
-  bundle: ShinsaBundle | null
+  bundle: ShinsaBundle | null,
+  exit: (code: number) => void
 ) {
   const byService = isStartedByService(env);
   yield* Effect.sync(() => {
@@ -219,10 +227,9 @@ const startEngineProcess = Effect.fn('Cli.startEngineProcess')(function* (
   if (isTerminal()) {
     yield* Effect.logInfo('[Serve] Started from a terminal, so the login shell environment is not read');
   } else {
-    const added = yield* Effect.tryPromise({
-      try: () => applyLoginEnv(Bun.env, createLoginEnvReader(Bun.env)),
-      catch: toCliFailure,
-    });
+    const added = yield* Effect.flatMap(createLoginEnvReader(Bun.env), (read) =>
+      applyLoginEnv(Bun.env, read)
+    );
     yield* Effect.logInfo('[Serve] Read the login shell environment').pipe(
       Effect.annotateLogs({ added: added.length })
     );
@@ -232,37 +239,47 @@ const startEngineProcess = Effect.fn('Cli.startEngineProcess')(function* (
       Bun.env.PATH = mergePathLists(bundle.bin, Bun.env.PATH ?? '');
     });
   }
-  return yield* Effect.tryPromise({ try: () => startShinsa(config, { byService }), catch: toCliFailure });
+  const engine = yield* Effect.forkChild(
+    runEngineLayer(config, { byService }).pipe(
+      Effect.mapError((error) =>
+        error._tag === 'LogVersionError' || error._tag === 'PortInUse'
+          ? new CliFailed({ message: error.message })
+          : error
+      )
+    )
+  );
+  return yield* Fiber.join(engine).pipe(Effect.onInterrupt(() => stopEngineFiber(engine, exit)));
 });
 
-function resolveBase(env: Record<string, string | undefined>) {
-  const address = resolveServerAddress(env);
+const resolveBase = Effect.fn('Cli.resolveBase')(function* (env: Record<string, string | undefined>) {
+  const address = yield* Effect.orDie(resolveServerAddress(env));
   return resolveServerUrl(address.hostname, address.port);
-}
+});
 
-export function createProcessIo(options: ProcessOptions = {}): CliIo {
+export const createProcessIo = Effect.fn('Cli.createProcessIo')(function* (options: ProcessOptions = {}) {
   const isTerminal = options.isTerminal ?? isStartedFromTerminal;
   const bundle = options.bundle === undefined ? BUNDLE : options.bundle;
-  const base = resolveBase(Bun.env);
+  const exit = options.exit ?? exitProcess;
+  const base = yield* resolveBase(Bun.env);
   const write = (line = '') => process.stdout.write(`${line}\n`);
-  return {
+  const io: CliIo = {
     env: Bun.env,
     cwd: process.cwd(),
     write,
     writeError: (line) => process.stderr.write(`${line}\n`),
     openApp: createOpenApp(base, { write }),
     readRepoRoot,
-    wakeEngine: createWakeEngine(base),
+    wakeEngine: yield* createWakeEngine(base),
     engine: { bundled: IS_BUNDLED, service: PLATFORM_SERVICE },
-    runEngine: (env) => startEngineProcess(env, isTerminal, bundle),
-    onShutdown: stopOnSignal,
+    runEngine: (env) => startEngineProcess(env, isTerminal, bundle, exit),
     terminal: resolveTerminal(Bun.env, process.stdout, process.stderr),
   };
-}
+  return io;
+});
 
-function createCommandIo(io: CliIo): CommandIo {
-  return {
-    api: createApiClient(resolveBase(io.env), io.wakeEngine),
+const createCommandIo = Effect.fn('Cli.createCommandIo')(function* (io: CliIo) {
+  const command: CommandIo = {
+    api: createApiClient(yield* resolveBase(io.env), io.wakeEngine),
     display: io.terminal.display,
     home: io.terminal.home,
     cwd: io.cwd,
@@ -270,12 +287,12 @@ function createCommandIo(io: CliIo): CommandIo {
     openApp: io.openApp,
     readRepoRoot: io.readRepoRoot,
   };
-}
+  return command;
+});
 
 const runEngine = Effect.fn('Cli.runEngine')(function* (io: CliIo) {
   const byService = isStartedByService(io.env);
   return yield* io.runEngine(io.env).pipe(
-    Effect.tap((shinsa) => Effect.sync(() => io.onShutdown(shinsa.stop))),
     Effect.as(0),
     Effect.catchIf(
       (error): error is ServerRunningError => byService && error instanceof ServerRunningError,
@@ -295,15 +312,16 @@ const runEngine = Effect.fn('Cli.runEngine')(function* (io: CliIo) {
   );
 });
 
-function createEngineIo(io: CliIo): EngineIo {
-  return {
+const createEngineIo = Effect.fn('Cli.createEngineIo')(function* (io: CliIo) {
+  const engine: EngineIo = {
     ...io.engine,
-    base: resolveBase(io.env),
+    base: yield* resolveBase(io.env),
     display: io.terminal.display,
     write: io.write,
     startProgress: io.terminal.startProgress,
   };
-}
+  return engine;
+});
 
 function isHelp(args: string[]) {
   return args.includes('--help') || args.includes('-h');
@@ -331,27 +349,27 @@ const printHelp = Effect.fn('Cli.printHelp')(function* (args: string[], io: CliI
 const routeTopLevel = Effect.fn('Cli.routeTopLevel')(function* (command: string, args: string[], io: CliIo) {
   switch (command) {
     case 'do':
-      yield* createTask(args, createCommandIo(io));
+      yield* createTask(args, yield* createCommandIo(io));
       return 0;
     case 'status':
-      return yield* printStatus(args, createCommandIo(io));
+      return yield* printStatus(args, yield* createCommandIo(io));
     case 'open':
-      yield* openApp(args, createCommandIo(io));
+      yield* openApp(args, yield* createCommandIo(io));
       return 0;
     case 'start':
-      yield* startEngine(createEngineIo(io));
+      yield* startEngine(yield* createEngineIo(io));
       return 0;
     case 'stop':
-      yield* stopEngine(createEngineIo(io));
+      yield* stopEngine(yield* createEngineIo(io));
       return 0;
     case 'restart':
-      yield* restartEngine(createEngineIo(io), (yield* readArgs(args)).flags.has('--when-idle'));
+      yield* restartEngine(yield* createEngineIo(io), (yield* readArgs(args)).flags.has('--when-idle'));
       return 0;
     case 'logs':
       printLogs(args, { env: io.env, display: io.terminal.display, write: io.write });
       return 0;
     default:
-      yield* printVersion(createEngineIo(io), (yield* readArgs(args)).flags.has('--json'));
+      yield* printVersion(yield* createEngineIo(io), (yield* readArgs(args)).flags.has('--json'));
       return 0;
   }
 });
@@ -389,19 +407,15 @@ const routeCommand: (
     return yield* routeTopLevel(command, args, io);
   }
   if (isPathArgument(command)) {
-    yield* openApp([command], createCommandIo(io));
+    yield* openApp([command], yield* createCommandIo(io));
     return 0;
   }
   if (isSurfaceGroup(command)) {
-    return yield* Effect.tryPromise({
-      try: () =>
-        runSurface([command, ...args], {
-          base: resolveBase(io.env),
-          display: io.terminal.display,
-          write: io.write,
-          wake: io.wakeEngine,
-        }),
-      catch: toCliFailure,
+    return yield* runSurface([command, ...args], {
+      base: yield* resolveBase(io.env),
+      display: io.terminal.display,
+      write: io.write,
+      wake: io.wakeEngine,
     });
   }
   return yield* new DomainError({ code: 'command_unknown', message: describeUnknown(command) });
@@ -414,7 +428,8 @@ function writeFailure(io: CliIo, error: unknown) {
   if (hint) io.writeError(style.dim(describeInline(style, hint)));
 }
 
-export const executeCli = Effect.fn('Cli.execute')(function* (args: string[], io: CliIo = createProcessIo()) {
+export const executeCli = Effect.fn('Cli.execute')(function* (args: string[], given?: CliIo) {
+  const io = given ?? (yield* createProcessIo());
   const [command = 'open', ...rest] = args;
   return yield* routeCommand(command, rest, io).pipe(
     Effect.catchCause((cause) =>
@@ -425,7 +440,3 @@ export const executeCli = Effect.fn('Cli.execute')(function* (args: string[], io
     )
   );
 });
-
-export function runCli(args: string[], io?: CliIo) {
-  return edgeRuntime.runPromise(executeCli(args, io));
-}

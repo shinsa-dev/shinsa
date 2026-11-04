@@ -1,7 +1,6 @@
-import type { ShinsaCommand, ShinsaEvent, ShinsaState } from '@shinsa/core';
-import { Duration, Effect, Schema } from 'effect';
+import type { DomainError, ShinsaCommand, ShinsaEvent } from '@shinsa/core';
+import { Context, Duration, Effect, Schema } from 'effect';
 import type { JsonSchema } from '../agents/providers/index.ts';
-import type { SecretStore } from '../secrets/index.ts';
 
 export interface WebhookRequest {
   method: string;
@@ -26,25 +25,17 @@ export const WebhookOutcome = Schema.Literals([
 ]);
 export type WebhookOutcome = typeof WebhookOutcome.Type;
 
-export interface WebhookReceiverOptions {
-  now?: () => number;
-  newId?: () => string;
-}
-
 export interface ScheduleToolCall {
-  runId: string;
-  attemptId: string;
-  state: () => ShinsaState;
-  dispatch: (command: ShinsaCommand) => Promise<ShinsaEvent[]>;
+  readonly runId: string;
+  readonly attemptId: string;
+  readonly dispatch: (
+    command: ShinsaCommand
+  ) => Effect.Effect<ShinsaEvent[], DomainError | { readonly message: string }>;
 }
 
-export interface ScheduleToolContext {
-  secrets: SecretStore;
-  baseUrl: () => string;
-  hookUrl: (scheduleId: string, token: string) => string | null;
-  timeZone: string;
-  now: () => number;
-}
+export const ScheduleTimeZone = Context.Reference<string>('shinsa/engine/schedules/ScheduleTimeZone', {
+  defaultValue: () => Intl.DateTimeFormat().resolvedOptions().timeZone,
+});
 
 const WatchLine = Schema.optionalKey(Schema.String.pipe(Schema.catchDecoding(() => Effect.succeedNone)));
 
@@ -55,12 +46,7 @@ export interface WatchWording {
   text: string | null;
 }
 
-export class WatchWordingFailed extends Schema.TaggedError<
-  WatchWordingFailed,
-  { readonly brand: unique symbol }
->()('WatchWordingFailed', { message: Schema.String }) {}
-
-export type WatchWriter = (server: string, data: string) => Promise<WatchWording>;
+export type WatchWriter = (server: string, data: string) => Effect.Effect<WatchWording>;
 
 export const WEBHOOK_ROUTE_PREFIX = '/api/hooks';
 

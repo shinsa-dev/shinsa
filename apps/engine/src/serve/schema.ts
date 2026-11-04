@@ -1,59 +1,44 @@
-import { Schema } from 'effect';
-import type { AccountsOptions } from '../accounts/index.ts';
+import type { Layer } from 'effect';
 import type {
-  IdleCompactionOptions,
   IdleReleaseOptions,
   ModelSource,
   NoticeListener,
-  ProviderRegistry,
+  Providers,
   RejectionHandler,
   SessionStarter,
 } from '../agents/index.ts';
-import type { ExtensionsOptions } from '../extensions/index.ts';
-import type { AccountSource, CommandRunner } from '../onboarding/index.ts';
-import type { TunnelConnectorLayer } from '../remote/index.ts';
-import type { PlacementAsker } from '../remote/placement.ts';
+import type { FetchLike } from '../extensions/oauth/schema.ts';
+import type { Env } from '../extensions/schema.ts';
+import type { AccountSource } from '../onboarding/index.ts';
+import type { TunnelConnectorLayer } from '../remote/connector/schema.ts';
+import type { PlacementAsker } from '../remote/placement/service.ts';
 import type { Discoverer, LoginResolver } from '../repos/index.ts';
-import type { Engine, StateClockOptions } from '../runtime/index.ts';
-import type { TerminalsOptions } from '../terminals/index.ts';
+import type { ClockTimings } from '../runtime/clock/schema.ts';
+import type { Shell } from '../shell/service.ts';
+import type { TerminalPty } from '../terminals/pty/service.ts';
 import type { TriageResolver } from '../triage/index.ts';
-import type { Classifier } from '../triage/message.ts';
-import type { VersionsOptions } from '../versions/index.ts';
+import type { ProgramInstalls } from '../versions/installs/service.ts';
+import type { NpmRegistry } from '../versions/registry/service.ts';
+import type { UpdaterRunner } from '../versions/updater/service.ts';
 
 export interface ShinsaOptions {
   startSession?: SessionStarter;
   onRejection?: RejectionHandler;
   onNotice?: NoticeListener;
   triage?: TriageResolver;
-  classify?: Classifier;
-  place?: PlacementAsker;
+  place?: PlacementAsker['Service'];
   resolveLogin?: LoginResolver;
-  providers?: ProviderRegistry;
+  providers?: Providers['Service'];
   models?: ModelSource;
   discover?: Discoverer;
-  runPrerequisite?: CommandRunner;
   accounts?: AccountSource;
-  accountOptions?: Omit<AccountsOptions, 'engine' | 'config'>;
-  scheduleClock?: StateClockOptions;
+  accountLayer?: Layer.Layer<Shell | TerminalPty>;
+  scheduleClock?: ClockTimings;
   timeZone?: string;
   idle?: IdleReleaseOptions;
-  compaction?: IdleCompactionOptions;
-  extensions?: Pick<ExtensionsOptions, 'check' | 'env' | 'fetch'>;
-  versions?: VersionsOptions;
-  terminals?: Pick<TerminalsOptions, 'spawn' | 'readForeground' | 'env'>;
+  extensions?: { env?: Env; fetch?: FetchLike };
+  versions?: Layer.Layer<ProgramInstalls | NpmRegistry | UpdaterRunner>;
   remoteConnector?: TunnelConnectorLayer;
-  openRemoteUrl?: (url: string) => Promise<void>;
   byService?: boolean;
   exit?: (code: number) => void;
 }
-
-export interface Shinsa {
-  url: string;
-  engine: Engine;
-  stop: () => Promise<void>;
-}
-
-export class AccountsCheckFailed extends Schema.TaggedError<
-  AccountsCheckFailed,
-  { readonly brand: unique symbol }
->()('AccountsCheckFailed', { message: Schema.String }) {}

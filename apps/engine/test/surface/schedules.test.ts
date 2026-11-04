@@ -1,6 +1,7 @@
 import { describe, expect, setSystemTime, test } from 'bun:test';
 import { DomainError, MINUTE_MS } from '@shinsa/core';
-import type { SurfaceHookSecrets } from '../../src/surface/index.ts';
+import { Effect } from 'effect';
+import { SurfaceCallFailed, type SurfaceHookSecrets } from '../../src/surface/index.ts';
 import { createFakeClient, createTaskDetail, findSpec, runSpec } from './fixtures.ts';
 
 const NOW = Date.UTC(2026, 9, 23, 9, 0);
@@ -158,13 +159,15 @@ describe('writing a schedule', () => {
   test('an agent’s signing secret ref is checked before the write and redeemed after it', async () => {
     const calls: unknown[][] = [];
     const hookSecrets: SurfaceHookSecrets = {
-      assertSecret: (...args) => {
-        calls.push(['assert', ...args]);
-      },
-      writeSecret: (...args) => {
-        calls.push(['write', ...args]);
-        return 'The schedule was saved, but its signing secret was not.';
-      },
+      assertSecret: (...args) =>
+        Effect.sync(() => {
+          calls.push(['assert', ...args]);
+        }),
+      writeSecret: (...args) =>
+        Effect.sync(() => {
+          calls.push(['write', ...args]);
+          return 'The schedule was saved, but its signing secret was not.';
+        }),
     };
     const ref = `secret-ref:${'a'.repeat(32)}`;
     const signed = ['--webhook', '--signature-header', 'x-sig', '--new-task'];
@@ -188,7 +191,10 @@ describe('writing a schedule', () => {
     await expect(
       write(['--webhook', '--signature-header', 'x-sig', '--new-task', '--signature-secret-ref', ref])
     ).rejects.toThrow('--signature-secret-ref is for agents.');
-    const hookSecrets: SurfaceHookSecrets = { assertSecret: () => undefined, writeSecret: () => null };
+    const hookSecrets: SurfaceHookSecrets = {
+      assertSecret: () => Effect.void,
+      writeSecret: () => Effect.succeed(null),
+    };
     await expect(
       write(['--webhook', '--new-task', '--signature-secret-ref', ref], hookSecrets)
     ).rejects.toThrow('Give --signature-secret-ref with --webhook and --signature-header.');
@@ -203,27 +209,26 @@ describe('writing a schedule', () => {
   test('a signed webhook the agent’s secret check refuses is refused with that check’s failure', async () => {
     const signed = ['--webhook', '--signature-header', 'x-sig', '--new-task'];
     const refusing: SurfaceHookSecrets = {
-      assertSecret: () => {
-        throw new DomainError({
-          code: 'schedule_invalid',
-          message: 'A signature check needs the signing secret.',
-        });
-      },
-      writeSecret: () => null,
+      assertSecret: () =>
+        Effect.fail(
+          new DomainError({
+            code: 'schedule_invalid',
+            message: 'A signature check needs the signing secret.',
+          })
+        ),
+      writeSecret: () => Effect.succeed(null),
     };
     await expect(write(signed, refusing)).rejects.toMatchObject({
       code: 'schedule_invalid',
       message: 'A signature check needs the signing secret.',
     });
     const breaking: SurfaceHookSecrets = {
-      assertSecret: () => {
-        throw new Error('secrets.json is unreadable');
-      },
-      writeSecret: () => null,
+      assertSecret: () => Effect.fail(new SurfaceCallFailed({ message: 'secrets.json is unreadable' })),
+      writeSecret: () => Effect.succeed(null),
     };
     await expect(write(signed, breaking)).rejects.toMatchObject({
       _tag: 'SurfaceCallFailed',
-      message: 'Error: secrets.json is unreadable',
+      message: 'secrets.json is unreadable',
     });
   });
 

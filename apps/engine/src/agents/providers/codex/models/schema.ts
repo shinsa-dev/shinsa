@@ -1,5 +1,5 @@
 import type { AgentModel } from '@shinsa/core';
-import { Duration, type Effect } from 'effect';
+import type { Duration, Effect } from 'effect';
 import type { CodexExecutable } from '../executable/schema.ts';
 
 export const CATALOG_TIMEOUT_MS = 20_000;

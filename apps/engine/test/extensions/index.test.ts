@@ -1,12 +1,13 @@
 import { afterEach, describe, expect, test } from 'bun:test';
 import { join } from 'node:path';
 import { createState, type McpServerSummary, type ShinsaState } from '@shinsa/core';
+import { Effect } from 'effect';
 import type { McpDefinition } from '../../src/extensions/definitions.ts';
-import { Extensions, type ServerCheck } from '../../src/extensions/index.ts';
+import { McpServerFailed } from '../../src/extensions/schema.ts';
 import { serializeSignInPage } from '../../src/extensions/sign-in.ts';
-import { SecretStore } from '../../src/secrets/store.ts';
 import { type FakeMcpHttp, startFakeMcpHttp } from '../helpers/mcp/http.ts';
 import { createFakeMachine, type FakeMachine, writeFile } from './fixtures.ts';
+import { disposeExtensionWorlds, type ExtensionsWorldOptions, openExtensions } from './harness.ts';
 
 const RETINA = { PLAYWRIGHT_MCP_DEVICE: 'Desktop Chrome HiDPI' };
 
@@ -15,7 +16,17 @@ let fake: FakeMcpHttp | null = null;
 afterEach(async () => {
   await fake?.stop();
   fake = null;
+  await disposeExtensionWorlds();
 });
+
+function resolveOptions(machine: FakeMachine, state: ShinsaState): ExtensionsWorldOptions {
+  return {
+    config: { home: machine.shinsaHome, userHome: machine.userHome, pluginDir: machine.pluginDir },
+    state: () => state,
+    env: machine.env,
+    redirectUrl: () => 'http://127.0.0.1:5180/api/mcp/oauth/callback',
+  };
+}
 
 function createWorld(machine: FakeMachine = createFakeMachine()) {
   const state: ShinsaState = createState();
@@ -30,27 +41,22 @@ function createWorld(machine: FakeMachine = createFakeMachine()) {
   };
   state.projects.p1 = { id: 'p1', name: 'Work', color: 'blue', key: 'W', description: '', folders: [] };
   const checked: McpDefinition[] = [];
-  const check: ServerCheck = (definition) => {
-    checked.push(definition);
-    return Promise.resolve({
-      state: 'connected',
-      error: null,
-      tools: [{ name: 'echo', description: null }],
-      tokens: 30,
-    });
-  };
-  const secrets = new SecretStore(join(machine.shinsaHome, 'secrets.json'));
   writeFile(join(machine.shinsaHome, 'extensions.json'), JSON.stringify({ optimizer: { enabled: false } }));
-  const extensions = new Extensions({
-    state: () => state,
-    config: { home: machine.shinsaHome, userHome: machine.userHome, pluginDir: machine.pluginDir },
-    secrets,
-    baseUrl: () => 'http://127.0.0.1:5180',
-    env: machine.env,
-    check,
+  const extensions = openExtensions({
+    ...resolveOptions(machine, state),
     now: () => 42,
+    check: (definition) =>
+      Effect.sync(() => {
+        checked.push(definition);
+        return {
+          state: 'connected' as const,
+          error: null,
+          tools: [{ name: 'echo', description: null }],
+          tokens: 30,
+        };
+      }),
   });
-  return { machine, state, extensions, checked, secrets };
+  return { machine, state, extensions, checked, secrets: extensions.secrets };
 }
 
 function findServer(servers: McpServerSummary[], id: string) {
@@ -241,7 +247,7 @@ describe('adding and changing servers', () => {
     expect(() => extensions.createServer(base)).toThrow('An MCP named docs exists.');
   });
 
-  test('editing keeps a secret you leave empty, and renaming moves the server', () => {
+  test('editing keeps a secret you leave empty, and renaming moves the server', async () => {
     const { extensions, secrets } = createWorld();
     extensions.createServer({
       name: 'docs',
@@ -249,7 +255,9 @@ describe('adding and changing servers', () => {
       url: 'https://a.dev/mcp',
       headers: { Authorization: 'Bearer abc' },
     });
-    secrets.updateMcpCredentials('shinsa:docs', { tokens: { access_token: 'x', token_type: 'Bearer' } });
+    await secrets.updateMcpCredentials('shinsa:docs', {
+      tokens: { access_token: 'x', token_type: 'Bearer' },
+    });
     const edited = extensions.updateServer('shinsa:docs', {
       name: 'docs',
       transport: 'http',
@@ -416,19 +424,13 @@ describe('checking servers', () => {
 
   test('a checker that fails fails the check, and without one Shinsa starts the server itself', async () => {
     const { machine, state } = createWorld();
-    const options = {
-      state: () => state,
-      config: { home: machine.shinsaHome, userHome: machine.userHome, pluginDir: machine.pluginDir },
-      secrets: new SecretStore(join(machine.shinsaHome, 'secrets.json')),
-      baseUrl: () => 'http://127.0.0.1:5180',
-      env: machine.env,
-    };
-    const failing = new Extensions({
+    const options = resolveOptions(machine, state);
+    const failing = openExtensions({
       ...options,
-      check: () => Promise.reject(new Error('The checker is gone.')),
+      check: () => Effect.die(new McpServerFailed({ message: 'The checker is gone.', unauthorized: false })),
     });
     await expect(failing.check('claude:files')).rejects.toThrow('The checker is gone.');
-    const own = new Extensions(options);
+    const own = openExtensions(options);
     own.createServer({ name: 'missing', transport: 'stdio', command: '/nonexistent/mcp-server' });
     const snapshot = await own.check('shinsa:missing');
     expect(findServer(snapshot.servers, 'shinsa:missing').status.state).toBe('failing');
@@ -437,13 +439,7 @@ describe('checking servers', () => {
   test('a check outlives a restart, and editing the server forgets it', async () => {
     const { extensions, machine, state } = createWorld();
     await extensions.check('claude:files');
-    const again = new Extensions({
-      state: () => state,
-      config: { home: machine.shinsaHome, userHome: machine.userHome, pluginDir: machine.pluginDir },
-      secrets: new SecretStore(join(machine.shinsaHome, 'secrets.json')),
-      baseUrl: () => 'http://127.0.0.1:5180',
-      env: machine.env,
-    });
+    const again = openExtensions(resolveOptions(machine, state));
     expect(findServer(again.snapshot().servers, 'claude:files').status.tokens).toBe(30);
     extensions.createServer({ name: 'docs', transport: 'http', url: 'https://a.dev/mcp' });
     await extensions.check('shinsa:docs');
@@ -471,8 +467,7 @@ describe('signing in from Shinsa', () => {
     expect(started.authorizationUrl).toContain('/authorize');
     const redirect = await fetch(started.authorizationUrl ?? '', { redirect: 'manual' });
     const callback = new URL(redirect.headers.get('location') ?? '');
-    expect(extensions.isCallback(callback.pathname)).toBe(true);
-    expect(extensions.isCallback('/api/extensions')).toBe(false);
+    expect(callback.pathname).toBe('/api/mcp/oauth/callback');
     const page = await extensions.finishSignIn(callback);
     expect(page).toContain('Signed in to remote');
     expect(checked.at(-1)?.headers.Authorization).toBe('Bearer access-1');

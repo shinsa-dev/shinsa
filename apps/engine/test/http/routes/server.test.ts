@@ -2,11 +2,12 @@ import { afterEach, describe, expect, test } from 'bun:test';
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { type AgentModel, ENGINE_PROTOCOL, KNOWN_AGENT_PROVIDERS, type OnboardingFlow } from '@shinsa/core';
+import { Effect } from 'effect';
 import type { ModelSource } from '../../../src/agents/index.ts';
 import type { ServerConfig } from '../../../src/config/index.ts';
-import { createWorktree } from '../../../src/git/index.ts';
 import type { Launcher } from '../../../src/http/index.ts';
 import type { EngineRestarter } from '../../../src/instance/index.ts';
+import { createWorktree } from '../../helpers/git.ts';
 import { createGitRepo, createTempDir, createTestOnboarding } from '../../helpers/index.ts';
 import { disposeWebHandlers } from '../../helpers/web.ts';
 import { startRoutes } from './harness.ts';
@@ -14,11 +15,11 @@ import { startRoutes } from './harness.ts';
 afterEach(disposeWebHandlers);
 
 function createModels(models: AgentModel[]) {
-  return { listModels: () => Promise.resolve(models) } as unknown as ModelSource;
+  return { listModels: Effect.succeed(models) } as unknown as ModelSource;
 }
 
 function start(
-  options: { config?: Partial<ServerConfig>; launch?: Launcher; restarter?: EngineRestarter } = {}
+  options: { config?: Partial<ServerConfig>; launch?: Launcher; restarter?: EngineRestarter['Service'] } = {}
 ) {
   const routes = startRoutes(
     ({ engine, config }) => ({
@@ -141,9 +142,9 @@ describe('the engine restart endpoint', () => {
     const restarter = {
       request: (when: string) => {
         asked.push(when);
-        return Promise.resolve({ restarting: when === 'now' });
+        return Effect.succeed({ restarting: when === 'now' });
       },
-    } as unknown as EngineRestarter;
+    } as unknown as EngineRestarter['Service'];
     const { post } = await start({ restarter });
     expect(await (await post('/api/engine/restart', { when: 'idle' })).json()).toEqual({ restarting: false });
     expect(await (await post('/api/engine/restart', { when: 'now' })).json()).toEqual({ restarting: true });
@@ -394,7 +395,9 @@ describe('read endpoints', () => {
 
   test('evidence is served by its task, round and name only, cached and in ranges', async () => {
     const { call, evidence, config } = await start();
-    const uri = evidence.writeText('proof of work', { taskId: 'task-1', round: 1 }, 'Proof');
+    const uri = Effect.runSync(
+      evidence.writeText('proof of work', { taskId: 'task-1', round: 1 }, 'Proof', 'txt')
+    );
     writeFileSync(join(config.dataDir, 'secret.txt'), 'secret');
     const whole = await call(uri);
     expect(await whole.text()).toBe('proof of work');
@@ -428,10 +431,11 @@ describe('read endpoints', () => {
 describe('worktree endpoints', () => {
   test('open runs the editor at a line, Terminal or Finder, and nothing else', async () => {
     const launched: string[][] = [];
-    const launch: Launcher = (command) => {
-      launched.push(command);
-      return Promise.resolve({ ok: true, code: 0, stdout: '', stderr: '', timedOut: false });
-    };
+    const launch: Launcher = (command) =>
+      Effect.sync(() => {
+        launched.push(command);
+        return { ok: true, code: 0, stdout: '', stderr: '', timedOut: false };
+      });
     const { post, taskId, worktree, config } = await startWithWorktree(launch);
     config.editor = 'zed';
     const open = (body: unknown) => post(`/api/tasks/${taskId}/open`, body);

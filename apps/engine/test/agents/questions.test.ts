@@ -1,9 +1,10 @@
 import { describe, expect, test } from 'bun:test';
 import type { Gate } from '@shinsa/core';
-import { Questions } from '../../src/agents/questions.ts';
-import { Transcripts } from '../../src/agents/transcripts/index.ts';
-import { createTempDir } from '../helpers/index.ts';
+import { Effect, Layer } from 'effect';
+import { Questions } from '../../src/agents/questions/service.ts';
+import { EngineCore } from '../../src/runtime/engine/service.ts';
 import { createStubEngine, createTask } from '../helpers/state.ts';
+import { createLiveRuns } from './live-runs.ts';
 
 describe('answers to an agent’s questions', () => {
   test('an answer the engine refuses to deliver fails with the engine’s reason', async () => {
@@ -19,12 +20,12 @@ describe('answers to an agent’s questions', () => {
       } as unknown as Gate;
     });
     stub.reject((command) => command.type === 'message.deliver', new Error('The task is gone.'));
-    const questions = new Questions({
-      engine: stub.engine,
-      transcripts: new Transcripts(createTempDir()),
-      active: new Map(),
-      execute: () => Promise.resolve(),
-    });
-    expect(questions.resolve('gate-1')).rejects.toThrow('The task is gone.');
+    const layer = Questions.layer.pipe(
+      Layer.provide(Layer.merge(createLiveRuns().layer, Layer.succeed(EngineCore, stub.engine.core)))
+    );
+    const failure = await Effect.runPromise(
+      Effect.flip(Questions.use((questions) => questions.resolve('gate-1'))).pipe(Effect.provide(layer))
+    );
+    expect(failure.message).toBe('The task is gone.');
   });
 });

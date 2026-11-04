@@ -10,7 +10,3 @@ function failCall(error: unknown) {
 export function assertToolInput<T>(result: { ok: true; value: T } | { ok: false; errors: string[] }) {
   return Effect.try({ try: () => assertProtocol(result), catch: failCall });
 }
-
-export function requestToolCall<T>(request: () => Promise<T>) {
-  return Effect.tryPromise({ try: request, catch: failCall });
-}

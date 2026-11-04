@@ -9,12 +9,12 @@ import {
   type ServiceResult,
   SYSTEMD_UNIT,
 } from '../../src/instance/index.ts';
-import { edgeRuntime } from '../../src/runtime/edge.ts';
 import type { Shell } from '../../src/shell/service.ts';
+import { testRuntime } from '../helpers/runtime.ts';
 import { createTempDir, removeTempDirs } from '../helpers/temp.ts';
 
 function run<A, E>(effect: Effect.Effect<A, E, Shell>) {
-  return edgeRuntime.runPromise(effect);
+  return testRuntime.runPromise(effect);
 }
 
 afterEach(removeTempDirs);

@@ -7,7 +7,17 @@ import {
   serializeBase64Url,
   serializePublicKey,
 } from '@shinsa/core';
-import { createChannelEphemeral, ShareChannel } from '../../src/remote/share-channel.ts';
+import { type Bytes } from '@shinsa/core';
+import { Effect } from 'effect';
+import { describeError } from '../../src/log/redact.ts';
+import { JsonLogger } from '../../src/log/service.ts';
+import { createEphemeralKeys } from '../../src/remote/share-channel/ephemeral.ts';
+import {
+  type HelloAnswer,
+  type LiveShare,
+  ShareChannelBroke,
+} from '../../src/remote/share-channel/schema.ts';
+import { makeShareChannel } from '../../src/remote/share-channel/service.ts';
 import { captureLogs } from '../helpers/logs.ts';
 import { createShareView } from '../helpers/state.ts';
 
@@ -34,11 +44,67 @@ function createPeer() {
   return peer;
 }
 
+interface TestFile {
+  id: string;
+  version: string;
+  type: 'image/png';
+  read: () => Promise<Bytes>;
+}
+
+interface TestHost {
+  name: string;
+  authorize: () => Promise<HelloAnswer<string>>;
+  resolveLive: () => Promise<{ view: LiveShare['view']; files: TestFile[] }>;
+}
+
+const broke = (error: unknown) => new ShareChannelBroke({ message: describeError(error) });
+
+function run<A, E>(effect: Effect.Effect<A, E>) {
+  return Effect.runPromise(effect.pipe(Effect.provide(JsonLogger)));
+}
+
+function createChannelEphemeral() {
+  return run(createEphemeralKeys);
+}
+
+function openChannel(peer: ReturnType<typeof createPeer>, host: TestHost) {
+  const handle = Effect.runSync(
+    makeShareChannel<string>({
+      name: host.name,
+      peer,
+      authorize: () => Effect.tryPromise({ try: host.authorize, catch: broke }),
+      resolveLive: () =>
+        Effect.tryPromise({ try: host.resolveLive, catch: broke }).pipe(
+          Effect.map((live) => ({
+            view: live.view,
+            files: live.files.map((file) => ({
+              ...file,
+              read: Effect.tryPromise({ try: file.read, catch: broke }),
+            })),
+          }))
+        ),
+    })
+  );
+  return {
+    get subject() {
+      return Effect.runSync(handle.subject);
+    },
+    receive: (raw: string) => run(handle.receive(raw)),
+    push: () => run(handle.push),
+    end: (reason: string) => run(handle.end(reason)),
+    fail: (reason: string, error?: unknown) =>
+      Effect.runSync(
+        handle.fail(reason, error ? describeError(error) : undefined).pipe(Effect.provide(JsonLogger))
+      ),
+    close: () => Effect.runSync(handle.close),
+  };
+}
+
 describe('a share channel that breaks', () => {
   test('closes when the hello cannot be answered, and logs why', async () => {
     const logs = captureLogs();
     const peer = createPeer();
-    const channel = new ShareChannel(peer, {
+    const channel = openChannel(peer, {
       name: 'share link',
       authorize: () => Promise.reject(new Error('state is gone')),
       resolveLive: () => Promise.reject(new Error('unused')),
@@ -55,7 +121,7 @@ describe('a share channel that breaks', () => {
     const logs = captureLogs();
     const peer = createPeer();
     const ephemeral = await createChannelEphemeral();
-    const channel = new ShareChannel(peer, {
+    const channel = openChannel(peer, {
       name: 'share link',
       authorize: async () => ({
         subject: 't1',
@@ -82,7 +148,7 @@ describe('a share channel that breaks', () => {
     const peer = createPeer();
     const ephemeral = await createChannelEphemeral();
     const view = createShareView({ title: 'Leaky' });
-    const channel = new ShareChannel(peer, {
+    const channel = openChannel(peer, {
       name: 'share link',
       authorize: async () => ({
         subject: 't1',
@@ -117,7 +183,7 @@ describe('a share channel that stays open', () => {
       const peer = createPeer();
       const ephemeral = await createChannelEphemeral();
       const reads: number[] = [];
-      const channel = new ShareChannel(peer, {
+      const channel = openChannel(peer, {
         name: 'share link',
         authorize: async () => ({
           subject: 't1',

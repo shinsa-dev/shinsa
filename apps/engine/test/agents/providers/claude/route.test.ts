@@ -1,22 +1,29 @@
 import { describe, expect, test } from 'bun:test';
-import type { EunoeLink } from '../../../../src/agents/providers/claude/index.ts';
+import type { CompactionMode } from '@shinsa/core';
+import { Effect } from 'effect';
 import {
   BLOCKING_LIMIT_ENV,
   DIRECT_BASE_URL,
-  resolveClaudeRoute,
-} from '../../../../src/agents/providers/claude/route.ts';
+  type EunoeLink,
+  type EunoeStatus,
+} from '../../../../src/agents/providers/claude/route/schema.ts';
+import { resolveRoute } from '../../../../src/agents/providers/claude/route/service.ts';
 
-function createLink(status: Awaited<ReturnType<EunoeLink['ensure']>>) {
+function createLink(status: EunoeStatus) {
   const asked: string[] = [];
   const link: EunoeLink = {
-    ensure: () => {
+    ensure: Effect.sync(() => {
       asked.push('ensure');
-      return Promise.resolve(status);
-    },
-    watch: () => () => undefined,
-    fold: () => () => undefined,
+      return status;
+    }),
+    watch: () => Effect.succeed(Effect.void),
+    fold: () => Effect.succeed(Effect.void),
   };
   return { link, asked };
+}
+
+function resolveClaudeRoute(compaction: CompactionMode, link: EunoeLink | null) {
+  return Effect.runPromise(resolveRoute(compaction, link?.ensure ?? null));
 }
 
 const UP = { ok: true as const, url: 'http://127.0.0.1:40001', dir: '/data/eunoe' };

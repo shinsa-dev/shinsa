@@ -2,22 +2,26 @@ import { afterEach, describe, expect, setDefaultTimeout, test } from 'bun:test';
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { isDelegatedRun, type Run } from '@shinsa/core';
-import { Cswap } from '../../src/accounts/cswap.ts';
+import { Effect } from 'effect';
 import { Accounts } from '../../src/accounts/index.ts';
-import { Transcripts } from '../../src/agents/index.ts';
-import { createCodexProvider } from '../../src/agents/providers/codex/index.ts';
-import { type AgentProvider, ProviderRegistry } from '../../src/agents/providers/index.ts';
-import type { Engine } from '../../src/runtime/index.ts';
+import type { AgentProvider } from '../../src/agents/providers/index.ts';
+import { type AccountsHarness, buildAccountsNow } from '../accounts/harness.ts';
 import { FakeCodex, type FakeCodexStep } from '../helpers/codex.ts';
+import type { Engine } from '../helpers/engine.ts';
+import { buildCodexProvider, createTestProviders } from '../helpers/providers.ts';
+import { createSyncTranscripts } from '../helpers/transcripts.ts';
 import { World } from './harness.ts';
 
 setDefaultTimeout(30_000);
 
 let world: World | null = null;
 
+const harnesses: AccountsHarness[] = [];
+
 afterEach(async () => {
   await world?.dispose();
   world = null;
+  for (const harness of harnesses.splice(0)) await harness.close();
 });
 
 const READY: FakeCodexStep = { plan: [{ step: 'Work', status: 'inProgress' }] };
@@ -31,23 +35,21 @@ function superviseAccounts(current: World, engine: Engine) {
   const shared = join(current.root, 'claude');
   mkdirSync(shared, { recursive: true });
   const unused = () => Promise.resolve({ ok: false, code: 1, stdout: '', stderr: '', timedOut: false });
-  const accounts = new Accounts({
-    engine,
+  const harness = buildAccountsNow({
+    engine: engine.core,
     config: current.config,
     env: { CLAUDE_CONFIG_DIR: shared },
+    liveClock: true,
     run: unused,
-    readSecret: () => Promise.resolve(null),
-    cswap: new Cswap({ run: unused, which: () => null }),
-    resolveClaude: () => Promise.resolve('claude'),
-    spawnLogin: () => ({ write: () => undefined, kill: () => undefined, exited: Promise.resolve(0) }),
     providerUsage: [
       {
         id: 'codex',
-        read: () => Promise.resolve({ read: { ok: true, windows: [] }, email: null, plan: null }),
+        read: Effect.succeed({ read: { ok: true, windows: [] }, email: null, plan: null }),
       },
     ],
   });
-  return { accounts, onRejection: accounts.onRejection, onNotice: accounts.onNotice };
+  harnesses.push(harness);
+  return { accountRoster: harness.service(Accounts) };
 }
 
 async function open(
@@ -56,9 +58,9 @@ async function open(
   const codex = options.codex ?? new FakeCodex();
   world = await World.create({
     providers: (created) => {
-      const providers: AgentProvider[] = [createCodexProvider(codex.runtime, { heartbeatMs: 50 })];
+      const providers: AgentProvider[] = [buildCodexProvider(codex.runtime, { heartbeatMs: 50 })];
       if (options.claude) providers.unshift(created.agents.provider('claude', 'Claude'));
-      return new ProviderRegistry(providers);
+      return createTestProviders(providers);
     },
     ...(options.accounts ? { supervise: superviseAccounts } : {}),
   });
@@ -132,7 +134,7 @@ describe('a task on Codex', () => {
     await untilScripted(w, codex);
     await w.until('the planner’s to-do to show', () => {
       const run = listRuns(w, taskId)[0];
-      const entries = run ? new Transcripts(w.config.transcriptsDir).listEntries(run.id) : [];
+      const entries = run ? createSyncTranscripts(w.config.transcriptsDir).listEntries(run.id) : [];
       return entries.some((entry) => entry.type === 'tool_call' && entry.tool.kind === 'todo');
     });
     await w.engine.dispatch({ type: 'task.message', taskId, text: 'Keep it tiny.' });

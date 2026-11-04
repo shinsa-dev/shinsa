@@ -1,8 +1,9 @@
-import { describe, expect, spyOn, test } from 'bun:test';
-import { homedir } from 'node:os';
-import { Cswap, type CswapRunner, parseCswapList } from '../../src/accounts/cswap.ts';
-import type { CommandResult } from '../../src/shell/index.ts';
-import { captureLogs } from '../helpers/index.ts';
+import { afterEach, describe, expect, test } from 'bun:test';
+import { parseCswapList } from '../../src/accounts/answers.ts';
+import { Cswap } from '../../src/accounts/cswap/service.ts';
+import type { CommandResult } from '../../src/shell/schema.ts';
+import { captureLogs, createTempDir, createTestConfig } from '../helpers/index.ts';
+import { type AccountsHarness, buildUnitAccounts, type FakeRunner } from './harness.ts';
 
 const LIST = JSON.stringify({
   accounts: [
@@ -15,14 +16,32 @@ const LIST = JSON.stringify({
   ],
 });
 
-function createRunner(results: Partial<CommandResult>[]) {
-  const calls: { command: string[]; cwd: string; timeoutMs: number | null | undefined }[] = [];
-  const run: CswapRunner = (command, cwd, options) => {
-    calls.push({ command, cwd, timeoutMs: options.timeoutMs });
+const open: AccountsHarness[] = [];
+
+afterEach(async () => {
+  for (const harness of open.splice(0)) await harness.close();
+});
+
+function createRunner(installed: string[], results: Partial<CommandResult>[]) {
+  const calls: string[][] = [];
+  const run: FakeRunner = (command) => {
+    if (!installed.includes(command[0] ?? ''))
+      return Promise.resolve({ ok: false, code: 127, stdout: '', stderr: 'not found', timedOut: false });
+    calls.push(command);
     const result = results[Math.min(calls.length - 1, results.length - 1)];
     return Promise.resolve({ ok: true, code: 0, stdout: '', stderr: '', timedOut: false, ...result });
   };
   return { run, calls };
+}
+
+async function createCswap(run: FakeRunner, userHome = createTempDir()) {
+  const harness = await buildUnitAccounts({
+    run,
+    config: { ...createTestConfig(createTempDir()), userHome },
+  });
+  open.push(harness);
+  const cswap = harness.service(Cswap);
+  return { harness, list: () => harness.run(cswap.list) };
 }
 
 describe('claude-swap output', () => {
@@ -35,60 +54,48 @@ describe('claude-swap output', () => {
 
 describe('Cswap', () => {
   test('lists through cswap, then answers from memory for ten minutes', async () => {
-    let now = 1_000;
-    const { run, calls } = createRunner([{ stdout: LIST }]);
-    const cswap = new Cswap({
-      run,
-      which: (name) => (name === 'cswap' ? '/bin/cswap' : null),
-      now: () => now,
+    const { run, calls } = createRunner(['cswap'], [{ stdout: LIST }]);
+    const userHome = createTempDir();
+    const { harness, list } = await createCswap(run, userHome);
+    await harness.setTime(1_000);
+    expect(await list()).toHaveLength(2);
+    await harness.adjust(10 * 60_000 - 1);
+    expect(await list()).toHaveLength(2);
+    expect(calls).toEqual([['cswap', 'list', '--json']]);
+    expect(harness.calls.at(-1)).toEqual({
+      command: ['cswap', 'list', '--json'],
+      cwd: userHome,
+      timeoutMs: 30_000,
     });
-    expect(await cswap.list()).toHaveLength(2);
-    now += 10 * 60_000 - 1;
-    expect(await cswap.list()).toHaveLength(2);
-    expect(calls).toEqual([{ command: ['/bin/cswap', 'list', '--json'], cwd: homedir(), timeoutMs: 30_000 }]);
-    now += 1;
-    await cswap.list();
+    await harness.adjust(1);
+    await list();
     expect(calls).toHaveLength(2);
   });
 
   test('without claude-swap installed there are no accounts', async () => {
-    const { run, calls } = createRunner([]);
-    const cswap = new Cswap({ run, which: () => null });
-    expect(await cswap.list()).toEqual([]);
+    const { run, calls } = createRunner([], []);
+    const { harness, list } = await createCswap(run);
+    expect(await list()).toEqual([]);
     expect(calls).toHaveLength(0);
+    expect(harness.calls.map((call) => call.command[0])).toEqual(['cswap', 'claude-swap']);
   });
 
   test('a failed list is logged and gives nothing', async () => {
     const logs = captureLogs();
     try {
-      const { run } = createRunner([{ ok: false, code: 2, stdout: LIST }]);
-      const cswap = new Cswap({ run, which: () => '/bin/cswap' });
-      expect(await cswap.list()).toEqual([]);
+      const { run } = createRunner(['cswap'], [{ ok: false, code: 2, stdout: LIST }]);
+      const { list } = await createCswap(run);
+      expect(await list()).toEqual([]);
       expect(logs.fieldsOf('[Accounts] claude-swap did not list its accounts')).toEqual([{ code: 2 }]);
     } finally {
       logs.restore();
     }
   });
 
-  test('a runner that breaks fails the list with its reason', async () => {
-    const cswap = new Cswap({
-      run: () => Promise.reject(new Error('cswap broke')),
-      which: () => '/bin/cswap',
-    });
-    await expect(cswap.list()).rejects.toMatchObject({ _tag: 'CswapListFailed', message: 'cswap broke' });
-  });
-
-  test('looks for cswap, then claude-swap, on PATH', async () => {
-    const which = spyOn(Bun, 'which').mockImplementation((name) =>
-      name === 'claude-swap' ? '/opt/claude-swap' : null
-    );
-    try {
-      const { run, calls } = createRunner([{ stdout: LIST }]);
-      await new Cswap({ run }).list();
-      expect(which.mock.calls.map(([name]) => name)).toEqual(['cswap', 'claude-swap']);
-      expect(calls[0]?.command[0]).toBe('/opt/claude-swap');
-    } finally {
-      which.mockRestore();
-    }
+  test('looks for cswap, then claude-swap', async () => {
+    const { run, calls } = createRunner(['claude-swap'], [{ stdout: LIST }]);
+    const { list } = await createCswap(run);
+    expect(await list()).toHaveLength(2);
+    expect(calls).toEqual([['claude-swap', 'list', '--json']]);
   });
 });

@@ -12,7 +12,6 @@ import { BodyInvalid, MembersFull, Revoked } from '@shinsa/core/remote/errors';
 import { Effect, Fiber, Layer, Redacted } from 'effect';
 import { FetchHttpClient } from 'effect/http';
 import { TestClock } from 'effect/testing';
-import { RemoteControl } from '../../../src/remote/client/index.ts';
 import { RemoteOrigin } from '../../../src/remote/client/schema.ts';
 import { RemoteClient } from '../../../src/remote/client/service.ts';
 import { type FakeControlPlane, refuse, startFakeControlPlane } from '../control-plane.ts';
@@ -76,7 +75,13 @@ function answer(plane: FakeControlPlane, path: string, body: unknown) {
 
 describe('the client for app.shinsa.dev', () => {
   test('defaults to app.shinsa.dev', () => {
-    expect(new RemoteControl().origin).toBe(REMOTE_APP_ORIGIN);
+    expect(
+      Effect.runSync(
+        Effect.gen(function* () {
+          return yield* RemoteOrigin;
+        })
+      )
+    ).toBe(REMOTE_APP_ORIGIN);
   });
 
   test('starts and polls pairing without a token', async () => {

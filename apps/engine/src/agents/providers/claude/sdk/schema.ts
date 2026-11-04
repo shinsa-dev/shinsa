@@ -5,8 +5,8 @@ import type { ExecutableResolver } from '../executable/schema.ts';
 export type QueryFn = typeof query;
 
 export interface ClaudeRuntime {
-  runQuery: QueryFn;
-  resolveExecutable: ExecutableResolver;
+  readonly runQuery: QueryFn;
+  readonly resolveExecutable: ExecutableResolver;
 }
 
 export class ClaudeSetupError extends Schema.TaggedError<

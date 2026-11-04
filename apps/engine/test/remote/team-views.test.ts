@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { chmodSync, existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { ShareMessage } from '@shinsa/core';
-import { TeamViewRecorder } from '../../src/remote/team-views/recorder.ts';
+import { createTeamViewRecorder, type TeamViewRecorder } from '../../src/remote/team-views/recorder.ts';
 import { TEAM_VIEWS_LIMIT } from '../../src/remote/team-views/schema.ts';
 import { createTempDir } from '../helpers/index.ts';
 import { captureLogs } from '../helpers/logs.ts';
@@ -33,7 +33,7 @@ const SIZE = Buffer.byteLength(JSON.stringify([view(5)]));
 
 describe('recording a teammate’s task view', () => {
   test('keeps the latest view and each file it lists, complete once every listed file came', () => {
-    const recorder = new TeamViewRecorder();
+    const recorder = createTeamViewRecorder();
     expect(recorder.messages()).toEqual([]);
     expect(recorder.isComplete).toBe(false);
     expect(record(recorder, [view(3, { diff: 'v1' })])).toEqual([true]);
@@ -50,7 +50,7 @@ describe('recording a teammate’s task view', () => {
   });
 
   test('leaves out a file past the size limit, and ignores what it cannot read', () => {
-    const recorder = new TeamViewRecorder(3);
+    const recorder = createTeamViewRecorder(3);
     record(recorder, [view(1, { big: 'v1', small: 'v1' })]);
     expect(record(recorder, file('big', 'v1', ['AA', 'BB']))).toEqual([false, false, false, false]);
     record(recorder, file('small', 'v1', ['A']));

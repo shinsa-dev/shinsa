@@ -1,11 +1,4 @@
-import type { Effect } from 'effect';
-import type { CommandResult } from '../../shell/index.ts';
-import type { OnboardingCallFailed, PrerequisiteId, PrerequisiteNeeds } from '../schema.ts';
-
-export interface PrerequisiteDefinition {
-  readonly run: (command: string[]) => Effect.Effect<CommandResult, OnboardingCallFailed>;
-  readonly needs: PrerequisiteNeeds;
-}
+import type { PrerequisiteId } from '../schema.ts';
 
 export const NOT_FOUND_CODE = 127;
 

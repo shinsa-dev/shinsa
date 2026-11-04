@@ -3,20 +3,27 @@ import { mkdirSync, realpathSync } from 'node:fs';
 import { join } from 'node:path';
 import { DomainError } from '@shinsa/core';
 import { Effect } from 'effect';
-import { createProjectChanges } from '../../src/projects/changes.ts';
-import { Engine } from '../../src/runtime/index.ts';
-import { EventLog } from '../../src/store/index.ts';
+import { listLocalRepoViews } from '../../src/projects/changes.ts';
+import { EngineStopped } from '../../src/runtime/engine/schema.ts';
+import { createConfigAt } from '../helpers/config.ts';
+import { Engine } from '../helpers/engine.ts';
+import { openEventLog, type TestEventLog } from '../helpers/event-log.ts';
 import { createGitRepo, createTempDir } from '../helpers/index.ts';
+import { createTestMachine } from '../helpers/machine.ts';
 
-const logs: EventLog[] = [];
+const logs: TestEventLog[] = [];
 
 afterEach(() => {
   for (const log of logs.splice(0)) log.close();
 });
 
+function createProjectChanges(engine: Engine, userHome: string) {
+  return createTestMachine(engine, createConfigAt(createTempDir(), { userHome })).projects;
+}
+
 async function setup() {
   const home = createTempDir();
-  const log = new EventLog(join(createTempDir(), 'events.db'));
+  const log = openEventLog(join(createTempDir(), 'events.db'));
   logs.push(log);
   const engine = new Engine(log);
   await engine.dispatch({
@@ -31,11 +38,7 @@ describe('a project’s repositories and folders', () => {
   test('a folder added on your behalf is logged as such, and adding it again changes nothing', async () => {
     const { home, engine, projectId } = await setup();
     mkdirSync(join(home, 'basket'));
-    const changes = createProjectChanges({
-      engine,
-      resolveLogin: () => Promise.resolve(null),
-      userHome: home,
-    });
+    const changes = createProjectChanges(engine, home);
     await Effect.runPromise(
       changes.upsertFolder(projectId, '~/basket', { onBehalf: true, byTask: 'task-1' })
     );
@@ -49,11 +52,7 @@ describe('a project’s repositories and folders', () => {
   test('a repository added on your behalf is registered as yours from that task, and records no action', async () => {
     const { home, engine, log, projectId } = await setup();
     const repo = await createGitRepo({ root: home, name: 'basket', remote: false });
-    const changes = createProjectChanges({
-      engine,
-      resolveLogin: () => Promise.resolve(null),
-      userHome: home,
-    });
+    const changes = createProjectChanges(engine, home);
     const { repo: added } = await Effect.runPromise(
       changes.upsertRepo(projectId, repo.path, { onBehalf: true, byTask: 'task-1' })
     );
@@ -69,36 +68,59 @@ describe('a project’s repositories and folders', () => {
     const { home, engine, projectId } = await setup();
     mkdirSync(join(home, 'shelf'));
     const broken = {
-      get state() {
-        return engine.state;
-      },
-      dispatch: () => Promise.reject(new Error('log closed')),
+      core: { ...engine.core, dispatch: () => Effect.fail(new EngineStopped({ message: 'log closed' })) },
     } as unknown as typeof engine;
-    const changes = createProjectChanges({
-      engine: broken,
-      resolveLogin: () => Promise.resolve(null),
-      userHome: home,
-    });
+    const changes = createProjectChanges(broken, home);
     const failure = await Effect.runPromise(Effect.flip(changes.upsertFolder(projectId, '~/shelf')));
-    expect(failure).toMatchObject({ _tag: 'ProjectChangeFailed', message: 'log closed' });
+    expect(failure).toMatchObject({ _tag: 'EngineStopped', message: 'log closed' });
   });
 
   test('a refusal from the engine passes through as its own error', async () => {
     const { home, engine, projectId } = await setup();
     mkdirSync(join(home, 'shelf'));
     const refusing = {
-      get state() {
-        return engine.state;
+      core: {
+        ...engine.core,
+        dispatch: () =>
+          Effect.fail(new DomainError({ code: 'project_not_found', message: 'No such project.' })),
       },
-      dispatch: () =>
-        Promise.reject(new DomainError({ code: 'project_not_found', message: 'No such project.' })),
     } as unknown as typeof engine;
-    const changes = createProjectChanges({
-      engine: refusing,
-      resolveLogin: () => Promise.resolve(null),
-      userHome: home,
-    });
+    const changes = createProjectChanges(refusing, home);
     const failure = await Effect.runPromise(Effect.flip(changes.upsertFolder(projectId, '~/shelf')));
     expect(failure).toMatchObject({ _tag: 'DomainError', code: 'project_not_found' });
+  });
+
+  test('a missing project and a path that is not a folder are refused', async () => {
+    const { home, engine, projectId } = await setup();
+    const changes = createProjectChanges(engine, home);
+    expect(await Effect.runPromise(Effect.flip(changes.upsertFolder('nope', '~/shelf')))).toMatchObject({
+      _tag: 'DomainError',
+      code: 'project_not_found',
+    });
+    expect(await Effect.runPromise(Effect.flip(changes.upsertFolder(projectId, 'relative')))).toMatchObject({
+      _tag: 'DomainError',
+      code: 'folder_invalid',
+    });
+  });
+
+  test('the local repositories are the registered ones and those in the chosen and project folders', async () => {
+    const { home, engine, projectId } = await setup();
+    const chosen = createTempDir();
+    const loose = await createGitRepo({ root: chosen, name: 'loose', remote: false });
+    const inside = await createGitRepo({ root: home, name: 'basket', remote: false });
+    await Effect.runPromise(createProjectChanges(engine, home).upsertFolder(projectId, home));
+    expect(
+      listLocalRepoViews(engine.state, [chosen]).map(({ name, repoId, projectId: id }) => [name, repoId, id])
+    ).toEqual([
+      ['basket', null, projectId],
+      ['loose', null, null],
+    ]);
+    const { repo } = await Effect.runPromise(
+      createProjectChanges(engine, home).upsertRepo(projectId, inside.path)
+    );
+    expect(listLocalRepoViews(engine.state, [chosen])).toEqual([
+      { path: repo.path, name: 'basket', repoId: repo.id, projectId },
+      { path: realpathSync(loose.path), name: 'loose', repoId: null, projectId: null },
+    ]);
   });
 });

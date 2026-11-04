@@ -4,10 +4,10 @@ import { Effect } from 'effect';
 import { findManifestFile } from '../../../files/manifest.ts';
 import { PACKAGE_MANIFEST } from '../../../files/schema.ts';
 import { BUNDLE, type ShinsaBundle } from '../../../instance/bundle.ts';
-import { edgeRuntime } from '../../../runtime/edge.ts';
 import { SDK_PACKAGE } from '../../../versions/schema.ts';
-import { type LocateDeps, locateProgram, readProgramVersion } from '../versions.ts';
-import { CLAUDE_EXECUTABLE_ENV, type ClaudeExecutable, type ExecutableDeps } from './executable/schema.ts';
+import { type LocateDeps, locateProgram } from '../versions.ts';
+import { ProgramVersions } from '../versions/service.ts';
+import { CLAUDE_EXECUTABLE_ENV, type ExecutableDeps } from './executable/schema.ts';
 import { resolveClaudeProgram } from './executable/service.ts';
 import { SdkManifestText } from './schema.ts';
 
@@ -35,20 +35,20 @@ export function parseClaudeVersion(output: string) {
 }
 
 export function readClaudeVersion(path: string) {
-  return readProgramVersion(path, parseClaudeVersion);
+  return ProgramVersions.use((versions) => versions.read(path, parseClaudeVersion));
 }
 
 export function locateClaude(deps: LocateDeps = {}) {
   return locateProgram('claude', CLAUDE_EXECUTABLE_ENV, deps);
 }
 
-export function resolveClaudeExecutable(deps: ExecutableDeps = {}): Promise<ClaudeExecutable> {
-  const readVersion = deps.readVersion ?? readClaudeVersion;
-  return edgeRuntime.runPromise(
-    resolveClaudeProgram({
-      location: locateClaude(deps),
-      readVersion: (path) => Effect.promise(() => readVersion(path)),
-      minimumVersion: Effect.sync(() => deps.minimumVersion ?? resolveSdkClaudeVersion()),
-    })
-  );
-}
+export const resolveClaudeExecutable = Effect.fn('ClaudeExecutable.resolveInstalled')(function* (
+  deps: ExecutableDeps = {}
+) {
+  const versions = yield* ProgramVersions;
+  return yield* resolveClaudeProgram({
+    location: locateClaude(deps),
+    readVersion: deps.readVersion ?? ((path) => versions.read(path, parseClaudeVersion)),
+    minimumVersion: Effect.sync(() => deps.minimumVersion ?? resolveSdkClaudeVersion()),
+  });
+});

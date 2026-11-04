@@ -1,21 +1,10 @@
-import type {
-  DomainError,
-  RemoteTeam,
-  ShinsaCommand,
-  ShinsaState,
-  TeamJoinStatus,
-  TeamSnapshot,
-  TeamView,
-} from '@shinsa/core';
+import type { DomainError, TeamJoinStatus, TeamView } from '@shinsa/core';
+import type { NotFound, NotOwner, OwnerCannotLeave, Revoked, TeamsFull } from '@shinsa/core/remote/errors';
 import { Schema } from 'effect';
 import type { Effect } from 'effect';
-import type { Engine } from '../../runtime/engine.ts';
-import type { TeamCalls, Token } from '../client/schema.ts';
-import type { Remote } from '../index.ts';
-import type { LiveShare, ShareChannelBroke, ShareChannelHandle } from '../share-channel/schema.ts';
-import type { Shares, ShareTranscripts } from '../shares.ts';
-import type { RemoteFile, ResolvedKey, StoredTeamKey, TeamGrant } from '../store/schema.ts';
-import type { TeamFeeds } from '../team-feeds.ts';
+import type { ChannelPeer } from '../channel/schema.ts';
+import type { RemoteUnreachable } from '../client/schema.ts';
+import type { ShareChannelHandle } from '../share-channel/schema.ts';
 
 export const TEAM_REFUSALS = {
   team: 'That machine has left this team.',
@@ -71,59 +60,40 @@ export interface TeamSubject {
   userId: string;
 }
 
-export interface TeamsOptions {
-  engine: Pick<Engine, 'state' | 'subscribe' | 'dispatch'>;
-  remote: Remote;
-  shares: Pick<Shares, 'resolveLive'>;
-  transcripts: Pick<ShareTranscripts, 'subscribe'>;
-  held?: Pick<TeamFeeds, 'listHeld' | 'subscribeHeld'>;
-  now?: () => number;
-  random?: (bytes: number) => Uint8Array<ArrayBuffer>;
-}
-
 export class TeamCommandFailed extends Schema.TaggedError<
   TeamCommandFailed,
   { readonly brand: unique symbol }
 >()('TeamCommandFailed', { message: Schema.String }) {}
-
-export class TeamHeartbeatFailed extends Schema.TaggedError<
-  TeamHeartbeatFailed,
-  { readonly brand: unique symbol }
->()('TeamHeartbeatFailed', { message: Schema.String }) {}
-
-interface TeamsStore {
-  readonly file: Effect.Effect<RemoteFile>;
-  readonly selectTeam: (teamId: string) => Effect.Effect<RemoteTeam | null>;
-  readonly selectTeamKey: (teamId: string) => Effect.Effect<StoredTeamKey | null>;
-  readonly selectGrant: (userId: string) => Effect.Effect<TeamGrant | null>;
-  readonly recordTeams: (teams: RemoteTeam[]) => Effect.Effect<void>;
-  readonly upsertTeamKey: (stored: StoredTeamKey) => Effect.Effect<void>;
-  readonly removeTeam: (teamId: string) => Effect.Effect<void>;
-  readonly resolveMachineKey: Effect.Effect<ResolvedKey, ShareChannelBroke>;
-  readonly resolveSigningKey: Effect.Effect<ResolvedKey, ShareChannelBroke>;
-}
-
-export interface TeamsDefinition {
-  readonly state: Effect.Effect<ShinsaState>;
-  readonly dispatch: (command: ShinsaCommand) => Effect.Effect<void, DomainError | TeamCommandFailed>;
-  readonly teams: TeamCalls;
-  readonly token: (machineToken: string) => Token;
-  readonly store: TeamsStore;
-  readonly publish: Effect.Effect<void>;
-  readonly requestHeartbeat: Effect.Effect<void, TeamHeartbeatFailed>;
-  readonly appOrigin: Effect.Effect<string>;
-  readonly isEnabled: Effect.Effect<boolean>;
-  readonly machineName: Effect.Effect<string>;
-  readonly acquireAccess: (onEnd: Effect.Effect<void>) => Effect.Effect<Effect.Effect<void>>;
-  readonly resolveTaskLive: (taskId: string) => Effect.Effect<LiveShare, ShareChannelBroke>;
-  readonly listHeld: (teamId: string) => Effect.Effect<TeamSnapshot[]>;
-  readonly now: Effect.Effect<number>;
-  readonly random: (bytes: number) => Effect.Effect<Uint8Array<ArrayBuffer>>;
-}
 
 export type TeamChannel = ShareChannelHandle<TeamSubject>;
 
 export interface TeamJoin {
   status: TeamJoinStatus;
   teamId: string;
+}
+
+type TeamFailure =
+  | DomainError
+  | TeamCommandFailed
+  | NotFound
+  | NotOwner
+  | OwnerCannotLeave
+  | Revoked
+  | TeamsFull
+  | RemoteUnreachable;
+
+export interface TeamsHandle {
+  create(name: string): Effect.Effect<string, TeamFailure>;
+  join(url: string): Effect.Effect<TeamJoin, TeamFailure>;
+  resolveJoinUrl(teamId: string): Effect.Effect<string, TeamFailure>;
+  renewInvite(teamId: string): Effect.Effect<void, TeamFailure>;
+  turnOffInvite(teamId: string): Effect.Effect<void, TeamFailure>;
+  acceptRequest(teamId: string, userId: string): Effect.Effect<void, TeamFailure>;
+  declineRequest(teamId: string, userId: string): Effect.Effect<void, TeamFailure>;
+  removeMember(teamId: string, userId: string): Effect.Effect<void, TeamFailure>;
+  leave(teamId: string): Effect.Effect<void, TeamFailure>;
+  remove(teamId: string): Effect.Effect<void, TeamFailure>;
+  readonly acceptsViewer: Effect.Effect<boolean>;
+  openChannel(peer: ChannelPeer, userId: string): Effect.Effect<TeamChannel>;
+  closeChannel(channel: TeamChannel): Effect.Effect<void>;
 }

@@ -2,9 +2,9 @@ import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { isDecisionGate, isTaskSettled, listOpenGates, resolveTaskShape } from '@shinsa/core';
-import { listDefaultProviders, ProviderRegistry } from '../../src/agents/providers/index.ts';
-import { EunoeServer } from '../../src/eunoe/index.ts';
 import { World } from '../e2e/harness.ts';
+import { openEunoe } from '../eunoe/harness.ts';
+import { buildDefaultProviders } from '../helpers/providers.ts';
 
 const FILES = {
   'package.json': JSON.stringify(
@@ -56,12 +56,12 @@ async function runShaped(label: string, request: string) {
 
 const started = Date.now();
 const elapsed = () => `${((Date.now() - started) / 1000).toFixed(0)}s`;
-const eunoe = new EunoeServer({ dir: join(mkdtempSync(join(tmpdir(), 'shinsa-live-eunoe-')), 'eunoe') });
+const eunoe = openEunoe({}, mkdtempSync(join(tmpdir(), 'shinsa-live-eunoe-')));
 const world = await World.create({
   live: true,
   checks: ['bun test'],
   files: FILES,
-  providers: () => new ProviderRegistry(listDefaultProviders(eunoe)),
+  providers: () => buildDefaultProviders({ eunoe: eunoe.server }),
 });
 
 function printEunoe() {
@@ -163,5 +163,5 @@ try {
   printEunoe();
   print(`total ${elapsed()}`);
   await world.dispose();
-  await eunoe.stop();
+  await eunoe.close();
 }

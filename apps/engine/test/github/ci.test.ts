@@ -1,7 +1,11 @@
 import { afterEach, describe, expect, test } from 'bun:test';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { isCheckWorkflow, RepoCiCache, readRepoCi } from '../../src/github/ci.ts';
+import type { Repo } from '@shinsa/core';
+import { Effect } from 'effect';
+import { RepoCiReader } from '../../src/github/ci/service.ts';
+import { isCheckWorkflow } from '../../src/github/ci/workflows.ts';
+import { runGit } from '../helpers/git.ts';
 import { createTempDir, overrideEnv } from '../helpers/index.ts';
 import { createRepo } from '../helpers/state.ts';
 
@@ -37,6 +41,9 @@ function useBrokenGitHub(failing: string) {
 }
 
 const repo = () => createRepo({ path: createTempDir() });
+
+const readRepoCi = (target: Repo, base: string) =>
+  runGit(RepoCiReader.use((reader) => reader.read(target, base)));
 
 const PULL_REQUEST_WORKFLOW = 'on:\n  pull_request:\n    branches: [main]\njobs: {}\n';
 
@@ -117,22 +124,30 @@ describe('reading whether a repository has CI', () => {
 describe('the cache', () => {
   test('reads a repository and base once', async () => {
     const github = useFakeGitHub({ workflows: { 'test.yml': PULL_REQUEST_WORKFLOW } });
-    const cache = new RepoCiCache();
     const app = repo();
-    expect(await cache.resolve(app, 'main')).toBe('workflows');
-    expect(await cache.resolve(app, 'main')).toBe('workflows');
-    expect(github.calls()).toHaveLength(3);
-    expect(await cache.resolve(app, 'develop')).toBe('workflows');
-    expect(github.calls()).toHaveLength(6);
+    await runGit(
+      Effect.gen(function* () {
+        const cache = yield* RepoCiReader;
+        expect(yield* cache.resolve(app, 'main')).toBe('workflows');
+        expect(yield* cache.resolve(app, 'main')).toBe('workflows');
+        expect(github.calls()).toHaveLength(3);
+        expect(yield* cache.resolve(app, 'develop')).toBe('workflows');
+        expect(github.calls()).toHaveLength(6);
+      })
+    );
   });
 
   test('a read stopped half way is not kept', async () => {
     useFakeGitHub();
-    const cache = new RepoCiCache();
     const stopped = new AbortController();
     stopped.abort();
     const app = repo();
-    expect(await cache.resolve(app, 'main', stopped.signal)).toBe('unknown');
-    expect(await cache.resolve(app, 'main')).toBe('none');
+    await runGit(
+      Effect.gen(function* () {
+        const cache = yield* RepoCiReader;
+        expect(yield* cache.resolve(app, 'main', stopped.signal)).toBe('unknown');
+        expect(yield* cache.resolve(app, 'main')).toBe('none');
+      })
+    );
   });
 });

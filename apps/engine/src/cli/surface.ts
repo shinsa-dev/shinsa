@@ -60,10 +60,10 @@ const runSpec = Effect.fn('Surface.runSpec')(function* (spec: SurfaceSpec, args:
   );
 });
 
-const routeSurface = Effect.fn('Surface.route')(function* (
+export const runSurface = Effect.fn('Surface.run')(function* (
   words: string[],
   io: SurfaceIo,
-  specs: SurfaceSpec[]
+  specs: SurfaceSpec[] = SURFACE
 ) {
   const [group = ''] = words;
   const found = selectSpec(words, specs);
@@ -83,8 +83,4 @@ const routeSurface = Effect.fn('Surface.route')(function* (
 
 export function isSurfaceGroup(word: string, specs: SurfaceSpec[] = SURFACE) {
   return listGroup(word, specs).length > 0;
-}
-
-export function runSurface(words: string[], io: SurfaceIo, specs: SurfaceSpec[] = SURFACE): Promise<number> {
-  return Effect.runPromise(routeSurface(words, io, specs));
 }

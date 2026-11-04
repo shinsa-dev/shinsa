@@ -1,14 +1,31 @@
 import { describe, expect, test } from 'bun:test';
 import { FEEDBACK_LIMITS } from '@shinsa/core';
-import { createFeedbackDrafter, describeFeedbackPrompt } from '../../src/feedback/draft.ts';
+import { Effect, Layer } from 'effect';
+import type { QuickJson } from '../../src/agents/quick/schema.ts';
+import { QuickCalls } from '../../src/agents/quick/service.ts';
+import { describeFeedbackPrompt } from '../../src/feedback/draft/prompt.ts';
+import { FeedbackDrafter } from '../../src/feedback/draft/service.ts';
 
 function createAsk(answer: unknown) {
   const calls: { system: string; prompt: string; schema: unknown }[] = [];
-  const ask = <T>(system: string, prompt: string, schema?: unknown) => {
-    calls.push({ system, prompt, schema });
-    return Promise.resolve(answer as T | null);
-  };
+  const ask: QuickJson = <T>(system: string, prompt: string, schema?: unknown) =>
+    Effect.sync(() => {
+      calls.push({ system, prompt, schema });
+      return answer as T | null;
+    });
   return { ask, calls };
+}
+
+function draft(ask: QuickJson, input = INPUT) {
+  return Effect.runPromise(
+    FeedbackDrafter.use((drafter) => drafter.draft(input)).pipe(
+      Effect.provide(
+        FeedbackDrafter.layer.pipe(
+          Layer.provide(Layer.succeed(QuickCalls, QuickCalls.of({ classify: ask, write: ask })))
+        )
+      )
+    )
+  );
 }
 
 const INPUT = {
@@ -24,7 +41,7 @@ describe('drafting feedback as a public issue', () => {
       title: ' Plan tab hides changes \nmore',
       body: ' The plan tab hides the changes. ',
     });
-    expect(await createFeedbackDrafter(ask)(INPUT)).toEqual({
+    expect(await draft(ask)).toEqual({
       title: 'Plan tab hides changes',
       body: 'The plan tab hides the changes.',
     });
@@ -59,17 +76,12 @@ describe('drafting feedback as a public issue', () => {
   });
 
   test('gives no draft when the writer gave nothing, an empty field or one too long', async () => {
-    const draft = (answer: unknown) => createFeedbackDrafter(createAsk(answer).ask)(INPUT);
-    expect(await draft(null)).toBeNull();
-    expect(await draft({ title: '  ', body: 'Body.' })).toBeNull();
-    expect(await draft({ title: 3, body: 'Body.' })).toBeNull();
-    expect(await draft({ title: 'x'.repeat(FEEDBACK_LIMITS.title + 1), body: 'Body.' })).toBeNull();
-    expect(await draft({ title: 'Title', body: 'x'.repeat(FEEDBACK_LIMITS.draft + 1) })).toBeNull();
-    expect(await draft({ title: 'Title', body: 7 })).toBeNull();
-  });
-
-  test('fails with the reason when the writer cannot be reached', async () => {
-    const ask = () => Promise.reject(new Error('writer offline'));
-    await expect(createFeedbackDrafter(ask)(INPUT)).rejects.toThrow('writer offline');
+    const answer = (value: unknown) => draft(createAsk(value).ask);
+    expect(await answer(null)).toBeNull();
+    expect(await answer({ title: '  ', body: 'Body.' })).toBeNull();
+    expect(await answer({ title: 3, body: 'Body.' })).toBeNull();
+    expect(await answer({ title: 'x'.repeat(FEEDBACK_LIMITS.title + 1), body: 'Body.' })).toBeNull();
+    expect(await answer({ title: 'Title', body: 'x'.repeat(FEEDBACK_LIMITS.draft + 1) })).toBeNull();
+    expect(await answer({ title: 'Title', body: 7 })).toBeNull();
   });
 });

@@ -10,19 +10,19 @@ import {
 } from '@shinsa/core';
 import { Effect, Result } from 'effect';
 import { createReadOnlyError } from '../instance/index.ts';
-import type { Engine } from '../runtime/engine.ts';
-import { type Classifier, routeUserCommand } from '../triage/message.ts';
-import { requestPromise, resolveRequestFailure } from './failures.ts';
+import type { EngineCore } from '../runtime/engine/service.ts';
+import type { CommandRouter } from '../triage/index.ts';
+import { resolveRequestFailure } from './failures.ts';
 
 export interface UserCommandSource {
   readonly clientId: string | null;
-  readonly classify: Classifier | null;
+  readonly router: CommandRouter['Service'] | null;
   readonly origin: RequestOrigin;
   readonly guest: GuestActor | null;
 }
 
 export const dispatchUserCommand = Effect.fn('dispatchUserCommand')(function* (
-  engine: Engine,
+  engine: EngineCore['Service'],
   body: unknown,
   source: UserCommandSource
 ) {
@@ -35,20 +35,20 @@ export const dispatchUserCommand = Effect.fn('dispatchUserCommand')(function* (
     return yield* Effect.fail(
       resolveRequestFailure(new DomainError({ code: LOCAL_ONLY_CODE, message: refusal }))
     );
-  const outside = source.guest ? resolveScopedRefusal(engine.state, source.guest.taskId, command) : null;
+  const outside = source.guest
+    ? resolveScopedRefusal(yield* engine.state, source.guest.taskId, command)
+    : null;
   if (outside)
     return yield* Effect.fail(
       resolveRequestFailure(new DomainError({ code: SCOPE_REFUSAL_CODE, message: outside }))
     );
-  const events = yield* requestPromise(() =>
-    routeUserCommand(
-      engine,
-      command,
-      source.clientId ? `client:${source.clientId}` : null,
-      source.classify,
-      source.guest ? { guest: source.guest } : {}
-    )
-  );
+  const id = source.clientId ? `client:${source.clientId}` : null;
+  const from = source.guest ? { guest: source.guest } : {};
+  const events = yield* (
+    source.router
+      ? source.router.route(command, id, from)
+      : engine.dispatch(command, id ? { ...from, id } : from)
+  ).pipe(Effect.mapError(resolveRequestFailure));
   const created = events.find((event) => event.type === 'task.created');
   return created?.type === 'task.created' ? created.taskId : null;
 });

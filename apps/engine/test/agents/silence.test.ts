@@ -1,11 +1,12 @@
 import { describe, expect, test } from 'bun:test';
 import type { ShinsaCommand } from '@shinsa/core';
 import { Exit, Scope } from 'effect';
-import { Transcripts, watchSilence } from '../../src/agents/index.ts';
-import { edgeRuntime } from '../../src/runtime/edge.ts';
+import { watchSilence } from '../../src/agents/index.ts';
 import { createTempDir, until } from '../helpers/index.ts';
 import { captureLogs } from '../helpers/logs.ts';
+import { testRuntime } from '../helpers/runtime.ts';
 import { createGate, createRun, createStubEngine } from '../helpers/state.ts';
+import { createSyncTranscripts } from '../helpers/transcripts.ts';
 
 const MINUTE = 60_000;
 
@@ -19,15 +20,17 @@ function setup(now: { value: number }) {
       silence: { since: 0, snoozedUntil: null, dismissed: false },
     });
   });
-  const transcripts = new Transcripts(createTempDir());
+  const transcripts = createSyncTranscripts(createTempDir());
   const start = (intervalMs = 60_000) => {
     const scope = Scope.makeUnsafe();
-    const handle = edgeRuntime.runSync(
-      watchSilence(stub.engine, transcripts, { now: () => now.value, intervalMs }).pipe(Scope.provide(scope))
+    const handle = testRuntime.runSync(
+      watchSilence(stub.engine.core, transcripts.service, { now: () => now.value, intervalMs }).pipe(
+        Scope.provide(scope)
+      )
     );
     return {
-      check: () => edgeRuntime.runPromise(handle.check),
-      stop: () => edgeRuntime.runPromise(Scope.close(scope, Exit.void)),
+      check: () => testRuntime.runPromise(handle.check),
+      stop: () => testRuntime.runPromise(Scope.close(scope, Exit.void)),
     };
   };
   return { ...stub, transcripts, start };

@@ -1,12 +1,6 @@
 import type { SpawnedProcess, SpawnOptions } from '@anthropic-ai/claude-agent-sdk';
 import type { Effect } from 'effect';
 
-export interface ClaudeProcess {
-  spawn: (options: SpawnOptions) => SpawnedProcess;
-  readStderr: () => string;
-  terminate: () => Promise<void>;
-}
-
 export interface ClaudeProcessDefinition {
   readonly onSpawn: (pid: number) => Effect.Effect<void>;
 }

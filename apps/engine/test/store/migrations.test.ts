@@ -3,10 +3,10 @@ import { describe, expect, test } from 'bun:test';
 import { join } from 'node:path';
 import { Effect } from 'effect';
 import { SqlClient } from 'effect/sql';
-import { Engine } from '../../src/runtime/engine.ts';
-import { EventLog } from '../../src/store/index.ts';
 import { LOG_MIGRATIONS, resolveLogVersion } from '../../src/store/migrations/list.ts';
 import { LOG_BASELINE, type LogMigration, LogVersionError } from '../../src/store/migrations/schema.ts';
+import { Engine } from '../helpers/engine.ts';
+import { openEventLog } from '../helpers/event-log.ts';
 import { commitEvents, createTempDir } from '../helpers/index.ts';
 
 function createLogPath() {
@@ -21,7 +21,7 @@ function readVersion(path: string) {
 }
 
 function writeLog(path: string, version: number) {
-  const log = new EventLog(path);
+  const log = openEventLog(path);
   commitEvents(log, [{ type: 'project.removed', projectId: 'a' }], [], 0, 1);
   log.close();
   const db = new Database(path);
@@ -50,7 +50,7 @@ describe('event log migrations', () => {
 
   test('a new log is stamped with the current version and needs nothing', () => {
     const path = createLogPath();
-    const log = new EventLog(path);
+    const log = openEventLog(path);
     expect(log.migrate()).toEqual([]);
     expect(() => log.assertCurrent()).not.toThrow();
     log.close();
@@ -60,14 +60,14 @@ describe('event log migrations', () => {
   test('a log that already holds events is never stamped on open', () => {
     const path = createLogPath();
     writeLog(path, 0);
-    new EventLog(path).close();
+    openEventLog(path).close();
     expect(readVersion(path)).toBe(0);
   });
 
   test.each([0, 7, LOG_BASELINE - 1])('a log at version %i is refused, never rewritten', (version) => {
     const path = createLogPath();
     writeLog(path, version);
-    const log = new EventLog(path);
+    const log = openEventLog(path);
     const refusal = new LogVersionError({
       message: `This event log is at version ${version}, from a Shinsa older than any this one reads (${LOG_BASELINE} and later). Move the data folder aside and start Shinsa again to begin a new log.`,
       version,
@@ -84,7 +84,7 @@ describe('event log migrations', () => {
   test('pending migrations run in order once, drop the snapshot and raise the version', () => {
     const path = createLogPath();
     writeLog(path, LOG_BASELINE);
-    const log = new EventLog(path);
+    const log = openEventLog(path);
     log.writeSnapshot({ seq: 1, version: 'v', payload: '{}', problems: [] }, 1);
     expect(log.migrate(TWO_MIGRATIONS)).toEqual(['rename-b', 'rename-c']);
     expect(log.readEvents().events).toEqual([{ type: 'project.removed', projectId: 'c', seq: 1, at: 1 }]);
@@ -97,7 +97,7 @@ describe('event log migrations', () => {
   test('a log part of the way there runs only the migrations after its version', () => {
     const path = createLogPath();
     writeLog(path, LOG_BASELINE + 1);
-    const log = new EventLog(path);
+    const log = openEventLog(path);
     expect(log.migrate(TWO_MIGRATIONS)).toEqual(['rename-c']);
     log.close();
   });
@@ -105,7 +105,7 @@ describe('event log migrations', () => {
   test('a migration that fails leaves the log as it was', () => {
     const path = createLogPath();
     writeLog(path, LOG_BASELINE);
-    const log = new EventLog(path);
+    const log = openEventLog(path);
     const failing: LogMigration = {
       name: 'broken',
       migrate: Effect.die(new Error('broken')),
@@ -119,7 +119,7 @@ describe('event log migrations', () => {
   test('inspect mode refuses a log that still needs migrating', () => {
     const path = createLogPath();
     writeLog(path, LOG_BASELINE);
-    const log = new EventLog(path);
+    const log = openEventLog(path);
     expect(() => log.assertCurrent(TWO_MIGRATIONS)).toThrow(
       new LogVersionError({
         message: `This event log is at version ${LOG_BASELINE} and needs migrating to version ${LOG_BASELINE + 2}. Open it once with a Shinsa that can write to it, then inspect it again.`,
@@ -133,7 +133,7 @@ describe('event log migrations', () => {
   test('a log a newer Shinsa wrote opens as it is', () => {
     const path = createLogPath();
     writeLog(path, LOG_BASELINE + 5);
-    const log = new EventLog(path);
+    const log = openEventLog(path);
     expect(log.migrate()).toEqual([]);
     expect(() => log.assertCurrent()).not.toThrow();
     expect(new Engine(log, { readOnly: true }).state.seq).toBe(1);

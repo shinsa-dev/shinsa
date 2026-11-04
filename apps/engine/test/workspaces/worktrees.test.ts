@@ -1,14 +1,14 @@
 import { describe, expect, test } from 'bun:test';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { runCommand } from '../../src/shell/index.ts';
-import { WorktreeStrategy } from '../../src/workspaces/worktrees.ts';
 import { createGitRepo, createTempDir, git, writeFiles } from '../helpers/index.ts';
+import { runCommand } from '../helpers/shell.ts';
 import { createRound, createTask } from '../helpers/state.ts';
+import { openStrategy } from './harness.ts';
 
 async function startTask() {
   const made = await createGitRepo();
-  const strategy = new WorktreeStrategy(createTempDir());
+  const strategy = openStrategy('worktrees', createTempDir());
   const checkout = await strategy.prepare(made.repo, createTask({ worktreePath: null }));
   const task = createTask({ worktreePath: checkout.path, branch: checkout.branch, workspace: 'worktrees' });
   return { ...made, strategy, checkout, task };

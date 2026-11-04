@@ -3,13 +3,12 @@ import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
-import { Transcripts } from '../../apps/engine/src/agents/index.ts';
-import { ConfigStore, resolveConfig } from '../../apps/engine/src/config/index.ts';
-import { startServer } from '../../apps/engine/src/http/index.ts';
-import { createRefusedConnector, REMOTE_FILE, Remote } from '../../apps/engine/src/remote/index.ts';
-import { Roots } from '../../apps/engine/src/repos/index.ts';
-import { Engine } from '../../apps/engine/src/runtime/index.ts';
-import { EventLog, EvidenceStore, resolveStateVersion } from '../../apps/engine/src/store/index.ts';
+import { REMOTE_FILE } from '../../apps/engine/src/remote/index.ts';
+import { resolveStateVersion } from '../../apps/engine/src/store/index.ts';
+import { resolveConfig } from '../../apps/engine/test/helpers/config.ts';
+import { Engine } from '../../apps/engine/test/helpers/engine.ts';
+import { openEventLog } from '../../apps/engine/test/helpers/event-log.ts';
+import { createTestEvidence } from '../../apps/engine/test/helpers/evidence.ts';
 import { openRemoteChannel } from '../../apps/web/src/lib/remote/channel.ts';
 import type { RemoteChannel } from '../../apps/web/src/lib/remote/remote-channel/schema.ts';
 import {
@@ -23,7 +22,9 @@ import {
   serializeBase64Url,
   serializePublicKey,
 } from '../../packages/core/src/index.ts';
-import { createIdleOnboarding } from '../kit/onboarding.ts';
+import { startRemoteMachine } from '../kit/remote.ts';
+import { startIdleServer } from '../kit/server.ts';
+import { createTranscripts } from '../kit/transcripts.ts';
 import {
   type ConnectSample,
   parseQuickTunnelUrl,
@@ -100,7 +101,7 @@ async function writeRemoteFile(dataDir: string, connectKey: string) {
   return device;
 }
 
-function startEngine(dataDir: string) {
+async function startEngine(dataDir: string) {
   const config = resolveConfig({
     ...Bun.env,
     SHINSA_DATA_DIR: dataDir,
@@ -110,29 +111,23 @@ function startEngine(dataDir: string) {
   for (const dir of [config.worktreesDir, config.evidenceDir, config.transcriptsDir])
     mkdirSync(dir, { recursive: true });
   const started = performance.now();
-  const engine = new Engine(new EventLog(config.databasePath), { stateVersion: resolveStateVersion() });
+  const engine = new Engine(openEventLog(config.databasePath), { stateVersion: resolveStateVersion() });
   const bootMs = performance.now() - started;
-  const store = new ConfigStore(config.configPath);
-  const roots = new Roots(config.roots, store, config.userHome, () =>
-    Promise.resolve({ candidates: [], truncated: false, refused: [] })
-  );
-  const remote = new Remote({
-    path: join(dataDir, REMOTE_FILE),
-    connector: createRefusedConnector('The bench runs its own tunnel.'),
-    localUrl: () => 'http://127.0.0.1',
+  const remote = await startRemoteMachine({
+    engine,
+    config,
+    refusal: 'The bench runs its own tunnel.',
+    localUrl: 'http://127.0.0.1',
     version: 'bench',
     maxBodyBytes: 32 * 1024 * 1024,
     machineName: 'Bench',
-    openUrl: () => Promise.resolve(),
   });
-  const http = startServer({
+  const http = startIdleServer({
     engine,
     config,
-    transcripts: new Transcripts(config.transcriptsDir),
-    evidence: new EvidenceStore(config.evidenceDir),
-    models: { listModels: () => Promise.resolve([]) } as never,
-    onboarding: createIdleOnboarding({ engine, config, store, roots }),
-    remote,
+    transcripts: createTranscripts(config.transcriptsDir),
+    evidence: createTestEvidence(config.evidenceDir),
+    ...remote.services,
   });
   return { engine, remote, http, port: http.server.port ?? 0, bootMs };
 }
@@ -364,11 +359,11 @@ async function runRemoteBench(): Promise<RemoteReport & { bootMs: number }> {
   copyLog(args.source, dataDir);
   const connectKey = serializeBase64Url(crypto.getRandomValues(new Uint8Array(32)));
   const device = await writeRemoteFile(dataDir, connectKey);
-  const machine = startEngine(dataDir);
+  const machine = await startEngine(dataDir);
   const target: BenchMachine = {
     connectKey,
     device,
-    machineKey: (await machine.remote.store.resolveMachineKey()).publicKey,
+    machineKey: await machine.remote.resolveMachineKey(),
   };
   console.error(`Engine up on :${machine.port} after ${Math.round(machine.bootMs)} ms.`);
   let cloud: RemoteReport['cloud'] = null;
@@ -385,7 +380,7 @@ async function runRemoteBench(): Promise<RemoteReport & { bootMs: number }> {
       tunnel.stop();
     }
   }
-  void machine.http.server.stop(true);
+  await machine.http.stop();
   machine.engine.stop();
   return { cloud, tunnels, routes: routes.map(summarizeRoute), bootMs: machine.bootMs };
 }

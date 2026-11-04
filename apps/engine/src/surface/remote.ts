@@ -1,7 +1,11 @@
-import { type AccessRequest, DomainError, type RemoteUser } from '@shinsa/core';
+import {
+  type AccessRequest,
+  DomainError,
+  type RemoteDevice,
+  type RemoteSnapshot,
+  type RemoteUser,
+} from '@shinsa/core';
 import { DateTime, Effect } from 'effect';
-import type { RemoteSnapshot } from '../remote/index.ts';
-import type { RemoteDevice } from '../remote/store.ts';
 import type { SurfaceClient } from './client.ts';
 import { defineAction, defineRead, readValue, type SurfaceSpec } from './spec.ts';
 

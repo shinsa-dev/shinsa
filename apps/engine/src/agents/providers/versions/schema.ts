@@ -1,5 +1,4 @@
-import { Duration, type Effect } from 'effect';
-import type { Shell } from '../../../shell/service.ts';
+import { Duration } from 'effect';
 
 export interface ProgramLocation {
   path: string | null;
@@ -16,10 +15,6 @@ export type VersionParser = (output: string) => string | null;
 export interface CachedVersion {
   readonly modifiedAt: number;
   readonly version: string | null;
-}
-
-export interface ProgramVersionsHandle {
-  readonly read: (path: string, parse: VersionParser) => Effect.Effect<string | null, never, Shell>;
 }
 
 export const VERSION_TIMEOUT = Duration.seconds(15);

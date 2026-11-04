@@ -9,7 +9,6 @@ import {
   resolveDelegationStatus,
   resolveTaskProject,
   selectProjectByReference,
-  type ShinsaCommand,
   type ShinsaState,
   serializeReference,
   type Task,
@@ -19,21 +18,19 @@ import {
   validateDelegationRequest,
   validateSplit,
 } from '@shinsa/core';
-import { Effect } from 'effect';
+import { Duration, Effect } from 'effect';
 import { describeError } from '../../../log/index.ts';
-import { assertToolInput, requestToolCall } from '../attempts.ts';
+import { assertToolInput } from '../attempts.ts';
 import { findForkSource } from '../forks.ts';
 import { ToolCallFailed } from '../schema.ts';
 import { DEFAULT_ROLE, type OrchestrationCall } from './schema.ts';
 
-export function handleOrchestrationTool(
+export const handleOrchestrationTool = Effect.fn('OrchestrationTool.handle')(function* (
   name: string,
   input: Record<string, unknown>,
   call: OrchestrationCall
-): Promise<string | null> {
+) {
   const refuse = (message: string) => new ToolCallFailed({ message });
-
-  const dispatch = (command: ShinsaCommand, id?: string) => requestToolCall(() => call.dispatch(command, id));
 
   const resolveDefaultRole = (parent: Run): DelegateRole =>
     parent.purpose === 'plan' ? 'planner' : DEFAULT_ROLE[parent.role];
@@ -42,13 +39,13 @@ export function handleOrchestrationTool(
     requestKey === null ? undefined : `agent:${call.runId}:${call.attemptId}:${tool}:${requestKey}`;
 
   const findParent = Effect.fn('OrchestrationTool.findParent')(function* () {
-    const run = call.state().runs[call.runId];
+    const run = (yield* call.state).runs[call.runId];
     if (!run) return yield* refuse('This run no longer exists. End your turn.');
     return run;
   });
 
   const findChild = Effect.fn('OrchestrationTool.findChild')(function* (delegationId: string) {
-    const child = call.state().runs[delegationId];
+    const child = (yield* call.state).runs[delegationId];
     if (!child || !isDelegatedRun(child) || child.delegation.parentRunId !== call.runId) {
       return yield* refuse(
         `You started no delegation ${delegationId}. Use the delegation_id that delegate_task returned.`
@@ -58,7 +55,7 @@ export function handleOrchestrationTool(
   });
 
   const findTaskOf = Effect.fn('OrchestrationTool.findTaskOf')(function* (run: Run) {
-    const task = call.state().tasks[run.taskId];
+    const task = (yield* call.state).tasks[run.taskId];
     if (!task) return yield* refuse('This task no longer exists. End your turn.');
     return task;
   });
@@ -91,18 +88,18 @@ export function handleOrchestrationTool(
   };
 
   const readStatus = Effect.fn('OrchestrationTool.readStatus')(function* (child: DelegatedRun) {
-    yield* dispatch({
+    yield* call.dispatch({
       type: 'agent.acknowledge_delegation',
       runId: call.runId,
       attemptId: call.attemptId,
       childRunId: child.id,
     });
     const seen = yield* findChild(child.id);
-    return serializeStatus(call.state(), seen);
+    return serializeStatus(yield* call.state, seen);
   });
 
-  const selectRequested = (requestKey: string) =>
-    listChildRuns(call.state(), call.runId).find((child) => child.delegation.requestKey === requestKey);
+  const selectRequested = (state: ShinsaState, requestKey: string) =>
+    listChildRuns(state, call.runId).find((child) => child.delegation.requestKey === requestKey);
 
   const listLinks = (tasks: Task[]) =>
     tasks.map((task) => `- [${task.title}](${serializeReference({ kind: 'task', id: task.id })})`).join('\n');
@@ -116,12 +113,9 @@ export function handleOrchestrationTool(
       );
     }
     const requestKey = request.requestKey ?? call.requestKey;
-    const known = selectRequested(requestKey);
-    const baseCommit =
-      request.isolation === 'worktree' && !known
-        ? yield* requestToolCall(() => call.resolveBaseCommit())
-        : null;
-    yield* dispatch(
+    const known = selectRequested(yield* call.state, requestKey);
+    const baseCommit = request.isolation === 'worktree' && !known ? yield* call.resolveBaseCommit : null;
+    yield* call.dispatch(
       {
         type: 'agent.delegate',
         runId: call.runId,
@@ -138,16 +132,18 @@ export function handleOrchestrationTool(
       },
       resolveCommandId('delegate', request.requestKey)
     );
-    const child = selectRequested(requestKey);
+    const child = selectRequested(yield* call.state, requestKey);
     if (!child) return yield* refuse('Nothing was delegated. Try again.');
-    if (!known) call.recordStarted(child.id);
-    if (request.mode === 'async') return serializeStatus(call.state(), child);
-    const outcome = yield* requestToolCall(() =>
-      call.awaitDelegation(child.id, request.timeoutMinutes * call.minuteMs, call.signal)
+    if (!known) yield* call.recordStarted(child.id);
+    if (request.mode === 'async') return serializeStatus(yield* call.state, child);
+    const outcome = yield* call.awaitDelegation(
+      child.id,
+      Duration.times(call.minute, request.timeoutMinutes),
+      call.signal
     );
     if (outcome !== 'timeout') return yield* readStatus(yield* findChild(child.id));
-    yield* dispatch({ type: 'delegation.wake_policy', runId: child.id, wake: 'always' });
-    return serializeStatus(call.state(), yield* findChild(child.id), true);
+    yield* call.dispatch({ type: 'delegation.wake_policy', runId: child.id, wake: 'always' });
+    return serializeStatus(yield* call.state, yield* findChild(child.id), true);
   });
 
   const readDelegation = Effect.fn('OrchestrationTool.readDelegation')(function* () {
@@ -158,19 +154,19 @@ export function handleOrchestrationTool(
   const cancelDelegation = Effect.fn('OrchestrationTool.cancelDelegation')(function* () {
     const { delegationId } = yield* assertToolInput(validateDelegationReference(input));
     yield* findChild(delegationId);
-    yield* dispatch({
+    yield* call.dispatch({
       type: 'agent.cancel_delegation',
       runId: call.runId,
       attemptId: call.attemptId,
       childRunId: delegationId,
     });
-    return serializeStatus(call.state(), yield* findChild(delegationId));
+    return serializeStatus(yield* call.state, yield* findChild(delegationId));
   });
 
   const answerDelegation = Effect.fn('OrchestrationTool.answerDelegation')(function* () {
     const { delegationId, answer } = yield* assertToolInput(validateDelegationAnswer(input));
     yield* findChild(delegationId);
-    yield* dispatch({
+    yield* call.dispatch({
       type: 'agent.answer_delegation',
       runId: call.runId,
       attemptId: call.attemptId,
@@ -181,15 +177,15 @@ export function handleOrchestrationTool(
   });
 
   const findProjectId = Effect.fn('OrchestrationTool.findProjectId')(function* (reference: string) {
-    const projects = Object.values(call.state().projects);
+    const projects = Object.values((yield* call.state).projects);
     const project = selectProjectByReference(projects, reference);
     if (project) return project.id;
     const known = projects.map((candidate) => `${candidate.name} (${candidate.key})`);
     return yield* refuse(`There is no project "${reference}". Known: ${known.join(', ') || 'none'}.`);
   });
 
-  const selectKnownRepo = (repoName: string, projectId: string | null, named: boolean) =>
-    Object.values(call.state().repos).find(
+  const selectKnownRepo = (state: ShinsaState, repoName: string, projectId: string | null, named: boolean) =>
+    Object.values(state.repos).find(
       (candidate) => candidate.name === repoName && (!named || candidate.projectId === projectId)
     ) ?? null;
 
@@ -202,7 +198,7 @@ export function handleOrchestrationTool(
         'This task belongs to no project, so there is no folder to create the repository in. Name one with project.'
       );
     }
-    return yield* requestToolCall(() => call.createRepo(projectId, repoName));
+    return yield* call.createRepo(projectId, repoName);
   });
 
   const resolveRepo = Effect.fn('OrchestrationTool.resolveRepo')(function* (
@@ -211,8 +207,8 @@ export function handleOrchestrationTool(
     projectId: string | null
   ) {
     const found =
-      selectKnownRepo(repoName, projectId, request.project !== null) ??
-      (yield* requestToolCall(() => call.registerRepo(projectId, repoName)));
+      selectKnownRepo(yield* call.state, repoName, projectId, request.project !== null) ??
+      (yield* call.registerRepo(projectId, repoName));
     if (found || !request.newRepository) return found;
     return yield* createNewRepo(projectId, repoName);
   });
@@ -228,7 +224,7 @@ export function handleOrchestrationTool(
         return yield* refuse('Set repository to the name of the repository to create.');
       return null;
     }
-    const state = call.state();
+    const state = yield* call.state;
     const repo = yield* resolveRepo(request, repoName, projectId);
     if (!repo) {
       const known = Object.values(state.repos).map((candidate) => candidate.name);
@@ -241,8 +237,9 @@ export function handleOrchestrationTool(
 
   const resolveForkOf = Effect.fn('OrchestrationTool.resolveForkOf')(function* (reference: string | null) {
     if (reference === null) return {};
+    const state = yield* call.state;
     const forkOf = yield* Effect.try({
-      try: () => findForkSource(call.state(), reference),
+      try: () => findForkSource(state, reference),
       catch: (error) => refuse(describeError(error)),
     });
     return { forkOf };
@@ -254,10 +251,10 @@ export function handleOrchestrationTool(
     const requestKey = request.requestKey ?? call.requestKey;
     const projectId = request.project
       ? yield* findProjectId(request.project)
-      : resolveTaskProject(call.state(), source);
+      : resolveTaskProject(yield* call.state, source);
     const repoId = yield* resolveRepoId(source, request, projectId);
     const forkOf = yield* resolveForkOf(request.forkFrom);
-    yield* dispatch(
+    yield* call.dispatch(
       {
         type: 'agent.create_task',
         runId: call.runId,
@@ -274,7 +271,7 @@ export function handleOrchestrationTool(
       },
       resolveCommandId('create_task', request.requestKey)
     );
-    const created = Object.values(call.state().tasks).filter(
+    const created = Object.values((yield* call.state).tasks).filter(
       (task) => task.createdBy?.taskId === source.id && task.createdBy.requestKey === requestKey
     );
     return `Created. Link it for the human with:\n${listLinks(created)}`;
@@ -283,38 +280,34 @@ export function handleOrchestrationTool(
   const splitPlan = Effect.fn('OrchestrationTool.splitPlan')(function* () {
     const request = yield* assertToolInput(validateSplit(input));
     const parent = yield* findParent();
-    yield* dispatch({
+    yield* call.dispatch({
       type: 'agent.split_task',
       runId: call.runId,
       attemptId: call.attemptId,
       requests: request.requests,
       thisWaits: request.thisTaskWaits,
     });
-    const state = call.state();
+    const state = yield* call.state;
     const task = yield* findTaskOf(parent);
     const split = task.splits?.find((entry) => entry.planVersion === (task.plan?.version ?? 0));
     const tasks = (split?.taskIds ?? []).flatMap((id) => state.tasks[id] ?? []);
     return `The plan is split into these tasks. Link them for the human with:\n${listLinks(tasks)}`;
   });
 
-  const handle = Effect.fn('OrchestrationTool.handle')(function* () {
-    switch (name) {
-      case 'delegate_task':
-        return yield* delegateTask();
-      case 'delegation_status':
-        return yield* readDelegation();
-      case 'delegation_cancel':
-        return yield* cancelDelegation();
-      case 'delegation_answer':
-        return yield* answerDelegation();
-      case 'create_task':
-        return yield* createCourier();
-      case 'split_task':
-        return yield* splitPlan();
-      default:
-        return null;
-    }
-  });
-
-  return Effect.runPromise(handle());
-}
+  switch (name) {
+    case 'delegate_task':
+      return yield* delegateTask();
+    case 'delegation_status':
+      return yield* readDelegation();
+    case 'delegation_cancel':
+      return yield* cancelDelegation();
+    case 'delegation_answer':
+      return yield* answerDelegation();
+    case 'create_task':
+      return yield* createCourier();
+    case 'split_task':
+      return yield* splitPlan();
+    default:
+      return null;
+  }
+});

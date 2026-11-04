@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, test } from 'bun:test';
+import { Effect } from 'effect';
 import type { Extensions } from '../../../src/extensions/index.ts';
+import { McpSignInFailed } from '../../../src/extensions/oauth/schema.ts';
 import { disposeWebHandlers } from '../../helpers/web.ts';
 import { readFailure, startRoutes } from './harness.ts';
 
@@ -11,23 +13,22 @@ function createExtensions() {
     (name: string, answer: unknown = { done: name }) =>
     (...args: unknown[]) => {
       calls.push([name, ...args]);
-      return answer;
+      return Effect.succeed(answer);
     };
   const extensions = {
-    isCallback: () => false,
-    readSnapshot: record('readSnapshot', { servers: [], skills: [], plugins: [] }),
-    check: record('check', Promise.resolve({ done: 'check' })),
+    readSnapshot: Effect.suspend(() => record('readSnapshot', { servers: [], skills: [], plugins: [] })()),
+    check: record('check'),
     createServer: record('createServer'),
     updateServer: record('updateServer'),
-    removeServer: record('removeServer', Promise.resolve({ done: 'removeServer' })),
+    removeServer: record('removeServer'),
     updateServerChoice: record('updateServerChoice'),
-    startSignIn: record('startSignIn', Promise.resolve({ done: 'startSignIn' })),
+    startSignIn: record('startSignIn'),
     signOut: record('signOut'),
     updateSkillChoice: record('updateSkillChoice'),
     updatePluginChoice: record('updatePluginChoice'),
     updateOptimizer: record('updateOptimizer'),
   };
-  return { calls, extensions: extensions as unknown as Extensions };
+  return { calls, extensions: extensions as unknown as Extensions['Service'] };
 }
 
 describe('extension routes', () => {
@@ -66,9 +67,8 @@ describe('extension routes', () => {
 
   test('a refused change answers its error, and without extensions the routes are not found', async () => {
     const { extensions } = createExtensions();
-    (extensions as unknown as { check: () => never }).check = () => {
-      throw new Error('No server s9.');
-    };
+    (extensions as unknown as { check: () => Effect.Effect<never, McpSignInFailed> }).check = () =>
+      Effect.fail(new McpSignInFailed({ message: 'No server s9.' }));
     expect(await readFailure(await startRoutes({ extensions }).post('/api/extensions/check', {}))).toEqual({
       status: 400,
       code: 'request_failed',

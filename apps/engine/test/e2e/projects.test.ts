@@ -3,14 +3,15 @@ import { mkdirSync, realpathSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Effect } from 'effect';
 import type { ModelSource } from '../../src/agents/index.ts';
-import { Transcripts } from '../../src/agents/index.ts';
 import type { QuickJson } from '../../src/agents/quick/index.ts';
-import { type CliIo, runCli } from '../../src/cli/index.ts';
+import type { CliIo } from '../../src/cli/index.ts';
 import { createLaunchdService } from '../../src/cli/launchd.ts';
-import { startServer } from '../../src/http/index.ts';
-import { runCommandOrThrow } from '../../src/shell/index.ts';
-import { EvidenceStore } from '../../src/store/index.ts';
+import { runCli } from '../cli/harness.ts';
+import { createTestEvidence } from '../helpers/evidence.ts';
 import { createTestOnboarding, createTestTerminal } from '../helpers/index.ts';
+import { runCommandOrThrow } from '../helpers/shell.ts';
+import { createTestTranscripts } from '../helpers/transcripts.ts';
+import { startHttpServer } from '../helpers/web.ts';
 import { World } from './harness.ts';
 
 setDefaultTimeout(30_000);
@@ -28,16 +29,16 @@ afterEach(async () => {
 async function open() {
   world = await World.create();
   const w = world;
-  const { onboarding, roots } = createTestOnboarding(w.engine, w.config);
-  const http = startServer({
+  const { onboarding, roots, machine } = createTestOnboarding(w.engine, w.config);
+  const http = startHttpServer({
     engine: w.engine,
     config: w.config,
-    transcripts: new Transcripts(w.config.transcriptsDir),
-    evidence: new EvidenceStore(w.config.evidenceDir),
+    transcripts: createTestTranscripts(w.config.transcriptsDir),
+    evidence: createTestEvidence(w.config.evidenceDir),
     models: { listModels: () => Promise.resolve([]) } as unknown as ModelSource,
     onboarding,
     roots,
-    resolveLogin: () => Promise.resolve(null),
+    projects: machine.projects,
   });
   stops.push(http.stop);
   const port = String(http.server.port);
@@ -50,7 +51,7 @@ async function open() {
       writeError: (line) => out.push(line),
       openApp: () => Effect.void,
       readRepoRoot: () => Effect.succeed(null),
-      wakeEngine: () => Promise.resolve(false),
+      wakeEngine: Effect.succeed(false),
       engine: {
         bundled: false,
         service: createLaunchdService({
@@ -60,7 +61,6 @@ async function open() {
         }),
       },
       runEngine: () => Effect.die(new Error('not in this test')),
-      onShutdown: () => undefined,
       terminal: createTestTerminal(),
     };
     const code = await runCli(args, io);
@@ -107,7 +107,7 @@ describe('projects', () => {
     );
 
     w.classify = <T>() =>
-      Promise.resolve({
+      Effect.succeed({
         title: 'Add the greeting files',
         repo: 'app',
         size: 'small',
@@ -153,7 +153,7 @@ describe('projects', () => {
     const prompts: string[] = [];
     const classify: QuickJson = <T>(_system: string, prompt: string) => {
       prompts.push(prompt);
-      return Promise.resolve({
+      return Effect.succeed({
         title: 'Return 404 for an unknown basket',
         repo: 'server',
         size: 'small',

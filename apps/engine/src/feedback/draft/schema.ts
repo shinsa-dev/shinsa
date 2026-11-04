@@ -1,6 +1,5 @@
 import { FEEDBACK_LIMITS, FEEDBACK_REPOSITORY, type FeedbackSource } from '@shinsa/core';
 import { Schema, SchemaTransformation } from 'effect';
-import type { Effect } from 'effect';
 import { identity } from 'effect/Function';
 import type { JsonSchema } from '../../agents/providers/index.ts';
 
@@ -9,19 +8,6 @@ export interface FeedbackDraftInput {
   note: string;
   privateWords: readonly string[];
   context: readonly string[];
-}
-
-export class FeedbackDraftFailed extends Schema.TaggedError<
-  FeedbackDraftFailed,
-  { readonly brand: unique symbol }
->()('FeedbackDraftFailed', { message: Schema.String }) {}
-
-export interface FeedbackDraftDefinition {
-  readonly ask: (
-    system: string,
-    prompt: string,
-    schema: JsonSchema
-  ) => Effect.Effect<unknown, FeedbackDraftFailed>;
 }
 
 export const PRIVATE_WORDS_LIMIT = 200;
@@ -79,5 +65,3 @@ const DraftBody = Schema.String.pipe(
 
 export const FeedbackDraft = Schema.Struct({ title: DraftTitle, body: DraftBody });
 export type FeedbackDraft = typeof FeedbackDraft.Type;
-
-export type FeedbackDrafter = (input: FeedbackDraftInput) => Promise<FeedbackDraft | null>;

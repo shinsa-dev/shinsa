@@ -7,7 +7,6 @@ import {
   type ShinsaCommand,
 } from '@shinsa/core';
 import { Effect, Ref } from 'effect';
-import { stashEdits } from '../../git/index.ts';
 import { describeError } from '../../log/index.ts';
 import { createActiveRun, resolveAttemptKey } from '../active/run.ts';
 import type { ActiveRun } from '../active/schema.ts';
@@ -27,7 +26,7 @@ const endRun = Effect.fn('RunSupervisor.end')(function* (
   attemptId: string | null
 ) {
   const world = yield* RunWorld;
-  world.transcripts.record(runId, { type: 'status', status: 'ended', outcome: result.outcome });
+  yield* world.transcripts.record(runId, { type: 'status', status: 'ended', outcome: result.outcome });
   const command: ShinsaCommand = {
     type: 'run.end',
     runId,
@@ -72,10 +71,9 @@ const reportUndelivered = Effect.fn('RunSupervisor.reportUndelivered')(function*
 });
 
 const discardEdits = Effect.fn('RunSupervisor.discardEdits')(function* (path: string, role: string) {
-  const stashed = yield* Effect.tryPromise({
-    try: () => stashEdits(path, `shinsa: edits by the ${role}`),
-    catch: (error) => new EditsNotSetAside({ message: describeError(error) }),
-  }).pipe(
+  const { checkout } = yield* RunWorld;
+  const stashed = yield* checkout.stash(path, `shinsa: edits by the ${role}`).pipe(
+    Effect.mapError((error) => new EditsNotSetAside({ message: describeError(error) })),
     Effect.catchTag('EditsNotSetAside', (failure) =>
       Effect.logWarning('[Runs] Could not set aside edits by a read-only agent').pipe(
         Effect.annotateLogs({ role, path, error: failure.message }),
@@ -97,11 +95,11 @@ const settleRun = Effect.fn('RunSupervisor.settle')(function* (
   const host = yield* RunHost;
   if ((yield* Ref.get(host.control)).shuttingDown) return yield* reportUndelivered(runId, active, result);
   const returned = [...active.unsteered, ...(result.undelivered ?? [])];
-  const undelivered = yield* Effect.promise(() => host.deliveries.release(runId, active, returned));
+  const undelivered = yield* host.deliveries.release(runId, active, returned);
   if (active.released) return;
   yield* endRun(runId, result, active.attemptId);
-  host.compaction.record(runId, result.context ?? null);
-  if (!active.delegated) host.compaction.schedule(active.taskId);
+  yield* host.compaction.record(runId, result.context ?? null);
+  if (!active.delegated) yield* host.compaction.schedule(active.taskId);
   yield* redeliver(active.taskId, resolveAttemptKey(runId, active.attemptId), [
     ...active.unsent,
     ...active.queued,
@@ -118,7 +116,7 @@ const runTurn = Effect.fn('RunSupervisor.runTurn')(function* (
 ) {
   const world = yield* RunWorld;
   const host = yield* RunHost;
-  if (!active.delegated) yield* Effect.promise(() => host.compaction.settle(run.taskId));
+  if (!active.delegated) yield* host.compaction.settle(run.taskId);
   if (!active.delegated) yield* quiesceTask(run.taskId, run.id);
   const state = yield* world.state;
   const current = state.runs[run.id];
@@ -157,16 +155,16 @@ export const executeRun = Effect.fn('RunSupervisor.execute')(function* (
       if (current.held.has(runId)) return [null, current] as const;
       return [current.holding, { ...current, held: new Set(current.held).add(runId) }] as const;
     });
-    holding?.();
+    if (holding) yield* Effect.forkDetach(holding);
     return;
   }
   const task = state.tasks[run.taskId];
   const workspace = task ? resolveWorkspace(state, world.config, run, task) : null;
   if (!task || !workspace) return yield* endRun(runId, { outcome: 'failed', summary: NO_RUN_WORKTREE }, null);
   const delegated = isDelegatedRun(run);
-  const provider = world.providers.resolve(
-    delegated ? run.provider : resolveAgentProvider(state.settings, RUN_AGENT_ROLE[run.role])
-  );
+  const provider = yield* world.providers
+    .resolve(delegated ? run.provider : resolveAgentProvider(state.settings, RUN_AGENT_ROLE[run.role]))
+    .pipe(Effect.orDie);
   const released = Promise.withResolvers<void>();
   const active = createActiveRun(task.id, released.promise, {
     steerable: resolveCapabilities(provider).turns.steering,
@@ -175,9 +173,9 @@ export const executeRun = Effect.fn('RunSupervisor.execute')(function* (
   });
   active.fiber = yield* Effect.fiber;
   host.active.set(runId, active);
-  const release = Effect.sync(() => {
+  const release = Effect.gen(function* () {
     if (host.active.get(runId) === active) host.active.delete(runId);
-    host.questions.forget(runId);
+    yield* host.questions.forget(runId);
     released.resolve();
   });
   const result = yield* runTurn(run, workspace, provider, active, override).pipe(Effect.ensuring(release));

@@ -1,26 +1,34 @@
 import { DomainError, parseUserCommand, type ShinsaEvent, type UserCommand } from '@shinsa/core';
-import { Effect } from 'effect';
+import { Context, Effect } from 'effect';
 import { createSurfaceClient } from '../../cli/api.ts';
 import { describeError } from '../../log/index.ts';
 import type { ProjectChanges } from '../../projects/changes.ts';
-import type { DispatchOptions, Engine } from '../../runtime/engine.ts';
+import type { DispatchOptions } from '../../runtime/engine/schema.ts';
+import type { EngineCore } from '../../runtime/engine/service.ts';
 import { SurfaceCallFailed, type SurfaceClient, type SurfaceHookSecrets } from '../../surface/index.ts';
+import type { RouteFailure } from '../../triage/index.ts';
 
-export type CommandRouter = (command: UserCommand, options: DispatchOptions) => Promise<ShinsaEvent[]>;
+export type CommandRouter = (
+  command: UserCommand,
+  options: DispatchOptions
+) => Effect.Effect<ShinsaEvent[], RouteFailure>;
 
-export interface ManageAccess {
-  baseUrl: () => string;
-  projects: ProjectChanges;
-  route: CommandRouter;
-  hookSecrets?: (taskId: string) => SurfaceHookSecrets;
-}
+export class ManageAccess extends Context.Service<
+  ManageAccess,
+  {
+    readonly baseUrl: () => string;
+    readonly projects: ProjectChanges['Service'];
+    readonly route: CommandRouter;
+    readonly hookSecrets?: (taskId: string) => SurfaceHookSecrets;
+  }
+>()('shinsa/engine/agents/manage/ManageAccess') {}
 
 interface ManageClientOptions {
-  engine: Engine;
+  engine: EngineCore['Service'];
   base: string;
   key: string | null;
   byTask: string;
-  projects?: ProjectChanges;
+  projects?: ProjectChanges['Service'];
   route?: CommandRouter;
   hookSecrets?: SurfaceHookSecrets;
 }
@@ -51,10 +59,7 @@ export function createManageClient(options: ManageClientOptions): SurfaceClient 
       sent += 1;
       const id = key === null ? {} : { id: `${key}:${sent}` };
       const parsed = yield* Effect.fromResult(parseUserCommand(command));
-      const events = yield* Effect.tryPromise({
-        try: () => route(parsed, { ...id, ...from }),
-        catch: refuse,
-      });
+      const events = yield* route(parsed, { ...id, ...from }).pipe(Effect.mapError(refuse));
       const created = events.find((event) => event.type === 'task.created');
       const written = events.find((event) => event.type === 'schedule.written');
       return {

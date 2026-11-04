@@ -49,7 +49,7 @@ export async function startSandbox() {
   await seedProject(laptop.engine, laptopData, { repo: 'website', project: 'Website', tasks: LAPTOP_TASKS });
   const teammateData = prepareMachine('kai');
   const teammate = await startMachine('kai', 'Kai’s MacBook', teammateData);
-  teammateLink.signingKey = (await teammate.machine.remote.store.resolveSigningKey()).publicKey;
+  teammateLink.signingKey = await teammate.machine.remote.resolveSigningKey();
   const paywalls = await seedProject(teammate.engine, teammateData, {
     repo: 'paywalls',
     project: 'Paywalls',

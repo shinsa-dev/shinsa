@@ -1,13 +1,27 @@
 import { describe, expect, test } from 'bun:test';
 import { join } from 'node:path';
-import {
-  CLAUDE_RUNTIME,
-  ClaudeSetupError,
-  resolveClaudeProcess,
-} from '../../../../src/agents/providers/claude/sdk.ts';
+import { Effect, Layer } from 'effect';
+import type { ClaudeExecutable } from '../../../../src/agents/providers/claude/executable/schema.ts';
+import { resolveClaudeLaunch } from '../../../../src/agents/providers/claude/sdk/launch.ts';
+import { ClaudeSetupError } from '../../../../src/agents/providers/claude/sdk/schema.ts';
+import { ClaudeSdk } from '../../../../src/agents/providers/claude/sdk/service.ts';
+import { ProgramVersions } from '../../../../src/agents/providers/versions/service.ts';
+import { ShellLayer } from '../../../../src/shell/layers.ts';
 import { overrideEnv } from '../../../helpers/index.ts';
 
-describe('resolveClaudeProcess', () => {
+function resolveClaudeProcess(executable: ClaudeExecutable) {
+  return Effect.runPromise(resolveClaudeLaunch(Effect.succeed(executable)));
+}
+
+function resolveInstalled() {
+  return Effect.runPromise(
+    ClaudeSdk.use((sdk) => sdk.resolveExecutable).pipe(
+      Effect.provide(ClaudeSdk.layer.pipe(Layer.provide(ProgramVersions.layer), Layer.provide(ShellLayer)))
+    )
+  );
+}
+
+describe('resolveClaudeLaunch', () => {
   test("points the SDK at the user's claude, keeps its browsers headless and never passes CLAUDECODE or another proxy's route on", async () => {
     const restore = overrideEnv({
       CLAUDECODE: '1',
@@ -16,9 +30,11 @@ describe('resolveClaudeProcess', () => {
       EUNOE_DIR: '/Users/someone/.eunoe',
     });
     try {
-      const process = await resolveClaudeProcess(() =>
-        Promise.resolve({ ok: true, path: '/usr/local/bin/claude', version: '2.1.300' })
-      );
+      const process = await resolveClaudeProcess({
+        ok: true,
+        path: '/usr/local/bin/claude',
+        version: '2.1.300',
+      });
       expect(process.version).toBe('2.1.300');
       expect(process.options.pathToClaudeCodeExecutable).toBe('/usr/local/bin/claude');
       expect(process.options.env.CLAUDECODE).toBeUndefined();
@@ -32,25 +48,22 @@ describe('resolveClaudeProcess', () => {
     }
   });
 
-  test('a missing or outdated claude stops the run with what to do', async () => {
-    const missing = resolveClaudeProcess(() =>
-      Promise.resolve({ ok: false, reason: 'not_installed', message: 'Claude Code is not installed.' })
+  test('a missing or outdated claude fails with ClaudeSetupError saying what to do', async () => {
+    const missing = await Effect.runPromise(
+      Effect.flip(
+        resolveClaudeLaunch(
+          Effect.succeed({ ok: false, reason: 'not_installed', message: 'Claude Code is not installed.' })
+        )
+      )
     );
-    expect(missing).rejects.toBeInstanceOf(ClaudeSetupError);
-    expect(missing).rejects.toThrow('Claude Code is not installed.');
-    const broken = resolveClaudeProcess(() => Promise.reject(new Error('which failed')));
-    expect(broken).rejects.toBeInstanceOf(ClaudeSetupError);
-    expect(broken).rejects.toThrow('which failed');
+    expect(missing).toBeInstanceOf(ClaudeSetupError);
+    expect(missing.message).toBe('Claude Code is not installed.');
   });
 
-  test('the default runtime finds claude through CLAUDE_EXECUTABLE or the PATH', async () => {
+  test('the SDK service finds claude through CLAUDE_EXECUTABLE or the PATH', async () => {
     const restore = overrideEnv({ CLAUDE_EXECUTABLE: '/opt/wrapper/claude' });
     try {
-      expect(await CLAUDE_RUNTIME.resolveExecutable()).toEqual({
-        ok: true,
-        path: '/opt/wrapper/claude',
-        version: null,
-      });
+      expect(await resolveInstalled()).toEqual({ ok: true, path: '/opt/wrapper/claude', version: null });
     } finally {
       restore();
     }
@@ -59,7 +72,7 @@ describe('resolveClaudeProcess', () => {
       PATH: `${join(import.meta.dirname, '../../../helpers/bin')}:${process.env.PATH ?? ''}`,
     });
     try {
-      expect(await CLAUDE_RUNTIME.resolveExecutable()).toMatchObject({
+      expect(await resolveInstalled()).toMatchObject({
         ok: true,
         path: join(import.meta.dirname, '../../../helpers/bin/claude'),
       });

@@ -1,16 +1,19 @@
 import { describe, expect, test } from 'bun:test';
 import type { DeliveryCohort, Run, RunDelegation, ShinsaCommand, ShinsaState } from '@shinsa/core';
-import { RunSupervisor, type SupervisorOptions, Transcripts } from '../../src/agents/index.ts';
+import { Effect } from 'effect';
 import { CLAUDE_CAPABILITIES } from '../../src/agents/providers/claude/index.ts';
-import {
-  type AgentSession,
-  type AgentSessionInput,
-  type AgentSessionResult,
-  ProviderRegistry,
-} from '../../src/agents/providers/index.ts';
-import { EvidenceStore } from '../../src/store/index.ts';
+import type { AgentSessionInput, AgentSessionResult } from '../../src/agents/providers/index.ts';
+import { createTestEvidence } from '../helpers/evidence.ts';
 import { captureLogs, createTempDir, createTestConfig, until } from '../helpers/index.ts';
+import { adaptStarter, createTestProviders, type PromiseSession } from '../helpers/providers.ts';
 import { createGate, createRepo, createRun, createStubEngine, createTask } from '../helpers/state.ts';
+import { createSyncTranscripts } from '../helpers/transcripts.ts';
+import {
+  adaptInput,
+  createSupervisor,
+  type PromiseInput,
+  type SupervisorOptions,
+} from './supervisor/harness.ts';
 
 type Broker = NonNullable<SupervisorOptions['accounts']>;
 
@@ -24,17 +27,17 @@ function createBroker(lease: Broker['lease']): Broker {
 }
 
 interface FakeSession {
-  input: AgentSessionInput;
+  input: PromiseInput;
   finish: (extra?: Partial<AgentSessionResult>) => void;
   steers: string[];
 }
 
 function createSessions(options: { refuseSteer?: boolean } = {}) {
   const started: FakeSession[] = [];
-  const startSession = (input: AgentSessionInput): AgentSession => {
+  const startPromise = (input: AgentSessionInput): PromiseSession => {
     const done = Promise.withResolvers<AgentSessionResult>();
     const fake: FakeSession = {
-      input,
+      input: adaptInput(input),
       steers: [],
       finish: (extra = {}) => done.resolve({ outcome: 'completed', summary: 'done', ...extra }),
     };
@@ -52,7 +55,7 @@ function createSessions(options: { refuseSteer?: boolean } = {}) {
       },
     };
   };
-  return { started, startSession };
+  return { started, startSession: adaptStarter(startPromise) };
 }
 
 function delegation(patch: Partial<RunDelegation> = {}): RunDelegation {
@@ -102,12 +105,12 @@ function setup(runs: Run[], options: SupervisorOptions = {}) {
     for (const run of runs) state.runs[run.id] = run;
   });
   const config = createTestConfig();
-  const transcripts = new Transcripts(config.transcriptsDir);
-  const supervisor = new RunSupervisor(
+  const transcripts = createSyncTranscripts(config.transcriptsDir);
+  const supervisor = createSupervisor(
     stub.engine,
     config,
-    transcripts,
-    new EvidenceStore(config.evidenceDir),
+    transcripts.service,
+    createTestEvidence(config.evidenceDir),
     options
   );
   return { ...stub, config, transcripts, supervisor, worktree };
@@ -132,14 +135,14 @@ describe('starting a delegated run', () => {
     const { supervisor, dispatched } = setup(
       [createRun(), reviewer, planning, finishedChild({ endedAt: null, outcome: null })],
       {
-        providers: new ProviderRegistry([
+        providers: createTestProviders([
           {
             id: 'claude',
             label: 'Claude',
             capabilities: { ...CLAUDE_CAPABILITIES, planning: { readOnly: false } },
             startSession: sessions.startSession,
-            listModels: () => Promise.resolve([]),
-            complete: () => Promise.resolve(null),
+            listModels: Effect.succeed([]),
+            complete: () => Effect.succeed(null),
           },
         ]),
       }
@@ -208,11 +211,11 @@ describe('the account a delegated run uses', () => {
       state.runs.child = finishedChild({ endedAt: null, outcome: null, model: 'sonnet' });
     });
     const config = createTestConfig();
-    const supervisor = new RunSupervisor(
+    const supervisor = createSupervisor(
       stub.engine,
       config,
-      new Transcripts(config.transcriptsDir),
-      new EvidenceStore(config.evidenceDir),
+      createSyncTranscripts(config.transcriptsDir).service,
+      createTestEvidence(config.evidenceDir),
       {
         startSession: sessions.startSession,
         accounts: createBroker((request) => {
@@ -369,8 +372,9 @@ describe('delivering results into a running turn', () => {
   });
 
   test('a report steered into a session that is released while it asks goes back to be delivered', async () => {
-    const started: { input: AgentSessionInput; steers: string[] }[] = [];
-    const startSession = (input: AgentSessionInput): AgentSession => {
+    const started: { input: PromiseInput; steers: string[] }[] = [];
+    const startSession = adaptStarter((raw: AgentSessionInput): PromiseSession => {
+      const input = adaptInput(raw);
       const done = Promise.withResolvers<AgentSessionResult>();
       const fake = { input, steers: [] as string[] };
       started.push(fake);
@@ -385,7 +389,7 @@ describe('delivering results into a running turn', () => {
           return Promise.resolve();
         },
       };
-    };
+    });
     const context = setup([createRun({ cohort: cohort('steer') }), finishedChild()], {
       startSession,
       idle: { idleMs: 5 },
@@ -431,7 +435,7 @@ describe('delivering results into a running turn', () => {
   test('a report a retried attempt never answered is steered into the next attempt, or handed back', async () => {
     const steers: string[][] = [];
     const finishes: ((result: AgentSessionResult) => void)[] = [];
-    const startSession = (): AgentSession => {
+    const startSession = adaptStarter((): PromiseSession => {
       const done = Promise.withResolvers<AgentSessionResult>();
       const taken: string[] = [];
       const attempt = steers.length;
@@ -446,7 +450,7 @@ describe('delivering results into a running turn', () => {
         },
         cancel: () => Promise.resolve(),
       };
-    };
+    });
     const limit = {
       class: 'usage_limit',
       message: 'Limit.',

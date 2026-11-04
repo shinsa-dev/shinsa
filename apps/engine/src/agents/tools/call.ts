@@ -1,7 +1,7 @@
 import type { RequestId } from '@modelcontextprotocol/sdk/types.js';
-import { Effect } from 'effect';
+import { Cause, Effect } from 'effect';
 import { describeError } from '../../log/index.ts';
-import { ToolCallFailed, type ToolHandler, type ToolReply } from './schema.ts';
+import type { ToolHandler, ToolReply } from './schema.ts';
 
 function replyWith(text: string): ToolReply {
   return { content: [{ type: 'text', text }] };
@@ -18,11 +18,8 @@ export const callTool = Effect.fn('Tools.call')(function* (
   signal: AbortSignal,
   requestId: RequestId
 ) {
-  return yield* Effect.tryPromise({
-    try: () => handle(name, input, signal, requestId),
-    catch: (error) => new ToolCallFailed({ message: describeError(error) }),
-  }).pipe(
+  return yield* handle(name, input, signal, requestId).pipe(
     Effect.map(replyWith),
-    Effect.catch((failure) => Effect.succeed(refuseTool(failure.message)))
+    Effect.catchCause((cause) => Effect.succeed(refuseTool(describeError(Cause.squash(cause)))))
   );
 });

@@ -1,22 +1,20 @@
-import { Effect } from 'effect';
-import { resolveBrowserEnv } from '../../../../extensions/definitions.ts';
-import { describeError } from '../../../../log/index.ts';
-import type { ExecutableResolver } from '../executable/schema.ts';
-import { type ClaudeLaunch, ClaudeSetupError, ROUTE_ENV } from './schema.ts';
+import { query } from '@anthropic-ai/claude-agent-sdk';
+import { Context, Effect, Layer } from 'effect';
+import { ProgramVersions } from '../../versions/service.ts';
+import { resolveClaudeExecutable } from '../executable.ts';
+import type { ClaudeRuntime } from './schema.ts';
 
-export const resolveClaudeLaunch = Effect.fn('ClaudeSdk.launch')(function* (
-  resolveExecutable: ExecutableResolver
+export class ClaudeSdk extends Context.Service<ClaudeSdk, ClaudeRuntime>()(
+  'shinsa/engine/agents/providers/claude/ClaudeSdk'
 ) {
-  const executable = yield* Effect.tryPromise({
-    try: resolveExecutable,
-    catch: (error) => new ClaudeSetupError({ message: describeError(error) }),
-  });
-  if (!executable.ok) return yield* new ClaudeSetupError({ message: executable.message });
-  const env = yield* Effect.sync(() =>
-    resolveBrowserEnv(Object.fromEntries(Object.entries(Bun.env).filter(([key]) => !ROUTE_ENV.includes(key))))
+  static readonly layer = Layer.effect(
+    ClaudeSdk,
+    Effect.gen(function* () {
+      const versions = yield* ProgramVersions;
+      return ClaudeSdk.of({
+        runQuery: query,
+        resolveExecutable: resolveClaudeExecutable().pipe(Effect.provideService(ProgramVersions, versions)),
+      });
+    })
   );
-  return {
-    version: executable.version,
-    options: { pathToClaudeCodeExecutable: executable.path, env },
-  } satisfies ClaudeLaunch;
-});
+}

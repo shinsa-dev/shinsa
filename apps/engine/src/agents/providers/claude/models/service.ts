@@ -2,7 +2,7 @@ import type { SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
 import { KNOWN_AGENT_MODELS } from '@shinsa/core';
 import { Duration, Effect, Stream } from 'effect';
 import { describeError } from '../../../../log/index.ts';
-import { resolveClaudeLaunch } from '../sdk/service.ts';
+import { resolveClaudeLaunch } from '../sdk/launch.ts';
 import { resolveModels } from './families.ts';
 import { type ModelCatalogDefinition, type ModelCatalogHandle, ModelsUnavailable } from './schema.ts';
 

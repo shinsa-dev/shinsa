@@ -1,16 +1,27 @@
 import { describe, expect, test } from 'bun:test';
 import { serializeTaskDetail } from '@shinsa/core';
+import type { ChatEvent, ShinsaState } from '@shinsa/core';
+import { Effect, Layer } from 'effect';
 import { resolveTaskReading } from '../../src/agents/reading/task.ts';
-import { Transcripts } from '../../src/agents/transcripts/index.ts';
-import { Engine } from '../../src/runtime/index.ts';
-import { EventLog } from '../../src/store/index.ts';
+import { Transcripts } from '../../src/agents/transcripts/service.ts';
+import { EngineConfig } from '../../src/config/service.ts';
+import { Engine } from '../helpers/engine.ts';
+import { openEventLog } from '../helpers/event-log.ts';
 import { createTestConfig } from '../helpers/index.ts';
 import { createRun } from '../helpers/state.ts';
 
 async function startPlanning() {
   const config = createTestConfig();
-  const engine = new Engine(new EventLog(config.databasePath));
-  const transcripts = new Transcripts(config.transcriptsDir);
+  const engine = new Engine(openEventLog(config.databasePath));
+  const service = Effect.runSync(
+    Transcripts.use(Effect.succeed).pipe(
+      Effect.provide(Transcripts.layer.pipe(Layer.provide(Layer.succeed(EngineConfig, config))))
+    )
+  );
+  const transcripts = {
+    service,
+    record: (runId: string, entry: ChatEvent) => Effect.runSync(service.record(runId, entry)),
+  };
   await engine.dispatch({
     type: 'repo.register',
     repo: {
@@ -39,20 +50,20 @@ async function startPlanning() {
   return { engine, transcripts, taskId, runId };
 }
 
+function read(state: ShinsaState, transcripts: { service: Transcripts['Service'] }, taskId: string) {
+  return Effect.runSync(resolveTaskReading(state, transcripts.service, taskId));
+}
+
 describe('reading a task for an agent', () => {
   test('a task nobody has replied on reads as its description', async () => {
     const { engine, transcripts, taskId, runId } = await startPlanning();
     transcripts.record(runId, { type: 'agent', phase: 'interim', text: 'Looking around.' });
-    expect(resolveTaskReading(engine.state, transcripts, taskId)).toBe(
-      serializeTaskDetail(engine.state, taskId)
-    );
+    expect(read(engine.state, transcripts, taskId)).toBe(serializeTaskDetail(engine.state, taskId));
   });
 
   test('a missing task says so', async () => {
     const { engine, transcripts } = await startPlanning();
-    expect(resolveTaskReading(engine.state, transcripts, 'nope')).toBe(
-      'No task nope. `find_tasks` lists the tasks.'
-    );
+    expect(read(engine.state, transcripts, 'nope')).toBe('No task nope. `find_tasks` lists the tasks.');
   });
 
   test('adds the last three final replies of its own agents, cut when long, and never a delegated agent’s', async () => {
@@ -76,7 +87,7 @@ describe('reading a task for an agent', () => {
     });
     const childId = Object.keys(engine.state.runs).find((id) => id !== runId) ?? '';
     transcripts.record(childId, { type: 'agent', phase: 'final', text: 'Delegated reply.' });
-    const reading = resolveTaskReading(engine.state, transcripts, taskId);
+    const reading = read(engine.state, transcripts, taskId);
     expect(reading.startsWith(serializeTaskDetail(engine.state, taskId))).toBe(true);
     expect(reading.split('\n').slice(-4)).toEqual([
       'Latest agent replies:',
@@ -106,7 +117,7 @@ describe('reading a task for an agent', () => {
     transcripts.record('run-builder', { type: 'agent', phase: 'final', text: 'Built it.' });
     transcripts.record(runId, { type: 'agent', phase: 'final', text: 'Planned it.' });
     transcripts.record('run-early', { type: 'agent', phase: 'final', text: 'Looked first.' });
-    expect(resolveTaskReading(state, transcripts, taskId).split('\n').slice(-3)).toEqual([
+    expect(read(state, transcripts, taskId).split('\n').slice(-3)).toEqual([
       '- reviewer: Looked first.',
       '- agent: Planned it.',
       '- agent: Built it.',

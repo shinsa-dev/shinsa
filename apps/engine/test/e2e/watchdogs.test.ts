@@ -1,7 +1,11 @@
 import { afterEach, describe, expect, setDefaultTimeout, test } from 'bun:test';
 import { join } from 'node:path';
-import { handleScheduleTool } from '../../src/schedules/tools.ts';
-import { SecretStore } from '../../src/secrets/store.ts';
+import { Effect, Layer } from 'effect';
+import { EngineCore } from '../../src/runtime/engine/service.ts';
+import { Schedules, SchedulesLayer } from '../../src/schedules/index.ts';
+import { ScheduleTimeZone } from '../../src/schedules/schema.ts';
+import { SecretStore } from '../../src/secrets/index.ts';
+import { openTestSecrets } from '../helpers/secrets.ts';
 import type { AgentContext } from './harness.ts';
 import { World } from './harness.ts';
 
@@ -37,17 +41,20 @@ function writePhase(phase: number, walkthrough: Record<string, unknown> | null) 
 
 async function merged() {
   world = await World.create({
-    supervise: (current) => {
-      const context = {
-        secrets: new SecretStore(join(current.root, 'secrets.json')),
-        baseUrl: () => 'http://localhost',
-        hookUrl: () => null,
-        timeZone: 'UTC',
-        now: Date.now,
-      };
-      return {
-        schedules: { handleTool: (name, input, call) => handleScheduleTool(name, input, call, context) },
-      };
+    supervise: (current, engine) => {
+      const layer = SchedulesLayer({
+        baseUrl: Effect.succeed('http://localhost'),
+        hookUrl: () => Effect.succeed(null),
+      }).pipe(
+        Layer.provide(
+          Layer.mergeAll(
+            Layer.succeed(EngineCore, engine.core),
+            Layer.succeed(SecretStore, openTestSecrets(join(current.root, 'secrets.json')).store),
+            Layer.succeed(ScheduleTimeZone, 'UTC')
+          )
+        )
+      );
+      return { schedules: Effect.runSync(Effect.scoped(Schedules.pipe(Effect.provide(layer)))) };
     },
   });
   const w = world;

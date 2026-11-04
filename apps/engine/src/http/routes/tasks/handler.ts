@@ -9,15 +9,20 @@ import {
   ROUTE_NOT_FOUND_MESSAGE,
   WorktreeMissing,
 } from '@shinsa/core/engine-api/schema';
-import { Effect, Layer, Predicate, Schema } from 'effect';
+import { Effect, Layer, Option, Predicate, Schema } from 'effect';
 import { HttpApiBuilder } from 'effect/http-api';
+import { Transcripts } from '../../../agents/transcripts/service.ts';
+import { EngineConfig } from '../../../config/service.ts';
 import { assertRepoPath, resolveInside, resolveWritableInside } from '../../../files/paths.ts';
 import { GitCommands } from '../../../git/layers.ts';
 import { Git } from '../../../git/service.ts';
-import { runCommand } from '../../../shell/index.ts';
-import { requestPromise, requestSync, resolveRequestFailure } from '../../failures.ts';
+import { EngineCore } from '../../../runtime/engine/service.ts';
+import { runCommand } from '../../../shell/command.ts';
+import { ShellLayer } from '../../../shell/layers.ts';
+import { Workspaces } from '../../../workspaces/service.ts';
+import { requestSync, resolveRequestFailure } from '../../failures.ts';
 import { BODY_INVALID } from '../../schema.ts';
-import { HttpServices } from '../../services/service.ts';
+import { CommandLauncher } from '../../schema.ts';
 import { findTaskByRef } from '../../task-lookup.ts';
 import {
   isTaskListed,
@@ -49,7 +54,14 @@ export const TasksHandlers = HttpApiBuilder.group(
   EngineApi,
   'tasks',
   Effect.fn('TasksHandlers')(function* (handlers) {
-    const { engine, config, transcripts, workspaces, launch = runCommand } = yield* HttpServices;
+    const engine = yield* EngineCore;
+    const config = yield* EngineConfig;
+    const transcripts = yield* Transcripts;
+    const workspaces = Option.getOrUndefined(yield* Effect.serviceOption(Workspaces));
+    const launch = yield* CommandLauncher;
+    const open =
+      launch ??
+      ((command: string[], cwd: string) => runCommand(command, cwd).pipe(Effect.provide(ShellLayer)));
     const git = yield* Git;
     const decodeFilter = Schema.decodeUnknownEffect(TaskFilter);
     const decodeLimit = Schema.decodeUnknownEffect(ListLimit);
@@ -96,7 +108,7 @@ export const TasksHandlers = HttpApiBuilder.group(
       .handle(
         'list',
         Effect.fn('TasksHandlers.list')(function* ({ query, request }) {
-          const state = engine.state;
+          const state = yield* engine.state;
           const filter = yield* decodeFilter(query.status ?? DEFAULT_FILTER).pipe(
             Effect.mapError(() => new RequestFailed(STATUS_FAILURE))
           );
@@ -118,18 +130,26 @@ export const TasksHandlers = HttpApiBuilder.group(
         })
       )
       .handle('read', ({ params, request }) =>
-        Effect.map(findTaskByRef(engine.state, params.taskRef), (task) =>
-          resolveTaskDetail(engine.state, task, new URL(request.originalUrl).origin)
+        Effect.flatMap(engine.state, (state) =>
+          Effect.map(findTaskByRef(state, params.taskRef), (task) =>
+            resolveTaskDetail(state, task, new URL(request.originalUrl).origin)
+          )
         )
       )
       .handle(
         'chat',
         Effect.fn('TasksHandlers.chat')(function* ({ params, query }) {
-          const task = yield* findTaskByRef(engine.state, params.taskRef);
+          const task = yield* findTaskByRef(yield* engine.state, params.taskRef);
           const kinds = new Set(yield* readKinds(query.kinds));
           const limit = yield* readLimit(query.limit);
           const after = yield* readIndex(query.after);
-          return resolveChatPage(transcripts, engine.state, task, {
+          const read = Object.values((yield* engine.state).runs).filter(
+            (run) => run.taskId === task.id && (!query.run || run.id === query.run)
+          );
+          const entries = yield* Effect.forEach(read, (run) =>
+            Effect.map(transcripts.listEntries(run.id), (listed) => [run.id, listed] as const)
+          );
+          return resolveChatPage(new Map(entries), yield* engine.state, task, {
             runId: query.run ?? null,
             kinds,
             limit,
@@ -140,15 +160,15 @@ export const TasksHandlers = HttpApiBuilder.group(
       .handle(
         'open',
         Effect.fn('TasksHandlers.open')(function* ({ params, payload }) {
-          const task = selectTaskByReference(engine.state, params.taskRef);
-          const repo = task?.repoId ? engine.state.repos[task.repoId] : undefined;
+          const task = selectTaskByReference(yield* engine.state, params.taskRef);
+          const repo = task?.repoId ? (yield* engine.state).repos[task.repoId] : undefined;
           const worktreePath = task?.worktreePath;
           if (!worktreePath || !repo)
             return yield* new WorktreeMissing({ message: WORKTREE_MISSING_MESSAGE });
           const file = payload.path ? resolveInside(worktreePath, payload.path) : null;
           const location = file && payload.line ? `${file}:${payload.line}` : file;
           const command = resolveOpenCommand(payload.target, worktreePath, location);
-          const result = yield* requestPromise(() => launch(command, worktreePath));
+          const result = yield* open(command, worktreePath);
           return { ok: result.ok };
         })
       )
@@ -156,8 +176,8 @@ export const TasksHandlers = HttpApiBuilder.group(
         'writeFile',
         Effect.fn('TasksHandlers.writeFile')(function* ({ params, payload }) {
           if (!workspaces) return yield* new RouteNotFound({ message: ROUTE_NOT_FOUND_MESSAGE });
-          const task = selectTaskByReference(engine.state, params.taskRef);
-          const repo = task?.repoId ? engine.state.repos[task.repoId] : undefined;
+          const task = selectTaskByReference(yield* engine.state, params.taskRef);
+          const repo = task?.repoId ? (yield* engine.state).repos[task.repoId] : undefined;
           if (!task || !repo)
             return yield* new RequestFailed({ code: 'code_unavailable', message: CODE_TO_EDIT_MISSING });
           const refusal = resolveEditRefusal(task);
@@ -173,16 +193,22 @@ export const TasksHandlers = HttpApiBuilder.group(
           if (!absolute)
             return yield* new RequestFailed({ code: 'path_invalid', message: PATH_LEAVES_WORKTREE });
           const disk: { current: string | null; written: boolean } = { current: null, written: false };
-          yield* requestPromise(() =>
-            workspaces.resolve(task).writeEdit(repo, task, path, () => {
-              disk.current = existsSync(absolute) ? readFileSync(absolute, 'utf8') : null;
-              if (disk.current !== base) return false;
-              mkdirSync(dirname(absolute), { recursive: true });
-              writeFileSync(absolute, content);
-              disk.written = true;
-              return true;
-            })
-          );
+          yield* workspaces
+            .resolve(task)
+            .writeEdit(
+              repo,
+              task,
+              path,
+              Effect.sync(() => {
+                disk.current = existsSync(absolute) ? readFileSync(absolute, 'utf8') : null;
+                if (disk.current !== base) return false;
+                mkdirSync(dirname(absolute), { recursive: true });
+                writeFileSync(absolute, content);
+                disk.written = true;
+                return true;
+              })
+            )
+            .pipe(Effect.mapError(resolveRequestFailure));
           if (!disk.written)
             return yield* new EditConflict({
               message: `${path} changed on disk since the editor read it.`,
@@ -195,11 +221,12 @@ export const TasksHandlers = HttpApiBuilder.group(
             .pipe(Effect.mapError(resolveRequestFailure));
           const changed = status.length > 0;
           const key = Bun.hash(`${base ?? ''}\0${content}`).toString(36);
-          yield* requestPromise(() =>
+          yield* Effect.mapError(
             engine.dispatch(
               { type: 'task.record_edit', taskId: task.id, path, changed },
               { id: `edit:${task.id}:${path}:${key}` }
-            )
+            ),
+            resolveRequestFailure
           );
           return { path, changed };
         })

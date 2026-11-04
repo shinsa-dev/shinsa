@@ -1,23 +1,33 @@
-import { Effect, Option, Schema } from 'effect';
+import { Context, Effect, Layer, Option, Schema } from 'effect';
+import { QuickCalls } from '../../agents/quick/service.ts';
 import { describeFeedbackPrompt } from './prompt.ts';
 import {
   FEEDBACK_DRAFT_SCHEMA,
   FEEDBACK_DRAFT_SYSTEM,
   FeedbackDraft,
-  type FeedbackDraftDefinition,
   type FeedbackDraftInput,
 } from './schema.ts';
 
-export const makeFeedbackDrafter = (definition: FeedbackDraftDefinition) =>
-  Effect.sync(() => {
-    const decodeDraft = Schema.decodeUnknownOption(FeedbackDraft);
+export class FeedbackDrafter extends Context.Service<
+  FeedbackDrafter,
+  { draft(input: FeedbackDraftInput): Effect.Effect<FeedbackDraft | null> }
+>()('shinsa/engine/feedback/draft/FeedbackDrafter') {
+  static readonly layer = Layer.effect(
+    FeedbackDrafter,
+    Effect.gen(function* () {
+      const quick = yield* QuickCalls;
+      const decodeDraft = Schema.decodeUnknownOption(FeedbackDraft);
 
-    return Effect.fn('FeedbackDrafter.draft')(function* (input: FeedbackDraftInput) {
-      const answer = yield* definition.ask(
-        FEEDBACK_DRAFT_SYSTEM,
-        describeFeedbackPrompt(input),
-        FEEDBACK_DRAFT_SCHEMA
-      );
-      return Option.getOrNull(decodeDraft(answer));
-    });
-  });
+      const draft = Effect.fn('FeedbackDrafter.draft')(function* (input: FeedbackDraftInput) {
+        const answer = yield* quick.write<unknown>(
+          FEEDBACK_DRAFT_SYSTEM,
+          describeFeedbackPrompt(input),
+          FEEDBACK_DRAFT_SCHEMA
+        );
+        return Option.getOrNull(decodeDraft(answer));
+      });
+
+      return FeedbackDrafter.of({ draft });
+    })
+  );
+}

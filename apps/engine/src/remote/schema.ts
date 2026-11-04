@@ -1,5 +1,10 @@
-import { Effect, Schema } from 'effect';
+import { Context, Effect, Schema } from 'effect';
 import { createLenientList } from '../files/lenient-list.ts';
+
+export const RandomBytes = Context.Reference<(bytes: number) => Uint8Array<ArrayBuffer>>(
+  'shinsa/engine/remote/RandomBytes',
+  { defaultValue: () => (bytes: number) => crypto.getRandomValues(new Uint8Array(bytes)) }
+);
 
 export const NORMAL_CLOSE = 1000;
 

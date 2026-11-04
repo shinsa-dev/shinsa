@@ -1,9 +1,19 @@
 import { describe, expect, test } from 'bun:test';
 import { existsSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
-import { commitWorktree, pushBranch, resolveHead, stashEdits } from '../../src/git/index.ts';
-import { runCommand } from '../../src/shell/index.ts';
+import { Checkout } from '../../src/git/checkout/service.ts';
+import { Remote } from '../../src/git/remote/service.ts';
+import { runGit } from '../helpers/git.ts';
 import { createGitRepo, git, writeFiles } from '../helpers/index.ts';
+import { runCommand } from '../helpers/shell.ts';
+
+const commitWorktree = (path: string, message: string) =>
+  runGit(Checkout.use((checkout) => checkout.commit(path, message)));
+const resolveHead = (path: string) => runGit(Checkout.use((checkout) => checkout.head(path)));
+const pushBranch = (path: string, branch: string, signal?: AbortSignal) =>
+  runGit(Remote.use((remote) => remote.pushBranch(path, branch, signal)));
+const stashEdits = (path: string, message: string) =>
+  runGit(Checkout.use((checkout) => checkout.stash(path, message)));
 
 describe('commits and pushes', () => {
   test('a commit takes every change, and a clean tree commits nothing', async () => {

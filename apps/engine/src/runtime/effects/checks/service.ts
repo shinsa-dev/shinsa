@@ -8,17 +8,19 @@ import {
   type Task,
 } from '@shinsa/core';
 import { Context, Effect, Layer } from 'effect';
-import { resolveSharedCacheEnv } from '../../../checks/caches.ts';
+import { BaseCheckouts } from '../../../checks/base/service.ts';
+import { resolveSharedCacheEnv } from '../../../checks/caches/paths.ts';
 import { serializeCheckOutput } from '../../../checks/evidence.ts';
-import { CHECK_TIMEOUT_MS, type CheckRun, runChecks } from '../../../checks/index.ts';
-import { measureTaskCoverage } from '../../../test-coverage/index.ts';
+import { CheckRunner } from '../../../checks/runner/service.ts';
+import { CHECK_TIMEOUT_MS, type CheckRun } from '../../../checks/schema.ts';
+import { History } from '../../../git/history/service.ts';
+import { TaskCoverage } from '../../../test-coverage/service.ts';
 import type { EffectAttempt } from '../../engine/schema.ts';
 import { resolveEffectFailure } from '../../failures/classify.ts';
 import type { EffectFailure } from '../../failures/schema.ts';
 import { EditCommits } from '../edits/service.ts';
 import type { EffectOf } from '../schema.ts';
 import { EffectWorld } from '../world/service.ts';
-import { createBaseComparison } from './comparison.ts';
 
 export class CheckRuns extends Context.Service<
   CheckRuns,
@@ -29,21 +31,22 @@ export class CheckRuns extends Context.Service<
     Effect.gen(function* () {
       const world = yield* EffectWorld;
       const edits = yield* EditCommits;
+      const runner = yield* CheckRunner;
+      const bases = yield* BaseCheckouts;
+      const taskCoverage = yield* TaskCoverage;
+      const history = yield* History;
 
       const storeOutputs = Effect.fn('CheckRuns.storeOutputs')(function* (
         task: Task,
         runs: readonly CheckRun[]
       ) {
         const folder = { taskId: task.id, round: resolveCurrentRound(task).number };
-        return yield* Effect.try({
-          try: () =>
-            runs.map((run): CheckEvidence => ({
-              checkId: run.check.id,
-              title: run.check.label,
-              uri: world.evidence.writeText(serializeCheckOutput(run), folder, run.check.label),
-            })),
-          catch: resolveEffectFailure,
-        });
+        return yield* Effect.forEach(runs, (run) =>
+          world.evidence.writeText(serializeCheckOutput(run), folder, run.check.label, 'txt').pipe(
+            Effect.map((uri): CheckEvidence => ({ checkId: run.check.id, title: run.check.label, uri })),
+            Effect.mapError(resolveEffectFailure)
+          )
+        );
       });
 
       const run = Effect.fn('CheckRuns.run')(function* (
@@ -53,38 +56,46 @@ export class CheckRuns extends Context.Service<
         const { task, repo } = yield* world.findTask(effect.taskId);
         const worktree = task.worktreePath;
         if (task.stage !== 'checking' || !worktree) return;
-        yield* world.bridge(() => world.runs.quiesce(task.id));
+        yield* world.runs.quiesce(task.id);
         if (task.approvedEdits === 'review') yield* edits.commit(task, repo, attempt);
         const env = resolveSharedCacheEnv(worktree, world.config.dataDir, repo.id);
         const track = world.trackProcess;
+        const runSync = Effect.runSyncWith(yield* Effect.context<never>());
         const runs = yield* Effect.acquireUseRelease(
-          Effect.sync((): (() => void)[] => []),
+          Effect.sync((): Effect.Effect<void>[] => []),
           (releases) =>
-            world.bridge((signal) =>
-              runChecks(effect.checks, worktree, {
-                timeoutMs: CHECK_TIMEOUT_MS,
-                signal,
-                env,
-                compare: createBaseComparison(world.bases, task, repo, worktree, env, signal),
-                ...(track ? { onSpawn: (pid: number) => releases.push(track(task.id, 'checks', pid)) } : {}),
-              })
+            Effect.flatMap(
+              Effect.cached(
+                Effect.map(history.taskRefs(repo, task, resolveRoundBase(task)), (refs) => refs.base)
+              ),
+              (resolveBase) =>
+                runner.runAll(effect.checks, worktree, {
+                  timeoutMs: CHECK_TIMEOUT_MS,
+                  env,
+                  compare: (checked) =>
+                    bases.compare({
+                      repo,
+                      resolveBase,
+                      cwd: worktree,
+                      run: checked,
+                      timeoutMs: CHECK_TIMEOUT_MS,
+                      env,
+                    }),
+                  ...(track
+                    ? { onSpawn: (pid: number) => releases.push(runSync(track(task.id, 'checks', pid))) }
+                    : {}),
+                })
             ),
-          (releases) =>
-            Effect.sync(() => {
-              for (const release of releases) release();
-            })
+          (releases) => Effect.forEach(releases, (release) => release, { discard: true })
         );
         let coverage: Coverage | null = null;
         if (effect.coverage && !runs.some((checked) => isBlockingCheck(checked.check))) {
-          coverage = yield* world.bridge((signal) =>
-            measureTaskCoverage({
-              repo,
-              task,
-              commands: listTaskChecks(task, repo).map((check) => check.command),
-              baseBranch: resolveRoundBase(task),
-              signal,
-            })
-          );
+          coverage = yield* taskCoverage.measure({
+            repo,
+            task,
+            commands: listTaskChecks(task, repo).map((check) => check.command),
+            baseBranch: resolveRoundBase(task),
+          });
         }
         if (coverage?.status === 'unavailable') {
           yield* Effect.logWarning('[Coverage] Could not measure the changed lines').pipe(

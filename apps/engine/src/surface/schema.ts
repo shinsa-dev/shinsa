@@ -19,8 +19,8 @@ export interface CommandReceipt {
 }
 
 export interface SurfaceHookSecrets {
-  assertSecret: (scheduleId: string | null, ref: string | null) => void;
-  writeSecret: (scheduleId: string, ref: string | null) => string | null;
+  assertSecret: (scheduleId: string | null, ref: string | null) => Effect.Effect<void, SurfaceFailure>;
+  writeSecret: (scheduleId: string, ref: string | null) => Effect.Effect<string | null>;
 }
 
 interface SurfaceProjectChanges {
@@ -69,7 +69,7 @@ export interface CommandDefinition {
   agentTool?: ShinsaToolName;
   build: (values: Values, client: SurfaceClient) => UserCommand | Effect.Effect<UserCommand, SurfaceFailure>;
   done?: (values: Values, receipt: CommandReceipt) => string;
-  after?: (values: Values, receipt: CommandReceipt, client: SurfaceClient) => string | null;
+  after?: (values: Values, receipt: CommandReceipt, client: SurfaceClient) => Effect.Effect<string | null>;
 }
 
 export interface ReadDefinition<T> {

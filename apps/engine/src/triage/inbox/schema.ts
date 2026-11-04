@@ -1,29 +1,13 @@
-import type { DomainError, ShinsaCommand, ShinsaState, Task } from '@shinsa/core';
-import { Schema } from 'effect';
-import type { Duration, Effect } from 'effect';
-import type { ClassifierFailed, MessageClass } from '../schema.ts';
+import { Context, Duration, Schema } from 'effect';
 
-export interface InboxOptions {
-  classifyTimeoutMs?: number;
-}
+export const ClassifyTimeout = Context.Reference<Duration.Duration>(
+  'shinsa/engine/triage/inbox/ClassifyTimeout',
+  {
+    defaultValue: () => Duration.seconds(30),
+  }
+);
 
 export class InboxDispatchFailed extends Schema.TaggedError<
   InboxDispatchFailed,
   { readonly brand: unique symbol }
 >()('InboxDispatchFailed', { message: Schema.String }) {}
-
-export interface MessageInboxDefinition {
-  readonly state: Effect.Effect<ShinsaState>;
-  readonly classify: (task: Task, text: string) => Effect.Effect<MessageClass | null, ClassifierFailed>;
-  readonly dispatch: (
-    command: ShinsaCommand,
-    id: string
-  ) => Effect.Effect<void, DomainError | InboxDispatchFailed>;
-  readonly classifyTimeout: Duration.Duration;
-}
-
-export interface MessageInboxHandle {
-  readonly sync: Effect.Effect<void>;
-  readonly settle: Effect.Effect<void>;
-  readonly stop: Effect.Effect<void>;
-}

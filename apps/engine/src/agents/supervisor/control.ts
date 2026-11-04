@@ -66,7 +66,7 @@ export const steerRun = Effect.fn('RunSupervisor.steer')(function* (
       (from ? active.resteered : active.queued).push(text);
       return;
     }
-    if (active.session.steer(text, from)) return;
+    if (yield* active.session.steer(text, from)) return;
   }
   if (from) {
     yield* Effect.logInfo('[Runs] A note of Shinsa’s reached no running turn').pipe(
@@ -97,13 +97,14 @@ export const shutdownRuns = Effect.fn('RunSupervisor.shutdown')(function* () {
     [...current.held],
     { ...current, shuttingDown: true, held: new Set<string>() },
   ]);
-  const compacting = host.compaction.stop();
+  const compacting = yield* Effect.forkChild(host.compaction.stop);
   for (const runId of held) yield* markInterrupted(runId, null);
+  const state = yield* (yield* RunWorld).state;
   const live = [...host.active.entries()];
-  for (const [runId, active] of live) yield* markInterrupted(runId, active.attemptId);
-  for (const [, active] of live) stopActiveRun(active);
-  const compacted = Effect.promise(() => Promise.allSettled([compacting]));
-  yield* stopWithin(live, Effect.all([compacted, awaitDone(live)], { discard: true }));
+  const working = live.filter(([runId]) => (state.runs[runId]?.endedAt ?? null) === null);
+  for (const [runId, active] of working) yield* markInterrupted(runId, active.attemptId);
+  for (const [, active] of working) stopActiveRun(active);
+  yield* stopWithin(working, Effect.all([Fiber.await(compacting), awaitDone(live)], { discard: true }));
   yield* settleWithin(host.scopes.closeAll, host.limits.stopMs);
 });
 
@@ -136,7 +137,7 @@ export const recoverRuns = Effect.fn('RunSupervisor.recover')(function* () {
   yield* world.dispatch({ type: 'delegations.recover' }, { id: `${boot}:delegations.recover` });
 });
 
-export const holdNewRuns = Effect.fn('RunSupervisor.holdNewRuns')(function* (onHeld: () => void) {
+export const holdNewRuns = Effect.fn('RunSupervisor.holdNewRuns')(function* (onHeld: Effect.Effect<void>) {
   const host = yield* RunHost;
   yield* Ref.update(host.control, (current) => ({ ...current, holding: onHeld }));
 });

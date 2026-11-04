@@ -5,14 +5,32 @@ import {
   decide,
   isDelegatedRun,
   type PlanDocument,
+  type Repo,
   type Run,
   type ShinsaCommand,
   type ShinsaEvent,
   type ShinsaState,
 } from '@shinsa/core';
-import { Result } from 'effect';
-import { handleOrchestrationTool } from '../../../src/agents/tools/orchestration/handler.ts';
+import { Duration, Effect, Result } from 'effect';
+import { handleOrchestrationTool as handleTool } from '../../../src/agents/tools/orchestration/handler.ts';
 import type { DelegationOutcome, OrchestrationCall } from '../../../src/agents/tools/orchestration/schema.ts';
+import { ToolCallFailed } from '../../../src/agents/tools/schema.ts';
+import { describeError } from '../../../src/log/index.ts';
+
+type RegisterRepo = (projectId: string | null, name: string) => Promise<Repo | null>;
+
+type CreateRepo = (projectId: string, name: string) => Promise<Repo>;
+
+function attempt<A>(run: () => Promise<A>) {
+  return Effect.tryPromise({
+    try: run,
+    catch: (error) => new ToolCallFailed({ message: describeError(error) }),
+  });
+}
+
+function handleOrchestrationTool(name: string, input: Record<string, unknown>, call: OrchestrationCall) {
+  return Effect.runPromise(handleTool(name, input, call));
+}
 
 const SPEC: PlanDocument = {
   goal: 'Ship it.',
@@ -93,8 +111,8 @@ interface Options {
   state?: () => ShinsaState;
   runId?: string;
   requestKey?: string;
-  registerRepo?: OrchestrationCall['registerRepo'];
-  createRepo?: OrchestrationCall['createRepo'];
+  registerRepo?: RegisterRepo;
+  createRepo?: CreateRepo;
 }
 
 function createCall(core: ReturnType<typeof createCore>, runId: string, options: Options = {}) {
@@ -102,31 +120,34 @@ function createCall(core: ReturnType<typeof createCore>, runId: string, options:
   const waits: number[] = [];
   const ids: (string | null)[] = [];
   let commits = 0;
+  const registerRepo = options.registerRepo ?? (() => Promise.resolve(null));
+  const createRepo =
+    options.createRepo ?? (() => Promise.reject(new Error('No repository is created here.')));
+  const state = options.state ?? (() => core.state);
   const call: OrchestrationCall = {
     runId: options.runId ?? runId,
     attemptId: '',
     requestKey: options.requestKey ?? Bun.randomUUIDv7(),
     signal: new AbortController().signal,
-    minuteMs: 2,
-    state: options.state ?? (() => core.state),
+    minute: Duration.millis(2),
+    state: Effect.sync(state),
     dispatch: (command, id) => {
       ids.push(id ?? null);
-      return core.dispatch(command);
+      return attempt(() => core.dispatch(command));
     },
-    resolveBaseCommit: () => {
+    resolveBaseCommit: Effect.sync(() => {
       commits += 1;
-      return Promise.resolve('abc1234');
-    },
-    registerRepo: options.registerRepo ?? (() => Promise.resolve(null)),
-    createRepo: options.createRepo ?? (() => Promise.reject(new Error('No repository is created here.'))),
+      return 'abc1234';
+    }),
+    registerRepo: (projectId, name) => attempt(() => registerRepo(projectId, name)),
+    createRepo: (projectId, name) => attempt(() => createRepo(projectId, name)),
     hasProvider: (id) => id === 'claude',
-    awaitDelegation: (_child, timeoutMs) => {
-      waits.push(timeoutMs);
-      return Promise.resolve(options.outcome ?? 'settled');
-    },
-    recordStarted: (childRunId) => {
-      started.push(childRunId);
-    },
+    awaitDelegation: (_child, timeout) =>
+      Effect.sync(() => {
+        waits.push(Duration.toMillis(timeout));
+        return options.outcome ?? 'settled';
+      }),
+    recordStarted: (childRunId) => Effect.sync(() => void started.push(childRunId)),
   };
   return { call, started, waits, ids, commits: () => commits };
 }
@@ -302,10 +323,13 @@ describe('delegate_task', () => {
 
   test('a delegation the core declined to make is reported', async () => {
     const { core, run } = await building();
-    const { call } = createCall(core, run.id, { state: () => createState() });
-    call.dispatch = () => Promise.resolve([]);
-    call.state = () => ({ ...core.state, runs: { [run.id]: run } });
-    await expect(handleOrchestrationTool('delegate_task', { brief: 'Try it.' }, call)).rejects.toThrow(
+    const { call } = createCall(core, run.id);
+    const declined: OrchestrationCall = {
+      ...call,
+      dispatch: () => Effect.succeed([]),
+      state: Effect.sync(() => ({ ...core.state, runs: { [run.id]: run } })),
+    };
+    await expect(handleOrchestrationTool('delegate_task', { brief: 'Try it.' }, declined)).rejects.toThrow(
       'Nothing was delegated. Try again.'
     );
   });
@@ -467,7 +491,7 @@ describe('create_task and split_task', () => {
   test('create_task registers a repository it names from the project folders, and files the task there', async () => {
     const { core, run, taskId } = await building();
     const named: string[] = [];
-    const registerRepo: OrchestrationCall['registerRepo'] = async (projectId, name) => {
+    const registerRepo: RegisterRepo = async (projectId, name) => {
       named.push(`${projectId}:${name}`);
       await core.dispatch({
         type: 'repo.register',
@@ -503,10 +527,7 @@ describe('create_task and split_task', () => {
     return { ...building_, shinsa: project('Shinsa'), islands: project('Islands') };
   }
 
-  function createRepoIn(
-    core: ReturnType<typeof createCore>,
-    made: string[]
-  ): OrchestrationCall['createRepo'] {
+  function createRepoIn(core: ReturnType<typeof createCore>, made: string[]): CreateRepo {
     return async (projectId, name) => {
       made.push(`${projectId}:${name}`);
       await core.dispatch({

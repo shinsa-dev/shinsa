@@ -2,9 +2,9 @@ import { afterEach, describe, expect, test } from 'bun:test';
 import { readFileSync, symlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import { CODE_LIMITS, type FileChanged, type FileWritten } from '@shinsa/core';
-import { createWorktree } from '../../../src/git/index.ts';
-import { Workspaces } from '../../../src/workspaces/index.ts';
+import { createWorktree } from '../../helpers/git.ts';
 import { createGitRepo, git, writeFiles } from '../../helpers/index.ts';
+import { createTestMachine } from '../../helpers/machine.ts';
 import { disposeWebHandlers } from '../../helpers/web.ts';
 import { startRoutes } from './harness.ts';
 
@@ -13,8 +13,8 @@ afterEach(disposeWebHandlers);
 const HEAD_TEXT = 'export const value = 2;\n';
 
 async function startWithTask() {
-  const { context, post } = startRoutes(({ config }) => ({
-    workspaces: new Workspaces({ worktreesDir: config.worktreesDir }),
+  const { context, post } = startRoutes(({ config, engine }) => ({
+    workspaces: createTestMachine(engine, config).workspaces,
   }));
   const { config, engine } = context;
   const { repo } = await createGitRepo({ files: { 'src/app.ts': 'export const value = 1;\n' } });

@@ -1,10 +1,16 @@
-import type { GuestActor, MachineCredentials, TaskGuest } from '@shinsa/core';
-import { type Effect, Schema } from 'effect';
-import type { ChannelHub } from '../channel/schema.ts';
-import type { RemoteControl } from '../client/index.ts';
-import type { MachineKeyPair } from '../pairing/schema.ts';
-import type { RemoteStore } from '../store.ts';
-import type { TunnelConnectorLayer, TunnelPing } from '../tunnel/index.ts';
+import type {
+  ConnectChannel,
+  ConnectClaim,
+  DomainError,
+  GuestActor,
+  PairingView,
+  RemoteSnapshot,
+  TaskGuest,
+} from '@shinsa/core';
+import type { NotFound, RateLimited, Revoked } from '@shinsa/core/remote/errors';
+import { type Effect, Schema, type Scope } from 'effect';
+import type { ChannelHub, ChannelPeer, RemoteChannelHandle } from '../channel/schema.ts';
+import type { RemoteUnreachable } from '../client/schema.ts';
 
 export const REMOTE_ACCESS_CHANGED = 'Remote access to this machine changed.';
 
@@ -34,54 +40,62 @@ export class RemoteUrlUnopened extends Schema.TaggedError<
   { readonly brand: unique symbol }
 >()('RemoteUrlUnopened', { message: Schema.String }) {}
 
-export interface RemoteOptions {
-  path: string;
-  control?: RemoteControl;
-  connector: TunnelConnectorLayer;
-  ping?: TunnelPing;
-  localUrl: () => string;
-  version: string;
-  maxBodyBytes: number;
-  now?: () => number;
-  machineName: string;
-  openUrl: (url: string) => Promise<void>;
+export interface RemoteInput {
+  readonly version: string;
+  readonly machineName: string;
+  readonly maxBodyBytes: number;
+  readonly localUrl: Effect.Effect<string>;
 }
 
 export interface ChannelParts {
   readonly hub: ChannelHub;
-  readonly respond: (request: Request, guest: GuestActor | null, userId: string) => Promise<Response>;
+  readonly respond: (request: Request, guest: GuestActor | null, userId: string) => Effect.Effect<Response>;
 }
 
-export type HandoffClaimer = (taskId: string, guest: TaskGuest) => Promise<string | null>;
-
-export type GuestLeaver = (userIds: string[]) => void;
+export type GuestLeaver = (userIds: string[]) => Effect.Effect<void>;
 
 export type HandoffClaim = (
   taskId: string,
   guest: TaskGuest
 ) => Effect.Effect<string | null, HandoffClaimFailed>;
 
-interface RemoteTunnel {
-  start(credentials: MachineCredentials): Effect.Effect<void>;
-  readonly stop: Effect.Effect<void>;
-}
+type RemoteCallFailure =
+  | DomainError
+  | NotFound
+  | RateLimited
+  | Revoked
+  | RemoteUnreachable
+  | RemoteKeyUnreadable;
 
-interface RemoteAccessLeases {
-  acquire(close: Effect.Effect<void>): Effect.Effect<Effect.Effect<void>>;
-  readonly end: Effect.Effect<void>;
-}
-
-export interface RemoteDefinition {
-  readonly store: RemoteStore;
-  readonly origin: string;
+export interface RemoteHandle {
   readonly machineName: string;
-  readonly version: string;
-  readonly now: Effect.Effect<number>;
-  readonly secret: Effect.Effect<string>;
-  readonly newId: Effect.Effect<string>;
-  readonly machineKey: Effect.Effect<MachineKeyPair, RemoteKeyUnreadable>;
-  readonly signingKey: Effect.Effect<string, RemoteKeyUnreadable>;
-  readonly openUrl: (url: string) => Effect.Effect<void, RemoteUrlUnopened>;
-  readonly tunnel: RemoteTunnel;
-  readonly access: RemoteAccessLeases;
+  readonly snapshot: Effect.Effect<RemoteSnapshot>;
+  readonly isEnabled: Effect.Effect<boolean>;
+  readonly tunnelHost: Effect.Effect<string | null>;
+  readonly startPairing: Effect.Effect<PairingView, RemoteCallFailure>;
+  readonly cancelPairing: Effect.Effect<void>;
+  resolveHookUrl(scheduleId: string, token: string): Effect.Effect<string | null>;
+  readonly enable: Effect.Effect<void, DomainError>;
+  readonly disable: Effect.Effect<void, DomainError>;
+  readonly remove: Effect.Effect<void, DomainError>;
+  readonly createLink: Effect.Effect<void, RemoteCallFailure>;
+  readonly removeLink: Effect.Effect<void, RemoteCallFailure>;
+  handleClaims(claim: HandoffClaim): Effect.Effect<void>;
+  handleLeaves(leave: GuestLeaver): Effect.Effect<void>;
+  createHandoff(taskId: string): Effect.Effect<string, RemoteCallFailure>;
+  removeHandoff(taskId: string, guestId: string | null): Effect.Effect<void, RemoteCallFailure>;
+  grantTeammate(userId: string, teamId: string): Effect.Effect<void, RemoteCallFailure>;
+  acceptRequest(requestId: string): Effect.Effect<void, RemoteCallFailure>;
+  declineRequest(requestId: string): Effect.Effect<void, DomainError>;
+  removeMember(userId: string): Effect.Effect<void, RemoteCallFailure>;
+  readonly publish: Effect.Effect<void>;
+  observe(listener: Effect.Effect<void>): Effect.Effect<void, never, Scope.Scope>;
+  readonly start: Effect.Effect<void>;
+  readonly stop: Effect.Effect<void>;
+  readonly requestHeartbeat: Effect.Effect<void>;
+  verifyConnect(token: string | null, channel: ConnectChannel): Effect.Effect<ConnectClaim | null>;
+  spendConnect(claim: ConnectClaim): Effect.Effect<boolean>;
+  openChannel(peer: ChannelPeer, parts: ChannelParts, userId: string): Effect.Effect<RemoteChannelHandle>;
+  closeChannel(channel: RemoteChannelHandle): Effect.Effect<void>;
+  removeDevice(publicKey: string): Effect.Effect<boolean>;
 }

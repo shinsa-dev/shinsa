@@ -1,22 +1,57 @@
 import { describe, expect, test } from 'bun:test';
 import { chmodSync, mkdirSync, realpathSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import {
-  createLoginResolver,
-  createProjectRepository,
-  createRepository,
-  listCandidateRepos,
-  listLocalRepos,
-  resolveContainingRepo,
-  resolveProjectName,
-  syncRepoRemote,
-  upsertProjectFolderRepo,
-  upsertRepo,
-} from '../../src/repos/index.ts';
-import { Engine } from '../../src/runtime/index.ts';
-import { EventLog } from '../../src/store/index.ts';
+import type { Repo } from '@shinsa/core';
+import { Context, Effect } from 'effect';
+import { listLocalRepos, RepoFolders, resolveContainingRepo } from '../../src/repos/index.ts';
+import { resolveOwnerProjectName } from '../../src/repos/project-name.ts';
+import { type DispatchOptions, EngineStopped } from '../../src/runtime/engine/schema.ts';
+import { createConfigAt } from '../helpers/config.ts';
+import { Engine } from '../helpers/engine.ts';
+import { openEventLog } from '../helpers/event-log.ts';
 import { createGitRepo, createTempDir, git, overrideEnv } from '../helpers/index.ts';
+import { createTestMachine } from '../helpers/machine.ts';
 import { createStubEngine } from '../helpers/state.ts';
+
+const machines = new WeakMap<Engine, ReturnType<typeof createTestMachine>>();
+
+function openMachine(engine: Engine) {
+  const known = machines.get(engine);
+  if (known) return known;
+  const machine = createTestMachine(engine, createConfigAt(createTempDir()));
+  machines.set(engine, machine);
+  return machine;
+}
+
+function upsertRepo(
+  engine: Engine,
+  path: string,
+  projectId: string | null = null,
+  from: DispatchOptions = {}
+) {
+  return Effect.runPromise(openMachine(engine).registry.upsert(path, null, projectId, from));
+}
+
+function syncRepoRemote(engine: Engine, repo: Repo) {
+  return Effect.runPromise(openMachine(engine).registry.syncRemote(repo));
+}
+
+function upsertProjectFolderRepo(engine: Engine, projectId: string | null, name: string) {
+  return Effect.runPromise(openMachine(engine).registry.upsertProjectFolder(projectId, name));
+}
+
+function createProjectRepository(engine: Engine, projectId: string, name: string) {
+  return Effect.runPromise(openMachine(engine).registry.createInProject(projectId, name));
+}
+
+function createRepository(engine: Engine, parent: string, name: string, projectId: string | null) {
+  return Effect.runPromise(openMachine(engine).registry.create(parent, name, projectId));
+}
+
+function listCandidateRepos(roots: readonly string[], origin: string | null) {
+  const folders = Context.get(openMachine(new Engine(openEventLog())).context, RepoFolders);
+  return Effect.runPromise(folders.listCandidates(roots, origin));
+}
 
 function createRoot() {
   const root = createTempDir();
@@ -44,14 +79,19 @@ describe('listLocalRepos', () => {
 
 describe('project names', () => {
   test('the user’s own repositories are Personal, others are named after their owner', async () => {
-    const login = () => Promise.resolve('christo');
-    expect(await resolveProjectName(null, login)).toBe('Local');
-    expect(await resolveProjectName('github.com/Christo/app', login)).toBe('Personal');
-    expect(await resolveProjectName('github.com/superwall-me/paywall', login)).toBe('Superwall Me');
+    const login = Effect.succeed('christo');
+    const resolveProjectName = (remote: string | null) =>
+      Effect.runPromise(resolveOwnerProjectName(remote, login));
+    expect(await resolveProjectName(null)).toBe('Local');
+    expect(await resolveProjectName('github.com/Christo/app')).toBe('Personal');
+    expect(await resolveProjectName('github.com/superwall-me/paywall')).toBe('Superwall Me');
   });
 
   test('the GitHub login is read from gh once it answers, and a failed read is tried again', async () => {
-    const resolveLogin = createLoginResolver(createTempDir());
+    const { login } = createTestMachine(new Engine(openEventLog()), createConfigAt(createTempDir()), {
+      resolveLogin: undefined,
+    });
+    const resolveLogin = () => Effect.runPromise(login);
     const restores = [overrideEnv({ FAKE_GH_LOGIN: undefined, FAKE_GH_STATE: undefined })];
     try {
       expect(await resolveLogin()).toBeNull();
@@ -68,10 +108,9 @@ describe('project names', () => {
 describe('upsertRepo', () => {
   test('registers a repository the first time and returns it after', async () => {
     const { path } = await createGitRepo();
-    const engine = new Engine(new EventLog(join(createTempDir(), 'db.sqlite')));
-    const login = () => Promise.resolve(null);
-    const first = await upsertRepo(engine, join(path), login);
-    const again = await upsertRepo(engine, path, login);
+    const engine = new Engine(openEventLog(join(createTempDir(), 'db.sqlite')));
+    const first = await upsertRepo(engine, join(path));
+    const again = await upsertRepo(engine, path);
     expect(again.id).toBe(first.id);
     expect(Object.keys(engine.state.repos)).toHaveLength(1);
   });
@@ -79,40 +118,38 @@ describe('upsertRepo', () => {
   test('a registration is named after the folder and the log position, or after the effect that asks for it, so a resend lands once', async () => {
     const { path } = await createGitRepo();
     const stub = createStubEngine();
-    const login = () => Promise.resolve(null);
     stub.state.seq = 12;
-    await expect(upsertRepo(stub.engine, path, login)).rejects.toThrow('Could not register app.');
+    await expect(upsertRepo(stub.engine, path)).rejects.toThrow('Could not register app.');
     expect(stub.commandIds).toEqual([`repo:${await git(path, 'rev-parse', '--show-toplevel')}:12`]);
-    await expect(
-      upsertRepo(stub.engine, path, login, null, { id: 'triage:t1:repo.register' })
-    ).rejects.toThrow('Could not register app.');
+    await expect(upsertRepo(stub.engine, path, null, { id: 'triage:t1:repo.register' })).rejects.toThrow(
+      'Could not register app.'
+    );
     expect(stub.commandIds.at(-1)).toBe('triage:t1:repo.register');
 
-    const engine = new Engine(new EventLog(join(createTempDir(), 'db.sqlite')));
-    const concurrent = await Promise.all([upsertRepo(engine, path, login), upsertRepo(engine, path, login)]);
+    const engine = new Engine(openEventLog(join(createTempDir(), 'db.sqlite')));
+    const concurrent = await Promise.all([upsertRepo(engine, path), upsertRepo(engine, path)]);
     expect(concurrent[0].id).toBe(concurrent[1].id);
     expect(Object.keys(engine.state.repos)).toHaveLength(1);
   });
 
   test('a repository registered before it had an origin gets its remote once origin exists', async () => {
     const { path } = await createGitRepo({ remote: false });
-    const engine = new Engine(new EventLog(join(createTempDir(), 'db.sqlite')));
-    const login = () => Promise.resolve(null);
-    const first = await upsertRepo(engine, path, login);
+    const engine = new Engine(openEventLog(join(createTempDir(), 'db.sqlite')));
+    const first = await upsertRepo(engine, path);
     expect(first.remote).toBeNull();
     expect(await syncRepoRemote(engine, first)).toBe(first);
     await git(path, 'remote', 'add', 'origin', 'git@github.com:acme/app.git');
-    const again = await upsertRepo(engine, path, login);
+    const again = await upsertRepo(engine, path);
     expect(again).toMatchObject({ id: first.id, remote: 'github.com/acme/app' });
     expect(engine.state.repos[first.id]?.remote).toBe('github.com/acme/app');
     await git(path, 'remote', 'set-url', 'origin', 'https://github.com/acme/other.git');
-    expect((await upsertRepo(engine, path, login)).remote).toBe('github.com/acme/app');
+    expect((await upsertRepo(engine, path)).remote).toBe('github.com/acme/app');
   });
 
   test('syncing a repository fills in a missing remote from origin and leaves a known one alone', async () => {
     const { path } = await createGitRepo({ remote: false });
-    const engine = new Engine(new EventLog(join(createTempDir(), 'db.sqlite')));
-    const repo = await upsertRepo(engine, path, () => Promise.resolve(null));
+    const engine = new Engine(openEventLog(join(createTempDir(), 'db.sqlite')));
+    const repo = await upsertRepo(engine, path);
     await git(path, 'remote', 'add', 'origin', 'https://github.com/acme/app.git');
     const synced = await syncRepoRemote(engine, repo);
     expect(synced).toMatchObject({ id: repo.id, remote: 'github.com/acme/app' });
@@ -123,17 +160,15 @@ describe('upsertRepo', () => {
   test('a registration that does not land is an error', async () => {
     const { path } = await createGitRepo({ remote: false });
     const { engine } = createStubEngine();
-    await expect(upsertRepo(engine, path, () => Promise.resolve(null))).rejects.toThrow(
-      'Could not register app.'
-    );
+    await expect(upsertRepo(engine, path)).rejects.toThrow('Could not register app.');
   });
   test('a registration the log cannot take fails with the reason', async () => {
     const { path } = await createGitRepo({ remote: false });
     const { engine } = createStubEngine();
     const broken = Object.assign(Object.create(engine), {
-      dispatch: () => Promise.reject(new Error('log full')),
+      core: { ...engine.core, dispatch: () => Effect.fail(new EngineStopped({ message: 'log full' })) },
     }) as typeof engine;
-    await expect(upsertRepo(broken, path, () => Promise.resolve(null))).rejects.toThrow('log full');
+    await expect(upsertRepo(broken, path)).rejects.toThrow('log full');
   });
 });
 
@@ -142,13 +177,13 @@ describe('upsertProjectFolderRepo', () => {
     const folder = createTempDir();
     await createGitRepo({ root: folder, name: 'app', remote: false });
     await createGitRepo({ root: folder, name: 'docs', remote: false });
-    const engine = new Engine(new EventLog(join(createTempDir(), 'db.sqlite')));
+    const engine = new Engine(openEventLog(join(createTempDir(), 'db.sqlite')));
     await engine.dispatch({
       type: 'project.write',
       project: { name: 'Superwall', color: 'blue', folders: [folder] },
     });
     const projectId = Object.keys(engine.state.projects)[0] ?? '';
-    const app = await upsertRepo(engine, join(folder, 'app'), () => Promise.resolve(null), projectId);
+    const app = await upsertRepo(engine, join(folder, 'app'), projectId);
     await engine.dispatch({ type: 'task.create', request: 'Add agent login', repoId: app.id });
     const task = Object.values(engine.state.tasks)[0];
     if (!task) throw new Error('no task');
@@ -167,7 +202,7 @@ async function createProject(engine: Engine, folders: string[] = []) {
 describe('createProjectRepository', () => {
   test('creates the folder in the project folder, starts it on the default branch and registers it there', async () => {
     const folder = createTempDir();
-    const engine = new Engine(new EventLog(join(createTempDir(), 'db.sqlite')));
+    const engine = new Engine(openEventLog(join(createTempDir(), 'db.sqlite')));
     const projectId = await createProject(engine, [folder]);
     const repo = await createProjectRepository(engine, projectId, 'native-islands');
     const path = realpathSync(join(folder, 'native-islands'));
@@ -183,7 +218,7 @@ describe('createProjectRepository', () => {
 
   test('starts on the branch git is set to begin with', async () => {
     const folder = createTempDir();
-    const engine = new Engine(new EventLog(join(createTempDir(), 'db.sqlite')));
+    const engine = new Engine(openEventLog(join(createTempDir(), 'db.sqlite')));
     const projectId = await createProject(engine, [folder]);
     const restore = overrideEnv({
       GIT_CONFIG_COUNT: '1',
@@ -200,20 +235,20 @@ describe('createProjectRepository', () => {
   });
 
   test('a project without a folder creates it beside its repositories, and one with neither is refused', async () => {
-    const engine = new Engine(new EventLog(join(createTempDir(), 'db.sqlite')));
+    const engine = new Engine(openEventLog(join(createTempDir(), 'db.sqlite')));
     const projectId = await createProject(engine);
     await expect(createProjectRepository(engine, projectId, 'app')).rejects.toThrow(
       'The project has no folder to create "app" in. Add one with `projects_add_folder`, then try again.'
     );
     const { path, root } = await createGitRepo({ remote: false });
-    await upsertRepo(engine, path, () => Promise.resolve(null), projectId);
+    await upsertRepo(engine, path, projectId);
     const repo = await createProjectRepository(engine, projectId, 'site');
     expect(repo.path).toBe(realpathSync(join(root, 'site')));
   });
 
   test('refuses a name that is not a plain folder name, a folder with files in it, and a folder git cannot start', async () => {
     const folder = createTempDir();
-    const engine = new Engine(new EventLog(join(createTempDir(), 'db.sqlite')));
+    const engine = new Engine(openEventLog(join(createTempDir(), 'db.sqlite')));
     const projectId = await createProject(engine, [folder]);
     for (const name of ['../escape', '.hidden', 'app.git', 'a b']) {
       await expect(createProjectRepository(engine, projectId, name)).rejects.toThrow(

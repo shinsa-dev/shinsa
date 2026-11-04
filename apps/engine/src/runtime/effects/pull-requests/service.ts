@@ -23,10 +23,15 @@ import {
   Semaphore,
   SynchronizedRef,
 } from 'effect';
-import { type BundleBranch, checkBundleMerge, syncRemoteBranch } from '../../../git/index.ts';
-import { type PullRequestRead, readPullRequest, retargetPullRequest } from '../../../github/index.ts';
+import { Checkout } from '../../../git/checkout/service.ts';
+import type { BundleBranch } from '../../../git/remote/schema.ts';
+import { Remote } from '../../../git/remote/service.ts';
+import { RepoCiReader } from '../../../github/ci/service.ts';
+import type { PullRequestRead } from '../../../github/pulls/schema.ts';
+import { PullRequests } from '../../../github/pulls/service.ts';
 import { describeError } from '../../../log/redact.ts';
-import { syncRepoRemote } from '../../../repos/index.ts';
+import { RepoRegistry } from '../../../repos/registry/service.ts';
+import { resolveEffectFailure } from '../../failures/classify.ts';
 import type { EffectFailure } from '../../failures/schema.ts';
 import { RATE_LIMITED } from '../schema.ts';
 import { EffectWorld } from '../world/service.ts';
@@ -48,6 +53,11 @@ export class PullRequestSync extends Context.Service<
     PullRequestSync,
     Effect.gen(function* () {
       const world = yield* EffectWorld;
+      const registry = yield* RepoRegistry;
+      const checkout = yield* Checkout;
+      const remote = yield* Remote;
+      const repoCi = yield* RepoCiReader;
+      const pulls = yield* PullRequests;
       const locks = yield* RcMap.make({ lookup: (_taskId: string) => Semaphore.make(1) });
       const syncing = yield* SynchronizedRef.make<Fiber.Fiber<void, EffectFailure> | null>(null);
       const watching = yield* FiberHandle.make();
@@ -78,9 +88,7 @@ export class PullRequestSync extends Context.Service<
         pullRequest: PullRequest
       ) {
         if (pullRequest.state !== 'open' || pullRequest.checks !== 'none') return 'unknown' as RepoCi;
-        return yield* world.bridge((signal) =>
-          world.ci.resolve(repo, pullRequest.base ?? repo.defaultBranch, signal)
-        );
+        return yield* repoCi.resolve(repo, pullRequest.base ?? repo.defaultBranch);
       });
 
       const recordRead = Effect.fn('PullRequestSync.recordRead')(function* (
@@ -129,15 +137,17 @@ export class PullRequestSync extends Context.Service<
       ) {
         const branches = yield* listBundleBranches(repo, task);
         if (pullRequest.state !== 'open' || branches.length === 0) return;
-        const conflict = yield* world
-          .bridge((signal) => checkBundleMerge(repo, branches, signal))
-          .pipe(
-            Effect.catch((failure) =>
-              Effect.logWarning(
-                '[Watch] Could not check that the bundle merges into the default branch'
-              ).pipe(Effect.annotateLogs({ taskId: task.id, error: failure.message }), Effect.as(undefined))
+        const conflict = yield* Effect.mapError(
+          remote.checkBundleMerge(repo, branches),
+          resolveEffectFailure
+        ).pipe(
+          Effect.catch((failure) =>
+            Effect.logWarning('[Watch] Could not check that the bundle merges into the default branch').pipe(
+              Effect.annotateLogs({ taskId: task.id, error: failure.message }),
+              Effect.as(undefined)
             )
-          );
+          )
+        );
         if (conflict === undefined) return;
         yield* world.dispatch({ type: 'bundle.record_check', taskId: task.id, conflict });
       });
@@ -149,12 +159,13 @@ export class PullRequestSync extends Context.Service<
       ) {
         const base = pullRequest.base;
         if (pullRequest.mergeable !== false || !base) return;
-        const error = yield* world
-          .bridge((signal) => syncRemoteBranch(repo, base, signal))
-          .pipe(
-            Effect.map((result) => (result.ok ? null : result.stderr)),
-            Effect.catch((failure) => Effect.succeed(failure.message))
-          );
+        const error = yield* Effect.mapError(
+          checkout.syncRemoteBranch(repo, base),
+          resolveEffectFailure
+        ).pipe(
+          Effect.map((result) => (result.ok ? null : result.stderr)),
+          Effect.catch((failure) => Effect.succeed(failure.message))
+        );
         if (error === null) return;
         yield* Effect.logWarning(
           '[Watch] Could not fetch the base of a conflicting pull request; the agent fetches it'
@@ -166,14 +177,14 @@ export class PullRequestSync extends Context.Service<
         const task = state.tasks[taskId];
         const known = task?.repoId ? state.repos[task.repoId] : undefined;
         if (!task || !known) return null;
-        const repo = yield* world.bridge(() => syncRepoRemote(world.engine, known));
+        const repo = yield* Effect.mapError(registry.syncRemote(known), resolveEffectFailure);
         const read = yield* Effect.gen(function* () {
           const wanted = resolveRoundBase(task) ?? repo.defaultBranch;
           const current = task.pullRequest;
           if (current?.state === 'open' && current.base && current.base !== wanted) {
-            yield* world.bridge((signal) => retargetPullRequest(repo, current.number, wanted, signal));
+            yield* Effect.mapError(pulls.retarget(repo, current.number, wanted), resolveEffectFailure);
           }
-          return yield* world.bridge((signal) => readPullRequest(repo, task, signal));
+          return yield* Effect.mapError(pulls.read(repo, task), resolveEffectFailure);
         }).pipe(
           Effect.catch((failure) => recordReadFailure(taskId, failure.message).pipe(Effect.as(undefined)))
         );
@@ -203,7 +214,7 @@ export class PullRequestSync extends Context.Service<
             (task.stage === 'shipping' || task.stage === 'awaiting_merge') && !task.pullRequestWatch?.stopped
         );
         for (const task of watched) yield* sync(task.id);
-        const failure = yield* world.bridge((signal) => world.feedback.syncIssues(signal));
+        const failure = yield* Effect.mapError(world.feedback.syncIssues, resolveEffectFailure);
         if (failure) {
           yield* Effect.logWarning('[Feedback] Could not read the state of opened issues').pipe(
             Effect.annotateLogs({ error: failure })

@@ -36,7 +36,7 @@ export function defineCommand(definition: CommandDefinition): SurfaceSpec {
         'check',
         definition.done?.(values, receipt) ?? 'Done.'
       );
-      const problem = definition.after?.(values, receipt, client) ?? null;
+      const problem = definition.after ? yield* definition.after(values, receipt, client) : null;
       const link = describeTaskLink(client, receipt);
       const text = [done, problem, link ? display.style.dim(link) : null].filter(Boolean).join('\n');
       return { data: receipt, text };

@@ -1,17 +1,45 @@
-import { describe, expect, spyOn, test } from 'bun:test';
+import { afterEach, describe, expect, spyOn, test } from 'bun:test';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { AccountsSnapshot, ProviderLogin, RunAccount, RunFailure, ShinsaCommand } from '@shinsa/core';
-import { Cswap } from '../../src/accounts/cswap.ts';
-import { Accounts, createOnboardingAccounts } from '../../src/accounts/index.ts';
-import type { LoginProcess, LoginSpawner } from '../../src/accounts/login.ts';
+import type {
+  AccountsSnapshot,
+  ChatNotice,
+  ProviderLogin,
+  RunAccount,
+  RunFailure,
+  ShinsaCommand,
+} from '@shinsa/core';
+import { Effect } from 'effect';
+import { Accounts } from '../../src/accounts/index.ts';
+import { UsageLimits } from '../../src/accounts/limits/service.ts';
+import { AccountLogins } from '../../src/accounts/login/service.ts';
 import { resolveKeychainService } from '../../src/accounts/paths.ts';
-import type { RunRejection } from '../../src/agents/index.ts';
-import type { ProviderUsageReading, ProviderUsageSource } from '../../src/agents/providers/index.ts';
+import type { AccountDetails } from '../../src/accounts/schema.ts';
+import type { AccountChange } from '../../src/accounts/store/schema.ts';
+import { AccountStore } from '../../src/accounts/store/service.ts';
+import type { AccountLeaseRequest, RunRejection } from '../../src/agents/index.ts';
+import type { ProviderUsageReading } from '../../src/agents/providers/types.ts';
 import { log } from '../../src/log/index.ts';
-import { type CommandOptions, type CommandResult, runCommand } from '../../src/shell/index.ts';
+import { createSummaryAccountSource } from '../../src/onboarding/accounts.ts';
+import { EngineStopped } from '../../src/runtime/engine/schema.ts';
+import type { CommandResult } from '../../src/shell/schema.ts';
 import { captureLogs, createTempDir, createTestConfig, overrideEnv, until } from '../helpers/index.ts';
 import { createGate, createRun, createStubEngine, createTask, type StubEngine } from '../helpers/state.ts';
+import {
+  type AccountsHarness,
+  type AccountsHarnessOptions,
+  buildAccounts,
+  createStubEngineCore,
+  type FakeLoginProcess,
+  type FakeLoginSpawner,
+  type FakeRunner,
+} from './harness.ts';
+
+const open: AccountsHarness[] = [];
+
+afterEach(async () => {
+  for (const harness of open.splice(0)) await harness.close();
+});
 
 const HOUR = 60 * 60 * 1000;
 
@@ -27,7 +55,7 @@ interface Call {
   env: Record<string, string | undefined>;
 }
 
-interface FakeProcess extends LoginProcess {
+interface FakeProcess extends FakeLoginProcess {
   written: string[];
   exit: (code: number) => void;
   emit: (text: string) => void;
@@ -42,11 +70,68 @@ interface WorldOptions {
   inspect?: boolean;
   root?: string;
   now?: number;
-  providerUsage?: ProviderUsageSource[];
+  providerUsage?: AccountsHarnessOptions['providerUsage'];
   providerLogins?: () => Promise<ProviderLogin[]>;
 }
 
-function createWorld(options: WorldOptions = {}) {
+async function openAccounts(stub: StubEngine, options: AccountsHarnessOptions) {
+  const harness = await buildAccounts(options);
+  open.push(harness);
+  const { run, runSync } = harness;
+  const roster = harness.service(Accounts);
+  const store = harness.service(AccountStore);
+  const logins = harness.service(AccountLogins);
+  const limits = harness.service(UsageLimits).claude;
+  const accounts = {
+    start: () => run(roster.start),
+    stop: () => runSync(roster.stop),
+    snapshot: () => runSync(roster.snapshot),
+    subscribe: (listener: (snapshot: AccountsSnapshot) => void) => {
+      const release = runSync(roster.subscribe((snapshot) => Effect.sync(() => listener(snapshot))));
+      return () => runSync(release);
+    },
+    syncProviderLogins: () => run(roster.syncProviderLogins),
+    syncSignIns: () => run(roster.syncSignIns),
+    lease: (request: AccountLeaseRequest) => run(roster.lease(request)),
+    readWeeklyReading: (accountId: string, force: boolean) => run(roster.readWeeklyReading(accountId, force)),
+    readProviderWeeklyReading: (provider: string, force: boolean) =>
+      run(roster.readProviderWeeklyReading(provider, force)),
+    readFastMode: (provider: string, accountId: string | null) =>
+      run(roster.readFastMode(provider, accountId)),
+    onRejection: (rejection: RunRejection) => run(roster.onRejection(rejection)),
+    rejectNow: (rejection: RunRejection) => runSync(roster.onRejection(rejection)),
+    onNotice: (runId: string, notice: ChatNotice) => runSync(roster.onNotice(runId, notice)),
+    refresh: () => run(roster.refresh),
+    refreshUsage: () => run(roster.refreshUsage),
+    startLogin: (accountId: string | null) => run(roster.startLogin(accountId)),
+    submitLoginCode: (loginId: unknown, code: unknown) => runSync(roster.submitLoginCode(loginId, code)),
+    cancelLogin: (loginId: unknown) => runSync(roster.cancelLogin(loginId)),
+    importAccount: (origin: unknown, email: unknown) => run(roster.importAccount(origin, email)),
+    update: (accountId: unknown, patch: unknown) => runSync(roster.update(accountId, patch)),
+    remove: (accountId: unknown) => run(roster.remove(accountId)),
+    snapshotEffect: roster.snapshot,
+    store: {
+      get exists() {
+        return runSync(store.exists);
+      },
+      list: () => runSync(store.list),
+      select: (id: string) => runSync(store.select(id)),
+      find: (id: string) => runSync(store.find(id)),
+      create: (details?: AccountDetails) => runSync(store.create(details)),
+      update: (id: string, patch: AccountChange) => runSync(store.update(id, patch)),
+      remove: (id: string) => runSync(store.remove(id)),
+    },
+    logins: { current: () => runSync(logins.current) },
+    limits: {
+      refresh: (ids: string[], force = false) => run(limits.refresh(ids, force)),
+      recordPush: (id: string, notice: Extract<ChatNotice, { kind: 'rate_limit' }>) =>
+        runSync(limits.recordPush(id, notice)),
+    },
+  };
+  return { accounts, harness, stub };
+}
+
+async function createWorld(options: WorldOptions = {}) {
   const root = options.root ?? createTempDir();
   const config = createTestConfig(root, { inspect: options.inspect ?? false });
   const shared = join(root, 'shared-claude');
@@ -62,13 +147,14 @@ function createWorld(options: WorldOptions = {}) {
   const usage = new Map<string, unknown>();
   const processes: FakeProcess[] = [];
   let cswapList: unknown = { accounts: [] };
-  let now = options.now ?? 1_000_000;
+  const clock = { now: options.now ?? 1_000_000 };
   let keychainBroken = false;
   const stub: StubEngine = createStubEngine();
-  const run = (command: string[], _cwd: string, commandOptions: CommandOptions): Promise<CommandResult> => {
+  const run: FakeRunner = (command, _cwd, commandOptions) => {
     const env = commandOptions.env ?? {};
     calls.push({ command, env });
-    if (command[0] === '/bin/cswap' && command[1] === 'list')
+    if (command[0] === 'claude-swap') return Promise.resolve({ ...result('', false), code: 127 });
+    if (command[0] === 'cswap' && command[1] === 'list')
       return Promise.resolve(result(JSON.stringify(cswapList)));
     if (command[1] === 'auth' && command[2] === 'status') {
       const status = statuses.get(env.CLAUDE_CONFIG_DIR ?? 'default') ?? { loggedIn: false };
@@ -76,7 +162,7 @@ function createWorld(options: WorldOptions = {}) {
     }
     return Promise.resolve(result(''));
   };
-  const spawnLogin: LoginSpawner = (command, spawnOptions) => {
+  const spawnLogin: FakeLoginSpawner = (command, spawnOptions) => {
     const exit = Promise.withResolvers<number>();
     const process: FakeProcess = {
       written: [],
@@ -90,8 +176,8 @@ function createWorld(options: WorldOptions = {}) {
     processes.push(process);
     return process;
   };
-  const accounts = new Accounts({
-    engine: stub.engine,
+  const opened = await openAccounts(stub, {
+    engine: createStubEngineCore(stub),
     config,
     env: { CLAUDE_CONFIG_DIR: shared, USER: 'tester' },
     run,
@@ -106,9 +192,8 @@ function createWorld(options: WorldOptions = {}) {
       return Promise.resolve(body ? Response.json(body) : new Response('no', { status: 401 }));
     },
     spawnLogin,
-    cswap: new Cswap({ run, which: (name) => (name === 'cswap' ? '/bin/cswap' : null) }),
     resolveClaude: () => Promise.resolve('claude'),
-    now: () => now,
+    now: clock.now,
     refreshIntervalMs: 60 * 60_000,
     loginTimers: { menuFallbackMs: 60_000, urlTimeoutMs: 60_000, watchdogMs: 60_000 },
     ...(options.providerUsage ? { providerUsage: options.providerUsage } : {}),
@@ -118,7 +203,8 @@ function createWorld(options: WorldOptions = {}) {
     root,
     config,
     shared,
-    accounts,
+    accounts: opened.accounts,
+    harness: opened.harness,
     stub,
     statuses,
     calls,
@@ -126,14 +212,15 @@ function createWorld(options: WorldOptions = {}) {
     secretReads,
     usage,
     processes,
-    advance: (ms: number) => {
-      now += ms;
+    advance: async (ms: number) => {
+      clock.now += ms;
+      await opened.harness.setTime(clock.now);
     },
     breakKeychain: (broken: boolean) => {
       keychainBroken = broken;
     },
     get now() {
-      return now;
+      return clock.now;
     },
     setCswap: (list: unknown) => {
       cswapList = list;
@@ -142,14 +229,14 @@ function createWorld(options: WorldOptions = {}) {
       secrets.set(
         resolveKeychainService(dir ?? shared),
         JSON.stringify({
-          claudeAiOauth: { accessToken: token, expiresAt: now + HOUR, subscriptionType: plan },
+          claudeAiOauth: { accessToken: token, expiresAt: clock.now + HOUR, subscriptionType: plan },
         })
       );
     },
   };
 }
 
-type World = ReturnType<typeof createWorld>;
+type World = Awaited<ReturnType<typeof createWorld>>;
 
 function windows(session: number, weekly: number, fable = 0, resetsAt = '2030-01-01T00:00:00Z') {
   return {
@@ -231,9 +318,7 @@ function reject(
     renewed: [],
     failure: failure(overrides),
   };
-  const verdict = world.accounts.onRejection(rejection);
-  if (verdict instanceof Promise) throw new Error('A Claude rejection is answered at once.');
-  return verdict;
+  return world.accounts.rejectNow(rejection);
 }
 
 function lease(
@@ -261,7 +346,7 @@ function dispatched(world: World) {
 
 describe('starting', () => {
   test('the first start adds no account, even with your Claude Code signed in, and offers none of it', async () => {
-    const world = createWorld();
+    const world = await createWorld();
     world.statuses.set('default', { loggedIn: true, email: 'me@example.com', subscriptionType: 'max' });
     world.login(null, 'token-me');
     await world.accounts.start();
@@ -272,7 +357,7 @@ describe('starting', () => {
   });
 
   test('a change to an account or a run starting on it shows in the snapshot pushed to listeners', async () => {
-    const world = createWorld({ registry: true });
+    const world = await createWorld({ registry: true });
     const account = await addAccount(world, 'me@example.com', 10);
     await world.accounts.start();
     const heard: number[] = [];
@@ -299,7 +384,7 @@ describe('starting', () => {
   });
 
   test('the other providers’ sign-ins ride along in the snapshot, and one that cannot be read is logged', async () => {
-    const world = createWorld();
+    const world = await createWorld();
     const logs = captureLogs();
     const codex = {
       provider: 'codex',
@@ -311,14 +396,11 @@ describe('starting', () => {
       fix: null,
     };
     let reads = 0;
-    const accounts = new Accounts({
-      engine: world.stub.engine,
+    const { accounts } = await openAccounts(world.stub, {
+      engine: createStubEngineCore(world.stub),
       config: createTestConfig(world.root),
       env: { CLAUDE_CONFIG_DIR: world.shared },
       run: () => Promise.resolve(result('')),
-      readSecret: () => Promise.resolve(null),
-      cswap: new Cswap({ run: () => Promise.resolve(result('')), which: () => null }),
-      resolveClaude: () => Promise.resolve('claude'),
       providerLogins: () => {
         reads += 1;
         return reads === 1 ? Promise.resolve([codex]) : Promise.reject(new Error('codex hung'));
@@ -336,7 +418,7 @@ describe('starting', () => {
   });
 
   test('stopping before the start finishes never leaves a timer behind', async () => {
-    const world = createWorld();
+    const world = await createWorld();
     const starting = world.accounts.start();
     world.accounts.stop();
     await starting;
@@ -346,7 +428,7 @@ describe('starting', () => {
 
 describe('signing in an account', () => {
   test('a new account gets its own Claude folder, signs in there, and retries the tasks waiting on it', async () => {
-    const world = createWorld({ registry: true });
+    const world = await createWorld({ registry: true });
     const heard: unknown[] = [];
     const unsubscribe = world.accounts.subscribe((snapshot) => heard.push(snapshot.login?.phase));
     const account = await addAccount(world, 'work@example.com', 30);
@@ -356,7 +438,16 @@ describe('signing in an account', () => {
     const login = world.calls.find((call) => call.command[1] === 'auth' && call.command[2] === 'login');
     expect(login).toEqual({
       command: ['claude', 'auth', 'login', '--claudeai'],
-      env: { CLAUDE_CONFIG_DIR: account.configDir as string },
+      env: {
+        USER: 'tester',
+        CLAUDE_CONFIG_DIR: account.configDir as string,
+        ANTHROPIC_API_KEY: undefined,
+        ANTHROPIC_AUTH_TOKEN: undefined,
+        CLAUDE_CODE_API_KEY_FILE_DESCRIPTOR: undefined,
+        CLAUDE_CODE_OAUTH_TOKEN: undefined,
+        CLAUDE_CODE_OAUTH_TOKEN_FILE_DESCRIPTOR: undefined,
+        TERM: 'xterm-256color',
+      },
     });
     expect(existsSync(join(account.configDir as string, 'settings.json'))).toBe(true);
     expect(JSON.parse(readFileSync(join(account.configDir as string, '.claude.json'), 'utf8'))).toEqual({
@@ -376,7 +467,7 @@ describe('signing in an account', () => {
   });
 
   test('a new account whose sign-in fails is removed again, and one that already exists is refused', async () => {
-    const world = createWorld({ registry: true });
+    const world = await createWorld({ registry: true });
     await world.accounts.startLogin(null);
     const [created] = world.accounts.store.list();
     world.processes[0]?.exit(1);
@@ -395,7 +486,7 @@ describe('signing in an account', () => {
   });
 
   test('signing an existing account in again keeps it, and a sign-in that stays signed out says so', async () => {
-    const world = createWorld({ registry: true });
+    const world = await createWorld({ registry: true });
     const account = await addAccount(world, 'work@example.com', 10);
     await world.accounts.startLogin(account.id);
     world.statuses.set(account.configDir as string, { loggedIn: false });
@@ -408,7 +499,7 @@ describe('signing in an account', () => {
   });
 
   test('a code can be pasted while the sign-in waits, and a finished sign-in can be cleared', async () => {
-    const world = createWorld({ registry: true });
+    const world = await createWorld({ registry: true });
     const snapshot = await world.accounts.startLogin(null);
     const loginId = snapshot.login?.id ?? '';
     expect(() => world.accounts.submitLoginCode(loginId, '')).toThrow(
@@ -429,7 +520,7 @@ describe('signing in an account', () => {
   });
 
   test('a sign-in for an account removed meanwhile fails plainly', async () => {
-    const world = createWorld({ registry: true });
+    const world = await createWorld({ registry: true });
     const account = await addAccount(world, 'work@example.com', 10);
     await world.accounts.startLogin(account.id);
     world.accounts.store.remove(account.id);
@@ -441,11 +532,11 @@ describe('signing in an account', () => {
 
 describe('inspect mode', () => {
   test('shows the stored accounts without reading a login or usage, and refuses to refresh or change them', async () => {
-    const live = createWorld({ registry: true });
+    const live = await createWorld({ registry: true });
     const account = await addAccount(live, 'seen@example.com', 20);
     live.accounts.stop();
     const registry = readFileSync(join(live.root, 'accounts.json'), 'utf8');
-    const world = createWorld({ root: live.root, inspect: true });
+    const world = await createWorld({ root: live.root, inspect: true });
     await world.accounts.start();
     expect(world.accounts.snapshot().accounts.map((listed) => listed.email)).toEqual(['seen@example.com']);
     const refused = { code: 'inspect_read_only' };
@@ -460,7 +551,7 @@ describe('inspect mode', () => {
 
 describe('importing logins', () => {
   test('an account from claude-swap gets a sign-in of its own, and claude-swap’s login is never read', async () => {
-    const world = createWorld({ registry: true });
+    const world = await createWorld({ registry: true });
     world.setCswap({ accounts: [{ email: 'swap@example.com', organizationName: 'Swap' }] });
     await world.accounts.refresh();
     expect(world.accounts.snapshot().imports).toEqual([
@@ -492,7 +583,7 @@ describe('importing logins', () => {
   });
 
   test('signing in as another account than the claude-swap one you picked adds nothing', async () => {
-    const world = createWorld({ registry: true });
+    const world = await createWorld({ registry: true });
     world.setCswap({ accounts: [{ email: 'swap@example.com' }] });
     await world.accounts.refresh();
     await world.accounts.importAccount('cswap', 'swap@example.com');
@@ -517,7 +608,7 @@ describe('importing logins', () => {
   });
 
   test('an import names its account and comes only from claude-swap, never from your Claude Code login', async () => {
-    const world = createWorld({ registry: true });
+    const world = await createWorld({ registry: true });
     expect(() => world.accounts.importAccount('cswap', ' ')).toThrow('Name the account to sign in to.');
     expect(() => world.accounts.importAccount('claude', 'me@example.com')).toThrow(
       'Sign in to an account claude-swap has.'
@@ -527,7 +618,7 @@ describe('importing logins', () => {
 
 describe('one login, one account', () => {
   test('an account you already have is neither offered nor signed in to again from claude-swap', async () => {
-    const world = createWorld({ registry: true });
+    const world = await createWorld({ registry: true });
     await addAccount(world, 'me@example.com', 10, 'Acme');
     world.setCswap({ accounts: [{ email: 'me@example.com' }] });
     await world.accounts.refresh();
@@ -541,7 +632,7 @@ describe('one login, one account', () => {
   test('an account that ran on your Claude Code login is kept behind a login of its own with the same email', async () => {
     const root = createTempDir();
     writeImportedAccount(root, 'claude', 'me@example.com');
-    const world = createWorld({ root });
+    const world = await createWorld({ root });
     const own = world.accounts.store.create({ email: 'me@example.com' });
     world.statuses.set(own.configDir as string, { loggedIn: true, email: 'me@example.com' });
     const snapshot = await world.accounts.refresh();
@@ -551,7 +642,7 @@ describe('one login, one account', () => {
   });
 
   test('the same email in another organization is another account, and a new sign-in to one you have is refused', async () => {
-    const world = createWorld({ registry: true });
+    const world = await createWorld({ registry: true });
     const mine = await addAccount(world, 'me@example.com', 10, 'Acme');
     const team = await addAccount(world, 'me@example.com', 10, 'Team');
     expect(world.accounts.snapshot().accounts.map((account) => account.id)).toEqual([mine.id, team.id]);
@@ -572,12 +663,12 @@ describe('one login, one account', () => {
 
 describe('choosing the account for an attempt', () => {
   test('with no accounts the run keeps the login it would have used anyway', async () => {
-    const world = createWorld({ registry: true });
+    const world = await createWorld({ registry: true });
     expect(await lease(world)).toBeNull();
   });
 
   test('the default account is used while it is below the threshold, then the one with most headroom', async () => {
-    const world = createWorld({ registry: true });
+    const world = await createWorld({ registry: true });
     const busy = await addAccount(world, 'busy@example.com', 50);
     const idle = await addAccount(world, 'idle@example.com', 10);
     const spare = await addAccount(world, 'spare@example.com', 30);
@@ -600,7 +691,7 @@ describe('choosing the account for an attempt', () => {
   });
 
   test('a run starts from the cached weekly reading and ends on a fresh one, each with its time and reset', async () => {
-    const world = createWorld({ registry: true });
+    const world = await createWorld({ registry: true });
     const account = await addAccount(world, 'weekly@example.com', 20);
     await world.accounts.refresh();
     world.usage.set('token-weekly@example.com', windows(30, 24));
@@ -615,7 +706,7 @@ describe('choosing the account for an attempt', () => {
   });
 
   test('a weekly value a session pushed is read again, since its time is not known', async () => {
-    const world = createWorld({ registry: true });
+    const world = await createWorld({ registry: true });
     const account = await addAccount(world, 'pushed@example.com', 20);
     await world.accounts.refresh();
     world.accounts.limits.recordPush(account.id, {
@@ -630,7 +721,7 @@ describe('choosing the account for an attempt', () => {
   });
 
   test('a model window counts only for runs on that model', async () => {
-    const world = createWorld({ registry: true });
+    const world = await createWorld({ registry: true });
     const first = await addAccount(world, 'first@example.com', 10);
     const second = await addAccount(world, 'second@example.com', 20);
     world.usage.set('token-first@example.com', windows(10, 10, 95));
@@ -640,7 +731,7 @@ describe('choosing the account for an attempt', () => {
   });
 
   test('a bound task always gets its account, and one bound to a removed account falls back to the login', async () => {
-    const world = createWorld({ registry: true });
+    const world = await createWorld({ registry: true });
     const spent = await addAccount(world, 'spent@example.com', 100);
     await addAccount(world, 'fresh@example.com', 0);
     const bound = { id: spent.id, email: spent.email };
@@ -660,7 +751,7 @@ describe('choosing the account for an attempt', () => {
   });
 
   test('when every account is spent the least spent one is tried, so the limit can be confirmed', async () => {
-    const world = createWorld({ registry: true });
+    const world = await createWorld({ registry: true });
     await addAccount(world, 'late@example.com', 10);
     const early = await addAccount(world, 'early@example.com', 10);
     reject(world, world.accounts.store.list()[0]?.id ?? '', { resetAt: world.now + 3 * HOUR });
@@ -671,7 +762,7 @@ describe('choosing the account for an attempt', () => {
 
 describe('moving a rejected attempt to another account', () => {
   test('a usage limit marks the account spent and retries on the next one, at most once per account', async () => {
-    const world = createWorld({ registry: true });
+    const world = await createWorld({ registry: true });
     const a = await addAccount(world, 'a@example.com', 10);
     const b = await addAccount(world, 'b@example.com', 20);
     const c = await addAccount(world, 'c@example.com', 30);
@@ -694,7 +785,7 @@ describe('moving a rejected attempt to another account', () => {
   });
 
   test('the accounts a run already tried come with the rejection, so nothing is remembered between runs', async () => {
-    const world = createWorld({ registry: true });
+    const world = await createWorld({ registry: true });
     const a = await addAccount(world, 'a@example.com', 10);
     const b = await addAccount(world, 'b@example.com', 10);
     const c = await addAccount(world, 'c@example.com', 10);
@@ -703,12 +794,12 @@ describe('moving a rejected attempt to another account', () => {
       expect(reject(world, account.id, { resetAt: world.now + 60_000 })).toEqual({ retry: true });
     }
     expect(reject(world, a.id, { resetAt: world.now + 60_000 }, [b.id, c.id, a.id]).retry).toBe(false);
-    world.advance(60_000);
+    await world.advance(60_000);
     expect((await lease(world))?.email).toBe('a@example.com');
   });
 
   test('a bound task never moves: it waits for its own account to reset', async () => {
-    const world = createWorld({ registry: true });
+    const world = await createWorld({ registry: true });
     const bound = await addAccount(world, 'bound@example.com', 10);
     await addAccount(world, 'free@example.com', 10);
     world.stub.update((state) => {
@@ -725,7 +816,7 @@ describe('moving a rejected attempt to another account', () => {
   });
 
   test('a run bound to an account never moves either, even when its task may run anywhere', async () => {
-    const world = createWorld({ registry: true });
+    const world = await createWorld({ registry: true });
     const bound = await addAccount(world, 'bound@example.com', 10);
     await addAccount(world, 'free@example.com', 10);
     world.stub.update((state) => {
@@ -737,7 +828,7 @@ describe('moving a rejected attempt to another account', () => {
   });
 
   test('an unknown reset blocks for a while, but never invents a time to resume at', async () => {
-    const world = createWorld({ registry: true });
+    const world = await createWorld({ registry: true });
     const only = await addAccount(world, 'only@example.com', 10);
     const verdict = reject(world, only.id, { resetAt: null });
     expect(verdict.failure?.resetAt).toBeNull();
@@ -745,11 +836,11 @@ describe('moving a rejected attempt to another account', () => {
   });
 
   test('a spent account stays spent after a restart until it resets', async () => {
-    const world = createWorld({ registry: true });
+    const world = await createWorld({ registry: true });
     const a = await addAccount(world, 'a@example.com', 10);
     const b = await addAccount(world, 'b@example.com', 10);
     reject(world, a.id, { resetAt: world.now + HOUR });
-    const restarted = createWorld({ root: world.root, now: world.now + 1 });
+    const restarted = await createWorld({ root: world.root, now: world.now + 1 });
     const spentUntil = (current: World) =>
       current.accounts.snapshot().accounts.find((account) => account.id === a.id)?.spentUntil;
     expect(spentUntil(restarted)).toBe(world.now + HOUR);
@@ -758,15 +849,15 @@ describe('moving a rejected attempt to another account', () => {
     restarted.statuses.set(a.configDir ?? '', { loggedIn: true, email: 'a@example.com' });
     restarted.processes.at(-1)?.exit(0);
     await until('the sign-in', () => restarted.accounts.logins.current()?.phase === 'done');
-    expect(spentUntil(createWorld({ root: world.root, now: world.now + 2 }))).toBeNull();
+    expect(spentUntil(await createWorld({ root: world.root, now: world.now + 2 }))).toBeNull();
 
     reject(world, a.id, { resetAt: world.now + HOUR });
-    expect(spentUntil(createWorld({ root: world.root, now: world.now + HOUR }))).toBeNull();
-    expect((await lease(createWorld({ root: world.root, now: world.now + HOUR })))?.id).toBe(a.id);
+    expect(spentUntil(await createWorld({ root: world.root, now: world.now + HOUR }))).toBeNull();
+    expect((await lease(await createWorld({ root: world.root, now: world.now + HOUR })))?.id).toBe(a.id);
   });
 
   test('an unreadable list of spent accounts is logged and Shinsa starts without it', async () => {
-    const world = createWorld({ registry: true });
+    const world = await createWorld({ registry: true });
     const a = await addAccount(world, 'a@example.com', 10);
     const path = join(world.config.dataDir, 'account-marks.json');
     writeFileSync(
@@ -775,11 +866,13 @@ describe('moving a rejected attempt to another account', () => {
         marks: { [a.id]: { until: 'soon', at: 1 }, other: null, gone: { until: null, at: 1 } },
       })
     );
-    expect(createWorld({ root: world.root }).accounts.snapshot().accounts[0]?.spentUntil).toBeNull();
+    expect((await createWorld({ root: world.root })).accounts.snapshot().accounts[0]?.spentUntil).toBeNull();
     writeFileSync(path, '{ not json');
     const logs = captureLogs();
     try {
-      expect(createWorld({ root: world.root }).accounts.snapshot().accounts[0]?.spentUntil).toBeNull();
+      expect(
+        (await createWorld({ root: world.root })).accounts.snapshot().accounts[0]?.spentUntil
+      ).toBeNull();
     } finally {
       logs.restore();
     }
@@ -789,7 +882,7 @@ describe('moving a rejected attempt to another account', () => {
   });
 
   test('a spent mark that cannot be written is logged and still keeps the account out', async () => {
-    const world = createWorld({ registry: true });
+    const world = await createWorld({ registry: true });
     const a = await addAccount(world, 'a@example.com', 10);
     mkdirSync(join(world.config.dataDir, 'account-marks.json'), { recursive: true });
     const logs = captureLogs();
@@ -805,7 +898,7 @@ describe('moving a rejected attempt to another account', () => {
   });
 
   test('a signed-out account asks for a sign-in unless another account can take over', async () => {
-    const world = createWorld({ registry: true });
+    const world = await createWorld({ registry: true });
     const a = await addAccount(world, 'a@example.com', 10);
     expect(reject(world, a.id, { class: 'auth', message: 'Signed out.' })).toEqual({
       retry: false,
@@ -853,7 +946,7 @@ describe('moving a rejected attempt to another account', () => {
   }
 
   test('a copied claude-swap login Claude could not refresh is never copied again; the gate asks for a login of its own', async () => {
-    const world = createWorld({ registry: true });
+    const world = await createWorld({ registry: true });
     const swapped = world.accounts.store.create({ email: 'a@example.com' });
     world.accounts.store.update(swapped.id, { origin: 'cswap' });
     const dir = swapped.configDir as string;
@@ -876,7 +969,7 @@ describe('moving a rejected attempt to another account', () => {
   });
 
   test('a copied claude-swap login needs signing in, is never leased, and works again only once signed in here', async () => {
-    const world = createWorld({ registry: true });
+    const world = await createWorld({ registry: true });
     const swapped = world.accounts.store.create({ email: 'a@example.com' });
     world.accounts.store.update(swapped.id, { origin: 'cswap' });
     const dir = swapped.configDir as string;
@@ -917,7 +1010,7 @@ describe('moving a rejected attempt to another account', () => {
   test('an account that ran on your Claude Code login needs signing in, is never leased, and gets a folder of its own when signed in', async () => {
     const root = createTempDir();
     writeImportedAccount(root, 'claude', 'me@example.com');
-    const world = createWorld({ root });
+    const world = await createWorld({ root });
     world.statuses.set('default', { loggedIn: true, email: 'me@example.com' });
     const snapshot = await world.accounts.refresh();
     expect(snapshot.accounts[0]).toMatchObject({
@@ -950,7 +1043,7 @@ describe('moving a rejected attempt to another account', () => {
     async (origin) => {
       const root = createTempDir();
       writeImportedAccount(root, origin, 'me@example.com');
-      const world = createWorld({ root });
+      const world = await createWorld({ root });
       await world.accounts.refresh();
 
       await world.accounts.startLogin('imported');
@@ -979,8 +1072,21 @@ describe('moving a rejected attempt to another account', () => {
     }
   );
 
+  test('a sign-in Shinsa cannot carry on from fails with the reason', async () => {
+    const world = await createWorld({ registry: true });
+    world.stub.reject((command) => command.type === 'account.signed_in', new Error('the log is closed'));
+    await world.accounts.startLogin(null);
+    const account = world.accounts.store.list()[0];
+    world.statuses.set(account?.configDir as string, { loggedIn: true, email: 'a@example.com' });
+    world.processes.at(-1)?.exit(0);
+    await until('the sign-in to fail', () => world.accounts.logins.current()?.phase === 'failed');
+    expect(world.accounts.logins.current()?.message).toBe(
+      'Shinsa could not check the sign-in: the log is closed'
+    );
+  });
+
   test('signing in again to your own account as another email keeps the account and its email', async () => {
-    const world = createWorld({ registry: true });
+    const world = await createWorld({ registry: true });
     const a = await addAccount(world, 'a@example.com', 10);
     await world.accounts.startLogin(a.id);
     world.statuses.set(a.configDir as string, { loggedIn: true, email: 'b@example.com' });
@@ -992,7 +1098,7 @@ describe('moving a rejected attempt to another account', () => {
   });
 
   test('a login another process refreshed meanwhile is tried once more on the same account', async () => {
-    const world = createWorld({ registry: true });
+    const world = await createWorld({ registry: true });
     const a = await addAccount(world, 'a@example.com', 10);
     storeLogin(world, a.configDir, 'refreshed', world.now + HOUR);
     const logs = captureLogs();
@@ -1010,7 +1116,7 @@ describe('moving a rejected attempt to another account', () => {
   });
 
   test('a login that stays dead moves the run to the next account; when none is left the Sign in gate names them all', async () => {
-    const world = createWorld({ registry: true });
+    const world = await createWorld({ registry: true });
     const a = await addAccount(world, 'a@example.com', 10);
     const b = await addAccount(world, 'b@example.com', 20);
     storeLogin(world, a.configDir, 'dead-a', world.now - HOUR);
@@ -1031,7 +1137,7 @@ describe('moving a rejected attempt to another account', () => {
   });
 
   test('a login that works again carries on the tasks waiting for a sign-in, once', async () => {
-    const world = createWorld({ registry: true });
+    const world = await createWorld({ registry: true });
     const a = await addAccount(world, 'a@example.com', 10);
     storeLogin(world, a.configDir, 'dead', world.now - HOUR);
     await rejectToken(world, a.id, [a.id]);
@@ -1055,8 +1161,8 @@ describe('moving a rejected attempt to another account', () => {
     expect(world.stub.commandIds.at(-1)).toMatch(new RegExp(`^login-renewed:${a.id}:[0-9a-f]{16}$`));
   });
 
-  test('a login check or a carry-on that fails is logged', async () => {
-    const world = createWorld({ registry: true });
+  test('a keychain that does not answer or a carry-on that fails is logged', async () => {
+    const world = await createWorld({ registry: true });
     const a = await addAccount(world, 'a@example.com', 10);
     storeLogin(world, a.configDir, 'dead', world.now - HOUR);
     await rejectToken(world, a.id, [a.id]);
@@ -1072,12 +1178,12 @@ describe('moving a rejected attempt to another account', () => {
       logs.restore();
     }
     const messages = logs.entries.map((entry) => entry.message);
-    expect(messages).toContain('[Accounts] Could not check the logins that needed signing in');
+    expect(messages).toContain('[Accounts] The keychain did not answer');
     expect(messages).toContain('[Accounts] Could not carry on after a login works again');
   });
 
   test('other failures, and attempts without a known account, are left alone', async () => {
-    const world = createWorld({ registry: true });
+    const world = await createWorld({ registry: true });
     const a = await addAccount(world, 'a@example.com', 10);
     expect(reject(world, a.id, { class: 'overloaded' })).toEqual({ retry: false });
     expect(reject(world, null, {})).toEqual({ retry: false });
@@ -1087,7 +1193,7 @@ describe('moving a rejected attempt to another account', () => {
 
 describe('a run’s failure shows on its account at once', () => {
   test('a usage limit and a sign-out reach every listener as the rejection is answered, and signing in clears it', async () => {
-    const world = createWorld({ registry: true });
+    const world = await createWorld({ registry: true });
     const a = await addAccount(world, 'a@example.com', 10);
     const heard: AccountsSnapshot[] = [];
     const unsubscribe = world.accounts.subscribe((snapshot) => heard.push(snapshot));
@@ -1104,7 +1210,7 @@ describe('a run’s failure shows on its account at once', () => {
 
   test('Codex signed out reads as signed out at once, and its usage limit is read again at once', async () => {
     const codex = createCodexSource([codexReading(10), codexReading(100)]);
-    const world = createWorld({
+    const world = await createWorld({
       registry: true,
       providerUsage: [codex.source],
       providerLogins: () => Promise.resolve([CODEX_LOGIN]),
@@ -1141,7 +1247,7 @@ describe('a run’s failure shows on its account at once', () => {
 
 describe('what runs report back', () => {
   test('a pushed rate-limit lands on the account of the run that saw it, and the account notice names it', async () => {
-    const world = createWorld({ registry: true });
+    const world = await createWorld({ registry: true });
     const account = await addAccount(world, 'a@example.com', 10);
     world.stub.update((state) => {
       state.runs['run-1'] = createRun({
@@ -1195,7 +1301,7 @@ describe('what runs report back', () => {
   });
 
   test('the plan a run reports wins; the login and auth status only fill a missing one', async () => {
-    const world = createWorld({ registry: true });
+    const world = await createWorld({ registry: true });
     const account = await addAccount(world, 'a@example.com', 25);
     world.stub.update((state) => {
       state.runs['run-1'] = createRun({
@@ -1226,7 +1332,7 @@ describe('what runs report back', () => {
   });
 
   test('usage that cannot be read keeps what was known and says why', async () => {
-    const world = createWorld({ registry: true });
+    const world = await createWorld({ registry: true });
     const account = await addAccount(world, 'a@example.com', 25);
     world.secrets.clear();
     await world.accounts.refresh();
@@ -1240,11 +1346,11 @@ describe('what runs report back', () => {
   });
 
   test('a login whose token has expired is not sent to Claude, and says it refreshes on the next run', async () => {
-    const world = createWorld({ registry: true });
+    const world = await createWorld({ registry: true });
     const account = await addAccount(world, 'a@example.com', 25);
     world.usage.set('token-a@example.com', windows(70, 25));
     const read = world.accounts.limits;
-    world.advance(HOUR);
+    await world.advance(HOUR);
     await read.refresh([account.id], true);
     expect(world.accounts.snapshot().accounts[0]?.usage).toMatchObject({
       detail: 'The login needs refreshing. It refreshes the next time an agent runs on this account.',
@@ -1256,26 +1362,26 @@ describe('what runs report back', () => {
   });
 
   test('a usage-only refresh reads stale usage without checking sign-ins, and inspect mode refuses it', async () => {
-    const world = createWorld({ registry: true });
+    const world = await createWorld({ registry: true });
     await addAccount(world, 'a@example.com', 25);
     world.usage.set('token-a@example.com', windows(70, 25));
     const statusChecks = () => world.calls.filter((call) => call.command[1] === 'auth').length;
     const checks = statusChecks();
     await world.accounts.refreshUsage();
     expect(world.accounts.snapshot().accounts[0]?.usage.windows[0]?.usedPercent).toBe(25);
-    world.advance(2 * 60_000);
+    await world.advance(2 * 60_000);
     const snapshot = await world.accounts.refreshUsage();
     expect(snapshot.accounts[0]?.usage.windows[0]?.usedPercent).toBe(70);
     expect(statusChecks()).toBe(checks);
-    const inspected = createWorld({ root: world.root, inspect: true });
+    const inspected = await createWorld({ root: world.root, inspect: true });
     await expect(inspected.accounts.refreshUsage()).rejects.toMatchObject({ code: 'inspect_read_only' });
   });
 
   test('a stale reading is refreshed when an attempt is leased', async () => {
-    const world = createWorld({ registry: true });
+    const world = await createWorld({ registry: true });
     await addAccount(world, 'a@example.com', 25);
     world.usage.set('token-a@example.com', windows(70, 25));
-    world.advance(2 * 60_000);
+    await world.advance(2 * 60_000);
     await lease(world);
     await until(
       'the new reading',
@@ -1286,7 +1392,7 @@ describe('what runs report back', () => {
 
 describe('changing and removing accounts', () => {
   test('an account can be made the default, left out of new work, given its own threshold and moved', async () => {
-    const world = createWorld({ registry: true });
+    const world = await createWorld({ registry: true });
     const a = await addAccount(world, 'a@example.com', 10);
     const b = await addAccount(world, 'b@example.com', 10);
     world.accounts.update(b.id, { isDefault: true });
@@ -1305,7 +1411,7 @@ describe('changing and removing accounts', () => {
   });
 
   test('a change that is not one an account has is refused with the reason', async () => {
-    const world = createWorld({ registry: true });
+    const world = await createWorld({ registry: true });
     const a = await addAccount(world, 'a@example.com', 10);
     for (const [patch, message] of [
       [null, 'Say what to change about the account.'],
@@ -1324,7 +1430,7 @@ describe('changing and removing accounts', () => {
   });
 
   test('removing an account signs it out, deletes its folder and releases the tasks bound to it', async () => {
-    const world = createWorld({ registry: true });
+    const world = await createWorld({ registry: true });
     const a = await addAccount(world, 'a@example.com', 10);
     const snapshot = await world.accounts.remove(a.id);
     expect(snapshot.accounts).toEqual([]);
@@ -1340,7 +1446,7 @@ describe('changing and removing accounts', () => {
   test('removing an account that ran on your Claude Code login only takes it out of Shinsa, never signs it out', async () => {
     const root = createTempDir();
     writeImportedAccount(root, 'claude', 'me@example.com');
-    const world = createWorld({ root });
+    const world = await createWorld({ root });
     await world.accounts.remove('imported');
     expect(world.accounts.store.list()).toEqual([]);
     expect(world.calls.some((call) => call.command[2] === 'logout')).toBe(false);
@@ -1349,34 +1455,35 @@ describe('changing and removing accounts', () => {
 
 describe('setup', () => {
   test('lists the accounts you signed in to', async () => {
-    const world = createWorld({ registry: true });
+    const world = await createWorld({ registry: true });
     const account = await addAccount(world, 'me@example.com', 10);
-    expect(await createOnboardingAccounts(world.accounts)()).toEqual([
+    expect(await Effect.runPromise(createSummaryAccountSource(world.accounts.snapshotEffect))).toEqual([
       { id: account.id, email: 'me@example.com', signedIn: true },
     ]);
   });
 });
 
 describe('when the outside world fails', () => {
-  function brittle(world: World, overrides: Partial<ConstructorParameters<typeof Accounts>[0]> = {}) {
-    return new Accounts({
-      engine: world.stub.engine,
+  async function brittle(world: World, overrides: Partial<AccountsHarnessOptions> = {}) {
+    const { accounts } = await openAccounts(world.stub, {
+      engine: createStubEngineCore(world.stub),
       config: createTestConfig(world.root),
       env: { CLAUDE_CONFIG_DIR: world.shared, USER: 'tester' },
       run: () => Promise.resolve(result('', false)),
       readSecret: () => Promise.reject(new Error('keychain locked')),
-      cswap: new Cswap({ run: () => Promise.resolve(result('')), which: () => null }),
       resolveClaude: () => Promise.resolve('claude'),
       refreshIntervalMs: 5,
+      liveClock: true,
       ...overrides,
     });
+    return accounts;
   }
 
-  test('a usage read that throws keeps what was known and says why, on the timer and on a lease', async () => {
-    const world = createWorld({ registry: true });
+  test('a keychain that does not answer keeps the usage known and says why, on the timer and on a lease', async () => {
+    const world = await createWorld({ registry: true });
     await addAccount(world, 'a@example.com', 10);
     let reads = 0;
-    const accounts = brittle(world, {
+    const accounts = await brittle(world, {
       readSecret: () => {
         reads += 1;
         return Promise.reject(new Error('keychain locked'));
@@ -1384,22 +1491,26 @@ describe('when the outside world fails', () => {
     });
     await accounts.start();
     await until('the timer to read again', () => reads >= 2);
-    expect(accounts.snapshot().accounts[0]?.usage.detail).toBe('Could not read usage: keychain locked');
+    expect(accounts.snapshot().accounts[0]?.usage.detail).toBe(
+      'Shinsa could not find this account’s login. Sign in again.'
+    );
     expect(accounts.snapshot().accounts[0]?.usage.windows[0]?.usedPercent).toBe(10);
     accounts.stop();
-    const leasing = brittle(world);
+    const leasing = await brittle(world);
     await leasing.lease({ runId: 'r', taskId: 't', model: null, bound: null, previous: null, exclude: [] });
     await until(
       'the lease to read',
-      () => leasing.snapshot().accounts[0]?.usage.detail === 'Could not read usage: keychain locked'
+      () =>
+        leasing.snapshot().accounts[0]?.usage.detail ===
+        'Shinsa could not find this account’s login. Sign in again.'
     );
   });
 
   test('an account whose status cannot be read shows why, and a failed sign-out is logged', async () => {
-    const world = createWorld({ registry: true });
+    const world = await createWorld({ registry: true });
     const account = await addAccount(world, 'a@example.com', 10);
     let missing = true;
-    const accounts = brittle(world, {
+    const accounts = await brittle(world, {
       readSecret: () => Promise.resolve(null),
       resolveClaude: () =>
         missing ? Promise.reject(new Error('Claude Code is not installed.')) : Promise.resolve('claude'),
@@ -1422,9 +1533,9 @@ describe('when the outside world fails', () => {
   });
 
   test('a new account that cannot be cleared after a failed sign-in is logged', async () => {
-    const world = createWorld({ registry: true });
+    const world = await createWorld({ registry: true });
     let calls = 0;
-    const accounts = brittle(world, {
+    const accounts = await brittle(world, {
       readSecret: () => Promise.resolve(null),
       spawnLogin: () => ({ write: () => undefined, kill: () => undefined, exited: Promise.resolve(1) }),
       resolveClaude: () => {
@@ -1449,7 +1560,7 @@ describe('when the outside world fails', () => {
   });
 
   test('commands for an account folder never inherit a login the server’s environment would force', async () => {
-    const world = createWorld({ registry: true });
+    const world = await createWorld({ registry: true });
     const dir = createTempDir();
     const seen = join(dir, 'seen.log');
     const claude = join(dir, 'claude');
@@ -1460,8 +1571,8 @@ describe('when the outside world fails', () => {
     );
     const restore = overrideEnv({ ANTHROPIC_API_KEY: 'sk-server', CLAUDE_CODE_OAUTH_TOKEN: 'oauth-server' });
     try {
-      const accounts = brittle(world, {
-        run: runCommand,
+      const accounts = await brittle(world, {
+        realShell: true,
         resolveClaude: () => Promise.resolve(claude),
         readSecret: () => Promise.resolve(null),
       });
@@ -1474,9 +1585,30 @@ describe('when the outside world fails', () => {
     expect(readFileSync(seen, 'utf8').split('\n')).toEqual(['status none:none', 'logout none:none', '']);
   });
 
+  test('an engine that has stopped fails the change with its reason', async () => {
+    const world = await createWorld({ registry: true });
+    const { accounts } = await openAccounts(world.stub, {
+      engine: {
+        ...createStubEngineCore(world.stub),
+        dispatch: () => Effect.fail(new EngineStopped({ message: 'Shinsa is stopping.' })),
+      },
+      config: createTestConfig(world.root),
+      env: { CLAUDE_CONFIG_DIR: world.shared, USER: 'tester' },
+      run: () => Promise.resolve(result('')),
+    });
+    const account = accounts.store.create({ email: 'a@example.com' });
+    await expect(accounts.remove(account.id)).rejects.toMatchObject({
+      _tag: 'AccountStepFailed',
+      message: 'Shinsa is stopping.',
+    });
+  });
+
   test('the user’s own claude is found on the PATH, and a missing one is named', async () => {
-    const world = createWorld({ registry: true });
-    const accounts = brittle(world, { resolveClaude: undefined, readSecret: () => Promise.resolve(null) });
+    const world = await createWorld({ registry: true });
+    const accounts = await brittle(world, {
+      resolveClaude: 'installed',
+      readSecret: () => Promise.resolve(null),
+    });
     const found = await accounts.startLogin(null);
     expect(found.login?.phase).toBe('starting');
     accounts.stop();
@@ -1492,7 +1624,7 @@ describe('when the outside world fails', () => {
 
 describe('the accounts snapshot', () => {
   test('an account with a window used up reads as spent until it resets, before any run is rejected', async () => {
-    const world = createWorld({ registry: true });
+    const world = await createWorld({ registry: true });
     await addAccount(world, 'full@example.com', 100);
     await world.accounts.refresh();
     expect(world.accounts.snapshot().accounts[0]?.spentUntil).toBe(Date.parse('2030-01-01T00:00:00Z'));
@@ -1511,13 +1643,13 @@ const CODEX_LOGIN: ProviderLogin = {
 
 function createCodexSource(readings: ProviderUsageReading[]) {
   let index = 0;
-  const source: ProviderUsageSource = {
+  const source = {
     id: 'codex',
-    read: () => {
+    read: Effect.sync(() => {
       const reading = readings[Math.min(index, readings.length - 1)] as ProviderUsageReading;
       index += 1;
-      return Promise.resolve(reading);
-    },
+      return reading;
+    }),
   };
   return { source, count: () => index };
 }
@@ -1555,7 +1687,7 @@ function codexReading(weekly: number, patch: Partial<ProviderUsageReading> = {})
 describe('a provider with a sign-in of its own (Codex)', () => {
   test('its usage, email and plan ride along with its sign-in in the snapshot', async () => {
     const codex = createCodexSource([codexReading(40)]);
-    const world = createWorld({
+    const world = await createWorld({
       registry: true,
       providerUsage: [codex.source],
       providerLogins: () =>
@@ -1580,7 +1712,7 @@ describe('a provider with a sign-in of its own (Codex)', () => {
       plan: null,
     };
     const codex = createCodexSource([codexReading(40), failed]);
-    const world = createWorld({
+    const world = await createWorld({
       registry: true,
       providerUsage: [codex.source],
       providerLogins: () => Promise.resolve([CODEX_LOGIN]),
@@ -1594,9 +1726,21 @@ describe('a provider with a sign-in of its own (Codex)', () => {
     });
   });
 
+  test('a provider whose usage cannot be read says why', async () => {
+    const world = await createWorld({
+      registry: true,
+      providerUsage: [{ id: 'codex', read: Effect.fail({ message: 'codex is down' }) }],
+      providerLogins: () => Promise.resolve([CODEX_LOGIN]),
+    });
+    await world.accounts.refresh();
+    expect(world.accounts.snapshot().providers?.[0]?.usage?.detail).toBe(
+      'Could not read usage: codex is down'
+    );
+  });
+
   test('a run on it starts from the cached weekly reading and ends on a fresh one; an unknown provider reads nothing', async () => {
     const codex = createCodexSource([codexReading(40), codexReading(45)]);
-    const world = createWorld({ registry: true, providerUsage: [codex.source] });
+    const world = await createWorld({ registry: true, providerUsage: [codex.source] });
     expect(await world.accounts.readProviderWeeklyReading('codex', false)).toMatchObject({ percent: 40 });
     expect(await world.accounts.readProviderWeeklyReading('codex', false)).toMatchObject({ percent: 40 });
     expect(await world.accounts.readProviderWeeklyReading('codex', true)).toMatchObject({ percent: 45 });
@@ -1607,26 +1751,26 @@ describe('a provider with a sign-in of its own (Codex)', () => {
     const codex = createCodexSource([
       codexReading(40, { read: { ok: true, windows: [], fastMode: 'available' } }),
     ]);
-    const world = createWorld({ registry: true, providerUsage: [codex.source] });
+    const world = await createWorld({ registry: true, providerUsage: [codex.source] });
     expect(await world.accounts.readFastMode('codex', null)).toBe('available');
     expect(await world.accounts.readFastMode('gemini', null)).toBe('unknown');
     expect(await world.accounts.readFastMode('claude', null)).toBe('unknown');
     const account = await addAccount(world, 'a@example.com', 10);
-    world.advance(2 * 60_000);
+    await world.advance(2 * 60_000);
     world.usage.set('token-a@example.com', {
       ...windows(10, 10),
       extra_usage: { is_enabled: true, monthly_limit: 50, used_credits: 5 },
     });
     expect(await world.accounts.readFastMode('claude', account.id)).toBe('available');
     world.usage.set('token-a@example.com', { ...windows(10, 10), extra_usage: { is_enabled: false } });
-    world.advance(2 * 60_000);
+    await world.advance(2 * 60_000);
     expect(await world.accounts.readFastMode('claude', account.id)).toBe('needs_credits');
   });
 
   test('a quick call on no account of Shinsa’s is unknown', async () => {
-    const world = createWorld({ registry: true });
+    const world = await createWorld({ registry: true });
     expect(await world.accounts.readFastMode('claude', null)).toBe('unknown');
-    expect(await world.accounts.readQuickFastMode('claude')).toBe('unknown');
+    expect(await world.accounts.readFastMode('codex', null)).toBe('unknown');
   });
 
   test('its usage limit waits for the reset it reported, or for the one its windows show', async () => {
@@ -1647,7 +1791,7 @@ describe('a provider with a sign-in of its own (Codex)', () => {
         },
       }),
     ]);
-    const world = createWorld({ registry: true, providerUsage: [codex.source] });
+    const world = await createWorld({ registry: true, providerUsage: [codex.source] });
     world.stub.update((state) => {
       state.runs['run-1'] = createRun({ model: 'gpt-6-astra' });
     });
@@ -1671,7 +1815,7 @@ describe('a provider with a sign-in of its own (Codex)', () => {
 
   test('its usage limit waits for the reset Codex pushed during the run, before reading its usage again', async () => {
     const codex = createCodexSource([codexReading(10)]);
-    const world = createWorld({ registry: true, providerUsage: [codex.source] });
+    const world = await createWorld({ registry: true, providerUsage: [codex.source] });
     world.stub.update((state) => {
       state.runs['run-1'] = createRun({
         attempts: [
@@ -1710,7 +1854,7 @@ describe('a provider with a sign-in of its own (Codex)', () => {
   test('signed out, it asks for its own sign-in, and signing in answers that provider’s Sign in gate, not a Claude account’s', async () => {
     let logins: ProviderLogin[] = [{ ...CODEX_LOGIN, status: 'signed_out' }];
     const codex = createCodexSource([codexReading(10)]);
-    const world = createWorld({
+    const world = await createWorld({
       registry: true,
       providerUsage: [codex.source],
       providerLogins: () => Promise.resolve(logins),
@@ -1766,7 +1910,7 @@ describe('a provider with a sign-in of its own (Codex)', () => {
 
   test('a sign-in that cannot be carried on is logged, and a failed sign-in check keeps the last one', async () => {
     let fail = false;
-    const world = createWorld({
+    const world = await createWorld({
       registry: true,
       providerLogins: () =>
         fail ? Promise.reject(new Error('codex vanished')) : Promise.resolve([CODEX_LOGIN]),
@@ -1800,7 +1944,7 @@ describe('a provider with a sign-in of its own (Codex)', () => {
 
   test('a pushed rate limit from a Codex run lands on Codex, and one from an unknown provider is dropped', async () => {
     const codex = createCodexSource([codexReading(10)]);
-    const world = createWorld({
+    const world = await createWorld({
       registry: true,
       providerUsage: [codex.source],
       providerLogins: () => Promise.resolve([CODEX_LOGIN]),

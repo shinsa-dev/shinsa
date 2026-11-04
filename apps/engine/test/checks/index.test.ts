@@ -2,16 +2,19 @@ import { describe, expect, test } from 'bun:test';
 import { existsSync, readFileSync, realpathSync } from 'node:fs';
 import { join } from 'node:path';
 import type { CheckToRun } from '@shinsa/core';
-import {
-  type CheckRun,
-  confirmFailure,
-  listFailedFiles,
-  resolveInstallCommand,
-  runCheck,
-  runChecks,
-  tailOutput,
-} from '../../src/checks/index.ts';
+import { Effect } from 'effect';
+import { type CheckRun, listFailedFiles, resolveInstallCommand, tailOutput } from '../../src/checks/index.ts';
+import { CheckRunner } from '../../src/checks/runner/service.ts';
+import type { CheckOptions, CheckRoundOptions } from '../../src/checks/schema.ts';
+import { runGit } from '../helpers/git.ts';
 import { createTempDir, writeFiles } from '../helpers/index.ts';
+
+const runCheck = (check: CheckToRun, cwd: string, options: CheckOptions) =>
+  runGit(CheckRunner.use((runner) => runner.run(check, cwd, options)));
+const confirmFailure = (run: CheckRun, cwd: string, options: CheckOptions) =>
+  runGit(CheckRunner.use((runner) => runner.confirm(run, cwd, options)));
+const runChecks = (checks: readonly CheckToRun[], cwd: string, options: CheckRoundOptions) =>
+  runGit(CheckRunner.use((runner) => runner.runAll(checks, cwd, options)));
 
 const OPTIONS = { timeoutMs: 60_000 };
 
@@ -228,9 +231,7 @@ describe('comparing a failure with the base commit', () => {
         ...OPTIONS,
         compare: (run) => {
           asked.push(run);
-          return Promise.resolve(
-            run.check.command === 'exit 1' ? { added: [], known: [known, known] } : null
-          );
+          return Effect.succeed(run.check.command === 'exit 1' ? { added: [], known: [known, known] } : null);
         },
       }
     );
@@ -254,7 +255,7 @@ describe('comparing a failure with the base commit', () => {
       ...OPTIONS,
       compare: (current) => {
         const [first, second] = current.failures ?? [];
-        return Promise.resolve(first && second ? { added: [second], known: [first] } : null);
+        return Effect.succeed(first && second ? { added: [second], known: [first] } : null);
       },
     });
     expect(run?.check.note).toBeUndefined();
@@ -268,7 +269,7 @@ describe('comparing a failure with the base commit', () => {
     writeFiles(dir, { 'package.json': '{}' });
     const [run] = await runChecks([checkOf('bun test ./missing/folder.test.ts')], dir, {
       ...OPTIONS,
-      compare: () => Promise.resolve({ added: [], known: [] }),
+      compare: () => Effect.succeed({ added: [], known: [] }),
     });
     expect(run?.check.outcome).toBe('fail');
     expect(run?.check.note).toBeUndefined();
@@ -281,7 +282,7 @@ describe('comparing a failure with the base commit', () => {
       timeoutMs: 100,
       compare: () => {
         asked = true;
-        return Promise.resolve(null);
+        return Effect.succeed(null);
       },
     });
     expect(run?.check.note).toBeUndefined();

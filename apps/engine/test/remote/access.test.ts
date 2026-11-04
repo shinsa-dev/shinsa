@@ -1,6 +1,4 @@
 import { afterEach, describe, expect, test } from 'bun:test';
-import { writeFileSync } from 'node:fs';
-import { join } from 'node:path';
 import {
   type RemoteTeam,
   resolveMachineTeamPath,
@@ -8,18 +6,16 @@ import {
   serializeShareMessage,
   type TeamMachine,
 } from '@shinsa/core';
-import { Effect, Ref } from 'effect';
+import { Effect, Layer, Ref } from 'effect';
 import { AccessScope } from '../../src/remote/access/service.ts';
-import type { ChannelPeer } from '../../src/remote/channel.ts';
-import { RemoteControl } from '../../src/remote/client/index.ts';
-import { createRefusedConnector } from '../../src/remote/connector/refused.ts';
-import { Remote } from '../../src/remote/index.ts';
-import { SHARE_REMOTE_CHANGED, Shares } from '../../src/remote/shares.ts';
-import { type FeedSocket, TEAM_FEED_OFFLINE, TeamFeeds } from '../../src/remote/team-feeds.ts';
-import { TEAM_REMOTE_CHANGED, Teams } from '../../src/remote/teams.ts';
-import { createTempDir, until } from '../helpers/index.ts';
+import type { ChannelPeer } from '../../src/remote/channel/schema.ts';
+import { SHARE_REMOTE_CHANGED } from '../../src/remote/shares/schema.ts';
+import { type FeedSocket, TEAM_FEED_OFFLINE, TeamFeedSettings } from '../../src/remote/team-feeds/schema.ts';
+import { TEAM_REMOTE_CHANGED } from '../../src/remote/teams/schema.ts';
+import { until } from '../helpers/index.ts';
 import { createStubEngine } from '../helpers/state.ts';
 import { type FakeControlPlane, startFakeControlPlane } from './control-plane.ts';
+import { adaptRemote, adaptShares, adaptTeamFeeds, adaptTeams, createRemoteTest } from './harness.ts';
 
 const MONA = { id: '1', login: 'mona', name: 'Mona Lisa', avatarUrl: null };
 
@@ -109,10 +105,29 @@ function setUp() {
   plane.answers.set(resolveMachineTeamPath('team1', 'connect'), () =>
     Response.json({ url: 'wss://t-inst2.shinsa.dev/team?token=t', expiresAt: 1 })
   );
-  const path = join(createTempDir(), 'remote.json');
-  writeFileSync(
-    path,
-    JSON.stringify({
+  const sockets: FakeFeedSocket[] = [];
+  const createSocket = () => {
+    const socket: FakeFeedSocket = {
+      binaryType: 'blob',
+      closed: false,
+      send: () => undefined,
+      close: () => {
+        socket.closed = true;
+      },
+      addEventListener: () => undefined,
+    };
+    sockets.push(socket);
+    return socket;
+  };
+  const machine = createRemoteTest({
+    origin: plane.origin,
+    engine: createStubEngine().engine.core,
+    layers: Layer.succeed(TeamFeedSettings, {
+      createSocket,
+      wait: () => Effect.never,
+      waitForViews: () => Effect.never,
+    }),
+    file: {
       credentials: {
         instanceId: 'inst1',
         machineToken: 'machine-token',
@@ -125,40 +140,12 @@ function setUp() {
       access: { owner: MONA, members: [] },
       teams: [TEAM],
       teamKeys: [TEAM_KEY],
-    })
-  );
-  const remote = new Remote({
-    path,
-    control: new RemoteControl({ origin: plane.origin }),
-    connector: createRefusedConnector('no tunnel in this test'),
-    localUrl: () => 'http://127.0.0.1:1',
-    version: '1',
-    maxBodyBytes: 1024,
-    machineName: 'Studio',
-    openUrl: () => Promise.resolve(),
-  });
-  const { engine } = createStubEngine();
-  const transcripts = { listEntries: () => [], subscribe: () => () => undefined };
-  const shares = new Shares({ engine, remote, evidence: {} as never, transcripts });
-  const teams = new Teams({ engine, remote, shares, transcripts });
-  const sockets: FakeFeedSocket[] = [];
-  const feeds = new TeamFeeds({
-    remote,
-    createSocket: () => {
-      const socket: FakeFeedSocket = {
-        binaryType: 'blob',
-        closed: false,
-        send: () => undefined,
-        close: () => {
-          socket.closed = true;
-        },
-        addEventListener: () => undefined,
-      };
-      sockets.push(socket);
-      return socket;
     },
-    wait: () => () => undefined,
   });
+  const remote = adaptRemote(machine);
+  const shares = adaptShares(machine);
+  const teams = adaptTeams(machine);
+  const feeds = adaptTeamFeeds(machine);
   return { remote, shares, teams, feeds, sockets };
 }
 
@@ -183,6 +170,7 @@ describe('ending remote access', () => {
     expect(remote.access.isOpen).toBe(true);
 
     await remote.disable();
+    await until('the team view closes', () => teamPeer.closes.length > 0);
 
     expect(appPeer.closes).toEqual([{ code: 1008, reason: REMOTE_ACCESS_CHANGED }]);
     expect(leftPeer.closes).toEqual([]);

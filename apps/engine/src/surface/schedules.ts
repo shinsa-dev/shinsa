@@ -14,7 +14,7 @@ import { Clock, DateTime, Effect } from 'effect';
 import type { CommandReceipt, SurfaceClient } from './client.ts';
 import type { FieldSpec, Values } from './fields.ts';
 import { findProjectId, findTaskId, resolveOptionalRepoId } from './resolve.ts';
-import { type SurfaceFailure, SurfaceCallFailed } from './schema.ts';
+import type { SurfaceFailure } from './schema.ts';
 import { defineAction, defineCommand, defineRead, readValue, type SurfaceSpec } from './spec.ts';
 
 const SCHEDULE_FIELD: FieldSpec = {
@@ -123,19 +123,13 @@ const assertHookSecret = Effect.fn('Surface.assertHookSecret')(function* (
     });
   }
   const secrets = client.hookSecrets;
-  if (signed && secrets) {
-    yield* Effect.try({
-      try: () => secrets.assertSecret(readValue(values, 'id') || null, ref || null),
-      catch: (error) =>
-        error instanceof DomainError ? error : new SurfaceCallFailed({ message: String(error) }),
-    });
-  }
+  if (signed && secrets) yield* secrets.assertSecret(readValue(values, 'id') || null, ref || null);
 });
 
 function writeHookSecret(values: Values, receipt: CommandReceipt, client: SurfaceClient) {
   const ref = readValue(values, 'signatureSecretRef');
   const scheduleId = receipt.scheduleId ?? readValue(values, 'id');
-  if (!ref || !scheduleId || !client.hookSecrets) return null;
+  if (!ref || !scheduleId || !client.hookSecrets) return Effect.succeed(null);
   return client.hookSecrets.writeSecret(scheduleId, ref);
 }
 

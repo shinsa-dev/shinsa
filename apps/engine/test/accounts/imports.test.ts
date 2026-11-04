@@ -1,71 +1,51 @@
-import { describe, expect, test } from 'bun:test';
-import { DomainError } from '@shinsa/core';
-import { Cswap } from '../../src/accounts/cswap.ts';
-import { AccountImports } from '../../src/accounts/imports.ts';
-import { AccountStore } from '../../src/accounts/store.ts';
-import { createTempDir } from '../helpers/index.ts';
+import { afterEach, describe, expect, test } from 'bun:test';
+import { AccountImports } from '../../src/accounts/imports/service.ts';
+import { AccountStore } from '../../src/accounts/store/service.ts';
+import { type AccountsHarness, buildUnitAccounts } from './harness.ts';
 
 const LIST = JSON.stringify({ accounts: [{ email: 'Known@x.dev' }, { email: 'new@x.dev' }] });
 
-function createImports(signIn: (email: string) => Promise<void>) {
-  const home = createTempDir();
-  const store = new AccountStore({
-    home,
-    sharedDir: `${home}/shared`,
-    sharedGlobalConfig: `${home}/shared.json`,
+const open: AccountsHarness[] = [];
+
+afterEach(async () => {
+  for (const harness of open.splice(0)) await harness.close();
+});
+
+async function createImports() {
+  const harness = await buildUnitAccounts({
+    run: (command) =>
+      Promise.resolve({
+        ok: command[0] === 'cswap',
+        code: command[0] === 'cswap' ? 0 : 127,
+        stdout: LIST,
+        stderr: '',
+        timedOut: false,
+      }),
   });
-  store.create({ email: 'known@x.dev' });
-  const cswap = new Cswap({
-    run: () => Promise.resolve({ ok: true, code: 0, stdout: LIST, stderr: '', timedOut: false }),
-    which: () => '/bin/cswap',
-  });
-  let changes = 0;
-  const imports = new AccountImports({
-    store,
-    cswap,
-    signIn,
-    onChange: () => {
-      changes++;
-    },
-  });
-  return { imports, changes: () => changes };
+  open.push(harness);
+  await harness.run(harness.service(AccountStore).create({ email: 'known@x.dev' }));
+  return { harness, imports: harness.service(AccountImports) };
 }
 
 describe('account imports', () => {
-  test('lists the claude-swap accounts Shinsa does not have yet and announces them', async () => {
-    const { imports, changes } = createImports(() => Promise.resolve());
-    expect(imports.list()).toEqual([]);
-    await imports.sync();
-    expect(imports.list()).toEqual([{ origin: 'cswap', email: 'new@x.dev', plan: null }]);
-    expect(changes()).toBe(1);
+  test('lists the claude-swap accounts Shinsa does not have yet', async () => {
+    const { harness, imports } = await createImports();
+    expect(await harness.run(imports.list)).toEqual([]);
+    await harness.run(imports.sync);
+    expect(await harness.run(imports.list)).toEqual([{ origin: 'cswap', email: 'new@x.dev', plan: null }]);
   });
 
-  test('importing signs in to the named account, and refuses one already added or unnamed', async () => {
-    const signedIn: string[] = [];
-    const { imports } = createImports((email) => {
-      signedIn.push(email);
-      return Promise.resolve();
-    });
-    await imports.importAccount('cswap', '  new@x.dev ');
-    expect(signedIn).toEqual(['new@x.dev']);
-    await expect(imports.importAccount('cswap', 'known@x.dev')).rejects.toMatchObject({
+  test('an import names a claude-swap account Shinsa does not have yet', async () => {
+    const { harness, imports } = await createImports();
+    expect(await harness.run(imports.resolveImportEmail('cswap', '  new@x.dev '))).toBe('new@x.dev');
+    await expect(harness.run(imports.resolveImportEmail('cswap', 'known@x.dev'))).rejects.toMatchObject({
       code: 'account_exists',
     });
-    await expect(imports.importAccount('cswap', ' ')).rejects.toMatchObject({ code: 'import_invalid' });
-    await expect(imports.importAccount('other', 'new@x.dev')).rejects.toMatchObject({
+    await expect(harness.run(imports.resolveImportEmail('cswap', ' '))).rejects.toMatchObject({
       code: 'import_invalid',
     });
-  });
-
-  test('a sign-in refused by Shinsa keeps its reason, and one that breaks is named', async () => {
-    const refused = createImports(() =>
-      Promise.reject(new DomainError({ code: 'claude_missing', message: 'Install Claude.' }))
-    );
-    await expect(refused.imports.importAccount('cswap', 'new@x.dev')).rejects.toBeInstanceOf(DomainError);
-    const broken = createImports(() => Promise.reject(new Error('pty closed')));
-    await expect(broken.imports.importAccount('cswap', 'new@x.dev')).rejects.toMatchObject({
-      _tag: 'ImportSignInFailed',
-      message: 'pty closed',
+    await expect(harness.run(imports.resolveImportEmail('other', 'new@x.dev'))).rejects.toMatchObject({
+      code: 'import_invalid',
     });
   });
 });

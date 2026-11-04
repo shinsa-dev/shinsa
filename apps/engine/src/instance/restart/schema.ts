@@ -1,5 +1,4 @@
-import type { DomainError, EngineRestartWhen, ShinsaState } from '@shinsa/core';
-import { Duration, type Effect, type Fiber, Schema } from 'effect';
+import { Context, Duration, type Effect, type Fiber, Schema, type Scope } from 'effect';
 
 export class RestartFailed extends Schema.TaggedError<RestartFailed, { readonly brand: unique symbol }>()(
   'RestartFailed',
@@ -11,62 +10,51 @@ export class StopFailed extends Schema.TaggedError<StopFailed, { readonly brand:
   { message: Schema.String }
 ) {}
 
-export interface RestartSource {
-  readonly state: ShinsaState;
-  subscribe: (listener: (state: ShinsaState) => void) => () => void;
-}
-
 export interface RestartDrain {
-  holdNewRuns: (onHeld: () => void) => void;
-  releaseHeldRuns: () => void;
-  isHeld: (runId: string) => boolean;
+  readonly holdNewRuns: (onHeld: Effect.Effect<void>) => Effect.Effect<void>;
+  readonly releaseHeldRuns: Effect.Effect<void>;
+  readonly isHeld: (runId: string) => Effect.Effect<boolean>;
 }
 
-export interface EngineRestartOptions {
-  isService: () => Promise<boolean>;
-  restart: () => Promise<unknown>;
+export interface EngineRestartInput {
+  readonly isService: Effect.Effect<boolean, RestartFailed>;
+  readonly restart: Effect.Effect<void, RestartFailed>;
+  readonly drain?: RestartDrain | undefined;
+}
+
+export interface ServiceRestart {
+  byService: boolean;
+  stop: Effect.Effect<void>;
   drain?: RestartDrain;
-  drainMs?: number;
-  now?: () => number;
-  schedule?: (run: () => void) => void;
+  exit?: (code: number) => void;
+  deadlineMs?: number;
 }
 
 export type EngineRestartPending = 'idle' | null;
 
-interface RestartAnswer {
+export interface RestartAnswer {
   restarting: boolean;
-}
-
-export interface RestartDefinition {
-  readonly state: Effect.Effect<ShinsaState>;
-  readonly watch: (onChange: Effect.Effect<void>) => Effect.Effect<() => void>;
-  readonly isService: Effect.Effect<boolean, RestartFailed>;
-  readonly restart: Effect.Effect<void, RestartFailed>;
-  readonly hold: (onHeld: Effect.Effect<void>) => Effect.Effect<void>;
-  readonly release: Effect.Effect<void>;
-  readonly isHeld: (runId: string) => boolean;
-  readonly drain: Duration.Duration;
-  readonly now: Effect.Effect<number>;
-  readonly schedule: (run: Effect.Effect<void>) => Effect.Effect<void>;
 }
 
 export interface RestartControl {
   readonly pending: EngineRestartPending;
   readonly deadlineAt: number | null;
   readonly deadline: Fiber.Fiber<void> | null;
-  readonly stopWatching: (() => void) | null;
+  readonly watching: Scope.Closeable | null;
   readonly restarting: boolean;
 }
 
-export interface EngineRestarterHandle {
-  readonly pending: Effect.Effect<EngineRestartPending>;
-  readonly deadlineAt: Effect.Effect<number | null>;
-  request(when: EngineRestartWhen): Effect.Effect<RestartAnswer, DomainError | RestartFailed>;
-}
+export const RestartDrainWindow = Context.Reference<Duration.Duration>(
+  'shinsa/engine/instance/restart/RestartDrainWindow',
+  { defaultValue: () => Duration.minutes(15) }
+);
 
-export const RESTART_DRAIN = Duration.minutes(15);
-
-export const RESTART_DELAY = Duration.millis(250);
+export const RestartDelay = Context.Reference<Duration.Duration>(
+  'shinsa/engine/instance/restart/RestartDelay',
+  {
+    defaultValue: () => Duration.millis(250),
+  }
+);
 
 export const EXIT_RESTART = 75;
 

@@ -1,8 +1,13 @@
 import { parseTerminalClientFrame } from '@shinsa/core';
 import type { ServerWebSocket } from 'bun';
-import type { Terminals } from './index.ts';
-import { SOCKET_CLOSED, TERMINAL_SOCKET_PATH, type TerminalSocketData } from './schema.ts';
-import type { TerminalViewer } from './session.ts';
+import { Effect } from 'effect';
+import {
+  SOCKET_CLOSED,
+  TERMINAL_SOCKET_PATH,
+  type TerminalSocketData,
+  type TerminalViewer,
+} from './schema.ts';
+import type { Terminals } from './service.ts';
 
 export function readTerminalSocketId(pathname: string) {
   return TERMINAL_SOCKET_PATH.exec(pathname)?.[1] ?? null;
@@ -10,10 +15,14 @@ export function readTerminalSocketId(pathname: string) {
 
 type TerminalSocket = ServerWebSocket<TerminalSocketData>;
 
-export function createTerminalSockets(terminals: Terminals) {
+export const createTerminalSockets = Effect.fn('TerminalSockets.create')(function* (
+  terminals: Terminals['Service']
+) {
+  const runSync = Effect.runSyncWith(yield* Effect.context<never>());
+  const select = (socket: TerminalSocket) => runSync(terminals.select(socket.data.terminalId));
   return {
     open(socket: TerminalSocket) {
-      const session = terminals.select(socket.data.terminalId);
+      const session = select(socket);
       if (!session) {
         socket.close(SOCKET_CLOSED, 'That terminal is closed.');
         return;
@@ -27,7 +36,7 @@ export function createTerminalSockets(terminals: Terminals) {
       session.attach(viewer);
     },
     message(socket: TerminalSocket, raw: string | Buffer) {
-      const session = terminals.select(socket.data.terminalId);
+      const session = select(socket);
       if (!session) return;
       if (typeof raw !== 'string') {
         session.input(new Uint8Array(raw));
@@ -40,12 +49,12 @@ export function createTerminalSockets(terminals: Terminals) {
     },
     drain(socket: TerminalSocket) {
       const { viewer } = socket.data;
-      if (viewer) terminals.select(socket.data.terminalId)?.drain(viewer);
+      if (viewer) select(socket)?.drain(viewer);
     },
     close(socket: TerminalSocket) {
       const { viewer } = socket.data;
-      if (viewer) terminals.select(socket.data.terminalId)?.detach(viewer);
+      if (viewer) select(socket)?.detach(viewer);
       socket.data.viewer = null;
     },
   };
-}
+});

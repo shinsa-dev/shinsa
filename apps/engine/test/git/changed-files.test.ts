@@ -1,13 +1,12 @@
 import { describe, expect, test } from 'bun:test';
 import type { Repo, Task } from '@shinsa/core';
 import { History } from '../../src/git/history/service.ts';
-import { createWorktree } from '../../src/git/index.ts';
-import { edgeRuntime } from '../../src/runtime/edge.ts';
+import { createWorktree, runGit } from '../helpers/git.ts';
 import { createGitRepo, createTempDir, git, writeFiles } from '../helpers/index.ts';
 import { createTask } from '../helpers/state.ts';
 
 function listChangedFiles(repo: Repo, task: Task, baseBranch: string | null) {
-  return edgeRuntime.runPromise(History.use((history) => history.changedFiles(repo, task, baseBranch)));
+  return runGit(History.use((history) => history.changedFiles(repo, task, baseBranch)));
 }
 
 async function commitAll(path: string, message: string) {

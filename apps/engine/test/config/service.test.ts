@@ -2,11 +2,11 @@ import { describe, expect, test } from 'bun:test';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Effect } from 'effect';
-import { readMachineConfig } from '../../src/config/machine/index.ts';
 import { MachineConfigFile } from '../../src/config/machine/service.ts';
 import type { Env } from '../../src/config/schema.ts';
 import { EngineConfig } from '../../src/config/service.ts';
 import { runTest } from '../harness.ts';
+import { readMachineConfig } from '../helpers/config.ts';
 import { createTempDir } from '../helpers/index.ts';
 
 function readEngineConfig(env: Env) {

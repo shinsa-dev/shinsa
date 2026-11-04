@@ -1,31 +1,14 @@
-import type { ShinsaCommand, ShinsaState } from '@shinsa/core';
-import { Schema } from 'effect';
-import type { Effect } from 'effect';
-import type { StateClockOptions } from '../../runtime/clock.ts';
+import { Context, Duration } from 'effect';
+import { USAGE_RESUME_GRACE, USAGE_RESUME_RETRY } from '../schema.ts';
 
-export interface UsageResumeClockOptions extends StateClockOptions {
-  graceMs?: number;
-  retryMs?: number;
+export interface UsageResumeTimings {
+  readonly grace: Duration.Duration;
+  readonly retry: Duration.Duration;
 }
 
-export class UsageResumeFailed extends Schema.TaggedError<
-  UsageResumeFailed,
-  { readonly brand: unique symbol }
->()('UsageResumeFailed', { message: Schema.String }) {}
+export const UsageResumeTimingSettings = Context.Reference<UsageResumeTimings>(
+  'shinsa/engine/accounts/resume/UsageResumeTimingSettings',
+  { defaultValue: (): UsageResumeTimings => ({ grace: USAGE_RESUME_GRACE, retry: USAGE_RESUME_RETRY }) }
+);
 
-export interface UsageResumeDefinition {
-  readonly graceMs: number;
-  readonly retryMs: number;
-  readonly now: Effect.Effect<number>;
-  readonly dispatch: (command: ShinsaCommand, id: string) => Effect.Effect<void, UsageResumeFailed>;
-}
-
-export interface UsageResumeEntry {
-  readonly id: string;
-  readonly dueAt: number;
-  readonly fire: Effect.Effect<void>;
-}
-
-export interface UsageResumeHandle {
-  readonly listEntries: (state: ShinsaState) => Effect.Effect<UsageResumeEntry[]>;
-}
+export const RESUME_MIN_DELAY = Duration.zero;

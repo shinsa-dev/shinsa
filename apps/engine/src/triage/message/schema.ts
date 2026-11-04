@@ -1,36 +1,14 @@
-import { ROUND_LIMITS, type RoundStatus, type ShinsaState, type Task, type TaskShape } from '@shinsa/core';
-import type { Effect } from 'effect';
+import { ROUND_LIMITS, type RoundStatus, type Task } from '@shinsa/core';
 import type { JsonSchema } from '../../agents/providers/index.ts';
 import { type ChoiceQuestion, resolveDecisionProperty } from '../../agents/quick/decide.ts';
-import type { LocalRepo } from '../../repos/index.ts';
 import { SHAPE_QUESTION } from '../decisions.ts';
-import {
-  type ClassifierFailed,
-  type MessageClass,
-  NO_REPOSITORY,
-  type QuickAsk,
-  REPOSITORY_RULE,
-} from '../schema.ts';
+import { NO_REPOSITORY, REPOSITORY_RULE } from '../schema.ts';
 
 export interface MessageAnswer {
   kind?: unknown;
   shape?: unknown;
   title?: unknown;
   why?: unknown;
-}
-
-export interface TriageClassifierDefinition {
-  readonly ask: QuickAsk;
-}
-
-export interface TriageClassifierHandle {
-  readonly message: (task: Task, text: string) => Effect.Effect<MessageClass | null, ClassifierFailed>;
-  readonly shape: (task: Task, request: string) => Effect.Effect<TaskShape | null, ClassifierFailed>;
-  readonly repository: (
-    state: ShinsaState,
-    task: Task,
-    local: LocalRepo[]
-  ) => Effect.Effect<string | null, ClassifierFailed>;
 }
 
 export const MESSAGE_SYSTEM = [

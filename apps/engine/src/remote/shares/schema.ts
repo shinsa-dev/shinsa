@@ -1,24 +1,11 @@
-import type {
-  Bytes,
-  ChatEntry,
-  PullRequest,
-  Repo,
-  ShareFileType,
-  ShareLiveView,
-  SharePreset,
-  ShinsaCommand,
-  ShinsaState,
-  Task,
-} from '@shinsa/core';
+import type { Bytes, PullRequest, Repo, ShareFileType, ShareLiveView, SharePreset, Task } from '@shinsa/core';
 import type { DomainError } from '@shinsa/core';
-import { Schema } from 'effect';
+import { Context, Schema } from 'effect';
 import type { Effect } from 'effect';
-import type { EffectContext, Engine } from '../../runtime/engine.ts';
+import type { EffectAttempt } from '../../runtime/engine/schema.ts';
 import type { EffectFailed } from '../../runtime/failures/schema.ts';
-import type { EvidenceStore } from '../../store/evidence/index.ts';
-import type { ChannelPeer } from '../channel.ts';
-import type { Remote } from '../index.ts';
-import type { HelloAnswer, ShareChannel } from '../share-channel.ts';
+import type { ChannelPeer } from '../channel/schema.ts';
+import type { LiveShare, ShareChannelHandle } from '../share-channel/schema.ts';
 
 export const SHARE_NOT_PAIRED =
   'Turn on remote access in Settings → General to share this task. Its link works once this machine is paired.';
@@ -48,45 +35,8 @@ export const CODE_FILE_LIMIT = 300;
 
 export const CODE_STATUSES: ReadonlySet<string> = new Set(['modified', 'renamed']);
 
-export interface ShareGitHub {
-  readDiff: (repo: Repo, number: number) => Promise<string>;
-  readFile: (repo: Repo, ref: string, path: string) => Promise<string>;
-}
-
-export interface ShareWorktree {
-  readBase: (repo: Repo, task: Task) => Promise<string>;
-  readPatch: (worktree: string, base: string) => Promise<string>;
-  readFile: (worktree: string, path: string) => Promise<string>;
-}
-
-export interface ShareTranscripts {
-  listEntries: (runId: string) => ChatEntry[];
-  subscribe: (listener: (runId: string) => void) => () => void;
-}
-
 export interface SharedCode {
   files: Record<string, string>;
-}
-
-export interface ShareEffects {
-  link: (taskId: string, context: EffectContext) => Promise<void>;
-}
-
-export interface ShareLinks {
-  acceptsShare: (shareId: string) => boolean;
-  openChannel: (peer: ChannelPeer, shareId: string) => ShareChannel;
-  closeChannel: (channel: ShareChannel) => void;
-}
-
-export interface SharesOptions {
-  engine: Engine;
-  remote: Remote;
-  evidence: EvidenceStore;
-  transcripts: ShareTranscripts;
-  github?: ShareGitHub;
-  worktree?: ShareWorktree;
-  now?: () => number;
-  random?: (bytes: number) => Uint8Array<ArrayBuffer>;
 }
 
 export class ShareCodeUnreadable extends Schema.TaggedError<
@@ -122,11 +72,6 @@ export interface ShareFile {
   readonly read: Effect.Effect<Bytes, ShareFileUnreadable>;
 }
 
-export interface ShareLive {
-  readonly view: ShareLiveView;
-  readonly files: readonly ShareFile[];
-}
-
 export interface HashedFile {
   readonly size: number;
   readonly modifiedAt: number;
@@ -143,37 +88,25 @@ export interface OpenShareChannel {
   readonly release: Effect.Effect<void>;
 }
 
-type RemoteFile = Remote['store']['file'];
-
-type ShareAuthorizer = (hello: string) => Effect.Effect<HelloAnswer<string>>;
-
-export interface SharesDefinition {
-  readonly now: Effect.Effect<number>;
-  readonly random: (bytes: number) => Effect.Effect<Uint8Array<ArrayBuffer>>;
-  readonly state: Effect.Effect<ShinsaState>;
-  readonly dispatch: (command: ShinsaCommand, id?: string) => Effect.Effect<void, ShareDispatchFailed>;
-  readonly remoteFile: Effect.Effect<RemoteFile>;
-  readonly remoteEnabled: Effect.Effect<boolean>;
-  readonly appOrigin: Effect.Effect<string>;
-  readonly machineName: Effect.Effect<ReturnType<Remote['snapshot']>['machineName']>;
-  readonly acquireAccess: (close: Effect.Effect<void>) => Effect.Effect<Effect.Effect<void>>;
-  readonly createChannel: (peer: ChannelPeer, authorize: ShareAuthorizer) => Effect.Effect<ShareChannel>;
-  readonly selectEvidenceFile: (name: string) => Effect.Effect<string | null>;
-  readonly listEntries: (runId: string) => Effect.Effect<ChatEntry[]>;
+export interface ShareSourcesShape {
   readonly github: ShareCodeSource | null;
   readonly worktree: ShareWorkingSource | null;
 }
 
-export interface SharesHandle {
-  readonly syncRemote: Effect.Effect<void>;
-  readonly syncChannels: Effect.Effect<void>;
-  readonly pushTranscript: (runId: string) => Effect.Effect<void>;
-  readonly acceptsShare: (shareId: string) => Effect.Effect<boolean>;
-  readonly openChannel: (peer: ChannelPeer, shareId: string) => Effect.Effect<ShareChannel>;
-  readonly closeChannel: (channel: ShareChannel) => Effect.Effect<void>;
-  readonly link: (
-    taskId: string,
-    context: EffectContext
-  ) => Effect.Effect<void, EffectFailed | ShareDispatchFailed>;
-  readonly resolveLive: (taskId: string, preset?: SharePreset) => Effect.Effect<ShareLive, DomainError>;
+export const ShareSources = Context.Reference<ShareSourcesShape>('shinsa/engine/remote/shares/ShareSources', {
+  defaultValue: () => ({ github: null, worktree: null }),
+});
+
+export interface ShareEffects {
+  link(taskId: string, attempt: EffectAttempt): Effect.Effect<void, EffectFailed | ShareDispatchFailed>;
+}
+
+export interface ShareLinks {
+  acceptsShare(shareId: string): Effect.Effect<boolean>;
+  openChannel(peer: ChannelPeer, shareId: string): Effect.Effect<ShareChannelHandle<string>>;
+  closeChannel(channel: ShareChannelHandle<string>): Effect.Effect<void>;
+}
+
+export interface SharesHandle extends ShareEffects, ShareLinks {
+  resolveLive(taskId: string, preset?: SharePreset): Effect.Effect<LiveShare<ShareLiveView>, DomainError>;
 }

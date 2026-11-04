@@ -1,10 +1,9 @@
 import { Effect } from 'effect';
-import { edgeRuntime } from '../../../runtime/edge.ts';
-import { type LocateDeps, locateProgram, readProgramVersion } from '../versions.ts';
+import { type LocateDeps, locateProgram } from '../versions.ts';
+import { ProgramVersions } from '../versions/service.ts';
 import {
   CODEX_EXECUTABLE_ENV,
   CODEX_MINIMUM_VERSION,
-  type CodexExecutable,
   type CodexExecutableDeps,
 } from './executable/schema.ts';
 import { resolveExecutable } from './executable/service.ts';
@@ -20,20 +19,20 @@ export function parseCodexVersion(output: string) {
 }
 
 export function readCodexVersion(path: string) {
-  return readProgramVersion(path, parseCodexVersion);
+  return ProgramVersions.use((versions) => versions.read(path, parseCodexVersion));
 }
 
 export function locateCodex(deps: LocateDeps = {}) {
   return locateProgram('codex', CODEX_EXECUTABLE_ENV, deps);
 }
 
-export function resolveCodexExecutable(deps: CodexExecutableDeps = {}): Promise<CodexExecutable> {
-  const readVersion = deps.readVersion ?? readCodexVersion;
-  return edgeRuntime.runPromise(
-    resolveExecutable({
-      path: locateCodex(deps).path,
-      readVersion: (path) => Effect.promise(() => readVersion(path)),
-      minimumVersion: deps.minimumVersion ?? CODEX_MINIMUM_VERSION,
-    })
-  );
-}
+export const resolveCodexExecutable = Effect.fn('CodexExecutable.resolveInstalled')(function* (
+  deps: CodexExecutableDeps = {}
+) {
+  const versions = yield* ProgramVersions;
+  return yield* resolveExecutable({
+    path: locateCodex(deps).path,
+    readVersion: deps.readVersion ?? ((path) => versions.read(path, parseCodexVersion)),
+    minimumVersion: deps.minimumVersion ?? CODEX_MINIMUM_VERSION,
+  });
+});

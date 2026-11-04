@@ -1,15 +1,43 @@
-import { describe, expect, test } from 'bun:test';
+import { afterAll, describe, expect, test } from 'bun:test';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { Layer, ManagedRuntime } from 'effect';
 import {
   expandDefinition,
   parseMcpEntry,
   readMcpServers,
   resolveBrowserEnv,
 } from '../../src/extensions/definitions.ts';
-import { type DiscoveryPaths, discoverServers, listClaudePlugins } from '../../src/extensions/discover.ts';
-import { discoverSkills, parseFrontmatter } from '../../src/extensions/skills.ts';
+import { ExtensionDiscovery } from '../../src/extensions/discovery/service.ts';
+import { listSkillRoots, parseFrontmatter } from '../../src/extensions/discovery/skills.ts';
+import type { ClaudePlugin, DiscoveryPaths } from '../../src/extensions/schema.ts';
+import { JsonFile } from '../../src/files/service.ts';
+import { JsonLogger } from '../../src/log/service.ts';
 import { createFakeMachine, type FakeMachine, writeFile } from './fixtures.ts';
+
+const runtime = ManagedRuntime.make(
+  ExtensionDiscovery.layer.pipe(Layer.provide(JsonFile.layer), Layer.provideMerge(JsonLogger))
+);
+
+afterAll(() => runtime.dispose());
+
+function listClaudePlugins(paths: DiscoveryPaths, problems: string[]) {
+  const read = runtime.runSync(ExtensionDiscovery.use((discovery) => discovery.listPlugins(paths)));
+  problems.push(...read.problems);
+  return read.plugins;
+}
+
+function discoverServers(paths: DiscoveryPaths, plugins: ClaudePlugin[], problems: string[]) {
+  const read = runtime.runSync(ExtensionDiscovery.use((discovery) => discovery.listServers(paths, plugins)));
+  problems.push(...read.problems);
+  return read.servers;
+}
+
+function discoverSkills(paths: DiscoveryPaths, plugins: ClaudePlugin[], pluginDir: string) {
+  return runtime.runSync(
+    ExtensionDiscovery.use((discovery) => discovery.listSkills(listSkillRoots(paths, plugins, pluginDir)))
+  );
+}
 
 function resolvePaths(machine: FakeMachine): DiscoveryPaths {
   return {

@@ -1,25 +1,25 @@
+import { type AccountsSnapshot } from '@shinsa/core';
 import { EngineApi } from '@shinsa/core/engine-api';
 import { RouteNotFound, ROUTE_NOT_FOUND_MESSAGE } from '@shinsa/core/engine-api/schema';
-import { Effect } from 'effect';
+import { Effect, Option } from 'effect';
 import { HttpApiBuilder } from 'effect/http-api';
-import { requestPromise } from '../../failures.ts';
-import { HttpServices } from '../../services/service.ts';
+import { Accounts } from '../../../accounts/roster/service.ts';
+import { resolveRequestFailure } from '../../failures.ts';
 
 export const AccountsHandlers = HttpApiBuilder.group(
   EngineApi,
   'accounts',
   Effect.fn('AccountsHandlers')(function* (handlers) {
-    const { accounts: given } = yield* HttpServices;
-    const accounts = given
-      ? Effect.succeed(given)
-      : Effect.fail(new RouteNotFound({ message: ROUTE_NOT_FOUND_MESSAGE }));
-    const act = <A>(run: (found: NonNullable<typeof given>) => A | PromiseLike<A>) =>
-      Effect.flatMap(accounts, (found) => requestPromise(() => Promise.resolve(run(found))));
+    const given = Option.getOrUndefined(yield* Effect.serviceOption(Accounts));
+    const act = <E>(run: (found: Accounts['Service']) => Effect.Effect<AccountsSnapshot, E>) =>
+      given
+        ? run(given).pipe(Effect.mapError(resolveRequestFailure))
+        : Effect.fail(new RouteNotFound({ message: ROUTE_NOT_FOUND_MESSAGE }));
 
     return handlers
-      .handle('list', () => act((found) => found.snapshot()))
+      .handle('list', () => act((found) => found.snapshot))
       .handle('refresh', ({ payload }) =>
-        act((found) => (payload.scope === 'usage' ? found.refreshUsage() : found.refresh()))
+        act((found) => (payload.scope === 'usage' ? found.refreshUsage : found.refresh))
       )
       .handle('login', ({ payload }) => act((found) => found.startLogin(payload.accountId ?? null)))
       .handle('loginCode', ({ payload }) =>

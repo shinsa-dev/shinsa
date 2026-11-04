@@ -1,23 +1,25 @@
 import { EngineApi } from '@shinsa/core/engine-api';
 import { Effect } from 'effect';
 import { HttpApiBuilder } from 'effect/http-api';
-import { requestPromise } from '../../failures.ts';
-import { HttpServices } from '../../services/service.ts';
+import { Onboarding } from '../../../onboarding/service.ts';
+import { resolveRequestFailure } from '../../failures.ts';
 
 export const OnboardingHandlers = HttpApiBuilder.group(
   EngineApi,
   'onboarding',
   Effect.fn('OnboardingHandlers')(function* (handlers) {
-    const { onboarding } = yield* HttpServices;
+    const onboarding = yield* Onboarding;
+
+    const answer = Effect.mapError(resolveRequestFailure);
 
     return handlers
-      .handle('status', () => requestPromise(() => onboarding.resolveStatus()))
-      .handle('roots', ({ query }) => requestPromise(() => onboarding.listSuggestions(query.refresh === '1')))
-      .handle('setup', ({ payload }) => requestPromise(() => onboarding.applySetup(payload)))
-      .handle('prerequisites', () => requestPromise(() => onboarding.resolvePrerequisites()))
-      .handle('privacy', () => requestPromise(() => onboarding.openPrivacySettings()))
-      .handle('install', ({ payload }) => requestPromise(() => onboarding.openInstall(payload)))
-      .handle('flow', () => requestPromise(() => onboarding.setup.resolve()))
-      .handle('reply', ({ payload }) => requestPromise(() => onboarding.setup.reply(payload)));
+      .handle('status', () => answer(onboarding.resolveStatus))
+      .handle('roots', ({ query }) => answer(onboarding.listSuggestions(query.refresh === '1')))
+      .handle('setup', ({ payload }) => answer(onboarding.applySetup(payload)))
+      .handle('prerequisites', () => answer(onboarding.resolvePrerequisites))
+      .handle('privacy', () => answer(onboarding.openPrivacySettings))
+      .handle('install', ({ payload }) => answer(onboarding.openInstall(payload)))
+      .handle('flow', () => answer(onboarding.setup.resolve))
+      .handle('reply', ({ payload }) => answer(onboarding.setup.reply(payload)));
   })
 );

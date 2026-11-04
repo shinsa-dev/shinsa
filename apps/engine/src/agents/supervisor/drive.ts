@@ -6,13 +6,14 @@ import {
   type Repo,
   type RunFailure,
 } from '@shinsa/core';
-import { Cause, Effect, FiberSet, Ref } from 'effect';
-import { describeIsolatedChanges } from '../../git/index.ts';
+import { Cause, Clock, Duration, Effect, FiberSet, Ref } from 'effect';
 import { describeError } from '../../log/index.ts';
-import { type RejectionVerdict, requestVerdict } from '../accounts.ts';
+import type { RejectionVerdict } from '../accounts/schema.ts';
 import { carryUndelivered, stopActiveRun } from '../active/run.ts';
 import type { ActiveRun } from '../active/schema.ts';
-import { RunClock } from '../clock.ts';
+import { RunClockTime } from '../clock/schema.ts';
+import type { RunClockHandle } from '../clock/schema.ts';
+import { makeRunClock } from '../clock/service.ts';
 import { resolveDelegatedReply } from '../delegations/delivery.ts';
 import { type AgentSessionResult, resolveCapabilities } from '../providers/index.ts';
 import { resolveRestorePlan, resolveTurnPlan } from '../turns/plan.ts';
@@ -64,10 +65,7 @@ const markLeaseSpent = Effect.fn('RunSupervisor.markLeaseSpent')(function* (
     yield* Effect.logInfo(
       '[Runs] Another run hit the usage limit of this run’s account; its next turn moves'
     ).pipe(Effect.annotateLogs({ runId, accountId }));
-    yield* FiberSet.run(
-      host.fibers,
-      Effect.promise(() => host.questions.releaseWaiting(runId))
-    );
+    yield* FiberSet.run(host.fibers, host.questions.releaseWaiting(runId));
   }
 });
 
@@ -95,7 +93,14 @@ const reviewAttempt = Effect.fn('RunSupervisor.review')(function* (
     renewed: [...active.renewed],
     failure,
   };
-  return yield* Effect.promise(() => Promise.resolve(requestVerdict(handler, rejection)));
+  return yield* handler(rejection).pipe(
+    Effect.catchDefect((error) =>
+      Effect.logWarning('[Runs] The rejection handler failed; the run ends').pipe(
+        Effect.annotateLogs({ runId: rejection.runId, error: describeError(error) }),
+        Effect.as(skip)
+      )
+    )
+  );
 });
 
 const restoreLost = Effect.fn('RunSupervisor.restoreLost')(function* (
@@ -105,30 +110,33 @@ const restoreLost = Effect.fn('RunSupervisor.restoreLost')(function* (
 ) {
   if (!plan.fork) yield* recordSessionLost(turn.run.id, sessionId);
   const context = yield* resolveTurnContext(turn);
-  return resolveRestorePlan(context, plan, sessionId);
+  return yield* resolveRestorePlan(context, plan, sessionId);
 });
 
 interface RunWatch {
-  readonly clock: RunClock;
+  readonly clock: RunClockHandle;
   timedOut: boolean;
 }
 
 const TIMED_OUT: AgentSessionResult = { outcome: 'failed', summary: DRIVE_TIMED_OUT };
 
-const startRunWatch = Effect.fn('RunSupervisor.startRunWatch')(function* ({ run, active }: Turn) {
+const startRunWatch = Effect.fn('RunSupervisor.startRunWatch')(function* (turn: Turn) {
+  const { active } = turn;
   const host = yield* RunHost;
   const fork = yield* FiberSet.runtime(host.fibers)<RunWorld | RunHost>();
-  const onTimeout = () => {
+  const onTimeout = Effect.sync(() => {
     watch.timedOut = true;
     const session = active.session;
     if (session) {
       stopActiveRun(active);
-      fork(stopSession(run.id, session, '[Runs] Could not stop a session'));
+      fork(stopSession(turn.run.id, session, '[Runs] Could not stop a run past its time limit'));
     }
     active.wake?.();
-  };
+  });
+  const time = yield* RunClockTime;
+  const make = makeRunClock(Duration.millis(host.limits.maxRunMs), onTimeout);
   const watch: RunWatch = {
-    clock: new RunClock(host.limits.maxRunMs, onTimeout, host.limits.clockTimers),
+    clock: yield* time ? Effect.provideService(make, Clock.Clock, time) : make,
     timedOut: false,
   };
   active.clock = watch.clock;
@@ -192,18 +200,18 @@ const driveTurn = Effect.fn('RunSupervisor.drive')(function* (turn: Turn) {
   if (!resolveCapabilities(provider).approvals) return failSetup(UNGUARDED, 'unguarded');
   const watch = yield* startRunWatch(turn);
   const loop = Effect.gen(function* () {
-    world.transcripts.record(run.id, { type: 'status', status: 'started', outcome: null });
-    watch.clock.start();
+    yield* world.transcripts.record(run.id, { type: 'status', status: 'started', outcome: null });
+    yield* watch.clock.start;
     const context = yield* resolveTurnContext(turn);
-    let step: DriveStep = { plan: yield* Effect.promise(() => resolveTurnPlan(context)), restored: false };
+    let step: DriveStep = { plan: yield* resolveTurnPlan(context), restored: false };
     while (!('done' in step)) step = yield* resolveDriveStep(turn, step, watch);
     return step.done;
   });
   return yield* loop.pipe(
     Effect.catchCause((cause) => Effect.succeed(resolveDriveFailure(Cause.squash(cause)))),
-    Effect.ensuring(Effect.sync(() => watch.clock.stop()))
+    Effect.ensuring(watch.clock.stop)
   );
-});
+}, Effect.scoped);
 
 export const prepareAndDrive = Effect.fn('RunSupervisor.prepareAndDrive')(function* (
   turn: Turn,
@@ -229,9 +237,9 @@ export const resolveDelegatedResult = Effect.fn('RunSupervisor.resolveDelegatedR
 ) {
   if (result.outcome !== 'completed') return result;
   const world = yield* RunWorld;
-  const reply = resolveDelegatedReply(world.transcripts.listEntries(run.id)) ?? result.summary;
+  const reply = resolveDelegatedReply(yield* world.transcripts.listEntries(run.id)) ?? result.summary;
   if (run.delegation.isolation !== 'worktree') return { ...result, summary: reply };
-  const changed = yield* Effect.promise(() => describeIsolatedChanges(cwd));
+  const changed = yield* world.checkout.describeIsolated(cwd);
   if (!changed) return { ...result, summary: reply };
   const files = `${changed} ${changed === 1 ? 'file' : 'files'}`;
   const note = `Its changes are not committed: ${files} in its own checkout at \`${cwd}\`. Bring over what you need, for example with \`git -C ${cwd} diff | git apply\`.`;

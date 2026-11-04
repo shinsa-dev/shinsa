@@ -1,4 +1,4 @@
-import type { Engine } from '../../apps/engine/src/runtime/index.ts';
+import type { Engine } from '../../apps/engine/test/helpers/engine.ts';
 import { isTaskSettled, resolveFirstName, type Task } from '../../packages/core/src/index.ts';
 import type { StartedMachine } from './machine.ts';
 import { GUEST, HANDOFF_FRESH, HOST, ORIGIN, SANDBOX_PATH, SIGN_IN_AS, USER } from './schema.ts';

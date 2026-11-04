@@ -3,13 +3,19 @@ import { chmodSync, existsSync, readdirSync, readFileSync, writeFileSync } from 
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { APP_IDENTITY } from '@shinsa/core';
+import { Effect } from 'effect';
 import {
   prepareDataDir,
-  resolveConfig,
-  resolveServerAddress,
+  resolveServerAddress as readServerAddress,
   resolveShinsaPaths,
 } from '../../src/config/index.ts';
+import { MachineConfigFile } from '../../src/config/machine/service.ts';
+import { resolveConfig } from '../helpers/config.ts';
 import { createTempDir } from '../helpers/index.ts';
+
+function resolveServerAddress(env: Record<string, string>) {
+  return Effect.runSync(readServerAddress(env).pipe(Effect.provide(MachineConfigFile.layer)));
+}
 
 const DEFAULT_PORT = APP_IDENTITY.port;
 

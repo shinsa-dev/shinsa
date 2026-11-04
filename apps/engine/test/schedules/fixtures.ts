@@ -1,9 +1,9 @@
 import { join } from 'node:path';
 import { listActiveRuns, type ScheduleTrigger } from '@shinsa/core';
-import { Engine } from '../../src/runtime/index.ts';
-import { SecretStore } from '../../src/secrets/index.ts';
-import { EventLog } from '../../src/store/index.ts';
+import { Engine } from '../helpers/engine.ts';
+import { openEventLog } from '../helpers/event-log.ts';
 import { createTempDir } from '../helpers/index.ts';
+import { openTestSecrets } from '../helpers/secrets.ts';
 
 export async function startTask(engine: Engine, repoId: string, dir: string, title: string) {
   const before = new Set(Object.keys(engine.state.tasks));
@@ -25,7 +25,7 @@ export async function startTask(engine: Engine, repoId: string, dir: string, tit
 
 export async function createWorld() {
   const dir = createTempDir('shinsa-schedules-');
-  const engine = new Engine(new EventLog(join(dir, 'shinsa.sqlite')));
+  const engine = new Engine(openEventLog(join(dir, 'shinsa.sqlite')));
   await engine.dispatch({
     type: 'repo.register',
     repo: {
@@ -39,7 +39,7 @@ export async function createWorld() {
   });
   const repoId = Object.keys(engine.state.repos)[0] ?? '';
   const { taskId, runId } = await startTask(engine, repoId, dir, 'Watch the nightly builds');
-  const secrets = new SecretStore(join(dir, 'secrets.json'));
+  const secrets = openTestSecrets(join(dir, 'secrets.json'));
   return { dir, engine, repoId, taskId, runId, secrets };
 }
 

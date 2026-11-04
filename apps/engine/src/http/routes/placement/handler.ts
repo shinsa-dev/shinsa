@@ -1,17 +1,17 @@
 import { parsePlacementQuestion } from '@shinsa/core';
 import { EngineApi } from '@shinsa/core/engine-api';
 import { RequestFailed, RouteNotFound, ROUTE_NOT_FOUND_MESSAGE } from '@shinsa/core/engine-api/schema';
-import { Effect } from 'effect';
+import { Effect, Option } from 'effect';
 import { HttpApiBuilder } from 'effect/http-api';
-import { requestPromise } from '../../failures.ts';
-import { HttpServices } from '../../services/service.ts';
+import { PlacementAsker } from '../../../remote/placement/service.ts';
+import { resolveRequestFailure } from '../../failures.ts';
 import { PLACEMENT_INVALID } from './schema.ts';
 
 export const PlacementHandlers = HttpApiBuilder.group(
   EngineApi,
   'placement',
   Effect.fn('PlacementHandlers')(function* (handlers) {
-    const { place } = yield* HttpServices;
+    const place = Option.getOrUndefined(yield* Effect.serviceOption(PlacementAsker));
 
     return handlers.handle(
       'ask',
@@ -19,7 +19,7 @@ export const PlacementHandlers = HttpApiBuilder.group(
         if (!place) return yield* new RouteNotFound({ message: ROUTE_NOT_FOUND_MESSAGE });
         const question = parsePlacementQuestion(payload);
         if (!question) return yield* new RequestFailed(PLACEMENT_INVALID);
-        return { answer: yield* requestPromise(() => place(question)) };
+        return { answer: yield* place.place(question).pipe(Effect.mapError(resolveRequestFailure)) };
       })
     );
   })

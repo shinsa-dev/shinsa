@@ -4,6 +4,9 @@ import { parse } from '@babel/parser';
 import { listDisclosureViolations } from './lint-disclosure.ts';
 import {
   ENGINE_PROMISE_MESSAGE,
+  ENGINE_RUNTIME_MESSAGE,
+  isEngineRuntimeSource,
+  listEngineRuntimeLines,
   isEngineSource,
   isEffectSource,
   listEffectViolations,
@@ -32,6 +35,8 @@ import {
   TIME_MESSAGE,
   TOOLTIP_DELAY_MESSAGE,
   VERB_CATALOG,
+  ENGINE_RUNTIME_FILES,
+  ENGINE_RUNTIME_STALE_MESSAGE,
 } from './lint-rules.ts';
 import { RAW_SELECTION_MESSAGE, RAW_SELECTION_PATTERN } from './lint-selection.ts';
 import { listToastViolations } from './lint-toast.ts';
@@ -556,6 +561,15 @@ function collectEnginePromiseViolations(file: string, source: string, violations
     violations.push({ file, line, message: ENGINE_PROMISE_MESSAGE });
 }
 
+function collectEngineRuntimeViolations(file: string, source: string, violations: Violation[]): void {
+  if (!isEngineRuntimeSource(file)) return;
+  const lines = listEngineRuntimeLines(file, source);
+  const listed = ENGINE_RUNTIME_FILES.has(file.replace(/^apps\/engine\/src\//, ''));
+  if (listed && lines.length === 0) violations.push({ file, line: 1, message: ENGINE_RUNTIME_STALE_MESSAGE });
+  if (listed) return;
+  for (const line of lines) violations.push({ file, line, message: ENGINE_RUNTIME_MESSAGE });
+}
+
 function parseSource(file: string, source: string) {
   return parse(source, {
     sourceType: 'module',
@@ -588,6 +602,7 @@ function checkFile(file: string, violations: Violation[], appSources: Record<str
     for (const violation of listEffectViolations(file, source)) violations.push({ file, ...violation });
   }
   collectEnginePromiseViolations(file, source, violations);
+  collectEngineRuntimeViolations(file, source, violations);
   if (isUnder(file, VERB_CHECK_ROOTS)) collectVerbViolations(file, parsed.program, violations);
   if (isUnder(file, APP)) appSources[file] = source;
 }
