@@ -20,7 +20,7 @@ import {
   signTeamSnapshot,
   type Task,
   TEAM_KEY_BYTES,
-  TEAM_SHARE_PRESET,
+  TEAM_SHARE_SCOPES,
   type TeamId,
   type TeamListView,
   type TeamTask,
@@ -369,7 +369,7 @@ export class Teams extends Context.Service<Teams, TeamsHandle>()('shinsa/engine/
       const resolveLive = Effect.fn('Teams.resolveLive')(function* (subject: TeamSubject) {
         if (subject.view.kind === 'task')
           return yield* shares
-            .resolveLive(subject.view.taskId, TEAM_SHARE_PRESET)
+            .resolveLive(subject.view.taskId, TEAM_SHARE_SCOPES)
             .pipe(Effect.mapError(broke));
         const file = yield* store.file;
         const listed = listTeamTasks(yield* engine.state, subject.teamId, {

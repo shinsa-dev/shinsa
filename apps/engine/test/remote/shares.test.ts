@@ -28,6 +28,8 @@ import {
   serializeBase64Url,
   serializeShareUrl,
   type Task,
+  SHARE_PRESET_SCOPES,
+  type ViewScope,
 } from '@shinsa/core';
 import { Clock, Effect, Layer } from 'effect';
 import type { Transcripts } from '../../src/agents/transcripts/service.ts';
@@ -71,7 +73,7 @@ const SHARE_URL = serializeShareUrl('https://app.shinsa.dev', {
   key: SHARE_KEY,
 });
 
-const SHARING = { at: 1, limit: 'none', preset: 'standard', endsAt: null } as const;
+const SHARING = { at: 1, limit: 'none', scopes: SHARE_PRESET_SCOPES.standard, endsAt: null } as const;
 
 let running: FakeControlPlane | null = null;
 
@@ -359,12 +361,16 @@ async function openViewer(publisher: Shares, url = SHARE_URL, shareId = SHARE_ID
   return viewer;
 }
 
-function sharedSetUp(options: SetUp & { preset?: SharePreset } = {}) {
+function sharedSetUp(options: SetUp & { preset?: SharePreset; scopes?: readonly ViewScope[] } = {}) {
   return setUp({
     ...options,
     patch: (state) => {
       state.tasks['task-1'] = shareTask({
-        share: { ...SHARING, preset: options.preset ?? 'standard', url: SHARE_URL },
+        share: {
+          ...SHARING,
+          scopes: options.scopes ?? SHARE_PRESET_SCOPES[options.preset ?? 'standard'],
+          url: SHARE_URL,
+        },
       });
       state.runs['run-1'] = createRun();
       options.patch?.(state);
@@ -533,7 +539,7 @@ describe('a share link opened live', () => {
   test('refuses a link whose time ran out, even before the clock ends the share', async () => {
     const { stub, publisher } = sharedSetUp();
     stub.state.tasks['task-1'] = shareTask({
-      share: { ...SHARING, limit: 'hour', preset: 'standard', endsAt: 0, url: SHARE_URL },
+      share: { ...SHARING, limit: 'hour', scopes: SHARE_PRESET_SCOPES.standard, endsAt: 0, url: SHARE_URL },
     });
     const expired = await openViewer(publisher);
     expect(expired.refused).toBe(SHARE_GONE_REASON);
@@ -917,7 +923,7 @@ describe('a share by preset', () => {
     const { publisher, github } = sharedSetUp({ preset: 'status' });
     const live = await publisher.resolveLive('task-1');
     expect(live.view.shared).toMatchObject({
-      preset: 'status',
+      scopes: [...SHARE_PRESET_SCOPES.status],
       owner: null,
       machine: null,
       repository: null,
@@ -1032,6 +1038,33 @@ describe('a share by preset', () => {
     const shared = JSON.parse(decodeText((await file?.read()) as Bytes)) as ChatEntry[];
     expect(shared.map((entry) => entry.type)).toEqual(['user', 'agent']);
     expect(JSON.stringify(shared)).not.toContain('sk-0000');
+  });
+
+  test('a custom share without code and with messages reads no diff, names its scopes and streams your own turns', async () => {
+    const transcripts = createTranscripts();
+    transcripts.record('run-1', { type: 'user', from: 'you', text: 'Try the left pane.', attachments: [] });
+    transcripts.record('run-1', { type: 'agent', phase: 'final', text: 'Done.' });
+    const scopes = [
+      ...SHARE_PRESET_SCOPES.standard.filter((scope) => scope !== 'code'),
+      'messages',
+    ] as const satisfies readonly ViewScope[];
+    const { publisher, github } = sharedSetUp({ scopes, transcripts });
+    const live = await publisher.resolveLive('task-1');
+    expect(live.view.shared.scopes).not.toContain('code');
+    expect(live.view.shared.scopes).toContain('messages');
+    expect(live.view.shared.code).toBe(false);
+    expect(Object.keys(live.view.files)).not.toContain(SHARE_DIFF_FILE);
+    expect(Object.keys(live.view.files)).not.toContain(SHARE_CODE_FILE);
+    expect(github.diffReads).toBe(0);
+    const file = live.files.find((item) => item.id === 'transcript-run-1-0');
+    expect(file?.version).toBe('messages:2');
+  });
+
+  test('a scope list passed to the live view replaces the share’s own, as a team view does', async () => {
+    const { publisher } = sharedSetUp({ preset: 'full' });
+    const live = await publisher.resolveLive('task-1', SHARE_PRESET_SCOPES.status);
+    expect(live.view.shared.scopes).toEqual([...SHARE_PRESET_SCOPES.status]);
+    expect(live.view.shared.owner).toBeNull();
   });
 
   test('a run with no transcript yet streams nothing, and one past the size a file carries keeps its latest entries', async () => {

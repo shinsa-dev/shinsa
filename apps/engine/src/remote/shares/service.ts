@@ -18,6 +18,8 @@ import {
   resolveRoundBase,
   resolveSharedTask,
   resolveSharePreset,
+  resolveShareScopes,
+  SHARE_PRESET_SCOPES,
   resolveShareTranscriptFile,
   SHARE_CODE_FILE,
   SHARE_DIFF_FILE,
@@ -28,12 +30,12 @@ import {
   SHARED_EVIDENCE_PREFIX,
   type SharedTask,
   type ShareLiveView,
-  type SharePreset,
   type ShinsaCommand,
   serializeBase64Url,
   serializePublicKey,
   serializeShareUrl,
   type Task,
+  type ViewScope,
   verifyShareHello,
 } from '@shinsa/core';
 import { Clock, Context, Effect, Layer, Option, Ref } from 'effect';
@@ -170,8 +172,8 @@ export class Shares extends Context.Service<Shares, SharesHandle>()('shinsa/engi
       const pushTranscript = Effect.fn('Shares.pushTranscript')(function* (runId: string) {
         const state = yield* engine.state;
         const taskId = state.runs[runId]?.taskId;
-        const preset = taskId ? state.tasks[taskId]?.share?.preset : undefined;
-        if (!(taskId && preset && hasShareGroup(preset, 'live'))) return;
+        const scopes = taskId ? state.tasks[taskId]?.share?.scopes : undefined;
+        if (!(taskId && scopes && hasShareGroup(scopes, 'live'))) return;
         for (const channel of (yield* Ref.get(channels)).keys())
           if ((yield* channel.subject) === taskId) yield* forkChannel(channel.push);
       });
@@ -287,15 +289,20 @@ export class Shares extends Context.Service<Shares, SharesHandle>()('shinsa/engi
         return bytes;
       };
 
-      const resolveShared = Effect.fn('Shares.resolveShared')(function* (task: Task, chosen?: SharePreset) {
+      const resolveShared = Effect.fn('Shares.resolveShared')(function* (
+        task: Task,
+        chosen?: readonly ViewScope[]
+      ) {
         const state = yield* engine.state;
         const file = yield* store.file;
-        const preset = chosen ?? task.share?.preset ?? resolveSharePreset(state.settings);
-        const people = hasShareGroup(preset, 'people');
+        const scopes = resolveShareScopes(
+          chosen ?? task.share?.scopes ?? SHARE_PRESET_SCOPES[resolveSharePreset(state.settings)]
+        );
+        const people = hasShareGroup(scopes, 'people');
         const repo = people && task.repoId ? (state.repos[task.repoId] ?? null) : null;
         const slug = repo ? resolveRepoSlug(repo) : null;
         const shared = resolveSharedTask(state, task, {
-          preset,
+          scopes,
           owner: people ? file.owner : null,
           ownerProfile: people ? resolveOwnerProfile(file) : null,
           machine: people ? remote.machineName : null,
@@ -321,8 +328,8 @@ export class Shares extends Context.Service<Shares, SharesHandle>()('shinsa/engi
       });
 
       const listTranscriptFiles = Effect.fn('Shares.listTranscriptFiles')(function* (shared: SharedTask) {
-        if (!hasShareGroup(shared.preset, 'live')) return [];
-        const messages = hasShareGroup(shared.preset, 'messages');
+        if (!hasShareGroup(shared.scopes, 'live')) return [];
+        const messages = hasShareGroup(shared.scopes, 'messages');
         const pages = yield* Effect.forEach(shared.runs, (run) => listTranscriptPages(run.id, messages));
         return pages.flat();
       });
@@ -475,10 +482,13 @@ export class Shares extends Context.Service<Shares, SharesHandle>()('shinsa/engi
           )
         );
 
-      const resolveLive = Effect.fn('Shares.resolveLive')(function* (taskId: string, preset?: SharePreset) {
+      const resolveLive = Effect.fn('Shares.resolveLive')(function* (
+        taskId: string,
+        scopes?: readonly ViewScope[]
+      ) {
         const task = (yield* engine.state).tasks[taskId];
         if (!task) return yield* new DomainError({ code: 'task_not_found', message: 'No such task.' });
-        const { shared, repo } = yield* resolveShared(task, preset);
+        const { shared, repo } = yield* resolveShared(task, scopes);
         const files = [
           ...(yield* listEvidenceFiles(shared)),
           ...(yield* listLiveCodeFiles(shared, task, repo)),
