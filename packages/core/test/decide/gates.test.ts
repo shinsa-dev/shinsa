@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import {
   GATE_SCHEMA,
+  HOUR_MS,
   type GateType,
   listOpenGates,
   type ReviewComment,
@@ -28,6 +29,7 @@ import {
   reachShipping,
   readInstruction,
   readyWorktree,
+  refreshWorktree,
   resolveReply,
   verifySetup,
 } from '../harness.ts';
@@ -205,10 +207,36 @@ describe('approving a plan', () => {
       response: null,
       planVersion: 1,
     });
+    refreshWorktree(harness, taskId);
     expect(harness.task(taskId).plan?.approvedAt).toBeNumber();
     expect(harness.activeRun(taskId).prompt).toContain(
       'This is plan version 1, approved by the human. Follow this exact version'
     );
+  });
+
+  test('moves the worktree onto the latest default branch before phase 1, however long the plan waited', () => {
+    const { harness, taskId, gate } = planGate();
+    const before = harness.effectsOf('worktree.create').length;
+    harness.advance(2 * HOUR_MS);
+    harness.send({ type: 'gate.answer', gateId: gate.id, decision: 'approve', response: null });
+    expect(harness.task(taskId)).toMatchObject({ stage: 'triage', stageReason: 'setting up the worktree' });
+    expect(harness.effectsOf('worktree.create')).toHaveLength(before + 1);
+    expect(harness.task(taskId).phases.every((phase) => phase.status !== 'active')).toBe(true);
+    refreshWorktree(harness, taskId);
+    expect(harness.task(taskId)).toMatchObject({
+      stage: 'building',
+      stageReason: expect.stringContaining('phase 1'),
+    });
+    expect(harness.activeRun(taskId)).toMatchObject({ purpose: 'build', phaseIndex: 0 });
+  });
+
+  test('a worktree set up again mid-build does not restart the approved plan', () => {
+    const { harness, taskId } = planGate();
+    approve(harness, taskId);
+    completePhase(harness, taskId);
+    const runs = harness.effectsOf('run.execute').length;
+    harness.send({ type: 'worktree.ready', taskId, path: `/wt/${taskId}`, branch: `fix/${taskId}` });
+    expect(harness.effectsOf('run.execute')).toHaveLength(runs);
   });
 
   test('refuses an approval for a version that is no longer current', () => {
@@ -243,6 +271,7 @@ describe('approving a plan', () => {
   test('a plan gate from before versions still approves', () => {
     const { harness, taskId, gate } = planGate();
     harness.send({ type: 'gate.answer', gateId: gate.id, decision: 'approve', response: 'Use the flag.' });
+    refreshWorktree(harness, taskId);
     expect(harness.task(taskId).planAnswers).toBe('Use the flag.');
     expect(harness.task(taskId).stage).toBe('building');
   });

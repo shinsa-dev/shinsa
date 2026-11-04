@@ -52,20 +52,25 @@ export function releaseInquiryFromBacklog(decider: Decider, taskId: string) {
   decider.emit({ type: 'task.backlog_changed', taskId, backlog: false, cause: 'inquiry' });
 }
 
-export function isStartingFromBacklog(task: Task) {
-  return Boolean(task.backlog && task.plan?.approvedAt);
+export function isStartingApprovedPlan(task: Task) {
+  return Boolean(task.plan?.approvedAt) && task.phaseReports.length === 0;
 }
 
-export function startFromBacklog(decider: Decider, taskId: string) {
+export function startApprovedPlan(decider: Decider, taskId: string) {
   const task = decider.task(taskId);
   if (task.worktreePath !== null && needsWorktree(resolveTaskPipeline(task))) {
     requestWorkspace(decider, taskId);
     return;
   }
-  buildFromBacklog(decider, taskId);
+  buildApprovedPlan(decider, taskId);
 }
 
-export function buildFromBacklog(decider: Decider, taskId: string) {
+export function buildApprovedPlan(decider: Decider, taskId: string) {
+  if (decider.task(taskId).backlog) buildFromBacklog(decider, taskId);
+  else startAfterPlan(decider, taskId);
+}
+
+function buildFromBacklog(decider: Decider, taskId: string) {
   const task = decider.task(taskId);
   const waited = decider.context.now - (task.plan?.proposedAt ?? decider.context.now);
   decider.emit({ type: 'task.backlog_changed', taskId, backlog: false, cause: 'started' });

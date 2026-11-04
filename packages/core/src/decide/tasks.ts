@@ -29,8 +29,8 @@ import {
 } from '../state/queries.ts';
 import {
   addToBacklog,
-  buildFromBacklog,
-  isStartingFromBacklog,
+  buildApprovedPlan,
+  isStartingApprovedPlan,
   releaseInquiryFromBacklog,
 } from './backlog.ts';
 import { type Decider, describeWaiting } from './decider.ts';
@@ -279,8 +279,8 @@ export function readyWorktree(decider: Decider, command: CommandOf<'worktree.rea
     decider.stage(task.id, 'waiting_on_tasks', describeWaiting(task, pending));
     return;
   }
-  if (isStartingFromBacklog(task)) {
-    buildFromBacklog(decider, task.id);
+  if (isStartingApprovedPlan(task)) {
+    buildApprovedPlan(decider, task.id);
     return;
   }
   startStep(decider, task.id, resolveNextStep(task));

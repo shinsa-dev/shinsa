@@ -1397,8 +1397,8 @@ nothing until you start it (`domain/backlog.ts`, `decide/backlog.ts`).
   and its plan waits in Needs you as a plan to approve ("plan ready for you").
 - **Starting.** Approving the held plan (Start building, or Start the operation for an operation) is the start: the
   task goes back to triage, `worktree.create` resets its worktree onto the freshly fetched default branch (planning
-  commits nothing, so nothing is lost), and `worktree.ready` builds the approved plan (`isStartingFromBacklog`,
-  `buildFromBacklog`) with `cause: started`. The first build prompt says how long the plan waited and that the
+  commits nothing, so nothing is lost), and `worktree.ready` builds the approved plan (`isStartingApprovedPlan`,
+  `buildApprovedPlan`) with `cause: started`. The first build prompt says how long the plan waited and that the
   worktree now holds the latest default branch, and asks the Agent to check the plan still fits the code before it
   builds (`resolveBacklogStart`). A task without a worktree starts building at once. A task that still waits on another
   waits for it first, then builds without planning again.
