@@ -191,9 +191,22 @@ export function openSampleJoinMachines(): Promise<JoinMachines> {
           { id: 'paywalls', name: 'Paywalls', color: 'blue' },
           { id: 'web', name: 'Web', color: 'green' },
         ],
-        share: () => Promise.resolve(),
+        join: () => Promise.resolve(),
       },
     ],
+    setup: null,
+    close: () => undefined,
+  });
+}
+
+export function openUnpairedSampleJoinMachines(): Promise<JoinMachines> {
+  return Promise.resolve({ machines: [], setup: { kind: 'pair' }, close: () => undefined });
+}
+
+export function openUnreachedSampleJoinMachines(): Promise<JoinMachines> {
+  return Promise.resolve({
+    machines: [],
+    setup: { kind: 'add', machines: ['Studio'] },
     close: () => undefined,
   });
 }

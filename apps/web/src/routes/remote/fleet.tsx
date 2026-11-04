@@ -3,9 +3,9 @@ import * as React from 'react';
 import { replaceConnection } from '@/lib/connection/socket.ts';
 import { serveNotificationOpens } from '@/lib/notifications/worker.ts';
 import { resolveDeviceName } from '@/lib/remote/device-name.ts';
-import { requestWaitingAnswer } from '@/lib/remote/enroll.ts';
+import { listSettledMachineRows } from '@/lib/remote/enroll.ts';
 import { Fleet } from '@/lib/remote/fleet.ts';
-import { createFleetMember, listMachineRows, type MachineRow } from '@/lib/remote/machines.ts';
+import { createFleetMember } from '@/lib/remote/machines.ts';
 import {
   describeOutdatedMachine,
   MACHINE_ICON,
@@ -14,6 +14,7 @@ import {
 } from '@/lib/remote/mode.ts';
 import { serveRelayedRequests, startServiceWorker } from '@/lib/remote/relay.ts';
 import type { RemoteServices } from '@/lib/remote/services.ts';
+import { listAddDeviceSteps, PAIR_STEPS } from '@/lib/remote/setup-steps.ts';
 import { forkApp, runApp } from '@/lib/runtime/app.ts';
 import { admitTeamMachines } from '@/lib/teams/admit.ts';
 import { HostedTeamFeeds } from '@/lib/teams/feeds.ts';
@@ -29,20 +30,6 @@ type FleetState =
   | { kind: 'ready'; fleet: Fleet }
   | { kind: 'failed'; title: string; message: string };
 
-const PAIR_STEPS = [
-  'Open Shinsa on the machine that runs it.',
-  'Go to Settings, Remote access and choose Turn on.',
-  'Sign in with GitHub and approve the code it shows. The machine shows up here.',
-];
-
-function listAddDeviceSteps(machines: string[]) {
-  return [
-    `On ${describeList(machines)}, open Settings > Remote access and choose Invite link.`,
-    'Scan the QR code with this device, or open the link here, and ask for access.',
-    'Accept the request on the machine.',
-  ];
-}
-
 function WaitingPage({ machines }: { machines: string[] }) {
   return (
     <section className='flex flex-col items-center gap-6 pt-4'>
@@ -53,22 +40,6 @@ function WaitingPage({ machines }: { machines: string[] }) {
       <RemoteCheckAgain />
     </section>
   );
-}
-
-async function settleWaitingRow(row: MachineRow, services: RemoteServices): Promise<MachineRow> {
-  if (!row.device?.waiting) return row;
-  const answer = await requestWaitingAnswer(row.device, {
-    dashboard: services.dashboard,
-    devices: services.devices,
-    openSocket: (url) => new WebSocket(url),
-  });
-  if (answer === 'waiting') return row;
-  if (answer === 'declined') return { ...row, device: null };
-  return { ...row, device: await services.devices.selectDevice(row.instance.id) };
-}
-
-function settleWaitingRows(rows: MachineRow[], services: RemoteServices) {
-  return Promise.all(rows.map((row) => settleWaitingRow(row, services)));
 }
 
 function NoMachinePage({ machines }: { machines: string[] }) {
@@ -149,9 +120,12 @@ export function FleetApp({
     const release: (() => void)[] = [];
     void (async () => {
       try {
-        const settled = await settleWaitingRows(
-          await runApp(listMachineRows(services.dashboard, services.devices)),
-          services
+        const settled = await runApp(
+          listSettledMachineRows({
+            dashboard: services.dashboard,
+            devices: services.devices,
+            openSocket: (url) => new WebSocket(url),
+          })
         );
         await syncOwnTeamKeys(settled, { dashboard: services.dashboard, teamKeys: services.teamKeys });
         const rows = await admitTeamMachines(settled, {

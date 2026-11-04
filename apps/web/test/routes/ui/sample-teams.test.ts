@@ -3,6 +3,8 @@ import {
   createSampleTeamActions,
   createSampleTeams,
   openSampleJoinMachines,
+  openUnreachedSampleJoinMachines,
+  openUnpairedSampleJoinMachines,
   requestSampleTeamJoin,
   SAMPLE_TEAM_JOIN_DASHBOARD,
 } from '@/routes/ui/sample-teams.ts';
@@ -52,8 +54,14 @@ describe('the /ui teams samples', () => {
     const machines = await openSampleJoinMachines();
     expect(machines.machines.map((machine) => machine.name)).toContain('Studio');
     await Promise.all(
-      machines.machines.map((machine) => machine.share('https://app.shinsa.dev/share/team#t.i.k', []))
+      machines.machines.map((machine) => machine.join('https://app.shinsa.dev/share/team#t.i.k', []))
     );
     machines.close();
+    const unpaired = await openUnpairedSampleJoinMachines();
+    expect(unpaired.setup).toEqual({ kind: 'pair' });
+    unpaired.close();
+    const unreached = await openUnreachedSampleJoinMachines();
+    expect(unreached.setup).toEqual({ kind: 'add', machines: ['Studio'] });
+    unreached.close();
   });
 });

@@ -2,10 +2,10 @@ import { describeList, type UserCommand } from '@shinsa/core';
 import { type Duration, Effect, Option } from 'effect';
 import { HttpClientRequest } from 'effect/http';
 import type { DashboardClient } from '@/lib/remote/dashboard.ts';
-import type { DeviceStore } from '@/lib/remote/devices.ts';
+import { listSettledMachineRows, type SettleOptions } from '@/lib/remote/enroll.ts';
 import type { FleetMember } from '@/lib/remote/fleet.ts';
 import { createRemoteLink, type RemoteLinkOptions } from '@/lib/remote/link.ts';
-import { listMachineRows, type MachineRow } from '@/lib/remote/machines.ts';
+import type { MachineRow } from '@/lib/remote/machines.ts';
 import type { EnrolledDevice } from '@/lib/remote/schema.ts';
 import { runApp } from '@/lib/runtime/app.ts';
 import { decodeAnswer } from '@/lib/runtime/engine/answers.ts';
@@ -21,11 +21,18 @@ export interface JoinMachine {
   id: string;
   name: string;
   projects: ProjectChoice[];
-  share: (url: string, projectIds: readonly string[]) => Promise<void>;
+  join: (url: string, projectIds: readonly string[]) => Promise<void>;
 }
+
+export type JoinSetup =
+  | { kind: 'pair' }
+  | { kind: 'add'; machines: string[] }
+  | { kind: 'waiting'; machines: string[] }
+  | { kind: 'offline'; machines: string[] };
 
 export interface JoinMachines {
   machines: JoinMachine[];
+  setup: JoinSetup | null;
   close: () => void;
 }
 
@@ -38,6 +45,18 @@ export function listJoinRows(rows: readonly MachineRow[]) {
     (row): row is JoinRow =>
       row.instance.role === 'owner' && row.instance.online && row.device !== null && !row.device.waiting
   );
+}
+
+export function resolveJoinSetup(rows: readonly MachineRow[], reached: number): JoinSetup | null {
+  const own = rows.filter((row) => row.instance.role === 'owner');
+  if (own.length === 0) return { kind: 'pair' };
+  if (reached > 0) return null;
+  const names = (keep: (row: MachineRow) => boolean) => own.filter(keep).map((row) => row.instance.name);
+  const waiting = names((row) => Boolean(row.device?.waiting));
+  if (waiting.length > 0) return { kind: 'waiting', machines: waiting };
+  const missing = names((row) => row.device === null);
+  if (missing.length > 0) return { kind: 'add', machines: missing };
+  return { kind: 'offline', machines: names(() => true) };
 }
 
 export function listJoinCommands(teamId: string, projectIds: readonly string[]): UserCommand[] {
@@ -54,8 +73,7 @@ export function onMachine(member: Pick<FleetMember, 'fetch'>, origin: string) {
 
 const decodeJoined = decodeAnswer(JoinedTeam);
 
-const shareFrom = Effect.fn('JoinMachines.share')(function* (url: string, projectIds: readonly string[]) {
-  if (projectIds.length === 0) return;
+const joinFrom = Effect.fn('JoinMachines.join')(function* (url: string, projectIds: readonly string[]) {
   const engine = yield* EngineClient;
   const { teamId } = yield* decodeJoined(yield* engine.teams.join({ payload: { url } }));
   for (const command of listJoinCommands(teamId, projectIds))
@@ -76,7 +94,7 @@ export function createJoinMachine(member: JoinFetch, projects: ProjectChoice[], 
     id: member.id,
     name: member.name,
     projects,
-    share: (url, projectIds) => runApp(through(shareFrom(url, projectIds))),
+    join: (url, projectIds) => runApp(through(joinFrom(url, projectIds))),
   };
 }
 
@@ -108,21 +126,23 @@ export function createJoinMember(
 }
 
 export function createJoinMachinesSource(
-  services: {
-    dashboard: Pick<DashboardClient, 'listInstances' | 'requestConnect'>;
-    devices: Pick<DeviceStore, 'selectDevice'>;
-  },
+  services: Pick<SettleOptions, 'dashboard' | 'devices'>,
   options: {
     origin?: string;
     timeout?: Duration.Input;
     createMember?: (row: JoinRow, dashboard: JoinDashboard) => JoinMember;
+    openSocket?: (url: string) => WebSocket;
   } = {}
 ): OpenJoinMachines {
   const createMember = options.createMember ?? createJoinMember;
   const timeout = options.timeout ?? PROJECTS_TIMEOUT;
   const open = Effect.fn('JoinMachines.open')(function* () {
     const origin = options.origin ?? location.origin;
-    const rows = listJoinRows(yield* listMachineRows(services.dashboard, services.devices));
+    const all = yield* listSettledMachineRows({
+      ...services,
+      openSocket: options.openSocket ?? ((url) => new WebSocket(url)),
+    });
+    const rows = listJoinRows(all);
     const closers: (() => void)[] = [];
     const machines = yield* Effect.forEach(
       rows,
@@ -140,8 +160,10 @@ export function createJoinMachinesSource(
       },
       { concurrency: 'unbounded' }
     );
+    const reached = machines.flatMap((machine) => Option.toArray(machine));
     return {
-      machines: machines.flatMap((machine) => Option.toArray(machine)),
+      machines: reached,
+      setup: resolveJoinSetup(all, reached.length),
       close: () => {
         for (const close of closers.splice(0)) close();
       },
@@ -156,9 +178,9 @@ export function countJoinPicks(picks: JoinPicks) {
   return Object.values(picks).reduce((total, projectIds) => total + projectIds.length, 0);
 }
 
-export function shareJoinPicks(machines: readonly JoinMachine[], picks: JoinPicks, url: string) {
+export function joinFromMachines(machines: readonly JoinMachine[], picks: JoinPicks, url: string) {
   return runApp(
-    Effect.forEach(machines, (machine) => enterPromise(() => machine.share(url, picks[machine.id] ?? [])), {
+    Effect.forEach(machines, (machine) => enterPromise(() => machine.join(url, picks[machine.id] ?? [])), {
       discard: true,
     })
   );

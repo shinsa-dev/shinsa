@@ -58,6 +58,8 @@ import {
   createSampleTeams,
   openPendingSampleJoinMachines,
   openSampleJoinMachines,
+  openUnreachedSampleJoinMachines,
+  openUnpairedSampleJoinMachines,
   requestSampleTeamJoin,
   SAMPLE_TEAM_JOIN_DASHBOARD,
   SAMPLE_TEAM_LINK,
@@ -541,6 +543,28 @@ export function SettingsSpecimens() {
             dashboard={SAMPLE_TEAM_JOIN_DASHBOARD}
             teamKeys={{ selectTeamKey: () => Promise.resolve(null), writeTeamKey: () => Promise.resolve() }}
             openMachines={openSampleJoinMachines}
+            request={requestSampleTeamJoin}
+          />
+        </div>
+      </Specimen>
+      <Specimen label='TeamJoinPage · with no paired machine, remote access comes first'>
+        <div className='w-full max-w-sm'>
+          <TeamJoinPage
+            link={SAMPLE_TEAM_LINK}
+            dashboard={SAMPLE_TEAM_JOIN_DASHBOARD}
+            teamKeys={{ selectTeamKey: () => Promise.resolve(null), writeTeamKey: () => Promise.resolve() }}
+            openMachines={openUnpairedSampleJoinMachines}
+            request={requestSampleTeamJoin}
+          />
+        </div>
+      </Specimen>
+      <Specimen label='TeamJoinPage · with a paired machine this browser cannot reach yet'>
+        <div className='w-full max-w-sm'>
+          <TeamJoinPage
+            link={SAMPLE_TEAM_LINK}
+            dashboard={SAMPLE_TEAM_JOIN_DASHBOARD}
+            teamKeys={{ selectTeamKey: () => Promise.resolve(null), writeTeamKey: () => Promise.resolve() }}
+            openMachines={openUnreachedSampleJoinMachines}
             request={requestSampleTeamJoin}
           />
         </div>
