@@ -26,7 +26,7 @@ export class Pairings extends Context.Service<
       const insert = SqlSchema.void({
         Request: Schema.Struct({ ...NewPairing.fields, clientIp: Schema.String }),
         execute: (row) =>
-          sql`INSERT INTO pair_sessions (claim_code, poll_secret_hash, name, public_key, version, features, client_ip, expires_at) VALUES (${row.claimCode}, ${row.pollSecretHash}, ${row.name}, ${row.publicKey}, ${row.version}, ${row.features}, ${row.clientIp}, ${row.expiresAt})`,
+          sql`INSERT INTO pair_sessions (claim_code, poll_secret_hash, name, public_key, features, client_ip, expires_at) VALUES (${row.claimCode}, ${row.pollSecretHash}, ${row.name}, ${row.publicKey}, ${row.features}, ${row.clientIp}, ${row.expiresAt})`,
       });
       const expiredRemoval = SqlSchema.void({
         Request: Schema.Number,
@@ -41,7 +41,7 @@ export class Pairings extends Context.Service<
         Request: ClaimCode,
         Result: Pairing,
         execute: (code) =>
-          sql`SELECT claim_code, poll_secret_hash, name, public_key, version, features, expires_at, credentials, owner FROM pair_sessions WHERE claim_code = ${code}`,
+          sql`SELECT claim_code, poll_secret_hash, name, public_key, features, expires_at, credentials, owner FROM pair_sessions WHERE claim_code = ${code}`,
       });
       const reservation = SqlSchema.findOneOption({
         Request: Schema.Struct({ claimCode: ClaimCode, owner: Schema.String }),

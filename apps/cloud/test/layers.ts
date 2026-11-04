@@ -132,6 +132,9 @@ export const runTest = <A, E>(
   options: ServicesOptions = {}
 ) => Effect.runPromise(effect.pipe(Effect.provide(servicesTest(options))));
 
+export const runSqlTest = <A, E>(effect: Effect.Effect<A, E, SqlClient.SqlClient>) =>
+  Effect.runPromise(effect.pipe(Effect.provide(SqlTest)));
+
 export const flipTest = <A, E>(
   effect: Effect.Effect<A, E, Layer.Success<ReturnType<typeof servicesTest>>>,
   options: ServicesOptions = {}

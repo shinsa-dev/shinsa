@@ -13,7 +13,6 @@ const PAIRING = {
   pollSecretHash: hashOf('f'),
   name: 'Studio',
   publicKey: 'public-key',
-  version: '1',
   features: [...MACHINE_FEATURES],
   expiresAt: TEST_NOW + 600_000,
 };
