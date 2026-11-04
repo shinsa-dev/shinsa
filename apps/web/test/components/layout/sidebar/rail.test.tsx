@@ -46,7 +46,7 @@ function ComposerProbe() {
 describe('New task', () => {
   for (const [name, shell] of [
     ['the rail', <Rail key='rail' state={STATE} />],
-    ['the compact bar', <CompactBar key='bar' state={STATE} onMenu={() => {}} />],
+    ['the More sheet', <Rail key='sheet' state={STATE} variant='sheet' />],
   ] as const) {
     it(`goes Home and asks for the composer from ${name}, as ⌘K’s New task does`, () => {
       act(() => navigate('/tasks/SW-1'));
@@ -66,7 +66,7 @@ describe('New task', () => {
     act(() => navigate('/tasks/SW-1'));
     render(
       <TooltipProvider>
-        <CompactBar state={STATE} onMenu={() => {}} />
+        <CompactBar state={STATE} onMore={() => {}} />
       </TooltipProvider>
     );
     act(() => fireEvent.click(screen.getByRole('button', { name: /Shinsa/ })));
@@ -76,7 +76,7 @@ describe('New task', () => {
   it('has Feedback, so ⌘K’s Send feedback opens its popover while the rail is folded away', async () => {
     render(
       <TooltipProvider>
-        <CompactBar state={STATE} onMenu={() => {}} />
+        <CompactBar state={STATE} onMore={() => {}} />
       </TooltipProvider>
     );
     const button = screen.getByRole('button', { name: /Feedback/ });
@@ -84,5 +84,51 @@ describe('New task', () => {
     act(() => openFeedback());
     expect(isFeedbackOpen()).toBe(true);
     await waitFor(() => expect(screen.getByLabelText('Your feedback')).toBeTruthy());
+  });
+});
+
+describe('the More sheet', () => {
+  it('leaves out the queue and search, which the phone bar already has', () => {
+    act(() => navigate('/tasks/SW-1'));
+    render(
+      <TooltipProvider>
+        <Rail state={STATE} variant='sheet' />
+      </TooltipProvider>
+    );
+    expect(screen.queryByRole('button', { name: /Review the login fix/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Search and actions' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Settings' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Feedback/ })).toBeTruthy();
+  });
+});
+
+describe('the compact bar', () => {
+  it('keeps Tasks, the queue, Feedback and search on the bar and opens More for the rest', () => {
+    act(() => navigate('/tasks/SW-1'));
+    let more = 0;
+    render(
+      <TooltipProvider>
+        <CompactBar state={STATE} onMore={() => (more += 1)} />
+      </TooltipProvider>
+    );
+    expect(screen.getByRole('button', { name: /1 needs you/ })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Feedback' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Search and actions' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Settings' })).toBeNull();
+    act(() => fireEvent.click(screen.getByRole('button', { name: 'Tasks' })));
+    expect(location.pathname).toBe('/tasks');
+    act(() => fireEvent.click(screen.getByRole('button', { name: 'More' })));
+    expect(more).toBe(1);
+  });
+
+  it('shows only the way home during setup', () => {
+    act(() => navigate('/onboarding'));
+    render(
+      <TooltipProvider>
+        <CompactBar state={STATE} onMore={() => {}} />
+      </TooltipProvider>
+    );
+    expect(screen.queryByRole('button', { name: 'Tasks' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'More' })).toBeNull();
   });
 });

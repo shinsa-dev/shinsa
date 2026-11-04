@@ -16,8 +16,18 @@ import { requestNewTaskOnHome } from '@/lib/command/menu.ts';
 import { resolveResetKey } from '@/lib/errors.ts';
 import { navigate, useRoute, useRouteTaskId } from '@/router.ts';
 
-export function Rail({ state, onNavigate = () => {} }: { state: ShinsaState; onNavigate?: () => void }) {
+export function Rail({
+  state,
+  variant = 'rail',
+  onNavigate = () => {},
+}: {
+  state: ShinsaState;
+  variant?: 'rail' | 'sheet';
+  onNavigate?: () => void;
+}) {
   const route = useRoute();
+  const sheet = variant === 'sheet';
+  const popoverSide = sheet ? 'bottom' : 'right';
   const activeTaskId = useRouteTaskId(state);
   const resetKey = resolveResetKey({ route, search: '' });
 
@@ -45,7 +55,7 @@ export function Rail({ state, onNavigate = () => {} }: { state: ShinsaState; onN
             <UsageMenu state={state} />
           </ErrorBoundary>
         )}
-        <CommandMenuButton />
+        {!sheet && <CommandMenuButton />}
       </div>
       <div className='flex flex-col px-2 pb-2'>
         <HoverHighlight className='flex flex-col gap-px'>
@@ -68,7 +78,7 @@ export function Rail({ state, onNavigate = () => {} }: { state: ShinsaState; onN
           />
           {route.name !== 'onboarding' && (
             <ErrorBoundary size='inline' resetKey={resetKey}>
-              <ServicesMenu state={state} variant='rail' onNavigate={onNavigate} />
+              <ServicesMenu state={state} variant='rail' side={popoverSide} onNavigate={onNavigate} />
             </ErrorBoundary>
           )}
           <NavItem
@@ -80,7 +90,7 @@ export function Rail({ state, onNavigate = () => {} }: { state: ShinsaState; onN
           />
           {route.name !== 'onboarding' && (
             <ErrorBoundary size='inline' resetKey={resetKey}>
-              <FeedbackButton state={state} variant='rail' onNavigate={onNavigate} />
+              <FeedbackButton state={state} variant='rail' side={popoverSide} onNavigate={onNavigate} />
             </ErrorBoundary>
           )}
         </HoverHighlight>
@@ -92,11 +102,13 @@ export function Rail({ state, onNavigate = () => {} }: { state: ShinsaState; onN
           </ErrorBoundary>
         </div>
       )}
-      <div className='flex min-h-0 flex-1 flex-col overflow-y-auto border-t border-border'>
-        <ErrorBoundary size='inline' resetKey={resetKey} className='p-2'>
-          <TaskQueue state={state} variant='compact' activeTaskId={activeTaskId} onNavigate={onNavigate} />
-        </ErrorBoundary>
-      </div>
+      {!sheet && (
+        <div className='flex min-h-0 flex-1 flex-col overflow-y-auto border-t border-border'>
+          <ErrorBoundary size='inline' resetKey={resetKey} className='p-2'>
+            <TaskQueue state={state} variant='compact' activeTaskId={activeTaskId} onNavigate={onNavigate} />
+          </ErrorBoundary>
+        </div>
+      )}
     </nav>
   );
 }

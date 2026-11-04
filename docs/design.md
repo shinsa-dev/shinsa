@@ -444,7 +444,18 @@ Only these, and they win over anything below:
     queue outside Home (there is no queue card beside the page). Sidebar is a permanent rail with
     the queue; it never hides. Its nav names the same places as Desk's bar, in the same words: New task (Home), Tasks,
     Services and Settings, each filled on its own page. From
-    `md` (768px) up it sits beside the page; below it, it opens as a sheet. The app has one
+    `md` (768px) up it sits beside the page.
+    **On a phone both layouts share one bar and one More sheet.** Desk below `sm` (640px, `PHONE_QUERY`, read with
+    `useMediaQuery` so only one bar is mounted) and Shelf below `md` show `CompactBar`
+    (`components/layout/sidebar/compact-bar.tsx`): the Shinsa logo (Home), Tasks as an icon alone, the queue button
+    where it shows, the connection status, then Feedback as its icon and count (so ⌘K's Send feedback still has a
+    trigger to open from), search and More (`IconDotGrid1x3Horizontal`). More opens the rail as a sheet from the
+    right (`Rail` with `variant='sheet'`): New task, Tasks, Services, Settings, Feedback, Focus, and What's new,
+    Update and Agent usage in its header, without the queue and search the bar already has; its Services and
+    Feedback popovers open below their rows instead of beside them. The sheet closes on any change of route. The
+    bars and the sheet keep clear of the notch and the home bar with the safe-area insets (`SAFE_AREA_TOP`,
+    `SAFE_AREA_SIDES`, `viewport-fit=cover` in `index.html`), and the page column's gutter is 16px below `sm`
+    (`PAGE_COLUMN`), its top 16px (`PAGE_TOP`). The app has one
     keyboard shortcut: ⌘K (Ctrl K elsewhere) opens the command menu (see 14). Nothing else is
     bound to a key, except the Code tab's ⌘P, ⇧⌘F, ⌘F and ⌘G while it is open (32), the Review tab's J and K while it is
     open (34), the Terminal page's ⌘T and ⌘W while it is open and a focused terminal's own keys (37), Enter sends in every input, and a setup step's option list takes the arrows, Home, End, Enter and
@@ -668,7 +679,7 @@ Only these, and they win over anything below:
         (`components/overlays/hint.tsx`): copy ("Copy", then "Copied"), Run in terminal (the folder it runs in as
         its detail, `~` for your home folder), collapse and expand ("Collapse summary"),
         previous and next spot, send, comment on a line, remove ("Remove folder"), dismiss, stop a delegated task,
-        the compact bar's queue and new-task buttons, the sidebar's resize handle (following the pointer down the
+        the compact bar's Tasks, Feedback and More buttons, the sidebar's resize handle (following the pointer down the
         edge), the error button. The tooltip repeats the `aria-label`. A `Hint` with a `detail` stacks a muted
         second line right under its label, with no gap, as a time's tooltip does (a task's round, 12).
       - **Keyboard-shortcut hints**: a `Hint` with a `shortcut` ("Home ⇧⌘H", "Search and actions ⌘K", "Search in
@@ -741,7 +752,7 @@ Only these, and they win over anything below:
 14. **The command menu (⌘K) reaches the whole app, and knows where you are.** It is Buzzkit's
     menu (`components/command/menu.tsx`, rendered once by `Root` on `CommandDialog` from
     `@shinsa/ui/components/command`), opened by ⌘K / Ctrl K from anywhere (inputs included) or
-    by the magnifying-glass button in the sidebar header and the compact bar. Every action goes
+    by the magnifying-glass button in the sidebar header and the phone's compact bar. Every action goes
     through the same `sendCommand` the buttons use; the menu adds no commands of its own.
     - **Pages contribute what they know.** `useRegisterCommands(sections)`
       (`lib/command/registry.ts`) registers ranked sections while a component is mounted
@@ -784,7 +795,7 @@ Only these, and they win over anything below:
       status, Clear filters and "Search all tasks for …"; the filter and search live in the URL
       (`?status=&q=`), and an active status shows as a removable button beside the search.
     - **Global**, in groups: Tasks (New task, which opens Home with the composer focused, as the rail's and the
-      compact bar's New task do, and
+      More sheet's New task do, and
       Jump to a task, a page of every task), Go to (Home, All tasks, Terminal, Settings), Focus (Switch
       focus project; keeping it for 2 hours or until tonight is `searchOnly` and appears only while
       typing), Appearance (Switch layout, Change theme), Accounts (Add a Claude account, Agent usage, which opens

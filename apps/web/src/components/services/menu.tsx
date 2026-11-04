@@ -470,10 +470,12 @@ function ServicesPanelContent({
 export function ServicesMenu({
   state,
   variant = 'bar',
+  side = variant === 'rail' ? 'right' : 'bottom',
   onNavigate,
 }: {
   state: ShinsaState;
   variant?: 'bar' | 'rail';
+  side?: 'right' | 'bottom';
   onNavigate?: () => void;
 }) {
   const [open, setOpen] = React.useState(false);
@@ -536,7 +538,7 @@ export function ServicesMenu({
       </PopoverTrigger>
       <PopoverContent
         align='start'
-        side={variant === 'rail' ? 'right' : 'bottom'}
+        side={side}
         sideOffset={6}
         collisionAvoidance={{ fallbackAxisSide: 'none' }}
         className={SERVICES_PANEL}

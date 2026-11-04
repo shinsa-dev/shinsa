@@ -3,6 +3,7 @@ import { TooltipProvider } from '@shinsa/ui/components/tooltip';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { CardsTopBar } from '@/components/layout/cards/top-bar.tsx';
 import { HomeLink } from '@/components/layout/home-link.tsx';
+import { PHONE_QUERY } from '@/components/layout/sidebar/compact-bar.tsx';
 import { DesktopChrome } from '@/lib/desktop.ts';
 import { navigate, parseRoute, RouteScope } from '@/router.ts';
 import { installDesktop } from '../../support/desktop.ts';
@@ -15,9 +16,21 @@ const STATE = createShinsaState({
 
 let fake: ReturnType<typeof installDesktop> | null = null;
 
+const realMatchMedia = globalThis.matchMedia;
+
+function emulatePhone() {
+  globalThis.matchMedia = ((query: string) => ({
+    matches: query === PHONE_QUERY,
+    media: query,
+    addEventListener: () => {},
+    removeEventListener: () => {},
+  })) as unknown as typeof matchMedia;
+}
+
 afterEach(() => {
   fake?.restore();
   fake = null;
+  globalThis.matchMedia = realMatchMedia;
 });
 
 describe('the way home', () => {
@@ -58,7 +71,7 @@ describe('the way home', () => {
     act(() => navigate('/'));
     render(
       <TooltipProvider>
-        <CardsTopBar state={STATE} />
+        <CardsTopBar state={STATE} onMore={() => {}} />
       </TooltipProvider>
     );
     const bar = screen.getByRole('banner');
@@ -72,7 +85,7 @@ describe('the way home', () => {
       <TooltipProvider>
         <DesktopChrome value>
           <RouteScope value={parseRoute('/tasks')}>
-            <CardsTopBar state={STATE} />
+            <CardsTopBar state={STATE} onMore={() => {}} />
           </RouteScope>
         </DesktopChrome>
       </TooltipProvider>
@@ -88,7 +101,7 @@ describe('the way home', () => {
     act(() => navigate('/'));
     render(
       <TooltipProvider>
-        <CardsTopBar state={STATE} />
+        <CardsTopBar state={STATE} onMore={() => {}} />
       </TooltipProvider>
     );
     const bar = screen.getByRole('banner');
@@ -120,7 +133,7 @@ describe('the way home', () => {
     act(() => navigate('/'));
     render(
       <TooltipProvider>
-        <CardsTopBar state={STATE} />
+        <CardsTopBar state={STATE} onMore={() => {}} />
       </TooltipProvider>
     );
     const queue = () => screen.queryByRole('button', { name: 'Nothing needs you' });
@@ -131,5 +144,24 @@ describe('the way home', () => {
       act(() => navigate(path));
       expect(queue()).toBeTruthy();
     }
+  });
+
+  it('keeps Tasks, the queue and search on a phone and moves the rest behind More', () => {
+    emulatePhone();
+    act(() => navigate('/settings'));
+    let more = 0;
+    render(
+      <TooltipProvider>
+        <CardsTopBar state={STATE} onMore={() => (more += 1)} />
+      </TooltipProvider>
+    );
+    const bar = screen.getByRole('banner');
+    expect(
+      [...bar.querySelectorAll('button')].map(
+        (button) => button.getAttribute('aria-label') ?? button.textContent
+      )
+    ).toEqual(['Shinsa', 'Tasks', 'Nothing needs you', 'Search and actions', 'More']);
+    act(() => fireEvent.click(screen.getByRole('button', { name: 'More' })));
+    expect(more).toBe(1);
   });
 });
