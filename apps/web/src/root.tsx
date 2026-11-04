@@ -15,6 +15,7 @@ import { LoadingSpinner } from '@/components/status/loading-line.tsx';
 import { DuplicateDialog } from '@/components/task/duplicate-dialog.tsx';
 import { ForkDialog } from '@/components/task/fork-dialog.tsx';
 import { HandoffRemoveConfirm, ShareDialog, UnshareConfirm } from '@/components/task/share-dialog.tsx';
+import { useTeamEscalations } from '@/components/teams/tasks.tsx';
 import { useAttention } from '@/hooks/use-attention.ts';
 import { useIdle, useIdleValue } from '@/hooks/use-idle.ts';
 import { useCommandMenuOpen, writeCommandMenuOpen } from '@/lib/command/registry.ts';
@@ -120,7 +121,7 @@ function Pages({ state, route }: { state: ShinsaState; route: PageRoute }) {
 }
 
 function AttentionSignals({ state, route }: { state: ShinsaState; route: Route }) {
-  useAttention(state, resolveRouteTaskId(state, route));
+  useAttention(state, resolveRouteTaskId(state, route), useTeamEscalations());
   return null;
 }
 

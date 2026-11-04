@@ -1,3 +1,4 @@
+export { listTeamEscalations, resolveTeamEscalationTag, type TeamEscalation } from './escalations.ts';
 export {
   isInFocus,
   isListedInFocus,

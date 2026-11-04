@@ -1,13 +1,13 @@
-import type { ShinsaState } from '@shinsa/core';
+import type { ShinsaState, TeamEscalation } from '@shinsa/core';
 import type { NotificationPreferences } from '@/lib/preferences/notifications.ts';
-import { type DecisionNotice, listNewDecisions, listOpenGateIds } from './attention.ts';
+import { type DecisionNotice, listNewDecisions, listOpenNoticeTags } from './attention.ts';
 import { shouldAlert } from './sounds.ts';
 
 interface AttentionAlerts {
   preferences: () => NotificationPreferences;
   play: (soundId: NotificationPreferences['soundId'], count: number) => void;
   notify: (notice: DecisionNotice) => void;
-  dismiss: (gateId: string) => void;
+  dismiss: (tag: string) => void;
   quiet: (notice: DecisionNotice) => boolean;
 }
 
@@ -19,11 +19,13 @@ export class AttentionWatcher {
     this.#alerts = alerts;
   }
 
-  observe(state: ShinsaState) {
+  observe(state: ShinsaState, escalations: readonly TeamEscalation[] = []) {
     const now = Date.now();
-    const open = listOpenGateIds(state);
-    for (const gateId of this.#seen ?? []) if (!open.has(gateId)) this.#alerts.dismiss(gateId);
-    const fresh = listNewDecisions(this.#seen, state, now).filter((notice) => !this.#alerts.quiet(notice));
+    const open = listOpenNoticeTags(state, escalations);
+    for (const tag of this.#seen ?? []) if (!open.has(tag)) this.#alerts.dismiss(tag);
+    const fresh = listNewDecisions(this.#seen, state, now, escalations).filter(
+      (notice) => !this.#alerts.quiet(notice)
+    );
     this.#seen = open;
     if (fresh.length === 0) return;
     const preferences = this.#alerts.preferences();

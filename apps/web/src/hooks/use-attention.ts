@@ -1,4 +1,4 @@
-import { type ShinsaState, selectTaskByReference } from '@shinsa/core';
+import { type ShinsaState, selectTaskByReference, type TeamEscalation } from '@shinsa/core';
 import * as React from 'react';
 import { useMinute } from '@/hooks/use-minute.ts';
 import { connection, useDesktopConnected } from '@/lib/connection/socket.ts';
@@ -14,10 +14,16 @@ import { showNotificationWelcome } from '@/lib/notifications/welcome.ts';
 import { readNotificationPreferences } from '@/lib/preferences/notifications.ts';
 import { navigate, resolveTaskPath, resolveTaskTarget, withRouteBase } from '@/router.ts';
 
-export function useAttention(state: ShinsaState, taskReference: string | null = null) {
+const NO_ESCALATIONS: readonly TeamEscalation[] = [];
+
+export function useAttention(
+  state: ShinsaState,
+  taskReference: string | null = null,
+  escalations: readonly TeamEscalation[] = NO_ESCALATIONS
+) {
   useMinute();
   const desktopConnected = useDesktopConnected();
-  const { status, badge } = resolvePageAttention(state, Date.now());
+  const { status, badge } = resolvePageAttention(state, Date.now(), escalations);
   const subject = resolveTaskSubject(taskReference ? selectTaskByReference(state, taskReference) : null);
   const latest = React.useRef(state);
   latest.current = state;
@@ -29,17 +35,17 @@ export function useAttention(state: ShinsaState, taskReference: string | null = 
         preferences: readNotificationPreferences,
         play: (soundId, count) => void playSound(soundId, count),
         quiet: (notice) => isAlertQuiet(connection.selectAttention(notice.taskId), latestDesktop.current),
-        dismiss: (gateId) => dismissDecisionNotification(gateId),
+        dismiss: (tag) => dismissDecisionNotification(tag),
         notify: (notice) => {
-          const path = resolveTaskPath(resolveTaskTarget(latest.current, notice.taskId));
-          if (notifyDesktop({ title: notice.title, body: notice.body, tag: notice.gateId, path })) return;
+          const path = notice.path ?? resolveTaskPath(resolveTaskTarget(latest.current, notice.taskId));
+          if (notifyDesktop({ title: notice.title, body: notice.body, tag: notice.tag, path })) return;
           showDecisionNotification(notice, withRouteBase(path), navigate);
         },
       })
   );
   React.useEffect(() => {
-    watcher.observe(state);
-  }, [watcher, state]);
+    watcher.observe(state, escalations);
+  }, [watcher, state, escalations]);
   React.useEffect(() => subscribeDesktopNotifyFailed(showNotifyBlocked), []);
   React.useEffect(() => watchPresence(() => connection.reportPresence()), []);
   React.useEffect(() => {

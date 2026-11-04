@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'bun:test';
-import { serializeReportMarkdown } from '@shinsa/core';
+import { serializeReportMarkdown, type TeamEscalation } from '@shinsa/core';
 import {
   describeDecision,
+  describeTeamEscalation,
   listNewDecisions,
-  listOpenGateIds,
+  listOpenNoticeTags,
   resolvePageAttention,
   resolveWindowTitle,
 } from '@/lib/notifications/attention.ts';
@@ -22,6 +23,21 @@ const question = createGate({
   type: 'question',
   title: 'Which colour should the button be?',
 });
+
+const ESCALATION: TeamEscalation = {
+  entry: {
+    task: createTask({ id: 'k-1', title: 'Fix the checkout', stage: 'awaiting_merge', priority: 'urgent' }),
+    gates: [],
+    project: null,
+    repo: null,
+    owner: 'kai',
+    ownerProfile: { name: 'Kai Lee', avatarUrl: null },
+    machine: 'Kai’s MacBook',
+    teamId: 'core',
+    instanceId: 'm-kai',
+  },
+  escalation: { at: NOW, reason: 'Urgent, and the merge waited 60 minutes for you.' },
+};
 
 function withTasks(...gates: ReturnType<typeof createGate>[]) {
   return createShinsaState({
@@ -54,7 +70,7 @@ describe('the page status and badge', () => {
     const review = createGate({ id: 'g-review', taskId: 't-2' });
     const state = { ...withTasks(question, review), focus: { projectId: 'a-1', teamId: null, until: null } };
     expect(resolvePageAttention(state, NOW).badge).toBe(1);
-    expect(listOpenGateIds(state)).toEqual(new Set(['g-question', 'g-review']));
+    expect(listOpenNoticeTags(state)).toEqual(new Set(['g-question', 'g-review']));
   });
 
   it('puts the count in front of the name', () => {
@@ -63,15 +79,41 @@ describe('the page status and badge', () => {
   });
 });
 
+describe('a teammate’s escalated task', () => {
+  it('counts in the badge and waits on you, beside your own decisions', () => {
+    expect(resolvePageAttention(withTasks(), NOW, [ESCALATION])).toEqual({ status: 'waiting', badge: 1 });
+    expect(resolvePageAttention(withTasks(question), NOW, [ESCALATION]).badge).toBe(2);
+    expect(listOpenNoticeTags(withTasks(question), [ESCALATION])).toEqual(
+      new Set(['g-question', `escalation:m-kai k-1:${NOW}`])
+    );
+  });
+
+  it('notifies once, opening the teammate’s task', () => {
+    expect(describeTeamEscalation(ESCALATION)).toEqual({
+      tag: `escalation:m-kai k-1:${NOW}`,
+      taskId: 'k-1',
+      title: 'Fix the checkout',
+      body: 'Kai’s urgent change is still waiting for its merge, so it was sent to your team.',
+      path: '/teams/core/m-kai/k-1',
+    });
+    const seen = listOpenNoticeTags(withTasks(), [ESCALATION]);
+    expect(listNewDecisions(new Set(), withTasks(), NOW, [ESCALATION]).map((notice) => notice.tag)).toEqual([
+      `escalation:m-kai k-1:${NOW}`,
+    ]);
+    expect(listNewDecisions(seen, withTasks(), NOW, [ESCALATION])).toEqual([]);
+  });
+});
+
 describe('what a notification says', () => {
   it('shows the pending question, or the reason and its detail, on one line under 180 characters', () => {
     const state = withTasks(question);
     const [entry] = listNewDecisions(new Set(), state, NOW);
     expect(entry).toEqual({
-      gateId: 'g-question',
+      tag: 'g-question',
       taskId: 't-1',
       title: 'Paint the button',
       body: 'Which colour should the button be?',
+      path: null,
     });
     const failure = createGate({
       id: 'g-fail',
@@ -184,7 +226,7 @@ describe('which decisions are new', () => {
       ...withTasks(question, review),
       focus: { projectId: 'a-1', teamId: null, until: null },
     };
-    expect(listNewDecisions(new Set(), focused, NOW).map((entry) => entry.gateId)).toEqual(['g-question']);
+    expect(listNewDecisions(new Set(), focused, NOW).map((entry) => entry.tag)).toEqual(['g-question']);
     expect(listNewDecisions(new Set(['g-question']), focused, NOW)).toEqual([]);
   });
 });

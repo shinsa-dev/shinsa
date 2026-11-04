@@ -84,19 +84,17 @@ export function showDecisionNotification(
   worker = selectNotificationWorker()
 ) {
   if (readNotificationPermission() !== 'granted') return false;
-  showBrowserNotification({ title: notice.title, body: notice.body, tag: notice.gateId, path }, open, worker);
+  showBrowserNotification({ title: notice.title, body: notice.body, tag: notice.tag, path }, open, worker);
   return true;
 }
 
-export function dismissDecisionNotification(gateId: string, worker = selectNotificationWorker()) {
-  shown.get(gateId)?.close();
-  shown.delete(gateId);
+export function dismissDecisionNotification(tag: string, worker = selectNotificationWorker()) {
+  shown.get(tag)?.close();
+  shown.delete(tag);
   if (!worker) return;
   forkApp(
     Effect.promise(() => worker.ready).pipe(
-      Effect.flatMap((registration) =>
-        Effect.tryPromise(() => registration.getNotifications({ tag: gateId }))
-      ),
+      Effect.flatMap((registration) => Effect.tryPromise(() => registration.getNotifications({ tag }))),
       Effect.flatMap((notifications) =>
         Effect.forEach(notifications, (notification) => Effect.sync(() => notification.close()), {
           discard: true,
