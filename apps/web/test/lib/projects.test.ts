@@ -152,7 +152,6 @@ describe('the project dialog', () => {
       ...resolveProjectInput(SUPERWALL),
       name: 'Superwall 2',
       description: 'd',
-      usageLimit: null,
       key: 'SW',
     });
     expect(
@@ -178,8 +177,14 @@ describe('the project dialog', () => {
     expect(validateProjectDraft(state, 'usageLimit', { ...draft, usageLimit: 'lots' }, 'p1').ok).toBe(false);
     expect(validateProjectDraft(state, 'name', { ...draft, usageLimit: 'lots' }, 'p1').ok).toBe(true);
     expect(resolveDraftInput(state, draft, null).usageLimit).toBe(20);
-    expect(resolveDraftInput(state, { ...draft, usageLimit: ' ' }, SUPERWALL).usageLimit).toBeNull();
+    expect(resolveDraftInput(state, { ...draft, usageLimit: ' ' }, SUPERWALL)).not.toHaveProperty(
+      'usageLimit'
+    );
     const limited = { ...SUPERWALL, usageLimit: 12.5 };
+    expect(resolveDraftInput(state, { ...draft, usageLimit: '' }, limited).usageLimit).toBeNull();
+    expect(resolveDraftInput(state, { ...draft, usageLimit: '12.5' }, limited)).not.toHaveProperty(
+      'usageLimit'
+    );
     expect(createProjectDraft(limited).usageLimit).toBe('12.5');
     expect(describeProjectUsageLimit(limited)).toBe('12.5% a day');
     expect(describeProjectUsageLimit(SUPERWALL)).toBeNull();

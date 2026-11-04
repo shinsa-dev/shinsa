@@ -5,9 +5,9 @@ import {
   type ForecastAccount,
   type ForecastSegment,
   listForecastAccounts,
-  listRecentSpends,
   resolveForecastAccount,
   resolveProviderLabel,
+  resolveRecentUsage,
   resolveUsageForecast,
   type ShinsaState,
   type UsageForecast,
@@ -36,15 +36,9 @@ export const APPLY_PACE_LABEL = 'Use as daily limit';
 
 const WEEKDAY = new Intl.DateTimeFormat('en', { weekday: 'short' });
 
-function isProviderWindow(provider: string, window: string) {
-  if (window === `provider:${provider}`) return true;
-  return provider === CLAUDE_PROVIDER && window.startsWith('account:');
-}
-
 export function resolveRecentPace(state: ShinsaState, provider: string, now: number) {
-  const { spends } = listRecentSpends(state, now);
-  const mine = spends.filter((spend) => isProviderWindow(provider, spend.window));
-  return mine.length === 0 ? null : mine.reduce((total, spend) => total + spend.percent, 0);
+  const recent = resolveRecentUsage(state, now, { provider });
+  return recent.spends.length === 0 ? null : recent.percent;
 }
 
 function listProviderAccounts(snapshot: AccountsSnapshot, provider: string, now: number) {

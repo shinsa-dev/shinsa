@@ -1,4 +1,4 @@
-import { resolveRecentUsage, resolveUsageRates, type ShinsaState } from '@shinsa/core';
+import { CLAUDE_PROVIDER, resolveRecentUsage, resolveUsageRates, type ShinsaState } from '@shinsa/core';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
 import { Choice } from '@/components/controls/choice.tsx';
@@ -108,7 +108,7 @@ function TabSections({ state, tab }: { state: ShinsaState; tab: SettingsTabId })
           <LimitSettings
             settings={state.settings}
             rates={resolveUsageRates(state.runs)}
-            recentUsage={resolveRecentUsage(state, Date.now()).percent}
+            recentUsage={resolveRecentUsage(state, Date.now(), { provider: CLAUDE_PROVIDER }).percent}
           />
         </>
       );

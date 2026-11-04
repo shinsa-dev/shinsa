@@ -315,7 +315,10 @@ export function listTriggerTasks({ paywall, kanna }: { paywall: Repo; kanna: Rep
       reason: 'held at the project’s usage limit',
       branch: 'perf/cache-transcripts',
       ageHours: 2,
-      runs: [{ role: 'agent', purpose: 'build', minutes: 18, summary: 'Finished the first phase.' }],
+      runs: [
+        { role: 'agent', purpose: 'build', minutes: 18, summary: 'Finished the first phase.' },
+        { role: 'agent', purpose: 'build', minutes: 0, summary: 'Held at a usage limit before it started.' },
+      ],
       extra: [
         {
           type: 'run.ended',
@@ -324,11 +327,17 @@ export function listTriggerTasks({ paywall, kanna }: { paywall: Repo; kanna: Rep
           summary: 'Finished the first phase.',
         },
         {
+          type: 'run.ended',
+          runId: 'task-pace-hold-run-1',
+          outcome: 'cancelled',
+          summary: 'Held at a usage limit before it started.',
+        },
+        {
           type: 'usage_wait.armed',
           taskId: 'task-pace-hold',
           wait: {
             id: 'wait-pace',
-            runId: 'task-pace-hold-run-0',
+            runId: 'task-pace-hold-run-1',
             role: 'agent',
             phaseIndex: 1,
             account: null,

@@ -1,10 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import { createSettings, type Settings, type UsageRate } from '@shinsa/core';
+import { createSettings, resolveEngineInfo, type Settings, type UsageRate } from '@shinsa/core';
 import { TooltipProvider } from '@shinsa/ui/components/tooltip';
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { LimitSettings } from '@/components/settings/usage.tsx';
 import { createAccount, createSnapshot, createWindow } from '../../support/accounts.ts';
 import { spyOnToasts } from '../../support/commands.ts';
+import { spyOnEngine } from '../../support/engine.ts';
 import { listSentCommands, pushAccounts, startFakeServer, stopFakeServer } from '../../support/server.ts';
 
 let toasts: ReturnType<typeof spyOnToasts>;
@@ -12,6 +13,7 @@ let toasts: ReturnType<typeof spyOnToasts>;
 beforeEach(() => {
   toasts = spyOnToasts();
   startFakeServer();
+  spyOnEngine();
 });
 
 afterEach(() => {
@@ -72,6 +74,18 @@ describe('the Limits settings', () => {
       '18.3% of a weekly limit a day'
     );
     expect(screen.getByText(/The last 24 hours used 7\.3%/)).toBeTruthy();
+  });
+
+  it('offers no daily usage limit on an engine that cannot hold work at one', () => {
+    const engine = resolveEngineInfo('1.0.0');
+    spyOnEngine({
+      ...engine,
+      features: engine.features.filter((feature) => feature !== 'usage.pace_limits'),
+    });
+    renderLimits({ ...createSettings(), dailyUsageLimit: 18.3 }, null, 7.25);
+    expect(screen.queryByRole('combobox', { name: 'Daily usage limit' })).toBeNull();
+    expect(screen.queryByText(/The last 24 hours used/)).toBeNull();
+    expect(screen.getByRole('combobox', { name: 'Usage limit per task' })).toBeTruthy();
   });
 
   it('shows the cost limit while one is set', async () => {

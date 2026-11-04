@@ -1,10 +1,18 @@
 import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
-import type { CoverageSetting, Project, ProjectInput, Repo, ShinsaState } from '@shinsa/core';
+import {
+  type CoverageSetting,
+  type Project,
+  type ProjectInput,
+  type Repo,
+  resolveEngineInfo,
+  type ShinsaState,
+} from '@shinsa/core';
 import { TooltipProvider } from '@shinsa/ui/components/tooltip';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { ProjectSettings } from '@/components/settings/projects.tsx';
 import { type CoverageDetectionMap, resetCoverageDetection } from '@/lib/connection/coverage.ts';
 import type { ProjectActions } from '@/lib/projects.ts';
+import { spyOnEngine } from '../../support/engine.ts';
 import { findTooltipText } from '../../support/hover.ts';
 import { createWatchSuggestion } from '../../support/schedules.ts';
 import { createProject, createRepo, createShinsaState } from '../../support/state.ts';
@@ -40,6 +48,7 @@ function createActions(overrides: Partial<ProjectActions> = {}) {
 let detected: CoverageDetectionMap = {};
 
 beforeEach(() => {
+  spyOnEngine();
   resetCoverageDetection();
   detected = {};
   spyOn(globalThis, 'fetch').mockImplementation((async () =>
@@ -150,6 +159,19 @@ describe('Settings → Projects', () => {
     changes.push(...observer.takeRecords());
     observer.disconnect();
     expect(changes).toEqual([]);
+  });
+
+  it('offers no usage limit on an engine that cannot hold work at one', async () => {
+    const engine = resolveEngineInfo('1.0.0');
+    spyOnEngine({
+      ...engine,
+      features: engine.features.filter((feature) => feature !== 'usage.pace_limits'),
+    });
+    renderProjects(superwallState());
+    fireEvent.click(screen.getByRole('button', { name: 'Project options' }));
+    await settle();
+    expect(screen.getByRole('menuitem', { name: 'Rename…' })).toBeDefined();
+    expect(screen.queryByRole('menuitem', { name: 'Set usage limit…' })).toBeNull();
   });
 
   it('sets a daily usage limit for the project, shows it beside the key and clears it when emptied', async () => {

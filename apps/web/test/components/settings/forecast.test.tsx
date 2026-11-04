@@ -1,10 +1,18 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import { createSettings, HOUR_MS, MINUTE_MS, listForecastAccounts, resolveUsageForecast } from '@shinsa/core';
+import {
+  createSettings,
+  HOUR_MS,
+  listForecastAccounts,
+  MINUTE_MS,
+  resolveEngineInfo,
+  resolveUsageForecast,
+} from '@shinsa/core';
 import { TooltipProvider } from '@shinsa/ui/components/tooltip';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { ForecastSettings } from '@/components/settings/forecast.tsx';
 import { createAccount, createSnapshot, createWindow } from '../../support/accounts.ts';
 import { spyOnToasts } from '../../support/commands.ts';
+import { spyOnEngine } from '../../support/engine.ts';
 import { listSentCommands, pushAccounts, startFakeServer, stopFakeServer } from '../../support/server.ts';
 import { createShinsaState } from '../../support/state.ts';
 
@@ -13,6 +21,7 @@ let toasts: ReturnType<typeof spyOnToasts>;
 beforeEach(() => {
   toasts = spyOnToasts();
   startFakeServer();
+  spyOnEngine();
 });
 
 afterEach(() => {
@@ -82,6 +91,19 @@ describe('the usage forecast', () => {
     await waitFor(() =>
       expect(listSentCommands()).toEqual([{ type: 'settings.change', patch: { dailyUsageLimit: pace } }])
     );
+  });
+
+  it('still forecasts on an engine without the daily limit, but offers nothing to apply', async () => {
+    const engine = resolveEngineInfo('1.0.0');
+    spyOnEngine({
+      ...engine,
+      features: engine.features.filter((feature) => feature !== 'usage.pace_limits'),
+    });
+    pushAccounts(createSnapshot({ accounts: ACCOUNTS }));
+    await settle();
+    renderForecast();
+    expect(screen.getByText('Forecast')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Use as daily limit' })).toBeNull();
   });
 
   it('says when the daily limit already is the safe pace', async () => {

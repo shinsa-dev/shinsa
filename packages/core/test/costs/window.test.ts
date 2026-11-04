@@ -8,6 +8,7 @@ import {
   type RunMeter,
   resolveRecentUsage,
   resolveRecentUsageFreesAt,
+  resolveWindowProvider,
   type ShinsaState,
   type Task,
 } from '../../src/index.ts';
@@ -77,7 +78,7 @@ const STATE = createUsageState([
 
 describe('resolveRecentUsage', () => {
   test('adds up what each step cost of the weekly limit over the last day', () => {
-    const recent = resolveRecentUsage(STATE, NOW);
+    const recent = resolveRecentUsage(STATE, NOW, { provider: 'claude' });
     expect(recent.from).toBe(NOW - RECENT_USAGE_MS);
     expect(recent.to).toBe(NOW);
     expect(recent.percent).toBeCloseTo(36, 6);
@@ -88,9 +89,25 @@ describe('resolveRecentUsage', () => {
   });
 
   test('counts one project alone', () => {
-    expect(resolveRecentUsage(STATE, NOW, 'project-app').percent).toBeCloseTo(15, 6);
-    expect(resolveRecentUsage(STATE, NOW, 'project-site').percent).toBeCloseTo(20, 6);
-    expect(resolveRecentUsage(STATE, NOW, 'project-none').percent).toBe(0);
+    expect(
+      resolveRecentUsage(STATE, NOW, { provider: 'claude', projectId: 'project-app' }).percent
+    ).toBeCloseTo(15, 6);
+    expect(
+      resolveRecentUsage(STATE, NOW, { provider: 'claude', projectId: 'project-site' }).percent
+    ).toBeCloseTo(20, 6);
+    expect(resolveRecentUsage(STATE, NOW, { provider: 'claude', projectId: 'project-none' }).percent).toBe(0);
+  });
+
+  test('counts each provider alone, so Codex usage never fills Claude’s limit', () => {
+    const state = createUsageState([
+      createRun('claude', 'app', [createMeter('claude', WORK, 2, 1)]),
+      createRun('codex', 'app', [createMeter('codex', 'provider:codex', 1, 3)]),
+    ]);
+    expect(resolveRecentUsage(state, NOW, { provider: 'claude' }).percent).toBeCloseTo(10, 6);
+    const codex = resolveRecentUsage(state, NOW, { provider: 'codex', projectId: 'project-app' });
+    expect(codex.percent).toBeCloseTo(30, 6);
+    expect(codex.spends.map((spend) => spend.provider)).toEqual(['codex']);
+    expect(resolveWindowProvider('provider:claude')).toBe('claude');
   });
 
   test('skips a meter on a window it has not learned yet', () => {
@@ -100,15 +117,20 @@ describe('resolveRecentUsage', () => {
 
 describe('resolveRecentUsageFreesAt', () => {
   test('frees once enough of the oldest usage leaves the window', () => {
-    const recent = resolveRecentUsage(STATE, NOW);
+    const recent = resolveRecentUsage(STATE, NOW, { provider: 'claude' });
     expect(resolveRecentUsageFreesAt(recent, 40)).toBeNull();
     expect(resolveRecentUsageFreesAt(recent, 30)).toBe(NOW - 20 * HOUR_MS + RECENT_USAGE_MS);
     expect(resolveRecentUsageFreesAt(recent, 10)).toBe(NOW - 10 * HOUR_MS + RECENT_USAGE_MS);
   });
 
   test('frees when the last usage leaves a window that never goes under the limit', () => {
-    const recent = resolveRecentUsage(STATE, NOW, 'project-app');
+    const recent = resolveRecentUsage(STATE, NOW, { provider: 'claude', projectId: 'project-app' });
     expect(resolveRecentUsageFreesAt(recent, 0)).toBe(NOW - 2 * HOUR_MS + RECENT_USAGE_MS);
-    expect(resolveRecentUsageFreesAt(resolveRecentUsage(STATE, NOW, 'project-none'), 0)).toBeNull();
+    expect(
+      resolveRecentUsageFreesAt(
+        resolveRecentUsage(STATE, NOW, { provider: 'claude', projectId: 'project-none' }),
+        0
+      )
+    ).toBeNull();
   });
 });

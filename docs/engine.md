@@ -2027,22 +2027,27 @@ checks it ran.
 - **Usage over the last 24 hours** (`costs/window.ts`). `listRecentSpends` turns every run meter that ended in the
   last 24 hours (`RECENT_USAGE_MS`) into a spend: its cost times its window's rate (`resolveUsageRates`, early
   estimates included), at the meter's end, with its task's project. A meter with no price or no rate yet is counted
-  as `unmetered` and left out. `resolveRecentUsage` sums the spends, overall or for one project, and
+  as `unmetered` and left out. Each spend has its provider (`resolveWindowProvider`: an account's window is Claude's,
+  `provider:<id>` that provider's), and `resolveRecentUsage` sums one provider's spends, overall or for one project, and
   `resolveRecentUsageFreesAt` is the time a limit frees up: the oldest spends drop out 24 hours after they ended,
   one by one, until the rest is below the limit. The window rolls, so no limit needs a time zone.
 - **Daily and project limits** (`holdForPace`, both off by default, both only yours: `dailyUsageLimit` is in
   `HUMAN_ONLY_SETTINGS`, and `project.write` sent on your behalf is refused when it changes `Project.usageLimit`).
   Both are a percentage of one account's weekly limit, like the task limit, any amount above zero, so a pool of
-  accounts can allow more than 100 a day. Settings → Agent usage → Limits, Daily usage limit counts every task; a
-  project's usage limit (its dialog, or `shinsa projects write --usageLimit`, 0 for off) counts only its tasks.
+  accounts can allow more than 100 a day. Each provider counts only its own usage against them: a step on Claude
+  is held by Claude's last 24 hours, a step on Codex by Codex's, since a percentage of one provider's weekly limit
+  means nothing on another. Settings → Agent usage → Limits, Daily usage limit counts every task; a
+  project's usage limit (its dialog, or `shinsa projects write --usage-limit`, 0 for off) counts only its tasks.
   Like the task limit they are checked when a step would start (`dispatchRuns`, after the task limit), never
   mid-turn, and never for work an agent delegates within a step that already started. When the last 24 hours
-  reach a limit (`resolvePaceHold`; with both reached, the one that frees up later), the step stays queued and
-  the task arms a pace hold: a usage wait with `cause: pace`, `pace` (the scope `daily` or `project`, the limit,
+  reach a limit (`resolvePaceHold`; with both reached, the one that frees up later), the queued step ends unstarted
+  (`cancelled`, "Held at a usage limit before it started."), so no run stays queued and none is active while the
+  wait is armed, and the task arms a pace hold: a usage wait with `cause: pace`, `runId` the held step, `pace` (the scope `daily` or `project`, the limit,
   the usage when it held, the project and the stage reason it had), `resetAt` the time the window frees up and
   `autoResume` always on. The stage reason is "held at the daily usage limit" or "held at the project's usage
   limit". The same `UsageResumeClock` dispatches `usage_wait.resume` at that time: the hold ends, the stage reason
-  comes back, and the queued step is checked again, so it starts, or is held again under a new wait when other
+  comes back, and a copy of the held step starts (`releasePaceWait`: its prompt, session, role and phase as they
+  were, `continues` the held run, `usageWaitId` the wait), so it starts, or is held again under a new wait when other
   work filled the window meanwhile. Resume now (`usage_wait.resume_now`) starts it at once, over the limit or
   not; a pace hold cannot be switched to waiting for you (`usage_wait.change` is refused); raising, clearing or
   changing either limit starts every held step that is now under it.
@@ -2057,7 +2062,8 @@ checks it ran.
   the pool must reach before it runs dry at a faster pace), the timeline of each account, and when the pool would
   run dry at the pace of the last 24 hours, shown only to compare. An account out of usage only until a shorter
   limit resets (its 5-hour window) keeps its weekly budget; only one spent until its weekly reset counts as empty.
-  Settings → Agent usage → Forecast draws one block per provider (`components/settings/forecast.tsx`,
+  The account picker follows the same order when it switches: past the switch threshold, the account whose weekly
+  limit resets soonest takes over (Accounts and usage limits, below). Settings → Agent usage → Forecast draws one block per provider (`components/settings/forecast.tsx`,
   `lib/accounts/forecast.ts`): every Claude account together, and each other provider's own login alone, each with
   its pace, a lane per account across the week (what each stretch between resets starts with, the tightest point
   marked), the tightest point in words and the last 24 hours of that provider (meters on an account's window for
@@ -6007,7 +6013,8 @@ Agent usage glance in the top bar, which shows every connected provider (`docs/d
   reset), minus the ones this execution already tried (`exclude` on the lease request). Among those below their
   switch threshold (the account's own `switchAt`, else `settings.accountSwitchAt`, default 90%, any whole
   percentage; an account with no reading counts as below it) the task's last account stays, then the default
-  account, then the most headroom; above the threshold, the most headroom. Headroom is 100 minus the highest
+  account, then the one whose weekly limit resets soonest (what an account has left is lost at its reset, so it is
+  spent first, the order the usage forecast assumes), then the most headroom; above the threshold, the most headroom. Headroom is 100 minus the highest
   relevant window: the session and weekly windows, and a model window for runs on that model family or on an
   unknown model; an account with no reading ranks after every account that has one. When nothing qualifies the
   least spent account is tried anyway, so a stale reading cannot strand work. The attempt records its account

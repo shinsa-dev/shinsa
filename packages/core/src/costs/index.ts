@@ -6,6 +6,7 @@ export {
   type PaceHold,
   RECENT_USAGE_MS,
   type RecentUsage,
+  type RecentUsageScope,
   resolveRecentUsage,
   resolvePaceHold,
   resolveRecentUsageFreesAt,
@@ -16,6 +17,7 @@ export {
   resolveMeterWindow,
   resolveUsageRates,
   resolveUsageShares,
+  resolveWindowProvider,
   USAGE_RATE_LIMITS,
   type UsageRate,
 } from './rate.ts';

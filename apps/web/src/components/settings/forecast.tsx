@@ -21,6 +21,7 @@ import {
   resolveForecastShare,
 } from '@/lib/accounts/forecast.ts';
 import { useAccounts } from '@/lib/connection/accounts.ts';
+import { useEngineFeature } from '@/lib/connection/socket.ts';
 import { updateSettings } from '@/lib/settings.ts';
 import { ROW_INSET, SETTING_ROW, SettingsBlock, SettingsGroup } from './group.tsx';
 
@@ -119,6 +120,7 @@ function ApplyPaceButton({ forecast, settings }: { forecast: UsageForecast; sett
 function ForecastBlock({ entry, settings }: { entry: ProviderForecast; settings: Settings }) {
   const { forecast } = entry;
   const tightest = describeTightest(forecast, forecast.from);
+  const paced = useEngineFeature('usage.pace_limits');
   return (
     <SettingsBlock
       header={
@@ -127,7 +129,7 @@ function ForecastBlock({ entry, settings }: { entry: ProviderForecast; settings:
             <span className='font-medium text-fg-4'>{entry.title}</span>
             <span className='shrink-0 text-fg-2 tabular-nums'>{formatPace(forecast.safePace)} a day</span>
           </div>
-          <ApplyPaceButton forecast={forecast} settings={settings} />
+          {paced && <ApplyPaceButton forecast={forecast} settings={settings} />}
         </>
       }
     >

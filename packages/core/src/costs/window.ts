@@ -1,7 +1,7 @@
 import type { Task, UsagePaceScope } from '../domain/index.ts';
 import { DAY_MS } from '../domain/time.ts';
 import type { ShinsaState } from '../state/project.ts';
-import { resolveUsageRates } from './rate.ts';
+import { resolveUsageRates, resolveWindowProvider } from './rate.ts';
 
 export const RECENT_USAGE_MS = DAY_MS;
 
@@ -11,6 +11,12 @@ export interface UsageSpend {
   taskId: string;
   projectId: string | null;
   window: string;
+  provider: string;
+}
+
+export interface RecentUsageScope {
+  provider: string;
+  projectId?: string | null;
 }
 
 export interface RecentUsage {
@@ -48,20 +54,19 @@ export function listRecentSpends(state: ShinsaState, now: number) {
         taskId: run.taskId,
         projectId: state.tasks[run.taskId]?.projectId ?? null,
         window: meter.window,
+        provider: resolveWindowProvider(meter.window),
       });
     }
   }
   return { spends: spends.sort((a, b) => a.at - b.at), unmetered };
 }
 
-export function resolveRecentUsage(
-  state: ShinsaState,
-  now: number,
-  projectId: string | null = null
-): RecentUsage {
+export function resolveRecentUsage(state: ShinsaState, now: number, scope: RecentUsageScope): RecentUsage {
   const listed = listRecentSpends(state, now);
-  const spends =
-    projectId === null ? listed.spends : listed.spends.filter((spend) => spend.projectId === projectId);
+  const projectId = scope.projectId ?? null;
+  const spends = listed.spends.filter(
+    (spend) => spend.provider === scope.provider && (projectId === null || spend.projectId === projectId)
+  );
   return {
     from: now - RECENT_USAGE_MS,
     to: now,
@@ -93,16 +98,21 @@ function resolveScopeHold(
   return freesAt === null ? null : { scope, limit, percent: recent.percent, projectId, freesAt };
 }
 
-export function resolvePaceHold(state: ShinsaState, task: Task, now: number): PaceHold | null {
+export function resolvePaceHold(
+  state: ShinsaState,
+  task: Task,
+  provider: string,
+  now: number
+): PaceHold | null {
   const daily = state.settings.dailyUsageLimit;
   const projectId = task.projectId ?? null;
   const project = projectId === null ? null : (state.projects[projectId] ?? null);
   if ((daily === null || daily === undefined) && !project?.usageLimit) return null;
   const holds = [
-    resolveScopeHold(resolveRecentUsage(state, now), 'daily', daily, null),
+    resolveScopeHold(resolveRecentUsage(state, now, { provider }), 'daily', daily, null),
     project
       ? resolveScopeHold(
-          resolveRecentUsage(state, now, project.id),
+          resolveRecentUsage(state, now, { provider, projectId: project.id }),
           'project',
           project.usageLimit,
           project.id

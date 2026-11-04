@@ -367,7 +367,7 @@ export function resolveDailyLimitValue(settings: Settings) {
 export function describeDailyLimitNote(settings: Settings, recent: number) {
   if (settings.dailyUsageLimit == null) return null;
   const used = `${Number(recent.toFixed(1))}%`;
-  return `The last 24 hours used ${used}. Once they reach the limit, a task’s next step waits and starts by itself when older usage drops out.`;
+  return `The last 24 hours used ${used} on Claude. Each provider counts its own usage: once it reaches the limit, a task’s next step waits and starts by itself when older usage drops out.`;
 }
 
 export function resolveAttentionValue(settings: Settings) {

@@ -252,7 +252,14 @@ export function resolveDraftInput(
   const key = draft.key.trim().toUpperCase();
   const usageLimit = parseDraftUsageLimit(draft.usageLimit);
   const values = { name: draft.name.trim(), description: draft.description.trim() };
-  if (project) return resolveProjectInput(project, { ...values, usageLimit, key: key || project.key });
+  if (project) {
+    const changed = usageLimit !== (project.usageLimit ?? null);
+    return resolveProjectInput(project, {
+      ...values,
+      ...(changed ? { usageLimit } : {}),
+      key: key || project.key,
+    });
+  }
   return {
     ...values,
     color: resolveProjectColor(state),

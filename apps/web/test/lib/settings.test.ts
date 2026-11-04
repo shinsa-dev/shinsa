@@ -258,7 +258,7 @@ describe('the daily usage limit', () => {
   it('says how much the last 24 hours used only while a limit is set', () => {
     expect(describeDailyLimitNote(settings(), 12)).toBeNull();
     expect(describeDailyLimitNote(settings({ dailyUsageLimit: 20 }), 12.04)).toBe(
-      'The last 24 hours used 12%. Once they reach the limit, a task’s next step waits and starts by itself when older usage drops out.'
+      'The last 24 hours used 12% on Claude. Each provider counts its own usage: once it reaches the limit, a task’s next step waits and starts by itself when older usage drops out.'
     );
   });
 });

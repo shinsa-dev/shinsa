@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import {
   isOverBudget,
+  listActiveRuns,
   listOpenGates,
   type RunUsage,
   RECENT_USAGE_MS,
@@ -463,7 +464,7 @@ describe('delegated work', () => {
 });
 
 function recentPercent(harness: Harness, projectId: string | null = null) {
-  return resolveRecentUsage(harness.state, harness.now, projectId).percent;
+  return resolveRecentUsage(harness.state, harness.now, { provider: 'claude', projectId }).percent;
 }
 
 function heldAtPace(patch: { daily?: number; project?: number }) {
@@ -487,11 +488,24 @@ function heldAtPace(patch: { daily?: number; project?: number }) {
     });
   }
   proposePlan(harness, taskId);
-  return { harness, taskId, projectId, run: harness.activeRun(taskId) };
+  const run = Object.values(harness.state.runs)
+    .filter((candidate) => candidate.taskId === taskId)
+    .at(-1);
+  if (!run) throw new Error('no run');
+  return { harness, taskId, projectId, run };
 }
 
 function isDispatched(harness: Harness, runId: string) {
   return harness.effectsOf('run.execute').some((effect) => effect.runId === runId);
+}
+
+function listContinuations(harness: Harness, runId: string): string[] {
+  const next = Object.values(harness.state.runs).filter((candidate) => candidate.continues === runId);
+  return next.flatMap((candidate) => [candidate.id, ...listContinuations(harness, candidate.id)]);
+}
+
+function isHeldStepStarted(harness: Harness, runId: string) {
+  return listContinuations(harness, runId).some((id) => isDispatched(harness, id));
 }
 
 function waitOf(harness: Harness, taskId: string) {
@@ -516,7 +530,13 @@ describe('the daily usage limit', () => {
 
   test('holds the next step once the last 24 hours reach it, and says why', () => {
     const { harness, taskId, run } = heldAtPace({ daily: -1 });
-    expect(run.status).toBe('queued');
+    expect(harness.state.runs[run.id]).toMatchObject({
+      status: 'queued',
+      outcome: 'cancelled',
+      summary: 'Held at a usage limit before it started.',
+    });
+    expect(harness.state.runs[run.id]?.endedAt).not.toBeNull();
+    expect(listActiveRuns(harness.state, taskId)).toEqual([]);
     expect(isDispatched(harness, run.id)).toBe(false);
     const wait = waitOf(harness, taskId);
     expect(wait).toMatchObject({
@@ -550,10 +570,19 @@ describe('the daily usage limit', () => {
     const wait = waitOf(harness, taskId);
     const reason = wait.pace?.stageReason;
     harness.send({ type: 'usage_wait.resume', taskId, waitId: wait.id });
-    expect(isDispatched(harness, run.id)).toBe(false);
+    expect(isHeldStepStarted(harness, run.id)).toBe(false);
     harness.advance(wait.resetAt - harness.now);
     harness.send({ type: 'usage_wait.resume', taskId, waitId: wait.id });
-    expect(isDispatched(harness, run.id)).toBe(true);
+    expect(isHeldStepStarted(harness, run.id)).toBe(true);
+    const [started] = listContinuations(harness, run.id);
+    const held = harness.state.runs[run.id];
+    expect(harness.state.runs[started as string]).toMatchObject({
+      prompt: held?.prompt,
+      role: held?.role,
+      phaseIndex: held?.phaseIndex,
+      usageWaitId: wait.id,
+      status: 'running',
+    });
     expect(waitOf(harness, taskId).status).toBe('resumed');
     expect(harness.task(taskId).stageReason).toBe(reason as string);
     expect(harness.task(taskId).activity.some((entry) => entry.text === 'Started the held step')).toBe(true);
@@ -569,16 +598,18 @@ describe('the daily usage limit', () => {
     harness.send({ type: 'usage_wait.resume', taskId, waitId: first.id });
     const second = waitOf(harness, taskId);
     expect(second.id).not.toBe(first.id);
-    expect(second).toMatchObject({ status: 'armed', cause: 'pace', runId: run.id });
+    expect(second).toMatchObject({ status: 'armed', cause: 'pace' });
+    expect(harness.state.runs[second.runId]?.continues).toBe(run.id);
     expect(second.resetAt).toBeGreaterThan(first.resetAt);
     expect(second.pace?.stageReason).toBe(reason);
-    expect(isDispatched(harness, run.id)).toBe(false);
+    expect(listActiveRuns(harness.state, taskId)).toEqual([]);
+    expect(isHeldStepStarted(harness, run.id)).toBe(false);
   });
 
   test('Resume now starts the held step at once, over the limit or not', () => {
     const { harness, taskId, run } = heldAtPace({ daily: -1 });
     harness.send({ type: 'usage_wait.resume_now', taskId });
-    expect(isDispatched(harness, run.id)).toBe(true);
+    expect(isHeldStepStarted(harness, run.id)).toBe(true);
     expect(harness.task(taskId).activity.some((entry) => entry.text === 'Started the held step early')).toBe(
       true
     );
@@ -587,7 +618,7 @@ describe('the daily usage limit', () => {
   test('raising or clearing the limit starts held steps right away', () => {
     const { harness, taskId, run } = heldAtPace({ daily: -1 });
     harness.send({ type: 'settings.change', patch: { dailyUsageLimit: null } });
-    expect(isDispatched(harness, run.id)).toBe(true);
+    expect(isHeldStepStarted(harness, run.id)).toBe(true);
     expect(waitOf(harness, taskId).status).toBe('resumed');
   });
 
@@ -667,7 +698,7 @@ describe('a project’s usage limit', () => {
     if (!project) throw new Error('no project');
     harness.send({ type: 'project.write', project: { ...project, usageLimit: null } });
     expect(harness.state.projects[projectId]?.usageLimit).toBeUndefined();
-    expect(isDispatched(harness, run.id)).toBe(true);
+    expect(isHeldStepStarted(harness, run.id)).toBe(true);
   });
 
   test('is above zero, only you change it, and an agent may write the project without touching it', () => {
