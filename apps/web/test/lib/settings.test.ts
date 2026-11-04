@@ -27,8 +27,11 @@ import {
   listGroupModelItems,
   listGroupSpeedItems,
   listSpeedItems,
+  describeDailyLimitNote,
+  listDailyLimitItems,
   listUsageLimitItems,
   listWatchdogSettingItems,
+  resolveDailyLimitValue,
   MERGE_ITEMS,
   MIXED_VALUE,
   needsCostLimit,
@@ -225,6 +228,38 @@ describe('the cost limit', () => {
     expect(resolveBudgetValue(settings({ taskBudgetUsd: 5 }))).toBe('5');
     expect(parseBudget('off')).toBeNull();
     expect(parseBudget('5')).toBe(5);
+  });
+});
+
+describe('the daily usage limit', () => {
+  it('is off by default and offers shares of a weekly limit a day, keeping the forecast’s pace', () => {
+    expect(resolveDailyLimitValue(settings())).toBe('off');
+    expect(resolveDailyLimitValue(settings({ dailyUsageLimit: 18.3 }))).toBe('18.3');
+    expect(listDailyLimitItems(settings()).map((item) => item.label)).toEqual([
+      'No limit',
+      '10% of a weekly limit a day',
+      '20% of a weekly limit a day',
+      '30% of a weekly limit a day',
+      '50% of a weekly limit a day',
+      '100% of a weekly limit a day',
+    ]);
+    expect(listDailyLimitItems(settings({ dailyUsageLimit: 20 }))).toHaveLength(6);
+    expect(listDailyLimitItems(settings({ dailyUsageLimit: 18.3 })).map((item) => item.value)).toEqual([
+      'off',
+      '10',
+      '18.3',
+      '20',
+      '30',
+      '50',
+      '100',
+    ]);
+  });
+
+  it('says how much the last 24 hours used only while a limit is set', () => {
+    expect(describeDailyLimitNote(settings(), 12)).toBeNull();
+    expect(describeDailyLimitNote(settings({ dailyUsageLimit: 20 }), 12.04)).toBe(
+      'The last 24 hours used 12%. Once they reach the limit, a task’s next step waits and starts by itself when older usage drops out.'
+    );
   });
 });
 

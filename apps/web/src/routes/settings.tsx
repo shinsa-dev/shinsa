@@ -1,4 +1,4 @@
-import { resolveUsageRates, type ShinsaState } from '@shinsa/core';
+import { resolveRecentUsage, resolveUsageRates, type ShinsaState } from '@shinsa/core';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
 import { Choice } from '@/components/controls/choice.tsx';
@@ -11,6 +11,7 @@ import { AppearanceSettings } from '@/components/settings/appearance.tsx';
 import { AttentionSettings } from '@/components/settings/attention.tsx';
 import { ContextSettings } from '@/components/settings/context.tsx';
 import { FolderSettings, SetupSettings } from '@/components/settings/folders.tsx';
+import { ForecastSettings } from '@/components/settings/forecast.tsx';
 import { IntegrationSettings } from '@/components/settings/integrations.tsx';
 import { MachinesSettings } from '@/components/settings/machines.tsx';
 import { MemorySettings } from '@/components/settings/memory.tsx';
@@ -103,7 +104,12 @@ function TabSections({ state, tab }: { state: ShinsaState; tab: SettingsTabId })
       return (
         <>
           <AccountSettings settings={state.settings} />
-          <LimitSettings settings={state.settings} rates={resolveUsageRates(state.runs)} />
+          <ForecastSettings state={state} />
+          <LimitSettings
+            settings={state.settings}
+            rates={resolveUsageRates(state.runs)}
+            recentUsage={resolveRecentUsage(state, Date.now()).percent}
+          />
         </>
       );
     case 'projects':

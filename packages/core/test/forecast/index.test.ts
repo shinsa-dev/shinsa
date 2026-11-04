@@ -136,9 +136,17 @@ describe('resolveForecastAccount', () => {
     });
   });
 
-  test('has nothing left while the account is marked spent', () => {
-    expect(resolveForecastAccount('work', 'Work', weekly(60, NOW + HOUR_MS), NOW + 1, NOW)?.left).toBe(0);
-    expect(resolveForecastAccount('work', 'Work', weekly(60, NOW + HOUR_MS), NOW, NOW)?.left).toBe(40);
+  test('has nothing left while the account is spent until its weekly reset', () => {
+    const resetsAt = NOW + HOUR_MS;
+    expect(resolveForecastAccount('work', 'Work', weekly(60, resetsAt), resetsAt, NOW)?.left).toBe(0);
+    expect(resolveForecastAccount('work', 'Work', weekly(60, null), NOW + 1, NOW)?.left).toBe(0);
+    expect(resolveForecastAccount('work', 'Work', weekly(60, resetsAt), NOW, NOW)?.left).toBe(40);
+  });
+
+  test('keeps the weekly budget of an account spent only until a shorter limit resets', () => {
+    expect(resolveForecastAccount('work', 'Work', weekly(60, NOW + 2 * HOUR_MS), NOW + 1, NOW)?.left).toBe(
+      40
+    );
   });
 
   test('a reading from before its reset counts a full week', () => {

@@ -84,6 +84,7 @@ describe('resolveRecentUsage', () => {
     expect(recent.unmetered).toBe(1);
     expect(recent.spends.map((spend) => spend.taskId)).toEqual(['app', 'site', 'gone', 'app']);
     expect(recent.spends[2]?.projectId).toBeNull();
+    expect(recent.spends[0]?.window).toBe(WORK);
   });
 
   test('counts one project alone', () => {

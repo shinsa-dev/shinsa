@@ -1,0 +1,170 @@
+import { MINUTE_MS, type Settings, type ShinsaState, type UsageForecast } from '@shinsa/core';
+import { Button } from '@shinsa/ui/components/button';
+import { Truncate } from '@shinsa/ui/components/truncate';
+import { cn } from '@shinsa/ui/lib/utils';
+import * as React from 'react';
+import { useMinute } from '@/hooks/use-minute.ts';
+import {
+  APPLY_PACE_LABEL,
+  describeRecentPace,
+  describeSafePace,
+  describeTightest,
+  FORECAST_TITLE,
+  type ForecastLane,
+  formatForecastDay,
+  formatPace,
+  isPaceApplied,
+  listForecastDays,
+  listForecastLanes,
+  listProviderForecasts,
+  type ProviderForecast,
+  resolveForecastShare,
+} from '@/lib/accounts/forecast.ts';
+import { useAccounts } from '@/lib/connection/accounts.ts';
+import { updateSettings } from '@/lib/settings.ts';
+import { ROW_INSET, SETTING_ROW, SettingsBlock, SettingsGroup } from './group.tsx';
+
+const LANE_LABEL = 'w-24 shrink-0 sm:w-36';
+
+function Lane({ forecast, lane }: { forecast: UsageForecast; lane: ForecastLane }) {
+  return (
+    <div className='flex items-center gap-3'>
+      <Truncate className={cn(LANE_LABEL, 'text-2xs text-fg-3')}>{lane.account.label}</Truncate>
+      <div className='relative h-3 min-w-0 flex-1'>
+        {lane.segments.map((segment) => {
+          const start = resolveForecastShare(forecast, segment.from);
+          const end = resolveForecastShare(forecast, segment.to);
+          return (
+            <span
+              key={segment.from}
+              data-left={segment.left}
+              className='absolute inset-y-0 overflow-hidden rounded-xs border-x border-card bg-bg-a2'
+              style={{ left: `${start * 100}%`, width: `${(end - start) * 100}%` }}
+            >
+              <span
+                className='absolute inset-y-0 start-0 bg-primary/50'
+                style={{ width: `${segment.left}%` }}
+              />
+            </span>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function TightestMark({ forecast }: { forecast: UsageForecast }) {
+  if (!forecast.tightest) return null;
+  return (
+    <span
+      aria-hidden
+      data-tightest
+      className='pointer-events-none absolute inset-y-0 border-l border-dashed border-amber-4'
+      style={{ left: `${resolveForecastShare(forecast, forecast.tightest.at) * 100}%` }}
+    />
+  );
+}
+
+function DayAxis({ forecast }: { forecast: UsageForecast }) {
+  return (
+    <div className='flex gap-3'>
+      <span className={LANE_LABEL} />
+      <div aria-hidden className='relative h-4 min-w-0 flex-1 text-2xs text-fg-2'>
+        {listForecastDays(forecast).map((day) => (
+          <span
+            key={day.at}
+            className='absolute top-0 -translate-x-1/2 whitespace-nowrap'
+            style={{ left: `${day.share * 100}%` }}
+          >
+            {formatForecastDay(day.at)}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function Timeline({ forecast }: { forecast: UsageForecast }) {
+  const lanes = listForecastLanes(forecast);
+  return (
+    <div className={cn('flex flex-col gap-1.5 py-2.5', ROW_INSET)}>
+      <div className='relative flex flex-col gap-1.5'>
+        {lanes.map((lane) => (
+          <Lane key={lane.account.id} forecast={forecast} lane={lane} />
+        ))}
+        <div className='pointer-events-none absolute inset-y-0 right-0 left-[calc(--spacing(24)+--spacing(3))] sm:left-[calc(--spacing(36)+--spacing(3))]'>
+          <TightestMark forecast={forecast} />
+        </div>
+      </div>
+      <DayAxis forecast={forecast} />
+    </div>
+  );
+}
+
+function ApplyPaceButton({ forecast, settings }: { forecast: UsageForecast; settings: Settings }) {
+  const applied = isPaceApplied(forecast, settings.dailyUsageLimit);
+  return (
+    <Button
+      variant='secondary'
+      size='xs'
+      icon='IconGauge'
+      disabled={applied || forecast.safePace <= 0}
+      onClick={() => void updateSettings({ dailyUsageLimit: forecast.safePace })}
+    >
+      {applied ? 'Daily limit set' : APPLY_PACE_LABEL}
+    </Button>
+  );
+}
+
+function ForecastBlock({ entry, settings }: { entry: ProviderForecast; settings: Settings }) {
+  const { forecast } = entry;
+  const tightest = describeTightest(forecast, forecast.from);
+  return (
+    <SettingsBlock
+      header={
+        <>
+          <div className='flex min-w-0 flex-1 items-center gap-1.5 text-xs'>
+            <span className='font-medium text-fg-4'>{entry.title}</span>
+            <span className='shrink-0 text-fg-2 tabular-nums'>{formatPace(forecast.safePace)} a day</span>
+          </div>
+          <ApplyPaceButton forecast={forecast} settings={settings} />
+        </>
+      }
+    >
+      <div className={SETTING_ROW}>
+        <span className='min-w-0 flex-1 text-xs text-fg-4'>{describeSafePace(forecast)}</span>
+      </div>
+      <Timeline forecast={forecast} />
+      {tightest && (
+        <div className={SETTING_ROW}>
+          <span className='min-w-0 flex-1 text-xs text-fg-2'>{tightest}</span>
+        </div>
+      )}
+      <div className={SETTING_ROW}>
+        <span className='min-w-0 flex-1 text-xs text-fg-2'>
+          {describeRecentPace(forecast, forecast.from)}
+        </span>
+      </div>
+    </SettingsBlock>
+  );
+}
+
+export function ForecastSettings({ state }: { state: ShinsaState }) {
+  const snapshot = useAccounts();
+  const minute = useMinute();
+  const forecasts = React.useMemo(
+    () => listProviderForecasts(snapshot, state, minute * MINUTE_MS),
+    [snapshot, state, minute]
+  );
+  if (forecasts.length === 0) return null;
+  return (
+    <SettingsGroup
+      title={FORECAST_TITLE}
+      description='The highest steady pace your accounts can keep up for the next 7 days, spending first from the account that resets soonest. Each lane is an account: the filled part is what it has left until its next reset, and the dashed line is the tightest point.'
+    >
+      {forecasts.map((entry) => (
+        <ForecastBlock key={entry.provider} entry={entry} settings={state.settings} />
+      ))}
+    </SettingsGroup>
+  );
+}

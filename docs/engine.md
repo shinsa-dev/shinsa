@@ -2055,7 +2055,14 @@ checks it ran.
   the highest pace that never runs every account dry, rounded down to a tenth (`FORECAST_LIMITS`). That pace is
   the recommendation, which you can apply as the daily limit; the forecast also names the tightest reset (the one
   the pool must reach before it runs dry at a faster pace), the timeline of each account, and when the pool would
-  run dry at the pace of the last 24 hours, shown only to compare.
+  run dry at the pace of the last 24 hours, shown only to compare. An account out of usage only until a shorter
+  limit resets (its 5-hour window) keeps its weekly budget; only one spent until its weekly reset counts as empty.
+  Settings → Agent usage → Forecast draws one block per provider (`components/settings/forecast.tsx`,
+  `lib/accounts/forecast.ts`): every Claude account together, and each other provider's own login alone, each with
+  its pace, a lane per account across the week (what each stretch between resets starts with, the tightest point
+  marked), the tightest point in words and the last 24 hours of that provider (meters on an account's window for
+  Claude, `provider:<id>` for the rest). Use as daily limit sends `settings.change` with `dailyUsageLimit` set to the
+  pace; the forecast is worked out again on every accounts refresh and every minute.
 
 ### Silent runs
 

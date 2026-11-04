@@ -26,11 +26,12 @@ async function settle() {
 describe('the Limits settings', () => {
   function renderLimits(
     settings: Settings = createSettings(),
-    rates: Map<string, UsageRate | null> | null = null
+    rates: Map<string, UsageRate | null> | null = null,
+    recentUsage = 0
   ) {
     return render(
       <TooltipProvider>
-        <LimitSettings settings={settings} rates={rates} />
+        <LimitSettings settings={settings} rates={rates} recentUsage={recentUsage} />
       </TooltipProvider>
     );
   }
@@ -57,6 +58,20 @@ describe('the Limits settings', () => {
     expect(screen.getByRole('combobox', { name: 'Usage limit per task' }).textContent).toBe('No limit');
     await choose('Usage limit per task', '10% of the weekly limit');
     expect(listSentCommands()).toEqual([{ type: 'settings.change', patch: { taskUsageLimit: 10 } }]);
+  });
+
+  it('holds work at a daily usage limit, off by default, and says how much the last 24 hours used', async () => {
+    const { unmount } = renderLimits();
+    expect(screen.getByRole('combobox', { name: 'Daily usage limit' }).textContent).toBe('No limit');
+    expect(screen.queryByText(/The last 24 hours used/)).toBeNull();
+    await choose('Daily usage limit', '20% of a weekly limit a day');
+    expect(listSentCommands()).toEqual([{ type: 'settings.change', patch: { dailyUsageLimit: 20 } }]);
+    unmount();
+    renderLimits({ ...createSettings(), dailyUsageLimit: 18.3 }, null, 7.25);
+    expect(screen.getByRole('combobox', { name: 'Daily usage limit' }).textContent).toBe(
+      '18.3% of a weekly limit a day'
+    );
+    expect(screen.getByText(/The last 24 hours used 7\.3%/)).toBeTruthy();
   });
 
   it('shows the cost limit while one is set', async () => {

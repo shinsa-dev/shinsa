@@ -10,6 +10,7 @@ export interface UsageSpend {
   percent: number;
   taskId: string;
   projectId: string | null;
+  window: string;
 }
 
 export interface RecentUsage {
@@ -46,6 +47,7 @@ export function listRecentSpends(state: ShinsaState, now: number) {
         percent: meter.usage.costUsd * rate.percentPerUsd,
         taskId: run.taskId,
         projectId: state.tasks[run.taskId]?.projectId ?? null,
+        window: meter.window,
       });
     }
   }

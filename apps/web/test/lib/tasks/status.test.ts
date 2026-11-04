@@ -304,6 +304,18 @@ describe('resolveTaskStatus', () => {
       label: 'Waiting for the usage limit',
       tone: 'neutral',
     });
+    const held = createTask({
+      id: 'h',
+      usageWait: {
+        ...(task.usageWait as NonNullable<typeof task.usageWait>),
+        cause: 'pace',
+        pace: { scope: 'project', limit: 20, percent: 21, projectId: null, stageReason: 'building' },
+      },
+    });
+    expect(resolveTaskStatus(createShinsaState({ tasks: [held] }), held)).toEqual({
+      label: 'Held at a usage limit',
+      tone: 'neutral',
+    });
   });
 
   it('reads the lead gate first', () => {

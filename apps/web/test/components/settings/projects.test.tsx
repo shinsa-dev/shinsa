@@ -152,6 +152,39 @@ describe('Settings → Projects', () => {
     expect(changes).toEqual([]);
   });
 
+  it('sets a daily usage limit for the project, shows it beside the key and clears it when emptied', async () => {
+    const actions = renderProjects(superwallState());
+    await openMenuItem('Set usage limit…');
+    const field = screen.getByLabelText('Daily usage limit (% of a weekly limit)');
+    expect(screen.getByText('Leave it empty for no limit.')).toBeDefined();
+    fireEvent.change(field, { target: { value: '0' } });
+    fireEvent.submit(field.closest('form') as HTMLFormElement);
+    await settle();
+    expect(screen.getByText('Type a percentage above zero, like 20.')).toBeDefined();
+    expect(actions.save).not.toHaveBeenCalled();
+    fireEvent.change(field, { target: { value: '20' } });
+    fireEvent.submit(field.closest('form') as HTMLFormElement);
+    await waitFor(() => expect(actions.save).toHaveBeenCalled());
+    expect(actions.save.mock.calls[0]).toEqual([
+      expect.objectContaining({ id: 'p1', usageLimit: 20 }),
+      'Usage limit saved.',
+    ]);
+  });
+
+  it('shows a project’s usage limit and offers to change it', async () => {
+    const actions = renderProjects(createShinsaState({ projects: [{ ...SUPERWALL, usageLimit: 12.5 }] }));
+    expect(await findTooltipText(screen.getByText('12.5% a day'))).toBe(
+      'Daily usage limit for this project’s tasks'
+    );
+    await openMenuItem('Change usage limit…');
+    const field = screen.getByLabelText('Daily usage limit (% of a weekly limit)') as HTMLInputElement;
+    expect(field.value).toBe('12.5');
+    fireEvent.change(field, { target: { value: '' } });
+    fireEvent.submit(field.closest('form') as HTMLFormElement);
+    await waitFor(() => expect(actions.save).toHaveBeenCalled());
+    expect(actions.save.mock.calls[0]?.[0]).toMatchObject({ id: 'p1', usageLimit: null });
+  });
+
   it('saves the description with Enter', async () => {
     const actions = renderProjects(superwallState());
     await openMenuItem('Edit description…');

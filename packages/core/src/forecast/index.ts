@@ -45,7 +45,8 @@ export function resolveForecastAccount(
 ): ForecastAccount | null {
   const weekly = usage.windows.find((window) => window.kind === 'weekly');
   if (!weekly) return null;
-  const spent = spentUntil !== null && spentUntil > now;
+  const spent =
+    spentUntil !== null && spentUntil > now && (weekly.resetsAt === null || spentUntil >= weekly.resetsAt);
   let left = spent ? 0 : Math.max(0, FORECAST_LIMITS.fullPercent - weekly.usedPercent);
   let resetsAt = weekly.resetsAt;
   while (resetsAt !== null && resetsAt <= now) {

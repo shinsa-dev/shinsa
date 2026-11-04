@@ -124,6 +124,9 @@ export function ProjectMenu({
           <DropdownMenuItem icon='IconTextEdit' onClick={() => onShow('description')}>
             {project.description ? 'Edit description…' : 'Add description…'}
           </DropdownMenuItem>
+          <DropdownMenuItem icon='IconGauge' onClick={() => onShow('usageLimit')}>
+            {project.usageLimit ? 'Change usage limit…' : 'Set usage limit…'}
+          </DropdownMenuItem>
           <ColourSubmenu project={project} actions={actions} />
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
