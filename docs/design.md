@@ -468,7 +468,12 @@ Only these, and they win over anything below:
     (`CheckRowItem`, a grid below `sm`). A run's header in the chat wraps the same way (`ChatLine` `wraps`): the role
     stays whole and the headline and the account go on to a second line. The Code tab's file sheet keeps clear of the
     notch and the home bar. The docked composer keeps clear of the home bar
-    (`env(safe-area-inset-bottom)`, `SAFE_AREA_BOTTOM` on the sheets). The app has one
+    (`env(safe-area-inset-bottom)`, `SAFE_AREA_BOTTOM` on the sheets), and so do the end of All tasks and an
+    automation's page (`PAGE_BOTTOM`) and the Terminal page's body. **Home on a phone**: a queue row that shows the
+    agent's latest action or a note drops its step track below `sm` (`RowSummary`), so the action reads in full
+    instead of a few letters; a row with nothing after it keeps the track, and so does the queue menu. A select's
+    list never grows wider than the room beside it (`max-w-(--available-width)`), its hints truncating instead, and
+    the guide's list of other running tasks scrolls inside a popover no taller than the room. The app has one
     keyboard shortcut: ⌘K (Ctrl K elsewhere) opens the command menu (see 14). Nothing else is
     bound to a key, except the Code tab's ⌘P, ⇧⌘F, ⌘F and ⌘G while it is open (32), the Review tab's J and K while it is
     open (34), the Terminal page's ⌘T and ⌘W while it is open and a focused terminal's own keys (37), Enter sends in every input, and a setup step's option list takes the arrows, Home, End, Enter and
