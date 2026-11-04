@@ -69,7 +69,7 @@ builds never reviews its own work.
 
 | Role | Default model | Session | Hands back with |
 | --- | --- | --- | --- |
-| Classifier | Sonnet | one call, no tools | title, repository (or none), size, branch, and for what you left on Auto: the shape, the priority and the tasks it waits on, each with why |
+| Classifier | Sonnet | one call, no tools | title, repository (or none), size, branch, and for what you left on Auto: the shape, the priority, the tasks it waits on with the kind of wait, and the open change it stacks on, each with why |
 | Agent | Opus | one session per task, resumed by every run of every round: it plans read-only, then builds, fixes and operates with edits; its watchdog checks, read-only after the merge, resume a watch session of their own; a fresh session only when the old one cannot go on (Recovery) | while planning, 2–8 phases (`propose_plan`) or the task's steps composed anew (`reshape_task`, Task shapes, below); a phase report per phase (`complete_phase`); a summary per fix (`complete_fix`); how the operation went (`report_outcome`), after the evidence its plan asks for; in a watchdog check or the home of a watch, each report a read found (`file_report`) and what it read (`report_read`) |
 | Reviewer | Opus | one session of its own per task, resumed by every review of every round and never the Agent's; it cannot edit | a summary and findings (`report_review`) |
 | Answerer | Opus | the task's session (fresh only for a task's first run), in the repository itself (a scratch folder of its own when the task has no repository), cannot edit; on another model than the session's it resumes it on its own, on another provider it starts fresh | an answer (`answer`), optionally a proposed change (Task shapes, below) |
@@ -405,7 +405,8 @@ create → classify → (wait for the tasks it waits on) → worktree → plan �
 
 1. **Classify.** One Sonnet call picks the title, the repository or none (A task without a repository,
    below), size, branch and, given every open task, the tasks this one waits on (`waits_on`, a list, usually
-   empty) and whether it is the same work as one of them in the same repository (`duplicate_of`, Duplicates,
+   empty, only for a direct dependency, with its `waits_on_kind`), the open change it is the next piece of
+   (`stacks_on`, usually `none`, Bundles, below) and whether it is the same work as one of them in the same repository (`duplicate_of`, Duplicates,
    below; never one in another repository). A duplicate is
    closed there and goes no further. Then the task either waits for them (Scheduling, below) or has its setup verified (`config.verify`,
    Setup verification, below) and gets its worktree (`worktree.create`): a fresh branch from the freshly fetched
@@ -1077,9 +1078,19 @@ them in the composer.
   (`backlog: true`, The backlog, above). Triage never chooses the backlog. Schedules and accepted suggested tasks
   keep their own choices; a split plan's tasks are changes; a courier's task is Auto.
 - Triage answers each Auto part as a typed decision question with a short why: `shape`, `priority` (urgent, high, normal or
-  low) and `waits_on` (the open tasks of the task's project, in any repository, listed with their repository and
-  stage; a task with no project is offered every open task, and keeps only those in its repository or in none, a
-  dropped one with no why). Core applies only the Auto parts
+  low) and `waits_on` (the open tasks of the task's project, in any repository, each listed with its repository,
+  stage, its request clipped to 280 characters and its plan's goal; a task with no project is offered every open
+  task, and keeps only those in its repository or in none, a dropped one with no why). A wait is for a direct
+  dependency only, and `waits_on_kind` names which: `needs_its_code` (it edits or calls code that exists only on that
+  task's unmerged branch), `asked_for` (the request asks for that order) or `shared_rewrite` (both heavily rewrite or
+  migrate the same files, so building in parallel means certain conflicts). Sharing an area, building on something
+  already on the default branch, a follow-up idea or "nicer after" never counts, and in doubt the answer is none; a
+  wait whose kind is `none`, missing or unknown is dropped and the task starts now. When start is Auto and an open
+  task of the same repository opens a pull request, triage also asks `stacks_on`: the one open change this task is
+  the next piece of and should ship with (a part of a split-up rewrite), or `none`, with a `stacks_on_why`. Core
+  stacks it there (`task.triage` `stacksOn`, `changeStack` by Shinsa, a wait on that task moving into the stack) only
+  while the task's own work opens a pull request and the parent passes `task.stack_on_tasks`' refusals, else drops it,
+  and keeps the choice as `triageDecisions.stack`, which the start fact's tooltip reads as "Stacks on ‹title›". Core applies only the Auto parts
   (`task.triaged` `pipeline`, `task.prioritized`, `task.waits_on_changed` by Shinsa) and keeps the decisions with their why on
   `task.triageDecisions`, so each fact can say why (the kind, the priority and when it starts, in their tooltips on the
   Overview: "Shinsa chose this: …"). The start and the priority each
@@ -1211,8 +1222,8 @@ and only the order in which finished work reaches you is managed.
 ### Dependencies
 
 A task can wait on other tasks (`task.waitsOn`, a list). They come from three places: the
-classifier (`waits_on`, only when the request needs that work to exist first, and only when you
-left When to start on Auto), you when creating the task (the composer's When to start: "After ‹task›"), or
+classifier (`waits_on`, only for a direct dependency named by its `waits_on_kind`, Task shapes above, and
+only when you left When to start on Auto), you when creating the task (the composer's When to start: "After ‹task›"), or
 later (the Waits on menu on the task page, the task's `•••` and context menus, All tasks' chain
 arrow, ⌘K's Wait for another task… and Stop waiting, all `task.wait_on` with the whole new list, recorded as
 `task.waits_on_changed`).
@@ -1252,7 +1263,9 @@ arrow, ⌘K's Wait for another task… and Stop waiting, all `task.wait_on` with
   pre-merge steps list each task it waits on as a row that ticks itself once that task finishes (`listMergeWaits`),
   on the review gate's card, the merge gate's card and the Review tab, so the hold is visible before you approve.
 - **Stacking is a bundle.** A plain dependent waits for its parents to finish and branches off the default branch. To
-  build on a parent's unmerged branch instead, stack it on that parent: a bundle (below).
+  build on a parent's unmerged branch instead, stack it on that parent: a bundle (below). The line between them: a
+  wait is for a separate feature that needs another's code merged first and ships on its own; a stack is for pieces
+  that ship at once, such as a large rewrite split into parts. Work that only touches the same area does neither.
 
 ### Bundles
 
@@ -1266,8 +1279,9 @@ stack-on <task> <below…>`, `shinsa tasks unstack`), all `task.stack_on_tasks` 
 it has; an empty list unstacks), recorded as `task.stack_changed`. Ticking a task in a picker adds it to the end of
 the list and unticking one removes only it, so the first pick stays the base. An agent files the next piece of a
 bundle with `create_task`'s `stack_on_this` (never with `this_task_waits` or `after_this`) and adds other parents with
-`stack_on` (`stacksOn` on `task.create`, this task first). Stacking on a task it already waits on moves that
-wait into the stack.
+`stack_on` (`stacksOn` on `task.create`, this task first), or splits its plan into a chain with `split_task`'s
+`stacked` (Delegation, below). Triage stacks a new task on an open change when it is that change's next piece
+(`stacks_on`, Task shapes, above). Stacking on a task it already waits on moves that wait into the stack.
 
 - **A graph, not a line.** A task can stack on several tasks and several tasks can stack on one, so a bundle fans out
   and back in: A, then B, C and D on A, then F on B, C and D, then E on F. A bundle is every task connected to a task
@@ -2549,7 +2563,10 @@ and the run supervisor.
   backlog), and its description tells agents to set it only when you asked to keep the work for later. It is
   exactly-once per `client_request_id`.
   `split_task` (the Agent) turns the accepted plan into one to eight tasks (`tasks[].request`), exactly once per plan
-  version, recorded on the task (`splits`, `planVersion`); a second call returns the same tasks. These are the only
+  version, recorded on the task (`splits`, `planVersion`); a second call returns the same tasks. With `stacked` the
+  parts are a bundle chained on this task (the first stacks on this task, each next one on the one before, all
+  merging together, Scheduling → Bundles), for a rewrite whose pieces ship at once; it is refused next to
+  `this_task_waits`. Without it each part starts at once and ships on its own. These are the only
   ways a task agent files a task: its management tools leave out `tasks create`, which stays for you and the command
   line.
 - **In the web.** Delegated runs show in their parent's turn (spawn, report, Stop, the child's own

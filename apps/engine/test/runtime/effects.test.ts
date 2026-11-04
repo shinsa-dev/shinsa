@@ -643,6 +643,40 @@ describe('triage', () => {
     expect(Object.values(engine.state.repos).map((repo) => repo.name)).toEqual(['app']);
   });
 
+  test('a task triage stacks is triaged onto the open change it names, in the same repository', async () => {
+    const { root } = await createGitRepo();
+    const config = createTestConfig(createTempDir(), { roots: [root] });
+    const eventLog = openEventLog(config.databasePath);
+    const engine = new Engine(eventLog);
+    await engine.dispatch({ type: 'task.create', request: 'Rewrite the store', repoId: null });
+    await engine.dispatch({
+      type: 'task.create',
+      request: 'Move the readers onto the new store',
+      repoId: null,
+    });
+    const [parent, task] = Object.values(engine.state.tasks);
+    const { runs } = createRuns();
+    const runner = new EffectRunner(engine, config, runs, createBriefings().briefings, {
+      shares: NO_SHARES,
+      previews: NO_PREVIEWS,
+      handoffs: NO_HANDOFFS,
+      resolveLogin: () => Promise.resolve(null),
+      triage: (_state, triaging, local) =>
+        Effect.succeed({
+          title: triaging.request,
+          repoPath: local[0]?.path ?? '',
+          size: 'small',
+          branch: triaging.id === parent?.id ? 'refactor/store' : 'refactor/store-readers',
+          waitsOn: [],
+          ...(triaging.id === task?.id && parent ? { stacksOn: [parent] } : {}),
+        }),
+    });
+    await runner.apply({ kind: 'task.triage', taskId: parent?.id ?? '' }, createContext());
+    await runner.apply({ kind: 'task.triage', taskId: task?.id ?? '' }, createContext());
+    expect(engine.state.tasks[task?.id ?? '']?.stacksOn).toEqual([parent?.id ?? '']);
+    expect(engine.state.tasks[parent?.id ?? '']?.stacksOn ?? []).toEqual([]);
+  });
+
   test('a repository outside the task’s project is bound while the task keeps its project, and filed by its owner', async () => {
     const { root } = await createGitRepo();
     const config = createTestConfig(createTempDir(), { roots: [root] });

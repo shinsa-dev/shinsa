@@ -682,10 +682,11 @@ describe('keeping a teammate’s last list', () => {
       held: [fresh, older, fresh, expired],
       now: () => 50 + TEAM_SNAPSHOT_TTL_MS,
     });
+    const heard: number[] = [];
+    const stopHearing = feeds.subscribeHeld(() => heard.push(1));
     feeds.start();
-    await until('the kept list is taken', () =>
-      feeds.snapshot().tasks.some((task) => task.instanceId === 'inst3')
-    );
+    await until('every kept list is checked', () => heard.length > 0);
+    stopHearing();
     await until('the teammate’s own list arrives', () =>
       feeds.snapshot().tasks.some((task) => task.instanceId === 'inst1')
     );
