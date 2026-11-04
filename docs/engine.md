@@ -1033,6 +1033,20 @@ folds in `state/shapes.ts`).
   (`by: you`, "kept as an investigation") and finishes it, so it takes follow-ups like any investigation. A message
   instead declines the proposal (`decline_proposal`) and resumes the inquiry agent with it; its next hand-over asks
   again.
+- **The agent's recommendation.** Before your OK the inquiry hand-over must set `recommend`: `go_on` when the work
+  should go on, `close` when it found nothing worth changing (a `close` beside `propose_change` is refused). It is kept
+  on the proposal. With `go_on` the card leads with "Make it a change" (or "Plan the operation") and keeps the
+  inquiry as the quiet link; with `close` its title says nothing was found ("The diagnosis found nothing to fix"), Close
+  (a veto, `closeProposal`) leads, and going on drops to the quiet link; ⌘K orders them the same way. A find-and-fix
+  diagnosis with `close` reshapes the task to `[investigate, your_ok, …]` (`by: agent`) so it stops for your OK instead
+  of planning a fix.
+- **Suggested replies.** Any hand-over but the reviewer's can carry up to three `actions` (`label`, `message`).
+  `task.actions_suggested` keeps them on `task.suggestedActions`; the next hand-over replaces them, and your message
+  that reaches the agent or your answer to a gate clears them (a message only kept for a later agent does not). The
+  plan, proposal, review, merge and result cards show them as outline buttons before the main one, ⌘K lists them as
+  "Suggested reply" while one of those gates is open, and both show them only while a message can reach the agent. A
+  click sends the message as yours (`task.message`), so it does what typing it does there: at review it asks for
+  changes in this round, at your OK it declines the proposal and resumes the inquiry.
 - **Changing shape mid-task.** An answerer, investigator or researcher can end with `propose_change` (`request` at most 2,000
   characters, `why` at most 240). On a task without `your_ok` whose pipeline does not already go on to a plan (a fix
   does), the agent's proposal reshapes the task to `[inquiry, your_ok, plan, build, checks, agent_review, your_review,

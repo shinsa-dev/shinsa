@@ -48,6 +48,7 @@ const GATE_REPLY = {
   makeChange: { decision: 'approve', done: 'Approved. Planning the change now.' },
   planOperation: { decision: 'approve', done: 'Approved. Planning the operation now.' },
   keepAsIs: { decision: 'reject', done: 'Kept as it is. The task is done.' },
+  closeProposal: { decision: 'reject', done: 'Closed. The task is done.' },
   runOperation: { decision: 'approve', done: 'Running the operation.' },
   runOperationWithNotes: { decision: 'reply', done: 'Running the operation with your notes.' },
   runOperationWithoutNotes: { decision: 'reply', done: 'Running the operation without notes.' },

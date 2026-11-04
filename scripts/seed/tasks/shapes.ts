@@ -22,6 +22,13 @@ const LEAK_PROPOSAL = {
   why: 'The stall comes from leaked connections, and the fix is a few lines in one function.',
 };
 
+const NO_RACE_DIAGNOSIS = [
+  'The double-charge reports all come from one customer who pressed Pay twice before the page answered.',
+  'Both requests carried the same idempotency key, so Stripe charged once and returned the same charge to the second request. The second line on the receipt is the confirmation email sent twice, not a second charge.',
+].join('\n\n');
+
+const NO_RACE_WHY = 'Found nothing worth changing, so the work goes on only with your OK.';
+
 const ROTATE_PLAN: PlanDocument = {
   goal: 'Rotate the webhook signing secret for every app without dropping a delivery.',
   phases: [
@@ -243,6 +250,60 @@ function listInquiryShapeTasks({ paywall, kanna }: SeedRepoPair): SeedTask[] {
         type: 'proposal',
         title: 'Turn this investigation into a fix?',
         body: `${LEAK_PROPOSAL.why}\n\n${LEAK_PROPOSAL.request}`,
+      },
+    },
+    {
+      id: 'task-shape-nothing-to-fix',
+      request: 'Some customers say they were charged twice at checkout. Find the cause and fix it.',
+      title: 'Find and fix the double charges at checkout',
+      repo: paywall,
+      size: 'small',
+      shape: 'fix',
+      stage: 'awaiting_proposal',
+      reason: 'a proposal waits for your OK',
+      branch: 'fix/double-charge',
+      ageHours: 1,
+      summary: NO_RACE_DIAGNOSIS,
+      runs: [{ role: 'investigator', minutes: 11, summary: 'Found no second charge.' }],
+      extra: [
+        {
+          type: 'task.delivered',
+          taskId: 'task-shape-nothing-to-fix',
+          step: 'investigate',
+          body: NO_RACE_DIAGNOSIS,
+          runId: 'task-shape-nothing-to-fix-run-0',
+        },
+        {
+          type: 'task.reshaped',
+          taskId: 'task-shape-nothing-to-fix',
+          pipeline: ['investigate', 'your_ok', ...SHAPE_PIPELINES.fix.slice(1)],
+          by: 'agent',
+          reason: NO_RACE_WHY,
+        },
+        {
+          type: 'task.change_proposed',
+          taskId: 'task-shape-nothing-to-fix',
+          request: 'Plan the change and build it. You review it before a pull request opens.',
+          why: NO_RACE_WHY,
+          recommend: 'close',
+          runId: 'task-shape-nothing-to-fix-run-0',
+        },
+        {
+          type: 'task.actions_suggested',
+          taskId: 'task-shape-nothing-to-fix',
+          actions: [
+            {
+              label: 'Send one confirmation email',
+              message: 'Send the payment confirmation email once per charge, even when Pay is pressed twice.',
+            },
+          ],
+          runId: 'task-shape-nothing-to-fix-run-0',
+        },
+      ],
+      gate: {
+        type: 'proposal',
+        title: 'Turn this investigation into a fix?',
+        body: `${NO_RACE_WHY}\n\nPlan the change and build it. You review it before a pull request opens.`,
       },
     },
     {

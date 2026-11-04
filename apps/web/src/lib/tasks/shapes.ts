@@ -86,7 +86,14 @@ const RESULT_IN: Record<InquiryStep, string> = {
   investigate: 'The diagnosis is in',
 };
 
-const GO_ON: Record<WorkStep, { label: string; reply: 'makeChange' | 'planOperation'; note: string }> = {
+export type ChangeReply = 'makeChange' | 'planOperation' | 'keepAsIs' | 'closeProposal';
+
+interface ChangeAction {
+  label: string;
+  reply: ChangeReply;
+}
+
+const GO_ON: Record<WorkStep, ChangeAction & { reply: 'makeChange' | 'planOperation'; note: string }> = {
   build: {
     label: 'Make it a change',
     reply: 'makeChange',
@@ -97,6 +104,18 @@ const GO_ON: Record<WorkStep, { label: string; reply: 'makeChange' | 'planOperat
     reply: 'planOperation',
     note: 'An operation gets a plan you approve before anything runs.',
   },
+};
+
+const CLOSE_TITLE: Record<InquiryStep, string> = {
+  answer: 'The answer calls for no change',
+  research: 'The report found nothing to change',
+  investigate: 'The diagnosis found nothing to fix',
+};
+
+const CLOSE: ChangeAction & { note: string } = {
+  label: 'Close',
+  reply: 'closeProposal',
+  note: 'The agent recommends closing. Close ends the task here and changes nothing.',
 };
 
 const KEEP_LABEL: Record<InquiryStep, string> = {
@@ -170,19 +189,37 @@ function isAddedByProposal(task: Task) {
   return (task.shapeChanges ?? []).some((change) => change.at === at && !change.from.includes('your_ok'));
 }
 
-export function describeChangeGate(task: Task, gate: Gate) {
+interface ChangeGate {
+  eyebrow: string;
+  title: string;
+  why: string;
+  request: string;
+  requestLabel: string;
+  primary: ChangeAction & { note: string };
+  quiet: ChangeAction;
+}
+
+function resolveRequestLabel(close: boolean, composed: boolean) {
+  if (close) return 'If you go on';
+  return composed ? 'What comes next' : 'What it would change';
+}
+
+export function describeChangeGate(task: Task, gate: Gate): ChangeGate {
   const step = resolveChangeStep(task);
   const pipeline = resolveTaskPipeline(task);
-  const composed = pipeline.includes('your_ok') && !isAddedByProposal(task);
   const open = task.proposal?.status === 'open' ? task.proposal : null;
+  const close = open?.recommend === 'close';
+  const composed = close || (pipeline.includes('your_ok') && !isAddedByProposal(task));
+  const goOn = GO_ON[resolveWorkStep(pipeline) ?? 'build'];
   const [why = '', ...rest] = gate.body.split('\n\n');
   return {
     eyebrow: composed ? RESULT_IN[step] : CHANGE_EYEBROW[step],
-    keep: KEEP_LABEL[step],
+    title: close ? CLOSE_TITLE[step] : gate.title,
     why: open?.why ?? why,
     request: open?.request ?? rest.join('\n\n'),
-    requestLabel: composed ? 'What comes next' : 'What it would change',
-    goOn: GO_ON[resolveWorkStep(pipeline) ?? 'build'],
+    requestLabel: resolveRequestLabel(close, composed),
+    primary: close ? CLOSE : goOn,
+    quiet: close ? { label: goOn.label, reply: goOn.reply } : { label: KEEP_LABEL[step], reply: 'keepAsIs' },
   };
 }
 
