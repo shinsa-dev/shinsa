@@ -1454,13 +1454,26 @@ engine ran out of automatic recovery, an agent's wait ran out of time or check-i
 reached its usage or cost limit (`cause: budget`), or the
 repository's pre-push hook rejected the push again with the same failures after a fix round (`cause: push_hook`; its
 approve is Send to the agent again, another fix round with the hook's output, and its `reply` adds your words; there is
-no way to push without the hook; Pushing the branch, below). `configuration` means setup verification found something missing
+no way to push without the hook; Pushing the branch, below), or you paused the task (`cause: paused`, "You paused the
+task"; Pausing a task, below). `configuration` means setup verification found something missing
 before any agent started. `sign_in` means a provider needs signing in again: the gate names the provider
 (`Gate.provider`, `claude` for a Claude account) and, for Claude, the account (Accounts and usage limits, below).
 The plan gate opens by one rule, `PLAN_GATE_RULE`: always for a task that runs an operation, a task created plan
 first, a task in the backlog (whose plan gate is held out of Needs you until you start it, Scheduling → The backlog)
 or a plan that asks for `approval`; with Approve plans on Large plans, also for a plan with more than 3 phases or
 6 files (`PLAN_SIZE_LIMITS`) or a revised plan; on Always, for every plan. Nothing else waits on you. A failure, configuration or Sign in gate pauses the task (`isPausingGate`).
+
+**Pausing a task.** Pause (the task's header, its menu, ⌘K, `shinsa tasks pause`, an agent's `tasks_pause`) sends
+`task.pause` (`decide/pause.ts`) while something works on the task: triage, planning, building, checks, review,
+fixing, shipping, an inquiry or an operation (`isTaskPausable`). It stops every active run of the task, delegated runs
+included (`run.cancel` closes each run's scope, which interrupts the provider's turn at once), cancels the effects
+still running for it (triage, setup verification, the worktree, checks, opening or pushing the pull request), and
+opens the failure gate "You paused the task" with `cause: paused`. The stage stays what it was, so Resume, the gate's
+approve (Retry), restarts that step in the task's own session (`retryTask`), and a message resumes it with your words
+as guidance, like any failure gate; reject cancels the task. Pause is refused (`not_pausable`) on a task that is
+settled, already at a pausing gate, resting at your decision (a plan, review, merge, your OK, a result or an
+operation to run), waiting on other tasks, or watching after the merge. A task whose agent asked you a question can be
+paused: its run is stopped, so the question is withdrawn with it. An agent may pause a task for you, but only you resume it, since resuming closes a gate.
 
 Every gate is yours: only you close it. Core refuses a `gate.answer` sent on your behalf, and any command on your
 behalf after which an open gate is no longer open, with `human_only` (Who can change Shinsa, below).

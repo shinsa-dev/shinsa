@@ -655,7 +655,7 @@ Soft gates, decided by Shinsa or the reviewer:
 | `openedAt`, `answeredAt`, `decision`, `response` | | your answer and its words |
 | `planVersion?` | number | the plan version a plan gate is for |
 | `choices?`, `recommendation?` | | a question's one-click answers |
-| `cause?` | `budget` \| `monitor` \| `push_hook` | why a failure gate opened, when not plain recovery; `push_hook` is the same pre-push hook failure after a fix round, whose approve (Send to the agent again) starts another fix round |
+| `cause?` | `budget` \| `monitor` \| `push_hook` \| `paused` | why a failure gate opened, when not plain recovery; `push_hook` is the same pre-push hook failure after a fix round, whose approve (Send to the agent again) starts another fix round; `paused` is your `task.pause`, whose approve (Resume) restarts the step |
 | `escalation?` | reason (`rounds`, `stalled`, `exhausted`), rounds | an escalated review |
 | `verdicts?` | `{ index, verdict: fix \| dismiss, note }[]` | your per-finding decisions |
 | `supersededBy?` | string \| null | the message that withdrew a question |
@@ -822,6 +822,7 @@ your behalf (`onBehalf`, `byTask`). **Human** = only you: its specs are `humanOn
 | `task.remove_from_backlog` | takes it out; its plan waits in Needs you ("plan ready for you"); a task not there records nothing | `tasks remove-from-backlog` | agent |
 | `task.snooze` | snoozes an open task in any step: its gates leave `ready` and it is listed in `queue.snoozed`, nothing else changes; refused for a settled task (`task_settled`); a snoozed task records nothing | `tasks snooze` | agent |
 | `task.unsnooze` | clears the snooze: the task shows where it is now; a task not snoozed records nothing | `tasks unsnooze` | agent |
+| `task.pause` | pauses a working task: cancels its active runs (delegations included) and its running triage, setup, worktree, checks and push effects, then opens the failure gate "You paused the task" (`cause: paused`) on the same stage; refused (`not_pausable`) unless the task is triaging or in a working stage (`isTaskPausable`) with no pausing gate open | `tasks pause` | agent |
 | `task.retry` | restarts the current step with a fresh budget, optionally on an account | `tasks retry`, `tasks rerun` | agent |
 | `task.cancel` | cancels it, and stops its watchdogs | `tasks cancel` | agent |
 | `task.share` | shares it by a link that reads it live from this machine (`share.link` makes it), for `limit` and as `preset` (the `shareLimit` and `sharePreset` settings when left out); again with another `limit` or `preset` it changes how long or what it shows and keeps the link; again on a failed share it asks for the link once more; an automation's home, or `until_done` on a finished task, is refused (`share_refused`) | `tasks share [--until] [--preset]` | **human** |

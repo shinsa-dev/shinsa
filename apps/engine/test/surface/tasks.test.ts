@@ -341,6 +341,11 @@ describe('the task commands', () => {
       { type: 'round.send', taskId: 'task-123', number: 2 },
       'Sent the queued round to the current round.',
     ],
+    [
+      ['tasks', 'pause', 'fix'],
+      { type: 'task.pause', taskId: 'task-123' },
+      'Paused. Retry or send a message to resume it.',
+    ],
     [['tasks', 'retry', 'fix'], { type: 'task.retry', taskId: 'task-123' }, 'Retrying.'],
     [
       ['tasks', 'retry', 'fix', '--account', 'acc-1'],

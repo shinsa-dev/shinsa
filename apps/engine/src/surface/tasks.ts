@@ -412,6 +412,20 @@ export const TASK_SPECS: SurfaceSpec[] = [
     done: () => 'Sent the queued round to the current round.',
   }),
   defineCommand({
+    path: ['tasks', 'pause'],
+    summary:
+      'Pause a working task: its agent stops at once and the task waits for you. `shinsa tasks retry` resumes it.',
+    command: 'task.pause',
+    fields: [TASK_FIELD],
+    build: Effect.fn('Surface.tasksPause')(function* (values, client) {
+      return {
+        type: 'task.pause' as const,
+        taskId: yield* findTaskId(client, readValue(values, 'task')),
+      };
+    }),
+    done: () => 'Paused. Retry or send a message to resume it.',
+  }),
+  defineCommand({
     path: ['tasks', 'retry'],
     summary: "Restart a paused task's current step with a fresh fix budget.",
     command: 'task.retry',

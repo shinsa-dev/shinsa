@@ -334,6 +334,20 @@ Every task agent's tool: `tasks_message`. Sends `task.message`.
 | `<text>` | text, required | The message. |
 | `--as` | choice, optional | feedback on the current round (a follow-up on a finished one), acknowledge for a message that needs nothing, new_round for new work in this task, or separate_task to suggest it as its own task. Left out, Shinsa decides. |
 
+#### shinsa tasks pause
+
+Pause a working task: its agent stops at once and the task waits for you. `shinsa tasks retry` resumes it.
+
+```
+shinsa tasks pause <task> [--json]
+```
+
+Every task agent's tool: `tasks_pause`. Sends `task.pause`.
+
+| Argument | Kind | What it is |
+| --- | --- | --- |
+| `<task>` | text, required | The task: its handle (SW-142), its id, the start of its id, or its exact title. |
+
 #### shinsa tasks retry
 
 Restart a paused task's current step with a fresh fix budget.
