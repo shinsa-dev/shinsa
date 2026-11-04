@@ -2,6 +2,7 @@ import {
   type AccountsSnapshot,
   CLAUDE_PROVIDER,
   DAY_MS,
+  FORECAST_LIMITS,
   type ForecastAccount,
   type ForecastOutage,
   type ForecastSegment,
@@ -14,7 +15,7 @@ import {
   type ShinsaState,
   type UsageForecast,
 } from '@shinsa/core';
-import { formatTurnaround } from '@/lib/format/time.ts';
+import { formatDaysAndHours } from '@/lib/format/time.ts';
 
 export interface ProviderForecast {
   provider: string;
@@ -109,14 +110,14 @@ export function describeTightest(forecast: UsageForecast, now: number) {
   const tightest = forecast.tightest;
   if (!tightest) return null;
   const label = selectLabel(forecast, tightest.accountId);
-  return `Tightest point at the safe pace: ${formatPace(tightest.leftBefore)} left just before ${label} resets in ${formatTurnaround(tightest.at - now)}.`;
+  return `Tightest point at the safe pace: ${formatPace(tightest.leftBefore)} left just before ${label} resets in ${formatDaysAndHours(tightest.at - now)}.`;
 }
 
 export function describeRecentPace(forecast: UsageForecast, now: number) {
   if (forecast.currentPace === null) return 'No measured usage in the last 24 hours.';
   const pace = `In the last 24 hours you used ${formatPace(forecast.currentPace)}.`;
   if (forecast.runsOutAt === null) return `${pace} At that pace your accounts last the week.`;
-  return `${pace} At that pace every account runs out in ${formatTurnaround(forecast.runsOutAt - now)}.`;
+  return `${pace} At that pace every account runs out in ${formatDaysAndHours(forecast.runsOutAt - now)}.`;
 }
 
 export function isPaceApplied(forecast: UsageForecast, dailyUsageLimit: number | null | undefined) {
@@ -189,8 +190,8 @@ export function describeOutages(timeline: ForecastTimeline, now: number) {
   const first = timeline.outages[0];
   if (!first) return null;
   const total = timeline.outages.reduce((sum, outage) => sum + outage.to - outage.from, 0);
-  const start = first.from <= now ? 'now' : `in ${formatTurnaround(first.from - now)}`;
-  return `At ${formatPace(timeline.pace)} a day every account is out of usage for ${formatTurnaround(total)} in all, starting ${start}.`;
+  const start = first.from <= now ? 'now' : `in ${formatDaysAndHours(first.from - now)}`;
+  return `At ${formatPace(timeline.pace)} a day every account is out of usage for ${formatDaysAndHours(total)} in all, starting ${start}.`;
 }
 
 export function listOutageSpans(forecast: UsageForecast, outages: readonly ForecastOutage[]) {
@@ -205,24 +206,32 @@ export function resolveUsableShare(segment: ForecastSegment) {
   return segment.to === segment.from ? 0 : Math.max(0, (end - segment.from) / (segment.to - segment.from));
 }
 
+function resolveSegmentEnd(forecast: UsageForecast, segment: ForecastSegment) {
+  if (segment.to < forecast.to) return segment.to;
+  const resetsAt = forecast.accounts.find((account) => account.id === segment.accountId)?.resetsAt ?? null;
+  if (resetsAt === null) return null;
+  const weeks = Math.max(0, Math.floor((segment.from - resetsAt) / FORECAST_LIMITS.weekMs) + 1);
+  return resetsAt + weeks * FORECAST_LIMITS.weekMs;
+}
+
 export function describeSegment(forecast: UsageForecast, segment: ForecastSegment, now: number) {
-  const lastsTheWeek = segment.to >= forecast.to;
+  const end = resolveSegmentEnd(forecast, segment);
   const outFor = (from: number) =>
-    lastsTheWeek ? 'for the rest of the week' : `for ${formatTurnaround(segment.to - from)}`;
+    end === null ? 'with no known reset' : `for ${formatDaysAndHours(end - from)}`;
   if (segment.emptyAt !== null && segment.emptyAt <= Math.max(segment.from, now)) {
     return `Out of usage ${outFor(Math.max(segment.from, now))}.`;
   }
   const left = formatPace(segment.left);
   const head =
-    segment.from <= now ? `${left} left` : `Resets to ${left} in ${formatTurnaround(segment.from - now)}`;
+    segment.from <= now ? `${left} left` : `Resets to ${left} in ${formatDaysAndHours(segment.from - now)}`;
   if (segment.emptyAt !== null) {
-    return `${head}. Runs out in ${formatTurnaround(segment.emptyAt - now)}, then out ${outFor(segment.emptyAt)}.`;
+    return `${head}. Runs out in ${formatDaysAndHours(segment.emptyAt - now)}, then out ${outFor(segment.emptyAt)}.`;
   }
-  if (lastsTheWeek || segment.from > now) return `${head}.`;
-  return `${head}. Resets in ${formatTurnaround(segment.to - now)}.`;
+  if (end === null || segment.from > now) return `${head}.`;
+  return `${head}. Resets in ${formatDaysAndHours(end - now)}.`;
 }
 
 export function describeOutage(outage: ForecastOutage, now: number) {
-  const start = outage.from <= now ? 'from now' : `starting in ${formatTurnaround(outage.from - now)}`;
-  return `All accounts out for ${formatTurnaround(outage.to - outage.from)}, ${start}.`;
+  const start = outage.from <= now ? 'from now' : `starting in ${formatDaysAndHours(outage.from - now)}`;
+  return `All accounts out for ${formatDaysAndHours(outage.to - outage.from)}, ${start}.`;
 }

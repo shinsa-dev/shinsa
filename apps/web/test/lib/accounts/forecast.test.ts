@@ -181,7 +181,7 @@ describe('the forecast in words', () => {
       `Up to ${formatPace(forecast.safePace)} of a weekly limit a day keeps you going for the next 7 days.`
     );
     expect(describeTightest(forecast, NOW)).toMatch(
-      /^Tightest point at the safe pace: .+% left just before (work|home)@example\.com resets in (15h|2\.6d)\.$/
+      /^Tightest point at the safe pace: .+% left just before (work|home)@example\.com resets in (15h|2d 15h)\.$/
     );
     expect(describeRecentPace(forecast, NOW)).toMatch(
       /^In the last 24 hours you used 40%\. At that pace every account runs out in .+\.$/
@@ -253,12 +253,20 @@ describe('the timeline', () => {
     const later = { accountId: 'work', from: NOW + 15 * HOUR_MS, to: forecast.to, left: 100, emptyAt: null };
     expect(describeSegment(forecast, later, NOW)).toBe('Resets to 100% in 15h.');
     expect(describeSegment(forecast, { ...later, left: 0, emptyAt: later.from }, NOW)).toBe(
-      'Out of usage for the rest of the week.'
+      'Out of usage for 7d.'
     );
     expect(describeSegment(forecast, { ...later, emptyAt: NOW + 2 * DAY }, NOW)).toBe(
-      'Resets to 100% in 15h. Runs out in 2d, then out for the rest of the week.'
+      'Resets to 100% in 15h. Runs out in 2d, then out for 5d 15h.'
     );
-    expect(describeSegment(forecast, { ...stretch, to: forecast.to }, NOW)).toBe('8% left.');
+    expect(describeSegment(forecast, { ...stretch, to: forecast.to }, NOW)).toBe('8% left. Resets in 15h.');
+    const unknown = {
+      ...forecast,
+      accounts: forecast.accounts.map((account) => ({ ...account, resetsAt: null })),
+    };
+    expect(describeSegment(unknown, { ...later, left: 0, emptyAt: later.from }, NOW)).toBe(
+      'Out of usage with no known reset.'
+    );
+    expect(describeSegment(unknown, { ...stretch, to: forecast.to }, NOW)).toBe('8% left.');
   });
 
   it('fills each stretch as far as it has usage', () => {
