@@ -228,6 +228,7 @@ export {
   isHeldBy,
   isTaskInScope,
   listScopedTasks,
+  resolveScopedTerminals,
   type ScopedActor,
   TEAM_COMMANDS,
   TEAM_SCOPE_MESSAGES,

@@ -36,6 +36,7 @@ import {
 import { createServicePreview, respondToggle } from './services.ts';
 import { createPreviewShares, respondShareConnect } from './shares.ts';
 import { teammateLink } from './team.ts';
+import { seedTeammateWork } from './teammate-work.ts';
 import { TUNNEL_SOCKET, upgradeTunnel } from './tunnel.ts';
 
 export const startSandbox = Effect.fn('Sandbox.start')(function* () {
@@ -70,6 +71,7 @@ export const startSandbox = Effect.fn('Sandbox.start')(function* () {
   const studioProject = yield* selectBusiestProject(studio.engine);
   yield* shareProjectWithTeam(studio.engine, studioProject);
   const [teamTask] = Object.values((yield* teammate.engine.core.state).tasks);
+  yield* seedTeammateWork(teammate, teammateData, teamTask);
   const keptOver = yield* seedTeammateDuplicate(studio.engine, studioProject, teamTask);
   const machines = [studio.machine, laptop.machine];
   const teammates = [...machines, teammate.machine];
@@ -86,7 +88,7 @@ export const startSandbox = Effect.fn('Sandbox.start')(function* () {
   });
   let page = serializeSandboxPage(sections, findRemoteStylesheet());
   const cloud = yield* Effect.try({
-    try: () => createSandboxCloud(SANDBOX_DIR, new URL(PREVIEW_ZONE).host, USER.id, machines),
+    try: () => createSandboxCloud(SANDBOX_DIR, new URL(PREVIEW_ZONE).host, USER.id, teammates),
     catch: (error) => new SandboxFailed({ message: `Starting the stand-in cloud failed: ${String(error)}` }),
   });
 
@@ -126,7 +128,7 @@ export const startSandbox = Effect.fn('Sandbox.start')(function* () {
             const url = new URL(request.url);
             const socket = request.headers.get('upgrade')?.toLowerCase() === 'websocket';
             if (socket && isPreviewHost(url.host, PREVIEW_ZONE))
-              return upgradePreview(request, url, machines, server);
+              return upgradePreview(request, url, teammates, server);
             const tunneled = upgradeTunnel(request, url, teammates, server);
             if (tunneled !== null) return tunneled;
             return run(respond(request, url));

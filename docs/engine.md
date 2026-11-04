@@ -3901,8 +3901,12 @@ engine enrols and relays (Teammates act on team tasks, below). Teams need remote
   - **Services** (`remote/previews.ts`, `routes/preview-open/` in `apps/cloud`). A teammate with `services` opens any
     running service of a team task at its private address (`<hash>.shinsa.page`), as you do over remote access:
     app.shinsa.dev admits an account that shares a team with the machine's owner, and the machine admits them for a
-    run of a team task only. A service started outside a task stays yours. Losing the right or the project leaving the
-    team closes their open connections.
+    run of a team task only. A service started outside a task stays yours. The task page finds the run because the
+    machine answers a teammate's `/api/terminals`, and sends their socket its `terminals` message, scoped by
+    `resolveScopedTerminals`: only the service runs of tasks in their scope, with each service's environment
+    emptied and no home folder, and nothing at all without `services`. Their Services fact shows each run's state
+    and Open, with no terminal, start, restart or stop. Losing the right or the project leaving the team closes
+    their open connections.
   - **Forking.** Anyone in the team forks a teammate's task onto their own machine, as Forking a task →
     Forking a teammate's task says; no right gates it, since nothing changes on the teammate's machine.
   - **Sharing.** A teammate with `share` makes and stops share links, status shares and service previews of team

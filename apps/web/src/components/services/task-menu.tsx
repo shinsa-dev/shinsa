@@ -35,7 +35,7 @@ export function TaskServicesPanel({
 }: {
   task: Pick<Task, 'handle'>;
   views: ServiceView[];
-  project: Project;
+  project: Project | null;
   now: number;
   handlers: ServiceHandlers;
 }) {
@@ -58,8 +58,8 @@ export function TaskServicesFact({ state, task }: { state: ShinsaState; task: Ta
   const now = useNow();
   const { handlers } = useServiceActions({ state, onNavigate: () => setOpen(false) });
   const views = listTaskServices(state, snapshot, task, now);
-  const project = state.projects[resolveTaskProject(state, task) ?? ''];
-  if (views.length === 0 || !project) return null;
+  const project = state.projects[resolveTaskProject(state, task) ?? ''] ?? null;
+  if (views.length === 0) return null;
   const fact = describeTaskServicesFact(views);
   return (
     <Popover open={open} onOpenChange={setOpen}>

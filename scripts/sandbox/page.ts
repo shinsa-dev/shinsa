@@ -169,6 +169,11 @@ export function listSandboxSections(
                   'One of Kai’s tasks on Studio as a full task page, through Studio’s relay (read-only while Kai’s MacBook is offline)',
                 url: `http://${HOST}:${studioPort}${teamTask}`,
               },
+              {
+                label:
+                  'Its Evidence shows Kai’s screenshot through the relay, and Open on its running web service goes to the service’s private address',
+                url: `http://${HOST}:${studioPort}${teamTask}`,
+              },
             ]
           : []),
         {

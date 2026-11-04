@@ -602,7 +602,7 @@ const ServiceParams = { serviceId: Schema.String };
 
 class TerminalsGroup extends HttpApiGroup.make('terminals')
   .add(
-    HttpApiEndpoint.get('list', '/api/terminals', { success: TerminalsAnswer }),
+    HttpApiEndpoint.get('list', '/api/terminals', { success: TerminalsAnswer }).annotate(GuestRoute, 'any'),
     HttpApiEndpoint.get('foreground', '/api/terminals/:terminalId/foreground', {
       params: TerminalParams,
       success: ObjectAnswer,

@@ -187,7 +187,7 @@ export const respondDashboard = Effect.fn('Sandbox.respondDashboard')(function* 
   if (team) return team;
   const session = respondSession(request, url);
   if (session) return session;
-  if (pathname === REMOTE_PATHS.previewOpen) return yield* respondPreviewOpen(url, machines);
+  if (pathname === REMOTE_PATHS.previewOpen) return yield* respondPreviewOpen(url, teammates);
   if (pathname === REMOTE_PATHS.instances)
     return Response.json(yield* listInstances(machines, teammates, user));
   if (pathname.startsWith(`${REMOTE_PATHS.pairs}/`)) {
