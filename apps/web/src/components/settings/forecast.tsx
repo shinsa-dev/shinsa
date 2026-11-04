@@ -1,8 +1,16 @@
-import { MINUTE_MS, type Settings, type ShinsaState, type UsageForecast } from '@shinsa/core';
+import {
+  type ForecastTimeline,
+  MINUTE_MS,
+  resolveForecastTimeline,
+  type Settings,
+  type ShinsaState,
+  type UsageForecast,
+} from '@shinsa/core';
 import { Button } from '@shinsa/ui/components/button';
 import { Truncate } from '@shinsa/ui/components/truncate';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
+import { Choice } from '@/components/controls/choice.tsx';
 import { Hint } from '@/components/overlays/hint.tsx';
 import { useMinute } from '@/hooks/use-minute.ts';
 import {
@@ -12,19 +20,23 @@ import {
   describeSafePace,
   describeSegment,
   describeTightest,
-  describeTimelinePace,
   FORECAST_TITLE,
+  type ForecastPaceChoice,
   type ForecastLane,
   formatForecastDay,
   formatPace,
   isPaceApplied,
   listForecastDays,
   listForecastLanes,
+  listForecastPaces,
+  listOutageSpans,
   listProviderForecasts,
   type ProviderForecast,
   FORECAST_LEGEND,
+  resolveDefaultPace,
   resolveForecastShare,
   resolveUsableShare,
+  selectForecastPace,
 } from '@/lib/accounts/forecast.ts';
 import { useAccounts } from '@/lib/connection/accounts.ts';
 import { useEngineFeature } from '@/lib/connection/socket.ts';
@@ -64,7 +76,8 @@ function Lane({ forecast, lane }: { forecast: UsageForecast; lane: ForecastLane 
 const LEGEND_SWATCH = {
   usable: 'h-2 w-3 rounded-xs bg-primary/50',
   empty: 'h-2 w-3 rounded-xs bg-bg-a2',
-  outage: 'h-2 w-3 rounded-xs bg-orange-a3',
+  outage: 'h-2 w-3 rounded-xs bg-orange-a4',
+  tightest: 'h-2.5 w-0.5 rounded-full bg-orange-4',
 } as const;
 
 function Legend() {
@@ -83,20 +96,28 @@ function Legend() {
   );
 }
 
-function Outages({ forecast }: { forecast: UsageForecast }) {
-  return forecast.outages.map((outage) => {
-    const start = resolveForecastShare(forecast, outage.from);
-    const end = resolveForecastShare(forecast, outage.to);
-    return (
-      <span
-        key={outage.from}
-        aria-hidden
-        data-outage
-        className='absolute -inset-y-1 rounded-xs bg-orange-a3'
-        style={{ left: `${start * 100}%`, width: `${(end - start) * 100}%` }}
-      />
-    );
-  });
+function Outages({ forecast, timeline }: { forecast: UsageForecast; timeline: ForecastTimeline }) {
+  return listOutageSpans(forecast, timeline.outages).map((span) => (
+    <span
+      key={span.at}
+      aria-hidden
+      data-outage
+      className='absolute -inset-y-1 rounded-xs bg-orange-a4'
+      style={{ left: `${span.start * 100}%`, width: `${span.width * 100}%` }}
+    />
+  ));
+}
+
+function TightestMark({ forecast }: { forecast: UsageForecast }) {
+  if (!forecast.tightest) return null;
+  return (
+    <span
+      aria-hidden
+      data-tightest
+      className='absolute -inset-y-1 w-0.5 -translate-x-1/2 rounded-full bg-orange-4'
+      style={{ left: `${resolveForecastShare(forecast, forecast.tightest.at) * 100}%` }}
+    />
+  );
 }
 
 function DayAxis({ forecast }: { forecast: UsageForecast }) {
@@ -118,17 +139,15 @@ function DayAxis({ forecast }: { forecast: UsageForecast }) {
   );
 }
 
-function Timeline({ forecast }: { forecast: UsageForecast }) {
-  const lanes = listForecastLanes(forecast);
+function Timeline({ forecast, timeline }: { forecast: UsageForecast; timeline: ForecastTimeline }) {
+  const lanes = listForecastLanes(forecast, timeline);
+  const atSafePace = timeline.pace === forecast.safePace;
   return (
     <div className={cn('flex flex-col gap-1.5 py-2.5', ROW_INSET)}>
-      <div className='flex gap-3'>
-        <span className={cn(LANE_LABEL, 'max-sm:hidden')} />
-        <span className='min-w-0 flex-1 text-2xs text-fg-2'>{describeTimelinePace(forecast)}</span>
-      </div>
       <div className='relative flex flex-col gap-1.5'>
         <div className='pointer-events-none absolute inset-y-0 right-0 left-[calc(--spacing(24)+--spacing(3))] sm:left-[calc(--spacing(36)+--spacing(3))]'>
-          <Outages forecast={forecast} />
+          <Outages forecast={forecast} timeline={timeline} />
+          {atSafePace && timeline.outages.length === 0 && <TightestMark forecast={forecast} />}
         </div>
         {lanes.map((lane) => (
           <Lane key={lane.account.id} forecast={forecast} lane={lane} />
@@ -157,8 +176,15 @@ function ApplyPaceButton({ forecast, settings }: { forecast: UsageForecast; sett
 
 function ForecastBlock({ entry, settings }: { entry: ProviderForecast; settings: Settings }) {
   const { forecast } = entry;
+  const [choice, setChoice] = React.useState<ForecastPaceChoice>(() => resolveDefaultPace(forecast));
+  const paces = listForecastPaces(forecast);
+  const chosen = selectForecastPace(forecast, choice);
+  const timeline = React.useMemo(
+    () => resolveForecastTimeline(forecast, chosen.pace),
+    [forecast, chosen.pace]
+  );
   const tightest = describeTightest(forecast, forecast.from);
-  const outages = describeOutages(forecast, forecast.from);
+  const outages = describeOutages(timeline, forecast.from);
   const paced = useEngineFeature('usage.pace_limits');
   return (
     <SettingsBlock
@@ -175,7 +201,18 @@ function ForecastBlock({ entry, settings }: { entry: ProviderForecast; settings:
       <div className={SETTING_ROW}>
         <span className='min-w-0 flex-1 text-xs text-fg-4'>{describeSafePace(forecast)}</span>
       </div>
-      <Timeline forecast={forecast} />
+      {paces.length > 1 && (
+        <div className={cn(SETTING_ROW, 'flex-wrap gap-y-1.5')}>
+          <span className='min-w-0 flex-1 text-xs text-fg-2'>Timeline at</span>
+          <Choice<ForecastPaceChoice>
+            label='Timeline pace'
+            items={paces}
+            value={chosen.value}
+            onValueChange={setChoice}
+          />
+        </div>
+      )}
+      <Timeline forecast={forecast} timeline={timeline} />
       {outages && (
         <div className={SETTING_ROW}>
           <span className='min-w-0 flex-1 text-xs text-fg-4'>{outages}</span>

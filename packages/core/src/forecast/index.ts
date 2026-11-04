@@ -5,6 +5,7 @@ import type {
   ForecastOutage,
   ForecastReset,
   ForecastSegment,
+  ForecastTimeline,
   UsageForecast,
 } from './schema.ts';
 
@@ -13,6 +14,7 @@ export type {
   ForecastOutage,
   ForecastReset,
   ForecastSegment,
+  ForecastTimeline,
   UsageForecast,
 } from './schema.ts';
 
@@ -163,6 +165,15 @@ function byAccount(order: readonly ForecastAccount[]) {
     (rank.get(a.accountId) ?? 0) - (rank.get(b.accountId) ?? 0) || a.from - b.from;
 }
 
+export function resolveForecastTimeline(forecast: UsageForecast, pace: number): ForecastTimeline {
+  const timeline = simulate(forecast.accounts, pace, forecast.from, forecast.to);
+  return {
+    pace,
+    segments: [...timeline.segments].sort(byAccount(forecast.accounts)),
+    outages: timeline.outages,
+  };
+}
+
 export function resolveUsageForecast(
   accounts: readonly ForecastAccount[],
   now: number,
@@ -175,15 +186,10 @@ export function resolveUsageForecast(
   const safe = simulate(ordered, safePace, now, to);
   const pace = currentPace ?? 0;
   const current = pace > 0 ? simulate(ordered, pace, now, to) : null;
-  const faster = current !== null && pace > safePace;
-  const timeline = faster ? current : safe;
   return {
     from: now,
     to,
     accounts: ordered,
-    segments: [...timeline.segments].sort(byAccount(ordered)),
-    outages: timeline.outages,
-    timelinePace: faster ? pace : safePace,
     resets: safe.resets,
     safePace,
     tightest: selectTightest(safe.resets),

@@ -2040,7 +2040,7 @@ checks it ran.
   project's usage limit (its dialog, or `shinsa projects write --usage-limit`, 0 for off) counts only its tasks.
   Like the task limit they are checked when a step would start (`dispatchRuns`, after the task limit), never
   mid-turn, and never for work an agent delegates within a step that already started. When the last 24 hours
-  reach a limit (`resolvePaceHold`; with both reached, the one that frees up later), the queued step ends unstarted
+  reach a limit (`resolvePaceHold`; with both reached, the one that frees up later), the queued step ends before it starts
   (`cancelled`, "Held at a usage limit before it started."), so no run stays queued and none is active while the
   wait is armed, and the task arms a pace hold: a usage wait with `cause: pace`, `runId` the held step, `pace` (the scope `daily` or `project`, the limit,
   the usage when it held, the project and the stage reason it had), `resetAt` the time the window frees up and
@@ -2066,9 +2066,10 @@ checks it ran.
   limit resets soonest takes over (Accounts and usage limits, below). Settings → Agent usage → Forecast draws one block per provider (`components/settings/forecast.tsx`,
   `lib/accounts/forecast.ts`): every Claude account together, and each other provider's own login alone, each with
   its pace, a lane per account across the week (blue while the account has usage at the timeline's pace, grey once
-  it runs out, a gap at each reset, and an orange band wherever every account is out at once: `outages`), the
-  timeline drawn at the safe pace or at the last 24 hours' pace when that is faster (`timelinePace`), the tightest
-  point in words and the last 24 hours of that provider (meters on an account's window for
+  it runs out, a gap at each reset, and an orange band wherever every account is out at once: `outages`), drawn at a
+  pace you pick (`resolveForecastTimeline`: the safe pace, the last 24 hours, or one and a half or twice the safe pace;
+  the last 24 hours first when it is faster), a thin orange line at the tightest point when the safe pace is drawn,
+  the tightest point in words and the last 24 hours of that provider (meters on an account's window for
   Claude, `provider:<id>` for the rest). Use as daily limit sends `settings.change` with `dailyUsageLimit` set to the
   pace; the forecast is worked out again on every accounts refresh and every minute.
 

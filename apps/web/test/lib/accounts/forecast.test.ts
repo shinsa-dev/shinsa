@@ -1,21 +1,31 @@
 import { describe, expect, it } from 'bun:test';
-import { HOUR_MS, type Run, type RunMeter, resolveUsageForecast, type ShinsaState } from '@shinsa/core';
+import {
+  HOUR_MS,
+  resolveForecastTimeline,
+  type Run,
+  type RunMeter,
+  resolveUsageForecast,
+  type ShinsaState,
+} from '@shinsa/core';
 import {
   describeOutages,
   describeRecentPace,
   describeSafePace,
   describeSegment,
   describeTightest,
-  describeTimelinePace,
   formatForecastDay,
   formatPace,
   isPaceApplied,
   listForecastDays,
   listForecastLanes,
+  listForecastPaces,
+  listOutageSpans,
   listProviderForecasts,
+  resolveDefaultPace,
   resolveForecastShare,
   resolveRecentPace,
   resolveUsableShare,
+  selectForecastPace,
 } from '@/lib/accounts/forecast.ts';
 import { createAccount, createSnapshot, createWindow } from '../../support/accounts.ts';
 import { createShinsaState, NOW } from '../../support/state.ts';
@@ -170,7 +180,7 @@ describe('the forecast in words', () => {
       `Up to ${formatPace(forecast.safePace)} of a weekly limit a day keeps you going for the next 7 days.`
     );
     expect(describeTightest(forecast, NOW)).toMatch(
-      /^Tightest point: at .+% a day you have .+% left across accounts just before (work|home)@example\.com resets in (15h|2\.6d)(, and the next one is .+ later)?\.$/
+      /^Tightest point at the safe pace: .+% left just before (work|home)@example\.com resets in (15h|2\.6d)\.$/
     );
     expect(describeRecentPace(forecast, NOW)).toMatch(
       /^In the last 24 hours you used 40%\. At that pace every account runs out in .+\.$/
@@ -194,7 +204,9 @@ describe('the forecast in words', () => {
     const forecast = resolveUsageForecast([accounts[0] as (typeof accounts)[number]], NOW, null);
     if (!forecast?.tightest) throw new Error('expected a tightest point');
     const lone = { ...forecast, resets: [forecast.tightest], accounts: [] };
-    expect(describeTightest(lone, NOW)).toMatch(/^Tightest point: at .+ just before work resets in 15h\.$/);
+    expect(describeTightest(lone, NOW)).toMatch(
+      /^Tightest point at the safe pace: .+ left just before work resets in 15h\.$/
+    );
   });
 
   it('knows whether the pace is already the daily limit', () => {
@@ -223,7 +235,7 @@ describe('the timeline', () => {
   if (!forecast) throw new Error('expected a forecast');
 
   it('draws one lane per account with its stretches between resets', () => {
-    const lanes = listForecastLanes(forecast);
+    const lanes = listForecastLanes(forecast, resolveForecastTimeline(forecast, forecast.safePace));
     expect(lanes.map((lane) => lane.account.id)).toEqual(['work', 'home']);
     expect(lanes[0]?.segments.map((segment) => segment.left)).toEqual([8, 100]);
   });
@@ -258,27 +270,39 @@ describe('the timeline', () => {
     expect(resolveUsableShare({ ...stretch, to: NOW })).toBe(0);
   });
 
-  it('names the pace the timeline is drawn at', () => {
-    expect(describeTimelinePace(forecast)).toBe(
-      `Timeline at ${formatPace(forecast.safePace)} a day, the safe pace`
+  it('offers the safe pace, the last 24 hours and two faster paces to draw the timeline at', () => {
+    const paces = listForecastPaces({ ...forecast, safePace: 20, currentPace: 9 });
+    expect(paces.map((pace) => [pace.value, pace.label, pace.pace])).toEqual([
+      ['safe', 'Safe pace 20%', 20],
+      ['recent', 'Last 24 hours 9%', 9],
+      ['faster', '30%', 30],
+      ['double', '40%', 40],
+    ]);
+    expect(listForecastPaces({ ...forecast, safePace: 0, currentPace: 0 }).map((pace) => pace.value)).toEqual(
+      ['safe']
     );
-    expect(describeTimelinePace({ ...forecast, timelinePace: 60 })).toBe(
-      'Timeline at 60% a day, your last 24 hours'
-    );
+    expect(selectForecastPace({ ...forecast, safePace: 20, currentPace: 9 }, 'double').pace).toBe(40);
+    expect(selectForecastPace({ ...forecast, currentPace: null }, 'recent').value).toBe('safe');
+    expect(resolveDefaultPace({ ...forecast, safePace: 20, currentPace: 9 })).toBe('safe');
+    expect(resolveDefaultPace({ ...forecast, safePace: 20, currentPace: 30 })).toBe('recent');
+    expect(resolveDefaultPace({ ...forecast, currentPace: null })).toBe('safe');
   });
 
-  it('says how long every account is out of usage at once', () => {
-    expect(describeOutages(forecast, NOW)).toBeNull();
+  it('says how long every account is out of usage at once, and where', () => {
+    expect(describeOutages({ pace: 10, segments: [], outages: [] }, NOW)).toBeNull();
     const outages = [
       { from: NOW + 12 * HOUR_MS, to: NOW + 24 * HOUR_MS },
       { from: NOW + 64 * HOUR_MS, to: NOW + 72 * HOUR_MS },
     ];
-    expect(describeOutages({ ...forecast, outages }, NOW)).toBe(
-      'At this pace every account is out of usage for 20h in all, starting in 12h.'
+    expect(describeOutages({ pace: 60, segments: [], outages }, NOW)).toBe(
+      'At 60% a day every account is out of usage for 20h in all, starting in 12h.'
     );
-    expect(describeOutages({ ...forecast, outages: [{ from: NOW, to: NOW + 2 * HOUR_MS }] }, NOW)).toBe(
-      'At this pace every account is out of usage for 2h in all, starting now.'
-    );
+    expect(
+      describeOutages({ pace: 60, segments: [], outages: [{ from: NOW, to: NOW + 2 * HOUR_MS }] }, NOW)
+    ).toBe('At 60% a day every account is out of usage for 2h in all, starting now.');
+    const [span] = listOutageSpans(forecast, [{ from: forecast.from, to: forecast.from + 3.5 * DAY }]);
+    expect(span?.start).toBe(0);
+    expect(span?.width).toBeCloseTo(0.5, 6);
   });
 
   it('places times on the week and marks each midnight', () => {

@@ -3,7 +3,9 @@ import {
   CLAUDE_PROVIDER,
   DAY_MS,
   type ForecastAccount,
+  type ForecastOutage,
   type ForecastSegment,
+  type ForecastTimeline,
   listForecastAccounts,
   resolveForecastAccount,
   resolveProviderLabel,
@@ -30,6 +32,20 @@ export interface ForecastDay {
   share: number;
 }
 
+export type ForecastPaceChoice = 'safe' | 'recent' | 'faster' | 'double';
+
+export interface ForecastPaceOption {
+  value: ForecastPaceChoice;
+  label: string;
+  hint?: string;
+  pace: number;
+}
+
+const WHAT_IF_PACES = [
+  { value: 'faster', times: 1.5, hint: 'One and a half times the safe pace' },
+  { value: 'double', times: 2, hint: 'Twice the safe pace' },
+] as const;
+
 export const FORECAST_TITLE = 'Forecast';
 
 export const APPLY_PACE_LABEL = 'Use as daily limit';
@@ -38,6 +54,7 @@ export const FORECAST_LEGEND = [
   { key: 'usable', label: 'Has usage' },
   { key: 'empty', label: 'Out of usage' },
   { key: 'outage', label: 'Every account out of usage' },
+  { key: 'tightest', label: 'Tightest point' },
 ] as const;
 
 const WEEKDAY = new Intl.DateTimeFormat('en', { weekday: 'short' });
@@ -92,9 +109,7 @@ export function describeTightest(forecast: UsageForecast, now: number) {
   const tightest = forecast.tightest;
   if (!tightest) return null;
   const label = selectLabel(forecast, tightest.accountId);
-  const after = forecast.resets.find((reset) => reset.at > tightest.at);
-  const then = after ? `, and the next one is ${formatTurnaround(after.at - tightest.at)} later` : '';
-  return `Tightest point: at ${formatPace(forecast.safePace)} a day you have ${formatPace(tightest.leftBefore)} left across accounts just before ${label} resets in ${formatTurnaround(tightest.at - now)}${then}.`;
+  return `Tightest point at the safe pace: ${formatPace(tightest.leftBefore)} left just before ${label} resets in ${formatTurnaround(tightest.at - now)}.`;
 }
 
 export function describeRecentPace(forecast: UsageForecast, now: number) {
@@ -108,10 +123,10 @@ export function isPaceApplied(forecast: UsageForecast, dailyUsageLimit: number |
   return dailyUsageLimit === forecast.safePace;
 }
 
-export function listForecastLanes(forecast: UsageForecast): ForecastLane[] {
+export function listForecastLanes(forecast: UsageForecast, timeline: ForecastTimeline): ForecastLane[] {
   return forecast.accounts.map((account) => ({
     account,
-    segments: forecast.segments.filter((segment) => segment.accountId === account.id),
+    segments: timeline.segments.filter((segment) => segment.accountId === account.id),
   }));
 }
 
@@ -132,18 +147,57 @@ export function formatForecastDay(at: number) {
   return WEEKDAY.format(at);
 }
 
-export function describeTimelinePace(forecast: UsageForecast) {
-  const pace = `${formatPace(forecast.timelinePace)} a day`;
-  if (forecast.timelinePace === forecast.safePace) return `Timeline at ${pace}, the safe pace`;
-  return `Timeline at ${pace}, your last 24 hours`;
+function roundPace(percent: number) {
+  return Math.round(percent * 10) / 10;
 }
 
-export function describeOutages(forecast: UsageForecast, now: number) {
-  const first = forecast.outages[0];
+function resolveSafeOption(forecast: UsageForecast): ForecastPaceOption {
+  return { value: 'safe', label: `Safe pace ${formatPace(forecast.safePace)}`, pace: forecast.safePace };
+}
+
+export function listForecastPaces(forecast: UsageForecast): ForecastPaceOption[] {
+  const safe = resolveSafeOption(forecast);
+  const recent: ForecastPaceOption[] =
+    forecast.currentPace !== null && forecast.currentPace > 0
+      ? [
+          {
+            value: 'recent',
+            label: `Last 24 hours ${formatPace(forecast.currentPace)}`,
+            pace: forecast.currentPace,
+          },
+        ]
+      : [];
+  const whatIf: ForecastPaceOption[] =
+    forecast.safePace > 0
+      ? WHAT_IF_PACES.map((option) => {
+          const pace = roundPace(forecast.safePace * option.times);
+          return { value: option.value, label: formatPace(pace), hint: option.hint, pace };
+        })
+      : [];
+  return [safe, ...recent, ...whatIf];
+}
+
+export function resolveDefaultPace(forecast: UsageForecast): ForecastPaceChoice {
+  return forecast.currentPace !== null && forecast.currentPace > forecast.safePace ? 'recent' : 'safe';
+}
+
+export function selectForecastPace(forecast: UsageForecast, choice: ForecastPaceChoice) {
+  return listForecastPaces(forecast).find((option) => option.value === choice) ?? resolveSafeOption(forecast);
+}
+
+export function describeOutages(timeline: ForecastTimeline, now: number) {
+  const first = timeline.outages[0];
   if (!first) return null;
-  const total = forecast.outages.reduce((sum, outage) => sum + outage.to - outage.from, 0);
+  const total = timeline.outages.reduce((sum, outage) => sum + outage.to - outage.from, 0);
   const start = first.from <= now ? 'now' : `in ${formatTurnaround(first.from - now)}`;
-  return `At this pace every account is out of usage for ${formatTurnaround(total)} in all, starting ${start}.`;
+  return `At ${formatPace(timeline.pace)} a day every account is out of usage for ${formatTurnaround(total)} in all, starting ${start}.`;
+}
+
+export function listOutageSpans(forecast: UsageForecast, outages: readonly ForecastOutage[]) {
+  return outages.map((outage) => {
+    const start = resolveForecastShare(forecast, outage.from);
+    return { at: outage.from, start, width: resolveForecastShare(forecast, outage.to) - start };
+  });
 }
 
 export function resolveUsableShare(segment: ForecastSegment) {

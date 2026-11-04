@@ -36,14 +36,19 @@ export const ForecastReset = Schema.Struct({
 
 export type ForecastReset = typeof ForecastReset.Type;
 
+export const ForecastTimeline = Schema.Struct({
+  pace: Schema.Number,
+  segments: Schema.Array(ForecastSegment),
+  outages: Schema.Array(ForecastOutage),
+});
+
+export type ForecastTimeline = typeof ForecastTimeline.Type;
+
 export const UsageForecast = Schema.Struct({
   from: Time,
   to: Time,
   accounts: Schema.Array(ForecastAccount),
-  segments: Schema.Array(ForecastSegment),
   resets: Schema.Array(ForecastReset),
-  outages: Schema.Array(ForecastOutage),
-  timelinePace: Schema.Number,
   safePace: Schema.Number,
   tightest: Schema.NullOr(ForecastReset),
   currentPace: Schema.NullOr(Schema.Number),

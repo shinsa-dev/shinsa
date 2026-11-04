@@ -7,6 +7,7 @@ import {
   HOUR_MS,
   listForecastAccounts,
   resolveForecastAccount,
+  resolveForecastTimeline,
   resolveUsageForecast,
 } from '../../src/index.ts';
 
@@ -71,7 +72,9 @@ describe('resolveUsageForecast', () => {
     expect(forecast?.tightest?.leftBefore).toBeLessThan(0.1);
     expect(forecast?.from).toBe(NOW);
     expect(forecast?.to).toBe(NOW + FORECAST_LIMITS.horizonMs);
-    expect(forecast?.segments).toEqual([
+    if (!forecast) throw new Error('no forecast');
+    const timeline = resolveForecastTimeline(forecast, forecast.safePace);
+    expect(timeline.segments).toEqual([
       { accountId: 'solo', from: NOW, to: NOW + 24 * HOUR_MS, left: 10, emptyAt: null },
       {
         accountId: 'solo',
@@ -81,21 +84,21 @@ describe('resolveUsageForecast', () => {
         emptyAt: null,
       },
     ]);
-    expect(forecast?.outages).toEqual([]);
-    expect(forecast?.timelinePace).toBe(10);
+    expect(timeline.outages).toEqual([]);
   });
 
   test('draws when each account runs out at the pace and where every account is out at once', () => {
     const forecast = resolveUsageForecast([account('near', 10, 24), account('far', 20, 72)], NOW, 60);
     expect(forecast?.safePace).toBe(30);
-    expect(forecast?.timelinePace).toBe(60);
-    expect(forecast?.segments.map((segment) => [segment.accountId, segment.from, segment.emptyAt])).toEqual([
+    if (!forecast) throw new Error('no forecast');
+    const timeline = resolveForecastTimeline(forecast, 60);
+    expect(timeline.segments.map((segment) => [segment.accountId, segment.from, segment.emptyAt])).toEqual([
       ['near', NOW, NOW + 4 * HOUR_MS],
       ['near', NOW + 24 * HOUR_MS, NOW + 64 * HOUR_MS],
       ['far', NOW, NOW + 12 * HOUR_MS],
       ['far', NOW + 72 * HOUR_MS, NOW + 112 * HOUR_MS],
     ]);
-    expect(forecast?.outages).toEqual([
+    expect(timeline.outages).toEqual([
       { from: NOW + 12 * HOUR_MS, to: NOW + 24 * HOUR_MS },
       { from: NOW + 64 * HOUR_MS, to: NOW + 72 * HOUR_MS },
       { from: NOW + 112 * HOUR_MS, to: NOW + FORECAST_LIMITS.horizonMs },
@@ -103,16 +106,13 @@ describe('resolveUsageForecast', () => {
     expect(forecast?.runsOutAt).toBe(NOW + 12 * HOUR_MS);
   });
 
-  test('keeps the timeline at the safe pace when the last 24 hours were slower', () => {
-    const forecast = resolveUsageForecast([account('solo', 10, 24)], NOW, 5);
-    expect(forecast?.timelinePace).toBe(forecast?.safePace);
-  });
-
   test('shows every account out until the first reset when the pool is spent', () => {
     const forecast = resolveUsageForecast([account('spent', 0, 2), account('later', 0, 30)], NOW);
     expect(forecast?.safePace).toBe(0);
-    expect(forecast?.outages).toEqual([{ from: NOW, to: NOW + 2 * HOUR_MS }]);
-    expect(forecast?.segments[0]?.emptyAt).toBe(NOW);
+    if (!forecast) throw new Error('no forecast');
+    const timeline = resolveForecastTimeline(forecast, forecast.safePace);
+    expect(timeline.outages).toEqual([{ from: NOW, to: NOW + 2 * HOUR_MS }]);
+    expect(timeline.segments[0]?.emptyAt).toBe(NOW);
   });
 
   test('spends the account that resets soonest first, so a late reset sets the pace', () => {
@@ -145,7 +145,8 @@ describe('resolveUsageForecast', () => {
     expect(forecast?.safePace).toBe(10);
     expect(forecast?.resets).toEqual([]);
     expect(forecast?.tightest).toBeNull();
-    expect(forecast?.segments).toEqual([
+    if (!forecast) throw new Error('no forecast');
+    expect(resolveForecastTimeline(forecast, forecast.safePace).segments).toEqual([
       { accountId: 'open', from: NOW, to: NOW + FORECAST_LIMITS.horizonMs, left: 70, emptyAt: null },
     ]);
   });
@@ -154,6 +155,19 @@ describe('resolveUsageForecast', () => {
     const forecast = resolveUsageForecast([account('spent', 0, 1)], NOW, 10);
     expect(forecast?.safePace).toBe(0);
     expect(forecast?.runsOutAt).toBe(NOW);
+  });
+});
+
+describe('resolveForecastTimeline', () => {
+  test('runs the week again at a pace you try, and marks where every account is out of usage', () => {
+    const forecast = resolveUsageForecast([account('work', 10, 24), account('home', 20, 72)], NOW);
+    if (!forecast) throw new Error('no forecast');
+    const safe = resolveForecastTimeline(forecast, forecast.safePace);
+    expect(safe.outages).toEqual([]);
+    const faster = resolveForecastTimeline(forecast, forecast.safePace * 2);
+    expect(faster.pace).toBe(forecast.safePace * 2);
+    expect(faster.outages.length).toBeGreaterThan(0);
+    expect(faster.segments.map((segment) => segment.accountId)[0]).toBe('work');
   });
 });
 

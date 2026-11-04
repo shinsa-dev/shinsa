@@ -84,12 +84,18 @@ describe('the usage forecast', () => {
     expect(screen.getByText(`${Number(pace.toFixed(1))}% a day`)).toBeTruthy();
     expect(screen.getByText('overclock@example.com')).toBeTruthy();
     expect(screen.getByText('home@example.com')).toBeTruthy();
-    expect(screen.getByText(/^Tightest point: /)).toBeTruthy();
+    expect(screen.getByText(/^Tightest point at the safe pace: /)).toBeTruthy();
     expect(screen.getByText('No measured usage in the last 24 hours.')).toBeTruthy();
-    expect(screen.getByText(/^Timeline at .+ a day, the safe pace$/)).toBeTruthy();
     expect(screen.getByText('Every account out of usage')).toBeTruthy();
     expect(container.querySelector('[data-outage]')).toBeNull();
+    expect(container.querySelectorAll('[data-tightest]')).toHaveLength(1);
     expect(container.querySelectorAll('[data-usable]').length).toBeGreaterThanOrEqual(4);
+    fireEvent.click(screen.getByRole('tab', { name: `${Number((pace * 2).toFixed(1))}%` }));
+    expect(container.querySelectorAll('[data-outage]').length).toBeGreaterThan(0);
+    expect(container.querySelector('[data-tightest]')).toBeNull();
+    expect(
+      screen.getByText(/^At .+% a day every account is out of usage for .+ in all, starting in .+\.$/)
+    ).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Use as daily limit' }));
     await waitFor(() =>
       expect(listSentCommands()).toEqual([{ type: 'settings.change', patch: { dailyUsageLimit: pace } }])
@@ -102,7 +108,7 @@ describe('the usage forecast', () => {
     const { container } = renderForecast();
     expect(container.querySelectorAll('[data-outage]')).toHaveLength(1);
     expect(
-      screen.getByText('At this pace every account is out of usage for 15h in all, starting now.')
+      screen.getByText('At 0% a day every account is out of usage for 15h in all, starting now.')
     ).toBeTruthy();
   });
 
