@@ -4077,14 +4077,16 @@ Slack ──a card's button──► app.shinsa.dev /slack/interactions
   its author in Slack's Activity. Three things are a new message, so the thread is notified once for each: the
   result (`task.delivered`: an answer, a diagnosis, a report, an outcome), the end of the task (done without a result
   or merge) and a watchdog that found a problem (`watchdog.checked` with `tripped`), each a `slack.post` (`SlackPost`
-  is `result`, `completed` or `tripped`); and the merge, once per round. A round's first `task.staged` to `merged`
-  emits `slack.merge_announced` (`SlackThreadLink.merge`, the round and later its ts) and a `slack.merge` effect, in
-  the thread's lane: the engine posts "Merged" the first time and records its ts with `slack.record_merge`
-  (`slack.merge_posted`), and every later `slack.merge` edits that message, skipping an edit that changes nothing.
-  Every watchdog event (started, live, deferred, missed, checked, ended) and every ticked post-merge step asks for
-  one. A watchdog check takes a merged task to `watching` and back; the stage moves of a check never restate the card
-  and never post, and the card, the reaction and the thread status read `watching` as the stage it rests at (merged,
-  else done), so a check leaves the thread as it was. Each message is built when it is sent, from the
+  is `result`, `completed` or `tripped`); and the merge, once per round. The `task.staged` to `merged` that comes with
+  the pull request recorded merged, in a round with no merge message yet, emits `slack.merge_announced`
+  (`SlackThreadLink.merge`, the round and later its ts) and a `slack.merge` effect, in the thread's lane: the engine
+  posts "Merged" the first time and records its ts with `slack.record_merge` (`slack.merge_posted`), and every later
+  `slack.merge` edits that message, skipping an edit that changes nothing. Every watchdog event (started, live,
+  deferred, missed, checked, ended) and every ticked post-merge step asks for one. A watchdog check takes a merged task
+  to `watching` and back; the stage moves of a check (one that checked, missed, ended or deferred a watchdog, waiting
+  for production included) never restate the card and never post, so a task merged before its merge message was kept is
+  not announced again by a check, and the card, the reaction and the thread status read `watching` as the stage it
+  rests at (merged, else done), so a check leaves the thread as it was. Each message is built when it is sent, from the
   state then (`slack/messages.ts`, `serializeSlackCard`, `resolveSlackPostMessage`), in Block Kit with no icons
   (`slack/blocks.ts`): a header naming the gate, the main point bold or quoted (`>`, so code and links in it keep
   their markup), details as fields, a numbered list or a context line, the decision buttons with a button to open the

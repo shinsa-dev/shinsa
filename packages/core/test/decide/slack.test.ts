@@ -94,7 +94,7 @@ const MIGRATION: MergeStep = {
   command: 'bun run db:migrate',
 };
 
-function mergeFromSlack(harness: Harness, steps: MergeStep[] = []) {
+function mergeFromSlack(harness: Harness, steps: MergeStep[] = [], watchdog = LATENCY) {
   const taskId = startFromSlack(harness);
   readyWorktree(harness, taskId);
   proposePlan(harness, taskId);
@@ -111,7 +111,7 @@ function mergeFromSlack(harness: Harness, steps: MergeStep[] = []) {
       flow: 'checkout → cache → price',
       risks: [],
       testing: { automated: [], manual: [] },
-      watchdogs: [LATENCY],
+      watchdogs: [watchdog],
       ...(steps.length > 0 ? { steps } : {}),
     },
   });
@@ -135,13 +135,19 @@ function fireWatchdog(harness: Harness, taskId: string) {
   harness.send({ type: 'watchdog.fire', taskId, watchdogId: watchdog?.id ?? '', dueAt });
 }
 
-function endWatchCheck(harness: Harness, taskId: string, summary: string, reached = true) {
+function endWatchCheck(
+  harness: Harness,
+  taskId: string,
+  summary: string,
+  reached = true,
+  live: boolean | null = null
+) {
   harness.send({
     type: 'agent.report_read',
     runId: harness.activeRun(taskId).id,
     summary,
     reached,
-    live: null,
+    live,
   });
 }
 
@@ -550,6 +556,46 @@ describe('a merged task with watchdogs', () => {
     expect(harness.task(taskId).stage).toBe('merged');
     expect(postsOf(harness)).toEqual([]);
     expect(mergesOf(harness)).toHaveLength(2);
+  });
+
+  test('a check that finds the change not yet in production only edits the merge message', () => {
+    const harness = createHarness();
+    const taskId = mergeFromSlack(harness, [], {
+      ...LATENCY,
+      startsOn: 'production',
+      productionCheck: 'The release tag is on the deploy.',
+    });
+    expect(harness.task(taskId).watchdogs?.[0]?.status).toBe('awaiting_production');
+    const statuses = harness.effectsOf('slack.status').length;
+    fireWatchdog(harness, taskId);
+    endWatchCheck(harness, taskId, 'Not deployed yet.', true, false);
+    expect(harness.task(taskId).stage).toBe('merged');
+    expect(postsOf(harness)).toEqual([]);
+    expect(mergesOf(harness)).toHaveLength(2);
+    expect(harness.effectsOf('slack.status')).toHaveLength(statuses);
+  });
+
+  test('a task merged before the merge message was kept is never announced again by a check', () => {
+    const harness = createHarness();
+    const taskId = mergeFromSlack(harness, [], {
+      ...LATENCY,
+      startsOn: 'production',
+      productionCheck: 'The release tag is on the deploy.',
+    });
+    const current = harness.task(taskId).slack;
+    if (!current) throw new Error('the task has no Slack thread');
+    const { merge: _merge, ...link } = current;
+    harness.replay({ type: 'slack.thread_linked', taskId, link });
+    expect(harness.task(taskId).slack?.merge).toBeUndefined();
+    const merges = mergesOf(harness).length;
+    for (const live of [false, true]) {
+      fireWatchdog(harness, taskId);
+      endWatchCheck(harness, taskId, 'p95 is 210 ms.', true, live);
+      expect(harness.task(taskId).stage).toBe('merged');
+    }
+    expect(postsOf(harness)).toEqual([]);
+    expect(mergesOf(harness)).toHaveLength(merges);
+    expect(harness.task(taskId).slack?.merge).toBeUndefined();
   });
 
   test('a watchdog that finds a problem posts one new message and edits the merge message', () => {

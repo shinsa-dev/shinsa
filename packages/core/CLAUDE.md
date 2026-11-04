@@ -234,8 +234,9 @@ src/
 │   │                decision from Slack through answerGate, then `slack.decided`); and syncSlackThreads (after every
 │   │                command): one `slack.status` per changed task, the card edited (never for a watchdog check's
 │   │                stage moves), `slack.post` only for the result, the finished task and a tripped watchdog, and
-│   │                the merge once per round (`slack.merge_announced`), then `slack.merge` to edit it on every
-│   │                watchdog event and ticked post-merge step; its ts (`slack.record_merge`)
+│   │                the merge once per round, when its pull request merges (`slack.merge_announced`), then
+│   │                `slack.merge` to edit it on every watchdog event and ticked post-merge step; its ts
+│   │                (`slack.record_merge`)
 │   ├── handoffs.ts  Handing a task off (task.hand_off and handoff.remove, human-only; the handoff.link and
 │   │                handoff.revoke effects), the link the engine made (handoff.record, handoff.fail) and the one
 │   │                claim it takes (handoff.claim; another account is refused)

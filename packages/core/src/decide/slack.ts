@@ -179,6 +179,7 @@ function isWatchEvent(event: ShinsaEventInput) {
 }
 
 const WATCH_CHECK_EVENTS: ReadonlySet<ShinsaEventInput['type']> = new Set<ShinsaEventInput['type']>([
+  'watchdog.deferred',
   'watchdog.checked',
   'watchdog.missed',
   'watchdog.ended',
@@ -193,13 +194,22 @@ function listCheckedTasks(state: ShinsaState, events: readonly ShinsaEventInput[
   );
 }
 
+function listMergedTasks(events: readonly ShinsaEventInput[]) {
+  return new Set(
+    events.flatMap((event) => {
+      const recorded = event.type === 'pull_request.updated' || event.type === 'pull_request.opened';
+      return recorded && event.pullRequest.state === 'merged' ? [event.taskId] : [];
+    })
+  );
+}
+
 function isWatchStaging(event: ShinsaEventInput, checked: boolean) {
   if (event.type !== 'task.staged') return false;
   return event.stage === 'watching' || (checked && (event.stage === 'merged' || event.stage === 'done'));
 }
 
-function isMergeAnnouncement(task: Task, event: ShinsaEventInput, checked: boolean) {
-  if (event.type !== 'task.staged' || event.stage !== 'merged' || checked) return false;
+function isMergeAnnouncement(task: Task, event: ShinsaEventInput, merging: boolean) {
+  if (event.type !== 'task.staged' || event.stage !== 'merged' || !merging) return false;
   return task.slack?.merge?.round !== resolveCurrentRound(task).number;
 }
 
@@ -227,6 +237,7 @@ function requestMergeMessages(decider: Decider, taskIds: ReadonlySet<string>) {
 export function syncSlackThreads(decider: Decider) {
   const events = [...decider.events];
   const checked = listCheckedTasks(decider.state, events);
+  const merging = listMergedTasks(events);
   const restated = new Set<string>();
   const merges = new Set<string>();
   for (const event of events) {
@@ -237,7 +248,7 @@ export function syncSlackThreads(decider: Decider) {
     const post = resolveEventPost(task, event);
     if (post) requestPost(decider, link, taskId, post);
     if (MERGE_EDIT_EVENTS.has(event.type)) merges.add(taskId);
-    if (isMergeAnnouncement(task, event, checked.has(taskId))) {
+    if (isMergeAnnouncement(task, event, merging.has(taskId))) {
       announceMerge(decider, task);
       merges.add(taskId);
     }
