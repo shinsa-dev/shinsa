@@ -67,8 +67,11 @@ export function describeScopesSummary(scopes: AccessScopes) {
   return `${PRESET_LABELS[resolveTeamChoice(scopes)].label} · ${on} of ${ACTION_SCOPES.length} scopes`;
 }
 
-export function describeScopesOwner(team: RemoteTeam) {
-  return team.role === 'owner' ? null : `Only ${team.owner.name ?? team.owner.login} changes these.`;
+export const SCOPES_FROM_MACHINE = 'Add one of your machines to this browser to change these.';
+
+export function describeScopesOwner(team: RemoteTeam, editable = true) {
+  if (team.role !== 'owner') return `Only ${team.owner.name ?? team.owner.login} changes these.`;
+  return editable ? null : SCOPES_FROM_MACHINE;
 }
 
 export function selectOverride(team: RemoteTeam, userId: string) {

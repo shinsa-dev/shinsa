@@ -4,6 +4,7 @@ import { Truncate } from '@shinsa/ui/components/truncate';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
 import { MentionText } from '@/components/people/user-tag.tsx';
+import { TeamScopesBlock } from '@/components/teams/scopes.tsx';
 import { useNow } from '@/hooks/use-now.ts';
 import { useTeamPresence } from '@/hooks/use-team-presence.ts';
 import { useTeamFeed } from '@/lib/connection/socket.ts';
@@ -12,6 +13,7 @@ import { createDisclosureId } from '@/lib/preferences/disclosure.ts';
 import { describeMemberSince } from '@/lib/remote-access.ts';
 import { RemoteServicesContext } from '@/lib/remote/services.ts';
 import { describePresence } from '@/lib/teams/presence.ts';
+import { hasOwnScopes } from '@/lib/teams/scopes.ts';
 import {
   describeHostedTeam,
   describeHostedTeamsNotice,
@@ -73,12 +75,16 @@ function TeamPeople({ team, viewerId }: { team: RemoteTeam; viewerId: string | n
         const self = user.id === viewerId;
         const seen = self ? null : (presence.get(user.id) ?? null);
         const base = member ? describeMemberSince(member, now) : 'Owner';
-        const lastSeen = seen ? describePresence(seen, now) : null;
+        const parts = [
+          seen ? describePresence(seen, now) : null,
+          base,
+          hasOwnScopes(team, user.id) ? 'Own scopes' : null,
+        ];
         return (
           <UserRow
             key={user.id}
             user={user}
-            detail={lastSeen ? `${lastSeen} · ${base}` : base}
+            detail={parts.filter((part) => part !== null).join(' · ')}
             self={self}
             presence={seen}
           />
@@ -108,6 +114,7 @@ function HostedTeamCard({ entry, viewerId }: { entry: HostedTeam; viewerId: stri
         </div>
       )}
       <TeamMachines team={team} />
+      <TeamScopesBlock team={team} onUpdate={null} />
       <TeamPeople team={team} viewerId={viewerId} />
     </SettingsCard>
   );

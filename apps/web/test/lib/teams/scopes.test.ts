@@ -54,6 +54,9 @@ describe('team scopes in settings', () => {
 
   it('says only the owner changes them, to anyone else', () => {
     expect(describeScopesOwner(TEAM)).toBeNull();
+    expect(describeScopesOwner(TEAM, false)).toBe(
+      'Add one of your machines to this browser to change these.'
+    );
     expect(describeScopesOwner({ ...TEAM, role: 'member' })).toBe('Only Mona Lisa changes these.');
     expect(describeScopesOwner({ ...TEAM, role: 'member', owner: { ...MONA, name: null } })).toBe(
       'Only mona changes these.'

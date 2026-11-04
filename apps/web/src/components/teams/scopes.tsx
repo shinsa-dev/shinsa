@@ -117,10 +117,12 @@ function PresetRow({ label, hint, children }: { label: string; hint: string; chi
   );
 }
 
-export function TeamScopesBlock({ team, onUpdate }: { team: RemoteTeam; onUpdate: UpdateScopes }) {
-  const note = describeScopesOwner(team);
+export function TeamScopesBlock({ team, onUpdate }: { team: RemoteTeam; onUpdate: UpdateScopes | null }) {
+  const note = describeScopesOwner(team, onUpdate !== null);
   const choice = resolveTeamChoice(team.scopes);
-  const update = (scopes: AccessScopes) => void requestWithToast(() => onUpdate(team.id, null, scopes));
+  const update = (scopes: AccessScopes) => {
+    if (onUpdate && note === null) void requestWithToast(() => onUpdate(team.id, null, scopes));
+  };
   return (
     <FoldingBlock
       persistId={createDisclosureId('settings', 'teams', team.id, 'scopes')}
@@ -128,16 +130,20 @@ export function TeamScopesBlock({ team, onUpdate }: { team: RemoteTeam; onUpdate
       detail={describeScopesSummary(team.scopes)}
     >
       <PresetRow label='Preset' hint={PRESET_LABELS[choice].hint}>
-        <SelectField
-          label='Preset for the team'
-          items={listPresetItems(choice)}
-          value={choice}
-          onValueChange={(next: TeamScopeChoice) => {
-            const scopes = resolveChoiceScopes(next, team.scopes);
-            if (scopes && note === null) update(scopes);
-          }}
-          className='w-40'
-        />
+        {note === null ? (
+          <SelectField
+            label='Preset for the team'
+            items={listPresetItems(choice)}
+            value={choice}
+            onValueChange={(next: TeamScopeChoice) => {
+              const scopes = resolveChoiceScopes(next, team.scopes);
+              if (scopes) update(scopes);
+            }}
+            className='w-40'
+          />
+        ) : (
+          <span className='text-xs text-fg-4'>{PRESET_LABELS[choice].label}</span>
+        )}
       </PresetRow>
       <ScopeGrid
         scopes={team.scopes}
