@@ -12,7 +12,7 @@ import type { CodexExecutableDeps } from '../../../../src/agents/providers/codex
 import { ProgramVersions } from '../../../../src/agents/providers/versions/service.ts';
 import { ShellLayer } from '../../../../src/shell/layers.ts';
 
-const runtime = ManagedRuntime.make(ProgramVersions.layer.pipe(Layer.provide(ShellLayer)));
+const runtime = ManagedRuntime.make(ProgramVersions.layer.pipe(Layer.provideMerge(ShellLayer)));
 
 function readCodexVersion(path: string) {
   return runtime.runPromise(readVersionEffect(path));

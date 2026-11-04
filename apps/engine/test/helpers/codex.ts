@@ -57,7 +57,7 @@ export class FakeCodex {
     this.env = { FAKE_CODEX_STATE: this.path, ...env };
     this.runtime = {
       resolveExecutable: resolveCodexExecutable().pipe(
-        Effect.provide(ProgramVersions.layer.pipe(Layer.provide(ShellLayer)))
+        Effect.provide(ProgramVersions.layer.pipe(Layer.provideMerge(ShellLayer)))
       ),
       env: this.env,
     };

@@ -1,10 +1,18 @@
 import { describe, expect, test } from 'bun:test';
-import { mkdirSync, realpathSync, symlinkSync } from 'node:fs';
+import { chmodSync, mkdirSync, realpathSync, symlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import { Option } from 'effect';
 import { selectInside, selectWritableInside } from '../../src/files/inside.ts';
 import { isInside } from '../../src/files/paths.ts';
-import { findFirstPresent, isFolder, isPresent, listEntries, selectText } from '../../src/files/probe.ts';
+import {
+  findFirstPresent,
+  isExecutable,
+  isFolder,
+  isPresent,
+  listEntries,
+  selectOnPath,
+  selectText,
+} from '../../src/files/probe.ts';
 import { runFiles } from '../harness.ts';
 import { createTempDir, writeFiles } from '../helpers/index.ts';
 
@@ -94,5 +102,23 @@ describe('the file probes', () => {
     const paths = ['a.txt', 'c.txt', 'b.txt'].map((name) => join(root, name));
     expect(Option.getOrNull(await runFiles(findFirstPresent(paths)))).toBe(join(root, 'c.txt'));
     expect(Option.isNone(await runFiles(findFirstPresent([join(root, 'a.txt')])))).toBe(true);
+  });
+});
+
+describe('finding a program', () => {
+  test('a program is a file someone may run, found by name on the PATH or by its own path', async () => {
+    const bin = createTempDir();
+    writeFiles(bin, { tool: '#!/bin/sh\n', notes: 'x' });
+    chmodSync(join(bin, 'tool'), 0o755);
+    expect(await runFiles(isExecutable(join(bin, 'tool')))).toBe(true);
+    expect(await runFiles(isExecutable(join(bin, 'notes')))).toBe(false);
+    expect(await runFiles(isExecutable(bin))).toBe(false);
+    expect(await runFiles(isExecutable(join(bin, 'missing')))).toBe(false);
+    const find = async (command: string, path: string) =>
+      Option.getOrNull(await runFiles(selectOnPath(command, path)));
+    expect(await find('tool', `/nowhere::${bin}`)).toBe(join(bin, 'tool'));
+    expect(await find('notes', bin)).toBeNull();
+    expect(await find(join(bin, 'tool'), '')).toBe(join(bin, 'tool'));
+    expect(await find(join(bin, 'notes'), bin)).toBeNull();
   });
 });

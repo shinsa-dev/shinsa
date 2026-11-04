@@ -2,7 +2,7 @@ import type { Dirent } from 'node:fs';
 import { readFileSync, statSync } from 'node:fs';
 import { readdir } from 'node:fs/promises';
 import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
-import { Clock, Context, Duration, Effect, Layer, Option } from 'effect';
+import { Clock, Context, Duration, Effect, FileSystem, Layer, Option } from 'effect';
 import { normalizeRemote } from '../../git/remote/output.ts';
 import { Remote } from '../../git/remote/service.ts';
 import { selectErrnoCode } from '../../shell/errno.ts';
@@ -38,6 +38,7 @@ export class RepoFolders extends Context.Service<
     RepoFolders,
     Effect.gen(function* () {
       const remote = yield* Remote;
+      const withFiles = Effect.provideService(FileSystem.FileSystem, yield* FileSystem.FileSystem);
 
       const isSkipped = (name: string) =>
         name.startsWith('.') ||
@@ -147,8 +148,7 @@ export class RepoFolders extends Context.Service<
         } satisfies Discovery;
       });
 
-      const listLocal = (roots: readonly string[], limit?: number) =>
-        Effect.sync(() => listLocalRepos(roots, limit));
+      const listLocal = (roots: readonly string[], limit?: number) => withFiles(listLocalRepos(roots, limit));
 
       const listCandidates = Effect.fn('RepoFolders.listCandidates')(function* (
         roots: readonly string[],

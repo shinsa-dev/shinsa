@@ -5,6 +5,7 @@ import {
   selectFolderProject,
   type Task,
 } from '@shinsa/core';
+import { Effect } from 'effect';
 import { type LocalRepo, listLocalRepos } from '../repos/index.ts';
 import { type CandidatePool, NO_REPOSITORY } from './schema.ts';
 
@@ -49,23 +50,31 @@ function isRepoNamed(text: string, name: string) {
   return words.trim() !== '' && resolveWords(text).includes(words);
 }
 
-export function resolveCandidatePool(
+export const resolveCandidatePool = Effect.fn('Triage.resolveCandidatePool')(function* (
   state: ShinsaState,
   task: Task,
   local: LocalRepo[],
   text = task.request
-): CandidatePool {
+) {
   const projectId = resolveTaskProject(state, task);
   const project = projectId ? (state.projects[projectId] ?? null) : null;
   const everywhere = listCandidates(state, local);
-  if (!project) return { project: null, candidates: everywhere, named: [], empty: false, outside: [] };
+  if (!project) {
+    return {
+      project: null,
+      candidates: everywhere,
+      named: [],
+      empty: false,
+      outside: [],
+    } satisfies CandidatePool;
+  }
   const candidates = listCandidates(
     state,
-    listLocalRepos(project.folders),
+    yield* listLocalRepos(project.folders),
     listProjectRepos(state, project.id)
   );
   if (candidates.length === 0) {
-    return { project, candidates: everywhere, named: [], empty: true, outside: [] };
+    return { project, candidates: everywhere, named: [], empty: true, outside: [] } satisfies CandidatePool;
   }
   const inside = new Set(candidates.map((candidate) => candidate.path));
   const rest = everywhere.filter((candidate) => !inside.has(candidate.path));
@@ -73,19 +82,23 @@ export function resolveCandidatePool(
   const outside = rest
     .filter((candidate) => !isRepoNamed(text, candidate.name))
     .map((candidate) => candidate.name);
-  return { project, candidates, named, empty: false, outside: [...new Set(outside)] };
-}
+  return { project, candidates, named, empty: false, outside: [...new Set(outside)] } satisfies CandidatePool;
+});
 
 export function listOfferedRepos(pool: CandidatePool) {
   return [...pool.candidates, ...pool.named];
 }
 
-export function resolveRepoProject(state: ShinsaState, task: Task, path: string) {
+export const resolveRepoProject = Effect.fn('Triage.resolveRepoProject')(function* (
+  state: ShinsaState,
+  task: Task,
+  path: string
+) {
   const folder = selectFolderProject(Object.values(state.projects), path);
   if (folder) return folder.id;
-  const pool = resolveCandidatePool(state, task, []);
+  const pool = yield* resolveCandidatePool(state, task, []);
   return pool.project && pool.empty ? pool.project.id : null;
-}
+});
 
 export function describeProject(pool: CandidatePool) {
   if (!pool.project) return [];

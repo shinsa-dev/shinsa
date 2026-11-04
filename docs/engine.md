@@ -6544,7 +6544,7 @@ scratch copy is one directory, and the event log, worktrees and config.json only
   (checkouts, installed dependencies, build output): on APFS they cost a fraction of their size, but a backup copies
   every cloned file in full. `prepareDataDir` marks each with `.metadata_never_index` for Spotlight and with Time
   Machine's exclusion, the `com.apple.metadata:com_apple_backup_excludeItem` attribute `tmutil addexclusion` writes,
-  set with `xattr` directly because `tmutil` takes seconds per folder. The marker says the folder is done, so a later
+  set with `xattr` directly through `Shell` because `tmutil` takes seconds per folder (a Mac without `xattr` gets the marker alone). The marker says the folder is done, so a later
   start does nothing (clearing out `check-bases/` leaves the markers, as every dot entry, in place); one Time Machine could not exclude is logged, and deleting its marker tries again. The event
   log, evidence, transcripts and settings are backed up as before.
 
@@ -6725,7 +6725,7 @@ closing the window, quitting the app, a crash and a reboot (`docs/plans/app-plan
   from setup you opened. A folder macOS refuses to list (`EPERM` or `EACCES`) is
   not read as empty: discovery returns it in `refused`, and the Folders step offers it unpicked as "macOS keeps this
   folder private". A folder chosen at setup that
-  the engine may not read is not an error but access to ask for: `resolveChosenRoots` throws `PrivateFoldersError`
+  the engine may not read is not an error but access to ask for: `resolveChosenRoots` fails with `PrivateFoldersError`
   (`roots_private`, naming the folders), the setup step keeps your picks and shows them as `access`, and the web
   offers Open System Settings (`POST /api/onboarding/privacy`, which runs `open` on the Full Disk Access pane, since
   the desktop app does not open `x-apple.systempreferences:` links from the page), Check again and Leave it out.

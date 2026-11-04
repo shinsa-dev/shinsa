@@ -13,6 +13,7 @@ import type { QuickJson } from '../../src/agents/quick/index.ts';
 import type { LocalRepo } from '../../src/repos/index.ts';
 import { SHAPE_QUESTION } from '../../src/triage/decisions.ts';
 import { resolveRepoProject, type TeamReading } from '../../src/triage/index.ts';
+import { runFiles } from '../harness.ts';
 import { createRepo, createTask } from '../helpers/state.ts';
 import { resolveTriage } from './harness.ts';
 
@@ -909,17 +910,18 @@ describe('the project a repository triage registers goes to', () => {
     } as ShinsaState['projects'][string];
   }
 
-  test('the project whose folder holds it, else the task’s project while it has no repository, else none', () => {
+  test('the project whose folder holds it, else the task’s project while it has no repository, else none', async () => {
     const state = stateWith((draft) => {
       draft.projects.full = project('full');
       draft.projects.empty = project('empty');
       draft.projects.home = project('home', ['/code/home']);
       draft.repos.r1 = createRepo({ id: 'r1', name: 'shinsa', path: '/code/shinsa', projectId: 'full' });
     });
-    expect(resolveRepoProject(state, newTask({ projectId: 'full' }), '/code/home/site')).toBe('home');
-    expect(resolveRepoProject(state, newTask({ projectId: 'empty' }), '/code/kanna')).toBe('empty');
-    expect(resolveRepoProject(state, newTask({ projectId: 'full' }), '/code/kanna')).toBeNull();
-    expect(resolveRepoProject(state, newTask(), '/code/kanna')).toBeNull();
+    const projectOf = (task: Task, path: string) => runFiles(resolveRepoProject(state, task, path));
+    expect(await projectOf(newTask({ projectId: 'full' }), '/code/home/site')).toBe('home');
+    expect(await projectOf(newTask({ projectId: 'empty' }), '/code/kanna')).toBe('empty');
+    expect(await projectOf(newTask({ projectId: 'full' }), '/code/kanna')).toBeNull();
+    expect(await projectOf(newTask(), '/code/kanna')).toBeNull();
   });
 });
 

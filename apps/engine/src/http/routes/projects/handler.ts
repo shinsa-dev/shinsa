@@ -24,9 +24,10 @@ export const ProjectsHandlers = HttpApiBuilder.group(
     return handlers
       .handle('localRepos', () =>
         Effect.flatMap(roots, (found) =>
-          Effect.zipWith(found.listRoots, engine.state, (listed, state) => ({
-            repos: listLocalRepoViews(state, listed),
-          }))
+          Effect.zip(found.listRoots, engine.state).pipe(
+            Effect.flatMap(([listed, state]) => withFiles(listLocalRepoViews(state, listed))),
+            Effect.map((repos) => ({ repos }))
+          )
         )
       )
       .handle('coverage', () =>

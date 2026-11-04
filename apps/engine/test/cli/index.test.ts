@@ -26,6 +26,7 @@ import {
   createServerRunningError,
 } from '../../src/instance/index.ts';
 import { createStyle, UNICODE_SYMBOLS } from '../../src/terminal/style.ts';
+import { runFiles } from '../harness.ts';
 import { Engine } from '../helpers/engine.ts';
 import { openEventLog } from '../helpers/event-log.ts';
 import { createTestEvidence } from '../helpers/evidence.ts';
@@ -90,7 +91,7 @@ function createIo(port: string, overrides: Partial<CliIo> = {}) {
       bundled: false,
       service: createLaunchdService({
         uid: 501,
-        ownsJob: () => true,
+        ownsJob: () => Effect.succeed(true),
         launchctl: () => Effect.succeed({ ok: false, output: '' }),
       }),
     },
@@ -181,7 +182,7 @@ describe('the engine commands', () => {
         waitMs: 2000,
         service: createLaunchdService({
           uid: 501,
-          ownsJob: () => true,
+          ownsJob: () => Effect.succeed(true),
           launchctl: (args) => {
             calls.push(args);
             if (args[1] === '-k') state.pid = 8;
@@ -217,7 +218,7 @@ describe('the engine commands', () => {
         bundled: true,
         service: createLaunchdService({
           uid: 501,
-          ownsJob: () => true,
+          ownsJob: () => Effect.succeed(true),
           launchctl: () => Effect.succeed({ ok: true, output: '' }),
         }),
       },
@@ -767,8 +768,8 @@ describe('waking the engine', () => {
   });
 
   test('the platform picks systemd on Linux and launchd elsewhere, which leaves a job it does not own alone', async () => {
-    expect(createPlatformService('linux', { HOME: '/home/dev' }).manager).toBe('systemd');
-    const launchd = createPlatformService('darwin');
+    expect((await runFiles(createPlatformService('linux', { HOME: '/home/dev' }))).manager).toBe('systemd');
+    const launchd = await runFiles(createPlatformService('darwin'));
     expect(launchd.manager).toBe('launchd');
     expect(await runCliEffect(launchd.kick)).toBe(false);
   });

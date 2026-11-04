@@ -10,6 +10,7 @@ import {
   resolveShinsaPaths,
 } from '../../src/config/index.ts';
 import { MachineConfigFile } from '../../src/config/machine/service.ts';
+import { runTest } from '../harness.ts';
 import { resolveConfig } from '../helpers/config.ts';
 import { createTempDir } from '../helpers/index.ts';
 
@@ -155,16 +156,16 @@ describe('resolveConfig', () => {
 });
 
 describe('prepareDataDir', () => {
-  test('creates the data directories', () => {
+  test('creates the data directories', async () => {
     const config = resolveConfig({ SHINSA_HOME: createTempDir() });
-    prepareDataDir(config);
+    await runTest(prepareDataDir(config));
     for (const dir of [config.dataDir, config.worktreesDir, config.evidenceDir, config.transcriptsDir])
       expect(existsSync(dir)).toBe(true);
   });
 
-  test('keeps the worktree, check-base, scratch and cache folders out of indexing and Time Machine', () => {
+  test('keeps the worktree, check-base, scratch and cache folders out of indexing and Time Machine', async () => {
     const config = resolveConfig({ SHINSA_HOME: createTempDir() });
-    prepareDataDir(config);
+    await runTest(prepareDataDir(config));
     const folders = [config.worktreesDir, config.checkBasesDir, config.scratchDir, config.cachesDir];
     for (const dir of folders) expect(existsSync(join(dir, '.metadata_never_index'))).toBe(true);
     expect(existsSync(join(config.evidenceDir, '.metadata_never_index'))).toBe(false);
@@ -175,7 +176,7 @@ describe('prepareDataDir', () => {
     }
   });
 
-  test('a folder Time Machine could not exclude is only logged, and not tried again', () => {
+  test('a folder Time Machine could not exclude is only logged, and not tried again', async () => {
     const bin = createTempDir();
     const calls = join(bin, 'calls');
     const fake = join(bin, 'xattr');
@@ -185,8 +186,8 @@ describe('prepareDataDir', () => {
     const path = process.env.PATH;
     process.env.PATH = `${bin}:${path}`;
     try {
-      prepareDataDir(config, 'darwin');
-      prepareDataDir(config, 'darwin');
+      await runTest(prepareDataDir(config, 'darwin'));
+      await runTest(prepareDataDir(config, 'darwin'));
     } finally {
       process.env.PATH = path;
     }
@@ -194,7 +195,19 @@ describe('prepareDataDir', () => {
     expect(existsSync(join(config.scratchDir, '.metadata_never_index'))).toBe(true);
   });
 
-  test('off macOS the folders get only the marker, and Time Machine is never asked', () => {
+  test('a Mac without xattr still gets the marker, and nothing fails', async () => {
+    const config = resolveConfig({ SHINSA_HOME: createTempDir() });
+    const path = process.env.PATH;
+    process.env.PATH = createTempDir();
+    try {
+      await runTest(prepareDataDir(config, 'darwin'));
+    } finally {
+      process.env.PATH = path;
+    }
+    expect(existsSync(join(config.worktreesDir, '.metadata_never_index'))).toBe(true);
+  });
+
+  test('off macOS the folders get only the marker, and Time Machine is never asked', async () => {
     const bin = createTempDir();
     const calls = join(bin, 'calls');
     const fake = join(bin, 'xattr');
@@ -204,7 +217,7 @@ describe('prepareDataDir', () => {
     const path = process.env.PATH;
     process.env.PATH = `${bin}:${path}`;
     try {
-      prepareDataDir(config, 'linux');
+      await runTest(prepareDataDir(config, 'linux'));
     } finally {
       process.env.PATH = path;
     }

@@ -1,6 +1,5 @@
-import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { Effect, Option, Schema } from 'effect';
+import { Effect, FileSystem, Option, Schema } from 'effect';
 import { selectText } from './probe.ts';
 import {
   DenoManifestText,
@@ -25,9 +24,14 @@ export const selectPackageManifest = Effect.fn('Files.selectPackageManifest')(fu
   return Option.flatMap(text, decodeManifest);
 });
 
-export function findManifestFile<A>(path: string, schema: Schema.Decoder<A>): A {
-  return Schema.decodeUnknownSync(schema)(readFileSync(path, 'utf8'));
-}
+export const findManifestFile = Effect.fn('Files.findManifestFile')(function* <A>(
+  path: string,
+  schema: Schema.Decoder<A>
+) {
+  const fs = yield* FileSystem.FileSystem;
+  const text = yield* fs.readFileString(path).pipe(Effect.orDie);
+  return yield* Schema.decodeUnknownEffect(schema)(text).pipe(Effect.orDie);
+});
 
 export function listDependencyNames(manifest: PackageManifest) {
   return [...Object.keys(manifest.dependencies ?? {}), ...Object.keys(manifest.devDependencies ?? {})];

@@ -2,7 +2,7 @@ import { closeSync, mkdirSync, openSync, readFileSync, statSync, writeFileSync, 
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { DomainError } from '@shinsa/core';
-import { Cause, Duration, Effect, Exit, Fiber } from 'effect';
+import { Cause, Duration, Effect, Exit, Fiber, FileSystem } from 'effect';
 import { resolveKeychainAccount } from '../accounts/paths.ts';
 import { resolveServerAddress } from '../config/index.ts';
 import { EngineConfig } from '../config/service.ts';
@@ -12,7 +12,6 @@ import {
   BUNDLE,
   createSystemdService,
   describeVersion,
-  type EngineService,
   isStartedByService,
   SERVICE_MARKER,
   ServerRunningError,
@@ -84,9 +83,9 @@ const runOrFail = Effect.fn('Cli.runOrFail')(function* (argv: Argv) {
 
 export function createOpenApp(base: string, options: OpenAppOptions) {
   const platform = options.platform ?? process.platform;
-  const inApp = (options.inApp ?? (Boolean(BUNDLE) && isInsideApp())) && platform === 'darwin';
   return Effect.fn('Cli.openApp')(function* (link: string) {
-    if (inApp) {
+    const inside = options.inApp ?? (Boolean(BUNDLE) && (yield* isInsideApp()));
+    if (inside && platform === 'darwin') {
       yield* runOrFail(['open', '-b', APP_BUNDLE_ID, link]);
       return;
     }
@@ -109,10 +108,10 @@ function createServiceRunner(tool: Argv): ServiceRunner {
     }));
 }
 
-export function createPlatformService(
+export const createPlatformService = Effect.fn('Cli.createPlatformService')(function* (
   platform: string = process.platform,
   env: Record<string, string | undefined> = Bun.env
-): EngineService {
+) {
   if (platform === 'linux') {
     return createSystemdService({
       env,
@@ -122,23 +121,23 @@ export function createPlatformService(
       loginctl: createServiceRunner(['loginctl']),
     });
   }
+  const withFiles = Effect.provideService(FileSystem.FileSystem, yield* FileSystem.FileSystem);
   return createLaunchdService({
     uid: process.getuid?.() ?? 0,
     launchctl: createServiceRunner(['launchctl']),
-    ownsJob: ownsEngineJob,
-    inApp: isInsideApp(),
+    ownsJob: (printed) => withFiles(ownsEngineJob(printed)),
+    inApp: yield* isInsideApp(),
     program: process.execPath,
     home: env.HOME || homedir(),
     env,
   });
-}
-
-const PLATFORM_SERVICE = createPlatformService();
+});
 
 export const createWakeEngine = Effect.fn('Cli.createWakeEngine')(function* (
   base: string,
-  options: WakeOptions = { bundled: IS_BUNDLED, kick: PLATFORM_SERVICE.kick }
+  given?: WakeOptions
 ) {
+  const options = given ?? { bundled: IS_BUNDLED, kick: (yield* createPlatformService()).kick };
   const shell = yield* Shell;
   return Effect.gen(function* () {
     if (!options.bundled || !(yield* options.kick)) return false;
@@ -268,7 +267,7 @@ export const createProcessIo = Effect.fn('Cli.createProcessIo')(function* (optio
     openApp: createOpenApp(base, { write }),
     readRepoRoot,
     wakeEngine: yield* createWakeEngine(base),
-    engine: { bundled: IS_BUNDLED, service: PLATFORM_SERVICE },
+    engine: { bundled: IS_BUNDLED, service: yield* createPlatformService() },
     runEngine: (env) => startEngineProcess(env, isTerminal, bundle, exit),
     terminal: resolveTerminal(Bun.env, process.stdout, process.stderr),
   };
@@ -364,7 +363,7 @@ const routeTopLevel = Effect.fn('Cli.routeTopLevel')(function* (command: string,
       yield* restartEngine(yield* createEngineIo(io), (yield* readArgs(args)).flags.has('--when-idle'));
       return 0;
     case 'logs':
-      printLogs(args, { env: io.env, display: io.terminal.display, write: io.write });
+      yield* printLogs(args, { env: io.env, display: io.terminal.display, write: io.write });
       return 0;
     default:
       yield* printVersion(yield* createEngineIo(io), (yield* readArgs(args)).flags.has('--json'));

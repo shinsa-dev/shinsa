@@ -1,6 +1,7 @@
 import { cpSync, existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { BunServices } from '@effect/platform-bun';
 import { Effect } from 'effect';
 import { resolveBuildChangelog } from '../../../scripts/changelog-history.ts';
 import { CommandLayer } from '../../../scripts/kit/command/index.ts';
@@ -43,7 +44,7 @@ const sdkPackage = JSON.parse(
   )
 ) as { version: string; claudeCodeVersion: string };
 
-const stateVersion = resolveStateVersion();
+const stateVersion = await Effect.runPromise(resolveStateVersion().pipe(Effect.provide(BunServices.layer)));
 if (!stateVersion) throw new Error('Could not read the state version from @shinsa/core');
 
 const changelog = await Effect.runPromise(

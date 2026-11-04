@@ -1,3 +1,4 @@
+import { BunServices } from '@effect/platform-bun';
 import { Context, Duration, Effect, Layer, Scope } from 'effect';
 import type { ModelSource } from '../../src/agents/index.ts';
 import type { QuickJson } from '../../src/agents/quick/schema.ts';
@@ -72,7 +73,8 @@ function createOnboardingLayer(options: TestOnboardingOptions) {
         JsonFile.layer,
         options.run ? createFakeShell(options.run) : ShellLayer
       )
-    )
+    ),
+    Layer.provide(BunServices.layer)
   );
 }
 

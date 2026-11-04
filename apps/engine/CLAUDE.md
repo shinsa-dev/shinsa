@@ -109,7 +109,7 @@ src/
 │                        are), store/ (ConfigStore: config.json from EngineConfig's read, kept in a Ref and written
 │                        atomically through JsonFile; a file it could not read kept aside and each problem logged),
 │                        address.ts (resolveServerAddress: where the command line reaches the engine, an Effect on
-│                        MachineConfigFile), data-dir.ts (prepareDataDir, plain), index.ts the re-exports. The port defaults to core's
+│                        MachineConfigFile), data-dir.ts (prepareDataDir, an Effect.fn on FileSystem and Shell), index.ts the re-exports. The port defaults to core's
 │                        APP_IDENTITY: 7446; package.json's dev and start scripts pin 5180 so a checkout never meets
 │                        the Mac app's engine; every SHINSA_* variable is read here, except SHINSA_QUICK and
 │                        SHINSA_SERVICE (instance/service/schema.ts) and the SHINSA_BUILD_* a compiled engine carries
@@ -143,7 +143,7 @@ src/
 │                        instead of failing and reads from a position), outbox/ (Outbox: the effects table, claimed
 │                        per lane, settled, retried, reconciled after a restart), receipts/, briefings/ (the Home
 │                        guide), snapshot/ (Snapshots: the state snapshot, verified by version, anchor and checksum;
-│                        version.ts: resolveStateVersion, a hash of @shinsa/core's source), commands/ (CommandLog: a
+│                        version.ts: resolveStateVersion, an Effect.fn on FileSystem hashing @shinsa/core's source), commands/ (CommandLog: a
 │                        command's events, effects, cancellations and receipt in one transaction) and migrations/
 │                        (LogMigrator over LOG_BASELINE and the ordered LOG_MIGRATIONS in list.ts, the log's version in
 │                        user_version, an older log refused with LogVersionError, inspect mode refusing a log that needs
@@ -487,8 +487,9 @@ src/
 │                        lenient PackageManifest schema: a field that breaks its shape is dropped, the rest kept),
 │                        lenient-list.ts (createLenientList: a list keeping the entries that decode), probe.ts
 │                        (the reads every module asks of a path, each an Effect.fn on Effect's FileSystem: isPresent,
-│                        isFolder, selectText, selectRealPath, listEntries, findFirstPresent; a failed read answers
-│                        false, none or no entries), inside.ts (the one containment check that reads the disk:
+│                        isFolder, selectText, selectRealPath, listEntries, findFirstPresent, isExecutable and
+│                        selectOnPath, the PATH lookup in place of Bun.which; a failed read answers false, none or
+│                        no entries), inside.ts (the one containment check that reads the disk:
 │                        selectInside and selectWritableInside, on real paths, so a symlink cannot leave), paths.ts
 │                        (the pure halves: isInside, assertRepoPath); every module asking whether a path stays in a
 │                        folder calls them
@@ -600,7 +601,7 @@ src/
 │                        verification before a task's first agent), login/ (GitHubLogins: the GitHub login through
 │                        GitHubCli, kept once gh answers it), current-login/ (CurrentLogin: that login for the user's
 │                        home), roots/ (Roots: chosen folders from ConfigStore, SHINSA_ROOTS, or discovery until
-│                        onboarding is done); folders/local.ts (listLocalRepos, plain); layers.ts (ReposLayer,
+│                        onboarding is done); folders/local.ts (listLocalRepos, an Effect.fn on FileSystem); layers.ts (ReposLayer,
 │                        RepoWorkLayer, StandaloneRepoWorkLayer); index.ts the pure helpers and re-exports
 ├── onboarding/          Status, folder suggestions, saving the setup (service.ts: Onboarding, its layer
 │                        Onboarding.layer({ models, accounts, terminals }) on EngineConfig, EngineCore, ConfigStore,
@@ -627,7 +628,7 @@ src/
 ├── projects/            changes.ts: listLocalRepoViews (repositories in the chosen folders and every project's
 │                        folders, registered or not) and the ProjectChanges service of changes/service.ts (on
 │                        EngineCore, RepoRegistry and CurrentLogin: upsertRepo and upsertFolder as Effects failing
-│                        with a DomainError, ProjectChangeFailed or the registry's failure), which http/routes/projects,
+│                        with a DomainError or the registry's failure), which http/routes/projects,
 │                        onboarding and the management client share; folders.ts
 │                        (resolving a folder you add)
 ├── triage/              Title, repository (or none), size, branch and dependencies for a new task, and the parts the human left

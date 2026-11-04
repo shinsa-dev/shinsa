@@ -1,5 +1,5 @@
 import { type MessageKind, ROUND_LIMITS, type ShinsaState, type Task, type TaskShape } from '@shinsa/core';
-import { Context, Effect, Layer } from 'effect';
+import { Context, Effect, FileSystem, Layer } from 'effect';
 import { describeDecisionQuestion, parseDecisionAnswer } from '../../agents/quick/decide.ts';
 import { QuickCalls } from '../../agents/quick/service.ts';
 import type { LocalRepo } from '../../repos/index.ts';
@@ -41,6 +41,7 @@ export class TriageClassifier extends Context.Service<
     TriageClassifier,
     Effect.gen(function* () {
       const ask = resolveQuickAsk((yield* QuickCalls).classify);
+      const withFiles = Effect.provideService(FileSystem.FileSystem, yield* FileSystem.FileSystem);
 
       const message = Effect.fn('TriageClassifier.message')(function* (task: Task, text: string) {
         const kindQuestion = resolveKindQuestion(task);
@@ -85,7 +86,7 @@ export class TriageClassifier extends Context.Service<
         local: LocalRepo[]
       ) {
         const work = describeRoundWork(task);
-        const pool = resolveCandidatePool(state, task, local, work.join('\n'));
+        const pool = yield* withFiles(resolveCandidatePool(state, task, local, work.join('\n')));
         const offered = listOfferedRepos(pool);
         if (offered.length === 0) return null;
         const prompt = [
