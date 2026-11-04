@@ -22,7 +22,7 @@ export type TeamScopeChoice = ResolvedPreset<TeamPreset>;
 export type MemberScopeChoice = TeamScopeChoice | typeof TEAM_CHOICE;
 
 export const PRESET_LABELS: Record<TeamScopeChoice, { label: string; hint: string }> = {
-  standard: { label: 'View only', hint: 'See the team’s tasks. Change nothing.' },
+  standard: { label: 'View only', hint: 'Open each other’s tasks in this team, and change nothing.' },
   collaborate: { label: 'Collaborate', hint: 'Everything but messaging agents.' },
   full: { label: 'Full access', hint: 'Everything, messaging agents included.' },
   custom: { label: 'Custom', hint: 'The scopes ticked below.' },
