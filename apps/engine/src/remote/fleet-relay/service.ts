@@ -251,6 +251,7 @@ export class FleetRelay extends Context.Service<FleetRelay, FleetRelayHandle>()(
               teamId: target.teamId,
               name: target.name,
               userId: target.userId,
+              appOrigin: origin,
             },
           ];
         });

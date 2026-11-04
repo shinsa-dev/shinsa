@@ -31,6 +31,7 @@ const STUDIO_RELAY: TeamRelayEntry = {
   teamId: 'team1',
   name: 'Studio',
   userId: MONA.id,
+  appOrigin: 'http://127.0.0.1:5195',
 };
 
 function createKaiRemote(overrides: Partial<RemoteSnapshot> = {}) {
@@ -81,8 +82,20 @@ describe('the local fleet relay', () => {
   });
 
   it('names each relayed machine’s owner and the scopes the team gives this account', () => {
-    const extra: TeamRelayEntry = { instanceId: 'gone', teamId: 'team1', name: 'Gone', userId: 'nobody' };
-    const missing: TeamRelayEntry = { instanceId: 'other', teamId: 'team9', name: 'Other', userId: KAI.id };
+    const extra: TeamRelayEntry = {
+      instanceId: 'gone',
+      teamId: 'team1',
+      name: 'Gone',
+      userId: 'nobody',
+      appOrigin: 'https://app.shinsa.dev',
+    };
+    const missing: TeamRelayEntry = {
+      instanceId: 'other',
+      teamId: 'team9',
+      name: 'Other',
+      userId: KAI.id,
+      appOrigin: 'https://app.shinsa.dev',
+    };
     const [target, ...rest] = resolveRelayTargets([STUDIO_RELAY, extra, missing], createKaiRemote());
     expect(rest).toEqual([]);
     expect(target).toEqual({
@@ -96,6 +109,7 @@ describe('the local fleet relay', () => {
       teamId: 'team1',
       name: 'Kai',
       userId: KAI.id,
+      appOrigin: 'https://app.shinsa.dev',
     };
     expect(resolveRelayTargets([kaiMachine], { ...asOwner, owner: MONA.id })).toEqual([
       { entry: kaiMachine, teammate: { owner: KAI, viewerId: MONA.id, scopes: [] }, online: false },
@@ -131,6 +145,7 @@ describe('the local fleet relay', () => {
       name: 'Studio',
       online: true,
       teammate: createTarget().teammate,
+      appOrigin: 'http://127.0.0.1:5195',
     });
     openWith(transport as unknown as SocketTransport);
     expect(opened).toEqual(['ws://localhost:7446/ws/teams/relay/studio']);

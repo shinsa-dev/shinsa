@@ -115,6 +115,7 @@ export function createRelayMember(target: RelayTarget, options: RelayMemberOptio
     connection: relayed,
     fetch: (request) => send(resolveRelayRequest(request, entry.instanceId)),
     resolveUrl: (path) => `${resolveTeamRelayPath(entry.instanceId)}${path}`,
+    appOrigin: entry.appOrigin,
     close: () => relayed.stop(),
   };
 }

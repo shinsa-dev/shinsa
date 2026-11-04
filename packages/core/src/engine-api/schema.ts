@@ -409,6 +409,7 @@ export const TeamRelayEntry = Schema.Struct({
   teamId: Schema.String,
   name: Schema.String,
   userId: Schema.String,
+  appOrigin: Schema.String,
 });
 
 export type TeamRelayEntry = typeof TeamRelayEntry.Type;

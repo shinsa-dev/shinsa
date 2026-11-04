@@ -1,6 +1,6 @@
 import { describe, expect, it, spyOn } from 'bun:test';
-import { connection, replaceConnection } from '@/lib/connection/socket.ts';
 import { resolveServiceView, SERVICE_LIMITS, type Task } from '@shinsa/core';
+import { connection, replaceConnection } from '@/lib/connection/socket.ts';
 import {
   canStartAll,
   createServiceDraft,
@@ -162,11 +162,15 @@ describe('a service’s private address', () => {
     expect(resolveServiceLink(stopped, undefined, true)).toBeNull();
   });
 
-  it('opens a relayed teammate’s service at its private address through app.shinsa.dev, from this machine too', () => {
+  it('opens a relayed teammate’s service at its private address through the engine’s Shinsa Cloud, from this machine too', () => {
     const relayed = { ...running, taskId: 'task-kai' };
-    replaceConnection(Object.assign(Object.create(connection), { isRelayed: (id: string) => id === 'task-kai' }));
+    replaceConnection(
+      Object.assign(Object.create(connection), {
+        selectAppOrigin: (id: string) => (id === 'task-kai' ? 'http://127.0.0.1:5195' : null),
+      })
+    );
     expect(resolveServiceLink(relayed, undefined, false)).toEqual({
-      href: `https://app.shinsa.dev${opened}`,
+      href: `http://127.0.0.1:5195${opened}`,
       text: remoteUrl,
     });
     expect(resolveServiceLink(running, undefined, false)?.href).toBe('http://localhost:4123/tasks/SH-4');

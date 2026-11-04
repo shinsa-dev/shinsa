@@ -3,6 +3,7 @@ import { mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   DEFAULT_TEAM_SCOPES,
+  REMOTE_APP_ORIGIN,
   REMOTE_KEY_ALGORITHM,
   type RemoteTeam,
   serializePrivateKey,
@@ -283,7 +284,13 @@ describe('the relay list', () => {
     ];
     const relay = startRelay(world);
     expect(await relay.list()).toEqual([
-      { instanceId: 'kai-mac', teamId: 'team1', name: 'Kai’s Mac', userId: '7' },
+      {
+        instanceId: 'kai-mac',
+        teamId: 'team1',
+        name: 'Kai’s Mac',
+        userId: '7',
+        appOrigin: REMOTE_APP_ORIGIN,
+      },
     ]);
     relay.update((file) => ({
       ...file,

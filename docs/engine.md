@@ -3856,9 +3856,10 @@ engine enrols and relays (Teammates act on team tasks, below). Teams need remote
     with its offline copy. Images, recordings and raw files of a relayed task load through the same relay
     (`Fleet.resolveMediaUrl`, `useMediaUrl`: a served path whose task belongs to a relayed member gets that member's
     `/api/teams/relay/<machine>` prefix), since the Mac app has no service worker to route them as app.shinsa.dev
-    does. A running service of a relayed task opens at its private `shinsa.page` address through app.shinsa.dev's
-    open route (`resolveServiceLink`, `https://app.shinsa.dev/__remote/previews/open?url=…`), which admits a
-    teammate with the `services` scope; its `localhost` address is the teammate's own machine, not yours.
+    does. A running service of a relayed task opens at its private `shinsa.page` address through the open route of
+    the Shinsa Cloud this engine talks to (`resolveServiceLink`, `<origin>/__remote/previews/open?url=…`, the origin
+    each relay entry carries as `TeamRelayEntry.appOrigin`: `SHINSA_REMOTE_ORIGIN`, app.shinsa.dev by default), which
+    admits a teammate with the `services` scope; its `localhost` address is the teammate's own machine, not yours.
   - **What a team device reaches** (`resolveScopedState`, `resolveScopedRefusal` in core's `remote/scope.ts`; the
     engine's `Remote.#resolveScope`, `http/socket.ts`, `remote/gate/service.ts`). Its channel carries a `ScopedActor`
     with `scope: { kind: 'team', teamId, scopes }`. The state it gets keeps only the tasks of the team's projects

@@ -20,11 +20,11 @@ import {
   Connection,
   connection,
   hasEngineCommand,
-  isRelayedRecord,
   replaceConnection,
   resolveMediaUrl,
   resolveUpdateMessage,
   selectEngineCommands,
+  selectRelayedAppOrigin,
   sendCommand,
   TRANSCRIPT_CACHE_LIMIT,
   TRANSCRIPT_ENTRY_LIMIT,
@@ -777,12 +777,12 @@ describe('Connection engine', () => {
 
   it('loads media of a relayed machine through its relay, and as it is on this machine', () => {
     expect(resolveMediaUrl('/api/evidence/t/a.png')).toBe('/api/evidence/t/a.png');
-    expect(isRelayedRecord('task-1')).toBe(false);
+    expect(selectRelayedAppOrigin('task-1')).toBeNull();
     const local = connection;
     replaceConnection({
       ...local,
       resolveMediaUrl: (uri: string) => `/api/teams/relay/kai${uri}`,
-      isRelayed: (id: string) => id === 'task-1',
+      selectAppOrigin: (id: string) => (id === 'task-1' ? 'https://app.shinsa.dev' : null),
     });
     expect(renderHook(() => useMediaUrl('/api/evidence/t/a.png')).result.current).toBe(
       '/api/teams/relay/kai/api/evidence/t/a.png'
@@ -791,8 +791,8 @@ describe('Connection engine', () => {
     expect(renderHook(() => useMediaUrls(images)).result.current).toEqual([
       { src: '/api/teams/relay/kai/api/evidence/t/a.png', caption: 'A' },
     ]);
-    expect(isRelayedRecord('task-1')).toBe(true);
-    expect(isRelayedRecord(null)).toBe(false);
+    expect(selectRelayedAppOrigin('task-1')).toBe('https://app.shinsa.dev');
+    expect(selectRelayedAppOrigin(null)).toBeNull();
     replaceConnection(null);
   });
 });

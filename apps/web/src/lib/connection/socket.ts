@@ -125,7 +125,7 @@ export interface ShinsaConnection {
   canOpenTerminals?: (projectId: string) => boolean;
   resolveTerminalTransport?: (terminalId: string) => SocketTransport | null;
   resolveMediaUrl?: (uri: string) => string;
-  isRelayed?: (id: string) => boolean;
+  selectAppOrigin?: (id: string) => string | null;
   subscribeResources: (listener: () => void) => () => void;
   selectResources: () => MachineResources | null;
   subscribeRemote: (listener: () => void) => () => void;
@@ -690,8 +690,8 @@ export function resolveMediaUrl(uri: string) {
   return connection.resolveMediaUrl?.(uri) ?? uri;
 }
 
-export function isRelayedRecord(id: string | null) {
-  return id !== null && (connection.isRelayed?.(id) ?? false);
+export function selectRelayedAppOrigin(id: string | null) {
+  return id === null ? null : (connection.selectAppOrigin?.(id) ?? null);
 }
 
 export function useMediaUrl(uri: string) {
@@ -700,7 +700,10 @@ export function useMediaUrl(uri: string) {
 
 export function useMediaUrls<T extends { src: string }>(images: T[]) {
   const snapshot = useSyncExternalStore(connection.subscribe, connection.snapshot);
-  return useMemo(() => images.map((image) => ({ ...image, src: resolveMediaUrl(image.src) })), [images, snapshot]);
+  return useMemo(
+    () => images.map((image) => ({ ...image, src: resolveMediaUrl(image.src) })),
+    [images, snapshot]
+  );
 }
 
 export function useConnection() {

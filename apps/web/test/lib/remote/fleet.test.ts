@@ -434,7 +434,11 @@ describe('sending to the machine that owns it', () => {
     const { studio, laptop } = createFleet();
     const fleet = new Fleet([
       studio.member,
-      { ...laptop.member, resolveUrl: (path) => `/api/teams/relay/m2${path}` },
+      {
+        ...laptop.member,
+        resolveUrl: (path) => `/api/teams/relay/m2${path}`,
+        appOrigin: 'https://app.shinsa.dev',
+      },
     ]);
     const image = '/api/evidence/task-laptop/round-1/shot.png';
     expect(fleet.resolveMediaUrl(image)).toBe(`/api/teams/relay/m2${image}`);
@@ -444,9 +448,9 @@ describe('sending to the machine that owns it', () => {
     );
     expect(fleet.resolveMediaUrl('https://example.com/shot.png')).toBe('https://example.com/shot.png');
     expect(fleet.resolveMediaUrl('//example.com/shot.png')).toBe('//example.com/shot.png');
-    expect(fleet.isRelayed('task-laptop')).toBe(true);
-    expect(fleet.isRelayed('task-studio')).toBe(false);
-    expect(fleet.isRelayed('task-nowhere')).toBe(false);
+    expect(fleet.selectAppOrigin('task-laptop')).toBe('https://app.shinsa.dev');
+    expect(fleet.selectAppOrigin('task-studio')).toBeNull();
+    expect(fleet.selectAppOrigin('task-nowhere')).toBeNull();
   });
 
   it('finds the owner of a request from its path or its query', () => {

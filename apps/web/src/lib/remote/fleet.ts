@@ -53,6 +53,7 @@ export interface FleetMember {
   fetch: (request: Request) => Promise<Response>;
   openTerminal?: (terminalId: string) => WebSocket;
   resolveUrl?: (path: string) => string;
+  appOrigin?: string;
   close?: () => void;
 }
 
@@ -422,7 +423,10 @@ export class Fleet implements ShinsaConnection {
 
   #relayOf(owner: string | null) {
     if (!owner) return null;
-    return this.#entries.find((entry) => entry.member.id === owner && isReachable(entry))?.member.resolveUrl ?? null;
+    return (
+      this.#entries.find((entry) => entry.member.id === owner && isReachable(entry))?.member.resolveUrl ??
+      null
+    );
   }
 
   resolveMediaUrl = (uri: string) => {
@@ -432,7 +436,11 @@ export class Fleet implements ShinsaConnection {
     return relay ? relay(uri) : uri;
   };
 
-  isRelayed = (id: string) => this.#relayOf(this.#ownerOf(id)) !== null;
+  selectAppOrigin = (id: string) => {
+    const owner = this.#ownerOf(id);
+    if (!this.#relayOf(owner)) return null;
+    return this.#entries.find((entry) => entry.member.id === owner)?.member.appOrigin ?? null;
+  };
 
   #outdatedMember(machineId: string | null | undefined) {
     const found = machineId ? this.#entries.find((entry) => entry.member.id === machineId) : undefined;
