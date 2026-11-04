@@ -15,6 +15,8 @@ import { useRoute, useRouteTaskId } from '@/router.ts';
 
 export const PHONE_QUERY = '(max-width: 639.98px)';
 
+export const COMPACT_BAR_QUERY = '(max-width: 767.98px)';
+
 export const SAFE_AREA_TOP = 'pt-[env(safe-area-inset-top)]';
 
 export const SAFE_AREA_BOTTOM = 'pb-[env(safe-area-inset-bottom)]';

@@ -3,7 +3,7 @@ import { TooltipProvider } from '@shinsa/ui/components/tooltip';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { CardsTopBar } from '@/components/layout/cards/top-bar.tsx';
 import { HomeLink } from '@/components/layout/home-link.tsx';
-import { PHONE_QUERY } from '@/components/layout/sidebar/compact-bar.tsx';
+import { COMPACT_BAR_QUERY, PHONE_QUERY } from '@/components/layout/sidebar/compact-bar.tsx';
 import { DesktopChrome } from '@/lib/desktop.ts';
 import { navigate, parseRoute, RouteScope } from '@/router.ts';
 import { installDesktop } from '../../support/desktop.ts';
@@ -20,7 +20,7 @@ const realMatchMedia = globalThis.matchMedia;
 
 function emulatePhone() {
   globalThis.matchMedia = ((query: string) => ({
-    matches: query === PHONE_QUERY,
+    matches: query === PHONE_QUERY || query === COMPACT_BAR_QUERY,
     media: query,
     addEventListener: () => {},
     removeEventListener: () => {},

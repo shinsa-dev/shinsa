@@ -445,9 +445,10 @@ Only these, and they win over anything below:
     the queue; it never hides. Its nav names the same places as Desk's bar, in the same words: New task (Home), Tasks,
     Services and Settings, each filled on its own page. From
     `md` (768px) up it sits beside the page.
-    **On a phone both layouts share one bar and one More sheet.** Desk below `sm` (640px, `PHONE_QUERY`, read with
-    `useMediaQuery` so only one bar is mounted) and Shelf below `md` show `CompactBar`
-    (`components/layout/sidebar/compact-bar.tsx`): the Shinsa logo (Home), Tasks as an icon alone, the queue button
+    **On a phone both layouts share one bar and one More sheet.** Both Desk and Shelf show `CompactBar` below `md`
+    (768px; Desk reads `COMPACT_BAR_QUERY` with `useMediaQuery`, so only one bar is mounted, because its full bar
+    needs about 720px), and Desk's full bar lets the Focus name truncate rather than clip when What's new or Update
+    joins it. The bar (`components/layout/sidebar/compact-bar.tsx`) holds the Shinsa logo (Home), Tasks as an icon alone, the queue button
     where it shows, the connection status, then Feedback as its icon and count (so ⌘K's Send feedback still has a
     trigger to open from), search and More (`IconDotGrid1x3Horizontal`). More opens the rail as a sheet from the
     right (`Rail` with `variant='sheet'`): New task, Tasks, Services, Settings, Feedback, Focus, and What's new,

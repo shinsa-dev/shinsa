@@ -10,8 +10,8 @@ import { HomeLink } from '@/components/layout/home-link.tsx';
 import { NavButton } from '@/components/layout/nav-button.tsx';
 import { CARDS_FRAME } from '@/components/layout/page/column.ts';
 import {
+  COMPACT_BAR_QUERY,
   CompactBar,
-  PHONE_QUERY,
   SAFE_AREA_SIDES,
   SAFE_AREA_TOP,
 } from '@/components/layout/sidebar/compact-bar.tsx';
@@ -27,13 +27,13 @@ export function CardsTopBar({ state, onMore }: { state: ShinsaState; onMore: () 
   const route = useRoute();
   const activeTaskId = useRouteTaskId(state);
   const resetKey = resolveResetKey({ route, search: '' });
-  const phone = useMediaQuery(PHONE_QUERY);
+  const compact = useMediaQuery(COMPACT_BAR_QUERY);
   return (
     <header
       data-window-drag
       className={cn('shrink-0 select-none desktop:ps-16', SAFE_AREA_TOP, SAFE_AREA_SIDES)}
     >
-      {phone ? (
+      {compact ? (
         <CompactBar state={state} onMore={onMore} className={CARDS_FRAME} />
       ) : (
         <div className={cn(CARDS_FRAME, 'flex h-11 items-center gap-1')}>
