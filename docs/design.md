@@ -460,7 +460,9 @@ Only these, and they win over anything below:
     is 16px there too (the framed Code tab keeps it). **The task page on a phone** (`PhoneTaskPage`, below `sm`) puts its header inside the tab's own scroll
     (`TaskScrollHeaderSlot`, rendered by each tab with `TaskScrollHeader`), so it scrolls away with the content;
     once the tabs leave the view (`useHeaderOutOfView`, an `IntersectionObserver`), a slim bar sticks at the top
-    with the title on one line and the tabs (`TaskCompactHeader`), the full header coming back as you scroll up. The
+    with the title on one line and the tabs (`TaskCompactHeader`), the full header coming back as you scroll up.
+    Under that bar the tab's scroll fades only at its bottom (`useTaskScrollFade`, `ScrollArea` `fade="end"`), since
+    a top fade would wash out the bar itself. The
     Code tab, which has no page scroll, shows only that slim bar. The header shows the handle, the round, the
     status and the pull request (or the checks) and folds every other fact behind a Details fact at the row's end
     (`TaskFacts` `fold`, opened per page view, never stored), which opens them in their usual order with Fewer
@@ -482,7 +484,8 @@ Only these, and they win over anything below:
     list never grows wider than the room beside it (`max-w-(--available-width)`), its hints truncating instead, and
     the guide's list of other running tasks scrolls inside a popover no taller than the room. **Settings on a phone**:
     the section tabs scroll sideways inside their strip, which keeps its width, and bring the open one into view
-    (`Choice` `scrolls`: the `TabsList` scrolls, never the box around it; anything that overflows sideways scrolls
+    (`Choice` `scrolls`: the `TabsList` scrolls, never the box around it, which carries the grey track; the tabs fade
+    out at whichever side still scrolls, through `ScrollFade` on the list; anything that overflows sideways scrolls
     its items, not its frame). A row with a label
     (`SettingRow`, `PathRow`, the model rows) wraps below `sm` (`SETTING_ROW_WRAPS`): the label keeps its own width
     (`SETTING_LABEL`, never less than its text unless that is the whole row) and the control goes to the next line

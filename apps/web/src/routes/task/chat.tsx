@@ -11,7 +11,7 @@ import { ROW, RunSection } from '@/components/chat/run-section.tsx';
 import { UserMessage } from '@/components/chat/user-message.tsx';
 import { PAGE_COLUMN } from '@/components/layout/page/column.ts';
 import { CHAT_COLUMN } from '@/components/layout/surface/card.ts';
-import { TaskScrollHeader } from '@/components/task/header.tsx';
+import { TaskScrollHeader, useTaskScrollFade } from '@/components/task/header.tsx';
 import { useReadOnly } from '@/components/task/read-only.tsx';
 import { TaskComposer } from '@/components/task/task-composer.tsx';
 import { useOutbox } from '@/hooks/use-outbox.ts';
@@ -157,6 +157,7 @@ export function ChatTab({
   const { scroller, content, detached, onScroll, jumpToLatest } = useStickToBottom(focusRunId);
   const readOnly = useReadOnly();
   const hint = readOnly ? null : resolveMessageHint(state, task);
+  const fade = useTaskScrollFade();
 
   return (
     <div className='flex min-h-0 flex-1 flex-col'>
@@ -164,6 +165,7 @@ export function ChatTab({
         <ScrollArea
           viewportRef={scroller}
           onScroll={onScroll}
+          fade={fade}
           className='min-h-0 flex-1'
           viewportClassName='overscroll-y-contain'
         >

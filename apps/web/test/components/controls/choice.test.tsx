@@ -60,6 +60,10 @@ describe('Choice', () => {
     const list = view.getByRole('tablist', { name: 'Settings sections' });
     expect(list.className).toContain('overflow-x-auto');
     expect(list.parentElement?.className).not.toContain('overflow-x-auto');
+    expect(list.parentElement?.className).toContain('bg-bg-2');
+    expect(list.className).toContain('bg-transparent');
+    expect(list.classList.contains('scroll-fade')).toBe(true);
+    expect(list.getAttribute('data-fade-orientation')).toBe('horizontal');
     view.unmount();
   });
 
@@ -67,7 +71,9 @@ describe('Choice', () => {
     const view = render(
       <Choice label='Task view' items={[...ITEMS]} value='automations' onValueChange={() => {}} />
     );
-    expect(view.getByRole('tablist', { name: 'Task view' }).className).not.toContain('overflow-x-auto');
+    const list = view.getByRole('tablist', { name: 'Task view' });
+    expect(list.className).not.toContain('overflow-x-auto');
+    expect(list.classList.contains('scroll-fade')).toBe(false);
     view.unmount();
   });
 });

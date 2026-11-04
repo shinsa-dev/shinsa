@@ -67,6 +67,15 @@ describe('ScrollArea', () => {
     view.unmount();
   });
 
+  it('fades only the bottom edge under a sticky header', () => {
+    const { viewport, mask } = setup({ fade: 'end' });
+    place(viewport, { scrollTop: 396, scrollHeight: 1000, clientHeight: 208 });
+    fireEvent.scroll(viewport);
+    expect(mask.getAttribute('data-fade-edges')).toBe('end');
+    expect(mask.hasAttribute('data-overflow-y-start')).toBe(false);
+    expect(mask.hasAttribute('data-overflow-y-end')).toBe(true);
+  });
+
   it('leaves the edges alone without fades', () => {
     const { viewport, mask } = setup({ fade: false });
     place(viewport, { scrollTop: 50, scrollHeight: 1000, clientHeight: 208 });

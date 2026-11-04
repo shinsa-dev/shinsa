@@ -679,7 +679,7 @@ export function ReviewTab({
   if (!report && diff.status === 'error') {
     return (
       <div className='flex min-h-0 flex-1 flex-col'>
-        <PageScroll>
+        <PageScroll fade={scrollHeader ? 'end' : true}>
           <TaskScrollHeader />
           <div className={cn(PAGE_COLUMN, 'flex flex-col gap-5 py-5')}>
             <p className='text-xs text-fg-2'>{diff.message}</p>
@@ -709,7 +709,7 @@ export function ReviewTab({
     <div className='flex min-h-0 flex-1 flex-col'>
       <FollowSpot viewport={viewport} selection={selection} />
       {!scrollHeader && index}
-      <PageScroll viewportRef={viewport}>
+      <PageScroll viewportRef={viewport} fade={scrollHeader ? 'end' : true}>
         {scrollHeader}
         {scrollHeader && index}
         <div className={cn(PAGE_COLUMN, 'flex flex-col gap-5 pt-4 pb-5', stops.length === 0 && 'pt-5')}>

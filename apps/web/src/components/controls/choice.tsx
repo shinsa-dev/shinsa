@@ -1,4 +1,5 @@
 import { Icon } from '@shinsa/ui/components/icon';
+import { ScrollFade } from '@shinsa/ui/components/scroll-fade';
 import { Tabs, TabsList, TabsTrigger } from '@shinsa/ui/components/tabs';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
@@ -12,6 +13,10 @@ interface ChoiceItem<V extends string> {
   checked?: boolean;
   disabled?: boolean;
 }
+
+const SCROLLING_TRACK = 'corner-superellipse/1.125 w-fit max-w-full rounded-control bg-bg-2';
+
+const SCROLLING_LIST = 'max-w-full justify-start overflow-x-auto overscroll-x-contain bg-transparent';
 
 export function revealActiveItem(strip: HTMLElement) {
   const active = strip.querySelector('[data-active]');
@@ -47,13 +52,9 @@ export function Choice<V extends string>({
     <Tabs
       value={value}
       onValueChange={(next) => onValueChange(next as V)}
-      className={cn(scrolls && 'max-w-full', className)}
+      className={cn(scrolls && SCROLLING_TRACK, className)}
     >
-      <TabsList
-        ref={list}
-        aria-label={label}
-        className={cn(scrolls && 'max-w-full justify-start overflow-x-auto overscroll-x-contain')}
-      >
+      <TabsList ref={list} aria-label={label} className={cn(scrolls && SCROLLING_LIST)}>
         {items.map((item) => {
           const trigger = (
             <TabsTrigger
@@ -75,6 +76,7 @@ export function Choice<V extends string>({
           );
         })}
       </TabsList>
+      {scrolls && <ScrollFade targetRef={list} orientation='horizontal' size={16} />}
     </Tabs>
   );
 }

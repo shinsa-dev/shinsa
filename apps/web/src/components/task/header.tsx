@@ -24,6 +24,10 @@ export function TaskScrollHeader() {
   return React.useContext(TaskScrollHeaderSlot);
 }
 
+export function useTaskScrollFade() {
+  return React.useContext(TaskScrollHeaderSlot) ? 'end' : true;
+}
+
 function TaskTabChoice({ view, onTabIntent }: { view: TaskView; onTabIntent?: (tab: TaskTab) => void }) {
   return (
     <Choice

@@ -38,8 +38,11 @@ function ScrollArea({
   onScroll,
   ...props
 }: Omit<React.ComponentProps<'div'>, 'onScroll'> & {
-  /** Fade the content out at whichever edges can still be scrolled. */
-  fade?: boolean;
+  /**
+   * Fade the content out at whichever edges can still be scrolled; `end`
+   * fades only the bottom, for a scroller whose top holds a sticky header.
+   */
+  fade?: boolean | 'end';
   /** The element that scrolls, for reading and setting the scroll position. */
   viewportRef?: React.Ref<HTMLDivElement>;
   viewportClassName?: string;
@@ -73,7 +76,7 @@ function ScrollArea({
     const { scrollTop, scrollHeight, clientHeight } = view;
     if (fade) {
       const edges = resolveOverflowEdges(scrollTop, clientHeight, scrollHeight);
-      masked.toggleAttribute('data-overflow-y-start', edges.start);
+      masked.toggleAttribute('data-overflow-y-start', fade === true && edges.start);
       masked.toggleAttribute('data-overflow-y-end', edges.end);
     }
     const geometry = resolveThumb({ scrollTop, scrollHeight, clientHeight });
@@ -160,6 +163,7 @@ function ScrollArea({
         ref={mask}
         data-slot='scroll-area-fade'
         data-fade-scope={fade ? '' : undefined}
+        data-fade-edges={fade === 'end' ? 'end' : undefined}
         style={fade ? timelines : undefined}
         className={cn('size-full rounded-[inherit]', fade && 'scroll-fade')}
       >
