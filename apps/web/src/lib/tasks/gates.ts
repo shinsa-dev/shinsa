@@ -22,6 +22,7 @@ export interface AnswerExtras {
 const GATE_REPLY = {
   answer: { decision: 'reply', done: 'Answered. The agent carries on.' },
   retry: { decision: 'approve', done: 'Picking it up again.' },
+  resume: { decision: 'approve', done: 'Resumed.' },
   sendToAgent: { decision: 'approve', done: 'Sent to the agent again.' },
   guide: { decision: 'reply', done: 'Retrying with your guidance.' },
   cancel: { decision: 'reject', done: 'Cancelled.' },
@@ -79,12 +80,14 @@ export function replyToGate(
 
 export function resolveRetryLabel(state: ShinsaState, gate: Gate) {
   if (gate.cause === 'push_hook') return 'Send to the agent again';
+  if (gate.cause === 'paused') return 'Resume';
   const task = state.tasks[gate.taskId];
   return (gate.cause === 'budget' && task && describeBudgetRetry(state, task)) || 'Retry';
 }
 
 const RETRY_REPLY: Partial<Record<NonNullable<Gate['cause']>, GateReply>> = {
   push_hook: 'sendToAgent',
+  paused: 'resume',
 };
 
 export function resolveRetryReply(gate: Gate): GateReply {

@@ -39,6 +39,7 @@ export type TaskActionKey =
   | 'removeFromBacklog'
   | 'snooze'
   | 'unsnooze'
+  | 'pause'
   | 'restart'
   | 'complete'
   | 'duplicate'
@@ -60,6 +61,7 @@ export const TASK_ACTION: Record<TaskActionKey, { label: string; icon: IconName 
   removeFromBacklog: { label: 'Remove from the backlog', icon: 'IconInboxEmpty' },
   snooze: { label: 'Snooze', icon: 'IconClockSnooze' },
   unsnooze: { label: 'Unsnooze', icon: 'IconBell' },
+  pause: { label: 'Pause', icon: 'IconPause' },
   restart: { label: 'Restart the current step', icon: 'IconArrowsRepeat' },
   complete: { label: 'Mark as done', icon: 'IconCheckCircle2' },
   duplicate: { label: DUPLICATE_TITLE, icon: 'IconSquareBehindSquare2' },
@@ -82,6 +84,7 @@ export const TASK_ACTION_COMMAND: Record<TaskActionKey, EngineCommand | null> = 
   removeFromBacklog: 'task.remove_from_backlog',
   snooze: 'task.snooze',
   unsnooze: 'task.unsnooze',
+  pause: 'task.pause',
   restart: 'task.retry',
   complete: 'task.complete',
   duplicate: 'task.mark_duplicate',
@@ -112,7 +115,8 @@ export function listTaskActions(
   task: Task,
   commands: ReadonlySet<string>,
   now = Date.now(),
-  teammate: TeammateMachine | null = null
+  teammate: TeammateMachine | null = null,
+  pausable = false
 ): TaskActionKey[][] {
   const links: TaskActionKey[] = [];
   if (task.pullRequest) links.push('pullRequest');
@@ -120,7 +124,7 @@ export function listTaskActions(
   const worktree: TaskActionKey[] = task.worktreePath ? ['editor', 'terminal', 'finder'] : [];
   const lifecycle: TaskActionKey[] = isTaskSettled(task)
     ? listSettledActions(task)
-    : ['restart', 'complete', 'duplicate', 'cancel'];
+    : [...(pausable ? (['pause'] as const) : []), 'restart', 'complete', 'duplicate', 'cancel'];
   const fork: TaskActionKey[] = task.stage === 'cancelled' ? [] : ['fork'];
   const share = listShareActions(task, now);
   return [
@@ -197,6 +201,9 @@ export function runTaskAction(task: Task, key: TaskActionKey) {
     case 'unsnooze':
       void sendCommandWithToast({ type: 'task.unsnooze', taskId: task.id }, 'Unsnoozed.');
       return;
+    case 'pause':
+      void pauseTask(task);
+      return;
     case 'restart':
       void sendCommandWithToast({ type: 'task.retry', taskId: task.id }, 'Restarted.');
       return;
@@ -213,6 +220,13 @@ export function runTaskAction(task: Task, key: TaskActionKey) {
       void sendCommandWithToast({ type: 'task.cancel', taskId: task.id }, 'Cancelled.');
       return;
   }
+}
+
+export function pauseTask(task: Task) {
+  return sendCommandWithToast(
+    { type: 'task.pause', taskId: task.id },
+    'Paused. Resume it when you are ready.'
+  );
 }
 
 export function updatePriority(task: Task, priority: TaskPriority) {

@@ -336,6 +336,16 @@ describe('the decision on a task page', () => {
     ] as never);
   });
 
+  it('offers Resume on a task you paused, which picks the step up again', () => {
+    const gate = createGate({ id: 'g1', taskId: 't1', type: 'failure', cause: 'paused' });
+    const { state, task } = setup(createTask({ id: 't1' }), [gate]);
+    const all = sections(state, task);
+    expect(labels(section(all, 'task.decide'))).toEqual(['Resume', 'Retry with guidance']);
+    expect(labels(section(all, 'task.actions'))).not.toContain('Pause');
+    run(find(all, 'task.t1.gate.g1.retry'));
+    expect(spies.sent.mock.calls).toEqual([answered('g1', 'approve', null, 'Resumed.')] as never);
+  });
+
   it('offers the same retry on a paused budget as the card does', () => {
     const budget = createGate({
       id: 'g1',
@@ -390,6 +400,7 @@ describe('the This task section', () => {
       'Fork into a new task',
       'Share task',
       'Snooze',
+      'Pause',
       'Restart the current step',
       'Mark as done',
       'Close as a duplicate',
@@ -430,6 +441,7 @@ describe('the This task section', () => {
       'Fork into a new task',
       'Share task',
       'Snooze',
+      'Pause',
       'Restart the current step',
       'Mark as done',
       'Close as a duplicate',
