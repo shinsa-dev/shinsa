@@ -103,7 +103,15 @@ function listLaterRoundCommands(state: ShinsaState): ShinsaCommand[] {
       ];
     }
     if (run.role === 'reviewer')
-      return [{ type: 'agent.report_review', runId: run.id, summary: null, findings: [] }];
+      return [
+        {
+          type: 'agent.report_review',
+          ratings: { confidence: 'high', risk: 'low' },
+          runId: run.id,
+          summary: null,
+          findings: [],
+        },
+      ];
     if (run.purpose === 'fix')
       return [
         { type: 'agent.complete_fix', runId: run.id, summary: 'Done.', ...resolveOwedReply(state, run.id) },

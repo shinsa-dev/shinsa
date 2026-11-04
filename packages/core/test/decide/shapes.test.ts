@@ -407,6 +407,7 @@ describe('find and fix', () => {
     harness.send({ type: 'checks.record', taskId, results: PASSING });
     harness.send({
       type: 'agent.report_review',
+      ratings: { confidence: 'high', risk: 'low' },
       runId: harness.activeRun(taskId).id,
       summary: null,
       findings: [],
@@ -800,6 +801,7 @@ describe('the agent composes the steps', () => {
     harness.send({ type: 'checks.record', taskId, results: PASSING });
     harness.send({
       type: 'agent.report_review',
+      ratings: { confidence: 'high', risk: 'low' },
       runId: harness.activeRun(taskId).id,
       summary: null,
       findings: [],
@@ -965,6 +967,7 @@ function reachMergedPullRequest(harness: Harness, taskId: string) {
   harness.send({ type: 'checks.record', taskId, results: PASSING });
   harness.send({
     type: 'agent.report_review',
+    ratings: { confidence: 'high', risk: 'low' },
     runId: harness.activeRun(taskId).id,
     summary: null,
     findings: [],
@@ -1060,6 +1063,7 @@ describe('a change, then an operation', () => {
     harness.send({ type: 'checks.record', taskId, results: PASSING });
     harness.send({
       type: 'agent.report_review',
+      ratings: { confidence: 'high', risk: 'low' },
       runId: harness.activeRun(taskId).id,
       summary: null,
       findings: [],

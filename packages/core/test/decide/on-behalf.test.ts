@@ -341,7 +341,13 @@ describe('acting for the human', () => {
     expect(reviewer.role).toBe('reviewer');
     expect(reviewer.prompt).not.toContain('Keep the old flag.');
     expect(harness.task(taskId).untoldMessages).toHaveLength(1);
-    harness.send({ type: 'agent.report_review', runId: reviewer.id, summary: null, findings: [] });
+    harness.send({
+      type: 'agent.report_review',
+      ratings: { confidence: 'high', risk: 'low' },
+      runId: reviewer.id,
+      summary: null,
+      findings: [],
+    });
     harness.send({ type: 'task.message', taskId, text: 'hello', kind: 'feedback' });
     expect(harness.activeRun(taskId).prompt).toContain(KEPT_NOTE);
   });

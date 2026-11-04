@@ -108,6 +108,7 @@ describe('your requests and their replies', () => {
     harness.send({ type: 'checks.record', taskId, results: [] });
     harness.send({
       type: 'agent.report_review',
+      ratings: { confidence: 'high', risk: 'low' },
       runId: harness.activeRun(taskId).id,
       summary: null,
       findings: [{ severity: 'blocking', file: 'a.ts', line: 1, message: 'Broken.' }],
@@ -123,6 +124,7 @@ describe('your requests and their replies', () => {
     harness.send({ type: 'checks.record', taskId, results: [] });
     harness.send({
       type: 'agent.report_review',
+      ratings: { confidence: 'high', risk: 'low' },
       runId: harness.activeRun(taskId).id,
       summary: null,
       findings: [],

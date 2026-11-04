@@ -168,6 +168,7 @@ export const ReportFilingInput = HandOverRecord({
   text: Required(SCHEDULE_LIMITS.reportText),
   fork_from: OptionalText(SCHEDULE_LIMITS.reference),
   repository: OptionalText(SCHEDULE_LIMITS.reference),
+  urgency: OrAbsent(OneOf(TASK_PRIORITIES)),
 }).check(
   Schema.makeFilter(
     ({ report_id: reportId, link }: { report_id: string | null; link: string | null }) =>

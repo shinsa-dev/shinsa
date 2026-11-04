@@ -144,7 +144,8 @@ async function hand(params: QueryParams, purpose: Purpose, turn: number) {
     writeFileSync(join(cwd, 'fixed.txt'), 'fixed\n');
     await callTool(params, 'complete_fix', { summary: 'Added the file the checks look for.' });
   }
-  if (purpose === 'review') await callTool(params, 'report_review', { findings: [] });
+  if (purpose === 'review')
+    await callTool(params, 'report_review', { confidence: 'high', risk: 'low', findings: [] });
   if (purpose === 'answer') await callTool(params, 'answer', { answer: 'Two files.' });
 }
 

@@ -9,6 +9,7 @@ import type {
   ReportWalkthrough,
   ReviewDisagreement,
   ReviewFinding,
+  ReviewRatings,
   TaskCheck,
   WorkReport,
 } from '../report/types.ts';
@@ -491,6 +492,7 @@ export interface Task {
   dismissedFindings?: ReviewFinding[];
   approveAfterFix?: boolean;
   reviewDisagreements?: ReviewDisagreement[];
+  reviewRatings?: ReviewRatings | null;
   reviewedInput?: string | null;
   monitor?: Monitor | null;
   treeHash?: string | null;

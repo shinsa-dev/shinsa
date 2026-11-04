@@ -663,6 +663,7 @@ function applyWorkSubmitted(state: ShinsaState, event: EventOf<'work.submitted'>
 function applyReviewReported(state: ShinsaState, event: EventOf<'review.reported'>) {
   updateTask(state, event.taskId, event.at, {
     reviewSummary: event.summary,
+    reviewRatings: event.ratings,
     findings: event.findings,
     reviewDisagreements: event.disagreements ?? [],
     reviewedInput: event.seen,

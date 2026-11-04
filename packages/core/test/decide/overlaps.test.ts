@@ -87,6 +87,7 @@ describe('files another open task changes too', () => {
     expect(harness.task(taskId).overlaps?.[0]?.untold).toEqual(['src/a.ts']);
     harness.send({
       type: 'agent.report_review',
+      ratings: { confidence: 'high', risk: 'low' },
       runId: review.id,
       summary: null,
       findings: [{ severity: 'blocking', file: 'src/a.ts', line: 1, message: 'It breaks the login.' }],

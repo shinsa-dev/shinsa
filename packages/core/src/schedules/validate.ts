@@ -1,5 +1,5 @@
 import type { ScheduleTargetInput } from '../commands/schedules.ts';
-import { MINUTE_MS, type ScheduleTrigger } from '../domain/index.ts';
+import { MINUTE_MS, type ScheduleTrigger, type TaskPriority } from '../domain/index.ts';
 import { HandOverReader, type Validation } from '../report/reading.ts';
 import {
   DailyAt,
@@ -151,6 +151,7 @@ export interface ReportFilingRequest {
   text: string;
   forkFrom: string | null;
   repository: string | null;
+  urgency: TaskPriority | null;
 }
 
 export function validateReportFiling(input: Record<string, unknown>): Validation<ReportFilingRequest> {
@@ -166,6 +167,7 @@ export function validateReportFiling(input: Record<string, unknown>): Validation
     text: filing.text,
     forkFrom: filing.fork_from,
     repository: filing.repository,
+    urgency: filing.urgency,
   });
 }
 

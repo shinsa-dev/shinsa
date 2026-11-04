@@ -282,7 +282,7 @@ describe('Claude and Codex together', () => {
       refused = await agent
         .call('delegate_task', { brief: 'Rewrite b.txt.', role: 'builder', provider: 'codex' })
         .catch((error: Error) => error.message);
-      await agent.call('report_review', { findings: [] });
+      await agent.call('report_review', { confidence: 'high', risk: 'low', findings: [] });
     });
     const taskId = await w.createTask();
     await w.untilStage(taskId, 'awaiting_review');

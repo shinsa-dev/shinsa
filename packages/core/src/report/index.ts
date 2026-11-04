@@ -82,6 +82,7 @@ export {
   MERGE_STEP_TIMINGS,
   PROTOCOL_LIMITS,
   REPLY_OUTCOMES,
+  REVIEW_RATINGS,
   REVIEW_PAYLOAD_VERSION,
   type ReviewPayload,
   type ReviewPayloadEvidence,

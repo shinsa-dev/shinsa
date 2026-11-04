@@ -49,6 +49,7 @@ function reachPullRequest(harness: Harness) {
   harness.send({ type: 'checks.record', taskId, results: PASSING });
   harness.send({
     type: 'agent.report_review',
+    ratings: { confidence: 'high', risk: 'low' },
     runId: harness.activeRun(taskId).id,
     summary: null,
     findings: [],

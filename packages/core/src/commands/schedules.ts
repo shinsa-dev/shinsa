@@ -10,6 +10,7 @@ export interface ReportFiling {
   text: string;
   forkOf: string | null;
   repoId: string | null;
+  urgency: TaskPriority | null;
 }
 
 export type ScheduleTargetInput =

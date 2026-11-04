@@ -92,6 +92,7 @@ export {
   parseReviewPayload,
   parseTestFile,
   REPLY_OUTCOMES,
+  REVIEW_RATINGS,
   type ReviewPayload,
   type ReviewPayloadEvidence,
   replacePullRequestBlock,

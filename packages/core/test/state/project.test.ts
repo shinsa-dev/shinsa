@@ -97,6 +97,7 @@ describe('task activity', () => {
     ].map((findings, index) => {
       const state = applyEvent(harness.state, {
         type: 'review.reported',
+        ratings: null,
         taskId,
         summary: null,
         findings,

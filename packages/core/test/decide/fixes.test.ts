@@ -110,6 +110,36 @@ describe('checks and agent review', () => {
     expect(harness.task(taskId).stage).toBe('reviewing');
   });
 
+  test('the reviewer is asked to rate the change, and its ratings are kept with each review', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    buildAll(harness, taskId);
+    harness.send({ type: 'checks.record', taskId, results: PASSING });
+    const reviewer = harness.activeRun(taskId);
+    expect(reviewer.prompt).toContain('Rate the change twice, honestly');
+    expect(reviewer.prompt).toContain(
+      'Call `report_review` with your summary, your ratings and your findings'
+    );
+    harness.send({
+      type: 'agent.report_review',
+      ratings: { confidence: 'medium', risk: 'high' },
+      runId: reviewer.id,
+      summary: null,
+      findings: [{ severity: 'blocking', file: 'src/a.ts', line: 3, message: 'Off by one.' }],
+    });
+    expect(harness.task(taskId).reviewRatings).toEqual({ confidence: 'medium', risk: 'high' });
+    harness.send({ type: 'agent.complete_fix', runId: harness.activeRun(taskId).id, summary: 'Fixed.' });
+    harness.send({ type: 'checks.record', taskId, results: PASSING });
+    harness.send({
+      type: 'agent.report_review',
+      ratings: { confidence: 'high', risk: 'low' },
+      runId: harness.activeRun(taskId).id,
+      summary: null,
+      findings: [],
+    });
+    expect(harness.task(taskId).reviewRatings).toEqual({ confidence: 'high', risk: 'low' });
+  });
+
   test('blocking findings go to the agent, then checks and a fresh reviewer', () => {
     const harness = createHarness();
     const taskId = createTask(harness);
@@ -118,6 +148,7 @@ describe('checks and agent review', () => {
     const reviewer = harness.activeRun(taskId);
     harness.send({
       type: 'agent.report_review',
+      ratings: { confidence: 'high', risk: 'low' },
       runId: reviewer.id,
       summary: null,
       findings: [{ severity: 'blocking', file: 'src/a.ts', line: 3, message: 'Off by one.' }],
@@ -138,6 +169,7 @@ describe('checks and agent review', () => {
     harness.send({ type: 'checks.record', taskId, results: PASSING });
     harness.send({
       type: 'agent.report_review',
+      ratings: { confidence: 'high', risk: 'low' },
       runId: harness.activeRun(taskId).id,
       summary: 'Checked the change; one naming nit.',
       findings: [
@@ -238,6 +270,7 @@ describe('fix loop limits', () => {
       harness.send({ type: 'checks.record', taskId, results: PASSING });
       harness.send({
         type: 'agent.report_review',
+        ratings: { confidence: 'high', risk: 'low' },
         runId: harness.activeRun(taskId).id,
         summary: null,
         findings: [finding(`wording ${round}`)],
@@ -332,6 +365,7 @@ describe('review rounds that escalate to you', () => {
     harness.send({ type: 'checks.record', taskId, results: PASSING });
     harness.send({
       type: 'agent.report_review',
+      ratings: { confidence: 'high', risk: 'low' },
       runId: harness.activeRun(taskId).id,
       summary: null,
       findings,
@@ -496,6 +530,7 @@ describe('review rounds that escalate to you', () => {
     expect(harness.activeRun(taskId).prompt).toContain('The human dismissed these findings');
     harness.send({
       type: 'agent.report_review',
+      ratings: { confidence: 'high', risk: 'low' },
       runId: harness.activeRun(taskId).id,
       summary: null,
       findings: blocking('Third.'),
@@ -577,6 +612,7 @@ describe('a fix that changed nothing reuses the last review', () => {
   function review(harness: Harness, taskId: string, findings: ReviewFinding[]) {
     harness.send({
       type: 'agent.report_review',
+      ratings: { confidence: 'high', risk: 'low' },
       runId: harness.activeRun(taskId).id,
       summary: null,
       findings,

@@ -266,9 +266,10 @@ function readPlanDocument(reader: HandOverReader, input: Record<string, unknown>
 
 export function validateReview(input: Record<string, unknown>): Validation<ReviewHandOver> {
   const reader = new HandOverReader();
-  const { summary, findings, disagreements } = reader.read(ReviewInput, input, []);
+  const { summary, confidence, risk, findings, disagreements } = reader.read(ReviewInput, input, []);
   return reader.result({
     summary,
+    ratings: { confidence, risk },
     findings: findings.map(({ line, end, title, fix, severity, file, message }) => ({
       severity,
       file,

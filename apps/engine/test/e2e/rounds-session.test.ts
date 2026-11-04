@@ -111,7 +111,8 @@ async function hand(params: QueryParams, brief: string, purpose: string, round: 
       judgement_calls: [],
     });
   }
-  if (purpose === 'review') await callTool(params, 'report_review', { findings: [] });
+  if (purpose === 'review')
+    await callTool(params, 'report_review', { confidence: 'high', risk: 'low', findings: [] });
 }
 
 async function tryEdit(params: QueryParams) {

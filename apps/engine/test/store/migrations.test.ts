@@ -42,13 +42,14 @@ function renameProject(name: string, to: string): LogMigration {
 const TWO_MIGRATIONS = [renameProject('rename-b', 'b'), renameProject('rename-c', 'c')];
 
 describe('event log migrations', () => {
-  test('the shipped list turns stacks into lists, names Slack channels and stamps what reviews saw, three versions past the baseline', () => {
+  test('the shipped list turns stacks into lists, names Slack channels, stamps what reviews saw and gives older reviews no ratings, four versions past the baseline', () => {
     expect(LOG_MIGRATIONS.map((migration) => migration.name)).toEqual([
       'stack-lists',
       'slack-channel-names',
       'review-seen',
+      'review-ratings',
     ]);
-    expect(resolveLogVersion()).toBe(LOG_BASELINE + 3);
+    expect(resolveLogVersion()).toBe(LOG_BASELINE + 4);
     expect(resolveLogVersion(TWO_MIGRATIONS)).toBe(LOG_BASELINE + 2);
   });
 
@@ -58,7 +59,7 @@ describe('event log migrations', () => {
     expect(log.migrate()).toEqual([]);
     expect(() => log.assertCurrent()).not.toThrow();
     log.close();
-    expect(readVersion(path)).toBe(LOG_BASELINE + 3);
+    expect(readVersion(path)).toBe(LOG_BASELINE + 4);
   });
 
   test('a log that already holds events is never stamped on open', () => {
@@ -156,7 +157,7 @@ describe('event log migrations', () => {
     }
     db.close();
     const log = openEventLog(path);
-    expect(log.migrate()).toEqual(['stack-lists', 'slack-channel-names', 'review-seen']);
+    expect(log.migrate()).toEqual(['stack-lists', 'slack-channel-names', 'review-seen', 'review-ratings']);
     expect(log.readEvents().events.slice(1)).toEqual([
       { type: 'task.stack_changed', taskId: 't1', stacksOn: ['p1'], by: 'you', seq: 2, at: 1 },
       { type: 'task.stack_changed', taskId: 't1', stacksOn: [], seq: 3, at: 1 },
@@ -166,7 +167,7 @@ describe('event log migrations', () => {
       { type: 'task.stack_based', taskId: 't2', bases: ['fix/p1', 'fix/p2'], seq: 7, at: 1 },
     ]);
     log.close();
-    expect(readVersion(path)).toBe(LOG_BASELINE + 3);
+    expect(readVersion(path)).toBe(LOG_BASELINE + 4);
   });
 
   test('slack-channel-names gives an older Slack thread link a null channel name, and keeps a known one', () => {
@@ -199,7 +200,7 @@ describe('event log migrations', () => {
     }
     db.close();
     const log = openEventLog(path);
-    expect(log.migrate()).toEqual(['slack-channel-names', 'review-seen']);
+    expect(log.migrate()).toEqual(['slack-channel-names', 'review-seen', 'review-ratings']);
     expect(log.readEvents().events.slice(1)).toEqual([
       {
         type: 'slack.thread_linked',
@@ -217,7 +218,7 @@ describe('event log migrations', () => {
       },
     ]);
     log.close();
-    expect(readVersion(path)).toBe(LOG_BASELINE + 3);
+    expect(readVersion(path)).toBe(LOG_BASELINE + 4);
   });
 
   test('review-seen gives an older review a null input it saw, and keeps a stamped one', () => {
@@ -238,13 +239,77 @@ describe('event log migrations', () => {
     }
     db.close();
     const log = openEventLog(path);
-    expect(log.migrate()).toEqual(['review-seen']);
+    expect(log.migrate()).toEqual(['review-seen', 'review-ratings']);
     expect(log.readEvents().events.slice(1)).toEqual([
-      { type: 'review.reported', taskId: 't1', summary: null, findings: [], seen: null, seq: 2, at: 1 },
-      { type: 'review.reported', taskId: 't2', summary: 'Clean', findings: [], seen: 'abc', seq: 3, at: 1 },
+      {
+        type: 'review.reported',
+        taskId: 't1',
+        summary: null,
+        findings: [],
+        seen: null,
+        ratings: null,
+        seq: 2,
+        at: 1,
+      },
+      {
+        type: 'review.reported',
+        taskId: 't2',
+        summary: 'Clean',
+        findings: [],
+        seen: 'abc',
+        ratings: null,
+        seq: 3,
+        at: 1,
+      },
     ]);
     log.close();
-    expect(readVersion(path)).toBe(LOG_BASELINE + 3);
+    expect(readVersion(path)).toBe(LOG_BASELINE + 4);
+  });
+
+  test('review-ratings gives an older review null ratings, and keeps rated ones', () => {
+    const path = createLogPath();
+    writeLog(path, LOG_BASELINE + 3);
+    const db = new Database(path);
+    const ratings = { confidence: 'high', risk: 'low' } as const;
+    const rows = [
+      { type: 'review.reported', taskId: 't1', summary: null, findings: [], seen: null },
+      { type: 'review.reported', taskId: 't2', summary: 'Clean', findings: [], seen: 'abc', ratings },
+    ];
+    for (const [index, row] of rows.entries()) {
+      db.run('INSERT INTO events (seq, at, type, payload) VALUES (?, ?, ?, ?)', [
+        index + 2,
+        1,
+        row.type,
+        JSON.stringify(row),
+      ]);
+    }
+    db.close();
+    const log = openEventLog(path);
+    expect(log.migrate()).toEqual(['review-ratings']);
+    expect(log.readEvents().events.slice(1)).toEqual([
+      {
+        type: 'review.reported',
+        taskId: 't1',
+        summary: null,
+        findings: [],
+        seen: null,
+        ratings: null,
+        seq: 2,
+        at: 1,
+      },
+      {
+        type: 'review.reported',
+        taskId: 't2',
+        summary: 'Clean',
+        findings: [],
+        seen: 'abc',
+        ratings,
+        seq: 3,
+        at: 1,
+      },
+    ]);
+    log.close();
+    expect(readVersion(path)).toBe(LOG_BASELINE + 4);
   });
 
   test('a log a newer Shinsa wrote opens as it is', () => {

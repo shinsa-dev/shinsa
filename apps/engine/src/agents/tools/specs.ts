@@ -5,6 +5,7 @@ import {
   EVIDENCE_STAGES,
   EVIDENCE_THEMES,
   FINDING_SEVERITIES,
+  REVIEW_RATINGS,
   MANUAL_TEST_TARGETS,
   MERGE_STEP_KINDS,
   MERGE_STEP_TIMINGS,
@@ -513,6 +514,18 @@ export const TOOL_SPECS = {
           'One or two sentences: what you checked and your overall view of the change.',
           L.reviewSummary
         ),
+        confidence: {
+          type: 'string',
+          enum: [...REVIEW_RATINGS],
+          description:
+            'How sure you are the change does what was asked and breaks nothing, once the findings you report are fixed. high: you read every changed line, the tests prove it and nothing is left to doubt. medium: it looks right but something is unproven. low: you could not tell, or you doubt it works.',
+        },
+        risk: {
+          type: 'string',
+          enum: [...REVIEW_RATINGS],
+          description:
+            'What breaks if the change is wrong. low: a contained change, such as copy, a test, a doc or one isolated function. medium: a feature people use, or shared code. high: data, money, security, auth, a migration, the release or anything hard to undo.',
+        },
         findings: {
           type: 'array',
           maxItems: L.findingCount,
@@ -550,7 +563,7 @@ export const TOOL_SPECS = {
           },
         },
       },
-      required: ['findings'],
+      required: ['confidence', 'risk', 'findings'],
     },
   },
   ask: {

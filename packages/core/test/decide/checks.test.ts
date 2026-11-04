@@ -265,6 +265,7 @@ describe('what blocks', () => {
     expect(harness.task(taskId).phaseReports[2]?.files).toBeUndefined();
     harness.send({
       type: 'agent.report_review',
+      ratings: { confidence: 'high', risk: 'low' },
       runId: harness.activeRun(taskId).id,
       summary: null,
       findings: [],
@@ -298,6 +299,7 @@ describe('what blocks', () => {
     });
     harness.send({
       type: 'agent.report_review',
+      ratings: { confidence: 'high', risk: 'low' },
       runId: harness.activeRun(taskId).id,
       summary: null,
       findings: [],
@@ -314,6 +316,7 @@ describe('what blocks', () => {
     expect(harness.activeRun(taskId).role).toBe('reviewer');
     harness.send({
       type: 'agent.report_review',
+      ratings: { confidence: 'high', risk: 'low' },
       runId: harness.activeRun(taskId).id,
       summary: null,
       findings: [],
@@ -398,6 +401,7 @@ describe('what blocks', () => {
     harness.send({ type: 'checks.record', taskId, results: [checkResult('r2', 'pass')] });
     harness.send({
       type: 'agent.report_review',
+      ratings: { confidence: 'high', risk: 'low' },
       runId: harness.activeRun(taskId).id,
       summary: null,
       findings: [],

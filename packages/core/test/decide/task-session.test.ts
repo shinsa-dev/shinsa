@@ -36,6 +36,7 @@ function reviewClean(harness: Harness, taskId: string) {
   linkSession(harness, taskId, 'reviewer-1');
   harness.send({
     type: 'agent.report_review',
+    ratings: { confidence: 'high', risk: 'low' },
     runId: harness.activeRun(taskId).id,
     summary: null,
     findings: [],
@@ -263,6 +264,7 @@ describe('one reviewer session per task', () => {
     linkSession(harness, taskId, 'reviewer-session');
     harness.send({
       type: 'agent.report_review',
+      ratings: { confidence: 'high', risk: 'low' },
       runId: first.id,
       summary: null,
       findings: [{ severity: 'blocking', message: 'Breaks the build.', file: 'src/a.ts', line: 1 }],

@@ -196,7 +196,15 @@ function listProgressCommands(state: ShinsaState, random: Random): ShinsaCommand
       ];
     }
     if (run.role === 'reviewer')
-      return [{ type: 'agent.report_review', runId: run.id, summary: null, findings: [] }];
+      return [
+        {
+          type: 'agent.report_review',
+          ratings: { confidence: 'high', risk: 'low' },
+          runId: run.id,
+          summary: null,
+          findings: [],
+        },
+      ];
     return [];
   });
   const tasks = Object.values(state.tasks).flatMap((task): ShinsaCommand[] => {

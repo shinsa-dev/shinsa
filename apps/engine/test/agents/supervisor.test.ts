@@ -1070,6 +1070,8 @@ describe('hand-overs', () => {
     });
     expect(
       await call('report_review', {
+        confidence: 'high',
+        risk: 'low',
         summary: 'Read the change.',
         findings: [],
         disagreements: [{ call: 1, reason: 'A flag reads clearer.' }],
@@ -1077,6 +1079,7 @@ describe('hand-overs', () => {
     ).toContain('Handed over: the human reads it in the chat as your reply.');
     expect(dispatched.find((command) => command.type === 'agent.report_review')).toMatchObject({
       summary: 'Read the change.',
+      ratings: { confidence: 'high', risk: 'low' },
       findings: [],
       disagreements: [{ call: 1, reason: 'A flag reads clearer.' }],
     });
@@ -1418,7 +1421,11 @@ describe('attempts and conditional writes', () => {
       fake.input.tools.handle('complete_fix', { summary: 'x' }, new AbortController().signal)
     ).rejects.toThrow('A newer attempt of this step has taken over.');
     expect(
-      fake.input.tools.handle('report_review', { findings: [] }, new AbortController().signal)
+      fake.input.tools.handle(
+        'report_review',
+        { confidence: 'high', risk: 'low', findings: [] },
+        new AbortController().signal
+      )
     ).rejects.toThrow('A newer attempt');
     expect(await git(path, 'status', '--porcelain')).toContain('late.txt');
     fake.finish();

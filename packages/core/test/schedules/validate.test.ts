@@ -175,6 +175,7 @@ describe('a report to file', () => {
         postedAt: null,
         forkFrom: null,
         repository: null,
+        urgency: null,
       },
     });
     expect(
@@ -185,6 +186,7 @@ describe('a report to file', () => {
         posted_at: '2026-10-29T10:00:00Z',
         fork_from: 'LOC-14',
         repository: 'shinsa',
+        urgency: 'urgent',
       })
     ).toMatchObject({
       ok: true,
@@ -194,6 +196,7 @@ describe('a report to file', () => {
         postedAt: '2026-10-29T10:00:00Z',
         forkFrom: 'LOC-14',
         repository: 'shinsa',
+        urgency: 'urgent',
       },
     });
   });

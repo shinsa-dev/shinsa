@@ -175,7 +175,13 @@ describe('a task is a conversation of rounds', () => {
       judgementCalls: [],
     });
     harness.send({ type: 'checks.record', taskId, results: PASSING });
-    harness.send({ type: 'agent.report_review', runId: builder().id, summary: null, findings: [] });
+    harness.send({
+      type: 'agent.report_review',
+      ratings: { confidence: 'high', risk: 'low' },
+      runId: builder().id,
+      summary: null,
+      findings: [],
+    });
     approve(harness, taskId);
     expect(harness.task(taskId).stageReason).toBe('pushing the changes');
     pushed(harness, taskId);
@@ -557,6 +563,7 @@ describe('how a round ships', () => {
     harness.send({ type: 'checks.record', taskId, results: PASSING });
     harness.send({
       type: 'agent.report_review',
+      ratings: { confidence: 'high', risk: 'low' },
       runId: harness.activeRun(taskId).id,
       summary: null,
       findings: [],
@@ -642,6 +649,7 @@ describe('how a round ships', () => {
     harness.send({ type: 'checks.record', taskId, results: PASSING });
     harness.send({
       type: 'agent.report_review',
+      ratings: { confidence: 'high', risk: 'low' },
       runId: harness.activeRun(taskId).id,
       summary: null,
       findings: [],
@@ -796,7 +804,7 @@ describe('ending a task', () => {
 });
 
 describe('what each round keeps', () => {
-  test('a new round starts with no review summary or findings', () => {
+  test('a new round starts with no review summary, ratings or findings', () => {
     const harness = createHarness();
     const taskId = createTask(harness);
     newIdea(harness, taskId, 'Next');
@@ -804,6 +812,7 @@ describe('what each round keeps', () => {
     harness.send({ type: 'checks.record', taskId, results: PASSING });
     harness.send({
       type: 'agent.report_review',
+      ratings: { confidence: 'high', risk: 'low' },
       runId: harness.activeRun(taskId).id,
       summary: 'Read the whole change; one naming nit.',
       findings: [
@@ -811,12 +820,14 @@ describe('what each round keeps', () => {
       ],
     });
     expect(harness.task(taskId).reviewSummary).toBe('Read the whole change; one naming nit.');
+    expect(harness.task(taskId).reviewRatings).toEqual({ confidence: 'high', risk: 'low' });
     approve(harness, taskId);
     pushed(harness, taskId);
     harness.send({ type: 'pull_request.record', taskId, pullRequest: pullRequest() });
     readyRound(harness, taskId);
     expect(resolveCurrentRound(harness.task(taskId)).number).toBe(2);
     expect(harness.task(taskId).reviewSummary).toBeNull();
+    expect(harness.task(taskId).reviewRatings).toBeNull();
     expect(harness.task(taskId).findings).toEqual([]);
   });
 
@@ -853,6 +864,7 @@ describe('what each round keeps', () => {
     harness.send({ type: 'checks.record', taskId, results: PASSING });
     harness.send({
       type: 'agent.report_review',
+      ratings: { confidence: 'high', risk: 'low' },
       runId: harness.activeRun(taskId).id,
       summary: null,
       findings: [],
@@ -931,6 +943,7 @@ describe('what each round keeps', () => {
     harness.send({ type: 'checks.record', taskId, results: PASSING });
     harness.send({
       type: 'agent.report_review',
+      ratings: { confidence: 'high', risk: 'low' },
       runId: harness.activeRun(taskId).id,
       summary: null,
       findings: [],

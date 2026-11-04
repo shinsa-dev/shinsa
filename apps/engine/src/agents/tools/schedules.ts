@@ -176,6 +176,12 @@ export const SCHEDULE_TOOL_SPECS = {
           maxLength: L.reference,
           description: 'The repository it belongs in, by name, when you know. Left out, triage picks one.',
         },
+        urgency: {
+          type: 'string',
+          enum: [...TASK_PRIORITIES],
+          description:
+            'How soon the issue needs fixing, as the new task’s priority. urgent: people are hurt by it now, such as errors on a main path, lost data or a broken release. Left out, a watchdog’s task takes the priority of the task it watches and an automation’s is left to triage.',
+        },
       },
       required: ['title', 'request', 'text'],
     },

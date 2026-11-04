@@ -293,6 +293,7 @@ function listAgentCommands(state: ShinsaState, random: Random): ShinsaCommand[] 
       case 'reviewer':
         commands.push({
           type: 'agent.report_review',
+          ratings: { confidence: 'high', risk: 'low' },
           runId,
           summary: chance(random, 0.5) ? 'Checked the change.' : null,
           findings: randomFindings(random),
@@ -686,6 +687,7 @@ function listProcessAgentCommands(state: ShinsaState, random: Random): ShinsaCom
     if (run.role === 'reviewer') {
       const review: ShinsaCommand = {
         type: 'agent.report_review',
+        ratings: { confidence: 'high', risk: 'low' },
         runId,
         summary: null,
         findings: [{ severity: 'blocking', file: 'a.ts', line: 1, message: `Again ${state.seq % 2}` }],

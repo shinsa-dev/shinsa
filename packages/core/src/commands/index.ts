@@ -43,6 +43,7 @@ import type {
   ReportWalkthrough,
   ReportWalkthroughRevision,
   ReviewFinding,
+  ReviewRatings,
   SuggestedTask,
 } from '../report/types.ts';
 import type { Coverage } from '../test-coverage/types.ts';
@@ -113,6 +114,7 @@ type AgentCommand =
       type: 'agent.report_review';
       runId: string;
       summary: string | null;
+      ratings: ReviewRatings;
       findings: ReviewFinding[];
       disagreements?: { call: number; reason: string }[];
     }

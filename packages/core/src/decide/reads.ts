@@ -137,6 +137,7 @@ function fileForIntake(decider: Decider, task: Task, run: Run, command: CommandO
       repoId: command.repoId,
       projectId: task.projectId ?? null,
       origin: null,
+      ...(command.urgency === null ? {} : { priority: command.urgency }),
       ...(command.forkOf ? { forkOf: command.forkOf } : {}),
     },
     {
@@ -180,7 +181,7 @@ function fileForWatchdog(decider: Decider, task: Task, run: Run, command: Comman
       type: 'task.create',
       request: resolveFiledRequest(command, watchdog.source.server),
       repoId,
-      priority: task.priority,
+      priority: command.urgency ?? task.priority,
       origin: task.origin,
       forkOf: task.id,
     },

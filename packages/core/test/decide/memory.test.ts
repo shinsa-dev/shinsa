@@ -325,6 +325,7 @@ describe('what agents are told', () => {
     linkSession(harness, taskId, 'review-session');
     harness.send({
       type: 'agent.report_review',
+      ratings: { confidence: 'high', risk: 'low' },
       runId: harness.activeRun(taskId).id,
       summary: null,
       findings: [{ severity: 'blocking', file: null, line: null, message: 'Handle the empty list.' }],

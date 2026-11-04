@@ -118,6 +118,7 @@ function mergeFromSlack(harness: Harness, steps: MergeStep[] = [], watchdog = LA
   harness.send({ type: 'checks.record', taskId, results: PASSING });
   harness.send({
     type: 'agent.report_review',
+    ratings: { confidence: 'high', risk: 'low' },
     runId: harness.activeRun(taskId).id,
     summary: null,
     findings: [],
@@ -614,6 +615,7 @@ describe('a merged task with watchdogs', () => {
       text: 'p95 is 1.8 s in Safari.',
       forkOf: null,
       repoId: null,
+      urgency: null,
     });
     endWatchCheck(harness, taskId, 'p95 is 1.8 s in Safari since the merge.');
     const watchdog = harness.task(taskId).watchdogs?.[0];

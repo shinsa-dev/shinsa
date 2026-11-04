@@ -290,6 +290,7 @@ export function reportReview(decider: Decider, command: CommandOf<'agent.report_
     type: 'review.reported',
     taskId: task.id,
     summary: command.summary,
+    ratings: command.ratings,
     findings: command.findings,
     ...(disagreements.length > 0 ? { disagreements } : {}),
     runId: run.id,

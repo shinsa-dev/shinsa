@@ -65,6 +65,7 @@ import type {
   ReportWalkthroughRevision,
   ReviewDisagreement,
   ReviewFinding,
+  ReviewRatings,
   WorkReport,
 } from '../report/types.ts';
 import type { Coverage } from '../test-coverage/types.ts';
@@ -221,6 +222,7 @@ type EventBody =
       type: 'review.reported';
       taskId: string;
       summary: string | null;
+      ratings: ReviewRatings | null;
       findings: ReviewFinding[];
       disagreements?: ReviewDisagreement[];
       runId?: string | null;
