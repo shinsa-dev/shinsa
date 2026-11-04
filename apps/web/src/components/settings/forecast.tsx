@@ -1,13 +1,16 @@
 import { MINUTE_MS, type Settings, type ShinsaState, type UsageForecast } from '@shinsa/core';
+import { AreaChart } from '@shinsa/ui/components/area-chart';
 import { Button } from '@shinsa/ui/components/button';
 import { Truncate } from '@shinsa/ui/components/truncate';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
+import { Hint } from '@/components/overlays/hint.tsx';
 import { useMinute } from '@/hooks/use-minute.ts';
 import {
   APPLY_PACE_LABEL,
   describeRecentPace,
   describeSafePace,
+  describeSegment,
   describeTightest,
   FORECAST_TITLE,
   type ForecastLane,
@@ -18,6 +21,9 @@ import {
   listForecastLanes,
   listProviderForecasts,
   type ProviderForecast,
+  FORECAST_LEGEND,
+  POOL_LABEL,
+  resolveForecastPaths,
   resolveForecastShare,
 } from '@/lib/accounts/forecast.ts';
 import { useAccounts } from '@/lib/connection/accounts.ts';
@@ -26,6 +32,10 @@ import { updateSettings } from '@/lib/settings.ts';
 import { ROW_INSET, SETTING_ROW, SettingsBlock, SettingsGroup } from './group.tsx';
 
 const LANE_LABEL = 'w-24 shrink-0 sm:w-36';
+
+const CHART_WIDTH = 700;
+
+const CHART_HEIGHT = 40;
 
 function Lane({ forecast, lane }: { forecast: UsageForecast; lane: ForecastLane }) {
   return (
@@ -36,20 +46,57 @@ function Lane({ forecast, lane }: { forecast: UsageForecast; lane: ForecastLane 
           const start = resolveForecastShare(forecast, segment.from);
           const end = resolveForecastShare(forecast, segment.to);
           return (
-            <span
-              key={segment.from}
-              data-left={segment.left}
-              className='absolute inset-y-0 overflow-hidden rounded-xs border-x border-card bg-bg-a2'
-              style={{ left: `${start * 100}%`, width: `${(end - start) * 100}%` }}
-            >
+            <Hint key={segment.from} label={describeSegment(forecast, segment, forecast.from)}>
               <span
-                className='absolute inset-y-0 start-0 bg-primary/50'
-                style={{ width: `${segment.left}%` }}
-              />
-            </span>
+                data-left={segment.left}
+                className='absolute inset-y-0 overflow-hidden rounded-xs border-x border-card bg-bg-a2'
+                style={{ left: `${start * 100}%`, width: `${(end - start) * 100}%` }}
+              >
+                <span
+                  className='absolute inset-y-0 start-0 bg-primary/50'
+                  style={{ width: `${segment.left}%` }}
+                />
+              </span>
+            </Hint>
           );
         })}
       </div>
+    </div>
+  );
+}
+
+function PoolRow({ forecast }: { forecast: UsageForecast }) {
+  const paths = resolveForecastPaths(forecast, CHART_WIDTH, CHART_HEIGHT);
+  if (!paths) return null;
+  return (
+    <div className='flex items-end gap-3'>
+      <span className={cn(LANE_LABEL, 'text-2xs text-fg-3')}>{POOL_LABEL}</span>
+      <div data-pool className='h-10 min-w-0 flex-1'>
+        <AreaChart width={CHART_WIDTH} height={CHART_HEIGHT} line={paths.line} area={paths.area} />
+      </div>
+    </div>
+  );
+}
+
+const LEGEND_SWATCH = {
+  left: 'h-2 w-3 rounded-xs bg-primary/50',
+  used: 'h-2 w-3 rounded-xs bg-bg-a2',
+  pool: 'h-0.5 w-3 rounded-full bg-primary',
+  tightest: 'h-2.5 w-0 border-l border-dashed border-amber-4',
+} as const;
+
+function Legend() {
+  return (
+    <div className='flex gap-3'>
+      <span className={cn(LANE_LABEL, 'max-sm:hidden')} />
+      <ul className='flex min-w-0 flex-1 flex-wrap gap-x-4 gap-y-1 text-2xs text-fg-2'>
+        {FORECAST_LEGEND.map((item) => (
+          <li key={item.key} className='flex items-center gap-1.5'>
+            <span aria-hidden className={LEGEND_SWATCH[item.key]} />
+            {item.label}
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
@@ -90,6 +137,7 @@ function Timeline({ forecast }: { forecast: UsageForecast }) {
   return (
     <div className={cn('flex flex-col gap-1.5 py-2.5', ROW_INSET)}>
       <div className='relative flex flex-col gap-1.5'>
+        <PoolRow forecast={forecast} />
         {lanes.map((lane) => (
           <Lane key={lane.account.id} forecast={forecast} lane={lane} />
         ))}
@@ -98,6 +146,7 @@ function Timeline({ forecast }: { forecast: UsageForecast }) {
         </div>
       </div>
       <DayAxis forecast={forecast} />
+      <Legend />
     </div>
   );
 }
@@ -162,7 +211,7 @@ export function ForecastSettings({ state }: { state: ShinsaState }) {
   return (
     <SettingsGroup
       title={FORECAST_TITLE}
-      description='The highest steady pace your accounts can keep up for the next 7 days, spending first from the account that resets soonest. Each lane is an account: the filled part is what it has left until its next reset, and the dashed line is the tightest point.'
+      description='The highest steady pace your accounts can keep up for the next 7 days, spending first from the account that resets soonest.'
     >
       {forecasts.map((entry) => (
         <ForecastBlock key={entry.provider} entry={entry} settings={state.settings} />

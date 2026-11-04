@@ -34,6 +34,15 @@ export const FORECAST_TITLE = 'Forecast';
 
 export const APPLY_PACE_LABEL = 'Use as daily limit';
 
+export const POOL_LABEL = 'At this pace';
+
+export const FORECAST_LEGEND = [
+  { key: 'left', label: 'Left on the account' },
+  { key: 'used', label: 'Already used' },
+  { key: 'pool', label: 'Left across accounts at this pace' },
+  { key: 'tightest', label: 'Tightest point' },
+] as const;
+
 const WEEKDAY = new Intl.DateTimeFormat('en', { weekday: 'short' });
 
 export function resolveRecentPace(state: ShinsaState, provider: string, now: number) {
@@ -87,8 +96,8 @@ export function describeTightest(forecast: UsageForecast, now: number) {
   if (!tightest) return null;
   const label = selectLabel(forecast, tightest.accountId);
   const after = forecast.resets.find((reset) => reset.at > tightest.at);
-  const then = after ? `, then ${formatTurnaround(after.at - tightest.at)} until the next reset` : '';
-  return `Tightest point: ${formatTurnaround(tightest.at - now)} until ${label} resets${then}, with ${formatPace(tightest.leftBefore)} left across accounts.`;
+  const then = after ? `, and the next one is ${formatTurnaround(after.at - tightest.at)} later` : '';
+  return `Tightest point: at ${formatPace(forecast.safePace)} a day you have ${formatPace(tightest.leftBefore)} left across accounts just before ${label} resets in ${formatTurnaround(tightest.at - now)}${then}.`;
 }
 
 export function describeRecentPace(forecast: UsageForecast, now: number) {
@@ -128,6 +137,23 @@ export function formatForecastDay(at: number) {
 
 export function describeSegment(forecast: UsageForecast, segment: ForecastSegment, now: number) {
   const label = selectLabel(forecast, segment.accountId);
-  const start = segment.from <= now ? 'now' : `in ${formatTurnaround(segment.from - now)}`;
-  return `${label}: ${formatPace(segment.left)} left from ${start}`;
+  const left = formatPace(segment.left);
+  const until = segment.to < forecast.to ? ` until it resets in ${formatTurnaround(segment.to - now)}` : '';
+  if (segment.from <= now) return `${label} has ${left} left${until}.`;
+  return `${label} resets to ${left} in ${formatTurnaround(segment.from - now)}.`;
+}
+
+function resolveCoordinate(value: number) {
+  return Number(value.toFixed(2));
+}
+
+export function resolveForecastPaths(forecast: UsageForecast, width: number, height: number) {
+  const top = Math.max(0, ...forecast.points.map((point) => point.left));
+  const first = forecast.points[0];
+  const last = forecast.points.at(-1);
+  if (!first || !last || top <= 0) return null;
+  const x = (at: number) => resolveCoordinate(resolveForecastShare(forecast, at) * width);
+  const y = (left: number) => resolveCoordinate(height - (left / top) * height);
+  const line = `M ${forecast.points.map((point) => `${x(point.at)} ${y(point.left)}`).join(' L ')}`;
+  return { line, area: `${line} L ${x(last.at)} ${height} L ${x(first.at)} ${height} Z` };
 }

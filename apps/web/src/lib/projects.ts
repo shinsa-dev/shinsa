@@ -83,7 +83,7 @@ export const PROJECT_DIALOG: Record<ProjectDialogMode, ProjectDialogCopy> = {
   usageLimit: {
     title: 'Set usage limit',
     description:
-      'Once this project’s tasks have used this much of a weekly limit in the last 24 hours, their next steps wait and start by themselves as older usage drops out.',
+      'Once this project’s tasks use this much in 24 hours, their next steps wait and start by themselves later.',
     action: 'Save limit',
     done: 'Usage limit saved.',
     fields: ['usageLimit'],

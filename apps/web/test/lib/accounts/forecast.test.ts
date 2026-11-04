@@ -11,6 +11,7 @@ import {
   listForecastDays,
   listForecastLanes,
   listProviderForecasts,
+  resolveForecastPaths,
   resolveForecastShare,
   resolveRecentPace,
 } from '@/lib/accounts/forecast.ts';
@@ -167,7 +168,7 @@ describe('the forecast in words', () => {
       `Up to ${formatPace(forecast.safePace)} of a weekly limit a day keeps you going for the next 7 days.`
     );
     expect(describeTightest(forecast, NOW)).toMatch(
-      /^Tightest point: (15h|2\.6d) until (work|home)@example\.com resets(, then .+ until the next reset)?, with .+% left across accounts\.$/
+      /^Tightest point: at .+% a day you have .+% left across accounts just before (work|home)@example\.com resets in (15h|2\.6d)(, and the next one is .+ later)?\.$/
     );
     expect(describeRecentPace(forecast, NOW)).toMatch(
       /^In the last 24 hours you used 40%\. At that pace every account runs out in .+\.$/
@@ -191,7 +192,7 @@ describe('the forecast in words', () => {
     const forecast = resolveUsageForecast([accounts[0] as (typeof accounts)[number]], NOW, null);
     if (!forecast?.tightest) throw new Error('expected a tightest point');
     const lone = { ...forecast, resets: [forecast.tightest], accounts: [] };
-    expect(describeTightest(lone, NOW)).toMatch(/^Tightest point: 15h until work resets, with .+% left/);
+    expect(describeTightest(lone, NOW)).toMatch(/^Tightest point: at .+ just before work resets in 15h\.$/);
   });
 
   it('knows whether the pace is already the daily limit', () => {
@@ -225,11 +226,27 @@ describe('the timeline', () => {
     expect(lanes[0]?.segments.map((segment) => segment.left)).toEqual([8, 100]);
     const later = lanes[0]?.segments[1];
     if (!later) throw new Error('expected a second stretch');
-    expect(describeSegment(forecast, later, NOW)).toBe('work@example.com: 100% left from in 15h');
+    expect(describeSegment(forecast, later, NOW)).toBe('work@example.com resets to 100% in 15h.');
     expect(describeSegment(forecast, lanes[0]?.segments[0] ?? later, NOW)).toBe(
-      'work@example.com: 8% left from now'
+      'work@example.com has 8% left until it resets in 15h.'
     );
-    expect(describeSegment({ ...forecast, accounts: [] }, later, NOW)).toBe('work: 100% left from in 15h');
+    expect(describeSegment({ ...forecast, accounts: [] }, later, NOW)).toBe('work resets to 100% in 15h.');
+    const open = { accountId: 'home', from: NOW, to: forecast.to, left: 21 };
+    expect(describeSegment(forecast, open, NOW)).toBe('home@example.com has 21% left.');
+  });
+
+  it('draws what is left across accounts at the safe pace as a line over the week', () => {
+    const paths = resolveForecastPaths(forecast, 700, 40);
+    if (!paths) throw new Error('expected paths');
+    const top = Math.max(...forecast.points.map((point) => point.left));
+    const first = forecast.points[0];
+    if (!first) throw new Error('expected a point');
+    expect(paths.line.startsWith(`M 0 ${Number((40 - (first.left / top) * 40).toFixed(2))} L `)).toBe(true);
+    expect(paths.line.split(' L ')).toHaveLength(forecast.points.length);
+    expect(paths.area).toBe(`${paths.line} L 700 40 L 0 40 Z`);
+    expect(resolveForecastPaths({ ...forecast, points: [] }, 700, 40)).toBeNull();
+    const dry = forecast.points.map((point) => ({ ...point, left: 0 }));
+    expect(resolveForecastPaths({ ...forecast, points: dry }, 700, 40)).toBeNull();
   });
 
   it('places times on the week and marks each midnight', () => {

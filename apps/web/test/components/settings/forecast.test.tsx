@@ -86,6 +86,8 @@ describe('the usage forecast', () => {
     expect(screen.getByText(/^Tightest point: /)).toBeTruthy();
     expect(screen.getByText('No measured usage in the last 24 hours.')).toBeTruthy();
     expect(container.querySelector('[data-tightest]')).not.toBeNull();
+    expect(container.querySelector('[data-pool] svg path')).not.toBeNull();
+    expect(screen.getByText('Left across accounts at this pace')).toBeTruthy();
     expect(container.querySelectorAll('[data-left]').length).toBeGreaterThanOrEqual(4);
     fireEvent.click(screen.getByRole('button', { name: 'Use as daily limit' }));
     await waitFor(() =>

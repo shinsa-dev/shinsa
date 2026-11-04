@@ -1,6 +1,7 @@
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { parse } from '@babel/parser';
+import { listDialogViolations } from './lint-dialog.ts';
 import { listDisclosureViolations } from './lint-disclosure.ts';
 import { isEffectSource, listEffectViolations } from './lint-effect.ts';
 import {
@@ -586,6 +587,7 @@ function run(): void {
     for (const file of listSourceFiles(root)) checkFile(file, violations, appSources);
   }
   violations.push(...listToastViolations(appSources));
+  violations.push(...listDialogViolations(appSources));
   for (const sheet of APP.flatMap((root) => listStyleSheets(root)))
     collectRawSelection(sheet, readFileSync(sheet, 'utf8'), violations);
   if (violations.length === 0) return;
