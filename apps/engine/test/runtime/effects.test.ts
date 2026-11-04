@@ -381,6 +381,10 @@ describe('the Slack effects', () => {
         handled.push('post');
         return Promise.resolve();
       },
+      merge: () => {
+        handled.push('merge');
+        return Promise.resolve();
+      },
       react: () => {
         handled.push('react');
         return Promise.resolve();
@@ -404,11 +408,12 @@ describe('the Slack effects', () => {
       { kind: 'slack.post', thread: THREAD, taskId: 't1', post: { kind: 'result' } },
       createContext()
     );
+    await runner.apply({ kind: 'slack.merge', thread: THREAD, taskId: 't1', round: 1 }, createContext());
     await runner.apply(
       { kind: 'slack.react', thread: THREAD, messageTs: '1.2', reaction: 'eyes' },
       createContext()
     );
-    expect(handled).toEqual(['evaluate', 'status', 'post', 'react']);
+    expect(handled).toEqual(['evaluate', 'status', 'post', 'merge', 'react']);
   });
 
   test('fail without one, so they wait in the outbox', async () => {

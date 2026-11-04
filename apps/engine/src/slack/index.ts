@@ -11,6 +11,7 @@ import {
   resolveSlackSessionStatus,
   resolveSlackTaskUrl,
   resolveSlackLastUsedAt,
+  resolveSlackMergeMessage,
   resolveSlackThreadKey,
   type ShinsaEffect,
   SLACK_ENGINE_INTERACTIONS_PATH,
@@ -87,6 +88,7 @@ export class Slack {
   readonly #statusIntervalMs: number;
   readonly #statusAt = new Map<string, number>();
   readonly #statusShown = new Map<string, string>();
+  readonly #mergeShown = new Map<string, string>();
   readonly #sessionShown = new Map<string, SlackSessionStatus>();
   readonly #declined = new Set<string>();
   readonly #sessionRefused = new Set<string>();
@@ -243,10 +245,30 @@ export class Slack {
   }
 
   async post(effect: Effect<'slack.post'>) {
-    const url = this.#taskUrl(effect.taskId);
-    const message = resolveSlackPostMessage(this.#engine.state, effect.post, effect.taskId, url);
+    const message = resolveSlackPostMessage(this.#engine.state, effect.post, effect.taskId, (taskId) =>
+      this.#taskUrl(taskId)
+    );
     if (!message) return;
     await this.#send(effect.thread, null, message);
+  }
+
+  async merge(effect: Effect<'slack.merge'>, context: EffectContext) {
+    const state = this.#engine.state;
+    const url = this.#taskUrl(effect.taskId);
+    const message = resolveSlackMergeMessage(state, effect.taskId, effect.round, url);
+    const merge = state.tasks[effect.taskId]?.slack?.merge;
+    if (!message || merge?.round !== effect.round) return;
+    const shown = JSON.stringify(message);
+    const key = `${effect.taskId}:${effect.round}`;
+    if (merge.ts && this.#mergeShown.get(key) === shown) return;
+    const ts = await this.#send(effect.thread, merge.ts, message);
+    if (!ts) return;
+    this.#mergeShown.set(key, shown);
+    if (ts === merge.ts) return;
+    await this.#engine.dispatch(
+      { type: 'slack.record_merge', taskId: effect.taskId, round: effect.round, ts },
+      { id: `${context.key}:slack.record_merge` }
+    );
   }
 
   async react(effect: Effect<'slack.react'>) {

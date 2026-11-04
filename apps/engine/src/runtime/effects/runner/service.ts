@@ -141,6 +141,10 @@ export class EffectHandlers extends Context.Service<
             );
           case 'slack.post':
             return yield* withSlack((slack) => world.bridge(() => slack.post(effect)));
+          case 'slack.merge':
+            return yield* withSlack((slack) =>
+              withContext(attempt, (context) => slack.merge(effect, context))
+            );
           case 'slack.react':
             return yield* withSlack((slack) => world.bridge(() => slack.react(effect)));
           case 'feedback.draft':
