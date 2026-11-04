@@ -48,6 +48,16 @@ describe('Slack’s status in Settings', () => {
       'Connected 2h ago as Christo'
     );
   });
+
+  it('leads with when the account last started a task here, then when it was connected', () => {
+    const hour = 3_600_000;
+    expect(describeSlackLink({ ...LINK, linkedAt: 0, lastUsedAt: 70 * hour }, 72 * hour)).toBe(
+      'Last used 2h ago as Christo · connected 3d ago'
+    );
+    expect(describeSlackLink({ ...LINK, linkedAt: 0, lastUsedAt: null }, 72 * hour)).toBe(
+      'Not used yet as Christo · connected 3d ago'
+    );
+  });
 });
 
 describe('the page after connecting Slack', () => {

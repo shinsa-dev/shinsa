@@ -4010,7 +4010,12 @@ Slack ──a card's button──► app.shinsa.dev /slack/interactions
   (connecting again from another machine moves it). The section reads `GET /api/slack` (`SlackSnapshot`: remote access
   on, the connect link, the links with workspace, user and when, or the problem when app.shinsa.dev cannot be
   reached) when Settings opens and when the window comes back. Disconnect (`POST /api/slack/disconnect`) removes every
-  link of this machine; from another device only its owner may (`OwnerOnlyRoute`). The hosted dashboard on
+  link of this machine; from another device only its owner may (`OwnerOnlyRoute`). Each row leads with when that
+  account last started work here ("Last used 2h ago as Christo · connected 3d ago", or "Not used yet"): the engine
+  adds `lastUsedAt` to each link from its own state (`resolveSlackLastUsedAt`, the newest task whose Slack thread
+  that user in that workspace started), so app.shinsa.dev stores nothing for it. Replies in a task's thread and
+  decisions from a card's buttons do not count. A page reaching an older engine, whose links lack the field, shows
+  "Connected 3d ago as Christo" as before. The hosted dashboard on
   app.shinsa.dev shows the same section, below Machines, read from and sent to the first machine of the dashboard.
 - **A mention reaches the machine** as `SlackMention` (`slack/schema.ts`): the event id, the workspace, channel and
   thread (`threadTs`, the mention's own `ts` for a mention outside a thread: the bot always answers in a thread), the

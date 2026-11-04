@@ -723,10 +723,17 @@ describe('Settings → General → Slack', () => {
     expect(await slack.snapshot()).toEqual({
       remote: true,
       connectUrl: 'https://app.test/slack/connect?instance=k3x9',
-      links: [{ teamId: 'T1', teamName: 'Acme', userId: 'U1', userName: 'Christo', linkedAt: 5 }],
+      links: [
+        { teamId: 'T1', teamName: 'Acme', userId: 'U1', userName: 'Christo', linkedAt: 5, lastUsedAt: 1 },
+      ],
       problem: null,
     });
     expect(relay[0]).toMatchObject({ path: '/__remote/slack/links', method: 'GET', token: 'machine-token' });
+  });
+
+  test('says when each connected account last started a task here, or that it has not', async () => {
+    const { slack } = setUp({ link: null });
+    expect((await slack.snapshot()).links[0]?.lastUsedAt).toBeNull();
   });
 
   test('says remote access comes first, and when app.shinsa.dev cannot be reached', async () => {

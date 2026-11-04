@@ -1,4 +1,5 @@
 import { Effect, Option, Schema } from 'effect';
+import type { ShinsaState } from '../state/index.ts';
 import { SLACK_BLOCK_LIMITS } from './blocks.ts';
 import { SlackId } from './schema.ts';
 
@@ -86,11 +87,24 @@ export const SlackLinks = Schema.Struct({ links: Schema.Array(SlackLink) });
 
 export type SlackLinks = typeof SlackLinks.Type;
 
+export interface SlackLinkUse extends SlackLink {
+  lastUsedAt?: number | null;
+}
+
 export interface SlackSnapshot {
   remote: boolean;
   connectUrl: string | null;
-  links: readonly SlackLink[];
+  links: readonly SlackLinkUse[];
   problem: string | null;
+}
+
+export function resolveSlackLastUsedAt(state: ShinsaState, link: Pick<SlackLink, 'teamId' | 'userId'>) {
+  let lastUsedAt: number | null = null;
+  for (const task of Object.values(state.tasks)) {
+    if (task.slack?.teamId !== link.teamId || task.slack.userId !== link.userId) continue;
+    lastUsedAt = Math.max(lastUsedAt ?? task.createdAt, task.createdAt);
+  }
+  return lastUsedAt;
 }
 
 export function resolveSlackConnectUrl(origin: string, instanceId: string) {

@@ -5,11 +5,13 @@ import {
   parseSlackRelayReaction,
   parseSlackRelaySession,
   resolveSlackConnectUrl,
+  resolveSlackLastUsedAt,
   resolveSlackLinkedPath,
   resolveSlackReadableText,
   resolveSlackTaskUrl,
   SLACK_RELAY_MESSAGE_LIMITS,
 } from '../../src/index.ts';
+import { createHarness, createTask } from '../harness.ts';
 
 describe('a machine’s post through the relay', () => {
   const POST = {
@@ -126,5 +128,48 @@ describe('links back to app.shinsa.dev', () => {
       'https://app.shinsa.dev/slack/connect?instance=k3%20x'
     );
     expect(resolveSlackTaskUrl('https://app.shinsa.dev', 'id-1')).toBe('https://app.shinsa.dev/tasks/id-1');
+  });
+});
+
+describe('when a Slack account last started work on this machine', () => {
+  function stateWith(links: Record<string, { teamId: string; userId: string } | null>) {
+    const harness = createHarness();
+    const ids = Object.keys(links).map(() => createTask(harness));
+    const state = harness.state;
+    const tasks = Object.fromEntries(
+      Object.values(links).map((link, index) => {
+        const task = state.tasks[ids[index] ?? ''];
+        if (!task) throw new Error('missing task');
+        const slack = link && {
+          ...link,
+          channelId: 'C1',
+          threadTs: `${index}.1`,
+          messageTs: `${index}.1`,
+          permalink: null,
+          statusTs: null,
+          reaction: null,
+        };
+        return [task.id, { ...task, createdAt: (index + 1) * 1_000, ...(slack ? { slack } : {}) }];
+      })
+    );
+    return { ...state, tasks };
+  }
+
+  test('is the newest task started by that user in that workspace', () => {
+    const state = stateWith({
+      first: { teamId: 'T1', userId: 'U1' },
+      newest: { teamId: 'T1', userId: 'U1' },
+      otherUser: { teamId: 'T1', userId: 'U2' },
+      otherTeam: { teamId: 'T2', userId: 'U1' },
+      typed: null,
+    });
+    expect(resolveSlackLastUsedAt(state, { teamId: 'T1', userId: 'U1' })).toBe(2_000);
+    expect(resolveSlackLastUsedAt(state, { teamId: 'T1', userId: 'U2' })).toBe(3_000);
+    expect(resolveSlackLastUsedAt(state, { teamId: 'T2', userId: 'U1' })).toBe(4_000);
+  });
+
+  test('is null for an account that has not started a task here', () => {
+    const state = stateWith({ typed: null, other: { teamId: 'T1', userId: 'U2' } });
+    expect(resolveSlackLastUsedAt(state, { teamId: 'T1', userId: 'U1' })).toBeNull();
   });
 });
