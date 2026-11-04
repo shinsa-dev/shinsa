@@ -115,6 +115,25 @@ describe('machines', () => {
     ]);
     expect(listed[1].map(({ machine, role }) => [machine.id, role])).toEqual([[STUDIO, 'owner']]);
   });
+
+  test('a machine a user reaches two ways is listed once, under the role that gives the most', async () => {
+    const listed = await runTest(
+      Effect.gen(function* () {
+        const machines = yield* Machines;
+        const access = yield* MachineAccess;
+        yield* seedUsers(MONA, RIO);
+        yield* seedMachine(STUDIO, MONA.id, 'a');
+        yield* access.members.add(STUDIO, RIO.id);
+        yield* access.guests.add(STUDIO, RIO.id);
+        yield* access.guests.add(STUDIO, MONA.id);
+        return [yield* machines.listOfUser(RIO.id), yield* machines.listOfUser(MONA.id)] as const;
+      })
+    );
+    expect(listed.map((machines) => machines.map(({ machine, role }) => [machine.id, role]))).toEqual([
+      [[STUDIO, 'member']],
+      [[STUDIO, 'owner']],
+    ]);
+  });
 });
 
 describe('machine access', () => {

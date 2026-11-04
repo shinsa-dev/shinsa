@@ -82,6 +82,27 @@ describe('Slack threads, posts and events', () => {
     expect(results).toEqual([true, false, true, false, Option.some(STUDIO), Option.none()]);
   });
 
+  test("removing a workspace removes its threads and posts, and not another workspace's", async () => {
+    const results = await runTest(
+      Effect.gen(function* () {
+        const slack = yield* seedWorkspace;
+        yield* slack.upsertWorkspace({ ...WORKSPACE, teamId: 'T2' });
+        yield* slack.recordThread(THREAD, STUDIO);
+        yield* slack.recordThread({ ...THREAD, teamId: 'T2' }, STUDIO);
+        yield* slack.recordPost({ teamId: 'T1', channelId: 'C1', ts: '2.000' }, STUDIO);
+        yield* slack.recordPost({ teamId: 'T2', channelId: 'C1', ts: '2.000' }, STUDIO);
+        yield* slack.removeWorkspace('T1');
+        return [
+          yield* slack.hasThread(THREAD, STUDIO),
+          yield* slack.hasThread({ ...THREAD, teamId: 'T2' }, STUDIO),
+          yield* slack.selectPoster({ teamId: 'T1', channelId: 'C1', ts: '2.000' }),
+          yield* slack.selectPoster({ teamId: 'T2', channelId: 'C1', ts: '2.000' }),
+        ] as const;
+      })
+    );
+    expect(results).toEqual([false, true, Option.none(), Option.some(STUDIO)]);
+  });
+
   test('an event is new once, and again after a day', async () => {
     const results = await runTest(
       Effect.gen(function* () {

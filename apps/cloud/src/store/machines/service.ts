@@ -65,7 +65,7 @@ export class Machines extends Context.Service<
         Request: RemoteUserId,
         Result: SharedMachineRow,
         execute: (userId) =>
-          sql`SELECT ${columns}, users.login AS owner_login, users.name AS owner_name, users.avatar_url AS owner_avatar_url, CASE WHEN instances.user_id = ${userId} THEN 'owner' WHEN instances.id IN (SELECT instance_id FROM instance_members WHERE user_id = ${userId}) THEN 'member' ELSE 'guest' END AS role FROM instances JOIN users ON users.id = instances.user_id WHERE instances.user_id = ${userId} OR instances.id IN (SELECT instance_id FROM instance_members WHERE user_id = ${userId}) OR instances.id IN (SELECT instance_id FROM instance_guests WHERE user_id = ${userId}) ORDER BY instances.created_at`,
+          sql`WITH access (instance_id, role, rank) AS (SELECT id, 'owner', 0 FROM instances WHERE user_id = ${userId} UNION ALL SELECT instance_id, 'member', 1 FROM instance_members WHERE user_id = ${userId} UNION ALL SELECT instance_id, 'guest', 2 FROM instance_guests WHERE user_id = ${userId}), roles AS (SELECT instance_id, role, MIN(rank) FROM access GROUP BY instance_id) SELECT ${columns}, users.login AS owner_login, users.name AS owner_name, users.avatar_url AS owner_avatar_url, roles.role FROM roles JOIN instances ON instances.id = roles.instance_id JOIN users ON users.id = instances.user_id ORDER BY instances.created_at, instances.id`,
       });
       const byId = SqlSchema.findOneOption({
         Request: InstanceId,

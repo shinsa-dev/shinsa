@@ -159,7 +159,7 @@ CREATE INDEX slack_links_user ON slack_links (user_id);
 CREATE INDEX slack_links_instance ON slack_links (instance_id);
 
 CREATE TABLE slack_threads (
-  team_id TEXT NOT NULL,
+  team_id TEXT NOT NULL REFERENCES slack_workspaces (team_id) ON DELETE CASCADE,
   channel_id TEXT NOT NULL,
   thread_ts TEXT NOT NULL,
   instance_id TEXT NOT NULL REFERENCES instances (id) ON DELETE CASCADE,
@@ -170,7 +170,7 @@ CREATE TABLE slack_threads (
 CREATE INDEX slack_threads_instance ON slack_threads (instance_id);
 
 CREATE TABLE slack_posts (
-  team_id TEXT NOT NULL,
+  team_id TEXT NOT NULL REFERENCES slack_workspaces (team_id) ON DELETE CASCADE,
   channel_id TEXT NOT NULL,
   ts TEXT NOT NULL,
   instance_id TEXT NOT NULL REFERENCES instances (id) ON DELETE CASCADE,

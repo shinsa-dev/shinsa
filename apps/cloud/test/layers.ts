@@ -119,8 +119,8 @@ export interface ServicesOptions {
 
 export const servicesTest = ({ upstream = createUpstream(), env = {} }: ServicesOptions = {}) =>
   CloudServices.pipe(
+    Layer.provideMerge(SqlTest),
     Layer.provide([
-      SqlTest,
       ConfigProvider.layer(ConfigProvider.fromUnknown({ ...TEST_ENV, ...env })),
       Layer.succeed(FetchHttpClient.Fetch, upstream.fetch),
     ]),
