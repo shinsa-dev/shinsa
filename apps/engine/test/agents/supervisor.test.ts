@@ -1219,34 +1219,33 @@ describe('hand-overs', () => {
     const extensions = { resolveSession: () => Effect.succeed(session as never) };
     const watch = (evidence: string) => ({
       summary: 'Fixed.',
-      walkthrough: {
-        watchdogs: [
-          {
-            title: 'Update feed errors',
-            check: 'No 5xx responses on /updates/*.',
-            source_request: {
-              data: 'Workers Logs of the site Worker',
-              evidence,
-              suggestions: ['Cloudflare’s official MCP server', 'Maple'],
-            },
+      watchdogs: [
+        {
+          title: 'Update feed errors',
+          check: 'No 5xx responses on /updates/*.',
+          source_request: {
+            data: 'Workers Logs of the site Worker',
+            evidence,
+            suggestions: ['Cloudflare’s official MCP server', 'Maple'],
           },
-        ],
-      },
+        },
+      ],
     });
     const { call, dispatched, done, running } = await handOverSetup(undefined, { extensions });
-    const { walkthrough } = watch('apps/marketing serves /updates.');
+    const { watchdogs } = watch('apps/marketing serves /updates.');
     await expect(
       call('complete_phase', {
         summary: 'Wrote it.',
         spots: [],
         judgement_calls: [],
-        walkthrough: { approach: 'Serve the feed.', flow: 'Request, then Worker.', ...walkthrough },
+        walkthrough: { approach: 'Serve the feed.', flow: 'Request, then Worker.' },
+        watchdogs,
       })
     ).rejects.toThrow('suggests `Cloudflare`, a server you already have.');
     expect(dispatched.some((command) => command.type === 'agent.complete_phase')).toBe(false);
     const refusal = call('complete_fix', watch('apps/marketing serves /updates.'));
     await expect(refusal).rejects.toThrow(
-      'walkthrough.watchdogs[0].source_request suggests `Cloudflare`, a server you already have.'
+      'watchdogs[0].source_request suggests `Cloudflare`, a server you already have.'
     );
     await expect(refusal).rejects.toThrow('suggests `maple`');
     expect(dispatched.some((command) => command.type === 'agent.complete_fix')).toBe(false);

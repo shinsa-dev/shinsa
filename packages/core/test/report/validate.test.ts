@@ -660,7 +660,7 @@ describe('validateFixHandOver', () => {
 
   test('refuses an empty walkthrough and names every broken part', () => {
     expect(errorsOf(validateFixHandOver({ summary: 'Fixed.', walkthrough: {} }))).toEqual([
-      'walkthrough needs at least one of approach, flow, risks, testing, steps or watchdogs. Leave it out when the fix changes none of them.',
+      'walkthrough needs at least one of approach, flow, risks, testing or steps. Leave it out when the fix changes none of them. Watchdogs go in watchdogs, beside walkthrough.',
     ]);
     expect(errorsOf(validateFixHandOver({ summary: 'Fixed.', walkthrough: 'flow' }))).toEqual([
       'walkthrough must be an object.',
@@ -1380,10 +1380,10 @@ const EVENTS = {
   production_check: 'The Vercel production deployment of paywall-next includes the merge commit.',
 };
 
-describe('watchdogs in the walkthrough', () => {
+describe('watchdogs beside the walkthrough', () => {
   test('reads a watchdog with a source and one with a source request', () => {
     const walkthrough = readValue(
-      validatePhaseHandOver({ summary: 'Done.', walkthrough: { ...WATCHED, watchdogs: [LATENCY, EVENTS] } })
+      validatePhaseHandOver({ summary: 'Done.', walkthrough: WATCHED, watchdogs: [LATENCY, EVENTS] })
     ).walkthrough;
     expect(walkthrough?.watchdogs).toEqual([
       {
@@ -1414,14 +1414,30 @@ describe('watchdogs in the walkthrough', () => {
       },
     ]);
     expect(
-      readValue(validatePhaseHandOver({ summary: 'Done.', walkthrough: { ...WATCHED, watchdogs: [] } }))
-        .walkthrough?.watchdogs
+      readValue(validatePhaseHandOver({ summary: 'Done.', walkthrough: WATCHED, watchdogs: [] })).walkthrough
+        ?.watchdogs
     ).toBeUndefined();
-    expect(
-      readValue(validateFixHandOver({ summary: 'Fixed.', walkthrough: { watchdogs: [] } })).walkthrough
-    ).toEqual({
+  });
+
+  test('makes a fix with only watchdogs a revision of them, and an empty list clears them', () => {
+    expect(readValue(validateFixHandOver({ summary: 'Fixed.', watchdogs: [LATENCY] })).walkthrough).toEqual({
+      watchdogs: [expect.objectContaining({ title: 'Checkout latency' })],
+    });
+    expect(readValue(validateFixHandOver({ summary: 'Fixed.', watchdogs: [] })).walkthrough).toEqual({
       watchdogs: [],
     });
+    expect(
+      readValue(
+        validateFixHandOver({ summary: 'Fixed.', walkthrough: { flow: 'New flow.' }, watchdogs: [EVENTS] })
+      ).walkthrough
+    ).toEqual({ flow: 'New flow.', watchdogs: [expect.objectContaining({ title: 'Paywall events' })] });
+    expect(readValue(validateFixHandOver({ summary: 'Fixed.' })).walkthrough).toBeNull();
+  });
+
+  test('refuses watchdogs on a phase without its walkthrough', () => {
+    expect(errorsOf(validatePhaseHandOver({ summary: 'Done.', watchdogs: [LATENCY] }))).toEqual([
+      'watchdogs go on the last phase, with its walkthrough: send both together.',
+    ]);
   });
 
   test('names a watchdog with both or neither source, no suggestions, a repeated title and a check past its window', () => {
@@ -1429,41 +1445,37 @@ describe('watchdogs in the walkthrough', () => {
       errorsOf(
         validatePhaseHandOver({
           summary: 'Done.',
-          walkthrough: {
-            ...WATCHED,
-            watchdogs: [
-              { ...LATENCY, source_request: EVENTS.source_request },
-              { ...LATENCY, title: 'No source', source: undefined },
-              { ...EVENTS, source_request: { data: 'd', evidence: 'e' } },
-              EVENTS,
-              { ...LATENCY, title: 'Short', first_check_minutes: 120, for_hours: 1 },
-            ],
-          },
+          walkthrough: WATCHED,
+          watchdogs: [
+            { ...LATENCY, source_request: EVENTS.source_request },
+            { ...LATENCY, title: 'No source', source: undefined },
+            { ...EVENTS, source_request: { data: 'd', evidence: 'e' } },
+            EVENTS,
+            { ...LATENCY, title: 'Short', first_check_minutes: 120, for_hours: 1 },
+          ],
         })
       )
     ).toEqual([
-      'walkthrough.watchdogs[0] needs exactly one of source (a server that has the data) or source_request (what to connect).',
-      'walkthrough.watchdogs[1] needs exactly one of source (a server that has the data) or source_request (what to connect).',
-      'walkthrough.watchdogs[2].source_request.suggestions needs at least 1 server to connect, by name and where it comes from.',
-      'walkthrough.watchdogs[3].title repeats walkthrough.watchdogs[2]; give each watchdog its own title.',
-      'walkthrough.watchdogs[4] checks first after 120 minutes but watches for only 1 hours; check at least once in the window.',
+      'watchdogs[0] needs exactly one of source (a server that has the data) or source_request (what to connect).',
+      'watchdogs[1] needs exactly one of source (a server that has the data) or source_request (what to connect).',
+      'watchdogs[2].source_request.suggestions needs at least 1 server to connect, by name and where it comes from.',
+      'watchdogs[3].title repeats watchdogs[2]; give each watchdog its own title.',
+      'watchdogs[4] checks first after 120 minutes but watches for only 1 hours; check at least once in the window.',
     ]);
     expect(
       errorsOf(
         validatePhaseHandOver({
           summary: 'Done.',
-          walkthrough: {
-            ...WATCHED,
-            watchdogs: [
-              { ...LATENCY, title: 'No way to tell', starts: 'production' },
-              { ...LATENCY, title: 'Staging', starts: 'staging', production_check: 'x' },
-            ],
-          },
+          walkthrough: WATCHED,
+          watchdogs: [
+            { ...LATENCY, title: 'No way to tell', starts: 'production' },
+            { ...LATENCY, title: 'Staging', starts: 'staging', production_check: 'x' },
+          ],
         })
       )
     ).toEqual([
-      'walkthrough.watchdogs[0].production_check is required when it starts on production: how to tell the merged change is live there.',
-      'walkthrough.watchdogs[1].starts must be one of merge, production.',
+      'watchdogs[0].production_check is required when it starts on production: how to tell the merged change is live there.',
+      'watchdogs[1].starts must be one of merge, production.',
     ]);
   });
 });
@@ -1474,13 +1486,8 @@ describe('a source request for a server the agent already has', () => {
       readValue(
         validatePhaseHandOver({
           summary: 'Done.',
-          walkthrough: {
-            ...WATCHED,
-            watchdogs: [
-              LATENCY,
-              { ...EVENTS, source_request: { data: 'Worker logs', evidence, suggestions } },
-            ],
-          },
+          walkthrough: WATCHED,
+          watchdogs: [LATENCY, { ...EVENTS, source_request: { data: 'Worker logs', evidence, suggestions } }],
         })
       ).walkthrough?.watchdogs ?? []
     );
@@ -1494,8 +1501,8 @@ describe('a source request for a server the agent already has', () => {
         'kampala',
       ])
     ).toEqual([
-      'walkthrough.watchdogs[1].source_request suggests `Cloudflare`, a server you already have. Check with its tools whether it reaches the data and give it as the `source`; only when it cannot, write in `evidence` “checked Cloudflare” and why it falls short.',
-      'walkthrough.watchdogs[1].source_request suggests `maple`, a server you already have. Check with its tools whether it reaches the data and give it as the `source`; only when it cannot, write in `evidence` “checked maple” and why it falls short.',
+      'watchdogs[1].source_request suggests `Cloudflare`, a server you already have. Check with its tools whether it reaches the data and give it as the `source`; only when it cannot, write in `evidence` “checked Cloudflare” and why it falls short.',
+      'watchdogs[1].source_request suggests `maple`, a server you already have. Check with its tools whether it reaches the data and give it as the `source`; only when it cannot, write in `evidence` “checked maple” and why it falls short.',
     ]);
   });
 

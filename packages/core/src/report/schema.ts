@@ -355,7 +355,6 @@ export const Walkthrough = OrAbsent(
     risks: Items(Risk, L.risks),
     testing: OrAbsent(Testing),
     steps: OrAbsent(MergeSteps),
-    watchdogs: OrAbsent(Watchdogs),
   })
 );
 
@@ -366,12 +365,11 @@ export const WalkthroughRevision = OptionalWholeRecord(
     risks: OrAbsent(Items(Risk, L.risks)),
     testing: OrAbsent(Testing),
     steps: OrAbsent(MergeSteps),
-    watchdogs: OrAbsent(Watchdogs),
   },
   Schema.makeFilter(
     (revision: { readonly [key: string]: unknown }) =>
       Object.values(revision).some((part) => part !== null) ||
-      'walkthrough needs at least one of approach, flow, risks, testing, steps or watchdogs. Leave it out when the fix changes none of them.'
+      'walkthrough needs at least one of approach, flow, risks, testing or steps. Leave it out when the fix changes none of them. Watchdogs go in watchdogs, beside walkthrough.'
   )
 );
 
@@ -444,6 +442,7 @@ export const PhaseHandOverInput = HandOverRecord({
   judgement_calls: Items(JudgementCallInput, L.judgementCalls),
   reply: ReplyInput,
   walkthrough: Walkthrough,
+  watchdogs: OrAbsent(Watchdogs),
   check_changes: CheckChanges,
 });
 
@@ -453,6 +452,7 @@ export const FixHandOverInput = HandOverRecord({
   summary: Required(L.phaseSummary),
   reply: ReplyInput,
   walkthrough: WalkthroughRevision,
+  watchdogs: OrAbsent(Watchdogs),
   checks: TextList(L.checks, L.checkId),
   check_changes: CheckChanges,
   evidence_kept: EvidenceRefs,
