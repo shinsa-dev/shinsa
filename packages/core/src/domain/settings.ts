@@ -1,4 +1,5 @@
 import { CLAUDE_PROVIDER } from '../agent-models/index.ts';
+import type { ReviewRating } from '../report/types.ts';
 import { DAY_MS, HOUR_MS } from './time.ts';
 import type { AgentRole } from './types.ts';
 
@@ -52,6 +53,47 @@ export function resolveShareEnd(limit: ShareLimit, now: number) {
   return span === undefined ? null : now + span;
 }
 
+export type AutoShipRisk = 'none' | ReviewRating;
+
+export const AUTO_SHIP_RISKS: readonly AutoShipRisk[] = ['none', 'low', 'medium', 'high'];
+
+export type AutoShipMerge = 'never' | 'low_risk' | 'approved';
+
+export const AUTO_SHIP_MERGES: readonly AutoShipMerge[] = ['never', 'low_risk', 'approved'];
+
+export type AutoShipUrgent = 'wait' | 'escalate' | 'merge' | 'escalate_then_merge';
+
+export const AUTO_SHIP_URGENT_ACTIONS: readonly AutoShipUrgent[] = [
+  'wait',
+  'escalate',
+  'merge',
+  'escalate_then_merge',
+];
+
+export interface AutoShipPolicy {
+  enabled: boolean;
+  approveUpTo: AutoShipRisk;
+  urgentApproveUpTo: AutoShipRisk;
+  merge: AutoShipMerge;
+  urgent: AutoShipUrgent;
+  urgentWaitMinutes: number;
+}
+
+export const MAX_URGENT_WAIT_MINUTES = 1440;
+
+export const AUTO_SHIP_DEFAULTS: AutoShipPolicy = {
+  enabled: false,
+  approveUpTo: 'low',
+  urgentApproveUpTo: 'medium',
+  merge: 'never',
+  urgent: 'escalate',
+  urgentWaitMinutes: 60,
+};
+
+export function resolveAutoShipPolicy(settings: Settings): AutoShipPolicy {
+  return { ...AUTO_SHIP_DEFAULTS, ...settings.autoShip };
+}
+
 export interface Settings {
   defaultProvider: string;
   defaultModel: string | null;
@@ -80,6 +122,7 @@ export interface Settings {
   placementPolicies?: string[];
   shareLimit?: ShareLimit;
   sharePreset?: SharePreset;
+  autoShip?: AutoShipPolicy;
 }
 
 export const SETTINGS_KEYS = [
@@ -110,6 +153,7 @@ export const SETTINGS_KEYS = [
   'placementPolicies',
   'shareLimit',
   'sharePreset',
+  'autoShip',
 ] as const satisfies readonly (keyof Settings)[];
 
 export const HUMAN_ONLY_SETTINGS = [
@@ -126,6 +170,7 @@ export const HUMAN_ONLY_SETTINGS = [
   'delegationLimit',
   'shareLimit',
   'sharePreset',
+  'autoShip',
 ] as const satisfies readonly (keyof Settings)[];
 
 export const HUMAN_ONLY_REPO_FIELDS = ['checkCommands', 'workspace', 'coverage'] as const;
@@ -179,6 +224,7 @@ const DEFAULT_SETTINGS: Settings = {
   placementPolicies: [],
   shareLimit: DEFAULT_SHARE_LIMIT,
   sharePreset: DEFAULT_SHARE_PRESET,
+  autoShip: AUTO_SHIP_DEFAULTS,
 };
 
 export function createSettings(): Settings {

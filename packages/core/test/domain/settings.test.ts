@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import {
+  AUTO_SHIP_DEFAULTS,
   createSettings,
   createState,
   isEunoeCompaction,
@@ -8,6 +9,7 @@ import {
   resolveAccountSwitchAt,
   resolveAgentFastMode,
   resolveAttentionLimit,
+  resolveAutoShipPolicy,
   resolveCompaction,
   resolveDelegationLimit,
   resolveFastMode,
@@ -64,8 +66,17 @@ describe('the settings a command may change', () => {
       placementPolicies: [],
       shareLimit: 'until_done',
       sharePreset: 'standard',
+      autoShip: AUTO_SHIP_DEFAULTS,
     };
     expect(Object.keys(every).sort()).toEqual([...SETTINGS_KEYS].sort());
+  });
+});
+
+describe('resolveAutoShipPolicy', () => {
+  test('is off by default, and fills in what the setting leaves out', () => {
+    expect(resolveAutoShipPolicy(createSettings())).toEqual(AUTO_SHIP_DEFAULTS);
+    expect(AUTO_SHIP_DEFAULTS.enabled).toBe(false);
+    expect(resolveAutoShipPolicy({ ...createSettings(), autoShip: undefined })).toEqual(AUTO_SHIP_DEFAULTS);
   });
 });
 

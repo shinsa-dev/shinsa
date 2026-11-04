@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import type { EventOf } from '../../src/events/index.ts';
 import {
+  AUTO_SHIP_DEFAULTS,
   HUMAN_ONLY_REPO_FIELDS,
   HUMAN_ONLY_SETTINGS,
   type Repo,
@@ -369,6 +370,7 @@ describe('acting for the human', () => {
       delegationLimit: 4,
       shareLimit: 'week',
       sharePreset: 'status',
+      autoShip: { ...AUTO_SHIP_DEFAULTS, enabled: true },
     };
     const fields: Required<Pick<Repo, (typeof HUMAN_ONLY_REPO_FIELDS)[number]>> = {
       checkCommands: ['bun test'],

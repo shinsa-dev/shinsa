@@ -23,6 +23,7 @@ import {
 import { assembleReport } from '../report/assemble.ts';
 import { serializeReportMarkdown } from '../report/markdown.ts';
 import { listPendingDependencies, resolveBundle } from '../state/queries.ts';
+import { resolveAutoShipDecision } from './auto-ship.ts';
 import { type Decider, describeWaiting } from './decider.ts';
 import { syncStackBases } from './dependencies.ts';
 import { approveReviewAhead } from './gates.ts';
@@ -177,17 +178,23 @@ export function openReviewGate(decider: Decider, taskId: string, escalation: Rev
     'awaiting_review',
     escalation ? 'the agents could not settle the review' : 'changes ready for your review'
   );
-  const ahead = escalation === null && decider.task(taskId).approveAfterFix === true;
+  const task = decider.task(taskId);
+  const ahead = escalation === null && task.approveAfterFix === true;
+  const autoShip = ahead ? null : resolveAutoShipDecision(decider.state.settings, task, escalation !== null);
   const gate = decider.openGate(
     taskId,
     'review',
     decider.task(taskId).title,
     serializeReportMarkdown(report),
     {
-      ...(escalation ? { details: { escalation } } : {}),
+      details: {
+        ...(escalation ? { escalation } : {}),
+        ...(autoShip && !autoShip.approve ? { autoShipHeld: autoShip.reason } : {}),
+      },
     }
   );
   if (ahead) approveReviewAhead(decider, gate);
+  else if (autoShip?.approve) approveReviewAhead(decider, gate, autoShip.reason);
 }
 
 export function settleTask(

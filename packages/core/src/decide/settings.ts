@@ -6,9 +6,11 @@ import {
   HUMAN_ONLY_SETTINGS,
   isProjectKey,
   MAX_COMPACTION_LEAD_MINUTES,
+  MAX_URGENT_WAIT_MINUTES,
   PROJECT_COLORS,
   PROJECT_LIMITS,
   type Project,
+  resolveAutoShipPolicy,
   resolveProjectKey,
   type Settings,
   selectFolderProject,
@@ -71,6 +73,13 @@ function assertSettings(patch: Partial<Settings>) {
     });
   }
   assertWatchdogSettings(patch);
+  const wait = patch.autoShip?.urgentWaitMinutes;
+  if (wait !== undefined && !isWholeBetween(wait, 1, MAX_URGENT_WAIT_MINUTES)) {
+    throw new DomainError({
+      code: 'settings_invalid',
+      message: `An urgent change waits 1 to ${MAX_URGENT_WAIT_MINUTES} minutes.`,
+    });
+  }
   const budget = patch.taskBudgetUsd;
   if (budget !== undefined && budget !== null && !(Number.isFinite(budget) && budget > 0)) {
     throw new DomainError({ code: 'settings_invalid', message: 'The cost limit must be above zero.' });
@@ -330,10 +339,20 @@ function dropStaleModels(previous: Settings, patch: Partial<Settings>): Settings
   };
 }
 
+function resolveSettingsPatch(
+  previous: Settings,
+  patch: CommandOf<'settings.change'>['patch']
+): Partial<Settings> {
+  const { autoShip, ...rest } = patch;
+  if (!autoShip) return rest;
+  return { ...rest, autoShip: { ...resolveAutoShipPolicy(previous), ...autoShip } };
+}
+
 export function changeSettings(decider: Decider, command: CommandOf<'settings.change'>) {
   assertHumanOnlyFields(decider, command.patch, HUMAN_ONLY_SETTINGS, 'the settings');
-  assertSettings(command.patch);
-  const settings = dropStaleModels(decider.state.settings, command.patch);
+  const patch = resolveSettingsPatch(decider.state.settings, command.patch);
+  assertSettings(patch);
+  const settings = dropStaleModels(decider.state.settings, patch);
   if (isSameValue(settings, decider.state.settings)) return;
   decider.emit({ type: 'settings.changed', settings });
   releaseBudgetHolds(decider);

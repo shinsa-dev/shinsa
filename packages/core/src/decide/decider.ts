@@ -90,6 +90,7 @@ type GateDetails = Partial<
     | 'recommendation'
     | 'cause'
     | 'escalation'
+    | 'autoShipHeld'
     | 'provider'
     | 'account'
     | 'secret'

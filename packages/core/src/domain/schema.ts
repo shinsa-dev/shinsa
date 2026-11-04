@@ -25,6 +25,9 @@ import {
 } from './fields.ts';
 import { SCHEDULE_TRIGGER_KINDS, WEBHOOK_ENCODINGS } from './schedules.ts';
 import {
+  AUTO_SHIP_MERGES,
+  AUTO_SHIP_RISKS,
+  AUTO_SHIP_URGENT_ACTIONS,
   COMPACTION_MODES,
   MERGE_METHODS,
   PLAN_APPROVALS,
@@ -88,6 +91,19 @@ export type Unbranded<T> =
       ? { [Key in keyof T]: Unbranded<T[Key]> }
       : T;
 
+export const AutoShipPatch = Strict(
+  {
+    enabled: Schema.optionalKey(Bool),
+    approveUpTo: Schema.optionalKey(Choice(AUTO_SHIP_RISKS)),
+    urgentApproveUpTo: Schema.optionalKey(Choice(AUTO_SHIP_RISKS)),
+    merge: Schema.optionalKey(Choice(AUTO_SHIP_MERGES)),
+    urgent: Schema.optionalKey(Choice(AUTO_SHIP_URGENT_ACTIONS)),
+    urgentWaitMinutes: Schema.optionalKey(WholeNumber),
+  },
+  'Auto-ship',
+  'autoShip'
+);
+
 export const SettingsPatch = Strict(
   {
     defaultProvider: Schema.optionalKey(Id()),
@@ -117,6 +133,7 @@ export const SettingsPatch = Strict(
     watchdogHours: Schema.optionalKey(WholeNumber),
     watchdogFirstCheckMinutes: Schema.optionalKey(WholeNumber),
     watchdogMaxGapHours: Schema.optionalKey(WholeNumber),
+    autoShip: Schema.optionalKey(AutoShipPatch),
   } satisfies Record<(typeof SETTINGS_KEYS)[number], Schema.Top>,
   'Settings',
   'patch'

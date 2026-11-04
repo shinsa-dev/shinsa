@@ -250,6 +250,7 @@ type EventBody =
       comments?: ReviewComment[];
       thenApprove?: boolean;
       ahead?: boolean;
+      autoShip?: string;
     }
   | { type: 'gate.withdrawn'; gateId: string }
   | { type: 'gate.noted'; gateId: string; notes: string | null }

@@ -435,6 +435,11 @@ export interface BundlePullRequest {
   number: number;
 }
 
+export interface AutoShipped {
+  at: number;
+  reason: string;
+}
+
 export interface Task {
   id: string;
   handle?: string | null;
@@ -493,6 +498,7 @@ export interface Task {
   approveAfterFix?: boolean;
   reviewDisagreements?: ReviewDisagreement[];
   reviewRatings?: ReviewRatings | null;
+  autoShipped?: AutoShipped | null;
   reviewedInput?: string | null;
   monitor?: Monitor | null;
   treeHash?: string | null;
@@ -730,6 +736,7 @@ export interface Gate {
   recommendation?: string | null;
   cause?: GateCause;
   escalation?: ReviewEscalation;
+  autoShipHeld?: string;
   verdicts?: FindingVerdict[];
   supersededBy?: string | null;
   provider?: string;

@@ -18,6 +18,7 @@ function writeApproveAfterFix(state: ShinsaState, taskId: string, at: number, ap
 
 function describeAnswer(gate: Gate, event: EventOf<'gate.answered'>) {
   if (gate.type === 'result') return 'Closed the task';
+  if (event.autoShip) return `Approved for you by Auto-ship: ${gate.title}`;
   if (event.ahead) return `Approved after the fix, as you asked: ${gate.title}`;
   if (event.thenApprove) return `Asked for changes and to approve after the fix: ${gate.title}`;
   return describeDecision(event.decision, gate.title);
@@ -28,6 +29,8 @@ function applyGateOpened(state: ShinsaState, event: EventOf<'gate.opened'>) {
   writeEntry(state, 'gates', gate.id, gate);
   if (gate.type === 'review' || isPausingGate(gate))
     writeApproveAfterFix(state, gate.taskId, event.at, false);
+  if (gate.type === 'review' && state.tasks[gate.taskId]?.autoShipped)
+    updateTask(state, gate.taskId, event.at, { autoShipped: null });
   if (isAgentQuestion(gate)) {
     record(state, gate.taskId, event.at, {
       actor: 'agent',
@@ -66,11 +69,13 @@ function applyGateAnswered(state: ShinsaState, event: EventOf<'gate.answered'>) 
   if (event.verdicts) applyVerdicts(state, gate.taskId, event.at, event.verdicts);
   clearSlackDecided(state, gate.taskId, event.at);
   if (gate.type === 'review') writeApproveAfterFix(state, gate.taskId, event.at, event.thenApprove === true);
+  if (event.autoShip)
+    updateTask(state, gate.taskId, event.at, { autoShipped: { at: event.at, reason: event.autoShip } });
   record(state, gate.taskId, event.at, {
-    actor: 'you',
+    actor: event.autoShip ? 'shinsa' : 'you',
     kind: 'decision',
     text: describeAnswer(gate, event),
-    detail: event.response,
+    detail: event.autoShip ?? event.response,
     ...(event.comments ? { comments: event.comments } : {}),
   });
 }

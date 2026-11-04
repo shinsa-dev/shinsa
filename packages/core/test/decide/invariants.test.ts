@@ -589,13 +589,15 @@ function listUserCommands(state: ShinsaState, random: Random): ShinsaCommand[] {
   }
   commands.push(...listMergeStepCommands(state));
   if (chance(random, 0.05)) {
+    const approvePlans = pick(random, ['when_asked', 'large', 'always'] as const) ?? 'when_asked';
     commands.push({
       type: 'settings.change',
       patch: {
-        approvePlans: pick(random, ['when_asked', 'large', 'always'] as const) ?? 'when_asked',
+        approvePlans,
         maxFixRounds: pick(random, [null, 1, 3]) ?? null,
         agentModels: chance(random, 0.5) ? { answerer: 'sonnet' } : {},
         agentProviders: chance(random, 0.3) ? { answerer: 'codex' } : {},
+        autoShip: { enabled: approvePlans === 'large' },
       },
     });
   }
