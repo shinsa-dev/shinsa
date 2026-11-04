@@ -5,7 +5,6 @@
   "ignoreRegExpList": ["gh\\[[a-z]+\\]_", "\\\\bxox\\[[a-z]+\\]-", "AKIA\\["],
   "words": [
     "seqno",
-    "unixepoch",
     "EPERM",
     "EACCES",
     "photoslibrary",

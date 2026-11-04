@@ -106,8 +106,6 @@ src/
                      TunnelUnreachable when it does not answer)
 migrations/          D1's schema (wrangler d1 migrations): 0001_schema.sql is the whole of it; test/store/schema.test.ts
                      pins its rules (How it works → The schema)
-rebuild/             The one-time move of a database made by the nine earlier migrations onto 0001_schema.sql,
-                     keeping its rows (Running and deploying)
 slack-manifest.json  The Slack app to create (api.slack.com → Create New App → From a manifest); test/slack.test.ts
                      keeps its scopes, redirects and events in step with the code
 test/                gates.test.ts reads every RemoteApi route with HttpApi.reflect and proves each sign-in gate:
@@ -380,18 +378,9 @@ model. The Worker's part of it:
   links follow). It is not called `dev`, so the root `bun dev` (turbo) never starts it.
 - The assets are `../web/dist-remote`, the web app's remote build, which `bun run build` makes (`build:remote` in
   `apps/web`): Cloudflare's Workers Builds runs it in `apps/cloud` before every deploy and preview.
-- Moving production onto the one schema file: D1 recorded the nine earlier migrations (`0001_remote.sql` to
-  `0008_team_scopes.sql`) by name, so `0001_schema.sql` cannot apply over them. The rebuild needs all nine applied
-  first (`wrangler d1 migrations list shinsa-cloud --remote`, run from `main`, lists none pending).
-  `rebuild/set-aside.sql` drops the old indexes and renames every table to `old_<name>`, the schema file creates the
-  tables, and `rebuild/copy.sql` copies every row but the expired sessions and the waiting pairings and sign-in
-  codes, drops the old tables and records `0001_schema.sql` as applied, as one file:
-  `cat rebuild/set-aside.sql migrations/0001_schema.sql rebuild/copy.sql > /tmp/shinsa-cloud-rebuild.sql`, then
-  `wrangler d1 execute shinsa-cloud --remote --file /tmp/shinsa-cloud-rebuild.sql`. The rebuild renames
-  every table, so the Worker running before it and the one after it each fail every request that reads D1 (500,
-  never 401, so no machine reads it as revoked) until the other half is in place: run it, then deploy this Worker
-  at once (`bun run deploy` from the branch, or merge and let Workers Builds deploy it), and the gap is that long. `wrangler d1 time-travel restore` undoes it. Once it
-  has run, `rebuild/` is removed.
+- The schema is `migrations/0001_schema.sql`, which production D1 runs and records as applied. A change to it is a
+  new numbered file beside it, applied with `bun run migrate` before the Worker that needs it deploys. A deploy from
+  a checkout runs `bun run build` first, since `wrangler deploy` refuses a missing `../web/dist-remote`.
 - Before the first deploy: a D1 database `shinsa-cloud` (`wrangler d1 create shinsa-cloud`, its id in
   `wrangler.jsonc`) with the migrations applied (`bun run migrate`), a GitHub OAuth app whose callback is
   `https://app.shinsa.dev/__remote/sign-in/callback`, and the secrets `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` and
