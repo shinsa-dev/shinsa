@@ -277,6 +277,34 @@ describe('a row’s summary line', () => {
     expect(row(/Build the export/).textContent).toContain('Running bun test apps/web');
   });
 
+  it('drops the steps on a phone when the row shows the agent’s latest action', () => {
+    renderQueue({
+      variant: 'wide',
+      state: createShinsaState({
+        tasks: [
+          BUILDING,
+          createTask({ id: 'idle', title: 'Idle task', stage: 'building', pipeline: ['build'] }),
+        ],
+        runs: [createRun({ id: 'run-phone', taskId: 'build', purpose: 'build' })],
+      }),
+    });
+    const track = (title: RegExp) => within(row(title)).getByRole('img', { name: /^Step/ }).parentElement;
+    expect(track(/Build the export/)?.className).toContain('max-sm:hidden');
+    expect(track(/Idle task/)?.className).not.toContain('max-sm:hidden');
+  });
+
+  it('keeps the steps on a phone in the compact queue', () => {
+    renderQueue({
+      variant: 'compact',
+      state: createShinsaState({
+        tasks: [BUILDING],
+        runs: [createRun({ id: 'run-compact-phone', taskId: 'build', purpose: 'build' })],
+      }),
+    });
+    const track = within(row(/Build the export/)).getByRole('img', { name: /^Step/ }).parentElement;
+    expect(track?.className).not.toContain('max-sm:hidden');
+  });
+
   it('shows nothing after the steps in the compact queue', () => {
     renderQueue({
       variant: 'compact',

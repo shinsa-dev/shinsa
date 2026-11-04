@@ -855,6 +855,14 @@
         calc(100% - var(--fade-size)) 100%;
     }
 
+    /* Only the bottom edge fades (ScrollArea's `fade="end"`): the top holds a
+       sticky header that a top fade would wash out. */
+    &[data-fade-edges="end"] {
+      animation: scroll-fade-b linear both;
+      animation-timeline: var(--fade-timeline-y);
+      animation-range: calc(100% - var(--fade-size)) 100%;
+    }
+
     scroll-timeline:
       var(--fade-timeline-y) block,
       var(--fade-timeline-x) inline;

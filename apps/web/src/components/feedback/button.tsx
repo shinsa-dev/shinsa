@@ -26,12 +26,14 @@ import {
 export function FeedbackButton({
   state,
   variant = 'bar',
+  side = variant === 'rail' ? 'right' : 'bottom',
   className,
   actions = FEEDBACK_ACTIONS,
   onNavigate,
 }: {
   state: ShinsaState;
-  variant?: 'bar' | 'rail';
+  variant?: 'bar' | 'compact' | 'rail';
+  side?: 'right' | 'bottom';
   className?: string;
   actions?: FeedbackActions;
   onNavigate?: () => void;
@@ -65,13 +67,14 @@ export function FeedbackButton({
           render={
             <Button
               variant='secondary'
-              size='sm'
+              size={variant === 'compact' && !count ? 'icon-sm' : 'sm'}
               icon={{ name: icon, className: NAV_ICON_NUDGE }}
               className={cn(open ? 'text-fg-4' : 'text-fg-3', className)}
             />
           }
+          aria-label={variant === 'compact' ? 'Feedback' : undefined}
         >
-          Feedback
+          {variant === 'compact' ? null : 'Feedback'}
           {count && <span className='text-primary-text tabular-nums'>{count}</span>}
         </PopoverTrigger>
       </Hint>
@@ -82,9 +85,9 @@ export function FeedbackButton({
       {trigger}
       <PopoverContent
         align={variant === 'rail' ? 'start' : 'end'}
-        side={variant === 'rail' ? 'right' : 'bottom'}
+        side={side}
         sideOffset={6}
-        collisionAvoidance={variant === 'rail' ? undefined : { fallbackAxisSide: 'none' }}
+        collisionAvoidance={side === 'right' ? undefined : { fallbackAxisSide: 'none' }}
         className={FEEDBACK_POPOVER}
       >
         <FeedbackPanel

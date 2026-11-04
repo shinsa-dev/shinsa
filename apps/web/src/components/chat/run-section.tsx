@@ -156,10 +156,11 @@ function RunLabel({
       className={cn('mt-2 mb-3 w-full', CHAT_INSET)}
       icon={role.icon}
       label={role.name}
+      wraps
       meta={
-        <span className='flex min-w-0'>
-          <Truncate className='min-w-0'>{headline}</Truncate>
-          <span className='shrink-0'>
+        <span className='flex min-w-0 max-sm:flex-wrap'>
+          <Truncate className='min-w-0 max-sm:line-clamp-2 max-sm:whitespace-normal'>{headline}</Truncate>
+          <span className='shrink-0 max-sm:whitespace-pre'>
             {run.outcome === 'failed' && <span className='text-red-text'> · Failed</span>}
             {run.outcome === 'cancelled' && ' · Stopped'} <RunAccount task={task} run={run} rerun={rerun} />
           </span>

@@ -118,12 +118,14 @@ function NoteBar({
       </IconSlot>
       {heading.author && <span className='shrink-0 font-medium text-fg-4'>{heading.author}</span>}
       {heading.title && <Truncate className='min-w-0 font-medium text-fg-4'>{heading.title}</Truncate>}
-      <span className='shrink-0 text-fg-2'>·</span>
-      <ToneLabel label={item.label} tone={item.tone} shrinks />
+      <span className='shrink-0 text-fg-2 max-sm:hidden'>·</span>
+      <span className='flex min-w-0 max-sm:ms-0.5 max-sm:shrink-0'>
+        <ToneLabel label={item.label} tone={item.tone} shrinks dotOnPhone />
+      </span>
       {item.section && (
         <>
-          <span className='shrink-0 text-fg-2'>·</span>
-          <Truncate className='min-w-0 text-2xs text-fg-2'>{item.section}</Truncate>
+          <span className='shrink-0 text-fg-2 max-sm:hidden'>·</span>
+          <Truncate className='min-w-0 text-2xs text-fg-2 max-sm:hidden'>{item.section}</Truncate>
         </>
       )}
     </DisclosureHeader>

@@ -8,6 +8,7 @@ interface ErrorBoundaryProps {
   title?: string;
   description?: string;
   className?: string;
+  fallbackLead?: React.ReactNode;
   onError?: (error: RenderError) => void;
   children: React.ReactNode;
 }
@@ -55,7 +56,13 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
         onRetry={this.retry}
       />
     );
-    if (!this.props.className) return fallback;
-    return <div className={this.props.className}>{fallback}</div>;
+    const framed = this.props.className ? <div className={this.props.className}>{fallback}</div> : fallback;
+    if (!this.props.fallbackLead) return framed;
+    return (
+      <>
+        {this.props.fallbackLead}
+        {framed}
+      </>
+    );
   }
 }

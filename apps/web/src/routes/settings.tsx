@@ -170,6 +170,7 @@ export function SettingsPage({ state }: { state: ShinsaState }) {
           </div>
           <Choice<SettingsTabId>
             label='Settings sections'
+            scrolls
             items={tabs.map((entry) => ({ value: entry.id, label: entry.label }))}
             value={tab}
             onValueChange={openTab}

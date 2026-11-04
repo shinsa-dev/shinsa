@@ -35,6 +35,19 @@ function Hint(props: { onClick?: () => void }) {
   );
 }
 
+function Label() {
+  return (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger render={<span />}>Round 2</TooltipTrigger>
+        <TooltipContent>
+          Merged <TooltipLabel>2h ago</TooltipLabel>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
+
 function Labelled({ label, tip }: { label: string; tip: string | null }) {
   return useTooltipTrigger(<button type='button'>{label}</button>, tip ? { content: tip } : null);
 }
@@ -416,27 +429,33 @@ describe('Tooltip from the keyboard', () => {
 describe('Tooltip without hover', () => {
   beforeEach(() => media.flip('(hover: hover)', false));
 
-  it('opens and closes on tap, and still runs the trigger’s own click', async () => {
-    const onClick = mock();
-    render(<Hint onClick={onClick} />);
-    const trigger = screen.getByRole('button', { name: 'Info' });
+  it('opens and closes a label’s tooltip on tap', async () => {
+    render(<Label />);
+    const trigger = screen.getByText('Round 2');
 
     await tap(trigger);
     expect(screen.getByText('2h ago').dataset.slot).toBe('tooltip-label');
-    expect(onClick).toHaveBeenCalledTimes(1);
 
     await tap(trigger);
     await waitClosed();
   });
 
+  it('runs a button’s action on tap and never opens its tooltip', async () => {
+    const onClick = mock();
+    render(<Hint onClick={onClick} />);
+    await tap(screen.getByRole('button', { name: 'Info' }));
+    expect(onClick).toHaveBeenCalledTimes(1);
+    expect(tooltip()).toBeNull();
+  });
+
   it('closes on a tap elsewhere, but not on a tap inside the tooltip', async () => {
     render(
       <>
-        <Hint />
+        <Label />
         <p>Elsewhere</p>
       </>
     );
-    await tap(screen.getByRole('button', { name: 'Info' }));
+    await tap(screen.getByText('Round 2'));
     await tap(tooltip() as HTMLElement);
     expect(tooltip()?.hasAttribute('data-open')).toBe(true);
     await tap(screen.getByText('Elsewhere'));

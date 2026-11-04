@@ -1,5 +1,6 @@
 import type { AccountsSnapshot, AgentProviderInfo, Settings } from '@shinsa/core';
 import { useDialogState } from '@shinsa/ui/hooks/use-dialog-state';
+import { cn } from '@shinsa/ui/lib/utils';
 import type * as React from 'react';
 import { SelectField } from '@/components/controls/select-field.tsx';
 import { SectionChevron } from '@/components/layout/page/section-label.tsx';
@@ -49,7 +50,14 @@ import {
   WATCHDOG_SETTINGS_TITLE,
 } from '@/lib/settings.ts';
 import { DelegationLimitDialog } from './delegation-limit-dialog.tsx';
-import { SETTING_ROW, SETTINGS_SHELF, SettingRow, SettingsGroup } from './group.tsx';
+import {
+  SETTING_LABEL,
+  SETTING_ROW,
+  SETTING_ROW_WRAPS,
+  SETTINGS_SHELF,
+  SettingRow,
+  SettingsGroup,
+} from './group.tsx';
 
 type SettingsUpdate = (patch: Partial<Settings>) => void;
 
@@ -111,8 +119,8 @@ function DescribedRow({
   children: React.ReactNode;
 }) {
   return (
-    <div className={SETTING_ROW}>
-      <div className='flex min-w-0 flex-1 flex-col'>
+    <div className={cn(SETTING_ROW, SETTING_ROW_WRAPS)}>
+      <div className={cn(SETTING_LABEL, 'flex flex-col')}>
         <div className='flex min-w-0 items-center gap-1.5 text-xs text-fg-4'>{title}</div>
         <p className='text-2xs text-fg-2'>{description}</p>
       </div>

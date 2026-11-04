@@ -15,9 +15,11 @@ import {
 } from '@shinsa/ui/components/dropdown-menu';
 import { EmptyState } from '@shinsa/ui/components/empty-state';
 import { useDialogState } from '@shinsa/ui/hooks/use-dialog-state';
+import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
 import { ProjectMenuTrigger, ProjectRadioItems } from '@/components/focus/menu.tsx';
 import { Toolbar } from '@/components/layout/page/toolbar.tsx';
+import { SAFE_AREA_BOTTOM } from '@/components/layout/sidebar/compact-bar.tsx';
 import { ConfirmDialog } from '@/components/overlays/confirm-dialog.tsx';
 import { Hint } from '@/components/overlays/hint.tsx';
 import { ServiceActionButton, ServiceRunButtons } from '@/components/services/service-row.tsx';
@@ -134,7 +136,7 @@ function TerminalBody({
   const view = views.find((each) => each.id === active.id) ?? null;
   const { findOpen, background } = useTerminalView(view);
   return (
-    <div className='flex min-h-0 flex-1 flex-col'>
+    <div className={cn('flex min-h-0 flex-1 flex-col', SAFE_AREA_BOTTOM)}>
       {view && findOpen && <TerminalFindBar key={view.id} view={view} />}
       <div style={{ background: background ?? undefined }} className='relative min-h-0 flex-1'>
         <div className='absolute inset-y-2 start-3 end-0'>
