@@ -1463,7 +1463,7 @@ first, a task in the backlog (whose plan gate is held out of Needs you until you
 or a plan that asks for `approval`; with Approve plans on Large plans, also for a plan with more than 3 phases or
 6 files (`PLAN_SIZE_LIMITS`) or a revised plan; on Always, for every plan. Nothing else waits on you. A failure, configuration or Sign in gate pauses the task (`isPausingGate`).
 
-**Pausing a task.** Pause (the task's header, its menu, ⌘K, `shinsa tasks pause`, an agent's `tasks_pause`) sends
+**Pausing a task.** Pause (the task's menu, a row's menu, ⌘K, `shinsa tasks pause`, an agent's `tasks_pause`) sends
 `task.pause` (`decide/pause.ts`) while something works on the task: triage, planning, building, checks, review,
 fixing, shipping, an inquiry or an operation (`isTaskPausable`). It stops every active run of the task, delegated runs
 included (`run.cancel` closes each run's scope, which interrupts the provider's turn at once), cancels the effects

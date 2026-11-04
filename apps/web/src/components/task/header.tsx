@@ -7,7 +7,6 @@ import { PHONE_QUERY } from '@/components/layout/sidebar/compact-bar.tsx';
 import { TaskFacts } from '@/components/task/facts.tsx';
 import { TaskHeading } from '@/components/task/heading.tsx';
 import { TaskMenu } from '@/components/task/menu.tsx';
-import { PauseButton } from '@/components/task/pause-button.tsx';
 import { useReadOnly, useReadOnlyNote } from '@/components/task/read-only.tsx';
 import { HandoffBanner, SharingBanner } from '@/components/task/sharing-banner.tsx';
 import { useTaskPageCommands } from '@/hooks/use-task-page-commands.ts';
@@ -155,7 +154,6 @@ export function TaskHeader({
         />
         {!readOnly && (
           <div className='flex h-6 shrink-0 items-center gap-2'>
-            <PauseButton state={state} task={task} />
             <TaskMenu state={state} task={task} />
           </div>
         )}

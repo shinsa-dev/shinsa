@@ -202,7 +202,10 @@ export function runTaskAction(task: Task, key: TaskActionKey) {
       void sendCommandWithToast({ type: 'task.unsnooze', taskId: task.id }, 'Unsnoozed.');
       return;
     case 'pause':
-      void pauseTask(task);
+      void sendCommandWithToast(
+        { type: 'task.pause', taskId: task.id },
+        'Paused. Resume it when you are ready.'
+      );
       return;
     case 'restart':
       void sendCommandWithToast({ type: 'task.retry', taskId: task.id }, 'Restarted.');
@@ -220,13 +223,6 @@ export function runTaskAction(task: Task, key: TaskActionKey) {
       void sendCommandWithToast({ type: 'task.cancel', taskId: task.id }, 'Cancelled.');
       return;
   }
-}
-
-export function pauseTask(task: Task) {
-  return sendCommandWithToast(
-    { type: 'task.pause', taskId: task.id },
-    'Paused. Resume it when you are ready.'
-  );
 }
 
 export function updatePriority(task: Task, priority: TaskPriority) {
