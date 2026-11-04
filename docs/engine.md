@@ -4494,10 +4494,13 @@ finishing), so a burst of changes costs one call: each request interrupts the fi
   its summary, the earlier work) and the instruction for the step it is on, and the server adds the transcript
   handoff (Resume fallback, The agent loop). Core does the same when it starts an Agent run with no session to resume
   (a fresh-class failure), so `run.prompt` holds the brief and `run.rolePrompt` the short form.
-- A fix loop stops with "not making progress" when the same failures come back after two fix
+- A fix loop stops with "not making progress" when the same failures come back after eight fix
   rounds (checks by the ids of the checks that block, the pull request by the names of its failing CI checks, the
-  ids of its unresolved review threads and a conflict), or after two rounds that left the code as it was
-  (the fingerprint's tree). This is what stops an agent that cannot fix a failure under "until clean". New
+  ids of its unresolved review threads and a conflict), or after eight rounds that left the code as it was
+  (the fingerprint's tree; `MAX_STALLED_FIXES`). Until then a repeat is not a pause: the next fix round goes to
+  the Agent with a line saying the failure came back after that many rounds and to find the cause another way
+  instead of repeating what it tried (`describeRepeatedFailure`), since a retry without new direction did the
+  same. This is what stops an agent that cannot fix a failure under "until clean". New
   comments alone key nothing, by signature or by tree: a pull request fix started only by them, with no
   failing check, open thread or conflict (`commentsOnly`, from `reactToWatch`), counts no repeats and
   records no tree, so an agent that answers a bot's comment with nothing to fix is never stopped for it,
@@ -4506,8 +4509,8 @@ finishing), so a burst of changes costs one call: each request interrupts the fi
   failing checks, the pull request's failing checks, open threads or conflict, the conflict with the
   base branch, or what the pre-push hook found (`STALLED_FIX_SUBJECT`).
   `maxFixRounds` caps the automatic rounds; "until clean" (the default, `null`) has no cap and keeps
-  going while each round changes something, so only "not making progress" stops it. The agent review never fails this way: it escalates to your review instead
-  (Review rounds escalate to you, above).
+  going while each round changes something, so only "not making progress" stops it. The agent review never fails this way: it escalates to your review instead,
+  after two repeats (`MAX_STALLED_REVIEW_FIXES`; Review rounds escalate to you, above).
 - Retrying a task, and asking for changes yourself, start a fresh automatic budget. Changes you
   ask for never use it up.
 - **Recovery budgets are keyed to durable state, never to prose** (`resolveRecoveryFingerprint`).
@@ -4979,7 +4982,7 @@ carries the comments it read (`remarks`) and who is reading (`viewer`).
   mergeable again. The merge commit carries git's own message, not the fix's: the subject git prepared in
   `MERGE_MSG`, with a merge of a remote-tracking branch named as the branch ("Merge branch 'main' into
   fix/login", as GitHub's own update writes it), and the fix's subject only when git left no message. A conflict the Agent
-  leaves twice stops at "Fixing is not making progress", as any fix does.
+  leaves eight times stops at "Fixing is not making progress", as any fix does.
 
 ## Merge queues
 
