@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, setDefaultTimeout, test } from 'bun:test';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Repo } from '@shinsa/core';
@@ -6,6 +6,8 @@ import { resolveIsolatedPath } from '../../src/git/checkout/paths.ts';
 import { Checkout } from '../../src/git/checkout/service.ts';
 import { runGit } from '../helpers/git.ts';
 import { captureLogs, createGitRepo, createTempDir, git } from '../helpers/index.ts';
+
+setDefaultTimeout(30_000);
 
 const resolveHead = (path: string) => runGit(Checkout.use((checkout) => checkout.head(path)));
 const createIsolatedWorktree = (

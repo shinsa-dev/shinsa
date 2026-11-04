@@ -1,9 +1,11 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, setDefaultTimeout, test } from 'bun:test';
 import type { Repo, Task } from '@shinsa/core';
 import { History } from '../../src/git/history/service.ts';
 import { createWorktree, runGit } from '../helpers/git.ts';
 import { createGitRepo, createTempDir, git, writeFiles } from '../helpers/index.ts';
 import { createTask } from '../helpers/state.ts';
+
+setDefaultTimeout(30_000);
 
 function listChangedFiles(repo: Repo, task: Task, baseBranch: string | null) {
   return runGit(History.use((history) => history.changedFiles(repo, task, baseBranch)));

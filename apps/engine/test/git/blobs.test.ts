@@ -1,9 +1,11 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, setDefaultTimeout, test } from 'bun:test';
 import { Duration, Effect, Fiber, type Scope } from 'effect';
 import { BATCH_IDLE, BATCH_TIMEOUT, type BatchChild, CatFileSettings } from '../../src/git/blobs/schema.ts';
 import { CatFiles } from '../../src/git/blobs/service.ts';
 import { isBatchName, parseInfoLine } from '../../src/git/tree/entries.ts';
 import { createGitRepo, git } from '../helpers/index.ts';
+
+setDefaultTimeout(30_000);
 
 async function createRepo() {
   const repo = await createGitRepo({

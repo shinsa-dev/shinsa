@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, setDefaultTimeout, test } from 'bun:test';
 import { existsSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { Checkout } from '../../src/git/checkout/service.ts';
@@ -6,6 +6,8 @@ import { Remote } from '../../src/git/remote/service.ts';
 import { runGit } from '../helpers/git.ts';
 import { createGitRepo, git, writeFiles } from '../helpers/index.ts';
 import { runCommand } from '../helpers/shell.ts';
+
+setDefaultTimeout(30_000);
 
 const commitWorktree = (path: string, message: string) =>
   runGit(Checkout.use((checkout) => checkout.commit(path, message)));

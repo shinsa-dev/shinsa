@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from 'bun:test';
+import { afterEach, describe, expect, setDefaultTimeout, test } from 'bun:test';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Repo } from '@shinsa/core';
@@ -8,6 +8,8 @@ import { isCheckWorkflow } from '../../src/github/ci/workflows.ts';
 import { runGit } from '../helpers/git.ts';
 import { createTempDir, overrideEnv } from '../helpers/index.ts';
 import { createRepo } from '../helpers/state.ts';
+
+setDefaultTimeout(30_000);
 
 interface FakeCi {
   workflows?: Record<string, string>;

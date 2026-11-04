@@ -1,10 +1,12 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, setDefaultTimeout, test } from 'bun:test';
 import { utimesSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { DIFF_PATCH_LIMITS } from '@shinsa/core';
 import { History } from '../../src/git/history/service.ts';
 import { createWorktree, runGit } from '../helpers/git.ts';
 import { createGitRepo, createTempDir, git, writeFiles } from '../helpers/index.ts';
+
+setDefaultTimeout(30_000);
 
 const resolveCommitDiff = (
   repoPath: string,

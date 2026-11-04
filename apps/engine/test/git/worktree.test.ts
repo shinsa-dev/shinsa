@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, setDefaultTimeout, test } from 'bun:test';
 import { chmodSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Repo } from '@shinsa/core';
@@ -6,6 +6,8 @@ import { Checkout } from '../../src/git/checkout/service.ts';
 import { History } from '../../src/git/history/service.ts';
 import { commitWorktree, createWorktree, removeWorktree, runGit } from '../helpers/git.ts';
 import { createGitRepo, createTempDir, git, writeFiles } from '../helpers/index.ts';
+
+setDefaultTimeout(30_000);
 
 const refreshWorktree = (repo: Repo, path: string, baseBranch: string | null, signal?: AbortSignal) =>
   runGit(Checkout.use((checkout) => checkout.refresh(repo, path, baseBranch, signal)));

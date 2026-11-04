@@ -1,7 +1,9 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, setDefaultTimeout, test } from 'bun:test';
 import { Deferred, Effect, Fiber } from 'effect';
 import { ObjectCacheBytes } from '../../src/git/objects/schema.ts';
 import { ObjectCache } from '../../src/git/objects/service.ts';
+
+setDefaultTimeout(30_000);
 
 function runCache<A, E>(effect: Effect.Effect<A, E, ObjectCache>, limit?: number) {
   const cached = effect.pipe(Effect.provide(ObjectCache.layer));

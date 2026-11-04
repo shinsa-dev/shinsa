@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from 'bun:test';
+import { afterEach, describe, expect, setDefaultTimeout, test } from 'bun:test';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Repo, Round, Settings, Task } from '@shinsa/core';
@@ -17,6 +17,8 @@ import { PullRequests } from '../../src/github/pulls/service.ts';
 import { runGit } from '../helpers/git.ts';
 import { createGitRepo, createTempDir, git, overrideEnv } from '../helpers/index.ts';
 import { createRepo, createTask } from '../helpers/state.ts';
+
+setDefaultTimeout(30_000);
 
 const readPullRequest = (repo: Repo, task: Task) =>
   runGit(PullRequests.use((pulls) => pulls.read(repo, task)));

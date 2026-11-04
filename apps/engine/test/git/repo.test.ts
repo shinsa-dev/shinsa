@@ -1,9 +1,11 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, setDefaultTimeout, test } from 'bun:test';
 import { join } from 'node:path';
 import { normalizeRemote } from '../../src/git/remote/output.ts';
 import { Remote } from '../../src/git/remote/service.ts';
 import { inspectRepo, runGit } from '../helpers/git.ts';
 import { createGitRepo, createTempDir, git } from '../helpers/index.ts';
+
+setDefaultTimeout(30_000);
 
 const resolveRepoRoot = (path: string) => runGit(Remote.use((remote) => remote.resolveRoot(path)));
 

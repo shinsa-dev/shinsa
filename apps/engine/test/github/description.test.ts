@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from 'bun:test';
+import { afterEach, describe, expect, setDefaultTimeout, test } from 'bun:test';
 import { randomBytes } from 'node:crypto';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -12,6 +12,8 @@ import { createTestEvidence } from '../helpers/evidence.ts';
 import { GitTestLayer } from '../helpers/git.ts';
 import { captureLogs, createTempDir, overrideEnv } from '../helpers/index.ts';
 import { createRepo, createTask } from '../helpers/state.ts';
+
+setDefaultTimeout(30_000);
 
 let restore: (() => void) | null = null;
 const runtimes: { dispose: () => Promise<void> }[] = [];

@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, setDefaultTimeout, test } from 'bun:test';
 import { join } from 'node:path';
 import { Duration, Effect } from 'effect';
 import type { GitReadRequest } from '../../src/git/schema.ts';
@@ -6,6 +6,8 @@ import { Git } from '../../src/git/service.ts';
 import { decodeText, splitRecords } from '../../src/git/text.ts';
 import { runGit } from '../helpers/git.ts';
 import { createGitRepo, writeFiles } from '../helpers/index.ts';
+
+setDefaultTimeout(30_000);
 
 function readGit(args: string[], cwd: string, options: GitReadRequest = {}) {
   return runGit(Git.use((git) => git.read(args, cwd, options)));

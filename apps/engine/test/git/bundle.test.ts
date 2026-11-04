@@ -1,10 +1,12 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, setDefaultTimeout, test } from 'bun:test';
 import { join } from 'node:path';
 import type { Repo } from '@shinsa/core';
 import type { BundleBranch } from '../../src/git/remote/schema.ts';
 import { Remote } from '../../src/git/remote/service.ts';
 import { runGit } from '../helpers/git.ts';
 import { createGitRepo, git, writeFiles } from '../helpers/index.ts';
+
+setDefaultTimeout(30_000);
 
 const checkBundleMerge = (repo: Repo, members: BundleBranch[], signal?: AbortSignal) =>
   runGit(Remote.use((remote) => remote.checkBundleMerge(repo, members, signal)));

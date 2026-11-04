@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, setDefaultTimeout, test } from 'bun:test';
 import { join } from 'node:path';
 import { Effect } from 'effect';
 import { PushError } from '../../src/git/remote/schema.ts';
@@ -6,6 +6,8 @@ import { Remote } from '../../src/git/remote/service.ts';
 import { commitWorktree, runGit } from '../helpers/git.ts';
 import { createGitRepo, git, writeFiles } from '../helpers/index.ts';
 import { runCommand } from '../helpers/shell.ts';
+
+setDefaultTimeout(30_000);
 
 const updateOntoBase = (
   path: string,

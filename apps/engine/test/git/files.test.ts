@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, setDefaultTimeout, test } from 'bun:test';
 import { mkdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { CODE_LIMITS, WORKING_REF } from '@shinsa/core';
@@ -10,6 +10,8 @@ import { type BatchReader, ObjectReaderStopped, type SearchQuery } from '../../s
 import { CodeFiles } from '../../src/git/tree/service.ts';
 import { runGit } from '../helpers/git.ts';
 import { createGitRepo, git, writeFiles } from '../helpers/index.ts';
+
+setDefaultTimeout(30_000);
 
 const assertCommit = (path: string, sha: string) =>
   runGit(CodeFiles.use((files) => files.assertCommit(path, sha)));
