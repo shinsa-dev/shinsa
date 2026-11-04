@@ -409,7 +409,10 @@ create → classify → (wait for the tasks it waits on) → worktree → plan �
    below; never one in another repository). A duplicate is
    closed there and goes no further. Then the task either waits for them (Scheduling, below) or has its setup verified (`config.verify`,
    Setup verification, below) and gets its worktree (`worktree.create`): a fresh branch from the freshly fetched
-   default branch.
+   default branch, never from your own checkout. The fetch also moves your local default branch ref forward to
+   `origin/<default>` when no worktree or checkout has it checked out and it has no commits of its own
+   (`Checkout.resolveStartPoint`); your checked-out files are never touched. A failed fetch logs a warning and the
+   task starts from the last known `origin/<default>`.
 2. **Plan.** The Agent reads the code and calls `propose_plan`. It plans read-only (Read-only while planning, The
    agent loop) and is told that it builds the plan itself, in the same session. A task created plan first
    (`planFirst`: `shinsa do --plan-first`) or kept in the backlog (Scheduling → The backlog, below)
@@ -418,7 +421,10 @@ create → classify → (wait for the tasks it waits on) → worktree → plan �
    large plan (more than 3 phases or 6 files, `PLAN_SIZE_LIMITS`) or a revised plan waits there, on Always every plan
    does (`PLAN_GATE_RULE`, evaluated by `needsPlanApproval`; Gates, below), and building starts at once when it does
    not. The size is the plan's, never triage's guess from the request. A decision
-   only the human can make is asked with `ask` before planning finishes.
+   only the human can make is asked with `ask` before planning finishes. Approving a plan at its gate, however long
+   it waited, sends a task with a worktree back through `worktree.create`, which resets the worktree onto the freshly
+   fetched base (planning commits nothing), and `worktree.ready` then starts phase 1 (`startApprovedPlan`,
+   `isStartingApprovedPlan`); a plan that needs no gate builds at once on the worktree planning just set up.
 3. **Build.** Each phase is a run of its own on the session that planned it, now able to edit. Its prompt is short
    (`resolvePhaseInstruction`: "Phase 1 is committed. Now build phase 2 of 3: …" and how to hand it over), since the
    session already holds the request, the plan and every earlier phase. Phases run in order in one worktree.
@@ -894,7 +900,11 @@ predicates) and `state/rounds.ts` (the folds); the classifier is `apps/engine/sr
 - **The same branch, worktree and sessions.** A round started onto the open pull request keeps the task's branch,
   worktree and pull request; a stacked one gets a new branch on the same worktree; one after a merge gets a fresh
   worktree from the freshly fetched default branch on a new branch (`<first branch>-round-<n>`; `worktree.create`
-  never resets a later round's worktree to the default branch, it only drops uncommitted scratch edits). The agents
+  never resets a later round's worktree to the default branch: it drops uncommitted scratch edits and merges the
+  freshly fetched base, the default branch or the first branch it stacks on, into the branch, as the push does
+  (`WorktreeWorkspaces.prepare`). A base that conflicts is aborted and left for the push's conflict fix, and a fetch
+  that fails is logged and the round starts from the branch as it is; the main checkout's later rounds reuse the
+  branch as it is). The agents
   remember everything: every run of a later round, whatever its kind of work, resumes the task's session
   (`Decider.taskSession`, Agents above), so the round that plans next has the earlier rounds in its context; the
   reviewer resumes only its own session, so it never reviews from inside the Agent's head. A round after a merge runs
