@@ -56,6 +56,7 @@ export class RunSupervisor extends Context.Service<RunSupervisor, RunSupervisorS
           workspaces,
           services: options.services ?? null,
           listServerNames: (run) => within(listServerNames(run)),
+          teamTasks: options.teamTasks ?? (() => []),
         });
         const deliveries = new Deliveries({ engine, transcripts, active, execute });
         const compaction = new IdleCompaction(

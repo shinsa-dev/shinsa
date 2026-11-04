@@ -1,5 +1,11 @@
 import type { RequestId } from '@modelcontextprotocol/sdk/types.js';
-import { type CommandOf, type Run, type ShinsaCommand, type ShinsaEvent } from '@shinsa/core';
+import {
+  type CommandOf,
+  type Run,
+  type ShinsaCommand,
+  type ShinsaEvent,
+  type TeamFeedTask,
+} from '@shinsa/core';
 import type { Engine } from '../../runtime/engine.ts';
 import type { ScheduleToolCall } from '../../schedules/index.ts';
 import type { EvidenceStore } from '../../store/index.ts';
@@ -30,6 +36,7 @@ export interface ToolCallsOptions {
   workspaces: Workspaces;
   services: TaskServiceRunner | null;
   listServerNames: (run: Run) => Promise<string[]>;
+  teamTasks: () => readonly TeamFeedTask[];
 }
 
 export interface ToolCall {

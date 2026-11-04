@@ -19,7 +19,7 @@ import {
   validateSplit,
 } from '@shinsa/core';
 import { assertProtocol } from '../../handover.ts';
-import { findForkSource, findStackParent } from '../forks.ts';
+import { type ForkReference, findStackParent, resolveForkReference } from '../forks.ts';
 import { DEFAULT_ROLE, type OrchestrationCall } from './schema.ts';
 
 function resolveDefaultRole(parent: Run): DelegateRole {
@@ -220,9 +220,14 @@ async function resolveRepoId(
   return repo.id === task.repoId ? null : repo.id;
 }
 
-function resolveForkOf(state: ShinsaState, reference: string | null) {
-  if (reference === null) return {};
-  return { forkOf: findForkSource(state, reference) };
+function resolveForkRepo(fork: ForkReference | null, source: Task) {
+  if (fork?.kind !== 'teammate' || fork.repoId === source.repoId) return null;
+  return fork.repoId;
+}
+
+function resolveForkFields(fork: ForkReference | null) {
+  if (fork?.kind === 'own') return { forkOf: fork.forkOf };
+  return fork ? { teammateFork: fork.teammateFork } : {};
 }
 
 function listLinks(tasks: Task[]) {
@@ -244,7 +249,9 @@ async function createCourier(input: Record<string, unknown>, call: Orchestration
   const projectId = request.project
     ? findProjectId(call.state(), request.project)
     : resolveTaskProject(call.state(), source);
-  const repoId = await resolveRepoId(call, source, request, projectId);
+  const fork = resolveForkReference(call.state(), call.teamTasks(), request.forkFrom);
+  const named = await resolveRepoId(call, source, request, projectId);
+  const repoId = named ?? resolveForkRepo(fork, source);
   await call.dispatch(
     {
       type: 'agent.create_task',
@@ -254,7 +261,7 @@ async function createCourier(input: Record<string, unknown>, call: Orchestration
       request: request.request,
       repoId,
       ...(request.project && projectId ? { projectId } : {}),
-      ...resolveForkOf(call.state(), request.forkFrom),
+      ...resolveForkFields(fork),
       thisWaits: request.thisTaskWaits,
       afterThis: request.afterThis,
       stackOnThis: request.stackOnThis,

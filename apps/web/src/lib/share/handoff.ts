@@ -94,7 +94,16 @@ export function describeHandoffMark(task: Task, machine: TaskMachine) {
   return guest ? `Handed to ${resolveFirstName(guest)}` : 'Hand-off link not opened yet';
 }
 
-export function resolveHandoffFact(task: Task, machine: TaskMachine) {
+interface HandoffFact {
+  verb: string;
+  user: RemoteUser | TaskGuest;
+  hint: string;
+  icon?: IconName;
+}
+
+export const OWNER_ICON: IconName = 'IconUser';
+
+export function resolveHandoffFact(task: Task, machine: TaskMachine): HandoffFact | null {
   if (machine?.handedBy)
     return {
       verb: 'Handed to you by',
@@ -108,7 +117,12 @@ export function resolveHandoffFact(task: Task, machine: TaskMachine) {
           user: machine.teammate.owner,
           hint: 'It runs on their machine. Give it back from the task’s actions.',
         }
-      : { verb: 'Owned by', user: machine.teammate.owner, hint: 'A teammate’s task, on their machine' };
+      : {
+          verb: 'Owned by',
+          user: machine.teammate.owner,
+          hint: 'A teammate’s task, on their machine',
+          icon: OWNER_ICON,
+        };
   const guest = task.handoff?.guest;
   if (!guest) return null;
   const hint = task.handoff?.teamId

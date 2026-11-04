@@ -4,6 +4,7 @@ import {
   isTaskSettled,
   resolveCurrentRound,
   serializeTaskReferences,
+  serializeTeamTaskReferences,
   validateEvidenceRemoval,
   validateFixHandOver,
   validatePhaseHandOver,
@@ -57,9 +58,7 @@ export class ToolCalls {
       case 'remove_evidence':
         return this.#removeEvidence(call, dispatch);
       case 'find_tasks':
-        return Promise.resolve(
-          serializeTaskReferences(this.#options.engine.state, readString(input, 'query') ?? '')
-        );
+        return Promise.resolve(this.#findTasks(readString(input, 'query') ?? ''));
       case 'read_task':
         return this.#readTask(input);
       case 'list_repository_work':
@@ -240,6 +239,12 @@ export class ToolCalls {
     return reply;
   }
 
+  #findTasks(query: string) {
+    const own = serializeTaskReferences(this.#options.engine.state, query);
+    const theirs = serializeTeamTaskReferences(this.#options.teamTasks(), query);
+    return theirs ? `${own}\n\n${theirs}` : own;
+  }
+
   #handleOrchestration(
     name: string,
     { runId, attemptId, input, signal, requestId }: ToolCall,
@@ -253,6 +258,7 @@ export class ToolCalls {
       signal,
       minuteMs,
       state: () => engine.state,
+      teamTasks: this.#options.teamTasks,
       dispatch,
       resolveBaseCommit: () => resolveHead(this.#findCurrent(runId, attemptId).task.worktreePath ?? ''),
       registerRepo: (projectId, repoName) => upsertProjectFolderRepo(engine, projectId, repoName),

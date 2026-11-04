@@ -10,6 +10,7 @@ import {
   type ShinsaCommand,
   type ShinsaEvent,
   type ShinsaState,
+  type TeamFeedTask,
 } from '@shinsa/core';
 import type { ToolSpec } from '../schema.ts';
 
@@ -153,7 +154,7 @@ export const ORCHESTRATION_TOOL_SPECS = {
           type: 'string',
           maxLength: DELEGATION_LIMITS.name,
           description:
-            'A task to fork, by id or handle (this one included): the new task starts from its conversation.',
+            'A task to fork, by id or handle (this one included): the new task starts from its conversation. A teammate’s task from `find_tasks` works too: the fork runs on this machine and starts from what that task was asked and did.',
         },
         this_task_waits: { type: 'boolean' },
         after_this: {
@@ -221,6 +222,7 @@ export interface OrchestrationCall {
   signal: AbortSignal;
   minuteMs: number;
   state: () => ShinsaState;
+  teamTasks: () => readonly TeamFeedTask[];
   dispatch: (command: ShinsaCommand, id?: string) => Promise<ShinsaEvent[]>;
   resolveBaseCommit: () => Promise<string>;
   registerRepo: (projectId: string | null, name: string) => Promise<Repo | null>;

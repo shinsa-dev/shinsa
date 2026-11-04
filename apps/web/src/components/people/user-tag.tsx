@@ -82,7 +82,7 @@ export function UserAvatar({
         role='img'
         aria-label={PRESENCE_LABELS[presence.status]}
         className={cn(
-          'absolute -right-px -bottom-px rounded-full ring-card',
+          'absolute right-[0.5px] bottom-[0.5px] rounded-full ring-card',
           PRESENCE_DOT[presence.status],
           PRESENCE_DOT_SIZE[size]
         )}

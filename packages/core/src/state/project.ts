@@ -218,6 +218,7 @@ function createTaskRecord(event: EventOf<'task.created'>): Task {
     auto: { ...event.auto },
     ...(event.account ? { account: event.account } : {}),
     ...(event.forkOf ? { forkOf: event.forkOf } : {}),
+    ...(event.teammateFork ? { teammateFork: event.teammateFork } : {}),
     rounds: [createFirstRound(title, request, pipeline, event.at)],
   };
 }

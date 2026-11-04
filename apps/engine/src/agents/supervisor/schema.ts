@@ -1,4 +1,4 @@
-import type { ChatNotice, DomainError, Repo, Run } from '@shinsa/core';
+import type { ChatNotice, DomainError, Repo, Run, TeamFeedTask } from '@shinsa/core';
 import { Duration, Effect, type Fiber, type FiberSet, type Ref, Schedule, Schema, type Scope } from 'effect';
 import type { ServerConfig } from '../../config/index.ts';
 import type { SessionExtensionSource } from '../../extensions/index.ts';
@@ -227,6 +227,7 @@ export interface SupervisorOptions {
   workspaces?: Workspaces;
   services?: TaskServiceRunner;
   trackProcess?: ProcessTracker;
+  teamTasks?: () => readonly TeamFeedTask[];
 }
 
 export interface SupervisorInput {

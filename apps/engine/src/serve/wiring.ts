@@ -146,6 +146,7 @@ export function createServices(
     schedules,
     services: terminals,
     trackProcess: ledger.track,
+    teamTasks: () => teamFeeds.listTasks(),
     extensions,
     ...(options.idle ? { idle: options.idle } : {}),
     ...(options.compaction ? { compaction: options.compaction } : {}),

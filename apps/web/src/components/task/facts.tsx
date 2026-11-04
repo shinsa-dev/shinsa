@@ -146,7 +146,7 @@ function HandoffFact({ task }: { task: Task }) {
     <span className={cn(FACT, 'max-w-80')}>
       <Hint label={fact.hint}>
         <span className='inline-flex shrink-0 cursor-default items-center gap-1.5 whitespace-pre'>
-          <Icon size='sm' name={HANDOFF_ICON} />
+          <Icon size='sm' name={fact.icon ?? HANDOFF_ICON} />
           {fact.verb}
         </span>
       </Hint>

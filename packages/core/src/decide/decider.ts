@@ -27,7 +27,7 @@ import {
 import type { EffectCancellation, ShinsaEffect, ShinsaEffectKind } from '../effects/index.ts';
 import type { ShinsaEventInput } from '../events/index.ts';
 import { describeUntoldMessages } from '../prompts/context.ts';
-import { describeForkSource, resolveForkNote } from '../prompts/forks.ts';
+import { describeForkSource, describeTeammateForkSource, resolveForkNote } from '../prompts/forks.ts';
 import { resolveMemoryTold } from '../prompts/memory.ts';
 import { resolveAdoptionNote } from '../prompts/orchestration.ts';
 import { resolveProjectContext } from '../prompts/project.ts';
@@ -225,6 +225,8 @@ export class Decider {
 
   #describeFreshContext(task: Task, role: RunRole, fork: RunFork | null) {
     const project = fork ? '' : resolveProjectContext(this.state, task);
+    if (task.teammateFork && isTaskSessionRole(role))
+      return `${project}${describeTeammateForkSource(task.teammateFork)}`;
     const source = task.forkOf ? this.state.tasks[task.forkOf] : undefined;
     if (!source || !isTaskSessionRole(role)) return project;
     return `${project}${fork ? resolveForkNote(source) : describeForkSource(source)}`;

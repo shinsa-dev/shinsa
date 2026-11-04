@@ -60,7 +60,8 @@ describe('listTaskActions', () => {
     ).not.toContain('takeOver');
     expect(listTaskActions(open, ALL_COMMANDS).flat()).not.toContain('takeOver');
     expect(listTaskActions(open, new Set(), NOW, teammate).flat()).not.toContain('takeOver');
-    expect(listTaskActions(open, ALL_COMMANDS, NOW, teammate).flat()).not.toContain('fork');
+    expect(listTaskActions(open, new Set(), NOW, teammate).flat()).toContain('fork');
+    expect(listTaskActions(open, new Set()).flat()).not.toContain('fork');
     expect(listTaskActions(open, ALL_COMMANDS).flat()).toContain('fork');
   });
 

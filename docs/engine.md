@@ -333,6 +333,21 @@ never resumed by it. The rules are core (`Decider.startRun`, `prompts/forks.ts`,
   overflow), the run starts fresh and its prompt ends with the source's brief (`describeForkSource`): the source's
   request and its rounds, each with its state, pull request and headline, result or goal, and `read_task` for more. A
   fork is never made twice: once any task-session run of the task had a session, a new one starts fresh.
+- **Forking a teammate's task.** A teammate's task runs on their machine, so its session cannot be copied: the fork
+  runs on yours, with its own branch, worktree, review and pull request, and starts from a brief of it instead. Core's
+  `resolveTeammateFork` (`share/forks.ts`) reads it from the teammate's task as the team view shows it (its machine, id,
+  handle, title, owner, request, rounds, branch and pull request) into `TeammateFork`, which `task.create` and
+  `agent.create_task` take as `teammateFork`, never with `forkOf` (`fork_twice`). The task keeps it as
+  `Task.teammateFork`, and its first task-session run ends its prompt with `describeTeammateForkSource`: what the
+  task was asked and did, and where its change is (merged, or on its branch to `git fetch`, never to push to). Its
+  activity reads "Forked from Kai's task PAY-1"; nothing is recorded on the teammate's machine. It lands in your
+  repository with the same remote as the teammate's, else the same name, else one in a project of the same name
+  (`findForkRepo`, over your own repositories, `listOwnRepos`). On app.shinsa.dev, Fork into a new task on a
+  teammate's task asks which of your repositories, the match first, and sends it to that repository's machine
+  (`forkTeammateTask`); with none of yours it says to add the repository first. An agent forks one with
+  `create_task`'s `fork_from`, by the id `find_tasks` lists under "Your teammates' tasks" (or its handle), from the
+  teammate tasks this machine watches (`TeamFeeds.listTasks`, `resolveForkReference` in `agents/tools/forks.ts`),
+  into the matching repository unless it names one.
 - **The reviewer never forks.** It is not a task-session role, so it reviews a fork with its own fresh session and
   is not told about the source.
 - **Forking from the web.** Fork into a new task (the task menu, an All tasks row's menu and ⌘K, on every task but a
@@ -3744,6 +3759,8 @@ the read-only view. Teams need remote access on (`Remote` paired and enabled), s
     app.shinsa.dev admits an account that shares a team with the machine's owner, and the machine admits them for a
     run of a team task only. A service started outside a task stays yours. Losing the right or the project leaving the
     team closes their open connections.
+  - **Forking.** Anyone in the team forks a teammate's task onto their own machine, as Forking a task →
+    Forking a teammate's task says; no right gates it, since nothing changes on the teammate's machine.
   - **Sharing.** A teammate with `share` makes and stops share links, status shares and service previews of team
     tasks (`task.share`, `task.unshare`, `preview.share`, `preview.unshare`), the link's preset being the machine's.
   - **Presence** (`remote/presence.ts`, `http/attention.ts`; core's `TeamPresence`, `mergeTeamPresence`). Each

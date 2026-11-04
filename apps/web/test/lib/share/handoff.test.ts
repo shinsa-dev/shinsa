@@ -116,7 +116,12 @@ describe('handing a task off', () => {
       id: 't1',
       handoff: { ...HANDED, guest: KAI, claimedAt: 9, teamId: 'team-1' },
     });
-    expect(resolveHandoffFact(open, viewer)).toMatchObject({ verb: 'Owned by', user: MONA });
+    expect(resolveHandoffFact(open, viewer)).toMatchObject({
+      verb: 'Owned by',
+      user: MONA,
+      icon: 'IconUser',
+    });
+    expect(resolveHandoffFact(taken, viewer)?.icon).toBeUndefined();
     expect(resolveHandoffFact(taken, viewer)).toMatchObject({ verb: 'Taken over from', user: MONA });
     expect(describeHandoffMark(taken, viewer)).toBe('You took this over from Mona');
     expect(describeHandoffMark(taken, { teammate: { owner: MONA, viewerId: 'u9' } })).toBe('Handed to Kai');

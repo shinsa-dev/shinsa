@@ -115,7 +115,7 @@ export function listTaskActions(
   const lifecycle: TaskActionKey[] = isTaskSettled(task)
     ? listSettledActions(task)
     : ['restart', 'complete', 'duplicate', 'cancel'];
-  const fork: TaskActionKey[] = task.stage === 'cancelled' || teammate ? [] : ['fork'];
+  const fork: TaskActionKey[] = task.stage === 'cancelled' ? [] : ['fork'];
   const share = listShareActions(task, now);
   return [
     listTeammateActions(task, teammate),
@@ -125,7 +125,7 @@ export function listTaskActions(
     listLaterActions(task),
     lifecycle,
   ]
-    .map((group) => group.filter((key) => isActionSpoken(key, commands)))
+    .map((group) => group.filter((key) => (key === 'fork' && teammate) || isActionSpoken(key, commands)))
     .filter((group) => group.length > 0);
 }
 

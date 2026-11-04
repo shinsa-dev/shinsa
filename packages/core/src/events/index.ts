@@ -43,6 +43,7 @@ import type {
   TaskSize,
   TaskStage,
   TaskSuggestion,
+  TeammateFork,
   TriageDecisions,
   UsageWait,
   WeeklyReading,
@@ -107,6 +108,7 @@ type EventBody =
       sourceReport?: SourceReport | null;
       watchHome?: boolean;
       forkOf?: string | null;
+      teammateFork?: TeammateFork | null;
     }
   | DelegationEventBody
   | ScheduleEventBody
