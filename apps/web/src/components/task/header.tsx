@@ -62,7 +62,7 @@ export function TaskCompactHeader({
   );
 }
 
-export function useHeaderOutOfView() {
+function useHeaderOutOfView() {
   const [out, setOut] = React.useState(false);
   const observe = React.useCallback((element: HTMLElement | null) => {
     if (!element) return;
