@@ -231,6 +231,55 @@ describe('the local fleet relay', () => {
     expect(relays.fleet).toBeNull();
   });
 
+  it('asks again once the feed goes live or a teammate machine comes online, and not on presence alone', async () => {
+    const offline = { ...STUDIO, online: false };
+    const local = createLocal(
+      createKaiRemote({
+        teams: [createTeamEntry({ team: createTeam({ role: 'member', machines: [offline] }) })],
+      })
+    );
+    const feedMachine = {
+      teamId: 'team1',
+      instanceId: 'studio',
+      name: 'Studio',
+      userId: MONA.id,
+      reason: null,
+      updatedAt: 1,
+      presence: [],
+    };
+    local.teams = { machines: [{ ...feedMachine, status: 'connecting' }], tasks: [] };
+    const answers: (readonly TeamRelayEntry[])[] = [[], [], [STUDIO_RELAY]];
+    let asked = 0;
+    const relays = new LocalRelays({
+      local,
+      origin: ORIGIN,
+      createConnection: () => createRelayConnection() as unknown as Connection,
+      requestRelays: Effect.sync(() => answers[asked++] ?? []),
+      onFleet: () => undefined,
+    });
+    const stop = relays.start();
+    await flushRequests();
+    expect(asked).toBe(1);
+
+    local.teams = { machines: [{ ...feedMachine, status: 'live' }], tasks: [] };
+    local.signal.publish();
+    await flushRequests();
+    expect(asked).toBe(2);
+
+    local.teams = { machines: [{ ...feedMachine, status: 'live', updatedAt: 2 }], tasks: [] };
+    local.signal.publish();
+    await flushRequests();
+    expect(asked).toBe(2);
+
+    local.remote = createKaiRemote();
+    local.signal.publish();
+    await flushRequests();
+    expect(asked).toBe(3);
+    expect(relays.fleet?.members.map((member) => member.id)).toEqual(['laptop', 'studio']);
+    stop();
+    relays.stop();
+  });
+
   it('asks again after a failed request, and never asks an engine that cannot relay', async () => {
     const local = createLocal();
     let asked = 0;

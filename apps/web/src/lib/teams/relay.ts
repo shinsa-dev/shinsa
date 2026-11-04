@@ -3,6 +3,7 @@ import {
   type RemoteSnapshot,
   type RemoteTeam,
   type RemoteUser,
+  type TeamFeedSnapshot,
   resolveTeamRelayPath,
   resolveTeamRelaySocketPath,
 } from '@shinsa/core';
@@ -142,7 +143,7 @@ function serializeTarget(target: RelayTarget) {
 
 function serializeTeam(team: RemoteTeam | null) {
   if (!team) return null;
-  const machines = team.machines.map((machine) => [machine.id, machine.userId, machine.name]);
+  const machines = team.machines.map((machine) => [machine.id, machine.userId, machine.name, machine.online]);
   return [
     team.id,
     team.owner.id,
@@ -153,11 +154,12 @@ function serializeTeam(team: RemoteTeam | null) {
   ];
 }
 
-function serializeTeams(remote: RemoteSnapshot) {
+function serializeTeams(remote: RemoteSnapshot, feed: TeamFeedSnapshot) {
   return JSON.stringify([
     remote.instanceId,
     remote.owner,
     remote.teams.map((entry) => serializeTeam(entry.team)),
+    feed.machines.map((machine) => [machine.teamId, machine.instanceId, machine.status]),
   ]);
 }
 
@@ -190,7 +192,7 @@ export class LocalRelays {
     const { local } = this.#options;
     const remote = local.selectRemote();
     if (!(remote?.instanceId && hasEngineFeature(local.selectEngine(), 'team-relay'))) return;
-    const asked = serializeTeams(remote);
+    const asked = serializeTeams(remote, local.selectTeams());
     if (asked === this.#asked) return;
     this.#asked = asked;
     const round = ++this.#round;

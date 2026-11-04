@@ -20,9 +20,11 @@ import {
   Layer,
   Queue,
   Redacted,
+  Result,
   Scope,
   Semaphore,
 } from 'effect';
+import { describeBodyLimit, resolveBodySizeRefusal } from '../../http/guard.ts';
 import type { ChannelPeer } from '../channel/schema.ts';
 import { RemoteOrigin } from '../client/schema.ts';
 import { RemoteClient } from '../client/service.ts';
@@ -35,6 +37,8 @@ import { TeamFeeds } from '../team-feeds/service.ts';
 import {
   FLEET_RELAY_MESSAGES,
   type FleetRelayHandle,
+  RELAY_ABORTED_STATUS,
+  RELAY_BODY_LIMIT_BYTES,
   RELAY_BODY_METHODS,
   RELAY_CLOSE,
   RELAY_DROPPED_HEADERS,
@@ -70,6 +74,24 @@ export class FleetRelay extends Context.Service<FleetRelay, FleetRelayHandle>()(
           }),
           { status: error.refused ? 403 : 502 }
         );
+
+      const respondTooLarge = () =>
+        Response.json(
+          serializeEngineFailure({
+            code: 'body_too_large',
+            message: describeBodyLimit(RELAY_BODY_LIMIT_BYTES),
+          }),
+          { status: 413 }
+        );
+
+      const readRelayBody = Effect.fn('FleetRelay.readBody')(function* (incoming: Request, method: string) {
+        if (!RELAY_BODY_METHODS.has(method)) return null;
+        if (resolveBodySizeRefusal(incoming, RELAY_BODY_LIMIT_BYTES)) return respondTooLarge();
+        const read = yield* Effect.tryPromise(() => incoming.arrayBuffer()).pipe(Effect.result);
+        if (Result.isFailure(read)) return new Response(null, { status: RELAY_ABORTED_STATUS });
+        if (read.success.byteLength > RELAY_BODY_LIMIT_BYTES) return respondTooLarge();
+        return new Uint8Array(read.success);
+      });
 
       const listRelayHeaders = (headers: Headers): [string, string][] =>
         [...headers].filter(([name]) => !(RELAY_DROPPED_HEADERS.has(name) || name.startsWith('sec-')));
@@ -242,9 +264,9 @@ export class FleetRelay extends Context.Service<FleetRelay, FleetRelayHandle>()(
         const target = yield* selectTarget(instanceId);
         if (!target) return respondFailure(fail(FLEET_RELAY_MESSAGES.unknown, true));
         const method = incoming.method.toUpperCase();
-        const bytes = RELAY_BODY_METHODS.has(method)
-          ? new Uint8Array(yield* Effect.promise(() => incoming.arrayBuffer()))
-          : null;
+        const read = yield* readRelayBody(incoming, method);
+        if (read instanceof Response) return read;
+        const bytes = read;
         const search = new URL(incoming.url).search;
         return yield* requestLink(target).pipe(
           Effect.flatMap((link) =>
@@ -256,7 +278,9 @@ export class FleetRelay extends Context.Service<FleetRelay, FleetRelayHandle>()(
               signal: incoming.signal,
             })
           ),
-          Effect.catchTag('DeviceRequestAborted', () => Effect.succeed(new Response(null, { status: 499 }))),
+          Effect.catchTag('DeviceRequestAborted', () =>
+            Effect.succeed(new Response(null, { status: RELAY_ABORTED_STATUS }))
+          ),
           Effect.catchTag('DeviceChannelError', (error) => Effect.succeed(respondFailure(error)))
         );
       });

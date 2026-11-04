@@ -14,6 +14,7 @@ import { Context, Effect, Exit, Layer, Redacted, Scope } from 'effect';
 import type { ServerConfig } from '../../src/config/index.ts';
 import { EngineConfig } from '../../src/config/service.ts';
 import { JsonFile } from '../../src/files/service.ts';
+import { describeBodyLimit } from '../../src/http/guard.ts';
 import { JsonLogger } from '../../src/log/service.ts';
 import type { ChannelPeer } from '../../src/remote/channel/schema.ts';
 import { RemoteUnreachable } from '../../src/remote/client/schema.ts';
@@ -27,7 +28,11 @@ import {
   DeviceRequestAborted,
 } from '../../src/remote/device-channel/schema.ts';
 import { DeviceChannels } from '../../src/remote/device-channel/service.ts';
-import { FLEET_RELAY_MESSAGES, RELAY_CLOSE } from '../../src/remote/fleet-relay/schema.ts';
+import {
+  FLEET_RELAY_MESSAGES,
+  RELAY_BODY_LIMIT_BYTES,
+  RELAY_CLOSE,
+} from '../../src/remote/fleet-relay/schema.ts';
 import { FleetRelay } from '../../src/remote/fleet-relay/service.ts';
 import { Remote } from '../../src/remote/machine/service.ts';
 import type { RelayDevice, RemoteFile } from '../../src/remote/store/schema.ts';
@@ -465,6 +470,39 @@ describe('a request to a teammate’s machine', () => {
       createLink(() => Effect.fail(new DeviceRequestAborted({ message: DEVICE_CHANNEL_MESSAGES.aborted }))),
     ];
     expect((await startRelay(world).request('kai-mac', '/api/health')).status).toBe(499);
+  });
+
+  test('refuses a body over the engine’s request limit, declared or read, before it reaches the machine', async () => {
+    const world = createWorld();
+    const relay = startRelay(world);
+    const declared = await relay.request('kai-mac', '/api/commands', {
+      method: 'POST',
+      headers: { 'content-length': String(RELAY_BODY_LIMIT_BYTES + 1) },
+      body: 'x',
+    });
+    expect(await readFailure(declared)).toEqual([
+      413,
+      { code: 'body_too_large', message: describeBodyLimit(RELAY_BODY_LIMIT_BYTES) },
+    ]);
+    const read = await relay.request('kai-mac', '/api/commands', {
+      method: 'POST',
+      body: new Uint8Array(RELAY_BODY_LIMIT_BYTES + 1),
+    });
+    expect(read.status).toBe(413);
+    expect(world.links).toEqual([]);
+  });
+
+  test('answers a body the page stopped sending with no body, as an aborted request', async () => {
+    const world = createWorld();
+    const broken = new ReadableStream({
+      start: (controller) => controller.error(new Error('gone')),
+    });
+    const answer = await startRelay(world).request('kai-mac', '/api/commands', {
+      method: 'POST',
+      body: broken,
+    });
+    expect(answer.status).toBe(499);
+    expect(world.links).toEqual([]);
   });
 });
 

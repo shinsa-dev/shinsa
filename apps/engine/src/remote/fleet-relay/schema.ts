@@ -1,6 +1,7 @@
 import type { Bytes } from '@shinsa/core';
 import type { TeamRelayEntry } from '@shinsa/core/engine-api/schema';
 import type { Effect } from 'effect';
+import { ATTACHMENT_REQUEST_LIMIT_BYTES } from '../../store/attachments/schema.ts';
 import type { ChannelPeer } from '../channel/schema.ts';
 
 export const FLEET_RELAY_MESSAGES = {
@@ -21,6 +22,10 @@ export const RELAY_DROPPED_HEADERS: ReadonlySet<string> = new Set([
   'transfer-encoding',
   'upgrade',
 ]);
+
+export const RELAY_BODY_LIMIT_BYTES = ATTACHMENT_REQUEST_LIMIT_BYTES;
+
+export const RELAY_ABORTED_STATUS = 499;
 
 export const RELAY_BODY_METHODS: ReadonlySet<string> = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 

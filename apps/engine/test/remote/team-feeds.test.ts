@@ -342,8 +342,10 @@ describe('watching teammates’ machines', () => {
     laptop.store.recordTeams([
       createTeam({ role: 'member', machines: [{ ...STUDIO, online: false }, LAPTOP] }),
     ]);
+    expect(feeds.listGrants()).toHaveLength(1);
     laptop.publish();
     expect(listMachineStatus(feeds)).toEqual([['inst1', 'offline', TEAM_FEED_OFFLINE]]);
+    expect(feeds.listGrants()).toEqual([]);
     expect(feeds.snapshot().machines[0]?.updatedAt).toBe(50);
     expect(
       feeds
@@ -381,6 +383,7 @@ describe('watching teammates’ machines', () => {
     feeds.start();
     await until('it is refused', () => feeds.snapshot().machines[0]?.status === 'refused');
     expect(listMachineStatus(feeds)).toEqual([['inst1', 'refused', TEAM_REFUSALS.mismatch]]);
+    expect(feeds.listGrants()).toEqual([]);
     expect(waits).toHaveLength(1);
     laptop.publish();
     expect(sockets).toHaveLength(1);
