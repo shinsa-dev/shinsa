@@ -26,7 +26,7 @@ const GATE_REPLY = {
   guide: { decision: 'reply', done: 'Retrying with your guidance.' },
   cancel: { decision: 'reject', done: 'Cancelled.' },
   recheck: { decision: 'approve', done: 'Verifying the setup again.' },
-  pickRepository: { decision: 'reply', done: 'Verifying the setup with that repository.' },
+  pickRepository: { decision: 'reply', done: 'Checking that repository.' },
   approvePlan: { decision: 'approve', done: 'Approved. Building now.' },
   approveOperationPlan: { decision: 'approve', done: 'Approved. Running the operation now.' },
   startBacklog: {

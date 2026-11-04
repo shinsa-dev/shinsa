@@ -75,7 +75,7 @@ describe('replyToGate', () => {
     expect(spies.sent.mock.calls).toEqual([
       [
         { type: 'gate.answer', gateId: 'g', decision: 'reply', response: 'paywall-next' },
-        'Verifying the setup with that repository.',
+        'Checking that repository.',
       ],
     ]);
   });
