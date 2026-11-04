@@ -208,7 +208,7 @@ describe('the webhook and sign-in routes', () => {
     });
     const guest = await handle(new Request(`${BASE}/api/mcp/oauth/callback`), {
       via: 'channel',
-      guest: { taskId: 't', name: 'Kai' } as never,
+      guest: { name: 'Kai', scope: { kind: 'task', taskId: 't' } } as never,
       userId: null,
     });
     expect((await guest.json()) as unknown).toMatchObject({ error: { code: 'handoff_scope' } });
@@ -300,7 +300,7 @@ describe('Ingress inside the remote channel', () => {
     ).toBe(404);
     const guest = await handle(new Request(`${BASE}/api/nothing`), {
       via: 'channel',
-      guest: { taskId: 't', name: 'Kai' } as never,
+      guest: { name: 'Kai', scope: { kind: 'task', taskId: 't' } } as never,
       userId: null,
     });
     expect([guest.status, ((await guest.json()) as { error: { code: string } }).error.code]).toEqual([

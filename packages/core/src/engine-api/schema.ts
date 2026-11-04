@@ -37,6 +37,7 @@ import type { PlacementAnswer } from '../remote/placement.ts';
 import type { RemoteSnapshot } from '../remote/status.ts';
 import type { TeamFeedSnapshot } from '../remote/teams.ts';
 import type { MergeStepView } from '../report/merge-steps.ts';
+import { AccessScopes } from '../scopes/schema.ts';
 import type { SlackSnapshot } from '../slack/relay.ts';
 import type { CoverageDetection } from '../test-coverage/types.ts';
 
@@ -364,6 +365,14 @@ export const TeamBody = Schema.Struct({ teamId: FilledText });
 
 export const TeamMemberBody = Schema.Struct({ teamId: FilledText, userId: FilledText });
 
+export const TeamScopesBody = Schema.Struct({
+  teamId: FilledText,
+  userId: Schema.optionalKey(FilledText),
+  scopes: Schema.NullOr(AccessScopes),
+});
+
+export const TeamExtraBody = Schema.Struct({ teamId: FilledText, userId: FilledText, scopes: AccessScopes });
+
 export const ProjectPathBody = Schema.Struct({ path: LoosePath });
 
 export const ServiceRunBody = Schema.Struct({ taskId: Field });
@@ -390,6 +399,10 @@ export type CommandAnswer = typeof CommandAnswer.Type;
 export const RestartAnswer = Schema.Struct({ restarting: Schema.Boolean });
 
 export const TeamLinkAnswer = Schema.Struct({ url: Schema.String });
+
+export const TeamKeysAnswer = Schema.Struct({
+  keys: Schema.Array(Schema.Struct({ teamId: Schema.String, name: Schema.String, key: Schema.String })),
+});
 
 export const TeamCreateAnswer = Schema.Struct({ teamId: Schema.String, url: Schema.String });
 

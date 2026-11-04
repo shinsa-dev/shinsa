@@ -21,7 +21,7 @@ function Mark({ label, icon }: { label: string; icon: IconName }) {
 
 function HandoffMark({ task }: { task: Task }) {
   const machine = useMachine(task.id);
-  return <Mark label={describeHandoffMark(task, machine?.handedBy ?? null)} icon={HANDOFF_ICON} />;
+  return <Mark label={describeHandoffMark(task, machine)} icon={HANDOFF_ICON} />;
 }
 
 export function SharedMark({ task }: { task: Task }) {

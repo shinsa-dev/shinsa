@@ -1,6 +1,7 @@
 import { writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import type {
+  AccessScopes,
   ConnectChannel,
   ConnectClaim,
   RemoteDevice,
@@ -39,6 +40,7 @@ import { HandoffClaimFailed, RemoteUrlUnopened } from '../../src/remote/machine/
 import { Remote } from '../../src/remote/machine/service.ts';
 import { RemoteUrlOpener } from '../../src/remote/opener/service.ts';
 import { PairPollInterval } from '../../src/remote/pairing/schema.ts';
+import { Presence } from '../../src/remote/presence/service.ts';
 import { Previews } from '../../src/remote/previews/service.ts';
 import type { ChannelInput, ShareChannelHandle } from '../../src/remote/share-channel/schema.ts';
 import { Shares } from '../../src/remote/shares/service.ts';
@@ -47,6 +49,7 @@ import {
   type RemoteFile,
   type StoredTeamKey,
   type TeamGrant,
+  type TeammateExtra,
 } from '../../src/remote/store/schema.ts';
 import { RemoteStore } from '../../src/remote/store/service.ts';
 import type {
@@ -187,7 +190,8 @@ export function createRemoteTest(options: RemoteTestOptions = {}) {
       Layer.mergeAll(
         wrapLayer(Shares, Shares.layer, options.shares),
         wrapLayer(TeamFeeds, TeamFeeds.layer, options.teamFeeds),
-        options.handoffs === false ? Layer.empty : Handoffs.layer
+        options.handoffs === false ? Layer.empty : Handoffs.layer,
+        Presence.layer
       )
     ),
     Layer.provideMerge(machine),
@@ -263,8 +267,14 @@ function adaptStore(test: RemoteTest) {
     selectTeam: (teamId: string) => runSync(store.selectTeam(teamId)),
     upsertTeamKey: (stored: StoredTeamKey) => runSync(store.upsertTeamKey(stored)),
     writeGrant: (grant: TeamGrant) => runSync(store.writeGrant(grant)),
-    selectGrant: (userId: string) => runSync(store.selectGrant(userId)),
-    removeGrantsOutside: (userIds: ReadonlySet<string>) => runSync(store.removeGrantsOutside(userIds)),
+    selectGrant: (userId: string, teamId: string) => runSync(store.selectGrant(userId, teamId)),
+    listGrants: (userId: string) => runSync(store.listGrants(userId)),
+    removeGrantsWhere: (match: (grant: TeamGrant) => boolean) => runSync(store.removeGrantsWhere(match)),
+    removeDevicesWhere: (match: (device: RemoteDevice) => boolean) =>
+      runSync(store.removeDevicesWhere(match)),
+    selectExtra: (userId: string, teamId: string) => runSync(store.selectExtra(userId, teamId)),
+    writeExtra: (extra: TeammateExtra) => runSync(store.writeExtra(extra)),
+    removeExtrasWhere: (match: (extra: TeammateExtra) => boolean) => runSync(store.removeExtrasWhere(match)),
     removeTeam: (teamId: string) => runSync(store.removeTeam(teamId)),
     recordDeviceSeen: (publicKey: string, at: number) => runSync(store.recordDeviceSeen(publicKey, at)),
   };
@@ -395,6 +405,12 @@ export function adaptRemote(test: RemoteTest) {
       ),
     closeChannel: (channel: { handle: RemoteChannelHandle }) => runSync(remote.closeChannel(channel.handle)),
     removeDevice: (publicKey: string) => runSync(remote.removeDevice(publicKey)),
+    isOwner: (userId: string | null) => runSync(remote.isOwner(userId)),
+    hasAccess: (userId: string) => runSync(remote.hasAccess(userId)),
+    resolveTeamScope: (userId: string, teamId: string) => runSync(remote.resolveTeamScope(userId, teamId)),
+    listTeamScopes: (userId: string) => runSync(remote.listTeamScopes(userId)),
+    resolveTeamGrant: (userId: string, teamId: string) => runSync(remote.resolveTeamGrant(userId, teamId)),
+    canForkTeamTask: (teamId: string) => runSync(remote.canForkTeamTask({ teamId })),
   };
 }
 
@@ -432,6 +448,11 @@ export function adaptTeams(test: RemoteTest) {
     acceptRequest: (teamId: string, userId: string) => runPromise(teams.acceptRequest(teamId, userId)),
     declineRequest: (teamId: string, userId: string) => runPromise(teams.declineRequest(teamId, userId)),
     removeMember: (teamId: string, userId: string) => runPromise(teams.removeMember(teamId, userId)),
+    updateScopes: (teamId: string, userId: string | null, scopes: AccessScopes | null) =>
+      runPromise(teams.updateScopes(teamId, userId, scopes)),
+    updateExtra: (teamId: string, userId: string, scopes: AccessScopes) =>
+      runPromise(teams.updateExtra(teamId, userId, scopes)),
+    listKeys: () => runSync(teams.listKeys),
     leave: (teamId: string) => runPromise(teams.leave(teamId)),
     remove: (teamId: string) => runPromise(teams.remove(teamId)),
     acceptsViewer: () => runSync(teams.acceptsViewer),

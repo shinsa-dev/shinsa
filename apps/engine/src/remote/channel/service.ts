@@ -10,7 +10,7 @@ import {
   decodeText,
   deriveServerSession,
   encodeText,
-  type GuestActor,
+  type ScopedActor,
   MAX_TERMINAL_STREAMS,
   parseBase64Url,
   parseBodyChunk,
@@ -198,7 +198,7 @@ export const makeRemoteChannel = Effect.fn('RemoteChannel.make')(function* (defi
     yield* post({ t: 'ready' });
   });
 
-  const createSocket = (guest: GuestActor | null, owner: boolean): HubSocket => ({
+  const createSocket = (guest: ScopedActor | null, owner: boolean): HubSocket => ({
     data: { kind: 'hub', transcripts: new Map(), surface: null, origin: owner ? 'owner' : 'remote', guest },
     send: (payload: string) => run(send({ t: 'socket', data: payload })),
   });
@@ -242,7 +242,7 @@ export const makeRemoteChannel = Effect.fn('RemoteChannel.make')(function* (defi
   const openTerminal = Effect.fn('RemoteChannel.openTerminal')(function* (
     id: string,
     terminalId: string,
-    guest: GuestActor | null
+    guest: ScopedActor | null
   ) {
     const open = yield* Ref.get(streams);
     if (open.has(id) || id.length > MAX_STREAM_ID_LENGTH)
@@ -288,7 +288,7 @@ export const makeRemoteChannel = Effect.fn('RemoteChannel.make')(function* (defi
 
   const startRequest = Effect.fn('RemoteChannel.startRequest')(function* (
     message: Extract<ChannelMessage, { t: 'request' }>,
-    guest: GuestActor | null
+    guest: ScopedActor | null
   ) {
     const open = yield* Ref.get(requests);
     if (open.has(message.id) || !isSafePath(message.path)) return yield* fail('A request was not valid.');

@@ -1,21 +1,29 @@
-import type { RemoteTeam } from '@shinsa/core';
-import { Icon } from '@shinsa/ui/components/icon';
+import type { AccessScopes, RemoteTeam, RemoteUser } from '@shinsa/core';
+import { Button } from '@shinsa/ui/components/button';
 import { Truncate } from '@shinsa/ui/components/truncate';
+import { useDialogState } from '@shinsa/ui/hooks/use-dialog-state';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
 import { MentionText } from '@/components/people/user-tag.tsx';
+import { MemberScopesDialog, TeamScopesBlock } from '@/components/teams/scopes.tsx';
 import { useNow } from '@/hooks/use-now.ts';
+import { useTeamPresence } from '@/hooks/use-team-presence.ts';
+import { useTeamFeed } from '@/lib/connection/socket.ts';
 import { TONE_TEXT } from '@/lib/format/tone.ts';
 import { createDisclosureId } from '@/lib/preferences/disclosure.ts';
 import { describeMemberSince } from '@/lib/remote-access.ts';
 import { RemoteServicesContext } from '@/lib/remote/services.ts';
 import { listHostedTeams } from '@/lib/teams/hosted.ts';
+import { describePresence } from '@/lib/teams/presence.ts';
+import { hasOwnScopes } from '@/lib/teams/scopes.ts';
 import {
   describeHostedTeam,
   describeHostedTeamsNotice,
   describePeopleCount,
   type HostedTeam,
   type HostedTeams,
+  showsKeyNote,
+  replaceHostedTeam,
   listTeamMachineRows,
   listTeamPeople,
   TEAM_KEY_MISSING,
@@ -28,7 +36,8 @@ import { UserRow } from './user-row.tsx';
 
 function TeamMachines({ team }: { team: RemoteTeam }) {
   const now = useNow();
-  const rows = listTeamMachineRows(team, now);
+  const feed = useTeamFeed();
+  const rows = listTeamMachineRows(team, now, feed);
   return (
     <FoldingBlock
       persistId={createDisclosureId('settings', 'teams', team.id, 'machines')}
@@ -37,12 +46,12 @@ function TeamMachines({ team }: { team: RemoteTeam }) {
       startsOpen
     >
       {rows.length === 0 && <SettingsEmpty>No machine in this team is on yet.</SettingsEmpty>}
-      {rows.map(({ machine, status, owner }) => (
+      {rows.map(({ machine, online, status, owner }) => (
         <div key={machine.id} className={SETTING_ROW}>
           <div className='flex min-w-0 flex-1 flex-col'>
             <div className='flex min-w-0 items-center gap-1.5 text-xs leading-4'>
               <Truncate className='font-medium text-fg-4'>{machine.name}</Truncate>
-              <span className={cn('shrink-0', machine.online ? TONE_TEXT.green : 'text-fg-2')}>{status}</span>
+              <span className={cn('shrink-0', online ? TONE_TEXT.green : 'text-fg-2')}>{status}</span>
             </div>
             {owner && (
               <Truncate className='text-2xs leading-4 text-fg-2'>
@@ -56,27 +65,65 @@ function TeamMachines({ team }: { team: RemoteTeam }) {
   );
 }
 
-function TeamPeople({ team, viewerId }: { team: RemoteTeam; viewerId: string | null }) {
+type UpdateScopes = (teamId: string, userId: string | null, scopes: AccessScopes | null) => Promise<unknown>;
+
+function TeamPeople({
+  team,
+  viewerId,
+  onScopes,
+}: {
+  team: RemoteTeam;
+  viewerId: string | null;
+  onScopes: ((user: RemoteUser) => void) | null;
+}) {
   const now = useNow();
+  const presence = useTeamPresence(team.id);
   return (
     <FoldingBlock
       persistId={createDisclosureId('settings', 'teams', team.id, 'people')}
       title='People'
       detail={describePeopleCount(team)}
     >
-      {listTeamPeople(team, '').map(({ user, member }) => (
-        <UserRow
-          key={user.id}
-          user={user}
-          detail={member ? describeMemberSince(member, now) : 'Owner'}
-          self={user.id === viewerId}
-        />
-      ))}
+      {listTeamPeople(team, '').map(({ user, member }) => {
+        const self = user.id === viewerId;
+        const seen = self ? null : (presence.get(user.id) ?? null);
+        const base = member ? describeMemberSince(member, now) : 'Owner';
+        const parts = [
+          seen ? describePresence(seen, now) : null,
+          base,
+          hasOwnScopes(team, user.id) ? 'Own scopes' : null,
+        ];
+        return (
+          <UserRow
+            key={user.id}
+            user={user}
+            detail={parts.filter((part) => part !== null).join(' · ')}
+            self={self}
+            presence={seen}
+          >
+            {onScopes && member && (
+              <Button variant='secondary' size='sm' onClick={() => onScopes(user)}>
+                Scopes
+              </Button>
+            )}
+          </UserRow>
+        );
+      })}
     </FoldingBlock>
   );
 }
 
-function HostedTeamCard({ entry, viewerId }: { entry: HostedTeam; viewerId: string | null }) {
+function HostedTeamCard({
+  entry,
+  viewerId,
+  onUpdate,
+  onScopes,
+}: {
+  entry: HostedTeam;
+  viewerId: string | null;
+  onUpdate: UpdateScopes | null;
+  onScopes: ((user: RemoteUser) => void) | null;
+}) {
   const now = useNow();
   const { team } = entry;
   return (
@@ -87,33 +134,53 @@ function HostedTeamCard({ entry, viewerId }: { entry: HostedTeam; viewerId: stri
           <Truncate className='text-2xs text-fg-2'>
             <MentionText mention={describeHostedTeam(team, now)} />
           </Truncate>
+          {showsKeyNote(entry) && <p className='text-2xs text-pretty text-fg-2'>{TEAM_KEY_MISSING}</p>}
         </div>
       </div>
-      {!entry.hasKey && (
-        <div className={cn(SETTING_ROW, 'gap-2')}>
-          <Icon name='IconKey1' size='sm' className='shrink-0 text-fg-2' />
-          <p className='min-w-0 flex-1 text-2xs text-pretty text-fg-2'>{TEAM_KEY_MISSING}</p>
-        </div>
-      )}
       <TeamMachines team={team} />
-      <TeamPeople team={team} viewerId={viewerId} />
+      <TeamScopesBlock team={team} onUpdate={team.role === 'owner' ? onUpdate : null} />
+      <TeamPeople
+        team={team}
+        viewerId={viewerId}
+        onScopes={team.role === 'owner' && onUpdate ? onScopes : null}
+      />
     </SettingsCard>
   );
 }
 
-export function HostedTeamsGroup({ teams, failure }: { teams: HostedTeams | null; failure: string | null }) {
+export function HostedTeamsGroup({
+  teams,
+  failure,
+  onUpdate = null,
+}: {
+  teams: HostedTeams | null;
+  failure: string | null;
+  onUpdate?: UpdateScopes | null;
+}) {
+  const dialog = useDialogState<{ teamId: string; user: RemoteUser }>();
+  const open = dialog.value;
+  const dialogTeam = open ? teams?.teams.find((entry) => entry.team.id === open.teamId)?.team : undefined;
   return (
     <SettingsSection title={TEAMS_SECTION} description={`${TEAMS_DESCRIPTION} ${TEAMS_ON_MACHINE_NOTE}`}>
       {!failure && teams && teams.teams.length > 0 ? (
         <div className='flex flex-col gap-2'>
           {teams.teams.map((entry) => (
-            <HostedTeamCard key={entry.team.id} entry={entry} viewerId={teams.viewerId} />
+            <HostedTeamCard
+              key={entry.team.id}
+              entry={entry}
+              viewerId={teams.viewerId}
+              onUpdate={onUpdate}
+              onScopes={(user) => dialog.show({ teamId: entry.team.id, user })}
+            />
           ))}
         </div>
       ) : (
         <SettingsCard>
           <SettingsEmpty>{describeHostedTeamsNotice(teams, failure)}</SettingsEmpty>
         </SettingsCard>
+      )}
+      {onUpdate && open && dialogTeam && (
+        <MemberScopesDialog control={dialog.control} team={dialogTeam} user={open.user} onUpdate={onUpdate} />
       )}
     </SettingsSection>
   );
@@ -138,5 +205,13 @@ export function HostedTeamsSettings() {
       live = false;
     };
   }, [services]);
-  return <HostedTeamsGroup teams={teams} failure={failure} />;
+  const update = React.useCallback<UpdateScopes>(
+    async (teamId, userId, scopes) => {
+      if (!services) return;
+      const team = await services.dashboard.updateTeamScopes(teamId, userId, scopes);
+      setTeams((current) => (current ? replaceHostedTeam(current, team) : current));
+    },
+    [services]
+  );
+  return <HostedTeamsGroup teams={teams} failure={failure} onUpdate={services ? update : null} />;
 }

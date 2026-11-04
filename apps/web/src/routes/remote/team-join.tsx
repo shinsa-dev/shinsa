@@ -35,9 +35,10 @@ const TEAM_POINTS: RemotePoint[] = [
     detail: 'Every task in the projects they share: its plan, progress, review, evidence and code.',
   },
   {
-    icon: 'IconEyeSlash',
-    title: 'Read-only, and never the chat',
-    detail: 'You cannot change their tasks, and their chats and messages to agents stay on their machines.',
+    icon: 'IconHandshake',
+    title: 'Pick up their work here',
+    detail:
+      'Answer gates, take a task over and open its running services, as the team’s owner allows. Nothing else on their machines.',
   },
 ];
 

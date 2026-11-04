@@ -1,5 +1,6 @@
 import {
   listTeamProjectIds,
+  NO_TEAM_FEED,
   parseTeamJoinUrl,
   type RemoteMember,
   type RemoteSnapshot,
@@ -8,16 +9,18 @@ import {
   type RemoteUser,
   type ShinsaState,
   TEAM_NAME_LIMIT,
+  type TeamFeedSnapshot,
   type TeamMachine,
   type UserCommand,
 } from '@shinsa/core';
 import { formatSince } from '@/lib/format/time.ts';
 import type { Mention } from '@/lib/remote/users.ts';
+import { isMachineOnline, resolveMachineSeenAt, selectFeedMachine } from './presence.ts';
 
 export const TEAMS_SECTION = 'Teams';
 
 export const TEAMS_DESCRIPTION =
-  'Teammates see every task in the projects you share with a team, live and read-only: its plan, review, evidence and code, never its chat. You choose the projects, and only you.';
+  'Teammates see every task in the projects you share with a team, live, and act on it as far as What teammates can do allows. You choose the projects, and only you.';
 
 export const TEAM_LINK_COPY =
   'Whoever opens it asks to join, which you accept here. It holds the team’s key, so share it only with people you’d add.';
@@ -120,6 +123,25 @@ export function hasMachineAccess(snapshot: RemoteSnapshot, userId: string) {
   return snapshot.access?.members.some((member) => member.user.id === userId) ?? false;
 }
 
+export interface GrantMachine {
+  id: string | null;
+  name: string;
+}
+
+export function listGrantMachines(
+  machines: readonly { id: string; name: string; remote: RemoteSnapshot | null }[],
+  current: GrantMachine,
+  userId: string
+): GrantMachine[] {
+  const others = machines.filter(
+    (machine) =>
+      machine.id !== current.id &&
+      machine.remote?.enabled === true &&
+      !hasMachineAccess(machine.remote, userId)
+  );
+  return [current, ...others.map((machine) => ({ id: machine.id, name: machine.name }))];
+}
+
 export function resolveProjectPick(projects: readonly ProjectChoice[], chosen: readonly string[]) {
   const picked = projects.filter((project) => chosen.includes(project.id));
   const [first, second] = picked;
@@ -158,7 +180,9 @@ export function describePeopleCount(team: RemoteTeam) {
 export const TEAMS_ON_MACHINE_NOTE = 'Make and change a team from a machine you own.';
 
 export const TEAM_KEY_MISSING =
-  'This browser has no key for the team. Open the team’s join link here once to read its tasks.';
+  'Add one of your machines in this team to this browser to read its tasks here. Its team key comes with it.';
+
+export const TEAMS_CONNECTING = 'Reading your teams from your machines…';
 
 export const NO_HOSTED_TEAM =
   'You are in no team yet. Make one in Settings on a machine, or open a teammate’s join link here and sign in to ask to join.';
@@ -174,9 +198,20 @@ export interface HostedTeam {
   hasKey: boolean;
 }
 
+export function showsKeyNote(entry: HostedTeam) {
+  return !entry.hasKey && entry.team.role !== 'owner';
+}
+
 export interface HostedTeams {
   viewerId: string | null;
   teams: HostedTeam[];
+}
+
+export function replaceHostedTeam(teams: HostedTeams, team: RemoteTeam): HostedTeams {
+  return {
+    ...teams,
+    teams: teams.teams.map((entry) => (entry.team.id === team.id ? { ...entry, team } : entry)),
+  };
 }
 
 function countOf(count: number, one: string, many: string) {
@@ -191,20 +226,30 @@ export function describeHostedTeam(team: RemoteTeam, now = Date.now()): Mention 
 
 export interface TeamMachineRow {
   machine: TeamMachine;
+  online: boolean;
   status: string;
   owner: RemoteUser | null;
 }
 
-export function listTeamMachineRows(team: RemoteTeam, now = Date.now()): TeamMachineRow[] {
+export function listTeamMachineRows(
+  team: RemoteTeam,
+  now = Date.now(),
+  feed: TeamFeedSnapshot = NO_TEAM_FEED
+): TeamMachineRow[] {
   const people = [team.owner, ...team.members.map((member) => member.user)];
-  return team.machines.map((machine) => ({
-    machine,
-    status: describeTeamMachineStatus(machine, now),
-    owner: people.find((user) => user.id === machine.userId) ?? null,
-  }));
+  return team.machines.map((machine) => {
+    const live = selectFeedMachine(feed, team.id, machine.id);
+    const online = isMachineOnline(machine, live);
+    return {
+      machine,
+      online,
+      status: describeTeamMachineStatus(online, resolveMachineSeenAt(machine, live), now),
+      owner: people.find((user) => user.id === machine.userId) ?? null,
+    };
+  });
 }
 
-function describeTeamMachineStatus(machine: TeamMachine, now: number) {
-  if (machine.online) return 'Online';
-  return machine.lastSeenAt === null ? 'Never connected' : formatSince('Last seen', machine.lastSeenAt, now);
+function describeTeamMachineStatus(online: boolean, seenAt: number | null, now: number) {
+  if (online) return 'Online';
+  return seenAt === null ? 'Never connected' : formatSince('Last seen', seenAt, now);
 }

@@ -1,4 +1,5 @@
 import { Option, Schema } from 'effect';
+import { AccessScopes } from '../scopes/schema.ts';
 import { URL_SAFE_SEGMENT } from './bytes.ts';
 import { isSigningPublicKey } from './keys.ts';
 
@@ -212,7 +213,7 @@ export const RemoteAccess = Schema.Struct({ owner: RemoteUser, members: Schema.A
 
 export type RemoteAccess = typeof RemoteAccess.Type;
 
-export const RemoteRole = Schema.Literals(['owner', 'member', 'guest']);
+export const RemoteRole = Schema.Literals(['owner', 'member', 'guest', 'teammate']);
 
 export type RemoteRole = typeof RemoteRole.Type;
 
@@ -225,9 +226,17 @@ export const TEAM_ACTIONS = [
   'leave',
   'remove',
   'connect',
+  'scopes',
 ] as const;
 
 export type TeamAction = (typeof TEAM_ACTIONS)[number];
+
+export const TeamScopeOverride = Schema.Struct({
+  userId: Schema.String,
+  scopes: AccessScopes,
+});
+
+export type TeamScopeOverride = typeof TeamScopeOverride.Type;
 
 export const TeamMachine = Schema.Struct({
   id: Schema.String,
@@ -248,6 +257,8 @@ export const RemoteTeam = Schema.Struct({
   members: Schema.Array(RemoteMember),
   requests: Schema.Array(RemoteMember),
   machines: Schema.Array(TeamMachine),
+  scopes: AccessScopes,
+  overrides: Schema.Array(TeamScopeOverride),
   createdAt: Schema.Number,
 });
 
@@ -379,6 +390,13 @@ export type TeamPreviewResponse = typeof TeamPreviewResponse.Type;
 export const TeamConnectRequest = Schema.Struct({ instanceId: InstanceId });
 
 export type TeamConnectRequest = typeof TeamConnectRequest.Type;
+
+export const TeamScopesRequest = Schema.Struct({
+  userId: Schema.optionalKey(RemoteUserId),
+  scopes: Schema.NullOr(AccessScopes),
+});
+
+export type TeamScopesRequest = typeof TeamScopesRequest.Type;
 
 export function resolveTunnelHost(instanceId: string) {
   return `t-${instanceId}.${REMOTE_TUNNEL_DOMAIN}`;

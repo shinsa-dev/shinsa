@@ -99,6 +99,8 @@ export interface ShinsaState {
   away: Record<string, TimingSpan>;
   focusHistory: Record<string, FocusSpan>;
   onBehalfActions: OnBehalfAction[];
+  teammateTasks?: Readonly<Record<string, true>>;
+  teammateRepos?: Readonly<Record<string, true>>;
 }
 
 const UNTITLED_LENGTH = 80;
@@ -216,6 +218,7 @@ function createTaskRecord(event: EventOf<'task.created'>): Task {
     auto: { ...event.auto },
     ...(event.account ? { account: event.account } : {}),
     ...(event.forkOf ? { forkOf: event.forkOf } : {}),
+    ...(event.teammateFork ? { teammateFork: event.teammateFork } : {}),
     rounds: [createFirstRound(title, request, pipeline, event.at)],
   };
 }
@@ -1148,6 +1151,7 @@ function applyEventBody(state: ShinsaState, event: ShinsaEvent): ShinsaState {
     case 'handoff.claimed':
     case 'handoff.removed':
     case 'handoff.left':
+    case 'task.handed_to_teammate':
       applyHandoffEvent(state, event);
       break;
     case 'slack.thread_linked':

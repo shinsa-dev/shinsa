@@ -1,4 +1,4 @@
-import { type RemoteInstance, resolveMachineLoad, type Task } from '@shinsa/core';
+import { type AccessScopes, type RemoteInstance, resolveMachineLoad, type Task } from '@shinsa/core';
 import { Clock, Effect } from 'effect';
 import { Connection, type MachineChoice, resolveSocketTransport } from '@/lib/connection/socket.ts';
 import { formatSince } from '@/lib/format/time.ts';
@@ -27,9 +27,11 @@ function resolveDeviceAccess(device: EnrolledDevice | null) {
   return device.waiting ? 'Waiting for an answer' : 'In this dashboard';
 }
 
-function describeSharer(instance: RemoteInstance) {
-  return instance.role === 'guest' ? 'A task handed to you by' : 'Shared by';
-}
+const SHARER: Record<Exclude<RemoteInstance['role'], 'owner'>, string> = {
+  member: 'Shared by',
+  guest: 'A task handed to you by',
+  teammate: 'In a team with',
+};
 
 export function describeMachine(
   instance: RemoteInstance,
@@ -43,7 +45,7 @@ export function describeMachine(
   const access: Mention =
     instance.role === 'owner'
       ? [added]
-      : [`${describeSharer(instance)} `, { user: instance.owner }, ` · ${added}`];
+      : [`${SHARER[instance.role]} `, { user: instance.owner }, ` · ${added}`];
   return {
     instance,
     device,
@@ -68,6 +70,18 @@ export function resolveMachineDetail(
   return titles.length > 0 ? [...row.access, ` · ${titles.join(', ')}`] : row.access;
 }
 
+export function isOwnMachineConnecting(rows: readonly MachineRow[], reached: readonly { id: string }[]) {
+  const ids = new Set(reached.map((machine) => machine.id));
+  return rows.some(
+    (row) =>
+      row.instance.role === 'owner' &&
+      row.instance.online &&
+      row.device !== null &&
+      !row.device.waiting &&
+      !ids.has(row.instance.id)
+  );
+}
+
 export const listMachineRows = Effect.fn('Machines.listMachineRows')(function* (
   dashboard: Pick<DashboardClient, 'listInstances'>,
   devices: Pick<DeviceStore, 'selectDevice'>,
@@ -87,6 +101,8 @@ export const listMachineRows = Effect.fn('Machines.listMachineRows')(function* (
 
 export interface FleetMemberOptions {
   dashboard: Pick<DashboardClient, 'requestConnect'>;
+  viewerId: string;
+  teammateScopes?: AccessScopes;
   onRefused: (instanceId: string, error: ChannelError) => void;
   onRemoved?: (instanceId: string) => void;
   createConnection?: (transport: SocketTransport) => Connection;
@@ -114,6 +130,15 @@ export function createFleetMember(
     current: device.onMachine === true,
     online: instance.online,
     ...(instance.role === 'guest' ? { guest: true as const, handedBy: instance.owner } : {}),
+    ...(instance.role === 'teammate'
+      ? {
+          teammate: {
+            owner: instance.owner,
+            viewerId: options.viewerId,
+            scopes: options.teammateScopes ?? [],
+          },
+        }
+      : {}),
     connection,
     fetch: link.fetch,
     ...(instance.role === 'owner'

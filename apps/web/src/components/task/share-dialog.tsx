@@ -17,7 +17,7 @@ import { MentionText, UserIdentity } from '@/components/people/user-tag.tsx';
 import { TimeAgo } from '@/components/text/time-ago.tsx';
 import { useNow } from '@/hooks/use-now.ts';
 import { useRemoteAccess } from '@/lib/connection/remote-access.ts';
-import { useSettings, useTask } from '@/lib/connection/selectors.ts';
+import { useSettings, useShinsaState, useTask } from '@/lib/connection/selectors.ts';
 import { useEngineCommand } from '@/lib/connection/socket.ts';
 import { formatSince } from '@/lib/format/time.ts';
 import { type Mention, resolveFirstName } from '@/lib/remote/users.ts';
@@ -53,8 +53,16 @@ import {
 import {
   closeHandoffRemoveConfirm,
   describeHandoffClaim,
+  describeHandToTeammate,
   HANDOFF_COPY,
   HANDOFF_DESCRIPTION,
+  HANDOFF_LINK,
+  HANDOFF_TEAMMATE_DESCRIPTION,
+  HANDOFF_TO_TITLE,
+  type HandoffTeammate,
+  handToTeammate,
+  listHandoffTargetItems,
+  listHandoffTeammates,
   HANDOFF_HELD_DESCRIPTION,
   HANDOFF_JOINED,
   HANDOFF_REMOVE,
@@ -215,13 +223,64 @@ function HandoffBody({ view }: { view: HandoffView }) {
   return null;
 }
 
-function HandoffActions({ task, view }: { task: Task; view: HandoffView }) {
+function HandoffTargetRow({
+  teammates,
+  target,
+  onChange,
+}: {
+  teammates: readonly HandoffTeammate[];
+  target: string;
+  onChange: (target: string) => void;
+}) {
+  return (
+    <Field className='w-full'>
+      <FieldLabel>{HANDOFF_TO_TITLE}</FieldLabel>
+      <SelectField
+        label={HANDOFF_TO_TITLE}
+        align='start'
+        className='w-full'
+        items={listHandoffTargetItems(teammates)}
+        value={target}
+        onValueChange={onChange}
+      />
+    </Field>
+  );
+}
+
+function HandToTeammateAction({ task, teammate }: { task: Task; teammate: HandoffTeammate }) {
+  const [busy, setBusy] = React.useState(false);
+  return (
+    <Button
+      loading={busy}
+      onClick={() => {
+        setBusy(true);
+        void handToTeammate(task, teammate).then(() => {
+          setBusy(false);
+          closeShareDialog();
+        });
+      }}
+    >
+      {describeHandToTeammate(teammate.user)}
+    </Button>
+  );
+}
+
+function HandoffActions({
+  task,
+  view,
+  teammate,
+}: {
+  task: Task;
+  view: HandoffView;
+  teammate: HandoffTeammate | null;
+}) {
   const [busy, setBusy] = React.useState(false);
   const handOff = async () => {
     setBusy(true);
     await handOffTask(task);
     setBusy(false);
   };
+  if (teammate && view.kind !== 'claimed') return <HandToTeammateAction task={task} teammate={teammate} />;
   switch (view.kind) {
     case 'off':
     case 'linking':
@@ -263,9 +322,19 @@ function HandoffActions({ task, view }: { task: Task; view: HandoffView }) {
   }
 }
 
-function describeHandoffView(view: HandoffView): Mention {
+function describeHandoffView(view: HandoffView, teammate: HandoffTeammate | null): Mention {
   if (view.kind === 'claimed') return [...describeHandoffClaim(view.guest), `. ${HANDOFF_HELD_DESCRIPTION}`];
-  return [HANDOFF_DESCRIPTION];
+  return [teammate ? HANDOFF_TEAMMATE_DESCRIPTION : HANDOFF_DESCRIPTION];
+}
+
+function useHandoffTeammates(task: Task) {
+  const state = useShinsaState();
+  const { snapshot } = useRemoteAccess();
+  const supported = useEngineCommand('task.hand_to_teammate', task.id);
+  return React.useMemo(
+    () => (state && supported ? listHandoffTeammates(state, task, snapshot) : []),
+    [state, supported, task, snapshot]
+  );
 }
 
 function ShareContent({ task }: { task: Task }) {
@@ -288,6 +357,10 @@ function ShareContent({ task }: { task: Task }) {
   const preset = mode === 'handoff' ? resolveSharePresetChoice(task, settings) : mode;
   const handing = mode === 'handoff' && view.kind !== 'unpaired';
   const handoff = resolveHandoffView(task);
+  const teammates = useHandoffTeammates(task);
+  const [target, setTarget] = React.useState(HANDOFF_LINK);
+  const teammate = teammates.find((candidate) => candidate.user.id === target) ?? null;
+  const picksTeammate = handing && handoff.kind !== 'claimed' && teammates.length > 0;
   const pickLimit = (next: ShareLimit) => {
     if (shared) void changeShareLimit(task, next);
     else setPicked(next);
@@ -302,7 +375,7 @@ function ShareContent({ task }: { task: Task }) {
       <DialogHeader>
         <DialogTitle>{SHARE_TITLE}</DialogTitle>
         <DialogDescription>
-          {handing ? <MentionText mention={describeHandoffView(handoff)} /> : SHARE_DESCRIPTION}
+          {handing ? <MentionText mention={describeHandoffView(handoff, teammate)} /> : SHARE_DESCRIPTION}
         </DialogDescription>
       </DialogHeader>
       {!handing && <ShareBody view={view} />}
@@ -313,6 +386,7 @@ function ShareContent({ task }: { task: Task }) {
             mode={shownMode}
             onChange={pickMode}
           />
+          {picksTeammate && <HandoffTargetRow teammates={teammates} target={target} onChange={setTarget} />}
           {handing ? (
             <HandoffBody view={handoff} />
           ) : (
@@ -322,7 +396,7 @@ function ShareContent({ task }: { task: Task }) {
       )}
       <DialogFooter>
         {handing ? (
-          <HandoffActions task={task} view={handoff} />
+          <HandoffActions task={task} view={handoff} teammate={picksTeammate ? teammate : null} />
         ) : (
           <ShareActions task={task} view={view} limit={limit} preset={preset} />
         )}

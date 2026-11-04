@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import {
   createTeamWelcome,
+  DEFAULT_TEAM_SCOPES,
   parseShareMessage,
   parseTeamHello,
   REMOTE_KEY_ALGORITHM,
@@ -68,6 +69,8 @@ function createTeam(overrides: Partial<RemoteTeam> = {}): RemoteTeam {
     members: [{ user: KAI, addedAt: 2 }],
     requests: [],
     machines: [STUDIO, LAPTOP],
+    scopes: DEFAULT_TEAM_SCOPES,
+    overrides: [],
     createdAt: 1,
     ...overrides,
   };
@@ -356,9 +359,13 @@ describe('watching teammates’ machines', () => {
     const { feeds, sockets, waits } = setUp();
     feeds.start();
     await until('the list arrives', () => feeds.snapshot().tasks.length === 2);
+    expect(feeds.snapshot().machines[0]?.presence).toEqual([
+      { userId: MONA.id, status: 'away', seenAt: null },
+    ]);
     sockets[0]?.drop();
     await until('the drop is seen', () => waits.length === 1);
     expect(listMachineStatus(feeds)).toEqual([['inst1', 'offline', TEAM_FEED_OFFLINE]]);
+    expect(feeds.snapshot().machines[0]?.presence).toBeUndefined();
     expect(feeds.snapshot().tasks).toHaveLength(2);
     waits.shift()?.();
     await until('it is live again', () => feeds.snapshot().machines[0]?.status === 'live');

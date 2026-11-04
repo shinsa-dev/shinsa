@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'bun:test';
-import { type RemoteInstance, type RemoteTeam, resolveKeyFingerprint } from '@shinsa/core';
+import {
+  DEFAULT_TEAM_SCOPES,
+  type RemoteInstance,
+  type RemoteTeam,
+  resolveKeyFingerprint,
+} from '@shinsa/core';
 import { Effect, Fiber } from 'effect';
 import { describeMachine } from '@/lib/remote/machines.ts';
 import type { ChannelOptions, RemoteChannel } from '@/lib/remote/remote-channel/schema.ts';
@@ -38,6 +43,8 @@ const TEAM: RemoteTeam = {
   members: [{ user: KAI, addedAt: 1 }],
   requests: [],
   machines: [{ id: 'studio', name: 'Studio', userId: MONA.id, online: true, lastSeenAt: 1 }],
+  scopes: DEFAULT_TEAM_SCOPES,
+  overrides: [],
   createdAt: 1,
 };
 

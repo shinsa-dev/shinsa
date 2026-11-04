@@ -1,4 +1,4 @@
-import { listTeamProjectIds, type RemoteSnapshot, type ShinsaState } from '@shinsa/core';
+import { listTeamProjectIds, type RemoteSnapshot, type ShinsaState, type AccessScopes } from '@shinsa/core';
 import { Effect } from 'effect';
 import { describeFailure } from '@/lib/connection/commands.ts';
 import { connection, sendCommand } from '@/lib/connection/socket.ts';
@@ -91,6 +91,12 @@ export function createTeamActions(machineId: string | null = null) {
       act((teams) => teams.removeMember({ payload: { teamId, userId } })),
     leave: (teamId: string) => act((teams) => teams.leave({ payload: { teamId } })),
     remove: (teamId: string) => act((teams) => teams.remove({ payload: { teamId } })),
+    updateScopes: (teamId: string, userId: string | null, scopes: AccessScopes | null) =>
+      act((teams) =>
+        teams.scopes({ payload: userId === null ? { teamId, scopes } : { teamId, userId, scopes } })
+      ),
+    updateExtra: (teamId: string, userId: string, scopes: AccessScopes) =>
+      act((teams) => teams.extra({ payload: { teamId, userId, scopes } })),
     grantAccess: (teamId: string, userId: string) => run(grantAccess(teamId, userId)),
   };
 }

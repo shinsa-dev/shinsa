@@ -1,4 +1,4 @@
-import type { ChatNotice } from '@shinsa/core';
+import type { ChatNotice, TeamFeedTask } from '@shinsa/core';
 import { Clock, Context, Duration, Effect, Layer, Scope } from 'effect';
 import type { Accounts } from '../../../src/accounts/index.ts';
 import {
@@ -25,7 +25,7 @@ import {
   STOP_MS,
 } from '../../../src/agents/supervisor/schema.ts';
 import { RunSupervisor } from '../../../src/agents/supervisor/service.ts';
-import { DelegationMinute } from '../../../src/agents/tool-calls/schema.ts';
+import { DelegationMinute, TeammateTasks } from '../../../src/agents/tool-calls/schema.ts';
 import type { Transcripts } from '../../../src/agents/transcripts/service.ts';
 import { Transcripts as TranscriptsService } from '../../../src/agents/transcripts/service.ts';
 import type { ServerConfig } from '../../../src/config/index.ts';
@@ -98,6 +98,7 @@ export interface SupervisorOptions {
   workspaces?: Workspaces['Service'];
   services?: unknown;
   trackProcess?: ProcessTracker;
+  teamTasks?: () => readonly TeamFeedTask[];
 }
 
 function resolveTimersClock(timers: ClockTimers): Clock.Clock {
@@ -192,8 +193,9 @@ function resolveSurroundings(options: SupervisorOptions) {
 }
 
 function resolveTimings(options: SupervisorOptions) {
-  const { clockTimers, idle, minuteMs, compaction } = options;
+  const { clockTimers, idle, minuteMs, compaction, teamTasks } = options;
   return Layer.mergeAll(
+    teamTasks ? Layer.succeed(TeammateTasks, Effect.sync(teamTasks)) : Layer.empty,
     options.maxRunMs === undefined && options.quiesceMs === undefined && options.stopMs === undefined
       ? Layer.empty
       : Layer.succeed(RunLimits, {

@@ -65,6 +65,7 @@ function createDashboard(overrides: Partial<DashboardClient> = {}): DashboardCli
     removeInstance: () => Promise.resolve({ ok: true }),
     leaveInstance: () => Promise.resolve({ ok: true }),
     listTeams: () => Promise.resolve([]),
+    updateTeamScopes: () => Promise.reject(new Error('unused')),
     acceptInvite: () =>
       Promise.resolve({
         instanceId: 'k3x9',
@@ -338,8 +339,8 @@ describe('managing a machine you own in Settings → Machines', () => {
           <MachinesSettings state={state} />
         </RemoteServicesContext.Provider>
       );
-      expect(await screen.findByText('Remote access on Studio')).toBeTruthy();
-      expect(screen.getByText('Devices that can reach Studio')).toBeTruthy();
+      expect(await screen.findByText('Devices that can reach Studio')).toBeTruthy();
+      expect(screen.getByRole('heading', { name: 'Remote access' })).toBeTruthy();
       expect(screen.getByText('People who can reach Studio')).toBeTruthy();
       expect(screen.getByRole('button', { name: 'Invite link' })).toBeTruthy();
       expect(screen.queryByRole('button', { name: 'Pause' })).toBeNull();
@@ -372,7 +373,7 @@ describe('managing a machine you own in Settings → Machines', () => {
         </RemoteServicesContext.Provider>
       );
       expect(await screen.findByText(/Make and change a team from a machine you own/)).toBeTruthy();
-      expect(screen.queryByText(/^Remote access on/)).toBeNull();
+      expect(screen.queryByText(/^Devices that can reach/)).toBeNull();
     } finally {
       replaceConnection(null);
     }

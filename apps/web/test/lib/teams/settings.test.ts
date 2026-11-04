@@ -9,6 +9,7 @@ import {
   describeTeamFacts,
   describeTeamsUnavailable,
   hasMachineAccess,
+  listGrantMachines,
   listProjectChoices,
   scopeStateToProjects,
   listTeamMachineRows,
@@ -116,6 +117,28 @@ describe('Settings → Teams', () => {
     expect(hasMachineAccess(createRemoteSnapshot(), KAI.id)).toBe(false);
   });
 
+  it('offers the machine you asked from first, then every other one of yours they cannot reach yet', () => {
+    const open = createRemoteSnapshot({ enabled: true });
+    const reached = createRemoteSnapshot({
+      enabled: true,
+      access: { owner: MONA, members: [{ user: KAI, addedAt: 3 }] },
+    });
+    const machines = [
+      { id: 'studio', name: 'Studio', remote: open },
+      { id: 'laptop', name: 'Laptop', remote: open },
+      { id: 'mini', name: 'Mini', remote: reached },
+      { id: 'off', name: 'Off', remote: createRemoteSnapshot({ enabled: false }) },
+      { id: 'none', name: 'None', remote: null },
+    ];
+    expect(listGrantMachines(machines, { id: 'studio', name: 'Studio' }, KAI.id)).toEqual([
+      { id: 'studio', name: 'Studio' },
+      { id: 'laptop', name: 'Laptop' },
+    ]);
+    expect(listGrantMachines([], { id: null, name: 'this machine' }, KAI.id)).toEqual([
+      { id: null, name: 'this machine' },
+    ]);
+  });
+
   it('lists the owner first, then the members, and finds people by name or login', () => {
     const team = createTeam({
       members: [
@@ -164,6 +187,36 @@ describe('Settings → Teams', () => {
         ['Never connected', null],
       ]
     );
+  });
+
+  it('turns a machine offline the moment its live channel drops, and online as soon as it answers', () => {
+    const team = createTeam({
+      machines: [
+        { id: 'm1', name: 'Studio', userId: MONA.id, online: true, lastSeenAt: NOW - 3_600_000 },
+        { id: 'm2', name: 'Laptop', userId: KAI.id, online: false, lastSeenAt: null },
+        { id: 'm3', name: 'Spare', userId: KAI.id, online: true, lastSeenAt: NOW },
+      ],
+    });
+    const machine = { teamId: team.id, name: '', reason: null } as const;
+    const feed = {
+      tasks: [],
+      machines: [
+        {
+          ...machine,
+          instanceId: 'm1',
+          userId: MONA.id,
+          status: 'offline' as const,
+          updatedAt: NOW - 60_000,
+        },
+        { ...machine, instanceId: 'm2', userId: KAI.id, status: 'live' as const },
+        { ...machine, instanceId: 'm3', userId: KAI.id, status: 'connecting' as const },
+      ],
+    };
+    expect(listTeamMachineRows(team, NOW, feed).map(({ online, status }) => [online, status])).toEqual([
+      [false, 'Last seen 1m ago'],
+      [true, 'Online'],
+      [true, 'Online'],
+    ]);
   });
 
   it('says why the hosted Teams section has no team to show', () => {

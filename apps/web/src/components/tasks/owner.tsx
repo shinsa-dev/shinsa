@@ -4,9 +4,10 @@ import { Truncate } from '@shinsa/ui/components/truncate';
 import { TEAM_ICON } from '@/components/focus/menu.tsx';
 import { Hint } from '@/components/overlays/hint.tsx';
 import { UserTag } from '@/components/people/user-tag.tsx';
-import { useRemoteSnapshot } from '@/lib/connection/socket.ts';
+import { useRemoteSnapshot, useTeamFeed } from '@/lib/connection/socket.ts';
 import { resolveSharedProfile } from '@/lib/remote/users.ts';
 import { describeTeamTaskOwner, describeTeamTaskPlace } from '@/lib/teams/feeds.ts';
+import { selectFeedMachine } from '@/lib/teams/presence.ts';
 
 const YOU_OWNER = 'You';
 
@@ -29,8 +30,10 @@ export function YourOwnerMark() {
 }
 
 export function TeammateOwnerMark({ entry }: { entry: TeamFeedTask }) {
+  const feed = useTeamFeed();
   const note = describeTeamTaskPlace(entry);
+  const userId = selectFeedMachine(feed, entry.teamId, entry.instanceId)?.userId ?? null;
   if (!entry.owner) return <PlainOwner icon={TEAM_ICON} label={describeTeamTaskOwner(entry)} detail={note} />;
   const user = resolveSharedProfile(entry.owner, entry.ownerProfile);
-  return <UserTag user={user} note={note} className={OWNER_TAG} />;
+  return <UserTag user={user} userId={userId} note={note} className={OWNER_TAG} />;
 }

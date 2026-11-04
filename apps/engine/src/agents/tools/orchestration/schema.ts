@@ -11,6 +11,7 @@ import {
   type ShinsaCommand,
   type ShinsaEvent,
   type ShinsaState,
+  type TeamFeedTask,
 } from '@shinsa/core';
 import type { Duration, Effect } from 'effect';
 import type { ToolCallFailed, ToolSpec } from '../schema.ts';
@@ -155,7 +156,7 @@ export const ORCHESTRATION_TOOL_SPECS = {
           type: 'string',
           maxLength: DELEGATION_LIMITS.name,
           description:
-            'A task to fork, by id or handle (this one included): the new task starts from its conversation.',
+            'A task to fork, by id or handle (this one included): the new task starts from its conversation. A teammate’s task from `find_tasks` works too: the fork runs on this machine and starts from what that task was asked and did.',
         },
         this_task_waits: { type: 'boolean' },
         after_this: {
@@ -228,6 +229,7 @@ export interface OrchestrationCall {
   readonly signal: AbortSignal;
   readonly minute: Duration.Duration;
   readonly state: Effect.Effect<ShinsaState>;
+  readonly teamTasks: Effect.Effect<readonly TeamFeedTask[]>;
   readonly dispatch: (
     command: ShinsaCommand,
     id?: string

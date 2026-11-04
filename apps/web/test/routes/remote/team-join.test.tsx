@@ -32,7 +32,7 @@ describe('the team join page on app.shinsa.dev', () => {
       Promise.resolve({ name: 'Platform', owner: KAI, status: 'requested' as const })
     );
     render(<TeamJoinPage link={LINK} dashboard={DASHBOARD} teamKeys={TEAM_KEYS} request={request} />);
-    expect(screen.getByText('Read-only, and never the chat')).toBeTruthy();
+    expect(screen.getByText('Pick up their work here')).toBeTruthy();
     expect(await screen.findByText('Join Platform')).toBeTruthy();
     const owns = screen.getByText(/owns this team/);
     expect(owns.textContent).toStartWith('MMona owns this team.');

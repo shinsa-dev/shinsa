@@ -78,6 +78,8 @@ export function createTask(decider: Decider, command: CommandOf<'task.create'>, 
   );
   const projectId = resolveCreatedProject(decider, command);
   if (command.forkOf !== undefined) decider.task(command.forkOf);
+  if (command.forkOf !== undefined && command.teammateFork !== undefined)
+    throw new DomainError({ code: 'fork_twice', message: 'Fork one task at a time.' });
   const taskId = decider.context.newId();
   const auto: TaskAuto = {
     shape: command.mode === undefined && lineage.shape === undefined,
@@ -97,6 +99,7 @@ export function createTask(decider: Decider, command: CommandOf<'task.create'>, 
     auto,
     ...(command.account ? { account: command.account } : {}),
     ...(command.forkOf ? { forkOf: command.forkOf } : {}),
+    ...(command.teammateFork ? { teammateFork: command.teammateFork } : {}),
     ...lineage,
   });
   const by = lineage.createdBy ? 'shinsa' : 'you';

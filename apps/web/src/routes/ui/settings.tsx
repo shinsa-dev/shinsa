@@ -27,6 +27,7 @@ import { SkillsGroup } from '@/components/settings/skills.tsx';
 import { SlackGroup } from '@/components/settings/slack.tsx';
 import { TeamsGroup } from '@/components/settings/teams.tsx';
 import { type UpdateActions, UpdatesGroup } from '@/components/settings/updates.tsx';
+import { UserRow } from '@/components/settings/user-row.tsx';
 import { type VersionActions, VersionsGroup } from '@/components/settings/versions.tsx';
 import { TaskFacts } from '@/components/task/facts.tsx';
 import { type EngineStatus, resolveEngineView } from '@/lib/connection/engine.ts';
@@ -39,6 +40,7 @@ import { DEFAULT_PREFERENCES } from '@/lib/preferences/notifications.ts';
 import type { Fleet } from '@/lib/remote/fleet.ts';
 import type { PolicyActions } from '@/lib/remote/policies.ts';
 import { RemoteServicesContext } from '@/lib/remote/services.ts';
+import { describePresence } from '@/lib/teams/presence.ts';
 import { SlackLinkedPage } from '../remote/slack.tsx';
 import { TeamJoinPage } from '../remote/team-join.tsx';
 import { createSampleAccounts, createSampleProviderLogins } from './sample-accounts.ts';
@@ -508,10 +510,30 @@ export function SettingsSpecimens() {
       {teams.scenes.map((scene) => (
         <Specimen key={scene.label} label={scene.label}>
           <div className='w-full max-w-xl'>
-            <TeamsGroup state={teams.state} snapshot={scene.snapshot} failure={null} actions={teamActions} />
+            <TeamsGroup
+              state={teams.state}
+              snapshot={scene.snapshot}
+              failure={null}
+              actions={teamActions}
+              rights
+            />
           </div>
         </Specimen>
       ))}
+      <Specimen label='UserRow · teammates online, away and offline, with when each was last seen'>
+        <div className='w-full max-w-xl'>
+          <SettingsGroup title='People'>
+            {teams.presence.map(({ user, presence, base }) => (
+              <UserRow
+                key={user.id}
+                user={user}
+                detail={[describePresence(presence, now), base].filter(Boolean).join(' · ')}
+                presence={presence}
+              />
+            ))}
+          </SettingsGroup>
+        </div>
+      </Specimen>
       <Specimen label='TeamJoinPage · on app.shinsa.dev, a team link opened after sign-in'>
         <div className='w-full max-w-sm'>
           <TeamJoinPage

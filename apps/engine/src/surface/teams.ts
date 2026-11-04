@@ -1,4 +1,17 @@
-import { DomainError, type RemoteSnapshot, type RemoteTeamEntry, type RemoteUser } from '@shinsa/core';
+import {
+  ACCESS_PRESETS,
+  ACTION_SCOPES,
+  type AccessScope,
+  type AccessScopes,
+  DomainError,
+  type RemoteSnapshot,
+  type RemoteTeamEntry,
+  type RemoteUser,
+  resolveMemberScopes,
+  TEAM_PRESET_NAMES,
+  type TeamPreset,
+  toggleScope,
+} from '@shinsa/core';
 import { Effect } from 'effect';
 import type { EngineCalls } from '../cli/client/schema.ts';
 import type { SurfaceClient } from './client.ts';
@@ -6,7 +19,7 @@ import type { FieldSpec } from './fields.ts';
 import type { SurfaceFailure } from './schema.ts';
 import { defineAction, defineRead, readValue, type SurfaceSpec } from './spec.ts';
 
-const TEAM_FIELD: FieldSpec = {
+export const TEAM_FIELD: FieldSpec = {
   name: 'team',
   kind: 'text',
   positional: 'one',
@@ -14,7 +27,7 @@ const TEAM_FIELD: FieldSpec = {
   description: 'The team’s name or id, from `shinsa teams list`.',
 };
 
-const LOGIN_FIELD: FieldSpec = {
+export const LOGIN_FIELD: FieldSpec = {
   name: 'login',
   kind: 'text',
   required: true,
@@ -62,7 +75,7 @@ export const findTeamId = Effect.fn('Surface.team')(function* (client: SurfaceCl
 
 type Among = 'members' | 'requests' | 'teammates';
 
-const findUserId = Effect.fn('Surface.teamUser')(function* (
+export const findTeamUser = Effect.fn('Surface.teamUser')(function* (
   client: SurfaceClient,
   teamId: string,
   login: string,
@@ -80,7 +93,7 @@ const findUserId = Effect.fn('Surface.teamUser')(function* (
       message: `${wanted} ${where}. See the team with \`shinsa teams list\`.`,
     });
   }
-  return found.user.id;
+  return found.user;
 });
 
 type TeamRoute = (api: EngineCalls, payload: { teamId: string }) => Effect.Effect<unknown, SurfaceFailure>;
@@ -118,12 +131,52 @@ function defineMemberAction(
     fields: [TEAM_FIELD, LOGIN_FIELD],
     act: Effect.fn('Surface.memberAction')(function* (client, values) {
       const teamId = yield* findTeamId(client, readValue(values, 'team'));
-      const userId = yield* findUserId(client, teamId, readValue(values, 'login'), among);
+      const { id: userId } = yield* findTeamUser(client, teamId, readValue(values, 'login'), among);
       const data = yield* route(client.api, { teamId, userId });
       return { data, text: done };
     }),
   });
 }
+
+const DEFAULT_CHOICE = 'default';
+
+const PRESET_CHOICES = [...TEAM_PRESET_NAMES, DEFAULT_CHOICE] as const;
+
+const SCOPE_NAMES: ReadonlySet<string> = new Set(ACTION_SCOPES);
+
+const readScopeNames = Effect.fn('Surface.teamScopeNames')(function* (
+  values: Record<string, unknown>,
+  name: string
+) {
+  const names: AccessScope[] = [];
+  for (const raw of (values[name] as string[] | undefined) ?? []) {
+    if (!SCOPE_NAMES.has(raw))
+      return yield* new DomainError({
+        code: 'arguments_invalid',
+        message: `${raw} is not a team scope. A teammate always sees the whole task; the scopes are what they may do: ${ACTION_SCOPES.join(', ')}.`,
+      });
+    names.push(raw as AccessScope);
+  }
+  return names;
+});
+
+const resolveScopesChange = Effect.fn('Surface.teamScopesChange')(function* (
+  current: AccessScopes,
+  values: Record<string, unknown>
+) {
+  const preset = readValue(values, 'preset');
+  const allow = yield* readScopeNames(values, 'allow');
+  const deny = yield* readScopeNames(values, 'deny');
+  if (!preset && allow.length === 0 && deny.length === 0)
+    return yield* new DomainError({
+      code: 'arguments_invalid',
+      message: 'Name a preset or a scope to change, such as `--preset full` or `--allow message`.',
+    });
+  if (preset === DEFAULT_CHOICE) return null;
+  const base = preset ? ACCESS_PRESETS[preset as TeamPreset] : current;
+  const allowed = allow.reduce((scopes, scope) => toggleScope(scopes, scope, true), base);
+  return deny.reduce((scopes, scope) => toggleScope(scopes, scope, false), allowed);
+});
 
 function describeLink(url: string) {
   return `Share this link with your teammates. Whoever opens it signs in with GitHub and asks to join, which you accept or decline:\n${url}`;
@@ -230,6 +283,53 @@ export const TEAM_SPECS: SurfaceSpec[] = [
     'teammates',
     'They can reach this machine now. Take it back with `shinsa remote remove-member`.'
   ),
+  defineAction({
+    path: ['teams', 'scopes'],
+    summary:
+      'Change what teammates may do on each other’s machines, for the whole team you own or, with --login, one member: a preset, then scopes to allow or deny.',
+    humanOnly: true,
+    fields: [
+      TEAM_FIELD,
+      {
+        ...LOGIN_FIELD,
+        required: false,
+        description: 'One member’s GitHub login. Leave out to change the team’s.',
+      },
+      {
+        name: 'preset',
+        kind: 'choice',
+        choices: PRESET_CHOICES,
+        description:
+          'standard (see the work), collaborate (act on it, but not message agents), full (everything) or default (the team’s, or Collaborate for the team).',
+      },
+      {
+        name: 'allow',
+        kind: 'list',
+        description: 'A scope to allow: gates, actions, message, fork, share or services. Repeat for each.',
+      },
+      {
+        name: 'deny',
+        kind: 'list',
+        description: 'A scope to deny, such as share or services. Repeat for each.',
+      },
+    ],
+    act: Effect.fn('Surface.teamScopes')(function* (client, values) {
+      const teamId = yield* findTeamId(client, readValue(values, 'team'));
+      const snapshot = yield* client.api.remote.snapshot();
+      const team = snapshot.teams.find((entry) => entry.id === teamId)?.team;
+      const login = readValue(values, 'login');
+      if (!login) {
+        const scopes = yield* resolveScopesChange(team?.scopes ?? ACCESS_PRESETS.collaborate, values);
+        const data = yield* client.api.teams.scopes({ payload: { teamId, scopes } });
+        return { data, text: 'The team’s scopes are changed.' };
+      }
+      const user = yield* findTeamUser(client, teamId, login, 'members');
+      const current = team ? resolveMemberScopes(team, user.id) : ACCESS_PRESETS.collaborate;
+      const scopes = yield* resolveScopesChange(current, values);
+      const data = yield* client.api.teams.scopes({ payload: { teamId, userId: user.id, scopes } });
+      return { data, text: 'Their scopes are changed.' };
+    }),
+  }),
   defineTeamAction(
     'leave',
     'Leave a team. Your projects stop showing their tasks to it.',

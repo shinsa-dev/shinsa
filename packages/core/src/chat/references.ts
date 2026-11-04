@@ -1,4 +1,5 @@
 import { isWatchHome, type Task, type TaskStage } from '../domain/index.ts';
+import type { TeamFeedTask } from '../remote/teams.ts';
 import type { ShinsaState } from '../state/project.ts';
 
 export type Reference =
@@ -346,4 +347,42 @@ export function serializeTaskReferences(state: ShinsaState, query: string, limit
       return `- ${parts.filter(Boolean).join(' · ')}`;
     })
     .join('\n');
+}
+
+function matchesTeamQuery(entry: TeamFeedTask, words: string[]) {
+  const { task } = entry;
+  const haystack = [
+    task.id,
+    task.handle ?? '',
+    task.title,
+    task.request,
+    entry.owner ?? '',
+    entry.repo?.name ?? '',
+  ]
+    .join(' ')
+    .toLowerCase();
+  return words.every((word) => haystack.includes(word));
+}
+
+export function serializeTeamTaskReferences(tasks: readonly TeamFeedTask[], query: string, limit = 10) {
+  const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+  const found = tasks
+    .filter((entry) => entry.task.stage !== 'cancelled' && matchesTeamQuery(entry, words))
+    .sort((a, b) => b.task.updatedAt - a.task.updatedAt)
+    .slice(0, limit);
+  if (found.length === 0) return '';
+  const lines = found.map(({ task, owner, repo }) => {
+    const parts = [
+      `${task.handle ? `${task.handle} ` : ''}“${task.title}”`,
+      `${owner ?? 'a teammate'}’s task`,
+      STAGE_WORDS[task.stage],
+      repo ? `repository ${repo.name}` : '',
+      `id ${task.id}`,
+    ];
+    return `- ${parts.filter(Boolean).join(' · ')}`;
+  });
+  return [
+    'Your teammates’ tasks, on their machines. Set `fork_from` to one’s id to fork it onto this machine:',
+    ...lines,
+  ].join('\n');
 }

@@ -1,4 +1,5 @@
 import {
+  DEFAULT_TEAM_SCOPES,
   DEVELOPMENT_VERSION,
   type MachineResources,
   NO_TEAM_FEED,
@@ -224,6 +225,8 @@ function createSampleHostedTeams(now: number): RemoteTeam[] {
           lastSeenAt: now - 3 * HOUR_MS,
         },
       ],
+      scopes: DEFAULT_TEAM_SCOPES,
+      overrides: [],
       createdAt: now - 9 * 24 * HOUR_MS,
     },
     {
@@ -236,6 +239,8 @@ function createSampleHostedTeams(now: number): RemoteTeam[] {
       machines: [
         { id: 'v9q1', name: 'Team server', userId: SAMPLE_PARTNER.id, online: true, lastSeenAt: now },
       ],
+      scopes: DEFAULT_TEAM_SCOPES,
+      overrides: [],
       createdAt: now - 20 * 24 * HOUR_MS,
     },
   ];
@@ -258,6 +263,7 @@ export function createSampleMachineServices(now: number): RemoteServices {
       acceptHandoff: refuse,
       listTeams: () => Promise.resolve(createSampleHostedTeams(now)),
       joinTeam: refuse,
+      updateTeamScopes: refuse,
       previewTeam: refuse,
       readPair: refuse,
       approvePair: refuse,

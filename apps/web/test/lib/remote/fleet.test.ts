@@ -16,8 +16,11 @@ import {
   ENGINE_PROTOCOL,
   NO_TEAM_FEED,
   resolveEngineInfo,
+  DEFAULT_TEAM_SCOPES,
   resolveScopedEngineInfo,
+  toggleScope,
   SCOPE_MESSAGES,
+  TEAM_SCOPE_MESSAGES,
 } from '@shinsa/core';
 import { Effect } from 'effect';
 import { Socket } from 'effect/socket';
@@ -843,7 +846,7 @@ describe('a machine that handed you one task', () => {
     const LEE = { id: 'u1', login: 'lee', name: 'Lee Park', avatarUrl: null };
     const fleet = new Fleet([{ ...handed.member, guest: true, handedBy: LEE }, own.member]);
     const handedTask = createTask({ id: 'task-handed', title: 'Handed over' });
-    handed.connection.engine = resolveScopedEngineInfo('1.2.0');
+    handed.connection.engine = resolveScopedEngineInfo('1.2.0', { kind: 'task', taskId: 'handed' });
     handed.connection.push({
       state: createWire(2, { tasks: { [handedTask.id]: handedTask } }),
       status: 'open',
@@ -860,5 +863,84 @@ describe('a machine that handed you one task', () => {
     );
     await fleet.command({ type: 'task.message', taskId: 'task-handed', text: 'Go on.' });
     expect(handed.connection.commands.map((command) => command.type)).toEqual(['task.message']);
+  });
+});
+
+describe('a teammate’s machine reached through a team', () => {
+  const MONA = { id: 'u2', login: 'mona', name: 'Mona Lisa', avatarUrl: null };
+  const KAI = { id: 'u3', login: 'kai', name: 'Kai Tan', avatarUrl: null };
+  const SCOPES = toggleScope(DEFAULT_TEAM_SCOPES, 'share', false);
+
+  function createTeamFleet() {
+    const theirs = createMember('m4', 'Mona’s Studio');
+    const own = createMember('m1', 'Studio');
+    const fleet = new Fleet([
+      { ...theirs.member, teammate: { owner: MONA, viewerId: KAI.id, scopes: [] } },
+      own.member,
+    ]);
+    const open = createTask({ id: 'task-theirs', title: 'Theirs' });
+    const held = createTask({
+      id: 'task-held',
+      title: 'Taken over',
+      handoff: { at: 1, url: null, guest: KAI, claimedAt: 1, teamId: 'team-1' },
+    });
+    theirs.connection.engine = resolveScopedEngineInfo('1.2.0', {
+      kind: 'team',
+      teamId: 'team-1',
+      scopes: SCOPES,
+    });
+    theirs.connection.push({
+      state: createWire(2, {
+        tasks: { [open.id]: open, [held.id]: held },
+        repos: { 'repo-theirs': { id: 'repo-theirs' } as WireState['repos'][string] },
+        projects: { 'project-theirs': { id: 'project-theirs' } as WireState['projects'][string] },
+        presence: { '10': 4 },
+      }),
+      status: 'open',
+    });
+    own.connection.push({ state: createWire(3, { presence: { '10': 1 } }), status: 'open' });
+    return { fleet, theirs, own };
+  }
+
+  it('comes after your own machines and is marked with whose it is', () => {
+    const { fleet } = createTeamFleet();
+    expect(fleet.members.map((member) => member.id)).toEqual(['m1', 'm4']);
+    expect(
+      fleet.listMachines().map((machine) => [machine.id, machine.teammate?.owner.login ?? null])
+    ).toEqual([
+      ['m1', null],
+      ['m4', 'mona'],
+    ]);
+    expect(fleet.selectMachine('task-theirs')).toMatchObject({ id: 'm4', teammate: { owner: MONA } });
+  });
+
+  it('opens their tasks as full pages, but keeps in your lists only what you took over', () => {
+    const { state } = createTeamFleet().fleet.snapshot();
+    expect(Object.keys(state?.tasks ?? {}).sort()).toEqual(['task-held', 'task-theirs']);
+    expect(state?.teammateTasks).toEqual({ 'task-theirs': true });
+    expect(state?.teammateRepos).toEqual({ 'repo-theirs': true });
+    expect(state?.repos['repo-theirs']).toBeDefined();
+    expect(state?.projects['project-theirs']).toBeUndefined();
+    expect(state?.presence).toEqual({ '10': 1 });
+  });
+
+  it('marks a lone teammate machine’s tasks too', () => {
+    const theirs = createMember('m4', 'Mona’s Studio');
+    const fleet = new Fleet([{ ...theirs.member, teammate: { owner: MONA, viewerId: KAI.id, scopes: [] } }]);
+    theirs.connection.push({
+      state: createWire(1, { tasks: { t: createTask({ id: 't' }) } }),
+      status: 'open',
+    });
+    expect(fleet.snapshot().state?.teammateTasks).toEqual({ t: true });
+    expect(fleet.selectMachine('t')).toMatchObject({ teammate: { owner: MONA } });
+  });
+
+  it('refuses with the team’s words what the machine does not let a teammate send', async () => {
+    const { fleet, theirs } = createTeamFleet();
+    expect(fleet.command({ type: 'task.share', taskId: 'task-theirs', limit: 'day' })).rejects.toThrow(
+      TEAM_SCOPE_MESSAGES.command
+    );
+    await fleet.command({ type: 'task.give_back', taskId: 'task-theirs' });
+    expect(theirs.connection.commands.map((command) => command.type)).toEqual(['task.give_back']);
   });
 });

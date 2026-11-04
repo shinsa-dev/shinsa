@@ -1,4 +1,4 @@
-import type { RemoteAccess, RemoteTeam, RemoteUser } from './contract.ts';
+import type { RemoteAccess, RemoteTeam, RemoteUser, TeamScopeOverride } from './contract.ts';
 
 export type TunnelStatus = 'off' | 'starting' | 'connected' | 'reconnecting' | 'revoked';
 
@@ -15,6 +15,7 @@ export interface RemoteDevice {
   lastSeenAt: number | null;
   userId: string;
   taskId?: string | null;
+  teamId?: string | null;
 }
 
 export interface RemoteLink {
@@ -39,6 +40,7 @@ export interface RemoteTeamEntry {
   onMachine: boolean;
   invite: boolean;
   team: RemoteTeam | null;
+  extras: TeamScopeOverride[];
 }
 
 export interface RemoteSnapshot {

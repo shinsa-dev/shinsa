@@ -26,6 +26,7 @@ const STRUCT_ANSWERS = new Set([
   'RestartAnswer',
   'TeamLinkAnswer',
   'TeamCreateAnswer',
+  'TeamKeysAnswer',
   'ProvidersAnswer',
   'ModelsAnswer',
 ]);

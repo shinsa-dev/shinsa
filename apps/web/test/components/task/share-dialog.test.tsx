@@ -8,7 +8,8 @@ import { closeShareDialog, closeUnshareConfirm, openShareDialog } from '@/lib/sh
 import { closeHandoffRemoveConfirm } from '@/lib/share/handoff.ts';
 import { createRemoteSnapshot } from '../../support/remote-access.ts';
 import { listSentCommands, pushState, startFakeServer, stopFakeServer } from '../../support/server.ts';
-import { createShinsaState, createTask } from '../../support/state.ts';
+import { createProject, createShinsaState, createTask } from '../../support/state.ts';
+import * as teams from '../../support/teams.ts';
 import { waitForGone } from '../../support/wait.ts';
 
 function showTask(overrides: Partial<Task> = {}, paired = true) {
@@ -176,6 +177,37 @@ describe('handing a task off as a kind of share', () => {
         'true'
       )
     );
+  });
+
+  it('hands the task straight to a teammate in a team that sees its project, with no link', async () => {
+    const snapshot = createRemoteSnapshot({
+      paired: true,
+      access: { owner: teams.MONA, members: [] },
+      teams: [teams.createTeamEntry()],
+    });
+    spyOn(globalThis, 'fetch').mockResolvedValue(Response.json(snapshot));
+    act(() => connection.replaceRemote(snapshot));
+    pushState(
+      createShinsaState({
+        projects: [createProject({ id: 'shared', teamIds: ['team1'] })],
+        tasks: [createTask({ id: 'source', handle: 'SW-2', projectId: 'shared' })],
+      })
+    );
+    render(<ShareDialog />);
+    act(() => openShareDialog('source'));
+    await screen.findByRole('combobox', { name: 'Share as' });
+    await choose('Share as', /^Hand off/);
+    expect(screen.getByRole('combobox', { name: 'Hand to' }).textContent).toBe('Anyone with the link');
+    await choose('Hand to', /^Kai$/);
+    const dialog = await findHandoff();
+    expect(dialog.getByText(/They see it in their Needs you/)).toBeTruthy();
+    fireEvent.click(dialog.getByRole('button', { name: 'Hand to Kai' }));
+    await waitFor(() =>
+      expect(listSentCommands()).toEqual([
+        { type: 'task.hand_to_teammate', taskId: 'source', teamId: 'team1', teammate: teams.KAI },
+      ])
+    );
+    await waitForGone(() => screen.queryByRole('dialog'));
   });
 
   it('goes back to sharing when a preset is picked again', async () => {
