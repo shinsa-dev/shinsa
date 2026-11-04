@@ -466,3 +466,41 @@ describe('tasks open', () => {
     ]);
   });
 });
+
+describe('tasks hand-to-teammate', () => {
+  const MONA = { id: '1', login: 'mona', name: 'Mona Lisa', avatarUrl: null };
+  const KAI = { id: '7', login: 'kai', name: 'Kai Lane', avatarUrl: 'https://avatars.example/kai' };
+  const REMOTE = {
+    paired: true,
+    teams: [
+      {
+        id: 'team1',
+        name: 'Platform',
+        status: 'member',
+        onMachine: true,
+        invite: false,
+        team: { id: 'team1', name: 'Platform', owner: MONA, members: [{ user: KAI, addedAt: 2 }] },
+      },
+    ],
+  };
+
+  test('names the team and the person by login, and sends who they are with the task', async () => {
+    const fake = createFakeClient({ ...TASKS, '/api/remote': REMOTE });
+    const result = await runSpec(fake, [
+      'tasks',
+      'hand-to-teammate',
+      'fix',
+      '--team',
+      'platform',
+      '--login',
+      '@Kai',
+    ]);
+    expect(fake.sent).toEqual([
+      { type: 'task.hand_to_teammate', taskId: 'task-123', teamId: 'team1', teammate: KAI },
+    ] as never);
+    expect(result.text).toBe('Handed over. Take it back with `shinsa tasks hand-off-remove`.');
+    await expect(
+      runSpec(fake, ['tasks', 'hand-to-teammate', 'fix', '--team', 'platform', '--login', 'bob'])
+    ).rejects.toThrow('bob is not in this team');
+  });
+});

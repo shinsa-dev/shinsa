@@ -6,6 +6,7 @@ import { Socket } from 'effect/socket';
 import { Connection } from '@/lib/connection/socket.ts';
 import { openRemoteChannel } from '@/lib/remote/channel.ts';
 import {
+  isOwnMachineConnecting,
   createFleetMember,
   describeMachine,
   listMachineRows,
@@ -213,5 +214,19 @@ describe('a machine’s task capacity', () => {
     expect(resolveTaskCapacityValue(8)).toBe('8');
     expect(parseTaskCapacity('none')).toBeNull();
     expect(parseTaskCapacity('8')).toBe(8);
+  });
+});
+
+describe('whether one of your machines is still connecting', () => {
+  const row = (id: string, role: string, waiting = false) =>
+    ({ instance: { id, role, online: true }, device: { waiting } }) as unknown as Parameters<
+      typeof isOwnMachineConnecting
+    >[0][number];
+
+  it('counts an online machine of yours this browser reaches but has not heard from yet', () => {
+    expect(isOwnMachineConnecting([row('studio', 'owner')], [])).toBe(true);
+    expect(isOwnMachineConnecting([row('studio', 'owner')], [{ id: 'studio' }])).toBe(false);
+    expect(isOwnMachineConnecting([row('studio', 'owner', true)], [])).toBe(false);
+    expect(isOwnMachineConnecting([row('kai-mac', 'teammate')], [])).toBe(false);
   });
 });

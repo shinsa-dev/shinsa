@@ -270,8 +270,9 @@ export function resolveScopedPatch(
 
 function isAnnounced(scope: ActorScope, command: string) {
   if (!isScopeCommand(scope, command)) return false;
-  if (scope.kind === 'task') return true;
-  return SHARE_COMMANDS.has(command) ? hasScope(scope.scopes, 'share') : true;
+  if (scope.kind === 'task' || command === 'task.give_back') return true;
+  const needed = resolveCommandScope(command);
+  return needed === 'message' || hasScope(scope.scopes, needed);
 }
 
 export function resolveScopedEngineInfo(version: string, scope: ActorScope) {

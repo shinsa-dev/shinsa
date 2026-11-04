@@ -4,9 +4,11 @@ import {
   OWNER_ONLY_CODE,
   parseUserCommand,
   type RequestOrigin,
+  resolveFirstName,
   resolveOwnerOnlyRefusal,
   resolveScopedRefusal,
   SCOPE_REFUSAL_CODE,
+  type UserCommand,
 } from '@shinsa/core';
 import { Effect, Result } from 'effect';
 import { createReadOnlyError } from '../instance/index.ts';
@@ -21,6 +23,19 @@ export interface UserCommandSource {
   readonly classify: Classifier | null;
   readonly origin: RequestOrigin;
   readonly guest: ScopedActor | null;
+  readonly teams?: Pick<Remote, 'resolveTeamScope'> | null | undefined;
+}
+
+export function resolveTeammateRefusal(
+  command: UserCommand,
+  teams: Pick<Remote, 'resolveTeamScope'> | null | undefined
+) {
+  if (command.type !== 'task.hand_to_teammate') return null;
+  if (teams?.resolveTeamScope(command.teammate.id, command.teamId)) return null;
+  return new DomainError({
+    code: 'handoff_refused',
+    message: `${resolveFirstName(command.teammate)} is not in that team, so they cannot take this task.`,
+  });
 }
 
 export function resolveRequestOrigin(
@@ -45,6 +60,8 @@ export const dispatchUserCommand = Effect.fn('dispatchUserCommand')(function* (
     return yield* Effect.fail(
       resolveRequestFailure(new DomainError({ code: OWNER_ONLY_CODE, message: refusal }))
     );
+  const stranger = resolveTeammateRefusal(command, source.teams);
+  if (stranger) return yield* Effect.fail(resolveRequestFailure(stranger));
   const outside = source.guest ? resolveScopedRefusal(engine.state, source.guest, command) : null;
   if (outside)
     return yield* Effect.fail(

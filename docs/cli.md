@@ -2606,7 +2606,7 @@ Yours alone: no agent has a tool for it, and an agent’s shell may not run it.
 | `<team>` | text, required | The team’s name or id, from `shinsa teams list`. |
 | `--login` | text, optional | One member’s GitHub login. Leave out to change the team’s. |
 | `--preset` | choice, optional | standard (see the work), collaborate (act on it, but not message agents), full (everything) or default (the team’s, or Collaborate for the team). |
-| `--allow` | list, optional | A scope to allow, such as message or fork. Repeat for each. |
+| `--allow` | list, optional | A scope to allow: gates, actions, message, fork, share or services. Repeat for each. |
 | `--deny` | list, optional | A scope to deny, such as share or services. Repeat for each. |
 
 #### shinsa teams leave

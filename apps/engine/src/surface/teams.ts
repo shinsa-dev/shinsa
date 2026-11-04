@@ -3,7 +3,7 @@ import {
   type RemoteTeamEntry,
   type RemoteUser,
   ACCESS_PRESETS,
-  ACCESS_SCOPES,
+  ACTION_SCOPES,
   type AccessScope,
   type AccessScopes,
   resolveMemberScopes,
@@ -132,14 +132,14 @@ const DEFAULT_CHOICE = 'default';
 
 const PRESET_CHOICES = [...TEAM_PRESET_NAMES, DEFAULT_CHOICE] as const;
 
-const SCOPE_NAMES: ReadonlySet<string> = new Set(ACCESS_SCOPES);
+const SCOPE_NAMES: ReadonlySet<string> = new Set(ACTION_SCOPES);
 
 function readScopeNames(values: Record<string, unknown>, name: string): AccessScope[] {
   return ((values[name] as string[] | undefined) ?? []).map((raw) => {
     if (SCOPE_NAMES.has(raw)) return raw as AccessScope;
     throw new DomainError({
       code: 'arguments_invalid',
-      message: `${raw} is not a scope. The scopes are ${ACCESS_SCOPES.join(', ')}.`,
+      message: `${raw} is not a team scope. A teammate always sees the whole task; the scopes are what they may do: ${ACTION_SCOPES.join(', ')}.`,
     });
   });
 }
@@ -286,7 +286,7 @@ export const TEAM_SPECS: SurfaceSpec[] = [
       {
         name: 'allow',
         kind: 'list',
-        description: 'A scope to allow, such as message or fork. Repeat for each.',
+        description: 'A scope to allow: gates, actions, message, fork, share or services. Repeat for each.',
       },
       {
         name: 'deny',

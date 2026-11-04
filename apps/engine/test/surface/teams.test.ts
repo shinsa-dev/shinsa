@@ -157,7 +157,10 @@ describe('the teams commands', () => {
     ]);
     await expect(runSpec(fake, ['teams', 'scopes', 'Platform'])).rejects.toThrow('Name a preset or a scope');
     await expect(runSpec(fake, ['teams', 'scopes', 'Platform', '--allow', 'everything'])).rejects.toThrow(
-      'everything is not a scope'
+      'everything is not a team scope'
+    );
+    await expect(runSpec(fake, ['teams', 'scopes', 'Platform', '--deny', 'code'])).rejects.toThrow(
+      'code is not a team scope'
     );
     expect(findSpec(['teams', 'scopes']).humanOnly).toBe(true);
     expect(fake.posts.map((post) => [post.path, post.body])).toEqual([

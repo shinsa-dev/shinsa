@@ -146,7 +146,7 @@ export function listSandboxSections(
           url: `http://${HOST}:${studioPort}/tasks`,
         },
         {
-          label: `Studio: Settings, Teams, with Inês asking to join, What teammates can do, and Kai’s own rights`,
+          label: `Studio: Settings, Teams, with Inês asking to join, What teammates can do, and Kai’s own scopes`,
           url: `http://${HOST}:${studioPort}/settings`,
         },
         {
@@ -158,7 +158,7 @@ export function listSandboxSections(
           url: `${ORIGIN}/tasks`,
         },
         {
-          label: 'Take Kai’s MacBook offline (Studio keeps its tasks as Offline)',
+          label: 'Take Kai’s MacBook offline (Studio keeps its tasks, marked with an offline icon)',
           url: `${ORIGIN}${SANDBOX_PATH}/teammate/offline`,
         },
         { label: 'Bring Kai’s MacBook back', url: `${ORIGIN}${SANDBOX_PATH}/teammate/online` },
@@ -177,7 +177,7 @@ export function listSandboxSections(
         ...(duplicate.original
           ? [
               {
-                label: `The remote dashboard: Kai’s ${duplicate.original} as a full task page, with Take over in its ••• menu`,
+                label: `The remote dashboard: Kai’s ${duplicate.original} as a full task page, with Fork in its ••• menu`,
                 url: `${ORIGIN}/tasks/${duplicate.original}`,
               },
               {

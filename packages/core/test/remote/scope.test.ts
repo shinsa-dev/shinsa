@@ -439,4 +439,16 @@ describe('a teammate’s scope', () => {
     expect(closed).toContain('task.give_back');
     expect(resolveScopedEngineInfo('1.2.3', taskScope('t1')).commands).not.toContain('task.give_back');
   });
+
+  test('resolveScopedEngineInfo leaves out gates and actions a view-only teammate would be refused', () => {
+    const viewOnly = resolveScopedEngineInfo(
+      '1.2.3',
+      teamScope({ gates: false, actions: false, fork: false, share: false, services: false })
+    ).commands;
+    expect(viewOnly).not.toContain('gate.answer');
+    expect(viewOnly).not.toContain('task.retry');
+    expect(viewOnly).not.toContain('task.share');
+    expect(viewOnly).toContain('task.message');
+    expect(viewOnly).toContain('task.give_back');
+  });
 });

@@ -1,4 +1,3 @@
-import { listOwnRepos } from '@shinsa/core';
 import { Button } from '@shinsa/ui/components/button';
 import {
   Dialog,
@@ -22,7 +21,8 @@ import {
   FORK_TITLE,
   forkTask,
   forkTeammateTask,
-  NO_FORK_REPO,
+  describeForkBlock,
+  listForkRepos,
   resolveForkRepo,
   resolveOwnerName,
   useForkDialog,
@@ -34,7 +34,7 @@ export function ForkDialog() {
   const task = taskId && state ? state.tasks[taskId] : undefined;
   const machine = useMachine(task?.id ?? null);
   const teammate = machine?.teammate ? { id: machine.id, teammate: machine.teammate } : null;
-  const repos = React.useMemo(() => (teammate && state ? listOwnRepos(state) : []), [teammate, state]);
+  const repos = React.useMemo(() => (teammate && state ? listForkRepos(state) : []), [teammate, state]);
   const suggested = teammate && state && task ? resolveForkRepo(state, task) : null;
   const [picked, setPicked] = React.useState<string | null>(null);
   const repoId = picked ?? suggested;
@@ -89,7 +89,7 @@ export function ForkDialog() {
               onValueChange={setPicked}
             />
           )}
-          {blocked && <p className='mb-3 text-sm text-fg-2'>{NO_FORK_REPO}</p>}
+          {blocked && state && <p className='mb-3 text-sm text-fg-2'>{describeForkBlock(state)}</p>}
           <Textarea
             value={request}
             rows={4}

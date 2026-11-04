@@ -27,6 +27,7 @@ import {
 import { TONE_TEXT } from '@/lib/format/tone.ts';
 import { REMOTE_ACCESS_SECTION } from '@/lib/remote-access.ts';
 import {
+  isOwnMachineConnecting,
   listMachineRows,
   listTaskCapacityItems,
   type MachineRow,
@@ -51,18 +52,6 @@ function resolveViewerId(instances: RemoteInstance[], machineId: string) {
 function listOwnedMachines(machines: readonly MachineAccess[], instances: RemoteInstance[]) {
   return machines.filter(
     (machine) => machine.remote?.paired === true && resolveViewerId(instances, machine.id) !== null
-  );
-}
-
-export function isOwnMachineConnecting(rows: readonly MachineRow[], owned: readonly MachineAccess[]) {
-  const reached = new Set(owned.map((machine) => machine.id));
-  return rows.some(
-    (row) =>
-      row.instance.role === 'owner' &&
-      row.instance.online &&
-      row.device !== null &&
-      !row.device.waiting &&
-      !reached.has(row.instance.id)
   );
 }
 

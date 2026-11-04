@@ -19,6 +19,7 @@ export const CommandsHandlers = HttpApiBuilder.group(
           classify: classify ?? null,
           origin: resolveRequestOrigin(source, remote),
           guest: null,
+          teams: remote,
         });
         const handle = taskId ? (engine.state.tasks[taskId]?.handle ?? null) : null;
         return { ok: true as const, taskId, handle };

@@ -219,6 +219,7 @@ export function createSocketHub(
           classify,
           origin: socket.data.origin,
           guest: socket.data.guest,
+          teams: remote,
         }).pipe(
           Effect.as(null),
           Effect.catch((failure) =>

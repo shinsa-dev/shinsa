@@ -1,5 +1,6 @@
 import {
   findForkRepo,
+  hasEngineFeature,
   listOwnRepos,
   resolveTaskProject,
   resolveTeammateFork,
@@ -21,6 +22,27 @@ export function describeTeammateFork(owner: string) {
 }
 
 export const NO_FORK_REPO = 'Add this repository on one of your machines first, then fork the task there.';
+
+export const NO_FORK_ENGINE = 'Update Shinsa on your machine first, then fork the task there.';
+
+type ForkTarget = (repoId: string) => boolean;
+
+export function canForkOnto(repoId: string) {
+  return hasEngineFeature(
+    connection.selectEngine(connection.selectMachine(repoId)?.id ?? null),
+    'team-access'
+  );
+}
+
+export function listForkRepos(state: ShinsaState, canFork: ForkTarget = canForkOnto) {
+  return listOwnRepos(state).filter((repo) => canFork(repo.id));
+}
+
+export function describeForkBlock(state: ShinsaState, canFork: ForkTarget = canForkOnto) {
+  return listOwnRepos(state).length > 0 && listForkRepos(state, canFork).length === 0
+    ? NO_FORK_ENGINE
+    : NO_FORK_REPO;
+}
 
 export function resolveOwnerName(teammate: TeammateMachine) {
   return teammate.owner.name ?? teammate.owner.login;
@@ -52,9 +74,11 @@ export function forkTask(state: ShinsaState, task: Task, request: string) {
   );
 }
 
-export function resolveForkRepo(state: ShinsaState, task: Task) {
+export function resolveForkRepo(state: ShinsaState, task: Task, canFork: ForkTarget = canForkOnto) {
   const repo = task.repoId ? state.repos[task.repoId] : undefined;
-  return findForkRepo(state, repo ?? null, null) ?? listOwnRepos(state)[0]?.id ?? null;
+  const match = findForkRepo(state, repo ?? null, null);
+  if (match && canFork(match)) return match;
+  return listForkRepos(state, canFork)[0]?.id ?? null;
 }
 
 export function forkTeammateTask(

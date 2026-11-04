@@ -3,10 +3,15 @@ import { act, renderHook } from '@testing-library/react';
 import { connection, replaceConnection } from '@/lib/connection/socket.ts';
 import { runTaskAction } from '@/lib/tasks/actions.ts';
 import {
+  canForkOnto,
   closeForkDialog,
+  describeForkBlock,
   describeTeammateFork,
   forkTask,
   forkTeammateTask,
+  listForkRepos,
+  NO_FORK_ENGINE,
+  NO_FORK_REPO,
   openForkDialog,
   resolveForkRepo,
   resolveOwnerName,
@@ -70,12 +75,33 @@ describe('forking a teammate’s task', () => {
       ...createShinsaState({ tasks: [task], repos }),
       teammateRepos: { 'kai-repo': true as const },
     };
-    expect(resolveForkRepo(state, task)).toBe('pay');
-    expect(resolveForkRepo(state, { ...task, repoId: null })).toBe('site');
-    expect(resolveForkRepo({ ...state, repos: {} }, task)).toBeNull();
+    const anywhere = () => true;
+    expect(resolveForkRepo(state, task, anywhere)).toBe('pay');
+    expect(resolveForkRepo(state, { ...task, repoId: null }, anywhere)).toBe('site');
+    expect(resolveForkRepo({ ...state, repos: {} }, task, anywhere)).toBeNull();
     expect(resolveOwnerName({ owner: KAI, viewerId: 'u1', scopes: [] })).toBe('Kai Lee');
     expect(resolveOwnerName({ owner: { ...KAI, name: null }, viewerId: 'u1', scopes: [] })).toBe('kai');
     expect(describeTeammateFork('Kai')).toContain('from what Kai’s task was asked and did');
+  });
+
+  it('only forks onto a machine whose Shinsa knows teammate forks, and says to update it when none does', () => {
+    const task = createTask({ id: 'k', repoId: 'kai-repo' });
+    const repos = [
+      createRepo({ id: 'kai-repo', name: 'pay', remote: 'github.com/acme/pay' }),
+      createRepo({ id: 'site', name: 'site', remote: 'github.com/acme/site' }),
+      createRepo({ id: 'pay', name: 'pay-local', remote: 'github.com/acme/pay' }),
+    ];
+    const state = {
+      ...createShinsaState({ tasks: [task], repos }),
+      teammateRepos: { 'kai-repo': true as const },
+    };
+    const onlySite = (repoId: string) => repoId === 'site';
+    expect(resolveForkRepo(state, task, onlySite)).toBe('site');
+    expect(listForkRepos(state, onlySite).map((repo) => repo.id)).toEqual(['site']);
+    expect(resolveForkRepo(state, task, () => false)).toBeNull();
+    expect(describeForkBlock(state, () => false)).toBe(NO_FORK_ENGINE);
+    expect(describeForkBlock({ ...state, repos: {} }, () => false)).toBe(NO_FORK_REPO);
+    expect(canForkOnto('site')).toBe(false);
   });
 
   it('creates the fork on the machine of the repository you pick, with what the task did', async () => {

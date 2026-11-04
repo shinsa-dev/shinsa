@@ -3727,7 +3727,9 @@ the read-only view. Teams need remote access on (`Remote` paired and enabled), s
     them, from their own machine: `POST /__remote/machine/teams/<team>/scopes { userId?, scopes }`
     (`TeamScopesRequest`, `null` puts the default or the team's back), reached from Settings → Teams, `POST
     /api/remote/teams/scopes` and `shinsa teams scopes <team> [--login] [--preset] [--allow <scope>] [--deny
-    <scope>]`, human-only. The heartbeat carries both on each `RemoteTeam` (`scopes`, `overrides`).
+    <scope>]`, human-only, whose `--allow` and `--deny` take only action scopes. A teammate's channel announces only
+    the commands its scopes allow (`resolveScopedEngineInfo`), so the page hides what would be refused; messages stay
+    announced, since a task handed to them lets them message it. The heartbeat carries both on each `RemoteTeam` (`scopes`, `overrides`).
   - **A device per member, without a click** (`Remote.resolveTeamGrant`, `admitTeamMachines` in `lib/teams/admit.ts`).
     The first time a member's team channel opens, the machine makes them a grant (`remote.json` `grants`, a fresh
     32-byte secret per person and team) and sends it only on that person's channel (`TeamListView.grant`, sealed with
@@ -3756,12 +3758,15 @@ the read-only view. Teams need remote access on (`Remote` paired and enabled), s
     activity reads "Handed this task to Kai". The holder may message its agent even without `message`. Give it back
     ends the hold; you end it with Remove in the task's banner, as for any hand-off. A hold also ends by itself when
     the holder leaves the team or the task's project leaves it (`handoff.left`). A task already held by someone else,
-    or handed off by a link someone opened, cannot be handed again (`handoff_claimed`). No teammate takes a task on
+    or handed off by a link someone opened, cannot be handed again (`handoff_claimed`), and someone the machine does not
+    know in that team is refused before anything is recorded (`resolveTeammateRefusal`, `handoff_refused`). No teammate takes a task on
     their own: a team that wants everyone to steer every task gives them `message` instead.
   - **Forking a teammate's task** (`teammateFork` on `task.create`). With `fork`, a teammate forks a team task onto
     their own machine, from its menu or, for an agent, `create_task`'s `fork_from`. The machine checks its owner's
     scopes in the team (`Remote.canForkTeamTask`): an agent is shown only the teammate tasks it may fork, and the
-    dashboard shows Fork only when the teammate machine's team gives it (`TeammateMachine.scopes`).
+    dashboard shows Fork only when the teammate machine's team gives it (`TeammateMachine.scopes`). The fork dialog
+    offers only your repositories on a machine that announces `team-access` (`listForkRepos`), and asks you to update
+    Shinsa there when none does, since an older engine refuses `teammateFork`.
   - **Services** (`remote/previews.ts`, `routes/preview-open/` in `apps/cloud`). A teammate with `services` opens any
     running service of a team task at its private address (`<hash>.shinsa.page`), as you do over remote access:
     app.shinsa.dev admits an account that shares a team with the machine's owner, and the machine admits them for a

@@ -68,6 +68,18 @@ export function resolveMachineDetail(
   return titles.length > 0 ? [...row.access, ` · ${titles.join(', ')}`] : row.access;
 }
 
+export function isOwnMachineConnecting(rows: readonly MachineRow[], reached: readonly { id: string }[]) {
+  const ids = new Set(reached.map((machine) => machine.id));
+  return rows.some(
+    (row) =>
+      row.instance.role === 'owner' &&
+      row.instance.online &&
+      row.device !== null &&
+      !row.device.waiting &&
+      !ids.has(row.instance.id)
+  );
+}
+
 export async function listMachineRows(
   dashboard: Pick<DashboardClient, 'listInstances'>,
   devices: Pick<DeviceStore, 'selectDevice'>,
