@@ -411,6 +411,8 @@ describe('resolveTriage for what the task left to Shinsa', () => {
       'priority',
       'waits_on',
       'waits_on_kind',
+      'stacks_on',
+      'stacks_on_why',
       'duplicate_of',
       'duplicate_why',
       'shape_why',
@@ -422,7 +424,7 @@ describe('resolveTriage for what the task left to Shinsa', () => {
     expect(prompt).toContain('"operation": run a one-off action in the repository');
     expect(prompt).toContain('- priority (choice): How soon does this need doing');
     expect(prompt).toContain(
-      'Then say why for each, in one plain sentence: shape_why, priority_why, waits_on_why, duplicate_why.'
+      'Then say why for each, in one plain sentence: shape_why, priority_why, waits_on_why, stacks_on_why, duplicate_why.'
     );
     expect(prompt).not.toContain('The human chose');
   });
@@ -1227,5 +1229,76 @@ describe('resolveTriage for teammates’ duplicates', () => {
     const lone = await resolveTriage(state, newTask(), LOCAL, ask, team);
     expect(lone.unreached).toBeUndefined();
     expect(prompts[0]).not.toContain('teammate-1');
+  });
+});
+
+describe('triage stacking a task on an open change', () => {
+  const AUTO = { shape: true, start: true, priority: true };
+  const state = stateWith((draft) => {
+    draft.repos.r1 = createRepo({ id: 'r1', path: '/code/api', name: 'api' });
+    draft.repos.r2 = createRepo({ id: 'r2', path: '/code/web', name: 'web' });
+    draft.tasks.store = createTask({ id: 'store', repoId: 'r1', title: 'Rewrite the store in Effect' });
+    draft.tasks.question = createTask({ id: 'question', repoId: 'r1', pipeline: ['answer'] });
+    draft.tasks.loose = createTask({ id: 'loose', repoId: null });
+    draft.tasks.web = createTask({ id: 'web', repoId: 'r2', title: 'Restyle the page' });
+  });
+
+  function stacking(value: Record<string, unknown>) {
+    return answer({ title: 'Move the outbox', repo: 'api', size: 'large', branch: 'feat/outbox', ...value });
+  }
+
+  test('offers only open changes with a pull request and says when to stack instead of wait', async () => {
+    const calls: { prompt: string; schema?: JsonSchema }[] = [];
+    const ask: QuickJson = <T>(_system: string, prompt: string, schema?: JsonSchema) => {
+      calls.push({ prompt, schema });
+      return Effect.succeed(null as T);
+    };
+    await resolveTriage(state, newTask({ auto: AUTO }), LOCAL, ask);
+    expect(calls[0]?.schema?.properties.stacks_on).toEqual({
+      type: 'string',
+      enum: ['none', 'store', 'web'],
+    });
+    const prompt = calls[0]?.prompt ?? '';
+    expect(prompt).toContain('- stacks_on (choice): Is this request the next piece of an open change');
+    expect(prompt).toContain('A separate feature is never a stack, even one that needs the other’s code');
+    await resolveTriage(state, newTask({ auto: START_ONLY }), LOCAL, ask);
+    expect(calls[1]?.prompt).toContain('stacks_on');
+    await resolveTriage(state, newTask({ auto: { ...AUTO, start: false } }), LOCAL, ask);
+    expect(calls[2]?.schema?.properties).not.toHaveProperty('stacks_on');
+    await resolveTriage(stateWith(), newTask({ auto: AUTO }), LOCAL, ask);
+    expect(calls[3]?.schema?.properties).not.toHaveProperty('stacks_on');
+  });
+
+  test('stacks on the change it names in the same repository, with the reason it gave', async () => {
+    const triage = await resolveTriage(
+      state,
+      newTask({ auto: AUTO }),
+      LOCAL,
+      stacking({ stacks_on: 'store', stacks_on_why: '  It is the next piece of the store rewrite.  ' })
+    );
+    expect(triage?.stacksOn?.map((task) => task.id)).toEqual(['store']);
+    expect(triage?.reasons?.stack).toBe('It is the next piece of the store rewrite.');
+    const unexplained = await resolveTriage(
+      state,
+      newTask({ auto: AUTO }),
+      LOCAL,
+      stacking({ stacks_on: 'store' })
+    );
+    expect(unexplained?.reasons?.stack).toBe('It continues “Rewrite the store in Effect” and ships with it.');
+  });
+
+  test('a stack on none, another repository, an unknown task, or with no repository is dropped', async () => {
+    for (const value of [
+      { stacks_on: 'none' },
+      { stacks_on: 'web' },
+      { stacks_on: 'question' },
+      { stacks_on: 'loose' },
+      { stacks_on: 'gone' },
+      { stacks_on: 'store', repo: 'none' },
+    ]) {
+      const triage = await resolveTriage(state, newTask({ auto: AUTO }), LOCAL, stacking(value));
+      expect(triage?.stacksOn).toBeUndefined();
+      expect(triage?.reasons?.stack).toBeUndefined();
+    }
   });
 });

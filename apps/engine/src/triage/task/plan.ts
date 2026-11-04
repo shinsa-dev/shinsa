@@ -1,4 +1,5 @@
 import {
+  hasStep,
   isTaskSettled,
   type Project,
   quoteDuplicateOriginal,
@@ -43,6 +44,7 @@ import {
   type KeptDependencies,
   LARGE_HINT,
   NEW_REPO_LIMIT,
+  NO_STACK,
   NO_WAIT,
   NOT_A_DUPLICATE,
   type ParsedDecisions,
@@ -65,6 +67,23 @@ function resolveWaitsOnQuestion(open: Task[]): ChoicesQuestion {
     instructions:
       'Which open tasks must be merged before this one can start? Usually none: tasks run side by side, and a wait holds this task, planning included, until the other one merges. Name a task only for a direct dependency: this request edits or calls code that exists only on that task’s unmerged branch, the request itself asks to come after it, or both heavily rewrite the same files. Never wait because the tasks share an area, a feature or words in their titles, because this one builds on something that already exists, because it is a follow-up idea, or because it would be nicer after. When in doubt, answer an empty list.',
     criteria: Object.fromEntries(open.map((task) => [task.id, task.title])),
+  };
+}
+
+function listStackableTasks(open: Task[]) {
+  return open.filter((task) => task.repoId !== null && hasStep(task, 'pull_request'));
+}
+
+function resolveStacksOnQuestion(open: Task[], asks: TriageAsks): ChoiceQuestion | null {
+  const stackable = listStackableTasks(open);
+  if (!asks.start || stackable.length === 0) return null;
+  return {
+    type: 'choice',
+    instructions: `Is this request the next piece of an open change in the same repository, so the two should ship together as one bundle? Stacking builds this task on that task’s branch, holds that task’s merge until this one is ready too, and merges both at once. Name a task only when this request continues that change: a part split off the same larger rewrite or migration, or the next step of that task’s own work, wrong to ship without it. A separate feature is never a stack, even one that needs the other’s code: that is waits_on. Usually "${NO_STACK}".`,
+    criteria: {
+      [NO_STACK]: 'not part of any open change',
+      ...Object.fromEntries(stackable.map((task) => [task.id, task.title])),
+    },
   };
 }
 
@@ -122,6 +141,10 @@ export function resolveTriageSchema(plan: TriagePlan): JsonSchema {
   if (asks.start) {
     properties.waits_on = resolveDecisionProperty(plan.waitsOnQuestion);
     properties.waits_on_kind = resolveDecisionProperty(WAITS_ON_KIND_QUESTION);
+  }
+  if (plan.stacksOnQuestion) {
+    properties.stacks_on = resolveDecisionProperty(plan.stacksOnQuestion);
+    properties.stacks_on_why = { type: 'string', maxLength: WHY_LIMIT };
   }
   if (plan.duplicateQuestion) {
     properties.duplicate_of = resolveDecisionProperty(plan.duplicateQuestion);
@@ -225,8 +248,12 @@ function isChosenAnswer(task: Task) {
 }
 
 function describeDecisions(plan: TriagePlan) {
-  const { asks, duplicateQuestion } = plan;
-  const whys = [...listWhyKeys(asks), ...(duplicateQuestion ? ['duplicate_why'] : [])];
+  const { asks, stacksOnQuestion, duplicateQuestion } = plan;
+  const whys = [
+    ...listWhyKeys(asks),
+    ...(stacksOnQuestion ? ['stacks_on_why'] : []),
+    ...(duplicateQuestion ? ['duplicate_why'] : []),
+  ];
   return [
     describeDecisionQuestion('size', SIZE_QUESTION),
     ...(asks.shape ? [describeDecisionQuestion('shape', SHAPE_QUESTION)] : []),
@@ -237,6 +264,7 @@ function describeDecisions(plan: TriagePlan) {
           describeDecisionQuestion('waits_on_kind', WAITS_ON_KIND_QUESTION),
         ]
       : []),
+    ...(stacksOnQuestion ? [describeDecisionQuestion('stacks_on', stacksOnQuestion)] : []),
     ...(duplicateQuestion ? [describeDecisionQuestion('duplicate_of', duplicateQuestion)] : []),
     ...(whys.length > 0 ? [`Then say why for each, in one plain sentence: ${whys.join(', ')}.`] : []),
   ];
@@ -277,6 +305,7 @@ export function resolveTriagePlan(
     optional: !pinned,
     open,
     waitsOnQuestion: resolveWaitsOnQuestion(open),
+    stacksOnQuestion: resolveStacksOnQuestion(open, asks),
     duplicateQuestion: resolveDuplicateQuestion(open, teammates?.tasks ?? []),
     teammates,
     fallback: {
@@ -332,6 +361,16 @@ function parseWaitsOn(state: ShinsaState, plan: TriagePlan, answer: TriageAnswer
   return { waitsOn, kept: { waitsOn, dropped: waitsOn.length < named.length } };
 }
 
+function parseStacksOn(state: ShinsaState, plan: TriagePlan, answer: TriageAnswer, repoPath: string | null) {
+  if (!plan.stacksOnQuestion || repoPath === null) return null;
+  const named = parseDecisionAnswer(plan.stacksOnQuestion, answer.stacks_on);
+  const parent = listStackableTasks(plan.open).find((candidate) => candidate.id === named);
+  if (!parent || state.repos[parent.repoId ?? '']?.path !== repoPath) return null;
+  const why =
+    parseAnswerText(answer.stacks_on_why, WHY_LIMIT) ?? `It continues “${parent.title}” and ships with it.`;
+  return { parent, why };
+}
+
 function resolveDuplicateWhy(answer: TriageAnswer, quoted: string) {
   return parseAnswerText(answer.duplicate_why, WHY_LIMIT) ?? `It asks for the same work as ${quoted}.`;
 }
@@ -367,6 +406,7 @@ export function parseTriageAnswer(state: ShinsaState, plan: TriagePlan, answer: 
   const branch =
     typeof answer.branch === 'string' && BRANCH_PATTERN.test(answer.branch) ? answer.branch : null;
   const { waitsOn, kept } = parseWaitsOn(state, plan, answer, repoPath);
+  const stack = parseStacksOn(state, plan, answer, repoPath);
   const duplicate = parseDuplicate(state, plan, answer, repoPath);
   const shape = asks.shape ? (parseDecisionAnswer(SHAPE_QUESTION, answer.shape) as TaskShape | null) : null;
   const priority = asks.priority
@@ -380,6 +420,7 @@ export function parseTriageAnswer(state: ShinsaState, plan: TriagePlan, answer: 
     size: large ? 'large' : 'small',
     branch: branch ?? fallback.branch,
     waitsOn,
+    ...(stack ? { stacksOn: [stack.parent] } : {}),
     ...(duplicate?.duplicateOf ? { duplicateOf: duplicate.duplicateOf } : {}),
     ...(duplicate?.duplicateOfTeammate ? { duplicateOfTeammate: duplicate.duplicateOfTeammate } : {}),
     ...(plan.teammates ? { unreached: plan.teammates.unreached } : {}),
@@ -387,6 +428,7 @@ export function parseTriageAnswer(state: ShinsaState, plan: TriagePlan, answer: 
     priority: priority ?? plan.task.priority,
     reasons: {
       ...resolveAnswerReasons(answer, fallback.reasons ?? {}, asks, { shape, priority, waitsOn: kept }),
+      ...(stack && asks.why ? { stack: stack.why } : {}),
       ...(duplicate ? { duplicate: duplicate.why } : {}),
     },
   };

@@ -2,6 +2,7 @@ import type { CommandOf, TriageReasons } from '../commands/index.ts';
 import {
   copyUnreachedTeammate,
   DomainError,
+  hasStep,
   isTaskResting,
   isTaskSettled,
   listQueuedRounds,
@@ -26,6 +27,7 @@ import {
   isWaitingForCheckout,
   listPendingDependencies,
   resolveTaskWorkspace,
+  selectStackRefusal,
 } from '../state/queries.ts';
 import {
   addToBacklog,
@@ -105,12 +107,13 @@ export function createTask(decider: Decider, command: CommandOf<'task.create'>, 
   return taskId;
 }
 
-function inferDependencies(decider: Decider, taskId: string, ids: string[]) {
+function inferDependencies(decider: Decider, taskId: string, ids: string[], stacked: string[]) {
   return [...new Set(ids)].filter((id) => {
     const dependency = decider.state.tasks[id];
     return (
       dependency !== undefined &&
       id !== taskId &&
+      !stacked.includes(id) &&
       !decider.state.tasks[taskId]?.stacksOn?.includes(id) &&
       !isTaskSettled(dependency) &&
       !isDependencyOf(decider.state, taskId, id)
@@ -118,10 +121,35 @@ function inferDependencies(decider: Decider, taskId: string, ids: string[]) {
   });
 }
 
+function resolveTriageStack(
+  decider: Decider,
+  task: Task,
+  command: CommandOf<'task.triage'>,
+  shape: TaskShape | undefined
+) {
+  const { repoId } = command;
+  if (!task.auto.start || !command.stacksOn?.length || task.stacksOn?.length || repoId === null) return [];
+  const pipeline = shape ? [...SHAPE_PIPELINES[shape]] : task.pipeline;
+  if (!hasStep({ pipeline, mode: task.mode }, 'pull_request')) return [];
+  return [...new Set(command.stacksOn)].filter((id) => {
+    const parent = decider.state.tasks[id];
+    return (
+      parent !== undefined &&
+      parent.repoId === repoId &&
+      selectStackRefusal(decider.state, task, parent, repoId) === null
+    );
+  });
+}
+
+interface TriageChoices {
+  inferred: string[];
+  stacked: string[];
+}
+
 function resolveDecisions(
   task: Task,
   command: CommandOf<'task.triage'>,
-  inferred: string[],
+  { inferred, stacked }: TriageChoices,
   reasons: TriageReasons
 ): TriageDecisions {
   const shape = command.shape ?? resolveShapeOf(resolveTaskPipeline(task));
@@ -131,6 +159,7 @@ function resolveDecisions(
     priority: task.auto.priority
       ? { value: command.priority ?? task.priority, why: reasons.priority ?? '' }
       : null,
+    ...(stacked.length > 0 ? { stack: { value: stacked, why: reasons.stack ?? '' } } : {}),
     ...(command.unreached ? { duplicate: { unreached: command.unreached.map(copyUnreachedTeammate) } } : {}),
   };
 }
@@ -139,9 +168,10 @@ export function triageTask(decider: Decider, command: CommandOf<'task.triage'>) 
   const task = decider.task(command.taskId);
   if (isTaskSettled(task) || isTriaged(task)) return;
   assertRepo(decider, command.repoId);
-  const inferred = task.auto.start ? inferDependencies(decider, task.id, command.waitsOn) : [];
-  const decisions = resolveDecisions(task, command, inferred, command.reasons ?? {});
   const shape = task.auto.shape && !isShapeLocked(task) ? command.shape : undefined;
+  const stacked = resolveTriageStack(decider, task, command, shape);
+  const inferred = task.auto.start ? inferDependencies(decider, task.id, command.waitsOn, stacked) : [];
+  const decisions = resolveDecisions(task, command, { inferred, stacked }, command.reasons ?? {});
   const projectId = task.projectId ?? decider.repoOf(command)?.projectId ?? null;
   decider.emit({
     type: 'task.triaged',
@@ -158,6 +188,7 @@ export function triageTask(decider: Decider, command: CommandOf<'task.triage'>) 
   if (task.auto.priority && command.priority && command.priority !== task.priority) {
     decider.emit({ type: 'task.prioritized', taskId: task.id, priority: command.priority });
   }
+  if (stacked.length > 0) changeStack(decider, task.id, stacked, 'shinsa');
   if (inferred.length > 0) {
     decider.emit({ type: 'task.waits_on_changed', taskId: task.id, waitsOn: inferred, by: 'shinsa' });
   }

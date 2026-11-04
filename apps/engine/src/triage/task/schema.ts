@@ -14,6 +14,8 @@ export interface TriageAnswer {
   branch?: unknown;
   waits_on?: unknown;
   waits_on_kind?: unknown;
+  stacks_on?: unknown;
+  stacks_on_why?: unknown;
   shape?: unknown;
   priority?: unknown;
   shape_why?: unknown;
@@ -49,6 +51,7 @@ export interface TriagePlan {
   optional: boolean;
   open: Task[];
   waitsOnQuestion: ChoicesQuestion;
+  stacksOnQuestion: ChoiceQuestion | null;
   duplicateQuestion: ChoiceQuestion | null;
   teammates: TeammateCheck | null;
   fallback: TriageResult;
@@ -120,6 +123,8 @@ export const UNCLASSIFIED = 'Shinsa could not classify the request, so';
 export const NOT_A_DUPLICATE = 'none';
 
 export const NO_WAIT = 'none';
+
+export const NO_STACK = 'none';
 
 export const WAITS_ON_KIND_QUESTION: ChoiceQuestion = {
   type: 'choice',
