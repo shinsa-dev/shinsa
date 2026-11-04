@@ -142,7 +142,7 @@ export function TeamScopesBlock({ team, onUpdate }: { team: RemoteTeam; onUpdate
             className='w-40'
           />
         ) : (
-          <span className='text-xs text-fg-4'>{PRESET_LABELS[choice].label}</span>
+          <span className='pr-1.5 text-xs text-fg-4'>{PRESET_LABELS[choice].label}</span>
         )}
       </PresetRow>
       <ScopeGrid
