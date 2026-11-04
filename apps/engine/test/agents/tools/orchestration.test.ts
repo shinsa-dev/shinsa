@@ -653,6 +653,18 @@ describe('create_task and split_task', () => {
     expect(await handleOrchestrationTool('split_task', { tasks: [{ request: 'Other.' }] }, call)).toBe(reply);
   });
 
+  test('split_task with stacked chains the parts as a bundle on this task', async () => {
+    const { core, run } = await building();
+    const { call } = createCall(core, run.id);
+    const input = { tasks: [{ request: 'Move the store.' }, { request: 'Move the views.' }], stacked: true };
+    await handleOrchestrationTool('split_task', input, call);
+    const parts = Object.values(core.state.tasks).filter((task) => task.parentTaskId === run.taskId);
+    const store = parts.find((task) => task.request === 'Move the store.');
+    const views = parts.find((task) => task.request === 'Move the views.');
+    expect(store?.stacksOn).toEqual([run.taskId]);
+    expect(views?.stacksOn).toEqual([store?.id ?? '']);
+  });
+
   test('a tool it does not know is not its to answer', async () => {
     const { core, run } = await building();
     expect(await handleOrchestrationTool('wait_for', {}, createCall(core, run.id).call)).toBeNull();

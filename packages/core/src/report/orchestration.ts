@@ -46,6 +46,7 @@ export interface CourierRequest {
 export interface SplitRequest {
   requests: string[];
   thisTaskWaits: boolean;
+  stacked: boolean;
 }
 
 function resolveDelegationTitle(title: string | null, brief: string) {
@@ -107,5 +108,6 @@ export function validateSplit(input: Record<string, unknown>): Validation<SplitR
   return reader.result({
     requests: split.tasks.map((task) => task.request),
     thisTaskWaits: split.this_task_waits,
+    stacked: split.stacked,
   });
 }

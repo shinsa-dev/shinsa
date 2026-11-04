@@ -298,6 +298,7 @@ export const handleOrchestrationTool = Effect.fn('OrchestrationTool.handle')(fun
       attemptId: call.attemptId,
       requests: request.requests,
       thisWaits: request.thisTaskWaits,
+      ...(request.stacked ? { stacked: true } : {}),
     });
     const state = yield* call.state;
     const task = yield* findTaskOf(parent);

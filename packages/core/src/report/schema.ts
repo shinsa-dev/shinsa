@@ -882,4 +882,5 @@ export const SplitInput = HandOverRecord({
     1
   ),
   this_task_waits: Flag,
+  stacked: Flag,
 });

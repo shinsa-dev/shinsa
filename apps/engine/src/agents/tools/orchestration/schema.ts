@@ -126,7 +126,7 @@ export const ORCHESTRATION_TOOL_SPECS = {
   create_task: {
     name: 'create_task',
     description:
-      'Create a new task for work outside this one, such as the part of this change that belongs in another repository: each task works in one repository and ships one pull request. It starts at once, or with after_this once this task is finished (merged, or done when it ships no pull request), and ends at the human’s review like any task. Whoever picks it up sees nothing of this task unless it is forked, so the request must stand on its own. Set fork_from to this task for the other part of this change, or to a task that shipped a feature for follow-up work on it: the new task’s agent starts from a copy of that task’s conversation. Set this_task_waits when this task cannot be merged before the new one, and after_this when the new one cannot be merged before this task; never both. Set stack_on_this instead for the next piece of a bundle in this repository: the new task starts once this one is ready to merge, branches off this task’s branch, and the two merge together. Add stack_on to stack it on other tasks of the bundle as well, such as one that joins several parallel pieces. Stack when the new task builds directly on this task’s code and ships with it, so a flaw it finds here is fixed in this pull request before anything merges. Use after_this when this task should ship on its own first: it is worth merging even if the follow-up stalls, the follow-up needs this change live on the default branch, or it works in another repository.',
+      'Create a new task for work outside this one, such as the part of this change that belongs in another repository: each task works in one repository and ships one pull request. It starts at once, or with after_this once this task is finished (merged, or done when it ships no pull request), and ends at the human’s review like any task. Whoever picks it up sees nothing of this task unless it is forked, so the request must stand on its own. Set fork_from to this task for the other part of this change, or to a task that shipped a feature for follow-up work on it: the new task’s agent starts from a copy of that task’s conversation. Set this_task_waits when this task cannot be merged before the new one, and after_this when the new one cannot be merged before this task; never both. Set stack_on_this instead for the next piece of a bundle in this repository: the new task starts once this one is ready to merge, branches off this task’s branch, and the two merge together. Add stack_on to stack it on other tasks of the bundle as well, such as one that joins several parallel pieces. Stack when the new task builds directly on this task’s code and ships with it, such as the next piece of a rewrite split into parts, so a flaw it finds here is fixed in this pull request before anything merges. Use after_this for a separate feature that needs this change merged first: it is worth merging even if the follow-up stalls, the follow-up needs this change live on the default branch, or it works in another repository. Set neither when the new task only touches the same area: it starts at once.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -187,7 +187,7 @@ export const ORCHESTRATION_TOOL_SPECS = {
   },
   split_task: {
     name: 'split_task',
-    description: `Split the rest of the accepted plan into separate tasks when it has parts that belong apart: different owners, parallel work, or separate reviews. Each becomes a task under this one that ends at its own review. A plan is split once: calling it again for the same plan returns the tasks it already made. Keep the work here when it is small and cohesive. At most ${L.splitTasks} tasks.`,
+    description: `Split the rest of the accepted plan into separate tasks when it has parts that belong apart: different owners, parallel work, or separate reviews. Each becomes a task under this one that ends at its own review. Set stacked when the parts build on each other and ship at once, such as a large rewrite done piece by piece: the parts become a bundle in this repository, each built on the one before and merged together with this task. Leave it out for independent parts, which start at once and merge on their own. A plan is split once: calling it again for the same plan returns the tasks it already made. Keep the work here when it is small and cohesive. At most ${L.splitTasks} tasks.`,
     inputSchema: {
       type: 'object',
       properties: {
@@ -208,6 +208,11 @@ export const ORCHESTRATION_TOOL_SPECS = {
           },
         },
         this_task_waits: { type: 'boolean', description: 'True when this task merges after them.' },
+        stacked: {
+          type: 'boolean',
+          description:
+            'The parts stack as a bundle: the first on this task, each next one on the one before, all merging together with this task. Never with this_task_waits.',
+        },
       },
       required: ['tasks'],
     },
