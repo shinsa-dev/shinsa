@@ -1,6 +1,6 @@
-import { afterEach, describe, expect, it, mock } from 'bun:test';
+import { describe, expect, it } from 'bun:test';
 import { render } from '@testing-library/react';
-import { Choice } from '@/components/controls/choice.tsx';
+import { Choice, revealActiveItem } from '@/components/controls/choice.tsx';
 
 const ITEMS = [
   { value: 'general', label: 'General' },
@@ -8,47 +8,68 @@ const ITEMS = [
   { value: 'automations', label: 'Automations' },
 ] as const;
 
-const original = Element.prototype.scrollIntoView;
-
-afterEach(() => {
-  Element.prototype.scrollIntoView = original;
-});
-
-function spyOnScrollIntoView() {
-  const revealed: string[] = [];
-  const spy = mock(function (this: Element) {
-    revealed.push(this.textContent ?? '');
-  });
-  Element.prototype.scrollIntoView = spy;
-  return { revealed, spy };
+function placeAt(element: Element, left: number, right: number) {
+  element.getBoundingClientRect = () => ({ left, right }) as DOMRect;
 }
 
+function createStrip(itemLeft: number, itemRight: number, scrollLeft = 0) {
+  const strip = document.createElement('div');
+  const item = document.createElement('button');
+  item.setAttribute('data-active', '');
+  strip.append(item);
+  placeAt(strip, 0, 200);
+  placeAt(item, itemLeft, itemRight);
+  strip.scrollLeft = scrollLeft;
+  return strip;
+}
+
+describe('revealActiveItem', () => {
+  it('scrolls the strip forward to an item past its end', () => {
+    const strip = createStrip(250, 330);
+    revealActiveItem(strip);
+    expect(strip.scrollLeft).toBe(130);
+  });
+
+  it('scrolls the strip back to an item before its start', () => {
+    const strip = createStrip(-40, 30, 100);
+    revealActiveItem(strip);
+    expect(strip.scrollLeft).toBe(60);
+  });
+
+  it('leaves the strip alone when the item is in view or none is active', () => {
+    const strip = createStrip(20, 90, 10);
+    revealActiveItem(strip);
+    expect(strip.scrollLeft).toBe(10);
+    const empty = document.createElement('div');
+    revealActiveItem(empty);
+    expect(empty.scrollLeft).toBe(0);
+  });
+});
+
 describe('Choice', () => {
-  it('scrolls its strip and keeps the active item in view when it scrolls', () => {
-    const { revealed, spy } = spyOnScrollIntoView();
+  it('scrolls its strip sideways when it scrolls', () => {
     const view = render(
-      <Choice label='Settings sections' items={[...ITEMS]} value='automations' onValueChange={() => {}} scrolls />
+      <Choice
+        label='Settings sections'
+        items={[...ITEMS]}
+        value='automations'
+        onValueChange={() => {}}
+        scrolls
+      />
     );
-    const strip = view.getByRole('tablist', { name: 'Settings sections' }).parentElement;
-    expect(strip?.className).toContain('overflow-x-auto');
-    expect(revealed).toEqual(['Automations']);
-    expect(spy.mock.calls[0]).toEqual([{ block: 'nearest', inline: 'nearest' }]);
-    view.rerender(
-      <Choice label='Settings sections' items={[...ITEMS]} value='projects' onValueChange={() => {}} scrolls />
+    expect(view.getByRole('tablist', { name: 'Settings sections' }).parentElement?.className).toContain(
+      'overflow-x-auto'
     );
-    expect(revealed).toEqual(['Automations', 'Projects']);
     view.unmount();
   });
 
-  it('leaves the strip and the page alone when it does not scroll', () => {
-    const { spy } = spyOnScrollIntoView();
+  it('leaves the strip as it is when it does not scroll', () => {
     const view = render(
       <Choice label='Task view' items={[...ITEMS]} value='automations' onValueChange={() => {}} />
     );
     expect(view.getByRole('tablist', { name: 'Task view' }).parentElement?.className).not.toContain(
       'overflow-x-auto'
     );
-    expect(spy).not.toHaveBeenCalled();
     view.unmount();
   });
 });

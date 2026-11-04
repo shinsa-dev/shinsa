@@ -13,6 +13,15 @@ interface ChoiceItem<V extends string> {
   disabled?: boolean;
 }
 
+export function revealActiveItem(strip: HTMLElement) {
+  const active = strip.querySelector('[data-active]');
+  if (!active) return;
+  const bounds = strip.getBoundingClientRect();
+  const item = active.getBoundingClientRect();
+  if (item.left < bounds.left) strip.scrollLeft += item.left - bounds.left;
+  else if (item.right > bounds.right) strip.scrollLeft += item.right - bounds.right;
+}
+
 export function Choice<V extends string>({
   items,
   value,
@@ -32,8 +41,7 @@ export function Choice<V extends string>({
 }) {
   const root = React.useRef<HTMLDivElement>(null);
   React.useEffect(() => {
-    if (!scrolls) return;
-    root.current?.querySelector('[data-active]')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    if (scrolls && root.current) revealActiveItem(root.current);
   }, [scrolls, value]);
   return (
     <Tabs
