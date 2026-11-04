@@ -232,7 +232,7 @@ one reads as its empty value. The fields under Triage and shape, Plan and build,
 | `proposedBranch?` | string \| null | triage's branch for a task with no worktree step yet |
 | `pipeline?` | `PipelineStep[]` | the steps; absent means change (or answer for `mode: 'ask'`) |
 | `auto` | `{ shape, start, priority }` booleans | which parts you left to Shinsa; `shape` is true unless `mode` was given |
-| `triageDecisions?` | `{ shape, start, priority }` each `{ value, why }` \| null, and `duplicate?` `{ unreached }` | triage's choice and why, per Auto part; `duplicate.unreached` lists the team machines (`UnreachedTeammate`: `{ teamId, machineId, name, owner }`, `owner` a `TeammateOwner` `{ login, name, avatarUrl }` or null) whose tasks the team-wide duplicate check could not read |
+| `triageDecisions?` | `{ shape, start, priority }` each `{ value, why }` \| null, `stack?` `{ value, why }`, and `duplicate?` `{ unreached }` | triage's choice and why, per Auto part; `stack` is the tasks triage stacked it on, present only when it did; `duplicate.unreached` lists the team machines (`UnreachedTeammate`: `{ teamId, machineId, name, owner }`, `owner` a `TeammateOwner` `{ login, name, avatarUrl }` or null) whose tasks the team-wide duplicate check could not read |
 | `shapeChanges?` | `ShapeChange[]` (last 20) | each pipeline change: from, to, by (`you`, `agent`, `shinsa`), reason |
 | `proposal?` | `ChangeProposal` \| null | an inquiry's proposal: request, why, status (`open`, `accepted`, `declined`) |
 | `planFirst` | boolean | plan first: the plan always waits at a gate |
@@ -631,7 +631,7 @@ secret.
 | `proposal` | Your OK | the answer, report or diagnosis, the proposal and why | approve (setup verified again, then planned) · reject (keeps the inquiry, finishes) | "Approve the proposal or keep the task." | no |
 | `operation` | Run the operation | the merged commit and pull request, the steps, the impact, your notes | approve (runs with the notes on the gate) · reply (replaces the notes with your words, then runs; empty clears them) · reject (finishes without it) | "Run the operation or finish without it." | no |
 | `failure` | Paused | what stopped, why, what Retry does | approve (retry) · reply (retry with guidance) · reject (cancel) | "Retry or cancel the task." | yes |
-| `configuration` | Setup incomplete | each setup problem and its fix | approve (verifies the setup again) · reject | "Verify the setup again, or cancel." | yes |
+| `configuration` | Setup incomplete | each setup problem and its fix, and the repositories to pick from when the repository is the only problem | approve (verifies the setup again) · reply (binds the picked repository, then verifies again) · reject | "Verify the setup again, or cancel." | yes |
 | `sign_in` | Sign in | the provider and the account | approve (retry) · reply (retry with guidance) · reject (cancel) | "Sign in, retry or cancel the task." | yes |
 | `post_merge` | Post-merge | each step left for you after the merge, which are ticked | none: ticking the last step withdraws it (`merge_step.tick`), unticking one opens it again | "Tick each step under Post-merge once you did it; the gate closes with the last one." | no |
 | `result` | Answered (titled "Read the answer", "Read the report" or "Read the diagnosis") | the answer, report or diagnosis | approve (Close: settles the task as done, still open to follow-ups) | "Close the task once you have read the result." | no |
@@ -941,7 +941,7 @@ role without the tool (`hasTool`).
 | `agent.file_report` | `file_report` | in a watch's read or a watchdog check only: files a task from one report (`title`, `request`, `reportId` or `link`, `author`, `postedAt`, `text`, `repoId`, `forkOf`); refuses a report the project already has a task for (`report_filed`) and a repository of another project (`repo_project`); a watchdog's always forks the shipped task (`fork_watchdog`), and links a report another watch or watchdog filed first (`watchdog.report_linked`) rather than refusing it |
 | `agent.report_read` | `report_read` | ends a read with its `summary`, as not finished with `reached: false`: a watch's next read covers the same time, a watchdog's check is missed; a watchdog check that filed a report trips it, one that filed none is healthy, and `live` answers a watchdog waiting for production; the task rests again |
 | `agent.create_task` | `create_task` | files a courier task from its `request`, optionally waiting on it (`thisWaits`), waiting on this task (`afterThis`, never with `thisWaits`), in the backlog (`backlog`), stacked on this task as a bundle (`stackOnThis`, never with `thisWaits` or `afterThis`) or forked from a task (`forkOf`) or a teammate's task (`teammateFork`), in another project (`projectId`, from `project`; without a repository, triage picks one there); `new_repository` makes the engine create and register the named repository first |
-| `agent.split_task` | `split_task` | splits the approved plan into tasks (`requests`) |
+| `agent.split_task` | `split_task` | splits the approved plan into tasks (`requests`); `stacked` chains them as a bundle on this task |
 | `agent.set_schedule` | `set_schedule` | writes one of its task's schedules; `source` names an integration of the task's project to watch: a new watch is recorded as a suggested watch for you to accept (origin the task and run, in its activity), at most 10 open at once (`suggestion_limit`) |
 | `agent.delete_schedule` | `delete_schedule` | deletes one |
 
@@ -959,7 +959,7 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 
 | Command | Sender | Does |
 | --- | --- | --- |
-| `task.triage` | `task.triage` effect (`triage/`) | records title, repository, size, branch, waits on, and the Auto parts; a `duplicateOf` naming an open task, or a `duplicateOfTeammate` (`TeammateOriginal`), closes it as that task's duplicate before any work (a local one wins when both come); `unreached` lists the team machines the duplicate check could not read |
+| `task.triage` | `task.triage` effect (`triage/`) | records title, repository, size, branch, waits on, the open change it stacks on (`stacksOn`, applied only while start is Auto and the stack is allowed), and the Auto parts; a `duplicateOf` naming an open task, or a `duplicateOfTeammate` (`TeammateOriginal`), closes it as that task's duplicate before any work (a local one wins when both come); `unreached` lists the team machines the duplicate check could not read |
 | `repo.register` | `repos/index.ts` | registers a repository on first use |
 | `config.record` | `config.verify` effect | records what setup verification found, with the repository it found (`repoId`) for a task that had none, and how it started a repository with no commits (`started`: `branch`, `initialized`, `pushed`) |
 | `worktree.ready`, `worktree.gone` | worktree effects | the worktree exists (with the branch a main checkout was on, `returnBranch`), or is gone |

@@ -75,6 +75,7 @@ export interface TriageReasons {
   shape?: string;
   priority?: string;
   start?: string;
+  stack?: string;
   duplicate?: string;
 }
 
@@ -201,6 +202,7 @@ type SystemCommand =
       size: TaskSize;
       branch: string;
       waitsOn: string[];
+      stacksOn?: string[];
       shape?: TaskShape;
       priority?: TaskPriority;
       duplicateOf?: string;

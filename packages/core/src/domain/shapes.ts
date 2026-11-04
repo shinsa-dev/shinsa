@@ -53,6 +53,7 @@ export interface TriageDecisions {
   shape: AutoChoice<TaskShape> | null;
   start: AutoChoice<string[]> | null;
   priority: AutoChoice<Task['priority']> | null;
+  stack?: AutoChoice<string[]>;
   duplicate?: TriageDuplicateCheck | null;
 }
 

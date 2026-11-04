@@ -55,9 +55,9 @@ function courier(
   return created(harness, before);
 }
 
-function split(harness: Harness, runId: string, requests: string[], thisWaits = false) {
+function split(harness: Harness, runId: string, requests: string[], thisWaits = false, stacked = false) {
   const before = new Set(Object.keys(harness.state.tasks));
-  harness.send({ type: 'agent.split_task', runId, requests, thisWaits });
+  harness.send({ type: 'agent.split_task', runId, requests, thisWaits, ...(stacked ? { stacked } : {}) });
   return created(harness, before);
 }
 
@@ -264,6 +264,32 @@ describe('splitting the accepted plan', () => {
     const [task] = split(harness, harness.activeRun(taskId).id, ['Port the footer.'], true);
     expect(harness.task(taskId).waitsOn).toEqual([task?.id ?? '']);
     expect(harness.task(taskId).activity.at(-2)?.text).toBe('Split the accepted plan into 1 task');
+  });
+
+  test('stacked, chains the parts as one bundle: the first on this task, each next on the one before', () => {
+    const { harness, taskId } = building();
+    const parts = split(
+      harness,
+      harness.activeRun(taskId).id,
+      ['Move the store.', 'Move the views.', 'Drop the shim.'],
+      false,
+      true
+    );
+    expect(parts.map((part) => part.stacksOn)).toEqual([
+      [taskId],
+      [parts[0]?.id ?? ''],
+      [parts[1]?.id ?? ''],
+    ]);
+    expect(parts.every((part) => part.waitsOn.length === 0)).toBe(true);
+    expect(harness.task(taskId).waitsOn).toEqual([]);
+  });
+
+  test('stacked parts never also make this task wait on them', () => {
+    const { harness, taskId } = building();
+    expect(() => split(harness, harness.activeRun(taskId).id, ['Move the store.'], true, true)).toThrow(
+      'Set stacked or this_task_waits, not both'
+    );
+    expect(harness.task(taskId).splits).toBeUndefined();
   });
 
   test('takes one to eight tasks', () => {
