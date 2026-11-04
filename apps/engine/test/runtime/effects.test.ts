@@ -395,6 +395,7 @@ describe('the Slack effects', () => {
       userName: 'A',
       text: '',
       permalink: null,
+      channelName: null,
       thread: [],
     };
     await runner.apply({ kind: 'slack.evaluate', mention }, createContext());

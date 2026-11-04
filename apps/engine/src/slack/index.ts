@@ -10,6 +10,7 @@ import {
   resolveSlackReaction,
   resolveSlackSessionStatus,
   resolveSlackTaskUrl,
+  resolveSlackLastUsedAt,
   resolveSlackThreadKey,
   type ShinsaEffect,
   SLACK_ENGINE_INTERACTIONS_PATH,
@@ -308,7 +309,9 @@ export class Slack {
     const connectUrl = resolveSlackConnectUrl(this.#remote.appOrigin, credentials.instanceId);
     try {
       const { links } = await this.#remote.control.requestSlackLinks(credentials.machineToken);
-      return { remote: true, connectUrl, links, problem: null };
+      const state = this.#engine.state;
+      const uses = links.map((link) => ({ ...link, lastUsedAt: resolveSlackLastUsedAt(state, link) }));
+      return { remote: true, connectUrl, links: uses, problem: null };
     } catch (error) {
       log.warn('[Slack] Could not read the Slack links', { error: describeError(error) });
       return {

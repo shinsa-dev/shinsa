@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import type { Task, Watchdog } from '@shinsa/core';
+import type { SlackThreadLink, Task, Watchdog } from '@shinsa/core';
 import { formatMoment } from '@/lib/format/time.ts';
 import {
   describeDuplicateHint,
@@ -12,6 +12,7 @@ import {
   listTeammateDuplicates,
   resolveFiledByFact,
   resolveReportFact,
+  resolveSlackFact,
   selectDuplicateOriginal,
 } from '@/lib/tasks/facts.ts';
 import { resolveTaskPath } from '@/router.ts';
@@ -491,5 +492,41 @@ describe('listForkSourcesBesides', () => {
     expect(
       listForkSourcesBesides(state, task, { ...filedBy, target: { kind: 'automation', scheduleId: 's' } })
     ).toEqual([source]);
+  });
+});
+
+describe('resolveSlackFact', () => {
+  const link: SlackThreadLink = {
+    teamId: 'T1',
+    channelId: 'C1',
+    threadTs: '100.1',
+    userId: 'U1',
+    messageTs: '100.2',
+    permalink: 'https://acme.slack.com/archives/C1/p1002?thread_ts=100.1',
+    channelName: 'support',
+    statusTs: null,
+    reaction: null,
+  };
+
+  it('is absent on a task not started from Slack', () => {
+    expect(resolveSlackFact(createTask({ id: 't' }))).toBeNull();
+  });
+
+  it('names the channel and opens the mention’s permalink', () => {
+    expect(resolveSlackFact(createTask({ id: 't', slack: link }))).toEqual({
+      place: '#support',
+      hint: 'A mention of @Shinsa in #support started this task. Open the thread in Slack.',
+      href: link.permalink as string,
+    });
+  });
+
+  it('says Slack when the channel name is unknown, and opens the thread in Slack’s web client without a permalink', () => {
+    expect(
+      resolveSlackFact(createTask({ id: 't', slack: { ...link, channelName: null, permalink: null } }))
+    ).toEqual({
+      place: 'Slack',
+      hint: 'A mention of @Shinsa in Slack started this task. Open the thread in Slack.',
+      href: 'https://app.slack.com/client/T1/C1/thread/C1-100.1',
+    });
   });
 });

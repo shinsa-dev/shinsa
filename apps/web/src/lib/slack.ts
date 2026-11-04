@@ -1,4 +1,4 @@
-import type { SlackLink, SlackSnapshot } from '@shinsa/core';
+import type { SlackLinkUse, SlackSnapshot } from '@shinsa/core';
 import { formatSince } from '@/lib/format/time.ts';
 import type { Tone } from '@/lib/format/tone.ts';
 import { MACHINE_ICON, type RemotePoint } from '@/lib/remote/mode.ts';
@@ -47,8 +47,11 @@ export function describeSlackStatus(snapshot: SlackSnapshot): SlackStatusView {
   };
 }
 
-export function describeSlackLink(link: SlackLink, now = Date.now()) {
-  return `${formatSince('Connected', link.linkedAt, now)} as ${link.userName}`;
+export function describeSlackLink(link: SlackLinkUse, now = Date.now()) {
+  const connected = formatSince('Connected', link.linkedAt, now);
+  if (link.lastUsedAt === undefined) return connected;
+  const used = link.lastUsedAt === null ? 'Not used yet' : formatSince('Last used', link.lastUsedAt, now);
+  return `${used} · ${connected}`;
 }
 
 export const SLACK_POINTS: RemotePoint[] = [

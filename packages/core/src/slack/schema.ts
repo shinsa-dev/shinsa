@@ -6,6 +6,7 @@ export const SLACK_LIMITS = {
   userName: 120,
   id: 64,
   permalink: 2000,
+  channelName: 80,
   threadMessages: 100,
   threadChars: 12_000,
 } as const;
@@ -36,6 +37,7 @@ export const SlackMention = Schema.Struct({
   userName: Truncated(SLACK_LIMITS.userName),
   text: Truncated(SLACK_LIMITS.text),
   permalink: SalvagedOrNull(Truncated(SLACK_LIMITS.permalink).check(Schema.isStartingWith('https://'))),
+  channelName: SalvagedOrNull(Truncated(SLACK_LIMITS.channelName).check(Schema.isNonEmpty())),
   thread: SalvagedItems(SlackThreadMessage, SLACK_LIMITS.threadMessages),
 });
 

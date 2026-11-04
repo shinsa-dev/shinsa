@@ -42,9 +42,9 @@ function renameProject(name: string, to: string): LogMigration {
 const TWO_MIGRATIONS = [renameProject('rename-b', 'b'), renameProject('rename-c', 'c')];
 
 describe('event log migrations', () => {
-  test('the shipped list turns stacks into lists, one version past the baseline', () => {
-    expect(LOG_MIGRATIONS.map((migration) => migration.name)).toEqual(['stack-lists']);
-    expect(resolveLogVersion()).toBe(LOG_BASELINE + 1);
+  test('the shipped list turns stacks into lists and names Slack channels, two versions past the baseline', () => {
+    expect(LOG_MIGRATIONS.map((migration) => migration.name)).toEqual(['stack-lists', 'slack-channel-names']);
+    expect(resolveLogVersion()).toBe(LOG_BASELINE + 2);
     expect(resolveLogVersion(TWO_MIGRATIONS)).toBe(LOG_BASELINE + 2);
   });
 
@@ -54,7 +54,7 @@ describe('event log migrations', () => {
     expect(log.migrate()).toEqual([]);
     expect(() => log.assertCurrent()).not.toThrow();
     log.close();
-    expect(readVersion(path)).toBe(LOG_BASELINE + 1);
+    expect(readVersion(path)).toBe(LOG_BASELINE + 2);
   });
 
   test('a log that already holds events is never stamped on open', () => {
@@ -152,7 +152,7 @@ describe('event log migrations', () => {
     }
     db.close();
     const log = new EventLog(path);
-    expect(log.migrate()).toEqual(['stack-lists']);
+    expect(log.migrate()).toEqual(['stack-lists', 'slack-channel-names']);
     expect(log.readEvents().events.slice(1)).toEqual([
       { type: 'task.stack_changed', taskId: 't1', stacksOn: ['p1'], by: 'you', seq: 2, at: 1 },
       { type: 'task.stack_changed', taskId: 't1', stacksOn: [], seq: 3, at: 1 },
@@ -162,7 +162,58 @@ describe('event log migrations', () => {
       { type: 'task.stack_based', taskId: 't2', bases: ['fix/p1', 'fix/p2'], seq: 7, at: 1 },
     ]);
     log.close();
-    expect(readVersion(path)).toBe(LOG_BASELINE + 1);
+    expect(readVersion(path)).toBe(LOG_BASELINE + 2);
+  });
+
+  test('slack-channel-names gives an older Slack thread link a null channel name, and keeps a known one', () => {
+    const path = createLogPath();
+    writeLog(path, LOG_BASELINE + 1);
+    const db = new Database(path);
+    const link = {
+      teamId: 'T1',
+      channelId: 'C1',
+      threadTs: '1.1',
+      userId: 'U1',
+      messageTs: '1.1',
+      permalink: null,
+    };
+    const rows = [
+      { type: 'slack.thread_linked', taskId: 't1', link: { ...link, statusTs: null, reaction: null } },
+      {
+        type: 'slack.thread_linked',
+        taskId: 't2',
+        link: { ...link, channelName: 'support', statusTs: null, reaction: null },
+      },
+    ];
+    for (const [index, row] of rows.entries()) {
+      db.run('INSERT INTO events (seq, at, type, payload) VALUES (?, ?, ?, ?)', [
+        index + 2,
+        1,
+        row.type,
+        JSON.stringify(row),
+      ]);
+    }
+    db.close();
+    const log = new EventLog(path);
+    expect(log.migrate()).toEqual(['slack-channel-names']);
+    expect(log.readEvents().events.slice(1)).toEqual([
+      {
+        type: 'slack.thread_linked',
+        taskId: 't1',
+        link: { ...link, statusTs: null, reaction: null, channelName: null },
+        seq: 2,
+        at: 1,
+      },
+      {
+        type: 'slack.thread_linked',
+        taskId: 't2',
+        link: { ...link, channelName: 'support', statusTs: null, reaction: null },
+        seq: 3,
+        at: 1,
+      },
+    ]);
+    log.close();
+    expect(readVersion(path)).toBe(LOG_BASELINE + 2);
   });
 
   test('a log a newer Shinsa wrote opens as it is', () => {

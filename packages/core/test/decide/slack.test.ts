@@ -23,6 +23,7 @@ function mention(overrides: Partial<SlackMention> = {}): SlackMention {
     userName: 'Christo',
     text: 'can you take this?',
     permalink: 'https://acme.slack.com/archives/C1/p1003',
+    channelName: 'support',
     thread: [{ ts: '100.1', userId: 'U2', userName: 'Mia', text: 'Export hangs on big files.', bot: false }],
     ...overrides,
   };
@@ -80,6 +81,7 @@ describe('a mention in a thread no task holds', () => {
       userId: 'U1',
       messageTs: '100.3',
       permalink: 'https://acme.slack.com/archives/C1/p1003',
+      channelName: 'support',
       statusTs: null,
       reaction: 'hourglass_flowing_sand',
     });
