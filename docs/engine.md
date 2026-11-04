@@ -1673,7 +1673,7 @@ see, and turns what it finds into work. It is a task-scoped automation: the Agen
 stops when its window ends. The rules are core (`domain/watchdogs.ts`, `decide/watchdogs.ts`, the folds in
 `state/watchdogs.ts`, the prompts in `prompts/watchdogs.ts`); the clock is the engine's (`runtime/watchdogs.ts`).
 
-- **The Agent writes them.** The last phase's walkthrough takes `watchdogs` (at most 5; `WatchdogSpec`: a `title`, a
+- **The Agent writes them.** The last phase's hand-over takes `watchdogs` beside its `walkthrough` (never inside it: both hand-overs and their walkthrough refuse a field they do not take; at most 5; `WatchdogSpec`: a `title`, a
   `check` with what counts as an issue, an optional schedule (`first_check_minutes`, `max_gap_hours`, `for_hours`, up to
   720 hours; each left out takes the setting's default, below), `starts` `merge` or `production` with the
   `production_check` that tells the change is live there, and either a `source`
@@ -1686,7 +1686,9 @@ stops when its window ends. The rules are core (`domain/watchdogs.ts`, `decide/w
   `complete_phase` and `complete_fix` the engine refuses one whose `suggestions` name a server the run already has
   (loaded or deferred, a whole-word match ignoring case) and whose `evidence` does not say it checked that server (“checked <server>” in one clause; a mere mention of the platform does not count) (`listHeldSourceRequests`,
   `assertHeldSourcesUsed` in `agents/handover.ts`). The handover skill says when one is worth it, a fix revises them like
-  `steps`, and the reviewer's brief lists them (`describeWatchdogsForReview`).
+  `steps` with its own top-level `watchdogs` (enough on its own; an empty list removes them), and the reviewer's brief
+  lists them (`describeWatchdogsForReview`). Until the merge arms them, `read_task` lists the planned ones from the
+  report ("Watchdogs for after the merge:").
 - **Integrations a project uses live on the project.** A project lists the MCP servers from Integrations its agents
   read, each with what it holds there; on screen and in the command line it is an integration, in code a
   `WatchSource`. `Project.watchSources` (`WatchSource`: `server`, `data`, the `repoIds` it

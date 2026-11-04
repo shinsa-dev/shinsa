@@ -79,7 +79,7 @@ disagrees. You built it and know why it is the way it is, so you write the expla
   variables and files in backticks, a dashboard as a link with its full URL, a task as its shinsa:// link. Only the human ticks a step; changing a step's title, detail, kind or
   command asks them to do it again, so change one only when what they must do changed. Never put `pre_merge` or
   `post_merge` in `reshape_task`.
-- **watchdogs** watch the change after it merges, through data the tests never see (traces, logs, errors, analytics,
+- **watchdogs**, a field of its own beside `walkthrough` (never inside it, which is refused), watch the change after it merges, through data the tests never see (traces, logs, errors, analytics,
   support messages); add one where the change sends something the world reads or writes, never for a refactor. Read
   how the repository ships first: when the merge is not the release, set `starts: production` with a
   `production_check`. Any MCP server you have can be the `source`, not only the data sources the last phase's prompt
@@ -110,8 +110,9 @@ item the fix touched that still holds.
 
 When the fix answers something the human sent, it carries `reply` (Replying to the human, below).
 
-Send `walkthrough` only when the fix changes the approach, the flow, a risk, the testing, the steps or the watchdogs. Each part you
-send replaces that part whole, so send the full new list, not just the new item.
+Send `walkthrough` only when the fix changes the approach, the flow, a risk, the testing or the steps, and `watchdogs`
+(beside `walkthrough`, never inside it) only when the fix changes them. Each part you send replaces that part whole, so
+send the full new list, not just the new item; an empty `watchdogs` removes them all.
 
 ## Replying to the human (`reply`)
 
