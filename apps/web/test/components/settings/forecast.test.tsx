@@ -34,12 +34,13 @@ async function settle() {
 }
 
 function weeklyAccount(id: string, usedPercent: number, resetsIn: number) {
+  const minute = Math.floor(Date.now() / MINUTE_MS) * MINUTE_MS;
   return createAccount({
     id,
     usage: {
       status: 'ok',
       windows: [
-        createWindow({ id: `${id}-weekly`, kind: 'weekly', usedPercent, resetsAt: Date.now() + resetsIn }),
+        createWindow({ id: `${id}-weekly`, kind: 'weekly', usedPercent, resetsAt: minute + resetsIn }),
       ],
       detail: null,
       checkedAt: Date.now(),
