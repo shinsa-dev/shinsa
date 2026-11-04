@@ -1,4 +1,4 @@
-import type { ShareLimit, Task, ViewScope } from '@shinsa/core';
+import { CUSTOM_PRESET, type ShareLimit, type Task, type ViewScope } from '@shinsa/core';
 import { Button } from '@shinsa/ui/components/button';
 import { Checkbox } from '@shinsa/ui/components/checkbox';
 import {
@@ -82,6 +82,7 @@ import {
   resolveHandoffView,
   useHandoffRemoveConfirm,
 } from '@/lib/share/handoff.ts';
+import { resolveShareSourceScopes } from '@/lib/share/scopes.ts';
 import { navigate } from '@/router.ts';
 
 function ShareBody({ view }: { view: ShareView }) {
@@ -416,7 +417,10 @@ function ShareContent({ task }: { task: Task }) {
   const [pickedMode, setPickedMode] = React.useState<ShareMode | null>(null);
   const [pickedScopes, setPickedScopes] = React.useState<readonly ViewScope[] | null>(null);
   const focus = useShareDialogFocus();
-  const scopes = shared && live ? live.scopes : (pickedScopes ?? resolveShareScopesChoice(task, settings));
+  const scopes =
+    shared && live
+      ? resolveShareSourceScopes(live)
+      : (pickedScopes ?? resolveShareScopesChoice(task, settings));
   const mode = pickedMode ?? resolveShareModeChoice(task, settings, handoffSupported, focus);
   const handing = mode === 'handoff' && view.kind !== 'unpaired';
   const handoff = resolveHandoffView(task);
@@ -428,7 +432,9 @@ function ShareContent({ task }: { task: Task }) {
     if (shared) void changeShareLimit(task, next);
     else setPicked(next);
   };
+  const [customSeen, setCustomSeen] = React.useState(false);
   const pickScopes = (next: readonly ViewScope[]) => {
+    if (resolveShareChoice(next) === CUSTOM_PRESET) setCustomSeen(true);
     setPickedMode(resolveShareChoice(next));
     if (shared) void changeShareScopes(task, next, scopesSupported);
     else setPickedScopes(next);
@@ -450,7 +456,7 @@ function ShareContent({ task }: { task: Task }) {
       {view.kind !== 'unpaired' && (
         <>
           <ShareModeRow
-            items={listShareModeItems(task, handoffSupported, scopesSupported)}
+            items={listShareModeItems(task, handoffSupported, customSeen || shownMode === CUSTOM_PRESET)}
             mode={shownMode}
             onChange={pickMode}
           />

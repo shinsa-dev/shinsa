@@ -22,6 +22,7 @@ import { useSyncExternalStore } from 'react';
 import { sendCommandWithToast } from '@/lib/connection/commands.ts';
 import { formatUntil } from '@/lib/format/time.ts';
 import { canHandOff, HANDOFF_ICON, HANDOFF_TITLE, isTaskHandedOff } from '@/lib/share/handoff.ts';
+import { resolveShareSourceScopes } from '@/lib/share/scopes.ts';
 import { createSignal } from '@/lib/signal.ts';
 
 export const SHARE_TITLE = 'Share task';
@@ -130,9 +131,9 @@ const HANDOFF_MODE_ITEM: { value: ShareMode; label: string; hint: string; icon: 
   icon: HANDOFF_ICON,
 };
 
-export function listShareModeItems(task: Task, handoffSupported: boolean, scopesSupported = false) {
+export function listShareModeItems(task: Task, handoffSupported: boolean, custom = false) {
   const items: { value: ShareMode; label: string; hint: string; icon: IconName }[] = [...SHARE_PRESET_ITEMS];
-  if (scopesSupported) items.push(CUSTOM_MODE_ITEM);
+  if (custom) items.push(CUSTOM_MODE_ITEM);
   return handoffSupported && canHandOff(task) ? [...items, HANDOFF_MODE_ITEM] : items;
 }
 
@@ -252,7 +253,7 @@ export function resolveShareLimitChoice(task: Task, settings: Settings): ShareLi
 }
 
 export function resolveShareScopesChoice(task: Task, settings: Settings | null): readonly ViewScope[] {
-  if (task.share) return resolveShareScopes(task.share.scopes);
+  if (task.share) return resolveShareScopes(resolveShareSourceScopes(task.share));
   return SHARE_PRESET_SCOPES[settings ? resolveSharePreset(settings) : 'standard'];
 }
 

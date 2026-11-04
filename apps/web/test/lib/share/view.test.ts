@@ -77,4 +77,10 @@ describe('a shared view', () => {
     expect(resolveSharedView(source()).diffUrl).toBe('/files/diff');
     expect(resolveSharedView(source(false)).diffUrl).toBeNull();
   });
+
+  it('reads a share from an older engine, which names a preset and no scopes, as that preset’s scopes', () => {
+    const older = { ...createSharedTask({ code: true }), scopes: undefined, preset: 'status' };
+    const view = resolveSharedView({ ...source(), shared: older as never });
+    expect(view.shared.scopes).toEqual([...SHARE_PRESET_SCOPES.status]);
+  });
 });

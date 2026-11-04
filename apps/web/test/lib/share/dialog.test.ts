@@ -124,6 +124,8 @@ describe('what a shared task shows', () => {
     expect(
       resolveShareScopesChoice({ ...task, share: { ...SHARING, url: null, scopes: own } }, settings)
     ).toEqual(own);
+    const older = { at: 1, limit: 'until_done', preset: 'full', endsAt: null, url: null } as never;
+    expect(resolveShareScopesChoice({ ...task, share: older }, settings)).toEqual(SHARE_PRESET_SCOPES.full);
   });
 
   it('names a preset’s exact scopes by the preset, and any other set Custom', () => {
@@ -246,6 +248,7 @@ describe('the kinds of share', () => {
       'handoff',
     ]);
     expect(listShareModeItems(open, false).map((item) => item.value)).not.toContain('handoff');
+    expect(listShareModeItems(open, true, false).map((item) => item.value)).not.toContain('custom');
     expect(listShareModeItems(open, true, true).map((item) => item.value)).toEqual([
       'status',
       'standard',

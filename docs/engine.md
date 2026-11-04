@@ -3454,7 +3454,9 @@ projection and channel serve teams, always at Standard (Teams, below).
   ticks exactly its scopes; ticking or unticking a box turns Share as to Custom, and a list that matches a preset
   again shows that preset. Title and status is ticked and locked. Share sends `scopes` for Custom and `preset` for a
   preset. Custom and the checkboxes show only on a machine that announces `share.scopes` (`ENGINE_FEATURES`); an
-  older engine gets the presets alone, as before.
+  older engine gets the presets alone, as before. Custom is listed once the boxes no longer match a preset, so picking
+  it never does nothing. The page built from `main` also reads a share from an older engine, which names a preset and
+  no scopes, as that preset's scopes (`resolveShareSourceScopes` in `apps/web/src/lib/share/scopes.ts`).
 - **From the command line.** `shinsa tasks share --preset standard --deny code --allow messages` starts from the
   preset (the `sharePreset` setting without `--preset`), adds each `--allow` and removes each `--deny`, and sends the
   list as `scopes`; an unknown scope is refused before anything is sent.
@@ -3700,8 +3702,8 @@ the read-only view. Teams need remote access on (`Remote` paired and enabled), s
   its gates and its project as a share link copies them, with the owner's GitHub login and the machine's name, and
   the machine's public key (`machineKey`, for a teammate given this machine), `updatedAt`, the same list signed
   (`snapshot`) and the copies it keeps of the team's offline machines (`held`, Offline teammates, below). A task
-  view is exactly a share link's `ShareLiveView` and files at Standard (`Shares.resolveLive` with `TEAM_SHARE_PRESET`,
-  whatever the task's own share link or the default preset says), pushed again when one of its runs writes to its
+  view is exactly a share link's `ShareLiveView` and files at Standard's scopes (`Shares.resolveLive` with
+  `TEAM_SHARE_SCOPES`, whatever the task's own share link or the default preset says), pushed again when one of its runs writes to its
   transcript (`Teams.#pushTranscript`): the table in Sharing a task is what a teammate can and cannot see, the same for
   every repository. In short, a teammate sees the title, status, request text, plan, phase reports, review report,
   findings, checks, branches, the pull request and its diff and code from GitHub, evidence, gates without your answers,

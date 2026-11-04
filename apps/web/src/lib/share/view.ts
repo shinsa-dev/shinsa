@@ -10,6 +10,7 @@ import {
   type ShinsaState,
   type Task,
 } from '@shinsa/core';
+import { resolveShareSourceScopes } from './scopes.ts';
 
 const SHARED_TASK_PREFIX = 'shared-';
 
@@ -43,10 +44,10 @@ function resolveSharedEvidence(item: Evidence, taskId: string, source: SharedSou
   return url ? { ...item, taskId, uri: url } : null;
 }
 
-function listTranscriptUrls(source: SharedSource) {
-  if (!hasShareGroup(source.shared.scopes, 'live')) return {};
+function listTranscriptUrls(source: SharedSource, shared: SharedTask) {
+  if (!hasShareGroup(shared.scopes, 'live')) return {};
   return Object.fromEntries(
-    source.shared.runs.flatMap((run) => {
+    shared.runs.flatMap((run) => {
       const urls: string[] = [];
       for (let page = 0; ; page += 1) {
         const url = source.resolveFileUrl(resolveShareTranscriptFile(run.id, page));
@@ -59,17 +60,18 @@ function listTranscriptUrls(source: SharedSource) {
 }
 
 export function resolveSharedView(source: SharedSource): SharedView {
-  const id = resolveSharedTaskId(source.shared.task.id);
-  const task: Task = { ...source.shared.task, id };
+  const shared: SharedTask = { ...source.shared, scopes: [...resolveShareSourceScopes(source.shared)] };
+  const id = resolveSharedTaskId(shared.task.id);
+  const task: Task = { ...shared.task, id };
   const state = createState();
   state.tasks = { [id]: task };
-  state.gates = Object.fromEntries(source.shared.gates.map((gate) => [gate.id, { ...gate, taskId: id }]));
-  state.runs = Object.fromEntries(source.shared.runs.map((run) => [run.id, { ...run, taskId: id }]));
-  const { repo, project } = source.shared;
+  state.gates = Object.fromEntries(shared.gates.map((gate) => [gate.id, { ...gate, taskId: id }]));
+  state.runs = Object.fromEntries(shared.runs.map((run) => [run.id, { ...run, taskId: id }]));
+  const { repo, project } = shared;
   if (repo) state.repos = { [repo.id]: repo };
   if (project) state.projects = { [project.id]: project };
   state.evidence = Object.fromEntries(
-    source.shared.evidence.flatMap((item) => {
+    shared.evidence.flatMap((item) => {
       const evidence = resolveSharedEvidence(item, id, source);
       return evidence ? [[evidence.id, evidence]] : [];
     })
@@ -77,10 +79,10 @@ export function resolveSharedView(source: SharedSource): SharedView {
   return {
     state,
     task,
-    shared: source.shared,
+    shared,
     updatedAt: source.updatedAt,
-    diffUrl: source.shared.code ? source.resolveFileUrl(SHARE_DIFF_FILE) : null,
-    codeUrl: source.shared.code ? source.resolveFileUrl(SHARE_CODE_FILE) : null,
-    transcripts: listTranscriptUrls(source),
+    diffUrl: shared.code ? source.resolveFileUrl(SHARE_DIFF_FILE) : null,
+    codeUrl: shared.code ? source.resolveFileUrl(SHARE_CODE_FILE) : null,
+    transcripts: listTranscriptUrls(source, shared),
   };
 }
