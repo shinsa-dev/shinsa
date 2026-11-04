@@ -7,9 +7,11 @@ import {
   toggleScope,
 } from '@shinsa/core';
 import {
+  describeExtraHint,
   describeScopesOwner,
   describeScopesSummary,
   hasOwnScopes,
+  listExtraRows,
   listMemberItems,
   listPresetItems,
   resolveChoiceScopes,
@@ -17,6 +19,7 @@ import {
   resolveMemberScopes,
   resolveTeamChoice,
   resolveTeammateScopes,
+  selectExtra,
 } from '../../../src/lib/teams/scopes.ts';
 
 const MONA = { id: '1', login: 'mona', name: 'Mona Lisa', avatarUrl: null };
@@ -85,5 +88,31 @@ describe('team scopes in settings', () => {
     expect(resolveTeammateScopes([TEAM], 'studio', '7')).toEqual(ACCESS_SCOPES);
     expect(resolveTeammateScopes([TEAM], 'studio', '8')).toEqual(DEFAULT_TEAM_SCOPES);
     expect(resolveTeammateScopes([TEAM], 'laptop', '7')).toEqual([]);
+  });
+});
+
+describe('a machine’s extra scopes in settings', () => {
+  it('locks what the team gives and fork, and lets the rest be ticked here', () => {
+    const rows = listExtraRows(TEAM, ['message'], '8');
+    expect(rows.map((row) => [row.scope, row.on, row.locked])).toEqual([
+      ['gates', true, true],
+      ['actions', true, true],
+      ['message', true, false],
+      ['fork', true, true],
+      ['share', true, true],
+      ['services', true, true],
+    ]);
+    const narrow = { ...TEAM, scopes: ACCESS_PRESETS.standard };
+    const fork = listExtraRows(narrow, [], '8').find((row) => row.scope === 'fork');
+    expect(fork && describeExtraHint(fork)).toBe('Set by the team, since a fork runs on their own machine.');
+    const gates = listExtraRows(TEAM, [], '8')[0];
+    expect(gates && describeExtraHint(gates)).toBe('From the team.');
+    const message = listExtraRows(narrow, [], '8').find((row) => row.scope === 'message');
+    expect(message && describeExtraHint(message)).toBe('Send messages to a task’s agent.');
+  });
+
+  it('reads what this machine gave someone, or nothing', () => {
+    expect(selectExtra([{ userId: '8', scopes: ['message'] }], '8')).toEqual(['message']);
+    expect(selectExtra([], '8')).toEqual([]);
   });
 });

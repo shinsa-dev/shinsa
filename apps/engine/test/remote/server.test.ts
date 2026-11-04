@@ -1355,7 +1355,7 @@ describe('links, access requests and members', () => {
     remote.start();
     await until('connected', () => remote.snapshot().status === 'connected');
     expect(remote.snapshot().teams).toEqual([
-      { id: 'team1', name: 'Platform', status: 'member', onMachine: false, invite: false, team: TEAM },
+      { id: 'team1', name: 'Platform', status: 'member', onMachine: false, invite: false, team: TEAM, extras: [] },
     ]);
     const settled = pushes.length;
     await remote.requestHeartbeat();

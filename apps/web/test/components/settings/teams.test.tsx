@@ -46,6 +46,7 @@ function createActions() {
     remove: mock((_teamId: string) => snapshot()),
     grantAccess: mock((_teamId: string, _userId: string) => snapshot()),
     updateScopes: mock((_teamId: string, _userId: string | null, _scopes: AccessScopes | null) => snapshot()),
+    updateExtra: mock((_teamId: string, _userId: string, _scopes: AccessScopes) => snapshot()),
   } satisfies TeamActions;
 }
 
@@ -237,10 +238,31 @@ describe('Settings → Teams', () => {
     await waitFor(() => expect(actions.writeProjects).toHaveBeenCalledWith(STATE, 'team1', ['web', 'api']));
   });
 
-  it('gives a teammate access to this machine without them asking, after saying what it means', async () => {
+  it('gives a teammate more on this machine than the team does, with the team’s scopes locked on', async () => {
     const actions = renderOwnedTeam();
-    fireEvent.click(screen.getByRole('button', { name: 'Give machine access' }));
+    fireEvent.click(screen.getByRole('button', { name: 'On Studio' }));
     const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByText('What Kai can do on Studio')).toBeTruthy();
+    const gates = within(dialog).getByRole('checkbox', { name: 'Answer gates for Kai' });
+    expect(gates.getAttribute('aria-disabled')).toBe('true');
+    const message = within(dialog).getByRole('checkbox', { name: 'Message agents for Kai' });
+    expect(message.getAttribute('aria-disabled')).not.toBe('true');
+    fireEvent.click(within(dialog).getByRole('checkbox', { name: 'Message agents for Kai' }));
+    await waitFor(() => expect(actions.updateExtra).toHaveBeenCalledWith('team1', KAI.id, ['message']));
+  });
+
+  it('says a teammate has more on this machine', () => {
+    renderOwnedTeam({
+      teams: [createTeamEntry({ extras: [{ userId: KAI.id, scopes: ['message'] }] })],
+    });
+    expect(screen.getByText(/More on Studio/)).toBeTruthy();
+  });
+
+  it('gives a teammate full access to this machine without them asking, after saying what it means', async () => {
+    const actions = renderOwnedTeam();
+    fireEvent.click(screen.getByRole('button', { name: 'On Studio' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Give full access to Studio' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Give Kai access to Studio?' });
     expect(within(dialog).getByText('Give Kai access to Studio?')).toBeTruthy();
     fireEvent.click(within(dialog).getByRole('button', { name: 'Give access' }));
     await waitFor(() => expect(actions.grantAccess).toHaveBeenCalledWith('team1', KAI.id));
@@ -250,12 +272,12 @@ describe('Settings → Teams', () => {
   it('says who can reach this machine already, with no grant offered to them', () => {
     renderOwnedTeam({ access: { owner: MONA, members: [{ user: KAI, addedAt: 1 }] } });
     expect(screen.getByText(/Can reach Studio/)).toBeTruthy();
-    expect(screen.queryByRole('button', { name: 'Give machine access' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'On Studio' })).toBeNull();
   });
 
   it('offers no grant while remote access is paused', () => {
     renderOwnedTeam({ enabled: false });
-    expect(screen.queryByRole('button', { name: 'Give machine access' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'On Studio' })).toBeNull();
   });
 
   it('turns off the link of a team you own', async () => {
@@ -293,7 +315,7 @@ describe('Settings → Teams', () => {
     expect(owned.textContent).toStartWith('Owned by KKai · 2 people');
     expect(owned.querySelector('a')?.getAttribute('href')).toBe('https://github.com/kai');
     expect(screen.queryByRole('button', { name: 'Remove' })).toBeNull();
-    expect(screen.getByRole('button', { name: 'Give machine access' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'On Studio' })).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Leave' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Leave team' }));
     await waitFor(() => expect(actions.leave).toHaveBeenCalledWith('team1'));

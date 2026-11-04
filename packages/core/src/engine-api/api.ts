@@ -100,6 +100,7 @@ import {
   TeamKeysAnswer,
   TeamLinkAnswer,
   TeamMemberBody,
+  TeamExtraBody,
   TeamScopesBody,
   TeamTasksAnswer,
   TeamTasksQuery,
@@ -545,6 +546,13 @@ class TeamsGroup extends HttpApiGroup.make('teams')
       success: RemoteAnswer,
     })
       .annotate(RouteFieldFailures, TEAM_FAILURES)
+      .annotate(OwnerOnlyRoute, true)
+      .annotate(EngineFeatureRoute, 'team-access'),
+    HttpApiEndpoint.post('extra', '/api/remote/teams/extra', {
+      payload: TeamExtraBody,
+      success: RemoteAnswer,
+    })
+      .annotate(RouteFieldFailures, TEAM_MEMBER_FAILURES)
       .annotate(OwnerOnlyRoute, true)
       .annotate(EngineFeatureRoute, 'team-access'),
     HttpApiEndpoint.get('keys', '/api/remote/teams/keys', { success: TeamKeysAnswer })

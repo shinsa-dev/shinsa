@@ -6,11 +6,13 @@ import {
   type ActionScope,
   CUSTOM_PRESET,
   listActionScopes,
+  MACHINE_EXTRA_SCOPES,
   type RemoteTeam,
   type ResolvedPreset,
   resolvePreset,
   TEAM_PRESET_NAMES,
   type TeamPreset,
+  type TeamScopeOverride,
 } from '@shinsa/core';
 
 export const SCOPES_TITLE = 'What teammates can do';
@@ -91,6 +93,32 @@ export function resolveChoiceScopes(choice: MemberScopeChoice, current: AccessSc
   if (choice === TEAM_CHOICE) return null;
   if (choice === CUSTOM_PRESET) return current;
   return ACCESS_PRESETS[choice];
+}
+
+export interface ExtraRow {
+  scope: ActionScope;
+  on: boolean;
+  fromTeam: boolean;
+  locked: boolean;
+}
+
+export function selectExtra(extras: readonly TeamScopeOverride[], userId: string): AccessScopes {
+  return extras.find((entry) => entry.userId === userId)?.scopes ?? [];
+}
+
+export function listExtraRows(team: RemoteTeam, extra: AccessScopes, userId: string): ExtraRow[] {
+  const granted = resolveMemberScopes(team, userId);
+  return ACTION_SCOPES.map((scope) => {
+    const fromTeam = granted.includes(scope);
+    const locked = fromTeam || !MACHINE_EXTRA_SCOPES.includes(scope);
+    return { scope, on: fromTeam || extra.includes(scope), fromTeam, locked };
+  });
+}
+
+export function describeExtraHint(row: ExtraRow) {
+  if (row.fromTeam) return 'From the team.';
+  if (row.locked) return 'Set by the team, since a fork runs on their own machine.';
+  return SCOPE_ROWS[row.scope].hint;
 }
 
 export function hasOwnScopes(team: RemoteTeam, userId: string) {

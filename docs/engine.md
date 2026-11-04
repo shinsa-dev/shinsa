@@ -3748,6 +3748,16 @@ the read-only view. Teams need remote access on (`Remote` paired and enabled), s
     other route is refused. A command is refused unless it names a team task and the person's scopes allow it
     (`resolveCommandScope`, `TEAM_SCOPE_MESSAGES`): no new task, no terminal, no change to the Code tab, no setting. A person who is also a
     member of the machine (Give machine access) gets full access instead, and falls back to the team's once that ends.
+  - **More on one machine.** The team's scopes are the floor every teammate gets on every machine; each machine's
+    owner may add to them for one teammate on that machine alone (On <machine> beside them in People, `POST
+    /api/remote/teams/extra { teamId, userId, scopes }`, `Teams.updateExtra`, owner-only like every remote route). The
+    extra scopes live in this machine's `remote.json` (`extras: { teamId, userId, scopes }`), never at app.shinsa.dev,
+    and the snapshot lists them per team (`RemoteTeamEntry.extras`, read as More on <machine>). A device's scopes are
+    the team's with the extras added (`mergeScopes`); an extra can only add, so the team's floor holds, and the team's
+    owner still decides the floor. Fork is not one of them (`MACHINE_EXTRA_SCOPES`): a fork runs on the forker's own
+    machine, which checks the team's scopes, not this one's. Giving extras, taking them back or a teammate leaving
+    (their extras are dropped with the grant) reopens their channel with the new scopes. The same dialog's Give full
+    access to <machine> is Give machine access below.
   - **Ending at once.** Every change to remote access, the team list or a project's teams checks each team device
     again (`Remote.#syncTeamAccess`): leaving or being removed, losing the team key, the team removed or the project
     taken out drops the grant, removes the device and closes its channel; narrower scopes close its channel, and the

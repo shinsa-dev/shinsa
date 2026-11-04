@@ -371,6 +371,8 @@ export const TeamScopesBody = Schema.Struct({
   scopes: Schema.NullOr(AccessScopes),
 });
 
+export const TeamExtraBody = Schema.Struct({ teamId: FilledText, userId: FilledText, scopes: AccessScopes });
+
 export const ProjectPathBody = Schema.Struct({ path: LoosePath });
 
 export const ServiceRunBody = Schema.Struct({ taskId: Field });

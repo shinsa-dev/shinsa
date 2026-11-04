@@ -35,6 +35,7 @@ const OWNED: RemoteTeamEntry = {
   onMachine: true,
   invite: true,
   team: PLATFORM,
+  extras: [],
 };
 
 const JOINED: RemoteTeamEntry = {
@@ -44,6 +45,7 @@ const JOINED: RemoteTeamEntry = {
   onMachine: false,
   invite: false,
   team: { ...PLATFORM, id: 'team2', name: 'Growth', owner: KAI, role: 'member', members: [], requests: [] },
+  extras: [],
 };
 
 const ASKED: RemoteTeamEntry = {
@@ -53,6 +55,7 @@ const ASKED: RemoteTeamEntry = {
   onMachine: true,
   invite: false,
   team: null,
+  extras: [],
 };
 
 function createSnapshot(teams: RemoteTeamEntry[], paired = true) {

@@ -9,6 +9,7 @@ import {
   createTeamHello,
   decodeText,
   deriveTeamSessionKey,
+  mergeScopes,
   parseShareMessage,
   parseShareWelcome,
   REMOTE_PATHS,
@@ -503,7 +504,7 @@ describe('making and joining teams', () => {
       resolveTeamJoinUrl({ teamId: 'team2', invite: 'invite-2', key }, plane.origin)
     );
     expect(remote.snapshot().teams).toEqual([
-      { id: 'team2', name: 'Growth', status: 'member', onMachine: true, invite: true, team },
+      { id: 'team2', name: 'Growth', status: 'member', onMachine: true, invite: true, team, extras: [] },
     ]);
     expect(JSON.stringify(remote.snapshot())).not.toContain(key);
     expect(readFileSync(path, 'utf8')).toContain(key);
@@ -530,7 +531,7 @@ describe('making and joining teams', () => {
     expect(await teams.join(url)).toEqual({ status: 'requested', teamId: 'team1' });
     expect(plane.calls.at(-1)?.body).toEqual({ invite: 'invite-1' });
     expect(remote.snapshot().teams).toEqual([
-      { id: 'team1', name: 'Platform', status: 'requested', onMachine: true, invite: false, team: null },
+      { id: 'team1', name: 'Platform', status: 'requested', onMachine: true, invite: false, team: null, extras: [] },
     ]);
     plane.answers.set(REMOTE_PATHS.machineTeamJoin, () =>
       Response.json({ teamId: 'team1', name: 'Platform', owner: MONA, status: 'member' })
@@ -948,6 +949,37 @@ describe('team access to this machine', () => {
     expect(kai.closedWith()).toBe('Remote access to this machine changed.');
     const back = await enter(remote, KAI.id, secret);
     expect((await back.ask('r2'))?.scope).toMatchObject({ scopes: ACCESS_PRESETS.standard });
+  });
+
+  test('this machine’s owner gives a teammate more here, which reopens their channel with it', async () => {
+    const { remote, teams } = setUp();
+    remote.store.recordTeams([createTeam({ scopes: ACCESS_PRESETS.collaborate })]);
+    const secret = remote.resolveTeamGrant(KAI.id, 'team1') ?? '';
+    const kai = await enter(remote, KAI.id, secret);
+    await kai.ask('r1');
+    teams.updateExtra('team1', KAI.id, ['message', 'fork', 'identity']);
+    expect(remote.snapshot().teams[0]?.extras).toEqual([{ userId: KAI.id, scopes: ['message'] }]);
+    expect(kai.closedWith()).toBe('Remote access to this machine changed.');
+    const back = await enter(remote, KAI.id, secret);
+    const scopes = (await back.ask('r2'))?.scope;
+    expect(scopes).toMatchObject({ scopes: mergeScopes(ACCESS_PRESETS.collaborate, ['message']) });
+    teams.updateExtra('team1', KAI.id, []);
+    expect(remote.snapshot().teams[0]?.extras).toEqual([]);
+  });
+
+  test('refuses extra scopes for someone not in the team, for itself, and in a team it is not in', () => {
+    const { teams } = setUp();
+    expect(() => teams.updateExtra('team1', BOB.id, ['message'])).toThrow('No one with that account');
+    expect(() => teams.updateExtra('team1', MONA.id, ['message'])).toThrow('No one with that account');
+    expect(() => teams.updateExtra('team9', KAI.id, ['message'])).toThrow('not in that team');
+  });
+
+  test('a teammate who leaves loses what this machine gave them', () => {
+    const { remote, teams } = setUp();
+    teams.updateExtra('team1', KAI.id, ['message']);
+    remote.store.recordTeams([createTeam({ members: [] })]);
+    remote.publish();
+    expect(remote.store.file.extras).toEqual([]);
   });
 
   test('leaving the team ends their access at once: the grant, the device and the open channel', async () => {

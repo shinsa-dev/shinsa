@@ -288,6 +288,9 @@ export type {
 export {
   DEFAULT_TEAM_SCOPES,
   isTeamPerson,
+  listMachineExtraScopes,
+  MACHINE_EXTRA_SCOPES,
+  mergeScopes,
   resolveMemberScopes,
   createTeamHello,
   createTeamWelcome,

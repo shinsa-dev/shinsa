@@ -115,6 +115,7 @@ export function createSampleTeams(now: number) {
               onMachine: true,
               invite: true,
               team: platform,
+              extras: [],
             },
             {
               id: paywalls.id,
@@ -123,8 +124,9 @@ export function createSampleTeams(now: number) {
               onMachine: true,
               invite: false,
               team: paywalls,
+              extras: [],
             },
-            { id: 'tm2z7c', name: 'Mobile', status: 'requested', onMachine: true, invite: false, team: null },
+            { id: 'tm2z7c', name: 'Mobile', status: 'requested', onMachine: true, invite: false, team: null, extras: [] },
           ],
         },
       },
@@ -152,6 +154,7 @@ export function createSampleTeamActions(): TeamActions {
     remove: refuse,
     grantAccess: refuse,
     updateScopes: refuse,
+    updateExtra: refuse,
   };
 }
 

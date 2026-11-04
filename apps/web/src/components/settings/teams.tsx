@@ -28,7 +28,7 @@ import { MentionText } from '@/components/people/user-tag.tsx';
 import { LoadingLine } from '@/components/status/loading-line.tsx';
 import { NewTeamDialog } from '@/components/teams/new-team-dialog.tsx';
 import { ProjectsSelect } from '@/components/teams/projects-select.tsx';
-import { MemberScopesDialog, TeamScopesBlock } from '@/components/teams/scopes.tsx';
+import { MachineExtraDialog, MemberScopesDialog, TeamScopesBlock } from '@/components/teams/scopes.tsx';
 import { useNow } from '@/hooks/use-now.ts';
 import { useTeamPresence } from '@/hooks/use-team-presence.ts';
 import { confirmDone, requestWithToast } from '@/lib/connection/commands.ts';
@@ -41,7 +41,7 @@ import { describeMemberSince } from '@/lib/remote-access.ts';
 import { MACHINE_ICON } from '@/lib/remote/mode.ts';
 import { resolveFirstName } from '@/lib/remote/users.ts';
 import { describePresence } from '@/lib/teams/presence.ts';
-import { hasOwnScopes } from '@/lib/teams/scopes.ts';
+import { hasOwnScopes, selectExtra } from '@/lib/teams/scopes.ts';
 import {
   canUseTeams,
   describePeopleCount,
@@ -85,6 +85,7 @@ type TeamsDialog =
   | { kind: 'delete'; entry: RemoteTeamEntry }
   | { kind: 'member'; team: RemoteTeam; user: RemoteUser }
   | { kind: 'scopes'; teamId: string; user: RemoteUser }
+  | { kind: 'extra'; teamId: string; user: RemoteUser; machine: GrantMachine }
   | { kind: 'grant'; team: RemoteTeam; user: RemoteUser; machine: GrantMachine };
 
 function TeamLinkDialog({
@@ -351,10 +352,15 @@ function TeammateActions({
           size='sm'
           icon={MACHINE_ICON}
           onClick={() =>
-            onDialog({ kind: 'grant', team, user, machine: { id: machineId, name: snapshot.machineName } })
+            onDialog({
+              kind: 'extra',
+              teamId: team.id,
+              user,
+              machine: { id: machineId, name: snapshot.machineName },
+            })
           }
         >
-          Give machine access
+          {`On ${snapshot.machineName}`}
         </Button>
       )}
       {team.role === 'owner' && (
@@ -376,6 +382,8 @@ function describePerson(
 ) {
   const parts = [presence ? describePresence(presence, now) : null, base];
   if (hasOwnScopes(team, user.id)) parts.push('Own scopes');
+  const extra = snapshot.teams.find((entry) => entry.id === team.id)?.extras ?? [];
+  if (selectExtra(extra, user.id).length > 0) parts.push(`More on ${snapshot.machineName}`);
   if (hasMachineAccess(snapshot, user.id)) parts.push(`Can reach ${snapshot.machineName}`);
   return parts.filter((part) => part !== null).join(' · ');
 }
@@ -577,6 +585,22 @@ function TeamsDialogs({
           actions={actions}
         />
       );
+    case 'extra': {
+      const entry = snapshot?.teams.find((found) => found.id === value.teamId);
+      if (!(entry?.team && snapshot)) return null;
+      const team = entry.team;
+      return (
+        <MachineExtraDialog
+          control={control}
+          team={team}
+          user={value.user}
+          extra={selectExtra(entry.extras, value.user.id)}
+          machineName={snapshot.machineName}
+          onUpdate={actions.updateExtra}
+          onFullAccess={() => onDialog({ kind: 'grant', team, user: value.user, machine: value.machine })}
+        />
+      );
+    }
     case 'scopes': {
       const team = snapshot?.teams.find((entry) => entry.id === value.teamId)?.team;
       if (!team) return null;

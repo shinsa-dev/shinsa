@@ -8,6 +8,8 @@ import {
   isTeamPerson,
   mergeTeamPresence,
   resolveTeamPresence,
+  listMachineExtraScopes,
+  mergeScopes,
   resolveMemberScopes,
   createTeamHello,
   createTeamWelcome,
@@ -203,6 +205,16 @@ describe('DEFAULT_TEAM_SCOPES', () => {
   test('is the Collaborate preset: the standard view and every action but messaging agents', () => {
     expect(DEFAULT_TEAM_SCOPES).toEqual(ACCESS_PRESETS.collaborate);
     expect(listActionScopes(DEFAULT_TEAM_SCOPES)).toEqual(['gates', 'actions', 'fork', 'share', 'services']);
+  });
+});
+
+describe('a machine’s extra scopes for a teammate', () => {
+  test('keep only what that machine enforces, so fork stays the team’s', () => {
+    expect(listMachineExtraScopes(['identity', 'message', 'fork', 'share'])).toEqual(['message', 'share']);
+  });
+
+  test('add to the team’s scopes in one order, without repeats', () => {
+    expect(mergeScopes(['gates', 'actions'], ['message', 'gates'])).toEqual(['gates', 'actions', 'message']);
   });
 });
 

@@ -46,6 +46,13 @@ export interface RemoteFile {
   teams: RemoteTeam[];
   teamKeys: StoredTeamKey[];
   grants: TeamGrant[];
+  extras: TeammateExtra[];
+}
+
+export interface TeammateExtra {
+  teamId: string;
+  userId: string;
+  scopes: AccessScope[];
 }
 
 export interface StoredHandoff extends StoredLink {
@@ -250,7 +257,20 @@ function readGrants(value: unknown): TeamGrant[] {
   });
 }
 
-function isSameGrant(grant: TeamGrant, other: Pick<TeamGrant, 'userId' | 'teamId'>) {
+function readExtras(value: unknown): TeammateExtra[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((entry) => {
+    const scopes = isFields(entry) ? readScopes(entry.scopes) : null;
+    if (!(isFields(entry) && typeof entry.userId === 'string' && typeof entry.teamId === 'string' && scopes))
+      return [];
+    return [{ teamId: entry.teamId, userId: entry.userId, scopes }];
+  });
+}
+
+function isSameGrant(
+  grant: Pick<TeamGrant, 'userId' | 'teamId'>,
+  other: Pick<TeamGrant, 'userId' | 'teamId'>
+) {
   return grant.userId === other.userId && grant.teamId === other.teamId;
 }
 
@@ -263,6 +283,9 @@ export function listTeamEntries(file: RemoteFile): RemoteTeamEntry[] {
     onMachine: keys.has(team.id),
     invite: team.role === 'owner' && Boolean(keys.get(team.id)?.invite),
     team,
+    extras: file.extras
+      .filter((extra) => extra.teamId === team.id)
+      .map(({ userId, scopes }) => ({ userId, scopes })),
   }));
   const asked = file.teamKeys
     .filter((stored) => !file.teams.some((team) => team.id === stored.teamId))
@@ -273,6 +296,7 @@ export function listTeamEntries(file: RemoteFile): RemoteTeamEntry[] {
       onMachine: true,
       invite: false,
       team: null,
+      extras: [],
     }));
   return [...known, ...asked];
 }
@@ -306,6 +330,7 @@ function createRemoteFile(): RemoteFile {
     teams: [],
     teamKeys: [],
     grants: [],
+    extras: [],
   };
 }
 
@@ -333,6 +358,7 @@ export function readRemoteFile(path: string): RemoteFile {
     teams: readTeams(fields.teams) ?? [],
     teamKeys: readTeamKeys(fields.teamKeys),
     grants: readGrants(fields.grants),
+    extras: readExtras(fields.extras),
   };
 }
 
@@ -479,6 +505,20 @@ export class RemoteStore {
   removeGrantsWhere(match: (grant: TeamGrant) => boolean) {
     if (!this.#file.grants.some(match)) return;
     this.update((file) => ({ ...file, grants: file.grants.filter((grant) => !match(grant)) }));
+  }
+
+  selectExtra(userId: string, teamId: string) {
+    return this.#file.extras.find((extra) => isSameGrant(extra, { userId, teamId })) ?? null;
+  }
+
+  writeExtra(extra: TeammateExtra) {
+    const others = this.#file.extras.filter((entry) => !isSameGrant(entry, extra));
+    this.update((file) => ({ ...file, extras: extra.scopes.length > 0 ? [...others, extra] : others }));
+  }
+
+  removeExtrasWhere(match: (extra: TeammateExtra) => boolean) {
+    if (!this.#file.extras.some(match)) return;
+    this.update((file) => ({ ...file, extras: file.extras.filter((extra) => !match(extra)) }));
   }
 
   removeTeam(teamId: string) {

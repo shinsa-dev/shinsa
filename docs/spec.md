@@ -450,6 +450,8 @@ by itself, with no invite and no Give machine access, and sees nothing outside t
 sets What teammates can do in Settings → Teams, for the team and for each person: a preset (View only, Collaborate,
 Full access) over six scopes, answering gates, acting on tasks, messaging agents, forking, sharing and opening
 services. Collaborate is the default: everything but messaging agents. Share links use the same scopes and presets.
+That is the floor every teammate gets on every machine; each machine's owner may give one teammate more on their own
+machine (On <machine> beside them in People), or full access to it, and nothing they give can take the team's away.
 You hand a task to a teammate from Share task → Hand off with no link: it is theirs to steer, its gates in their
 Needs you, until they give it back or you take it back. They open a team task's running services at its private
 address, fork it onto their own machine and make share links for it. Every person and machine shows Online, Away or
@@ -1202,6 +1204,8 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
   accepts or declines it in Settings → Teams, and a member leaves or is removed there, which ends their access at
   once. Asking to join asks which of your projects to share first, from every machine the browser reaches, so none
   is forgotten. Which projects a team sees is yours alone: no agent can add one.
+- **More on your own machine.** The team's owner sets the floor for everyone; on your own machine you can add
+  scopes for one teammate, such as messaging agents, without changing the team, and only for that machine.
 - **A teammate is one click from your machine.** Give machine access beside a teammate makes them a member of this
   machine, with full control, without an invite or a request; their browser adds itself with the team's key the next
   time they open Shinsa Cloud. You take it back under Remote access, like any member.

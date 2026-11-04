@@ -59,6 +59,9 @@ export const TeamsHandlers = HttpApiBuilder.group(
       .handle('scopes', ({ payload }) =>
         change((found) => found.updateScopes(payload.teamId, payload.userId ?? null, payload.scopes))
       )
+      .handle('extra', ({ payload }) =>
+        change((found) => Promise.resolve(found.updateExtra(payload.teamId, payload.userId, payload.scopes)))
+      )
       .handle('keys', () => Effect.map(teams, (found) => ({ keys: found.listKeys() })))
       .handle('leave', ({ payload }) => change((found) => found.leave(payload.teamId)))
       .handle('remove', ({ payload }) => change((found) => found.remove(payload.teamId)))

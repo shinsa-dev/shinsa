@@ -5,6 +5,7 @@ import {
   deriveTeamSessionKey,
   isTeamPerson,
   isTeamTask,
+  listMachineExtraScopes,
   listTeamProjectIds,
   listTeamTasks,
   parseTeamHello,
@@ -323,6 +324,13 @@ export class Teams implements TeamLinks {
       NotFound: userId === null ? TEAM_GONE : MEMBER_NOT_FOUND,
     });
     this.#replaceTeam(answer);
+  }
+
+  updateExtra(teamId: string, userId: string, scopes: AccessScopes) {
+    const team = this.#findTeam(teamId);
+    if (!isTeamPerson(team, userId) || this.#remote.isOwner(userId)) throw MEMBER_NOT_FOUND;
+    this.#store.writeExtra({ teamId, userId, scopes: [...listMachineExtraScopes(scopes)] });
+    this.#remote.publish();
   }
 
   async leave(teamId: string) {

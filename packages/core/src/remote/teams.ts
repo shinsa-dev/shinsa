@@ -1,7 +1,7 @@
 import { isRecord, parseJsonRecord } from '../domain/records.ts';
 import { DAY_MS } from '../domain/time.ts';
 import { ACCESS_PRESETS } from '../scopes/index.ts';
-import { ACCESS_SCOPES, type AccessScopes } from '../scopes/schema.ts';
+import { ACCESS_SCOPES, ACTION_SCOPES, type AccessScopes, type ActionScope } from '../scopes/schema.ts';
 import type { TeamTask } from '../share/teams.ts';
 import { encodeText, hasBytes, parseBase64Url, serializeBase64Url, URL_SAFE_SEGMENT } from './bytes.ts';
 import {
@@ -49,6 +49,16 @@ export function resolveMemberScopes(
 ): AccessScopes {
   if (team.owner.id === userId) return ACCESS_SCOPES;
   return team.overrides.find((entry) => entry.userId === userId)?.scopes ?? team.scopes;
+}
+
+export const MACHINE_EXTRA_SCOPES: readonly ActionScope[] = ACTION_SCOPES.filter((scope) => scope !== 'fork');
+
+export function listMachineExtraScopes(scopes: AccessScopes): AccessScopes {
+  return MACHINE_EXTRA_SCOPES.filter((scope) => scopes.includes(scope));
+}
+
+export function mergeScopes(base: AccessScopes, extra: AccessScopes): AccessScopes {
+  return ACCESS_SCOPES.filter((scope) => base.includes(scope) || extra.includes(scope));
 }
 
 export interface TeamJoinFragment {

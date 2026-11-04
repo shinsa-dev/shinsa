@@ -96,6 +96,7 @@ describe('remote.json', () => {
       teams: [],
       teamKeys: [],
       grants: [{ userId: '7', teamId: 't1', secret: 'g1' }],
+      extras: [],
       machine: { publicKey: 'p', privateKey: 'k' },
       signing: null,
       credentials: CREDENTIALS,

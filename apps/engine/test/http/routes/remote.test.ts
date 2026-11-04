@@ -62,6 +62,7 @@ function createTeams() {
     leave: record('leave', Promise.resolve()),
     remove: record('remove', Promise.resolve()),
     updateScopes: record('updateScopes', Promise.resolve()),
+    updateExtra: record('updateExtra', undefined),
     listKeys: () => [{ teamId: 't', name: 'Core', key: 'k' }],
   };
   return { calls, teams: teams as unknown as Teams };
@@ -179,6 +180,8 @@ describe('teams over HTTP', () => {
     const narrow = { teamId: 't', scopes: ['share'] };
     expect(await (await post('/api/remote/teams/scopes', narrow)).json()).toEqual(SNAPSHOT);
     await post('/api/remote/teams/scopes', { ...narrow, userId: 'u', scopes: null });
+    const extra = { teamId: 't', userId: 'u', scopes: ['message'] };
+    expect(await (await post('/api/remote/teams/extra', extra)).json()).toEqual(SNAPSHOT);
     expect(await (await send('/api/remote/teams/keys')).json()).toEqual({
       keys: [{ teamId: 't', name: 'Core', key: 'k' }],
     });
@@ -194,6 +197,7 @@ describe('teams over HTTP', () => {
       ['removeMember', 't', 'u'],
       ['updateScopes', 't', null, ['share']],
       ['updateScopes', 't', 'u', null],
+      ['updateExtra', 't', 'u', ['message']],
     ]);
   });
 

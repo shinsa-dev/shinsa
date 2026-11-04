@@ -27,8 +27,10 @@ import { requestWithToast } from '@/lib/connection/commands.ts';
 import { createDisclosureId } from '@/lib/preferences/disclosure.ts';
 import { resolveFirstName } from '@/lib/remote/users.ts';
 import {
+  describeExtraHint,
   describeScopesOwner,
   describeScopesSummary,
+  listExtraRows,
   listMemberItems,
   listPresetItems,
   type MemberScopeChoice,
@@ -205,5 +207,80 @@ export function MemberScopesDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+export function MachineExtraDialog({
+  control,
+  team,
+  user,
+  extra,
+  machineName,
+  onUpdate,
+  onFullAccess,
+}: {
+  control: DialogControl;
+  team: RemoteTeam;
+  user: RemoteUser;
+  extra: AccessScopes;
+  machineName: string;
+  onUpdate: (teamId: string, userId: string, scopes: AccessScopes) => Promise<unknown>;
+  onFullAccess: () => void;
+}) {
+  const name = resolveFirstName(user);
+  const rows = listExtraRows(team, extra, user.id);
+  const update = (scope: ActionScope, on: boolean) =>
+    void requestWithToast(() => onUpdate(team.id, user.id, toggleScope(extra, scope, on)));
+  return (
+    <Dialog {...control}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{`What ${name} can do on ${machineName}`}</DialogTitle>
+          <DialogDescription>
+            {`${name} has what ${team.name} gives every teammate. Tick more to give it to ${name} on ${machineName} only, for this team's tasks.`}
+          </DialogDescription>
+        </DialogHeader>
+        <div className='-mx-2 grid grid-cols-1 gap-x-4 gap-y-2 px-3 py-2 sm:grid-cols-2'>
+          {rows.map((row) => (
+            <ExtraCheck key={row.scope} row={row} name={name} onToggle={update} />
+          ))}
+        </div>
+        <DialogFooter>
+          <Button variant='secondary' onClick={onFullAccess}>
+            {`Give full access to ${machineName}`}
+          </Button>
+          <DialogClose render={<Button />}>Done</DialogClose>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function ExtraCheck({
+  row,
+  name,
+  onToggle,
+}: {
+  row: ReturnType<typeof listExtraRows>[number];
+  name: string;
+  onToggle: (scope: ActionScope, on: boolean) => void;
+}) {
+  const id = React.useId();
+  return (
+    <div className='flex min-w-0 items-start gap-2'>
+      <Checkbox
+        id={id}
+        size='sm'
+        className='mt-px'
+        checked={row.on}
+        disabled={row.locked}
+        aria-label={`${SCOPE_ROWS[row.scope].title} for ${name}`}
+        onCheckedChange={(next) => onToggle(row.scope, next)}
+      />
+      <label htmlFor={id} className='flex min-w-0 flex-col gap-px'>
+        <span className='text-xs text-fg-4'>{SCOPE_ROWS[row.scope].title}</span>
+        <span className='text-2xs text-pretty text-fg-2'>{describeExtraHint(row)}</span>
+      </label>
+    </div>
   );
 }

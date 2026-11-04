@@ -23,6 +23,7 @@ import {
   resolveClaimUrl,
   resolveEnrollUrl,
   hasScope,
+  mergeScopes,
   resolveMemberScopes,
   resolveRemoteHookUrl,
   serializeBase64Url,
@@ -502,7 +503,8 @@ export class Remote {
   resolveTeamScope(userId: string, teamId: string): TeamScope | null {
     const team = this.#selectTeamAccess(userId, teamId);
     if (!team) return null;
-    return { kind: 'team', teamId: team.id, scopes: resolveMemberScopes(team, userId) };
+    const extra = this.store.selectExtra(userId, team.id)?.scopes ?? [];
+    return { kind: 'team', teamId: team.id, scopes: mergeScopes(resolveMemberScopes(team, userId), extra) };
   }
 
   listTeamScopes(userId: string) {
@@ -528,6 +530,7 @@ export class Remote {
   #syncTeamAccess() {
     const outside = (userId: string, teamId: string) => !this.#selectTeamAccess(userId, teamId);
     this.store.removeGrantsWhere((grant) => outside(grant.userId, grant.teamId));
+    this.store.removeExtrasWhere((extra) => outside(extra.userId, extra.teamId));
     const removed = new Set(
       this.store.removeDevicesWhere(
         (device) => device.teamId != null && outside(device.userId, device.teamId)

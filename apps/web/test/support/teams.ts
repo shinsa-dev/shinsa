@@ -33,6 +33,7 @@ export function createTeamEntry(overrides: Partial<RemoteTeamEntry> = {}): Remot
     onMachine: true,
     invite: true,
     team,
+    extras: [],
     ...overrides,
   };
 }
