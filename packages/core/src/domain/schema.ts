@@ -106,6 +106,7 @@ export const SettingsPatch = Strict(
     agentFastModes: Schema.optionalKey(RoleMap('agentFastModes', AGENT_ROLES, Bool)),
     taskBudgetUsd: Schema.optionalKey(OrNull(FiniteNumber, FIELD_MESSAGES.number)),
     taskUsageLimit: Schema.optionalKey(OrNull(WholeNumber, FIELD_MESSAGES.wholeNumber)),
+    dailyUsageLimit: Schema.optionalKey(OrNull(FiniteNumber, FIELD_MESSAGES.number)),
     autoResume: Schema.optionalKey(Bool),
     snoozeLimited: Schema.optionalKey(Bool),
     accountSwitchAt: Schema.optionalKey(WholeNumber),

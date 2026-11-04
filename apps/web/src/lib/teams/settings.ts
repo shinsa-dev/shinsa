@@ -20,7 +20,7 @@ export const TEAMS_DESCRIPTION =
   'Teammates see every task in the projects you share with a team, live and read-only: its plan, review, evidence and code, never its chat. You choose the projects, and only you.';
 
 export const TEAM_LINK_COPY =
-  'Share this link with your teammates. Whoever opens it signs in with GitHub and asks to join, which you accept or decline here. It holds the team’s key, so send it only to people you would add.';
+  'Whoever opens it asks to join, which you accept here. It holds the team’s key, so share it only with people you’d add.';
 
 export interface ProjectChoice {
   id: string;

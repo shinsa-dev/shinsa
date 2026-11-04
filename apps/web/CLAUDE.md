@@ -78,7 +78,7 @@ src/
 │                        new task, recently finished and recent conversations), tasks, settings (one file per
 │                        section, group.tsx the shared rows, SettingsBlock, FoldingBlock and TOKEN_TEXT;
 │                        projects.tsx with project-block.tsx, project-menu.tsx, workspace-select.tsx (where agents work) and baseline-select.tsx (Always run before review);
-│                        accounts.tsx is the Agent usage tab's Accounts card, with usage.tsx's windows, providers.tsx's
+│                        accounts.tsx is the Agent usage tab's Accounts card, forecast.tsx its Forecast, with usage.tsx's windows and Limits, providers.tsx's
 │                        Codex block and usage-account.tsx, the one block every provider's account renders in;
 │                        integrations.tsx reads the extensions for the search, slack.tsx (General, right under
 │                        Remote access, and below Machines on app.shinsa.dev: the status, Connect Slack, each
@@ -240,7 +240,8 @@ src/
     │                    an account's status and header, the glance at the account the server picks next and
     │                    which row it marks), limits.ts (switch thresholds, the Limits settings), providers.ts (a
     │                    provider's sign-in block: its header, state, the fix, the sign-in command), sign-in.ts (resolveSignInProvider: the Sign in gate's provider),
-    │                    usage-wait.ts, recheck.ts (createUsageRecheck: one read at a time, on open and every
+    │                    usage-wait.ts (a usage wait's words, a pace hold's included), forecast.ts (the usage
+    │                    forecast per provider, its lanes, days and words), recheck.ts (createUsageRecheck: one read at a time, on open and every
     │                    60 s while watched and the page is visible)
     ├── chat/            attachment-drafts.ts (the files a composer holds until you send: the 10-file and 25 MB
     │                    limits, what is ready, whether it can send), task-drafts.ts (one draft per task, in memory: the

@@ -84,7 +84,7 @@ describe('remote access words', () => {
   });
 
   it('says what the one link does', () => {
-    expect(LINK_COPY.intro).toContain('your own devices and for other people');
+    expect(LINK_COPY.intro).toContain('Nothing opens until you accept.');
     expect(LINK_COPY.share).toContain('The link works until you turn it off.');
   });
 

@@ -17,7 +17,7 @@ import {
 import { isPlacementPoliciesValid } from '../remote/placement.ts';
 import { PLACEMENT_POLICY_LIMITS } from '../remote/schema.ts';
 import { findProject, findRepo } from '../state/queries.ts';
-import { releaseBudgetHolds } from './costs.ts';
+import { releaseBudgetHolds, releasePaceHolds } from './costs.ts';
 import type { Decider } from './decider.ts';
 import { isSameValue } from './equality.ts';
 import { removeProjectMemory } from './memory.ts';
@@ -79,6 +79,33 @@ function assertSettings(patch: Partial<Settings>) {
   if (usage !== undefined && usage !== null && !isWholeBetween(usage, 1, 100)) {
     throw new DomainError({ code: 'settings_invalid', message: 'The usage limit must be 1 to 100%.' });
   }
+  if (!isPaceLimit(patch.dailyUsageLimit)) {
+    throw new DomainError({ code: 'settings_invalid', message: 'The daily usage limit must be above zero.' });
+  }
+}
+
+function isPaceLimit(limit: number | null | undefined) {
+  return limit === undefined || limit === null || (Number.isFinite(limit) && limit > 0);
+}
+
+function resolveProjectUsageLimit(
+  decider: Decider,
+  command: CommandOf<'project.write'>,
+  existing: Project | undefined
+) {
+  const asked = command.project.usageLimit;
+  const kept = existing?.usageLimit ?? null;
+  if (asked === undefined || asked === kept) return kept;
+  if (decider.context.onBehalf) {
+    throw new DomainError({
+      code: 'human_only',
+      message: 'Only the human changes a project’s usage limit. Tell them what you would change and why.',
+    });
+  }
+  if (!isPaceLimit(asked)) {
+    throw new DomainError({ code: 'project_invalid', message: 'The usage limit must be above zero.' });
+  }
+  return asked;
 }
 
 const WATCHDOG_SETTING_RULES = [
@@ -237,6 +264,7 @@ export function writeProject(decider: Decider, command: CommandOf<'project.write
     });
   }
   const id = existing?.id ?? decider.context.newId();
+  const usageLimit = resolveProjectUsageLimit(decider, command, existing);
   const folders = readFolders(command.project.folders ?? existing?.folders ?? []);
   assertFoldersFree(decider, id, folders);
   const project: Project = {
@@ -248,10 +276,12 @@ export function writeProject(decider: Decider, command: CommandOf<'project.write
     folders,
     ...(existing?.watchSources ? { watchSources: existing.watchSources } : {}),
     ...(existing?.teamIds ? { teamIds: existing.teamIds } : {}),
+    ...(usageLimit === null ? {} : { usageLimit }),
   };
   if (existing && isSameValue(project, existing)) return;
   decider.emit({ type: 'project.written', project });
   moveReposIntoFolders(decider, project);
+  releasePaceHolds(decider);
 }
 
 export function removeProject(decider: Decider, command: CommandOf<'project.remove'>) {
@@ -307,4 +337,5 @@ export function changeSettings(decider: Decider, command: CommandOf<'settings.ch
   if (isSameValue(settings, decider.state.settings)) return;
   decider.emit({ type: 'settings.changed', settings });
   releaseBudgetHolds(decider);
+  releasePaceHolds(decider);
 }

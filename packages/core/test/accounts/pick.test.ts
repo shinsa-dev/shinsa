@@ -120,6 +120,34 @@ describe('picking an account', () => {
     });
   });
 
+  test('past the threshold the account whose weekly limit resets soonest takes over, so what it has left is not lost', () => {
+    const weekly = (used: number, resetsIn: number | null) =>
+      createUsage([
+        {
+          id: 'weekly',
+          kind: 'weekly',
+          label: 'Weekly',
+          usedPercent: used,
+          resetsAt: resetsIn === null ? null : NOW + resetsIn,
+        },
+      ]);
+    const accounts = [
+      createCandidate('a', { isDefault: true, usage: weekly(95, 1_000) }),
+      createCandidate('late', { usage: weekly(10, 90_000) }),
+      createCandidate('soon', { usage: weekly(60, 15_000) }),
+      createCandidate('unknown', { usage: weekly(0, null) }),
+    ];
+    expect(pickAccount(createRequest(accounts, { previous: 'a' }))).toMatchObject({
+      account: { id: 'soon' },
+      reason: 'headroom',
+    });
+    const noReset = [
+      createCandidate('x', { usage: weekly(50, null) }),
+      createCandidate('y', { usage: weekly(10, null) }),
+    ];
+    expect(pickAccount(createRequest(noReset))?.account.id).toBe('y');
+  });
+
   test('accounts with known headroom rank before unknown ones, and equal ones keep their order', () => {
     const unknownFirst = [createCandidate('x'), createCandidate('y', {}, 30), createCandidate('z', {}, 30)];
     expect(pickAccount(createRequest(unknownFirst))?.account.id).toBe('y');

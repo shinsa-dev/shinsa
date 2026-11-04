@@ -58,7 +58,7 @@ export const ClientMessage = Schema.Union([
 
 export type ParsedClientMessage = typeof ClientMessage.Type;
 
-export type WireRun = Omit<Run, 'prompt' | 'rolePrompt'> & { fixFocus?: FixFocus };
+export type WireRun = Omit<Run, 'prompt' | 'rolePrompt' | 'told'> & { fixFocus?: FixFocus };
 
 export type WireTask = Task & { summarized?: true };
 

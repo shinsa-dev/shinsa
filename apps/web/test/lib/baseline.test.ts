@@ -31,7 +31,7 @@ describe('what always runs before review', () => {
       ['commands', 'Commands before review…'],
     ]);
     expect(listBaselineItems(two)[1]?.label).toBe('2 commands before review');
-    expect(BASELINE_DIALOG.description).toContain('Leave it empty and nothing extra runs.');
+    expect(BASELINE_DIALOG.description).toContain('Leave it empty to run nothing extra.');
   });
 
   it('reads one command per line, trimmed, without blanks or repeats, and refuses a long or crowded list', () => {

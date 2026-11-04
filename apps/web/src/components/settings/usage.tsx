@@ -19,15 +19,20 @@ import {
 } from '@/lib/accounts/limits.ts';
 import { describeUsageDetail, listUsageRows, type UsageRow } from '@/lib/accounts/usage.ts';
 import { useAccounts } from '@/lib/connection/accounts.ts';
+import { useEngineFeature } from '@/lib/connection/socket.ts';
 import {
   COST_LIMIT_TITLE,
+  DAILY_LIMIT_TITLE,
+  describeDailyLimitNote,
   describeUsageLimitNote,
+  listDailyLimitItems,
   listBudgetItems,
   listUsageLimitItems,
   needsCostLimit,
   parseBudget,
   parseUsageLimit,
   resolveBudgetValue,
+  resolveDailyLimitValue,
   resolveUsageLimitValue,
   USAGE_LIMIT_TITLE,
   updateSettings,
@@ -93,14 +98,29 @@ function SwitchAtField({ settings }: { settings: Settings }) {
 export function LimitSettings({
   settings,
   rates,
+  recentUsage,
 }: {
   settings: Settings;
   rates: Map<string, UsageRate | null> | null;
+  recentUsage: number;
 }) {
   const accounts = useAccounts()?.accounts ?? null;
   const note = describeUsageLimitNote(settings, accounts, rates);
+  const dailyNote = describeDailyLimitNote(settings, recentUsage);
+  const paced = useEngineFeature('usage.pace_limits');
   return (
     <SettingsGroup title='Limits'>
+      {paced && (
+        <SettingRow title={DAILY_LIMIT_TITLE}>
+          <SelectField
+            label={DAILY_LIMIT_TITLE}
+            items={listDailyLimitItems(settings)}
+            value={resolveDailyLimitValue(settings)}
+            onValueChange={(value) => void updateSettings({ dailyUsageLimit: parseUsageLimit(value) })}
+          />
+        </SettingRow>
+      )}
+      {paced && dailyNote && <SettingsEmpty>{dailyNote}</SettingsEmpty>}
       <SettingRow title={USAGE_LIMIT_TITLE}>
         <SelectField
           label={USAGE_LIMIT_TITLE}

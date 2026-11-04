@@ -8,9 +8,9 @@ import {
   TOAST_UNCHECKED_MESSAGE,
 } from './lint-rules.ts';
 
-type Text = { file: string; line: number; length: number | null };
+export type Text = { file: string; line: number; length: number | null };
 
-type Source = {
+export type Source = {
   file: string;
   program: AstNode;
   constants: Map<string, AstNode>;
@@ -21,7 +21,7 @@ type Definition = { source: Source; params: string[]; returns: AstNode[] };
 
 type Exported = { source: Source; value: AstNode };
 
-type Index = { definitions: Map<string, Definition[]>; exported: Map<string, Exported[]> };
+export type Index = { definitions: Map<string, Definition[]>; exported: Map<string, Exported[]> };
 
 type Context = Index & { source: Source; seen: Set<AstNode> };
 
@@ -99,7 +99,7 @@ function readFunction(node: AstNode): [string, AstNode] | null {
   return name && fn && FUNCTION_TYPES.has(fn.type) ? [name, fn] : null;
 }
 
-function readSource(file: string, text: string): Source {
+export function readSource(file: string, text: string): Source {
   const program = parse(text, { sourceType: 'module', plugins: ['typescript', 'jsx'] })
     .program as unknown as AstNode;
   const constants = new Map<string, AstNode>();
@@ -124,7 +124,7 @@ function readSource(file: string, text: string): Source {
   return { file, program, constants, imports };
 }
 
-function indexSources(sources: Source[]): Index {
+export function indexSources(sources: Source[]): Index {
   const definitions = new Map<string, Definition[]>();
   const exported = new Map<string, Exported[]>();
   for (const source of sources) {
@@ -212,7 +212,7 @@ function resolveFound(found: Exported[], context: Context) {
   return found.flatMap(({ source, value }) => resolveTexts(value, { ...context, source }));
 }
 
-function resolveTexts(node: AstNode | null, context: Context): Text[] {
+export function resolveTexts(node: AstNode | null, context: Context): Text[] {
   if (!node || context.seen.has(node)) return [];
   context.seen.add(node);
   const at = { file: context.source.file, line: node.loc?.start.line ?? 0 };

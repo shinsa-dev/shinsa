@@ -6,7 +6,7 @@ import { createSignal } from '@/lib/signal.ts';
 export const FORK_TITLE = 'Fork into a new task';
 
 export const FORK_DESCRIPTION =
-  'The new task gets its own branch, review and pull request, and its agent starts from a copy of this task’s conversation, so it knows what was done here.';
+  'The new task gets its own branch and pull request, and its agent starts from a copy of this conversation.';
 
 const forkSignal = createSignal();
 

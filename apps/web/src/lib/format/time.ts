@@ -77,6 +77,14 @@ export function formatTurnaround(ms: number) {
   return `${(ms / DAY_MS).toFixed(1).replace(/\.0$/, '')}d`;
 }
 
+export function formatDaysAndHours(ms: number) {
+  if (ms < DAY_MS) return formatTurnaround(ms);
+  const hours = Math.round(ms / HOUR_MS);
+  const days = Math.floor(hours / 24);
+  const rest = hours % 24;
+  return rest === 0 ? `${days}d` : `${days}d ${rest}h`;
+}
+
 export function formatWholeHours(ms: number) {
   return `${Math.max(1, Math.ceil(ms / HOUR_MS))} h`;
 }
