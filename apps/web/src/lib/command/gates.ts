@@ -79,6 +79,18 @@ function listAnswerCommands(gate: Gate): Command[] {
 }
 
 function listSetupCommands(gate: Gate): Command[] {
+  const repositories = gate.choices ?? [];
+  if (repositories.length > 0) {
+    return repositories.map((repository) => ({
+      kind: 'run',
+      id: `${resolveGateId(gate)}.repository.${repository}`,
+      label: `Use ${repository}`,
+      hint: gate.title,
+      icon: resolveGateGlyph(gate).icon,
+      keywords: ['configuration', 'setup', 'repository', 'pick', repository],
+      run: () => void replyToGate(gate, 'pickRepository', repository),
+    }));
+  }
   return [
     {
       kind: 'run',

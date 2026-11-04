@@ -1,5 +1,6 @@
 export { resolveCommentedMessage } from './comments.ts';
 export {
+  describeRepeatedFailure,
   resolveChecksFixPrompt,
   resolveCodeFence,
   resolveHumanFixPrompt,

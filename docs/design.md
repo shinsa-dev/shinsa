@@ -1401,7 +1401,9 @@ Only these, and they win over anything below:
     - **Setup incomplete** (`setup-card.tsx`): status orange in the Paused group with the
       `IconToolbox` tile; the card renders the gate's body (each problem and its fix) as markdown, with Verify
       again (primary, `approve`) at the top right, and Cancel task as the footer's quiet link. A repository without
-      check commands is not a problem: nothing extra runs.
+      check commands is not a problem: nothing extra runs. When the gate asks which repository the task is for (its
+      `choices`), the card lists them as the question card's choice buttons (`QuestionChoices`), a click sends that
+      name as a `reply`, Verify again gives way to them and the footer reads "Picking one verifies the setup again."
     - **A revised plan** (`plan-revision.tsx`): the eyebrow reads "Version 2 · 4 phases"; above the
       plan an inset (`bg-bg-a1` on `INSET`, `PlanFeedback`) holds only "You asked" and your words, and
       none at all when the revision came without a message. In the plan itself "What changed" with the

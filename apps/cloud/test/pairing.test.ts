@@ -60,7 +60,7 @@ describe('pairing a machine', () => {
       harness.post(resolvePairApprovePath(start.claimCode), {}, { session: kai }),
     ]);
     expect(answers.map((answer) => answer.status).sort()).toEqual([200, 409]);
-    expect(harness.db.sqlite.query('SELECT COUNT(*) AS count FROM instances').get()).toEqual({ count: 1 });
+    expect(harness.db.sqlite.query('SELECT COUNT(*) AS count FROM machines').get()).toEqual({ count: 1 });
     const tunnels = harness.calls.filter(
       (call) => call.method === 'POST' && call.url.endsWith('/cfd_tunnel')
     );
@@ -123,7 +123,7 @@ describe('pairing a machine', () => {
       tunnelHost: `t-${instanceId}.shinsa.dev`,
     });
     expect(await poll(harness, start)).toEqual({ status: 'expired' });
-    const stored = harness.db.sqlite.query('SELECT machine_token_hash FROM instances').get() as {
+    const stored = harness.db.sqlite.query('SELECT machine_token_hash FROM machines').get() as {
       machine_token_hash: string;
     };
     expect(stored.machine_token_hash).not.toBe(credentials.machineToken);
@@ -134,7 +134,7 @@ describe('pairing a machine', () => {
     const { start } = await startPair(harness);
     const session = await harness.signIn();
     await harness.post(resolvePairApprovePath(start.claimCode), {}, { session });
-    const row = harness.db.sqlite.query('SELECT credentials FROM pair_sessions').get() as {
+    const row = harness.db.sqlite.query('SELECT credentials FROM pairings').get() as {
       credentials: string;
     };
     expect(row.credentials).not.toContain('tunnel-token-1');
@@ -155,7 +155,7 @@ describe('pairing a machine', () => {
       credentials: { instanceId, tunnelToken: 'tunnel-token-1', tunnelHost: `t-${instanceId}.shinsa.dev` },
     });
     expect(claimed).not.toHaveProperty('sealedCredentials');
-    const row = harness.db.sqlite.query('SELECT features FROM instances').get() as { features: string };
+    const row = harness.db.sqlite.query('SELECT features FROM machines').get() as { features: string };
     expect(JSON.parse(row.features)).toEqual([]);
   });
 
@@ -164,7 +164,7 @@ describe('pairing a machine', () => {
     const { start } = await startPair(harness, 'Studio', []);
     const session = await harness.signIn();
     await harness.post(resolvePairApprovePath(start.claimCode), {}, { session });
-    harness.db.sqlite.query("UPDATE pair_sessions SET credentials = 'broken'").run();
+    harness.db.sqlite.query("UPDATE pairings SET credentials = 'broken'").run();
     expect(await poll(harness, start)).toEqual({ status: 'expired' });
   });
 
@@ -241,7 +241,7 @@ describe('pairing a machine', () => {
     logged.mockRestore();
     expect((await readJson<{ error: { message: string } }>(failed)).error.message).toContain('record exists');
     expect(harness.calls.at(-1)).toMatchObject({ method: 'DELETE' });
-    expect(harness.db.sqlite.query('SELECT COUNT(*) AS count FROM instances').get()).toEqual({ count: 0 });
+    expect(harness.db.sqlite.query('SELECT COUNT(*) AS count FROM machines').get()).toEqual({ count: 0 });
     expect(await poll(harness, start)).toEqual({ status: 'pending' });
     harness.handlers.length = 0;
     const retried = await harness.post(resolvePairApprovePath(start.claimCode), {}, { session });
@@ -258,7 +258,7 @@ describe('pairing a machine', () => {
       harness.post(resolvePairApprovePath(start.claimCode), {}, { session: kai }),
     ]);
     expect(answers.map((answer) => answer.status).sort()).toEqual([200, 409]);
-    expect(harness.db.sqlite.query('SELECT COUNT(*) AS count FROM instances').get()).toEqual({ count: 1 });
+    expect(harness.db.sqlite.query('SELECT COUNT(*) AS count FROM machines').get()).toEqual({ count: 1 });
     const tunnels = harness.calls.filter(
       (call) => call.method === 'POST' && call.url.endsWith('/cfd_tunnel')
     );

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test';
-import { createState, DomainError, type TaskShare } from '@shinsa/core';
+import { createState, DomainError, SHARE_PRESET_SCOPES, type TaskShare } from '@shinsa/core';
 import { ShareClock } from '../../src/remote/share-clock/service.ts';
 import { EngineStopped } from '../../src/runtime/engine/schema.ts';
 import { createTask } from '../helpers/state.ts';
@@ -31,7 +31,13 @@ async function openShares(fake: ReturnType<typeof createFakeEngine>) {
   return clock;
 }
 
-const SHARE = { at: 0, url: null, limit: 'hour', preset: 'standard', endsAt: 1_000 } as const;
+const SHARE = {
+  at: 0,
+  url: null,
+  limit: 'hour',
+  scopes: SHARE_PRESET_SCOPES.standard,
+  endsAt: 1_000,
+} as const;
 
 describe('the share clock', () => {
   test('ends each share whose time ran out, and only those', async () => {

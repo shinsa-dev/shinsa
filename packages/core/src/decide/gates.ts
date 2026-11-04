@@ -13,7 +13,7 @@ import type { ShinsaState } from '../state/project.ts';
 import { listOpenGates } from '../state/queries.ts';
 import { startApprovedPlan } from './backlog.ts';
 import { startEditsChecks } from './checks.ts';
-import { answerConfiguration } from './config.ts';
+import { answerConfiguration, assertConfigurationReply } from './config.ts';
 import { acknowledgeBudget } from './costs.ts';
 import type { Decider } from './decider.ts';
 import { recordEditsApproval } from './edits.ts';
@@ -258,6 +258,7 @@ export function answerGate(
   assertComments(gate, decision, options.comments);
   assertThenApprove(gate, decision, options.thenApprove);
   assertMergeStepsDone(decider, gate, decision);
+  assertConfigurationReply(decider, gate, decision, response);
   const verdicts = options.verdicts && options.verdicts.length > 0 ? { verdicts: options.verdicts } : {};
   const comments = options.comments && options.comments.length > 0 ? { comments: options.comments } : {};
   const thenApprove = options.thenApprove ? { thenApprove: true } : {};
@@ -282,7 +283,7 @@ export function answerGate(
       answerFailure(decider, gate, decision, response);
       return;
     case 'configuration':
-      answerConfiguration(decider, gate, decision);
+      answerConfiguration(decider, gate, decision, response);
       return;
     case 'proposal':
       answerProposal(decider, gate, decision);

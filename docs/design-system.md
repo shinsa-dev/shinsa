@@ -7633,7 +7633,7 @@ Every waiting or result state of a running process is one card on the same frame
 | State | Tone and icon | Title / body | Actions |
 | --- | --- | --- | --- |
 | Paused (a failure) | orange, Paused group | the gate's title, a link to the agent's last message or the body | Retry (primary, named for what it does); Cancel task as a quiet link |
-| Setup incomplete | orange, `IconToolbox` tile | the body (each problem and its fix) as markdown | Verify again (primary); Cancel task quiet. Nothing configured to check is never a setup problem |
+| Setup incomplete | orange, `IconToolbox` tile | the body (each problem and its fix) as markdown; a repository question lists its repositories as choice buttons | Verify again (primary), or a choice button per repository when it asks which one; Cancel task quiet. Nothing configured to check is never a setup problem |
 | Sign-in needed | orange, `IconUserKey` | the title ("Paused: a@b.com needs signing in", one status for the cause) and body | Sign in (primary); Retry anyway / Cancel task quiet. When the user must act outside the app, the fix on an inset strip with a `CopyButton` and the primary re-checks |
 | A wait | blue, "Waiting to check in again" | "The agent is waiting on something outside the repository", the notes (`selectable text-fg-4`) over "Check-in 2 of 10 · gives up in 3 hours" (`text-2xs text-fg-2`) | Check in now (`outline`); eyebrow counts down |
 | Waiting on a limit | blue, In progress | "Waiting for usage: continues at 3:40 PM on a@b.com" (when and where it carries on, in one line), the reset in the eyebrow | Resume now (`outline`); "Don’t resume automatically" / "Resume at the reset" quiet |

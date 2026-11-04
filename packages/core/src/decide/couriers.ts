@@ -132,16 +132,27 @@ export function splitTask(decider: Decider, command: CommandOf<'agent.split_task
       message: `Split the plan into 1 to ${DELEGATION_LIMITS.splitTasks} tasks; this asked for ${command.requests.length}.`,
     });
   }
+  if (command.stacked && command.thisWaits) {
+    throw new DomainError({
+      code: 'dependency_cycle',
+      message:
+        'Set stacked or this_task_waits, not both: stacked parts already merge together with this task as one bundle.',
+    });
+  }
   const requestKey = `plan:${version}`;
-  const taskIds = command.requests.map((request) =>
-    spawnTask(
-      decider,
-      task,
-      request,
-      { kind: 'split', taskId: task.id, runId: run.id, requestKey },
-      { parent: true }
-    )
-  );
+  const taskIds: string[] = [];
+  for (const request of command.requests) {
+    const below = taskIds.at(-1) ?? task.id;
+    taskIds.push(
+      spawnTask(
+        decider,
+        task,
+        request,
+        { kind: 'split', taskId: task.id, runId: run.id, requestKey },
+        { parent: true, ...(command.stacked ? { stacksOn: [below] } : {}) }
+      )
+    );
+  }
   decider.emit({
     type: 'task.split',
     taskId: task.id,

@@ -485,6 +485,12 @@ describe('the activity on the Overview', () => {
     return { task, state: createShinsaState({ tasks: [task] }) };
   }
 
+  it('shows no Activity panel for a task with no activity, as a share without the activity scope', () => {
+    const task = createTask({ id: 't', activity: [] });
+    const view = renderOverview(createShinsaState({ tasks: [task] }), task);
+    expect(view.queryByText('Activity')).toBeNull();
+  });
+
   it(
     'shows the newest entries and older ones a page at a time',
     async () => {

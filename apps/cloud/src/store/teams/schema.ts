@@ -5,7 +5,7 @@ export const StoredScopes = Schema.NullOr(Schema.fromJsonString(AccessScopes));
 
 export const Team = Schema.Struct({
   id: TeamId,
-  userId: RemoteUserId,
+  ownerId: RemoteUserId,
   name: Schema.String,
   scopes: StoredScopes,
   createdAt: Schema.Number,
@@ -24,4 +24,4 @@ export const MemberScopesRow = Schema.Struct({
 
 export type MemberScopesRow = typeof MemberScopesRow.Type;
 
-export const TEAM_COLUMNS = 'teams.id, teams.user_id, teams.name, teams.scopes, teams.created_at';
+export const TEAM_COLUMNS = 'teams.id, teams.owner_id, teams.name, teams.scopes, teams.created_at';

@@ -1,4 +1,4 @@
-import type { Bytes, PullRequest, Repo, ShareFileType, ShareLiveView, SharePreset, Task } from '@shinsa/core';
+import type { Bytes, PullRequest, Repo, ShareFileType, ShareLiveView, Task, ViewScope } from '@shinsa/core';
 import type { DomainError } from '@shinsa/core';
 import { Context, Schema } from 'effect';
 import type { Effect } from 'effect';
@@ -108,5 +108,8 @@ export interface ShareLinks {
 }
 
 export interface SharesHandle extends ShareEffects, ShareLinks {
-  resolveLive(taskId: string, preset?: SharePreset): Effect.Effect<LiveShare<ShareLiveView>, DomainError>;
+  resolveLive(
+    taskId: string,
+    scopes?: readonly ViewScope[]
+  ): Effect.Effect<LiveShare<ShareLiveView>, DomainError>;
 }

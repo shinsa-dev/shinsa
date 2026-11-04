@@ -45,6 +45,10 @@ export class Accounts extends Context.Service<
         execute: (row) =>
           sql`SELECT ${users} FROM sessions JOIN users ON users.id = sessions.user_id WHERE sessions.token_hash = ${row.tokenHash} AND sessions.expires_at > ${row.now}`,
       });
+      const expiredSessionsRemoval = SqlSchema.void({
+        Request: Schema.Number,
+        execute: (now) => sql`DELETE FROM sessions WHERE expires_at <= ${now}`,
+      });
       const sessionRemoval = SqlSchema.void({
         Request: TokenHash,
         execute: (hash) => sql`DELETE FROM sessions WHERE token_hash = ${hash}`,
@@ -73,6 +77,15 @@ export class Accounts extends Context.Service<
         return yield* sessionUser({ tokenHash, now: yield* Clock.currentTimeMillis });
       }, Effect.orDie);
 
+      const createSession = Effect.fn('Accounts.createSession')(function* (
+        tokenHash: TokenHash,
+        userId: RemoteUserId,
+        expiresAt: number
+      ) {
+        yield* expiredSessionsRemoval(yield* Clock.currentTimeMillis);
+        yield* insertSession({ tokenHash, userId, expiresAt });
+      }, Effect.orDie);
+
       const createSignInCode = Effect.fn('Accounts.createSignInCode')(function* (
         codeHash: TokenHash,
         code: SignInCode
@@ -84,11 +97,7 @@ export class Accounts extends Context.Service<
       return Accounts.of({
         upsertUser,
         selectUser: Effect.fn('Accounts.selectUser')((id: RemoteUserId) => userById(id), Effect.orDie),
-        createSession: Effect.fn('Accounts.createSession')(
-          (tokenHash: TokenHash, userId: RemoteUserId, expiresAt: number) =>
-            insertSession({ tokenHash, userId, expiresAt }),
-          Effect.orDie
-        ),
+        createSession,
         selectSessionUser,
         removeSession: Effect.fn('Accounts.removeSession')(
           (hash: TokenHash) => sessionRemoval(hash),

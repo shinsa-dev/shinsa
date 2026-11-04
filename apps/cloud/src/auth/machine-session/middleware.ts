@@ -19,7 +19,7 @@ export const MachineSessionLive = Layer.effect(
         if (Option.isNone(machine)) return yield* revoked;
         return yield* Effect.provideService(httpEffect, CurrentMachine, {
           instanceId: machine.value.id,
-          ownerId: machine.value.userId,
+          ownerId: machine.value.ownerId,
         });
       }),
     });

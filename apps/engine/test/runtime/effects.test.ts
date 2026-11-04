@@ -10,6 +10,7 @@ import {
   type ShinsaCommand,
   type ShinsaState,
   type Task,
+  SHARE_PRESET_SCOPES,
 } from '@shinsa/core';
 import { Effect } from 'effect';
 import type { RunSupervisor } from '../../src/agents/supervisor/service.ts';
@@ -485,7 +486,9 @@ describe('describing a shared task', () => {
   test('writes the description of a shared task and records it under an id the effect decides', async () => {
     const asked: string[] = [];
     const { runner, dispatched, commandIds } = setup(
-      withTask({ share: { at: 1, url: null, limit: 'until_done', preset: 'status', endsAt: null } }),
+      withTask({
+        share: { at: 1, url: null, limit: 'until_done', scopes: SHARE_PRESET_SCOPES.status, endsAt: null },
+      }),
       {
         describeShare: (task) =>
           Effect.sync(() => {
@@ -510,7 +513,9 @@ describe('describing a shared task', () => {
     await unshared.runner.apply({ kind: 'share.describe', taskId: 'task-1' }, createContext());
     expect(unshared.dispatched).toEqual([]);
     const silent = setup(
-      withTask({ share: { at: 1, url: null, limit: 'until_done', preset: 'standard', endsAt: null } })
+      withTask({
+        share: { at: 1, url: null, limit: 'until_done', scopes: SHARE_PRESET_SCOPES.standard, endsAt: null },
+      })
     );
     await silent.runner.apply({ kind: 'share.describe', taskId: 'task-1' }, createContext());
     expect(silent.dispatched).toEqual([]);
@@ -641,6 +646,40 @@ describe('triage', () => {
       waitsOn: [dependency?.id],
     });
     expect(Object.values(engine.state.repos).map((repo) => repo.name)).toEqual(['app']);
+  });
+
+  test('a task triage stacks is triaged onto the open change it names, in the same repository', async () => {
+    const { root } = await createGitRepo();
+    const config = createTestConfig(createTempDir(), { roots: [root] });
+    const eventLog = openEventLog(config.databasePath);
+    const engine = new Engine(eventLog);
+    await engine.dispatch({ type: 'task.create', request: 'Rewrite the store', repoId: null });
+    await engine.dispatch({
+      type: 'task.create',
+      request: 'Move the readers onto the new store',
+      repoId: null,
+    });
+    const [parent, task] = Object.values(engine.state.tasks);
+    const { runs } = createRuns();
+    const runner = new EffectRunner(engine, config, runs, createBriefings().briefings, {
+      shares: NO_SHARES,
+      previews: NO_PREVIEWS,
+      handoffs: NO_HANDOFFS,
+      resolveLogin: () => Promise.resolve(null),
+      triage: (_state, triaging, local) =>
+        Effect.succeed({
+          title: triaging.request,
+          repoPath: local[0]?.path ?? '',
+          size: 'small',
+          branch: triaging.id === parent?.id ? 'refactor/store' : 'refactor/store-readers',
+          waitsOn: [],
+          ...(triaging.id === task?.id && parent ? { stacksOn: [parent] } : {}),
+        }),
+    });
+    await runner.apply({ kind: 'task.triage', taskId: parent?.id ?? '' }, createContext());
+    await runner.apply({ kind: 'task.triage', taskId: task?.id ?? '' }, createContext());
+    expect(engine.state.tasks[task?.id ?? '']?.stacksOn).toEqual([parent?.id ?? '']);
+    expect(engine.state.tasks[parent?.id ?? '']?.stacksOn ?? []).toEqual([]);
   });
 
   test('a repository outside the task’s project is bound while the task keeps its project, and filed by its owner', async () => {

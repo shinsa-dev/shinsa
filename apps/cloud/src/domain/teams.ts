@@ -25,7 +25,7 @@ export const serializeTeam = Effect.fn('serializeTeam')(function* (team: Team, u
   return {
     id: team.id,
     name: team.name,
-    owner: yield* findOwner(team.userId, NO_SUCH_TEAM),
+    owner: yield* findOwner(team.ownerId, NO_SUCH_TEAM),
     role,
     members: yield* teams.members.list(team.id),
     requests: role === 'owner' ? yield* teams.requesters.list(team.id) : [],
@@ -74,7 +74,7 @@ export const findInviteTeam = Effect.fn('teams.findInviteTeam')(function* (invit
     return yield* new InviteInvalid({
       message: 'This team link was turned off. Ask the team’s owner for a new one.',
     });
-  return { team: team.value, owner: yield* findOwner(team.value.userId, NO_SUCH_TEAM) };
+  return { team: team.value, owner: yield* findOwner(team.value.ownerId, NO_SUCH_TEAM) };
 });
 
 export const joinTeam = Effect.fn('teams.join')(function* (userId: RemoteUserId, invite: string) {

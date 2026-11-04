@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { SHARE_PRESET_SCOPES, VIEW_SCOPES } from '@shinsa/core';
 import { PLAIN_STYLE } from '../../src/terminal/index.ts';
 import {
   BASE,
@@ -463,6 +464,51 @@ describe('the task commands', () => {
       expect(result.text).toBe(text);
     });
   }
+});
+
+describe('tasks share with view scopes', () => {
+  test('--deny and --allow change the preset’s scopes into the exact set the link shows', async () => {
+    const fake = createFakeClient(TASKS);
+    await runSpec(fake, [
+      'tasks',
+      'share',
+      'fix',
+      '--preset',
+      'standard',
+      '--deny',
+      'code',
+      '--allow',
+      'messages',
+    ]);
+    const scopes = [...SHARE_PRESET_SCOPES.standard.filter((scope) => scope !== 'code'), 'messages'];
+    expect(fake.sent).toEqual([
+      {
+        type: 'task.share',
+        taskId: 'task-123',
+        scopes: VIEW_SCOPES.filter((scope) => scopes.includes(scope)),
+      },
+    ]);
+  });
+
+  test('without --preset they start from the sharePreset setting', async () => {
+    const fake = createFakeClient({ ...TASKS, '/api/settings': { settings: { sharePreset: 'status' } } });
+    await runSpec(fake, ['tasks', 'share', 'fix', '--allow', 'plan']);
+    expect(fake.sent).toEqual([
+      {
+        type: 'task.share',
+        taskId: 'task-123',
+        scopes: VIEW_SCOPES.filter((scope) => [...SHARE_PRESET_SCOPES.status, 'plan'].includes(scope)),
+      },
+    ]);
+  });
+
+  test('a scope a link cannot show is refused before anything is sent', async () => {
+    const fake = createFakeClient(TASKS);
+    await expect(runSpec(fake, ['tasks', 'share', 'fix', '--allow', 'message'])).rejects.toThrow(
+      'message is not a view scope.'
+    );
+    expect(fake.sent).toEqual([]);
+  });
 });
 
 describe('tasks open', () => {

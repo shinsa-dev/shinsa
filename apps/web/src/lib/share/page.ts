@@ -1,4 +1,11 @@
-import { capitalise, hasShareGroup, lowerFirst, type SharedTask, type Task } from '@shinsa/core';
+import {
+  capitalise,
+  hasShareGroup,
+  lowerFirst,
+  SHARE_PRESET_SCOPES,
+  type SharedTask,
+  type Task,
+} from '@shinsa/core';
 import {
   type MentionPart,
   resolveFirstName,
@@ -10,8 +17,12 @@ import { listTaskTabs, type TaskTab } from '@/lib/tasks/tabs.ts';
 export const SHARED_READ_ONLY_NOTE = 'Read-only';
 
 export function listSharedTabs(task: Task, shared: SharedTask): TaskTab[] {
-  const chat = hasShareGroup(shared.preset, 'live');
+  const chat = hasShareGroup(shared.scopes, 'live');
   return listTaskTabs(task).filter((tab) => (tab !== 'chat' || chat) && (tab !== 'code' || shared.code));
+}
+
+export function isStatusShare(shared: SharedTask) {
+  return shared.scopes.every((scope) => SHARE_PRESET_SCOPES.status.includes(scope));
 }
 
 const UNKNOWN_OWNER = 'The owner';

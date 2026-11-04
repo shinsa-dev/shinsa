@@ -782,7 +782,14 @@ describe('decisions only the human makes', () => {
     const takesReply = [...gates.keys()].filter((type) =>
       GATE_SCHEMA[type].decisions.some((choice) => choice.decision === 'reply')
     );
-    expect(takesReply.sort()).toEqual(['failure', 'operation', 'question', 'secret', 'sign_in']);
+    expect(takesReply.sort()).toEqual([
+      'configuration',
+      'failure',
+      'operation',
+      'question',
+      'secret',
+      'sign_in',
+    ]);
   });
 
   test('a reply retries a failure or a Sign in gate with the words as guidance, and needs words', () => {

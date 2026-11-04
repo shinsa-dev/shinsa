@@ -148,9 +148,9 @@ describe('reacting to the pull request', () => {
     }
   });
 
-  test('a pull request that keeps failing while its fixes change nothing stops after two fix rounds', () => {
+  test('a pull request that keeps failing while its fixes change nothing stops after 8 fix rounds', () => {
     const { harness, taskId } = shipping();
-    for (let round = 0; round < 4; round += 1) {
+    for (let round = 0; round < 12; round += 1) {
       harness.send({ type: 'pull_request.record', taskId, pullRequest: pullRequest({ checks: 'failing' }) });
       if (harness.task(taskId).stage !== 'fixing') break;
       harness.send({
@@ -164,13 +164,13 @@ describe('reacting to the pull request', () => {
     const gate = harness.openGate(taskId);
     expect(gate.type).toBe('failure');
     expect(gate.body).toBe(
-      'The pull request’s failing checks, open threads or conflict came back after 2 fix rounds. Steer the agent in the chat, or retry.'
+      'The pull request’s failing checks, open threads or conflict came back after 8 fix rounds. Steer the agent in the chat, or retry.'
     );
   });
 
   test('a conflict that stays while its fixes change nothing names the conflict when it stops', () => {
     const { harness, taskId } = shipping();
-    for (let round = 0; round < 4; round += 1) {
+    for (let round = 0; round < 12; round += 1) {
       harness.send({
         type: 'pull_request.record',
         taskId,
@@ -186,7 +186,7 @@ describe('reacting to the pull request', () => {
       pushed(harness, taskId);
     }
     expect(harness.openGate(taskId).body).toBe(
-      'The conflict with the base branch came back after 2 fix rounds. Steer the agent in the chat, or retry.'
+      'The conflict with the base branch came back after 8 fix rounds. Steer the agent in the chat, or retry.'
     );
   });
 
@@ -520,12 +520,13 @@ describe('watching the pull request', () => {
       null,
       null,
     ]);
-    for (const head of ['head-a', 'head-b', 'head-c']) {
-      record(harness, taskId, { checks: 'failing', headSha: head });
+    for (let round = 0; round < 12; round += 1) {
+      record(harness, taskId, { checks: 'failing', headSha: `head-${round}` });
       if (harness.task(taskId).stage !== 'fixing') break;
       fixOn('t3');
     }
     expect(harness.openGate(taskId).title).toBe('Fixing is not making progress');
+    expect(harness.task(taskId).fixRounds).toBe(11);
   });
 
   test('ten updates in a row that only bring comments stop the watch; retrying watches again', () => {
@@ -593,9 +594,13 @@ describe('watching the pull request', () => {
     fixOnSameTree();
     record(harness, taskId, { checks: 'failing', headSha: 'head-2' });
     expect(harness.task(taskId)).toMatchObject({ stage: 'fixing', stalledFixes: 1 });
-    fixOnSameTree();
-    record(harness, taskId, { checks: 'failing', headSha: 'head-3' });
+    for (let round = 3; round < 12; round += 1) {
+      fixOnSameTree();
+      record(harness, taskId, { checks: 'failing', headSha: `head-${round}` });
+      if (harness.task(taskId).stage !== 'fixing') break;
+    }
     expect(harness.openGate(taskId).title).toBe('Fixing is not making progress');
+    expect(harness.task(taskId).stalledFixes).toBe(7);
   });
 
   test('a clean pull request restarts a stopped watch and opens the merge gate', () => {

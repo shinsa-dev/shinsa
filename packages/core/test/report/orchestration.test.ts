@@ -162,7 +162,11 @@ describe('the other orchestration tools', () => {
   test('a split is one to eight requests', () => {
     expect(validateSplit({ tasks: [{ request: 'A.' }, { request: 'B.' }] })).toEqual({
       ok: true,
-      value: { requests: ['A.', 'B.'], thisTaskWaits: false },
+      value: { requests: ['A.', 'B.'], thisTaskWaits: false, stacked: false },
+    });
+    expect(validateSplit({ tasks: [{ request: 'A.' }], stacked: true })).toEqual({
+      ok: true,
+      value: { requests: ['A.'], thisTaskWaits: false, stacked: true },
     });
     expect(validateSplit({ tasks: [] })).toEqual({ ok: false, errors: ['tasks needs at least 1 item.'] });
   });

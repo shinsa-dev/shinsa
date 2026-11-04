@@ -125,7 +125,7 @@ export const MachineHandlers = HttpApiBuilder.group(
             features: payload.features ?? [],
           });
           const { owner, members, guests } = yield* listMachinePeople(machine);
-          return { ok: true as const, owner, members, guests, teams: yield* listUserTeams(machine.userId) };
+          return { ok: true as const, owner, members, guests, teams: yield* listUserTeams(machine.ownerId) };
         })
       )
       .handle(
