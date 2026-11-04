@@ -46,6 +46,22 @@ describe('an error boundary', () => {
     expect(screen.queryByText('Services')).toBeNull();
   });
 
+  it('keeps what it leads with above its fallback, as a task tab keeps its title and tabs on a phone', () => {
+    render(
+      <ErrorBoundary size='inline' className='px-4' fallbackLead={<nav>Task tabs</nav>}>
+        <Widget />
+      </ErrorBoundary>
+    );
+    const lead = screen.getByText('Task tabs');
+    const alert = screen.getByRole('alert');
+    expect(lead.compareDocumentPosition(alert) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(lead.closest('.px-4')).toBeNull();
+    broken.current = false;
+    fireEvent.click(screen.getByRole('button', { name: ERROR_COPY.retry }));
+    expect(screen.queryByText('Task tabs')).toBeNull();
+    expect(screen.getByText('Services')).toBeTruthy();
+  });
+
   it('logs the error to the console with the component stack', () => {
     renderWidget('inline');
     const call = logged.mock.calls.find(

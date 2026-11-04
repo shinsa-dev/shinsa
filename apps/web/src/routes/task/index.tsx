@@ -13,6 +13,7 @@ import {
   TaskCompactHeader,
   TaskHeader,
   TaskPageCommands,
+  TaskScrollHeader,
   TaskScrollHeaderSlot,
   TaskScrollingHeader,
 } from '@/components/task/header.tsx';
@@ -96,6 +97,7 @@ function TaskTabs({
           size='inline'
           resetKey={tab === view.tab ? task.id : 'hidden'}
           className={cn(PAGE_COLUMN, 'py-5')}
+          fallbackLead={<TaskScrollHeader />}
         >
           <TaskTabContent
             tab={tab}
