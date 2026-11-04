@@ -3603,8 +3603,8 @@ view are a share link for a whole project, on the same projection and the same o
 place of the link: nothing is copied to app.shinsa.dev, and a teammate reads each task from your machine over its
 tunnel while it is online, and the last list of it their own machine kept while it is not (Offline teammates, below).
 On app.shinsa.dev a teammate also acts on those tasks, with what the team's owner lets them do, through a device your
-machine admits by itself and scopes to the team's projects (Teammates act on team tasks, below); the local app keeps
-the read-only view. Teams need remote access on (`Remote` paired and enabled), since that is how a teammate reaches you.
+machine admits by itself and scopes to the team's projects, and the Mac app does the same through a device its own
+engine enrols and relays (Teammates act on team tasks, below). Teams need remote access on (`Remote` paired and enabled), since that is how a teammate reaches you.
 
 - **What app.shinsa.dev keeps** (`apps/cloud/src/routes/teams/`, `routes/machine-teams/`, `migrations/0005_teams.sql`): who is in which team. A
   team is an id, a name of 60 characters at most (`TEAM_NAME_LIMIT`), its owner (the account whose machine made it),
@@ -3725,7 +3725,8 @@ the read-only view. Teams need remote access on (`Remote` paired and enabled), s
   alone: it never lists a teammate's task. A teammate's task never waits for you, so it never counts towards Needs you, the queue, the
   guide or a notification. Opening one goes to `/teams/<team>/<machine>/<task>` (`routes/team-task.tsx`), the shared
   task page (`SharedTaskPage`, read-only, its Chat the agents' output only) fed by the engine relay in the local app and, on app.shinsa.dev, by
-  a team channel the browser opens with its own key. On app.shinsa.dev a teammate's machine admitted to the fleet
+  a team channel the browser opens with its own key. On app.shinsa.dev, and in the Mac app for a machine its engine
+  relays (the local fleet relay, Teammates act on team tasks), a teammate's machine in the fleet
   opens the task as a full task page at `/tasks/<handle>` instead, straight from the row (`resolveFleetTeamTaskPath`).
   Your browser takes the keys of the teams your own machines hold when it opens the dashboard
   (`GET /api/remote/teams/keys`, owner devices only, `syncOwnTeamKeys` in `lib/teams/own-keys.ts`), so you never open
@@ -3814,6 +3815,22 @@ the read-only view. Teams need remote access on (`Remote` paired and enabled), s
     grant's secret. The machine admits that device without asking, recording its team (`RemoteDevice.teamId`), while
     the person is still in the team, the team key is here and the proof checks. app.shinsa.dev hands a teammate a
     `remote` connect token for the machine (`findReachableMachine` in `auth/access.ts`); the token alone opens nothing.
+  - **In the Mac app: the local fleet relay** (`apps/engine/src/remote/fleet-relay/`, `remote/device-channel/`;
+    `apps/web/src/lib/teams/relay.ts`). The engine is a team device itself, so a teammate's task opens as the same full
+    page in the local app. For each teammate machine its team feed lists with a grant, the engine enrols its own keys
+    as that machine's team device, with the grant's enroll proof, and keeps them only in `remote.json`
+    (`relayDevices: { instanceId, teamId, machineKey, … }`); it asks app.shinsa.dev for a `remote` token with its
+    machine token (`POST /__remote/machine/teams/<team>/connect/remote`, `machineTeams.remoteConnect`, the same checks
+    as the team view's connect) and opens the sealed channel with core's handshake and frames (`DeviceChannels`), on
+    demand. The page sees only localhost: `GET /api/teams/relays` lists the relayed machines (`TeamRelayEntry`, behind
+    the `team-relay` feature), each machine's API is relayed under `/api/teams/relay/<machine>/…` and its socket at
+    `/ws/teams/relay/<machine>`, and the page builds a `Fleet` of this machine plus one `teammate` member per relayed
+    machine (`startLocalRelays`), asking for the list again only when the team list changes. So the same `ScopedActor`
+    team scope and refusals apply on the teammate's machine, and no key, grant or token reaches the page. The tunnel
+    has no route to either relay path, so only this machine's own page reaches it. A device is removed and its channel
+    closed when you leave the team, the grant or the team key goes, the machine leaves the team or remote access is
+    turned off; a machine that is offline, too old or refuses the device keeps its tasks on the read-only team view,
+    with its offline copy.
   - **What a team device reaches** (`resolveScopedState`, `resolveScopedRefusal` in core's `remote/scope.ts`; the
     engine's `Remote.#resolveScope`, `http/socket.ts`, `remote/gate/service.ts`). Its channel carries a `ScopedActor`
     with `scope: { kind: 'team', teamId, scopes }`. The state it gets keeps only the tasks of the team's projects

@@ -165,7 +165,8 @@ export function listSandboxSections(
         ...(teamTask
           ? [
               {
-                label: 'One of Kai’s tasks on Studio, read-only',
+                label:
+                  'One of Kai’s tasks on Studio as a full task page, through Studio’s relay (read-only while Kai’s MacBook is offline)',
                 url: `http://${HOST}:${studioPort}${teamTask}`,
               },
             ]

@@ -35,7 +35,7 @@ import {
 } from './schema.ts';
 import { createServicePreview, respondToggle } from './services.ts';
 import { createPreviewShares, respondShareConnect } from './shares.ts';
-import { TEAM, teammateLink } from './team.ts';
+import { teammateLink } from './team.ts';
 import { TUNNEL_SOCKET, upgradeTunnel } from './tunnel.ts';
 
 export const startSandbox = Effect.fn('Sandbox.start')(function* () {
@@ -74,7 +74,7 @@ export const startSandbox = Effect.fn('Sandbox.start')(function* () {
   const machines = [studio.machine, laptop.machine];
   const teammates = [...machines, teammate.machine];
   const shares = yield* createPreviewShares(studio);
-  const teamTaskPath = teamTask ? `/teams/${TEAM.id}/kai/${teamTask.id}` : null;
+  const teamTaskPath = teamTask ? `/tasks/${teamTask.handle}` : null;
   const { preview, shared } = yield* createServicePreview(studio);
   const { serializeSandboxPage }: SandboxPageModule = yield* Effect.tryPromise({
     try: () => import(join(ROOT, 'apps/web/src/components/sandbox/sandbox-page.tsx')),
