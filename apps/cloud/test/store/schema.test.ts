@@ -4,13 +4,13 @@ import { SqlClient, SqlSchema } from 'effect/sql';
 import { runSqlTest } from '../layers.ts';
 
 const TABLES = [
-  'instance_guests',
-  'instance_handoffs',
-  'instance_invites',
-  'instance_members',
-  'instance_requesters',
-  'instances',
-  'pair_sessions',
+  'machine_guests',
+  'machine_handoffs',
+  'machine_invites',
+  'machine_members',
+  'machine_requesters',
+  'machines',
+  'pairings',
   'sessions',
   'sign_in_codes',
   'slack_events',
@@ -68,10 +68,10 @@ describe('schema', () => {
   test('tables keyed by a token hash or a composite key are stored without a rowid', async () => {
     const { tables } = await runSqlTest(readSchema);
     expect(tables.filter((table) => table.withoutRowid === 1).map((table) => table.name)).toEqual([
-      'instance_guests',
-      'instance_handoffs',
-      'instance_members',
-      'instance_requesters',
+      'machine_guests',
+      'machine_handoffs',
+      'machine_members',
+      'machine_requesters',
       'sessions',
       'sign_in_codes',
       'slack_events',
@@ -91,11 +91,7 @@ describe('schema', () => {
 
   test('every expiry is indexed, so a sweep never scans its table', async () => {
     const { expiries } = await runSqlTest(readSchema);
-    expect(expiries.map((expiry) => expiry.tableName)).toEqual([
-      'pair_sessions',
-      'sessions',
-      'sign_in_codes',
-    ]);
+    expect(expiries.map((expiry) => expiry.tableName)).toEqual(['pairings', 'sessions', 'sign_in_codes']);
     expect(expiries.filter((expiry) => expiry.indexed !== 1)).toEqual([]);
   });
 
@@ -109,5 +105,27 @@ describe('schema', () => {
       })
     );
     expect(outcome._tag).toBe('Failure');
+  });
+
+  test('a JSON column refuses text that is not JSON, and an optional one still takes null', async () => {
+    const outcome = await runSqlTest(
+      Effect.gen(function* () {
+        const sql = yield* SqlClient.SqlClient;
+        yield* sql`INSERT INTO users (id, login, created_at) VALUES ('user-1', 'kai', 0)`;
+        const noScopes = yield* Effect.exit(
+          sql`INSERT INTO teams (id, owner_id, name, scopes, created_at) VALUES ('team-1', 'user-1', 'Core', NULL, 0)`
+        );
+        const brokenScopes = yield* Effect.exit(
+          sql`INSERT INTO teams (id, owner_id, name, scopes, created_at) VALUES ('team-2', 'user-1', 'Core', 'not json', 0)`
+        );
+        const brokenFeatures = yield* Effect.exit(
+          sql`INSERT INTO pairings (claim_code, poll_secret_hash, name, public_key, features, client_ip, expires_at) VALUES ('ABCD2345', 'hash', 'Laptop', 'key', '[', '1.2.3.4', 0)`
+        );
+        return { noScopes, brokenScopes, brokenFeatures };
+      })
+    );
+    expect(outcome.noScopes._tag).toBe('Success');
+    expect(outcome.brokenScopes._tag).toBe('Failure');
+    expect(outcome.brokenFeatures._tag).toBe('Failure');
   });
 });

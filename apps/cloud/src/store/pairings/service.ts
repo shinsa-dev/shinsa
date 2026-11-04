@@ -26,33 +26,33 @@ export class Pairings extends Context.Service<
       const insert = SqlSchema.void({
         Request: Schema.Struct({ ...NewPairing.fields, clientIp: Schema.String }),
         execute: (row) =>
-          sql`INSERT INTO pair_sessions (claim_code, poll_secret_hash, name, public_key, features, client_ip, expires_at) VALUES (${row.claimCode}, ${row.pollSecretHash}, ${row.name}, ${row.publicKey}, ${row.features}, ${row.clientIp}, ${row.expiresAt})`,
+          sql`INSERT INTO pairings (claim_code, poll_secret_hash, name, public_key, features, client_ip, expires_at) VALUES (${row.claimCode}, ${row.pollSecretHash}, ${row.name}, ${row.publicKey}, ${row.features}, ${row.clientIp}, ${row.expiresAt})`,
       });
       const expiredRemoval = SqlSchema.void({
         Request: Schema.Number,
-        execute: (now) => sql`DELETE FROM pair_sessions WHERE expires_at <= ${now}`,
+        execute: (now) => sql`DELETE FROM pairings WHERE expires_at <= ${now}`,
       });
       const countByIp = SqlSchema.findOne({
         Request: Schema.String,
         Result: Count,
-        execute: (ip) => sql`SELECT COUNT(*) AS total FROM pair_sessions WHERE client_ip = ${ip}`,
+        execute: (ip) => sql`SELECT COUNT(*) AS total FROM pairings WHERE client_ip = ${ip}`,
       });
       const byCode = SqlSchema.findOneOption({
         Request: ClaimCode,
         Result: Pairing,
         execute: (code) =>
-          sql`SELECT claim_code, poll_secret_hash, name, public_key, features, expires_at, credentials, owner FROM pair_sessions WHERE claim_code = ${code}`,
+          sql`SELECT claim_code, poll_secret_hash, name, public_key, features, expires_at, credentials, owner FROM pairings WHERE claim_code = ${code}`,
       });
       const reservation = SqlSchema.findOneOption({
         Request: Schema.Struct({ claimCode: ClaimCode, owner: Schema.String }),
         Result: Schema.Struct({ claimCode: ClaimCode }),
         execute: (row) =>
-          sql`UPDATE pair_sessions SET owner = ${row.owner} WHERE claim_code = ${row.claimCode} AND owner IS NULL RETURNING claim_code`,
+          sql`UPDATE pairings SET owner = ${row.owner} WHERE claim_code = ${row.claimCode} AND owner IS NULL RETURNING claim_code`,
       });
       const release = SqlSchema.void({
         Request: ClaimCode,
         execute: (code) =>
-          sql`UPDATE pair_sessions SET owner = NULL WHERE claim_code = ${code} AND credentials IS NULL`,
+          sql`UPDATE pairings SET owner = NULL WHERE claim_code = ${code} AND credentials IS NULL`,
       });
       const claim = SqlSchema.void({
         Request: Schema.Struct({
@@ -60,11 +60,11 @@ export class Pairings extends Context.Service<
           credentials: Schema.String,
         }),
         execute: (row) =>
-          sql`UPDATE pair_sessions SET credentials = ${row.credentials} WHERE claim_code = ${row.claimCode}`,
+          sql`UPDATE pairings SET credentials = ${row.credentials} WHERE claim_code = ${row.claimCode}`,
       });
       const removal = SqlSchema.void({
         Request: ClaimCode,
-        execute: (code) => sql`DELETE FROM pair_sessions WHERE claim_code = ${code}`,
+        execute: (code) => sql`DELETE FROM pairings WHERE claim_code = ${code}`,
       });
 
       return Pairings.of({

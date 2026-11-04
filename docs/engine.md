@@ -3633,7 +3633,7 @@ the read-only view. Teams need remote access on (`Remote` paired and enabled), s
   team is an id, a name of 60 characters at most (`TEAM_NAME_LIMIT`), its owner (the account whose machine made it),
   up to 20 members (`MAX_TEAM_MEMBERS`), who asked to join, and one reusable invite kept as its SHA-256. An account
   owns at most 10 teams (`MAX_OWNED_TEAMS`). It keeps no task, no title, no project and no key but each machine's
-  public signing key (`instances.signing_key`, `migrations/0001_schema.sql`), which the heartbeat sends
+  public signing key (`machines.signing_key`, `migrations/0001_schema.sql`), which the heartbeat sends
   (`HeartbeatRequest.signingKey`; one left out keeps the stored key, one that is not a P-256 public key is 400
   `body_invalid`) and the team listing returns (`TeamMachine.signingKey`). Each machine's
   heartbeat answers its owner's teams (`HeartbeatResponse.teams`, `RemoteTeam`: owner, your role, members, the owner's

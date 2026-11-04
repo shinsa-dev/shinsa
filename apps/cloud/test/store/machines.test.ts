@@ -25,7 +25,7 @@ describe('machines', () => {
     const machine = Option.getOrThrow(byId);
     expect(machine).toMatchObject({
       id: STUDIO,
-      userId: MONA.id,
+      ownerId: MONA.id,
       online: false,
       localUrl: null,
       lastSeenAt: null,
@@ -147,7 +147,7 @@ describe('machines', () => {
         yield* TestClock.adjust('1 second');
         yield* seedMachine(LAPTOP, RIO.id, 'b');
         const crew = TeamId.make('crew00000001');
-        yield* teams.create({ id: crew, userId: MONA.id, name: 'Crew' });
+        yield* teams.create({ id: crew, ownerId: MONA.id, name: 'Crew' });
         yield* teams.members.add(crew, KAI.id);
         yield* access.guests.add(STUDIO, KAI.id);
         return [
@@ -172,7 +172,7 @@ describe('machines', () => {
         yield* TestClock.adjust('1 second');
         yield* seedMachine(LAPTOP, KAI.id, 'b');
         const crew = TeamId.make('crew00000001');
-        yield* teams.create({ id: crew, userId: MONA.id, name: 'Crew' });
+        yield* teams.create({ id: crew, ownerId: MONA.id, name: 'Crew' });
         yield* teams.members.add(crew, KAI.id);
         return [yield* machines.listOfUser(KAI.id), yield* machines.listOfUser(MONA.id)] as const;
       })
