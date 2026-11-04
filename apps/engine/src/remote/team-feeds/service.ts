@@ -64,6 +64,7 @@ import {
   type Feed,
   type FeedSocketEvent,
   type HeldCloses,
+  type TeamFeedGrant,
   ListViewText,
   TEAM_FEED_OFFLINE,
   TEAM_FEED_REFUSED,
@@ -457,6 +458,8 @@ export class TeamFeeds extends Context.Service<TeamFeeds, TeamFeedsHandle>()(
           presence: (list.presence ?? []) as TeamPresence[],
           updatedAt: list.updatedAt,
           snapshot: (list.snapshot as TeamSnapshot | undefined) ?? null,
+          machineKey: list.machineKey ?? null,
+          grant: list.grant ?? null,
           attempt: 0,
           status: 'live',
           reason: null,
@@ -549,6 +552,8 @@ export class TeamFeeds extends Context.Service<TeamFeeds, TeamFeedsHandle>()(
           presence: [],
           updatedAt: held?.updatedAt ?? null,
           snapshot: held?.snapshot ?? null,
+          machineKey: null,
+          grant: null,
           attempt: 0,
         };
         return feed;
@@ -651,6 +656,14 @@ export class TeamFeeds extends Context.Service<TeamFeeds, TeamFeedsHandle>()(
           Effect.sync(() => set.add(listener)),
           () => Effect.sync(() => set.delete(listener))
         ).pipe(Effect.asVoid);
+
+      const listGrants = Effect.map(Ref.get(feeds), (all) =>
+        [...all.values()].flatMap((feed): TeamFeedGrant[] =>
+          feed.status === 'live' && feed.machineKey
+            ? [{ teamId: feed.teamId, machine: feed.machine, machineKey: feed.machineKey, grant: feed.grant }]
+            : []
+        )
+      );
 
       const listHeld = Effect.fn('TeamFeeds.listHeld')(function* (teamId: string) {
         const now = yield* Clock.currentTimeMillis;
@@ -791,6 +804,7 @@ export class TeamFeeds extends Context.Service<TeamFeeds, TeamFeedsHandle>()(
         observeHeld: observeIn(heldListeners),
         listHeld,
         snapshot,
+        listGrants,
         listTasks,
         openRelay,
         openStream,

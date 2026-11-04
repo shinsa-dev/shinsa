@@ -2,12 +2,14 @@ import { afterEach, describe, expect, spyOn, test } from 'bun:test';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { type AgentModel, applyStatePatch, type ServerMessage, serializeState } from '@shinsa/core';
-import { Effect } from 'effect';
+import { Effect, Queue } from 'effect';
 import { type ModelSource } from '../../src/agents/index.ts';
 import type { ServerConfig } from '../../src/config/index.ts';
 import { type Launcher } from '../../src/http/index.ts';
 import type { EngineRestarter } from '../../src/instance/index.ts';
 import { log as logger } from '../../src/log/index.ts';
+import type { ChannelPeer } from '../../src/remote/channel/schema.ts';
+import type { FleetRelay } from '../../src/remote/fleet-relay/service.ts';
 import { Engine } from '../helpers/engine.ts';
 import { openEventLog } from '../helpers/event-log.ts';
 import { createTestEvidence } from '../helpers/evidence.ts';
@@ -26,7 +28,12 @@ function createModels(models: AgentModel[]) {
 }
 
 async function start(
-  options: { config?: Partial<ServerConfig>; launch?: Launcher; restarter?: EngineRestarter['Service'] } = {}
+  options: {
+    config?: Partial<ServerConfig>;
+    launch?: Launcher;
+    restarter?: EngineRestarter['Service'];
+    fleetRelay?: FleetRelay['Service'];
+  } = {}
 ) {
   const config = createTestConfig(createTempDir(), options.config);
   const engine = new Engine(openEventLog(config.databasePath));
@@ -41,6 +48,7 @@ async function start(
     onboarding: createTestOnboarding(engine, config).onboarding,
     launch: options.launch,
     restarter: options.restarter,
+    fleetRelay: options.fleetRelay,
   });
   running.push(http.stop);
   const base = `http://127.0.0.1:${http.server.port}`;
@@ -308,5 +316,97 @@ describe('the socket', () => {
       error.mockRestore();
       service.readEntries = original;
     }
+  });
+});
+
+describe('the relay to a teammate’s machine', () => {
+  function createFakeRelay() {
+    const calls: { instanceId: string; path: string; url: string; body: string }[] = [];
+    const received: string[] = [];
+    const peers: ChannelPeer[] = [];
+    let closed = 0;
+    const relay = {
+      list: Effect.succeed([{ instanceId: 'kai-mac', teamId: 'team1', name: 'Kai’s Mac', userId: '7' }]),
+      request: (instanceId: string, path: string, request: Request) =>
+        Effect.promise(async () => {
+          calls.push({ instanceId, path, url: request.url, body: await request.text() });
+          return new Response(`relayed ${path}`);
+        }),
+      openSocket: (_instanceId: string, peer: ChannelPeer) =>
+        Effect.sync(() => {
+          peers.push(peer);
+          peer.send('{"t":"state"}');
+          return {
+            receive: (raw: string | Uint8Array) =>
+              Effect.sync(
+                () => void received.push(typeof raw === 'string' ? raw : new TextDecoder().decode(raw))
+              ),
+            close: Effect.sync(() => {
+              closed += 1;
+            }),
+          };
+        }),
+    } as unknown as FleetRelay['Service'];
+    return { relay, calls, received, peers, closed: () => closed };
+  }
+
+  test('relays a page request to the machine it names, and only from this machine’s page', async () => {
+    const fake = createFakeRelay();
+    const { call } = await start({ fleetRelay: fake.relay });
+    const answer = await call('/api/teams/relay/kai-mac/api/tasks/SW-1?full=1', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: '{}',
+    });
+    expect(await answer.text()).toBe('relayed /api/tasks/SW-1');
+    expect(fake.calls).toEqual([
+      {
+        instanceId: 'kai-mac',
+        path: '/api/tasks/SW-1',
+        url: expect.stringContaining('/api/teams/relay/kai-mac/api/tasks/SW-1?full=1'),
+        body: '{}',
+      },
+    ]);
+    const crossSite = await call('/api/teams/relay/kai-mac/api/tasks', {
+      headers: { origin: 'https://attacker.example' },
+    });
+    expect(crossSite.status).toBe(403);
+    expect((await call('/api/teams/relays')).status).toBe(200);
+    expect(await (await call('/api/teams/relays')).json()).toEqual({
+      relays: [{ instanceId: 'kai-mac', teamId: 'team1', name: 'Kai’s Mac', userId: '7' }],
+    });
+  });
+
+  test('relays the app socket both ways and closes the relay when the page does', async () => {
+    const fake = createFakeRelay();
+    const { base } = await start({ fleetRelay: fake.relay });
+    const socket = new WebSocket(`${base.replace('http', 'ws')}/ws/teams/relay/kai-mac`, {
+      headers: { origin: 'http://localhost:5181' },
+    });
+    const messages = await Effect.runPromise(Queue.unbounded<string>());
+    socket.addEventListener('message', (event) => Queue.offerUnsafe(messages, String(event.data)));
+    await new Promise<void>((resolve) => socket.addEventListener('open', () => resolve()));
+    expect(await Effect.runPromise(Queue.take(messages))).toBe('{"t":"state"}');
+    socket.send('{"t":"hello"}');
+    socket.send(new TextEncoder().encode('{"t":"binary"}'));
+    await until('the relay hears both', () => fake.received.length === 2);
+    expect(fake.received).toEqual(['{"t":"hello"}', '{"t":"binary"}']);
+    socket.close();
+    await until('the relay closes', () => fake.closed() === 1);
+  });
+
+  test('has no relay without remote access', async () => {
+    const { call, base } = await start();
+    expect((await call('/api/teams/relay/kai-mac/api/tasks')).status).toBe(404);
+    expect(await (await call('/api/teams/relays')).json()).toEqual({ relays: [] });
+    const socket = new WebSocket(`${base.replace('http', 'ws')}/ws/teams/relay/kai-mac`, {
+      headers: { origin: 'http://localhost:5181' },
+    });
+    await expect(
+      new Promise((resolve, reject) => {
+        socket.addEventListener('open', resolve);
+        socket.addEventListener('error', () => reject(new Error('socket refused')));
+      })
+    ).rejects.toThrow('socket refused');
   });
 });

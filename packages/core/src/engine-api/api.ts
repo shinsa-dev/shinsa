@@ -102,6 +102,7 @@ import {
   TeamMemberBody,
   TeamExtraBody,
   TeamScopesBody,
+  TeamRelaysAnswer,
   TeamTasksAnswer,
   TeamTasksQuery,
   TerminalsAnswer,
@@ -557,7 +558,10 @@ class TeamsGroup extends HttpApiGroup.make('teams')
       .annotate(EngineFeatureRoute, 'team-access'),
     HttpApiEndpoint.get('keys', '/api/remote/teams/keys', { success: TeamKeysAnswer })
       .annotate(OwnerOnlyRoute, true)
-      .annotate(EngineFeatureRoute, 'team-access')
+      .annotate(EngineFeatureRoute, 'team-access'),
+    HttpApiEndpoint.get('relays', '/api/teams/relays', { success: TeamRelaysAnswer })
+      .annotate(LocalOnlyRoute, true)
+      .annotate(EngineFeatureRoute, 'team-relay')
   )
   .middleware(EngineGate) {}
 

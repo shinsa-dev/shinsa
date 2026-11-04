@@ -404,6 +404,17 @@ export const TeamKeysAnswer = Schema.Struct({
   keys: Schema.Array(Schema.Struct({ teamId: Schema.String, name: Schema.String, key: Schema.String })),
 });
 
+export const TeamRelayEntry = Schema.Struct({
+  instanceId: Schema.String,
+  teamId: Schema.String,
+  name: Schema.String,
+  userId: Schema.String,
+});
+
+export type TeamRelayEntry = typeof TeamRelayEntry.Type;
+
+export const TeamRelaysAnswer = Schema.Struct({ relays: Schema.Array(TeamRelayEntry) });
+
 export const TeamCreateAnswer = Schema.Struct({ teamId: Schema.String, url: Schema.String });
 
 export const Bytes = Schema.Uint8Array;

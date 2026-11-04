@@ -136,6 +136,7 @@ const FEATURE_ROUTES = {
     'GET /api/remote/teams/keys',
   ],
   'usage.pace_limits': [],
+  'team-relay': ['GET /api/teams/relays'],
 };
 
 const LOCAL_ONLY = [
@@ -143,6 +144,7 @@ const LOCAL_ONLY = [
   { pattern: /^\/api\/extensions\/servers\/sign-in$/, writesOnly: true },
   { pattern: /^\/api\/tasks\/[^/]+\/open$/, writesOnly: true },
   { pattern: /^\/api\/onboarding\/install$/, writesOnly: true },
+  { pattern: /^\/api\/teams\/relays$/, writesOnly: false },
 ];
 
 const OWNER_ONLY = [

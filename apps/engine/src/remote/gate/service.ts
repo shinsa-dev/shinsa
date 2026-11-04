@@ -9,6 +9,7 @@ import {
   REMOTE_CONNECT_PARAM,
   SCOPE_MESSAGES,
   SHARE_CHANNEL_PARAM,
+  TEAM_RELAY_PATH,
   splitMessageAttachments,
   TEAM_SCOPE_MESSAGES,
 } from '@shinsa/core';
@@ -168,6 +169,8 @@ export class TunnelGate extends Context.Service<
 
       const admitChannelRequest = (url: URL, source: RequestSourceShape) => {
         if (!url.pathname.startsWith('/api/')) return Effect.fail(notFound());
+        if (url.pathname.startsWith(`${TEAM_RELAY_PATH}/`))
+          return Effect.fail(new LocalOnly({ message: LOCAL_ONLY_MESSAGE }));
         if (extensions === undefined || url.pathname !== SIGN_IN_CALLBACK_PATH) return Effect.void;
         if (source.guest) return Effect.fail(refuseScope(source.guest.scope, url.pathname));
         return Effect.fail(new LocalOnly({ message: LOCAL_ONLY_MESSAGE }));

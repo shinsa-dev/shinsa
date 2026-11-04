@@ -312,6 +312,9 @@ describe('watching teammates’ machines', () => {
       body: { instanceId: 'inst1' },
     });
     expect(listMachineStatus(feeds)).toEqual([['inst1', 'live', null]]);
+    expect(feeds.listGrants()).toEqual([
+      { teamId: 'team1', machine: STUDIO, machineKey: expect.any(String), grant: expect.any(String) },
+    ]);
     expect(feeds.snapshot().tasks[0]).toMatchObject({
       teamId: 'team1',
       instanceId: 'inst1',

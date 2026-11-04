@@ -317,6 +317,15 @@ describe('a plain request over the tunnel', () => {
     );
     expect(await admit('/api/queue', 'GET', member, createGateContext({ extensions: undefined }))).toBeNull();
   });
+
+  test('never relays to a teammate’s machine: the relay answers only this machine’s page', async () => {
+    const relay = '/api/teams/relay/kai-mac/api/tasks';
+    expect(await admit(relay, 'GET', channelSource(OWNER_ID))).toBe('LocalOnly');
+    expect(await admit(relay, 'POST', channelSource('u-member'))).toBe('LocalOnly');
+    expect(await admit(relay, 'GET', TUNNEL)).toBe('RouteNotFound');
+    expect(await admit('/ws/teams/relay/kai-mac', 'GET', TUNNEL)).toBe('RouteNotFound');
+    expect(await admit(relay, 'GET', LOCAL)).toBeNull();
+  });
 });
 
 describe('an endpoint inside the channel', () => {
@@ -382,6 +391,9 @@ describe('a socket over the tunnel', () => {
     expect(await upgrade(`/remote?token=${GOOD_TOKEN}`, {}, full())).toBe('RequestForbidden');
     expect(await upgrade('/remote?token=bad', { origin: APP }, full())).toBe('ConnectRefused');
     expect(await upgrade('/remote', { origin: APP }, full())).toBe('ConnectRefused');
+    expect(await upgrade(`/ws/teams/relay/kai-mac?token=${GOOD_TOKEN}`, { origin: APP }, full())).toBe(
+      'RouteNotFound'
+    );
   });
 
   test('opens a share link only from app.shinsa.dev and only for a link the machine shares', async () => {

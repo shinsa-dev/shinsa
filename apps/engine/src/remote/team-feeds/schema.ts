@@ -38,6 +38,8 @@ export const TEAM_VIEW_FETCH_TIMEOUT = Duration.seconds(30);
 export const ListViewText = Schema.fromJsonString(
   Schema.Struct({
     tasks: Schema.Array(Schema.Unknown),
+    machineKey: Schema.optionalKey(Schema.String),
+    grant: Schema.optionalKey(Schema.String),
     updatedAt: Schema.Number,
     snapshot: Schema.optionalKey(Schema.Unknown),
     held: Schema.optionalKey(Schema.Array(Schema.Unknown)),
@@ -118,7 +120,16 @@ export interface Feed {
   readonly presence: TeamPresence[];
   readonly updatedAt: number | null;
   readonly snapshot: TeamSnapshot | null;
+  readonly machineKey: string | null;
+  readonly grant: string | null;
   readonly attempt: number;
+}
+
+export interface TeamFeedGrant {
+  readonly teamId: string;
+  readonly machine: TeamMachine;
+  readonly machineKey: string;
+  readonly grant: string | null;
 }
 
 export type HeldCloses = ReadonlyMap<number, Effect.Effect<void>>;
@@ -141,6 +152,7 @@ export interface TeamFeedsHandle {
   listTasks(filter: TeamTaskFilter): Effect.Effect<TeamFeedTask[]>;
   listHeld(teamId: string): Effect.Effect<TeamSnapshot[]>;
   readonly snapshot: Effect.Effect<TeamFeedSnapshot>;
+  readonly listGrants: Effect.Effect<TeamFeedGrant[]>;
   openRelay(peer: ChannelPeer, target: TeamViewTarget): Effect.Effect<TeamRelay>;
   openStream(target: TeamStreamTarget, handlers: TeamStreamHandlers): Effect.Effect<void>;
 }
