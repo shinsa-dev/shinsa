@@ -299,7 +299,8 @@ export class Shares extends Context.Service<Shares, SharesHandle>()('shinsa/engi
           chosen ?? task.share?.scopes ?? SHARE_PRESET_SCOPES[resolveSharePreset(state.settings)]
         );
         const people = hasShareGroup(scopes, 'people');
-        const repo = people && task.repoId ? (state.repos[task.repoId] ?? null) : null;
+        const reads = people || hasShareGroup(scopes, 'code');
+        const repo = reads && task.repoId ? (state.repos[task.repoId] ?? null) : null;
         const slug = repo ? resolveRepoSlug(repo) : null;
         const shared = resolveSharedTask(state, task, {
           scopes,

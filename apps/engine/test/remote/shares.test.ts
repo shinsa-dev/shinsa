@@ -1060,6 +1060,14 @@ describe('a share by preset', () => {
     expect(file?.version).toBe('messages:2');
   });
 
+  test('a custom share with code but without people shows the code and still names no one and no repository', async () => {
+    const scopes = ['identity', 'progress', 'code'] as const satisfies readonly ViewScope[];
+    const { publisher } = sharedSetUp({ scopes });
+    const live = await publisher.resolveLive('task-1');
+    expect(live.view.shared).toMatchObject({ code: true, owner: null, machine: null, repository: null });
+    expect(Object.keys(live.view.files)).toContain(SHARE_DIFF_FILE);
+  });
+
   test('a scope list passed to the live view replaces the share’s own, as a team view does', async () => {
     const { publisher } = sharedSetUp({ preset: 'full' });
     const live = await publisher.resolveLive('task-1', SHARE_PRESET_SCOPES.status);
