@@ -419,7 +419,7 @@ Only these, and they win over anything below:
     `cards` and `sidebar`. Both are one frame, `AppFrame` (`components/layout/frame.tsx`), around one `main`:
     switching adds or drops the top bar and the rail and never remounts the pages inside.
     Cards (the default) has no rail: a top
-    bar with the navigation on the left (the Shinsa logo, the Home button in the Mac app, 31; Tasks; Services, 37;
+    bar with the navigation on the left (the Home button, 31; Tasks; Services, 37;
     and a "3 need you" button that opens the compact queue) and Update, Settings, Agent usage and Focus on the right,
     and task pages centred on the same axis as Home (see 12). Tasks (`NavButton` in `components/layout/nav-button.tsx`,
     secondary `sm`, `IconListBullets` and the word Tasks, the look of the Home button) opens All tasks; Settings is the
@@ -2090,11 +2090,10 @@ Only these, and they win over anything below:
       Dock already say Shinsa), so in the app the Shinsa wordmark is a Home button: `HomeLink`
       (`components/layout/home-link.tsx`) renders a `NavButton` there, as Tasks and Settings are (secondary `sm`, `IconHomeRoundDoor` and the word Home; on Home itself
       `IconHomeRoundDoorFilled` in `fg-4` with `aria-current="page"`; the tooltip "Home ⇧⌘H") and `BrandLink` in a browser and Floaty, in the Cards top bar, the rail's
-      header and the compact bar alike. In a browser it is the logo mark alone (no wordmark, `aria-hidden`) followed by
-      the same Home button, in the Cards top bar and the rail's header; the phone's compact bar shows the Home icon
+      header and the compact bar alike. In a browser it is the same Home button with no logo beside it (the tab's favicon already says Shinsa), in the Cards top bar and the rail's header; the phone's compact bar shows the Home icon
       alone and the More sheet keeps the logo with the wordmark (`variant`: `bar`, `icon`, `brand`). The site's demos (`apps/marketing`, which never have the bridge) ask for the
       app's look with the `DesktopChrome` context (`lib/desktop.ts`) and render the bar at the demo's page with
-      `RouteScope` (`router.ts`); nothing else reads either. In a browser the logo mark keeps 4px after it (`me-1`) before Home, and every pair in the bar sits as far apart: 19px between what one button draws and the next, Home in the app, Tasks, Services and the queue on the left and Settings, usage and Focus on the right included; the icon-only Settings keeps 2px more after it (`me-0.5`), since a square icon button pads its glyph less than a labelled button does (measured from the pixels at 1440 and 900, light and dark, in the browser and the app: every gap 19px, the browser's Services to the queue 18px). The Go menu has the matching keys: Back ⌘[ and Forward ⌘] step through
+      `RouteScope` (`router.ts`); nothing else reads either. Every pair in the bar sits as far apart: 19px between what one button draws and the next, Home in the app, Tasks, Services and the queue on the left and Settings, usage and Focus on the right included; the icon-only Settings keeps 2px more after it (`me-0.5`), since a square icon button pads its glyph less than a labelled button does (measured from the pixels at 1440 and 900, light and dark, in the browser and the app: every gap 19px, the browser's Services to the queue 18px). The Go menu has the matching keys: Back ⌘[ and Forward ⌘] step through
       the page's own history (`MainWindow.step`, which never steps onto the waiting page,
       `resolveHistoryStep`), and Home ⇧⌘H opens `/`, as in Finder and Safari. The code editor keeps ⌘[ and ⌘] for
       indent and outdent while it has focus, since the page sees the key before the menu does.

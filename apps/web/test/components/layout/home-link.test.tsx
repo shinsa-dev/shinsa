@@ -34,14 +34,14 @@ afterEach(() => {
 });
 
 describe('the way home', () => {
-  it('is the logo mark and a Home button in a browser, never the wordmark', () => {
+  it('is a Home button alone in a browser, with no logo, as the favicon names the tab', () => {
     act(() => navigate('/tasks/SW-1'));
     const view = render(
       <TooltipProvider>
         <HomeLink />
       </TooltipProvider>
     );
-    expect(view.container.querySelector('[aria-hidden] svg')).toBeTruthy();
+    expect(view.container.firstElementChild).toBe(screen.getByRole('button', { name: 'Home' }));
     expect(view.container.textContent).toBe('Home');
     act(() => fireEvent.click(screen.getByRole('button', { name: 'Home' })));
     expect(location.pathname).toBe('/');
