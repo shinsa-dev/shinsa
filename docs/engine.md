@@ -2272,6 +2272,12 @@ note (you, or report_feedback) ──► drafting ── quick call ──► dr
   web labels the task "Setup incomplete". Verify again (`approve`) verifies the setup again; Cancel ends the task. A
   message at the gate verifies the setup again too (`verify_setup`) and is kept for the first agent. The same
   problems twice record nothing new.
+- **A missing repository is a question.** When `no_repository` is the only problem and Shinsa knows repositories, the
+  gate asks "Which repository is this task for?" with `choices`: the repositories of the task's project, or every
+  registered one when it has none or no project, by name, at most eight, a name two repositories share told apart by
+  project, then by folder. A pick (`reply` with the choice) binds that repository, with its project when the task has
+  none, and verifies the setup again; a reply that is not one of the choices is refused ("Pick one of the
+  repositories listed."). With no repository registered, or with other problems beside it, the gate reads as above.
 
 ### Schedules and webhooks
 
