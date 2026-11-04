@@ -392,6 +392,7 @@ describe('the Slack effects', () => {
       evaluate: () => record('evaluate'),
       status: () => record('status'),
       post: () => record('post'),
+      merge: () => record('merge'),
       react: () => record('react'),
     } as unknown as Slack['Service'];
     const { runner } = setup(() => undefined, { slack });
@@ -412,11 +413,12 @@ describe('the Slack effects', () => {
       { kind: 'slack.post', thread: THREAD, taskId: 't1', post: { kind: 'result' } },
       createContext()
     );
+    await runner.apply({ kind: 'slack.merge', thread: THREAD, taskId: 't1', round: 1 }, createContext());
     await runner.apply(
       { kind: 'slack.react', thread: THREAD, messageTs: '1.2', reaction: 'eyes' },
       createContext()
     );
-    expect(handled).toEqual(['evaluate', 'status', 'post', 'react']);
+    expect(handled).toEqual(['evaluate', 'status', 'post', 'merge', 'react']);
   });
 
   test('fail without one, so they wait in the outbox', async () => {

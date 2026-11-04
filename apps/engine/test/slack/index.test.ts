@@ -7,6 +7,7 @@ import {
   type SlackDecision,
   type SlackMention,
   type SlackThreadLink,
+  type Watchdog,
   serializeBase64Url,
 } from '@shinsa/core';
 import { Duration, Effect, Exit, Fiber } from 'effect';
@@ -338,6 +339,119 @@ describe('a post the outbox asks for', () => {
     expect(logs.fieldsOf('[Slack] Remote access is off, so nothing was posted')).toEqual([
       { threadTs: '100.1' },
     ]);
+  });
+});
+
+function watchdogOf(fields: Partial<Watchdog> = {}): Watchdog {
+  return {
+    id: 'w1',
+    round: 1,
+    title: 'Checkout latency',
+    check: 'p95 stays under 400 ms.',
+    source: null,
+    sourceRequest: null,
+    firstCheckMinutes: 360,
+    maxGapMinutes: 360,
+    forMinutes: 2880,
+    startsOn: 'merge',
+    productionCheck: null,
+    status: 'watching',
+    armedAt: NOW,
+    awaitingSince: null,
+    startedAt: NOW,
+    endsAt: null,
+    nextCheckAt: NOW + 3_600_000,
+    runId: null,
+    checks: [],
+    forkTaskIds: [],
+    linkedTaskIds: [],
+    endedAt: null,
+    ...fields,
+  };
+}
+
+function setUpMerged(merge: SlackThreadLink['merge'] = { round: 1, ts: null }) {
+  const setup = setUp({ link: { ...LINK, merge } });
+  setup.stub.update((state) => {
+    const task = state.tasks.t1;
+    if (task) {
+      task.stage = 'merged';
+      task.watchdogs = [watchdogOf()];
+    }
+  });
+  return setup;
+}
+
+describe('the merge message of a task', () => {
+  const effect = { kind: 'slack.merge' as const, thread: THREAD, taskId: 't1', round: 1 };
+
+  test('is posted once and its message id recorded, then edited in place as its watchdogs move', async () => {
+    const { slack, stub, relay } = setUpMerged();
+    await slack.merge(effect, context('merge-1'));
+    const posts = () => callsTo(relay, 'post');
+    expect(posts()[0]?.body).toMatchObject({ replaceTs: null });
+    expect(JSON.stringify(posts()[0]?.body?.message)).toContain('Checkout latency');
+    expect(stub.dispatched).toEqual([{ type: 'slack.record_merge', taskId: 't1', round: 1, ts: '200.1' }]);
+    expect(stub.commandIds).toEqual(['merge-1:slack.record_merge']);
+    stub.update((state) => {
+      const task = state.tasks.t1;
+      if (!task) return;
+      task.slack = { ...LINK, merge: { round: 1, ts: '200.1' } };
+      task.watchdogs = [watchdogOf({ status: 'passed', nextCheckAt: null, endedAt: NOW })];
+    });
+    await slack.merge(effect, context('merge-2'));
+    expect(posts()).toHaveLength(2);
+    expect(posts()[1]?.body).toMatchObject({ replaceTs: '200.1' });
+    expect(stub.dispatched).toHaveLength(1);
+    await slack.merge(effect, context('merge-3'));
+    expect(posts()).toHaveLength(2);
+  });
+
+  test('sends nothing for another round, a thread with no merge, or a task that is gone', async () => {
+    const { slack, relay } = setUpMerged({ round: 2, ts: '200.4' });
+    await slack.merge(effect, context());
+    await slack.merge({ ...effect, taskId: 'gone' }, context());
+    const none = setUpMerged(null);
+    await none.slack.merge(effect, context());
+    expect([...relay, ...none.relay]).toEqual([]);
+  });
+
+  test('records nothing when the relay refuses it', async () => {
+    const { slack, stub, answers } = setUpMerged();
+    answers['/__remote/slack/post'] = () =>
+      Response.json({ error: { code: 'post_not_yours', message: 'Refused.' } }, { status: 403 });
+    await slack.merge(effect, context());
+    expect(stub.dispatched).toEqual([]);
+  });
+});
+
+describe('a watchdog that found a problem', () => {
+  test('is posted as a new message naming it and linking the tasks it filed', async () => {
+    const { slack, stub, relay } = setUpMerged({ round: 1, ts: '200.1' });
+    stub.update((state) => {
+      const task = state.tasks.t1;
+      if (task)
+        task.watchdogs = [
+          watchdogOf({
+            status: 'tripped',
+            checks: [{ at: NOW, healthy: false, summary: 'p95 is 1.8 s in Safari.' }],
+            forkTaskIds: ['t2'],
+          }),
+        ];
+      state.tasks.t2 = createTask({ id: 't2', handle: 'LOC-8', title: 'Slow checkout in Safari' });
+    });
+    await slack.post({
+      kind: 'slack.post',
+      thread: THREAD,
+      taskId: 't1',
+      post: { kind: 'tripped', watchdogId: 'w1' },
+    });
+    const call = callsTo(relay, 'post')[0]?.body;
+    expect(call).toMatchObject({ replaceTs: null });
+    const message = JSON.stringify(call?.message);
+    expect(message).toContain('Watchdog found a problem');
+    expect(message).toContain('p95 is 1.8 s in Safari.');
+    expect(message).toContain('https://app.test/tasks/t2');
   });
 });
 

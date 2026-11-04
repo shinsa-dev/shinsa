@@ -436,7 +436,9 @@ src/
 │                        slack.status effect, the thread's one card (the open gate with its buttons, else the
 │                        status) edited at most every 5 s and only when it changes, the thread's status and the
 │                        mention's one reaction moved with it; slack.react, 👀 or 📥 on a later mention;
-│                        slack.post, a new message only for the result and the finished task; GET
+│                        slack.post, a new message only for the result, the finished task and a watchdog that
+│                        found a problem; slack.merge, the round's Merged message posted once with its ts
+│                        recorded (slack.record_merge), then edited in place and only when it changes; GET
 │                        /api/slack and POST /api/slack/disconnect); posts, reactions, the thread's status, links and
 │                        unlink go through RemoteClient's slackRelay group with the machine token, retried only
 │                        on SlackFailed or a retryable RemoteUnreachable (the relay down, busy or unreachable)

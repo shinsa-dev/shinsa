@@ -9,6 +9,7 @@ import {
   resolveSlackReaction,
   resolveSlackSessionStatus,
   resolveSlackLastUsedAt,
+  resolveSlackMergeMessage,
   resolveSlackTaskUrl,
   resolveSlackThreadKey,
   SLACK_ENGINE_INTERACTIONS_PATH,
@@ -64,6 +65,10 @@ export class Slack extends Context.Service<
       key: string
     ) => Effect.Effect<void, SlackRefusal | SlackRelayFailure>;
     readonly post: (effect: SlackEffect<'slack.post'>) => Effect.Effect<void, SlackRelayFailure>;
+    readonly merge: (
+      effect: SlackEffect<'slack.merge'>,
+      key: string
+    ) => Effect.Effect<void, SlackRefusal | SlackRelayFailure>;
     readonly react: (effect: SlackEffect<'slack.react'>) => Effect.Effect<void>;
     readonly status: (
       effect: SlackEffect<'slack.status'>,
@@ -85,6 +90,7 @@ export class Slack extends Context.Service<
         const dispatch = (command: ShinsaCommand, id: string) => engine.dispatch(command, { id });
         const statusAt = yield* Ref.make<ReadonlyMap<string, number>>(new Map());
         const statusShown = yield* Ref.make<ReadonlyMap<string, string>>(new Map());
+        const mergeShown = yield* Ref.make<ReadonlyMap<string, string>>(new Map());
         const sessionShown = yield* Ref.make<ReadonlyMap<string, SlackSessionStatus>>(new Map());
         const declined = yield* Ref.make<ReadonlySet<string>>(new Set());
         const sessionRefused = yield* Ref.make<ReadonlySet<string>>(new Set());
@@ -301,10 +307,37 @@ export class Slack extends Context.Service<
         });
 
         const post = Effect.fn('Slack.post')(function* (effect: SlackEffect<'slack.post'>) {
-          const url = resolveTaskUrl(effect.taskId);
-          const message = resolveSlackPostMessage(yield* engine.state, effect.post, effect.taskId, url);
+          const message = resolveSlackPostMessage(
+            yield* engine.state,
+            effect.post,
+            effect.taskId,
+            resolveTaskUrl
+          );
           if (!message) return;
           yield* send(effect.thread, null, message);
+        });
+
+        const merge = Effect.fn('Slack.merge')(function* (effect: SlackEffect<'slack.merge'>, key: string) {
+          const state = yield* engine.state;
+          const message = resolveSlackMergeMessage(
+            state,
+            effect.taskId,
+            effect.round,
+            resolveTaskUrl(effect.taskId)
+          );
+          const posted = state.tasks[effect.taskId]?.slack?.merge;
+          if (!message || posted?.round !== effect.round) return;
+          const shown = JSON.stringify(message);
+          const shownKey = `${effect.taskId}:${effect.round}`;
+          if (posted.ts && (yield* Ref.get(mergeShown)).get(shownKey) === shown) return;
+          const ts = yield* send(effect.thread, posted.ts, message);
+          if (!ts) return;
+          yield* Ref.update(mergeShown, (messages) => new Map(messages).set(shownKey, shown));
+          if (ts === posted.ts) return;
+          yield* dispatch(
+            { type: 'slack.record_merge', taskId: effect.taskId, round: effect.round, ts },
+            `${key}:slack.record_merge`
+          );
         });
 
         const react = (effect: SlackEffect<'slack.react'>) =>
@@ -399,6 +432,7 @@ export class Slack extends Context.Service<
           handleTunnel,
           evaluate,
           post,
+          merge,
           react,
           status,
           snapshot,

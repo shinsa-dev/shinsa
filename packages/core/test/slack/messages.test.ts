@@ -5,6 +5,7 @@ import {
   type Gate,
   listSlackStatusGates,
   parseSlackDecisionValue,
+  resolveSlackMergeMessage,
   resolveSlackPostMessage,
   resolveSlackReaction,
   resolveSlackSessionStatus,
@@ -19,9 +20,12 @@ import {
   serializeSlackDeclined,
   serializeSlackGate,
   serializeSlackLinkPrompt,
+  serializeSlackMerged,
   serializeSlackOffline,
   serializeSlackResult,
+  type Task,
   type TaskShape,
+  type Watchdog,
 } from '../../src/index.ts';
 import {
   approve,
@@ -523,10 +527,6 @@ describe("the bot's own replies", () => {
     expect(readText(serializeSlackCompleted(task, URL))).toBe(
       `*Done*\nThe task is finished.\n<${URL}|SUP-1 · Fix it>`
     );
-    const merged = { ...task, pullRequest: pullRequest({ state: 'merged' }) };
-    const mergedMessage = serializeSlackCompleted(merged, URL);
-    expect(readText(mergedMessage)).toStartWith('*Merged*\nThe pull request is merged.\n');
-    expect(mergedMessage.text).toBe('SUP-1 · Fix it is merged.');
     const declined = serializeSlackDeclined();
     expect(declined.text).toBe('Not a task, so nothing was started.');
     expect(declined.blocks).toEqual([
@@ -545,9 +545,11 @@ describe('a post from the outbox', () => {
     const taskId = createTask(harness);
     ask(harness, taskId, { question: 'Go?' });
     const { state } = harness;
-    expect(resolveSlackPostMessage(state, { kind: 'result' }, taskId, URL)).toBeNull();
-    expect(resolveSlackPostMessage(state, { kind: 'completed' }, taskId, URL)?.text).toEndWith('is done.');
-    expect(resolveSlackPostMessage(state, { kind: 'completed' }, 'gone', URL)).toBeNull();
+    expect(resolveSlackPostMessage(state, { kind: 'result' }, taskId, () => URL)).toBeNull();
+    expect(resolveSlackPostMessage(state, { kind: 'completed' }, taskId, () => URL)?.text).toEndWith(
+      'is done.'
+    );
+    expect(resolveSlackPostMessage(state, { kind: 'completed' }, 'gone', () => URL)).toBeNull();
     expect(listSlackStatusGates(state, taskId).map((gate) => gate.id)).toEqual(['q1']);
   });
 });
@@ -568,3 +570,177 @@ describe('Slack limits on every message', () => {
 function never(): never {
   throw new Error('expected a value');
 }
+
+const AT = Date.UTC(2026, 10, 4, 14, 0);
+
+function watchdogOf(fields: Partial<Watchdog>): Watchdog {
+  return {
+    id: 'w1',
+    round: 1,
+    title: 'Checkout latency',
+    check: 'p95 stays under 400 ms.',
+    source: { server: 'maple', data: 'Traces' },
+    sourceRequest: null,
+    firstCheckMinutes: 360,
+    maxGapMinutes: 360,
+    forMinutes: 2880,
+    startsOn: 'merge',
+    productionCheck: null,
+    status: 'watching',
+    armedAt: AT,
+    awaitingSince: null,
+    startedAt: AT,
+    endsAt: null,
+    nextCheckAt: null,
+    runId: null,
+    checks: [],
+    forkTaskIds: [],
+    linkedTaskIds: [],
+    endedAt: null,
+    ...fields,
+  };
+}
+
+function mergedTask(harness: Harness, fields: Partial<Task> = {}) {
+  const taskId = createTask(harness, { request: 'Fix it' });
+  return { ...harness.task(taskId), pullRequest: pullRequest({ state: 'merged' }), ...fields };
+}
+
+const HEALTHY = { at: AT, healthy: true, summary: 'p95 is 210 ms.' };
+
+describe('the merge message', () => {
+  test('says the pull request is merged, with no sections when nothing watches it', () => {
+    const harness = createHarness();
+    const message = serializeSlackMerged(mergedTask(harness), 1, URL);
+    expect(message.text).toBe('SUP-1 · Fix it is merged.');
+    expect(readText(message)).toStartWith('*Merged*\nThe pull request is merged.\n<');
+    expect(message.blocks).toHaveLength(2);
+  });
+
+  test('lists each watchdog of the round with its state', () => {
+    const harness = createHarness();
+    const task = mergedTask(harness, {
+      watchdogs: [
+        watchdogOf({ id: 'a', title: 'Sources', status: 'needs_source' }),
+        watchdogOf({ id: 'b', title: 'Release', status: 'awaiting_production' }),
+        watchdogOf({ id: 'c', title: 'Fresh', nextCheckAt: AT }),
+        watchdogOf({ id: 'd', title: 'Healthy', checks: [HEALTHY], nextCheckAt: AT }),
+        watchdogOf({ id: 'e', title: 'Unscheduled', checks: [HEALTHY] }),
+        watchdogOf({ id: 'f', title: 'Passed', status: 'passed', checks: [HEALTHY, HEALTHY] }),
+        watchdogOf({ id: 'g', title: 'Tripped', status: 'tripped' }),
+        watchdogOf({ id: 'h', title: 'Stopped', status: 'stopped' }),
+        watchdogOf({ id: 'i', title: 'Earlier round', round: 2 }),
+      ],
+    });
+    const date = `<!date^${AT / 1000}^{date_short_pretty} at {time}|2026-11-04T14:00:00.000Z>`;
+    expect(
+      readText(serializeSlackMerged(task, 1, URL))
+        .split('\n')
+        .slice(2, 11)
+    ).toEqual([
+      '*Watchdogs*',
+      '• *Sources*: Waits for a data source.',
+      '• *Release*: Waits for the change to reach production.',
+      `• *Fresh*: Watching. Next check ${date}.`,
+      `• *Healthy*: Watching. Nothing wrong so far. Next check ${date}.`,
+      '• *Unscheduled*: Watching. Nothing wrong so far.',
+      '• *Passed*: Passed. Found nothing wrong in 2 checks.',
+      '• *Tripped*: Found a problem.',
+      '• *Stopped*: Stopped.',
+    ]);
+  });
+
+  test('lists the open steps after the merge of the round', () => {
+    const harness = createHarness();
+    const task = mergedTask(harness);
+    const step = {
+      when: 'post_merge' as const,
+      kind: 'migration' as const,
+      title: 'Run the <migration>',
+      detail: 'Adds the invoices table.',
+      command: null,
+    };
+    const carried = [
+      { ...step, round: 1, done: false },
+      { ...step, title: 'Ticked', round: 1, done: true },
+      { ...step, title: 'Other round', round: 2, done: false },
+    ];
+    const text = readText(serializeSlackMerged({ ...task, carriedMergeSteps: carried }, 1, URL));
+    expect(text).toContain('*Still to do after the merge*\n• Run the &lt;migration&gt;\n<');
+    expect(text).not.toContain('Ticked');
+    expect(text).not.toContain('Other round');
+  });
+
+  test('resolves from the state, and nothing for a task that is gone', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    expect(resolveSlackMergeMessage(harness.state, taskId, 1, URL)?.text).toEndWith('is merged.');
+    expect(resolveSlackMergeMessage(harness.state, 'gone', 1, URL)).toBeNull();
+  });
+});
+
+describe('the message when a watchdog finds a problem', () => {
+  test('names the watchdog, quotes its last check and links each task filed for it', () => {
+    const harness = createHarness();
+    const fork = createTask(harness, { request: 'Fix Safari' });
+    const linked = createTask(harness, { request: 'Known issue' });
+    const taskId = createTask(harness, { request: 'Fix it' });
+    const watchdog = watchdogOf({
+      status: 'tripped',
+      checks: [HEALTHY, { at: AT, healthy: false, summary: 'p95 is 1.8 s in Safari. It started at noon.' }],
+      forkTaskIds: [fork, 'gone'],
+      linkedTaskIds: [linked, fork],
+    });
+    harness.state.tasks[taskId] = { ...harness.task(taskId), watchdogs: [watchdog] };
+    const urlOf = (id: string) => `https://app.shinsa.dev/tasks/${id}`;
+    const message = resolveSlackPostMessage(
+      harness.state,
+      { kind: 'tripped', watchdogId: 'w1' },
+      taskId,
+      urlOf
+    );
+    const handleOf = (id: string) => `${harness.task(id).handle} · ${harness.task(id).title}`;
+    expect(message?.text).toBe(`${handleOf(taskId)}: the watchdog “Checkout latency” found a problem.`);
+    expect(readText(message ?? never())).toBe(
+      [
+        'Watchdog found a problem',
+        '*Checkout latency*',
+        '> p95 is 1.8 s in Safari.',
+        '*Filed as*',
+        `• <${urlOf(fork)}|${handleOf(fork)}>`,
+        `• <${urlOf(linked)}|${handleOf(linked)}>`,
+        `<${urlOf(taskId)}|${handleOf(taskId)}>`,
+      ].join('\n')
+    );
+  });
+
+  test('has no list when nothing was filed, no quote with no check, and nothing for a watchdog that is gone', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness, { request: 'Fix it' });
+    harness.state.tasks[taskId] = { ...harness.task(taskId), watchdogs: [watchdogOf({ status: 'tripped' })] };
+    const post = (watchdogId: string) =>
+      resolveSlackPostMessage(harness.state, { kind: 'tripped', watchdogId }, taskId, () => URL);
+    expect(readText(post('w1') ?? never())).toBe(
+      ['Watchdog found a problem', '*Checkout latency*', `<${URL}|SUP-1 · Fix it>`].join('\n')
+    );
+    expect(post('gone')).toBeNull();
+  });
+});
+
+describe('a merged task while a watchdog checks it', () => {
+  test('keeps the card, the reaction and the thread status it had after the merge', () => {
+    const harness = createHarness();
+    const merged = mergedTask(harness, { stage: 'merged', stageReason: 'pull request merged' });
+    const watching = {
+      ...merged,
+      stage: 'watching' as const,
+      stageReason: 'checking the watchdog “Checkout latency”',
+    };
+    expect(readText(serializeSlackCard(watching, [], URL))).toStartWith('*Merged*\n');
+    expect(resolveSlackReaction(watching, [])).toBe(SLACK_REACTIONS.done);
+    expect(resolveSlackSessionStatus(watching, [])).toBe('active');
+    const done = { ...watching, pullRequest: null };
+    expect(readText(serializeSlackCard(done, [], URL))).toStartWith('*Done*\n');
+    expect(resolveSlackReaction(done, [])).toBe(SLACK_REACTIONS.done);
+  });
+});
