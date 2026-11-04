@@ -58,8 +58,8 @@ describe('POST /api/commands', () => {
     const { context } = startRoutes();
     const routed: (string | null)[] = [];
     const router = {
-      route: (_command: unknown, id: string | null) =>
-        Effect.sync(() => void routed.push(id)).pipe(Effect.as([])),
+      route: (_command: unknown, from?: { readonly id?: string }) =>
+        Effect.sync(() => void routed.push(from?.id ?? null)).pipe(Effect.as([])),
     };
     const taskId = await Effect.runPromise(
       dispatchUserCommand(context.engine.core, TASK, { clientId: 'c1', router, origin: 'local', guest: null })

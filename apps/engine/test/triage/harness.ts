@@ -144,13 +144,12 @@ export function routeUserCommand(
   from: RouteSource = {}
 ) {
   if (!classify) return engine.dispatch(command, id ? { ...from, id } : from);
-  return run(resolveRouter(engine, classify).route(command, id, from));
+  return run(resolveRouter(engine, classify).route(command, id ? { ...from, id } : from));
 }
 
 export function createManageRoute(engine: Engine, classify: Classifier) {
   const router = resolveRouter(engine, classify);
-  return (command: UserCommand, from: RouteSource & { id?: string }) =>
-    router.route(command, from.id ?? null, from);
+  return router.route;
 }
 
 export function createCommandRouter(engine: Engine, classify: Classifier | null) {

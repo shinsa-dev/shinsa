@@ -26,8 +26,7 @@ export class CommandRouter extends Context.Service<
   {
     readonly route: (
       command: UserCommand,
-      id: string | null,
-      from?: RouteSource
+      from?: RouteSource & { readonly id?: string }
     ) => Effect.Effect<ShinsaEvent[], RouteFailure>;
   }
 >()('shinsa/engine/triage/router/CommandRouter') {
@@ -115,10 +114,9 @@ export class CommandRouter extends Context.Service<
 
       const route = Effect.fn('CommandRouter.route')(function* (
         command: UserCommand,
-        id: string | null,
-        from: RouteSource = {}
+        plain: RouteSource & { readonly id?: string } = {}
       ) {
-        const plain = id ? { ...from, id } : from;
+        const { id = null, ...from } = plain;
         if (id && (yield* engine.hasReceipt(id))) return yield* dispatch(command, plain);
         const shapeless = selectShapelessRound(yield* engine.state, command);
         if (shapeless) return yield* routeResolved(command, id, from, shapeCommand(shapeless));

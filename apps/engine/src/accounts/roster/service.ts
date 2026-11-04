@@ -70,7 +70,7 @@ export class Accounts extends Context.Service<
     lease(request: AccountLeaseRequest): Effect.Effect<AccountLease | null, DomainError>;
     readWeeklyReading(accountId: string, force: boolean): Effect.Effect<WeeklyReading | null>;
     readProviderWeeklyReading(provider: string, force: boolean): Effect.Effect<WeeklyReading | null>;
-    readFastMode(provider: string, accountId: string | null): Effect.Effect<FastModeAvailability>;
+    readFastMode(provider: string, accountId?: string | null): Effect.Effect<FastModeAvailability>;
     onRejection(rejection: RunRejection): Effect.Effect<RejectionVerdict>;
     onNotice(runId: string, notice: ChatNotice): Effect.Effect<void>;
     readonly refresh: Effect.Effect<AccountsSnapshot, AccountsFailure>;
@@ -395,7 +395,7 @@ export class Accounts extends Context.Service<
 
       const readFastMode = Effect.fn('Accounts.readFastMode')(function* (
         provider: string,
-        accountId: string | null
+        accountId: string | null = null
       ) {
         const unknown: FastModeAvailability = 'unknown';
         if (accountId === null && providerIds.has(provider)) {

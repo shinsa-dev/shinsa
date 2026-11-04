@@ -307,7 +307,7 @@ export type AccountsFailure = AccountStepFailed | DomainError;
 
 interface AccountUsageSource {
   readonly id: string;
-  readonly read: Effect.Effect<ProviderUsageReading, AccountsFailure>;
+  readonly read: Effect.Effect<ProviderUsageReading, { readonly message: string }>;
 }
 
 export interface AccountsInputShape {

@@ -147,11 +147,9 @@ export const createWakeEngine = Effect.fn('Cli.createWakeEngine')(function* (
   }).pipe(Effect.provideService(Shell, shell));
 });
 
-const exitProcess = (code: number) => process.exit(code);
-
 export const stopEngineFiber = Effect.fn('Cli.stopEngineFiber')(function* <E>(
   engine: Fiber.Fiber<unknown, E>,
-  exit: (code: number) => void = exitProcess,
+  exit: (code: number) => void = process.exit,
   deadlineMs: number = STOP_DEADLINE_MS
 ) {
   yield* Effect.logInfo('[Serve] Stopping');
@@ -259,7 +257,7 @@ const resolveBase = Effect.fn('Cli.resolveBase')(function* (env: Record<string, 
 export const createProcessIo = Effect.fn('Cli.createProcessIo')(function* (options: ProcessOptions = {}) {
   const isTerminal = options.isTerminal ?? isStartedFromTerminal;
   const bundle = options.bundle === undefined ? BUNDLE : options.bundle;
-  const exit = options.exit ?? exitProcess;
+  const exit = options.exit ?? process.exit;
   const base = yield* resolveBase(Bun.env);
   const write = (line = '') => process.stdout.write(`${line}\n`);
   const io: CliIo = {

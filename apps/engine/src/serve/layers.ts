@@ -1,7 +1,8 @@
 import { mkdirSync } from 'node:fs';
 import { Duration, Effect, Layer } from 'effect';
-import { Accounts, AccountsInput, AccountsLayer, AccountStepFailed } from '../accounts/index.ts';
-import { AccountBroker, AccountBrokerFailed } from '../agents/accounts/schema.ts';
+import { constant } from 'effect/Function';
+import { Accounts, AccountsInput, AccountsLayer } from '../accounts/index.ts';
+import { AccountBroker } from '../agents/accounts/schema.ts';
 import { IDLE_RELEASE, IdleReleaseSettings, MAX_IDLE_PIN_MS } from '../agents/idle/schema.ts';
 import { Providers, ProvidersLayer, RunHooks, RunSupervisor, Transcripts } from '../agents/index.ts';
 import { ManageAccess } from '../agents/manage/index.ts';
@@ -153,20 +154,14 @@ function createAgentsLayer(options: ShinsaOptions) {
           )
         )
       );
-  const forward = options.onNotice;
   const accountsInput = Layer.effect(
     AccountsInput,
     Effect.gen(function* () {
       const found = yield* Providers;
       return {
-        usageSources: found.listUsageSources().map((source) => ({
-          id: source.id,
-          read: source.read.pipe(
-            Effect.mapError((failure) => new AccountStepFailed({ message: failure.message }))
-          ),
-        })),
+        usageSources: found.listUsageSources(),
         listProviderLogins: found.listLogins,
-        forward: (runId, notice) => (forward ? forward(runId, notice) : Effect.void),
+        forward: options.onNotice ?? constant(Effect.void),
       } satisfies typeof AccountsInput.Service;
     })
   );
@@ -177,8 +172,7 @@ function createAgentsLayer(options: ShinsaOptions) {
   const fastMode = Layer.effect(
     QuickFastMode,
     Effect.gen(function* () {
-      const found = yield* Accounts;
-      return (provider: string) => found.readFastMode(provider, null);
+      return (yield* Accounts).readFastMode;
     })
   );
   const quick = QuickCalls.layer.pipe(Layer.provide(fastMode));
@@ -321,7 +315,7 @@ function createRunsLayer(options: ShinsaOptions) {
       return ManageAccess.of({
         baseUrl: address.current,
         projects,
-        route: (command, from) => router.route(command, from.id ?? null, from),
+        route: router.route,
         hookSecrets: (taskId) => schedules.hookSecrets(taskId),
       });
     })
@@ -331,10 +325,7 @@ function createRunsLayer(options: ShinsaOptions) {
     Effect.gen(function* () {
       const accounts = yield* Accounts;
       return {
-        lease: (request: Parameters<typeof accounts.lease>[0]) =>
-          accounts
-            .lease(request)
-            .pipe(Effect.mapError((error) => new AccountBrokerFailed({ message: error.message }))),
+        lease: accounts.lease,
         readWeeklyReading: accounts.readWeeklyReading,
         readProviderWeeklyReading: accounts.readProviderWeeklyReading,
         readFastMode: accounts.readFastMode,

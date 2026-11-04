@@ -1,4 +1,11 @@
-import type { FastModeAvailability, Run, RunAccount, ShinsaState, WeeklyReading } from '@shinsa/core';
+import type {
+  DomainError,
+  FastModeAvailability,
+  Run,
+  RunAccount,
+  ShinsaState,
+  WeeklyReading,
+} from '@shinsa/core';
 import { Context, Effect, Layer } from 'effect';
 import { EngineCore } from '../../runtime/engine/service.ts';
 import { Transcripts } from '../transcripts/service.ts';
@@ -11,7 +18,7 @@ export class AccountLeasing extends Context.Service<
       run: Run,
       exclude: string[],
       renewed: RunAccount | null
-    ): Effect.Effect<AccountLease | null, AccountBrokerFailed>;
+    ): Effect.Effect<AccountLease | null, AccountBrokerFailed | DomainError>;
     readWeeklyReading(
       runId: string,
       lease: AccountLease | null,
@@ -22,7 +29,7 @@ export class AccountLeasing extends Context.Service<
       lease: AccountLease | null,
       provider: string
     ): Effect.Effect<FastModeAvailability, AccountBrokerFailed>;
-    leaseSession(run: Run): Effect.Effect<AccountLease | null, AccountBrokerFailed>;
+    leaseSession(run: Run): Effect.Effect<AccountLease | null, AccountBrokerFailed | DomainError>;
   }
 >()('shinsa/engine/agents/accounts/AccountLeasing') {
   static readonly layer = Layer.effect(

@@ -13,7 +13,7 @@ export class ResourceMachine extends Context.Service<
     readonly cores: number;
     readonly cpuTimes: Effect.Effect<CpuTimes>;
     readonly memory: Effect.Effect<MemoryReading | null, ResourceReadFailed>;
-    run(argv: Argv, cwd: string): Effect.Effect<CommandResult>;
+    run(argv: Argv, cwd?: string): Effect.Effect<CommandResult>;
   }
 >()('shinsa/engine/resources/machine/ResourceMachine') {
   static readonly layer = Layer.effect(
@@ -21,7 +21,7 @@ export class ResourceMachine extends Context.Service<
     Effect.gen(function* () {
       const shell = yield* Shell;
 
-      const run = Effect.fn('ResourceMachine.run')(function* (argv: Argv, cwd: string) {
+      const run = Effect.fn('ResourceMachine.run')(function* (argv: Argv, cwd = '/') {
         return yield* shell
           .run({ argv, cwd, timeout: RESOURCE_COMMAND_TIMEOUT })
           .pipe(Effect.orElseSucceed(constant(COMMAND_MISSING)));
@@ -40,7 +40,7 @@ export class ResourceMachine extends Context.Service<
       return ResourceMachine.of({
         cores: cpus().length,
         cpuTimes,
-        memory: readMemoryWith(process.platform, (argv) => run(argv, '/'), readResourceText),
+        memory: readMemoryWith(process.platform, run, readResourceText),
         run,
       });
     })

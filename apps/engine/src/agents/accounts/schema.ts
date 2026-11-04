@@ -1,5 +1,6 @@
 import type {
   AccountSwitchReason,
+  DomainError,
   FastModeAvailability,
   RunAccount,
   RunFailure,
@@ -48,7 +49,9 @@ export class AccountBrokerFailed extends Schema.TaggedError<
 >()('AccountBrokerFailed', { message: Schema.String }) {}
 
 export interface AccountBrokerShape {
-  readonly lease: (request: AccountLeaseRequest) => Effect.Effect<AccountLease | null, AccountBrokerFailed>;
+  readonly lease: (
+    request: AccountLeaseRequest
+  ) => Effect.Effect<AccountLease | null, AccountBrokerFailed | DomainError>;
   readonly readWeeklyReading: (
     accountId: string,
     force: boolean

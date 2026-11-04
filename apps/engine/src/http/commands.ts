@@ -53,12 +53,12 @@ export const dispatchUserCommand = Effect.fn('dispatchUserCommand')(function* (
     return yield* Effect.fail(
       resolveRequestFailure(new DomainError({ code: SCOPE_REFUSAL_CODE, message: outside }))
     );
-  const id = source.clientId ? `client:${source.clientId}` : null;
-  const from = source.guest ? { guest: source.guest } : {};
+  const from = {
+    ...(source.clientId ? { id: `client:${source.clientId}` } : {}),
+    ...(source.guest ? { guest: source.guest } : {}),
+  };
   const events = yield* (
-    source.router
-      ? source.router.route(command, id, from)
-      : engine.dispatch(command, id ? { ...from, id } : from)
+    source.router ? source.router.route(command, from) : engine.dispatch(command, from)
   ).pipe(Effect.mapError(resolveRequestFailure));
   const created = events.find((event) => event.type === 'task.created');
   return created?.type === 'task.created' ? created.taskId : null;
