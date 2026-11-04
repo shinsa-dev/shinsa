@@ -3985,7 +3985,12 @@ Slack ──event──► app.shinsa.dev /slack/events
                   ──► slack.status: the one card, edited
                       (the open gate with its buttons, else the status)
                       + the mention's one reaction
-   the result, merged or done ──► slack.post, the only new message
+   the result, or done ──► slack.post, a new message
+   the round merged ──► slack.merge_announced + slack.merge:
+                  "Merged", posted once, its ts kept (slack.record_merge)
+                  └─ a watchdog moves or a post-merge step is ticked
+                     ──► slack.merge: the same message, edited
+   a watchdog trips ──► slack.post (tripped), a new message
                   └─ app.shinsa.dev /__remote/slack/post ──► Slack
 
 Slack ──a card's button──► app.shinsa.dev /slack/interactions
@@ -4069,9 +4074,17 @@ Slack ──a card's button──► app.shinsa.dev /slack/interactions
   moving, a gate opening (any gate a person decides: a failure, a sign-in, a question, a secret, a proposal, an
   operation, a plan, a review, a merge), a gate answered, withdrawn or superseded, and a decision made in Slack
   (`slack.decided`). Nothing else is posted while the task runs, since the mention's reaction (below) already tells
-  its author in Slack's Activity. Two things are a new message, a `slack.post`, so the thread is notified once: the
-  result (`task.delivered`: an answer, a diagnosis, a report, an outcome) and the end of the task (merged, or done
-  without a result or merge; `SlackPost` is `result` or `completed`). Each message is built when it is sent, from the
+  its author in Slack's Activity. Three things are a new message, so the thread is notified once for each: the
+  result (`task.delivered`: an answer, a diagnosis, a report, an outcome), the end of the task (done without a result
+  or merge) and a watchdog that found a problem (`watchdog.checked` with `tripped`), each a `slack.post` (`SlackPost`
+  is `result`, `completed` or `tripped`); and the merge, once per round. A round's first `task.staged` to `merged`
+  emits `slack.merge_announced` (`SlackThreadLink.merge`, the round and later its ts) and a `slack.merge` effect, in
+  the thread's lane: the engine posts "Merged" the first time and records its ts with `slack.record_merge`
+  (`slack.merge_posted`), and every later `slack.merge` edits that message, skipping an edit that changes nothing.
+  Every watchdog event (started, live, deferred, missed, checked, ended) and every ticked post-merge step asks for
+  one. A watchdog check takes a merged task to `watching` and back; the stage moves of a check never restate the card
+  and never post, and the card, the reaction and the thread status read `watching` as the stage it rests at (merged,
+  else done), so a check leaves the thread as it was. Each message is built when it is sent, from the
   state then (`slack/messages.ts`, `serializeSlackCard`, `resolveSlackPostMessage`), in Block Kit with no icons
   (`slack/blocks.ts`): a header naming the gate, the main point bold or quoted (`>`, so code and links in it keep
   their markup), details as fields, a numbered list or a context line, the decision buttons with a button to open the
@@ -4098,7 +4111,12 @@ Slack ──a card's button──► app.shinsa.dev /slack/interactions
   - a merge: "Ready to merge", the same fields, Merge;
   - the result, a new message: "Result", the result in mrkdwn (`serializeSlackResult`), cut at 1,500 characters on a
     word (`SLACK_RESULT_LIMIT`), and "Open in Shinsa" (or "Read the rest in Shinsa"); the end, a new message:
-    "Merged" or "Done" (`serializeSlackCompleted`).
+    "Done" (`serializeSlackCompleted`); the merge, a new message edited afterwards: "Merged", the round's watchdogs
+    each with its state (waits for a data source or for production, watching with the next check in the reader's
+    time, passed with its number of checks, found a problem, stopped) and the open post-merge steps under "Still to do
+    after the merge" (`serializeSlackMerged`, `resolveSlackMergeMessage`); a trip, a new message: "Watchdog found a
+    problem", the watchdog in bold, its summary's lead quoted and "Filed as" with a link to each task it filed or
+    found (`forkTaskIds` and `linkedTaskIds`).
   A link button (`shinsa.open`) still sends Slack an interaction, which app.shinsa.dev acknowledges and drops; the
   app's Interactivity is on, with `/slack/interactions` as its request URL (`apps/cloud/slack-manifest.json`).
 - **Decide from Slack** (`slack/decisions.ts`, `decideSlackGate`). What each gate takes in Slack is
@@ -4164,7 +4182,7 @@ Slack ──a card's button──► app.shinsa.dev /slack/interactions
   restarts (`#sessionRefused`). Any other refusal (`channel_not_found`, `ratelimited`, `invalid_auth`) is logged and
   answered 502 `slack_failed`, which the engine logs as a warning and tries again at the next status change, so a
   passing failure never turns the status off. The posts, reactions and status message carry on as they are.
-- **Failures.** `slack.evaluate`, `slack.post`, `slack.react` and `slack.status` are replay-safe effects in the thread's lane
+- **Failures.** `slack.evaluate`, `slack.post`, `slack.merge`, `slack.react` and `slack.status` are replay-safe effects in the thread's lane
   (`slack:<thread key>`), so a thread's posts go out in order. A post app.shinsa.dev answers with 429, a 5xx or not
   at all is retried by the outbox (the relay call through `RemoteClient` fails with `SlackFailed` or a retryable
   `RemoteUnreachable`); any other refusal, a typed failure of its own, (the thread was never sent here, the app was removed from the

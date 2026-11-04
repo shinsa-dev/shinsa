@@ -232,8 +232,10 @@ src/
 │   │                task as Home starts one (`task.create`, triage picks the kind, project and priority), linked to
 │   │                the thread with `slack.thread_linked`; the card's ts; `slack.decide` (decideSlackGate: a
 │   │                decision from Slack through answerGate, then `slack.decided`); and syncSlackThreads (after every
-│   │                command): one `slack.status` per changed task, the card edited, and `slack.post` only for the
-│   │                result and the finished task
+│   │                command): one `slack.status` per changed task, the card edited (never for a watchdog check's
+│   │                stage moves), `slack.post` only for the result, the finished task and a tripped watchdog, and
+│   │                the merge once per round (`slack.merge_announced`), then `slack.merge` to edit it on every
+│   │                watchdog event and ticked post-merge step; its ts (`slack.record_merge`)
 │   ├── handoffs.ts  Handing a task off (task.hand_off and handoff.remove, human-only; the handoff.link and
 │   │                handoff.revoke effects), the link the engine made (handoff.record, handoff.fail) and the one
 │   │                claim it takes (handoff.claim; another account is refused)
@@ -365,7 +367,7 @@ src/
 │                    thread as text with its budget, the request of a task from Slack with the thread fenced as
 │                    untrusted data, and a mention sent to a linked task (thread.ts), whether a mention is work
 │                    or not, task or none (evaluation.ts: SLACK_EVALUATION_SYSTEM, parseSlackEvaluation), and
-│                    what is posted as a new message (posts.ts: SlackPost, result or completed); deciding a gate
+│                    what is posted as a new message (posts.ts: SlackPost, result, completed or tripped); deciding a gate
 │                    from Slack (decisions.ts: SLACK_DECIDABLE, the action ids, the button value, the form
 │                    (serializeSlackDecisionModal) and the decided line; schema.ts: SlackDecisionValue,
 │                    SlackDecisionModal, SlackDecision, SlackDecisionReply); the thread key is
@@ -378,9 +380,10 @@ src/
 │                    its decision buttons or else the status, resolveSlackSessionStatus for the thread's
 │                    status, resolveSlackReaction and SLACK_REACTIONS for the one reaction on the mention,
 │                    SLACK_MENTION_REACTIONS for a later mention, the views (SlackTaskRef, serializeSlack*View)
-│                    the card is built from, the result in mrkdwn, the bot's own posts (Merged, Done, Not a task,
-│                    Connect Slack, offline), and resolveSlackPostMessage for a
-│                    `slack.post` from the outbox), and the relay's wire
+│                    the card is built from, the result in mrkdwn, the bot's own posts (Done, a tripped watchdog,
+│                    Not a task, Connect Slack, offline), resolveSlackPostMessage for a `slack.post` from the
+│                    outbox, and the Merged message with the round's watchdogs and open post-merge steps,
+│                    resolveSlackMergeMessage for `slack.merge`), and the relay's wire
 │                    contract (relay.ts: SLACK_RELAY_PATHS, a machine's post, reaction and thread status and
 │                    SlackLinks as Schemas (SlackRelayPost, SlackRelayReaction, SlackRelaySession; parseSlackRelay*
 │                    decode one or return null), resolveSlackReadableText for Slack's <@U…> markup), and the
