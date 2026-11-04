@@ -32,12 +32,12 @@ export function TeamMachines({ team, keyless }: { team: RemoteTeam; keyless?: Re
       {rows.map(({ machine, tone, status, owner }) => (
         <div key={machine.id} className={SETTING_ROW}>
           <div className='flex min-w-0 flex-1 flex-col'>
-            <div className='flex min-w-0 items-center gap-1.5 text-xs leading-4'>
+            <div className='flex min-w-0 items-center gap-1.5 text-xs'>
               <Truncate className='font-medium text-fg-4'>{machine.name}</Truncate>
               <span className={cn('shrink-0', MACHINE_TONE_TEXT[tone])}>{status}</span>
             </div>
             {owner && (
-              <Truncate className='text-2xs leading-4 text-fg-2'>
+              <Truncate className='text-2xs text-fg-2'>
                 <MentionText mention={['Owned by ', { user: owner }]} />
               </Truncate>
             )}

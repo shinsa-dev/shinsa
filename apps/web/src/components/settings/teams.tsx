@@ -254,10 +254,7 @@ function TeamLinkRow({
         void add();
       }}
     >
-      <div className='flex items-start gap-1.5 text-xs text-fg-3'>
-        <Icon size='sm' name='IconExclamationTriangle' className='mt-px text-orange-text' />
-        <span className='min-w-0 text-pretty'>{TEAM_KEY_WARNING}</span>
-      </div>
+      <span className='text-xs text-pretty text-fg-3'>{TEAM_KEY_WARNING}</span>
       <div className='flex items-center gap-1.5'>
         <Input
           aria-label='Team link'
