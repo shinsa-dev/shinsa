@@ -3655,7 +3655,8 @@ the read-only view. Teams need remote access on (`Remote` paired and enabled), s
   opens the task as a full task page at `/tasks/<handle>` instead, straight from the row (`resolveFleetTeamTaskPath`).
   Your browser takes the keys of the teams your own machines hold when it opens the dashboard
   (`GET /api/remote/teams/keys`, owner devices only, `syncOwnTeamKeys` in `lib/teams/own-keys.ts`), so you never open
-  the join link to see your own team; a browser that still has no key says "Add the team to this browser".
+  the join link to see your own team: the key is your machines', and a browser that still has no key asks you to add
+  one of your machines in that team to it.
 - **Machines you already reach.** A teammate who also made you a member of a machine (Remote access → members) shows
   that machine's tasks as your own, with full control, through the dashboard's sealed channel; team rows from a
   machine the dashboard reaches are left out (`listTeamFeedTasks`), so no task appears twice. The hosted dashboard
@@ -3791,7 +3792,7 @@ the read-only view. Teams need remote access on (`Remote` paired and enabled), s
   app.shinsa.dev for each machine you own, below; every change is the owner's, `OwnerOnlyRoute`): one card per team with its name and
   your role, Shared projects (`components/teams/projects-select.tsx`, a dropdown of your projects with their dots, as
   New task's), the link field when this machine has no key, requests with Accept and Decline, and People (a fold
-  that starts closed from six people on, with a search row by name or login, `listTeamPeople`), each teammate with their presence, Give machine access (or Can reach this machine; with more than one machine of yours it asks which, `listGrantMachines`) and, for the owner, Scopes and Remove; What teammates can do, folded by default, is a preset picker (View only, Collaborate, Full access, and Custom when the list matches none) above the six action scopes as checkboxes, the owner's to change and a member's to read (`components/teams/scopes.tsx`, `lib/teams/scopes.ts`); Scopes opens one person's, the team's or a preset of their own with the same checkboxes, and anyone with their own reads Own scopes; the owner has Join link,
+  that starts closed from six people on, with a search row by name or login, `listTeamPeople`), each teammate with their presence, Give machine access (or Can reach this machine; with more than one machine of yours it asks which, `listGrantMachines`) and, for the owner, Scopes and Remove; What teammates can do, folded by default, is a preset picker (View only, Collaborate, Full access, and Custom when the list matches none) above the six action scopes as checkboxes, the owner's to change and a member's to read (`components/teams/scopes.tsx`, `lib/teams/scopes.ts`); on app.shinsa.dev a browser that reaches none of your machines still lets the owner change them, team-wide and per person, through `POST /__remote/teams/<team>/scopes`, and every machine takes the change on its next heartbeat (`components/settings/hosted-teams.tsx`); Scopes opens one person's, the team's or a preset of their own with the same checkboxes, and anyone with their own reads Own scopes; the owner has Join link,
   which shows the link as a QR code with Copy and Turn off link like Remote access's Invite link, and Delete team; a
   member has Leave. New team (`components/teams/new-team-dialog.tsx`) asks the name and which projects to share. The
   owner's routes are `POST /api/remote/teams/create|join|link|link/renew|link/remove|requests/accept|requests/decline|members/remove|scopes|leave|remove`

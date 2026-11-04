@@ -263,6 +263,7 @@ export function createSampleMachineServices(now: number): RemoteServices {
       acceptHandoff: refuse,
       listTeams: () => Promise.resolve(createSampleHostedTeams(now)),
       joinTeam: refuse,
+      updateTeamScopes: refuse,
       previewTeam: refuse,
       readPair: refuse,
       approvePair: refuse,

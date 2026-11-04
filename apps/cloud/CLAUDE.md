@@ -225,7 +225,9 @@ test/                gates.test.ts reads every RemoteApi route with HttpApi.refl
   team key's proof. Removing a user, a team or a machine cascades its rows.
   What teammates may do on each other's machines (`0008_team_scopes.sql`) is the team's `scopes` and each member's
   own (`team_members.scopes`), both a JSON list of core's `AccessScope`s, null for the default or the team's. Only the
-  owner's machine changes them, with `POST /__remote/machine/teams/<team>/scopes { userId?, scopes }` (403 `not_owner`
+  owner changes them, from their machine with `POST /__remote/machine/teams/<team>/scopes { userId?, scopes }` or from
+  a page with `POST /__remote/teams/<team>/scopes`, the same body, so a browser that reaches none of their machines can
+  too; machines learn it on their next heartbeat (403 `not_owner`
   for anyone else, 404 for a `userId` that is not a member, 400 for a scope core does not know): without a `userId`
   it sets the team's, with one that member's, and `null` puts the default or the team's back. It answers the team.
   Every `RemoteTeam` carries the team's list, or `DEFAULT_TEAM_SCOPES` (Collaborate: everything but `message`), as

@@ -80,6 +80,8 @@ const OTHER_TEAMS: Omit<RemoteTeam, 'role'>[] = [
 
 const TEAM_SCOPES_PATH = new RegExp(`^${REMOTE_PATHS.machineTeams}/([^/]+)/scopes$`);
 
+const PAGE_SCOPES_PATH = new RegExp(`^${REMOTE_PATHS.teams}/([^/]+)/scopes$`);
+
 const REQUESTED_TEAM = { id: 'growth', name: 'Growth' };
 
 const PREVIEW_TEAM_KEYS: Record<string, string> = Object.fromEntries(
@@ -103,6 +105,18 @@ async function respondScopesChange(request: Request, teamId: string) {
   const overrides = scopes ? [...others, { userId, scopes }] : others;
   TEAM_SCOPES.set(teamId, { ...current, overrides });
   return Response.json({ ok: true });
+}
+
+async function respondPageScopesChange(request: Request, teamId: string) {
+  const team = resolvePreviewTeams(USER).find((entry) => entry.id === teamId);
+  if (!team || team.role !== 'owner')
+    return Response.json(
+      { error: { code: 'not_owner', message: 'Only the team’s owner can do this.' } },
+      { status: 403 }
+    );
+  const changed = await respondScopesChange(request, teamId);
+  if (!changed.ok) return changed;
+  return Response.json(resolvePreviewTeams(USER).find((entry) => entry.id === teamId));
 }
 
 export const teammateLink = {
@@ -179,6 +193,8 @@ export function respondTeams(request: Request, url: URL, teammates: Machine[]) {
   }
   if (pathname === `${REMOTE_PATHS.teams}/${TEAM.id}/connect`)
     return respondTeamConnect(request, USER, teammates);
+  const pageScopes = PAGE_SCOPES_PATH.exec(pathname);
+  if (pageScopes) return respondPageScopesChange(request, pageScopes[1] ?? '');
   const owner = MACHINE_OWNERS[readBearerMachine(request)] ?? null;
   if (owner && pathname === `${REMOTE_PATHS.machineTeams}/${TEAM.id}/connect`)
     return respondTeamConnect(request, owner, teammates);

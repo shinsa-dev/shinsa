@@ -42,6 +42,7 @@ const ROUTES = [
   'POST /__remote/teams/preview',
   'POST /__remote/teams/:teamId/leave',
   'POST /__remote/teams/:teamId/connect',
+  'POST /__remote/teams/:teamId/scopes',
   'POST /__remote/machine/heartbeat',
   'POST /__remote/machine/offline',
   'POST /__remote/machine/remove',

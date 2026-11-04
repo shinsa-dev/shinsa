@@ -238,6 +238,12 @@ class TeamsGroup extends HttpApiGroup.make('teams')
       payload: TeamConnectRequest,
       success: ConnectResponse,
       error: wire(NotFound),
+    }),
+    HttpApiEndpoint.post('scopes', `${REMOTE_PATHS.teams}/:teamId/scopes`, {
+      params: TeamParams,
+      payload: TeamScopesRequest,
+      success: RemoteTeam,
+      error: [wire(NotFound), wire(NotOwner)],
     })
   )
   .middleware(RequestGate)

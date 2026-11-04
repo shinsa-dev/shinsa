@@ -1,9 +1,11 @@
-import type { RemoteTeam } from '@shinsa/core';
+import type { AccessScopes, RemoteTeam, RemoteUser } from '@shinsa/core';
+import { Button } from '@shinsa/ui/components/button';
 import { Truncate } from '@shinsa/ui/components/truncate';
+import { useDialogState } from '@shinsa/ui/hooks/use-dialog-state';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
 import { MentionText } from '@/components/people/user-tag.tsx';
-import { TeamScopesBlock } from '@/components/teams/scopes.tsx';
+import { MemberScopesDialog, TeamScopesBlock } from '@/components/teams/scopes.tsx';
 import { useNow } from '@/hooks/use-now.ts';
 import { useTeamPresence } from '@/hooks/use-team-presence.ts';
 import { useTeamFeed } from '@/lib/connection/socket.ts';
@@ -21,6 +23,7 @@ import {
   type HostedTeams,
   showsKeyNote,
   listHostedTeams,
+  replaceHostedTeam,
   listTeamMachineRows,
   listTeamPeople,
   TEAM_KEY_MISSING,
@@ -62,7 +65,17 @@ function TeamMachines({ team }: { team: RemoteTeam }) {
   );
 }
 
-function TeamPeople({ team, viewerId }: { team: RemoteTeam; viewerId: string | null }) {
+type UpdateScopes = (teamId: string, userId: string | null, scopes: AccessScopes | null) => Promise<unknown>;
+
+function TeamPeople({
+  team,
+  viewerId,
+  onScopes,
+}: {
+  team: RemoteTeam;
+  viewerId: string | null;
+  onScopes: ((user: RemoteUser) => void) | null;
+}) {
   const now = useNow();
   const presence = useTeamPresence(team.id);
   return (
@@ -87,14 +100,30 @@ function TeamPeople({ team, viewerId }: { team: RemoteTeam; viewerId: string | n
             detail={parts.filter((part) => part !== null).join(' · ')}
             self={self}
             presence={seen}
-          />
+          >
+            {onScopes && member && (
+              <Button variant='secondary' size='sm' onClick={() => onScopes(user)}>
+                Scopes
+              </Button>
+            )}
+          </UserRow>
         );
       })}
     </FoldingBlock>
   );
 }
 
-function HostedTeamCard({ entry, viewerId }: { entry: HostedTeam; viewerId: string | null }) {
+function HostedTeamCard({
+  entry,
+  viewerId,
+  onUpdate,
+  onScopes,
+}: {
+  entry: HostedTeam;
+  viewerId: string | null;
+  onUpdate: UpdateScopes | null;
+  onScopes: ((user: RemoteUser) => void) | null;
+}) {
   const now = useNow();
   const { team } = entry;
   return (
@@ -109,25 +138,49 @@ function HostedTeamCard({ entry, viewerId }: { entry: HostedTeam; viewerId: stri
         </div>
       </div>
       <TeamMachines team={team} />
-      <TeamScopesBlock team={team} onUpdate={null} />
-      <TeamPeople team={team} viewerId={viewerId} />
+      <TeamScopesBlock team={team} onUpdate={team.role === 'owner' ? onUpdate : null} />
+      <TeamPeople
+        team={team}
+        viewerId={viewerId}
+        onScopes={team.role === 'owner' && onUpdate ? onScopes : null}
+      />
     </SettingsCard>
   );
 }
 
-export function HostedTeamsGroup({ teams, failure }: { teams: HostedTeams | null; failure: string | null }) {
+export function HostedTeamsGroup({
+  teams,
+  failure,
+  onUpdate = null,
+}: {
+  teams: HostedTeams | null;
+  failure: string | null;
+  onUpdate?: UpdateScopes | null;
+}) {
+  const dialog = useDialogState<{ teamId: string; user: RemoteUser }>();
+  const open = dialog.value;
+  const dialogTeam = open ? teams?.teams.find((entry) => entry.team.id === open.teamId)?.team : undefined;
   return (
     <SettingsSection title={TEAMS_SECTION} description={`${TEAMS_DESCRIPTION} ${TEAMS_ON_MACHINE_NOTE}`}>
       {!failure && teams && teams.teams.length > 0 ? (
         <div className='flex flex-col gap-2'>
           {teams.teams.map((entry) => (
-            <HostedTeamCard key={entry.team.id} entry={entry} viewerId={teams.viewerId} />
+            <HostedTeamCard
+              key={entry.team.id}
+              entry={entry}
+              viewerId={teams.viewerId}
+              onUpdate={onUpdate}
+              onScopes={(user) => dialog.show({ teamId: entry.team.id, user })}
+            />
           ))}
         </div>
       ) : (
         <SettingsCard>
           <SettingsEmpty>{describeHostedTeamsNotice(teams, failure)}</SettingsEmpty>
         </SettingsCard>
+      )}
+      {onUpdate && open && dialogTeam && (
+        <MemberScopesDialog control={dialog.control} team={dialogTeam} user={open.user} onUpdate={onUpdate} />
       )}
     </SettingsSection>
   );
@@ -152,5 +205,13 @@ export function HostedTeamsSettings() {
       live = false;
     };
   }, [services]);
-  return <HostedTeamsGroup teams={teams} failure={failure} />;
+  const update = React.useCallback<UpdateScopes>(
+    async (teamId, userId, scopes) => {
+      if (!services) return;
+      const team = await services.dashboard.updateTeamScopes(teamId, userId, scopes);
+      setTeams((current) => (current ? replaceHostedTeam(current, team) : current));
+    },
+    [services]
+  );
+  return <HostedTeamsGroup teams={teams} failure={failure} onUpdate={services ? update : null} />;
 }

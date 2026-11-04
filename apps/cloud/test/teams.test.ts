@@ -431,6 +431,19 @@ describe('what teammates can do', () => {
     expect((await listTeams(harness, kai))[0]?.overrides).toEqual([]);
   });
 
+  test('the owner changes them from a page too, and a member’s page is refused', async () => {
+    const { harness, mona, kai, laptop, team } = await joinedTeam();
+    const path = `${REMOTE_PATHS.teams}/${team.id}/scopes`;
+    const changed = await harness.post(path, { scopes: VIEW_ONLY }, { session: mona });
+    expect((await readJson<RemoteTeam>(changed)).scopes).toEqual(VIEW_ONLY);
+    const beat = await readJson<HeartbeatResponse>(await heartbeat(harness, laptop));
+    expect(beat.teams[0]?.scopes).toEqual(VIEW_ONLY);
+    const own = await harness.post(path, { userId: KAI.id, scopes: FULL }, { session: mona });
+    expect((await readJson<RemoteTeam>(own)).overrides).toEqual([{ userId: KAI.id, scopes: FULL }]);
+    const refused = await harness.post(path, { scopes: FULL }, { session: kai });
+    expect([refused.status, await readCode(refused)]).toEqual([403, 'not_owner']);
+  });
+
   test('only the owner changes them, only for a member, and only with scopes it knows', async () => {
     const { harness, studio, laptop, team } = await joinedTeam();
     const notOwner = await act(harness, laptop, team.id, 'scopes', { scopes: FULL });

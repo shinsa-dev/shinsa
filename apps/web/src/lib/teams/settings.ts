@@ -181,7 +181,8 @@ export function describePeopleCount(team: RemoteTeam) {
 
 export const TEAMS_ON_MACHINE_NOTE = 'Make and change a team from a machine you own.';
 
-export const TEAM_KEY_MISSING = 'Open the team’s join link in this browser once to read its tasks here.';
+export const TEAM_KEY_MISSING =
+  'Add one of your machines in this team to this browser to read its tasks here. Its team key comes with it.';
 
 export const TEAMS_CONNECTING = 'Reading your teams from your machines…';
 
@@ -220,6 +221,13 @@ export async function listHostedTeams(options: {
   return {
     viewerId: session.user?.id ?? null,
     teams: teams.map((team, index) => ({ team, hasKey: keys[index] !== null })),
+  };
+}
+
+export function replaceHostedTeam(teams: HostedTeams, team: RemoteTeam): HostedTeams {
+  return {
+    ...teams,
+    teams: teams.teams.map((entry) => (entry.team.id === team.id ? { ...entry, team } : entry)),
   };
 }
 
