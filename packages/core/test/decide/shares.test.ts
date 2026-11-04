@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { DAY_MS, HOUR_MS, MINUTE_MS } from '../../src/index.ts';
+import { DAY_MS, HOUR_MS, MINUTE_MS, SHARE_PRESET_SCOPES } from '../../src/index.ts';
 import { parseCommand, createHarness, createTask, type Harness, proposePlan } from '../harness.ts';
 
 const URL = 'https://app.shinsa.dev/share/inst/AAAAAAAAAAAAAAAAAAAAAA#key';
@@ -17,7 +17,7 @@ describe('sharing a task', () => {
       at: harness.now,
       url: null,
       limit: 'until_done',
-      preset: 'standard',
+      scopes: SHARE_PRESET_SCOPES.standard,
       endsAt: null,
     });
     expect(links(harness, taskId)).toBe(1);
@@ -254,19 +254,48 @@ describe('how long a task is shared', () => {
     const taskId = createTask(harness);
     harness.send({ type: 'settings.change', patch: { sharePreset: 'status' } });
     harness.send({ type: 'task.share', taskId, limit: 'hour' });
-    expect(harness.task(taskId).share).toMatchObject({ preset: 'status', endsAt: harness.now + HOUR_MS });
+    expect(harness.task(taskId).share).toMatchObject({
+      scopes: SHARE_PRESET_SCOPES.status,
+      endsAt: harness.now + HOUR_MS,
+    });
     harness.send({ type: 'share.record', taskId, url: URL });
     const endsAt = harness.task(taskId).share?.endsAt;
     harness.advance(MINUTE_MS);
     harness.send({ type: 'task.share', taskId, preset: 'standard' });
     expect(harness.task(taskId).share).toMatchObject({
       url: URL,
-      preset: 'standard',
+      scopes: SHARE_PRESET_SCOPES.standard,
       limit: 'hour',
       endsAt,
     });
     expect(links(harness, taskId)).toBe(1);
     expect(harness.send({ type: 'task.share', taskId, preset: 'standard' }).events).toEqual([]);
+  });
+
+  test('a custom scope list is stored in order with the title, and the same set in another order changes nothing', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    harness.send({ type: 'task.share', taskId, scopes: ['code', 'plan'] });
+    expect(harness.task(taskId).share?.scopes).toEqual(['identity', 'plan', 'code']);
+    expect(harness.send({ type: 'task.share', taskId, scopes: ['plan', 'identity', 'code'] }).events).toEqual(
+      []
+    );
+    harness.send({ type: 'task.share', taskId, preset: 'status', scopes: ['checks'] });
+    expect(harness.task(taskId).share?.scopes).toEqual(['identity', 'checks']);
+    harness.send({ type: 'task.share', taskId, limit: 'hour' });
+    expect(harness.task(taskId).share).toMatchObject({ limit: 'hour', scopes: ['identity', 'checks'] });
+    harness.send({ type: 'task.share', taskId, preset: 'full' });
+    expect(harness.task(taskId).share?.scopes).toEqual(SHARE_PRESET_SCOPES.full);
+  });
+
+  test('a scope list takes view scopes only', () => {
+    expect(parseCommand({ type: 'task.share', taskId: 't1', scopes: ['plan', 'messages'] })).toEqual({
+      type: 'task.share',
+      taskId: 't1',
+      scopes: ['plan', 'messages'],
+    });
+    expect(() => parseCommand({ type: 'task.share', taskId: 't1', scopes: ['fork'] })).toThrow();
+    expect(() => parseCommand({ type: 'task.share', taskId: 't1', scopes: ['secrets'] })).toThrow();
   });
 
   test('a preset is read from a command, and only the human picks one, in the settings too', () => {
