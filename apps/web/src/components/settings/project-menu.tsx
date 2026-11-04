@@ -48,7 +48,10 @@ export function AddMenu({
           </Button>
         }
       />
-      <DropdownMenuContent align='end' className='max-h-80 max-w-96 min-w-64'>
+      <DropdownMenuContent
+        align='end'
+        className='max-h-80 max-w-[min(24rem,var(--available-width))] min-w-64'
+      >
         <DropdownMenuItem icon='IconFolder1' onClick={onAddFolder}>
           Folder by its path…
         </DropdownMenuItem>

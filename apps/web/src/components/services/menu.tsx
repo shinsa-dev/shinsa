@@ -166,7 +166,7 @@ function ServicesEmpty({
 
 export const SERVICES_PANEL = cn(
   COMPACT_POPOVER,
-  'flex w-88 max-w-[calc(100vw-1rem)] flex-col overflow-hidden'
+  'flex w-88 max-w-(--available-width) flex-col overflow-hidden'
 );
 
 const VIEW_HEIGHT: Record<ServicesPanelHeight, string> = {

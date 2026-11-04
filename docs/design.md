@@ -473,7 +473,18 @@ Only these, and they win over anything below:
     agent's latest action or a note drops its step track below `sm` (`RowSummary`), so the action reads in full
     instead of a few letters; a row with nothing after it keeps the track, and so does the queue menu. A select's
     list never grows wider than the room beside it (`max-w-(--available-width)`), its hints truncating instead, and
-    the guide's list of other running tasks scrolls inside a popover no taller than the room. The app has one
+    the guide's list of other running tasks scrolls inside a popover no taller than the room. **Settings on a phone**:
+    the section tabs scroll sideways and bring the open one into view (`Choice` `scrolls`). A row with a label
+    (`SettingRow`, `PathRow`, the model rows) wraps below `sm` (`SETTING_ROW_WRAPS`): the label keeps its own width
+    (`SETTING_LABEL`, never less than its text unless that is the whole row) and the control goes to the next line
+    when both do not fit, so "Play a sound" stays whole over its select, a model row's description runs the full
+    width over its two selects, and a repository's three controls wrap as one group under its name and path. A row
+    that is a form (a field and its button) never wraps. **Menus and dialogs on a phone**: every popup in the kit
+    (popover, menu, select, preview card) keeps 12px from the viewport edge (`POPUP_COLLISION_PADDING`) and is never
+    wider than the room it has (`max-w-(--available-width)`; a menu with a cap of its own writes it as
+    `max-w-[min(24rem,var(--available-width))]`, since a plain `max-w-96` would replace the kit's). A dialog is the
+    viewport less 12px a side below `sm`, and the command menu opens 12px under the notch instead of a third of the
+    way down, so the keyboard never covers it. The app has one
     keyboard shortcut: ⌘K (Ctrl K elsewhere) opens the command menu (see 14). Nothing else is
     bound to a key, except the Code tab's ⌘P, ⇧⌘F, ⌘F and ⌘G while it is open (32), the Review tab's J and K while it is
     open (34), the Terminal page's ⌘T and ⌘W while it is open and a focused terminal's own keys (37), Enter sends in every input, and a setup step's option list takes the arrows, Home, End, Enter and

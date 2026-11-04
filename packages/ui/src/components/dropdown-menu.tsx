@@ -5,7 +5,7 @@ import { HighlightList } from '@shinsa/ui/components/highlight-list';
 import { Icon } from '@shinsa/ui/components/icon';
 import { type MenuItemIcon, menuIconPosition, renderMenuIcon } from '@shinsa/ui/components/menu-icon';
 import { useControllableOpen } from '@shinsa/ui/hooks/use-controllable-open';
-import { POPUP_SIDE_SLIDE, POPUP_SURFACE, POPUP_ZOOM } from '@shinsa/ui/lib/popup';
+import { POPUP_COLLISION_PADDING, POPUP_SIDE_SLIDE, POPUP_SURFACE, POPUP_ZOOM } from '@shinsa/ui/lib/popup';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
 
@@ -76,6 +76,7 @@ function DropdownMenuContent({
         side={side}
         sideOffset={sideOffset}
         anchor={anchor}
+        collisionPadding={POPUP_COLLISION_PADDING}
       >
         <MenuPrimitive.Popup
           data-slot='dropdown-menu-content'
@@ -84,7 +85,7 @@ function DropdownMenuContent({
             POPUP_SURFACE,
             POPUP_SIDE_SLIDE,
             POPUP_ZOOM,
-            'z-50 max-h-(--available-height) min-w-[max(8rem,var(--anchor-width))] overflow-x-hidden overflow-y-auto whitespace-nowrap duration-200 outline-none data-closed:overflow-hidden',
+            'z-50 max-h-(--available-height) max-w-(--available-width) min-w-[max(8rem,var(--anchor-width))] overflow-x-hidden overflow-y-auto whitespace-nowrap duration-200 outline-none data-closed:overflow-hidden',
             className
           )}
           {...props}

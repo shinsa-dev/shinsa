@@ -5,6 +5,7 @@ import { HighlightList } from '@shinsa/ui/components/highlight-list';
 import { Icon } from '@shinsa/ui/components/icon';
 import { type MenuItemIcon, menuIconPosition, renderMenuIcon } from '@shinsa/ui/components/menu-icon';
 import { useControllableOpen } from '@shinsa/ui/hooks/use-controllable-open';
+import { POPUP_COLLISION_PADDING } from '@shinsa/ui/lib/popup';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
 
@@ -154,6 +155,7 @@ function SelectContent({
         align={align}
         alignOffset={alignOffset}
         alignItemWithTrigger={alignItemWithTrigger}
+        collisionPadding={POPUP_COLLISION_PADDING}
         className='isolate z-50'
       >
         <SelectPrimitive.Popup

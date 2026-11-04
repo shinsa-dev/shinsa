@@ -1,5 +1,7 @@
 import { Icon } from '@shinsa/ui/components/icon';
 import { Tabs, TabsList, TabsTrigger } from '@shinsa/ui/components/tabs';
+import { cn } from '@shinsa/ui/lib/utils';
+import * as React from 'react';
 import { Hint } from '@/components/overlays/hint.tsx';
 import { CHECK_TEXT } from '@/components/status/check-mark.tsx';
 
@@ -17,6 +19,7 @@ export function Choice<V extends string>({
   onValueChange,
   label,
   onItemIntent,
+  scrolls = false,
   className,
 }: {
   items: ChoiceItem<V>[];
@@ -24,10 +27,21 @@ export function Choice<V extends string>({
   onValueChange: (value: V) => void;
   label: string;
   onItemIntent?: (value: V) => void;
+  scrolls?: boolean;
   className?: string;
 }) {
+  const root = React.useRef<HTMLDivElement>(null);
+  React.useEffect(() => {
+    if (!scrolls) return;
+    root.current?.querySelector('[data-active]')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  }, [scrolls, value]);
   return (
-    <Tabs value={value} onValueChange={(next) => onValueChange(next as V)} className={className}>
+    <Tabs
+      ref={root}
+      value={value}
+      onValueChange={(next) => onValueChange(next as V)}
+      className={cn(scrolls && 'max-w-full overflow-x-auto', className)}
+    >
       <TabsList aria-label={label}>
         {items.map((item) => {
           const trigger = (

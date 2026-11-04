@@ -69,7 +69,7 @@ export function BundleFact({ state, task }: { state: ShinsaState; task: Task }) 
           <span className='tabular-nums'>{describeBundleCount(rows)}</span>
         </>
       }
-      className='w-140 max-w-[calc(100vw-2rem)]'
+      className='w-140 max-w-(--available-width)'
     >
       <InfoHeader
         title={`Bundle · ${describeBundleProgress(rows)}`}

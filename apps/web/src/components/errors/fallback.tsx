@@ -134,7 +134,7 @@ function IconFallback({ className, ...props }: Omit<ErrorFallbackProps, 'size'>)
       <PopoverContent
         align='start'
         sideOffset={6}
-        className='flex w-80 max-w-[calc(100vw-1rem)] flex-col gap-2 p-3'
+        className='flex w-80 max-w-(--available-width) flex-col gap-2 p-3'
       >
         <InlineBody {...props} />
       </PopoverContent>
