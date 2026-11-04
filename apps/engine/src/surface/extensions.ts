@@ -5,8 +5,10 @@ import {
   type PluginSummary,
   type SkillSummary,
 } from '@shinsa/core';
+import { Effect } from 'effect';
 import type { SurfaceClient } from './client.ts';
 import type { FieldSpec, Values } from './fields.ts';
+import type { SurfaceFailure } from './schema.ts';
 import { defineAction, defineRead, readValue, type SurfaceSpec } from './spec.ts';
 
 const SERVER_FIELD: FieldSpec = {
@@ -65,56 +67,72 @@ function formatPlugins(snapshot: ExtensionsSnapshot) {
   return snapshot.plugins.length === 0 ? 'No plugins.' : snapshot.plugins.map(describePlugin).join('\n');
 }
 
-function findEntry<T extends { id: string; name: string }>(entries: T[], reference: string, kind: string) {
+function findEntry<T extends { id: string; name: string }>(
+  entries: readonly T[],
+  reference: string,
+  kind: string
+) {
   const found =
     entries.find((entry) => entry.id === reference) ?? entries.find((entry) => entry.name === reference);
-  if (!found)
-    throw new DomainError({ code: `${kind}_not_found`, message: `There is no ${kind} named ${reference}.` });
-  return found;
+  return found
+    ? Effect.succeed(found)
+    : Effect.fail(
+        new DomainError({ code: `${kind}_not_found`, message: `There is no ${kind} named ${reference}.` })
+      );
 }
 
-async function findServer(client: SurfaceClient, values: Values) {
-  const snapshot = await client.api.extensions.snapshot();
-  return findEntry(snapshot.servers, readValue(values, 'server'), 'server');
-}
+const findServer = Effect.fn('Surface.mcpServer')(function* (client: SurfaceClient, values: Values) {
+  const snapshot = yield* client.api.extensions.snapshot();
+  return yield* findEntry(snapshot.servers, readValue(values, 'server'), 'server');
+});
 
 function defineSwitch(
   group: string,
   enabled: boolean,
   field: FieldSpec,
-  act: (client: SurfaceClient, values: Values, enabled: boolean) => Promise<string>
+  act: (client: SurfaceClient, values: Values, enabled: boolean) => Effect.Effect<string, SurfaceFailure>
 ) {
   return defineAction({
     path: [group, enabled ? 'on' : 'off'],
     summary: `Turn ${field.name === 'server' ? 'an MCP server' : `a ${field.name}`} ${enabled ? 'on' : 'off'} for agents.`,
     humanOnly: true,
     fields: [field],
-    act: async (client, values) => {
-      const text = await act(client, values, enabled);
-      return { data: { ok: true }, text };
-    },
+    act: (client, values) =>
+      Effect.map(act(client, values, enabled), (text) => ({ data: { ok: true }, text })),
   });
 }
 
-async function switchServer(client: SurfaceClient, values: Values, enabled: boolean) {
-  const server = await findServer(client, values);
-  await client.api.extensions.chooseServer({ payload: { serverId: server.id, enabled } });
+const switchServer = Effect.fn('Surface.switchServer')(function* (
+  client: SurfaceClient,
+  values: Values,
+  enabled: boolean
+) {
+  const server = yield* findServer(client, values);
+  yield* client.api.extensions.chooseServer({ payload: { serverId: server.id, enabled } });
   return `Turned ${server.name} ${enabled ? 'on' : 'off'} for agents.`;
-}
+});
 
-async function switchSkill(client: SurfaceClient, values: Values, enabled: boolean) {
-  const snapshot = await client.api.extensions.snapshot();
-  const skill = findEntry(snapshot.skills, readValue(values, 'skill'), 'skill');
-  await client.api.extensions.chooseSkill({ payload: { skillId: skill.id, enabled } });
+const switchSkill = Effect.fn('Surface.switchSkill')(function* (
+  client: SurfaceClient,
+  values: Values,
+  enabled: boolean
+) {
+  const snapshot = yield* client.api.extensions.snapshot();
+  const skill = yield* findEntry(snapshot.skills, readValue(values, 'skill'), 'skill');
+  yield* client.api.extensions.chooseSkill({ payload: { skillId: skill.id, enabled } });
   return `Turned the ${skill.name} skill ${enabled ? 'on' : 'off'}.`;
-}
+});
 
-async function switchPlugin(client: SurfaceClient, values: Values, enabled: boolean) {
-  const snapshot = await client.api.extensions.snapshot();
-  const plugin = findEntry(snapshot.plugins, readValue(values, 'plugin'), 'plugin');
-  await client.api.extensions.choosePlugin({ payload: { pluginId: plugin.id, enabled } });
+const switchPlugin = Effect.fn('Surface.switchPlugin')(function* (
+  client: SurfaceClient,
+  values: Values,
+  enabled: boolean
+) {
+  const snapshot = yield* client.api.extensions.snapshot();
+  const plugin = yield* findEntry(snapshot.plugins, readValue(values, 'plugin'), 'plugin');
+  yield* client.api.extensions.choosePlugin({ payload: { pluginId: plugin.id, enabled } });
   return `Turned the ${plugin.name} plugin ${enabled ? 'on' : 'off'}.`;
-}
+});
 
 export const EXTENSION_SPECS: SurfaceSpec[] = [
   defineRead({
@@ -129,12 +147,15 @@ export const EXTENSION_SPECS: SurfaceSpec[] = [
     summary: 'Connect to every MCP server that is on, or one, and list its tools.',
     humanOnly: true,
     fields: [{ ...SERVER_FIELD, required: false }],
-    act: async (client, values) => {
-      let body = {};
-      if (readValue(values, 'server')) body = { serverId: (await findServer(client, values)).id };
-      const data = await client.api.extensions.check({ payload: body });
+    act: Effect.fn('Surface.mcpCheck')(function* (client, values) {
+      if (!readValue(values, 'server')) {
+        const data = yield* client.api.extensions.check({ payload: {} });
+        return { data, text: formatServers(data) };
+      }
+      const server = yield* findServer(client, values);
+      const data = yield* client.api.extensions.check({ payload: { serverId: server.id } });
       return { data, text: formatServers(data) };
-    },
+    }),
   }),
   defineAction({
     path: ['mcp', 'add'],
@@ -151,7 +172,7 @@ export const EXTENSION_SPECS: SurfaceSpec[] = [
         description: 'The command that starts it, with its arguments (after -- when one starts with --).',
       },
     ],
-    act: async (client, values) => {
+    act: Effect.fn('Surface.mcpAdd')(function* (client, values) {
       const words = (readValue(values, 'command') || '').split(' ').filter(Boolean);
       const url = readValue(values, 'url');
       const server = url
@@ -162,24 +183,24 @@ export const EXTENSION_SPECS: SurfaceSpec[] = [
             command: words[0] ?? '',
             args: words.slice(1),
           };
-      const data = await client.api.extensions.addServer({ payload: { server } });
+      const data = yield* client.api.extensions.addServer({ payload: { server } });
       return { data, text: `Added ${server.name}. Agents load it from their next run.` };
-    },
+    }),
   }),
   defineAction({
     path: ['mcp', 'remove'],
     summary: 'Remove an MCP server you added in Shinsa.',
     humanOnly: true,
     fields: [SERVER_FIELD],
-    act: async (client, values) => {
-      const server = await findServer(client, values);
-      const data = await client.api.extensions.removeServer({
+    act: Effect.fn('Surface.mcpRemove')(function* (client, values) {
+      const server = yield* findServer(client, values);
+      const data = yield* client.api.extensions.removeServer({
         payload: {
           serverId: server.id,
         },
       });
       return { data, text: `Removed ${server.name}.` };
-    },
+    }),
   }),
   defineSwitch('mcp', true, SERVER_FIELD, switchServer),
   defineSwitch('mcp', false, SERVER_FIELD, switchServer),
@@ -188,9 +209,9 @@ export const EXTENSION_SPECS: SurfaceSpec[] = [
     summary: 'Sign in to a remote MCP server in the browser; Shinsa keeps the sign-in.',
     humanOnly: true,
     fields: [SERVER_FIELD],
-    act: async (client, values) => {
-      const server = await findServer(client, values);
-      const data = await client.api.extensions.signIn({
+    act: Effect.fn('Surface.mcpSignIn')(function* (client, values) {
+      const server = yield* findServer(client, values);
+      const data = yield* client.api.extensions.signIn({
         payload: {
           serverId: server.id,
         },
@@ -201,22 +222,22 @@ export const EXTENSION_SPECS: SurfaceSpec[] = [
           ? `Open this page to sign in to ${server.name}:\n${data.authorizationUrl}`
           : `Already signed in to ${server.name}.`,
       };
-    },
+    }),
   }),
   defineAction({
     path: ['mcp', 'sign-out'],
     summary: 'Forget Shinsa’s sign-in to a remote MCP server.',
     humanOnly: true,
     fields: [SERVER_FIELD],
-    act: async (client, values) => {
-      const server = await findServer(client, values);
-      const data = await client.api.extensions.signOut({
+    act: Effect.fn('Surface.mcpSignOut')(function* (client, values) {
+      const server = yield* findServer(client, values);
+      const data = yield* client.api.extensions.signOut({
         payload: {
           serverId: server.id,
         },
       });
       return { data, text: `Signed out of ${server.name}.` };
-    },
+    }),
   }),
   defineRead({
     path: ['skills', 'list'],

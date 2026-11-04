@@ -38,6 +38,8 @@ const SharedUsageWait = Schema.Struct({
   autoResume: Data,
   status: Data,
   provider: Schema.optionalKey(Data),
+  cause: Schema.optionalKey(Data),
+  pace: Schema.optionalKey(Data),
 });
 
 const SharedActivity = Schema.Struct({

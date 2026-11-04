@@ -1,6 +1,11 @@
 import { afterEach, describe, expect, test } from 'bun:test';
 import { REMOTE_KEY_ALGORITHM, REMOTE_PATHS, serializePublicKey } from '@shinsa/core';
-import { RemoteControl } from '../../src/remote/client/index.ts';
+import { Effect, Exit, Fiber, Layer, ManagedRuntime } from 'effect';
+import { JsonLogger } from '../../src/log/service.ts';
+import { RemoteOrigin } from '../../src/remote/client/schema.ts';
+import { RemoteClientLayer } from '../../src/remote/layers.ts';
+import { type PairingEnd, PairPollInterval } from '../../src/remote/pairing/schema.ts';
+import { Pairings } from '../../src/remote/pairing/service.ts';
 import { captureLogs } from '../helpers/logs.ts';
 import { type FakeControlPlane, sealCredentials, startFakeControlPlane } from './control-plane.ts';
 
@@ -21,7 +26,10 @@ const CREDENTIALS = {
 
 const PAIR = (await crypto.subtle.generateKey(REMOTE_KEY_ALGORITHM, true, ['deriveBits'])) as CryptoKeyPair;
 
-const MACHINE = { publicKey: await serializePublicKey(PAIR.publicKey), privateKey: PAIR.privateKey };
+const MACHINE = {
+  publicKey: await Effect.runPromise(serializePublicKey(PAIR.publicKey)),
+  privateKey: PAIR.privateKey,
+};
 
 const SEALED = await sealCredentials(MACHINE.publicKey, CREDENTIALS);
 
@@ -34,8 +42,21 @@ afterEach(async () => {
 function startPairing(start = START) {
   const plane = startFakeControlPlane();
   planes.push(plane);
-  const control = new RemoteControl({ origin: plane.origin, pairPollMs: 1 });
-  return { plane, pairing: control.startPairing(start, MACHINE) };
+  const runtime = ManagedRuntime.make(
+    RemoteClientLayer.pipe(
+      Layer.provide(
+        Layer.merge(Layer.succeed(RemoteOrigin, plane.origin), Layer.succeed(PairPollInterval, 1))
+      ),
+      Layer.provideMerge(JsonLogger)
+    )
+  );
+  const fiber = runtime.runFork(Pairings.use((pairings) => pairings.await(start, MACHINE)));
+  const done = runtime.runPromise(
+    Fiber.await(fiber).pipe(
+      Effect.map((exit): PairingEnd => (Exit.isSuccess(exit) ? exit.value : { status: 'cancelled' }))
+    )
+  );
+  return { plane, pairing: { done, cancel: () => runtime.runFork(Fiber.interrupt(fiber)) } };
 }
 
 function answerPolls(fake: FakeControlPlane, ...bodies: unknown[]) {
@@ -81,9 +102,11 @@ describe('pairing', () => {
   test('ends without pairing when the credentials were not sealed to this machine’s key', async () => {
     const logs = captureLogs();
     const other = await sealCredentials(
-      await serializePublicKey(
-        ((await crypto.subtle.generateKey(REMOTE_KEY_ALGORITHM, true, ['deriveBits'])) as CryptoKeyPair)
-          .publicKey
+      await Effect.runPromise(
+        serializePublicKey(
+          ((await crypto.subtle.generateKey(REMOTE_KEY_ALGORITHM, true, ['deriveBits'])) as CryptoKeyPair)
+            .publicKey
+        )
       ),
       CREDENTIALS
     );

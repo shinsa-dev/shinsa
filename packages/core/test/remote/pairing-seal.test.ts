@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { Effect } from 'effect';
 import {
   type MachineCredentials,
   openPairingCredentials,
@@ -20,14 +21,17 @@ const CREDENTIALS: MachineCredentials = {
 
 async function createMachine() {
   const pair = (await crypto.subtle.generateKey(REMOTE_KEY_ALGORITHM, true, ['deriveBits'])) as CryptoKeyPair;
-  return { publicKey: await serializePublicKey(pair.publicKey), privateKey: pair.privateKey };
+  return {
+    publicKey: await Effect.runPromise(serializePublicKey(pair.publicKey)),
+    privateKey: pair.privateKey,
+  };
 }
 
 async function seal(machineKey: string, iv = crypto.getRandomValues(new Uint8Array(PAIRING_SEAL_IV_BYTES))) {
   const ephemeral = (await crypto.subtle.generateKey(REMOTE_KEY_ALGORITHM, true, [
     'deriveBits',
   ])) as CryptoKeyPair;
-  return sealPairingCredentials({ machineKey, ephemeral, iv }, CREDENTIALS);
+  return Effect.runPromise(sealPairingCredentials({ machineKey, ephemeral, iv }, CREDENTIALS));
 }
 
 describe('pairing seal', () => {
@@ -35,10 +39,12 @@ describe('pairing seal', () => {
     const machine = await createMachine();
     const sealed = await seal(machine.publicKey);
     expect(sealed).not.toContain('machine-token');
-    expect(await openPairingCredentials(machine, sealed)).toEqual(CREDENTIALS);
+    expect(await Effect.runPromise(openPairingCredentials(machine, sealed))).toEqual(CREDENTIALS);
     const other = await createMachine();
-    expect(await openPairingCredentials(other, sealed)).toBeNull();
-    expect(await openPairingCredentials({ ...machine, publicKey: other.publicKey }, sealed)).toBeNull();
+    expect(await Effect.runPromise(openPairingCredentials(other, sealed))).toBeNull();
+    expect(
+      await Effect.runPromise(openPairingCredentials({ ...machine, publicKey: other.publicKey }, sealed))
+    ).toBeNull();
   });
 
   test('a changed, cut or malformed seal opens to nothing', async () => {
@@ -54,7 +60,7 @@ describe('pairing seal', () => {
       serializeBase64Url(badPoint),
       '***',
     ])
-      expect(await openPairingCredentials(machine, sealed)).toBeNull();
+      expect(await Effect.runPromise(openPairingCredentials(machine, sealed))).toBeNull();
   });
 
   test('opens to nothing when what is inside is not the credentials', async () => {
@@ -64,8 +70,10 @@ describe('pairing seal', () => {
     ])) as CryptoKeyPair;
     const iv = crypto.getRandomValues(new Uint8Array(PAIRING_SEAL_IV_BYTES));
     const partial = { instanceId: 'studio000001' } as unknown as MachineCredentials;
-    const sealed = await sealPairingCredentials({ machineKey: machine.publicKey, ephemeral, iv }, partial);
-    expect(await openPairingCredentials(machine, sealed)).toBeNull();
+    const sealed = await Effect.runPromise(
+      sealPairingCredentials({ machineKey: machine.publicKey, ephemeral, iv }, partial)
+    );
+    expect(await Effect.runPromise(openPairingCredentials(machine, sealed))).toBeNull();
   });
 
   test('refuses a machine key that is not P-256, or an IV of the wrong size', async () => {

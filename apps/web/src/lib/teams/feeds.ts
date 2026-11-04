@@ -10,28 +10,31 @@ import {
   type TeamFeedMachine,
   type TeamFeedSnapshot,
   type TeamFeedTask,
-  type TeamListView,
   type TeamSnapshot,
   type TeamTask,
   type TeamViewTarget,
   type Task,
   verifyTeamSnapshot,
 } from '@shinsa/core';
+import { Clock, Duration, Effect, Option, Schema } from 'effect';
 import type { MachineView } from '@/lib/connection/socket.ts';
 import { resolveFirstName, resolveSharedProfile } from '@/lib/remote/users.ts';
+import { forkApp, runApp } from '@/lib/runtime/app.ts';
 import { createSignal } from '@/lib/signal.ts';
 import { resolveTaskPath } from '@/router.ts';
 import { openTeamChannel } from './channel.ts';
-import type { StoredTeamKey } from './join.ts';
+import { type StoredTeamKey, TeamListViewText } from './schema.ts';
 import {
   TEAM_MACHINE_OFFLINE,
   type TeamChannelHandlers,
   type TeamChannelTarget,
 } from './team-socket/schema.ts';
 
-function waitFor(ms: number, run: () => void) {
-  const timer = setTimeout(run, ms);
-  return () => clearTimeout(timer);
+function waitOnTimer(ms: number, run: () => void) {
+  const fiber = forkApp(Effect.delay(Effect.sync(run), Duration.millis(ms)));
+  return () => {
+    fiber.interruptUnsafe();
+  };
 }
 
 const FEED_RETRY_MS = [1_000, 2_000, 5_000, 10_000, 30_000];
@@ -188,57 +191,60 @@ interface HostedFeed {
   stop: (() => void) | null;
 }
 
+const decodeListView = Schema.decodeUnknownOption(TeamListViewText);
+
+function readNow(options: HostedTeamFeedsOptions) {
+  return options.now ? Effect.sync(options.now) : Clock.currentTimeMillis;
+}
+
 export class HostedTeamFeeds implements TeamFeedSource {
   readonly #options: HostedTeamFeedsOptions;
   readonly #signal = createSignal();
-  readonly #now: () => number;
   #feeds: HostedFeed[] = [];
   #snapshot: TeamFeedSnapshot = NO_TEAM_FEED;
   #started = false;
 
   constructor(options: HostedTeamFeedsOptions) {
     this.#options = options;
-    this.#now = options.now ?? Date.now;
   }
 
   subscribe = (listener: () => void) => this.#signal.subscribe(listener);
 
   snapshot = () => this.#snapshot;
 
-  async start() {
+  start() {
     this.#started = true;
-    let teams: readonly RemoteTeam[];
-    try {
-      teams = await this.#options.listTeams();
-    } catch {
-      return;
-    }
-    if (!this.#started) return;
-    for (const team of teams) {
-      const stored = await this.#options.selectTeamKey(team.id);
-      if (!(stored && this.#started)) continue;
-      for (const machine of team.machines) {
-        const feed: HostedFeed = {
-          target: { teamId: team.id, instanceId: machine.id, key: stored.key, view: { kind: 'list' } },
-          machine: {
-            teamId: team.id,
-            instanceId: machine.id,
-            name: machine.name,
-            userId: machine.userId,
-            status: machine.online ? 'connecting' : 'offline',
-            reason: machine.online ? null : TEAM_MACHINE_OFFLINE,
-          },
-          signingKey: machine.signingKey ?? null,
-          tasks: [],
-          updatedAt: null,
-          attempt: 0,
-          stop: null,
-        };
-        this.#feeds.push(feed);
-        if (machine.online) this.#connect(feed);
-      }
-    }
-    this.#publish();
+    return runApp(
+      Effect.gen({ self: this }, function* () {
+        const teams = yield* Effect.option(Effect.tryPromise(() => this.#options.listTeams()));
+        if (Option.isNone(teams) || !this.#started) return;
+        for (const team of teams.value) {
+          const stored = yield* Effect.promise(() => this.#options.selectTeamKey(team.id));
+          if (!(stored && this.#started)) continue;
+          for (const machine of team.machines) {
+            const feed: HostedFeed = {
+              target: { teamId: team.id, instanceId: machine.id, key: stored.key, view: { kind: 'list' } },
+              machine: {
+                teamId: team.id,
+                instanceId: machine.id,
+                name: machine.name,
+                userId: machine.userId,
+                status: machine.online ? 'connecting' : 'offline',
+                reason: machine.online ? null : TEAM_MACHINE_OFFLINE,
+              },
+              signingKey: machine.signingKey ?? null,
+              tasks: [],
+              updatedAt: null,
+              attempt: 0,
+              stop: null,
+            };
+            this.#feeds.push(feed);
+            if (machine.online) this.#connect(feed);
+          }
+        }
+        this.#publish(yield* readNow(this.#options));
+      })
+    );
   }
 
   stop() {
@@ -248,20 +254,20 @@ export class HostedTeamFeeds implements TeamFeedSource {
     this.#snapshot = NO_TEAM_FEED;
   }
 
-  #isShown(feed: HostedFeed) {
+  #isShown(feed: HostedFeed, now: number) {
     if (feed.updatedAt === null) return false;
-    return feed.machine.status === 'live' || !isTeamSnapshotExpired(feed.updatedAt, this.#now());
+    return feed.machine.status === 'live' || !isTeamSnapshotExpired(feed.updatedAt, now);
   }
 
-  #publish() {
+  #publish(now: number) {
     this.#snapshot = {
       machines: this.#feeds.map((feed) =>
-        feed.machine.status !== 'live' && feed.updatedAt !== null && this.#isShown(feed)
+        feed.machine.status !== 'live' && feed.updatedAt !== null && this.#isShown(feed, now)
           ? { ...feed.machine, updatedAt: feed.updatedAt }
           : feed.machine
       ),
       tasks: this.#feeds.flatMap((feed) =>
-        this.#isShown(feed)
+        this.#isShown(feed, now)
           ? feed.tasks.map((task) => ({
               ...task,
               teamId: feed.target.teamId,
@@ -277,24 +283,26 @@ export class HostedTeamFeeds implements TeamFeedSource {
     return this.#started && (feed.machine.status === 'offline' || feed.machine.status === 'connecting');
   }
 
-  async #adoptHeld(teamId: string, held: readonly TeamSnapshot[]) {
-    let adopted = false;
-    for (const snapshot of held) {
-      const instanceId = selectTeamSnapshotSigner(snapshot);
-      const feed = this.#feeds.find(
-        (candidate) => candidate.target.teamId === teamId && candidate.target.instanceId === instanceId
-      );
-      if (!(feed?.signingKey && this.#canAdopt(feed))) continue;
-      const body = await verifyTeamSnapshot(feed.signingKey, snapshot);
-      if (!(body && body.teamId === teamId && body.instanceId === instanceId && this.#canAdopt(feed)))
-        continue;
-      if (isTeamSnapshotExpired(body.updatedAt, this.#now()) || (feed.updatedAt ?? -1) >= body.updatedAt)
-        continue;
-      feed.tasks = body.tasks;
-      feed.updatedAt = body.updatedAt;
-      adopted = true;
-    }
-    if (adopted) this.#publish();
+  #adoptHeld(teamId: string, held: readonly TeamSnapshot[]) {
+    return Effect.gen({ self: this }, function* () {
+      let adopted = false;
+      for (const snapshot of held) {
+        const instanceId = selectTeamSnapshotSigner(snapshot);
+        const feed = this.#feeds.find(
+          (candidate) => candidate.target.teamId === teamId && candidate.target.instanceId === instanceId
+        );
+        if (!(feed?.signingKey && this.#canAdopt(feed))) continue;
+        const body = yield* verifyTeamSnapshot(feed.signingKey, snapshot);
+        if (!(body && body.teamId === teamId && body.instanceId === instanceId && this.#canAdopt(feed)))
+          continue;
+        const now = yield* readNow(this.#options);
+        if (isTeamSnapshotExpired(body.updatedAt, now) || (feed.updatedAt ?? -1) >= body.updatedAt) continue;
+        feed.tasks = body.tasks;
+        feed.updatedAt = body.updatedAt;
+        adopted = true;
+      }
+      if (adopted) this.#publish(yield* readNow(this.#options));
+    });
   }
 
   #mark(feed: HostedFeed, status: TeamFeedMachine['status'], reason: string | null) {
@@ -304,32 +312,34 @@ export class HostedTeamFeeds implements TeamFeedSource {
 
   #receive(feed: HostedFeed, message: ShareMessage) {
     if (message.t !== 'view') return;
-    const view = JSON.parse(message.data) as TeamListView;
-    feed.tasks = view.tasks;
-    feed.updatedAt = view.updatedAt ?? this.#now();
-    feed.attempt = 0;
-    this.#mark(feed, 'live', null);
-    feed.machine = view.presence?.length ? { ...feed.machine, presence: view.presence } : feed.machine;
-    this.#publish();
-    void this.#adoptHeld(feed.target.teamId, view.held ?? []);
+    forkApp(
+      Effect.gen({ self: this }, function* () {
+        const view = decodeListView(message.data);
+        if (Option.isNone(view)) return;
+        const now = yield* readNow(this.#options);
+        feed.tasks = view.value.tasks;
+        feed.updatedAt = view.value.updatedAt ?? now;
+        feed.attempt = 0;
+        this.#mark(feed, 'live', null);
+        feed.machine = view.value.presence?.length
+          ? { ...feed.machine, presence: view.value.presence }
+          : feed.machine;
+        this.#publish(now);
+        yield* this.#adoptHeld(feed.target.teamId, view.value.held ?? []);
+      })
+    );
   }
 
-  #connect(feed: HostedFeed) {
-    const open = this.#options.openChannel ?? openTeamChannel;
-    const wait = this.#options.wait ?? waitFor;
-    feed.stop = open(feed.target, {
-      onMessage: (message) => {
-        if (this.#started) this.#receive(feed, message);
-      },
-      onEnd: (end) => {
-        feed.stop = null;
-        if (!this.#started) return;
+  #end(feed: HostedFeed, end: { reason: string; gone: boolean }) {
+    const wait = this.#options.wait ?? waitOnTimer;
+    forkApp(
+      Effect.gen({ self: this }, function* () {
         if (end.gone) {
           feed.tasks = [];
           feed.updatedAt = null;
         }
         this.#mark(feed, end.gone ? 'refused' : 'offline', end.reason);
-        this.#publish();
+        this.#publish(yield* readNow(this.#options));
         const steps = end.gone ? FEED_REFUSED_RETRY_MS : FEED_RETRY_MS;
         const delay = steps[Math.min(feed.attempt, steps.length - 1)] as number;
         feed.attempt += 1;
@@ -337,6 +347,19 @@ export class HostedTeamFeeds implements TeamFeedSource {
           if (this.#started && feed.stop === cancel) this.#connect(feed);
         });
         feed.stop = cancel;
+      })
+    );
+  }
+
+  #connect(feed: HostedFeed) {
+    const open = this.#options.openChannel ?? openTeamChannel;
+    feed.stop = open(feed.target, {
+      onMessage: (message) => {
+        if (this.#started) this.#receive(feed, message);
+      },
+      onEnd: (end) => {
+        feed.stop = null;
+        if (this.#started) this.#end(feed, end);
       },
     });
   }

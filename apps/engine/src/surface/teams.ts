@@ -1,20 +1,22 @@
 import {
-  DomainError,
-  type RemoteTeamEntry,
-  type RemoteUser,
   ACCESS_PRESETS,
   ACTION_SCOPES,
   type AccessScope,
   type AccessScopes,
+  DomainError,
+  type RemoteSnapshot,
+  type RemoteTeamEntry,
+  type RemoteUser,
   resolveMemberScopes,
   TEAM_PRESET_NAMES,
   type TeamPreset,
   toggleScope,
 } from '@shinsa/core';
+import { Effect } from 'effect';
 import type { EngineCalls } from '../cli/client/schema.ts';
-import type { RemoteSnapshot } from '../remote/index.ts';
 import type { SurfaceClient } from './client.ts';
 import type { FieldSpec } from './fields.ts';
+import type { SurfaceFailure } from './schema.ts';
 import { defineAction, defineRead, readValue, type SurfaceSpec } from './spec.ts';
 
 export const TEAM_FIELD: FieldSpec = {
@@ -55,8 +57,8 @@ function formatTeams(snapshot: RemoteSnapshot) {
   return snapshot.teams.flatMap(describeEntry).join('\n');
 }
 
-export async function findTeamId(client: SurfaceClient, ref: string) {
-  const snapshot = await client.api.remote.snapshot();
+export const findTeamId = Effect.fn('Surface.team')(function* (client: SurfaceClient, ref: string) {
+  const snapshot = yield* client.api.remote.snapshot();
   const wanted = ref.trim().toLowerCase();
   const matches = snapshot.teams.filter(
     (entry) => entry.id === ref.trim() || entry.name.toLowerCase() === wanted
@@ -65,33 +67,41 @@ export async function findTeamId(client: SurfaceClient, ref: string) {
   if (found && matches.length === 1) return found.id;
   const problem =
     matches.length > 1 ? `More than one team is called ${ref}; name it by its id` : `No team matches ${ref}`;
-  throw new DomainError({
+  return yield* new DomainError({
     code: 'team_not_found',
     message: `${problem}. See them with \`shinsa teams list\`.`,
   });
-}
+});
 
 type Among = 'members' | 'requests' | 'teammates';
 
-export async function findTeamUser(client: SurfaceClient, teamId: string, login: string, among: Among) {
-  const snapshot = await client.api.remote.snapshot();
+export const findTeamUser = Effect.fn('Surface.teamUser')(function* (
+  client: SurfaceClient,
+  teamId: string,
+  login: string,
+  among: Among
+) {
+  const snapshot = yield* client.api.remote.snapshot();
   const team = snapshot.teams.find((entry) => entry.id === teamId)?.team;
   const wanted = login.replace(/^@/, '').toLowerCase();
   const listed = team && (among === 'teammates' ? [{ user: team.owner }, ...team.members] : team[among]);
   const found = listed?.find((entry) => entry.user.login.toLowerCase() === wanted);
   if (!found) {
     const where = among === 'requests' ? 'has not asked to join this team' : 'is not in this team';
-    throw new DomainError({
+    return yield* new DomainError({
       code: 'member_not_found',
       message: `${wanted} ${where}. See the team with \`shinsa teams list\`.`,
     });
   }
   return found.user;
-}
+});
 
-type TeamRoute = (api: EngineCalls, payload: { teamId: string }) => Promise<unknown>;
+type TeamRoute = (api: EngineCalls, payload: { teamId: string }) => Effect.Effect<unknown, SurfaceFailure>;
 
-type MemberRoute = (api: EngineCalls, payload: { teamId: string; userId: string }) => Promise<unknown>;
+type MemberRoute = (
+  api: EngineCalls,
+  payload: { teamId: string; userId: string }
+) => Effect.Effect<unknown, SurfaceFailure>;
 
 function defineTeamAction(path: string, summary: string, route: TeamRoute, done: string): SurfaceSpec {
   return defineAction({
@@ -99,11 +109,11 @@ function defineTeamAction(path: string, summary: string, route: TeamRoute, done:
     summary,
     humanOnly: true,
     fields: [TEAM_FIELD],
-    act: async (client, values) => {
-      const teamId = await findTeamId(client, readValue(values, 'team'));
-      const data = await route(client.api, { teamId });
+    act: Effect.fn('Surface.teamAction')(function* (client, values) {
+      const teamId = yield* findTeamId(client, readValue(values, 'team'));
+      const data = yield* route(client.api, { teamId });
       return { data, text: done };
-    },
+    }),
   });
 }
 
@@ -119,12 +129,12 @@ function defineMemberAction(
     summary,
     humanOnly: true,
     fields: [TEAM_FIELD, LOGIN_FIELD],
-    act: async (client, values) => {
-      const teamId = await findTeamId(client, readValue(values, 'team'));
-      const { id: userId } = await findTeamUser(client, teamId, readValue(values, 'login'), among);
-      const data = await route(client.api, { teamId, userId });
+    act: Effect.fn('Surface.memberAction')(function* (client, values) {
+      const teamId = yield* findTeamId(client, readValue(values, 'team'));
+      const { id: userId } = yield* findTeamUser(client, teamId, readValue(values, 'login'), among);
+      const data = yield* route(client.api, { teamId, userId });
       return { data, text: done };
-    },
+    }),
   });
 }
 
@@ -134,22 +144,31 @@ const PRESET_CHOICES = [...TEAM_PRESET_NAMES, DEFAULT_CHOICE] as const;
 
 const SCOPE_NAMES: ReadonlySet<string> = new Set(ACTION_SCOPES);
 
-function readScopeNames(values: Record<string, unknown>, name: string): AccessScope[] {
-  return ((values[name] as string[] | undefined) ?? []).map((raw) => {
-    if (SCOPE_NAMES.has(raw)) return raw as AccessScope;
-    throw new DomainError({
-      code: 'arguments_invalid',
-      message: `${raw} is not a team scope. A teammate always sees the whole task; the scopes are what they may do: ${ACTION_SCOPES.join(', ')}.`,
-    });
-  });
-}
+const readScopeNames = Effect.fn('Surface.teamScopeNames')(function* (
+  values: Record<string, unknown>,
+  name: string
+) {
+  const names: AccessScope[] = [];
+  for (const raw of (values[name] as string[] | undefined) ?? []) {
+    if (!SCOPE_NAMES.has(raw))
+      return yield* new DomainError({
+        code: 'arguments_invalid',
+        message: `${raw} is not a team scope. A teammate always sees the whole task; the scopes are what they may do: ${ACTION_SCOPES.join(', ')}.`,
+      });
+    names.push(raw as AccessScope);
+  }
+  return names;
+});
 
-export function resolveScopesChange(current: AccessScopes, values: Record<string, unknown>) {
+export const resolveScopesChange = Effect.fn('Surface.teamScopesChange')(function* (
+  current: AccessScopes,
+  values: Record<string, unknown>
+) {
   const preset = readValue(values, 'preset');
-  const allow = readScopeNames(values, 'allow');
-  const deny = readScopeNames(values, 'deny');
+  const allow = yield* readScopeNames(values, 'allow');
+  const deny = yield* readScopeNames(values, 'deny');
   if (!preset && allow.length === 0 && deny.length === 0)
-    throw new DomainError({
+    return yield* new DomainError({
       code: 'arguments_invalid',
       message: 'Name a preset or a scope to change, such as `--preset full` or `--allow message`.',
     });
@@ -157,7 +176,7 @@ export function resolveScopesChange(current: AccessScopes, values: Record<string
   const base = preset ? ACCESS_PRESETS[preset as TeamPreset] : current;
   const allowed = allow.reduce((scopes, scope) => toggleScope(scopes, scope, true), base);
   return deny.reduce((scopes, scope) => toggleScope(scopes, scope, false), allowed);
-}
+});
 
 function describeLink(url: string) {
   return `Share this link with your teammates. Whoever opens it signs in with GitHub and asks to join, which you accept or decline:\n${url}`;
@@ -184,14 +203,14 @@ export const TEAM_SPECS: SurfaceSpec[] = [
         description: 'The team’s name, 60 characters at most.',
       },
     ],
-    act: async (client, values) => {
-      const data = await client.api.teams.create({
+    act: Effect.fn('Surface.teamsCreate')(function* (client, values) {
+      const data = yield* client.api.teams.create({
         payload: {
           name: readValue(values, 'name'),
         },
       });
       return { data, text: describeLink(data.url) };
-    },
+    }),
   }),
   defineAction({
     path: ['teams', 'join'],
@@ -206,8 +225,8 @@ export const TEAM_SPECS: SurfaceSpec[] = [
         description: 'The team link, https://app.shinsa.dev/share/team#…',
       },
     ],
-    act: async (client, values) => {
-      const data = await client.api.teams.join({
+    act: Effect.fn('Surface.teamsJoin')(function* (client, values) {
+      const data = yield* client.api.teams.join({
         payload: {
           url: readValue(values, 'url'),
         },
@@ -217,18 +236,18 @@ export const TEAM_SPECS: SurfaceSpec[] = [
           ? 'This machine is in the team now. Add a project to it with `shinsa projects add-to-team`.'
           : 'You asked to join. The team’s owner accepts or declines.';
       return { data, text };
-    },
+    }),
   }),
   defineAction({
     path: ['teams', 'link'],
     summary: 'Show the link that asks to join a team you own, making a new one if it is off.',
     humanOnly: true,
     fields: [TEAM_FIELD],
-    act: async (client, values) => {
-      const teamId = await findTeamId(client, readValue(values, 'team'));
-      const data = await client.api.teams.link({ payload: { teamId } });
+    act: Effect.fn('Surface.teamsLink')(function* (client, values) {
+      const teamId = yield* findTeamId(client, readValue(values, 'team'));
+      const data = yield* client.api.teams.link({ payload: { teamId } });
       return { data, text: describeLink(data.url) };
-    },
+    }),
   }),
   defineTeamAction(
     'link-off',
@@ -294,22 +313,22 @@ export const TEAM_SPECS: SurfaceSpec[] = [
         description: 'A scope to deny, such as share or services. Repeat for each.',
       },
     ],
-    act: async (client, values) => {
-      const teamId = await findTeamId(client, readValue(values, 'team'));
-      const snapshot = await client.api.remote.snapshot();
+    act: Effect.fn('Surface.teamScopes')(function* (client, values) {
+      const teamId = yield* findTeamId(client, readValue(values, 'team'));
+      const snapshot = yield* client.api.remote.snapshot();
       const team = snapshot.teams.find((entry) => entry.id === teamId)?.team;
       const login = readValue(values, 'login');
       if (!login) {
-        const scopes = resolveScopesChange(team?.scopes ?? ACCESS_PRESETS.collaborate, values);
-        const data = await client.api.teams.scopes({ payload: { teamId, scopes } });
+        const scopes = yield* resolveScopesChange(team?.scopes ?? ACCESS_PRESETS.collaborate, values);
+        const data = yield* client.api.teams.scopes({ payload: { teamId, scopes } });
         return { data, text: 'The team’s scopes are changed.' };
       }
-      const user = await findTeamUser(client, teamId, login, 'members');
+      const user = yield* findTeamUser(client, teamId, login, 'members');
       const current = team ? resolveMemberScopes(team, user.id) : ACCESS_PRESETS.collaborate;
-      const scopes = resolveScopesChange(current, values);
-      const data = await client.api.teams.scopes({ payload: { teamId, userId: user.id, scopes } });
+      const scopes = yield* resolveScopesChange(current, values);
+      const data = yield* client.api.teams.scopes({ payload: { teamId, userId: user.id, scopes } });
       return { data, text: 'Their scopes are changed.' };
-    },
+    }),
   }),
   defineTeamAction(
     'leave',

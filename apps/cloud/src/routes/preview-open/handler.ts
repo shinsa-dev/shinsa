@@ -44,13 +44,11 @@ export const PreviewOpenRoutes = Layer.unwrap(
       if (Option.isNone(user)) return respondSignInRedirect(config.origin, url);
       const machine = yield* findReachableMachine(user.value.id, instanceId);
       const now = yield* Clock.currentTimeMillis;
-      const token = yield* Effect.promise(() =>
-        createPreviewAccessToken(Redacted.value(machine.connectKey), {
-          ...address,
-          userId: user.value.id,
-          expiresAt: now + PREVIEW_OPEN_TTL_MS,
-        })
-      );
+      const token = yield* createPreviewAccessToken(Redacted.value(machine.connectKey), {
+        ...address,
+        userId: user.value.id,
+        expiresAt: now + PREVIEW_OPEN_TTL_MS,
+      }).pipe(Effect.orDie);
       const location = new URL(`${target.origin}${target.pathname}${target.search}${target.hash}`);
       location.searchParams.delete(PREVIEW_KEY_PARAM);
       location.searchParams.set(PREVIEW_ACCESS_PARAM, token);

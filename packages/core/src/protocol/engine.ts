@@ -15,6 +15,7 @@ export const ENGINE_FEATURES = [
   'attention',
   'worktree-root',
   'team-access',
+  'usage.pace_limits',
 ] as const;
 
 export type EngineFeature = (typeof ENGINE_FEATURES)[number];

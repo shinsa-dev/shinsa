@@ -1,6 +1,6 @@
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { EventLog } from '../../apps/engine/src/store/index.ts';
+import { openEventLog } from '../../apps/engine/test/helpers/event-log.ts';
 import { MINUTE } from '../kit/time.ts';
 import { writeSeedChangelog } from './changelog.ts';
 import { createCodeSample, listCodeTasks } from './code/sample.ts';
@@ -26,7 +26,7 @@ export function seed() {
   const seedRepos = [...Object.values(repos), sample.repo];
   const tasks = [...listTasks(repos, createWorktrees(repos)), ...listCodeTasks(sample)];
 
-  const log = new EventLog(join(DATA, 'shinsa.sqlite'));
+  const log = openEventLog(join(DATA, 'shinsa.sqlite'));
   const timeline = stampRunPrompts(buildEvents(tasks, projects, seedRepos));
   let seq = 0;
   for (const { at, event } of timeline) {

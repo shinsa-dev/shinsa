@@ -1,11 +1,11 @@
 import { describe, expect, test } from 'bun:test';
-import { describeWorkspaceProblem, WorktreeRoot, Workspaces } from '../../src/workspaces/index.ts';
 import { createGitRepo, createTempDir, writeFiles } from '../helpers/index.ts';
 import { createTask } from '../helpers/state.ts';
+import { openStrategy, openWorkspaces } from './harness.ts';
 
 describe('where agents work', () => {
   test('each task runs on the strategy of the place it was set up in, worktrees by default', () => {
-    const workspaces = new Workspaces({ root: new WorktreeRoot({ defaultDir: createTempDir() }) });
+    const { workspaces } = openWorkspaces(createTempDir());
     expect(workspaces.resolve(createTask()).mode).toBe('worktrees');
     expect(workspaces.resolve(createTask({ workspace: 'worktrees' })).mode).toBe('worktrees');
     expect(workspaces.resolve(createTask({ workspace: 'main_checkout' })).mode).toBe('main_checkout');
@@ -13,14 +13,14 @@ describe('where agents work', () => {
 
   test('the setup check names what stops agents working where the repository says', async () => {
     const plain = await createGitRepo();
-    expect(await describeWorkspaceProblem(plain.repo, 'worktrees', false)).toBeNull();
-    expect(await describeWorkspaceProblem(plain.repo, 'main_checkout', false)).toBeNull();
+    expect(await openStrategy('worktrees').describeProblem(plain.repo, false)).toBeNull();
+    expect(await openStrategy('main_checkout').describeProblem(plain.repo, false)).toBeNull();
     writeFiles(plain.path, { 'mine.txt': 'mine\n' });
-    expect(await describeWorkspaceProblem(plain.repo, 'worktrees', false)).toBeNull();
-    expect(await describeWorkspaceProblem(plain.repo, 'main_checkout', false)).toMatchObject({
+    expect(await openStrategy('worktrees').describeProblem(plain.repo, false)).toBeNull();
+    expect(await openStrategy('main_checkout').describeProblem(plain.repo, false)).toMatchObject({
       kind: 'workspace',
       detail: expect.stringContaining('has uncommitted changes'),
     });
-    expect(await describeWorkspaceProblem(plain.repo, 'main_checkout', true)).toBeNull();
+    expect(await openStrategy('main_checkout').describeProblem(plain.repo, true)).toBeNull();
   });
 });

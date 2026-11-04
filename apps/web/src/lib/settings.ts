@@ -343,6 +343,33 @@ export function parseUsageLimit(value: string) {
   return value === 'off' ? null : Number(value);
 }
 
+export const DAILY_LIMIT_TITLE = 'Daily usage limit';
+
+const DAILY_LIMITS = [10, 20, 30, 50, 100];
+
+function createDailyLimitItem(limit: number): SettingItem<string> {
+  return { value: String(limit), label: `${limit}% of a weekly limit a day`, icon: 'IconGauge' };
+}
+
+export function listDailyLimitItems(settings: Settings): SettingItem<string>[] {
+  const current = settings.dailyUsageLimit ?? null;
+  const limits =
+    current === null || DAILY_LIMITS.includes(current)
+      ? DAILY_LIMITS
+      : [...DAILY_LIMITS, current].sort((a, b) => a - b);
+  return [{ value: 'off', label: 'No limit', icon: 'IconInfinity' }, ...limits.map(createDailyLimitItem)];
+}
+
+export function resolveDailyLimitValue(settings: Settings) {
+  return settings.dailyUsageLimit == null ? 'off' : String(settings.dailyUsageLimit);
+}
+
+export function describeDailyLimitNote(settings: Settings, recent: number) {
+  if (settings.dailyUsageLimit == null) return null;
+  const used = `${Number(recent.toFixed(1))}%`;
+  return `The last 24 hours used ${used} on Claude. Each provider counts its own usage: once it reaches the limit, a task’s next step waits and starts by itself when older usage drops out.`;
+}
+
 export function resolveAttentionValue(settings: Settings) {
   return String(resolveAttentionLimit(settings));
 }

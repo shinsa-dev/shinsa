@@ -1,5 +1,6 @@
 import { describe, expect, it, mock } from 'bun:test';
 import { type RemoteInstance, serializePublicKey } from '@shinsa/core';
+import { Effect } from 'effect';
 import { openRemoteChannel } from '@/lib/remote/channel.ts';
 import { describeMachine } from '@/lib/remote/machines.ts';
 import type { EnrolledDevice } from '@/lib/remote/schema.ts';
@@ -61,11 +62,15 @@ function answerProjects(request: Request) {
 describe('the machines the join page shares from', () => {
   it('keeps only your own online machines this browser was added to and is not waiting on', () => {
     const rows = [
-      describeMachine(STUDIO, createDevice(STUDIO.id)),
-      describeMachine(LAPTOP, createDevice(LAPTOP.id, { waiting: { machineName: 'Laptop' } })),
-      describeMachine(SHARED, createDevice(SHARED.id)),
-      describeMachine({ ...STUDIO, id: 'none' }, null),
-      describeMachine({ ...STUDIO, id: 'z8v4', name: 'Mini', online: false }, createDevice('z8v4')),
+      describeMachine(STUDIO, createDevice(STUDIO.id), Date.now()),
+      describeMachine(LAPTOP, createDevice(LAPTOP.id, { waiting: { machineName: 'Laptop' } }), Date.now()),
+      describeMachine(SHARED, createDevice(SHARED.id), Date.now()),
+      describeMachine({ ...STUDIO, id: 'none' }, null, Date.now()),
+      describeMachine(
+        { ...STUDIO, id: 'z8v4', name: 'Mini', online: false },
+        createDevice('z8v4'),
+        Date.now()
+      ),
     ];
     expect(listJoinRows(rows).map((row) => row.instance.name)).toEqual(['Studio']);
   });
@@ -176,7 +181,7 @@ describe('opening your machines for the join page', () => {
   it('reads the projects over the sealed channel, and stops once the machine refuses this browser', async () => {
     const keys = await createKeyPair();
     const mac = await FakeMac.create({
-      enrolled: [await serializePublicKey(keys.publicKey)],
+      enrolled: [await Effect.runPromise(serializePublicKey(keys.publicKey))],
       respond: answerProjects,
     });
     const device: EnrolledDevice = { instanceId: STUDIO.id, machineKey: mac.machineKey, keys, enrolledAt: 1 };
@@ -199,7 +204,7 @@ describe('opening your machines for the join page', () => {
     opened.close();
     mac.enrolled.clear();
     const refused = createJoinMember(
-      { ...describeMachine(STUDIO, device), device },
+      { ...describeMachine(STUDIO, device, Date.now()), device },
       { requestConnect: connect },
       (options) => openRemoteChannel({ ...options, openSocket: mac.openSocket })
     );

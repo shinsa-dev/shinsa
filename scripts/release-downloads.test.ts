@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import type { DownloadPointer } from '../apps/marketing/src/worker/download.ts';
+import type { DownloadPointer } from '../apps/marketing/src/worker/releases/schema.ts';
 import {
   assertDownloadFile,
   assertUpdateZip,

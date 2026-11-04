@@ -2,12 +2,15 @@ import { afterEach, describe, expect, setDefaultTimeout, test } from 'bun:test';
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { MERGE_METHODS, PLAN_APPROVALS, PRIORITY_RANK, replayEventLog, type ShinsaState } from '@shinsa/core';
-import { type ModelSource, Transcripts } from '../../src/agents/index.ts';
-import { startServer } from '../../src/http/index.ts';
-import { Engine } from '../../src/runtime/index.ts';
-import { EventLog, EvidenceStore } from '../../src/store/index.ts';
+import { Effect } from 'effect';
+import { type ModelSource } from '../../src/agents/index.ts';
+import { Engine } from '../helpers/engine.ts';
+import { openEventLog } from '../helpers/event-log.ts';
+import { createTestEvidence } from '../helpers/evidence.ts';
 import { createTempDir, createTestConfig, createTestOnboarding, until } from '../helpers/index.ts';
 import { createRandom } from '../helpers/random.ts';
+import { createTestTranscripts } from '../helpers/transcripts.ts';
+import { startHttpServer } from '../helpers/web.ts';
 
 setDefaultTimeout(60_000);
 
@@ -229,13 +232,13 @@ async function startFuzzServer() {
   const root = createTempDir();
   const config = createTestConfig(root, { roots: [] });
   mkdirSync(join(root, 'web'), { recursive: true });
-  const engine = new Engine(new EventLog(config.databasePath));
-  const http = startServer({
+  const engine = new Engine(openEventLog(config.databasePath));
+  const http = startHttpServer({
     engine,
     config,
-    transcripts: new Transcripts(config.transcriptsDir),
-    evidence: new EvidenceStore(config.evidenceDir),
-    models: { listModels: () => Promise.resolve([]) } as ModelSource,
+    transcripts: createTestTranscripts(config.transcriptsDir),
+    evidence: createTestEvidence(config.evidenceDir),
+    models: { listModels: Effect.succeed([]) } as ModelSource,
     onboarding: createTestOnboarding(engine, config).onboarding,
   });
   stops.push(http.stop);
@@ -311,7 +314,7 @@ describe('fuzzing the command surface', () => {
         }
         assertWellFormed(engine.state);
       }
-      const reopened = new EventLog(config.databasePath);
+      const reopened = openEventLog(config.databasePath);
       const read = reopened.readEvents();
       reopened.close();
       expect(read.unreadable).toEqual([]);

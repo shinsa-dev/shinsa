@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'bun:test';
+import { Effect } from 'effect';
 import {
   createTokenizer,
   type GrammarEngine,
@@ -13,6 +14,7 @@ import {
   type TokenRequest,
   unpackLines,
 } from '@/lib/code/editor/textmate.ts';
+import { StepFailed } from '@/lib/runtime/schema.ts';
 
 class Depth implements LineState {
   constructor(readonly depth: number) {}
@@ -50,8 +52,8 @@ function createEngine(): GrammarEngine {
     initial: new Depth(0),
     colors: () => COLORS,
     load: (grammar) => {
-      if (grammar === 'broken') return Promise.reject(new Error('no'));
-      return Promise.resolve(grammar === 'fake' ? GRAMMAR : null);
+      if (grammar === 'broken') return Effect.fail(new StepFailed({ message: 'no' }));
+      return Effect.succeed(grammar === 'fake' ? GRAMMAR : null);
     },
   };
 }
@@ -72,12 +74,7 @@ function ask(text: string, extra: Partial<TokenRequest> = {}): TokenRequest {
 
 function createHarness(now: () => number = () => 0) {
   const answers: TokenAnswer[] = [];
-  const tokenizer = createTokenizer(
-    createEngine(),
-    (answer) => answers.push(answer),
-    () => Promise.resolve(),
-    now
-  );
+  const tokenizer = createTokenizer(createEngine(), (answer) => answers.push(answer), Effect.void, now);
   const replies = () => answers.filter((answer): answer is TokenReply => !isTokenFailure(answer));
   return { tokenizer, answers, replies };
 }
@@ -181,7 +178,7 @@ describe('createTokenizer', () => {
     const tokenizer = createTokenizer(
       createEngine(),
       (answer) => answers.push(answer),
-      () => new Promise<void>((resolve) => pauses.push(resolve)),
+      Effect.promise(() => new Promise<void>((resolve) => pauses.push(resolve))),
       () => {
         clock += 10;
         return clock;
@@ -206,7 +203,7 @@ describe('createTokenizer', () => {
     const tokenizer = createTokenizer(
       createEngine(),
       (answer) => answers.push(answer),
-      () => new Promise<void>((resolve) => setTimeout(resolve, 0)),
+      Effect.sleep(0),
       () => {
         clock += 10;
         return clock;

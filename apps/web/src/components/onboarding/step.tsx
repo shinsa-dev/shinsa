@@ -51,7 +51,7 @@ import {
   SUBMIT_KEY,
 } from '@/lib/onboarding.ts';
 
-export const ONBOARDING_COLUMN = 'mx-auto flex w-full max-w-xl flex-col gap-6 px-6';
+export const ONBOARDING_COLUMN = 'mx-auto flex w-full max-w-xl flex-col gap-6 px-4 sm:px-6';
 
 export interface OnboardingStepActions {
   openPrivacy: () => void;

@@ -5,9 +5,11 @@ import {
   type RemoteTeam,
   resolveKeyFingerprint,
 } from '@shinsa/core';
+import { Effect, Fiber } from 'effect';
 import { describeMachine } from '@/lib/remote/machines.ts';
 import type { ChannelOptions, RemoteChannel } from '@/lib/remote/remote-channel/schema.ts';
 import type { EnrolledDevice } from '@/lib/remote/schema.ts';
+import { forkApp, runApp } from '@/lib/runtime/app.ts';
 import { admitTeamMachines, readTeamMachineGrant } from '@/lib/teams/admit.ts';
 import type { TeamChannelHandlers, TeamChannelTarget } from '@/lib/teams/team-socket/schema.ts';
 import { createKeyPair } from '../remote/fake-mac.ts';
@@ -93,9 +95,9 @@ function setUp(
 
 describe('adding this browser to a teammate’s machine', () => {
   it('adds a machine with the grant only its owner’s machine sends you, pinned to the key the team channel sends', async () => {
-    const instance = createInstance({ fingerprint: await resolveKeyFingerprint(MACHINE_KEY) });
+    const instance = createInstance({ fingerprint: await runApp(resolveKeyFingerprint(MACHINE_KEY)) });
     const { admit, written, opened } = setUp();
-    const [row] = await admitTeamMachines([describeMachine(instance, null)], admit);
+    const [row] = await admitTeamMachines([describeMachine(instance, null, Date.now())], admit);
     expect(row?.device).toMatchObject({ instanceId: 'studio', machineKey: MACHINE_KEY, enrolledAt: 5 });
     expect(written).toHaveLength(1);
     expect(opened[0]).toMatchObject({ machineKey: MACHINE_KEY, enrollSecret: GRANT, name: 'Kai’s Mac' });
@@ -104,7 +106,7 @@ describe('adding this browser to a teammate’s machine', () => {
   it('leaves a machine alone when its key does not match the fingerprint app.shinsa.dev lists', async () => {
     const { admit, written } = setUp();
     const [row] = await admitTeamMachines(
-      [describeMachine(createInstance({ fingerprint: 'nope' }), null)],
+      [describeMachine(createInstance({ fingerprint: 'nope' }), null, Date.now())],
       admit
     );
     expect(row?.device).toBeNull();
@@ -112,8 +114,8 @@ describe('adding this browser to a teammate’s machine', () => {
   });
 
   it('writes nothing when the machine refuses or sends no grant, this browser has no key, or no team lists it', async () => {
-    const fingerprint = await resolveKeyFingerprint(MACHINE_KEY);
-    const row = describeMachine(createInstance({ fingerprint }), null);
+    const fingerprint = await runApp(resolveKeyFingerprint(MACHINE_KEY));
+    const row = describeMachine(createInstance({ fingerprint }), null, Date.now());
     for (const options of [
       { refuse: true },
       { key: null },
@@ -140,8 +142,8 @@ describe('adding this browser to a teammate’s machine', () => {
       },
     };
     const rows = [
-      describeMachine(createInstance({ role: 'owner' }), null),
-      describeMachine(createInstance({ online: false }), null),
+      describeMachine(createInstance({ role: 'owner' }), null, Date.now()),
+      describeMachine(createInstance({ online: false }), null, Date.now()),
     ];
     expect(await admitTeamMachines(rows, counting)).toBe(rows);
     expect(listed).toBe(0);
@@ -150,7 +152,7 @@ describe('adding this browser to a teammate’s machine', () => {
 
   it('keeps the rows as they were when the teams cannot be read', async () => {
     const { admit } = setUp();
-    const rows = [describeMachine(createInstance(), null)];
+    const rows = [describeMachine(createInstance(), null, Date.now())];
     const failing = {
       ...admit,
       dashboard: { ...admit.dashboard, listTeams: () => Promise.reject(new Error('down')) },
@@ -165,20 +167,55 @@ describe('adding this browser to a teammate’s machine', () => {
       key: TEAM_KEY,
       view: { kind: 'list' },
     };
-    expect(await readTeamMachineGrant(target, sendView('k'))).toEqual({ machineKey: 'k', grant: GRANT });
-    expect(await readTeamMachineGrant(target, sendView(undefined))).toBeNull();
-    let stopped = 0;
-    const ended = await readTeamMachineGrant(target, (_target, handlers) => {
-      setTimeout(() => {
-        handlers.onMessage({ t: 'end', id: 'gone' });
-        handlers.onEnd({ reason: 'gone', gone: true });
-        handlers.onEnd({ reason: 'again', gone: true });
-      }, 0);
-      return () => {
-        stopped += 1;
-      };
+    expect(await runApp(readTeamMachineGrant(target, sendView('k')))).toEqual({
+      machineKey: 'k',
+      grant: GRANT,
     });
+    expect(await runApp(readTeamMachineGrant(target, sendView(undefined)))).toBeNull();
+    let stopped = 0;
+    const ended = await runApp(
+      readTeamMachineGrant(target, (_target, handlers) => {
+        setTimeout(() => {
+          handlers.onMessage({ t: 'end', id: 'gone' });
+          handlers.onEnd({ reason: 'gone', gone: true });
+          handlers.onEnd({ reason: 'again', gone: true });
+        }, 0);
+        return () => {
+          stopped += 1;
+        };
+      })
+    );
     expect(ended).toBeNull();
     expect(stopped).toBe(1);
+  });
+
+  it('stops the team channel when the read is cancelled before any view', async () => {
+    let stopped = 0;
+    const target: TeamChannelTarget = {
+      teamId: 'team1',
+      instanceId: 'studio',
+      key: TEAM_KEY,
+      view: { kind: 'list' },
+    };
+    const fiber = forkApp(
+      readTeamMachineGrant(target, () => () => {
+        stopped += 1;
+      })
+    );
+    await runApp(Effect.yieldNow);
+    await runApp(Fiber.interrupt(fiber));
+    expect(stopped).toBe(1);
+  });
+
+  it('keeps the rows it does not touch beside the one it adds', async () => {
+    const instance = createInstance({ fingerprint: await runApp(resolveKeyFingerprint(MACHINE_KEY)) });
+    const { admit } = setUp();
+    const owned = describeMachine(createInstance({ id: 'mine', role: 'owner' }), null, Date.now());
+    const [first, second] = await admitTeamMachines(
+      [owned, describeMachine(instance, null, Date.now())],
+      admit
+    );
+    expect(first).toBe(owned);
+    expect(second?.device).toMatchObject({ instanceId: 'studio' });
   });
 });

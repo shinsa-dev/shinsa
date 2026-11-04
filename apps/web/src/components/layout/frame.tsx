@@ -7,8 +7,9 @@ import { ErrorBoundary } from '@/components/errors/boundary.tsx';
 import { FeedbackDialog } from '@/components/feedback/dialog.tsx';
 import type { LayoutPreference } from '@/lib/preferences/layout.ts';
 import { useRailWidth } from '@/lib/preferences/rail-width.ts';
+import { useRoute } from '@/router.ts';
 import { CardsTopBar } from './cards/top-bar.tsx';
-import { CompactBar } from './sidebar/compact-bar.tsx';
+import { CompactBar, SAFE_AREA_BOTTOM, SAFE_AREA_SIDES, SAFE_AREA_TOP } from './sidebar/compact-bar.tsx';
 import { Rail } from './sidebar/rail.tsx';
 import { ResizeHandle } from './sidebar/resize-handle.tsx';
 
@@ -31,22 +32,38 @@ export function AppFrame({
   state: ShinsaState;
   children: React.ReactNode;
 }) {
-  const [menuOpen, setMenuOpen] = React.useState(false);
+  const [moreOpen, setMoreOpen] = React.useState(false);
+  const route = useRoute();
+  React.useEffect(() => setMoreOpen(false), [route]);
   const sidebar = layout === 'sidebar';
+  const openMore = () => setMoreOpen(true);
   return (
     <div className={cn('flex h-dvh overflow-hidden bg-background text-fg-3', !sidebar && 'flex-col')}>
-      {sidebar ? null : <CardsTopBar state={state} />}
+      {sidebar ? null : <CardsTopBar state={state} onMore={openMore} />}
       {sidebar ? <SidebarRail state={state} /> : null}
-      {sidebar ? (
-        <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
-          <SheetContent side='left' showCloseButton={false} className='w-72 gap-0 p-0'>
-            <SheetTitle className='sr-only'>Queue</SheetTitle>
-            <Rail state={state} onNavigate={() => setMenuOpen(false)} />
-          </SheetContent>
-        </Sheet>
-      ) : null}
+      <Sheet open={moreOpen} onOpenChange={setMoreOpen}>
+        <SheetContent
+          side='right'
+          showCloseButton={false}
+          className={cn('w-72 gap-0 p-0', SAFE_AREA_TOP, SAFE_AREA_BOTTOM)}
+        >
+          <SheetTitle className='sr-only'>More</SheetTitle>
+          <Rail state={state} variant='sheet' onNavigate={() => setMoreOpen(false)} />
+        </SheetContent>
+      </Sheet>
       <main className={cn('flex flex-1 flex-col', sidebar ? 'min-w-0' : 'min-h-0')}>
-        {sidebar ? <CompactBar state={state} onMenu={() => setMenuOpen(true)} /> : null}
+        {sidebar ? (
+          <header
+            data-window-drag
+            className={cn(
+              'shrink-0 border-b border-border select-none md:hidden',
+              SAFE_AREA_TOP,
+              SAFE_AREA_SIDES
+            )}
+          >
+            <CompactBar state={state} onMore={openMore} className='px-3 desktop:ps-20' />
+          </header>
+        ) : null}
         {children}
       </main>
       <ErrorBoundary size='silent'>

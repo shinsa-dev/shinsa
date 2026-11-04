@@ -20,6 +20,7 @@ import {
   type TeamCreateResponse,
   verifyPreviewAccessToken,
 } from '@shinsa/core';
+import { Effect } from 'effect';
 import { resolveForwardCookie } from '../src/routes/previews/address.ts';
 import { PREVIEW_ACCESS_COOKIE, PREVIEW_COOKIE } from '../src/routes/previews/schema.ts';
 import { createHarness, type Harness, heartbeat, pairMachine, readJson } from './harness.ts';
@@ -258,12 +259,8 @@ describe('a private address', () => {
     expect(location.searchParams.get('tab')).toBe('2');
     expect(location.searchParams.has('key')).toBe(false);
     const token = location.searchParams.get('access') ?? '';
-    const claim = await verifyPreviewAccessToken(
-      credentials.connectKey,
-      token,
-      address,
-      harness.clock.now,
-      PREVIEW_OPEN_TTL_MS
+    const claim = await Effect.runPromise(
+      verifyPreviewAccessToken(credentials.connectKey, token, address, harness.clock.now, PREVIEW_OPEN_TTL_MS)
     );
     expect(claim?.userId).toBe('1');
     expect(claim?.expiresAt).toBe(harness.clock.now + PREVIEW_OPEN_TTL_MS);
@@ -308,12 +305,8 @@ describe('a private address', () => {
     const answer = await harness.call(openPath(`${origin}/`), { session: kai });
     expect(answer.status).toBe(303);
     const token = new URL(answer.headers.get('location') ?? '').searchParams.get('access') ?? '';
-    const claim = await verifyPreviewAccessToken(
-      credentials.connectKey,
-      token,
-      address,
-      harness.clock.now,
-      PREVIEW_OPEN_TTL_MS
+    const claim = await Effect.runPromise(
+      verifyPreviewAccessToken(credentials.connectKey, token, address, harness.clock.now, PREVIEW_OPEN_TTL_MS)
     );
     expect(claim?.userId).toBe('2');
     await harness.post(resolveMachineTeamPath(team.id, 'members/remove'), { userId: '2' }, machine);
@@ -331,18 +324,22 @@ describe('a private address', () => {
   test('trades a valid short token for a 12-hour cookie on that host and drops it from the address', async () => {
     const harness = createHarness();
     const { credentials, address, origin } = await pairPrivate(harness);
-    const short = await createPreviewAccessToken(credentials.connectKey, {
-      ...address,
-      userId: '1',
-      expiresAt: harness.clock.now + PREVIEW_OPEN_TTL_MS,
-    });
+    const short = await Effect.runPromise(
+      createPreviewAccessToken(credentials.connectKey, {
+        ...address,
+        userId: '1',
+        expiresAt: harness.clock.now + PREVIEW_OPEN_TTL_MS,
+      })
+    );
     const answer = await visit(harness, `${origin}/app?access=${short}&x=1`);
     expect(answer.status).toBe(303);
     expect(answer.headers.get('location')).toBe(`${origin}/app?x=1`);
     const cookie = answer.headers.get('set-cookie') ?? '';
     expect(cookie).toEndWith('; Path=/; Max-Age=43200; HttpOnly; Secure; SameSite=Lax');
     const token = cookie.split(';')[0]?.slice(`${PREVIEW_ACCESS_COOKIE}=`.length) ?? '';
-    const claim = await verifyPreviewAccessToken(credentials.connectKey, token, address, harness.clock.now);
+    const claim = await Effect.runPromise(
+      verifyPreviewAccessToken(credentials.connectKey, token, address, harness.clock.now)
+    );
     expect(claim?.expiresAt).toBe(harness.clock.now + PREVIEW_ACCESS_TTL_MS);
     expect(harness.calls.filter((call) => call.url.includes('/__preview/'))).toEqual([]);
   });
@@ -351,7 +348,7 @@ describe('a private address', () => {
     const harness = createHarness();
     const { credentials, address, origin } = await pairPrivate(harness);
     const sign = (expiresAt: number, at = address) =>
-      createPreviewAccessToken(credentials.connectKey, { ...at, userId: '1', expiresAt });
+      Effect.runPromise(createPreviewAccessToken(credentials.connectKey, { ...at, userId: '1', expiresAt }));
     const now = harness.clock.now;
     const other = { ...address, previewId: serializeBase64Url(new Uint8Array(PREVIEW_ID_BYTES).fill(3)) };
     for (const token of [

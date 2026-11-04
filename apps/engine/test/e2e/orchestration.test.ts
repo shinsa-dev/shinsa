@@ -2,8 +2,8 @@ import { afterEach, describe, expect, setDefaultTimeout, test } from 'bun:test';
 import { realpathSync } from 'node:fs';
 import { join } from 'node:path';
 import { isDelegatedRun, listChildRuns, listOpenGates, type Run } from '@shinsa/core';
-import { Transcripts } from '../../src/agents/index.ts';
 import { createGitRepo } from '../helpers/index.ts';
+import { createSyncTranscripts } from '../helpers/transcripts.ts';
 import { type AgentContext, PLAN, toolPlan, World } from './harness.ts';
 
 setDefaultTimeout(30_000);
@@ -41,7 +41,7 @@ function stepRun(w: World, taskId: string, purpose: Run['purpose']) {
 }
 
 function notices(w: World, runId: string) {
-  return new Transcripts(w.config.transcriptsDir)
+  return createSyncTranscripts(w.config.transcriptsDir)
     .listEntries(runId)
     .flatMap((entry) =>
       entry.type === 'notice' && entry.notice.kind === 'delegation' ? [entry.notice] : []

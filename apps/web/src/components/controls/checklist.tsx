@@ -76,7 +76,7 @@ export function ItemChecklist<Item extends ChecklistItem>({
               )
             }
           >
-            <ChecklistTitle meta={meta?.(item)}>
+            <ChecklistTitle meta={meta?.(item)} className='max-sm:*:first:w-full max-sm:*:first:truncate'>
               <LinkedInlineMarkdown text={item.title} />
             </ChecklistTitle>
             {item.detail && (

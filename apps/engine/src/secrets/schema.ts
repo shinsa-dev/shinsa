@@ -47,6 +47,8 @@ export interface SecretFile {
   mcp: Record<string, McpCredentials>;
 }
 
+export const SECRETS_FILE = 'secrets.json';
+
 export const NO_SALT = 'It has no salt.';
 
 export const SALT_BYTES = 32;

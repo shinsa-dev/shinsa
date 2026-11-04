@@ -35,7 +35,7 @@ import { TONE_TEXT } from '@/lib/format/tone.ts';
 import { isSubmitKey } from '@/lib/keys.ts';
 
 export const FEEDBACK_POPOVER =
-  'flex max-h-(--available-height) w-96 max-w-[calc(100vw-1rem)] flex-col gap-0 p-0';
+  'flex max-h-(--available-height) w-96 max-w-(--available-width) flex-col gap-0 p-0';
 
 function NoteForm({ actions }: { actions: FeedbackActions }) {
   const [note, setNote] = React.useState('');

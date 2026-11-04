@@ -4,7 +4,7 @@ import { HttpClientRequest } from 'effect/http';
 import type { DashboardClient } from '@/lib/remote/dashboard.ts';
 import type { DeviceStore } from '@/lib/remote/devices.ts';
 import type { FleetMember } from '@/lib/remote/fleet.ts';
-import { RemoteLink, type RemoteLinkOptions } from '@/lib/remote/link.ts';
+import { createRemoteLink, type RemoteLinkOptions } from '@/lib/remote/link.ts';
 import { listMachineRows, type MachineRow } from '@/lib/remote/machines.ts';
 import type { EnrolledDevice } from '@/lib/remote/schema.ts';
 import { runApp } from '@/lib/runtime/app.ts';
@@ -94,7 +94,7 @@ export function createJoinMember(
   dashboard: JoinDashboard,
   openChannel?: RemoteLinkOptions['openChannel']
 ): JoinMember {
-  const link: RemoteLink = new RemoteLink({
+  const link = createRemoteLink({
     instanceId: row.instance.id,
     device: row.device,
     dashboard,
@@ -102,7 +102,7 @@ export function createJoinMember(
     ...(openChannel ? { openChannel } : {}),
   });
   return {
-    member: { id: row.instance.id, name: row.instance.name, fetch: (request) => link.fetch(request) },
+    member: { id: row.instance.id, name: row.instance.name, fetch: link.fetch },
     close: () => link.close(),
   };
 }
@@ -122,9 +122,7 @@ export function createJoinMachinesSource(
   const timeout = options.timeout ?? PROJECTS_TIMEOUT;
   const open = Effect.fn('JoinMachines.open')(function* () {
     const origin = options.origin ?? location.origin;
-    const rows = listJoinRows(
-      yield* enterPromise(() => listMachineRows(services.dashboard, services.devices))
-    );
+    const rows = listJoinRows(yield* listMachineRows(services.dashboard, services.devices));
     const closers: (() => void)[] = [];
     const machines = yield* Effect.forEach(
       rows,

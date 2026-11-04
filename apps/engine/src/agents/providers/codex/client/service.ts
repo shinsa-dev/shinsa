@@ -2,6 +2,7 @@ import { Deferred, Effect, Fiber, Option, Ref, Schema, Stream } from 'effect';
 import { resolveBrowserEnv } from '../../../../extensions/definitions.ts';
 import { describeError } from '../../../../log/index.ts';
 import { stopProcessGroup } from '../../../../shell/processes.ts';
+import { readRecord } from '../params.ts';
 import {
   CLIENT_INFO,
   CLOSED,
@@ -27,8 +28,6 @@ export const makeCodexClient = Effect.fn('CodexClient.make')(function* (
   const notification = given.notification ?? (() => undefined);
   const exit = given.exit ?? (() => undefined);
   const decodeMessage = Schema.decodeUnknownOption(CodexMessage);
-  const readParams = (value: unknown): CodexParams =>
-    value && typeof value === 'object' && !Array.isArray(value) ? (value as CodexParams) : {};
   const isRequestId = (id: unknown): id is CodexRequestId => typeof id === 'number' || typeof id === 'string';
   const { CLAUDECODE: _claudeCode, ...inherited } = Bun.env;
 
@@ -96,7 +95,7 @@ export const makeCodexClient = Effect.fn('CodexClient.make')(function* (
       if (!entry) return Effect.void;
       pending.delete(id);
       if (message.error === undefined) return Deferred.succeed(entry.answer, message.result);
-      const text = readParams(message.error).message;
+      const text = readRecord(message.error).message;
       return Deferred.fail(
         entry.answer,
         new CodexRequestError({
@@ -111,7 +110,7 @@ export const makeCodexClient = Effect.fn('CodexClient.make')(function* (
       onNone: () => Effect.void,
       onSome: (message): Effect.Effect<void> => {
         const { id, method } = message;
-        const params = readParams(message.params);
+        const params = readRecord(message.params);
         if (typeof method === 'string' && isRequestId(id)) {
           return Effect.asVoid(Effect.forkDetach(answer(id, method, params)));
         }

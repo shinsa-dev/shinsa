@@ -13,10 +13,13 @@ import {
   resolveFastMode,
   type Settings,
 } from '@shinsa/core';
+import type { Effect, Scope } from 'effect';
 import type { UsageRead } from '../../accounts/usage.ts';
-import type { SessionExtensions } from '../../extensions/index.ts';
-import type { DeferredServer } from '../../extensions/loader.ts';
+import type { DeferredServer } from '../../extensions/loader/schema.ts';
+import type { SessionExtensions } from '../../extensions/session.ts';
 import type { ShinsaTools } from '../tools/index.ts';
+import type { ClaudeSessionEnded, McpServersRefused } from './claude/session/schema.ts';
+import type { ProviderCallFailed } from './schema.ts';
 
 export type ImageStore = (data: string, mediaType: string) => string | null;
 
@@ -79,14 +82,14 @@ export interface AgentSessionResult {
 type SteerSource = 'you' | 'shinsa';
 
 export interface AgentSession {
-  done: Promise<AgentSessionResult>;
-  steer: (text: string, from?: SteerSource) => boolean;
-  cancel: () => Promise<void>;
-  hasPendingBackgroundWork?: () => boolean;
-  loadMcpServers?: (
+  readonly done: Effect.Effect<AgentSessionResult>;
+  readonly steer: (text: string, from?: SteerSource) => Effect.Effect<boolean>;
+  readonly cancel: Effect.Effect<void>;
+  readonly hasPendingBackgroundWork?: Effect.Effect<boolean>;
+  readonly loadMcpServers?: (
     servers: DeferredServer[],
     abandoned: AbortSignal
-  ) => Promise<Record<string, string | null>>;
+  ) => Effect.Effect<Record<string, string | null>, ClaudeSessionEnded | McpServersRefused>;
 }
 
 export interface CompletionRequest {
@@ -142,20 +145,22 @@ const MINIMAL_CAPABILITIES: ProviderCapabilities = {
 };
 
 export interface ModelSource {
-  listModels: () => Promise<AgentModel[]>;
+  readonly listModels: Effect.Effect<AgentModel[]>;
 }
 
 export interface AgentProvider extends ModelSource {
-  id: string;
-  label: string;
-  capabilities?: ProviderCapabilities;
-  startSession: (input: AgentSessionInput) => AgentSession;
-  compactSession?: (input: Omit<AgentSessionInput, 'prompt'>) => AgentSession;
-  inspectSession?: (query: SessionQuery) => Promise<SessionArtifactStatus>;
-  complete: (request: CompletionRequest) => Promise<string | null>;
-  completeStructured?: (request: StructuredRequest) => Promise<unknown>;
-  readLogin?: () => Promise<ProviderLogin>;
-  readUsage?: () => Promise<ProviderUsageReading>;
+  readonly id: string;
+  readonly label: string;
+  readonly capabilities?: ProviderCapabilities;
+  readonly startSession: (input: AgentSessionInput) => Effect.Effect<AgentSession, never, Scope.Scope>;
+  readonly compactSession?: (
+    input: Omit<AgentSessionInput, 'prompt'>
+  ) => Effect.Effect<AgentSession, never, Scope.Scope>;
+  readonly inspectSession?: (query: SessionQuery) => Effect.Effect<SessionArtifactStatus>;
+  readonly complete: (request: CompletionRequest) => Effect.Effect<string | null, ProviderCallFailed>;
+  readonly completeStructured?: (request: StructuredRequest) => Effect.Effect<unknown, ProviderCallFailed>;
+  readonly readLogin?: Effect.Effect<ProviderLogin>;
+  readonly readUsage?: Effect.Effect<ProviderUsageReading, ProviderCallFailed>;
 }
 
 export type SessionStarter = AgentProvider['startSession'];

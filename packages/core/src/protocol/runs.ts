@@ -8,10 +8,11 @@ const WIRE_RUNS = new WeakMap<object, WireRun>();
 const WIRE_RECORDS = new WeakMap<object, Record<string, WireRun>>();
 
 export function serializeRun(run: Run & { fixFocus?: FixFocus }): WireRun {
-  if (!Object.hasOwn(run, 'prompt') && !Object.hasOwn(run, 'rolePrompt')) return run;
+  if (!Object.hasOwn(run, 'prompt') && !Object.hasOwn(run, 'rolePrompt') && !Object.hasOwn(run, 'told'))
+    return run;
   const known = WIRE_RUNS.get(run);
   if (known) return known;
-  const { prompt: _prompt, rolePrompt: _rolePrompt, ...rest } = run;
+  const { prompt: _prompt, rolePrompt: _rolePrompt, told: _told, ...rest } = run;
   const focus = resolveFixFocus(run);
   const wire: WireRun = focus ? { ...rest, fixFocus: focus } : rest;
   WIRE_RUNS.set(run, wire);

@@ -19,7 +19,7 @@ const FINDING = {
 };
 
 function readHeadRow(body: string) {
-  return screen.getAllByText(body)[0]?.closest('.justify-between') as HTMLElement;
+  return screen.getAllByText(body)[0]?.closest('.grid') as HTMLElement;
 }
 
 describe('a finding card', () => {
@@ -46,8 +46,10 @@ describe('a finding card', () => {
       ['The Overview card.', 'Fix there'],
     ] as const) {
       const row = readHeadRow(body);
-      expect(row.className).toContain('justify-between');
-      expect(row.contains(screen.getByRole('button', { name: action }))).toBe(true);
+      expect(row.className).toContain('grid-cols-[minmax(0,1fr)_auto]');
+      expect(row.querySelector('.col-start-2')?.contains(screen.getByRole('button', { name: action }))).toBe(
+        true
+      );
       expect(row.textContent).toContain('Blocking');
       expect(row.textContent).not.toContain('Agent review');
       expect(row.querySelector('.rounded-full')).toBeNull();

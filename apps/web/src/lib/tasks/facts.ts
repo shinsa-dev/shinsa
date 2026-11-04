@@ -1,5 +1,6 @@
 import {
   describeCount,
+  resolveSlackThreadUrl,
   type ShinsaState,
   type Task,
   type TeamFeedSnapshot,
@@ -228,6 +229,23 @@ export function resolveFiledByFact(state: ShinsaState, task: Task): FiledByFact 
     };
   }
   return null;
+}
+
+export interface SlackFact {
+  place: string;
+  hint: string;
+  href: string;
+}
+
+export function resolveSlackFact(task: Task): SlackFact | null {
+  const link = task.slack;
+  if (!link) return null;
+  const place = link.channelName ? `#${link.channelName}` : 'Slack';
+  return {
+    place,
+    hint: `A mention of @Shinsa in ${place} started this task. Open the thread in Slack.`,
+    href: resolveSlackThreadUrl(link),
+  };
 }
 
 export function listForkSourcesBesides(state: ShinsaState, task: Task, filedBy: FiledByFact | null) {

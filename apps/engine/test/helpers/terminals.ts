@@ -1,13 +1,21 @@
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { Context, Duration, Effect, Exit, Layer, Scope } from 'effect';
 import type { ModelSource } from '../../src/agents/index.ts';
-import { Transcripts } from '../../src/agents/index.ts';
-import { startServer } from '../../src/http/index.ts';
-import { Engine } from '../../src/runtime/index.ts';
-import { EventLog, EvidenceStore } from '../../src/store/index.ts';
-import { type ServiceRefiner, Terminals } from '../../src/terminals/index.ts';
+import type { QuickJson } from '../../src/agents/quick/schema.ts';
+import type { ServerConfig } from '../../src/config/index.ts';
+import { EngineConfig } from '../../src/config/service.ts';
+import { JsonFile } from '../../src/files/service.ts';
+import { ShellLayer } from '../../src/shell/layers.ts';
+import { ServiceRefiner, Terminals, TerminalTimings } from '../../src/terminals/index.ts';
+import { TerminalsLayer } from '../../src/terminals/layers.ts';
+import { Engine } from './engine.ts';
+import { openEventLog } from './event-log.ts';
+import { createTestEvidence } from './evidence.ts';
 import { createTestConfig, createTestOnboarding } from './index.ts';
 import { createTempDir } from './temp.ts';
+import { createTestTranscripts } from './transcripts.ts';
+import { startHttpServer } from './web.ts';
 
 export const ORIGIN = 'http://localhost:5181';
 
@@ -15,33 +23,60 @@ export const NO_PREVIEW = { previewUrl: null, portVariable: 'PORT' };
 
 const running: (() => Promise<void>)[] = [];
 
+export async function startRealTerminals(config: ServerConfig, home: string) {
+  const scope = Effect.runSync(Scope.make());
+  const built = await Effect.runPromise(
+    Layer.buildWithScope(
+      Terminals.layer({
+        version: '1.0.0',
+        env: { SHELL: '/bin/sh', PATH: '/usr/bin:/bin', PS1: '$ ', HOME: home },
+      }).pipe(
+        Layer.provide(TerminalsLayer),
+        Layer.provide(
+          Layer.mergeAll(
+            ShellLayer,
+            JsonFile.layer,
+            Layer.succeed(EngineConfig, config),
+            Layer.succeed(TerminalTimings, { notify: Duration.millis(1), screen: Duration.seconds(2) })
+          )
+        )
+      ),
+      scope
+    )
+  );
+  return {
+    terminals: Context.get(built, Terminals),
+    close: () => Effect.runPromise(Scope.close(scope, Exit.void)),
+  };
+}
+
+export function createTestRefiner(ask: QuickJson) {
+  return Effect.runSync(ServiceRefiner.use(Effect.succeed).pipe(Effect.provide(ServiceRefiner.layer(ask))));
+}
+
 export async function stopTerminalServers() {
   for (const stop of running.splice(0)) await stop();
 }
 
-export async function startTerminalServer(options: { inspect?: boolean; refiner?: ServiceRefiner } = {}) {
+export async function startTerminalServer(
+  options: { inspect?: boolean; refiner?: ServiceRefiner['Service'] } = {}
+) {
   const root = createTempDir();
   const config = createTestConfig(root, { inspect: options.inspect ?? false });
-  const engine = new Engine(new EventLog(config.databasePath));
-  const terminals = new Terminals({
-    dataDir: config.dataDir,
-    home: root,
-    version: '1.0.0',
-    env: { SHELL: '/bin/sh', PATH: '/usr/bin:/bin', PS1: '$ ', HOME: root },
-    notifyMs: 1,
-  });
-  const http = startServer({
+  const engine = new Engine(openEventLog(config.databasePath));
+  const { terminals, close } = await startRealTerminals({ ...config, userHome: root }, root);
+  const http = startHttpServer({
     engine,
     config,
-    transcripts: new Transcripts(config.transcriptsDir),
-    evidence: new EvidenceStore(config.evidenceDir),
-    models: { listModels: () => Promise.resolve([]) } as unknown as ModelSource,
+    transcripts: createTestTranscripts(config.transcriptsDir),
+    evidence: createTestEvidence(config.evidenceDir),
+    models: { listModels: Effect.succeed([]) } as unknown as ModelSource,
     onboarding: createTestOnboarding(engine, config).onboarding,
     terminals,
     ...(options.refiner ? { refiner: options.refiner } : {}),
   });
   running.push(async () => {
-    await terminals.stop();
+    await close();
     await http.stop();
   });
   const repoPath = join(root, 'web');

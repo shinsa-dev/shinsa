@@ -1,6 +1,6 @@
 import { join } from 'node:path';
-import { TerminalStore } from '../../apps/engine/src/terminals/store.ts';
 import type { Project, Repo, ServiceDefinition } from '../../packages/core/src/index.ts';
+import { writeTerminalServices } from '../kit/terminals.ts';
 
 export const SANDBOX_SERVICE_COMMAND = `bun ${join(import.meta.dir, '../sandbox/service.ts')}`;
 
@@ -32,6 +32,6 @@ export function listSeedServices(projects: readonly Project[], repos: readonly R
 
 export function writeSeedServices(dataDir: string, projects: readonly Project[], repos: readonly Repo[]) {
   const services = listSeedServices(projects, repos);
-  new TerminalStore(dataDir).writeServices(services);
+  writeTerminalServices(dataDir, services);
   return services;
 }

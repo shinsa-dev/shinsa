@@ -1,9 +1,10 @@
 import { afterEach, describe, expect, test } from 'bun:test';
-import type { PlacementQuestion } from '@shinsa/core';
-import type { Remote } from '../../../src/remote/index.ts';
-import type { PlacementAsker } from '../../../src/remote/placement.ts';
-import type { TeamFeeds } from '../../../src/remote/team-feeds.ts';
-import type { Teams } from '../../../src/remote/teams.ts';
+import { DomainError, type PlacementQuestion } from '@shinsa/core';
+import { Effect } from 'effect';
+import type { Remote } from '../../../src/remote/machine/service.ts';
+import type { PlacementAsker } from '../../../src/remote/placement/service.ts';
+import type { TeamFeeds } from '../../../src/remote/team-feeds/service.ts';
+import type { Teams } from '../../../src/remote/teams/service.ts';
 import type { Slack } from '../../../src/slack/index.ts';
 import { disposeWebHandlers } from '../../helpers/web.ts';
 import { readFailure, startRoutes } from './harness.ts';
@@ -14,58 +15,64 @@ const SNAPSHOT = { enabled: true };
 
 function createRecorder() {
   const calls: [string, ...unknown[]][] = [];
+  const step = (name: string) =>
+    Effect.sync(() => {
+      calls.push([name]);
+    });
   const record =
     (name: string, answer: unknown = undefined) =>
-    (...args: unknown[]) => {
-      calls.push([name, ...args]);
-      return answer;
-    };
-  return { calls, record };
+    (...args: unknown[]) =>
+      Effect.sync(() => {
+        calls.push([name, ...args]);
+        return answer;
+      });
+  return { calls, step, record };
 }
 
 function createRemote() {
-  const { calls, record } = createRecorder();
+  const { calls, step, record } = createRecorder();
   const remote = {
-    tunnelHost: null,
-    isEnabled: false,
-    snapshot: () => SNAPSHOT,
-    startPairing: record('startPairing', Promise.resolve()),
-    cancelPairing: record('cancelPairing'),
-    enable: record('enable'),
-    disable: record('disable', Promise.resolve()),
-    remove: record('remove', Promise.resolve()),
-    createLink: record('createLink', Promise.resolve()),
-    removeLink: record('removeLink', Promise.resolve()),
-    acceptRequest: record('acceptRequest', Promise.resolve()),
+    tunnelHost: Effect.succeed(null),
+    isEnabled: Effect.succeed(false),
+    snapshot: Effect.succeed(SNAPSHOT),
+    startPairing: step('startPairing'),
+    cancelPairing: step('cancelPairing'),
+    enable: step('enable'),
+    disable: step('disable'),
+    remove: step('remove'),
+    createLink: step('createLink'),
+    removeLink: step('removeLink'),
+    acceptRequest: record('acceptRequest'),
     declineRequest: record('declineRequest'),
-    grantTeammate: record('grantTeammate', Promise.resolve()),
-    removeMember: record('removeMember', Promise.resolve()),
-    removeDevice: (key: unknown) => {
-      calls.push(['removeDevice', key]);
-      return key === 'known';
-    },
+    grantTeammate: record('grantTeammate'),
+    removeMember: record('removeMember'),
+    removeDevice: (key: string) =>
+      Effect.sync(() => {
+        calls.push(['removeDevice', key]);
+        return key === 'known';
+      }),
   };
-  return { calls, remote: remote as unknown as Remote };
+  return { calls, remote: remote as unknown as Remote['Service'] };
 }
 
 function createTeams() {
   const { calls, record } = createRecorder();
   const teams = {
-    create: record('create', Promise.resolve('team-1')),
-    join: record('join', Promise.resolve({ status: 'requested', teamId: 'team-2' })),
-    resolveJoinUrl: (teamId: string) => Promise.resolve(`https://app.shinsa.dev/share/team#${teamId}`),
-    renewInvite: record('renewInvite', Promise.resolve()),
-    turnOffInvite: record('turnOffInvite', Promise.resolve()),
-    acceptRequest: record('acceptRequest', Promise.resolve()),
-    declineRequest: record('declineRequest', Promise.resolve()),
-    removeMember: record('removeMember', Promise.resolve()),
-    leave: record('leave', Promise.resolve()),
-    remove: record('remove', Promise.resolve()),
-    updateScopes: record('updateScopes', Promise.resolve()),
-    updateExtra: record('updateExtra', undefined),
-    listKeys: () => [{ teamId: 't', name: 'Core', key: 'k' }],
+    create: record('create', 'team-1'),
+    join: record('join', { status: 'requested', teamId: 'team-2' }),
+    resolveJoinUrl: (teamId: string) => Effect.succeed(`https://app.shinsa.dev/share/team#${teamId}`),
+    renewInvite: record('renewInvite'),
+    turnOffInvite: record('turnOffInvite'),
+    acceptRequest: record('acceptRequest'),
+    declineRequest: record('declineRequest'),
+    removeMember: record('removeMember'),
+    leave: record('leave'),
+    remove: record('remove'),
+    updateScopes: record('updateScopes'),
+    updateExtra: record('updateExtra'),
+    listKeys: Effect.succeed([{ teamId: 't', name: 'Core', key: 'k' }]),
   };
-  return { calls, teams: teams as unknown as Teams };
+  return { calls, teams: teams as unknown as Teams['Service'] };
 }
 
 describe('remote access over HTTP', () => {
@@ -139,10 +146,15 @@ describe('remote access over HTTP', () => {
 
   test('a failing change answers its error, and without remote access the routes are not found', async () => {
     const { remote } = createRemote();
-    (remote as unknown as { disable: () => Promise<void> }).disable = () =>
-      Promise.reject(new Error('Pair this machine first.'));
-    expect(await readFailure(await startRoutes({ remote }).post('/api/remote/disable', {}))).toMatchObject({
-      code: 'request_failed',
+    const failing = {
+      ...remote,
+      disable: Effect.fail(new DomainError({ code: 'not_paired', message: 'Pair this machine first.' })),
+    } as Remote['Service'];
+    expect(
+      await readFailure(await startRoutes({ remote: failing }).post('/api/remote/disable', {}))
+    ).toMatchObject({
+      status: 400,
+      code: 'not_paired',
       message: 'Pair this machine first.',
     });
     const bare = startRoutes();
@@ -231,12 +243,13 @@ describe('teams over HTTP', () => {
   test('the team feed lists teammates’ tasks, open ones on request', async () => {
     const asked: unknown[] = [];
     const teamFeeds = {
-      snapshot: () => ({ machines: [{ id: 'm1' }], tasks: [] }),
-      listTasks: (filter: unknown) => {
-        asked.push(filter);
-        return [{ task: { id: 'task-1' } }];
-      },
-    } as unknown as TeamFeeds;
+      snapshot: Effect.succeed({ machines: [{ id: 'm1' }], tasks: [] }),
+      listTasks: (filter: unknown) =>
+        Effect.sync(() => {
+          asked.push(filter);
+          return [{ task: { id: 'task-1' } }];
+        }),
+    } as unknown as TeamFeeds['Service'];
     const { send } = startRoutes({ teamFeeds });
     expect(await (await send('/api/teams/tasks')).json()).toEqual({
       machines: [{ id: 'm1' }],
@@ -280,9 +293,12 @@ describe('placement over HTTP', () => {
 
   test('answers with the machine, and refuses a question it cannot read', async () => {
     const asked: PlacementQuestion[] = [];
-    const place: PlacementAsker = (question) => {
-      asked.push(question);
-      return Promise.resolve({ machineId: 'box', reason: 'Room.' });
+    const place: PlacementAsker['Service'] = {
+      place: (question) =>
+        Effect.sync(() => {
+          asked.push(question);
+          return { machineId: 'box', reason: 'Room.' };
+        }),
     };
     const { post } = startRoutes({ place });
     const answered = await post('/api/placement', QUESTION);
@@ -301,15 +317,15 @@ describe('Slack over HTTP', () => {
   test('reads the links and disconnects, and is not found without Slack', async () => {
     const calls: string[] = [];
     const slack = {
-      snapshot: () => {
+      snapshot: Effect.sync(() => {
         calls.push('snapshot');
-        return Promise.resolve({ remote: true, links: [] });
-      },
-      disconnect: () => {
+        return { remote: true, links: [] };
+      }),
+      disconnect: Effect.sync(() => {
         calls.push('disconnect');
-        return Promise.resolve({ remote: true, links: [] });
-      },
-    } as unknown as Slack;
+        return { remote: true, links: [] };
+      }),
+    } as unknown as Slack['Service'];
     const { send, post } = startRoutes({ slack });
     expect(await (await send('/api/slack')).json()).toEqual({ remote: true, links: [] });
     expect((await post('/api/slack/disconnect', {})).status).toBe(200);

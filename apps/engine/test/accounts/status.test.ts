@@ -1,11 +1,35 @@
-import { describe, expect, test } from 'bun:test';
+import { afterEach, describe, expect, test } from 'bun:test';
+import { parseAuthStatus } from '../../src/accounts/answers.ts';
+import { STATUS_TIMEOUT_MS } from '../../src/accounts/schema.ts';
+import { AuthStatusReader } from '../../src/accounts/status/service.ts';
+import type { CommandResult } from '../../src/shell/schema.ts';
+import { createTempDir, createTestConfig } from '../helpers/index.ts';
 import {
-  type ClaudeRunner,
-  parseAuthStatus,
-  readAuthStatus,
-  STATUS_TIMEOUT_MS,
-} from '../../src/accounts/status.ts';
-import type { CommandOptions, CommandResult } from '../../src/shell/index.ts';
+  type AccountsHarness,
+  buildUnitAccounts,
+  type FakeCommandOptions,
+  type FakeRunner,
+} from './harness.ts';
+
+const open: AccountsHarness[] = [];
+
+afterEach(async () => {
+  for (const harness of open.splice(0)) await harness.close();
+});
+
+async function readAuthStatus(
+  run: FakeRunner,
+  claude: string,
+  env: Record<string, string>,
+  userHome: string
+) {
+  const harness = await buildUnitAccounts({
+    run,
+    config: { ...createTestConfig(createTempDir()), userHome },
+  });
+  open.push(harness);
+  return harness.run(harness.service(AuthStatusReader).read(claude, env));
+}
 
 function createResult(result: Partial<CommandResult>): CommandResult {
   return { ok: true, code: 0, stdout: '', stderr: '', timedOut: false, ...result };
@@ -64,30 +88,37 @@ describe('claude auth status', () => {
   });
 
   test('runs claude auth status --json with the account env and a timeout', async () => {
-    const calls: [string[], string, CommandOptions][] = [];
-    const run: ClaudeRunner = (command, cwd, options) => {
+    const calls: [string[], string, FakeCommandOptions][] = [];
+    const work = createTempDir();
+    const run: FakeRunner = (command, cwd, options) => {
       calls.push([command, cwd, options]);
       return Promise.resolve(createResult({ stdout: '{"loggedIn":true,"email":"me@x.dev"}' }));
     };
-    const status = await readAuthStatus(run, '/bin/claude', { CLAUDE_CONFIG_DIR: '/acc' }, '/work');
+    const status = await readAuthStatus(run, '/bin/claude', { CLAUDE_CONFIG_DIR: '/acc' }, work);
     expect(status.email).toBe('me@x.dev');
     expect(calls).toEqual([
       [
         ['/bin/claude', 'auth', 'status', '--json'],
-        '/work',
+        work,
         { env: { CLAUDE_CONFIG_DIR: '/acc' }, timeoutMs: STATUS_TIMEOUT_MS },
       ],
     ]);
   });
 
   test('a claude that takes too long is unknown, not signed out', async () => {
-    const run: ClaudeRunner = () => Promise.resolve(createResult({ ok: false, timedOut: true }));
-    expect(await readAuthStatus(run, 'claude', {}, '/')).toEqual({
+    const run: FakeRunner = () => Promise.resolve(createResult({ ok: false, timedOut: true }));
+    expect(await readAuthStatus(run, 'claude', {}, createTempDir())).toEqual({
       signIn: 'unknown',
       email: null,
       organization: null,
       plan: null,
       detail: 'Claude took too long to answer.',
     });
+  });
+
+  test('a claude that cannot be found is unknown, with why', async () => {
+    const run: FakeRunner = () =>
+      Promise.resolve(createResult({ ok: false, code: 127, stderr: 'spawn claude ENOENT' }));
+    expect((await readAuthStatus(run, 'claude', {}, createTempDir())).detail).toBe('spawn claude ENOENT');
   });
 });

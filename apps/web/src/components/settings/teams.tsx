@@ -617,7 +617,7 @@ function TeamsDialogs({
               ? `Leave ${value.entry.name}?`
               : `Withdraw your request to join ${value.entry.name}?`
           }
-          body='Your projects stop showing their tasks to the team, and you no longer see your teammates’ tasks. You can ask to join again with its link.'
+          body='You stop sharing tasks with the team and stop seeing theirs. You can ask to join again with its link.'
           action={value.entry.team ? 'Leave team' : 'Withdraw request'}
           onConfirm={() =>
             void requestWithToast(() => actions.leave(value.entry.id), `You left ${value.entry.name}.`)
@@ -642,7 +642,7 @@ function TeamsDialogs({
         <ConfirmDialog
           control={control}
           title={`Remove ${name} from ${value.team.name}?`}
-          body={`${name} no longer sees the team’s tasks, and any view of them they have open closes. They can ask to join again with the team’s link.`}
+          body={`${name} no longer sees the team’s tasks. They can ask to join again with the team’s link.`}
           action='Remove member'
           onConfirm={() =>
             void requestWithToast(

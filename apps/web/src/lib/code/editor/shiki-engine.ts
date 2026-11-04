@@ -1,8 +1,10 @@
+import { Effect } from 'effect';
 import { createHighlighterCore, type HighlighterCore } from 'shiki/core';
 import { createOnigurumaEngine } from 'shiki/engine/oniguruma';
 import { bundledLanguages } from 'shiki/langs';
 import { INITIAL } from 'shiki/textmate';
 import { CODE_THEME, IGNORE_GRAMMAR, listEmbeddedGrammars } from '@/lib/code/grammar.ts';
+import { enterPromise } from '@/lib/runtime/promise.ts';
 import type { GrammarEngine, LineGrammar } from './textmate.ts';
 
 const EMBEDDING = new Set(['markdown', 'mdx']);
@@ -38,14 +40,18 @@ export function createShikiEngine(): GrammarEngine {
   return {
     initial: INITIAL as unknown as GrammarEngine['initial'],
     colors: () => colors,
-    async load(grammar, text) {
+    load: Effect.fn('ShikiEngine.load')(function* (grammar: string, text: string) {
       if (!isKnownGrammar(grammar)) return null;
-      const highlighter = await requestCore();
+      const highlighter = yield* enterPromise(requestCore);
       const embedded = EMBEDDING.has(grammar) ? listEmbeddedGrammars(text).filter(isKnownGrammar) : [];
-      await Promise.all([grammar, ...embedded].map((id) => requestGrammar(highlighter, id)));
+      yield* Effect.forEach(
+        [grammar, ...embedded],
+        (id) => enterPromise(() => requestGrammar(highlighter, id)),
+        { concurrency: 'unbounded', discard: true }
+      );
       const { theme, colorMap } = highlighter.setTheme(CODE_THEME.name ?? '');
       colors = colorMap.map((color) => theme.colorReplacements?.[color.toLowerCase()] ?? color);
       return highlighter.getLanguage(grammar) as unknown as LineGrammar;
-    },
+    }),
   };
 }

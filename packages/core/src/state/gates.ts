@@ -47,6 +47,12 @@ function applyGateOpened(state: ShinsaState, event: EventOf<'gate.opened'>) {
   });
 }
 
+function clearSlackDecided(state: ShinsaState, taskId: string, at: number) {
+  const link = state.tasks[taskId]?.slack;
+  if (!link?.decided) return;
+  updateTask(state, taskId, at, { slack: { ...link, decided: null } });
+}
+
 function applyGateAnswered(state: ShinsaState, event: EventOf<'gate.answered'>) {
   updateGate(state, event.gateId, {
     status: 'answered',
@@ -58,6 +64,7 @@ function applyGateAnswered(state: ShinsaState, event: EventOf<'gate.answered'>) 
   const gate = state.gates[event.gateId];
   if (!gate) return;
   if (event.verdicts) applyVerdicts(state, gate.taskId, event.at, event.verdicts);
+  clearSlackDecided(state, gate.taskId, event.at);
   if (gate.type === 'review') writeApproveAfterFix(state, gate.taskId, event.at, event.thenApprove === true);
   record(state, gate.taskId, event.at, {
     actor: 'you',

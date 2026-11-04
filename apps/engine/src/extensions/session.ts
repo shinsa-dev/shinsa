@@ -1,13 +1,9 @@
 import type { ExtensionPlace, LoadedExtensions, SkillSource } from '@shinsa/core';
+import type { Effect } from 'effect';
 import type { Catalog, CatalogSkill } from './catalog.ts';
 import type { McpDefinition } from './definitions.ts';
-import {
-  type DeferredServer,
-  type DeferredSkill,
-  describeServerChoice,
-  ExtensionLoader,
-  type OpenClient,
-} from './loader.ts';
+import { describeServerChoice } from './loader/names.ts';
+import type { DeferredServer, DeferredSkill, LoadableExtensions, SessionLoader } from './loader/schema.ts';
 
 interface SessionMcpServer {
   name: string;
@@ -35,8 +31,11 @@ export interface SessionExtensions {
 }
 
 export interface SessionExtensionSource {
-  resolveSession: (place: ExtensionPlace, pin?: LoadedExtensions | null) => Promise<SessionExtensions>;
-  createLoader?: (extensions: SessionExtensions) => ExtensionLoader | null;
+  readonly resolveSession: (
+    place: ExtensionPlace,
+    pin: LoadedExtensions | null
+  ) => Effect.Effect<SessionExtensions>;
+  readonly createLoader?: (extensions: SessionExtensions) => Effect.Effect<SessionLoader | null>;
 }
 
 interface SessionParts {
@@ -144,14 +143,11 @@ export function resolveDeferredInstructions(
   return lines.join('\n');
 }
 
-export function createSessionLoader(extensions: SessionExtensions, open: OpenClient | undefined) {
+export function resolveLoadableExtensions(extensions: SessionExtensions): LoadableExtensions | null {
   if (extensions.deferred.length === 0 && extensions.deferredSkills.length === 0) return null;
-  return new ExtensionLoader(
-    {
-      deferred: extensions.deferred,
-      deferredSkills: extensions.deferredSkills,
-      loadedNames: extensions.servers.flatMap((server) => [server.name, server.claudeName]),
-    },
-    open
-  );
+  return {
+    deferred: extensions.deferred,
+    deferredSkills: extensions.deferredSkills,
+    loadedNames: extensions.servers.flatMap((server) => [server.name, server.claudeName]),
+  };
 }

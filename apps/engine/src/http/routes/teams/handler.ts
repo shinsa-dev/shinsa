@@ -1,28 +1,36 @@
 import { EngineApi } from '@shinsa/core/engine-api';
 import { RouteNotFound, ROUTE_NOT_FOUND_MESSAGE } from '@shinsa/core/engine-api/schema';
-import { Effect } from 'effect';
+import { Effect, Option } from 'effect';
 import { HttpApiBuilder } from 'effect/http-api';
-import { requestPromise } from '../../failures.ts';
-import { HttpServices } from '../../services/service.ts';
+import { Remote } from '../../../remote/machine/service.ts';
+import { TeamFeeds } from '../../../remote/team-feeds/service.ts';
+import { Teams } from '../../../remote/teams/service.ts';
+import { resolveRequestFailure } from '../../failures.ts';
 
 export const TeamsHandlers = HttpApiBuilder.group(
   EngineApi,
   'teams',
   Effect.fn('TeamsHandlers')(function* (handlers) {
-    const { remote, teams: given, teamFeeds } = yield* HttpServices;
+    const remote = Option.getOrUndefined(yield* Effect.serviceOption(Remote));
+    const given = Option.getOrUndefined(yield* Effect.serviceOption(Teams));
+    const teamFeeds = Option.getOrUndefined(yield* Effect.serviceOption(TeamFeeds));
     const notFound = Effect.fail(new RouteNotFound({ message: ROUTE_NOT_FOUND_MESSAGE }));
     const services = remote && given ? Effect.succeed({ remote, teams: given }) : notFound;
     const teams = Effect.map(services, (found) => found.teams);
     type Found = NonNullable<typeof given>;
+    const request = <A, E>(effect: Effect.Effect<A, E>) =>
+      effect.pipe(Effect.mapError(resolveRequestFailure));
 
     const resolveLink = Effect.fn('TeamsHandlers.resolveLink')(function* (found: Found, teamId: string) {
-      return { url: yield* requestPromise(() => found.resolveJoinUrl(teamId)) };
+      return { url: yield* request(found.resolveJoinUrl(teamId)) };
     });
 
-    const change = Effect.fn('TeamsHandlers.change')(function* (run: (found: Found) => PromiseLike<void>) {
+    const change = Effect.fn('TeamsHandlers.change')(function* <E>(
+      run: (found: Found) => Effect.Effect<void, E>
+    ) {
       const found = yield* services;
-      yield* requestPromise(() => run(found.teams));
-      return found.remote.snapshot();
+      yield* request(run(found.teams));
+      return yield* found.remote.snapshot;
     });
 
     return handlers
@@ -30,19 +38,17 @@ export const TeamsHandlers = HttpApiBuilder.group(
         'create',
         Effect.fn('TeamsHandlers.create')(function* ({ payload }) {
           const found = yield* teams;
-          const teamId = yield* requestPromise(() => found.create(payload.name));
+          const teamId = yield* request(found.create(payload.name));
           return { teamId, ...(yield* resolveLink(found, teamId)) };
         })
       )
-      .handle('join', ({ payload }) =>
-        Effect.flatMap(teams, (found) => requestPromise(() => found.join(payload.url)))
-      )
+      .handle('join', ({ payload }) => Effect.flatMap(teams, (found) => request(found.join(payload.url))))
       .handle('link', ({ payload }) => Effect.flatMap(teams, (found) => resolveLink(found, payload.teamId)))
       .handle(
         'renewLink',
         Effect.fn('TeamsHandlers.renewLink')(function* ({ payload }) {
           const found = yield* teams;
-          yield* requestPromise(() => found.renewInvite(payload.teamId));
+          yield* request(found.renewInvite(payload.teamId));
           return yield* resolveLink(found, payload.teamId);
         })
       )
@@ -60,17 +66,24 @@ export const TeamsHandlers = HttpApiBuilder.group(
         change((found) => found.updateScopes(payload.teamId, payload.userId ?? null, payload.scopes))
       )
       .handle('extra', ({ payload }) =>
-        change((found) => Promise.resolve(found.updateExtra(payload.teamId, payload.userId, payload.scopes)))
+        change((found) => found.updateExtra(payload.teamId, payload.userId, payload.scopes))
       )
-      .handle('keys', () => Effect.map(teams, (found) => ({ keys: found.listKeys() })))
+      .handle('keys', () =>
+        Effect.flatMap(teams, (found) => Effect.map(found.listKeys, (keys) => ({ keys })))
+      )
       .handle('leave', ({ payload }) => change((found) => found.leave(payload.teamId)))
       .handle('remove', ({ payload }) => change((found) => found.remove(payload.teamId)))
       .handle('tasks', ({ query }) =>
         teamFeeds
-          ? Effect.sync(() => ({
-              machines: teamFeeds.snapshot().machines,
-              tasks: teamFeeds.listTasks({ teamId: query.team ?? null, open: query.open === 'true' }),
-            }))
+          ? Effect.gen(function* () {
+              return {
+                machines: (yield* teamFeeds.snapshot).machines,
+                tasks: yield* teamFeeds.listTasks({
+                  teamId: query.team ?? null,
+                  open: query.open === 'true',
+                }),
+              };
+            })
           : notFound
       );
   })

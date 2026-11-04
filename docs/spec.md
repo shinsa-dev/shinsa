@@ -82,7 +82,7 @@ draft ─► plan ──[GATE: approve plan]──► build ─► self-check �
   you ask, the default: building starts as soon as the plan is written. Large plans: a plan with more than 3
   phases or 6 files stops at the plan gate, judged from the plan itself rather than from the request, and so
   does any plan the agent revised. Always: every plan stops there. A task you ask for plan first
-  (`shinsa do --plan-first`, or a session brought in with `shinsa import`) always stops there, and so does a task
+  (`shinsa do --plan-first`) always stops there, and so does a task
   in the backlog, a task that runs an operation or a plan that asks for your approval, whatever the setting says
   (`docs/engine.md` → A task's path).
 - **Self-check** is everything that can be verified before you look: the checks the agent chose for the
@@ -471,8 +471,10 @@ on app.shinsa.dev goes there, and only the machine's owner and members get in, s
 can be tested from a laptop (`docs/engine.md` → Private service addresses).
 Slack: mention the Shinsa bot in a channel or a thread and the machine of whoever mentioned it reads the thread
 and starts a task from it exactly as a request typed on Home, its project, kind and priority picked for it (anything
-that is not work gets "Not a task" once and no task: Shinsa never chats), or messages the task the thread already has; the task's status, its questions, its plan, its review and its result come back in the thread; a question's choice
-can be answered with its button there, and every other decision is made in Shinsa. One bot for everyone through app.shinsa.dev, each person connecting their Slack user to their
+that is not work gets "Not a task" once and no task: Shinsa never chats), or messages the task the thread already has; the task's status and every gate come back as one card in the thread, edited in place, with buttons to approve a plan,
+a review, a merge, a proposal or an operation, retry a failure, answer a question or request changes in a Slack form,
+pressed only by the owner or a member of the machine; only the result and the end of the task post a new message.
+Secrets, sign-in and cancelling stay in Shinsa. One bot for everyone through app.shinsa.dev, each person connecting their Slack user to their
 own machine in Settings → General → Slack (`docs/engine.md` → Slack).
 
 - **Event-sourced core** (from T3 Code): commands are decided purely, events, the effect outbox and
@@ -570,7 +572,7 @@ Built and verified end to end against a scratch repository:
   tools and the agent plugin (review, evidence, handover skills), live transcripts, steering.
 - **M2** done: plan, review, merge, question and failure gates; the ranked queue; the agent review
   loop with automatic fix rounds; review with evidence, a risk-ranked diff and line comments that go
-  back to the agent; plan first from `shinsa do --plan-first` and `shinsa import`.
+  back to the agent; plan first from `shinsa do --plan-first`.
 - **M3** built, unit-tested, not yet run against GitHub: PR opening, the 45 second PR watcher, CI and
   review-thread fix rounds, the merge gate, settlement and worktree cleanup.
 - **M4** partly: focus by project with an expiry, the briefing, dependencies (triage, the new-task
@@ -610,8 +612,7 @@ Built and verified end to end against a scratch repository:
 - **No repositories to manage.** Shinsa finds git repositories on the machine, registers one the
   first time it works there and files it into a project: the one whose folder holds it, the task's
   while that project has no repository yet, or one named after its GitHub owner.
-- **`shinsa` CLI.** The server is `shinsa engine`; `shinsa do "<request>"`, `shinsa import` (bring a
-  Claude Code session in as a task), `shinsa status` and `shinsa open` let people and agents hand work
+- **`shinsa` CLI.** The server is `shinsa engine`; `shinsa do "<request>"`, `shinsa status` and `shinsa open` let people and agents hand work
   over from any project.
 - **Design.** Blue is the one accent (primary buttons included), the Feedbase mark is the logo,
   controls are more compact and less rounded, the secondary button has real contrast.
@@ -1160,6 +1161,21 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
   machine, and Slack spreads a socket app's events across its connections, so one shared bot needs the relay.
   Mentions while a machine is offline are not kept.
 
+### Slack: one card and its buttons (2026-11-03)
+
+- **One message per thread, always edited.** The status message is the task's card: every change, and every gate
+  that opens or closes, edits it. The reaction on your mention already notifies you, so only the result and the end
+  of the task (merged or done) post a new message, and the thread's people are pinged once. A later mention in the
+  thread gets 👀 (sent to the task) or 📥 (kept while a gate is open) instead of a reply.
+- **Decide from Slack.** A plan and a review have Approve and Request changes…, a merge Merge, a proposal Approve and
+  Keep as is, a failure Retry, an operation Run and Finish without it, a question a button per choice and Answer….
+  Request changes… and Answer… open a Slack form. The card then says who decided what. Secrets, sign-in and
+  cancelling stay in Shinsa.
+- **Only people with access to the machine.** app.shinsa.dev lets a click or a form through only from the owner or a
+  member of the machine that posted the card, found from their connected Slack; anyone else is told privately, and
+  nothing reaches the machine. The machine then decides as Shinsa does, so an outdated plan or an answered gate is
+  refused.
+
 ### Duplicates (2026-10-31)
 
 - **A duplicate is a cancel with a reason.** A task that repeats another closes as its duplicate: cancelled like any
@@ -1291,7 +1307,7 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
 
 ## 11. Open questions
 
-1. **Plan gate threshold.** Today: `shinsa do --plan-first` and `shinsa import` always stop at the plan gate, and
+1. **Plan gate threshold.** Today: `shinsa do --plan-first` always stops at the plan gate, and
    with Settings → Agents → Engine, Approve plans on Large plans, plans of more than 3 phases or 6 files and
    revised plans stop too, and on Always every plan does. Are 3 phases and 6 files the right line?
 2. **Learning from you.** Your past corrections (in Kanna transcripts) could seed the rules skills

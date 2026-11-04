@@ -1,5 +1,6 @@
 import {
   type Bytes,
+  type FrameError,
   createFrameOpener,
   createTeamHello,
   decodeText,
@@ -85,11 +86,12 @@ export class TeamSocket extends Context.Service<
               crypto.subtle.generateKey(REMOTE_KEY_ALGORITHM, true, ['deriveBits']) as Promise<CryptoKeyPair>,
             offline
           );
-          const hello = yield* enterPromiseOr(
-            () => createTeamHello(target.teamId, target.key, target.view, ephemeral.publicKey),
-            offline
+          const created = yield* Effect.option(
+            createTeamHello(target.teamId, target.key, target.view, ephemeral.publicKey)
           );
-          let openFrame: ((frame: Bytes) => Promise<Bytes>) | null = null;
+          if (Option.isNone(created)) return yield* offline;
+          const hello = created.value;
+          let openFrame: ((frame: Bytes) => Effect.Effect<Bytes, FrameError>) | null = null;
 
           const readWelcome = Effect.fn('TeamSocket.readWelcome')(function* (text: string) {
             const welcome = parseShareWelcome(text);
@@ -101,22 +103,22 @@ export class TeamSocket extends Context.Service<
               clientEphemeral: hello.ephemeral,
               serverEphemeral: welcome.ephemeral,
             };
-            const verified = yield* enterPromiseOr(
-              () => verifyTeamWelcome(target.key, keys, welcome.proof),
-              offline
-            );
+            const verified = yield* verifyTeamWelcome(target.key, keys, welcome.proof);
             if (!verified) return yield* taskGone;
-            const key = yield* enterPromiseOr(
-              () => deriveTeamSessionKey(target.key, keys, ephemeral.privateKey, welcome.ephemeral),
-              offline
+            const derived = yield* Effect.option(
+              deriveTeamSessionKey(target.key, keys, ephemeral.privateKey, welcome.ephemeral)
             );
+            if (Option.isNone(derived)) return yield* offline;
+            const key = derived.value;
             openFrame = createFrameOpener(key);
           });
 
           const readFrame = Effect.fn('TeamSocket.readFrame')(function* (frame: Bytes) {
             const opener = openFrame;
             if (!opener) return yield* offline;
-            const plain = yield* enterPromiseOr(() => opener(frame), offline);
+            const opened = yield* Effect.option(opener(frame));
+            if (Option.isNone(opened)) return yield* offline;
+            const plain = opened.value;
             return yield* readMessage(decodeText(plain), onMessage);
           });
 

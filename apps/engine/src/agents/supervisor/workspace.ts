@@ -8,14 +8,11 @@ import {
   type Task,
 } from '@shinsa/core';
 import { Effect } from 'effect';
-import { resolveScratchPath } from '../../config/index.ts';
-import { createIsolatedWorktree, resolveIsolatedPath } from '../../git/index.ts';
+import { resolveScratchPath, type ServerConfig } from '../../config/index.ts';
+import { resolveIsolatedPath } from '../../git/checkout/paths.ts';
 import { describeError } from '../../log/index.ts';
-import { assertWorktreeRoot } from '../../workspaces/index.ts';
 import { IsolationFailed, SCRATCH_BRANCH, type Workspace, WorkspaceUnavailable } from './schema.ts';
 import { RunWorld } from './world/service.ts';
-
-type WorkspaceWorld = Pick<RunWorld['Service'], 'config' | 'worktreeRoot'>;
 
 function resolveRoleCwd(run: Run, task: Task, repo: Repo) {
   const role = run.role;
@@ -24,28 +21,24 @@ function resolveRoleCwd(run: Run, task: Task, repo: Repo) {
   return task.worktreePath;
 }
 
-function resolveCwd(world: WorkspaceWorld, run: Run, task: Task, repo: Repo) {
+function resolveCwd(config: ServerConfig, run: Run, task: Task, repo: Repo) {
   if (!isDelegatedRun(run)) return resolveRoleCwd(run, task, repo);
   if (run.delegation.isolation === 'worktree')
-    return resolveIsolatedPath(world.worktreeRoot.path, task.id, run.id);
+    return resolveIsolatedPath(config.worktreesDir, task.id, run.id);
   return task.worktreePath ?? repo.path;
 }
 
 export function resolveWorkspace(
   state: ShinsaState,
-  world: WorkspaceWorld,
+  config: ServerConfig,
   run: Run,
   task: Task
 ): Workspace | null {
   if (task.repoId === null) {
-    return {
-      cwd: resolveScratchPath(world.config.dataDir, task.id),
-      repo: null,
-      defaultBranch: SCRATCH_BRANCH,
-    };
+    return { cwd: resolveScratchPath(config.dataDir, task.id), repo: null, defaultBranch: SCRATCH_BRANCH };
   }
   const repo = state.repos[task.repoId];
-  const cwd = repo ? resolveCwd(world, run, task, repo) : null;
+  const cwd = repo ? resolveCwd(config, run, task, repo) : null;
   return repo && cwd ? { cwd, repo, defaultBranch: repo.defaultBranch } : null;
 }
 
@@ -69,13 +62,16 @@ export const prepareIsolation = Effect.fn('RunSupervisor.prepareIsolation')(func
 ) {
   const baseCommit = run.delegation.baseCommit;
   if (!repo || run.delegation.isolation !== 'worktree' || !baseCommit) return;
-  const { worktreeRoot } = yield* RunWorld;
-  const worktreesDir = yield* assertWorktreeRoot(worktreeRoot.resolve()).pipe(
+  const { worktreeRoot, checkout } = yield* RunWorld;
+  const worktreesDir = yield* worktreeRoot.assert.pipe(
     Effect.mapError((unavailable) => new IsolationFailed({ message: unavailable.message }))
   );
-  yield* Effect.tryPromise({
-    try: () => createIsolatedWorktree(repo, worktreesDir, run.taskId, run.id, baseCommit),
-    catch: (error) =>
-      new IsolationFailed({ message: `Shinsa could not set up its own checkout: ${describeError(error)}` }),
-  });
+  yield* checkout.createIsolated(repo, worktreesDir, run.taskId, run.id, baseCommit).pipe(
+    Effect.mapError(
+      (error) =>
+        new IsolationFailed({
+          message: `Shinsa could not set up its own checkout: ${describeError(error)}`,
+        })
+    )
+  );
 });

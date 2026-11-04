@@ -15,6 +15,7 @@ import {
   SLACK_RELAY_PATHS,
   verifyConnectToken,
 } from '@shinsa/core';
+import { Effect } from 'effect';
 import { MAX_INSTANCES_PER_USER } from '../src/routes/pairs/schema.ts';
 import { createHarness, type Harness, heartbeat, pairMachine, readJson } from './harness.ts';
 
@@ -78,11 +79,13 @@ describe('machine members', () => {
     const accepted = await readJson<InviteAcceptResponse>(await acceptInvite(harness, kai, invite.token));
     expect(accepted).toMatchObject({ instanceId: studio.instanceId, name: 'Studio', owner: MONA, user: KAI });
     const token = new URL(accepted.connect.url).searchParams.get('token') ?? '';
-    const claim = await verifyConnectToken(
-      studio.connectKey,
-      token,
-      { instanceId: studio.instanceId, channel: 'remote' },
-      harness.clock.now
+    const claim = await Effect.runPromise(
+      verifyConnectToken(
+        studio.connectKey,
+        token,
+        { instanceId: studio.instanceId, channel: 'remote' },
+        harness.clock.now
+      )
     );
     expect(claim?.userId).toBe(KAI.id);
     expect(await listInstances(harness, kai)).toEqual([]);

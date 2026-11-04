@@ -41,7 +41,7 @@ export function Window({
         <RouteScope value={route}>
           <div className='demo-bar-app relative' data-desktop='window' inert>
             <DesktopChrome value>
-              <CardsTopBar state={state} />
+              <CardsTopBar state={state} onMore={() => {}} />
             </DesktopChrome>
             <div aria-hidden className='demo-lights'>
               <span className='demo-light-close' />
@@ -50,7 +50,7 @@ export function Window({
             </div>
           </div>
           <div className='demo-bar-browser' inert>
-            <CardsTopBar state={state} />
+            <CardsTopBar state={state} onMore={() => {}} />
           </div>
           <div className='flex min-h-0 flex-1 flex-col' inert={inert}>
             {children}

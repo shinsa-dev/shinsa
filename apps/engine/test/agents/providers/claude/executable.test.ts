@@ -2,15 +2,29 @@ import { describe, expect, test } from 'bun:test';
 import { chmodSync, utimesSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
+import { Effect, Layer, ManagedRuntime } from 'effect';
 import {
   parseClaudeVersion,
-  readClaudeVersion,
-  resolveClaudeExecutable,
+  readClaudeVersion as readVersionEffect,
+  resolveClaudeExecutable as resolveEffect,
   resolveSdkClaudeVersion,
   resolveSdkPackage,
 } from '../../../../src/agents/providers/claude/executable.ts';
+import type { ExecutableDeps } from '../../../../src/agents/providers/claude/executable.ts';
 import { compareVersions } from '../../../../src/agents/providers/versions.ts';
+import { ProgramVersions } from '../../../../src/agents/providers/versions/service.ts';
+import { ShellLayer } from '../../../../src/shell/layers.ts';
 import { createTempDir } from '../../../helpers/index.ts';
+
+const runtime = ManagedRuntime.make(ProgramVersions.layer.pipe(Layer.provide(ShellLayer)));
+
+function readClaudeVersion(path: string) {
+  return runtime.runPromise(readVersionEffect(path));
+}
+
+function resolveClaudeExecutable(deps: ExecutableDeps = {}) {
+  return runtime.runPromise(resolveEffect(deps));
+}
 
 function fakeClaude(output: string) {
   const dir = createTempDir();
@@ -73,7 +87,7 @@ describe('resolveClaudeExecutable', () => {
     const resolved = await resolveClaudeExecutable({
       env: {},
       which: () => '/bin/claude',
-      readVersion: () => Promise.resolve('2.1.100'),
+      readVersion: () => Effect.succeed('2.1.100'),
       minimumVersion: '2.1.280',
     });
     expect(resolved).toEqual({
@@ -88,14 +102,14 @@ describe('resolveClaudeExecutable', () => {
     const current = await resolveClaudeExecutable({
       env: {},
       which: () => '/bin/claude',
-      readVersion: () => Promise.resolve('2.1.280'),
+      readVersion: () => Effect.succeed('2.1.280'),
       minimumVersion: '2.1.280',
     });
     expect(current).toEqual({ ok: true, path: '/bin/claude', version: '2.1.280' });
     const unreadable = await resolveClaudeExecutable({
       env: {},
       which: () => '/bin/claude',
-      readVersion: () => Promise.resolve(null),
+      readVersion: () => Effect.succeed(null),
     });
     expect(unreadable).toEqual({ ok: true, path: '/bin/claude', version: null });
   });

@@ -2,7 +2,7 @@
 
 import { PreviewCard as PreviewCardPrimitive } from '@base-ui/react/preview-card';
 import { appendSample, isHeadingInto, type PointerSample } from '@shinsa/ui/lib/pointer-intent';
-import { POPUP_SURFACE, POPUP_ZOOM } from '@shinsa/ui/lib/popup';
+import { POPUP_COLLISION_PADDING, POPUP_SURFACE, POPUP_ZOOM } from '@shinsa/ui/lib/popup';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
 
@@ -192,6 +192,7 @@ function PreviewCardContent({
         side={side}
         sideOffset={sideOffset}
         align={align}
+        collisionPadding={POPUP_COLLISION_PADDING}
       >
         <PreviewCardPrimitive.Popup
           ref={popup}
@@ -200,7 +201,7 @@ function PreviewCardContent({
           className={cn(
             POPUP_SURFACE,
             POPUP_ZOOM,
-            'flex w-72 flex-col text-xs outline-hidden',
+            'flex w-72 max-w-(--available-width) flex-col text-xs outline-hidden',
             'data-instant:animate-none! data-instant:duration-0!',
             className
           )}

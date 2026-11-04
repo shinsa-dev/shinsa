@@ -24,6 +24,7 @@ import {
   type TeamPreviewResponse,
   verifyConnectToken,
 } from '@shinsa/core';
+import { Effect } from 'effect';
 import { createHarness, type Harness, heartbeat, pairMachine, readJson } from './harness.ts';
 
 const MONA: RemoteUser = { id: '1', login: 'mona', name: 'Mona Lisa', avatarUrl: null };
@@ -277,10 +278,14 @@ describe('team connect tokens', () => {
     expect(url.pathname).toBe('/team');
     const token = url.searchParams.get('token') ?? '';
     const teamChannel = { instanceId: studio.instanceId, channel: 'team' } as const;
-    const claim = await verifyConnectToken(studio.connectKey, token, teamChannel, harness.clock.now);
+    const claim = await Effect.runPromise(
+      verifyConnectToken(studio.connectKey, token, teamChannel, harness.clock.now)
+    );
     expect(claim?.userId).toBe(KAI.id);
     const remote = { instanceId: studio.instanceId, channel: 'remote' } as const;
-    expect(await verifyConnectToken(studio.connectKey, token, remote, harness.clock.now)).toBeNull();
+    expect(
+      await Effect.runPromise(verifyConnectToken(studio.connectKey, token, remote, harness.clock.now))
+    ).toBeNull();
   });
 
   test('a machine gets a token for its owner, as the local app watches through it', async () => {
@@ -289,11 +294,13 @@ describe('team connect tokens', () => {
       await act(harness, laptop, team.id, 'connect', { instanceId: studio.instanceId })
     );
     const token = new URL(answer.url).searchParams.get('token') ?? '';
-    const claim = await verifyConnectToken(
-      studio.connectKey,
-      token,
-      { instanceId: studio.instanceId, channel: 'team' },
-      harness.clock.now
+    const claim = await Effect.runPromise(
+      verifyConnectToken(
+        studio.connectKey,
+        token,
+        { instanceId: studio.instanceId, channel: 'team' },
+        harness.clock.now
+      )
     );
     expect(claim?.userId).toBe(KAI.id);
   });
@@ -305,9 +312,10 @@ describe('team connect tokens', () => {
     );
     const token = new URL(answer.url).searchParams.get('token') ?? '';
     const remote = { instanceId: studio.instanceId, channel: 'remote' } as const;
-    expect((await verifyConnectToken(studio.connectKey, token, remote, harness.clock.now))?.userId).toBe(
-      KAI.id
-    );
+    expect(
+      (await Effect.runPromise(verifyConnectToken(studio.connectKey, token, remote, harness.clock.now)))
+        ?.userId
+    ).toBe(KAI.id);
     await act(harness, studio, team.id, 'members/remove', { userId: KAI.id });
     const refused = await harness.post(resolveInstanceConnectPath(studio.instanceId), {}, { session: kai });
     expect(refused.status).toBe(404);
@@ -356,7 +364,7 @@ describe('each machine’s signing key', () => {
       'sign',
       'verify',
     ])) as CryptoKeyPair;
-    return serializePublicKey(pair.publicKey);
+    return Effect.runPromise(serializePublicKey(pair.publicKey));
   }
 
   function beat(harness: Harness, credentials: MachineCredentials, signingKey?: string) {

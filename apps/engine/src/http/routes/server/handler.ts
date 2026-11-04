@@ -1,44 +1,54 @@
 import { resolveQueueSummary } from '@shinsa/core';
 import { EngineApi } from '@shinsa/core/engine-api';
 import { RequestFailed } from '@shinsa/core/engine-api/schema';
-import { Clock, Effect } from 'effect';
+import { Clock, Effect, Option } from 'effect';
 import { HttpApiBuilder } from 'effect/http-api';
+import { Providers } from '../../../agents/providers/registry/service.ts';
+import { EngineConfig } from '../../../config/service.ts';
 import { createServerInstance, resolveEngineActivity, resolveHealth } from '../../../instance/index.ts';
-import { requestPromise } from '../../failures.ts';
-import { HttpServices } from '../../services/service.ts';
+import { EngineRestarter } from '../../../instance/restart/service.ts';
+import { EngineCore } from '../../../runtime/engine/service.ts';
+import { resolveRequestFailure } from '../../failures.ts';
+import { EngineModels, ServedInstance } from '../../schema.ts';
 import { KNOWN_PROVIDERS, RESTART_UNSUPPORTED } from './schema.ts';
 
 export const ServerHandlers = HttpApiBuilder.group(
   EngineApi,
   'server',
   Effect.fn('ServerHandlers')(function* (handlers) {
-    const { engine, config, models, providers, restarter, instance: given } = yield* HttpServices;
+    const engine = yield* EngineCore;
+    const config = yield* EngineConfig;
+    const models = yield* EngineModels;
+    const providers = Option.getOrUndefined(yield* Effect.serviceOption(Providers));
+    const restarter = Option.getOrUndefined(yield* Effect.serviceOption(EngineRestarter));
+    const given = yield* ServedInstance;
     const instance = given ?? createServerInstance(null, yield* Clock.currentTimeMillis);
 
     return handlers
-      .handle('health', () =>
-        Effect.map(Clock.currentTimeMillis, (now) =>
-          resolveHealth(
-            { seq: engine.state.seq, problems: engine.problems },
+      .handle(
+        'health',
+        Effect.fn('ServerHandlers.health')(function* () {
+          const state = yield* engine.state;
+          const activity = restarter ? restarter.activity : Effect.succeed(resolveEngineActivity(state));
+          return resolveHealth(
+            { seq: state.seq, problems: engine.problems },
             config.dataDir,
             instance,
-            resolveEngineActivity(engine.state, restarter),
-            now
-          )
-        )
+            yield* activity,
+            yield* Clock.currentTimeMillis
+          );
+        })
       )
       .handle('restart', ({ payload }) =>
         restarter
-          ? requestPromise(() => restarter.request(payload.when))
+          ? restarter.request(payload.when).pipe(Effect.mapError(resolveRequestFailure))
           : Effect.fail(new RequestFailed(RESTART_UNSUPPORTED))
       )
-      .handle('models', () => requestPromise(() => models.listModels()))
-      .handle('providers', () =>
-        providers ? requestPromise(() => providers.listProviders()) : Effect.succeed(KNOWN_PROVIDERS)
-      )
+      .handle('models', () => models.listModels)
+      .handle('providers', () => (providers ? providers.listProviders : Effect.succeed(KNOWN_PROVIDERS)))
       .handle('queue', ({ request }) =>
-        Effect.map(Clock.currentTimeMillis, (now) =>
-          resolveQueueSummary(engine.state, now, new URL(request.originalUrl).origin)
+        Effect.zipWith(Clock.currentTimeMillis, engine.state, (now, state) =>
+          resolveQueueSummary(state, now, new URL(request.originalUrl).origin)
         )
       );
   })

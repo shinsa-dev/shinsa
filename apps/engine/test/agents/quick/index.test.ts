@@ -1,18 +1,63 @@
 import { describe, expect, test } from 'bun:test';
-import { createSettings } from '@shinsa/core';
+import { createSettings, type FastModeAvailability, type Settings, type ShinsaState } from '@shinsa/core';
+import { Effect, Layer } from 'effect';
 import { CLAUDE_CAPABILITIES } from '../../../src/agents/providers/claude/index.ts';
 import {
   type AgentProvider,
   type CompletionRequest,
-  ProviderRegistry,
+  ProviderCallFailed,
+  Providers,
   type StructuredRequest,
 } from '../../../src/agents/providers/index.ts';
+import type { JsonSchema } from '../../../src/agents/providers/types.ts';
 import {
-  createQuickCalls,
   parseJsonObject,
-  requestQuickStructured,
+  QuickCalls,
+  QuickFastMode,
+  type QuickRequest,
+  requestQuick,
 } from '../../../src/agents/quick/index.ts';
+import { EngineCore } from '../../../src/runtime/engine/service.ts';
 import { overrideEnv } from '../../helpers/index.ts';
+
+function requestQuickStructured<T>(request: QuickRequest<T>, providers: AgentProvider[]) {
+  return Effect.runPromise(requestQuick(request, providers));
+}
+
+function createQuickCalls(
+  providers: AgentProvider[],
+  readSettings: () => Settings,
+  readFastMode?: (provider: string) => Promise<FastModeAvailability>
+) {
+  const engine = {
+    state: Effect.sync(() => ({ settings: readSettings() }) as unknown as ShinsaState),
+  } as unknown as EngineCore['Service'];
+  const calls = Effect.runSync(
+    QuickCalls.use(Effect.succeed).pipe(
+      Effect.provide(
+        QuickCalls.layer.pipe(
+          Layer.provide(
+            Layer.mergeAll(
+              Layer.succeed(Providers, Providers.make(providers)),
+              Layer.succeed(EngineCore, engine),
+              readFastMode
+                ? Layer.succeed(QuickFastMode, (provider: string) =>
+                    Effect.promise(() => readFastMode(provider))
+                  )
+                : Layer.empty
+            )
+          )
+        )
+      )
+    )
+  );
+  return {
+    classify: <T>(system: string, prompt: string, schema?: JsonSchema) =>
+      Effect.runPromise(calls.classify<T>(system, prompt, schema)),
+    write: <T>(system: string, prompt: string, schema?: JsonSchema) =>
+      Effect.runPromise(calls.write<T>(system, prompt, schema)),
+  };
+}
 
 function withQuickOn<T>(run: () => Promise<T>) {
   const restore = overrideEnv({ SHINSA_QUICK: undefined });
@@ -32,26 +77,34 @@ function fakeProvider(
   const texts: CompletionRequest[] = [];
   const structured: StructuredRequest[] = [];
   const answerStructured = answers.structured;
+  const failed = (error: unknown) =>
+    new ProviderCallFailed({ provider: id, message: error instanceof Error ? error.message : String(error) });
   const provider: AgentProvider = {
     id,
     label: id.toUpperCase(),
     ...(answerStructured
       ? {
           capabilities: CLAUDE_CAPABILITIES,
-          completeStructured: (request: StructuredRequest) => {
-            structured.push(request);
-            return answerStructured();
-          },
+          completeStructured: (request: StructuredRequest) =>
+            Effect.tryPromise({
+              try: () => {
+                structured.push(request);
+                return answerStructured();
+              },
+              catch: failed,
+            }),
         }
       : {}),
-    startSession: () => {
-      throw new Error('not used');
-    },
-    complete: (request) => {
-      texts.push(request);
-      return answers.text?.() ?? Promise.resolve(null);
-    },
-    listModels: () => Promise.resolve([]),
+    startSession: () => Effect.die(new Error('not used')),
+    complete: (request) =>
+      Effect.tryPromise({
+        try: () => {
+          texts.push(request);
+          return answers.text?.() ?? Promise.resolve(null);
+        },
+        catch: failed,
+      }),
+    listModels: Effect.succeed([]),
   };
   return { provider, texts, structured };
 }
@@ -63,7 +116,7 @@ function parseSize(value: unknown) {
   return size === 'small' || size === 'large' ? size : null;
 }
 
-describe('requestQuickStructured', () => {
+describe('requestQuick', () => {
   test('is off when SHINSA_QUICK is off', async () => {
     const fake = fakeProvider('a', { text: () => Promise.resolve('{"size":"small"}') });
     const result = await requestQuickStructured(
@@ -139,14 +192,14 @@ describe('requestQuickStructured', () => {
   });
 });
 
-describe('createQuickCalls', () => {
+describe('QuickCalls', () => {
   test('returns the first JSON object, without a schema told to answer JSON only', async () => {
     const fake = fakeProvider('claude', { text: () => Promise.resolve('Sure: {"a": 1} done') });
-    const quick = createQuickCalls(new ProviderRegistry([fake.provider]), createSettings);
+    const quick = createQuickCalls([fake.provider], createSettings);
     expect(await withQuickOn(() => quick.classify('Route it.', 'p'))).toEqual({ a: 1 });
     expect(fake.texts[0]?.system).toBe('Route it.\nAnswer with one JSON object and nothing else.');
     const listy = fakeProvider('claude', { text: () => Promise.resolve('[1, 2]') });
-    const lists = createQuickCalls(new ProviderRegistry([listy.provider]), createSettings);
+    const lists = createQuickCalls([listy.provider], createSettings);
     expect(await withQuickOn(() => lists.classify('s', 'p'))).toBeNull();
   });
 
@@ -156,7 +209,7 @@ describe('createQuickCalls', () => {
       text: () => Promise.reject(new Error('signed out')),
     });
     const plain = fakeProvider('plain', { text: () => Promise.resolve('{"from": "plain"}') });
-    const registry = new ProviderRegistry([claude.provider, plain.provider]);
+    const registry = [claude.provider, plain.provider];
     const fast = createQuickCalls(registry, () => ({ ...createSettings(), fastMode: true }));
     expect(await withQuickOn(() => fast.classify('s', 'p', SCHEMA))).toEqual({ from: 'plain' });
     expect(claude.structured[0]?.fastMode).toBe(true);
@@ -172,7 +225,7 @@ describe('createQuickCalls', () => {
     const answers = ['needs_credits', 'available'] as const;
     const asked: string[] = [];
     const quick = createQuickCalls(
-      new ProviderRegistry([fake.provider]),
+      [fake.provider],
       () => ({ ...createSettings(), fastMode: true }),
       (provider) => {
         asked.push(provider);
@@ -188,7 +241,7 @@ describe('createQuickCalls', () => {
   test('the classifier and the writer each run at the speed set for their own role', async () => {
     const fake = fakeProvider('claude', { structured: () => Promise.resolve({ ok: true }) });
     const settings = { ...createSettings(), fastMode: true, agentFastModes: { classifier: false } };
-    const quick = createQuickCalls(new ProviderRegistry([fake.provider]), () => settings);
+    const quick = createQuickCalls([fake.provider], () => settings);
     await withQuickOn(() => quick.classify('s', 'p', SCHEMA));
     await withQuickOn(() => quick.write('s', 'p', SCHEMA));
     expect(fake.structured.map((request) => request.fastMode)).toEqual([false, true]);
@@ -200,7 +253,7 @@ describe('createQuickCalls', () => {
       text: () => Promise.reject(new Error('signed out')),
     });
     const codex = fakeProvider('codex', { text: () => Promise.resolve('{"from": "codex"}') });
-    const quick = createQuickCalls(new ProviderRegistry([claude.provider, codex.provider]), createSettings);
+    const quick = createQuickCalls([claude.provider, codex.provider], createSettings);
     expect(await withQuickOn(() => quick.classify('s', 'p', SCHEMA))).toEqual({ from: 'codex' });
     expect([claude.structured.length, claude.texts.length, codex.texts.length]).toEqual([1, 1, 1]);
   });
@@ -217,7 +270,7 @@ describe('createQuickCalls', () => {
       return fake.provider;
     });
     let settings = { ...createSettings(), defaultProvider: 'b' };
-    const quick = createQuickCalls(new ProviderRegistry(providers), () => settings);
+    const quick = createQuickCalls(providers, () => settings);
     await withQuickOn(() => quick.write('s', 'p'));
     expect(asked).toEqual(['b', 'a', 'c']);
     asked.length = 0;
@@ -229,7 +282,7 @@ describe('createQuickCalls', () => {
   test('a provider without structured output answers in text, and nothing outside the registry is asked', async () => {
     const plain = fakeProvider('claude', { text: () => Promise.resolve('{"size": "small"}') });
     const outside = fakeProvider('outside', { structured: () => Promise.resolve({ size: 'large' }) });
-    const quick = createQuickCalls(new ProviderRegistry([plain.provider]), createSettings);
+    const quick = createQuickCalls([plain.provider], createSettings);
     expect(await withQuickOn(() => quick.classify('s', 'p', SCHEMA))).toEqual({ size: 'small' });
     expect(plain.texts).toHaveLength(1);
     expect([outside.structured.length, outside.texts.length]).toEqual([0, 0]);
@@ -238,7 +291,7 @@ describe('createQuickCalls', () => {
   test('the classifier and the writer use the models chosen in Settings, read at each call', async () => {
     const fake = fakeProvider('claude', { text: () => Promise.resolve('{"ok": true}') });
     let settings = createSettings();
-    const quick = createQuickCalls(new ProviderRegistry([fake.provider]), () => settings);
+    const quick = createQuickCalls([fake.provider], () => settings);
     await withQuickOn(() => quick.classify('s', 'p'));
     await withQuickOn(() => quick.write('s', 'p'));
     settings = { ...settings, agentModels: { classifier: 'haiku', writer: 'opus' } };
@@ -251,7 +304,7 @@ describe('createQuickCalls', () => {
     const claude = fakeProvider('claude', { text: () => Promise.resolve(null) });
     const codex = fakeProvider('codex', { text: () => Promise.resolve('{"ok": true}') });
     const settings = { ...createSettings(), agentModels: { classifier: 'sonnet' } };
-    const quick = createQuickCalls(new ProviderRegistry([claude.provider, codex.provider]), () => settings);
+    const quick = createQuickCalls([claude.provider, codex.provider], () => settings);
     expect(await withQuickOn(() => quick.classify('s', 'p'))).toEqual({ ok: true });
     expect(claude.texts.map((request) => request.model)).toEqual(['sonnet']);
     expect(codex.texts.map((request) => request.model)).toEqual(['gpt-5.6-luna']);
@@ -260,7 +313,7 @@ describe('createQuickCalls', () => {
       agentProviders: { writer: 'codex' },
       agentModels: { writer: 'gpt-5.6-sol' },
     };
-    const writer = createQuickCalls(new ProviderRegistry([claude.provider, codex.provider]), () => moved);
+    const writer = createQuickCalls([claude.provider, codex.provider], () => moved);
     await withQuickOn(() => writer.write('s', 'p'));
     expect(codex.texts.at(-1)?.model).toBe('gpt-5.6-sol');
     expect(claude.texts).toHaveLength(1);

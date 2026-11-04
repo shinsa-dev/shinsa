@@ -1,3 +1,4 @@
+import { Effect } from 'effect';
 import { isRecord, parseJsonRecord } from '../domain/records.ts';
 import { DAY_MS } from '../domain/time.ts';
 import { ACCESS_PRESETS } from '../scopes/index.ts';
@@ -202,13 +203,10 @@ export function parseTeamJoinFragment(fragment: string): TeamJoinFragment | null
 }
 
 export function parseTeamJoinUrl(url: string): TeamJoinFragment | null {
-  try {
-    const parsed = new URL(url.trim());
-    if (parsed.pathname !== REMOTE_PATHS.teamJoinPage) return null;
-    return parseTeamJoinFragment(parsed.hash);
-  } catch {
-    return null;
-  }
+  if (!URL.canParse(url.trim())) return null;
+  const parsed = new URL(url.trim());
+  if (parsed.pathname !== REMOTE_PATHS.teamJoinPage) return null;
+  return parseTeamJoinFragment(parsed.hash);
 }
 
 export function resolveTeamJoinUrl(fragment: TeamJoinFragment, origin: string = REMOTE_APP_ORIGIN) {
@@ -275,24 +273,25 @@ function listTeamWelcomeParts(keys: TeamKeys) {
   ];
 }
 
-export async function createTeamHello(
+export const createTeamHello = Effect.fn('createTeamHello')(function* (
   team: string,
   key: string,
   view: TeamView,
   ephemeral: CryptoKey,
   watcher: TeamHello['watcher'] = undefined
-): Promise<TeamHello> {
-  const serialized = await serializePublicKey(ephemeral);
-  return {
+) {
+  const serialized = yield* serializePublicKey(ephemeral);
+  const hello: TeamHello = {
     type: 'team-hello',
     version: REMOTE_PROTOCOL_VERSION,
     team,
     view,
     ephemeral: serialized,
-    proof: await signChannelProof(key, listHelloParts(team, view, serialized)),
+    proof: yield* signChannelProof(key, listHelloParts(team, view, serialized)),
     ...(watcher ? { watcher } : {}),
   };
-}
+  return hello;
+});
 
 export function parseTeamHello(text: string): TeamHello | null {
   const fields = parseJsonRecord(text);
@@ -316,13 +315,13 @@ export function verifyTeamHello(key: string, hello: TeamHello) {
   return verifyChannelProof(key, hello.proof, listHelloParts(hello.team, hello.view, hello.ephemeral));
 }
 
-export async function createTeamWelcome(key: string, keys: TeamKeys) {
+export const createTeamWelcome = Effect.fn('createTeamWelcome')(function* (key: string, keys: TeamKeys) {
   return {
     type: 'welcome' as const,
     ephemeral: keys.serverEphemeral,
-    proof: await signChannelProof(key, listTeamWelcomeParts(keys)),
+    proof: yield* signChannelProof(key, listTeamWelcomeParts(keys)),
   };
-}
+});
 
 export function verifyTeamWelcome(key: string, keys: TeamKeys, proof: string) {
   return verifyChannelProof(key, proof, listTeamWelcomeParts(keys));
@@ -342,11 +341,17 @@ function listSnapshotBytes(body: string) {
   return encodeText(`${SNAPSHOT_LABEL}\n${body}`);
 }
 
-export async function signTeamSnapshot(privateKey: CryptoKey, body: TeamSnapshotBody): Promise<TeamSnapshot> {
+export const signTeamSnapshot = Effect.fn('signTeamSnapshot')(function* (
+  privateKey: CryptoKey,
+  body: TeamSnapshotBody
+) {
   const text = JSON.stringify(body);
-  const signature = await crypto.subtle.sign(SNAPSHOT_SIGNATURE, privateKey, listSnapshotBytes(text));
-  return { body: text, signature: serializeBase64Url(new Uint8Array(signature)) };
-}
+  const signature = yield* Effect.promise(() =>
+    crypto.subtle.sign(SNAPSHOT_SIGNATURE, privateKey, listSnapshotBytes(text))
+  );
+  const snapshot: TeamSnapshot = { body: text, signature: serializeBase64Url(new Uint8Array(signature)) };
+  return snapshot;
+});
 
 export function isTeamSnapshotExpired(updatedAt: number, now: number) {
   return now - updatedAt > TEAM_SNAPSHOT_TTL_MS;
@@ -372,15 +377,15 @@ export function selectTeamSnapshotSigner(snapshot: TeamSnapshot) {
   return typeof instanceId === 'string' ? instanceId : null;
 }
 
-export async function verifyTeamSnapshot(signingKey: string, snapshot: TeamSnapshot) {
-  const key = await parseSigningPublicKey(signingKey);
+export const verifyTeamSnapshot = Effect.fn('verifyTeamSnapshot')(function* (
+  signingKey: string,
+  snapshot: TeamSnapshot
+) {
+  const key = yield* parseSigningPublicKey(signingKey);
   const signature = parseBase64Url(snapshot.signature);
   if (!(key && signature)) return null;
-  const valid = await crypto.subtle.verify(
-    SNAPSHOT_SIGNATURE,
-    key,
-    signature,
-    listSnapshotBytes(snapshot.body)
+  const valid = yield* Effect.promise(() =>
+    crypto.subtle.verify(SNAPSHOT_SIGNATURE, key, signature, listSnapshotBytes(snapshot.body))
   );
   return valid ? readSnapshotBody(snapshot.body) : null;
-}
+});

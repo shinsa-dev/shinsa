@@ -39,6 +39,7 @@ import {
 import { describeOutdatedMachine, MACHINES_SECTION } from '@/lib/remote/mode.ts';
 import { describeMachineResources, listResourceGauges, NO_RESOURCE_READING } from '@/lib/remote/resources.ts';
 import { RemoteServicesContext } from '@/lib/remote/services.ts';
+import { runApp } from '@/lib/runtime/app.ts';
 import { SETTING_ROW, SettingsEmpty, SettingsGroup, SettingsSection } from './group.tsx';
 import { PolicySettings } from './policies.tsx';
 import { AccessRequestRows, MACHINE_ACCESS_DESCRIPTION, MachineAccessCard } from './remote-access.tsx';
@@ -232,7 +233,7 @@ function useMachineRows() {
   React.useEffect(() => {
     if (!services) return;
     let live = true;
-    listMachineRows(services.dashboard, services.devices).then(
+    runApp(listMachineRows(services.dashboard, services.devices)).then(
       (next) => {
         if (live) setRows(next);
       },

@@ -33,10 +33,12 @@ export function ToneLabel({
   label,
   tone,
   shrinks = false,
+  dotOnPhone = false,
 }: {
   label: string;
   tone: Tone;
   shrinks?: boolean;
+  dotOnPhone?: boolean;
 }) {
   return (
     <span
@@ -47,7 +49,11 @@ export function ToneLabel({
       )}
     >
       <span className={cn('size-1.5 shrink-0 rounded-full', TONE_FILL[tone])} />
-      {shrinks ? <Truncate>{label}</Truncate> : label}
+      {shrinks ? (
+        <Truncate className={cn(dotOnPhone && 'max-sm:sr-only')}>{label}</Truncate>
+      ) : (
+        <span className={cn(dotOnPhone && 'max-sm:sr-only')}>{label}</span>
+      )}
     </span>
   );
 }

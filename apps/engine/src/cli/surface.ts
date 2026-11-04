@@ -1,4 +1,5 @@
 import { DomainError } from '@shinsa/core';
+import { Cause, Effect } from 'effect';
 import { describeError } from '../log/index.ts';
 import {
   describeGroup,
@@ -6,6 +7,7 @@ import {
   listGroup,
   readArgv,
   SURFACE,
+  SurfaceCallFailed,
   type SurfaceSpec,
   selectSpec,
 } from '../surface/index.ts';
@@ -27,48 +29,58 @@ function writeJson(io: SurfaceIo, value: unknown) {
   io.write(JSON.stringify(value, null, 2));
 }
 
-async function runSpec(spec: SurfaceSpec, args: string[], io: SurfaceIo) {
-  const json = args.includes('--json');
-  try {
-    const parsed = readArgv(spec.fields, args);
-    if (parsed.help) {
-      io.write(describeUsage(spec, io.display));
-      return 0;
-    }
-    const client = {
-      ...createSurfaceClient(io.base, parsed.idempotencyKey ?? `cli:${Bun.randomUUIDv7()}`, io.wake),
-    };
-    const result = await spec.run(client, parsed.values, io.display);
-    if (json) writeJson(io, result.data);
-    else io.write(result.text);
+const answerSpec = Effect.fn('Surface.answer')(function* (spec: SurfaceSpec, args: string[], io: SurfaceIo) {
+  const parsed = yield* Effect.try({
+    try: () => readArgv(spec.fields, args),
+    catch: (error) =>
+      error instanceof DomainError ? error : new SurfaceCallFailed({ message: describeError(error) }),
+  });
+  if (parsed.help) {
+    io.write(describeUsage(spec, io.display));
     return 0;
-  } catch (error) {
-    if (!json) throw error;
-    const code = error instanceof DomainError ? error.code : 'command_failed';
-    writeJson(io, { error: { code, message: describeError(error) } });
-    return 1;
   }
-}
+  const client = createSurfaceClient(io.base, parsed.idempotencyKey ?? `cli:${Bun.randomUUIDv7()}`, io.wake);
+  const result = yield* spec.run(client, parsed.values, io.display);
+  if (args.includes('--json')) writeJson(io, result.data);
+  else io.write(result.text);
+  return 0;
+});
+
+const runSpec = Effect.fn('Surface.runSpec')(function* (spec: SurfaceSpec, args: string[], io: SurfaceIo) {
+  if (!args.includes('--json')) return yield* answerSpec(spec, args, io);
+  return yield* answerSpec(spec, args, io).pipe(
+    Effect.catchCause((cause) =>
+      Effect.sync(() => {
+        const error = Cause.squash(cause);
+        const code = error instanceof DomainError ? error.code : 'command_failed';
+        writeJson(io, { error: { code, message: describeError(error) } });
+        return 1;
+      })
+    )
+  );
+});
+
+export const runSurface = Effect.fn('Surface.run')(function* (
+  words: string[],
+  io: SurfaceIo,
+  specs: SurfaceSpec[] = SURFACE
+) {
+  const [group = ''] = words;
+  const found = selectSpec(words, specs);
+  if (found) return yield* runSpec(found.spec, found.rest, io);
+  if (isHelp(words.slice(1))) {
+    io.write(describeGroup(group, specs, io.display));
+    return 0;
+  }
+  const actions = listGroup(group, specs).map((spec) => spec.path.slice(1).join(' '));
+  const closest = selectClosest(words[1] ?? '', actions);
+  const hint = closest ? `Did you mean \`shinsa ${group} ${closest}\`? ` : '';
+  return yield* new DomainError({
+    code: 'command_unknown',
+    message: `No command shinsa ${words.slice(0, 2).join(' ')}. ${hint}Run \`shinsa ${group} --help\` for its commands.`,
+  });
+});
 
 export function isSurfaceGroup(word: string, specs: SurfaceSpec[] = SURFACE) {
   return listGroup(word, specs).length > 0;
-}
-
-export function runSurface(words: string[], io: SurfaceIo, specs: SurfaceSpec[] = SURFACE): Promise<number> {
-  const [group = ''] = words;
-  const found = selectSpec(words, specs);
-  if (!found) {
-    if (isHelp(words.slice(1))) {
-      io.write(describeGroup(group, specs, io.display));
-      return Promise.resolve(0);
-    }
-    const actions = listGroup(group, specs).map((spec) => spec.path.slice(1).join(' '));
-    const closest = selectClosest(words[1] ?? '', actions);
-    const hint = closest ? `Did you mean \`shinsa ${group} ${closest}\`? ` : '';
-    throw new DomainError({
-      code: 'command_unknown',
-      message: `No command shinsa ${words.slice(0, 2).join(' ')}. ${hint}Run \`shinsa ${group} --help\` for its commands.`,
-    });
-  }
-  return runSpec(found.spec, found.rest, io);
 }

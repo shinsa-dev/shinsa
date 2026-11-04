@@ -2,13 +2,15 @@ import { describe, expect, it } from 'bun:test';
 import type { UsageWait } from '@shinsa/core';
 import {
   describeUsageWaitBody,
+  describeUsageWaitCountdown,
   describeUsageWaitNote,
   describeUsageWaitTitle,
   describeUsageWaitToggle,
   describeUsageWaitToggled,
+  isPaceWait,
   isUsageWaitArmed,
 } from '@/lib/accounts/usage-wait.ts';
-import { createTask, NOW } from '../../support/state.ts';
+import { createProject, createTask, NOW } from '../../support/state.ts';
 
 function wait(overrides: Partial<UsageWait> = {}): UsageWait {
   return {
@@ -59,5 +61,37 @@ describe('usage waits', () => {
     expect(describeUsageWaitToggle(wait({ autoResume: false }))).toBe('Resume at the reset');
     expect(describeUsageWaitToggled(true)).toBe('Resumes at the reset.');
     expect(describeUsageWaitToggled(false)).toBe('Waits for you at the reset.');
+  });
+
+  it('says a step held at a daily or project limit starts by itself, and why it waits', () => {
+    const at = new Date(2026, 9, 28, 15, 40).getTime();
+    const morning = new Date(2026, 9, 28, 9, 0).getTime();
+    const daily = wait({
+      cause: 'pace',
+      account: null,
+      resetAt: at,
+      pace: { scope: 'daily', limit: 18.34, percent: 19, projectId: null, stageReason: 'building' },
+    });
+    const project = wait({
+      cause: 'pace',
+      pace: { scope: 'project', limit: 20, percent: 21.25, projectId: 'p', stageReason: 'building' },
+    });
+    expect(isPaceWait(daily)).toBe(true);
+    expect(isPaceWait(wait())).toBe(false);
+    expect(isPaceWait(wait({ cause: 'pace' }))).toBe(false);
+    expect(describeUsageWaitTitle(daily, morning)).toBe('Held at a usage limit: starts at 3:40 PM');
+    expect(describeUsageWaitBody(daily)).toBe(
+      'The last 24 hours used 19%, which reached the daily usage limit of 18.3%, so the next step did not start.'
+    );
+    expect(describeUsageWaitBody(project, createProject({ id: 'p', name: 'Superwall' }))).toBe(
+      'The last 24 hours used 21.3%, which reached Superwall’s usage limit of 20% a day, so the next step did not start.'
+    );
+    expect(describeUsageWaitBody(project)).toMatch(/reached the project’s usage limit of 20% a day/);
+    expect(describeUsageWaitCountdown(daily, at - 3 * 3_600_000)).toBe('Starts in 3h');
+    expect(describeUsageWaitCountdown(daily, at)).toBe('Starts now');
+    expect(describeUsageWaitCountdown(wait({ resetAt: at }), at - 3_600_000)).toBe('Resets in 1h');
+    expect(describeUsageWaitNote(daily)).toBe(
+      'It starts by itself once older usage drops out of the last 24 hours. Raise the limit to start it sooner.'
+    );
   });
 });

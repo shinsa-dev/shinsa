@@ -78,9 +78,9 @@ src/
 │                    shares/ (a share's connect), machine/ (every machine-token route: heartbeat, offline, removal,
 │                    invites, hand-offs, members, guests), teams/ and machine-teams/ (a page's teams and the
 │                    machine's), slack-relay/ (a machine's links, posts, thread status and reactions), slack-link/
-│                    (Sign in with Slack, adding the app), slack-events/ (events and a question's choice clicked,
-│                    each Slack payload a schema: EventEnvelope, MentionEnvelope, UninstallEvent, ThreadMessage,
-│                    BlockActions), hooks/ (/hooks/<instance>/<schedule>/<token> to the machine), preview-open/ (the
+│                    (Sign in with Slack, adding the app), slack-events/ (events, a card's decision buttons and
+│                    forms, who may decide; each Slack payload a schema: EventEnvelope, MentionEnvelope,
+│                    UninstallEvent, ThreadMessage, BlockActions, ViewSubmission), hooks/ (/hooks/<instance>/<schedule>/<token> to the machine), preview-open/ (the
 │                    open route for a private address), previews/ (PreviewHost, service.ts: *.shinsa.page forwarded
 │                    to its machine; address.ts: isPreviewHost and resolveForwardCookie)
 ├── slack/           What the Slack routes share: signed-body.ts (readSignedBody: its size, Slack's signature within
@@ -310,9 +310,13 @@ test/                gates.test.ts reads every RemoteApi route with HttpApi.refl
   machine offline, or a tunnel that does not answer, gets "offline" in the thread instead. A machine posts and edits
   through `/__remote/slack/post` with its machine token, only in a thread it was sent and only editing what it
   posted (`slack_threads`, `slack_posts`), `/__remote/slack/react` moves the one reaction on a mention it was sent (`reactions.remove` then `reactions.add`, best effort),
-  `/slack/interactions` takes a question's choice button (signed, acknowledged at once): from a linked person on a
-  message their own machine posted it is forwarded signed to that machine's `/api/slack/interactions`, and the
-  click's `response_url` gets the post with "@you answered" in place of the buttons, or a private refusal, `/__remote/slack/session` sets the thread's status
+  `/slack/interactions` takes a card's decision buttons and forms (signed, acknowledged at once). It lets through
+  only the owner or a member of the machine that posted the card (`selectPoster`, then the linked account's role
+  there; a guest, someone not connected and anyone else get a private refusal, `SLACK_DECISION_REFUSALS`, and
+  nothing reaches the machine). A decide click is forwarded signed to that machine's `/api/slack/interactions` as a
+  `SlackDecision`, and the click's `response_url` gets the card with "@you approved the plan" in place of the
+  buttons, or a private refusal. A write click opens a form (`views.open`), checked again when it is sent; its
+  refusal comes as `chat.postEphemeral` in the thread. `/__remote/slack/session` sets the thread's status
   (`agents.sessions.setStatus`, best effort: `applied: false`, not logged, for `not_authorized` from an app not on
   Agent Sessions (`agent_view` stays off) and `feature_disabled`; any other refusal is logged and answered 502); `/__remote/slack/links` and `/unlink` read and remove its links. Message
   text passes through the Worker on its way and is never stored: D1 keeps ids, names and the sealed tokens.

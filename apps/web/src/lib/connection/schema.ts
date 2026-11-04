@@ -72,6 +72,11 @@ export class UsageRecheckFailed extends Schema.TaggedError<
   { readonly brand: unique symbol }
 >()('UsageRecheckFailed', { message: Schema.String }) {}
 
+export class PlacementUnanswered extends Schema.TaggedError<
+  PlacementUnanswered,
+  { readonly brand: unique symbol }
+>()('PlacementUnanswered', {}) {}
+
 export const TerminalOpenedAnswer = Schema.Unknown.pipe(
   Schema.refine((value): value is TerminalsSnapshot & { readonly terminal: TerminalInfo } =>
     Predicate.isObject(value)

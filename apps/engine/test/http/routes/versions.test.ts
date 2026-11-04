@@ -1,27 +1,28 @@
 import { afterEach, describe, expect, test } from 'bun:test';
 import type { UpdateOutcome, UpdateStreamLine, VersionsSnapshot } from '@shinsa/core';
+import { Effect } from 'effect';
 import { UPDATE_STREAM_TYPE } from '../../../src/http/routes/versions/schema.ts';
-import { Versions } from '../../../src/versions/index.ts';
+import type { CommandResult } from '../../../src/shell/schema.ts';
+import { VersionsCallFailed } from '../../../src/versions/schema.ts';
 import { disposeWebHandlers, recordedLogs } from '../../helpers/web.ts';
+import { buildFakeVersions } from '../../versions/fakes.ts';
 import { readFailure, startRoutes } from './harness.ts';
 
 afterEach(disposeWebHandlers);
 
 const PASSED = { ok: true, code: 0, stdout: '', stderr: '', timedOut: false };
 
-function createRoutes(run = () => Promise.resolve(PASSED)) {
+function createRoutes(run: Effect.Effect<CommandResult, VersionsCallFailed> = Effect.succeed(PASSED)) {
   const installed = { version: '2.1.287' };
-  const versions = new Versions({
-    locate: (program) => ({ path: `/opt/bin/${program}`, override: null }),
-    readVersion: () => Promise.resolve(installed.version),
-    minimum: () => '2.1.280',
-    sdk: () => ({ version: '0.3.280', claudeCodeVersion: '2.1.280' }),
-    latest: () => Promise.resolve('2.1.310'),
-    run: (_updater, onLine) => {
-      onLine('Checking for updates');
-      installed.version = '2.1.310';
-      return run();
-    },
+  const versions = buildFakeVersions({
+    readVersion: () => installed.version,
+    latest: () => Effect.succeed('2.1.310'),
+    run: (_updater, onLine) =>
+      Effect.suspend(() => {
+        onLine('Checking for updates');
+        installed.version = '2.1.310';
+        return run;
+      }),
   });
   const routes = startRoutes({ versions });
   return (method: 'GET' | 'POST', path: string, body?: unknown, accept?: string) =>
@@ -73,7 +74,7 @@ describe('the versions routes', () => {
       UPDATE_STREAM_TYPE
     );
     expect(await readFailure(refused)).toMatchObject({ status: 400, message: 'Update claude or codex.' });
-    const broken = await createRoutes(() => Promise.reject(new Error('spawn failed')))(
+    const broken = await createRoutes(Effect.fail(new VersionsCallFailed({ message: 'spawn failed' })))(
       'POST',
       '/api/versions/update',
       { program: 'claude' },

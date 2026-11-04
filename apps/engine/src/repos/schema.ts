@@ -1,5 +1,5 @@
 import type { Repo } from '@shinsa/core';
-import { Duration, Schema } from 'effect';
+import { Duration, type Effect, Schema } from 'effect';
 
 export const LocalRepo = Schema.Struct({
   path: Schema.String,
@@ -45,7 +45,7 @@ export interface SetupScope {
 export type RootSourceKind = 'configured' | 'environment' | 'discovered';
 
 export interface RootSource {
-  listRoots: () => Promise<string[]>;
+  readonly listRoots: Effect.Effect<string[]>;
 }
 
 export type Discoverer = (home: string) => Promise<Discovery>;

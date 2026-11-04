@@ -285,7 +285,10 @@ site serves it are `apps/marketing/CLAUDE.md` → Deploy. It talks to R2's S3 AP
 on `shinsa-releases`. The script asks Cloudflare for the token's id (`/accounts/<id>/tokens/verify`) and signs in with
 the id as the access key and the token's SHA-256 as the secret, as R2 defines them; a bucket-scoped token works there
 and not on Cloudflare's REST object API, which `wrangler r2 object` uses. Large files go up in parts, so there is no
-size limit to watch. Running it again for the same tag is safe, and
+size limit to watch. Every request (the token check, `gh release view` and `gh release download`, each pointer read
+and each write to R2) is tried again after 15, 30 and 60 seconds (`R2_REQUEST_DELAYS` in `scripts/release-retry.ts`),
+with a warning annotation for each retry, because R2 now and then answers `InternalError`; every write puts one
+whole object, so a retry never leaves half a file. Running it again for the same tag is safe, and
 `CLOUDFLARE_API_TOKEN=… bun scripts/release-upload.ts v1.2.0` backfills a release by hand.
 
 If R2 cannot serve (no pointer yet, an error), the site redirects to the file on GitHub instead of showing a page, so
@@ -302,7 +305,7 @@ Every release, on every channel, carries the engine three times, each a `.tar.gz
 `<sha256>  <archive>`): `shinsa-darwin-arm64` (packed from the signed, notarized app, so the binary keeps its
 Developer ID signature), `shinsa-linux-x64` and `shinsa-linux-arm64`. Each unpacks to one folder holding `bin/shinsa`,
 `plugin/` (the plugin agents load) and `web/` (the built interface, served on the engine's port and through remote
-access). `scripts/release-engine.ts` packs them (`packEngine`: the folder must hold all three, the binary must report
+access). `scripts/release-engine.ts` packs them (`packEngine` in `scripts/release/engine.ts`: the folder must hold all three, the binary must report
 the release's version, and macOS's `._` files are kept out) and refuses any other target. Intel Macs, Windows and
 musl (Alpine) have none.
 
@@ -314,7 +317,7 @@ Two ways in, both reading those archives:
   npm skips the others). The launcher runs that package's `bin/shinsa` with the same arguments, passing on its exit
   code and signals, and on an Intel Mac, another system or a missing engine package says why instead. The `npm` job
   downloads the release's archives, checks each against its `.sha256`, unpacks them into packages at the release's
-  version (`scripts/release-npm.ts`) and publishes the engine packages first, the launcher last, all under the
+  version (`scripts/release-npm.ts`, its steps in `scripts/release/npm.ts`) and publishes the engine packages first, the launcher last, all under the
   channel's dist-tag: `latest` for stable, `beta` and `canary` otherwise. So `npm i -g shinsa@beta` or `@canary`
   picks a channel, and plain `shinsa` stays on the 0.0.1 placeholder until the first stable release. A version npm
   already has is skipped, so Re-run failed jobs is safe. Each `npm publish` gets three attempts, 30 s and 60 s apart,

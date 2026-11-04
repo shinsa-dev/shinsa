@@ -1,71 +1,80 @@
-import { type CdpPage, launchChromium } from '../kit/chromium/index.ts';
-import { PROBE } from './content-probe.ts';
+import { BunRuntime } from '@effect/platform-bun';
+import { Config, Console, Duration, Effect, Option, Schema } from 'effect';
+import { type CdpPage, ChromiumLayer } from '../kit/chromium/index.ts';
 import { summarize } from './content-stats.ts';
+import { openContentPage } from './content/page.ts';
+import {
+  ChatScroll,
+  HeldPlace,
+  Inputs,
+  ListScroll,
+  LongTasks,
+  type Measurements,
+  Navigation,
+  NO_MEASUREMENTS,
+  PushCost,
+  RUN_SECTION,
+  type Scenario,
+} from './content/schema.ts';
+import { writeReport } from './report/write.ts';
 
 const BASE = Bun.argv[2] ?? 'http://localhost:5661';
-const ROUNDS = Number(Bun.env.SHINSA_PERF_ROUNDS ?? 3);
-const ONLY = Bun.env.SHINSA_PERF_ONLY?.split(',') ?? null;
 
-interface Navigation {
-  ms: number;
-  found: boolean;
-  long: { count: number; max: number; total: number };
-}
+const program = Effect.gen(function* () {
+  const rounds = yield* Config.Number('SHINSA_PERF_ROUNDS').pipe(Config.withDefault(3));
+  const only = yield* Config.option(Config.String('SHINSA_PERF_ONLY'));
+  const chosenTask = yield* Config.option(Config.String('SHINSA_PERF_TASK'));
+  const out = yield* Config.option(Config.String('SHINSA_PERF_OUT'));
 
-const RUN = 'section[id^="run-"]';
+  const navigate = (page: CdpPage, path: string, ready = 'body') =>
+    page.evaluate(`window.__perf.navigate(${JSON.stringify(path)}, ${JSON.stringify(ready)})`, Navigation);
 
-const NONE: Record<string, number> = {};
+  const settle = (page: CdpPage) => page.evaluate('window.__perf.sleep(600)', Schema.Unknown);
 
-function navigate(page: CdpPage, path: string, ready = 'body') {
-  return page.evaluate<Navigation>(
-    `window.__perf.navigate(${JSON.stringify(path)}, ${JSON.stringify(ready)})`
-  );
-}
-
-async function settle(page: CdpPage) {
-  await page.evaluate('window.__perf.sleep(600)');
-}
-
-function pickTask(page: CdpPage) {
-  if (Bun.env.SHINSA_PERF_TASK) return Promise.resolve(Bun.env.SHINSA_PERF_TASK);
-  return page.evaluate<string>(`(() => {
+  const pickTask = (page: CdpPage) =>
+    Option.isSome(chosenTask)
+      ? Effect.succeed(chosenTask.value)
+      : page.evaluate(
+          `(() => {
     const state = JSON.parse(window.__perf.lastState).state;
     const counts = {};
     for (const run of Object.values(state.runs)) counts[run.taskId] = (counts[run.taskId] ?? 0) + 1;
     return Object.entries(counts).sort((a, b) => b[1] - a[1])[0][0];
-  })()`);
-}
+  })()`,
+          Schema.String
+        );
 
-function liveRun(page: CdpPage, taskId: string) {
-  return page.evaluate<string | null>(`(() => {
+  const selectLiveRun = (page: CdpPage, taskId: string) =>
+    page.evaluate(
+      `(() => {
     const state = JSON.parse(window.__perf.lastState).state;
     const runs = Object.values(state.runs).filter((run) => run.taskId === ${JSON.stringify(taskId)});
     return (runs.find((run) => run.endedAt === null) ?? runs.at(-1))?.id ?? null;
-  })()`);
-}
+  })()`,
+      Schema.NullOr(Schema.String)
+    );
 
-async function typeText(page: CdpPage, text: string) {
-  for (const char of text) {
-    await page.send('Input.dispatchKeyEvent', {
-      type: 'keyDown',
-      text: char,
-      key: char,
-      unmodifiedText: char,
-    });
-    await page.send('Input.dispatchKeyEvent', { type: 'keyUp', key: char });
-    await Bun.sleep(45);
-  }
-}
+  const typeText = Effect.fn('ContentMeasure.typeText')(function* (page: CdpPage, text: string) {
+    for (const char of text) {
+      yield* page.send('Input.dispatchKeyEvent', {
+        type: 'keyDown',
+        text: char,
+        key: char,
+        unmodifiedText: char,
+      });
+      yield* page.send('Input.dispatchKeyEvent', { type: 'keyUp', key: char });
+      yield* Effect.sleep(Duration.millis(45));
+    }
+  });
 
-const scenarios: Record<string, (page: CdpPage, taskId: string) => Promise<Record<string, number>>> = {
-  async openChat(page, taskId) {
-    await navigate(page, '/');
-    await settle(page);
-    const open = await navigate(page, `/tasks/${taskId}?tab=chat`, RUN);
-    const start = Date.now();
-    await settle(page);
-    const settled = await page.evaluate<{ count: number; max: number; total: number }>(
-      `window.__perf.since(performance.now() - ${Date.now() - start + 600})`
+  const openChat = Effect.fn('ContentMeasure.openChat')(function* (page: CdpPage, taskId: string) {
+    yield* navigate(page, '/');
+    yield* settle(page);
+    const open = yield* navigate(page, `/tasks/${taskId}?tab=chat`, RUN_SECTION);
+    const [settledFor] = yield* Effect.timed(settle(page));
+    const settled = yield* page.evaluate(
+      `window.__perf.since(performance.now() - ${Duration.toMillis(settledFor) + 600})`,
+      LongTasks
     );
     return {
       paintMs: open.ms,
@@ -73,35 +82,32 @@ const scenarios: Record<string, (page: CdpPage, taskId: string) => Promise<Recor
       settleLongMax: settled.max,
       settleLongTotal: settled.total,
     };
-  },
-  async switchTabs(page, taskId) {
-    await navigate(page, `/tasks/${taskId}?tab=chat`, RUN);
-    await settle(page);
+  });
+
+  const switchTabs = Effect.fn('ContentMeasure.switchTabs')(function* (page: CdpPage, taskId: string) {
+    yield* navigate(page, `/tasks/${taskId}?tab=chat`, RUN_SECTION);
+    yield* settle(page);
     for (const tab of ['overview', 'review', 'chat']) {
-      await navigate(page, `/tasks/${taskId}?tab=${tab}`);
-      await settle(page);
+      yield* navigate(page, `/tasks/${taskId}?tab=${tab}`);
+      yield* settle(page);
     }
-    const overview = await navigate(page, `/tasks/${taskId}?tab=overview`);
-    await settle(page);
-    const review = await navigate(page, `/tasks/${taskId}?tab=review`);
-    await settle(page);
-    const chat = await navigate(page, `/tasks/${taskId}?tab=chat`, RUN);
-    await settle(page);
+    const overview = yield* navigate(page, `/tasks/${taskId}?tab=overview`);
+    yield* settle(page);
+    const review = yield* navigate(page, `/tasks/${taskId}?tab=review`);
+    yield* settle(page);
+    const chat = yield* navigate(page, `/tasks/${taskId}?tab=chat`, RUN_SECTION);
+    yield* settle(page);
     return { toOverviewMs: overview.ms, toReviewMs: review.ms, toChatMs: chat.ms };
-  },
-  async scrollChat(page, taskId) {
-    await navigate(page, `/tasks/${taskId}?tab=chat`, RUN);
-    await settle(page);
-    const result = await page.evaluate<{
-      p95: number;
-      max: number;
-      over16: number;
-      vsyncP95: number;
-      vsyncMax: number;
-      dropped: number;
-      long: { max: number; count: number };
-    } | null>(`window.__perf.scroll(${JSON.stringify(RUN)}, 'up', 150, 160)`);
-    if (!result) return NONE;
+  });
+
+  const scrollChat = Effect.fn('ContentMeasure.scrollChat')(function* (page: CdpPage, taskId: string) {
+    yield* navigate(page, `/tasks/${taskId}?tab=chat`, RUN_SECTION);
+    yield* settle(page);
+    const result = yield* page.evaluate(
+      `window.__perf.scroll(${JSON.stringify(RUN_SECTION)}, 'up', 150, 160)`,
+      ChatScroll
+    );
+    if (!result) return NO_MEASUREMENTS;
     return {
       vsyncP95: result.vsyncP95,
       vsyncMax: result.vsyncMax,
@@ -112,33 +118,41 @@ const scenarios: Record<string, (page: CdpPage, taskId: string) => Promise<Recor
       longMax: result.long.max,
       longCount: result.long.count,
     };
-  },
-  async holdPlace(page, taskId) {
-    await navigate(page, `/tasks/${taskId}?tab=chat`, RUN);
-    await settle(page);
-    const result = await page.evaluate<{ jumps: number; worst: number } | null>(
-      `window.__perf.holdPlace(${JSON.stringify(RUN)}, 300, 160)`
+  });
+
+  const holdPlace = Effect.fn('ContentMeasure.holdPlace')(function* (page: CdpPage, taskId: string) {
+    yield* navigate(page, `/tasks/${taskId}?tab=chat`, RUN_SECTION);
+    yield* settle(page);
+    const result = yield* page.evaluate(
+      `window.__perf.holdPlace(${JSON.stringify(RUN_SECTION)}, 300, 160)`,
+      HeldPlace
     );
-    if (!result) return NONE;
+    if (!result) return NO_MEASUREMENTS;
     return { placeJumps: result.jumps, placeWorstPx: Math.round(result.worst) };
-  },
-  async typeWhileStreaming(page, taskId) {
-    await navigate(page, `/tasks/${taskId}?tab=chat`, RUN);
-    await settle(page);
-    const runId = await liveRun(page, taskId);
-    const focused = await page.evaluate<boolean>(
-      `(() => { const box = [...document.querySelectorAll('textarea')].find((each) => each.offsetParent !== null); if (!box) return false; box.focus(); return true; })()`
+  });
+
+  const typeWhileStreaming = Effect.fn('ContentMeasure.typeWhileStreaming')(function* (
+    page: CdpPage,
+    taskId: string
+  ) {
+    yield* navigate(page, `/tasks/${taskId}?tab=chat`, RUN_SECTION);
+    yield* settle(page);
+    const runId = yield* selectLiveRun(page, taskId);
+    const focused = yield* page.evaluate(
+      `(() => { const box = [...document.querySelectorAll('textarea')].find((each) => each.offsetParent !== null); if (!box) return false; box.focus(); return true; })()`,
+      Schema.Boolean
     );
-    if (!focused || !runId) return NONE;
-    const start = await page.evaluate<number>('performance.now()');
-    await page.evaluate(`window.__perf.startStream(${JSON.stringify(runId)}, 20, 1)`);
-    await typeText(page, 'the header should wrap on narrow windows ');
-    await page.evaluate('window.__perf.stopStream()');
-    const inputs = await page.evaluate<{ delay: number; paint: number }[]>(
-      `window.__perf.inputsSince(${start})`
+    if (!focused || !runId) return NO_MEASUREMENTS;
+    const start = yield* page.evaluate('performance.now()', Schema.Number);
+    yield* page.evaluate(`window.__perf.startStream(${JSON.stringify(runId)}, 20, 1)`, Schema.Unknown);
+    yield* typeText(page, 'the header should wrap on narrow windows ');
+    yield* page.evaluate('window.__perf.stopStream()', Schema.Unknown);
+    const inputs = yield* page.evaluate(`window.__perf.inputsSince(${start})`, Inputs);
+    const long = yield* page.evaluate(`window.__perf.since(${start})`, LongTasks);
+    const streamed = yield* page.evaluate(
+      `document.body.innerText.includes('Streaming update')`,
+      Schema.Boolean
     );
-    const long = await page.evaluate<{ max: number; count: number }>(`window.__perf.since(${start})`);
-    const streamed = await page.evaluate<boolean>(`document.body.innerText.includes('Streaming update')`);
     return {
       streamed: streamed ? 1 : 0,
       inputPaintMax: Math.max(0, ...inputs.map((input) => input.paint)),
@@ -146,34 +160,32 @@ const scenarios: Record<string, (page: CdpPage, taskId: string) => Promise<Recor
       longMax: long.max,
       longCount: long.count,
     };
-  },
-  async pushes(page, taskId) {
-    await navigate(page, `/tasks/${taskId}?tab=chat`, RUN);
-    await settle(page);
-    const runId = await liveRun(page, taskId);
-    const cost = await page.evaluate<{
-      state: number;
-      stateMax: number;
-      transcript: number;
-      transcriptMax: number;
-    }>(`window.__perf.pushCost(${JSON.stringify(runId)}, 15)`);
+  });
+
+  const pushes = Effect.fn('ContentMeasure.pushes')(function* (page: CdpPage, taskId: string) {
+    yield* navigate(page, `/tasks/${taskId}?tab=chat`, RUN_SECTION);
+    yield* settle(page);
+    const runId = yield* selectLiveRun(page, taskId);
+    const cost = yield* page.evaluate(`window.__perf.pushCost(${JSON.stringify(runId)}, 15)`, PushCost);
     return {
       stateMs: cost.state,
       stateMaxMs: cost.stateMax,
       transcriptMs: cost.transcript,
       transcriptMaxMs: cost.transcriptMax,
     };
-  },
-  async lists(page) {
-    await navigate(page, '/');
-    await settle(page);
-    const tasks = await navigate(page, '/tasks', 'a[href^="/tasks/"]');
-    await settle(page);
-    const scroll = await page.evaluate<{ p95: number; max: number; long: { max: number } } | null>(
-      `window.__perf.scroll('a[href^="/tasks/"]', 'down', 120, 120)`
+  });
+
+  const lists = Effect.fn('ContentMeasure.lists')(function* (page: CdpPage) {
+    yield* navigate(page, '/');
+    yield* settle(page);
+    const tasks = yield* navigate(page, '/tasks', 'a[href^="/tasks/"]');
+    yield* settle(page);
+    const scroll = yield* page.evaluate(
+      `window.__perf.scroll('a[href^="/tasks/"]', 'down', 120, 120)`,
+      ListScroll
     );
-    const home = await navigate(page, '/', 'a[href^="/tasks/"]');
-    await settle(page);
+    const home = yield* navigate(page, '/', 'a[href^="/tasks/"]');
+    yield* settle(page);
     return {
       tasksPaintMs: tasks.ms,
       tasksLongMax: tasks.long.max,
@@ -182,41 +194,35 @@ const scenarios: Record<string, (page: CdpPage, taskId: string) => Promise<Recor
       homePaintMs: home.ms,
       homeLongMax: home.long.max,
     };
-  },
-};
+  });
 
-async function runScenario(name: string) {
-  const samples: Record<string, number>[] = [];
-  for (let round = 0; round < ROUNDS; round += 1) {
-    const browser = await launchChromium(1280, 900);
-    try {
-      const { page } = browser;
-      await page.send('Page.enable');
-      await page.send('Page.addScriptToEvaluateOnNewDocument', { source: PROBE });
-      await page.send('Page.navigate', { url: `${BASE}/` });
-      await page.evaluate(
-        `new Promise((resolve) => { const check = () => window.__perf?.lastState ? resolve(true) : setTimeout(check, 20); check(); })`
-      );
-      await settle(page);
-      const taskId = await pickTask(page);
-      samples.push(
-        await (scenarios[name] as (page: CdpPage, taskId: string) => Promise<Record<string, number>>)(
-          page,
-          taskId
-        )
-      );
-    } finally {
-      browser.close();
-    }
+  const scenarios: ReadonlyArray<readonly [string, Scenario]> = [
+    ['openChat', openChat],
+    ['switchTabs', switchTabs],
+    ['scrollChat', scrollChat],
+    ['holdPlace', holdPlace],
+    ['typeWhileStreaming', typeWhileStreaming],
+    ['pushes', pushes],
+    ['lists', lists],
+  ];
+
+  const runRound = Effect.fn('ContentMeasure.runRound')(function* (scenario: Scenario) {
+    const page = yield* openContentPage(BASE);
+    yield* settle(page);
+    return yield* scenario(page, yield* pickTask(page));
+  }, Effect.scoped);
+
+  const chosen = Option.match(only, {
+    onNone: () => scenarios,
+    onSome: (names) => scenarios.filter(([name]) => names.split(',').includes(name)),
+  });
+  const results: Record<string, Measurements> = {};
+  for (const [name, scenario] of chosen) {
+    const samples = yield* Effect.forEach(Array.from({ length: rounds }), () => runRound(scenario));
+    results[name] = summarize(samples);
+    yield* Console.info(name, JSON.stringify(results[name]));
   }
-  return summarize(samples);
-}
+  if (Option.isSome(out)) yield* writeReport(out.value, `${JSON.stringify(results, null, 2)}\n`);
+});
 
-const results: Record<string, Record<string, number>> = {};
-for (const name of Object.keys(scenarios)) {
-  if (ONLY && !ONLY.includes(name)) continue;
-  results[name] = await runScenario(name);
-  console.info(name, JSON.stringify(results[name]));
-}
-if (Bun.env.SHINSA_PERF_OUT)
-  await Bun.write(Bun.env.SHINSA_PERF_OUT, `${JSON.stringify(results, null, 2)}\n`);
+program.pipe(Effect.provide(ChromiumLayer), BunRuntime.runMain);

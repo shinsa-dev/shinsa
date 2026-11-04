@@ -419,7 +419,7 @@ Only these, and they win over anything below:
     `cards` and `sidebar`. Both are one frame, `AppFrame` (`components/layout/frame.tsx`), around one `main`:
     switching adds or drops the top bar and the rail and never remounts the pages inside.
     Cards (the default) has no rail: a top
-    bar with the navigation on the left (the Shinsa logo, the Home button in the Mac app, 31; Tasks; Services, 37;
+    bar with the navigation on the left (the Home button, 31; Tasks; Services, 37;
     and a "3 need you" button that opens the compact queue) and Update, Settings, Agent usage and Focus on the right,
     and task pages centred on the same axis as Home (see 12). Tasks (`NavButton` in `components/layout/nav-button.tsx`,
     secondary `sm`, `IconListBullets` and the word Tasks, the look of the Home button) opens All tasks; Settings is the
@@ -444,7 +444,64 @@ Only these, and they win over anything below:
     queue outside Home (there is no queue card beside the page). Sidebar is a permanent rail with
     the queue; it never hides. Its nav names the same places as Desk's bar, in the same words: New task (Home), Tasks,
     Services and Settings, each filled on its own page. From
-    `md` (768px) up it sits beside the page; below it, it opens as a sheet. The app has one
+    `md` (768px) up it sits beside the page.
+    **On a phone both layouts share one bar and one More sheet.** Both Desk and Shelf show `CompactBar` below `md`
+    (768px; Desk reads `COMPACT_BAR_QUERY` with `useMediaQuery`, so only one bar is mounted, because its full bar
+    needs about 720px), and Desk's full bar lets the Focus name truncate rather than clip when What's new or Update
+    joins it. The bar (`components/layout/sidebar/compact-bar.tsx`) holds Home and Tasks as icons alone (no logo: `HomeLink` `variant='icon'`), the queue button
+    where it shows, the connection status, then Feedback as its icon and count (so ⌘K's Send feedback still has a
+    trigger to open from), search and More (`IconBarsTwo`). More opens the rail as a sheet from the
+    right (`Rail` with `variant='sheet'`), the one place a phone shows the Shinsa logo and wordmark (`HomeLink` `variant='brand'`, `BrandLink`): New task, Tasks, Services, Settings, Feedback, Focus, and What's new,
+    Update and Agent usage in its header, without the queue and search the bar already has; its Services and
+    Feedback popovers open below their rows instead of beside them. The sheet closes on any change of route. The
+    bars and the sheet keep clear of the notch and the home bar with the safe-area insets (`SAFE_AREA_TOP`,
+    `SAFE_AREA_SIDES`, `viewport-fit=cover` in `index.html`), and the page column's gutter is 16px below `sm`
+    (`PAGE_COLUMN`), its top 8px (`PAGE_TOP`); the task page in Desk drops its frame's own padding below `sm`, so it
+    is 16px there too (the framed Code tab keeps it). **The task page on a phone** (`PhoneTaskPage`, below `sm`) puts its header inside the tab's own scroll
+    (`TaskScrollHeaderSlot`, rendered by each tab with `TaskScrollHeader`), so it scrolls away with the content;
+    once the tabs leave the view (`useHeaderOutOfView`, an `IntersectionObserver`), a slim bar sticks at the top
+    with the title on one line and the tabs (`TaskCompactHeader`), the full header coming back as you scroll up.
+    Under that bar the tab's scroll fades only at its bottom (`useTaskScrollFade`, `ScrollArea` `fade="end"`), since
+    a top fade would wash out the bar itself. The
+    Code tab, which has no page scroll, shows only that slim bar. The header shows the handle, the round, the
+    status and the pull request (or the checks) and folds every other fact behind a Details fact at the row's end
+    (`TaskFacts` `fold`, opened per page view, never stored), which opens them in their usual order with Fewer
+    details at the end. Its tabs scroll sideways inside their own strip. A now card's actions go under its title (`NowFrame`), a
+    finding's Fix / Dismiss sit on its label row with the issue at full width under both (`FindingNote`, a grid), a
+    suggested task's controls go under its text, a watchdog's title wraps instead of truncating, and the queued
+    messages over the composer stop at 96px. On the Review tab a point's header bar stays one line: the title truncates,
+    the label shows as its coloured dot alone (`ToneLabel` `dotOnPhone`) and the plan section drops (`NoteBar`); a
+    checklist's titles (merge steps, How to test) stay on one line below `sm`, and a bundled task's row is its title
+    with "Merges with this one" under it; a check row puts Show the output
+    under the check and keeps its outcome at the right, so the command and the detail use the row's width
+    (`CheckRowItem`, a grid below `sm`). A run's header in the chat wraps the same way (`ChatLine` `wraps`): the role
+    stays whole and the headline and the account go on to a second line. The Code tab's file sheet keeps clear of the
+    notch and the home bar. The docked composer keeps clear of the home bar
+    (`env(safe-area-inset-bottom)`, `SAFE_AREA_BOTTOM` on the sheets), and so do the end of All tasks and an
+    automation's page (`PAGE_BOTTOM`) and the Terminal page's body. **Home on a phone**: a queue row that shows the
+    agent's latest action or a note drops its step track below `sm` (`RowSummary`), so the action reads in full
+    instead of a few letters; a row with nothing after it keeps the track, and so does the queue menu. A select's
+    list never grows wider than the room beside it (`max-w-(--available-width)`), its hints truncating instead, and
+    the guide's list of other running tasks scrolls inside a popover no taller than the room. **Settings on a phone**:
+    the section tabs scroll sideways inside their strip, which keeps its width, and bring the open one into view
+    (`Choice` `scrolls`: the `TabsList` scrolls, never the box around it, which carries the grey track; the tabs fade
+    out at whichever side still scrolls, through `ScrollFade` on the list; anything that overflows sideways scrolls
+    its items, not its frame). A row with a label
+    (`SettingRow`, `PathRow`, the model rows) wraps below `sm` (`SETTING_ROW_WRAPS`): the label keeps its own width
+    (`SETTING_LABEL`, never less than its text unless that is the whole row) and the control goes to the next line
+    when both do not fit, so "Play a sound" stays whole over its select, a model row's description runs the full
+    width over its two selects, and a repository row is one line (`PathRow` `dense`): its name, then each setting as the icon of its
+    value alone (`data-select-text` hidden), its edit button and Remove, the path left out. A row
+    that is a form (a field and its button) never wraps. **Menus and dialogs on a phone**: every popup in the kit
+    (popover, menu, select, preview card) keeps 12px from the viewport edge (`POPUP_COLLISION_PADDING`) and is never
+    wider than the room it has (`max-w-(--available-width)`; a menu with a cap of its own writes it as
+    `max-w-[min(24rem,var(--available-width))]`, since a plain `max-w-96` would replace the kit's). A dialog is the
+    viewport less 12px a side below `sm`, and the command menu opens 12px under the notch instead of a third of the
+    way down, so the keyboard never covers it. **Setup and the remote pages on a phone**: setup's column keeps the
+    16px phone gutter (`ONBOARDING_COLUMN`), the tools step's "Stuck on an install?" line puts its button under the
+    text, and setup's shell and the remote pages' shell (`RemoteShell`) keep clear of the notch; a shared task's page
+    also keeps clear of the home bar. The pair, enroll, claim, team join, Slack and Fleet pages are one centred
+    column and need nothing more. The app has one
     keyboard shortcut: ⌘K (Ctrl K elsewhere) opens the command menu (see 14). Nothing else is
     bound to a key, except the Code tab's ⌘P, ⇧⌘F, ⌘F and ⌘G while it is open (32), the Review tab's J and K while it is
     open (34), the Terminal page's ⌘T and ⌘W while it is open and a focused terminal's own keys (37), Enter sends in every input, and a setup step's option list takes the arrows, Home, End, Enter and
@@ -668,7 +725,7 @@ Only these, and they win over anything below:
         (`components/overlays/hint.tsx`): copy ("Copy", then "Copied"), Run in terminal (the folder it runs in as
         its detail, `~` for your home folder), collapse and expand ("Collapse summary"),
         previous and next spot, send, comment on a line, remove ("Remove folder"), dismiss, stop a delegated task,
-        the compact bar's queue and new-task buttons, the sidebar's resize handle (following the pointer down the
+        the compact bar's Tasks, Feedback and More buttons, the sidebar's resize handle (following the pointer down the
         edge), the error button. The tooltip repeats the `aria-label`. A `Hint` with a `detail` stacks a muted
         second line right under its label, with no gap, as a time's tooltip does (a task's round, 12).
       - **Keyboard-shortcut hints**: a `Hint` with a `shortcut` ("Home ⇧⌘H", "Search and actions ⌘K", "Search in
@@ -705,7 +762,8 @@ Only these, and they win over anything below:
         only when the text really is clipped. Text that is already a popover or menu trigger (the Focus menu, the
         repository and branch facts) keeps a plain `truncate`, so two overlays never stack.
     - **Instant: nothing.** No tooltip opens the moment the pointer arrives. Keyboard focus is not hover: a
-      tooltip opens on a keyboard focus at once, and on a tap where there is no hover.
+      tooltip opens on a keyboard focus at once, and, where there is no hover (a phone), on a tap of a label
+      only: a trigger that is an action (a button, a link, a tab, a field) runs it and never shows its tooltip.
 
     **One delay, in the kit.** `TOOLTIP_DELAY` (600ms) is how long the pointer rests on a trigger before its
     tooltip opens; `TOOLTIP_SKIP_DELAY` (400ms) is how long after one closes the next still opens at once, with no
@@ -728,7 +786,7 @@ Only these, and they win over anything below:
       `Hint`, a time, a clipped `Truncate` or a `TooltipTrigger` is just its own element, registered by a ref and
       marked `data-tooltip-trigger` (`useTooltipTrigger` in `@shinsa/ui/components/tooltip`). The provider opens
       the tooltip on hover after `TOOLTIP_DELAY` (at once within `TOOLTIP_SKIP_DELAY` of the last one), on
-      keyboard focus, and on a tap where there is no hover; it closes it when the pointer leaves, on a press of the
+      keyboard focus, and on a tap of a label that is not an action where there is no hover (`ACTION_TRIGGER`); it closes it when the pointer leaves, on a press of the
       trigger, on Escape and when focus leaves. A tooltip closed by a press or Escape stays closed until the pointer
       leaves its trigger. What it shows is built when it opens, so a time's exact moment is formatted only then.
       While it is open the trigger carries `aria-describedby` (the tooltip) and `data-popup-open`. A trigger costs
@@ -741,7 +799,7 @@ Only these, and they win over anything below:
 14. **The command menu (⌘K) reaches the whole app, and knows where you are.** It is Buzzkit's
     menu (`components/command/menu.tsx`, rendered once by `Root` on `CommandDialog` from
     `@shinsa/ui/components/command`), opened by ⌘K / Ctrl K from anywhere (inputs included) or
-    by the magnifying-glass button in the sidebar header and the compact bar. Every action goes
+    by the magnifying-glass button in the sidebar header and the phone's compact bar. Every action goes
     through the same `sendCommand` the buttons use; the menu adds no commands of its own.
     - **Pages contribute what they know.** `useRegisterCommands(sections)`
       (`lib/command/registry.ts`) registers ranked sections while a component is mounted
@@ -784,7 +842,7 @@ Only these, and they win over anything below:
       status, Clear filters and "Search all tasks for …"; the filter and search live in the URL
       (`?status=&q=`), and an active status shows as a removable button beside the search.
     - **Global**, in groups: Tasks (New task, which opens Home with the composer focused, as the rail's and the
-      compact bar's New task do, and
+      More sheet's New task do, and
       Jump to a task, a page of every task), Go to (Home, All tasks, Terminal, Settings), Focus (Switch
       focus project; keeping it for 2 hours or until tonight is `searchOnly` and appears only while
       typing), Appearance (Switch layout, Change theme), Accounts (Add a Claude account, Agent usage, which opens
@@ -2035,9 +2093,10 @@ Only these, and they win over anything below:
       Dock already say Shinsa), so in the app the Shinsa wordmark is a Home button: `HomeLink`
       (`components/layout/home-link.tsx`) renders a `NavButton` there, as Tasks and Settings are (secondary `sm`, `IconHomeRoundDoor` and the word Home; on Home itself
       `IconHomeRoundDoorFilled` in `fg-4` with `aria-current="page"`; the tooltip "Home ⇧⌘H") and `BrandLink` in a browser and Floaty, in the Cards top bar, the rail's
-      header and the compact bar alike. The site's demos (`apps/marketing`, which never have the bridge) ask for the
+      header and the compact bar alike. In a browser it is the same Home button with no logo beside it (the tab's favicon already says Shinsa), in the Cards top bar and the rail's header; the phone's compact bar shows the Home icon
+      alone and the More sheet keeps the logo with the wordmark (`variant`: `bar`, `icon`, `brand`). The site's demos (`apps/marketing`, which never have the bridge) ask for the
       app's look with the `DesktopChrome` context (`lib/desktop.ts`) and render the bar at the demo's page with
-      `RouteScope` (`router.ts`); nothing else reads either. In the Cards top bar the wordmark, which has no padding of its own, keeps 8px after it (`brandClassName`, `me-2`), so what it draws sits as far from Tasks as every other pair in the bar sits apart: 19px between what one button draws and the next, Home in the app, Tasks, Services and the queue on the left and Settings, usage and Focus on the right included; the icon-only Settings keeps 2px more after it (`me-0.5`), since a square icon button pads its glyph less than a labelled button does (measured from the pixels at 1440 and 900, light and dark, in the browser and the app: every gap 19px, the browser's Services to the queue 18px). The Go menu has the matching keys: Back ⌘[ and Forward ⌘] step through
+      `RouteScope` (`router.ts`); nothing else reads either. Every pair in the bar sits as far apart: 19px between what one button draws and the next, Home in the app, Tasks, Services and the queue on the left and Settings, usage and Focus on the right included; the icon-only Settings keeps 2px more after it (`me-0.5`), since a square icon button pads its glyph less than a labelled button does (measured from the pixels at 1440 and 900, light and dark, in the browser and the app: every gap 19px, the browser's Services to the queue 18px). The Go menu has the matching keys: Back ⌘[ and Forward ⌘] step through
       the page's own history (`MainWindow.step`, which never steps onto the waiting page,
       `resolveHistoryStep`), and Home ⇧⌘H opens `/`, as in Finder and Safari. The code editor keeps ⌘[ and ⌘] for
       indent and outdent while it has focus, since the page sees the key before the menu does.
@@ -3102,6 +3161,15 @@ Only these, and they win over anything below:
     title, a name inside a clickable header) it is the plain first name (`describeMentionText`: "Remove Kai?", "Kai
     joined."). No other avatar or name layout exists.
 
+44. **A dialog description is at most two lines** (since 2026-11-04; `packages/ui/src/components/dialog.tsx`,
+    `scripts/lint-dialog.ts`). Under a dialog's title, the description says what the dialog does in one short
+    sentence, two at most, and never runs past two lines at the dialog's 420px: "Agents read it before they start
+    work in this project." The detail goes in the field's hint, or the screen already shows it. The kit's
+    `DialogDescription` and `AlertDialogDescription` clip at two lines (`line-clamp-2`), so a third never draws, and
+    `bun lint:conventions` fails on a description longer than 120 characters: the text inside either part, a
+    `ConfirmDialog`'s `body` and a `PercentDialog`'s `description`, followed through constants, lookup tables and the
+    functions that return them, as for a toast (42), with an inserted value counted as 12.
+
 `bun lint:conventions` (`scripts/lint-conventions.ts`) checks the app (`apps/web/src`) for raw `text-[N]` sizes, a
 weight other than normal, `font-medium` and `font-semibold`, `gap-0.5` (outside `SectionLabel`), Tailwind's own
 shadows (`shadow-2xs` … `shadow-2xl`, `shadow-inner`) and raw `shadow-[…]` or `ring-[…]` (the tokens `shadow-1…4`
@@ -3121,7 +3189,8 @@ handler on its element (37). It also rejects an ad hoc selection (`select-text`,
 rejects a toast string in the app longer than 40 characters (42): the text passed to `toast.*`, `confirmDone`,
 `requestWithToast`, `sendCommandWithToast` and any function with a `done` or `sent` parameter, and every `done` or
 `sent` property, followed through constants, lookup tables, both branches of a choice and the functions that return
-it, in any file of the app; an inserted value counts as 12. A message from the server is not caught.
+it, in any file of the app; an inserted value counts as 12. A message from the server is not caught. It rejects a dialog description
+longer than 120 characters (44), followed the same way.
 
 ---
 

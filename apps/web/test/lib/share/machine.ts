@@ -15,6 +15,7 @@ import {
   serializeShareMessage,
   verifyShareHello,
 } from '@shinsa/core';
+import { Effect } from 'effect';
 import type { Socket } from 'effect/socket';
 import type { ShareStreamOptions } from '@/lib/share/live.ts';
 import { createSocketTransport, type PendingRetry } from '../../support/engine-socket.ts';
@@ -112,7 +113,7 @@ export function createFakeShareMachine(): FakeShareMachine {
     },
     answer: async (socket, data) => {
       const hello = parseShareHello(data);
-      if (!(hello && (await verifyShareHello(machine.key, hello)))) {
+      if (!(hello && (await Effect.runPromise(verifyShareHello(machine.key, hello))))) {
         socket.emit('message', { data: JSON.stringify({ type: 'refused', reason: 'Wrong key.' }) });
         return;
       }
@@ -122,11 +123,16 @@ export function createFakeShareMachine(): FakeShareMachine {
       const keys = {
         share: hello.share,
         clientEphemeral: hello.ephemeral,
-        serverEphemeral: await serializePublicKey(ephemeral.publicKey),
+        serverEphemeral: await Effect.runPromise(serializePublicKey(ephemeral.publicKey)),
       };
-      const session = await deriveShareSessionKey(machine.key, keys, ephemeral.privateKey, hello.ephemeral);
-      machine.seal = createFrameSealer(session);
-      socket.emit('message', { data: JSON.stringify(await createShareWelcome(machine.key, keys)) });
+      const session = await Effect.runPromise(
+        deriveShareSessionKey(machine.key, keys, ephemeral.privateKey, hello.ephemeral)
+      );
+      const seal = createFrameSealer(session);
+      machine.seal = (plain) => Effect.runPromise(seal(plain));
+      socket.emit('message', {
+        data: JSON.stringify(await Effect.runPromise(createShareWelcome(machine.key, keys))),
+      });
       readied();
     },
     send: async (message) => {

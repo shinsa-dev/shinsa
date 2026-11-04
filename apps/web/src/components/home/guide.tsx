@@ -51,7 +51,7 @@ function RunningMore({ state, tasks }: { state: ShinsaState; tasks: Task[] }) {
         />
       }
       trigger={`${tasks.length} more`}
-      className='p-1'
+      className='max-h-(--available-height) overflow-y-auto p-1'
     >
       <TaskPopoverRows state={state} tasks={tasks} />
     </InfoPopover>

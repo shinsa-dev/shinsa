@@ -13,14 +13,18 @@ import {
   type TaskShape,
   type UserCommand,
 } from '@shinsa/core';
+import { Effect } from 'effect';
 import type { JsonSchema } from '../../src/agents/providers/index.ts';
 import type { QuickJson } from '../../src/agents/quick/index.ts';
-import { Engine } from '../../src/runtime/engine.ts';
-import { EventLog } from '../../src/store/index.ts';
-import { MessageInbox } from '../../src/triage/inbox.ts';
+import { Engine } from '../helpers/engine.ts';
+import { openEventLog } from '../helpers/event-log.ts';
+import { until } from '../helpers/index.ts';
+import { createRepo, createTask } from '../helpers/state.ts';
 import {
   type Classifier,
   createClassifier,
+  createInbox,
+  createCommandRouter,
   type MessageClass,
   type MessageClassifier,
   resolveMessageClass,
@@ -29,9 +33,7 @@ import {
   resolveRoundShape,
   routeUserCommand,
   type ShapeClassifier,
-} from '../../src/triage/message.ts';
-import { until } from '../helpers/index.ts';
-import { createRepo, createTask } from '../helpers/state.ts';
+} from './harness.ts';
 
 const dirs: string[] = [];
 
@@ -40,13 +42,13 @@ afterEach(() => {
 });
 
 function answer(value: unknown): QuickJson {
-  return <T>() => Promise.resolve(value as T);
+  return <T>() => Effect.succeed(value as T);
 }
 
 async function openEngine() {
   const dir = mkdtempSync(join(tmpdir(), 'shinsa-message-'));
   dirs.push(dir);
-  const engine = new Engine(new EventLog(join(dir, 'shinsa.sqlite')));
+  const engine = new Engine(openEventLog(join(dir, 'shinsa.sqlite')));
   await engine.dispatch({ type: 'task.create', request: 'Add MCP v2', repoId: null });
   const taskId = Object.keys(engine.state.tasks)[0] ?? '';
   return { engine, taskId };
@@ -67,7 +69,7 @@ describe('reading what a message asks for', () => {
     const asked: { system: string; prompt: string; schema: JsonSchema | undefined }[] = [];
     const ask: QuickJson = <T>(system: string, prompt: string, schema?: JsonSchema) => {
       asked.push({ system, prompt, schema });
-      return Promise.resolve({
+      return Effect.succeed({
         kind: 'new_round',
         shape: 'fix',
         title: ' Add search ',
@@ -114,7 +116,7 @@ describe('reading what a message asks for', () => {
       const asked: string[] = [];
       const ask: QuickJson = <T>(_system: string, prompt: string) => {
         asked.push(prompt);
-        return Promise.resolve({
+        return Effect.succeed({
           kind: 'feedback',
           shape: 'answer',
           title: 'Dev server',
@@ -152,7 +154,7 @@ describe('reading what a message asks for', () => {
     const asked: string[] = [];
     const ask: QuickJson = <T>(_system: string, prompt: string) => {
       asked.push(prompt);
-      return Promise.resolve({
+      return Effect.succeed({
         kind: 'feedback',
         shape: 'answer',
         title: 'The PSL step',
@@ -223,11 +225,11 @@ async function routed(
   id: string | null,
   classify: MessageClassifier | null
 ) {
-  const inbox = classify ? new MessageInbox(engine, classify) : null;
-  inbox?.start();
+  const inbox = classify ? createInbox(engine, classify) : null;
+  await inbox?.start();
   const events = await routeUserCommand(engine, command, id, classify ? using(classify) : null);
   await inbox?.settle();
-  inbox?.stop();
+  await inbox?.stop();
   return events;
 }
 
@@ -240,14 +242,14 @@ describe('routing a command through the classifier', () => {
         release = resolve;
       });
     };
-    const inbox = new MessageInbox(engine, classify);
-    inbox.start();
+    const inbox = createInbox(engine, classify);
+    await inbox.start();
     const accepted = await routeUserCommand(engine, message(taskId), 'client:1', using(classify));
     expect(accepted.map((event) => event.type)).toEqual(['task.message_received']);
     expect(engine.state.tasks[taskId]?.inbox?.map((entry) => entry.text)).toEqual(['Also add search']);
     release({ kind: 'new_round', title: 'Search', why: 'New work.', shape: 'change' });
     await inbox.settle();
-    inbox.stop();
+    await inbox.stop();
     expect(engine.state.tasks[taskId]?.inbox).toEqual([]);
     expect(resolveTaskRounds(engine.state.tasks[taskId] ?? createTask())[1]).toMatchObject({
       title: 'Search',
@@ -333,14 +335,14 @@ describe('new work the classifier reads', () => {
       asked += 1;
       return Promise.resolve({ kind: 'new_round', title: 'Search', why: 'New work.', shape: 'change' });
     };
-    const inbox = new MessageInbox(engine, classify);
-    inbox.start();
+    const inbox = createInbox(engine, classify);
+    await inbox.start();
     const [landed, repeated] = await Promise.all([
       routeUserCommand(engine, message(taskId), 'client:7', using(classify)),
       routeUserCommand(engine, message(taskId), 'client:7', using(classify)),
     ]);
     await inbox.settle();
-    inbox.stop();
+    await inbox.stop();
     expect(repeated).toEqual(landed);
     expect(asked).toBe(1);
     expect(resolveTaskRounds(engine.state.tasks[taskId] ?? createTask())).toHaveLength(2);
@@ -368,7 +370,7 @@ describe('a round that starts without a kind of task', () => {
     const asked: { system: string; prompt: string; schema: JsonSchema | undefined }[] = [];
     const ask: QuickJson = <T>(system: string, prompt: string, schema?: JsonSchema) => {
       asked.push({ system, prompt, schema });
-      return Promise.resolve({ shape: 'research' } as T);
+      return Effect.succeed({ shape: 'research' } as T);
     };
     const task = createTask({ title: 'Add MCP v2', request: 'Add MCP v2', stageReason: 'building' });
     expect(await resolveRoundShape(task, 'Compare the SDKs', ask)).toBe('research');
@@ -492,6 +494,39 @@ describe('a message an agent sends for you', () => {
     );
     expect(engine.state.tasks[taskId]?.inbox).toBeUndefined();
   });
+
+  test('a routed command the engine breaks on fails as CommandRouteFailed with what went wrong', async () => {
+    const { engine, taskId } = await openEngine();
+    const broken = { kind: 'new_round', shape: 'unknown', title: 'Add search', why: 'New work.' };
+    await expect(
+      routeUserCommand(
+        engine,
+        message(taskId),
+        'agent:3',
+        using(() => Promise.resolve(broken as unknown as MessageClass)),
+        { onBehalf: true, byTask: null }
+      )
+    ).rejects.toMatchObject({ _tag: 'CommandRouteFailed' });
+  });
+
+  test('goes through the router an agent’s management commands use, and a classifier that fails refuses it with its reason', async () => {
+    const { engine, taskId } = await openEngine();
+    const route = createCommandRouter(
+      engine,
+      using(() => Promise.reject(new Error('model down')))
+    );
+    await expect(route(message(taskId), { onBehalf: true, byTask: null, id: 'agent:8' })).rejects.toThrow(
+      'model down'
+    );
+    const shaped = createCommandRouter(
+      engine,
+      using(notAsked, () => Promise.resolve('research'))
+    );
+    const events = await shaped({ ...message(taskId), kind: 'new_round' }, { onBehalf: true, byTask: null });
+    expect(events.map((event) => event.type)).toContain('round.queued');
+    const task = engine.state.tasks[taskId];
+    expect(task ? resolveTaskRounds(task).at(-1)?.pipeline : null).toEqual([...SHAPE_PIPELINES.research]);
+  });
 });
 
 const LONG_RESULT = `Moved 39 repositories into groups.\n\n${'Each group has a README. '.repeat(30)}`;
@@ -521,7 +556,7 @@ describe('reading a message to a resting task', () => {
     const asked: string[] = [];
     const ask: QuickJson = <T>(_system: string, prompt: string) => {
       asked.push(prompt);
-      return Promise.resolve({ why: 'Thanks.', kind: 'acknowledge', shape: 'answer', title: 'Thanks' } as T);
+      return Effect.succeed({ why: 'Thanks.', kind: 'acknowledge', shape: 'answer', title: 'Thanks' } as T);
     };
     const task = createTask({
       title: 'Restructure projects/',
@@ -592,7 +627,7 @@ function activeRunOf(engine: Engine, taskId: string) {
 async function restAfterOperation() {
   const dir = mkdtempSync(join(tmpdir(), 'shinsa-message-'));
   dirs.push(dir);
-  const engine = new Engine(new EventLog(join(dir, 'shinsa.sqlite')));
+  const engine = new Engine(openEventLog(join(dir, 'shinsa.sqlite')));
   await engine.dispatch({
     type: 'repo.register',
     repo: {
@@ -771,7 +806,7 @@ describe('finding the repository a round needs', () => {
     const calls: { system: string; prompt: string; schema: JsonSchema | undefined }[] = [];
     const ask: QuickJson = <T>(system: string, prompt: string, schema?: JsonSchema) => {
       calls.push({ system, prompt, schema });
-      return Promise.resolve({ repo: 'kanna' } as T);
+      return Effect.succeed({ repo: 'kanna' } as T);
     };
     expect(await resolveRoundRepository(createState(), unbound(), LOCAL, ask)).toBe('/code/kanna');
     const [call] = calls;
@@ -790,13 +825,15 @@ describe('finding the repository a round needs', () => {
       expect(await resolveRoundRepository(createState(), unbound(), LOCAL, answer(value))).toBeNull();
     }
     const plain = createTask({ repoId: null, request: 'Fix it', activity: [], proposal: null });
-    expect(await resolveRoundRepository(createState(), plain, [], notAsked)).toBeNull();
+    expect(
+      await resolveRoundRepository(createState(), plain, [], () => Effect.die(new Error('not asked')))
+    ).toBeNull();
     const state = createState();
     state.repos.r1 = createRepo({ id: 'r1', name: 'kanna', path: '/code/kanna' });
     const prompts: string[] = [];
     const ask: QuickJson = <T>(_system: string, prompt: string) => {
       prompts.push(prompt);
-      return Promise.resolve({ repo: 'kanna' } as T);
+      return Effect.succeed({ repo: 'kanna' } as T);
     };
     expect(await resolveRoundRepository(state, plain, [], ask)).toBe('/code/kanna');
     expect(prompts[0]).toContain('What this round asks for:\nFix it');
@@ -818,7 +855,7 @@ describe('finding the repository a round needs', () => {
     const calls: { prompt: string; schema: JsonSchema | undefined }[] = [];
     const ask: QuickJson = <T>(_system: string, prompt: string, schema?: JsonSchema) => {
       calls.push({ prompt, schema });
-      return Promise.resolve({ repo: 'kanna' } as T);
+      return Effect.succeed({ repo: 'kanna' } as T);
     };
     const named = { ...unbound(), projectId: 'p1' };
     expect(await resolveRoundRepository(state, named, LOCAL, ask)).toBe('/code/kanna');

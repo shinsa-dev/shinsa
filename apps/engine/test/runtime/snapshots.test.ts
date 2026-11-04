@@ -2,8 +2,8 @@ import { Database } from 'bun:sqlite';
 import { describe, expect, test } from 'bun:test';
 import { join } from 'node:path';
 import { applyStatePatch, resolveStatePatch, type ShinsaState } from '@shinsa/core';
-import { Engine } from '../../src/runtime/engine.ts';
-import { EventLog } from '../../src/store/index.ts';
+import { Engine } from '../helpers/engine.ts';
+import { openEventLog } from '../helpers/event-log.ts';
 import { createTempDir, until } from '../helpers/index.ts';
 import { captureLogs } from '../helpers/logs.ts';
 
@@ -13,7 +13,7 @@ function openEngine(
   path: string,
   options: ConstructorParameters<typeof Engine>[1] = { stateVersion: VERSION }
 ) {
-  const log = new EventLog(path);
+  const log = openEventLog(path);
   return { log, engine: new Engine(log, options) };
 }
 
@@ -233,7 +233,7 @@ describe('the Home guide', () => {
 
   test('a stored guide that cannot be read is left out', () => {
     const path = join(createTempDir(), 'shinsa.sqlite');
-    const log = new EventLog(path);
+    const log = openEventLog(path);
     log.writeBriefing(null, { text: 'Kept.', at: 5, briefing: null });
     const db = new Database(path);
     db.run(

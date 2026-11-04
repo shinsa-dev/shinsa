@@ -1,7 +1,7 @@
 import { RouteNotFound, ROUTE_NOT_FOUND_MESSAGE } from '@shinsa/core/engine-api/schema';
-import { Effect, Layer } from 'effect';
+import { Effect, Layer, Option } from 'effect';
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from 'effect/http';
-import { HttpServices } from '../../services/service.ts';
+import { Slack } from '../../../slack/service.ts';
 import {
   SLACK_ENGINE_EVENTS_PATH,
   SLACK_ENGINE_INTERACTIONS_PATH,
@@ -11,7 +11,7 @@ import {
 
 export const TunnelRoutes = Layer.unwrap(
   Effect.gen(function* () {
-    const { slack } = yield* HttpServices;
+    const slack = Option.getOrUndefined(yield* Effect.serviceOption(Slack));
 
     const respondHealth = Effect.succeed(HttpServerResponse.jsonUnsafe(TUNNEL_HEALTH));
 
@@ -19,7 +19,7 @@ export const TunnelRoutes = Layer.unwrap(
       if (!slack) return yield* new RouteNotFound({ message: ROUTE_NOT_FOUND_MESSAGE });
       const request = yield* HttpServerRequest.HttpServerRequest;
       const web = yield* Effect.orDie(HttpServerRequest.toWeb(request));
-      const answer = yield* Effect.promise(() => slack.handleTunnel(web, new URL(request.originalUrl)));
+      const answer = yield* Effect.orDie(slack.handleTunnel(web, new URL(request.originalUrl)));
       return HttpServerResponse.raw(answer);
     });
 

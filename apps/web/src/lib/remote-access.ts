@@ -78,10 +78,8 @@ export function canEnrollDevices(snapshot: RemoteSnapshot | null) {
 
 export const LINK_COPY = {
   title: 'Invite link',
-  intro:
-    'Make one link for your own devices and for other people. Whoever opens it signs in with GitHub and asks for access. Nothing opens until you accept.',
-  share:
-    'Open it on your own device, or share it. Whoever opens it signs in with GitHub and asks for access, which you accept here. Accepting someone else gives them full control. The link works until you turn it off.',
+  intro: 'Whoever opens it signs in with GitHub and asks for access. Nothing opens until you accept.',
+  share: 'Accepting someone else gives them full control. The link works until you turn it off.',
 };
 
 export function describeAccessRequest(request: AccessRequest, now = Date.now()) {

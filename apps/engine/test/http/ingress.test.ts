@@ -7,7 +7,7 @@ import { HttpRouter, HttpServerResponse } from 'effect/http';
 import { SignInRoutes } from '../../src/http/routes/sign-in/handler.ts';
 import { TunnelRoutes } from '../../src/http/routes/tunnel/handler.ts';
 import { WebhookRoutes } from '../../src/http/routes/webhooks/handler.ts';
-import type { HttpContext } from '../../src/http/server.ts';
+import type { HttpContext } from '../helpers/web.ts';
 import { createHttpContext, createWebHandler, disposeWebHandlers, recordedLogs } from '../helpers/web.ts';
 
 afterEach(disposeWebHandlers);
@@ -44,7 +44,10 @@ const tunnel = { 'cf-connecting-ip': '203.0.113.9' };
 function createTunnelContext(overrides: Partial<HttpContext> = {}, config = {}) {
   return createHttpContext(
     {
-      remote: { isEnabled: true, tunnelHost: 'box.shinsa.dev' } as unknown as HttpContext['remote'],
+      remote: {
+        isEnabled: Effect.succeed(true),
+        tunnelHost: Effect.succeed('box.shinsa.dev'),
+      } as unknown as HttpContext['remote'],
       ...overrides,
     },
     config
@@ -151,10 +154,11 @@ describe('the webhook and sign-in routes', () => {
   test('a webhook is taken from any host, since another service calls it', async () => {
     const received: string[] = [];
     const schedules = {
-      handleWebhook: async (request: Request, url: URL) => {
-        received.push(`${request.method} ${url.pathname} ${await request.text()}`);
-        return new Response('hooked', { status: 202 });
-      },
+      handleWebhook: (request: Request, url: URL) =>
+        Effect.promise(async () => {
+          received.push(`${request.method} ${url.pathname} ${await request.text()}`);
+          return new Response('hooked', { status: 202 });
+        }),
     } as unknown as HttpContext['schedules'];
     const handle = createWebHandler(createHttpContext({ schedules }), AllRoutes);
     const answer = await post(handle, '/api/hooks/sched/token', '{"a":1}', { host: 'hooks.example' });
@@ -173,10 +177,11 @@ describe('the webhook and sign-in routes', () => {
     const urls: string[] = [];
     const extensions = {
       isCallback: (path: string) => path === '/api/mcp/oauth/callback',
-      finishSignIn: (url: URL) => {
-        urls.push(url.search);
-        return Promise.resolve('<p>Signed in</p>');
-      },
+      finishSignIn: (url: URL) =>
+        Effect.sync(() => {
+          urls.push(url.search);
+          return '<p>Signed in</p>';
+        }),
     } as unknown as HttpContext['extensions'];
     const handle = createWebHandler(createHttpContext({ extensions }), AllRoutes);
     const page = await call(handle, '/api/mcp/oauth/callback?code=c', {
@@ -236,7 +241,10 @@ describe('Ingress through the tunnel', () => {
 
   test('a tunnel that is switched off answers nothing', async () => {
     const context = createHttpContext({
-      remote: { isEnabled: false, tunnelHost: null } as unknown as HttpContext['remote'],
+      remote: {
+        isEnabled: Effect.succeed(false),
+        tunnelHost: Effect.succeed(null),
+      } as unknown as HttpContext['remote'],
     });
     const handle = createWebHandler(context, AllRoutes);
     expect((await call(handle, '/health', { headers: tunnel })).status).toBe(404);
@@ -245,10 +253,11 @@ describe('Ingress through the tunnel', () => {
   test('Slack’s events reach Slack, and an inspect engine refuses them', async () => {
     const seen: string[] = [];
     const slack = {
-      handleTunnel: (request: Request, url: URL) => {
-        seen.push(`${request.method} ${url.pathname}`);
-        return Promise.resolve(new Response('ok'));
-      },
+      handleTunnel: (request: Request, url: URL) =>
+        Effect.sync(() => {
+          seen.push(`${request.method} ${url.pathname}`);
+          return new Response('ok');
+        }),
     } as unknown as HttpContext['slack'];
     const handle = createWebHandler(createTunnelContext({ slack }), AllRoutes);
     expect(await (await post(handle, '/api/slack/events', '{}', tunnel)).text()).toBe('ok');
@@ -265,7 +274,7 @@ describe('Ingress through the tunnel', () => {
 
   test('a webhook through the tunnel reaches its schedule', async () => {
     const schedules = {
-      handleWebhook: () => Promise.resolve(new Response('hooked')),
+      handleWebhook: () => Effect.sync(() => new Response('hooked')),
     } as unknown as HttpContext['schedules'];
     const handle = createWebHandler(createTunnelContext({ schedules }), AllRoutes);
     expect(await (await post(handle, '/api/hooks/s/t', '{}', tunnel)).text()).toBe('hooked');

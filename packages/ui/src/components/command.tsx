@@ -57,7 +57,7 @@ function CommandDialog({
         overlayClassName={COMMAND_SCRIM_MOTION}
         bodyClassName='gap-0 overflow-hidden p-0'
         className={cn(
-          'top-[max(3rem,14vh)] w-[min(32.5rem,calc(100vw-2rem))] translate-y-0 overflow-hidden rounded-popup bg-popover *:data-[slot=command]:bg-transparent',
+          'top-[max(3rem,14vh)] w-[min(32.5rem,calc(100vw-2rem))] translate-y-0 overflow-hidden rounded-popup bg-popover *:data-[slot=command]:bg-transparent max-sm:top-[calc(env(safe-area-inset-top)+0.75rem)] max-sm:max-h-[calc(100dvh-env(safe-area-inset-top)-1.5rem)] max-sm:w-[calc(100vw-1.5rem)]',
           COMMAND_MOTION,
           className
         )}

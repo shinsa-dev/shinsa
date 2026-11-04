@@ -150,7 +150,7 @@ export function MessageQueue({
         </span>
         <span className='truncate text-fg-2'>· {describeQueue(state, task)}</span>
       </header>
-      <ScrollArea className='border-t border-border' viewportClassName='max-h-44'>
+      <ScrollArea className='border-t border-border' viewportClassName='max-h-44 max-sm:max-h-24'>
         <ul className='flex flex-col divide-y divide-border'>
           {messages.map((message) =>
             message.number === editing ? (

@@ -2,17 +2,20 @@ import { afterEach, describe, expect, setDefaultTimeout, test } from 'bun:test';
 import { mkdirSync, realpathSync } from 'node:fs';
 import { join } from 'node:path';
 import { type MessageKind, resolveTaskRounds, type TaskShape } from '@shinsa/core';
+import { Effect } from 'effect';
 import type { ModelSource } from '../../src/agents/index.ts';
-import { Transcripts } from '../../src/agents/index.ts';
 import { resolveCommandVerdict } from '../../src/agents/providers/claude/guard.ts';
 import type { QuickJson } from '../../src/agents/quick/index.ts';
-import { type CliIo, runCli } from '../../src/cli/index.ts';
+import type { CliIo } from '../../src/cli/index.ts';
 import { createLaunchdService } from '../../src/cli/launchd.ts';
-import { startServer } from '../../src/http/index.ts';
-import { createProjectChanges } from '../../src/projects/changes.ts';
-import { EvidenceStore } from '../../src/store/index.ts';
-import { createClassifier, createCommandRouter } from '../../src/triage/message.ts';
-import { createTestOnboarding, createTestTerminal } from '../helpers/index.ts';
+import { runCli } from '../cli/harness.ts';
+import { createConfigAt } from '../helpers/config.ts';
+import { createTestEvidence } from '../helpers/evidence.ts';
+import { createTempDir, createTestOnboarding, createTestTerminal } from '../helpers/index.ts';
+import { createTestMachine } from '../helpers/machine.ts';
+import { createTestTranscripts } from '../helpers/transcripts.ts';
+import { startHttpServer } from '../helpers/web.ts';
+import { createClassifier, createManageRoute } from '../triage/harness.ts';
 import { type AgentContext, World } from './harness.ts';
 
 setDefaultTimeout(30_000);
@@ -30,7 +33,7 @@ afterEach(async () => {
 const address = { url: '' };
 
 function answerAs(kind: MessageKind, title: string): QuickJson {
-  return <T>() => Promise.resolve({ kind, shape: 'change', title, why: `It reads as ${kind}.` } as T);
+  return <T>() => Effect.succeed({ kind, shape: 'change', title, why: `It reads as ${kind}.` } as T);
 }
 
 async function open(ask: QuickJson = answerAs('feedback', 'Keep going')) {
@@ -38,21 +41,20 @@ async function open(ask: QuickJson = answerAs('feedback', 'Keep going')) {
     supervise: (_, engine) => ({
       manage: {
         baseUrl: () => address.url,
-        projects: createProjectChanges({
+        projects: createTestMachine(
           engine,
-          resolveLogin: () => Promise.resolve(null),
-          userHome: world?.config.userHome ?? '',
-        }),
-        route: createCommandRouter(engine, createClassifier(ask)),
+          createConfigAt(createTempDir(), { userHome: world?.config.userHome ?? '' })
+        ).projects,
+        route: createManageRoute(engine, createClassifier(ask)),
       },
     }),
   });
   const w = world;
-  const http = startServer({
+  const http = startHttpServer({
     engine: w.engine,
     config: w.config,
-    transcripts: new Transcripts(w.config.transcriptsDir),
-    evidence: new EvidenceStore(w.config.evidenceDir),
+    transcripts: createTestTranscripts(w.config.transcriptsDir),
+    evidence: createTestEvidence(w.config.evidenceDir),
     models: { listModels: () => Promise.resolve([]) } as unknown as ModelSource,
     onboarding: createTestOnboarding(w.engine, w.config).onboarding,
   });
@@ -68,19 +70,18 @@ async function shinsa(...args: string[]) {
     cwd: '/code/app',
     write: (line = '') => out.push(line),
     writeError: (line) => out.push(line),
-    openApp: () => Promise.resolve(),
-    readRepoRoot: () => Promise.resolve(null),
-    wakeEngine: () => Promise.resolve(false),
+    openApp: () => Effect.void,
+    readRepoRoot: () => Effect.succeed(null),
+    wakeEngine: Effect.succeed(false),
     engine: {
       bundled: false,
       service: createLaunchdService({
         uid: 0,
         ownsJob: () => true,
-        launchctl: () => Promise.resolve({ ok: false, output: '' }),
+        launchctl: () => Effect.succeed({ ok: false, output: '' }),
       }),
     },
-    runEngine: () => Promise.reject(new Error('not in this test')),
-    onShutdown: () => undefined,
+    runEngine: () => Effect.die(new Error('not in this test')),
     terminal: createTestTerminal(),
   };
   expect(await runCli(args, io)).toBe(0);

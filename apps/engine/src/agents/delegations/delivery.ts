@@ -12,7 +12,9 @@ import {
   resolveDeliveryPrompt,
   type ShinsaState,
 } from '@shinsa/core';
-import type { Engine } from '../../runtime/engine.ts';
+import { Deferred, type Duration, Effect } from 'effect';
+import { EngineCore } from '../../runtime/engine/service.ts';
+import { awaitAbort } from '../../shell/abort.ts';
 import type { DelegationOutcome } from '../tools/orchestration/schema.ts';
 import { type Delivery } from './schema.ts';
 
@@ -69,31 +71,24 @@ function resolveDelegationOutcome(state: ShinsaState, childRunId: string): Deleg
   return null;
 }
 
-export function awaitDelegation(
-  engine: Pick<Engine, 'state' | 'subscribe'>,
+export const awaitDelegation = Effect.fn('Delegations.await')(function* (
   childRunId: string,
-  timeoutMs: number,
+  timeout: Duration.Duration,
   signal: AbortSignal
-): Promise<DelegationOutcome> {
-  const now = resolveDelegationOutcome(engine.state, childRunId);
-  if (now) return Promise.resolve(now);
-  if (signal.aborted) return Promise.resolve('timeout');
-  const { promise, resolve } = Promise.withResolvers<DelegationOutcome>();
-  const timer = setTimeout(() => finish('timeout'), timeoutMs);
-  const abort = () => finish('timeout');
-  const unsubscribe = engine.subscribe((state) => {
-    const outcome = resolveDelegationOutcome(state, childRunId);
-    if (outcome) finish(outcome);
+) {
+  const engine = yield* EngineCore;
+  const outcome = yield* Deferred.make<DelegationOutcome>();
+  yield* engine.observe((state) => {
+    const settled = resolveDelegationOutcome(state, childRunId);
+    if (settled) Deferred.doneUnsafe(outcome, Effect.succeed(settled));
   });
-  function finish(outcome: DelegationOutcome) {
-    clearTimeout(timer);
-    unsubscribe();
-    signal.removeEventListener('abort', abort);
-    resolve(outcome);
-  }
-  signal.addEventListener('abort', abort, { once: true });
-  return promise;
-}
+  const now = resolveDelegationOutcome(yield* engine.state, childRunId);
+  if (now) return now;
+  const timedOut: DelegationOutcome = 'timeout';
+  return yield* Effect.raceFirst(Deferred.await(outcome), Effect.as(awaitAbort(signal), timedOut)).pipe(
+    Effect.timeoutOrElse({ duration: timeout, orElse: () => Effect.succeed(timedOut) })
+  );
+}, Effect.scoped);
 
 export function resolveDelegatedReply(entries: ChatEntry[]) {
   for (const entry of [...entries].reverse()) {

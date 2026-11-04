@@ -3,6 +3,7 @@ import { PROJECT_COLORS } from '@shinsa/core';
 import {
   createProjectDraft,
   describeProjectKey,
+  describeProjectUsageLimit,
   describeProjectRemoval,
   listLooseRepos,
   listProjectRepoRows,
@@ -88,62 +89,112 @@ describe('reading projects', () => {
 
 describe('the project dialog', () => {
   it('starts from the project, or empty for a new one', () => {
-    expect(createProjectDraft(SUPERWALL)).toEqual({ name: 'Superwall', key: 'SW', description: 'Paywalls' });
-    expect(createProjectDraft(null)).toEqual({ name: '', key: '', description: '' });
+    expect(createProjectDraft(SUPERWALL)).toEqual({
+      name: 'Superwall',
+      key: 'SW',
+      description: 'Paywalls',
+      usageLimit: '',
+    });
+    expect(createProjectDraft(null)).toEqual({ name: '', key: '', description: '', usageLimit: '' });
   });
 
   it('checks the name, the key and the description it edits', () => {
     const state = stateWith();
     const long = 'x'.repeat(1001);
-    expect(validateProjectDraft(state, 'create', { name: ' ', key: '', description: '' }, null)).toEqual({
+    expect(
+      validateProjectDraft(state, 'create', { name: ' ', key: '', description: '', usageLimit: '' }, null)
+    ).toEqual({
       ok: false,
       errors: { name: 'Give the project a name.' },
     });
     expect(
-      validateProjectDraft(state, 'create', { name: 'x'.repeat(200), key: '1A', description: long }, null)
-        .errors
+      validateProjectDraft(
+        state,
+        'create',
+        { name: 'x'.repeat(200), key: '1A', description: long, usageLimit: '' },
+        null
+      ).errors
     ).toEqual({
       name: 'Use 80 characters or fewer.',
       key: 'Use 2 to 6 letters or digits, starting with a letter.',
       description: 'Use 1,000 characters or fewer.',
     });
-    expect(validateProjectDraft(state, 'key', { name: '', key: ' ', description: '' }, 'p1').errors).toEqual({
+    expect(
+      validateProjectDraft(state, 'key', { name: '', key: ' ', description: '', usageLimit: '' }, 'p1').errors
+    ).toEqual({
       key: 'Type a key, like SW.',
     });
     expect(
-      validateProjectDraft(state, 'key', { name: '', key: 'bas', description: '' }, 'p1').errors
+      validateProjectDraft(state, 'key', { name: '', key: 'bas', description: '', usageLimit: '' }, 'p1')
+        .errors
     ).toEqual({
       key: 'Basket already uses BAS.',
     });
-    expect(validateProjectDraft(state, 'key', { name: '', key: 'sw', description: '' }, 'p1').ok).toBe(true);
     expect(
-      validateProjectDraft(state, 'name', { name: 'Paywalls', key: '1', description: long }, 'p1').ok
+      validateProjectDraft(state, 'key', { name: '', key: 'sw', description: '', usageLimit: '' }, 'p1').ok
+    ).toBe(true);
+    expect(
+      validateProjectDraft(
+        state,
+        'name',
+        { name: 'Paywalls', key: '1', description: long, usageLimit: '' },
+        'p1'
+      ).ok
     ).toBe(true);
   });
 
   it('turns the draft into the project to write, upper-casing the key and keeping what it does not edit', () => {
     const state = stateWith();
     expect(
-      resolveDraftInput(state, { name: ' Superwall 2 ', key: '', description: ' d ' }, SUPERWALL)
+      resolveDraftInput(
+        state,
+        { name: ' Superwall 2 ', key: '', description: ' d ', usageLimit: '' },
+        SUPERWALL
+      )
     ).toEqual({
       ...resolveProjectInput(SUPERWALL),
       name: 'Superwall 2',
       description: 'd',
       key: 'SW',
     });
-    expect(resolveDraftInput(state, { name: 'Home', key: 'hm', description: '' }, null)).toEqual({
+    expect(
+      resolveDraftInput(state, { name: 'Home', key: 'hm', description: '', usageLimit: '' }, null)
+    ).toEqual({
       name: 'Home',
       description: '',
       color: 'blue',
       key: 'HM',
     });
-    expect(resolveDraftInput(state, { name: 'Home', key: '', description: '' }, null)).not.toHaveProperty(
-      'key'
+    expect(
+      resolveDraftInput(state, { name: 'Home', key: '', description: '', usageLimit: '' }, null)
+    ).not.toHaveProperty('key');
+  });
+
+  it('checks and writes the usage limit, empty for none', () => {
+    const state = stateWith();
+    const draft = { name: 'Home', key: '', description: '', usageLimit: '20%' };
+    expect(validateProjectDraft(state, 'usageLimit', draft, 'p1').ok).toBe(true);
+    expect(validateProjectDraft(state, 'usageLimit', { ...draft, usageLimit: '0' }, 'p1').errors).toEqual({
+      usageLimit: 'Type a percentage above zero, like 20.',
+    });
+    expect(validateProjectDraft(state, 'usageLimit', { ...draft, usageLimit: 'lots' }, 'p1').ok).toBe(false);
+    expect(validateProjectDraft(state, 'name', { ...draft, usageLimit: 'lots' }, 'p1').ok).toBe(true);
+    expect(resolveDraftInput(state, draft, null).usageLimit).toBe(20);
+    expect(resolveDraftInput(state, { ...draft, usageLimit: ' ' }, SUPERWALL)).not.toHaveProperty(
+      'usageLimit'
     );
+    const limited = { ...SUPERWALL, usageLimit: 12.5 };
+    expect(resolveDraftInput(state, { ...draft, usageLimit: '' }, limited).usageLimit).toBeNull();
+    expect(resolveDraftInput(state, { ...draft, usageLimit: '12.5' }, limited)).not.toHaveProperty(
+      'usageLimit'
+    );
+    expect(createProjectDraft(limited).usageLimit).toBe('12.5');
+    expect(describeProjectUsageLimit(limited)).toBe('12.5% a day');
+    expect(describeProjectUsageLimit(SUPERWALL)).toBeNull();
   });
 
   it('gives a new project the first colour no project has, and blue once all are taken', () => {
-    const draft = { name: 'Home', key: '', description: '' };
+    const draft = { name: 'Home', key: '', description: '', usageLimit: '' };
     const used = createShinsaState({ projects: [createProject({ id: 'a', color: 'blue' })] });
     expect(resolveDraftInput(used, draft, null).color).toBe(PROJECT_COLORS[1]);
     const full = createShinsaState({

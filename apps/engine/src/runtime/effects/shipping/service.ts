@@ -8,10 +8,13 @@ import {
 } from '@shinsa/core';
 import { Context, Effect, Layer } from 'effect';
 import { listCheckFailures } from '../../../checks/failures.ts';
-import { hasPrePushHook, PushError, resolveOutputTail } from '../../../git/index.ts';
-import { createPullRequest, writePullRequestBlock } from '../../../github/index.ts';
+import { resolveOutputTail } from '../../../git/remote/output.ts';
+import { PushError } from '../../../git/remote/schema.ts';
+import { Remote } from '../../../git/remote/service.ts';
+import { PullRequestDescriber } from '../../../github/description/service.ts';
+import { PullRequests } from '../../../github/pulls/service.ts';
 import type { EffectAttempt } from '../../engine/schema.ts';
-import { createEffectFailed, resolveShippingFailure } from '../../failures/classify.ts';
+import { createEffectFailed, resolveEffectFailure, resolveShippingFailure } from '../../failures/classify.ts';
 import type { EffectFailure, ShippingFailed, ShippingStepKind } from '../../failures/schema.ts';
 import { EditCommits } from '../edits/service.ts';
 import { PullRequestSync } from '../pull-requests/service.ts';
@@ -31,24 +34,24 @@ export class Shipping extends Context.Service<
       const world = yield* EffectWorld;
       const edits = yield* EditCommits;
       const pullRequests = yield* PullRequestSync;
-      const runPromise = Effect.runPromiseWith(yield* Effect.context<never>());
+      const remote = yield* Remote;
+      const pulls = yield* PullRequests;
+      const describer = yield* PullRequestDescriber;
 
       const asShipping =
         (step: ShippingStepKind) =>
         (error: unknown): ShippingFailed =>
           resolveShippingFailure(step, error, world.config.pushRetryMs);
 
-      const resolveStepKey = (step: ShippingStep) =>
-        step.kind === 'updating' ? `updating:${step.base}` : step.kind;
-
       const recordStep = Effect.fn('Shipping.recordStep')(function* (
         taskId: string,
         step: ShippingStep,
         attempt: EffectAttempt
       ) {
+        const stepKey = step.kind === 'updating' ? `updating:${step.base}` : step.kind;
         yield* world.dispatch(
           { type: 'pull_request.record_step', taskId, step },
-          { id: `${attempt.key}:${attempt.attempt}:pull_request.record_step:${resolveStepKey(step)}` }
+          { id: `${attempt.key}:${attempt.attempt}:pull_request.record_step:${stepKey}` }
         );
       });
 
@@ -58,14 +61,10 @@ export class Shipping extends Context.Service<
         base: string,
         attempt: EffectAttempt
       ) {
-        const update = yield* world.bridgeWith(
-          (signal) =>
-            world.workspaces.resolve(task).syncBase(repo, task, base, {
-              signal,
-              onBehind: () => runPromise(recordStep(task.id, { kind: 'updating', base }, attempt)),
-            }),
-          asShipping('updating')
-        );
+        const update = yield* world.workspaces
+          .resolve(task)
+          .syncBase(repo, task, base, Effect.orDie(recordStep(task.id, { kind: 'updating', base }, attempt)))
+          .pipe(Effect.mapError(asShipping('updating')));
         if (update.status !== 'conflicted') return true;
         yield* world.dispatch(
           { type: 'pull_request.record_update_conflict', taskId: task.id, base, files: update.files },
@@ -110,17 +109,19 @@ export class Shipping extends Context.Service<
         repo: Repo,
         attempt: EffectAttempt
       ) {
-        const hook = yield* world.bridge((signal) => hasPrePushHook(task.worktreePath ?? repo.path, signal));
+        const hook = yield* remote.hasPrePushHook(task.worktreePath ?? repo.path);
         yield* recordStep(task.id, { kind: 'pushing', hook }, attempt);
-        return yield* world
-          .bridgeWith(
-            (signal) => world.workspaces.resolve(task).push(repo, task, signal),
-            (error) =>
+        return yield* world.workspaces
+          .resolve(task)
+          .push(repo, task)
+          .pipe(
+            Effect.mapError((error) =>
               error instanceof PushError && error.kind === 'hook'
                 ? new HookRejected({ output: error.output })
                 : asShipping('pushing')(error)
-          )
-          .pipe(Effect.catchTag('HookRejected', (rejected) => recordHookFailure(task, rejected, attempt)));
+            ),
+            Effect.catchTag('HookRejected', (rejected) => recordHookFailure(task, rejected, attempt))
+          );
       });
 
       const pushHead = Effect.fn('Shipping.pushHead')(function* (
@@ -128,7 +129,7 @@ export class Shipping extends Context.Service<
         repo: Repo,
         attempt: EffectAttempt
       ) {
-        yield* world.bridge(() => world.runs.quiesce(task.id));
+        yield* world.runs.quiesce(task.id);
         yield* edits.commit(task, repo, attempt);
         if (!(yield* updateOntoBases(task, repo, attempt))) return false;
         const sha = yield* pushBranch(task, repo, attempt).pipe(Effect.mapError(asShipping('pushing')));
@@ -150,9 +151,7 @@ export class Shipping extends Context.Service<
         const evidence = Object.values((yield* world.state).evidence).filter(
           (piece) => piece.taskId === taskId
         );
-        const { body, uploads } = yield* world.bridge((signal) =>
-          world.descriptions.describe(repo, task, evidence, signal)
-        );
+        const { body, uploads } = yield* describer.describe(repo, task, evidence);
         if (uploads.length === 0) return body;
         const ids = uploads.map((upload) => upload.evidenceId).join(',');
         yield* world.dispatch(
@@ -172,7 +171,7 @@ export class Shipping extends Context.Service<
         yield* Effect.gen(function* () {
           const body = yield* describePullRequest(taskId, attempt, opened);
           const { repo } = yield* world.findTask(taskId);
-          yield* world.bridge((signal) => writePullRequestBlock(repo, number, body, signal));
+          yield* pulls.writeBlock(repo, number, body).pipe(Effect.mapError(resolveEffectFailure));
         }).pipe(
           Effect.catch((failure) =>
             Effect.logWarning('[GitHub] Could not refresh the pull request description').pipe(
@@ -189,9 +188,9 @@ export class Shipping extends Context.Service<
         attempt: EffectAttempt
       ) {
         const body = yield* describePullRequest(taskId, attempt);
-        const created = yield* world.bridge((signal) =>
-          createPullRequest(repo, task, resolveRoundBase(task), body, signal)
-        );
+        const created = yield* pulls
+          .create(repo, task, resolveRoundBase(task), body)
+          .pipe(Effect.mapError(resolveEffectFailure));
         if (!created) return yield* createEffectFailed(NOT_CREATED);
         return created;
       });

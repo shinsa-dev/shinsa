@@ -13,6 +13,7 @@ import { TONE_TEXT } from '@/lib/format/tone.ts';
 import { createDisclosureId } from '@/lib/preferences/disclosure.ts';
 import { describeMemberSince } from '@/lib/remote-access.ts';
 import { RemoteServicesContext } from '@/lib/remote/services.ts';
+import { listHostedTeams } from '@/lib/teams/hosted.ts';
 import { describePresence } from '@/lib/teams/presence.ts';
 import { hasOwnScopes } from '@/lib/teams/scopes.ts';
 import {
@@ -22,7 +23,6 @@ import {
   type HostedTeam,
   type HostedTeams,
   showsKeyNote,
-  listHostedTeams,
   replaceHostedTeam,
   listTeamMachineRows,
   listTeamPeople,

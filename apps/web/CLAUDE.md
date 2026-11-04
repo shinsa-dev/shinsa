@@ -78,7 +78,7 @@ src/
 │                        new task, recently finished and recent conversations), tasks, settings (one file per
 │                        section, group.tsx the shared rows, SettingsBlock, FoldingBlock and TOKEN_TEXT;
 │                        projects.tsx with project-block.tsx, project-menu.tsx, workspace-select.tsx (where agents work) and baseline-select.tsx (Always run before review);
-│                        accounts.tsx is the Agent usage tab's Accounts card, with usage.tsx's windows, providers.tsx's
+│                        accounts.tsx is the Agent usage tab's Accounts card, forecast.tsx its Forecast, with usage.tsx's windows and Limits, providers.tsx's
 │                        Codex block and usage-account.tsx, the one block every provider's account renders in;
 │                        integrations.tsx reads the extensions for the search, slack.tsx (General, right under
 │                        Remote access, and below Machines on app.shinsa.dev: the status, Connect Slack, each
@@ -179,8 +179,8 @@ src/
     │                    devices.ts and indexed-store.ts (this device's key per machine, in IndexedDB, read by its schema, and whether it sits on that machine),
     │                    channel.ts (openRemoteChannel: the promise face of remote-channel/, the RemoteChannels service:
     │                    the handshake, sealed frames sent through one queue in order, each request's settle-once slot,
-    │                    the app socket and HTTP inside), link.ts (RemoteLink: the channel per machine, reconnecting,
-    │                    its `fetch` the machine's own Fetch for EngineClient, and ChannelSocket, the app socket on it), relay.ts (the service worker's relay and the page's side of it: never a navigation, every answer sandboxed),
+    │                    the app socket and HTTP inside), link.ts (createRemoteLink: the channel per machine, one shared connect attempt at a time, reconnecting,
+    │                    its `fetch` the machine's own Fetch for EngineClient, and ChannelSocket, the app socket on it), relay.ts (the service worker's relay, an effect its fetch handler runs, and the page's side of it, served until its fiber is interrupted: never a navigation, every answer sandboxed),
     │                    enroll.ts (requestDeviceAccess: a link's access request through the invite's connect token, asked again on ENROLL_RETRY (every 2 s) with the same key while it waits and kept as waiting so the page can close; requestWaitingAnswer: the dashboard asking again for a device that left while it waited), device-name.ts (the device name a request starts with, from the browser and system), users.ts (a GitHub user's name, first name, login, initial and profile address, the member who added a device; components/people/user-tag.tsx: UserTag, a person's name with a small avatar in front, as a task chip has its tile, that opens the one user card on hover, UserAvatar, and UserIdentity, the avatar beside "Name login" on one line (no `@`) over a description, View on GitHub in the card and the row's detail in every settings UserRow), policies.ts (Settings → Routing policies: each machine's plain-English routing policies, the machines it can write to and the
     │                    ones this device cannot reach yet, the form's checks and the
     │                    settings each add, edit, move or removal writes), machines.ts (a machine's row, the rows of the account, task capacity's choices, a machine as a
@@ -240,7 +240,8 @@ src/
     │                    an account's status and header, the glance at the account the server picks next and
     │                    which row it marks), limits.ts (switch thresholds, the Limits settings), providers.ts (a
     │                    provider's sign-in block: its header, state, the fix, the sign-in command), sign-in.ts (resolveSignInProvider: the Sign in gate's provider),
-    │                    usage-wait.ts, recheck.ts (createUsageRecheck: one read at a time, on open and every
+    │                    usage-wait.ts (a usage wait's words, a pace hold's included), forecast.ts (the usage
+    │                    forecast per provider, its lanes, days and words), recheck.ts (createUsageRecheck: one read at a time, on open and every
     │                    60 s while watched and the page is visible)
     ├── chat/            attachment-drafts.ts (the files a composer holds until you send: the 10-file and 25 MB
     │                    limits, what is ready, whether it can send), task-drafts.ts (one draft per task, in memory: the

@@ -5,6 +5,7 @@ import {
   type ScopedActor,
   listSummarizedTasks,
   parseClientMessage,
+  type RemoteSnapshot,
   type RequestOrigin,
   resolveEngineInfo,
   isTaskInScope,
@@ -18,29 +19,47 @@ import {
   type Surface,
   serializeState,
   serializeViewState,
+  type TeamFeedSnapshot,
 } from '@shinsa/core';
-import { Cause, Effect } from 'effect';
+import { Cause, Effect, type Scope } from 'effect';
 import type { Accounts } from '../accounts/index.ts';
-import type { Transcripts } from '../agents/transcripts/index.ts';
+import type { Transcripts } from '../agents/transcripts/service.ts';
 import { describeError, log } from '../log/index.ts';
-import type { Remote } from '../remote/index.ts';
-import type { Presence } from '../remote/presence.ts';
-import type { TeamFeeds } from '../remote/team-feeds.ts';
+import type { RemoteHandle } from '../remote/machine/schema.ts';
+import type { Presence } from '../remote/presence/service.ts';
 import type { ResourceMonitor } from '../resources/index.ts';
-import { edgeRuntime } from '../runtime/edge.ts';
-import type { Engine } from '../runtime/engine.ts';
+import type { EngineCore } from '../runtime/engine/service.ts';
 import type { Terminals } from '../terminals/index.ts';
-import type { Classifier } from '../triage/message.ts';
-import { type AttentionClock, AttentionTracker } from './attention.ts';
+import type { CommandRouter } from '../triage/index.ts';
+import { makeAttentionTracker } from './attention/service.ts';
 import { dispatchUserCommand } from './commands.ts';
 import { REQUEST_FAILED } from './schema.ts';
 
 export interface SocketData {
   kind: 'hub';
-  transcripts: Map<string, () => void>;
+  transcripts: Map<string, Effect.Effect<void>>;
   surface: Surface | null;
   origin: RequestOrigin;
   guest: ScopedActor | null;
+}
+
+interface FeedSource<T> {
+  observe(listener: Effect.Effect<void>): Effect.Effect<void, never, Scope.Scope>;
+  readonly snapshot: Effect.Effect<T>;
+}
+
+export interface SocketHubInput {
+  readonly engine: EngineCore['Service'];
+  readonly transcripts: Transcripts['Service'];
+  readonly accounts?: Accounts['Service'] | undefined;
+  readonly router?: CommandRouter['Service'] | null | undefined;
+  readonly terminals?: Terminals['Service'] | undefined;
+  readonly remote?: FeedSource<RemoteSnapshot> | undefined;
+  readonly teamFeeds?: FeedSource<TeamFeedSnapshot> | undefined;
+  readonly version?: string | undefined;
+  readonly resources?: ResourceMonitor['Service'] | undefined;
+  readonly teams?: Pick<RemoteHandle, 'resolveTeamScope'> | undefined;
+  readonly presence?: Presence['Service'] | undefined;
 }
 
 export interface HubSocket {
@@ -69,28 +88,22 @@ const TRANSCRIPT_PAGE = 500;
 
 const COMMAND_FAILED = 'command_failed';
 
-export function createSocketHub(
-  engine: Engine,
-  transcripts: Transcripts,
-  accounts?: Accounts,
-  classify: Classifier | null = null,
-  terminals?: Terminals,
-  remote?: Remote,
-  teamFeeds?: Pick<TeamFeeds, 'subscribe' | 'snapshot'>,
-  version = DEVELOPMENT_VERSION,
-  resources?: Pick<ResourceMonitor, 'subscribe' | 'snapshot'>,
-  clock?: AttentionClock,
-  presence?: Pick<Presence, 'recordOwner'>
-) {
+export const makeSocketHub = Effect.fn('SocketHub.make')(function* (input: SocketHubInput) {
+  const { engine, transcripts, accounts, terminals, remote, teamFeeds, resources, teams, presence } = input;
+  const router = input.router ?? null;
+  const version = input.version ?? DEVELOPMENT_VERSION;
+  const context = yield* Effect.context<never>();
+  const runSync = Effect.runSyncWith(context);
+  const runFork = Effect.runForkWith(context);
+  const readState = () => runSync(engine.state);
   const sockets = new Set<Socket>();
   const views = new WeakMap<SocketData, ReadonlySet<string>>();
   const engineInfo = resolveEngineInfo(version);
   let desktopConnected = false;
-  let unsubscribeResources: (() => void) | null = null;
-  const attention = new AttentionTracker<Socket>(
+  let unsubscribeResources: Effect.Effect<void> | null = null;
+  const attention = yield* makeAttentionTracker<Socket>(
     (socket, where) => send(socket, { type: 'attention', where }),
-    clock,
-    presence ? (owner) => presence.recordOwner(owner) : null
+    presence ? presence.recordOwner : null
   );
 
   function broadcast(message: ServerMessage) {
@@ -100,7 +113,9 @@ export function createSocketHub(
 
   function isVisibleRun(socket: Socket, runId: string) {
     const { guest } = socket.data;
-    return !guest || isTaskInScope(engine.state, guest.scope, engine.state.runs[runId]?.taskId ?? null);
+    if (!guest) return true;
+    const state = readState();
+    return isTaskInScope(state, guest.scope, state.runs[runId]?.taskId ?? null);
   }
 
   function selectView(socket: Socket): ReadonlySet<string> {
@@ -109,18 +124,19 @@ export function createSocketHub(
 
   function sendState(socket: Socket) {
     const { guest } = socket.data;
+    const state = readState();
     if (guest) {
-      send(socket, { type: 'state', state: serializeState(resolveScopedState(engine.state, guest.scope)) });
+      send(socket, { type: 'state', state: serializeState(resolveScopedState(state, guest.scope)) });
       return;
     }
-    const summarized = listSummarizedTasks(engine.state);
+    const summarized = listSummarizedTasks(state);
     views.set(socket.data, summarized);
-    send(socket, { type: 'state', state: serializeViewState(engine.state, summarized) });
+    send(socket, { type: 'state', state: serializeViewState(state, summarized) });
   }
 
   function sendTaskDetail(socket: Socket, taskId: string) {
     views.set(socket.data, new Set([...selectView(socket)].filter((id) => id !== taskId)));
-    send(socket, { type: 'task.detail', detail: resolveTaskDetail(engine.state, taskId) });
+    send(socket, { type: 'task.detail', detail: resolveTaskDetail(readState(), taskId) });
   }
 
   function syncSurfaces() {
@@ -130,34 +146,58 @@ export function createSocketHub(
     broadcast({ type: 'surfaces', desktop });
   }
 
-  const unsubscribeAccounts = accounts?.subscribe((snapshot) =>
-    broadcast({ type: 'accounts', accounts: snapshot })
-  );
+  if (accounts) {
+    const unsubscribe = yield* accounts.subscribe((snapshot) =>
+      Effect.sync(() => broadcast({ type: 'accounts', accounts: snapshot }))
+    );
+    yield* Effect.addFinalizer(() => unsubscribe);
+  }
 
-  const unsubscribeTerminals = terminals?.subscribe((snapshot) =>
-    broadcast({ type: 'terminals', terminals: snapshot })
-  );
+  if (terminals) {
+    const unsubscribe = yield* terminals.subscribe((snapshot) =>
+      broadcast({ type: 'terminals', terminals: snapshot })
+    );
+    yield* Effect.addFinalizer(() => unsubscribe);
+  }
 
   function syncResources() {
     if (!resources) return;
     if (sockets.size > 0 && !unsubscribeResources) {
-      unsubscribeResources = resources.subscribe((snapshot) =>
-        broadcast({ type: 'resources', resources: snapshot })
+      unsubscribeResources = runSync(
+        resources.subscribe((snapshot) => broadcast({ type: 'resources', resources: snapshot }))
       );
     }
     if (sockets.size === 0 && unsubscribeResources) {
-      unsubscribeResources();
+      runFork(unsubscribeResources);
       unsubscribeResources = null;
     }
   }
 
-  const unsubscribeRemote = remote?.subscribe(() => broadcast({ type: 'remote', remote: remote.snapshot() }));
-
-  const unsubscribeTeams = teamFeeds?.subscribe(() =>
-    broadcast({ type: 'teams', teams: teamFeeds.snapshot() })
+  yield* Effect.addFinalizer(() =>
+    Effect.suspend(() => {
+      const release = unsubscribeResources ?? Effect.void;
+      unsubscribeResources = null;
+      return release;
+    })
   );
 
-  const unsubscribeState = engine.subscribe((state, { previous, changes }) => {
+  if (remote) {
+    yield* remote.observe(
+      Effect.flatMap(remote.snapshot, (snapshot) =>
+        Effect.sync(() => broadcast({ type: 'remote', remote: snapshot }))
+      )
+    );
+  }
+
+  if (teamFeeds) {
+    yield* teamFeeds.observe(
+      Effect.flatMap(teamFeeds.snapshot, (snapshot) =>
+        Effect.sync(() => broadcast({ type: 'teams', teams: snapshot }))
+      )
+    );
+  }
+
+  yield* engine.observe((state, { previous, changes }) => {
     if (sockets.size === 0) return;
     const patch = resolveStatePatch(previous, state, changes);
     let shared: string | null = null;
@@ -181,13 +221,14 @@ export function createSocketHub(
     }
   });
 
-  const unsubscribeTranscripts = transcripts.subscribe((runId, entries, start) => {
+  const unsubscribeTranscripts = yield* transcripts.subscribe((runId, entries, start) => {
     if (start === null) return;
     const payload = JSON.stringify({ type: 'transcript', runId, entries, start } satisfies ServerMessage);
     for (const socket of sockets) {
       if (socket.data.transcripts.has(runId)) deliver(socket, payload);
     }
   });
+  yield* Effect.addFinalizer(() => unsubscribeTranscripts);
 
   function sendTranscript(socket: Socket, runId: string, entries: ChatEntry[], start: number) {
     for (let index = 0; index === 0 || index < entries.length; index += TRANSCRIPT_PAGE) {
@@ -211,15 +252,14 @@ export function createSocketHub(
         syncSurfaces();
         return;
       case 'presence':
-        attention.report(socket, message.active);
-        return;
+        return yield* attention.report(socket, message.active);
       case 'command': {
         const error = yield* dispatchUserCommand(engine, message.command, {
           clientId: message.id,
-          classify,
+          router,
           origin: socket.data.origin,
           guest: socket.data.guest,
-          teams: remote,
+          teams: teams ?? null,
         }).pipe(
           Effect.as(null),
           Effect.catch((failure) =>
@@ -242,14 +282,14 @@ export function createSocketHub(
       case 'transcript.subscribe': {
         if (!isVisibleRun(socket, message.runId)) return;
         if (!socket.data.transcripts.has(message.runId)) {
-          socket.data.transcripts.set(message.runId, transcripts.follow(message.runId));
+          socket.data.transcripts.set(message.runId, yield* transcripts.follow(message.runId));
         }
-        const read = transcripts.readEntries(message.runId, message.from);
+        const read = yield* transcripts.readEntries(message.runId, message.from);
         sendTranscript(socket, message.runId, read.entries, read.start);
         return;
       }
       case 'transcript.unsubscribe':
-        socket.data.transcripts.get(message.runId)?.();
+        yield* socket.data.transcripts.get(message.runId) ?? Effect.void;
         socket.data.transcripts.delete(message.runId);
         return;
     }
@@ -265,21 +305,21 @@ export function createSocketHub(
         return;
       }
       send(socket, { type: 'engine', engine: engineInfo });
-      if (accounts) send(socket, { type: 'accounts', accounts: accounts.snapshot() });
-      if (terminals) send(socket, { type: 'terminals', terminals: terminals.snapshot() });
-      if (remote) send(socket, { type: 'remote', remote: remote.snapshot() });
-      if (teamFeeds) send(socket, { type: 'teams', teams: teamFeeds.snapshot() });
-      const sampled = resources?.snapshot();
+      if (accounts) send(socket, { type: 'accounts', accounts: runSync(accounts.snapshot) });
+      if (terminals) send(socket, { type: 'terminals', terminals: runSync(terminals.snapshot) });
+      if (remote) send(socket, { type: 'remote', remote: runSync(remote.snapshot) });
+      if (teamFeeds) send(socket, { type: 'teams', teams: runSync(teamFeeds.snapshot) });
+      const sampled = resources && runSync(resources.snapshot);
       if (sampled) send(socket, { type: 'resources', resources: sampled });
       sendState(socket);
       syncResources();
     },
     close(socket: Socket) {
       sockets.delete(socket);
-      attention.remove(socket);
+      runSync(attention.remove(socket));
       syncSurfaces();
       syncResources();
-      for (const unfollow of socket.data.transcripts.values()) unfollow();
+      for (const unfollow of socket.data.transcripts.values()) runSync(unfollow);
       socket.data.transcripts.clear();
     },
     message(socket: Socket, raw: string | Buffer) {
@@ -288,7 +328,7 @@ export function createSocketHub(
         log.warn('[Socket] Ignored a message that is not a Shinsa message');
         return;
       }
-      edgeRuntime.runFork(
+      runFork(
         handleMessage(socket, message).pipe(
           Effect.catchCause((cause) =>
             Effect.sync(() =>
@@ -301,16 +341,5 @@ export function createSocketHub(
         )
       );
     },
-    stop() {
-      unsubscribeState();
-      unsubscribeTranscripts();
-      unsubscribeAccounts?.();
-      unsubscribeTerminals?.();
-      unsubscribeRemote?.();
-      unsubscribeTeams?.();
-      unsubscribeResources?.();
-      unsubscribeResources = null;
-      attention.stop();
-    },
   };
-}
+});

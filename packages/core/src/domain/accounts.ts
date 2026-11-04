@@ -11,6 +11,18 @@ export type AccountSwitchReason = 'usage_limit' | 'signed_out' | 'headroom' | 'b
 
 export type UsageWaitStatus = 'armed' | 'resumed';
 
+export type UsageWaitCause = 'usage_limit' | 'pace';
+
+export type UsagePaceScope = 'daily' | 'project';
+
+export interface UsagePace {
+  scope: UsagePaceScope;
+  limit: number;
+  percent: number;
+  projectId: string | null;
+  stageReason: string;
+}
+
 export interface UsageWait {
   id: string;
   runId: string;
@@ -22,4 +34,6 @@ export interface UsageWait {
   autoResume: boolean;
   status: UsageWaitStatus;
   provider?: string;
+  cause?: UsageWaitCause;
+  pace?: UsagePace;
 }

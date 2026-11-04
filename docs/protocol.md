@@ -90,6 +90,8 @@ One definition per term. **Code** is the name in `packages/core`; **UI** is the 
 | schedule (automation) | A trigger (once, interval, daily, webhook) that starts a task, messages one, or watches an integration; on screen a Schedule, a Trigger or a Watch | `Schedule`, `ScheduleSource` | Settings → Automations: Schedule, Trigger, Watch |
 | monitor | An agent's armed wait (`wait_for`): its run ends and a fresh one checks in again later | `Monitor` | "Waiting to check in again" |
 | usage wait | A step paused until a usage limit resets, then resumed on the same session | `UsageWait` | "Waiting for the usage limit" |
+| pace hold | A step held before it starts because the last 24 hours reached the daily or a project's usage limit; it starts when older usage drops out | `UsageWait` with `cause: pace`, `UsagePace` | "Held at a usage limit" |
+| usage forecast | The highest steady daily pace the accounts allow without all of them running out, with each account's timeline | `UsageForecast` (`resolveUsageForecast`) | forecast |
 | account | A Claude login a run is leased on | `RunAccount` | account |
 | provider sign-in | A provider's own login (Codex), named on a Sign in gate with no account | `ProviderSignIn`, `Gate.provider` | "Paused: ‹email› needs signing in" |
 | command | A request to change state; `decide` turns it into events and effects or refuses it | `ShinsaCommand` (`UserCommand`, `AgentCommand`, `SystemCommand`) | not shown |
@@ -216,7 +218,7 @@ one reads as its empty value. The fields under Triage and shape, Plan and build,
 | `projectId?` | string \| null | the project, else none |
 | `request` | string | your request, as written |
 | `title` | string | from triage (the request's first line until then) |
-| `origin` | string \| null | the folder `shinsa do` or `shinsa import` ran in, a hint for triage; `onboarding` for the welcome task setup records |
+| `origin` | string \| null | the folder `shinsa do` ran in, a hint for triage; `onboarding` for the welcome task setup records |
 | `mode?` | `build` \| `ask` | `ask` reads as the answer shape: `tasks create --ask`, a schedule's `just_answer` target |
 | `createdAt`, `updatedAt`, `stageChangedAt` | number | times (ms) |
 
@@ -320,7 +322,7 @@ one reads as its empty value. The fields under Triage and shape, Plan and build,
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `monitor?` | `Monitor` \| null | an agent's armed wait |
-| `usageWait?` | `UsageWait` \| null | a step waiting for a usage reset |
+| `usageWait?` | `UsageWait` \| null | a step waiting for a usage reset, or held at a daily or project limit (`cause: pace`, with `pace`: `scope` `daily` or `project`, `limit`, `percent`, `projectId`, `stageReason`) |
 | `account?` | `RunAccount` \| null | the account the task is bound to |
 | `budgetAcknowledgedUsd?`, `usageAcknowledgedPercent?` | number | what you allowed past the cost and usage limits |
 | `configProblems?` | `ConfigProblem[]` | the problems setup verification found, each a `kind` (`repository`, `no_repository`, `default_branch` or `workspace`) and a `detail`; the checks are never one (`docs/engine.md` → Setup verification) |
@@ -468,6 +470,7 @@ the merge gate, so an open pull request is never left without one.
 | `description` | string | at most 1,000 characters, given to every fresh run |
 | `folders` | string[] | at most 20; every repository one level inside belongs to the project |
 | `watchSources?` | `WatchSource[]` | at most 20 integrations its agents read: `server` (an MCP server), `data`, `repoIds` (none for every repository), `addedBy` (`you` or `agent`), `addedAt`; kept by `project.write` |
+| `usageLimit?` | number | its daily usage limit, % of one account's weekly limit over the last 24 hours, above zero; absent for none; only you change it (`docs/engine.md` → Cost) |
 | `teamIds?` | string[] | the teams that see every task of the project (`docs/engine.md` → Teams); written only by `project.add_to_team` and `project.remove_from_team`, kept by `project.write`; absent for none |
 
 | `Repo` field | Type | Meaning |
@@ -762,7 +765,7 @@ unless an agent's question is open, which it then answers as feedback would. `ne
 (`round.queued`) with the steps of its `shape` (a change without one), which starts when the current one rests (Rounds, above);
 `separate_task` records a split-off suggested task instead (a new round when the task already has ten open
 suggestions). The server sets `kind` from the classifier, unless the message already carries one (`--as`)
-(`triage/message.ts`, `docs/engine.md` → Rounds). Yours is accepted first and classified after: the server turns it
+(`triage/message/service.ts`, `docs/engine.md` → Rounds). Yours is accepted first and classified after: the server turns it
 into `message.receive`, which checks it like `task.message` (`message_required`, `task_settled`) and keeps it in the
 task's `inbox` (`task.message_received`); the classifier's answer comes back as `message.route` with the same `kind`,
 `title`, `why` and `shape` (`MessageRoute`) and the ids of the messages it routes (`messageIds`, every message
@@ -866,7 +869,7 @@ your behalf (`onBehalf`, `byTask`). **Human** = only you: its specs are `humanOn
 | `repo.remove` | forgets a repository | `repos remove` | agent |
 | `focus.change` | sets or clears the focus: `projectId` or `teamId`, never both (`focus_refused`), and `until` | `focus set`, `focus clear` | agent |
 | `away.record` | records a span you were away from your Mac (`from`, `to`), sent by the Mac app's page; refused when it ends before it starts, after now or lasts over 30 days (`away_refused`) | none | **human** |
-| `settings.change` | changes settings (`SETTINGS_KEYS`) | `settings set` | agent; **human** for `approvePlans`, `mergeMethod`, `taskBudgetUsd`, `taskUsageLimit`, `autoResume`, `snoozeLimited`, `accountSwitchAt`, `fastMode`, `agentFastModes`, `delegationLimit`, `shareLimit`, `sharePreset` (`HUMAN_ONLY_SETTINGS`) |
+| `settings.change` | changes settings (`SETTINGS_KEYS`) | `settings set` | agent; **human** for `approvePlans`, `mergeMethod`, `taskBudgetUsd`, `taskUsageLimit`, `dailyUsageLimit`, `autoResume`, `snoozeLimited`, `accountSwitchAt`, `fastMode`, `agentFastModes`, `delegationLimit`, `shareLimit`, `sharePreset` (`HUMAN_ONLY_SETTINGS`) |
 
 Core refuses a command sent on your behalf with `human_only`, recording nothing, when it is a `gate.answer`
 (`assertHumanDecides`), when a gate that was open before it is no longer open after it (`assertGatesStayOpen` in
@@ -991,12 +994,12 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `run.compact` | the supervisor (idle compaction) | records an idle compaction |
 | `runs.dispatch` | the supervisor at boot | starts queued runs |
 | `run.silence` | `agents/silence.ts` | marks or clears a quiet run |
-| `message.deliver` | the supervisor, `agents/questions.ts` | redelivers a message a session never took |
-| `message.receive` | `routeUserCommand`, for your `task.message` without a `kind` | accepts the message into the task's inbox |
-| `message.route`, `message.drop` | `triage/inbox.ts` | delivers the messages waiting in an inbox, together, with the classifier's answer, or drops the ones core refused, with the reason |
+| `message.deliver` | the supervisor, `agents/questions/service.ts` | redelivers a message a session never took |
+| `message.receive` | `CommandRouter`, for your `task.message` without a `kind` | accepts the message into the task's inbox |
+| `message.route`, `message.drop` | `MessageInbox` (`triage/inbox/service.ts`) | delivers the messages waiting in an inbox, together, with the classifier's answer, or drops the ones core refused, with the reason |
 | `monitor.fire` | `MonitorClock` | wakes a monitor |
 | `watchdog.fire` | `WatchdogClock` | checks a watchdog at its `nextCheckAt` (`dueAt`), defers it while the task works, or passes it once its window ended |
-| `usage_wait.resume` | `UsageResumeClock` | resumes a step after the reset |
+| `usage_wait.resume` | `UsageResume` | resumes a step after the reset |
 | `watch_suggestion.record` | the `watch.suggest` effect | records the suggested watch for a new integration (`projectId`, `server`, the Writer's `name` and `text` or null for plain wording, `timeZone`), hourly; does nothing when the integration is gone or watched, was suggested before, or 10 suggestions are open |
 | `feedback.record_draft` | the `feedback.draft` effect | the drafted `title` and `body` of an entry still `drafting`; an empty one fails it |
 | `feedback.record_filed` | the `feedback.file` effect | the new issue's `number` and `url`, for an entry still `filing`; its `openedAt` is now and `closedAt` null |
@@ -1010,10 +1013,10 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `delegations.recover` | the supervisor at boot | releases claims and waits, claims again |
 | `schedule.fire`, `schedule.fail` | `ScheduleClock`, the webhook | fires a slot, or records a failed one |
 | `schedule.deliver` | the webhook receiver | starts the schedule's work from a delivery |
-| `slack.mention` | `POST /api/slack/events`, command id `slack:<event id>` | a signed `SlackMention`: messages the open task of its thread (kept while a gate is open), else asks for `slack.evaluate` |
+| `slack.mention` | `POST /api/slack/events`, command id `slack:<event id>` | a signed `SlackMention`: messages the open task of its thread with 👀 on the mention (kept with 📥 while a gate is open, `slack.react`), else asks for `slack.evaluate` |
 | `slack.start_task` | the `slack.evaluate` effect, when the mention is work | the mention: starts a task as Home does and links it to the thread, or messages the thread's task when one opened meanwhile |
-| `slack.record_status` | the `slack.status` effect | the ts of the task's status message and the reaction now on the mention, once Slack has them |
-| `slack.answer` | `POST /api/slack/interactions`, command id `slack-answer:<trigger id>` | a signed `SlackAnswer`: answers an open question gate with its choice (`gate.answer`, `reply`), only for the Slack user who started the task from that thread; refused `slack_answer_closed`, `slack_answer_refused` or `slack_answer_choice` |
+| `slack.record_status` | the `slack.status` effect | the ts of the task's card and the reaction now on the mention, once Slack has them |
+| `slack.decide` | `POST /api/slack/interactions`, command id `slack-decide:<trigger id>` | a signed `SlackDecision` from someone app.shinsa.dev found to be an owner or member of the machine: decides an open gate of the task linked to that thread as Shinsa does (`answerGate`, so `plan_changed` and `gate_closed` hold), for the decisions `SLACK_DECIDABLE` allows, then `slack.decided`; refused `slack_decision_closed`, `slack_decision_refused` or `slack_decision_choice` |
 
 ## Events
 
@@ -1136,7 +1139,8 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `schedule.read` | a watch's read finished with `report_read`: the next one reads from `readFrom`, when it started (`Schedule.lastReadAt`) |
 | `on_behalf.acted` | a command sent on your behalf changed something (command, task, sentence, acting task) |
 | `slack.thread_linked` | a task was started from a Slack thread (the whole `link`, `Task.slack`; "Started from a Slack thread") |
-| `slack.status_posted` | the task's status message has this `ts` and its mention this `reaction` now |
+| `slack.status_posted` | the task's card has this `ts` and its mention this `reaction` now |
+| `slack.decided` | a gate of the task was decided from Slack: the Slack user and what they did ("approved the plan"), shown on the card's status (`Task.slack.decided`) |
 
 ## Effects
 
@@ -1173,8 +1177,9 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `delegation.steer` | process_bound | `steer:<id>` | `delegation.record_delivery`, `delegation.release` |
 | `delegation.reply` | process_bound | `reply:<id>` | none: answers the child's question |
 | `slack.evaluate` | replay_safe | `slack:<thread key>` | ⏳ on the mention first; `slack.start_task` for work; otherwise ⏳ off and "Not a task, so nothing was started.", once per thread; key `slack.evaluate:<event id>` |
-| `slack.post` | replay_safe | `slack:<thread key>` | none: posts a gate, the result, "Sent to …" or "Kept for …" through app.shinsa.dev |
-| `slack.status` | replay_safe | `slack:<thread key>` | `slack.record_status` for a new status message or reaction; edits it at most every 5 s and moves the mention's reaction |
+| `slack.post` | replay_safe | `slack:<thread key>` | none: posts the result, or "Merged" or "Done" when the task ends, as a new message through app.shinsa.dev |
+| `slack.status` | replay_safe | `slack:<thread key>` | `slack.record_status` for a new card or reaction; edits the card (the open gate with its buttons, else the status) at most every 5 s and moves the mention's reaction |
+| `slack.react` | replay_safe | `slack:<thread key>` | none: 👀 or 📥 on a later mention in the thread, through `/__remote/slack/react`; key `slack.react:<thread key>:<message ts>` |
 
 Any effect that gives up sends `effect.fail`; it opens a failure gate when its kind has a title in `FAILURE_TITLE`.
 
@@ -1578,8 +1583,8 @@ What the engine, the Worker on app.shinsa.dev and the web share for the Slack bo
 | `GET /slack/connect?instance=<id>` | The browser, from Settings | Signs in with Slack for one of your machines (the one seen last without `instance`) |
 | `GET /slack/connect/callback`, `/slack/install/callback` | Slack | Writes the link, adding the app to the workspace first when it has none; then `/slack/linked?team=` or `?error=` (`resolveSlackLinkedPath`) |
 | `POST /slack/events` | Slack | Events API, checked against Slack's signature; a mention is answered at once and forwarded after |
-| `POST /slack/interactions` | Slack | Interactivity (`payload` form field), checked against Slack's signature and answered at once; a `shinsa.answer.<n>` click from a linked person on a message their machine posted is forwarded as a `SlackAnswer`, and the click's `response_url` (on `hooks.slack.com`) gets the answered post or a private refusal; anything else is dropped |
-| `POST https://t-<instance>.shinsa.dev/api/slack/interactions` | app.shinsa.dev | The `SlackAnswer` (`SLACK_ENGINE_INTERACTIONS_PATH`), signed as a mention is → `SlackAnswerReply`: `{ answered: true, choice }` or `{ answered: false, reason }` |
+| `POST /slack/interactions` | Slack | Interactivity (`payload` form field), checked against Slack's signature and answered at once; a `shinsa.decide.*` click, or a `shinsa.decision` form sent after a `shinsa.write.*` click opened it (`views.open`), from the owner or a member of the machine that posted the card is forwarded as a `SlackDecision`; the click's `response_url` (on `hooks.slack.com`) gets the decided card or a private refusal, a form's refusal comes as `chat.postEphemeral`; anything else is dropped |
+| `POST https://t-<instance>.shinsa.dev/api/slack/interactions` | app.shinsa.dev | The `SlackDecision` (`SLACK_ENGINE_INTERACTIONS_PATH`), signed as a mention is → `SlackDecisionReply`: `{ decided: true, text }` or `{ decided: false, reason }` |
 | `POST https://t-<instance>.shinsa.dev/api/slack/events` | app.shinsa.dev | The `SlackMention`, with `x-shinsa-slack-signature` (`v1=<hex>`, an HMAC-SHA256 over `v1:<ms>:<body>` keyed by `slack:<connect key>`) and `x-shinsa-slack-timestamp` (`SLACK_FORWARD_HEADERS`), good for five minutes (`SLACK_FORWARD_WINDOW_MS`) |
 | `POST /__remote/slack/post` | The engine, with its machine token | `SlackRelayPost` (`teamId`, `channelId`, `threadTs`, `replaceTs`, `message` of `text` and Block Kit `blocks`; `parseSlackRelayPost`) → `SlackRelayPosted` `{ ts }`; 403 for a thread not sent to it or a message it did not post, 410 when the app was removed, 502 when Slack refused |
 | `POST /__remote/slack/session` | The engine, with its machine token | `SlackRelaySession` (the thread and a `status` of `SLACK_SESSION_STATUSES`: `processing`, `suspended`, `active`, `closed`; `parseSlackRelaySession`) → `SlackRelaySessionSet` `{ applied }`: `agents.sessions.setStatus`, `applied: false` when the workspace cannot show one (`not_authorized` from an app not on Agent Sessions, `feature_disabled` from a workspace without agent features), after which the engine stops asking for that workspace until it restarts; any other refusal is 502 `slack_failed`, logged, and tried again at the next change |
@@ -1589,9 +1594,12 @@ What the engine, the Worker on app.shinsa.dev and the web share for the Slack bo
 | Shape | Fields |
 | --- | --- |
 | `SlackMention` (`contract.ts`, `parseSlackMention`) | `eventId`, `teamId`, `channelId`, `threadTs`, `messageTs`, `userId`, `userName`, `text`, `permalink`, `thread` (`SlackThreadMessage`: `ts`, `userId`, `userName`, `text`, `bot`; the last 100, at most 4,000 characters each, `SLACK_LIMITS`) |
-| `SlackPost` (`posts.ts`) | `gate` with its `gateId`, `result`, `forwarded`, `held` |
+| `SlackPost` (`posts.ts`) | `result` or `completed`, the only new messages; everything else edits the card |
 | `SlackMessage` (`blocks.ts`) | `text`, the notification's fallback, and `blocks` (`header`, `section` with text or fields, `context`, `actions` of buttons) within Slack's limits (`SLACK_BLOCK_LIMITS`: 50 blocks, 3,000 characters a section, 150 a header, 75 a button, 10 fields) |
-| `SlackAnswer` (`answers.ts`, `parseSlackAnswer`) | `interactionId`, `teamId`, `channelId`, `threadTs`, `messageTs`, `userId`, `gateId`, `choice` (the index into the gate's choices; a button's value is `{ gateId, choice }`, `serializeSlackAnswerValue`) |
+| `SlackDecisionValue` (`schema.ts`, `serializeSlackDecisionValue`, `parseSlackDecisionValue`) | a button's value: `gateId`, `decision` (`approve`, `revise`, `reject`, `reply`), `choice` (the index into a question's choices, or null), `planVersion` (the plan a plan's Approve shows, or null) |
+| `SlackDecisionModal` (`parseSlackDecisionModal`) | a form's `private_metadata`: the value with the card's `channelId`, `threadTs` and `messageTs` |
+| `SlackDecision` (`parseSlackDecision`) | the modal's fields with `interactionId`, `teamId`, `userId` and `response` (the form's text, at most 4,000 characters, or null) |
+| `SlackDecisionReply` (`parseSlackDecisionReply`) | `{ decided: true, text }` (what the card says they did) or `{ decided: false, reason }` |
 | `SlackSnapshot` (the engine's `GET /api/slack`) | `remote`, `connectUrl`, `links`, `problem` |
 
 ## The changelog
@@ -1621,7 +1629,7 @@ Behind the scenes).
 | Which settings a run role uses | `packages/core/src/agent-models/index.ts` (`RUN_AGENT_ROLE`) |
 | Rounds, shipping, resting and closed | `packages/core/src/domain/rounds.ts`, `state/rounds.ts`, `decide/rounds.ts` |
 | Test coverage of the change: the setting, the report and diff parsers, the measurement, the summary | `packages/core/src/test-coverage/`; detection and the run in `apps/engine/src/test-coverage/` |
-| The message classifier and routing | `apps/engine/src/triage/message.ts` |
+| The message classifier and routing | `apps/engine/src/triage/message/service.ts`, `apps/engine/src/triage/router/service.ts` |
 | Human-only decisions | `packages/core/src/decide/gates.ts` (`assertHumanDecides`, `assertGatesStayOpen`), `domain/settings.ts` (`HUMAN_ONLY_SETTINGS`, `HUMAN_ONLY_REPO_FIELDS`), `decide/settings.ts` |
 | Gate predicates | `packages/core/src/domain/gates.ts` (`isPausingGate`, `isDecisionGate`, `isAgentQuestion`) |
 | Steps, gates, `validatePipeline`, `PLAN_GATE_RULE` | `packages/core/src/domain/steps.ts`; `needsPlanApproval` in `decide/lifecycle.ts` |
@@ -1647,7 +1655,7 @@ Behind the scenes).
 | Services, their states, suggestions and runs for a task | `packages/core/src/protocol/services.ts` (`ServiceView.taskId`, `ServiceView.url`, `resolveServiceUrl`, `resolveTaskServiceCwd`, `listTaskServices`, `listServiceTaskRuns`); `apps/engine/src/terminals/` (`detect.ts`, `routes.ts`), `apps/engine/src/agents/services.ts` (the agents' tools), `apps/web/src/lib/terminal/services.ts` |
 | State patches, drafts | `packages/core/src/protocol/patch.ts`, `packages/core/src/state/draft.ts` |
 | State snapshots | `apps/engine/src/store/snapshot.ts`, `apps/engine/src/store/event-log.ts` |
-| Event log, receipts, outbox | `apps/engine/src/store/event-log.ts`, `apps/engine/src/runtime/engine.ts` |
+| Event log, receipts, outbox | `apps/engine/src/store/`, `apps/engine/src/runtime/engine/service.ts` |
 | Effect handlers | `apps/engine/src/runtime/effects/` (`runner/service.ts` routes each kind to its area's service) |
 | Agent tools (MCP) | `apps/engine/src/agents/tools/`; the loader tools `apps/engine/src/extensions/loader.ts` |
 | Management tools | `apps/engine/src/agents/manage/` |

@@ -1,4 +1,5 @@
 import { parseReviewPayload, type ReviewPayload } from '@shinsa/core';
+import { Effect, Option, Schema } from 'effect';
 import { openTask } from './content.ts';
 
 const TASK_ID = /^[A-Za-z0-9][A-Za-z0-9-]{0,63}$/;
@@ -26,18 +27,22 @@ export function resolveTaskInvite(search: string): TaskInvite | null {
   };
 }
 
-export async function readReviewFragment(hash: string): Promise<ReviewPayload | null> {
-  const encoded = new URLSearchParams(hash.replace(/^#/, '')).get('review');
-  if (!encoded || !/^[\w-]+$/.test(encoded)) return null;
-  try {
-    const base64 = encoded.replaceAll('-', '+').replaceAll('_', '/');
-    const bytes = Uint8Array.from(atob(base64), (character) => character.charCodeAt(0));
-    const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
-    return parseReviewPayload(JSON.parse(await new Response(stream).text()));
-  } catch {
-    return null;
-  }
-}
+const decodeReviewText = Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Unknown));
+
+export const readReviewFragment = Effect.fn('readReviewFragment')(
+  function* (hash: string) {
+    const encoded = new URLSearchParams(hash.replace(/^#/, '')).get('review');
+    if (!encoded || !/^[\w-]+$/.test(encoded)) return Option.none<ReviewPayload>();
+    const text = yield* Effect.tryPromise(() => {
+      const base64 = encoded.replaceAll('-', '+').replaceAll('_', '/');
+      const bytes = Uint8Array.from(atob(base64), (character) => character.charCodeAt(0));
+      const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
+      return new Response(stream).text();
+    });
+    return Option.fromNullishOr(parseReviewPayload(yield* decodeReviewText(text)));
+  },
+  Effect.orElseSucceed(() => Option.none<ReviewPayload>())
+);
 
 export function resolveDocumentTitle(invite: TaskInvite | null): string | null {
   if (!invite?.title) return null;

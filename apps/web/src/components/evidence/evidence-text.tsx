@@ -50,12 +50,20 @@ function RunList({ runs }: { runs: EvidenceRun[] }) {
   );
 }
 
-export function OutputToggle({ open, onToggle }: { open: boolean; onToggle: () => void }) {
+export function OutputToggle({
+  open,
+  onToggle,
+  className,
+}: {
+  open: boolean;
+  onToggle: () => void;
+  className?: string;
+}) {
   return (
     <Button
       variant='secondary'
       size='xs'
-      className='ms-auto'
+      className={cn('ms-auto', className)}
       aria-expanded={open}
       onClick={onToggle}
       icon={{

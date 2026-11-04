@@ -44,7 +44,9 @@ function SelectFieldValue<Value extends string>({
   return (
     <>
       {renderMenuIcon(item.icon, 'inline-start')}
-      <span className='truncate'>{item.label}</span>
+      <span data-select-text={item.icon ? '' : undefined} className='truncate'>
+        {item.label}
+      </span>
     </>
   );
 }
@@ -55,7 +57,7 @@ function SelectFieldItems<Value extends string>({ items }: { items: readonly Sel
     return (
       <SelectItem key={item.value} value={item.value} icon={item.icon} disabled={item.disabled !== undefined}>
         {item.dot ? <ProjectOption color={item.dot} name={item.label} /> : item.label}
-        {hint && <span className='font-normal text-fg-2'>{hint}</span>}
+        {hint && <span className='min-w-0 truncate font-normal text-fg-2'>{hint}</span>}
       </SelectItem>
     );
   });

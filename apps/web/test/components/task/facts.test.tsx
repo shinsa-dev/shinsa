@@ -3,6 +3,7 @@ import type { Task, TriageDecisions } from '@shinsa/core';
 import { TooltipProvider } from '@shinsa/ui/components/tooltip';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { TaskFacts } from '@/components/task/facts.tsx';
+import { ReadOnlyProvider } from '@/components/task/read-only.tsx';
 import { connection, type MachineChoice, replaceConnection } from '@/lib/connection/socket.ts';
 import { TONE_TEXT } from '@/lib/format/tone.ts';
 import { resolveSharedTaskId } from '@/lib/share/view.ts';
@@ -650,5 +651,43 @@ describe('who filed the task', () => {
   it('adds nothing to a task you filed yourself', () => {
     const view = renderFacts(createTask({ id: 't', handle: 'SW-7' }));
     expect(view.queryByText(/Filed by|Started by|Split from/)).toBeNull();
+  });
+});
+
+describe('the Slack fact', () => {
+  const slack = {
+    teamId: 'T1',
+    channelId: 'C1',
+    threadTs: '100.1',
+    userId: 'U1',
+    messageTs: '100.2',
+    permalink: 'https://acme.slack.com/archives/C1/p1002?thread_ts=100.1',
+    channelName: 'support',
+    statusTs: null,
+    reaction: null,
+  };
+
+  it('says which channel filed the task and opens the thread in a new tab', () => {
+    renderFacts(createTask({ id: 't', slack }));
+    const link = screen.getByText('#support').closest('a') as HTMLAnchorElement;
+    expect(link.textContent).toBe('Filed in #support');
+    expect(link.getAttribute('href')).toBe(slack.permalink);
+    expect(link.getAttribute('target')).toBe('_blank');
+  });
+
+  it('is left out on a read-only shared view and on a task not started from Slack', () => {
+    const task = createTask({ id: 't', slack });
+    const state = createShinsaState({ tasks: [task] });
+    pushState(state);
+    render(
+      <TooltipProvider>
+        <ReadOnlyProvider>
+          <TaskFacts state={state} task={task} />
+        </ReadOnlyProvider>
+      </TooltipProvider>
+    );
+    expect(screen.queryByText(/Filed in/)).toBeNull();
+    renderFacts();
+    expect(screen.queryByText(/Filed in/)).toBeNull();
   });
 });

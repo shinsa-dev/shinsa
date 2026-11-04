@@ -29,7 +29,7 @@ export const makeIdleRelease = Effect.fn('IdleRelease.make')(function* (definiti
       yield* Effect.sleep(definition.idle);
       const entry = yield* selectEntry(runId);
       if (!entry || entry.session !== session || entry.waits === 0) return;
-      if (session.hasPendingBackgroundWork?.() === true) {
+      if (session.hasPendingBackgroundWork && (yield* session.hasPendingBackgroundWork)) {
         const now = yield* definition.now;
         const pinnedSince = entry.pinnedSince ?? now;
         if (now - pinnedSince < definition.maxPinMs) {

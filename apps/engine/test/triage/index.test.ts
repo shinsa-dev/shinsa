@@ -7,13 +7,14 @@ import {
   type Task,
   type TeamFeedSnapshot,
 } from '@shinsa/core';
+import { Effect } from 'effect';
 import type { JsonSchema } from '../../src/agents/providers/index.ts';
 import type { QuickJson } from '../../src/agents/quick/index.ts';
 import type { LocalRepo } from '../../src/repos/index.ts';
 import { SHAPE_QUESTION } from '../../src/triage/decisions.ts';
-import { resolveRepoProject, resolveTriage } from '../../src/triage/index.ts';
-import type { TeamReader } from '../../src/triage/team.ts';
+import { resolveRepoProject, type TeamReading } from '../../src/triage/index.ts';
 import { createRepo, createTask } from '../helpers/state.ts';
+import { resolveTriage } from './harness.ts';
 
 const LOCAL: LocalRepo[] = [
   { path: '/code/web', name: 'web', touchedAt: 2 },
@@ -21,7 +22,7 @@ const LOCAL: LocalRepo[] = [
 ];
 
 function answer(value: unknown): QuickJson {
-  return <T>() => Promise.resolve(value as T);
+  return <T>() => Effect.succeed(value as T);
 }
 
 const silent = answer(null);
@@ -61,6 +62,11 @@ describe('resolveTriage without the model', () => {
       priority: 'normal',
       reasons: {},
     });
+  });
+
+  test('a classifier that fails fails the triage with its reason', async () => {
+    const broken: QuickJson = () => Effect.die(new Error('model down'));
+    await expect(resolveTriage(stateWith(), newTask(), LOCAL, broken)).rejects.toThrow('model down');
   });
 
   test('a spec request, a long request or a redesign is large and gets a feat branch', async () => {
@@ -106,7 +112,7 @@ describe('resolveTriage without the model', () => {
     const prompts: string[] = [];
     const recording: QuickJson = <T>(_system: string, prompt: string) => {
       prompts.push(prompt);
-      return Promise.resolve(null as T);
+      return Effect.succeed(null as T);
     };
     expect((await resolveTriage(state, newTask(), LOCAL, recording))?.repoPath).toBeNull();
     expect(prompts[0]).toContain(
@@ -201,7 +207,7 @@ describe('the branch triage names', () => {
     const calls: { system: string; schema: JsonSchema | undefined }[] = [];
     const ask: QuickJson = <T>(system: string, _prompt: string, schema?: JsonSchema) => {
       calls.push({ system, schema });
-      return Promise.resolve(null as T);
+      return Effect.succeed(null as T);
     };
     await resolveTriage(stateWith(), newTask(), LOCAL, ask);
     expect(calls[0]?.system).toContain('type one of feat, fix, chore, refactor, docs, perf, test');
@@ -215,7 +221,7 @@ describe('the branch triage names', () => {
     const calls: { system: string; schema: JsonSchema | undefined }[] = [];
     const ask: QuickJson = <T>(system: string, _prompt: string, schema?: JsonSchema) => {
       calls.push({ system, schema });
-      return Promise.resolve(null as T);
+      return Effect.succeed(null as T);
     };
     await resolveTriage(stateWith(), newTask(), LOCAL, ask);
     expect(calls[0]?.system).toContain('a request to set up a Shinsa automation');
@@ -240,7 +246,7 @@ describe('resolveTriage with structured output', () => {
     const calls: { prompt: string; schema: JsonSchema | undefined }[] = [];
     const recording: QuickJson = <T>(_system: string, prompt: string, shape?: JsonSchema) => {
       calls.push({ prompt, schema: shape });
-      return Promise.resolve({
+      return Effect.succeed({
         title: 'Fix it',
         repo: 'api',
         size: 'large',
@@ -278,7 +284,7 @@ describe('resolveTriage with structured output', () => {
     const prompts: string[] = [];
     const recording: QuickJson = <T>(_system: string, prompt: string) => {
       prompts.push(prompt);
-      return Promise.resolve(null as T);
+      return Effect.succeed(null as T);
     };
     await resolveTriage(
       stateWith(),
@@ -315,7 +321,7 @@ describe('resolveTriage for what the task left to Shinsa', () => {
     const calls: { prompt: string; schema: JsonSchema | undefined }[] = [];
     const ask: QuickJson = <T>(_system: string, prompt: string, schema?: JsonSchema) => {
       calls.push({ prompt, schema });
-      return Promise.resolve(value as T);
+      return Effect.succeed(value as T);
     };
     return { calls, ask };
   }
@@ -524,7 +530,7 @@ describe('triage in a project', () => {
     const prompts: string[] = [];
     const ask: QuickJson = <T>(_system: string, prompt: string) => {
       prompts.push(prompt);
-      return Promise.resolve(null as T);
+      return Effect.succeed(null as T);
     };
     return { prompts, ask };
   }
@@ -580,7 +586,7 @@ describe('triage in a project', () => {
     const prompts: string[] = [];
     const ask: QuickJson = <T>(_system: string, prompt: string) => {
       prompts.push(prompt);
-      return Promise.resolve({
+      return Effect.succeed({
         title: 'Add the export button',
         repo: 'web',
         size: 'small',
@@ -627,7 +633,7 @@ describe('triage may choose no repository', () => {
     const calls: { system: string; schema: JsonSchema | undefined }[] = [];
     const ask: QuickJson = <T>(system: string, _prompt: string, schema?: JsonSchema) => {
       calls.push({ system, schema });
-      return Promise.resolve({ title: 'Hey', repo, size: 'small', branch: 'chore/hey' } as T);
+      return Effect.succeed({ title: 'Hey', repo, size: 'small', branch: 'chore/hey' } as T);
     };
     return { calls, ask };
   }
@@ -659,7 +665,7 @@ describe('triage may choose no repository', () => {
     const calls: { system: string; prompt: string; schema: JsonSchema | undefined }[] = [];
     const ask: QuickJson = <T>(system: string, prompt: string, schema?: JsonSchema) => {
       calls.push({ system, prompt, schema });
-      return Promise.resolve({
+      return Effect.succeed({
         title: 'Fix the button',
         repo: 'kanna',
         size: 'small',
@@ -710,7 +716,7 @@ describe('triage may choose no repository', () => {
     const calls: { system: string; prompt: string }[] = [];
     const ask: QuickJson = <T>(system: string, prompt: string) => {
       calls.push({ system, prompt });
-      return Promise.resolve(null as T);
+      return Effect.succeed(null as T);
     };
     const triage = await resolveTriage(
       state,
@@ -745,7 +751,7 @@ describe('triage may start a new repository', () => {
     const calls: { system: string; schema: JsonSchema | undefined }[] = [];
     const ask: QuickJson = <T>(system: string, _prompt: string, schema?: JsonSchema) => {
       calls.push({ system, schema });
-      return Promise.resolve({
+      return Effect.succeed({
         title: 'Start the app',
         repo,
         new_repo: newRepo,
@@ -853,7 +859,7 @@ describe('resolveTriage for duplicates', () => {
     const calls: { prompt: string; schema: JsonSchema | undefined }[] = [];
     const ask: QuickJson = <T>(_system: string, prompt: string, shape?: JsonSchema) => {
       calls.push({ prompt, schema: shape });
-      return Promise.resolve(value as T);
+      return Effect.succeed(value as T);
     };
     return { calls, ask };
   }
@@ -946,7 +952,7 @@ describe('resolveTriage for duplicates in a project of several repositories', ()
     const ask: QuickJson = <T>(_system: string, prompt: string, shape?: JsonSchema) => {
       prompts.push(prompt);
       schemas.push(shape);
-      return Promise.resolve(value as T);
+      return Effect.succeed(value as T);
     };
     return { prompts, schemas, ask };
   }
@@ -1059,7 +1065,7 @@ describe('resolveTriage for teammates’ duplicates', () => {
       createdAt: 1,
     },
   ];
-  const team: TeamReader = () => ({ feed, teams, self: null });
+  const team: () => TeamReading = () => ({ feed, teams, self: null });
   const base = { title: 'Add dark mode', repo: 'api', size: 'small', branch: 'feat/dark' };
   const task = newTask({ projectId: 'p1' });
 
@@ -1069,7 +1075,7 @@ describe('resolveTriage for teammates’ duplicates', () => {
     const ask: QuickJson = <T>(_system: string, prompt: string, shape?: JsonSchema) => {
       prompts.push(prompt);
       schemas.push(shape);
-      return Promise.resolve(value as T);
+      return Effect.succeed(value as T);
     };
     return { prompts, schemas, ask };
   }

@@ -1,4 +1,4 @@
-import type { AgentProviderInfo, Changelog, ScopedActor } from '@shinsa/core';
+import type { Changelog, ScopedActor } from '@shinsa/core';
 import {
   BodyTooLarge,
   type FieldFailure,
@@ -12,32 +12,10 @@ import {
   RouteNotFound,
   ScopeRefused,
 } from '@shinsa/core/engine-api/schema';
-import { Context, Schema } from 'effect';
-import type { Accounts } from '../accounts/index.ts';
+import { Context, type Effect, Schema } from 'effect';
 import type { ModelSource } from '../agents/index.ts';
-import type { Transcripts } from '../agents/transcripts/index.ts';
-import type { ServerConfig } from '../config/index.ts';
-import type { Extensions } from '../extensions/index.ts';
-import type { EngineRestarter, ServerInstance } from '../instance/index.ts';
-import type { Onboarding } from '../onboarding/index.ts';
-import type { Remote } from '../remote/index.ts';
-import type { PlacementAsker } from '../remote/placement.ts';
-import type { Presence } from '../remote/presence.ts';
-import type { PreviewLinks } from '../remote/previews.ts';
-import type { ShareLinks } from '../remote/shares.ts';
-import type { TeamFeeds } from '../remote/team-feeds.ts';
-import type { Teams } from '../remote/teams.ts';
-import type { LoginResolver, RootSource } from '../repos/index.ts';
-import type { ResourceMonitor } from '../resources/index.ts';
-import type { Engine } from '../runtime/engine.ts';
-import type { Schedules } from '../schedules/index.ts';
+import type { ServerInstance } from '../instance/index.ts';
 import type { CommandResult } from '../shell/index.ts';
-import type { Slack } from '../slack/index.ts';
-import type { EvidenceStore } from '../store/index.ts';
-import type { ServiceRefiner, Terminals } from '../terminals/index.ts';
-import type { Classifier } from '../triage/message.ts';
-import type { Versions } from '../versions/index.ts';
-import type { Workspaces } from '../workspaces/index.ts';
 
 const REQUEST_VIAS = ['local', 'tunnel', 'channel'] as const;
 
@@ -64,46 +42,23 @@ export class PortInUse extends Schema.TaggedError<PortInUse, { readonly brand: u
 
 export type JsonObject = Record<string, unknown>;
 
-export type Launcher = (command: string[], cwd: string) => Promise<CommandResult>;
+export type Launcher = (command: string[], cwd: string) => Effect.Effect<CommandResult>;
 
-interface ProviderCatalog {
-  listProviders: () => Promise<AgentProviderInfo[]>;
-}
+export class EngineModels extends Context.Service<EngineModels, ModelSource>()(
+  'shinsa/engine/http/EngineModels'
+) {}
 
-export interface HttpContext {
-  engine: Engine;
-  remote?: Remote;
-  shares?: ShareLinks;
-  teams?: Teams;
-  teamFeeds?: TeamFeeds;
-  presence?: Presence;
-  previews?: PreviewLinks;
-  slack?: Slack;
-  config: ServerConfig;
-  instance?: ServerInstance;
-  evidence: EvidenceStore;
-  models: ModelSource;
-  providers?: ProviderCatalog;
-  onboarding: Onboarding;
-  launch?: Launcher;
-  accounts?: Accounts;
-  schedules?: Schedules;
-  transcripts: Transcripts;
-  extensions?: Extensions;
-  versions?: Versions;
-  changelog?: Changelog;
-  roots?: RootSource;
-  resolveLogin?: LoginResolver;
-  classify?: Classifier;
-  place?: PlacementAsker;
-  workspaces?: Workspaces;
-  restarter?: EngineRestarter;
-  terminals?: Terminals;
-  refiner?: ServiceRefiner;
-  resources?: Pick<ResourceMonitor, 'subscribe' | 'snapshot'>;
-}
+export const ServedInstance = Context.Reference<ServerInstance | null>('shinsa/engine/http/ServedInstance', {
+  defaultValue: () => null,
+});
 
-export type HttpServicesShape = HttpContext;
+export const ServedChangelog = Context.Reference<Changelog | null>('shinsa/engine/http/ServedChangelog', {
+  defaultValue: () => null,
+});
+
+export const CommandLauncher = Context.Reference<Launcher | null>('shinsa/engine/http/CommandLauncher', {
+  defaultValue: () => null,
+});
 
 export const FIXED_FAILURES = {
   RouteNotFound,

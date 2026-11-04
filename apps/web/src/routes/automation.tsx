@@ -3,7 +3,7 @@ import { EmptyState } from '@shinsa/ui/components/empty-state';
 import { Icon } from '@shinsa/ui/components/icon';
 import { cn } from '@shinsa/ui/lib/utils';
 import type * as React from 'react';
-import { PAGE_COLUMN, PAGE_TOP } from '@/components/layout/page/column.ts';
+import { PAGE_BOTTOM, PAGE_COLUMN, PAGE_TOP } from '@/components/layout/page/column.ts';
 import { PAGE_DESCRIPTION, PageHeading } from '@/components/layout/page/heading.tsx';
 import { Panel } from '@/components/layout/surface/panel.tsx';
 import { TaskLink } from '@/components/links/task.tsx';
@@ -151,7 +151,7 @@ function ActivityPanel({ state, schedule }: { state: ShinsaState; schedule: Sche
 function AutomationBody({ state, schedule }: { state: ShinsaState; schedule: Schedule }) {
   const gates = listAutomationGates(state, schedule);
   return (
-    <div className={cn(PAGE_COLUMN, PAGE_TOP, 'flex flex-col gap-4 pb-6')}>
+    <div className={cn(PAGE_COLUMN, PAGE_TOP, PAGE_BOTTOM, 'flex flex-col gap-4')}>
       <div className='flex flex-col gap-2.5'>
         <PageHeading
           title={schedule.name}

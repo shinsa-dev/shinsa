@@ -6,6 +6,7 @@ import {
   Command,
   Count,
   FIELD_MESSAGES,
+  FiniteNumber,
   ID_LIMIT,
   Id,
   List,
@@ -88,6 +89,7 @@ export const ProjectInput = Strict(
     key: Optional(Id(), FIELD_MESSAGES.text),
     description: Optional(Text(NOTE_LIMIT), FIELD_MESSAGES.text),
     folders: Optional(List(Id()), FIELD_MESSAGES.list),
+    usageLimit: Optional(OrNull(FiniteNumber, FIELD_MESSAGES.number), FIELD_MESSAGES.number),
   },
   'A project',
   'project'

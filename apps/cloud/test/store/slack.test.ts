@@ -74,10 +74,12 @@ describe('Slack threads, posts and events', () => {
           yield* slack.hasThread(THREAD, LAPTOP),
           yield* slack.hasPost({ teamId: 'T1', channelId: 'C1', ts: '2.000' }, STUDIO),
           yield* slack.hasPost({ teamId: 'T1', channelId: 'C1', ts: '2.000' }, LAPTOP),
+          yield* slack.selectPoster({ teamId: 'T1', channelId: 'C1', ts: '2.000' }),
+          yield* slack.selectPoster({ teamId: 'T1', channelId: 'C1', ts: '9.000' }),
         ] as const;
       })
     );
-    expect(results).toEqual([true, false, true, false]);
+    expect(results).toEqual([true, false, true, false, Option.some(STUDIO), Option.none()]);
   });
 
   test('an event is new once, and again after a day', async () => {

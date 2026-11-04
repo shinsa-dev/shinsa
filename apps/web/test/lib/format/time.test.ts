@@ -10,6 +10,7 @@ import {
   formatSpan,
   formatTimeAgo,
   formatTimeLeft,
+  formatDaysAndHours,
   formatTurnaround,
   formatUntil,
   formatWholeHours,
@@ -109,6 +110,15 @@ describe('formatDuration', () => {
     expect(formatDuration(3 * MINUTE + 20 * SECOND)).toBe('3m');
     expect(formatDuration(2 * HOUR)).toBe('2h');
     expect(formatDuration(2 * HOUR + 5 * MINUTE)).toBe('2h 5m');
+  });
+});
+
+describe('formatDaysAndHours', () => {
+  it('reads hours with minutes under a day, then whole days and hours', () => {
+    expect(formatDaysAndHours(5 * HOUR + 20 * MINUTE)).toBe('5h 20m');
+    expect(formatDaysAndHours(DAY + 9 * HOUR)).toBe('1d 9h');
+    expect(formatDaysAndHours(2 * DAY + 10 * MINUTE)).toBe('2d');
+    expect(formatDaysAndHours(DAY + 23 * HOUR + 50 * MINUTE)).toBe('2d');
   });
 });
 

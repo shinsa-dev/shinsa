@@ -5,7 +5,7 @@ import { describeError } from '../../log/redact.ts';
 import { RemoteClient } from '../client/service.ts';
 import { TunnelConnector } from '../connector/service.ts';
 import { TunnelHealth } from '../health/service.ts';
-import { readAccess, readGuests, readTeams } from '../store.ts';
+import { readAccess, readGuests, readTeams } from '../store/decode.ts';
 import {
   FAILED_PINGS_BEFORE_RESTART,
   HEARTBEAT_EVERY_PINGS,

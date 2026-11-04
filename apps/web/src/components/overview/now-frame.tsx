@@ -28,7 +28,7 @@ export function NowFrame({
   return (
     <section className={cn(CARD, 'flex flex-col overflow-hidden')}>
       <div className='flex flex-col gap-3 p-3'>
-        <div className='flex items-start gap-3'>
+        <div className='flex flex-col gap-3 sm:flex-row sm:items-start'>
           <div className='flex min-w-0 flex-1 flex-col gap-px'>
             <span className='text-2xs text-fg-2'>{eyebrow}</span>
             {typeof title === 'string' ? (
@@ -39,7 +39,9 @@ export function NowFrame({
               </span>
             )}
           </div>
-          {action && !readOnly && <div className='flex shrink-0 items-center gap-1.5'>{action}</div>}
+          {action && !readOnly && (
+            <div className='flex shrink-0 flex-wrap items-center gap-1.5'>{action}</div>
+          )}
         </div>
         {children}
       </div>

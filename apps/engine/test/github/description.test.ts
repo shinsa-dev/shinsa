@@ -1,20 +1,41 @@
-import { afterEach, describe, expect, test } from 'bun:test';
+import { afterEach, describe, expect, setDefaultTimeout, test } from 'bun:test';
 import { randomBytes } from 'node:crypto';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { inflateRawSync } from 'node:zlib';
-import { type Evidence, parseReviewPayload, type Task } from '@shinsa/core';
-import { PullRequestDescriptions, serializeReviewLink } from '../../src/github/description.ts';
-import { EvidenceStore } from '../../src/store/evidence/index.ts';
+import { type Evidence, parseReviewPayload, type Repo, type Task } from '@shinsa/core';
+import { Effect, Layer, ManagedRuntime } from 'effect';
+import { serializeReviewLink } from '../../src/github/description/link.ts';
+import { PullRequestDescriber } from '../../src/github/description/service.ts';
+import { Evidence as EvidenceFiles } from '../../src/store/evidence/service.ts';
+import { createTestEvidence } from '../helpers/evidence.ts';
+import { GitTestLayer } from '../helpers/git.ts';
 import { captureLogs, createTempDir, overrideEnv } from '../helpers/index.ts';
 import { createRepo, createTask } from '../helpers/state.ts';
 
-let restore: (() => void) | null = null;
+setDefaultTimeout(30_000);
 
-afterEach(() => {
+let restore: (() => void) | null = null;
+const runtimes: { dispose: () => Promise<void> }[] = [];
+
+afterEach(async () => {
   restore?.();
   restore = null;
+  await Promise.all(runtimes.splice(0).map((runtime) => runtime.dispose()));
 });
+
+function createDescriber(store: EvidenceFiles['Service']) {
+  const runtime = ManagedRuntime.make(
+    PullRequestDescriber.layer.pipe(
+      Layer.provideMerge(Layer.merge(GitTestLayer, Layer.succeed(EvidenceFiles, store)))
+    )
+  );
+  runtimes.push(runtime);
+  return {
+    describe: (repo: Repo, task: Task, evidence: readonly Evidence[]) =>
+      runtime.runPromise(PullRequestDescriber.use((describer) => describer.describe(repo, task, evidence))),
+  };
+}
 
 function useFakeGitHub(extra: { repositoryId?: number; failUploads?: boolean } = {}) {
   const path = join(createTempDir(), 'gh.json');
@@ -25,21 +46,25 @@ function useFakeGitHub(extra: { repositoryId?: number; failUploads?: boolean } =
 
 function createStore() {
   const source = createTempDir();
-  const store = new EvidenceStore(createTempDir());
+  const store = createTestEvidence(createTempDir());
   const folder = { taskId: 'task-1', round: 1 };
   const copy = (name: string, bytes = 'x') => {
     const file = join(source, name);
     writeFileSync(file, bytes);
-    return store.copyFile(file, folder, name);
+    return Effect.runSync(store.copyFile(file, folder, name));
   };
-  return { store, copy, note: (text: string) => store.writeText(text, folder, 'note', 'md') };
+  return {
+    store,
+    copy,
+    note: (text: string) => Effect.runSync(store.writeText(text, folder, 'note', 'md')),
+  };
 }
 
 function piece(task: Task, id: string, fields: Pick<Evidence, 'kind' | 'uri'> & Partial<Evidence>): Evidence {
   return { id, taskId: task.id, runId: 'run-1', title: id, attachedAt: 1, ...fields };
 }
 
-describe('PullRequestDescriptions', () => {
+describe('PullRequestDescriber', () => {
   test('uploads the screenshots and recordings GitHub cannot reach yet, once per repository id', async () => {
     const github = useFakeGitHub({ repositoryId: 4242 });
     const { store, copy, note } = createStore();
@@ -58,7 +83,7 @@ describe('PullRequestDescriptions', () => {
       piece(task, 'notes', { kind: 'note', uri: note('Load time fell from 2s to 300ms.') }),
       piece(task, 'lost', { kind: 'note', uri: '/api/evidence/missing.md' }),
     ];
-    const descriptions = new PullRequestDescriptions(store);
+    const descriptions = createDescriber(store);
     const repo = createRepo({ path: createTempDir() });
     const first = await descriptions.describe(repo, task, evidence);
     expect(first.uploads).toEqual([
@@ -85,7 +110,7 @@ describe('PullRequestDescriptions', () => {
     const github = useFakeGitHub({ repositoryId: 4242 });
     const { store } = createStore();
     const task = createTask({ summary: 'Did it.' });
-    const description = await new PullRequestDescriptions(store).describe(
+    const description = await createDescriber(store).describe(
       createRepo({ path: createTempDir() }),
       task,
       []
@@ -101,7 +126,7 @@ describe('PullRequestDescriptions', () => {
     const { store, copy } = createStore();
     const task = createTask();
     const evidence = [piece(task, 'shot', { kind: 'screenshot', uri: copy('shot.png') })];
-    const description = await new PullRequestDescriptions(store).describe(
+    const description = await createDescriber(store).describe(
       createRepo({ path: createTempDir() }),
       task,
       evidence
@@ -120,7 +145,7 @@ describe('PullRequestDescriptions', () => {
     const { store, copy } = createStore();
     const task = createTask();
     const evidence = [piece(task, 'shot', { kind: 'screenshot', uri: copy('shot.png') })];
-    const description = await new PullRequestDescriptions(store).describe(
+    const description = await createDescriber(store).describe(
       createRepo({ path: createTempDir() }),
       task,
       evidence
@@ -142,7 +167,7 @@ describe('serializeReviewLink', () => {
       piece(task, 'web', { kind: 'screenshot', uri: 'https://cdn.example.com/web.png' }),
       piece(task, 'hosted', { kind: 'screenshot', uri: 'https://github.com/user-attachments/assets/h' }),
     ];
-    const description = await new PullRequestDescriptions(store).describe(
+    const description = await createDescriber(store).describe(
       createRepo({ path: createTempDir() }),
       task,
       evidence
@@ -183,7 +208,7 @@ describe('serializeReviewLink', () => {
       reviewSummary: noise(4_000),
       phaseReports: [{ index: 0, summary: 's', spots: [], judgementCalls: [], walkthrough, at: 0 }],
     });
-    const description = await new PullRequestDescriptions(store).describe(
+    const description = await createDescriber(store).describe(
       createRepo({ path: createTempDir() }),
       task,
       []

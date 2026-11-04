@@ -17,8 +17,9 @@ import {
   WORKSPACE_MODES,
   type WorkspaceMode,
 } from '@shinsa/core';
+import { Clock, DateTime, Effect, Option, Schema } from 'effect';
+import { describeError } from '../log/index.ts';
 import { resolveProjectFolder } from '../projects/folders.ts';
-import type { SurfaceClient } from './client.ts';
 import type { FieldSpec, Values } from './fields.ts';
 import {
   findProject,
@@ -29,6 +30,7 @@ import {
   resolveOptionalProjectId,
   selectProject,
 } from './resolve.ts';
+import { SurfaceCallFailed, type SurfaceClient } from './schema.ts';
 import { defineAction, defineCommand, defineRead, readValue, type SurfaceSpec } from './spec.ts';
 import { findTeamId } from './teams.ts';
 
@@ -65,13 +67,11 @@ const PATH_FIELD: FieldSpec = {
   description: 'A full path, or one starting with ~/.',
 };
 
+const decodeSettingJson = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Unknown));
+
 function readSettingValue(raw: unknown) {
   if (typeof raw !== 'string') return raw;
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return raw;
-  }
+  return Option.getOrElse(decodeSettingJson(raw), () => raw);
 }
 
 function formatSettings({ settings }: { settings: Settings }, values: Values) {
@@ -81,14 +81,14 @@ function formatSettings({ settings }: { settings: Settings }, values: Values) {
   return entries.map(([name, value]) => `${name} = ${JSON.stringify(value)}`).join('\n');
 }
 
-function assertSettingKey(key: string) {
+const assertSettingKey = Effect.fn('Surface.assertSettingKey')(function* (key: string) {
   if (!(SETTINGS_KEYS as readonly string[]).includes(key)) {
-    throw new DomainError({
+    return yield* new DomainError({
       code: 'setting_unknown',
       message: `No setting ${key}. The settings are ${SETTINGS_KEYS.join(', ')}.`,
     });
   }
-}
+});
 
 function buildCoverage(values: Values): CoverageSetting | null {
   const mode = readValue(values, 'coverage');
@@ -103,11 +103,11 @@ function buildCoverage(values: Values): CoverageSetting | null {
   };
 }
 
-async function buildRepoPatch(client: SurfaceClient, values: Values): Promise<RepoPatch> {
+const buildRepoPatch = Effect.fn('Surface.buildRepoPatch')(function* (client: SurfaceClient, values: Values) {
   const project = readValue(values, 'project');
-  const projectId = await resolveOptionalProjectId(client, project === 'none' ? '' : project);
+  const projectId = yield* resolveOptionalProjectId(client, project === 'none' ? '' : project);
   const coverage = buildCoverage(values);
-  return {
+  const patch: RepoPatch = {
     ...(values.name ? { name: readValue(values, 'name') } : {}),
     ...(values.defaultBranch ? { defaultBranch: readValue(values, 'defaultBranch') } : {}),
     ...(values.project === undefined ? {} : { projectId }),
@@ -115,7 +115,8 @@ async function buildRepoPatch(client: SurfaceClient, values: Values): Promise<Re
     ...(values.workspace ? { workspace: readValue(values, 'workspace') as WorkspaceMode } : {}),
     ...(coverage ? { coverage } : {}),
   };
-}
+  return patch;
+});
 
 function resolveFolderPath(path: string) {
   return path.startsWith('~') ? path : resolve(path);
@@ -126,21 +127,36 @@ function resolveNewColor(projects: readonly ProjectView[]) {
   return PROJECT_COLORS.find((color) => !used.has(color)) ?? PROJECT_COLORS[0];
 }
 
-async function buildProjectInput(client: SurfaceClient, values: Values): Promise<ProjectInput> {
-  const { projects } = await client.api.state.projects();
+const buildProjectInput = Effect.fn('Surface.buildProjectInput')(function* (
+  client: SurfaceClient,
+  values: Values
+) {
+  const { projects } = yield* client.api.state.projects();
   const ref = readValue(values, 'id');
   const existing = ref ? selectProject(projects, ref) : null;
   if (ref && !existing) {
-    throw new DomainError({
+    return yield* new DomainError({
       code: 'project_not_found',
       message: `No project ${ref}. \`shinsa projects list\` lists them.`,
     });
   }
   const name = readValue(values, 'name') || existing?.name;
-  if (!name)
-    throw new DomainError({ code: 'arguments_invalid', message: 'Name the new project with --name.' });
+  if (!name) {
+    return yield* new DomainError({
+      code: 'arguments_invalid',
+      message: 'Name the new project with --name.',
+    });
+  }
   const folders = values.folders as string[] | undefined;
-  return {
+  const resolvedFolders =
+    folders === undefined
+      ? undefined
+      : yield* Effect.try({
+          try: () => folders.map((folder) => resolveProjectFolder(resolveFolderPath(folder), homedir())),
+          catch: (error) =>
+            error instanceof DomainError ? error : new SurfaceCallFailed({ message: describeError(error) }),
+        });
+  const input: ProjectInput = {
     ...(existing ? { id: existing.id } : {}),
     name,
     color: readValue(values, 'color') || existing?.color || resolveNewColor(projects),
@@ -150,13 +166,17 @@ async function buildProjectInput(client: SurfaceClient, values: Values): Promise
         ? { description: existing.description }
         : {}
       : { description: readValue(values, 'description') }),
-    ...(folders === undefined
+    ...(resolvedFolders === undefined
       ? existing
         ? { folders: existing.folders }
         : {}
-      : { folders: folders.map((folder) => resolveProjectFolder(resolveFolderPath(folder), homedir())) }),
+      : { folders: resolvedFolders }),
+    ...(typeof values.usageLimit === 'number'
+      ? { usageLimit: values.usageLimit > 0 ? values.usageLimit : null }
+      : {}),
   };
-}
+  return input;
+});
 
 function describeProjectLine(project: ProjectView) {
   const count = project.repos.length;
@@ -191,9 +211,13 @@ function requestProjectChange(
   return client.projects.upsertFolder(projectId, path);
 }
 
-async function upsertProjectPath(client: SurfaceClient, values: Values, kind: 'repos' | 'folders') {
-  const project = await findProject(client, readValue(values, 'project'));
-  const data = await requestProjectChange(
+const upsertProjectPath = Effect.fn('Surface.upsertProjectPath')(function* (
+  client: SurfaceClient,
+  values: Values,
+  kind: 'repos' | 'folders'
+) {
+  const project = yield* findProject(client, readValue(values, 'project'));
+  const data: unknown = yield* requestProjectChange(
     client,
     project.id,
     kind,
@@ -201,14 +225,17 @@ async function upsertProjectPath(client: SurfaceClient, values: Values, kind: 'r
   );
   const noun = kind === 'repos' ? 'repository' : 'folder';
   return { data, text: `Added the ${noun} to ${project.name}.` };
-}
+});
 
-async function saveFolders(client: SurfaceClient, change: (roots: string[]) => string[]) {
-  const status = await client.api.onboarding.status();
+const saveFolders = Effect.fn('Surface.saveFolders')(function* (
+  client: SurfaceClient,
+  change: (roots: string[]) => string[]
+) {
+  const status = yield* client.api.onboarding.status();
   const roots = change(status.roots.configured);
-  const data = await client.api.onboarding.setup({ payload: { roots } });
+  const data = yield* client.api.onboarding.setup({ payload: { roots } });
   return { data, text: formatFolders(data) };
-}
+});
 
 function formatFolders(status: OnboardingStatus) {
   return [
@@ -241,14 +268,14 @@ export const CONFIG_SPECS: SurfaceSpec[] = [
       },
       { name: 'value', kind: 'text', positional: 'rest', required: true, description: 'The new value.' },
     ],
-    build: (values) => {
+    build: Effect.fn('Surface.settingsSet')(function* (values) {
       const key = readValue(values, 'key');
-      assertSettingKey(key);
+      yield* assertSettingKey(key);
       return {
-        type: 'settings.change',
+        type: 'settings.change' as const,
         patch: { [key]: readSettingValue(values.value) } as Partial<Settings>,
       };
-    },
+    }),
     done: (values) => `Set ${readValue(values, 'key')}.`,
   }),
   defineRead({
@@ -295,10 +322,15 @@ export const CONFIG_SPECS: SurfaceSpec[] = [
         description:
           'Folders whose repositories all belong to it, replacing the ones it has. Repeat the option for each.',
       },
+      {
+        name: 'usageLimit',
+        kind: 'number',
+        description:
+          'Its daily usage limit: % of one account’s weekly limit over the last 24 hours, 0 to turn it off. Only the human changes it.',
+      },
     ],
-    build: async (values, client) => ({
-      type: 'project.write',
-      project: await buildProjectInput(client, values),
+    build: Effect.fn('Surface.projectWrite')(function* (values, client) {
+      return { type: 'project.write' as const, project: yield* buildProjectInput(client, values) };
     }),
     done: () => 'Saved the project.',
   }),
@@ -307,9 +339,11 @@ export const CONFIG_SPECS: SurfaceSpec[] = [
     summary: 'Remove a project. Its repositories and tasks keep working without one.',
     command: 'project.remove',
     fields: [PROJECT_FIELD],
-    build: async (values, client) => ({
-      type: 'project.remove',
-      projectId: await findProjectId(client, readValue(values, 'project')),
+    build: Effect.fn('Surface.projectRemove')(function* (values, client) {
+      return {
+        type: 'project.remove' as const,
+        projectId: yield* findProjectId(client, readValue(values, 'project')),
+      };
     }),
     done: () => 'Removed the project.',
   }),
@@ -319,10 +353,12 @@ export const CONFIG_SPECS: SurfaceSpec[] = [
     command: 'project.add_to_team',
     humanOnly: true,
     fields: [PROJECT_FIELD, TEAM_FIELD],
-    build: async (values, client) => ({
-      type: 'project.add_to_team',
-      projectId: await findProjectId(client, readValue(values, 'project')),
-      teamId: await findTeamId(client, readValue(values, 'team')),
+    build: Effect.fn('Surface.projectAddToTeam')(function* (values, client) {
+      return {
+        type: 'project.add_to_team' as const,
+        projectId: yield* findProjectId(client, readValue(values, 'project')),
+        teamId: yield* findTeamId(client, readValue(values, 'team')),
+      };
     }),
     done: () => 'The team sees its tasks now.',
   }),
@@ -332,10 +368,12 @@ export const CONFIG_SPECS: SurfaceSpec[] = [
     command: 'project.remove_from_team',
     humanOnly: true,
     fields: [PROJECT_FIELD, TEAM_FIELD],
-    build: async (values, client) => ({
-      type: 'project.remove_from_team',
-      projectId: await findProjectId(client, readValue(values, 'project')),
-      teamId: await findTeamId(client, readValue(values, 'team')),
+    build: Effect.fn('Surface.projectRemoveFromTeam')(function* (values, client) {
+      return {
+        type: 'project.remove_from_team' as const,
+        projectId: yield* findProjectId(client, readValue(values, 'project')),
+        teamId: yield* findTeamId(client, readValue(values, 'team')),
+      };
     }),
     done: () => 'The team no longer sees its tasks.',
   }),
@@ -359,7 +397,7 @@ export const CONFIG_SPECS: SurfaceSpec[] = [
     format: ({ projects, focus }) => {
       const project = projects.find((candidate) => candidate.id === focus.projectId);
       if (!project) return 'No focus: everything shows.';
-      const until = focus.until ? ` until ${new Date(focus.until).toISOString()}` : '';
+      const until = focus.until ? ` until ${DateTime.formatIso(DateTime.makeUnsafe(focus.until))}` : '';
       return `Focused on ${project.name}${until}.`;
     },
   }),
@@ -368,10 +406,14 @@ export const CONFIG_SPECS: SurfaceSpec[] = [
     summary: 'Focus on one project: Shinsa shows only its work.',
     command: 'focus.change',
     fields: [PROJECT_FIELD, { name: 'hours', kind: 'number', description: 'Only for this many hours.' }],
-    build: async (values, client) => ({
-      type: 'focus.change',
-      projectId: await findProjectId(client, readValue(values, 'project')),
-      until: typeof values.hours === 'number' ? Date.now() + values.hours * HOUR_MS : null,
+    build: Effect.fn('Surface.focusSet')(function* (values, client) {
+      const projectId = yield* findProjectId(client, readValue(values, 'project'));
+      const now = yield* Clock.currentTimeMillis;
+      return {
+        type: 'focus.change' as const,
+        projectId,
+        until: typeof values.hours === 'number' ? now + values.hours * HOUR_MS : null,
+      };
     }),
     done: () => 'Focused.',
   }),
@@ -464,10 +506,12 @@ export const CONFIG_SPECS: SurfaceSpec[] = [
           'With --coverage custom: the report format, when its name does not tell (lcov, cobertura or go).',
       },
     ],
-    build: async (values, client) => ({
-      type: 'repo.update',
-      repoId: await findRepoId(client, readValue(values, 'repo')),
-      patch: await buildRepoPatch(client, values),
+    build: Effect.fn('Surface.repoUpdate')(function* (values, client) {
+      return {
+        type: 'repo.update' as const,
+        repoId: yield* findRepoId(client, readValue(values, 'repo')),
+        patch: yield* buildRepoPatch(client, values),
+      };
     }),
     done: () => 'Saved the repository.',
   }),
@@ -476,9 +520,8 @@ export const CONFIG_SPECS: SurfaceSpec[] = [
     summary: 'Forget a repository. Nothing on disk changes.',
     command: 'repo.remove',
     fields: [REPO_FIELD],
-    build: async (values, client) => ({
-      type: 'repo.remove',
-      repoId: await findRepoId(client, readValue(values, 'repo')),
+    build: Effect.fn('Surface.repoRemove')(function* (values, client) {
+      return { type: 'repo.remove' as const, repoId: yield* findRepoId(client, readValue(values, 'repo')) };
     }),
     done: () => 'Removed the repository.',
   }),

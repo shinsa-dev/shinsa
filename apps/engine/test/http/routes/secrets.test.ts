@@ -1,25 +1,28 @@
 import { afterEach, describe, expect, test } from 'bun:test';
 import { listActiveRuns } from '@shinsa/core';
-import { Schedules } from '../../../src/schedules/index.ts';
+import { DomainError } from '@shinsa/core';
+import { Effect } from 'effect';
 import { disposeWebHandlers } from '../../helpers/web.ts';
 import { addSchedule, createWorld, type World } from '../../schedules/fixtures.ts';
+import { openSchedules, type SchedulesHarness } from '../../schedules/harness.ts';
 import { readFailure, startRoutes } from './harness.ts';
 
-const running: Schedules[] = [];
+const running: SchedulesHarness[] = [];
 
 afterEach(async () => {
-  for (const schedules of running.splice(0)) schedules.stop();
+  for (const harness of running.splice(0)) await harness.close();
   await disposeWebHandlers();
 });
 
-function setUp(world: World, hookUrl?: (scheduleId: string, token: string) => string | null) {
-  const schedules = new Schedules(world.engine, world.secrets, {
-    baseUrl: () => 'http://127.0.0.1:5180',
-    ...(hookUrl ? { hookUrl } : {}),
+async function setUp(world: World, hookUrl?: (scheduleId: string, token: string) => string | null) {
+  const harness = await openSchedules(world.engine.core, world.secrets.store, hookUrl ? { hookUrl } : {});
+  await harness.start();
+  running.push(harness);
+  const routes = startRoutes({
+    engine: world.engine,
+    schedules: harness.schedules,
+    secrets: world.secrets.store,
   });
-  schedules.start();
-  running.push(schedules);
-  const routes = startRoutes({ engine: world.engine, schedules });
   const call = async (method: 'GET' | 'POST', path: string, body?: unknown) => {
     const response = await routes.send(path, {
       method,
@@ -50,7 +53,7 @@ describe('webhook settings over HTTP', () => {
   test('shows the stable app.shinsa.dev URL while remote access is on', async () => {
     const world = await createWorld();
     const schedule = await addSchedule(world, { kind: 'webhook', signature: null, replayKey: null });
-    const { call } = setUp(world, (id, hook) => `https://app.shinsa.dev/hooks/k3x9/${id}/${hook}`);
+    const { call } = await setUp(world, (id, hook) => `https://app.shinsa.dev/hooks/k3x9/${id}/${hook}`);
     const shown = await call('GET', `/api/schedules/${schedule.id}/webhook`);
     const token = world.secrets.selectHook(schedule.id)?.token;
     expect(shown.url).toBe(`https://app.shinsa.dev/hooks/k3x9/${schedule.id}/${token}`);
@@ -63,7 +66,7 @@ describe('webhook settings over HTTP', () => {
       signature: { header: 'x-sig', encoding: 'hex', prefix: '' },
       replayKey: null,
     });
-    const { call } = setUp(world);
+    const { call } = await setUp(world);
     expect(await call('GET', `/api/schedules/${schedule.id}/webhook`)).toEqual({
       url: `http://127.0.0.1:5180/api/hooks/${schedule.id}/${world.secrets.selectHook(schedule.id)?.token}`,
       signature: { header: 'x-sig', encoding: 'hex', prefix: '' },
@@ -81,7 +84,7 @@ describe('webhook settings over HTTP', () => {
     const world = await createWorld();
     const timed = await addSchedule(world, { kind: 'interval', everyMinutes: 5 });
     const hook = await addSchedule(world, { kind: 'webhook', signature: null, replayKey: null });
-    const { call } = setUp(world);
+    const { call } = await setUp(world);
     await expect(call('GET', `/api/schedules/${timed.id}/webhook`)).rejects.toMatchObject({
       code: 'schedule_not_found',
       message: 'This schedule has no webhook.',
@@ -100,7 +103,7 @@ describe('webhook settings over HTTP', () => {
   test('a webhook whose hook is gone is not found', async () => {
     const world = await createWorld();
     const schedule = await addSchedule(world, { kind: 'webhook', signature: null, replayKey: null });
-    const { call } = setUp(world);
+    const { call } = await setUp(world);
     world.secrets.pruneHooks(new Set());
     await expect(call('GET', `/api/schedules/${schedule.id}/webhook`)).rejects.toMatchObject({
       code: 'schedule_not_found',
@@ -118,7 +121,7 @@ describe('answering a secret request over HTTP', () => {
   test('stores the value and answers the question with a one-use ref', async () => {
     const world = await createWorld();
     await askForSecret(world);
-    const { call } = setUp(world);
+    const { call } = await setUp(world);
     expect(await call('POST', '/api/secrets/gate-1', { value: 'hunter2' })).toEqual({ ok: true });
     const gate = world.engine.state.gates['gate-1'];
     expect(gate?.status).toBe('answered');
@@ -130,7 +133,7 @@ describe('answering a secret request over HTTP', () => {
   test('a decline answers without a value', async () => {
     const world = await createWorld();
     await askForSecret(world);
-    const { call } = setUp(world);
+    const { call } = await setUp(world);
     expect(await call('POST', '/api/secrets/gate-1', { decline: true })).toEqual({ ok: true });
     expect(world.engine.state.gates['gate-1']).toMatchObject({
       status: 'answered',
@@ -142,7 +145,7 @@ describe('answering a secret request over HTTP', () => {
   test('refuses a question that is not a secret request or is already answered, and keeps nothing', async () => {
     const world = await createWorld();
     await askForSecret(world);
-    const { call } = setUp(world);
+    const { call } = await setUp(world);
     await expect(call('POST', '/api/secrets/nope', { value: 'x' })).rejects.toMatchObject({
       message: 'No secret was asked for here.',
     });
@@ -158,8 +161,10 @@ describe('answering a secret request over HTTP', () => {
   test('a value whose answer the log refuses is thrown away', async () => {
     const world = await createWorld();
     await askForSecret(world);
-    const { call } = setUp(world);
-    world.engine.dispatch = () => Promise.reject(new Error('disk full'));
+    const { call } = await setUp(world);
+    Object.assign(world.engine.core, {
+      dispatch: () => Effect.fail(new DomainError({ code: 'disk_full', message: 'disk full' })),
+    });
     await expect(call('POST', '/api/secrets/gate-1', { value: 'hunter2' })).rejects.toMatchObject({
       message: 'disk full',
     });

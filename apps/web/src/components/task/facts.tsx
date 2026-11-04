@@ -65,6 +65,7 @@ import {
   listTeammateDuplicates,
   resolveFiledByFact,
   resolveReportFact,
+  resolveSlackFact,
   selectDuplicateOriginal,
 } from '@/lib/tasks/facts.ts';
 import { resolvePullRequestTone } from '@/lib/tasks/pull-request.ts';
@@ -618,6 +619,27 @@ function FiledByFact({ state, filedBy }: { state: ShinsaState; filedBy: FiledBy 
   );
 }
 
+function SlackFact({ task }: { task: Task }) {
+  const slack = resolveSlackFact(task);
+  if (!slack) return null;
+  return (
+    <Hint label={slack.hint}>
+      <a
+        href={slack.href}
+        target='_blank'
+        rel='noreferrer'
+        className={cn(FACT, FACT_INTERACTIVE, 'max-w-80')}
+      >
+        <Icon size='sm' name='IconSlack' />
+        <span className='flex min-w-0'>
+          <span className='shrink-0 whitespace-pre'>Filed in </span>
+          <Truncate>{slack.place}</Truncate>
+        </span>
+      </a>
+    </Hint>
+  );
+}
+
 function WaitsOnFact({ state, task }: { state: ShinsaState; task: Task }) {
   const waitsOn = listPendingDependencies(state, task);
   const owner = useReadOnlyOwnerName();
@@ -667,18 +689,51 @@ export function TaskSharedFacts({
   );
 }
 
+export interface FactsFold {
+  open: boolean;
+  onToggle: () => void;
+}
+
+function FoldToggle({ fold }: { fold: FactsFold }) {
+  return (
+    <button
+      type='button'
+      aria-expanded={fold.open}
+      onClick={fold.onToggle}
+      className={cn(FACT, FACT_INTERACTIVE)}
+    >
+      {fold.open ? 'Fewer details' : 'Details'}
+      <Icon size='sm' name={fold.open ? 'IconChevronTopMedium' : 'IconChevronDownMedium'} />
+    </button>
+  );
+}
+
 export function TaskFacts({
   state,
   task,
+  fold = null,
   className,
 }: {
   state: ShinsaState;
   task: Task;
+  fold?: FactsFold | null;
   className?: string;
 }) {
   const readOnly = useReadOnly();
   const checks = resolveChecksView(state, task);
   const filedBy = resolveFiledByFact(state, task);
+  if (fold && !fold.open) {
+    return (
+      <div className={cn('-ms-1.5 flex flex-wrap items-center gap-1', className)}>
+        <HandleFact task={task} />
+        <RoundFact task={task} />
+        <StatusFact state={state} task={task} />
+        <PullRequestFact state={state} task={task} />
+        {!task.pullRequest && checks && <ChecksFact view={checks} />}
+        <FoldToggle fold={fold} />
+      </div>
+    );
+  }
   return (
     <div className={cn('-ms-1.5 flex flex-wrap items-center gap-1', className)}>
       <HandleFact task={task} />
@@ -707,6 +762,7 @@ export function TaskFacts({
         tasks={listDependents(state, task.id)}
       />
       <FiledByFact state={state} filedBy={filedBy} />
+      {!readOnly && <SlackFact task={task} />}
       <ReportFact task={task} />
       <RelatedFact
         state={state}
@@ -722,6 +778,7 @@ export function TaskFacts({
         tasks={listDuplicates(state, task)}
       />
       <TeammateKeptOverFacts task={task} />
+      {fold && <FoldToggle fold={fold} />}
     </div>
   );
 }

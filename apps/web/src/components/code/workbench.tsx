@@ -10,6 +10,7 @@ import { EditorPane } from '@/components/code/editor-pane.tsx';
 import type { EditorHandle, EditorSessionHolder } from '@/components/code/editor/code-editor.tsx';
 import { Explorer, type ExplorerProps } from '@/components/code/explorer.tsx';
 import { QuickOpen } from '@/components/code/quick-open.tsx';
+import { SAFE_AREA_BOTTOM, SAFE_AREA_TOP } from '@/components/layout/sidebar/compact-bar.tsx';
 import { ResizeHandle } from '@/components/layout/sidebar/resize-handle.tsx';
 import { Hint } from '@/components/overlays/hint.tsx';
 import { useCodeKeyLabel, useCodeKeys } from '@/hooks/use-code-keys.ts';
@@ -230,7 +231,11 @@ export function Workbench({ task, refs, modes }: { task: Task; refs: TaskRefs; m
     <div className={cn('flex min-h-0 min-w-0 flex-1', INSTANT, side === 'right' && 'flex-row-reverse')}>
       {narrow ? (
         <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
-          <SheetContent side={side} showCloseButton={false} className={cn('gap-0 p-0', INSTANT)}>
+          <SheetContent
+            side={side}
+            showCloseButton={false}
+            className={cn('gap-0 p-0', SAFE_AREA_TOP, SAFE_AREA_BOTTOM, INSTANT)}
+          >
             <SheetTitle className='sr-only'>Files</SheetTitle>
             <Explorer {...explorer} />
           </SheetContent>

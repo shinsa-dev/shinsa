@@ -1,87 +1,145 @@
 import { describe, expect, test } from 'bun:test';
 import { chmodSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { Effect } from 'effect';
-import {
-  assertWorktreeRoot,
-  describeWorktreeRootMarkProblem,
-  describeWorktreeRootProblem,
-  markWorktreeRoot,
-  WORKTREE_ROOT_MARKER,
-  WorktreeRoot,
-} from '../../src/workspaces/index.ts';
+import { Effect, Layer } from 'effect';
+import type { ServerConfig } from '../../src/config/index.ts';
+import { EngineConfig } from '../../src/config/service.ts';
+import { ConfigStore } from '../../src/config/store/service.ts';
+import { JsonFile } from '../../src/files/service.ts';
+import { WORKTREE_ROOT_MARKER } from '../../src/workspaces/root/schema.ts';
+import { WorktreeRoot } from '../../src/workspaces/root/service.ts';
+import { createConfigAt } from '../helpers/config.ts';
 import { createTempDir } from '../helpers/index.ts';
 
+function runRoot<A, E>(
+  effect: Effect.Effect<A, E, WorktreeRoot | ConfigStore>,
+  overrides: Partial<ServerConfig> = {}
+) {
+  const config = createConfigAt(createTempDir(), overrides);
+  return Effect.runPromise(
+    effect.pipe(
+      Effect.provide(
+        WorktreeRoot.layer.pipe(
+          Layer.provideMerge(ConfigStore.layer),
+          Layer.provide(Layer.merge(Layer.succeed(EngineConfig, config), JsonFile.layer))
+        )
+      )
+    )
+  );
+}
+
+const choose = (path: string | null) =>
+  ConfigStore.use((store) => Effect.asVoid(Effect.orDie(store.update({ worktreesDir: path }))));
+
 describe('the worktree folder', () => {
-  test('the environment wins over config.json, and config.json over the default', () => {
+  test('the environment wins over config.json, and config.json over the default', async () => {
     const defaultDir = createTempDir();
-    let configured: string | null = '/Volumes/bucket/worktrees';
-    const root = new WorktreeRoot({ defaultDir, readConfigured: () => configured });
-    expect(root.resolve()).toEqual({ path: '/Volumes/bucket/worktrees', source: 'config' });
-    configured = null;
-    expect(root.resolve()).toEqual({ path: defaultDir, source: 'default' });
-    expect(root.path).toBe(defaultDir);
-    const fromEnvironment = new WorktreeRoot({
-      defaultDir: '/env/worktrees',
-      fromEnvironment: true,
-      readConfigured: () => '/Volumes/bucket/worktrees',
+    const resolved = await runRoot(
+      Effect.gen(function* () {
+        const root = yield* WorktreeRoot;
+        yield* choose('/Volumes/bucket/worktrees');
+        const configured = yield* root.resolve;
+        yield* choose(null);
+        return { configured, fallback: yield* root.resolve, path: yield* root.path };
+      }),
+      { worktreesDir: defaultDir }
+    );
+    expect(resolved).toEqual({
+      configured: { path: '/Volumes/bucket/worktrees', source: 'config' },
+      fallback: { path: defaultDir, source: 'default' },
+      path: defaultDir,
     });
-    expect(fromEnvironment.resolve()).toEqual({ path: '/env/worktrees', source: 'environment' });
+    const environmentDir = createTempDir();
+    const fromEnvironment = await runRoot(
+      Effect.gen(function* () {
+        yield* choose('/Volumes/bucket/worktrees');
+        return yield* (yield* WorktreeRoot).resolve;
+      }),
+      { worktreesDir: environmentDir, worktreesDirFromEnvironment: true }
+    );
+    expect(fromEnvironment).toEqual({ path: environmentDir, source: 'environment' });
   });
 
-  test('a chosen folder must exist, be a folder and be writable', () => {
-    const problemOf = (path: string) => Effect.runSync(describeWorktreeRootProblem(path));
+  test('a chosen folder must exist, be a folder and be writable', async () => {
     const base = createTempDir();
     const missing = join(base, 'bucket');
-    expect(problemOf(missing)).toBe(
-      `The worktree folder ${missing} does not exist. If it is on a drive you mount, mount it again, or choose another folder in Settings → Projects.`
-    );
     const file = join(base, 'file');
     writeFileSync(file, '');
-    expect(problemOf(file)).toBe(`The worktree folder ${file} is not a folder.`);
     const locked = join(base, 'locked');
     mkdirSync(locked);
     chmodSync(locked, 0o500);
-    expect(problemOf(locked)).toBe(`Shinsa cannot write to the worktree folder ${locked}.`);
-    chmodSync(locked, 0o700);
-    expect(problemOf(locked)).toBeNull();
+    const problems = await runRoot(
+      Effect.gen(function* () {
+        const root = yield* WorktreeRoot;
+        const found = [
+          yield* root.describeProblem(missing),
+          yield* root.describeProblem(file),
+          yield* root.describeProblem(locked),
+        ];
+        yield* Effect.sync(() => chmodSync(locked, 0o700));
+        return [...found, yield* root.describeProblem(locked)];
+      })
+    );
+    expect(problems).toEqual([
+      `The worktree folder ${missing} does not exist. If it is on a drive you mount, mount it again, or choose another folder in Settings → Projects.`,
+      `The worktree folder ${file} is not a folder.`,
+      `Shinsa cannot write to the worktree folder ${locked}.`,
+      null,
+    ]);
   });
 
   test('only a chosen folder is checked; the default one is made when needed', async () => {
     const missing = join(createTempDir(), 'gone');
-    expect(await Effect.runPromise(assertWorktreeRoot({ path: missing, source: 'default' }))).toBe(missing);
-    const failure = await Effect.runPromise(
-      Effect.flip(assertWorktreeRoot({ path: missing, source: 'config' }))
+    expect(
+      await runRoot(
+        WorktreeRoot.use((root) => root.assert),
+        { worktreesDir: missing }
+      )
+    ).toBe(missing);
+    const failure = await runRoot(
+      Effect.flip(
+        Effect.gen(function* () {
+          yield* choose(missing);
+          return yield* (yield* WorktreeRoot).assert;
+        })
+      )
     );
     expect(failure._tag).toBe('WorktreeRootUnavailable');
     expect(failure.path).toBe(missing);
     const present = createTempDir();
-    expect(await Effect.runPromise(assertWorktreeRoot({ path: present, source: 'environment' }))).toBe(
-      present
-    );
+    expect(
+      await runRoot(
+        WorktreeRoot.use((root) => root.assert),
+        {
+          worktreesDir: present,
+          worktreesDirFromEnvironment: true,
+        }
+      )
+    ).toBe(present);
   });
 
   test('a folder chosen in Settings must still hold the mark Shinsa left in it', async () => {
     const mountPoint = createTempDir();
-    const unmounted = await Effect.runPromise(
-      Effect.flip(assertWorktreeRoot({ path: mountPoint, source: 'config' }))
-    );
-    expect(unmounted.message).toBe(
-      `The worktree folder ${mountPoint} is not the one you chose: the drive it is on may not be mounted. Mount it again, or choose the folder again in Settings → Projects.`
-    );
-    expect(Effect.runSync(markWorktreeRoot(mountPoint))).toBe(mountPoint);
-    expect(existsSync(join(mountPoint, WORKTREE_ROOT_MARKER))).toBe(true);
-    expect(await Effect.runPromise(assertWorktreeRoot({ path: mountPoint, source: 'config' }))).toBe(
-      mountPoint
-    );
     const locked = createTempDir();
     chmodSync(locked, 0o500);
-    const refused = Effect.runSync(Effect.flip(markWorktreeRoot(locked)));
-    expect(refused.message).toBe(`Shinsa cannot write to the worktree folder ${locked}.`);
-    expect(Effect.runSync(describeWorktreeRootMarkProblem(locked))).toBe(
-      `Shinsa cannot write to the worktree folder ${locked}.`
+    const outcome = await runRoot(
+      Effect.gen(function* () {
+        const root = yield* WorktreeRoot;
+        yield* choose(mountPoint);
+        const unmounted = yield* Effect.flip(root.assert);
+        const marked = yield* root.mark(mountPoint);
+        const mounted = yield* root.assert;
+        const refused = yield* Effect.flip(root.mark(locked));
+        return { unmounted: unmounted.message, marked, mounted, refused: refused.message };
+      })
     );
+    expect(outcome).toEqual({
+      unmounted: `The worktree folder ${mountPoint} is not the one you chose: the drive it is on may not be mounted. Mount it again, or choose the folder again in Settings → Projects.`,
+      marked: mountPoint,
+      mounted: mountPoint,
+      refused: `Shinsa cannot write to the worktree folder ${locked}.`,
+    });
+    expect(existsSync(join(mountPoint, WORKTREE_ROOT_MARKER))).toBe(true);
     chmodSync(locked, 0o700);
-    expect(Effect.runSync(describeWorktreeRootMarkProblem(locked))).toBeNull();
   });
 });

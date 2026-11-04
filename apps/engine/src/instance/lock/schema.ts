@@ -51,3 +51,8 @@ export class LockBusy extends Schema.TaggedError<LockBusy, { readonly brand: uni
 }) {}
 
 export const TAKEOVER_SCHEDULE = Schedule.recurs(2);
+
+export class ServerRunningError extends Schema.TaggedError<
+  ServerRunningError,
+  { readonly brand: unique symbol }
+>()('ServerRunningError', { dataDir: Schema.String, holder: LockHolder, message: Schema.String }) {}

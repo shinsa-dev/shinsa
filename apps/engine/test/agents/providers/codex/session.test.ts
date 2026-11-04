@@ -1,10 +1,54 @@
 import { describe, expect, test } from 'bun:test';
 import { type ChatEvent, type ChatNotice, isReadOnlyRole, type RunRole } from '@shinsa/core';
-import { type CodexSessionMode, startCodexSession } from '../../../../src/agents/providers/codex/session.ts';
+import { Duration, Effect } from 'effect';
+import { HEARTBEAT_MS } from '../../../../src/agents/providers/codex/mcp/schema.ts';
+import {
+  COMPACT_GRACE,
+  type CodexRuntime,
+  type CodexSessionMode,
+  REQUEST_TIMEOUT,
+} from '../../../../src/agents/providers/codex/session/schema.ts';
+import { makeCodexSession } from '../../../../src/agents/providers/codex/session/service.ts';
 import type { AgentSessionInput } from '../../../../src/agents/providers/index.ts';
-import { createShinsaTools, type ToolHandler } from '../../../../src/agents/tools/index.ts';
 import { FakeCodex, type FakeCodexStep } from '../../../helpers/codex.ts';
 import { createTempDir, until } from '../../../helpers/index.ts';
+import { startScopedSession } from '../../../helpers/providers.ts';
+import { createTestTools, type PromisedToolHandler } from '../../../helpers/tools.ts';
+
+interface CodexSessionOptions {
+  runtime: CodexRuntime;
+  requestTimeoutMs?: number;
+  heartbeatMs?: number;
+  compactGraceMs?: number;
+  now?: () => number;
+}
+
+function startCodexSession(
+  input: AgentSessionInput,
+  options: CodexSessionOptions,
+  mode: CodexSessionMode = 'turns'
+) {
+  return startScopedSession(
+    makeCodexSession({
+      input,
+      mode,
+      executable: options.runtime.resolveExecutable,
+      env: options.runtime.env,
+      now: Effect.sync(options.now ?? Date.now),
+      requestTimeout:
+        options.requestTimeoutMs === undefined ? REQUEST_TIMEOUT : Duration.millis(options.requestTimeoutMs),
+      compactGrace:
+        options.compactGraceMs === undefined ? COMPACT_GRACE : Duration.millis(options.compactGraceMs),
+      heartbeat: Duration.millis(options.heartbeatMs ?? HEARTBEAT_MS),
+      token: Effect.sync(() => crypto.randomUUID()),
+    }).pipe(
+      Effect.map((handle) => ({
+        ...handle,
+        steer: (text: string, from: 'you' | 'shinsa' = 'you') => handle.steer(text, from),
+      }))
+    )
+  );
+}
 
 interface Started {
   input: AgentSessionInput;
@@ -16,13 +60,13 @@ interface Started {
 function createInput(
   key: RunRole | 'plan' | 'build' = 'build',
   overrides: Partial<AgentSessionInput> = {},
-  handle?: ToolHandler
+  handle?: PromisedToolHandler
 ) {
   const role: RunRole = key === 'plan' || key === 'build' ? 'agent' : key;
   const entries: ChatEvent[] = [];
   const sessions: string[] = [];
   const tools: string[] = [];
-  const handler: ToolHandler =
+  const handler: PromisedToolHandler =
     handle ??
     ((name) => {
       tools.push(name);
@@ -36,7 +80,7 @@ function createInput(
     model: 'gpt-6-astra',
     resume: null,
     defaultBranch: 'main',
-    tools: createShinsaTools(role, handler),
+    tools: createTestTools(role, handler),
     pluginDir: '/plugin',
     onSession: (id) => sessions.push(id),
     onEntry: (entry) => entries.push(entry),
@@ -325,8 +369,12 @@ describe('how a Codex turn fails', () => {
     const missing = createInput('plan');
     const result = await startCodexSession(missing.input, {
       runtime: {
-        resolveExecutable: () =>
-          Promise.resolve({ ok: false, reason: 'not_installed', message: 'Install Codex.', version: null }),
+        resolveExecutable: Effect.succeed({
+          ok: false,
+          reason: 'not_installed',
+          message: 'Install Codex.',
+          version: null,
+        }),
       },
     }).done;
     expect(result.failure).toMatchObject({
@@ -337,7 +385,7 @@ describe('how a Codex turn fails', () => {
     const broken = createInput('plan');
     const crashed = await startCodexSession(broken.input, {
       runtime: {
-        resolveExecutable: () => Promise.resolve({ ok: true, path: '/no/such/codex', version: null }),
+        resolveExecutable: Effect.succeed({ ok: true, path: '/no/such/codex', version: null }),
       },
     }).done;
     expect(crashed.failure?.class).toBe('setup_failed');

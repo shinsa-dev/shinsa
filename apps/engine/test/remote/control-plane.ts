@@ -5,6 +5,7 @@ import {
   REMOTE_PATHS,
   sealPairingCredentials,
 } from '@shinsa/core';
+import { Effect } from 'effect';
 
 interface ControlCall {
   path: string;
@@ -24,7 +25,7 @@ export async function sealCredentials(machineKey: string, credentials: MachineCr
     'deriveBits',
   ])) as CryptoKeyPair;
   const iv = crypto.getRandomValues(new Uint8Array(PAIRING_SEAL_IV_BYTES));
-  return sealPairingCredentials({ machineKey, ephemeral, iv }, credentials);
+  return Effect.runPromise(sealPairingCredentials({ machineKey, ephemeral, iv }, credentials));
 }
 
 export function refuse(failure: { readonly code: string; readonly status: number }, message = 'Refused.') {

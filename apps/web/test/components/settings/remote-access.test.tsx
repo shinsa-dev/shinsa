@@ -136,7 +136,7 @@ describe('Settings → Remote access', () => {
   it('makes the one invite link without asking for a name, then shows it as a QR code', async () => {
     const actions = renderGroup(createRemoteSnapshot());
     fireEvent.click(screen.getByRole('button', { name: 'Invite link' }));
-    expect(await screen.findByText(/Make one link for your own devices and for other people/)).toBeTruthy();
+    expect(await screen.findByText(/Whoever opens it signs in with GitHub and asks for access/)).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Make link' }));
     await waitFor(() => expect(actions.createLink).toHaveBeenCalled());
     actions.push(createRemoteSnapshot({ link: { url: ENROLL_URL, createdAt: Date.now() } }));
@@ -151,7 +151,7 @@ describe('Settings → Remote access', () => {
     const toasts = spyOnToasts();
     const actions = renderGroup(createRemoteSnapshot({ link: { url: ENROLL_URL, createdAt: Date.now() } }));
     fireEvent.click(screen.getByRole('button', { name: 'Invite link' }));
-    expect(await screen.findByText(/Open it on your own device, or share it/)).toBeTruthy();
+    expect(await screen.findByText(/Accepting someone else gives them full control/)).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Turn off link' }));
     await waitFor(() => expect(actions.removeLink).toHaveBeenCalled());
     await waitFor(() => expect(toasts.success).toHaveBeenCalledWith('The link is off.'));

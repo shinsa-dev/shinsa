@@ -13,6 +13,7 @@ import {
   type TeamHello,
   verifyTeamHello,
 } from '@shinsa/core';
+import { Effect } from 'effect';
 import type { Socket } from 'effect/socket';
 import type { TeamChannelTarget } from '@/lib/teams/team-socket/schema.ts';
 import { createSocketTransport } from '../../support/engine-socket.ts';
@@ -92,7 +93,7 @@ export function createFakeTeamMachine() {
     },
     answer: async (socket: FakeTeamSocket, data: string) => {
       const hello = parseTeamHello(data);
-      if (!(hello && (await verifyTeamHello(machine.key, hello)))) {
+      if (!(hello && (await Effect.runPromise(verifyTeamHello(machine.key, hello))))) {
         socket.emit('message', {
           data: JSON.stringify({ type: 'refused', reason: 'You are not in this team.' }),
         });
@@ -106,12 +107,17 @@ export function createFakeTeamMachine() {
         team: hello.team,
         view: hello.view,
         clientEphemeral: hello.ephemeral,
-        serverEphemeral: await serializePublicKey(ephemeral.publicKey),
+        serverEphemeral: await Effect.runPromise(serializePublicKey(ephemeral.publicKey)),
       };
-      machine.seal = createFrameSealer(
-        await deriveTeamSessionKey(machine.key, keys, ephemeral.privateKey, hello.ephemeral)
+      const seal = createFrameSealer(
+        await Effect.runPromise(
+          deriveTeamSessionKey(machine.key, keys, ephemeral.privateKey, hello.ephemeral)
+        )
       );
-      socket.emit('message', { data: JSON.stringify(await createTeamWelcome(machine.key, keys)) });
+      machine.seal = (plain) => Effect.runPromise(seal(plain));
+      socket.emit('message', {
+        data: JSON.stringify(await Effect.runPromise(createTeamWelcome(machine.key, keys))),
+      });
       readied();
     },
     send: async (message: ShareMessage) => {

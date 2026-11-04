@@ -191,7 +191,7 @@ export class CheckRunner extends Context.Service<
         if (checked.check.outcome !== 'fail' || checked.timedOut || !compare || options.signal?.aborted)
           return checked;
         if (NO_TESTS.test(checked.output)) return checked;
-        const diff = yield* Effect.promise(() => compare(checked));
+        const diff = yield* compare(checked);
         if (!diff) return checked;
         const detail = [describeFailureDiff(diff), checked.check.detail].filter(Boolean).join('\n\n');
         if (diff.added.length > 0)

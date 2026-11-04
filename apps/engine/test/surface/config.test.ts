@@ -3,6 +3,7 @@ import { realpathSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { resolve } from 'node:path';
 import { HOUR_MS, PROJECT_COLORS } from '@shinsa/core';
+import { Effect } from 'effect';
 import { createTempDir } from '../helpers/index.ts';
 import { createFakeClient, findSpec, runSpec } from './fixtures.ts';
 
@@ -178,6 +179,16 @@ describe('projects and focus', () => {
     ]);
   });
 
+  test('sets a project’s usage limit, and 0 turns it off', async () => {
+    const fake = createFakeClient({ '/api/projects': PROJECTS });
+    await runSpec(fake, ['projects', 'write', '--name', 'Play', '--usage-limit', '12.5']);
+    await runSpec(fake, ['projects', 'write', '--name', 'Play', '--usage-limit', '0']);
+    expect(fake.sent).toEqual([
+      { type: 'project.write', project: { name: 'Play', color: 'purple', usageLimit: 12.5 } },
+      { type: 'project.write', project: { name: 'Play', color: 'purple', usageLimit: null } },
+    ]);
+  });
+
   test('a new project needs a name, and a project to change must exist', async () => {
     const fake = createFakeClient({ '/api/projects': PROJECTS });
     await expect(runSpec(fake, ['projects', 'write', '--key', 'NEW'])).rejects.toThrow(
@@ -256,8 +267,8 @@ describe('projects and focus', () => {
     const fake = createFakeClient({ '/api/projects': PROJECTS });
     const changed: string[] = [];
     fake.client.projects = {
-      upsertRepo: (projectId, path) => Promise.resolve(changed.push(`repo ${projectId} ${path}`)),
-      upsertFolder: (projectId, path) => Promise.resolve(changed.push(`folder ${projectId} ${path}`)),
+      upsertRepo: (projectId, path) => Effect.sync(() => changed.push(`repo ${projectId} ${path}`)),
+      upsertFolder: (projectId, path) => Effect.sync(() => changed.push(`folder ${projectId} ${path}`)),
     };
     await runSpec(fake, ['projects', 'add-repo', 'WK', '~/code/server']);
     await runSpec(fake, ['projects', 'add-folder', 'Work', '/code/basket']);

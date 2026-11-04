@@ -4,6 +4,7 @@ import {
   DELEGATION_LIMITS,
   DELEGATION_MODES,
   type DelegateRole,
+  type DomainError,
   PROTOCOL_LIMITS,
   type Repo,
   type RunRole,
@@ -12,7 +13,8 @@ import {
   type ShinsaState,
   type TeamFeedTask,
 } from '@shinsa/core';
-import type { ToolSpec } from '../schema.ts';
+import type { Duration, Effect } from 'effect';
+import type { ToolCallFailed, ToolSpec } from '../schema.ts';
 
 const L = DELEGATION_LIMITS;
 
@@ -216,18 +218,28 @@ export const ORCHESTRATION_TOOL_SPECS = {
 export type DelegationOutcome = 'settled' | 'question' | 'timeout';
 
 export interface OrchestrationCall {
-  runId: string;
-  attemptId: string;
-  requestKey: string;
-  signal: AbortSignal;
-  minuteMs: number;
-  state: () => ShinsaState;
-  teamTasks: () => readonly TeamFeedTask[];
-  dispatch: (command: ShinsaCommand, id?: string) => Promise<ShinsaEvent[]>;
-  resolveBaseCommit: () => Promise<string>;
-  registerRepo: (projectId: string | null, name: string) => Promise<Repo | null>;
-  createRepo: (projectId: string, name: string) => Promise<Repo>;
-  hasProvider: (id: string) => boolean;
-  awaitDelegation: (childRunId: string, timeoutMs: number, signal: AbortSignal) => Promise<DelegationOutcome>;
-  recordStarted: (childRunId: string) => void;
+  readonly runId: string;
+  readonly attemptId: string;
+  readonly requestKey: string;
+  readonly signal: AbortSignal;
+  readonly minute: Duration.Duration;
+  readonly state: Effect.Effect<ShinsaState>;
+  readonly teamTasks: Effect.Effect<readonly TeamFeedTask[]>;
+  readonly dispatch: (
+    command: ShinsaCommand,
+    id?: string
+  ) => Effect.Effect<ShinsaEvent[], ToolCallFailed | DomainError>;
+  readonly resolveBaseCommit: Effect.Effect<string, ToolCallFailed | DomainError>;
+  readonly registerRepo: (
+    projectId: string | null,
+    name: string
+  ) => Effect.Effect<Repo | null, ToolCallFailed | DomainError>;
+  readonly createRepo: (projectId: string, name: string) => Effect.Effect<Repo, ToolCallFailed | DomainError>;
+  readonly hasProvider: (id: string) => boolean;
+  readonly awaitDelegation: (
+    childRunId: string,
+    timeout: Duration.Duration,
+    signal: AbortSignal
+  ) => Effect.Effect<DelegationOutcome>;
+  readonly recordStarted: (childRunId: string) => Effect.Effect<void>;
 }

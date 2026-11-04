@@ -6,14 +6,12 @@ import {
   type RemoteTeam,
   type RemoteUser,
   type TeamJoinResponse,
-  type TeamScopesRequest,
   toggleScope,
   type TeamPreviewResponse,
 } from '../../packages/core/src/index.ts';
 import { DAY, HOUR } from '../kit/time.ts';
-import { respondTeamConnect } from './connect.ts';
 import { createRandomKey, readBearerMachine } from './requests.ts';
-import { TEAM_INVITE, TEAMMATE, type Machine, type TunnelData, USER } from './schema.ts';
+import { TEAM_INVITE, TEAMMATE, type TunnelData, USER } from './schema.ts';
 
 export const TEAM_KEY = createRandomKey(32);
 
@@ -78,9 +76,9 @@ const OTHER_TEAMS: Omit<RemoteTeam, 'role'>[] = [
   },
 ];
 
-const TEAM_SCOPES_PATH = new RegExp(`^${REMOTE_PATHS.machineTeams}/([^/]+)/scopes$`);
+export const TEAM_SCOPES_PATH = new RegExp(`^${REMOTE_PATHS.machineTeams}/([^/]+)/scopes$`);
 
-const PAGE_SCOPES_PATH = new RegExp(`^${REMOTE_PATHS.teams}/([^/]+)/scopes$`);
+export const PAGE_SCOPES_PATH = new RegExp(`^${REMOTE_PATHS.teams}/([^/]+)/scopes$`);
 
 const REQUESTED_TEAM = { id: 'growth', name: 'Growth' };
 
@@ -88,36 +86,9 @@ const PREVIEW_TEAM_KEYS: Record<string, string> = Object.fromEntries(
   [...OTHER_TEAMS, REQUESTED_TEAM].map((team) => [team.id, createRandomKey(32)])
 );
 
-const TEAM_SCOPES = new Map<string, Pick<RemoteTeam, 'scopes' | 'overrides'>>(
+export const TEAM_SCOPES = new Map<string, Pick<RemoteTeam, 'scopes' | 'overrides'>>(
   [TEAM, ...OTHER_TEAMS].map((team) => [team.id, { scopes: team.scopes, overrides: team.overrides }])
 );
-
-async function respondScopesChange(request: Request, teamId: string) {
-  const current = TEAM_SCOPES.get(teamId);
-  if (!current)
-    return Response.json({ error: { code: 'not_found', message: 'No such team.' } }, { status: 404 });
-  const { userId, scopes } = (await request.json()) as TeamScopesRequest;
-  if (!userId) {
-    TEAM_SCOPES.set(teamId, { ...current, scopes: scopes ?? DEFAULT_TEAM_SCOPES });
-    return Response.json({ ok: true });
-  }
-  const others = current.overrides.filter((entry) => entry.userId !== userId);
-  const overrides = scopes ? [...others, { userId, scopes }] : others;
-  TEAM_SCOPES.set(teamId, { ...current, overrides });
-  return Response.json({ ok: true });
-}
-
-async function respondPageScopesChange(request: Request, teamId: string) {
-  const team = resolvePreviewTeams(USER).find((entry) => entry.id === teamId);
-  if (!team || team.role !== 'owner')
-    return Response.json(
-      { error: { code: 'not_owner', message: 'Only the team’s owner can do this.' } },
-      { status: 403 }
-    );
-  const changed = await respondScopesChange(request, teamId);
-  if (!changed.ok) return changed;
-  return Response.json(resolvePreviewTeams(USER).find((entry) => entry.id === teamId));
-}
 
 export const teammateLink = {
   online: true,
@@ -175,7 +146,7 @@ export function listPreviewTeamKeys(owner: RemoteUser) {
   ];
 }
 
-export function respondTeams(request: Request, url: URL, teammates: Machine[]) {
+export function respondTeams(request: Request, url: URL) {
   const { pathname } = url;
   if (pathname === REMOTE_PATHS.teams) return Response.json(resolvePreviewTeams(USER));
   if (pathname === REMOTE_PATHS.teamJoin) {
@@ -191,15 +162,7 @@ export function respondTeams(request: Request, url: URL, teammates: Machine[]) {
     const answer: TeamPreviewResponse = { name: TEAM.name, owner: TEAM.owner };
     return Response.json(answer);
   }
-  if (pathname === `${REMOTE_PATHS.teams}/${TEAM.id}/connect`)
-    return respondTeamConnect(request, USER, teammates);
-  const pageScopes = PAGE_SCOPES_PATH.exec(pathname);
-  if (pageScopes) return respondPageScopesChange(request, pageScopes[1] ?? '');
   const owner = MACHINE_OWNERS[readBearerMachine(request)] ?? null;
-  if (owner && pathname === `${REMOTE_PATHS.machineTeams}/${TEAM.id}/connect`)
-    return respondTeamConnect(request, owner, teammates);
-  const scopes = TEAM_SCOPES_PATH.exec(pathname);
-  if (owner && scopes) return respondScopesChange(request, scopes[1] ?? '');
   if (owner && pathname.startsWith(`${REMOTE_PATHS.machineTeams}/`)) return Response.json({ ok: true });
   return null;
 }

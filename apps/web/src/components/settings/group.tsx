@@ -16,6 +16,10 @@ export const ROW_INSET =
 
 export const SETTING_ROW = `flex min-h-10 items-center gap-4 py-1 ${ROW_INSET}`;
 
+export const SETTING_ROW_WRAPS = 'max-sm:flex-wrap max-sm:gap-y-1.5';
+
+export const SETTING_LABEL = 'min-w-0 flex-1 max-sm:flex-[1_0_auto] max-sm:max-w-full';
+
 export const SETTINGS_SUBHEADING = `mt-1.5 border-border border-t pt-2.5 pb-0.5 text-2xs text-fg-2 first:mt-0 first:border-t-0 first:pt-1.5 ${ROW_INSET}`;
 
 export const SETTINGS_SHELF = `${INSET} flex flex-col divide-y divide-border bg-bg-a1 [--shelf-edge:1px] [--input-hover:var(--bg-4)] [--input:var(--bg-3)]`;
@@ -72,8 +76,8 @@ export function SettingsCard({ className, children }: { className?: string; chil
 
 export function SettingRow({ title, children }: { title: React.ReactNode; children: React.ReactNode }) {
   return (
-    <div className={SETTING_ROW}>
-      <div className='flex min-w-0 flex-1 items-center gap-1.5 truncate text-xs text-fg-4'>{title}</div>
+    <div className={cn(SETTING_ROW, SETTING_ROW_WRAPS)}>
+      <div className={cn(SETTING_LABEL, 'flex items-center gap-1.5 truncate text-xs text-fg-4')}>{title}</div>
       <div className='flex shrink-0 items-center gap-1.5'>{children}</div>
     </div>
   );
@@ -85,25 +89,44 @@ export function PathRow({
   title,
   path,
   action,
+  dense = false,
 }: {
   icon: IconName;
   iconLabel: string;
   title: string;
   path?: string;
   action?: React.ReactNode;
+  dense?: boolean;
 }) {
   return (
-    <div className={cn(SETTING_ROW, 'gap-2')}>
+    <div className={cn(SETTING_ROW, !dense && SETTING_ROW_WRAPS, 'gap-2')}>
       <Hint label={iconLabel}>
         <span className='grid size-3.5 shrink-0 place-items-center'>
           <Icon size='sm' name={icon} />
         </span>
       </Hint>
-      <span className='flex min-w-0 flex-1 items-baseline gap-1.5'>
-        <Truncate className='min-w-0 shrink-0 text-xs text-fg-4'>{title}</Truncate>
-        {path && <Truncate className='min-w-0 text-2xs text-fg-2'>{path}</Truncate>}
+      <span className={cn(SETTING_LABEL, 'flex items-baseline gap-1.5', dense && 'max-sm:flex-1')}>
+        <Truncate className={cn('min-w-0 shrink-0 text-xs text-fg-4', dense && 'max-sm:shrink')}>
+          {title}
+        </Truncate>
+        {path && (
+          <Truncate
+            className={cn('min-w-0 text-2xs text-fg-2 max-sm:w-0 max-sm:grow', dense && 'max-sm:hidden')}
+          >
+            {path}
+          </Truncate>
+        )}
       </span>
-      {action}
+      {action && (
+        <span
+          className={cn(
+            'flex min-w-0 items-center gap-2',
+            dense ? 'max-sm:shrink-0 max-sm:gap-1 max-sm:**:data-select-text:sr-only' : 'flex-wrap'
+          )}
+        >
+          {action}
+        </span>
+      )}
     </div>
   );
 }

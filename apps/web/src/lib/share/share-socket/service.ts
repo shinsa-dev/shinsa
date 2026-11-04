@@ -1,5 +1,6 @@
 import {
   type Bytes,
+  type FrameError,
   createFrameOpener,
   createShareHello,
   decodeText,
@@ -42,7 +43,7 @@ export class ShareSocket extends Context.Service<
 
       const dial = Effect.fn('ShareSocket.dial')(function* (link: ShareLink, session: ShareSession) {
         let connected = false;
-        let open: ((frame: Bytes) => Promise<Bytes>) | null = null;
+        let open: ((frame: Bytes) => Effect.Effect<Bytes, FrameError>) | null = null;
         const drop = (reason: string, final = false) =>
           Effect.suspend(() => {
             const dropped = new ShareDropped({ reason, connected, final });
@@ -71,7 +72,9 @@ export class ShareSocket extends Context.Service<
           () =>
             crypto.subtle.generateKey(REMOTE_KEY_ALGORITHM, true, ['deriveBits']) as Promise<CryptoKeyPair>
         );
-        const hello = yield* enter(() => createShareHello(link.shareId, link.key, ephemeral.publicKey));
+        const created = yield* Effect.option(createShareHello(link.shareId, link.key, ephemeral.publicKey));
+        if (Option.isNone(created)) return yield* offline;
+        const hello = created.value;
         const socket = yield* Effect.catchTag(
           dialSocket(resolveShareChannelUrl(answer.url, link.shareId)),
           'SocketError',
@@ -88,11 +91,13 @@ export class ShareSocket extends Context.Service<
             clientEphemeral: hello.ephemeral,
             serverEphemeral: welcome.ephemeral,
           };
-          const verified = yield* enter(() => verifyShareWelcome(link.key, keys, welcome.proof));
+          const verified = yield* verifyShareWelcome(link.key, keys, welcome.proof);
           if (!verified) return yield* gone();
-          const key = yield* enter(() =>
+          const derived = yield* Effect.option(
             deriveShareSessionKey(link.key, keys, ephemeral.privateKey, welcome.ephemeral)
           );
+          if (Option.isNone(derived)) return yield* offline;
+          const key = derived.value;
           open = createFrameOpener(key);
           session.welcomed();
         });
@@ -101,7 +106,9 @@ export class ShareSocket extends Context.Service<
           const opener = open;
           if (!opener) return yield* offline;
           const unreadable = drop(UNREADABLE_MESSAGE);
-          const plain = yield* enter(() => opener(frame), unreadable);
+          const opened = yield* Effect.option(opener(frame));
+          if (Option.isNone(opened)) return yield* unreadable;
+          const plain = opened.value;
           const message = parseShareMessage(decodeText(plain));
           if (!message) return yield* unreadable;
           if (message.t === 'closed') return yield* gone(message.reason);

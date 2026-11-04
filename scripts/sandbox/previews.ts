@@ -1,3 +1,4 @@
+import { Clock, Effect } from 'effect';
 import { PREVIEW_ACCESS_COOKIE, PREVIEW_COOKIE } from '../../apps/cloud/src/routes/previews/schema.ts';
 import {
   createPreviewAccessToken,
@@ -8,11 +9,15 @@ import {
   parsePreviewHost,
   resolvePreviewTunnelPath,
 } from '../../packages/core/src/index.ts';
-import type { createSandboxCloud } from './cloud.ts';
 import { readCookie } from './requests.ts';
 import { type Machine, PREVIEW_ZONE, type TunnelData, USER } from './schema.ts';
 
-function upgradePreview(request: Request, url: URL, machines: Machine[], server: Bun.Server<TunnelData>) {
+export function upgradePreview(
+  request: Request,
+  url: URL,
+  machines: Machine[],
+  server: Bun.Server<TunnelData>
+) {
   const address = parsePreviewHost(url.host, PREVIEW_ZONE);
   const machine = machines.find((entry) => entry.id === address?.instanceId);
   const key = readCookie(request, PREVIEW_COOKIE);
@@ -33,28 +38,20 @@ function upgradePreview(request: Request, url: URL, machines: Machine[], server:
   return new Response('Upgrade failed', { status: 400 });
 }
 
-export function respondPreviewHost(
-  request: Request,
+export const respondPreviewOpen = Effect.fn('Sandbox.respondPreviewOpen')(function* (
   url: URL,
-  machines: Machine[],
-  cloud: ReturnType<typeof createSandboxCloud>,
-  server: Bun.Server<TunnelData>
+  machines: Machine[]
 ) {
-  if (request.headers.get('upgrade')?.toLowerCase() === 'websocket')
-    return upgradePreview(request, url, machines, server);
-  return cloud.respond(request);
-}
-
-export async function respondPreviewOpen(url: URL, machines: Machine[]) {
-  const target = new URL(url.searchParams.get('url') ?? '', PREVIEW_ZONE);
-  const address = parsePreviewHost(target.host, PREVIEW_ZONE);
+  const target = URL.parse(url.searchParams.get('url') ?? '', PREVIEW_ZONE);
+  const address = target && parsePreviewHost(target.host, PREVIEW_ZONE);
   const machine = machines.find((entry) => entry.id === address?.instanceId);
-  if (!(address && machine)) return new Response('Not a service of yours', { status: 404 });
-  const token = await createPreviewAccessToken(machine.connectKey, {
+  if (!(target && address && machine)) return new Response('Not a service of yours', { status: 404 });
+  const expiresAt = (yield* Clock.currentTimeMillis) + PREVIEW_OPEN_TTL_MS;
+  const token = yield* createPreviewAccessToken(machine.connectKey, {
     ...address,
     userId: USER.id,
-    expiresAt: Date.now() + PREVIEW_OPEN_TTL_MS,
+    expiresAt,
   });
   target.searchParams.set(PREVIEW_ACCESS_PARAM, token);
   return Response.redirect(target.href, 303);
-}
+});

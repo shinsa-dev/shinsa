@@ -3,7 +3,13 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { $ } from 'bun';
+import { Effect } from 'effect';
 import { resolveBuildChangelog } from './changelog-history.ts';
+import { CommandLayer } from './kit/command/index.ts';
+
+function resolveChangelogAt(repo: string, version: string) {
+  return Effect.runPromise(resolveBuildChangelog(repo, version).pipe(Effect.provide(CommandLayer)));
+}
 
 let root = '';
 
@@ -37,7 +43,7 @@ describe('resolveBuildChangelog', () => {
     await recordEntry(repo, 'tidy-runner', 'internal', 'The runner is simpler inside.');
     await $`git tag v1.1.0-canary.1`.cwd(repo);
 
-    const changelog = await resolveBuildChangelog(repo, '1.1.0');
+    const changelog = await resolveChangelogAt(repo, '1.1.0');
     expect(changelog.releases.map((release) => release.version)).toEqual(['1.1.0', '1.0.0']);
     expect(changelog.releases.map((release) => release.changes.map((change) => change.slug))).toEqual([
       ['whats-new'],
@@ -51,7 +57,7 @@ describe('resolveBuildChangelog', () => {
     await recordEntry(repo, 'faster-diffs', 'fixed', 'Large diffs open without freezing.');
     await $`git tag v1.0.0`.cwd(repo);
 
-    const changelog = await resolveBuildChangelog(repo, '0.0.0');
+    const changelog = await resolveChangelogAt(repo, '0.0.0');
     expect(changelog.releases).toEqual([
       {
         version: null,
@@ -64,6 +70,6 @@ describe('resolveBuildChangelog', () => {
   it('refuses to build with an invalid entry', async () => {
     const repo = await createRepository();
     await recordEntry(repo, 'broken', 'shiny', 'Something.');
-    expect(resolveBuildChangelog(repo, '1.0.0')).rejects.toThrow('.changes/broken.md');
+    await expect(resolveChangelogAt(repo, '1.0.0')).rejects.toThrow('.changes/broken.md');
   });
 });

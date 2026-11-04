@@ -11,20 +11,21 @@ import {
   type ShinsaState,
   type Task,
 } from '@shinsa/core';
-import type { RunSupervisor } from '../../src/agents/index.ts';
-import type { Briefings } from '../../src/briefing/index.ts';
+import { Effect } from 'effect';
+import type { RunSupervisor } from '../../src/agents/supervisor/service.ts';
+import { BriefingWriter } from '../../src/briefing/service.ts';
 import { resolveScratchPath, type ServerConfig } from '../../src/config/index.ts';
-import { NO_DRAFT, STOPPED_WHILE_FILING } from '../../src/feedback/index.ts';
-import { createWorktree, inspectRepo } from '../../src/git/index.ts';
-import * as github from '../../src/github/index.ts';
-import { ProcessLedger } from '../../src/resources/index.ts';
+import { NO_DRAFT, STOPPED_WHILE_FILING } from '../../src/feedback/effects/schema.ts';
+import { GitFailed } from '../../src/git/schema.ts';
 import { resolveEffectFailure } from '../../src/runtime/failures/classify.ts';
 import { EffectFailed, ShippingFailed } from '../../src/runtime/failures/schema.ts';
-import { EffectRunner, type EffectRunnerOptions, Engine } from '../../src/runtime/index.ts';
+import { type EffectRunnerOptions } from '../../src/runtime/index.ts';
 import type { Slack } from '../../src/slack/index.ts';
-import { EventLog } from '../../src/store/index.ts';
-import { resolveTriage } from '../../src/triage/index.ts';
-import type { Workspaces } from '../../src/workspaces/index.ts';
+import type { Workspaces } from '../../src/workspaces/service.ts';
+import { EffectRunner } from '../helpers/effects.ts';
+import { Engine } from '../helpers/engine.ts';
+import { openEventLog } from '../helpers/event-log.ts';
+import { createWorktree, inspectRepo } from '../helpers/git.ts';
 import {
   captureLogs,
   createGitRepo,
@@ -40,6 +41,8 @@ import {
   writeFiles,
 } from '../helpers/index.ts';
 import { createRepo, createRound, createStubEngine, createTask } from '../helpers/state.ts';
+import { createMonitor } from '../resources/harness.ts';
+import { resolveTriageEffect } from '../triage/harness.ts';
 
 setDefaultTimeout(30_000);
 
@@ -98,6 +101,17 @@ function useHangingGh(failing: string) {
   return () => Number(existsSync(pidFile) ? readFileSync(pidFile, 'utf8').trim() : 0);
 }
 
+function useGhBefore(matching: string, command: string) {
+  const dir = createTempDir();
+  const real = join(import.meta.dirname, '../helpers/bin/gh');
+  writeFileSync(
+    join(dir, 'gh'),
+    `#!/bin/sh\ncase "$*" in *"${matching}"*) ${command};; esac\nexec "${real}" "$@"\n`,
+    { mode: 0o755 }
+  );
+  restores.push(overrideEnv({ PATH: `${dir}:${process.env.PATH ?? ''}` }));
+}
+
 function useHeldGh(held: string) {
   const dir = createTempDir();
   const real = join(import.meta.dirname, '../helpers/bin/gh');
@@ -148,46 +162,51 @@ function createContext(signal: AbortSignal = new AbortController().signal) {
 function createRuns() {
   const calls: string[] = [];
   const runs = {
-    execute: (runId: string) => {
-      calls.push(`execute:${runId}`);
-      return Promise.resolve();
-    },
-    cancel: (runId: string) => {
-      calls.push(`cancel:${runId}`);
-      return Promise.resolve();
-    },
-    steer: (runId: string, text: string, cause: string) => {
-      calls.push(`steer:${runId}:${text}:${cause}`);
-      return Promise.resolve();
-    },
-    resolveQuestion: (gateId: string) => {
-      calls.push(`question:${gateId}`);
-      return Promise.resolve();
-    },
-    quiesce: (taskId: string) => {
-      calls.push(`quiesce:${taskId}`);
-      return Promise.resolve();
-    },
-    wake: (runId: string, generation: number) => {
-      calls.push(`wake:${runId}:${generation}`);
-      return Promise.resolve();
-    },
-    deliver: (runId: string, generation: number) => {
-      calls.push(`deliver:${runId}:${generation}`);
-      return Promise.resolve();
-    },
-    replyToDelegate: (runId: string, questionId: string) => {
-      calls.push(`reply:${runId}:${questionId}`);
-      return Promise.resolve();
-    },
+    execute: (runId: string) =>
+      Effect.sync(() => {
+        calls.push(`execute:${runId}`);
+      }),
+    cancel: (runId: string) =>
+      Effect.sync(() => {
+        calls.push(`cancel:${runId}`);
+      }),
+    steer: (runId: string, text: string, cause: string) =>
+      Effect.sync(() => {
+        calls.push(`steer:${runId}:${text}:${cause}`);
+      }),
+    resolveQuestion: (gateId: string) =>
+      Effect.sync(() => {
+        calls.push(`question:${gateId}`);
+      }),
+    quiesce: (taskId: string) =>
+      Effect.sync(() => {
+        calls.push(`quiesce:${taskId}`);
+      }),
+    wake: (runId: string, generation: number) =>
+      Effect.sync(() => {
+        calls.push(`wake:${runId}:${generation}`);
+      }),
+    deliver: (runId: string, generation: number) =>
+      Effect.sync(() => {
+        calls.push(`deliver:${runId}:${generation}`);
+      }),
+    replyToDelegate: (runId: string, questionId: string) =>
+      Effect.sync(() => {
+        calls.push(`reply:${runId}:${questionId}`);
+      }),
   };
-  return { runs: runs as unknown as RunSupervisor, calls };
+  return { runs: runs as unknown as RunSupervisor['Service'], calls };
 }
 
 function createBriefings() {
   let scheduled = 0;
   return {
-    briefings: { schedule: () => (scheduled += 1) } as unknown as Briefings,
+    briefings: BriefingWriter.of({
+      schedule: Effect.sync(() => {
+        scheduled += 1;
+      }),
+      stop: Effect.void,
+    }),
     scheduled: () => scheduled,
   };
 }
@@ -205,7 +224,7 @@ function setup(
     previews: NO_PREVIEWS,
     handoffs: NO_HANDOFFS,
     resolveLogin: () => Promise.resolve(null),
-    triage: (state, task, local) => resolveTriage(state, task, local, () => Promise.resolve(null)),
+    triage: (state, task, local) => resolveTriageEffect(state, task, local, () => Effect.succeed(null)),
     ...options,
   });
   return { ...stub, config, runner, calls, scheduled: briefings.scheduled };
@@ -300,14 +319,14 @@ describe('routing effects', () => {
     const handed: string[] = [];
     const { runner, dispatched, commandIds } = setup(undefined, {
       handoffs: {
-        link: (taskId, effectContext) => {
-          handed.push(`link:${taskId}:${effectContext.key}`);
-          return Promise.resolve();
-        },
-        revoke: (taskId, guestId) => {
-          handed.push(`revoke:${taskId}:${guestId}`);
-          return Promise.resolve();
-        },
+        link: (taskId, effectContext) =>
+          Effect.sync(() => {
+            handed.push(`link:${taskId}:${effectContext.key}`);
+          }),
+        revoke: (taskId, guestId) =>
+          Effect.sync(() => {
+            handed.push(`revoke:${taskId}:${guestId}`);
+          }),
       },
     });
     const context = createContext();
@@ -327,10 +346,10 @@ describe('routing effects', () => {
     const shared: string[] = [];
     const { runner, dispatched, commandIds } = setup(undefined, {
       shares: {
-        link: (taskId, effectContext) => {
-          shared.push(`link:${taskId}:${effectContext.key}`);
-          return Promise.resolve();
-        },
+        link: (taskId, effectContext) =>
+          Effect.sync(() => {
+            shared.push(`link:${taskId}:${effectContext.key}`);
+          }),
       },
     });
     const context = createContext();
@@ -345,10 +364,10 @@ describe('routing effects', () => {
     const linked: string[] = [];
     const { runner, dispatched, commandIds } = setup(undefined, {
       previews: {
-        link: (taskId, serviceId, effectContext) => {
-          linked.push(`link:${taskId}:${serviceId}:${effectContext.key}`);
-          return Promise.resolve();
-        },
+        link: (taskId, serviceId, effectContext) =>
+          Effect.sync(() => {
+            linked.push(`link:${taskId}:${serviceId}:${effectContext.key}`);
+          }),
       },
     });
     const context = createContext();
@@ -368,20 +387,14 @@ describe('the Slack effects', () => {
 
   test('go to the Slack service', async () => {
     const handled: string[] = [];
+    const record = (name: string) => Effect.sync(() => void handled.push(name));
     const slack = {
-      evaluate: () => {
-        handled.push('evaluate');
-        return Promise.resolve();
-      },
-      status: () => {
-        handled.push('status');
-        return Promise.resolve();
-      },
-      post: () => {
-        handled.push('post');
-        return Promise.resolve();
-      },
-    } as unknown as Slack;
+      evaluate: () => record('evaluate'),
+      status: () => record('status'),
+      post: () => record('post'),
+      merge: () => record('merge'),
+      react: () => record('react'),
+    } as unknown as Slack['Service'];
     const { runner } = setup(() => undefined, { slack });
     const mention = {
       ...THREAD,
@@ -391,15 +404,21 @@ describe('the Slack effects', () => {
       userName: 'A',
       text: '',
       permalink: null,
+      channelName: null,
       thread: [],
     };
     await runner.apply({ kind: 'slack.evaluate', mention }, createContext());
     await runner.apply({ kind: 'slack.status', taskId: 't1', thread: THREAD }, createContext());
     await runner.apply(
-      { kind: 'slack.post', thread: THREAD, taskId: 't1', post: { kind: 'forwarded' } },
+      { kind: 'slack.post', thread: THREAD, taskId: 't1', post: { kind: 'result' } },
       createContext()
     );
-    expect(handled).toEqual(['evaluate', 'status', 'post']);
+    await runner.apply({ kind: 'slack.merge', thread: THREAD, taskId: 't1', round: 1 }, createContext());
+    await runner.apply(
+      { kind: 'slack.react', thread: THREAD, messageTs: '1.2', reaction: 'eyes' },
+      createContext()
+    );
+    expect(handled).toEqual(['evaluate', 'status', 'post', 'merge', 'react']);
   });
 
   test('fail without one, so they wait in the outbox', async () => {
@@ -415,13 +434,14 @@ describe('suggesting a watch', () => {
     const asked: string[] = [];
     const { runner, dispatched, commandIds } = setup(() => undefined, {
       timeZone: 'Europe/Sofia',
-      wordWatch: (server, data) => {
-        asked.push(`${server}: ${data}`);
-        return Promise.resolve({
-          name: 'Bugs in #feedback',
-          text: 'File a task for each new bug in #feedback.',
-        });
-      },
+      wordWatch: (server, data) =>
+        Effect.sync(() => {
+          asked.push(`${server}: ${data}`);
+          return {
+            name: 'Bugs in #feedback',
+            text: 'File a task for each new bug in #feedback.',
+          };
+        }),
     });
     const context = createContext();
     await runner.apply(
@@ -467,10 +487,11 @@ describe('describing a shared task', () => {
     const { runner, dispatched, commandIds } = setup(
       withTask({ share: { at: 1, url: null, limit: 'until_done', preset: 'status', endsAt: null } }),
       {
-        describeShare: (task) => {
-          asked.push(task.id);
-          return Promise.resolve('Tab groups now scroll sideways.');
-        },
+        describeShare: (task) =>
+          Effect.sync(() => {
+            asked.push(task.id);
+            return 'Tab groups now scroll sideways.';
+          }),
       }
     );
     const context = createContext();
@@ -484,7 +505,7 @@ describe('describing a shared task', () => {
 
   test('records nothing for a task no longer shared, or when nothing was written', async () => {
     const unshared = setup(withTask({ share: null }), {
-      describeShare: () => Promise.resolve('Unused.'),
+      describeShare: () => Effect.succeed('Unused.'),
     });
     await unshared.runner.apply({ kind: 'share.describe', taskId: 'task-1' }, createContext());
     expect(unshared.dispatched).toEqual([]);
@@ -548,7 +569,7 @@ describe('triage', () => {
   test('a triage that gives no answer is an error', async () => {
     const { runner } = setup(withTask({ branch: null, size: null, stage: 'triage', repoId: null }), {
       config: { roots: [createTempDir()] },
-      triage: () => Promise.resolve(null),
+      triage: () => Effect.succeed(null),
     });
     await expect(runner.apply({ kind: 'task.triage', taskId: 'task-1' }, createContext())).rejects.toThrow(
       'Shinsa could not read the request'
@@ -558,7 +579,7 @@ describe('triage', () => {
   test('a request that needs no repository registers none and is triaged without one', async () => {
     const { root } = await createGitRepo();
     const config = createTestConfig(createTempDir(), { roots: [root] });
-    const eventLog = new EventLog(config.databasePath);
+    const eventLog = openEventLog(config.databasePath);
     const engine = new Engine(eventLog);
     await engine.dispatch({ type: 'task.create', request: 'Hey', repoId: null, mode: 'ask' });
     const [task] = Object.values(engine.state.tasks);
@@ -568,8 +589,8 @@ describe('triage', () => {
       handoffs: NO_HANDOFFS,
       resolveLogin: () => Promise.resolve(null),
       triage: (state, current, local) =>
-        resolveTriage(state, current, local, <T>() =>
-          Promise.resolve({ title: 'Hey', repo: 'none', size: 'small', branch: 'chore/hey' } as T)
+        resolveTriageEffect(state, current, local, <T>() =>
+          Effect.succeed({ title: 'Hey', repo: 'none', size: 'small', branch: 'chore/hey' } as T)
         ),
     });
     const context = createContext();
@@ -589,7 +610,7 @@ describe('triage', () => {
   test('the repository is registered and the task triaged with its dependencies, each under the effect’s key', async () => {
     const { root } = await createGitRepo();
     const config = createTestConfig(createTempDir(), { roots: [root] });
-    const eventLog = new EventLog(config.databasePath);
+    const eventLog = openEventLog(config.databasePath);
     const engine = new Engine(eventLog);
     await engine.dispatch({ type: 'task.create', request: 'Earlier work', repoId: null });
     await engine.dispatch({ type: 'task.create', request: 'Fix the button', repoId: null });
@@ -601,7 +622,7 @@ describe('triage', () => {
       handoffs: NO_HANDOFFS,
       resolveLogin: () => Promise.resolve(null),
       triage: (_state, _task, local) =>
-        Promise.resolve({
+        Effect.succeed({
           title: 'Fix the button',
           repoPath: local[0]?.path ?? '',
           size: 'small',
@@ -625,7 +646,7 @@ describe('triage', () => {
   test('a repository outside the task’s project is bound while the task keeps its project, and filed by its owner', async () => {
     const { root } = await createGitRepo();
     const config = createTestConfig(createTempDir(), { roots: [root] });
-    const engine = new Engine(new EventLog(config.databasePath));
+    const engine = new Engine(openEventLog(config.databasePath));
     await engine.dispatch({ type: 'project.write', project: { name: 'Shinsa', color: 'blue' } });
     const [project] = Object.values(engine.state.projects);
     const projectId = project?.id ?? '';
@@ -643,8 +664,8 @@ describe('triage', () => {
       handoffs: NO_HANDOFFS,
       resolveLogin: () => Promise.resolve(null),
       triage: (state, current, local) =>
-        resolveTriage(state, current, local, <T>() =>
-          Promise.resolve({ title: 'Fix the button', repo: 'app', size: 'small', branch: 'fix/button' } as T)
+        resolveTriageEffect(state, current, local, <T>() =>
+          Effect.succeed({ title: 'Fix the button', repo: 'app', size: 'small', branch: 'fix/button' } as T)
         ),
     });
     await runner.apply({ kind: 'task.triage', taskId: task?.id ?? '' }, createContext());
@@ -658,7 +679,7 @@ describe('triage', () => {
 
   async function triageNewRepo(options: { roots?: string[]; folders?: string[]; newRepo?: string } = {}) {
     const config = createTestConfig(createTempDir(), { roots: options.roots ?? [] });
-    const eventLog = new EventLog(config.databasePath);
+    const eventLog = openEventLog(config.databasePath);
     const engine = new Engine(eventLog);
     let projectId: string | null = null;
     if (options.folders) {
@@ -676,8 +697,8 @@ describe('triage', () => {
       handoffs: NO_HANDOFFS,
       resolveLogin: () => Promise.resolve(null),
       triage: (state, current, local) =>
-        resolveTriage(state, current, local, <T>() =>
-          Promise.resolve({
+        resolveTriageEffect(state, current, local, <T>() =>
+          Effect.succeed({
             title: 'Start native-islands',
             repo: 'none',
             new_repo: options.newRepo ?? 'native-islands',
@@ -747,7 +768,7 @@ describe('triage', () => {
   test('the kind of task and its priority are sent with why triage chose them', async () => {
     const { root } = await createGitRepo();
     const config = createTestConfig(createTempDir(), { roots: [root] });
-    const engine = new Engine(new EventLog(config.databasePath));
+    const engine = new Engine(openEventLog(config.databasePath));
     await engine.dispatch({ type: 'task.create', request: 'Why is the export slow?', repoId: null });
     const [task] = Object.values(engine.state.tasks);
     const runner = new EffectRunner(engine, config, createRuns().runs, createBriefings().briefings, {
@@ -756,7 +777,7 @@ describe('triage', () => {
       handoffs: NO_HANDOFFS,
       resolveLogin: () => Promise.resolve(null),
       triage: (_state, _task, local) =>
-        Promise.resolve({
+        Effect.succeed({
           title: 'Find why the export is slow',
           repoPath: local[0]?.path ?? '',
           size: 'small',
@@ -851,7 +872,7 @@ describe('the setup check', () => {
       config: { roots: [root] },
       findRepository: (_state, task, local) => {
         asked.push(`${task.id}:${local.map((candidate) => candidate.name).join(',')}`);
-        return Promise.resolve(repo.path);
+        return Effect.succeed(repo.path);
       },
     });
     const context = createContext();
@@ -862,7 +883,7 @@ describe('the setup check', () => {
       { type: 'config.record', taskId: 'task-1', problems: [], repoId: 'repo-1' },
     ]);
 
-    const none = setup(change, { findRepository: () => Promise.resolve(null) });
+    const none = setup(change, { findRepository: () => Effect.succeed(null) });
     await none.runner.apply({ kind: 'config.verify', taskId: 'task-1' }, createContext());
     expect(none.dispatched).toEqual([{ type: 'config.record', taskId: 'task-1', problems: [] }]);
   });
@@ -871,7 +892,7 @@ describe('the setup check', () => {
     const asked: string[] = [];
     const findRepository = () => {
       asked.push('asked');
-      return Promise.resolve(null);
+      return Effect.succeed(null);
     };
     const question = setup(withTask({ stage: 'triage', repoId: null, pipeline: ['answer'] }), {
       findRepository,
@@ -1006,7 +1027,7 @@ describe('worktrees', () => {
       stdout: 'ignore',
       stderr: 'ignore',
     });
-    const services = { closeTaskTerminals: () => undefined, listTerminalPids: () => [shell.pid] };
+    const services = { closeTaskTerminals: () => Effect.void, listTerminalPids: Effect.succeed([shell.pid]) };
     const { runner, dispatched } = setup(withTask({ worktreePath: worktree }, repo), { services });
     await runner.apply({ kind: 'worktree.remove', taskId: 'task-1' }, createContext());
     expect(await server.exited).not.toBe(0);
@@ -1037,8 +1058,8 @@ describe('worktrees', () => {
     const { repo, worktree } = await createShippingRepo();
     const closed: string[] = [];
     const services = {
-      closeTaskTerminals: (taskId: string) => closed.push(taskId),
-      listTerminalPids: () => [],
+      closeTaskTerminals: (taskId: string) => Effect.sync(() => void closed.push(taskId)),
+      listTerminalPids: Effect.succeed([]),
     };
     const { runner, dispatched, commandIds } = setup(withTask({ worktreePath: worktree }, repo), {
       services,
@@ -1048,8 +1069,14 @@ describe('worktrees', () => {
     expect(existsSync(worktree)).toBe(false);
     expect(closed).toEqual(['task-1']);
     expect(commandIds).toEqual([`${context.key}:worktree.gone`]);
-    const failing = { mode: 'worktrees', remove: () => Promise.reject(new Error('Device busy')) };
-    const workspaces = { resolve: () => failing } as unknown as Workspaces;
+    const failing = {
+      mode: 'worktrees',
+      remove: () => Effect.fail(new GitFailed({ message: 'Device busy', retryable: false })),
+    };
+    const workspaces = {
+      resolve: () => failing,
+      root: { path: Effect.succeed(createTempDir()) },
+    } as unknown as Workspaces['Service'];
     const broken = setup(withTask({ worktreePath: createTempDir() }, repo), { workspaces });
     const logs = captureLogs();
     await broken.runner.apply({ kind: 'worktree.remove', taskId: 'task-1' }, createContext());
@@ -1079,8 +1106,8 @@ describe('scratch folders', () => {
     for (const stage of ['done', 'merged', 'cancelled'] as const) {
       const closed: string[] = [];
       const services = {
-        closeTaskTerminals: (taskId: string) => closed.push(taskId),
-        listTerminalPids: () => [],
+        closeTaskTerminals: (taskId: string) => Effect.sync(() => void closed.push(taskId)),
+        listTerminalPids: Effect.succeed([]),
       };
       const { runner, config, calls, dispatched } = setup(withTask({ stage, repoId: null }), { services });
       const scratch = writeScratch(config.dataDir);
@@ -1099,8 +1126,8 @@ describe('scratch folders', () => {
   test('a task reopened before or while its runs stop keeps its scratch folder', async () => {
     const closed: string[] = [];
     const services = {
-      closeTaskTerminals: (taskId: string) => closed.push(taskId),
-      listTerminalPids: () => [],
+      closeTaskTerminals: (taskId: string) => Effect.sync(() => void closed.push(taskId)),
+      listTerminalPids: Effect.succeed([]),
     };
     const reopened = setup(withTask({ stage: 'answering', repoId: null }), { services });
     const kept = writeScratch(reopened.config.dataDir);
@@ -1114,18 +1141,19 @@ describe('scratch folders', () => {
     const scratch = writeScratch(config.dataDir);
     const runs = {
       quiesce: () => {
-        stub.update((state) => {
-          const task = state.tasks['task-1'];
-          if (task) task.stage = 'answering';
-        });
-        return Promise.resolve();
+        return Effect.sync(() =>
+          stub.update((state) => {
+            const task = state.tasks['task-1'];
+            if (task) task.stage = 'answering';
+          })
+        );
       },
-    } as unknown as RunSupervisor;
+    } as unknown as RunSupervisor['Service'];
     const runner = new EffectRunner(stub.engine, config, runs, createBriefings().briefings, {
       shares: NO_SHARES,
       previews: NO_PREVIEWS,
       handoffs: NO_HANDOFFS,
-      triage: () => Promise.resolve(null),
+      triage: () => Effect.succeed(null),
     });
     await runner.apply({ kind: 'scratch.remove', taskId: 'task-1' }, createContext());
     expect(existsSync(scratch)).toBe(true);
@@ -1154,17 +1182,18 @@ describe('checks', () => {
       results: [{ id: 'c1', label: 'Check 1', command: 'test -f a.txt', outcome: 'pass' }],
     });
     expect(commandIds).toEqual([`${context.key}:checks.record`]);
-    const tracked = new ProcessLedger();
+    const tracked = createMonitor().ledger;
     const counted = setup(withTask({ stage: 'checking', worktreePath: worktree }, repo), {
-      trackProcess: (taskId, kind, pid) => {
-        const release = tracked.track(taskId, kind, pid);
-        expect(tracked.listRoots()).toEqual([{ taskId: 'task-1', kind: 'checks', pid }]);
-        return release;
-      },
+      trackProcess: (taskId, kind, pid) =>
+        Effect.tap(tracked.track(taskId, kind, pid), () =>
+          Effect.sync(() =>
+            expect(Effect.runSync(tracked.listRoots)).toEqual([{ taskId: 'task-1', kind: 'checks', pid }])
+          )
+        ),
     });
     await counted.runner.apply(checksEffect(['true']), createContext());
     expect(counted.dispatched).toHaveLength(1);
-    expect(tracked.listRoots()).toEqual([]);
+    expect(Effect.runSync(tracked.listRoots)).toEqual([]);
     const idle = setup(withTask({ stage: 'building' }, repo));
     await idle.runner.apply(checksEffect(['true']), createContext());
     expect(idle.dispatched).toEqual([]);
@@ -1772,17 +1801,9 @@ describe('pull requests', () => {
     const readGitHub = useFakeGitHub([fakePull('main')]);
     const { repo, path } = await createGitRepo();
     const head = (await git(path, 'rev-parse', 'main')).trim();
-    const merge = github.mergePullRequest;
-    const spy = spyOn(github, 'mergePullRequest').mockImplementation(async (...args) => {
-      await git(path, 'commit', '-q', '--allow-empty', '-m', 'chore: someone else');
-      await merge(...args);
-    });
+    useGhBefore('pr merge', `git -C "${path}" commit -q --allow-empty -m 'chore: someone else'`);
     const { runner, dispatched } = setup(withTask({ stage: 'awaiting_merge', pullRequest: PULL }, repo));
-    try {
-      await runner.apply({ kind: 'pull_request.merge', taskId: 'task-1', headSha: head }, createContext());
-    } finally {
-      spy.mockRestore();
-    }
+    await runner.apply({ kind: 'pull_request.merge', taskId: 'task-1', headSha: head }, createContext());
     const moved = (await git(path, 'rev-parse', 'main')).trim();
     expect(records(dispatched)).toMatchObject([{ pullRequest: { state: 'open', headSha: moved } }]);
     expect(readGitHub().pulls[0]).toMatchObject({ state: 'OPEN' });
@@ -1865,19 +1886,15 @@ describe('merging a stack of pull requests', () => {
     const readGitHub = useFakeGitHub(stackedPulls());
     const { runner } = await setupStack();
     const controller = new AbortController();
-    const merge = github.mergePullRequest;
-    const spy = spyOn(github, 'mergePullRequest').mockImplementation(async (...args) => {
-      await merge(...args);
-      controller.abort();
-    });
-    try {
-      await runner.apply(
-        { kind: 'pull_request.merge', taskId: 'task-1', headSha: null },
-        createContext(controller.signal)
-      );
-    } finally {
-      spy.mockRestore();
-    }
+    const release = useHeldGh('pr merge 9');
+    const applied = runner.apply(
+      { kind: 'pull_request.merge', taskId: 'task-1', headSha: null },
+      createContext(controller.signal)
+    );
+    await until('the first merge', () => readGitHub().pulls[2]?.state === 'MERGED');
+    controller.abort();
+    await applied;
+    release();
     expect(readGitHub().pulls.map((pull) => pull.state)).toEqual(['OPEN', 'OPEN', 'MERGED']);
   });
 });
@@ -2237,8 +2254,8 @@ describe('watching pull requests', () => {
     );
     await Promise.all([runner.recover(), runner.syncAll()]);
     expect(readGitHub().calls.filter((call) => call[1] === 'view')).toHaveLength(1);
-    runner.startWatching();
-    runner.startWatching();
+    await runner.startWatching();
+    await runner.startWatching();
     await until('a watched sync', () => dispatched.length >= 2, GH_WAIT_MS);
     await runner.stop();
     await runner.stop();
@@ -2315,7 +2332,7 @@ describe('watching pull requests', () => {
       { watchIntervalMs: 10, config: { settleDelayMs: 5 } }
     );
     reject((command) => command.type === 'pull_request.record', new Error('engine stopped'));
-    runner.startWatching();
+    await runner.startWatching();
     await runner.apply({ kind: 'pull_request.push', taskId: 'task-1' }, createContext());
     const failed = (taskId?: string) =>
       logs.fieldsOf('[Watch] Pull request sync failed').some((fields) => fields.taskId === taskId);

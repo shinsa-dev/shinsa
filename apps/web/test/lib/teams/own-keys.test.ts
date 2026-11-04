@@ -2,8 +2,8 @@ import { describe, expect, it } from 'bun:test';
 import type { RemoteInstance } from '@shinsa/core';
 import { describeMachine } from '@/lib/remote/machines.ts';
 import type { EnrolledDevice } from '@/lib/remote/schema.ts';
-import type { StoredTeamKey } from '@/lib/teams/join.ts';
 import { syncOwnTeamKeys } from '@/lib/teams/own-keys.ts';
+import type { StoredTeamKey } from '@/lib/teams/schema.ts';
 
 const MONA = { id: '1', login: 'mona', name: null, avatarUrl: null };
 
@@ -69,9 +69,9 @@ describe('team keys from your own machines', () => {
         ),
     });
     const rows = [
-      describeMachine(STUDIO, createDevice(STUDIO.id)),
-      describeMachine({ ...STUDIO, id: 'laptop', name: 'Laptop' }, createDevice('laptop')),
-      describeMachine({ ...STUDIO, id: 'kai', role: 'teammate' }, createDevice('kai')),
+      describeMachine(STUDIO, createDevice(STUDIO.id), 1),
+      describeMachine({ ...STUDIO, id: 'laptop', name: 'Laptop' }, createDevice('laptop'), 1),
+      describeMachine({ ...STUDIO, id: 'kai', role: 'teammate' }, createDevice('kai'), 1),
     ];
     const added = await syncOwnTeamKeys(rows, {
       dashboard: { requestConnect: () => Promise.reject(new Error('unused')) },
@@ -90,7 +90,7 @@ describe('team keys from your own machines', () => {
     const { createMember } = answering({
       studio: () => Promise.resolve(Response.json({ keys: [{ teamId: 'core', name: 'Core', key: 'k1' }] })),
     });
-    const added = await syncOwnTeamKeys([describeMachine(STUDIO, createDevice(STUDIO.id))], {
+    const added = await syncOwnTeamKeys([describeMachine(STUDIO, createDevice(STUDIO.id), 1)], {
       dashboard: { requestConnect: () => Promise.reject(new Error('unused')) },
       teamKeys: {
         selectTeamKey: () => Promise.resolve(null),

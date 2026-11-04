@@ -237,7 +237,7 @@ export function MachineExtraDialog({
         <DialogHeader>
           <DialogTitle>{`What ${name} can do on ${machineName}`}</DialogTitle>
           <DialogDescription>
-            {`${name} has what ${team.name} gives every teammate. Tick more to give it to ${name} on ${machineName} only, for this team's tasks.`}
+            {`Give ${name} more than ${team.name} gives, on ${machineName} only.`}
           </DialogDescription>
         </DialogHeader>
         <div className='-mx-2 grid grid-cols-1 gap-x-4 gap-y-2 px-3 py-2 sm:grid-cols-2'>

@@ -90,6 +90,7 @@ export function createProjects(): Project[] {
       key: 'PER',
       description: 'Side projects: Kanna, the coding agent UI, and prints, the print queue.',
       folders: [],
+      usageLimit: 20,
     },
   ];
 }

@@ -25,7 +25,7 @@ function HelpAsk({
   onAsk: () => void;
 }) {
   return (
-    <div className='flex items-center justify-between gap-3'>
+    <div className='flex items-center justify-between gap-3 max-sm:flex-col max-sm:items-start'>
       <p className='text-xs text-fg-2'>{text}</p>
       <Button
         variant='secondary'

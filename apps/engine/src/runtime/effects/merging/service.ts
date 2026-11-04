@@ -6,15 +6,10 @@ import {
   type Task,
 } from '@shinsa/core';
 import { Context, Effect, Layer } from 'effect';
-import { checkBundleMerge } from '../../../git/index.ts';
-import {
-  closePullRequest,
-  mergePullRequest,
-  readPullRequest,
-  readStackedPullRequest,
-} from '../../../github/index.ts';
+import { Remote } from '../../../git/remote/service.ts';
+import { PullRequests } from '../../../github/pulls/service.ts';
 import type { EffectAttempt } from '../../engine/schema.ts';
-import { createEffectFailed } from '../../failures/classify.ts';
+import { createEffectFailed, resolveEffectFailure } from '../../failures/classify.ts';
 import type { EffectFailure } from '../../failures/schema.ts';
 import { isAwaitingMerge, isHeadMoved, needsMerge } from '../pull-requests/news.ts';
 import { PullRequestSync } from '../pull-requests/service.ts';
@@ -33,11 +28,13 @@ export class Merging extends Context.Service<
     Effect.gen(function* () {
       const world = yield* EffectWorld;
       const pullRequests = yield* PullRequestSync;
+      const remote = yield* Remote;
+      const pulls = yield* PullRequests;
 
-      const read = (repo: Repo, task: Task) => world.bridge((signal) => readPullRequest(repo, task, signal));
+      const read = (repo: Repo, task: Task) => Effect.mapError(pulls.read(repo, task), resolveEffectFailure);
 
       const readStacked = (repo: Repo, number: number) =>
-        world.bridge((signal) => readStackedPullRequest(repo, number, signal));
+        Effect.mapError(pulls.readStacked(repo, number), resolveEffectFailure);
 
       const mergeNumber = Effect.fn('Merging.mergeNumber')(function* (
         repo: Repo,
@@ -45,7 +42,7 @@ export class Merging extends Context.Service<
         headSha: string | null
       ) {
         const method = (yield* world.state).settings.mergeMethod;
-        yield* world.bridge((signal) => mergePullRequest(repo, number, method, headSha, signal));
+        yield* Effect.mapError(pulls.merge(repo, number, method, headSha), resolveEffectFailure);
       });
 
       const recoverMovedHead = Effect.fn('Merging.recoverMovedHead')(function* (
@@ -133,7 +130,10 @@ export class Merging extends Context.Service<
       const assertBundleMerges = Effect.fn('Merging.assertBundleMerges')(function* (taskId: string) {
         const { task, repo } = yield* world.findTask(taskId);
         const branches = yield* pullRequests.listBundleBranches(repo, task);
-        const conflict = yield* world.bridge((signal) => checkBundleMerge(repo, branches, signal));
+        const conflict = yield* Effect.mapError(
+          remote.checkBundleMerge(repo, branches),
+          resolveEffectFailure
+        );
         if (!conflict) return;
         const title = (yield* world.state).tasks[conflict.taskId]?.title ?? 'A task';
         return yield* createEffectFailed(
@@ -163,17 +163,15 @@ export class Merging extends Context.Service<
         const closed: number[] = [];
         const failed: PullRequestCloseFailure[] = [];
         for (const number of effect.numbers) {
-          yield* world
-            .bridge((signal) => closePullRequest(repo, number, CANCELLED_COMMENT, signal))
-            .pipe(
-              Effect.andThen(Effect.sync(() => closed.push(number))),
-              Effect.catch((failure) =>
-                Effect.logWarning('[Effects] Could not close a pull request').pipe(
-                  Effect.annotateLogs({ taskId: effect.taskId, number, error: failure.message }),
-                  Effect.andThen(Effect.sync(() => failed.push({ number, detail: failure.message })))
-                )
+          yield* Effect.mapError(pulls.close(repo, number, CANCELLED_COMMENT), resolveEffectFailure).pipe(
+            Effect.andThen(Effect.sync(() => closed.push(number))),
+            Effect.catch((failure) =>
+              Effect.logWarning('[Effects] Could not close a pull request').pipe(
+                Effect.annotateLogs({ taskId: effect.taskId, number, error: failure.message }),
+                Effect.andThen(Effect.sync(() => failed.push({ number, detail: failure.message })))
               )
-            );
+            )
+          );
         }
         yield* world.dispatch(
           { type: 'pull_request.record_closed', taskId: effect.taskId, closed, failed },
