@@ -9,7 +9,7 @@ export interface SlackDecided {
   text: string;
 }
 
-export interface SlackMergePost {
+interface SlackMergePost {
   round: number;
   ts: string | null;
 }
