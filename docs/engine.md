@@ -2506,7 +2506,7 @@ line and every task agent's management tools are generated from it, so neither c
   (`EngineClient`, `apps/engine/src/cli/client/`, and `createWakeEngine`; Configuration and data → The engine in the background, Run on a
   server).
   `shinsa status` and `shinsa version` only report, and never start it.
-- **Around the surface** (`apps/engine/src/cli`): the everyday commands (`shinsa [folder]`, `open`, `do`, `import`,
+- **Around the surface** (`apps/engine/src/cli`): the everyday commands (`shinsa [folder]`, `open`, `do`,
   `status`) and the engine's controls (`start`, `stop`, `restart`, `logs`, `version`) are the top level, one table in
   `cli/help.ts` that the help, each command's `--help` and `docs/cli.md` are written from; why it is shaped like
   Tailscale's and Docker's is `docs/cli.md` → How it is shaped. `shinsa engine` runs the engine itself, for the
@@ -6237,7 +6237,7 @@ scratch copy is one directory, and the event log, worktrees and config.json only
   machine must reproduce it, it is an event; if it only describes this machine, it is `config.json`.
 - **A broken config.json** never stops Shinsa: the server reads it once at start, copies unreadable JSON to
   `config.json.unreadable-<time>` once and uses the defaults; a field of the wrong type is dropped. Each problem is
-  logged once. `shinsa do`, `import`, `status`, `open` and the engine's controls only read the port and never copy
+  logged once. `shinsa do`, `status`, `open` and the engine's controls only read the port and never copy
   the file. An unreadable
   `secrets.json` (or one without its salt) is kept aside the same way as `secrets.json.unreadable-<time>`, logged, and
   an empty store is used.
