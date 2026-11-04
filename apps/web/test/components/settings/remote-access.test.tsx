@@ -213,8 +213,8 @@ describe('Settings → Remote access', () => {
     await waitFor(() => expect(actions.removeMember).toHaveBeenCalledWith('7'));
   });
 
-  it('says only you can reach it before anyone is invited', () => {
+  it('lists only you before anyone is invited, with no extra line', () => {
     renderGroup(createRemoteSnapshot());
-    expect(screen.getByText(/Only you\. Share the invite link/)).toBeTruthy();
+    expect(screen.queryByText(/Only you/)).toBeNull();
   });
 });

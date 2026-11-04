@@ -3,7 +3,7 @@ import { CurrentUser, RemoteApi } from '@shinsa/core/remote/api';
 import { HandoffInvalid, InviteInvalid, OwnerCannotLeave } from '@shinsa/core/remote/errors';
 import { Clock, Effect, Option, Redacted } from 'effect';
 import { HttpApiBuilder } from 'effect/http-api';
-import { findMachineAccess, findOwnMachine } from '../../auth/access.ts';
+import { findMachineAccess, findOwnMachine, findReachableMachine } from '../../auth/access.ts';
 import type { TokenHash } from '../../crypto/schema.ts';
 import { CloudCrypto } from '../../crypto/service.ts';
 import {
@@ -60,8 +60,7 @@ export const InstancesHandlers = HttpApiBuilder.group(
         'connect',
         Effect.fn('instances.connect')(function* ({ params }) {
           const user = yield* CurrentUser;
-          const { machine } = yield* findMachineAccess(user.id, params.instanceId);
-          return yield* createConnectAnswer(machine, user.id);
+          return yield* createConnectAnswer(yield* findReachableMachine(user.id, params.instanceId), user.id);
         })
       )
       .handle(

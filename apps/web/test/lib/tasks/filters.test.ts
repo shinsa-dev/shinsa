@@ -289,6 +289,15 @@ describe('listTaskFilterFields', () => {
     ]);
   });
 
+  it('leaves out the team field while a team is in focus, unless it is filtered on', () => {
+    const all = { ...NO_TASK_FILTERS };
+    const rows = listTaskRows(STATE, TEAM, TEAMS, NOW);
+    const inFocus = listTaskFilterFields(rows, TEAMS, all, 'apps');
+    expect(inFocus.some((entry) => entry.key === 'team')).toBe(false);
+    const kept = listTaskFilterFields(rows, TEAMS, { ...all, team: ['apps'] }, 'apps');
+    expect(kept.some((entry) => entry.key === 'team')).toBe(true);
+  });
+
   it('leaves out a field with one value, unless it is filtered on', () => {
     expect(fields().some((entry) => entry.key === 'repo')).toBe(false);
     const repo = field('repo', fields({ repo: ['paywall-next', 'gone'] }));

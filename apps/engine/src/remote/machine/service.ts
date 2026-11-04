@@ -4,20 +4,26 @@ import {
   type ConnectChannel,
   type ConnectClaim,
   DomainError,
-  type GuestActor,
+  type ScopedActor,
   type HeartbeatRequest,
+  hasScope,
+  isTeamPerson,
   MACHINE_FEATURES,
+  mergeScopes,
   MAX_INSTANCE_GUESTS,
   MAX_INSTANCE_MEMBERS,
   type PairingView,
   type RemoteAccess,
   type RemoteMember,
   type RemoteSnapshot,
+  type RemoteDevice,
   type RemoteTeam,
+  type RemoteUser,
   type RemoteUserId,
   type TunnelStatus,
   resolveClaimUrl,
   resolveEnrollUrl,
+  resolveMemberScopes,
   resolveRemoteHookUrl,
   serializeBase64Url,
   verifyConnectToken,
@@ -48,7 +54,7 @@ import { TunnelMachine } from '../tunnel/schema.ts';
 import { TunnelSupervisor } from '../tunnel/service.ts';
 import {
   type ChannelParts,
-  GUEST_FALLBACK_LOGIN,
+  UNKNOWN_PERSON,
   type GuestLeaver,
   type HandoffClaim,
   HANDOFF_NOT_ENABLED,
@@ -59,6 +65,8 @@ import {
   type RemoteInput,
   RemoteKeyUnreadable,
   SECRET_BYTES,
+  NOWHERE,
+  type TeamScope,
 } from './schema.ts';
 
 export class Remote extends Context.Service<Remote, RemoteHandle>()('shinsa/engine/remote/machine/Remote') {
@@ -82,6 +90,7 @@ export class Remote extends Context.Service<Remote, RemoteHandle>()('shinsa/engi
         const channels = yield* Ref.make<ReadonlyMap<RemoteChannelHandle, Effect.Effect<void>>>(new Map());
         const spentConnects = yield* Ref.make<ReadonlyMap<string, number>>(new Map());
         const listeners = new Set<Effect.Effect<void>>();
+        const teamScopes = new Map<string, string>();
         const waiters = yield* Ref.make<ReadonlyMap<string, Deferred.Deferred<boolean>>>(new Map());
 
         const file = store.file;
@@ -101,7 +110,9 @@ export class Remote extends Context.Service<Remote, RemoteHandle>()('shinsa/engi
         const tunnelHost = file.pipe(Effect.map((current) => current.credentials?.tunnelHost ?? null));
 
         const publish = Effect.suspend(() =>
-          Effect.forEach([...listeners], (listener) => listener, { discard: true })
+          syncTeamAccess.pipe(
+            Effect.andThen(Effect.forEach([...listeners], (listener) => listener, { discard: true }))
+          )
         );
 
         const observe = (listener: Effect.Effect<void>) =>
@@ -502,18 +513,136 @@ export class Remote extends Context.Service<Remote, RemoteHandle>()('shinsa/engi
           yield* publish;
         });
 
-        const selectLogin = Effect.fn('Remote.selectLogin')(function* (userId: string) {
-          const { access: known, guests } = yield* file;
+        const selectPerson = Effect.fn('Remote.selectPerson')(function* (userId: string) {
+          const { access: known, guests, teams } = yield* file;
           const users = [known?.owner, ...(known?.members ?? []).map((member) => member.user)];
-          const found = [...users, ...guests.map((guest) => guest.user)].find((user) => user?.id === userId);
-          return found?.login ?? GUEST_FALLBACK_LOGIN;
+          const teammates = teams.flatMap((team) => [
+            team.owner,
+            ...team.members.map((member) => member.user),
+          ]);
+          const found = [...users, ...guests.map((guest) => guest.user), ...teammates].find(
+            (user) => user?.id === userId
+          );
+          const person: RemoteUser = found ?? { ...UNKNOWN_PERSON, id: userId };
+          return person;
+        });
+
+        const selectTeamAccess = Effect.fn('Remote.selectTeamAccess')(function* (
+          userId: string,
+          teamId: string
+        ) {
+          const team = yield* store.selectTeam(teamId);
+          if (!team || !(yield* store.selectTeamKey(teamId))) return null;
+          if (yield* isOwner(userId)) return null;
+          return isTeamPerson(team, userId) ? team : null;
+        });
+
+        const resolveTeamScope = Effect.fn('Remote.resolveTeamScope')(function* (
+          userId: string,
+          teamId: string
+        ) {
+          const team = yield* selectTeamAccess(userId, teamId);
+          if (!team) return null;
+          const extra = (yield* store.selectExtra(userId, team.id))?.scopes ?? [];
+          const scope: TeamScope = {
+            kind: 'team',
+            teamId: team.id,
+            scopes: mergeScopes(resolveMemberScopes(team, userId), extra),
+          };
+          return scope;
+        });
+
+        const listTeamScopes = Effect.fn('Remote.listTeamScopes')(function* (userId: string) {
+          const scopes = yield* Effect.forEach((yield* file).teams, (team) =>
+            resolveTeamScope(userId, team.id)
+          );
+          return scopes.flatMap((scope) => (scope ? [scope] : []));
+        });
+
+        const canForkTeamTask = Effect.fn('Remote.canForkTeamTask')(function* ({
+          teamId,
+        }: {
+          readonly teamId: string;
+        }) {
+          const current = yield* file;
+          const ownerId = current.access?.owner.id;
+          const team = current.teams.find((entry) => entry.id === teamId);
+          return Boolean(ownerId && team && hasScope(resolveMemberScopes(team, ownerId), 'fork'));
+        });
+
+        const resolveScope = Effect.fn('Remote.resolveScope')(function* (enrolled: RemoteDevice) {
+          if (enrolled.taskId) {
+            const scope: ScopedActor['scope'] = { kind: 'task', taskId: enrolled.taskId };
+            return scope;
+          }
+          if (!enrolled.teamId || (yield* hasAccess(enrolled.userId))) return null;
+          const scope: ScopedActor['scope'] =
+            (yield* resolveTeamScope(enrolled.userId, enrolled.teamId)) ?? NOWHERE;
+          return scope;
         });
 
         const resolveGuest = Effect.fn('Remote.resolveGuest')(function* (device: string) {
           const enrolled = yield* store.selectDevice(device);
-          if (!enrolled?.taskId) return null;
-          const guest: GuestActor = { taskId: enrolled.taskId, login: yield* selectLogin(enrolled.userId) };
+          const scope = enrolled ? yield* resolveScope(enrolled) : null;
+          if (!(enrolled && scope)) return null;
+          if (scope.kind === 'team') teamScopes.set(device, JSON.stringify(scope));
+          const { id, login, name, avatarUrl } = yield* selectPerson(enrolled.userId);
+          const guest: ScopedActor = { id, login, name, avatarUrl, scope };
           return guest;
+        });
+
+        const resolveTeamGrant = Effect.fn('Remote.resolveTeamGrant')(function* (
+          userId: string,
+          teamId: string
+        ) {
+          if (!((yield* isEnabled) && (yield* selectTeamAccess(userId, teamId)))) return null;
+          const existing = yield* store.selectGrant(userId, teamId);
+          if (existing) return existing.secret;
+          const secret = yield* createSecret;
+          yield* Effect.orDie(store.writeGrant({ userId, teamId, secret }));
+          return secret;
+        });
+
+        const listOutsidePairs = Effect.gen(function* () {
+          const current = yield* file;
+          const outside = new Set<string>();
+          for (const pair of [...current.grants, ...current.extras, ...current.devices]) {
+            const teamId = pair.teamId;
+            if (teamId && !(yield* selectTeamAccess(pair.userId, teamId)))
+              outside.add(`${pair.userId}:${teamId}`);
+          }
+          return outside;
+        });
+
+        const removeOutside = Effect.fn('Remote.removeOutside')(function* (outside: ReadonlySet<string>) {
+          const isOutside = (userId: string, teamId: string) => outside.has(`${userId}:${teamId}`);
+          yield* Effect.orDie(store.removeGrantsWhere((grant) => isOutside(grant.userId, grant.teamId)));
+          yield* Effect.orDie(store.removeExtrasWhere((extra) => isOutside(extra.userId, extra.teamId)));
+          const removed = yield* Effect.orDie(
+            store.removeDevicesWhere(
+              (device) => device.teamId != null && isOutside(device.userId, device.teamId)
+            )
+          );
+          return new Set(removed);
+        });
+
+        const listNarrowed = Effect.gen(function* () {
+          const narrowed = new Set<string>();
+          for (const [device, opened] of teamScopes) {
+            const enrolled = yield* store.selectDevice(device);
+            const scope = enrolled ? yield* resolveScope(enrolled) : null;
+            if (JSON.stringify(scope) !== opened) narrowed.add(device);
+          }
+          return narrowed;
+        });
+
+        const syncTeamAccess = Effect.gen(function* () {
+          const removed = yield* removeOutside(yield* listOutsidePairs);
+          const narrowed = yield* listNarrowed;
+          const ended = new Set([...removed, ...narrowed]);
+          for (const device of ended) teamScopes.delete(device);
+          if (ended.size === 0) return;
+          yield* closeChannels((device) => device !== null && ended.has(device));
         });
 
         const awaitDecision = Effect.fn('Remote.awaitDecision')(function* (requestId: string) {
@@ -528,27 +657,28 @@ export class Remote extends Context.Service<Remote, RemoteHandle>()('shinsa/engi
           return { kind: 'waiting', decided: Deferred.await(decided) } satisfies AccessAnswer;
         });
 
+        const matchGrant = Effect.fn('Remote.matchGrant')(function* (
+          userId: string,
+          proof: string,
+          keys: ProofKeys
+        ) {
+          for (const grant of yield* store.listGrants(userId)) {
+            if (!(yield* selectTeamAccess(userId, grant.teamId))) continue;
+            if (yield* verifyEnrollProof(grant.secret, proof, keys)) return grant;
+          }
+          return null;
+        });
+
         const admitTeammate = Effect.fn('Remote.admitTeammate')(function* (
           proof: string,
           keys: ProofKeys,
           name: string | null,
           userId: string
         ) {
-          const grant = yield* store.selectGrant(userId);
-          if (!(grant && (yield* file).access?.members.some((member) => member.user.id === userId)))
-            return false;
-          const team = yield* store.selectTeam(grant.teamId);
-          const inTeam =
-            team?.owner.id === userId || team?.members.some((member) => member.user.id === userId);
-          if (
-            !(
-              inTeam &&
-              (yield* store.selectTeamKey(grant.teamId)) &&
-              (yield* verifyEnrollProof(grant.secret, proof, keys))
-            )
-          )
-            return false;
+          const grant = yield* matchGrant(userId, proof, keys);
+          if (!grant) return false;
           const enrolledAt = yield* Clock.currentTimeMillis;
+          const full = yield* hasAccess(userId);
           yield* Effect.orDie(
             store.upsertDevice({
               publicKey: keys.device,
@@ -556,6 +686,7 @@ export class Remote extends Context.Service<Remote, RemoteHandle>()('shinsa/engi
               enrolledAt,
               lastSeenAt: null,
               userId,
+              ...(full ? {} : { teamId: grant.teamId }),
             })
           );
           yield* publish;
@@ -656,7 +787,6 @@ export class Remote extends Context.Service<Remote, RemoteHandle>()('shinsa/engi
           const leave = yield* Ref.get(leaver);
           if (left.length > 0 && leave) yield* leave(left);
           const removed = new Set(yield* Effect.orDie(store.removeDevicesOutside(allowed, listed)));
-          yield* Effect.orDie(store.removeGrantsOutside(allowed));
           yield* closeChannels((device) => device !== null && removed.has(device));
           if (changed || removed.size > 0) yield* publish;
         });
@@ -686,10 +816,7 @@ export class Remote extends Context.Service<Remote, RemoteHandle>()('shinsa/engi
               code: 'team_not_found',
               message: 'This machine is not in that team.',
             });
-          const teammate = [team.owner, ...team.members.map((member) => member.user)].find(
-            (user) => user.id === userId
-          );
-          if (!(known && teammate) || known.owner.id === userId)
+          if (!(known && (yield* selectTeamAccess(userId, teamId))))
             return yield* new DomainError({
               code: 'teammate_not_found',
               message: 'No one else in that team has that GitHub account.',
@@ -698,8 +825,7 @@ export class Remote extends Context.Service<Remote, RemoteHandle>()('shinsa/engi
             const member = yield* requestMemberAddition(credentials.machineToken, userId);
             yield* recordAccess({ ...known, members: [...known.members, member] });
           }
-          const secret = yield* createSecret;
-          yield* Effect.orDie(store.writeGrant({ userId, teamId, secret }));
+          yield* resolveTeamGrant(userId, teamId);
           yield* publish;
         });
 
@@ -747,8 +873,11 @@ export class Remote extends Context.Service<Remote, RemoteHandle>()('shinsa/engi
           });
         });
 
-        const admits = (device: string, userId: string) =>
-          Effect.map(store.selectDevice(device), (enrolled) => enrolled?.userId === userId);
+        const admits = Effect.fn('Remote.admits')(function* (device: string, userId: string) {
+          const enrolled = yield* store.selectDevice(device);
+          if (enrolled?.userId !== userId) return false;
+          return !enrolled.teamId || (yield* resolveScope(enrolled)) !== NOWHERE;
+        });
 
         const recordSeen = Effect.fn('Remote.recordSeen')(function* (device: string) {
           yield* Effect.orDie(store.recordDeviceSeen(device, yield* Clock.currentTimeMillis));
@@ -923,6 +1052,11 @@ export class Remote extends Context.Service<Remote, RemoteHandle>()('shinsa/engi
           verifyConnect,
           spendConnect,
           isOwner,
+          hasAccess,
+          resolveTeamScope,
+          listTeamScopes,
+          resolveTeamGrant,
+          canForkTeamTask,
           openChannel,
           closeChannel,
           removeDevice,

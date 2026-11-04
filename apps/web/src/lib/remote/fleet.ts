@@ -6,7 +6,9 @@ import {
   NO_TEAM_FEED,
   type RemoteSnapshot,
   type RemoteUser,
+  isHeldBy,
   SCOPE_MESSAGES,
+  TEAM_SCOPE_MESSAGES,
   type TeamFeedSnapshot,
   type TerminalsSnapshot,
   type UserCommand,
@@ -27,6 +29,7 @@ import {
   type ShinsaConnection,
   type Snapshot,
   selectEngineCommands,
+  type TeammateMachine,
   type UnreachableMachine,
 } from '@/lib/connection/socket.ts';
 import { describeOutdatedMachine } from '@/lib/remote/mode.ts';
@@ -44,6 +47,7 @@ export interface FleetMember {
   online?: boolean;
   guest?: true;
   handedBy?: RemoteUser;
+  teammate?: TeammateMachine;
   connection: ShinsaConnection;
   fetch: (request: Request) => Promise<Response>;
   openTerminal?: (terminalId: string) => WebSocket;
@@ -68,16 +72,13 @@ const SCAN_DEPTH = 4;
 interface FleetPart {
   id: string;
   state: WireState;
+  teammate?: Pick<TeammateMachine, 'viewerId'>;
 }
 
 export interface FleetState {
   state: WireState;
   owners: ReadonlyMap<string, string>;
   sharedHandles: ReadonlySet<string>;
-}
-
-function mergeRecords(parts: FleetPart[], key: (typeof FLEET_RECORDS)[number]) {
-  return Object.assign({}, ...parts.map((part) => part.state[key])) as WireState[typeof key];
 }
 
 function mergePresence(parts: FleetPart[]) {
@@ -105,6 +106,32 @@ export function listSharedHandles(parts: FleetPart[]) {
   return shared;
 }
 
+const TEAMMATE_HIDDEN: ReadonlySet<string> = new Set([
+  'projects',
+  'briefings',
+  'schedules',
+  'memories',
+  'sessionUsage',
+]);
+
+function listTeammateRecords(parts: FleetPart[]) {
+  const tasks: Record<string, true> = {};
+  const repos: Record<string, true> = {};
+  for (const part of parts) {
+    const viewer = part.teammate?.viewerId;
+    if (viewer === undefined) continue;
+    for (const task of Object.values(part.state.tasks))
+      if (!isHeldBy(task, { id: viewer })) tasks[task.id] = true;
+    for (const id of Object.keys(part.state.repos)) repos[id] = true;
+  }
+  return { teammateTasks: tasks, teammateRepos: repos };
+}
+
+function mergeRecords(parts: FleetPart[], key: (typeof FLEET_RECORDS)[number]) {
+  const shown = TEAMMATE_HIDDEN.has(key) ? parts.filter((part) => !part.teammate) : parts;
+  return Object.assign({}, ...shown.map((part) => part.state[key])) as WireState[typeof key];
+}
+
 export function mergeFleetStates(parts: FleetPart[]): FleetState | null {
   const [home] = parts;
   if (!home) return null;
@@ -114,15 +141,17 @@ export function mergeFleetStates(parts: FleetPart[]): FleetState | null {
     for (const key of FLEET_RECORDS) for (const id of Object.keys(part.state[key])) owners.set(id, part.id);
   }
   const sharedHandles = listSharedHandles(parts);
-  if (parts.length === 1) return { state: home.state, owners, sharedHandles };
+  if (parts.length === 1 && !home.teammate) return { state: home.state, owners, sharedHandles };
+  const own = parts.filter((part) => !part.teammate);
   const state: WireState = {
     ...home.state,
     seq: parts.reduce((total, part) => total + part.state.seq, 0),
     taskNumbers: Object.assign({}, ...parts.map((part) => part.state.taskNumbers)),
-    onBehalfActions: parts.flatMap((part) => part.state.onBehalfActions),
-    presence: mergePresence(parts),
-    away: mergeKeyed(parts, 'away'),
-    focusHistory: mergeKeyed(parts, 'focusHistory'),
+    onBehalfActions: own.flatMap((part) => part.state.onBehalfActions),
+    presence: mergePresence(own),
+    away: mergeKeyed(own, 'away'),
+    focusHistory: mergeKeyed(own, 'focusHistory'),
+    ...listTeammateRecords(parts),
   };
   for (const key of FLEET_RECORDS) Object.assign(state, { [key]: mergeRecords(parts, key) });
   return { state, owners, sharedHandles };
@@ -246,6 +275,16 @@ function isReachable(entry: FleetEntry) {
   return isEngineProtocolMatch(entry.member.connection.selectEngine());
 }
 
+function resolveRefusedCommand(member: FleetMember) {
+  if (member.teammate) return TEAM_SCOPE_MESSAGES.command;
+  return member.guest ? SCOPE_MESSAGES.command : resolveUpdateMessage(member.name);
+}
+
+function resolveMemberRank(member: FleetMember) {
+  if (member.teammate) return 2;
+  return member.guest ? 1 : 0;
+}
+
 export class Fleet implements ShinsaConnection {
   #entries: FleetEntry[] = [];
   #inputs: Snapshot[] = [];
@@ -284,7 +323,7 @@ export class Fleet implements ShinsaConnection {
     hostedTeams: TeamFeedSource | null = null,
     wait: (settle: () => void) => () => void = waitForMachines
   ) {
-    for (const member of [...members].sort((a, b) => Number(a.guest === true) - Number(b.guest === true)))
+    for (const member of [...members].sort((a, b) => resolveMemberRank(a) - resolveMemberRank(b)))
       this.#add(member);
     this.#unreachable = unreachable;
     this.#hostedTeams = hostedTeams;
@@ -307,6 +346,7 @@ export class Fleet implements ShinsaConnection {
         current: member.current === true,
         ...(member.guest ? { guest: true as const } : {}),
         ...(member.handedBy ? { handedBy: member.handedBy } : {}),
+        ...(member.teammate ? { teammate: member.teammate } : {}),
       },
       release: [
         connection.subscribe(() => this.#state.publish()),
@@ -413,7 +453,9 @@ export class Fleet implements ShinsaConnection {
     }
     const parts = this.#entries.flatMap((entry, index) => {
       const state = inputs[index]?.state;
-      return state && reachable[index] ? [{ id: entry.member.id, state, view: entry.view }] : [];
+      if (!(state && reachable[index])) return [];
+      const { teammate } = entry.member;
+      return [{ id: entry.member.id, state, view: entry.view, ...(teammate ? { teammate } : {}) }];
     });
     const outdated = this.#entries.flatMap((entry, index) =>
       reachable[index] ? [] : [{ id: entry.member.id, name: entry.member.name, outdated: true }]
@@ -544,7 +586,7 @@ export class Fleet implements ShinsaConnection {
   selectMachine = (id: string) => {
     const owner = this.#ownerOf(id);
     const view = this.#entries.find((entry) => entry.member.id === owner)?.view ?? null;
-    if (view?.guest) return view;
+    if (view?.guest || view?.teammate) return view;
     return this.#entries.length + this.#unreachable.length < 2 ? null : view;
   };
 
@@ -606,9 +648,7 @@ export class Fleet implements ShinsaConnection {
     const member = this.#memberOf(machineId ?? resolveCommandOwner(command, this.#owners));
     if (!member) return Promise.reject(new Error(NO_MACHINE_CONNECTED));
     if (!selectEngineCommands(member.connection.selectEngine()).has(command.type))
-      return Promise.reject(
-        new Error(member.guest ? SCOPE_MESSAGES.command : resolveUpdateMessage(member.name))
-      );
+      return Promise.reject(new Error(resolveRefusedCommand(member)));
     return member.connection.command(command);
   };
 

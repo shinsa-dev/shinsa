@@ -69,7 +69,7 @@ builds never reviews its own work.
 
 | Role | Default model | Session | Hands back with |
 | --- | --- | --- | --- |
-| Classifier | Sonnet | one call, no tools | title, repository (or none), size, branch, and for what you left on Auto: the shape, the priority and the tasks it waits on, each with why |
+| Classifier | Sonnet | one call, no tools | title, repository (or none), size, branch, and for what you left on Auto: the shape, the priority, the tasks it waits on with the kind of wait, and the open change it stacks on, each with why |
 | Agent | Opus | one session per task, resumed by every run of every round: it plans read-only, then builds, fixes and operates with edits; its watchdog checks, read-only after the merge, resume a watch session of their own; a fresh session only when the old one cannot go on (Recovery) | while planning, 2–8 phases (`propose_plan`) or the task's steps composed anew (`reshape_task`, Task shapes, below); a phase report per phase (`complete_phase`); a summary per fix (`complete_fix`); how the operation went (`report_outcome`), after the evidence its plan asks for; in a watchdog check or the home of a watch, each report a read found (`file_report`) and what it read (`report_read`) |
 | Reviewer | Opus | one session of its own per task, resumed by every review of every round and never the Agent's; it cannot edit | a summary and findings (`report_review`) |
 | Answerer | Opus | the task's session (fresh only for a task's first run), in the repository itself (a scratch folder of its own when the task has no repository), cannot edit; on another model than the session's it resumes it on its own, on another provider it starts fresh | an answer (`answer`), optionally a proposed change (Task shapes, below) |
@@ -333,6 +333,21 @@ never resumed by it. The rules are core (`Decider.startRun`, `prompts/forks.ts`,
   overflow), the run starts fresh and its prompt ends with the source's brief (`describeForkSource`): the source's
   request and its rounds, each with its state, pull request and headline, result or goal, and `read_task` for more. A
   fork is never made twice: once any task-session run of the task had a session, a new one starts fresh.
+- **Forking a teammate's task.** A teammate's task runs on their machine, so its session cannot be copied: the fork
+  runs on yours, with its own branch, worktree, review and pull request, and starts from a brief of it instead. Core's
+  `resolveTeammateFork` (`share/forks.ts`) reads it from the teammate's task as the team view shows it (its machine, id,
+  handle, title, owner, request, rounds, branch and pull request) into `TeammateFork`, which `task.create` and
+  `agent.create_task` take as `teammateFork`, never with `forkOf` (`fork_twice`). The task keeps it as
+  `Task.teammateFork`, and its first task-session run ends its prompt with `describeTeammateForkSource`: what the
+  task was asked and did, and where its change is (merged, or on its branch to `git fetch`, never to push to). Its
+  activity reads "Forked from Kai's task PAY-1"; nothing is recorded on the teammate's machine. It lands in your
+  repository with the same remote as the teammate's, else the same name, else one in a project of the same name
+  (`findForkRepo`, over your own repositories, `listOwnRepos`). On app.shinsa.dev, Fork into a new task on a
+  teammate's task asks which of your repositories, the match first, and sends it to that repository's machine
+  (`forkTeammateTask`); with none of yours it says to add the repository first. An agent forks one with
+  `create_task`'s `fork_from`, by the id `find_tasks` lists under "Your teammates' tasks" (or its handle), from the
+  teammate tasks this machine watches (`TeamFeeds.listTasks`, `resolveForkReference` in `agents/tools/forks.ts`),
+  into the matching repository unless it names one.
 - **The reviewer never forks.** It is not a task-session role, so it reviews a fork with its own fresh session and
   is not told about the source.
 - **Forking from the web.** Fork into a new task (the task menu, an All tasks row's menu and ⌘K, on every task but a
@@ -390,7 +405,8 @@ create → classify → (wait for the tasks it waits on) → worktree → plan �
 
 1. **Classify.** One Sonnet call picks the title, the repository or none (A task without a repository,
    below), size, branch and, given every open task, the tasks this one waits on (`waits_on`, a list, usually
-   empty) and whether it is the same work as one of them in the same repository (`duplicate_of`, Duplicates,
+   empty, only for a direct dependency, with its `waits_on_kind`), the open change it is the next piece of
+   (`stacks_on`, usually `none`, Bundles, below) and whether it is the same work as one of them in the same repository (`duplicate_of`, Duplicates,
    below; never one in another repository). A duplicate is
    closed there and goes no further. Then the task either waits for them (Scheduling, below) or has its setup verified (`config.verify`,
    Setup verification, below) and gets its worktree (`worktree.create`): a fresh branch from the freshly fetched
@@ -1062,9 +1078,19 @@ them in the composer.
   (`backlog: true`, The backlog, above). Triage never chooses the backlog. Schedules and accepted suggested tasks
   keep their own choices; a split plan's tasks are changes; a courier's task is Auto.
 - Triage answers each Auto part as a typed decision question with a short why: `shape`, `priority` (urgent, high, normal or
-  low) and `waits_on` (the open tasks of the task's project, in any repository, listed with their repository and
-  stage; a task with no project is offered every open task, and keeps only those in its repository or in none, a
-  dropped one with no why). Core applies only the Auto parts
+  low) and `waits_on` (the open tasks of the task's project, in any repository, each listed with its repository,
+  stage, its request clipped to 280 characters and its plan's goal; a task with no project is offered every open
+  task, and keeps only those in its repository or in none, a dropped one with no why). A wait is for a direct
+  dependency only, and `waits_on_kind` names which: `needs_its_code` (it edits or calls code that exists only on that
+  task's unmerged branch), `asked_for` (the request asks for that order) or `shared_rewrite` (both heavily rewrite or
+  migrate the same files, so building in parallel means certain conflicts). Sharing an area, building on something
+  already on the default branch, a follow-up idea or "nicer after" never counts, and in doubt the answer is none; a
+  wait whose kind is `none`, missing or unknown is dropped and the task starts now. When start is Auto and an open
+  task of the same repository opens a pull request, triage also asks `stacks_on`: the one open change this task is
+  the next piece of and should ship with (a part of a split-up rewrite), or `none`, with a `stacks_on_why`. Core
+  stacks it there (`task.triage` `stacksOn`, `changeStack` by Shinsa, a wait on that task moving into the stack) only
+  while the task's own work opens a pull request and the parent passes `task.stack_on_tasks`' refusals, else drops it,
+  and keeps the choice as `triageDecisions.stack`, which the start fact's tooltip reads as "Stacks on ‹title›". Core applies only the Auto parts
   (`task.triaged` `pipeline`, `task.prioritized`, `task.waits_on_changed` by Shinsa) and keeps the decisions with their why on
   `task.triageDecisions`, so each fact can say why (the kind, the priority and when it starts, in their tooltips on the
   Overview: "Shinsa chose this: …"). The start and the priority each
@@ -1196,8 +1222,8 @@ and only the order in which finished work reaches you is managed.
 ### Dependencies
 
 A task can wait on other tasks (`task.waitsOn`, a list). They come from three places: the
-classifier (`waits_on`, only when the request needs that work to exist first, and only when you
-left When to start on Auto), you when creating the task (the composer's When to start: "After ‹task›"), or
+classifier (`waits_on`, only for a direct dependency named by its `waits_on_kind`, Task shapes above, and
+only when you left When to start on Auto), you when creating the task (the composer's When to start: "After ‹task›"), or
 later (the Waits on menu on the task page, the task's `•••` and context menus, All tasks' chain
 arrow, ⌘K's Wait for another task… and Stop waiting, all `task.wait_on` with the whole new list, recorded as
 `task.waits_on_changed`).
@@ -1237,7 +1263,9 @@ arrow, ⌘K's Wait for another task… and Stop waiting, all `task.wait_on` with
   pre-merge steps list each task it waits on as a row that ticks itself once that task finishes (`listMergeWaits`),
   on the review gate's card, the merge gate's card and the Review tab, so the hold is visible before you approve.
 - **Stacking is a bundle.** A plain dependent waits for its parents to finish and branches off the default branch. To
-  build on a parent's unmerged branch instead, stack it on that parent: a bundle (below).
+  build on a parent's unmerged branch instead, stack it on that parent: a bundle (below). The line between them: a
+  wait is for a separate feature that needs another's code merged first and ships on its own; a stack is for pieces
+  that ship at once, such as a large rewrite split into parts. Work that only touches the same area does neither.
 
 ### Bundles
 
@@ -1251,8 +1279,9 @@ stack-on <task> <below…>`, `shinsa tasks unstack`), all `task.stack_on_tasks` 
 it has; an empty list unstacks), recorded as `task.stack_changed`. Ticking a task in a picker adds it to the end of
 the list and unticking one removes only it, so the first pick stays the base. An agent files the next piece of a
 bundle with `create_task`'s `stack_on_this` (never with `this_task_waits` or `after_this`) and adds other parents with
-`stack_on` (`stacksOn` on `task.create`, this task first). Stacking on a task it already waits on moves that
-wait into the stack.
+`stack_on` (`stacksOn` on `task.create`, this task first), or splits its plan into a chain with `split_task`'s
+`stacked` (Delegation, below). Triage stacks a new task on an open change when it is that change's next piece
+(`stacks_on`, Task shapes, above). Stacking on a task it already waits on moves that wait into the stack.
 
 - **A graph, not a line.** A task can stack on several tasks and several tasks can stack on one, so a bundle fans out
   and back in: A, then B, C and D on A, then F on B, C and D, then E on F. A bundle is every task connected to a task
@@ -2272,6 +2301,12 @@ note (you, or report_feedback) ──► drafting ── quick call ──► dr
   web labels the task "Setup incomplete". Verify again (`approve`) verifies the setup again; Cancel ends the task. A
   message at the gate verifies the setup again too (`verify_setup`) and is kept for the first agent. The same
   problems twice record nothing new.
+- **A missing repository is a question.** When `no_repository` is the only problem and Shinsa knows repositories, the
+  gate asks "Which repository is this task for?" with `choices`: the repositories of the task's project, or every
+  registered one when it has none or no project, by name, at most eight, a name two repositories share told apart by
+  project, then by folder. A pick (`reply` with the choice) binds that repository, with its project when the task has
+  none, and verifies the setup again; a reply that is not one of the choices is refused ("Pick one of the
+  repositories listed."). With no repository registered, or with other problems beside it, the gate reads as above.
 
 ### Schedules and webhooks
 
@@ -2534,7 +2569,10 @@ and the run supervisor.
   backlog), and its description tells agents to set it only when you asked to keep the work for later. It is
   exactly-once per `client_request_id`.
   `split_task` (the Agent) turns the accepted plan into one to eight tasks (`tasks[].request`), exactly once per plan
-  version, recorded on the task (`splits`, `planVersion`); a second call returns the same tasks. These are the only
+  version, recorded on the task (`splits`, `planVersion`); a second call returns the same tasks. With `stacked` the
+  parts are a bundle chained on this task (the first stacks on this task, each next one on the one before, all
+  merging together, Scheduling → Bundles), for a rewrite whose pieces ship at once; it is refused next to
+  `this_task_waits`. Without it each part starts at once and ships on its own. These are the only
   ways a task agent files a task: its management tools leave out `tasks create`, which stays for you and the command
   line.
 - **In the web.** Delegated runs show in their parent's turn (spawn, report, Stop, the child's own
@@ -3123,8 +3161,8 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   removing, the tunnel's status, a pairing) and the socket hub sends `remote` with the whole snapshot, which the page keeps on its connection
   (`selectRemote`); a page reads `GET /api/remote` once when Settings opens, only to show a failure, and never polls.
   The remote build shows it per machine in Settings → Machines instead: for each machine of the dashboard you own
-  (`listOwnedMachines`: paired, and Shinsa Cloud names you its owner), Remote access on <machine>
-  (`MachineAccessGroup`) with the invite link, the requests, the devices with Revoke and the people with Remove, but
+  (`listOwnedMachines`: paired, and Shinsa Cloud names you its owner), one Remote access section with a card per
+  machine (`MachineAccessCard`), each headed by the machine's name with its invite link, the requests, the devices with Revoke and the people with Remove, but
   no Turn on, Pause, Resume or Remove, which stay at the keyboard. Each is read from that machine's own `remote` push
   (`Fleet.listMachineAccess`), and every change goes to that machine (`createMachineAccessActions`: `?machine=<instance>`
   on the request, which the fleet routes by, `resolveRequestOwner`), whose push then updates the page. Machines shared
@@ -3582,11 +3620,14 @@ projection and channel serve teams, always at Standard (Teams, below).
 
 ## Teams
 
-A team is people who watch each other's work. You put your own projects in a team, and every member then sees every
-task in them, live and read-only, next to their own tasks, on the hosted dashboard and in the local app. It is a share
-link for a whole project, on the same projection and the same one-way channel, with membership in place of the link:
-nothing is copied to app.shinsa.dev, and a teammate reads each task from your machine over its tunnel while it is
-online, and the last list of it their own machine kept while it is not (Offline teammates, below). Teams need remote access on (`Remote` paired and enabled), since that is how a teammate reaches you.
+A team is people who work as if on one Shinsa. You put your own projects in a team, and every member then sees every
+task in them, live, next to their own tasks, on the hosted dashboard and in the local app. The list and the read-only
+view are a share link for a whole project, on the same projection and the same one-way channel, with membership in
+place of the link: nothing is copied to app.shinsa.dev, and a teammate reads each task from your machine over its
+tunnel while it is online, and the last list of it their own machine kept while it is not (Offline teammates, below).
+On app.shinsa.dev a teammate also acts on those tasks, with what the team's owner lets them do, through a device your
+machine admits by itself and scopes to the team's projects (Teammates act on team tasks, below); the local app keeps
+the read-only view. Teams need remote access on (`Remote` paired and enabled), since that is how a teammate reaches you.
 
 - **What app.shinsa.dev keeps** (`apps/cloud/src/routes/teams/`, `routes/machine-teams/`, `migrations/0001_schema.sql`): who is in which team. A
   team is an id, a name of 60 characters at most (`TEAM_NAME_LIMIT`), its owner (the account whose machine made it),
@@ -3707,8 +3748,12 @@ online, and the last list of it their own machine kept while it is not (Offline 
   alone: it never lists a teammate's task. A teammate's task never waits for you, so it never counts towards Needs you, the queue, the
   guide or a notification. Opening one goes to `/teams/<team>/<machine>/<task>` (`routes/team-task.tsx`), the shared
   task page (`SharedTaskPage`, read-only, its Chat the agents' output only) fed by the engine relay in the local app and, on app.shinsa.dev, by
-  a team channel the browser opens with its own key; a browser without the key says "Add the team to this browser"
-  until you open the join link there once.
+  a team channel the browser opens with its own key. On app.shinsa.dev a teammate's machine admitted to the fleet
+  opens the task as a full task page at `/tasks/<handle>` instead, straight from the row (`resolveFleetTeamTaskPath`).
+  Your browser takes the keys of the teams your own machines hold when it opens the dashboard
+  (`GET /api/remote/teams/keys`, owner devices only, `syncOwnTeamKeys` in `lib/teams/own-keys.ts`), so you never open
+  the join link to see your own team: the key is your machines', and a browser that still has no key asks you to add
+  one of your machines in that team to it.
 - **Machines you already reach.** A teammate who also made you a member of a machine (Remote access → members) shows
   that machine's tasks as your own, with full control, through the dashboard's sealed channel; team rows from a
   machine the dashboard reaches are left out (`listTeamFeedTasks`), so no task appears twice. The hosted dashboard
@@ -3762,14 +3807,102 @@ online, and the last list of it their own machine kept while it is not (Offline 
     refused. Pausing remote access keeps the copies, since a paused machine cannot tell a removal from a pause, but still drops
     those past 30 days, with their full tasks, each time remote access changes and when the engine starts. Removing
     the machine from remote access, or app.shinsa.dev forgetting it, drops every copy and full task at once.
+- **Teammates act on team tasks.** Every member of a team reaches the team's tasks on every other member's machine
+  from app.shinsa.dev, with no invite and no Give machine access, and nothing outside the team's projects.
+  - **Scopes** (core's `scopes/`; `teams.scopes` and `team_members.scopes` in `apps/cloud/migrations/0001_schema.sql`). What anyone outside your machine may see or do is
+    a list of scopes, one system for share links and teams. View scopes are the parts of a task a person sees
+    (`identity`, `plan`, `review`, `code`, `messages`…, `VIEW_SCOPES`); action scopes are what they may do: `gates`
+    (answer gates, approve, tick merge steps), `actions` (retry, snooze, prioritize, cancel and every other task
+    action a hand-off guest may send), `message` (message agents, edit and send a round), `fork` (fork a task onto
+    their own machine), `share` (share links, status shares and service previews) and `services` (open a team task's
+    running services at their private address) (`ACTION_SCOPES`). A preset is a named list (`ACCESS_PRESETS`): Status,
+    Standard, Collaborate and Full. A share link picks Status, Standard or Full and reads only their view scopes
+    (`SHARE_PRESET_GROUPS`); a team picks View only (Standard), Collaborate or Full, or any custom list, and reads only
+    the action scopes, since a teammate always sees the full task page. A new team gets Collaborate, every action but
+    `message` (`DEFAULT_TEAM_SCOPES`). app.shinsa.dev keeps the team's list (`teams.scopes`, null for the default) and
+    one list per person set apart (`team_members.scopes`, null to follow the team), so a person's scopes are their own
+    when set, else the team's (`resolveMemberScopes`). The team's owner always has every scope. Only the owner changes
+    them, from their own machine: `POST /__remote/machine/teams/<team>/scopes { userId?, scopes }`
+    (`TeamScopesRequest`, `null` puts the default or the team's back), reached from Settings → Teams, `POST
+    /api/remote/teams/scopes` and `shinsa teams scopes <team> [--login] [--preset] [--allow <scope>] [--deny
+    <scope>]`, human-only, whose `--allow` and `--deny` take only action scopes. A teammate's channel announces only
+    the commands its scopes allow (`resolveScopedEngineInfo`), so the page hides what would be refused; messages stay
+    announced, since a task handed to them lets them message it. The heartbeat carries both on each `RemoteTeam` (`scopes`, `overrides`).
+  - **A device per member, without a click** (`Remote.resolveTeamGrant`, `admitTeamMachines` in `lib/teams/admit.ts`).
+    The first time a member's team channel opens, the machine makes them a grant (`remote.json` `grants`, a fresh
+    32-byte secret per person and team) and sends it only on that person's channel (`TeamListView.grant`, sealed with
+    the team key), with the machine's public key. The machine's own owner gets none. The hosted dashboard lists every
+    machine of a teammate with the role `teammate` and its owner (`listInstances` in `apps/cloud`), and the browser,
+    holding the team key, checks the key against the listed fingerprint and enrols with an enroll proof made with the
+    grant's secret. The machine admits that device without asking, recording its team (`RemoteDevice.teamId`), while
+    the person is still in the team, the team key is here and the proof checks. app.shinsa.dev hands a teammate a
+    `remote` connect token for the machine (`findReachableMachine` in `auth/access.ts`); the token alone opens nothing.
+  - **What a team device reaches** (`resolveScopedState`, `resolveScopedRefusal` in core's `remote/scope.ts`; the
+    engine's `Remote.#resolveScope`, `http/socket.ts`, `remote/gate/service.ts`). Its channel carries a `ScopedActor`
+    with `scope: { kind: 'team', teamId, scopes }`. The state it gets keeps only the tasks of the team's projects
+    (`isTeamTask`), with their repositories and projects, never your settings, accounts, inbox or other tasks; the
+    socket's patches are scoped the same way. Reads under `/api/tasks/<id>` answer only for those tasks, and every
+    other route is refused. A command is refused unless it names a team task and the person's scopes allow it
+    (`resolveCommandScope`, `TEAM_SCOPE_MESSAGES`): no new task, no terminal, no change to the Code tab, no setting. A person who is also a
+    member of the machine (Give machine access) gets full access instead, and falls back to the team's once that ends.
+  - **More on one machine.** The team's scopes are the floor every teammate gets on every machine; each machine's
+    owner may add to them for one teammate on that machine alone (On <machine> beside them in People, `POST
+    /api/remote/teams/extra { teamId, userId, scopes }`, `Teams.updateExtra`, owner-only like every remote route). The
+    extra scopes live in this machine's `remote.json` (`extras: { teamId, userId, scopes }`), never at app.shinsa.dev,
+    and the snapshot lists them per team (`RemoteTeamEntry.extras`, read as More on <machine>). A device's scopes are
+    the team's with the extras added (`mergeScopes`); an extra can only add, so the team's floor holds, and the team's
+    owner still decides the floor. Fork is not one of them (`MACHINE_EXTRA_SCOPES`): a fork runs on the forker's own
+    machine, which checks the team's scopes, not this one's. Giving extras, taking them back or a teammate leaving
+    (their extras are dropped with the grant) reopens their channel with the new scopes. The same dialog's Give full
+    access to <machine> is Give machine access below.
+  - **Ending at once.** Every change to remote access, the team list or a project's teams checks each team device
+    again (`Remote.#syncTeamAccess`): leaving or being removed, losing the team key, the team removed or the project
+    taken out drops the grant, removes the device and closes its channel; narrower scopes close its channel, and the
+    browser connects again with the new ones.
+  - **Handing a task to a teammate** (`task.hand_to_teammate { taskId, teamId, teammate }`, `task.give_back`, core's
+    `decide/handoffs.ts`). Who works on a task is its owner's call: under Share task → Hand off they pick a teammate,
+    with no link, and the task is held by them at once, as a hand-off guest holds one. `Task.handoff` names them, with
+    the team (`handoff.teamId`), the task's gates show in their Needs you and not in yours (`queue/rank.ts`), and its
+    activity reads "Handed this task to Kai". The holder may message its agent even without `message`. Give it back
+    ends the hold; you end it with Remove in the task's banner, as for any hand-off. A hold also ends by itself when
+    the holder leaves the team or the task's project leaves it (`handoff.left`). A task already held by someone else,
+    or handed off by a link someone opened, cannot be handed again (`handoff_claimed`), and someone the machine does not
+    know in that team is refused before anything is recorded (`resolveTeammateRefusal`, `handoff_refused`). No teammate takes a task on
+    their own: a team that wants everyone to steer every task gives them `message` instead.
+  - **Forking a teammate's task** (`teammateFork` on `task.create`). With `fork`, a teammate forks a team task onto
+    their own machine, from its menu or, for an agent, `create_task`'s `fork_from`. The machine checks its owner's
+    scopes in the team (`Remote.canForkTeamTask`): an agent is shown only the teammate tasks it may fork, and the
+    dashboard shows Fork only when the teammate machine's team gives it (`TeammateMachine.scopes`). The fork dialog
+    offers only your repositories on a machine that announces `team-access` (`listForkRepos`), and asks you to update
+    Shinsa there when none does, since an older engine refuses `teammateFork`.
+  - **Services** (`remote/previews.ts`, `routes/preview-open/` in `apps/cloud`). A teammate with `services` opens any
+    running service of a team task at its private address (`<hash>.shinsa.page`), as you do over remote access:
+    app.shinsa.dev admits an account that shares a team with the machine's owner, and the machine admits them for a
+    run of a team task only. A service started outside a task stays yours. Losing the right or the project leaving the
+    team closes their open connections.
+  - **Forking.** Anyone in the team forks a teammate's task onto their own machine, as Forking a task →
+    Forking a teammate's task says; no right gates it, since nothing changes on the teammate's machine.
+  - **Sharing.** A teammate with `share` makes and stops share links, status shares and service previews of team
+    tasks (`task.share`, `task.unshare`, `preview.share`, `preview.unshare`), the link's preset being the machine's.
+  - **Presence** (`remote/presence.ts`, `http/attention.ts`; core's `TeamPresence`, `mergeTeamPresence`). Each
+    machine's list view carries each person it can tell about: its owner Online while one of their Shinsa pages, on
+    the machine or their own browser, was used in the last five minutes (`ATTENTION_IDLE_MS`), else Away; a teammate
+    Online while they have this machine's team view open, else Offline with when they last had it (`seenAt`); a view
+    their machine keeps open in the background to list your tasks (`TeamFeeds`, whose hello says `watcher: 'machine'`)
+    is not them being here, so it never makes them Online. The page shows you Online on the page you are using
+    (`markViewerPresent`), whatever an older report says. The
+    page merges every machine's reports into one status per person, the best one winning and the latest last seen
+    kept (`resolveTeamPresence`), and shows it as a dot on avatars, user cards and People rows (green Online, amber Away, grey Offline), with no
+    word for the status beside it, only "Seen 2 hours ago" when not online. A teammate's machine shows Offline the moment its team channel drops, not at app.shinsa.dev's
+    five-minute heartbeat window.
 - **Settings → Teams** (`components/settings/teams.tsx`, `lib/teams/settings.ts`, on the machine, and on
   app.shinsa.dev for each machine you own, below; every change is the owner's, `OwnerOnlyRoute`): one card per team with its name and
   your role, Shared projects (`components/teams/projects-select.tsx`, a dropdown of your projects with their dots, as
   New task's), the link field when this machine has no key, requests with Accept and Decline, and People (a fold
-  that starts closed from six people on, with a search row by name or login, `listTeamPeople`), each teammate with Give machine access (or Can reach this machine) and, for the owner, Remove; the owner has Join link,
+  that starts closed from six people on, with a search row by name or login, `listTeamPeople`), each teammate with their presence, Give machine access (or Can reach this machine; with more than one machine of yours it asks which, `listGrantMachines`) and, for the owner, Scopes and Remove; What teammates can do, folded by default, is a preset picker (View only, Collaborate, Full access, and Custom when the list matches none) above the six action scopes as checkboxes, the owner's to change and a member's to read (`components/teams/scopes.tsx`, `lib/teams/scopes.ts`); on app.shinsa.dev a browser that reaches none of your machines still lets the owner change them, team-wide and per person, through `POST /__remote/teams/<team>/scopes`, and every machine takes the change on its next heartbeat (`components/settings/hosted-teams.tsx`); Scopes opens one person's, the team's or a preset of their own with the same checkboxes, and anyone with their own reads Own scopes; the owner has Join link,
   which shows the link as a QR code with Copy and Turn off link like Remote access's Invite link, and Delete team; a
   member has Leave. New team (`components/teams/new-team-dialog.tsx`) asks the name and which projects to share. The
-  owner's routes are `POST /api/remote/teams/create|join|link|link/renew|link/remove|requests/accept|requests/decline|members/remove|leave|remove`
+  owner's routes are `POST /api/remote/teams/create|join|link|link/renew|link/remove|requests/accept|requests/decline|members/remove|scopes|leave|remove`
   and `POST /api/remote/members/grant`,
   and the remote snapshot carries the teams (`RemoteSnapshot.teams`, `listTeamEntries`), so every change reaches every
   page at once.
@@ -3812,7 +3945,8 @@ one task on your machine through remote access, as you do, from its own dashboar
 back. The task stays yours and keeps running on your machine, in its worktree, sessions and accounts; nothing moves,
 you see and do everything on it as before, and both pages say so (Share task, and the claim page's "The task stays
 theirs"). Sharing (above) is
-for watching; a hand-off is for steering. Teams are another matter (LOC-78).
+for watching; a hand-off is for steering. Inside a team no link is needed: a teammate takes a team task over, or you
+hand it to them, under Teams → Teammates act on team tasks.
 
 - **Handing off is yours alone.** `task.hand_off` and `handoff.remove` (Hand off in Share task's Share as, `shinsa tasks
   hand-off|hand-off-remove`) are human-only: their surface specs are `humanOnly`, and core refuses them on your behalf
@@ -3840,7 +3974,7 @@ for watching; a hand-off is for steering. Teams are another matter (LOC-78).
   for one link cannot both get in; a failed step after it leaves the same account free to open the link again. Once
   claimed, the link is gone: no second browser and no second person can use it. A browser that already reaches the
   machine does not claim, and one browser takes at most one handed task per machine.
-- **One task, on the engine.** A device with a task is a guest (`GuestActor`: `taskId`, `login`), and its channel's hub
+- **One task, on the engine.** A device with a task is a guest (`ScopedActor` with `scope: { kind: 'task', taskId }`), and its channel's hub
   socket is scoped to that task (`apps/engine/src/http/socket.ts`):
   - **State.** It gets `resolveScopedState` (core's `remote/scope.ts`): that task alone, its runs, gates and evidence,
     its repository and project, nothing else (no other task, schedule, memory, setting or focus); the task without its
@@ -4494,10 +4628,13 @@ finishing), so a burst of changes costs one call: each request interrupts the fi
   its summary, the earlier work) and the instruction for the step it is on, and the server adds the transcript
   handoff (Resume fallback, The agent loop). Core does the same when it starts an Agent run with no session to resume
   (a fresh-class failure), so `run.prompt` holds the brief and `run.rolePrompt` the short form.
-- A fix loop stops with "not making progress" when the same failures come back after two fix
+- A fix loop stops with "not making progress" when the same failures come back after eight fix
   rounds (checks by the ids of the checks that block, the pull request by the names of its failing CI checks, the
-  ids of its unresolved review threads and a conflict), or after two rounds that left the code as it was
-  (the fingerprint's tree). This is what stops an agent that cannot fix a failure under "until clean". New
+  ids of its unresolved review threads and a conflict), or after eight rounds that left the code as it was
+  (the fingerprint's tree; `MAX_STALLED_FIXES`). Until then a repeat is not a pause: the next fix round goes to
+  the Agent with a line saying the failure came back after that many rounds and to find the cause another way
+  instead of repeating what it tried (`describeRepeatedFailure`), since a retry without new direction did the
+  same. This is what stops an agent that cannot fix a failure under "until clean". New
   comments alone key nothing, by signature or by tree: a pull request fix started only by them, with no
   failing check, open thread or conflict (`commentsOnly`, from `reactToWatch`), counts no repeats and
   records no tree, so an agent that answers a bot's comment with nothing to fix is never stopped for it,
@@ -4506,8 +4643,8 @@ finishing), so a burst of changes costs one call: each request interrupts the fi
   failing checks, the pull request's failing checks, open threads or conflict, the conflict with the
   base branch, or what the pre-push hook found (`STALLED_FIX_SUBJECT`).
   `maxFixRounds` caps the automatic rounds; "until clean" (the default, `null`) has no cap and keeps
-  going while each round changes something, so only "not making progress" stops it. The agent review never fails this way: it escalates to your review instead
-  (Review rounds escalate to you, above).
+  going while each round changes something, so only "not making progress" stops it. The agent review never fails this way: it escalates to your review instead,
+  after two repeats (`MAX_STALLED_REVIEW_FIXES`; Review rounds escalate to you, above).
 - Retrying a task, and asking for changes yourself, start a fresh automatic budget. Changes you
   ask for never use it up.
 - **Recovery budgets are keyed to durable state, never to prose** (`resolveRecoveryFingerprint`).
@@ -4979,7 +5116,7 @@ carries the comments it read (`remarks`) and who is reading (`viewer`).
   mergeable again. The merge commit carries git's own message, not the fix's: the subject git prepared in
   `MERGE_MSG`, with a merge of a remote-tracking branch named as the branch ("Merge branch 'main' into
   fix/login", as GitHub's own update writes it), and the fix's subject only when git left no message. A conflict the Agent
-  leaves twice stops at "Fixing is not making progress", as any fix does.
+  leaves eight times stops at "Fixing is not making progress", as any fix does.
 
 ## Merge queues
 

@@ -9,7 +9,8 @@ import { StatusText } from '@/components/status/text.tsx';
 import { TaskHandle } from '@/components/task/handle.tsx';
 import { OfflineBadge } from '@/components/teams/tasks.tsx';
 import { useSharedView } from '@/hooks/use-shared-view.ts';
-import { useTeamFeed } from '@/lib/connection/socket.ts';
+import { useTask } from '@/lib/connection/selectors.ts';
+import { useMachine, useTeamFeed } from '@/lib/connection/socket.ts';
 import { isRemoteBuild } from '@/lib/remote/mode.ts';
 import { RemoteServicesContext } from '@/lib/remote/services.ts';
 import { type Mention, resolveFirstName, resolveSharedProfile } from '@/lib/remote/users.ts';
@@ -18,12 +19,14 @@ import { openLocalTeamView, openTeamChannel, openTeamTaskStream } from '@/lib/te
 import {
   describeTeamTaskOwner,
   listHeldTeamMachines,
+  resolveFleetTeamTaskPath,
   resolveTeamTaskPath,
   resolveTeamTaskState,
   selectTeamTaskHeldAt,
 } from '@/lib/teams/feeds.ts';
 import { TEAM_KEY_MISSING } from '@/lib/teams/settings.ts';
 import type { TeamTransport } from '@/lib/teams/team-socket/schema.ts';
+import { replaceRoute } from '@/router.ts';
 
 function useHostedKey(teamId: string) {
   const services = React.useContext(RemoteServicesContext);
@@ -134,8 +137,20 @@ function HeldTeamTask({ entry, heldAt }: { entry: TeamFeedTask; heldAt: number }
   );
 }
 
+function useFleetTeamTask(target: TeamViewTarget) {
+  const task = useTask(target.taskId);
+  const machine = useMachine(target.taskId);
+  const path = resolveFleetTeamTaskPath(target, task, machine);
+  React.useEffect(() => {
+    if (path) replaceRoute(path);
+  }, [path]);
+  return path;
+}
+
 export function TeamTaskPage({ target }: { target: TeamViewTarget }) {
+  const opening = useFleetTeamTask(target);
   const held = useHeldTeamTask(target);
+  if (opening) return <LoadingLine label='Opening the team task' className='m-auto' />;
   const summary = held && <HeldTeamTask entry={held.entry} heldAt={held.heldAt} />;
   if (isRemoteBuild()) return summary || <HostedTeamTask target={target} />;
   return (

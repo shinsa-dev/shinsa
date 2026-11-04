@@ -131,7 +131,7 @@ export function RemoteRoot({ services, app }: { services: RemoteServices; app: R
   if (view.kind === 'app' && session?.user && !failure)
     return (
       <RemoteServicesContext.Provider value={services}>
-        <FleetApp services={services} shell={shell}>
+        <FleetApp services={services} viewer={session.user} shell={shell}>
           {app}
         </FleetApp>
       </RemoteServicesContext.Provider>

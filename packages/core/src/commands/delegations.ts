@@ -1,4 +1,10 @@
-import type { DelegateRole, DelegationIsolation, DelegationMode, DelegationWake } from '../domain/index.ts';
+import type {
+  DelegateRole,
+  DelegationIsolation,
+  DelegationMode,
+  DelegationWake,
+  TeammateFork,
+} from '../domain/index.ts';
 
 export type DelegationAgentCommand =
   | {
@@ -30,8 +36,9 @@ export type DelegationAgentCommand =
       stackOn?: string[];
       backlog?: boolean;
       forkOf?: string;
+      teammateFork?: TeammateFork;
     }
-  | { type: 'agent.split_task'; runId: string; requests: string[]; thisWaits: boolean };
+  | { type: 'agent.split_task'; runId: string; requests: string[]; thisWaits: boolean; stacked?: boolean };
 
 export type DelegationSystemCommand =
   | { type: 'delegation.record_delivery'; runId: string; generation: number; items: string[] }

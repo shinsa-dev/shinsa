@@ -19,6 +19,7 @@ import {
   type TeamFeedTask,
   type TeamId,
   type TeamMachine,
+  type TeamPresence,
   type TeamSnapshot,
   type TeamTask,
   type TeamViewTarget,
@@ -225,7 +226,8 @@ export class TeamFeeds extends Context.Service<TeamFeeds, TeamFeedsHandle>()(
             target.teamId,
             target.key,
             target.view,
-            ephemeral.publicKey
+            ephemeral.publicKey,
+            'machine'
           ).pipe(Effect.mapError(unreachable));
           const origin = appOrigin;
           const events = yield* Queue.unbounded<FeedSocketEvent>();
@@ -452,6 +454,7 @@ export class TeamFeeds extends Context.Service<TeamFeeds, TeamFeedsHandle>()(
         const feed = yield* updateFeed(id, token, (before) => ({
           ...before,
           tasks: list.tasks as TeamTask[],
+          presence: (list.presence ?? []) as TeamPresence[],
           updatedAt: list.updatedAt,
           snapshot: (list.snapshot as TeamSnapshot | undefined) ?? null,
           attempt: 0,
@@ -477,7 +480,12 @@ export class TeamFeeds extends Context.Service<TeamFeeds, TeamFeedsHandle>()(
       });
 
       const markOffline = (id: string, token: number) =>
-        updateFeed(id, token, (before) => ({ ...before, status: 'offline', reason: TEAM_FEED_OFFLINE }));
+        updateFeed(id, token, (before) => ({
+          ...before,
+          status: 'offline',
+          reason: TEAM_FEED_OFFLINE,
+          presence: [],
+        }));
 
       const watch = Effect.fn('TeamFeeds.watch')(function* (id: string, token: number) {
         for (;;) {
@@ -496,6 +504,7 @@ export class TeamFeeds extends Context.Service<TeamFeeds, TeamFeedsHandle>()(
             ...before,
             status: end.gone ? 'refused' : 'offline',
             reason: end.reason,
+            presence: [],
             attempt: before.attempt + 1,
           }));
           if (!ended) return;
@@ -537,6 +546,7 @@ export class TeamFeeds extends Context.Service<TeamFeeds, TeamFeedsHandle>()(
           status: 'connecting',
           reason: null,
           tasks: held?.tasks ?? [],
+          presence: [],
           updatedAt: held?.updatedAt ?? null,
           snapshot: held?.snapshot ?? null,
           attempt: 0,
@@ -660,6 +670,7 @@ export class TeamFeeds extends Context.Service<TeamFeeds, TeamFeedsHandle>()(
           status: feed.status,
           reason: feed.reason,
           ...(feed.updatedAt === null || isExpired(feed, now) ? {} : { updatedAt: feed.updatedAt }),
+          ...(feed.presence.length > 0 ? { presence: feed.presence } : {}),
         }));
         const tasks: TeamFeedTask[] = all.flatMap((feed) =>
           isExpired(feed, now)

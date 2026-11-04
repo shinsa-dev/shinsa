@@ -25,8 +25,12 @@ One definition per term. **Code** is the name in `packages/core`; **UI** is the 
 | handle | A task's name for people, `<project key>-<number>` (`SW-142`), given once, never reused, never a key | `Task.handle` | the handle |
 | id | A UUIDv7, the key of everything stored (events, receipts, references, transcripts) | `id` | not shown |
 | focus | The one project or team whose work Home, the queue and the guide show, or none for your work | `Focus` | Focus |
-| team | People who watch each other's work: a project in a team shows every task in it to every member, live and read-only, without its chat | `RemoteTeam`, `Project.teamIds` | team |
-| teammate | Another member of a team you are in, whose team tasks you see read-only | `TeamTask.owner` | teammate |
+| team | People who work as if on one Shinsa: a project in a team shows every task in it to every member, live, and on app.shinsa.dev each member acts on it with the scopes the team's owner sets | `RemoteTeam`, `Project.teamIds` | team |
+| teammate | Another member of a team you are in, whose team tasks you see and, on app.shinsa.dev, act on | `TeamTask.owner`, `role: 'teammate'` | teammate |
+| scope | One thing a person outside your machine may see (a view scope: the plan, the code, your messages…) or do (an action scope: answer gates, act, message agents, fork, share, open services); share links and teams read the same list | `AccessScope`, `VIEW_SCOPES`, `ACTION_SCOPES` | scope, the scope's own label (Answer gates, Fork tasks…) |
+| preset | A named list of scopes: Status, Standard, Collaborate, Full; a share link picks one, a team picks View only, Collaborate or Full or its own list, and one person can be set apart | `ACCESS_PRESETS`, `RemoteTeam.scopes`, `RemoteTeam.overrides` | View only, Collaborate, Full access, Custom, What teammates can do, Own scopes |
+| hand to a teammate | The owner giving a team task to a teammate to steer, without a link, until they give it back or the owner takes it back | `task.hand_to_teammate`, `task.give_back`, `TaskHandoff.teamId` | Hand off (Share task), Give it back, "Handed this task to Kai" |
+| presence | Whether a person is using Shinsa now: Online, Away or Offline with when they were last seen | `TeamPresence` | Online, Away, Offline, "Seen 2 hours ago" |
 | changelog entry | One change's line in the changelog: a `.changes/<slug>.md` file with its `kind` (`added`, `improved`, `fixed`, `internal`) and one or two sentences; the release it belongs to comes from the tags (`docs/release.md` → The changelog) | `ChangeEntry`, `ChangeKind` | New, Improved, Fixed, Behind the scenes |
 | changelog | Every release's entries, newest first, unreleased on top, as the engine serves it at `GET /api/changelog` | `Changelog`, `ChangelogRelease` | What's new, Changelog |
 | run | One agent working one step of a task (or a delegation of it), from start to end | `Run` | a run, "the agent" |
@@ -96,7 +100,7 @@ One definition per term. **Code** is the name in `packages/core`; **UI** is the 
 | receipt | The stored answer to a command id, so a repeat is answered and never applied twice | `CommandReceipt` (engine) | not shown |
 | on your behalf | A user command an agent's management tool sent for you from its task, recorded with the acting task | `onBehalf`, `byTask`, `OnBehalfAction` | "‹handle› agent (on your behalf)" |
 | hand-off | A task given to someone by a link: the first GitHub account to open it steers that one task on your machine | `TaskHandoff`, `task.hand_off` | Hand off, "took this task over" |
-| guest | The account a task was handed to, and its device, scoped to that task | `TaskGuest`, `GuestActor`, `byGuest`, `role: 'guest'` | "Kai" as a user tag, "A task handed to you by …" |
+| guest | The account a task was handed to, and its device, scoped to that task | `TaskGuest`, `ScopedActor`, `byGuest`, `role: 'guest'` | "Kai" as a user tag, "A task handed to you by …" |
 | message kind | What the classifier read a message to be: feedback on the current round (a follow-up on a finished one), a message that needs nothing (thanks, "ok"), new work for the task (a new round), or work for another task (a split-off) | `MessageKind` (`feedback`, `acknowledge`, `new_round`, `separate_task`) | not shown |
 | split-off | A suggested task saying something you asked for in this chat belongs in a task of its own; you make it a task or keep it here, which sends it to this task now | `TaskSuggestion.splitOff` | "Make it a task", "Keep it here" |
 
@@ -228,7 +232,7 @@ one reads as its empty value. The fields under Triage and shape, Plan and build,
 | `proposedBranch?` | string \| null | triage's branch for a task with no worktree step yet |
 | `pipeline?` | `PipelineStep[]` | the steps; absent means change (or answer for `mode: 'ask'`) |
 | `auto` | `{ shape, start, priority }` booleans | which parts you left to Shinsa; `shape` is true unless `mode` was given |
-| `triageDecisions?` | `{ shape, start, priority }` each `{ value, why }` \| null, and `duplicate?` `{ unreached }` | triage's choice and why, per Auto part; `duplicate.unreached` lists the team machines (`UnreachedTeammate`: `{ teamId, machineId, name, owner }`, `owner` a `TeammateOwner` `{ login, name, avatarUrl }` or null) whose tasks the team-wide duplicate check could not read |
+| `triageDecisions?` | `{ shape, start, priority }` each `{ value, why }` \| null, `stack?` `{ value, why }`, and `duplicate?` `{ unreached }` | triage's choice and why, per Auto part; `stack` is the tasks triage stacked it on, present only when it did; `duplicate.unreached` lists the team machines (`UnreachedTeammate`: `{ teamId, machineId, name, owner }`, `owner` a `TeammateOwner` `{ login, name, avatarUrl }` or null) whose tasks the team-wide duplicate check could not read |
 | `shapeChanges?` | `ShapeChange[]` (last 20) | each pipeline change: from, to, by (`you`, `agent`, `shinsa`), reason |
 | `proposal?` | `ChangeProposal` \| null | an inquiry's proposal: request, why, status (`open`, `accepted`, `declined`) |
 | `planFirst` | boolean | plan first: the plan always waits at a gate |
@@ -332,6 +336,7 @@ one reads as its empty value. The fields under Triage and shape, Plan and build,
 | `parentTaskId?` | string \| null | the task whose agent filed this one |
 | `createdBy?` | `TaskCreator` \| null | `courier` (`create_task`), `split` (`split_task`), `watchdog` (`file_report` in a watchdog check) or `intake` (`file_report` in a watch's read), with the task, the run and request key |
 | `forkOf?` | string \| null | the task this one was forked from: its first Agent run forks that task's session (`docs/engine.md` → Forking a task) |
+| `teammateFork?` | `TeammateFork` \| null | the teammate's task this one was forked from, as a brief (`instanceId`, `taskId`, `handle`, `title`, `owner`, `request`, `rounds`, `branch`, `pullRequest`): its first Agent run starts fresh from it (`docs/engine.md` → Forking a teammate's task) |
 | `watchdogs?` | `Watchdog[]` | the watchdogs of its merged rounds: `id`, `round`, `title`, `check`, `source` or `sourceRequest`, `firstCheckMinutes`, `maxGapMinutes`, `forMinutes`, `startsOn` (`merge` or `production`) and its `productionCheck`, `status` (`needs_source`, `awaiting_production`, `watching`, `passed`, `tripped`, `stopped`), `armedAt`, `awaitingSince` (when it began waiting for production), `startedAt`, `endsAt`, `nextCheckAt`, the `runId` of a check running now, the last 20 `checks` (`at`, `healthy`, `summary`), the `forkTaskIds` its checks filed (forks of this task), the `linkedTaskIds` they found already filed by a watch or another watchdog, `endedAt` (`docs/engine.md` → Watchdogs) |
 | `splits?` | `TaskSplit[]` | tasks `split_task` made, once per plan version (`planVersion`); each of them shows Split from |
 | `scheduleId?` | string \| null | the schedule that started it, or whose read filed it |
@@ -626,7 +631,7 @@ secret.
 | `proposal` | Your OK | the answer, report or diagnosis, the proposal and why | approve (setup verified again, then planned) · reject (keeps the inquiry, finishes) | "Approve the proposal or keep the task." | no |
 | `operation` | Run the operation | the merged commit and pull request, the steps, the impact, your notes | approve (runs with the notes on the gate) · reply (replaces the notes with your words, then runs; empty clears them) · reject (finishes without it) | "Run the operation or finish without it." | no |
 | `failure` | Paused | what stopped, why, what Retry does | approve (retry) · reply (retry with guidance) · reject (cancel) | "Retry or cancel the task." | yes |
-| `configuration` | Setup incomplete | each setup problem and its fix | approve (verifies the setup again) · reject | "Verify the setup again, or cancel." | yes |
+| `configuration` | Setup incomplete | each setup problem and its fix, and the repositories to pick from when the repository is the only problem | approve (verifies the setup again) · reply (binds the picked repository, then verifies again) · reject | "Verify the setup again, or cancel." | yes |
 | `sign_in` | Sign in | the provider and the account | approve (retry) · reply (retry with guidance) · reject (cancel) | "Sign in, retry or cancel the task." | yes |
 | `post_merge` | Post-merge | each step left for you after the merge, which are ticked | none: ticking the last step withdraws it (`merge_step.tick`), unticking one opens it again | "Tick each step under Post-merge once you did it; the gate closes with the last one." | no |
 | `result` | Answered (titled "Read the answer", "Read the report" or "Read the diagnosis") | the answer, report or diagnosis | approve (Close: settles the task as done, still open to follow-ups) | "Close the task once you have read the result." | no |
@@ -804,7 +809,7 @@ your behalf (`onBehalf`, `byTask`). **Human** = only you: its specs are `humanOn
 
 | Command | Does | Command line | Who |
 | --- | --- | --- | --- |
-| `task.create` | creates a task (request, project, priority, plan first, backlog, waits on, stacks on: `stacksOn`, a list, mode, account, the task it forks: `forkOf`) | `tasks create` | you; task agents file tasks with `create_task` |
+| `task.create` | creates a task (request, project, priority, plan first, backlog, waits on, stacks on: `stacksOn`, a list, mode, account, the task it forks: `forkOf`, or a teammate's: `teammateFork`, never both) | `tasks create` | you; task agents file tasks with `create_task` |
 | `task.message` | your message; what it does: Messages, above; `kind` says whether it is feedback, a new round or work for another task; `comments` carries line comments (Line comments, below) | `tasks message [--as]` | agent |
 | `round.ship` | how a round ships: onto the open pull request or stacked | `rounds ship` | agent |
 | `round.update` | replaces what a round waiting to start asks for (`request`; its title becomes the request's first line); a round that started is refused (`round_started`) | `rounds update` | agent |
@@ -825,6 +830,8 @@ your behalf (`onBehalf`, `byTask`). **Human** = only you: its specs are `humanOn
 | `preview.unshare` | stops sharing that run: its open pages and sockets end at once and the link stops working | `services unshare <service> --task` | **human** |
 | `task.hand_off` | hands it to someone by a link (`handoff.link` makes it): the first GitHub account to open it takes the task over; again on a failed link it asks for the link once more; an automation's home or a finished task is refused (`handoff_refused`) | `tasks hand-off` | **human** |
 | `handoff.remove` | takes it back: the link stops working, and whoever took it over loses access at once (`handoff.revoke`) | `tasks hand-off-remove` | **human** |
+| `task.hand_to_teammate` | hands a team task to a teammate (`teamId`, `teammate`) with no link: they hold it at once, as a hand-off guest does; refused for a task outside that team (`handoff_refused`) or held by someone else (`handoff_claimed`); a hand-off link no one opened stops working | `tasks hand-to-teammate --team --login` | **human** |
+| `task.give_back` | the teammate holding a task gives it back (`handoff.left`; from their team device only, `ScopedActor` with a team scope) | `tasks give-back` | **human** |
 | `task.mark_duplicate` | closes it as a duplicate of `duplicateOf`: `task.duplicated`, then the cancel's settle; refused for itself (`duplicate_of_itself`), a finished task (`task_settled`), an original that is a duplicate (`duplicate_of_duplicate`) or one in another repository when both have one (`duplicate_other_repository`) | `tasks duplicate --of` | agent |
 | `task.clear_duplicate` | starts a duplicate again (`task.duplicate_cleared`): one that never ran an agent through `startWork`, as if triage had not closed it; one that did in a fresh round with the same request (`round.queued`, `round.started`); refused for a task that is no duplicate (`not_duplicate`) | `tasks not-duplicate` | agent |
 | `watchdog.stop` | stops a watchdog, and its check if one runs | `watchdogs stop` | agent |
@@ -933,8 +940,8 @@ role without the tool (`hasTool`).
 | `agent.acknowledge_delegation` | `delegation_status` | marks a finished result read |
 | `agent.file_report` | `file_report` | in a watch's read or a watchdog check only: files a task from one report (`title`, `request`, `reportId` or `link`, `author`, `postedAt`, `text`, `repoId`, `forkOf`); refuses a report the project already has a task for (`report_filed`) and a repository of another project (`repo_project`); a watchdog's always forks the shipped task (`fork_watchdog`), and links a report another watch or watchdog filed first (`watchdog.report_linked`) rather than refusing it |
 | `agent.report_read` | `report_read` | ends a read with its `summary`, as not finished with `reached: false`: a watch's next read covers the same time, a watchdog's check is missed; a watchdog check that filed a report trips it, one that filed none is healthy, and `live` answers a watchdog waiting for production; the task rests again |
-| `agent.create_task` | `create_task` | files a courier task from its `request`, optionally waiting on it (`thisWaits`), waiting on this task (`afterThis`, never with `thisWaits`), in the backlog (`backlog`), stacked on this task as a bundle (`stackOnThis`, never with `thisWaits` or `afterThis`) or forked from a task (`forkOf`), in another project (`projectId`, from `project`; without a repository, triage picks one there); `new_repository` makes the engine create and register the named repository first |
-| `agent.split_task` | `split_task` | splits the approved plan into tasks (`requests`) |
+| `agent.create_task` | `create_task` | files a courier task from its `request`, optionally waiting on it (`thisWaits`), waiting on this task (`afterThis`, never with `thisWaits`), in the backlog (`backlog`), stacked on this task as a bundle (`stackOnThis`, never with `thisWaits` or `afterThis`) or forked from a task (`forkOf`) or a teammate's task (`teammateFork`), in another project (`projectId`, from `project`; without a repository, triage picks one there); `new_repository` makes the engine create and register the named repository first |
+| `agent.split_task` | `split_task` | splits the approved plan into tasks (`requests`); `stacked` chains them as a bundle on this task |
 | `agent.set_schedule` | `set_schedule` | writes one of its task's schedules; `source` names an integration of the task's project to watch: a new watch is recorded as a suggested watch for you to accept (origin the task and run, in its activity), at most 10 open at once (`suggestion_limit`) |
 | `agent.delete_schedule` | `delete_schedule` | deletes one |
 
@@ -952,7 +959,7 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 
 | Command | Sender | Does |
 | --- | --- | --- |
-| `task.triage` | `task.triage` effect (`triage/`) | records title, repository, size, branch, waits on, and the Auto parts; a `duplicateOf` naming an open task, or a `duplicateOfTeammate` (`TeammateOriginal`), closes it as that task's duplicate before any work (a local one wins when both come); `unreached` lists the team machines the duplicate check could not read |
+| `task.triage` | `task.triage` effect (`triage/`) | records title, repository, size, branch, waits on, the open change it stacks on (`stacksOn`, applied only while start is Auto and the stack is allowed), and the Auto parts; a `duplicateOf` naming an open task, or a `duplicateOfTeammate` (`TeammateOriginal`), closes it as that task's duplicate before any work (a local one wins when both come); `unreached` lists the team machines the duplicate check could not read |
 | `repo.register` | `repos/index.ts` | registers a repository on first use |
 | `config.record` | `config.verify` effect | records what setup verification found, with the repository it found (`repoId`) for a task that had none, and how it started a repository with no commits (`started`: `branch`, `initialized`, `pushed`) |
 | `worktree.ready`, `worktree.gone` | worktree effects | the worktree exists (with the branch a main checkout was on, `returnBranch`), or is gone |
@@ -1036,6 +1043,7 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `preview.recorded`, `preview.failed` | the engine made the preview's link (`url`, null when unchanged), or could not (`detail`) |
 | `task.handed_off`, `handoff.removed` | you handed a task off, or took it back (`guest`, null when no one had claimed it); each adds an activity entry |
 | `handoff.recorded`, `handoff.failed`, `handoff.claimed` | the engine made the hand-off link (`url`), or could not (`detail`), or an account took the task over (`guest`; adds an activity entry, "Handed this task to Kai", with the guest as `Activity.person`) |
+| `task.handed_to_teammate` | you handed a team task to a teammate (`teamId`, `guest`); adds an activity entry, "Handed this task to Kai" |
 | `handoff.left` | the guest left the machine at app.shinsa.dev, so the task is no longer handed off (`guest`; adds an activity entry, "Kai gave this task back", with the guest as `Activity.person`) |
 | `task.staged` | the stage and its reason changed |
 | `task.prioritized` | the priority changed |
@@ -1546,7 +1554,7 @@ the tunnel in about a quarter of the time (`bun scripts/perf/remote.ts`, `docs/e
 | `{ t: 'terminal-text', id, data }` / `{ t: 'terminal-bytes', id, chunk }` | One frame of the terminal's stream either way: a control frame as text (`TerminalClientFrame`, `TerminalServerFrame`), or keys and screen bytes in base64url |
 | `{ t: 'terminal-close', id, code, reason }` | Either side ends a stream: 1000 from the page, 4403 for a device that is not the owner's or too many streams (`MAX_TERMINAL_STREAMS`, 16), 4404 for a terminal that is gone (`TERMINAL_STREAM_CLOSE`) |
 
-**One task for a guest** (`scope.ts`): a device with a task is a `GuestActor` (`taskId`, `login`). Its socket gets `resolveScopedState` and `resolveScopedPatch` (that task, its runs, gates, evidence, repository and project, accounts without their email, no share, previews or hand-off link) and `resolveScopedEngineInfo` (only `SCOPED_COMMANDS`); `resolveScopedRefusal` refuses any other command, another task's, a secret or sign-in gate's answer and a retry on a chosen account, with the code `handoff_scope` (`SCOPE_REFUSAL_CODE`, `SCOPE_MESSAGES`).
+**One task for a guest, one team for a teammate** (`scope.ts`): a scoped device is a `ScopedActor` (a `TaskGuest` with `scope`, `{ kind: 'task', taskId }` or `{ kind: 'team', teamId, scopes }`). A team scope reaches every task of the team's projects (`isTeamTask`) and the commands its action scopes allow (`resolveCommandScope`) (`TEAM_COMMANDS` on top of `SCOPED_COMMANDS`, `TEAM_SCOPE_MESSAGES`); a task scope, as follows. Its socket gets `resolveScopedState` and `resolveScopedPatch` (that task, its runs, gates, evidence, repository and project, accounts without their email, no share, previews or hand-off link) and `resolveScopedEngineInfo` (only `SCOPED_COMMANDS`); `resolveScopedRefusal` refuses any other command, another task's, a secret or sign-in gate's answer and a retry on a chosen account, with the code `handoff_scope` (`SCOPE_REFUSAL_CODE`, `SCOPE_MESSAGES`).
 
 **What only the owner sends from another device** (`local-only.ts`): `isOwnerOnlyCommand` names the user commands
 that need you at the keyboard or the machine's owner on a sealed channel (a human-only setting or repository field,

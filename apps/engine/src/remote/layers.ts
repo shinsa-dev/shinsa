@@ -9,6 +9,7 @@ import { Remote } from './machine/service.ts';
 import { RemoteUrlOpener } from './opener/service.ts';
 import { Pairings } from './pairing/service.ts';
 import { PlacementAsker } from './placement/service.ts';
+import { Presence } from './presence/service.ts';
 import { ShareDescriber } from './share-describe/service.ts';
 import { Shares } from './shares/service.ts';
 import { RemoteStore } from './store/service.ts';
@@ -32,7 +33,7 @@ export const RemoteMachineLayer = (input: RemoteInput) =>
 
 export const RemoteLayer = (input: RemoteInput) =>
   Teams.layer.pipe(
-    Layer.provideMerge(Layer.mergeAll(Shares.layer, TeamFeeds.layer, Handoffs.layer)),
+    Layer.provideMerge(Layer.mergeAll(Shares.layer, TeamFeeds.layer, Handoffs.layer, Presence.layer)),
     Layer.provideMerge(RemoteMachineLayer(input))
   );
 

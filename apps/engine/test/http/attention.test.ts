@@ -1,16 +1,16 @@
 import { describe, expect, test } from 'bun:test';
-import type { GuestActor, RequestOrigin } from '@shinsa/core';
+import type { ScopedActor, RequestOrigin } from '@shinsa/core';
 import { Duration, Effect } from 'effect';
 import { TestClock } from 'effect/testing';
-import { ATTENTION_IDLE } from '../../src/http/attention/schema.ts';
+import { ATTENTION_IDLE, type OwnerActivity } from '../../src/http/attention/schema.ts';
 import { makeAttentionTracker } from '../../src/http/attention/service.ts';
 
 interface Page {
   name: string;
-  data: { origin: RequestOrigin; guest: GuestActor | null };
+  data: { origin: RequestOrigin; guest: ScopedActor | null };
 }
 
-function createPage(name: string, origin: RequestOrigin, guest: GuestActor | null = null): Page {
+function createPage(name: string, origin: RequestOrigin, guest: ScopedActor | null = null): Page {
   return { name, data: { origin, guest } };
 }
 
@@ -98,8 +98,43 @@ describe('the attention tracker', () => {
       Effect.gen(function* () {
         yield* tracker.report(createPage('app', 'local'), true);
         yield* tracker.report(createPage('member', 'remote'), true);
-        yield* tracker.report(createPage('guest', 'remote', { taskId: 't-1' } as GuestActor), true);
+        yield* tracker.report(
+          createPage('guest', 'remote', {
+            id: 'u-kai',
+            login: 'kai',
+            name: null,
+            avatarUrl: null,
+            scope: { kind: 'task', taskId: 't-1' },
+          }),
+          true
+        );
         expect(told).toEqual(['app:here', 'member:nowhere']);
       })
     ));
+});
+
+describe('the owner’s presence', () => {
+  test('is here while one of your pages was used in the last five minutes, then away since you last used one', async () => {
+    const reported: OwnerActivity[] = [];
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        const tracker = yield* makeAttentionTracker<Page>(
+          () => undefined,
+          (owner) => Effect.sync(() => void reported.push(owner))
+        );
+        const app = createPage('app', 'local');
+        const teammate = createPage('kai', 'remote');
+        yield* TestClock.adjust(Duration.seconds(1));
+        yield* tracker.report(teammate, true);
+        expect(reported.at(-1)).toEqual({ active: false, seenAt: null });
+        yield* tracker.report(app, true);
+        expect(reported.at(-1)).toEqual({ active: true, seenAt: 1_000 });
+        yield* TestClock.adjust(ATTENTION_IDLE);
+        expect(reported.at(-1)).toEqual({ active: false, seenAt: 1_000 });
+        yield* tracker.report(app, true);
+        yield* tracker.remove(app);
+        expect(reported.at(-1)).toEqual({ active: false, seenAt: 1_000 + idleMs });
+      }).pipe(Effect.scoped, Effect.provide(TestClock.layer()))
+    );
+  });
 });

@@ -1,4 +1,4 @@
-import type { ShinsaState } from '@shinsa/core';
+import { resolveFocusTeam, type ShinsaState } from '@shinsa/core';
 import { EmptyState } from '@shinsa/ui/components/empty-state';
 import { Input } from '@shinsa/ui/components/input';
 import { cn } from '@shinsa/ui/lib/utils';
@@ -30,7 +30,7 @@ export function TasksPage({ state }: { state: ShinsaState }) {
     () => listTaskRows(state, team.entries, team.teams),
     [state, team.entries, team.teams]
   );
-  const fields = listTaskFilterFields(rows, team.teams, filters);
+  const fields = listTaskFilterFields(rows, team.teams, filters, resolveFocusTeam(state, Date.now()));
   const sections = listTaskGroupSections(state, filterTaskRows(rows, filters), filters.status);
   const owners = rows.some((row) => row.team);
   const columns = owners ? TEAM_TASK_LIST_COLUMNS : TASK_LIST_COLUMNS;

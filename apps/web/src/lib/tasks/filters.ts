@@ -203,7 +203,7 @@ const FIELD_LABEL: Record<TaskFilterKey, { label: string; icon: IconName }> = {
   owner: { label: 'Owner', icon: 'IconUser' },
   team: { label: 'Team', icon: 'IconUserDuo' },
   project: { label: 'Project', icon: 'IconFolder1' },
-  repo: { label: 'Repository', icon: 'IconFolderGit' },
+  repo: { label: 'Repository', icon: 'IconGithub' },
   kind: { label: 'Kind', icon: 'IconHammer' },
   priority: { label: 'Priority', icon: 'IconPriorityHigh' },
 };
@@ -303,13 +303,18 @@ function listFieldOptions(
 export function listTaskFilterFields(
   rows: readonly TaskRow[],
   teams: readonly FocusTeam[],
-  filters: TaskFilters
+  filters: TaskFilters,
+  focusTeamId: string | null = null
 ): TaskFilterField[] {
   return TASK_FILTER_KEYS.map((key) => ({
     key,
     ...FIELD_LABEL[key],
     options: listFieldOptions(key, rows, teams, filters[key]),
-  })).filter((field) => field.options.length > 1 || filters[field.key].length > 0);
+  })).filter(
+    (field) =>
+      filters[field.key].length > 0 ||
+      (field.options.length > 1 && !(field.key === 'team' && focusTeamId !== null))
+  );
 }
 
 export function describeFilterChoice(field: TaskFilterField, picked: readonly string[]) {

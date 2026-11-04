@@ -1,5 +1,11 @@
 import { describe, expect, test } from 'bun:test';
-import type { RemoteTeam, RemoteTeamEntry } from '@shinsa/core';
+import {
+  ACCESS_PRESETS,
+  DEFAULT_TEAM_SCOPES,
+  type RemoteTeam,
+  type RemoteTeamEntry,
+  toggleScope,
+} from '@shinsa/core';
 import type { RemoteSnapshot } from '../../src/remote/index.ts';
 import { createFakeClient, findSpec, runSpec } from './fixtures.ts';
 
@@ -17,6 +23,8 @@ const PLATFORM: RemoteTeam = {
   members: [{ user: KAI, addedAt: 2 }],
   requests: [{ user: BOB, addedAt: 3 }],
   machines: [],
+  scopes: DEFAULT_TEAM_SCOPES,
+  overrides: [],
   createdAt: 1,
 };
 
@@ -27,6 +35,7 @@ const OWNED: RemoteTeamEntry = {
   onMachine: true,
   invite: true,
   team: PLATFORM,
+  extras: [],
 };
 
 const JOINED: RemoteTeamEntry = {
@@ -36,6 +45,7 @@ const JOINED: RemoteTeamEntry = {
   onMachine: false,
   invite: false,
   team: { ...PLATFORM, id: 'team2', name: 'Growth', owner: KAI, role: 'member', members: [], requests: [] },
+  extras: [],
 };
 
 const ASKED: RemoteTeamEntry = {
@@ -45,6 +55,7 @@ const ASKED: RemoteTeamEntry = {
   onMachine: true,
   invite: false,
   team: null,
+  extras: [],
 };
 
 function createSnapshot(teams: RemoteTeamEntry[], paired = true) {
@@ -117,6 +128,7 @@ describe('the teams commands', () => {
       '/api/remote/teams/remove': reply,
       '/api/remote/teams/link/remove': reply,
       '/api/remote/members/grant': reply,
+      '/api/remote/teams/scopes': reply,
     });
     expect((await runSpec(fake, ['teams', 'accept', 'Platform', '--login', '@bob'])).text).toContain(
       'in the team now'
@@ -129,6 +141,31 @@ describe('the teams commands', () => {
     expect((await runSpec(fake, ['teams', 'grant', 'Platform', '--login', 'kai'])).text).toContain(
       'can reach this machine now'
     );
+    expect(
+      (await runSpec(fake, ['teams', 'scopes', 'Platform', '--allow', 'message', '--deny', 'share'])).text
+    ).toBe('The team’s scopes are changed.');
+    expect(
+      (await runSpec(fake, ['teams', 'scopes', 'Platform', '--login', 'kai', '--preset', 'default'])).text
+    ).toBe('Their scopes are changed.');
+    await runSpec(fake, [
+      'teams',
+      'scopes',
+      'Platform',
+      '--login',
+      'kai',
+      '--preset',
+      'standard',
+      '--allow',
+      'fork',
+    ]);
+    await expect(runSpec(fake, ['teams', 'scopes', 'Platform'])).rejects.toThrow('Name a preset or a scope');
+    await expect(runSpec(fake, ['teams', 'scopes', 'Platform', '--allow', 'everything'])).rejects.toThrow(
+      'everything is not a team scope'
+    );
+    await expect(runSpec(fake, ['teams', 'scopes', 'Platform', '--deny', 'code'])).rejects.toThrow(
+      'code is not a team scope'
+    );
+    expect(findSpec(['teams', 'scopes']).humanOnly).toBe(true);
     expect(fake.posts.map((post) => [post.path, post.body])).toEqual([
       ['/api/remote/teams/requests/accept', { teamId: 'team1', userId: '9' }],
       ['/api/remote/teams/requests/decline', { teamId: 'team1', userId: '9' }],
@@ -137,6 +174,18 @@ describe('the teams commands', () => {
       ['/api/remote/teams/remove', { teamId: 'team1' }],
       ['/api/remote/teams/link/remove', { teamId: 'team1' }],
       ['/api/remote/members/grant', { teamId: 'team1', userId: '7' }],
+      [
+        '/api/remote/teams/scopes',
+        {
+          teamId: 'team1',
+          scopes: toggleScope(toggleScope(DEFAULT_TEAM_SCOPES, 'message', true), 'share', false),
+        },
+      ],
+      ['/api/remote/teams/scopes', { teamId: 'team1', userId: '7', scopes: null }],
+      [
+        '/api/remote/teams/scopes',
+        { teamId: 'team1', userId: '7', scopes: toggleScope(ACCESS_PRESETS.standard, 'fork', true) },
+      ],
     ]);
   });
 

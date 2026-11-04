@@ -246,11 +246,25 @@ export interface PullRequestChanges {
   changedFiles: number;
 }
 
+export interface TeammateFork {
+  instanceId: string;
+  taskId: string;
+  handle: string | null;
+  title: string;
+  owner: string | null;
+  request: string;
+  rounds: string[];
+  branch: string | null;
+  pullRequest: Pick<PullRequest, 'number' | 'url' | 'state'> | null;
+}
+
+export const PULL_REQUEST_STATES = ['open', 'merged', 'closed'] as const;
+
 export interface PullRequest {
   number: number;
   url: string;
   base?: string;
-  state: 'open' | 'merged' | 'closed';
+  state: (typeof PULL_REQUEST_STATES)[number];
   checks: CiState;
   unresolvedComments: number;
   mergeable: boolean | null;
@@ -491,6 +505,7 @@ export interface Task {
   parentTaskId?: string | null;
   createdBy?: TaskCreator | null;
   forkOf?: string | null;
+  teammateFork?: TeammateFork | null;
   splits?: TaskSplit[];
   scheduleId?: string | null;
   sourceReport?: SourceReport | null;
@@ -639,6 +654,7 @@ export interface TaskHandoff {
   failure?: string | null;
   guest: TaskGuest | null;
   claimedAt: number | null;
+  teamId?: string | null;
 }
 
 export interface InboxMessage {

@@ -1,15 +1,22 @@
 import type { AttentionPlace } from '@shinsa/core';
 import { Clock, Duration, Effect, Fiber } from 'effect';
-import { ATTENTION_IDLE, type AttentionMember, type AttentionTell, type AttentionTracker } from './schema.ts';
+import {
+  ATTENTION_IDLE,
+  type AttentionMember,
+  type AttentionTell,
+  type AttentionTracker,
+  type OwnerActivityListener,
+} from './schema.ts';
 
 export const makeAttentionTracker = Effect.fn('AttentionTracker.make')(function* <
   Member extends AttentionMember,
->(tell: AttentionTell<Member>) {
+>(tell: AttentionTell<Member>, onOwner: OwnerActivityListener | null = null) {
   const scope = yield* Effect.scope;
   const idleMs = Duration.toMillis(ATTENTION_IDLE);
   const activeAt = new Map<Member, number>();
   const told = new Map<Member, AttentionPlace | null>();
   let expiry: Fiber.Fiber<void> | null = null;
+  let seenAt: number | null = null;
 
   const isOwnersOwn = (member: Member) => !member.data.guest && member.data.origin !== 'remote';
 
@@ -45,6 +52,7 @@ export const makeAttentionTracker = Effect.fn('AttentionTracker.make')(function*
       tell(member, where);
     }
     yield* cancelExpiry;
+    if (onOwner) yield* onOwner({ active: holder !== null, seenAt });
     if (!holder) return;
     const expire = Effect.sleep(Duration.millis(expiresAt - now)).pipe(
       Effect.andThen(
@@ -60,7 +68,10 @@ export const makeAttentionTracker = Effect.fn('AttentionTracker.make')(function*
   const report = Effect.fn('AttentionTracker.report')(function* (member: Member, active: boolean) {
     if (member.data.guest) return;
     if (!told.has(member)) told.set(member, null);
-    if (active && isOwnersOwn(member)) activeAt.set(member, yield* Clock.currentTimeMillis);
+    if (active && isOwnersOwn(member)) {
+      seenAt = yield* Clock.currentTimeMillis;
+      activeAt.set(member, seenAt);
+    }
     yield* sync();
   });
 

@@ -2,7 +2,7 @@ import type {
   ConnectChannel,
   ConnectClaim,
   DomainError,
-  GuestActor,
+  ScopedActor,
   PairingView,
   RemoteSnapshot,
   TaskGuest,
@@ -23,7 +23,11 @@ export const HANDOFF_NOT_ENABLED =
 
 export const HANDOFF_UNAVAILABLE = 'This machine cannot hand off tasks right now. Try again in a moment.';
 
-export const GUEST_FALLBACK_LOGIN = 'guest';
+export const UNKNOWN_PERSON = { login: 'guest', name: null, avatarUrl: null } as const;
+
+export type TeamScope = Extract<ScopedActor['scope'], { kind: 'team' }>;
+
+export const NOWHERE: ScopedActor['scope'] = { kind: 'task', taskId: '' };
 
 export class RemoteKeyUnreadable extends Schema.TaggedError<
   RemoteKeyUnreadable,
@@ -50,7 +54,7 @@ export interface RemoteInput {
 export interface ChannelParts {
   readonly hub: ChannelHub;
   readonly terminals: ChannelTerminals | null;
-  readonly respond: (request: Request, guest: GuestActor | null, userId: string) => Effect.Effect<Response>;
+  readonly respond: (request: Request, guest: ScopedActor | null, userId: string) => Effect.Effect<Response>;
 }
 
 export type GuestLeaver = (userIds: string[]) => Effect.Effect<void>;
@@ -97,6 +101,11 @@ export interface RemoteHandle {
   verifyConnect(token: string | null, channel: ConnectChannel): Effect.Effect<ConnectClaim | null>;
   spendConnect(claim: ConnectClaim): Effect.Effect<boolean>;
   isOwner(userId: string | null): Effect.Effect<boolean>;
+  hasAccess(userId: string): Effect.Effect<boolean>;
+  resolveTeamScope(userId: string, teamId: string): Effect.Effect<TeamScope | null>;
+  listTeamScopes(userId: string): Effect.Effect<TeamScope[]>;
+  resolveTeamGrant(userId: string, teamId: string): Effect.Effect<string | null>;
+  canForkTeamTask(task: { readonly teamId: string }): Effect.Effect<boolean>;
   openChannel(peer: ChannelPeer, parts: ChannelParts, userId: string): Effect.Effect<RemoteChannelHandle>;
   closeChannel(channel: RemoteChannelHandle): Effect.Effect<void>;
   removeDevice(publicKey: string): Effect.Effect<boolean>;

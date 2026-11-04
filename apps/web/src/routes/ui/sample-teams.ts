@@ -1,4 +1,6 @@
 import {
+  ACCESS_PRESETS,
+  DEFAULT_TEAM_SCOPES,
   createState,
   type Project,
   type RemoteSnapshot,
@@ -43,6 +45,8 @@ export function createSampleTeams(now: number) {
     members: [{ user: KAI, addedAt: now - 30 * HOUR_MS }],
     requests: [{ user: BOB, addedAt: now - 4 * 60_000 }],
     machines: [],
+    scopes: DEFAULT_TEAM_SCOPES,
+    overrides: [{ userId: KAI.id, scopes: ACCESS_PRESETS.full }],
     createdAt: now - 72 * HOUR_MS,
   };
   const paywalls: RemoteTeam = {
@@ -56,6 +60,8 @@ export function createSampleTeams(now: number) {
     ],
     requests: [],
     machines: [],
+    scopes: DEFAULT_TEAM_SCOPES,
+    overrides: [],
     createdAt: now - 240 * HOUR_MS,
   };
   const state: ShinsaState = {
@@ -84,6 +90,19 @@ export function createSampleTeams(now: number) {
   };
   return {
     state,
+    presence: [
+      { user: LEE, base: 'Owner', presence: { userId: LEE.id, status: 'online' as const, seenAt: now } },
+      {
+        user: KAI,
+        base: 'Joined 6h ago',
+        presence: { userId: KAI.id, status: 'away' as const, seenAt: now - 12 * 60_000 },
+      },
+      {
+        user: BOB,
+        base: 'Joined 3d ago',
+        presence: { userId: BOB.id, status: 'offline' as const, seenAt: now - 5 * HOUR_MS },
+      },
+    ],
     scenes: [
       {
         label:
@@ -98,6 +117,7 @@ export function createSampleTeams(now: number) {
               onMachine: true,
               invite: true,
               team: platform,
+              extras: [],
             },
             {
               id: paywalls.id,
@@ -106,8 +126,17 @@ export function createSampleTeams(now: number) {
               onMachine: true,
               invite: false,
               team: paywalls,
+              extras: [],
             },
-            { id: 'tm2z7c', name: 'Mobile', status: 'requested', onMachine: true, invite: false, team: null },
+            {
+              id: 'tm2z7c',
+              name: 'Mobile',
+              status: 'requested',
+              onMachine: true,
+              invite: false,
+              team: null,
+              extras: [],
+            },
           ],
         },
       },
@@ -134,6 +163,8 @@ export function createSampleTeamActions(): TeamActions {
     leave: refuse,
     remove: refuse,
     grantAccess: refuse,
+    updateScopes: refuse,
+    updateExtra: refuse,
   };
 }
 

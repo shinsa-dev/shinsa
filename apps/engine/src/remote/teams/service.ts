@@ -1,8 +1,11 @@
 import {
+  type AccessScopes,
   createTeamWelcome,
   DomainError,
   deriveTeamSessionKey,
+  isTeamPerson,
   isTeamTask,
+  listMachineExtraScopes,
   listTeamProjectIds,
   listTeamTasks,
   parseTeamHello,
@@ -15,6 +18,7 @@ import {
   serializePublicKey,
   type ShinsaCommand,
   signTeamSnapshot,
+  type Task,
   TEAM_KEY_BYTES,
   TEAM_SHARE_PRESET,
   type TeamId,
@@ -32,6 +36,7 @@ import { RemoteOrigin } from '../client/schema.ts';
 import { RemoteClient } from '../client/service.ts';
 import { EgressGate } from '../egress/service.ts';
 import { Remote } from '../machine/service.ts';
+import { Presence } from '../presence/service.ts';
 import { RandomBytes } from '../schema.ts';
 import { createEphemeralKeys } from '../share-channel/ephemeral.ts';
 import { type HelloAnswer, type LiveShare, ShareChannelBroke } from '../share-channel/schema.ts';
@@ -62,6 +67,7 @@ export class Teams extends Context.Service<Teams, TeamsHandle>()('shinsa/engine/
       const access = yield* AccessScope;
       const shares = yield* Shares;
       const feeds = yield* TeamFeeds;
+      const presence = yield* Presence;
       const transcripts = yield* Transcripts;
       const client = yield* RemoteClient;
       const appOrigin = yield* RemoteOrigin;
@@ -76,7 +82,8 @@ export class Teams extends Context.Service<Teams, TeamsHandle>()('shinsa/engine/
         file: remoteStore.file,
         selectTeam: remoteStore.selectTeam,
         selectTeamKey: remoteStore.selectTeamKey,
-        selectGrant: remoteStore.selectGrant,
+        writeExtra: (extra: { teamId: string; userId: string; scopes: AccessScopes[number][] }) =>
+          Effect.orDie(remoteStore.writeExtra(extra)),
         recordTeams: (teams: RemoteTeam[]) => Effect.asVoid(Effect.orDie(remoteStore.recordTeams(teams))),
         upsertTeamKey: (stored: StoredTeamKey) => Effect.orDie(remoteStore.upsertTeamKey(stored)),
         removeTeam: (teamId: string) => Effect.orDie(remoteStore.removeTeam(teamId)),
@@ -92,6 +99,8 @@ export class Teams extends Context.Service<Teams, TeamsHandle>()('shinsa/engine/
           )
         );
       const channels = yield* Ref.make<ReadonlyMap<TeamChannel, Effect.Effect<void>>>(new Map());
+      const viewers = new Map<TeamChannel, string>();
+      const releasing = new Set<string>();
 
       const refuse = (error: { readonly code: string; readonly message: string }) => () =>
         Effect.fail(new DomainError(error));
@@ -100,9 +109,6 @@ export class Teams extends Context.Service<Teams, TeamsHandle>()('shinsa/engine/
         NotOwner: refuse(TEAM_DOMAIN_ERRORS.notOwner),
         NotFound: refuse(TEAM_DOMAIN_ERRORS.gone),
       };
-
-      const isViewer = (team: RemoteTeam, userId: string) =>
-        team.owner.id === userId || team.members.some((member) => member.user.id === userId);
 
       const withoutUser = (members: readonly RemoteMember[], userId: string) =>
         members.filter((member) => member.user.id !== userId);
@@ -242,6 +248,45 @@ export class Teams extends Context.Service<Teams, TeamsHandle>()('shinsa/engine/
         yield* replaceTeam({ ...team, members: withoutUser(team.members, userId) });
       });
 
+      const updateScopes = Effect.fn('Teams.updateScopes')(function* (
+        teamId: string,
+        userId: string | null,
+        scopes: AccessScopes | null
+      ) {
+        const team = yield* findOwnTeam(teamId);
+        if (userId !== null && !team.members.some((member) => member.user.id === userId))
+          return yield* new DomainError(TEAM_DOMAIN_ERRORS.memberNotFound);
+        const token = yield* findMachineToken();
+        const request = userId === null ? { scopes } : { userId: userId as RemoteUserId, scopes };
+        const answer = yield* calls.scopes(token, teamId as TeamId, request).pipe(
+          Effect.catchTags({
+            NotOwner: refuse(TEAM_DOMAIN_ERRORS.notOwner),
+            NotFound: refuse(userId === null ? TEAM_DOMAIN_ERRORS.gone : TEAM_DOMAIN_ERRORS.memberNotFound),
+          })
+        );
+        yield* replaceTeam(answer);
+      });
+
+      const updateExtra = Effect.fn('Teams.updateExtra')(function* (
+        teamId: string,
+        userId: string,
+        scopes: AccessScopes
+      ) {
+        const team = yield* findTeam(teamId);
+        if (!isTeamPerson(team, userId) || (yield* remote.isOwner(userId)))
+          return yield* new DomainError(TEAM_DOMAIN_ERRORS.memberNotFound);
+        yield* store.writeExtra({ teamId, userId, scopes: [...listMachineExtraScopes(scopes)] });
+        yield* remote.publish;
+      });
+
+      const listKeys = Effect.gen(function* () {
+        const file = yield* store.file;
+        const teams = new Set(file.teams.map((team) => team.id));
+        return file.teamKeys
+          .filter((stored) => teams.has(stored.teamId))
+          .map(({ teamId, name, key }) => ({ teamId, name, key }));
+      });
+
       const endTeam = Effect.fn('Teams.endTeam')(function* (teamId: string, action: 'leave' | 'remove') {
         const token = yield* findMachineToken();
         if (action === 'leave')
@@ -272,7 +317,7 @@ export class Teams extends Context.Service<Teams, TeamsHandle>()('shinsa/engine/
         const team = yield* store.selectTeam(subject.teamId);
         if (!team) return TEAM_REFUSALS.team;
         if (!(yield* store.selectTeamKey(subject.teamId))) return TEAM_REFUSALS.key;
-        if (!isViewer(team, subject.userId)) return TEAM_REFUSALS.member;
+        if (!isTeamPerson(team, subject.userId)) return TEAM_REFUSALS.member;
         if (subject.view.kind === 'list') return null;
         const state = yield* engine.state;
         const task = state.tasks[subject.view.taskId];
@@ -282,7 +327,12 @@ export class Teams extends Context.Service<Teams, TeamsHandle>()('shinsa/engine/
       const authorize = Effect.fn('Teams.authorize')(function* (text: string, userId: string) {
         const hello = parseTeamHello(text);
         if (!hello) return null;
-        const subject: TeamSubject = { teamId: hello.team, view: hello.view, userId };
+        const subject: TeamSubject = {
+          teamId: hello.team,
+          view: hello.view,
+          userId,
+          present: hello.watcher !== 'machine',
+        };
         const refused = yield* resolveRefusal(subject);
         if (refused) return { refused };
         const stored = yield* store.selectTeamKey(hello.team);
@@ -329,17 +379,20 @@ export class Teams extends Context.Service<Teams, TeamsHandle>()('shinsa/engine/
         });
         const tasks = EgressGate.listTeamTasks(listed);
         const { publicKey } = yield* store.resolveMachineKey;
-        const grant = yield* store.selectGrant(subject.userId);
+        const grant = yield* remote.resolveTeamGrant(subject.userId, subject.teamId);
         const updatedAt = yield* Clock.currentTimeMillis;
         const snapshot = yield* signList(subject.teamId, tasks, updatedAt);
         const held = yield* feeds.listHeld(subject.teamId);
+        const team = yield* store.selectTeam(subject.teamId);
+        const present = team ? yield* presence.listTeam(team, file.access?.owner.id ?? null) : [];
         const view: TeamListView = {
           tasks,
           machineKey: publicKey,
-          ...(grant?.teamId === subject.teamId ? { grant: grant.secret } : {}),
+          ...(grant ? { grant } : {}),
           updatedAt,
           ...(snapshot ? { snapshot } : {}),
           ...(held.length > 0 ? { held } : {}),
+          ...(present.length > 0 ? { presence: present } : {}),
         };
         const live: LiveShare = { view, files: [] };
         return live;
@@ -358,20 +411,41 @@ export class Teams extends Context.Service<Teams, TeamsHandle>()('shinsa/engine/
           Effect.asVoid
         );
 
+      const openViewer = Effect.fn('Teams.openViewer')(function* (channel: TeamChannel, userId: string) {
+        if (viewers.has(channel)) return;
+        viewers.set(channel, userId);
+        yield* presence.openViewer(userId);
+      });
+
+      const closeViewer = Effect.fn('Teams.closeViewer')(function* (channel: TeamChannel) {
+        const userId = viewers.get(channel);
+        if (userId === undefined) return;
+        viewers.delete(channel);
+        yield* presence.closeViewer(userId);
+      });
+
       const releaseChannel = Effect.fn('Teams.releaseChannel')(function* (channel: TeamChannel) {
         const release = yield* Ref.modify(channels, (open) => {
           const rest = new Map(open);
           rest.delete(channel);
           return [open.get(channel), rest];
         });
+        yield* closeViewer(channel);
         if (release) yield* release;
       });
 
       const openChannel = Effect.fn('Teams.openChannel')(function* (peer: ChannelPeer, userId: string) {
-        const channel = yield* makeShareChannel<TeamSubject>({
+        const channel: TeamChannel = yield* makeShareChannel<TeamSubject>({
           name: 'team view',
           peer,
-          authorize: (hello) => authorize(hello, userId),
+          authorize: (hello) =>
+            authorize(hello, userId).pipe(
+              Effect.tap((answer) =>
+                answer && 'subject' in answer && answer.subject.present
+                  ? openViewer(channel, userId)
+                  : Effect.void
+              )
+            ),
           resolveLive,
         });
         const onEnd = Effect.gen(function* () {
@@ -379,7 +453,9 @@ export class Teams extends Context.Service<Teams, TeamsHandle>()('shinsa/engine/
             const rest = new Map(open);
             return [rest.delete(channel), rest];
           });
-          if (held) yield* endChannel(channel, TEAM_REMOTE_CHANGED);
+          if (!held) return;
+          yield* closeViewer(channel);
+          yield* endChannel(channel, TEAM_REMOTE_CHANGED);
         });
         const { release } = yield* access.acquire(onEnd);
         yield* Ref.update(channels, (open) => new Map(open).set(channel, release));
@@ -393,7 +469,32 @@ export class Teams extends Context.Service<Teams, TeamsHandle>()('shinsa/engine/
 
       const listOpen = Effect.map(Ref.get(channels), (open) => [...open.keys()]);
 
+      const isHoldKept = Effect.fn('Teams.isHoldKept')(function* (task: Task) {
+        const teamId = task.handoff?.teamId;
+        const holder = teamId ? task.handoff?.guest : null;
+        if (!(holder && teamId)) return true;
+        if (!(yield* remote.resolveTeamScope(holder.id, teamId))) return false;
+        return isTeamTask(yield* engine.state, task, teamId);
+      });
+
+      const releaseHolds = Effect.gen(function* () {
+        for (const task of Object.values((yield* engine.state).tasks)) {
+          if (releasing.has(task.id) || (yield* isHoldKept(task))) continue;
+          releasing.add(task.id);
+          yield* engine.dispatch({ type: 'handoff.remove', taskId: task.id }).pipe(
+            Effect.catch((error) =>
+              Effect.logWarning('[Teams] Could not end a teammate’s hold on a task').pipe(
+                Effect.annotateLogs({ taskId: task.id, error: describeError(error) })
+              )
+            ),
+            Effect.ensuring(Effect.sync(() => releasing.delete(task.id))),
+            Effect.forkDetach
+          );
+        }
+      });
+
       const syncChannels = Effect.gen(function* () {
+        yield* releaseHolds;
         for (const channel of yield* listOpen) {
           const subject = yield* channel.subject;
           if (!subject) continue;
@@ -424,6 +525,7 @@ export class Teams extends Context.Service<Teams, TeamsHandle>()('shinsa/engine/
       yield* remote.observe(syncChannels);
       yield* engine.observe(() => runSync(syncChannels));
       yield* feeds.observeHeld(pushLists);
+      yield* presence.observe(pushLists);
       const releaseTranscripts = yield* transcripts.subscribe((runId) => runSync(pushTranscript(runId)));
       yield* Effect.addFinalizer(() => releaseTranscripts);
 
@@ -436,6 +538,9 @@ export class Teams extends Context.Service<Teams, TeamsHandle>()('shinsa/engine/
         acceptRequest,
         declineRequest,
         removeMember,
+        updateScopes,
+        updateExtra,
+        listKeys,
         leave,
         remove,
         acceptsViewer: remote.isEnabled,

@@ -1,10 +1,17 @@
 import { describe, expect, test } from 'bun:test';
 import { Effect } from 'effect';
+import { ACCESS_PRESETS, ACCESS_SCOPES, DEFAULT_TEAM_SCOPES, listActionScopes } from '../../src/index.ts';
 import { decodeText, encodeText, serializeBase64Url } from '../../src/remote/bytes.ts';
 import { createFrameOpener, createFrameSealer } from '../../src/remote/frames.ts';
 import { REMOTE_PROTOCOL_VERSION } from '../../src/remote/handshake.ts';
 import { SIGNING_KEY_ALGORITHM, serializePublicKey } from '../../src/remote/keys.ts';
 import {
+  isTeamPerson,
+  mergeTeamPresence,
+  resolveTeamPresence,
+  listMachineExtraScopes,
+  mergeScopes,
+  resolveMemberScopes,
   createTeamHello,
   createTeamWelcome,
   deriveTeamSessionKey,
@@ -208,5 +215,111 @@ describe('a signed team snapshot', () => {
     expect(readTeamSnapshot(null)).toBeNull();
     expect(readTeamSnapshot({ body: 1, signature: 'x' })).toBeNull();
     expect(readTeamSnapshot({ body: '{}', signature: 'x' })).toEqual({ body: '{}', signature: 'x' });
+  });
+});
+
+describe('DEFAULT_TEAM_SCOPES', () => {
+  test('is the Collaborate preset: the standard view and every action but messaging agents', () => {
+    expect(DEFAULT_TEAM_SCOPES).toEqual(ACCESS_PRESETS.collaborate);
+    expect(listActionScopes(DEFAULT_TEAM_SCOPES)).toEqual(['gates', 'actions', 'fork', 'share', 'services']);
+  });
+});
+
+describe('a machine’s extra scopes for a teammate', () => {
+  test('keep only what that machine enforces, so fork stays the team’s', () => {
+    expect(listMachineExtraScopes(['identity', 'message', 'fork', 'share'])).toEqual(['message', 'share']);
+  });
+
+  test('add to the team’s scopes in one order, without repeats', () => {
+    expect(mergeScopes(['gates', 'actions'], ['message', 'gates'])).toEqual(['gates', 'actions', 'message']);
+  });
+});
+
+describe('resolveMemberScopes', () => {
+  const user = (id: string) => ({ id, login: id, name: null, avatarUrl: null });
+  const team = {
+    owner: user('mona'),
+    members: [
+      { user: user('kai'), addedAt: 1 },
+      { user: user('lee'), addedAt: 1 },
+    ],
+    scopes: ACCESS_PRESETS.standard,
+    overrides: [{ userId: 'kai', scopes: ACCESS_PRESETS.full }],
+  };
+
+  test('gives the team’s owner every right, a member the team’s, and a member set apart their own', () => {
+    expect(resolveMemberScopes(team, 'mona')).toEqual(ACCESS_SCOPES);
+    expect(resolveMemberScopes(team, 'lee')).toEqual(ACCESS_PRESETS.standard);
+    expect(resolveMemberScopes(team, 'kai')).toEqual(ACCESS_PRESETS.full);
+  });
+
+  test('counts the owner and the members as the team’s people, and no one else', () => {
+    expect(isTeamPerson(team, 'mona')).toBe(true);
+    expect(isTeamPerson(team, 'kai')).toBe(true);
+    expect(isTeamPerson(team, 'octo')).toBe(false);
+  });
+});
+
+describe('resolveTeamPresence', () => {
+  const machine = { name: 'Studio', reason: null } as const;
+
+  test('reads each live machine’s report, counts the owner of a machine that dropped as offline, and keeps to one team', () => {
+    const feed = {
+      tasks: [],
+      machines: [
+        {
+          ...machine,
+          teamId: 't1',
+          instanceId: 'a',
+          userId: 'mona',
+          status: 'live' as const,
+          presence: [
+            { userId: 'mona', status: 'online' as const, seenAt: 500 },
+            { userId: 'kai', status: 'away' as const, seenAt: 400 },
+          ],
+        },
+        {
+          ...machine,
+          teamId: 't1',
+          instanceId: 'b',
+          userId: 'kai',
+          status: 'offline' as const,
+          updatedAt: 450,
+        },
+        { ...machine, teamId: 't1', instanceId: 'c', userId: 'tess', status: 'live' as const },
+        { ...machine, teamId: 't2', instanceId: 'd', userId: 'bob', status: 'refused' as const },
+      ],
+    };
+    expect([...resolveTeamPresence(feed, 't1').values()]).toEqual([
+      { userId: 'mona', status: 'online', seenAt: 500 },
+      { userId: 'kai', status: 'away', seenAt: 450 },
+    ]);
+    expect(resolveTeamPresence(feed).get('bob')).toEqual({ userId: 'bob', status: 'offline', seenAt: null });
+  });
+});
+
+describe('mergeTeamPresence', () => {
+  test('keeps each person’s liveliest status and latest sighting across every machine', () => {
+    const merged = mergeTeamPresence([
+      [
+        { userId: 'mona', status: 'away', seenAt: 100 },
+        { userId: 'kai', status: 'offline', seenAt: 300 },
+      ],
+      [
+        { userId: 'kai', status: 'online', seenAt: 200 },
+        { userId: 'mona', status: 'offline', seenAt: null },
+        { userId: 'tess', status: 'offline', seenAt: null },
+      ],
+      [{ userId: 'tess', status: 'offline', seenAt: 50 }],
+    ]);
+    expect([...merged.values()]).toEqual([
+      { userId: 'mona', status: 'away', seenAt: 100 },
+      { userId: 'kai', status: 'online', seenAt: 300 },
+      { userId: 'tess', status: 'offline', seenAt: 50 },
+    ]);
+  });
+
+  test('is empty when no machine reports anyone', () => {
+    expect(mergeTeamPresence([[], []]).size).toBe(0);
   });
 });

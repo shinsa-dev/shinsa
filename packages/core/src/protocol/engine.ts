@@ -14,6 +14,7 @@ export const ENGINE_FEATURES = [
   'remote.terminals',
   'attention',
   'worktree-root',
+  'team-access',
   'usage.pace_limits',
 ] as const;
 

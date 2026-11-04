@@ -4,6 +4,7 @@ import type {
   TeamFeedTask,
   TeamFeedStatus,
   TeamMachine,
+  TeamPresence,
   TeamSnapshot,
   TeamTask,
   TeamView,
@@ -40,6 +41,7 @@ export const ListViewText = Schema.fromJsonString(
     updatedAt: Schema.Number,
     snapshot: Schema.optionalKey(Schema.Unknown),
     held: Schema.optionalKey(Schema.Array(Schema.Unknown)),
+    presence: Schema.optionalKey(Schema.Array(Schema.Unknown)),
   })
 );
 
@@ -113,6 +115,7 @@ export interface Feed {
   readonly status: TeamFeedStatus;
   readonly reason: string | null;
   readonly tasks: TeamTask[];
+  readonly presence: TeamPresence[];
   readonly updatedAt: number | null;
   readonly snapshot: TeamSnapshot | null;
   readonly attempt: number;

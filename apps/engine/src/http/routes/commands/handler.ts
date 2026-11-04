@@ -23,6 +23,7 @@ export const CommandsHandlers = HttpApiBuilder.group(
           router,
           origin: yield* resolveRequestOrigin(source, remote),
           guest: null,
+          teams: remote,
         });
         const handle = taskId ? ((yield* engine.state).tasks[taskId]?.handle ?? null) : null;
         return { ok: true as const, taskId, handle };

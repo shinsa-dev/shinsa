@@ -21,7 +21,7 @@ import {
 import { Duration, Effect } from 'effect';
 import { describeError } from '../../../log/index.ts';
 import { assertToolInput } from '../attempts.ts';
-import { findForkSource, findStackParent } from '../forks.ts';
+import { type ForkReference, findStackParent, resolveForkReference } from '../forks.ts';
 import { ToolCallFailed } from '../schema.ts';
 import { DEFAULT_ROLE, type OrchestrationCall } from './schema.ts';
 
@@ -100,6 +100,14 @@ export const handleOrchestrationTool = Effect.fn('OrchestrationTool.handle')(fun
 
   const selectRequested = (state: ShinsaState, requestKey: string) =>
     listChildRuns(state, call.runId).find((child) => child.delegation.requestKey === requestKey);
+
+  const resolveForkRepo = (fork: ForkReference | null, source: Task) =>
+    fork?.kind !== 'teammate' || fork.repoId === source.repoId ? null : fork.repoId;
+
+  const resolveForkFields = (fork: ForkReference | null) => {
+    if (fork?.kind === 'own') return { forkOf: fork.forkOf };
+    return fork ? { teammateFork: fork.teammateFork } : {};
+  };
 
   const listLinks = (tasks: Task[]) =>
     tasks.map((task) => `- [${task.title}](${serializeReference({ kind: 'task', id: task.id })})`).join('\n');
@@ -235,14 +243,13 @@ export const handleOrchestrationTool = Effect.fn('OrchestrationTool.handle')(fun
     return repo.id === task.repoId ? null : repo.id;
   });
 
-  const resolveForkOf = Effect.fn('OrchestrationTool.resolveForkOf')(function* (reference: string | null) {
-    if (reference === null) return {};
+  const resolveFork = Effect.fn('OrchestrationTool.resolveFork')(function* (reference: string | null) {
     const state = yield* call.state;
-    const forkOf = yield* Effect.try({
-      try: () => findForkSource(state, reference),
+    const teamTasks = yield* call.teamTasks;
+    return yield* Effect.try({
+      try: () => resolveForkReference(state, teamTasks, reference),
       catch: (error) => refuse(describeError(error)),
     });
-    return { forkOf };
   });
 
   const resolveStackOn = Effect.fn('OrchestrationTool.resolveStackOn')(function* (
@@ -262,8 +269,9 @@ export const handleOrchestrationTool = Effect.fn('OrchestrationTool.handle')(fun
     const projectId = request.project
       ? yield* findProjectId(request.project)
       : resolveTaskProject(yield* call.state, source);
-    const repoId = yield* resolveRepoId(source, request, projectId);
-    const forkOf = yield* resolveForkOf(request.forkFrom);
+    const fork = yield* resolveFork(request.forkFrom);
+    const named = yield* resolveRepoId(source, request, projectId);
+    const repoId = named ?? resolveForkRepo(fork, source);
     const stackOn = yield* resolveStackOn(request.stackOn);
     yield* call.dispatch(
       {
@@ -274,7 +282,7 @@ export const handleOrchestrationTool = Effect.fn('OrchestrationTool.handle')(fun
         request: request.request,
         repoId,
         ...(request.project && projectId ? { projectId } : {}),
-        ...forkOf,
+        ...resolveForkFields(fork),
         thisWaits: request.thisTaskWaits,
         afterThis: request.afterThis,
         stackOnThis: request.stackOnThis,
@@ -298,6 +306,7 @@ export const handleOrchestrationTool = Effect.fn('OrchestrationTool.handle')(fun
       attemptId: call.attemptId,
       requests: request.requests,
       thisWaits: request.thisTaskWaits,
+      ...(request.stacked ? { stacked: true } : {}),
     });
     const state = yield* call.state;
     const task = yield* findTaskOf(parent);

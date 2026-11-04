@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from 'bun:test';
 import { OWNER_ONLY_MESSAGE, SCOPE_MESSAGES } from '@shinsa/core';
 import { Effect } from 'effect';
-import { dispatchUserCommand } from '../../../src/http/commands.ts';
+import { dispatchUserCommand, resolveTeammateRefusal } from '../../../src/http/commands.ts';
 import { Engine } from '../../helpers/engine.ts';
 import { openEventLog } from '../../helpers/event-log.ts';
 import { disposeWebHandlers } from '../../helpers/web.ts';
@@ -75,11 +75,30 @@ describe('POST /api/commands', () => {
           clientId: null,
           router: null,
           origin: 'remote',
-          guest: { taskId: 'task-1' } as never,
+          guest: { scope: { kind: 'task', taskId: 'task-1' } } as never,
         })
       )
     );
     expect([refusal.code, refusal.message]).toEqual(['handoff_scope', SCOPE_MESSAGES.command]);
+  });
+});
+
+describe('handing a task to a teammate', () => {
+  const KAI = { id: '7', login: 'kai', name: 'Kai Lane', avatarUrl: null };
+  const hand = { type: 'task.hand_to_teammate', taskId: 'task-1', teamId: 'core', teammate: KAI } as const;
+
+  test('is refused before anything happens when the person is not in that team', async () => {
+    const teams = {
+      resolveTeamScope: (userId: string) => Effect.succeed(userId === '7' ? ({} as never) : null),
+    };
+    const refuse = (command: Parameters<typeof resolveTeammateRefusal>[0], given: typeof teams | null) =>
+      Effect.runPromise(resolveTeammateRefusal(command, given));
+    expect(await refuse(hand, teams)).toBeNull();
+    expect((await refuse({ ...hand, teammate: { ...KAI, id: '9' } }, teams))?.message).toBe(
+      'Kai is not in that team, so they cannot take this task.'
+    );
+    expect((await refuse(hand, null))?.code).toBe('handoff_refused');
+    expect(await refuse({ type: 'task.cancel', taskId: 'task-1' }, null)).toBeNull();
   });
 });
 

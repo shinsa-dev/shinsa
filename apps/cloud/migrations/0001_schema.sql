@@ -107,6 +107,7 @@ CREATE TABLE teams (
   id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL REFERENCES users (id) ON DELETE CASCADE,
   name TEXT NOT NULL,
+  scopes TEXT,
   created_at INTEGER NOT NULL
 ) STRICT;
 
@@ -130,6 +131,7 @@ CREATE INDEX team_requesters_user ON team_requesters (user_id);
 CREATE TABLE team_members (
   team_id TEXT NOT NULL REFERENCES teams (id) ON DELETE CASCADE,
   user_id TEXT NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+  scopes TEXT,
   added_at INTEGER NOT NULL,
   PRIMARY KEY (team_id, user_id)
 ) STRICT, WITHOUT ROWID;

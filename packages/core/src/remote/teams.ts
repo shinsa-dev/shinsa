@@ -1,9 +1,17 @@
 import { Effect } from 'effect';
 import { isRecord, parseJsonRecord } from '../domain/records.ts';
 import { DAY_MS } from '../domain/time.ts';
+import { ACCESS_PRESETS } from '../scopes/index.ts';
+import { ACCESS_SCOPES, ACTION_SCOPES, type AccessScopes, type ActionScope } from '../scopes/schema.ts';
 import type { TeamTask } from '../share/teams.ts';
 import { encodeText, hasBytes, parseBase64Url, serializeBase64Url, URL_SAFE_SEGMENT } from './bytes.ts';
-import { REMOTE_APP_ORIGIN, REMOTE_CONNECT_PARAM, REMOTE_PATHS, type TeamAction } from './contract.ts';
+import {
+  REMOTE_APP_ORIGIN,
+  REMOTE_CONNECT_PARAM,
+  REMOTE_PATHS,
+  type RemoteTeam,
+  type TeamAction,
+} from './contract.ts';
 import { REMOTE_PROTOCOL_VERSION } from './handshake.ts';
 import { parseSigningPublicKey, serializePublicKey } from './keys.ts';
 import { deriveChannelSessionKey, signChannelProof, verifyChannelProof } from './share-channel.ts';
@@ -28,6 +36,32 @@ export const TEAM_TASKS_PATH = '/api/teams/tasks';
 
 export const TEAM_VIEW_PATH = '/api/teams/view';
 
+export const DEFAULT_TEAM_SCOPES: AccessScopes = ACCESS_PRESETS.collaborate;
+
+type TeamPeople = Pick<RemoteTeam, 'owner' | 'members'>;
+
+export function isTeamPerson(team: TeamPeople, userId: string) {
+  return team.owner.id === userId || team.members.some((member) => member.user.id === userId);
+}
+
+export function resolveMemberScopes(
+  team: TeamPeople & Pick<RemoteTeam, 'scopes' | 'overrides'>,
+  userId: string
+): AccessScopes {
+  if (team.owner.id === userId) return ACCESS_SCOPES;
+  return team.overrides.find((entry) => entry.userId === userId)?.scopes ?? team.scopes;
+}
+
+export const MACHINE_EXTRA_SCOPES: readonly ActionScope[] = ACTION_SCOPES.filter((scope) => scope !== 'fork');
+
+export function listMachineExtraScopes(scopes: AccessScopes): AccessScopes {
+  return MACHINE_EXTRA_SCOPES.filter((scope) => scopes.includes(scope));
+}
+
+export function mergeScopes(base: AccessScopes, extra: AccessScopes): AccessScopes {
+  return ACCESS_SCOPES.filter((scope) => base.includes(scope) || extra.includes(scope));
+}
+
 export interface TeamJoinFragment {
   teamId: string;
   invite: string;
@@ -43,6 +77,7 @@ export interface TeamHello {
   view: TeamView;
   ephemeral: string;
   proof: string;
+  watcher?: 'machine';
 }
 
 export interface TeamKeys {
@@ -64,6 +99,16 @@ export interface TeamSnapshot {
   signature: string;
 }
 
+export const TEAM_PRESENCE_STATUSES = ['online', 'away', 'offline'] as const;
+
+export type TeamPresenceStatus = (typeof TEAM_PRESENCE_STATUSES)[number];
+
+export interface TeamPresence {
+  userId: string;
+  status: TeamPresenceStatus;
+  seenAt: number | null;
+}
+
 export interface TeamListView {
   tasks: TeamTask[];
   machineKey: string;
@@ -71,6 +116,33 @@ export interface TeamListView {
   updatedAt: number;
   snapshot?: TeamSnapshot;
   held?: TeamSnapshot[];
+  presence?: TeamPresence[];
+}
+
+function resolvePresenceRank(status: TeamPresenceStatus) {
+  return TEAM_PRESENCE_STATUSES.length - TEAM_PRESENCE_STATUSES.indexOf(status);
+}
+
+function resolveLaterSeen(left: number | null, right: number | null) {
+  if (left === null) return right;
+  return right === null ? left : Math.max(left, right);
+}
+
+export function mergeTeamPresence(reports: readonly (readonly TeamPresence[])[]) {
+  const merged = new Map<string, TeamPresence>();
+  for (const entry of reports.flat()) {
+    const known = merged.get(entry.userId);
+    const status =
+      known && resolvePresenceRank(known.status) > resolvePresenceRank(entry.status)
+        ? known.status
+        : entry.status;
+    merged.set(entry.userId, {
+      userId: entry.userId,
+      status,
+      seenAt: resolveLaterSeen(known?.seenAt ?? null, entry.seenAt),
+    });
+  }
+  return merged;
 }
 
 export type TeamFeedStatus = 'connecting' | 'live' | 'offline' | 'refused';
@@ -83,6 +155,7 @@ export interface TeamFeedMachine {
   status: TeamFeedStatus;
   reason: string | null;
   updatedAt?: number;
+  presence?: TeamPresence[];
 }
 
 export interface TeamFeedTask extends TeamTask {
@@ -96,6 +169,17 @@ export interface TeamFeedSnapshot {
 }
 
 export const NO_TEAM_FEED: TeamFeedSnapshot = { machines: [], tasks: [] };
+
+export function resolveTeamPresence(feed: TeamFeedSnapshot, teamId: string | null = null) {
+  const machines = feed.machines.filter((machine) => teamId === null || machine.teamId === teamId);
+  return mergeTeamPresence(
+    machines.map((machine) =>
+      machine.status === 'live'
+        ? (machine.presence ?? [])
+        : [{ userId: machine.userId, status: 'offline' as const, seenAt: machine.updatedAt ?? null }]
+    )
+  );
+}
 
 export interface TeamViewTarget {
   teamId: string;
@@ -193,7 +277,8 @@ export const createTeamHello = Effect.fn('createTeamHello')(function* (
   team: string,
   key: string,
   view: TeamView,
-  ephemeral: CryptoKey
+  ephemeral: CryptoKey,
+  watcher: TeamHello['watcher'] = undefined
 ) {
   const serialized = yield* serializePublicKey(ephemeral);
   const hello: TeamHello = {
@@ -203,6 +288,7 @@ export const createTeamHello = Effect.fn('createTeamHello')(function* (
     view,
     ephemeral: serialized,
     proof: yield* signChannelProof(key, listHelloParts(team, view, serialized)),
+    ...(watcher ? { watcher } : {}),
   };
   return hello;
 });
@@ -214,7 +300,15 @@ export function parseTeamHello(text: string): TeamHello | null {
   const { team, ephemeral, proof } = fields;
   if (!(view && typeof team === 'string' && typeof ephemeral === 'string' && typeof proof === 'string'))
     return null;
-  return { type: 'team-hello', version: REMOTE_PROTOCOL_VERSION, team, view, ephemeral, proof };
+  const hello: TeamHello = {
+    type: 'team-hello',
+    version: REMOTE_PROTOCOL_VERSION,
+    team,
+    view,
+    ephemeral,
+    proof,
+  };
+  return fields.watcher === 'machine' ? { ...hello, watcher: 'machine' } : hello;
 }
 
 export function verifyTeamHello(key: string, hello: TeamHello) {

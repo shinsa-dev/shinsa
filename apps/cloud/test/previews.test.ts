@@ -13,9 +13,11 @@ import {
   PREVIEW_PAGE_HEADER,
   PREVIEW_STOPPED,
   REMOTE_PATHS,
+  resolveMachineTeamPath,
   resolvePreviewOrigin,
   serializeBase64Url,
   serializePreviewUrl,
+  type TeamCreateResponse,
   verifyPreviewAccessToken,
 } from '@shinsa/core';
 import { Effect } from 'effect';
@@ -287,6 +289,28 @@ describe('a private address', () => {
     await harness.post(REMOTE_PATHS.inviteAccept, { token: invite.token }, { session: kai });
     await harness.post(REMOTE_PATHS.machineMemberAdd, { userId: '2' }, machine);
     expect((await harness.call(openPath(`${origin}/`), { session: kai })).status).toBe(303);
+  });
+
+  test('opens for a teammate of the owner, whose machine then checks what they may open', async () => {
+    const harness = createHarness();
+    const { credentials, address, origin } = await pairPrivate(harness);
+    const kai = await harness.signIn('kai', 2);
+    const machine = { bearer: credentials.machineToken, sameOrigin: false };
+    const { team, invite } = await readJson<TeamCreateResponse>(
+      await harness.post(REMOTE_PATHS.machineTeams, { name: 'Payments' }, machine)
+    );
+    await harness.post(REMOTE_PATHS.teamJoin, { invite }, { session: kai });
+    expect((await harness.call(openPath(`${origin}/`), { session: kai })).status).toBe(404);
+    await harness.post(resolveMachineTeamPath(team.id, 'members/add'), { userId: '2' }, machine);
+    const answer = await harness.call(openPath(`${origin}/`), { session: kai });
+    expect(answer.status).toBe(303);
+    const token = new URL(answer.headers.get('location') ?? '').searchParams.get('access') ?? '';
+    const claim = await Effect.runPromise(
+      verifyPreviewAccessToken(credentials.connectKey, token, address, harness.clock.now, PREVIEW_OPEN_TTL_MS)
+    );
+    expect(claim?.userId).toBe('2');
+    await harness.post(resolveMachineTeamPath(team.id, 'members/remove'), { userId: '2' }, machine);
+    expect((await harness.call(openPath(`${origin}/`), { session: kai })).status).toBe(404);
   });
 
   test('refuses an address that is not a preview, so it can never redirect elsewhere', async () => {

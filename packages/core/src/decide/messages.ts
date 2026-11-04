@@ -14,7 +14,7 @@ import {
   type ReviewComment,
   type Run,
   resolveCurrentRound,
-  resolveGuestFirstName,
+  resolveFirstName,
   resolveNextRoundNumber,
   SHAPE_PIPELINES,
   type Task,
@@ -26,6 +26,7 @@ import {
   resolveCommentedMessage,
   resolveHumanFixPrompt,
 } from '../prompts/index.ts';
+import { isHeldBy, type ScopedActor } from '../remote/scope.ts';
 import type { ShinsaState } from '../state/project.ts';
 import { listOpenGates, listRunningRuns } from '../state/queries.ts';
 import type { Decider } from './decider.ts';
@@ -188,11 +189,15 @@ function deliverMessage(decider: Decider, task: Task, delivery: Delivery, sent: 
       return;
     case 'steer':
       if (isReplyingRun(delivery.run)) requestIteration(decider, task.id, note, comments);
-      decider.run({ kind: 'run.steer', runId: delivery.run.id, text: resolveGuestText(decider, text) });
+      decider.run({
+        kind: 'run.steer',
+        runId: delivery.run.id,
+        text: resolveGuestText(decider, delivery.run.taskId, text),
+      });
       return;
     case 'wake':
       if (isReplyingRun(delivery.run)) requestIteration(decider, task.id, note, comments);
-      queueMessageForWake(decider, delivery.run, resolveGuestText(decider, text));
+      queueMessageForWake(decider, delivery.run, resolveGuestText(decider, delivery.run.taskId, text));
       return;
     case 'retry':
       answerGate(decider, delivery.gate.id, 'reply', text);
@@ -352,11 +357,16 @@ function sendMessages(decider: Decider, send: MessageSend, scheduleId: string | 
   deliverMessage(decider, decider.task(task.id), delivery, sent);
 }
 
-function resolveGuestText(decider: Decider, text: string) {
+function describeGuest(decider: Decider, taskId: string, guest: ScopedActor) {
+  const name = resolveFirstName(guest);
+  if (guest.scope.kind === 'task' || isHeldBy(decider.state.tasks[taskId], guest))
+    return `${name}, who the human handed this task to`;
+  return `${name}, a teammate of the human`;
+}
+
+function resolveGuestText(decider: Decider, taskId: string, text: string) {
   const guest = decider.context.guest;
-  if (!guest) return text;
-  const name = resolveGuestFirstName(decider.state.tasks[guest.taskId], guest.login);
-  return `From ${name}, who the human handed this task to:\n\n${text}`;
+  return guest ? `From ${describeGuest(decider, taskId, guest)}:\n\n${text}` : text;
 }
 
 export function messageTask(

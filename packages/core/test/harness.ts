@@ -5,7 +5,7 @@ import {
   type ConfigProblem,
   createState,
   decide,
-  type GuestActor,
+  type ScopedActor,
   listActiveRuns,
   listOpenGates,
   parseUserCommand,
@@ -48,7 +48,7 @@ export function createHarness() {
 
   function send(
     command: ShinsaCommand,
-    options: { onBehalf?: boolean; byTask?: string | null; guest?: GuestActor | null } = {}
+    options: { onBehalf?: boolean; byTask?: string | null; guest?: ScopedActor | null } = {}
   ) {
     clock += 1;
     const decision = decideOrThrow(state, command, { now: clock, newId: () => `id${++counter}`, ...options });

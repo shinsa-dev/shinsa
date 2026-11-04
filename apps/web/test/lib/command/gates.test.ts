@@ -352,6 +352,28 @@ describe('gate commands', () => {
     ]);
   });
 
+  it('offers each repository the setup question lists instead of verifying again', () => {
+    const gate = createGate({
+      id: 'g',
+      taskId: 't',
+      type: 'configuration',
+      title: 'Which repository is this task for?',
+      choices: ['shinsa', 'paywall-next'],
+    });
+    const commands = commandsFor(createTask({ id: 't' }), gate);
+    expect(commands.map((command) => [command.label, command.hint, command.icon])).toEqual([
+      ['Use shinsa', 'Which repository is this task for?', 'IconToolbox'],
+      ['Use paywall-next', 'Which repository is this task for?', 'IconToolbox'],
+    ]);
+    run(commands[1]);
+    expect(spies.sent.mock.calls).toEqual([
+      [
+        { type: 'gate.answer', gateId: 'g', decision: 'reply', response: 'paywall-next' },
+        'Checking that repository.',
+      ],
+    ]);
+  });
+
   it('signs in to the gate’s account, with the sign-in glyph, or retries anyway', () => {
     const signIn = spyOn(accounts, 'startSignIn').mockResolvedValue(undefined);
     const task = createTask({ id: 't' });

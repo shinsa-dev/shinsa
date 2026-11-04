@@ -146,11 +146,19 @@ export function listSandboxSections(
           url: `http://${HOST}:${studioPort}/tasks`,
         },
         {
-          label: 'Studio: Settings, Teams, with Inês asking to join',
+          label: `Studio: Settings, Teams, with Inês asking to join, What teammates can do, and Kai’s own scopes`,
           url: `http://${HOST}:${studioPort}/settings`,
         },
         {
-          label: 'Take Kai’s MacBook offline (Studio keeps its tasks as Offline)',
+          label: `The remote dashboard: Settings, Teams, with each person’s presence and last seen`,
+          url: `${ORIGIN}/settings`,
+        },
+        {
+          label: `The remote dashboard: All tasks, with Kai’s MacBook in your fleet and its tasks marked with their owner`,
+          url: `${ORIGIN}/tasks`,
+        },
+        {
+          label: 'Take Kai’s MacBook offline (Studio keeps its tasks, marked with an offline icon)',
           url: `${ORIGIN}${SANDBOX_PATH}/teammate/offline`,
         },
         { label: 'Bring Kai’s MacBook back', url: `${ORIGIN}${SANDBOX_PATH}/teammate/online` },
@@ -169,7 +177,11 @@ export function listSandboxSections(
         ...(duplicate.original
           ? [
               {
-                label: `${teammate.name}: ${duplicate.original}, which shows the task kept over on Studio`,
+                label: `The remote dashboard: Kai’s ${duplicate.original} as a full task page, with Fork in its ••• menu`,
+                url: `${ORIGIN}/tasks/${duplicate.original}`,
+              },
+              {
+                label: `${teammate.name}’s own app, signed in as Kai: ${duplicate.original}, which shows the task kept over on Studio`,
                 url: `http://${HOST}:${teammate.port}/tasks/${duplicate.original}`,
               },
             ]
@@ -180,7 +192,7 @@ export function listSandboxSections(
         },
         {
           label:
-            'The team’s join link, which gives this browser the team key so the dashboard opens Kai’s tasks too',
+            'The team’s join page (the dashboard now takes the team key from your own machines, so you no longer need it to open Kai’s tasks)',
           url: resolveTeamJoinUrl({ teamId: TEAM.id, invite: TEAM_INVITE, key: TEAM_KEY }, ORIGIN),
         },
       ],

@@ -22,8 +22,8 @@ SELECT instance_id, user_id, added_at FROM old_instance_members;
 INSERT INTO instance_guests (instance_id, user_id, added_at)
 SELECT instance_id, user_id, added_at FROM old_instance_guests;
 
-INSERT INTO teams (id, user_id, name, created_at)
-SELECT id, user_id, name, created_at FROM old_teams;
+INSERT INTO teams (id, user_id, name, scopes, created_at)
+SELECT id, user_id, name, scopes, created_at FROM old_teams;
 
 INSERT INTO team_invites (team_id, token_hash, created_at)
 SELECT team_id, token_hash, created_at FROM old_team_invites;
@@ -31,8 +31,8 @@ SELECT team_id, token_hash, created_at FROM old_team_invites;
 INSERT INTO team_requesters (team_id, user_id, requested_at)
 SELECT team_id, user_id, requested_at FROM old_team_requesters;
 
-INSERT INTO team_members (team_id, user_id, added_at)
-SELECT team_id, user_id, added_at FROM old_team_members;
+INSERT INTO team_members (team_id, user_id, scopes, added_at)
+SELECT team_id, user_id, scopes, added_at FROM old_team_members;
 
 INSERT INTO slack_workspaces (team_id, team_name, bot_user_id, bot_token, installed_at)
 SELECT team_id, team_name, bot_user_id, bot_token, installed_at FROM old_slack_workspaces;

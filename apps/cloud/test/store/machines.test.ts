@@ -1,9 +1,10 @@
 import { describe, expect, test } from 'bun:test';
-import { MACHINE_FEATURES } from '@shinsa/core';
+import { MACHINE_FEATURES, TeamId } from '@shinsa/core';
 import { Effect, Option, Redacted } from 'effect';
 import { TestClock } from 'effect/testing';
 import { MachineAccess } from '../../src/store/access/service.ts';
 import { Machines } from '../../src/store/machines/service.ts';
+import { Teams } from '../../src/store/teams/service.ts';
 import { runTest, TEST_NOW } from '../layers.ts';
 import { hashOf, KAI, LAPTOP, MONA, RIO, STUDIO, seedMachine, seedUsers } from './fixtures.ts';
 
@@ -132,6 +133,57 @@ describe('machines', () => {
     expect(listed.map((machines) => machines.map(({ machine, role }) => [machine.id, role]))).toEqual([
       [[STUDIO, 'member']],
       [[STUDIO, 'owner']],
+    ]);
+  });
+
+  test('the machines of everyone in a team with the user are listed as a teammate’s, and no one else’s', async () => {
+    const [ofKai, ofRio, ofMona] = await runTest(
+      Effect.gen(function* () {
+        const machines = yield* Machines;
+        const teams = yield* Teams;
+        const access = yield* MachineAccess;
+        yield* seedUsers(MONA, KAI, RIO);
+        yield* seedMachine(STUDIO, MONA.id, 'a');
+        yield* TestClock.adjust('1 second');
+        yield* seedMachine(LAPTOP, RIO.id, 'b');
+        const crew = TeamId.make('crew00000001');
+        yield* teams.create({ id: crew, userId: MONA.id, name: 'Crew' });
+        yield* teams.members.add(crew, KAI.id);
+        yield* access.guests.add(STUDIO, KAI.id);
+        return [
+          yield* machines.listOfUser(KAI.id),
+          yield* machines.listOfUser(RIO.id),
+          yield* machines.listOfUser(MONA.id),
+        ] as const;
+      })
+    );
+    expect(ofKai.map(({ machine, role }) => [machine.id, role])).toEqual([[STUDIO, 'guest']]);
+    expect(ofRio.map(({ machine, role }) => [machine.id, role])).toEqual([[LAPTOP, 'owner']]);
+    expect(ofMona.map(({ machine, role }) => [machine.id, role])).toEqual([[STUDIO, 'owner']]);
+  });
+
+  test('a teammate’s machine reads as theirs to the team’s owner, and the owner’s to a member', async () => {
+    const [ofKai, ofMona] = await runTest(
+      Effect.gen(function* () {
+        const machines = yield* Machines;
+        const teams = yield* Teams;
+        yield* seedUsers(MONA, KAI);
+        yield* seedMachine(STUDIO, MONA.id, 'a');
+        yield* TestClock.adjust('1 second');
+        yield* seedMachine(LAPTOP, KAI.id, 'b');
+        const crew = TeamId.make('crew00000001');
+        yield* teams.create({ id: crew, userId: MONA.id, name: 'Crew' });
+        yield* teams.members.add(crew, KAI.id);
+        return [yield* machines.listOfUser(KAI.id), yield* machines.listOfUser(MONA.id)] as const;
+      })
+    );
+    expect(ofKai.map(({ machine, owner, role }) => [machine.id, owner, role])).toEqual([
+      [STUDIO, MONA, 'teammate'],
+      [LAPTOP, KAI, 'owner'],
+    ]);
+    expect(ofMona.map(({ machine, role }) => [machine.id, role])).toEqual([
+      [STUDIO, 'owner'],
+      [LAPTOP, 'teammate'],
     ]);
   });
 });
