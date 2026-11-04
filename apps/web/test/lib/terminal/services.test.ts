@@ -1,4 +1,5 @@
 import { describe, expect, it, spyOn } from 'bun:test';
+import { connection, replaceConnection } from '@/lib/connection/socket.ts';
 import { resolveServiceView, SERVICE_LIMITS, type Task } from '@shinsa/core';
 import {
   canStartAll,
@@ -159,6 +160,20 @@ describe('a service’s private address', () => {
       NOW
     );
     expect(resolveServiceLink(stopped, undefined, true)).toBeNull();
+  });
+
+  it('opens a relayed teammate’s service at its private address through app.shinsa.dev, from this machine too', () => {
+    const relayed = { ...running, taskId: 'task-kai' };
+    replaceConnection(Object.assign(Object.create(connection), { isRelayed: (id: string) => id === 'task-kai' }));
+    expect(resolveServiceLink(relayed, undefined, false)).toEqual({
+      href: `https://app.shinsa.dev${opened}`,
+      text: remoteUrl,
+    });
+    expect(resolveServiceLink(running, undefined, false)?.href).toBe('http://localhost:4123/tasks/SH-4');
+    expect(resolveServiceLink({ ...older, taskId: 'task-kai' }, undefined, false)?.href).toBe(
+      'http://localhost:4123/tasks/SH-4'
+    );
+    replaceConnection(null);
   });
 
   it('carries the path of a preview the agent attached onto the private address', () => {

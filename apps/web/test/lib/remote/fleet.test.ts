@@ -430,6 +430,25 @@ describe('sending to the machine that owns it', () => {
     expect(resolveCommandOwner(deep, owners)).toBeNull();
   });
 
+  it('sends a relayed machine’s media through its relay, once, and leaves the rest as they are', () => {
+    const { studio, laptop } = createFleet();
+    const fleet = new Fleet([
+      studio.member,
+      { ...laptop.member, resolveUrl: (path) => `/api/teams/relay/m2${path}` },
+    ]);
+    const image = '/api/evidence/task-laptop/round-1/shot.png';
+    expect(fleet.resolveMediaUrl(image)).toBe(`/api/teams/relay/m2${image}`);
+    expect(fleet.resolveMediaUrl(`/api/teams/relay/m2${image}`)).toBe(`/api/teams/relay/m2${image}`);
+    expect(fleet.resolveMediaUrl('/api/evidence/task-studio/round-1/shot.png')).toBe(
+      '/api/evidence/task-studio/round-1/shot.png'
+    );
+    expect(fleet.resolveMediaUrl('https://example.com/shot.png')).toBe('https://example.com/shot.png');
+    expect(fleet.resolveMediaUrl('//example.com/shot.png')).toBe('//example.com/shot.png');
+    expect(fleet.isRelayed('task-laptop')).toBe(true);
+    expect(fleet.isRelayed('task-studio')).toBe(false);
+    expect(fleet.isRelayed('task-nowhere')).toBe(false);
+  });
+
   it('finds the owner of a request from its path or its query', () => {
     const owners = new Map([['task-1', 'm2']]);
     expect(resolveRequestOwner(new URL('https://shinsa.dev/api/tasks/task-1/diff'), owners)).toBe('m2');

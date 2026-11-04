@@ -3853,7 +3853,12 @@ engine enrols and relays (Teammates act on team tasks, below). Teams need remote
     has no route to either relay path, so only this machine's own page reaches it. A device is removed and its channel
     closed when you leave the team, the grant or the team key goes, the machine leaves the team or remote access is
     turned off; a machine that is offline, too old or refuses the device keeps its tasks on the read-only team view,
-    with its offline copy.
+    with its offline copy. Images, recordings and raw files of a relayed task load through the same relay
+    (`Fleet.resolveMediaUrl`, `useMediaUrl`: a served path whose task belongs to a relayed member gets that member's
+    `/api/teams/relay/<machine>` prefix), since the Mac app has no service worker to route them as app.shinsa.dev
+    does. A running service of a relayed task opens at its private `shinsa.page` address through app.shinsa.dev's
+    open route (`resolveServiceLink`, `https://app.shinsa.dev/__remote/previews/open?url=…`), which admits a
+    teammate with the `services` scope; its `localhost` address is the teammate's own machine, not yours.
   - **What a team device reaches** (`resolveScopedState`, `resolveScopedRefusal` in core's `remote/scope.ts`; the
     engine's `Remote.#resolveScope`, `http/socket.ts`, `remote/gate/service.ts`). Its channel carries a `ScopedActor`
     with `scope: { kind: 'team', teamId, scopes }`. The state it gets keeps only the tasks of the team's projects

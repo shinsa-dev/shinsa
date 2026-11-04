@@ -136,6 +136,9 @@ describe('the local fleet relay', () => {
     expect(opened).toEqual(['ws://localhost:7446/ws/teams/relay/studio']);
     expect(await (await member.fetch(new Request('http://localhost:7446/api/tasks'))).text()).toBe('ok');
     expect(sent).toEqual(['/api/teams/relay/studio/api/tasks']);
+    expect(member.resolveUrl?.('/api/evidence/t/round-1/a.png')).toBe(
+      '/api/teams/relay/studio/api/evidence/t/round-1/a.png'
+    );
     member.close?.();
     expect(relayed.stop).toHaveBeenCalledTimes(1);
     const realWebSocket = globalThis.WebSocket;

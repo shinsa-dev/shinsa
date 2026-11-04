@@ -8,6 +8,7 @@ import {
   type RemoteUser,
   isHeldBy,
   SCOPE_MESSAGES,
+  TEAM_RELAY_PATH,
   TEAM_SCOPE_MESSAGES,
   type TeamFeedSnapshot,
   type TerminalsSnapshot,
@@ -51,6 +52,7 @@ export interface FleetMember {
   connection: ShinsaConnection;
   fetch: (request: Request) => Promise<Response>;
   openTerminal?: (terminalId: string) => WebSocket;
+  resolveUrl?: (path: string) => string;
   close?: () => void;
 }
 
@@ -239,6 +241,10 @@ interface FleetEntry {
 
 const EMPTY_OWNERS: ReadonlyMap<string, string> = new Map();
 
+const SERVED_PATH = /^\/(?!\/)/;
+
+const PATH_BASE = 'http://localhost';
+
 const NO_FLEET_TERMINALS: FleetTerminals = { terminals: null, owners: EMPTY_OWNERS };
 
 const BODY_ROUTED_PREFIX = '/api/services';
@@ -413,6 +419,20 @@ export class Fleet implements ShinsaConnection {
     const found = machineId ? reachable.find((entry) => entry.member.id === machineId) : undefined;
     return found?.member ?? reachable[0]?.member ?? null;
   }
+
+  #relayOf(owner: string | null) {
+    if (!owner) return null;
+    return this.#entries.find((entry) => entry.member.id === owner && isReachable(entry))?.member.resolveUrl ?? null;
+  }
+
+  resolveMediaUrl = (uri: string) => {
+    if (!SERVED_PATH.test(uri) || uri.startsWith(TEAM_RELAY_PATH)) return uri;
+    this.snapshot();
+    const relay = this.#relayOf(resolveRequestOwner(new URL(uri, PATH_BASE), this.#owners));
+    return relay ? relay(uri) : uri;
+  };
+
+  isRelayed = (id: string) => this.#relayOf(this.#ownerOf(id)) !== null;
 
   #outdatedMember(machineId: string | null | undefined) {
     const found = machineId ? this.#entries.find((entry) => entry.member.id === machineId) : undefined;

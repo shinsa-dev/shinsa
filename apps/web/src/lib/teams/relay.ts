@@ -114,6 +114,7 @@ export function createRelayMember(target: RelayTarget, options: RelayMemberOptio
     teammate: target.teammate,
     connection: relayed,
     fetch: (request) => send(resolveRelayRequest(request, entry.instanceId)),
+    resolveUrl: (path) => `${resolveTeamRelayPath(entry.instanceId)}${path}`,
     close: () => relayed.stop(),
   };
 }
