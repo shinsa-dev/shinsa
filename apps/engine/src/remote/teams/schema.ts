@@ -61,7 +61,7 @@ export interface TeamSubject {
   present?: boolean;
 }
 
-export interface StoredTeamKeyView {
+interface StoredTeamKeyView {
   teamId: string;
   name: string;
   key: string;

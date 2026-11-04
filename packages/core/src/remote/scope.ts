@@ -132,7 +132,7 @@ export function isHeldBy(task: Task | undefined, actor: Pick<ScopedActor, 'id'>)
   return task?.handoff?.teamId != null && task.handoff.guest?.id === actor.id;
 }
 
-export function resolveCommandScope(type: string): CommandScope {
+function resolveCommandScope(type: string): CommandScope {
   if (SHARE_COMMANDS.has(type)) return 'share';
   if (MESSAGE_COMMANDS.has(type)) return 'message';
   if (GATE_COMMANDS.has(type)) return 'gates';

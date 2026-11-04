@@ -101,7 +101,7 @@ interface HandoffFact {
   icon?: IconName;
 }
 
-export const OWNER_ICON: IconName = 'IconUser';
+const OWNER_ICON: IconName = 'IconUser';
 
 export function resolveHandoffFact(task: Task, machine: TaskMachine): HandoffFact | null {
   if (machine?.handedBy)

@@ -178,6 +178,8 @@ describe('the Worker gates every route by who asks', () => {
     const leave = resolveInstanceLeavePath(studio.instanceId);
     expect((await post(leave, world.eve)).status).toBe(404);
     expect(await readCode(await post(leave, world.mona))).toBe('owner_cannot_leave');
+    const unknown = await post(resolveInstanceLeavePath('gone'), world.mona);
+    expect([unknown.status, await readCode(unknown)]).toEqual([404, 'not_found']);
   });
 
   test('a team’s routes answer its owner and its members, and nobody else', async () => {

@@ -11,7 +11,6 @@ export { Remote } from './machine/service.ts';
 export { BrowserCommand } from './opener/schema.ts';
 export { RemoteUrlOpener } from './opener/service.ts';
 export { PlacementAsker } from './placement/service.ts';
-export { Presence } from './presence/service.ts';
 export { Previews } from './previews/service.ts';
 export { ShareDescriber } from './share-describe/service.ts';
 export { Shares } from './shares/service.ts';

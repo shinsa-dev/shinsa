@@ -17,7 +17,7 @@ import {
 
 export const SCOPES_TITLE = 'What teammates can do';
 
-export const TEAM_CHOICE = 'team';
+const TEAM_CHOICE = 'team';
 
 export type TeamScopeChoice = ResolvedPreset<TeamPreset>;
 
@@ -69,14 +69,14 @@ export function describeScopesSummary(scopes: AccessScopes) {
   return `${PRESET_LABELS[resolveTeamChoice(scopes)].label} · ${on} of ${ACTION_SCOPES.length} scopes`;
 }
 
-export const SCOPES_FROM_MACHINE = 'Add one of your machines to this browser to change these.';
+const SCOPES_FROM_MACHINE = 'Add one of your machines to this browser to change these.';
 
 export function describeScopesOwner(team: RemoteTeam, editable = true) {
   if (team.role !== 'owner') return `Only ${team.owner.name ?? team.owner.login} changes these.`;
   return editable ? null : SCOPES_FROM_MACHINE;
 }
 
-export function selectOverride(team: RemoteTeam, userId: string) {
+function selectOverride(team: RemoteTeam, userId: string) {
   return team.overrides.find((entry) => entry.userId === userId)?.scopes ?? null;
 }
 

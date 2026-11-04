@@ -160,7 +160,7 @@ const readScopeNames = Effect.fn('Surface.teamScopeNames')(function* (
   return names;
 });
 
-export const resolveScopesChange = Effect.fn('Surface.teamScopesChange')(function* (
+const resolveScopesChange = Effect.fn('Surface.teamScopesChange')(function* (
   current: AccessScopes,
   values: Record<string, unknown>
 ) {
