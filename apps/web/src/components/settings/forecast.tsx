@@ -49,7 +49,7 @@ function Lane({ forecast, lane }: { forecast: UsageForecast; lane: ForecastLane 
   return (
     <div className='flex items-center gap-3'>
       <Truncate className={cn(LANE_LABEL, 'text-2xs text-fg-3')}>{lane.account.label}</Truncate>
-      <div className='relative h-3 min-w-0 flex-1'>
+      <div className='relative h-3 min-w-0 flex-1 overflow-hidden rounded-xs bg-bg-a2'>
         {lane.segments.map((segment) => {
           const start = resolveForecastShare(forecast, segment.from);
           const end = resolveForecastShare(forecast, segment.to);
@@ -57,7 +57,7 @@ function Lane({ forecast, lane }: { forecast: UsageForecast; lane: ForecastLane 
             <Hint key={segment.from} label={describeSegment(forecast, segment, forecast.from)}>
               <span
                 data-usable={resolveUsableShare(segment)}
-                className='absolute inset-y-0 overflow-hidden rounded-xs border-x border-card bg-bg-a2'
+                className='absolute inset-y-0 overflow-hidden'
                 style={{ left: `${start * 100}%`, width: `${(end - start) * 100}%` }}
               >
                 <span
