@@ -122,7 +122,14 @@ function applyChangeProposed(state: ShinsaState, event: EventOf<'task.change_pro
   const task = state.tasks[event.taskId];
   const isOperation = task !== undefined && resolveWorkStep(resolveTaskPipeline(task)) === 'operate';
   updateTask(state, event.taskId, event.at, {
-    proposal: { request: event.request, why: event.why, status: 'open', runId: event.runId, at: event.at },
+    proposal: {
+      request: event.request,
+      why: event.why,
+      status: 'open',
+      recommend: event.recommend,
+      runId: event.runId,
+      at: event.at,
+    },
   });
   record(state, event.taskId, event.at, {
     actor: 'agent',

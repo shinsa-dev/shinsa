@@ -867,6 +867,7 @@ describe('finding the repository a round needs', () => {
         request: 'Make the button blue',
         why: 'It is grey.',
         status: 'accepted',
+        recommend: 'go_on',
         runId: null,
         at: 1,
       },

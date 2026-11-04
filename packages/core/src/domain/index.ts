@@ -222,6 +222,8 @@ export {
   isSamePipeline,
   needsRepository,
   type OperationTiming,
+  PROPOSAL_RECOMMENDATIONS,
+  type ProposalRecommendation,
   resolveInquiryStep,
   resolveOperationTiming,
   resolvePresetOf,

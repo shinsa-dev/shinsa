@@ -1,6 +1,7 @@
 import {
   COMPOSABLE_STEPS,
   type DeliveringStep,
+  PROPOSAL_RECOMMENDATIONS,
   SCHEDULE_LIMITS,
   SHAPE_LIMITS,
   STEP_SCHEMA,
@@ -29,6 +30,13 @@ const PROPOSE_CHANGE_SPEC = {
   required: ['request', 'why'],
 };
 
+const RECOMMEND_SPEC = {
+  type: 'string',
+  enum: [...PROPOSAL_RECOMMENDATIONS],
+  description:
+    'What the human should do next. go_on: the work after this is worth doing, or your propose_change is. close: you found nothing worth changing, so the human sees Close as the main choice and can still go on. Required when the human decides next whether the work goes on; never close with propose_change.',
+};
+
 const AS_YOUR_REPLY =
   'Write it to the human in the first person: it is your reply, shown in the chat as you wrote it. After the call, stop and write nothing more.';
 
@@ -42,6 +50,7 @@ export const SHAPE_TOOL_SPECS = {
         answer: limitedText('The answer in markdown.', L.answer),
         reply: REPLY_SPEC,
         propose_change: PROPOSE_CHANGE_SPEC,
+        recommend: RECOMMEND_SPEC,
       },
       required: ['answer'],
     },
@@ -58,6 +67,7 @@ export const SHAPE_TOOL_SPECS = {
         ),
         reply: REPLY_SPEC,
         propose_change: PROPOSE_CHANGE_SPEC,
+        recommend: RECOMMEND_SPEC,
       },
       required: ['diagnosis'],
     },
@@ -71,6 +81,7 @@ export const SHAPE_TOOL_SPECS = {
         report: limitedText('The report in markdown.', L.report),
         reply: REPLY_SPEC,
         propose_change: PROPOSE_CHANGE_SPEC,
+        recommend: RECOMMEND_SPEC,
       },
       required: ['report'],
     },

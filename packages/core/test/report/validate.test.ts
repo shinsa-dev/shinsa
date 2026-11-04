@@ -1091,7 +1091,7 @@ describe('the shape hand-overs', () => {
   test('an answer is delivered with its field and limit, and can carry a proposed change', () => {
     expect(validateDelivery('answer', { answer: ' It retries. ' })).toEqual({
       ok: true,
-      value: { body: 'It retries.', reply: null, proposal: null },
+      value: { body: 'It retries.', reply: null, proposal: null, recommend: null },
     });
     expect(validateDelivery('answer', { answer: 'x'.repeat(8_001) })).toEqual({
       ok: false,
@@ -1104,7 +1104,12 @@ describe('the shape hand-overs', () => {
       })
     ).toEqual({
       ok: true,
-      value: { body: 'Yes.', reply: null, proposal: { request: 'Stream it.', why: 'Memory.' } },
+      value: {
+        body: 'Yes.',
+        reply: null,
+        proposal: { request: 'Stream it.', why: 'Memory.' },
+        recommend: 'go_on',
+      },
     });
     expect(
       validateDelivery('answer', { answer: 'Yes.', propose_change: { request: '', why: 'x'.repeat(241) } })
@@ -1120,7 +1125,7 @@ describe('the shape hand-overs', () => {
   test('a diagnosis, a report and an outcome each have their field and limit; an outcome proposes nothing', () => {
     expect(validateDelivery('investigate', { diagnosis: 'The cache.', propose_change: null })).toEqual({
       ok: true,
-      value: { body: 'The cache.', reply: null, proposal: null },
+      value: { body: 'The cache.', reply: null, proposal: null, recommend: null },
     });
     expect(validateDelivery('research', { report: 'x'.repeat(40_001) })).toEqual({
       ok: false,
@@ -1128,7 +1133,36 @@ describe('the shape hand-overs', () => {
     });
     expect(
       validateDelivery('operate', { outcome: 'Ran it.', propose_change: { request: 'More.', why: 'Why.' } })
-    ).toEqual({ ok: true, value: { body: 'Ran it.', reply: null, proposal: null } });
+    ).toEqual({ ok: true, value: { body: 'Ran it.', reply: null, proposal: null, recommend: null } });
+  });
+
+  test('a result recommends going on or closing, and closing cannot carry a proposed change', () => {
+    expect(validateDelivery('research', { report: 'Not an issue.', recommend: 'close' })).toEqual({
+      ok: true,
+      value: { body: 'Not an issue.', reply: null, proposal: null, recommend: 'close' },
+    });
+    expect(validateDelivery('investigate', { diagnosis: 'The cache.', recommend: 'go_on' })).toMatchObject({
+      ok: true,
+      value: { recommend: 'go_on' },
+    });
+    expect(validateDelivery('answer', { answer: 'Yes.', recommend: 'later' })).toEqual({
+      ok: false,
+      errors: ['recommend must be one of go_on, close.'],
+    });
+    expect(
+      validateDelivery('answer', {
+        answer: 'Yes.',
+        recommend: 'close',
+        propose_change: { request: 'Stream it.', why: 'Memory.' },
+      })
+    ).toEqual({
+      ok: false,
+      errors: ['`recommend` is `close`, but `propose_change` proposes a change. Drop one of them.'],
+    });
+    expect(validateDelivery('operate', { outcome: 'Ran it.', recommend: 'close' })).toMatchObject({
+      ok: true,
+      value: { recommend: null },
+    });
   });
 
   test('a reshape names one of the inquiry shapes and why', () => {

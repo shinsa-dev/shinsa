@@ -48,6 +48,7 @@ import type {
   UsageWait,
   WeeklyReading,
   WorkspaceMode,
+  ProposalRecommendation,
 } from '../domain/index.ts';
 import type {
   PullRequestCloseFailure,
@@ -132,7 +133,14 @@ type EventBody =
     }
   | { type: 'task.reshaped'; taskId: string; pipeline: PipelineStep[]; by: ShapeActor; reason: string }
   | { type: 'task.delivered'; taskId: string; step: DeliveringStep; body: string; runId: string | null }
-  | { type: 'task.change_proposed'; taskId: string; request: string; why: string; runId: string | null }
+  | {
+      type: 'task.change_proposed';
+      taskId: string;
+      request: string;
+      why: string;
+      recommend: ProposalRecommendation;
+      runId: string | null;
+    }
   | { type: 'task.change_declined'; taskId: string }
   | { type: 'task.change_approved'; taskId: string }
   | { type: 'task.staged'; taskId: string; stage: TaskStage; reason: string; by?: 'you' }

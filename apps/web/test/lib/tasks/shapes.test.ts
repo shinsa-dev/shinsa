@@ -151,7 +151,14 @@ describe('describeChangeGate', () => {
     const task = createTask({
       id: 't',
       pipeline: ['investigate'],
-      proposal: { request: 'Release the connection.', why: 'It leaks.', status: 'open', runId: null, at: 0 },
+      proposal: {
+        request: 'Release the connection.',
+        why: 'It leaks.',
+        status: 'open',
+        recommend: 'go_on',
+        runId: null,
+        at: 0,
+      },
     });
     expect(describeChangeGate(task, createGate({ id: 'g', taskId: 't', body: 'ignored' }))).toEqual({
       eyebrow: 'The investigation proposes a fix',
@@ -172,6 +179,7 @@ describe('describeChangeGate', () => {
       request: 'Release the connection.',
       why: 'It leaks.',
       status: 'open',
+      recommend: 'go_on',
       runId: null,
       at: 5,
     } as const;

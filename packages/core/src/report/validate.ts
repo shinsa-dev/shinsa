@@ -1,5 +1,5 @@
 import type { ChangeProposalInput, InquiryShape } from '../commands/index.ts';
-import type { DeliveringStep, MemoryScope, PipelineStep } from '../domain/index.ts';
+import type { DeliveringStep, MemoryScope, PipelineStep, ProposalRecommendation } from '../domain/index.ts';
 import type { EvidenceItemKind } from '../domain/types.ts';
 import { HandOverReader, type Validation } from './reading.ts';
 import {
@@ -26,6 +26,7 @@ import {
   PlanReply,
   Proposal,
   QuestionInput,
+  Recommendation,
   ReplyInput,
   ReviewInput,
   type Risk,
@@ -394,6 +395,7 @@ export interface DeliveryHandOver {
   body: string;
   reply: AgentReply | null;
   proposal: ChangeProposalInput | null;
+  recommend: ProposalRecommendation | null;
 }
 
 export function validateDelivery(
@@ -402,10 +404,15 @@ export function validateDelivery(
 ): Validation<DeliveryHandOver> {
   const reader = new HandOverReader();
   const { field, body, proposes } = DELIVERY_FIELD[step];
+  const proposal = proposes ? reader.read(Proposal, input.propose_change, ['propose_change']) : null;
+  const recommend = proposes ? reader.read(Recommendation, input.recommend, ['recommend']) : null;
+  if (proposal && recommend === 'close')
+    reader.refuse('`recommend` is `close`, but `propose_change` proposes a change. Drop one of them.');
   return reader.result({
     body: reader.read(body, input[field], [field]),
     reply: resolveReply(reader.read(ReplyInput, input.reply, ['reply'])),
-    proposal: proposes ? reader.read(Proposal, input.propose_change, ['propose_change']) : null,
+    proposal,
+    recommend: proposal ? 'go_on' : recommend,
   });
 }
 

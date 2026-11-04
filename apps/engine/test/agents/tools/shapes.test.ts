@@ -74,6 +74,7 @@ describe('the shape tools', () => {
         step: 'research',
         body: 'Option B is faster.',
         proposal: { request: 'Switch to option B.', why: 'It halves the build time.' },
+        recommend: 'go_on',
       },
     ] as ShinsaCommand[]);
   });
@@ -130,6 +131,32 @@ describe('the shape tools', () => {
     ).rejects.toThrow('summary');
   });
 
+  test('an inquiry passes its recommendation on, and refuses closing with a proposed change', async () => {
+    const { sent, call } = createCall();
+    await runShapeTool('submit_report', { report: 'Not an issue.', recommend: 'close' }, call);
+    await expect(
+      runShapeTool(
+        'report_diagnosis',
+        {
+          diagnosis: 'The pool.',
+          recommend: 'close',
+          propose_change: { request: 'Grow it.', why: 'It runs out.' },
+        },
+        call
+      )
+    ).rejects.toThrow('`recommend` is `close`, but `propose_change` proposes a change.');
+    expect(sent).toEqual([
+      {
+        type: 'agent.deliver',
+        runId: 'run-1',
+        attemptId: 'a-1',
+        step: 'research',
+        body: 'Not an issue.',
+        recommend: 'close',
+      },
+    ] as ShinsaCommand[]);
+  });
+
   test('report_outcome hands the operation over, and never carries a proposal', async () => {
     const { sent, call } = createCall();
     await runShapeTool(
@@ -168,6 +195,7 @@ describe('the shape tools', () => {
         step: 'answer',
         body: 'In a.txt.',
         proposal: { request: 'Move it.', why: 'It is easier to find.' },
+        recommend: 'go_on',
       },
       {
         type: 'agent.reshape',

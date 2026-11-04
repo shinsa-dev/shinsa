@@ -24,6 +24,7 @@ import type {
   TeammateOriginal,
   UnreachedTeammate,
   WeeklyReading,
+  ProposalRecommendation,
 } from '../domain/index.ts';
 import type {
   PullRequestCloseFailure,
@@ -176,6 +177,7 @@ type AgentCommand =
       body: string;
       reply?: AgentReply | null;
       proposal?: ChangeProposalInput | null;
+      recommend?: ProposalRecommendation | null;
     }
   | ({ type: 'agent.reshape'; runId: string; reason: string } & (
       | { shape: InquiryShape }

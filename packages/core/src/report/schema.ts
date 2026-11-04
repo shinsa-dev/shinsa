@@ -18,6 +18,7 @@ import {
   MEMORY_SCOPES,
   type PipelineStep,
   PLAN_EVIDENCE_KINDS,
+  PROPOSAL_RECOMMENDATIONS,
   SHAPE_LIMITS,
   WATCHDOG_SETTING_LIMITS,
 } from '../domain/index.ts';
@@ -666,6 +667,8 @@ export const FeedbackNote = Required(FEEDBACK_LIMITS.note);
 export const Proposal = OrAbsent(
   HandOverRecord({ request: Required(SHAPE_LIMITS.request), why: Required(SHAPE_LIMITS.why) })
 );
+
+export const Recommendation = OptionalOneOf(PROPOSAL_RECOMMENDATIONS);
 
 export const DELIVERY_FIELD: Record<
   DeliveringStep,
