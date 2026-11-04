@@ -11,18 +11,19 @@ export const ForecastAccount = Schema.Struct({
 
 export type ForecastAccount = typeof ForecastAccount.Type;
 
-export const ForecastPoint = Schema.Struct({
-  at: Time,
-  left: Schema.Number,
+export const ForecastOutage = Schema.Struct({
+  from: Time,
+  to: Time,
 });
 
-export type ForecastPoint = typeof ForecastPoint.Type;
+export type ForecastOutage = typeof ForecastOutage.Type;
 
 export const ForecastSegment = Schema.Struct({
   accountId: Schema.String,
   from: Time,
   to: Time,
   left: Schema.Number,
+  emptyAt: Schema.NullOr(Time),
 });
 
 export type ForecastSegment = typeof ForecastSegment.Type;
@@ -41,7 +42,8 @@ export const UsageForecast = Schema.Struct({
   accounts: Schema.Array(ForecastAccount),
   segments: Schema.Array(ForecastSegment),
   resets: Schema.Array(ForecastReset),
-  points: Schema.Array(ForecastPoint),
+  outages: Schema.Array(ForecastOutage),
+  timelinePace: Schema.Number,
   safePace: Schema.Number,
   tightest: Schema.NullOr(ForecastReset),
   currentPace: Schema.NullOr(Schema.Number),

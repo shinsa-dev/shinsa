@@ -2065,8 +2065,10 @@ checks it ran.
   The account picker follows the same order when it switches: past the switch threshold, the account whose weekly
   limit resets soonest takes over (Accounts and usage limits, below). Settings → Agent usage → Forecast draws one block per provider (`components/settings/forecast.tsx`,
   `lib/accounts/forecast.ts`): every Claude account together, and each other provider's own login alone, each with
-  its pace, a lane per account across the week (what each stretch between resets starts with, the tightest point
-  marked), the tightest point in words and the last 24 hours of that provider (meters on an account's window for
+  its pace, a lane per account across the week (blue while the account has usage at the timeline's pace, grey once
+  it runs out, a gap at each reset, and an orange band wherever every account is out at once: `outages`), the
+  timeline drawn at the safe pace or at the last 24 hours' pace when that is faster (`timelinePace`), the tightest
+  point in words and the last 24 hours of that provider (meters on an account's window for
   Claude, `provider:<id>` for the rest). Use as daily limit sends `settings.change` with `dailyUsageLimit` set to the
   pace; the forecast is worked out again on every accounts refresh and every minute.
 

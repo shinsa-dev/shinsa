@@ -1,5 +1,4 @@
 import { MINUTE_MS, type Settings, type ShinsaState, type UsageForecast } from '@shinsa/core';
-import { AreaChart } from '@shinsa/ui/components/area-chart';
 import { Button } from '@shinsa/ui/components/button';
 import { Truncate } from '@shinsa/ui/components/truncate';
 import { cn } from '@shinsa/ui/lib/utils';
@@ -8,10 +7,12 @@ import { Hint } from '@/components/overlays/hint.tsx';
 import { useMinute } from '@/hooks/use-minute.ts';
 import {
   APPLY_PACE_LABEL,
+  describeOutages,
   describeRecentPace,
   describeSafePace,
   describeSegment,
   describeTightest,
+  describeTimelinePace,
   FORECAST_TITLE,
   type ForecastLane,
   formatForecastDay,
@@ -22,9 +23,8 @@ import {
   listProviderForecasts,
   type ProviderForecast,
   FORECAST_LEGEND,
-  POOL_LABEL,
-  resolveForecastPaths,
   resolveForecastShare,
+  resolveUsableShare,
 } from '@/lib/accounts/forecast.ts';
 import { useAccounts } from '@/lib/connection/accounts.ts';
 import { useEngineFeature } from '@/lib/connection/socket.ts';
@@ -32,10 +32,6 @@ import { updateSettings } from '@/lib/settings.ts';
 import { ROW_INSET, SETTING_ROW, SettingsBlock, SettingsGroup } from './group.tsx';
 
 const LANE_LABEL = 'w-24 shrink-0 sm:w-36';
-
-const CHART_WIDTH = 700;
-
-const CHART_HEIGHT = 40;
 
 function Lane({ forecast, lane }: { forecast: UsageForecast; lane: ForecastLane }) {
   return (
@@ -48,13 +44,13 @@ function Lane({ forecast, lane }: { forecast: UsageForecast; lane: ForecastLane 
           return (
             <Hint key={segment.from} label={describeSegment(forecast, segment, forecast.from)}>
               <span
-                data-left={segment.left}
+                data-usable={resolveUsableShare(segment)}
                 className='absolute inset-y-0 overflow-hidden rounded-xs border-x border-card bg-bg-a2'
                 style={{ left: `${start * 100}%`, width: `${(end - start) * 100}%` }}
               >
                 <span
                   className='absolute inset-y-0 start-0 bg-primary/50'
-                  style={{ width: `${segment.left}%` }}
+                  style={{ width: `${resolveUsableShare(segment) * 100}%` }}
                 />
               </span>
             </Hint>
@@ -65,24 +61,10 @@ function Lane({ forecast, lane }: { forecast: UsageForecast; lane: ForecastLane 
   );
 }
 
-function PoolRow({ forecast }: { forecast: UsageForecast }) {
-  const paths = resolveForecastPaths(forecast, CHART_WIDTH, CHART_HEIGHT);
-  if (!paths) return null;
-  return (
-    <div className='flex items-end gap-3'>
-      <span className={cn(LANE_LABEL, 'text-2xs text-fg-3')}>{POOL_LABEL}</span>
-      <div data-pool className='h-10 min-w-0 flex-1'>
-        <AreaChart width={CHART_WIDTH} height={CHART_HEIGHT} line={paths.line} area={paths.area} />
-      </div>
-    </div>
-  );
-}
-
 const LEGEND_SWATCH = {
-  left: 'h-2 w-3 rounded-xs bg-primary/50',
-  used: 'h-2 w-3 rounded-xs bg-bg-a2',
-  pool: 'h-0.5 w-3 rounded-full bg-primary',
-  tightest: 'h-2.5 w-0 border-l border-dashed border-amber-4',
+  usable: 'h-2 w-3 rounded-xs bg-primary/50',
+  empty: 'h-2 w-3 rounded-xs bg-bg-a2',
+  outage: 'h-2 w-3 rounded-xs bg-orange-a3',
 } as const;
 
 function Legend() {
@@ -101,16 +83,20 @@ function Legend() {
   );
 }
 
-function TightestMark({ forecast }: { forecast: UsageForecast }) {
-  if (!forecast.tightest) return null;
-  return (
-    <span
-      aria-hidden
-      data-tightest
-      className='pointer-events-none absolute inset-y-0 border-l border-dashed border-amber-4'
-      style={{ left: `${resolveForecastShare(forecast, forecast.tightest.at) * 100}%` }}
-    />
-  );
+function Outages({ forecast }: { forecast: UsageForecast }) {
+  return forecast.outages.map((outage) => {
+    const start = resolveForecastShare(forecast, outage.from);
+    const end = resolveForecastShare(forecast, outage.to);
+    return (
+      <span
+        key={outage.from}
+        aria-hidden
+        data-outage
+        className='absolute -inset-y-1 rounded-xs bg-orange-a3'
+        style={{ left: `${start * 100}%`, width: `${(end - start) * 100}%` }}
+      />
+    );
+  });
 }
 
 function DayAxis({ forecast }: { forecast: UsageForecast }) {
@@ -136,14 +122,17 @@ function Timeline({ forecast }: { forecast: UsageForecast }) {
   const lanes = listForecastLanes(forecast);
   return (
     <div className={cn('flex flex-col gap-1.5 py-2.5', ROW_INSET)}>
+      <div className='flex gap-3'>
+        <span className={cn(LANE_LABEL, 'max-sm:hidden')} />
+        <span className='min-w-0 flex-1 text-2xs text-fg-2'>{describeTimelinePace(forecast)}</span>
+      </div>
       <div className='relative flex flex-col gap-1.5'>
-        <PoolRow forecast={forecast} />
+        <div className='pointer-events-none absolute inset-y-0 right-0 left-[calc(--spacing(24)+--spacing(3))] sm:left-[calc(--spacing(36)+--spacing(3))]'>
+          <Outages forecast={forecast} />
+        </div>
         {lanes.map((lane) => (
           <Lane key={lane.account.id} forecast={forecast} lane={lane} />
         ))}
-        <div className='pointer-events-none absolute inset-y-0 right-0 left-[calc(--spacing(24)+--spacing(3))] sm:left-[calc(--spacing(36)+--spacing(3))]'>
-          <TightestMark forecast={forecast} />
-        </div>
       </div>
       <DayAxis forecast={forecast} />
       <Legend />
@@ -169,6 +158,7 @@ function ApplyPaceButton({ forecast, settings }: { forecast: UsageForecast; sett
 function ForecastBlock({ entry, settings }: { entry: ProviderForecast; settings: Settings }) {
   const { forecast } = entry;
   const tightest = describeTightest(forecast, forecast.from);
+  const outages = describeOutages(forecast, forecast.from);
   const paced = useEngineFeature('usage.pace_limits');
   return (
     <SettingsBlock
@@ -186,6 +176,11 @@ function ForecastBlock({ entry, settings }: { entry: ProviderForecast; settings:
         <span className='min-w-0 flex-1 text-xs text-fg-4'>{describeSafePace(forecast)}</span>
       </div>
       <Timeline forecast={forecast} />
+      {outages && (
+        <div className={SETTING_ROW}>
+          <span className='min-w-0 flex-1 text-xs text-fg-4'>{outages}</span>
+        </div>
+      )}
       {tightest && (
         <div className={SETTING_ROW}>
           <span className='min-w-0 flex-1 text-xs text-fg-2'>{tightest}</span>

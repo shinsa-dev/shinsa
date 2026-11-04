@@ -2,7 +2,7 @@ import { DAY_MS } from '../domain/time.ts';
 import type { AccountSummary, AccountUsage } from '../protocol/accounts.ts';
 import type {
   ForecastAccount,
-  ForecastPoint,
+  ForecastOutage,
   ForecastReset,
   ForecastSegment,
   UsageForecast,
@@ -10,7 +10,7 @@ import type {
 
 export type {
   ForecastAccount,
-  ForecastPoint,
+  ForecastOutage,
   ForecastReset,
   ForecastSegment,
   UsageForecast,
@@ -26,14 +26,18 @@ export const FORECAST_LIMITS = {
 
 interface Simulation {
   dryAt: number | null;
-  points: ForecastPoint[];
+  segments: ForecastSegment[];
   resets: ForecastReset[];
+  outages: ForecastOutage[];
 }
 
 interface Budget {
   id: string;
   left: number;
   resetsAt: number | null;
+  start: number;
+  startLeft: number;
+  emptyAt: number | null;
 }
 
 export function resolveForecastAccount(
@@ -69,53 +73,65 @@ function sumLeft(budgets: readonly { left: number }[]) {
   return budgets.reduce((total, budget) => total + budget.left, 0);
 }
 
-function byDeadline(a: Budget, b: Budget) {
+function byDeadline(a: { resetsAt: number | null }, b: { resetsAt: number | null }) {
   return (a.resetsAt ?? Number.POSITIVE_INFINITY) - (b.resetsAt ?? Number.POSITIVE_INFINITY);
 }
 
-function draw(budgets: Budget[], demand: number) {
-  let owed = demand;
+function drain(budgets: Budget[], pace: number, at: number, next: number) {
+  let cursor = at;
   for (const budget of [...budgets].sort(byDeadline)) {
-    const taken = Math.min(budget.left, owed);
-    budget.left -= taken;
-    owed -= taken;
+    if (budget.left <= 0) continue;
+    const emptiesAt = cursor + (budget.left / pace) * DAY_MS;
+    if (emptiesAt >= next) {
+      budget.left -= (pace * (next - cursor)) / DAY_MS;
+      return next;
+    }
+    budget.left = 0;
+    budget.emptyAt = emptiesAt;
+    cursor = emptiesAt;
   }
+  return cursor;
+}
+
+function closeSegment(budget: Budget, to: number): ForecastSegment {
+  return { accountId: budget.id, from: budget.start, to, left: budget.startLeft, emptyAt: budget.emptyAt };
 }
 
 function simulate(accounts: readonly ForecastAccount[], pace: number, from: number, to: number): Simulation {
-  const budgets = accounts.map((account) => ({
+  const budgets: Budget[] = accounts.map((account) => ({
     id: account.id,
     left: account.left,
     resetsAt: account.resetsAt,
+    start: from,
+    startLeft: account.left,
+    emptyAt: account.left > 0 ? null : from,
   }));
-  const points: ForecastPoint[] = [{ at: from, left: sumLeft(budgets) }];
+  const segments: ForecastSegment[] = [];
   const resets: ForecastReset[] = [];
+  const outages: ForecastOutage[] = [];
   let at = from;
   while (at < to) {
-    const deadlines = budgets
-      .map((budget) => budget.resetsAt)
-      .filter((reset) => reset !== null && reset < to);
-    const next = Math.min(to, ...(deadlines as number[]));
-    const demand = (pace * (next - at)) / DAY_MS;
-    const available = sumLeft(budgets);
-    if (available < demand) {
-      const dryAt = at + (available / pace) * DAY_MS;
-      points.push({ at: dryAt, left: 0 });
-      return { dryAt, points, resets };
-    }
-    draw(budgets, demand);
+    const deadlines = budgets.flatMap((budget) =>
+      budget.resetsAt !== null && budget.resetsAt < to ? [budget.resetsAt] : []
+    );
+    const next = Math.min(to, ...deadlines);
+    const cursor = drain(budgets, pace, at, next);
+    if (cursor < next) outages.push({ from: cursor, to: next });
     const leftBefore = sumLeft(budgets);
-    points.push({ at: next, left: leftBefore });
     for (const budget of budgets) {
       if (budget.resetsAt !== next) continue;
       resets.push({ accountId: budget.id, at: next, leftBefore });
+      segments.push(closeSegment(budget, next));
       budget.left = FORECAST_LIMITS.fullPercent;
       budget.resetsAt = next + FORECAST_LIMITS.weekMs;
+      budget.start = next;
+      budget.startLeft = FORECAST_LIMITS.fullPercent;
+      budget.emptyAt = null;
     }
-    if (next < to) points.push({ at: next, left: sumLeft(budgets) });
     at = next;
   }
-  return { dryAt: null, points, resets };
+  for (const budget of budgets) segments.push(closeSegment(budget, to));
+  return { dryAt: outages[0]?.from ?? null, segments, resets, outages };
 }
 
 function resolveSafePace(accounts: readonly ForecastAccount[], from: number, to: number) {
@@ -129,24 +145,8 @@ function resolveSafePace(accounts: readonly ForecastAccount[], from: number, to:
     else high = middle;
   }
   const nearest = Math.round(low * FORECAST_LIMITS.paceScale) / FORECAST_LIMITS.paceScale;
-  if (simulate(accounts, nearest, from, to).dryAt === null) return nearest;
+  if (nearest <= 0 || simulate(accounts, nearest, from, to).dryAt === null) return nearest;
   return (Math.round(low * FORECAST_LIMITS.paceScale) - 1) / FORECAST_LIMITS.paceScale;
-}
-
-function listSegments(accounts: readonly ForecastAccount[], from: number, to: number) {
-  const segments: ForecastSegment[] = [];
-  for (const account of accounts) {
-    let start = from;
-    let left = account.left;
-    let end = account.resetsAt ?? to;
-    while (start < to) {
-      segments.push({ accountId: account.id, from: start, to: Math.min(end, to), left });
-      start = end;
-      end += FORECAST_LIMITS.weekMs;
-      left = FORECAST_LIMITS.fullPercent;
-    }
-  }
-  return segments;
 }
 
 function selectTightest(resets: ForecastReset[]) {
@@ -155,6 +155,12 @@ function selectTightest(resets: ForecastReset[]) {
     if (tightest === null || reset.leftBefore < tightest.leftBefore) tightest = reset;
   }
   return tightest;
+}
+
+function byAccount(order: readonly ForecastAccount[]) {
+  const rank = new Map(order.map((account, index) => [account.id, index]));
+  return (a: ForecastSegment, b: ForecastSegment) =>
+    (rank.get(a.accountId) ?? 0) - (rank.get(b.accountId) ?? 0) || a.from - b.from;
 }
 
 export function resolveUsageForecast(
@@ -167,18 +173,21 @@ export function resolveUsageForecast(
   const ordered = [...accounts].sort(byDeadline);
   const safePace = resolveSafePace(ordered, now, to);
   const safe = simulate(ordered, safePace, now, to);
-  const runsOutAt =
-    currentPace === null || currentPace <= 0 ? null : simulate(ordered, currentPace, now, to).dryAt;
+  const pace = currentPace ?? 0;
+  const current = pace > 0 ? simulate(ordered, pace, now, to) : null;
+  const faster = current !== null && pace > safePace;
+  const timeline = faster ? current : safe;
   return {
     from: now,
     to,
     accounts: ordered,
-    segments: listSegments(ordered, now, to),
+    segments: [...timeline.segments].sort(byAccount(ordered)),
+    outages: timeline.outages,
+    timelinePace: faster ? pace : safePace,
     resets: safe.resets,
-    points: safe.points,
     safePace,
     tightest: selectTightest(safe.resets),
     currentPace,
-    runsOutAt,
+    runsOutAt: current?.dryAt ?? null,
   };
 }

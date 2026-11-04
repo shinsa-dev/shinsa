@@ -34,13 +34,10 @@ export const FORECAST_TITLE = 'Forecast';
 
 export const APPLY_PACE_LABEL = 'Use as daily limit';
 
-export const POOL_LABEL = 'At this pace';
-
 export const FORECAST_LEGEND = [
-  { key: 'left', label: 'Left on the account' },
-  { key: 'used', label: 'Already used' },
-  { key: 'pool', label: 'Left across accounts at this pace' },
-  { key: 'tightest', label: 'Tightest point' },
+  { key: 'usable', label: 'Has usage' },
+  { key: 'empty', label: 'Out of usage' },
+  { key: 'outage', label: 'Every account out of usage' },
 ] as const;
 
 const WEEKDAY = new Intl.DateTimeFormat('en', { weekday: 'short' });
@@ -135,25 +132,34 @@ export function formatForecastDay(at: number) {
   return WEEKDAY.format(at);
 }
 
+export function describeTimelinePace(forecast: UsageForecast) {
+  const pace = `${formatPace(forecast.timelinePace)} a day`;
+  if (forecast.timelinePace === forecast.safePace) return `Timeline at ${pace}, the safe pace`;
+  return `Timeline at ${pace}, your last 24 hours`;
+}
+
+export function describeOutages(forecast: UsageForecast, now: number) {
+  const first = forecast.outages[0];
+  if (!first) return null;
+  const total = forecast.outages.reduce((sum, outage) => sum + outage.to - outage.from, 0);
+  const start = first.from <= now ? 'now' : `in ${formatTurnaround(first.from - now)}`;
+  return `At this pace every account is out of usage for ${formatTurnaround(total)} in all, starting ${start}.`;
+}
+
+export function resolveUsableShare(segment: ForecastSegment) {
+  const end = segment.emptyAt ?? segment.to;
+  return segment.to === segment.from ? 0 : Math.max(0, (end - segment.from) / (segment.to - segment.from));
+}
+
 export function describeSegment(forecast: UsageForecast, segment: ForecastSegment, now: number) {
   const label = selectLabel(forecast, segment.accountId);
   const left = formatPace(segment.left);
   const until = segment.to < forecast.to ? ` until it resets in ${formatTurnaround(segment.to - now)}` : '';
-  if (segment.from <= now) return `${label} has ${left} left${until}.`;
-  return `${label} resets to ${left} in ${formatTurnaround(segment.from - now)}.`;
-}
-
-function resolveCoordinate(value: number) {
-  return Number(value.toFixed(2));
-}
-
-export function resolveForecastPaths(forecast: UsageForecast, width: number, height: number) {
-  const top = Math.max(0, ...forecast.points.map((point) => point.left));
-  const first = forecast.points[0];
-  const last = forecast.points.at(-1);
-  if (!first || !last || top <= 0) return null;
-  const x = (at: number) => resolveCoordinate(resolveForecastShare(forecast, at) * width);
-  const y = (left: number) => resolveCoordinate(height - (left / top) * height);
-  const line = `M ${forecast.points.map((point) => `${x(point.at)} ${y(point.left)}`).join(' L ')}`;
-  return { line, area: `${line} L ${x(last.at)} ${height} L ${x(first.at)} ${height} Z` };
+  if (segment.emptyAt !== null && segment.emptyAt <= segment.from) return `${label} is out of usage${until}.`;
+  const start =
+    segment.from <= now
+      ? `${label} has ${left} left`
+      : `${label} resets to ${left} in ${formatTurnaround(segment.from - now)}`;
+  if (segment.emptyAt === null) return segment.from <= now ? `${start}${until}.` : `${start}.`;
+  return `${start} and runs out in ${formatTurnaround(segment.emptyAt - now)} at this pace.`;
 }

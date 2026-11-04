@@ -74,7 +74,7 @@ describe('the usage forecast', () => {
     expect(screen.queryByText('Forecast')).toBeNull();
   });
 
-  it('shows the safe pace, a lane per account with the tightest point, and applies it as the daily limit', async () => {
+  it('shows the safe pace, a lane per account and the tightest point, and applies it as the daily limit', async () => {
     pushAccounts(createSnapshot({ accounts: ACCOUNTS }));
     await settle();
     const { container } = renderForecast();
@@ -85,14 +85,24 @@ describe('the usage forecast', () => {
     expect(screen.getByText('home@example.com')).toBeTruthy();
     expect(screen.getByText(/^Tightest point: /)).toBeTruthy();
     expect(screen.getByText('No measured usage in the last 24 hours.')).toBeTruthy();
-    expect(container.querySelector('[data-tightest]')).not.toBeNull();
-    expect(container.querySelector('[data-pool] svg path')).not.toBeNull();
-    expect(screen.getByText('Left across accounts at this pace')).toBeTruthy();
-    expect(container.querySelectorAll('[data-left]').length).toBeGreaterThanOrEqual(4);
+    expect(screen.getByText(/^Timeline at .+ a day, the safe pace$/)).toBeTruthy();
+    expect(screen.getByText('Every account out of usage')).toBeTruthy();
+    expect(container.querySelector('[data-outage]')).toBeNull();
+    expect(container.querySelectorAll('[data-usable]').length).toBeGreaterThanOrEqual(4);
     fireEvent.click(screen.getByRole('button', { name: 'Use as daily limit' }));
     await waitFor(() =>
       expect(listSentCommands()).toEqual([{ type: 'settings.change', patch: { dailyUsageLimit: pace } }])
     );
+  });
+
+  it('marks where every account is out of usage at once', async () => {
+    pushAccounts(createSnapshot({ accounts: [weeklyAccount('spent', 100, 15 * HOUR_MS)] }));
+    await settle();
+    const { container } = renderForecast();
+    expect(container.querySelectorAll('[data-outage]')).toHaveLength(1);
+    expect(
+      screen.getByText('At this pace every account is out of usage for 15h in all, starting now.')
+    ).toBeTruthy();
   });
 
   it('still forecasts on an engine without the daily limit, but offers nothing to apply', async () => {

@@ -1,19 +1,21 @@
 import { describe, expect, it } from 'bun:test';
 import { HOUR_MS, type Run, type RunMeter, resolveUsageForecast, type ShinsaState } from '@shinsa/core';
 import {
+  describeOutages,
   describeRecentPace,
   describeSafePace,
   describeSegment,
   describeTightest,
+  describeTimelinePace,
   formatForecastDay,
   formatPace,
   isPaceApplied,
   listForecastDays,
   listForecastLanes,
   listProviderForecasts,
-  resolveForecastPaths,
   resolveForecastShare,
   resolveRecentPace,
+  resolveUsableShare,
 } from '@/lib/accounts/forecast.ts';
 import { createAccount, createSnapshot, createWindow } from '../../support/accounts.ts';
 import { createShinsaState, NOW } from '../../support/state.ts';
@@ -224,29 +226,59 @@ describe('the timeline', () => {
     const lanes = listForecastLanes(forecast);
     expect(lanes.map((lane) => lane.account.id)).toEqual(['work', 'home']);
     expect(lanes[0]?.segments.map((segment) => segment.left)).toEqual([8, 100]);
-    const later = lanes[0]?.segments[1];
-    if (!later) throw new Error('expected a second stretch');
-    expect(describeSegment(forecast, later, NOW)).toBe('work@example.com resets to 100% in 15h.');
-    expect(describeSegment(forecast, lanes[0]?.segments[0] ?? later, NOW)).toBe(
-      'work@example.com has 8% left until it resets in 15h.'
-    );
-    expect(describeSegment({ ...forecast, accounts: [] }, later, NOW)).toBe('work resets to 100% in 15h.');
-    const open = { accountId: 'home', from: NOW, to: forecast.to, left: 21 };
-    expect(describeSegment(forecast, open, NOW)).toBe('home@example.com has 21% left.');
   });
 
-  it('draws what is left across accounts at the safe pace as a line over the week', () => {
-    const paths = resolveForecastPaths(forecast, 700, 40);
-    if (!paths) throw new Error('expected paths');
-    const top = Math.max(...forecast.points.map((point) => point.left));
-    const first = forecast.points[0];
-    if (!first) throw new Error('expected a point');
-    expect(paths.line.startsWith(`M 0 ${Number((40 - (first.left / top) * 40).toFixed(2))} L `)).toBe(true);
-    expect(paths.line.split(' L ')).toHaveLength(forecast.points.length);
-    expect(paths.area).toBe(`${paths.line} L 700 40 L 0 40 Z`);
-    expect(resolveForecastPaths({ ...forecast, points: [] }, 700, 40)).toBeNull();
-    const dry = forecast.points.map((point) => ({ ...point, left: 0 }));
-    expect(resolveForecastPaths({ ...forecast, points: dry }, 700, 40)).toBeNull();
+  it('says when each stretch has usage and when it runs out', () => {
+    const stretch = { accountId: 'work', from: NOW, to: NOW + 15 * HOUR_MS, left: 8, emptyAt: null };
+    expect(describeSegment(forecast, stretch, NOW)).toBe(
+      'work@example.com has 8% left until it resets in 15h.'
+    );
+    expect(describeSegment(forecast, { ...stretch, emptyAt: NOW + 5 * HOUR_MS }, NOW)).toBe(
+      'work@example.com has 8% left and runs out in 5h at this pace.'
+    );
+    expect(describeSegment(forecast, { ...stretch, left: 0, emptyAt: NOW }, NOW)).toBe(
+      'work@example.com is out of usage until it resets in 15h.'
+    );
+    const later = { accountId: 'work', from: NOW + 15 * HOUR_MS, to: forecast.to, left: 100, emptyAt: null };
+    expect(describeSegment(forecast, later, NOW)).toBe('work@example.com resets to 100% in 15h.');
+    expect(describeSegment({ ...forecast, accounts: [] }, later, NOW)).toBe('work resets to 100% in 15h.');
+    expect(describeSegment(forecast, { ...later, emptyAt: NOW + 2 * DAY }, NOW)).toBe(
+      'work@example.com resets to 100% in 15h and runs out in 2d at this pace.'
+    );
+    expect(describeSegment(forecast, { ...stretch, to: forecast.to }, NOW)).toBe(
+      'work@example.com has 8% left.'
+    );
+  });
+
+  it('fills each stretch as far as it has usage', () => {
+    const stretch = { accountId: 'work', from: NOW, to: NOW + 10 * HOUR_MS, left: 8, emptyAt: null };
+    expect(resolveUsableShare(stretch)).toBe(1);
+    expect(resolveUsableShare({ ...stretch, emptyAt: NOW + 4 * HOUR_MS })).toBeCloseTo(0.4, 6);
+    expect(resolveUsableShare({ ...stretch, emptyAt: NOW })).toBe(0);
+    expect(resolveUsableShare({ ...stretch, to: NOW })).toBe(0);
+  });
+
+  it('names the pace the timeline is drawn at', () => {
+    expect(describeTimelinePace(forecast)).toBe(
+      `Timeline at ${formatPace(forecast.safePace)} a day, the safe pace`
+    );
+    expect(describeTimelinePace({ ...forecast, timelinePace: 60 })).toBe(
+      'Timeline at 60% a day, your last 24 hours'
+    );
+  });
+
+  it('says how long every account is out of usage at once', () => {
+    expect(describeOutages(forecast, NOW)).toBeNull();
+    const outages = [
+      { from: NOW + 12 * HOUR_MS, to: NOW + 24 * HOUR_MS },
+      { from: NOW + 64 * HOUR_MS, to: NOW + 72 * HOUR_MS },
+    ];
+    expect(describeOutages({ ...forecast, outages }, NOW)).toBe(
+      'At this pace every account is out of usage for 20h in all, starting in 12h.'
+    );
+    expect(describeOutages({ ...forecast, outages: [{ from: NOW, to: NOW + 2 * HOUR_MS }] }, NOW)).toBe(
+      'At this pace every account is out of usage for 2h in all, starting now.'
+    );
   });
 
   it('places times on the week and marks each midnight', () => {
