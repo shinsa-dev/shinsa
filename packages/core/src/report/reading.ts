@@ -132,15 +132,25 @@ export function HandOverRecord<const F extends Schema.Struct.Fields>(fields: F) 
   return Schema.Struct(fields).annotate({ handOver: 'record' });
 }
 
+export type MovedFields = { readonly [field: string]: string };
+
+export function ClosedHandOverRecord<const F extends Schema.Struct.Fields>(
+  fields: F,
+  moved: MovedFields = {}
+) {
+  return Schema.Struct(fields).annotate({ handOver: 'record', closed: moved });
+}
+
 export function OrAbsent<S extends Schema.Top>(schema: S) {
   return Schema.Union([AbsentAsNull, Schema.Null, schema]).annotate({ handOver: 'optional' });
 }
 
-export function OptionalWholeRecord<const F extends Schema.Struct.Fields>(
+export function OptionalClosedRecord<const F extends Schema.Struct.Fields>(
   fields: F,
+  moved: MovedFields,
   ...checks: ReadonlyArray<SchemaAST.Check<Schema.Struct.Type<F>>>
 ) {
-  const record = Schema.Struct(fields).annotate({ handOver: 'record', halts: true });
+  const record = Schema.Struct(fields).annotate({ handOver: 'record', halts: true, closed: moved });
   const [first, ...rest] = checks;
   return OrAbsent(first ? record.check(first, ...rest) : record);
 }
@@ -217,6 +227,7 @@ export class HandOverReader {
       this.errors.push(NOT_OBJECT.replaceAll('{path}', resolveIssuePath(path)));
       if (ast.annotations?.halts === true) return null;
     }
+    this.refuseUnknownFields(ast, fields, path);
     const record: { [key: string]: unknown } = {};
     const filters = listFilters(ast.checks);
     this.runFilters(
@@ -242,6 +253,24 @@ export class HandOverReader {
       path
     );
     return record;
+  }
+
+  private refuseUnknownFields(
+    ast: SchemaAST.Objects,
+    fields: { readonly [key: string]: unknown },
+    path: HandOverPath
+  ) {
+    const moved = ast.annotations?.closed;
+    if (!isRecord(moved)) return;
+    const known = ast.propertySignatures.map((field) => String(field.name));
+    for (const name of Object.keys(fields).filter((key) => !known.includes(key))) {
+      const hint = moved[name];
+      this.errors.push(
+        Predicate.isString(hint)
+          ? `${resolveIssuePath(path)} has no field \`${name}\`; ${hint}`
+          : `${resolveIssuePath(path)} has no field \`${name}\`; it takes ${known.join(', ')}.`
+      );
+    }
   }
 
   private readField(

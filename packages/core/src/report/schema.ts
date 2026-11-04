@@ -27,6 +27,7 @@ import {
   CountUpTo,
   EndAfter,
   Flag,
+  ClosedHandOverRecord,
   HandOverRecord,
   Items,
   LineNumber,
@@ -34,7 +35,7 @@ import {
   OneOf,
   OptionalOneOf,
   OptionalText,
-  OptionalWholeRecord,
+  OptionalClosedRecord,
   OrAbsent,
   OrOmitted,
   ReadWhen,
@@ -348,17 +349,24 @@ const Watchdogs = Items(Watchdog, L.watchdogs).check(
   )
 );
 
+const WATCHDOGS_MOVED = {
+  watchdogs: 'watchdogs go in `watchdogs`, beside `walkthrough`, never inside it.',
+};
+
 export const Walkthrough = OrAbsent(
-  HandOverRecord({
-    approach: Required(L.walkthroughApproach),
-    flow: Required(L.flow),
-    risks: Items(Risk, L.risks),
-    testing: OrAbsent(Testing),
-    steps: OrAbsent(MergeSteps),
-  })
+  ClosedHandOverRecord(
+    {
+      approach: Required(L.walkthroughApproach),
+      flow: Required(L.flow),
+      risks: Items(Risk, L.risks),
+      testing: OrAbsent(Testing),
+      steps: OrAbsent(MergeSteps),
+    },
+    WATCHDOGS_MOVED
+  )
 );
 
-export const WalkthroughRevision = OptionalWholeRecord(
+export const WalkthroughRevision = OptionalClosedRecord(
   {
     approach: OrAbsent(Required(L.walkthroughApproach)),
     flow: OrAbsent(Required(L.flow)),
@@ -366,6 +374,7 @@ export const WalkthroughRevision = OptionalWholeRecord(
     testing: OrAbsent(Testing),
     steps: OrAbsent(MergeSteps),
   },
+  WATCHDOGS_MOVED,
   Schema.makeFilter(
     (revision: { readonly [key: string]: unknown }) =>
       Object.values(revision).some((part) => part !== null) ||
@@ -436,7 +445,7 @@ export const ReplyInput = OrAbsent(
   })
 );
 
-export const PhaseHandOverInput = HandOverRecord({
+export const PhaseHandOverInput = ClosedHandOverRecord({
   summary: Required(L.phaseSummary),
   spots: Items(Spot, L.spots),
   judgement_calls: Items(JudgementCallInput, L.judgementCalls),
@@ -448,7 +457,7 @@ export const PhaseHandOverInput = HandOverRecord({
 
 export const EvidenceRefs = TextList(L.evidenceItems, L.evidenceKey);
 
-export const FixHandOverInput = HandOverRecord({
+export const FixHandOverInput = ClosedHandOverRecord({
   summary: Required(L.phaseSummary),
   reply: ReplyInput,
   walkthrough: WalkthroughRevision,

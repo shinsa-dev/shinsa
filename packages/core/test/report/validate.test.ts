@@ -1440,6 +1440,32 @@ describe('watchdogs beside the walkthrough', () => {
     ]);
   });
 
+  test('refuses watchdogs inside the walkthrough and says where they go', () => {
+    const moved =
+      'walkthrough has no field `watchdogs`; watchdogs go in `watchdogs`, beside `walkthrough`, never inside it.';
+    expect(
+      errorsOf(validatePhaseHandOver({ summary: 'Done.', walkthrough: { ...WATCHED, watchdogs: [LATENCY] } }))
+    ).toEqual([moved]);
+    expect(
+      errorsOf(validateFixHandOver({ summary: 'Fixed.', walkthrough: { watchdogs: [LATENCY] } }))
+    ).toEqual([
+      moved,
+      'walkthrough needs at least one of approach, flow, risks, testing or steps. Leave it out when the fix changes none of them. Watchdogs go in watchdogs, beside walkthrough.',
+    ]);
+  });
+
+  test('refuses a field either hand-over does not take, naming the ones it does', () => {
+    expect(errorsOf(validateFixHandOver({ summary: 'Fixed.', evidence: ['shot'] }))).toEqual([
+      'The input has no field `evidence`; it takes summary, reply, walkthrough, watchdogs, checks, check_changes, evidence_kept.',
+    ]);
+    expect(errorsOf(validatePhaseHandOver({ summary: 'Done.', notes: 'x' }))).toEqual([
+      'The input has no field `notes`; it takes summary, spots, judgement_calls, reply, walkthrough, watchdogs, check_changes.',
+    ]);
+    expect(
+      errorsOf(validateFixHandOver({ summary: 'Fixed.', walkthrough: { flow: 'New flow.', diagram: 'x' } }))
+    ).toEqual(['walkthrough has no field `diagram`; it takes approach, flow, risks, testing, steps.']);
+  });
+
   test('names a watchdog with both or neither source, no suggestions, a repeated title and a check past its window', () => {
     expect(
       errorsOf(
