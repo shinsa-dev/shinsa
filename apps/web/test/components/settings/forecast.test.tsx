@@ -114,6 +114,19 @@ describe('the usage forecast', () => {
     ).toBeTruthy();
   });
 
+  it('stacks the outage band above the lanes so its hint wins the hover', async () => {
+    pushAccounts(createSnapshot({ accounts: [weeklyAccount('spent', 100, 15 * HOUR_MS)] }));
+    await settle();
+    const { container } = renderForecast();
+    const outage = container.querySelector('[data-outage]');
+    const overlay = outage?.closest('[data-overlay]');
+    expect(overlay?.classList.contains('z-10')).toBe(true);
+    expect(overlay?.classList.contains('pointer-events-none')).toBe(true);
+    expect(outage?.classList.contains('pointer-events-auto')).toBe(true);
+    const lane = container.querySelector('[data-usable]')?.closest('.relative');
+    expect(overlay?.compareDocumentPosition(lane as Node)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+  });
+
   it('still forecasts on an engine without the daily limit, but offers nothing to apply', async () => {
     const engine = resolveEngineInfo('1.0.0');
     spyOnEngine({
