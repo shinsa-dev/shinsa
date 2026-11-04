@@ -25,7 +25,7 @@ describe('machines', () => {
     const machine = Option.getOrThrow(byId);
     expect(machine).toMatchObject({
       id: STUDIO,
-      userId: MONA.id,
+      ownerId: MONA.id,
       online: false,
       localUrl: null,
       lastSeenAt: null,
@@ -117,6 +117,25 @@ describe('machines', () => {
     expect(listed[1].map(({ machine, role }) => [machine.id, role])).toEqual([[STUDIO, 'owner']]);
   });
 
+  test('a machine a user reaches two ways is listed once, under the role that gives the most', async () => {
+    const listed = await runTest(
+      Effect.gen(function* () {
+        const machines = yield* Machines;
+        const access = yield* MachineAccess;
+        yield* seedUsers(MONA, RIO);
+        yield* seedMachine(STUDIO, MONA.id, 'a');
+        yield* access.members.add(STUDIO, RIO.id);
+        yield* access.guests.add(STUDIO, RIO.id);
+        yield* access.guests.add(STUDIO, MONA.id);
+        return [yield* machines.listOfUser(RIO.id), yield* machines.listOfUser(MONA.id)] as const;
+      })
+    );
+    expect(listed.map((machines) => machines.map(({ machine, role }) => [machine.id, role]))).toEqual([
+      [[STUDIO, 'member']],
+      [[STUDIO, 'owner']],
+    ]);
+  });
+
   test('the machines of everyone in a team with the user are listed as a teammate’s, and no one else’s', async () => {
     const [ofKai, ofRio, ofMona] = await runTest(
       Effect.gen(function* () {
@@ -128,7 +147,7 @@ describe('machines', () => {
         yield* TestClock.adjust('1 second');
         yield* seedMachine(LAPTOP, RIO.id, 'b');
         const crew = TeamId.make('crew00000001');
-        yield* teams.create({ id: crew, userId: MONA.id, name: 'Crew' });
+        yield* teams.create({ id: crew, ownerId: MONA.id, name: 'Crew' });
         yield* teams.members.add(crew, KAI.id);
         yield* access.guests.add(STUDIO, KAI.id);
         return [
@@ -153,7 +172,7 @@ describe('machines', () => {
         yield* TestClock.adjust('1 second');
         yield* seedMachine(LAPTOP, KAI.id, 'b');
         const crew = TeamId.make('crew00000001');
-        yield* teams.create({ id: crew, userId: MONA.id, name: 'Crew' });
+        yield* teams.create({ id: crew, ownerId: MONA.id, name: 'Crew' });
         yield* teams.members.add(crew, KAI.id);
         return [yield* machines.listOfUser(KAI.id), yield* machines.listOfUser(MONA.id)] as const;
       })

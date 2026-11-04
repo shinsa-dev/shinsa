@@ -48,7 +48,6 @@ export const PairingHandlers = HttpApiBuilder.group(
               pollSecretHash: yield* crypto.hashToken(pollSecret),
               name: payload.name,
               publicKey: payload.publicKey,
-              version: payload.version,
               features: payload.features ?? [],
               expiresAt,
             },

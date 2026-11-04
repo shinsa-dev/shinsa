@@ -119,8 +119,8 @@ export interface ServicesOptions {
 
 export const servicesTest = ({ upstream = createUpstream(), env = {} }: ServicesOptions = {}) =>
   CloudServices.pipe(
+    Layer.provideMerge(SqlTest),
     Layer.provide([
-      SqlTest,
       ConfigProvider.layer(ConfigProvider.fromUnknown({ ...TEST_ENV, ...env })),
       Layer.succeed(FetchHttpClient.Fetch, upstream.fetch),
     ]),
@@ -131,6 +131,9 @@ export const runTest = <A, E>(
   effect: Effect.Effect<A, E, Layer.Success<ReturnType<typeof servicesTest>>>,
   options: ServicesOptions = {}
 ) => Effect.runPromise(effect.pipe(Effect.provide(servicesTest(options))));
+
+export const runSqlTest = <A, E>(effect: Effect.Effect<A, E, SqlClient.SqlClient>) =>
+  Effect.runPromise(effect.pipe(Effect.provide(SqlTest)));
 
 export const flipTest = <A, E>(
   effect: Effect.Effect<A, E, Layer.Success<ReturnType<typeof servicesTest>>>,

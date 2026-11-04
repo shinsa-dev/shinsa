@@ -73,7 +73,7 @@ export const MachineTeamsHandlers = HttpApiBuilder.group(
             });
           const team = yield* teams.create({
             id: yield* crypto.createTeamId,
-            userId: owner.id,
+            ownerId: owner.id,
             name: payload.name,
           });
           const invite = yield* replaceInvite(team.id);
