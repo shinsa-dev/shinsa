@@ -308,10 +308,10 @@ describe('connecting Slack to a machine', () => {
     expect(linked.headers.get('location')).toBe('/slack/linked?team=Acme');
     expect(readSetCookie(linked, '__Host-shinsa_slack')).toBe('__Host-shinsa_slack=');
     expect(slack.callsTo('oauth.v2.access')[0]?.body.client_secret).toBe(TEST_CONFIG.slackClientSecret);
-    const stored = harness.db.sqlite.query('SELECT bot_token FROM slack_workspaces').get() as {
-      bot_token: string;
+    const stored = harness.db.sqlite.query('SELECT sealed_bot_token FROM slack_workspaces').get() as {
+      sealed_bot_token: string;
     };
-    expect(stored.bot_token).not.toContain('xoxb');
+    expect(stored.sealed_bot_token).not.toContain('xoxb');
     const links = await readJson<SlackLinks>(
       await harness.call(SLACK_RELAY_PATHS.links, {
         headers: { authorization: `Bearer ${machine.machineToken}` },

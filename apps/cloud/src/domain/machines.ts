@@ -42,7 +42,7 @@ export function serializeTeamMachine(machine: Machine, now: number): TeamMachine
   return {
     id: machine.id,
     name: machine.name,
-    userId: machine.userId,
+    userId: machine.ownerId,
     online: isMachineOnline(machine, now),
     lastSeenAt: machine.lastSeenAt,
     ...(machine.signingKey ? { signingKey: machine.signingKey } : {}),
@@ -91,7 +91,7 @@ export const findOwner = Effect.fn('findOwner')(function* (ownerId: RemoteUserId
   return owner.value satisfies RemoteUser;
 });
 
-export const findMachineOwner = (machine: Machine) => findOwner(machine.userId, NO_SUCH_MACHINE);
+export const findMachineOwner = (machine: Machine) => findOwner(machine.ownerId, NO_SUCH_MACHINE);
 
 export const listMachinePeople = Effect.fn('listMachinePeople')(function* (machine: Machine) {
   const access = yield* MachineAccess;

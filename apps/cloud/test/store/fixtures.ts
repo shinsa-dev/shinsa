@@ -30,7 +30,7 @@ export const seedMachine = (id: InstanceId, userId: RemoteUserId, token = 'a') =
   Machines.use((machines) =>
     machines.create({
       id,
-      userId,
+      ownerId: userId,
       name: `Machine ${id}`,
       fingerprint: `fp-${id}`,
       tunnelId: `tunnel-${id}`,

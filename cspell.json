@@ -4,6 +4,7 @@
   "ignorePaths": ["**/node_modules/**", "**/dist/**", "packages/ui/src/components/icon/paths.ts"],
   "ignoreRegExpList": ["gh\\[[a-z]+\\]_", "\\\\bxox\\[[a-z]+\\]-", "AKIA\\["],
   "words": [
+    "seqno",
     "EPERM",
     "EACCES",
     "photoslibrary",
