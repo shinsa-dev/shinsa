@@ -76,8 +76,9 @@ function Lane({ forecast, lane }: { forecast: UsageForecast; lane: ForecastLane 
 const LEGEND_SWATCH = {
   usable: 'h-2 w-3 rounded-xs bg-primary/50',
   empty: 'h-2 w-3 rounded-xs bg-bg-a2',
-  outage: 'h-2 w-3 rounded-xs bg-orange-a4',
-  tightest: 'h-2.5 w-0.5 rounded-full bg-orange-4',
+  outage:
+    'h-2 w-3 rounded-xs border border-dashed border-orange-4 bg-[repeating-linear-gradient(135deg,var(--color-orange-a3)_0_1px,transparent_1px_5px)]',
+  tightest: 'h-2.5 w-0 border-l border-dashed border-amber-4',
 } as const;
 
 function Legend() {
@@ -102,7 +103,7 @@ function Outages({ forecast, timeline }: { forecast: UsageForecast; timeline: Fo
       key={span.at}
       aria-hidden
       data-outage
-      className='absolute -inset-y-1 rounded-xs bg-orange-a4'
+      className='absolute -inset-y-1 rounded-xs border border-dashed border-orange-4 bg-[repeating-linear-gradient(135deg,var(--color-orange-a3)_0_1px,transparent_1px_5px)]'
       style={{ left: `${span.start * 100}%`, width: `${span.width * 100}%` }}
     />
   ));
@@ -114,7 +115,7 @@ function TightestMark({ forecast }: { forecast: UsageForecast }) {
     <span
       aria-hidden
       data-tightest
-      className='absolute -inset-y-1 w-0.5 -translate-x-1/2 rounded-full bg-orange-4'
+      className='absolute -inset-y-1 border-l border-dashed border-amber-4'
       style={{ left: `${resolveForecastShare(forecast, forecast.tightest.at) * 100}%` }}
     />
   );
