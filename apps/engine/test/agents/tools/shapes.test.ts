@@ -7,8 +7,13 @@ import {
   type ShinsaEvent,
   STEP_SCHEMA,
 } from '@shinsa/core';
+import { Effect } from 'effect';
 import { handleShapeTool } from '../../../src/agents/tools/shapes/handler.ts';
 import { SHAPE_TOOL_SPECS } from '../../../src/agents/tools/shapes/schema.ts';
+
+function runShapeTool(...args: Parameters<typeof handleShapeTool>) {
+  return Effect.runPromise(handleShapeTool(...args));
+}
 
 const RESHAPED = {
   type: 'task.reshaped',
@@ -29,7 +34,7 @@ function createCall(events: ShinsaEvent[] = []) {
       attemptId: 'a-1',
       dispatch: (command: ShinsaCommand) => {
         sent.push(command);
-        return Promise.resolve(events);
+        return Effect.succeed(events);
       },
     },
   };
@@ -41,11 +46,11 @@ const HANDED_OVER =
 describe('the shape tools', () => {
   test('report_diagnosis and submit_report hand the work over, with a change for the human to approve', async () => {
     const { sent, call } = createCall();
-    expect(await handleShapeTool('report_diagnosis', { diagnosis: 'The cache never expires.' }, call)).toBe(
+    expect(await runShapeTool('report_diagnosis', { diagnosis: 'The cache never expires.' }, call)).toBe(
       HANDED_OVER
     );
     expect(
-      await handleShapeTool(
+      await runShapeTool(
         'submit_report',
         {
           report: 'Option B is faster.',
@@ -87,19 +92,19 @@ describe('the shape tools', () => {
     ] as const;
     for (const [tool, field] of deliveries) {
       expect(SHAPE_TOOL_SPECS[tool].inputSchema.properties).toHaveProperty('reply');
-      await handleShapeTool(tool, { [field]: 'Done.', reply }, call);
+      await runShapeTool(tool, { [field]: 'Done.', reply }, call);
     }
     expect(sent.map((command) => command.type === 'agent.deliver' && command.reply)).toEqual(
       deliveries.map(() => ({ ...reply, next: null }))
     );
     await expect(
-      handleShapeTool('answer', { answer: 'Done.', reply: { headline: '', points: [] } }, call)
+      runShapeTool('answer', { answer: 'Done.', reply: { headline: '', points: [] } }, call)
     ).rejects.toThrow('reply.points');
   });
 
   test('report_read ends a read of a data source, with live for a watchdog, and refuses a summary over its limit', async () => {
     const { sent, call } = createCall();
-    expect(await handleShapeTool('report_read', { summary: 'Read 12 messages; filed 2.' }, call)).toBe(
+    expect(await runShapeTool('report_read', { summary: 'Read 12 messages; filed 2.' }, call)).toBe(
       HANDED_OVER
     );
     expect(sent).toEqual([
@@ -113,21 +118,21 @@ describe('the shape tools', () => {
       },
     ] as ShinsaCommand[]);
     expect(SHAPE_TOOL_SPECS.report_read.description).toContain('then stop');
-    await handleShapeTool('report_read', { summary: 'slack timed out.', reached: false }, call);
+    await runShapeTool('report_read', { summary: 'slack timed out.', reached: false }, call);
     expect(sent.at(-1)).toMatchObject({ type: 'agent.report_read', reached: false });
-    await handleShapeTool('report_read', { summary: 'Not live yet.', live: false }, call);
+    await runShapeTool('report_read', { summary: 'Not live yet.', live: false }, call);
     expect(sent.at(-1)).toMatchObject({ type: 'agent.report_read', reached: true, live: false });
+    await expect(runShapeTool('report_read', { summary: 'Read it.', reached: 'no' }, call)).rejects.toThrow(
+      'reached'
+    );
     await expect(
-      handleShapeTool('report_read', { summary: 'Read it.', reached: 'no' }, call)
-    ).rejects.toThrow('reached');
-    await expect(
-      handleShapeTool('report_read', { summary: 'x'.repeat(SCHEDULE_LIMITS.readSummary + 1) }, call)
+      runShapeTool('report_read', { summary: 'x'.repeat(SCHEDULE_LIMITS.readSummary + 1) }, call)
     ).rejects.toThrow('summary');
   });
 
   test('report_outcome hands the operation over, and never carries a proposal', async () => {
     const { sent, call } = createCall();
-    await handleShapeTool(
+    await runShapeTool(
       'report_outcome',
       { outcome: 'Ran the migration.', propose_change: { request: 'More.', why: 'Because.' } },
       call
@@ -145,14 +150,14 @@ describe('the shape tools', () => {
 
   test('answer hands the answer over like every inquiry, may propose a change, and reshape_task turns the task into an inquiry', async () => {
     const { sent, call } = createCall([RESHAPED]);
-    await handleShapeTool('answer', { answer: 'In a.txt.' }, call);
-    await handleShapeTool(
+    await runShapeTool('answer', { answer: 'In a.txt.' }, call);
+    await runShapeTool(
       'answer',
       { answer: 'In a.txt.', propose_change: { request: 'Move it.', why: 'It is easier to find.' } },
       call
     );
     expect(
-      await handleShapeTool('reshape_task', { shape: 'research', reason: 'It asks for a comparison.' }, call)
+      await runShapeTool('reshape_task', { shape: 'research', reason: 'It asks for a comparison.' }, call)
     ).toBe(HANDED_OVER);
     expect(sent).toEqual([
       { type: 'agent.deliver', runId: 'run-1', attemptId: 'a-1', step: 'answer', body: 'In a.txt.' },
@@ -178,17 +183,17 @@ describe('the shape tools', () => {
     const steps = ['investigate', 'your_ok', 'plan', 'operate'];
     const composed = createCall([RESHAPED]);
     expect(
-      await handleShapeTool('reshape_task', { steps, reason: 'Find it, then clear it.' }, composed.call)
+      await runShapeTool('reshape_task', { steps, reason: 'Find it, then clear it.' }, composed.call)
     ).toBe(HANDED_OVER);
     expect(composed.sent).toEqual([
       { type: 'agent.reshape', runId: 'run-1', attemptId: 'a-1', steps, reason: 'Find it, then clear it.' },
     ] as ShinsaCommand[]);
     const unchanged = createCall();
     expect(
-      await handleShapeTool('reshape_task', { steps: ['plan', 'operate'], reason: 'x' }, unchanged.call)
+      await runShapeTool('reshape_task', { steps: ['plan', 'operate'], reason: 'x' }, unchanged.call)
     ).toBe('Those are the steps this task already has. Plan it with `propose_plan`.');
     expect(
-      handleShapeTool('reshape_task', { steps: ['plan', 'deploy'], reason: 'x' }, unchanged.call)
+      runShapeTool('reshape_task', { steps: ['plan', 'deploy'], reason: 'x' }, unchanged.call)
     ).rejects.toThrow('steps[1] must be one of answer, research, investigate, your_ok, plan, operate, build');
     expect(SHAPE_TOOL_SPECS.reshape_task.inputSchema.properties.steps.items.enum).toContain('your_ok');
   });
@@ -212,17 +217,17 @@ describe('the shape tools', () => {
 
   test('a hand-over that breaks the protocol is rejected with the reasons, and other tools are not this module’s', async () => {
     const { sent, call } = createCall();
-    expect(handleShapeTool('report_diagnosis', {}, call)).rejects.toThrow('diagnosis is required.');
+    expect(runShapeTool('report_diagnosis', {}, call)).rejects.toThrow('diagnosis is required.');
     expect(
-      handleShapeTool('submit_report', { report: 'x'.repeat(SHAPE_LIMITS.report + 1) }, call)
+      runShapeTool('submit_report', { report: 'x'.repeat(SHAPE_LIMITS.report + 1) }, call)
     ).rejects.toThrow(`the limit is ${SHAPE_LIMITS.report}`);
     expect(
-      handleShapeTool('answer', { answer: 'Yes.', propose_change: { request: 'Do it.' } }, call)
+      runShapeTool('answer', { answer: 'Yes.', propose_change: { request: 'Do it.' } }, call)
     ).rejects.toThrow('propose_change.why is required.');
-    expect(handleShapeTool('reshape_task', { shape: 'change', reason: 'x' }, call)).rejects.toThrow(
+    expect(runShapeTool('reshape_task', { shape: 'change', reason: 'x' }, call)).rejects.toThrow(
       'shape must be one of answer, investigate, research.'
     );
-    expect(await handleShapeTool('constructor', {}, call)).toBeNull();
+    expect(await runShapeTool('constructor', {}, call)).toBeNull();
     expect(sent).toEqual([]);
   });
 

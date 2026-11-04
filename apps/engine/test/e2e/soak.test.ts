@@ -2,10 +2,10 @@ import { afterEach, describe, expect, setDefaultTimeout, test } from 'bun:test';
 import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { type Run, replayEventLog, type ShinsaState } from '@shinsa/core';
-import { Engine } from '../../src/runtime/index.ts';
-import { runCommandOrThrow } from '../../src/shell/index.ts';
-import { EventLog } from '../../src/store/index.ts';
+import { Engine } from '../helpers/engine.ts';
+import { openEventLog } from '../helpers/event-log.ts';
 import { createRandom } from '../helpers/random.ts';
+import { runCommandOrThrow } from '../helpers/shell.ts';
 import { World } from './harness.ts';
 
 setDefaultTimeout(240_000);
@@ -62,7 +62,7 @@ async function live(
 }
 
 function readLog(path: string) {
-  const log = new EventLog(path);
+  const log = openEventLog(path);
   try {
     return { read: log.readEvents(), effects: log.listEffectStatuses() };
   } finally {
@@ -110,7 +110,7 @@ function describeLog(w: World) {
 
 function readReceipts(w: World) {
   const outbox = JSON.parse(readFileSync(join(w.root, 'client-outbox.json'), 'utf8')) as { id: string }[];
-  const log = new EventLog(w.config.databasePath);
+  const log = openEventLog(w.config.databasePath);
   try {
     return outbox.map((entry) => ({ id: entry.id, receipt: log.selectReceipt(entry.id) }));
   } finally {
@@ -206,7 +206,7 @@ describe('crash and restart soak', () => {
       world = w;
       w.daemon.stop();
       await w.daemon.engine.settle();
-      const seeding = new Engine(new EventLog(w.config.databasePath));
+      const seeding = new Engine(openEventLog(w.config.databasePath));
       for (const request of [...INTENTS, CANCELLED_INTENT]) {
         await seeding.dispatch({ type: 'task.create', request, repoId: w.repoId });
       }

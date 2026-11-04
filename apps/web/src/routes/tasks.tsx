@@ -3,7 +3,7 @@ import { EmptyState } from '@shinsa/ui/components/empty-state';
 import { Input } from '@shinsa/ui/components/input';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
-import { PAGE_COLUMN, PAGE_TOP } from '@/components/layout/page/column.ts';
+import { PAGE_BOTTOM, PAGE_COLUMN, PAGE_TOP } from '@/components/layout/page/column.ts';
 import { PAGE_DESCRIPTION, PageHeading } from '@/components/layout/page/heading.tsx';
 import { CARD } from '@/components/layout/surface/card.ts';
 import { TaskFilterChips, TaskFilterMenu } from '@/components/tasks/filter-menu.tsx';
@@ -40,7 +40,7 @@ export function TasksPage({ state }: { state: ShinsaState }) {
   useRegisterCommands(listTaskListSections(filters, fields));
 
   return (
-    <div className={cn(PAGE_COLUMN, PAGE_TOP, 'flex min-h-0 flex-1 flex-col gap-6 pb-6')}>
+    <div className={cn(PAGE_COLUMN, PAGE_TOP, PAGE_BOTTOM, 'flex min-h-0 flex-1 flex-col gap-6')}>
       <div className='flex items-end gap-3'>
         <PageHeading
           title='All tasks'

@@ -1,7 +1,9 @@
 import { describe, expect, test } from 'bun:test';
 import { existsSync, mkdirSync, utimesSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { pruneSharedCaches, resolveRepoCachePath, resolveSharedCacheEnv } from '../../src/checks/caches.ts';
+import { resolveRepoCachePath, resolveSharedCacheEnv } from '../../src/checks/caches/paths.ts';
+import { SharedCaches } from '../../src/checks/caches/service.ts';
+import { runGit } from '../helpers/git.ts';
 import { createTempDir, writeFiles } from '../helpers/index.ts';
 
 describe('the caches a repository’s checkouts share', () => {
@@ -18,7 +20,7 @@ describe('the caches a repository’s checkouts share', () => {
     expect(resolveSharedCacheEnv(createTempDir(), '/data', 'repo-1')).toEqual({});
   });
 
-  test('pruning drops what has not been written in two weeks and the caches of repositories Shinsa forgot', () => {
+  test('pruning drops what has not been written in two weeks and the caches of repositories Shinsa forgot', async () => {
     const dataDir = createTempDir();
     const turbo = join(dataDir, 'caches', 'repo-1', 'turbo');
     mkdirSync(turbo, { recursive: true });
@@ -28,11 +30,11 @@ describe('the caches a repository’s checkouts share', () => {
     const old = new Date(now - 15 * 24 * 60 * 60 * 1000);
     utimesSync(join(turbo, 'stale.tar.zst'), old, old);
     utimesSync(join(turbo, '.marker'), old, old);
-    pruneSharedCaches(dataDir, ['repo-1'], now);
+    await runGit(SharedCaches.use((caches) => caches.prune(dataDir, ['repo-1'], now)));
     expect(existsSync(join(turbo, 'fresh.tar.zst'))).toBe(true);
     expect(existsSync(join(turbo, 'stale.tar.zst'))).toBe(false);
     expect(existsSync(join(turbo, '.marker'))).toBe(true);
     expect(existsSync(join(dataDir, 'caches', 'repo-gone'))).toBe(false);
-    pruneSharedCaches(createTempDir(), [], now);
+    await runGit(SharedCaches.use((caches) => caches.prune(createTempDir(), [], now)));
   });
 });

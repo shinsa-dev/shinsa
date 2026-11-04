@@ -1,18 +1,18 @@
 import { describe, expect, test } from 'bun:test';
 import type { SDKMessage, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
 import { resolveClaudeExtensions } from '../../../../src/agents/providers/claude/extensions.ts';
-import { startClaudeSession } from '../../../../src/agents/providers/claude/session.ts';
 import type { AgentSessionInput } from '../../../../src/agents/providers/index.ts';
 import { createMessageFeed } from '../../../helpers/feed.ts';
 import { captureLogs } from '../../../helpers/logs.ts';
+import { startClaudeSession } from '../../../helpers/providers.ts';
 
 type ChatEntryEvent = Parameters<AgentSessionInput['onEntry']>[0];
 
-import { createShinsaTools } from '../../../../src/agents/tools/index.ts';
 import type { McpDefinition } from '../../../../src/extensions/definitions.ts';
 import type { SessionExtensions } from '../../../../src/extensions/index.ts';
 import { until } from '../../../helpers/index.ts';
 import { createFakeQuery, createFakeRuntime, sdkMessage } from '../../../helpers/query.ts';
+import { createTestTools } from '../../../helpers/tools.ts';
 
 function definition(overrides: Partial<McpDefinition>): McpDefinition {
   return {
@@ -150,7 +150,7 @@ function createInput(extensions?: SessionExtensions): AgentSessionInput {
     model: null,
     resume: null,
     defaultBranch: 'main',
-    tools: createShinsaTools('agent', () => Promise.resolve('ok')),
+    tools: createTestTools('agent', () => Promise.resolve('ok')),
     pluginDir: '/plugin',
     onSession: () => undefined,
     onEntry: () => undefined,

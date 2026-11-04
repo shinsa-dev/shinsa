@@ -76,7 +76,7 @@ export function ChangelogDialog() {
         if (!open) closeChangelog();
       }}
     >
-      <DialogContent className='w-[min(32rem,calc(100vw-2rem))]'>
+      <DialogContent className='w-[min(32rem,calc(100vw-2rem))] max-sm:w-[calc(100vw-1.5rem)]'>
         <DialogHeader className='px-10'>
           <DialogTitle>{CHANGELOG_COPY.title}</DialogTitle>
           <DialogDescription>{describeChangelogSince(view.since)}</DialogDescription>

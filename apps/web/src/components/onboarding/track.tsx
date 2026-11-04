@@ -38,7 +38,7 @@ export function OnboardingTrack({
   });
 
   return (
-    <div className='onboarding-track -mx-6 grid grid-cols-[minmax(0,1fr)] overflow-x-clip px-6'>
+    <div className='onboarding-track -mx-4 grid grid-cols-[minmax(0,1fr)] overflow-x-clip px-4 sm:-mx-6 sm:px-6'>
       {leaving && leaving.key !== stepKey && (
         <div
           key={leaving.key}

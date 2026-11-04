@@ -2,8 +2,8 @@ import { afterEach, describe, expect, test } from 'bun:test';
 import { OWNER_ONLY_MESSAGE, SCOPE_MESSAGES } from '@shinsa/core';
 import { Effect } from 'effect';
 import { dispatchUserCommand } from '../../../src/http/commands.ts';
-import { Engine } from '../../../src/runtime/index.ts';
-import { EventLog } from '../../../src/store/index.ts';
+import { Engine } from '../../helpers/engine.ts';
+import { openEventLog } from '../../helpers/event-log.ts';
 import { disposeWebHandlers } from '../../helpers/web.ts';
 import { startRoutes } from './harness.ts';
 
@@ -14,7 +14,7 @@ const TASK = { type: 'task.create', request: 'Add search', repoId: null };
 describe('POST /api/commands', () => {
   test('an engine opened read-only refuses every command', async () => {
     const { post } = startRoutes(({ config }) => ({
-      engine: new Engine(new EventLog(config.databasePath), { readOnly: true }),
+      engine: new Engine(openEventLog(config.databasePath), { readOnly: true }),
     }));
     const response = await post('/api/commands', TASK);
     expect(response.status).toBe(400);
@@ -25,9 +25,9 @@ describe('POST /api/commands', () => {
 
   test('a command for the machine’s owner is refused to a member and taken from the owner over the channel', async () => {
     const remote = {
-      isOwner: (userId: string | null) => userId === 'u-owner',
-      tunnelHost: null,
-      isEnabled: true,
+      isOwner: (userId: string | null) => Effect.succeed(userId === 'u-owner'),
+      tunnelHost: Effect.succeed(null),
+      isEnabled: Effect.succeed(true),
     };
     const { send, context } = startRoutes({ remote: remote as never });
     const init = (mergeMethod: string) => ({
@@ -54,13 +54,26 @@ describe('POST /api/commands', () => {
     expect(context.engine.state.settings.mergeMethod).toBe('rebase');
   });
 
+  test('a command goes through the router when the engine has one, with the client’s id', async () => {
+    const { context } = startRoutes();
+    const routed: (string | null)[] = [];
+    const router = {
+      route: (_command: unknown, from?: { readonly id?: string }) =>
+        Effect.sync(() => void routed.push(from?.id ?? null)).pipe(Effect.as([])),
+    };
+    const taskId = await Effect.runPromise(
+      dispatchUserCommand(context.engine.core, TASK, { clientId: 'c1', router, origin: 'local', guest: null })
+    );
+    expect([taskId, routed]).toEqual([null, ['client:c1']]);
+  });
+
   test('a guest is held to the task it was handed', async () => {
     const { context } = startRoutes();
     const refusal = await Effect.runPromise(
       Effect.flip(
-        dispatchUserCommand(context.engine, TASK, {
+        dispatchUserCommand(context.engine.core, TASK, {
           clientId: null,
-          classify: null,
+          router: null,
           origin: 'remote',
           guest: { taskId: 'task-1' } as never,
         })
@@ -74,7 +87,7 @@ describe('GET /api/providers', () => {
   test('answers the providers the engine was given', async () => {
     const providers = [{ id: 'codex', label: 'Codex' }];
     const { send } = startRoutes({
-      providers: { listProviders: () => Promise.resolve(providers) } as never,
+      providers: { listProviders: Effect.succeed(providers) } as never,
     });
     expect(await (await send('/api/providers')).json()).toEqual(providers);
   });

@@ -6,12 +6,22 @@ import {
   type Run,
   type RunDelegation,
 } from '@shinsa/core';
+import { Duration, Effect } from 'effect';
 import {
-  awaitDelegation,
+  awaitDelegation as awaitOutcome,
   resolveDelegatedReply,
   resolveDelivery,
 } from '../../src/agents/delegations/delivery.ts';
-import { createRun, createStubEngine } from '../helpers/state.ts';
+import { createStubEngineCoreLayer } from '../helpers/engine-core.ts';
+import { createRun, createStubEngine, type StubEngine } from '../helpers/state.ts';
+
+function awaitDelegation(stub: StubEngine, childRunId: string, timeoutMs: number, signal: AbortSignal) {
+  return Effect.runPromise(
+    awaitOutcome(childRunId, Duration.millis(timeoutMs), signal).pipe(
+      Effect.provide(createStubEngineCoreLayer(stub))
+    )
+  );
+}
 
 function delegation(patch: Partial<RunDelegation> = {}): RunDelegation {
   return {
@@ -157,22 +167,22 @@ describe('awaitDelegation', () => {
   test('returns at once for a task that has ended, is gone, or asks', async () => {
     const signal = new AbortController().signal;
     const ended = engineWith(createRun({ id: 'c', endedAt: 1, delegation: delegation() }));
-    expect(await awaitDelegation(ended.engine, 'c', 1_000, signal)).toBe('settled');
-    expect(await awaitDelegation(ended.engine, 'gone', 1_000, signal)).toBe('settled');
+    expect(await awaitDelegation(ended, 'c', 1_000, signal)).toBe('settled');
+    expect(await awaitDelegation(ended, 'gone', 1_000, signal)).toBe('settled');
     const asking = engineWith(createRun({ id: 'c', delegation: delegation({ question: QUESTION }) }));
-    expect(await awaitDelegation(asking.engine, 'c', 1_000, signal)).toBe('question');
+    expect(await awaitDelegation(asking, 'c', 1_000, signal)).toBe('question');
   });
 
   test('a question it has already seen does not end the wait', async () => {
     const seen = engineWith(
       createRun({ id: 'c', delegation: delegation({ question: { ...QUESTION, delivered: true } }) })
     );
-    expect(await awaitDelegation(seen.engine, 'c', 5, new AbortController().signal)).toBe('timeout');
+    expect(await awaitDelegation(seen, 'c', 5, new AbortController().signal)).toBe('timeout');
   });
 
   test('wakes when the state changes, and stops listening once it has an answer', async () => {
     const stub = engineWith(createRun({ id: 'c', delegation: delegation() }));
-    const waiting = awaitDelegation(stub.engine, 'c', 10_000, new AbortController().signal);
+    const waiting = awaitDelegation(stub, 'c', 10_000, new AbortController().signal);
     stub.notify();
     stub.update((state) => {
       state.runs.c = createRun({ id: 'c', endedAt: 9, delegation: delegation() });
@@ -184,10 +194,10 @@ describe('awaitDelegation', () => {
   test('a stopped tool call ends the wait as if it timed out', async () => {
     const stub = engineWith(createRun({ id: 'c', delegation: delegation() }));
     const controller = new AbortController();
-    const waiting = awaitDelegation(stub.engine, 'c', 10_000, controller.signal);
+    const waiting = awaitDelegation(stub, 'c', 10_000, controller.signal);
     controller.abort();
     expect(await waiting).toBe('timeout');
-    expect(await awaitDelegation(stub.engine, 'c', 10_000, controller.signal)).toBe('timeout');
+    expect(await awaitDelegation(stub, 'c', 10_000, controller.signal)).toBe('timeout');
   });
 });
 

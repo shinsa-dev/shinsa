@@ -10,10 +10,12 @@ import {
   type TaskRefs,
   WORKING_REF,
 } from '@shinsa/core';
+import { Cause, Effect, Exit } from 'effect';
 import * as React from 'react';
 import type { FileSave } from '@/lib/code/edits.ts';
 import { requestCodeAnswer, requestCodeSearch, requestFileSave } from '@/lib/connection/code-reads.ts';
 import { describeFailure } from '@/lib/connection/commands.ts';
+import { forkApp, runApp } from '@/lib/runtime/app.ts';
 
 export type Loaded<T> =
   | { status: 'idle' }
@@ -109,18 +111,18 @@ function remember<T>(url: string, key: string, create: () => Promise<T>): Promis
     touch(reads, key, known);
     return known as Promise<T>;
   }
-  const pending = create();
+  const pending: Promise<T> = runApp(
+    Effect.onExit(Effect.promise(create), (exit) =>
+      Effect.sync(() => {
+        if (reads.get(key) !== pending) return;
+        if (Exit.isSuccess(exit)) recordRead(url, key, exit.value);
+        else reads.delete(key);
+      })
+    )
+  );
   const evicted = touch(reads, key, pending);
   if (evicted !== null) removeRead(evicted);
   touch(newest, url, key);
-  pending.then(
-    (value) => {
-      if (reads.get(key) === pending) recordRead(url, key, value);
-    },
-    () => {
-      if (reads.get(key) === pending) reads.delete(key);
-    }
-  );
   return pending;
 }
 
@@ -185,13 +187,21 @@ export function useCodeRead<T>(url: string | null, version = ''): Loaded<T> {
   React.useLayoutEffect(() => {
     if (key === null || url === null) return;
     let alive = true;
-    requestCodeRead<T>(url, version).then(
-      (value) => {
-        if (alive) setLoaded({ url, key, value: { status: 'ready', value } });
-      },
-      (error: unknown) => {
-        if (alive) setLoaded({ url, key, value: { status: 'error', message: describeFailure(error) } });
-      }
+    forkApp(
+      Effect.exit(Effect.promise(() => requestCodeRead<T>(url, version))).pipe(
+        Effect.flatMap((exit) =>
+          Effect.sync(() => {
+            if (!alive) return;
+            if (Exit.isSuccess(exit)) setLoaded({ url, key, value: { status: 'ready', value: exit.value } });
+            else
+              setLoaded({
+                url,
+                key,
+                value: { status: 'error', message: describeFailure(Cause.squash(exit.cause)) },
+              });
+          })
+        )
+      )
     );
     return () => {
       alive = false;
@@ -276,13 +286,19 @@ export function useRepoTrees(task: Task, ref: string, dirs: readonly string[]) {
   React.useLayoutEffect(() => {
     let alive = true;
     for (const url of key.split('\n')) {
-      requestCodeRead<RepoTree>(url, version).then(
-        () => {
-          if (alive) settle();
-        },
-        (error: unknown) => {
-          if (alive) setFailures((current) => new Map(current).set(url, describeFailure(error)));
-        }
+      forkApp(
+        Effect.exit(Effect.promise(() => requestCodeRead<RepoTree>(url, version))).pipe(
+          Effect.flatMap((exit) =>
+            Effect.sync(() => {
+              if (!alive) return;
+              if (Exit.isSuccess(exit)) settle();
+              else
+                setFailures((current) =>
+                  new Map(current).set(url, describeFailure(Cause.squash(exit.cause)))
+                );
+            })
+          )
+        )
       );
     }
     return () => {
@@ -366,28 +382,38 @@ export function useRepoSearch(task: Task, ref: string | null, search: CodeSearch
       view: { loaded: holdLoaded(current.view.loaded, LOADING), searching: true },
     }));
     const { taskId, params } = readCodeKey(key);
-    requestCodeSearch(taskId, Object.fromEntries(params), (line) => {
-      if (line.kind === 'failed') {
-        failure = line.message;
-        return;
-      }
-      result = applySearchLine(result, line);
-      if (line.kind === 'done' || frame !== null) return;
-      frame = requestAnimationFrame(() => {
-        frame = null;
-        show(true);
-      });
-    }).then(
-      () => {
-        if (frame !== null) cancelAnimationFrame(frame);
-        if (failure !== null) {
-          fail(failure);
+    const searched = Effect.promise(() =>
+      requestCodeSearch(taskId, Object.fromEntries(params), (line) => {
+        if (line.kind === 'failed') {
+          failure = line.message;
           return;
         }
-        touch(searches, key, result, CODE_SEARCH_LIMIT);
-        show(false);
-      },
-      (error: unknown) => fail(describeFailure(error))
+        result = applySearchLine(result, line);
+        if (line.kind === 'done' || frame !== null) return;
+        frame = requestAnimationFrame(() => {
+          frame = null;
+          show(true);
+        });
+      })
+    );
+    forkApp(
+      Effect.exit(searched).pipe(
+        Effect.flatMap((exit) =>
+          Effect.sync(() => {
+            if (Exit.isFailure(exit)) {
+              fail(describeFailure(Cause.squash(exit.cause)));
+              return;
+            }
+            if (frame !== null) cancelAnimationFrame(frame);
+            if (failure !== null) {
+              fail(failure);
+              return;
+            }
+            touch(searches, key, result, CODE_SEARCH_LIMIT);
+            show(false);
+          })
+        )
+      )
     );
     return () => {
       alive = false;

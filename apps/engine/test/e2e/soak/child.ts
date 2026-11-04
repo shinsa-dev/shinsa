@@ -9,11 +9,12 @@ import {
   type Task,
   type TaskStage,
 } from '@shinsa/core';
+import { Effect } from 'effect';
 import type { ModelSource } from '../../../src/agents/index.ts';
-import { startShinsa } from '../../../src/serve.ts';
-import { EventLog } from '../../../src/store/index.ts';
 import { createConfigAt } from '../../helpers/config.ts';
+import { openEventLog } from '../../helpers/event-log.ts';
 import { createRandom } from '../../helpers/random.ts';
+import { startShinsa } from '../../helpers/serve.ts';
 import { FakeAgents } from '../harness.ts';
 
 const root = Bun.env.SOAK_ROOT ?? '';
@@ -28,9 +29,9 @@ let readState: (() => ShinsaState) | null = null;
 agents.state = () => readState?.() ?? null;
 
 const shinsa = await startShinsa(config, {
-  startSession: agents.start,
+  startSession: agents.startSession,
   resolveLogin: () => Promise.resolve(null),
-  models: { listModels: () => Promise.resolve([]) } as ModelSource,
+  models: { listModels: Effect.succeed([]) } as ModelSource,
   discover: () => Promise.resolve({ candidates: [], truncated: false, refused: [] }),
 });
 
@@ -113,7 +114,7 @@ function cancelOnCue() {
   }
 }
 
-const outbox = new EventLog(config.databasePath);
+const outbox = openEventLog(config.databasePath);
 
 let stopping = false;
 

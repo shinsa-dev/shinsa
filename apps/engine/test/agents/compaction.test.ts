@@ -1,12 +1,17 @@
 import { describe, expect, test } from 'bun:test';
 import { createState, type ShinsaState } from '@shinsa/core';
+import { Deferred, Duration, Effect, Fiber, Layer, type Scope } from 'effect';
+import { TestClock } from 'effect/testing';
 import {
   COMPACTION_NEAR_LIMIT,
-  IdleCompaction,
-  resolveCompactionWindow,
-} from '../../src/agents/compaction.ts';
+  CompactionFailed,
+  IdleCompactor,
+} from '../../src/agents/compaction/schema.ts';
+import { IdleCompaction } from '../../src/agents/compaction/service.ts';
+import { resolveCompactionWindow } from '../../src/agents/compaction/window.ts';
 import type { SessionContext } from '../../src/agents/providers/index.ts';
-import { until } from '../helpers/index.ts';
+import { JsonLogger } from '../../src/log/service.ts';
+import { EngineCore } from '../../src/runtime/engine/service.ts';
 import { captureLogs } from '../helpers/logs.ts';
 import { createGate, createRun, createTask } from '../helpers/state.ts';
 
@@ -164,77 +169,95 @@ describe('when an idle session compacts', () => {
 });
 
 describe('the compaction timer', () => {
-  function setUp(state: ShinsaState, now: () => number) {
-    const started: string[] = [];
-    let finish: () => void = () => undefined;
-    const compaction = new IdleCompaction(
-      () => state,
-      (runId, sessionId) => {
-        started.push(`${runId}:${sessionId}`);
-        return new Promise<void>((resolve) => {
-          finish = resolve;
-        });
-      },
-      { now }
+  function run(
+    state: () => ShinsaState,
+    compact: (runId: string, sessionId: string) => Effect.Effect<void, CompactionFailed>,
+    body: (compaction: IdleCompaction['Service']) => Effect.Effect<void, never, Scope.Scope>
+  ) {
+    const engine = { state: Effect.sync(state) } as unknown as EngineCore['Service'];
+    return Effect.runPromise(
+      Effect.scoped(IdleCompaction.use(body)).pipe(
+        Effect.provide(
+          IdleCompaction.layer.pipe(
+            Layer.provide(
+              Layer.merge(
+                Layer.succeed(EngineCore, engine),
+                Layer.succeed(IdleCompactor, IdleCompactor.of(compact))
+              )
+            ),
+            Layer.provideMerge(Layer.merge(TestClock.layer(), JsonLogger))
+          )
+        )
+      )
     );
-    return { compaction, started, finish: () => finish() };
   }
 
   test('compacts when the window opens, and a new run on the task waits for it to finish', async () => {
     const state = idleState();
-    const { compaction, started, finish } = setUp(state, () => NOW + HOUR - 60_000);
-    compaction.record('run-1', CONTEXT);
-    compaction.schedule('task-1');
-    await until('the compaction', () => started.length === 1);
-    expect(started).toEqual(['run-1:s1']);
-    let settled = false;
-    const waiting = compaction.settle('task-1').then(() => {
-      settled = true;
-    });
-    await Bun.sleep(0);
-    expect(settled).toBe(false);
-    finish();
-    await waiting;
-    expect(settled).toBe(true);
+    const started: string[] = [];
+    const finish = Effect.runSync(Deferred.make<void>());
+    await run(
+      () => state,
+      (runId, sessionId) => {
+        started.push(`${runId}:${sessionId}`);
+        return Deferred.await(finish);
+      },
+      (compaction) =>
+        Effect.gen(function* () {
+          yield* TestClock.setTime(NOW + HOUR - 60_000);
+          yield* compaction.record('run-1', CONTEXT);
+          yield* compaction.schedule('task-1');
+          yield* TestClock.adjust(Duration.zero);
+          expect(started).toEqual(['run-1:s1']);
+          const waiting = yield* Effect.forkChild(compaction.settle('task-1'));
+          yield* Effect.yieldNow;
+          expect(waiting.pollUnsafe()).toBeUndefined();
+          yield* Deferred.succeed(finish, undefined);
+          yield* Fiber.join(waiting);
+        })
+    );
   });
 
   test('a newer run, a cancel or a stop drops the waiting compaction', async () => {
     const state = idleState();
-    let now = NOW;
     let reads = 0;
     const started: string[] = [];
-    const compaction = new IdleCompaction(
+    await run(
       () => {
         reads += 1;
         return state;
       },
       (runId) => {
         started.push(runId);
-        return Promise.resolve();
+        return Effect.void;
       },
-      { now: () => now }
+      (compaction) =>
+        Effect.gen(function* () {
+          yield* TestClock.setTime(NOW);
+          yield* compaction.schedule('task-1');
+          yield* compaction.record('run-1', CONTEXT);
+          yield* compaction.schedule('task-1');
+          yield* compaction.cancel('task-1');
+          yield* compaction.cancel('task-1');
+          yield* compaction.schedule('task-1');
+          yield* compaction.stop;
+          yield* compaction.record('missing', CONTEXT);
+          yield* compaction.record('run-1', { ...CONTEXT, usedTokens: 10 });
+          yield* compaction.schedule('task-1');
+          yield* compaction.record('run-1', CONTEXT);
+          yield* TestClock.setTime(NOW + HOUR - 3 * 60_000);
+          yield* compaction.schedule('task-1');
+          state.runs['run-2'] = createRun({ id: 'run-2' });
+          const scheduled = reads;
+          yield* TestClock.adjust(Duration.minutes(1));
+          expect(reads).toBeGreaterThan(scheduled);
+          expect(started).toEqual([]);
+          yield* compaction.settle('task-1');
+        })
     );
-    compaction.schedule('task-1');
-    compaction.record('run-1', CONTEXT);
-    compaction.schedule('task-1');
-    compaction.cancel('task-1');
-    compaction.cancel('task-1');
-    compaction.schedule('task-1');
-    await compaction.stop();
-    compaction.record('missing', CONTEXT);
-    compaction.record('run-1', { ...CONTEXT, usedTokens: 10 });
-    compaction.schedule('task-1');
-    compaction.record('run-1', CONTEXT);
-    now = NOW + HOUR - 60_000;
-    compaction.schedule('task-1');
-    state.runs['run-2'] = createRun({ id: 'run-2' });
-    const scheduled = reads;
-    await until('the timer to look again', () => reads > scheduled);
-    expect(started).toEqual([]);
-    await compaction.settle('task-1');
   });
 
-  test('only the last session a later step would resume is remembered, and a finished task forgets it', () => {
+  test('only the last session a later step would resume is remembered, and a finished task forgets it', async () => {
     const state = idleState((draft) => {
       draft.runs['run-5'] = createRun({ id: 'run-5', role: 'reviewer', endedAt: 9, outcome: 'completed' });
       draft.runs['run-6'] = createRun({
@@ -243,37 +266,50 @@ describe('the compaction timer', () => {
         delegation: { parentRunId: 'run-1' },
       } as never);
     });
-    const { compaction, started } = setUp(state, () => NOW);
-    compaction.record('run-1', CONTEXT);
-    compaction.record('run-5', null);
-    compaction.record('run-6', null);
-    compaction.schedule('task-1');
-    compaction.cancel('task-1');
-    state.tasks['task-1'] = createTask({ stage: 'merged' });
-    compaction.schedule('task-1');
-    compaction.schedule('task-1');
-    state.tasks['task-1'] = createTask({ stage: 'awaiting_review' });
-    compaction.schedule('task-1');
-    Reflect.deleteProperty(state.tasks, 'task-1');
-    compaction.record('run-1', CONTEXT);
-    compaction.schedule('task-1');
-    expect(started).toEqual([]);
+    const started: string[] = [];
+    await run(
+      () => state,
+      (runId) => {
+        started.push(runId);
+        return Effect.void;
+      },
+      (compaction) =>
+        Effect.gen(function* () {
+          yield* TestClock.setTime(NOW);
+          yield* compaction.record('run-1', CONTEXT);
+          yield* compaction.record('run-5', null);
+          yield* compaction.record('run-6', null);
+          yield* compaction.schedule('task-1');
+          yield* compaction.cancel('task-1');
+          state.tasks['task-1'] = createTask({ stage: 'merged' });
+          yield* compaction.schedule('task-1');
+          yield* compaction.schedule('task-1');
+          state.tasks['task-1'] = createTask({ stage: 'awaiting_review' });
+          yield* compaction.schedule('task-1');
+          Reflect.deleteProperty(state.tasks, 'task-1');
+          yield* compaction.record('run-1', CONTEXT);
+          yield* compaction.schedule('task-1');
+          expect(started).toEqual([]);
+        })
+    );
   });
 
   test('a failed compaction is logged', async () => {
     const state = idleState();
     const logs = captureLogs();
-    const compaction = new IdleCompaction(
+    await run(
       () => state,
-      () => Promise.reject(new Error('cli gone')),
-      {
-        now: () => NOW + HOUR - 60_000,
-      }
+      () => Effect.fail(new CompactionFailed({ message: 'cli gone' })),
+      (compaction) =>
+        Effect.gen(function* () {
+          yield* TestClock.setTime(NOW + HOUR - 60_000);
+          yield* compaction.record('run-1', CONTEXT);
+          yield* compaction.schedule('task-1');
+          yield* TestClock.adjust(Duration.zero);
+          yield* compaction.settle('task-1');
+        })
     );
-    compaction.record('run-1', CONTEXT);
-    compaction.schedule('task-1');
     const message = '[Compaction] An idle session could not be compacted';
-    await until('the warning', () => logs.fieldsOf(message).length > 0);
     expect(logs.fieldsOf(message)).toEqual([{ runId: 'run-1', error: 'cli gone' }]);
     logs.restore();
   });

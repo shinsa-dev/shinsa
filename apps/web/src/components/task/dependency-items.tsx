@@ -9,7 +9,7 @@ import {
   DropdownMenuSubContent,
   DropdownMenuSubTrigger,
 } from '@shinsa/ui/components/dropdown-menu';
-import { Icon } from '@shinsa/ui/components/icon';
+import { Icon, type IconName } from '@shinsa/ui/components/icon';
 import { Truncate } from '@shinsa/ui/components/truncate';
 import { cn } from '@shinsa/ui/lib/utils';
 import { DepthMark, resolveDepthIndent } from '@/components/tasks/row.tsx';
@@ -25,35 +25,44 @@ import { orderChains } from '@/lib/tasks/groups.ts';
 import { resolveTaskMenuIcon, resolveTaskStatus } from '@/lib/tasks/status.ts';
 import { navigate, resolveTaskPath } from '@/router.ts';
 
-function TaskChoiceItems({
-  state,
-  entries,
-  isChecked,
-  onToggle,
-}: {
+interface TaskChoiceSubProps {
   state: ShinsaState;
-  entries: { task: Task; depth: number }[];
+  icon: IconName;
+  label: string;
+  choices: Task[];
   isChecked: (choice: Task) => boolean;
   onToggle: (choice: Task) => void;
-}) {
-  return entries.map(({ task: choice, depth }) => {
-    const icon = resolveTaskMenuIcon(state, choice);
-    return (
-      <DropdownMenuCheckboxItem
-        key={choice.id}
-        checked={isChecked(choice)}
-        onCheckedChange={() => onToggle(choice)}
-      >
-        <span className={cn('flex min-w-0 items-center gap-2', resolveDepthIndent(depth))}>
-          {depth > 0 && <Icon name='IconArrowCornerDownRight' className='text-fg-2' />}
-          <DepthMark depth={depth} />
-          <Icon name={icon.name} className={icon.className} />
-          {choice.handle && <span className='shrink-0 text-fg-2 tabular-nums'>{choice.handle}</span>}
-          <Truncate>{choice.title}</Truncate>
-        </span>
-      </DropdownMenuCheckboxItem>
-    );
-  });
+}
+
+function TaskChoiceSub({ state, icon, label, choices, isChecked, onToggle }: TaskChoiceSubProps) {
+  return (
+    <DropdownMenuSub>
+      <DropdownMenuSubTrigger>
+        <Icon name={icon} />
+        {label}
+      </DropdownMenuSubTrigger>
+      <DropdownMenuSubContent className='max-h-80 max-w-80 overflow-y-auto'>
+        {orderChains(state, choices).map(({ task: choice, depth }) => {
+          const choiceIcon = resolveTaskMenuIcon(state, choice);
+          return (
+            <DropdownMenuCheckboxItem
+              key={choice.id}
+              checked={isChecked(choice)}
+              onCheckedChange={() => onToggle(choice)}
+            >
+              <span className={cn('flex min-w-0 items-center gap-2', resolveDepthIndent(depth))}>
+                {depth > 0 && <Icon name='IconArrowCornerDownRight' className='text-fg-2' />}
+                <DepthMark depth={depth} />
+                <Icon name={choiceIcon.name} className={choiceIcon.className} />
+                {choice.handle && <span className='shrink-0 text-fg-2 tabular-nums'>{choice.handle}</span>}
+                <Truncate>{choice.title}</Truncate>
+              </span>
+            </DropdownMenuCheckboxItem>
+          );
+        })}
+      </DropdownMenuSubContent>
+    </DropdownMenuSub>
+  );
 }
 
 export function DependencyItems({ state, task }: { state: ShinsaState; task: Task }) {
@@ -62,20 +71,14 @@ export function DependencyItems({ state, task }: { state: ShinsaState; task: Tas
   return (
     <>
       {choices.length > 0 && (
-        <DropdownMenuSub>
-          <DropdownMenuSubTrigger>
-            <Icon name='IconHourglass' />
-            {resolveDependencyLabel(task)}
-          </DropdownMenuSubTrigger>
-          <DropdownMenuSubContent className='max-h-80 max-w-80 overflow-y-auto'>
-            <TaskChoiceItems
-              state={state}
-              entries={orderChains(state, choices)}
-              isChecked={(choice) => task.waitsOn.includes(choice.id)}
-              onToggle={(choice) => void toggleDependency(task, choice)}
-            />
-          </DropdownMenuSubContent>
-        </DropdownMenuSub>
+        <TaskChoiceSub
+          state={state}
+          icon='IconHourglass'
+          label={resolveDependencyLabel(task)}
+          choices={choices}
+          isChecked={(choice) => task.waitsOn.includes(choice.id)}
+          onToggle={(choice) => void toggleDependency(task, choice)}
+        />
       )}
       {task.waitsOn.length > 0 && (
         <DropdownMenuItem icon='IconCrossMedium' onClick={() => void clearDependencies(task)}>
@@ -92,20 +95,14 @@ function StackItems({ state, task }: { state: ShinsaState; task: Task }) {
   return (
     <>
       {choices.length > 0 && (
-        <DropdownMenuSub>
-          <DropdownMenuSubTrigger>
-            <Icon name={BUNDLE_ICON} />
-            {STACK_LABEL}
-          </DropdownMenuSubTrigger>
-          <DropdownMenuSubContent className='max-h-80 max-w-80 overflow-y-auto'>
-            <TaskChoiceItems
-              state={state}
-              entries={orderChains(state, choices)}
-              isChecked={(choice) => task.stacksOn?.includes(choice.id) ?? false}
-              onToggle={(choice) => void toggleStack(task, choice)}
-            />
-          </DropdownMenuSubContent>
-        </DropdownMenuSub>
+        <TaskChoiceSub
+          state={state}
+          icon={BUNDLE_ICON}
+          label={STACK_LABEL}
+          choices={choices}
+          isChecked={(choice) => task.stacksOn?.includes(choice.id) ?? false}
+          onToggle={(choice) => void toggleStack(task, choice)}
+        />
       )}
       {(task.stacksOn?.length ?? 0) > 0 && canChangeStack(task) && (
         <DropdownMenuItem icon='IconCrossMedium' onClick={() => void unstackTask(task)}>

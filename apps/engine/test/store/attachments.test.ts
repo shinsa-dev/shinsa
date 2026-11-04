@@ -1,13 +1,36 @@
 import { describe, expect, test } from 'bun:test';
 import { mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import {
-  ATTACHMENT_LIMIT_BYTES,
-  ATTACHMENT_ROUTE,
-  AttachmentStore,
-  readAttachmentUpload,
-} from '../../src/store/index.ts';
+import { Effect, Layer, Option } from 'effect';
+import { EngineConfig } from '../../src/config/service.ts';
+import type { AttachmentUpload } from '../../src/store/attachments/schema.ts';
+import { parseAttachmentUpload } from '../../src/store/attachments/upload.ts';
+import { ATTACHMENT_LIMIT_BYTES, ATTACHMENT_ROUTE, Attachments } from '../../src/store/index.ts';
+import { createConfigAt } from '../helpers/config.ts';
 import { createTempDir } from '../helpers/index.ts';
+
+class AttachmentStore {
+  readonly #attachments: Attachments['Service'];
+
+  constructor(attachmentsDir: string) {
+    const config = Layer.succeed(EngineConfig, createConfigAt(createTempDir(), { attachmentsDir }));
+    this.#attachments = Effect.runSync(
+      Attachments.pipe(Effect.provide(Attachments.layer.pipe(Layer.provide(config))))
+    );
+  }
+
+  write(upload: AttachmentUpload) {
+    return Effect.runSync(this.#attachments.write(upload));
+  }
+
+  selectFile(name: string) {
+    return Option.getOrNull(Effect.runSync(this.#attachments.selectFile(name)));
+  }
+}
+
+function readAttachmentUpload(body: Record<string, unknown>) {
+  return Effect.runSync(parseAttachmentUpload(body));
+}
 
 const PNG = Buffer.from('fake png bytes').toString('base64');
 

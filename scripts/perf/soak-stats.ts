@@ -1,23 +1,5 @@
 import { summarize } from './shell-stats.ts';
-
-export interface Frames {
-  clickToPaint: number;
-  longest: number;
-  over34: number;
-  frames: number;
-}
-
-export interface SoakSample {
-  lap: number;
-  minutes: number;
-  nodes: number;
-  heapMb: number;
-  idleBusy: number;
-  scriptBusy: number;
-  recalcsPerSecond: number;
-  layoutsPerSecond: number;
-  transition: Frames[];
-}
+import type { SoakSample } from './soak/schema.ts';
 
 const HEADER =
   '| Lap | Minutes | Elements | Heap after GC | Idle main thread | Idle script | Style recalcs/s | Layouts/s | Tab switch | Longest frame | Frames over 34 ms |';

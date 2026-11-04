@@ -1,6 +1,12 @@
 import { describe, expect, test } from 'bun:test';
 import type { ShinsaCommand, ShinsaEvent } from '@shinsa/core';
-import { handleProcessTool } from '../../../src/agents/tools/process/handler.ts';
+import { Effect } from 'effect';
+import { handleProcessTool as handleTool } from '../../../src/agents/tools/process/handler.ts';
+import type { ProcessToolCall } from '../../../src/agents/tools/process/schema.ts';
+
+function handleProcessTool(name: string, input: Record<string, unknown>, call: ProcessToolCall) {
+  return Effect.runPromise(handleTool(name, input, call));
+}
 
 function createCall(events: ShinsaEvent[] = []) {
   const sent: ShinsaCommand[] = [];
@@ -11,7 +17,7 @@ function createCall(events: ShinsaEvent[] = []) {
       attemptId: 'a-1',
       dispatch: (command: ShinsaCommand) => {
         sent.push(command);
-        return Promise.resolve(events);
+        return Effect.succeed(events);
       },
     },
   };

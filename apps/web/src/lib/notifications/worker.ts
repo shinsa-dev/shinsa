@@ -1,55 +1,44 @@
-export const NOTIFICATION_OPEN = 'shinsa-notification-open';
+import { Effect, Option, Predicate, Schema } from 'effect';
+import {
+  NOTIFICATION_FAILED,
+  NOTIFICATION_OPEN,
+  NotificationData,
+  NotificationFailed,
+  NotificationOpen,
+  type NotificationClients,
+  type NotificationWorker,
+} from './schema.ts';
 
-interface NotificationOpen {
-  type: typeof NOTIFICATION_OPEN;
-  path: string;
-}
+const decodeNotificationData = Schema.decodeUnknownOption(NotificationData);
 
-interface WindowClientLike {
-  focused: boolean;
-  focus: () => Promise<unknown>;
-  postMessage: (message: NotificationOpen) => void;
-}
+const isNotificationOpen = Schema.is(NotificationOpen);
 
-export interface NotificationClients {
-  matchAll: (options: { type: 'window' }) => Promise<readonly WindowClientLike[]>;
-  openWindow: (url: string) => Promise<unknown>;
-}
-
-export type NotificationWorker = Pick<ServiceWorkerContainer, 'controller' | 'ready'>;
-
-function isAppPath(path: unknown): path is string {
-  return typeof path === 'string' && path.startsWith('/') && !path.startsWith('//') && !path.includes('\\');
+function enterClients<A>(step: () => Promise<A>) {
+  return Effect.tryPromise({
+    try: step,
+    catch: (error) =>
+      new NotificationFailed({ message: Predicate.isError(error) ? error.message : NOTIFICATION_FAILED }),
+  });
 }
 
 export function readNotificationPath(data: unknown) {
-  const path = typeof data === 'object' && data !== null ? Reflect.get(data, 'path') : null;
-  return isAppPath(path) ? path : null;
+  return Option.getOrNull(Option.map(decodeNotificationData(data), (notice) => notice.path));
 }
 
-export async function openNotificationTarget(
+export const openNotificationTarget = Effect.fn('NotificationWorker.openTarget')(function* (
   path: string | null,
   home: string,
   clients: NotificationClients
 ) {
-  const windows = await clients.matchAll({ type: 'window' });
+  const windows = yield* enterClients(() => clients.matchAll({ type: 'window' }));
   const client = windows.find((candidate) => candidate.focused) ?? windows[0];
   if (!client) {
-    await clients.openWindow(path ?? home);
+    yield* enterClients(() => clients.openWindow(path ?? home));
     return;
   }
-  await client.focus();
+  yield* enterClients(() => client.focus());
   if (path) client.postMessage({ type: NOTIFICATION_OPEN, path });
-}
-
-function isNotificationOpen(data: unknown): data is NotificationOpen {
-  return (
-    typeof data === 'object' &&
-    data !== null &&
-    Reflect.get(data, 'type') === NOTIFICATION_OPEN &&
-    isAppPath(Reflect.get(data, 'path'))
-  );
-}
+});
 
 export function serveNotificationOpens(
   target: Pick<ServiceWorkerContainer, 'addEventListener' | 'removeEventListener'>,

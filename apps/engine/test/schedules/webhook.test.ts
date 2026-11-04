@@ -1,14 +1,52 @@
-import { describe, expect, spyOn, test } from 'bun:test';
+import { afterEach, describe, expect, test } from 'bun:test';
 import { createHmac } from 'node:crypto';
 import { SCHEDULE_LIMITS } from '@shinsa/core';
-import { log } from '../../src/log/index.ts';
-import {
-  isWebhookPath,
-  WEBHOOK_MAX_BODY_BYTES,
-  WEBHOOK_RATE_LIMIT_PER_MINUTE,
-  WebhookReceiver,
-} from '../../src/schedules/webhook.ts';
+import { Effect, Layer } from 'effect';
+import { EngineStopped } from '../../src/runtime/engine/schema.ts';
+import type { EngineCore } from '../../src/runtime/engine/service.ts';
+import { WEBHOOK_MAX_BODY_BYTES, WEBHOOK_RATE_LIMIT_PER_MINUTE } from '../../src/schedules/schema.ts';
+import { isWebhookPath } from '../../src/schedules/webhook/path.ts';
+import { WebhookDeliveryId } from '../../src/schedules/webhook/schema.ts';
+import { WebhookReceiver } from '../../src/schedules/webhook/service.ts';
+import { SecretStore } from '../../src/secrets/index.ts';
+import { captureLogs } from '../helpers/index.ts';
+import { openServices, type ServicesOptions } from '../runtime/harness.ts';
 import { addSchedule, createWorld, type World } from './fixtures.ts';
+
+const open: { close: () => Promise<void> }[] = [];
+
+afterEach(async () => {
+  for (const harness of open.splice(0)) await harness.close();
+});
+
+type Dispatch = EngineCore['Service']['dispatch'];
+
+async function openReceiver(
+  world: World,
+  options: ServicesOptions & { newId?: () => string; dispatch?: () => Dispatch } = { liveClock: true }
+) {
+  const { newId, dispatch, ...clock } = options;
+  const core = world.engine.core;
+  const layer = WebhookReceiver.layer.pipe(
+    Layer.provide(
+      Layer.mergeAll(
+        Layer.succeed(SecretStore, world.secrets.store),
+        newId ? Layer.succeed(WebhookDeliveryId, Effect.sync(newId)) : Layer.empty
+      )
+    )
+  );
+  const engine = {
+    ...core,
+    dispatch: ((command, dispatchOptions) =>
+      (dispatch?.() ?? core.dispatch)(command, dispatchOptions)) as Dispatch,
+  };
+  const harness = await openServices(layer, engine, clock);
+  open.push(harness);
+  const receiver = harness.service(WebhookReceiver);
+  return { ...harness, handle: (request: Request, url: URL) => harness.run(receiver.handle(request, url)) };
+}
+
+type Receiver = Awaited<ReturnType<typeof openReceiver>>;
 
 const SIGNED = { header: 'x-hub-signature-256', encoding: 'hex' as const, prefix: 'sha256=' };
 
@@ -26,9 +64,17 @@ async function hooked(options: { signed?: boolean; replayKey?: string | null; te
   const hook = world.secrets.upsertHook(schedule.id);
   if (options.signed) world.secrets.writeHookSecret(schedule.id, 'shh');
   let counter = 0;
-  const receiver = new WebhookReceiver(world.engine, world.secrets, { newId: () => `d${++counter}` });
+  let dispatch: Dispatch | null = null;
+  const receiver = await openReceiver(world, {
+    liveClock: true,
+    newId: () => `d${++counter}`,
+    dispatch: () => dispatch ?? world.engine.core.dispatch,
+  });
   const url = `http://127.0.0.1:5180/api/hooks/${schedule.id}/${hook.token}`;
-  return { world, schedule, receiver, url };
+  const replaceDispatch = (next: Dispatch) => {
+    dispatch = next;
+  };
+  return { world, schedule, receiver, url, replaceDispatch };
 }
 
 function post(url: string, body: string, headers: Record<string, string> = {}) {
@@ -39,7 +85,7 @@ function post(url: string, body: string, headers: Record<string, string> = {}) {
   });
 }
 
-function send(receiver: WebhookReceiver, request: Request) {
+function send(receiver: Receiver, request: Request) {
   return receiver.handle(request, new URL(request.url));
 }
 
@@ -154,9 +200,8 @@ describe('receiving a webhook', () => {
   });
 
   test('stops taking requests past its rate limit for the minute', async () => {
-    let now = 0;
     const { url, world, schedule } = await hooked({ replayKey: null });
-    const limited = new WebhookReceiver(world.engine, world.secrets, { now: () => now });
+    const limited = await openReceiver(world, { now: 0 });
     for (let index = 0; index < WEBHOOK_RATE_LIMIT_PER_MINUTE; index += 1) {
       expect((await send(limited, post(url.replace(schedule.id, 'nope'), '{}'))).status).toBe(404);
     }
@@ -166,7 +211,7 @@ describe('receiving a webhook', () => {
     }
     expect(statuses.filter((status) => status === 202)).toHaveLength(WEBHOOK_RATE_LIMIT_PER_MINUTE);
     expect(statuses.at(-1)).toBe(429);
-    now += 60_000;
+    await limited.adjust(60_000);
     expect((await send(limited, post(url, '{}'))).status).toBe(202);
   });
 
@@ -187,18 +232,32 @@ describe('receiving a webhook', () => {
   });
 
   test('a delivery the log refuses answers with an error and is logged', async () => {
-    const { world, receiver, url } = await hooked();
-    world.engine.dispatch = () => Promise.reject(new Error('disk full'));
-    const warn = spyOn(log, 'warn').mockImplementation(() => undefined);
+    const { receiver, url, replaceDispatch } = await hooked();
+    replaceDispatch(() => Effect.fail(new EngineStopped({ message: 'disk full' })));
+    const logs = captureLogs();
     const response = await send(receiver, post(url, '{}'));
+    logs.restore();
     expect(response.status).toBe(500);
-    expect(warn).toHaveBeenCalledWith('[Webhooks] A delivery could not be recorded', expect.anything());
-    warn.mockRestore();
+    expect(logs.fieldsOf('[Webhooks] A delivery could not be recorded')).toEqual([
+      { scheduleId: expect.any(String), error: 'disk full' },
+    ]);
+  });
+
+  test('a body that cannot be read answers with an error and is logged', async () => {
+    const { receiver, url } = await hooked();
+    const broken = new ReadableStream({
+      pull: (controller) => controller.error(new Error('connection reset')),
+    });
+    const logs = captureLogs();
+    const response = await send(receiver, new Request(url, { method: 'POST', body: broken }));
+    logs.restore();
+    expect(response.status).toBe(500);
+    expect(logs.fieldsOf('[Webhooks] A delivery could not be recorded')).toHaveLength(1);
   });
 
   test('a delivery the schedule no longer takes is reported as a duplicate', async () => {
-    const { world, receiver, url } = await hooked();
-    world.engine.dispatch = () => Promise.resolve([]);
+    const { receiver, url, replaceDispatch } = await hooked();
+    replaceDispatch(() => Effect.succeed([]));
     expect((await readJson(await send(receiver, post(url, '{}')))).outcome).toBe('duplicate');
   });
 

@@ -1,14 +1,16 @@
 import { describe, expect, test } from 'bun:test';
-import { chmodSync, readFileSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { BunServices } from '@effect/platform-bun';
-import { type Duration, Effect, Layer, Redacted } from 'effect';
+import { type Duration, Effect, Fiber, Layer, Redacted } from 'effect';
+import { TestClock } from 'effect/testing';
 import { Cloudflared } from '../../src/remote/cloudflared/service.ts';
 import { createInstalledConnector } from '../../src/remote/connector/installed.ts';
 import { createRefusedConnector } from '../../src/remote/connector/refused.ts';
 import { ConnectTimeout } from '../../src/remote/connector/schema.ts';
 import { TunnelConnector } from '../../src/remote/connector/service.ts';
 import { createTempDir } from '../helpers/index.ts';
+import { until } from '../helpers/until.ts';
 
 function writeFake(script: string) {
   const dir = createTempDir();
@@ -71,10 +73,17 @@ describe('the cloudflared connector', () => {
 
   test('names the last line cloudflared printed when it does not connect in time', async () => {
     const fake = writeFake(
-      'echo "INF Starting tunnel" >&2; echo "ERR Failed to dial a quic connection error=timeout" >&2; exec sleep 30'
+      'echo "INF Starting tunnel" >&2; echo "ERR Failed to dial a quic connection error=timeout" >&2; touch "$(dirname "$0")/printed"; exec sleep 30'
     );
     const error = await Effect.runPromise(
-      Effect.flip(open('t', 'http://127.0.0.1:1')).pipe(Effect.scoped, provideFake(fake.path, '500 millis'))
+      Effect.gen(function* () {
+        const opening = yield* Effect.forkChild(Effect.flip(open('t', 'http://127.0.0.1:1')));
+        yield* Effect.promise(() =>
+          until('cloudflared to print', () => existsSync(join(fake.dir, 'printed')))
+        );
+        yield* TestClock.adjust('30 seconds');
+        return yield* Fiber.join(opening);
+      }).pipe(Effect.scoped, provideFake(fake.path), Effect.provide(TestClock.layer()))
     );
     expect(error.message).toBe(
       'cloudflared did not connect within 30 seconds. It last printed: ERR Failed to dial a quic connection error=timeout'

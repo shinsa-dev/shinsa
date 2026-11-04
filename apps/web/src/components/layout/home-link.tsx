@@ -3,24 +3,27 @@ import { BrandLink } from '@/components/layout/brand-link.tsx';
 import { NavButton } from '@/components/layout/nav-button.tsx';
 import { DesktopChrome, HOME_SHORTCUT, isDesktop } from '@/lib/desktop.ts';
 
+export type HomeLinkVariant = 'bar' | 'icon' | 'brand';
+
 export function HomeLink({
+  variant = 'bar',
   onNavigate,
-  brandClassName,
 }: {
+  variant?: HomeLinkVariant;
   onNavigate?: () => void;
-  brandClassName?: string;
 }) {
   const chrome = React.useContext(DesktopChrome);
-  if (chrome || isDesktop())
-    return (
-      <NavButton
-        page='home'
-        label='Home'
-        icon='IconHomeRoundDoor'
-        activeIcon='IconHomeRoundDoorFilled'
-        shortcut={HOME_SHORTCUT}
-        onNavigate={onNavigate}
-      />
-    );
-  return <BrandLink onNavigate={onNavigate} className={brandClassName} />;
+  const desktop = chrome || isDesktop();
+  if (variant === 'brand' && !desktop) return <BrandLink onNavigate={onNavigate} />;
+  return (
+    <NavButton
+      page='home'
+      label='Home'
+      icon='IconHomeRoundDoor'
+      activeIcon='IconHomeRoundDoorFilled'
+      shortcut={HOME_SHORTCUT}
+      iconOnly={variant === 'icon'}
+      onNavigate={onNavigate}
+    />
+  );
 }

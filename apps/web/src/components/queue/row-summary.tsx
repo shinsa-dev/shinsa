@@ -71,6 +71,7 @@ export function RowSummary({
   const { track, count } = progress;
   const note =
     progress.note ?? describeBundleWait(state, task) ?? (postMerge && run ? resolveStageLabel(task) : null);
+  const activity = detail && (run || note);
   return (
     <span className='flex min-w-0 flex-1 items-center gap-2'>
       <span className='shrink-0'>
@@ -83,7 +84,7 @@ export function RowSummary({
           </>
         )}
       </span>
-      {track}
+      <span className={cn('flex shrink-0', activity && 'max-sm:hidden')}>{track}</span>
       {detail && (
         <span className='flex min-w-0 flex-1 contain-inline-size'>
           {run ? <LiveActivity run={run} fallback={note} /> : note && <Truncate>{note}</Truncate>}

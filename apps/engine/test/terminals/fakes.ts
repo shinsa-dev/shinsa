@@ -1,6 +1,5 @@
 import type { TerminalInfo } from '@shinsa/core';
-import type { TerminalProcess, TerminalSpawner, TerminalSpawnOptions } from '../../src/terminals/pty.ts';
-import type { TerminalViewer } from '../../src/terminals/session.ts';
+import type { TerminalProcess, TerminalSpawnOptions, TerminalViewer } from '../../src/terminals/schema.ts';
 
 interface FakeProcess extends TerminalProcess {
   command: string[];
@@ -14,14 +13,14 @@ interface FakeProcess extends TerminalProcess {
 
 export function createFakeSpawner() {
   const spawned: FakeProcess[] = [];
-  const spawn: TerminalSpawner = (command, options) => {
+  const spawn = (command: readonly string[], options: TerminalSpawnOptions) => {
     let resolveExit: (code: number) => void = () => undefined;
     const exited = new Promise<number>((resolve) => {
       resolveExit = resolve;
     });
     const process: FakeProcess = {
       pid: 1000 + spawned.length,
-      command,
+      command: [...command],
       options,
       written: [],
       sizes: [],

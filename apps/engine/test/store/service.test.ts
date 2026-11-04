@@ -1,7 +1,8 @@
 import { describe, expect, test } from 'bun:test';
 import { join } from 'node:path';
-import { Effect, Option } from 'effect';
+import { Effect, Layer, Option } from 'effect';
 import { SqlClient } from 'effect/sql';
+import { EngineConfig } from '../../src/config/service.ts';
 import { CommandLog } from '../../src/store/commands/service.ts';
 import { Events } from '../../src/store/events/service.ts';
 import { Evidence } from '../../src/store/evidence/service.ts';
@@ -9,6 +10,7 @@ import { LogMigrator } from '../../src/store/migrations/service.ts';
 import { Outbox } from '../../src/store/outbox/service.ts';
 import { Receipts } from '../../src/store/receipts/service.ts';
 import { runTest } from '../harness.ts';
+import { createConfigAt } from '../helpers/config.ts';
 import { createTempDir } from '../helpers/index.ts';
 
 const TRIAGE = { kind: 'task.triage', taskId: 't1' } as const;
@@ -80,7 +82,13 @@ describe('the store services', () => {
           evidence.copyFile(join(dir, 'missing'), { taskId: 't', round: 1 }, 'x')
         );
         return [folder, missing];
-      }).pipe(Effect.provide(Evidence.layer(dir)))
+      }).pipe(
+        Effect.provide(
+          Evidence.layer.pipe(
+            Layer.provide(Layer.succeed(EngineConfig, createConfigAt(createTempDir(), { evidenceDir: dir })))
+          )
+        )
+      )
     );
     expect(errors.map((error) => error._tag)).toEqual(['EvidenceFolderInvalid', 'EvidenceSourceMissing']);
   });

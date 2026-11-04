@@ -38,7 +38,7 @@ export const MERGE_STEP_KIND: Record<MergeStepKind, { label: string; icon: IconN
 
 export const MERGE_WAIT_KIND: Record<MergeWaitView['kind'], { label: string; icon: IconName }> = {
   wait: { label: 'Linked task', icon: 'IconHourglass' },
-  bundle: { label: 'Bundle', icon: 'IconLayersThree' },
+  bundle: { label: 'Merges with this one', icon: 'IconLayersThree' },
 };
 
 export function listTimedSteps(task: Task, when: MergeStepTiming, round: number | null = null) {
@@ -109,7 +109,7 @@ function listBundleWaits(state: Pick<ShinsaState, 'tasks'>, task: Task): MergeWa
       key: `bundle:${above.id}`,
       taskId: above.id,
       kind: 'bundle',
-      title: `${linkTask(above)} merges with this one`,
+      title: linkTask(above),
       detail: open === 0 ? null : `Tick its ${formatSteps(open)} before the merge on that task first.`,
       command: null,
       done: (Boolean(above.bundleReady) || isTaskComplete(above)) && open === 0,

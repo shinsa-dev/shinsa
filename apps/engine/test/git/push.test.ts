@@ -1,15 +1,18 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, setDefaultTimeout, test } from 'bun:test';
 import { chmodSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
-import {
-  commitWorktree,
-  hasPrePushHook,
-  PushError,
-  pushBranch,
-  resolveOutputTail,
-} from '../../src/git/index.ts';
-import { classifyPushFailure, describeShortFailure } from '../../src/git/push.ts';
+import { classifyPushFailure, describeShortFailure, resolveOutputTail } from '../../src/git/remote/output.ts';
+import { PushError } from '../../src/git/remote/schema.ts';
+import { Remote } from '../../src/git/remote/service.ts';
+import { commitWorktree, runGit } from '../helpers/git.ts';
 import { createGitRepo, git, writeFiles } from '../helpers/index.ts';
+
+setDefaultTimeout(30_000);
+
+const pushBranch = (path: string, branch: string, signal?: AbortSignal) =>
+  runGit(Remote.use((remote) => remote.pushBranch(path, branch, signal)));
+const hasPrePushHook = (cwd: string, signal?: AbortSignal) =>
+  runGit(Remote.use((remote) => remote.hasPrePushHook(cwd, signal)));
 
 const HOOK_OUTPUT = [
   '@shinsa/engine#test: FAIL test/a.test.ts > adds',

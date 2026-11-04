@@ -3,23 +3,23 @@ import { describe, expect, test } from 'bun:test';
 import { join } from 'node:path';
 import type { ShinsaEffect } from '@shinsa/core';
 import { SETTLED_RETENTION_MS } from '../../src/store/index.ts';
-import { EventLog } from '../../src/store/index.ts';
+import { openEventLog, type TestEventLog } from '../helpers/event-log.ts';
 import { commitEvents, createTempDir } from '../helpers/index.ts';
 
 function openLog() {
   const path = join(createTempDir(), 'shinsa.sqlite');
-  return { path, log: new EventLog(path) };
+  return { path, log: openEventLog(path) };
 }
 
 const briefing: ShinsaEffect = { kind: 'briefing.request', projectId: null };
 
-function statuses(log: EventLog) {
+function statuses(log: TestEventLog) {
   return log.listEffectStatuses().map(({ kind, status, attempts }) => ({ kind, status, attempts }));
 }
 
 const receipt = (id: string) => ({ id, type: 'project.remove', target: 'projectId:a', fingerprint: 'f' });
 
-describe('EventLog', () => {
+describe('TestEventLog', () => {
   test('events are numbered from the given sequence and read back in order', () => {
     const { log } = openLog();
     const events = commitEvents(
@@ -75,7 +75,7 @@ describe('EventLog', () => {
     ]);
     expect(read.unreadable[0]?.error).toStartWith('The stored event is not valid JSON');
     expect(read.unreadable[1]?.error).toBe('The stored event does not match its type.');
-    expect(new EventLog(join(createTempDir(), 'empty.sqlite')).readEvents().lastSeq).toBe(0);
+    expect(openEventLog(join(createTempDir(), 'empty.sqlite')).readEvents().lastSeq).toBe(0);
     log.close();
   });
 

@@ -1,10 +1,4 @@
-import type { Effect } from 'effect';
-
-export interface ClockTimers {
-  now: () => number;
-  start: (fire: () => void, ms: number) => unknown;
-  clear: (timer: unknown) => void;
-}
+import { type Clock, Context, type Effect } from 'effect';
 
 export interface RunClockState {
   readonly remaining: number;
@@ -21,4 +15,6 @@ export interface RunClockHandle {
   readonly stop: Effect.Effect<void>;
 }
 
-export const NANOS_PER_MS = 1_000_000n;
+export const RunClockTime = Context.Reference<Clock.Clock | null>('shinsa/engine/agents/clock/RunClockTime', {
+  defaultValue: () => null,
+});

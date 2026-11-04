@@ -1,5 +1,5 @@
 import { Popover as PopoverPrimitive } from '@base-ui/react/popover';
-import { POPUP_SIDE_SLIDE, POPUP_SURFACE, POPUP_ZOOM } from '@shinsa/ui/lib/popup';
+import { POPUP_COLLISION_PADDING, POPUP_SIDE_SLIDE, POPUP_SURFACE, POPUP_ZOOM } from '@shinsa/ui/lib/popup';
 import { cn } from '@shinsa/ui/lib/utils';
 import type * as React from 'react';
 
@@ -34,6 +34,7 @@ function PopoverContent({
         sideOffset={sideOffset}
         anchor={anchor}
         collisionAvoidance={collisionAvoidance}
+        collisionPadding={POPUP_COLLISION_PADDING}
         className='isolate z-50'
       >
         <PopoverPrimitive.Popup
@@ -42,7 +43,7 @@ function PopoverContent({
             POPUP_SURFACE,
             POPUP_SIDE_SLIDE,
             POPUP_ZOOM,
-            'z-50 flex w-64 flex-col gap-2 p-2.5 text-xs outline-hidden duration-200',
+            'z-50 flex w-64 max-w-(--available-width) flex-col gap-2 p-2.5 text-xs outline-hidden duration-200',
             className
           )}
           {...props}

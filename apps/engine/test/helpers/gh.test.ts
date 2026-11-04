@@ -1,9 +1,9 @@
 import { describe, expect, test } from 'bun:test';
 import { existsSync, mkdirSync, utimesSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { runCommand } from '../../src/shell/index.ts';
 import { FakeGitHub } from '../e2e/harness.ts';
 import { createTempDir, until } from './index.ts';
+import { runCommand } from './shell.ts';
 
 const GH_EXIT_MS = 5_000;
 

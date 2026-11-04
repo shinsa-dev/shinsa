@@ -14,6 +14,7 @@ import {
 } from '@/lib/remote/mode.ts';
 import { serveRelayedRequests, startServiceWorker } from '@/lib/remote/relay.ts';
 import type { RemoteServices } from '@/lib/remote/services.ts';
+import { forkApp, runApp } from '@/lib/runtime/app.ts';
 import { admitTeamMachines } from '@/lib/teams/admit.ts';
 import { HostedTeamFeeds } from '@/lib/teams/feeds.ts';
 import { navigate } from '@/router.ts';
@@ -137,7 +138,10 @@ export function FleetApp({
     void (async () => {
       try {
         const rows = await admitTeamMachines(
-          await settleWaitingRows(await listMachineRows(services.dashboard, services.devices), services),
+          await settleWaitingRows(
+            await runApp(listMachineRows(services.dashboard, services.devices)),
+            services
+          ),
           {
             dashboard: services.dashboard,
             devices: services.devices,
@@ -198,10 +202,11 @@ export function FleetApp({
         );
         void hostedTeams.start();
         release.push(() => fleet?.close());
-        await startServiceWorker(services.worker, SERVICE_WORKER_PATH, SERVICE_WORKER_SCOPE);
+        await runApp(startServiceWorker(services.worker, SERVICE_WORKER_PATH, SERVICE_WORKER_SCOPE));
         if (!live) return;
         const current = fleet;
-        release.push(serveRelayedRequests(services.worker, (request) => current.fetch(request)));
+        const serving = forkApp(serveRelayedRequests(services.worker, (request) => current.fetch(request)));
+        release.push(() => serving.interruptUnsafe());
         release.push(serveNotificationOpens(services.worker, navigate));
         replaceConnection(current);
         release.push(() => replaceConnection(null));

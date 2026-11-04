@@ -1,10 +1,7 @@
-import { statSync } from 'node:fs';
-import { homedir, tmpdir } from 'node:os';
-import { runCommand } from '../../shell/index.ts';
+import { homedir } from 'node:os';
+import type { LocateDeps, ProgramLocation } from './versions/schema.ts';
 
-const VERSION_TIMEOUT_MS = 15_000;
-
-const versions = new Map<string, { mtimeMs: number; version: string | null }>();
+export type { LocateDeps, ProgramLocation } from './versions/schema.ts';
 
 function splitVersion(version: string) {
   return version.split('.').map((part) => Number.parseInt(part, 10) || 0);
@@ -18,34 +15,6 @@ export function compareVersions(left: string, right: string) {
     if (difference !== 0) return Math.sign(difference);
   }
   return 0;
-}
-
-function readModifiedAt(path: string) {
-  try {
-    return statSync(path).mtimeMs;
-  } catch {
-    return -1;
-  }
-}
-
-export async function readProgramVersion(path: string, parse: (output: string) => string | null) {
-  const mtimeMs = readModifiedAt(path);
-  const cached = versions.get(path);
-  if (cached && cached.mtimeMs === mtimeMs) return cached.version;
-  const result = await runCommand([path, '--version'], tmpdir(), { timeoutMs: VERSION_TIMEOUT_MS });
-  const version = parse(`${result.stdout}\n${result.stderr}`);
-  versions.set(path, { mtimeMs, version });
-  return version;
-}
-
-export interface ProgramLocation {
-  path: string | null;
-  override: string | null;
-}
-
-export interface LocateDeps {
-  env?: Record<string, string | undefined>;
-  which?: (command: string) => string | null;
 }
 
 export function whichOnPath(command: string) {

@@ -17,6 +17,7 @@ import {
   serializeSlackDecisionValue,
   verifySlackForwardSignature,
 } from '@shinsa/core';
+import { Effect } from 'effect';
 import { SLACK_BOT_SCOPES } from '../src/integrations/slack/schema.ts';
 import { SLACK_DECISION_REFUSALS } from '../src/routes/slack-events/schema.ts';
 import { SLACK_USER_SCOPES } from '../src/routes/slack-link/schema.ts';
@@ -561,7 +562,9 @@ describe('a mention from someone', () => {
       timestamp: forward?.headers.get(SLACK_FORWARD_HEADERS.timestamp) ?? null,
     };
     expect(
-      await verifySlackForwardSignature(machine.connectKey, signature, forward?.body ?? '', harness.clock.now)
+      await Effect.runPromise(
+        verifySlackForwardSignature(machine.connectKey, signature, forward?.body ?? '', harness.clock.now)
+      )
     ).toBe(true);
     const mention = JSON.parse(forward?.body ?? '') as SlackMention;
     expect(mention).toMatchObject({
@@ -1019,11 +1022,13 @@ describe('deciding from the card', () => {
       timestamp: decision?.headers.get(SLACK_FORWARD_HEADERS.timestamp) ?? null,
     };
     expect(
-      await verifySlackForwardSignature(
-        machine.connectKey,
-        signature,
-        JSON.stringify(decision?.body),
-        harness.clock.now
+      await Effect.runPromise(
+        verifySlackForwardSignature(
+          machine.connectKey,
+          signature,
+          JSON.stringify(decision?.body),
+          harness.clock.now
+        )
       )
     ).toBe(true);
     expect(replies).toEqual([

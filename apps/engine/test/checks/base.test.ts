@@ -1,10 +1,41 @@
-import { describe, expect, test } from 'bun:test';
+import { afterEach, describe, expect, test } from 'bun:test';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { BaseCheckouts, type BaseRequest } from '../../src/checks/base.ts';
+import { Effect, Layer, ManagedRuntime } from 'effect';
+import { BaseCheckouts } from '../../src/checks/base/service.ts';
 import { type CheckFailure, listCheckFailures } from '../../src/checks/failures.ts';
 import type { CheckRun } from '../../src/checks/index.ts';
-import { captureLogs, createGitRepo, createTempDir, git, writeFiles } from '../helpers/index.ts';
+import { type BaseRequest, KeptCheckouts } from '../../src/checks/schema.ts';
+import { EngineConfig } from '../../src/config/service.ts';
+import { CodeUnavailable } from '../../src/git/history/schema.ts';
+import { GitTestLayer } from '../helpers/git.ts';
+import {
+  captureLogs,
+  createGitRepo,
+  createTempDir,
+  createTestConfig,
+  git,
+  writeFiles,
+} from '../helpers/index.ts';
+
+const runtimes: { dispose: () => Promise<void> }[] = [];
+
+afterEach(async () => {
+  await Promise.all(runtimes.splice(0).map((runtime) => runtime.dispose()));
+});
+
+function createBases(dir: string, keep?: number) {
+  const config = Layer.succeed(EngineConfig, { ...createTestConfig(), checkBasesDir: dir });
+  const kept = keep === undefined ? Layer.empty : Layer.succeed(KeptCheckouts, keep);
+  const runtime = ManagedRuntime.make(
+    BaseCheckouts.layer.pipe(Layer.provideMerge(Layer.mergeAll(GitTestLayer, config, kept)))
+  );
+  runtimes.push(runtime);
+  return {
+    compareWithBase: (request: BaseRequest) =>
+      runtime.runPromise(BaseCheckouts.use((bases) => bases.compare(request))),
+  };
+}
 
 const BROKEN_TEST = `import { expect, test } from 'bun:test';
 test('is broken', () => {
@@ -59,7 +90,7 @@ function requestOf(
 ): BaseRequest {
   return {
     repo: setup.repo,
-    resolveBase: () => Promise.resolve(base),
+    resolveBase: Effect.succeed(base),
     cwd: setup.path,
     run,
     timeoutMs: 60_000,
@@ -78,7 +109,7 @@ describe('running a failing check on the base commit', () => {
   test('a command that fails on the base too is compared error by error, run once per base and command', async () => {
     const setup = await createBase({ 'flag.txt': 'old' });
     const counter = join(createTempDir(), 'runs.log');
-    const bases = new BaseCheckouts(join(createTempDir(), 'bases'));
+    const bases = createBases(join(createTempDir(), 'bases'));
     const broken = runOf(countingCommand(counter, failing()));
     expect(countOf(await bases.compareWithBase(requestOf(setup, broken)))).toEqual({ added: 0, known: 1 });
     expect(countOf(await bases.compareWithBase(requestOf(setup, broken)))).toEqual({ added: 0, known: 1 });
@@ -91,7 +122,7 @@ describe('running a failing check on the base commit', () => {
     const setup = await createBase({ 'test/old.test.ts': '' });
     writeFiles(setup.path, { 'test/new.test.ts': '', 'src/new/x.ts': '' });
     await commitAll(setup.path, 'feat: add');
-    const bases = new BaseCheckouts(join(createTempDir(), 'bases'));
+    const bases = createBases(join(createTempDir(), 'bases'));
     const added = runOf(failing(), ['test/new.test.ts']);
     expect(await bases.compareWithBase(requestOf(setup, added))).toBeNull();
     expect(
@@ -103,7 +134,7 @@ describe('running a failing check on the base commit', () => {
 
   test('failing tests are compared by name, so a new test failing in a file that fails on the base is new', async () => {
     const setup = await createBase({ 'a.test.ts': BROKEN_TEST });
-    const bases = new BaseCheckouts(join(createTempDir(), 'bases'));
+    const bases = createBases(join(createTempDir(), 'bases'));
     const command = 'bun test ./a.test.ts';
     const output = (tests: string[]) =>
       [
@@ -127,7 +158,7 @@ describe('running a failing check on the base commit', () => {
   test('a failure Shinsa cannot read, now or on the base, is never compared', async () => {
     const setup = await createBase({});
     const counter = join(createTempDir(), 'runs.log');
-    const bases = new BaseCheckouts(join(createTempDir(), 'bases'));
+    const bases = createBases(join(createTempDir(), 'bases'));
     const unread = runOf(countingCommand(counter, 'exit 1'), null, null);
     expect(await bases.compareWithBase(requestOf(setup, unread))).toBeNull();
     expect(readCount(counter)).toBe(0);
@@ -136,7 +167,7 @@ describe('running a failing check on the base commit', () => {
 
   test('no base commit, a value that is not one, or a base git cannot check out is no comparison', async () => {
     const setup = await createBase({});
-    const bases = new BaseCheckouts(join(createTempDir(), 'bases'));
+    const bases = createBases(join(createTempDir(), 'bases'));
     const logs = captureLogs();
     try {
       const command = failing();
@@ -148,7 +179,7 @@ describe('running a failing check on the base commit', () => {
       );
       const broken = {
         ...requestOf(setup, runOf(command)),
-        resolveBase: () => Promise.reject(new Error('gone')),
+        resolveBase: Effect.fail(new CodeUnavailable({ message: 'gone' })),
       };
       expect(await bases.compareWithBase(broken)).toBeNull();
       expect(countOf(await bases.compareWithBase(requestOf(setup, runOf(command))))).toEqual({
@@ -163,7 +194,7 @@ describe('running a failing check on the base commit', () => {
   test('a cancelled or stopped run is not kept, so the next asks again', async () => {
     const setup = await createBase({});
     const counter = join(createTempDir(), 'runs.log');
-    const bases = new BaseCheckouts(join(createTempDir(), 'bases'));
+    const bases = createBases(join(createTempDir(), 'bases'));
     const slow = runOf(countingCommand(counter, 'sleep 30'));
     expect(await bases.compareWithBase({ ...requestOf(setup, slow), timeoutMs: 100 })).toBeNull();
     const controller = new AbortController();
@@ -181,7 +212,7 @@ describe('running a failing check on the base commit', () => {
     const dir = join(createTempDir(), 'bases');
     mkdirSync(join(dir, 'left-over'), { recursive: true });
     writeFileSync(join(dir, '.metadata_never_index'), '');
-    const bases = new BaseCheckouts(dir, 1);
+    const bases = createBases(dir, 1);
     const one = runOf(failing('grep -q 1 v.txt || exit 0'));
     const two = runOf(failing('grep -q 2 v.txt || exit 0'));
     expect(await bases.compareWithBase(requestOf(setup, one, first))).not.toBeNull();

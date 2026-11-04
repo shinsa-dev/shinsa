@@ -1,55 +1,65 @@
-import { appendFileSync, writeFileSync } from 'node:fs';
+import { writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { $ } from 'bun';
-import { CHANGES_DIRECTORY } from '../packages/core/src/changelog/index.ts';
-import { listChangeFiles } from './changelog-files.ts';
-import {
-  listReleaseEntries,
-  resolveChangelogCheck,
-  selectEntrySlug,
-  serializeReleaseBody,
-} from './changelog-rules.ts';
+import { BunRuntime } from '@effect/platform-bun';
+import { Config, Console, Effect, Option } from 'effect';
+import { listReleaseEntries, serializeReleaseBody } from './changelog-rules.ts';
+import { Command, CommandLayer } from './kit/command/index.ts';
+import { reportFailure } from './kit/script.ts';
 import {
   describeReleaseChannel,
   parseReleaseOptions,
   resolveChangesSinceTag,
   resolveReleasePlan,
 } from './release-version.ts';
+import { recordActionsOutputs, recordStepSummary } from './release/actions.ts';
+import { listReleasedSlugs, listTags, listValidEntries } from './release/changes.ts';
+import { ReleaseRefused } from './release/schema.ts';
 
-const { channel, bump } = parseReleaseOptions(Bun.env.RELEASE_CHANNEL, Bun.env.RELEASE_BUMP);
-const root = (await $`git rev-parse --show-toplevel`.text()).trim();
-const tags = (await $`git tag --list ${'v*'}`.text())
-  .split('\n')
-  .map((tag) => tag.trim())
-  .filter(Boolean);
-const plan = resolveReleasePlan({ tags, channel, bump });
+const program = Effect.gen(function* () {
+  const command = yield* Command;
+  const settings = yield* Effect.orDie(
+    Config.all({
+      channel: Config.option(Config.String('RELEASE_CHANNEL')),
+      bump: Config.option(Config.String('RELEASE_BUMP')),
+      notesDir: Config.String('RUNNER_TEMP').pipe(Config.withDefault(tmpdir())),
+    })
+  );
+  const { channel, bump } = yield* Effect.try({
+    try: () =>
+      parseReleaseOptions(
+        settings.channel.pipe(Option.getOrUndefined),
+        settings.bump.pipe(Option.getOrUndefined)
+      ),
+    catch: (error) => new ReleaseRefused({ message: error instanceof Error ? error.message : String(error) }),
+  });
+  const root = yield* command.text(['git', 'rev-parse', '--show-toplevel']);
+  const plan = resolveReleasePlan({ tags: [...(yield* listTags(root))], channel, bump });
+  const entries = yield* listValidEntries(root);
+  const since = resolveChangesSinceTag(plan);
+  const released = since ? yield* listReleasedSlugs(root, since) : [];
+  const notes = listReleaseEntries(entries, released);
+  const notesFile = join(settings.notesDir, 'release-notes.md');
+  yield* Effect.sync(() =>
+    writeFileSync(notesFile, serializeReleaseBody(describeReleaseChannel(plan), notes))
+  );
 
-const check = resolveChangelogCheck(listChangeFiles(root));
-if (!check.ok) throw new Error(`The changelog has invalid entries:\n${check.errors.join('\n')}`);
+  const outputs = [
+    `version=${plan.version}`,
+    `tag=${plan.tag}`,
+    `prerelease=${plan.prerelease}`,
+    `channel=${plan.channel}`,
+    `notes_start_tag=${plan.notesStartTag ?? ''}`,
+    `notes_file=${notesFile}`,
+  ];
+  const summary = `Releasing **Shinsa ${plan.version}** on the ${plan.channel} channel (the last stable release is ${plan.lastStable ?? 'none'}), with ${notes.length} changelog ${notes.length === 1 ? 'entry' : 'entries'}.`;
+  yield* recordActionsOutputs(outputs);
+  yield* recordStepSummary(summary);
+  yield* Console.log(`${summary}\n${outputs.join('\n')}`);
+});
 
-async function listReleasedSlugs(tag: string | null) {
-  if (!tag) return [];
-  return (await $`git ls-tree --name-only ${tag} ${`${CHANGES_DIRECTORY}/`}`.cwd(root).text())
-    .split('\n')
-    .map((path) => selectEntrySlug(path.trim()))
-    .filter((slug) => slug !== null);
-}
-
-const entries = listReleaseEntries(check.entries, await listReleasedSlugs(resolveChangesSinceTag(plan)));
-const notesFile = join(Bun.env.RUNNER_TEMP ?? tmpdir(), 'release-notes.md');
-writeFileSync(notesFile, serializeReleaseBody(describeReleaseChannel(plan), entries));
-
-const outputs = [
-  `version=${plan.version}`,
-  `tag=${plan.tag}`,
-  `prerelease=${plan.prerelease}`,
-  `channel=${plan.channel}`,
-  `notes_start_tag=${plan.notesStartTag ?? ''}`,
-  `notes_file=${notesFile}`,
-];
-const summary = `Releasing **Shinsa ${plan.version}** on the ${plan.channel} channel (the last stable release is ${plan.lastStable ?? 'none'}), with ${entries.length} changelog ${entries.length === 1 ? 'entry' : 'entries'}.`;
-
-if (Bun.env.GITHUB_OUTPUT) appendFileSync(Bun.env.GITHUB_OUTPUT, `${outputs.join('\n')}\n`);
-if (Bun.env.GITHUB_STEP_SUMMARY) appendFileSync(Bun.env.GITHUB_STEP_SUMMARY, `${summary}\n\n`);
-process.stdout.write(`${summary}\n${outputs.join('\n')}\n`);
+program.pipe(
+  reportFailure,
+  Effect.provide(CommandLayer),
+  BunRuntime.runMain({ disableErrorReporting: true })
+);

@@ -1,33 +1,36 @@
 import { describe, expect, it } from 'bun:test';
-import { FLOW_LIMITS, TerminalSession } from '../../src/terminals/session.ts';
-import { until } from '../helpers/index.ts';
+import { Effect } from 'effect';
+import type { TerminalSession, TerminalSpawnOptions } from '../../src/terminals/schema.ts';
+import { createTerminalSession, FLOW_LIMITS } from '../../src/terminals/session.ts';
+import { until } from '../helpers/until.ts';
 import { createFakeSpawner, createFakeViewer, createInfo } from './fakes.ts';
 
 function createSession(saved: string | null = null) {
   const changes: string[] = [];
   const screens: number[] = [];
-  const session = new TerminalSession({
-    info: createInfo(),
-    saved,
-    now: () => 50,
-    onChange: (each) => changes.push(each.info.status),
-    onScreen: () => screens.push(1),
-  });
+  const time = { now: 10 };
+  const session: TerminalSession = Effect.runSync(
+    createTerminalSession({
+      info: createInfo(),
+      saved,
+      now: Effect.sync(() => time.now),
+      onChange: Effect.sync(() => void changes.push(session.info.status)),
+      onScreen: () => Effect.sync(() => void screens.push(1)),
+    })
+  );
   const fake = createFakeSpawner();
-  session.start({
-    command: ['/bin/fish', '-l'],
-    env: { TERM: 'xterm-256color' },
-    spawn: fake.spawn,
-    now: 10,
-  });
+  const spawn = (command: readonly string[], options: TerminalSpawnOptions) =>
+    Effect.sync(() => fake.spawn(command, options));
+  Effect.runSync(session.start({ command: ['/bin/fish', '-l'], env: { TERM: 'xterm-256color' }, spawn }));
+  time.now = 50;
   const process = fake.spawned[0];
   if (!process) throw new Error('No process');
-  return { session, process, fake, changes, screens };
+  return { session, process, fake, spawn, time, changes, screens };
 }
 
 describe('TerminalSession', () => {
   it('starts the shell in its folder at the mirror’s size, once', () => {
-    const { session, process, fake } = createSession();
+    const { session, process, fake, spawn } = createSession();
     expect(process.command).toEqual(['/bin/fish', '-l']);
     expect(process.options).toMatchObject({
       cwd: '/tmp',
@@ -35,7 +38,7 @@ describe('TerminalSession', () => {
       rows: 30,
       env: { TERM: 'xterm-256color' },
     });
-    session.start({ command: ['again'], env: {}, spawn: fake.spawn, now: 11 });
+    Effect.runSync(session.start({ command: ['again'], env: {}, spawn }));
     expect(fake.spawned).toHaveLength(1);
     expect(session.running).toBe(true);
     session.dispose();
@@ -116,7 +119,7 @@ describe('TerminalSession', () => {
     const { session, process } = createSession();
     process.emit('old line\r\nprompt $ ');
     session.clear();
-    const screen = await session.serializeScreen();
+    const screen = await Effect.runPromise(session.serializeScreen);
     expect(screen).not.toContain('old line');
     expect(screen).toContain('prompt $');
     session.dispose();
@@ -141,7 +144,7 @@ describe('TerminalSession', () => {
     process.emit('\u001b]0;bun dev\u0007');
     await until('the title changes', () => session.info.title === 'bun dev');
     process.emit('\u001b]0;bun dev\u0007');
-    await session.serializeScreen();
+    await Effect.runPromise(session.serializeScreen);
     expect(changes).toEqual(['running']);
     process.emit('\u001b]0;\u0007');
     await until('an empty title clears it', () => session.info.title === null);
@@ -149,7 +152,7 @@ describe('TerminalSession', () => {
   });
 
   it('records how the shell exited and starts again below its last output', async () => {
-    const { session, process, fake, changes } = createSession();
+    const { session, process, spawn, time, changes } = createSession();
     process.emit('done\r\n');
     const viewer = createFakeViewer();
     session.attach(viewer);
@@ -158,25 +161,27 @@ describe('TerminalSession', () => {
     expect(session.info).toMatchObject({ exitCode: 2, endedAt: 50 });
     expect(changes).toEqual(['exited']);
     session.input('ignored');
-    session.start({ command: ['/bin/fish', '-l'], env: {}, spawn: fake.spawn, now: 60 });
+    time.now = 60;
+    Effect.runSync(session.start({ command: ['/bin/fish', '-l'], env: {}, spawn }));
     expect(session.info).toMatchObject({ status: 'running', exitCode: null, startedAt: 60, endedAt: null });
-    expect(await session.serializeScreen()).toContain('done');
+    expect(await Effect.runPromise(session.serializeScreen)).toContain('done');
     session.dispose();
   });
 
   it('marks the shell stopped, not exited, when Shinsa stops', async () => {
     const { session, process } = createSession();
-    await session.stop();
+    await Effect.runPromise(session.stop);
     expect(process.hungUp).toBe(true);
     expect(session.info).toMatchObject({ status: 'stopped', exitCode: null });
-    expect(session.stop()).toBeUndefined();
+    await Effect.runPromise(session.stop);
+    expect(process.hungUp).toBe(true);
     session.hangUp();
     session.dispose();
   });
 
   it('shows the screen it saved, and ends its viewers and ignores late output once disposed', async () => {
     const { session, process, screens } = createSession('saved line');
-    expect(await session.serializeScreen()).toContain('saved line');
+    expect(await Effect.runPromise(session.serializeScreen)).toContain('saved line');
     const viewer = createFakeViewer();
     session.attach(viewer);
     session.hangUp();

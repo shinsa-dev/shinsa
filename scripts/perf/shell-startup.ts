@@ -1,110 +1,101 @@
-import { rmSync, writeFileSync } from 'node:fs';
+import { rmSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { CdpPage, listTargets } from '../kit/chromium/index.ts';
+import { BunRuntime } from '@effect/platform-bun';
+import { Clock, Config, Console, Duration, Effect, Option, Schedule, Schema } from 'effect';
+import { ChildProcess, ChildProcessSpawner } from 'effect/process';
+import { Chromium, ChromiumLayer } from '../kit/chromium/index.ts';
+import { writeReport } from './report/write.ts';
 import { summarize } from './shell-stats.ts';
-
-interface Paints {
-  timeOrigin: number;
-  firstContentfulPaint: number | null;
-  largestContentfulPaint: number | null;
-}
-
-interface Launch {
-  navigationStart: number;
-  firstContentfulPaint: number;
-  largestContentfulPaint: number;
-  homeReady: number;
-}
+import {
+  AppNeverOpened,
+  HOME_READY,
+  LAUNCH_KEYS,
+  type Launch,
+  PAINTS,
+  Paints,
+  STARTUP_PORT,
+  STARTUP_TIMEOUT,
+} from './shell/schema.ts';
 
 const APP_DIR = resolve(Bun.argv[2] ?? 'apps/desktop');
 const ORIGIN = Bun.argv[3] ?? 'http://127.0.0.1:5620';
-const RUNS = Number(Bun.env.SHELL_PERF_RUNS ?? 6);
-const OUT = Bun.env.SHELL_PERF_OUT ?? null;
-const USER_DATA = Bun.env.SHELL_PERF_USER_DATA ?? null;
-const ELECTRON = resolve(
-  Bun.env.SHELL_PERF_ELECTRON ??
-    'apps/desktop/node_modules/electron/dist/Electron.app/Contents/MacOS/Electron'
-);
-const PORT = 9520;
-const HOME_READY = `!!document.querySelector('main textarea')`;
 
-const PAINTS = `new Promise((done) => {
-  let largest = null;
-  try {
-    new PerformanceObserver((list) => {
-      for (const entry of list.getEntries()) largest = entry.renderTime || entry.startTime;
-    }).observe({ type: 'largest-contentful-paint', buffered: true });
-  } catch {}
-  setTimeout(() => {
-    const first = performance.getEntriesByName('first-contentful-paint')[0];
-    done({ timeOrigin: performance.timeOrigin, firstContentfulPaint: first ? first.startTime : null, largestContentfulPaint: largest });
-  }, 50);
-})`;
+const STARTUP_POLL = Schedule.spaced(Duration.millis(5));
 
-async function findPage(deadline: number) {
-  while (Date.now() < deadline) {
-    try {
-      const target = (await listTargets(PORT)).find(
-        (entry) => entry.type === 'page' && entry.url.startsWith(ORIGIN)
-      );
-      if (target) return CdpPage.open(target.webSocketDebuggerUrl);
-    } catch {}
-    await Bun.sleep(5);
-  }
-  throw new Error('The app never opened a page on the server.');
-}
+const program = Effect.gen(function* () {
+  const runs = yield* Config.Number('SHELL_PERF_RUNS').pipe(Config.withDefault(6));
+  const out = yield* Config.option(Config.String('SHELL_PERF_OUT'));
+  const userData = yield* Config.option(Config.String('SHELL_PERF_USER_DATA'));
+  const electron = resolve(
+    yield* Config.String('SHELL_PERF_ELECTRON').pipe(
+      Config.withDefault('apps/desktop/node_modules/electron/dist/Electron.app/Contents/MacOS/Electron')
+    )
+  );
+  const chromium = yield* Chromium;
+  const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+  const timeout = Duration.fromInputUnsafe(STARTUP_TIMEOUT);
 
-async function waitForHome(page: CdpPage, deadline: number) {
-  while (Date.now() < deadline) {
-    if (await page.evaluate<boolean>(HOME_READY)) return Date.now();
-    await Bun.sleep(5);
-  }
-  throw new Error('Home never rendered.');
-}
-
-async function launchOnce(): Promise<Launch> {
-  const startedAt = Date.now();
-  const child = Bun.spawn([ELECTRON, APP_DIR, `--remote-debugging-port=${PORT}`], {
-    env: { ...Bun.env, SHINSA_URL: ORIGIN },
-    stdout: 'ignore',
-    stderr: 'ignore',
-  });
-  try {
-    const deadline = startedAt + 30_000;
-    const page = await findPage(deadline);
-    const homeReady = await waitForHome(page, deadline);
-    const paints = await page.evaluate<Paints>(PAINTS);
-    page.close();
+  const launchOnce = Effect.fn('ShellStartup.launchOnce')(function* () {
+    const startedAt = yield* Clock.currentTimeMillis;
+    yield* spawner.spawn(
+      ChildProcess.make(electron, [APP_DIR, `--remote-debugging-port=${STARTUP_PORT}`], {
+        env: { SHINSA_URL: ORIGIN },
+        extendEnv: true,
+        stdin: 'ignore',
+        stdout: 'ignore',
+        stderr: 'ignore',
+      })
+    );
+    const target = yield* chromium.listTargets(STARTUP_PORT).pipe(
+      Effect.map((targets) => targets.find((entry) => entry.type === 'page' && entry.url.startsWith(ORIGIN))),
+      Effect.orElseSucceed(() => undefined),
+      Effect.repeat({ schedule: STARTUP_POLL, until: (found) => found !== undefined }),
+      Effect.timeoutOrElse({ duration: timeout, orElse: () => Effect.succeed(undefined) })
+    );
+    if (!target) return yield* new AppNeverOpened({ message: 'The app never opened a page on the server.' });
+    const page = yield* chromium.connect(target.webSocketDebuggerUrl);
+    const elapsed = (yield* Clock.currentTimeMillis) - startedAt;
+    const rendered = yield* page.evaluate(HOME_READY, Schema.Boolean).pipe(
+      Effect.repeat({ schedule: STARTUP_POLL, until: (ready) => ready }),
+      Effect.timeoutOrElse({
+        duration: Duration.subtract(timeout, Duration.millis(elapsed)),
+        orElse: () => Effect.succeed(false),
+      })
+    );
+    if (!rendered) return yield* new AppNeverOpened({ message: 'Home never rendered.' });
+    const homeReady = yield* Clock.currentTimeMillis;
+    const paints = yield* page.evaluate(PAINTS, Paints);
     const since = (offset: number | null) => paints.timeOrigin + (offset ?? 0) - startedAt;
-    return {
+    const launch: Launch = {
       navigationStart: since(0),
       firstContentfulPaint: since(paints.firstContentfulPaint),
       largestContentfulPaint: since(paints.largestContentfulPaint),
       homeReady: homeReady - startedAt,
     };
-  } finally {
-    child.kill('SIGTERM');
-    await child.exited;
-    await Bun.sleep(500);
+    return launch;
+  }, Effect.scoped);
+
+  if (Option.isSome(userData))
+    yield* Effect.sync(() =>
+      rmSync(join(homedir(), 'Library/Application Support', userData.value), { recursive: true, force: true })
+    );
+
+  const launches = yield* Effect.forEach(Array.from({ length: runs }), () =>
+    Effect.andThen(launchOnce(), (launch) => Effect.as(Effect.sleep(Duration.millis(500)), launch))
+  );
+
+  const first = launches[0];
+  const rest = launches.slice(1);
+  yield* Console.log(`Electron start, ${APP_DIR} on ${ORIGIN}\n`);
+  yield* Console.log('| From launch to | First launch (empty cache) | Later launches (median) |');
+  yield* Console.log('|---|---|---|');
+  for (const key of LAUNCH_KEYS) {
+    const median = summarize(rest.map((launch) => launch[key])).median;
+    yield* Console.log(`| ${key} | ${first?.[key].toFixed(0)} ms | ${median.toFixed(0)} ms |`);
   }
-}
+  if (Option.isSome(out))
+    yield* writeReport(out.value, JSON.stringify({ appDir: APP_DIR, origin: ORIGIN, launches }, null, 2));
+});
 
-if (USER_DATA)
-  rmSync(join(homedir(), 'Library/Application Support', USER_DATA), { recursive: true, force: true });
-
-const launches: Launch[] = [];
-for (let run = 0; run < RUNS; run += 1) launches.push(await launchOnce());
-
-const keys = ['navigationStart', 'firstContentfulPaint', 'largestContentfulPaint', 'homeReady'] as const;
-const first = launches[0];
-const rest = launches.slice(1);
-console.log(`Electron start, ${APP_DIR} on ${ORIGIN}\n`);
-console.log('| From launch to | First launch (empty cache) | Later launches (median) |');
-console.log('|---|---|---|');
-for (const key of keys) {
-  const median = summarize(rest.map((launch) => launch[key])).median;
-  console.log(`| ${key} | ${first?.[key].toFixed(0)} ms | ${median.toFixed(0)} ms |`);
-}
-if (OUT) writeFileSync(OUT, JSON.stringify({ appDir: APP_DIR, origin: ORIGIN, launches }, null, 2));
-process.exit(0);
+program.pipe(Effect.provide(ChromiumLayer), BunRuntime.runMain);

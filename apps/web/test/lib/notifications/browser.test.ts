@@ -8,7 +8,7 @@ import {
   showTestNotification,
   TEST_NOTIFICATION,
 } from '@/lib/notifications/browser.ts';
-import type { NotificationWorker } from '@/lib/notifications/worker.ts';
+import type { NotificationWorker } from '@/lib/notifications/schema.ts';
 import { installDesktop } from '../../support/desktop.ts';
 import { installNotifications } from '../../support/notifications.ts';
 

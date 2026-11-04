@@ -20,7 +20,6 @@ import type {
   TaskDetailView,
   TaskView,
 } from '@shinsa/core/engine-api/schema';
-import type { Transcripts } from '../agents/transcripts/index.ts';
 import type { TaskFilter } from './routes/tasks/schema.ts';
 
 export interface ChatRequest {
@@ -143,7 +142,7 @@ export function resolveTaskDetail(state: ShinsaState, task: Task, base: string):
 }
 
 export function resolveChatPage(
-  transcripts: Transcripts,
+  transcripts: ReadonlyMap<string, ChatEntry[]>,
   state: ShinsaState,
   task: Task,
   chat: ChatRequest
@@ -151,7 +150,7 @@ export function resolveChatPage(
   const runs = listTaskRuns(state, task.id);
   const all = runs
     .filter((run) => !chat.runId || run.id === chat.runId)
-    .flatMap((run) => transcripts.listEntries(run.id).map((entry) => ({ ...entry, runId: run.id })))
+    .flatMap((run) => (transcripts.get(run.id) ?? []).map((entry) => ({ ...entry, runId: run.id })))
     .map((entry, index) => ({ index, ...entry }))
     .filter((entry) => chat.kinds.has(entry.type));
   const page =

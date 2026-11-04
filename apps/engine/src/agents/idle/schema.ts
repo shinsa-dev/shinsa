@@ -1,4 +1,4 @@
-import { Duration, type Effect } from 'effect';
+import { Context, Duration, type Effect } from 'effect';
 import type { AgentSession } from '../providers/index.ts';
 
 export const IDLE_RELEASE_MS = 30 * 60 * 1000;
@@ -6,6 +6,16 @@ export const IDLE_RELEASE_MS = 30 * 60 * 1000;
 export const MAX_IDLE_PIN_MS = 4 * 60 * 60 * 1000;
 
 export const IDLE_RELEASE = Duration.millis(IDLE_RELEASE_MS);
+
+export interface IdleReleaseTimings {
+  readonly idle: Duration.Duration;
+  readonly maxPinMs: number;
+}
+
+export const IdleReleaseSettings = Context.Reference<IdleReleaseTimings>(
+  'shinsa/engine/agents/idle/IdleReleaseSettings',
+  { defaultValue: () => ({ idle: IDLE_RELEASE, maxPinMs: MAX_IDLE_PIN_MS }) }
+);
 
 export interface IdleReleaseOptions {
   idleMs?: number;

@@ -1,13 +1,19 @@
 import { afterEach, describe, expect, setDefaultTimeout, test } from 'bun:test';
 import type { Run } from '@shinsa/core';
-import { EngineRestarter } from '../../src/instance/index.ts';
+import { Context, Duration, Effect, Exit, Layer, Scope } from 'effect';
+import { EngineRestarter, RestartDelay, RestartDrainWindow } from '../../src/instance/index.ts';
+import { JsonLogger } from '../../src/log/service.ts';
+import { EngineCore } from '../../src/runtime/engine/service.ts';
 import { PLAN, toolPlan, World } from './harness.ts';
 
 setDefaultTimeout(30_000);
 
 let world: World | null = null;
 
+const scopes: Scope.Closeable[] = [];
+
 afterEach(async () => {
+  for (const scope of scopes.splice(0)) await Effect.runPromise(Scope.close(scope, Exit.void));
   await world?.dispose();
   world = null;
 });
@@ -18,19 +24,33 @@ function listRuns(w: World, taskId: string): Run[] {
     .sort((a, b) => a.startedAt - b.startedAt);
 }
 
-function createRestarter(w: World, drainMs?: number) {
+async function createRestarter(w: World, drainMs?: number) {
   const restarted = Promise.withResolvers<void>();
-  const restarter = new EngineRestarter(w.engine, {
-    isService: () => Promise.resolve(true),
-    drain: w.daemon.runs,
-    drainMs,
-    restart: async () => {
-      await w.restartGracefully();
-      restarted.resolve();
-    },
-    schedule: (run) => setTimeout(run, 0),
-  });
-  return { restarter, restarted: restarted.promise };
+  const scope = Scope.makeUnsafe();
+  scopes.push(scope);
+  const layer = EngineRestarter.layer({
+    isService: Effect.succeed(true),
+    drain: w.daemon.runs.service,
+    restart: Effect.promise(() => w.restartGracefully()).pipe(
+      Effect.andThen(Effect.sync(() => restarted.resolve()))
+    ),
+  }).pipe(
+    Layer.provide(Layer.succeed(EngineCore, w.engine.core)),
+    Layer.provide(Layer.succeed(RestartDelay, Duration.zero)),
+    Layer.provide(
+      drainMs === undefined ? Layer.empty : Layer.succeed(RestartDrainWindow, Duration.millis(drainMs))
+    )
+  );
+  const restarter = await Effect.runPromise(
+    Layer.buildWithScope(layer, scope).pipe(
+      Effect.map((context) => Context.get(context, EngineRestarter)),
+      Effect.provide(JsonLogger)
+    )
+  );
+  return {
+    request: (when: 'idle' | 'now') => Effect.runPromise(restarter.request(when)),
+    restarted: restarted.promise,
+  };
 }
 
 describe('restarting the engine for an update', () => {
@@ -45,7 +65,7 @@ describe('restarting the engine for an update', () => {
     const working = await w.createTask('Add the greeting files');
     await w.until('the first agent to start', () => w.agents.of('plan').length === 1);
     const workingSession = w.agents.of('plan')[0];
-    const { restarter, restarted } = createRestarter(w);
+    const restarter = await createRestarter(w);
 
     expect(await restarter.request('idle')).toEqual({ restarting: false });
     const held = await w.createTask('Add the farewell files');
@@ -56,7 +76,7 @@ describe('restarting the engine for an update', () => {
     const heldRunId = listRuns(w, held)[0]?.id ?? '';
 
     handOver.resolve();
-    await restarted;
+    await restarter.restarted;
     await w.until('the held step to start on the new engine', () => w.agents.of('plan').length === 2);
 
     expect(workingSession?.cancelled).toBe(false);
@@ -79,10 +99,10 @@ describe('restarting the engine for an update', () => {
     await w.until('the agent to start', () => w.agents.of('plan').length === 1);
     const cut = w.agents.of('plan')[0];
     const runId = listRuns(w, taskId)[0]?.id ?? '';
-    const { restarter, restarted } = createRestarter(w, 20);
+    const restarter = await createRestarter(w, 20);
 
     expect(await restarter.request('idle')).toEqual({ restarting: false });
-    await restarted;
+    await restarter.restarted;
     await w.until('the run to finish on the new engine', () => w.state.runs[runId]?.outcome === 'completed');
 
     expect(cut?.cancelled).toBe(true);

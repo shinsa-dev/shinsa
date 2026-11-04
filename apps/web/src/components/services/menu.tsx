@@ -166,7 +166,7 @@ function ServicesEmpty({
 
 export const SERVICES_PANEL = cn(
   COMPACT_POPOVER,
-  'flex w-88 max-w-[calc(100vw-1rem)] flex-col overflow-hidden'
+  'flex w-88 max-w-(--available-width) flex-col overflow-hidden'
 );
 
 const VIEW_HEIGHT: Record<ServicesPanelHeight, string> = {
@@ -470,10 +470,12 @@ function ServicesPanelContent({
 export function ServicesMenu({
   state,
   variant = 'bar',
+  side = variant === 'rail' ? 'right' : 'bottom',
   onNavigate,
 }: {
   state: ShinsaState;
   variant?: 'bar' | 'rail';
+  side?: 'right' | 'bottom';
   onNavigate?: () => void;
 }) {
   const [open, setOpen] = React.useState(false);
@@ -536,7 +538,7 @@ export function ServicesMenu({
       </PopoverTrigger>
       <PopoverContent
         align='start'
-        side={variant === 'rail' ? 'right' : 'bottom'}
+        side={side}
         sideOffset={6}
         collisionAvoidance={{ fallbackAxisSide: 'none' }}
         className={SERVICES_PANEL}

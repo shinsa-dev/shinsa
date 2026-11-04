@@ -1,13 +1,17 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, setDefaultTimeout, test } from 'bun:test';
 import { readFileSync, realpathSync } from 'node:fs';
 import { join } from 'node:path';
-import {
-  listProcessesIn,
-  listWorkingFolderPids,
-  resolveStopTargets,
-  stopProcessesIn,
-} from '../../src/git/processes.ts';
+import type { StopOptions } from '../../src/git/leftovers/schema.ts';
+import { LeftoverProcesses } from '../../src/git/leftovers/service.ts';
+import { listWorkingFolderPids, resolveStopTargets } from '../../src/git/leftovers/targets.ts';
+import { runGit } from '../helpers/git.ts';
 import { createTempDir } from '../helpers/index.ts';
+
+setDefaultTimeout(30_000);
+
+const listProcessesIn = (path: string) => runGit(LeftoverProcesses.use((leftovers) => leftovers.list(path)));
+const stopProcessesIn = (path: string, options: StopOptions = {}) =>
+  runGit(LeftoverProcesses.use((leftovers) => leftovers.stop(path, options)));
 
 function spawnIn(cwd: string, script: string) {
   return Bun.spawn(['sh', '-c', script], { cwd, stdout: 'ignore', stderr: 'ignore' });

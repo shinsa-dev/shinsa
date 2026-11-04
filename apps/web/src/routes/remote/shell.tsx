@@ -5,6 +5,11 @@ import { Icon, type IconName } from '@shinsa/ui/components/icon';
 import { Logo } from '@shinsa/ui/components/logo';
 import { cn } from '@shinsa/ui/lib/utils';
 import type * as React from 'react';
+import {
+  SAFE_AREA_BOTTOM,
+  SAFE_AREA_SIDES,
+  SAFE_AREA_TOP,
+} from '@/components/layout/sidebar/compact-bar.tsx';
 import { StepNumber } from '@/components/layout/surface/step-number.tsx';
 import { SettingsCard } from '@/components/settings/group.tsx';
 import { LoadingSpinner } from '@/components/status/loading-line.tsx';
@@ -34,7 +39,12 @@ export function RemoteShell({
   const user = session?.user ?? null;
   return (
     <div
-      className={cn('flex flex-col bg-background text-fg-3', fill ? 'h-dvh overflow-hidden' : 'min-h-dvh')}
+      className={cn(
+        'flex flex-col bg-background text-fg-3',
+        SAFE_AREA_TOP,
+        SAFE_AREA_SIDES,
+        fill ? cn('h-dvh overflow-hidden', SAFE_AREA_BOTTOM) : 'min-h-dvh'
+      )}
     >
       <header className='flex h-11 shrink-0 items-center gap-2 px-3.5 sm:px-5'>
         <a href={REMOTE_PATHS.app} className='flex items-center gap-1.5 text-sm font-medium text-fg-4'>

@@ -1,13 +1,13 @@
-import type { CoreConfig, WindowLookup } from '@chroxify/eunoe';
-import { Schema } from 'effect';
+import { CORE_DEFAULTS, type CoreConfig, createWindowLookup, type WindowLookup } from '@chroxify/eunoe';
+import { Context, Schema } from 'effect';
+import { DIRECT_BASE_URL } from '../agents/providers/claude/route/schema.ts';
 
-export interface EunoeServerOptions {
-  dir: string;
-  upstream?: string;
-  port?: number;
-  window?: WindowLookup;
-  tuning?: Partial<CoreConfig>;
-  foldFloor?: number;
+export interface EunoeSettingsShape {
+  readonly upstream: string;
+  readonly port: number;
+  readonly window: WindowLookup;
+  readonly config: CoreConfig;
+  readonly foldFloor: number;
 }
 
 export type RequestEntry = Record<string, unknown>;
@@ -32,11 +32,44 @@ export class ForwarderUnavailable extends Schema.TaggedError<
   { readonly brand: unique symbol }
 >()('ForwarderUnavailable', { message: Schema.String }) {}
 
+export class EunoeRewriteFailed extends Schema.TaggedError<
+  EunoeRewriteFailed,
+  { readonly brand: unique symbol }
+>()('EunoeRewriteFailed', { message: Schema.String }) {}
+
+export class FoldUnavailable extends Schema.TaggedError<FoldUnavailable, { readonly brand: unique symbol }>()(
+  'FoldUnavailable',
+  { message: Schema.String }
+) {}
+
+export class RequestLogUnwritable extends Schema.TaggedError<
+  RequestLogUnwritable,
+  { readonly brand: unique symbol }
+>()('RequestLogUnwritable', { message: Schema.String }) {}
+
+export type Forwarder = ReturnType<typeof Bun.serve>;
+
+export interface FoldToken {
+  readonly warm: boolean;
+}
+
+const FOLD_FLOOR_TOKENS = 40_000;
+
+export const EunoeSettings = Context.Reference<EunoeSettingsShape>('shinsa/engine/eunoe/EunoeSettings', {
+  defaultValue: () => ({
+    upstream: DIRECT_BASE_URL,
+    port: 0,
+    window: createWindowLookup(),
+    config: { ...CORE_DEFAULTS, mode: 'compact' },
+    foldFloor: FOLD_FLOOR_TOKENS,
+  }),
+});
+
+export const EUNOE_DIR = 'eunoe';
+
 export const STOPPING = 'Shinsa is stopping.';
 
 export const IDLE_TIMEOUT_S = 255;
-
-export const FOLD_FLOOR_TOKENS = 40_000;
 
 export const CHARS_PER_TOKEN = 3.6;
 

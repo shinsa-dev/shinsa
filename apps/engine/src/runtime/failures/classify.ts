@@ -1,5 +1,6 @@
 import { Predicate } from 'effect';
-import { describeShortFailure, PushError } from '../../git/push.ts';
+import { describeShortFailure } from '../../git/remote/output.ts';
+import { PushError } from '../../git/remote/schema.ts';
 import { describeError } from '../../log/index.ts';
 import {
   EffectFailed,

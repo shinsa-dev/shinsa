@@ -1,4 +1,5 @@
 import { MINUTE_MS } from '@shinsa/core';
+import { Clock, Effect } from 'effect';
 import type { FieldSpec } from './fields.ts';
 import { findTaskId, readTask } from './resolve.ts';
 import { defineCommand, defineRead, readValue, type SurfaceSpec } from './spec.ts';
@@ -52,12 +53,14 @@ export const WORK_SPECS: SurfaceSpec[] = [
         description: 'Plan it now and keep it in the backlog until you start building it.',
       },
     ],
-    build: async (values, client) => ({
-      type: 'suggestion.accept',
-      taskId: await findTaskId(client, readValue(values, 'task')),
-      suggestionId: readValue(values, 'suggestion'),
-      waitsOnThis: values.afterThis === true,
-      ...(values.backlog ? { backlog: true } : {}),
+    build: Effect.fn('Surface.suggestionAccept')(function* (values, client) {
+      return {
+        type: 'suggestion.accept' as const,
+        taskId: yield* findTaskId(client, readValue(values, 'task')),
+        suggestionId: readValue(values, 'suggestion'),
+        waitsOnThis: values.afterThis === true,
+        ...(values.backlog ? { backlog: true } : {}),
+      };
     }),
     done: (values) =>
       values.backlog ? 'Added the suggested task to the backlog.' : 'Added the suggested task.',
@@ -67,10 +70,13 @@ export const WORK_SPECS: SurfaceSpec[] = [
     summary: 'Dismiss a suggested task.',
     command: 'suggestion.dismiss',
     fields: [TASK_FIELD, SUGGESTION_FIELD],
-    build: async (values, client) => ({
-      type: 'suggestion.dismiss',
-      taskId: (await readTask(client, readValue(values, 'task'))).task.id,
-      suggestionId: readValue(values, 'suggestion'),
+    build: Effect.fn('Surface.suggestionDismiss')(function* (values, client) {
+      const detail = yield* readTask(client, readValue(values, 'task'));
+      return {
+        type: 'suggestion.dismiss' as const,
+        taskId: detail.task.id,
+        suggestionId: readValue(values, 'suggestion'),
+      };
     }),
     done: () => 'Dismissed.',
   }),
@@ -79,10 +85,12 @@ export const WORK_SPECS: SurfaceSpec[] = [
     summary: 'Keep a suggested task in this task instead: it goes to the agent now.',
     command: 'suggestion.keep',
     fields: [TASK_FIELD, SUGGESTION_FIELD],
-    build: async (values, client) => ({
-      type: 'suggestion.keep',
-      taskId: await findTaskId(client, readValue(values, 'task')),
-      suggestionId: readValue(values, 'suggestion'),
+    build: Effect.fn('Surface.suggestionKeep')(function* (values, client) {
+      return {
+        type: 'suggestion.keep' as const,
+        taskId: yield* findTaskId(client, readValue(values, 'task')),
+        suggestionId: readValue(values, 'suggestion'),
+      };
     }),
     done: () => 'Kept it in this task as a new round.',
   }),
@@ -98,10 +106,13 @@ export const WORK_SPECS: SurfaceSpec[] = [
         description: `For this many minutes (${SNOOZE_MINUTES} by default).`,
       },
     ],
-    build: (values) => ({
-      type: 'run.snooze_silence',
-      runId: readValue(values, 'run'),
-      until: Date.now() + ((values.minutes as number | undefined) ?? SNOOZE_MINUTES) * MINUTE_MS,
+    build: Effect.fn('Surface.runSnooze')(function* (values) {
+      const now = yield* Clock.currentTimeMillis;
+      return {
+        type: 'run.snooze_silence' as const,
+        runId: readValue(values, 'run'),
+        until: now + ((values.minutes as number | undefined) ?? SNOOZE_MINUTES) * MINUTE_MS,
+      };
     }),
     done: () => 'Snoozed.',
   }),

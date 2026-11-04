@@ -1,13 +1,16 @@
 import { describe, expect, it, spyOn } from 'bun:test';
-import type { ByteRange } from '../../src/worker/download.ts';
+import type { BucketBinding, ByteRange } from '../../src/worker/platform/schema.ts';
 import {
   isUpdatePath,
   resolveBuildKey,
   resolveUpdateFile,
   resolveUpdateKey,
-  respondUpdate,
-  type UpdateBucket,
-} from '../../src/worker/updates.ts';
+} from '../../src/worker/updates/files.ts';
+import { respond } from './harness.ts';
+
+function respondUpdate(request: Request, bucket: BucketBinding | null) {
+  return respond(request, { bucket });
+}
 
 const ZIP_BYTES = new Uint8Array([0x50, 0x4b, 0x03, 0x04, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f]);
 
@@ -30,7 +33,7 @@ function createBucket(objects: Record<string, string | Uint8Array>, failure?: Er
     if (stored === undefined) return null;
     return typeof stored === 'string' ? new TextEncoder().encode(stored) : stored;
   };
-  const bucket: UpdateBucket = {
+  const bucket: BucketBinding = {
     head: async (key) => {
       calls.push({ method: 'head', key });
       if (failure) throw failure;
@@ -42,7 +45,8 @@ function createBucket(objects: Record<string, string | Uint8Array>, failure?: Er
       const bytes = storedBytes(key);
       if (!bytes) return null;
       const range = options?.range ?? { offset: 0, length: bytes.length };
-      return { body: new Response(bytes.slice(range.offset, range.offset + range.length)).body };
+      const slice = bytes.slice(range.offset, range.offset + range.length);
+      return { body: new Response(slice).body, text: async () => new TextDecoder().decode(slice) };
     },
   };
   return { bucket, calls };
@@ -212,7 +216,7 @@ describe('respondUpdate', () => {
 
   it('answers 404 when the file goes between the head and the read', async () => {
     const { bucket } = createBucket(STORED);
-    const vanishing: UpdateBucket = { head: bucket.head, get: async () => null };
+    const vanishing: BucketBinding = { head: bucket.head, get: async () => null };
     const response = await respondUpdate(createRequest('/updates/beta-mac.yml'), vanishing);
     expect(response.status).toBe(404);
   });

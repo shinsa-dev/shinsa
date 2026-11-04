@@ -1,43 +1,40 @@
 import type { ShinsaEffect } from '@shinsa/core';
 import { Duration, Schema } from 'effect';
-import type { FeedbackDrafter } from '../../feedback/draft.ts';
+import type { FeedbackDrafter } from '../../feedback/draft/service.ts';
 import type { ServerInstance } from '../../instance/install.ts';
-import type { HandoffEffects } from '../../remote/handoffs.ts';
-import type { PreviewEffects } from '../../remote/previews.ts';
-import type { ShareDescriber } from '../../remote/share-describe.ts';
-import type { ShareEffects } from '../../remote/shares.ts';
+import type { HandoffEffects } from '../../remote/handoffs/schema.ts';
+import type { PreviewEffects } from '../../remote/previews/schema.ts';
+import type { ShareDescriber } from '../../remote/share-describe/service.ts';
+import type { ShareEffects } from '../../remote/shares/schema.ts';
 import type { LoginResolver, RootSource } from '../../repos/index.ts';
 import type { ProcessTracker } from '../../resources/index.ts';
 import type { WatchWriter } from '../../schedules/suggest.ts';
 import type { Slack } from '../../slack/index.ts';
-import type { TriageResolver } from '../../triage/index.ts';
-import type { RepositoryFinder } from '../../triage/message.ts';
-import type { Workspaces } from '../../workspaces/index.ts';
+import type { Terminals } from '../../terminals/index.ts';
+import type { RepositoryFinder, TriageResolver } from '../../triage/index.ts';
+import type { Workspaces } from '../../workspaces/service.ts';
 
 export interface EffectRunnerOptions {
   triage: TriageResolver;
   wordWatch?: WatchWriter;
-  describeShare?: ShareDescriber;
-  draftFeedback?: FeedbackDrafter;
+  describeShare?: ShareDescriber['Service']['describe'];
+  draftFeedback?: FeedbackDrafter['Service'];
   instance?: Pick<ServerInstance, 'version' | 'commit'>;
   timeZone?: string;
   findRepository?: RepositoryFinder;
   resolveLogin?: LoginResolver;
   roots?: RootSource;
   watchIntervalMs?: number;
-  workspaces?: Workspaces;
+  workspaces?: Workspaces['Service'];
   services?: TaskServices;
   shares: ShareEffects;
   previews: PreviewEffects;
   handoffs: HandoffEffects;
-  slack?: Slack;
+  slack?: Slack['Service'];
   trackProcess?: ProcessTracker;
 }
 
-export interface TaskServices {
-  closeTaskTerminals(taskId: string): void;
-  listTerminalPids(): number[];
-}
+export type TaskServices = Pick<Terminals['Service'], 'closeTaskTerminals' | 'listTerminalPids'>;
 
 export type EffectOf<Kind extends ShinsaEffect['kind']> = Extract<ShinsaEffect, { kind: Kind }>;
 

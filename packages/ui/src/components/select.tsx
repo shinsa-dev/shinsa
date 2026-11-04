@@ -5,6 +5,7 @@ import { HighlightList } from '@shinsa/ui/components/highlight-list';
 import { Icon } from '@shinsa/ui/components/icon';
 import { type MenuItemIcon, menuIconPosition, renderMenuIcon } from '@shinsa/ui/components/menu-icon';
 import { useControllableOpen } from '@shinsa/ui/hooks/use-controllable-open';
+import { POPUP_COLLISION_PADDING } from '@shinsa/ui/lib/popup';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
 
@@ -154,6 +155,7 @@ function SelectContent({
         align={align}
         alignOffset={alignOffset}
         alignItemWithTrigger={alignItemWithTrigger}
+        collisionPadding={POPUP_COLLISION_PADDING}
         className='isolate z-50'
       >
         <SelectPrimitive.Popup
@@ -163,7 +165,7 @@ function SelectContent({
             // and the positioner picks the side with room for it. The popup is a
             // static shell: the list scrolls, and the surface lives on ::before so
             // only the background animates while text lands instantly.
-            'corner-superellipse/1.125 relative isolate z-50 flex max-h-(--available-height) min-w-(--anchor-width) flex-col rounded-popup whitespace-nowrap text-popover-foreground',
+            'corner-superellipse/1.125 relative isolate z-50 flex max-h-(--available-height) max-w-(--available-width) min-w-(--anchor-width) flex-col rounded-popup whitespace-nowrap text-popover-foreground',
             "before:corner-superellipse/1.125 before:pointer-events-none before:absolute before:inset-0 before:-z-10 before:rounded-[inherit] before:bg-popover before:shadow-md before:content-['']",
             // Entry only; closing is instant.
             'before:origin-(--transform-origin) before:duration-150 before:ease-out data-open:before:animate-in',
@@ -218,7 +220,7 @@ function SelectItem({
       )}
       {...props}
     >
-      <SelectPrimitive.ItemText className='flex flex-1 shrink-0 items-center gap-2 whitespace-nowrap'>
+      <SelectPrimitive.ItemText className='flex min-w-0 flex-1 items-center gap-2 whitespace-nowrap'>
         {renderMenuIcon(icon, 'inline-start')}
         {children}
       </SelectPrimitive.ItemText>

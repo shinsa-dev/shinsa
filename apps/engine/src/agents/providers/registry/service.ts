@@ -1,5 +1,7 @@
 import { CLAUDE_PROVIDER } from '@shinsa/core';
 import { Context, Effect, Layer } from 'effect';
+import { ClaudeProvider } from '../claude/provider/service.ts';
+import { CodexProvider } from '../codex/provider/service.ts';
 import type { AgentProvider } from '../types.ts';
 import { NO_PROVIDER, NoAgentProvider, type ProviderUsageSource, type ProvidersShape } from './schema.ts';
 
@@ -28,7 +30,7 @@ export class Providers extends Context.Service<Providers, ProvidersShape>()(
       listProviders: Effect.forEach(
         list(),
         (provider) =>
-          Effect.map(Effect.promise(provider.listModels), (models) => ({
+          Effect.map(provider.listModels, (models) => ({
             id: provider.id,
             label: provider.label,
             models,
@@ -37,17 +39,22 @@ export class Providers extends Context.Service<Providers, ProvidersShape>()(
       ),
       listLogins: Effect.forEach(
         list().flatMap((provider) => (provider.readLogin ? [provider.readLogin] : [])),
-        (read) => Effect.promise(read),
+        (read) => read,
         { concurrency: 'unbounded' }
       ),
       listUsageSources: () =>
-        list().flatMap((provider): ProviderUsageSource[] => {
-          const read = provider.readUsage;
-          return read ? [{ id: provider.id, read: () => read() }] : [];
-        }),
+        list().flatMap((provider): ProviderUsageSource[] =>
+          provider.readUsage ? [{ id: provider.id, read: provider.readUsage }] : []
+        ),
     };
   };
 
-  static readonly layer = (providers: readonly AgentProvider[]) =>
-    Layer.succeed(Providers, Providers.make(providers));
+  static readonly layer = Layer.effect(
+    Providers,
+    Effect.gen(function* () {
+      const claude = yield* ClaudeProvider;
+      const codex = yield* CodexProvider;
+      return Providers.make([claude, codex]);
+    })
+  );
 }

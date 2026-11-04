@@ -184,7 +184,7 @@ describe('the bundle on the merge gate', () => {
         key: 'bundle:middle',
         taskId: 'middle',
         kind: 'bundle',
-        title: '[Add the API](shinsa://task/middle) merges with this one',
+        title: '[Add the API](shinsa://task/middle)',
         detail: null,
         command: null,
         done: true,
@@ -193,7 +193,7 @@ describe('the bundle on the merge gate', () => {
         key: 'bundle:above',
         taskId: 'above',
         kind: 'bundle',
-        title: '[Add the screen](shinsa://task/above) merges with this one',
+        title: '[Add the screen](shinsa://task/above)',
         detail: null,
         command: null,
         done: false,
@@ -205,7 +205,7 @@ describe('the bundle on the merge gate', () => {
       'Ticks itself once that task is ready and its steps before the merge are ticked'
     );
     expect(resolveWaitBlock(ready)).toBe('That task is ready to merge');
-    expect(MERGE_WAIT_KIND.bundle.label).toBe('Bundle');
+    expect(MERGE_WAIT_KIND.bundle.label).toBe('Merges with this one');
     const state = createShinsaState({ tasks: [root, middle, above] });
     const stepped = withSteps({
       id: 'middle',

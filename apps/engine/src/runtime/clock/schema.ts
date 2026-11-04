@@ -1,24 +1,8 @@
+import type { DomainError, ShinsaState } from '@shinsa/core';
 import { Duration, Schema } from 'effect';
 import type { Effect } from 'effect';
-
-export interface StateClockOptions {
-  now?: () => number;
-  minDelayMs?: number;
-  maxDelayMs?: number;
-}
-
-export interface ClockEntry {
-  id: string;
-  dueAt: number;
-  fire: () => Promise<void>;
-}
-
-export interface ClockDefaults {
-  area: string;
-  failure: string;
-  minDelayMs: number;
-  maxDelayMs?: number;
-}
+import type { EngineStopped } from '../engine/schema.ts';
+import type { EngineCore } from '../engine/service.ts';
 
 export class ClockTickFailed extends Schema.TaggedError<ClockTickFailed, { readonly brand: unique symbol }>()(
   'ClockTickFailed',
@@ -50,6 +34,32 @@ export interface StateClockHandle {
   readonly stop: Effect.Effect<void>;
 }
 
+export interface ClockTimings {
+  readonly minDelay: Duration.Duration;
+  readonly maxDelay: Duration.Duration;
+}
+
+export interface EngineClockTick {
+  readonly id: string;
+  readonly dueAt: number;
+  readonly fire: Effect.Effect<readonly unknown[] | null, DomainError | EngineStopped>;
+}
+
+export interface EngineClockDefinition {
+  readonly area: string;
+  readonly failure: string;
+  readonly timings: ClockTimings;
+  readonly list: (state: ShinsaState, engine: EngineCore['Service']) => readonly EngineClockTick[];
+}
+
+export interface EngineClock {
+  readonly start: Effect.Effect<void>;
+  readonly stop: Effect.Effect<void>;
+  readonly fireDue: Effect.Effect<void>;
+}
+
 export const MAX_CLOCK_DELAY = Duration.millis(2 ** 31 - 1);
 
 export const CLOCK_FLOOR = Duration.millis(1);
+
+export const CLOCK_MIN_DELAY = Duration.seconds(1);

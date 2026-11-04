@@ -6,7 +6,9 @@ import {
   type ShinsaState,
   type TeamJoinFragment,
 } from '@shinsa/core';
+import { Effect } from 'effect';
 import type { TeamActions } from '@/lib/connection/teams.ts';
+import { runApp } from '@/lib/runtime/app.ts';
 import type { JoinMachines } from '@/lib/teams/join-machines.ts';
 import type { TeamJoinResult } from '@/lib/teams/join.ts';
 
@@ -145,7 +147,7 @@ export const SAMPLE_TEAM_JOIN_DASHBOARD = {
 };
 
 export function openPendingSampleJoinMachines(): Promise<JoinMachines> {
-  return new Promise(() => undefined);
+  return runApp(Effect.never);
 }
 
 export function openSampleJoinMachines(): Promise<JoinMachines> {

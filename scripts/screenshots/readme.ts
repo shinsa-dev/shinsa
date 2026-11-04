@@ -1,133 +1,238 @@
-import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  appendFileSync,
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { CdpPage, listTargets } from '../kit/chromium/index.ts';
-
-type Theme = 'light' | 'dark';
-
-interface AppWindow {
-  id: number;
-  title: string;
-  bounds: { X: number; Y: number; Width: number; Height: number };
-}
+import { BunRuntime } from '@effect/platform-bun';
+import { Console, Effect, Ref, Schema, Stream } from 'effect';
+import { HttpClient, HttpClientResponse } from 'effect/http';
+import { ChildProcess, ChildProcessSpawner } from 'effect/process';
+import { type CdpPage, Chromium, ChromiumLayer } from '../kit/chromium/index.ts';
+import { reportFailure } from '../kit/script.ts';
+import {
+  AppWindowsText,
+  CLEARED_ENV,
+  FOCUS_PAUSE,
+  Health,
+  QUIT_TIMEOUT,
+  READY_POLL,
+  SETTLE_PAUSE,
+  SETTLED_CHECKS,
+  StepFailed,
+  THEMES,
+  type Theme,
+  WAIT_TIMEOUT,
+  WaitTimedOut,
+  WINDOW,
+  WindowNotFound,
+} from './schema.ts';
 
 const ROOT = resolve(import.meta.dirname, '../..');
 const WORK = Bun.env.SHINSA_SHOTS_DIR ?? '/tmp/shinsa-shots';
 const ASSETS = join(ROOT, '.github/assets');
-const WINDOW = { width: 1000, height: 700 };
-const THEMES: Theme[] = ['light', 'dark'];
 const DEV_PREFS = join(homedir(), 'Library/Application Support/Shinsa Dev/prefs.json');
 const WINDOWS_HELPER = join(import.meta.dirname, 'windows.swift');
-const TIMEOUT_MS = 60_000;
+const ENV = Object.fromEntries(
+  Object.entries(Bun.env).filter(
+    (entry): entry is [string, string] => entry[1] !== undefined && !CLEARED_ENV.includes(entry[0])
+  )
+);
 
-const env: Record<string, string | undefined> = { ...Bun.env };
-for (const key of ['SHINSA_HOME', 'SHINSA_URL', 'SHINSA_PORT', 'SHINSA_WEB_DIR', 'SHINSA_DATA_DIR'])
-  delete env[key];
+const program = Effect.gen(function* () {
+  const chromium = yield* Chromium;
+  const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+  const http = yield* HttpClient.HttpClient;
+  const decodeWindows = Schema.decodeUnknownEffect(AppWindowsText);
 
-const cleanups: (() => void | Promise<void>)[] = [];
+  const runStep = Effect.fn('Readme.runStep')(function* (
+    label: string,
+    command: readonly [string, ...string[]],
+    cwd: string,
+    extra: Record<string, string> = {}
+  ) {
+    yield* Console.log(`· ${label}`);
+    const [binary, ...args] = command;
+    const failed = (detail: string) => new StepFailed({ message: `${command.join(' ')} failed:\n${detail}` });
+    const handle = yield* spawner
+      .spawn(
+        ChildProcess.make(binary, args, {
+          cwd,
+          env: { ...ENV, ...extra },
+          extendEnv: false,
+          stdin: 'ignore',
+          stdout: 'pipe',
+          stderr: 'pipe',
+        })
+      )
+      .pipe(Effect.mapError((error) => failed(error.message)));
+    const [stdout, stderr, code] = yield* Effect.all(
+      [
+        Stream.mkString(Stream.decodeText(handle.stdout)),
+        Stream.mkString(Stream.decodeText(handle.stderr)),
+        handle.exitCode,
+      ],
+      { concurrency: 'unbounded' }
+    ).pipe(Effect.mapError((error) => failed(error.message)));
+    if (code !== 0) return yield* failed(`${stderr}${stdout}`);
+    return stdout;
+  }, Effect.scoped);
 
-function runStep(label: string, command: string[], cwd: string, extra: Record<string, string> = {}) {
-  console.log(`· ${label}`);
-  const result = Bun.spawnSync(command, { cwd, env: { ...env, ...extra }, stdout: 'pipe', stderr: 'pipe' });
-  if (result.exitCode !== 0)
-    throw new Error(`${command.join(' ')} failed:\n${result.stderr.toString()}${result.stdout.toString()}`);
-  return result.stdout.toString();
-}
-
-function reservePort() {
-  const server = Bun.serve({ port: 0, hostname: '127.0.0.1', fetch: () => new Response() });
-  const port = server.port;
-  void server.stop(true);
-  if (port === undefined) throw new Error('No free port.');
-  return port;
-}
-
-async function waitFor<T>(label: string, attempt: () => Promise<T | null | undefined>) {
-  const deadline = Date.now() + TIMEOUT_MS;
-  while (Date.now() < deadline) {
-    const value = await attempt().catch(() => null);
-    if (value !== null && value !== undefined && value !== false) return value;
-    await Bun.sleep(200);
-  }
-  throw new Error(`Timed out waiting for ${label}.`);
-}
-
-function startEngine(port: number) {
-  const data = join(WORK, 'data');
-  const engine = Bun.spawn(['bun', 'src/main.ts', 'engine'], {
-    cwd: join(ROOT, 'apps/engine'),
-    env: {
-      ...env,
-      SHINSA_DATA_DIR: data,
-      SHINSA_INSPECT: '1',
-      SHINSA_PORT: String(port),
-      SHINSA_WEB_DIR: join(WORK, 'web'),
-    },
-    stdout: Bun.file(join(WORK, 'engine.log')),
-    stderr: Bun.file(join(WORK, 'engine.err.log')),
-  });
-  cleanups.push(async () => {
-    engine.kill('SIGTERM');
-    await engine.exited;
-  });
-  const origin = `http://127.0.0.1:${port}`;
-  return waitFor('the engine', async () => {
-    const health = (await (await fetch(`${origin}/api/health`)).json()) as { ok: boolean; dataDir: string };
-    return health.ok && health.dataDir === data ? origin : null;
-  });
-}
-
-function keepDevPrefs() {
-  const saved = existsSync(DEV_PREFS) ? readFileSync(DEV_PREFS, 'utf8') : null;
-  cleanups.push(() => {
-    if (saved === null) rmSync(DEV_PREFS, { force: true });
-    else writeFileSync(DEV_PREFS, saved);
-  });
-}
-
-async function launchApp(origin: string) {
-  const mainPort = reservePort();
-  const pagePort = reservePort();
-  const launcher = Bun.spawn(
-    ['bun', 'scripts/dev.ts', `--inspect=${mainPort}`, `--remote-debugging-port=${pagePort}`],
-    {
-      cwd: join(ROOT, 'apps/desktop'),
-      env: { ...env, SHINSA_URL: origin },
-      stdout: Bun.file(join(WORK, 'app.log')),
-      stderr: Bun.file(join(WORK, 'app.err.log')),
-    }
-  );
-  const app: { main: CdpPage | null; pid: number | null } = { main: null, pid: null };
-  cleanups.push(async () => {
-    await app.main?.evaluate(`process.mainModule.require('electron').app.quit()`).catch(() => undefined);
-    app.main?.close();
-    const exited = await Promise.race([launcher.exited.then(() => true), Bun.sleep(8000).then(() => false)]);
-    if (exited) return;
-    if (app.pid) process.kill(app.pid, 'SIGTERM');
-    launcher.kill('SIGTERM');
-    await launcher.exited;
-  });
-  const main = await waitFor('the app', async () => {
-    const target = (await listTargets(mainPort)).find((entry) => entry.type === 'node');
-    return target ? CdpPage.open(target.webSocketDebuggerUrl) : null;
-  });
-  app.main = main;
-  app.pid = await main.evaluate<number>('process.pid');
-  const page = await waitFor('the page', async () => {
-    const target = (await listTargets(pagePort)).find(
-      (entry) => entry.type === 'page' && entry.url.startsWith(origin)
+  const reservePort = Effect.gen(function* () {
+    const server = yield* Effect.sync(() =>
+      Bun.serve({ port: 0, hostname: '127.0.0.1', fetch: () => new Response() })
     );
-    return target ? CdpPage.open(target.webSocketDebuggerUrl) : null;
+    const port = server.port;
+    yield* Effect.promise(() => server.stop(true));
+    if (port === undefined) return yield* new StepFailed({ message: 'No free port.' });
+    return port;
   });
-  cleanups.push(async () => {
-    await page.evaluate(`localStorage.removeItem('shinsa.theme')`).catch(() => undefined);
-    page.close();
-  });
-  return { main, page, pid: app.pid };
-}
 
-function placeWindow(main: CdpPage, theme: Theme) {
-  return main.evaluate<boolean>(`(() => {
+  const waitFor = Effect.fn('Readme.waitFor')(function* <A, E, R>(
+    label: string,
+    attempt: Effect.Effect<A | null | undefined | false, E, R>
+  ) {
+    const value = yield* attempt.pipe(
+      Effect.orElseSucceed(() => null),
+      Effect.repeat({
+        schedule: READY_POLL,
+        until: (found) => found !== null && found !== undefined && found !== false,
+      }),
+      Effect.timeoutOrElse({
+        duration: WAIT_TIMEOUT,
+        orElse: () => Effect.fail(new WaitTimedOut({ message: `Timed out waiting for ${label}.` })),
+      })
+    );
+    if (value === null || value === undefined || value === false)
+      return yield* new WaitTimedOut({ message: `Timed out waiting for ${label}.` });
+    return value;
+  });
+
+  const writeLog = (name: string, output: Stream.Stream<Uint8Array, unknown>) =>
+    output.pipe(
+      Stream.runForEach((chunk) => Effect.sync(() => appendFileSync(join(WORK, name), chunk))),
+      Effect.ignore,
+      Effect.forkScoped
+    );
+
+  const startEngine = Effect.fn('Readme.startEngine')(function* (port: number) {
+    const data = join(WORK, 'data');
+    const engine = yield* spawner
+      .spawn(
+        ChildProcess.make('bun', ['src/main.ts', 'engine'], {
+          cwd: join(ROOT, 'apps/engine'),
+          env: {
+            ...ENV,
+            SHINSA_DATA_DIR: data,
+            SHINSA_INSPECT: '1',
+            SHINSA_PORT: String(port),
+            SHINSA_WEB_DIR: join(WORK, 'web'),
+          },
+          extendEnv: false,
+          stdin: 'ignore',
+          stdout: 'pipe',
+          stderr: 'pipe',
+          killSignal: 'SIGTERM',
+        })
+      )
+      .pipe(
+        Effect.mapError((error) => new StepFailed({ message: `The engine did not start: ${error.message}` }))
+      );
+    yield* writeLog('engine.log', engine.stdout);
+    yield* writeLog('engine.err.log', engine.stderr);
+    const origin = `http://127.0.0.1:${port}`;
+    return yield* waitFor(
+      'the engine',
+      http.get(`${origin}/api/health`).pipe(
+        Effect.flatMap(HttpClientResponse.schemaBodyJson(Health)),
+        Effect.map((health) => (health.ok && health.dataDir === data ? origin : null))
+      )
+    );
+  });
+
+  const keepDevPrefs = Effect.acquireRelease(
+    Effect.sync(() => (existsSync(DEV_PREFS) ? readFileSync(DEV_PREFS, 'utf8') : null)),
+    (saved) =>
+      Effect.sync(() => {
+        if (saved === null) rmSync(DEV_PREFS, { force: true });
+        else writeFileSync(DEV_PREFS, saved);
+      })
+  );
+
+  const launchApp = Effect.fn('Readme.launchApp')(function* (origin: string) {
+    const mainPort = yield* reservePort;
+    const pagePort = yield* reservePort;
+    const launcher = yield* spawner
+      .spawn(
+        ChildProcess.make(
+          'bun',
+          ['scripts/dev.ts', `--inspect=${mainPort}`, `--remote-debugging-port=${pagePort}`],
+          {
+            cwd: join(ROOT, 'apps/desktop'),
+            env: { ...ENV, SHINSA_URL: origin },
+            extendEnv: false,
+            stdin: 'ignore',
+            stdout: 'pipe',
+            stderr: 'pipe',
+            killSignal: 'SIGTERM',
+          }
+        )
+      )
+      .pipe(
+        Effect.mapError((error) => new StepFailed({ message: `The app did not start: ${error.message}` }))
+      );
+    yield* writeLog('app.log', launcher.stdout);
+    yield* writeLog('app.err.log', launcher.stderr);
+    const mainUrl = yield* waitFor(
+      'the app',
+      Effect.map(
+        chromium.listTargets(mainPort),
+        (targets) => targets.find((entry) => entry.type === 'node')?.webSocketDebuggerUrl
+      )
+    );
+    const main = yield* chromium.connect(mainUrl);
+    const pid = yield* main.evaluate('process.pid', Schema.Number);
+    const quitApp = Effect.fn('Readme.quitApp')(function* () {
+      yield* Effect.ignore(
+        main.evaluate(`process.mainModule.require('electron').app.quit()`, Schema.Unknown)
+      );
+      const exited = yield* launcher.exitCode.pipe(
+        Effect.as(true),
+        Effect.timeoutOrElse({ duration: QUIT_TIMEOUT, orElse: () => Effect.succeed(false) }),
+        Effect.orElseSucceed(() => false)
+      );
+      if (!exited)
+        yield* Effect.ignore(
+          Effect.try({
+            try: () => process.kill(pid, 'SIGTERM'),
+            catch: () => new StepFailed({ message: 'kill' }),
+          })
+        );
+    });
+    yield* Effect.addFinalizer(() => quitApp());
+    const pageUrl = yield* waitFor(
+      'the page',
+      Effect.map(
+        chromium.listTargets(pagePort),
+        (targets) =>
+          targets.find((entry) => entry.type === 'page' && entry.url.startsWith(origin))?.webSocketDebuggerUrl
+      )
+    );
+    const page = yield* chromium.connect(pageUrl);
+    yield* Effect.addFinalizer(() =>
+      Effect.ignore(page.evaluate(`localStorage.removeItem('shinsa.theme')`, Schema.Unknown))
+    );
+    return { main, page, pid };
+  });
+
+  const placeWindow = (main: CdpPage, theme: Theme) =>
+    main.evaluate(
+      `(() => {
     const { app, BrowserWindow, nativeTheme, screen } = process.mainModule.require('electron');
     nativeTheme.themeSource = '${theme}';
     const win = BrowserWindow.getAllWindows().find((each) => each.isVisible()) ?? BrowserWindow.getAllWindows()[0];
@@ -149,11 +254,13 @@ function placeWindow(main: CdpPage, theme: Theme) {
     win.focus();
     app.focus({ steal: true });
     return win.isFocused();
-  })()`);
-}
+  })()`,
+      Schema.Boolean
+    );
 
-function isPageSettled(page: CdpPage, theme: Theme) {
-  return page.evaluate<boolean>(`(async () => {
+  const isPageSettled = (page: CdpPage, theme: Theme) =>
+    page.evaluate(
+      `(async () => {
     await document.fonts.ready;
     document.activeElement?.blur?.();
     return document.fonts.status === 'loaded'
@@ -163,77 +270,93 @@ function isPageSettled(page: CdpPage, theme: Theme) {
       && !document.querySelector('[aria-label="Reconnecting"]')
       && !document.querySelector('[data-sonner-toast]')
       && !document.querySelector('.animate-spin');
-  })()`);
-}
+  })()`,
+      Schema.Boolean
+    );
 
-function findAppWindow(pid: number) {
-  const windows = JSON.parse(
-    runStep('find the window', ['swift', WINDOWS_HELPER, String(pid)], ROOT)
-  ) as AppWindow[];
-  const match = windows.find(
-    (each) => each.bounds.Width === WINDOW.width && each.bounds.Height === WINDOW.height
-  );
-  if (!match)
-    throw new Error(`No ${WINDOW.width}×${WINDOW.height} window for pid ${pid}: ${JSON.stringify(windows)}`);
-  return match.id;
-}
-
-function writeImage(raw: string, target: string) {
-  const pngquant = Bun.which('pngquant');
-  if (!pngquant) {
-    console.log('  pngquant is not installed (brew install pngquant): writing the capture as is');
-    copyFileSync(raw, target);
-    return;
-  }
-  runStep(
-    `shrink ${target}`,
-    [pngquant, '--quality', '75-95', '--speed', '1', '--strip', '--force', '--output', target, raw],
-    ROOT
-  );
-}
-
-async function captureTheme(main: CdpPage, page: CdpPage, pid: number, theme: Theme) {
-  await placeWindow(main, theme);
-  let calm = 0;
-  await waitFor(`the ${theme} page to settle`, async () => {
-    calm = (await isPageSettled(page, theme)) ? calm + 1 : 0;
-    return calm >= 5;
+  const findAppWindow = Effect.fn('Readme.findAppWindow')(function* (pid: number) {
+    const output = yield* runStep('find the window', ['swift', WINDOWS_HELPER, String(pid)], ROOT);
+    const windows = yield* decodeWindows(output).pipe(
+      Effect.mapError(
+        (issue) => new WindowNotFound({ message: `The window list did not decode: ${issue.message}` })
+      )
+    );
+    const match = windows.find(
+      (each) => each.bounds.Width === WINDOW.width && each.bounds.Height === WINDOW.height
+    );
+    if (!match)
+      return yield* new WindowNotFound({
+        message: `No ${WINDOW.width}×${WINDOW.height} window for pid ${pid}: ${output.trim()}`,
+      });
+    return match.id;
   });
-  await Bun.sleep(1200);
-  await waitFor('the window to have focus', () => placeWindow(main, theme));
-  await Bun.sleep(400);
-  const raw = join(WORK, `shinsa-${theme}.raw.png`);
-  runStep(
-    `capture ${theme}`,
-    ['screencapture', '-l', String(findAppWindow(pid)), '-x', '-t', 'png', raw],
-    ROOT
-  );
-  writeImage(raw, join(ASSETS, `shinsa-${theme}.png`));
-}
 
-async function cleanUp() {
-  for (const step of cleanups.splice(0).reverse()) await Promise.resolve(step()).catch(console.error);
-}
+  const writeImage = Effect.fn('Readme.writeImage')(function* (raw: string, target: string) {
+    const pngquant = Bun.which('pngquant');
+    if (!pngquant) {
+      yield* Console.log('  pngquant is not installed (brew install pngquant): writing the capture as is');
+      return yield* Effect.sync(() => copyFileSync(raw, target));
+    }
+    yield* runStep(
+      `shrink ${target}`,
+      [pngquant, '--quality', '75-95', '--speed', '1', '--strip', '--force', '--output', target, raw],
+      ROOT
+    );
+  });
 
-process.on('SIGINT', () => void cleanUp().then(() => process.exit(130)));
+  const captureTheme = Effect.fn('Readme.captureTheme')(function* (
+    main: CdpPage,
+    page: CdpPage,
+    pid: number,
+    theme: Theme
+  ) {
+    yield* placeWindow(main, theme);
+    const calm = yield* Ref.make(0);
+    yield* waitFor(
+      `the ${theme} page to settle`,
+      isPageSettled(page, theme).pipe(
+        Effect.flatMap((settled) => Ref.updateAndGet(calm, (count) => (settled ? count + 1 : 0))),
+        Effect.map((count) => count >= SETTLED_CHECKS)
+      )
+    );
+    yield* Effect.sleep(SETTLE_PAUSE);
+    yield* waitFor('the window to have focus', placeWindow(main, theme));
+    yield* Effect.sleep(FOCUS_PAUSE);
+    const raw = join(WORK, `shinsa-${theme}.raw.png`);
+    const windowId = yield* findAppWindow(pid);
+    yield* runStep(
+      `capture ${theme}`,
+      ['screencapture', '-l', String(windowId), '-x', '-t', 'png', raw],
+      ROOT
+    );
+    yield* writeImage(raw, join(ASSETS, `shinsa-${theme}.png`));
+  });
 
-try {
-  rmSync(WORK, { recursive: true, force: true });
-  mkdirSync(WORK, { recursive: true });
-  runStep('seed', ['bun', 'scripts/seed.ts'], ROOT, { SHINSA_SEED_DIR: WORK });
-  runStep(
+  yield* Effect.sync(() => {
+    rmSync(WORK, { recursive: true, force: true });
+    mkdirSync(WORK, { recursive: true });
+  });
+  yield* runStep('seed', ['bun', 'scripts/seed.ts'], ROOT, { SHINSA_SEED_DIR: WORK });
+  yield* runStep(
     'build the web app',
     ['bun', 'run', 'build', '--outDir', join(WORK, 'web'), '--emptyOutDir'],
     join(ROOT, 'apps/web')
   );
-  runStep('build the app', ['bun', 'run', 'build'], join(ROOT, 'apps/desktop'));
-  const origin = await startEngine(reservePort());
-  console.log(`· engine on ${origin}`);
-  keepDevPrefs();
-  const { main, page, pid } = await launchApp(origin);
-  await page.evaluate(`localStorage.removeItem('shinsa.theme'); location.reload()`).catch(() => undefined);
-  for (const theme of THEMES) await captureTheme(main, page, pid, theme);
-  console.log(`Wrote ${THEMES.map((theme) => join(ASSETS, `shinsa-${theme}.png`)).join(' and ')}`);
-} finally {
-  await cleanUp();
-}
+  yield* runStep('build the app', ['bun', 'run', 'build'], join(ROOT, 'apps/desktop'));
+  const origin = yield* startEngine(yield* reservePort);
+  yield* Console.log(`· engine on ${origin}`);
+  yield* keepDevPrefs;
+  const { main, page, pid } = yield* launchApp(origin);
+  yield* Effect.ignore(
+    page.evaluate(`localStorage.removeItem('shinsa.theme'); location.reload()`, Schema.Unknown)
+  );
+  for (const theme of THEMES) yield* captureTheme(main, page, pid, theme);
+  yield* Console.log(`Wrote ${THEMES.map((theme) => join(ASSETS, `shinsa-${theme}.png`)).join(' and ')}`);
+});
+
+program.pipe(
+  Effect.scoped,
+  reportFailure,
+  Effect.provide(ChromiumLayer),
+  BunRuntime.runMain({ disableErrorReporting: true })
+);

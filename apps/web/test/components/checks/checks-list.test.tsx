@@ -85,6 +85,20 @@ describe('the Checks list', () => {
     expect(unit?.className.split(' ')).toContain('has-[[data-facts]]:items-start');
   });
 
+  it('on a phone moves the output toggle under the check, so its details keep the row’s width', () => {
+    render(
+      <TooltipProvider>
+        <ChecksBlock taskId='t' view={createView({})} />
+      </TooltipProvider>
+    );
+    const toggle = screen.getByRole('button', { name: 'Show the output' });
+    const row = toggle.closest('li')?.firstElementChild;
+    expect(row?.className.split(' ')).toContain('max-sm:grid');
+    expect(toggle.className.split(' ')).toContain('max-sm:row-start-2');
+    expect(toggle.className.split(' ')).toContain('max-sm:col-start-2');
+    expect(toggle.parentElement?.lastElementChild?.className.split(' ')).toContain('max-sm:col-start-3');
+  });
+
   it('spins a running check, so a run of the checks never looks stuck', () => {
     const view = createView({
       stage: 'checking',

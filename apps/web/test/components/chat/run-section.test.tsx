@@ -101,4 +101,25 @@ describe('RunSection', () => {
     expect(reply.compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(view.queryByText('No response requested.')).toBeNull();
   });
+
+  it('lets the run’s header wrap on a phone, while its one-line rows stay one line', async () => {
+    pushState(createShinsaState({ tasks: [task], runs: [run] }));
+    pushTranscript('run-fix', [
+      createEntry(
+        { type: 'tool_call', callId: 'r1', tool: { kind: 'read', path: 'a.ts', range: null } },
+        'r1',
+        STARTED
+      ),
+      createEntry({ type: 'agent', phase: 'final', text: REPLY }, 'a2', STARTED + 2000),
+    ]);
+    const view = render(
+      <TooltipProvider>
+        <RunSection run={run} task={task} messages={[]} waiting={false} />
+      </TooltipProvider>
+    );
+    const worked = (await view.findByText(/Worked for/)).closest('[data-chat-line]');
+    const header = view.getByText('Agent').closest('[data-chat-line]');
+    expect(header?.className.split(' ')).toContain('max-sm:h-auto');
+    expect(worked?.className.split(' ')).not.toContain('max-sm:h-auto');
+  });
 });

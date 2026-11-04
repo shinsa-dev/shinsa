@@ -1,11 +1,19 @@
 import { Logo } from '@shinsa/ui/components/logo';
+import { cn } from '@shinsa/ui/lib/utils';
 import type * as React from 'react';
+import { SAFE_AREA_SIDES, SAFE_AREA_TOP } from '@/components/layout/sidebar/compact-bar.tsx';
 import { ConnectionStatus } from '@/components/status/connection-status.tsx';
 import { UpdateButton } from '@/components/status/update-button.tsx';
 
 export function OnboardingShell({ children }: { children: React.ReactNode }) {
   return (
-    <div className='flex h-dvh flex-col overflow-hidden bg-background text-fg-3'>
+    <div
+      className={cn(
+        'flex h-dvh flex-col overflow-hidden bg-background text-fg-3',
+        SAFE_AREA_TOP,
+        SAFE_AREA_SIDES
+      )}
+    >
       <header
         data-window-drag
         className='flex h-11 shrink-0 items-center gap-2 px-3.5 select-none sm:px-5 desktop:ps-20'

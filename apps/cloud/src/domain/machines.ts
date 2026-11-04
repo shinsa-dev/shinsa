@@ -71,11 +71,11 @@ export const createConnectAnswer = Effect.fn('createConnectAnswer')(function* (
   const expiresAt = (yield* Clock.currentTimeMillis) + CONNECT_TOKEN_TTL_MS;
   const connectKey = Redacted.value(machine.connectKey);
   const nonce = Redacted.value(yield* crypto.createToken(CONNECT_NONCE_BYTES));
-  const token = yield* Effect.promise(() =>
+  const token = yield* (
     hasMachineFeature(machine.features, 'bound-connect-tokens')
       ? createConnectToken(connectKey, { instanceId: machine.id, userId, channel, nonce, expiresAt })
       : createLegacyConnectToken(connectKey, { instanceId: machine.id, userId, expiresAt })
-  );
+  ).pipe(Effect.orDie);
   const tunnel = resolveTunnelUrl(machine);
   const url =
     channel === 'team'

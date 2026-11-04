@@ -9,7 +9,6 @@ import {
   CI_QUERY,
   CiDetails,
   KNOWN_CI_TTL,
-  type RepoCiCache,
   UNKNOWN_CI_TTL,
   WORKFLOW_FILE,
 } from './schema.ts';
@@ -19,13 +18,14 @@ export class RepoCiReader extends Context.Service<
   RepoCiReader,
   {
     read(repo: Repo, base: string, signal?: AbortSignal): Effect.Effect<RepoCi>;
-    makeCache: Effect.Effect<RepoCiCache>;
+    resolve(repo: Repo, base: string, signal?: AbortSignal): Effect.Effect<RepoCi>;
   }
 >()('shinsa/engine/github/ci/RepoCiReader') {
   static readonly layer = Layer.effect(
     RepoCiReader,
     Effect.gen(function* () {
       const gh = yield* GitHubCli;
+      const entries = yield* Ref.make(new Map<string, { ci: RepoCi; until: number }>());
 
       const readJson = <A>(
         schema: Schema.Decoder<A>,
@@ -107,27 +107,23 @@ export class RepoCiReader extends Context.Service<
         return 'none' as const;
       });
 
-      const makeCache = Effect.gen(function* () {
-        const entries = yield* Ref.make(new Map<string, { ci: RepoCi; until: number }>());
-        const resolve = Effect.fn('RepoCiCache.resolve')(function* (
-          repo: Repo,
-          base: string,
-          signal?: AbortSignal
-        ) {
-          const key = `${repo.id}\n${base}`;
-          const cached = (yield* Ref.get(entries)).get(key);
-          if (cached && cached.until > (yield* Clock.currentTimeMillis)) return cached.ci;
-          const ci = yield* read(repo, base, signal);
-          if (signal?.aborted) return ci;
-          const ttl = ci === 'unknown' ? UNKNOWN_CI_TTL : KNOWN_CI_TTL;
-          const until = (yield* Clock.currentTimeMillis) + Duration.toMillis(ttl);
-          yield* Ref.update(entries, (known) => new Map(known).set(key, { ci, until }));
-          return ci;
-        });
-        return { resolve } satisfies RepoCiCache;
+      const resolve = Effect.fn('RepoCiReader.resolve')(function* (
+        repo: Repo,
+        base: string,
+        signal?: AbortSignal
+      ) {
+        const key = `${repo.id}\n${base}`;
+        const cached = (yield* Ref.get(entries)).get(key);
+        if (cached && cached.until > (yield* Clock.currentTimeMillis)) return cached.ci;
+        const ci = yield* read(repo, base, signal);
+        if (signal?.aborted) return ci;
+        const ttl = ci === 'unknown' ? UNKNOWN_CI_TTL : KNOWN_CI_TTL;
+        const until = (yield* Clock.currentTimeMillis) + Duration.toMillis(ttl);
+        yield* Ref.update(entries, (known) => new Map(known).set(key, { ci, until }));
+        return ci;
       });
 
-      return RepoCiReader.of({ read, makeCache });
+      return RepoCiReader.of({ read, resolve });
     })
   );
 }

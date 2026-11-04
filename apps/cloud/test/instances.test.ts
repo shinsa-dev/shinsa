@@ -9,7 +9,7 @@ import {
   resolveInstanceRemovePath,
   verifyConnectToken,
 } from '@shinsa/core';
-import { Duration } from 'effect';
+import { Effect, Duration } from 'effect';
 import { ONLINE_WINDOW } from '../src/domain/schema.ts';
 import { createHarness, type Harness, heartbeat, pairMachine, readJson } from './harness.ts';
 
@@ -112,7 +112,9 @@ describe('instances', () => {
     );
     const token = url.searchParams.get('token') ?? '';
     const remote = { instanceId: studio.instanceId, channel: 'remote' } as const;
-    const claim = await verifyConnectToken(studio.connectKey, token, remote, harness.clock.now);
+    const claim = await Effect.runPromise(
+      verifyConnectToken(studio.connectKey, token, remote, harness.clock.now)
+    );
     expect(claim).toEqual({
       instanceId: studio.instanceId,
       userId: '7',
@@ -124,7 +126,9 @@ describe('instances', () => {
       await harness.post(resolveInstanceConnectPath(studio.instanceId), {}, { session })
     );
     const next = new URL(again.url).searchParams.get('token') ?? '';
-    const nextClaim = await verifyConnectToken(studio.connectKey, next, remote, harness.clock.now);
+    const nextClaim = await Effect.runPromise(
+      verifyConnectToken(studio.connectKey, next, remote, harness.clock.now)
+    );
     expect(nextClaim?.nonce).not.toBe(claim?.nonce);
   });
 
@@ -158,10 +162,12 @@ describe('instances', () => {
       u: '7',
       e: harness.clock.now + CONNECT_TOKEN_TTL_MS,
     });
-    expect(await verifyConnectToken(studio.connectKey, legacy, remote, harness.clock.now)).toBeNull();
+    expect(
+      await Effect.runPromise(verifyConnectToken(studio.connectKey, legacy, remote, harness.clock.now))
+    ).toBeNull();
     await heartbeat(harness, studio);
     expect(
-      await verifyConnectToken(studio.connectKey, await mint(), remote, harness.clock.now)
+      await Effect.runPromise(verifyConnectToken(studio.connectKey, await mint(), remote, harness.clock.now))
     ).toMatchObject({
       channel: 'remote',
     });

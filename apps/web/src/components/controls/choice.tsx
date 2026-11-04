@@ -1,5 +1,8 @@
 import { Icon } from '@shinsa/ui/components/icon';
+import { ScrollFade } from '@shinsa/ui/components/scroll-fade';
 import { Tabs, TabsList, TabsTrigger } from '@shinsa/ui/components/tabs';
+import { cn } from '@shinsa/ui/lib/utils';
+import * as React from 'react';
 import { Hint } from '@/components/overlays/hint.tsx';
 import { CHECK_TEXT } from '@/components/status/check-mark.tsx';
 
@@ -11,12 +14,26 @@ interface ChoiceItem<V extends string> {
   disabled?: boolean;
 }
 
+const SCROLLING_TRACK = 'corner-superellipse/1.125 w-fit max-w-full rounded-control bg-bg-2';
+
+const SCROLLING_LIST = 'max-w-full justify-start overflow-x-auto overscroll-x-contain bg-transparent';
+
+export function revealActiveItem(strip: HTMLElement) {
+  const active = strip.querySelector('[data-active]');
+  if (!active) return;
+  const bounds = strip.getBoundingClientRect();
+  const item = active.getBoundingClientRect();
+  if (item.left < bounds.left) strip.scrollLeft += item.left - bounds.left;
+  else if (item.right > bounds.right) strip.scrollLeft += item.right - bounds.right;
+}
+
 export function Choice<V extends string>({
   items,
   value,
   onValueChange,
   label,
   onItemIntent,
+  scrolls = false,
   className,
 }: {
   items: ChoiceItem<V>[];
@@ -24,11 +41,20 @@ export function Choice<V extends string>({
   onValueChange: (value: V) => void;
   label: string;
   onItemIntent?: (value: V) => void;
+  scrolls?: boolean;
   className?: string;
 }) {
+  const list = React.useRef<HTMLDivElement>(null);
+  React.useEffect(() => {
+    if (scrolls && list.current) revealActiveItem(list.current);
+  }, [scrolls, value]);
   return (
-    <Tabs value={value} onValueChange={(next) => onValueChange(next as V)} className={className}>
-      <TabsList aria-label={label}>
+    <Tabs
+      value={value}
+      onValueChange={(next) => onValueChange(next as V)}
+      className={cn(scrolls && SCROLLING_TRACK, className)}
+    >
+      <TabsList ref={list} aria-label={label} className={cn(scrolls && SCROLLING_LIST)}>
         {items.map((item) => {
           const trigger = (
             <TabsTrigger
@@ -50,6 +76,7 @@ export function Choice<V extends string>({
           );
         })}
       </TabsList>
+      {scrolls && <ScrollFade targetRef={list} orientation='horizontal' size={16} />}
     </Tabs>
   );
 }

@@ -2,15 +2,16 @@ import { describe, expect, test } from 'bun:test';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { ServiceSuggestion } from '@shinsa/core';
+import { Effect } from 'effect';
 import type { QuickJson } from '../../src/agents/quick/index.ts';
 import {
   parseRefinedEntries,
   REFINE_LIMITS,
   readFolderDigest,
   resolveRefinedSuggestions,
-  ServiceRefiner,
 } from '../../src/terminals/refine.ts';
-import { createTempDir } from '../helpers/index.ts';
+import { createTempDir } from '../helpers/temp.ts';
+import { createTestRefiner } from '../helpers/terminals.ts';
 
 function suggest(name: string, cwd: string, command = 'bun run dev'): ServiceSuggestion {
   return { name, cwd, command, source: 'package', recommended: true, previewUrl: null, portVariable: 'PORT' };
@@ -32,7 +33,7 @@ function createAsk(answers: unknown[]) {
   const calls: { system: string; prompt: string; schema: unknown }[] = [];
   const ask = ((system: string, prompt: string, schema?: unknown) => {
     calls.push({ system, prompt, schema });
-    return Promise.resolve(answers.shift() ?? null);
+    return Effect.succeed(answers.shift() ?? null);
   }) as QuickJson;
   return { ask, calls };
 }
@@ -138,9 +139,9 @@ describe('the service refiner', () => {
   test('asks once with the candidates and their folders, and answers again from its cache', async () => {
     const { web } = createProject();
     const { ask, calls } = createAsk([{ services: [entry(0)] }]);
-    const refiner = new ServiceRefiner(ask);
+    const refiner = createTestRefiner(ask);
     const candidates = [suggest('app', web)];
-    const first = await refiner.refine('p1', candidates);
+    const first = await Effect.runPromise(refiner.refine('p1', candidates));
     expect(first).toEqual({
       refined: true,
       suggestions: [
@@ -160,45 +161,71 @@ describe('the service refiner', () => {
         { folder: web, scripts: { dev: 'vite', build: 'vite build' }, dependencies: ['react', 'vite'] },
       ],
     });
-    expect(await refiner.refine('p1', candidates)).toEqual(first);
+    expect(await Effect.runPromise(refiner.refine('p1', candidates))).toEqual(first);
     expect(calls).toHaveLength(1);
   });
 
   test('asks again once the files or the candidates change', async () => {
     const { web } = createProject();
     const { ask, calls } = createAsk([{ services: [] }, { services: [] }, { services: [] }]);
-    const refiner = new ServiceRefiner(ask);
-    await refiner.refine('p1', [suggest('web', web)]);
+    const refiner = createTestRefiner(ask);
+    await Effect.runPromise(refiner.refine('p1', [suggest('web', web)]));
     writeFileSync(join(web, 'package.json'), JSON.stringify({ scripts: { dev: 'next dev' } }));
-    await refiner.refine('p1', [suggest('web', web)]);
-    await refiner.refine('p1', [suggest('web', web, 'npm run dev')]);
+    await Effect.runPromise(refiner.refine('p1', [suggest('web', web)]));
+    await Effect.runPromise(refiner.refine('p1', [suggest('web', web, 'npm run dev')]));
     expect(calls).toHaveLength(3);
   });
 
   test('falls back to the detected services when the call fails, and tries again next time', async () => {
     const { web } = createProject();
     const { ask, calls } = createAsk([null, { services: 'nothing' }]);
-    const refiner = new ServiceRefiner(ask);
+    const refiner = createTestRefiner(ask);
     const candidates = [suggest('web', web)];
-    expect(await refiner.refine('p1', candidates)).toEqual({ suggestions: candidates, refined: false });
-    expect(await refiner.refine('p1', candidates)).toEqual({ suggestions: candidates, refined: false });
+    expect(await Effect.runPromise(refiner.refine('p1', candidates))).toEqual({
+      suggestions: candidates,
+      refined: false,
+    });
+    expect(await Effect.runPromise(refiner.refine('p1', candidates))).toEqual({
+      suggestions: candidates,
+      refined: false,
+    });
     expect(calls).toHaveLength(2);
+  });
+
+  test('fails when the call breaks, and asks again next time', async () => {
+    const { web } = createProject();
+    let calls = 0;
+    const ask = (() => {
+      calls += 1;
+      return calls === 1 ? Effect.die(new Error('quick call broke')) : Effect.succeed({ services: [] });
+    }) as QuickJson;
+    const refiner = createTestRefiner(ask);
+    const candidates = [suggest('web', web)];
+    await expect(Effect.runPromise(refiner.refine('p1', candidates))).rejects.toThrow('quick call broke');
+    expect(await Effect.runPromise(refiner.refine('p1', candidates))).toEqual({
+      suggestions: candidates,
+      refined: true,
+    });
+    expect(calls).toBe(2);
   });
 
   test('asks nothing when there is nothing to refine', async () => {
     const { ask, calls } = createAsk([]);
-    expect(await new ServiceRefiner(ask).refine('p1', [])).toEqual({ suggestions: [], refined: false });
+    expect(await Effect.runPromise(createTestRefiner(ask).refine('p1', []))).toEqual({
+      suggestions: [],
+      refined: false,
+    });
     expect(calls).toHaveLength(0);
   });
 
   test('shares one call between two requests that arrive together', async () => {
     const { web } = createProject();
     const { ask, calls } = createAsk([{ services: [entry(0)] }]);
-    const refiner = new ServiceRefiner(ask);
+    const refiner = createTestRefiner(ask);
     const candidates = [suggest('app', web)];
     const [one, two] = await Promise.all([
-      refiner.refine('p1', candidates),
-      refiner.refine('p1', candidates),
+      Effect.runPromise(refiner.refine('p1', candidates)),
+      Effect.runPromise(refiner.refine('p1', candidates)),
     ]);
     expect(one).toEqual(two);
     expect(calls).toHaveLength(1);

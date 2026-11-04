@@ -1,5 +1,6 @@
 import type { Repo, ReportCheck } from '@shinsa/core';
-import { Duration, type Effect } from 'effect';
+import { Context, Duration, type Effect } from 'effect';
+import type { CodeUnavailable } from '../git/history/schema.ts';
 import type { GitFailed } from '../git/schema.ts';
 
 export type TestRunner = 'bun' | 'vitest' | 'jest';
@@ -50,7 +51,7 @@ export interface CheckOptions {
   onSpawn?: (pid: number) => void;
 }
 
-export type BaseComparison = (run: CheckRun) => Promise<FailureDiff | null>;
+type BaseComparison = (run: CheckRun) => Effect.Effect<FailureDiff | null>;
 
 export interface CheckRoundOptions extends CheckOptions {
   compare?: BaseComparison;
@@ -58,7 +59,7 @@ export interface CheckRoundOptions extends CheckOptions {
 
 export interface BaseRequest extends CheckOptions {
   repo: Repo;
-  resolveBase: () => Promise<string | null>;
+  resolveBase: Effect.Effect<string | null, CodeUnavailable>;
   cwd: string;
   run: CheckRun;
 }
@@ -74,10 +75,6 @@ export interface BaseCheckout {
   path: string;
   ready: Effect.Effect<string, GitFailed>;
   users: number;
-}
-
-export interface BaseCheckoutPool {
-  readonly compare: (request: BaseRequest) => Effect.Effect<FailureDiff | null>;
 }
 
 export interface GroupRerun {
@@ -106,7 +103,11 @@ export const COVERAGE_FLOOR_ONLY =
 export const NO_TESTS =
   /did not match any test files|had no matches|No test files found|No tests found|no tests ran|no test files/i;
 
-export const KEPT_CHECKOUTS = 3;
+const KEPT_CHECKOUTS = 3;
+
+export const KeptCheckouts = Context.Reference<number>('shinsa/engine/checks/KeptCheckouts', {
+  defaultValue: () => KEPT_CHECKOUTS,
+});
 
 export const UNUSED_CACHE = Duration.days(14);
 

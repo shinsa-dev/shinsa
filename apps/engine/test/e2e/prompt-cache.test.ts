@@ -7,9 +7,8 @@ import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import type { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { resolveCurrentRound, resolveTaskRounds } from '@shinsa/core';
 import { resolveClaudeProjectName } from '../../src/agents/providers/claude/artifacts.ts';
-import { createClaudeProvider } from '../../src/agents/providers/claude/index.ts';
-import { ProviderRegistry } from '../../src/agents/providers/index.ts';
 import { createTempDir } from '../helpers/index.ts';
+import { buildClaudeProvider, createTestProviders } from '../helpers/providers.ts';
 import { createFakeQuery, createFakeRuntime, type QueryParams, sdkMessage } from '../helpers/query.ts';
 import { World } from './harness.ts';
 
@@ -234,10 +233,10 @@ async function openWorld(wait: SteerWait | null = null) {
   const sessions = new Map<string, CachedSession>();
   let calls = 0;
   const fake = createFakeQuery((params) => cachedTurn(params, calls++, home, turns, sessions, wait));
-  const provider = createClaudeProvider(createFakeRuntime(fake.query), { env: {}, home });
+  const provider = buildClaudeProvider(createFakeRuntime(fake.query), { env: {}, home });
   world = await World.create({
     checks: ['test -f fixed.txt || ! ls turn-*.txt'],
-    providers: () => new ProviderRegistry([provider]),
+    providers: () => createTestProviders([provider]),
   });
   return { w: world, turns };
 }

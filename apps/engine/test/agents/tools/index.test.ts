@@ -7,13 +7,13 @@ import {
   SHINSA_TOOL_NAMES,
   VERIFICATION_RULES,
 } from '@shinsa/core';
-import { createShinsaTools, createToolSet, type ToolHandler } from '../../../src/agents/tools/index.ts';
 import { TOOL_SPECS } from '../../../src/agents/tools/specs.ts';
+import { createTestTools, createTestToolSet, type PromisedToolHandler } from '../../helpers/tools.ts';
 
 type Handler = (request: unknown, extra: unknown) => Promise<unknown>;
 
-function readHandlers(role: RunRole, handler: ToolHandler) {
-  const tools = createShinsaTools(role, handler);
+function readHandlers(role: RunRole, handler: PromisedToolHandler) {
+  const tools = createTestTools(role, handler);
   const handlers = (tools.server as unknown as { _requestHandlers: Map<string, Handler> })._requestHandlers;
   const list = handlers.get('tools/list');
   const call = handlers.get('tools/call');
@@ -258,7 +258,7 @@ describe('the plan parameters propose_plan publishes', () => {
 describe('a tool set of any specs', () => {
   test('publishes each spec with its annotations and scopes request ids to the server it serves', async () => {
     const seen: unknown[] = [];
-    const tools = createToolSet(
+    const tools = createTestToolSet(
       'planner',
       [
         {

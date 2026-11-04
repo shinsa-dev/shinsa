@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test';
-import { mkdirSync, symlinkSync, writeFileSync } from 'node:fs';
+import { mkdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   type Bytes,
@@ -21,6 +21,7 @@ import {
   SHARE_FILE_BYTES,
   SHARE_TRANSCRIPT_PAGE,
   type ShareLiveView,
+  type Repo,
   type ShareMessage,
   type SharePreset,
   type ShinsaState,
@@ -28,26 +29,25 @@ import {
   serializeShareUrl,
   type Task,
 } from '@shinsa/core';
-import { createWorktree } from '../../src/git/index.ts';
-import { RemoteControl } from '../../src/remote/client/index.ts';
-import { createRefusedConnector } from '../../src/remote/connector/refused.ts';
-import { Remote } from '../../src/remote/index.ts';
-import { SHARE_GONE_REASON } from '../../src/remote/share-channel.ts';
+import { Clock, Effect, Layer } from 'effect';
+import type { Transcripts } from '../../src/agents/transcripts/service.ts';
+import { RandomBytes } from '../../src/remote/schema.ts';
+import { SHARE_GONE_REASON } from '../../src/remote/share-channel/schema.ts';
 import {
-  readWorktreeFile,
   SHARE_LINK_LOST,
   SHARE_NOT_PAIRED,
   SHARE_REMOTE_CHANGED,
-  type ShareGitHub,
-  Shares,
-  type ShareTranscripts,
-  type ShareWorktree,
-} from '../../src/remote/shares.ts';
+  ShareCodeUnreadable,
+  ShareSources,
+} from '../../src/remote/shares/schema.ts';
+import { readWorktreeFile as readWorktreeFileEffect } from '../../src/remote/shares/worktree-file.ts';
 import { EffectFailed } from '../../src/runtime/failures/schema.ts';
-import { EvidenceStore } from '../../src/store/evidence/index.ts';
-import { createGitRepo, createTempDir, until } from '../helpers/index.ts';
+import { createTestEvidence } from '../helpers/evidence.ts';
+import { createWorktree } from '../helpers/git.ts';
+import { createGitRepo, createTempDir, overrideEnv, until } from '../helpers/index.ts';
 import { createRepo, createRun, createStubEngine, createTask } from '../helpers/state.ts';
 import { type FakeControlPlane, startFakeControlPlane } from './control-plane.ts';
+import { adaptRemote, adaptShares, createRemoteTest } from './harness.ts';
 
 const MONA = { id: '1', login: 'mona', name: 'Mona Lisa', avatarUrl: 'https://avatars.example/mona' };
 
@@ -79,6 +79,48 @@ afterEach(async () => {
   await running?.stop();
   running = null;
 });
+
+interface ShareGitHub {
+  readDiff: (repo: Repo, number: number) => Promise<string>;
+  readFile: (repo: Repo, ref: string, path: string) => Promise<string>;
+}
+
+interface ShareWorktree {
+  readBase: (repo: Repo, task: Task) => Promise<string>;
+  readPatch: (worktree: string, base: string) => Promise<string>;
+  readFile: (worktree: string, path: string) => Promise<string>;
+}
+
+type Shares = ReturnType<typeof adaptShares>;
+
+function readWorktreeFile(worktree: string, path: string) {
+  return Effect.runPromise(readWorktreeFileEffect(worktree, path));
+}
+
+const enterCode = <A>(run: () => Promise<A>) =>
+  Effect.tryPromise({
+    try: run,
+    catch: (error) =>
+      new ShareCodeUnreadable({ message: error instanceof Error ? error.message : String(error) }),
+  });
+
+function countClock(onRead: () => void) {
+  return Layer.effect(
+    Clock.Clock,
+    Effect.map(Clock.clockWith(Effect.succeed), (clock) =>
+      Object.assign(Object.create(clock) as Clock.Clock, {
+        currentTimeMillisUnsafe: () => {
+          onRead();
+          return clock.currentTimeMillisUnsafe();
+        },
+        currentTimeMillis: Effect.sync(() => {
+          onRead();
+          return clock.currentTimeMillisUnsafe();
+        }),
+      })
+    )
+  );
+}
 
 interface FakeGitHub extends ShareGitHub {
   diffReads: number;
@@ -119,28 +161,34 @@ function createEvidence(overrides: Partial<Evidence>): Evidence {
   };
 }
 
-interface FakeTranscripts extends ShareTranscripts {
+interface FakeTranscripts {
   runs: Map<string, ChatEntry[]>;
   record: (runId: string, event: ChatEvent) => void;
+  service: Partial<Transcripts['Service']>;
 }
 
 function createTranscripts(): FakeTranscripts {
-  const listeners = new Set<(runId: string) => void>();
-  const transcripts: FakeTranscripts = {
-    runs: new Map(),
-    listEntries: (runId) => [...(transcripts.runs.get(runId) ?? [])],
-    subscribe: (listener) => {
-      listeners.add(listener);
-      return () => listeners.delete(listener);
+  const listeners = new Set<(runId: string, entries: ChatEntry[], start: number | null) => void>();
+  const runs = new Map<string, ChatEntry[]>();
+  return {
+    runs,
+    service: {
+      listEntries: (runId) => Effect.sync(() => [...(runs.get(runId) ?? [])]),
+      subscribe: (listener) =>
+        Effect.sync(() => {
+          listeners.add(listener);
+          return Effect.sync(() => {
+            listeners.delete(listener);
+          });
+        }),
     },
     record: (runId, event) => {
-      const entries = transcripts.runs.get(runId) ?? [];
+      const entries = runs.get(runId) ?? [];
       entries.push({ ...event, v: CHAT_PROTOCOL_VERSION, id: `e${entries.length}`, at: 1 } as ChatEntry);
-      transcripts.runs.set(runId, entries);
-      for (const listener of listeners) listener(runId);
+      runs.set(runId, entries);
+      for (const listener of listeners) listener(runId, entries, null);
     },
   };
-  return transcripts;
 }
 
 function shareTask(overrides: Partial<Task> = {}) {
@@ -167,35 +215,16 @@ interface SetUp {
   github?: FakeGitHub;
   worktree?: ShareWorktree;
   patch?: (state: ShinsaState) => void;
-  now?: () => number;
   transcripts?: FakeTranscripts;
+  sources?: boolean;
+  random?: boolean;
+  onClock?: () => void;
 }
 
 function setUp(options: SetUp = {}) {
   const plane = startFakeControlPlane();
   running = plane;
   const dir = createTempDir();
-  const path = join(dir, 'remote.json');
-  if (options.paired ?? true)
-    writeFileSync(
-      path,
-      JSON.stringify({
-        credentials: CREDENTIALS,
-        enabled: true,
-        owner: 'mona',
-        access: { owner: MONA, members: [] },
-      })
-    );
-  const remote = new Remote({
-    path,
-    control: new RemoteControl({ origin: plane.origin }),
-    connector: createRefusedConnector('no tunnel in this test'),
-    localUrl: () => 'http://127.0.0.1:1',
-    version: '1',
-    maxBodyBytes: 1024,
-    machineName: 'Studio',
-    openUrl: () => Promise.resolve(),
-  });
   const evidenceDir = join(dir, 'evidence');
   mkdirSync(evidenceDir);
   writeFileSync(join(evidenceDir, 'settings.png'), 'png bytes');
@@ -208,18 +237,49 @@ function setUp(options: SetUp = {}) {
   });
   const github = options.github ?? createGitHub();
   const transcripts = options.transcripts ?? createTranscripts();
+  const { worktree } = options;
   let fill = 7;
-  const publisher = new Shares({
-    engine: stub.engine,
-    remote,
-    evidence: new EvidenceStore(evidenceDir),
-    transcripts,
-    github,
-    ...(options.worktree ? { worktree: options.worktree } : {}),
-    random: (bytes) => new Uint8Array(bytes).fill(fill++),
-    ...(options.now ? { now: options.now } : {}),
+  const machine = createRemoteTest({
+    dataDir: dir,
+    ...((options.paired ?? true)
+      ? {
+          file: {
+            credentials: CREDENTIALS,
+            enabled: true,
+            owner: 'mona',
+            access: { owner: MONA, members: [] },
+          },
+        }
+      : {}),
+    origin: plane.origin,
+    engine: stub.engine.core,
+    transcripts: transcripts.service,
+    evidence: createTestEvidence(evidenceDir),
+    layers: Layer.mergeAll(
+      options.sources === false
+        ? Layer.empty
+        : Layer.succeed(ShareSources, {
+            github: {
+              readDiff: (repo, number) => enterCode(() => github.readDiff(repo, number)),
+              readFile: (repo, ref, path) => enterCode(() => github.readFile(repo, ref, path)),
+            },
+            worktree: worktree
+              ? {
+                  readBase: (repo, task) => enterCode(() => worktree.readBase(repo, task)),
+                  readPatch: (path, base) => enterCode(() => worktree.readPatch(path, base)),
+                  readFile: (path, file) => enterCode(() => worktree.readFile(path, file)),
+                }
+              : null,
+          }),
+      options.random === false
+        ? Layer.empty
+        : Layer.succeed(RandomBytes, (bytes: number) => new Uint8Array(bytes).fill(fill++)),
+      options.onClock ? countClock(options.onClock) : Layer.empty
+    ),
   });
-  return { plane, stub, publisher, github, remote, transcripts };
+  const publisher = adaptShares(machine);
+  const remote = adaptRemote(machine);
+  return { plane, stub, publisher, github, remote, transcripts, evidenceDir };
 }
 
 function sha256(text: string) {
@@ -241,8 +301,8 @@ async function openViewer(publisher: Shares, url = SHARE_URL, shareId = SHARE_ID
   const ephemeral = (await crypto.subtle.generateKey(REMOTE_KEY_ALGORITHM, true, [
     'deriveBits',
   ])) as CryptoKeyPair;
-  const hello = await createShareHello(link.shareId, link.key, ephemeral.publicKey);
-  let open: ((frame: Bytes) => Promise<Bytes>) | null = null;
+  const hello = await Effect.runPromise(createShareHello(link.shareId, link.key, ephemeral.publicKey));
+  let open: ReturnType<typeof createFrameOpener> | null = null;
   let queue: Promise<void> = Promise.resolve();
   const viewer: Viewer = {
     messages: [],
@@ -270,17 +330,19 @@ async function openViewer(publisher: Shares, url = SHARE_URL, shareId = SHARE_ID
             const welcome = parseShareWelcome(data);
             if (welcome?.type === 'refused') viewer.refused = welcome.reason;
             if (welcome?.type !== 'welcome') return;
-            const key = await deriveShareSessionKey(
-              link.key,
-              { share: link.shareId, clientEphemeral: hello.ephemeral, serverEphemeral: welcome.ephemeral },
-              ephemeral.privateKey,
-              welcome.ephemeral
+            const key = await Effect.runPromise(
+              deriveShareSessionKey(
+                link.key,
+                { share: link.shareId, clientEphemeral: hello.ephemeral, serverEphemeral: welcome.ephemeral },
+                ephemeral.privateKey,
+                welcome.ephemeral
+              )
             );
             open = createFrameOpener(key);
             return;
           }
           if (!open) throw new Error('a frame before the welcome');
-          const message = parseShareMessage(decodeText(await open(data as Bytes)));
+          const message = parseShareMessage(decodeText(await Effect.runPromise(open(data as Bytes))));
           if (message) viewer.messages.push(message);
         });
       },
@@ -312,12 +374,12 @@ function sharedSetUp(options: SetUp & { preset?: SharePreset } = {}) {
 
 describe('making a share link', () => {
   test('a new share gets a link to this machine with a fresh id and a key only in its fragment', async () => {
-    const { stub, publisher, remote } = setUp();
+    const { stub, publisher, plane } = setUp();
     await publisher.link('task-1', CONTEXT);
     const recorded = stub.dispatched[0] as { url: string };
     const key = serializeBase64Url(new Uint8Array(32).fill(8));
     expect(recorded.url).toBe(
-      serializeShareUrl(remote.appOrigin, { instanceId: 'inst1', shareId: SHARE_ID, key })
+      serializeShareUrl(plane.origin, { instanceId: 'inst1', shareId: SHARE_ID, key })
     );
     expect(parseShareUrl(recorded.url)?.shareId).toBe(SHARE_ID);
     expect(stub.commandIds).toEqual([`${CONTEXT.key}:share.record`]);
@@ -342,13 +404,7 @@ describe('making a share link', () => {
   });
 
   test('a key and an id come from the system random source by default', async () => {
-    const { stub, remote } = setUp();
-    const shares = new Shares({
-      engine: stub.engine,
-      remote,
-      evidence: new EvidenceStore(createTempDir()),
-      transcripts: createTranscripts(),
-    });
+    const { stub, publisher: shares } = setUp({ random: false });
     await shares.link('task-1', CONTEXT);
     const link = parseShareUrl((stub.dispatched[0] as { url: string }).url);
     expect(link?.key).toHaveLength(43);
@@ -700,6 +756,58 @@ describe('what a link shows', () => {
     expect(await readWorktreeFile(worktree, 'a.ts')).toBe('inside');
   });
 
+  test('an evidence file removed after it was listed fails to read', async () => {
+    const { publisher, evidenceDir } = setUp();
+    const shot = (await publisher.resolveLive('task-1')).files.find((file) => file.id === 'shot-1');
+    rmSync(join(evidenceDir, 'settings.png'));
+    await expect(shot?.read() ?? Promise.resolve()).rejects.toBeDefined();
+  });
+
+  test('a path that is missing, or a folder, is refused', async () => {
+    const worktree = createTempDir();
+    mkdirSync(join(worktree, 'src'));
+    await expect(readWorktreeFile(worktree, 'missing.ts')).rejects.toThrow('missing.ts');
+    await expect(readWorktreeFile(worktree, 'src')).rejects.toBeDefined();
+  });
+
+  test('by default the code comes from GitHub through gh, and a pull request gh cannot read leaves it out', async () => {
+    const state = join(createTempDir(), 'gh.json');
+    writeFileSync(
+      state,
+      JSON.stringify({
+        next: 1,
+        defaultChecks: 'pending',
+        pulls: [],
+        calls: [],
+        diffs: { '7': DIFF },
+        contents: { 'src/a.ts@abc123': 'from gh' },
+      })
+    );
+    const restore = overrideEnv({ FAKE_GH_STATE: state });
+    try {
+      const { stub, publisher: shares } = setUp({
+        sources: false,
+        patch: (current) => {
+          current.repos['repo-1'] = createRepo({ path: createTempDir() });
+          delete current.evidence['shot-1'];
+        },
+      });
+      const live = await shares.resolveLive('task-1');
+      const code = live.files.find((file) => file.id === SHARE_CODE_FILE);
+      expect(JSON.parse(decodeText((await code?.read()) as Bytes))).toEqual({
+        files: { 'src/a.ts': 'from gh' },
+      });
+      const task = shareTask();
+      stub.state.tasks['task-1'] = {
+        ...task,
+        pullRequest: task.pullRequest && { ...task.pullRequest, number: 8 },
+      };
+      expect(Object.keys((await shares.resolveLive('task-1')).view.files)).toEqual([]);
+    } finally {
+      restore();
+    }
+  });
+
   test('the working copy’s code is read from its checkout, against the branch’s base', async () => {
     const { repo } = await createGitRepo({ remote: false, files: { 'src/a.ts': 'export const a = 1;\n' } });
     const checkout = await createWorktree(repo, createTempDir(), 'task-eeeeee', 'fix/live', null);
@@ -825,17 +933,20 @@ describe('a share by preset', () => {
   test('a status share streams no transcript', async () => {
     const transcripts = createTranscripts();
     transcripts.record('run-1', { type: 'agent', phase: 'final', text: 'Done.' });
-    const { publisher } = sharedSetUp({ transcripts, preset: 'status' });
+    let builds = 0;
+    const { publisher } = sharedSetUp({
+      transcripts,
+      preset: 'status',
+      onClock: () => {
+        builds += 1;
+      },
+    });
     const live = await publisher.resolveLive('task-1');
     expect(Object.keys(live.view.files)).not.toContain('transcript-run-1-0');
     const viewer = await openViewer(publisher);
     await until('the viewer has the view', () => viewer.views().length > 0);
-    const resolve = publisher.resolveLive.bind(publisher);
-    let builds = 0;
-    publisher.resolveLive = (taskId) => {
-      builds += 1;
-      return resolve(taskId);
-    };
+    await Bun.sleep(0);
+    builds = 0;
     transcripts.record('run-1', { type: 'agent', phase: 'final', text: 'Again.' });
     await Bun.sleep(0);
     expect(builds).toBe(0);

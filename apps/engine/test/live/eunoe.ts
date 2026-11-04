@@ -2,10 +2,10 @@ import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import type { ChatEvent, CompactionMode } from '@shinsa/core';
-import { startClaudeSession } from '../../src/agents/providers/claude/session.ts';
 import type { AgentSessionResult } from '../../src/agents/providers/index.ts';
-import { createShinsaTools } from '../../src/agents/tools/index.ts';
-import { EunoeServer } from '../../src/eunoe/index.ts';
+import { type OpenEunoe, openEunoe } from '../eunoe/harness.ts';
+import { buildDefaultProviders, startProviderSession } from '../helpers/providers.ts';
+import { createTestTools } from '../helpers/tools.ts';
 
 const MARKERS = ['amber', 'basalt', 'cobalt', 'dahlia'];
 
@@ -70,7 +70,7 @@ interface TurnOptions {
   label: string;
   cwd: string;
   eunoeDir: string;
-  server: EunoeServer;
+  server: OpenEunoe;
   prompt: string;
   resume?: string | null;
   fold?: boolean;
@@ -82,26 +82,25 @@ async function runTurn(options: TurnOptions): Promise<Turn> {
   let sessionId: string | null = options.resume ?? null;
   const before = readRequests(options.eunoeDir).length;
   const started = Date.now();
-  const session = startClaudeSession(
-    {
-      role: 'agent',
-      readOnly: false,
-      cwd: options.cwd,
-      prompt: options.prompt,
-      model: MODEL,
-      resume: options.resume ?? null,
-      defaultBranch: 'main',
-      tools: createShinsaTools('agent', () => Promise.resolve('ok')),
-      pluginDir: resolve(import.meta.dirname, '../../plugin'),
-      compaction: options.compaction ?? 'fold',
-      ...(options.fold ? { fold: true } : {}),
-      onSession: (id) => {
-        sessionId = id;
-      },
-      onEntry: (entry) => entries.push(entry),
+  const claude = buildDefaultProviders({ eunoe: options.server.server }).select('claude');
+  if (!claude) throw new Error('Claude is not registered.');
+  const session = startProviderSession(claude, {
+    role: 'agent',
+    readOnly: false,
+    cwd: options.cwd,
+    prompt: options.prompt,
+    model: MODEL,
+    resume: options.resume ?? null,
+    defaultBranch: 'main',
+    tools: createTestTools('agent', () => Promise.resolve('ok')),
+    pluginDir: resolve(import.meta.dirname, '../../plugin'),
+    compaction: options.compaction ?? 'fold',
+    ...(options.fold ? { fold: true } : {}),
+    onSession: (id) => {
+      sessionId = id;
     },
-    { eunoe: options.server }
-  );
+    onEntry: (entry) => entries.push(entry),
+  });
   const result = await session.done;
   const requests = readRequests(options.eunoeDir).slice(before);
   const seconds = ((Date.now() - started) / 1000).toFixed(0);
@@ -137,10 +136,10 @@ function isMessagesRequest(request: Record<string, unknown>) {
 
 async function runFoldScenario(root: string) {
   const cwd = join(root, 'fold');
-  const eunoeDir = join(root, 'fold-eunoe');
   mkdirSync(cwd, { recursive: true });
   writeHaystack(cwd);
-  const server = new EunoeServer({ dir: eunoeDir });
+  const server = openEunoe({}, join(root, 'fold-eunoe'));
+  const eunoeDir = server.dir;
   try {
     const plan = await runTurn({
       label: 'fold 1 · plan turn reads a large file',
@@ -244,16 +243,16 @@ async function runFoldScenario(root: string) {
     );
     return [plan, build, follow];
   } finally {
-    await server.stop();
+    await server.close();
   }
 }
 
 async function runCutScenario(root: string) {
   const cwd = join(root, 'cut');
-  const eunoeDir = join(root, 'cut-eunoe');
   mkdirSync(cwd, { recursive: true });
   writeHaystack(cwd, 2_000);
-  const server = new EunoeServer({ dir: eunoeDir, window: () => Promise.resolve(150_000) });
+  const server = openEunoe({ window: () => Promise.resolve(150_000) }, join(root, 'cut-eunoe'));
+  const eunoeDir = server.dir;
   try {
     const first = await runTurn({
       label: 'cut 1 · read the file in a small window',
@@ -298,16 +297,16 @@ async function runCutScenario(root: string) {
     );
     return [first, second];
   } finally {
-    await server.stop();
+    await server.close();
   }
 }
 
 async function runStuckScenario(root: string) {
   const cwd = join(root, 'stuck');
-  const eunoeDir = join(root, 'stuck-eunoe');
   mkdirSync(cwd, { recursive: true });
   writeHaystack(cwd);
-  const server = new EunoeServer({ dir: eunoeDir, window: () => Promise.resolve(30_000) });
+  const server = openEunoe({ window: () => Promise.resolve(30_000) }, join(root, 'stuck-eunoe'));
+  const eunoeDir = server.dir;
   try {
     const stuck = await runTurn({
       label: 'stuck · one turn bigger than the window',
@@ -334,7 +333,7 @@ async function runStuckScenario(root: string) {
     );
     return [stuck];
   } finally {
-    await server.stop();
+    await server.close();
   }
 }
 

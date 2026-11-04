@@ -1,19 +1,8 @@
-export type {
-  AccountLease,
-  AccountLeaseRequest,
-  RejectionHandler,
-  RejectionVerdict,
-  RunRejection,
-} from './accounts.ts';
-export type { IdleCompactionOptions } from './compaction.ts';
-export type { IdleReleaseOptions } from './idle.ts';
+export type { AccountLeaseRequest, RejectionHandler, RunRejection } from './accounts/schema.ts';
+export type { IdleReleaseOptions } from './idle/schema.ts';
 export { convertClaudeSession } from './providers/claude/import.ts';
-export {
-  listDefaultProviders,
-  type ModelSource,
-  ProviderRegistry,
-  type SessionStarter,
-} from './providers/index.ts';
-export { SilenceWatch } from './silence.ts';
-export { type NoticeListener, RunSupervisor, type SupervisorOptions } from './supervisor.ts';
-export { Transcripts } from './transcripts/index.ts';
+export { type ModelSource, Providers, ProvidersLayer, type SessionStarter } from './providers/index.ts';
+export { watchSilence } from './silence.ts';
+export { type NoticeListener, RunHooks } from './supervisor/schema.ts';
+export { RunSupervisor } from './supervisor/service.ts';
+export { Transcripts } from './transcripts/service.ts';

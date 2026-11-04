@@ -1,19 +1,50 @@
 import { afterEach, describe, expect, spyOn, test } from 'bun:test';
 import { join } from 'node:path';
-import type { UsageWait } from '@shinsa/core';
-import { resolveResumeCommandId, UsageResumeClock } from '../../src/accounts/resume.ts';
-import { log as logger } from '../../src/log/index.ts';
-import { Engine } from '../../src/runtime/engine.ts';
-import { EventLog } from '../../src/store/index.ts';
-import { createTempDir, until } from '../helpers/index.ts';
+import { DomainError, type UsageWait } from '@shinsa/core';
+import { Effect } from 'effect';
+import { TestClock } from 'effect/testing';
+import { resolveResumeCommandId } from '../../src/accounts/resume/command.ts';
+import { UsageResume } from '../../src/accounts/resume/service.ts';
+import { Engine } from '../helpers/engine.ts';
+import { openEventLog } from '../helpers/event-log.ts';
+import { captureLogs, createTempDir, createTestConfig, until } from '../helpers/index.ts';
+import { type AccountsHarness, buildAccounts } from './harness.ts';
 
 const MINUTE = 60_000;
 
 const spies: { mockRestore: () => void }[] = [];
 
-afterEach(() => {
+const open: AccountsHarness[] = [];
+
+afterEach(async () => {
+  for (const harness of open.splice(0)) await harness.close();
   for (const spy of spies.splice(0)) spy.mockRestore();
 });
+
+async function createResume(
+  engine: Engine,
+  now: number,
+  timings: { graceMs?: number; retryMs?: number } = {}
+) {
+  const harness = await buildAccounts({
+    config: createTestConfig(createTempDir()),
+    engine: {
+      ...engine.core,
+      dispatch: (command, options) => TestClock.withLive(engine.core.dispatch(command, options)),
+    },
+    now,
+    resume: { graceMs: timings.graceMs ?? 0, retryMs: timings.retryMs ?? MINUTE },
+  });
+  open.push(harness);
+  const resume = harness.service(UsageResume);
+  return {
+    fireDue: () => harness.run(resume.fireDue),
+    start: () => harness.run(resume.start),
+    stop: () => harness.run(resume.stop),
+    setTime: harness.setTime,
+    adjust: harness.adjust,
+  };
+}
 
 function shiftEngineClock() {
   const realNow = Date.now;
@@ -23,7 +54,7 @@ function shiftEngineClock() {
 }
 
 async function startPlanning() {
-  const log = new EventLog(join(createTempDir(), 'shinsa.sqlite'));
+  const log = openEventLog(join(createTempDir(), 'shinsa.sqlite'));
   const engine = new Engine(log);
   await engine.dispatch({
     type: 'repo.register',
@@ -89,7 +120,7 @@ async function armWait(resetIn = MINUTE) {
 }
 
 function spyOnDispatch(engine: Engine) {
-  const dispatch = spyOn(engine, 'dispatch');
+  const dispatch = spyOn(engine.core, 'dispatch');
   spies.push(dispatch);
   return dispatch;
 }
@@ -110,7 +141,7 @@ describe('usage resume clock', () => {
     });
     const dispatch = spyOnDispatch(engine);
     shift.ms = MINUTE + 1;
-    await new UsageResumeClock(engine, { now: () => wait.resetAt, graceMs: 0 }).fireDue();
+    await (await createResume(engine, wait.resetAt)).fireDue();
     const id = `usage-resume:${taskId}:${wait.runId}:${wait.resetAt}:${wait.id}`;
     expect(dispatch.mock.calls).toEqual([[{ type: 'usage_wait.resume', taskId, waitId: wait.id }, { id }]]);
     expect(log.selectReceipt(id)).not.toBeNull();
@@ -127,27 +158,24 @@ describe('usage resume clock', () => {
     const shift = shiftEngineClock();
     const { engine, taskId, wait } = await armWait();
     const dispatch = spyOnDispatch(engine);
-    const clock = { now: wait.resetAt + 4_999 };
-    const resume = new UsageResumeClock(engine, { now: () => clock.now, graceMs: 5_000 });
+    const resume = await createResume(engine, wait.resetAt + 4_999, { graceMs: 5_000 });
     await resume.fireDue();
     expect(dispatch).not.toHaveBeenCalled();
     expect(selectWait(engine, taskId).status).toBe('armed');
     shift.ms = MINUTE + 5_000;
-    clock.now += 1;
+    await resume.setTime(wait.resetAt + 5_000);
     await resume.fireDue();
     expect(dispatch).toHaveBeenCalledTimes(1);
     expect(selectWait(engine, taskId).status).toBe('resumed');
   });
 
-  test('a round already running is shared instead of resuming twice', async () => {
+  test('two checks at once resume the task only once', async () => {
     const shift = shiftEngineClock();
     const { engine, wait } = await armWait();
     const dispatch = spyOnDispatch(engine);
     shift.ms = MINUTE + 1;
-    const resume = new UsageResumeClock(engine, { now: () => wait.resetAt, graceMs: 0 });
-    const first = resume.fireDue();
-    expect(resume.fireDue()).toBe(first);
-    await first;
+    const resume = await createResume(engine, wait.resetAt);
+    await Promise.all([resume.fireDue(), resume.fireDue()]);
     expect(dispatch).toHaveBeenCalledTimes(1);
   });
 
@@ -155,30 +183,31 @@ describe('usage resume clock', () => {
     const shift = shiftEngineClock();
     const { engine, taskId, wait } = await armWait();
     shift.ms = MINUTE + 1;
-    const resume = new UsageResumeClock(engine, { now: () => wait.resetAt, graceMs: 0 });
-    resume.start();
-    resume.start();
+    const resume = await createResume(engine, wait.resetAt);
+    await resume.start();
+    await resume.start();
+    await resume.adjust(1);
     await until('the resume', () => selectWait(engine, taskId).status === 'resumed');
-    resume.stop();
+    await resume.stop();
   });
 
   test('a resume that fails is logged and tried again a retry later, under a new id', async () => {
     const shift = shiftEngineClock();
     const { engine, taskId, wait } = await armWait();
     shift.ms = MINUTE + 1;
-    const warn = spyOn(logger, 'warn').mockImplementation(() => undefined);
-    spies.push(warn);
-    spyOnDispatch(engine).mockImplementationOnce(() => Promise.reject(new Error('database is locked')));
+    const logs = captureLogs();
+    spies.push({ mockRestore: logs.restore });
+    spyOnDispatch(engine).mockImplementationOnce(() =>
+      Effect.fail(new DomainError({ code: 'busy', message: 'database is locked' }))
+    );
     const dispatched = spyOnDispatch(engine);
-    const clock = { now: wait.resetAt };
-    const resume = new UsageResumeClock(engine, { now: () => clock.now, graceMs: 0, retryMs: MINUTE });
+    const resume = await createResume(engine, wait.resetAt);
     await resume.fireDue();
-    expect(warn).toHaveBeenCalledWith('[Accounts] Could not resume a task after the usage limit reset', {
-      taskId,
-      error: 'database is locked',
-    });
+    expect(logs.fieldsOf('[Accounts] Could not resume a task after the usage limit reset')).toEqual([
+      { taskId, error: 'database is locked' },
+    ]);
     expect(selectWait(engine, taskId).status).toBe('armed');
-    clock.now += MINUTE;
+    await resume.setTime(wait.resetAt + MINUTE);
     await resume.fireDue();
     expect(selectWait(engine, taskId).status).toBe('resumed');
     const id = resolveResumeCommandId(taskId, wait);
@@ -188,16 +217,15 @@ describe('usage resume clock', () => {
   test('a resume the engine ignores is tried again a retry later under a new id, never in a loop', async () => {
     const { engine, taskId, wait } = await armWait();
     const dispatched = spyOnDispatch(engine);
-    const clock = { now: wait.resetAt };
-    const resume = new UsageResumeClock(engine, { now: () => clock.now, graceMs: 0, retryMs: MINUTE });
+    const resume = await createResume(engine, wait.resetAt);
     await resume.fireDue();
     expect(selectWait(engine, taskId).status).toBe('armed');
-    clock.now += MINUTE - 1;
+    await resume.setTime(wait.resetAt + MINUTE - 1);
     await resume.fireDue();
     expect(dispatched).toHaveBeenCalledTimes(1);
     const shift = shiftEngineClock();
     shift.ms = 2 * MINUTE;
-    clock.now += 1;
+    await resume.setTime(wait.resetAt + MINUTE);
     await resume.fireDue();
     expect(selectWait(engine, taskId).status).toBe('resumed');
     expect(dispatched.mock.calls.map(([, options]) => options?.id)).toEqual([
@@ -208,16 +236,12 @@ describe('usage resume clock', () => {
 
   test('after a restart, a retry is a new command at once instead of replaying the ones already tried', async () => {
     const { engine, taskId, wait } = await armWait();
-    const clock = { now: wait.resetAt };
-    const options = { now: () => clock.now, graceMs: 0, retryMs: MINUTE };
-    await new UsageResumeClock(engine, options).fireDue();
-    clock.now += MINUTE;
-    await new UsageResumeClock(engine, options).fireDue();
+    await (await createResume(engine, wait.resetAt)).fireDue();
+    await (await createResume(engine, wait.resetAt + MINUTE)).fireDue();
     expect(selectWait(engine, taskId).status).toBe('armed');
     const shift = shiftEngineClock();
     shift.ms = 2 * MINUTE;
-    clock.now += MINUTE;
-    await new UsageResumeClock(engine, options).fireDue();
+    await (await createResume(engine, wait.resetAt + 2 * MINUTE)).fireDue();
     expect(selectWait(engine, taskId).status).toBe('resumed');
   });
 
@@ -225,35 +249,30 @@ describe('usage resume clock', () => {
     const { engine, taskId, wait } = await armWait();
     await engine.dispatch({ type: 'usage_wait.resume_now', taskId });
     const dispatched = spyOnDispatch(engine);
-    await new UsageResumeClock(engine, { now: () => wait.resetAt, graceMs: 0 }).fireDue();
+    await (await createResume(engine, wait.resetAt)).fireDue();
     expect(dispatched).not.toHaveBeenCalled();
   });
 
-  test('a reset months away waits for the longest timer instead of firing at once', async () => {
+  test('a reset months away is not resumed when the longest timer fires', async () => {
     const { engine, taskId } = await startPlanning();
-    const timers = spyOn(globalThis, 'setTimeout');
-    spies.push(timers);
-    const resume = new UsageResumeClock(engine, { now: () => 0 });
-    resume.start();
+    const resume = await createResume(engine, 0);
+    await resume.start();
     await hitUsageLimit(engine, taskId, Date.now() + MINUTE);
-    expect(timers.mock.calls.map(([, delay]) => delay)).toEqual([2 ** 31 - 1]);
-    resume.stop();
+    const dispatched = spyOnDispatch(engine);
+    await resume.adjust(2 ** 31 - 1);
+    expect(dispatched).not.toHaveBeenCalled();
+    expect(selectWait(engine, taskId).status).toBe('armed');
+    await resume.stop();
   });
 
-  test('stopping clears the timer and stops listening to state changes', async () => {
+  test('a stopped clock resumes nothing, even once a reset passes', async () => {
     const { engine, taskId, wait } = await armWait();
-    const timers = spyOn(globalThis, 'setTimeout');
-    const clears = spyOn(globalThis, 'clearTimeout');
-    spies.push(timers, clears);
-    const resume = new UsageResumeClock(engine, { now: () => wait.resetAt - MINUTE });
-    resume.start();
-    const timer = timers.mock.results[0]?.value;
-    resume.stop();
-    expect(clears).toHaveBeenCalledWith(timer);
-    await engine.dispatch({ type: 'usage_wait.resume_now', taskId });
-    await hitUsageLimit(engine, taskId, Date.now() + 2 * MINUTE);
+    const resume = await createResume(engine, wait.resetAt - MINUTE);
+    await resume.start();
+    await resume.stop();
+    const shift = shiftEngineClock();
+    shift.ms = 2 * MINUTE;
+    await resume.adjust(2 * MINUTE);
     expect(selectWait(engine, taskId).status).toBe('armed');
-    expect(timers).toHaveBeenCalledTimes(1);
-    resume.stop();
   });
 });

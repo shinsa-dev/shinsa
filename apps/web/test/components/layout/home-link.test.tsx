@@ -3,6 +3,7 @@ import { TooltipProvider } from '@shinsa/ui/components/tooltip';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { CardsTopBar } from '@/components/layout/cards/top-bar.tsx';
 import { HomeLink } from '@/components/layout/home-link.tsx';
+import { COMPACT_BAR_QUERY, PHONE_QUERY } from '@/components/layout/sidebar/compact-bar.tsx';
 import { DesktopChrome } from '@/lib/desktop.ts';
 import { navigate, parseRoute, RouteScope } from '@/router.ts';
 import { installDesktop } from '../../support/desktop.ts';
@@ -15,22 +16,60 @@ const STATE = createShinsaState({
 
 let fake: ReturnType<typeof installDesktop> | null = null;
 
+const realMatchMedia = globalThis.matchMedia;
+
+function emulatePhone() {
+  globalThis.matchMedia = ((query: string) => ({
+    matches: query === PHONE_QUERY || query === COMPACT_BAR_QUERY,
+    media: query,
+    addEventListener: () => {},
+    removeEventListener: () => {},
+  })) as unknown as typeof matchMedia;
+}
+
 afterEach(() => {
   fake?.restore();
   fake = null;
+  globalThis.matchMedia = realMatchMedia;
 });
 
 describe('the way home', () => {
-  it('is the Shinsa wordmark in a browser', () => {
+  it('is a Home button alone in a browser, with no logo, as the favicon names the tab', () => {
     act(() => navigate('/tasks/SW-1'));
-    render(
+    const view = render(
       <TooltipProvider>
         <HomeLink />
+      </TooltipProvider>
+    );
+    expect(view.container.firstElementChild).toBe(screen.getByRole('button', { name: 'Home' }));
+    expect(view.container.textContent).toBe('Home');
+    act(() => fireEvent.click(screen.getByRole('button', { name: 'Home' })));
+    expect(location.pathname).toBe('/');
+  });
+
+  it('is the Shinsa wordmark only in the phone’s More sheet', () => {
+    act(() => navigate('/tasks/SW-1'));
+    let navigated = 0;
+    render(
+      <TooltipProvider>
+        <HomeLink variant='brand' onNavigate={() => navigated++} />
       </TooltipProvider>
     );
     expect(screen.queryByRole('button', { name: 'Home' })).toBeNull();
     act(() => fireEvent.click(screen.getByRole('button', { name: /Shinsa/ })));
     expect(location.pathname).toBe('/');
+    expect(navigated).toBe(1);
+  });
+
+  it('is the Home button in the Mac app’s sheet too', () => {
+    fake = installDesktop();
+    render(
+      <TooltipProvider>
+        <HomeLink variant='brand' />
+      </TooltipProvider>
+    );
+    expect(screen.getByRole('button', { name: 'Home' })).toBeTruthy();
+    expect(screen.queryByText('Shinsa')).toBeNull();
   });
 
   it('is a Home button with its menu shortcut in the Mac app, never the wordmark', async () => {
@@ -58,7 +97,7 @@ describe('the way home', () => {
     act(() => navigate('/'));
     render(
       <TooltipProvider>
-        <CardsTopBar state={STATE} />
+        <CardsTopBar state={STATE} onMore={() => {}} />
       </TooltipProvider>
     );
     const bar = screen.getByRole('banner');
@@ -72,7 +111,7 @@ describe('the way home', () => {
       <TooltipProvider>
         <DesktopChrome value>
           <RouteScope value={parseRoute('/tasks')}>
-            <CardsTopBar state={STATE} />
+            <CardsTopBar state={STATE} onMore={() => {}} />
           </RouteScope>
         </DesktopChrome>
       </TooltipProvider>
@@ -88,12 +127,12 @@ describe('the way home', () => {
     act(() => navigate('/'));
     render(
       <TooltipProvider>
-        <CardsTopBar state={STATE} />
+        <CardsTopBar state={STATE} onMore={() => {}} />
       </TooltipProvider>
     );
     const bar = screen.getByRole('banner');
     expect([...bar.querySelectorAll('button')].map((button) => button.textContent).slice(0, 3)).toEqual([
-      'Shinsa',
+      'Home',
       'Tasks',
       'Services',
     ]);
@@ -120,7 +159,7 @@ describe('the way home', () => {
     act(() => navigate('/'));
     render(
       <TooltipProvider>
-        <CardsTopBar state={STATE} />
+        <CardsTopBar state={STATE} onMore={() => {}} />
       </TooltipProvider>
     );
     const queue = () => screen.queryByRole('button', { name: 'Nothing needs you' });
@@ -131,5 +170,24 @@ describe('the way home', () => {
       act(() => navigate(path));
       expect(queue()).toBeTruthy();
     }
+  });
+
+  it('keeps Tasks, the queue and search on a phone and moves the rest behind More', () => {
+    emulatePhone();
+    act(() => navigate('/settings'));
+    let more = 0;
+    render(
+      <TooltipProvider>
+        <CardsTopBar state={STATE} onMore={() => (more += 1)} />
+      </TooltipProvider>
+    );
+    const bar = screen.getByRole('banner');
+    expect(
+      [...bar.querySelectorAll('button')].map(
+        (button) => button.getAttribute('aria-label') ?? button.textContent
+      )
+    ).toEqual(['Home', 'Tasks', 'Nothing needs you', 'Search and actions', 'More']);
+    act(() => fireEvent.click(screen.getByRole('button', { name: 'More' })));
+    expect(more).toBe(1);
   });
 });

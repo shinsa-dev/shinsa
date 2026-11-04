@@ -5,7 +5,9 @@ import type {
   OnboardingStepId,
 } from '@shinsa/core';
 import { toast } from '@shinsa/ui/components/sonner';
+import { Effect } from 'effect';
 import * as React from 'react';
+import { useAppEffect } from '@/hooks/use-app-effect.ts';
 import { describeFailure } from '@/lib/connection/commands.ts';
 import { replyToOnboarding, requestOnboardingFlow } from '@/lib/connection/onboarding.ts';
 import {
@@ -17,6 +19,8 @@ import {
   type StepDirection,
   SUBMIT_KEY,
 } from '@/lib/onboarding.ts';
+import { runApp } from '@/lib/runtime/app.ts';
+import { StepFailed } from '@/lib/runtime/schema.ts';
 import { navigate, replaceRoute } from '@/router.ts';
 
 export function useOnboardingFlow() {
@@ -27,43 +31,54 @@ export function useOnboardingFlow() {
   const [attempt, setAttempt] = React.useState(0);
   const index = React.useRef<number | null>(null);
 
+  const enterOnboarding = (request: () => Promise<OnboardingFlow>) =>
+    Effect.tryPromise({
+      try: request,
+      catch: (error) => new StepFailed({ message: describeFailure(error) }),
+    });
+
   const show = React.useCallback((next: OnboardingFlow) => {
     setDirection(resolveStepDirection(index.current, next.index));
     index.current = next.index;
     setFlow(next);
   }, []);
 
-  React.useEffect(() => {
-    let live = true;
-    setFailure(null);
-    requestOnboardingFlow().then(
-      (next) => {
-        if (!live) return;
-        if (next.step === null) replaceRoute('/');
-        else show(next);
-      },
-      (error: unknown) => {
-        if (live) setFailure(describeFailure(error));
-      }
-    );
-    return () => {
-      live = false;
-    };
-  }, [attempt, show]);
+  useAppEffect(
+    () =>
+      Effect.sync(() => setFailure(null)).pipe(
+        Effect.andThen(enterOnboarding(requestOnboardingFlow)),
+        Effect.matchEffect({
+          onSuccess: (next) =>
+            Effect.sync(() => {
+              if (next.step === null) replaceRoute('/');
+              else show(next);
+            }),
+          onFailure: (failed) => Effect.sync(() => setFailure(failed.message)),
+        })
+      ),
+    [attempt, show]
+  );
 
-  async function run(key: string, request: () => Promise<OnboardingFlow>) {
-    setPending(key);
-    try {
-      const next = await request();
-      if (next.step === null) navigate(resolveSetupEndPath(next));
-      else show(next);
-      return true;
-    } catch (error) {
-      toast.error(describeFailure(error));
-      return false;
-    } finally {
-      setPending(null);
-    }
+  function run(key: string, request: () => Promise<OnboardingFlow>) {
+    return runApp(
+      Effect.sync(() => setPending(key)).pipe(
+        Effect.andThen(enterOnboarding(request)),
+        Effect.matchEffect({
+          onSuccess: (next) =>
+            Effect.sync(() => {
+              if (next.step === null) navigate(resolveSetupEndPath(next));
+              else show(next);
+              return true;
+            }),
+          onFailure: (failed) =>
+            Effect.sync(() => {
+              toast.error(failed.message);
+              return false;
+            }),
+        }),
+        Effect.ensuring(Effect.sync(() => setPending(null)))
+      )
+    );
   }
 
   function send(reply: OnboardingReply, key: string) {

@@ -1,4 +1,5 @@
 ---
+import { Effect } from 'effect';
 import { CodeDemo } from '../components/demos/code';
 import { GatesDemo } from '../components/demos/gates';
 import { GuardDemo } from '../components/demos/guard';
@@ -17,7 +18,7 @@ import { sections } from '../lib/content';
 import { listGuardedCommands } from '../lib/guard';
 import { site } from '../lib/site';
 
-const guarded = await listGuardedCommands();
+const guarded = await Effect.runPromise(listGuardedCommands);
 ---
 
 <Site title={site.title} description={site.description}>

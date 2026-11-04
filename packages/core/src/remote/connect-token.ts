@@ -1,8 +1,9 @@
+import { Effect, Option } from 'effect';
 import { parseJsonRecord } from '../domain/records.ts';
 import { MINUTE_MS } from '../domain/time.ts';
 import { decodeText, encodeText } from './bytes.ts';
 import { CONNECT_CHANNELS, CONNECT_NONCE_PATTERN, type ConnectChannel } from './schema.ts';
-import { createSignedToken, importHmacKey, verifySignedToken } from './tokens.ts';
+import { createSignedToken, findHmacKey, verifySignedToken } from './tokens.ts';
 
 export const CONNECT_TOKEN_TTL_MS = MINUTE_MS;
 
@@ -37,10 +38,13 @@ function readClaim(payload: string): ConnectClaim | null {
   return { instanceId: i, userId: u, channel: c, nonce: n, expiresAt: e };
 }
 
-export async function createConnectToken(connectKey: string, claim: ConnectClaim) {
-  const key = await importHmacKey(connectKey);
-  if (!key) throw new Error('The connect key is not valid.');
-  if (!CONNECT_NONCE_PATTERN.test(claim.nonce)) throw new Error('A connect token needs a random nonce.');
+export const createConnectToken = Effect.fn('createConnectToken')(function* (
+  connectKey: string,
+  claim: ConnectClaim
+) {
+  const key = yield* findHmacKey(connectKey, 'The connect key is not valid.');
+  if (!CONNECT_NONCE_PATTERN.test(claim.nonce))
+    return yield* Effect.die(new Error('A connect token needs a random nonce.'));
   const payload = encodeText(
     JSON.stringify({
       i: claim.instanceId,
@@ -50,8 +54,8 @@ export async function createConnectToken(connectKey: string, claim: ConnectClaim
       e: claim.expiresAt,
     })
   );
-  return createSignedToken(key, CONNECT_LABEL, payload);
-}
+  return yield* createSignedToken(key, CONNECT_LABEL, payload);
+});
 
 export interface LegacyConnectClaim {
   instanceId: string;
@@ -59,29 +63,27 @@ export interface LegacyConnectClaim {
   expiresAt: number;
 }
 
-export async function createLegacyConnectToken(connectKey: string, claim: LegacyConnectClaim) {
-  const key = await importHmacKey(connectKey);
-  if (!key) throw new Error('The connect key is not valid.');
+export const createLegacyConnectToken = Effect.fn('createLegacyConnectToken')(function* (
+  connectKey: string,
+  claim: LegacyConnectClaim
+) {
+  const key = yield* findHmacKey(connectKey, 'The connect key is not valid.');
   const payload = encodeText(JSON.stringify({ i: claim.instanceId, u: claim.userId, e: claim.expiresAt }));
-  return createSignedToken(key, LEGACY_LABEL, payload);
-}
+  return yield* createSignedToken(key, LEGACY_LABEL, payload);
+});
 
-export async function verifyConnectToken(
+const selectText = Option.liftThrowable(decodeText);
+
+export const verifyConnectToken = Effect.fn('verifyConnectToken')(function* (
   connectKey: string,
   token: string,
   audience: ConnectAudience,
   now: number
-): Promise<ConnectClaim | null> {
-  const payload = await verifySignedToken(connectKey, CONNECT_LABEL, token);
-  if (!payload) return null;
-  let text: string;
-  try {
-    text = decodeText(payload);
-  } catch {
-    return null;
-  }
-  const claim = readClaim(text);
+) {
+  const payload = yield* verifySignedToken(connectKey, CONNECT_LABEL, token);
+  const text = payload ? Option.getOrNull(selectText(payload)) : null;
+  const claim = text === null ? null : readClaim(text);
   if (!claim || claim.instanceId !== audience.instanceId || claim.channel !== audience.channel) return null;
   if (claim.expiresAt <= now || claim.expiresAt > now + CONNECT_TOKEN_TTL_MS) return null;
   return claim;
-}
+});

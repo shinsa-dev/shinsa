@@ -1,9 +1,11 @@
 import { toast } from '@shinsa/ui/components/sonner';
+import { Effect } from 'effect';
 import { openDesktopNotificationSettings } from '@/lib/desktop.ts';
 import {
   type NotificationPreferences,
   writeNotificationPreferences,
 } from '@/lib/preferences/notifications.ts';
+import { runApp } from '@/lib/runtime/app.ts';
 import {
   readNotificationPermission,
   requestNotificationPermission,
@@ -39,27 +41,36 @@ export function showNotifyBlocked() {
   });
 }
 
-async function requestPermissionWithToast() {
-  const permission = await requestNotificationPermission();
-  if (permission === 'granted') return true;
-  toast.error(permission === 'unsupported' ? UNSUPPORTED : BLOCKED);
-  return false;
-}
+const requestPermissionWithToast = Effect.promise(requestNotificationPermission).pipe(
+  Effect.map((permission) => {
+    if (permission === 'granted') return true;
+    toast.error(permission === 'unsupported' ? UNSUPPORTED : BLOCKED);
+    return false;
+  })
+);
 
-export async function updateNotifications(patch: Partial<NotificationPreferences>) {
-  if (patch.notify && patch.notify !== 'never' && !(await requestPermissionWithToast())) return false;
-  writeNotificationPreferences(patch);
-  return true;
+export function updateNotifications(patch: Partial<NotificationPreferences>) {
+  return runApp(
+    Effect.gen(function* () {
+      if (patch.notify && patch.notify !== 'never' && !(yield* requestPermissionWithToast)) return false;
+      writeNotificationPreferences(patch);
+      return true;
+    })
+  );
 }
 
 export function needsTestNotification(preferences: NotificationPreferences) {
   return preferences.notify !== 'never' || readNotificationPermission() === 'granted';
 }
 
-export async function testNotifications(preferences: NotificationPreferences) {
-  void playSound(preferences.soundId);
-  if (!needsTestNotification(preferences)) return false;
-  if (!(await requestPermissionWithToast())) return false;
-  showTestNotification();
-  return true;
+export function testNotifications(preferences: NotificationPreferences) {
+  return runApp(
+    Effect.gen(function* () {
+      void playSound(preferences.soundId);
+      if (!needsTestNotification(preferences)) return false;
+      if (!(yield* requestPermissionWithToast)) return false;
+      showTestNotification();
+      return true;
+    })
+  );
 }

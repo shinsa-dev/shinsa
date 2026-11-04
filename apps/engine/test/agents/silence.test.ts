@@ -1,9 +1,12 @@
 import { describe, expect, test } from 'bun:test';
 import type { ShinsaCommand } from '@shinsa/core';
-import { SilenceWatch, Transcripts } from '../../src/agents/index.ts';
+import { Exit, Scope } from 'effect';
+import { watchSilence } from '../../src/agents/index.ts';
 import { createTempDir, until } from '../helpers/index.ts';
 import { captureLogs } from '../helpers/logs.ts';
+import { testRuntime } from '../helpers/runtime.ts';
 import { createGate, createRun, createStubEngine } from '../helpers/state.ts';
+import { createSyncTranscripts } from '../helpers/transcripts.ts';
 
 const MINUTE = 60_000;
 
@@ -17,9 +20,20 @@ function setup(now: { value: number }) {
       silence: { since: 0, snoozedUntil: null, dismissed: false },
     });
   });
-  const transcripts = new Transcripts(createTempDir());
-  const watch = new SilenceWatch(stub.engine, transcripts, { now: () => now.value, intervalMs: 5 });
-  return { ...stub, transcripts, watch };
+  const transcripts = createSyncTranscripts(createTempDir());
+  const start = (intervalMs = 60_000) => {
+    const scope = Scope.makeUnsafe();
+    const handle = testRuntime.runSync(
+      watchSilence(stub.engine.core, transcripts.service, { now: () => now.value, intervalMs }).pipe(
+        Scope.provide(scope)
+      )
+    );
+    return {
+      check: () => testRuntime.runPromise(handle.check),
+      stop: () => testRuntime.runPromise(Scope.close(scope, Exit.void)),
+    };
+  };
+  return { ...stub, transcripts, start };
 }
 
 function silences(dispatched: ShinsaCommand[]) {
@@ -29,18 +43,21 @@ function silences(dispatched: ShinsaCommand[]) {
 describe('the silent-run watch', () => {
   test('a running run quiet for five minutes is marked from its last output, once', async () => {
     const now = { value: 4 * MINUTE };
-    const { watch, dispatched, commandIds } = setup(now);
+    const { start, dispatched, commandIds } = setup(now);
+    const watch = start();
     await watch.check();
     expect(silences(dispatched)).toEqual([]);
     now.value = 5 * MINUTE;
     await watch.check();
     expect(silences(dispatched)).toEqual([{ type: 'run.silence', runId: 'run-1', since: 0 }]);
     expect(commandIds).toEqual(['run.silence:run-1:0']);
+    await watch.stop();
   });
 
   test('a run waiting on an answer, from the human or from the agent that delegated it, is never marked', async () => {
     const now = { value: 10 * MINUTE };
-    const { watch, dispatched, update } = setup(now);
+    const { start, dispatched, update } = setup(now);
+    const watch = start();
     update((state) => {
       state.runs['run-1'] = createRun({ startedAt: 0, status: 'waiting' });
       Reflect.deleteProperty(state.runs, 'run-3');
@@ -78,16 +95,16 @@ describe('the silent-run watch', () => {
     });
     await watch.check();
     expect(silences(dispatched)).toEqual([]);
+    await watch.stop();
   });
 
   test('the last thing in the transcript counts as output after a restart, and output clears a mark', async () => {
     const now = { value: 0 };
-    const { watch, dispatched, commandIds, transcripts, update } = setup(now);
+    const { start, dispatched, commandIds, transcripts, update } = setup(now);
     transcripts.record('run-1', { type: 'agent', phase: 'interim', text: 'working' });
     const last = transcripts.listEntries('run-1').at(-1)?.at ?? 0;
     now.value = last + 6 * MINUTE;
-    watch.start();
-    watch.start();
+    const watch = start();
     await watch.check();
     expect(silences(dispatched)).toEqual([{ type: 'run.silence', runId: 'run-1', since: last }]);
     transcripts.record('run-3', { type: 'agent', phase: 'interim', text: 'back' });
@@ -99,21 +116,22 @@ describe('the silent-run watch', () => {
       state.runs['run-1'] = createRun({ endedAt: 9 });
     });
     await watch.check();
-    watch.stop();
-    watch.stop();
+    await watch.stop();
+    transcripts.record('run-3', { type: 'agent', phase: 'interim', text: 'after' });
+    expect(silences(dispatched)).toHaveLength(2);
   });
 
   test('the periodic check runs on its own, and a failed record is logged', async () => {
     const now = { value: 10 * MINUTE };
-    const { watch, dispatched, reject } = setup(now);
+    const { start, dispatched, reject } = setup(now);
     reject((command) => command.type === 'run.silence');
-    watch.start();
+    const watch = start(5);
     await until('a check', () => silences(dispatched).length > 0);
-    watch.stop();
+    await watch.stop();
     const quiet = setup({ value: 0 });
     quiet.reject((command) => command.type === 'run.silence');
     quiet.transcripts.record('run-3', { type: 'agent', phase: 'interim', text: 'back' });
-    quiet.watch.start();
+    const quietWatch = quiet.start(5);
     const logs = captureLogs();
     try {
       quiet.transcripts.record('run-3', { type: 'agent', phase: 'interim', text: 'back' });
@@ -124,7 +142,7 @@ describe('the silent-run watch', () => {
     } finally {
       logs.restore();
     }
-    quiet.watch.stop();
+    await quietWatch.stop();
     expect(silences(quiet.dispatched)).toHaveLength(1);
   });
 });

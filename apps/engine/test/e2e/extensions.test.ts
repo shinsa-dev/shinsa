@@ -4,20 +4,22 @@ import { join, resolve } from 'node:path';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import type { ExtensionsSnapshot, McpServerSummary } from '@shinsa/core';
+import { Effect } from 'effect';
 import type { ModelSource } from '../../src/agents/index.ts';
 import { resolveClaudeExtensions } from '../../src/agents/providers/claude/extensions.ts';
 import type { AgentSessionInput } from '../../src/agents/providers/index.ts';
-import { inspectRepo } from '../../src/git/index.ts';
-import { type Shinsa, startShinsa } from '../../src/serve.ts';
 import { serializeClaudeToolUse, writeFile, writeSkill } from '../extensions/fixtures.ts';
+import { inspectRepo } from '../helpers/git.ts';
 import { createGitRepo, createTempDir, createTestConfig, until } from '../helpers/index.ts';
 import { type FakeMcpHttp, startFakeMcpHttp } from '../helpers/mcp/http.ts';
+import { adaptStarter } from '../helpers/providers.ts';
+import { type Shinsa, startShinsa } from '../helpers/serve.ts';
 
 setDefaultTimeout(30_000);
 
 const STDIO_SERVER = resolve(import.meta.dirname, '../helpers/mcp/stdio-server.ts');
 
-const models = { listModels: () => Promise.resolve([]) } as unknown as ModelSource;
+const models = { listModels: Effect.succeed([]) } as unknown as ModelSource;
 
 const running: { shinsa: Shinsa[]; fakes: FakeMcpHttp[] } = { shinsa: [], fakes: [] };
 
@@ -91,15 +93,15 @@ describe('MCP servers and skills, end to end', () => {
         models,
         resolveLogin: () => Promise.resolve(null),
         extensions: { env: { HOME: machine.userHome } },
-        startSession: (input) => {
+        startSession: adaptStarter((input) => {
           sessions.push(input);
           const signal = new AbortController().signal;
           const done = (async () => {
-            await input.tools.handle('answer', { answer: 'Done.' }, signal, 1);
+            await Effect.runPromise(input.tools.handle('answer', { answer: 'Done.' }, signal, 1));
             return { outcome: 'completed' as const, summary: null };
           })();
           return { done, steer: () => false, cancel: () => done.then(() => undefined) };
-        },
+        }),
       }
     );
     running.shinsa.push(shinsa);
@@ -266,13 +268,13 @@ function startScriptedAgents(hotLoad: boolean) {
           callId: `c${calls}`,
           tool: { kind: 'mcp', server: 'shinsa', name, args },
         });
-        return input.tools.handle(name, args, signal, calls);
+        return Effect.runPromise(input.tools.handle(name, args, signal, calls));
       },
       finish: () => finished.resolve(),
     });
     const done = (async () => {
       await finished.promise;
-      await input.tools.handle('answer', { answer: 'Done.' }, signal, 'answer');
+      await Effect.runPromise(input.tools.handle('answer', { answer: 'Done.' }, signal, 'answer'));
       return { outcome: 'completed' as const, summary: null };
     })();
     return {
@@ -287,7 +289,7 @@ function startScriptedAgents(hotLoad: boolean) {
         : {}),
     };
   };
-  return { turns, startSession };
+  return { turns, startSession: adaptStarter(startSession) };
 }
 
 async function finishTurn(shinsa: Shinsa, turn: ScriptedTurn | undefined) {

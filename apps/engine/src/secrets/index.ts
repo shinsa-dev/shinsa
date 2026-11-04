@@ -1,1 +1,1 @@
-export { SecretStore } from './store.ts';
+export { SecretStore } from './store/service.ts';

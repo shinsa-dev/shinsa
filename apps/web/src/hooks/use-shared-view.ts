@@ -16,8 +16,8 @@ function registerSharedCode(view: SharedView) {
   return registerCodeSource(
     view.task.id,
     createSharedCodeSource({
-      readDiff: diffUrl ? () => requestSharedText(diffUrl) : null,
-      readCode: codeUrl ? () => requestSharedText(codeUrl) : null,
+      readDiff: diffUrl ? requestSharedText(diffUrl) : null,
+      readCode: codeUrl ? requestSharedText(codeUrl) : null,
       branch: view.task.branch,
       head: resolveSharedHead(view.task),
     })

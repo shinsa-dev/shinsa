@@ -1,3 +1,4 @@
+import { Effect } from 'effect';
 import type { QuickJson } from '../agents/quick/index.ts';
 import { parseWatchAnswer } from './answer.ts';
 import { WATCH_SCHEMA, WATCH_SYSTEM, type WatchWriter } from './schema.ts';
@@ -9,6 +10,6 @@ export function describeWatchPrompt(server: string, data: string) {
 }
 
 export function createWatchWriter(ask: QuickJson): WatchWriter {
-  return async (server, data) =>
-    parseWatchAnswer(await ask(WATCH_SYSTEM, describeWatchPrompt(server, data), WATCH_SCHEMA));
+  return (server, data) =>
+    ask(WATCH_SYSTEM, describeWatchPrompt(server, data), WATCH_SCHEMA).pipe(Effect.map(parseWatchAnswer));
 }
