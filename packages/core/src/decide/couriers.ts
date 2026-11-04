@@ -1,5 +1,12 @@
 import type { CommandOf } from '../commands/index.ts';
-import { DELEGATION_LIMITS, DomainError, type Run, type Task, type TaskCreator } from '../domain/index.ts';
+import {
+  DELEGATION_LIMITS,
+  DomainError,
+  type Run,
+  type Task,
+  type TaskCreator,
+  type TeammateFork,
+} from '../domain/index.ts';
 import { resolveTaskProject } from '../state/queries.ts';
 import type { Decider } from './decider.ts';
 import { changeDependencies } from './dependencies.ts';
@@ -43,6 +50,7 @@ interface SpawnOptions {
   parent: boolean;
   projectId?: string;
   forkOf?: string;
+  teammateFork?: TeammateFork;
   waitsOn?: string[];
   stacksOn?: string[];
   backlog?: boolean;
@@ -66,6 +74,7 @@ function spawnTask(
       priority: source.priority,
       origin: source.origin,
       ...(options.forkOf ? { forkOf: options.forkOf } : {}),
+      ...(options.teammateFork ? { teammateFork: options.teammateFork } : {}),
       ...(options.waitsOn ? { waitsOn: options.waitsOn } : {}),
       ...(options.stacksOn ? { stacksOn: options.stacksOn } : {}),
       ...(options.backlog ? { backlog: true } : {}),
@@ -104,6 +113,7 @@ export function createCourierTask(decider: Decider, command: CommandOf<'agent.cr
       parent: false,
       ...(command.projectId ? { projectId: command.projectId } : {}),
       ...(command.forkOf ? { forkOf: command.forkOf } : {}),
+      ...(command.teammateFork ? { teammateFork: command.teammateFork } : {}),
       ...(command.afterThis ? { waitsOn: [task.id] } : {}),
       ...resolveCourierStack(task, command),
       ...(command.backlog ? { backlog: true } : {}),

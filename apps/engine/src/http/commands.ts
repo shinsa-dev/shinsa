@@ -1,12 +1,14 @@
 import {
   DomainError,
-  type GuestActor,
+  type ScopedActor,
   OWNER_ONLY_CODE,
   parseUserCommand,
   type RequestOrigin,
+  resolveFirstName,
   resolveOwnerOnlyRefusal,
   resolveScopedRefusal,
   SCOPE_REFUSAL_CODE,
+  type UserCommand,
 } from '@shinsa/core';
 import { Effect, Result } from 'effect';
 import { createReadOnlyError } from '../instance/index.ts';
@@ -20,8 +22,21 @@ export interface UserCommandSource {
   readonly clientId: string | null;
   readonly router: CommandRouter['Service'] | null;
   readonly origin: RequestOrigin;
-  readonly guest: GuestActor | null;
+  readonly guest: ScopedActor | null;
+  readonly teams?: Pick<RemoteHandle, 'resolveTeamScope'> | null | undefined;
 }
+
+export const resolveTeammateRefusal = Effect.fn('resolveTeammateRefusal')(function* (
+  command: UserCommand,
+  teams: Pick<RemoteHandle, 'resolveTeamScope'> | null | undefined
+) {
+  if (command.type !== 'task.hand_to_teammate') return null;
+  if (teams && (yield* teams.resolveTeamScope(command.teammate.id, command.teamId))) return null;
+  return new DomainError({
+    code: 'handoff_refused',
+    message: `${resolveFirstName(command.teammate)} is not in that team, so they cannot take this task.`,
+  });
+});
 
 export const resolveRequestOrigin = Effect.fn('resolveRequestOrigin')(function* (
   source: RequestSourceShape,
@@ -46,9 +61,9 @@ export const dispatchUserCommand = Effect.fn('dispatchUserCommand')(function* (
     return yield* Effect.fail(
       resolveRequestFailure(new DomainError({ code: OWNER_ONLY_CODE, message: refusal }))
     );
-  const outside = source.guest
-    ? resolveScopedRefusal(yield* engine.state, source.guest.taskId, command)
-    : null;
+  const stranger = yield* resolveTeammateRefusal(command, source.teams);
+  if (stranger) return yield* Effect.fail(resolveRequestFailure(stranger));
+  const outside = source.guest ? resolveScopedRefusal(yield* engine.state, source.guest, command) : null;
   if (outside)
     return yield* Effect.fail(
       resolveRequestFailure(new DomainError({ code: SCOPE_REFUSAL_CODE, message: outside }))

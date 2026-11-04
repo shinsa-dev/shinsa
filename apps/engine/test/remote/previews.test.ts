@@ -1,6 +1,9 @@
 import { afterEach, describe, expect, test } from 'bun:test';
 import {
   createPreviewAccessToken,
+  DEFAULT_TEAM_SCOPES,
+  toggleScope,
+  type RemoteTeam,
   PREVIEW_ACCESS_HEADER,
   PREVIEW_ACCESS_TTL_MS,
   PREVIEW_GONE,
@@ -54,6 +57,10 @@ const OWNER = { id: 'u-owner', login: 'mona', name: null, avatarUrl: null };
 const MEMBER = { id: 'u-member', login: 'hubot', name: null, avatarUrl: null };
 
 const ACCESS = { owner: OWNER, members: [{ user: MEMBER, addedAt: 1 }] };
+
+const TEAMMATE = { id: 'u-kai', login: 'kai', name: null, avatarUrl: null };
+
+const VIEWER = { id: 'u-tess', login: 'tess', name: null, avatarUrl: null };
 
 const CONTEXT = { key: 'preview.link:task-1:web:1', attempt: 1, signal: new AbortController().signal };
 
@@ -635,6 +642,68 @@ describe('a private address for every running service', () => {
       expect(response.status).toBe(404);
       expect(await response.text()).toContain(PREVIEW_GONE);
     }
+  });
+
+  test('a teammate opens a team task’s services with the right to; a machine-wide one, or without it, stays shut', async () => {
+    const dev = startDevServer();
+    const { previews, snapshot, remote, stub } = setUp({
+      preview: null,
+      now: () => 10,
+      patch: (state) => {
+        state.projects['project-1'] = {
+          id: 'project-1',
+          name: 'Superwall',
+          color: 'blue',
+          key: 'SW',
+          description: '',
+          folders: [],
+          teamIds: ['team1'],
+        };
+        state.tasks['task-1'] = createTask({ projectId: 'project-1', previews: [] });
+      },
+    });
+    const team: RemoteTeam = {
+      id: 'team1',
+      name: 'Platform',
+      owner: OWNER,
+      role: 'owner',
+      members: [
+        { user: TEAMMATE, addedAt: 2 },
+        { user: VIEWER, addedAt: 3 },
+      ],
+      requests: [],
+      machines: [],
+      scopes: DEFAULT_TEAM_SCOPES,
+      overrides: [{ userId: VIEWER.id, scopes: toggleScope(DEFAULT_TEAM_SCOPES, 'services', false) }],
+      createdAt: 1,
+    };
+    remote.store.update((file) => ({
+      ...file,
+      teams: [team],
+      teamKeys: [{ teamId: 'team1', name: 'Platform', key: 'key', invite: null, addedAt: 1 }],
+    }));
+    snapshot.terminals[0] = createRun({ port: dev.port });
+    const taskRun = resolvePrivateId(await resolvePrivateUrl(previews, createRun({ port: dev.port })));
+    const machineRun = resolvePrivateId(await resolvePrivateUrl(previews, createRun({ taskId: null })));
+    const open = async (previewId: string, userId: string) =>
+      readResponse(
+        await askPrivately(previews, previewId, '/', { access: await createAccess(previewId, userId) })
+      ).status;
+    expect(await open(taskRun, TEAMMATE.id)).toBe(200);
+    expect(await open(machineRun, TEAMMATE.id)).toBe(404);
+    expect(await open(taskRun, VIEWER.id)).toBe(404);
+    expect(await open(taskRun, 'u-stranger')).toBe(404);
+    const answer = await askPrivately(previews, taskRun, '/hmr', {
+      access: await createAccess(taskRun, TEAMMATE.id),
+      headers: { upgrade: 'websocket' },
+    });
+    if (answer.kind !== 'upgrade') throw new Error('expected an upgrade');
+    const peer = createPeer();
+    previews.openSocket(peer, answer.upgrade);
+    if (stub.state.projects['project-1']) stub.state.projects['project-1'].teamIds = [];
+    stub.notify();
+    expect(peer.closed).toEqual({ code: 1000, reason: PREVIEW_GONE });
+    expect(await open(taskRun, TEAMMATE.id)).toBe(404);
   });
 
   test('an address made before a restart still opens, a stopped run says so, and a run gone is not shared', async () => {

@@ -1,4 +1,13 @@
-import type { InstanceId, RemoteRole, RemoteTeam, RemoteUserId, TeamId, TeamJoinStatus } from '@shinsa/core';
+import {
+  type InstanceId,
+  type RemoteRole,
+  type RemoteTeam,
+  type RemoteUserId,
+  DEFAULT_TEAM_SCOPES,
+  type TeamId,
+  type TeamJoinStatus,
+  type TeamScopesRequest,
+} from '@shinsa/core';
 import { InviteInvalid, NotFound, OwnerCannotLeave } from '@shinsa/core/remote/errors';
 import { Clock, Effect, Option, Redacted } from 'effect';
 import { findTeamAccess, isTeamOwner, selectTeamRole } from '../auth/access.ts';
@@ -21,8 +30,26 @@ export const serializeTeam = Effect.fn('serializeTeam')(function* (team: Team, u
     members: yield* teams.members.list(team.id),
     requests: role === 'owner' ? yield* teams.requesters.list(team.id) : [],
     machines,
+    scopes: team.scopes ?? DEFAULT_TEAM_SCOPES,
+    overrides: yield* teams.listMemberScopes(team.id),
     createdAt: team.createdAt,
   } satisfies RemoteTeam;
+});
+
+export const updateTeamScopes = Effect.fn('teams.updateScopes')(function* (
+  team: Team,
+  request: TeamScopesRequest
+) {
+  const teams = yield* Teams;
+  const userId = request.userId;
+  if (userId === undefined) {
+    yield* teams.replaceScopes(team.id, request.scopes);
+    return { ...team, scopes: request.scopes };
+  }
+  if (!(yield* teams.members.has(team.id, userId)))
+    return yield* new NotFound({ message: 'That person is not a member of this team.' });
+  yield* teams.replaceMemberScopes(team.id, userId, request.scopes);
+  return team;
 });
 
 export const listUserTeams = Effect.fn('listUserTeams')(function* (userId: RemoteUserId) {

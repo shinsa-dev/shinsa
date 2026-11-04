@@ -196,6 +196,11 @@ export class RemoteClient extends Context.Service<
               'machineTeams.connect',
               teams.connect({ params: { teamId }, payload: { instanceId } }).pipe(asMachine(token))
             ),
+          scopes: (token, teamId, request) =>
+            call(
+              'machineTeams.scopes',
+              teams.scopes({ params: { teamId }, payload: request }).pipe(asMachine(token))
+            ),
         },
         slack: {
           links: (token) => call('slackRelay.links', slack.links({}).pipe(asMachine(token))),

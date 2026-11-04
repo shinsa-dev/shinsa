@@ -3,6 +3,7 @@ import type { Engine } from '../../apps/engine/test/helpers/engine.ts';
 import {
   isTaskSettled,
   resolveFirstName,
+  resolveTaskProject,
   type ShinsaState,
   type Task,
 } from '../../packages/core/src/index.ts';
@@ -16,9 +17,11 @@ import {
   SANDBOX_PATH,
   SandboxFailed,
   SIGN_IN_AS,
+  TEAMMATE,
   USER,
 } from './schema.ts';
 import { respondSignInAs } from './session.ts';
+import { TEAM } from './team.ts';
 
 const waitForHandoffLink = Effect.fn('Sandbox.waitForHandoffLink')(function* (
   engine: Engine,
@@ -84,7 +87,7 @@ export const createPreviewHandoffs = Effect.fn('Sandbox.createPreviewHandoffs')(
   yield* core.dispatch({ type: 'handoff.claim', taskId: claimed.id, guest: GUEST });
   yield* core.dispatch(
     { type: 'task.message', taskId: claimed.id, text: 'I have this from here. Keep going with the plan.' },
-    { guest: { taskId: claimed.id, login: GUEST.login } }
+    { guest: { ...GUEST, scope: { kind: 'task', taskId: claimed.id } } }
   );
   yield* core.dispatch({ type: 'task.hand_off', taskId: waiting.id });
   const claim = yield* waitForHandoffLink(engine, waiting.id);
@@ -104,5 +107,44 @@ export const createPreviewHandoffs = Effect.fn('Sandbox.createPreviewHandoffs')(
       url: `${ORIGIN}${SANDBOX_PATH}/handoff/${waiting.handle}`,
     },
     { label: `Sign in as ${resolveFirstName(USER)} again`, url: `${ORIGIN}${SANDBOX_PATH}/as/${USER.login}` },
+  ];
+});
+
+export const createPreviewTeammateHandoff = Effect.fn('Sandbox.createPreviewTeammateHandoff')(function* (
+  studio: StartedMachine,
+  projectId: string | undefined
+) {
+  const { core } = studio.engine;
+  const state = yield* core.state;
+  const task = Object.values(state.tasks).find(
+    (entry) =>
+      entry.handle &&
+      !entry.handoff &&
+      !entry.backlog &&
+      !entry.share &&
+      !isTaskSettled(entry) &&
+      resolveTaskProject(state, entry) === projectId
+  );
+  if (!task?.handle) return [];
+  yield* core.dispatch({
+    type: 'task.hand_to_teammate',
+    taskId: task.id,
+    teamId: TEAM.id,
+    teammate: TEAMMATE,
+  });
+  const at = `http://${HOST}:${studio.machine.port}/tasks/${task.handle}`;
+  return [
+    {
+      label: `Studio: ${task.handle}, handed to ${resolveFirstName(TEAMMATE)}, with Remove in its banner`,
+      url: at,
+    },
+    {
+      label: `The same task on the remote dashboard, where its owner sees who holds it`,
+      url: `${ORIGIN}/tasks/${task.handle}`,
+    },
+    {
+      label: `Sign in as ${resolveFirstName(TEAMMATE)} to see it in their Needs you, with Give it back`,
+      url: `${ORIGIN}${SANDBOX_PATH}/as/${TEAMMATE.login}`,
+    },
   ];
 });

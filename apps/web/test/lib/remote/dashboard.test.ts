@@ -4,6 +4,7 @@ import {
   describeSignInError,
   isMachineGone,
   resolveSignInUrl,
+  SCOPES_INVALID,
 } from '@/lib/remote/dashboard.ts';
 import { CloudRefused } from '@/lib/runtime/remote/schema.ts';
 import { answerFetch } from '../../support/fetch-fake.ts';
@@ -40,6 +41,18 @@ const ANSWERS: Record<string, unknown> = {
   'GET /__remote/teams': [],
   'POST /__remote/teams/join': { teamId: 't1', name: 'Design', owner: USER, status: 'requested' },
   'POST /__remote/teams/preview': TEAM_PREVIEW,
+  'POST /__remote/teams/t1/scopes': {
+    id: 't1',
+    name: 'Design',
+    owner: USER,
+    role: 'owner',
+    members: [],
+    requests: [],
+    machines: [],
+    scopes: ['gates', 'fork'],
+    overrides: [],
+    createdAt: 0,
+  },
   'GET /__remote/pairs/K7PQ': PAIR,
   'POST /__remote/pairs/K7PQ/approve': { instanceId: 'k3x9', name: 'Studio' },
   'POST /__remote/sign-out': { ok: true },
@@ -59,6 +72,8 @@ describe('the dashboard client', () => {
     await client.listTeams();
     await client.joinTeam('team-invite');
     await client.previewTeam('team-invite');
+    await client.updateTeamScopes('t1', null, ['gates', 'fork']);
+    await client.updateTeamScopes('t1', '7', null);
     await client.readPair('K7PQ');
     await client.approvePair('K7PQ');
     await client.signOut();
@@ -73,6 +88,8 @@ describe('the dashboard client', () => {
       { path: '/__remote/teams', method: 'GET', body: null },
       { path: '/__remote/teams/join', method: 'POST', body: { invite: 'team-invite' } },
       { path: '/__remote/teams/preview', method: 'POST', body: { invite: 'team-invite' } },
+      { path: '/__remote/teams/t1/scopes', method: 'POST', body: { scopes: ['gates', 'fork'] } },
+      { path: '/__remote/teams/t1/scopes', method: 'POST', body: { userId: '7', scopes: null } },
       { path: '/__remote/pairs/K7PQ', method: 'GET', body: null },
       { path: '/__remote/pairs/K7PQ/approve', method: 'POST', body: null },
       { path: '/__remote/sign-out', method: 'POST', body: null },
@@ -117,6 +134,21 @@ describe('the dashboard client', () => {
     const gone = await client.requestConnect('not/an id').catch((caught: unknown) => caught);
     expect(isMachineGone(gone)).toBe(true);
     await expect(client.readPair('')).rejects.toMatchObject({ status: 404, code: 'not_found' });
+    expect(requests).toEqual([]);
+  });
+
+  it('says what was wrong with a team change it cannot send, without asking Shinsa Cloud', async () => {
+    const requests = answerFetch(() => Response.json({ ok: true }));
+    const client = createDashboardClient();
+    await expect(client.updateTeamScopes('', null, ['gates'])).rejects.toMatchObject({
+      status: 404,
+      code: 'not_found',
+    });
+    const refused = await client
+      .updateTeamScopes('t1', null, ['gates', 'everything'] as never)
+      .catch((caught: unknown) => caught);
+    expect(refused).toBeInstanceOf(CloudRefused);
+    expect(refused).toMatchObject(SCOPES_INVALID);
     expect(requests).toEqual([]);
   });
 

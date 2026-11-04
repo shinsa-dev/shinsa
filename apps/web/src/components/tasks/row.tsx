@@ -71,6 +71,7 @@ export function DepthMark({ depth }: { depth: number }) {
 
 function TaskMenuItems({ state, task }: { state: ShinsaState; task: Task }) {
   const commands = useEngineCommands(task.id);
+  const teammate = useMachine(task.id)?.teammate ?? null;
   return (
     <DropdownMenuContent className='min-w-48'>
       <DropdownMenuItem icon={TASK_ACTION.open.icon} onClick={() => navigate(resolveTaskPath(task))}>
@@ -84,7 +85,7 @@ function TaskMenuItems({ state, task }: { state: ShinsaState; task: Task }) {
           <DependencyItems state={state} task={task} />
         </>
       )}
-      {listTaskActions(task, commands).length > 0 && <DropdownMenuSeparator />}
+      {listTaskActions(task, commands, Date.now(), teammate).length > 0 && <DropdownMenuSeparator />}
       <TaskActionItems task={task} />
     </DropdownMenuContent>
   );

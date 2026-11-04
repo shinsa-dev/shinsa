@@ -173,7 +173,7 @@ export function listProjectRepoRows(state: ShinsaState, projectId: string) {
 
 export function listLooseRepos(state: ShinsaState) {
   return Object.values(state.repos)
-    .filter((repo) => selectProject(state, repo.projectId) === null)
+    .filter((repo) => selectProject(state, repo.projectId) === null && !state.teammateRepos?.[repo.id])
     .sort(byName);
 }
 

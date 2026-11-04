@@ -1,4 +1,4 @@
-import type { RemoteTeam, RemoteTeamEntry } from '@shinsa/core';
+import { DEFAULT_TEAM_SCOPES, type RemoteTeam, type RemoteTeamEntry } from '@shinsa/core';
 
 export const MONA = { id: '1', login: 'mona', name: 'Mona Lisa', avatarUrl: null };
 
@@ -17,6 +17,8 @@ export function createTeam(overrides: Partial<RemoteTeam> = {}): RemoteTeam {
     members: [{ user: KAI, addedAt: Date.now() - 3_600_000 }],
     requests: [{ user: BOB, addedAt: Date.now() - 60_000 }],
     machines: [],
+    scopes: DEFAULT_TEAM_SCOPES,
+    overrides: [],
     createdAt: Date.now() - 86_400_000,
     ...overrides,
   };
@@ -31,6 +33,7 @@ export function createTeamEntry(overrides: Partial<RemoteTeamEntry> = {}): Remot
     onMachine: true,
     invite: true,
     team,
+    extras: [],
     ...overrides,
   };
 }

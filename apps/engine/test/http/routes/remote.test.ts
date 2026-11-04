@@ -68,6 +68,9 @@ function createTeams() {
     removeMember: record('removeMember'),
     leave: record('leave'),
     remove: record('remove'),
+    updateScopes: record('updateScopes'),
+    updateExtra: record('updateExtra'),
+    listKeys: Effect.succeed([{ teamId: 't', name: 'Core', key: 'k' }]),
   };
   return { calls, teams: teams as unknown as Teams['Service'] };
 }
@@ -165,7 +168,7 @@ describe('teams over HTTP', () => {
   test('creating a team and its links answer the team link; every other change the snapshot', async () => {
     const { remote } = createRemote();
     const { calls, teams } = createTeams();
-    const { post } = startRoutes({ remote, teams });
+    const { post, send } = startRoutes({ remote, teams });
     expect(await (await post('/api/remote/teams/create', { name: 'Core' })).json()).toEqual({
       teamId: 'team-1',
       url: 'https://app.shinsa.dev/share/team#team-1',
@@ -186,6 +189,14 @@ describe('teams over HTTP', () => {
       expect(await (await post(`/api/remote/teams/${path}`, { teamId: 't', userId: 'u' })).json()).toEqual(
         SNAPSHOT
       );
+    const narrow = { teamId: 't', scopes: ['share'] };
+    expect(await (await post('/api/remote/teams/scopes', narrow)).json()).toEqual(SNAPSHOT);
+    await post('/api/remote/teams/scopes', { ...narrow, userId: 'u', scopes: null });
+    const extra = { teamId: 't', userId: 'u', scopes: ['message'] };
+    expect(await (await post('/api/remote/teams/extra', extra)).json()).toEqual(SNAPSHOT);
+    expect(await (await send('/api/remote/teams/keys')).json()).toEqual({
+      keys: [{ teamId: 't', name: 'Core', key: 'k' }],
+    });
     expect(calls).toEqual([
       ['create', 'Core'],
       ['join', 'https://x'],
@@ -196,6 +207,9 @@ describe('teams over HTTP', () => {
       ['acceptRequest', 't', 'u'],
       ['declineRequest', 't', 'u'],
       ['removeMember', 't', 'u'],
+      ['updateScopes', 't', null, ['share']],
+      ['updateScopes', 't', 'u', null],
+      ['updateExtra', 't', 'u', ['message']],
     ]);
   });
 

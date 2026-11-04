@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { DomainError, type Run } from '../../src/index.ts';
+import { DomainError, type Run, type TeammateFork } from '../../src/index.ts';
 import {
   approve,
   completePhase,
@@ -302,5 +302,119 @@ describe('forking a task', () => {
     const forkId = forkTask(harness, sourceId);
     reachReviewGate(harness, forkId);
     expect(harness.task(forkId).forkOf).toBe(sourceId);
+  });
+});
+
+const TEAMMATE_FORK: TeammateFork = {
+  instanceId: 'kai-macbook',
+  taskId: 'kai-task',
+  handle: 'PAY-1',
+  title: 'Retry failed card payments',
+  owner: 'Kai',
+  request: 'Retry a failed card payment once before showing the error',
+  rounds: ['- Round 1: Retry failed card payments (in review, pull request #12): Retries once'],
+  branch: 'fix/payment-retry',
+  pullRequest: { number: 12, url: 'https://github.com/acme/pay/pull/12', state: 'open' },
+};
+
+function forkTeammate(harness: Harness, fork: TeammateFork) {
+  const source = createTask(harness);
+  const before = new Set(Object.keys(harness.state.tasks));
+  harness.send({
+    type: 'task.create',
+    request: FORK_REQUEST,
+    repoId: harness.task(source).repoId,
+    teammateFork: fork,
+  });
+  const taskId = Object.keys(harness.state.tasks).find((id) => !before.has(id)) ?? '';
+  harness.send({
+    type: 'task.triage',
+    taskId,
+    title: FORK_REQUEST,
+    repoId: harness.task(source).repoId,
+    size: 'small',
+    branch: `fix/${taskId}`,
+    waitsOn: [],
+  });
+  readyWorktree(harness, taskId);
+  return taskId;
+}
+
+describe('forking a teammate’s task', () => {
+  test('starts a fresh session told what the teammate’s task was asked and did, and how to read its branch', () => {
+    const harness = createHarness();
+    const forkId = forkTeammate(harness, TEAMMATE_FORK);
+    const run = harness.activeRun(forkId);
+    expect(harness.task(forkId).teammateFork).toEqual(TEAMMATE_FORK);
+    expect(run.fork ?? null).toBeNull();
+    const prompt = promptOf(run);
+    expect(prompt).toContain('This task carries on from Kai’s task PAY-1 “Retry failed card payments”');
+    expect(prompt).toContain(TEAMMATE_FORK.request);
+    expect(prompt).toContain(TEAMMATE_FORK.rounds[0] ?? '');
+    expect(prompt).toContain('Run `git fetch origin fix/payment-retry`');
+    expect(prompt).toContain('pull request #12 (https://github.com/acme/pay/pull/12)');
+    expect(harness.task(forkId).activity.find((entry) => entry.kind === 'fork')).toMatchObject({
+      actor: 'you',
+      text: 'Forked from Kai’s task PAY-1',
+    });
+  });
+
+  test('names a merged change, a missing branch and an unknown owner plainly', () => {
+    const merged = createHarness();
+    const mergedRun = merged.activeRun(
+      forkTeammate(merged, {
+        ...TEAMMATE_FORK,
+        pullRequest: { number: 12, url: 'https://github.com/acme/pay/pull/12', state: 'merged' },
+      })
+    );
+    expect(promptOf(mergedRun)).toContain('Its change merged in pull request #12');
+    const bare = createHarness();
+    const bareId = forkTeammate(bare, {
+      ...TEAMMATE_FORK,
+      owner: null,
+      handle: null,
+      branch: null,
+      pullRequest: null,
+    });
+    expect(promptOf(bare.activeRun(bareId))).toContain(
+      'This task carries on from a teammate’s task “Retry failed card payments”'
+    );
+    expect(promptOf(bare.activeRun(bareId))).toContain('Its change is not merged yet, so this worktree');
+    expect(bare.task(bareId).activity.find((entry) => entry.kind === 'fork')?.text).toBe(
+      'Forked from a teammate’s task “Retry failed card payments”'
+    );
+  });
+
+  test('is refused together with a fork of a task of this machine', () => {
+    const harness = createHarness();
+    const sourceId = createTask(harness);
+    expect(() =>
+      harness.send({
+        type: 'task.create',
+        request: FORK_REQUEST,
+        repoId: harness.task(sourceId).repoId,
+        forkOf: sourceId,
+        teammateFork: TEAMMATE_FORK,
+      })
+    ).toThrow(DomainError);
+  });
+
+  test('an agent forks a teammate’s task with create_task', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    proposePlan(harness, taskId);
+    const before = new Set(Object.keys(harness.state.tasks));
+    harness.send({
+      type: 'agent.create_task',
+      runId: harness.activeRun(taskId).id,
+      requestKey: 'teammate-fork',
+      request: FORK_REQUEST,
+      repoId: null,
+      thisWaits: false,
+      teammateFork: TEAMMATE_FORK,
+    });
+    const fork = Object.values(harness.state.tasks).find((task) => !before.has(task.id));
+    expect(fork?.teammateFork).toEqual(TEAMMATE_FORK);
+    expect(fork?.activity.find((entry) => entry.kind === 'fork')).toMatchObject({ actor: 'agent' });
   });
 });

@@ -1,7 +1,16 @@
 import { CurrentUser, RemoteApi } from '@shinsa/core/remote/api';
 import { Effect } from 'effect';
 import { HttpApiBuilder } from 'effect/http-api';
-import { connectTeam, findInviteTeam, joinTeam, leaveTeam, listUserTeams } from '../../domain/teams.ts';
+import { findOwnTeam } from '../../auth/access.ts';
+import {
+  connectTeam,
+  findInviteTeam,
+  joinTeam,
+  leaveTeam,
+  listUserTeams,
+  serializeTeam,
+  updateTeamScopes,
+} from '../../domain/teams.ts';
 
 export const TeamsHandlers = HttpApiBuilder.group(RemoteApi, 'teams', (handlers) =>
   Effect.succeed(
@@ -18,6 +27,14 @@ export const TeamsHandlers = HttpApiBuilder.group(RemoteApi, 'teams', (handlers)
       )
       .handle('connect', ({ params, payload }) =>
         Effect.flatMap(CurrentUser, (user) => connectTeam(user.id, params.teamId, payload.instanceId))
+      )
+      .handle(
+        'scopes',
+        Effect.fn('teams.scopes')(function* ({ params, payload }) {
+          const user = yield* CurrentUser;
+          const team = yield* findOwnTeam(user.id, params.teamId);
+          return yield* serializeTeam(yield* updateTeamScopes(team, payload), user.id);
+        })
       )
   )
 );

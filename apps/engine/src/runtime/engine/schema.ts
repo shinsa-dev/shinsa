@@ -1,6 +1,6 @@
 import type {
   Briefing,
-  GuestActor,
+  ScopedActor,
   ShinsaCommand,
   ShinsaEffect,
   ShinsaState,
@@ -55,14 +55,14 @@ export interface DispatchOptions {
   id?: string;
   onBehalf?: boolean;
   byTask?: string | null;
-  guest?: GuestActor | null;
+  guest?: ScopedActor | null;
   receipt?: ShinsaCommand;
 }
 
 export interface BehalfContext {
   onBehalf: boolean;
   byTask: string | null;
-  guest: GuestActor | null;
+  guest: ScopedActor | null;
 }
 
 export interface WrittenBriefing {

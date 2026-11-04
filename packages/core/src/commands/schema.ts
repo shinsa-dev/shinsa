@@ -42,11 +42,22 @@ import { FindingVerdict, ReviewComment } from '../domain/schema.ts';
 import { SHARE_LIMITS, SHARE_PRESETS } from '../domain/settings.ts';
 import { TASK_SHAPES } from '../domain/shapes.ts';
 import { TASK_PRIORITIES } from '../domain/stages.ts';
-import { TASK_MODES } from '../domain/types.ts';
+import { PULL_REQUEST_STATES, TASK_MODES } from '../domain/types.ts';
 import { WORKSPACE_MODES } from '../domain/workspaces.ts';
 import { CoverageSetting } from '../test-coverage/schema.ts';
 
 const FEEDBACK_LIMIT = 20_000;
+
+const Teammate = Strict(
+  {
+    id: Id(),
+    login: Id(),
+    name: OrNull(Text(ID_LIMIT), FIELD_MESSAGES.text),
+    avatarUrl: OrNull(Text(), FIELD_MESSAGES.text),
+  },
+  'A teammate',
+  'teammate'
+);
 
 const RepoPatch = Strict(
   {
@@ -86,6 +97,29 @@ export const ProjectInput = Strict(
 
 export type ProjectInput = Unbranded<typeof ProjectInput.Type>;
 
+const TeammateFork = Strict(
+  {
+    instanceId: IdText,
+    taskId: IdText,
+    handle: OrNull(Text(ID_LIMIT), FIELD_MESSAGES.text),
+    title: Text(ID_LIMIT),
+    owner: OrNull(Text(ID_LIMIT), FIELD_MESSAGES.text),
+    request: Text(),
+    rounds: List(Text(NOTE_LIMIT)),
+    branch: OrNull(Text(ID_LIMIT), FIELD_MESSAGES.text),
+    pullRequest: OrNull(
+      Strict(
+        { number: Count, url: Text(ID_LIMIT), state: Choice(PULL_REQUEST_STATES) },
+        'A pull request',
+        'pullRequest'
+      ),
+      FIELD_MESSAGES.object
+    ),
+  },
+  'A teammate’s task',
+  'teammateFork'
+);
+
 const NamedAccount = OrNull(RunAccount, FIELD_MESSAGES.object).pipe(
   Schema.refine(Predicate.isNotNull, { message: 'account must name an account.' })
 );
@@ -114,6 +148,7 @@ export const UserCommand = Schema.Union([
     mode: OptionalChoice(TASK_MODES),
     account: Optional(OrNull(RunAccount, FIELD_MESSAGES.object), FIELD_MESSAGES.object),
     forkOf: Optional(TaskId, FIELD_MESSAGES.text),
+    teammateFork: Optional(TeammateFork, FIELD_MESSAGES.object),
     backlog: Optional(Bool, FIELD_MESSAGES.boolean),
   }),
   Command('task.prioritize', { taskId: TaskId, priority: Choice(TASK_PRIORITIES) }),
@@ -233,6 +268,8 @@ export const UserCommand = Schema.Union([
   Command('preview.unshare', { taskId: TaskId, serviceId: ServiceId }),
   Command('task.hand_off', { taskId: TaskId }),
   Command('handoff.remove', { taskId: TaskId }),
+  Command('task.hand_to_teammate', { taskId: TaskId, teamId: IdText, teammate: Teammate }),
+  Command('task.give_back', { taskId: TaskId }),
 ]);
 
 export type ParsedUserCommand = typeof UserCommand.Type;

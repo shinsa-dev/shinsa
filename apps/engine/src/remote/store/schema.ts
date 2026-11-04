@@ -1,5 +1,6 @@
 import type {
   AccessRequest,
+  AccessScope,
   MachineCredentials,
   RemoteAccess,
   RemoteDevice,
@@ -40,6 +41,12 @@ export interface TeamGrant {
   secret: string;
 }
 
+export interface TeammateExtra {
+  teamId: string;
+  userId: string;
+  scopes: AccessScope[];
+}
+
 export interface StoredTeamKey {
   teamId: string;
   name: string;
@@ -64,6 +71,7 @@ export interface RemoteFile {
   teams: RemoteTeam[];
   teamKeys: StoredTeamKey[];
   grants: TeamGrant[];
+  extras: TeammateExtra[];
 }
 
 export interface RemoteFileRead {
@@ -92,14 +100,19 @@ export interface RemoteStoreHandle {
     userIds: ReadonlySet<string>,
     guestIds: ReadonlySet<string>
   ): Effect.Effect<string[], JsonFileWriteFailed>;
+  removeDevicesWhere(match: (device: RemoteDevice) => boolean): Effect.Effect<string[], JsonFileWriteFailed>;
   removeDevice(publicKey: string): Effect.Effect<boolean, JsonFileWriteFailed>;
   recordTeams(teams: RemoteTeam[]): Effect.Effect<boolean, JsonFileWriteFailed>;
   selectTeamKey(teamId: string): Effect.Effect<StoredTeamKey | null>;
   selectTeam(teamId: string): Effect.Effect<RemoteTeam | null>;
   upsertTeamKey(stored: StoredTeamKey): Effect.Effect<void, JsonFileWriteFailed>;
   writeGrant(grant: TeamGrant): Effect.Effect<void, JsonFileWriteFailed>;
-  selectGrant(userId: string): Effect.Effect<TeamGrant | null>;
-  removeGrantsOutside(userIds: ReadonlySet<string>): Effect.Effect<void, JsonFileWriteFailed>;
+  selectGrant(userId: string, teamId: string): Effect.Effect<TeamGrant | null>;
+  listGrants(userId: string): Effect.Effect<TeamGrant[]>;
+  removeGrantsWhere(match: (grant: TeamGrant) => boolean): Effect.Effect<void, JsonFileWriteFailed>;
+  selectExtra(userId: string, teamId: string): Effect.Effect<TeammateExtra | null>;
+  writeExtra(extra: TeammateExtra): Effect.Effect<void, JsonFileWriteFailed>;
+  removeExtrasWhere(match: (extra: TeammateExtra) => boolean): Effect.Effect<void, JsonFileWriteFailed>;
   removeTeam(teamId: string): Effect.Effect<void, JsonFileWriteFailed>;
   recordDeviceSeen(publicKey: string, at: number): Effect.Effect<void, JsonFileWriteFailed>;
 }

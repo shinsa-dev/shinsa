@@ -13,7 +13,7 @@ import {
   serializePublicKey,
   TERMINAL_STREAM_CLOSE,
 } from '@shinsa/core';
-import type { GuestActor } from '@shinsa/core';
+import type { ScopedActor } from '@shinsa/core';
 import { Effect } from 'effect';
 import type { HubSocket } from '../../src/http/socket.ts';
 import { describeError } from '../../src/log/redact.ts';
@@ -35,14 +35,14 @@ import { createKeyPair, serializeDeviceKey, startHandshake, type TestSession } f
 interface ChannelHost {
   resolveMachineKey: () => Promise<MachineKeyPair>;
   isEnrolled: (device: string) => boolean;
-  resolveGuest: (device: string) => GuestActor | null;
+  resolveGuest: (device: string) => ScopedActor | null;
   isOwner: () => boolean;
   requestAccess: (proof: string, keys: ProofKeys, name: string | null) => Promise<AccessAnswer>;
   resumeAccess: (device: string) => AccessAnswer | null;
   recordSeen: (device: string) => void;
   hub: ChannelHub;
   terminals: { select: (id: string) => TerminalSession | null };
-  respond: (request: Request, guest: GuestActor | null) => Promise<Response>;
+  respond: (request: Request, guest: ScopedActor | null) => Promise<Response>;
   maxBodyBytes: number;
 }
 
@@ -130,7 +130,7 @@ type TestChannel = ReturnType<typeof openChannel>;
 
 interface Harness {
   terminals: Map<string, FakeTerminal & TerminalSession>;
-  guest: GuestActor | null;
+  guest: ScopedActor | null;
   owner: boolean;
   channel: TestChannel;
   sent: (string | Bytes)[];
@@ -593,7 +593,7 @@ describe('the sealed channel', () => {
 });
 
 describe('terminal streams in the sealed channel', () => {
-  async function connectAs(owner: boolean, guest: GuestActor | null = null) {
+  async function connectAs(owner: boolean, guest: ScopedActor | null = null) {
     const harness = await createHarness();
     harness.owner = owner;
     harness.guest = guest;
@@ -678,7 +678,13 @@ describe('terminal streams in the sealed channel', () => {
       },
     ]);
     expect(member.terminal.attached).toHaveLength(0);
-    const guest = await connectAs(true, { taskId: 'task-1', login: 'kai' } as GuestActor);
+    const guest = await connectAs(true, {
+      id: 'u-kai',
+      login: 'kai',
+      name: null,
+      avatarUrl: null,
+      scope: { kind: 'task', taskId: 'task-1' },
+    });
     await guest.send({ t: 'terminal-open', id: 's', terminal: 'term-1' });
     expect((await guest.next(1))[0]).toMatchObject({ code: TERMINAL_STREAM_CLOSE.refused });
     expect(guest.terminal.attached).toHaveLength(0);

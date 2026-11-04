@@ -436,6 +436,36 @@ Yours alone: no agent has a tool for it, and an agent’s shell may not run it. 
 | --- | --- | --- |
 | `<task>` | text, required | The task: its handle (SW-142), its id, the start of its id, or its exact title. |
 
+#### shinsa tasks hand-to-teammate
+
+Hand a task to someone in a team that sees its project. It is theirs to steer at once, with no link.
+
+```
+shinsa tasks hand-to-teammate <task> --team <text> --login <text> [--json]
+```
+
+Yours alone: no agent has a tool for it, and an agent’s shell may not run it. Sends `task.hand_to_teammate`.
+
+| Argument | Kind | What it is |
+| --- | --- | --- |
+| `<task>` | text, required | The task: its handle (SW-142), its id, the start of its id, or its exact title. |
+| `--team` | text, required | The team’s name or id, from `shinsa teams list`. |
+| `--login` | text, required | Their GitHub login, from `shinsa teams list`. |
+
+#### shinsa tasks give-back
+
+Give a task a teammate handed you back to them.
+
+```
+shinsa tasks give-back <task> [--json]
+```
+
+Yours alone: no agent has a tool for it, and an agent’s shell may not run it. Sends `task.give_back`.
+
+| Argument | Kind | What it is |
+| --- | --- | --- |
+| `<task>` | text, required | The task: its handle (SW-142), its id, the start of its id, or its exact title. |
+
 #### shinsa tasks duplicate
 
 Close a task as a duplicate of another. It is cancelled and links the task it duplicates.
@@ -2556,6 +2586,24 @@ Yours alone: no agent has a tool for it, and an agent’s shell may not run it.
 | --- | --- | --- |
 | `<team>` | text, required | The team’s name or id, from `shinsa teams list`. |
 | `--login` | text, required | Their GitHub login, from `shinsa teams list`. |
+
+#### shinsa teams scopes
+
+Change what teammates may do on each other’s machines, for the whole team you own or, with --login, one member: a preset, then scopes to allow or deny.
+
+```
+shinsa teams scopes <team> [--login <text>] [--preset <standard|collaborate|full|default>] [--allow <list>] [--deny <list>] [--json]
+```
+
+Yours alone: no agent has a tool for it, and an agent’s shell may not run it.
+
+| Argument | Kind | What it is |
+| --- | --- | --- |
+| `<team>` | text, required | The team’s name or id, from `shinsa teams list`. |
+| `--login` | text, optional | One member’s GitHub login. Leave out to change the team’s. |
+| `--preset` | choice, optional | standard (see the work), collaborate (act on it, but not message agents), full (everything) or default (the team’s, or Collaborate for the team). |
+| `--allow` | list, optional | A scope to allow: gates, actions, message, fork, share or services. Repeat for each. |
+| `--deny` | list, optional | A scope to deny, such as share or services. Repeat for each. |
 
 #### shinsa teams leave
 

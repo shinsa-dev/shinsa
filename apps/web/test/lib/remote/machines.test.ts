@@ -6,6 +6,7 @@ import { Socket } from 'effect/socket';
 import { Connection } from '@/lib/connection/socket.ts';
 import { openRemoteChannel } from '@/lib/remote/channel.ts';
 import {
+  isOwnMachineConnecting,
   createFleetMember,
   describeMachine,
   listMachineRows,
@@ -46,6 +47,17 @@ describe('a machine in the dashboard', () => {
     const { access } = describeMachine(shared, null, NOW);
     expect(access).toEqual(['Shared by ', { user: shared.owner }, ' · Not added on this device']);
     expect(describeMentionText(access)).toBe('Shared by lee · Not added on this device');
+  });
+
+  it('names the teammate whose machine you reach through a team', () => {
+    const teammate: RemoteInstance = {
+      ...STUDIO,
+      owner: { id: '3', login: 'lee', name: 'Lee Park', avatarUrl: null },
+      role: 'teammate',
+    };
+    expect(describeMentionText(describeMachine(teammate, null, NOW).access)).toBe(
+      'In a team with Lee · Not added on this device'
+    );
   });
 
   it('names who handed you a task on a machine, and the task once it is in this dashboard', async () => {
@@ -129,6 +141,7 @@ describe('a machine in the dashboard', () => {
       dashboard: {
         requestConnect: () => Promise.resolve({ url: 'wss://t-k3x9.shinsa.dev/remote', expiresAt: 0 }),
       },
+      viewerId: '1',
       onRefused: () => undefined,
       openChannel: (options) => openRemoteChannel({ ...options, openSocket: mac.openSocket }),
       createConnection: (transport) => {
@@ -143,6 +156,7 @@ describe('a machine in the dashboard', () => {
     expect(member.guest).toBeUndefined();
     const handed = createFleetMember({ ...STUDIO, role: 'guest' }, device, {
       dashboard: { requestConnect: () => Promise.reject(new Error('unused')) },
+      viewerId: '2',
       onRefused: () => undefined,
       createConnection: () =>
         new Connection({
@@ -152,6 +166,19 @@ describe('a machine in the dashboard', () => {
     expect(handed.guest).toBe(true);
     expect(handed.handedBy).toEqual(STUDIO.owner);
     expect(handed.openTerminal).toBeUndefined();
+    expect(handed.teammate).toBeUndefined();
+    const teammate = createFleetMember({ ...STUDIO, role: 'teammate' }, device, {
+      dashboard: { requestConnect: () => Promise.reject(new Error('unused')) },
+      viewerId: '2',
+      onRefused: () => undefined,
+      createConnection: () =>
+        new Connection({
+          transport: Layer.succeed(Socket.WebSocketConstructor, () => new WebSocket('ws://x')),
+        }),
+    });
+    expect(teammate.teammate).toEqual({ owner: STUDIO.owner, viewerId: '2', scopes: [] });
+    expect([teammate.guest, teammate.openTerminal]).toEqual([undefined, undefined]);
+    teammate.close();
     const terminal = member.openTerminal?.('term-1');
     await waitFor(() => expect(terminal?.readyState).toBe(1));
     terminal?.close();
@@ -172,6 +199,7 @@ describe('a machine in the dashboard', () => {
       dashboard: {
         requestConnect: () => Promise.resolve({ url: 'wss://t-k3x9.shinsa.dev/remote', expiresAt: 0 }),
       },
+      viewerId: '1',
       onRefused: (instanceId, error) => refused.push(`${instanceId}: ${error.message}`),
       openChannel: (options) => openRemoteChannel({ ...options, openSocket: mac.openSocket }),
     });
@@ -188,6 +216,7 @@ describe('a machine in the dashboard', () => {
         requestConnect: () =>
           Promise.reject(new CloudRefused({ code: 'not_found', message: 'No such machine.', status: 404 })),
       },
+      viewerId: 'u1',
       onRefused: () => undefined,
       onRemoved: (instanceId) => removed.push(instanceId),
     });
@@ -207,5 +236,19 @@ describe('a machine’s task capacity', () => {
     expect(resolveTaskCapacityValue(8)).toBe('8');
     expect(parseTaskCapacity('none')).toBeNull();
     expect(parseTaskCapacity('8')).toBe(8);
+  });
+});
+
+describe('whether one of your machines is still connecting', () => {
+  const row = (id: string, role: string, waiting = false) =>
+    ({ instance: { id, role, online: true }, device: { waiting } }) as unknown as Parameters<
+      typeof isOwnMachineConnecting
+    >[0][number];
+
+  it('counts an online machine of yours this browser reaches but has not heard from yet', () => {
+    expect(isOwnMachineConnecting([row('studio', 'owner')], [])).toBe(true);
+    expect(isOwnMachineConnecting([row('studio', 'owner')], [{ id: 'studio' }])).toBe(false);
+    expect(isOwnMachineConnecting([row('studio', 'owner', true)], [])).toBe(false);
+    expect(isOwnMachineConnecting([row('kai-mac', 'teammate')], [])).toBe(false);
   });
 });

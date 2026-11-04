@@ -62,6 +62,15 @@ export const TeamsHandlers = HttpApiBuilder.group(
       .handle('removeMember', ({ payload }) =>
         change((found) => found.removeMember(payload.teamId, payload.userId))
       )
+      .handle('scopes', ({ payload }) =>
+        change((found) => found.updateScopes(payload.teamId, payload.userId ?? null, payload.scopes))
+      )
+      .handle('extra', ({ payload }) =>
+        change((found) => found.updateExtra(payload.teamId, payload.userId, payload.scopes))
+      )
+      .handle('keys', () =>
+        Effect.flatMap(teams, (found) => Effect.map(found.listKeys, (keys) => ({ keys })))
+      )
       .handle('leave', ({ payload }) => change((found) => found.leave(payload.teamId)))
       .handle('remove', ({ payload }) => change((found) => found.remove(payload.teamId)))
       .handle('tasks', ({ query }) =>

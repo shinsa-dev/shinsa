@@ -1,5 +1,8 @@
 import {
+  ACCESS_SCOPES,
   type AccessRequest,
+  type AccessScope,
+  DEFAULT_TEAM_SCOPES,
   isTeamKey,
   type MachineCredentials,
   type RemoteAccess,
@@ -7,6 +10,7 @@ import {
   type RemoteMember,
   type RemoteTeam,
   type RemoteUser,
+  type TeamScopeOverride,
 } from '@shinsa/core';
 import { Predicate } from 'effect';
 import { createRemoteFile } from './derive.ts';
@@ -18,6 +22,7 @@ import {
   type StoredLink,
   type StoredTeamKey,
   type TeamGrant,
+  type TeammateExtra,
 } from './schema.ts';
 
 type Fields = Record<string, unknown>;
@@ -56,6 +61,7 @@ function readDevices(value: unknown): RemoteDevice[] {
     if (typeof entry.enrolledAt !== 'number' || typeof entry.userId !== 'string') return [];
     const lastSeenAt = typeof entry.lastSeenAt === 'number' ? entry.lastSeenAt : null;
     const taskId = typeof entry.taskId === 'string' ? { taskId: entry.taskId } : {};
+    const teamId = typeof entry.teamId === 'string' ? { teamId: entry.teamId } : {};
     return [
       {
         publicKey: entry.publicKey,
@@ -64,6 +70,7 @@ function readDevices(value: unknown): RemoteDevice[] {
         lastSeenAt,
         userId: entry.userId,
         ...taskId,
+        ...teamId,
       },
     ];
   });
@@ -135,6 +142,22 @@ function readTeamMachines(value: unknown): RemoteTeam['machines'] {
   });
 }
 
+const SCOPE_NAMES: ReadonlySet<unknown> = new Set(ACCESS_SCOPES);
+
+function readScopes(value: unknown): AccessScope[] | null {
+  if (!Array.isArray(value)) return null;
+  return value.filter((scope): scope is AccessScope => SCOPE_NAMES.has(scope));
+}
+
+function readOverrides(value: unknown): TeamScopeOverride[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((entry) => {
+    const scopes = isFields(entry) ? readScopes(entry.scopes) : null;
+    if (!(isFields(entry) && typeof entry.userId === 'string' && scopes)) return [];
+    return [{ userId: entry.userId, scopes }];
+  });
+}
+
 function readTeam(value: unknown): RemoteTeam | null {
   const owner = isFields(value) ? readUser(value.owner) : null;
   if (!(owner && isFields(value))) return null;
@@ -148,6 +171,8 @@ function readTeam(value: unknown): RemoteTeam | null {
     members: readMembers(value.members),
     requests: readMembers(value.requests),
     machines: readTeamMachines(value.machines),
+    scopes: readScopes(value.scopes) ?? DEFAULT_TEAM_SCOPES,
+    overrides: readOverrides(value.overrides),
     createdAt,
   };
 }
@@ -177,6 +202,16 @@ function readGrants(value: unknown): TeamGrant[] {
   });
 }
 
+function readExtras(value: unknown): TeammateExtra[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((entry) => {
+    const scopes = isFields(entry) ? readScopes(entry.scopes) : null;
+    if (!(isFields(entry) && typeof entry.userId === 'string' && typeof entry.teamId === 'string' && scopes))
+      return [];
+    return [{ teamId: entry.teamId, userId: entry.userId, scopes }];
+  });
+}
+
 export function readAccess(value: unknown): RemoteAccess | null {
   const owner = isFields(value) ? readUser(value.owner) : null;
   if (!(owner && isFields(value))) return null;
@@ -203,6 +238,7 @@ export function readRemoteFields(fields: Fields | null): RemoteFileRead {
       teams: readTeams(fields.teams) ?? [],
       teamKeys: readTeamKeys(fields.teamKeys),
       grants: readGrants(fields.grants),
+      extras: readExtras(fields.extras),
     },
     credentialsIncomplete: incomplete,
   };

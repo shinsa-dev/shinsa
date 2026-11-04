@@ -61,7 +61,8 @@ src/
 │                    tokens.ts (the session's steps: selectSessionToken, selectRequestUser for the routes that work
 │                    signed out too, assertPageRequest, createSession), access.ts (the one access check:
 │                    selectMachineRole, owner, member or guest; selectTeamRole, owner or member; findMachineAccess
-│                    and findTeamAccess on them, else not_found; findOwnMachine and findOwnTeam), schema.ts (the
+│                    and findTeamAccess on them, else not_found; findOwnMachine and findOwnTeam; findReachableMachine,
+│                    which also admits the owner's teammates, for preview open and the channel's connect), schema.ts (the
 │                    access grants, TeamRole, BEARER, SESSION_TTL, OAUTH_STATE_BYTES and the messages several
 │                    files answer: NO_SUCH_MACHINE, NO_SUCH_TEAM, NOT_PAIRED, SIGN_IN_EXPIRED)
 ├── domain/          The Worker's own steps several routes share: machines.ts (isMachineOnline, a machine row as a
@@ -222,15 +223,24 @@ test/                gates.test.ts reads every RemoteApi route with HttpApi.refl
   and a machine of one of them, as `wss://t-<instance>.shinsa.dev/team?token=…`, signed with that machine's connect
   key for the account that asked; the machine then checks the account against its own copy of the members and the
   team key's proof. Removing a user, a team or a machine cascades its rows.
+  What teammates may do on each other's machines (`0008_team_scopes.sql`) is the team's `scopes` and each member's
+  own (`team_members.scopes`), both a JSON list of core's `AccessScope`s, null for the default or the team's. Only the
+  owner changes them, from their machine with `POST /__remote/machine/teams/<team>/scopes { userId?, scopes }` or from
+  a page with `POST /__remote/teams/<team>/scopes`, the same body, so a browser that reaches none of their machines can
+  too; machines learn it on their next heartbeat (403 `not_owner`
+  for anyone else, 404 for a `userId` that is not a member, 400 for a scope core does not know): without a `userId`
+  it sets the team's, with one that member's, and `null` puts the default or the team's back. It answers the team.
+  Every `RemoteTeam` carries the team's list, or `DEFAULT_TEAM_SCOPES` (Collaborate: everything but `message`), as
+  `scopes`, and each member set apart as `overrides`; a removed member's go with their row. The Worker only keeps them: each machine enforces them for its own tasks.
 - **Signing keys** (`instances.signing_key`, `0006_signing_keys.sql`). Each machine's heartbeat may send
   `signingKey`, its ECDSA P-256 public key (raw, base64url; anything else is 400 `body_invalid`, and one left out keeps
   the stored key), and the team listing returns it on each machine (`TeamMachine.signingKey`). Teammates verify a
   machine's signed task list with it when another teammate passes it on while the machine is offline
   (`docs/engine.md` → Teams → Offline teammates). The Worker stores the public half only and never sees a list.
-- **Connect tokens.** `/__remote/instances/<id>/connect`, signed in and same-origin, for the owner, a member or a guest, answers
+- **Connect tokens.** `/__remote/instances/<id>/connect`, signed in and same-origin, for the owner, a member, a guest or a teammate of the owner (`findReachableMachine`), answers
   `wss://t-<id>.shinsa.dev/remote?token=…` with a token from `createConnectToken` (the instance's connect key, 60
   seconds), signed for the account that asked. It only keeps random traffic off the machine's endpoint; the machine
-  still needs an enrolled device key.
+  still needs an enrolled device key, and a teammate's is scoped to the team's projects.
 - **Share links.** `POST /__remote/shares/<instance>/connect`, with no session, tells a share page where the machine is:
   `{ url: "wss://t-<instance>.shinsa.dev", online }` (`ShareConnectResponse`), 404 for an instance that does not
   exist. The page then opens the machine's `/share?id=…` channel itself, sealed with the key in the link's fragment,
@@ -261,7 +271,9 @@ test/                gates.test.ts reads every RemoteApi route with HttpApi.refl
 - **Private service addresses.** Every running service of a machine with remote access has a private address on
   `shinsa.page` too (`docs/engine.md` → Private service addresses). `GET /__remote/previews/open?url=<address>`
   (`routes/preview-open/`, `REMOTE_PATHS.previewOpen`) takes only a `shinsa.page` preview address, sends a signed-out
-  browser to sign in and back, answers 404 to anyone but the machine's owner or a member, and otherwise redirects
+  browser to sign in and back, answers 404 to anyone but the machine's owner, a member, a guest or someone who shares a
+  team with the owner (`findReachableMachine`; the machine then decides whether that teammate may open that run's
+  service), and otherwise redirects
   (303) to the address with `?access=` a token from `createPreviewAccessToken` signed with the instance's connect key,
   valid 60 seconds. On the preview host the Worker checks that token against the instance's connect key and sets a
   new one, valid 12 hours, as `__Host-shinsa_preview_access` (HttpOnly, Secure, SameSite=Lax, that host only),

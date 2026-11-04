@@ -202,6 +202,7 @@ describe('where a server is used', () => {
         { path: '/Users/you/Developer/b', name: 'shinsa', color: null },
       ],
     });
+    expect(resolveExtensionPlaces({ ...state, teammateRepos: { b: true } }).repos).toHaveLength(1);
   });
 
   it('says where it is used, and nothing when it is used everywhere', () => {

@@ -25,7 +25,9 @@ import {
   useUnreachableMachines,
 } from '@/lib/connection/socket.ts';
 import { TONE_TEXT } from '@/lib/format/tone.ts';
+import { REMOTE_ACCESS_SECTION } from '@/lib/remote-access.ts';
 import {
+  isOwnMachineConnecting,
   listMachineRows,
   listTaskCapacityItems,
   type MachineRow,
@@ -38,9 +40,9 @@ import { describeOutdatedMachine, MACHINES_SECTION } from '@/lib/remote/mode.ts'
 import { describeMachineResources, listResourceGauges, NO_RESOURCE_READING } from '@/lib/remote/resources.ts';
 import { RemoteServicesContext } from '@/lib/remote/services.ts';
 import { runApp } from '@/lib/runtime/app.ts';
-import { SETTING_ROW, SettingsEmpty, SettingsGroup } from './group.tsx';
+import { SETTING_ROW, SettingsEmpty, SettingsGroup, SettingsSection } from './group.tsx';
 import { PolicySettings } from './policies.tsx';
-import { AccessRequestRows, MachineAccessGroup } from './remote-access.tsx';
+import { AccessRequestRows, MACHINE_ACCESS_DESCRIPTION, MachineAccessCard } from './remote-access.tsx';
 import { MachineTeamsSettings } from './teams.tsx';
 
 function resolveViewerId(instances: RemoteInstance[], machineId: string) {
@@ -92,7 +94,7 @@ export function MachineAccessRequests({
 function OwnedMachineAccess({ machine }: { machine: MachineAccess }) {
   const actions = React.useMemo(() => createMachineAccessActions(machine.id), [machine.id]);
   if (!machine.remote) return null;
-  return <MachineAccessGroup name={machine.name} snapshot={machine.remote} actions={actions} />;
+  return <MachineAccessCard name={machine.name} snapshot={machine.remote} actions={actions} />;
 }
 
 const MACHINES_DESCRIPTION =
@@ -213,9 +215,11 @@ function MachineItem({
       </div>
       <div className='flex shrink-0 items-center gap-1.5'>
         {machine && <MachineCapacity machine={machine} />}
-        <Button variant='secondary' size='sm' loading={removing} onClick={onRemove}>
-          {row.instance.role === 'owner' ? 'Remove' : 'Leave'}
-        </Button>
+        {row.instance.role !== 'teammate' && (
+          <Button variant='secondary' size='sm' loading={removing} onClick={onRemove}>
+            {row.instance.role === 'owner' ? 'Remove' : 'Leave'}
+          </Button>
+        )}
       </div>
     </div>
   );
@@ -275,16 +279,28 @@ export function MachinesSettings({ state }: { state?: ShinsaState }) {
           <SettingsEmpty>Reading your machines.</SettingsEmpty>
         )}
       </SettingsGroup>
-      {owned.map((machine) => (
-        <OwnedMachineAccess key={machine.id} machine={machine} />
-      ))}
+      {owned.length > 0 && (
+        <SettingsSection title={REMOTE_ACCESS_SECTION} description={MACHINE_ACCESS_DESCRIPTION}>
+          <div className='flex flex-col gap-2'>
+            {owned.map((machine) => (
+              <OwnedMachineAccess key={machine.id} machine={machine} />
+            ))}
+          </div>
+        </SettingsSection>
+      )}
       <PolicySettings
         machines={machines}
         unreachable={(rows ?? [])
           .filter((row) => !row.device || row.device.waiting)
           .map((row) => ({ id: row.instance.id, name: row.instance.name }))}
       />
-      {state && rows && <MachineTeamsSettings state={state} machines={owned} />}
+      {state && rows && (
+        <MachineTeamsSettings
+          state={state}
+          machines={owned}
+          connecting={isOwnMachineConnecting(rows, owned)}
+        />
+      )}
     </>
   );
 }
