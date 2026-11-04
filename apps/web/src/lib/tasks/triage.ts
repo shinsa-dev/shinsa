@@ -31,23 +31,36 @@ function describeWhy(auto: boolean, decided: string, why: string, owner: string 
   return `${owner ?? 'You'} changed this. Shinsa chose “${lowerFirst(decided)}”: ${why}`;
 }
 
+function resolveStartWhy(state: ShinsaState, task: Task, owner: string | null) {
+  const decision = task.triageDecisions?.start;
+  const start = decision
+    ? describeWhy(
+        isSameList(task.waitsOn, decision.value),
+        describeStart(state, decision.value),
+        decision.why,
+        owner
+      )
+    : null;
+  const stack = task.triageDecisions?.stack;
+  if (!stack) return start;
+  const stacked = describeWhy(
+    isSameList(task.stacksOn ?? [], stack.value),
+    describeStack(state, stack.value),
+    stack.why,
+    owner,
+    true
+  );
+  const waits = (decision?.value.length ?? 0) > 0 || task.waitsOn.length > 0;
+  return waits && start ? `${stacked} ${start}` : stacked;
+}
+
 export function resolveTriageWhy(
   state: ShinsaState,
   task: Task,
   fact: TriageFact,
   owner: string | null = null
 ): string | null {
-  if (fact === 'start') {
-    const stack = task.triageDecisions?.stack;
-    if (stack) {
-      const auto = isSameList(task.stacksOn ?? [], stack.value);
-      return describeWhy(auto, describeStack(state, stack.value), stack.why, owner, true);
-    }
-    const decision = task.triageDecisions?.start;
-    if (!decision) return null;
-    const auto = isSameList(task.waitsOn, decision.value);
-    return describeWhy(auto, describeStart(state, decision.value), decision.why, owner);
-  }
+  if (fact === 'start') return resolveStartWhy(state, task, owner);
   const decision = task.triageDecisions?.priority;
   if (!decision) return null;
   return describeWhy(task.priority === decision.value, describePriority(decision.value), decision.why, owner);

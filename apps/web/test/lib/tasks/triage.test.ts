@@ -98,4 +98,24 @@ describe('resolveTriageWhy', () => {
     );
     expect(several).toBe('Shinsa chose this. Stacks on 2 tasks: Both pieces ship together.');
   });
+
+  it('gives the reason for a wait Shinsa kept beside the stack', () => {
+    const decisions: TriageDecisions = {
+      ...DECIDED,
+      start: { value: ['other'], why: 'It calls the column the other task adds.' },
+      stack: { value: ['base'], why: 'It is the next piece of the schema rewrite.' },
+    };
+    const [both] = whyOf({ stacksOn: ['base'], waitsOn: ['other'] }, decisions);
+    expect(both).toBe(
+      'Shinsa chose this. Stacks on “Fix the schema”: It is the next piece of the schema rewrite. Shinsa chose this: It calls the column the other task adds.'
+    );
+    const [cleared] = whyOf({ stacksOn: ['base'] }, decisions);
+    expect(cleared).toBe(
+      'Shinsa chose this. Stacks on “Fix the schema”: It is the next piece of the schema rewrite. You changed this. Shinsa chose “starts after “Add the column””: It calls the column the other task adds.'
+    );
+    const [added] = whyOf({ stacksOn: ['base'], waitsOn: ['other'] }, { ...decisions, start: DECIDED.start });
+    expect(added).toBe(
+      'Shinsa chose this. Stacks on “Fix the schema”: It is the next piece of the schema rewrite. You changed this. Shinsa chose “starts now”: Nothing it touches is in flight.'
+    );
+  });
 });
