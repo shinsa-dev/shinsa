@@ -1718,6 +1718,7 @@ function scriptReview(sample: CodeSample, push: Push) {
     taskId: task,
     summary: REVIEW_SUMMARY,
     findings: listReviewFindings(sample),
+    seen: null,
     disagreements: listReviewDisagreements(sample),
     runId: reviewer,
   });
@@ -2004,6 +2005,7 @@ function scriptMerged(sample: CodeSample, push: Push) {
     taskId: task,
     summary: MERGED_REVIEW_SUMMARY,
     findings: [],
+    seen: null,
     runId: runId(task, 3),
   });
   push(at(MERGED_MARKS.reviewer[1] + 0.2), {

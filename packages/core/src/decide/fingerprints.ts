@@ -59,3 +59,24 @@ export function countUnchangedRounds(task: Task, reason: FixReason) {
 export function countReviewRounds(task: Task) {
   return (task.fixFingerprints ?? []).filter((fingerprint) => fingerprint.reason === 'review').length;
 }
+
+export function resolveReviewInputFingerprint(task: Task, evidenceIds: readonly string[]) {
+  const tree = task.treeHash ?? null;
+  if (tree === null) return null;
+  const input = {
+    tree,
+    plan: task.plan?.version ?? 0,
+    reports: [...task.phaseReports]
+      .sort((a, b) => a.index - b.index)
+      .map((report) => ({
+        index: report.index,
+        summary: report.summary,
+        spots: report.spots,
+        judgementCalls: report.judgementCalls,
+        walkthrough: report.walkthrough ?? null,
+        files: report.files ?? [],
+      })),
+    evidence: [...evidenceIds].sort(),
+  };
+  return `review:${hashText(JSON.stringify(input)).toString(16).padStart(8, '0')}`;
+}

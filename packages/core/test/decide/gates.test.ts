@@ -443,7 +443,6 @@ describe('fixing findings, then approving', () => {
     fix(harness, taskId, 'tree-1');
     review(harness, taskId, blocking);
     fix(harness, taskId, 'tree-1');
-    review(harness, taskId, blocking);
     expect(harness.openGate(taskId)).toMatchObject({ type: 'review', status: 'open' });
     expect(harness.openGate(taskId).escalation?.reason).toBe('stalled');
     expect(harness.task(taskId)).toMatchObject({ stage: 'awaiting_review', approveAfterFix: false });
@@ -465,7 +464,6 @@ describe('fixing findings, then approving', () => {
     fix(harness, taskId, 'tree-1');
     review(harness, taskId, blocking);
     fix(harness, taskId, 'tree-1');
-    review(harness, taskId, blocking);
     const gate = harness.openGate(taskId);
     harness.send({
       type: 'gate.answer',

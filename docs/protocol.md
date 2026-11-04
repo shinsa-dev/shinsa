@@ -294,6 +294,7 @@ one reads as its empty value. The fields under Triage and shape, Plan and build,
 | `fixRounds` | number | automatic fix rounds used |
 | `fixFor` | `checks` \| `review` \| `you` \| `pull_request` \| `conflict` \| `update` \| `hook` \| null | what the current fix is for (`conflict`: the pull request conflicts with its base, read by the pull request watch; `update`: conflicts while updating the branch onto its base before a push; `hook`: the repository's pre-push hook rejected the push) |
 | `fixSignature`, `stalledFixes`, `fixFingerprints?` | | repeat detection: the same failures after the same tree |
+| `reviewedInput?` | string \| null | what the last agent review of this round saw (`review.reported`'s `seen`); a fix that leaves it unchanged reuses that review instead of running the reviewer, and a new round clears it |
 | `recoveries`, `recoveryFingerprint?` | number, string | the recovery budget and the durable state it is keyed to |
 | `iterations?` | `Iteration[]` | every request you sent after the work was in, with its reply, oldest first; kept across rounds, each with its `round` (not archived by a new round): `id`, `round`, `requests` (`text`, `comments`: the line comments sent with it, `at`), `reply` (`AgentReply` \| null while open), `runId` and `repliedAt` of the run whose hand-over answered it. At most one is open, the last (`selectOpenIteration`) |
 
@@ -1092,7 +1093,7 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `checks.recorded` | a round of checks finished (`results`, and `coverage?` when it was measured; merges `checkResults` by id, sets `coverage`, an activity entry of kind `check`) |
 | `checks.changed` | the agent changed the task's checks at a hand-over (`changes: CheckChange[]`, `runId`); updates `Task.checks`, drops the last result of a changed or removed check, an activity entry of kind `check` per change |
 | `checks.started` | Shinsa started a run of checks (`checkIds`); sets `Task.runningChecks` |
-| `review.reported`, `review.escalated` | a reviewer reported (`summary`, `findings`, `disagreements?`); the review escalated to you |
+| `review.reported`, `review.escalated` | a reviewer reported (`summary`, `findings`, `disagreements?`, `seen`: the fingerprint of the tree, plan, phase reports and Agent evidence it reviewed, null without a tree hash; sets `reviewedInput`); the review escalated to you |
 | `fix.started` | a fix round started (reason, signature, tree) |
 | `iteration.requested` | you sent a request after the work was in (`iterationId`, `round`, `text`, `comments`); appends to the iteration with that id or opens it |
 | `iteration.answered` | the hand-over that answered it carried its `reply` (`iterationId`, `runId`); sets `reply`, `runId` and `repliedAt` |
