@@ -2046,8 +2046,8 @@ checks it ran.
   the usage when it held, the project and the stage reason it had), `resetAt` the time the window frees up and
   `autoResume` always on. The stage reason is "held at the daily usage limit" or "held at the project's usage
   limit". The same `UsageResumeClock` dispatches `usage_wait.resume` at that time: the hold ends, the stage reason
-  comes back, and a copy of the held step starts (`releasePaceWait`: its prompt, session, role and phase as they
-  were, `continues` the held run, `usageWaitId` the wait), so it starts, or is held again under a new wait when other
+  comes back, and the held step starts again through `startRun` (`releasePaceWait`: its role prompt, session, role,
+  phase, feedback and account as they were, `continues` the held run, `usageWaitId` the wait), so it starts, or is held again under a new wait when other
   work filled the window meanwhile. Resume now (`usage_wait.resume_now`) starts it at once, over the limit or
   not; a pace hold cannot be switched to waiting for you (`usage_wait.change` is refused); raising, clearing or
   changing either limit starts every held step that is now under it.
@@ -2066,9 +2066,9 @@ checks it ran.
   limit resets soonest takes over (Accounts and usage limits, below). Settings → Agent usage → Forecast draws one block per provider (`components/settings/forecast.tsx`,
   `lib/accounts/forecast.ts`): every Claude account together, and each other provider's own login alone, each with
   its pace, a lane per account across the week (blue while the account has usage at the timeline's pace, grey once
-  it runs out, a gap at each reset, and an orange band wherever every account is out at once: `outages`), drawn at a
+  it runs out, a thin tick at each reset, and an orange band wherever every account is out at once: `outages`), drawn at a
   pace you pick (`resolveForecastTimeline`: the safe pace, the last 24 hours, or one and a half or twice the safe pace;
-  the last 24 hours first when it is faster), a thin orange line at the tightest point when the safe pace is drawn,
+  the last 24 hours first when it is faster), a dashed amber line at the tightest point when the safe pace is drawn,
   the tightest point in words and the last 24 hours of that provider (meters on an account's window for
   Claude, `provider:<id>` for the rest). Use as daily limit sends `settings.change` with `dailyUsageLimit` set to the
   pace; the forecast is worked out again on every accounts refresh and every minute.

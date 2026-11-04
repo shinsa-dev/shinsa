@@ -50,25 +50,38 @@ function Lane({ forecast, lane }: { forecast: UsageForecast; lane: ForecastLane 
   return (
     <div className='flex items-center gap-3'>
       <Truncate className={cn(LANE_LABEL, 'text-2xs text-fg-3')}>{lane.account.label}</Truncate>
-      <div className='relative h-3 min-w-0 flex-1 overflow-hidden rounded-xs bg-bg-a2'>
-        {lane.segments.map((segment) => {
-          const start = resolveForecastShare(forecast, segment.from);
-          const end = resolveForecastShare(forecast, segment.to);
-          return (
-            <Hint key={segment.from} label={describeSegment(forecast, segment, forecast.from)}>
-              <span
-                data-usable={resolveUsableShare(segment)}
-                className='absolute inset-y-0 overflow-hidden'
-                style={{ left: `${start * 100}%`, width: `${(end - start) * 100}%` }}
-              >
+      <div className='relative h-3 min-w-0 flex-1'>
+        <div className='absolute inset-0 overflow-hidden rounded-xs bg-bg-a2'>
+          {lane.segments.map((segment) => {
+            const start = resolveForecastShare(forecast, segment.from);
+            const end = resolveForecastShare(forecast, segment.to);
+            return (
+              <Hint key={segment.from} label={describeSegment(forecast, segment, forecast.from)}>
                 <span
-                  className='absolute inset-y-0 start-0 bg-primary/50'
-                  style={{ width: `${resolveUsableShare(segment) * 100}%` }}
-                />
-              </span>
-            </Hint>
-          );
-        })}
+                  data-usable={resolveUsableShare(segment)}
+                  className='absolute inset-y-0 overflow-hidden'
+                  style={{ left: `${start * 100}%`, width: `${(end - start) * 100}%` }}
+                >
+                  <span
+                    className='absolute inset-y-0 start-0 bg-primary/50'
+                    style={{ width: `${resolveUsableShare(segment) * 100}%` }}
+                  />
+                </span>
+              </Hint>
+            );
+          })}
+        </div>
+        {lane.segments
+          .filter((segment) => segment.from > forecast.from)
+          .map((segment) => (
+            <span
+              key={segment.from}
+              aria-hidden
+              data-reset
+              className='pointer-events-none absolute -inset-y-0.5 w-px -translate-x-1/2 bg-fg-3'
+              style={{ left: `${resolveForecastShare(forecast, segment.from) * 100}%` }}
+            />
+          ))}
       </div>
     </div>
   );
@@ -79,6 +92,7 @@ const LEGEND_SWATCH = {
   empty: 'h-2 w-3 rounded-xs bg-bg-a2',
   outage:
     'h-2 w-3 rounded-xs border border-dashed border-orange-4 bg-[repeating-linear-gradient(135deg,var(--color-orange-a3)_0_1px,transparent_1px_5px)]',
+  reset: 'h-2.5 w-px bg-fg-3',
   tightest: 'h-2.5 w-0 border-l border-dashed border-amber-4',
 } as const;
 

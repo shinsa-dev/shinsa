@@ -194,19 +194,16 @@ export function releasePaceWait(decider: Decider, task: Task, wait: UsageWait) {
   if (wait.pace) decider.stage(task.id, task.stage, wait.pace.stageReason);
   const held = decider.state.runs[wait.runId];
   if (!held) return;
-  const { context } = decider;
-  const run: Run = {
-    ...held,
-    id: context.newId(),
-    status: 'queued',
-    startedAt: context.now,
-    endedAt: null,
-    outcome: null,
-    summary: null,
-    continues: held.id,
+  const run = decider.startRun(decider.task(task.id), held.role, held.rolePrompt ?? held.prompt ?? '', {
+    resumeFrom: decider.resumableFrom(held),
+    purpose: held.purpose ?? null,
+    phaseIndex: held.phaseIndex ?? null,
+    feedback: held.feedback ?? null,
+    monitorId: held.monitorId ?? null,
     usageWaitId: wait.id,
-  };
-  decider.emit({ type: 'run.started', run });
+    account: held.account ?? null,
+    continues: held.id,
+  });
   moveWatchCheck(decider, held.id, run.id);
 }
 
