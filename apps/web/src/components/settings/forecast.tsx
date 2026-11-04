@@ -15,6 +15,7 @@ import { Hint } from '@/components/overlays/hint.tsx';
 import { useMinute } from '@/hooks/use-minute.ts';
 import {
   APPLY_PACE_LABEL,
+  describeOutage,
   describeOutages,
   describeRecentPace,
   describeSafePace,
@@ -99,13 +100,13 @@ function Legend() {
 
 function Outages({ forecast, timeline }: { forecast: UsageForecast; timeline: ForecastTimeline }) {
   return listOutageSpans(forecast, timeline.outages).map((span) => (
-    <span
-      key={span.at}
-      aria-hidden
-      data-outage
-      className='absolute -inset-y-1 rounded-xs border border-dashed border-orange-4 bg-[repeating-linear-gradient(135deg,var(--color-orange-a3)_0_1px,transparent_1px_5px)]'
-      style={{ left: `${span.start * 100}%`, width: `${span.width * 100}%` }}
-    />
+    <Hint key={span.at} label={describeOutage(span.outage, forecast.from)}>
+      <span
+        data-outage
+        className='pointer-events-auto absolute -inset-y-1 rounded-xs border border-dashed border-orange-4 bg-[repeating-linear-gradient(135deg,var(--color-orange-a3)_0_1px,transparent_1px_5px)]'
+        style={{ left: `${span.start * 100}%`, width: `${span.width * 100}%` }}
+      />
+    </Hint>
   ));
 }
 

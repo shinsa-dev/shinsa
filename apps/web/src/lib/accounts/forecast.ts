@@ -196,7 +196,7 @@ export function describeOutages(timeline: ForecastTimeline, now: number) {
 export function listOutageSpans(forecast: UsageForecast, outages: readonly ForecastOutage[]) {
   return outages.map((outage) => {
     const start = resolveForecastShare(forecast, outage.from);
-    return { at: outage.from, start, width: resolveForecastShare(forecast, outage.to) - start };
+    return { at: outage.from, outage, start, width: resolveForecastShare(forecast, outage.to) - start };
   });
 }
 
@@ -206,14 +206,23 @@ export function resolveUsableShare(segment: ForecastSegment) {
 }
 
 export function describeSegment(forecast: UsageForecast, segment: ForecastSegment, now: number) {
-  const label = selectLabel(forecast, segment.accountId);
+  const lastsTheWeek = segment.to >= forecast.to;
+  const outFor = (from: number) =>
+    lastsTheWeek ? 'for the rest of the week' : `for ${formatTurnaround(segment.to - from)}`;
+  if (segment.emptyAt !== null && segment.emptyAt <= Math.max(segment.from, now)) {
+    return `Out of usage ${outFor(Math.max(segment.from, now))}.`;
+  }
   const left = formatPace(segment.left);
-  const until = segment.to < forecast.to ? ` until it resets in ${formatTurnaround(segment.to - now)}` : '';
-  if (segment.emptyAt !== null && segment.emptyAt <= segment.from) return `${label} is out of usage${until}.`;
-  const start =
-    segment.from <= now
-      ? `${label} has ${left} left`
-      : `${label} resets to ${left} in ${formatTurnaround(segment.from - now)}`;
-  if (segment.emptyAt === null) return segment.from <= now ? `${start}${until}.` : `${start}.`;
-  return `${start} and runs out in ${formatTurnaround(segment.emptyAt - now)} at this pace.`;
+  const head =
+    segment.from <= now ? `${left} left` : `Resets to ${left} in ${formatTurnaround(segment.from - now)}`;
+  if (segment.emptyAt !== null) {
+    return `${head}. Runs out in ${formatTurnaround(segment.emptyAt - now)}, then out ${outFor(segment.emptyAt)}.`;
+  }
+  if (lastsTheWeek || segment.from > now) return `${head}.`;
+  return `${head}. Resets in ${formatTurnaround(segment.to - now)}.`;
+}
+
+export function describeOutage(outage: ForecastOutage, now: number) {
+  const start = outage.from <= now ? 'from now' : `starting in ${formatTurnaround(outage.from - now)}`;
+  return `All accounts out for ${formatTurnaround(outage.to - outage.from)}, ${start}.`;
 }

@@ -8,6 +8,7 @@ import {
   type ShinsaState,
 } from '@shinsa/core';
 import {
+  describeOutage,
   describeOutages,
   describeRecentPace,
   describeSafePace,
@@ -242,24 +243,22 @@ describe('the timeline', () => {
 
   it('says when each stretch has usage and when it runs out', () => {
     const stretch = { accountId: 'work', from: NOW, to: NOW + 15 * HOUR_MS, left: 8, emptyAt: null };
-    expect(describeSegment(forecast, stretch, NOW)).toBe(
-      'work@example.com has 8% left until it resets in 15h.'
-    );
+    expect(describeSegment(forecast, stretch, NOW)).toBe('8% left. Resets in 15h.');
     expect(describeSegment(forecast, { ...stretch, emptyAt: NOW + 5 * HOUR_MS }, NOW)).toBe(
-      'work@example.com has 8% left and runs out in 5h at this pace.'
+      '8% left. Runs out in 5h, then out for 10h.'
     );
     expect(describeSegment(forecast, { ...stretch, left: 0, emptyAt: NOW }, NOW)).toBe(
-      'work@example.com is out of usage until it resets in 15h.'
+      'Out of usage for 15h.'
     );
     const later = { accountId: 'work', from: NOW + 15 * HOUR_MS, to: forecast.to, left: 100, emptyAt: null };
-    expect(describeSegment(forecast, later, NOW)).toBe('work@example.com resets to 100% in 15h.');
-    expect(describeSegment({ ...forecast, accounts: [] }, later, NOW)).toBe('work resets to 100% in 15h.');
+    expect(describeSegment(forecast, later, NOW)).toBe('Resets to 100% in 15h.');
+    expect(describeSegment(forecast, { ...later, left: 0, emptyAt: later.from }, NOW)).toBe(
+      'Out of usage for the rest of the week.'
+    );
     expect(describeSegment(forecast, { ...later, emptyAt: NOW + 2 * DAY }, NOW)).toBe(
-      'work@example.com resets to 100% in 15h and runs out in 2d at this pace.'
+      'Resets to 100% in 15h. Runs out in 2d, then out for the rest of the week.'
     );
-    expect(describeSegment(forecast, { ...stretch, to: forecast.to }, NOW)).toBe(
-      'work@example.com has 8% left.'
-    );
+    expect(describeSegment(forecast, { ...stretch, to: forecast.to }, NOW)).toBe('8% left.');
   });
 
   it('fills each stretch as far as it has usage', () => {
@@ -300,6 +299,12 @@ describe('the timeline', () => {
     expect(
       describeOutages({ pace: 60, segments: [], outages: [{ from: NOW, to: NOW + 2 * HOUR_MS }] }, NOW)
     ).toBe('At 60% a day every account is out of usage for 2h in all, starting now.');
+    expect(describeOutage({ from: NOW + 12 * HOUR_MS, to: NOW + 22 * HOUR_MS }, NOW)).toBe(
+      'All accounts out for 10h, starting in 12h.'
+    );
+    expect(describeOutage({ from: NOW, to: NOW + 2 * HOUR_MS }, NOW)).toBe(
+      'All accounts out for 2h, from now.'
+    );
     const [span] = listOutageSpans(forecast, [{ from: forecast.from, to: forecast.from + 3.5 * DAY }]);
     expect(span?.start).toBe(0);
     expect(span?.width).toBeCloseTo(0.5, 6);
