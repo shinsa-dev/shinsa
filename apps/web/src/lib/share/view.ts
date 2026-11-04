@@ -44,7 +44,7 @@ function resolveSharedEvidence(item: Evidence, taskId: string, source: SharedSou
 }
 
 function listTranscriptUrls(source: SharedSource) {
-  if (!hasShareGroup(source.shared.preset, 'live')) return {};
+  if (!hasShareGroup(source.shared.scopes, 'live')) return {};
   return Object.fromEntries(
     source.shared.runs.flatMap((run) => {
       const urls: string[] = [];

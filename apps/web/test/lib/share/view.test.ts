@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'bun:test';
+import { SHARE_PRESET_SCOPES } from '@shinsa/core';
 import { resolveSharedTaskId, resolveSharedView, resolveSourceTaskId } from '@/lib/share/view.ts';
 import { createSharedTask } from './fixtures.ts';
 
@@ -50,9 +51,15 @@ describe('a shared view', () => {
         ({ 'transcript-run-1-0': '/t/1', 'transcript-run-1-1': '/t/2' })[id] ?? null,
     };
     expect(
-      resolveSharedView({ ...transcripts, shared: createSharedTask({ preset: 'status' }) }).transcripts
+      resolveSharedView({
+        ...transcripts,
+        shared: createSharedTask({ scopes: [...SHARE_PRESET_SCOPES.status] }),
+      }).transcripts
     ).toEqual({});
-    const everything = { ...transcripts, shared: createSharedTask({ preset: 'standard' }) };
+    const everything = {
+      ...transcripts,
+      shared: createSharedTask({ scopes: [...SHARE_PRESET_SCOPES.standard] }),
+    };
     expect(resolveSharedView(everything).transcripts).toEqual({ 'run-1': ['/t/1', '/t/2'] });
     expect(resolveSharedView({ ...everything, resolveFileUrl: () => null }).transcripts).toEqual({});
   });

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
-import type { Task } from '@shinsa/core';
+import { resolveEngineInfo, SHARE_PRESET_SCOPES, type Task } from '@shinsa/core';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { HandoffRemoveConfirm, ShareDialog, UnshareConfirm } from '@/components/task/share-dialog.tsx';
 import { HandoffBanner, SharingBanner } from '@/components/task/sharing-banner.tsx';
@@ -7,7 +7,13 @@ import { connection } from '@/lib/connection/socket.ts';
 import { closeShareDialog, closeUnshareConfirm, openShareDialog } from '@/lib/share/dialog.ts';
 import { closeHandoffRemoveConfirm } from '@/lib/share/handoff.ts';
 import { createRemoteSnapshot } from '../../support/remote-access.ts';
-import { listSentCommands, pushState, startFakeServer, stopFakeServer } from '../../support/server.ts';
+import {
+  listSentCommands,
+  pushEngine,
+  pushState,
+  startFakeServer,
+  stopFakeServer,
+} from '../../support/server.ts';
 import { createProject, createShinsaState, createTask } from '../../support/state.ts';
 import * as teams from '../../support/teams.ts';
 import { waitForGone } from '../../support/wait.ts';
@@ -39,7 +45,7 @@ async function choose(label: string, option: RegExp) {
 
 const URL = 'https://app.shinsa.dev/share/t/abc';
 
-const SHARING = { at: 1, limit: 'until_done', preset: 'standard', endsAt: null } as const;
+const SHARING = { at: 1, limit: 'until_done', scopes: SHARE_PRESET_SCOPES.standard, endsAt: null } as const;
 
 beforeEach(() => {
   startFakeServer();
@@ -70,7 +76,7 @@ describe('the share dialog', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Share' }));
     await waitFor(() =>
       expect(listSentCommands()).toEqual([
-        { type: 'task.share', taskId: 'source', limit: 'until_done', preset: 'standard' },
+        { type: 'task.share', taskId: 'source', limit: 'until_done', scopes: SHARE_PRESET_SCOPES.standard },
       ])
     );
   });
@@ -83,7 +89,80 @@ describe('the share dialog', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Share' }));
     await waitFor(() =>
       expect(listSentCommands()).toEqual([
-        { type: 'task.share', taskId: 'source', limit: 'until_done', preset: 'status' },
+        { type: 'task.share', taskId: 'source', limit: 'until_done', scopes: SHARE_PRESET_SCOPES.status },
+      ])
+    );
+  });
+
+  it('ticks the preset’s scopes, turns Custom when a box changes and shares exactly the ticked ones', async () => {
+    showTask();
+    await screen.findByRole('combobox', { name: 'Share as' });
+    const title = screen.getByRole('checkbox', { name: 'Title and status' });
+    expect(title.getAttribute('aria-checked')).toBe('true');
+    expect(title.hasAttribute('data-disabled') || title.getAttribute('aria-disabled') === 'true').toBe(true);
+    expect(screen.getByRole('checkbox', { name: 'Your messages' }).getAttribute('aria-checked')).toBe(
+      'false'
+    );
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Code and diff' }));
+    await waitFor(() =>
+      expect(screen.getByRole('combobox', { name: 'Share as' }).textContent).toBe('Custom')
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Share' }));
+    await waitFor(() =>
+      expect(listSentCommands()).toEqual([
+        {
+          type: 'task.share',
+          taskId: 'source',
+          limit: 'until_done',
+          scopes: SHARE_PRESET_SCOPES.standard.filter((scope) => scope !== 'code'),
+        },
+      ])
+    );
+  });
+
+  it('fills the boxes when a preset is picked over Custom', async () => {
+    showTask();
+    await screen.findByRole('combobox', { name: 'Share as' });
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Checks' }));
+    await waitFor(() =>
+      expect(screen.getByRole('combobox', { name: 'Share as' }).textContent).toBe('Custom')
+    );
+    await choose('Share as', /^Status/);
+    expect(screen.getByRole('checkbox', { name: 'Plan' }).getAttribute('aria-checked')).toBe('false');
+    expect(screen.getByRole('checkbox', { name: 'Progress' }).getAttribute('aria-checked')).toBe('true');
+  });
+
+  it('changes a live share’s scopes at once from a box', async () => {
+    showTask({ share: { ...SHARING, url: URL } });
+    fireEvent.click(await screen.findByRole('checkbox', { name: 'Live work' }));
+    await waitFor(() =>
+      expect(listSentCommands()).toEqual([
+        {
+          type: 'task.share',
+          taskId: 'source',
+          scopes: SHARE_PRESET_SCOPES.standard.filter((scope) => scope !== 'live'),
+        },
+      ])
+    );
+  });
+
+  it('offers only the presets, without boxes, on a machine that cannot share chosen scopes', async () => {
+    const engine = resolveEngineInfo('1.0.0');
+    showTask();
+    pushEngine({ ...engine, features: engine.features.filter((feature) => feature !== 'share.scopes') });
+    fireEvent.click(await screen.findByRole('combobox', { name: 'Share as' }));
+    await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
+    const list = screen.getAllByRole('listbox').at(-1) as HTMLElement;
+    expect(within(list).queryByRole('option', { name: /^Custom/ })).toBeNull();
+    expect(screen.queryByRole('checkbox', { name: 'Plan' })).toBeNull();
+    const standard = within(list).getByRole('option', { name: /^Standard/ });
+    fireEvent.pointerDown(standard, { pointerType: 'mouse' });
+    fireEvent.click(standard);
+    await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
+    fireEvent.click(screen.getByRole('button', { name: 'Share' }));
+    await waitFor(() =>
+      expect(listSentCommands()).toEqual([
+        { type: 'task.share', taskId: 'source', limit: 'until_done', preset: 'standard' },
       ])
     );
   });
@@ -118,7 +197,7 @@ describe('the share dialog', () => {
     await choose('Share for', /^24 hours/);
     await waitFor(() =>
       expect(listSentCommands()).toEqual([
-        { type: 'task.share', taskId: 'source', preset: 'full' },
+        { type: 'task.share', taskId: 'source', scopes: SHARE_PRESET_SCOPES.full },
         { type: 'task.share', taskId: 'source', limit: 'day' },
       ])
     );
@@ -143,7 +222,7 @@ describe('the share dialog', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
     await waitFor(() =>
       expect(listSentCommands()).toEqual([
-        { type: 'task.share', taskId: 'source', limit: 'until_done', preset: 'standard' },
+        { type: 'task.share', taskId: 'source', limit: 'until_done', scopes: SHARE_PRESET_SCOPES.standard },
       ])
     );
   });
@@ -225,7 +304,9 @@ describe('handing a task off as a kind of share', () => {
     await choose('Share as', /^Hand off/);
     await choose('Share as', /^Status/);
     await waitFor(() =>
-      expect(listSentCommands()).toEqual([{ type: 'task.share', taskId: 'source', preset: 'status' }])
+      expect(listSentCommands()).toEqual([
+        { type: 'task.share', taskId: 'source', scopes: SHARE_PRESET_SCOPES.status },
+      ])
     );
   });
 
@@ -302,10 +383,15 @@ describe('the sharing banner', () => {
     expect(screen.queryByText('Anyone with the link can watch this task.')).toBeNull();
   });
   it('opens the dialog from Manage to change what the link shares', async () => {
-    showTask({ share: { ...SHARING, preset: 'status', url: URL } });
+    showTask({ share: { ...SHARING, scopes: SHARE_PRESET_SCOPES.status, url: URL } });
     act(() => closeShareDialog());
     render(
-      <SharingBanner task={createTask({ id: 'source', share: { ...SHARING, preset: 'status', url: URL } })} />
+      <SharingBanner
+        task={createTask({
+          id: 'source',
+          share: { ...SHARING, scopes: SHARE_PRESET_SCOPES.status, url: URL },
+        })}
+      />
     );
     fireEvent.click(within(screen.getByRole('status')).getByRole('button', { name: 'Manage' }));
     expect(await screen.findByRole('dialog')).toBeTruthy();
@@ -317,7 +403,7 @@ describe('the sharing banner', () => {
       <SharingBanner
         task={createTask({
           id: 'source',
-          share: { at: 1, limit: 'hour', preset: 'standard', endsAt, url: URL },
+          share: { at: 1, limit: 'hour', scopes: SHARE_PRESET_SCOPES.standard, endsAt, url: URL },
         })}
       />
     );
@@ -331,12 +417,12 @@ describe('the hand-off banner', () => {
   const claimed = { ...HANDED, guest: KAI, claimedAt: Date.now() };
 
   it('says who works on a shared task beside the sharing banner, which alone has Manage', async () => {
-    showTask({ share: { ...SHARING, preset: 'status', url: URL }, handoff: claimed });
+    showTask({ share: { ...SHARING, scopes: SHARE_PRESET_SCOPES.status, url: URL }, handoff: claimed });
     act(() => closeShareDialog());
     await waitForGone(() => screen.queryByRole('dialog'));
     const task = createTask({
       id: 'source',
-      share: { ...SHARING, preset: 'status', url: URL },
+      share: { ...SHARING, scopes: SHARE_PRESET_SCOPES.status, url: URL },
       handoff: claimed,
     });
     render(

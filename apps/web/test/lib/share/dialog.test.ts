@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it } from 'bun:test';
-import { createSettings, HOUR_MS, USER_COMMAND_TYPES } from '@shinsa/core';
+import { createSettings, HOUR_MS, SHARE_PRESET_SCOPES, USER_COMMAND_TYPES, VIEW_SCOPES } from '@shinsa/core';
 import { act, renderHook } from '@testing-library/react';
 import {
-  changeSharePreset,
+  changeShareScopes,
   closeShareDialog,
   closeUnshareConfirm,
   describeShareEnd,
@@ -15,7 +15,11 @@ import {
   openUnshareConfirm,
   resolveShareLimitChoice,
   resolveShareModeChoice,
-  resolveSharePresetChoice,
+  resolveShareChoice,
+  resolveShareChoiceScopes,
+  resolveShareScopesChoice,
+  listShareScopeRows,
+  toggleShareScope,
   resolveShareView,
   selectLiveShare,
   shareTask,
@@ -38,7 +42,7 @@ afterEach(() => {
 
 const PAIRED = createRemoteSnapshot({ paired: true });
 
-const SHARING = { at: 1, limit: 'until_done', preset: 'standard', endsAt: null } as const;
+const SHARING = { at: 1, limit: 'until_done', scopes: SHARE_PRESET_SCOPES.standard, endsAt: null } as const;
 
 describe('the share dialog', () => {
   it('opens for one task from its action and closes again', () => {
@@ -82,12 +86,21 @@ describe('the share dialog', () => {
   it('shares and stops sharing with the human’s commands', async () => {
     const spies = spyOnCommands();
     const task = createTask({ id: 't' });
-    await shareTask(task, 'day', 'status');
-    await changeSharePreset(task, 'standard');
+    const custom = toggleShareScope(SHARE_PRESET_SCOPES.status, 'plan', true);
+    await shareTask(task, 'day', SHARE_PRESET_SCOPES.status, false);
+    await shareTask(task, 'day', custom, true);
+    await shareTask(task, 'day', custom, false);
+    await changeShareScopes(task, SHARE_PRESET_SCOPES.standard, false);
+    await changeShareScopes(task, SHARE_PRESET_SCOPES.full, true);
+    await changeShareScopes(task, custom, true);
     await unshareTask(task);
     expect(spies.sent.mock.calls).toEqual([
       [{ type: 'task.share', taskId: 't', limit: 'day', preset: 'status' }],
+      [{ type: 'task.share', taskId: 't', limit: 'day', scopes: custom }],
+      [{ type: 'task.share', taskId: 't', limit: 'day', preset: 'standard' }],
       [{ type: 'task.share', taskId: 't', preset: 'standard' }, 'Sharing as standard.'],
+      [{ type: 'task.share', taskId: 't', scopes: SHARE_PRESET_SCOPES.full }, 'Sharing as full access.'],
+      [{ type: 'task.share', taskId: 't', scopes: custom }, 'Sharing the parts you ticked.'],
       [{ type: 'task.unshare', taskId: 't' }, 'Stopped sharing.'],
     ]);
     spies.restore();
@@ -98,17 +111,47 @@ describe('what a shared task shows', () => {
   it('names each preset, and an unknown one by its value', () => {
     expect(describeSharePreset('standard')).toBe('Standard');
     expect(describeSharePreset('status')).toBe('Status');
+    expect(describeSharePreset('custom')).toBe('Custom');
     expect(describeSharePreset('other' as never)).toBe('other');
   });
 
   it('defaults to the setting, keeps a shared task’s own, and is Default before settings load', () => {
     const settings = { ...createSettings(), sharePreset: 'status' as const };
     const task = createTask({ id: 't' });
-    expect(resolveSharePresetChoice(task, settings)).toBe('status');
-    expect(resolveSharePresetChoice(task, null)).toBe('standard');
+    expect(resolveShareScopesChoice(task, settings)).toEqual(SHARE_PRESET_SCOPES.status);
+    expect(resolveShareScopesChoice(task, null)).toEqual(SHARE_PRESET_SCOPES.standard);
+    const own = toggleShareScope(SHARE_PRESET_SCOPES.status, 'code', true);
     expect(
-      resolveSharePresetChoice({ ...task, share: { ...SHARING, url: null, preset: 'standard' } }, settings)
-    ).toBe('standard');
+      resolveShareScopesChoice({ ...task, share: { ...SHARING, url: null, scopes: own } }, settings)
+    ).toEqual(own);
+  });
+
+  it('names a preset’s exact scopes by the preset, and any other set Custom', () => {
+    expect(resolveShareChoice(SHARE_PRESET_SCOPES.standard)).toBe('standard');
+    expect(resolveShareChoice(toggleShareScope(SHARE_PRESET_SCOPES.standard, 'code', false))).toBe('custom');
+  });
+
+  it('fills a preset’s scopes, and keeps the current ones for Custom', () => {
+    const custom = toggleShareScope(SHARE_PRESET_SCOPES.status, 'plan', true);
+    expect(resolveShareChoiceScopes('full', custom)).toEqual(SHARE_PRESET_SCOPES.full);
+    expect(resolveShareChoiceScopes('custom', custom)).toEqual(custom);
+  });
+
+  it('ticks and unticks a scope in the scopes’ own order, and never drops the title', () => {
+    expect(toggleShareScope(['identity', 'plan'], 'description', true)).toEqual([
+      'identity',
+      'description',
+      'plan',
+    ]);
+    expect(toggleShareScope(['identity', 'plan'], 'plan', false)).toEqual(['identity']);
+    expect(toggleShareScope(['identity', 'plan'], 'identity', false)).toEqual(['identity', 'plan']);
+  });
+
+  it('lists every view scope with its words, the title one required', () => {
+    const rows = listShareScopeRows();
+    expect(rows.map((row) => row.scope)).toEqual([...VIEW_SCOPES]);
+    expect(rows.filter((row) => row.required).map((row) => row.scope)).toEqual(['identity']);
+    expect(rows.every((row) => row.title.length > 0 && row.hint.length > 0)).toBe(true);
   });
 });
 
@@ -203,6 +246,13 @@ describe('the kinds of share', () => {
       'handoff',
     ]);
     expect(listShareModeItems(open, false).map((item) => item.value)).not.toContain('handoff');
+    expect(listShareModeItems(open, true, true).map((item) => item.value)).toEqual([
+      'status',
+      'standard',
+      'full',
+      'custom',
+      'handoff',
+    ]);
     expect(
       listShareModeItems(createTask({ id: 'a', stage: 'done' }), true).map((item) => item.value)
     ).not.toContain('handoff');
@@ -222,7 +272,7 @@ describe('the kinds of share', () => {
     const both = createTask({
       id: 'a',
       handoff: HANDED,
-      share: { at: 1, limit: 'none', preset: 'status', endsAt: null, url: 'https://x' },
+      share: { at: 1, limit: 'none', scopes: SHARE_PRESET_SCOPES.status, endsAt: null, url: 'https://x' },
     });
     expect(resolveShareModeChoice(both, settings, true)).toBe('status');
     expect(resolveShareModeChoice(both, settings, true, 'share')).toBe('status');

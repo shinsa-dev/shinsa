@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'bun:test';
+import { SHARE_PRESET_SCOPES } from '@shinsa/core';
 import type { Task } from '@shinsa/core';
 import {
   describeOwnerInSentence,
   describeOwnerPossessive,
   describeSharedBy,
   describeSharedFrom,
+  isStatusShare,
   listSharedTabs,
   resolveOwnerName,
 } from '@/lib/share/page.ts';
@@ -22,7 +24,7 @@ const MONA = { name: 'Mona Lisa Octocat', avatarUrl: 'https://avatars.example/mo
 describe('the shared page', () => {
   it('has the owner’s tabs, without Chat when the share sends no live output, and Code only when it is shared', () => {
     const reviewed = createTask({ id: 't', repoId: 'r', stage: 'awaiting_review', report: createReport() });
-    const status = { preset: 'status' } as const;
+    const status = { scopes: [...SHARE_PRESET_SCOPES.status] };
     expect(listSharedTabs(reviewed, createSharedTask(status))).toEqual(['overview', 'review', 'code']);
     expect(listSharedTabs(reviewed, createSharedTask({ ...status, code: false }))).toEqual([
       'overview',
@@ -34,12 +36,15 @@ describe('the shared page', () => {
 
   it('has Chat when the share sends the agents’ live output, as Default does', () => {
     const reviewed = createTask({ id: 't', repoId: 'r', stage: 'awaiting_review', report: createReport() });
-    expect(listSharedTabs(reviewed, createSharedTask({ preset: 'standard' }))).toEqual([
-      'overview',
-      'review',
-      'code',
-      'chat',
-    ]);
+    expect(listSharedTabs(reviewed, createSharedTask({ scopes: [...SHARE_PRESET_SCOPES.standard] }))).toEqual(
+      ['overview', 'review', 'code', 'chat']
+    );
+  });
+
+  it('is a status card only when the share shows nothing beyond Status’s scopes', () => {
+    expect(isStatusShare(createSharedTask({ scopes: [...SHARE_PRESET_SCOPES.status] }))).toBe(true);
+    expect(isStatusShare(createSharedTask({ scopes: ['identity', 'progress'] }))).toBe(true);
+    expect(isStatusShare(createSharedTask({ scopes: ['identity', 'progress', 'plan'] }))).toBe(false);
   });
 
   it('says who shared it and from which machine, with what it knows', () => {
