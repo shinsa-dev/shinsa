@@ -1870,6 +1870,17 @@ checks it ran.
   gate with `escalation` (reason, rounds) and the last findings. The overview says the agents
   could not settle it. Only review fixes escalate: a checks or pull request fix that stalls or
   runs out opens a failure gate (Recovery, below).
+- A review fix that left the work as the last review saw it never starts the reviewer again. `report_review` stamps
+  `review.reported` with `seen`, `resolveReviewInputFingerprint` over the tree hash, plan version, phase reports and
+  the round's Agent evidence (null without a tree hash), kept as `task.reviewedInput` until a new round clears it.
+  After a fix's checks, `proceedAfterChecks` compares it with the current input (`isReviewInputUnchanged`): on a match
+  `reuseLastReview` takes the last findings as they are, so anything still to fix escalates `stalled` at once and a
+  clean review opens the gate, which "Fix and approve" approves. This holds for your fix too: Fix and approve
+  on unchanged work opens the gate after no extra review. A new commit, a revised walkthrough, a phase report or new
+  evidence changes the input and gets one fresh review; a retry while reviewing always runs the reviewer. The fix's
+  own summary is not part of the input, since an agent that answers in words only would otherwise buy another review.
+  A finding that needs no code change (a missing watchdog or step) is answered in `walkthrough` on `complete_fix`,
+  and the review fix prompt says so.
 - At any review gate you can decide each finding: Fix or Dismiss (`gate.answer` with
   `verdicts`, one per finding index). Fix is chosen at first for a blocking or should fix finding and Dismiss for an
   optional one (`createVerdictDraft` in the web). Kept findings go to the Agent with the dismissed ones named
