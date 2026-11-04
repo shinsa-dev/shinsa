@@ -32,11 +32,18 @@ import {
   resolveRepoProperty,
 } from '../repositories.ts';
 import type { TriageResult } from '../schema.ts';
-import { resolveTeammateCheck, type TeammateCheck, type TeammateTask, type TeamReading } from '../team.ts';
+import {
+  clipText,
+  resolveTeammateCheck,
+  type TeammateCheck,
+  type TeammateTask,
+  type TeamReading,
+} from '../team.ts';
 import {
   type KeptDependencies,
   LARGE_HINT,
   NEW_REPO_LIMIT,
+  NO_WAIT,
   NOT_A_DUPLICATE,
   type ParsedDecisions,
   PRIORITY_QUESTION,
@@ -48,6 +55,7 @@ import {
   type TriageAsks,
   type TriagePlan,
   UNCLASSIFIED,
+  WAITS_ON_KIND_QUESTION,
   WHY_LIMIT,
 } from './schema.ts';
 
@@ -55,7 +63,7 @@ function resolveWaitsOnQuestion(open: Task[]): ChoicesQuestion {
   return {
     type: 'choices',
     instructions:
-      'Which open tasks must be finished before this one can start? Often none. Name a task only when this request clearly needs its work to exist first: it extends, uses or changes what that task builds. Related but independent work is left out; it runs in parallel.',
+      'Which open tasks must be merged before this one can start? Usually none: tasks run side by side, and a wait holds this task, planning included, until the other one merges. Name a task only for a direct dependency: this request edits or calls code that exists only on that task’s unmerged branch, the request itself asks to come after it, or both heavily rewrite the same files. Never wait because the tasks share an area, a feature or words in their titles, because this one builds on something that already exists, because it is a follow-up idea, or because it would be nicer after. When in doubt, answer an empty list.',
     criteria: Object.fromEntries(open.map((task) => [task.id, task.title])),
   };
 }
@@ -111,7 +119,10 @@ export function resolveTriageSchema(plan: TriagePlan): JsonSchema {
   };
   if (asks.shape) properties.shape = resolveDecisionProperty(SHAPE_QUESTION);
   if (asks.priority) properties.priority = resolveDecisionProperty(PRIORITY_QUESTION);
-  if (asks.start) properties.waits_on = resolveDecisionProperty(plan.waitsOnQuestion);
+  if (asks.start) {
+    properties.waits_on = resolveDecisionProperty(plan.waitsOnQuestion);
+    properties.waits_on_kind = resolveDecisionProperty(WAITS_ON_KIND_QUESTION);
+  }
   if (plan.duplicateQuestion) {
     properties.duplicate_of = resolveDecisionProperty(plan.duplicateQuestion);
     properties.duplicate_why = { type: 'string', maxLength: WHY_LIMIT };
@@ -177,7 +188,9 @@ function resolveAnswerReasons(
 
 function describeOpenTask(state: ShinsaState, task: Task) {
   const repo = state.repos[task.repoId ?? '']?.name ?? 'no repository yet';
-  return `- ${task.id}: ${task.title} (${repo}, ${task.stage})`;
+  const goal = task.plan?.document?.goal;
+  const plan = goal ? ` Plan: ${clipText(goal)}` : '';
+  return `- ${task.id}: ${task.title} (${repo}, ${task.stage}). Request: ${clipText(task.request)}${plan}`;
 }
 
 function describeTeammateTask(task: TeammateTask) {
@@ -218,7 +231,12 @@ function describeDecisions(plan: TriagePlan) {
     describeDecisionQuestion('size', SIZE_QUESTION),
     ...(asks.shape ? [describeDecisionQuestion('shape', SHAPE_QUESTION)] : []),
     ...(asks.priority ? [describeDecisionQuestion('priority', PRIORITY_QUESTION)] : []),
-    ...(asks.start ? [describeDecisionQuestion('waits_on', plan.waitsOnQuestion)] : []),
+    ...(asks.start
+      ? [
+          describeDecisionQuestion('waits_on', plan.waitsOnQuestion),
+          describeDecisionQuestion('waits_on_kind', WAITS_ON_KIND_QUESTION),
+        ]
+      : []),
     ...(duplicateQuestion ? [describeDecisionQuestion('duplicate_of', duplicateQuestion)] : []),
     ...(whys.length > 0 ? [`Then say why for each, in one plain sentence: ${whys.join(', ')}.`] : []),
   ];
@@ -277,7 +295,7 @@ export function resolveTriagePlan(
 export function describeTriagePrompt(state: ShinsaState, plan: TriagePlan) {
   const { task, open } = plan;
   return [
-    'Open tasks (not finished yet), each with its repository and stage:',
+    'Open tasks (not finished yet), each with its repository, stage, request and plan:',
     ...open.map((candidate) => describeOpenTask(state, candidate)),
     open.length === 0 ? '(none)' : '',
     ...describeTeammateTasks(plan.teammates),
@@ -304,6 +322,10 @@ function parseWaitsOn(state: ShinsaState, plan: TriagePlan, answer: TriageAnswer
   if (!plan.asks.start) return { waitsOn: [], kept: null };
   const named = parseDecisionAnswer(plan.waitsOnQuestion, answer.waits_on);
   if (named === null) return { waitsOn: [], kept: null };
+  const kind = parseDecisionAnswer(WAITS_ON_KIND_QUESTION, answer.waits_on_kind);
+  if (named.length > 0 && (kind === null || kind === NO_WAIT)) {
+    return { waitsOn: [], kept: { waitsOn: [], dropped: true } };
+  }
   const waitsOn = plan.open.filter(
     (candidate) => named.includes(candidate.id) && isDependencyAllowed(state, plan, candidate, repoPath)
   );

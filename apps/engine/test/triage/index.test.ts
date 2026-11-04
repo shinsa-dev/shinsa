@@ -144,6 +144,7 @@ describe('resolveTriage with the model', () => {
         size: 'large',
         branch: 'fix/login-mobile',
         waits_on: ['same', 'loose', 'other'],
+        waits_on_kind: 'needs_its_code',
       })
     );
     expect(triage).toMatchObject({
@@ -161,7 +162,14 @@ describe('resolveTriage with the model', () => {
         state,
         newTask(),
         LOCAL,
-        answer({ title: 'Fix it', repo: 'api', size: 'small', branch: 'fix/it', waits_on })
+        answer({
+          title: 'Fix it',
+          repo: 'api',
+          size: 'small',
+          branch: 'fix/it',
+          waits_on,
+          waits_on_kind: 'needs_its_code',
+        })
       );
       expect(triage?.waitsOn).toEqual([]);
     }
@@ -251,6 +259,7 @@ describe('resolveTriage with structured output', () => {
         size: 'large',
         branch: 'fix/it',
         waits_on: ['same'],
+        waits_on_kind: 'asked_for',
       } as T);
     };
     const triage = await resolveTriage(state, newTask({ auto: START_ONLY }), LOCAL, recording);
@@ -264,11 +273,19 @@ describe('resolveTriage with structured output', () => {
       items: { type: 'string', enum: ['same'] },
       uniqueItems: true,
     });
+    expect(schema?.properties.waits_on_kind).toEqual({
+      type: 'string',
+      enum: ['none', 'needs_its_code', 'asked_for', 'shared_rewrite'],
+    });
     expect(calls[0]?.prompt).toContain(
       'Decisions:\n- size (choice): How big is the work? Options: "small": a contained fix'
     );
     expect(calls[0]?.prompt).toContain(
-      '- waits_on (choices): Which open tasks must be finished before this one can start? Often none.'
+      '- waits_on (choices): Which open tasks must be merged before this one can start? Usually none'
+    );
+    expect(calls[0]?.prompt).toContain('When in doubt, answer an empty list.');
+    expect(calls[0]?.prompt).toContain(
+      '- waits_on_kind (choice): Which direct dependency makes this task wait'
     );
     expect(calls[0]?.prompt).toContain('Options: "same": Add the export.');
 
@@ -358,6 +375,7 @@ describe('resolveTriage for what the task left to Shinsa', () => {
       shape: 'investigate',
       priority: 'high',
       waits_on: ['same'],
+      waits_on_kind: 'needs_its_code',
       shape_why: '  It asks why the export is slow, not for a change.  ',
       priority_why: 'x'.repeat(200),
       waits_on_why: 'It measures the export that task adds.',
@@ -392,6 +410,7 @@ describe('resolveTriage for what the task left to Shinsa', () => {
       'shape',
       'priority',
       'waits_on',
+      'waits_on_kind',
       'duplicate_of',
       'duplicate_why',
       'shape_why',
@@ -456,8 +475,16 @@ describe('resolveTriage for what the task left to Shinsa', () => {
       state,
       newTask({ auto: AUTO }),
       LOCAL,
-      answer({ title: 'Fix it', repo: 'api', size: 'small', branch: 'fix/it', waits_on: ['same'] })
+      answer({
+        title: 'Fix it',
+        repo: 'api',
+        size: 'small',
+        branch: 'fix/it',
+        waits_on: ['same'],
+        waits_on_kind: 'shared_rewrite',
+      })
     );
+    expect(waiting?.waitsOn.map((task) => task.id)).toEqual(['same']);
     expect(waiting?.reasons?.start).toBe('It needs the work of another open task first.');
   });
 
@@ -472,12 +499,59 @@ describe('resolveTriage for what the task left to Shinsa', () => {
         size: 'small',
         branch: 'feat/export-button',
         waits_on: ['same'],
+        waits_on_kind: 'needs_its_code',
         waits_on_why: 'It calls the endpoint that task adds.',
       })
     );
     expect(triage?.repoPath).toBe('/code/web');
     expect(triage?.waitsOn).toEqual([]);
     expect(triage?.reasons?.start).toBe('It does not need the work of another open task.');
+  });
+
+  test('a wait that names no direct dependency is dropped along with its reason, so the task starts now', async () => {
+    for (const waits_on_kind of ['none', 'same_area', undefined]) {
+      const triage = await resolveTriage(
+        state,
+        newTask({ auto: AUTO }),
+        LOCAL,
+        answer({
+          title: 'Escalate to teammates',
+          repo: 'api',
+          size: 'large',
+          branch: 'feat/escalate',
+          waits_on: ['same'],
+          waits_on_kind,
+          waits_on_why: 'Escalating to teammates relies on the teams task.',
+        })
+      );
+      expect(triage?.waitsOn).toEqual([]);
+      expect(triage?.reasons?.start).toBe('It does not need the work of another open task.');
+    }
+  });
+
+  test('each open task is shown with its request and plan goal, clipped, so overlap is judged on the work', async () => {
+    const planned = stateWith((draft) => {
+      draft.repos.r1 = createRepo({ id: 'r1', path: '/code/api', name: 'api' });
+      draft.tasks.teams = createTask({
+        id: 'teams',
+        repoId: 'r1',
+        title: 'Improve teams',
+        request: `Hand a task\n  to a teammate. ${'x'.repeat(400)}`,
+        plan: { version: 1, document: { goal: 'Teammates take over each other’s tasks.' } } as never,
+      });
+      draft.tasks.bare = createTask({ id: 'bare', repoId: 'r1', title: 'Fix the tab', request: 'Fix it' });
+    });
+    const { calls, ask } = record(null);
+    await resolveTriage(planned, newTask({ auto: AUTO }), LOCAL, ask);
+    const prompt = calls[0]?.prompt ?? '';
+    expect(prompt).toContain(
+      'Open tasks (not finished yet), each with its repository, stage, request and plan:'
+    );
+    expect(prompt).toContain(
+      '- teams: Improve teams (api, building). Request: Hand a task to a teammate. xxx'
+    );
+    expect(prompt).toContain('… Plan: Teammates take over each other’s tasks.');
+    expect(prompt).toContain('- bare: Fix the tab (api, building). Request: Fix it\n');
   });
 
   test('what the human chose is stated and not asked again', async () => {
@@ -591,6 +665,7 @@ describe('triage in a project', () => {
         size: 'small',
         branch: 'feat/export-button',
         waits_on: ['backend', 'unfiled'],
+        waits_on_kind: 'needs_its_code',
         waits_on_why: 'It calls the endpoint that task adds.',
       } as T);
     };

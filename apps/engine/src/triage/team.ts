@@ -34,7 +34,7 @@ const TEAMMATE_KEY_PREFIX = 'teammate-';
 
 export const TEAMMATE_TEXT_LIMIT = 280;
 
-function clipText(text: string) {
+export function clipText(text: string) {
   const flat = text.replace(/\s+/g, ' ').trim();
   return flat.length > TEAMMATE_TEXT_LIMIT ? `${flat.slice(0, TEAMMATE_TEXT_LIMIT).trimEnd()}…` : flat;
 }
