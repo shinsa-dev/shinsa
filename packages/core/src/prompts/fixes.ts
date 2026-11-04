@@ -38,7 +38,7 @@ function describeFixClosing(next: string) {
     '',
     'Fix it, confirming the fix with the test files or folders it touches, never the whole suite (Shinsa refuses it): Shinsa runs the checks itself after you hand over.',
     'Then call `complete_fix` with a one or two sentence summary of what you changed. Shinsa runs again the checks that failed, the checks of every phase whose files your fix changes, and the ones you name in `checks` by their ids; add, change or remove a check with `check_changes` and a reason when the fix needs one.',
-    'When the fix changes the approach, the flow, a risk, how to test it or the steps the human takes around the merge, also send `walkthrough` with only the parts that changed. Otherwise leave it out.',
+    'When the fix changes the approach, the flow, a risk, how to test it or the steps the human takes around the merge, also send `walkthrough` with only the parts that changed. Otherwise leave it out. When it changes the watchdogs, send the whole new list in `watchdogs`, beside `walkthrough`.',
     'When the fix changes what your evidence shows, refresh it before you hand over: attach the new shot with the same `key` so it replaces the old one (never add it beside it), remove what no longer applies with `remove_evidence`, and name in `evidence_kept` what still shows the work as it is.',
     `${next} Then stop.`,
   ].join('\n');
@@ -62,6 +62,7 @@ export function resolveReviewFixPrompt(findings: ReviewFinding[]) {
   return [
     'The agent review found problems. Fix every blocking finding and the suggestions that are clearly right.',
     'Judge each one: if a finding is wrong, say why in your summary instead of changing code.',
+    'A finding that needs no code change, such as a missing watchdog or a step around the merge, is answered in `walkthrough` on `complete_fix`. A fix that changes neither the files nor the hand-over gets no new review: its findings go back to the human as they are.',
     '',
     describeFindingLines(findings),
     describeFixClosing(WORK_FIX_NEXT),

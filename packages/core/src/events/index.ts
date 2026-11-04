@@ -224,6 +224,7 @@ type EventBody =
       findings: ReviewFinding[];
       disagreements?: ReviewDisagreement[];
       runId?: string | null;
+      seen: string | null;
     }
   | {
       type: 'fix.started';

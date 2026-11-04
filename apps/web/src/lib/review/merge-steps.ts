@@ -9,6 +9,7 @@ import {
   type MergeStepKind,
   type MergeStepTiming,
   type MergeStepView,
+  resolveCurrentRound,
   type ShinsaState,
   serializeReference,
   type Task,
@@ -40,8 +41,19 @@ export const MERGE_WAIT_KIND: Record<MergeWaitView['kind'], { label: string; ico
   bundle: { label: 'Merges with this one', icon: 'IconLayersThree' },
 };
 
-export function listTimedSteps(task: Task, when: MergeStepTiming) {
-  return listMergeSteps(task).filter((step) => step.when === when);
+export function listTimedSteps(task: Task, when: MergeStepTiming, round: number | null = null) {
+  return listMergeSteps(task).filter(
+    (step) => step.when === when && (round === null || step.round === round)
+  );
+}
+
+export function describePostMergeOrigin(task: Task) {
+  const rounds = [...new Set(listDuePostMergeSteps(task).map((step) => step.round))];
+  const [only] = rounds;
+  if (rounds.length !== 1 || only === undefined || only === resolveCurrentRound(task).number) {
+    return 'The merged work left these steps for you. The task is done once each is ticked.';
+  }
+  return `Round ${only} merged and left these steps for you. The task is done once each is ticked.`;
 }
 
 export function resolveMergeLabel(state: Pick<ShinsaState, 'tasks'>, task: Task, fallback: string) {

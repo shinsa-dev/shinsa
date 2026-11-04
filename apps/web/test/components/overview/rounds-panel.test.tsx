@@ -92,6 +92,34 @@ describe('the rounds of a task on its Overview', () => {
     await waitForGone(() => screen.queryByRole('listbox'));
   });
 
+  it('opens an earlier round that left post-merge steps and lists them to tick', () => {
+    const task = createTask({
+      id: 't',
+      rounds: [
+        createRound({ number: 1, title: 'Fix the revenue' }),
+        createRound({ number: 2, title: 'Check purchases', status: 'active', outcome: null }),
+      ],
+      carriedMergeSteps: [
+        {
+          when: 'post_merge',
+          kind: 'deploy',
+          title: 'Deploy the API',
+          detail: 'By hand.',
+          command: null,
+          round: 1,
+          done: false,
+        },
+      ],
+    });
+    const view = render(
+      <TooltipProvider>
+        <RoundsPanel state={createShinsaState({ tasks: [task] })} task={task} onOpen={() => undefined} />
+      </TooltipProvider>
+    );
+    expect(view.getByText('Post-merge steps')).toBeTruthy();
+    expect(view.getByRole('checkbox', { name: 'Deploy the API' })).toBeTruthy();
+  });
+
   it('shows nothing for a task with one round', () => {
     const task = createTask({ id: 't' });
     const view = render(
@@ -112,8 +140,9 @@ describe('the rounds of a task on its Overview', () => {
         <TaskHandlePrefix task={task} />
         <TaskHandle task={createTask({ id: 'x' })} />
         <TaskHandlePrefix task={createTask({ id: 'x' })} />
+        <TaskHandlePrefix task={task} round={false} />
       </>
     );
-    expect(view.container.textContent).toBe('SW-14 · Round 2SW-14 · Round 2 · ');
+    expect(view.container.textContent).toBe('SW-14 · Round 2SW-14 · Round 2 · SW-14 · ');
   });
 });

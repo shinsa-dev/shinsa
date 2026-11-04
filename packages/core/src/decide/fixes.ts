@@ -1,5 +1,6 @@
 import {
   type FixReason,
+  isCurrentEvidence,
   isOfCurrentRound,
   type ReviewEscalation,
   type ReviewEscalationReason,
@@ -8,7 +9,12 @@ import {
 import { describeEvidenceForFix, resolveAgentPrompt, resolveReviewFixPrompt } from '../prompts/index.ts';
 import type { ReviewFinding } from '../report/types.ts';
 import type { Decider } from './decider.ts';
-import { countFixRepeats, countReviewRounds, countUnchangedRounds } from './fingerprints.ts';
+import {
+  countFixRepeats,
+  countReviewRounds,
+  countUnchangedRounds,
+  resolveReviewInputFingerprint,
+} from './fingerprints.ts';
 import { openReviewGate } from './lifecycle.ts';
 
 const MAX_STALLED_FIXES = 2;
@@ -115,6 +121,19 @@ function listAgentEvidence(decider: Decider, task: Task) {
     .sort((a, b) => a.attachedAt - b.attachedAt);
 }
 
+export function resolveReviewInput(decider: Decider, task: Task) {
+  const evidence = listAgentEvidence(decider, task).filter(isCurrentEvidence);
+  return resolveReviewInputFingerprint(
+    task,
+    evidence.map((piece) => piece.id)
+  );
+}
+
+export function isReviewInputUnchanged(decider: Decider, task: Task) {
+  const seen = task.reviewedInput ?? null;
+  return seen !== null && resolveReviewInput(decider, task) === seen;
+}
+
 type FixOptions = { base?: string | null; commentsOnly?: boolean };
 
 export function startFix(
@@ -169,11 +188,22 @@ function isFixedBeforeReview(task: Task, finding: ReviewFinding) {
   return finding.severity === 'should_fix' && task.approveAfterFix === true;
 }
 
+function listFindingsToFix(task: Task, findings: readonly ReviewFinding[]) {
+  return findings.filter((finding) => isFixedBeforeReview(task, finding) && !isDismissed(task, finding));
+}
+
+export function reuseLastReview(decider: Decider, taskId: string) {
+  const task = decider.task(taskId);
+  if (listFindingsToFix(task, task.findings).length === 0) {
+    openReviewGate(decider, taskId);
+    return;
+  }
+  escalateReview(decider, taskId, 'stalled');
+}
+
 export function reactToFindings(decider: Decider, taskId: string, findings: ReviewFinding[]) {
   const task = decider.task(taskId);
-  const toFix = findings.filter(
-    (finding) => isFixedBeforeReview(task, finding) && !isDismissed(task, finding)
-  );
+  const toFix = listFindingsToFix(task, findings);
   if (toFix.length === 0) {
     openReviewGate(decider, taskId);
     return;

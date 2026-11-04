@@ -491,6 +491,7 @@ export interface Task {
   dismissedFindings?: ReviewFinding[];
   approveAfterFix?: boolean;
   reviewDisagreements?: ReviewDisagreement[];
+  reviewedInput?: string | null;
   monitor?: Monitor | null;
   treeHash?: string | null;
   fixFingerprints?: FixFingerprint[];

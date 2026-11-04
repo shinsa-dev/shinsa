@@ -1,5 +1,12 @@
 import { describe, expect, test } from 'bun:test';
-import { type Gate, listWaitsOn, resolveFocusProject, resolveQueue, type Task } from '../../src/index.ts';
+import {
+  type Gate,
+  listWaitsOn,
+  resolveFocusProject,
+  resolveQueue,
+  type ShinsaState,
+  type Task,
+} from '../../src/index.ts';
 import { resolveGateWords } from '../../src/queue/reasons.ts';
 import {
   approve,
@@ -160,6 +167,30 @@ describe('what is working and what is waiting', () => {
     expect(resolveFocusProject(harness.state, 5_000)).toBeNull();
   });
 
+  test('a task with post-merge steps left and an agent at work is listed once, under its gate', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    const state = withPostMergeGate(harness.state, taskId);
+    const queue = resolveQueue(state, 0);
+    expect(queue.ready.map((entry) => [entry.task.id, entry.gate.type])).toEqual([[taskId, 'post_merge']]);
+    expect(queue.working).toHaveLength(0);
+  });
+
+  test('a task with post-merge steps left and another decision open shows only that decision', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    harness.send({
+      type: 'agent.ask',
+      runId: harness.activeRun(taskId).id,
+      gateId: 'q1',
+      question: 'Which tab?',
+      context: null,
+    });
+    const queue = resolveQueue(withPostMergeGate(harness.state, taskId), 0);
+    expect(queue.ready.map((entry) => entry.gate.type)).toEqual(['question']);
+    expect(queue.working).toHaveLength(0);
+  });
+
   test('a gate after the merge says what is left', () => {
     const gate = { type: 'post_merge', title: '2 post-merge steps left' } as Gate;
     expect(resolveGateWords(gate).why(gate, {} as Task)).toBe(
@@ -175,3 +206,15 @@ describe('what is working and what is waiting', () => {
     );
   });
 });
+
+function withPostMergeGate(state: ShinsaState, taskId: string): ShinsaState {
+  const gate = {
+    id: 'post-merge',
+    taskId,
+    type: 'post_merge',
+    status: 'open',
+    title: '5 post-merge steps left',
+    openedAt: 0,
+  } as Gate;
+  return { ...state, gates: { ...state.gates, [gate.id]: gate } };
+}

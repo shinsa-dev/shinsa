@@ -665,6 +665,7 @@ function applyReviewReported(state: ShinsaState, event: EventOf<'review.reported
     reviewSummary: event.summary,
     findings: event.findings,
     reviewDisagreements: event.disagreements ?? [],
+    reviewedInput: event.seen,
   });
   record(state, event.taskId, event.at, {
     actor: 'agent',

@@ -100,6 +100,7 @@ describe('task activity', () => {
         taskId,
         summary: null,
         findings,
+        seen: null,
         seq: harness.state.seq + 1,
         at: index + 1,
       });

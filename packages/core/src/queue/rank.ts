@@ -143,11 +143,16 @@ function listQueuedGates(state: ShinsaState): QueuedGate[] {
   });
 }
 
-export function resolveQueue(state: ShinsaState, now: number): Queue {
-  const entries = listQueuedGates(state);
-  const tasksWithGates = new Set(
+function listLeadingGates(entries: QueuedGate[]) {
+  const decided = new Set(
     entries.filter((entry) => entry.gate.type !== 'post_merge').map((entry) => entry.task.id)
   );
+  return entries.filter((entry) => entry.gate.type !== 'post_merge' || !decided.has(entry.task.id));
+}
+
+export function resolveQueue(state: ShinsaState, now: number): Queue {
+  const entries = listLeadingGates(listQueuedGates(state));
+  const tasksWithGates = new Set(entries.map((entry) => entry.task.id));
 
   const running = resolveActiveRunTasks(state);
   const working: Task[] = [];

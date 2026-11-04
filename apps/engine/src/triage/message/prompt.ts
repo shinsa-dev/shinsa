@@ -15,6 +15,7 @@ import {
   ACKNOWLEDGE,
   GATE_STAGES,
   MESSAGE_SHAPE_QUESTION,
+  POST_MERGE_KIND_QUESTION,
   RESTING_KIND_QUESTION,
   RESULT_EXCERPT,
   ROUND_STATE,
@@ -37,7 +38,12 @@ function createGateKindQuestion(decision: string): ChoiceQuestion {
   };
 }
 
+function hasDuePostMergeSteps(task: Task) {
+  return isTaskResting(task) && listDuePostMergeSteps(task).length > 0;
+}
+
 export function resolveKindQuestion(task: Task) {
+  if (hasDuePostMergeSteps(task)) return POST_MERGE_KIND_QUESTION;
   if (isTaskResting(task)) return RESTING_KIND_QUESTION;
   const decision = GATE_STAGES[task.stage];
   return decision ? createGateKindQuestion(decision) : WORKING_KIND_QUESTION;
@@ -80,6 +86,8 @@ function describeRound(task: Task, round: Round) {
 
 function describeNow(task: Task) {
   const current = resolveCurrentRound(task);
+  if (hasDuePostMergeSteps(task))
+    return `Now: round ${current.number} is done and nothing is in progress; steps left for the human after the merge are still open.`;
   if (isTaskResting(task)) return `Now: round ${current.number} is done and nothing is in progress.`;
   const decision = GATE_STAGES[task.stage];
   if (decision) return `Now: round ${current.number} is finished and waits for the human to ${decision} it.`;

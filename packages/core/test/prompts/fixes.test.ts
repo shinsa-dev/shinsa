@@ -114,7 +114,7 @@ describe('fix prompts', () => {
       resolvePullRequestFixPrompt(pullRequest({ number: 42 })),
     ]) {
       expect(prompt).toContain(
-        'When the fix changes the approach, the flow, a risk, how to test it or the steps the human takes around the merge, also send `walkthrough` with only the parts that changed. Otherwise leave it out.'
+        'When the fix changes the approach, the flow, a risk, how to test it or the steps the human takes around the merge, also send `walkthrough` with only the parts that changed. Otherwise leave it out. When it changes the watchdogs, send the whole new list in `watchdogs`, beside `walkthrough`.'
       );
     }
   });

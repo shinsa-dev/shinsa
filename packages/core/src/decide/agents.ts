@@ -30,7 +30,7 @@ import {
   startPhaseChecks,
 } from './checks.ts';
 import type { Decider } from './decider.ts';
-import { reactToFindings } from './fixes.ts';
+import { reactToFindings, resolveReviewInput } from './fixes.ts';
 import { answerIteration } from './iterations.ts';
 import { isLastPhase, needsPlanApproval, resolveCurrentPhase } from './lifecycle.ts';
 import { requestPush } from './pull-requests.ts';
@@ -293,6 +293,7 @@ export function reportReview(decider: Decider, command: CommandOf<'agent.report_
     findings: command.findings,
     ...(disagreements.length > 0 ? { disagreements } : {}),
     runId: run.id,
+    seen: resolveReviewInput(decider, task),
   });
   decider.endRun(run, 'completed', null);
   decider.progressed(task.id);

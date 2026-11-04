@@ -10,6 +10,7 @@ import { Icon } from '@shinsa/ui/components/icon';
 import * as React from 'react';
 import { Panel } from '@/components/layout/surface/panel.tsx';
 import { RoundHeader } from '@/components/overview/round-header.tsx';
+import { MergeStepsBlock } from '@/components/review/merge-steps.tsx';
 import { useReadOnly } from '@/components/task/read-only.tsx';
 import { InlineMarkdown } from '@/components/text/markdown.tsx';
 import { listTaskRuns } from '@/lib/chat/runs.ts';
@@ -18,6 +19,7 @@ import {
   resolveTaskDisclosureId,
   useDisclosure,
 } from '@/lib/preferences/disclosure.ts';
+import { listTimedSteps } from '@/lib/review/merge-steps.ts';
 import { listEarlierRounds, ROUND_ICON, resolveRoundSummary, selectRoundRun } from '@/lib/tasks/rounds.ts';
 
 type ShippingChanger = (round: Round, shipping: RoundShipping) => Promise<unknown>;
@@ -39,6 +41,9 @@ function RoundDetail({
   return (
     <div className='flex flex-col gap-1.5 ps-7 pt-1.5'>
       <InlineMarkdown text={resolveRoundSummary(state, task, round)} className='text-xs text-fg-3' />
+      {listTimedSteps(task, 'post_merge', round.number).length > 0 && (
+        <MergeStepsBlock task={task} when='post_merge' round={round.number} />
+      )}
       {run && !readOnly && (
         <button
           type='button'
@@ -70,7 +75,7 @@ function RoundRow({
 }) {
   const disclosure = useDisclosure(
     resolveTaskDisclosureId(task.id, 'overview', 'round', String(round.number)),
-    false
+    listTimedSteps(task, 'post_merge', round.number).some((step) => !step.done)
   );
   return (
     <li className='flex flex-col py-2 first:pt-0 last:pb-0'>
