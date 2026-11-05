@@ -41,6 +41,7 @@ import { FACT, FACT_INTERACTIVE } from '@/components/task/fact.ts';
 import { useReadOnly, useReadOnlyOwnerName } from '@/components/task/read-only.tsx';
 import { TimeAgo } from '@/components/text/time-ago.tsx';
 import { describeRunsOn } from '@/lib/accounts/account.ts';
+import { resolveAutoShipFact, resolveEscalationFact } from '@/lib/auto-ship.ts';
 import { describeAgentCount, listTaskAgents } from '@/lib/chat/agents.ts';
 import { useShinsaState } from '@/lib/connection/selectors.ts';
 import { useMachine, useMachines, useTeamFeed } from '@/lib/connection/socket.ts';
@@ -155,6 +156,23 @@ function HandoffFact({ task }: { task: Task }) {
         <UserTag user={fact.user} />
       </Truncate>
     </span>
+  );
+}
+
+function AutoShipFacts({ task }: { task: Task }) {
+  const facts = [
+    { icon: 'IconRocket' as const, fact: resolveAutoShipFact(task) },
+    { icon: 'IconMegaphone' as const, fact: resolveEscalationFact(task) },
+  ];
+  return facts.map(({ icon, fact }) =>
+    fact ? (
+      <Hint key={icon} label={fact.hint}>
+        <span className={cn(FACT, 'cursor-default')}>
+          <Icon size='sm' name={icon} />
+          {fact.label}
+        </span>
+      </Hint>
+    ) : null
   );
 }
 
@@ -740,6 +758,7 @@ export function TaskFacts({
       <RoundFact task={task} />
       <StatusFact state={state} task={task} />
       <DuplicateFact state={state} task={task} />
+      <AutoShipFacts task={task} />
       <RepoFact state={state} task={task} />
       <BranchFact state={state} task={task} />
       <PullRequestFact state={state} task={task} />

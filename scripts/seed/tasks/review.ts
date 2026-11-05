@@ -37,8 +37,14 @@ export function listReviewTasks({ paywall }: SeedRepos, worktrees: SeedWorktrees
       repo: paywall,
       size: 'small',
       stage: 'awaiting_merge',
+      priority: 'urgent',
       reason: 'clean and ready to merge',
       branch: 'fix/code-first-duplicate',
+      findings: [],
+      reviewSummary:
+        'The guard covers the dashboard button and the public API, and the new test fails without it.',
+      reviewRatings: { confidence: 'high', risk: 'low' },
+      review: { minutes: 0, autoShip: 'High confidence, low risk, urgent.' },
       ageHours: 30,
       worktreePath: duplicatePath,
       report: {
@@ -319,6 +325,13 @@ export function listReviewTasks({ paywall }: SeedRepos, worktrees: SeedWorktrees
         title: 'Merge #4531',
         body: 'Checks are green and the review-bot comment is resolved.',
       },
+      extra: [
+        {
+          type: 'task.escalated',
+          taskId: 'task-duplicate',
+          reason: 'Urgent, and the merge waited 60 minutes for you. A pre-merge step is not ticked yet.',
+        },
+      ],
     },
     {
       id: 'task-command-registry',
@@ -794,6 +807,7 @@ export function listReviewTasks({ paywall }: SeedRepos, worktrees: SeedWorktrees
           },
         },
       },
+      reviewRatings: { confidence: 'medium', risk: 'medium' },
       reviewSummary:
         'I read the registry, the parser, the codemod and a sample of the ported commands, ran every command’s help, and tried the flags used in the docs. The structure is sound; the parser drops two things the old one handled, negated flags and values containing =.',
       reviewDisagreements: [

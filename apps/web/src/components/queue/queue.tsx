@@ -11,11 +11,13 @@ import { RowSummary } from '@/components/queue/row-summary.tsx';
 import { SharedMark } from '@/components/share/shared-mark.tsx';
 import { GateGlyph, TaskGlyph, WorkingGlyph } from '@/components/status/glyphs.tsx';
 import { BundleMark } from '@/components/task/bundle.tsx';
+import { useTeamEscalations } from '@/components/teams/tasks.tsx';
 import { TimeAgo } from '@/components/text/time-ago.tsx';
 import { useProgressiveCount } from '@/hooks/use-progressive-count.ts';
+import { listTeamEscalationRows, TEAM_ESCALATIONS_TITLE } from '@/lib/auto-ship.ts';
 import { TONE_TEXT } from '@/lib/format/tone.ts';
 import { resolveHomeSectionId } from '@/lib/home.ts';
-import { type DisclosureId, useDisclosure } from '@/lib/preferences/disclosure.ts';
+import { createDisclosureId, type DisclosureId, useDisclosure } from '@/lib/preferences/disclosure.ts';
 import {
   listQueueSections,
   type QueueItem,
@@ -178,6 +180,49 @@ function QueueSectionView({
   );
 }
 
+const TEAM_ESCALATIONS_ID = createDisclosureId('queue', 'section', 'team-escalations');
+
+function TeamEscalationsSection({ variant, onNavigate }: { variant: Variant; onNavigate: () => void }) {
+  const rows = listTeamEscalationRows(useTeamEscalations());
+  if (rows.length === 0) return null;
+  const glyph = <Icon size='sm' name='IconMegaphone' className={TONE_TEXT.amber} />;
+  const items = rows.map((row) => (
+    <ListRow
+      key={row.key}
+      leading={glyph}
+      title={row.title}
+      summary={row.summary}
+      trailing={variant === 'wide' ? <TimeAgo at={row.since} compact /> : undefined}
+      onClick={() => {
+        navigate(row.path);
+        onNavigate();
+      }}
+    />
+  ));
+  if (variant === 'compact') {
+    return (
+      <CompactSection
+        persistId={TEAM_ESCALATIONS_ID}
+        leading={glyph}
+        title={TEAM_ESCALATIONS_TITLE}
+        count={rows.length}
+      >
+        {items}
+      </CompactSection>
+    );
+  }
+  return (
+    <WideSection
+      title={TEAM_ESCALATIONS_TITLE}
+      count={rows.length}
+      empty={null}
+      persistId={TEAM_ESCALATIONS_ID}
+    >
+      {items}
+    </WideSection>
+  );
+}
+
 export function TaskQueue({
   state,
   variant,
@@ -193,16 +238,19 @@ export function TaskQueue({
   className?: string;
   onNavigate?: () => void;
 }) {
-  const views = sections.map((section) => (
-    <QueueSectionView
-      key={section.key}
-      state={state}
-      section={section}
-      variant={variant}
-      activeTaskId={activeTaskId}
-      onNavigate={onNavigate}
-    />
-  ));
+  const views = [
+    <TeamEscalationsSection key='team-escalations' variant={variant} onNavigate={onNavigate} />,
+    ...sections.map((section) => (
+      <QueueSectionView
+        key={section.key}
+        state={state}
+        section={section}
+        variant={variant}
+        activeTaskId={activeTaskId}
+        onNavigate={onNavigate}
+      />
+    )),
+  ];
   if (variant === 'compact') return <CompactSections className={className}>{views}</CompactSections>;
   return <>{views}</>;
 }

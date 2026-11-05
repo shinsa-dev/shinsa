@@ -6,11 +6,12 @@ import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
 import { COMPACT_POPOVER_INSET, QUEUE_POPOVER } from '@/components/layout/compact-section.tsx';
 import { TaskQueue } from '@/components/queue/queue.tsx';
+import { useTeamEscalations } from '@/components/teams/tasks.tsx';
 import { describeNeedsCount } from '@/lib/queue.ts';
 
 export function QueueMenu({ state, activeTaskId }: { state: ShinsaState; activeTaskId: string | null }) {
   const [open, setOpen] = React.useState(false);
-  const count = resolveQueue(state, Date.now()).ready.length;
+  const count = resolveQueue(state, Date.now()).ready.length + useTeamEscalations().length;
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger
