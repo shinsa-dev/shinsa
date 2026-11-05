@@ -5,7 +5,15 @@ import { record, updateTask } from './write.ts';
 
 type WaitEvent = Extract<
   ShinsaEvent,
-  { type: 'monitor.armed' | 'monitor.fired' | 'monitor.ended' | 'usage_wait.armed' | 'usage_wait.ended' }
+  {
+    type:
+      | 'monitor.armed'
+      | 'monitor.fired'
+      | 'monitor.ended'
+      | 'usage_wait.armed'
+      | 'usage_wait.ended'
+      | 'task.pace_limits_ignored';
+  }
 >;
 
 function applyMonitorFired(state: ShinsaState, event: EventOf<'monitor.fired'>) {
@@ -107,6 +115,14 @@ export function applyWaitEvent(state: ShinsaState, event: WaitEvent) {
       return;
     case 'usage_wait.ended':
       applyUsageWaitEnded(state, event);
+      return;
+    case 'task.pace_limits_ignored':
+      updateTask(state, event.taskId, event.at, { paceLimitsIgnored: true });
+      record(state, event.taskId, event.at, {
+        actor: 'you',
+        kind: 'account',
+        text: 'Ignoring the daily and project usage limits for this task',
+      });
       return;
   }
 }

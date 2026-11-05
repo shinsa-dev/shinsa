@@ -1,19 +1,28 @@
 import {
+  CUSTOM_PRESET,
   isTaskSettled,
   type RemoteSnapshot,
   resolveShareLimit,
   resolveSharePreset,
+  resolveShareScopes,
+  resolveShareScopesPreset,
+  type ResolvedPreset,
   type Settings,
+  SHARE_PRESET_SCOPES,
+  SHARE_REQUIRED_SCOPE,
   type ShareLimit,
   type SharePreset,
   type Task,
   type TaskShare,
+  VIEW_SCOPES,
+  type ViewScope,
 } from '@shinsa/core';
 import type { IconName } from '@shinsa/ui/components/icon';
 import { useSyncExternalStore } from 'react';
 import { sendCommandWithToast } from '@/lib/connection/commands.ts';
 import { formatUntil } from '@/lib/format/time.ts';
 import { canHandOff, HANDOFF_ICON, HANDOFF_TITLE, isTaskHandedOff } from '@/lib/share/handoff.ts';
+import { resolveShareSourceScopes } from '@/lib/share/scopes.ts';
 import { createSignal } from '@/lib/signal.ts';
 
 export const SHARE_TITLE = 'Share task';
@@ -60,7 +69,69 @@ export const SHARE_PRESET_ITEMS: { value: SharePreset; label: string; hint: stri
   { value: 'full', label: 'Full access', hint: 'Standard and your messages', icon: 'IconEyeOpen' },
 ];
 
-export type ShareMode = SharePreset | 'handoff';
+export type ShareChoice = ResolvedPreset<SharePreset>;
+
+export type ShareMode = ShareChoice | 'handoff';
+
+const CUSTOM_MODE_ITEM: { value: ShareMode; label: string; hint: string; icon: IconName } = {
+  value: CUSTOM_PRESET,
+  label: 'Custom',
+  hint: 'Only the parts you tick below',
+  icon: 'IconSettingsSliderHor',
+};
+
+const SHARE_SCOPE_ROWS: Readonly<Record<ViewScope, { title: string; hint: string }>> = {
+  identity: { title: 'Title and status', hint: 'Always on the link' },
+  description: { title: 'Request', hint: 'The task as first asked' },
+  requests: { title: 'Later requests', hint: 'Each round’s request' },
+  progress: { title: 'Progress', hint: 'Steps and current stage' },
+  summary: { title: 'Summary', hint: 'The agent’s work summary' },
+  people: { title: 'People', hint: 'Owner and contributors' },
+  plan: { title: 'Plan', hint: 'The plan and its phases' },
+  reports: { title: 'Phase reports', hint: 'What each phase changed' },
+  review: { title: 'Review', hint: 'The review and findings' },
+  evidence: { title: 'Evidence', hint: 'Screenshots and notes' },
+  checks: { title: 'Checks', hint: 'Check results and output' },
+  pull_request: { title: 'Pull request', hint: 'Pull request and branch' },
+  activity: { title: 'Activity', hint: 'Events, without messages' },
+  code: { title: 'Code and diff', hint: 'The diff and its files' },
+  runs: { title: 'Runs', hint: 'Agent runs, no prompts' },
+  live: { title: 'Live work', hint: 'The agents’ live output' },
+  messages: { title: 'Your messages', hint: 'What you wrote to agents' },
+};
+
+export const SHARE_SCOPES_TITLE = 'What the link shows';
+
+export function listShareScopeRows() {
+  return VIEW_SCOPES.map((scope) => ({
+    scope,
+    ...SHARE_SCOPE_ROWS[scope],
+    required: scope === SHARE_REQUIRED_SCOPE,
+  }));
+}
+
+export function toggleShareScope(scopes: readonly ViewScope[], scope: ViewScope, on: boolean) {
+  if (scope === SHARE_REQUIRED_SCOPE) return resolveShareScopes(scopes);
+  const rest = scopes.filter((item) => item !== scope);
+  return resolveShareScopes(on ? [...rest, scope] : rest);
+}
+
+export function resolveShareChoice(scopes: readonly ViewScope[]): ShareChoice {
+  return resolveShareScopesPreset(scopes);
+}
+
+export function resolveShareChoiceScopes(choice: ShareChoice, current: readonly ViewScope[]) {
+  return choice === CUSTOM_PRESET ? resolveShareScopes(current) : SHARE_PRESET_SCOPES[choice];
+}
+
+export function resolveShownShareMode(
+  mode: ShareMode,
+  customPicked: boolean,
+  scopes: readonly ViewScope[]
+): ShareMode {
+  if (mode === 'handoff') return mode;
+  return customPicked ? CUSTOM_PRESET : resolveShareChoice(scopes);
+}
 
 const HANDOFF_MODE_ITEM: { value: ShareMode; label: string; hint: string; icon: IconName } = {
   value: 'handoff',
@@ -69,8 +140,9 @@ const HANDOFF_MODE_ITEM: { value: ShareMode; label: string; hint: string; icon: 
   icon: HANDOFF_ICON,
 };
 
-export function listShareModeItems(task: Task, handoffSupported: boolean) {
+export function listShareModeItems(task: Task, handoffSupported: boolean, custom = false) {
   const items: { value: ShareMode; label: string; hint: string; icon: IconName }[] = [...SHARE_PRESET_ITEMS];
+  if (custom) items.push(CUSTOM_MODE_ITEM);
   return handoffSupported && canHandOff(task) ? [...items, HANDOFF_MODE_ITEM] : items;
 }
 
@@ -85,10 +157,11 @@ export function resolveShareModeChoice(
   const handing = handoffSupported && canHandOff(task);
   if (focus === 'handoff' && handing) return 'handoff';
   if (focus === null && !task.share && task.handoff && handing) return 'handoff';
-  return resolveSharePresetChoice(task, settings);
+  return resolveShareChoice(resolveShareScopesChoice(task, settings));
 }
 
-export function describeSharePreset(preset: SharePreset) {
+export function describeSharePreset(preset: ShareChoice) {
+  if (preset === CUSTOM_PRESET) return CUSTOM_MODE_ITEM.label;
   return SHARE_PRESET_ITEMS.find((item) => item.value === preset)?.label ?? preset;
 }
 
@@ -188,9 +261,21 @@ export function resolveShareLimitChoice(task: Task, settings: Settings): ShareLi
   return limit === 'until_done' && isTaskSettled(task) ? FINISHED_TASK_LIMIT : limit;
 }
 
-export function resolveSharePresetChoice(task: Task, settings: Settings | null): SharePreset {
-  if (task.share) return task.share.preset;
-  return settings ? resolveSharePreset(settings) : 'standard';
+export function resolveShareScopesChoice(task: Task, settings: Settings | null): readonly ViewScope[] {
+  if (task.share) return resolveShareScopes(resolveShareSourceScopes(task.share));
+  return SHARE_PRESET_SCOPES[settings ? resolveSharePreset(settings) : 'standard'];
+}
+
+function resolveShareFields(scopes: readonly ViewScope[], scopesSupported: boolean) {
+  if (scopesSupported) return { scopes: resolveShareScopes(scopes) };
+  const choice = resolveShareChoice(scopes);
+  return { preset: choice === CUSTOM_PRESET ? 'standard' : choice } as const;
+}
+
+function describeShareChange(scopes: readonly ViewScope[]) {
+  const choice = resolveShareChoice(scopes);
+  if (choice === CUSTOM_PRESET) return 'Sharing the parts you ticked.';
+  return `Sharing as ${describeSharePreset(choice).toLowerCase()}.`;
 }
 
 export function describeShareEnd(share: TaskShare, now = Date.now()) {
@@ -199,14 +284,24 @@ export function describeShareEnd(share: TaskShare, now = Date.now()) {
   return 'Shared until you stop it';
 }
 
-export function shareTask(task: Task, limit: ShareLimit, preset: SharePreset) {
-  return sendCommandWithToast({ type: 'task.share', taskId: task.id, limit, preset });
+export function shareTask(
+  task: Task,
+  limit: ShareLimit,
+  scopes: readonly ViewScope[],
+  scopesSupported: boolean
+) {
+  return sendCommandWithToast({
+    type: 'task.share',
+    taskId: task.id,
+    limit,
+    ...resolveShareFields(scopes, scopesSupported),
+  });
 }
 
-export function changeSharePreset(task: Task, preset: SharePreset) {
+export function changeShareScopes(task: Task, scopes: readonly ViewScope[], scopesSupported: boolean) {
   return sendCommandWithToast(
-    { type: 'task.share', taskId: task.id, preset },
-    `Sharing as ${describeSharePreset(preset).toLowerCase()}.`
+    { type: 'task.share', taskId: task.id, ...resolveShareFields(scopes, scopesSupported) },
+    describeShareChange(scopes)
   );
 }
 

@@ -7,7 +7,7 @@ import type {
   RemoteDevice,
   RemoteTeam,
   ShareLiveView,
-  SharePreset,
+  ViewScope,
   TaskGuest,
   TeamViewTarget,
 } from '@shinsa/core';
@@ -425,9 +425,9 @@ export function adaptShares(test: RemoteTest) {
       test.runSync(shares.closeChannel(channel.handle)),
     link: (taskId: string, context: { key: string; attempt?: number }) =>
       test.runPromise(shares.link(taskId, { attempt: 1, ...context })),
-    resolveLive: (taskId: string, preset?: SharePreset) =>
+    resolveLive: (taskId: string, scopes?: readonly ViewScope[]) =>
       test.runPromise(
-        Effect.map(shares.resolveLive(taskId, preset), (live) => ({
+        Effect.map(shares.resolveLive(taskId, scopes), (live) => ({
           view: live.view as ShareLiveView,
           files: live.files.map((file) => ({ ...file, read: () => test.runPromise(file.read) })),
         }))

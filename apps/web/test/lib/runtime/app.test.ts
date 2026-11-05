@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from 'bun:test';
 import { Effect, Fiber, Layer } from 'effect';
 import { FetchHttpClient } from 'effect/http';
 import { Socket } from 'effect/socket';
-import { forkApp, replaceAppTransport, runApp } from '@/lib/runtime/app.ts';
+import { forkApp, PAGE_TRANSPORT, replaceAppTransport, runApp } from '@/lib/runtime/app.ts';
 import { EngineClient } from '@/lib/runtime/engine/service.ts';
 import { answerFetch } from '../../support/fetch-fake.ts';
 
@@ -11,19 +11,7 @@ const readProjects = Effect.gen(function* () {
   return yield* engine.state.projects();
 });
 
-function createGlobalTransport() {
-  return Layer.mergeAll(
-    Layer.succeed(
-      FetchHttpClient.Fetch,
-      Object.assign((input: RequestInfo | URL, init?: RequestInit) => globalThis.fetch(input, init), {
-        preconnect: globalThis.fetch.preconnect,
-      })
-    ),
-    Socket.layerWebSocketConstructorGlobal
-  );
-}
-
-afterEach(() => replaceAppTransport(createGlobalTransport()));
+afterEach(() => replaceAppTransport(PAGE_TRANSPORT));
 
 describe('replacing the app’s transport', () => {
   it('sends requests through the page’s fetch until replaced, then through the new fetch and WebSocket', async () => {
@@ -63,7 +51,7 @@ describe('replacing the app’s transport', () => {
   it('keeps a fiber that started before the swap running, as the engine connection does', async () => {
     const latch = Promise.withResolvers<void>();
     const fiber = forkApp(Effect.promise(() => latch.promise).pipe(Effect.as('kept')));
-    replaceAppTransport(createGlobalTransport());
+    replaceAppTransport(PAGE_TRANSPORT);
     latch.resolve();
     expect(await Effect.runPromise(Fiber.join(fiber))).toBe('kept');
   });

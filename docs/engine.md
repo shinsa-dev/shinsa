@@ -410,7 +410,10 @@ create → classify → (wait for the tasks it waits on) → worktree → plan �
    below; never one in another repository). A duplicate is
    closed there and goes no further. Then the task either waits for them (Scheduling, below) or has its setup verified (`config.verify`,
    Setup verification, below) and gets its worktree (`worktree.create`): a fresh branch from the freshly fetched
-   default branch.
+   default branch, never from your own checkout. The fetch also moves your local default branch ref forward to
+   `origin/<default>` when no worktree or checkout has it checked out and it has no commits of its own
+   (`Checkout.resolveStartPoint`); your checked-out files are never touched. A failed fetch logs a warning and the
+   task starts from the last known `origin/<default>`.
 2. **Plan.** The Agent reads the code and calls `propose_plan`. It plans read-only (Read-only while planning, The
    agent loop) and is told that it builds the plan itself, in the same session. A task created plan first
    (`planFirst`: `shinsa do --plan-first`) or kept in the backlog (Scheduling → The backlog, below)
@@ -419,7 +422,10 @@ create → classify → (wait for the tasks it waits on) → worktree → plan �
    large plan (more than 3 phases or 6 files, `PLAN_SIZE_LIMITS`) or a revised plan waits there, on Always every plan
    does (`PLAN_GATE_RULE`, evaluated by `needsPlanApproval`; Gates, below), and building starts at once when it does
    not. The size is the plan's, never triage's guess from the request. A decision
-   only the human can make is asked with `ask` before planning finishes.
+   only the human can make is asked with `ask` before planning finishes. Approving a plan at its gate, however long
+   it waited, sends a task with a worktree back through `worktree.create`, which resets the worktree onto the freshly
+   fetched base (planning commits nothing), and `worktree.ready` then starts phase 1 (`startApprovedPlan`,
+   `isStartingApprovedPlan`); a plan that needs no gate builds at once on the worktree planning just set up.
 3. **Build.** Each phase is a run of its own on the session that planned it, now able to edit. Its prompt is short
    (`resolvePhaseInstruction`: "Phase 1 is committed. Now build phase 2 of 3: …" and how to hand it over), since the
    session already holds the request, the plan and every earlier phase. Phases run in order in one worktree.
@@ -895,7 +901,11 @@ predicates) and `state/rounds.ts` (the folds); the classifier is `apps/engine/sr
 - **The same branch, worktree and sessions.** A round started onto the open pull request keeps the task's branch,
   worktree and pull request; a stacked one gets a new branch on the same worktree; one after a merge gets a fresh
   worktree from the freshly fetched default branch on a new branch (`<first branch>-round-<n>`; `worktree.create`
-  never resets a later round's worktree to the default branch, it only drops uncommitted scratch edits). The agents
+  never resets a later round's worktree to the default branch: it drops uncommitted scratch edits and merges the
+  freshly fetched base, the default branch or the first branch it stacks on, into the branch, as the push does
+  (`WorktreeWorkspaces.prepare`). A base that conflicts is aborted and left for the push's conflict fix, and a fetch
+  that fails is logged and the round starts from the branch as it is; the main checkout's later rounds reuse the
+  branch as it is). The agents
   remember everything: every run of a later round, whatever its kind of work, resumes the task's session
   (`Decider.taskSession`, Agents above), so the round that plans next has the earlier rounds in its context; the
   reviewer resumes only its own session, so it never reviews from inside the Agent's head. A round after a merge runs
@@ -1411,8 +1421,8 @@ nothing until you start it (`domain/backlog.ts`, `decide/backlog.ts`).
   and its plan waits in Needs you as a plan to approve ("plan ready for you").
 - **Starting.** Approving the held plan (Start building, or Start the operation for an operation) is the start: the
   task goes back to triage, `worktree.create` resets its worktree onto the freshly fetched default branch (planning
-  commits nothing, so nothing is lost), and `worktree.ready` builds the approved plan (`isStartingFromBacklog`,
-  `buildFromBacklog`) with `cause: started`. The first build prompt says how long the plan waited and that the
+  commits nothing, so nothing is lost), and `worktree.ready` builds the approved plan (`isStartingApprovedPlan`,
+  `buildApprovedPlan`) with `cause: started`. The first build prompt says how long the plan waited and that the
   worktree now holds the latest default branch, and asks the Agent to check the plan still fits the code before it
   builds (`resolveBacklogStart`). A task without a worktree starts building at once. A task that still waits on another
   waits for it first, then builds without planning again.
@@ -2116,7 +2126,10 @@ checks it ran.
   comes back, and the held step starts again through `startRun` (`releasePaceWait`: its role prompt, session, role,
   phase, feedback and account as they were, `continues` the held run, `usageWaitId` the wait), so it starts, or is held again under a new wait when other
   work filled the window meanwhile. Resume now (`usage_wait.resume_now`) starts it at once, over the limit or
-  not; a pace hold cannot be switched to waiting for you (`usage_wait.change` is refused); raising, clearing or
+  not, and from you it also ignores both limits for the rest of the task (`task.pace_limits_ignored`,
+  `Task.paceLimitsIgnored`, "Ignoring the daily and project usage limits for this task"): `resolvePaceHold` never
+  holds that task again, in any phase or round, while every other task still counts against them. Sent on your
+  behalf or by a guest it starts only the held step, since both limits are yours alone; a pace hold cannot be switched to waiting for you (`usage_wait.change` is refused); raising, clearing or
   changing either limit starts every held step that is now under it.
 - **The usage forecast** (`forecast/`, `resolveUsageForecast`, pure; the web runs it on the accounts it reads).
   It answers how fast you can go without every account running out, not how fast you went. Each unpaused,
@@ -3444,7 +3457,7 @@ in and without a device key. A link is
 read-only remote access to that one task, live: the browser opens a channel through the machine's tunnel, as remote
 access does, and the machine pushes the task down it the moment it changes. It shows everything its owner sees on its
 Overview, Review, Code and Chat, for a public or a private repository alike, with the agents' live output and tool
-calls, when shared as Standard (the default); shared as Status it is an anonymous status card (the preset, below). Your messages to agents, their prompts and your answers never leave the machine. Nothing is stored on app.shinsa.dev: it only tells the page where the machine's tunnel is. The same
+calls, when shared as Standard (the default); shared as Status it is an anonymous status card, and Custom shows exactly the scopes you tick (its scopes, below). Your messages to agents, their prompts and your answers never leave the machine. Nothing is stored on app.shinsa.dev: it only tells the page where the machine's tunnel is. The same
 projection and channel serve teams, always at Standard (Teams, below).
 
 - **The link.** The share id is 16 random bytes and the key 32 (base64url), both made by the engine
@@ -3473,17 +3486,36 @@ projection and channel serve teams, always at Standard (Teams, below).
   the task list's row menu, `shinsa tasks share|unshare`) are human-only: their surface specs are `humanOnly` and
   core refuses them on your behalf (`human_only`), since they open a task to people outside the machine. An automation's home is
   refused (`share_refused`). The remote dashboard may share, as it may close a gate.
-- **What it shows: the preset.** `TaskShare.preset` is `status`, `standard` (the default) or `full` (Full access),
-  picked with Share as in Share task and defaulting to the `sharePreset` setting (Settings → General → Sharing, human-only). Each
-  preset is a list of field groups in core (`SHARE_PRESET_GROUPS` in `share/presets.ts`: identity, description,
-  requests, progress, summary, people, plan, reports, review, evidence, checks, pull_request, activity, code, runs,
-  live, messages), and
-  each group names the fields it copies (`TASK_GROUP_FIELDS` and the `grants` checks in `share/index.ts`), so adding a
-  field to a preset is one entry and a field in no group is never sent. Status is identity, description and progress;
-  Standard is every group but messages; Full access is every group. Changing the preset or how long while
-  shared (Share task's dialog, opened from Manage on the banner, or `shinsa tasks share --preset`/`--until`; while a
-  task is shared its menu offers only Stop sharing) is `task.share` with another `preset` or `limit`: it keeps the link, and every open page
-  switches to the new view on the next push.
+- **What it shows: its scopes.** `TaskShare.scopes` is the list of view scopes the link shows (`VIEW_SCOPES` in
+  core's `scopes/schema.ts`: identity, description, requests, progress, summary, people, plan, reports, review,
+  evidence, checks, pull_request, activity, code, runs, live, messages), the one scope system teams use too
+  (Teams, below). Each scope names the fields it copies (`TASK_GROUP_FIELDS` and the `grants` checks in
+  `share/index.ts`), so a field in no scope is never sent, and identity is always shown (`SHARE_REQUIRED_SCOPE`;
+  `resolveShareScopes` adds it and puts the list in order). The presets are scope lists in `SHARE_PRESET_SCOPES`
+  (`share/presets.ts`, from `ACCESS_PRESETS`): Status is identity, description and progress; Standard (the default)
+  every scope but messages; Full access every scope. `task.share` takes `preset` (a name; the `sharePreset` setting,
+  Settings → General → Sharing, human-only, when left out) or `scopes` (any list), and stores only the resolved list.
+  A preset's name is never kept: a share's label is worked out from its list (`resolveShareScopesPreset`, through
+  `resolvePreset`), Status, Standard, Full access, or Custom for any other list.
+- **Custom in Share task.** Share as lists Status, Standard, Full access and Custom, then Hand off. A preset shows
+  no checkboxes; picking Custom shows every view scope as a checkbox with its title and one line on what it shows
+  (`SHARE_SCOPE_ROWS` in `apps/web/src/lib/share/dialog.ts`), the same layout as Settings → Teams → What teammates can
+  do, ticked with the scopes the preset had. Ticking or unticking a box keeps Custom; picking a preset again hides the
+  boxes and fills its scopes (`resolveShownShareMode`). A live share whose scopes match no preset opens on Custom.
+  Title and status is ticked and locked. Share sends `scopes` for Custom and `preset` for a preset. Custom and the
+  checkboxes show only on a machine that announces `share.scopes` (`ENGINE_FEATURES`); an older engine gets the
+  presets alone, as before. The page built from `main` also reads a share from an older engine, which names a preset
+  and no scopes, as that preset's scopes (`resolveShareSourceScopes` in `apps/web/src/lib/share/scopes.ts`).
+- **From the command line.** `shinsa tasks share --preset standard --deny code --allow messages` starts from the
+  preset (the `sharePreset` setting without `--preset`), adds each `--allow` and removes each `--deny`, and sends the
+  list as `scopes`; an unknown scope is refused before anything is sent.
+- **Changing it while shared.** Share task's dialog (opened from Manage on the banner), or `shinsa tasks share` again
+  with another preset, other scopes or `--until`, is `task.share` with other `scopes` or another `limit`: it keeps
+  the link, and every open page switches to the new view on the next push. While a task is shared its menu offers
+  only Stop sharing.
+- **Shares from before scopes.** The `share-scopes` log migration (`apps/engine/src/store/migrations/share-scopes.ts`)
+  rewrites every `task.shared` event that names a `preset` to that preset's scope list, so a link made before the
+  change shows exactly what it did.
 - **The description.** When sharing starts `task.share` also queues `share.describe` (`replay_safe`, lane
   `share:<task>`): the engine's writer quick call (`remote/share-describe.ts`) writes one or two sentences on what the
   task addresses from its title and its request without attachments, told never to copy the request or name people,
@@ -3498,15 +3530,16 @@ projection and channel serve teams, always at Standard (Teams, below).
   investigation or research), answered, done or closed. A merged task is deploying while any of its watchdogs waits
   for production (`awaiting_production`, a watchdog that starts on `production`) and live once none does, so a
   change merged but not yet released never says live. It changes with the task, so an open card follows it.
-- **The projection** (core's `share/`, `resolveSharedTask(state, task, { owner, machine, repository, preset })`) builds a
+- **The projection** (core's `share/`, `resolveSharedTask(state, task, { owner, machine, repository, scopes })`) builds a
   `SharedTask`: a redacted `Task`, its gates and runs, its current evidence, its repository and project records
   (without their paths, folders or description), the owner's GitHub login and the machine's name from `remote.json`
   (with `ownerProfile`, the owner's GitHub name and photo kept from pairing, only when that profile's login is the
   owner's; an older engine sends none and the page names the owner by login),
   the repository's name and whether it shares code, which is everything the owner's task page reads, so the shared
-  page renders that same page; and the `preset`. It copies fields by name: a field added to `Task` later stays empty
-  until it is added to a group on purpose. A Status share is read with no owner, machine or repository at all
-  (`Shares` never asks GitHub for it), so nothing outside its groups can reach it. What each preset keeps and drops,
+  page renders that same page; and its `scopes`. It copies fields by name: a field added to `Task` later stays empty
+  until it is added to a scope on purpose. A share without the people scope (Status, or a Custom
+  list without it) is read with no owner, machine or repository at all (`Shares` never asks GitHub for it), so nothing
+  outside its scopes can reach it. What each preset keeps and drops,
   the same for every repository:
 
   | Part | Status | Standard | Full access |
@@ -3718,8 +3751,8 @@ the read-only view. Teams need remote access on (`Remote` paired and enabled), s
   its gates and its project as a share link copies them, with the owner's GitHub login and the machine's name, and
   the machine's public key (`machineKey`, for a teammate given this machine), `updatedAt`, the same list signed
   (`snapshot`) and the copies it keeps of the team's offline machines (`held`, Offline teammates, below). A task
-  view is exactly a share link's `ShareLiveView` and files at Standard (`Shares.resolveLive` with `TEAM_SHARE_PRESET`,
-  whatever the task's own share link or the default preset says), pushed again when one of its runs writes to its
+  view is exactly a share link's `ShareLiveView` and files at Standard's scopes (`Shares.resolveLive` with
+  `TEAM_SHARE_SCOPES`, whatever the task's own share link or the default preset says), pushed again when one of its runs writes to its
   transcript (`Teams.#pushTranscript`): the table in Sharing a task is what a teammate can and cannot see, the same for
   every repository. In short, a teammate sees the title, status, request text, plan, phase reports, review report,
   findings, checks, branches, the pull request and its diff and code from GitHub, evidence, gates without your answers,
@@ -3830,7 +3863,7 @@ the read-only view. Teams need remote access on (`Remote` paired and enabled), s
     their own machine), `share` (share links, status shares and service previews) and `services` (open a team task's
     running services at their private address) (`ACTION_SCOPES`). A preset is a named list (`ACCESS_PRESETS`): Status,
     Standard, Collaborate and Full. A share link picks Status, Standard or Full and reads only their view scopes
-    (`SHARE_PRESET_GROUPS`); a team picks View only (Standard), Collaborate or Full, or any custom list, and reads only
+    (`SHARE_PRESET_SCOPES`); a team picks View only (Standard), Collaborate or Full, or any custom list, and reads only
     the action scopes, since a teammate always sees the full task page. A new team gets Collaborate, every action but
     `message` (`DEFAULT_TEAM_SCOPES`). app.shinsa.dev keeps the team's list (`teams.scopes`, null for the default) and
     one list per person set apart (`team_members.scopes`, null to follow the team), so a person's scopes are their own

@@ -397,7 +397,7 @@ Every task agent's tool: `tasks_cancel`. Sends `task.cancel`.
 Share a task by a link that reads it live from this machine: read-only, without its chat.
 
 ```
-shinsa tasks share <task> [--until <until_done|hour|day|week|none>] [--preset <status|standard|full>] [--json]
+shinsa tasks share <task> [--until <until_done|hour|day|week|none>] [--preset <status|standard|full>] [--allow <list>] [--deny <list>] [--json]
 ```
 
 Yours alone: no agent has a tool for it, and an agent’s shell may not run it. Sends `task.share`.
@@ -407,6 +407,8 @@ Yours alone: no agent has a tool for it, and an agent’s shell may not run it. 
 | `<task>` | text, required | The task: its handle (SW-142), its id, the start of its id, or its exact title. |
 | `--until` | choice, optional | How long it stays shared: until_done (until the task finishes), hour, day, week or none (until you stop it). Left out, the shareLimit setting. |
 | `--preset` | choice, optional | What the link shows: status (an anonymous status card), standard (the whole task with the agents' live output and tool calls, without your messages) or full (standard and your messages). Left out, the sharePreset setting. |
+| `--allow` | list, optional | A view scope to show on top of the preset: identity, description, requests, progress, summary, people, plan, reports, review, evidence, checks, pull_request, activity, code, runs, live, messages. Repeat for each. |
+| `--deny` | list, optional | A view scope to leave out of the preset, such as code or messages. Repeat for each. |
 
 #### shinsa tasks unshare
 

@@ -44,6 +44,7 @@ import { TASK_SHAPES } from '../domain/shapes.ts';
 import { TASK_PRIORITIES } from '../domain/stages.ts';
 import { PULL_REQUEST_STATES, TASK_MODES } from '../domain/types.ts';
 import { WORKSPACE_MODES } from '../domain/workspaces.ts';
+import { ViewScopes } from '../scopes/schema.ts';
 import { CoverageSetting } from '../test-coverage/schema.ts';
 
 const FEEDBACK_LIMIT = 20_000;
@@ -257,6 +258,7 @@ export const UserCommand = Schema.Union([
     taskId: TaskId,
     limit: Schema.optionalKey(Choice(SHARE_LIMITS)),
     preset: Schema.optionalKey(Choice(SHARE_PRESETS)),
+    scopes: Schema.optionalKey(ViewScopes),
   }),
   Command('task.unshare', { taskId: TaskId }),
   Command('project.add_to_team', { projectId: ProjectId, teamId: IdText }),

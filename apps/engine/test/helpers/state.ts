@@ -12,6 +12,7 @@ import {
   type ShinsaEvent,
   type ShinsaState,
   type Task,
+  SHARE_PRESET_SCOPES,
 } from '@shinsa/core';
 import { Effect } from 'effect';
 import type { EngineCore } from '../../src/runtime/engine/service.ts';
@@ -66,7 +67,7 @@ export function createShareView(
   const task = createTask({ repoId: null, worktreePath: null, activity: [], ...overrides });
   state.tasks[task.id] = task;
   const context = {
-    preset: 'standard',
+    scopes: SHARE_PRESET_SCOPES.standard,
     owner: null,
     ownerProfile: null,
     machine: null,

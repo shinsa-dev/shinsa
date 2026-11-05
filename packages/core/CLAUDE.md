@@ -343,13 +343,14 @@ src/
 │                    from the task, its current evidence and the project's name; everything its owner sees but
 │                    chats, runs' prompts, messages, gate answers, and attachments) and hasSharedCode; presets.ts:
 │                    the share presets (SharePreset in domain/settings.ts: status, standard, full), each a
-│                    list of field groups (full adds `messages`: your chat turns and message activity,
-│                    their attachment blocks stripped) (SHARE_PRESET_GROUPS, hasShareGroup), and resolveSharedTask copies only the
-│                    fields of the groups its context's preset grants (TASK_GROUP_FIELDS);
+│                    list of view scopes (full adds `messages`: your chat turns and message activity,
+│                    their attachment blocks stripped) (SHARE_PRESET_SCOPES, resolveShareScopes,
+│                    resolveShareScopesPreset, hasShareGroup); a share stores its own scope list, and
+│                    resolveSharedTask copies only the fields of the scopes its context grants (TASK_GROUP_FIELDS);
 │                    update.ts: resolveShareUpdate, a Status card's customer update from the stage and watchdogs
 │                    (decide/shares.ts: task.share and task.unshare, human-only, the share.link effect and,
 │                    when sharing starts, share.describe, recorded by share.describe on TaskShare.description;
-│                    how long, ShareLimit and the shareLimit setting, as what, the preset and the sharePreset
+│                    how long, ShareLimit and the shareLimit setting, as what, a preset or scopes and the sharePreset
 │                    setting, both changed in place on a running share, ended by syncShares when a task shared
 │                    until_done settles and by share.expire;
 │                    share.record, the link the engine made; share.fail, why it could not); the link and its
