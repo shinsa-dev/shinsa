@@ -5,6 +5,7 @@ import {
   describeList,
   type Evidence,
   isPausingGate,
+  listOpenGates,
   listTaskChecks,
   type PullRequestCheckStatus,
   type ReportCheck,
@@ -145,14 +146,9 @@ function resolveResultState(result: ReportCheck): CheckState {
   return result.note === 'passed_alone' ? 'passed_alone' : 'passed';
 }
 
-function isHeldAtPausingGate(state: Pick<ShinsaState, 'gates'>, task: Task) {
-  return Object.values(state.gates).some(
-    (gate) => gate.taskId === task.id && gate.status === 'open' && isPausingGate(gate)
-  );
-}
-
 export function listRunningCheckIds(state: Pick<ShinsaState, 'gates'>, task: Task) {
-  if (task.stage !== 'checking' || isHeldAtPausingGate(state, task)) return new Set<string>();
+  if (task.stage !== 'checking' || listOpenGates(state, task.id).some(isPausingGate))
+    return new Set<string>();
   return new Set(task.runningChecks ?? []);
 }
 
