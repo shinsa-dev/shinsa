@@ -91,7 +91,7 @@ describe('usage waits', () => {
     expect(describeUsageWaitCountdown(daily, at)).toBe('Starts now');
     expect(describeUsageWaitCountdown(wait({ resetAt: at }), at - 3_600_000)).toBe('Resets in 1h');
     expect(describeUsageWaitNote(daily)).toBe(
-      'It starts by itself once older usage drops out of the last 24 hours. Resume now starts it and ignores the daily and project limits for the rest of this task.'
+      'Starts by itself as older usage drops out. Resume now ignores the limits for this task.'
     );
   });
 });
