@@ -217,7 +217,14 @@ describe('share presets', () => {
     const task = {
       ...harness.task(taskId),
       result: { step: 'answer' as const, body: 'It scrolls now.', runId: 'r1', at: 4 },
-      proposal: { request: 'Change it.', why: 'Because.', status: 'open' as const, runId: 'r1', at: 4 },
+      proposal: {
+        request: 'Change it.',
+        why: 'Because.',
+        status: 'open' as const,
+        recommend: 'go_on' as const,
+        runId: 'r1',
+        at: 4,
+      },
       rounds: [
         {
           ...harness.task(taskId).rounds?.[0],

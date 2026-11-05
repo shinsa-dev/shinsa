@@ -159,6 +159,13 @@ describe('what the house rules leave to the tools', () => {
       expect(resolveHouseRules(role)).not.toContain(rule);
   });
 
+  test('the roles that hand over to the human are told when to suggest replies, and the reviewer is not', () => {
+    const rule = 'add `actions`: up to three replies';
+    for (const role of ['agent', 'answerer', 'investigator', 'researcher'] as const)
+      expect(resolveHouseRules(role)).toContain(rule);
+    expect(resolveHouseRules('reviewer')).not.toContain(rule);
+  });
+
   test('the writing rules are one block every role gets once', () => {
     for (const role of ['agent', 'reviewer', 'answerer', 'investigator', 'researcher'] as const) {
       const rules = resolveHouseRules(role);

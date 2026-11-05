@@ -58,6 +58,7 @@ describe('validatePhaseHandOver', () => {
         { title: 'Keep the cache', call: 'Kept the cache', reason: 'It is hot.', file: null, line: null },
       ],
       reply: null,
+      actions: [],
       walkthrough: null,
       checkChanges: [],
     });
@@ -69,6 +70,7 @@ describe('validatePhaseHandOver', () => {
       spots: [],
       judgementCalls: [],
       reply: null,
+      actions: [],
       walkthrough: null,
       checkChanges: [],
     });
@@ -116,6 +118,7 @@ describe('validatePhaseHandOver', () => {
         },
       ],
       reply: null,
+      actions: [],
       walkthrough: {
         approach: 'Read once, keep it.',
         flow: 'read → cache → render',
@@ -563,6 +566,7 @@ describe('validateFixHandOver', () => {
     expect(readValue(validateFixHandOver({ summary: 'Fixed CI.' }))).toEqual({
       summary: 'Fixed CI.',
       reply: null,
+      actions: [],
       walkthrough: null,
       checks: [],
       checkChanges: [],
@@ -870,7 +874,15 @@ describe('validatePlanHandOver', () => {
     expect(revised.ok && revised.value).toEqual({
       document: expect.objectContaining({ goal: 'Ship it.' }),
       reply: { ...reply, next: null },
+      actions: [],
     });
+    const offered = validatePlanHandOver({
+      ...plan,
+      actions: [{ label: 'Keep it small', message: 'Drop phase 3.' }],
+    });
+    expect(offered.ok && offered.value.actions).toEqual([
+      { label: 'Keep it small', message: 'Drop phase 3.' },
+    ]);
     const broken = validatePlanHandOver({ ...plan, goal: '', reply: { points: [] } });
     expect(broken.ok ? [] : broken.errors).toEqual([
       'goal is required.',
@@ -1091,7 +1103,7 @@ describe('the shape hand-overs', () => {
   test('an answer is delivered with its field and limit, and can carry a proposed change', () => {
     expect(validateDelivery('answer', { answer: ' It retries. ' })).toEqual({
       ok: true,
-      value: { body: 'It retries.', reply: null, proposal: null },
+      value: { body: 'It retries.', reply: null, actions: [], proposal: null, recommend: null },
     });
     expect(validateDelivery('answer', { answer: 'x'.repeat(8_001) })).toEqual({
       ok: false,
@@ -1104,7 +1116,13 @@ describe('the shape hand-overs', () => {
       })
     ).toEqual({
       ok: true,
-      value: { body: 'Yes.', reply: null, proposal: { request: 'Stream it.', why: 'Memory.' } },
+      value: {
+        body: 'Yes.',
+        reply: null,
+        actions: [],
+        proposal: { request: 'Stream it.', why: 'Memory.' },
+        recommend: 'go_on',
+      },
     });
     expect(
       validateDelivery('answer', { answer: 'Yes.', propose_change: { request: '', why: 'x'.repeat(241) } })
@@ -1120,7 +1138,7 @@ describe('the shape hand-overs', () => {
   test('a diagnosis, a report and an outcome each have their field and limit; an outcome proposes nothing', () => {
     expect(validateDelivery('investigate', { diagnosis: 'The cache.', propose_change: null })).toEqual({
       ok: true,
-      value: { body: 'The cache.', reply: null, proposal: null },
+      value: { body: 'The cache.', reply: null, actions: [], proposal: null, recommend: null },
     });
     expect(validateDelivery('research', { report: 'x'.repeat(40_001) })).toEqual({
       ok: false,
@@ -1128,7 +1146,74 @@ describe('the shape hand-overs', () => {
     });
     expect(
       validateDelivery('operate', { outcome: 'Ran it.', propose_change: { request: 'More.', why: 'Why.' } })
-    ).toEqual({ ok: true, value: { body: 'Ran it.', reply: null, proposal: null } });
+    ).toEqual({
+      ok: true,
+      value: { body: 'Ran it.', reply: null, actions: [], proposal: null, recommend: null },
+    });
+  });
+
+  test('every hand-over carries up to three suggested replies, each with a short label and its message', () => {
+    const actions = [
+      { label: ' Do the renames ', message: 'Rename them as you listed.' },
+      { label: 'Leave them', message: 'Keep the names as they are.' },
+    ];
+    expect(validateDelivery('answer', { answer: 'Two names clash.', actions })).toMatchObject({
+      ok: true,
+      value: {
+        actions: [
+          { label: 'Do the renames', message: 'Rename them as you listed.' },
+          { label: 'Leave them', message: 'Keep the names as they are.' },
+        ],
+      },
+    });
+    expect(readValue(validatePhaseHandOver({ summary: 'Done.', actions })).actions).toHaveLength(2);
+    expect(readValue(validateFixHandOver({ summary: 'Fixed.', actions })).actions).toHaveLength(2);
+    const action = { label: 'Go', message: 'Go on.' };
+    expect(
+      errorsOf(
+        validateDelivery('research', {
+          report: 'Done.',
+          actions: [action, { label: 'x'.repeat(41), message: '' }, action, action],
+        })
+      )
+    ).toEqual([
+      'actions has 4 items; the limit is 3.',
+      'actions[1].label is 41 characters; the limit is 40.',
+      'actions[1].message is required.',
+      'actions names a label twice.',
+    ]);
+    expect(
+      errorsOf(validateFixHandOver({ summary: 'Fixed.', actions: [action, { ...action, label: 'go' }] }))
+    ).toEqual(['actions names a label twice.']);
+  });
+
+  test('a result recommends going on or closing, and closing cannot carry a proposed change', () => {
+    expect(validateDelivery('research', { report: 'Not an issue.', recommend: 'close' })).toEqual({
+      ok: true,
+      value: { body: 'Not an issue.', reply: null, actions: [], proposal: null, recommend: 'close' },
+    });
+    expect(validateDelivery('investigate', { diagnosis: 'The cache.', recommend: 'go_on' })).toMatchObject({
+      ok: true,
+      value: { recommend: 'go_on' },
+    });
+    expect(validateDelivery('answer', { answer: 'Yes.', recommend: 'later' })).toEqual({
+      ok: false,
+      errors: ['recommend must be one of go_on, close.'],
+    });
+    expect(
+      validateDelivery('answer', {
+        answer: 'Yes.',
+        recommend: 'close',
+        propose_change: { request: 'Stream it.', why: 'Memory.' },
+      })
+    ).toEqual({
+      ok: false,
+      errors: ['`recommend` is `close`, but `propose_change` proposes a change. Drop one of them.'],
+    });
+    expect(validateDelivery('operate', { outcome: 'Ran it.', recommend: 'close' })).toMatchObject({
+      ok: true,
+      value: { recommend: null },
+    });
   });
 
   test('a reshape names one of the inquiry shapes and why', () => {
@@ -1456,10 +1541,10 @@ describe('watchdogs beside the walkthrough', () => {
 
   test('refuses a field either hand-over does not take, naming the ones it does', () => {
     expect(errorsOf(validateFixHandOver({ summary: 'Fixed.', evidence: ['shot'] }))).toEqual([
-      'The input has no field `evidence`; it takes summary, reply, walkthrough, watchdogs, checks, check_changes, evidence_kept.',
+      'The input has no field `evidence`; it takes summary, reply, actions, walkthrough, watchdogs, checks, check_changes, evidence_kept.',
     ]);
     expect(errorsOf(validatePhaseHandOver({ summary: 'Done.', notes: 'x' }))).toEqual([
-      'The input has no field `notes`; it takes summary, spots, judgement_calls, reply, walkthrough, watchdogs, check_changes.',
+      'The input has no field `notes`; it takes summary, spots, judgement_calls, reply, actions, walkthrough, watchdogs, check_changes.',
     ]);
     expect(
       errorsOf(validateFixHandOver({ summary: 'Fixed.', walkthrough: { flow: 'New flow.', diagram: 'x' } }))

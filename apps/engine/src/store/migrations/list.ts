@@ -1,3 +1,4 @@
+import { PROPOSAL_RECOMMEND } from './proposal-recommend.ts';
 import { REVIEW_SEEN } from './review-seen.ts';
 import { LOG_BASELINE, type LogMigration } from './schema.ts';
 import { SHARE_SCOPES } from './share-scopes.ts';
@@ -9,6 +10,7 @@ export const LOG_MIGRATIONS: readonly LogMigration[] = [
   SLACK_CHANNEL_NAMES,
   REVIEW_SEEN,
   SHARE_SCOPES,
+  PROPOSAL_RECOMMEND,
 ];
 
 export function resolveLogVersion(migrations: readonly LogMigration[] = LOG_MIGRATIONS) {

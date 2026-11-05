@@ -1,8 +1,15 @@
 import type { ChangeProposalInput, InquiryShape } from '../commands/index.ts';
-import type { DeliveringStep, MemoryScope, PipelineStep } from '../domain/index.ts';
+import type {
+  DeliveringStep,
+  MemoryScope,
+  PipelineStep,
+  ProposalRecommendation,
+  SuggestedAction,
+} from '../domain/index.ts';
 import type { EvidenceItemKind } from '../domain/types.ts';
 import { HandOverReader, type Validation } from './reading.ts';
 import {
+  ActionsInput,
   AnyPlanChecks,
   CHECK_LINK_LEAVES,
   type CheckChangeInput,
@@ -26,6 +33,7 @@ import {
   PlanReply,
   Proposal,
   QuestionInput,
+  Recommendation,
   ReplyInput,
   ReviewInput,
   type Risk,
@@ -224,6 +232,7 @@ export function validatePhaseHandOver(input: Record<string, unknown>): Validatio
     spots: handOver.spots.map(resolveSpot),
     judgementCalls: handOver.judgement_calls.map(resolveJudgementCall),
     reply: resolveReply(handOver.reply),
+    actions: handOver.actions,
     walkthrough: resolveWalkthrough(reader, handOver.walkthrough, handOver.watchdogs),
     checkChanges: handOver.check_changes.map(resolveCheckChangeInput),
   });
@@ -235,6 +244,7 @@ export function validateFixHandOver(input: Record<string, unknown>): Validation<
   return reader.result({
     summary: handOver.summary,
     reply: resolveReply(handOver.reply),
+    actions: handOver.actions,
     walkthrough: resolveWalkthroughRevision(handOver.walkthrough, handOver.watchdogs),
     checks: [...new Set(handOver.checks)],
     checkChanges: handOver.check_changes.map(resolveCheckChangeInput),
@@ -286,9 +296,9 @@ export function validatePlanHandOver(input: Record<string, unknown>): Validation
   const plan = new HandOverReader();
   const document = readPlanDocument(plan, input);
   const reader = new HandOverReader();
-  const { reply } = reader.read(PlanReply, input, []);
+  const { reply, actions } = reader.read(PlanReply, input, []);
   if (plan.errors.length > 0) return { ok: false, errors: [...plan.errors, ...reader.errors] };
-  return reader.result({ document, reply: resolveReply(reply) });
+  return reader.result({ document, reply: resolveReply(reply), actions });
 }
 
 export function validateQuestion(input: Record<string, unknown>): Validation<QuestionHandOver> {
@@ -394,6 +404,8 @@ export interface DeliveryHandOver {
   body: string;
   reply: AgentReply | null;
   proposal: ChangeProposalInput | null;
+  recommend: ProposalRecommendation | null;
+  actions: SuggestedAction[];
 }
 
 export function validateDelivery(
@@ -402,10 +414,16 @@ export function validateDelivery(
 ): Validation<DeliveryHandOver> {
   const reader = new HandOverReader();
   const { field, body, proposes } = DELIVERY_FIELD[step];
+  const proposal = proposes ? reader.read(Proposal, input.propose_change, ['propose_change']) : null;
+  const recommend = proposes ? reader.read(Recommendation, input.recommend, ['recommend']) : null;
+  if (proposal && recommend === 'close')
+    reader.refuse('`recommend` is `close`, but `propose_change` proposes a change. Drop one of them.');
   return reader.result({
     body: reader.read(body, input[field], [field]),
     reply: resolveReply(reader.read(ReplyInput, input.reply, ['reply'])),
-    proposal: proposes ? reader.read(Proposal, input.propose_change, ['propose_change']) : null,
+    actions: reader.read(ActionsInput, input.actions, ['actions']),
+    proposal,
+    recommend: proposal ? 'go_on' : recommend,
   });
 }
 

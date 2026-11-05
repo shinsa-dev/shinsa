@@ -430,7 +430,14 @@ describe('what a shared task shows', () => {
     const task: Task = {
       ...harness.task(taskId),
       result: { step: 'answer', body: 'It clamps.', runId: 'run-1', at: 5 },
-      proposal: { request: 'Clamp it', why: 'It overflows.', status: 'open', runId: 'run-1', at: 5 },
+      proposal: {
+        request: 'Clamp it',
+        why: 'It overflows.',
+        status: 'open',
+        recommend: 'go_on',
+        runId: 'run-1',
+        at: 5,
+      },
     };
     const shared = resolveSharedTask(harness.state, task, CONTEXT);
     expect(shared.task.result).toEqual({ step: 'answer', body: 'It clamps.', runId: null, at: 5 });

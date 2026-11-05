@@ -32,6 +32,7 @@ import { SecretCard } from '@/components/overview/secret-card.tsx';
 import { SetupCard } from '@/components/overview/setup-card.tsx';
 import { SignInCard } from '@/components/overview/sign-in-card.tsx';
 import { SilenceNote } from '@/components/overview/silence-note.tsx';
+import { SuggestedReplies } from '@/components/overview/suggested-replies.tsx';
 import { UsageWaitCard } from '@/components/overview/usage-wait-card.tsx';
 import { WaitCard } from '@/components/overview/wait-card.tsx';
 import { MergeStepsBlock } from '@/components/review/merge-steps.tsx';
@@ -70,7 +71,7 @@ import {
   resolveRetryReply,
 } from '@/lib/tasks/gates.ts';
 import { describeMergeable, describePullRequestChecks } from '@/lib/tasks/pull-request.ts';
-import { describeChangeGate, resolvePlannedOperation } from '@/lib/tasks/shapes.ts';
+import { type ChangeReply, describeChangeGate, resolvePlannedOperation } from '@/lib/tasks/shapes.ts';
 
 function PlannedOperation({ task }: { task: Task }) {
   const operation = resolvePlannedOperation(task);
@@ -230,13 +231,18 @@ export function PlanCard({
       eyebrow={<Eyebrow state={state} task={task} extra={describePlanEyebrow(task)} />}
       title={copy.title}
       action={
-        <Button
-          size='sm'
-          loading={busy === approve}
-          onClick={() => void run(approve, () => onReply(approve, null, { planVersion: task.plan?.version }))}
-        >
-          {copy.approve}
-        </Button>
+        <>
+          <SuggestedReplies state={state} task={task} />
+          <Button
+            size='sm'
+            loading={busy === approve}
+            onClick={() =>
+              void run(approve, () => onReply(approve, null, { planVersion: task.plan?.version }))
+            }
+          >
+            {copy.approve}
+          </Button>
+        </>
       }
       footer={
         <FooterNote note={copy.note}>
@@ -263,27 +269,30 @@ export function ChangeCard({
   gate: Gate;
   onReply?: GateReplier;
 }) {
-  const { busy, run } = useBusy<'makeChange' | 'planOperation' | 'keepAsIs'>();
   const change = describeChangeGate(task, gate);
-  const goOn = change.goOn;
+  const { primary, quiet } = change;
+  const { busy, run } = useBusy<ChangeReply>();
   const reply = selectShownReply(state, task, gate);
   return (
     <NowFrame
       eyebrow={<Eyebrow state={state} task={task} extra={change.eyebrow} />}
-      title={gate.title}
+      title={change.title}
       action={
-        <Button
-          size='sm'
-          loading={busy === goOn.reply}
-          onClick={() => void run(goOn.reply, () => onReply(goOn.reply))}
-        >
-          {goOn.label}
-        </Button>
+        <>
+          <SuggestedReplies state={state} task={task} />
+          <Button
+            size='sm'
+            loading={busy === primary.reply}
+            onClick={() => void run(primary.reply, () => onReply(primary.reply))}
+          >
+            {primary.label}
+          </Button>
+        </>
       }
       footer={
-        <FooterNote note={goOn.note}>
-          <QuietLink busy={busy !== null} onClick={() => void run('keepAsIs', () => onReply('keepAsIs'))}>
-            {change.keep}
+        <FooterNote note={primary.note}>
+          <QuietLink busy={busy !== null} onClick={() => void run(quiet.reply, () => onReply(quiet.reply))}>
+            {quiet.label}
           </QuietLink>
         </FooterNote>
       }
@@ -351,6 +360,7 @@ function ReviewCard({
           <Button variant='outline' size='sm' onClick={() => onOpen('review')}>
             Review
           </Button>
+          <SuggestedReplies state={state} task={task} />
           <ReviewActions state={state} task={task} gate={gate} />
         </>
       }
@@ -510,7 +520,14 @@ export function ResultCard({
     <NowFrame
       eyebrow={<Eyebrow state={state} task={task} extra={<TimeAgo at={result.at} />} />}
       title={describeResultTitle(result.step, owner)}
-      action={gate && <CloseButton onReply={onReply} />}
+      action={
+        gate && (
+          <>
+            <SuggestedReplies state={state} task={task} />
+            <CloseButton onReply={onReply} />
+          </>
+        )
+      }
       footer={
         <FooterNote note={describeFollowUpNote(result.step, run?.role ?? null)}>
           <QuietLink onClick={() => onOpen('agent', result.runId ?? undefined)}>Open the chat</QuietLink>
