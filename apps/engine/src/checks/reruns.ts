@@ -6,7 +6,7 @@ import { isFolder, isPresent, listEntries, selectText } from '../files/probe.ts'
 import { PACKAGE_MANIFEST } from '../files/schema.ts';
 import type { FailedTestCase, FailedTestGroup, FailedTests, TestRunner } from './schema.ts';
 
-export type { FailedTestCase, FailedTestGroup, FailedTests, TestRunner } from './schema.ts';
+export type { FailedTestCase, FailedTestGroup, TestRunner } from './schema.ts';
 
 interface FailedFile {
   runner: TestRunner | null;

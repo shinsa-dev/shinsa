@@ -5,7 +5,7 @@ import { whichOnPath } from '../agents/providers/versions.ts';
 import { isExecutable, selectRealPath } from '../files/probe.ts';
 import { CODEX_LATEST, type Updater, type UpdaterDeps } from './schema.ts';
 
-export type { Updater, UpdaterDeps } from './schema.ts';
+export type { UpdaterDeps } from './schema.ts';
 
 const resolveCodexUpdater = Effect.fn('Versions.resolveCodexUpdater')(function* (
   path: string,

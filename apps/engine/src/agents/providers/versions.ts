@@ -3,7 +3,7 @@ import { Effect, Option } from 'effect';
 import { selectOnPath } from '../../files/probe.ts';
 import type { LocateDeps, ProgramLocation } from './versions/schema.ts';
 
-export type { LocateDeps, ProgramLocation } from './versions/schema.ts';
+export type { LocateDeps } from './versions/schema.ts';
 
 function splitVersion(version: string) {
   return version.split('.').map((part) => Number.parseInt(part, 10) || 0);

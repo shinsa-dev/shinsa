@@ -1,6 +1,5 @@
 import { join } from 'node:path';
 import type { Project, Repo, ServiceDefinition } from '../../packages/core/src/index.ts';
-import { writeTerminalServices } from '../kit/terminals.ts';
 
 export const SANDBOX_SERVICE_COMMAND = `bun ${join(import.meta.dir, '../sandbox/service.ts')}`;
 
@@ -28,10 +27,4 @@ export function listSeedServices(projects: readonly Project[], repos: readonly R
       portVariable: 'PORT',
     };
   });
-}
-
-export function writeSeedServices(dataDir: string, projects: readonly Project[], repos: readonly Repo[]) {
-  const services = listSeedServices(projects, repos);
-  writeTerminalServices(dataDir, services);
-  return services;
 }
