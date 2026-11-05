@@ -57,7 +57,7 @@ describe('the value a decision button carries', () => {
 describe('a decision forwarded to the machine', () => {
   test('is checked field by field, and a long answer is cut', () => {
     expect(parseSlackDecision(DECISION)).toEqual(DECISION);
-    expect(parseSlackDecision({ ...DECISION, response: 'x'.repeat(5000) })?.response).toHaveLength(4000);
+    expect(parseSlackDecision({ ...DECISION, response: 'x'.repeat(5000) })?.response).toHaveLength(3000);
     expect(parseSlackDecision({ ...DECISION, userId: '' })).toBeNull();
     expect(parseSlackDecision({ ...DECISION, gateId: 'x'.repeat(65) })).toBeNull();
     expect(parseSlackDecision(null)).toBeNull();
@@ -135,7 +135,7 @@ describe('the form for written words', () => {
     expect(modal.blocks[0]).toMatchObject({
       block_id: SLACK_RESPONSE_INPUT.block,
       label: { text: 'What should change?' },
-      element: { action_id: SLACK_RESPONSE_INPUT.action, multiline: true, max_length: 4000 },
+      element: { action_id: SLACK_RESPONSE_INPUT.action, multiline: true, max_length: 3000 },
     });
     expect(parseSlackDecisionModal(modal.private_metadata)).toEqual(metadata);
     expect(serializeSlackDecisionModal({ ...metadata, decision: 'reply' })?.title.text).toBe('Answer');

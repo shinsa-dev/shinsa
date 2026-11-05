@@ -3,7 +3,7 @@ import { isRecord } from '../domain/records.ts';
 import type { GateDecision, GateType } from '../domain/types.ts';
 import { escapeSlackText, fitSlackPlainText } from './mrkdwn.ts';
 import {
-  SLACK_LIMITS,
+  SLACK_VIEW_LIMITS,
   SlackDecision,
   SlackDecisionModal,
   SlackDecisionReply,
@@ -23,8 +23,6 @@ export const SLACK_GATE_BLOCK = 'shinsa.gate';
 export const SLACK_MODAL_CALLBACK = 'shinsa.decision';
 
 export const SLACK_RESPONSE_INPUT = { block: 'shinsa.response', action: 'shinsa.response.text' } as const;
-
-const SLACK_MODAL_TITLE_LIMIT = 24;
 
 const SLACK_DECIDED_CHOICE_LIMIT = 200;
 
@@ -158,19 +156,19 @@ export function serializeSlackDecisionModal(metadata: SlackDecisionModal): Slack
     type: 'modal',
     callback_id: SLACK_MODAL_CALLBACK,
     private_metadata: JSON.stringify(metadata),
-    title: createPlainText(copy.title, SLACK_MODAL_TITLE_LIMIT),
-    submit: createPlainText(copy.submit, SLACK_MODAL_TITLE_LIMIT),
-    close: createPlainText('Cancel', SLACK_MODAL_TITLE_LIMIT),
+    title: createPlainText(copy.title, SLACK_VIEW_LIMITS.title),
+    submit: createPlainText(copy.submit, SLACK_VIEW_LIMITS.title),
+    close: createPlainText('Cancel', SLACK_VIEW_LIMITS.title),
     blocks: [
       {
         type: 'input',
         block_id: SLACK_RESPONSE_INPUT.block,
-        label: createPlainText(copy.label, 2000),
+        label: createPlainText(copy.label, SLACK_VIEW_LIMITS.label),
         element: {
           type: 'plain_text_input',
           action_id: SLACK_RESPONSE_INPUT.action,
           multiline: true,
-          max_length: SLACK_LIMITS.text,
+          max_length: SLACK_VIEW_LIMITS.input,
         },
       },
     ],
