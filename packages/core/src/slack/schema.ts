@@ -11,6 +11,14 @@ export const SLACK_LIMITS = {
   threadChars: 12_000,
 } as const;
 
+export const SLACK_VIEW_LIMITS = {
+  input: 3000,
+  title: 24,
+  label: 2000,
+  privateMetadata: 3000,
+  id: 255,
+} as const;
+
 export const SlackId = Schema.String.check(
   Schema.isNonEmpty(),
   Schema.isMaxLength(SLACK_LIMITS.id),
@@ -82,7 +90,7 @@ export const SlackDecision = Schema.Struct({
   interactionId: SlackId,
   teamId: SlackId,
   userId: SlackId,
-  response: NullByDefault(Truncated(SLACK_LIMITS.text)),
+  response: NullByDefault(Truncated(SLACK_VIEW_LIMITS.input)),
 });
 
 export type SlackDecision = typeof SlackDecision.Type;
