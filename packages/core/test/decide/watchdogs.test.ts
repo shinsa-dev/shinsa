@@ -1325,4 +1325,15 @@ describe('watchdogs and usage limits', () => {
     expect(isDispatched(harness, resumed.id)).toBe(true);
     expect(watchdog(harness, taskId).runId).toBe(resumed.id);
   });
+
+  test('turning the setting on starts a check held at the cost limit', () => {
+    const { harness, taskId, check } = overLimit({ taskBudgetUsd: 1 }, false);
+    harness.send({ type: 'settings.change', patch: { watchdogsIgnoreUsageLimits: true } });
+    expect(listOpenGates(harness.state).filter((gate) => gate.taskId === taskId)).toEqual([]);
+    const resumed = harness.activeRun(taskId);
+    expect(resumed.purpose).toBe('watch');
+    expect(resumed.id).not.toBe(check);
+    expect(isDispatched(harness, resumed.id)).toBe(true);
+    expect(watchdog(harness, taskId).runId).toBe(resumed.id);
+  });
 });

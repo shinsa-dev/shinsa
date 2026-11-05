@@ -13,6 +13,7 @@ import {
   DomainError,
   type Gate,
   isDelegatedRun,
+  isWatchHome,
   resolveWatchdogsIgnoreUsageLimits,
   type Run,
   type RunUsage,
@@ -141,10 +142,20 @@ export function acknowledgeBudget(decider: Decider, gate: Gate) {
   });
 }
 
-export function releaseBudgetHolds(decider: Decider) {
-  const released = listOpenGates(decider.state).filter(
-    (gate) => gate.cause === 'budget' && !isOverBudget(decider.state, decider.task(gate.taskId))
+function isExemptWatchTask(decider: Decider, task: Task) {
+  return (
+    task.stage === 'watching' &&
+    !isWatchHome(task) &&
+    resolveWatchdogsIgnoreUsageLimits(decider.state.settings)
   );
+}
+
+export function releaseBudgetHolds(decider: Decider) {
+  const released = listOpenGates(decider.state).filter((gate) => {
+    if (gate.cause !== 'budget') return false;
+    const task = decider.task(gate.taskId);
+    return isExemptWatchTask(decider, task) || !isOverBudget(decider.state, task);
+  });
   for (const gate of released) retryTask(decider, gate.taskId, null);
 }
 

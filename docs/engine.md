@@ -2114,7 +2114,7 @@ checks it ran.
   usage, cost, daily and project limits, and its usage still counts toward each of them for the steps that follow.
   Settings → Agent usage → Limits, Watchdogs ("Ignore usage limits" or "Follow usage limits", and the same choice in
   ⌘K) changes it, shown only on an engine with `usage.watchdog_limits`; turning it on starts a check a pace hold
-  held (`releasePaceHolds`). An account out of usage still holds a check as it holds any run, and the tasks a
+  held (`releasePaceHolds`) and retries one a budget gate held, over the limit or not (`releaseBudgetHolds`). An account out of usage still holds a check as it holds any run, and the tasks a
   watchdog files are ordinary tasks that follow every limit.
 - **The usage forecast** (`forecast/`, `resolveUsageForecast`, pure; the web runs it on the accounts it reads).
   It answers how fast you can go without every account running out, not how fast you went. Each unpaused,
