@@ -643,6 +643,7 @@ function listProcessAgentCommands(state: ShinsaState, random: Random): ShinsaCom
             request: 'Do more.',
             why: 'Seen.',
             waitsOnThis: chance(random, 0.5),
+            stacksOnThis: state.seq % 4 === 0,
           },
         ],
       },
@@ -779,6 +780,7 @@ function listProcessUserCommands(state: ShinsaState, random: Random): ShinsaComm
           taskId: task.id,
           suggestionId: suggestion.id,
           waitsOnThis: chance(random, 0.5),
+          stackOnThis: state.seq % 3 === 0,
         },
         { type: 'suggestion.dismiss', taskId: task.id, suggestionId: suggestion.id }
       );

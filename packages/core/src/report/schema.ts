@@ -649,6 +649,7 @@ export const SuggestionsInput = Items(
     request: Required(L.suggestionRequest),
     why: Required(L.suggestionWhy),
     after_this: Flag,
+    stack_on_this: Flag,
     split_off: Flag,
   }),
   L.suggestions,

@@ -191,6 +191,7 @@ export const UserCommand = Schema.Union([
     taskId: TaskId,
     suggestionId: SuggestionId,
     waitsOnThis: Bool,
+    stackOnThis: Optional(Bool, FIELD_MESSAGES.boolean),
     backlog: Optional(Bool, FIELD_MESSAGES.boolean),
   }),
   Command('suggestion.dismiss', { taskId: TaskId, suggestionId: SuggestionId }),

@@ -368,11 +368,12 @@ export function validateSuggestions(input: Record<string, unknown>): Validation<
   const reader = new HandOverReader();
   const tasks = reader.read(SuggestionsInput, input.tasks, ['tasks']);
   return reader.result(
-    tasks.map(({ title, request, why, after_this, split_off }) => ({
+    tasks.map(({ title, request, why, after_this, stack_on_this, split_off }) => ({
       title,
       request,
       why,
       waitsOnThis: after_this,
+      ...(stack_on_this ? { stacksOnThis: true } : {}),
       ...(split_off ? { splitOff: true } : {}),
     }))
   );

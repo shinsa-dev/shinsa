@@ -1027,6 +1027,7 @@ describe('validateSuggestions', () => {
         tasks: [
           { title: 'Cache it', request: 'Cache the session.', why: 'It is slow.' },
           { title: 'Retry', request: 'Retry the export.', why: 'It fails.', after_this: true },
+          { title: 'Split', request: 'Split the export.', why: 'It ships along.', stack_on_this: true },
         ],
       })
     ).toEqual({
@@ -1034,6 +1035,13 @@ describe('validateSuggestions', () => {
       value: [
         { title: 'Cache it', request: 'Cache the session.', why: 'It is slow.', waitsOnThis: false },
         { title: 'Retry', request: 'Retry the export.', why: 'It fails.', waitsOnThis: true },
+        {
+          title: 'Split',
+          request: 'Split the export.',
+          why: 'It ships along.',
+          waitsOnThis: false,
+          stacksOnThis: true,
+        },
       ],
     });
   });
@@ -1044,10 +1052,16 @@ describe('validateSuggestions', () => {
       errors: ['tasks needs at least 1 item.'],
     });
     expect(
-      validateSuggestions({ tasks: [{ title: 'x', request: '', why: 'y', after_this: 'yes' }] })
+      validateSuggestions({
+        tasks: [{ title: 'x', request: '', why: 'y', after_this: 'yes', stack_on_this: 1 }],
+      })
     ).toEqual({
       ok: false,
-      errors: ['tasks[0].request is required.', 'tasks[0].after_this must be true or false.'],
+      errors: [
+        'tasks[0].request is required.',
+        'tasks[0].after_this must be true or false.',
+        'tasks[0].stack_on_this must be true or false.',
+      ],
     });
   });
 });

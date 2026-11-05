@@ -17,6 +17,7 @@ export const ENGINE_FEATURES = [
   'team-access',
   'usage.pace_limits',
   'share.scopes',
+  'suggestion.bundle',
 ] as const;
 
 export type EngineFeature = (typeof ENGINE_FEATURES)[number];
