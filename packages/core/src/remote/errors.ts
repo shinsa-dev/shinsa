@@ -80,6 +80,8 @@ export class GuestsFull extends RemoteFailure<GuestsFull>()('GuestsFull', {
 
 export class TeamsFull extends RemoteFailure<TeamsFull>()('TeamsFull', { code: 'teams_full', status: 409 }) {}
 
+export class NoMachine extends RemoteFailure<NoMachine>()('NoMachine', { code: 'no_machine', status: 409 }) {}
+
 export class InstancesFull extends RemoteFailure<InstancesFull>()('InstancesFull', {
   code: 'instances_full',
   status: 409,

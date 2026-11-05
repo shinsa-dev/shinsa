@@ -15,6 +15,7 @@ export const ENGINE_FEATURES = [
   'attention',
   'worktree-root',
   'team-access',
+  'team-keys',
   'usage.pace_limits',
   'usage.watchdog_limits',
   'share.scopes',

@@ -6,15 +6,6 @@ import type { ChannelPeer } from '../channel/schema.ts';
 import type { RemoteUnreachable } from '../client/schema.ts';
 import type { ShareChannelHandle } from '../share-channel/schema.ts';
 
-export const TEAM_REFUSALS = {
-  team: 'That machine has left this team.',
-  key: 'That machine has no key for this team. Its owner can rejoin from the team’s join link.',
-  member:
-    'That machine does not list you in this team yet. It catches up the next time it reaches Shinsa Cloud.',
-  mismatch: 'Your key for this team does not match that machine’s. Open the team’s join link again.',
-  task: 'This task is no longer shown to the team.',
-} as const;
-
 export const TEAM_REMOTE_CHANGED = 'Remote access on the machine that shows these tasks was turned off.';
 
 export const TEAM_DOMAIN_ERRORS = {
@@ -67,6 +58,14 @@ interface StoredTeamKeyView {
   key: string;
 }
 
+export const KEY_WAITS_LIMIT = 16;
+
+export interface KeyWait {
+  readonly teamId: string;
+  readonly recipient: string;
+  readonly privateKey: CryptoKey;
+}
+
 export class TeamCommandFailed extends Schema.TaggedError<
   TeamCommandFailed,
   { readonly brand: unique symbol }
@@ -107,6 +106,7 @@ export interface TeamsHandle {
   readonly listKeys: Effect.Effect<StoredTeamKeyView[]>;
   leave(teamId: string): Effect.Effect<void, TeamFailure>;
   remove(teamId: string): Effect.Effect<void, TeamFailure>;
+  requestKey(teamId: string): Effect.Effect<void, TeamFailure>;
   readonly acceptsViewer: Effect.Effect<boolean>;
   openChannel(peer: ChannelPeer, userId: string): Effect.Effect<TeamChannel>;
   closeChannel(channel: TeamChannel): Effect.Effect<void>;
