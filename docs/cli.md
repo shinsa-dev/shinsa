@@ -1048,7 +1048,7 @@ Every task agent's tool: `suggestions_list` (reads).
 Add a suggested task as a task of its own.
 
 ```
-shinsa suggestions accept <task> <suggestion> [--after-this] [--backlog] [--json]
+shinsa suggestions accept <task> <suggestion> [--after-this] [--stack-on-this] [--backlog] [--json]
 ```
 
 Every task agent's tool: `suggestions_accept`. Sends `suggestion.accept`.
@@ -1058,6 +1058,7 @@ Every task agent's tool: `suggestions_accept`. Sends `suggestion.accept`.
 | `<task>` | text, required | The task: its handle (SW-142), its id, the start of its id, or its exact title. |
 | `<suggestion>` | text, required | The suggested task id, from `shinsa suggestions list`. |
 | `--after-this` | boolean, optional | Start it only after this task merges. |
+| `--stack-on-this` | boolean, optional | Bundle it with this task: it builds on this task’s branch and merges together with it. |
 | `--backlog` | boolean, optional | Plan it now and keep it in the backlog until you start building it. |
 
 #### shinsa suggestions dismiss

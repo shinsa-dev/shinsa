@@ -24,7 +24,7 @@ export const ACKNOWLEDGE =
   'needs nothing: thanks, an acknowledgement ("ok", "great", "sick thank you"), praise or small talk';
 
 export const SEPARATE_TASK =
-  "asks for work toward another goal, which belongs in a task of its own; a message about this task's own work, its files, its steps or the parts it needs in other repositories is not this, even when it names another repository or checkout";
+  "plainly asks for work toward another goal, unrelated to this task, which belongs in a task of its own; a message about this task's own work, its files, its steps, the parts it needs in other repositories or a change to how it behaves is not this, even when it names another repository or checkout; when unsure, it is not this";
 
 export const RESTING_KIND_QUESTION: ChoiceQuestion = {
   type: 'choice',

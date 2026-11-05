@@ -580,6 +580,6 @@ export function resolveAnswererPrompt(task: Task, repo: Repo | null, followUp: s
     '',
     `Call \`answer\` with your answer in markdown (at most ${SHAPE_LIMITS.answer} characters): lead with the answer itself, then the evidence (files and lines as shinsa:// links).`,
     describeWhatFollows(task) ?? PROPOSAL_RULE,
-    'For other work worth doing, propose it with `suggest_tasks`. Then stop.',
+    'Only for work you noticed that serves a different goal than this task, propose it with `suggest_tasks`. Then stop.',
   ].join('\n');
 }
