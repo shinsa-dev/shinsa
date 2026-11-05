@@ -2,6 +2,7 @@ import {
   type AccountsSnapshot,
   type AgentProviderInfo,
   type CompactionMode,
+  hasEngineFeature,
   listAgentProviders,
   type PlanApproval,
   type Repo,
@@ -20,11 +21,15 @@ import {
   resolveResumeValue,
   resolveSnoozeValue,
   resolveSwitchValue,
+  resolveWatchdogLimitsValue,
   SNOOZE_ITEMS,
   SNOOZE_TITLE,
+  WATCHDOG_LIMITS_ITEMS,
+  WATCHDOG_LIMITS_TITLE,
 } from '@/lib/accounts/limits.ts';
 import { type Command, type CommandSection, RANK } from '@/lib/command/registry.ts';
 import { restartOnboarding } from '@/lib/connection/onboarding.ts';
+import { connection } from '@/lib/connection/socket.ts';
 import { applyDesktopChannel, type UpdateChannel } from '@/lib/desktop.ts';
 import { EXTENSION_ICON, EXTENSION_SECTION } from '@/lib/extensions.ts';
 import { updateNotifications } from '@/lib/notifications/settings.ts';
@@ -441,6 +446,17 @@ function listUsageChoices(
         listBudgetItems(settings),
         resolveBudgetValue(settings),
         (value) => patchSettings({ taskBudgetUsd: parseBudget(value) })
+      )
+    );
+  }
+  if (hasEngineFeature(connection.selectEngine(), 'usage.watchdog_limits')) {
+    choices.push(
+      settingChoice(
+        'watchdog-limits',
+        WATCHDOG_LIMITS_TITLE,
+        WATCHDOG_LIMITS_ITEMS,
+        resolveWatchdogLimitsValue(settings),
+        (value) => patchSettings({ watchdogsIgnoreUsageLimits: value === 'ignore' })
       )
     );
   }

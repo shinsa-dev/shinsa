@@ -2108,6 +2108,14 @@ checks it ran.
   holds that task again, in any phase or round, while every other task still counts against them. Sent on your
   behalf or by a guest it starts only the held step, since both limits are yours alone; a pace hold cannot be switched to waiting for you (`usage_wait.change` is refused); raising, clearing or
   changing either limit starts every held step that is now under it.
+- **Watchdog checks ignore these limits** while `watchdogsIgnoreUsageLimits` is on (the default; only yours, in
+  `HUMAN_ONLY_SETTINGS`, since it decides how much usage a check may spend): a run with `purpose: watch` skips
+  `holdForBudget` and `holdForPace` (`isExemptWatchCheck` in `decide/costs.ts`), so a check starts on time at the task
+  usage, cost, daily and project limits, and its usage still counts toward each of them for the steps that follow.
+  Settings → Agent usage → Limits, Watchdogs ("Ignore usage limits" or "Follow usage limits", and the same choice in
+  ⌘K) changes it, shown only on an engine with `usage.watchdog_limits`; turning it on starts a check a pace hold
+  held (`releasePaceHolds`). An account out of usage still holds a check as it holds any run, and the tasks a
+  watchdog files are ordinary tasks that follow every limit.
 - **The usage forecast** (`forecast/`, `resolveUsageForecast`, pure; the web runs it on the accounts it reads).
   It answers how fast you can go without every account running out, not how fast you went. Each unpaused,
   signed-in account is a budget that expires: what is left of its weekly window now lasts until its reset, and
@@ -3299,7 +3307,8 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   `review.approve_after_fix` for `gate.answer`'s `thenApprove`, `message.line_comments` for `task.message`'s
   `comments`, `changelog` for `GET /api/changelog`, `remote.terminals` for terminal streams on the sealed channel,
   `attention` for routing notifications to the device you use, `worktree-root` for the worktree folder and
-  `usage.pace_limits` for `dailyUsageLimit` and `Project.usageLimit`, today;
+  `usage.pace_limits` for `dailyUsageLimit` and `Project.usageLimit` and `usage.watchdog_limits` for
+  `watchdogsIgnoreUsageLimits`, today;
   Settings → Teams, the review's Fix and approve choice and
   What's new show only on an engine that has them). `ENGINE_PROTOCOL` is the hard floor: a machine whose protocol differs from the page's is left out of the
   dashboard, merges nothing and gets no command, and Settings → Machines says "Update Shinsa on <name> to reach it from
@@ -4455,7 +4464,8 @@ plainly what protects what.
   - giving or declining a secret (`gates secret`, `gates decline-secret`, `schedules webhook-secret`);
   - the settings that spend money, merge, share or decide for you (`HUMAN_ONLY_SETTINGS` in `domain/settings.ts`:
     `approvePlans`, `mergeMethod`, `taskBudgetUsd`, `taskUsageLimit`, `dailyUsageLimit`, `autoResume`,
-    `snoozeLimited`, `accountSwitchAt`, `fastMode`, `agentFastModes`, `delegationLimit`, `shareLimit`), a
+    `snoozeLimited`, `accountSwitchAt`, `fastMode`, `agentFastModes`, `delegationLimit`, `shareLimit`, `sharePreset`,
+    `watchdogsIgnoreUsageLimits`), a
     project's usage limit (`Project.usageLimit`) and a repository's own check commands,
     workspace and coverage (`HUMAN_ONLY_REPO_FIELDS`: `checkCommands`, `workspace`, `coverage`); agents keep the rest
     (models, providers, fix rounds, attention, compaction), and a task's own checks are the agent's (Checks, above);

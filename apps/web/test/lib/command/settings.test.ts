@@ -8,6 +8,7 @@ import { DEFAULT_PREFERENCES, readNotificationPreferences } from '@/lib/preferen
 import { createAccount, createSnapshot } from '../../support/accounts.ts';
 import { spyOnCommands } from '../../support/commands.ts';
 import { installDesktop } from '../../support/desktop.ts';
+import { spyOnEngine } from '../../support/engine.ts';
 import { installNotifications } from '../../support/notifications.ts';
 import { createRepo } from '../../support/state.ts';
 
@@ -260,6 +261,34 @@ describe('Change a setting', () => {
         hint: 'When the limit resets',
       }
     );
+  });
+
+  it('lets watchdogs ignore or follow usage limits, only on an engine that holds them apart', () => {
+    expect(() =>
+      find(listSettingsSections(createSettings(), MODELS, DEFAULT_PREFERENCES), 'settings.watchdog-limits')
+    ).toThrow();
+    spyOnEngine();
+    const sections = listSettingsSections(createSettings(), MODELS, DEFAULT_PREFERENCES);
+    expect(find(sections, 'settings.watchdog-limits')).toMatchObject({
+      label: 'Watchdogs',
+      value: 'ignore',
+      hint: 'Ignore usage limits',
+    });
+    pick(sections, 'settings.watchdog-limits', 'follow');
+    const following = listSettingsSections(
+      { ...createSettings(), watchdogsIgnoreUsageLimits: false },
+      MODELS,
+      DEFAULT_PREFERENCES
+    );
+    expect(find(following, 'settings.watchdog-limits')).toMatchObject({
+      value: 'follow',
+      hint: 'Follow usage limits',
+    });
+    pick(following, 'settings.watchdog-limits', 'ignore');
+    expect(spies.sent.mock.calls.map(([command]) => command)).toEqual([
+      { type: 'settings.change', patch: { watchdogsIgnoreUsageLimits: false } },
+      { type: 'settings.change', patch: { watchdogsIgnoreUsageLimits: true } },
+    ]);
   });
 
   it('shows a stored attention limit the usual choices do not offer', () => {
