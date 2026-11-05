@@ -2113,7 +2113,10 @@ checks it ran.
   comes back, and the held step starts again through `startRun` (`releasePaceWait`: its role prompt, session, role,
   phase, feedback and account as they were, `continues` the held run, `usageWaitId` the wait), so it starts, or is held again under a new wait when other
   work filled the window meanwhile. Resume now (`usage_wait.resume_now`) starts it at once, over the limit or
-  not; a pace hold cannot be switched to waiting for you (`usage_wait.change` is refused); raising, clearing or
+  not, and from you it also ignores both limits for the rest of the task (`task.pace_limits_ignored`,
+  `Task.paceLimitsIgnored`, "Ignoring the daily and project usage limits for this task"): `resolvePaceHold` never
+  holds that task again, in any phase or round, while every other task still counts against them. Sent on your
+  behalf or by a guest it starts only the held step, since both limits are yours alone; a pace hold cannot be switched to waiting for you (`usage_wait.change` is refused); raising, clearing or
   changing either limit starts every held step that is now under it.
 - **The usage forecast** (`forecast/`, `resolveUsageForecast`, pure; the web runs it on the accounts it reads).
   It answers how fast you can go without every account running out, not how fast you went. Each unpaused,
