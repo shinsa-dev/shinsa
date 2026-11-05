@@ -57,7 +57,7 @@ export const BROWSER_ONLY_TERMINALS = 'Only Shinsa’s page opens terminals.';
 
 export const BROWSER_ONLY_INSTALL = 'Only Shinsa’s own page installs the tools setup checks.';
 
-export const GUEST_ACCESS = ['none', 'any', 'own_task', 'task_file'] as const;
+export const GUEST_ACCESS = ['none', 'any', 'filtered', 'own_task', 'task_file'] as const;
 
 export type GuestAccess = (typeof GUEST_ACCESS)[number];
 

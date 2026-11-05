@@ -207,11 +207,12 @@ export class TunnelGate extends Context.Service<
         const access = Context.get(annotations, GuestRoute);
         const admitsGuest =
           access === 'any' ||
+          access === 'filtered' ||
           (access !== 'none' && source.guest !== null && (yield* isGuestRoute(source.guest.scope, request)));
         if (source.guest && !admitsGuest) return yield* refuseScope(source.guest.scope, request.pathname);
         if (Context.get(annotations, LocalOnlyRoute))
           return yield* new LocalOnly({ message: LOCAL_ONLY_MESSAGE });
-        const scopedRead = source.guest !== null && access === 'any';
+        const scopedRead = source.guest !== null && access === 'filtered';
         if (Context.get(annotations, OwnerOnlyRoute) && !scopedRead && !(yield* isOwner(source.userId)))
           return yield* new NotMachineOwner({ message: OWNER_ONLY_MESSAGE });
         yield* assertWritable(request.method);

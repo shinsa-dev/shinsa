@@ -215,7 +215,8 @@ function isLocalOnly(method: string, path: string) {
 
 function resolveOldGuest(method: string, path: string) {
   if (method !== 'GET') return 'none';
-  if (path === '/api/health' || path === '/api/terminals') return 'any';
+  if (path === '/api/health') return 'any';
+  if (path === '/api/terminals') return 'filtered';
   if (OLD_TASK_READS.test(path)) return 'own_task';
   if (path === '/api/evidence/*' || path === '/api/attachments/*') return 'task_file';
   return 'none';

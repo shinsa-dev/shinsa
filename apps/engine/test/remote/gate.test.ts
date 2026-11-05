@@ -167,7 +167,7 @@ function request(path: string, init: RequestInit = {}) {
 }
 
 function annotate(entries: {
-  guest?: 'none' | 'any' | 'own_task' | 'task_file';
+  guest?: 'none' | 'any' | 'filtered' | 'own_task' | 'task_file';
   localOnly?: boolean;
   ownerOnly?: boolean;
 }) {
@@ -362,6 +362,15 @@ describe('an endpoint inside the channel', () => {
     expect(await admit(annotate({ guest: 'any' }), channelSource('u-guest', GUEST))).toBeNull();
     expect(await admit(annotate({ guest: 'any', localOnly: true }), channelSource('u-guest', GUEST))).toBe(
       'LocalOnly'
+    );
+  });
+
+  test('lets a guest past an owner-only route only when the route filters its answer for guests', async () => {
+    const guest = channelSource('u-guest', GUEST);
+    expect(await admit(annotate({ guest: 'any', ownerOnly: true }), guest)).toBe('NotMachineOwner');
+    expect(await admit(annotate({ guest: 'filtered', ownerOnly: true }), guest)).toBeNull();
+    expect(await admit(annotate({ guest: 'filtered', ownerOnly: true }), channelSource('u-member'))).toBe(
+      'NotMachineOwner'
     );
   });
 
