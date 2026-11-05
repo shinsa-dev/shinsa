@@ -738,6 +738,12 @@ async function restAfterOperation() {
   const gate = Object.values(engine.state.gates).find((candidate) => candidate.status === 'open');
   await engine.dispatch({ type: 'gate.answer', gateId: gate?.id ?? '', decision: 'approve', response: null });
   await engine.dispatch({
+    type: 'worktree.ready',
+    taskId,
+    path: '/wt/projects',
+    branch: 'chore/restructure-projects',
+  });
+  await engine.dispatch({
     type: 'run.link',
     runId: activeRunOf(engine, taskId).id,
     sessionId: 'operator-1',
@@ -867,6 +873,7 @@ describe('finding the repository a round needs', () => {
         request: 'Make the button blue',
         why: 'It is grey.',
         status: 'accepted',
+        recommend: 'go_on',
         runId: null,
         at: 1,
       },

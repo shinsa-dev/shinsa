@@ -4,6 +4,7 @@ import {
   isTeamSnapshotExpired,
   NO_TEAM_FEED,
   type RemoteTeam,
+  type RemoteUser,
   type ShareMessage,
   type ShinsaState,
   selectTeamSnapshotSigner,
@@ -14,16 +15,19 @@ import {
   type TeamTask,
   type TeamViewTarget,
   type Task,
+  TEAM_REFUSALS,
   verifyTeamSnapshot,
 } from '@shinsa/core';
 import { Clock, Duration, Effect, Option, Schema } from 'effect';
 import type { MachineView } from '@/lib/connection/socket.ts';
-import { resolveFirstName, resolveSharedProfile } from '@/lib/remote/users.ts';
+import { describeMachineName } from '@/lib/remote/setup-steps.ts';
+import { type Mention, resolveFirstName, resolveSharedProfile } from '@/lib/remote/users.ts';
 import { forkApp, runApp } from '@/lib/runtime/app.ts';
 import { createSignal } from '@/lib/signal.ts';
 import { resolveTaskPath } from '@/router.ts';
 import { openTeamChannel } from './channel.ts';
 import { type StoredTeamKey, TeamListViewText } from './schema.ts';
+import { selectTeamPerson } from './settings.ts';
 import {
   TEAM_MACHINE_OFFLINE,
   type TeamChannelHandlers,
@@ -366,32 +370,66 @@ export class HostedTeamFeeds implements TeamFeedSource {
 export interface TeamFeedRefusal {
   key: string;
   machine: string;
+  owner: RemoteUser | null;
   team: string;
+  waitsForKey: boolean;
   reason: string;
 }
 
 export const TEAM_FEED_REFUSED = 'It refused to list its tasks.';
 
+export const TEAM_FEED_WAITS_FOR_KEY =
+  'It gets the key once its owner gives it access from another of their machines, or the team’s owner does.';
+
+export interface RefusalTeam {
+  id: string;
+  name: string;
+  team: Pick<RemoteTeam, 'owner' | 'members'> | null;
+}
+
 export function listTeamFeedRefusals(
   feed: TeamFeedSnapshot,
-  teams: readonly { id: string; name: string }[],
+  teams: readonly RefusalTeam[],
   reachable: ReadonlySet<string>,
   focusTeamId: string | null
 ): TeamFeedRefusal[] {
-  const names = new Map(teams.map((team) => [team.id, team.name]));
+  const byId = new Map(teams.map((team) => [team.id, team]));
   return feed.machines
     .flatMap((machine): TeamFeedRefusal[] => {
-      const team = names.get(machine.teamId);
+      const team = byId.get(machine.teamId);
       if (machine.status !== 'refused' || team === undefined || reachable.has(machine.instanceId)) return [];
       if (focusTeamId !== null && machine.teamId !== focusTeamId) return [];
       return [
         {
           key: resolveMachineKey(machine),
-          machine: machine.name,
-          team,
+          machine: describeMachineName(machine.name),
+          owner: team.team ? selectTeamPerson(team.team, machine.userId) : null,
+          team: team.name,
+          waitsForKey: machine.reason === TEAM_REFUSALS.key,
           reason: machine.reason ?? TEAM_FEED_REFUSED,
         },
       ];
     })
     .sort((left, right) => left.machine.localeCompare(right.machine));
+}
+
+export function describeTeamFeedRefusals(refusals: readonly TeamFeedRefusal[]): {
+  label: Mention;
+  detail: string;
+} | null {
+  const [first] = refusals;
+  if (!first) return null;
+  if (refusals.length > 1)
+    return {
+      label: [`${refusals.length} teammate machines are not listing their tasks`],
+      detail: refusals.map((refusal) => `${describeRefusalMachine(refusal)}: ${refusal.reason}`).join(' '),
+    };
+  const owner: Mention = first.owner ? [' by ', { user: first.owner }] : [];
+  const outcome = first.waitsForKey ? 'is waiting for the team’s key' : 'is not listing its tasks';
+  const detail = first.waitsForKey ? TEAM_FEED_WAITS_FOR_KEY : first.reason;
+  return { label: [first.machine, ...owner, ` in ${first.team} ${outcome}`], detail };
+}
+
+function describeRefusalMachine(refusal: TeamFeedRefusal) {
+  return refusal.owner ? `${refusal.machine} (${resolveFirstName(refusal.owner)})` : refusal.machine;
 }

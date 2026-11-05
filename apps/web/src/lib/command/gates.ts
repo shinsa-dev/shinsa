@@ -13,6 +13,7 @@ import { type Command, type MenuPage, RANK } from '@/lib/command/registry.ts';
 import { refreshUsage, startSignIn } from '@/lib/connection/accounts.ts';
 import { sendCommandWithToast } from '@/lib/connection/commands.ts';
 import { OPERATION_SKIP } from '@/lib/overview/operation.ts';
+import { listSuggestedReplies, sendSuggestedReply } from '@/lib/overview/suggested-replies.ts';
 import {
   describeApproveHint,
   isFixingAction,
@@ -40,7 +41,7 @@ import {
   resolveRetryLabel,
   resolveRetryReply,
 } from '@/lib/tasks/gates.ts';
-import { describeChangeGate } from '@/lib/tasks/shapes.ts';
+import { type ChangeReply, describeChangeGate } from '@/lib/tasks/shapes.ts';
 import { resolveGateGlyph } from '@/lib/tasks/status.ts';
 import { hasReview, type TaskTab } from '@/lib/tasks/tabs.ts';
 import { resolveTaskPath } from '@/router.ts';
@@ -61,6 +62,23 @@ export function compose(
 ): MenuPage {
   return { kind: 'compose', crumb, placeholder, submit, send };
 }
+
+const SUGGESTING_GATES: ReadonlySet<Gate['type']> = new Set<Gate['type']>([
+  'plan',
+  'proposal',
+  'review',
+  'merge',
+  'result',
+]);
+
+const GO_ON_KEYWORDS = ['approve', 'change', 'fix', 'build', 'operation', 'proposal'];
+
+const CHANGE_KEYWORDS: Record<ChangeReply, string[]> = {
+  makeChange: GO_ON_KEYWORDS,
+  planOperation: GO_ON_KEYWORDS,
+  keepAsIs: ['decline', 'reject', 'keep', 'done', 'proposal'],
+  closeProposal: ['close', 'decline', 'reject', 'done', 'nothing', 'proposal'],
+};
 
 function resolveGateId(gate: Gate) {
   return `task.${gate.taskId}.gate.${gate.id}`;
@@ -401,20 +419,20 @@ function listChangeCommands(task: Task, gate: Gate): Command[] {
   return [
     {
       kind: 'run',
-      id: `${id}.make-change`,
-      label: change.goOn.label,
-      hint: gate.title,
+      id: `${id}.${change.primary.reply}`,
+      label: change.primary.label,
+      hint: change.title,
       icon: resolveGateGlyph(gate).icon,
-      keywords: ['approve', 'change', 'fix', 'build', 'operation', 'proposal'],
-      run: () => void replyToGate(gate, change.goOn.reply),
+      keywords: CHANGE_KEYWORDS[change.primary.reply],
+      run: () => void replyToGate(gate, change.primary.reply),
     },
     {
       kind: 'run',
-      id: `${id}.keep`,
-      label: change.keep,
+      id: `${id}.${change.quiet.reply}`,
+      label: change.quiet.label,
       icon: 'IconCheckCircle2',
-      keywords: ['decline', 'reject', 'keep', 'done', 'proposal'],
-      run: () => void replyToGate(gate, 'keepAsIs'),
+      keywords: CHANGE_KEYWORDS[change.quiet.reply],
+      run: () => void replyToGate(gate, change.quiet.reply),
     },
   ];
 }
@@ -514,8 +532,24 @@ function listGateCommands(state: ShinsaState, task: Task, gate: Gate, context: G
   }
 }
 
+function listSuggestedReplyCommands(state: ShinsaState, task: Task): Command[] {
+  return listSuggestedReplies(state, task).map((action, index) => ({
+    kind: 'run',
+    id: `task.${task.id}.suggested.${index}`,
+    label: action.label,
+    hint: 'Suggested reply',
+    icon: 'IconBubbleText',
+    keywords: ['reply', 'suggested', 'send', 'message', 'agent'],
+    run: () => void sendSuggestedReply(state, task, action),
+  }));
+}
+
 export function listOpenGateCommands(state: ShinsaState, task: Task, context: GateContext) {
-  return listOpenGates(state, task.id)
-    .sort((a, b) => Number(isDecisionGate(a)) - Number(isDecisionGate(b)))
-    .flatMap((gate) => listGateCommands(state, task, gate, context));
+  const gates = listOpenGates(state, task.id).sort(
+    (a, b) => Number(isDecisionGate(a)) - Number(isDecisionGate(b))
+  );
+  const replies = gates.some((gate) => SUGGESTING_GATES.has(gate.type))
+    ? listSuggestedReplyCommands(state, task)
+    : [];
+  return [...gates.flatMap((gate) => listGateCommands(state, task, gate, context)), ...replies];
 }

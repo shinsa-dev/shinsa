@@ -13,6 +13,7 @@ import {
   resolveFastMode,
   resolveIdleCompaction,
   resolveWatchdogDefaults,
+  resolveWatchdogsIgnoreUsageLimits,
   SETTINGS_KEYS,
   type Settings,
 } from '../../src/index.ts';
@@ -60,12 +61,25 @@ describe('the settings a command may change', () => {
       watchdogHours: 72,
       watchdogFirstCheckMinutes: 30,
       watchdogMaxGapHours: 6,
+      watchdogsIgnoreUsageLimits: true,
       taskCapacity: null,
       placementPolicies: [],
       shareLimit: 'until_done',
       sharePreset: 'standard',
     };
     expect(Object.keys(every).sort()).toEqual([...SETTINGS_KEYS].sort());
+  });
+});
+
+describe('resolveWatchdogsIgnoreUsageLimits', () => {
+  test('watchdogs ignore usage limits unless you switch it off', () => {
+    expect(resolveWatchdogsIgnoreUsageLimits(createSettings())).toBe(true);
+    expect(
+      resolveWatchdogsIgnoreUsageLimits({ ...createSettings(), watchdogsIgnoreUsageLimits: undefined })
+    ).toBe(true);
+    expect(
+      resolveWatchdogsIgnoreUsageLimits({ ...createSettings(), watchdogsIgnoreUsageLimits: false })
+    ).toBe(false);
   });
 });
 

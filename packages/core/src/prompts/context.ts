@@ -250,6 +250,7 @@ export function describeWhatFollows(task: Task) {
   return [
     `After your hand-over the human decides whether this task goes on to the ${work}. If they agree, the ${work} is planned and carried out from what you hand over, usually by you in this same conversation.`,
     `End with what the ${work} should do.`,
+    `Set \`recommend\` on your hand-over: \`go_on\` when the ${work} is worth doing, \`close\` when you found nothing worth changing. With \`close\`, the human sees Close as the main choice and can still go on.`,
   ].join('\n');
 }
 

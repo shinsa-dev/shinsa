@@ -98,6 +98,9 @@ export function createTeamActions(machineId: string | null = null) {
     updateExtra: (teamId: string, userId: string, scopes: AccessScopes) =>
       act((teams) => teams.extra({ payload: { teamId, userId, scopes } })),
     grantAccess: (teamId: string, userId: string) => run(grantAccess(teamId, userId)),
+    requestKey: (teamId: string) => act((teams) => teams.requestKey({ payload: { teamId } })),
+    answerKey: (teamId: string, instanceId: string, approve: boolean) =>
+      act((teams) => teams.answerKey({ payload: { teamId, instanceId, approve } })),
   };
 }
 

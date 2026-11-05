@@ -410,7 +410,10 @@ create → classify → (wait for the tasks it waits on) → worktree → plan �
    below; never one in another repository). A duplicate is
    closed there and goes no further. Then the task either waits for them (Scheduling, below) or has its setup verified (`config.verify`,
    Setup verification, below) and gets its worktree (`worktree.create`): a fresh branch from the freshly fetched
-   default branch.
+   default branch, never from your own checkout. The fetch also moves your local default branch ref forward to
+   `origin/<default>` when no worktree or checkout has it checked out and it has no commits of its own
+   (`Checkout.resolveStartPoint`); your checked-out files are never touched. A failed fetch logs a warning and the
+   task starts from the last known `origin/<default>`.
 2. **Plan.** The Agent reads the code and calls `propose_plan`. It plans read-only (Read-only while planning, The
    agent loop) and is told that it builds the plan itself, in the same session. A task created plan first
    (`planFirst`: `shinsa do --plan-first`) or kept in the backlog (Scheduling → The backlog, below)
@@ -419,7 +422,10 @@ create → classify → (wait for the tasks it waits on) → worktree → plan �
    large plan (more than 3 phases or 6 files, `PLAN_SIZE_LIMITS`) or a revised plan waits there, on Always every plan
    does (`PLAN_GATE_RULE`, evaluated by `needsPlanApproval`; Gates, below), and building starts at once when it does
    not. The size is the plan's, never triage's guess from the request. A decision
-   only the human can make is asked with `ask` before planning finishes.
+   only the human can make is asked with `ask` before planning finishes. Approving a plan at its gate, however long
+   it waited, sends a task with a worktree back through `worktree.create`, which resets the worktree onto the freshly
+   fetched base (planning commits nothing), and `worktree.ready` then starts phase 1 (`startApprovedPlan`,
+   `isStartingApprovedPlan`); a plan that needs no gate builds at once on the worktree planning just set up.
 3. **Build.** Each phase is a run of its own on the session that planned it, now able to edit. Its prompt is short
    (`resolvePhaseInstruction`: "Phase 1 is committed. Now build phase 2 of 3: …" and how to hand it over), since the
    session already holds the request, the plan and every earlier phase. Phases run in order in one worktree.
@@ -896,7 +902,11 @@ predicates) and `state/rounds.ts` (the folds); the classifier is `apps/engine/sr
 - **The same branch, worktree and sessions.** A round started onto the open pull request keeps the task's branch,
   worktree and pull request; a stacked one gets a new branch on the same worktree; one after a merge gets a fresh
   worktree from the freshly fetched default branch on a new branch (`<first branch>-round-<n>`; `worktree.create`
-  never resets a later round's worktree to the default branch, it only drops uncommitted scratch edits). The agents
+  never resets a later round's worktree to the default branch: it drops uncommitted scratch edits and merges the
+  freshly fetched base, the default branch or the first branch it stacks on, into the branch, as the push does
+  (`WorktreeWorkspaces.prepare`). A base that conflicts is aborted and left for the push's conflict fix, and a fetch
+  that fails is logged and the round starts from the branch as it is; the main checkout's later rounds reuse the
+  branch as it is). The agents
   remember everything: every run of a later round, whatever its kind of work, resumes the task's session
   (`Decider.taskSession`, Agents above), so the round that plans next has the earlier rounds in its context; the
   reviewer resumes only its own session, so it never reviews from inside the Agent's head. A round after a merge runs
@@ -1034,6 +1044,21 @@ folds in `state/shapes.ts`).
   (`by: you`, "kept as an investigation") and finishes it, so it takes follow-ups like any investigation. A message
   instead declines the proposal (`decline_proposal`) and resumes the inquiry agent with it; its next hand-over asks
   again.
+- **The agent's recommendation.** Before your OK the inquiry hand-over must set `recommend`: `go_on` when the work
+  should go on, `close` when it found nothing worth changing (a `close` beside `propose_change` is refused). It is kept
+  on the proposal. With `go_on` the card leads with "Make it a change" (or "Plan the operation") and keeps the
+  inquiry as the quiet link; with `close` the gate's own title says nothing was found ("The diagnosis found nothing to fix"), so the card,
+  notifications and the Home guide agree, Close
+  (a veto, `closeProposal`) leads, and going on drops to the quiet link; ⌘K orders them the same way. A find-and-fix
+  diagnosis with `close` reshapes the task to `[investigate, your_ok, …]` (`by: agent`) so it stops for your OK instead
+  of planning a fix.
+- **Suggested replies.** Any hand-over but the reviewer's can carry up to three `actions` (`label`, `message`).
+  `task.actions_suggested` keeps them on `task.suggestedActions`; the next hand-over replaces them, and your message
+  that reaches the agent or your answer to a gate clears them (a message only kept for a later agent does not). The
+  plan, proposal, review, merge and result cards show them as outline buttons before the main one, ⌘K lists them as
+  "Suggested reply" while one of those gates is open, and both show them only while a message can reach the agent. A
+  click sends the message as yours (`task.message`), so it does what typing it does there: at review it asks for
+  changes in this round, at your OK it declines the proposal and resumes the inquiry.
 - **Changing shape mid-task.** An answerer, investigator or researcher can end with `propose_change` (`request` at most 2,000
   characters, `why` at most 240). On a task without `your_ok` whose pipeline does not already go on to a plan (a fix
   does), the agent's proposal reshapes the task to `[inquiry, your_ok, plan, build, checks, agent_review, your_review,
@@ -1412,8 +1437,8 @@ nothing until you start it (`domain/backlog.ts`, `decide/backlog.ts`).
   and its plan waits in Needs you as a plan to approve ("plan ready for you").
 - **Starting.** Approving the held plan (Start building, or Start the operation for an operation) is the start: the
   task goes back to triage, `worktree.create` resets its worktree onto the freshly fetched default branch (planning
-  commits nothing, so nothing is lost), and `worktree.ready` builds the approved plan (`isStartingFromBacklog`,
-  `buildFromBacklog`) with `cause: started`. The first build prompt says how long the plan waited and that the
+  commits nothing, so nothing is lost), and `worktree.ready` builds the approved plan (`isStartingApprovedPlan`,
+  `buildApprovedPlan`) with `cause: started`. The first build prompt says how long the plan waited and that the
   worktree now holds the latest default branch, and asks the Agent to check the plan still fits the code before it
   builds (`resolveBacklogStart`). A task without a worktree starts building at once. A task that still waits on another
   waits for it first, then builds without planning again.
@@ -1455,13 +1480,26 @@ engine ran out of automatic recovery, an agent's wait ran out of time or check-i
 reached its usage or cost limit (`cause: budget`), or the
 repository's pre-push hook rejected the push again with the same failures after a fix round (`cause: push_hook`; its
 approve is Send to the agent again, another fix round with the hook's output, and its `reply` adds your words; there is
-no way to push without the hook; Pushing the branch, below). `configuration` means setup verification found something missing
+no way to push without the hook; Pushing the branch, below), or you paused the task (`cause: paused`, "You paused the
+task"; Pausing a task, below). `configuration` means setup verification found something missing
 before any agent started. `sign_in` means a provider needs signing in again: the gate names the provider
 (`Gate.provider`, `claude` for a Claude account) and, for Claude, the account (Accounts and usage limits, below).
 The plan gate opens by one rule, `PLAN_GATE_RULE`: always for a task that runs an operation, a task created plan
 first, a task in the backlog (whose plan gate is held out of Needs you until you start it, Scheduling → The backlog)
 or a plan that asks for `approval`; with Approve plans on Large plans, also for a plan with more than 3 phases or
 6 files (`PLAN_SIZE_LIMITS`) or a revised plan; on Always, for every plan. Nothing else waits on you. A failure, configuration or Sign in gate pauses the task (`isPausingGate`).
+
+**Pausing a task.** Pause (the task's menu, a row's menu, ⌘K, `shinsa tasks pause`, an agent's `tasks_pause`) sends
+`task.pause` (`decide/pause.ts`) while something works on the task: triage, planning, building, checks, review,
+fixing, shipping, an inquiry or an operation (`isTaskPausable`). It stops every active run of the task, delegated runs
+included (`run.cancel` closes each run's scope, which interrupts the provider's turn at once), cancels the effects
+still running for it (triage, setup verification, the worktree, checks, opening or pushing the pull request), and
+opens the failure gate "You paused the task" with `cause: paused`. The stage stays what it was, so Resume, the gate's
+approve (Retry), restarts that step in the task's own session (`retryTask`), and a message resumes it with your words
+as guidance, like any failure gate; reject cancels the task. Pause is refused (`not_pausable`) on a task that is
+settled, already at a pausing gate, resting at your decision (a plan, review, merge, your OK, a result or an
+operation to run), waiting on other tasks, or watching after the merge. A task whose agent asked you a question can be
+paused: its run is stopped, so the question is withdrawn with it. An agent may pause a task for you, but only you resume it, since resuming closes a gate.
 
 Every gate is yours: only you close it. Core refuses a `gate.answer` sent on your behalf, and any command on your
 behalf after which an open gate is no longer open, with `human_only` (Who can change Shinsa, below).
@@ -2109,6 +2147,14 @@ checks it ran.
   holds that task again, in any phase or round, while every other task still counts against them. Sent on your
   behalf or by a guest it starts only the held step, since both limits are yours alone; a pace hold cannot be switched to waiting for you (`usage_wait.change` is refused); raising, clearing or
   changing either limit starts every held step that is now under it.
+- **Watchdog checks ignore these limits** while `watchdogsIgnoreUsageLimits` is on (the default; only yours, in
+  `HUMAN_ONLY_SETTINGS`, since it decides how much usage a check may spend): a run with `purpose: watch` skips
+  `holdForBudget` and `holdForPace` (`isExemptWatchCheck` in `decide/costs.ts`), so a check starts on time at the task
+  usage, cost, daily and project limits, and its usage still counts toward each of them for the steps that follow.
+  Settings → Agent usage → Limits, Watchdogs ("Ignore usage limits" or "Follow usage limits", and the same choice in
+  ⌘K) changes it, shown only on an engine with `usage.watchdog_limits`; turning it on starts a check a pace hold
+  held (`releasePaceHolds`) and retries one a budget gate held, over the limit or not (`releaseBudgetHolds`). An account out of usage still holds a check as it holds any run, and the tasks a
+  watchdog files are ordinary tasks that follow every limit.
 - **The usage forecast** (`forecast/`, `resolveUsageForecast`, pure; the web runs it on the accounts it reads).
   It answers how fast you can go without every account running out, not how fast you went. Each unpaused,
   signed-in account is a budget that expires: what is left of its weekly window now lasts until its reset, and
@@ -3313,7 +3359,8 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   `review.approve_after_fix` for `gate.answer`'s `thenApprove`, `message.line_comments` for `task.message`'s
   `comments`, `changelog` for `GET /api/changelog`, `remote.terminals` for terminal streams on the sealed channel,
   `attention` for routing notifications to the device you use, `worktree-root` for the worktree folder and
-  `usage.pace_limits` for `dailyUsageLimit` and `Project.usageLimit`, today;
+  `usage.pace_limits` for `dailyUsageLimit` and `Project.usageLimit` and `usage.watchdog_limits` for
+  `watchdogsIgnoreUsageLimits`, today;
   Settings → Teams, the review's Fix and approve choice and
   What's new show only on an engine that has them). `ENGINE_PROTOCOL` is the hard floor: a machine whose protocol differs from the page's is left out of the
   dashboard, merges nothing and gets no command, and Settings → Machines says "Update Shinsa on <name> to reach it from
@@ -3682,25 +3729,47 @@ the read-only view. Teams need remote access on (`Remote` paired and enabled), s
   the fragment, which no browser sends to a server, so app.shinsa.dev never sees it and cannot read a team view. The
   invite only lets someone ask; turning the link off (`invite/remove`) or making a new one (`invite`) stops the old
   one, and a member already in keeps their key.
-- **Joining works like a machine invite.** Whoever opens the join link signs in with GitHub; the page names the team
-  and its owner first (`POST /__remote/teams/preview { invite }`, which records nothing), keeps the key in the browser
-  and, on Ask to join, sends `POST /__remote/teams/join { invite }`, which records that the account asked
-  (`team_requesters`) and makes it no member. When this browser reaches machines of your own, the page reads the
-  projects of those online with one `GET /api/projects` over the sealed channel, never the whole state
-  (`lib/teams/join-machines.ts`, giving up on one after 4 s) and asks
-  which to share, one or more being required once any arrive (Ask to join stays open while they load, and joins
-  without sharing if pressed before they do);
-  Ask to join then sends each machine with a pick `POST /api/remote/teams/join { url }` (the one team route the
-  dashboard may call, and only from a device of the machine's owner: a member's device is refused with `not_owner`,
-  since joining your account to a team and sharing your projects is yours alone, `Remote.openChannel`) and
-  `project.add_to_team` for each pick (`POST /api/commands`), so the key
-  and the projects are in place before the owner answers. Once the owner accepts, the team shows in Settings → Teams
-  on each of your machines; one without the key asks for the link right in the team's card, with the projects to
-  share beside it (or `shinsa teams join <url>`), which stores the key there (each of your machines needs it once). The owner sees each request in Settings → Teams with Accept and Decline (`members/add`,
+- **Joining works like a machine invite, after remote access.** Whoever opens the join link signs in with GitHub; the
+  page names the team and its owner first (`POST /__remote/teams/preview { invite }`, which records nothing) and keeps
+  the key in the browser (and the link in `sessionStorage`, so it survives sign-in and pairing). Teams reach teammates
+  only through machines, so the page then reads your machines (`resolveJoinSetup`, `lib/teams/join-machines.ts`):
+  with none paired it shows the fleet page's steps to turn on remote access (`PAIR_STEPS`, `lib/remote/setup-steps.ts`),
+  and with paired machines this browser reaches none of, the steps to add this device (`listAddDeviceSteps`), each with
+  Check again and no Ask to join. app.shinsa.dev enforces it too: `POST /__remote/teams/join { invite }` from an
+  account with no paired machine of its own is 409 `no_machine` (`NoMachine`) and records nothing; otherwise it
+  records that the account asked (`team_requesters`) and makes it no member. The page reads the projects of each
+  machine it reaches with one `GET /api/projects` over the sealed channel, never the whole state (giving up on one
+  after 4 s), and offers them to share, none required: with none picked it says teammates see nothing of yours until
+  you share a project. Ask to join then sends every machine it reaches `POST /api/remote/teams/join { url }`, picks or
+  not (`joinFromMachines`; the one team route the dashboard may call, and only from a device of the machine's owner: a
+  member's device is refused with `not_owner`, since joining your account to a team and sharing your projects is yours
+  alone, `Remote.openChannel`), then `project.add_to_team` for each pick (`POST /api/commands`), so every machine
+  holds the key and the projects are in place before the owner answers. Once the owner accepts, the team shows in Settings → Teams
+  on each of your machines, with how many of its people are online, and its machines (every member's, each with its
+  owner and Online, Last seen or Waiting for the team's key, `TeamMachines`, the same list on the hosted Settings). A
+  machine in the team without the key (one paired after you joined, or out of reach then) gets it handed over, below;
+  its card says so, and has Request access to ask the team's owner instead. The owner sees each request in Settings → Teams with Accept and Decline (`members/add`,
   `requests/decline`; `shinsa teams accept|decline <team> --login`). A member may leave (`leave`, which also takes
   your projects out of the team) and the owner may remove a member (`members/remove`) or the team (`remove`); either
   way the next heartbeat drops it from every machine and their open views close (below). Making a team asks which of
   your projects to share, and each team's card picks them after.
+- **Handing a machine the team's key** (core's `remote/team-keys.ts`). The key never leaves your devices in clear, so
+  a machine without it gets it from one that holds it, over the team channel. Asked by a hello for a team whose key it
+  lacks, the keyless machine refuses with `TEAM_REFUSALS.key` and a `keyRequest`: a fresh P-256 key and whether you
+  asked for access, signed with its signing key (`createTeamKeyRequest`). Every machine that holds the key watches the
+  team's machines (`TeamFeeds`), so it hears the request on its next try. It hands the key over only after a person
+  clicks Give access: for its own owner's machine, which asks by itself, that is you on any of your machines in the
+  team; for a teammate's machine that asked, the team's owner. Never without the click, because which machines are
+  yours and their signing keys come only from app.shinsa.dev's team list, and the key must stay out of its reach. It checks
+  the signature against that machine's signing key in the team's list (`verifyTeamKeyRequest`), seals the key to the
+  fresh key (`sealTeamKey`: ECDH, HKDF, AES-GCM bound to the team and the recipient) and sends it as the first message
+  of a new channel (`team-key`). The keyless machine takes it only while it waits on that fresh key, from an account
+  that is its owner or, after it asked, the team's owner, as app.shinsa.dev signed the connect token for; it stores
+  the key and answers `TEAM_KEY_RECEIVED`, and the next try goes live. Request access on its team card
+  (`POST /api/remote/teams/key/request`, `Teams.requestKey`, held in memory until the key arrives) marks the next
+  requests as asked; the person who may answer sees them under Asking for access with Give access and Decline
+  (`POST /api/remote/teams/key/answer { teamId, instanceId, approve }`, `TeamFeeds.answerKeyRequest`, also in memory).
+  Both routes are the `team-keys` engine feature.
 - **Giving a teammate this machine.** A teammate is a step from full remote access: Give machine access beside them
   in Settings → Teams (`shinsa teams grant <team> --login`, `POST /api/remote/members/grant { teamId, userId }`,
   `Remote.grantTeammate`) makes them a member of this machine at once, with no invite and no request
@@ -3734,7 +3803,9 @@ the read-only view. Teams need remote access on (`Remote` paired and enabled), s
   one of its members in the machine's own copy (`isTeamViewer`), a task asked for is in one of the team's projects,
   and the HMAC checks in constant time; else `refused`, with the reason for the first check that failed
   (`TEAM_REFUSALS`: the machine is not in the team, has no key for it, does not list you yet, your key does not match,
-  or the task is not shown to the team), which the viewer's All tasks shows beside that machine's name. The welcome and the session key work as a share's (`deriveTeamSessionKey`, HKDF over the team, the
+  or the task is not shown to the team), which the viewer's All tasks shows as a lock naming the machine, quoted, and its owner (“Mac.lan” by Jake in
+  Superwall is not listing its tasks, or is waiting for the team's key when the reason is the missing key,
+  `TEAM_REFUSALS.key`, in core so the page can tell it apart). The welcome and the session key work as a share's (`deriveTeamSessionKey`, HKDF over the team, the
   view and both fresh keys), so the view asked for is bound into the key: a hello for the list cannot be replayed to
   read a task. The share channel's code serves both (`makeShareChannel`, with a host that authorizes the hello).
 - **What a teammate sees.** The list view is `TeamListView`: every open task of the team's projects and the 50 most
@@ -4374,7 +4445,7 @@ Slack ──a card's button──► app.shinsa.dev /slack/interactions
   `shinsa.gate.<gate>`. A button that decides at once has the action `shinsa.decide.<decision>` (a choice
   `shinsa.decide.choice.<n>`); Request changes… and Answer… are `shinsa.write.<decision>` and open a Slack form
   (`views.open` with the click's trigger id, `serializeSlackDecisionModal`, callback `shinsa.decision`) with one
-  text field of at most 4,000 characters, whose `private_metadata` is the value with the card's channel, thread and
+  text field of at most 3,000 characters (Slack's own limit, `SLACK_VIEW_LIMITS`), whose `private_metadata` is the value with the card's channel, thread and
   message (`SlackDecisionModal`). A click or a form's Send reaches `POST /slack/interactions` on app.shinsa.dev,
   which checks Slack's signature, acknowledges at once and then checks who it is:
   - **Only the owner or a member of the machine that posted the card decides.** app.shinsa.dev finds the Shinsa
@@ -4469,7 +4540,8 @@ plainly what protects what.
   - giving or declining a secret (`gates secret`, `gates decline-secret`, `schedules webhook-secret`);
   - the settings that spend money, merge, share or decide for you (`HUMAN_ONLY_SETTINGS` in `domain/settings.ts`:
     `approvePlans`, `mergeMethod`, `taskBudgetUsd`, `taskUsageLimit`, `dailyUsageLimit`, `autoResume`,
-    `snoozeLimited`, `accountSwitchAt`, `fastMode`, `agentFastModes`, `delegationLimit`, `shareLimit`), a
+    `snoozeLimited`, `accountSwitchAt`, `fastMode`, `agentFastModes`, `delegationLimit`, `shareLimit`, `sharePreset`,
+    `watchdogsIgnoreUsageLimits`), a
     project's usage limit (`Project.usageLimit`) and a repository's own check commands,
     workspace and coverage (`HUMAN_ONLY_REPO_FIELDS`: `checkCommands`, `workspace`, `coverage`); agents keep the rest
     (models, providers, fix rounds, attention, compaction), and a task's own checks are the agent's (Checks, above);

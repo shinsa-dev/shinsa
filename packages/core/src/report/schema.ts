@@ -18,6 +18,7 @@ import {
   MEMORY_SCOPES,
   type PipelineStep,
   PLAN_EVIDENCE_KINDS,
+  PROPOSAL_RECOMMENDATIONS,
   SHAPE_LIMITS,
   WATCHDOG_SETTING_LIMITS,
 } from '../domain/index.ts';
@@ -156,6 +157,9 @@ export const PROTOCOL_LIMITS = {
   replyAsk: 160,
   replyNote: 280,
   replyNext: 1_200,
+  actions: 3,
+  actionLabel: 40,
+  actionMessage: 2_000,
 } as const;
 
 export const REPLY_OUTCOMES: readonly [ReplyOutcome, ...ReplyOutcome[]] = ['done', 'answered', 'not_changed'];
@@ -445,11 +449,22 @@ export const ReplyInput = OrAbsent(
   })
 );
 
+export const ActionsInput = Items(
+  HandOverRecord({ label: Required(L.actionLabel), message: Required(L.actionMessage) }),
+  L.actions
+).check(
+  Schema.makeFilter((actions: ReadonlyArray<{ label: string }>) => {
+    const labels = actions.map((action) => action.label.toLowerCase());
+    return new Set(labels).size === labels.length || 'actions names a label twice.';
+  })
+);
+
 export const PhaseHandOverInput = ClosedHandOverRecord({
   summary: Required(L.phaseSummary),
   spots: Items(Spot, L.spots),
   judgement_calls: Items(JudgementCallInput, L.judgementCalls),
   reply: ReplyInput,
+  actions: ActionsInput,
   walkthrough: Walkthrough,
   watchdogs: OrAbsent(Watchdogs),
   check_changes: CheckChanges,
@@ -460,6 +475,7 @@ export const EvidenceRefs = TextList(L.evidenceItems, L.evidenceKey);
 export const FixHandOverInput = ClosedHandOverRecord({
   summary: Required(L.phaseSummary),
   reply: ReplyInput,
+  actions: ActionsInput,
   walkthrough: WalkthroughRevision,
   watchdogs: OrAbsent(Watchdogs),
   checks: TextList(L.checks, L.checkId),
@@ -547,7 +563,7 @@ export const ReviewInput = HandOverRecord({
   ),
 });
 
-export const PlanReply = HandOverRecord({ reply: ReplyInput });
+export const PlanReply = HandOverRecord({ reply: ReplyInput, actions: ActionsInput });
 
 export const QuestionInput = HandOverRecord({
   question: Required(L.question),
@@ -667,6 +683,8 @@ export const FeedbackNote = Required(FEEDBACK_LIMITS.note);
 export const Proposal = OrAbsent(
   HandOverRecord({ request: Required(SHAPE_LIMITS.request), why: Required(SHAPE_LIMITS.why) })
 );
+
+export const Recommendation = OptionalOneOf(PROPOSAL_RECOMMENDATIONS);
 
 export const DELIVERY_FIELD: Record<
   DeliveringStep,

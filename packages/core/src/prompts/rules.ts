@@ -50,8 +50,22 @@ function describeWaitingRule(tools: readonly ShinsaToolName[]) {
   return `${never} When something outside the worktree is not ready, hand over and say what is still pending.`;
 }
 
+const SUGGESTING_TOOLS: readonly ShinsaToolName[] = [
+  'propose_plan',
+  'complete_phase',
+  'complete_fix',
+  'answer',
+  'report_diagnosis',
+  'submit_report',
+  'report_outcome',
+];
+
+const ACTIONS_RULE =
+  'When your hand-over leaves the human a plain choice the usual buttons do not cover, such as doing the renames or leaving them, add `actions`: up to three replies, each a short `label` for its button and the `message` it sends you as their feedback. Leave it out when approving or closing is the only sensible next step.';
+
 function listToolRules(tools: readonly ShinsaToolName[]) {
   return [
+    ...(tools.some((tool) => SUGGESTING_TOOLS.includes(tool)) ? [ACTIONS_RULE] : []),
     ...(tools.includes('ask')
       ? [
           'Ask the human with the `ask` tool only when you are blocked on a decision only they can make. The tool waits for the answer. When the answer is one of a few options, pass them as `choices` so the human can answer with one click.',

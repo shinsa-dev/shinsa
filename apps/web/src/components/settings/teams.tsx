@@ -1,4 +1,6 @@
 import {
+  type TeamFeedMachine,
+  type TeamFeedSnapshot,
   listTeamProjectIds,
   type RemoteSnapshot,
   type RemoteTeam,
@@ -18,7 +20,6 @@ import {
   DialogTitle,
 } from '@shinsa/ui/components/dialog';
 import { Icon } from '@shinsa/ui/components/icon';
-import { Input } from '@shinsa/ui/components/input';
 import { Truncate } from '@shinsa/ui/components/truncate';
 import { type DialogControl, useDialogState } from '@shinsa/ui/hooks/use-dialog-state';
 import * as React from 'react';
@@ -33,12 +34,13 @@ import { useNow } from '@/hooks/use-now.ts';
 import { useTeamPresence } from '@/hooks/use-team-presence.ts';
 import { confirmDone, requestWithToast } from '@/lib/connection/commands.ts';
 import { useRemoteAccess } from '@/lib/connection/remote-access.ts';
-import { type MachineAccess, useEngineFeature, useMachines } from '@/lib/connection/socket.ts';
+import { type MachineAccess, useEngineFeature, useMachines, useTeamFeed } from '@/lib/connection/socket.ts';
 import { createTeamActions, TEAM_ACTIONS, type TeamActions } from '@/lib/connection/teams.ts';
 import { formatSince } from '@/lib/format/time.ts';
 import { createDisclosureId } from '@/lib/preferences/disclosure.ts';
 import { describeMemberSince } from '@/lib/remote-access.ts';
 import { MACHINE_ICON } from '@/lib/remote/mode.ts';
+import { describeMachineName } from '@/lib/remote/setup-steps.ts';
 import { resolveFirstName } from '@/lib/remote/users.ts';
 import { describePresence } from '@/lib/teams/presence.ts';
 import { hasOwnScopes, selectExtra } from '@/lib/teams/scopes.ts';
@@ -60,9 +62,13 @@ import {
   TEAMS_CONNECTING,
   TEAMS_DESCRIPTION,
   TEAMS_SECTION,
-  validateTeamLink,
   scopeStateToProjects,
-  validateTeamLinkProjects,
+  describeKeyAsked,
+  describeKeyRequest,
+  listKeyRequests,
+  TEAM_KEY_UPDATE,
+  TEAM_KEY_WAITING,
+  listKeylessMachines,
 } from '@/lib/teams/settings.ts';
 import {
   FoldingBlock,
@@ -76,6 +82,7 @@ import {
 } from './group.tsx';
 import { HostedTeamsSettings } from './hosted-teams.tsx';
 import { LinkView } from './remote-access.tsx';
+import { TeamMachines } from './team-machines.tsx';
 import { UserRow } from './user-row.tsx';
 
 type TeamsDialog =
@@ -169,15 +176,20 @@ function GrantDialog({
   const name = resolveFirstName(user);
   const target = choices.find((choice) => (choice.id ?? '') === picked) ?? machine;
   const title =
-    choices.length > 1 ? `Give ${name} access to a machine?` : `Give ${name} access to ${machine.name}?`;
+    choices.length > 1
+      ? `Give ${name} access to a machine?`
+      : `Give ${name} access to ${describeMachineName(machine.name)}?`;
 
   async function grant() {
     setBusy(true);
     const through = target.id === machine.id ? actions : createTeamActions(target.id);
-    await requestWithToast(async () => {
-      await through.grantAccess(team.id, user.id);
-      control.onOpenChange(false);
-    }, `${name} can reach ${target.name} now.`);
+    await requestWithToast(
+      async () => {
+        await through.grantAccess(team.id, user.id);
+        control.onOpenChange(false);
+      },
+      `${name} can reach ${describeMachineName(target.name)} now.`
+    );
     setBusy(false);
   }
 
@@ -187,7 +199,7 @@ function GrantDialog({
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>
-            {`${name} gets full control of ${choices.length > 1 ? 'the machine you pick' : machine.name} in Shinsa Cloud. Take it back under Remote access.`}
+            {`${name} gets full control of ${choices.length > 1 ? 'the machine you pick' : describeMachineName(machine.name)} in Shinsa Cloud. Take it back under Remote access.`}
           </DialogDescription>
         </DialogHeader>
         {choices.length > 1 && (
@@ -210,71 +222,73 @@ function GrantDialog({
   );
 }
 
-function TeamLinkRow({
-  state,
-  entry,
-  actions,
-}: {
-  state: ShinsaState;
-  entry: RemoteTeamEntry;
-  actions: TeamActions;
-}) {
-  const [url, setUrl] = React.useState('');
-  const [projectIds, setProjectIds] = React.useState<string[]>([]);
-  const [error, setError] = React.useState<string | null>(null);
+function TeamKeyRow({ team, actions, keys }: { team: RemoteTeam; actions: TeamActions; keys: boolean }) {
+  const [asked, setAsked] = React.useState(false);
   const [busy, setBusy] = React.useState(false);
-  const projects = listProjectChoices(state);
+  const owns = team.role === 'owner';
 
-  async function add() {
-    const problem = validateTeamLink(entry.id, url) ?? validateTeamLinkProjects(projects, projectIds);
-    setError(problem);
-    if (problem) return;
+  async function ask() {
     setBusy(true);
-    await requestWithToast(
-      () => actions.join(state, url.trim(), projectIds),
-      `${entry.name}’s tasks show here now.`
-    );
+    const done = await requestWithToast(() => actions.requestKey(team.id));
     setBusy(false);
+    setAsked(done);
   }
 
   return (
-    <form
-      className={`flex flex-col gap-1.5 py-2 ${ROW_INSET}`}
-      onSubmit={(event) => {
-        event.preventDefault();
-        void add();
-      }}
-    >
-      <span className='text-xs text-fg-2'>
-        This machine has no key for the team yet. Paste the team’s link and pick the projects to share.
+    <div className={`flex items-center gap-3 py-2 ${ROW_INSET}`}>
+      <span className='min-w-0 flex-1 text-xs text-pretty text-fg-3'>
+        {!keys ? (
+          TEAM_KEY_UPDATE
+        ) : asked ? (
+          <MentionText mention={describeKeyAsked(team)} />
+        ) : (
+          TEAM_KEY_WAITING
+        )}
       </span>
-      <div className='flex items-center gap-1.5'>
-        <Input
-          aria-label='Team link'
-          value={url}
-          className='min-w-0 flex-1 font-mono'
-          placeholder='https://app.shinsa.dev/share/team#…'
-          onChange={(event) => {
-            setUrl(event.target.value);
-            setError(null);
-          }}
-        />
-        <ProjectsSelect
-          label='Projects to share'
-          projects={projects}
-          chosen={projectIds}
-          variant='default'
-          onChange={(chosen) => {
-            setProjectIds(chosen);
-            setError(null);
-          }}
-        />
-        <Button type='submit' size='sm' loading={busy}>
-          Add link
+      {keys && !owns && !asked && (
+        <Button size='sm' className='shrink-0' loading={busy} onClick={() => void ask()}>
+          Request access
         </Button>
-      </div>
-      {error && <span className='text-destructive-text text-xs'>{error}</span>}
-    </form>
+      )}
+    </div>
+  );
+}
+
+function TeamKeyRequests({
+  team,
+  feed,
+  actions,
+}: {
+  team: RemoteTeam;
+  feed: TeamFeedSnapshot;
+  actions: TeamActions;
+}) {
+  const asking = listKeyRequests(feed, team.id);
+  if (asking.length === 0) return null;
+  const answer = (machine: TeamFeedMachine, approve: boolean) =>
+    void requestWithToast(
+      () => actions.answerKey(team.id, machine.instanceId, approve),
+      approve ? `“${machine.name}” gets access in a moment.` : 'Request declined.'
+    );
+  return (
+    <>
+      <p className={SETTINGS_SUBHEADING}>Asking for access</p>
+      {asking.map((machine) => (
+        <div key={machine.instanceId} className={SETTING_ROW}>
+          <Truncate className='min-w-0 flex-1 text-xs text-fg-4'>
+            <MentionText mention={describeKeyRequest(machine, team)} />
+          </Truncate>
+          <div className='flex shrink-0 items-center gap-1.5'>
+            <Button variant='secondary' size='sm' onClick={() => answer(machine, false)}>
+              Decline
+            </Button>
+            <Button size='sm' onClick={() => answer(machine, true)}>
+              Give access
+            </Button>
+          </div>
+        </div>
+      ))}
+    </>
   );
 }
 
@@ -360,7 +374,7 @@ function TeammateActions({
             })
           }
         >
-          {`On ${snapshot.machineName}`}
+          {`On ${describeMachineName(snapshot.machineName)}`}
         </Button>
       )}
       {team.role === 'owner' && (
@@ -383,8 +397,10 @@ function describePerson(
   const parts = [presence ? describePresence(presence, now) : null, base];
   if (hasOwnScopes(team, user.id)) parts.push('Own scopes');
   const extra = snapshot.teams.find((entry) => entry.id === team.id)?.extras ?? [];
-  if (selectExtra(extra, user.id).length > 0) parts.push(`More on ${snapshot.machineName}`);
-  if (hasMachineAccess(snapshot, user.id)) parts.push(`Can reach ${snapshot.machineName}`);
+  if (selectExtra(extra, user.id).length > 0)
+    parts.push(`More on ${describeMachineName(snapshot.machineName)}`);
+  if (hasMachineAccess(snapshot, user.id))
+    parts.push(`Can reach ${describeMachineName(snapshot.machineName)}`);
   return parts.filter((part) => part !== null).join(' · ');
 }
 
@@ -456,19 +472,20 @@ function TeamPeople({
 
 function TeamHeader({
   entry,
+  feed,
   onDialog,
 }: {
   entry: RemoteTeamEntry;
+  feed: TeamFeedSnapshot;
   onDialog: (dialog: TeamsDialog) => void;
 }) {
-  const now = useNow();
   const owns = entry.team?.role === 'owner';
   return (
     <div className={SETTING_ROW}>
       <div className='flex min-w-0 flex-1 flex-col'>
         <Truncate className='text-xs font-medium text-fg-4'>{entry.name}</Truncate>
         <Truncate className='text-2xs text-fg-2'>
-          <MentionText mention={describeTeamEntry(entry, now)} />
+          <MentionText mention={describeTeamEntry(entry, feed)} />
         </Truncate>
       </div>
       <div className='flex shrink-0 items-center gap-1.5'>
@@ -503,6 +520,8 @@ function TeamCard({
   projects,
   actions,
   rights,
+  keys,
+  feed,
   onDialog,
 }: {
   state: ShinsaState;
@@ -511,12 +530,14 @@ function TeamCard({
   projects: readonly ProjectChoice[];
   actions: TeamActions;
   rights: boolean;
+  keys: boolean;
+  feed: TeamFeedSnapshot;
   onDialog: (dialog: TeamsDialog) => void;
 }) {
   const { team } = entry;
   return (
     <SettingsCard>
-      <TeamHeader entry={entry} onDialog={onDialog} />
+      <TeamHeader entry={entry} feed={feed} onDialog={onDialog} />
       <SettingRow title='Shared projects'>
         <ProjectsSelect
           label={`Projects shared with ${entry.name}`}
@@ -527,8 +548,10 @@ function TeamCard({
           }
         />
       </SettingRow>
-      {needsTeamLink(entry) && <TeamLinkRow state={state} entry={entry} actions={actions} />}
+      {team && needsTeamLink(entry) && <TeamKeyRow team={team} actions={actions} keys={keys} />}
       {team && <TeamRequests team={team} actions={actions} />}
+      {team && keys && <TeamKeyRequests team={team} feed={feed} actions={actions} />}
+      {team && <TeamMachines team={team} feed={feed} keyless={listKeylessMachines(entry, snapshot)} />}
       {team && rights && <TeamScopesBlock team={team} onUpdate={actions.updateScopes} />}
       {team && <TeamPeople team={team} snapshot={snapshot} rights={rights} onDialog={onDialog} />}
     </SettingsCard>
@@ -665,6 +688,8 @@ export function TeamsGroup({
   title = TEAMS_SECTION,
   actions = TEAM_ACTIONS,
   rights = false,
+  keys = false,
+  feed,
 }: {
   state: ShinsaState;
   snapshot: RemoteSnapshot | null;
@@ -672,8 +697,11 @@ export function TeamsGroup({
   title?: string;
   actions?: TeamActions;
   rights?: boolean;
+  keys?: boolean;
+  feed?: TeamFeedSnapshot;
 }) {
   const dialog = useDialogState<TeamsDialog>();
+  const live = useTeamFeed();
   const usable = canUseTeams(snapshot);
   const projects = listProjectChoices(state);
   const notice = (() => {
@@ -716,6 +744,8 @@ export function TeamsGroup({
                 projects={projects}
                 actions={actions}
                 rights={rights}
+                keys={keys}
+                feed={feed ?? live}
                 onDialog={dialog.show}
               />
             ))}
@@ -736,8 +766,9 @@ export function TeamsSettings({ state }: { state: ShinsaState }) {
   const { snapshot, failure } = useRemoteAccess();
   const supported = useEngineFeature('teams');
   const rights = useEngineFeature('team-access');
+  const keys = useEngineFeature('team-keys');
   if (!supported) return null;
-  return <TeamsGroup state={state} snapshot={snapshot} failure={failure} rights={rights} />;
+  return <TeamsGroup state={state} snapshot={snapshot} failure={failure} rights={rights} keys={keys} />;
 }
 
 function MachineTeams({
@@ -753,6 +784,7 @@ function MachineTeams({
 }) {
   const supported = useEngineFeature('teams', machine.id);
   const rights = useEngineFeature('team-access', machine.id);
+  const keys = useEngineFeature('team-keys', machine.id);
   const choice = useMachines().find((candidate) => candidate.id === machine.id);
   const projectIds = Object.keys(choice?.state.projects ?? {});
   const projectKey = projectIds.join(' ');
@@ -769,6 +801,7 @@ function MachineTeams({
         title={title}
         actions={actions}
         rights={rights}
+        keys={keys}
       />
     </GrantMachinesContext.Provider>
   );
@@ -801,7 +834,9 @@ export function MachineTeamsSettings({
           state={state}
           machine={machine}
           owned={machines}
-          title={machines.length > 1 ? `${TEAMS_SECTION} on ${machine.name}` : TEAMS_SECTION}
+          title={
+            machines.length > 1 ? `${TEAMS_SECTION} on ${describeMachineName(machine.name)}` : TEAMS_SECTION
+          }
         />
       ))}
     </>

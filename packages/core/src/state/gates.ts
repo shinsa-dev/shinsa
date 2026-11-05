@@ -4,6 +4,7 @@ import { describeDecision } from './activity.ts';
 import { writeEntry } from './draft.ts';
 import type { ShinsaState } from './project.ts';
 import { applyVerdicts } from './reviews.ts';
+import { clearSuggestedActions } from './shapes.ts';
 import { record, updateGate, updateTask } from './write.ts';
 
 type GateEvent = Extract<
@@ -65,6 +66,7 @@ function applyGateAnswered(state: ShinsaState, event: EventOf<'gate.answered'>) 
   if (!gate) return;
   if (event.verdicts) applyVerdicts(state, gate.taskId, event.at, event.verdicts);
   clearSlackDecided(state, gate.taskId, event.at);
+  clearSuggestedActions(state, gate.taskId, event.at);
   if (gate.type === 'review') writeApproveAfterFix(state, gate.taskId, event.at, event.thenApprove === true);
   record(state, gate.taskId, event.at, {
     actor: 'you',

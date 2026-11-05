@@ -10,6 +10,7 @@ import {
   SLACK_MODAL_CALLBACK,
   SLACK_RELAY_PATHS,
   SLACK_RESPONSE_INPUT,
+  SLACK_VIEW_LIMITS,
   SLACK_WRITE_ACTION,
   type SlackLinks,
   type SlackMention,
@@ -1126,6 +1127,16 @@ describe('deciding from the card', () => {
       },
     ]);
     expect(setup.slack.callsTo('views.open')[0]?.token).toBe('xoxb-bot-token');
+    const sent = setup.slack.callsTo('views.open')[0]?.body as {
+      view: { private_metadata: string; blocks: unknown[] };
+    };
+    expect(sent.view.blocks).toEqual([
+      expect.objectContaining({
+        element: expect.objectContaining({ max_length: SLACK_VIEW_LIMITS.input }),
+      }),
+    ]);
+    expect(SLACK_VIEW_LIMITS.input).toBe(3000);
+    expect(sent.view.private_metadata.length).toBeLessThanOrEqual(SLACK_VIEW_LIMITS.privateMetadata);
   });
 
   test('a form Slack will not open is told to the clicker and logged', async () => {

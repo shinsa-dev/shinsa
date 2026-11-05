@@ -455,6 +455,7 @@ export function adaptTeams(test: RemoteTest) {
     listKeys: () => runSync(teams.listKeys),
     leave: (teamId: string) => runPromise(teams.leave(teamId)),
     remove: (teamId: string) => runPromise(teams.remove(teamId)),
+    requestKey: (teamId: string) => runPromise(teams.requestKey(teamId)),
     acceptsViewer: () => runSync(teams.acceptsViewer),
     openChannel: (peer: ChannelPeer, userId: string) =>
       adaptShareChannel(test, runSync(teams.openChannel(peer, userId))),
@@ -487,6 +488,8 @@ export function adaptTeamFeeds(test: RemoteTest) {
       const relay = runSync(feeds.openRelay(peer, target));
       return { close: () => runSync(relay.close) };
     },
+    answerKeyRequest: (teamId: string, instanceId: string, approve: boolean) =>
+      test.runPromise(feeds.answerKeyRequest(teamId, instanceId, approve)),
     openStream: (target: TeamStreamTarget, handlers: TeamStreamHandlers) => {
       const fiber = Effect.runForkWith(test.context)(feeds.openStream(target, handlers));
       return () => {

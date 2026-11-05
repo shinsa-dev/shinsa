@@ -334,6 +334,20 @@ Every task agent's tool: `tasks_message`. Sends `task.message`.
 | `<text>` | text, required | The message. |
 | `--as` | choice, optional | feedback on the current round (a follow-up on a finished one), acknowledge for a message that needs nothing, new_round for new work in this task, or separate_task to suggest it as its own task. Left out, Shinsa decides. |
 
+#### shinsa tasks pause
+
+Pause a working task: its agent stops at once and the task waits for you. `shinsa tasks retry` resumes it.
+
+```
+shinsa tasks pause <task> [--json]
+```
+
+Every task agent's tool: `tasks_pause`. Sends `task.pause`.
+
+| Argument | Kind | What it is |
+| --- | --- | --- |
+| `<task>` | text, required | The task: its handle (SW-142), its id, the start of its id, or its exact title. |
+
 #### shinsa tasks retry
 
 Restart a paused task's current step with a fresh fix budget.
@@ -1451,7 +1465,7 @@ Every task agent's tool: `settings_get` (reads).
 
 | Argument | Kind | What it is |
 | --- | --- | --- |
-| `<key>` | text, optional | One of defaultProvider, defaultModel, maxFixRounds, delegationLimit, mergeMethod, attentionLimit, approvePlans, agentModels, agentProviders, agentFastModes, taskBudgetUsd, taskUsageLimit, dailyUsageLimit, autoResume, snoozeLimited, accountSwitchAt, idleCompaction, compactionLeadMinutes, compaction, fastMode, watchdogHours, watchdogFirstCheckMinutes, watchdogMaxGapHours, taskCapacity, placementPolicies, shareLimit, sharePreset. |
+| `<key>` | text, optional | One of defaultProvider, defaultModel, maxFixRounds, delegationLimit, mergeMethod, attentionLimit, approvePlans, agentModels, agentProviders, agentFastModes, taskBudgetUsd, taskUsageLimit, dailyUsageLimit, autoResume, snoozeLimited, accountSwitchAt, idleCompaction, compactionLeadMinutes, compaction, fastMode, watchdogHours, watchdogFirstCheckMinutes, watchdogMaxGapHours, watchdogsIgnoreUsageLimits, taskCapacity, placementPolicies, shareLimit, sharePreset. |
 
 #### shinsa settings set
 
@@ -1465,7 +1479,7 @@ Every task agent's tool: `settings_set`. Sends `settings.change`.
 
 | Argument | Kind | What it is |
 | --- | --- | --- |
-| `<key>` | text, required | One of defaultProvider, defaultModel, maxFixRounds, delegationLimit, mergeMethod, attentionLimit, approvePlans, agentModels, agentProviders, agentFastModes, taskBudgetUsd, taskUsageLimit, dailyUsageLimit, autoResume, snoozeLimited, accountSwitchAt, idleCompaction, compactionLeadMinutes, compaction, fastMode, watchdogHours, watchdogFirstCheckMinutes, watchdogMaxGapHours, taskCapacity, placementPolicies, shareLimit, sharePreset. Only the human changes approvePlans, mergeMethod, taskBudgetUsd, taskUsageLimit, dailyUsageLimit, autoResume, snoozeLimited, accountSwitchAt, fastMode, agentFastModes, delegationLimit, shareLimit, sharePreset. |
+| `<key>` | text, required | One of defaultProvider, defaultModel, maxFixRounds, delegationLimit, mergeMethod, attentionLimit, approvePlans, agentModels, agentProviders, agentFastModes, taskBudgetUsd, taskUsageLimit, dailyUsageLimit, autoResume, snoozeLimited, accountSwitchAt, idleCompaction, compactionLeadMinutes, compaction, fastMode, watchdogHours, watchdogFirstCheckMinutes, watchdogMaxGapHours, watchdogsIgnoreUsageLimits, taskCapacity, placementPolicies, shareLimit, sharePreset. Only the human changes approvePlans, mergeMethod, taskBudgetUsd, taskUsageLimit, dailyUsageLimit, autoResume, snoozeLimited, accountSwitchAt, fastMode, agentFastModes, delegationLimit, shareLimit, sharePreset, watchdogsIgnoreUsageLimits. |
 | `<value>` | text, required | The new value. |
 
 ### projects

@@ -70,6 +70,7 @@ function createTeams() {
     remove: record('remove'),
     updateScopes: record('updateScopes'),
     updateExtra: record('updateExtra'),
+    requestKey: record('requestKey'),
     listKeys: Effect.succeed([{ teamId: 't', name: 'Core', key: 'k' }]),
   };
   return { calls, teams: teams as unknown as Teams['Service'] };
@@ -197,6 +198,7 @@ describe('teams over HTTP', () => {
     expect(await (await send('/api/remote/teams/keys')).json()).toEqual({
       keys: [{ teamId: 't', name: 'Core', key: 'k' }],
     });
+    expect(await (await post('/api/remote/teams/key/request', { teamId: 't' })).json()).toEqual(SNAPSHOT);
     expect(calls).toEqual([
       ['create', 'Core'],
       ['join', 'https://x'],
@@ -210,7 +212,28 @@ describe('teams over HTTP', () => {
       ['updateScopes', 't', null, ['share']],
       ['updateScopes', 't', 'u', null],
       ['updateExtra', 't', 'u', ['message']],
+      ['requestKey', 't'],
     ]);
+  });
+
+  test('the team’s owner answers a machine that asks for the team’s key', async () => {
+    const { remote } = createRemote();
+    const { teams } = createTeams();
+    const answered: unknown[] = [];
+    const teamFeeds = {
+      answerKeyRequest: (...answer: unknown[]) =>
+        Effect.sync(() => {
+          answered.push(answer);
+          return true;
+        }),
+    } as unknown as TeamFeeds['Service'];
+    const body = { teamId: 't', instanceId: 'm1', approve: true };
+    const { post } = startRoutes({ remote, teams, teamFeeds });
+    expect(await (await post('/api/remote/teams/key/answer', body)).json()).toEqual(SNAPSHOT);
+    expect(answered).toEqual([['t', 'm1', true]]);
+    expect((await startRoutes({ remote, teams }).post('/api/remote/teams/key/answer', body)).status).toBe(
+      404
+    );
   });
 
   test('a team or person left out is named, and teams need remote access', async () => {

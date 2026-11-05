@@ -4,6 +4,7 @@ import { Icon } from '@shinsa/ui/components/icon';
 import { Truncate } from '@shinsa/ui/components/truncate';
 import * as React from 'react';
 import { Hint } from '@/components/overlays/hint.tsx';
+import { MentionText } from '@/components/people/user-tag.tsx';
 import { PriorityIcon } from '@/components/status/priority-icon.tsx';
 import { TaskHandle } from '@/components/task/handle.tsx';
 import { TeammateOwnerMark } from '@/components/tasks/owner.tsx';
@@ -27,11 +28,13 @@ import {
 import { type FocusTeam, listFocusTeams } from '@/lib/focus.ts';
 import { PRIORITY_LABEL } from '@/lib/format/labels.ts';
 import { formatSince } from '@/lib/format/time.ts';
+import { describeMentionText } from '@/lib/remote/users.ts';
 import type { TeamEntry } from '@/lib/tasks/groups.ts';
 import {
   listFullMachineIds,
   listHeldTaskIds,
   listHeldTeamMachines,
+  describeTeamFeedRefusals,
   listTeamFeedRefusals,
   listTeamFeedTasks,
   resolveFleetTeamTaskPath,
@@ -70,29 +73,26 @@ export function useTeamTasks(): TeamTasks {
 
 export function TeamFeedRefusals({ state }: { state: ShinsaState }) {
   const remote = useRemoteSnapshot();
-  const teams = React.useMemo(() => listFocusTeams(remote), [remote]);
   const feed = useTeamFeed();
   const machines = useMachines();
+  const teams = React.useMemo(
+    () => (remote?.teams ?? []).filter((entry) => entry.status === 'member'),
+    [remote]
+  );
   const refusals = listTeamFeedRefusals(
     feed,
     teams,
     listFullMachineIds(machines),
     resolveFocusTeam(state, Date.now())
   );
-  const [first] = refusals;
-  if (!first) return null;
-  const label =
-    refusals.length === 1
-      ? `${first.machine} in ${first.team} is not listing its tasks`
-      : `${refusals.length} teammate machines are not listing their tasks`;
-  const detail = refusals
-    .map((refusal) => (refusals.length === 1 ? refusal.reason : `${refusal.machine}: ${refusal.reason}`))
-    .join(' ');
+  const described = describeTeamFeedRefusals(refusals);
+  if (!described) return null;
+  const label = describeMentionText(described.label);
   return (
-    <Hint label={label} detail={detail}>
+    <Hint label={<MentionText mention={described.label} />} detail={described.detail}>
       <span
         role='img'
-        aria-label={`${label}. ${detail}`}
+        aria-label={`${label}. ${described.detail}`}
         className='grid size-4 shrink-0 cursor-pointer place-items-center'
       >
         <Icon size='sm' name='IconLock' className='cursor-pointer text-fg-2' />

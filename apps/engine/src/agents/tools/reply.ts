@@ -36,3 +36,21 @@ export const REPLY_SPEC = {
   },
   required: ['headline', 'points'],
 };
+
+export const ACTIONS_SPEC = {
+  type: 'array',
+  description:
+    'Only when this hand-over leaves the human a plain choice the usual buttons do not cover, such as doing the renames or leaving them: up to 3 replies they can send with one click, each shown as a button beside the main one. A click sends its message to you as their feedback. Leave it out when approving or closing is the only sensible next step.',
+  maxItems: L.actions,
+  items: {
+    type: 'object',
+    properties: {
+      label: limitedText('The button, a few words in sentence case: "Do the renames".', L.actionLabel),
+      message: limitedText(
+        'What the click sends you, written as the human would say it: "Do the renames you listed."',
+        L.actionMessage
+      ),
+    },
+    required: ['label', 'message'],
+  },
+};

@@ -1,9 +1,11 @@
 import type { RemoteInstance } from '@shinsa/core';
 import { Clock, Effect, Predicate, type Schedule } from 'effect';
 import { runApp } from '@/lib/runtime/app.ts';
+import { enterPromise } from '@/lib/runtime/promise.ts';
 import { openRemoteChannel } from './channel.ts';
 import type { DashboardClient } from './dashboard.ts';
 import { createDeviceKeys, type DeviceStore } from './devices.ts';
+import { listMachineRows, type MachineRow } from './machines.ts';
 import { ChannelError, type ChannelOptions, type RemoteChannel } from './remote-channel/schema.ts';
 import {
   type ClaimStanding,
@@ -188,3 +190,27 @@ export function resolveClaimStanding(
     return { kind: 'ready' };
   return { kind: instance.role === 'guest' ? 'busy' : 'added', machine: instance.name };
 }
+
+export interface SettleOptions extends WaitingOptions {
+  dashboard: Pick<DashboardClient, 'requestConnect' | 'listInstances'>;
+  devices: Pick<DeviceStore, 'writeDevice' | 'removeDevice' | 'selectDevice'>;
+}
+
+const settleWaitingRow = Effect.fn('Enroll.settleWaitingRow')(function* (
+  row: MachineRow,
+  options: SettleOptions
+) {
+  const device = row.device;
+  if (!device?.waiting) return row;
+  const answer = yield* enterPromise(() => requestWaitingAnswer(device, options));
+  if (answer === 'waiting') return row;
+  if (answer === 'declined') return { ...row, device: null };
+  return { ...row, device: yield* enterPromise(() => options.devices.selectDevice(row.instance.id)) };
+});
+
+export const listSettledMachineRows = Effect.fn('Enroll.listSettledMachineRows')(function* (
+  options: SettleOptions
+) {
+  const rows = yield* listMachineRows(options.dashboard, options.devices);
+  return yield* Effect.forEach(rows, (row) => settleWaitingRow(row, options), { concurrency: 'unbounded' });
+});
