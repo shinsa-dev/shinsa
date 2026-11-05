@@ -20,6 +20,7 @@ import {
   createTask,
   failing,
   type Harness,
+  learnUsageRate,
   linkSession,
   PASSING,
   proposePlan,
@@ -27,6 +28,7 @@ import {
   pushed,
   REPLY,
   readInstruction,
+  writePastRun,
 } from '../harness.ts';
 
 const LATENCY: WatchdogSpec = {
@@ -1254,5 +1256,84 @@ describe('watchdogs on your behalf', () => {
       'Saved sentry as a data source of Superwall',
       'Removed sentry from the data sources of Superwall',
     ]);
+  });
+});
+
+function spentRecently(harness: Harness, taskId: string) {
+  learnUsageRate(harness);
+  writePastRun(harness, { id: 'past-spend', taskId, from: harness.now - 1_000, percent: 40, costUsd: 20 });
+}
+
+function isDispatched(harness: Harness, runId: string) {
+  return harness.effectsOf('run.execute').some((effect) => effect.runId === runId);
+}
+
+function overLimit(patch: { dailyUsageLimit?: number; taskBudgetUsd?: number }, ignore: boolean) {
+  const { harness, taskId } = mergeWith();
+  spentRecently(harness, taskId);
+  harness.send({ type: 'settings.change', patch: { ...patch, watchdogsIgnoreUsageLimits: ignore } });
+  fire(harness, taskId);
+  const check = watchdog(harness, taskId).runId;
+  if (check === null) throw new Error('no check');
+  return { harness, taskId, check };
+}
+
+describe('watchdogs and usage limits', () => {
+  test('ignore usage limits by default, and only you change that', () => {
+    const harness = createHarness();
+    expect(harness.state.settings.watchdogsIgnoreUsageLimits).toBe(true);
+    expect(() =>
+      harness.send(
+        { type: 'settings.change', patch: { watchdogsIgnoreUsageLimits: false } },
+        { onBehalf: true }
+      )
+    ).toThrow('Only the human changes the settings watchdogsIgnoreUsageLimits.');
+  });
+
+  test('a check over the daily usage limit starts on time', () => {
+    const { harness, taskId, check } = overLimit({ dailyUsageLimit: 1 }, true);
+    expect(isDispatched(harness, check)).toBe(true);
+    expect(harness.task(taskId).usageWait ?? null).toBeNull();
+    expect(harness.task(taskId).stage).toBe('watching');
+  });
+
+  test('a check over the cost limit starts on time and opens no gate', () => {
+    const { harness, taskId, check } = overLimit({ taskBudgetUsd: 1 }, true);
+    expect(isDispatched(harness, check)).toBe(true);
+    expect(listOpenGates(harness.state).filter((gate) => gate.taskId === taskId)).toEqual([]);
+  });
+
+  test('with the setting off, a check is held at the daily usage limit like any step', () => {
+    const { harness, taskId, check } = overLimit({ dailyUsageLimit: 1 }, false);
+    expect(isDispatched(harness, check)).toBe(false);
+    expect(harness.task(taskId).usageWait).toMatchObject({ runId: check, cause: 'pace', status: 'armed' });
+    expect(harness.task(taskId).stageReason).toBe('held at the daily usage limit');
+  });
+
+  test('with the setting off, a check is held at the cost limit', () => {
+    const { harness, taskId, check } = overLimit({ taskBudgetUsd: 1 }, false);
+    expect(isDispatched(harness, check)).toBe(false);
+    expect(harness.openGate(taskId)).toMatchObject({ cause: 'budget', title: 'Reached its cost limit' });
+  });
+
+  test('turning the setting on starts a check held at the daily usage limit', () => {
+    const { harness, taskId, check } = overLimit({ dailyUsageLimit: 1 }, false);
+    harness.send({ type: 'settings.change', patch: { watchdogsIgnoreUsageLimits: true } });
+    expect(harness.task(taskId).usageWait?.status).not.toBe('armed');
+    const resumed = harness.activeRun(taskId);
+    expect(resumed).toMatchObject({ purpose: 'watch', continues: check });
+    expect(isDispatched(harness, resumed.id)).toBe(true);
+    expect(watchdog(harness, taskId).runId).toBe(resumed.id);
+  });
+
+  test('turning the setting on starts a check held at the cost limit', () => {
+    const { harness, taskId, check } = overLimit({ taskBudgetUsd: 1 }, false);
+    harness.send({ type: 'settings.change', patch: { watchdogsIgnoreUsageLimits: true } });
+    expect(listOpenGates(harness.state).filter((gate) => gate.taskId === taskId)).toEqual([]);
+    const resumed = harness.activeRun(taskId);
+    expect(resumed.purpose).toBe('watch');
+    expect(resumed.id).not.toBe(check);
+    expect(isDispatched(harness, resumed.id)).toBe(true);
+    expect(watchdog(harness, taskId).runId).toBe(resumed.id);
   });
 });

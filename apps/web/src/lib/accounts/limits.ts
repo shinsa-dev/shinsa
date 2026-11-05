@@ -1,4 +1,9 @@
-import { type AccountSummary, resolveAccountSwitchAt, type Settings } from '@shinsa/core';
+import {
+  type AccountSummary,
+  resolveAccountSwitchAt,
+  resolveWatchdogsIgnoreUsageLimits,
+  type Settings,
+} from '@shinsa/core';
 import { resolveAccountLabel } from '@/lib/accounts/account.ts';
 import type { SettingItem } from '@/lib/settings.ts';
 
@@ -94,4 +99,15 @@ export function resolveSnoozeValue(settings: Settings) {
 
 export function needsSnoozeSetting(settings: Settings) {
   return !isAutoResume(settings);
+}
+
+export const WATCHDOG_LIMITS_TITLE = 'Watchdogs';
+
+export const WATCHDOG_LIMITS_ITEMS: SettingItem<string>[] = [
+  { value: 'ignore', label: 'Ignore usage limits', icon: 'IconRadar' },
+  { value: 'follow', label: 'Follow usage limits', icon: 'IconGauge' },
+];
+
+export function resolveWatchdogLimitsValue(settings: Settings) {
+  return resolveWatchdogsIgnoreUsageLimits(settings) ? 'ignore' : 'follow';
 }

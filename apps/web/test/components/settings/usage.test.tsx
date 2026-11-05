@@ -88,6 +88,31 @@ describe('the Limits settings', () => {
     expect(screen.getByRole('combobox', { name: 'Usage limit per task' })).toBeTruthy();
   });
 
+  it('lets watchdog checks ignore usage limits by default, and follow them once you choose', async () => {
+    const { unmount } = renderLimits();
+    expect(screen.getByRole('combobox', { name: 'Watchdogs' }).textContent).toBe('Ignore usage limits');
+    await choose('Watchdogs', 'Follow usage limits');
+    unmount();
+    renderLimits({ ...createSettings(), watchdogsIgnoreUsageLimits: false });
+    expect(screen.getByRole('combobox', { name: 'Watchdogs' }).textContent).toBe('Follow usage limits');
+    await choose('Watchdogs', 'Ignore usage limits');
+    expect(listSentCommands()).toEqual([
+      { type: 'settings.change', patch: { watchdogsIgnoreUsageLimits: false } },
+      { type: 'settings.change', patch: { watchdogsIgnoreUsageLimits: true } },
+    ]);
+  });
+
+  it('offers no watchdog choice on an engine that holds watchdog checks at every limit', () => {
+    const engine = resolveEngineInfo('1.0.0');
+    spyOnEngine({
+      ...engine,
+      features: engine.features.filter((feature) => feature !== 'usage.watchdog_limits'),
+    });
+    renderLimits();
+    expect(screen.queryByRole('combobox', { name: 'Watchdogs' })).toBeNull();
+    expect(screen.getByRole('combobox', { name: 'Usage limit per task' })).toBeTruthy();
+  });
+
   it('shows the cost limit while one is set', async () => {
     renderLimits({ ...createSettings(), taskBudgetUsd: 5 });
     expect(screen.getByRole('combobox', { name: 'Cost limit per task' }).textContent).toBe('$5.00 per task');
