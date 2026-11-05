@@ -346,6 +346,11 @@ describe('gate commands', () => {
       ['task.t.suggested.0', 'Do the renames'],
       ['task.t.suggested.1', 'Skip them'],
     ]);
+    run(review.find((command) => command.id === 'task.t.suggested.0'));
+    expect(spies.sent).toHaveBeenCalledWith(
+      { type: 'task.message', taskId: 't', text: 'Do the renames too.' },
+      'Changes requested.'
+    );
     const question = commandsFor(
       createTask({ id: 't', stage: 'building', suggestedActions }),
       createGate({ id: 'g', taskId: 't', type: 'question' })
