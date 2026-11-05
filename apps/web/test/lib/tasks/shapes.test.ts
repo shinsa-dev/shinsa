@@ -328,7 +328,10 @@ describe('composed steps', () => {
       ],
     });
     expect(
-      describeChangeGate(fix, createGate({ id: 'g', taskId: 't', title: 'The diagnosis found nothing to fix' }))
+      describeChangeGate(
+        fix,
+        createGate({ id: 'g', taskId: 't', title: 'The diagnosis found nothing to fix' })
+      )
     ).toEqual({
       eyebrow: 'The diagnosis is in',
       title: 'The diagnosis found nothing to fix',
