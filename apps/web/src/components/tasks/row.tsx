@@ -86,7 +86,7 @@ function TaskMenuItems({ state, task }: { state: ShinsaState; task: Task }) {
         </>
       )}
       {listTaskActions(task, commands, Date.now(), teammate).length > 0 && <DropdownMenuSeparator />}
-      <TaskActionItems task={task} />
+      <TaskActionItems state={state} task={task} />
     </DropdownMenuContent>
   );
 }

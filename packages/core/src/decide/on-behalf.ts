@@ -100,6 +100,7 @@ const DESCRIPTIONS: Descriptions = {
   'task.clear_duplicate': (state, command) =>
     `Started ${quoteTask(state, command.taskId)} again, as not a duplicate`,
   'task.complete': (state, command) => `Marked ${quoteTask(state, command.taskId)} as done`,
+  'task.pause': (state, command) => `Paused ${quoteTask(state, command.taskId)}`,
   'task.retry': (state, command) => `Retried ${quoteTask(state, command.taskId)}`,
   'task.message': (state, command) =>
     listOpenGates(state, command.taskId).length > 0

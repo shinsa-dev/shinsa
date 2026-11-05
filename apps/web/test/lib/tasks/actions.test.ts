@@ -142,6 +142,23 @@ describe('listTaskActions', () => {
     ).toEqual([['fork', 'share']]);
   });
 
+  it('offers Pause first among the lifecycle actions only while the task is pausable', () => {
+    expect(listTaskActions(FULL, ALL_COMMANDS, NOW, null, true).at(-1)).toEqual([
+      'pause',
+      'restart',
+      'complete',
+      'duplicate',
+      'cancel',
+    ]);
+    expect(listTaskActions(FULL, ALL_COMMANDS).flat()).not.toContain('pause');
+    expect(
+      listTaskActions(createTask({ id: 't', stage: 'merged' }), ALL_COMMANDS, NOW, null, true).flat()
+    ).not.toContain('pause');
+    const older = new Set(USER_COMMAND_TYPES.filter((type) => type !== 'task.pause'));
+    expect(listTaskActions(FULL, older, NOW, null, true).flat()).not.toContain('pause');
+    expect(TASK_ACTION.pause).toEqual({ label: 'Pause', icon: 'IconPause' });
+  });
+
   it('labels every action with its icon', () => {
     expect(TASK_ACTION.cancel).toEqual({ label: 'Cancel task', icon: 'IconCircleX' });
     expect(TASK_ACTION.branch.label).toBe('Copy branch name');
@@ -199,6 +216,13 @@ describe('runTaskAction', () => {
       [{ type: 'task.retry', taskId: 'full' }, 'Restarted.'],
       [{ type: 'task.complete', taskId: 'full' }, 'Marked done.'],
       [{ type: 'task.cancel', taskId: 'full' }, 'Cancelled.'],
+    ]);
+  });
+
+  it('pauses a task, with a toast', () => {
+    runTaskAction(FULL, 'pause');
+    expect(spies.sent.mock.calls).toEqual([
+      [{ type: 'task.pause', taskId: 'full' }, 'Paused. Resume it when you are ready.'],
     ]);
   });
 

@@ -4,6 +4,8 @@ import {
   type CiRun,
   describeList,
   type Evidence,
+  isPausingGate,
+  listOpenGates,
   listTaskChecks,
   type PullRequestCheckStatus,
   type ReportCheck,
@@ -144,8 +146,10 @@ function resolveResultState(result: ReportCheck): CheckState {
   return result.note === 'passed_alone' ? 'passed_alone' : 'passed';
 }
 
-export function listRunningCheckIds(task: Task) {
-  return new Set(task.stage === 'checking' ? (task.runningChecks ?? []) : []);
+export function listRunningCheckIds(state: Pick<ShinsaState, 'gates'>, task: Task) {
+  if (task.stage !== 'checking' || listOpenGates(state, task.id).some(isPausingGate))
+    return new Set<string>();
+  return new Set(task.runningChecks ?? []);
 }
 
 export function selectCheckOutput(evidence: ShinsaState['evidence'], taskId: string, checkId: string) {
@@ -256,13 +260,13 @@ const CI_SUMMARY: Record<CheckStageStatus, string> = {
   idle: 'Not run yet',
 };
 
-function resolveBuildingStage(state: Pick<ShinsaState, 'repos' | 'evidence'>, task: Task) {
+function resolveBuildingStage(state: Pick<ShinsaState, 'repos' | 'evidence' | 'gates'>, task: Task) {
   const own = task.checks ?? [];
   if (own.length === 0 && (task.checkResults ?? []).length === 0) return null;
   const repo = task.repoId ? (state.repos[task.repoId] ?? null) : null;
   const checks = listTaskChecks(task, repo);
   const results = new Map((task.checkResults ?? []).map((result) => [result.id, result]));
-  const running = listRunningCheckIds(task);
+  const running = listRunningCheckIds(state, task);
   const rows = checks.map((check) =>
     resolveTaskCheckRow(state, task, check, results.get(check.id), running.has(check.id))
   );
@@ -316,7 +320,7 @@ export function isChecksOpenByDefault(view: ChecksView) {
 }
 
 export function resolveChecksView(
-  state: Pick<ShinsaState, 'repos' | 'evidence'>,
+  state: Pick<ShinsaState, 'repos' | 'evidence' | 'gates'>,
   task: Task
 ): ChecksView | null {
   const stages = [resolveBuildingStage(state, task), resolveCiStage(task)].filter(
