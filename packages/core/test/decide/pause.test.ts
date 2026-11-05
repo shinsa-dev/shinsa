@@ -14,6 +14,7 @@ import {
   createTask,
   type Harness,
   linkSession,
+  PASSING,
   pullRequest,
   readInstruction,
   proposePlan,
@@ -97,6 +98,31 @@ describe('pausing a task', () => {
       },
     ]);
     expect(pausedGate(harness, taskId)).toBeDefined();
+  });
+
+  test('ignores a check result that lands after the pause, and Resume runs the checks again', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    buildAll(harness, taskId);
+    const running = harness.task(taskId).runningChecks;
+    pause(harness, taskId);
+
+    const late = harness.send({ type: 'checks.record', taskId, results: PASSING });
+
+    expect(late.events).toEqual([]);
+    expect(harness.task(taskId).stage).toBe('checking');
+    expect(pausedGate(harness, taskId)).toBeDefined();
+    expect(listActiveRuns(harness.state, taskId)).toEqual([]);
+
+    harness.send({ type: 'task.retry', taskId });
+
+    expect(pausedGate(harness, taskId)).toBeUndefined();
+    expect(
+      harness
+        .effectsOf('checks.run')
+        .at(-1)
+        ?.checks.map((check) => check.id)
+    ).toEqual(running);
   });
 
   test('pauses a task still in triage', () => {
