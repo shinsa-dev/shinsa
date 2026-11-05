@@ -12,7 +12,6 @@ import {
   SLACK_BLOCK_LIMITS,
   SLACK_GATE_BLOCK,
   SLACK_REACTIONS,
-  SLACK_RESULT_LIMIT,
   type SlackButton,
   type SlackMessage,
   serializeSlackCard,
@@ -492,24 +491,33 @@ describe('the result', () => {
     expect(message.text).toBe('## Cause');
   });
 
-  test('a long one is cut at a word, with a link to read the rest', () => {
+  test('a long one is posted whole, split into sections Slack folds', () => {
     const harness = createHarness();
     const taskId = startShaped(harness, 'research');
-    deliver(
-      harness,
-      taskId,
-      Array.from({ length: 400 }, (_, index) => `Paragraph ${index} words`).join('\n\n'),
-      'research'
-    );
+    const paragraphs = Array.from({ length: 400 }, (_, index) => `Paragraph ${index} words`);
+    deliver(harness, taskId, paragraphs.join('\n\n'), 'research');
     const message = serializeSlackResult(harness.task(taskId), URL) ?? never();
-    const body = message.blocks.slice(1, -2).map(readBlockText).join('\n');
-    expect(body.length).toBeLessThanOrEqual(SLACK_RESULT_LIMIT + 100);
-    expect(readText(message)).toContain(`…\n<${URL}|Read the rest in Shinsa>\n`);
+    const sections = message.blocks.slice(1, -2).map(readBlockText);
+    expect(sections.length).toBeGreaterThan(1);
+    expect(sections.join('\n\n')).toBe(paragraphs.join('\n\n'));
+    expect(readText(message)).toContain(`<${URL}|Open in Shinsa>`);
     const unbroken = startShaped(harness, 'answer', 'Other');
-    deliver(harness, unbroken, 'x'.repeat(SLACK_RESULT_LIMIT + 10));
-    expect(readText(serializeSlackResult(harness.task(unbroken), URL) ?? never())).toStartWith(
-      `Result\n${'x'.repeat(SLACK_RESULT_LIMIT)}…`
-    );
+    deliver(harness, unbroken, 'x'.repeat(5000));
+    const whole = serializeSlackResult(harness.task(unbroken), URL) ?? never();
+    expect(whole.blocks.slice(1, -2).map(readBlockText).join('')).toBe('x'.repeat(5000));
+  });
+
+  test('one too long for Slack ends where the blocks run out, with a link to read the rest', () => {
+    const harness = createHarness();
+    const taskId = startShaped(harness, 'research');
+    deliver(harness, taskId, 'Short.', 'research');
+    const task = harness.task(taskId);
+    const result = task.result ?? never();
+    const body = Array.from({ length: 8000 }, (_, index) => `Paragraph ${index} has some words`).join('\n\n');
+    const message = serializeSlackResult({ ...task, result: { ...result, body } }, URL) ?? never();
+    expect(message.blocks).toHaveLength(50);
+    expect(readBlockText(message.blocks.at(-3) ?? never())).toEndWith('…');
+    expect(readText(message)).toContain(`<${URL}|Read the rest in Shinsa>`);
   });
 
   test('a task without a result has nothing to post', () => {

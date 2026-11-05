@@ -31,7 +31,7 @@ import type { SlackPost } from './posts.ts';
 import type { SlackSessionStatus } from './relay.ts';
 import type { SlackDecisionValue } from './schema.ts';
 
-export const SLACK_RESULT_LIMIT = 1500;
+const SLACK_SECTION_SIZE = 2800;
 
 const SLACK_LEAD_LIMIT = 280;
 
@@ -465,20 +465,22 @@ export function serializeSlackGate(task: Task, gate: Gate, taskUrl: string): Sla
   }
 }
 
-function resolveResultBody(markdown: string) {
-  const body = markdown.trim();
-  if (body.length <= SLACK_RESULT_LIMIT) return { body, cut: false };
-  const kept = body.slice(0, SLACK_RESULT_LIMIT);
-  const end = Math.max(kept.lastIndexOf('\n'), kept.lastIndexOf(' '));
-  return { body: `${(end > 0 ? kept.slice(0, end) : kept).trimEnd()}…`, cut: true };
+function listBodySections(markdown: string, fixedBlocks: number) {
+  const { chunks, cut } = listSlackChunks(
+    serializeSlackMrkdwn(markdown),
+    SLACK_SECTION_SIZE,
+    SLACK_BLOCK_LIMITS.blocks - fixedBlocks
+  );
+  const sections = cut ? [...chunks.slice(0, -1), `${chunks.at(-1) ?? ''}…`] : chunks;
+  return { sections: sections.map((chunk) => createSlackSection(chunk)), cut };
 }
 
 function serializeSlackResultView(ref: SlackTaskRef, markdown: string): SlackMessage {
-  const { body, cut } = resolveResultBody(markdown);
-  const { chunks } = listSlackChunks(serializeSlackMrkdwn(body), 2800, SLACK_RESULT_LIMIT + 100);
+  const body = markdown.trim();
+  const { sections, cut } = listBodySections(body, 3);
   return createSlackMessage(resolveLead(body) || ref.label, [
     createSlackHeader('Result'),
-    ...chunks.map((chunk) => createSlackSection(chunk)),
+    ...sections,
     createSlackActions([
       createOpenButton(cut ? 'Read the rest in Shinsa' : 'Open in Shinsa', ref.url, false),
     ]),
