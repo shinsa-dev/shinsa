@@ -198,6 +198,7 @@ export {
   resolveShareLimit,
   resolveSharePreset,
   resolveWatchdogDefaults,
+  resolveWatchdogsIgnoreUsageLimits,
   SETTINGS_KEYS,
   type Settings,
   SHARE_LIMITS,

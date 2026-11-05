@@ -16,6 +16,7 @@ export const ENGINE_FEATURES = [
   'worktree-root',
   'team-access',
   'usage.pace_limits',
+  'usage.watchdog_limits',
   'share.scopes',
 ] as const;
 

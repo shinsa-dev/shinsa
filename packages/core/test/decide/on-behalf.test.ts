@@ -363,6 +363,7 @@ describe('acting for the human', () => {
       delegationLimit: 4,
       shareLimit: 'week',
       sharePreset: 'status',
+      watchdogsIgnoreUsageLimits: false,
     };
     const fields: Required<Pick<Repo, (typeof HUMAN_ONLY_REPO_FIELDS)[number]>> = {
       checkCommands: ['bun test'],

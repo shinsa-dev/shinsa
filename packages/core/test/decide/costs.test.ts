@@ -8,13 +8,13 @@ import {
   resolvePaceHold,
   resolveRecentUsage,
   resolveTaskCost,
-  USAGE_RATE_LIMITS,
 } from '../../src/index.ts';
 import {
   completePhase,
   createHarness,
   createTask,
   type Harness,
+  learnUsageRate,
   proposePlan,
   registerRepo,
 } from '../harness.ts';
@@ -163,33 +163,6 @@ describe('the cost limit per task', () => {
     );
   });
 });
-
-function learnUsageRate(harness: Harness) {
-  const start = harness.now - 100_000;
-  for (let index = 0; index < USAGE_RATE_LIMITS.minTasks; index += 1) {
-    const from = start + index * 1_000;
-    const id = `learned-${index}`;
-    const readings = [
-      { percent: index * 2, at: from, resetsAt: null },
-      { percent: index * 2 + 2, at: from + 100, resetsAt: null },
-    ];
-    harness.state.runs[id] = {
-      id,
-      taskId: `learned-task-${index}`,
-      role: 'agent',
-      purpose: 'build',
-      provider: 'claude',
-      model: null,
-      sessionId: null,
-      startedAt: from,
-      endedAt: from + 100,
-      outcome: 'completed',
-      summary: null,
-      usage: usage(2),
-      meters: [{ attemptId: id, window: 'account:acc-1', from, to: from + 100, usage: usage(2), readings }],
-    };
-  }
-}
 
 function meterWeekly(
   harness: Harness,
