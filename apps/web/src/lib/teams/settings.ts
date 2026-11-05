@@ -77,14 +77,9 @@ export function listKeylessMachines(
   return new Set([snapshot.instanceId]);
 }
 
-export const TEAM_KEY_WAITING =
-  'Teammates cannot see this machine’s tasks yet. Give it access in Settings → Teams on another of your machines in this team, or ask the team’s owner.';
+export const TEAM_KEY_WAITING = 'Teammates cannot see this machine’s tasks until it gets access.';
 
-export const TEAM_KEY_UPDATE =
-  'Teammates cannot see this machine’s tasks yet. Update Shinsa on this machine so it can get the team’s key.';
-
-export const TEAM_KEY_OWNER_WAITING =
-  'Teammates cannot see this machine’s tasks yet. Give it access in Settings → Teams on another of your machines in this team. If it does not ask there, update Shinsa on that machine.';
+export const TEAM_KEY_UPDATE = 'Teammates cannot see this machine’s tasks. Update Shinsa to get access.';
 
 export function describeKeyAsked(team: RemoteTeam): Mention {
   return ['Asked. ', { user: team.owner }, ' gives this machine access from Settings → Teams.'];

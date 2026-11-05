@@ -12,12 +12,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import { TeamsGroup } from '@/components/settings/teams.tsx';
 import { connection } from '@/lib/connection/socket.ts';
 import type { TeamActions } from '@/lib/connection/teams.ts';
-import {
-  TEAM_KEY_OWNER_WAITING,
-  TEAM_KEY_UPDATE,
-  TEAM_KEY_WAITING,
-  TEAM_MACHINE_NEEDS_KEY,
-} from '@/lib/teams/settings.ts';
+import { TEAM_KEY_UPDATE, TEAM_KEY_WAITING, TEAM_MACHINE_NEEDS_KEY } from '@/lib/teams/settings.ts';
 import { spyOnToasts } from '../../support/commands.ts';
 import { createRemoteSnapshot } from '../../support/remote-access.ts';
 import { createProject, createShinsaState } from '../../support/state.ts';
@@ -383,7 +378,7 @@ describe('Settings → Teams', () => {
       false,
       true
     );
-    expect(screen.getByText(TEAM_KEY_OWNER_WAITING)).toBeTruthy();
+    expect(screen.getByText(TEAM_KEY_WAITING)).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Request access' })).toBeNull();
     cleanup();
     renderTeams(createRemoteSnapshot({ access: ACCESS, teams: [createTeamEntry({ onMachine: false })] }));

@@ -66,7 +66,6 @@ import {
   describeKeyAsked,
   describeKeyRequest,
   listKeyRequests,
-  TEAM_KEY_OWNER_WAITING,
   TEAM_KEY_UPDATE,
   TEAM_KEY_WAITING,
   listKeylessMachines,
@@ -242,8 +241,6 @@ function TeamKeyRow({ team, actions, keys }: { team: RemoteTeam; actions: TeamAc
           TEAM_KEY_UPDATE
         ) : asked ? (
           <MentionText mention={describeKeyAsked(team)} />
-        ) : owns ? (
-          TEAM_KEY_OWNER_WAITING
         ) : (
           TEAM_KEY_WAITING
         )}
