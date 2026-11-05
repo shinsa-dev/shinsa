@@ -1,5 +1,6 @@
 import {
   type AccessScopes,
+  createTeamKeyRequest,
   createTeamWelcome,
   DomainError,
   deriveTeamSessionKey,
@@ -8,7 +9,9 @@ import {
   listMachineExtraScopes,
   listTeamProjectIds,
   listTeamTasks,
+  openTeamKey,
   parseTeamHello,
+  parseTeamKeyDelivery,
   parseTeamJoinUrl,
   type RemoteMember,
   type RemoteTeam,
@@ -20,6 +23,9 @@ import {
   signTeamSnapshot,
   type Task,
   TEAM_KEY_BYTES,
+  TEAM_KEY_RECEIVED,
+  TEAM_KEY_UNWANTED,
+  type TeamKeyDelivery,
   TEAM_SHARE_PRESET,
   type TeamId,
   type TeamListView,
@@ -40,7 +46,12 @@ import { Remote } from '../machine/service.ts';
 import { Presence } from '../presence/service.ts';
 import { RandomBytes } from '../schema.ts';
 import { createEphemeralKeys } from '../share-channel/ephemeral.ts';
-import { type HelloAnswer, type LiveShare, ShareChannelBroke } from '../share-channel/schema.ts';
+import {
+  type ChannelRefusal,
+  type HelloAnswer,
+  type LiveShare,
+  ShareChannelBroke,
+} from '../share-channel/schema.ts';
 import { makeShareChannel } from '../share-channel/service.ts';
 import { Shares } from '../shares/service.ts';
 import { resolveOwnerProfile } from '../store/derive.ts';
@@ -49,6 +60,8 @@ import { RemoteStore } from '../store/service.ts';
 import { TeamFeeds } from '../team-feeds/service.ts';
 import {
   TEAM_DOMAIN_ERRORS,
+  KEY_WAITS_LIMIT,
+  type KeyWait,
   TEAM_REMOTE_CHANGED,
   type TeamChannel,
   TeamCommandFailed,
@@ -100,6 +113,8 @@ export class Teams extends Context.Service<Teams, TeamsHandle>()('shinsa/engine/
         );
       const channels = yield* Ref.make<ReadonlyMap<TeamChannel, Effect.Effect<void>>>(new Map());
       const viewers = new Map<TeamChannel, string>();
+      const asking = yield* Ref.make<ReadonlySet<string>>(new Set());
+      const waiting = yield* Ref.make<ReadonlyArray<KeyWait>>([]);
       const releasing = new Set<string>();
 
       const refuse = (error: { readonly code: string; readonly message: string }) => () =>
@@ -324,7 +339,62 @@ export class Teams extends Context.Service<Teams, TeamsHandle>()('shinsa/engine/
         return task && isTeamTask(state, task, subject.teamId) ? null : TEAM_REFUSALS.task;
       });
 
+      const requestKey = Effect.fn('Teams.requestKey')(function* (teamId: string) {
+        const team = yield* findTeam(teamId);
+        if (team.role === 'owner' || (yield* store.selectTeamKey(teamId))) return;
+        yield* Ref.update(asking, (all) => new Set(all).add(teamId));
+      });
+
+      const createKeyRefusal = Effect.fn('Teams.createKeyRefusal')(function* (teamId: string) {
+        const refusal: ChannelRefusal = { refused: TEAM_REFUSALS.key };
+        const instanceId = (yield* store.file).credentials?.instanceId;
+        if (!instanceId) return refusal;
+        const { privateKey } = yield* store.resolveSigningKey;
+        const ephemeral = yield* createEphemeralKeys;
+        const ask = (yield* Ref.get(asking)).has(teamId);
+        const keyRequest = yield* createTeamKeyRequest(
+          privateKey,
+          { teamId, instanceId },
+          ephemeral.publicKey,
+          ask
+        );
+        const wait: KeyWait = { teamId, recipient: keyRequest.ephemeral, privateKey: ephemeral.privateKey };
+        yield* Ref.update(waiting, (all) => [...all, wait].slice(-KEY_WAITS_LIMIT));
+        return { ...refusal, keyRequest };
+      });
+
+      const isKeySender = Effect.fn('Teams.isKeySender')(function* (team: RemoteTeam, userId: string) {
+        if (userId === (yield* store.file).access?.owner.id) return true;
+        return userId === team.owner.id && (yield* Ref.get(asking)).has(team.id);
+      });
+
+      const receiveKey = Effect.fn('Teams.receiveKey')(function* (delivery: TeamKeyDelivery, userId: string) {
+        const unwanted: ChannelRefusal = { refused: TEAM_KEY_UNWANTED };
+        const team = yield* store.selectTeam(delivery.team);
+        const wait = (yield* Ref.get(waiting)).find(
+          (entry) => entry.teamId === delivery.team && entry.recipient === delivery.recipient
+        );
+        if (!(team && wait) || (yield* store.selectTeamKey(team.id))) return unwanted;
+        if (!(yield* isKeySender(team, userId))) return unwanted;
+        const key = yield* openTeamKey(wait.privateKey, delivery);
+        if (!key) return unwanted;
+        yield* store.upsertTeamKey({
+          teamId: team.id,
+          name: team.name,
+          key,
+          invite: null,
+          addedAt: yield* Clock.currentTimeMillis,
+        });
+        yield* Ref.update(waiting, (all) => all.filter((entry) => entry.teamId !== team.id));
+        yield* Ref.update(asking, (all) => new Set([...all].filter((teamId) => teamId !== team.id)));
+        yield* remote.publish;
+        const received: ChannelRefusal = { refused: TEAM_KEY_RECEIVED };
+        return received;
+      });
+
       const authorize = Effect.fn('Teams.authorize')(function* (text: string, userId: string) {
+        const delivery = parseTeamKeyDelivery(text);
+        if (delivery) return yield* receiveKey(delivery, userId);
         const hello = parseTeamHello(text);
         if (!hello) return null;
         const subject: TeamSubject = {
@@ -334,9 +404,10 @@ export class Teams extends Context.Service<Teams, TeamsHandle>()('shinsa/engine/
           present: hello.watcher !== 'machine',
         };
         const refused = yield* resolveRefusal(subject);
+        if (refused === TEAM_REFUSALS.key) return yield* createKeyRefusal(hello.team);
         if (refused) return { refused };
         const stored = yield* store.selectTeamKey(hello.team);
-        if (!stored) return { refused: TEAM_REFUSALS.key };
+        if (!stored) return yield* createKeyRefusal(hello.team);
         if (!(yield* verifyTeamHello(stored.key, hello))) return { refused: TEAM_REFUSALS.mismatch };
         const ephemeral = yield* createEphemeralKeys;
         const keys = {
@@ -543,6 +614,7 @@ export class Teams extends Context.Service<Teams, TeamsHandle>()('shinsa/engine/
         listKeys,
         leave,
         remove,
+        requestKey,
         acceptsViewer: remote.isEnabled,
         openChannel,
         closeChannel,

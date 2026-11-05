@@ -28,6 +28,7 @@ import {
   resolveTeamTaskTarget,
   selectTeamTaskHeldAt,
   TEAM_FEED_REFUSED,
+  TEAM_FEED_WAITS_FOR_KEY,
 } from '@/lib/teams/feeds.ts';
 import type { TeamChannelHandlers, TeamChannelTarget } from '@/lib/teams/team-socket/schema.ts';
 import { createGate, createProject, createRepo, createTask } from '../../support/state.ts';
@@ -103,7 +104,7 @@ describe('teammates’ task lists', () => {
     expect(listTeamFeedRefusals(feed, teams, new Set(), 'team2')).toEqual([]);
   });
 
-  it('names the owner of a refused machine and says when it only needs the team link', () => {
+  it('names the owner of a refused machine and says when it only waits for the team’s key', () => {
     const team = createTeam({ owner: MONA, members: [{ user: KAI, addedAt: 1 }] });
     const feed = {
       machines: [
@@ -119,10 +120,10 @@ describe('teammates’ task lists', () => {
     };
     const teams = [{ id: 'team1', name: 'Superwall', team }];
     const refusals = listTeamFeedRefusals(feed, teams, new Set(), null);
-    expect(refusals.map(({ owner, needsLink }) => [owner, needsLink])).toEqual([[KAI, true]]);
+    expect(refusals.map(({ owner, waitsForKey }) => [owner, waitsForKey])).toEqual([[KAI, true]]);
     expect(describeTeamFeedRefusals(refusals)).toEqual({
-      label: ['“Mac.lan”', ' by ', { user: KAI }, ' in Superwall needs the team link'],
-      detail: TEAM_REFUSALS.key,
+      label: ['“Mac.lan”', ' by ', { user: KAI }, ' in Superwall is waiting for the team’s key'],
+      detail: TEAM_FEED_WAITS_FOR_KEY,
     });
     const quiet = listTeamFeedRefusals(
       {

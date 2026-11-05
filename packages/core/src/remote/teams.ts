@@ -38,7 +38,7 @@ export const TEAM_VIEW_PATH = '/api/teams/view';
 
 export const TEAM_REFUSALS = {
   team: 'That machine has left this team.',
-  key: 'That machine has no key for this team. Its owner opens the team’s join link on it once.',
+  key: 'That machine has no key for this team. Its owner can rejoin from the team’s join link.',
   member:
     'That machine does not list you in this team yet. It catches up the next time it reaches Shinsa Cloud.',
   mismatch: 'Your key for this team does not match that machine’s. Open the team’s join link again.',
@@ -165,6 +165,7 @@ export interface TeamFeedMachine {
   reason: string | null;
   updatedAt?: number;
   presence?: TeamPresence[];
+  asking?: boolean;
 }
 
 export interface TeamFeedTask extends TeamTask {

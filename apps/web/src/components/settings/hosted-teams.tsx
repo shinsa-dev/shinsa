@@ -7,6 +7,7 @@ import { MentionText } from '@/components/people/user-tag.tsx';
 import { MemberScopesDialog, TeamScopesBlock } from '@/components/teams/scopes.tsx';
 import { useNow } from '@/hooks/use-now.ts';
 import { useTeamPresence } from '@/hooks/use-team-presence.ts';
+import { useTeamFeed } from '@/lib/connection/socket.ts';
 import { createDisclosureId } from '@/lib/preferences/disclosure.ts';
 import { describeMemberSince } from '@/lib/remote-access.ts';
 import { RemoteServicesContext } from '@/lib/remote/services.ts';
@@ -90,7 +91,7 @@ function HostedTeamCard({
   onUpdate: UpdateScopes | null;
   onScopes: ((user: RemoteUser) => void) | null;
 }) {
-  const now = useNow();
+  const feed = useTeamFeed();
   const { team } = entry;
   return (
     <SettingsCard>
@@ -98,7 +99,7 @@ function HostedTeamCard({
         <div className='flex min-w-0 flex-1 flex-col'>
           <Truncate className='text-xs font-medium text-fg-4'>{team.name}</Truncate>
           <Truncate className='text-2xs text-fg-2'>
-            <MentionText mention={describeHostedTeam(team, now)} />
+            <MentionText mention={describeHostedTeam(team, feed)} />
           </Truncate>
           {showsKeyNote(entry) && <p className='text-2xs text-pretty text-fg-2'>{TEAM_KEY_MISSING}</p>}
         </div>

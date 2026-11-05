@@ -135,6 +135,7 @@ const FEATURE_ROUTES = {
     'POST /api/remote/teams/extra',
     'GET /api/remote/teams/keys',
   ],
+  'team-keys': ['POST /api/remote/teams/key/request', 'POST /api/remote/teams/key/answer'],
   'usage.pace_limits': [],
 };
 
@@ -163,6 +164,8 @@ const OWNER_ONLY = [
   'POST /api/remote/teams/remove',
   'POST /api/remote/teams/scopes',
   'POST /api/remote/teams/extra',
+  'POST /api/remote/teams/key/request',
+  'POST /api/remote/teams/key/answer',
   'POST /api/slack/disconnect',
   'POST /api/engine/restart',
   'POST /api/onboarding/setup',

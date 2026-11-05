@@ -372,11 +372,14 @@ export interface TeamFeedRefusal {
   machine: string;
   owner: RemoteUser | null;
   team: string;
-  needsLink: boolean;
+  waitsForKey: boolean;
   reason: string;
 }
 
 export const TEAM_FEED_REFUSED = 'It refused to list its tasks.';
+
+export const TEAM_FEED_WAITS_FOR_KEY =
+  'It gets the key from its owner’s other machines in the team once one is online, or from the team’s owner once it asks.';
 
 export interface RefusalTeam {
   id: string;
@@ -402,7 +405,7 @@ export function listTeamFeedRefusals(
           machine: describeMachineName(machine.name),
           owner: team.team ? selectTeamPerson(team.team, machine.userId) : null,
           team: team.name,
-          needsLink: machine.reason === TEAM_REFUSALS.key,
+          waitsForKey: machine.reason === TEAM_REFUSALS.key,
           reason: machine.reason ?? TEAM_FEED_REFUSED,
         },
       ];
@@ -422,8 +425,9 @@ export function describeTeamFeedRefusals(refusals: readonly TeamFeedRefusal[]): 
       detail: refusals.map((refusal) => `${describeRefusalMachine(refusal)}: ${refusal.reason}`).join(' '),
     };
   const owner: Mention = first.owner ? [' by ', { user: first.owner }] : [];
-  const outcome = first.needsLink ? 'needs the team link' : 'is not listing its tasks';
-  return { label: [first.machine, ...owner, ` in ${first.team} ${outcome}`], detail: first.reason };
+  const outcome = first.waitsForKey ? 'is waiting for the team’s key' : 'is not listing its tasks';
+  const detail = first.waitsForKey ? TEAM_FEED_WAITS_FOR_KEY : first.reason;
+  return { label: [first.machine, ...owner, ` in ${first.team} ${outcome}`], detail };
 }
 
 function describeRefusalMachine(refusal: TeamFeedRefusal) {

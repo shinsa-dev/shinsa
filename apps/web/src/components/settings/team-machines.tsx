@@ -1,4 +1,4 @@
-import type { RemoteTeam } from '@shinsa/core';
+import type { RemoteTeam, TeamFeedSnapshot } from '@shinsa/core';
 import { Truncate } from '@shinsa/ui/components/truncate';
 import { cn } from '@shinsa/ui/lib/utils';
 import { MentionText } from '@/components/people/user-tag.tsx';
@@ -15,10 +15,18 @@ const MACHINE_TONE_TEXT: Record<TeamMachineTone, string> = {
   quiet: 'text-fg-2',
 };
 
-export function TeamMachines({ team, keyless }: { team: RemoteTeam; keyless?: ReadonlySet<string> }) {
+export function TeamMachines({
+  team,
+  keyless,
+  feed,
+}: {
+  team: RemoteTeam;
+  keyless?: ReadonlySet<string>;
+  feed?: TeamFeedSnapshot;
+}) {
   const now = useNow();
-  const feed = useTeamFeed();
-  const rows = listTeamMachineRows(team, now, feed, keyless);
+  const live = useTeamFeed();
+  const rows = listTeamMachineRows(team, now, feed ?? live, keyless);
   return (
     <FoldingBlock
       persistId={createDisclosureId('settings', 'teams', team.id, 'machines')}

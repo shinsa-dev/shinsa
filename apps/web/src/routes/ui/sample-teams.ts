@@ -6,6 +6,8 @@ import {
   type RemoteSnapshot,
   type RemoteTeam,
   type ShinsaState,
+  TEAM_REFUSALS,
+  type TeamFeedSnapshot,
   type TeamJoinFragment,
 } from '@shinsa/core';
 import { Effect } from 'effect';
@@ -46,7 +48,7 @@ export function createSampleTeams(now: number) {
     requests: [{ user: BOB, addedAt: now - 4 * 60_000 }],
     machines: [
       { id: 'k3x9', name: 'Studio', userId: MONA.id, online: true, lastSeenAt: now },
-      { id: 'p7m2', name: 'Mac.lan', userId: KAI.id, online: false, lastSeenAt: now - 3 * HOUR_MS },
+      { id: 'p7m2', name: 'Mac.lan', userId: KAI.id, online: true, lastSeenAt: now },
     ],
     scopes: DEFAULT_TEAM_SCOPES,
     overrides: [{ userId: KAI.id, scopes: ACCESS_PRESETS.full }],
@@ -94,8 +96,23 @@ export function createSampleTeams(now: number) {
     requests: [],
     teams: [],
   };
+  const feed: TeamFeedSnapshot = {
+    tasks: [],
+    machines: [
+      {
+        teamId: platform.id,
+        instanceId: 'p7m2',
+        name: 'Mac.lan',
+        userId: KAI.id,
+        status: 'refused',
+        reason: TEAM_REFUSALS.key,
+        asking: true,
+      },
+    ],
+  };
   return {
     state,
+    feed,
     presence: [
       { user: LEE, base: 'Owner', presence: { userId: LEE.id, status: 'online' as const, seenAt: now } },
       {
@@ -171,6 +188,8 @@ export function createSampleTeamActions(): TeamActions {
     grantAccess: refuse,
     updateScopes: refuse,
     updateExtra: refuse,
+    requestKey: refuse,
+    answerKey: refuse,
   };
 }
 

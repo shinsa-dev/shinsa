@@ -340,6 +340,22 @@ export {
   verifyTeamWelcome,
 } from './teams.ts';
 export {
+  createTeamKeyRequest,
+  openTeamKey,
+  parseTeamKeyDelivery,
+  parseTeamKeyRefusal,
+  readTeamKeyRequest,
+  sealTeamKey,
+  TEAM_KEY_IV_BYTES,
+  TEAM_KEY_RECEIVED,
+  TEAM_KEY_UNWANTED,
+  type TeamKeyDelivery,
+  type TeamKeyRequest,
+  type TeamKeyRequestSubject,
+  type TeamKeySealInput,
+  verifyTeamKeyRequest,
+} from './team-keys.ts';
+export {
   CONNECT_CHANNELS,
   ConnectChannel,
   FrameError,

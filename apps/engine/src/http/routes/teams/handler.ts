@@ -71,6 +71,14 @@ export const TeamsHandlers = HttpApiBuilder.group(
       .handle('keys', () =>
         Effect.flatMap(teams, (found) => Effect.map(found.listKeys, (keys) => ({ keys })))
       )
+      .handle('requestKey', ({ payload }) => change((found) => found.requestKey(payload.teamId)))
+      .handle('answerKey', ({ payload }) =>
+        teamFeeds
+          ? change(() =>
+              Effect.asVoid(teamFeeds.answerKeyRequest(payload.teamId, payload.instanceId, payload.approve))
+            )
+          : notFound
+      )
       .handle('leave', ({ payload }) => change((found) => found.leave(payload.teamId)))
       .handle('remove', ({ payload }) => change((found) => found.remove(payload.teamId)))
       .handle('tasks', ({ query }) =>

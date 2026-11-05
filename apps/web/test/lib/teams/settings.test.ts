@@ -21,13 +21,12 @@ import {
   resolveProjectPick,
   listKeylessMachines,
   selectTeamPerson,
-  TEAM_MACHINE_NEEDS_LINK,
+  TEAM_MACHINE_NEEDS_KEY,
   validateTeamDraft,
-  validateTeamLink,
 } from '@/lib/teams/settings.ts';
 import { createRemoteSnapshot } from '../../support/remote-access.ts';
 import { createProject, createShinsaState } from '../../support/state.ts';
-import { BOB, createTeam, createTeamEntry, KAI, MONA, TEAM_URL } from '../../support/teams.ts';
+import { BOB, createTeam, createTeamEntry, KAI, MONA } from '../../support/teams.ts';
 
 const NOW = Date.now();
 
@@ -51,19 +50,36 @@ describe('Settings → Teams', () => {
     expect(describeTeamsUnavailable(createRemoteSnapshot({ status: 'revoked' }))).toContain('was removed');
   });
 
-  it('says who owns a team, how many are in it, and when a request waits', () => {
-    const team = createTeam({ createdAt: NOW - 2 * 86_400_000 });
-    expect(describeTeamEntry(createTeamEntry({ team }), NOW)).toEqual([
-      'You own it · 2 people · Made 2d ago',
-    ]);
-    const alone = createTeam({ owner: KAI, role: 'member', members: [], createdAt: NOW - 2 * 86_400_000 });
-    expect(describeTeamEntry(createTeamEntry({ team: alone }), NOW)).toEqual([
+  it('says who owns a team, how many are in it, how many are online, and when a request waits', () => {
+    const team = createTeam({
+      machines: [
+        { id: 'm1', name: 'Studio', userId: MONA.id, online: true, lastSeenAt: NOW },
+        { id: 'm2', name: 'Spare', userId: MONA.id, online: true, lastSeenAt: NOW },
+        { id: 'm3', name: 'Laptop', userId: KAI.id, online: true, lastSeenAt: NOW },
+      ],
+    });
+    expect(describeTeamEntry(createTeamEntry({ team }))).toEqual(['You own it · 2 people · 2 online']);
+    const dropped = {
+      tasks: [],
+      machines: [
+        {
+          teamId: team.id,
+          instanceId: 'm3',
+          name: 'Laptop',
+          userId: KAI.id,
+          status: 'offline' as const,
+          reason: null,
+        },
+      ],
+    };
+    expect(describeTeamFacts(team, dropped)).toBe('2 people · 1 online');
+    const alone = createTeam({ owner: KAI, role: 'member', members: [] });
+    expect(describeTeamEntry(createTeamEntry({ team: alone }))).toEqual([
       'Owned by ',
       { user: KAI },
-      ' · 1 person · Made 2d ago',
+      ' · 1 person · 0 online',
     ]);
-    expect(describeTeamFacts(alone, NOW)).toBe('1 person · Made 2d ago');
-    expect(describeTeamEntry(createTeamEntry({ team: null }), NOW)).toEqual([
+    expect(describeTeamEntry(createTeamEntry({ team: null }))).toEqual([
       'You asked to join. The team’s owner has not answered yet.',
     ]);
   });
@@ -93,15 +109,12 @@ describe('Settings → Teams', () => {
     expect(listTeamProjectCommands(STATE, 'team1', ['web', 'api'])).toEqual([]);
   });
 
-  it('checks a new team’s name, and that a pasted link is this team’s', () => {
+  it('checks a new team’s name', () => {
     const draft = createTeamDraft();
     expect(draft).toEqual({ name: '', projectIds: [] });
     expect(validateTeamDraft(draft)).toBe('Give the team a name.');
     expect(validateTeamDraft({ ...draft, name: 'x'.repeat(61) })).toBe('Keep the name to 60 characters.');
     expect(validateTeamDraft({ ...draft, name: 'Platform' })).toBeNull();
-    expect(validateTeamLink('team1', 'https://example.com')).toContain('not a team link');
-    expect(validateTeamLink('team2', TEAM_URL)).toBe('That link is for another team.');
-    expect(validateTeamLink('team1', ` ${TEAM_URL} `)).toBeNull();
   });
 
   it('flags this machine as keyless only when it is in the team without the key', () => {
@@ -164,19 +177,13 @@ describe('Settings → Teams', () => {
 
   it('describes a hosted team with your role, its people and its machines', () => {
     const machine = { id: 'm1', name: 'Studio', userId: MONA.id, online: true, lastSeenAt: NOW };
-    const team = createTeam({ machines: [machine], createdAt: NOW - 2 * 86_400_000 });
-    expect(describeHostedTeam(team, NOW)).toEqual(['You own it · 2 people · 1 machine · Made 2d ago']);
-    const joined = createTeam({
-      owner: KAI,
-      role: 'member',
-      members: [],
-      machines: [],
-      createdAt: NOW - 2 * 86_400_000,
-    });
-    expect(describeHostedTeam(joined, NOW)).toEqual([
+    const team = createTeam({ machines: [machine] });
+    expect(describeHostedTeam(team)).toEqual(['You own it · 2 people · 1 online · 1 machine']);
+    const joined = createTeam({ owner: KAI, role: 'member', members: [], machines: [] });
+    expect(describeHostedTeam(joined)).toEqual([
       'Owned by ',
       { user: KAI },
-      ' · 1 person · 0 machines · Made 2d ago',
+      ' · 1 person · 0 online · 0 machines',
     ]);
   });
 
@@ -202,7 +209,7 @@ describe('Settings → Teams', () => {
     ]);
   });
 
-  it('says a machine needs the team link when it holds no key, here or as its feed reports', () => {
+  it('says a machine waits for the team’s key when it holds none, here or as its feed reports', () => {
     const team = createTeam({
       machines: [
         { id: 'm1', name: 'Studio', userId: MONA.id, online: true, lastSeenAt: NOW },
@@ -221,8 +228,8 @@ describe('Settings → Teams', () => {
     expect(
       listTeamMachineRows(team, NOW, feed, new Set(['m1'])).map(({ tone, status }) => [tone, status])
     ).toEqual([
-      ['warning', TEAM_MACHINE_NEEDS_LINK],
-      ['warning', TEAM_MACHINE_NEEDS_LINK],
+      ['warning', TEAM_MACHINE_NEEDS_KEY],
+      ['warning', TEAM_MACHINE_NEEDS_KEY],
       ['quiet', 'Last seen just now'],
     ]);
   });

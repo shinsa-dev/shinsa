@@ -518,6 +518,8 @@ export function SettingsSpecimens() {
               failure={null}
               actions={teamActions}
               rights
+              keys
+              feed={teams.feed}
             />
           </div>
         </Specimen>

@@ -58,6 +58,14 @@ interface StoredTeamKeyView {
   key: string;
 }
 
+export const KEY_WAITS_LIMIT = 16;
+
+export interface KeyWait {
+  readonly teamId: string;
+  readonly recipient: string;
+  readonly privateKey: CryptoKey;
+}
+
 export class TeamCommandFailed extends Schema.TaggedError<
   TeamCommandFailed,
   { readonly brand: unique symbol }
@@ -98,6 +106,7 @@ export interface TeamsHandle {
   readonly listKeys: Effect.Effect<StoredTeamKeyView[]>;
   leave(teamId: string): Effect.Effect<void, TeamFailure>;
   remove(teamId: string): Effect.Effect<void, TeamFailure>;
+  requestKey(teamId: string): Effect.Effect<void, TeamFailure>;
   readonly acceptsViewer: Effect.Effect<boolean>;
   openChannel(peer: ChannelPeer, userId: string): Effect.Effect<TeamChannel>;
   closeChannel(channel: TeamChannel): Effect.Effect<void>;
