@@ -47,6 +47,8 @@ const CHOICES = [
 
 const ORIGIN = 'https://app.shinsa.dev';
 
+const OPEN_SOCKET = () => ({}) as WebSocket;
+
 const DEVICES = { writeDevice: () => Promise.resolve(), removeDevice: () => Promise.resolve() };
 
 const URL = 'https://app.shinsa.dev/share/team#team1.invite.key';
@@ -191,6 +193,7 @@ describe('opening your machines for the join page', () => {
       },
       {
         origin: ORIGIN,
+        openSocket: OPEN_SOCKET,
         timeout: '20 millis',
         createMember: (row) => ({
           member: {
@@ -229,6 +232,7 @@ describe('opening your machines for the join page', () => {
       },
       {
         origin: ORIGIN,
+        openSocket: OPEN_SOCKET,
         createMember: (row, dashboard) =>
           createJoinMember(row, dashboard, (options) =>
             openRemoteChannel({ ...options, openSocket: mac.openSocket })
@@ -260,7 +264,7 @@ describe('opening your machines for the join page', () => {
         },
         devices: { ...DEVICES, selectDevice: () => Promise.resolve(waiting) },
       },
-      { origin: ORIGIN, openSocket: () => ({}) as WebSocket }
+      { origin: ORIGIN, openSocket: OPEN_SOCKET }
     );
     expect((await open()).setup).toEqual({ kind: 'waiting', machines: ['Studio'] });
     const silent = createJoinMachinesSource(
@@ -273,6 +277,7 @@ describe('opening your machines for the join page', () => {
       },
       {
         origin: ORIGIN,
+        openSocket: OPEN_SOCKET,
         createMember: (row) => ({
           member: {
             id: row.instance.id,
@@ -287,13 +292,16 @@ describe('opening your machines for the join page', () => {
   });
 
   it('asks to pair when the account has none of its own here', async () => {
-    const open = createJoinMachinesSource({
-      dashboard: {
-        listInstances: () => Promise.resolve([SHARED]),
-        requestConnect: () => Promise.reject(new Error('unused')),
+    const open = createJoinMachinesSource(
+      {
+        dashboard: {
+          listInstances: () => Promise.resolve([SHARED]),
+          requestConnect: () => Promise.reject(new Error('unused')),
+        },
+        devices: { ...DEVICES, selectDevice: () => Promise.resolve(null) },
       },
-      devices: { ...DEVICES, selectDevice: () => Promise.resolve(null) },
-    });
+      { openSocket: OPEN_SOCKET }
+    );
     const opened = await open();
     expect(opened.machines).toEqual([]);
     expect(opened.setup).toEqual({ kind: 'pair' });

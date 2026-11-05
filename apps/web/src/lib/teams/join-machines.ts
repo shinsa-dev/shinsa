@@ -131,8 +131,8 @@ export function createJoinMachinesSource(
     origin?: string;
     timeout?: Duration.Input;
     createMember?: (row: JoinRow, dashboard: JoinDashboard) => JoinMember;
-    openSocket?: (url: string) => WebSocket;
-  } = {}
+    openSocket: (url: string) => WebSocket;
+  }
 ): OpenJoinMachines {
   const createMember = options.createMember ?? createJoinMember;
   const timeout = options.timeout ?? PROJECTS_TIMEOUT;
@@ -140,7 +140,7 @@ export function createJoinMachinesSource(
     const origin = options.origin ?? location.origin;
     const all = yield* listSettledMachineRows({
       ...services,
-      openSocket: options.openSocket ?? ((url) => new WebSocket(url)),
+      openSocket: options.openSocket,
     });
     const rows = listJoinRows(all);
     const closers: (() => void)[] = [];

@@ -54,7 +54,10 @@ export function RemoteRoot({ services, app }: { services: RemoteServices; app: R
     }
     return resolved;
   });
-  const joinMachines = React.useMemo(() => createJoinMachinesSource(services), [services]);
+  const joinMachines = React.useMemo(
+    () => createJoinMachinesSource(services, { openSocket: (url) => new WebSocket(url) }),
+    [services]
+  );
   const [session, setSession] = React.useState<RemoteSession | null>(null);
   const [failure, setFailure] = React.useState<string | null>(null);
   React.useEffect(() => {
