@@ -265,7 +265,14 @@ export function readyWorktree(harness: Harness, taskId: string) {
 }
 
 export function approve(harness: Harness, taskId: string, response: string | null = null) {
-  harness.send({ type: 'gate.answer', gateId: harness.openGate(taskId).id, decision: 'approve', response });
+  const gate = harness.openGate(taskId);
+  harness.send({ type: 'gate.answer', gateId: gate.id, decision: 'approve', response });
+  if (gate.type === 'plan') refreshWorktree(harness, taskId);
+}
+
+export function refreshWorktree(harness: Harness, taskId: string) {
+  if (harness.task(taskId).stage !== 'triage') return;
+  harness.send({ type: 'worktree.ready', taskId, path: `/wt/${taskId}`, branch: `fix/${taskId}` });
 }
 
 export function pushed(harness: Harness, taskId: string, sha = `sha-${harness.state.seq}`) {
