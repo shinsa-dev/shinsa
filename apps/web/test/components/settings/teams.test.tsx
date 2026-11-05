@@ -421,6 +421,29 @@ describe('Settings → Teams', () => {
     feed.mockRestore();
   });
 
+  it('lets a member give another of their own machines access', async () => {
+    const team = createTeam({ owner: KAI, role: 'member', members: [{ user: MONA, addedAt: Date.now() }] });
+    const asking = {
+      teamId: 'team1',
+      instanceId: 'mona2',
+      name: 'Laptop',
+      userId: MONA.id,
+      status: 'refused' as const,
+      reason: TEAM_REFUSALS.key,
+      asking: true,
+    };
+    const feed = spyOn(connection, 'selectTeams').mockReturnValue({ machines: [asking], tasks: [] });
+    const actions = renderTeams(
+      createRemoteSnapshot({ access: ACCESS, teams: [createTeamEntry({ team })] }),
+      null,
+      false,
+      true
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Give access' }));
+    await waitFor(() => expect(actions.answerKey).toHaveBeenCalledWith('team1', 'mona2', true));
+    feed.mockRestore();
+  });
+
   it('withdraws a request the owner has not answered', async () => {
     const actions = renderTeams(createRemoteSnapshot({ teams: [createTeamEntry({ team: null })] }));
     expect(screen.getByText('You asked to join. The team’s owner has not answered yet.')).toBeTruthy();

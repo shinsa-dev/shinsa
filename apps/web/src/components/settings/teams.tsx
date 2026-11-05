@@ -267,7 +267,7 @@ function TeamKeyRequests({
   actions: TeamActions;
 }) {
   const asking = listKeyRequests(feed, team.id);
-  if (team.role !== 'owner' || asking.length === 0) return null;
+  if (asking.length === 0) return null;
   const answer = (machine: TeamFeedMachine, approve: boolean) =>
     void requestWithToast(
       () => actions.answerKey(team.id, machine.instanceId, approve),

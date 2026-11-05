@@ -379,7 +379,7 @@ export interface TeamFeedRefusal {
 export const TEAM_FEED_REFUSED = 'It refused to list its tasks.';
 
 export const TEAM_FEED_WAITS_FOR_KEY =
-  'It gets the key from its owner’s other machines in the team once one is online, or from the team’s owner once it asks.';
+  'It gets the key once its owner gives it access from another of their machines, or the team’s owner does.';
 
 export interface RefusalTeam {
   id: string;

@@ -542,11 +542,15 @@ export class TeamFeeds extends Context.Service<TeamFeeds, TeamFeedsHandle>()(
         );
       });
 
-      const canHandKey = Effect.fn('TeamFeeds.canHandKey')(function* (feed: Feed, request: TeamKeyRequest) {
+      const mayAnswer = Effect.fn('TeamFeeds.mayAnswer')(function* (feed: Feed, request: TeamKeyRequest) {
         const file = yield* store.file;
         if (feed.machine.userId === file.access?.owner.id) return true;
         const team = file.teams.find((entry) => entry.id === feed.teamId);
-        return request.ask && team?.role === 'owner' && (yield* Ref.get(approvals)).has(feed.id);
+        return request.ask && team?.role === 'owner';
+      });
+
+      const canHandKey = Effect.fn('TeamFeeds.canHandKey')(function* (feed: Feed, request: TeamKeyRequest) {
+        return (yield* mayAnswer(feed, request)) && (yield* Ref.get(approvals)).has(feed.id);
       });
 
       const handKey = Effect.fn('TeamFeeds.handKey')(function* (feed: Feed, request: TeamKeyRequest) {
@@ -572,9 +576,8 @@ export class TeamFeeds extends Context.Service<TeamFeeds, TeamFeedsHandle>()(
         feed: Feed,
         request: TeamKeyRequest | undefined
       ) {
-        if (!request?.ask || (yield* Ref.get(declines)).has(feed.id)) return false;
-        const team = (yield* store.file).teams.find((entry) => entry.id === feed.teamId);
-        return team?.role === 'owner';
+        if (!request || (yield* Ref.get(declines)).has(feed.id)) return false;
+        return yield* mayAnswer(feed, request);
       });
 
       const watch = Effect.fn('TeamFeeds.watch')(function* (id: string, token: number) {

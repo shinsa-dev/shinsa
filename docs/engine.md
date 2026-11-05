@@ -3664,7 +3664,7 @@ the read-only view. Teams need remote access on (`Remote` paired and enabled), s
   on each of your machines, with how many of its people are online, and its machines (every member's, each with its
   owner and Online, Last seen or Waiting for the team's key, `TeamMachines`, the same list on the hosted Settings). A
   machine in the team without the key (one paired after you joined, or out of reach then) gets it handed over, below;
-  its card says so, and has Request access when no machine of yours can. The owner sees each request in Settings → Teams with Accept and Decline (`members/add`,
+  its card says so, and has Request access to ask the team's owner instead. The owner sees each request in Settings → Teams with Accept and Decline (`members/add`,
   `requests/decline`; `shinsa teams accept|decline <team> --login`). A member may leave (`leave`, which also takes
   your projects out of the team) and the owner may remove a member (`members/remove`) or the team (`remove`); either
   way the next heartbeat drops it from every machine and their open views close (below). Making a team asks which of
@@ -3673,15 +3673,17 @@ the read-only view. Teams need remote access on (`Remote` paired and enabled), s
   a machine without it gets it from one that holds it, over the team channel. Asked by a hello for a team whose key it
   lacks, the keyless machine refuses with `TEAM_REFUSALS.key` and a `keyRequest`: a fresh P-256 key and whether you
   asked for access, signed with its signing key (`createTeamKeyRequest`). Every machine that holds the key watches the
-  team's machines (`TeamFeeds`), so it hears the request on its next try. It hands the key over when the keyless
-  machine is its own owner's, or, for a teammate's machine that asked, once the team's owner gave it access: it checks
+  team's machines (`TeamFeeds`), so it hears the request on its next try. It hands the key over only after a person
+  clicks Give access: for its own owner's machine, which asks by itself, that is you on any of your machines in the
+  team; for a teammate's machine that asked, the team's owner. Never without the click, because which machines are
+  yours and their signing keys come only from app.shinsa.dev's team list, and the key must stay out of its reach. It checks
   the signature against that machine's signing key in the team's list (`verifyTeamKeyRequest`), seals the key to the
   fresh key (`sealTeamKey`: ECDH, HKDF, AES-GCM bound to the team and the recipient) and sends it as the first message
   of a new channel (`team-key`). The keyless machine takes it only while it waits on that fresh key, from an account
   that is its owner or, after it asked, the team's owner, as app.shinsa.dev signed the connect token for; it stores
   the key and answers `TEAM_KEY_RECEIVED`, and the next try goes live. Request access on its team card
   (`POST /api/remote/teams/key/request`, `Teams.requestKey`, held in memory until the key arrives) marks the next
-  requests as asked; the team's owner sees them under Asking for access with Give access and Decline
+  requests as asked; the person who may answer sees them under Asking for access with Give access and Decline
   (`POST /api/remote/teams/key/answer { teamId, instanceId, approve }`, `TeamFeeds.answerKeyRequest`, also in memory).
   Both routes are the `team-keys` engine feature.
 - **Giving a teammate this machine.** A teammate is a step from full remote access: Give machine access beside them

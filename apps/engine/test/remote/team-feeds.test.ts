@@ -772,7 +772,7 @@ function selectStudioKey(studio: Remote) {
 }
 
 describe('handing the team key to a machine that has none', () => {
-  test('one of your machines hands it to another of yours without asking', async () => {
+  test('one of your machines asks for it by itself, and gets it once you approve', async () => {
     const { signing, signingKey } = await createStudioSigning();
     const own = { ...STUDIO, userId: KAI.id, signingKey };
     const { feeds, studio } = setUp({
@@ -786,6 +786,9 @@ describe('handing the team key to a machine that has none', () => {
       watcherMachines: [own, LAPTOP],
     });
     feeds.start();
+    await until('it asks', () => feeds.snapshot().machines[0]?.asking === true);
+    expect(selectStudioKey(studio)).toBeNull();
+    expect(await feeds.answerKeyRequest('team1', 'inst1', true)).toBe(true);
     await until('it is live with the handed key', () => feeds.snapshot().tasks.length === 2);
     expect(selectStudioKey(studio)).toBe(TEAM_KEY);
     feeds.stop();
@@ -877,13 +880,15 @@ describe('handing the team key to a machine that has none', () => {
     let calls = 0;
     plane.answers.set(CONNECT_PATH, () => {
       calls += 1;
-      return calls === 1
+      return calls <= 2
         ? Response.json({ url: 'wss://t-inst1.shinsa.dev/team?token=t', expiresAt: 1 })
         : refuse(NotFound);
     });
     const logs = captureLogs();
     feeds.start();
-    await until('it is refused for the key', () => waits.length === 1);
+    await until('it asks', () => feeds.snapshot().machines[0]?.asking === true);
+    expect(await feeds.answerKeyRequest('team1', 'inst1', true)).toBe(true);
+    await until('the hand-over fails', () => calls === 3 && waits.length > 0);
     logs.restore();
     expect(logs.fieldsOf('[Teams] Could not hand a machine the team’s key')).toHaveLength(1);
     expect(selectStudioKey(studio)).toBeNull();

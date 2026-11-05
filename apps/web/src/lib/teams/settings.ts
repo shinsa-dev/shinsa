@@ -78,13 +78,13 @@ export function listKeylessMachines(
 }
 
 export const TEAM_KEY_WAITING =
-  'Teammates cannot see this machine’s tasks yet. Your other machines in this team give it the team’s key as soon as one of them is online.';
+  'Teammates cannot see this machine’s tasks yet. Give it access in Settings → Teams on another of your machines in this team, or ask the team’s owner.';
 
 export const TEAM_KEY_UPDATE =
   'Teammates cannot see this machine’s tasks yet. Update Shinsa on this machine so it can get the team’s key.';
 
 export const TEAM_KEY_OWNER_WAITING =
-  'Teammates cannot see this machine’s tasks yet. Another of your machines in this team gives it the team’s key as soon as it is online.';
+  'Teammates cannot see this machine’s tasks yet. Give it access in Settings → Teams on another of your machines in this team. If it does not ask there, update Shinsa on that machine.';
 
 export function describeKeyAsked(team: RemoteTeam): Mention {
   return ['Asked. ', { user: team.owner }, ' gives this machine access from Settings → Teams.'];
