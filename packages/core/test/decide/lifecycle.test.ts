@@ -23,6 +23,7 @@ import {
   reachReviewGate,
   readInstruction,
   readyWorktree,
+  refreshWorktree,
 } from '../harness.ts';
 
 function withApproval(approvePlans: PlanApproval) {
@@ -157,6 +158,7 @@ describe('planning', () => {
     const gate = harness.openGate(taskId);
     expect(gate.type).toBe('plan');
     harness.send({ type: 'gate.answer', gateId: gate.id, decision: 'approve', response: 'Use option B.' });
+    refreshWorktree(harness, taskId);
     expect(harness.task(taskId).stage).toBe('building');
     expect(harness.task(taskId).planAnswers).toBe('Use option B.');
     expect(harness.activeRun(taskId).prompt).toContain('The human answered:\nUse option B.');

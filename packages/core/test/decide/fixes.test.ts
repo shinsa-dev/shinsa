@@ -670,6 +670,25 @@ describe('a fix that changed nothing reuses the last review', () => {
     expect(harness.task(taskId)).toMatchObject({ stage: 'shipping', approveAfterFix: false });
   });
 
+  test('blocking findings again after a fix on the same tree go to you instead of another fix', () => {
+    const harness = createHarness();
+    const taskId = reachReview(harness);
+    review(harness, taskId, blocking);
+    fix(harness, taskId, {
+      walkthrough: {
+        approach: 'Count from zero.',
+        flow: 'loop → index',
+        risks: [],
+        testing: { automated: [], manual: [] },
+      },
+    });
+    expect(harness.activeRun(taskId).role).toBe('reviewer');
+    review(harness, taskId, blocking);
+    expect(countReviews(harness, taskId)).toBe(2);
+    expect(listActiveRuns(harness.state).filter((run) => run.taskId === taskId)).toHaveLength(0);
+    expect(harness.openGate(taskId)).toMatchObject({ type: 'review', escalation: { reason: 'stalled' } });
+  });
+
   test('a revised walkthrough on the same tree gets one fresh review', () => {
     const harness = createHarness();
     const taskId = reachReview(harness);
