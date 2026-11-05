@@ -125,9 +125,15 @@ export function resumeUsageWait(decider: Decider, command: CommandOf<'usage_wait
   decider.fail(task.id, 'The usage limit has reset', describeReset(wait), wait.runId);
 }
 
+function canIgnorePaceLimits(decider: Decider) {
+  const { onBehalf, guest } = decider.context;
+  return !onBehalf && !guest;
+}
+
 export function resumeUsageWaitNow(decider: Decider, command: CommandOf<'usage_wait.resume_now'>) {
   const { task, wait } = findArmedWait(decider, command.taskId);
   if (wait.cause === 'pace') {
+    if (canIgnorePaceLimits(decider)) decider.emit({ type: 'task.pace_limits_ignored', taskId: task.id });
     releasePaceWait(decider, task, wait);
     return;
   }

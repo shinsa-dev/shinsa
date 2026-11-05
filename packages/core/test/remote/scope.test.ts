@@ -15,6 +15,7 @@ import {
   TEAM_SCOPE_MESSAGES,
   toggleScope,
   USER_COMMAND_TYPES,
+  SHARE_PRESET_SCOPES,
 } from '../../src/index.ts';
 import { createHarness, createTask, linkSession, proposePlan, registerRepo } from '../harness.ts';
 
@@ -156,7 +157,7 @@ describe('resolveScopedState', () => {
             at: 1,
             url: 'https://share',
             limit: 'none' as const,
-            preset: 'full' as const,
+            scopes: [...SHARE_PRESET_SCOPES.full],
             endsAt: null,
           },
           previews: [],
@@ -398,7 +399,7 @@ describe('a teammate’s scope', () => {
       at: 1,
       url: 'https://share',
       limit: 'none' as const,
-      preset: 'full' as const,
+      scopes: [...SHARE_PRESET_SCOPES.full],
       endsAt: null,
     };
     const state = {

@@ -11,9 +11,14 @@ import { HttpApiBuilder } from 'effect/http-api';
 import type { SlackCallFailed } from '../../integrations/slack/schema.ts';
 import { SlackApi } from '../../integrations/slack/service.ts';
 import { selectWorkspaceToken } from '../../slack/workspace.ts';
-import type { SlackThread } from '../../store/slack/schema.ts';
 import { SlackStore } from '../../store/slack/service.ts';
-import { Posted, REFUSED_BLOCK_CODES, SETTLED_REACTION_CODES, STATUS_UNAVAILABLE_CODES } from './schema.ts';
+import {
+  Posted,
+  REFUSED_BLOCK_CODES,
+  type RelayThread,
+  SETTLED_REACTION_CODES,
+  STATUS_UNAVAILABLE_CODES,
+} from './schema.ts';
 export const SlackRelayHandlers = HttpApiBuilder.group(
   RemoteApi,
   'slackRelay',
@@ -26,15 +31,22 @@ export const SlackRelayHandlers = HttpApiBuilder.group(
     const store = yield* SlackStore;
     const slack = yield* SlackApi;
 
-    const assertOwnPost = Effect.fn('slackRelay.assertOwnPost')(function* (thread: SlackThread, ts: string) {
+    const assertOwnPost = Effect.fn('slackRelay.assertOwnPost')(function* (thread: RelayThread, ts: string) {
       const { instanceId } = yield* CurrentMachine;
-      if (!(yield* store.hasPost({ teamId: thread.teamId, channelId: thread.channelId, ts }, instanceId)))
+      if (
+        !(yield* store.hasPost({ workspaceId: thread.teamId, channelId: thread.channelId, ts }, instanceId))
+      )
         return yield* new PostNotYours({ message: 'This machine did not post that Slack message.' });
     });
 
-    const findThreadToken = Effect.fn('slackRelay.findThreadToken')(function* (thread: SlackThread) {
+    const findThreadToken = Effect.fn('slackRelay.findThreadToken')(function* (thread: RelayThread) {
       const { instanceId } = yield* CurrentMachine;
-      if (!(yield* store.hasThread(thread, instanceId)))
+      if (
+        !(yield* store.hasThread(
+          { workspaceId: thread.teamId, channelId: thread.channelId, threadTs: thread.threadTs },
+          instanceId
+        ))
+      )
         return yield* new ThreadNotForwarded({ message: 'This machine was never sent that Slack thread.' });
       const opened = yield* selectWorkspaceToken(thread.teamId);
       if (Option.isNone(opened))
@@ -71,8 +83,8 @@ export const SlackRelayHandlers = HttpApiBuilder.group(
           const links = yield* store.listMachineLinks((yield* CurrentMachine).instanceId);
           return {
             links: links.map((link) => ({
-              teamId: link.teamId,
-              teamName: link.teamName,
+              teamId: link.workspaceId,
+              teamName: link.workspaceName,
               userId: link.slackUserId,
               userName: link.slackUserName,
               linkedAt: link.linkedAt,
@@ -123,7 +135,7 @@ export const SlackRelayHandlers = HttpApiBuilder.group(
           if (!posted.ts)
             return yield* new SlackFailed({ message: 'Slack did not say where the post went.' });
           yield* store.recordPost(
-            { teamId: payload.teamId, channelId: payload.channelId, ts: posted.ts },
+            { workspaceId: payload.teamId, channelId: payload.channelId, ts: posted.ts },
             instanceId
           );
           return { ts: posted.ts };

@@ -196,7 +196,7 @@ describe('a preview link', () => {
   test('answers a failure inside the Worker as an error, not the app', async () => {
     const harness = createHarness();
     const { origin } = await shareMachine(harness);
-    harness.db.sqlite.exec('DROP TABLE instances');
+    harness.db.sqlite.exec('DROP TABLE machines');
     const answer = await visit(harness, `${origin}/`, withKey());
     expect(answer.status).toBe(500);
     expect(answer.headers.get('x-robots-tag')).toBe('noindex, nofollow, noarchive');

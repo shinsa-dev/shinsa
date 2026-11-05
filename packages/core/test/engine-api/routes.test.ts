@@ -137,6 +137,7 @@ const FEATURE_ROUTES = {
   ],
   'team-keys': ['POST /api/remote/teams/key/request', 'POST /api/remote/teams/key/answer'],
   'usage.pace_limits': [],
+  'share.scopes': [],
 };
 
 const LOCAL_ONLY = [

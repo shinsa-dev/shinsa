@@ -5,6 +5,7 @@ import {
   ENGINE_BASELINE_COMMANDS,
   type Task,
   USER_COMMAND_TYPES,
+  SHARE_PRESET_SCOPES,
 } from '@shinsa/core';
 import { listTaskActions, runTaskAction, TASK_ACTION, TASK_ACTION_COMMAND } from '@/lib/tasks/actions.ts';
 import { spyOnCommands } from '../../support/commands.ts';
@@ -117,7 +118,7 @@ describe('listTaskActions', () => {
   });
 
   it('offers only Stop sharing while a task is shared or its link failed, since the banner manages it', () => {
-    const share = { at: 1, limit: 'until_done', preset: 'standard', endsAt: null } as const;
+    const share = { at: 1, limit: 'until_done', scopes: SHARE_PRESET_SCOPES.standard, endsAt: null } as const;
     const shared = createTask({
       id: 't',
       stage: 'merged',

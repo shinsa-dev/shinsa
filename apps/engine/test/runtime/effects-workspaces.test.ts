@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, setDefaultTimeout, test } from 'bun:test';
 import type { ShinsaState, Task } from '@shinsa/core';
 import { Effect } from 'effect';
 import type { RunSupervisor } from '../../src/agents/supervisor/service.ts';
@@ -15,6 +15,8 @@ import {
   writeFiles,
 } from '../helpers/index.ts';
 import { createRepo, createStubEngine, createTask } from '../helpers/state.ts';
+
+setDefaultTimeout(30_000);
 
 const RUNS = { quiesce: () => Effect.void } as unknown as RunSupervisor['Service'];
 

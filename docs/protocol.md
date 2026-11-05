@@ -237,7 +237,7 @@ one reads as its empty value. The fields under Triage and shape, Plan and build,
 | `proposal?` | `ChangeProposal` \| null | an inquiry's proposal: request, why, status (`open`, `accepted`, `declined`) |
 | `planFirst` | boolean | plan first: the plan always waits at a gate |
 | `backlog?` | `{ at }` \| null | in the backlog since `at`: its plan gate opens and is held out of Needs you until you start it |
-| `share?` | `TaskShare` \| null | shared by link since `at`: `url` once the engine made the link (null while `share.link` runs), which holds the share id and, in its fragment, the key; `limit` how long (`ShareLimit`: `until_done`, `hour`, `day`, `week`, `none`), `preset` what it shows (`SharePreset`: `status`, `standard`, `full`, each a list of `ShareGroup`s in `SHARE_PRESET_GROUPS`) and `endsAt` when a time limit runs out (null otherwise); `failure` the reason the link could not be made, cleared once it is; `description` the summary the writer wrote of what the task addresses when sharing started (`share.describe`) (`docs/engine.md` → Sharing a task) |
+| `share?` | `TaskShare` \| null | shared by link since `at`: `url` once the engine made the link (null while `share.link` runs), which holds the share id and, in its fragment, the key; `limit` how long (`ShareLimit`: `until_done`, `hour`, `day`, `week`, `none`), `scopes` the view scopes it shows (`ViewScope`s in order, identity always among them; a preset is a list in `SHARE_PRESET_SCOPES`, and the label Status, Standard, Full access or Custom comes from `resolveShareScopesPreset`) and `endsAt` when a time limit runs out (null otherwise); `failure` the reason the link could not be made, cleared once it is; `description` the summary the writer wrote of what the task addresses when sharing started (`share.describe`) (`docs/engine.md` → Sharing a task) |
 | `previews?` | `PreviewShare[]` | the task's service runs shared by link, one per `serviceId`: `at`, `url` (`https://<label>.shinsa.page/?key=<key>` once the engine made it, null while `preview.link` runs), `limit` and `endsAt` as on `share`, `failure` the reason the link could not be made (`docs/engine.md` → Sharing a preview) |
 | `handoff?` | `TaskHandoff` \| null | handed off by a link since `at`: `url` once the engine made the link (null while `handoff.link` runs and once someone claimed it), `failure` the reason the link could not be made, `guest` the account that took it over (`TaskGuest`: `id`, `login`, `name`, `avatarUrl`) and `claimedAt` when (`docs/engine.md` → Handing off a task) |
 
@@ -326,6 +326,7 @@ one reads as its empty value. The fields under Triage and shape, Plan and build,
 | `usageWait?` | `UsageWait` \| null | a step waiting for a usage reset, or held at a daily or project limit (`cause: pace`, with `pace`: `scope` `daily` or `project`, `limit`, `percent`, `projectId`, `stageReason`) |
 | `account?` | `RunAccount` \| null | the account the task is bound to |
 | `budgetAcknowledgedUsd?`, `usageAcknowledgedPercent?` | number | what you allowed past the cost and usage limits |
+| `paceLimitsIgnored?` | boolean | you pressed Resume now on a pace hold, so the daily and project usage limits no longer hold this task |
 | `configProblems?` | `ConfigProblem[]` | the problems setup verification found, each a `kind` (`repository`, `no_repository`, `default_branch` or `workspace`) and a `detail`; the checks are never one (`docs/engine.md` → Setup verification) |
 
 **Agents and other tasks**
@@ -824,7 +825,7 @@ your behalf (`onBehalf`, `byTask`). **Human** = only you: its specs are `humanOn
 | `task.unsnooze` | clears the snooze: the task shows where it is now; a task not snoozed records nothing | `tasks unsnooze` | agent |
 | `task.retry` | restarts the current step with a fresh budget, optionally on an account | `tasks retry`, `tasks rerun` | agent |
 | `task.cancel` | cancels it, and stops its watchdogs | `tasks cancel` | agent |
-| `task.share` | shares it by a link that reads it live from this machine (`share.link` makes it), for `limit` and as `preset` (the `shareLimit` and `sharePreset` settings when left out); again with another `limit` or `preset` it changes how long or what it shows and keeps the link; again on a failed share it asks for the link once more; an automation's home, or `until_done` on a finished task, is refused (`share_refused`) | `tasks share [--until] [--preset]` | **human** |
+| `task.share` | shares it by a link that reads it live from this machine (`share.link` makes it), for `limit` and as `preset` or as `scopes`, any list of view scopes (the `shareLimit` and `sharePreset` settings when left out); again with another `limit`, `preset` or `scopes` it changes how long or what it shows and keeps the link; again on a failed share it asks for the link once more; an automation's home, or `until_done` on a finished task, is refused (`share_refused`) | `tasks share [--until] [--preset] [--allow] [--deny]` | **human** |
 | `task.unshare` | stops sharing it: every open link ends at once and the link stops working | `tasks unshare` | **human** |
 | `preview.share` | shares the task's run of a service (`serviceId`) by a link on `shinsa.page` (`preview.link` makes it), for `limit` (the `shareLimit` setting when left out); again with another `limit` it changes how long and keeps the link; again on a failed share it asks for the link once more; an automation's home or a finished task is refused (`share_refused`) | `services share <service> --task [--until]` | **human** |
 | `preview.unshare` | stops sharing that run: its open pages and sockets end at once and the link stops working | `services unshare <service> --task` | **human** |
@@ -1036,7 +1037,7 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `task.repo_bound` | a task with no repository got the one the setup check found (`repoId`, and `projectId` when it had none) |
 | `task.repo_started` | the setup check started a repository with no commits: an empty first commit on the default branch (`start`: `branch`, `initialized` when it ran `git init` on an empty folder, `pushed` when it pushed to an origin with no branches) |
 | `task.reshaped` | the pipeline changed (`by` you, agent or Shinsa, with a reason) |
-| `task.shared`, `task.unshared` | you shared a task by link or changed how long or what it shows (`limit`, `endsAt`, `preset`; the first adds an activity entry), or sharing stopped (`reason`: `you`, `done` when a task shared `until_done` settled, `expired`; each adds an activity entry) |
+| `task.shared`, `task.unshared` | you shared a task by link or changed how long or what it shows (`limit`, `endsAt`, `scopes`; the first adds an activity entry), or sharing stopped (`reason`: `you`, `done` when a task shared `until_done` settled, `expired`; each adds an activity entry) |
 | `share.recorded`, `share.failed` | the engine made the link (`url`, null when unchanged), or could not (`detail`) |
 | `share.described` | the writer described a shared task (`description`) |
 | `preview.shared`, `preview.unshared` | you shared a service run by link or changed how long (`serviceId`, `limit`, `endsAt`; the first adds an activity entry), or sharing stopped (`reason`: `you`, `done` when the task settled, whatever its limit, `expired`; each adds an activity entry) |
@@ -1121,6 +1122,7 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `run.waiting` | a step's turn ended while its delegations work |
 | `monitor.armed`, `monitor.fired`, `monitor.ended` | a monitor was armed, fired, ran out or was cleared |
 | `usage_wait.armed`, `usage_wait.ended` | a usage wait was armed; resumed, reset or cleared |
+| `task.pace_limits_ignored` | you resumed a pace hold, so the daily and project usage limits no longer hold the task |
 | `pull_request.opened`, `pull_request.updated` | the pull request was opened; a read changed it |
 | `pull_request.push_requested`, `pull_request.pushed`, `pull_request.head_moved` | a push was asked for, made; someone else moved the head |
 | `pull_request.read_failed`, `pull_request.read_failures_cleared` | a read failed; the count reset |

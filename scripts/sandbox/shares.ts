@@ -8,6 +8,7 @@ import {
   type ShareConnectResponse,
   type ShareLink,
   type SharePreset,
+  type ViewScope,
   serializeShareUrl,
   type Task,
 } from '../../packages/core/src/index.ts';
@@ -27,6 +28,15 @@ import {
 export function createShareLink(instanceId: string): ShareLink {
   return { instanceId, shareId: createRandomKey(SHARE_ID_BYTES), key: createRandomKey(SHARE_KEY_BYTES) };
 }
+
+const CUSTOM_SHARE_SCOPES: readonly ViewScope[] = [
+  'identity',
+  'description',
+  'progress',
+  'summary',
+  'evidence',
+  'checks',
+];
 
 export const createPreviewShares = Effect.fn('Sandbox.createPreviewShares')(function* (
   studio: StartedMachine
@@ -67,7 +77,7 @@ export const createPreviewShares = Effect.fn('Sandbox.createPreviewShares')(func
   const createPreviewShare = Effect.fn('Sandbox.createPreviewShare')(function* (
     task: Task,
     label: string,
-    preset: SharePreset = 'standard'
+    shown: { preset: SharePreset } | { scopes: readonly ViewScope[] } = { preset: 'standard' }
   ) {
     const seeded = task.repoId ? (yield* core.state).repos[task.repoId] : undefined;
     if (!seeded) return null;
@@ -78,7 +88,7 @@ export const createPreviewShares = Effect.fn('Sandbox.createPreviewShares')(func
         patch: { remote: normalizeRemote(seeded.remote) },
       });
     const url = serializeShareUrl(ORIGIN, createShareLink(studio.machine.id));
-    if (!task.share) yield* core.dispatch({ type: 'task.share', taskId: task.id, limit: 'none', preset });
+    if (!task.share) yield* core.dispatch({ type: 'task.share', taskId: task.id, limit: 'none', ...shown });
     yield* core.dispatch({ type: 'share.record', taskId: task.id, url });
     const share: PreviewShare = { url, label, handle: task.handle ?? task.id, port: studio.machine.port };
     return share;
@@ -116,20 +126,23 @@ export const createPreviewShares = Effect.fn('Sandbox.createPreviewShares')(func
     pushed && (yield* createPreviewShare(pushed, 'A shared task with an open pull request, with Code')),
     evidenced &&
       evidenced.id !== pushed?.id &&
-      (yield* createPreviewShare(evidenced, 'A shared task with its evidence')),
-    status && (yield* createPreviewShare(status, 'A task shared as Status, the status card', 'status')),
+      (yield* createPreviewShare(
+        evidenced,
+        'A task shared with custom scopes: its evidence and checks, no code',
+        {
+          scopes: CUSTOM_SHARE_SCOPES,
+        }
+      )),
+    status &&
+      (yield* createPreviewShare(status, 'A task shared as Status, the status card', { preset: 'status' })),
     talked &&
-      (yield* createPreviewShare(
-        talked,
-        'A task shared as Standard, with the agents’ live output in Chat',
-        'standard'
-      )),
+      (yield* createPreviewShare(talked, 'A task shared as Standard, with the agents’ live output in Chat', {
+        preset: 'standard',
+      })),
     chatty &&
-      (yield* createPreviewShare(
-        chatty,
-        'A task shared as Full access, with your messages in Chat too',
-        'full'
-      )),
+      (yield* createPreviewShare(chatty, 'A task shared as Full access, with your messages in Chat too', {
+        preset: 'full',
+      })),
   ];
   return shares.filter((share): share is PreviewShare => Boolean(share));
 });

@@ -71,7 +71,7 @@ function applyPreviewUnshared(state: ShinsaState, event: EventOf<'preview.unshar
 
 function applyShared(state: ShinsaState, event: EventOf<'task.shared'>) {
   const share = state.tasks[event.taskId]?.share;
-  const limits = { limit: event.limit, preset: event.preset, endsAt: event.endsAt };
+  const limits = { limit: event.limit, scopes: event.scopes, endsAt: event.endsAt };
   if (share) {
     updateTask(state, event.taskId, event.at, { share: { ...share, ...limits } });
     return;
