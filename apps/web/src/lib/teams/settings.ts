@@ -52,7 +52,7 @@ function describeTeamRole(team: RemoteTeam, facts: string): Mention {
   return team.role === 'owner' ? [`You own it${facts}`] : ['Owned by ', { user: team.owner }, facts];
 }
 
-export function countOnlinePeople(team: RemoteTeam, feed: TeamFeedSnapshot = NO_TEAM_FEED) {
+function countOnlinePeople(team: RemoteTeam, feed: TeamFeedSnapshot = NO_TEAM_FEED) {
   const online = team.machines.filter((machine) =>
     isMachineOnline(machine, selectFeedMachine(feed, team.id, machine.id))
   );

@@ -87,7 +87,7 @@ export const joinTeam = Effect.fn('teams.join')(function* (userId: RemoteUserId,
   return { teamId: team.id, name: team.name, owner, status };
 });
 
-export const TEAM_NO_MACHINE =
+const TEAM_NO_MACHINE =
   'Turn on remote access on one of your machines first. Your teammates reach your work through it.';
 
 export const assertPairedMachine = Effect.fn('teams.assertPairedMachine')(function* (userId: RemoteUserId) {
