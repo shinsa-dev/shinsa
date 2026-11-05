@@ -500,6 +500,7 @@ export interface Task {
   suggestions?: TaskSuggestion[];
   budgetAcknowledgedUsd?: number;
   usageAcknowledgedPercent?: number;
+  paceLimitsIgnored?: boolean;
   configProblems?: ConfigProblem[];
   account?: RunAccount | null;
   usageWait?: UsageWait | null;
