@@ -4332,7 +4332,11 @@ Slack ──a card's button──► app.shinsa.dev /slack/interactions
   thread (`threadTs`, the mention's own `ts` for a mention outside a thread: the bot always answers in a thread), the
   author with their Slack name, the text with Slack's markup turned into words and the bot's own mention dropped
   (`resolveSlackReadableText`), a permalink, the channel's name (`conversations.info`; null without `channels:read` or
-  `groups:read`, in a direct message, or when Slack refuses), and the thread's last 100 messages, bots marked. The tunnel route
+  `groups:read`, in a direct message, or when Slack refuses), and the thread's last 100 messages, bots marked. Each
+  message is read from its `text`, its `blocks` (section, header, context and rich text) and its `attachments`
+  (pretext, title, text and fields, else the fallback), taking the longer of the text and the blocks and adding the
+  attachments (`resolveSlackMessageText`, `apps/cloud/src/routes/slack-events/message.ts`), so a bot whose `text`
+  is only a preview reaches the agent with its whole report. The tunnel route
   `POST /api/slack/events` (`TunnelGate`, `remote/gate/`) is 404 while remote access is off, refuses a body over 1 MB and a
   forward whose `x-shinsa-slack-signature` is not an HMAC over `v1:<ms>:<body>` keyed by the machine's connect key or
   whose `x-shinsa-slack-timestamp` is more than five minutes off (`verifySlackForwardSignature`, 401), then
@@ -4400,27 +4404,31 @@ Slack ──a card's button──► app.shinsa.dev /slack/interactions
     under it while the last decision on the task was made in Slack (`SlackThreadLink.decided`, cleared by any
     `gate.answered` before `slack.decided` sets it again, so a decision made in Shinsa drops it), then the task
     line, with no header;
-  - a failure: "Something failed", the failure and the first sentence of its detail, Retry; a sign-in: "Sign-in
-    needed", Open in Shinsa;
-  - a question: "Question for you", the question in bold, the first sentence of its context quoted, "Recommended:"
-    with the agent's recommendation, a button per choice (the recommended one primary) when it has one to five
-    choices of at most 75 characters, otherwise the choices numbered, and Answer… for any other answer;
+  - a failure: "Something failed", the failure and its whole detail quoted, Retry; a sign-in: "Sign-in needed", Open
+    in Shinsa;
+  - a question: "Question for you", the question in bold, its whole context quoted, "Recommended:" with the agent's
+    recommendation, a button per choice (the recommended one primary) when it has one to five choices of at most 75
+    characters, otherwise the choices numbered, and Answer… for any other answer;
   - a secret: "Secret needed", what is needed in bold, to give it in Shinsa and never in Slack, "Give it in Shinsa";
   - a proposal: "Proposed change", the change quoted, Approve and Keep as is;
-  - an operation: "Ready to run", the operation, Run and Finish without it;
-  - a plan: "Plan ready for your approval", its goal quoted, its phases numbered (eight at most), Approve and Request
-    changes…, "Read the plan";
-  - a review: "Ready for your review", the summary's first sentence quoted, the fields Checks (how they went) and
-    Pull request (`PR #<number>`, or "Opens once you approve"), Approve and Request changes…, "Review in Shinsa";
-  - a merge: "Ready to merge", the same fields, Merge;
-  - the result, a new message: "Result", the result in mrkdwn (`serializeSlackResult`), cut at 1,500 characters on a
-    word (`SLACK_RESULT_LIMIT`), and "Open in Shinsa" (or "Read the rest in Shinsa"); the end, a new message:
+  - an operation: "Ready to run", the operation and its whole detail quoted, Run and Finish without it;
+  - a plan: "Plan ready for your approval", the whole plan (`serializePlanMarkdown`: goal, every phase with its detail,
+    behaviour, approach, files, checks), Approve and Request changes…, "Read the plan";
+  - a review: "Ready for your review", the summary quoted when it differs from the goal, then the whole work report
+    (`serializeReportMarkdown`), the fields Checks (how they went) and Pull request (`PR #<number>`, or "Opens once
+    you approve"), Approve and Request changes…, "Review in Shinsa";
+  - a merge: "Ready to merge", the same report and fields, Merge;
+  - the result, a new message: "Result", the whole result in mrkdwn (`serializeSlackResult`); the end, a new message:
     "Done" (`serializeSlackCompleted`); the merge, a new message edited afterwards: "Merged", the round's watchdogs
     each with its state (waits for a data source or for production, watching with the next check in the reader's
     time, passed with its number of checks, found a problem, stopped) and the open post-merge steps under "Still to do
     after the merge" (`serializeSlackMerged`, `resolveSlackMergeMessage`); a trip, a new message: "Watchdog found a
     problem", the watchdog in bold, its summary's lead quoted and "Filed as" with a link to each task it filed or
     found (`forkTaskIds` and `linkedTaskIds`).
+  Every post carries its whole content, never a cut-down lead: the body goes out in 2,800-character sections
+  (`listSlackChunks`, which splits on paragraphs and lines and never inside a code fence or a link) up to the blocks
+  the post has left of Slack's 50, and Slack folds a long one behind its own See more. Only a body that still does
+  not fit ends in "…" with "Read the rest in Shinsa" in place of its link button (about 130,000 characters).
   A link button (`shinsa.open`) still sends Slack an interaction, which app.shinsa.dev acknowledges and drops; the
   app's Interactivity is on, with `/slack/interactions` as its request URL (`apps/cloud/slack-manifest.json`).
 - **Decide from Slack** (`slack/decisions.ts`, `decideSlackGate`). What each gate takes in Slack is

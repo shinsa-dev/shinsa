@@ -277,8 +277,31 @@ describe('the card for each gate', () => {
     expect(readText(gateCardOf(harness, taskId))).toBe(
       `Question for you\n*Go?*\n[Answer…]  <${URL}|Open in Shinsa>\n${footerOf(harness, taskId)}`
     );
-    const withContext = { ...(harness.state.gates.q1 ?? never()), body: 'The page has room. More here.' };
-    expect(readText(gateCardOf(harness, taskId, withContext))).toContain('*Go?*\n> The page has room.\n');
+    const withContext = {
+      ...(harness.state.gates.q1 ?? never()),
+      body: 'The page has room. More here.\nAnd a **second** line.',
+    };
+    expect(readText(gateCardOf(harness, taskId, withContext))).toContain(
+      '*Go?*\n> The page has room. More here.\n> And a *second* line.\n[Answer…]'
+    );
+  });
+
+  test('a question with a long context shows all of it', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    ask(harness, taskId, { question: 'Go?', choices: ['Yes', 'No'], recommendation: 'Yes' });
+    const lines = Array.from({ length: 300 }, (_, index) => `Line ${index} of the context.`);
+    const gate = { ...(harness.state.gates.q1 ?? never()), body: lines.join('\n') };
+    const message = gateCardOf(harness, taskId, gate);
+    const quoted = message.blocks.slice(2, -3).map(readBlockText);
+    expect(quoted.length).toBeGreaterThan(1);
+    expect(quoted.join('\n')).toBe(lines.map((line) => `> ${line}`).join('\n'));
+    expect(readText(message)).toContain(`<${URL}|Open in Shinsa>`);
+    const huge = { ...gate, body: Array.from({ length: 20000 }, (_, index) => `Line ${index}.`).join('\n') };
+    const cut = gateCardOf(harness, taskId, huge);
+    expect(cut.blocks).toHaveLength(SLACK_BLOCK_LIMITS.blocks);
+    expect(readText(cut)).toContain('Recommended: *Yes*');
+    expect(readText(cut)).toContain(`<${URL}|Read the rest in Shinsa>`);
   });
 
   test('a secret is never asked for in Slack', () => {
@@ -323,7 +346,32 @@ describe('the card for each gate', () => {
     const gate = harness.openGate(taskId);
     const message = gateCardOf(harness, taskId);
     expect(readText(message)).toBe(
-      `Plan ready for your approval\n> Stream the export. Then test it on a large file.\n*1.*  Read in chunks\n*2.*  Test it\n[Approve]  [Request changes…]  <${URL}|Read the plan>\n${footerOf(harness, taskId)}`
+      [
+        'Plan ready for your approval',
+        '*Goal*',
+        'Stream the export. Then test it on a large file.',
+        '',
+        '*Plan*',
+        '1. *Read in chunks*: Use a stream.',
+        '2. *Test it*: A large file.',
+        '',
+        '*Behaviour*',
+        '• Exports a 2 GB file.',
+        '',
+        '*Approach*',
+        'Streams.',
+        '',
+        '*Files*',
+        '• `src/export.ts`: Stream it.',
+        '',
+        '*Checks*',
+        '• Export tests: `bun test test/export` (phases 1, 2)',
+        '',
+        '*Evidence*',
+        'test',
+        `[Approve]  [Request changes…]  <${URL}|Read the plan>`,
+        footerOf(harness, taskId),
+      ].join('\n')
     );
     const version = harness.task(taskId).plan?.version ?? never();
     expect(valuesOf(message)).toEqual([
@@ -349,9 +397,8 @@ describe('the card for each gate', () => {
         },
       },
     };
-    expect(readText(serializeSlackGate(long, gate, URL) ?? never())).toContain(
-      '*8.*  Phase 7\n_and 2 more phases_\n'
-    );
+    const longText = readText(serializeSlackGate(long, gate, URL) ?? never());
+    expect(longText).toContain('9. *Phase 8*: \n10. *Phase 9*: \n');
     const bare =
       serializeSlackGate({ ...task, plan: null }, { ...gate, planVersion: undefined }, URL) ?? never();
     expect(readText(bare)).toContain(`> ${task.title}\n[`);
@@ -365,7 +412,8 @@ describe('the card for each gate', () => {
     const task = harness.task(taskId);
     const message = gateCardOf(harness, taskId);
     const text = readText(message);
-    expect(text).toStartWith('Ready for your review\n> ');
+    expect(text).toStartWith(`Ready for your review\n${task.plan?.document?.goal ?? task.title}\n`);
+    expect(text).toContain('\n*What changed*\n• ');
     expect(text).toContain('\n*Checks*\nAll');
     expect(text).toContain('*Pull request*\nOpens once you approve\n');
     expect(text).toContain(`[Approve]  [Request changes…]  <${URL}|Review in Shinsa>\n`);
@@ -381,9 +429,9 @@ describe('the card for each gate', () => {
       pullRequest: pullRequest(),
     };
     const failed = readText(serializeSlackGate(failing, harness.openGate(taskId), URL) ?? never());
-    expect(failed).toContain(
-      'Ready for your review\n> Streams the export.\n*Checks*\n1 of 2 checks failed.\n'
-    );
+    expect(failed).toStartWith(`Ready for your review\n> ${failing.summary.trim()}\n\n`);
+    expect(failed).toContain('• ✗ Export tests: `bun test`\n• ✓ Export tests: `bun test`\n');
+    expect(failed).toContain('*Checks*\n1 of 2 checks failed.\n');
     expect(failed).toContain(
       `*Pull request*\n<${failing.pullRequest.url}|PR #${failing.pullRequest.number}>\n`
     );
@@ -394,7 +442,8 @@ describe('the card for each gate', () => {
     );
     const none = { ...task, checkResults: [], summary: 'x'.repeat(400) };
     const bare = readText(serializeSlackGate(none, harness.openGate(taskId), URL) ?? never());
-    expect(bare).toContain(`${'x'.repeat(279)}…\n*Checks*\nNone ran\n`);
+    expect(bare).toContain(`> ${'x'.repeat(400)}\n`);
+    expect(bare).toContain('*Checks*\nNone ran\n');
   });
 
   test('a merge is the summary, the pull request and Merge', () => {
@@ -404,7 +453,7 @@ describe('the card for each gate', () => {
     const gate = { ...harness.openGate(taskId), type: 'merge' as const };
     const message = gateCardOf(harness, taskId, gate);
     expect(readText(message)).toContain(`*Pull request*\nNot open yet\n[Merge]  <${URL}|Open in Shinsa>\n`);
-    expect(readText(message)).toStartWith('Ready to merge\n> ');
+    expect(readText(message)).toStartWith('Ready to merge\nShip it.\n\n*What changed*\n');
     expect(valuesOf(message)).toEqual([
       {
         action: 'shinsa.decide.approve',
@@ -447,7 +496,7 @@ describe('the card for each gate', () => {
     const gate = harness.openGate(taskId);
     const message = gateCardOf(harness, taskId, gate);
     expect(readText(message)).toBe(
-      `Something failed\n*The worktree failed*\n> disk full.\n[Retry]  <${URL}|Open in Shinsa>\n${footerOf(harness, taskId)}`
+      `Something failed\n*The worktree failed*\n> disk full. More.\n[Retry]  <${URL}|Open in Shinsa>\n${footerOf(harness, taskId)}`
     );
     expect(valuesOf(message).map((value) => value.decision)).toEqual(['approve']);
     const signIn = gateCardOf(harness, taskId, { ...gate, type: 'sign_in', body: '' });
@@ -467,6 +516,10 @@ describe('the card for each gate', () => {
       `Ready to run\n*Run the backfill*\n[Run]  [Finish without it]  <${URL}|Open in Shinsa>\n${footerOf(harness, taskId)}`
     );
     expect(valuesOf(message).map((value) => value.decision)).toEqual(['approve', 'reject']);
+    const body = Array.from({ length: 40 }, (_, index) => `Step ${index} runs.`).join('\n');
+    const steps = readText(gateCardOf(harness, taskId, { ...gate, body }));
+    expect(steps).toContain('*Run the backfill*\n> Step 0 runs.\n> Step 1 runs.');
+    expect(steps).toContain('> Step 39 runs.\n[Run]');
   });
 });
 

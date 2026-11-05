@@ -5,6 +5,7 @@ import type { SlackDecided } from '../domain/slack.ts';
 import type { Gate, GateDecision, GateType, Task, TaskStage } from '../domain/types.ts';
 import type { Watchdog, WatchdogStatus } from '../domain/watchdogs.ts';
 import { assembleReport } from '../report/assemble.ts';
+import { serializePlanMarkdown, serializeReportMarkdown } from '../report/markdown.ts';
 import { listOpenMergeSteps } from '../report/merge-steps.ts';
 import type { ShinsaState } from '../state/index.ts';
 import {
@@ -34,8 +35,6 @@ import type { SlackDecisionValue } from './schema.ts';
 const SLACK_SECTION_SIZE = 2800;
 
 const SLACK_LEAD_LIMIT = 280;
-
-const SLACK_PLAN_PHASES = 8;
 
 export const SLACK_REACTIONS = {
   sizing: 'hourglass_flowing_sand',
@@ -88,13 +87,12 @@ interface SlackQuestionView {
 }
 
 interface SlackPlanView {
-  goal: string;
-  phases: string[];
+  body: string;
   version: number | null;
 }
 
 interface SlackReviewView {
-  summary: string;
+  body: string;
   checks: string | null;
 }
 
@@ -127,6 +125,10 @@ function serializeQuote(text: string) {
 
 function serializeLines(lines: (string | null)[]) {
   return lines.filter((line): line is string => line !== null && line.length > 0).join('\n');
+}
+
+function resolveOpenLabel(cut: boolean, label: string) {
+  return cut ? 'Read the rest in Shinsa' : label;
 }
 
 function createOpenButton(label: string, url: string, primary = true) {
@@ -277,16 +279,20 @@ function serializeSlackQuestionView(ref: SlackTaskRef, gate: Gate, view: SlackQu
   const recommended = view.recommendation
     ? createSlackContext([`Recommended: *${escapeSlackText(view.recommendation)}*`])
     : null;
+  const { sections, cut } = listBodySections(
+    view.context ? serializeQuote(view.context) : '',
+    4 + (choices ? 1 : 0) + (recommended ? 1 : 0)
+  );
   return createSlackMessage(`${ref.label} asks: ${view.question}`, [
     createSlackHeader('Question for you'),
     createSlackSection(`*${escapeSlackText(view.question)}*`),
-    ...(view.context ? [createSlackSection(serializeQuote(resolveLead(view.context)))] : []),
+    ...sections,
     ...(choices ? [choices] : []),
     ...(recommended ? [recommended] : []),
     createGateActions(gate, [
       ...answers,
       createWriteButton('Answer…', resolveDecisionValue(gate, 'reply'), answers.length === 0),
-      createOpenButton('Open in Shinsa', ref.url, false),
+      createOpenButton(resolveOpenLabel(cut, 'Open in Shinsa'), ref.url, false),
     ]),
     serializeFooter(ref),
   ]);
@@ -309,23 +315,13 @@ function listApproveButtons(gate: Gate, planVersion: number | null = null) {
 }
 
 function serializeSlackPlanView(ref: SlackTaskRef, gate: Gate, view: SlackPlanView): SlackMessage {
-  const phases = view.phases
-    .slice(0, SLACK_PLAN_PHASES)
-    .map((phase, index) => `*${index + 1}.*  ${escapeSlackText(phase)}`);
-  const more = view.phases.length - phases.length;
+  const { sections, cut } = listBodySections(view.body, 3);
   return createSlackMessage(`${ref.label} has a plan for you to approve.`, [
     createSlackHeader('Plan ready for your approval'),
-    createSlackSection(serializeQuote(view.goal)),
-    ...(phases.length > 0
-      ? [
-          createSlackSection(
-            serializeLines([...phases, more > 0 ? `_and ${describeCount(more, 'more phase')}_` : null])
-          ),
-        ]
-      : []),
+    ...sections,
     createGateActions(gate, [
       ...listApproveButtons(gate, view.version),
-      createOpenButton('Read the plan', ref.url, false),
+      createOpenButton(resolveOpenLabel(cut, 'Read the plan'), ref.url, false),
     ]),
     serializeFooter(ref),
   ]);
@@ -338,76 +334,81 @@ function serializePullRequestField(ref: SlackTaskRef, missing: string) {
 }
 
 function serializeSlackReviewView(ref: SlackTaskRef, gate: Gate, view: SlackReviewView): SlackMessage {
+  const { sections, cut } = listBodySections(view.body, 4);
   return createSlackMessage(`${ref.label} is ready for your review.`, [
     createSlackHeader('Ready for your review'),
-    createSlackSection(serializeQuote(view.summary)),
+    ...sections,
     createSlackFields([
       { label: 'Checks', value: escapeSlackText(view.checks ?? 'None ran') },
       { label: 'Pull request', value: serializePullRequestField(ref, 'Opens once you approve') },
     ]),
     createGateActions(gate, [
       ...listApproveButtons(gate),
-      createOpenButton('Review in Shinsa', ref.url, false),
+      createOpenButton(resolveOpenLabel(cut, 'Review in Shinsa'), ref.url, false),
     ]),
     serializeFooter(ref),
   ]);
 }
 
 function serializeSlackMergeView(ref: SlackTaskRef, gate: Gate, view: SlackReviewView): SlackMessage {
+  const { sections, cut } = listBodySections(view.body, 4);
   return createSlackMessage(`${ref.label} is ready to merge.`, [
     createSlackHeader('Ready to merge'),
-    createSlackSection(serializeQuote(view.summary)),
+    ...sections,
     createSlackFields([
       { label: 'Checks', value: escapeSlackText(view.checks ?? 'None ran') },
       { label: 'Pull request', value: serializePullRequestField(ref, 'Not open yet') },
     ]),
     createGateActions(gate, [
       createDecideButton('Merge', resolveDecisionValue(gate, 'approve'), true),
-      createOpenButton('Open in Shinsa', ref.url, false),
+      createOpenButton(resolveOpenLabel(cut, 'Open in Shinsa'), ref.url, false),
     ]),
     serializeFooter(ref),
   ]);
 }
 
 function serializeSlackProposalView(ref: SlackTaskRef, gate: Gate, request: string): SlackMessage {
+  const { sections, cut } = listBodySections(serializeQuote(request || 'A change to the code.'), 3);
   return createSlackMessage(`${ref.label} proposes a change.`, [
     createSlackHeader('Proposed change'),
-    createSlackSection(serializeQuote(request || 'A change to the code.')),
+    ...sections,
     createGateActions(gate, [
       createDecideButton('Approve', resolveDecisionValue(gate, 'approve'), true),
       createDecideButton('Keep as is', resolveDecisionValue(gate, 'reject')),
-      createOpenButton('Open in Shinsa', ref.url, false),
+      createOpenButton(resolveOpenLabel(cut, 'Open in Shinsa'), ref.url, false),
     ]),
     serializeFooter(ref),
   ]);
 }
 
-function serializeGateLines(gate: Gate) {
-  const lead = gate.body.trim() ? resolveLead(gate.body) : null;
-  return serializeLines([`*${escapeSlackText(gate.title)}*`, lead ? serializeQuote(lead) : null]);
+function listGateSections(gate: Gate) {
+  const body = gate.body.trim() ? serializeQuote(gate.body) : null;
+  return listBodySections(serializeLines([`*${escapeSlackText(gate.title)}*`, body]), 3);
 }
 
 function serializeSlackFailureView(ref: SlackTaskRef, gate: Gate): SlackMessage {
   const retry = gate.type === 'failure';
+  const { sections, cut } = listGateSections(gate);
   return createSlackMessage(`${ref.label} needs you: ${gate.title}`, [
     createSlackHeader(retry ? 'Something failed' : 'Sign-in needed'),
-    createSlackSection(serializeGateLines(gate)),
+    ...sections,
     createGateActions(gate, [
       ...(retry ? [createDecideButton('Retry', resolveDecisionValue(gate, 'approve'), true)] : []),
-      createOpenButton('Open in Shinsa', ref.url, !retry),
+      createOpenButton(resolveOpenLabel(cut, 'Open in Shinsa'), ref.url, !retry),
     ]),
     serializeFooter(ref),
   ]);
 }
 
 function serializeSlackOperationView(ref: SlackTaskRef, gate: Gate): SlackMessage {
+  const { sections, cut } = listGateSections(gate);
   return createSlackMessage(`${ref.label} is ready to run its operation.`, [
     createSlackHeader('Ready to run'),
-    createSlackSection(serializeGateLines(gate)),
+    ...sections,
     createGateActions(gate, [
       createDecideButton('Run', resolveDecisionValue(gate, 'approve'), true),
       createDecideButton('Finish without it', resolveDecisionValue(gate, 'reject')),
-      createOpenButton('Open in Shinsa', ref.url, false),
+      createOpenButton(resolveOpenLabel(cut, 'Open in Shinsa'), ref.url, false),
     ]),
     serializeFooter(ref),
   ]);
@@ -423,10 +424,18 @@ function describeCheckSummary(task: Task) {
 }
 
 function resolveReviewView(task: Task): SlackReviewView {
+  const report = assembleReport(task);
+  const summary = task.summary?.trim();
+  const lead = summary && summary !== report.headline.trim() ? `${serializeQuote(summary)}\n` : null;
   return {
-    summary: resolveLead(task.summary?.trim() || assembleReport(task).headline),
+    body: serializeLines([lead, serializeSlackMrkdwn(serializeReportMarkdown(report))]),
     checks: describeCheckSummary(task),
   };
+}
+
+function resolvePlanBody(task: Task) {
+  const document = task.plan?.document;
+  return document ? serializeSlackMrkdwn(serializePlanMarkdown(document)) : serializeQuote(task.title);
 }
 
 export function serializeSlackGate(task: Task, gate: Gate, taskUrl: string): SlackMessage | null {
@@ -443,8 +452,7 @@ export function serializeSlackGate(task: Task, gate: Gate, taskUrl: string): Sla
       return serializeSlackSecretView(ref, gate.secret?.label ?? gate.title);
     case 'plan':
       return serializeSlackPlanView(ref, gate, {
-        goal: task.plan?.document?.goal ?? task.title,
-        phases: (task.plan?.document?.phases ?? []).map((phase) => phase.title),
+        body: resolvePlanBody(task),
         version: gate.planVersion ?? task.plan?.version ?? null,
       });
     case 'review':
@@ -465,9 +473,9 @@ export function serializeSlackGate(task: Task, gate: Gate, taskUrl: string): Sla
   }
 }
 
-function listBodySections(markdown: string, fixedBlocks: number) {
+function listBodySections(mrkdwn: string, fixedBlocks: number) {
   const { chunks, cut } = listSlackChunks(
-    serializeSlackMrkdwn(markdown),
+    mrkdwn,
     SLACK_SECTION_SIZE,
     SLACK_BLOCK_LIMITS.blocks - fixedBlocks
   );
@@ -477,13 +485,11 @@ function listBodySections(markdown: string, fixedBlocks: number) {
 
 function serializeSlackResultView(ref: SlackTaskRef, markdown: string): SlackMessage {
   const body = markdown.trim();
-  const { sections, cut } = listBodySections(body, 3);
+  const { sections, cut } = listBodySections(serializeSlackMrkdwn(body), 3);
   return createSlackMessage(resolveLead(body) || ref.label, [
     createSlackHeader('Result'),
     ...sections,
-    createSlackActions([
-      createOpenButton(cut ? 'Read the rest in Shinsa' : 'Open in Shinsa', ref.url, false),
-    ]),
+    createSlackActions([createOpenButton(resolveOpenLabel(cut, 'Open in Shinsa'), ref.url, false)]),
     serializeFooter(ref),
   ]);
 }
