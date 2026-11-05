@@ -976,6 +976,7 @@ describe('the agent composes the steps', () => {
       stage: 'awaiting_proposal',
       proposal: { status: 'open', recommend: 'close' },
     });
+    expect(harness.openGate(taskId).title).toBe('The report found nothing to change');
     harness.send({
       type: 'gate.answer',
       gateId: harness.openGate(taskId).id,
@@ -1008,6 +1009,7 @@ describe('the agent composes the steps', () => {
     });
     expect(harness.openGate(taskId)).toMatchObject({
       type: 'proposal',
+      title: 'The diagnosis found nothing to fix',
       body: 'Found nothing worth changing, so the work goes on only with your OK.\n\nPlan the change and build it. You review it before a pull request opens.',
     });
     approve(harness, taskId);

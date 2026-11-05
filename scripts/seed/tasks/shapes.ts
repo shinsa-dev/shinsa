@@ -302,7 +302,7 @@ function listInquiryShapeTasks({ paywall, kanna }: SeedRepoPair): SeedTask[] {
       ],
       gate: {
         type: 'proposal',
-        title: 'Turn this investigation into a fix?',
+        title: 'The diagnosis found nothing to fix',
         body: `${NO_RACE_WHY}\n\nPlan the change and build it. You review it before a pull request opens.`,
       },
     },

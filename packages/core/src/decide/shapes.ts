@@ -103,6 +103,12 @@ const OPERATION_PROPOSAL_TITLE: Record<InquiryStep, string> = {
   investigate: 'Run an operation from this diagnosis?',
 };
 
+const CLOSE_PROPOSAL_TITLE: Record<InquiryStep, string> = {
+  answer: 'The answer calls for no change',
+  research: 'The report found nothing to change',
+  investigate: 'The diagnosis found nothing to fix',
+};
+
 const NOTHING_TO_CHANGE = 'Found nothing worth changing, so the work goes on only with your OK.';
 
 const NEXT_WORK: Record<WorkStep, string> = {
@@ -287,13 +293,24 @@ export function proceedAfterSetup(decider: Decider, taskId: string) {
   startStep(decider, taskId, step);
 }
 
-function openProposalGate(decider: Decider, task: Task, step: InquiryStep, proposal: ChangeProposalInput) {
+function resolveProposalTitle(task: Task, step: InquiryStep, recommend: ProposalRecommendation) {
+  if (recommend === 'close') return CLOSE_PROPOSAL_TITLE[step];
   const operation = resolveWorkStep(resolveTaskPipeline(task)) === 'operate';
+  return operation ? OPERATION_PROPOSAL_TITLE[step] : CHANGE_PROPOSAL_TITLE[step];
+}
+
+function openProposalGate(
+  decider: Decider,
+  task: Task,
+  step: InquiryStep,
+  proposal: ChangeProposalInput,
+  recommend: ProposalRecommendation
+) {
   decider.stage(task.id, 'awaiting_proposal', 'a proposal waits for your OK');
   decider.openGate(
     task.id,
     'proposal',
-    operation ? OPERATION_PROPOSAL_TITLE[step] : CHANGE_PROPOSAL_TITLE[step],
+    resolveProposalTitle(task, step, recommend),
     `${proposal.why}\n\n${proposal.request}`
   );
 }
@@ -317,15 +334,16 @@ function requestYourOk(
     request: NEXT_WORK[findWorkStep(pipeline)],
     why: resolveComposedReason(task),
   };
+  const recommended = proposal ? 'go_on' : recommend;
   decider.emit({
     type: 'task.change_proposed',
     taskId,
     request: next.request,
     why: next.why,
-    recommend: proposal ? 'go_on' : recommend,
+    recommend: recommended,
     runId,
   });
-  openProposalGate(decider, decider.task(taskId), step, next);
+  openProposalGate(decider, decider.task(taskId), step, next, recommended);
 }
 
 function finishInquiry(

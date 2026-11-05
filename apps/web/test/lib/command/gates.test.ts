@@ -307,7 +307,7 @@ describe('gate commands', () => {
   });
 
   it('leads with Close when the agent recommends closing a proposal', () => {
-    const gate = createGate({ id: 'g', taskId: 't', type: 'proposal', title: 'Turn this into a fix?' });
+    const gate = createGate({ id: 'g', taskId: 't', type: 'proposal', title: 'The diagnosis found nothing to fix' });
     const task = createTask({
       id: 't',
       pipeline: ['investigate', 'your_ok', 'plan', 'build', 'merge'],

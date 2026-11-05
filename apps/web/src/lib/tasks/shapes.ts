@@ -106,12 +106,6 @@ const GO_ON: Record<WorkStep, ChangeAction & { reply: 'makeChange' | 'planOperat
   },
 };
 
-const CLOSE_TITLE: Record<InquiryStep, string> = {
-  answer: 'The answer calls for no change',
-  research: 'The report found nothing to change',
-  investigate: 'The diagnosis found nothing to fix',
-};
-
 const CLOSE: ChangeAction & { note: string } = {
   label: 'Close',
   reply: 'closeProposal',
@@ -214,7 +208,7 @@ export function describeChangeGate(task: Task, gate: Gate): ChangeGate {
   const [why = '', ...rest] = gate.body.split('\n\n');
   return {
     eyebrow: composed ? RESULT_IN[step] : CHANGE_EYEBROW[step],
-    title: close ? CLOSE_TITLE[step] : gate.title,
+    title: gate.title,
     why: open?.why ?? why,
     request: open?.request ?? rest.join('\n\n'),
     requestLabel: resolveRequestLabel(close, composed),

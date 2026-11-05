@@ -286,7 +286,7 @@ describe('NowCard on the Overview', () => {
       id: 'gate-1',
       taskId: 'task-1',
       type: 'proposal',
-      title: 'Turn this into a fix?',
+      title: 'The diagnosis found nothing to fix',
     });
     const { view } = renderOverview(createShinsaState({ tasks: [task], gates: [gate] }), task, gate);
     expect(view.getByText('The diagnosis found nothing to fix')).toBeTruthy();

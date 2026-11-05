@@ -1036,7 +1036,8 @@ folds in `state/shapes.ts`).
 - **The agent's recommendation.** Before your OK the inquiry hand-over must set `recommend`: `go_on` when the work
   should go on, `close` when it found nothing worth changing (a `close` beside `propose_change` is refused). It is kept
   on the proposal. With `go_on` the card leads with "Make it a change" (or "Plan the operation") and keeps the
-  inquiry as the quiet link; with `close` its title says nothing was found ("The diagnosis found nothing to fix"), Close
+  inquiry as the quiet link; with `close` the gate's own title says nothing was found ("The diagnosis found nothing to fix"), so the card,
+  notifications and the Home guide agree, Close
   (a veto, `closeProposal`) leads, and going on drops to the quiet link; ⌘K orders them the same way. A find-and-fix
   diagnosis with `close` reshapes the task to `[investigate, your_ok, …]` (`by: agent`) so it stops for your OK instead
   of planning a fix.

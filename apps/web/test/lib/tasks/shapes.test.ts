@@ -328,7 +328,7 @@ describe('composed steps', () => {
       ],
     });
     expect(
-      describeChangeGate(fix, createGate({ id: 'g', taskId: 't', title: 'Turn this into a fix?' }))
+      describeChangeGate(fix, createGate({ id: 'g', taskId: 't', title: 'The diagnosis found nothing to fix' }))
     ).toEqual({
       eyebrow: 'The diagnosis is in',
       title: 'The diagnosis found nothing to fix',
@@ -348,7 +348,6 @@ describe('composed steps', () => {
       proposal,
     });
     expect(describeChangeGate(operation, createGate({ id: 'g', taskId: 't' }))).toMatchObject({
-      title: 'The report found nothing to change',
       quiet: { label: 'Plan the operation', reply: 'planOperation' },
     });
   });
