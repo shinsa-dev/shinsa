@@ -326,6 +326,7 @@ one reads as its empty value. The fields under Triage and shape, Plan and build,
 | `usageWait?` | `UsageWait` \| null | a step waiting for a usage reset, or held at a daily or project limit (`cause: pace`, with `pace`: `scope` `daily` or `project`, `limit`, `percent`, `projectId`, `stageReason`) |
 | `account?` | `RunAccount` \| null | the account the task is bound to |
 | `budgetAcknowledgedUsd?`, `usageAcknowledgedPercent?` | number | what you allowed past the cost and usage limits |
+| `paceLimitsIgnored?` | boolean | you pressed Resume now on a pace hold, so the daily and project usage limits no longer hold this task |
 | `configProblems?` | `ConfigProblem[]` | the problems setup verification found, each a `kind` (`repository`, `no_repository`, `default_branch` or `workspace`) and a `detail`; the checks are never one (`docs/engine.md` → Setup verification) |
 
 **Agents and other tasks**
@@ -1121,6 +1122,7 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `run.waiting` | a step's turn ended while its delegations work |
 | `monitor.armed`, `monitor.fired`, `monitor.ended` | a monitor was armed, fired, ran out or was cleared |
 | `usage_wait.armed`, `usage_wait.ended` | a usage wait was armed; resumed, reset or cleared |
+| `task.pace_limits_ignored` | you resumed a pace hold, so the daily and project usage limits no longer hold the task |
 | `pull_request.opened`, `pull_request.updated` | the pull request was opened; a read changed it |
 | `pull_request.push_requested`, `pull_request.pushed`, `pull_request.head_moved` | a push was asked for, made; someone else moved the head |
 | `pull_request.read_failed`, `pull_request.read_failures_cleared` | a read failed; the count reset |
