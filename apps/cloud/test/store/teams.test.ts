@@ -16,7 +16,7 @@ describe('teams', () => {
       Effect.gen(function* () {
         const teams = yield* Teams;
         yield* seedUsers(MONA, KAI);
-        const readCreated = yield* teams.create({ id: CREW, userId: MONA.id, name: 'Crew' });
+        const readCreated = yield* teams.create({ id: CREW, ownerId: MONA.id, name: 'Crew' });
         const readFound = yield* teams.select(CREW);
         yield* teams.members.add(CREW, KAI.id);
         const readMembers = yield* teams.members.count(CREW);
@@ -26,7 +26,7 @@ describe('teams', () => {
     );
     expect(created).toEqual({
       id: CREW,
-      userId: MONA.id,
+      ownerId: MONA.id,
       name: 'Crew',
       scopes: null,
       createdAt: TEST_NOW,
@@ -41,9 +41,9 @@ describe('teams', () => {
       Effect.gen(function* () {
         const teams = yield* Teams;
         yield* seedUsers(MONA, KAI, RIO);
-        yield* teams.create({ id: CREW, userId: MONA.id, name: 'Crew' });
+        yield* teams.create({ id: CREW, ownerId: MONA.id, name: 'Crew' });
         yield* TestClock.adjust('1 second');
-        yield* teams.create({ id: BAND, userId: KAI.id, name: 'Band' });
+        yield* teams.create({ id: BAND, ownerId: KAI.id, name: 'Band' });
         yield* teams.members.add(CREW, KAI.id);
         return [
           yield* teams.listOfUser(KAI.id),
@@ -62,7 +62,7 @@ describe('teams', () => {
       Effect.gen(function* () {
         const teams = yield* Teams;
         yield* seedUsers(MONA, KAI, RIO);
-        yield* teams.create({ id: CREW, userId: MONA.id, name: 'Crew' });
+        yield* teams.create({ id: CREW, ownerId: MONA.id, name: 'Crew' });
         yield* teams.members.add(CREW, KAI.id);
         return [
           yield* teams.shareTeam(MONA.id, KAI.id),
@@ -79,7 +79,7 @@ describe('teams', () => {
       Effect.gen(function* () {
         const teams = yield* Teams;
         yield* seedUsers(MONA, KAI, RIO);
-        yield* teams.create({ id: CREW, userId: MONA.id, name: 'Crew' });
+        yield* teams.create({ id: CREW, ownerId: MONA.id, name: 'Crew' });
         yield* teams.members.add(CREW, KAI.id);
         yield* seedMachine(STUDIO, MONA.id, 'a');
         yield* TestClock.adjust('1 second');
@@ -96,7 +96,7 @@ describe('teams', () => {
       Effect.gen(function* () {
         const teams = yield* Teams;
         yield* seedUsers(MONA, KAI);
-        yield* teams.create({ id: CREW, userId: MONA.id, name: 'Crew' });
+        yield* teams.create({ id: CREW, ownerId: MONA.id, name: 'Crew' });
         yield* teams.invites.replace(CREW, hashOf('4'));
         yield* teams.requesters.add(CREW, KAI.id);
         return [yield* teams.invites.select(hashOf('4')), yield* teams.requesters.list(CREW)] as const;

@@ -10,16 +10,13 @@ import {
   proposePlan,
   readInstruction,
   readyWorktree,
+  refreshWorktree,
 } from '../harness.ts';
 
 function park(harness: Harness) {
   const taskId = createTask(harness, { backlog: true });
   proposePlan(harness, taskId);
   return taskId;
-}
-
-function refreshWorktree(harness: Harness, taskId: string) {
-  harness.send({ type: 'worktree.ready', taskId, path: `/wt/${taskId}`, branch: `fix/${taskId}` });
 }
 
 describe('the backlog', () => {
@@ -51,7 +48,12 @@ describe('the backlog', () => {
     const taskId = park(harness);
     const before = harness.effectsOf('worktree.create').length;
     harness.advance(3 * DAY_MS);
-    approve(harness, taskId);
+    harness.send({
+      type: 'gate.answer',
+      gateId: harness.openGate(taskId).id,
+      decision: 'approve',
+      response: null,
+    });
     expect(harness.task(taskId).stage).toBe('triage');
     expect(harness.effectsOf('worktree.create')).toHaveLength(before + 1);
     expect(harness.task(taskId).backlog).toEqual({ at: expect.any(Number) });

@@ -9,7 +9,7 @@ import {
   listActionScopes,
   listViewScopes,
   resolvePreset,
-  SHARE_PRESET_GROUPS,
+  SHARE_PRESET_SCOPES,
   TEAM_PRESET_NAMES,
   toggleScope,
 } from '../../src/index.ts';
@@ -39,9 +39,9 @@ describe('access scopes', () => {
   });
 
   test('share presets are the view scopes of the same presets', () => {
-    expect(SHARE_PRESET_GROUPS.standard).toEqual(listViewScopes(ACCESS_PRESETS.standard));
-    expect(SHARE_PRESET_GROUPS.full).toContain('messages');
-    expect(SHARE_PRESET_GROUPS.full.some(isActionScope)).toBe(false);
+    expect(SHARE_PRESET_SCOPES.standard).toEqual(listViewScopes(ACCESS_PRESETS.standard));
+    expect(SHARE_PRESET_SCOPES.full).toContain('messages');
+    expect(SHARE_PRESET_SCOPES.full.some(isActionScope)).toBe(false);
   });
 
   test('toggleScope turns one scope on in its place or off, and leaves the rest', () => {

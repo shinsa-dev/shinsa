@@ -1,3 +1,4 @@
+import { ViewScopes } from '@shinsa/core';
 import { Schema } from 'effect';
 
 const Data = Schema.Unknown;
@@ -218,7 +219,7 @@ const SharedProject = Schema.Struct({
 });
 
 const SharedTask = Schema.Struct({
-  preset: Data,
+  scopes: ViewScopes,
   task: SharedTaskRecord,
   gates: Schema.Array(SharedGate),
   runs: Schema.Array(SharedRun),

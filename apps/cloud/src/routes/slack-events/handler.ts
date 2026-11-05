@@ -329,7 +329,7 @@ export const SlackEventRoutes = Layer.unwrap(
         );
         return;
       }
-      const machine = yield* machines.select(link.value.instanceId);
+      const machine = yield* machines.select(link.value.machineId);
       const now = yield* Clock.currentTimeMillis;
       if (Option.isNone(machine) || !isMachineOnline(machine.value, now)) {
         yield* postInThread(
@@ -339,7 +339,7 @@ export const SlackEventRoutes = Layer.unwrap(
       }
       const forwarded = yield* resolveForwardedMention(mention, workspace, token);
       yield* store.recordThread(
-        { teamId: mention.teamId, channelId: mention.channelId, threadTs: mention.threadTs },
+        { workspaceId: mention.teamId, channelId: mention.channelId, threadTs: mention.threadTs },
         machine.value.id
       );
       if (!(yield* forwardMention(forwarded, machine.value)))
@@ -354,13 +354,13 @@ export const SlackEventRoutes = Layer.unwrap(
       const link = yield* store.selectLink(card.teamId, card.userId);
       if (Option.isNone(link)) return refuse(SLACK_DECISION_REFUSALS.notLinked);
       const poster = yield* store.selectPoster({
-        teamId: card.teamId,
+        workspaceId: card.teamId,
         channelId: card.channelId,
         ts: card.messageTs,
       });
       const machine = Option.isSome(poster) ? yield* machines.select(poster.value) : Option.none<Machine>();
       if (Option.isNone(machine)) return refuse(SLACK_DECISION_REFUSALS.noAccess);
-      const role = yield* selectMachineRole(machine.value.id, machine.value.userId, link.value.userId);
+      const role = yield* selectMachineRole(machine.value.id, machine.value.ownerId, link.value.userId);
       if (Option.isNone(role) || role.value === 'guest') return refuse(SLACK_DECISION_REFUSALS.noAccess);
       if (!isMachineOnline(machine.value, yield* Clock.currentTimeMillis))
         return refuse(serializeOfflineRefusal(machine.value.name));

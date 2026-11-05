@@ -7,3 +7,9 @@ export const STATUS_UNAVAILABLE_CODES = new Set(['not_authorized', 'feature_disa
 export const SETTLED_REACTION_CODES = new Set(['no_reaction', 'already_reacted']);
 
 export const Posted = Schema.Struct({ ts: Schema.optional(Schema.String) });
+
+export interface RelayThread {
+  readonly teamId: string;
+  readonly channelId: string;
+  readonly threadTs: string;
+}

@@ -89,7 +89,7 @@ src/
 ├── store/           The D1 tables as services over SqlClient, one folder each (schema.ts: the row schemas and
 │                    column lists; service.ts: the service), every row decoded and every value encoded by a Schema
 │                    (SqlSchema), ids branded, `orDie` at each method: accounts/ (users, sessions, sign-in codes),
-│                    pairings/, machines/ (instances, with SharedMachine for a user's list), access/ (invites,
+│                    pairings/, machines/ (machines, with SharedMachine for a user's list), access/ (invites,
 │                    requesters, members, guests, hand-offs), teams/ (and their invites, requesters, members),
 │                    slack/; shared/ (schema.ts: SQL_NAMES, USER_COLUMNS, Found, Count and MemberRow as schema
 │                    transforms; membership.ts and invites.ts: createMembership and createInvites, the two shapes
@@ -104,7 +104,8 @@ src/
                      selectUserName, hasBotScopes; the scopes), tunnels/ (Tunnels: the one way anything reaches a
                      machine's t-<instance>.shinsa.dev: webhooks, previews and Slack, never following a redirect;
                      TunnelUnreachable when it does not answer)
-migrations/          D1's schema (wrangler d1 migrations), applied in order
+migrations/          D1's schema (wrangler d1 migrations): 0001_schema.sql is the whole of it; test/store/schema.test.ts
+                     pins its rules (How it works → The schema)
 slack-manifest.json  The Slack app to create (api.slack.com → Create New App → From a manifest); test/slack.test.ts
                      keeps its scopes, redirects and events in step with the code
 test/                gates.test.ts reads every RemoteApi route with HttpApi.reflect and proves each sign-in gate:
@@ -134,7 +135,7 @@ test/                gates.test.ts reads every RemoteApi route with HttpApi.refl
   time, redeems the code with the verifier (a code stolen from the redirect cannot be redeemed without it), reads who
   you are from GitHub and sets `__Host-shinsa_session` (Path=/, HttpOnly,
   Secure, SameSite=Lax, 30 days). The `__Host-` prefix means no other host, a machine's `t-<id>.shinsa.dev`
-  included, can set or overwrite either cookie. D1 keeps only the SHA-256 of the session token.
+  included, can set or overwrite either cookie. D1 keeps only the SHA-256 of the session token, and removes the expired ones each time it makes one.
   Any GitHub account may sign in: an account reaches only the machines it paired itself or was invited to, and even
   those open only to a browser the machine enrolled, so a stranger signed in sees an empty list and can reach nothing.
   Each sign-in keeps the account's GitHub login, name and avatar (`users`), which is how an owner and a member show
@@ -162,12 +163,11 @@ test/                gates.test.ts reads every RemoteApi route with HttpApi.refl
   they are stored (`CloudCrypto.sealCredentials`, core's `pairing-seal.ts`), so the waiting row in D1 holds nothing the
   Worker or a copy of D1 can open. The machine's next poll with the right secret collects them once as
   `sealedCredentials`, opens them with its private key, and the row is then gone. Only a machine whose `pair/start`
-  names `sealed-pairing` in `features` (kept in `pair_sessions.features` and then `instances.features`,
-  `0007_machine_features.sql`) is sealed to; an older engine that names nothing collects them in the clear as
+  names `sealed-pairing` in `features` (kept in `pairings.features` and then `machines.features`) is sealed to; an older engine that names nothing collects them in the clear as
   `credentials`, as it always has. At most 5 machines per account, and at most `MAX_INSTANCES` (50 by default, a
   variable in `wrangler.jsonc`) on the whole service, each one a tunnel and a DNS record on our Cloudflare account; past
   it an approval is 503 `service_full`.
-- **Machines.** A heartbeat (machine token as bearer) records the `features` the engine names (`instances.features`)
+- **Machines.** A heartbeat (machine token as bearer) records the `features` the engine names (`machines.features`)
   and marks the instance online and, when the machine's loopback
   address changed, moves the tunnel's ingress there; any address but loopback is refused. Online means a heartbeat in
   the last 5 minutes and no offline call since. An unknown machine token is 401, which the machine reads as revoked.
@@ -176,12 +176,12 @@ test/                gates.test.ts reads every RemoteApi route with HttpApi.refl
   (`HeartbeatResponse`), the machine's owner, its members and its guests as users, so the machine keeps its own copy
   and forgets the devices of anyone no longer listed.
 - **Members.** A machine has one owner, the account that paired it, and up to 20 members (`MAX_INSTANCE_MEMBERS`,
-  `instance_members`), who reach it exactly as its owner does. Only the machine invites, and only it lets someone
+  `machine_members`), who reach it exactly as its owner does. Only the machine invites, and only it lets someone
   in. `POST /__remote/machine/invites` (machine token) answers the machine's one reusable invite token, replacing the
-  one before, of which D1 keeps only the SHA-256 (`instance_invites`, one row per machine);
+  one before, of which D1 keeps only the SHA-256 (`machine_invites`, one row per machine);
   `/__remote/machine/invites/remove` turns it off. The machine puts it in its one invite link, for its owner's devices and other people alike; whoever opens the
   link signs in with any GitHub account and the page sends `POST /__remote/invites/accept { token }`, which records
-  that this account asked (`instance_requesters`), makes it no member, and answers the machine's id, name and owner,
+  that this account asked (`machine_requesters`), makes it no member, and answers the machine's id, name and owner,
   the account's user and a connect token for that account alone, so the browser can ask the machine over the sealed
   channel (an unknown or turned-off token is 404 `invite_invalid`). The machine checks who asked with `POST
   /__remote/machine/requesters/find { userId }`, which answers the user only for an account that asked, a member,
@@ -194,8 +194,8 @@ test/                gates.test.ts reads every RemoteApi route with HttpApi.refl
   do not count toward the 5 machines a member may pair.
 - **Guests.** A guest is someone a task was handed to (`docs/engine.md` → Handing off a task): they reach the machine
   only for that task, which the machine enforces; here they are only an account allowed connect tokens, up to 20 a
-  machine (`MAX_INSTANCE_GUESTS`, `instance_guests`). `POST /__remote/machine/handoffs` (machine token) answers a new
-  hand-off token, one per hand-off and many at once, of which D1 keeps only the SHA-256 (`instance_handoffs`) and
+  machine (`MAX_INSTANCE_GUESTS`, `machine_guests`). `POST /__remote/machine/handoffs` (machine token) answers a new
+  hand-off token, one per hand-off and many at once, of which D1 keeps only the SHA-256 (`machine_handoffs`) and
   never the task it is for; `/__remote/machine/handoffs/remove { token }` turns that one off. Whoever opens the
   hand-off link signs in and the page sends `POST /__remote/handoffs/accept { token }`, which records that this
   account asked and answers as an invite does (an unknown or removed token is 404 `handoff_invalid`). An invite token
@@ -204,7 +204,7 @@ test/                gates.test.ts reads every RemoteApi route with HttpApi.refl
   `guests_full` past the limit; an owner or member stays what they are. A guest sees the machine with
   `role: 'guest'`, gets connect tokens for it and can leave it; the machine removes one with
   `/__remote/machine/guests/remove { userId }`.
-- **Teams** (`routes/teams/`, `routes/machine-teams/`, `0005_teams.sql`; `docs/engine.md` → Teams). Who is in which team, and nothing else: no task,
+- **Teams** (`routes/teams/`, `routes/machine-teams/`; `docs/engine.md` → Teams). Who is in which team, and nothing else: no task,
   project, title or key is ever sent here. A team (`teams`) has one owner, the account whose machine made it with
   `POST /__remote/machine/teams { name }` (machine token; at most 10 owned, 409 `teams_full`), a name of 60 characters
   at most and up to 20 members (`team_members`, 409 `members_full`). It mirrors a machine's members: one reusable
@@ -223,7 +223,7 @@ test/                gates.test.ts reads every RemoteApi route with HttpApi.refl
   and a machine of one of them, as `wss://t-<instance>.shinsa.dev/team?token=…`, signed with that machine's connect
   key for the account that asked; the machine then checks the account against its own copy of the members and the
   team key's proof. Removing a user, a team or a machine cascades its rows.
-  What teammates may do on each other's machines (`0008_team_scopes.sql`) is the team's `scopes` and each member's
+  What teammates may do on each other's machines is the team's `scopes` (`teams.scopes`) and each member's
   own (`team_members.scopes`), both a JSON list of core's `AccessScope`s, null for the default or the team's. Only the
   owner changes them, from their machine with `POST /__remote/machine/teams/<team>/scopes { userId?, scopes }` or from
   a page with `POST /__remote/teams/<team>/scopes`, the same body, so a browser that reaches none of their machines can
@@ -232,7 +232,7 @@ test/                gates.test.ts reads every RemoteApi route with HttpApi.refl
   it sets the team's, with one that member's, and `null` puts the default or the team's back. It answers the team.
   Every `RemoteTeam` carries the team's list, or `DEFAULT_TEAM_SCOPES` (Collaborate: everything but `message`), as
   `scopes`, and each member set apart as `overrides`; a removed member's go with their row. The Worker only keeps them: each machine enforces them for its own tasks.
-- **Signing keys** (`instances.signing_key`, `0006_signing_keys.sql`). Each machine's heartbeat may send
+- **Signing keys** (`machines.signing_key`). Each machine's heartbeat may send
   `signingKey`, its ECDSA P-256 public key (raw, base64url; anything else is 400 `body_invalid`, and one left out keeps
   the stored key), and the team listing returns it on each machine (`TeamMachine.signingKey`). Teammates verify a
   machine's signed task list with it when another teammate passes it on while the machine is offline
@@ -309,7 +309,7 @@ test/                gates.test.ts reads every RemoteApi route with HttpApi.refl
   with an HMAC over the time and the body keyed by the machine's connect key (`createSlackForwardSignature`); a
   machine offline, or a tunnel that does not answer, gets "offline" in the thread instead. A machine posts and edits
   through `/__remote/slack/post` with its machine token, only in a thread it was sent and only editing what it
-  posted (`slack_threads`, `slack_posts`), `/__remote/slack/react` moves the one reaction on a mention it was sent (`reactions.remove` then `reactions.add`, best effort),
+  posted (`slack_threads`, `slack_posts`, kept until their workspace or machine is removed), `/__remote/slack/react` moves the one reaction on a mention it was sent (`reactions.remove` then `reactions.add`, best effort),
   `/slack/interactions` takes a card's decision buttons and forms (signed, acknowledged at once). It lets through
   only the owner or a member of the machine that posted the card (`selectPoster`, then the linked account's role
   there; a guest, someone not connected and anyone else get a private refusal, `SLACK_DECISION_REFUSALS`, and
@@ -347,6 +347,17 @@ model. The Worker's part of it:
   one secret kept plain is each machine's connect key, which the Worker signs connect, preview and Slack tokens with:
   a D1 copy can therefore act as the Worker toward that machine's previews and Slack, though still not open its
   channel. Sealing it needs a Worker secret of its own and a rewrite of every row, left for a change of its own.
+- **The schema** (`migrations/0001_schema.sql`, `test/store/schema.test.ts`). One file holds every table. Every table
+  is `STRICT`, so a value of the wrong type fails the write; a table keyed by a token hash or by two or more columns is
+  `WITHOUT ROWID`, stored by its key alone; every foreign key has an index that starts with its column, so removing a
+  user, a machine, a team or a Slack workspace cascades without scanning a table; every expiry is indexed and swept
+  when a row of its kind is made (`sessions` in `createSession`, `sign_in_codes`, `pairings`); a column nothing
+  reads is not kept. Names say what a row is: `machines` (the API's "instance"), a machine's own tables
+  `machine_*` keyed by `machine_id`, `owner_id` for the account that owns a machine or a team and `user_id` for any
+  other account, a Slack workspace's id as `workspace_id` (never `team_id`, which is one of our teams), a sealed
+  value as `sealed_*`; a JSON column (`features`, `scopes`) is checked with `json_valid`. The test fails on a table missing from its list, one not strict, a foreign key without an index
+  a value of the wrong type and text that is not JSON. A change to the schema is a new file after it (`0002_…`), never an edit to one D1
+  has applied.
 - **What logs keep.** Failures of 500 or more with their cause, and the ids and statuses of what a machine or Slack
   refused (`WorkerLogger`); never a body, and every secret is `Redacted`, so a cause prints it as `<redacted>`.
   Workers Logs record each request's URL too, which for a webhook includes its token.
@@ -356,8 +367,7 @@ model. The Worker's part of it:
   and clear credentials, so the Worker can deploy from `main` before every engine updates. A hardened engine accepts
   only the new token and refuses clear credentials, so a forged empty heartbeat downgrades nothing it runs
   (`test/instances.test.ts`, `test/pairing.test.ts`).
-- **Known limits.** Rate limits only on pairing start (10 waiting per address); expired session rows are not swept
-  (hashes only); signing out ends that one session, not every session of the account; an older engine keeps the old
+- **Known limits.** Rate limits only on pairing start (10 waiting per address); signing out ends that one session, not every session of the account; an older engine keeps the old
   token and clear pairing credentials until it updates.
 
 ## Running and deploying
@@ -368,12 +378,22 @@ model. The Worker's part of it:
   links follow). It is not called `dev`, so the root `bun dev` (turbo) never starts it.
 - The assets are `../web/dist-remote`, the web app's remote build, which `bun run build` makes (`build:remote` in
   `apps/web`): Cloudflare's Workers Builds runs it in `apps/cloud` before every deploy and preview.
+- The schema is `migrations/0001_schema.sql`, which production D1 runs and records as applied. A change to it is a
+  new numbered file beside it, applied with `bun run migrate` before the Worker that needs it deploys. `bun run
+  deploy` builds first (`bun run build && wrangler deploy`), so a checkout without `../web/dist-remote` never fails
+  halfway and leaves the Worker before it serving a schema it cannot read.
+- A Worker and the schema it reads roll back together. Every Worker built from code before #184 (the change that
+  brought `0001_schema.sql` and renamed `instances` to `machines`) reads the old table names (`instances`,
+  `pair_sessions`). In `wrangler deployments list` those are the Worker versions deployed before 2026-11-04 21:44 UTC,
+  the first on the new schema being version `d2e271eb` (a Worker version id, not a commit). Rolling the Worker back to
+  one of them, or restoring D1 to before its rebuild (`wrangler d1 time-travel restore`), fails every request that
+  reads D1 with `no such table`. Undo one only with the other, in the same minute.
 - Before the first deploy: a D1 database `shinsa-cloud` (`wrangler d1 create shinsa-cloud`, its id in
   `wrangler.jsonc`) with the migrations applied (`bun run migrate`), a GitHub OAuth app whose callback is
   `https://app.shinsa.dev/__remote/sign-in/callback`, and the secrets `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` and
   `CLOUDFLARE_API_TOKEN` (`wrangler secret put`; the token needs Cloudflare Tunnel edit on the account and DNS edit on
   the `shinsa.dev` zone). The Slack bot needs the app made from `slack-manifest.json`, with public distribution on
-  (Manage Distribution) so other workspaces can add it, the `0003_slack.sql` migration, and the secrets
+  (Manage Distribution) so other workspaces can add it, and the secrets
   `SLACK_CLIENT_ID`, `SLACK_CLIENT_SECRET`, `SLACK_SIGNING_SECRET` (the app's Basic Information) and `SLACK_TOKEN_KEY`
   (32 random bytes in base64url: `openssl rand -base64 32 | tr '+/' '-_' | tr -d '='`). Changing `SLACK_TOKEN_KEY`
   later makes every stored bot token unreadable, so each workspace has to add the app again.

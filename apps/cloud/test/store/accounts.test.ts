@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { RemoteUserId } from '@shinsa/core';
 import { Effect, Option } from 'effect';
+import { SqlClient } from 'effect/sql';
 import { TestClock } from 'effect/testing';
 import { Accounts } from '../../src/store/accounts/service.ts';
 import { runTest, TEST_NOW } from '../layers.ts';
@@ -62,5 +63,23 @@ describe('accounts', () => {
     );
     expect(Option.isNone(again)).toBe(true);
     expect(Option.isNone(stale)).toBe(true);
+  });
+
+  test('making a session removes the sessions that have expired, and only those', async () => {
+    const left = await runTest(
+      Effect.gen(function* () {
+        const accounts = yield* Accounts;
+        const sql = yield* SqlClient.SqlClient;
+        yield* seedUsers(MONA, KAI);
+        yield* accounts.createSession(hashOf('a'), MONA.id, TEST_NOW + 1000);
+        yield* accounts.createSession(hashOf('b'), KAI.id, TEST_NOW + 60_000);
+        yield* TestClock.adjust('1 second');
+        yield* accounts.createSession(hashOf('c'), KAI.id, TEST_NOW + 120_000);
+        return yield* sql<{
+          readonly tokenHash: string;
+        }>`SELECT token_hash FROM sessions ORDER BY expires_at`;
+      })
+    );
+    expect(left.map((row) => row.tokenHash)).toEqual([hashOf('b'), hashOf('c')]);
   });
 });

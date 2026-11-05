@@ -1,5 +1,6 @@
-import type { ShareLimit, SharePreset, Task } from '@shinsa/core';
+import { CUSTOM_PRESET, type ShareLimit, type Task, type ViewScope } from '@shinsa/core';
 import { Button } from '@shinsa/ui/components/button';
+import { Checkbox } from '@shinsa/ui/components/checkbox';
 import {
   Dialog,
   DialogContent,
@@ -18,31 +19,37 @@ import { TimeAgo } from '@/components/text/time-ago.tsx';
 import { useNow } from '@/hooks/use-now.ts';
 import { useRemoteAccess } from '@/lib/connection/remote-access.ts';
 import { useSettings, useShinsaState, useTask } from '@/lib/connection/selectors.ts';
-import { useEngineCommand } from '@/lib/connection/socket.ts';
+import { useEngineCommand, useEngineFeature } from '@/lib/connection/socket.ts';
 import { formatSince } from '@/lib/format/time.ts';
 import { type Mention, resolveFirstName } from '@/lib/remote/users.ts';
 import { resolveSettingsPath } from '@/lib/settings-tabs.ts';
 import {
   changeShareLimit,
-  changeSharePreset,
+  changeShareScopes,
   closeShareDialog,
   closeUnshareConfirm,
   listShareLimitItems,
   listShareModeItems,
+  listShareScopeRows,
   openUnshareConfirm,
   resolveShareLimitChoice,
   resolveShareModeChoice,
-  resolveSharePresetChoice,
+  resolveShareChoice,
+  resolveShareChoiceScopes,
+  resolveShownShareMode,
+  resolveShareScopesChoice,
   resolveShareView,
   SHARE_DESCRIPTION,
   SHARE_LIMIT_TITLE,
   SHARE_NEEDS_REMOTE,
   SHARE_PRESET_TITLE,
+  SHARE_SCOPES_TITLE,
   SHARE_TITLE,
   type ShareMode,
   type ShareView,
   selectLiveShare,
   shareTask,
+  toggleShareScope,
   UNSHARE_DESCRIPTION,
   UNSHARE_TITLE,
   unshareTask,
@@ -76,6 +83,7 @@ import {
   resolveHandoffView,
   useHandoffRemoveConfirm,
 } from '@/lib/share/handoff.ts';
+import { resolveShareSourceScopes } from '@/lib/share/scopes.ts';
 import { navigate } from '@/router.ts';
 
 function ShareBody({ view }: { view: ShareView }) {
@@ -143,21 +151,76 @@ function ShareModeRow({
   );
 }
 
+function ShareScopeCheck({
+  row,
+  checked,
+  onToggle,
+}: {
+  row: ReturnType<typeof listShareScopeRows>[number];
+  checked: boolean;
+  onToggle: (scope: ViewScope, on: boolean) => void;
+}) {
+  const id = React.useId();
+  return (
+    <div className='flex min-w-0 items-start gap-2'>
+      <Checkbox
+        id={id}
+        size='sm'
+        className='mt-px'
+        checked={checked}
+        disabled={row.required}
+        aria-label={row.title}
+        onCheckedChange={(next) => onToggle(row.scope, next)}
+      />
+      <label htmlFor={id} className='flex min-w-0 flex-col'>
+        <span className='text-xs text-fg-4'>{row.title}</span>
+        <span className='text-2xs text-pretty text-fg-2'>{row.hint}</span>
+      </label>
+    </div>
+  );
+}
+
+function ShareScopesRow({
+  scopes,
+  onChange,
+}: {
+  scopes: readonly ViewScope[];
+  onChange: (scopes: readonly ViewScope[]) => void;
+}) {
+  return (
+    <Field className='w-full'>
+      <FieldLabel>{SHARE_SCOPES_TITLE}</FieldLabel>
+      <div className='grid grid-cols-1 gap-x-4 gap-y-2 sm:grid-cols-2'>
+        {listShareScopeRows().map((row) => (
+          <ShareScopeCheck
+            key={row.scope}
+            row={row}
+            checked={scopes.includes(row.scope)}
+            onToggle={(scope, on) => onChange(toggleShareScope(scopes, scope, on))}
+          />
+        ))}
+      </div>
+    </Field>
+  );
+}
+
 function ShareActions({
   task,
   view,
   limit,
-  preset,
+  scopes,
+  scopesSupported,
 }: {
   task: Task;
   view: ShareView;
   limit: ShareLimit;
-  preset: SharePreset;
+  scopes: readonly ViewScope[];
+  scopesSupported: boolean;
 }) {
   const [busy, setBusy] = React.useState(false);
   const share = async () => {
     setBusy(true);
-    await shareTask(task, limit, preset);
+    await shareTask(task, limit, scopes, scopesSupported);
     setBusy(false);
   };
   if (view.kind === 'unpaired') {
@@ -351,10 +414,15 @@ function ShareContent({ task }: { task: Task }) {
   const [picked, setPicked] = React.useState<ShareLimit | null>(null);
   const limit = picked ?? live?.limit ?? (settings ? resolveShareLimitChoice(task, settings) : 'until_done');
   const handoffSupported = useEngineCommand('task.hand_off', task.id);
+  const scopesSupported = useEngineFeature('share.scopes', task.id);
   const [pickedMode, setPickedMode] = React.useState<ShareMode | null>(null);
+  const [pickedScopes, setPickedScopes] = React.useState<readonly ViewScope[] | null>(null);
   const focus = useShareDialogFocus();
+  const scopes =
+    shared && live
+      ? resolveShareSourceScopes(live)
+      : (pickedScopes ?? resolveShareScopesChoice(task, settings));
   const mode = pickedMode ?? resolveShareModeChoice(task, settings, handoffSupported, focus);
-  const preset = mode === 'handoff' ? resolveSharePresetChoice(task, settings) : mode;
   const handing = mode === 'handoff' && view.kind !== 'unpaired';
   const handoff = resolveHandoffView(task);
   const teammates = useHandoffTeammates(task);
@@ -365,11 +433,18 @@ function ShareContent({ task }: { task: Task }) {
     if (shared) void changeShareLimit(task, next);
     else setPicked(next);
   };
-  const pickMode = (next: ShareMode) => {
-    setPickedMode(next);
-    if (next !== 'handoff' && live && shared && next !== live.preset) void changeSharePreset(task, next);
+  const [customPicked, setCustomPicked] = React.useState(false);
+  const pickScopes = (next: readonly ViewScope[]) => {
+    setPickedMode(resolveShareChoice(next));
+    if (shared) void changeShareScopes(task, next, scopesSupported);
+    else setPickedScopes(next);
   };
-  const shownMode = mode === 'handoff' || !(shared && live) ? mode : live.preset;
+  const pickMode = (next: ShareMode) => {
+    setCustomPicked(next === CUSTOM_PRESET);
+    if (next === 'handoff' || next === CUSTOM_PRESET) setPickedMode(next);
+    else pickScopes(resolveShareChoiceScopes(next, scopes));
+  };
+  const shownMode = resolveShownShareMode(mode, customPicked, scopes);
   return (
     <>
       <DialogHeader>
@@ -382,10 +457,13 @@ function ShareContent({ task }: { task: Task }) {
       {view.kind !== 'unpaired' && (
         <>
           <ShareModeRow
-            items={listShareModeItems(task, handoffSupported)}
+            items={listShareModeItems(task, handoffSupported, scopesSupported)}
             mode={shownMode}
             onChange={pickMode}
           />
+          {shownMode === CUSTOM_PRESET && scopesSupported && (
+            <ShareScopesRow scopes={scopes} onChange={pickScopes} />
+          )}
           {picksTeammate && <HandoffTargetRow teammates={teammates} target={target} onChange={setTarget} />}
           {handing ? (
             <HandoffBody view={handoff} />
@@ -398,7 +476,13 @@ function ShareContent({ task }: { task: Task }) {
         {handing ? (
           <HandoffActions task={task} view={handoff} teammate={picksTeammate ? teammate : null} />
         ) : (
-          <ShareActions task={task} view={view} limit={limit} preset={preset} />
+          <ShareActions
+            task={task}
+            view={view}
+            limit={limit}
+            scopes={scopes}
+            scopesSupported={scopesSupported}
+          />
         )}
       </DialogFooter>
     </>

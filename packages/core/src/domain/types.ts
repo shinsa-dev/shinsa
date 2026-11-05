@@ -12,6 +12,7 @@ import type {
   TaskCheck,
   WorkReport,
 } from '../report/types.ts';
+import type { ViewScope } from '../scopes/schema.ts';
 import type { Coverage, CoverageSetting } from '../test-coverage/types.ts';
 import type { UsageWait, WeeklyReading } from './accounts.ts';
 import type { DeliveryCohort, RunDelegation, RunWait, TaskCreator, TaskSplit } from './delegations.ts';
@@ -19,7 +20,7 @@ import type { CiRun, MergeQueueEntry, PullRequestWatch, PushHookFailure } from '
 import type { Round } from './rounds.ts';
 import type { GateSecret, SourceReport } from './schedules.ts';
 import type { FindingVerdict, ReviewComment, RunAccount } from './schema.ts';
-import type { ShareLimit, SharePreset } from './settings.ts';
+import type { ShareLimit } from './settings.ts';
 import type {
   ChangeProposal,
   ShapeChange,
@@ -506,6 +507,7 @@ export interface Task {
   suggestions?: TaskSuggestion[];
   budgetAcknowledgedUsd?: number;
   usageAcknowledgedPercent?: number;
+  paceLimitsIgnored?: boolean;
   configProblems?: ConfigProblem[];
   account?: RunAccount | null;
   usageWait?: UsageWait | null;
@@ -591,7 +593,7 @@ export interface TaskShare {
   at: number;
   url: string | null;
   limit: ShareLimit;
-  preset: SharePreset;
+  scopes: readonly ViewScope[];
   endsAt: number | null;
   failure?: string | null;
   description?: string | null;

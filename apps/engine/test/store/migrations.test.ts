@@ -1,6 +1,7 @@
 import { Database } from 'bun:sqlite';
 import { describe, expect, test } from 'bun:test';
 import { join } from 'node:path';
+import { SHARE_PRESET_SCOPES } from '@shinsa/core';
 import { Effect } from 'effect';
 import { SqlClient } from 'effect/sql';
 import { LOG_MIGRATIONS, resolveLogVersion } from '../../src/store/migrations/list.ts';
@@ -42,14 +43,15 @@ function renameProject(name: string, to: string): LogMigration {
 const TWO_MIGRATIONS = [renameProject('rename-b', 'b'), renameProject('rename-c', 'c')];
 
 describe('event log migrations', () => {
-  test('the shipped list turns stacks into lists, names Slack channels, stamps what reviews saw and what proposals recommend, four versions past the baseline', () => {
+  test('the shipped list turns stacks into lists, names Slack channels, stamps what reviews saw, turns share presets into scopes and stamps what proposals recommend, five versions past the baseline', () => {
     expect(LOG_MIGRATIONS.map((migration) => migration.name)).toEqual([
       'stack-lists',
       'slack-channel-names',
       'review-seen',
+      'share-scopes',
       'proposal-recommend',
     ]);
-    expect(resolveLogVersion()).toBe(LOG_BASELINE + 4);
+    expect(resolveLogVersion()).toBe(LOG_BASELINE + 5);
     expect(resolveLogVersion(TWO_MIGRATIONS)).toBe(LOG_BASELINE + 2);
   });
 
@@ -59,7 +61,7 @@ describe('event log migrations', () => {
     expect(log.migrate()).toEqual([]);
     expect(() => log.assertCurrent()).not.toThrow();
     log.close();
-    expect(readVersion(path)).toBe(LOG_BASELINE + 4);
+    expect(readVersion(path)).toBe(LOG_BASELINE + 5);
   });
 
   test('a log that already holds events is never stamped on open', () => {
@@ -161,6 +163,7 @@ describe('event log migrations', () => {
       'stack-lists',
       'slack-channel-names',
       'review-seen',
+      'share-scopes',
       'proposal-recommend',
     ]);
     expect(log.readEvents().events.slice(1)).toEqual([
@@ -172,7 +175,7 @@ describe('event log migrations', () => {
       { type: 'task.stack_based', taskId: 't2', bases: ['fix/p1', 'fix/p2'], seq: 7, at: 1 },
     ]);
     log.close();
-    expect(readVersion(path)).toBe(LOG_BASELINE + 4);
+    expect(readVersion(path)).toBe(LOG_BASELINE + 5);
   });
 
   test('slack-channel-names gives an older Slack thread link a null channel name, and keeps a known one', () => {
@@ -205,7 +208,12 @@ describe('event log migrations', () => {
     }
     db.close();
     const log = openEventLog(path);
-    expect(log.migrate()).toEqual(['slack-channel-names', 'review-seen', 'proposal-recommend']);
+    expect(log.migrate()).toEqual([
+      'slack-channel-names',
+      'review-seen',
+      'share-scopes',
+      'proposal-recommend',
+    ]);
     expect(log.readEvents().events.slice(1)).toEqual([
       {
         type: 'slack.thread_linked',
@@ -223,7 +231,7 @@ describe('event log migrations', () => {
       },
     ]);
     log.close();
-    expect(readVersion(path)).toBe(LOG_BASELINE + 4);
+    expect(readVersion(path)).toBe(LOG_BASELINE + 5);
   });
 
   test('review-seen gives an older review a null input it saw, and keeps a stamped one', () => {
@@ -244,18 +252,82 @@ describe('event log migrations', () => {
     }
     db.close();
     const log = openEventLog(path);
-    expect(log.migrate()).toEqual(['review-seen', 'proposal-recommend']);
+    expect(log.migrate()).toEqual(['review-seen', 'share-scopes', 'proposal-recommend']);
     expect(log.readEvents().events.slice(1)).toEqual([
       { type: 'review.reported', taskId: 't1', summary: null, findings: [], seen: null, seq: 2, at: 1 },
       { type: 'review.reported', taskId: 't2', summary: 'Clean', findings: [], seen: 'abc', seq: 3, at: 1 },
     ]);
     log.close();
-    expect(readVersion(path)).toBe(LOG_BASELINE + 4);
+    expect(readVersion(path)).toBe(LOG_BASELINE + 5);
+  });
+
+  test('share-scopes turns each share preset into the view scopes it showed, and keeps a share with scopes', () => {
+    const path = createLogPath();
+    writeLog(path, LOG_BASELINE + 3);
+    const db = new Database(path);
+    const rows = [
+      { type: 'task.shared', taskId: 't1', limit: 'hour', preset: 'status', endsAt: 5 },
+      { type: 'task.shared', taskId: 't2', limit: 'none', preset: 'standard', endsAt: null },
+      { type: 'task.shared', taskId: 't3', limit: 'none', preset: 'full', endsAt: null },
+      { type: 'task.shared', taskId: 't4', limit: 'none', scopes: ['identity', 'code'], endsAt: null },
+    ];
+    for (const [index, row] of rows.entries()) {
+      db.run('INSERT INTO events (seq, at, type, payload) VALUES (?, ?, ?, ?)', [
+        index + 2,
+        1,
+        row.type,
+        JSON.stringify(row),
+      ]);
+    }
+    db.close();
+    const log = openEventLog(path);
+    expect(log.migrate()).toEqual(['share-scopes', 'proposal-recommend']);
+    const shared = log.readEvents().events.slice(1);
+    expect(shared).toEqual([
+      {
+        type: 'task.shared',
+        taskId: 't1',
+        limit: 'hour',
+        scopes: [...SHARE_PRESET_SCOPES.status],
+        endsAt: 5,
+        seq: 2,
+        at: 1,
+      },
+      {
+        type: 'task.shared',
+        taskId: 't2',
+        limit: 'none',
+        scopes: [...SHARE_PRESET_SCOPES.standard],
+        endsAt: null,
+        seq: 3,
+        at: 1,
+      },
+      {
+        type: 'task.shared',
+        taskId: 't3',
+        limit: 'none',
+        scopes: [...SHARE_PRESET_SCOPES.full],
+        endsAt: null,
+        seq: 4,
+        at: 1,
+      },
+      {
+        type: 'task.shared',
+        taskId: 't4',
+        limit: 'none',
+        scopes: ['identity', 'code'],
+        endsAt: null,
+        seq: 5,
+        at: 1,
+      },
+    ]);
+    log.close();
+    expect(readVersion(path)).toBe(LOG_BASELINE + 5);
   });
 
   test('proposal-recommend has an older proposal recommend going on, and keeps a stamped one', () => {
     const path = createLogPath();
-    writeLog(path, LOG_BASELINE + 3);
+    writeLog(path, LOG_BASELINE + 4);
     const db = new Database(path);
     const rows = [
       { type: 'task.change_proposed', taskId: 't1', request: 'Fix it.', why: 'Broken.', runId: null },
@@ -302,7 +374,7 @@ describe('event log migrations', () => {
       },
     ]);
     log.close();
-    expect(readVersion(path)).toBe(LOG_BASELINE + 4);
+    expect(readVersion(path)).toBe(LOG_BASELINE + 5);
   });
 
   test('a log a newer Shinsa wrote opens as it is', () => {

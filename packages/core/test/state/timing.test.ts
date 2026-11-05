@@ -8,7 +8,7 @@ import {
   resolveTaskTiming,
   type UsageWait,
 } from '../../src/index.ts';
-import { approve, createHarness, createTask, proposePlan, registerRepo } from '../harness.ts';
+import { createHarness, createTask, proposePlan, registerRepo } from '../harness.ts';
 
 function gate(taskId: string, id: string): Gate {
   return {
@@ -115,7 +115,7 @@ describe('task timing', () => {
     expect(from).not.toBeNull();
     expect(timingOf(harness, taskId).openGates).toEqual([plan.id]);
     harness.advance(1_000);
-    approve(harness, taskId);
+    harness.send({ type: 'gate.answer', gateId: plan.id, decision: 'approve', response: null });
     const timing = timingOf(harness, taskId);
     expect(timing.needsYou.at(-1)).toEqual({ from: from ?? 0, to: harness.now, answered: true });
     expect(timing.openGates).not.toContain(plan.id);
@@ -173,7 +173,8 @@ describe('your inputs', () => {
     const harness = createHarness();
     const taskId = createTask(harness, { planFirst: true });
     proposePlan(harness, taskId);
-    approve(harness, taskId);
+    const plan = harness.openGate(taskId);
+    harness.send({ type: 'gate.answer', gateId: plan.id, decision: 'approve', response: null });
     const approved = harness.now;
     harness.replay({ type: 'task.messaged', taskId, text: 'Use the blue one', kind: 'feedback' });
     const messaged = harness.now;

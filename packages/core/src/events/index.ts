@@ -359,6 +359,7 @@ type EventBody =
       byTaskId?: string | null;
     }
   | { type: 'usage_wait.armed'; taskId: string; wait: UsageWait }
+  | { type: 'task.pace_limits_ignored'; taskId: string }
   | {
       type: 'usage_wait.ended';
       taskId: string;
