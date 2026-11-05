@@ -40,6 +40,7 @@ import type { Machine } from '../../store/machines/schema.ts';
 import { Machines } from '../../store/machines/service.ts';
 import type { SlackWorkspace } from '../../store/slack/schema.ts';
 import { SlackStore } from '../../store/slack/service.ts';
+import { resolveSlackMessageText } from './message.ts';
 import {
   type BlockActions,
   BlockActions as BlockActionsSchema,
@@ -100,7 +101,7 @@ export const SlackEventRoutes = Layer.unwrap(
       if (!userId) return null;
       const botName =
         message.bot_id === undefined ? null : (message.bot_profile?.name ?? message.username ?? 'Bot');
-      return { ts: message.ts, userId, text: message.text ?? '', botName };
+      return { ts: message.ts, userId, text: resolveSlackMessageText(message), botName };
     };
 
     const resolveCardMessage = (actions: BlockActions): CardMessage => ({
