@@ -13,6 +13,7 @@ import {
   SLACK_MODAL_CALLBACK,
   SLACK_RELAY_PATHS,
   SLACK_RESPONSE_INPUT,
+  SLACK_VIEW_LIMITS,
   SLACK_WRITE_ACTION,
   type SlackDecision,
   type SlackDecisionReply,
@@ -158,7 +159,7 @@ export const SlackEventRoutes = Layer.unwrap(
           interactionId: (submission.trigger_id ?? view.id).slice(0, SLACK_LIMITS.id),
           teamId: submission.team.id,
           userId: submission.user.id,
-          response: text.slice(0, SLACK_LIMITS.text),
+          response: text.slice(0, SLACK_VIEW_LIMITS.input),
         },
       };
     };

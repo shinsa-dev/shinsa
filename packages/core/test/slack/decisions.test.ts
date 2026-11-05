@@ -12,7 +12,9 @@ import {
   SLACK_GATE_BLOCK,
   SLACK_MODAL_CALLBACK,
   SLACK_RESPONSE_INPUT,
+  SLACK_VIEW_LIMITS,
   type SlackDecision,
+  type SlackModal,
   serializeSlackDecidedView,
   serializeSlackDecisionModal,
   serializeSlackDecisionValue,
@@ -57,7 +59,7 @@ describe('the value a decision button carries', () => {
 describe('a decision forwarded to the machine', () => {
   test('is checked field by field, and a long answer is cut', () => {
     expect(parseSlackDecision(DECISION)).toEqual(DECISION);
-    expect(parseSlackDecision({ ...DECISION, response: 'x'.repeat(5000) })?.response).toHaveLength(4000);
+    expect(parseSlackDecision({ ...DECISION, response: 'x'.repeat(5000) })?.response).toHaveLength(3000);
     expect(parseSlackDecision({ ...DECISION, userId: '' })).toBeNull();
     expect(parseSlackDecision({ ...DECISION, gateId: 'x'.repeat(65) })).toBeNull();
     expect(parseSlackDecision(null)).toBeNull();
@@ -135,7 +137,7 @@ describe('the form for written words', () => {
     expect(modal.blocks[0]).toMatchObject({
       block_id: SLACK_RESPONSE_INPUT.block,
       label: { text: 'What should change?' },
-      element: { action_id: SLACK_RESPONSE_INPUT.action, multiline: true, max_length: 4000 },
+      element: { action_id: SLACK_RESPONSE_INPUT.action, multiline: true, max_length: 3000 },
     });
     expect(parseSlackDecisionModal(modal.private_metadata)).toEqual(metadata);
     expect(serializeSlackDecisionModal({ ...metadata, decision: 'reply' })?.title.text).toBe('Answer');
@@ -143,6 +145,55 @@ describe('the form for written words', () => {
     expect(parseSlackDecisionModal(JSON.stringify(VALUE))).toBeNull();
   });
 });
+
+describe('the form keeps to what Slack lets views.open take', () => {
+  const LONGEST_ID = 'x'.repeat(64);
+  const LONGEST = {
+    gateId: LONGEST_ID,
+    choice: 99,
+    planVersion: 2_147_483_647,
+    channelId: LONGEST_ID,
+    threadTs: LONGEST_ID,
+    messageTs: LONGEST_ID,
+  };
+
+  test.each(['reply', 'revise'] as const)('the %s form, with the longest ids it can carry', (decision) => {
+    const modal = serializeSlackDecisionModal({ ...LONGEST, decision }) ?? never();
+    expect(listViewProblems(modal)).toEqual([]);
+  });
+
+  test('a text box asking for more than Slack allows is caught', () => {
+    const modal = serializeSlackDecisionModal({ ...LONGEST, decision: 'reply' }) ?? never();
+    const blocks = modal.blocks.map((block) => ({
+      ...block,
+      element: { ...block.element, max_length: 4000 },
+    }));
+    expect(listViewProblems({ ...modal, blocks })).toEqual(['max_length 4000']);
+  });
+});
+
+function listViewProblems(modal: SlackModal): string[] {
+  const texts = [modal.title.text, modal.submit.text, modal.close.text];
+  const ids = [
+    modal.callback_id,
+    ...modal.blocks.flatMap((block) => [block.block_id, block.element.action_id]),
+  ];
+  return [
+    ...texts.filter((text) => text.length === 0 || text.length > SLACK_VIEW_LIMITS.title),
+    ...modal.blocks
+      .map((block) => block.label.text)
+      .filter((label) => label.length === 0 || label.length > SLACK_VIEW_LIMITS.label),
+    ...ids.filter((id) => id.length === 0 || id.length > SLACK_VIEW_LIMITS.id),
+    ...(new Set(ids).size === ids.length ? [] : ['ids repeat']),
+    ...(new TextEncoder().encode(modal.private_metadata).length > SLACK_VIEW_LIMITS.privateMetadata
+      ? ['private_metadata']
+      : []),
+    ...modal.blocks
+      .map((block) => block.element.max_length)
+      .filter((length) => length < 1 || length > SLACK_VIEW_LIMITS.input)
+      .map((length) => `max_length ${length}`),
+  ];
+}
 
 function never(): never {
   throw new Error('expected a value');
