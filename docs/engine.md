@@ -4360,7 +4360,7 @@ Slack ──a card's button──► app.shinsa.dev /slack/interactions
   `shinsa.gate.<gate>`. A button that decides at once has the action `shinsa.decide.<decision>` (a choice
   `shinsa.decide.choice.<n>`); Request changes… and Answer… are `shinsa.write.<decision>` and open a Slack form
   (`views.open` with the click's trigger id, `serializeSlackDecisionModal`, callback `shinsa.decision`) with one
-  text field of at most 4,000 characters, whose `private_metadata` is the value with the card's channel, thread and
+  text field of at most 3,000 characters (Slack's own limit, `SLACK_VIEW_LIMITS`), whose `private_metadata` is the value with the card's channel, thread and
   message (`SlackDecisionModal`). A click or a form's Send reaches `POST /slack/interactions` on app.shinsa.dev,
   which checks Slack's signature, acknowledges at once and then checks who it is:
   - **Only the owner or a member of the machine that posted the card decides.** app.shinsa.dev finds the Shinsa
