@@ -284,6 +284,12 @@ describe('the shapes a task can take', () => {
         reason: 'Find what is stuck, then clear it.',
       });
     });
+    w.agents.queue('investigator', async (agent) => {
+      await agent.call('report_diagnosis', {
+        diagnosis: 'The greeting files were never written.',
+        recommend: 'go_on',
+      });
+    });
     const taskId = await w.createTask('The nightly exports are stuck. Clear them.');
     const ok = await w.untilGate(taskId, 'proposal');
     expect(refusals).toEqual([
