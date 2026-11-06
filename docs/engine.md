@@ -777,7 +777,8 @@ predicates) and `state/rounds.ts` (the folds); the classifier is `apps/engine/sr
   own (changing how the merged work behaves, a fix to it, a new idea) is `new_round`. In every
   form, a message about the round's own work (its files, its steps around the merge, the part it needs in another
   repository) is never `separate_task`, even when it names another checkout: pasting a step's paths and branches
-  back to the agent is feedback, not another goal.
+  back to the agent is feedback, not another goal. `separate_task` needs a plain ask for work toward an unrelated
+  goal; an unsure message is read as part of this task.
 - **Where you decide, a message is always the gate's reply.** At a plan gate, a review gate, an agent's question, your
   OK, an operation gate, a failure, Sign in or setup gate, and while planning with no agent running, the composer's
   words say what sending does (What a message does, below), and that is what it does: the classifier is not asked
@@ -2204,15 +2205,28 @@ checks it ran.
 
 ### Suggested tasks
 
-- `suggest_tasks` (every working role) proposes up to five tasks: title, request, why
-  and `after_this`. A title the task was already given (open, accepted or dismissed), the title of an
+- `suggest_tasks` (every working role) proposes up to five tasks: title, request, why, `after_this` and
+  `stack_on_this`. Agents suggest rarely: only work they noticed themselves that serves a different goal. Work this
+  task needs, a fix they find on the way and anything you ask for about this task in the chat they do here, and they
+  never answer your feedback with a suggestion (the tool's description, the answerer's and follow-up's last line,
+  and the classifier's `separate_task`, which needs a plain ask for unrelated work and reads an unsure message as
+  part of this task). A title the task was already given (open, accepted or dismissed), the title of an
   open task, or one repeated in the call is dropped; a call that would leave more than ten open
   suggestions on the task is refused. Suggestions never start anything.
+- `stack_on_this` (`TaskSuggestion.stacksOnThis`) recommends a bundle: separate work that should still merge
+  together with this task, such as the next piece of the same feature. Core refuses it beside `after_this`
+  (`dependency_cycle`) and on a task that opens no pull request (`stack_no_pull_request`).
 - Accepting (`suggestion.accept`, `shinsa suggestions accept`) creates the task in the same repository, waiting on
-  this one when `waitsOnThis` is set, or in the backlog when `backlog` is (Scheduling → The backlog), and links it; dismissing keeps it out of the way. A settled task keeps its
-  suggested tasks so you can still accept them. On screen they are "Suggested tasks" ("Add the suggested task
-  “‹title›”", "Dismiss the suggested task"). A follow-up is something else: a message to a finished answer,
-  investigation or report.
+  this one when `waitsOnThis` is set, stacked on it as a bundle when `stackOnThis` is (`stacksOn: [this task]`, so it
+  starts once this task is ready to merge, builds on its branch and merges with it; Bundles, and
+  `selectStackRefusal` still guards it), or in the backlog when `backlog` is (Scheduling → The backlog), and links
+  it; `stackOnThis` with either of the others is refused (`suggestion_start`). Dismissing keeps it out of the way. A
+  settled task keeps its suggested tasks so you can still accept them. On screen they are "Suggested tasks" ("Add
+  the suggested task “‹title›”", "Dismiss the suggested task"), and When to start offers Start now, After this task
+  merges, Bundle with this task and Backlog, the agent's pick first and marked Suggested. Bundle with this task shows
+  only while this task opens a pull request and is not finished, on an engine that announces `suggestion.bundle`
+  (`canBundleSuggestion` in `lib/tasks/suggestions.ts`). A follow-up is something else: a message to a finished
+  answer, investigation or report.
 
 ### Memory
 

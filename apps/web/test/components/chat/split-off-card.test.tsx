@@ -69,6 +69,21 @@ describe('a message read as work for another task', () => {
     ]);
   });
 
+  it('makes a task bundled with this one when the agent suggested a bundle', async () => {
+    pushState(
+      createShinsaState({
+        tasks: [createTask({ id: 't', suggestions: [suggestion({ stacksOnThis: true })] })],
+      })
+    );
+    const view = renderMessage();
+    expect(view.getByRole('combobox', { name: 'When to start' }).textContent).toBe('Bundle with this task');
+    fireEvent.click(view.getByRole('button', { name: 'Make it a task' }));
+    await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
+    expect(spies.sent.mock.calls.map(([command]) => command)).toEqual([
+      { type: 'suggestion.accept', taskId: 't', suggestionId: 's1', waitsOnThis: false, stackOnThis: true },
+    ]);
+  });
+
   it('once made a task, links to that task and offers no buttons', () => {
     const created = createTask({ id: 't2', title: 'Stage the docs and skills files' });
     const parent = createTask({

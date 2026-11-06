@@ -139,6 +139,7 @@ const FEATURE_ROUTES = {
   'usage.pace_limits': [],
   'usage.watchdog_limits': [],
   'share.scopes': [],
+  'suggestion.bundle': [],
 };
 
 const LOCAL_ONLY = [
