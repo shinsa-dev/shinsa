@@ -350,7 +350,8 @@ Desktop-first and responsive: built for a full window, still right in a ~900px f
   7, 30 or 90 days or all time (back to the first task), picked beside the page title (the range stays in the URL). With a project in focus it counts only that project's tasks and their runs, and each section says so beside its title; it counts everything again once the focus ends. Shipping: pull requests merged, tasks finished, lines merged and the
   shipping streak, each pull request on the local day it merged (`mergedAt`, the first time Shinsa saw it merged, which a
   later watchdog check, follow-up or marking the task done never moves) and each task on the day it closed or its last
-  round ended, a year of merged pull requests as a contribution graph, and an area chart of them by day (by week
+  round ended (a task with a merged pull request stays counted while a watchdog check or a later round runs, unless it is
+  cancelled), a year of merged pull requests as a contribution graph, and an area chart of them by day (by week
   past a month); every chart shows a readout of the day, point or bar under the pointer. Turnaround: medians, never
   averages, of rounds that merged or finished in the range and of waits you answered in it. Start to finish is a round
   from its start to its end; agent time is the part not waiting on you; your turnaround is each wait from a task needing

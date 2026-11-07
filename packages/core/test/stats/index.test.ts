@@ -123,7 +123,7 @@ describe('resolveStats', () => {
     expect(stats.total).toMatchObject({ pullRequests: 1, tasks: 1, additions: 120 });
   });
 
-  test('a merged round without an end time is dated when its task closed or changed stage', () => {
+  test('a merged round without an end time is dated when its task closed or changed stage, and its task counts as finished', () => {
     const closed = task('a', { stage: 'done', closedAt: DAY, rounds: [round(1, { endedAt: null })] });
     const open = task('b', {
       stage: 'shipping',
@@ -133,7 +133,14 @@ describe('resolveStats', () => {
     });
     const stats = resolveStats(stateOf([closed, open], []), windowOf(3));
     expect(stats.days.map((day) => day.pullRequests)).toEqual([0, 1, 1]);
-    expect(stats.days.map((day) => day.tasks)).toEqual([0, 1, 0]);
+    expect(stats.days.map((day) => day.tasks)).toEqual([0, 1, 1]);
+  });
+
+  test('a cancelled task keeps its merged pull request but does not count as finished', () => {
+    const cancelled = task('a', { stage: 'cancelled', closedAt: DAY, rounds: [round(1, { endedAt: DAY })] });
+    const stats = resolveStats(stateOf([cancelled], []), windowOf(3));
+    expect(stats.days.map((day) => day.pullRequests)).toEqual([0, 1, 0]);
+    expect(stats.total.tasks).toBe(0);
   });
 
   test('work outside the window is left out', () => {
@@ -293,6 +300,9 @@ describe('resolveStats', () => {
     const before = resolveStats(harness.state, window);
     harness.advance(DAY);
     harness.replay({ type: 'task.staged', taskId, stage: 'watching', reason: 'Watch check' });
+    expect(resolveStats(harness.state, window).days).toEqual(before.days);
+    harness.replay({ type: 'task.staged', taskId, stage: 'answering', reason: 'Follow-up' });
+    expect(resolveStats(harness.state, window).days).toEqual(before.days);
     harness.replay({ type: 'task.staged', taskId, stage: 'merged', reason: 'Watch check done' });
     expect(harness.task(taskId).stageChangedAt).toBeGreaterThan((mergeDay + 1) * DAY);
     const after = resolveStats(harness.state, window);

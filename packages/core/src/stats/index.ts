@@ -213,12 +213,17 @@ function foldRunUsage(fold: UsageFold, run: Run, dayAt: DayLookup) {
   }
 }
 
+function isTaskShipped(task: Task, merged: readonly unknown[]) {
+  return SHIPPED_STAGES.includes(task.stage) || (merged.length > 0 && task.stage !== 'cancelled');
+}
+
 function foldShipping(task: Task, dayAt: DayLookup) {
-  if (SHIPPED_STAGES.includes(task.stage)) {
+  const pullRequests = listMergedPullRequests(task);
+  if (isTaskShipped(task, pullRequests)) {
     const day = dayAt(resolveFinishedAt(task));
     if (day) day.tasks += 1;
   }
-  for (const merged of listMergedPullRequests(task)) {
+  for (const merged of pullRequests) {
     const day = dayAt(merged.at);
     if (!day) continue;
     day.pullRequests += 1;
