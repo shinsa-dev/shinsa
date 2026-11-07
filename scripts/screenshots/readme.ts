@@ -292,7 +292,7 @@ const program = Effect.gen(function* () {
   });
 
   const writeImage = Effect.fn('Readme.writeImage')(function* (raw: string, target: string) {
-    const pngquant = Bun.which('pngquant');
+    const pngquant = yield* Effect.sync(() => Bun.which('pngquant'));
     if (!pngquant) {
       yield* Console.log('  pngquant is not installed (brew install pngquant): writing the capture as is');
       return yield* Effect.sync(() => copyFileSync(raw, target));

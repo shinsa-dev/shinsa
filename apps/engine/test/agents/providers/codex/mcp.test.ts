@@ -14,7 +14,7 @@ const clients: Client[] = [];
 
 afterEach(async () => {
   for (const client of clients.splice(0)) await client.close();
-  for (const endpoint of endpoints.splice(0)) testRuntime.runSync(endpoint.close);
+  for (const endpoint of endpoints.splice(0)) await testRuntime.runPromise(endpoint.close);
 });
 
 interface Call {
@@ -23,14 +23,14 @@ interface Call {
   signal: AbortSignal;
 }
 
-function open(handle?: (call: Call) => Promise<string>) {
+async function open(handle?: (call: Call) => Promise<string>) {
   const calls: Call[] = [];
   const tools = createTestTools('agent', (name, _input, signal, requestId) => {
     const call = { name, requestId, signal };
     calls.push(call);
     return handle ? handle(call) : Promise.resolve(`${name} done`);
   });
-  const endpoint = testRuntime.runSync(
+  const endpoint = await testRuntime.runPromise(
     makeToolEndpoint({ tools, heartbeat: Duration.millis(5), token: crypto.randomUUID() })
   );
   endpoints.push(endpoint);
@@ -48,7 +48,7 @@ async function connect(endpoint: ToolEndpointHandle) {
 
 describe('the tool endpoint Codex calls', () => {
   test('serves the role’s tools on localhost behind a bearer token', async () => {
-    const { endpoint, calls } = open();
+    const { endpoint, calls } = await open();
     expect(endpoint.url).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/mcp$/);
     const client = await connect(endpoint);
     const listed = await client.listTools();
@@ -59,7 +59,7 @@ describe('the tool endpoint Codex calls', () => {
   });
 
   test('refuses a request without the token, on another path or from a browser', async () => {
-    const { endpoint } = open();
+    const { endpoint } = await open();
     const post = (url: string, headers: Record<string, string>) =>
       fetch(url, { method: 'POST', headers: { 'content-type': 'application/json', ...headers }, body: '{}' });
     expect((await post(endpoint.url, {})).status).toBe(401);
@@ -87,7 +87,7 @@ describe('the tool endpoint Codex calls', () => {
   test('a long call sends progress, and a reconnecting client gets fresh request ids', async () => {
     const progress: number[] = [];
     let release = () => {};
-    const { endpoint, calls } = open(
+    const { endpoint, calls } = await open(
       () =>
         new Promise((resolve) => {
           release = () => resolve('answered');
@@ -109,7 +109,7 @@ describe('the tool endpoint Codex calls', () => {
   });
 
   test('closing the endpoint stops the calls in flight, and closing twice is fine', async () => {
-    const { endpoint, calls } = open(
+    const { endpoint, calls } = await open(
       (call) => new Promise((resolve) => call.signal.addEventListener('abort', () => resolve('stopped')))
     );
     const client = await connect(endpoint);
@@ -119,14 +119,14 @@ describe('the tool endpoint Codex calls', () => {
       () => outcome.push('dropped')
     );
     await until('the call to arrive', () => calls.length === 1);
-    testRuntime.runSync(endpoint.close);
-    testRuntime.runSync(endpoint.close);
+    await testRuntime.runPromise(endpoint.close);
+    await testRuntime.runPromise(endpoint.close);
     await until('the call to be stopped', () => calls[0]?.signal.aborted === true);
     expect(outcome).not.toContain('answered');
   });
 
   test('a client that drops a streaming call stops it', async () => {
-    const { endpoint, calls } = open(
+    const { endpoint, calls } = await open(
       (call) => new Promise((resolve) => call.signal.addEventListener('abort', () => resolve('stopped')))
     );
     const headers = {

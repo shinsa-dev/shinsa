@@ -27,7 +27,6 @@ export interface Updater {
 
 export interface UpdaterDeps {
   which?: (command: string) => string | null;
-  isExecutable?: (path: string) => boolean;
 }
 
 export type LineListener = (line: string) => void;

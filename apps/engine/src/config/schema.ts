@@ -1,5 +1,5 @@
 import { PREVIEW_ORIGIN, REMOTE_APP_ORIGIN } from '@shinsa/core';
-import { Config, Schema } from 'effect';
+import { Config, Duration, Schema } from 'effect';
 import type { MachineConfigRead } from './machine/schema.ts';
 
 export type Env = Record<string, string | undefined>;
@@ -45,6 +45,8 @@ export const INSPECT_ON = '1';
 export const DATABASE_FILE = 'shinsa.sqlite';
 
 export const NEVER_INDEX_MARKER = '.metadata_never_index';
+
+export const XATTR_TIMEOUT = Duration.seconds(10);
 
 export const BACKUP_EXCLUSION = {
   name: 'com.apple.metadata:com_apple_backup_excludeItem',

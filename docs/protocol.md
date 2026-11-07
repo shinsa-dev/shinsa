@@ -228,7 +228,8 @@ one reads as its empty value. The fields under Triage and shape, Plan and build,
 
 | Field | Type | Meaning |
 | --- | --- | --- |
-| `repoId` | string \| null | the repository, from triage |
+| `repoId` | string \| null | the repository, from triage, or the one `move_to_repository` moved it to |
+| `movingTo?` | string \| null | the repository a move is taking it to, while the old worktree is removed (`task.moving` to `task.moved`) |
 | `size` | `small` \| `large` \| null | from triage; a large plan can wait for approval |
 | `branch` | string \| null | the task's branch, once its worktree exists |
 | `proposedBranch?` | string \| null | triage's branch for a task with no worktree step yet |
@@ -537,7 +538,7 @@ Which agent role's settings (provider, model, speed) each run role uses is one t
 
 | Run role | Settings role (`RUN_AGENT_ROLE`) | Read-only | Works in | Hands over with |
 | --- | --- | --- | --- | --- |
-| `agent` | agent | while it plans (`purpose: plan`) | worktree | by purpose: `propose_plan` or `reshape_task` (plan), `complete_phase` (build), `complete_fix` (fix), `report_outcome` (operate), `report_read` after any `file_report` (watch and intake, read-only, in the repository) |
+| `agent` | agent | while it plans (`purpose: plan`) | worktree | by purpose: `propose_plan`, `reshape_task` or `move_to_repository` (plan), `complete_phase` (build), `complete_fix` (fix), `report_outcome` (operate), `report_read` after any `file_report` (watch and intake, read-only, in the repository) |
 | `reviewer` | reviewer | yes | worktree | `report_review` |
 | `answerer` | answerer | yes | the repository itself | `answer` |
 | `investigator` | answerer | no (scratch) | worktree | `report_diagnosis` |
@@ -598,7 +599,7 @@ An inquiry's own gate is `result`, which opens only when nothing follows it (sta
 pull_request, merge]` (`resolveProposalUpgrade`) and waits at `your_ok`, so a proposal and a composed OK take one path.
 
 **The plan gate rule** is data, `PLAN_GATE_RULE` (`domain/steps.ts`): `always` when the task operates, was created
-plan first, is in the backlog or the plan asks for approval (`operates`, `plan_first`, `backlog`, `asks_approval`); with Approve plans
+plan first, is in the backlog, the plan asks for approval or the plan splits the work into other tasks (`operates`, `plan_first`, `backlog`, `asks_approval`, `splits`); with Approve plans
 (`approvePlans`, a `PlanApproval`: `when_asked`, `large`, `always`) on Large plans, also when the plan has more than 3
 phases or 6 files or is a revision (`withLargePlans`: `large`, `revised`; the limits are `PLAN_SIZE_LIMITS`, counted on
 the plan document, never the triage size); on Always, every plan. `describePlanGateRule()` writes
@@ -707,8 +708,12 @@ The agent composes steps and sets plan parameters while it plans; it cannot add 
   without it; Checks, below), `evidence` (`screenshot`, `recording`, `test`, `note`, `preview`; for a code change or an
   operation), `impact` (required for an operation), `operation` (its steps, required with code), `approval` (asks for
   the plan gate), `title` (a new title, only when the work moved away from the task's, such as a question that became
-  a change; the plan gate shows it and the round takes it once the plan is accepted, `task.retitled`). A refusal is
-  `plan_invalid`.
+  a change; the plan gate shows it and the round takes it once the plan is accepted, `task.retitled`), `split` (the
+  other parts of the request that ship as their own pull requests, only for a task that opens one: up to 8
+  (`PROTOCOL_LIMITS.splitParts`), each a `title` (named once), a `request` that stands on its own, an `order`
+  (`PLAN_SPLIT_ORDERS`: `parallel`, `waits_on`, `stacks_on`) and, for `waits_on` and `stacks_on` only, `on`: 0 for this
+  task or an earlier part's number, so the parts cannot wait on each other in a loop; the phases cover only the work
+  that stays here, and the plan gate always opens for it, `splits`). A refusal is `plan_invalid`.
 - **Checks later**: `check_changes` on `complete_phase` and `complete_fix` (Checks, below).
 - The only hard gates an agent can add: your OK (`your_ok`, after an inquiry) and plan approval (`approval`).
 
@@ -928,6 +933,7 @@ role without the tool (`hasTool`).
 | `agent.report_review` | `report_review` | hands over the review: `summary` (or null), the findings and the `disagreements` with the Agent's judgement calls |
 | `agent.deliver` | `answer`, `report_diagnosis`, `submit_report`, `report_outcome` | hands over an answer, a diagnosis, a report or an outcome (step `answer`, `investigate`, `research`, `operate`), an inquiry optionally with a proposal, each with `reply` while a request of yours is open and only then; an operation without a code change needs its evidence first |
 | `agent.reshape` | `reshape_task` | recomposes the steps before planning |
+| `agent.move_to_repository` | `move_to_repository` | while it plans, moves the task to another repository of its project (`repoId`, `reason`): ends the run, removes the old worktree and, once it is gone, plans again there in the same session; refused for the same repository (`same_repository`), another project's (`other_project`), once a phase reported, a pull request exists or an earlier round shipped (`work_started`) and for a task in a bundle (`task_stacked`) |
 | `agent.ask` | `ask` | asks you (or, from a delegated run, its parent) |
 | `agent.attach_evidence` | `attach_evidence` | attaches evidence, stored under its task and round (`validateEvidence`; `docs/engine.md` → Evidence) |
 | `agent.attach_comparison` | `attach_evidence` with `kind: "comparison"` | attaches one comparison: a piece per part, sharing one `itemId` (`docs/engine.md` → Evidence) |
@@ -1036,9 +1042,9 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `focus.changed` | the focus changes; closes the open entry of `state.focusHistory` and, with a project, opens one (`{ projectId, from, to, until }`, kept a year) |
 | `away.recorded` | the Mac app reported a span you were away (`from`, `to`), kept in `state.away` for a year; never counted as something you did |
 | `settings.changed` | settings change (the whole settings object) |
-| `task.created` | a task is created (`request`, `planFirst`; with its handle when it has a project; `createdBy`, `scheduleId` and `sourceReport` for one a watch's read filed; `watchHome` for a watch's home) |
+| `task.created` | a task is created (`request`, `planFirst`, `auto`; with its handle when it has a project you chose (`auto.project` false); `createdBy`, `scheduleId` and `sourceReport` for one a watch's read filed; `watchHome` for a watch's home) |
 | `task.triaged` | triage set title, repository (or none), size, branch, handle, pipeline, decisions (always) |
-| `task.repo_bound` | a task with no repository got the one the setup check found (`repoId`, and `projectId` when it had none) |
+| `task.repo_bound` | a task with no repository got the one the setup check found (`repoId`; `projectId` when it had none, or when the bind moves it to the repository's project, with that project's `handle`) |
 | `task.repo_started` | the setup check started a repository with no commits: an empty first commit on the default branch (`start`: `branch`, `initialized` when it ran `git init` on an empty folder, `pushed` when it pushed to an origin with no branches) |
 | `task.reshaped` | the pipeline changed (`by` you, agent or Shinsa, with a reason) |
 | `task.shared`, `task.unshared` | you shared a task by link or changed how long or what it shows (`limit`, `endsAt`, `scopes`; the first adds an activity entry), or sharing stopped (`reason`: `you`, `done` when a task shared `until_done` settled, `expired`; each adds an activity entry) |
@@ -1079,6 +1085,7 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `task.suggested`, `suggestion.settled` | a task was suggested (`request`; `splitOff` for a split-off); accepted or dismissed (`keptRound` when it was kept here as a round) |
 | `task.account_bound` | the task's account changed |
 | `task.split` | `split_task` made tasks |
+| `task.moving`, `task.moved` | `move_to_repository` started moving the task (`repoId`, `runId`, `reason`; sets `movingTo`), and the old worktree is gone, so the task now works in `repoId` |
 | `config.verified` | setup verification ran |
 | `budget.acknowledged` | you allowed more past a usage or cost limit |
 | `worktree.requested` | the task asked for its workspace, in this mode (`workspace`) |
@@ -1205,6 +1212,7 @@ non-delegated task run also gets one management tool per surface spec that is no
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | `propose_plan` | ✓ plan | | | | | | |
 | `reshape_task` | ✓ plan | | | | | | |
+| `move_to_repository` | ✓ plan | | | | | | |
 | `complete_phase` | ✓ build | | | | | | |
 | `complete_fix` | ✓ fix | | | | | | |
 | `report_review` | | ✓ | | | | | |
@@ -1253,7 +1261,7 @@ The fields each hand-over tool takes, checked by `validate*` in `packages/core/s
 
 | Tool | Fields (required in bold) | Limits |
 | --- | --- | --- |
-| `propose_plan` | **`goal`**, **`phases`** (**`title`**, **`detail`**), **`behaviour`**, **`approach`**, **`files`** (**`path`**, **`change`**), **`out_of_scope`**, **`verification`** (**`label`**, **`command`**, **`phases`**), **`questions`** (**`question`**, **`options`**, `recommendation`); `title`, `impact`, `evidence`, `approval`, `operation`, `reply` (as in `complete_fix`), `actions` (as in `complete_fix`) | title 60; goal 300; 2 to 8 phases (title 60, detail 160); behaviour 8 × 200; approach 700; files 20 (change 140); out of scope 6 × 200; verification 12 checks (label 60, command 200, never a whole-suite command or one listed twice; phases 1-based, at least one, within the plan); questions 4 (question 200, 2 to 4 options of 100); impact 1,000; operation 8 × 200; reply as in `complete_fix` |
+| `propose_plan` | **`goal`**, **`phases`** (**`title`**, **`detail`**), **`behaviour`**, **`approach`**, **`files`** (**`path`**, **`change`**), **`out_of_scope`**, **`verification`** (**`label`**, **`command`**, **`phases`**), **`questions`** (**`question`**, **`options`**, `recommendation`); `title`, `impact`, `evidence`, `approval`, `operation`, `split` (**`title`**, **`request`**, **`order`**, `on`), `reply` (as in `complete_fix`), `actions` (as in `complete_fix`) | title 60; goal 300; 2 to 8 phases (title 60, detail 160); behaviour 8 × 200; approach 700; files 20 (change 140); out of scope 6 × 200; verification 12 checks (label 60, command 200, never a whole-suite command or one listed twice; phases 1-based, at least one, within the plan); questions 4 (question 200, 2 to 4 options of 100); impact 1,000; operation 8 × 200; split 8 parts (title as a task's title, request as a suggestion's, `on` 0 to 7 and before its own part); reply as in `complete_fix` |
 | `complete_phase` | `reply` and `actions` (as in `complete_fix`); **`summary`**, **`spots`** (**`file`**, **`start`**, **`end`**, **`attention`**: critical, high or normal, **`why`**, `title`, `explain`), **`judgement_calls`** (**`title`**: a few words naming the decision, **`call`**, **`reason`**, `file`, `line`, `end`, `alternatives` (**`option`**, **`rejected`**)); `walkthrough` (**`approach`**, **`flow`**, `risks` (**`title`**: a few words naming the risk, **`risk`**, `file`, `line`, `end`), `testing` (`automated`, `manual` (**`action`**, `target` (**`kind`**: url, file, command or screen, **`value`**), **`expect`**)), `steps` (**`when`**: pre_merge or post_merge, **`kind`**: env, secret, migration, deploy, config or other, **`title`**, **`detail`**, `command`)), asked for on the last phase; `watchdogs` (**`title`**, **`check`**, `first_check_minutes`, `max_gap_hours`, `for_hours`, `starts` (`merge` or `production`) with `production_check`, and exactly one of `source` (**`server`**, **`data`**) or `source_request` (**`data`**, **`evidence`**, **`suggestions`**)), beside `walkthrough` and only with it; `check_changes` (**`action`**: add, change or remove, `id` (not for add), `label`, `command`, `phases`, **`reason`**) | summary 240; 8 spots (why 180, title 80, explain 400); 5 judgement calls (title 60, call 120, reason 240; 3 alternatives, option 100, rejected 200); walkthrough approach 1,200, flow 2,400, 8 risks (title 60, risk 280), testing automated 4 × 240 and 10 manual steps (action 240, target 400, expect 240), 8 steps (title 80, unique per `when`; detail 400; command 400); 5 watchdogs (title 80, unique; check 600; server 128; data 200; evidence 600; 1 to 4 suggestions of 160; first check 1 to 720 minutes, gaps up to 1 to 24 hours, for 1 to 720 hours and no less than the first check; production check 400, required with `starts: production`; a `source_request` whose suggestions name a server the run already has is refused unless its `evidence` says it checked that server (“checked <server>” in one clause), here and on `complete_fix`); 6 check changes (id 12, label 60, command 200, reason 200; an add needs a label and a command); reply as in `complete_fix` |
 | `complete_fix` | **`summary`**; `reply` (**`headline`**, **`points`** (**`ask`**, **`outcome`**: done, answered or not_changed, **`note`**), `next`), required while a request of yours is open and refused otherwise; `walkthrough` (`approach`, `flow`, `risks` (**`title`**, **`risk`**, `file`, `line`, `end`), `testing`, `steps`), only when the fix changes how the change works, with only the parts that changed and at least one; `testing` and `steps` replace the part whole, an empty one included; `watchdogs` as in `complete_phase`, beside `walkthrough`, replacing the list whole (an empty one removes them) and enough on its own; `checks` (ids of checks to run again besides the failing ones); `check_changes` as in `complete_phase`; `evidence_kept` (earlier items, by key or id, that still show the work as it is); `actions` (**`label`**, **`message`**: one-click replies shown beside the gate's main button, each sending its message as yours) | summary 240; actions 3 (label 40, unique ignoring case; message 2,000); reply headline 240, 1 to 8 points (ask 160, note 280), next 1,200; walkthrough as in `complete_phase`; checks 12 ids of 12; check changes as in `complete_phase`; evidence kept 24 of 60; watchdogs as in `complete_phase`. Both hand-overs and their `walkthrough` refuse a field they do not take, naming the ones they do |
 | `report_review` | **`findings`** (**`severity`**: `blocking`, `should_fix` or `optional`, **`message`**: what is wrong and why it matters, `title`, `fix`, `file`, `line`, `end`); `summary`; `disagreements` (**`call`**: the judgement call's number in the brief, **`reason`**) | summary 400; 12 findings (title 80, message 280, fix 600); 8 disagreements (reason 280), each call once |
@@ -1264,6 +1272,7 @@ The fields each hand-over tool takes, checked by `validate*` in `packages/core/s
 | `report_read` | **`summary`**: what it read, filed and skipped; `reached` (false when the source still failed after 3 tries; true when left out); `live` (only for a watchdog waiting for production: false while it is not live, true once it is; a report filed counts as true) | 1,000 |
 | `file_report` | **`title`**, **`request`**, **`text`**; `report_id` or `link` (one is required), `author`, `posted_at`, `fork_from` (a task id or handle; a watchdog's is always the shipped task), `repository` (a name or id) | title 100; request 2,000; report_id 200; link 2,000; author 120; posted_at 60; text 4,000 |
 | `reshape_task` | **`reason`**; `shape` (answer, investigate, research) or `steps` (`PIPELINE_ORDER` names) | reason 240 |
+| `move_to_repository` | **`repository`** (a repository of the task's project by name, or the folder name of one in its folders, registered when named), **`reason`** | reason 240 |
 | `attach_evidence` | **`kind`** (comparison, screenshot, recording, test, check, note, preview); for test or check only **`check`** (a check id of the task) and `detail`; otherwise **`title`**: what it shows, the same for a before shot and its after shot; `detail`: what to look at; `width` (CSS pixels), `theme` (light, dark), `stage` (before, after); `key`: what it shows, lower-case words and hyphens (not for a test or check); `replaces`: earlier items by key or id; exactly one of `path`, `url` (http or https) or `text`, or for a comparison **`parts`** (each **`path`**, `stage`, `label`) | title 80; detail 280; check 12; width 1 to 7,680; text 40,000; url 2,000; path 300; 2 to 6 parts, label 40; key 60; replaces 24 |
 | `remove_evidence` | **`items`** (by key or id), **`reason`**: why it no longer applies | 1 to 24 items of 60; reason 200 |
 

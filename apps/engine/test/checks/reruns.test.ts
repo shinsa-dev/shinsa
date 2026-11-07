@@ -2,14 +2,22 @@ import { afterEach, describe, expect, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
+import { Option } from 'effect';
 import {
   isCoverageFloorOnly,
   isRerunPassed,
   listFailedTests,
-  resolveRerunCommand,
+  selectRerunCommand,
 } from '../../src/checks/reruns.ts';
+import type { FailedTestGroup } from '../../src/checks/schema.ts';
+import { runFiles } from '../harness.ts';
 
 const dirs: string[] = [];
+
+const failedTests = (output: string, root: string) => runFiles(listFailedTests(output, root));
+
+const rerunCommand = async (group: FailedTestGroup, root: string) =>
+  Option.getOrNull(await runFiles(selectRerunCommand(group, root)));
 
 function createRepo(files: Record<string, string>) {
   const root = realpathSync(mkdtempSync(join(tmpdir(), 'shinsa-reruns-')));
@@ -41,7 +49,7 @@ const MONOREPO = {
 const BUN_SUMMARY = (fails: number) => ` 3 pass\n ${fails} fail\n Ran 4 tests across 2 files.`;
 
 describe('reading which test files failed', () => {
-  test('finds Bun files in a Turbo run by their package prefix, even when two packages share a path', () => {
+  test('finds Bun files in a Turbo run by their package prefix, even when two packages share a path', async () => {
     const root = createRepo(MONOREPO);
     const output = [
       '@acme/engine:test: bun test v1.4.4',
@@ -53,7 +61,7 @@ describe('reading which test files failed', () => {
       '@acme/core:test:  1 fail',
       '@acme/web:test: test/index.test.ts:',
     ].join('\n');
-    expect(listFailedTests(output, root)).toEqual({
+    expect(await failedTests(output, root)).toEqual({
       kind: 'files',
       groups: [
         { runner: 'bun', packageDir: join(root, 'apps/engine'), files: ['test/index.test.ts'] },
@@ -62,7 +70,7 @@ describe('reading which test files failed', () => {
     });
   });
 
-  test('reads Bun output grouped for GitHub Actions, alone or in a Turbo run', () => {
+  test('reads Bun output grouped for GitHub Actions, alone or in a Turbo run', async () => {
     const root = createRepo(MONOREPO);
     const alone = [
       'bun test v1.4.4',
@@ -71,7 +79,7 @@ describe('reading which test files failed', () => {
       '::endgroup::',
       ' 1 fail',
     ];
-    expect(listFailedTests(alone.join('\n'), join(root, 'packages/core'))).toEqual({
+    expect(await failedTests(alone.join('\n'), join(root, 'packages/core'))).toEqual({
       kind: 'files',
       groups: [{ runner: 'bun', packageDir: join(root, 'packages/core'), files: ['test/c.test.ts'] }],
     });
@@ -82,13 +90,13 @@ describe('reading which test files failed', () => {
       '@acme/core:test: ::endgroup::',
       '@acme/core:test:  1 fail',
     ];
-    expect(listFailedTests(turbo.join('\n'), root)).toEqual({
+    expect(await failedTests(turbo.join('\n'), root)).toEqual({
       kind: 'files',
       groups: [{ runner: 'bun', packageDir: join(root, 'packages/core'), files: ['test/c.test.ts'] }],
     });
   });
 
-  test('finds Vitest and Jest files, and the runner from the package', () => {
+  test('finds Vitest and Jest files, and the runner from the package', async () => {
     const root = createRepo({
       ...MONOREPO,
       'apps/jest/package.json': JSON.stringify({ name: 'jest-app', scripts: { test: 'jest' } }),
@@ -99,7 +107,7 @@ describe('reading which test files failed', () => {
       ' FAIL  src/b.spec.tsx > renders again',
       'FAIL apps/jest/src/d.test.js (5.1 s)',
     ].join('\n');
-    expect(listFailedTests(output, root)).toEqual({
+    expect(await failedTests(output, root)).toEqual({
       kind: 'files',
       groups: [
         { runner: 'vitest', packageDir: join(root, 'apps/web'), files: ['src/b.spec.tsx'] },
@@ -108,37 +116,37 @@ describe('reading which test files failed', () => {
     });
   });
 
-  test('reads pnpm workspaces and absolute paths inside the repository', () => {
+  test('reads pnpm workspaces and absolute paths inside the repository', async () => {
     const root = createRepo({
       'pnpm-workspace.yaml': "packages:\n  - 'libs/*'\n  # a comment\n",
       'libs/one/package.json': JSON.stringify({ name: 'one', dependencies: { jest: '29' } }),
       'libs/one/e.test.ts': '',
     });
-    expect(listFailedTests('FAIL e.test.ts', root)).toEqual({
+    expect(await failedTests('FAIL e.test.ts', root)).toEqual({
       kind: 'files',
       groups: [{ runner: 'jest', packageDir: join(root, 'libs/one'), files: ['e.test.ts'] }],
     });
-    expect(listFailedTests(`FAIL ${join(root, 'libs/one/e.test.ts')}`, root)).toEqual({
+    expect(await failedTests(`FAIL ${join(root, 'libs/one/e.test.ts')}`, root)).toEqual({
       kind: 'files',
       groups: [{ runner: 'jest', packageDir: join(root, 'libs/one'), files: ['e.test.ts'] }],
     });
-    expect(listFailedTests('FAIL /elsewhere/e.test.ts', root)).toEqual({ kind: 'unknown' });
+    expect(await failedTests('FAIL /elsewhere/e.test.ts', root)).toEqual({ kind: 'unknown' });
   });
 
-  test('a package.json object of workspaces is read too', () => {
+  test('a package.json object of workspaces is read too', async () => {
     const root = createRepo({
       'package.json': JSON.stringify({ workspaces: { packages: ['pkg'] }, scripts: { test: 'bun test' } }),
       'pkg/package.json': '{}',
       'pkg/a.test.ts': '',
     });
     const output = ['pkg/a.test.ts:', '(fail) a', BUN_SUMMARY(1)].join('\n');
-    expect(listFailedTests(output, root)).toEqual({
+    expect(await failedTests(output, root)).toEqual({
       kind: 'files',
       groups: [{ runner: 'bun', packageDir: join(root, 'pkg'), files: ['a.test.ts'] }],
     });
   });
 
-  test('says it cannot tell when a failure is not tied to a file it can find', () => {
+  test('says it cannot tell when a failure is not tied to a file it can find', async () => {
     const root = createRepo(MONOREPO);
     const cases = [
       '(fail) no header [1ms]\n 1 fail',
@@ -149,26 +157,26 @@ describe('reading which test files failed', () => {
       'FAIL apps/notes.test.ts',
       'not json at all\nFAIL test/index.test.ts',
     ];
-    for (const output of cases) expect(listFailedTests(output, root)).toEqual({ kind: 'unknown' });
+    for (const output of cases) expect(await failedTests(output, root)).toEqual({ kind: 'unknown' });
   });
 
-  test('a file in no package, or in a package with no known runner, cannot be re-run alone', () => {
+  test('a file in no package, or in a package with no known runner, cannot be re-run alone', async () => {
     const root = createRepo({ 'test/a.test.ts': '', 'pkg/package.json': '{}', 'pkg/b.test.ts': '' });
-    expect(listFailedTests('FAIL test/a.test.ts', root)).toEqual({ kind: 'unknown' });
-    expect(listFailedTests('FAIL pkg/b.test.ts', root)).toEqual({ kind: 'unknown' });
-    expect(listFailedTests('FAIL pkg/b.test.ts', join(root, 'nowhere'))).toEqual({ kind: 'unknown' });
+    expect(await failedTests('FAIL test/a.test.ts', root)).toEqual({ kind: 'unknown' });
+    expect(await failedTests('FAIL pkg/b.test.ts', root)).toEqual({ kind: 'unknown' });
+    expect(await failedTests('FAIL pkg/b.test.ts', join(root, 'nowhere'))).toEqual({ kind: 'unknown' });
     const listed = createRepo({ 'package.json': '[]', 'b.test.ts': '' });
-    expect(listFailedTests('FAIL b.test.ts', listed)).toEqual({ kind: 'unknown' });
+    expect(await failedTests('FAIL b.test.ts', listed)).toEqual({ kind: 'unknown' });
   });
 
-  test('a Bun run that also fell below a coverage floor still names its failing files', () => {
+  test('a Bun run that also fell below a coverage floor still names its failing files', async () => {
     const files = {
       'package.json': '{}',
       'a.test.ts': '',
       'bunfig.toml': '[test]\ncoverageThreshold = 1.0\n',
     };
     const output = ['a.test.ts:', '(fail) a', 'All files  |   90.00 |  100.00 |', ' 1 fail'].join('\n');
-    expect(listFailedTests(output, createRepo(files)).kind).toBe('files');
+    expect((await failedTests(output, createRepo(files))).kind).toBe('files');
   });
 
   test('a scoped Bun run that failed only its coverage floor is told apart from a failing one', () => {
@@ -183,48 +191,48 @@ describe('reading which test files failed', () => {
     expect(isCoverageFloorOnly('bun test v1.4.4\nAll files  |   61.20 |   70.03 |')).toBe(false);
   });
 
-  test('a recap of failures after the run is not counted twice', () => {
+  test('a recap of failures after the run is not counted twice', async () => {
     const root = createRepo({ 'package.json': '{}', 'a.test.ts': '' });
     const output = ['a.test.ts:', '(fail) a', '1 test failed:', '(fail) a', ' 1 fail'].join('\n');
-    expect(listFailedTests(output, root)).toEqual({
+    expect(await failedTests(output, root)).toEqual({
       kind: 'files',
       groups: [{ runner: 'bun', packageDir: root, files: ['a.test.ts'] }],
     });
   });
 
-  test('Bun output with no failed test is a failure elsewhere; output from no test runner is none', () => {
+  test('Bun output with no failed test is a failure elsewhere; output from no test runner is none', async () => {
     const root = createRepo({ 'package.json': '{}' });
-    expect(listFailedTests('bun test v1.4.4\n 4 pass\n 0 fail', root)).toEqual({ kind: 'clean' });
-    expect(listFailedTests('src/a.ts(3,1): error TS2322', root)).toEqual({ kind: 'none' });
+    expect(await failedTests('bun test v1.4.4\n 4 pass\n 0 fail', root)).toEqual({ kind: 'clean' });
+    expect(await failedTests('src/a.ts(3,1): error TS2322', root)).toEqual({ kind: 'none' });
   });
 });
 
 describe('re-running failed files', () => {
-  test('Bun runs the files by path, Vitest and Jest from the nearest installed binary, without coverage', () => {
+  test('Bun runs the files by path, Vitest and Jest from the nearest installed binary, without coverage', async () => {
     const root = createRepo({
       'node_modules/.bin/vitest': '',
       'apps/web/node_modules/.bin/jest': '',
     });
     const web = join(root, 'apps/web');
-    expect(resolveRerunCommand({ runner: 'bun', packageDir: web, files: ['a.test.ts'] }, root)).toEqual([
+    expect(await rerunCommand({ runner: 'bun', packageDir: web, files: ['a.test.ts'] }, root)).toEqual([
       'bun',
       'test',
       './a.test.ts',
     ]);
-    expect(resolveRerunCommand({ runner: 'vitest', packageDir: web, files: ['b.spec.ts'] }, root)).toEqual([
+    expect(await rerunCommand({ runner: 'vitest', packageDir: web, files: ['b.spec.ts'] }, root)).toEqual([
       join(root, 'node_modules/.bin/vitest'),
       'run',
       '--coverage.enabled=false',
       'b.spec.ts',
     ]);
-    expect(resolveRerunCommand({ runner: 'jest', packageDir: web, files: ['c.test.js'] }, root)).toEqual([
+    expect(await rerunCommand({ runner: 'jest', packageDir: web, files: ['c.test.js'] }, root)).toEqual([
       join(web, 'node_modules/.bin/jest'),
       '--coverage=false',
       '--runTestsByPath',
       'c.test.js',
     ]);
     const bare = createRepo({});
-    expect(resolveRerunCommand({ runner: 'jest', packageDir: bare, files: ['c.test.js'] }, bare)).toBeNull();
+    expect(await rerunCommand({ runner: 'jest', packageDir: bare, files: ['c.test.js'] }, bare)).toBeNull();
   });
 
   test('a Bun re-run passes on its counts, whatever a coverage floor did to the exit code', () => {

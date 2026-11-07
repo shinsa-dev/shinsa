@@ -31,7 +31,10 @@ function createFakeLaunchctl(printed: string | null) {
   return { calls, launchctl };
 }
 
-function createStandalone(printed: string | null, ownsJob = (output: string) => output.includes(PROGRAM)) {
+function createStandalone(
+  printed: string | null,
+  ownsJob = (output: string) => Effect.succeed(output.includes(PROGRAM))
+) {
   const home = createTempDir();
   const fake = createFakeLaunchctl(printed);
   const service = createLaunchdService({
@@ -54,9 +57,11 @@ describe('the launchd service', () => {
       calls.push(args);
       return Effect.succeed({ ok: true, output: 'program = /Applications/Shinsa.app/x' });
     };
-    expect(await run(createLaunchdService({ uid: 501, launchctl, ownsJob: () => false }).kick)).toBe(false);
+    expect(
+      await run(createLaunchdService({ uid: 501, launchctl, ownsJob: () => Effect.succeed(false) }).kick)
+    ).toBe(false);
     expect(calls).toEqual([['print', TARGET]]);
-    const owned = createLaunchdService({ uid: 501, launchctl, ownsJob: () => true });
+    const owned = createLaunchdService({ uid: 501, launchctl, ownsJob: () => Effect.succeed(true) });
     expect(await run(owned.kick)).toBe(true);
     expect(calls.slice(1)).toEqual([
       ['print', TARGET],
@@ -65,7 +70,7 @@ describe('the launchd service', () => {
     const missing = createLaunchdService({
       uid: 501,
       launchctl: () => Effect.succeed({ ok: false, output: '' }),
-      ownsJob: () => true,
+      ownsJob: () => Effect.succeed(true),
     });
     expect(await run(missing.kick)).toBe(false);
     expect(owned.manager).toBe('launchd');
@@ -76,14 +81,22 @@ describe('the launchd service', () => {
     const missing = createLaunchdService({
       uid: 501,
       launchctl: createFakeLaunchctl(null).launchctl,
-      ownsJob: () => true,
+      ownsJob: () => Effect.succeed(true),
     });
     await expect(run(missing.prepare)).rejects.toThrow('Open the Shinsa app once and it sets it up.');
     const fake = createFakeLaunchctl(APP_JOB);
-    const set = createLaunchdService({ uid: 501, launchctl: fake.launchctl, ownsJob: () => true });
+    const set = createLaunchdService({
+      uid: 501,
+      launchctl: fake.launchctl,
+      ownsJob: () => Effect.succeed(true),
+    });
     expect(await run(set.prepare)).toBeNull();
     expect(fake.calls).toEqual([['print', TARGET]]);
-    const other = createLaunchdService({ uid: 501, launchctl: fake.launchctl, ownsJob: () => false });
+    const other = createLaunchdService({
+      uid: 501,
+      launchctl: fake.launchctl,
+      ownsJob: () => Effect.succeed(false),
+    });
     await expect(run(other.assertInstalled)).rejects.toThrow('is not the one inside the Shinsa app');
   });
 });
@@ -147,7 +160,7 @@ describe('the engine on a Mac without the app', () => {
     await expect(run(service.assertInstalled)).rejects.toThrow('The Shinsa app runs the engine on this Mac');
     expect(calls.every(([verb]) => verb === 'print')).toBe(true);
     expect(existsSync(plist)).toBe(false);
-    const owned = createStandalone(APP_JOB, () => true);
+    const owned = createStandalone(APP_JOB, () => Effect.succeed(true));
     expect(await run(owned.service.prepare)).toBeNull();
     expect(existsSync(owned.plist)).toBe(false);
   });

@@ -1,4 +1,3 @@
-import { existsSync } from 'node:fs';
 import { isAbsolute, join, normalize } from 'node:path';
 import {
   DomainError,
@@ -12,11 +11,12 @@ import {
   selectService,
   type TaskServiceView,
 } from '@shinsa/core';
-import { Effect } from 'effect';
+import { Effect, Option } from 'effect';
 import { isInside } from '../../files/paths.ts';
+import { isPresent } from '../../files/probe.ts';
 import { describeError } from '../../log/index.ts';
 import { readServiceInput } from '../../terminals/input.ts';
-import { resolveServiceRunIn } from '../../terminals/places.ts';
+import { selectServiceRunIn } from '../../terminals/runs.ts';
 import { readString } from '../handover.ts';
 import { ToolCallFailed } from '../tools/schema.ts';
 import {
@@ -87,11 +87,11 @@ export const runServiceTool = Effect.fn('ServiceTools.run')(function* (
   });
 
   const resolveRun = Effect.fn('ServiceTools.resolveRun')(function* (view: TaskServiceView) {
-    const run = resolveServiceRunIn(state, view.service, task.id, runner);
-    if (!run) return yield* refuse(`${view.service.name} cannot run for this task.`);
-    if (!(yield* Effect.sync(() => existsSync(run.cwd))))
-      return yield* refuse(`The folder ${run.cwd} is not in the worktree.`);
-    return run;
+    const run = yield* selectServiceRunIn(state, view.service, task.id, runner);
+    if (Option.isNone(run)) return yield* refuse(`${view.service.name} cannot run for this task.`);
+    if (!(yield* isPresent(run.value.cwd)))
+      return yield* refuse(`The folder ${run.value.cwd} is not in the worktree.`);
+    return run.value;
   });
 
   const listServices = Effect.fn('ServiceTools.list')(function* () {
@@ -152,7 +152,7 @@ export const runServiceTool = Effect.fn('ServiceTools.run')(function* (
     if (!(repo && projectId))
       return yield* refuse('add_service needs a task that works in a project’s repository.');
     const { relative, cwd } = yield* resolveServiceFolder(repo.path);
-    if (!(yield* Effect.sync(() => existsSync(cwd))))
+    if (!(yield* isPresent(cwd)))
       return yield* refuse(
         `${describeFolder(relative)} is not in the repository’s own checkout yet. A service runs from a folder on the default branch.`
       );

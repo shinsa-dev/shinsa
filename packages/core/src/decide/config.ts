@@ -3,13 +3,16 @@ import {
   type ConfigProblem,
   type Gate,
   type GateDecision,
+  isLaterRound,
+  isRepoNamed,
   needsRepository,
+  resolveRepoMove,
   resolveTaskPipeline,
   DomainError,
   type Repo,
   type Task,
 } from '../domain/index.ts';
-import type { ShinsaState } from '../state/project.ts';
+import { resolveNextHandle, type ShinsaState } from '../state/project.ts';
 import { findRepo, listProjectRepos } from '../state/queries.ts';
 import type { Decider } from './decider.ts';
 import { isSameValue } from './equality.ts';
@@ -65,10 +68,32 @@ const MAX_REPOSITORY_CHOICES = 8;
 
 const PICK_REPOSITORY_TITLE = 'Which repository is this task for?';
 
-function listCandidateRepos(state: ShinsaState, task: Task) {
+function sortRepos(repos: Repo[]) {
+  return [...repos].sort((a, b) => a.name.localeCompare(b.name));
+}
+
+function listNamedOutsideRepos(state: ShinsaState, task: Task) {
+  if (!task.projectId || isLaterRound(task)) return [];
+  return sortRepos(
+    Object.values(state.repos).filter(
+      (repo) =>
+        repo.projectId !== null && repo.projectId !== task.projectId && isRepoNamed(task.request, repo.name)
+    )
+  ).slice(0, MAX_REPOSITORY_CHOICES);
+}
+
+function listRepoChoices(state: ShinsaState, task: Task) {
   const inProject = task.projectId ? listProjectRepos(state, task.projectId) : [];
-  const repos = inProject.length > 0 ? inProject : Object.values(state.repos);
-  return [...repos].sort((a, b) => a.name.localeCompare(b.name)).slice(0, MAX_REPOSITORY_CHOICES);
+  if (inProject.length === 0) {
+    const repos = sortRepos(Object.values(state.repos)).slice(0, MAX_REPOSITORY_CHOICES);
+    return repos.map((repo) => ({ repo, label: resolveRepoLabel(state, repo, repos), outside: false }));
+  }
+  const named = listNamedOutsideRepos(state, task);
+  const own = sortRepos(inProject).slice(0, MAX_REPOSITORY_CHOICES - named.length);
+  return [
+    ...own.map((repo) => ({ repo, label: resolveRepoLabel(state, repo, own), outside: false })),
+    ...named.map((repo) => ({ repo, label: resolveOutsideLabel(state, repo, named), outside: true })),
+  ];
 }
 
 function resolveProjectName(state: ShinsaState, repo: Repo) {
@@ -83,18 +108,29 @@ function resolveRepoLabel(state: ShinsaState, repo: Repo, repos: Repo[]) {
   return project && sameProject.length < 2 ? `${repo.name} (${project})` : `${repo.name} (${repo.path})`;
 }
 
-function listRepoChoices(state: ShinsaState, task: Task) {
-  const repos = listCandidateRepos(state, task);
-  return repos.map((repo) => ({ repo, label: resolveRepoLabel(state, repo, repos) }));
+function resolveOutsideLabel(state: ShinsaState, repo: Repo, repos: Repo[]) {
+  const project = resolveProjectName(state, repo);
+  const twins = repos.filter(
+    (other) => other.name === repo.name && resolveProjectName(state, other) === project
+  );
+  return project && twins.length < 2 ? `${repo.name} (${project})` : `${repo.name} (${repo.path})`;
 }
 
 function isLoneNoRepository(problems: ConfigProblem[]) {
   return problems.length === 1 && problems[0]?.kind === 'no_repository';
 }
 
-function describeRepoQuestion() {
+function describeRepoQuestion(state: ShinsaState, task: Task) {
+  const named = listNamedOutsideRepos(state, task);
+  const project = task.projectId ? state.projects[task.projectId]?.name : undefined;
   return [
     'Shinsa could not tell which repository this task works in, and its work needs one.',
+    ...(named.length > 0 && project
+      ? [
+          '',
+          `The request names ${named.map((repo) => repo.name).join(', ')}, outside ${project}. Picking one moves the task to that repository's project.`,
+        ]
+      : []),
     '',
     'Pick one below, or say in a message which repository it is. A repository Shinsa does not know yet can be added to the project in Settings.',
   ].join('\n');
@@ -106,9 +142,15 @@ function openSetupGate(decider: Decider, task: Task, problems: ConfigProblem[]) 
     decider.openGate(task.id, 'configuration', describeTitle(problems), describeProblems(problems));
     return;
   }
-  decider.openGate(task.id, 'configuration', PICK_REPOSITORY_TITLE, describeRepoQuestion(), {
-    details: { choices: choices.map((choice) => choice.label) },
-  });
+  decider.openGate(
+    task.id,
+    'configuration',
+    PICK_REPOSITORY_TITLE,
+    describeRepoQuestion(decider.state, task),
+    {
+      details: { choices: choices.map((choice) => choice.label) },
+    }
+  );
 }
 
 export function assertConfigurationReply(
@@ -127,17 +169,24 @@ function selectChosenRepo(decider: Decider, gate: Gate, response: string | null)
   const label = response?.trim() ?? '';
   if (!gate.choices?.includes(label)) return null;
   const choices = listRepoChoices(decider.state, decider.task(gate.taskId));
-  return choices.find((choice) => choice.label === label)?.repo ?? null;
+  return choices.find((choice) => choice.label === label) ?? null;
 }
 
-function bindRepo(decider: Decider, task: Task, repoId: string) {
+function resolveBindProject(task: Task, repo: Repo, outside: boolean) {
+  if (outside) return repo.projectId ?? null;
+  return resolveRepoMove(task, repo);
+}
+
+function bindRepo(decider: Decider, task: Task, repoId: string, outside = false) {
   if (task.repoId !== null) return;
   const repo = findRepo(decider.state, repoId);
+  const projectId = resolveBindProject(task, repo, outside);
   decider.emit({
     type: 'task.repo_bound',
     taskId: task.id,
     repoId,
-    ...(task.projectId ? {} : { projectId: repo.projectId }),
+    ...(projectId ? { projectId } : {}),
+    ...(projectId && task.projectId ? { handle: resolveNextHandle(decider.state, projectId) } : {}),
   });
 }
 
@@ -168,7 +217,7 @@ export function answerConfiguration(
     settleTask(decider, gate.taskId, 'cancelled', 'cancelled during setup');
     return;
   }
-  const repo = decision === 'reply' ? selectChosenRepo(decider, gate, response) : null;
-  if (repo) bindRepo(decider, decider.task(gate.taskId), repo.id);
+  const choice = decision === 'reply' ? selectChosenRepo(decider, gate, response) : null;
+  if (choice) bindRepo(decider, decider.task(gate.taskId), choice.repo.id, choice.outside);
   startWork(decider, gate.taskId);
 }

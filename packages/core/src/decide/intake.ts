@@ -46,7 +46,7 @@ export function createWatchHome(decider: Decider, source: ScheduleSource, name: 
     planFirst: false,
     origin: null,
     mode: 'ask',
-    auto: { shape: false, start: false, priority: false },
+    auto: { shape: false, start: false, priority: false, project: false },
     watchHome: true,
   });
   decider.stage(taskId, 'done', 'waiting for its first read');

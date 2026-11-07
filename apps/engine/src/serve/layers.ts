@@ -131,10 +131,13 @@ function createFoundationLayer(config: ServerConfig) {
 }
 
 function createLogLayer(config: ServerConfig) {
-  return EngineCore.layer({
-    readOnly: config.inspect,
-    stateVersion: BUNDLE?.stateVersion ?? resolveStateVersion(),
-  }).pipe(
+  const stateVersion = BUNDLE ? Effect.succeed(BUNDLE.stateVersion) : resolveStateVersion();
+  const core = Layer.unwrap(
+    Effect.map(stateVersion, (version) =>
+      EngineCore.layer({ readOnly: config.inspect, stateVersion: version })
+    )
+  );
+  return core.pipe(
     Layer.provideMerge(StoreLayer(config.databasePath)),
     Layer.provideMerge(
       Layer.effectDiscard(Effect.addFinalizer(() => Effect.logInfo('[Serve] Closed the event log')))
@@ -420,13 +423,13 @@ function createServedLayer(options: ShinsaOptions, instance: ServerInstance, sto
   ).pipe(Layer.provide(Prerequisites.layer), Layer.provide(SetupCommands.layer));
   const served = Layer.mergeAll(
     Layer.succeed(ServedInstance, instance),
-    Layer.succeed(
+    Layer.effect(
       ServedChangelog,
       resolveEngineChangelog({
         built: process.env.SHINSA_BUILD_CHANGELOG,
         root: BUNDLE ? null : INSTALL_PATH,
       })
-    ),
+    ).pipe(Layer.provide(ShellLayer)),
     options.place ? Layer.succeed(PlacementAsker, options.place) : Layer.empty,
     restarter
   );
@@ -480,7 +483,7 @@ export function EngineLayer(config: ServerConfig, options: ShinsaOptions, stop: 
             url: resolveServerUrl(config.hostname, config.port),
           });
       return createServeLayer(config, options, instance, stop).pipe(
-        Layer.provideMerge(Layer.effectDiscard(Effect.sync(() => prepareDataDir(config)))),
+        Layer.provideMerge(Layer.effectDiscard(prepareDataDir(config)).pipe(Layer.provide(ShellLayer))),
         Layer.provideMerge(lock)
       );
     })

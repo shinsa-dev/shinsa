@@ -125,7 +125,7 @@ export function ServiceRow({
   hasRuns = false,
 }: {
   view: ServiceView;
-  project: Project;
+  project: Project | null;
   now: number;
   handlers: ServiceHandlers;
   hasRuns?: boolean;
@@ -141,15 +141,15 @@ export function ServiceRow({
       {hasRuns && <span aria-hidden className={cn(TREE_LINE, 'top-7.5 bottom-0')} />}
       <button
         type='button'
-        disabled={!view.terminal}
-        aria-label={view.terminal ? `Open the terminal of ${name}` : name}
-        onClick={() => handlers.open(view, project)}
+        disabled={!(view.terminal && project)}
+        aria-label={view.terminal && project ? `Open the terminal of ${name}` : name}
+        onClick={() => project && handlers.open(view, project)}
         className={cn(LIST_ROW, LIST_ROW_LINES, 'min-w-0 flex-1 ps-1.5 disabled:cursor-default')}
       >
         <StatusTile icon={glyph.icon} tone={glyph.tone} label={state} />
         <ServiceLines view={view} now={now} />
       </button>
-      <RowRunButtons view={view} handlers={handlers} />
+      <RowRunButtons view={view} handlers={handlers} controls={project !== null} />
     </div>
   );
 }
@@ -177,12 +177,21 @@ function RowRunButtons({
   view,
   label = null,
   handlers,
+  controls = true,
 }: {
   view: ServiceView;
   label?: string | null;
   handlers: ServiceHandlers;
+  controls?: boolean;
 }) {
   const name = view.service.name;
+  if (!controls)
+    return (
+      <span className='flex shrink-0 items-center gap-px'>
+        <ServiceShareButton view={view} handlers={handlers} />
+        <ServicePreviewButton view={view} label={label} onPreview={() => handlers.preview(view)} />
+      </span>
+    );
   if (!isServiceActive(view))
     return (
       <ServiceActionButton label={`Start ${name}`} icon='IconPlay' onClick={() => handlers.start(view)} />

@@ -87,6 +87,7 @@ export {
   type MergeStepView,
   type PhaseChange,
   type PlanChange,
+  PLAN_SPLIT_ORDERS,
   PROTOCOL_LIMITS,
   type PullRequestSource,
   parseReviewPayload,

@@ -14,12 +14,12 @@ import {
   type Task,
   type TaskRefs,
 } from '@shinsa/core';
-import { Context, Effect, Layer } from 'effect';
+import { Context, Effect, FileSystem, Layer, Option } from 'effect';
 import type { CommandEnv } from '../../shell/schema.ts';
 import type { GitFailed } from '../schema.ts';
 import { Git } from '../service.ts';
 import { decodeText } from '../text.ts';
-import { resolveTaskCheckout } from './checkout.ts';
+import { selectTaskCheckout } from './checkout.ts';
 import {
   ChangesUnreadable,
   CODE_UNAVAILABLE_MESSAGE,
@@ -83,6 +83,9 @@ export class History extends Context.Service<
     History,
     Effect.gen(function* () {
       const git = yield* Git;
+      const withFiles = Effect.provideService(FileSystem.FileSystem, yield* FileSystem.FileSystem);
+      const selectCheckout = (task: Task) =>
+        Effect.map(withFiles(selectTaskCheckout(task)), Option.getOrNull);
 
       const resolveCommit = Effect.fnUntraced(function* (cwd: string, ref: string, signal?: AbortSignal) {
         const read = yield* git.read(
@@ -265,7 +268,7 @@ export class History extends Context.Service<
         baseBranch: string | null,
         signal?: AbortSignal
       ) {
-        const worktree = yield* Effect.sync(() => resolveTaskCheckout(task));
+        const worktree = yield* selectCheckout(task);
         const head = yield* resolveHead(repo, task, worktree, signal);
         if (!head) return yield* new CodeUnavailable({ message: CODE_UNAVAILABLE_MESSAGE });
         const base = yield* resolveBase(repo, task, head, baseBranch, signal);
@@ -327,10 +330,7 @@ export class History extends Context.Service<
         signal?: AbortSignal
       ) {
         const committed = yield* listCommittedFiles(repo, task, baseBranch, signal);
-        const uncommitted = yield* listUncommittedFiles(
-          yield* Effect.sync(() => resolveTaskCheckout(task)),
-          signal
-        );
+        const uncommitted = yield* listUncommittedFiles(yield* selectCheckout(task), signal);
         return [...new Set([...committed, ...uncommitted])].sort();
       });
 

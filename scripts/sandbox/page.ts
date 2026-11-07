@@ -1,6 +1,7 @@
-import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { Effect, FileSystem } from 'effect';
 import { SECURITY_HEADERS } from '../../apps/cloud/src/http/ingress/schema.ts';
+import { serveStatic } from '../../apps/engine/src/http/static.ts';
 import {
   REMOTE_NATIVE_CLIENT,
   REMOTE_PATHS,
@@ -15,6 +16,7 @@ import {
   type PreviewShare,
   REMOTE_WEB,
   SANDBOX_PATH,
+  SandboxFailed,
   type SandboxSection,
   type ServicePreview,
   TEAM_INVITE,
@@ -22,22 +24,21 @@ import {
 import { createShareLink } from './shares.ts';
 import { TEAM, TEAM_KEY } from './team.ts';
 
-export function findRemoteStylesheet() {
-  const html = readFileSync(join(REMOTE_WEB, 'index.html'), 'utf8');
+export const findRemoteStylesheet = Effect.fn('Sandbox.findRemoteStylesheet')(function* () {
+  const fs = yield* FileSystem.FileSystem;
+  const html = yield* fs
+    .readFileString(join(REMOTE_WEB, 'index.html'))
+    .pipe(Effect.mapError(() => new SandboxFailed({ message: 'The remote build has no index.html.' })));
   const href = /<link rel="stylesheet"[^>]*href="([^"]+\.css)"/.exec(html)?.[1];
-  if (!href) throw new Error('The remote build has no stylesheet.');
+  if (!href) return yield* new SandboxFailed({ message: 'The remote build has no stylesheet.' });
   return href;
-}
+});
 
-export function respondStatic(pathname: string) {
-  const relative = pathname.replace(/^\/+/, '');
-  const file = Bun.file(join(REMOTE_WEB, relative));
-  if (relative && !relative.includes('..') && existsSync(join(REMOTE_WEB, relative)) && file.size > 0)
-    return new Response(file, { headers: SECURITY_HEADERS });
-  return new Response(Bun.file(join(REMOTE_WEB, 'index.html')), {
-    headers: { ...SECURITY_HEADERS, 'content-type': 'text/html; charset=utf-8' },
-  });
-}
+export const respondStatic = Effect.fn('Sandbox.respondStatic')(function* (pathname: string) {
+  const response = yield* serveStatic(REMOTE_WEB, `/${pathname.replace(/^\/+/, '')}`);
+  for (const [name, value] of Object.entries(SECURITY_HEADERS)) response.headers.set(name, value);
+  return response;
+});
 
 export function listSandboxSections(
   machines: Machine[],
@@ -165,7 +166,13 @@ export function listSandboxSections(
         ...(teamTask
           ? [
               {
-                label: 'One of Kai’s tasks on Studio, read-only',
+                label:
+                  'One of Kai’s tasks on Studio as a full task page, through Studio’s relay (read-only while Kai’s MacBook is offline)',
+                url: `http://${HOST}:${studioPort}${teamTask}`,
+              },
+              {
+                label:
+                  'Its Evidence shows Kai’s screenshot through the relay, and Open on its running web service goes to the service’s private address',
                 url: `http://${HOST}:${studioPort}${teamTask}`,
               },
             ]

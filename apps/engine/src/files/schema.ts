@@ -19,6 +19,8 @@ export const JSON_INDENT = 2;
 
 export const PATH_LIMIT = 4096;
 
+export const EXECUTABLE_BITS = 0o111;
+
 export const NEWLINE = 0x0a;
 
 const TextEntries = Schema.Record(

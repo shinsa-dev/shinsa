@@ -1,9 +1,15 @@
 import { afterEach, describe, expect, setDefaultTimeout, test } from 'bun:test';
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { ServiceDefinition, ServiceSuggestion, TerminalInfo, TerminalsSnapshot } from '@shinsa/core';
+import {
+  DEFAULT_TEAM_SCOPES,
+  type ServiceDefinition,
+  type ServiceSuggestion,
+  type TerminalInfo,
+  type TerminalsSnapshot,
+} from '@shinsa/core';
 import { Effect } from 'effect';
-import type { ServiceRefiner } from '../../../src/terminals/index.ts';
+import type { ServiceRefiner, Terminals } from '../../../src/terminals/index.ts';
 import { createConfigAt } from '../../helpers/config.ts';
 import { createTempDir, until } from '../../helpers/index.ts';
 import { createTestRefiner, startRealTerminals } from '../../helpers/terminals.ts';
@@ -341,5 +347,51 @@ describe('services over HTTP', () => {
     );
     const refused = await call(outside.id, 'start', { taskId });
     expect(refused.error?.message).toBe('It cannot run in this task.');
+  });
+});
+
+describe('terminals for a teammate', () => {
+  const SNAPSHOT: TerminalsSnapshot = {
+    home: '/Users/mona',
+    terminals: [
+      {
+        id: 't1',
+        projectId: 'p',
+        name: 'web',
+        title: null,
+        cwd: '/Users/mona/web',
+        place: 'repository',
+        taskId: 'task-mine',
+        serviceId: 's1',
+        port: 4000,
+        status: 'running',
+        exitCode: null,
+        startedAt: 1,
+        endedAt: null,
+      },
+    ],
+    services: [],
+  };
+  const fake = { snapshot: Effect.succeed(SNAPSHOT) } as unknown as Terminals['Service'];
+  const teammate = {
+    via: 'channel' as const,
+    userId: 'u-kai',
+    guest: {
+      id: 'u-kai',
+      login: 'kai',
+      name: null,
+      avatarUrl: null,
+      scope: { kind: 'team' as const, teamId: 'team-1', scopes: [...DEFAULT_TEAM_SCOPES] },
+    },
+  };
+
+  test('lists everything here, and to a teammate only the services of the team’s tasks', async () => {
+    const routes = startRoutes({ terminals: fake });
+    expect(await (await routes.send('/api/terminals')).json()).toEqual(SNAPSHOT);
+    expect(await (await routes.send('/api/terminals', {}, teammate)).json()).toEqual({
+      home: '',
+      terminals: [],
+      services: [],
+    });
   });
 });

@@ -1,5 +1,3 @@
-import { writeFileSync } from 'node:fs';
-import { join } from 'node:path';
 import type {
   AgentReply,
   ChatEvent,
@@ -29,12 +27,12 @@ import type {
   TriageDecisions,
   WorkReport,
 } from '../../packages/core/src/index.ts';
-import { CHAT_PROTOCOL_VERSION, listRepoChecks } from '../../packages/core/src/index.ts';
+import { listRepoChecks } from '../../packages/core/src/index.ts';
 import { MINUTE } from '../kit/time.ts';
 
 export const NOW = Date.now();
 
-export const CHOSEN_BY_YOU: TaskAuto = { shape: false, start: false, priority: false };
+export const CHOSEN_BY_YOU: TaskAuto = { shape: false, start: false, priority: false, project: false };
 
 export const NO_TRIAGE_DECISIONS: TriageDecisions = { shape: null, start: null, priority: null };
 
@@ -212,9 +210,7 @@ export function spreadEvents(events: ChatEvent[], from: number, to: number): Tim
   }));
 }
 
-export function writeTranscript(dir: string, runId: string, timed: TimedChatEvent[]) {
-  const lines = timed.map(({ at, event }, index) =>
-    JSON.stringify({ ...event, v: CHAT_PROTOCOL_VERSION, id: `${runId}-${index}`, at })
-  );
-  writeFileSync(join(dir, `${runId}.jsonl`), `${lines.join('\n')}\n`);
+export interface SeedTranscript {
+  runId: string;
+  timed: TimedChatEvent[];
 }

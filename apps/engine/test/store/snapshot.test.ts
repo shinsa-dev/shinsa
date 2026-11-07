@@ -4,8 +4,9 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { createState, type ShinsaState } from '@shinsa/core';
 import { resolveStateVersion } from '../../src/store/index.ts';
+import { runFiles } from '../harness.ts';
 import { openEventLog } from '../helpers/event-log.ts';
-import { commitEvents, createTempDir } from '../helpers/index.ts';
+import { commitEvents, createTempDir, writeFiles } from '../helpers/index.ts';
 
 function openLog() {
   const path = join(createTempDir(), 'shinsa.sqlite');
@@ -88,20 +89,23 @@ describe('state snapshots', () => {
 });
 
 describe('the state version', () => {
-  test('follows the source of the code that folds events into state', () => {
+  test('follows the source of the code that folds events into state, and no other file', async () => {
     const root = createTempDir();
     mkdirSync(join(root, 'state'), { recursive: true });
     writeFileSync(join(root, 'state', 'project.ts'), 'export const a = 1;');
-    const first = resolveStateVersion(root);
+    const version = (at?: string) => runFiles(resolveStateVersion(at));
+    const first = await version(root);
     expect(first).toMatch(/^[0-9a-f]{24}$/);
-    expect(resolveStateVersion(root)).toBe(first);
+    expect(await version(root)).toBe(first);
+    writeFiles(root, { 'README.md': 'x', '.cache/skip.ts': 'x', 'state/.hidden.ts': 'x' });
+    expect(await version(root)).toBe(first);
     writeFileSync(join(root, 'state', 'project.ts'), 'export const a = 2;');
-    expect(resolveStateVersion(root)).not.toBe(first);
-    expect(resolveStateVersion()).toMatch(/^[0-9a-f]{24}$/);
+    expect(await version(root)).not.toBe(first);
+    expect(await version()).toMatch(/^[0-9a-f]{24}$/);
   });
 
-  test('is null where the source cannot be read, so the engine replays the whole log', () => {
-    expect(resolveStateVersion(createTempDir())).toBeNull();
-    expect(resolveStateVersion(join(createTempDir(), 'missing'))).toBeNull();
+  test('is null where the source cannot be read, so the engine replays the whole log', async () => {
+    expect(await runFiles(resolveStateVersion(createTempDir()))).toBeNull();
+    expect(await runFiles(resolveStateVersion(join(createTempDir(), 'missing')))).toBeNull();
   });
 });

@@ -192,6 +192,12 @@ export function validatePlanRules(steps: readonly PipelineStep[], document: Plan
       '`verification` lists checks for a code change, and this task changes no code: leave it empty.'
     );
   }
+  const split = document.split ?? [];
+  if (split.length > 0 && !steps.includes('pull_request')) {
+    errors.push(
+      '`split` starts other changes, and this task opens no pull request: leave it out and suggest the work with `suggest_tasks`.'
+    );
+  }
   return errors;
 }
 

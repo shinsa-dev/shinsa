@@ -49,6 +49,7 @@ import {
   type RemoteFile,
   type StoredTeamKey,
   type TeamGrant,
+  type RelayDevice,
   type TeammateExtra,
 } from '../../src/remote/store/schema.ts';
 import { RemoteStore } from '../../src/remote/store/service.ts';
@@ -275,6 +276,10 @@ function adaptStore(test: RemoteTest) {
     selectExtra: (userId: string, teamId: string) => runSync(store.selectExtra(userId, teamId)),
     writeExtra: (extra: TeammateExtra) => runSync(store.writeExtra(extra)),
     removeExtrasWhere: (match: (extra: TeammateExtra) => boolean) => runSync(store.removeExtrasWhere(match)),
+    selectRelayDevice: (instanceId: string) => runSync(store.selectRelayDevice(instanceId)),
+    writeRelayDevice: (device: RelayDevice) => runSync(store.writeRelayDevice(device)),
+    removeRelayDevicesWhere: (match: (device: RelayDevice) => boolean) =>
+      runSync(store.removeRelayDevicesWhere(match)),
     removeTeam: (teamId: string) => runSync(store.removeTeam(teamId)),
     recordDeviceSeen: (publicKey: string, at: number) => runSync(store.recordDeviceSeen(publicKey, at)),
   };
@@ -483,6 +488,7 @@ export function adaptTeamFeeds(test: RemoteTest) {
     subscribeHeld: observe(feeds.observeHeld),
     listHeld: (teamId: string) => runSync(feeds.listHeld(teamId)),
     snapshot: () => runSync(feeds.snapshot),
+    listGrants: () => runSync(feeds.listGrants),
     listTasks: (filter: TeamTaskFilter = {}) => runSync(feeds.listTasks(filter)),
     openRelay: (peer: ChannelPeer, target: TeamViewTarget) => {
       const relay = runSync(feeds.openRelay(peer, target));

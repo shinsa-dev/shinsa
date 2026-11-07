@@ -177,6 +177,29 @@ export const LARGE_PLAN: PlanDocument = {
   ],
 };
 
+export const SPLIT_PLAN: PlanDocument = {
+  ...PLAN,
+  split: [
+    {
+      title: 'Add the export button',
+      request: 'Add an export button to the reports page.',
+      order: 'parallel',
+    },
+    {
+      title: 'Document the export',
+      request: 'Document the reports export in the help centre.',
+      order: 'waits_on',
+      on: 1,
+    },
+    {
+      title: 'Move the panel styles',
+      request: 'Move the panel styles onto the new tokens.',
+      order: 'stacks_on',
+      on: 0,
+    },
+  ],
+};
+
 export const IMPACT =
   'Touches the 1,240 accounts without a plan; the dry run lists them. Undo by clearing the column.';
 

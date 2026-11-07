@@ -21,7 +21,7 @@ export function recordWelcome(decider: Decider, command: CommandOf<'onboarding.w
     planFirst: false,
     origin: WELCOME_TASK.origin,
     mode: 'ask',
-    auto: { shape: false, start: false, priority: false },
+    auto: { shape: false, start: false, priority: false, project: false },
   });
   decider.emit({
     type: 'task.triaged',

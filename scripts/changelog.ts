@@ -26,7 +26,7 @@ const program = Effect.gen(function* () {
     return [...tracked, ...untracked];
   });
 
-  const check = resolveChangelogCheck(listChangeFiles(root));
+  const check = resolveChangelogCheck(yield* listChangeFiles(root));
   const errors = check.ok ? [] : [...check.errors];
   if (base !== null && needsChangelogEntry(yield* listChanged(base, 'ACMRD'), yield* listChanged(base, 'A')))
     errors.push(MISSING_ENTRY_MESSAGE);

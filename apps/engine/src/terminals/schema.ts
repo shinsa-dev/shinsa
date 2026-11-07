@@ -232,6 +232,8 @@ export const PORT_RETRY = Schedule.recurs(PORT_ATTEMPTS - 1);
 
 export const NO_FREE_PORT = 'No free port for the service.';
 
+export const FOLDER_GONE_MESSAGE = 'That folder is not there anymore.';
+
 export const HANG_UP_GRACE = Duration.seconds(3);
 
 export const FOREGROUND_TIMEOUT = Duration.seconds(5);

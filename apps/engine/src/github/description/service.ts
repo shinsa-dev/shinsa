@@ -48,7 +48,7 @@ export class PullRequestDescriber extends Context.Service<
         if (resolvePublicUrl(piece) !== null) return null;
         const path = yield* selectPath(piece);
         const type = path ? ATTACHMENT_TYPES[extname(path).toLowerCase()] : undefined;
-        if (!path || !type || statSync(path).size > type.limit) return null;
+        if (!path || !type || (yield* Effect.sync(() => statSync(path).size)) > type.limit) return null;
         const attachment: Attachment = { path, name: basename(path), contentType: type.contentType };
         return attachment;
       });
@@ -119,8 +119,8 @@ export class PullRequestDescriber extends Context.Service<
         const notePieces = items.filter((item) => item.kind === 'note').flatMap((item) => item.parts);
         const notes = Object.fromEntries(
           (yield* Effect.forEach(notePieces, (piece) =>
-            Effect.map(selectPath(piece), (path): [string, string][] =>
-              path ? [[piece.id, readFileSync(path, 'utf8')]] : []
+            Effect.flatMap(selectPath(piece), (path) =>
+              Effect.sync((): [string, string][] => (path ? [[piece.id, readFileSync(path, 'utf8')]] : []))
             )
           )).flat()
         );

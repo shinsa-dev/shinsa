@@ -247,7 +247,7 @@ function createSupervisorLayer(
         workspaces,
         providers,
         StandaloneRepoWorkLayer.pipe(Layer.provide(base)),
-        GitLayer.pipe(Layer.provide(ShellLayer)),
+        GitLayer.pipe(Layer.provideMerge(ShellLayer)),
         resolveBroker(options),
         resolveHooks(options),
         resolveSurroundings(options),

@@ -107,7 +107,7 @@ describe('choosing the shape', () => {
     const other = createTask(harness, { request: 'Rework the exporter' });
     const taskId = start(harness, { triage: { shape: 'answer', priority: 'high', waitsOn: [other] } });
     const task = harness.task(taskId);
-    expect(task.auto).toEqual({ shape: true, start: true, priority: true });
+    expect(task.auto).toEqual({ shape: true, start: true, priority: true, project: false });
     expect(resolveTaskShape(task)).toBe('answer');
     expect(task.priority).toBe('high');
     expect(task.waitsOn).toEqual([other]);
@@ -132,7 +132,7 @@ describe('choosing the shape', () => {
     expect(resolveTaskShape(task)).toBe('research');
     expect(task.priority).toBe('low');
     expect(task.waitsOn).toEqual([]);
-    expect(task.auto).toEqual({ shape: true, start: false, priority: false });
+    expect(task.auto).toEqual({ shape: true, start: false, priority: false, project: false });
     expect(task.triageDecisions).toEqual({
       shape: { value: 'research', why: 'It asks why something happens.' },
       start: null,
@@ -719,7 +719,7 @@ describe('a task without a chosen shape', () => {
     const repoId = registerRepo(harness);
     harness.send({ type: 'task.create', request: 'How?', repoId, mode: 'ask' });
     const ask = Object.keys(harness.state.tasks)[0] ?? '';
-    expect(harness.task(ask).auto).toEqual({ shape: false, start: true, priority: true });
+    expect(harness.task(ask).auto).toEqual({ shape: false, start: true, priority: true, project: false });
     expect(resolveTaskShape(harness.task(ask))).toBe('answer');
     const unshaped = { ...harness.task(ask), mode: undefined, pipeline: undefined };
     expect(resolveTaskShape(unshaped)).toBe('change');

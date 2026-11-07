@@ -1,21 +1,34 @@
-import { appendFileSync } from 'node:fs';
-import { type RunCommand, runCommand } from './run-command.ts';
+import { BunRuntime } from '@effect/platform-bun';
+import { Console, Effect, FileSystem, Schema } from 'effect';
+import { Command, CommandLayer } from './kit/command/index.ts';
+import { reportFailure } from './kit/script.ts';
+import { ScriptUsage } from './release/schema.ts';
 
 export const MAX_RERUN_ATTEMPT = 2;
 
 const FAILED_CONCLUSIONS = new Set(['failure', 'cancelled', 'timed_out', 'startup_failure']);
 
-export interface RunJob {
-  name: string;
-  conclusion: string | null;
-  runner_id: number | null;
-  steps?: unknown[];
-}
+export const RunJob = Schema.Struct({
+  name: Schema.String,
+  conclusion: Schema.NullOr(Schema.String),
+  runner_id: Schema.NullOr(Schema.Number),
+  steps: Schema.optionalKey(Schema.Array(Schema.Unknown)),
+});
+export type RunJob = typeof RunJob.Type;
+
+const RunJobs = Schema.Struct({ jobs: Schema.Array(RunJob) });
+
+const WorkflowRuns = Schema.Struct({ workflow_runs: Schema.Array(Schema.Struct({ id: Schema.Number })) });
+
+export class WatchAnswerInvalid extends Schema.TaggedError<
+  WatchAnswerInvalid,
+  { readonly brand: unique symbol }
+>()('WatchAnswerInvalid', { message: Schema.String }) {}
 
 export interface RerunInput {
   runId: number;
   attempt: number;
-  jobs: RunJob[];
+  jobs: readonly RunJob[];
   newestRunId: number;
 }
 
@@ -53,34 +66,50 @@ export function resolveRerun(input: RerunInput): RerunDecision {
   };
 }
 
-function runGh(run: RunCommand, argv: string[]) {
-  const result = run(['gh', ...argv]);
-  if (result.exitCode !== 0) throw new Error(`gh ${argv.join(' ')} failed: ${result.stderr.trim()}`);
-  return result.stdout;
-}
+const decodeRunJobs = Schema.decodeUnknownEffect(Schema.fromJsonString(RunJobs));
 
-function findPositiveInteger(env: Record<string, string | undefined>, name: string, meaning: string) {
+const decodeWorkflowRuns = Schema.decodeUnknownEffect(Schema.fromJsonString(WorkflowRuns));
+
+const findPositiveInteger = Effect.fn('WatchRerun.findPositiveInteger')(function* (
+  env: Record<string, string | undefined>,
+  name: string,
+  meaning: string
+) {
   const value = Number(env[name]);
-  if (!Number.isInteger(value) || value < 1) throw new Error(`Set ${name} to ${meaning}.`);
+  if (!Number.isInteger(value) || value < 1)
+    return yield* new ScriptUsage({ message: `Set ${name} to ${meaning}.` });
   return value;
-}
+});
 
-export function runWatchRerun(env: Record<string, string | undefined>, run: RunCommand) {
+export const runWatchRerun = Effect.fn('WatchRerun.run')(function* (env: Record<string, string | undefined>) {
+  const command = yield* Command;
+  const fs = yield* FileSystem.FileSystem;
   const repo = env.GH_REPO;
-  if (!repo) throw new Error('Set GH_REPO to the repository, as owner/name.');
-  const runId = findPositiveInteger(env, 'RUN_ID', "the failed run's id");
-  const attempt = findPositiveInteger(env, 'RUN_ATTEMPT', "the failed run's attempt");
-  const workflowId = findPositiveInteger(env, 'WORKFLOW_ID', "the failed run's workflow id");
-  const { jobs } = JSON.parse(
-    runGh(run, ['api', `repos/${repo}/actions/runs/${runId}/attempts/${attempt}/jobs?per_page=100`])
-  ) as { jobs: RunJob[] };
-  const { workflow_runs: newest } = JSON.parse(
-    runGh(run, ['api', `repos/${repo}/actions/workflows/${workflowId}/runs?branch=main&per_page=1`])
-  ) as { workflow_runs: { id: number }[] };
+  if (!repo) return yield* new ScriptUsage({ message: 'Set GH_REPO to the repository, as owner/name.' });
+  const runId = yield* findPositiveInteger(env, 'RUN_ID', "the failed run's id");
+  const attempt = yield* findPositiveInteger(env, 'RUN_ATTEMPT', "the failed run's attempt");
+  const workflowId = yield* findPositiveInteger(env, 'WORKFLOW_ID', "the failed run's workflow id");
+  const toInvalid = (path: string) => () =>
+    new WatchAnswerInvalid({ message: `gh api ${path} answered something else.` });
+  const jobsPath = `repos/${repo}/actions/runs/${runId}/attempts/${attempt}/jobs?per_page=100`;
+  const { jobs } = yield* command
+    .text(['gh', 'api', jobsPath])
+    .pipe(Effect.flatMap((text) => decodeRunJobs(text).pipe(Effect.mapError(toInvalid(jobsPath)))));
+  const newestPath = `repos/${repo}/actions/workflows/${workflowId}/runs?branch=main&per_page=1`;
+  const { workflow_runs: newest } = yield* command
+    .text(['gh', 'api', newestPath])
+    .pipe(Effect.flatMap((text) => decodeWorkflowRuns(text).pipe(Effect.mapError(toInvalid(newestPath)))));
   const decision = resolveRerun({ runId, attempt, jobs, newestRunId: newest[0]?.id ?? runId });
-  if (decision.rerun) runGh(run, ['run', 'rerun', String(runId), '--failed', '--repo', repo]);
-  if (env.GITHUB_OUTPUT) appendFileSync(env.GITHUB_OUTPUT, `rerun=${decision.rerun}\n`);
-  return `${decision.reason}\n`;
-}
+  if (decision.rerun) yield* command.text(['gh', 'run', 'rerun', String(runId), '--failed', '--repo', repo]);
+  if (env.GITHUB_OUTPUT)
+    yield* fs.writeFileString(env.GITHUB_OUTPUT, `rerun=${decision.rerun}\n`, { flag: 'a' });
+  return decision.reason;
+});
 
-if (import.meta.main) process.stdout.write(runWatchRerun(Bun.env, runCommand));
+const main = runWatchRerun(Bun.env).pipe(
+  Effect.flatMap(Console.log),
+  reportFailure,
+  Effect.provide(CommandLayer)
+);
+
+if (import.meta.main) BunRuntime.runMain(main, { disableErrorReporting: true });

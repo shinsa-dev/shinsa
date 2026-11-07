@@ -5,17 +5,19 @@ import {
   SERVICE_PORT_VARIABLE,
   type ServiceSuggestion,
 } from '@shinsa/core';
-import { listDependencyNames, readPackageManifest } from '../../files/manifest.ts';
+import { Effect, Option } from 'effect';
+import { listDependencyNames, selectPackageManifest } from '../../files/manifest.ts';
 import { type FolderDigest, REFINE_LIMITS, type RefinedEntry } from '../schema.ts';
 
-export function readFolderDigest(folder: string): FolderDigest {
-  const manifest = readPackageManifest(folder);
+export const readFolderDigest = Effect.fn('ServiceRefiner.readFolderDigest')(function* (folder: string) {
+  const manifest = Option.getOrNull(yield* selectPackageManifest(folder));
   const scripts = Object.entries(manifest?.scripts ?? {})
     .slice(0, REFINE_LIMITS.scripts)
     .map(([name, script]) => [name, script.slice(0, REFINE_LIMITS.script)]);
   const dependencies = (manifest ? listDependencyNames(manifest) : []).slice(0, REFINE_LIMITS.dependencies);
-  return { folder, scripts: Object.fromEntries(scripts), dependencies };
-}
+  const digest: FolderDigest = { folder, scripts: Object.fromEntries(scripts), dependencies };
+  return digest;
+});
 
 export function serializeRefinePrompt(candidates: ServiceSuggestion[], digests: FolderDigest[]) {
   return JSON.stringify({
