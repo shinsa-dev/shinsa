@@ -38,6 +38,7 @@ import {
   verifyShareHello,
 } from '@shinsa/core';
 import { Clock, Context, Effect, FileSystem, Layer, Option, Ref } from 'effect';
+import { constant } from 'effect/Function';
 import { Transcripts } from '../../agents/transcripts/service.ts';
 import { selectTaskCheckout } from '../../git/history/checkout.ts';
 import { History } from '../../git/history/service.ts';
@@ -365,7 +366,7 @@ export class Shares extends Context.Service<Shares, SharesHandle>()('shinsa/engi
         );
         const stat = {
           size: Number(info.value.size),
-          mtimeMs: Option.match(info.value.mtime, { onNone: () => 0, onSome: (date) => date.getTime() }),
+          mtimeMs: Option.match(info.value.mtime, { onNone: constant(0), onSome: (date) => date.getTime() }),
         };
         const version = yield* Effect.option(resolveFileHash(path, stat, read));
         if (Option.isNone(version)) return null;

@@ -1,4 +1,5 @@
 import { Effect, FileSystem, Option } from 'effect';
+import { constant } from 'effect/Function';
 import { HttpServerResponse, Mime } from 'effect/http';
 
 const IMMUTABLE = 'private, max-age=31536000, immutable';
@@ -38,7 +39,7 @@ export function resolveAttachmentHeaders(type: string, fileName: string): Record
 }
 
 export function resolveFileType(path: string) {
-  return Option.getOrElse(Mime.getType(path), () => UNKNOWN_TYPE);
+  return Option.getOrElse(Mime.getType(path), constant(UNKNOWN_TYPE));
 }
 
 export const respondFile = Effect.fn('Http.respondFile')(function* (

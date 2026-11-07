@@ -729,6 +729,26 @@ describe('the process io', () => {
     }
   });
 
+  test('an engine its service starts fails when it cannot make its data folder', async () => {
+    const root = createTempDir();
+    writeFiles(root, { data: '' });
+    const bundle = {
+      version: '1.0.0',
+      commit: null,
+      stateVersion: 's',
+      sdk: { version: '0', claudeCodeVersion: '0' },
+      root,
+      bin: join(root, 'bin'),
+    };
+    const io = await runCliEffect(createProcessIo({ isTerminal: () => true, bundle }));
+    const failure = await runCliEffect(
+      Effect.flip(
+        io.runEngine({ SHINSA_SERVICE: '1', SHINSA_DATA_DIR: join(root, 'data'), SHINSA_PORT: '0' })
+      )
+    );
+    expect(failure).toBeInstanceOf(CliFailed);
+  });
+
   test('an engine whose port is taken answers why, and the command says it', async () => {
     const taken = Bun.serve({ hostname: '127.0.0.1', port: 0, fetch: () => new Response('') });
     try {
@@ -818,6 +838,12 @@ describe('the engine log', () => {
     stream.write(new TextEncoder().encode('bytes\n'));
     close();
     expect(readFileSync(path, 'utf8').endsWith('hello\nbytes\n')).toBe(true);
+  });
+
+  test('a log it cannot open fails instead of swallowing the output', async () => {
+    const path = join(createTempDir(), 'missing', 'engine.log');
+    const failure = await runFiles(Effect.flip(writeOutputTo(path, [])));
+    expect(failure).toBeInstanceOf(CliFailed);
   });
 });
 

@@ -2,6 +2,7 @@ import { basename } from 'node:path';
 import { EngineApi } from '@shinsa/core/engine-api';
 import { FileNotFound } from '@shinsa/core/engine-api/schema';
 import { Effect, Layer } from 'effect';
+import { constant } from 'effect/Function';
 import { HttpApiBuilder } from 'effect/http-api';
 import { EngineConfig } from '../../../config/service.ts';
 import { Attachments } from '../../../store/attachments/service.ts';
@@ -24,10 +25,11 @@ export const FilesHandlers = HttpApiBuilder.group(
       .handle(
         'evidence',
         Effect.fn('FilesHandlers.evidence')(function* ({ params, request }) {
+          const notFound = new FileNotFound();
           const path = yield* evidence.selectFile(params['*']);
-          if (path._tag === 'None') return yield* new FileNotFound();
+          if (path._tag === 'None') return yield* notFound;
           return yield* respondFile(path.value, request.headers.range).pipe(
-            Effect.mapError(() => new FileNotFound())
+            Effect.mapError(constant(notFound))
           );
         })
       )
@@ -39,11 +41,12 @@ export const FilesHandlers = HttpApiBuilder.group(
       .handle(
         'attachment',
         Effect.fn('FilesHandlers.attachment')(function* ({ params, request }) {
+          const notFound = new FileNotFound();
           const found = yield* attachments.selectFile(params['*']);
-          if (found._tag === 'None') return yield* new FileNotFound();
+          if (found._tag === 'None') return yield* notFound;
           const headers = resolveAttachmentHeaders(resolveFileType(found.value), basename(found.value));
           return yield* respondFile(found.value, request.headers.range, headers).pipe(
-            Effect.mapError(() => new FileNotFound())
+            Effect.mapError(constant(notFound))
           );
         })
       );
