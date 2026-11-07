@@ -108,6 +108,7 @@ const SharedTaskRecord = Schema.Struct({
   mode: Schema.optionalKey(Data),
   pipeline: Schema.optionalKey(Data),
   duplicate: Schema.optionalKey(Data),
+  escalation: Schema.NullOr(Schema.Struct({ at: Data, reason: Data })),
   reviewDisagreements: Data,
   monitor: Data,
   suggestions: Data,
