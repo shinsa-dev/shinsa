@@ -29,7 +29,7 @@ const CURRENCY_CODE = /^[A-Z]{3}$/;
 
 const LIST_FORMAT = new Intl.ListFormat('en-US', { type: 'conjunction' });
 
-export const USAGE_EXTRA_LABEL = {
+const USAGE_EXTRA_LABEL = {
   extraUsage: 'Extra usage',
   on: 'On',
   off: 'Off',
