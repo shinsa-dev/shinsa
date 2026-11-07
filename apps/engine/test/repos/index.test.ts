@@ -6,6 +6,7 @@ import { Context, Effect } from 'effect';
 import { listLocalRepos, RepoFolders, resolveContainingRepo } from '../../src/repos/index.ts';
 import { resolveOwnerProjectName } from '../../src/repos/project-name.ts';
 import { type DispatchOptions, EngineStopped } from '../../src/runtime/engine/schema.ts';
+import { runFiles } from '../harness.ts';
 import { createConfigAt } from '../helpers/config.ts';
 import { Engine } from '../helpers/engine.ts';
 import { openEventLog } from '../helpers/event-log.ts';
@@ -69,9 +70,9 @@ function createRoot() {
 }
 
 describe('listLocalRepos', () => {
-  test('finds git repositories one level down, newest first, once each, skipping files and missing roots', () => {
+  test('finds git repositories one level down, newest first, once each, skipping files and missing roots', async () => {
     const root = createRoot();
-    const repos = listLocalRepos([root, root, join(root, 'file.txt'), join(root, 'nowhere')]);
+    const repos = await runFiles(listLocalRepos([root, root, join(root, 'file.txt'), join(root, 'nowhere')]));
     expect(repos.map((repo) => repo.name)).toEqual(['newer', 'older']);
     expect(repos[0]?.path).toBe(realpathSync(join(root, 'newer')));
   });

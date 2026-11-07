@@ -131,6 +131,9 @@ export {
   PROJECT_LIMITS,
   parseTaskHandle,
   resolveProjectKey,
+  isProjectFixed,
+  isRepoNamed,
+  resolveRepoMove,
   selectFolderProject,
   selectProjectByReference,
 } from './projects.ts';

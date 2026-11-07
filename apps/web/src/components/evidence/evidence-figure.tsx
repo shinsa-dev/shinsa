@@ -4,6 +4,7 @@ import { cn } from '@shinsa/ui/lib/utils';
 import { INSET } from '@/components/layout/surface/card.ts';
 import type { useImageViewer } from '@/hooks/use-image-viewer.ts';
 import { useNearViewport } from '@/hooks/use-near-viewport.ts';
+import { useMediaUrl } from '@/lib/connection/socket.ts';
 import { describeEvidenceCaption, describeEvidencePart, type EvidenceView } from '@/lib/evidence/layout.ts';
 
 const FRAME = `${INSET} block aspect-[16/10] w-full overflow-hidden bg-bg-2`;
@@ -52,6 +53,7 @@ function VideoThumbnail({
 
 function EvidenceMedia({ view, viewer }: { view: EvidenceView; viewer: Viewer }) {
   const { evidence } = view;
+  const src = useMediaUrl(evidence.uri);
   const index = view.image ?? 0;
   const label = [
     describeEvidenceCaption({ title: evidence.title, facts: view.facts }),
@@ -60,7 +62,7 @@ function EvidenceMedia({ view, viewer }: { view: EvidenceView; viewer: Viewer })
     .filter(Boolean)
     .join(' · ');
   if (view.media === 'video') {
-    return <VideoThumbnail src={evidence.uri} label={label} index={index} viewer={viewer} />;
+    return <VideoThumbnail src={src} label={label} index={index} viewer={viewer} />;
   }
   return (
     <button
@@ -71,7 +73,7 @@ function EvidenceMedia({ view, viewer }: { view: EvidenceView; viewer: Viewer })
     >
       <img
         ref={viewer.recordOrigin(index)}
-        src={evidence.uri}
+        src={src}
         alt={evidence.title}
         decoding='async'
         loading='lazy'
@@ -108,7 +110,7 @@ export function EvidenceFigure({
   return (
     <figure className='flex min-w-0 flex-col gap-1.5'>
       <EvidenceMedia view={view} viewer={viewer} />
-      <figcaption className='flex min-w-0 flex-col gap-px'>
+      <figcaption className='flex min-w-0 flex-col'>
         {label === 'part' ? (
           <span className='text-2xs font-medium text-fg-4'>{describeEvidencePart(evidence)}</span>
         ) : (

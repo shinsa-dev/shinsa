@@ -14,8 +14,6 @@ import {
 } from '@shinsa/core';
 import { Effect } from 'effect';
 import type { ClaudeAccount } from './accounts.ts';
-import { resolveOnboardingFailure } from './failures.ts';
-import { resolveChosenRoots } from './roots.ts';
 import {
   CONTINUE,
   MAX_SUGGESTIONS,
@@ -108,10 +106,7 @@ const ROOTS: StepDefinition = {
     return Effect.succeed(rest.length === 0 ? first : `${first} and ${rest.length} more`);
   },
   answer: Effect.fn('OnboardingSteps.roots.answer')(function* (values, context) {
-    const roots = yield* Effect.try({
-      try: () => resolveChosenRoots(values, context.userHome),
-      catch: resolveOnboardingFailure,
-    });
+    const roots = yield* context.resolveRoots(values);
     yield* context.save({ roots });
   }),
 };

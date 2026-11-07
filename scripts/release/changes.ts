@@ -6,7 +6,7 @@ import { Command } from '../kit/command/index.ts';
 import { ChangelogInvalid } from './schema.ts';
 
 export const listValidEntries = Effect.fn('listValidEntries')(function* (root: string) {
-  const check = resolveChangelogCheck(listChangeFiles(root));
+  const check = resolveChangelogCheck(yield* listChangeFiles(root));
   if (check.ok) return check.entries;
   return yield* new ChangelogInvalid({
     errors: check.errors,

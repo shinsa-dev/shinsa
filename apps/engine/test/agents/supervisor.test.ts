@@ -857,9 +857,13 @@ describe('steering, cancelling and recovering', () => {
     continueRuns(respond, ['run-1', 'run-4', 'run-5']);
     await supervisor.recover();
     await until('two sessions', () => sessions.started.length === 2);
-    expect(sessions.started.map((fake) => [fake.input.prompt.length > 0, fake.input.resume])).toEqual([
-      [true, 'sess-1'],
+    expect(
+      sessions.started
+        .map((fake) => [fake.input.prompt.length > 0, fake.input.resume])
+        .sort(([, a], [, b]) => String(a).localeCompare(String(b)))
+    ).toEqual([
       [true, null],
+      [true, 'sess-1'],
     ]);
     expect(dispatched.filter((command) => command.type === 'runs.dispatch')).toHaveLength(1);
     expect(

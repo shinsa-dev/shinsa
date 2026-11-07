@@ -6,6 +6,8 @@ export type LogProblem = (ReplayFailure | UnreadableEvent) & { kind: 'unreadable
 
 export const SNAPSHOT_FORMAT = 1;
 
+export const STATE_SOURCE_FILE = /^(?:[^./][^/]*\/)*[^./][^/]*\.ts$/;
+
 export interface StateSnapshot {
   seq: number;
   version: string;

@@ -1,4 +1,3 @@
-import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   type AccountUsage,
@@ -26,7 +25,7 @@ function createAccountUsage(windows: UsageWindow[]): AccountUsage {
   return { status: 'ok', windows, detail: null, checkedAt: NOW - 2 * MINUTE, source: 'read' };
 }
 
-export function writeAccountFiles(data: string) {
+export function listAccountFiles(data: string): Record<string, string> {
   const account = (details: typeof OPS, extra: Record<string, unknown>) => ({
     id: details.id,
     configDir: join(data, 'accounts', details.id),
@@ -48,19 +47,35 @@ export function writeAccountFiles(data: string) {
       account(SPARE, { paused: true }),
     ],
   };
-  writeFileSync(join(data, 'accounts.json'), `${JSON.stringify(registry, null, 2)}\n`);
   const limits = {
     version: 1,
     accounts: {
-      [PERSONAL.id]: createAccountUsage([
-        window('session', 'session', '5-hour limit', 64, 2 * HOUR),
-        window('weekly_all', 'weekly', 'Weekly · All models', 41, 3 * 24 * HOUR),
-        window('weekly_fable', 'model', 'Weekly · Fable', 72, 3 * 24 * HOUR),
-      ]),
-      [OPS.id]: createAccountUsage([
-        window('session', 'session', '5-hour limit', 100, 40 * MINUTE),
-        window('weekly_all', 'weekly', 'Weekly · All models', 93, 2 * 24 * HOUR),
-      ]),
+      [PERSONAL.id]: {
+        ...createAccountUsage([
+          window('session', 'session', '5-hour limit', 64, 2 * HOUR),
+          window('weekly_all', 'weekly', 'Weekly · All models', 41, 3 * 24 * HOUR),
+          window('weekly_fable', 'model', 'Weekly · Fable', 72, 3 * 24 * HOUR),
+        ]),
+        extraUsage: { enabled: true, noLimit: false, credit: { minor: 1240, exponent: 2, currency: 'USD' } },
+        resetGrants: [
+          {
+            id: 'seed-launch-grant',
+            label: null,
+            left: 1,
+            total: 2,
+            clears: ['five_hour', 'seven_day'],
+            usableNow: true,
+            endsAt: NOW + 14 * 24 * HOUR,
+          },
+        ],
+      },
+      [OPS.id]: {
+        ...createAccountUsage([
+          window('session', 'session', '5-hour limit', 100, 40 * MINUTE),
+          window('weekly_all', 'weekly', 'Weekly · All models', 93, 2 * 24 * HOUR),
+        ]),
+        extraUsage: { enabled: false, noLimit: false, credit: null },
+      },
       [SPARE.id]: {
         ...createAccountUsage([
           window('session', 'session', '5-hour limit', 3, 4 * HOUR),
@@ -72,7 +87,10 @@ export function writeAccountFiles(data: string) {
       },
     },
   };
-  writeFileSync(join(data, 'usage-limits.json'), `${JSON.stringify(limits, null, 2)}\n`);
+  return {
+    'accounts.json': `${JSON.stringify(registry, null, 2)}\n`,
+    'usage-limits.json': `${JSON.stringify(limits, null, 2)}\n`,
+  };
 }
 
 function scheduleRun(
@@ -189,9 +207,10 @@ const MOVED_NOTICES: ChatNotice[] = [
   { kind: 'compaction', trigger: 'auto', preTokens: 168_000, summary: null },
 ];
 
-export function writeAccountTranscripts(dir: string) {
-  const path = join(dir, 'task-account-move-run-1.jsonl');
-  const entries = readFileSync(path, 'utf8')
+export const ACCOUNT_MOVE_TRANSCRIPT = 'task-account-move-run-1.jsonl';
+
+export function insertAccountNotices(transcript: string) {
+  const entries = transcript
     .trim()
     .split('\n')
     .map((line) => JSON.parse(line) as { id: string; at: number });
@@ -212,7 +231,7 @@ export function writeAccountTranscripts(dir: string) {
     notice: { kind: 'context', usedTokens: 132_000, maxTokens: 200_000, totalProcessedTokens: 910_000 },
   };
   const lines = [...entries.slice(0, 2), ...notices, ...entries.slice(2), context];
-  writeFileSync(path, `${lines.map((line) => JSON.stringify(line)).join('\n')}\n`);
+  return `${lines.map((line) => JSON.stringify(line)).join('\n')}\n`;
 }
 
 export function listTriggerTasks({ paywall, kanna }: { paywall: Repo; kanna: Repo }): SeedTask[] {

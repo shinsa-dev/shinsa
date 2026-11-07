@@ -1,6 +1,7 @@
 import { isAbsolute, relative } from 'node:path';
 import { describeCount } from '@shinsa/core';
-import { listFailedTestCases } from './reruns.ts';
+import { Effect, Option } from 'effect';
+import { selectFailedTestCases } from './reruns.ts';
 import type { CheckFailure, FailureDiff, FailureKind } from './schema.ts';
 
 export type { CheckFailure, FailureDiff } from './schema.ts';
@@ -117,19 +118,24 @@ function listDiagnostics(output: string, root: string): CheckFailure[] {
   });
 }
 
-export function listCheckFailures(output: string, root: string): CheckFailure[] | null {
-  const cases = listFailedTestCases(output, root);
-  if (cases) {
-    return cases.map(({ file, test }) => ({
-      kind: 'test',
-      file,
-      key: `${file}\n${test}`,
-      label: test ? `${file} › ${test}` : file,
-    }));
+export const selectCheckFailures = Effect.fn('Checks.selectCheckFailures')(function* (
+  output: string,
+  root: string
+) {
+  const cases = yield* selectFailedTestCases(output, root);
+  if (Option.isSome(cases)) {
+    return Option.some(
+      cases.value.map(({ file, test }): CheckFailure => ({
+        kind: 'test',
+        file,
+        key: `${file}\n${test}`,
+        label: test ? `${file} › ${test}` : file,
+      }))
+    );
   }
   const diagnostics = listDiagnostics(output, root);
-  return diagnostics.length > 0 ? diagnostics : null;
-}
+  return diagnostics.length > 0 ? Option.some(diagnostics) : Option.none<CheckFailure[]>();
+});
 
 export function resolveFailureDiff(failures: readonly CheckFailure[], onBase: readonly CheckFailure[]) {
   const counts = new Map<string, number>();

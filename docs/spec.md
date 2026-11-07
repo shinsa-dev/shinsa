@@ -348,7 +348,10 @@ Desktop-first and responsive: built for a full window, still right in a ~900px f
   top bar.
 - **Statistics.** Settings → Statistics, between General and Agents, shows what shipped and where the tokens went over the last
   7, 30 or 90 days or all time (back to the first task), picked beside the page title (the range stays in the URL). With a project in focus it counts only that project's tasks and their runs, and each section says so beside its title; it counts everything again once the focus ends. Shipping: pull requests merged, tasks finished, lines merged and the
-  shipping streak, a year of merged pull requests as a contribution graph, and an area chart of them by day (by week
+  shipping streak, each pull request on the local day it merged (`mergedAt`, the first time Shinsa saw it merged, which a
+  later watchdog check, follow-up or marking the task done never moves) and each task on the day it first finished (its
+  first merge, or else its first round's end, never moved by closing it or a later round) (a task with a merged pull request stays counted while a watchdog check or a later round runs, unless it is
+  cancelled), a year of merged pull requests as a contribution graph, and an area chart of them by day (by week
   past a month); every chart shows a readout of the day, point or bar under the pointer. Turnaround: medians, never
   averages, of rounds that merged or finished in the range and of waits you answered in it. Start to finish is a round
   from its start to its end; agent time is the part not waiting on you; your turnaround is each wait from a task needing
@@ -1268,8 +1271,9 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
 - **Presence from what is live.** A machine is offline when its channel drops, and a person is online while a page
   of theirs is in use or they have a teammate's team view open; app.shinsa.dev's five-minute heartbeat is only the
   fallback.
-- **Not yet.** The local Mac app acting on teammate tasks (it keeps the read-only view), teammates creating tasks on
-  someone else's machine, and terminals or Code-tab edits for teammates, both of which write to the owner's disk.
+- **The Mac app too.** Its engine enrols a team device of its own on each teammate's machine and relays it to the
+  page over localhost, so a teammate's task opens as the same full page there; the keys never leave the engine.
+- **Not yet.** Teammates creating tasks on someone else's machine, and terminals or Code-tab edits for teammates, both of which write to the owner's disk.
 
 ### Bundles (2026-11-01)
 

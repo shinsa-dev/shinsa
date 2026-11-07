@@ -16,8 +16,7 @@ import { Effect, Layer } from 'effect';
 import { type FileEntry, FileWriteFailed } from '../files/schema.ts';
 import { Files } from '../files/service.ts';
 
-const writing = (path: string, write: () => void) =>
-  Effect.try({ try: write, catch: (cause) => new FileWriteFailed({ path, message: String(cause) }) });
+const failWrite = (path: string) => (cause: unknown) => new FileWriteFailed({ path, message: String(cause) });
 
 export const FilesLive = Layer.succeed(
   Files,
@@ -31,21 +30,30 @@ export const FilesLive = Layer.succeed(
         return { kind: 'link', target: readlinkSync(path) };
       }).pipe(Effect.orElseSucceed((): FileEntry => ({ kind: 'missing' }))),
     link: (target, path) =>
-      writing(path, () => {
-        mkdirSync(dirname(path), { recursive: true });
-        symlinkSync(target, path);
+      Effect.try({
+        try: () => {
+          mkdirSync(dirname(path), { recursive: true });
+          symlinkSync(target, path);
+        },
+        catch: failWrite(path),
       }),
     writeText: (path, text) =>
-      writing(path, () => {
-        mkdirSync(dirname(path), { recursive: true });
-        writeFileSync(path, text);
+      Effect.try({
+        try: () => {
+          mkdirSync(dirname(path), { recursive: true });
+          writeFileSync(path, text);
+        },
+        catch: failWrite(path),
       }),
     appendText: (path, text) =>
-      writing(path, () => {
-        mkdirSync(dirname(path), { recursive: true });
-        appendFileSync(path, text);
+      Effect.try({
+        try: () => {
+          mkdirSync(dirname(path), { recursive: true });
+          appendFileSync(path, text);
+        },
+        catch: failWrite(path),
       }),
-    rename: (from, to) => writing(from, () => renameSync(from, to)),
+    rename: (from, to) => Effect.try({ try: () => renameSync(from, to), catch: failWrite(from) }),
     remove: (path) => Effect.ignore(Effect.try(() => rmSync(path, { recursive: true, force: true }))),
   })
 );

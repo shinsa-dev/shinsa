@@ -969,6 +969,97 @@ describe('the plan parameters', () => {
   });
 });
 
+describe('a plan that splits the work into other tasks', () => {
+  const plan = {
+    goal: 'Ship it.',
+    phases: [
+      { title: 'One', detail: 'First.' },
+      { title: 'Two', detail: 'Second.' },
+    ],
+    approach: 'Plainly.',
+  };
+  const part = (order: string, on?: unknown) => ({
+    title: `Part ${order} ${String(on)}`,
+    request: 'Do the other half.',
+    order,
+    ...(on === undefined ? {} : { on }),
+  });
+
+  test('keeps each part with its order, and leaves split out when there is none', () => {
+    const result = validatePlanHandOver({
+      ...plan,
+      split: [
+        { title: ' Add export ', request: ' Add the export button. ', order: 'parallel', on: null },
+        part('waits_on', 1),
+        part('stacks_on', 0),
+      ],
+    });
+    expect(result.ok && result.value.document.split).toEqual([
+      { title: 'Add export', request: 'Add the export button.', order: 'parallel' },
+      { title: 'Part waits_on 1', request: 'Do the other half.', order: 'waits_on', on: 1 },
+      { title: 'Part stacks_on 0', request: 'Do the other half.', order: 'stacks_on', on: 0 },
+    ]);
+    const bare = validatePlanHandOver({ ...plan, split: [] });
+    expect(bare.ok && Object.keys(bare.value.document)).not.toContain('split');
+  });
+
+  test('a part waits on or stacks on only this task or an earlier part', () => {
+    expect(
+      errorsOf(
+        validatePlanHandOver({
+          ...plan,
+          split: [
+            part('waits_on', 1),
+            part('stacks_on'),
+            part('parallel', 0),
+            part('waits_on', 4),
+            part('waits_on', 3),
+          ],
+        })
+      )
+    ).toEqual([
+      "split[0].on must be 0 for this task or an earlier part's number: a part only waits on or stacks on what comes before it.",
+      "split[1].on is required: 0 for this task, or an earlier part's number.",
+      'split[2].on is only for waits_on and stacks_on: leave it out.',
+      "split[3].on must be 0 for this task or an earlier part's number, 1 to 3: a part only waits on or stacks on what comes before it.",
+    ]);
+  });
+
+  test('refuses an unknown order, a number out of range, a repeated title and more than eight parts', () => {
+    expect(
+      errorsOf(
+        validatePlanHandOver({
+          ...plan,
+          split: [
+            { title: 'Same', request: 'x', order: 'later' },
+            { title: 'same', request: 'y', order: 'waits_on', on: 9 },
+          ],
+        })
+      )
+    ).toEqual([
+      'split[0].order must be one of parallel, waits_on, stacks_on.',
+      "split[1].on must be 0 for this task or an earlier part's number, from 1 to 7.",
+      'split names a title twice.',
+    ]);
+    expect(
+      errorsOf(
+        validatePlanHandOver({
+          ...plan,
+          split: [part('parallel'), { ...part('parallel'), title: 'PART PARALLEL UNDEFINED' }],
+        })
+      )
+    ).toEqual(['split names a title twice.']);
+    expect(
+      errorsOf(
+        validatePlanHandOver({
+          ...plan,
+          split: Array.from({ length: 9 }, (_, index) => ({ ...part('parallel'), title: `Part ${index}` })),
+        })
+      )
+    ).toEqual(['split has 9 items; the limit is 8.']);
+  });
+});
+
 describe('validateQuestion', () => {
   test('keeps a question with up to four choices and a recommended one', () => {
     expect(

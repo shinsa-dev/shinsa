@@ -10,7 +10,7 @@ import {
   validatePlanRules,
   validateVerification,
 } from '../../src/index.ts';
-import { IMPACT, PLAN } from '../harness.ts';
+import { IMPACT, PLAN, SPLIT_PLAN } from '../harness.ts';
 
 const POST_MERGE: PipelineStep[] = [...SHAPE_PIPELINES.change, 'operate'];
 
@@ -67,6 +67,15 @@ describe('the verification rules', () => {
     expect(validatePlanRules(SHAPE_PIPELINES.operation, { ...UNVERIFIED_PLAN, impact: IMPACT })).toEqual([]);
     expect(validatePlanRules(POST_MERGE, { ...PLAN, impact: IMPACT })).toEqual([
       'This task also runs an operation: list its steps in `operation`, in order, each with how to check it worked. The `phases` are the code change only.',
+    ]);
+  });
+
+  test('a plan splits off other tasks only when this task opens a pull request', () => {
+    expect(validatePlanRules(SHAPE_PIPELINES.change, SPLIT_PLAN)).toEqual([]);
+    expect(
+      validatePlanRules(SHAPE_PIPELINES.operation, { ...SPLIT_PLAN, verification: [], impact: IMPACT })
+    ).toEqual([
+      '`split` starts other changes, and this task opens no pull request: leave it out and suggest the work with `suggest_tasks`.',
     ]);
   });
 

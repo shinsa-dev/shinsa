@@ -683,7 +683,7 @@ describe('triage', () => {
     expect(engine.state.tasks[parent?.id ?? '']?.stacksOn ?? []).toEqual([]);
   });
 
-  test('a repository outside the task’s project is bound while the task keeps its project, and filed by its owner', async () => {
+  async function triageOutsideRepo(options: { chosen: boolean }) {
     const { root } = await createGitRepo();
     const config = createTestConfig(createTempDir(), { roots: [root] });
     const engine = new Engine(openEventLog(config.databasePath));
@@ -696,7 +696,13 @@ describe('triage', () => {
       projectName: null,
       projectId,
     });
-    await engine.dispatch({ type: 'task.create', request: 'Fix the button in app', repoId: null, projectId });
+    if (!options.chosen) await engine.dispatch({ type: 'focus.change', projectId, until: null });
+    await engine.dispatch({
+      type: 'task.create',
+      request: 'Fix the button in app',
+      repoId: null,
+      ...(options.chosen ? { projectId } : {}),
+    });
     const [task] = Object.values(engine.state.tasks);
     const runner = new EffectRunner(engine, config, createRuns().runs, createBriefings().briefings, {
       shares: NO_SHARES,
@@ -709,12 +715,24 @@ describe('triage', () => {
         ),
     });
     await runner.apply({ kind: 'task.triage', taskId: task?.id ?? '' }, createContext());
+    const triaged = engine.state.tasks[task?.id ?? ''];
     const app = Object.values(engine.state.repos).find((repo) => repo.name === 'app');
-    expect(app?.projectId).not.toBe(projectId);
-    expect(engine.state.tasks[task?.id ?? '']).toMatchObject({ repoId: app?.id, projectId });
     await runner.stop();
     engine.stop();
     await engine.settle();
+    return { projectId, triaged, app };
+  }
+
+  test('a project you chose never binds a repository outside it, even one the request names', async () => {
+    const { projectId, triaged, app } = await triageOutsideRepo({ chosen: true });
+    expect(app).toBeUndefined();
+    expect(triaged).toMatchObject({ repoId: null, projectId, handle: 'SHI-1' });
+  });
+
+  test('a task whose project only came from the focus binds a named repository outside it', async () => {
+    const { projectId, triaged, app } = await triageOutsideRepo({ chosen: false });
+    expect(app?.projectId).not.toBe(projectId);
+    expect(triaged).toMatchObject({ repoId: app?.id, projectId: app?.projectId, auto: { project: true } });
   });
 
   async function triageNewRepo(options: { roots?: string[]; folders?: string[]; newRepo?: string } = {}) {

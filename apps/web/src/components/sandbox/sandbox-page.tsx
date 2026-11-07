@@ -17,7 +17,7 @@ const THEME_SCRIPT =
   "document.documentElement.classList.add(matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')";
 
 const LINK_ROW =
-  'corner-superellipse/1.125 flex min-h-10 flex-col justify-center gap-px rounded-lg px-2 py-1 hover:bg-bg-a2 active:bg-bg-a2';
+  'corner-superellipse/1.125 flex min-h-10 flex-col justify-center rounded-lg px-2 py-1 hover:bg-bg-a2 active:bg-bg-a2';
 
 function SandboxGroup({ section }: { section: SandboxSection }) {
   return (

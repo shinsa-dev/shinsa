@@ -39,7 +39,7 @@ function Alternatives({ item }: { item: ReviewItem }) {
         {item.alternatives.map((alternative) => (
           <li key={alternative.option} className='flex min-w-0 gap-1.5 text-xs'>
             <Icon size='sm' name='IconSplit' className='mt-0.5' />
-            <span className='flex min-w-0 flex-1 selectable flex-col gap-px'>
+            <span className='flex min-w-0 flex-1 selectable flex-col'>
               <InlineMarkdown text={alternative.option} className='font-medium text-fg-4' />
               <InlineMarkdown text={alternative.rejected} className='text-fg-3' />
             </span>
@@ -53,7 +53,7 @@ function Alternatives({ item }: { item: ReviewItem }) {
 function Why({ item }: { item: ReviewItem }) {
   if (!item.why) return null;
   return (
-    <p className='flex min-w-0 flex-col gap-px text-xs'>
+    <p className='flex min-w-0 flex-col text-xs'>
       <span className={cn('text-2xs', TONE_TEXT[item.tone])}>Why it matters</span>
       <InlineMarkdown text={item.why} className='selectable text-fg-3' />
     </p>

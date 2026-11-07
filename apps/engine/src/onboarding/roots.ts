@@ -1,6 +1,10 @@
-import { existsSync, readdirSync, statSync } from 'node:fs';
 import { isAbsolute, join, resolve } from 'node:path';
 import { DomainError, describeList, resolveDisplayPath } from '@shinsa/core';
+import { Effect, FileSystem } from 'effect';
+import type { PlatformError } from 'effect/PlatformError';
+import { isFolder } from '../files/probe.ts';
+import { describeError } from '../log/redact.ts';
+import { OnboardingCallFailed } from './schema.ts';
 
 const MAX_ROOTS = 50;
 
@@ -8,15 +12,6 @@ export function expandHome(path: string, userHome: string) {
   if (path === '~') return userHome;
   if (path.startsWith('~/')) return join(userHome, path.slice(2));
   return path;
-}
-
-function isDirectory(path: string) {
-  return existsSync(path) && statSync(path).isDirectory();
-}
-
-function isPrivacyRefusal(error: unknown) {
-  const code = (error as { code?: unknown } | null)?.code;
-  return code === 'EPERM' || code === 'EACCES';
 }
 
 export const PRIVACY_SETTINGS_URL =
@@ -42,45 +37,62 @@ export function isPrivateFolders(error: DomainError): error is PrivateFolders {
   return error.code === PRIVATE_CODE && 'folders' in error && 'picked' in error;
 }
 
-function isReadable(root: string, read: (path: string) => unknown) {
-  try {
-    read(root);
-    return true;
-  } catch (error) {
-    if (!isPrivacyRefusal(error)) throw error;
-    return false;
-  }
-}
+const isReadable = Effect.fn('Onboarding.isReadable')(function* (
+  root: string,
+  read: (path: string) => Effect.Effect<unknown, PlatformError, FileSystem.FileSystem>
+) {
+  return yield* read(root).pipe(
+    Effect.as(true),
+    Effect.catch((error) =>
+      error.reason._tag === 'PermissionDenied'
+        ? Effect.succeed(false)
+        : Effect.fail(new OnboardingCallFailed({ message: describeError(error) }))
+    )
+  );
+});
 
-export function resolveChosenRoots(
+const readFolder = Effect.fn('Onboarding.readFolder')(function* (path: string) {
+  const fs = yield* FileSystem.FileSystem;
+  return yield* fs.readDirectory(path);
+});
+
+export const resolveChosenRoots = Effect.fn('Onboarding.resolveChosenRoots')(function* (
   value: unknown,
   userHome: string,
-  read: (path: string) => unknown = readdirSync
-): string[] {
+  read: (path: string) => Effect.Effect<unknown, PlatformError, FileSystem.FileSystem> = readFolder
+) {
   if (!Array.isArray(value) || value.length === 0) {
-    throw new DomainError({ code: 'roots_invalid', message: 'Choose a folder with your repositories.' });
+    return yield* new DomainError({
+      code: 'roots_invalid',
+      message: 'Choose a folder with your repositories.',
+    });
   }
   if (value.length > MAX_ROOTS) {
-    throw new DomainError({ code: 'roots_invalid', message: `Choose at most ${MAX_ROOTS} folders.` });
+    return yield* new DomainError({ code: 'roots_invalid', message: `Choose at most ${MAX_ROOTS} folders.` });
   }
   const roots: string[] = [];
   const refused: string[] = [];
   const picked: string[] = [];
   for (const entry of value) {
     if (typeof entry !== 'string' || entry.trim().length === 0) {
-      throw new DomainError({ code: 'roots_invalid', message: 'Each folder must be a path.' });
+      return yield* new DomainError({ code: 'roots_invalid', message: 'Each folder must be a path.' });
     }
     const path = expandHome(entry.trim(), userHome);
-    if (!isAbsolute(path))
-      throw new DomainError({ code: 'roots_invalid', message: `${entry} is not a full path.` });
+    if (!isAbsolute(path)) {
+      return yield* new DomainError({ code: 'roots_invalid', message: `${entry} is not a full path.` });
+    }
     const root = resolve(path);
-    if (!isDirectory(root))
-      throw new DomainError({ code: 'roots_invalid', message: 'That is not a folder on this machine.' });
+    if (!(yield* isFolder(root))) {
+      return yield* new DomainError({
+        code: 'roots_invalid',
+        message: 'That is not a folder on this machine.',
+      });
+    }
     if (picked.includes(root)) continue;
     picked.push(root);
-    if (isReadable(root, read)) roots.push(root);
+    if (yield* isReadable(root, read)) roots.push(root);
     else refused.push(root);
   }
-  if (refused.length > 0) throw createPrivateFolders(refused, picked, userHome);
+  if (refused.length > 0) return yield* createPrivateFolders(refused, picked, userHome);
   return roots;
-}
+});

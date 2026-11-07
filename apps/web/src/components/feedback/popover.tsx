@@ -139,7 +139,7 @@ function WaitingRow({
       className={cn(LIST_ROW, LIST_ROW_LINES, 'px-1.5')}
     >
       <RowIcon state={state} entry={entry} />
-      <span className='flex min-w-0 flex-1 flex-col gap-px'>
+      <span className='flex min-w-0 flex-1 flex-col'>
         <Truncate className={LIST_ROW_TITLE}>{preview}</Truncate>
         <Truncate className={LIST_ROW_META}>{describeFeedbackRowMeta(state, entry)}</Truncate>
       </span>
@@ -162,7 +162,7 @@ function FiledRow({ state, entry }: { state: ShinsaState; entry: Feedback }) {
       className={cn(LIST_ROW, LIST_ROW_LINES, 'group/issue px-1.5')}
     >
       <RowIcon state={state} entry={entry} />
-      <span className='flex min-w-0 flex-1 flex-col gap-px'>
+      <span className='flex min-w-0 flex-1 flex-col'>
         <Truncate className={cn(LIST_ROW_TITLE, closed && 'text-fg-3')}>{entry.title}</Truncate>
         <span className={cn(LIST_ROW_META, 'truncate')}>
           <span className='sr-only'>{describeFeedbackSender(entry)}, </span>
@@ -196,7 +196,7 @@ export function FeedbackPanel({
   return (
     <>
       <div className='flex shrink-0 flex-col gap-2 border-b border-border p-3'>
-        <div className='flex flex-col gap-px'>
+        <div className='flex flex-col'>
           <p className='text-xs font-medium text-fg-4'>Feedback on Shinsa</p>
           <p className='text-2xs text-fg-2'>
             {FEEDBACK_INTRO.before} <span className='whitespace-nowrap'>{FEEDBACK_REPOSITORY}</span>

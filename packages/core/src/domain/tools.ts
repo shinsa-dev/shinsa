@@ -28,6 +28,7 @@ export const SHINSA_TOOL_NAMES = [
   'report_read',
   'file_report',
   'reshape_task',
+  'move_to_repository',
   'delegate_task',
   'delegation_status',
   'delegation_cancel',
@@ -53,6 +54,7 @@ const HAND_OVER_TOOLS: ReadonlySet<ShinsaToolName> = new Set<ShinsaToolName>([
   'report_outcome',
   'report_read',
   'reshape_task',
+  'move_to_repository',
 ]);
 
 type StepRole = Exclude<RunRole, 'planner' | 'builder'>;
@@ -61,6 +63,7 @@ const ROLE_TOOLS: Record<StepRole, readonly ShinsaToolName[]> = {
   agent: [
     'propose_plan',
     'reshape_task',
+    'move_to_repository',
     'complete_phase',
     'complete_fix',
     'report_outcome',
@@ -112,7 +115,7 @@ const ROLE_TOOLS: Record<StepRole, readonly ShinsaToolName[]> = {
 };
 
 export const PURPOSE_HAND_OVERS: Record<RunPurpose, readonly ShinsaToolName[]> = {
-  plan: ['propose_plan', 'reshape_task'],
+  plan: ['propose_plan', 'reshape_task', 'move_to_repository'],
   build: ['complete_phase'],
   fix: ['complete_fix'],
   operate: ['report_outcome'],

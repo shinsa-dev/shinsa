@@ -1,6 +1,6 @@
 import { existsSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
-import { Console, Effect } from 'effect';
+import { Console, Effect, type FileSystem } from 'effect';
 import { isPreviewHost } from '../../apps/cloud/src/routes/previews/address.ts';
 import { createSandboxCloud } from './cloud.ts';
 import { respondDashboard, respondEnroll } from './dashboard.ts';
@@ -19,6 +19,7 @@ import {
   HOST,
   LAPTOP_TASKS,
   LOCAL_WEB,
+  MACHINE_APP,
   ORIGIN,
   PORT,
   PREVIEW_ZONE,
@@ -35,7 +36,8 @@ import {
 } from './schema.ts';
 import { createServicePreview, respondToggle } from './services.ts';
 import { createPreviewShares, respondShareConnect } from './shares.ts';
-import { TEAM, teammateLink } from './team.ts';
+import { teammateLink } from './team.ts';
+import { seedTeammateWork } from './teammate-work.ts';
 import { TUNNEL_SOCKET, upgradeTunnel } from './tunnel.ts';
 
 export const startSandbox = Effect.fn('Sandbox.start')(function* () {
@@ -70,11 +72,12 @@ export const startSandbox = Effect.fn('Sandbox.start')(function* () {
   const studioProject = yield* selectBusiestProject(studio.engine);
   yield* shareProjectWithTeam(studio.engine, studioProject);
   const [teamTask] = Object.values((yield* teammate.engine.core.state).tasks);
+  yield* seedTeammateWork(teammate, teammateData, teamTask);
   const keptOver = yield* seedTeammateDuplicate(studio.engine, studioProject, teamTask);
   const machines = [studio.machine, laptop.machine];
   const teammates = [...machines, teammate.machine];
   const shares = yield* createPreviewShares(studio);
-  const teamTaskPath = teamTask ? `/teams/${TEAM.id}/kai/${teamTask.id}` : null;
+  const teamTaskPath = teamTask ? `/tasks/${teamTask.handle}` : null;
   const { preview, shared } = yield* createServicePreview(studio);
   const { serializeSandboxPage }: SandboxPageModule = yield* Effect.tryPromise({
     try: () => import(join(ROOT, 'apps/web/src/components/sandbox/sandbox-page.tsx')),
@@ -84,11 +87,12 @@ export const startSandbox = Effect.fn('Sandbox.start')(function* () {
     duplicate: keptOver.handle ?? keptOver.id,
     original: teamTask?.handle ?? null,
   });
-  let page = serializeSandboxPage(sections, findRemoteStylesheet());
-  const cloud = yield* Effect.try({
-    try: () => createSandboxCloud(SANDBOX_DIR, new URL(PREVIEW_ZONE).host, USER.id, machines),
-    catch: (error) => new SandboxFailed({ message: `Starting the stand-in cloud failed: ${String(error)}` }),
-  });
+  let page = serializeSandboxPage(sections, yield* findRemoteStylesheet());
+  const cloud = yield* createSandboxCloud(SANDBOX_DIR, new URL(PREVIEW_ZONE).host, USER.id, teammates).pipe(
+    Effect.mapError(
+      (error) => new SandboxFailed({ message: `Starting the stand-in cloud failed: ${String(error)}` })
+    )
+  );
 
   const respond = Effect.fn('Sandbox.respond')(
     function* (request: Request, url: URL) {
@@ -101,12 +105,16 @@ export const startSandbox = Effect.fn('Sandbox.start')(function* () {
       if (share && request.method === 'POST') return respondShareConnect(share, machines);
       const signIn = respondSandboxSignIn(url, studio.engine);
       if (signIn) return yield* signIn;
+      const app = MACHINE_APP.exec(url.pathname);
+      const target = teammates.find((entry) => entry.id === app?.[1]);
+      if (target)
+        return Response.redirect(`http://${HOST}:${target.port}${app?.[2] ?? '/'}${url.search}`, 302);
       const enroll = ENROLL.exec(url.pathname);
       const enrolling = machines.find((entry) => entry.id === enroll?.[1]);
       if (enrolling) return yield* respondEnroll(enrolling, url);
       if (url.pathname.startsWith('/__remote/'))
         return yield* respondDashboard(request, url, machines, teammates);
-      return respondStatic(url.pathname);
+      return yield* respondStatic(url.pathname);
     },
     Effect.catchTag('SandboxBodyInvalid', (error) =>
       Effect.succeed(
@@ -114,7 +122,7 @@ export const startSandbox = Effect.fn('Sandbox.start')(function* () {
       )
     )
   );
-  const run = Effect.runPromiseWith(yield* Effect.context<never>());
+  const run = Effect.runPromiseWith(yield* Effect.context<FileSystem.FileSystem>());
 
   yield* Effect.acquireRelease(
     Effect.try({
@@ -126,7 +134,7 @@ export const startSandbox = Effect.fn('Sandbox.start')(function* () {
             const url = new URL(request.url);
             const socket = request.headers.get('upgrade')?.toLowerCase() === 'websocket';
             if (socket && isPreviewHost(url.host, PREVIEW_ZONE))
-              return upgradePreview(request, url, machines, server);
+              return upgradePreview(request, url, teammates, server);
             const tunneled = upgradeTunnel(request, url, teammates, server);
             if (tunneled !== null) return tunneled;
             return run(respond(request, url));
@@ -146,7 +154,7 @@ export const startSandbox = Effect.fn('Sandbox.start')(function* () {
       { title: 'Handing off a task', links: handoffs },
       { title: 'A task handed to a teammate', links: handedToTeammate },
     ],
-    findRemoteStylesheet()
+    yield* findRemoteStylesheet()
   );
   yield* Console.log(`The sandbox: ${ORIGIN}${SANDBOX_PATH}`);
 });

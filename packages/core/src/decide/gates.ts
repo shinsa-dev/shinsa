@@ -15,6 +15,7 @@ import { startApprovedPlan } from './backlog.ts';
 import { startEditsChecks } from './checks.ts';
 import { answerConfiguration, assertConfigurationReply } from './config.ts';
 import { acknowledgeBudget } from './costs.ts';
+import { startPlanSplit } from './couriers.ts';
 import type { Decider } from './decider.ts';
 import { recordEditsApproval } from './edits.ts';
 import { clearFixLoop, startFix } from './fixes.ts';
@@ -234,6 +235,7 @@ function answerDecision(
     const version = decider.task(taskId).plan?.version ?? 1;
     decider.emit({ type: 'plan.approved', taskId, version });
     if (response?.trim()) decider.emit({ type: 'plan.answered', taskId, answers: response.trim() });
+    startPlanSplit(decider, taskId);
     startApprovedPlan(decider, taskId);
     return;
   }

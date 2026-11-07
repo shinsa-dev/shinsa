@@ -34,7 +34,7 @@ function useTimeTrigger(at: number, content: React.ReactNode, text: string, deta
       {text}
     </time>,
     {
-      className: detail ? 'flex-col items-start gap-px' : undefined,
+      className: detail ? 'flex-col items-start' : undefined,
       content: (
         <>
           {content}

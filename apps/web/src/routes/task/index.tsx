@@ -23,10 +23,11 @@ import { useIdle, useIdleValue } from '@/hooks/use-idle.ts';
 import { applyNowTarget, type TaskView, useTaskView } from '@/hooks/use-task-view.ts';
 import { selectWatchOfHome } from '@/lib/automations.ts';
 import { removeCarriedCaret } from '@/lib/chat/task-drafts.ts';
-import { useEngineFeature, useTaskDetail } from '@/lib/connection/socket.ts';
+import { useEngineFeature, useTaskDetail, useTeamFeed } from '@/lib/connection/socket.ts';
 import { useLayoutPreference } from '@/lib/preferences/layout.ts';
 import { resolveLineComments } from '@/lib/tasks/messages.ts';
 import type { TaskTab } from '@/lib/tasks/tabs.ts';
+import { resolveTeamTaskPath, resolveTeamTaskTarget, selectTeamFeedTask } from '@/lib/teams/feeds.ts';
 import { replaceRoute, resolveAutomationPath, resolveCanonicalTaskPath } from '@/router.ts';
 import { ChatTab } from './chat.tsx';
 import { CodeTab, prefetchCode, usePrefetchCode } from './lazy-code.tsx';
@@ -222,6 +223,16 @@ function useCanonicalPath(state: ShinsaState, task: Task | null, segment: string
   }, [path]);
 }
 
+function useTeamFallback(task: Task | null, reference: string) {
+  const feed = useTeamFeed();
+  const entry = task ? null : selectTeamFeedTask(feed, reference);
+  const path = entry ? resolveTeamTaskPath(resolveTeamTaskTarget(entry)) : null;
+  React.useEffect(() => {
+    if (path) replaceRoute(path);
+  }, [path]);
+  return path;
+}
+
 function useCarryEndsWithPage(taskId: string | null) {
   React.useEffect(() => {
     if (!taskId) return;
@@ -239,6 +250,8 @@ export function TaskPage({ state, taskId }: { state: ShinsaState; taskId: string
   useCarryEndsWithPage(task?.id ?? null);
   useTaskDetail(task?.id ?? null);
   const supported = useEngineFeature('message.line_comments', task?.id ?? null);
+  const teamPath = useTeamFallback(task, taskId);
+  if (!task && teamPath) return <LoadingLine label='Opening the team task' className='m-auto' />;
   if (!task) {
     return <EmptyState icon='IconInboxEmpty' title='No such task' description='It may have been removed.' />;
   }

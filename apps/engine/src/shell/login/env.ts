@@ -1,6 +1,7 @@
-import { accessSync, constants, existsSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, delimiter, join } from 'node:path';
+import { Effect, Option } from 'effect';
+import { isExecutable, isPresent, selectText } from '../../files/probe.ts';
 import { type Env, LOGIN_MARKER, SKIPPED_KEYS, type TerminalStreams } from './schema.ts';
 
 export function isStartedFromTerminal(streams: TerminalStreams = process) {
@@ -34,34 +35,28 @@ export function resolveDefaultShell(platform: string = process.platform) {
   return platform === 'darwin' ? '/bin/zsh' : '/bin/sh';
 }
 
-export function resolveFishHandOff(shell: string, path: string, env: Env, home: string) {
-  const isExecutable = (candidate: string) => {
-    try {
-      accessSync(candidate, constants.X_OK);
-      return true;
-    } catch {
-      return false;
-    }
-  };
-  const onPath = path
-    .split(delimiter)
-    .filter(Boolean)
-    .map((dir) => join(dir, 'fish'))
-    .find(isExecutable);
-  if (onPath) return onPath;
+export const resolveFishHandOff = Effect.fn('LoginEnv.resolveFishHandOff')(function* (
+  shell: string,
+  path: string,
+  env: Env,
+  home: string
+) {
+  for (const dir of path.split(delimiter).filter(Boolean)) {
+    const candidate = join(dir, 'fish');
+    if (yield* isExecutable(candidate)) return candidate;
+  }
   const isBash = basename(shell).includes('bash');
   const rcFile = isBash ? join(home, '.bashrc') : join(env.ZDOTDIR ?? home, '.zshrc');
-  const readRc = () => {
-    try {
-      return readFileSync(rcFile, 'utf8');
-    } catch {
-      return '';
-    }
-  };
-  return readRc().match(/\bexec\s+(\S*\bfish)\b/)?.[1] ?? null;
-}
+  const rc = Option.getOrElse(yield* selectText(rcFile), () => '');
+  return rc.match(/\bexec\s+(\S*\bfish)\b/)?.[1] ?? null;
+});
 
-export function refreshInstallFolders(env: Env = process.env, home = env.HOME ?? homedir()) {
+export const refreshInstallFolders = Effect.fn('LoginEnv.refreshInstallFolders')(function* (
+  env: Env = process.env,
+  home = env.HOME ?? homedir()
+) {
   const folders = [join(home, '.bun/bin'), join(home, '.local/bin'), '/opt/homebrew/bin', '/usr/local/bin'];
-  env.PATH = mergePathLists(env.PATH ?? '', folders.filter((dir) => existsSync(dir)).join(delimiter));
-}
+  const present: string[] = [];
+  for (const dir of folders) if (yield* isPresent(dir)) present.push(dir);
+  env.PATH = mergePathLists(env.PATH ?? '', present.join(delimiter));
+});

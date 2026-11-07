@@ -196,6 +196,11 @@ export class RemoteClient extends Context.Service<
               'machineTeams.connect',
               teams.connect({ params: { teamId }, payload: { instanceId } }).pipe(asMachine(token))
             ),
+          remoteConnect: (token, teamId, instanceId) =>
+            call(
+              'machineTeams.remoteConnect',
+              teams.remoteConnect({ params: { teamId }, payload: { instanceId } }).pipe(asMachine(token))
+            ),
           scopes: (token, teamId, request) =>
             call(
               'machineTeams.scopes',

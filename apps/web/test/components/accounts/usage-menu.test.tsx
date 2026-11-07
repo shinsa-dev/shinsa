@@ -110,6 +110,30 @@ describe('the usage menu', () => {
     expect(screen.getByText('No usage reported yet.')).toBeTruthy();
   });
 
+  it('says how many usage resets an account can use now, under that account only', async () => {
+    const grant = {
+      id: 'g',
+      label: null,
+      left: 1,
+      total: 1,
+      clears: ['five_hour'],
+      usableNow: true,
+      endsAt: null,
+    };
+    pushAccounts(
+      createSnapshot({
+        accounts: [
+          createAccount({ id: 'a', isDefault: true, usage: { ...usage(20), resetGrants: [grant] } }),
+          createAccount({ id: 'b', usage: usage(30) }),
+        ],
+      })
+    );
+    renderMenu();
+    await hover(screen.getByRole('button', { name: 'Agent usage' }));
+    expect(await screen.findByText('1 usage reset available')).toBeTruthy();
+    expect(screen.getAllByText(/usage resets? available/)).toHaveLength(1);
+  });
+
   it('reads usage again by itself while its popover is open, and only then', async () => {
     const stop = mock(() => undefined);
     const watch = spyOn(accounts, 'watchUsage').mockReturnValue(stop);

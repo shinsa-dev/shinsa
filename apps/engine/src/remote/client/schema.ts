@@ -136,6 +136,7 @@ export interface TeamCalls {
   leave(token: Token, teamId: TeamId): MachineCall<void, NotFound | OwnerCannotLeave>;
   remove(token: Token, teamId: TeamId): MachineCall<void, OwnerFailure>;
   connect(token: Token, teamId: TeamId, instanceId: InstanceId): MachineCall<ConnectResponse, NotFound>;
+  remoteConnect(token: Token, teamId: TeamId, instanceId: InstanceId): MachineCall<ConnectResponse, NotFound>;
   scopes(token: Token, teamId: TeamId, request: TeamScopesRequest): MachineCall<RemoteTeam, OwnerFailure>;
 }
 

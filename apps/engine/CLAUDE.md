@@ -109,7 +109,7 @@ src/
 │                        are), store/ (ConfigStore: config.json from EngineConfig's read, kept in a Ref and written
 │                        atomically through JsonFile; a file it could not read kept aside and each problem logged),
 │                        address.ts (resolveServerAddress: where the command line reaches the engine, an Effect on
-│                        MachineConfigFile), data-dir.ts (prepareDataDir, plain), index.ts the re-exports. The port defaults to core's
+│                        MachineConfigFile), data-dir.ts (prepareDataDir, an Effect.fn on FileSystem and Shell), index.ts the re-exports. The port defaults to core's
 │                        APP_IDENTITY: 7446; package.json's dev and start scripts pin 5180 so a checkout never meets
 │                        the Mac app's engine; every SHINSA_* variable is read here, except SHINSA_QUICK and
 │                        SHINSA_SERVICE (instance/service/schema.ts) and the SHINSA_BUILD_* a compiled engine carries
@@ -143,7 +143,7 @@ src/
 │                        instead of failing and reads from a position), outbox/ (Outbox: the effects table, claimed
 │                        per lane, settled, retried, reconciled after a restart), receipts/, briefings/ (the Home
 │                        guide), snapshot/ (Snapshots: the state snapshot, verified by version, anchor and checksum;
-│                        version.ts: resolveStateVersion, a hash of @shinsa/core's source), commands/ (CommandLog: a
+│                        version.ts: resolveStateVersion, an Effect.fn on FileSystem hashing @shinsa/core's source), commands/ (CommandLog: a
 │                        command's events, effects, cancellations and receipt in one transaction) and migrations/
 │                        (LogMigrator over LOG_BASELINE and the ordered LOG_MIGRATIONS in list.ts, the log's version in
 │                        user_version, an older log refused with LogVersionError, inspect mode refusing a log that needs
@@ -485,9 +485,14 @@ src/
 │                        write, atomic through `<name>.writing-<pid>` and mode 600), schema.ts, manifest.ts (the
 │                        one reader of a checkout's package.json and deno.json, and the Claude SDK's, through the
 │                        lenient PackageManifest schema: a field that breaks its shape is dropped, the rest kept),
-│                        lenient-list.ts (createLenientList: a list keeping the entries that decode), paths.ts
-│                        (the one containment check: isInside, isFolder, resolveInside, resolveWritableInside,
-│                        assertRepoPath; every module asking whether a path stays in a folder calls it)
+│                        lenient-list.ts (createLenientList: a list keeping the entries that decode), probe.ts
+│                        (the reads every module asks of a path, each an Effect.fn on Effect's FileSystem: isPresent,
+│                        isFolder, selectText, selectRealPath, listEntries, findFirstPresent, isExecutable and
+│                        selectOnPath, the PATH lookup in place of Bun.which; a failed read answers false, none or
+│                        no entries), inside.ts (the one containment check that reads the disk:
+│                        selectInside and selectWritableInside, on real paths, so a symlink cannot leave), paths.ts
+│                        (the pure halves: isInside, assertRepoPath); every module asking whether a path stays in a
+│                        folder calls them
 ├── git/                 service.ts (Git: attempt answers a CommandResult, run fails with GitFailed and retries a held
 │                        index.lock on LOCK_RETRY, read answers a command's raw bytes with its byte or line cap, a
 │                        5 s timeout, each chunk as it comes and the request's abort, literal pathspecs), schema.ts
@@ -559,7 +564,7 @@ src/
 │                        checkout, cached per base commit and command (base/: BaseCheckouts.compare, its folder
 │                        EngineConfig's checkBasesDir and KeptCheckouts, a Context.Reference, how many it keeps; any
 │                        failure logged and answered as no comparison; outside ChecksLayer, since it needs EngineConfig), comparing the failures themselves (failures.ts:
-│                        listCheckFailures reads failing tests by file and name, or tsc, Biome, ESLint, Prettier and
+│                        selectCheckFailures reads failing tests by file and name, or tsc, Biome, ESLint, Prettier and
 │                        path:line diagnostics by file, code and message, never the line; resolveFailureDiff,
 │                        describeFailureDiff): none new is `fails_on_base`, not blocking; new ones block, named first;
 │                        output it cannot read, or a failing file or a path in the command missing on the base, is
@@ -571,7 +576,7 @@ src/
 │                        test-coverage's TaskCoverage); index.ts re-exports the pure helpers (docs/engine.md → Checks)
 ├── test-coverage/       Changed-line coverage, once before review, from the tests among the task's checks: detect.ts
 │                        (resolveCoverageRun: a test check's command run again with its runner's coverage report in a
-│                        temporary folder; resolveCoverageDetection for Settings), service.ts (TaskCoverage.measure:
+│                        temporary folder; selectCoverageDetection for Settings, an Effect.fn on FileSystem), service.ts (TaskCoverage.measure:
 │                        run each like a check in a temporary folder released with its scope, merge the reports, diff
 │                        against the task's base, and core's measureCoverage; CoverageReportUnreadable), schema.ts,
 │                        index.ts (TaskCoverage; listCoverageDetections for GET /api/repos/coverage)
@@ -596,7 +601,7 @@ src/
 │                        verification before a task's first agent), login/ (GitHubLogins: the GitHub login through
 │                        GitHubCli, kept once gh answers it), current-login/ (CurrentLogin: that login for the user's
 │                        home), roots/ (Roots: chosen folders from ConfigStore, SHINSA_ROOTS, or discovery until
-│                        onboarding is done); folders/local.ts (listLocalRepos, plain); layers.ts (ReposLayer,
+│                        onboarding is done); folders/local.ts (listLocalRepos, an Effect.fn on FileSystem); layers.ts (ReposLayer,
 │                        RepoWorkLayer, StandaloneRepoWorkLayer); index.ts the pure helpers and re-exports
 ├── onboarding/          Status, folder suggestions, saving the setup (service.ts: Onboarding, its layer
 │                        Onboarding.layer({ models, accounts, terminals }) on EngineConfig, EngineCore, ConfigStore,
@@ -623,7 +628,7 @@ src/
 ├── projects/            changes.ts: listLocalRepoViews (repositories in the chosen folders and every project's
 │                        folders, registered or not) and the ProjectChanges service of changes/service.ts (on
 │                        EngineCore, RepoRegistry and CurrentLogin: upsertRepo and upsertFolder as Effects failing
-│                        with a DomainError, ProjectChangeFailed or the registry's failure), which http/routes/projects,
+│                        with a DomainError or the registry's failure), which http/routes/projects,
 │                        onboarding and the management client share; folders.ts
 │                        (resolving a folder you add)
 ├── triage/              Title, repository (or none), size, branch and dependencies for a new task, and the parts the human left
@@ -674,8 +679,11 @@ src/
 │                        makeServiceRefiner, the pure steps in refine/suggestions.ts: the
 │                        quick call that names them, adds a port flag and a preview URL, cached per project; its answer
 │                        decoded in answer.ts), input.ts (what http/routes/terminals and services read from a body),
-│                        places.ts (where a terminal opens and a service runs: resolveTerminalStart,
-│                        resolveServicePlace, resolveServiceRunIn, the suggestions a project does not have yet),
+│                        places.ts (where a terminal opens and a service runs, pure: resolveTerminalStart,
+│                        resolveServicePlace, listNewServiceSuggestions), runs.ts (selectServiceRunIn: a service's
+│                        run, a task's with its shared cache variables), folders.ts (assertFolderPresent: the
+│                        folder a terminal or service starts in is still there, read after input.ts's checks;
+│                        detect.ts's listNewSuggestions, the suggestions a project does not have yet),
 │                        sockets.ts (the /ws/terminals/<id> socket, createTerminalSockets: Bun's socket callbacks
 │                        run on the context it was made in), service.ts (Terminals, its layer
 │                        `Terminals.layer({ version, env })` over EngineConfig, TerminalFiles and TerminalPty, and
@@ -819,7 +827,7 @@ random points of a task's life; `test/http/fuzz.test.ts` throws malformed reques
   skip part of it, are `docs/engine.md` → Who can change Shinsa); never answer a request outside them. `parseUserCommand` (core) is the single
   gate for commands from outside: it accepts only `UserCommand` types and checks each field by field; never add an
   allowlist of your own. A socket message needs a string `id` or `runId`; request bodies are capped at 8 MB (an
-  attachment upload at the base64 of 25 MB, `ATTACHMENT_REQUEST_LIMIT_BYTES`), by `Content-Length` and again by the bytes the gate reads, a route's cap its `bodyLimit` annotation; files are read through `resolveInside` (real paths, so a symlink cannot leave the
+  attachment upload at the base64 of 25 MB, `ATTACHMENT_REQUEST_LIMIT_BYTES`), by `Content-Length` and again by the bytes the gate reads, a route's cap its `bodyLimit` annotation; files are read through `selectInside` (real paths, so a symlink cannot leave the
   worktree) and evidence by plain name only.
 - **Human-only decisions have no agent path**: a `humanOnly` spec is left out of the agents' tools
   (`listAgentSpecs`) and its `shinsa` command is refused in an agent's shell (`agents/policy.ts`), and so are
@@ -897,7 +905,7 @@ random points of a task's life; `test/http/fuzz.test.ts` throws malformed reques
   dispatched as `agent.attach_check`, with nothing stored.
 - **Code reads are pinned and confined** (`http/routes/code`, `docs/engine.md` → The Code tab's reads): only the task's
   registered repository, a ref is a full commit id the repository has or `working`, paths are relative with no `.`
-  or `..` segment and pass git as literal pathspecs after `--`, working-copy reads go through `resolveInside`, and
+  or `..` segment and pass git as literal pathspecs after `--`, working-copy reads go through `selectInside`, and
   every read has a timeout and a size cap. A read named by a commit is immutable (`ETag`, a year's cache, the
   ObjectCache); the working copy is never cached.
 - **The diff never touches the worktree's index**: `History.workingDiff` adds intent-to-add entries to a copy of it, so a

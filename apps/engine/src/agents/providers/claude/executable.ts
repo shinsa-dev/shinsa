@@ -1,6 +1,6 @@
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { Effect } from 'effect';
+import { Effect, FileSystem } from 'effect';
 import { findManifestFile } from '../../../files/manifest.ts';
 import { PACKAGE_MANIFEST } from '../../../files/schema.ts';
 import { BUNDLE, type ShinsaBundle } from '../../../instance/bundle.ts';
@@ -13,18 +13,23 @@ import { SdkManifestText } from './schema.ts';
 
 export type { ClaudeExecutable, ExecutableDeps } from './executable/schema.ts';
 
-export function resolveSdkPackage(packagePath?: string, bundle: ShinsaBundle | null = BUNDLE) {
+export const resolveSdkPackage = Effect.fn('ClaudeExecutable.resolveSdkPackage')(function* (
+  packagePath?: string,
+  bundle: ShinsaBundle | null = BUNDLE
+) {
   if (bundle && !packagePath) return bundle.sdk;
-  const { version, claudeCodeVersion } = findManifestFile(
+  const { version, claudeCodeVersion } = yield* findManifestFile(
     packagePath ?? resolveSdkPackagePath(),
     SdkManifestText
   );
   return { version, claudeCodeVersion };
-}
+});
 
-export function resolveSdkClaudeVersion(packagePath?: string) {
-  return resolveSdkPackage(packagePath).claudeCodeVersion;
-}
+export const resolveSdkClaudeVersion = Effect.fn('ClaudeExecutable.resolveSdkClaudeVersion')(function* (
+  packagePath?: string
+) {
+  return (yield* resolveSdkPackage(packagePath)).claudeCodeVersion;
+});
 
 function resolveSdkPackagePath() {
   return join(dirname(fileURLToPath(import.meta.resolve(SDK_PACKAGE))), PACKAGE_MANIFEST);
@@ -46,9 +51,13 @@ export const resolveClaudeExecutable = Effect.fn('ClaudeExecutable.resolveInstal
   deps: ExecutableDeps = {}
 ) {
   const versions = yield* ProgramVersions;
+  const withFiles = Effect.provideService(FileSystem.FileSystem, yield* FileSystem.FileSystem);
   return yield* resolveClaudeProgram({
-    location: locateClaude(deps),
+    location: yield* locateClaude(deps),
     readVersion: deps.readVersion ?? ((path) => versions.read(path, parseClaudeVersion)),
-    minimumVersion: Effect.sync(() => deps.minimumVersion ?? resolveSdkClaudeVersion()),
+    minimumVersion:
+      deps.minimumVersion === undefined
+        ? withFiles(resolveSdkClaudeVersion())
+        : Effect.succeed(deps.minimumVersion),
   });
 });

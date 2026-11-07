@@ -1,9 +1,15 @@
-import { afterEach, describe, expect, spyOn, test } from 'bun:test';
+import { afterEach, describe, expect, test } from 'bun:test';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
+import { Effect, type Layer } from 'effect';
+import { CommandLayer } from './kit/command/index.ts';
 import { lintHtml, listHtmlRules, resolveHtmlReport, runHtmlLint, serializeHtmlAsJsx } from './lint-html.ts';
 
 const OXLINT = join(process.cwd(), 'node_modules/.bin/oxlint');
+
+function runLint<A, E>(effect: Effect.Effect<A, E, Layer.Success<typeof CommandLayer>>) {
+  return Effect.runPromise(effect.pipe(Effect.provide(CommandLayer)));
+}
 
 const folders: string[] = [];
 
@@ -82,7 +88,7 @@ describe('the HTML lint', () => {
     );
   });
 
-  test('a page with the faults Biome caught fails, on their lines', () => {
+  test('a page with the faults Biome caught fails, on their lines', async () => {
     const file = writeHtml(
       [
         '<!doctype html>',
@@ -95,7 +101,7 @@ describe('the HTML lint', () => {
         '</html>',
       ].join('\n')
     );
-    const { ok, output } = runHtmlLint([file], OXLINT);
+    const { ok, output } = await runLint(runHtmlLint([file], OXLINT));
     expect(ok).toBe(false);
     expect(output).toContain(`${file}:2:`);
     expect(output).toContain('html-has-lang');
@@ -106,16 +112,14 @@ describe('the HTML lint', () => {
     expect(output).not.toContain('.html.tsx');
   });
 
-  test('a sound page passes', () => {
+  test('a sound page passes', async () => {
     const file = writeHtml(
       '<!doctype html>\n<html lang="en"><body><button type="button">Go</button></body></html>\n'
     );
-    expect(runHtmlLint([file], OXLINT).ok).toBe(true);
+    expect((await runLint(runHtmlLint([file], OXLINT))).ok).toBe(true);
   });
 
-  test('every HTML file in the repository passes', () => {
-    const write = spyOn(process.stdout, 'write').mockImplementation(() => true);
-    expect(lintHtml()).toBe(0);
-    write.mockRestore();
+  test('every HTML file in the repository passes', async () => {
+    await runLint(lintHtml());
   });
 });

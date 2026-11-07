@@ -39,7 +39,7 @@ export function createSampleTask(
     repoId: null,
     size: null,
     planFirst: false,
-    auto: { shape: false, start: false, priority: false },
+    auto: { shape: false, start: false, priority: false, project: false },
     stage: 'building',
     stageReason: 'building the change',
     priority: 'normal',

@@ -18,6 +18,7 @@ import {
 import { SectionLabel } from '@/components/layout/page/section-label.tsx';
 import { ICON_SLOT } from '@/components/layout/surface/card.ts';
 import { ServiceFields, useServiceDraft } from '@/components/services/service-form.tsx';
+import { usePicks } from '@/components/services/use-picks.ts';
 import { LoadingLine } from '@/components/status/loading-line.tsx';
 import {
   createServiceDraft,
@@ -30,7 +31,6 @@ import {
   listServiceFolders,
   resolveServiceForm,
   resolveSuggestionKey,
-  resolveSuggestionPicks,
   type ServiceInput,
   togglePick,
 } from '@/lib/terminal/services.ts';
@@ -60,7 +60,7 @@ export function PanelHeader({
 }) {
   return (
     <div className='flex shrink-0 items-center gap-2 border-b border-border py-3 ps-3 pe-1.5'>
-      <span className='flex min-w-0 flex-1 flex-col gap-px'>
+      <span className='flex min-w-0 flex-1 flex-col'>
         <h2 className='truncate text-xs font-medium text-fg-4'>{title}</h2>
         {description && <p className='text-2xs text-fg-2'>{description}</p>}
       </span>
@@ -123,7 +123,7 @@ function SuggestionRow({
           onCheckedChange={onToggle}
         />
       </span>
-      <span className='flex min-w-0 flex-1 flex-col gap-px'>
+      <span className='flex min-w-0 flex-1 flex-col'>
         <Truncate className={LIST_ROW_TITLE}>{suggestion.name}</Truncate>
         <Truncate className={LIST_ROW_META}>
           <span className='font-mono'>{suggestion.command}</span> in{' '}
@@ -223,17 +223,6 @@ function useSuggestions(projectId: string, actions: ServicesPanelActions) {
     };
   }, [projectId]);
   return found?.projectId === projectId ? found : null;
-}
-
-function usePicks(suggestions: ServiceSuggestion[] | null) {
-  const [picked, setPicked] = React.useState<string[]>([]);
-  const seen = React.useRef<ServiceSuggestion[] | null>(null);
-  React.useEffect(() => {
-    const before = seen.current;
-    seen.current = suggestions;
-    if (suggestions) setPicked((current) => resolveSuggestionPicks(before, current, suggestions));
-  }, [suggestions]);
-  return [picked, setPicked] as const;
 }
 
 function useBusy() {

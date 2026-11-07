@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from 'bun:test';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import type { AccountUsage, ChatNotice, UsageWindow } from '@shinsa/core';
+import type { AccountUsage, ChatNotice, ExtraUsage, UsageResetGrant, UsageWindow } from '@shinsa/core';
 import { Duration, Effect, Exit, Layer, Scope } from 'effect';
 import { TestClock } from 'effect/testing';
 import { AccountChanges } from '../../src/accounts/changes/service.ts';
@@ -100,6 +100,22 @@ const FABLE: UsageWindow = {
   resetsAt: 50_000,
 };
 
+const EXTRA_ON: ExtraUsage = {
+  enabled: true,
+  noLimit: false,
+  credit: { minor: 1240, exponent: 2, currency: 'USD' },
+};
+
+const GRANT: UsageResetGrant = {
+  id: 'opus55-launch',
+  label: 'Opus 5.5 launch reset',
+  left: 1,
+  total: 1,
+  clears: ['five_hour', 'seven_day'],
+  usableNow: true,
+  endsAt: 90_000,
+};
+
 async function createLimits(reads: UsageRead[], options: { path?: string; ttlMs?: number } = {}) {
   const asked: string[] = [];
   const read: UsageReader = (accountId) => {
@@ -149,6 +165,59 @@ describe('usage limits', () => {
     expect(limits.snapshot('a')).toEqual(usage);
     expect(changes).toBe(1);
     expect(JSON.parse(readFileSync(path, 'utf8'))).toEqual({ version: 1, accounts: { a: usage } });
+  });
+
+  test('a read keeps the extra usage and reset grants Claude reports, on disk too', async () => {
+    const { limits, path } = await createLimits([
+      { ok: true, windows: [SESSION], extraUsage: EXTRA_ON, resetGrants: [GRANT] },
+    ]);
+    await limits.refresh(['a']);
+    expect(limits.snapshot('a')).toMatchObject({ extraUsage: EXTRA_ON, resetGrants: [GRANT] });
+    expect(JSON.parse(readFileSync(path, 'utf8')).accounts.a).toMatchObject({
+      extraUsage: EXTRA_ON,
+      resetGrants: [GRANT],
+    });
+  });
+
+  test('a failed read keeps the last extra usage and reset grants', async () => {
+    const { limits } = await createLimits([
+      { ok: true, windows: [SESSION], extraUsage: EXTRA_ON, resetGrants: [GRANT] },
+      { ok: false, reason: 'failed', detail: 'Claude answered 503.', retryAfterMs: null },
+    ]);
+    await limits.refresh(['a']);
+    await limits.refresh(['a'], true);
+    expect(limits.snapshot('a')).toMatchObject({
+      detail: 'Claude answered 503.',
+      extraUsage: EXTRA_ON,
+      resetGrants: [GRANT],
+    });
+  });
+
+  test('a read that reports no grants and no extra usage clears them; one that says nothing keeps them', async () => {
+    const { limits } = await createLimits([
+      { ok: true, windows: [SESSION], extraUsage: EXTRA_ON, resetGrants: [GRANT] },
+      { ok: true, windows: [SESSION] },
+      { ok: true, windows: [SESSION], extraUsage: null, resetGrants: [] },
+    ]);
+    await limits.refresh(['a']);
+    await limits.refresh(['a'], true);
+    expect(limits.snapshot('a')).toMatchObject({ extraUsage: EXTRA_ON, resetGrants: [GRANT] });
+    await limits.refresh(['a'], true);
+    expect(limits.snapshot('a')).not.toHaveProperty('extraUsage');
+    expect(limits.snapshot('a')).not.toHaveProperty('resetGrants');
+  });
+
+  test('extra usage and reset grants come back from the cache', async () => {
+    const first = await createLimits([
+      { ok: true, windows: [SESSION], extraUsage: EXTRA_ON, resetGrants: [GRANT] },
+    ]);
+    await first.limits.refresh(['a']);
+    const second = await createLimits([], { path: first.path });
+    expect(second.limits.snapshot('a')).toMatchObject({
+      source: 'cache',
+      extraUsage: EXTRA_ON,
+      resetGrants: [GRANT],
+    });
   });
 
   test('a read without windows says Claude reports none', async () => {

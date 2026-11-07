@@ -69,7 +69,7 @@ describe('schedule events', () => {
         priority: 'normal',
         planFirst: false,
         origin: null,
-        auto: { shape: true, start: true, priority: true },
+        auto: { shape: true, start: true, priority: true, project: false },
         scheduleId: 'gone',
       },
       { type: 'task.messaged', taskId: 't', text: 'Again', scheduleId: 'gone' },

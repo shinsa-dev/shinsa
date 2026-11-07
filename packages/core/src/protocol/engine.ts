@@ -17,6 +17,7 @@ export const ENGINE_FEATURES = [
   'team-access',
   'team-keys',
   'usage.pace_limits',
+  'team-relay',
   'usage.watchdog_limits',
   'share.scopes',
   'suggestion.bundle',

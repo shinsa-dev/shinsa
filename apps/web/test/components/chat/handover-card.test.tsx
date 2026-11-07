@@ -161,6 +161,17 @@ describe('HandoverCard for the process tools', () => {
     expect(plain.queryByText('Steps')).toBeNull();
   });
 
+  it('shows a move with the repository it went to and its reason', () => {
+    const moved = renderCard(
+      call('move_to_repository', { repository: 'superwall', reason: 'The badge is there.' })
+    );
+    expect(moved.getByText('Moved the task to superwall')).toBeTruthy();
+    expect(moved.getByText('The badge is there.')).toBeTruthy();
+    moved.unmount();
+    const unnamed = renderCard(call('move_to_repository', { reason: 'Elsewhere.' }));
+    expect(unnamed.getByText('Moved the task')).toBeTruthy();
+  });
+
   it('shows a question’s choices and marks a withdrawn one', () => {
     const view = renderCard(
       call(

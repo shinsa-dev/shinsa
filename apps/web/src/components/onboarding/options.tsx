@@ -18,7 +18,7 @@ import { isHighlightKey, resolveNextHighlight } from '@/lib/onboarding.ts';
 
 function OptionText({ option }: { option: OnboardingOption }) {
   return (
-    <span className='flex min-w-0 flex-1 flex-col gap-px'>
+    <span className='flex min-w-0 flex-1 flex-col'>
       <span className='flex min-w-0 items-center gap-1.5'>
         <span className={cn(LIST_ROW_TITLE, 'truncate')}>{option.label}</span>
         {option.recommended && <Badge size='sm'>Recommended</Badge>}

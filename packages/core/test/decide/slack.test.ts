@@ -192,9 +192,10 @@ describe('a mention in a thread no task holds', () => {
   test('takes the project, the kind of task and the priority the way Home does: the focus project, then triage', () => {
     const harness = createHarness();
     const focus = writeProject(harness, 'Site');
+    registerRepo(harness, 'site', 'Site');
     harness.send({ type: 'focus.change', projectId: focus, until: null });
     const taskId = startFromSlack(harness, { shape: 'answer' });
-    expect(harness.task(taskId).projectId).toBe(focus);
+    expect(harness.task(taskId)).toMatchObject({ projectId: focus, auto: { project: true } });
   });
 });
 

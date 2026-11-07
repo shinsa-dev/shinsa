@@ -218,6 +218,16 @@ export interface PlanDocument {
   impact?: string;
   evidence?: Exclude<EvidenceKind, 'check'>[];
   approval?: boolean;
+  split?: PlanSplitPart[];
+}
+
+export type PlanSplitOrder = 'parallel' | 'waits_on' | 'stacks_on';
+
+export interface PlanSplitPart {
+  title: string;
+  request: string;
+  order: PlanSplitOrder;
+  on?: number;
 }
 
 export interface ReviewFinding {

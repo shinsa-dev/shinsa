@@ -204,6 +204,65 @@ describe('the Accounts settings', () => {
     expect(screen.getByText('No usage reported yet.')).toBeTruthy();
   });
 
+  it('shows extra usage, credit from $1 and each usage reset under the windows, and never a way to claim one', () => {
+    const windows = [createWindow({ id: 's', usedPercent: 10 })];
+    const read = {
+      status: 'ok' as const,
+      windows,
+      detail: null,
+      checkedAt: Date.now(),
+      source: 'read' as const,
+    };
+    renderAccounts(
+      createSnapshot({
+        accounts: [
+          createAccount({
+            id: 'a',
+            usage: {
+              ...read,
+              extraUsage: {
+                enabled: true,
+                noLimit: false,
+                credit: { minor: 1240, exponent: 2, currency: 'USD' },
+              },
+              resetGrants: [
+                {
+                  id: 'g',
+                  label: null,
+                  left: 1,
+                  total: 2,
+                  clears: ['five_hour'],
+                  usableNow: true,
+                  endsAt: null,
+                },
+              ],
+            },
+          }),
+          createAccount({
+            id: 'b',
+            usage: {
+              ...read,
+              extraUsage: {
+                enabled: false,
+                noLimit: false,
+                credit: { minor: 99, exponent: 2, currency: 'USD' },
+              },
+            },
+          }),
+        ],
+      })
+    );
+    expect(screen.getAllByText('Extra usage')).toHaveLength(2);
+    expect(screen.getByText('On')).toBeTruthy();
+    expect(screen.getByText('Off')).toBeTruthy();
+    expect(screen.getAllByText('Credit left')).toHaveLength(1);
+    expect(screen.getByText('$12.40')).toBeTruthy();
+    expect(screen.getByText('Usage reset')).toBeTruthy();
+    expect(screen.getByText('1 of 2 left')).toBeTruthy();
+    expect(screen.getByText('Clears the 5-hour limit')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /claim/i })).toBeNull();
+  });
+
   it('says why the last reading is kept in the tooltip of when it was read, never as a row under its windows', async () => {
     const expired = 'The login needs refreshing. It refreshes the next time an agent runs on this account.';
     renderAccounts(

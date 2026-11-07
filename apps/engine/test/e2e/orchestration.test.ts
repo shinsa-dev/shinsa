@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, setDefaultTimeout, test } from 'bun:test';
-import { realpathSync } from 'node:fs';
+import { existsSync, realpathSync } from 'node:fs';
 import { join } from 'node:path';
 import { isDelegatedRun, listChildRuns, listOpenGates, type Run } from '@shinsa/core';
 import { createGitRepo } from '../helpers/index.ts';
@@ -431,5 +431,45 @@ describe('filing work in another repository', () => {
     const courier = Object.values(w.state.tasks).find((task) => task.createdBy?.kind === 'courier');
     expect(courier?.repoId).toBe(islands?.id);
     expect(reply).toContain('Created.');
+  });
+});
+
+describe('moving a task to another repository', () => {
+  test('a planning agent moves its task into a folder repository and plans there in the same session', async () => {
+    const w = await open();
+    await createGitRepo({ root: w.root, name: 'docs', remote: false });
+    await w.engine.dispatch({
+      type: 'project.write',
+      project: { name: 'Superwall', color: 'blue', folders: [w.root] },
+    });
+    const projectId = Object.keys(w.state.projects)[0] ?? '';
+    let reply = '';
+    w.agents.queue('plan', async (agent) => {
+      reply = await agent.call('move_to_repository', {
+        repository: 'docs',
+        reason: 'The login guide lives in the docs.',
+      });
+    });
+    await w.engine.dispatch({
+      type: 'task.create',
+      request: 'Document the agent login',
+      repoId: w.repoId,
+      projectId,
+    });
+    const taskId = Object.keys(w.state.tasks)[0] ?? '';
+    await w.until('planning in the first repository', () => w.agents.of('plan').length > 0);
+    const { handle, branch } = w.task(taskId);
+    await w.until('the plan in the new repository', () => w.task(taskId).plan !== null);
+    const docs = Object.values(w.state.repos).find((repo) => repo.name === 'docs');
+    const task = w.task(taskId);
+    const [first, second] = w.agents.of('plan');
+    expect(reply).toContain('Handed over');
+    expect(task).toMatchObject({ repoId: docs?.id, movingTo: null, handle, branch });
+    expect(task.worktreePath).not.toBeNull();
+    expect(realpathSync(second?.cwd ?? '')).toBe(realpathSync(task.worktreePath ?? ''));
+    expect(existsSync(first?.cwd ?? '')).toBe(false);
+    expect(second?.resume).toBe(first?.sessionId ?? '');
+    expect(second?.prompt).toContain('not where this conversation started');
+    expect(Object.keys(w.state.tasks)).toEqual([taskId]);
   });
 });

@@ -42,6 +42,7 @@ import {
   ReadWhen,
   Required,
   TextList,
+  WholeNumber,
 } from './reading.ts';
 import { isWebUrl, MANUAL_TEST_TARGETS, parseTestFile } from './testing.ts';
 import type {
@@ -54,6 +55,8 @@ import type {
   MergeStep,
   MergeStepKind,
   MergeStepTiming,
+  PlanSplitOrder,
+  PlanSplitPart,
   ReplyOutcome,
   ReportCheck,
   ReviewFinding,
@@ -160,6 +163,7 @@ export const PROTOCOL_LIMITS = {
   actions: 3,
   actionLabel: 40,
   actionMessage: 2_000,
+  splitParts: 8,
 } as const;
 
 export const REPLY_OUTCOMES: readonly [ReplyOutcome, ...ReplyOutcome[]] = ['done', 'answered', 'not_changed'];
@@ -189,6 +193,12 @@ export const CHECK_CHANGE_ACTIONS: readonly [CheckChangeAction, ...CheckChangeAc
   'add',
   'change',
   'remove',
+];
+
+export const PLAN_SPLIT_ORDERS: readonly [PlanSplitOrder, ...PlanSplitOrder[]] = [
+  'parallel',
+  'waits_on',
+  'stacks_on',
 ];
 
 export const ATTENTION_LEVELS: readonly [Attention, ...Attention[]] = ['critical', 'high', 'normal'];
@@ -509,6 +519,42 @@ export const PlanOutline = HandOverRecord({
   out_of_scope: TextList(L.listItems, L.listItem),
 });
 
+const SplitPartNumber = WholeNumber(
+  `{path} must be 0 for this task or an earlier part's number, from 1 to ${L.splitParts - 1}.`,
+  (number) => number >= 0 && number < L.splitParts,
+  0
+);
+
+type SplitPartInput = Omit<PlanSplitPart, 'on'> & { on: number | null };
+
+const PlanSplit = Items(
+  HandOverRecord({
+    title: Required(L.taskTitle),
+    request: Required(L.suggestionRequest),
+    order: OneOf(PLAN_SPLIT_ORDERS),
+    on: OrAbsent(SplitPartNumber),
+  }),
+  L.splitParts
+).check(
+  Schema.makeFilter((parts: ReadonlyArray<SplitPartInput>) =>
+    parts.flatMap((part, index) => {
+      const path = `split[${index}]`;
+      if (part.order === 'parallel') {
+        return part.on === null ? [] : [`${path}.on is only for waits_on and stacks_on: leave it out.`];
+      }
+      if (part.on === null) return [`${path}.on is required: 0 for this task, or an earlier part's number.`];
+      if (part.on <= index) return [];
+      return [
+        `${path}.on must be 0 for this task or an earlier part's number${index === 0 ? '' : `, 1 to ${index}`}: a part only waits on or stacks on what comes before it.`,
+      ];
+    })
+  ),
+  Schema.makeFilter((parts: ReadonlyArray<SplitPartInput>) => {
+    const titles = parts.map((part) => part.title.toLowerCase());
+    return new Set(titles).size === titles.length || 'split names a title twice.';
+  })
+);
+
 const UniqueCommands = Schema.makeFilter((checks: ReadonlyArray<{ command: string }>) => {
   const commands = checks.map((check) => check.command);
   return new Set(commands).size === commands.length || 'verification lists a command twice.';
@@ -534,6 +580,7 @@ export const PlanParameters = HandOverRecord({
     )
   ),
   approval: Flag,
+  split: PlanSplit,
 });
 
 const Finding = HandOverRecord({

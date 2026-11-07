@@ -11,9 +11,10 @@ how the server boots and how transcripts stream.
 ### How it is measured
 
 - **Data.** The user's own data copied to `/tmp` with `sqlite3 .backup` (1,645 events, 5 tasks, 19 runs, a 338 KB state),
-  and a synthetic log written by `scripts/perf/synthetic.ts` through the real `decide` and `EventLog`: 200 tasks over
-  five repositories walked through planning, phases, checks, review and pull request updates, 50,000 events, 1,125
-  runs, an 18.5 MB state, 20 transcripts of 5,000 entries (1.5 MB each) and 60 entries for the rest.
+  and a synthetic log built by `scripts/perf/synthetic/log.ts` through the real `decide` and written by
+  `scripts/perf/synthetic.ts` through the store's `CommandLog`: 200 tasks over five repositories walked through
+  planning, phases, checks, review and pull request updates, 50,000 events, 1,125 runs, an 18.5 MB state, 20
+  transcripts of 5,000 entries (1.5 MB each) and 60 entries for the rest.
 - **The bench.** `bun scripts/perf/bench.ts <data dir> <scratch dir>` copies the data to the scratch folder and
   measures, in one process: boot (a cold boot that replays the log, then a warm one from the snapshot the first wrote);
   60 commands dispatched with the socket hub attached (latency, CPU per command, bytes per push, and the time to parse

@@ -72,7 +72,7 @@ function listAttachedUris(layout: EvidenceLayout) {
 function Comparison({ entry, viewer }: { entry: EvidenceEntry; viewer: Viewer }) {
   return (
     <section className={cn('flex min-w-0 flex-col gap-1.5', SKIPPED_OFFSCREEN)}>
-      <div className='flex min-w-0 flex-col gap-px'>
+      <div className='flex min-w-0 flex-col'>
         <h3 className='flex min-w-0 items-center gap-1.5 text-xs'>
           <span className='min-w-0 font-medium text-fg-4'>{entry.title}</span>
           {entry.facts && <span className='shrink-0 text-2xs text-fg-2'>{entry.facts}</span>}

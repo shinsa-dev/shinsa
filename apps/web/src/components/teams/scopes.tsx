@@ -73,7 +73,7 @@ function ScopeCheck({
         aria-label={label}
         onCheckedChange={(next) => onToggle(scope, next)}
       />
-      <label htmlFor={id} className='flex min-w-0 flex-col gap-px'>
+      <label htmlFor={id} className='flex min-w-0 flex-col'>
         <span className='text-xs text-fg-4'>{row.title}</span>
         <span className='text-2xs text-pretty text-fg-2'>{row.hint}</span>
       </label>
@@ -111,7 +111,7 @@ function ScopeGrid({
 function PresetRow({ label, hint, children }: { label: string; hint: string; children: React.ReactNode }) {
   return (
     <div className={cn(SETTING_ROW, 'py-1.5')}>
-      <div className='flex min-w-0 flex-1 flex-col gap-px'>
+      <div className='flex min-w-0 flex-1 flex-col'>
         <span className='text-xs text-fg-4'>{label}</span>
         <span className='text-2xs text-pretty text-fg-2'>{hint}</span>
       </div>
@@ -278,7 +278,7 @@ function ExtraCheck({
         aria-label={`${SCOPE_ROWS[row.scope].title} for ${name}`}
         onCheckedChange={(next) => onToggle(row.scope, next)}
       />
-      <label htmlFor={id} className='flex min-w-0 flex-col gap-px'>
+      <label htmlFor={id} className='flex min-w-0 flex-col'>
         <span className='text-xs text-fg-4'>{SCOPE_ROWS[row.scope].title}</span>
         <span className='text-2xs text-pretty text-fg-2'>{describeExtraHint(row)}</span>
       </label>

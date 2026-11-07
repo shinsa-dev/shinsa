@@ -115,7 +115,7 @@ function RuleRow({
   const proposed = entry.status === 'proposed';
   return (
     <div className={cn(SETTING_ROW, 'gap-2')}>
-      <div className='flex min-w-0 flex-1 flex-col gap-px py-1 text-xs'>
+      <div className='flex min-w-0 flex-1 flex-col py-1 text-xs'>
         <span className='selectable text-fg-4'>{entry.text}</span>
         {detail && <span className='text-fg-2'>{detail}</span>}
       </div>

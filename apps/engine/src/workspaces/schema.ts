@@ -53,12 +53,12 @@ export interface Workspace {
   commit(repo: Repo, task: Task, message: string): Effect.Effect<CheckoutCommit, WorkspaceFailure>;
   push(repo: Repo, task: Task, signal?: AbortSignal): Effect.Effect<string, WorkspaceFailure>;
   remove(repo: Repo, task: Task): Effect.Effect<void, WorkspaceFailure>;
-  writeEdit(
+  writeEdit<E>(
     repo: Repo,
     task: Task,
     path: string,
-    write: Effect.Effect<boolean>
-  ): Effect.Effect<void, WorkspaceFailure>;
+    write: Effect.Effect<boolean, E>
+  ): Effect.Effect<void, WorkspaceFailure | E>;
   syncBase(
     repo: Repo,
     task: Task,

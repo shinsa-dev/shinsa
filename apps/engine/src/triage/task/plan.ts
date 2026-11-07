@@ -13,6 +13,7 @@ import {
   type TaskSize,
   type TriageReasons,
 } from '@shinsa/core';
+import { Effect } from 'effect';
 import type { JsonSchema } from '../../agents/providers/index.ts';
 import {
   type ChoiceQuestion,
@@ -101,7 +102,7 @@ function resolveDuplicateQuestion(open: Task[], teammates: TeammateTask[]): Choi
 }
 
 function resolveAsks(task: Task): TriageAsks {
-  return { ...task.auto, why: true };
+  return { shape: task.auto.shape, priority: task.auto.priority, start: task.auto.start, why: true };
 }
 
 function listWhyKeys(asks: TriageAsks) {
@@ -279,14 +280,14 @@ function listOpenTasks(state: ShinsaState, task: Task, project: Project | null) 
   );
 }
 
-export function resolveTriagePlan(
+export const resolveTriagePlan = Effect.fn('TaskTriage.resolvePlan')(function* (
   state: ShinsaState,
   task: Task,
   local: LocalRepo[],
   team: TeamReading | null
-): TriagePlan {
+) {
   const pinned = task.repoId ? state.repos[task.repoId] : undefined;
-  const pool = resolveCandidatePool(state, task, local);
+  const pool = yield* resolveCandidatePool(state, task, local);
   const offered = listOfferedRepos(pool);
   const bound = pinned
     ? { path: pinned.path, name: pinned.name, touchedAt: 0 }
@@ -318,8 +319,8 @@ export function resolveTriagePlan(
       priority: task.priority,
       reasons: resolveFallbackReasons(task, asks),
     },
-  };
-}
+  } satisfies TriagePlan;
+});
 
 export function describeTriagePrompt(state: ShinsaState, plan: TriagePlan) {
   const { task, open } = plan;

@@ -10,7 +10,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { join } from 'node:path';
-import { Context, Effect, Layer, Option } from 'effect';
+import { Context, Effect, Layer, Option, Result } from 'effect';
 import { JSON_FILE_MODE, JSON_INDENT } from '../../files/schema.ts';
 import { JsonFile } from '../../files/service.ts';
 import { describeError } from '../../log/redact.ts';
@@ -37,18 +37,19 @@ export class AccountFolders extends Context.Service<
     AccountFolders,
     Effect.gen(function* () {
       const files = yield* JsonFile;
-      const readText = Option.liftThrowable((path: string) => readFileSync(path, 'utf8'));
-      const listEntries = Option.liftThrowable((dir: string) => readdirSync(dir));
-      const isLink = (path: string) =>
-        Option.getOrElse(Option.liftThrowable(() => lstatSync(path).isSymbolicLink())(), () => false);
-      const exists = (path: string) => Option.isSome(Option.liftThrowable(() => lstatSync(path))());
+      const listEntries = (dir: string) => Effect.option(Effect.try(() => readdirSync(dir)));
+      const exists = (path: string) =>
+        Effect.try(() => lstatSync(path)).pipe(
+          Effect.as(true),
+          Effect.orElseSucceed(() => false)
+        );
 
       const seed = Effect.fn('AccountFolders.seed')(function* (
         configDir: string,
         sharedGlobalConfig: string
       ) {
         const target = join(configDir, ACCOUNT_CONFIG_FILE);
-        if (existsSync(target)) return;
+        if (yield* Effect.sync(() => existsSync(target))) return;
         const read = yield* Effect.result(files.read(sharedGlobalConfig, SharedGlobalConfig));
         const found = read._tag === 'Success' ? Option.getOrUndefined(read.success) : undefined;
         if (found === undefined) {
@@ -75,7 +76,7 @@ export class AccountFolders extends Context.Service<
         entry: string
       ) {
         const target = join(configDir, entry);
-        if (ACCOUNT_OWNED_ENTRIES.has(entry) || exists(target)) return;
+        if (ACCOUNT_OWNED_ENTRIES.has(entry) || (yield* exists(target))) return;
         yield* Effect.try({
           try: () => symlinkSync(join(sharedDir, entry), target),
           catch: (error) => new SharedEntryUnlinked({ entry, message: describeError(error) }),
@@ -92,11 +93,11 @@ export class AccountFolders extends Context.Service<
         configDir: string,
         sources: AccountFolderSources
       ) {
-        if (!existsSync(configDir)) {
+        if (!(yield* Effect.sync(() => existsSync(configDir)))) {
           yield* Effect.sync(() => mkdirSync(configDir, { recursive: true, mode: ACCOUNT_DIR_MODE }));
           yield* seed(configDir, sources.sharedGlobalConfig);
         }
-        const entries = Option.getOrElse(listEntries(sources.sharedDir), () => []);
+        const entries = Option.getOrElse(yield* listEntries(sources.sharedDir), () => []);
         for (const entry of entries) yield* link(configDir, sources.sharedDir, entry);
       });
 
@@ -113,19 +114,25 @@ export class AccountFolders extends Context.Service<
       });
 
       const remove = Effect.fn('AccountFolders.remove')(function* (configDir: string) {
-        const entries = listEntries(configDir);
+        const entries = yield* listEntries(configDir);
         if (Option.isNone(entries)) return;
         yield* Effect.sync(() => {
           for (const entry of entries.value) {
             const path = join(configDir, entry);
-            if (isLink(path)) unlinkSync(path);
+            const linked = Result.getOrElse(
+              Result.try(() => lstatSync(path).isSymbolicLink()),
+              () => false
+            );
+            if (linked) unlinkSync(path);
           }
           rmSync(configDir, { recursive: true, force: true });
         });
       });
 
       const readCredentials = (dir: string) =>
-        Effect.sync(() => Option.getOrNull(readText(join(dir, CREDENTIALS_FILE))));
+        Effect.try(() => readFileSync(join(dir, CREDENTIALS_FILE), 'utf8')).pipe(
+          Effect.orElseSucceed(() => null)
+        );
 
       return AccountFolders.of({ prepare, writeConfig, remove, readCredentials });
     })
