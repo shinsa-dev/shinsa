@@ -3,6 +3,7 @@ import {
   type Gate,
   type GateType,
   isAgentQuestion,
+  isDecisionHeld,
   isDependencyOf,
   isHeldInBacklog,
   isPausingGate,
@@ -149,6 +150,10 @@ export function describeWaitsOn(waitsOn: Task[]) {
   const titles = waitsOn.map((task) => `“${task.title}”`);
   if (titles.length <= 2) return `Waits on ${titles.join(' and ')}`;
   return `Waits on ${titles.slice(0, 2).join(', ')} and ${titles.length - 2} more`;
+}
+
+export function describeHeldWait(state: ShinsaState, task: Task) {
+  return isDecisionHeld(state, task) ? describeWaitsOn(listWaitsOn(state, task)) : null;
 }
 
 export function describeBundleWait(state: ShinsaState, task: Task) {

@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { traceStalledLeaf } from '../../src/index.ts';
-import { createHarness, createTask, reachReviewGate } from '../harness.ts';
+import { approve, createHarness, createTask, pullRequest, pushed, reachReviewGate } from '../harness.ts';
 
 describe('traceStalledLeaf', () => {
   test('walks a chain to the task that is stuck on you, with the path to it', () => {
@@ -44,5 +44,33 @@ describe('traceStalledLeaf', () => {
     const c = createTask(harness, { request: 'C', waitsOn: [a] });
     const d = createTask(harness, { request: 'D', waitsOn: [b, c] });
     expect(traceStalledLeaf(harness.state, harness.task(d))).toBeNull();
+  });
+
+  test('a parent whose review is held by its own wait is not stuck on you: the trace goes on to what it waits on', () => {
+    const harness = createHarness();
+    const root = createTask(harness, { request: 'Root' });
+    const parent = createTask(harness, { request: 'Parent' });
+    reachReviewGate(harness, parent);
+    harness.send({ type: 'task.wait_on', taskId: parent, waitsOn: [root] });
+    const child = createTask(harness, { request: 'Child', waitsOn: [parent] });
+    expect(traceStalledLeaf(harness.state, harness.task(child))).toBeNull();
+    reachReviewGate(harness, root);
+    expect(traceStalledLeaf(harness.state, harness.task(child))).toMatchObject({
+      task: { id: root },
+      reason: 'needs_you',
+      path: [{ id: parent }, { id: root }],
+    });
+    approve(harness, root);
+    pushed(harness, root);
+    harness.send({
+      type: 'pull_request.record',
+      taskId: root,
+      pullRequest: pullRequest({ state: 'merged' }),
+    });
+    expect(traceStalledLeaf(harness.state, harness.task(child))).toMatchObject({
+      task: { id: parent },
+      reason: 'needs_you',
+      path: [{ id: parent }],
+    });
   });
 });
