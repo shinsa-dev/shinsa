@@ -53,7 +53,7 @@ function describeSplitTarget(split: PlanSplitPart[], on: number) {
   return on === 0 ? 'this task' : `**${split[on - 1]?.title ?? `part ${on}`}**`;
 }
 
-export function describeSplitStart(split: PlanSplitPart[], part: PlanSplitPart) {
+function describeSplitStart(split: PlanSplitPart[], part: PlanSplitPart) {
   if (part.order === 'parallel' || part.on === undefined) return 'starts now';
   const target = describeSplitTarget(split, part.on);
   return part.order === 'waits_on' ? `waits on ${target}` : `stacks on ${target}`;

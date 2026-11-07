@@ -527,7 +527,7 @@ const SplitPartNumber = WholeNumber(
 
 type SplitPartInput = Omit<PlanSplitPart, 'on'> & { on: number | null };
 
-export const PlanSplit = Items(
+const PlanSplit = Items(
   HandOverRecord({
     title: Required(L.taskTitle),
     request: Required(L.suggestionRequest),
