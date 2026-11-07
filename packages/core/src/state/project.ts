@@ -61,6 +61,7 @@ import { applyHandoffEvent } from './handoffs.ts';
 import { applyInboxEvent } from './inbox.ts';
 import { applyIterationEvent } from './iterations.ts';
 import { applyMemoryEvent } from './memory.ts';
+import { applyMoveEvent } from './moves.ts';
 import { applyOnBehalfActed } from './on-behalf.ts';
 import { applyOverlapEvent } from './overlaps.ts';
 import { recordAway, recordFocus, recordPresence } from './presence.ts';
@@ -945,6 +946,10 @@ function applyEventBody(state: ShinsaState, event: ShinsaEvent): ShinsaState {
       break;
     case 'worktree.removed':
       updateTask(state, event.taskId, event.at, { worktreePath: null });
+      break;
+    case 'task.moving':
+    case 'task.moved':
+      applyMoveEvent(state, event);
       break;
     case 'plan.proposed':
       applyPlanProposed(state, event);

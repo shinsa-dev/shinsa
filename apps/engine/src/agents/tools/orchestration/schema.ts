@@ -7,6 +7,7 @@ import {
   type DomainError,
   PROTOCOL_LIMITS,
   type Repo,
+  SHAPE_LIMITS,
   type RunRole,
   type ShinsaCommand,
   type ShinsaEvent,
@@ -216,6 +217,28 @@ export const ORCHESTRATION_TOOL_SPECS = {
         },
       },
       required: ['tasks'],
+    },
+  },
+  move_to_repository: {
+    name: 'move_to_repository',
+    description:
+      'Move this task to another repository of its project, while you plan, when all of its work is there and nothing changes here. The task keeps its handle, title, branch name and this conversation: its worktree here is removed, one is made in that repository and planning carries on there. Use `create_task` instead for work beside this one. Refused once a phase has reported, a pull request exists, an earlier round has shipped or the task is part of a bundle. After the call, stop.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        repository: {
+          type: 'string',
+          maxLength: L.name,
+          description:
+            'The repository to move to, by name: one of the project’s repositories, or the folder name of a repository in its folders.',
+        },
+        reason: {
+          type: 'string',
+          maxLength: SHAPE_LIMITS.reason,
+          description: `Why the work belongs there, in one sentence. At most ${SHAPE_LIMITS.reason} characters.`,
+        },
+      },
+      required: ['repository', 'reason'],
     },
   },
 } satisfies Record<string, ToolSpec>;

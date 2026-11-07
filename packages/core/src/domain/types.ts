@@ -450,6 +450,7 @@ export interface Task {
   request: string;
   title: string;
   repoId: string | null;
+  movingTo?: string | null;
   size: TaskSize | null;
   planFirst: boolean;
   stage: TaskStage;
