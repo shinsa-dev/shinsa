@@ -1,11 +1,5 @@
 import type { CommandOf } from '../commands/index.ts';
-import {
-  DomainError,
-  isLaterRound,
-  isPausingGate,
-  type Repo,
-  type Task,
-} from '../domain/index.ts';
+import { DomainError, isLaterRound, isPausingGate, type Repo, type Task } from '../domain/index.ts';
 import type { ShinsaState } from '../state/project.ts';
 import { findRepo, listStackChildren, resolveTaskProject } from '../state/queries.ts';
 import type { Decider } from './decider.ts';
