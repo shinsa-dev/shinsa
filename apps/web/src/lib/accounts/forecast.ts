@@ -54,7 +54,6 @@ export const APPLY_PACE_LABEL = 'Use as daily limit';
 export const FORECAST_LEGEND = [
   { key: 'usable', label: 'Has usage' },
   { key: 'empty', label: 'Out of usage' },
-  { key: 'reset', label: 'Reset' },
   { key: 'outage', label: 'Every account out of usage' },
   { key: 'tightest', label: 'Tightest point' },
 ] as const;

@@ -837,7 +837,10 @@ predicates) and `state/rounds.ts` (the folds); the classifier is `apps/engine/sr
   (a merged change, an operation that ran) gets an answerer that resumes the task's session (the reviewer's
   excepted; `answerFollowUp`, `resolveFollowUpPrompt`, `Decider.taskSession`), runs in the repository like any answerer and answers with
   `answer`, proposing no change (`follow_up_proposal`). The round reopens while it answers (stage `answering`,
-  `isFollowUpOnWork`) and rests again as it was, merged or done, with its result untouched. A message on a resting task
+  `isFollowUpOnWork`) and rests again as it was, merged or done, with its result untouched. A merged round reopened this way, or by a watchdog
+  check (stage `watching`), keeps its first `endedAt` and its pull request's `mergedAt` (stamped once, the first time
+  the fold sees it merged) and settles back to `merged`, even when you then mark the task done, so Statistics never
+  moves a merge to a later day. A message on a resting task
   with no kind (the model off or failed) is such a follow-up, never a new round; only a schedule's message to a
   resting task still starts the next round. The classifier is shown the post-merge steps still waiting on you
   (`describeOpenSteps`), so a question about one, even one that quotes it ("what is this for? <the step>"), is
@@ -2224,7 +2227,7 @@ checks it ran.
   limit resets soonest takes over (Accounts and usage limits, below). Settings → Agent usage → Forecast draws one block per provider (`components/settings/forecast.tsx`,
   `lib/accounts/forecast.ts`): every Claude account together, and each other provider's own login alone, each with
   its pace, a lane per account across the week (blue while the account has usage at the timeline's pace, grey once
-  it runs out, a thin tick at each reset, and an orange band wherever every account is out at once: `outages`), drawn at a
+  it runs out, a small gap before each reset, each limit window its own bar, and an orange band wherever every account is out at once: `outages`), drawn at a
   pace you pick (`resolveForecastTimeline`: the safe pace, the last 24 hours, or one and a half or twice the safe pace;
   the last 24 hours first when it is faster), a dashed amber line at the tightest point when the safe pace is drawn,
   the tightest point in words and the last 24 hours of that provider (meters on an account's window for

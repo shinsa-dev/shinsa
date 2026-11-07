@@ -1,5 +1,5 @@
 import { addUsage, resolveUsageDelta } from '../costs/index.ts';
-import { resolveTaskRounds } from '../domain/rounds.ts';
+import { type Round, resolveTaskRounds } from '../domain/rounds.ts';
 import type { PullRequestChanges, Run, RunRole, RunUsage, Task } from '../domain/types.ts';
 import type { ShinsaState } from '../state/project.ts';
 import { resolveTaskProject } from '../state/queries.ts';
@@ -147,16 +147,27 @@ function resolveWorkKey(run: Run): StatsWork {
   return run.purpose ?? run.role;
 }
 
-function resolveMergedAt(task: Task, endedAt: number | null) {
-  return endedAt ?? task.closedAt ?? task.stageChangedAt;
+function resolveMergedAt(task: Task, round: Round) {
+  return round.pullRequest?.mergedAt ?? round.endedAt ?? task.closedAt ?? task.stageChangedAt;
+}
+
+function resolveFinishedAt(task: Task, merged: readonly MergedPullRequest[]) {
+  if (merged.length > 0) return Math.min(...merged.map((pullRequest) => pullRequest.at));
+  const ends = resolveTaskRounds(task).flatMap((round) => (round.endedAt === null ? [] : [round.endedAt]));
+  return ends.length > 0 ? Math.min(...ends) : (task.closedAt ?? task.stageChangedAt);
+}
+
+interface MergedPullRequest {
+  at: number;
+  changes: PullRequestChanges | null;
 }
 
 function listMergedPullRequests(task: Task) {
-  const merged = new Map<number, { at: number; changes: PullRequestChanges | null }>();
+  const merged = new Map<number, MergedPullRequest>();
   for (const round of resolveTaskRounds(task)) {
     const pullRequest = round.pullRequest;
-    if (round.status !== 'merged' || !pullRequest) continue;
-    const at = resolveMergedAt(task, round.endedAt);
+    if (!pullRequest || (round.status !== 'merged' && typeof pullRequest.mergedAt !== 'number')) continue;
+    const at = resolveMergedAt(task, round);
     const previous = merged.get(pullRequest.number);
     if (previous && previous.at > at) continue;
     merged.set(pullRequest.number, { at, changes: pullRequest.changes ?? null });
@@ -208,12 +219,17 @@ function foldRunUsage(fold: UsageFold, run: Run, dayAt: DayLookup) {
   }
 }
 
+function isTaskShipped(task: Task, merged: readonly MergedPullRequest[]) {
+  return SHIPPED_STAGES.includes(task.stage) || (merged.length > 0 && task.stage !== 'cancelled');
+}
+
 function foldShipping(task: Task, dayAt: DayLookup) {
-  if (SHIPPED_STAGES.includes(task.stage)) {
-    const day = dayAt(task.closedAt ?? task.stageChangedAt);
+  const pullRequests = listMergedPullRequests(task);
+  if (isTaskShipped(task, pullRequests)) {
+    const day = dayAt(resolveFinishedAt(task, pullRequests));
     if (day) day.tasks += 1;
   }
-  for (const merged of listMergedPullRequests(task)) {
+  for (const merged of pullRequests) {
     const day = dayAt(merged.at);
     if (!day) continue;
     day.pullRequests += 1;

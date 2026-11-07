@@ -284,6 +284,7 @@ export interface PullRequest {
   queueRemoval?: string | null;
   mergeCommit?: string | null;
   changes?: PullRequestChanges | null;
+  mergedAt?: number | null;
 }
 
 export type PhaseStatus = 'pending' | 'active' | 'done' | 'skipped';
