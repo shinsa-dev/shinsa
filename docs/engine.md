@@ -1295,6 +1295,16 @@ arrow, ⌘K's Wait for another task… and Stop waiting, all `task.wait_on` with
   repository locks its merge to that part (`create_task` with `this_task_waits`, Work across repositories): the
   pre-merge steps list each task it waits on as a row that ticks itself once that task finishes (`listMergeWaits`),
   on the review gate's card, the merge gate's card and the Review tab, so the hold is visible before you approve.
+- **A decision held by a wait.** A task at its plan, review or proposal gate (`awaiting_plan`, `awaiting_review`,
+  `awaiting_proposal`) that waits on an unfinished task is not asking for you yet: `resolveQueue` leaves that gate out
+  of `ready` (`isGateHeld`, `queue/rank.ts`) and lists the task in `queue.waiting`, reading "Waits on ‹task›"
+  (`listWaitsOn`). So it is not in Needs you, the queue button, the guide, the Dock badge, a notification or `shinsa
+  status`, and `--status needs_you` leaves it out (`isTaskListed` in `http/task-views.ts`). The gate stays open: the
+  task page and the Review tab still let you decide early. Its All tasks row and `read_task` name what it waits on in place of its gate's words, a
+  dependent's stall trace (`traceStalledLeaf`) walks on past it to what holds it, and the notification watcher counts
+  the gate as new when it is released (`listOpenGateIds` skips a held gate), so it alerts you then. Nothing is recorded; once every task it waits on is merged
+  or marked done, the gate is back in Needs you. Any other gate on the task (an agent's question, a secret, a sign-in,
+  a failure, Post-merge) still reaches you, and a task still building with a wait stays in progress.
 - **Stacking is a bundle.** A plain dependent waits for its parents to finish and branches off the default branch. To
   build on a parent's unmerged branch instead, stack it on that parent: a bundle (below). The line between them: a
   wait is for a separate feature that needs another's code merged first and ships on its own; a stack is for pieces
@@ -1493,8 +1503,24 @@ before any agent started. `sign_in` means a provider needs signing in again: the
 (`Gate.provider`, `claude` for a Claude account) and, for Claude, the account (Accounts and usage limits, below).
 The plan gate opens by one rule, `PLAN_GATE_RULE`: always for a task that runs an operation, a task created plan
 first, a task in the backlog (whose plan gate is held out of Needs you until you start it, Scheduling → The backlog)
-or a plan that asks for `approval`; with Approve plans on Large plans, also for a plan with more than 3 phases or
-6 files (`PLAN_SIZE_LIMITS`) or a revised plan; on Always, for every plan. Nothing else waits on you. A failure, configuration or Sign in gate pauses the task (`isPausingGate`).
+or a plan that asks for `approval` or splits the work into other tasks (`splits`); with Approve plans on Large plans,
+also for a plan with more than 3 phases or 6 files (`PLAN_SIZE_LIMITS`) or a revised plan; on Always, for every plan.
+Nothing else waits on you. A failure, configuration or Sign in gate pauses the task (`isPausingGate`).
+
+**Splitting at the plan.** A request often holds work that would ship better as separate pull requests. The Agent
+says so in its plan instead of an agent splitting the request before anyone read the code: `propose_plan`'s `split`
+lists the other parts (a title, a request that stands on its own, and when each starts: now, waiting on this task or
+an earlier part, or stacked on one), and the phases cover only the work that stays (`docs/protocol.md` → Plan
+parameters). The planning prompt says when (`describePlanSplit`, `prompts/roles.ts`): only for a task that opens a
+pull request, parts in parallel by default, waiting only on code on an unmerged branch, stacked only for pieces of one
+rewrite, and a small or cohesive request kept whole. Such a plan always waits for you. The plan card leads with
+Start N tasks (counting this task) over the list of parts, with Keep as one task beside it, and ⌘K offers both.
+Start N tasks approves the plan, and `startPlanSplit` (`decide/couriers.ts`) creates each part as a task under this
+one (`createdBy` `split`, the planning run), forked from it (`forkOf`), so its agent starts from this conversation and
+then plans for itself, with its wait or stack set; it shares the creation with `split_task` and is recorded as the
+same `task.split` for the plan version, made after that plan was proposed (a new round starts again at version 1), so
+neither creates the parts twice. Keep as one task is the plan's revise with a fixed message (drop the split and plan
+all of the work here), so the Agent proposes a plan without one.
 
 **Pausing a task.** Pause (the task's menu, a row's menu, ⌘K, `shinsa tasks pause`, an agent's `tasks_pause`) sends
 `task.pause` (`decide/pause.ts`) while something works on the task: triage, planning, building, checks, review,

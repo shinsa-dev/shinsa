@@ -16,6 +16,7 @@ import {
   createTask,
   type Harness,
   LARGE_PLAN,
+  SPLIT_PLAN,
   linkSession,
   PASSING,
   PLAN,
@@ -103,6 +104,12 @@ describe('planning', () => {
         const harness = withApproval(approvePlans);
         const taskId = createTask(harness);
         proposePlan(harness, taskId, { ...PLAN, approval: true });
+        return { harness, taskId };
+      },
+      splits: (approvePlans) => {
+        const harness = withApproval(approvePlans);
+        const taskId = createTask(harness);
+        proposePlan(harness, taskId, SPLIT_PLAN);
         return { harness, taskId };
       },
       large: (approvePlans) => {
