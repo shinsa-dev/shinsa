@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import {
   type CommandOf,
+  DAY_MS,
   type DomainError,
   HOUR_MS,
   listActiveRuns,
@@ -9,6 +10,7 @@ import {
   MINUTE_MS,
   replayEventLog,
   resolveTaskProgress,
+  resolveTaskRounds,
   serializeTaskDetail,
   type Watchdog,
   type WatchdogSpec,
@@ -309,6 +311,38 @@ describe('a watch check', () => {
     ]);
     expect(after.nextCheckAt).toBe((after.checks[0]?.at ?? 0) + 6 * HOUR_MS);
     expect(listActiveRuns(harness.state, taskId)).toEqual([]);
+  });
+
+  test('a check on a later day keeps the merged round’s merge time and end, and marking the task done keeps it merged', () => {
+    const { harness, taskId } = mergeWith();
+    const [merged] = resolveTaskRounds(harness.task(taskId));
+    const mergedAt = harness.task(taskId).pullRequest?.mergedAt;
+    expect(mergedAt).toEqual(expect.any(Number));
+    expect(merged).toMatchObject({ status: 'merged', pullRequest: { state: 'merged', mergedAt } });
+    fire(harness, taskId);
+    harness.advance(DAY_MS);
+    expect(resolveTaskRounds(harness.task(taskId))[0]).toMatchObject({
+      status: 'active',
+      endedAt: merged?.endedAt,
+    });
+    report(harness, taskId, true);
+    fire(harness, taskId);
+    report(harness, taskId, true);
+    expect(harness.task(taskId).stage).toBe('merged');
+    expect(harness.task(taskId).pullRequest?.mergedAt).toBe(mergedAt);
+    expect(resolveTaskRounds(harness.task(taskId))[0]).toMatchObject({
+      status: 'merged',
+      endedAt: merged?.endedAt,
+      pullRequest: { mergedAt },
+    });
+    fire(harness, taskId);
+    harness.send({ type: 'task.complete', taskId });
+    expect(harness.task(taskId).stage).toBe('done');
+    expect(resolveTaskRounds(harness.task(taskId))[0]).toMatchObject({
+      status: 'merged',
+      endedAt: merged?.endedAt,
+      pullRequest: { mergedAt },
+    });
   });
 
   test('a check is not told a message kept for the next agent; it waits for a turn that can act on it', () => {

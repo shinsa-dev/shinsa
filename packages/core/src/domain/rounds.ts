@@ -15,6 +15,7 @@ export interface RoundPullRequest {
   state: PullRequest['state'];
   base: string | null;
   changes?: PullRequestChanges | null;
+  mergedAt?: number | null;
 }
 
 export interface RoundOutcome {
@@ -110,6 +111,7 @@ export function toRoundPullRequest(pullRequest: PullRequest): RoundPullRequest {
     state: pullRequest.state,
     base: pullRequest.base ?? null,
     ...(pullRequest.changes ? { changes: pullRequest.changes } : {}),
+    ...(typeof pullRequest.mergedAt === 'number' ? { mergedAt: pullRequest.mergedAt } : {}),
   };
 }
 
