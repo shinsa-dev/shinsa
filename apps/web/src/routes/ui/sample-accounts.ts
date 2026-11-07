@@ -1,4 +1,10 @@
-import type { AccountSummary, AccountsSnapshot, AccountUsage, ProviderLogin, UsageWindow } from '@shinsa/core';
+import type {
+  AccountSummary,
+  AccountsSnapshot,
+  AccountUsage,
+  ProviderLogin,
+  UsageWindow,
+} from '@shinsa/core';
 import { HOUR, MINUTE } from './samples.ts';
 
 function createSampleWindow(
@@ -66,7 +72,11 @@ export function createSampleAccounts(now: number): AccountsSnapshot {
         usedPercent: 42,
         isDefault: true,
         extras: {
-          extraUsage: { enabled: true, noLimit: false, credit: { minor: 1240, exponent: 2, currency: 'USD' } },
+          extraUsage: {
+            enabled: true,
+            noLimit: false,
+            credit: { minor: 1240, exponent: 2, currency: 'USD' },
+          },
           resetGrants: [
             {
               id: 'sample-launch-grant',

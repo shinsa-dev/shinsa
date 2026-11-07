@@ -206,7 +206,13 @@ describe('the Accounts settings', () => {
 
   it('shows extra usage, credit from $1 and each usage reset under the windows, and never a way to claim one', () => {
     const windows = [createWindow({ id: 's', usedPercent: 10 })];
-    const read = { status: 'ok' as const, windows, detail: null, checkedAt: Date.now(), source: 'read' as const };
+    const read = {
+      status: 'ok' as const,
+      windows,
+      detail: null,
+      checkedAt: Date.now(),
+      source: 'read' as const,
+    };
     renderAccounts(
       createSnapshot({
         accounts: [
@@ -214,7 +220,11 @@ describe('the Accounts settings', () => {
             id: 'a',
             usage: {
               ...read,
-              extraUsage: { enabled: true, noLimit: false, credit: { minor: 1240, exponent: 2, currency: 'USD' } },
+              extraUsage: {
+                enabled: true,
+                noLimit: false,
+                credit: { minor: 1240, exponent: 2, currency: 'USD' },
+              },
               resetGrants: [
                 {
                   id: 'g',
@@ -232,7 +242,11 @@ describe('the Accounts settings', () => {
             id: 'b',
             usage: {
               ...read,
-              extraUsage: { enabled: false, noLimit: false, credit: { minor: 99, exponent: 2, currency: 'USD' } },
+              extraUsage: {
+                enabled: false,
+                noLimit: false,
+                credit: { minor: 99, exponent: 2, currency: 'USD' },
+              },
             },
           }),
         ],
