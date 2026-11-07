@@ -152,9 +152,6 @@ export const lintHtml = Effect.fn('HtmlLint.lint')(function* () {
   if (output.trim()) yield* Console.log(output.trimEnd());
 });
 
-if (import.meta.main)
-  lintHtml().pipe(
-    reportFailure,
-    Effect.provide(CommandLayer),
-    BunRuntime.runMain({ disableErrorReporting: true })
-  );
+const main = lintHtml().pipe(reportFailure, Effect.provide(CommandLayer));
+
+if (import.meta.main) BunRuntime.runMain(main, { disableErrorReporting: true });
