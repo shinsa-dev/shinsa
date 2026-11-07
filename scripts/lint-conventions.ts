@@ -1,6 +1,9 @@
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { parse } from '@babel/parser';
+import { BunRuntime, BunServices } from '@effect/platform-bun';
+import { Effect, FileSystem, Schema } from 'effect';
+import type { PlatformError } from 'effect/PlatformError';
+import { reportFailure } from './kit/script.ts';
 import { listDialogViolations } from './lint-dialog.ts';
 import { listDisclosureViolations } from './lint-disclosure.ts';
 import {
@@ -145,25 +148,38 @@ const TIME_FORMATTERS = new Set(['formatAge', 'formatDuration']);
 
 const TIME_COMPONENTS = new Set(['TimeAgo', 'Duration']);
 
-function listSourceFiles(root: string): string[] {
-  const files: string[] = [];
-  for (const entry of readdirSync(root)) {
-    if (SKIPPED_SEGMENTS.has(entry)) continue;
-    const path = join(root, entry);
-    if (statSync(path).isDirectory()) {
-      files.push(...listSourceFiles(path));
-      continue;
-    }
-    if (/\.(ts|tsx)$/.test(entry) && !entry.endsWith('.d.ts')) files.push(path);
-  }
-  return files;
-}
+class SourceUnparsable extends Schema.TaggedError<SourceUnparsable, { readonly brand: unique symbol }>()(
+  'SourceUnparsable',
+  { reason: Schema.String }
+) {}
 
-function listStyleSheets(root: string): string[] {
-  return readdirSync(root, { recursive: true })
-    .map((entry) => join(root, String(entry)))
+class ConventionsBroken extends Schema.TaggedError<ConventionsBroken, { readonly brand: unique symbol }>()(
+  'ConventionsBroken',
+  { message: Schema.String }
+) {}
+
+const listSourceFiles: (root: string) => Effect.Effect<string[], PlatformError, FileSystem.FileSystem> =
+  Effect.fn('Conventions.listSourceFiles')(function* (root: string) {
+    const fs = yield* FileSystem.FileSystem;
+    const files: string[] = [];
+    for (const entry of (yield* fs.readDirectory(root)).sort()) {
+      if (SKIPPED_SEGMENTS.has(entry)) continue;
+      const path = join(root, entry);
+      if ((yield* fs.stat(path)).type === 'Directory') {
+        files.push(...(yield* listSourceFiles(path)));
+        continue;
+      }
+      if (/\.(ts|tsx)$/.test(entry) && !entry.endsWith('.d.ts')) files.push(path);
+    }
+    return files;
+  });
+
+const listStyleSheets = Effect.fn('Conventions.listStyleSheets')(function* (root: string) {
+  const fs = yield* FileSystem.FileSystem;
+  return (yield* fs.readDirectory(root, { recursive: true }))
+    .map((entry) => join(root, entry))
     .filter((path) => path.endsWith('.css'));
-}
+});
 
 function isUnder(file: string, roots: readonly string[]) {
   return roots.some((root) => file.startsWith(root));
@@ -574,16 +590,25 @@ function parseSource(file: string, source: string) {
   }) as unknown as { program: BabelNode; comments?: BabelComment[] | null };
 }
 
-function checkFile(file: string, violations: Violation[], appSources: Record<string, string>): void {
-  const source = readFileSync(file, 'utf8');
-  let parsed: ReturnType<typeof parseSource>;
-  try {
-    parsed = parseSource(file, source);
-  } catch (error) {
-    const reason = error instanceof Error ? error.message : String(error);
-    violations.push({ file, line: 1, message: `Could not parse: ${reason}` });
-    return;
-  }
+const checkFile = Effect.fn('Conventions.checkFile')(function* (
+  file: string,
+  source: string,
+  violations: Violation[],
+  appSources: Record<string, string>
+) {
+  const parsed = yield* Effect.try({
+    try: () => parseSource(file, source),
+    catch: (error) =>
+      new SourceUnparsable({ reason: error instanceof Error ? error.message : String(error) }),
+  }).pipe(
+    Effect.catchTag('SourceUnparsable', ({ reason }) =>
+      Effect.as(
+        Effect.sync(() => violations.push({ file, line: 1, message: `Could not parse: ${reason}` })),
+        null
+      )
+    )
+  );
+  if (parsed === null) return;
   if (!isUnder(file, COMMENT_CHECK_EXCLUDED_ROOTS)) {
     collectCommentViolations(file, parsed.comments ?? [], violations);
   }
@@ -601,26 +626,34 @@ function checkFile(file: string, violations: Violation[], appSources: Record<str
   collectEngineRuntimeViolations(file, source, violations);
   if (isUnder(file, VERB_CHECK_ROOTS)) collectVerbViolations(file, parsed.program, violations);
   if (isUnder(file, APP)) appSources[file] = source;
-}
+});
 
-function run(): void {
+const run = Effect.fn('Conventions.run')(function* () {
+  const fs = yield* FileSystem.FileSystem;
   const violations: Violation[] = [];
   const appSources: Record<string, string> = {};
-  for (const root of ROOTS.filter((candidate) => existsSync(candidate))) {
-    for (const file of listSourceFiles(root)) checkFile(file, violations, appSources);
+  for (const root of ROOTS) {
+    if (!(yield* fs.exists(root))) continue;
+    for (const file of yield* listSourceFiles(root))
+      yield* checkFile(file, yield* fs.readFileString(file), violations, appSources);
   }
   violations.push(...listToastViolations(appSources));
   violations.push(...listDialogViolations(appSources));
-  for (const sheet of APP.flatMap((root) => listStyleSheets(root)))
-    collectRawSelection(sheet, readFileSync(sheet, 'utf8'), violations);
+  for (const root of APP)
+    for (const sheet of yield* listStyleSheets(root))
+      collectRawSelection(sheet, yield* fs.readFileString(sheet), violations);
   if (violations.length === 0) return;
-  for (const violation of violations) {
-    process.stderr.write(
-      `${relative(process.cwd(), violation.file)}:${violation.line} ${violation.message}\n`
-    );
-  }
-  process.stderr.write(`\n${violations.length} convention violation(s).\n`);
-  process.exit(1);
-}
+  const lines = violations.map(
+    (violation) => `${relative(process.cwd(), violation.file)}:${violation.line} ${violation.message}`
+  );
+  return yield* new ConventionsBroken({
+    message: `${lines.join('\n')}\n\n${violations.length} convention violation(s).`,
+  });
+});
 
-run();
+run().pipe(
+  Effect.catchTag('PlatformError', Effect.die),
+  reportFailure,
+  Effect.provide(BunServices.layer),
+  BunRuntime.runMain({ disableErrorReporting: true })
+);

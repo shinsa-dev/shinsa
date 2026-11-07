@@ -1,6 +1,10 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
+import { BunRuntime, BunServices } from '@effect/platform-bun';
+import { Effect, FileSystem } from 'effect';
+import { readMarkPaths } from './kit/marks.ts';
+import { reportScriptFailure } from './kit/report.ts';
+import { runScriptCommand } from './kit/run.ts';
+import { ScriptStepFailed } from './kit/schema.ts';
 
 const CANVAS = 1024;
 
@@ -27,13 +31,6 @@ const resourcesDir = join(desktopDir, 'resources');
 const staticDir = join(desktopDir, 'static');
 
 const logoPath = resolve(desktopDir, '../../packages/ui/src/components/logo.tsx');
-
-function listMarkPaths() {
-  const source = readFileSync(logoPath, 'utf8');
-  const paths = [...source.matchAll(/<path d='([^']+)'/g)].map((match) => match[1] ?? '');
-  if (paths.length === 0) throw new Error(`No mark paths found in ${logoPath}.`);
-  return paths;
-}
 
 function formatPoint(x: number, y: number) {
   return `${x.toFixed(2)} ${y.toFixed(2)}`;
@@ -66,13 +63,11 @@ function resolveSquirclePath() {
   return `M${first} ${rest.map((point) => `L${point}`).join(' ')} Z`;
 }
 
-function serializeIcon() {
+function serializeIcon(markPaths: readonly string[]) {
   const scale = MARK.size / MARK.viewBox;
   const offset = (CANVAS - MARK.size) / 2;
   const squircle = resolveSquirclePath();
-  const marks = listMarkPaths()
-    .map((d) => `    <path d="${d}"/>`)
-    .join('\n');
+  const marks = markPaths.map((d) => `    <path d="${d}"/>`).join('\n');
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${CANVAS}" height="${CANVAS}" viewBox="0 0 ${CANVAS} ${CANVAS}">
   <defs>
     <linearGradient id="body" x1="0" y1="0" x2="0" y2="1">
@@ -99,41 +94,44 @@ ${marks}
 `;
 }
 
-function run(command: string[]) {
-  const result = Bun.spawnSync(command, { stdout: 'pipe', stderr: 'pipe' });
-  if (result.exitCode !== 0) {
-    throw new Error(`${command.join(' ')} failed: ${result.stderr.toString()}`);
-  }
-}
-
 function renderPng(svgPath: string, size: number, outPath: string) {
-  run(['rsvg-convert', '--width', String(size), '--height', String(size), svgPath, '--output', outPath]);
+  return runScriptCommand([
+    'rsvg-convert',
+    '--width',
+    String(size),
+    '--height',
+    String(size),
+    svgPath,
+    '--output',
+    outPath,
+  ]);
 }
 
-function writeIcon(name: string) {
+const writeIcon = Effect.fn('DesktopIcon.writeIcon')(function* (name: string, markPaths: readonly string[]) {
+  const fs = yield* FileSystem.FileSystem;
   const svgPath = join(resourcesDir, `${name}.svg`);
-  writeFileSync(svgPath, serializeIcon());
-  renderPng(svgPath, CANVAS, join(resourcesDir, `${name}.png`));
-  const scratch = mkdtempSync(join(tmpdir(), 'shinsa-icon-'));
-  const iconset = join(scratch, 'icon.iconset');
-  try {
-    run(['mkdir', iconset]);
-    for (const size of ICONSET_SIZES) {
-      renderPng(svgPath, size, join(iconset, `icon_${size}x${size}.png`));
-      renderPng(svgPath, size * 2, join(iconset, `icon_${size}x${size}@2x.png`));
-    }
-    run(['iconutil', '--convert', 'icns', iconset, '--output', join(resourcesDir, `${name}.icns`)]);
-  } finally {
-    rmSync(scratch, { recursive: true, force: true });
+  yield* fs.writeFileString(svgPath, serializeIcon(markPaths));
+  yield* renderPng(svgPath, CANVAS, join(resourcesDir, `${name}.png`));
+  const iconset = join(yield* fs.makeTempDirectoryScoped({ prefix: 'shinsa-icon-' }), 'icon.iconset');
+  yield* fs.makeDirectory(iconset);
+  for (const size of ICONSET_SIZES) {
+    yield* renderPng(svgPath, size, join(iconset, `icon_${size}x${size}.png`));
+    yield* renderPng(svgPath, size * 2, join(iconset, `icon_${size}x${size}@2x.png`));
   }
-}
+  yield* runScriptCommand([
+    'iconutil',
+    '--convert',
+    'icns',
+    iconset,
+    '--output',
+    join(resourcesDir, `${name}.icns`),
+  ]);
+}, Effect.scoped);
 
-function serializeTrayIcon() {
+function serializeTrayIcon(markPaths: readonly string[]) {
   const scale = TRAY.mark / MARK.viewBox;
   const offset = (TRAY.canvas - TRAY.mark) / 2;
-  const marks = listMarkPaths()
-    .map((d) => `    <path d="${d}"/>`)
-    .join('\n');
+  const marks = markPaths.map((d) => `    <path d="${d}"/>`).join('\n');
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${TRAY.canvas}" height="${TRAY.canvas}" viewBox="0 0 ${TRAY.canvas} ${TRAY.canvas}">
   <g transform="translate(${offset} ${offset}) scale(${scale.toFixed(6)})" fill="#000">
 ${marks}
@@ -142,17 +140,21 @@ ${marks}
 `;
 }
 
-function writeTrayIcon() {
-  const scratch = mkdtempSync(join(tmpdir(), 'shinsa-tray-'));
-  const svgPath = join(scratch, 'tray.svg');
-  try {
-    writeFileSync(svgPath, serializeTrayIcon());
-    renderPng(svgPath, TRAY.canvas, join(staticDir, 'trayTemplate.png'));
-    renderPng(svgPath, TRAY.canvas * 2, join(staticDir, 'trayTemplate@2x.png'));
-  } finally {
-    rmSync(scratch, { recursive: true, force: true });
-  }
-}
+const writeTrayIcon = Effect.fn('DesktopIcon.writeTrayIcon')(function* (markPaths: readonly string[]) {
+  const fs = yield* FileSystem.FileSystem;
+  const svgPath = join(yield* fs.makeTempDirectoryScoped({ prefix: 'shinsa-tray-' }), 'tray.svg');
+  yield* fs.writeFileString(svgPath, serializeTrayIcon(markPaths));
+  yield* renderPng(svgPath, TRAY.canvas, join(staticDir, 'trayTemplate.png'));
+  yield* renderPng(svgPath, TRAY.canvas * 2, join(staticDir, 'trayTemplate@2x.png'));
+}, Effect.scoped);
 
-writeIcon('icon');
-writeTrayIcon();
+Effect.gen(function* () {
+  const markPaths = yield* readMarkPaths(logoPath);
+  yield* writeIcon('icon', markPaths);
+  yield* writeTrayIcon(markPaths);
+}).pipe(
+  Effect.catchTag('PlatformError', (error) => Effect.fail(new ScriptStepFailed({ message: error.message }))),
+  reportScriptFailure,
+  Effect.provide(BunServices.layer),
+  BunRuntime.runMain({ disableErrorReporting: true })
+);

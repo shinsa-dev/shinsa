@@ -97,3 +97,12 @@ export const WAIT_FOR_STATE = `new Promise((resolve) => { const check = () => wi
 export const SCROLL_STEP = 'scroll:';
 
 export const NO_MEASUREMENTS: Measurements = {};
+
+export class ScaleDataMissing extends Schema.TaggedError<
+  ScaleDataMissing,
+  { readonly brand: unique symbol }
+>()('ScaleDataMissing', { message: Schema.String }) {}
+
+export const SCALE_USAGE = 'Usage: bun scripts/perf/content-seed.ts <data dir>   (a copy of `bun run seed`)';
+
+export const SCALE_EMPTY = 'The data dir has no tasks to copy: run `bun run seed` into it first.';
