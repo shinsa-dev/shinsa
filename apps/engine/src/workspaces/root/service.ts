@@ -1,6 +1,6 @@
-import { accessSync, constants, existsSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { Context, Effect, Layer } from 'effect';
+import { Context, Effect, FileSystem, Layer, Option } from 'effect';
+import { constFalse } from 'effect/Function';
 import { EngineConfig } from '../../config/service.ts';
 import { ConfigStore } from '../../config/store/service.ts';
 import {
@@ -25,6 +25,7 @@ export class WorktreeRoot extends Context.Service<
     Effect.gen(function* () {
       const { worktreesDir, worktreesDirFromEnvironment } = yield* EngineConfig;
       const store = yield* ConfigStore;
+      const fs = yield* FileSystem.FileSystem;
 
       const resolve = Effect.gen(function* () {
         if (worktreesDirFromEnvironment) return { path: worktreesDir, source: 'environment' } as const;
@@ -34,37 +35,39 @@ export class WorktreeRoot extends Context.Service<
       });
 
       const isWritable = (path: string) =>
-        Effect.try(() => accessSync(path, constants.W_OK | constants.X_OK)).pipe(
-          Effect.match({ onFailure: () => false, onSuccess: () => true })
-        );
+        fs
+          .access(path, { writable: true })
+          .pipe(Effect.match({ onFailure: constFalse, onSuccess: () => true }));
 
       const describeProblem = Effect.fn('WorktreeRoot.describeProblem')(function* (
         path: string,
         chosen = false
       ) {
-        const folder = yield* Effect.sync(
-          () => statSync(path, { throwIfNoEntry: false })?.isDirectory() ?? null
-        );
-        if (folder === null) {
+        const info = yield* Effect.option(fs.stat(path));
+        if (Option.isNone(info)) {
           return `The worktree folder ${path} does not exist. If it is on a drive you mount, mount it again, or choose another folder in Settings → Projects.`;
         }
-        if (!folder) return `The worktree folder ${path} is not a folder.`;
+        if (info.value.type !== 'Directory') return `The worktree folder ${path} is not a folder.`;
         if (!(yield* isWritable(path))) return `Shinsa cannot write to the worktree folder ${path}.`;
-        if (chosen && !(yield* Effect.sync(() => existsSync(join(path, WORKTREE_ROOT_MARKER))))) {
+        if (
+          chosen &&
+          !(yield* fs.exists(join(path, WORKTREE_ROOT_MARKER)).pipe(Effect.orElseSucceed(constFalse)))
+        ) {
           return `The worktree folder ${path} is not the one you chose: the drive it is on may not be mounted. Mount it again, or choose the folder again in Settings → Projects.`;
         }
         return null;
       });
 
       const mark = Effect.fn('WorktreeRoot.mark')(function* (path: string) {
-        yield* Effect.try({
-          try: () => writeFileSync(join(path, WORKTREE_ROOT_MARKER), WORKTREE_ROOT_MARKER_TEXT),
-          catch: () =>
-            new WorktreeRootUnavailable({
-              path,
-              message: `Shinsa cannot write to the worktree folder ${path}.`,
-            }),
-        });
+        yield* fs.writeFileString(join(path, WORKTREE_ROOT_MARKER), WORKTREE_ROOT_MARKER_TEXT).pipe(
+          Effect.mapError(
+            () =>
+              new WorktreeRootUnavailable({
+                path,
+                message: `Shinsa cannot write to the worktree folder ${path}.`,
+              })
+          )
+        );
         return path;
       });
 

@@ -369,7 +369,9 @@ describe('worktree usage', () => {
       main: createTask({ id: 'main', worktreePath: main, workspace: 'main_checkout' }),
       none: createTask({ id: 'none', worktreePath: null }),
     };
-    const usage = await Effect.runPromise(measureWorktreeUsage(folder, tasks, run, 42));
+    const usage = await Effect.runPromise(
+      measureWorktreeUsage(folder, tasks, run, 42).pipe(Effect.provide(ShellLayer))
+    );
     expect(usage).toMatchObject({ folder, worktrees: 2, measuredAt: 42 });
     expect(usage.bytes).toBeGreaterThanOrEqual(112 * 1024);
     expect(usage.bytes).toBeLessThan(512 * 1024);
@@ -378,7 +380,9 @@ describe('worktree usage', () => {
 
   test('measures nothing without worktrees, and has no free space for a folder that is gone', async () => {
     const refused: CommandRunner = () => Effect.die('du should not run');
-    const usage = await Effect.runPromise(measureWorktreeUsage('/no/such/mount', {}, refused, 1));
+    const usage = await Effect.runPromise(
+      measureWorktreeUsage('/no/such/mount', {}, refused, 1).pipe(Effect.provide(ShellLayer))
+    );
     expect(usage).toEqual({
       folder: '/no/such/mount',
       worktrees: 0,
@@ -394,7 +398,9 @@ describe('worktree usage', () => {
     const timedOut: CommandRunner = () =>
       Effect.succeed({ ok: false, code: -1, stdout: '', stderr: '', timedOut: true });
     const usage = await Effect.runPromise(
-      measureWorktreeUsage(folder, { a: createTask({ worktreePath: path }) }, timedOut, 1)
+      measureWorktreeUsage(folder, { a: createTask({ worktreePath: path }) }, timedOut, 1).pipe(
+        Effect.provide(ShellLayer)
+      )
     );
     expect(usage.bytes).toBeNull();
     expect(usage.worktrees).toBe(1);

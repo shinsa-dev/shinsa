@@ -219,11 +219,13 @@ export class Onboarding extends Context.Service<
         });
 
         const resolveWorktreeUsage = Effect.gen(function* () {
-          return yield* measureWorktreeUsage(
-            yield* worktreeRoot.path,
-            (yield* engine.state).tasks,
-            commands.run,
-            yield* Clock.currentTimeMillis
+          return yield* withFiles(
+            measureWorktreeUsage(
+              yield* worktreeRoot.path,
+              (yield* engine.state).tasks,
+              commands.run,
+              yield* Clock.currentTimeMillis
+            )
           );
         });
 

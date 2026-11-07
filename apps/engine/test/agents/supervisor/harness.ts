@@ -234,7 +234,7 @@ function createSupervisorLayer(
   const workspaces = options.workspaces
     ? Layer.merge(
         Layer.succeed(Workspaces, options.workspaces),
-        WorktreeRoot.layer.pipe(Layer.provide(machine))
+        WorktreeRoot.layer.pipe(Layer.provide(machine), Layer.provide(ShellLayer))
       )
     : WorkspacesServiceLayer.pipe(Layer.provide(machine), Layer.provide(GitLayer), Layer.provide(ShellLayer));
   const providers = options.providers

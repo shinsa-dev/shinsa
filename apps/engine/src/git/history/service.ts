@@ -1,5 +1,3 @@
-import { copyFileSync, existsSync, mkdtempSync, rmSync, statSync, utimesSync } from 'node:fs';
-import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   DIFF_PATCH_LIMITS,
@@ -14,9 +12,10 @@ import {
   type Task,
   type TaskRefs,
 } from '@shinsa/core';
-import { Context, Effect, FileSystem, Layer, Option } from 'effect';
+import { Clock, Context, Effect, FileSystem, Layer, Option } from 'effect';
+import { describeError } from '../../log/redact.ts';
 import type { CommandEnv } from '../../shell/schema.ts';
-import type { GitFailed } from '../schema.ts';
+import { GitFailed } from '../schema.ts';
 import { Git } from '../service.ts';
 import { decodeText } from '../text.ts';
 import { selectTaskCheckout } from './checkout.ts';
@@ -83,7 +82,8 @@ export class History extends Context.Service<
     History,
     Effect.gen(function* () {
       const git = yield* Git;
-      const withFiles = Effect.provideService(FileSystem.FileSystem, yield* FileSystem.FileSystem);
+      const fs = yield* FileSystem.FileSystem;
+      const withFiles = Effect.provideService(FileSystem.FileSystem, fs);
       const selectCheckout = (task: Task) =>
         Effect.map(withFiles(selectTaskCheckout(task)), Option.getOrNull);
 
@@ -374,6 +374,26 @@ export class History extends Context.Service<
         return yield* readDiff({ cwd: repoPath, range: [base, head], signal }, paths);
       });
 
+      const copyIndex = Effect.fn('History.copyIndex')(
+        function* (index: string) {
+          const scratch = yield* fs.makeTempDirectoryScoped({ prefix: SCRATCH_PREFIX });
+          const file = join(scratch, 'index');
+          if (!(yield* fs.exists(index))) return file;
+          yield* fs.copyFile(index, file);
+          const { atime, mtime } = yield* fs.stat(index);
+          const now = yield* Clock.currentTimeMillis;
+          yield* fs.utimes(file, Option.getOrUndefined(atime) ?? now, Option.getOrUndefined(mtime) ?? now);
+          return file;
+        },
+        Effect.mapError(
+          (error) =>
+            new GitFailed({
+              message: `Could not copy the git index: ${describeError(error)}`,
+              retryable: false,
+            })
+        )
+      );
+
       const withScratchIndex = <A, E>(worktree: string, read: (env: CommandEnv) => Effect.Effect<A, E>) =>
         Effect.scoped(
           Effect.gen(function* () {
@@ -381,17 +401,7 @@ export class History extends Context.Service<
               ['rev-parse', '--path-format=absolute', '--git-path', 'index'],
               worktree
             );
-            const scratch = yield* Effect.acquireRelease(
-              Effect.sync(() => mkdtempSync(join(tmpdir(), SCRATCH_PREFIX))),
-              (folder) => Effect.sync(() => rmSync(folder, { recursive: true, force: true }))
-            );
-            const file = join(scratch, 'index');
-            yield* Effect.sync(() => {
-              if (!existsSync(index)) return;
-              copyFileSync(index, file);
-              const { atime, mtime } = statSync(index);
-              utimesSync(file, atime, mtime);
-            });
+            const file = yield* copyIndex(index);
             const env = { GIT_INDEX_FILE: file };
             yield* git.run(['add', '-A', '--intent-to-add'], worktree, { env });
             return yield* read(env);

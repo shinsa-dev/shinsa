@@ -21,7 +21,7 @@ export function discoverRoots(home: string, options: DiscoveryOptions = {}) {
 }
 
 export function readOriginRemote(repo: string) {
-  return runtime.runSync(RepoFolders.use((folders) => folders.readOrigin(repo)));
+  return runtime.runPromise(RepoFolders.use((folders) => folders.readOrigin(repo)));
 }
 
 export function prepareSetup(target: SetupTarget) {
