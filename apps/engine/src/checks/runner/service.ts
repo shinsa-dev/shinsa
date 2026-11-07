@@ -1,5 +1,6 @@
 import { type CheckToRun, describeCount } from '@shinsa/core';
 import { Context, Duration, Effect, FileSystem, Layer, Option } from 'effect';
+import { selectOnPath } from '../../files/probe.ts';
 import { resolveCancel } from '../../shell/abort.ts';
 import {
   CANCELLED_BEFORE_START,
@@ -45,7 +46,9 @@ export class CheckRunner extends Context.Service<
     Effect.gen(function* () {
       const shell = yield* Shell;
       const withFiles = Effect.provideService(FileSystem.FileSystem, yield* FileSystem.FileSystem);
-      const prefix = (yield* Effect.sync(() => Bun.which('nice'))) ? LOW_PRIORITY : [];
+      const prefix = Option.isSome(yield* withFiles(selectOnPath('nice', Bun.env.PATH ?? '')))
+        ? LOW_PRIORITY
+        : [];
 
       const command = Effect.fn('CheckRunner.command')(function* (
         argv: readonly string[],

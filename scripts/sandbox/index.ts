@@ -85,10 +85,11 @@ export const startSandbox = Effect.fn('Sandbox.start')(function* () {
     original: teamTask?.handle ?? null,
   });
   let page = serializeSandboxPage(sections, yield* findRemoteStylesheet());
-  const cloud = yield* Effect.try({
-    try: () => createSandboxCloud(SANDBOX_DIR, new URL(PREVIEW_ZONE).host, USER.id, machines),
-    catch: (error) => new SandboxFailed({ message: `Starting the stand-in cloud failed: ${String(error)}` }),
-  });
+  const cloud = yield* createSandboxCloud(SANDBOX_DIR, new URL(PREVIEW_ZONE).host, USER.id, machines).pipe(
+    Effect.mapError(
+      (error) => new SandboxFailed({ message: `Starting the stand-in cloud failed: ${String(error)}` })
+    )
+  );
 
   const respond = Effect.fn('Sandbox.respond')(
     function* (request: Request, url: URL) {

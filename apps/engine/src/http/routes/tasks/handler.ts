@@ -1,4 +1,3 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { CODE_LIMITS, resolveEditRefusal, selectTaskByReference } from '@shinsa/core';
 import { EngineApi } from '@shinsa/core/engine-api';
@@ -15,6 +14,7 @@ import { Transcripts } from '../../../agents/transcripts/service.ts';
 import { EngineConfig } from '../../../config/service.ts';
 import { selectInside, selectWritableInside } from '../../../files/inside.ts';
 import { assertRepoPath } from '../../../files/paths.ts';
+import { selectOnPath } from '../../../files/probe.ts';
 import { GitCommands } from '../../../git/layers.ts';
 import { Git } from '../../../git/service.ts';
 import { EngineCore } from '../../../runtime/engine/service.ts';
@@ -98,13 +98,18 @@ export const TasksHandlers = HttpApiBuilder.group(
       return value;
     });
 
-    const resolveOpenCommand = (target: string, worktreePath: string, location: string | null) => {
-      const editor = config.editor ?? (Bun.which('cursor') ? 'cursor' : 'code');
+    const resolveOpenCommand = Effect.fn('TasksHandlers.resolveOpenCommand')(function* (
+      target: string,
+      worktreePath: string,
+      location: string | null
+    ) {
+      const cursor = yield* withFiles(selectOnPath('cursor', Bun.env.PATH ?? ''));
+      const editor = config.editor ?? (Option.isSome(cursor) ? 'cursor' : 'code');
       if (target === 'editor')
         return location ? [editor, worktreePath, '--goto', location] : [editor, worktreePath];
       if (target === 'terminal') return ['open', '-a', config.terminal, worktreePath];
       return ['open', worktreePath];
-    };
+    });
 
     return handlers
       .handle(
@@ -169,7 +174,7 @@ export const TasksHandlers = HttpApiBuilder.group(
             return yield* new WorktreeMissing({ message: WORKTREE_MISSING_MESSAGE });
           const file = Option.getOrNull(yield* withFiles(selectInside(worktreePath, payload.path ?? '')));
           const location = file && payload.line ? `${file}:${payload.line}` : file;
-          const command = resolveOpenCommand(payload.target, worktreePath, location);
+          const command = yield* resolveOpenCommand(payload.target, worktreePath, location);
           const result = yield* open(command, worktreePath);
           return { ok: result.ok };
         })
@@ -202,14 +207,17 @@ export const TasksHandlers = HttpApiBuilder.group(
               repo,
               task,
               path,
-              Effect.sync(() => {
-                disk.current = existsSync(absolute) ? readFileSync(absolute, 'utf8') : null;
-                if (disk.current !== base) return false;
-                mkdirSync(dirname(absolute), { recursive: true });
-                writeFileSync(absolute, content);
-                disk.written = true;
-                return true;
-              })
+              withFiles(
+                Effect.gen(function* () {
+                  const fs = yield* FileSystem.FileSystem;
+                  disk.current = (yield* fs.exists(absolute)) ? yield* fs.readFileString(absolute) : null;
+                  if (disk.current !== base) return false;
+                  yield* fs.makeDirectory(dirname(absolute), { recursive: true });
+                  yield* fs.writeFileString(absolute, content);
+                  disk.written = true;
+                  return true;
+                })
+              )
             )
             .pipe(Effect.mapError(resolveRequestFailure));
           if (!disk.written)

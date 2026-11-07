@@ -16,6 +16,8 @@ import {
   listPromiseLines,
   isEngineRuntimeSource,
   isSyncIoSource,
+  isEffectIoSource,
+  listUnbridgedIoLines,
   listEngineRuntimeLines,
   listSyncIoLines,
   SYNC_IO_EXEMPT,
@@ -252,5 +254,41 @@ describe('no file or process I/O runs outside Effect', () => {
     expect(listSyncIoLines("import { join } from 'node:path';\nexport const a = join('x', 'y');")).toEqual(
       []
     );
+  });
+
+  test('Effect files are checked too, but not tests, components or the exempt transcript reader', () => {
+    const effect = "import { Effect } from 'effect';";
+    expect(isEffectIoSource('apps/engine/src/changelog/changelog.ts', effect)).toBe(true);
+    expect(isEffectIoSource('scripts/zz.ts', "import { Option } from 'effect';")).toBe(true);
+    expect(isEffectIoSource('apps/desktop/scripts/build.ts', effect)).toBe(true);
+    expect(isEffectIoSource('scripts/zz.ts', 'export const a = 1;')).toBe(false);
+    expect(isEffectIoSource('apps/engine/test/a.test.ts', effect)).toBe(false);
+    expect(isEffectIoSource('apps/web/src/components/row.tsx', effect)).toBe(false);
+    for (const file of SYNC_IO_EXEMPT) expect(isEffectIoSource(file, effect)).toBe(false);
+  });
+
+  test('in an Effect file, I/O outside an effect is found and I/O inside one is not', () => {
+    const source = [
+      "import { readFileSync, existsSync } from 'node:fs';",
+      "import * as fs from 'node:fs';",
+      "import type { Stats } from 'node:fs';",
+      "import { Effect } from 'effect';",
+      "export function plain() { return readFileSync('a', 'utf8'); }",
+      'const helper = (path: string) => existsSync(path);',
+      "const read = Effect.try(() => readFileSync('a', 'utf8'));",
+      "const tried = Effect.try({ try: () => fs.statSync('a'), catch: String });",
+      "const quiet = Effect.sync(() => existsSync('a'));",
+      'const attempt = <A>(run: () => A) => Effect.try({ try: run, catch: String });',
+      'const probe = (run: () => boolean) => Effect.try(run);',
+      "const viaHelper = attempt(() => readFileSync('a'));",
+      "const viaShort = probe(() => existsSync('a'));",
+      "export const found = Effect.fn('found')(function* () { return Bun.which('git'); });",
+      "const lazy = Effect.sync(() => Bun.file('a'));",
+      "const direct = fs.readdirSync('.');",
+      'const other = (run: () => void) => Effect.succeed(run);',
+      "const notHelper = other(() => existsSync('a'));",
+      'const id = Bun.randomUUIDv7();',
+    ].join('\n');
+    expect(listUnbridgedIoLines(source)).toEqual([5, 6, 14, 16, 18]);
   });
 });

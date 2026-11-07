@@ -30,11 +30,13 @@ export class ExtensionUsage extends Context.Service<
       const decodeToolCall = Schema.decodeUnknownOption(TranscriptToolCall);
 
       const listSessionFiles = (dir: string) =>
-        existsSync(dir)
-          ? readdirSync(dir, { recursive: true, encoding: 'utf8' })
-              .filter((entry) => entry.endsWith('.jsonl'))
-              .map((entry) => join(dir, entry))
-          : [];
+        Effect.sync(() =>
+          existsSync(dir)
+            ? readdirSync(dir, { recursive: true, encoding: 'utf8' })
+                .filter((entry) => entry.endsWith('.jsonl'))
+                .map((entry) => join(dir, entry))
+            : []
+        );
 
       const recordLatest = (target: Record<string, number>, key: string, at: number) => {
         if (!key || !Number.isFinite(at)) return;
@@ -138,7 +140,7 @@ export class ExtensionUsage extends Context.Service<
         path: string,
         horizon: number
       ) {
-        const stat = statSync(path, { throwIfNoEntry: false });
+        const stat = yield* Effect.sync(() => statSync(path, { throwIfNoEntry: false }));
         if (!stat || stat.mtimeMs < horizon) return;
         const known = previous.files[path];
         if (known && known.size === stat.size && known.mtimeMs === stat.mtimeMs) {
@@ -170,7 +172,7 @@ export class ExtensionUsage extends Context.Service<
           skills: { ...previous.skills },
         };
         for (const source of request.sources) {
-          for (const path of listSessionFiles(source.dir)) {
+          for (const path of yield* listSessionFiles(source.dir)) {
             yield* scanFile(request, previous, next, source.kind, path, horizon);
           }
         }

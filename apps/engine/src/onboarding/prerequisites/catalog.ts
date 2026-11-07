@@ -1,6 +1,5 @@
-import { existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { Result } from 'effect';
+import { Effect, FileSystem } from 'effect';
 import type { Prerequisite, PrerequisiteId } from '../schema.ts';
 import { BUN_FILES, COMMANDS, INSTALL_ORDER, LABELS, SCRIPTS } from './schema.ts';
 
@@ -24,15 +23,24 @@ export function resolvePrerequisiteLabel(id: string) {
   return Object.hasOwn(LABELS, id) ? LABELS[id as PrerequisiteId] : null;
 }
 
-function listFolders(root: string) {
-  const entries = Result.try(() => readdirSync(root, { withFileTypes: true }));
-  return Result.getOrElse(entries, () => [])
-    .filter((entry) => entry.isDirectory() && !entry.name.startsWith('.'))
-    .map((entry) => join(root, entry.name));
-}
-
-export function isBunUsed(roots: readonly string[]) {
-  return roots
-    .flatMap((root) => [root, ...listFolders(root)])
-    .some((folder) => BUN_FILES.some((file) => existsSync(join(folder, file))));
-}
+export const isBunUsed = Effect.fn('Prerequisites.isBunUsed')(function* (roots: readonly string[]) {
+  const fs = yield* FileSystem.FileSystem;
+  const isFolder = (path: string) =>
+    fs.stat(path).pipe(
+      Effect.map((info) => info.type === 'Directory'),
+      Effect.orElseSucceed(() => false)
+    );
+  const listFolders = Effect.fn('Prerequisites.listFolders')(function* (root: string) {
+    const names = yield* fs.readDirectory(root).pipe(Effect.orElseSucceed((): string[] => []));
+    const folders = names.filter((name) => !name.startsWith('.')).map((name) => join(root, name));
+    return yield* Effect.filter(folders, isFolder);
+  });
+  for (const root of roots) {
+    for (const folder of [root, ...(yield* listFolders(root))]) {
+      for (const file of BUN_FILES) {
+        if (yield* fs.exists(join(folder, file)).pipe(Effect.orElseSucceed(() => false))) return true;
+      }
+    }
+  }
+  return false;
+});

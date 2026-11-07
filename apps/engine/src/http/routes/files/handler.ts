@@ -26,7 +26,7 @@ export const FilesHandlers = HttpApiBuilder.group(
         Effect.fn('FilesHandlers.evidence')(function* ({ params, request }) {
           const path = yield* evidence.selectFile(params['*']);
           if (path._tag === 'None') return yield* new FileNotFound();
-          return respondFile(Bun.file(path.value), request.headers.range);
+          return respondFile(yield* Effect.sync(() => Bun.file(path.value)), request.headers.range);
         })
       )
       .handle('uploadAttachment', ({ payload }) =>
@@ -39,7 +39,7 @@ export const FilesHandlers = HttpApiBuilder.group(
         Effect.fn('FilesHandlers.attachment')(function* ({ params, request }) {
           const found = yield* attachments.selectFile(params['*']);
           if (found._tag === 'None') return yield* new FileNotFound();
-          const file = Bun.file(found.value);
+          const file = yield* Effect.sync(() => Bun.file(found.value));
           const headers = resolveAttachmentHeaders(file.type, basename(found.value));
           return respondFile(file, request.headers.range, headers);
         })

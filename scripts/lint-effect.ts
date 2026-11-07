@@ -5,6 +5,8 @@ export const EFFECT_IMPORT = /from\s+['"](?:effect(?:\/[\w-]+)?|@effect\/[\w-]+)
 
 const PROMISE_BRIDGES = new Set(['try', 'tryPromise', 'promise']);
 
+const IO_BRIDGES = new Set(['try', 'tryPromise', 'promise', 'sync', 'callback']);
+
 const PROMISE_METHODS = new Set(['then', 'catch', 'finally']);
 
 const TIME_SOURCES = new Set(['Date']);
@@ -44,6 +46,9 @@ export const PROMISE_IO_MESSAGE =
 
 export const SYNC_IO_MESSAGE =
   "File or process I/O outside Effect. Read and write files through FileSystem and Path from effect, run a process through the engine's Shell or the kit's Command, and yield them from an Effect.fn step (a script as one Effect program run once with BunRuntime.runMain); node:path and other pure helpers stay plain (the effect skill → What is Effect code)";
+
+export const EFFECT_SYNC_IO_MESSAGE =
+  'File or process I/O outside an effect in Effect code. Read and write through FileSystem from effect, run a process through the Shell or Command service, or call it inside Effect.try (Effect.sync only for a call that cannot fail); a plain helper that does I/O hides it from the type (the effect skill → What is Effect code)';
 
 export const ENGINE_RUNTIME_MESSAGE =
   'A runtime or a Promise class in the engine. Write the module as a Context.Service with its Layer, yield what it needs, and run effects only at the process edge, main.ts; a callback from outside enters with Effect.runForkWith on the context the layer captured (the effect skill → Services and layers)';
@@ -117,24 +122,24 @@ function isFunction(node: AstNode) {
   );
 }
 
-function isBridgeCall(node: AstNode | undefined) {
-  return node?.type === 'CallExpression' && isMember(node.callee, 'Effect', PROMISE_BRIDGES);
+function isBridgeCall(node: AstNode | undefined, bridges: ReadonlySet<string> = PROMISE_BRIDGES) {
+  return node?.type === 'CallExpression' && isMember(node.callee, 'Effect', bridges);
 }
 
 function isTryKey(node: AstNode | undefined) {
   return readName(node?.key) === 'try';
 }
 
-function isBridgedFunction(chain: AstNode[], index: number) {
+function isBridgedFunction(chain: AstNode[], index: number, bridges: ReadonlySet<string>) {
   const [parent, grandparent, greatGrandparent] = [chain[index - 1], chain[index - 2], chain[index - 3]];
   const node = chain[index] as AstNode;
-  if (parent && isBridgeCall(parent)) return (parent.arguments as AstNode[]).includes(node);
-  if (node.type === 'ObjectMethod') return isTryKey(node) && isBridgeCall(grandparent);
-  return parent?.type === 'ObjectProperty' && isTryKey(parent) && isBridgeCall(greatGrandparent);
+  if (parent && isBridgeCall(parent, bridges)) return (parent.arguments as AstNode[]).includes(node);
+  if (node.type === 'ObjectMethod') return isTryKey(node) && isBridgeCall(grandparent, bridges);
+  return parent?.type === 'ObjectProperty' && isTryKey(parent) && isBridgeCall(greatGrandparent, bridges);
 }
 
-function isInsideBridge(chain: AstNode[]) {
-  return chain.some((node, index) => isFunction(node) && isBridgedFunction(chain, index));
+function isInsideBridge(chain: AstNode[], bridges: ReadonlySet<string> = PROMISE_BRIDGES) {
+  return chain.some((node, index) => isFunction(node) && isBridgedFunction(chain, index, bridges));
 }
 
 function isPromiseChain(node: AstNode) {
@@ -256,6 +261,90 @@ export function listSyncIoLines(source: string) {
   const lines = new Set<number>();
   walk(program, (node) => {
     if (isSyncIoNode(node)) lines.add(node.loc?.start.line ?? 0);
+  });
+  return [...lines];
+}
+
+export function isEffectIoSource(file: string, source: string) {
+  const isTest = /\.test\.ts$/.test(file) || /(?:^|\/)test\//.test(file);
+  return (
+    PROMISE_IO_SOURCE.test(file) &&
+    file.endsWith('.ts') &&
+    !isTest &&
+    EFFECT_IMPORT.test(source) &&
+    !SYNC_IO_EXEMPT.has(file)
+  );
+}
+
+function listIoBindings(program: AstNode) {
+  const named = new Set<string>();
+  const namespaces = new Set<string>();
+  for (const node of program.body as AstNode[]) {
+    if (node.type !== 'ImportDeclaration' || isTypeOnlyImport(node)) continue;
+    if (!SYNC_IO_MODULES.has((node.source as AstNode).value as string)) continue;
+    for (const specifier of node.specifiers as AstNode[]) {
+      if (specifier.importKind === 'type') continue;
+      const local = readName(specifier.local) ?? '';
+      (specifier.type === 'ImportSpecifier' ? named : namespaces).add(local);
+    }
+  }
+  return { named, namespaces };
+}
+
+function isIoCall(node: AstNode, bindings: ReturnType<typeof listIoBindings>) {
+  if (node.type !== 'CallExpression') return false;
+  const callee = node.callee as AstNode;
+  if (callee.type === 'Identifier') return bindings.named.has(callee.name as string);
+  const object = readName(callee.object);
+  return isMember(callee, 'Bun', BUN_IO) || (object !== null && bindings.namespaces.has(object));
+}
+
+function isBridgeHelper(node: AstNode) {
+  const init = node.init as AstNode | undefined;
+  if (node.type !== 'VariableDeclarator' || !init || !isFunction(init)) return false;
+  const body = init.body as AstNode;
+  const statements = body.type === 'BlockStatement' ? (body.body as AstNode[]) : [];
+  const returned = body.type === 'BlockStatement' ? statements[0]?.argument : body;
+  const [first] = (init.params as AstNode[]).map(readName);
+  const call = returned as AstNode | undefined;
+  if (!first || !isBridgeCall(call, IO_BRIDGES)) return false;
+  const [argument] = (call?.arguments as AstNode[]) ?? [];
+  if (readName(argument) === first) return true;
+  const properties = argument?.type === 'ObjectExpression' ? (argument.properties as AstNode[]) : [];
+  return properties.some((property) => isTryKey(property) && readName(property.value) === first);
+}
+
+function listBridgeHelpers(program: AstNode) {
+  const helpers = new Set<string>();
+  walk(program, (node) => {
+    if (isBridgeHelper(node)) helpers.add(readName(node.id) ?? '');
+  });
+  return helpers;
+}
+
+function isPassedToHelper(chain: AstNode[], helpers: ReadonlySet<string>) {
+  return chain.some((node, index) => {
+    const parent = chain[index - 1];
+    return (
+      isFunction(node) &&
+      parent?.type === 'CallExpression' &&
+      helpers.has(readName(parent.callee) ?? '') &&
+      (parent.arguments as AstNode[]).includes(node)
+    );
+  });
+}
+
+export function listUnbridgedIoLines(source: string) {
+  const program = parse(source, { sourceType: 'module', plugins: ['typescript'] })
+    .program as unknown as AstNode;
+  const bindings = listIoBindings(program);
+  const helpers = listBridgeHelpers(program);
+  const lines = new Set<number>();
+  walk(program, (node, ancestors) => {
+    if (!isIoCall(node, bindings)) return;
+    const chain = [...ancestors, node];
+    if (isInsideBridge(chain, IO_BRIDGES) || isPassedToHelper(chain, helpers)) return;
+    lines.add(node.loc?.start.line ?? 0);
   });
   return [...lines];
 }

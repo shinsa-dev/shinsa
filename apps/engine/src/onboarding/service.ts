@@ -229,7 +229,9 @@ export class Onboarding extends Context.Service<
 
         const resolvePrerequisites = Effect.gen(function* () {
           yield* withFiles(refreshInstallFolders(Bun.env, userHome));
-          return yield* prerequisites.resolve(userHome, { bun: isBunUsed(yield* roots.list) });
+          return yield* prerequisites.resolve(userHome, {
+            bun: yield* withFiles(isBunUsed(yield* roots.list)),
+          });
         });
 
         const resolveContext = Effect.fn('Onboarding.resolveContext')(function* (

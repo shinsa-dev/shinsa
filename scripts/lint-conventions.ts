@@ -14,6 +14,9 @@ import {
   listEngineRuntimeLines,
   isPromiseIoSource,
   isSyncIoSource,
+  isEffectIoSource,
+  listUnbridgedIoLines,
+  EFFECT_SYNC_IO_MESSAGE,
   listSyncIoLines,
   isEffectSource,
   listEffectViolations,
@@ -586,6 +589,12 @@ function collectSyncIoViolations(file: string, source: string, violations: Viola
   for (const line of listSyncIoLines(source)) violations.push({ file, line, message: SYNC_IO_MESSAGE });
 }
 
+function collectEffectIoViolations(file: string, source: string, violations: Violation[]): void {
+  if (!isEffectIoSource(file, source)) return;
+  for (const line of listUnbridgedIoLines(source))
+    violations.push({ file, line, message: EFFECT_SYNC_IO_MESSAGE });
+}
+
 function collectEngineRuntimeViolations(file: string, source: string, violations: Violation[]): void {
   if (!isEngineRuntimeSource(file)) return;
   for (const line of listEngineRuntimeLines(file, source))
@@ -634,6 +643,7 @@ const checkFile = Effect.fn('Conventions.checkFile')(function* (
   }
   collectPromiseIoViolations(file, source, violations);
   collectSyncIoViolations(file, source, violations);
+  collectEffectIoViolations(file, source, violations);
   collectEngineRuntimeViolations(file, source, violations);
   if (isUnder(file, VERB_CHECK_ROOTS)) collectVerbViolations(file, parsed.program, violations);
   if (isUnder(file, APP)) appSources[file] = source;

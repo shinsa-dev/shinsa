@@ -34,13 +34,13 @@ export class BaseCheckouts extends Context.Service<
       const checkouts = new Map<string, BaseCheckout>();
       const results = new Map<string, Effect.Effect<BaseResult | null>>();
 
-      const listCommandPaths = (command: string, cwd: string) =>
+      const listCommandTokens = (command: string) =>
         command
           .split(/\s+/)
           .map((token) => token.replace(/^['"]|['"]$/g, ''))
           .map((token) => (token.startsWith('-') ? (token.split('=')[1] ?? '') : token))
           .map((token) => token.replace(/^\.\//, ''))
-          .filter((token) => token.length > 0 && !isAbsolute(token) && existsSync(join(cwd, token)));
+          .filter((token) => token.length > 0 && !isAbsolute(token));
 
       const remove = Effect.fn('BaseCheckouts.remove')(function* (held: BaseCheckout) {
         checkouts.delete(held.key);
@@ -149,8 +149,15 @@ export class BaseCheckouts extends Context.Service<
         const held = yield* acquire(repo, base, request.signal);
         return yield* Effect.gen(function* () {
           const path = yield* held.ready;
-          const needed = [...(run.failedFiles ?? []), ...listCommandPaths(run.check.command, request.cwd)];
-          if (needed.some((file) => !existsSync(join(path, file)))) return null;
+          const missing = yield* Effect.sync(() => {
+            const commandPaths = listCommandTokens(run.check.command).filter((token) =>
+              existsSync(join(request.cwd, token))
+            );
+            return [...(run.failedFiles ?? []), ...commandPaths].some(
+              (file) => !existsSync(join(path, file))
+            );
+          });
+          if (missing) return null;
           const result = yield* runOnBase(held, path, request);
           if (!result?.failed || !result.failures) return null;
           return resolveFailureDiff(run.failures ?? [], result.failures);

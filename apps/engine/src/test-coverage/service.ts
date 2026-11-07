@@ -70,10 +70,11 @@ export class TaskCoverage extends Context.Service<
         return { runs: [{ tool: 'custom', command: setting.command, cwd: worktree, report, format }] };
       };
 
-      const listRoots = (worktree: string) => {
-        const real = realpathSync(worktree);
-        return real === worktree ? [worktree] : [worktree, real];
-      };
+      const listRoots = (worktree: string) =>
+        Effect.sync(() => {
+          const real = realpathSync(worktree);
+          return real === worktree ? [worktree] : [worktree, real];
+        });
 
       const mergeHits = (into: CoverageHits, run: CoverageRun, hits: CoverageHits) => {
         for (const [path, lines] of hits) {
@@ -101,7 +102,8 @@ export class TaskCoverage extends Context.Service<
           signal: request.signal,
         });
         if (result.timedOut) return 'It ran too long and was stopped.';
-        if (!existsSync(run.report)) return `It wrote no report at ${run.report} (exit ${result.code}).`;
+        if (!(yield* Effect.sync(() => existsSync(run.report))))
+          return `It wrote no report at ${run.report} (exit ${result.code}).`;
         const text = yield* Effect.try({
           try: () => readFileSync(run.report, 'utf8'),
           catch: (error) => new CoverageReportUnreadable({ path: run.report, message: describeError(error) }),
@@ -144,7 +146,7 @@ export class TaskCoverage extends Context.Service<
           command: command.slice(0, COVERAGE_LIMITS.command),
           changed,
           hits: collected.hits,
-          roots: listRoots(worktree),
+          roots: yield* listRoots(worktree),
           modulePath,
         });
       });

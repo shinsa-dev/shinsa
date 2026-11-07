@@ -423,13 +423,13 @@ function createServedLayer(options: ShinsaOptions, instance: ServerInstance, sto
   ).pipe(Layer.provide(Prerequisites.layer), Layer.provide(SetupCommands.layer));
   const served = Layer.mergeAll(
     Layer.succeed(ServedInstance, instance),
-    Layer.succeed(
+    Layer.effect(
       ServedChangelog,
       resolveEngineChangelog({
         built: process.env.SHINSA_BUILD_CHANGELOG,
         root: BUNDLE ? null : INSTALL_PATH,
       })
-    ),
+    ).pipe(Layer.provide(ShellLayer)),
     options.place ? Layer.succeed(PlacementAsker, options.place) : Layer.empty,
     restarter
   );
