@@ -10,6 +10,7 @@ import { EngineConfig } from '../../src/config/service.ts';
 import { ConfigStore } from '../../src/config/store/service.ts';
 import { JsonFile } from '../../src/files/service.ts';
 import { GitLayer } from '../../src/git/layers.ts';
+import { MachineGitHub, type MachineGitHubShape } from '../../src/github/identity/schema.ts';
 import { GitHubLayer } from '../../src/github/layers.ts';
 import { JsonLogger } from '../../src/log/service.ts';
 import { CurrentLogin } from '../../src/repos/current-login/service.ts';
@@ -38,7 +39,7 @@ function createEffectRunnerLayer(
   config: ServerConfig,
   runs: RunSupervisor['Service'],
   briefings: BriefingWriter['Service'],
-  options: EffectRunnerOptions
+  { machineGitHub = null, ...options }: TestEffectRunnerOptions
 ) {
   const repositories = Layer.mergeAll(
     Evidence.layer,
@@ -58,8 +59,13 @@ function createEffectRunnerLayer(
     ),
     Layer.provideMerge(ShellLayer)
   );
-  return EffectRunnerLayer(options).pipe(Layer.provide(repositories));
+  return EffectRunnerLayer(options).pipe(
+    Layer.provide(Layer.succeed(MachineGitHub, machineGitHub)),
+    Layer.provide(repositories)
+  );
 }
+
+type TestEffectRunnerOptions = EffectRunnerOptions & { machineGitHub?: MachineGitHubShape | null };
 
 export class EffectRunner {
   readonly #runtime: ManagedRuntime.ManagedRuntime<EffectRunnerTag, never>;
@@ -69,7 +75,7 @@ export class EffectRunner {
     config: ServerConfig,
     runs: RunSupervisor['Service'],
     briefings: BriefingWriter['Service'],
-    options: EffectRunnerOptions
+    options: TestEffectRunnerOptions
   ) {
     this.#runtime = ManagedRuntime.make(
       Layer.mergeAll(createEffectRunnerLayer(engine, config, runs, briefings, options), JsonLogger)

@@ -176,3 +176,32 @@ describe('MCP sign-ins', () => {
     expect(openTestSecrets(path).selectMcpCredentials('ok')).toEqual({});
   });
 });
+
+describe('members’ GitHub tokens', () => {
+  const KAI = { token: 'ghp_kai', login: 'Kai', name: 'Kai Lane', email: '7+Kai@users.noreply.github.com' };
+
+  test('are kept per login whatever its case, in the private file, and forgotten on removal', async () => {
+    const { path, store } = createStore();
+    await store.setTime(5);
+    expect(store.writeGitHubToken(KAI)).toEqual({ ...KAI, savedAt: 5 });
+    expect(statSync(path).mode & 0o777).toBe(0o600);
+    expect(openTestSecrets(path).selectGitHubToken('kai')).toEqual({ ...KAI, savedAt: 5 });
+    expect(store.selectGitHubToken('mona')).toBeNull();
+    store.removeGitHubToken('mona');
+    store.removeGitHubToken('KAI');
+    expect(openTestSecrets(path).selectGitHubToken('kai')).toBeNull();
+  });
+
+  test('a damaged entry is dropped and the rest is kept', () => {
+    const path = join(createTempDir(), 'secrets.json');
+    writeFileSync(
+      path,
+      JSON.stringify({ salt: 'abc', github: { kai: { ...KAI, savedAt: 1 }, mona: 'junk' } })
+    );
+    const store = openTestSecrets(path);
+    expect(store.selectGitHubToken('kai')).toEqual({ ...KAI, savedAt: 1 });
+    expect(store.selectGitHubToken('mona')).toBeNull();
+    writeFileSync(path, JSON.stringify({ salt: 'abc', github: [] }));
+    expect(openTestSecrets(path).selectGitHubToken('kai')).toBeNull();
+  });
+});

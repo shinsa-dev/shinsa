@@ -53,6 +53,7 @@ import {
   OpenRequest,
   OwnerOnlyRoute,
   SharedMemberRoute,
+  GitHubTokenAnswer,
   PlacementAnswerBody,
   ProjectAnswer,
   ProjectPathBody,
@@ -350,7 +351,18 @@ class SecretsGroup extends HttpApiGroup.make('secrets')
       params: { gateId: Schema.String },
       payload: Schema.Struct({ decline: Field, value: Field }),
       success: OkAnswer,
-    }).annotate(OwnerOnlyRoute, true)
+    }).annotate(OwnerOnlyRoute, true),
+    HttpApiEndpoint.get('githubToken', '/api/github-token', { success: GitHubTokenAnswer })
+      .annotate(OwnerOnlyRoute, true)
+      .annotate(SharedMemberRoute, true)
+      .annotate(EngineFeatureRoute, 'shared-machine'),
+    HttpApiEndpoint.post('writeGitHubToken', '/api/github-token', {
+      payload: Schema.Struct({ token: Field }),
+      success: GitHubTokenAnswer,
+    })
+      .annotate(OwnerOnlyRoute, true)
+      .annotate(SharedMemberRoute, true)
+      .annotate(EngineFeatureRoute, 'shared-machine')
   )
   .middleware(EngineGate) {}
 

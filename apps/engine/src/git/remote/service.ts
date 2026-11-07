@@ -2,6 +2,8 @@ import { existsSync, statSync } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
 import type { BundleConflict, Repo, RepoCandidate } from '@shinsa/core';
 import { Context, Effect, Layer } from 'effect';
+import { resolveAuthorEnv, resolveGitTokenEnv } from '../../github/identity/resolve.ts';
+import { TaskGitHub } from '../../github/identity/schema.ts';
 import { describeFailure } from '../../shell/failure.ts';
 import { decodeRefName } from '../ref-name.ts';
 import { GitFailed, type RefNameInvalid } from '../schema.ts';
@@ -68,7 +70,9 @@ export class Remote extends Context.Service<
         cwd: string,
         signal?: AbortSignal
       ) {
-        const result = yield* git.attempt(argv.slice(1), cwd, { timeout: null, signal });
+        const { identity } = yield* TaskGitHub;
+        const env = resolveGitTokenEnv(identity);
+        const result = yield* git.attempt(argv.slice(1), cwd, { timeout: null, signal, env });
         if (result.ok) return;
         return yield* createPushError(argv, result, yield* hasPrePushHook(cwd));
       });
@@ -86,7 +90,8 @@ export class Remote extends Context.Service<
         const branch = yield* decodeRefName(base);
         const ref = `refs/remotes/origin/${branch}`;
         const args = ['fetch', '--quiet', 'origin', '--', `+refs/heads/${branch}:${ref}`];
-        const result = yield* git.attempt(args, path, { timeout: FETCH_TIMEOUT, signal });
+        const env = resolveGitTokenEnv((yield* TaskGitHub).identity);
+        const result = yield* git.attempt(args, path, { timeout: FETCH_TIMEOUT, signal, env });
         if (result.ok) return ref;
         if (MISSING_REMOTE_REF.test(result.stderr)) return null;
         return yield* createPushError(['git', ...args], result, false);
@@ -101,7 +106,8 @@ export class Remote extends Context.Service<
 
       const mergeBase = Effect.fnUntraced(function* (path: string, ref: string, message: string) {
         const args = ['merge', '--quiet', '--no-edit', '-m', message, ref];
-        const result = yield* git.attempt(args, path);
+        const env = resolveAuthorEnv((yield* TaskGitHub).identity);
+        const result = yield* git.attempt(args, path, { env });
         if (result.ok) return { status: 'merged' } satisfies BaseUpdate;
         const unmerged = yield* git.run(
           ['-c', 'core.quotePath=false', 'diff', '--name-only', '--diff-filter=U'],
@@ -139,7 +145,8 @@ export class Remote extends Context.Service<
           Effect.map(decodeRefName(branch), (name) => `+refs/heads/${name}:refs/remotes/origin/${name}`)
         );
         const args = ['fetch', '--quiet', 'origin', '--', ...refs];
-        const result = yield* git.attempt(args, repo.path, { timeout: FETCH_TIMEOUT, signal });
+        const env = resolveGitTokenEnv((yield* TaskGitHub).identity);
+        const result = yield* git.attempt(args, repo.path, { timeout: FETCH_TIMEOUT, signal, env });
         if (!result.ok) {
           return yield* new GitFailed({
             message: describeFailure(['git', ...args], result),

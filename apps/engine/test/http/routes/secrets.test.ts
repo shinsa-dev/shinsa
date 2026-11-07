@@ -1,7 +1,13 @@
 import { afterEach, describe, expect, test } from 'bun:test';
+import { join } from 'node:path';
 import { listActiveRuns } from '@shinsa/core';
 import { DomainError } from '@shinsa/core';
-import { Effect } from 'effect';
+import { OWNER_ONLY_MESSAGE } from '@shinsa/core';
+import { Effect, Layer } from 'effect';
+import { GitHubProcess } from '../../../src/github/process/service.ts';
+import { GitHubCli } from '../../../src/github/service.ts';
+import { createTempDir } from '../../helpers/index.ts';
+import { openTestSecrets } from '../../helpers/secrets.ts';
 import { disposeWebHandlers } from '../../helpers/web.ts';
 import { addSchedule, createWorld, type World } from '../../schedules/fixtures.ts';
 import { openSchedules, type SchedulesHarness } from '../../schedules/harness.ts';
@@ -171,5 +177,126 @@ describe('answering a secret request over HTTP', () => {
     expect(() => world.secrets.removeRef(world.secrets.resolveRef('gate-1'), world.taskId)).toThrow(
       'has been used'
     );
+  });
+});
+
+describe('a member’s GitHub token over HTTP', () => {
+  const KAI = { login: 'kai', name: 'Kai Lane', avatarUrl: null };
+  const OWNER = { login: 'owner', name: 'Olive', avatarUrl: null };
+  const remote = {
+    isOwner: (userId: string | null) => Effect.succeed(userId === 'u-owner'),
+    resolveActor: (userId: string | null) =>
+      Effect.succeed(userId === null || userId === 'u-owner' ? OWNER : userId === 'u-kai' ? KAI : null),
+    tunnelHost: Effect.succeed(null),
+    isEnabled: Effect.succeed(true),
+  };
+
+  function setUpTokens(gh: (token: string | undefined) => { ok: boolean; stdout: string }, extras = {}) {
+    const secrets = openTestSecrets(join(createTempDir(), 'secrets.json'));
+    const asked: string[] = [];
+    const github = Effect.runSync(
+      GitHubCli.use(Effect.succeed).pipe(
+        Effect.provide(
+          GitHubCli.layer.pipe(
+            Layer.provide(
+              GitHubProcess.layerTest((args) => {
+                asked.push(args.join(' '));
+                const { ok, stdout } = gh(undefined);
+                return { ok, code: ok ? 0 : 1, stdout, stderr: ok ? '' : stdout, timedOut: false };
+              })
+            )
+          )
+        )
+      )
+    );
+    const routes = startRoutes({ secrets: secrets.store, github, remote, ...extras } as never);
+    const as = async (userId: string | null, method: 'GET' | 'POST', body?: unknown) => {
+      const response = await routes.send(
+        '/api/github-token',
+        {
+          method,
+          headers: { 'content-type': 'application/json' },
+          ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+        },
+        userId === null ? undefined : { via: 'channel', guest: null, userId }
+      );
+      if (!response.ok) return readFailure(response);
+      return (await response.json()) as Record<string, unknown>;
+    };
+    return { routes, secrets, asked, as };
+  }
+
+  const kaiUser = () => ({ ok: true, stdout: JSON.stringify({ id: 7, login: 'kai', name: 'Kai Lane' }) });
+
+  test('a member on a shared machine saves, reads and removes their own token', async () => {
+    const { routes, secrets, asked, as } = setUpTokens(kaiUser);
+    await routes.context.engine.dispatch({ type: 'settings.change', patch: { sharedMachine: true } });
+    expect(await as('u-kai', 'GET')).toEqual({
+      login: 'kai',
+      saved: false,
+      savedAt: null,
+      machineLogin: false,
+    });
+    expect(await as('u-kai', 'POST', { token: '  ghp_kai  ' })).toMatchObject({ login: 'kai', saved: true });
+    expect(asked).toEqual(['api user']);
+    expect(secrets.selectGitHubToken('kai')).toMatchObject({
+      token: 'ghp_kai',
+      email: '7+kai@users.noreply.github.com',
+    });
+    expect(await as('u-kai', 'POST', { token: null })).toMatchObject({ saved: false });
+    expect(secrets.selectGitHubToken('kai')).toBeNull();
+  });
+
+  test('the machine’s owner uses its own login and has no token to save', async () => {
+    const { routes, as } = setUpTokens(kaiUser);
+    await routes.context.engine.dispatch({ type: 'settings.change', patch: { sharedMachine: true } });
+    expect(await as(null, 'GET')).toEqual({
+      login: 'owner',
+      saved: false,
+      savedAt: null,
+      machineLogin: true,
+    });
+    expect(await as('u-owner', 'POST', { token: 'ghp_x' })).toMatchObject({ code: 'github_token_machine' });
+  });
+
+  test('a token GitHub refuses, one of another account, or no token at all is not saved', async () => {
+    const refused = setUpTokens(() => ({ ok: false, stdout: 'Bad credentials' }));
+    await refused.routes.context.engine.dispatch({ type: 'settings.change', patch: { sharedMachine: true } });
+    expect(await refused.as('u-kai', 'POST', { token: 'ghp_old' })).toMatchObject({
+      code: 'github_token_refused',
+    });
+    expect(await refused.as('u-kai', 'POST', { token: '  ' })).toMatchObject({
+      code: 'github_token_invalid',
+    });
+    expect(await refused.as('u-kai', 'POST', { token: 7 })).toMatchObject({ code: 'github_token_invalid' });
+    const other = setUpTokens(() => ({
+      ok: true,
+      stdout: JSON.stringify({ id: 9, login: 'mona', name: null }),
+    }));
+    await other.routes.context.engine.dispatch({ type: 'settings.change', patch: { sharedMachine: true } });
+    expect(await other.as('u-kai', 'POST', { token: 'ghp_mona' })).toMatchObject({
+      code: 'github_token_other_account',
+    });
+    expect(refused.secrets.selectGitHubToken('kai')).toBeNull();
+    expect(other.secrets.selectGitHubToken('kai')).toBeNull();
+  });
+
+  test('a member reaches it only on a shared machine, and a stranger never', async () => {
+    const { routes, as } = setUpTokens(kaiUser);
+    expect(await as('u-kai', 'GET')).toMatchObject({ status: 403, message: OWNER_ONLY_MESSAGE });
+    await routes.context.engine.dispatch({ type: 'settings.change', patch: { sharedMachine: true } });
+    expect(await as('u-gone', 'GET')).toMatchObject({ status: 400, message: OWNER_ONLY_MESSAGE });
+  });
+
+  test('without remote access the token has no owner, and without a store the route is not served', async () => {
+    const { as } = setUpTokens(kaiUser, { remote: undefined });
+    expect(await as(null, 'GET')).toMatchObject({ code: 'github_token_no_owner' });
+    const noOwner = setUpTokens(kaiUser, {
+      remote: { ...remote, resolveActor: () => Effect.succeed(null) },
+    });
+    expect(await noOwner.as(null, 'GET')).toMatchObject({ code: 'github_token_no_owner' });
+    const bare = startRoutes();
+    expect((await bare.send('/api/github-token')).status).toBe(404);
+    expect((await bare.post('/api/github-token', { token: 'x' })).status).toBe(404);
   });
 });

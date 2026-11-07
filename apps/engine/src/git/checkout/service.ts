@@ -3,6 +3,8 @@ import { dirname, join, resolve } from 'node:path';
 import type { Repo } from '@shinsa/core';
 import { Clock, Context, Effect, Layer } from 'effect';
 import { resolveInstallCommand } from '../../checks/install.ts';
+import { resolveAuthorEnv } from '../../github/identity/resolve.ts';
+import { TaskGitHub } from '../../github/identity/schema.ts';
 import { resolveCancel } from '../../shell/abort.ts';
 import { describeFailure } from '../../shell/failure.ts';
 import { COMMAND_TIMEOUT, type CommandResult, NOT_STARTED_EXIT_CODE } from '../../shell/schema.ts';
@@ -128,6 +130,7 @@ export class Checkout extends Context.Service<
           mergeHead === null ? null : { mergeHead, mergeMessage: yield* resolveMergeMessage(path, message) };
         yield* git.run(['commit', '--no-verify', '-q', '-F', '-'], path, {
           input: merge?.mergeMessage ?? message,
+          env: resolveAuthorEnv((yield* TaskGitHub).identity),
         });
         return { merge };
       });

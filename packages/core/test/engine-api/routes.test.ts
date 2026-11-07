@@ -140,6 +140,7 @@ const FEATURE_ROUTES = {
   'usage.watchdog_limits': [],
   'share.scopes': [],
   'suggestion.bundle': [],
+  'shared-machine': ['GET /api/github-token', 'POST /api/github-token'],
 };
 
 const LOCAL_ONLY = [
@@ -150,6 +151,8 @@ const LOCAL_ONLY = [
 ];
 
 const OWNER_ONLY = [
+  'GET /api/github-token',
+  'POST /api/github-token',
   'POST /api/remote/link/create',
   'POST /api/remote/link/remove',
   'POST /api/remote/members/grant',

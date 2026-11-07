@@ -20,6 +20,7 @@ export const ENGINE_FEATURES = [
   'usage.watchdog_limits',
   'share.scopes',
   'suggestion.bundle',
+  'shared-machine',
 ] as const;
 
 export type EngineFeature = (typeof ENGINE_FEATURES)[number];

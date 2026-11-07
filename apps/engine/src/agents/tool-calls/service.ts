@@ -16,6 +16,8 @@ import {
 } from '@shinsa/core';
 import { Clock, Context, Effect, Layer, Option } from 'effect';
 import { Checkout } from '../../git/checkout/service.ts';
+import { provideTaskGitHub } from '../../github/identity/resolve.ts';
+import { MachineGitHub } from '../../github/identity/schema.ts';
 import { describeError } from '../../log/index.ts';
 import { RepoRegistry } from '../../repos/registry/service.ts';
 import { EngineCore } from '../../runtime/engine/service.ts';
@@ -78,6 +80,7 @@ export class ToolCalls extends Context.Service<
       const services = yield* Effect.serviceOption(Terminals);
       const schedules = yield* Effect.serviceOption(ScheduleTools);
       const access = yield* Effect.serviceOption(ManageAccess);
+      const machine = yield* MachineGitHub;
 
       const refuse = (message: string) => new ToolCallFailed({ message });
 
@@ -124,7 +127,10 @@ export class ToolCalls extends Context.Service<
         const repo = task.repoId ? (yield* engine.state).repos[task.repoId] : undefined;
         if (!task.worktreePath || !repo) return yield* dispatch({ ...command, treeHash: null });
         const commit = yield* Effect.mapError(
-          workspaces.resolve(task).commit(repo, task, resolveCommitMessage(task, run)),
+          workspaces
+            .resolve(task)
+            .commit(repo, task, resolveCommitMessage(task, run))
+            .pipe(provideTaskGitHub(machine, engine.state, task.id)),
           fail
         );
         return yield* work.recordOverlaps(task.id, [], call.signal).pipe(

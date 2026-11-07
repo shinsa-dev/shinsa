@@ -1,5 +1,7 @@
 import type { ShinsaEffect } from '@shinsa/core';
 import { Context, Effect, Layer } from 'effect';
+import { provideTaskGitHub } from '../../../github/identity/resolve.ts';
+import { MachineGitHub } from '../../../github/identity/schema.ts';
 import type { Slack, SlackRefusal, SlackRelayFailure } from '../../../slack/index.ts';
 import type { EffectAttempt } from '../../engine/schema.ts';
 import { createEffectFailed, resolveEffectFailure } from '../../failures/classify.ts';
@@ -27,6 +29,7 @@ export class EffectHandlers extends Context.Service<
       const merging = yield* Merging;
       const cleanup = yield* Cleanup;
       const pullRequests = yield* PullRequestSync;
+      const machine = yield* MachineGitHub;
 
       const withSlack = Effect.fn('EffectHandlers.withSlack')(function* (
         work: (slack: Slack['Service']) => Effect.Effect<void, SlackRefusal | SlackRelayFailure>
@@ -67,7 +70,7 @@ export class EffectHandlers extends Context.Service<
         );
       });
 
-      const apply = Effect.fn('EffectHandlers.apply')(function* (
+      const applyEffect = Effect.fn('EffectHandlers.applyEffect')(function* (
         effect: ShinsaEffect,
         attempt: EffectAttempt
       ) {
@@ -158,6 +161,11 @@ export class EffectHandlers extends Context.Service<
             );
         }
       });
+
+      const apply = (effect: ShinsaEffect, attempt: EffectAttempt) =>
+        'taskId' in effect
+          ? provideTaskGitHub(machine, world.state, effect.taskId)(applyEffect(effect, attempt))
+          : applyEffect(effect, attempt);
 
       return EffectHandlers.of({ apply });
     })

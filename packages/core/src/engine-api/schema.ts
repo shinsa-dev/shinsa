@@ -644,6 +644,14 @@ export const FileWrittenAnswer = Schema.Unknown.pipe(
   Schema.refine((value): value is FileWritten => Predicate.isObject(value))
 );
 
+export const GitHubTokenAnswer = Schema.Struct({
+  login: Schema.NullOr(Schema.String),
+  saved: Schema.Boolean,
+  savedAt: Schema.NullOr(Schema.Number),
+  machineLogin: Schema.Boolean,
+});
+export type GitHubTokenAnswer = typeof GitHubTokenAnswer.Type;
+
 export const AccountsAnswer = Schema.Unknown.pipe(
   Schema.refine((value): value is AccountsSnapshot => Predicate.isObject(value))
 );
