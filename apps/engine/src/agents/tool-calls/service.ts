@@ -200,7 +200,7 @@ export class ToolCalls extends Context.Service<
       ) {
         const { task } = yield* findCurrent(runId, attemptId);
         const folder = { taskId: task.id, round: resolveCurrentRound(task).number };
-        const stored = yield* storeEvidence(input, task.worktreePath, evidence, folder).pipe(
+        const stored = yield* withFiles(storeEvidence(input, task.worktreePath, evidence, folder)).pipe(
           Effect.catchDefect(Effect.fail),
           Effect.mapError(fail)
         );

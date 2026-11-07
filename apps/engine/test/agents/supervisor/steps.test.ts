@@ -18,6 +18,7 @@ import { GitLayer } from '../../../src/git/layers.ts';
 import { EngineCore } from '../../../src/runtime/engine/service.ts';
 import { ShellLayer } from '../../../src/shell/layers.ts';
 import { WorktreeRoot } from '../../../src/workspaces/root/service.ts';
+import { runFiles } from '../../harness.ts';
 import { JsonFileLayer } from '../../helpers/files.ts';
 import { createTempDir, createTestConfig } from '../../helpers/index.ts';
 import { createRun, createStubEngine } from '../../helpers/state.ts';
@@ -91,8 +92,8 @@ describe('the steps of a turn', () => {
   test('a scratch folder that cannot be made fails with WorkspaceUnavailable', async () => {
     const file = join(createTempDir(), 'taken');
     writeFileSync(file, '');
-    const exit = await Effect.runPromiseExit(
-      prepareWorkspace({ cwd: join(file, 'scratch'), repo: null, defaultBranch: 'main' })
+    const exit = await runFiles(
+      Effect.exit(prepareWorkspace({ cwd: join(file, 'scratch'), repo: null, defaultBranch: 'main' }))
     );
     expect(exit).toMatchObject(Exit.fail(expect.objectContaining({ _tag: 'WorkspaceUnavailable' })));
   });

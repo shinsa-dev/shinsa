@@ -1,8 +1,8 @@
-import type { Dirent } from 'node:fs';
 import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
 import { Clock, Context, Duration, Effect, FileSystem, Layer, Option } from 'effect';
 import { normalizeRemote } from '../../git/remote/output.ts';
 import { Remote } from '../../git/remote/service.ts';
+import { selectErrnoCode } from '../../shell/errno.ts';
 import {
   BUNDLE_SUFFIXES,
   DISCOVERY_BUDGET,
@@ -19,7 +19,6 @@ import {
   SKIPPED_DIRS,
   URL_LINE,
 } from '../schema.ts';
-import { listFolderEntries } from './entries.ts';
 import { listLocalRepos } from './local.ts';
 
 export class RepoFolders extends Context.Service<
@@ -43,13 +42,15 @@ export class RepoFolders extends Context.Service<
         SKIPPED_DIRS.has(name) ||
         BUNDLE_SUFFIXES.some((suffix) => name.endsWith(suffix));
 
-      const listChildren = (dir: string, entries: Dirent[]) =>
+      const listChildren = (dir: string, entries: readonly FileSystem.DirectoryEntry[]) =>
         entries
-          .filter((entry) => entry.isDirectory() && !isSkipped(entry.name))
+          .filter((entry) => entry.type === 'Directory' && !isSkipped(entry.name))
           .map((entry) => join(dir, entry.name));
 
-      const isRepo = (entries: Dirent[]) =>
-        entries.some((entry) => entry.name === '.git' && (entry.isDirectory() || entry.isFile()));
+      const isRepo = (entries: readonly FileSystem.DirectoryEntry[]) =>
+        entries.some(
+          (entry) => entry.name === '.git' && (entry.type === 'Directory' || entry.type === 'File')
+        );
 
       const readText = (path: string) => fs.readFileString(path).pipe(Effect.orElseSucceed(() => null));
 
@@ -79,7 +80,12 @@ export class RepoFolders extends Context.Service<
         return null;
       };
 
-      const recordEntries = (scan: DiscoveryScan, dir: string, entries: Dirent[], descend: boolean) => {
+      const recordEntries = (
+        scan: DiscoveryScan,
+        dir: string,
+        entries: readonly FileSystem.DirectoryEntry[],
+        descend: boolean
+      ) => {
         if (dir !== scan.home && isRepo(entries)) {
           const parent = dirname(dir);
           scan.parents.set(parent, [...(scan.parents.get(parent) ?? []), basename(dir)]);
@@ -89,11 +95,11 @@ export class RepoFolders extends Context.Service<
       };
 
       const visit = (scan: DiscoveryScan, dir: string, descend: boolean) =>
-        listFolderEntries(dir).pipe(
+        fs.readDirectoryEntries(dir).pipe(
           Effect.map((entries) => recordEntries(scan, dir, entries, descend)),
-          Effect.catchTag('FolderUnreadable', (failure) =>
+          Effect.catchTag('PlatformError', (failure) =>
             Effect.sync(() => {
-              if (REFUSED_CODES.has(failure.code ?? '')) scan.refused.push(dir);
+              if (REFUSED_CODES.has(selectErrnoCode(failure.reason.cause) ?? '')) scan.refused.push(dir);
               return [];
             })
           )

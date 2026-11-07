@@ -1,6 +1,6 @@
-import { statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { Context, Effect, Layer, Ref } from 'effect';
+import { Context, Effect, FileSystem, Layer, Option, Ref } from 'effect';
+import { constant } from 'effect/Function';
 import { Shell } from '../../../shell/service.ts';
 import { type CachedVersion, UNREADABLE_MODIFIED_AT, VERSION_TIMEOUT, type VersionParser } from './schema.ts';
 
@@ -14,10 +14,17 @@ export class ProgramVersions extends Context.Service<
     ProgramVersions,
     Effect.gen(function* () {
       const shell = yield* Shell;
+      const fs = yield* FileSystem.FileSystem;
       const cache = yield* Ref.make<ReadonlyMap<string, CachedVersion>>(new Map());
 
       const readModifiedAt = (path: string) =>
-        Effect.try({ try: () => statSync(path).mtimeMs, catch: String }).pipe(
+        fs.stat(path).pipe(
+          Effect.map((info) =>
+            Option.match(info.mtime, {
+              onNone: constant(UNREADABLE_MODIFIED_AT),
+              onSome: (at) => at.getTime(),
+            })
+          ),
           Effect.orElseSucceed(() => UNREADABLE_MODIFIED_AT)
         );
 

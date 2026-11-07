@@ -2,14 +2,14 @@ import { describe, expect, test } from 'bun:test';
 import { readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Run, Task } from '@shinsa/core';
-import { Effect } from 'effect';
 import { storeEvidence as storeEvidenceEffect } from '../../src/agents/evidence.ts';
 import { assertProtocol, HANDED_OVER, resolveCommitMessage } from '../../src/agents/handover.ts';
+import { runFiles } from '../harness.ts';
 import { createTestEvidence } from '../helpers/evidence.ts';
 import { createTempDir, writeFiles } from '../helpers/index.ts';
 
 const storeEvidence = (...args: Parameters<typeof storeEvidenceEffect>) =>
-  Effect.runPromise(storeEvidenceEffect(...args));
+  runFiles(storeEvidenceEffect(...args));
 
 describe('commits', () => {
   const task = {

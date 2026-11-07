@@ -80,9 +80,8 @@ async function createToolCalls({ config, engine }: Setup, extra: Layer.Layer<nev
     Layer.succeed(Providers, createTestProviders([])),
     Layer.succeed(EngineCore, engine.core),
     Layer.succeed(DelegationMinute, Duration.millis(5)),
-    GitLayer.pipe(Layer.provideMerge(ShellLayer)),
     extra
-  );
+  ).pipe(Layer.provideMerge(GitLayer.pipe(Layer.provideMerge(ShellLayer))));
   return (name: string, call: Omit<ToolCall, 'signal'>) =>
     Effect.runPromise(
       ToolCalls.use((tools) => tools.handle(name, { ...call, signal: new AbortController().signal })).pipe(
