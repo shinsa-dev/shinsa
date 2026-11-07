@@ -36,6 +36,7 @@ function mention(overrides: Partial<SlackMention> = {}): SlackMention {
     permalink: 'https://acme.slack.com/archives/C1/p1003',
     channelName: 'support',
     thread: [{ ts: '100.1', userId: 'U2', userName: 'Mia', text: 'Export hangs on big files.', bot: false }],
+    linkedThreads: [],
     ...overrides,
   };
 }

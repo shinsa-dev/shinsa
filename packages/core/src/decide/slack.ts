@@ -30,7 +30,7 @@ function requestPost(decider: Decider, thread: SlackThreadRef, taskId: string, p
 }
 
 function forwardMention(decider: Decider, task: Task, mention: SlackMention) {
-  const text = serializeSlackMessage(mention);
+  const text = serializeSlackMessage(mention, decider.context.newId());
   const held = listOpenGates(decider.state, task.id).length > 0;
   if (held) recordHeldMessage(decider, task.id, text);
   else messageTask(decider, { type: 'task.message', taskId: task.id, text });

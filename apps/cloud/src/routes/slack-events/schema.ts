@@ -1,8 +1,23 @@
-import type { SlackDecision, SlackDecisionModal } from '@shinsa/core';
+import type { SlackDecision, SlackDecisionModal, SlackMessageLink } from '@shinsa/core';
 import { Schema } from 'effect';
 import type { Machine } from '../../store/machines/schema.ts';
 
 export const SLACK_NAMED_USERS_LIMIT = 30;
+
+export const RECONNECT_CODES: ReadonlySet<string> = new Set([
+  'missing_scope',
+  'invalid_auth',
+  'not_authed',
+  'token_revoked',
+  'token_expired',
+  'account_inactive',
+]);
+
+export const HIDDEN_THREAD_CODES: ReadonlySet<string> = new Set([
+  'not_in_channel',
+  'channel_not_found',
+  'thread_not_found',
+]);
 
 export const RESPONSE_URL_ORIGIN = 'https://hooks.slack.com/';
 
@@ -29,6 +44,14 @@ export const UninstallEvent = Schema.Struct({
   ]),
 });
 
+export const UserTokensRevokedEvent = Schema.Struct({
+  team_id: Id,
+  event: Schema.Struct({
+    type: Schema.Literal('tokens_revoked'),
+    tokens: Schema.Struct({ oauth: Schema.NonEmptyArray(Id) }),
+  }),
+});
+
 export const MentionEnvelope = Schema.Struct({
   event_id: Id,
   team_id: Id,
@@ -39,6 +62,7 @@ export const MentionEnvelope = Schema.Struct({
     channel: Id,
     ts: Id,
     user: Id,
+    user_team: Text,
     thread_ts: Text,
     text: Text,
   }),
@@ -153,6 +177,7 @@ export interface MentionEvent {
   readonly ts: string;
   readonly threadTs: string;
   readonly userId: string;
+  readonly userTeam: string | null;
   readonly text: string;
 }
 
@@ -161,6 +186,18 @@ export interface ThreadEntry {
   readonly userId: string;
   readonly text: string;
   readonly botName: string | null;
+}
+
+export interface LinkedThreadRead {
+  readonly link: SlackMessageLink;
+  readonly entries: ReadonlyArray<ThreadEntry>;
+  readonly channelName: string | null;
+}
+
+export interface LinkedThreads {
+  readonly read: ReadonlyArray<LinkedThreadRead>;
+  readonly unread: number;
+  readonly reconnect: boolean;
 }
 
 export interface SlackCard {

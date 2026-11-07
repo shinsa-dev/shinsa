@@ -19,6 +19,8 @@ import {
   serializeSlackDeclined,
   serializeSlackGate,
   serializeSlackLinkPrompt,
+  serializeSlackReconnectPrompt,
+  serializeSlackUnreadLinks,
   serializeSlackMerged,
   serializeSlackOffline,
   serializeSlackResult,
@@ -597,6 +599,19 @@ describe("the bot's own replies", () => {
       '<https://app.shinsa.dev/slack/connect|Connect Slack>'
     );
     expect(readText(serializeSlackOffline('Studio & Co'))).toStartWith('*Studio &amp; Co is offline*\n');
+  });
+
+  test('asks to connect again, or says how many linked threads could not be read', () => {
+    const prompt = serializeSlackReconnectPrompt('https://app.shinsa.dev/slack/connect');
+    expect(prompt.text).toBe('Connect Slack again so I can read the threads you link.');
+    expect(readText(prompt)).toStartWith('*Connect Slack again*\n');
+    expect(readText(prompt)).toEndWith('<https://app.shinsa.dev/slack/connect|Connect Slack>');
+    expect(serializeSlackUnreadLinks(1)).toBe(
+      'I could not read the thread you linked. Check that you can open it in Slack.'
+    );
+    expect(serializeSlackUnreadLinks(2)).toBe(
+      'I could not read 2 of the threads you linked. Check that you can open them in Slack.'
+    );
   });
 });
 

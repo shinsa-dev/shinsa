@@ -3173,7 +3173,7 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   upgrade (404, the token kept), then spends the nonce (`Remote.spendConnect`, held until the token expires), so a
   token seen in a log or on the wire opens nothing (401). The token only keeps random traffic off the endpoint; trust
   rests on the handshake. Every engine names what it speaks in each heartbeat and pairing start (`features`:
-  `bound-connect-tokens`, `sealed-pairing`, `MACHINE_FEATURES` in core), and app.shinsa.dev mints these tokens and
+  `bound-connect-tokens`, `sealed-pairing`, `slack-linked-threads`, `MACHINE_FEATURES` in core), and app.shinsa.dev mints these tokens and
   seals pairing credentials only for a machine that named them; an engine that predates them, which names nothing,
   still gets the old unlabelled token over the instance, user and expiry and its credentials in the clear, so the
   Worker can deploy before every machine has updated. This engine only accepts the new token and refuses clear
@@ -4363,15 +4363,20 @@ Mention the Shinsa bot in Slack and the machine of the person who mentioned it d
 for everyone, on app.shinsa.dev; each person connects their own Slack user to one of their own machines, so the same
 mention from a teammate who connected their Shinsa runs on their machine, and from one who did not, runs nowhere. It
 needs remote access (above): the relay reaches the machine through its tunnel, and the machine posts back through the
-relay with its machine token. No machine holds a Slack token. The rules are core's (`packages/core/src/slack/`,
+relay with its machine token. No machine holds a Slack token. A thread the mention links to is read with the token of
+the person who mentioned the bot, never the bot's, so a thread in a channel the bot is not in, such as a shared
+customer channel, reaches the task as long as that person can read it. The rules are core's (`packages/core/src/slack/`,
 `decide/slack.ts`, `state/slack.ts`); the relay is `apps/cloud` (`routes/slack-events/`, `routes/slack-relay/`, `routes/slack-link/`, `apps/cloud/CLAUDE.md`);
 the machine side is `apps/engine/src/slack/`.
 
 ```
 Slack ──event──► app.shinsa.dev /slack/events
                   ├─ Slack's signature, the event id seen once
+                  ├─ author of another org ─► nothing
                   ├─ author not connected ──► private "Connect Slack"
                   ├─ machine offline ───────► "<machine> is offline"
+                  ├─ linked threads, read with the author's token
+                  │  └─ one unreadable ──► a private note after
                   └─ the thread, signed ──► t-<id>.shinsa.dev
                                              /api/slack/events
                                                └─ slack.mention
@@ -4408,15 +4413,23 @@ Slack ──a card's button──► app.shinsa.dev /slack/interactions
 
 - **Connecting** (Settings → General → Slack, `components/settings/slack.tsx`): with remote access on, Connect
   Slack opens `https://app.shinsa.dev/slack/connect?instance=<this machine>` (`resolveSlackConnectUrl`). You sign in
-  with GitHub there if you are not, then with Slack (OpenID Connect, `openid profile`); a workspace without Shinsa
-  goes on to add the app, which asks for the bot scopes `app_mentions:read`, `channels:history`, `channels:read`,
-  `groups:history`, `groups:read`, `chat:write`, `reactions:write` and `users:read` (`SLACK_BOT_SCOPES`, `apps/cloud/slack-manifest.json`). Either way your Slack user is
-  linked to that machine and you land on `/slack/linked` (`routes/remote/slack.tsx`), which names the workspace or
+  with GitHub there if you are not, then with Slack (OAuth v2, `oauth.v2.access`), which asks for your own
+  read-only user scopes `channels:history`, `groups:history`, `channels:read` and `groups:read` (`SLACK_USER_SCOPES`)
+  and never a direct message's; a workspace without Shinsa goes on to add the app, which asks for the bot scopes `app_mentions:read`, `channels:history`, `channels:read`,
+  `groups:history`, `groups:read`, `chat:write`, `reactions:write` and `users:read` (`SLACK_BOT_SCOPES`, `apps/cloud/slack-manifest.json`) and the same user scopes, so its installer is linked in that one step. Either way your Slack user is
+  linked to that machine with your user token kept sealed (`slack_links.sealed_user_token`, AES-GCM under
+  `SLACK_TOKEN_KEY`, as a bot token is) and you land on `/slack/linked` (`routes/remote/slack.tsx`), which names the workspace or
   says what went wrong. A machine can be linked in several workspaces; a Slack user to one machine at a time
   (connecting again from another machine moves it). The section reads `GET /api/slack` (`SlackSnapshot`: remote access
   on, the connect link, the links with workspace, user and when, or the problem when app.shinsa.dev cannot be
   reached) when Settings opens and when the window comes back. Disconnect (`POST /api/slack/disconnect`) removes every
-  link of this machine; from another device only its owner may (`OwnerOnlyRoute`). Each row leads with when that
+  link of this machine; from another device only its owner may (`OwnerOnlyRoute`). Your user token is revoked
+  (`auth.revoke`, best effort: a failure is logged as `[Cloud] A Slack user token could not be revoked` and the
+  links still go) when you disconnect, when the machine is removed (`revokeMachineUserTokens`) and when connecting
+  again brings a different token (`replaceUserToken`; Slack gives the same one back while it is valid, which is
+  kept). Revoking Shinsa in Slack sends `tokens_revoked` with your user id, which drops your token and keeps the
+  link; removing the app still forgets the workspace and every link. A link made before user tokens has none until
+  you connect again. Each row leads with when that
   account last started work here ("Last used 2h ago · Connected 3d ago", or "Not used yet"): the engine
   adds `lastUsedAt` to each link from its own state (`resolveSlackLastUsedAt`, the newest task whose Slack thread
   that user in that workspace started), so app.shinsa.dev stores nothing for it. Replies in a task's thread and
@@ -4431,7 +4444,8 @@ Slack ──a card's button──► app.shinsa.dev /slack/interactions
   thread (`threadTs`, the mention's own `ts` for a mention outside a thread: the bot always answers in a thread), the
   author with their Slack name, the text with Slack's markup turned into words and the bot's own mention dropped
   (`resolveSlackReadableText`), a permalink, the channel's name (`conversations.info`; null without `channels:read` or
-  `groups:read`, in a direct message, or when Slack refuses), and the thread's last 100 messages, bots marked. Each
+  `groups:read`, in a direct message, or when Slack refuses), the thread's last 100 messages, bots marked, and
+  `linkedThreads` (below). Each
   message is read from its `text`, its `blocks` (section, header, context and rich text) and its `attachments`
   (pretext, title, text and fields, else the fallback), taking the longer of the text and the blocks and adding the
   attachments (`resolveSlackMessageText`, `apps/cloud/src/routes/slack-events/message.ts`), so a bot whose `text`
@@ -4443,6 +4457,27 @@ Slack ──a card's button──► app.shinsa.dev /slack/interactions
   whose `x-shinsa-slack-timestamp` is more than five minutes off (`verifySlackForwardSignature`, 401), then
   dispatches `slack.mention` with command id `slack:<event id>`, so a forward that comes twice is answered by its
   receipt.
+- **Threads a mention links to** (`SlackLinkedThread`, `listSlackMessageLinks`): a mention's text may link to other
+  Slack messages (`https://<workspace>.slack.com/archives/<channel>/p<ts>`, with `?thread_ts=` for a reply). The
+  relay reads the first three distinct threads it links to, other than its own (`SLACK_LIMITS.linkedThreads`), each
+  with `conversations.replies` and `conversations.info` called with the mentioning person's own user token, never
+  the bot's: Slack shows that token only the public and private channels that person is in, so the bot never reads
+  a thread to someone who could not read it themselves, and never needs to join a channel. People in a linked thread
+  are named with the bot token's `users:read`. Each reaches the machine with its channel, thread root, permalink,
+  channel name and up to 100 messages, read and named as the mention's own thread is. The relay reads them only for
+  a machine that names `slack-linked-threads` in `MACHINE_FEATURES`, so an older engine, which would drop the field,
+  is never sent them. When one cannot be read, the mention still goes on with the rest, and its author gets one
+  private message in the thread after it is forwarded: "Connect Slack again" with the connect link when the link has
+  no user token, its sealed token no longer opens with `SLACK_TOKEN_KEY` (`selectUserToken`, logged as a warning
+  `[Cloud] A stored Slack user token does not open`), or Slack refuses the token (`RECONNECT_CODES`: `missing_scope`,
+  `invalid_auth`, `token_revoked`…, `serializeSlackReconnectPrompt`), otherwise "I could not read the thread you
+  linked." (`serializeSlackUnreadLinks`). Each refusal is logged as `[Cloud] A linked Slack thread could not be read`
+  with Slack's `code`: a warning for a thread the person cannot see (`HIDDEN_THREAD_CODES`: `not_in_channel`,
+  `channel_not_found`, `thread_not_found`), an error for anything else, such as a missing scope. A token that no
+  longer opens is never revoked when it is replaced, unlinked or its machine removed; it is overwritten or dropped.
+- **Mentions from outside the workspace are ignored.** In a channel shared with another organisation, a mention
+  whose author's `user_team` is not the workspace that installed the app gets no reply, no connect prompt and no
+  forward.
 - **How a thread maps to a task** (`Task.slack`, `SlackThreadLink`: workspace, channel, thread, author, the mention's
   own `messageTs`, permalink, the status message's ts and the reaction on the mention; the key is `resolveSlackThreadKey`, `team:channel:threadTs`). A thread holds at most one
   open task. A mention in a thread whose task is open (not done or cancelled) messages that task like any message you
@@ -4474,7 +4509,10 @@ Slack ──a card's button──► app.shinsa.dev /slack/interactions
   with everything on Auto, so the focus project, then triage, decide the project, the repository, the kind of task
   (a question is an answer and ends with it) and the priority. Its request is what the person wrote (or "Do what this
   Slack thread asks for." for a bare mention), who asked with the permalink, and the thread fenced in a nonce-tagged
-  `<slack-thread-…>` element marked as untrusted data (`serializeSlackRequest`). It is linked to the thread
+  `<slack-thread-…>` element marked as untrusted data (`serializeSlackRequest`), then each linked thread under
+  "Linked thread 1 in #channel: <permalink>" in its own `<slack-linked-…-n>` element, also marked as untrusted
+  data and kept to 6,000 characters (`SLACK_LIMITS.linkedThreadChars`, its root always kept, then its latest
+  replies). A message to an open task fences them the same way, and the classifier reads them with the thread. It is linked to the thread
   (`slack.thread_linked`, "Started from a Slack thread"), and its first `slack.status` posts its card.
 - **One card per thread, edited in place** (`syncSlackThreads`, after every command, for the tasks it changed): the
   task's first `slack.status` posts one message in the thread, the card, and every later change edits it: the task
@@ -4606,8 +4644,8 @@ Slack ──a card's button──► app.shinsa.dev /slack/interactions
   With remote access off nothing is posted. A machine that is offline when someone mentions the bot gets "is offline"
   in the thread from app.shinsa.dev, and the mention is not kept: mention it again once Shinsa runs there.
 - **What app.shinsa.dev sees.** Slack's messages and the posts back pass through the Worker on their way and are never
-  stored: D1 keeps the workspaces with their bot tokens sealed (AES-GCM, `SLACK_TOKEN_KEY`), the links (Slack user to
-  account and machine), which threads were sent to which machine and which messages each machine posted (so a machine
+  stored, linked threads included: D1 keeps the workspaces with their bot tokens sealed (AES-GCM, `SLACK_TOKEN_KEY`), the links (Slack user to
+  account and machine, with that person's read-only user token sealed the same way), which threads were sent to which machine and which messages each machine posted (so a machine
   posts only in its own threads and edits only its own messages), and Slack's event ids for a day. The sealed channel
   of remote access is not involved; this is the one path where the Worker reads what goes by.
 

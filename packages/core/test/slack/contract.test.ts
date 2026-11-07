@@ -19,6 +19,15 @@ const WIRE = {
   permalink: 'https://acme.slack.com/archives/C1/p1003',
   channelName: 'support',
   thread: [{ ts: '100.1', userId: 'U2', userName: 'Mia', text: 'It hangs.', bot: false }],
+  linkedThreads: [
+    {
+      channelId: 'C9',
+      threadTs: '1730120000.123456',
+      permalink: 'https://acme.slack.com/archives/C9/p1730120000123456',
+      channelName: 'customer-acme',
+      thread: [{ ts: '1730120000.123456', userId: 'U7', userName: 'Lee', text: 'Login fails.', bot: false }],
+    },
+  ],
 };
 
 describe('a forwarded mention', () => {
@@ -56,6 +65,21 @@ describe('a forwarded mention', () => {
       thread: [],
       permalink: null,
     });
+    expect(parseSlackMention({ ...WIRE, linkedThreads: undefined })?.linkedThreads).toEqual([]);
+    const [linked] = WIRE.linkedThreads;
+    if (!linked) throw new Error('The wire mention has a linked thread.');
+    const broken = [
+      { ...linked, permalink: 'javascript:alert(1)' },
+      { ...linked, channelId: 'C1/x' },
+      { ...linked, channelName: '', thread: [...linked.thread, 'nope'] },
+    ];
+    expect(parseSlackMention({ ...WIRE, linkedThreads: broken })?.linkedThreads).toEqual([
+      { ...linked, channelName: null },
+    ]);
+    const many = Array.from({ length: SLACK_LIMITS.linkedThreads + 2 }, () => linked);
+    expect(parseSlackMention({ ...WIRE, linkedThreads: many })?.linkedThreads).toHaveLength(
+      SLACK_LIMITS.linkedThreads
+    );
     expect(parseSlackMention({ ...WIRE, channelName: undefined })?.channelName).toBeNull();
     expect(parseSlackMention({ ...WIRE, channelName: '' })?.channelName).toBeNull();
     expect(parseSlackMention({ ...WIRE, channelName: 'c'.repeat(200) })?.channelName).toHaveLength(

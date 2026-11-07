@@ -105,7 +105,7 @@ export type ClaimCode = typeof ClaimCode.Type;
 
 export const RemoteOk = Schema.Struct({ ok: Schema.Literal(true) });
 
-export const MACHINE_FEATURES = ['bound-connect-tokens', 'sealed-pairing'] as const;
+export const MACHINE_FEATURES = ['bound-connect-tokens', 'sealed-pairing', 'slack-linked-threads'] as const;
 
 export type MachineFeature = (typeof MACHINE_FEATURES)[number];
 
