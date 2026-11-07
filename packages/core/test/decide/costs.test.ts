@@ -778,6 +778,35 @@ describe('Autopilot and usage limits', () => {
     expect(harness.activeRun(taskId)).toMatchObject({ purpose: 'build' });
   });
 
+  test('marking a task urgent yourself releases it from its cost limit', () => {
+    const { harness, taskId } = limited(5);
+    harness.send(AUTOPILOT_ON);
+    meter(harness, taskId, 6);
+    proposePlan(harness, taskId);
+    expect(harness.openGate(taskId)).toMatchObject({ cause: 'budget' });
+    makeUrgent(harness, taskId);
+    expect(listOpenGates(harness.state, taskId)).toHaveLength(0);
+    expect(harness.activeRun(taskId)).toMatchObject({ purpose: 'build' });
+  });
+
+  test('urgency an agent set on your behalf keeps every limit, until you mark it urgent yourself', () => {
+    const { harness, taskId } = limited(5);
+    harness.send(AUTOPILOT_ON);
+    harness.send({ type: 'task.prioritize', taskId, priority: 'urgent' }, { onBehalf: true });
+    expect(harness.task(taskId)).toMatchObject({ priority: 'urgent', priorityOnBehalf: true });
+    meter(harness, taskId, 6);
+    proposePlan(harness, taskId);
+    expect(harness.openGate(taskId)).toMatchObject({ cause: 'budget' });
+    const held = heldAtPace({ daily: -1 });
+    held.harness.send(AUTOPILOT_ON);
+    held.harness.send({ type: 'task.prioritize', taskId: held.taskId, priority: 'urgent' }, { onBehalf: true });
+    expect(isHeldStepStarted(held.harness, held.run.id)).toBe(false);
+    held.harness.send({ type: 'task.prioritize', taskId: held.taskId, priority: 'high' });
+    makeUrgent(held.harness, held.taskId);
+    expect(held.harness.task(held.taskId).priorityOnBehalf).toBe(false);
+    expect(isHeldStepStarted(held.harness, held.run.id)).toBe(true);
+  });
+
   test('keeps the limits when you switch that off, or when Autopilot is off', () => {
     const off = heldAtPace({ daily: -1 });
     makeUrgent(off.harness, off.taskId);

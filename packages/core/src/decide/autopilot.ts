@@ -28,7 +28,7 @@ function isRiskWithin(risk: ReviewRating, upTo: AutopilotRisk) {
 }
 
 function isUrgent(task: Task) {
-  return task.priority === 'urgent';
+  return task.priority === 'urgent' && task.priorityOnBehalf !== true;
 }
 
 function isRiskAllowed(settings: Settings, task: Task, risk: ReviewRating) {

@@ -281,6 +281,7 @@ one reads as its empty value. The fields under Triage and shape, Plan and build,
 | `approvedEdits?` | `review` \| `merge` \| null | you approved that gate while `editedPaths` had files: every check runs before the push (`review`), or CI before the merge (`merge`); `task.edits_approved`, dropped by a real fix turn |
 | `approveAfterFix?` | boolean | you asked for changes with Fix N findings and approve (`gate.answered` with `thenApprove`): the next review gate that opens without an escalation is approved at once (`ahead`); written by every review answer, false in a new round |
 | `reviewRatings?` | `ReviewRatings` \| null | the last agent review's `confidence` and `risk` (`review.reported`'s `ratings`); a new round clears them |
+| `priorityOnBehalf?` | boolean | the priority was last set on your behalf by an agent (`task.prioritized` or `task.created` with `onBehalf`); Autopilot then treats the task as not urgent |
 | `autopiloted?` | `{ at, reason }` \| null | Autopilot approved this round's review for you (`gate.answered` with `autopilot`), why; cleared by the next review gate or a new round. Only such a change merges for you |
 | `escalation?` | `{ at, reason }` \| null | Autopilot sent this urgent change to your team (`task.escalated`); a shared status field, so it travels in the team listing. Cleared when its merge gate is answered or withdrawn, or a new round starts |
 | `untoldEdits?` | string[] | those of them no agent has been told about; the next run's prompt names them (`task.edits_told`) |

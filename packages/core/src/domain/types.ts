@@ -510,6 +510,7 @@ export interface Task {
   approveAfterFix?: boolean;
   reviewDisagreements?: ReviewDisagreement[];
   reviewRatings?: ReviewRatings | null;
+  priorityOnBehalf?: boolean;
   autopiloted?: Autopiloted | null;
   escalation?: TaskEscalation | null;
   reviewedInput?: string | null;

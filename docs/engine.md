@@ -1997,10 +1997,13 @@ action it takes is recorded with its reason. The rules are core's (`decide/autop
   opens the usual failure gate.
 - **Urgent work and usage limits.** With the policy on and `ignoreUsageLimits` set (`isUsageLimitExempt`), an urgent
   task's runs skip both holds before they start: `holdForBudget` (the task's usage and cost limits) and `holdForPace`
-  (the daily and project usage limits). Marking a task urgent starts a step the daily or project limit held
-  (`releasePaceHolds` after `task.prioritize`), and a settings change that exempts it also releases a step its own
-  limit paused (`releaseBudgetHolds`). Its limit's failure gate is never closed by marking it urgent, since an agent
-  may prioritize a task on your behalf.
+  (the daily and project usage limits). Marking a task urgent starts a step either hold stopped (`releasePaceHolds`
+  and `releaseBudgetHolds` after `task.prioritize`), and so does a settings change that exempts it.
+- **Only urgency you set counts.** An agent may prioritize a task on your behalf, so a priority set that way, or a
+  task an agent created urgent on your behalf, is marked `Task.priorityOnBehalf` and counts as not urgent for
+  Autopilot: it widens no approval rule, sets no deadline and skips no limit. Your own `task.prioritize` clears the
+  mark, and so does triage's choice; a watchdog's urgent fork (`file_report` `urgency`) is not on your behalf and
+  counts.
 
 ### Questions
 

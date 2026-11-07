@@ -124,6 +124,13 @@ describe('Autopilot at the review', () => {
     });
   });
 
+  test('does not count urgency an agent set on your behalf', () => {
+    const { harness, taskId } = setup({ approveUpTo: 'none', urgentApproveUpTo: 'medium' });
+    harness.send({ type: 'task.prioritize', taskId, priority: 'urgent' }, { onBehalf: true });
+    review(harness, taskId, { confidence: 'high', risk: 'medium' });
+    expectWaitsForYou(harness, taskId, 'The risk is medium, above what Autopilot approves.');
+  });
+
   test('leaves an urgent change above the urgent limit for you', () => {
     const { harness, taskId } = setup({ urgentApproveUpTo: 'medium' }, 'urgent');
     review(harness, taskId, { confidence: 'high', risk: 'high' });

@@ -34,7 +34,7 @@ import {
   isStartingFromBacklog,
   releaseInquiryFromBacklog,
 } from './backlog.ts';
-import { releasePaceHolds } from './costs.ts';
+import { releaseBudgetHolds, releasePaceHolds } from './costs.ts';
 import { type Decider, describeWaiting } from './decider.ts';
 import { changeDependencies, changeStack, resolveDependencies, resolveStackParents } from './dependencies.ts';
 import { closeTeammateDuplicate, closeTriageDuplicate, selectTriageDuplicate } from './duplicates.ts';
@@ -186,6 +186,7 @@ export function prioritizeTask(decider: Decider, command: CommandOf<'task.priori
   decider.requestBriefing(command.taskId);
   syncAutopilotDeadlines(decider, command.taskId);
   releasePaceHolds(decider);
+  releaseBudgetHolds(decider);
 }
 
 export function waitOnTasks(decider: Decider, command: CommandOf<'task.wait_on'>) {

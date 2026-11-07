@@ -179,6 +179,7 @@ function createTaskRecord(event: EventOf<'task.created'>): Task {
     stage: 'triage',
     stageReason: 'sizing up the work',
     priority: event.priority,
+    ...(event.onBehalf ? { priorityOnBehalf: true } : {}),
     branch: null,
     worktreePath: null,
     plan: null,
@@ -330,7 +331,10 @@ function applyStaged(state: ShinsaState, event: EventOf<'task.staged'>) {
 }
 
 function applyPrioritized(state: ShinsaState, event: EventOf<'task.prioritized'>) {
-  updateTask(state, event.taskId, event.at, { priority: event.priority });
+  updateTask(state, event.taskId, event.at, {
+    priority: event.priority,
+    priorityOnBehalf: event.onBehalf === true,
+  });
   if (event.by !== 'you') return;
   record(state, event.taskId, event.at, {
     actor: 'you',
