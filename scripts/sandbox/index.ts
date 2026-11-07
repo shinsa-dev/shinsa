@@ -6,12 +6,13 @@ import { createSandboxCloud } from './cloud.ts';
 import { respondDashboard, respondEnroll } from './dashboard.ts';
 import { createPreviewHandoffs, createPreviewTeammateHandoff, respondSandboxSignIn } from './handoffs.ts';
 import { prepareMachine, seedStudio, startMachine } from './machine.ts';
-import { findRemoteStylesheet, listSandboxSections, respondStatic } from './page.ts';
+import { findRemoteStylesheet, listSandboxSections, listSharedMachineLinks, respondStatic } from './page.ts';
 import { upgradePreview } from './previews.ts';
 import {
   seedProject,
   seedTeammateDuplicate,
   selectBusiestProject,
+  shareMachine,
   shareProjectWithTeam,
 } from './projects.ts';
 import {
@@ -54,7 +55,12 @@ export const startSandbox = Effect.fn('Sandbox.start')(function* () {
   const laptopData = yield* prepareMachine('laptop');
   const studio = yield* startMachine('studio', 'Studio', studioData);
   const laptop = yield* startMachine('laptop', 'Laptop', laptopData);
-  yield* seedProject(laptop.engine, laptopData, { repo: 'website', project: 'Website', tasks: LAPTOP_TASKS });
+  const website = yield* seedProject(laptop.engine, laptopData, {
+    repo: 'website',
+    project: 'Website',
+    tasks: LAPTOP_TASKS,
+  });
+  yield* shareMachine(laptop.engine);
   const teammateData = yield* prepareMachine('kai');
   const teammate = yield* startMachine('kai', 'Kai’s MacBook', teammateData);
   teammateLink.signingKey = yield* Effect.tryPromise({
@@ -80,11 +86,18 @@ export const startSandbox = Effect.fn('Sandbox.start')(function* () {
     try: () => import(join(ROOT, 'apps/web/src/components/sandbox/sandbox-page.tsx')),
     catch: (error) => new SandboxFailed({ message: `Loading the sandbox page failed: ${String(error)}` }),
   });
+  const laptopTasks = Object.values((yield* laptop.engine.core.state).tasks).filter(
+    (task) => task.repoId === website.id
+  );
+  const sharedLinks = listSharedMachineLinks(laptop.machine, laptopTasks);
   const sections = listSandboxSections(machines, teammate.machine, shares, teamTaskPath, preview, {
     duplicate: keptOver.handle ?? keptOver.id,
     original: teamTask?.handle ?? null,
   });
-  let page = serializeSandboxPage(sections, findRemoteStylesheet());
+  let page = serializeSandboxPage(
+    [...sections, { title: 'A shared machine', links: sharedLinks }],
+    findRemoteStylesheet()
+  );
   const cloud = yield* Effect.try({
     try: () => createSandboxCloud(SANDBOX_DIR, new URL(PREVIEW_ZONE).host, USER.id, machines),
     catch: (error) => new SandboxFailed({ message: `Starting the stand-in cloud failed: ${String(error)}` }),
@@ -143,6 +156,7 @@ export const startSandbox = Effect.fn('Sandbox.start')(function* () {
   page = serializeSandboxPage(
     [
       ...sections,
+      { title: 'A shared machine', links: sharedLinks },
       { title: 'Handing off a task', links: handoffs },
       { title: 'A task handed to a teammate', links: handedToTeammate },
     ],

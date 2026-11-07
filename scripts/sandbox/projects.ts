@@ -25,7 +25,10 @@ export const seedProject = Effect.fn('Sandbox.seedProject')(function* (
   const repo = Object.values((yield* core.state).repos).find((entry) => entry.name === seed.repo);
   if (!repo) return yield* new SandboxFailed({ message: `Registering ${seed.repo} failed.` });
   for (const task of seed.tasks) {
-    yield* core.dispatch({ type: 'task.create', request: task.request, repoId: repo.id });
+    const actor = task.owner
+      ? { login: task.owner.login, name: task.owner.name, avatarUrl: task.owner.avatarUrl }
+      : null;
+    yield* core.dispatch({ type: 'task.create', request: task.request, repoId: repo.id }, { actor });
     const created = Object.values((yield* core.state).tasks).find((entry) => entry.request === task.request);
     if (!created) return yield* new SandboxFailed({ message: `Creating a ${seed.project} task failed.` });
     yield* core.dispatch({
@@ -39,6 +42,10 @@ export const seedProject = Effect.fn('Sandbox.seedProject')(function* (
     });
   }
   return repo;
+});
+
+export const shareMachine = Effect.fn('Sandbox.shareMachine')(function* (engine: Engine) {
+  yield* engine.core.dispatch({ type: 'settings.change', patch: { sharedMachine: true } });
 });
 
 export const shareProjectWithTeam = Effect.fn('Sandbox.shareProjectWithTeam')(function* (

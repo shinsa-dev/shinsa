@@ -40,6 +40,7 @@ const program = Effect.gen(function* () {
     surface: null,
     origin: 'local',
     guest: null,
+    userId: null,
   });
 
   const readData = <A>(read: () => A) =>

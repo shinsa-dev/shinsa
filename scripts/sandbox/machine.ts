@@ -31,7 +31,7 @@ import {
   SEED_TIMEOUT,
   USER,
 } from './schema.ts';
-import { listPreviewTeamKeys, MACHINE_OWNERS, resolvePreviewTeams } from './team.ts';
+import { listPreviewTeamKeys, MACHINE_MEMBERS, MACHINE_OWNERS, resolvePreviewTeams } from './team.ts';
 
 export type StartedMachine = Effect.Success<ReturnType<typeof startMachine>>;
 
@@ -84,7 +84,7 @@ export const startMachine = Effect.fn('Sandbox.startMachine')(function* (
     enabled: true,
     owner: owner.login,
     devices: [],
-    access: { owner, members: [] },
+    access: { owner, members: MACHINE_MEMBERS[id] ?? [] },
     teams: resolvePreviewTeams(owner),
     teamKeys: listPreviewTeamKeys(owner),
   });
