@@ -110,7 +110,7 @@ export function RemoteBenefits({ points = SIGN_IN_POINTS }: { points?: RemotePoi
       {points.map((point) => (
         <div key={point.title} className='flex gap-3 px-2.5 py-2'>
           <Icon name={point.icon} size='sm' className='mt-px shrink-0 text-fg-2' />
-          <div className='flex min-w-0 flex-col gap-px'>
+          <div className='flex min-w-0 flex-col'>
             <span className='text-xs text-fg-4'>{point.title}</span>
             <span className='text-2xs text-pretty text-fg-2'>{point.detail}</span>
           </div>

@@ -102,7 +102,7 @@ function PlanList({ task }: { task: Task }) {
         {document.phases.map((phase, index) => (
           <li key={phase.title} className='flex gap-2.5'>
             <StepNumber index={index} />
-            <div className='flex min-w-0 flex-col gap-px'>
+            <div className='flex min-w-0 flex-col'>
               <PlanPhaseTitle title={phase.title} change={resolvePhaseChange(changes, phase.title)} />
               <Markdown text={phase.detail} className='text-xs text-fg-3' />
             </div>

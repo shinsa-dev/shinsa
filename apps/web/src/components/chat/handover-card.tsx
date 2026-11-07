@@ -103,7 +103,7 @@ function PlanCard({ args, task, at }: { args: ChatToolArgs; task: Task | null; a
                 // oxlint-disable-next-line shinsa/no-array-index-key -- plan phases are positional
                 <li key={index} className='flex gap-2.5'>
                   <StepNumber index={index} />
-                  <div className='flex min-w-0 flex-col gap-px'>
+                  <div className='flex min-w-0 flex-col'>
                     <PlanPhaseTitle title={title} change={resolvePhaseChange(changes, title)} />
                     {readString(phase, 'detail') && (
                       <span className='selectable text-xs text-fg-3'>
@@ -287,7 +287,7 @@ function SuggestionsCard({ args }: { args: ChatToolArgs }) {
       <ul className='flex flex-col gap-2'>
         {tasks.map((task, index) => (
           // oxlint-disable-next-line shinsa/no-array-index-key -- suggestions are positional
-          <li key={index} className='flex flex-col gap-px text-xs'>
+          <li key={index} className='flex flex-col text-xs'>
             <InlineMarkdown text={readString(task, 'title') ?? ''} className='font-medium text-fg-4' />
             <InlineMarkdown text={readString(task, 'why') ?? ''} className='text-fg-3' />
           </li>
@@ -301,7 +301,7 @@ function RememberCard({ args }: { args: ChatToolArgs }) {
   const why = readString(args, 'why');
   return (
     <Card icon='IconLightbulbGlow' title='Proposed a rule to remember' meta='In Settings → Memory'>
-      <div className='flex flex-col gap-px text-xs'>
+      <div className='flex flex-col text-xs'>
         <InlineMarkdown text={readString(args, 'text') ?? ''} className='selectable font-medium text-fg-4' />
         {why && <InlineMarkdown text={why} className='text-fg-3' />}
       </div>
@@ -319,7 +319,7 @@ function SuggestedWatchCard({ args, task }: { args: ChatToolArgs; task: Task | n
   const open = suggestion?.status === 'open';
   return (
     <Card icon='IconRadar' title='Suggested a watch' meta={describeSuggestionStatus(suggestion)}>
-      <div className='flex flex-col gap-px text-xs'>
+      <div className='flex flex-col text-xs'>
         <InlineMarkdown
           text={readString(args, 'message') ?? ''}
           className='selectable font-medium text-fg-4'
@@ -345,7 +345,7 @@ function DeliveryCard({ title, args, field }: { title: string; args: ChatToolArg
       <ReplyFirst args={args}>
         <Markdown text={readString(args, field) ?? ''} />
         {proposal && (
-          <div className='flex flex-col gap-px border-t border-border pt-2.5 text-xs'>
+          <div className='flex flex-col border-t border-border pt-2.5 text-xs'>
             <span className='text-2xs text-fg-2'>Proposed a change</span>
             <InlineMarkdown text={proposal.why} className='selectable text-fg-4' />
           </div>
@@ -361,7 +361,7 @@ function ReshapeCard({ args }: { args: ChatToolArgs }) {
     <Card icon='IconSplit' title={steps.length > 0 ? 'Set the steps' : 'Changed the kind of task'}>
       <Markdown text={readString(args, 'reason') ?? ''} />
       {steps.length > 0 && (
-        <div className='flex flex-col gap-px border-t border-border pt-2.5 text-xs'>
+        <div className='flex flex-col border-t border-border pt-2.5 text-xs'>
           <span className='text-2xs text-fg-2'>Steps</span>
           <span className='text-fg-4'>{capitalise(describeSteps(steps))}</span>
         </div>

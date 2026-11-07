@@ -60,7 +60,7 @@ export function PanelHeader({
 }) {
   return (
     <div className='flex shrink-0 items-center gap-2 border-b border-border py-3 ps-3 pe-1.5'>
-      <span className='flex min-w-0 flex-1 flex-col gap-px'>
+      <span className='flex min-w-0 flex-1 flex-col'>
         <h2 className='truncate text-xs font-medium text-fg-4'>{title}</h2>
         {description && <p className='text-2xs text-fg-2'>{description}</p>}
       </span>
@@ -123,7 +123,7 @@ function SuggestionRow({
           onCheckedChange={onToggle}
         />
       </span>
-      <span className='flex min-w-0 flex-1 flex-col gap-px'>
+      <span className='flex min-w-0 flex-1 flex-col'>
         <Truncate className={LIST_ROW_TITLE}>{suggestion.name}</Truncate>
         <Truncate className={LIST_ROW_META}>
           <span className='font-mono'>{suggestion.command}</span> in{' '}

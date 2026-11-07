@@ -248,7 +248,7 @@ export function TaskRunRow({
 function ServiceLines({ view, now }: { view: ServiceView; now: number }) {
   const glyph = SERVICE_GLYPHS[view.state];
   return (
-    <span className='flex min-w-0 flex-1 flex-col gap-px'>
+    <span className='flex min-w-0 flex-1 flex-col'>
       <Truncate className={LIST_ROW_TITLE}>{view.service.name}</Truncate>
       <Truncate className={LIST_ROW_META}>
         <span className={cn(glyph.tone !== 'neutral' && TONE_TEXT[glyph.tone])}>

@@ -56,7 +56,7 @@ export function ActivityEntry({
     <li className='group relative flex gap-3 pb-4 last:pb-0'>
       <span aria-hidden className='absolute top-6 bottom-0 left-2.5 w-px bg-border group-last:hidden' />
       <StatusTile {...glyph} className='relative' />
-      <div className='flex min-w-0 flex-1 flex-col gap-px'>
+      <div className='flex min-w-0 flex-1 flex-col'>
         <div className='flex items-baseline gap-2 text-xs leading-5'>
           {typeof text === 'string' ? (
             <InlineMarkdown text={text} className={ENTRY_TEXT} />

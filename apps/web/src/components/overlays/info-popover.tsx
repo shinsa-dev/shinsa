@@ -55,7 +55,7 @@ export function InfoHeader({
   description?: React.ReactNode;
 }) {
   return (
-    <div className='flex flex-col gap-px px-3 py-2.5'>
+    <div className='flex flex-col px-3 py-2.5'>
       <div className='min-w-0 text-xs font-medium text-fg-4'>{title}</div>
       {description && <div className='min-w-0 text-2xs text-fg-2'>{description}</div>}
     </div>

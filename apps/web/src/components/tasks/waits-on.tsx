@@ -26,7 +26,7 @@ function WaitsOnHint({
   detail?: string;
 }) {
   return (
-    <span className='flex max-w-72 flex-col gap-px'>
+    <span className='flex max-w-72 flex-col'>
       <TooltipLabel>{label}</TooltipLabel>
       {waitsOn.map((parent) => (
         <span key={parent.id} className='flex min-w-0 gap-1.5'>
