@@ -13,6 +13,12 @@ export const RECONNECT_CODES: ReadonlySet<string> = new Set([
   'account_inactive',
 ]);
 
+export const HIDDEN_THREAD_CODES: ReadonlySet<string> = new Set([
+  'not_in_channel',
+  'channel_not_found',
+  'thread_not_found',
+]);
+
 export const RESPONSE_URL_ORIGIN = 'https://hooks.slack.com/';
 
 const Id = Schema.NonEmptyString;

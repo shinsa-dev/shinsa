@@ -1,5 +1,5 @@
 import type { InstanceId } from '@shinsa/core';
-import { Cause, Effect, Redacted, Schema } from 'effect';
+import { Cause, Effect, Option, Redacted, Schema } from 'effect';
 import { CloudCrypto } from '../crypto/service.ts';
 import { SlackApi } from '../integrations/slack/service.ts';
 import { SlackStore } from '../store/slack/service.ts';
@@ -20,19 +20,34 @@ const revokeUserToken = Effect.fn('revokeUserToken')(function* (token: Redacted.
     );
 });
 
-const revokeSealedUserToken = Effect.fn('revokeSealedUserToken')(function* (sealed: string) {
+export const selectUserToken = Effect.fn('selectUserToken')(function* (sealed: string) {
   const crypto = yield* CloudCrypto;
-  yield* revokeUserToken(yield* crypto.openToken(sealed));
+  return yield* crypto.openToken(sealed).pipe(
+    Effect.map(Option.some),
+    Effect.catchDefect((defect) =>
+      Effect.as(
+        Effect.logWarning('[Cloud] A stored Slack user token does not open').pipe(
+          Effect.annotateLogs({ cause: Cause.pretty(Cause.die(defect)) })
+        ),
+        Option.none<Redacted.Redacted<string>>()
+      )
+    )
+  );
+});
+
+const revokeSealedUserToken = Effect.fn('revokeSealedUserToken')(function* (sealed: string) {
+  const token = yield* selectUserToken(sealed);
+  if (Option.isSome(token)) yield* revokeUserToken(token.value);
 });
 
 export const replaceUserToken = Effect.fn('replaceUserToken')(function* (
   sealed: string | null,
   token: Redacted.Redacted<string>
 ) {
-  const crypto = yield* CloudCrypto;
   if (sealed === null) return;
-  const previous = yield* crypto.openToken(sealed);
-  if (Redacted.value(previous) !== Redacted.value(token)) yield* revokeUserToken(previous);
+  const previous = yield* selectUserToken(sealed);
+  if (Option.isSome(previous) && Redacted.value(previous.value) !== Redacted.value(token))
+    yield* revokeUserToken(previous.value);
 });
 
 export const revokeMachineUserTokens = Effect.fn('revokeMachineUserTokens')(function* (

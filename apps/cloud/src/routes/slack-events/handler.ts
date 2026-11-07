@@ -36,12 +36,12 @@ import { Cause, Clock, Effect, Layer, Option, type Redacted, Schema } from 'effe
 import { HttpClient, HttpClientRequest, HttpRouter, HttpServerResponse } from 'effect/http';
 import { selectMachineRole } from '../../auth/access.ts';
 import { CloudConfig } from '../../config/service.ts';
-import { CloudCrypto } from '../../crypto/service.ts';
 import { isMachineOnline } from '../../domain/machines.ts';
 import { requestOnlineMachine } from '../../http/forward.ts';
 import { deferWork } from '../../http/worker.ts';
 import { SlackApi } from '../../integrations/slack/service.ts';
 import { readSignedBody } from '../../slack/signed-body.ts';
+import { selectUserToken } from '../../slack/user-tokens.ts';
 import { requestSignedMachine, selectWorkspaceToken } from '../../slack/workspace.ts';
 import type { Machine } from '../../store/machines/schema.ts';
 import { Machines } from '../../store/machines/service.ts';
@@ -63,6 +63,7 @@ import {
   type MentionEvent,
   ChannelInfo,
   Permalink,
+  HIDDEN_THREAD_CODES,
   RECONNECT_CODES,
   RESPONSE_URL_ORIGIN,
   Replies,
@@ -82,7 +83,6 @@ export const SlackEventRoutes = Layer.unwrap(
     const config = yield* CloudConfig;
     const slack = yield* SlackApi;
     const store = yield* SlackStore;
-    const crypto = yield* CloudCrypto;
     const machines = yield* Machines;
     const client = yield* HttpClient.HttpClient;
 
@@ -258,23 +258,32 @@ export const SlackEventRoutes = Layer.unwrap(
         (linked) => linked.channelId !== mention.channelId || linked.threadTs !== mention.threadTs
       );
       if (links.length === 0) return none;
-      if (link.sealedUserToken === null) return { read: [], unread: links.length, reconnect: true };
-      const userToken = yield* crypto.openToken(link.sealedUserToken);
+      const reconnect: LinkedThreads = { read: [], unread: links.length, reconnect: true };
+      if (link.sealedUserToken === null) return reconnect;
+      const opened = yield* selectUserToken(link.sealedUserToken);
+      if (Option.isNone(opened)) return reconnect;
+      const userToken = opened.value;
       const read: LinkedThreadRead[] = [];
       let unread = 0;
-      let reconnect = false;
+      let expired = false;
       for (const linked of links) {
         const result = yield* readLinkedThread(linked, botUserId, userToken).pipe(
           Effect.map(Option.some),
           Effect.catchTag('SlackCallFailed', (error) => {
             unread += 1;
-            reconnect ||= RECONNECT_CODES.has(error.code);
-            return Effect.succeed(Option.none<LinkedThreadRead>());
+            expired ||= RECONNECT_CODES.has(error.code);
+            const log = HIDDEN_THREAD_CODES.has(error.code) ? Effect.logWarning : Effect.logError;
+            return Effect.as(
+              log('[Cloud] A linked Slack thread could not be read').pipe(
+                Effect.annotateLogs({ error, code: error.code, teamId: mention.teamId })
+              ),
+              Option.none<LinkedThreadRead>()
+            );
           })
         );
         if (Option.isSome(result)) read.push(result.value);
       }
-      return { read, unread, reconnect } satisfies LinkedThreads;
+      return { read, unread, reconnect: expired } satisfies LinkedThreads;
     });
 
     const resolveUserNames = Effect.fn('slackEvents.resolveUserNames')(function* (

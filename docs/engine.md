@@ -4383,8 +4383,13 @@ Slack ──a card's button──► app.shinsa.dev /slack/interactions
   a machine that names `slack-linked-threads` in `MACHINE_FEATURES`, so an older engine, which would drop the field,
   is never sent them. When one cannot be read, the mention still goes on with the rest, and its author gets one
   private message in the thread after it is forwarded: "Connect Slack again" with the connect link when the link has
-  no user token or Slack refuses the token (`RECONNECT_CODES`: `missing_scope`, `invalid_auth`, `token_revoked`…,
-  `serializeSlackReconnectPrompt`), otherwise "I could not read the thread you linked." (`serializeSlackUnreadLinks`).
+  no user token, its sealed token no longer opens with `SLACK_TOKEN_KEY` (`selectUserToken`, logged as a warning
+  `[Cloud] A stored Slack user token does not open`), or Slack refuses the token (`RECONNECT_CODES`: `missing_scope`,
+  `invalid_auth`, `token_revoked`…, `serializeSlackReconnectPrompt`), otherwise "I could not read the thread you
+  linked." (`serializeSlackUnreadLinks`). Each refusal is logged as `[Cloud] A linked Slack thread could not be read`
+  with Slack's `code`: a warning for a thread the person cannot see (`HIDDEN_THREAD_CODES`: `not_in_channel`,
+  `channel_not_found`, `thread_not_found`), an error for anything else, such as a missing scope. A token that no
+  longer opens is never revoked when it is replaced, unlinked or its machine removed; it is overwritten or dropped.
 - **Mentions from outside the workspace are ignored.** In a channel shared with another organisation, a mention
   whose author's `user_team` is not the workspace that installed the app gets no reply, no connect prompt and no
   forward.

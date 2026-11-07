@@ -942,6 +942,8 @@ async function setUpLinking() {
   return setup;
 }
 
+const UNOPENABLE_TOKEN = 'A'.repeat(64);
+
 function readForward(forwards: Setup['forwards'], index = 0) {
   return JSON.parse(forwards[index]?.body ?? '') as SlackMention;
 }
@@ -1012,8 +1014,15 @@ describe('a mention that links to other threads', () => {
 
   test('never falls back to the bot’s token, and says privately which links it could not read', async () => {
     const { harness, slack, forwards } = await setUpLinking();
+    const warnings = spyOn(console, 'warn').mockImplementation(() => undefined);
     answerRepliesByToken(slack, { C9: 'not_in_channel' });
     await sendEvent(harness, linkingMention(`${CUSTOMER_LINK} and ${OPS_LINK}`));
+    expect(warnings).toHaveBeenCalledWith(
+      '[Cloud] A linked Slack thread could not be read',
+      expect.objectContaining({ code: 'not_in_channel', teamId: 'T1' })
+    );
+    warnings.mockRestore();
+    expect(failures).not.toHaveBeenCalled();
     expect(slack.callsTo('conversations.replies').every((call) => call.token === 'xoxp-user-1')).toBe(true);
     expect(readForward(forwards).linkedThreads.map((thread) => thread.channelId)).toEqual(['G8']);
     const [ephemeral] = slack.callsTo('chat.postEphemeral');
@@ -1038,6 +1047,10 @@ describe('a mention that links to other threads', () => {
     await sendEvent(harness, linkingMention(`${CUSTOMER_LINK} and ${OPS_LINK}`));
     const [refused] = slack.callsTo('chat.postEphemeral');
     expect(refused?.body.text).toBe('Connect Slack again so I can read the threads you link.');
+    expect(failures).toHaveBeenCalledWith(
+      '[Cloud] A linked Slack thread could not be read',
+      expect.objectContaining({ code: 'missing_scope', teamId: 'T1' })
+    );
     expect(JSON.stringify(refused?.body.blocks)).toContain(`${TEST_CONFIG.origin}/slack/connect`);
     harness.db.sqlite.query('UPDATE slack_links SET sealed_user_token = NULL').run();
     const reads = slack.callsTo('conversations.replies').length;
@@ -1047,6 +1060,27 @@ describe('a mention that links to other threads', () => {
       'Connect Slack again so I can read the threads you link.'
     );
     expect(readForward(forwards, 1).linkedThreads).toEqual([]);
+  });
+
+  test('asks to connect again, and still forwards the mention, when the kept token no longer opens', async () => {
+    const { harness, session, machine, slack, forwards } = await setUpLinking();
+    const warnings = spyOn(console, 'warn').mockImplementation(() => undefined);
+    harness.db.sqlite.query('UPDATE slack_links SET sealed_user_token = ?').run(UNOPENABLE_TOKEN);
+    await sendEvent(harness, linkingMention(CUSTOMER_LINK));
+    expect(slack.callsTo('conversations.replies')).toHaveLength(0);
+    expect(readForward(forwards).linkedThreads).toEqual([]);
+    expect(slack.callsTo('chat.postEphemeral')[0]?.body.text).toBe(
+      'Connect Slack again so I can read the threads you link.'
+    );
+    expect(warnings).toHaveBeenCalledWith(
+      '[Cloud] A stored Slack user token does not open',
+      expect.anything()
+    );
+    warnings.mockRestore();
+    const linked = await connectSlack(harness, session, machine.instanceId);
+    expect(linked.headers.get('location')).toBe('/slack/linked?team=Acme');
+    expect(slack.callsTo('auth.revoke')).toEqual([]);
+    expect(sealedUserTokens(harness)[0]?.sealed_user_token).not.toBe(UNOPENABLE_TOKEN);
   });
 
   test('reads nothing linked for a machine that does not take linked threads, and asks nothing', async () => {
