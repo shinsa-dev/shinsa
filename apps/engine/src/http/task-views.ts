@@ -1,5 +1,6 @@
 import {
   type ChatEntry,
+  isGateHeld,
   isTaskSettled,
   isWatchHome,
   listMergeSteps,
@@ -72,7 +73,7 @@ export function isTaskListed(state: ShinsaState, task: Task, filter: TaskFilter)
   if (filter === 'settled') return isTaskSettled(task);
   if (isTaskSettled(task)) return false;
   if (filter === 'open') return true;
-  return !task.snoozed && selectDecision(state, task) !== null;
+  return !task.snoozed && listOpenGates(state, task.id).some((gate) => !isGateHeld(state, gate));
 }
 
 export function matchesTaskQuery(state: ShinsaState, task: Task, words: readonly string[]) {

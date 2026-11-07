@@ -92,7 +92,7 @@ export function isDecisionHeld(state: ShinsaState, task: Task) {
   return HELD_DECISIONS[task.stage] !== undefined && listOpenBlockers(state, task).length > 0;
 }
 
-function isGateHeld(state: ShinsaState, gate: Gate) {
+export function isGateHeld(state: ShinsaState, gate: Gate) {
   const task = state.tasks[gate.taskId];
   if (!task || HELD_DECISIONS[task.stage] !== gate.type) return false;
   return isDecisionHeld(state, task);

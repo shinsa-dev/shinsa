@@ -3,6 +3,7 @@ import type { Gate, ShinsaState, Task } from '@shinsa/core';
 import { filterTaskRows, listTaskRows, NO_TASK_FILTERS } from '@/lib/tasks/filters.ts';
 import {
   describeBundleWait,
+  describeHeldWait,
   describeTaskCounts,
   describeWaitsOn,
   listOpenTaskChoices,
@@ -545,6 +546,17 @@ describe('the tasks of a bundle in All tasks', () => {
     });
     expect(describeBundleWait(done, right)).toBe('Waits on “Root”');
     expect(describeBundleWait(done, root)).toBeNull();
+  });
+
+  it('names what a review held by a wait waits on, and nothing once it is free', () => {
+    const parent = createTask({ id: 'parent', title: 'Parent', stage: 'building' });
+    const held = createTask({ id: 'held', stage: 'awaiting_review', waitsOn: ['parent'] });
+    const building = createTask({ id: 'building', stage: 'building', waitsOn: ['parent'] });
+    const state = createShinsaState({ tasks: [parent, held, building] });
+    expect(describeHeldWait(state, held)).toBe('Waits on “Parent”');
+    expect(describeHeldWait(state, building)).toBeNull();
+    const merged = createShinsaState({ tasks: [{ ...parent, stage: 'merged' }, held] });
+    expect(describeHeldWait(merged, held)).toBeNull();
   });
 
   it('keeps a ready task on its own when nothing open is above it', () => {
