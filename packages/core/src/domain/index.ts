@@ -200,6 +200,7 @@ export {
   resolveWatchdogDefaults,
   resolveWatchdogsIgnoreUsageLimits,
   isSharedMachine,
+  OWNER_SIGNED_OUT_CODE,
   SETTINGS_KEYS,
   type Settings,
   SHARE_LIMITS,

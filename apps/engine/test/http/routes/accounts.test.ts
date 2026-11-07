@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test';
-import { DomainError } from '@shinsa/core';
+import { DomainError, OWNER_ONLY_CODE, OWNER_ONLY_MESSAGE } from '@shinsa/core';
 import { Effect } from 'effect';
 import type { Accounts } from '../../../src/accounts/index.ts';
 import { disposeWebHandlers } from '../../helpers/web.ts';
@@ -7,7 +7,16 @@ import { readFailure, startRoutes } from './harness.ts';
 
 afterEach(disposeWebHandlers);
 
-function createAccounts() {
+const KAI = { login: 'kai', name: 'Kai Lane', avatarUrl: null };
+
+const remote = {
+  isOwner: (userId: string | null) => Effect.succeed(userId === 'u-owner'),
+  resolveActor: (userId: string | null) => Effect.succeed(userId === 'u-kai' ? KAI : null),
+  tunnelHost: Effect.succeed(null),
+  isEnabled: Effect.succeed(true),
+};
+
+function createAccounts(extras: Record<string, unknown> = {}) {
   const calls: [string, ...unknown[]][] = [];
   const answer = (name: string, value: unknown, args: unknown[] = []) =>
     Effect.sync(() => {
@@ -32,7 +41,7 @@ function createAccounts() {
         : answer('update', { updated: true }, args),
     remove: record('remove', { removed: true }),
   };
-  const routes = startRoutes({ accounts: accounts as unknown as Accounts['Service'] });
+  const routes = startRoutes({ accounts: accounts as unknown as Accounts['Service'], ...extras });
   const post = async (path: string, body: string) =>
     (
       await routes.send(path, { method: 'POST', headers: { 'content-type': 'application/json' }, body })
@@ -74,13 +83,52 @@ describe('account routes', () => {
     expect(calls).toEqual([
       ['refresh'],
       ['refreshUsage'],
-      ['startLogin', 'acc-1'],
+      ['startLogin', 'acc-1', null],
       ['submitLoginCode', 'login-1', 'abc#def'],
       ['cancelLogin', 'login-1'],
-      ['importAccount', 'cswap', 'me@x.dev'],
-      ['update', 'acc-1', { paused: true }],
-      ['remove', 'acc-1'],
+      ['importAccount', 'cswap', 'me@x.dev', null],
+      ['update', 'acc-1', { paused: true }, null],
+      ['remove', 'acc-1', null],
     ]);
+  });
+
+  test('a member’s account changes carry their login, and the machine’s owner and a stranger do not', async () => {
+    const { routes, calls } = createAccounts({ remote });
+    await routes.context.engine.dispatch({ type: 'settings.change', patch: { sharedMachine: true } });
+    const as = (userId: string, path: string, body: string) =>
+      routes.send(
+        path,
+        { method: 'POST', headers: { 'content-type': 'application/json' }, body },
+        { via: 'channel', guest: null, userId }
+      );
+    await as('u-kai', '/api/accounts/login', '{}');
+    await as('u-kai', '/api/accounts/import', '{"origin":"cswap","email":"kai@x.dev"}');
+    await as('u-kai', '/api/accounts/update', '{"accountId":"acc-1","patch":{"paused":true}}');
+    await as('u-kai', '/api/accounts/remove', '{"accountId":"acc-1"}');
+    await as('u-owner', '/api/accounts/remove', '{"accountId":"acc-2"}');
+    expect(await readFailure(await as('u-gone', '/api/accounts/login', '{}'))).toEqual({
+      status: 400,
+      code: OWNER_ONLY_CODE,
+      message: OWNER_ONLY_MESSAGE,
+    });
+    expect(calls).toEqual([
+      ['startLogin', null, 'kai'],
+      ['importAccount', 'cswap', 'kai@x.dev', 'kai'],
+      ['update', 'acc-1', { paused: true }, 'kai'],
+      ['remove', 'acc-1', 'kai'],
+      ['remove', 'acc-2', null],
+    ]);
+  });
+
+  test('a member reaches account changes only once the machine is shared', async () => {
+    const { routes, calls } = createAccounts({ remote });
+    const response = await routes.send(
+      '/api/accounts/login',
+      { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' },
+      { via: 'channel', guest: null, userId: 'u-kai' }
+    );
+    expect(await readFailure(response)).toMatchObject({ status: 403, message: OWNER_ONLY_MESSAGE });
+    expect(calls).toEqual([]);
   });
 
   test('a change the accounts refuse answers with their code and reason', async () => {
@@ -97,8 +145,8 @@ describe('account routes', () => {
     await post('/api/accounts/login', '{}');
     await post('/api/accounts/login', '{"accountId":null}');
     expect(calls).toEqual([
-      ['startLogin', null],
-      ['startLogin', null],
+      ['startLogin', null, null],
+      ['startLogin', null, null],
     ]);
   });
 

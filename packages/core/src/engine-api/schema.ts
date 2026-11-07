@@ -80,6 +80,10 @@ export const OwnerOnlyRoute = Context.Reference<boolean>('shinsa/core/engine-api
   defaultValue: () => false,
 });
 
+export const SharedMemberRoute = Context.Reference<boolean>('shinsa/core/engine-api/SharedMember', {
+  defaultValue: () => false,
+});
+
 export const GuestRoute = Context.Reference<GuestAccess>('shinsa/core/engine-api/Guest', {
   defaultValue: () => 'none',
 });

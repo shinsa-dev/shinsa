@@ -1,16 +1,19 @@
 import { join } from 'node:path';
 import {
   type AccountCandidate,
+  DomainError,
+  isSharedMachine,
+  OWNER_SIGNED_OUT_CODE,
   pickAccount,
   type RunFailure,
   resolveAccountSwitchAt,
   resolvePoolResetAt,
-  type DomainError,
 } from '@shinsa/core';
 import { Clock, Context, Effect, Layer, Ref } from 'effect';
 import type {
   AccountLease,
   AccountLeaseRequest,
+  AccountOwnership,
   RejectionVerdict,
   RunRejection,
 } from '../../agents/accounts/schema.ts';
@@ -81,12 +84,16 @@ export class AccountRotation extends Context.Service<
         yield* persist;
       });
 
-      const listCandidates = Effect.fn('AccountRotation.listCandidates')(function* (knownResets: boolean) {
+      const listCandidates = Effect.fn('AccountRotation.listCandidates')(function* (
+        knownResets: boolean,
+        ownership: AccountOwnership | null
+      ) {
         const threshold = resolveAccountSwitchAt((yield* engine.state).settings);
         const duplicates = yield* store.resolveDuplicates;
         const candidates: AccountCandidate[] = [];
         for (const account of yield* store.listDistinct) {
           if (isSharedLogin(account)) continue;
+          if (ownership && account.owner !== ownership.owner) continue;
           candidates.push({
             id: account.id,
             isDefault: yield* store.isDefault(account.id, duplicates),
@@ -111,14 +118,23 @@ export class AccountRotation extends Context.Service<
         const stale: string[] = [];
         for (const id of ids) if (!(yield* limits.isFresh(id))) stale.push(id);
         if (stale.length > 0) yield* Effect.forkDetach(limits.refresh(stale, false));
+        const ownership = request.ownership ?? null;
+        const accounts = yield* listCandidates(false, ownership);
+        const bound = yield* resolveKept(request.bound?.id ?? null);
         const picked = pickAccount({
-          accounts: yield* listCandidates(false),
-          bound: yield* resolveKept(request.bound?.id ?? null),
+          accounts,
+          bound: ownership && !accounts.some((account) => account.id === bound) ? null : bound,
           previous: yield* resolveKept(request.previous?.id ?? null),
           model: request.model,
           exclude: new Set(request.exclude),
           now: yield* Clock.currentTimeMillis,
         });
+        if (!picked && ownership) {
+          return yield* new DomainError({
+            code: OWNER_SIGNED_OUT_CODE,
+            message: 'The task’s owner has no Claude account it can use on this shared machine.',
+          });
+        }
         if (!picked) {
           yield* Effect.logWarning(
             '[Accounts] The account a task is bound to is gone; using the default login'
@@ -147,11 +163,14 @@ export class AccountRotation extends Context.Service<
         yield* changes.notify;
         const refined: RunFailure = { ...failure, account: { id: account.id, email: account.email } };
         const state = yield* engine.state;
+        const ownership: AccountOwnership | null = isSharedMachine(state.settings)
+          ? { owner: account.owner }
+          : null;
         const model = state.runs[rejection.runId]?.model ?? null;
         const bound = state.runs[rejection.runId]?.account ?? state.tasks[rejection.taskId]?.account ?? null;
         if (!bound && rejection.tried.length < MAX_ACCOUNTS_PER_EXECUTION) {
           const next = pickAccount({
-            accounts: yield* listCandidates(false),
+            accounts: yield* listCandidates(false, ownership),
             bound: null,
             previous: account.id,
             model,
@@ -176,7 +195,7 @@ export class AccountRotation extends Context.Service<
           return refused;
         }
         const kept = bound ? yield* resolveKept(bound.id) : null;
-        const candidates = (yield* listCandidates(true)).filter(
+        const candidates = (yield* listCandidates(true, ownership)).filter(
           (candidate) => !bound || candidate.id === kept
         );
         const resetAt = resolvePoolResetAt(candidates, model, now) ?? failure.resetAt;

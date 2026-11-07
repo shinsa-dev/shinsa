@@ -35,6 +35,7 @@ export interface AccountSummary {
   organization: string | null;
   plan: string | null;
   origin: AccountOrigin;
+  owner?: string | null;
   isDefault: boolean;
   paused: boolean;
   switchAt: number | null;

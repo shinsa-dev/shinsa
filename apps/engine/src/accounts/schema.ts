@@ -37,6 +37,7 @@ export const StoredAccountFields = Schema.Struct({
   email: LenientText,
   organization: LenientText,
   plan: LenientText,
+  owner: LenientText,
   addedAt: LenientNumber,
   paused: Schema.optionalKey(Schema.Boolean.pipe(Schema.catchDecoding(() => Effect.succeedNone))),
   switchAt: Schema.optionalKey(
@@ -56,6 +57,7 @@ export interface StoredAccount {
   organization: string | null;
   plan: string | null;
   origin: CoreAccountOrigin;
+  owner: string | null;
   addedAt: number;
   paused: boolean;
   switchAt: number | null;
@@ -67,7 +69,7 @@ export interface Registry {
   accounts: StoredAccount[];
 }
 
-export type AccountDetails = Partial<Pick<StoredAccount, 'email' | 'organization' | 'plan'>>;
+export type AccountDetails = Partial<Pick<StoredAccount, 'email' | 'organization' | 'plan' | 'owner'>>;
 
 export type AccountIdentity = Pick<StoredAccount, 'email' | 'organization'>;
 

@@ -6,6 +6,7 @@ import {
   type ChatNotice,
   DomainError,
   type FastModeAvailability,
+  isSharedMachine,
   listActiveRuns,
   listOpenGates,
   type ProviderLogin,
@@ -54,7 +55,7 @@ import { AccountSignIns } from '../sign-ins/service.ts';
 import { AuthStatusReader } from '../status/service.ts';
 import { isSharedLogin } from '../store/identity.ts';
 import { AccountStore } from '../store/service.ts';
-import { SHARED_LOGIN_DETAIL } from './schema.ts';
+import { ACCOUNT_NOT_YOURS_CODE, ACCOUNT_NOT_YOURS_MESSAGE, SHARED_LOGIN_DETAIL } from './schema.ts';
 
 export class Accounts extends Context.Service<
   Accounts,
@@ -75,12 +76,23 @@ export class Accounts extends Context.Service<
     onNotice(runId: string, notice: ChatNotice): Effect.Effect<void>;
     readonly refresh: Effect.Effect<AccountsSnapshot, AccountsFailure>;
     readonly refreshUsage: Effect.Effect<AccountsSnapshot, AccountsFailure>;
-    startLogin(accountId: string | null): Effect.Effect<AccountsSnapshot, AccountsFailure>;
+    startLogin(
+      accountId: string | null,
+      requester?: string | null
+    ): Effect.Effect<AccountsSnapshot, AccountsFailure>;
     submitLoginCode(loginId: unknown, code: unknown): Effect.Effect<AccountsSnapshot, DomainError>;
     cancelLogin(loginId: unknown): Effect.Effect<AccountsSnapshot, DomainError>;
-    importAccount(origin: unknown, email: unknown): Effect.Effect<AccountsSnapshot, AccountsFailure>;
-    update(accountId: unknown, patch: unknown): Effect.Effect<AccountsSnapshot, AccountsFailure>;
-    remove(accountId: unknown): Effect.Effect<AccountsSnapshot, AccountsFailure>;
+    importAccount(
+      origin: unknown,
+      email: unknown,
+      requester?: string | null
+    ): Effect.Effect<AccountsSnapshot, AccountsFailure>;
+    update(
+      accountId: unknown,
+      patch: unknown,
+      requester?: string | null
+    ): Effect.Effect<AccountsSnapshot, AccountsFailure>;
+    remove(accountId: unknown, requester?: string | null): Effect.Effect<AccountsSnapshot, AccountsFailure>;
   }
 >()('shinsa/engine/accounts/roster/Accounts') {
   static readonly layer = Layer.effect(
@@ -144,6 +156,15 @@ export class Accounts extends Context.Service<
         if (inspect) return yield* createReadOnlyError();
       });
 
+      const assertOwned = Effect.fn('Accounts.assertOwned')(function* (
+        account: StoredAccount,
+        requester: string | null
+      ) {
+        if (requester === null || account.owner === requester) return;
+        if (!isSharedMachine((yield* engine.state).settings)) return;
+        return yield* new DomainError({ code: ACCOUNT_NOT_YOURS_CODE, message: ACCOUNT_NOT_YOURS_MESSAGE });
+      });
+
       const listIds = Effect.map(store.listDistinct, (accounts) => accounts.map((account) => account.id));
 
       const listProviderSummaries = Effect.gen(function* () {
@@ -185,6 +206,7 @@ export class Accounts extends Context.Service<
             organization: account.organization,
             plan: account.plan,
             origin: account.origin,
+            owner: account.owner,
             isDefault: yield* store.isDefault(account.id, kept),
             paused: account.paused,
             switchAt: account.switchAt,
@@ -579,10 +601,13 @@ export class Accounts extends Context.Service<
 
       const beginLogin = Effect.fn('Accounts.beginLogin')(function* (
         existing: StoredAccount | null,
-        email: string | null
+        email: string | null,
+        owner: string | null
       ) {
         const claude = yield* resolveClaude;
-        const account = existing ? yield* store.createFolder(existing.id) : yield* store.create({ email });
+        const account = existing
+          ? yield* store.createFolder(existing.id)
+          : yield* store.create({ email, owner });
         if (!account?.configDir) return;
         if (!existing) yield* Ref.update(newLogins, (ids) => new Set(ids).add(account.id));
         const configDir = account.configDir;
@@ -600,10 +625,14 @@ export class Accounts extends Context.Service<
         });
       });
 
-      const startLogin = Effect.fn('Accounts.startLogin')(function* (accountId: string | null) {
+      const startLogin = Effect.fn('Accounts.startLogin')(function* (
+        accountId: string | null,
+        requester: string | null = null
+      ) {
         yield* assertChangeable;
         const existing = accountId ? yield* store.find(accountId) : null;
-        yield* beginLogin(existing, null);
+        if (existing) yield* assertOwned(existing, requester);
+        yield* beginLogin(existing, null, requester);
         return yield* snapshot;
       });
 
@@ -633,17 +662,26 @@ export class Accounts extends Context.Service<
         return yield* snapshot;
       });
 
-      const importAccount = Effect.fn('Accounts.importAccount')(function* (origin: unknown, email: unknown) {
+      const importAccount = Effect.fn('Accounts.importAccount')(function* (
+        origin: unknown,
+        email: unknown,
+        requester: string | null = null
+      ) {
         yield* assertChangeable;
-        yield* beginLogin(null, yield* imports.resolveImportEmail(origin, email));
+        yield* beginLogin(null, yield* imports.resolveImportEmail(origin, email), requester);
         return yield* snapshot;
       });
 
-      const update = Effect.fn('Accounts.update')(function* (accountId: unknown, patchBody: unknown) {
+      const update = Effect.fn('Accounts.update')(function* (
+        accountId: unknown,
+        patchBody: unknown,
+        requester: string | null = null
+      ) {
         yield* assertChangeable;
         if (typeof accountId !== 'string')
           return yield* new DomainError({ code: 'account_invalid', message: 'Name the account to change.' });
         const account = yield* store.find(accountId);
+        yield* assertOwned(account, requester);
         const patch = yield* Effect.fromResult(parseAccountPatch(patchBody));
         if (patch.isDefault) yield* store.updateDefault(account.id);
         if (patch.paused !== undefined) yield* store.update(account.id, { paused: patch.paused });
@@ -652,11 +690,14 @@ export class Accounts extends Context.Service<
         return yield* snapshot;
       });
 
-      const remove = Effect.fn('Accounts.remove')(function* (accountId: unknown) {
+      const remove = Effect.fn('Accounts.remove')(function* (
+        accountId: unknown,
+        requester: string | null = null
+      ) {
         yield* assertChangeable;
         if (typeof accountId !== 'string')
           return yield* new DomainError({ code: 'account_invalid', message: 'Name the account to remove.' });
-        yield* store.find(accountId);
+        yield* assertOwned(yield* store.find(accountId), requester);
         yield* forget(accountId);
         yield* dispatch({ type: 'account.removed', accountId }, `account.removed:${accountId}`);
         yield* syncImports;

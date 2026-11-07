@@ -325,11 +325,13 @@ function createRunsLayer(options: ShinsaOptions) {
     AccountBroker,
     Effect.gen(function* () {
       const accounts = yield* Accounts;
+      const remote = yield* Remote;
       return {
         lease: accounts.lease,
         readWeeklyReading: accounts.readWeeklyReading,
         readProviderWeeklyReading: accounts.readProviderWeeklyReading,
         readFastMode: accounts.readFastMode,
+        machineOwner: Effect.map(remote.resolveActor(null), (owner) => owner?.login ?? null),
       };
     })
   );

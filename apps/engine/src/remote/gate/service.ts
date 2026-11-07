@@ -1,6 +1,7 @@
 import {
   type ActorScope,
   type ChatEntry,
+  isSharedMachine,
   isTaskInScope,
   listScopedTasks,
   type ConnectChannel,
@@ -24,6 +25,7 @@ import {
   RouteNotFound,
   ROUTE_NOT_FOUND_MESSAGE,
   ScopeRefused,
+  SharedMemberRoute,
 } from '@shinsa/core/engine-api/schema';
 import { Context, Effect, Layer, Option } from 'effect';
 import { Transcripts } from '../../agents/transcripts/service.ts';
@@ -208,7 +210,9 @@ export class TunnelGate extends Context.Service<
         if (source.guest && !admitsGuest) return yield* refuseScope(source.guest.scope, request.pathname);
         if (Context.get(annotations, LocalOnlyRoute))
           return yield* new LocalOnly({ message: LOCAL_ONLY_MESSAGE });
-        if (Context.get(annotations, OwnerOnlyRoute) && !(yield* isOwner(source.userId)))
+        const sharedMember =
+          Context.get(annotations, SharedMemberRoute) && isSharedMachine((yield* engine.state).settings);
+        if (Context.get(annotations, OwnerOnlyRoute) && !sharedMember && !(yield* isOwner(source.userId)))
           return yield* new NotMachineOwner({ message: OWNER_ONLY_MESSAGE });
         yield* assertWritable(request.method);
       });

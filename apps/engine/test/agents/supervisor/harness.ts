@@ -1,4 +1,4 @@
-import type { ChatNotice, TeamFeedTask } from '@shinsa/core';
+import { type ChatNotice, DomainError, type TeamFeedTask } from '@shinsa/core';
 import { Clock, Context, Duration, Effect, Layer, Scope } from 'effect';
 import type { Accounts } from '../../../src/accounts/index.ts';
 import {
@@ -70,6 +70,7 @@ interface PromiseBroker {
     provider: string,
     accountId: string | null
   ) => Promise<import('@shinsa/core').FastModeAvailability>;
+  machineOwner?: string | null;
 }
 
 export interface SupervisorOptions {
@@ -131,7 +132,11 @@ function resolveBroker(options: SupervisorOptions) {
   const { accounts, accountRoster } = options;
   if (accounts) {
     return Layer.succeed(AccountBroker, {
-      lease: (request) => Effect.tryPromise({ try: () => accounts.lease(request), catch: failBroker }),
+      lease: (request) =>
+        Effect.tryPromise({
+          try: () => accounts.lease(request),
+          catch: (error) => (error instanceof DomainError ? error : failBroker(error)),
+        }),
       readWeeklyReading: (accountId, force) =>
         Effect.tryPromise({ try: () => accounts.readWeeklyReading(accountId, force), catch: failBroker }),
       readProviderWeeklyReading: (provider, force) =>
@@ -141,6 +146,7 @@ function resolveBroker(options: SupervisorOptions) {
         }),
       readFastMode: (provider, accountId) =>
         Effect.tryPromise({ try: () => accounts.readFastMode(provider, accountId), catch: failBroker }),
+      ...(accounts.machineOwner === undefined ? {} : { machineOwner: Effect.succeed(accounts.machineOwner) }),
     });
   }
   if (accountRoster) {

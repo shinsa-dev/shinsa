@@ -158,6 +158,8 @@ export function resolveWatchdogDefaults(settings: Settings) {
   };
 }
 
+export const OWNER_SIGNED_OUT_CODE = 'owner_signed_out';
+
 export function isSharedMachine(settings: Settings) {
   return settings.sharedMachine ?? false;
 }

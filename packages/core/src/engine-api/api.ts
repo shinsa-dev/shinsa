@@ -52,6 +52,7 @@ import {
   OpenAnswer,
   OpenRequest,
   OwnerOnlyRoute,
+  SharedMemberRoute,
   PlacementAnswerBody,
   ProjectAnswer,
   ProjectPathBody,
@@ -330,6 +331,7 @@ class AccountsGroup extends HttpApiGroup.make('accounts')
     })
   )
   .annotateEndpoints(OwnerOnlyRoute, true)
+  .annotateEndpoints(SharedMemberRoute, true)
   .add(HttpApiEndpoint.get('list', '/api/accounts', { success: AccountsAnswer }))
   .middleware(EngineGate) {}
 
