@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { serializeReportMarkdown } from '@shinsa/core';
+import { serializeReportMarkdown, type Task } from '@shinsa/core';
 import {
   describeDecision,
   listNewDecisions,
@@ -60,6 +60,23 @@ describe('the page status and badge', () => {
   it('puts the count in front of the name', () => {
     expect(resolveWindowTitle(0)).toBe('Shinsa');
     expect(resolveWindowTitle(3)).toBe('[3] Shinsa');
+  });
+});
+
+describe('a decision held by a wait', () => {
+  it('alerts on the review once what its task waits on settles', () => {
+    const review = createGate({ id: 'g-review', taskId: 't-2' });
+    const open = withTasks(review);
+    const waitOn = (blocker: Task) => ({
+      ...open,
+      tasks: { 't-1': blocker, 't-2': { ...open.tasks['t-2']!, waitsOn: ['t-1'] } },
+    });
+    const held = waitOn(open.tasks['t-1']!);
+    const seen = listOpenGateIds(held);
+    expect(seen).toEqual(new Set());
+    expect(listNewDecisions(seen, held, NOW)).toEqual([]);
+    const released = waitOn({ ...open.tasks['t-1']!, stage: 'merged' });
+    expect(listNewDecisions(seen, released, NOW).map((notice) => notice.gateId)).toEqual(['g-review']);
   });
 });
 
