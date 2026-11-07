@@ -55,7 +55,7 @@ export class SlackStore extends Context.Service<
       const insertLink = SqlSchema.void({
         Request: Schema.Struct({ ...NewLink.fields, at: Schema.Number }),
         execute: (row) =>
-          sql`INSERT INTO slack_links (workspace_id, slack_user_id, slack_user_name, user_id, machine_id, linked_at) VALUES (${row.workspaceId}, ${row.slackUserId}, ${row.slackUserName}, ${row.userId}, ${row.machineId}, ${row.at}) ON CONFLICT (workspace_id, slack_user_id) DO UPDATE SET slack_user_name = excluded.slack_user_name, user_id = excluded.user_id, machine_id = excluded.machine_id, linked_at = excluded.linked_at`,
+          sql`INSERT INTO slack_links (workspace_id, slack_user_id, slack_user_name, user_id, machine_id, sealed_user_token, linked_at) VALUES (${row.workspaceId}, ${row.slackUserId}, ${row.slackUserName}, ${row.userId}, ${row.machineId}, ${row.sealedUserToken}, ${row.at}) ON CONFLICT (workspace_id, slack_user_id) DO UPDATE SET slack_user_name = excluded.slack_user_name, user_id = excluded.user_id, machine_id = excluded.machine_id, sealed_user_token = excluded.sealed_user_token, linked_at = excluded.linked_at`,
       });
       const linkByUser = SqlSchema.findOneOption({
         Request: Schema.Struct({ workspaceId: Schema.String, slackUserId: Schema.String }),

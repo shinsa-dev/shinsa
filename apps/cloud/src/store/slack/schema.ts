@@ -20,6 +20,7 @@ export const SlackLink = Schema.Struct({
   slackUserName: Schema.String,
   userId: RemoteUserId,
   machineId: InstanceId,
+  sealedUserToken: Schema.NullOr(Schema.String),
   linkedAt: Schema.Number,
 });
 
@@ -42,6 +43,6 @@ export const SlackMessage = Schema.Struct({
 export type SlackMessage = typeof SlackMessage.Type;
 
 export const LINK_COLUMNS =
-  'slack_links.workspace_id, slack_workspaces.name AS workspace_name, slack_links.slack_user_id, slack_links.slack_user_name, slack_links.user_id, slack_links.machine_id, slack_links.linked_at';
+  'slack_links.workspace_id, slack_workspaces.name AS workspace_name, slack_links.slack_user_id, slack_links.slack_user_name, slack_links.user_id, slack_links.machine_id, slack_links.sealed_user_token, slack_links.linked_at';
 
 export const NewLink = SlackLink.mapFields(({ workspaceName: _, linkedAt: __, ...fields }) => fields);

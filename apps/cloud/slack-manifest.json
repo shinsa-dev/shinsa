@@ -27,7 +27,7 @@
         "reactions:write",
         "users:read"
       ],
-      "user": ["openid", "profile"]
+      "user": ["channels:history", "groups:history", "channels:read", "groups:read"]
     }
   },
   "settings": {

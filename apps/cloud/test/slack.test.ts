@@ -52,21 +52,21 @@ function createFakeSlack(harness: Harness): FakeSlack {
   const calls: SlackCall[] = [];
   let posted = 0;
   const answers: Record<string, (body: Fields) => Fields> = {
-    'openid.connect.token': () => ({ ok: true, access_token: 'xoxp-user' }),
-    'openid.connect.userInfo': () => ({
-      ok: true,
-      'https://slack.com/team_id': 'T1',
-      'https://slack.com/user_id': 'U1',
-      'https://slack.com/team_name': 'Acme',
-      name: 'Christo T',
-    }),
-    'oauth.v2.access': () => ({
-      ok: true,
-      access_token: 'xoxb-bot-token',
-      bot_user_id: 'B0T',
-      team: { id: 'T1', name: 'Acme' },
-      authed_user: { id: 'U1' },
-    }),
+    'oauth.v2.access': (body) =>
+      body.code === 'connect'
+        ? {
+            ok: true,
+            team: { id: 'T1', name: 'Acme' },
+            authed_user: { id: 'U1', access_token: 'xoxp-user-1' },
+          }
+        : {
+            ok: true,
+            access_token: 'xoxb-bot-token',
+            bot_user_id: 'B0T',
+            team: { id: 'T1', name: 'Acme' },
+            authed_user: { id: 'U1', access_token: 'xoxp-user-1' },
+          },
+    'auth.revoke': () => ({ ok: true, revoked: true }),
     'users.info': (body) => {
       if (body.user === 'U5') return { ok: true, user: { name: 'sam', profile: { real_name: 'Sam Real' } } };
       if (body.user === 'U6') return { ok: true, user: { name: 'kit', profile: {} } };
@@ -111,6 +111,20 @@ function createFakeSlack(harness: Harness): FakeSlack {
   return { calls, answers, callsTo: (method) => calls.filter((call) => call.method === method) };
 }
 
+function answerConnectAs(slack: FakeSlack, userId: string, token: string) {
+  const install = slack.answers['oauth.v2.access'];
+  slack.answers['oauth.v2.access'] = (body) =>
+    body.code === 'connect'
+      ? { ok: true, team: { id: 'T1', name: 'Acme' }, authed_user: { id: userId, access_token: token } }
+      : (install?.(body) ?? {});
+}
+
+function sealedUserTokens(harness: Harness) {
+  return harness.db.sqlite
+    .query('SELECT slack_user_id, sealed_user_token FROM slack_links ORDER BY slack_user_id')
+    .all() as { slack_user_id: string; sealed_user_token: string | null }[];
+}
+
 async function bringOnline(harness: Harness, machine: MachineCredentials) {
   await harness.post(
     REMOTE_PATHS.heartbeat,
@@ -149,7 +163,7 @@ async function connectSlack(harness: Harness, session: string, instanceId: strin
     session,
     start,
     SLACK_RELAY_PATHS.connectCallback,
-    'oidc'
+    'connect'
   );
   if (readLocation(identified).hostname !== 'slack.com') return identified;
   return followAuthorize(harness, session, identified, SLACK_RELAY_PATHS.installCallback, 'install');
@@ -281,8 +295,11 @@ describe('connecting Slack to a machine', () => {
       session,
     });
     const authorize = readLocation(start);
-    expect(authorize.origin + authorize.pathname).toBe('https://slack.com/openid/connect/authorize');
-    expect(authorize.searchParams.get('scope')).toBe('openid profile');
+    expect(authorize.origin + authorize.pathname).toBe('https://slack.com/oauth/v2/authorize');
+    expect(authorize.searchParams.get('scope')).toBeNull();
+    expect(authorize.searchParams.get('user_scope')).toBe(
+      'channels:history,groups:history,channels:read,groups:read'
+    );
     expect(authorize.searchParams.get('redirect_uri')).toBe(
       `${TEST_CONFIG.origin}${SLACK_RELAY_PATHS.connectCallback}`
     );
@@ -291,7 +308,7 @@ describe('connecting Slack to a machine', () => {
       session,
       start,
       SLACK_RELAY_PATHS.connectCallback,
-      'oidc'
+      'connect'
     );
     const install = readLocation(identified);
     expect(install.origin + install.pathname).toBe('https://slack.com/oauth/v2/authorize');
@@ -299,6 +316,7 @@ describe('connecting Slack to a machine', () => {
     expect(install.searchParams.get('scope')).toBe(
       'app_mentions:read,channels:history,channels:read,groups:history,groups:read,chat:write,reactions:write,users:read'
     );
+    expect(install.searchParams.get('user_scope')).toBe(authorize.searchParams.get('user_scope'));
     const linked = await followAuthorize(
       harness,
       session,
@@ -308,11 +326,19 @@ describe('connecting Slack to a machine', () => {
     );
     expect(linked.headers.get('location')).toBe('/slack/linked?team=Acme');
     expect(readSetCookie(linked, '__Host-shinsa_slack')).toBe('__Host-shinsa_slack=');
-    expect(slack.callsTo('oauth.v2.access')[0]?.body.client_secret).toBe(TEST_CONFIG.slackClientSecret);
+    expect(slack.callsTo('oauth.v2.access').map((call) => call.body.client_secret)).toEqual([
+      TEST_CONFIG.slackClientSecret,
+      TEST_CONFIG.slackClientSecret,
+    ]);
     const stored = harness.db.sqlite.query('SELECT sealed_bot_token FROM slack_workspaces').get() as {
       sealed_bot_token: string;
     };
     expect(stored.sealed_bot_token).not.toContain('xoxb');
+    const [userToken] = sealedUserTokens(harness);
+    expect(userToken?.slack_user_id).toBe('U1');
+    expect(userToken?.sealed_user_token).not.toBeNull();
+    expect(userToken?.sealed_user_token).not.toContain('xoxp');
+    expect(slack.callsTo('auth.revoke')).toEqual([]);
     const links = await readJson<SlackLinks>(
       await harness.call(SLACK_RELAY_PATHS.links, {
         headers: { authorization: `Bearer ${machine.machineToken}` },
@@ -325,17 +351,17 @@ describe('connecting Slack to a machine', () => {
 
   test('a teammate in a workspace that has the app links without adding it again, to their own machine', async () => {
     const { harness, slack } = await setUp();
-    slack.answers['openid.connect.userInfo'] = () => ({
-      ok: true,
-      'https://slack.com/team_id': 'T1',
-      'https://slack.com/user_id': 'U2',
-      name: 'Mia',
-    });
+    answerConnectAs(slack, 'U2', 'xoxp-user-2');
     const mia = await harness.signIn('mia', 7);
     const laptop = await pairMachine(harness, mia, 'Laptop');
     const linked = await connectSlack(harness, mia, laptop.instanceId);
     expect(linked.headers.get('location')).toBe('/slack/linked?team=Acme');
-    expect(slack.callsTo('oauth.v2.access')).toHaveLength(1);
+    expect(slack.callsTo('oauth.v2.access').filter((call) => call.body.code === 'install')).toHaveLength(1);
+    expect(slack.callsTo('users.info').at(-1)).toMatchObject({
+      token: 'xoxb-bot-token',
+      body: { user: 'U2' },
+    });
+    expect(sealedUserTokens(harness).map((row) => row.sealed_user_token === null)).toEqual([false, false]);
     const links = await readJson<SlackLinks>(
       await harness.call(SLACK_RELAY_PATHS.links, {
         headers: { authorization: `Bearer ${laptop.machineToken}` },
@@ -355,7 +381,7 @@ describe('connecting Slack to a machine', () => {
       session,
       start,
       SLACK_RELAY_PATHS.connectCallback,
-      'oidc'
+      'connect'
     );
     expect(readLocation(identified).pathname).toBe('/oauth/v2/authorize');
     expect(readLocation(identified).searchParams.get('scope')).toContain('reactions:write');
@@ -366,7 +392,7 @@ describe('connecting Slack to a machine', () => {
     expect((await connectSlack(harness, session, machine.instanceId)).headers.get('location')).toBe(
       '/slack/linked?team=Acme'
     );
-    expect(slack.callsTo('oauth.v2.access')).toHaveLength(1);
+    expect(slack.callsTo('oauth.v2.access').filter((call) => call.body.code === 'install')).toHaveLength(1);
     harness.handlers.unshift((call) =>
       call.url.endsWith('/api/auth.test')
         ? Promise.reject(new Error('offline'))
@@ -375,6 +401,23 @@ describe('connecting Slack to a machine', () => {
     expect((await connectSlack(harness, session, machine.instanceId)).headers.get('location')).toBe(
       '/slack/linked?team=Acme'
     );
+  });
+
+  test('connecting again keeps a token Slack hands back unchanged, and revokes one it replaced', async () => {
+    const { harness, session, machine, slack } = await setUp();
+    const before = sealedUserTokens(harness);
+    await connectSlack(harness, session, machine.instanceId);
+    expect(slack.callsTo('auth.revoke')).toEqual([]);
+    expect(sealedUserTokens(harness)).toHaveLength(1);
+    expect(sealedUserTokens(harness)[0]?.sealed_user_token).not.toBe(before[0]?.sealed_user_token);
+    answerConnectAs(slack, 'U1', 'xoxp-user-1b');
+    await connectSlack(harness, session, machine.instanceId);
+    expect(slack.callsTo('auth.revoke').map((call) => call.token)).toEqual(['xoxp-user-1']);
+    answerConnectAs(slack, 'U1', 'xoxp-user-1c');
+    slack.answers['auth.revoke'] = () => ({ ok: false, error: 'ratelimited' });
+    const linked = await connectSlack(harness, session, machine.instanceId);
+    expect(linked.headers.get('location')).toBe('/slack/linked?team=Acme');
+    expect(slack.callsTo('auth.revoke').map((call) => call.token)).toEqual(['xoxp-user-1', 'xoxp-user-1b']);
   });
 
   test('without a machine named it links the one seen last, and says so when there is none', async () => {
@@ -433,19 +476,22 @@ describe('connecting Slack to a machine', () => {
     });
     expect(reasonOf(signedOut)).toBe('signed_out');
 
-    slack.answers['openid.connect.token'] = () => ({ ok: false, error: 'invalid_code' });
-    expect(
-      reasonOf(await followAuthorize(harness, session, await begin(), SLACK_RELAY_PATHS.connectCallback, 'c'))
-    ).toBe('slack_failed');
-    slack.answers['openid.connect.token'] = () => ({ ok: true });
-    expect(
-      reasonOf(await followAuthorize(harness, session, await begin(), SLACK_RELAY_PATHS.connectCallback, 'c'))
-    ).toBe('slack_failed');
-    slack.answers['openid.connect.token'] = () => ({ ok: true, access_token: 'xoxp' });
-    slack.answers['openid.connect.userInfo'] = () => ({ ok: true });
-    expect(
-      reasonOf(await followAuthorize(harness, session, await begin(), SLACK_RELAY_PATHS.connectCallback, 'c'))
-    ).toBe('slack_failed');
+    const refusedWith = async (answer: Fields) => {
+      slack.answers['oauth.v2.access'] = () => answer;
+      return reasonOf(
+        await followAuthorize(harness, session, await begin(), SLACK_RELAY_PATHS.connectCallback, 'connect')
+      );
+    };
+    expect(await refusedWith({ ok: false, error: 'invalid_code' })).toBe('slack_failed');
+    expect(await refusedWith({ ok: true, team: { id: 'T1' }, authed_user: { id: 'U1' } })).toBe(
+      'slack_failed'
+    );
+    expect(await refusedWith({ ok: true, authed_user: { id: 'U1', access_token: 'xoxp' } })).toBe(
+      'slack_failed'
+    );
+    expect(await refusedWith({ ok: true, team: { id: 'T1' }, authed_user: { access_token: 'xoxp' } })).toBe(
+      'slack_failed'
+    );
   });
 
   test('an install Slack answers without a bot is refused, and an unreadable store fails as a server error', async () => {
@@ -453,7 +499,11 @@ describe('connecting Slack to a machine', () => {
     const slack = createFakeSlack(harness);
     const session = await harness.signIn();
     const machine = await pairMachine(harness, session);
-    slack.answers['oauth.v2.access'] = () => ({ ok: true, team: { id: 'T1' }, authed_user: { id: 'U1' } });
+    slack.answers['oauth.v2.access'] = () => ({
+      ok: true,
+      team: { id: 'T1' },
+      authed_user: { id: 'U1', access_token: 'xoxp' },
+    });
     const refused = await connectSlack(harness, session, machine.instanceId);
     expect(refused.headers.get('location')).toBe('/slack/linked?error=slack_failed');
 
@@ -462,7 +512,7 @@ describe('connecting Slack to a machine', () => {
       access_token: 'xoxb',
       bot_user_id: 'B0T',
       team: { id: 'T1' },
-      authed_user: { id: 'U9' },
+      authed_user: { id: 'U9', access_token: 'xoxp' },
     });
     harness.world.config.slackTokenKey = 'short';
     const broken = await connectSlack(harness, session, machine.instanceId);
@@ -948,6 +998,44 @@ describe('what a machine does through the relay', () => {
     expect(slack.callsTo('chat.postEphemeral')).toHaveLength(1);
   });
 
+  test('disconnecting and removing the machine revoke each linked person’s Slack token, whatever Slack answers', async () => {
+    const { harness, session, machine, slack } = await forwardedSetup();
+    answerConnectAs(slack, 'U2', 'xoxp-user-2');
+    await connectSlack(harness, session, machine.instanceId);
+    slack.answers['auth.revoke'] = (body) => ({ ok: false, error: 'token_revoked', ...body });
+    const unlinked = await harness.post(
+      SLACK_RELAY_PATHS.unlink,
+      {},
+      { bearer: machine.machineToken, sameOrigin: false }
+    );
+    expect(unlinked.status).toBe(200);
+    expect(
+      slack
+        .callsTo('auth.revoke')
+        .map((call) => call.token)
+        .sort()
+    ).toEqual(['xoxp-user-1', 'xoxp-user-2']);
+    expect(sealedUserTokens(harness)).toEqual([]);
+
+    answerConnectAs(slack, 'U1', 'xoxp-user-3');
+    await connectSlack(harness, session, machine.instanceId);
+    answerConnectAs(slack, 'U2', 'xoxp-user-4');
+    await connectSlack(harness, session, machine.instanceId);
+    harness.db.sqlite.exec(
+      "UPDATE slack_links SET sealed_user_token = 'not-sealed' WHERE slack_user_id = 'U2'"
+    );
+    slack.answers['auth.revoke'] = () => ({ ok: false, error: 'ratelimited' });
+    const removed = await harness.post(
+      REMOTE_PATHS.machineRemove,
+      {},
+      { bearer: machine.machineToken, sameOrigin: false }
+    );
+    expect(removed.status).toBe(200);
+    expect(slack.callsTo('auth.revoke').at(-1)?.token).toBe('xoxp-user-3');
+    expect(slack.callsTo('auth.revoke')).toHaveLength(3);
+    expect(sealedUserTokens(harness)).toEqual([]);
+  });
+
   test('sets the thread’s status in Slack, says so when the workspace cannot show one, and fails and logs any other refusal', async () => {
     const { harness, machine, slack } = await forwardedSetup();
     const session = (body: unknown) =>
@@ -1058,12 +1146,7 @@ describe('deciding from the card', () => {
 
   async function addTeammate(setup: CardSetup, role: 'member' | 'guest' | 'stranger') {
     const { harness, slack, machine } = setup;
-    slack.answers['openid.connect.userInfo'] = () => ({
-      ok: true,
-      'https://slack.com/team_id': 'T1',
-      'https://slack.com/user_id': 'U2',
-      name: 'Mia',
-    });
+    answerConnectAs(slack, 'U2', 'xoxp-user-2');
     const mia = await harness.signIn('mia', 7);
     const laptop = await pairMachine(harness, mia, 'Laptop');
     await connectSlack(harness, mia, laptop.instanceId);
