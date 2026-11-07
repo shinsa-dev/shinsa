@@ -19,6 +19,7 @@ export function createRemoteFile(): RemoteFile {
     teamKeys: [],
     grants: [],
     extras: [],
+    relayDevices: [],
   };
 }
 

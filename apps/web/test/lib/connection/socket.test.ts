@@ -21,8 +21,10 @@ import {
   connection,
   hasEngineCommand,
   replaceConnection,
+  resolveMediaUrl,
   resolveUpdateMessage,
   selectEngineCommands,
+  selectRelayedAppOrigin,
   sendCommand,
   TRANSCRIPT_CACHE_LIMIT,
   TRANSCRIPT_ENTRY_LIMIT,
@@ -35,6 +37,8 @@ import {
   useMachine,
   useMachineAccess,
   useMachines,
+  useMediaUrl,
+  useMediaUrls,
   useTaskDetail,
   useTranscript,
   useUnreachableMachines,
@@ -768,6 +772,27 @@ describe('Connection engine', () => {
     expect(renderHook(() => useEngineFeature('task.share', 'task-1')).result.current).toBe(true);
     expect(renderHook(() => useEngineFeature('task.share')).result.current).toBe(false);
     expect(renderHook(() => useEngineCommands('task-1')).result.current).toBe(selectEngineCommands(engine));
+    replaceConnection(null);
+  });
+
+  it('loads media of a relayed machine through its relay, and as it is on this machine', () => {
+    expect(resolveMediaUrl('/api/evidence/t/a.png')).toBe('/api/evidence/t/a.png');
+    expect(selectRelayedAppOrigin('task-1')).toBeNull();
+    const local = connection;
+    replaceConnection({
+      ...local,
+      resolveMediaUrl: (uri: string) => `/api/teams/relay/kai${uri}`,
+      selectAppOrigin: (id: string) => (id === 'task-1' ? 'https://app.shinsa.dev' : null),
+    });
+    expect(renderHook(() => useMediaUrl('/api/evidence/t/a.png')).result.current).toBe(
+      '/api/teams/relay/kai/api/evidence/t/a.png'
+    );
+    const images = [{ src: '/api/evidence/t/a.png', caption: 'A' }];
+    expect(renderHook(() => useMediaUrls(images)).result.current).toEqual([
+      { src: '/api/teams/relay/kai/api/evidence/t/a.png', caption: 'A' },
+    ]);
+    expect(selectRelayedAppOrigin('task-1')).toBe('https://app.shinsa.dev');
+    expect(selectRelayedAppOrigin(null)).toBeNull();
     replaceConnection(null);
   });
 });

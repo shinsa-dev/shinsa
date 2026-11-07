@@ -10,10 +10,12 @@ import {
   type ServerMessage,
   serializeViewState,
   type TeamFeedSnapshot,
+  type TerminalsSnapshot,
   type WireState,
 } from '@shinsa/core';
 import { Effect } from 'effect';
 import type { SocketData } from '../../src/http/socket.ts';
+import type { Terminals } from '../../src/terminals/service.ts';
 import { Engine } from '../helpers/engine.ts';
 import { openEventLog } from '../helpers/event-log.ts';
 import { createTempDir } from '../helpers/index.ts';
@@ -384,6 +386,66 @@ describe('the socket hub', () => {
     expect(replayState(detail.sent)).toEqual(plain(serializeViewState(engine.state, new Set([settled]))));
     hub.close(summary.socket);
     hub.close(detail.socket);
+    hub.stop();
+    engine.stop();
+    log.close();
+  });
+
+  test('sends a guest only the services of its own task, when it connects and when they change', async () => {
+    const dir = createTempDir();
+    const log = openEventLog(join(dir, 'shinsa.sqlite'));
+    const engine = new Engine(log);
+    const { open, settled } = await createSettledTask(engine);
+    const run = (id: string, taskId: string) => ({
+      id,
+      projectId: 'p',
+      name: 'web',
+      title: null,
+      cwd: '/Users/mona/web',
+      place: 'repository' as const,
+      taskId,
+      serviceId: `service-${id}`,
+      port: 4000,
+      status: 'running' as const,
+      exitCode: null,
+      startedAt: 1,
+      endedAt: null,
+    });
+    let snapshot: TerminalsSnapshot = { home: '/Users/mona', terminals: [run('t1', settled)], services: [] };
+    const listeners: ((next: TerminalsSnapshot) => void)[] = [];
+    const terminals = {
+      snapshot: Effect.sync(() => snapshot),
+      subscribe: (listener: (next: TerminalsSnapshot) => void) =>
+        Effect.sync(() => {
+          listeners.push(listener);
+          return Effect.void;
+        }),
+    } as unknown as Terminals['Service'];
+    const hub = createSocketHub(
+      engine,
+      createTestTranscripts(join(dir, 'transcripts')),
+      undefined,
+      null,
+      terminals
+    );
+    const guest = createSocket();
+    guest.socket.data.guest = {
+      id: 'u-kai',
+      login: 'kai',
+      name: null,
+      avatarUrl: null,
+      scope: { kind: 'task', taskId: settled },
+    };
+    hub.open(guest.socket);
+    const listTerminals = () =>
+      guest.sent.flatMap((message) =>
+        message.type === 'terminals' ? [message.terminals.terminals.map((each) => each.id)] : []
+      );
+    expect(listTerminals()).toEqual([['t1']]);
+    snapshot = { ...snapshot, terminals: [run('t1', settled), run('t2', open)] };
+    for (const listener of listeners) listener(snapshot);
+    expect(listTerminals()).toEqual([['t1'], ['t1']]);
+    hub.close(guest.socket);
     hub.stop();
     engine.stop();
     log.close();
