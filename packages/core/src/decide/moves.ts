@@ -3,7 +3,6 @@ import {
   DomainError,
   isLaterRound,
   isPausingGate,
-  isTaskSettled,
   type Repo,
   type Task,
 } from '../domain/index.ts';
@@ -62,6 +61,6 @@ export function finishMove(decider: Decider, taskId: string) {
   const task = decider.task(taskId);
   if (!task.movingTo) return;
   decider.emit({ type: 'task.moved', taskId, repoId: task.movingTo });
-  if (isTaskSettled(task) || decider.hasOpenGate(taskId, isPausingGate)) return;
+  if (decider.hasOpenGate(taskId, isPausingGate)) return;
   startWork(decider, taskId);
 }

@@ -100,6 +100,17 @@ describe('the agent moves its task to another repository', () => {
     expect(harness.effectsOf('config.verify')).toHaveLength(verifies + 1);
   });
 
+  test('a task cancelled while its worktree is removed stays where it was', () => {
+    const { harness, pwn, superwall, taskId } = createMoveTask();
+    move(harness, taskId, superwall);
+    harness.send({ type: 'task.cancel', taskId });
+    expect(harness.task(taskId).movingTo).toBeNull();
+    const events = harness.events.length;
+    harness.send({ type: 'worktree.gone', taskId });
+    expect(harness.task(taskId)).toMatchObject({ stage: 'cancelled', repoId: pwn });
+    expect(harness.events.slice(events).map((event) => event.type)).not.toContain('task.moved');
+  });
+
   test('a worktree removed after the move changes nothing more', () => {
     const { harness, superwall, taskId } = createMoveTask();
     move(harness, taskId, superwall);

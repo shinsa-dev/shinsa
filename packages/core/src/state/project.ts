@@ -9,6 +9,7 @@ import {
   type FocusSpan,
   formatTaskHandle,
   type Gate,
+  isTaskSettled,
   type MemoryEntry,
   NO_PROJECT_KEY,
   needsWorktree,
@@ -318,6 +319,7 @@ function applyStaged(state: ShinsaState, event: EventOf<'task.staged'>) {
     stageChangedAt: event.at,
     ...resolveCancelledFrom(task, stage),
     ...(stage === 'checking' ? {} : { runningChecks: [] }),
+    ...(task?.movingTo && isTaskSettled({ stage }) ? { movingTo: null } : {}),
   });
   const closed = previous === 'answered' && event.by !== 'you';
   const answered = (previous === 'answering' || closed) && (stage === 'done' || stage === 'merged');
