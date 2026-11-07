@@ -98,6 +98,26 @@ describe('remote.json', () => {
           { teamId: 't1', userId: '8', scopes: 'message' },
           'nope',
         ],
+        relayDevices: [
+          {
+            instanceId: 'kai-mac',
+            teamId: 't1',
+            machineKey: 'mk',
+            publicKey: 'pk',
+            privateKey: 'sk',
+            enrolledAt: 4,
+          },
+          { instanceId: 'lee-mac', teamId: 't1', machineKey: 'mk', publicKey: 'pk', privateKey: 'sk' },
+          {
+            instanceId: 'gus-mac',
+            teamId: 't1',
+            machineKey: 3,
+            publicKey: 'pk',
+            privateKey: 'sk',
+            enrolledAt: 4,
+          },
+          'nope',
+        ],
       })
     );
     expect(readRemoteFile(path)).toEqual({
@@ -106,6 +126,16 @@ describe('remote.json', () => {
       teamKeys: [],
       grants: [{ userId: '7', teamId: 't1', secret: 'g1' }],
       extras: [{ teamId: 't1', userId: '7', scopes: ['message'] }],
+      relayDevices: [
+        {
+          instanceId: 'kai-mac',
+          teamId: 't1',
+          machineKey: 'mk',
+          publicKey: 'pk',
+          privateKey: 'sk',
+          enrolledAt: 4,
+        },
+      ],
       machine: { publicKey: 'p', privateKey: 'k' },
       signing: null,
       credentials: CREDENTIALS,
@@ -245,6 +275,19 @@ describe('the remote store', () => {
     store.removeExtrasWhere((extra) => extra.userId === 'nobody');
     store.removeExtrasWhere((extra) => extra.userId === '7');
     expect(store.file.extras).toEqual([]);
+  });
+
+  test('keeps one relay device per teammate machine, and drops the ones asked for', () => {
+    const store = openTestStore(createPath());
+    const relay = { teamId: 't1', machineKey: 'mk', publicKey: 'pk', privateKey: 'sk', enrolledAt: 1 };
+    store.writeRelayDevice({ ...relay, instanceId: 'kai-mac' });
+    store.writeRelayDevice({ ...relay, instanceId: 'lee-mac' });
+    store.writeRelayDevice({ ...relay, instanceId: 'kai-mac', enrolledAt: 2 });
+    expect(store.selectRelayDevice('kai-mac')?.enrolledAt).toBe(2);
+    expect(store.selectRelayDevice('gus-mac')).toBeNull();
+    expect(store.removeRelayDevicesWhere((device) => device.instanceId === 'nobody')).toEqual([]);
+    expect(store.removeRelayDevicesWhere((device) => device.instanceId === 'kai-mac')).toEqual(['kai-mac']);
+    expect(store.file.relayDevices.map((device) => device.instanceId)).toEqual(['lee-mac']);
   });
 
   test('creates the machine key once and reads it back after a restart', async () => {

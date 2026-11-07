@@ -10,7 +10,7 @@ import {
   resolveKeyFingerprint,
 } from '../../packages/core/src/index.ts';
 import { DAY, MINUTE } from '../kit/time.ts';
-import { createConnect, respondConnect, respondTeamConnect } from './connect.ts';
+import { createConnect, respondConnect, respondTeamConnect, respondTeamRemoteConnect } from './connect.ts';
 import { respondPreviewOpen } from './previews.ts';
 import { createRandomKey, parseRequestBody, readBearerMachine, readPreviewUser } from './requests.ts';
 import { GUEST, type Machine, SandboxFailed, TEAMMATE, TokenBody, USER, UserBody } from './schema.ts';
@@ -179,13 +179,15 @@ export const respondDashboard = Effect.fn('Sandbox.respondDashboard')(function* 
   const owner = MACHINE_OWNERS[readBearerMachine(request)];
   if (owner && pathname === `${REMOTE_PATHS.machineTeams}/${TEAM.id}/connect`)
     return yield* respondTeamConnect(request, owner, teammates);
+  if (owner && pathname === `${REMOTE_PATHS.machineTeams}/${TEAM.id}/connect/remote`)
+    return yield* respondTeamRemoteConnect(request, owner, teammates);
   const scoped = yield* respondTeamScopes(request, url);
   if (scoped) return scoped;
   const team = respondTeams(request, url);
   if (team) return team;
   const session = respondSession(request, url);
   if (session) return session;
-  if (pathname === REMOTE_PATHS.previewOpen) return yield* respondPreviewOpen(url, machines);
+  if (pathname === REMOTE_PATHS.previewOpen) return yield* respondPreviewOpen(url, teammates);
   if (pathname === REMOTE_PATHS.instances)
     return Response.json(yield* listInstances(machines, teammates, user));
   if (pathname.startsWith(`${REMOTE_PATHS.pairs}/`)) {

@@ -19,6 +19,7 @@ import {
   HOST,
   LAPTOP_TASKS,
   LOCAL_WEB,
+  MACHINE_APP,
   ORIGIN,
   PORT,
   PREVIEW_ZONE,
@@ -35,7 +36,8 @@ import {
 } from './schema.ts';
 import { createServicePreview, respondToggle } from './services.ts';
 import { createPreviewShares, respondShareConnect } from './shares.ts';
-import { TEAM, teammateLink } from './team.ts';
+import { teammateLink } from './team.ts';
+import { seedTeammateWork } from './teammate-work.ts';
 import { TUNNEL_SOCKET, upgradeTunnel } from './tunnel.ts';
 
 export const startSandbox = Effect.fn('Sandbox.start')(function* () {
@@ -70,11 +72,12 @@ export const startSandbox = Effect.fn('Sandbox.start')(function* () {
   const studioProject = yield* selectBusiestProject(studio.engine);
   yield* shareProjectWithTeam(studio.engine, studioProject);
   const [teamTask] = Object.values((yield* teammate.engine.core.state).tasks);
+  yield* seedTeammateWork(teammate, teammateData, teamTask);
   const keptOver = yield* seedTeammateDuplicate(studio.engine, studioProject, teamTask);
   const machines = [studio.machine, laptop.machine];
   const teammates = [...machines, teammate.machine];
   const shares = yield* createPreviewShares(studio);
-  const teamTaskPath = teamTask ? `/teams/${TEAM.id}/kai/${teamTask.id}` : null;
+  const teamTaskPath = teamTask ? `/tasks/${teamTask.handle}` : null;
   const { preview, shared } = yield* createServicePreview(studio);
   const { serializeSandboxPage }: SandboxPageModule = yield* Effect.tryPromise({
     try: () => import(join(ROOT, 'apps/web/src/components/sandbox/sandbox-page.tsx')),
@@ -85,7 +88,7 @@ export const startSandbox = Effect.fn('Sandbox.start')(function* () {
     original: teamTask?.handle ?? null,
   });
   let page = serializeSandboxPage(sections, yield* findRemoteStylesheet());
-  const cloud = yield* createSandboxCloud(SANDBOX_DIR, new URL(PREVIEW_ZONE).host, USER.id, machines).pipe(
+  const cloud = yield* createSandboxCloud(SANDBOX_DIR, new URL(PREVIEW_ZONE).host, USER.id, teammates).pipe(
     Effect.mapError(
       (error) => new SandboxFailed({ message: `Starting the stand-in cloud failed: ${String(error)}` })
     )
@@ -102,6 +105,10 @@ export const startSandbox = Effect.fn('Sandbox.start')(function* () {
       if (share && request.method === 'POST') return respondShareConnect(share, machines);
       const signIn = respondSandboxSignIn(url, studio.engine);
       if (signIn) return yield* signIn;
+      const app = MACHINE_APP.exec(url.pathname);
+      const target = teammates.find((entry) => entry.id === app?.[1]);
+      if (target)
+        return Response.redirect(`http://${HOST}:${target.port}${app?.[2] ?? '/'}${url.search}`, 302);
       const enroll = ENROLL.exec(url.pathname);
       const enrolling = machines.find((entry) => entry.id === enroll?.[1]);
       if (enrolling) return yield* respondEnroll(enrolling, url);
@@ -127,7 +134,7 @@ export const startSandbox = Effect.fn('Sandbox.start')(function* () {
             const url = new URL(request.url);
             const socket = request.headers.get('upgrade')?.toLowerCase() === 'websocket';
             if (socket && isPreviewHost(url.host, PREVIEW_ZONE))
-              return upgradePreview(request, url, machines, server);
+              return upgradePreview(request, url, teammates, server);
             const tunneled = upgradeTunnel(request, url, teammates, server);
             if (tunneled !== null) return tunneled;
             return run(respond(request, url));

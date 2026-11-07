@@ -3,6 +3,7 @@ import {
   isTaskSettled,
   isTeamSnapshotExpired,
   NO_TEAM_FEED,
+  parseTaskHandle,
   type RemoteTeam,
   type RemoteUser,
   type ShareMessage,
@@ -157,6 +158,11 @@ export function resolveFleetTeamTaskPath(
 ) {
   if (!(task && machine?.teammate && machine.id === target.instanceId)) return null;
   return resolveTaskPath(task);
+}
+
+export function selectTeamFeedTask(feed: TeamFeedSnapshot, reference: string) {
+  const handle = parseTaskHandle(reference);
+  return feed.tasks.find((entry) => entry.task.id === reference || entry.task.handle === handle) ?? null;
 }
 
 export function resolveTeamTaskTarget(task: TeamFeedTask): TeamViewTarget {

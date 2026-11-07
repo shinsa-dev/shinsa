@@ -226,6 +226,7 @@ export const TEAM_ACTIONS = [
   'leave',
   'remove',
   'connect',
+  'connect/remote',
   'scopes',
 ] as const;
 
