@@ -40,6 +40,7 @@ import { changeDependencies, changeStack, resolveDependencies, resolveStackParen
 import { closeTeammateDuplicate, closeTriageDuplicate, selectTriageDuplicate } from './duplicates.ts';
 import { settleTask, startWork } from './lifecycle.ts';
 import { assertNoMergeStepsLeft } from './merge-steps.ts';
+import { finishMove } from './moves.ts';
 import { retryTask } from './retry.ts';
 import { isShapeLocked, resolveNextStep, startStep } from './shapes.ts';
 import { assertNoWatchdogsLeft, stopAllWatchdogs } from './watchdogs.ts';
@@ -280,7 +281,7 @@ export function retryTaskCommand(decider: Decider, command: CommandOf<'task.retr
 
 export function readyWorktree(decider: Decider, command: CommandOf<'worktree.ready'>) {
   const current = decider.task(command.taskId);
-  if (current.repoId === null || isWaitingForCheckout(decider.state, current)) return;
+  if (current.repoId === null || current.movingTo || isWaitingForCheckout(decider.state, current)) return;
   const workspace = resolveTaskWorkspace(decider.state, current);
   const unchanged =
     current.worktreePath === command.path &&
@@ -320,6 +321,7 @@ export function readyWorktree(decider: Decider, command: CommandOf<'worktree.rea
 export function removeWorktree(decider: Decider, command: CommandOf<'worktree.gone'>) {
   if (decider.task(command.taskId).worktreePath === null) return;
   decider.emit({ type: 'worktree.removed', taskId: command.taskId });
+  finishMove(decider, command.taskId);
 }
 
 export function failEffect(decider: Decider, command: CommandOf<'effect.fail'>) {

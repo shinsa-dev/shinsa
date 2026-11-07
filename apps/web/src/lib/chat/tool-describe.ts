@@ -34,6 +34,7 @@ const HANDOVER_TOOLS = new Set<ShinsaToolName>([
   'report_outcome',
   'report_read',
   'reshape_task',
+  'move_to_repository',
 ]);
 
 function isWatchSuggestionCall(tool: ChatTool) {
@@ -184,6 +185,8 @@ function describeShinsaWork(name: Exclude<ShinsaToolName, PlainShinsaTool>, args
       if (steps.length > 0) return plain('IconSplit', 'Set the steps:', describeSteps(steps));
       return plain('IconSplit', 'Changed the kind of task');
     }
+    case 'move_to_repository':
+      return plain('IconFolderOpen', 'Moved the task to', readString(args, 'repository'));
     case 'delegate_task':
       return plain(
         'IconAgents',
@@ -216,6 +219,7 @@ function describeShinsaMessage(
     ShinsaToolName,
     | PlainShinsaTool
     | 'reshape_task'
+    | 'move_to_repository'
     | 'delegate_task'
     | 'create_task'
     | 'file_report'
@@ -445,6 +449,7 @@ const GROUP_PHRASES: Record<ToolGroupKey, (count: number) => string> = {
   report_outcome: () => 'reported the outcome',
   report_read: () => 'reported what it read',
   reshape_task: () => 'changed the kind of task',
+  move_to_repository: () => 'moved the task to another repository',
   delegate_task: (count) => `started ${describeCount(count, 'delegation', 'delegations')}`,
   delegation_status: (count) => (count === 1 ? 'checked a delegation' : `checked delegations ${count} times`),
   delegation_cancel: (count) => `stopped ${describeCount(count, 'delegation', 'delegations')}`,

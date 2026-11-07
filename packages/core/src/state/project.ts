@@ -9,6 +9,7 @@ import {
   type FocusSpan,
   formatTaskHandle,
   type Gate,
+  isTaskSettled,
   type MemoryEntry,
   NO_PROJECT_KEY,
   needsWorktree,
@@ -61,6 +62,7 @@ import { applyHandoffEvent } from './handoffs.ts';
 import { applyInboxEvent } from './inbox.ts';
 import { applyIterationEvent } from './iterations.ts';
 import { applyMemoryEvent } from './memory.ts';
+import { applyMoveEvent } from './moves.ts';
 import { applyOnBehalfActed } from './on-behalf.ts';
 import { applyOverlapEvent } from './overlaps.ts';
 import { recordAway, recordFocus, recordPresence } from './presence.ts';
@@ -317,6 +319,7 @@ function applyStaged(state: ShinsaState, event: EventOf<'task.staged'>) {
     stageChangedAt: event.at,
     ...resolveCancelledFrom(task, stage),
     ...(stage === 'checking' ? {} : { runningChecks: [] }),
+    ...(task?.movingTo && isTaskSettled({ stage }) ? { movingTo: null } : {}),
   });
   const closed = previous === 'answered' && event.by !== 'you';
   const answered = (previous === 'answering' || closed) && (stage === 'done' || stage === 'merged');
@@ -945,6 +948,10 @@ function applyEventBody(state: ShinsaState, event: ShinsaEvent): ShinsaState {
       break;
     case 'worktree.removed':
       updateTask(state, event.taskId, event.at, { worktreePath: null });
+      break;
+    case 'task.moving':
+    case 'task.moved':
+      applyMoveEvent(state, event);
       break;
     case 'plan.proposed':
       applyPlanProposed(state, event);

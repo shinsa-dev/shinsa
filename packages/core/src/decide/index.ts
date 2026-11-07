@@ -76,6 +76,7 @@ import {
   sendQueuedRound,
 } from './messages.ts';
 import { checkInNow, fireMonitor, waitFor } from './monitors.ts';
+import { moveToRepository } from './moves.ts';
 import { recordOnBehalfAction } from './on-behalf.ts';
 import { recordWelcome } from './onboarding.ts';
 import { applyOrchestration } from './orchestration.ts';
@@ -367,6 +368,8 @@ function apply(decider: Decider, command: ShinsaCommand) {
       return readyWorktree(decider, command);
     case 'worktree.gone':
       return removeWorktree(decider, command);
+    case 'agent.move_to_repository':
+      return moveToRepository(decider, command);
     case 'task.record_edit':
       return recordEdit(decider, command);
     case 'task.commit_edits':

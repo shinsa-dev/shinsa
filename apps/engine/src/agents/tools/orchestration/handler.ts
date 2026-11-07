@@ -7,6 +7,7 @@ import {
   listLiveChildRuns,
   type Run,
   resolveDelegationStatus,
+  SHAPE_LIMITS,
   resolveTaskProject,
   selectProjectByReference,
   type ShinsaState,
@@ -20,6 +21,7 @@ import {
 } from '@shinsa/core';
 import { Duration, Effect } from 'effect';
 import { describeError } from '../../../log/index.ts';
+import { HANDED_OVER } from '../../handover.ts';
 import { assertToolInput } from '../attempts.ts';
 import { type ForkReference, findStackParent, resolveForkReference } from '../forks.ts';
 import { ToolCallFailed } from '../schema.ts';
@@ -315,6 +317,38 @@ export const handleOrchestrationTool = Effect.fn('OrchestrationTool.handle')(fun
     return `The plan is split into these tasks. Link them for the human with:\n${listLinks(tasks)}`;
   });
 
+  const readMoveInput = Effect.fn('OrchestrationTool.readMoveInput')(function* () {
+    const repository = typeof input.repository === 'string' ? input.repository.trim() : '';
+    const reason = typeof input.reason === 'string' ? input.reason.trim() : '';
+    if (!repository) return yield* refuse('Set repository to the name of the repository to move to.');
+    if (!reason) return yield* refuse('Set reason to why the work belongs there, in one sentence.');
+    if (reason.length > SHAPE_LIMITS.reason) {
+      return yield* refuse(`reason is ${reason.length} characters; keep it to ${SHAPE_LIMITS.reason}.`);
+    }
+    return { repository, reason };
+  });
+
+  const moveToRepository = Effect.fn('OrchestrationTool.moveToRepository')(function* () {
+    const { repository, reason } = yield* readMoveInput();
+    const task = yield* findTaskOf(yield* findParent());
+    const state = yield* call.state;
+    const projectId = resolveTaskProject(state, task);
+    const repo =
+      selectKnownRepo(state, repository, projectId, true) ??
+      (yield* call.registerRepo(projectId, repository)) ??
+      selectKnownRepo(state, repository, projectId, false);
+    if (!repo) {
+      const known = Object.values(state.repos)
+        .filter((candidate) => candidate.projectId === projectId)
+        .map((candidate) => candidate.name);
+      return yield* refuse(
+        `There is no repository "${repository}" in this task's project or its folders. Known: ${known.join(', ') || 'none'}.`
+      );
+    }
+    yield* call.dispatch({ type: 'agent.move_to_repository', runId: call.runId, repoId: repo.id, reason });
+    return HANDED_OVER;
+  });
+
   switch (name) {
     case 'delegate_task':
       return yield* delegateTask();
@@ -328,6 +362,8 @@ export const handleOrchestrationTool = Effect.fn('OrchestrationTool.handle')(fun
       return yield* createCourier();
     case 'split_task':
       return yield* splitPlan();
+    case 'move_to_repository':
+      return yield* moveToRepository();
     default:
       return null;
   }

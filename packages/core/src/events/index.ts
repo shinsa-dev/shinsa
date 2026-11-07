@@ -214,6 +214,8 @@ type EventBody =
       returnBranch?: string;
     }
   | { type: 'worktree.removed'; taskId: string }
+  | { type: 'task.moving'; taskId: string; repoId: string; runId: string; reason: string }
+  | { type: 'task.moved'; taskId: string; repoId: string }
   | { type: 'task.edited'; taskId: string; path: string; changed: boolean }
   | { type: 'task.edits_told'; taskId: string }
   | { type: 'task.overlapped'; taskId: string; otherTaskId: string; paths: string[] }
