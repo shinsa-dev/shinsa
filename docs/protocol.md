@@ -371,6 +371,7 @@ export interface RoundPullRequest {
   state: PullRequest['state'];
   base: string | null;
   changes?: PullRequestChanges | null;
+  mergedAt?: number | null;
 }
 
 export interface RoundOutcome {

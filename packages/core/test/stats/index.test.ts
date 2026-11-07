@@ -246,6 +246,60 @@ describe('resolveStats', () => {
     const stats = resolveStats(harness.state, { days: ['all'], dayOf: () => 'all' });
     expect(stats.total).toMatchObject({ pullRequests: 1, tasks: 1, additions: 3, deletions: 1 });
   });
+  test('a pull request counts on the day it merged, even when its round ended later', () => {
+    const merged = task('a', {
+      stage: 'merged',
+      closedAt: null,
+      stageChangedAt: 3 * DAY,
+      rounds: [
+        round(1, {
+          endedAt: 2 * DAY,
+          pullRequest: { number: 7, url: 'u', state: 'merged', base: null, mergedAt: DAY + 5 },
+        }),
+      ],
+    });
+    const stats = resolveStats(stateOf([merged], []), windowOf(4));
+    expect(stats.days.map((day) => day.pullRequests)).toEqual([0, 1, 0, 0]);
+    expect(stats.days.map((day) => day.tasks)).toEqual([0, 0, 1, 0]);
+  });
+
+  test('a merged pull request still counts while its round is reopened or after it finished another way', () => {
+    const merged = { number: 7, url: 'u', state: 'merged' as const, base: null, mergedAt: DAY };
+    const watching = task('a', {
+      rounds: [round(1, { status: 'active', endedAt: DAY, pullRequest: merged })],
+    });
+    const operated = task('b', {
+      rounds: [round(1, { status: 'finished', pullRequest: { ...merged, number: 8 } })],
+    });
+    const unmerged = task('c', { rounds: [round(1, { status: 'finished' })] });
+    const stats = resolveStats(stateOf([watching, operated, unmerged], []), windowOf(3));
+    expect(stats.days.map((day) => day.pullRequests)).toEqual([0, 2, 0]);
+  });
+
+  test('a watchdog check on a later day leaves every shipping count where it was', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    reachShipping(harness, taskId);
+    harness.send({
+      type: 'pull_request.record',
+      taskId,
+      pullRequest: pullRequest({ state: 'merged', changes: { additions: 3, deletions: 1, changedFiles: 1 } }),
+    });
+    const mergeDay = Math.floor(harness.now / DAY);
+    const window: StatsWindow = {
+      days: ['merge', 'later'],
+      dayOf: (at) => (Math.floor(at / DAY) === mergeDay ? 'merge' : 'later'),
+    };
+    const before = resolveStats(harness.state, window);
+    harness.advance(DAY);
+    harness.replay({ type: 'task.staged', taskId, stage: 'watching', reason: 'Watch check' });
+    harness.replay({ type: 'task.staged', taskId, stage: 'merged', reason: 'Watch check done' });
+    expect(harness.task(taskId).stageChangedAt).toBeGreaterThan((mergeDay + 1) * DAY);
+    const after = resolveStats(harness.state, window);
+    expect(after.days).toEqual(before.days);
+    expect(after.days[0]).toMatchObject({ pullRequests: 1, tasks: 1, additions: 3 });
+    expect(after.streak).toEqual(before.streak);
+  });
 });
 
 describe('cache rates', () => {

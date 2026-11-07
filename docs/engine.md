@@ -809,7 +809,10 @@ predicates) and `state/rounds.ts` (the folds); the classifier is `apps/engine/sr
   (a merged change, an operation that ran) gets an answerer that resumes the task's session (the reviewer's
   excepted; `answerFollowUp`, `resolveFollowUpPrompt`, `Decider.taskSession`), runs in the repository like any answerer and answers with
   `answer`, proposing no change (`follow_up_proposal`). The round reopens while it answers (stage `answering`,
-  `isFollowUpOnWork`) and rests again as it was, merged or done, with its result untouched. A message on a resting task
+  `isFollowUpOnWork`) and rests again as it was, merged or done, with its result untouched. A merged round reopened this way, or by a watchdog
+  check (stage `watching`), keeps its first `endedAt` and its pull request's `mergedAt` (stamped once, the first time
+  the fold sees it merged) and settles back to `merged`, even when you then mark the task done, so Statistics never
+  moves a merge to a later day. A message on a resting task
   with no kind (the model off or failed) is such a follow-up, never a new round; only a schedule's message to a
   resting task still starts the next round. The classifier is shown the post-merge steps still waiting on you
   (`describeOpenSteps`), so a question about one, even one that quotes it ("what is this for? <the step>"), is

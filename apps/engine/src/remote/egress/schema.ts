@@ -25,6 +25,7 @@ const SharedPullRequest = Schema.Struct({
   mergeQueue: Schema.optionalKey(Data),
   queueRemoval: Schema.optionalKey(Data),
   mergeCommit: Schema.optionalKey(Data),
+  mergedAt: Schema.optionalKey(Data),
   changes: Schema.optionalKey(Data),
 });
 

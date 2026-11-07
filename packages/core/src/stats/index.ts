@@ -1,5 +1,5 @@
 import { addUsage, resolveUsageDelta } from '../costs/index.ts';
-import { resolveTaskRounds } from '../domain/rounds.ts';
+import { type Round, resolveTaskRounds } from '../domain/rounds.ts';
 import type { PullRequestChanges, Run, RunRole, RunUsage, Task } from '../domain/types.ts';
 import type { ShinsaState } from '../state/project.ts';
 import { resolveTaskProject } from '../state/queries.ts';
@@ -147,16 +147,21 @@ function resolveWorkKey(run: Run): StatsWork {
   return run.purpose ?? run.role;
 }
 
-function resolveMergedAt(task: Task, endedAt: number | null) {
-  return endedAt ?? task.closedAt ?? task.stageChangedAt;
+function resolveMergedAt(task: Task, round: Round) {
+  return round.pullRequest?.mergedAt ?? round.endedAt ?? task.closedAt ?? task.stageChangedAt;
+}
+
+function resolveFinishedAt(task: Task) {
+  const ends = resolveTaskRounds(task).flatMap((round) => (round.endedAt === null ? [] : [round.endedAt]));
+  return task.closedAt ?? (ends.length > 0 ? Math.max(...ends) : task.stageChangedAt);
 }
 
 function listMergedPullRequests(task: Task) {
   const merged = new Map<number, { at: number; changes: PullRequestChanges | null }>();
   for (const round of resolveTaskRounds(task)) {
     const pullRequest = round.pullRequest;
-    if (round.status !== 'merged' || !pullRequest) continue;
-    const at = resolveMergedAt(task, round.endedAt);
+    if (!pullRequest || (round.status !== 'merged' && typeof pullRequest.mergedAt !== 'number')) continue;
+    const at = resolveMergedAt(task, round);
     const previous = merged.get(pullRequest.number);
     if (previous && previous.at > at) continue;
     merged.set(pullRequest.number, { at, changes: pullRequest.changes ?? null });
@@ -210,7 +215,7 @@ function foldRunUsage(fold: UsageFold, run: Run, dayAt: DayLookup) {
 
 function foldShipping(task: Task, dayAt: DayLookup) {
   if (SHIPPED_STAGES.includes(task.stage)) {
-    const day = dayAt(task.closedAt ?? task.stageChangedAt);
+    const day = dayAt(resolveFinishedAt(task));
     if (day) day.tasks += 1;
   }
   for (const merged of listMergedPullRequests(task)) {
