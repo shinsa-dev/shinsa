@@ -6305,8 +6305,16 @@ Agent usage glance in the top bar, which shows every connected provider (`docs/d
   account's OAuth token (from the keychain through `/usr/bin/security find-generic-password -w`, else
   `.credentials.json`) and `anthropic-beta: oauth-2025-04-20`. The `limits` array wins: `session` is "5-hour
   limit" (Codex's label for the same window), `weekly_all` "Weekly · All models", a `weekly_scoped` entry with a model is "Weekly · ‹model›" (the Fable
-  window); the keyed `five_hour`, `seven_day`, `seven_day_opus` and `seven_day_sonnet` fill in, and rotating
-  codenames are dropped. A model window has one id whatever reports it, `weekly:<model slug>` (the keyed
+  window); the keyed `five_hour`, `seven_day`, `seven_day_opus` and `seven_day_sonnet` fill in, and other rotating
+  codenames are dropped. Two more parts of the answer are kept on the reading, each decoded on its own so a
+  malformed one drops only itself: `extraUsage` (`extra_usage.is_enabled`, else `spend.enabled`; `noLimit` when it is
+  on with no monthly limit; `credit`, the money left, from `spend.balance`, else `monthly_limit` minus `used_credits`)
+  and `resetGrants`, the usage resets Claude gives an account, read from `grants` under `cedar_ember`, then
+  `juniper_tide` (each with its resets left and total, the windows it clears, whether it is usable now and when it
+  ends; a spent grant or one without an id is dropped). Settings → Agent usage shows extra usage On or Off, the
+  credit only from one whole unit of its currency, and each grant; the usage menu counts the resets usable now.
+  Shinsa never claims a reset or spends extra usage: claiming stays your click in the Claude app. Fast mode reads
+  the same decoded extra usage. A failed read keeps both, like the windows. A model window has one id whatever reports it, `weekly:<model slug>` (the keyed
   `seven_day_opus` is `weekly:opus`, `seven_day_sonnet` `weekly:sonnet`), so one reading never holds two windows with
   one id (the `limits` entry wins), and a pushed notice naming `seven_day_opus` updates `weekly:opus`. Shinsa never refreshes a token itself (Claude Code does, under its own lock): an expired
   token keeps the last reading and says the login refreshes on the next run, and a stored token whose `expiresAt`

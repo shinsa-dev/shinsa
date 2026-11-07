@@ -92,6 +92,8 @@ One definition per term. **Code** is the name in `packages/core`; **UI** is the 
 | usage wait | A step paused until a usage limit resets, then resumed on the same session | `UsageWait` | "Waiting for the usage limit" |
 | pace hold | A step held before it starts because the last 24 hours reached the daily or a project's usage limit; it starts when older usage drops out | `UsageWait` with `cause: pace`, `UsagePace` | "Held at a usage limit" |
 | usage forecast | The highest steady daily pace the accounts allow without all of them running out, with each account's timeline | `UsageForecast` (`resolveUsageForecast`) | forecast |
+| usage reset | A reset of usage limits Claude grants an account, which you claim in the Claude app; Shinsa shows it and never claims it | `UsageResetGrant`, `AccountUsage.resetGrants` | "Usage reset", "1 usage reset available" |
+| extra usage | Paid usage past a plan's limits, on or off per account, with the credit left | `ExtraUsage`, `UsageMoney`, `AccountUsage.extraUsage` | "Extra usage", "credit left" |
 | account | A Claude login a run is leased on | `RunAccount` | account |
 | provider sign-in | A provider's own login (Codex), named on a Sign in gate with no account | `ProviderSignIn`, `Gate.provider` | "Paused: ‹email› needs signing in" |
 | command | A request to change state; `decide` turns it into events and effects or refuses it | `ShinsaCommand` (`UserCommand`, `AgentCommand`, `SystemCommand`) | not shown |
