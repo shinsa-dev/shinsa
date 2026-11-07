@@ -1,5 +1,6 @@
 import { join } from 'node:path';
 import { Effect, FileSystem } from 'effect';
+import { constFalse } from 'effect/Function';
 import type { Prerequisite, PrerequisiteId } from '../schema.ts';
 import { BUN_FILES, COMMANDS, INSTALL_ORDER, LABELS, SCRIPTS } from './schema.ts';
 
@@ -28,7 +29,7 @@ export const isBunUsed = Effect.fn('Prerequisites.isBunUsed')(function* (roots: 
   const isFolder = (path: string) =>
     fs.stat(path).pipe(
       Effect.map((info) => info.type === 'Directory'),
-      Effect.orElseSucceed(() => false)
+      Effect.orElseSucceed(constFalse)
     );
   const listFolders = Effect.fn('Prerequisites.listFolders')(function* (root: string) {
     const names = yield* fs.readDirectory(root).pipe(Effect.orElseSucceed((): string[] => []));
@@ -38,7 +39,7 @@ export const isBunUsed = Effect.fn('Prerequisites.isBunUsed')(function* (roots: 
   for (const root of roots) {
     for (const folder of [root, ...(yield* listFolders(root))]) {
       for (const file of BUN_FILES) {
-        if (yield* fs.exists(join(folder, file)).pipe(Effect.orElseSucceed(() => false))) return true;
+        if (yield* fs.exists(join(folder, file)).pipe(Effect.orElseSucceed(constFalse))) return true;
       }
     }
   }

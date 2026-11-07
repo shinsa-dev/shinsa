@@ -3,6 +3,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { DomainError } from '@shinsa/core';
 import { Cause, Duration, Effect, Exit, Fiber, FileSystem } from 'effect';
+import { flow } from 'effect/Function';
 import { resolveKeychainAccount } from '../accounts/paths.ts';
 import { resolveServerAddress } from '../config/index.ts';
 import { EngineConfig } from '../config/service.ts';
@@ -125,7 +126,7 @@ export const createPlatformService = Effect.fn('Cli.createPlatformService')(func
   return createLaunchdService({
     uid: process.getuid?.() ?? 0,
     launchctl: createServiceRunner(['launchctl']),
-    ownsJob: (printed) => withFiles(ownsEngineJob(printed)),
+    ownsJob: flow(ownsEngineJob, withFiles),
     inApp: yield* isInsideApp(),
     program: process.execPath,
     home: env.HOME || homedir(),

@@ -156,9 +156,8 @@ export const CodeHandlers = HttpApiBuilder.group(
             files.readCommitBytes(found.repoPath, ref.sha, path, reader)
           )
         );
-      return Effect.flatMap(
-        withFiles(selectInside(ref.worktree, path)),
-        Option.match({ onNone: () => Effect.succeed(null), onSome: files.readWorkingBytes })
+      return Effect.flatMap(withFiles(selectInside(ref.worktree, path)), (inside) =>
+        Option.isSome(inside) ? files.readWorkingBytes(inside.value) : Effect.succeed(null)
       );
     };
 
