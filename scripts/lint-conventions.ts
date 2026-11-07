@@ -8,10 +8,13 @@ import { listDialogViolations } from './lint-dialog.ts';
 import { listDisclosureViolations } from './lint-disclosure.ts';
 import {
   PROMISE_IO_MESSAGE,
+  SYNC_IO_MESSAGE,
   ENGINE_RUNTIME_MESSAGE,
   isEngineRuntimeSource,
   listEngineRuntimeLines,
   isPromiseIoSource,
+  isSyncIoSource,
+  listSyncIoLines,
   isEffectSource,
   listEffectViolations,
   listPromiseLines,
@@ -62,6 +65,8 @@ const ROOTS = [
   'apps/web/test',
   'apps/desktop/src',
   'apps/desktop/test',
+  'apps/desktop/scripts',
+  'apps/engine/scripts',
   'apps/marketing/src',
   'packages',
   'scripts',
@@ -576,6 +581,11 @@ function collectPromiseIoViolations(file: string, source: string, violations: Vi
     violations.push({ file, line, message: PROMISE_IO_MESSAGE });
 }
 
+function collectSyncIoViolations(file: string, source: string, violations: Violation[]): void {
+  if (!isSyncIoSource(file, source)) return;
+  for (const line of listSyncIoLines(source)) violations.push({ file, line, message: SYNC_IO_MESSAGE });
+}
+
 function collectEngineRuntimeViolations(file: string, source: string, violations: Violation[]): void {
   if (!isEngineRuntimeSource(file)) return;
   for (const line of listEngineRuntimeLines(file, source))
@@ -623,6 +633,7 @@ const checkFile = Effect.fn('Conventions.checkFile')(function* (
     for (const violation of listEffectViolations(file, source)) violations.push({ file, ...violation });
   }
   collectPromiseIoViolations(file, source, violations);
+  collectSyncIoViolations(file, source, violations);
   collectEngineRuntimeViolations(file, source, violations);
   if (isUnder(file, VERB_CHECK_ROOTS)) collectVerbViolations(file, parsed.program, violations);
   if (isUnder(file, APP)) appSources[file] = source;

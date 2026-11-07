@@ -42,12 +42,28 @@ export const EFFECT_SCHEMA_FILE_MESSAGE =
 export const PROMISE_IO_MESSAGE =
   'Promise I/O outside Effect. Write the module as a Context.Service provided by a Layer (a script as one Effect program run once with BunRuntime.runMain), with Effect.fn and Effect.tryPromise around the promise API; only React components (.tsx) keep plain promises, and reach I/O through the app runtime (the effect skill → Services and layers)';
 
+export const SYNC_IO_MESSAGE =
+  "File or process I/O outside Effect. Read and write files through FileSystem and Path from effect, run a process through the engine's Shell or the kit's Command, and yield them from an Effect.fn step (a script as one Effect program run once with BunRuntime.runMain); node:path and other pure helpers stay plain (the effect skill → What is Effect code)";
+
 export const ENGINE_RUNTIME_MESSAGE =
   'A runtime or a Promise class in the engine. Write the module as a Context.Service with its Layer, yield what it needs, and run effects only at the process edge, main.ts; a callback from outside enters with Effect.runForkWith on the context the layer captured (the effect skill → Services and layers)';
 
 const ENGINE_SOURCE = /^apps\/engine\/src\//;
 
-const PROMISE_IO_SOURCE = /^(?:apps\/[\w-]+\/src|packages\/[\w-]+\/src|scripts)\//;
+const PROMISE_IO_SOURCE = /^(?:apps\/[\w-]+\/(?:src|scripts)|packages\/[\w-]+\/src|scripts)\//;
+
+const SYNC_IO_MODULES = new Set([
+  'node:fs',
+  'node:fs/promises',
+  'node:child_process',
+  'fs',
+  'fs/promises',
+  'child_process',
+]);
+
+const BUN_IO = new Set(['spawn', 'spawnSync', 'file', 'write', 'which', 'build']);
+
+export const SYNC_IO_EXEMPT = new Set(['apps/engine/src/agents/transcripts/file.ts']);
 
 const ENGINE_EDGE = 'apps/engine/src/main.ts';
 
@@ -214,6 +230,34 @@ export function isEffectSource(file: string, source: string) {
 export function isPromiseIoSource(file: string, source: string) {
   const isTest = /\.test\.ts$/.test(file) || /(?:^|\/)test\//.test(file);
   return PROMISE_IO_SOURCE.test(file) && file.endsWith('.ts') && !isTest && !EFFECT_IMPORT.test(source);
+}
+
+export function isSyncIoSource(file: string, source: string) {
+  return isPromiseIoSource(file, source) && !SYNC_IO_EXEMPT.has(file);
+}
+
+function isTypeOnlyImport(node: AstNode) {
+  if (node.importKind === 'type') return true;
+  const specifiers = node.specifiers as AstNode[];
+  return specifiers.length > 0 && specifiers.every((specifier) => specifier.importKind === 'type');
+}
+
+function isSyncIoNode(node: AstNode) {
+  if (node.type === 'ImportDeclaration') {
+    const module = (node.source as AstNode).value as string;
+    return SYNC_IO_MODULES.has(module) && !isTypeOnlyImport(node);
+  }
+  return isMember(node, 'Bun', BUN_IO);
+}
+
+export function listSyncIoLines(source: string) {
+  const program = parse(source, { sourceType: 'module', plugins: ['typescript'] })
+    .program as unknown as AstNode;
+  const lines = new Set<number>();
+  walk(program, (node) => {
+    if (isSyncIoNode(node)) lines.add(node.loc?.start.line ?? 0);
+  });
+  return [...lines];
 }
 
 export function isEngineRuntimeSource(file: string) {

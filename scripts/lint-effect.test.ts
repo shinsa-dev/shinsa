@@ -15,7 +15,10 @@ import {
   listEffectViolations,
   listPromiseLines,
   isEngineRuntimeSource,
+  isSyncIoSource,
   listEngineRuntimeLines,
+  listSyncIoLines,
+  SYNC_IO_EXEMPT,
 } from './lint-effect.ts';
 
 const messages = (source: string) =>
@@ -156,6 +159,9 @@ describe('every workspace does its I/O in Effect', () => {
     expect(isPromiseIoSource('apps/web/src/lib/api.ts', plain)).toBe(true);
     expect(isPromiseIoSource('packages/core/src/remote/keys.ts', plain)).toBe(true);
     expect(isPromiseIoSource('scripts/release.ts', plain)).toBe(true);
+    expect(isPromiseIoSource('apps/desktop/scripts/build.ts', plain)).toBe(true);
+    expect(isPromiseIoSource('apps/engine/scripts/build-engine.ts', plain)).toBe(true);
+    expect(isPromiseIoSource('packages/ui/scripts/icons.ts', plain)).toBe(false);
     expect(isPromiseIoSource('apps/engine/src/remote/teams.ts', "import { Effect } from 'effect';")).toBe(
       false
     );
@@ -207,5 +213,44 @@ describe('the engine runs effects only at its edge', () => {
       'export class Odd extends (class {}) {}',
     ].join('\n');
     expect(listEngineRuntimeLines('apps/engine/src/a.ts', source)).toEqual([1, 2, 3, 5, 6, 7, 13]);
+  });
+});
+
+describe('no file or process I/O runs outside Effect', () => {
+  test('the Promise I/O files are checked, and the one synchronous transcript reader is exempt', () => {
+    const plain = 'export const a = 1;';
+    expect(isSyncIoSource('apps/engine/src/files/probe.ts', plain)).toBe(true);
+    expect(isSyncIoSource('apps/desktop/scripts/icon.ts', plain)).toBe(true);
+    expect(isSyncIoSource('scripts/seed.ts', plain)).toBe(true);
+    expect(isSyncIoSource('apps/engine/src/files/probe.ts', "import { Effect } from 'effect';")).toBe(false);
+    expect(isSyncIoSource('apps/engine/test/files/probe.test.ts', plain)).toBe(false);
+    expect(isSyncIoSource('apps/web/src/components/row.tsx', plain)).toBe(false);
+    expect(isSyncIoSource('packages/ui/scripts/icons.ts', plain)).toBe(false);
+    for (const file of SYNC_IO_EXEMPT) expect(isSyncIoSource(file, plain)).toBe(false);
+  });
+
+  test('fs and child_process value imports and Bun process and file calls are found, with their lines', () => {
+    const source = [
+      "import { existsSync } from 'node:fs';",
+      "import { readFile } from 'fs/promises';",
+      "import { spawnSync } from 'node:child_process';",
+      "import type { Stats } from 'node:fs';",
+      "import { type Dirent } from 'node:fs';",
+      "import { join } from 'node:path';",
+      "const found = Bun.which('git');",
+      'Bun.spawnSync(["ls"]); Bun.spawn(["ls"]);',
+      "const text = Bun.file('a').text;",
+      "Bun.write('a', 'b');",
+      'const run = Bun.build;',
+      'const id = Bun.randomUUIDv7();',
+      'const env = Bun.env.HOME;',
+    ].join('\n');
+    expect(listSyncIoLines(source)).toEqual([1, 2, 3, 7, 8, 9, 10, 11]);
+  });
+
+  test('a file with no I/O has nothing to report', () => {
+    expect(listSyncIoLines("import { join } from 'node:path';\nexport const a = join('x', 'y');")).toEqual(
+      []
+    );
   });
 });

@@ -6687,7 +6687,9 @@ closing the window, quitting the app, a crash and a reboot (`docs/plans/app-plan
   the SDK's `package.json`. `shinsa eunoe …` runs eunoe's CLI from the same executable (the agents' `eunoe load` and
   `eunoe peek`), importing its `src/cli/main.ts` by path through `node_modules`, since eunoe's `exports` map lists only
   the library; the Test workflow bundles `scripts/engine-main.ts` so a dependency bump that breaks the import fails
-  before merge. The forwarder itself is the library, in the engine.
+  before merge. The forwarder itself is the library, in the engine. Both scripts are Effect programs run once with
+  `BunRuntime.runMain`, their files read through `FileSystem` and their commands run through the kit's `Command`; a
+  build that cannot go on fails with `EngineBuildFailed` (`scripts/schema.ts`), printed as its message, and exits 1.
   Claude Code and Codex stay the user's own installs, found on the login shell's `PATH`.
 - **The job.** `Contents/Library/LaunchAgents/studio.overclock.shinsa.engine.plist` runs `shinsa engine` from the bundle
   (`BundleProgram`), with `SHINSA_SERVICE=1`, `RunAtLoad`, `KeepAlive` with `SuccessfulExit: false` (a crash or a
