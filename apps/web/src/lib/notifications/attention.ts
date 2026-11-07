@@ -1,6 +1,7 @@
 import {
   isAgentQuestion,
   isDecisionGate,
+  isGateHeld,
   isPausingGate,
   listOpenGates,
   type QueuedGate,
@@ -74,7 +75,11 @@ export function describeDecision(entry: QueuedGate): DecisionNotice {
 }
 
 export function listOpenGateIds(state: ShinsaState) {
-  return new Set(listOpenGates(state).map((gate) => gate.id));
+  return new Set(
+    listOpenGates(state)
+      .filter((gate) => !isGateHeld(state, gate))
+      .map((gate) => gate.id)
+  );
 }
 
 export function listNewDecisions(previous: ReadonlySet<string> | null, state: ShinsaState, now: number) {
