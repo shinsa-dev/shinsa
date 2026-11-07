@@ -1,20 +1,40 @@
 import type { AutoShipPolicy, Settings } from '@shinsa/core';
+import type * as React from 'react';
 import { SelectField } from '@/components/controls/select-field.tsx';
 import {
   AUTO_SHIP_DESCRIPTION,
   AUTO_SHIP_ENABLED_ITEMS,
   AUTO_SHIP_MERGE_ITEMS,
+  AUTO_SHIP_NO_TEAM,
   AUTO_SHIP_RISK_ITEMS,
   AUTO_SHIP_TITLE,
   AUTO_SHIP_URGENT_ITEMS,
+  isEscalationUnseen,
   listAutoShipWaitItems,
   resolveAutoShipValue,
 } from '@/lib/auto-ship.ts';
+import { useShinsaSelector } from '@/lib/connection/selectors.ts';
+import { useEngineFeature } from '@/lib/connection/socket.ts';
 import { updateSettings } from '@/lib/settings.ts';
-import { SettingRow, SettingsGroup } from './group.tsx';
+import { DescribedRow, SettingRow, SettingsGroup } from './group.tsx';
+
+const URGENT_TITLE = 'When an urgent merge waits';
+
+function UrgentRow({ description, children }: { description: string | null; children: React.ReactNode }) {
+  if (description === null) return <SettingRow title={URGENT_TITLE}>{children}</SettingRow>;
+  return (
+    <DescribedRow title={URGENT_TITLE} description={description}>
+      {children}
+    </DescribedRow>
+  );
+}
 
 export function AutoShipSettings({ settings }: { settings: Settings }) {
+  const available = useEngineFeature('auto_ship');
+  const projects = useShinsaSelector((state) => state.projects);
   const { policy, enabled } = resolveAutoShipValue(settings);
+  if (!available) return null;
+  const unseen = isEscalationUnseen(policy, Object.values(projects ?? {}));
   const updateAutoShip = (patch: Partial<AutoShipPolicy>) => {
     void updateSettings({ autoShip: { ...policy, ...patch } });
   };
@@ -54,14 +74,14 @@ export function AutoShipSettings({ settings }: { settings: Settings }) {
               onValueChange={(merge) => updateAutoShip({ merge })}
             />
           </SettingRow>
-          <SettingRow title='When an urgent merge waits'>
+          <UrgentRow description={unseen ? AUTO_SHIP_NO_TEAM : null}>
             <SelectField
               label='When an urgent merge waits'
               items={AUTO_SHIP_URGENT_ITEMS}
               value={policy.urgent}
               onValueChange={(urgent) => updateAutoShip({ urgent })}
             />
-          </SettingRow>
+          </UrgentRow>
           {policy.urgent !== 'wait' && (
             <SettingRow title='Wait before acting'>
               <SelectField

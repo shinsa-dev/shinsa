@@ -136,6 +136,7 @@ const FEATURE_ROUTES = {
     'GET /api/remote/teams/keys',
   ],
   'usage.pace_limits': [],
+  auto_ship: [],
 };
 
 const LOCAL_ONLY = [

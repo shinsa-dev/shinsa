@@ -422,6 +422,47 @@ describe('Auto-ship at the merge', () => {
     expect(calm.harness.task(calm.taskId).escalation ?? null).toBeNull();
   });
 
+  test.each([
+    ['wait', null],
+    ['escalate', 'escalate'],
+  ] as const)('follows the urgent rule you pick after the deadline was set (%s)', (urgent, expected) => {
+    const { harness, taskId } = reachMerge({ policy: { urgent: 'merge' }, priority: 'urgent' });
+    const dueAt = harness.openGate(taskId).autoShipDue?.at ?? 0;
+    harness.send({ type: 'settings.change', patch: { autoShip: { urgent } } });
+    fire(harness, taskId, dueAt);
+    expectMergeWaits(harness, taskId);
+    expect(harness.task(taskId).escalation ? 'escalate' : null).toBe(expected);
+    expect(harness.openGate(taskId).autoShipDue ?? null).toBeNull();
+  });
+
+  test('merges at once when you switch from escalating to merging before the deadline', () => {
+    const { harness, taskId } = reachMerge({ policy: { urgent: 'escalate' }, priority: 'urgent' });
+    const dueAt = harness.openGate(taskId).autoShipDue?.at ?? 0;
+    harness.send({ type: 'settings.change', patch: { autoShip: { urgent: 'merge' } } });
+    expect(harness.openGate(taskId).autoShipDue?.at).toBe(dueAt);
+    fire(harness, taskId, dueAt);
+    expectMerging(harness, taskId, WAITED);
+  });
+
+  test('sets the deadline when the task turns urgent while its merge waits, and clears it when it calms', () => {
+    const { harness, taskId } = reachMerge({ policy: { urgent: 'escalate' } });
+    expect(harness.openGate(taskId).autoShipDue ?? null).toBeNull();
+    harness.advance(5 * MINUTE_MS);
+    harness.send({ type: 'task.prioritize', taskId, priority: 'urgent' });
+    expect(harness.openGate(taskId).autoShipDue).toEqual({ at: harness.now + WAIT, action: 'escalate' });
+    harness.send({ type: 'task.prioritize', taskId, priority: 'normal' });
+    expect(harness.openGate(taskId).autoShipDue ?? null).toBeNull();
+  });
+
+  test('sets the deadline when you turn Auto-ship on while an urgent merge waits', () => {
+    const { harness, taskId } = reachMerge({ policy: { urgent: 'wait' }, priority: 'urgent' });
+    expect(harness.openGate(taskId).autoShipDue ?? null).toBeNull();
+    harness.send({ type: 'settings.change', patch: { autoShip: { urgent: 'escalate' } } });
+    expect(harness.openGate(taskId).autoShipDue).toEqual({ at: harness.now + WAIT, action: 'escalate' });
+    fire(harness, taskId);
+    expect(harness.task(taskId).escalation?.reason).toBe(WAITED);
+  });
+
   test('ignores a fire for a gate that closed, another task or nothing it knows', () => {
     const { harness, taskId } = reachMerge({ policy: { urgent: 'escalate' }, priority: 'urgent' });
     const gate = harness.openGate(taskId);

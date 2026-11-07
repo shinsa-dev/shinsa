@@ -3,6 +3,7 @@ import {
   type AutoShipPolicy,
   type AutoShipRisk,
   type AutoShipUrgent,
+  type Project,
   type ReviewRatings,
   resolveAutoShipPolicy,
   type Settings,
@@ -50,6 +51,14 @@ export const AUTO_SHIP_URGENT_ITEMS: SettingItem<AutoShipUrgent>[] = [
   { value: 'merge', label: 'Merge it for me', icon: 'IconMerged' },
   { value: 'escalate_then_merge', label: 'Send it to my team, then merge', icon: 'IconMegaphone' },
 ];
+
+export const AUTO_SHIP_NO_TEAM =
+  'None of your projects is in a team yet, so only you see an urgent change it sends on.';
+
+export function isEscalationUnseen(policy: AutoShipPolicy, projects: readonly Pick<Project, 'teamIds'>[]) {
+  if (policy.urgent !== 'escalate' && policy.urgent !== 'escalate_then_merge') return false;
+  return !projects.some((project) => (project.teamIds?.length ?? 0) > 0);
+}
 
 const WAIT_CHOICES = [15, 30, 60, 120, 240, 480];
 

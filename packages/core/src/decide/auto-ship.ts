@@ -6,9 +6,15 @@ import {
   MINUTE_MS,
   resolveApprovalPath,
 } from '../domain/index.ts';
-import { type AutoShipRisk, resolveAutoShipPolicy, type Settings } from '../domain/settings.ts';
+import {
+  type AutoShipPolicy,
+  type AutoShipRisk,
+  resolveAutoShipPolicy,
+  type Settings,
+} from '../domain/settings.ts';
 import type { Task } from '../domain/types.ts';
 import type { ReviewFinding, ReviewRating } from '../report/types.ts';
+import { listOpenGates } from '../state/queries.ts';
 import type { Decider } from './decider.ts';
 import { hasOpenPreMergeSteps } from './merge-steps.ts';
 import { startMerge } from './pull-requests.ts';
@@ -115,6 +121,15 @@ function resolveUrgentDue(decider: Decider, task: Task): AutoShipDue | null {
   };
 }
 
+export function syncAutoShipDeadlines(decider: Decider, taskId?: string) {
+  for (const gate of listOpenGates(decider.state, taskId)) {
+    if (gate.type !== 'merge') continue;
+    const due = resolveUrgentDue(decider, decider.task(gate.taskId));
+    if (due === null) scheduleAutoShip(decider, gate, null);
+    else if (!gate.autoShipDue) scheduleAutoShip(decider, gate, due);
+  }
+}
+
 export function applyAutoShipMerge(decider: Decider, gate: Gate) {
   const task = decider.task(gate.taskId);
   const settings = decider.state.settings;
@@ -136,6 +151,11 @@ function escalate(decider: Decider, task: Task, reason: string) {
   decider.emit({ type: 'task.escalated', taskId: task.id, reason });
 }
 
+function resolveUrgentAction(urgent: AutoShipPolicy['urgent'], due: AutoShipDue['action']) {
+  if (urgent === 'wait') return null;
+  return urgent === 'escalate_then_merge' ? due : urgent;
+}
+
 function selectDueGate(decider: Decider, command: CommandOf<'auto_ship.fire'>) {
   const gate = decider.state.gates[command.gateId];
   const task = decider.state.tasks[command.taskId];
@@ -150,18 +170,19 @@ export function fireAutoShip(decider: Decider, command: CommandOf<'auto_ship.fir
   if (!found) return;
   const { gate, task, due } = found;
   const policy = resolveAutoShipPolicy(decider.state.settings);
-  if (!policy.enabled || !isUrgent(task)) {
+  const action = resolveUrgentAction(policy.urgent, due.action);
+  if (!policy.enabled || !isUrgent(task) || action === null) {
     scheduleAutoShip(decider, gate, null);
     return;
   }
   const waited = `Urgent, and the merge waited ${describeWait(policy.urgentWaitMinutes)} for you.`;
   const refusal = resolveMergeRefusal(decider, task);
-  if (due.action === 'merge' && refusal === null) {
+  if (action === 'merge' && refusal === null) {
     mergeForYou(decider, gate, waited);
     return;
   }
-  escalate(decider, task, due.action === 'merge' ? `${waited} ${refusal}` : waited);
-  const merges = policy.urgent === 'escalate_then_merge' && due.action === 'escalate' && refusal === null;
+  escalate(decider, task, action === 'merge' ? `${waited} ${refusal}` : waited);
+  const merges = policy.urgent === 'escalate_then_merge' && action === 'escalate' && refusal === null;
   scheduleAutoShip(
     decider,
     gate,

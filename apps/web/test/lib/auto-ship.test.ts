@@ -4,6 +4,7 @@ import {
   AUTO_SHIP_RISK_ITEMS,
   describeAgentReviewNote,
   describeReviewRatings,
+  isEscalationUnseen,
   listAutoShipWaitItems,
   listTeamEscalationRows,
   resolveAutoShipFact,
@@ -22,6 +23,16 @@ describe('the Auto-ship settings', () => {
       autoShip: { ...AUTO_SHIP_DEFAULTS, enabled: true, merge: 'approved' as const },
     };
     expect(resolveAutoShipValue(settings)).toMatchObject({ enabled: 'on', policy: { merge: 'approved' } });
+  });
+
+  it('warns that an escalation reaches only you while no project is in a team', () => {
+    const escalate = { ...AUTO_SHIP_DEFAULTS, urgent: 'escalate' as const };
+    const later = { ...AUTO_SHIP_DEFAULTS, urgent: 'escalate_then_merge' as const };
+    const merge = { ...AUTO_SHIP_DEFAULTS, urgent: 'merge' as const };
+    expect(isEscalationUnseen(escalate, [])).toBe(true);
+    expect(isEscalationUnseen(later, [{ teamIds: [] }, {}])).toBe(true);
+    expect(isEscalationUnseen(escalate, [{}, { teamIds: ['team-1'] }])).toBe(false);
+    expect(isEscalationUnseen(merge, [])).toBe(false);
   });
 
   it('names each risk limit, and never approving is not a shield', () => {

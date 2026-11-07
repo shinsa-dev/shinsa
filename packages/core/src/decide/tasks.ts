@@ -27,6 +27,7 @@ import {
   listPendingDependencies,
   resolveTaskWorkspace,
 } from '../state/queries.ts';
+import { syncAutoShipDeadlines } from './auto-ship.ts';
 import {
   addToBacklog,
   buildFromBacklog,
@@ -182,6 +183,7 @@ export function prioritizeTask(decider: Decider, command: CommandOf<'task.priori
   if (decider.task(command.taskId).priority === command.priority) return;
   decider.emit({ type: 'task.prioritized', taskId: command.taskId, priority: command.priority, by: 'you' });
   decider.requestBriefing(command.taskId);
+  syncAutoShipDeadlines(decider, command.taskId);
 }
 
 export function waitOnTasks(decider: Decider, command: CommandOf<'task.wait_on'>) {

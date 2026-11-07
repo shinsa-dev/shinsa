@@ -1,18 +1,22 @@
 import { afterEach, beforeEach, describe, expect, it, type Mock, spyOn } from 'bun:test';
-import { createSettings, type Settings } from '@shinsa/core';
+import { AUTO_SHIP_DEFAULTS, createSettings, resolveEngineInfo, type Settings } from '@shinsa/core';
 import { TooltipProvider } from '@shinsa/ui/components/tooltip';
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { AgentSettings } from '@/components/settings/agents.tsx';
+import { AUTO_SHIP_NO_TEAM } from '@/lib/auto-ship.ts';
 import { createAccount, createSnapshot } from '../../support/accounts.ts';
 import { spyOnToasts } from '../../support/commands.ts';
+import { spyOnEngine } from '../../support/engine.ts';
 import {
   holdAcks,
   listSentCommands,
   pushAccounts,
+  pushState,
   releaseAcks,
   startFakeServer,
   stopFakeServer,
 } from '../../support/server.ts';
+import { createProject, createShinsaState } from '../../support/state.ts';
 
 let toasts: ReturnType<typeof spyOnToasts>;
 let providers: Mock<typeof fetch>;
@@ -218,5 +222,34 @@ describe('Settings → Agents → Engine', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
     await settle();
     expect(listSentCommands()).toEqual([{ type: 'settings.change', patch: { delegationLimit: 3 } }]);
+  });
+});
+
+describe('Settings → Agents → Auto-ship', () => {
+  const ESCALATING: Settings = {
+    ...createSettings(),
+    autoShip: { ...AUTO_SHIP_DEFAULTS, enabled: true, urgent: 'escalate' },
+  };
+
+  it('shows only on an engine that has Auto-ship', () => {
+    const engine = resolveEngineInfo('1.0.0');
+    spyOnEngine({ ...engine, features: engine.features.filter((feature) => feature !== 'auto_ship') });
+    renderAgents(ESCALATING);
+    expect(screen.queryByRole('combobox', { name: 'Auto-ship' })).toBeNull();
+  });
+
+  it('warns that an escalation reaches only you while no project is in a team', () => {
+    spyOnEngine();
+    renderAgents(ESCALATING);
+    expect(screen.getByRole('combobox', { name: 'Auto-ship' })).toBeTruthy();
+    expect(screen.getByText(AUTO_SHIP_NO_TEAM)).toBeTruthy();
+  });
+
+  it('leaves the warning out once a project is in a team', () => {
+    spyOnEngine();
+    pushState(createShinsaState({ projects: [createProject({ id: 'p1', teamIds: ['team-1'] })] }));
+    renderAgents(ESCALATING);
+    expect(screen.getByRole('combobox', { name: 'When an urgent merge waits' })).toBeTruthy();
+    expect(screen.queryByText(AUTO_SHIP_NO_TEAM)).toBeNull();
   });
 });

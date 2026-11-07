@@ -74,6 +74,26 @@ export function SettingsCard({ className, children }: { className?: string; chil
   return <Card className={cn('gap-0 p-1.5', className)}>{children}</Card>;
 }
 
+export function DescribedRow({
+  title,
+  description,
+  children,
+}: {
+  title: React.ReactNode;
+  description: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className={cn(SETTING_ROW, SETTING_ROW_WRAPS)}>
+      <div className={cn(SETTING_LABEL, 'flex flex-col')}>
+        <div className='flex min-w-0 items-center gap-1.5 text-xs text-fg-4'>{title}</div>
+        <p className='text-2xs text-fg-2'>{description}</p>
+      </div>
+      <div className='flex shrink-0 items-center gap-1.5'>{children}</div>
+    </div>
+  );
+}
+
 export function SettingRow({ title, children }: { title: React.ReactNode; children: React.ReactNode }) {
   return (
     <div className={cn(SETTING_ROW, SETTING_ROW_WRAPS)}>

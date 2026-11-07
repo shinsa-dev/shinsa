@@ -1972,10 +1972,14 @@ action it takes is recorded with its reason. The rules are core's (`decide/auto-
   (`gate.answered` with `autoShip`, then the usual merge) when `merge` allows it (`approved`, or `low_risk` and the
   risk is `low`), no pre-merge step of it or its bundle is open, and your edits are pushed. Otherwise an urgent task
   whose policy acts on a wait gets a deadline on its gate (`auto_ship.scheduled`, `Gate.autoShipDue {at, action}`).
+  The deadline follows you while the gate waits (`syncAutoShipDeadlines`, after `task.prioritize` and
+  `settings.change`): a task you mark urgent, or a policy you turn on or set to act, gets one a full wait from then;
+  a task no longer urgent, or a policy off or set to `wait`, loses it; a deadline already set keeps its time.
 - **The idle clock.** `AutoShipClock` fires `auto_ship.fire {taskId, gateId, dueAt}` (command id
   `auto_ship:<gate>:<dueAt>`) for each open merge gate at its deadline. Core ignores a fire for another deadline, a
   gate no longer open, or a closed task, and clears the deadline once the policy is off or the task is no longer
-  urgent. A `merge` deadline merges for you when nothing refuses it; otherwise, and for an `escalate` deadline, it
+  urgent. It acts on the urgent rule as it is at the fire, not the one the deadline was set under: `merge` merges,
+  `escalate` escalates, `escalate_then_merge` takes the deadline's own step, `wait` does nothing. A `merge` deadline merges for you when nothing refuses it; otherwise, and for an `escalate` deadline, it
   escalates the task (`task.escalated`, `Task.escalation {at, reason}`, "Escalated by Auto-ship" in the activity).
   With `escalate_then_merge` the escalation sets a second deadline the same wait later, which merges.
 - **Escalating to your team.** `Task.escalation` is a shared status field, so it travels in your team listing
@@ -1983,7 +1987,8 @@ action it takes is recorded with its reason. The rules are core's (`decide/auto-
   tasks out of the team feed: they show in Needs you as "Sent to your team", count in the page badge, and each sends
   one notification that opens the task. A teammate merges it from the task's page as they would any team task. The
   escalation clears when its merge gate is answered or withdrawn, or a new round starts. A task whose project is in
-  no team escalates only in its own activity and Overview ("Sent to your team").
+  no team escalates only in its own activity and Overview ("Sent to your team"), so while none of your projects is
+  in a team, Settings → Agents → Auto-ship says so under the urgent rule when it escalates (`isEscalationUnseen`).
 - **What it never does.** It never closes a plan, question, operation, proposal, result, failure, setup, Sign in or
   escalated review gate, never ticks a step around the merge, and never gets past GitHub: a merge GitHub refuses
   opens the usual failure gate. Usage and cost limits still hold the agent runs of an urgent task.
@@ -3324,8 +3329,8 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   `review.approve_after_fix` for `gate.answer`'s `thenApprove`, `message.line_comments` for `task.message`'s
   `comments`, `changelog` for `GET /api/changelog`, `remote.terminals` for terminal streams on the sealed channel,
   `attention` for routing notifications to the device you use, `worktree-root` for the worktree folder and
-  `usage.pace_limits` for `dailyUsageLimit` and `Project.usageLimit`, today;
-  Settings → Teams, the review's Fix and approve choice and
+  `usage.pace_limits` for `dailyUsageLimit` and `Project.usageLimit`, and `auto_ship` for the `autoShip` setting, today;
+  Settings → Teams, Settings → Agents → Auto-ship, the review's Fix and approve choice and
   What's new show only on an engine that has them). `ENGINE_PROTOCOL` is the hard floor: a machine whose protocol differs from the page's is left out of the
   dashboard, merges nothing and gets no command, and Settings → Machines says "Update Shinsa on <name> to reach it from
   here." in its row, as do New task's machine picker and a routing policy's on that machine's disabled entry. When every

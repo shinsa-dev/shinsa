@@ -16,6 +16,7 @@ export const ENGINE_FEATURES = [
   'worktree-root',
   'team-access',
   'usage.pace_limits',
+  'auto_ship',
 ] as const;
 
 export type EngineFeature = (typeof ENGINE_FEATURES)[number];
