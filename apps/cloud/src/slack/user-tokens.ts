@@ -13,7 +13,7 @@ const revokeUserToken = Effect.fn('revokeUserToken')(function* (token: Redacted.
       Effect.catchTag('SlackCallFailed', (error) =>
         SETTLED_REVOKE_CODES.has(error.code)
           ? Effect.void
-          : Effect.logWarning('[Cloud] Slack did not revoke a user token').pipe(
+          : Effect.logWarning('[Cloud] A Slack user token could not be revoked').pipe(
               Effect.annotateLogs({ error, code: error.code })
             )
       )
@@ -56,12 +56,6 @@ export const revokeMachineUserTokens = Effect.fn('revokeMachineUserTokens')(func
   const store = yield* SlackStore;
   for (const link of yield* store.listMachineLinks(instanceId)) {
     if (link.sealedUserToken === null) continue;
-    yield* revokeSealedUserToken(link.sealedUserToken).pipe(
-      Effect.catchCause((cause) =>
-        Effect.logWarning('[Cloud] A Slack user token could not be revoked').pipe(
-          Effect.annotateLogs({ cause: Cause.pretty(cause), teamId: link.workspaceId })
-        )
-      )
-    );
+    yield* revokeSealedUserToken(link.sealedUserToken);
   }
 });

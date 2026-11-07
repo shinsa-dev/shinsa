@@ -370,6 +370,22 @@ describe('connecting Slack to a machine', () => {
     expect(links.links.map((link) => [link.userId, link.userName])).toEqual([['U2', 'Mia']]);
   });
 
+  test('names someone by their Slack user id when Slack will not say their name', async () => {
+    const { harness, slack } = await setUp();
+    answerConnectAs(slack, 'U9', 'xoxp-user-9');
+    const mia = await harness.signIn('mia', 7);
+    const laptop = await pairMachine(harness, mia, 'Laptop');
+    expect((await connectSlack(harness, mia, laptop.instanceId)).headers.get('location')).toBe(
+      '/slack/linked?team=Acme'
+    );
+    const links = await readJson<SlackLinks>(
+      await harness.call(SLACK_RELAY_PATHS.links, {
+        headers: { authorization: `Bearer ${laptop.machineToken}` },
+      })
+    );
+    expect(links.links.map((link) => [link.userId, link.userName])).toEqual([['U9', 'U9']]);
+  });
+
   test('adds the app again when its bot token lacks a scope the relay now asks for', async () => {
     const { harness, session, machine, slack } = await setUp();
     slack.answers['auth.test'] = () => ({ ok: true, headers: { 'x-oauth-scopes': 'chat:write,users:read' } });
