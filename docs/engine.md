@@ -4336,7 +4336,9 @@ Slack ──a card's button──► app.shinsa.dev /slack/interactions
   message is read from its `text`, its `blocks` (section, header, context and rich text) and its `attachments`
   (pretext, title, text and fields, else the fallback), taking the longer of the text and the blocks and adding the
   attachments (`resolveSlackMessageText`, `apps/cloud/src/routes/slack-events/message.ts`), so a bot whose `text`
-  is only a preview reaches the agent with its whole report. The tunnel route
+  is only a preview reaches the agent with its whole report. Shinsa's own posts (the workspace's bot user) are read
+  from their `text` alone, the short fallback each card carries, so a long result or plan earlier in the thread never
+  crowds the person's message out of the 12,000 characters a thread may take. The tunnel route
   `POST /api/slack/events` (`TunnelGate`, `remote/gate/`) is 404 while remote access is off, refuses a body over 1 MB and a
   forward whose `x-shinsa-slack-signature` is not an HMAC over `v1:<ms>:<body>` keyed by the machine's connect key or
   whose `x-shinsa-slack-timestamp` is more than five minutes off (`verifySlackForwardSignature`, 401), then
@@ -4429,6 +4431,9 @@ Slack ──a card's button──► app.shinsa.dev /slack/interactions
   (`listSlackChunks`, which splits on paragraphs and lines and never inside a code fence or a link) up to the blocks
   the post has left of Slack's 50, and Slack folds a long one behind its own See more. Only a body that still does
   not fit ends in "…" with "Read the rest in Shinsa" in place of its link button (about 130,000 characters).
+  When Slack refuses a post's blocks (`invalid_blocks`, `invalid_blocks_format`, `msg_blocks_too_long`,
+  `REFUSED_BLOCK_CODES`), app.shinsa.dev logs "[Cloud] Slack did not take a post" with the code and answers
+  `SlackBlocksRefused`, like every other refused post.
   A link button (`shinsa.open`) still sends Slack an interaction, which app.shinsa.dev acknowledges and drops; the
   app's Interactivity is on, with `/slack/interactions` as its request URL (`apps/cloud/slack-manifest.json`).
 - **Decide from Slack** (`slack/decisions.ts`, `decideSlackGate`). What each gate takes in Slack is

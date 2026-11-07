@@ -742,6 +742,17 @@ describe('a mention from someone', () => {
           ],
         },
         { ts: '90.4', bot_id: 'BA', username: 'Alerts', attachments: [{ fallback: 'Disk full on db-1' }] },
+        {
+          ts: '90.5',
+          user: 'B0T',
+          bot_id: 'BSH',
+          bot_profile: { name: 'Shinsa' },
+          text: 'The parser drops blocks.',
+          blocks: [
+            { type: 'header', text: { type: 'plain_text', text: 'Result' } },
+            { type: 'section', text: { type: 'mrkdwn', text: 'x'.repeat(2800) } },
+          ],
+        },
       ],
     });
     await sendEvent(harness, mentionEnvelope({ ts: '90.9', thread_ts: '90.2' }));
@@ -761,6 +772,7 @@ describe('a mention from someone', () => {
       ],
       ['Mia', 'same on @Mia side'],
       ['Alerts', 'Disk full on db-1'],
+      ['Shinsa', 'The parser drops blocks.'],
       ['Christo', 'the build hangs'],
     ]);
   });
@@ -898,6 +910,12 @@ describe('what a machine does through the relay', () => {
     const blocks = await post(POST);
     expect(blocks.status).toBe(422);
     expect((await readJson<{ error: { code: string } }>(blocks)).error.code).toBe('slack_blocks_refused');
+    slack.answers['chat.postMessage'] = () => ({ ok: false, error: 'msg_blocks_too_long' });
+    expect((await post(POST)).status).toBe(422);
+    expect(failures).toHaveBeenCalledWith('[Cloud] Slack did not take a post', {
+      error: expect.objectContaining({ code: 'msg_blocks_too_long' }),
+      code: 'msg_blocks_too_long',
+    });
     slack.answers['chat.postMessage'] = () => ({ ok: true });
     expect((await post(POST)).status).toBe(502);
     harness.handlers.unshift((call) => {

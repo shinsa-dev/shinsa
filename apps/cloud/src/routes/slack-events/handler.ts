@@ -96,12 +96,13 @@ export const SlackEventRoutes = Layer.unwrap(
       text: event.text ?? '',
     });
 
-    const resolveThreadEntry = (message: ThreadMessage): ThreadEntry | null => {
+    const resolveThreadEntry = (message: ThreadMessage, botUserId: string): ThreadEntry | null => {
       const userId = message.user ?? message.bot_id;
       if (!userId) return null;
       const botName =
         message.bot_id === undefined ? null : (message.bot_profile?.name ?? message.username ?? 'Bot');
-      return { ts: message.ts, userId, text: resolveSlackMessageText(message), botName };
+      const text = userId === botUserId ? (message.text ?? '') : resolveSlackMessageText(message);
+      return { ts: message.ts, userId, text, botName };
     };
 
     const resolveCardMessage = (actions: BlockActions): CardMessage => ({
@@ -167,6 +168,7 @@ export const SlackEventRoutes = Layer.unwrap(
 
     const listThreadEntries = Effect.fn('slackEvents.listThreadEntries')(function* (
       mention: MentionEvent,
+      botUserId: string,
       token: Redacted.Redacted<string>
     ) {
       const own: ThreadEntry = { ts: mention.ts, userId: mention.userId, text: mention.text, botName: null };
@@ -189,7 +191,11 @@ export const SlackEventRoutes = Layer.unwrap(
         .pipe(
           Effect.map((replies) => {
             const entries = (replies.messages ?? [])
-              .map((value) => Option.getOrNull(Option.map(decodeThreadMessage(value), resolveThreadEntry)))
+              .map((value) =>
+                Option.getOrNull(
+                  Option.map(decodeThreadMessage(value), (message) => resolveThreadEntry(message, botUserId))
+                )
+              )
               .filter((entry) => entry !== null);
             return entries.some((entry) => entry.ts === mention.ts) ? entries : [...entries, own];
           }),
@@ -226,7 +232,9 @@ export const SlackEventRoutes = Layer.unwrap(
       workspace: SlackWorkspace,
       token: Redacted.Redacted<string>
     ) {
-      const entries = (yield* listThreadEntries(mention, token)).slice(-SLACK_LIMITS.threadMessages);
+      const entries = (yield* listThreadEntries(mention, workspace.botUserId, token)).slice(
+        -SLACK_LIMITS.threadMessages
+      );
       const users = yield* resolveUserNames(entries, token);
       const names = { users, botUserId: workspace.botUserId };
       const readable = (text: string) => resolveSlackReadableText(text, names).slice(0, SLACK_LIMITS.text);
