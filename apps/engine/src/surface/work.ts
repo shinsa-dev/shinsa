@@ -48,6 +48,11 @@ export const WORK_SPECS: SurfaceSpec[] = [
       SUGGESTION_FIELD,
       { name: 'afterThis', kind: 'boolean', description: 'Start it only after this task merges.' },
       {
+        name: 'stackOnThis',
+        kind: 'boolean',
+        description: 'Bundle it with this task: it builds on this task’s branch and merges together with it.',
+      },
+      {
         name: 'backlog',
         kind: 'boolean',
         description: 'Plan it now and keep it in the backlog until you start building it.',
@@ -59,11 +64,16 @@ export const WORK_SPECS: SurfaceSpec[] = [
         taskId: yield* findTaskId(client, readValue(values, 'task')),
         suggestionId: readValue(values, 'suggestion'),
         waitsOnThis: values.afterThis === true,
+        ...(values.stackOnThis ? { stackOnThis: true } : {}),
         ...(values.backlog ? { backlog: true } : {}),
       };
     }),
-    done: (values) =>
-      values.backlog ? 'Added the suggested task to the backlog.' : 'Added the suggested task.',
+    done: (values) => {
+      if (values.backlog) return 'Added the suggested task to the backlog.';
+      return values.stackOnThis
+        ? 'Added the suggested task to this task’s bundle.'
+        : 'Added the suggested task.';
+    },
   }),
   defineCommand({
     path: ['suggestions', 'dismiss'],

@@ -68,7 +68,7 @@ import { applyPullRequestEvent } from './pull-requests.ts';
 import { applyRoundEvent, createFirstRound, recordRoundBranch, recordRoundStaged } from './rounds.ts';
 import { applyRunEvent } from './runs.ts';
 import { applyScheduledTask, applyScheduleEvent, describeSchedule } from './schedules.ts';
-import { applyShapeEvent, describeShape } from './shapes.ts';
+import { applyShapeEvent, clearSuggestedActions, describeShape } from './shapes.ts';
 import { applyShareEvent } from './shares.ts';
 import { applySlackEvent } from './slack.ts';
 import { applySuggested, applySuggestionSettled } from './suggestions.ts';
@@ -572,6 +572,7 @@ const NEW_WORK_TEXT = {
 
 function applyMessaged(state: ShinsaState, event: EventOf<'task.messaged'>) {
   const scheduleId = event.scheduleId;
+  if (!event.kept) clearSuggestedActions(state, event.taskId, event.at);
   if (event.kind === 'new_round' || event.kind === 'separate_task') {
     record(state, event.taskId, event.at, {
       actor: 'you',
@@ -1022,6 +1023,7 @@ function applyEventBody(state: ShinsaState, event: ShinsaEvent): ShinsaState {
     case 'task.reshaped':
     case 'task.delivered':
     case 'task.change_proposed':
+    case 'task.actions_suggested':
     case 'task.change_declined':
     case 'task.change_approved':
       applyShapeEvent(state, event);
@@ -1084,6 +1086,7 @@ function applyEventBody(state: ShinsaState, event: ShinsaEvent): ShinsaState {
     case 'monitor.ended':
     case 'usage_wait.armed':
     case 'usage_wait.ended':
+    case 'task.pace_limits_ignored':
       applyWaitEvent(state, event);
       break;
     case 'run.started':

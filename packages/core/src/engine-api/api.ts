@@ -99,6 +99,7 @@ import {
   TeamJoinBody,
   TeamKeysAnswer,
   TeamLinkAnswer,
+  TeamKeyDecisionBody,
   TeamMemberBody,
   TeamExtraBody,
   TeamScopesBody,
@@ -557,7 +558,21 @@ class TeamsGroup extends HttpApiGroup.make('teams')
       .annotate(EngineFeatureRoute, 'team-access'),
     HttpApiEndpoint.get('keys', '/api/remote/teams/keys', { success: TeamKeysAnswer })
       .annotate(OwnerOnlyRoute, true)
-      .annotate(EngineFeatureRoute, 'team-access')
+      .annotate(EngineFeatureRoute, 'team-access'),
+    HttpApiEndpoint.post('requestKey', '/api/remote/teams/key/request', {
+      payload: TeamBody,
+      success: RemoteAnswer,
+    })
+      .annotate(RouteFieldFailures, TEAM_FAILURES)
+      .annotate(OwnerOnlyRoute, true)
+      .annotate(EngineFeatureRoute, 'team-keys'),
+    HttpApiEndpoint.post('answerKey', '/api/remote/teams/key/answer', {
+      payload: TeamKeyDecisionBody,
+      success: RemoteAnswer,
+    })
+      .annotate(RouteFieldFailures, TEAM_FAILURES)
+      .annotate(OwnerOnlyRoute, true)
+      .annotate(EngineFeatureRoute, 'team-keys')
   )
   .middleware(EngineGate) {}
 

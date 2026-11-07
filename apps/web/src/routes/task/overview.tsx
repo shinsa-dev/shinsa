@@ -117,6 +117,7 @@ function ActivityPanel({
   const shown = useProgressiveCount(Math.min(entries.length, limit), FIRST_ACTIVITY);
   const older = entries.length - limit;
   useOnHide(() => setLimit(ACTIVITY_PAGE));
+  if (entries.length === 0) return null;
   return (
     <Panel persistId={resolveOverviewPanelId(task, 'activity')} title='Activity' icon='IconClock'>
       <ol className='flex flex-col'>

@@ -152,7 +152,7 @@ export class ToolCalls extends Context.Service<
         const { runId, attemptId, input } = call;
         switch (name) {
           case 'propose_plan': {
-            const { document, reply } = yield* assertCalled(() =>
+            const { document, reply, actions } = yield* assertCalled(() =>
               assertProtocol(validatePlanHandOver(input))
             );
             const { task } = yield* findCurrent(runId, attemptId);
@@ -161,7 +161,7 @@ export class ToolCalls extends Context.Service<
               document.files.map((file) => file.path),
               call.signal
             );
-            yield* dispatch({ type: 'agent.propose_plan', runId, attemptId, document, reply });
+            yield* dispatch({ type: 'agent.propose_plan', runId, attemptId, document, reply, actions });
             break;
           }
           case 'complete_phase': {

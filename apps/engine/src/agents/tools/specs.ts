@@ -17,7 +17,7 @@ import {
 import { limitedPath, limitedText, textList } from './fields.ts';
 import { ORCHESTRATION_TOOL_SPECS } from './orchestration/schema.ts';
 import { CHOICES_SPEC, PROCESS_TOOL_SPECS } from './process/schema.ts';
-import { REPLY_SPEC } from './reply.ts';
+import { ACTIONS_SPEC, REPLY_SPEC } from './reply.ts';
 import { SCHEDULE_TOOL_SPECS } from './schedules.ts';
 import type { ToolSpec } from './schema.ts';
 import { SHAPE_TOOL_SPECS } from './shapes/schema.ts';
@@ -399,6 +399,7 @@ export const TOOL_SPECS = {
           },
         },
         reply: REPLY_SPEC,
+        actions: ACTIONS_SPEC,
       },
       required: [
         'goal',
@@ -460,6 +461,7 @@ export const TOOL_SPECS = {
           },
         },
         reply: REPLY_SPEC,
+        actions: ACTIONS_SPEC,
         walkthrough: WALKTHROUGH,
         watchdogs: WATCHDOGS_ON_PHASE,
         check_changes: CHECK_CHANGES,
@@ -479,6 +481,7 @@ export const TOOL_SPECS = {
           L.phaseSummary
         ),
         reply: REPLY_SPEC,
+        actions: ACTIONS_SPEC,
         walkthrough: WALKTHROUGH_REVISION,
         watchdogs: WATCHDOGS_ON_FIX,
         checks: {

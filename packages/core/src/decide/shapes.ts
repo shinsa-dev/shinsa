@@ -1,5 +1,6 @@
 import type { ChangeProposalInput, CommandOf } from '../commands/index.ts';
 import {
+  type DeliveringStep,
   DomainError,
   findInquiryStep,
   findWorkStep,
@@ -15,6 +16,7 @@ import {
   isWorktreeStep,
   listComposedSteps,
   type PipelineStep,
+  type ProposalRecommendation,
   type Run,
   resolveCurrentRound,
   resolveInquiryStep,
@@ -42,7 +44,7 @@ import {
 import { listOpenGates } from '../state/queries.ts';
 import { assertEvidence } from './agents.ts';
 import type { Decider } from './decider.ts';
-import { answerIteration } from './iterations.ts';
+import { answerIteration, suggestActions } from './iterations.ts';
 import { settleTask, startPhase, startPlanning, startWork } from './lifecycle.ts';
 import { findCurrentRun } from './runs.ts';
 import { requestWorkspace } from './workspaces.ts';
@@ -100,6 +102,14 @@ const OPERATION_PROPOSAL_TITLE: Record<InquiryStep, string> = {
   research: 'Run an operation from this report?',
   investigate: 'Run an operation from this diagnosis?',
 };
+
+const CLOSE_PROPOSAL_TITLE: Record<InquiryStep, string> = {
+  answer: 'The answer calls for no change',
+  research: 'The report found nothing to change',
+  investigate: 'The diagnosis found nothing to fix',
+};
+
+const NOTHING_TO_CHANGE = 'Found nothing worth changing, so the work goes on only with your OK.';
 
 const NEXT_WORK: Record<WorkStep, string> = {
   build: 'Plan the change and build it. You review it before a pull request opens.',
@@ -267,7 +277,7 @@ export function startStep(decider: Decider, taskId: string, step: EntryStep) {
     return;
   }
   if (step === 'your_ok') {
-    requestYourOk(decider, taskId, null, null);
+    requestYourOk(decider, taskId, null, null, 'go_on');
     return;
   }
   startInquiry(decider, taskId, step, null);
@@ -283,13 +293,24 @@ export function proceedAfterSetup(decider: Decider, taskId: string) {
   startStep(decider, taskId, step);
 }
 
-function openProposalGate(decider: Decider, task: Task, step: InquiryStep, proposal: ChangeProposalInput) {
+function resolveProposalTitle(task: Task, step: InquiryStep, recommend: ProposalRecommendation) {
+  if (recommend === 'close') return CLOSE_PROPOSAL_TITLE[step];
   const operation = resolveWorkStep(resolveTaskPipeline(task)) === 'operate';
+  return operation ? OPERATION_PROPOSAL_TITLE[step] : CHANGE_PROPOSAL_TITLE[step];
+}
+
+function openProposalGate(
+  decider: Decider,
+  task: Task,
+  step: InquiryStep,
+  proposal: ChangeProposalInput,
+  recommend: ProposalRecommendation
+) {
   decider.stage(task.id, 'awaiting_proposal', 'a proposal waits for your OK');
   decider.openGate(
     task.id,
     'proposal',
-    operation ? OPERATION_PROPOSAL_TITLE[step] : CHANGE_PROPOSAL_TITLE[step],
+    resolveProposalTitle(task, step, recommend),
     `${proposal.why}\n\n${proposal.request}`
   );
 }
@@ -303,7 +324,8 @@ function requestYourOk(
   decider: Decider,
   taskId: string,
   runId: string | null,
-  proposal: ChangeProposalInput | null
+  proposal: ChangeProposalInput | null,
+  recommend: ProposalRecommendation
 ) {
   const task = decider.task(taskId);
   const pipeline = resolveTaskPipeline(task);
@@ -312,8 +334,16 @@ function requestYourOk(
     request: NEXT_WORK[findWorkStep(pipeline)],
     why: resolveComposedReason(task),
   };
-  decider.emit({ type: 'task.change_proposed', taskId, request: next.request, why: next.why, runId });
-  openProposalGate(decider, decider.task(taskId), step, next);
+  const recommended = proposal ? 'go_on' : recommend;
+  decider.emit({
+    type: 'task.change_proposed',
+    taskId,
+    request: next.request,
+    why: next.why,
+    recommend: recommended,
+    runId,
+  });
+  openProposalGate(decider, decider.task(taskId), step, next, recommended);
 }
 
 function finishInquiry(
@@ -321,12 +351,18 @@ function finishInquiry(
   taskId: string,
   step: InquiryStep,
   runId: string,
-  proposal: ChangeProposalInput | null
+  proposal: ChangeProposalInput | null,
+  recommend: ProposalRecommendation | null
 ) {
   const task = decider.task(taskId);
   const pipeline = resolveTaskPipeline(task);
   if (pipeline.includes('your_ok')) {
-    requestYourOk(decider, taskId, runId, proposal);
+    requestYourOk(decider, taskId, runId, proposal, recommend ?? 'go_on');
+    return;
+  }
+  if (pipeline.includes('plan') && recommend === 'close') {
+    reshapeTask(decider, taskId, [step, 'your_ok', ...pipeline.slice(1)], 'agent', NOTHING_TO_CHANGE);
+    requestYourOk(decider, taskId, runId, null, 'close');
     return;
   }
   if (pipeline.includes('plan')) {
@@ -335,7 +371,7 @@ function finishInquiry(
   }
   if (proposal) {
     reshapeTask(decider, taskId, resolveProposalUpgrade(pipeline), 'agent', proposal.why);
-    requestYourOk(decider, taskId, runId, proposal);
+    requestYourOk(decider, taskId, runId, proposal, 'go_on');
     return;
   }
   openResultGate(decider, taskId, step);
@@ -360,9 +396,11 @@ const DELIVER_TOOL = {
 export function recordDelivery(decider: Decider, command: CommandOf<'agent.deliver'>) {
   const { run, task } = findCurrentRun(decider, command.runId, DELIVER_TOOL[command.step]);
   if (command.proposal && isFollowUpOnWork(task)) throwFollowUpProposal();
+  if (needsRecommendation(task, command)) throwMissingRecommendation(command.step);
   if (command.step === 'operate' && !hasStep(task, 'build'))
     assertEvidence(decider, task, 'report the outcome');
   answerIteration(decider, task, run.id, command.reply ?? null, DELIVER_TOOL[command.step]);
+  suggestActions(decider, task, run.id, command.actions);
   if (isFollowUpOnWork(task)) {
     finishFollowUp(decider, task, run);
     return;
@@ -380,7 +418,7 @@ export function recordDelivery(decider: Decider, command: CommandOf<'agent.deliv
     finishOperation(decider, task.id);
     return;
   }
-  finishInquiry(decider, task.id, command.step, run.id, command.proposal ?? null);
+  finishInquiry(decider, task.id, command.step, run.id, command.proposal ?? null, command.recommend ?? null);
 }
 
 function finishOperation(decider: Decider, taskId: string) {
@@ -514,6 +552,23 @@ function throwFollowUpProposal(): never {
     code: 'follow_up_proposal',
     message:
       'This answers a follow-up on finished work, so it proposes no change. Call `answer` without `propose_change`; work worth doing outside this task goes to `suggest_tasks`.',
+  });
+}
+
+function needsRecommendation(task: Task, command: CommandOf<'agent.deliver'>) {
+  return (
+    command.step !== 'operate' &&
+    !command.proposal &&
+    !command.recommend &&
+    !isFollowUpOnWork(task) &&
+    resolveTaskPipeline(task).includes('your_ok')
+  );
+}
+
+function throwMissingRecommendation(step: DeliveringStep): never {
+  throw new DomainError({
+    code: 'recommendation_missing',
+    message: `Your OK comes next, so set \`recommend\` on \`${DELIVER_TOOL[step]}\`: \`go_on\` when the work should go on as planned, \`close\` when you found nothing worth changing and the task should end here.`,
   });
 }
 

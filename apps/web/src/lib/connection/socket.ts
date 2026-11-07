@@ -738,6 +738,10 @@ export function useEngineCommand(type: EngineCommand, id?: string | null) {
   return useEngineCommands(id).has(type);
 }
 
+export function hasTaskEngineFeature(feature: EngineFeature, id?: string | null) {
+  return hasEngineFeature(connection.selectEngine(id), feature);
+}
+
 export function useEngineFeature(feature: EngineFeature, id?: string | null) {
   return useSyncExternalStore(connection.subscribe, () =>
     hasEngineFeature(connection.selectEngine(id), feature)

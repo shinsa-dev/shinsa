@@ -35,12 +35,12 @@ export class Teams extends Context.Service<
       const insert = SqlSchema.void({
         Request: NewTeam,
         execute: (team) =>
-          sql`INSERT INTO teams (id, user_id, name, created_at) VALUES (${team.id}, ${team.userId}, ${team.name}, ${team.createdAt})`,
+          sql`INSERT INTO teams (id, owner_id, name, created_at) VALUES (${team.id}, ${team.ownerId}, ${team.name}, ${team.createdAt})`,
       });
       const countByOwner = SqlSchema.findOne({
         Request: RemoteUserId,
         Result: Count,
-        execute: (userId) => sql`SELECT COUNT(*) AS total FROM teams WHERE user_id = ${userId}`,
+        execute: (userId) => sql`SELECT COUNT(*) AS total FROM teams WHERE owner_id = ${userId}`,
       });
       const byId = SqlSchema.findOneOption({
         Request: TeamId,
@@ -51,7 +51,7 @@ export class Teams extends Context.Service<
         Request: RemoteUserId,
         Result: Team,
         execute: (userId) =>
-          sql`SELECT ${columns} FROM teams WHERE user_id = ${userId} OR id IN (SELECT team_id FROM team_members WHERE user_id = ${userId}) ORDER BY created_at, id`,
+          sql`SELECT ${columns} FROM teams WHERE owner_id = ${userId} OR id IN (SELECT team_id FROM team_members WHERE user_id = ${userId}) ORDER BY created_at, id`,
       });
       const removal = SqlSchema.void({
         Request: TeamId,
@@ -61,13 +61,13 @@ export class Teams extends Context.Service<
         Request: Schema.Struct({ userId: RemoteUserId, otherId: RemoteUserId }),
         Result: Found,
         execute: ({ userId, otherId }) =>
-          sql`SELECT 1 AS found FROM teams WHERE (user_id = ${userId} OR id IN (SELECT team_id FROM team_members WHERE user_id = ${userId})) AND (user_id = ${otherId} OR id IN (SELECT team_id FROM team_members WHERE user_id = ${otherId})) LIMIT 1`,
+          sql`SELECT 1 AS found FROM teams WHERE (owner_id = ${userId} OR id IN (SELECT team_id FROM team_members WHERE user_id = ${userId})) AND (owner_id = ${otherId} OR id IN (SELECT team_id FROM team_members WHERE user_id = ${otherId})) LIMIT 1`,
       });
       const machines = SqlSchema.findAll({
         Request: TeamId,
         Result: Machine,
         execute: (id) =>
-          sql`SELECT ${sql.literal(MACHINE_COLUMNS)} FROM instances WHERE user_id IN (SELECT user_id FROM teams WHERE id = ${id} UNION SELECT user_id FROM team_members WHERE team_id = ${id}) ORDER BY created_at, id`,
+          sql`SELECT ${sql.literal(MACHINE_COLUMNS)} FROM machines WHERE owner_id IN (SELECT owner_id FROM teams WHERE id = ${id} UNION SELECT user_id FROM team_members WHERE team_id = ${id}) ORDER BY created_at, id`,
       });
 
       const teamScopes = SqlSchema.void({

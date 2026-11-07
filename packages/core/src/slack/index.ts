@@ -56,7 +56,6 @@ export {
   resolveSlackSessionStatus,
   SLACK_MENTION_REACTIONS,
   SLACK_REACTIONS,
-  SLACK_RESULT_LIMIT,
   type SlackMentionReaction,
   type SlackReaction,
   type SlackTaskRef,
@@ -107,6 +106,7 @@ export { serializeSlackMessage, serializeSlackRequest, serializeSlackThread } fr
 export {
   SLACK_DECISION_LIMITS,
   SLACK_LIMITS,
+  SLACK_VIEW_LIMITS,
   SlackDecision,
   SlackDecisionModal,
   SlackDecisionReply,

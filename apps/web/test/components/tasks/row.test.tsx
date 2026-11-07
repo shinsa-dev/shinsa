@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { SHARE_PRESET_SCOPES } from '@shinsa/core';
 import type { ShinsaState, Task } from '@shinsa/core';
 import { TooltipProvider } from '@shinsa/ui/components/tooltip';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
@@ -330,7 +331,7 @@ describe('a shared task in the list', () => {
       share: {
         at: 1,
         limit: 'until_done',
-        preset: 'standard',
+        scopes: SHARE_PRESET_SCOPES.standard,
         endsAt: null,
         url: 'https://app.shinsa.dev/share/t/abc',
       },

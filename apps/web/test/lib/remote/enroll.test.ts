@@ -6,6 +6,7 @@ import {
   claimHandoff,
   type EnrollOptions,
   requestDeviceAccess,
+  listSettledMachineRows,
   requestWaitingAnswer,
   resolveClaimStanding,
 } from '@/lib/remote/enroll.ts';
@@ -196,6 +197,58 @@ describe('a device that left while it waited for an answer', () => {
     );
     expect(await requestWaitingAnswer(offline.device, offline.options)).toBe('waiting');
     expect(offline.removed).toEqual([]);
+  });
+
+  it('settles every waiting machine row: kept once accepted, dropped once declined, left as is otherwise', async () => {
+    const instance = {
+      id: 'k3x9',
+      name: 'Studio',
+      fingerprint: 'abcd',
+      online: true,
+      lastSeenAt: 1,
+      createdAt: 0,
+      owner: USER,
+      role: 'owner' as const,
+    };
+    const settle = async (open: (options: ChannelOptions) => Promise<RemoteChannel>) => {
+      const waiting = await createWaiting(open);
+      const { waiting: _waiting, ...accepted } = waiting.device;
+      const rows = await Effect.runPromise(
+        listSettledMachineRows({
+          ...waiting.options,
+          dashboard: {
+            ...waiting.options.dashboard,
+            listInstances: () => Promise.resolve([instance, { ...instance, id: 'p7m2', name: 'Laptop' }]),
+          },
+          devices: {
+            ...waiting.options.devices,
+            selectDevice: (id) =>
+              Promise.resolve(
+                id === 'k3x9' ? (waiting.written.length > 0 ? accepted : waiting.device) : null
+              ),
+          },
+        })
+      );
+      return rows.map((row) => [row.instance.name, row.device?.waiting ?? row.device?.instanceId ?? null]);
+    };
+    expect(
+      await settle(() => Promise.resolve({ close: () => undefined } as unknown as RemoteChannel))
+    ).toEqual([
+      ['Studio', 'k3x9'],
+      ['Laptop', null],
+    ]);
+    expect(
+      await settle(() => Promise.reject(new ChannelError({ message: 'Declined.', refused: true })))
+    ).toEqual([
+      ['Studio', null],
+      ['Laptop', null],
+    ]);
+    expect(
+      await settle(() => Promise.reject(new ChannelError({ message: 'Couldn’t reach your machine.' })))
+    ).toEqual([
+      ['Studio', { machineName: 'Studio' }],
+      ['Laptop', null],
+    ]);
   });
 });
 

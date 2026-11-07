@@ -10,6 +10,7 @@ import {
   SLACK_MODAL_CALLBACK,
   SLACK_RELAY_PATHS,
   SLACK_RESPONSE_INPUT,
+  SLACK_VIEW_LIMITS,
   SLACK_WRITE_ACTION,
   type SlackLinks,
   type SlackMention,
@@ -308,10 +309,10 @@ describe('connecting Slack to a machine', () => {
     expect(linked.headers.get('location')).toBe('/slack/linked?team=Acme');
     expect(readSetCookie(linked, '__Host-shinsa_slack')).toBe('__Host-shinsa_slack=');
     expect(slack.callsTo('oauth.v2.access')[0]?.body.client_secret).toBe(TEST_CONFIG.slackClientSecret);
-    const stored = harness.db.sqlite.query('SELECT bot_token FROM slack_workspaces').get() as {
-      bot_token: string;
+    const stored = harness.db.sqlite.query('SELECT sealed_bot_token FROM slack_workspaces').get() as {
+      sealed_bot_token: string;
     };
-    expect(stored.bot_token).not.toContain('xoxb');
+    expect(stored.sealed_bot_token).not.toContain('xoxb');
     const links = await readJson<SlackLinks>(
       await harness.call(SLACK_RELAY_PATHS.links, {
         headers: { authorization: `Bearer ${machine.machineToken}` },
@@ -625,6 +626,157 @@ describe('a mention from someone', () => {
     ]);
   });
 
+  test('in a thread reads a bot report from its blocks and attachments, not its preview text', async () => {
+    const { harness, slack, forwards } = await setUp();
+    const report = {
+      ts: '90.2',
+      bot_id: 'BS',
+      bot_profile: { name: 'Superwall CLI' },
+      text: 'feedback: BUG: Android sw-auto selects wrong offer token. On Android, when a paywall product uses sw-a',
+      blocks: [
+        {
+          type: 'header',
+          text: { type: 'plain_text', text: 'BUG: Android sw-auto selects wrong offer token' },
+        },
+        { type: 'divider' },
+        {
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: 'On Android, when a paywall product uses sw-auto on a base plan that is not current, the 2023 plan is billed.',
+          },
+          fields: [{ type: 'mrkdwn', text: '*App* Audiomack' }, 'noise'],
+        },
+        { type: 'markdown', text: '**Expected** the 2026 plan.' },
+        {
+          type: 'context',
+          elements: [
+            { type: 'mrkdwn', text: 'Reported by' },
+            { type: 'image', image_url: 'https://x.test/a.png' },
+            { type: 'user', user_id: 'U2' },
+          ],
+        },
+        {
+          type: 'rich_text',
+          elements: [
+            {
+              type: 'rich_text_section',
+              elements: [
+                { type: 'text', text: 'Steps from ' },
+                { type: 'user', user_id: 'U2' },
+                { type: 'text', text: ' in ' },
+                { type: 'channel', channel_id: 'C9' },
+                { type: 'text', text: ' for ' },
+                { type: 'usergroup', usergroup_id: 'S1' },
+                { type: 'text', text: ' and ' },
+                { type: 'broadcast', range: 'here' },
+                { type: 'emoji', name: 'bug' },
+                { type: 'link', url: 'https://docs.test/a', text: 'docs' },
+                { type: 'link', url: 'https://docs.test/b' },
+                { type: 'link', text: 'no address' },
+                { type: 'user' },
+                { type: 'channel' },
+                { type: 'usergroup' },
+                { type: 'broadcast' },
+                { type: 'emoji' },
+                { type: 'color' },
+              ],
+            },
+            {
+              type: 'rich_text_list',
+              style: 'ordered',
+              elements: [
+                { type: 'rich_text_section', elements: [{ type: 'text', text: 'Open the paywall' }] },
+                { type: 'rich_text_section', elements: [{ type: 'text', text: 'Buy' }] },
+              ],
+            },
+            {
+              type: 'rich_text_list',
+              style: 'bullet',
+              elements: [{ type: 'rich_text_section', elements: [{ type: 'text', text: 'on Pixel 8' }] }],
+            },
+            { type: 'rich_text_preformatted', elements: [{ type: 'text', text: 'basePlan=audiomack-2023' }] },
+            { type: 'rich_text_quote', elements: [{ type: 'text', text: 'first line\nsecond line' }] },
+            { type: 'rich_text_section' },
+          ],
+        },
+        { type: 'section', text: 42 },
+        'noise',
+      ],
+      attachments: [
+        {
+          pretext: 'Logs',
+          title: 'Device',
+          text: 'Pixel 8, Android 15',
+          fields: [{ title: 'SDK', value: '2.3.0' }, { title: 'Store' }, 7],
+          blocks: [{ type: 'section', text: { type: 'mrkdwn', text: 'Attached block' } }],
+        },
+        { fallback: 'Only the fallback' },
+        { fallback: '  ' },
+        {},
+        'noise',
+      ],
+    };
+    slack.answers['conversations.replies'] = () => ({
+      ok: true,
+      messages: [
+        report,
+        {
+          ts: '90.3',
+          user: 'U2',
+          text: 'same on <@U2> side',
+          blocks: [
+            {
+              type: 'rich_text',
+              elements: [
+                {
+                  type: 'rich_text_section',
+                  elements: [
+                    { type: 'text', text: 'same on ' },
+                    { type: 'user', user_id: 'U2' },
+                    { type: 'text', text: ' side' },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+        { ts: '90.4', bot_id: 'BA', username: 'Alerts', attachments: [{ fallback: 'Disk full on db-1' }] },
+        {
+          ts: '90.5',
+          user: 'B0T',
+          bot_id: 'BSH',
+          bot_profile: { name: 'Shinsa' },
+          text: 'The parser drops blocks.',
+          blocks: [
+            { type: 'header', text: { type: 'plain_text', text: 'Result' } },
+            { type: 'section', text: { type: 'mrkdwn', text: 'x'.repeat(2800) } },
+          ],
+        },
+      ],
+    });
+    await sendEvent(harness, mentionEnvelope({ ts: '90.9', thread_ts: '90.2' }));
+    const mention = JSON.parse(forwards[0]?.body ?? '') as SlackMention;
+    expect(mention.thread.map((message) => [message.userName, message.text])).toEqual([
+      [
+        'Superwall CLI',
+        [
+          'BUG: Android sw-auto selects wrong offer token',
+          'On Android, when a paywall product uses sw-auto on a base plan that is not current, the 2023 plan is billed.\n*App* Audiomack',
+          '**Expected** the 2026 plan.',
+          'Reported by @Mia',
+          'Steps from @Mia in <#C9> for <!subteam^S1> and @here:bug:docs (https://docs.test/a)https://docs.test/bno address\n1. Open the paywall\n2. Buy\n• on Pixel 8\n```\nbasePlan=audiomack-2023\n```\n> first line\n> second line',
+          'Logs\nDevice\nPixel 8, Android 15\nSDK: 2.3.0\nStore\nAttached block',
+          'Only the fallback',
+        ].join('\n\n'),
+      ],
+      ['Mia', 'same on @Mia side'],
+      ['Alerts', 'Disk full on db-1'],
+      ['Shinsa', 'The parser drops blocks.'],
+      ['Christo', 'the build hangs'],
+    ]);
+  });
+
   test('in a thread Slack will not show still carries their own message', async () => {
     const { harness, slack, forwards } = await setUp();
     slack.answers['conversations.replies'] = () => ({ ok: false, error: 'not_in_channel' });
@@ -758,6 +910,12 @@ describe('what a machine does through the relay', () => {
     const blocks = await post(POST);
     expect(blocks.status).toBe(422);
     expect((await readJson<{ error: { code: string } }>(blocks)).error.code).toBe('slack_blocks_refused');
+    slack.answers['chat.postMessage'] = () => ({ ok: false, error: 'msg_blocks_too_long' });
+    expect((await post(POST)).status).toBe(422);
+    expect(failures).toHaveBeenCalledWith('[Cloud] Slack did not take a post', {
+      error: expect.objectContaining({ code: 'msg_blocks_too_long' }),
+      code: 'msg_blocks_too_long',
+    });
     slack.answers['chat.postMessage'] = () => ({ ok: true });
     expect((await post(POST)).status).toBe(502);
     harness.handlers.unshift((call) => {
@@ -1126,6 +1284,16 @@ describe('deciding from the card', () => {
       },
     ]);
     expect(setup.slack.callsTo('views.open')[0]?.token).toBe('xoxb-bot-token');
+    const sent = setup.slack.callsTo('views.open')[0]?.body as {
+      view: { private_metadata: string; blocks: unknown[] };
+    };
+    expect(sent.view.blocks).toEqual([
+      expect.objectContaining({
+        element: expect.objectContaining({ max_length: SLACK_VIEW_LIMITS.input }),
+      }),
+    ]);
+    expect(SLACK_VIEW_LIMITS.input).toBe(3000);
+    expect(sent.view.private_metadata.length).toBeLessThanOrEqual(SLACK_VIEW_LIMITS.privateMetadata);
   });
 
   test('a form Slack will not open is told to the clicker and logged', async () => {

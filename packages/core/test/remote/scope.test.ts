@@ -15,6 +15,7 @@ import {
   TEAM_SCOPE_MESSAGES,
   toggleScope,
   USER_COMMAND_TYPES,
+  SHARE_PRESET_SCOPES,
 } from '../../src/index.ts';
 import { createHarness, createTask, linkSession, proposePlan, registerRepo } from '../harness.ts';
 
@@ -61,6 +62,7 @@ describe('resolveScopedRefusal', () => {
       resolveScopedRefusal(state, guestOf(taskId), { type: 'run.dismiss_silence', runId: run.id })
     ).toBeNull();
     expect(resolveScopedRefusal(state, guestOf(taskId), { type: 'task.retry', taskId })).toBeNull();
+    expect(resolveScopedRefusal(state, guestOf(taskId), { type: 'task.pause', taskId })).toBeNull();
   });
 
   test('refuses another task, by its id, its run or its gate', () => {
@@ -156,7 +158,7 @@ describe('resolveScopedState', () => {
             at: 1,
             url: 'https://share',
             limit: 'none' as const,
-            preset: 'full' as const,
+            scopes: [...SHARE_PRESET_SCOPES.full],
             endsAt: null,
           },
           previews: [],
@@ -398,7 +400,7 @@ describe('a teammate’s scope', () => {
       at: 1,
       url: 'https://share',
       limit: 'none' as const,
-      preset: 'full' as const,
+      scopes: [...SHARE_PRESET_SCOPES.full],
       endsAt: null,
     };
     const state = {

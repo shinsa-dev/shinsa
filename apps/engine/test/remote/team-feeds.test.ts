@@ -18,6 +18,7 @@ import {
   type TeamMachine,
   type TeamSnapshot,
   type TeamTask,
+  TEAM_REFUSALS,
 } from '@shinsa/core';
 import { NotFound } from '@shinsa/core/remote/errors';
 import { Clock, Effect, Layer } from 'effect';
@@ -31,7 +32,6 @@ import {
 } from '../../src/remote/team-feeds/schema.ts';
 import { TEAM_SNAPSHOTS_FILE } from '../../src/remote/team-snapshots/schema.ts';
 import { TEAM_VIEWS_DIR } from '../../src/remote/team-views/schema.ts';
-import { TEAM_REFUSALS } from '../../src/remote/teams/schema.ts';
 import { createFixedClock } from '../helpers/clock.ts';
 import { until } from '../helpers/index.ts';
 import { captureLogs } from '../helpers/logs.ts';
@@ -126,6 +126,8 @@ interface FakeFeedSocket extends FeedSocket {
 }
 
 interface SetUp {
+  studioFile?: Record<string, unknown>;
+  viewer?: string;
   watcherKey?: string;
   watcherFile?: Record<string, unknown>;
   watcherMachines?: TeamMachine[];
@@ -180,6 +182,7 @@ function setUp(options: SetUp = {}) {
       access: { owner: MONA, members: [] },
       teams: [createTeam()],
       teamKeys: [createKey()],
+      ...options.studioFile,
     },
     {
       engine: stub.engine.core,
@@ -220,7 +223,7 @@ function setUp(options: SetUp = {}) {
             emit('close');
           }),
       },
-      KAI.id
+      options.viewer ?? KAI.id
     );
     const socket: FakeFeedSocket = {
       url,
@@ -286,7 +289,19 @@ function setUp(options: SetUp = {}) {
     });
     return adaptTeamFeeds(again);
   };
-  return { plane, stub, studio, laptop, teams, feeds, sockets, waits, viewWaits, restart };
+  return {
+    plane,
+    stub,
+    studio,
+    studioMachine: studioMachine.machine,
+    laptop,
+    teams,
+    feeds,
+    sockets,
+    waits,
+    viewWaits,
+    restart,
+  };
 }
 
 type Feeds = ReturnType<typeof setUp>['feeds'];
@@ -741,6 +756,163 @@ interface RelayPeer {
   send: (data: string | Uint8Array) => void;
   close: (code: number, reason: string) => void;
 }
+
+async function createStudioSigning() {
+  const pair = (await crypto.subtle.generateKey(SIGNING_KEY_ALGORITHM, true, [
+    'sign',
+    'verify',
+  ])) as CryptoKeyPair;
+  const jwk = await crypto.subtle.exportKey('jwk', pair.privateKey);
+  const publicKey = await Effect.runPromise(serializePublicKey(pair.publicKey));
+  return { signing: { publicKey, privateKey: JSON.stringify(jwk) }, signingKey: publicKey };
+}
+
+function selectStudioKey(studio: Remote) {
+  return studio.store.selectTeamKey('team1')?.key ?? null;
+}
+
+describe('handing the team key to a machine that has none', () => {
+  test('one of your machines asks for it by itself, and gets it once you approve', async () => {
+    const { signing, signingKey } = await createStudioSigning();
+    const own = { ...STUDIO, userId: KAI.id, signingKey };
+    const { feeds, studio } = setUp({
+      studioFile: {
+        signing,
+        owner: 'kai',
+        access: { owner: KAI, members: [] },
+        teams: [createTeam({ owner: KAI, role: 'member', members: [{ user: MONA, addedAt: 2 }] })],
+        teamKeys: [],
+      },
+      watcherMachines: [own, LAPTOP],
+    });
+    feeds.start();
+    await until('it asks', () => feeds.snapshot().machines[0]?.asking === true);
+    expect(selectStudioKey(studio)).toBeNull();
+    expect(await feeds.answerKeyRequest('team1', 'inst1', true)).toBe(true);
+    await until('it is live with the handed key', () => feeds.snapshot().tasks.length === 2);
+    expect(selectStudioKey(studio)).toBe(TEAM_KEY);
+    feeds.stop();
+  });
+
+  test('a teammate’s machine waits for the team’s owner to approve once it asks', async () => {
+    const { signing, signingKey } = await createStudioSigning();
+    const { feeds, studio, studioMachine, waits } = setUp({
+      studioFile: {
+        signing,
+        teams: [createTeam({ owner: KAI, role: 'member', members: [{ user: MONA, addedAt: 2 }] })],
+        teamKeys: [],
+      },
+      watcherFile: {
+        teams: [createTeam({ owner: KAI, role: 'owner', machines: [{ ...STUDIO, signingKey }, LAPTOP] })],
+      },
+    });
+    feeds.start();
+    await until('it is refused for the key', () => feeds.snapshot().machines[0]?.status === 'refused');
+    expect(feeds.snapshot().machines[0]?.reason).toBe(TEAM_REFUSALS.key);
+    expect(feeds.snapshot().machines[0]?.asking).toBeUndefined();
+    await adaptTeams(studioMachine).requestKey('team1');
+    waits.shift()?.();
+    await until('it asks', () => feeds.snapshot().machines[0]?.asking === true);
+    expect(selectStudioKey(studio)).toBeNull();
+    expect(await feeds.answerKeyRequest('team1', 'inst1', true)).toBe(true);
+    await until('it is live with the handed key', () => feeds.snapshot().tasks.length === 2);
+    expect(selectStudioKey(studio)).toBe(TEAM_KEY);
+    expect(await feeds.answerKeyRequest('team1', 'inst1', true)).toBe(false);
+    feeds.stop();
+  });
+
+  test('a declined request stops asking until the machine asks again', async () => {
+    const { signing, signingKey } = await createStudioSigning();
+    const { feeds, studio, studioMachine, waits } = setUp({
+      studioFile: {
+        signing,
+        teams: [createTeam({ owner: KAI, role: 'member', members: [{ user: MONA, addedAt: 2 }] })],
+        teamKeys: [],
+      },
+      watcherFile: {
+        teams: [createTeam({ owner: KAI, role: 'owner', machines: [{ ...STUDIO, signingKey }, LAPTOP] })],
+      },
+    });
+    await adaptTeams(studioMachine).requestKey('team1');
+    feeds.start();
+    await until('it asks', () => feeds.snapshot().machines[0]?.asking === true);
+    expect(await feeds.answerKeyRequest('team1', 'inst1', false)).toBe(true);
+    expect(feeds.snapshot().machines[0]?.asking).toBeUndefined();
+    waits.shift()?.();
+    await until('it is refused again', () => waits.length === 1);
+    expect(feeds.snapshot().machines[0]?.asking).toBeUndefined();
+    expect(selectStudioKey(studio)).toBeNull();
+    feeds.stop();
+  });
+
+  test('a teammate’s machine that has not asked gets nothing, even when approved', async () => {
+    const { signing, signingKey } = await createStudioSigning();
+    const { feeds, studio, waits } = setUp({
+      studioFile: {
+        signing,
+        teams: [createTeam({ owner: KAI, role: 'member', members: [{ user: MONA, addedAt: 2 }] })],
+        teamKeys: [],
+      },
+      watcherFile: {
+        teams: [createTeam({ owner: KAI, role: 'owner', machines: [{ ...STUDIO, signingKey }, LAPTOP] })],
+      },
+    });
+    feeds.start();
+    await until('it is refused for the key', () => waits.length === 1);
+    expect(await feeds.answerKeyRequest('team1', 'inst1', true)).toBe(false);
+    expect(selectStudioKey(studio)).toBeNull();
+    feeds.stop();
+  });
+
+  test('logs a hand-over app.shinsa.dev does not connect, and keeps the machine refused', async () => {
+    const { signing, signingKey } = await createStudioSigning();
+    const own = { ...STUDIO, userId: KAI.id, signingKey };
+    const { feeds, plane, studio, waits } = setUp({
+      studioFile: {
+        signing,
+        owner: 'kai',
+        access: { owner: KAI, members: [] },
+        teams: [createTeam({ owner: KAI, role: 'member', members: [{ user: MONA, addedAt: 2 }] })],
+        teamKeys: [],
+      },
+      watcherMachines: [own, LAPTOP],
+    });
+    let calls = 0;
+    plane.answers.set(CONNECT_PATH, () => {
+      calls += 1;
+      return calls <= 2
+        ? Response.json({ url: 'wss://t-inst1.shinsa.dev/team?token=t', expiresAt: 1 })
+        : refuse(NotFound);
+    });
+    const logs = captureLogs();
+    feeds.start();
+    await until('it asks', () => feeds.snapshot().machines[0]?.asking === true);
+    expect(await feeds.answerKeyRequest('team1', 'inst1', true)).toBe(true);
+    await until('the hand-over fails', () => calls === 3 && waits.length > 0);
+    logs.restore();
+    expect(logs.fieldsOf('[Teams] Could not hand a machine the team’s key')).toHaveLength(1);
+    expect(selectStudioKey(studio)).toBeNull();
+    feeds.stop();
+  });
+
+  test('your own machine with no signing key gets nothing', async () => {
+    const own = { ...STUDIO, userId: KAI.id };
+    const { feeds, studio, waits } = setUp({
+      studioFile: {
+        owner: 'kai',
+        access: { owner: KAI, members: [] },
+        teams: [createTeam({ owner: KAI, role: 'member', members: [{ user: MONA, addedAt: 2 }] })],
+        teamKeys: [],
+      },
+      watcherMachines: [own, LAPTOP],
+    });
+    feeds.start();
+    await until('it is refused for the key', () => waits.length === 1);
+    expect(feeds.snapshot().machines[0]?.reason).toBe(TEAM_REFUSALS.key);
+    expect(selectStudioKey(studio)).toBeNull();
+    feeds.stop();
+  });
+});
 
 function createPeer(): RelayPeer {
   const peer: RelayPeer = {

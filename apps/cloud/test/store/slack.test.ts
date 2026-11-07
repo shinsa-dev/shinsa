@@ -5,11 +5,17 @@ import { SlackStore } from '../../src/store/slack/service.ts';
 import { runTest, TEST_NOW } from '../layers.ts';
 import { KAI, LAPTOP, MONA, STUDIO, seedMachine, seedUsers } from './fixtures.ts';
 
-const WORKSPACE = { teamId: 'T1', teamName: 'Acme', botUserId: 'B1', sealedBotToken: 'sealed-1' };
+const WORKSPACE = { id: 'T1', name: 'Acme', botUserId: 'B1', sealedBotToken: 'sealed-1' };
 
-const LINK = { teamId: 'T1', slackUserId: 'U1', slackUserName: 'mona', userId: MONA.id, instanceId: STUDIO };
+const LINK = {
+  workspaceId: 'T1',
+  slackUserId: 'U1',
+  slackUserName: 'mona',
+  userId: MONA.id,
+  machineId: STUDIO,
+};
 
-const THREAD = { teamId: 'T1', channelId: 'C1', threadTs: '1.000' };
+const THREAD = { workspaceId: 'T1', channelId: 'C1', threadTs: '1.000' };
 
 const seedWorkspace = Effect.gen(function* () {
   const slack = yield* SlackStore;
@@ -36,7 +42,7 @@ describe('Slack workspaces and links', () => {
     expect(workspace).toEqual(
       Option.some({ ...WORKSPACE, botUserId: 'B2', sealedBotToken: 'sealed-2', installedAt: TEST_NOW })
     );
-    expect(link).toEqual(Option.some({ ...LINK, teamName: 'Acme', linkedAt: TEST_NOW }));
+    expect(link).toEqual(Option.some({ ...LINK, workspaceName: 'Acme', linkedAt: TEST_NOW }));
     expect(Option.isNone(afterRemove)).toBe(true);
   });
 
@@ -47,7 +53,7 @@ describe('Slack workspaces and links', () => {
         yield* slack.upsertLink(LINK);
         yield* slack.upsertLink({ ...LINK, slackUserId: 'U2', slackUserName: 'kai', userId: KAI.id });
         yield* TestClock.adjust('1 second');
-        yield* slack.upsertLink({ ...LINK, instanceId: LAPTOP });
+        yield* slack.upsertLink({ ...LINK, machineId: LAPTOP });
         const readOfStudio = yield* slack.listMachineLinks(STUDIO);
         const readOfLaptop = yield* slack.listMachineLinks(LAPTOP);
         yield* slack.removeMachineLinks(STUDIO);
@@ -55,7 +61,9 @@ describe('Slack workspaces and links', () => {
       })
     );
     expect(ofStudio.map((link) => link.slackUserId)).toEqual(['U2']);
-    expect(ofLaptop).toEqual([{ ...LINK, instanceId: LAPTOP, teamName: 'Acme', linkedAt: TEST_NOW + 1000 }]);
+    expect(ofLaptop).toEqual([
+      { ...LINK, machineId: LAPTOP, workspaceName: 'Acme', linkedAt: TEST_NOW + 1000 },
+    ]);
     expect(afterRemove).toEqual([]);
   });
 });
@@ -67,19 +75,40 @@ describe('Slack threads, posts and events', () => {
         const slack = yield* seedWorkspace;
         yield* slack.recordThread(THREAD, STUDIO);
         yield* slack.recordThread(THREAD, STUDIO);
-        yield* slack.recordPost({ teamId: 'T1', channelId: 'C1', ts: '2.000' }, STUDIO);
-        yield* slack.recordPost({ teamId: 'T1', channelId: 'C1', ts: '2.000' }, LAPTOP);
+        yield* slack.recordPost({ workspaceId: 'T1', channelId: 'C1', ts: '2.000' }, STUDIO);
+        yield* slack.recordPost({ workspaceId: 'T1', channelId: 'C1', ts: '2.000' }, LAPTOP);
         return [
           yield* slack.hasThread(THREAD, STUDIO),
           yield* slack.hasThread(THREAD, LAPTOP),
-          yield* slack.hasPost({ teamId: 'T1', channelId: 'C1', ts: '2.000' }, STUDIO),
-          yield* slack.hasPost({ teamId: 'T1', channelId: 'C1', ts: '2.000' }, LAPTOP),
-          yield* slack.selectPoster({ teamId: 'T1', channelId: 'C1', ts: '2.000' }),
-          yield* slack.selectPoster({ teamId: 'T1', channelId: 'C1', ts: '9.000' }),
+          yield* slack.hasPost({ workspaceId: 'T1', channelId: 'C1', ts: '2.000' }, STUDIO),
+          yield* slack.hasPost({ workspaceId: 'T1', channelId: 'C1', ts: '2.000' }, LAPTOP),
+          yield* slack.selectPoster({ workspaceId: 'T1', channelId: 'C1', ts: '2.000' }),
+          yield* slack.selectPoster({ workspaceId: 'T1', channelId: 'C1', ts: '9.000' }),
         ] as const;
       })
     );
     expect(results).toEqual([true, false, true, false, Option.some(STUDIO), Option.none()]);
+  });
+
+  test("removing a workspace removes its threads and posts, and not another workspace's", async () => {
+    const results = await runTest(
+      Effect.gen(function* () {
+        const slack = yield* seedWorkspace;
+        yield* slack.upsertWorkspace({ ...WORKSPACE, id: 'T2' });
+        yield* slack.recordThread(THREAD, STUDIO);
+        yield* slack.recordThread({ ...THREAD, workspaceId: 'T2' }, STUDIO);
+        yield* slack.recordPost({ workspaceId: 'T1', channelId: 'C1', ts: '2.000' }, STUDIO);
+        yield* slack.recordPost({ workspaceId: 'T2', channelId: 'C1', ts: '2.000' }, STUDIO);
+        yield* slack.removeWorkspace('T1');
+        return [
+          yield* slack.hasThread(THREAD, STUDIO),
+          yield* slack.hasThread({ ...THREAD, workspaceId: 'T2' }, STUDIO),
+          yield* slack.selectPoster({ workspaceId: 'T1', channelId: 'C1', ts: '2.000' }),
+          yield* slack.selectPoster({ workspaceId: 'T2', channelId: 'C1', ts: '2.000' }),
+        ] as const;
+      })
+    );
+    expect(results).toEqual([false, true, Option.none(), Option.some(STUDIO)]);
   });
 
   test('an event is new once, and again after a day', async () => {

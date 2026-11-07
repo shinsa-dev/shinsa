@@ -60,6 +60,7 @@ import {
   InstancesFull,
   InviteInvalid,
   MembersFull,
+  NoMachine,
   NotFound,
   NotOwner,
   OwnerCannotLeave,
@@ -221,7 +222,7 @@ class TeamsGroup extends HttpApiGroup.make('teams')
     HttpApiEndpoint.post('join', REMOTE_PATHS.teamJoin, {
       payload: TeamJoinRequest,
       success: TeamJoinResponse,
-      error: [wire(InviteInvalid), wire(NotFound)],
+      error: [wire(InviteInvalid), wire(NotFound), wire(NoMachine)],
     }),
     HttpApiEndpoint.post('preview', REMOTE_PATHS.teamPreview, {
       payload: TeamJoinRequest,

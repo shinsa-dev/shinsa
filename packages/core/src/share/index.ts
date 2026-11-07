@@ -3,7 +3,6 @@ import type { RunDelegation } from '../domain/delegations.ts';
 import { copyTeammateOriginal } from '../domain/duplicates.ts';
 import { isCurrentEvidence } from '../domain/evidence.ts';
 import type { Round } from '../domain/rounds.ts';
-import type { SharePreset } from '../domain/settings.ts';
 import type { ChangeProposal, TaskResult } from '../domain/shapes.ts';
 import type {
   Activity,
@@ -21,9 +20,10 @@ import type {
 } from '../domain/types.ts';
 import { serializePlanMarkdown } from '../report/markdown.ts';
 import type { PlanDocument, ReviewFinding, WorkReport } from '../report/types.ts';
+import type { ViewScope } from '../scopes/schema.ts';
 import type { ShinsaState } from '../state/project.ts';
 import { resolveTaskProject } from '../state/queries.ts';
-import { hasShareGroup, SHARE_PRESET_GROUPS, type ShareGroup } from './presets.ts';
+import { hasShareGroup, resolveShareScopes, type ShareGroup } from './presets.ts';
 import { resolveShareUpdate, type ShareUpdate } from './update.ts';
 
 export interface SharedPerson {
@@ -32,7 +32,7 @@ export interface SharedPerson {
 }
 
 export interface SharedTaskContext {
-  preset: SharePreset;
+  scopes: readonly ViewScope[];
   owner: string | null;
   ownerProfile: SharedPerson | null;
   machine: string | null;
@@ -40,7 +40,7 @@ export interface SharedTaskContext {
 }
 
 export interface SharedTask {
-  preset: SharePreset;
+  scopes: ViewScope[];
   task: Task;
   gates: Gate[];
   runs: Run[];
@@ -342,8 +342,8 @@ const TASK_GROUP_FIELDS: Partial<Record<ShareGroup, (task: Task, grants: Grants)
   }),
 };
 
-function redactTask(task: Task, preset: SharePreset, grants: Grants): Task {
-  const parts = SHARE_PRESET_GROUPS[preset].map((group) => TASK_GROUP_FIELDS[group]?.(task, grants) ?? {});
+function redactTask(task: Task, scopes: readonly ViewScope[], grants: Grants): Task {
+  const parts = scopes.map((group) => TASK_GROUP_FIELDS[group]?.(task, grants) ?? {});
   return Object.assign(createBlankTask(task, grants), ...parts);
 }
 
@@ -487,15 +487,16 @@ export function resolveSharedListing(
   state: ShinsaState,
   task: Task,
   gates: readonly Gate[],
-  preset: SharePreset
+  shown: readonly ViewScope[]
 ): SharedListing {
-  const grants: Grants = (group) => hasShareGroup(preset, group);
+  const scopes = resolveShareScopes(shown);
+  const grants: Grants = (group) => hasShareGroup(scopes, group);
   const projectId = resolveTaskProject(state, task);
   const project = grants('people') && projectId ? state.projects[projectId] : undefined;
   const repo = grants('people') && task.repoId ? state.repos[task.repoId] : undefined;
   const links = grants('people') ? SHARED_LINK_KINDS : new Set<string>();
   return {
-    task: scrubValue(redactTask(task, preset, grants), links),
+    task: scrubValue(redactTask(task, scopes, grants), links),
     gates: grants('activity') ? gates.map((gate) => scrubValue(redactGate(gate), links)) : [],
     project: project ? redactProject(project) : null,
     repo: repo ? redactRepo(repo) : null,
@@ -503,15 +504,16 @@ export function resolveSharedListing(
 }
 
 export function resolveSharedTask(state: ShinsaState, task: Task, context: SharedTaskContext): SharedTask {
-  const grants: Grants = (group) => hasShareGroup(context.preset, group);
+  const scopes = resolveShareScopes(context.scopes);
+  const grants: Grants = (group) => hasShareGroup(scopes, group);
   const people = grants('people');
   const projectId = resolveTaskProject(state, task);
   const project = people && projectId ? state.projects[projectId] : undefined;
   const repo = people && task.repoId ? state.repos[task.repoId] : undefined;
   const links = people ? SHARED_LINK_KINDS : new Set<string>();
   return {
-    preset: context.preset,
-    task: scrubValue(redactTask(task, context.preset, grants), links),
+    scopes: [...scopes],
+    task: scrubValue(redactTask(task, scopes, grants), links),
     gates: grants('activity')
       ? Object.values(state.gates)
           .filter((gate) => gate.taskId === task.id)

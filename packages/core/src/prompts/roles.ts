@@ -507,7 +507,7 @@ export function resolveInvestigatorPrompt(task: Task, repo: Repo | null, followU
     'Lead with the cause in one or two sentences (or what is still unknown), then how you reproduced it and the evidence (files and lines as shinsa:// links).',
     describeWhatFollows(task) ??
       (continues
-        ? 'The human already asked for a fix: an agent plans it from your diagnosis next, so end with what the fix should change.'
+        ? 'The human already asked for a fix: an agent plans it from your diagnosis next, so end with what the fix should change. If you found nothing worth fixing, set `recommend` to `close`: the task then waits for the human to close it or go on anyway.'
         : PROPOSAL_RULE),
     'Then stop.',
   ].join('\n');
@@ -580,6 +580,6 @@ export function resolveAnswererPrompt(task: Task, repo: Repo | null, followUp: s
     '',
     `Call \`answer\` with your answer in markdown (at most ${SHAPE_LIMITS.answer} characters): lead with the answer itself, then the evidence (files and lines as shinsa:// links).`,
     describeWhatFollows(task) ?? PROPOSAL_RULE,
-    'For other work worth doing, propose it with `suggest_tasks`. Then stop.',
+    'Only for work you noticed that serves a different goal than this task, propose it with `suggest_tasks`. Then stop.',
   ].join('\n');
 }

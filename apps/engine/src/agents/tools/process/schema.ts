@@ -61,7 +61,7 @@ export const PROCESS_TOOL_SPECS = {
   suggest_tasks: {
     name: 'suggest_tasks',
     description:
-      'Suggest tasks for work you noticed that is outside this task. Each becomes a suggested task the human can add as a task or dismiss; nothing starts until they accept. Do not suggest work this task already covers. When the human asked in this chat for something that does not belong in this task, suggest it with `split_off`: they can make it a task of its own or keep it here as the next round.',
+      'Suggest tasks for work you noticed yourself that serves a different goal than this task. Each becomes a suggested task the human can add or dismiss; nothing starts until they accept. Suggest rarely. Work this task needs to be done well, a fix you found on the way, or anything the human asks for about this task is not a suggestion: do it here. Never answer the human’s feedback with a suggestion. Set `stack_on_this` when the work builds on this task’s code and should ship with it, as the next piece of a bundle; `after_this` when it is worth merging on its own but needs this change merged first; neither when it stands alone. Use `split_off` only when the human plainly asked in this chat for work toward another goal.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -81,12 +81,17 @@ export const PROCESS_TOOL_SPECS = {
               after_this: {
                 type: 'boolean',
                 description:
-                  'True when it should wait until this task is merged, for example because it builds on it.',
+                  'True when it is worth merging on its own but needs this change merged first. Never with stack_on_this.',
+              },
+              stack_on_this: {
+                type: 'boolean',
+                description:
+                  'True when it builds on this task’s code and should merge together with it: it starts once this task is ready to merge, branches off this task’s branch, and the two merge as one bundle. Only when this task opens a pull request.',
               },
               split_off: {
                 type: 'boolean',
                 description:
-                  'True when the human asked for it in this task and it belongs in a task of its own instead.',
+                  'True only when the human plainly asked in this chat for work toward another goal, which belongs in a task of its own. Work they asked for about this task is done here.',
               },
             },
             required: ['title', 'request', 'why'],

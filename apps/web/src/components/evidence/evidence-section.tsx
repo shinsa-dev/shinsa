@@ -349,7 +349,7 @@ export function EvidenceSection({
   showEmpty?: boolean;
 }) {
   const dataDir = useServerHealth()?.dataDir ?? null;
-  const { evidence, runs, repos } = state;
+  const { evidence, runs, repos, gates } = state;
   const layout = useStructuralValue(
     React.useMemo(
       () => resolveEvidenceLayout({ evidence, runs }, task, dataDir),
@@ -357,7 +357,7 @@ export function EvidenceSection({
     )
   );
   const checks = useStructuralValue(
-    React.useMemo(() => resolveChecksView({ evidence, repos }, task), [evidence, repos, task])
+    React.useMemo(() => resolveChecksView({ evidence, repos, gates }, task), [evidence, repos, gates, task])
   );
   const previews = useStructuralValue(useTaskPreviews(state, task));
   const persistId = resolveTaskDisclosureId(task.id, 'evidence', 'panel');

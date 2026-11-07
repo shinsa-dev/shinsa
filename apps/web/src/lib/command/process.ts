@@ -8,6 +8,7 @@ import {
 } from '@shinsa/core';
 import { describeStopDelegation, listLiveDelegations } from '@/lib/chat/delegations.ts';
 import { type Command, RANK } from '@/lib/command/registry.ts';
+import { hasTaskEngineFeature } from '@/lib/connection/socket.ts';
 import { describeCheckInCount } from '@/lib/overview/wait.ts';
 import {
   acceptSuggestion,
@@ -21,6 +22,7 @@ import {
 } from '@/lib/tasks/process.ts';
 import { changeRoundShipping, listShippingItems, ROUND_ICON } from '@/lib/tasks/rounds.ts';
 import {
+  canBundleSuggestion,
   listOpenSuggestions,
   listSuggestionStarts,
   SUGGESTION_START_LABEL,
@@ -69,6 +71,7 @@ function listSilenceCommands(state: ShinsaState, task: Task, now: number): Comma
 }
 
 function listSuggestionCommands(task: Task): Command[] {
+  const canBundle = canBundleSuggestion(task, hasTaskEngineFeature('suggestion.bundle', task.id));
   return listOpenSuggestions(task).flatMap((suggestion): Command[] => {
     const id = `task.${task.id}.suggestion.${suggestion.id}`;
     return [
@@ -88,7 +91,7 @@ function listSuggestionCommands(task: Task): Command[] {
               id: `${id}.start`,
               heading: SUGGESTION_START_LABEL,
               rank: RANK.context,
-              commands: listSuggestionStarts(suggestion).map((item) => ({
+              commands: listSuggestionStarts(suggestion, canBundle).map((item) => ({
                 kind: 'run',
                 id: `${id}.accept.${item.value}`,
                 label: item.label,

@@ -32,7 +32,7 @@ function seedDatabase(
   for (const tunnel of tunnels)
     sqlite
       .query(
-        'INSERT INTO instances (id, user_id, name, fingerprint, tunnel_id, dns_record_id, machine_token_hash, connect_key, features, online, last_seen_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, 0)'
+        'INSERT INTO machines (id, owner_id, name, fingerprint, tunnel_id, dns_record_id, machine_token_hash, connect_key, features, online, last_seen_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, 0)'
       )
       .run(
         tunnel.id,

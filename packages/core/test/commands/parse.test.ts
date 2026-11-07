@@ -510,6 +510,21 @@ describe('parseUserCommand for the process commands', () => {
       waitsOnThis: false,
       backlog: true,
     });
+    expect(
+      parseCommand({
+        type: 'suggestion.accept',
+        taskId: 't',
+        suggestionId: 's',
+        waitsOnThis: false,
+        stackOnThis: true,
+      })
+    ).toEqual({
+      type: 'suggestion.accept',
+      taskId: 't',
+      suggestionId: 's',
+      waitsOnThis: false,
+      stackOnThis: true,
+    });
     expect(parseCommand({ type: 'suggestion.dismiss', taskId: 't', suggestionId: 's' })).toEqual({
       type: 'suggestion.dismiss',
       taskId: 't',

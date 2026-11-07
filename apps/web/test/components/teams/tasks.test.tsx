@@ -149,7 +149,7 @@ describe('teammates’ tasks', () => {
     renderTasks();
     expect(
       screen.getByRole('img', {
-        name: 'Mac.lan in Platform is not listing its tasks. That machine does not list you in this team yet.',
+        name: '“Mac.lan” by Kai in Platform is not listing its tasks. That machine does not list you in this team yet.',
       })
     ).toBeDefined();
     pushTeams({ machines: [{ ...refused, status: 'live', reason: null }], tasks: [] });
@@ -172,7 +172,7 @@ describe('teammates’ tasks', () => {
     renderTasks();
     expect(
       screen.getByRole('img', {
-        name: '2 teammate machines are not listing their tasks. Attic: That machine is in no team. Basement: It refused to list its tasks.',
+        name: '2 teammate machines are not listing their tasks. “Attic” (Kai): That machine is in no team. “Basement” (Kai): It refused to list its tasks.',
       })
     ).toBeDefined();
   });

@@ -14,6 +14,7 @@ import { EgressGate } from '../egress/service.ts';
 import { NORMAL_CLOSE, POLICY_VIOLATION } from '../schema.ts';
 import {
   type ChannelInput,
+  type ChannelRefusal,
   type ChannelState,
   type LiveFile,
   type PushState,
@@ -114,9 +115,12 @@ export const makeShareChannel = Effect.fn('ShareChannel.make')(function* <Subjec
     );
   });
 
-  const refuse = Effect.fn('ShareChannel.refuse')(function* (reason: string) {
-    yield* sendPeer(JSON.stringify({ type: 'refused', reason } satisfies ShareWelcome));
-    yield* fail(reason);
+  const refuse = Effect.fn('ShareChannel.refuse')(function* (refusal: ChannelRefusal) {
+    const welcome = { type: 'refused', reason: refusal.refused } satisfies ShareWelcome;
+    yield* sendPeer(
+      JSON.stringify(refusal.keyRequest ? { ...welcome, keyRequest: refusal.keyRequest } : welcome)
+    );
+    yield* fail(refusal.refused);
   });
 
   const receiveOnce = Effect.fn('ShareChannel.receiveOnce')(function* (raw: ChannelInput) {
@@ -125,7 +129,7 @@ export const makeShareChannel = Effect.fn('ShareChannel.make')(function* <Subjec
     if (current.kind === 'open') return yield* fail(`A ${name} only listens.`);
     const answer = typeof raw === 'string' ? yield* definition.authorize(raw) : null;
     if (!answer) return yield* fail(`The ${name} expects a hello first.`);
-    if ('refused' in answer) return yield* refuse(answer.refused);
+    if ('refused' in answer) return yield* refuse(answer);
     if ((yield* Ref.get(state)).kind !== 'hello') return;
     yield* Ref.set(state, { kind: 'open', subject: answer.subject, seal: createFrameSealer(answer.session) });
     yield* sendPeer(JSON.stringify(answer.welcome));

@@ -1,7 +1,6 @@
 import {
   listTeamProjectIds,
   NO_TEAM_FEED,
-  parseTeamJoinUrl,
   type RemoteMember,
   type RemoteSnapshot,
   type RemoteTeam,
@@ -9,6 +8,8 @@ import {
   type RemoteUser,
   type ShinsaState,
   TEAM_NAME_LIMIT,
+  TEAM_REFUSALS,
+  type TeamFeedMachine,
   type TeamFeedSnapshot,
   type TeamMachine,
   type UserCommand,
@@ -41,23 +42,57 @@ export function describeTeamsUnavailable(snapshot: RemoteSnapshot | null) {
   return 'Teams reach your teammates through remote access. Turn it on above first.';
 }
 
-export function describeTeamEntry(entry: RemoteTeamEntry, now = Date.now()): Mention {
+export function describeTeamEntry(entry: RemoteTeamEntry, feed: TeamFeedSnapshot = NO_TEAM_FEED): Mention {
   const { team } = entry;
   if (!team) return ['You asked to join. The team’s owner has not answered yet.'];
-  return describeTeamRole(team, ` · ${describeTeamFacts(team, now)}`);
+  return describeTeamRole(team, ` · ${describeTeamFacts(team, feed)}`);
 }
 
 function describeTeamRole(team: RemoteTeam, facts: string): Mention {
   return team.role === 'owner' ? [`You own it${facts}`] : ['Owned by ', { user: team.owner }, facts];
 }
 
-export function describeTeamFacts(team: NonNullable<RemoteTeamEntry['team']>, now = Date.now()) {
-  const people = team.members.length + 1;
-  return `${people} ${people === 1 ? 'person' : 'people'} · ${formatSince('Made', team.createdAt, now)}`;
+function countOnlinePeople(team: RemoteTeam, feed: TeamFeedSnapshot = NO_TEAM_FEED) {
+  const online = team.machines.filter((machine) =>
+    isMachineOnline(machine, selectFeedMachine(feed, team.id, machine.id))
+  );
+  return new Set(online.map((machine) => machine.userId)).size;
+}
+
+export function describeTeamFacts(team: RemoteTeam, feed: TeamFeedSnapshot = NO_TEAM_FEED) {
+  return `${countOf(team.members.length + 1, 'person', 'people')} · ${countOnlinePeople(team, feed)} online`;
 }
 
 export function needsTeamLink(entry: RemoteTeamEntry) {
   return entry.team !== null && !entry.onMachine;
+}
+
+const NO_KEYLESS_MACHINES: ReadonlySet<string> = new Set();
+
+export function listKeylessMachines(
+  entry: Pick<RemoteTeamEntry, 'onMachine'>,
+  snapshot: Pick<RemoteSnapshot, 'instanceId'>
+): ReadonlySet<string> {
+  if (entry.onMachine || snapshot.instanceId === null) return NO_KEYLESS_MACHINES;
+  return new Set([snapshot.instanceId]);
+}
+
+export const TEAM_KEY_WAITING = 'Teammates cannot see this machine’s tasks until it gets access.';
+
+export const TEAM_KEY_UPDATE = 'Teammates cannot see this machine’s tasks. Update Shinsa to get access.';
+
+export function describeKeyAsked(team: RemoteTeam): Mention {
+  return ['Asked. ', { user: team.owner }, ' gives this machine access from Settings → Teams.'];
+}
+
+export function describeKeyRequest(machine: TeamFeedMachine, team: RemoteTeam): Mention {
+  const owner = selectTeamPerson(team, machine.userId);
+  const by: Mention = owner ? [' by ', { user: owner }] : [];
+  return [`“${machine.name}”`, ...by, ' asks for access to this team’s tasks'];
+}
+
+export function listKeyRequests(feed: TeamFeedSnapshot, teamId: string) {
+  return feed.machines.filter((machine) => machine.teamId === teamId && machine.asking);
 }
 
 export function listProjectChoices(state: Pick<ShinsaState, 'projects'>): ProjectChoice[] {
@@ -103,20 +138,6 @@ export function validateTeamDraft(draft: TeamDraft): string | null {
   if (!name) return 'Give the team a name.';
   if (name.length > TEAM_NAME_LIMIT) return `Keep the name to ${TEAM_NAME_LIMIT} characters.`;
   return null;
-}
-
-export function validateTeamLink(teamId: string, url: string): string | null {
-  const link = parseTeamJoinUrl(url.trim());
-  if (!link) return 'That is not a team link. Copy the whole link, with everything after the #.';
-  if (link.teamId !== teamId) return 'That link is for another team.';
-  return null;
-}
-
-export const TEAM_PROJECTS_REQUIRED = 'Pick at least one project to share with the team.';
-
-export function validateTeamLinkProjects(projects: readonly ProjectChoice[], chosen: readonly string[]) {
-  if (projects.length === 0) return null;
-  return chosen.some((id) => projects.some((project) => project.id === id)) ? null : TEAM_PROJECTS_REQUIRED;
 }
 
 export function hasMachineAccess(snapshot: RemoteSnapshot, userId: string) {
@@ -218,33 +239,45 @@ function countOf(count: number, one: string, many: string) {
   return `${count} ${count === 1 ? one : many}`;
 }
 
-export function describeHostedTeam(team: RemoteTeam, now = Date.now()): Mention {
-  const people = countOf(team.members.length + 1, 'person', 'people');
+export function describeHostedTeam(team: RemoteTeam, feed: TeamFeedSnapshot = NO_TEAM_FEED): Mention {
   const machines = countOf(team.machines.length, 'machine', 'machines');
-  return describeTeamRole(team, ` · ${people} · ${machines} · ${formatSince('Made', team.createdAt, now)}`);
+  return describeTeamRole(team, ` · ${describeTeamFacts(team, feed)} · ${machines}`);
 }
+
+export type TeamMachineTone = 'online' | 'warning' | 'quiet';
 
 export interface TeamMachineRow {
   machine: TeamMachine;
-  online: boolean;
+  tone: TeamMachineTone;
   status: string;
   owner: RemoteUser | null;
+}
+
+export const TEAM_MACHINE_NEEDS_KEY = 'Waiting for the team’s key';
+
+export function selectTeamPerson(team: Pick<RemoteTeam, 'owner' | 'members'>, userId: string) {
+  if (team.owner.id === userId) return team.owner;
+  return team.members.find((member) => member.user.id === userId)?.user ?? null;
 }
 
 export function listTeamMachineRows(
   team: RemoteTeam,
   now = Date.now(),
-  feed: TeamFeedSnapshot = NO_TEAM_FEED
+  feed: TeamFeedSnapshot = NO_TEAM_FEED,
+  keyless: ReadonlySet<string> = NO_KEYLESS_MACHINES
 ): TeamMachineRow[] {
-  const people = [team.owner, ...team.members.map((member) => member.user)];
-  return team.machines.map((machine) => {
+  return team.machines.map((machine): TeamMachineRow => {
     const live = selectFeedMachine(feed, team.id, machine.id);
+    const owner = selectTeamPerson(team, machine.userId);
+    if (keyless.has(machine.id) || (live?.status === 'refused' && live.reason === TEAM_REFUSALS.key))
+      return { machine, tone: 'warning', status: TEAM_MACHINE_NEEDS_KEY, owner };
     const online = isMachineOnline(machine, live);
+    const seenAt = resolveMachineSeenAt(machine, live);
     return {
       machine,
-      online,
-      status: describeTeamMachineStatus(online, resolveMachineSeenAt(machine, live), now),
-      owner: people.find((user) => user.id === machine.userId) ?? null,
+      tone: online ? 'online' : 'quiet',
+      status: describeTeamMachineStatus(online, seenAt, now),
+      owner,
     };
   });
 }

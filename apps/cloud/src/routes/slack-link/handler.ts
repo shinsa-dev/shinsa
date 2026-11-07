@@ -143,11 +143,11 @@ export const SlackLinkRoutes = Layer.unwrap(
     ) {
       const store = yield* SlackStore;
       yield* store.upsertLink({
-        teamId: identity.teamId,
+        workspaceId: identity.teamId,
         slackUserId: identity.userId,
         slackUserName: identity.userName,
-        userId: machine.userId,
-        instanceId: machine.id,
+        userId: machine.ownerId,
+        machineId: machine.id,
       });
     });
 
@@ -172,7 +172,7 @@ export const SlackLinkRoutes = Layer.unwrap(
       if (Option.isNone(opened) || !(yield* slack.hasBotScopes(opened.value.token)))
         return yield* respondInstall(identity, machine);
       yield* recordLink(identity, machine);
-      return respondLinked({ team: opened.value.workspace.teamName });
+      return respondLinked({ team: opened.value.workspace.name });
     });
 
     const installCallback = Effect.gen(function* () {
@@ -204,8 +204,8 @@ export const SlackLinkRoutes = Layer.unwrap(
       const teamName = present(install.team?.name) ?? teamId;
       const token = Redacted.make(botToken);
       yield* store.upsertWorkspace({
-        teamId,
-        teamName,
+        id: teamId,
+        name: teamName,
         botUserId,
         sealedBotToken: yield* crypto.sealToken(token),
       });

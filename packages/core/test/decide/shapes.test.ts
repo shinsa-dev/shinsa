@@ -4,6 +4,7 @@ import {
   listActiveRuns,
   listOpenGates,
   type PipelineStep,
+  type ProposalRecommendation,
   resolveFallbackBriefing,
   resolveMessageEffect,
   resolveQueue,
@@ -83,7 +84,8 @@ function deliver(
   harness: Harness,
   taskId: string,
   step: 'investigate' | 'research' | 'operate',
-  proposal: { request: string; why: string } | null = null
+  proposal: { request: string; why: string } | null = null,
+  recommend: ProposalRecommendation = 'go_on'
 ) {
   const runId = harness.activeRun(taskId).id;
   harness.send({
@@ -91,6 +93,7 @@ function deliver(
     runId,
     step,
     body: `The ${step} result.`,
+    recommend,
     ...resolveReply(harness, runId),
     ...(proposal ? { proposal } : {}),
   });
@@ -446,6 +449,29 @@ describe('research', () => {
     expect(harness.lastEffect('worktree.create').taskId).toBe(taskId);
   });
 
+  test('a report offers its suggested replies on the result, and closing it clears them', () => {
+    const harness = createHarness();
+    const taskId = start(harness, { shape: 'research' });
+    verifySetup(harness, taskId);
+    const actions = [{ label: 'Compare a third', message: 'Add BullMQ to the comparison.' }];
+    harness.send({
+      type: 'agent.deliver',
+      runId: harness.activeRun(taskId).id,
+      step: 'research',
+      body: 'Both work.',
+      actions,
+    });
+    expect(harness.openGate(taskId).type).toBe('result');
+    expect(harness.task(taskId).suggestedActions).toEqual(actions);
+    harness.send({
+      type: 'gate.answer',
+      gateId: harness.openGate(taskId).id,
+      decision: 'approve',
+      response: null,
+    });
+    expect(harness.task(taskId).suggestedActions).toEqual([]);
+  });
+
   test('a researcher or an investigator cannot hand over the other one’s result', () => {
     const harness = createHarness();
     const taskId = start(harness, { shape: 'research' });
@@ -789,6 +815,9 @@ describe('the agent composes the steps', () => {
     compose(harness, taskId, ['research', 'your_ok', 'plan', 'build', ...REVIEW_TAIL], 'Compare first.');
     expect(harness.activeRun(taskId).role).toBe('researcher');
     expect(harness.activeRun(taskId).prompt).toContain('goes on to the change');
+    expect(harness.activeRun(taskId).prompt).toContain(
+      'Set `recommend` on your hand-over: `go_on` when the change is worth doing, `close` when you found nothing worth changing.'
+    );
     deliver(harness, taskId, 'research');
     expect(harness.openGate(taskId).title).toBe('Turn this report into a change?');
     approve(harness, taskId);
@@ -854,6 +883,7 @@ describe('the agent composes the steps', () => {
         runId: harness.activeRun(taskId).id,
         step: 'investigate',
         body: 'The pool.',
+        recommend: 'go_on',
       })
     ).toThrow('This `report_diagnosis` answers a message the human sent');
     deliver(harness, taskId, 'investigate');
@@ -928,6 +958,66 @@ describe('the agent composes the steps', () => {
     );
   });
 
+  test('a result before your OK must recommend going on or closing, and closing puts Close first', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    compose(harness, taskId, ['research', 'your_ok', 'plan', 'build', ...REVIEW_TAIL]);
+    passSetup(harness, taskId);
+    expect(() =>
+      harness.send({
+        type: 'agent.deliver',
+        runId: harness.activeRun(taskId).id,
+        step: 'research',
+        body: 'Not an issue.',
+      })
+    ).toThrow('Your OK comes next, so set `recommend` on `submit_report`');
+    deliver(harness, taskId, 'research', null, 'close');
+    expect(harness.task(taskId)).toMatchObject({
+      stage: 'awaiting_proposal',
+      proposal: { status: 'open', recommend: 'close' },
+    });
+    expect(harness.openGate(taskId).title).toBe('The report found nothing to change');
+    harness.send({
+      type: 'gate.answer',
+      gateId: harness.openGate(taskId).id,
+      decision: 'reject',
+      response: null,
+    });
+    expect(harness.task(taskId)).toMatchObject({ stage: 'done', pipeline: ['research'] });
+  });
+
+  test('a proposed change always recommends going on', () => {
+    const harness = createHarness();
+    const taskId = start(harness, { shape: 'investigate' });
+    passSetup(harness, taskId);
+    deliver(harness, taskId, 'investigate', PROPOSAL, 'close');
+    expect(harness.task(taskId).proposal).toMatchObject({ status: 'open', recommend: 'go_on' });
+  });
+
+  test('a find-and-fix diagnosis that recommends closing waits for your OK instead of planning', () => {
+    const harness = createHarness();
+    const taskId = start(harness, { triage: { shape: 'fix' } });
+    passSetup(harness, taskId);
+    expect(harness.activeRun(taskId).prompt).toContain(
+      'If you found nothing worth fixing, set `recommend` to `close`'
+    );
+    deliver(harness, taskId, 'investigate', null, 'close');
+    expect(harness.task(taskId)).toMatchObject({
+      stage: 'awaiting_proposal',
+      pipeline: ['investigate', 'your_ok', ...SHAPE_PIPELINES.change],
+      proposal: { status: 'open', recommend: 'close' },
+    });
+    expect(harness.openGate(taskId)).toMatchObject({
+      type: 'proposal',
+      title: 'The diagnosis found nothing to fix',
+      body: 'Found nothing worth changing, so the work goes on only with your OK.\n\nPlan the change and build it. You review it before a pull request opens.',
+    });
+    approve(harness, taskId);
+    expect(harness.task(taskId).proposal?.status).toBe('accepted');
+    passSetup(harness, taskId);
+    expect(harness.activeRun(taskId)).toMatchObject({ role: 'agent', purpose: 'plan' });
+  });
+
   test('an answer can lead to an operation, and approving plans it without asking for another proposal', () => {
     const harness = createHarness();
     const taskId = createTask(harness);
@@ -938,6 +1028,7 @@ describe('the agent composes the steps', () => {
       runId: harness.activeRun(taskId).id,
       step: 'answer',
       body: 'It is stuck.',
+      recommend: 'go_on',
     });
     expect(harness.openGate(taskId)).toMatchObject({
       title: 'Run an operation from this answer?',

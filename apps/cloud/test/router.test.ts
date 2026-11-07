@@ -91,7 +91,7 @@ describe('the router', () => {
   test('a webhook that fails unexpectedly is a plain 500 too', async () => {
     const harness = createHarness();
     const logged = spyOn(console, 'error').mockImplementation(() => undefined);
-    harness.db.sqlite.exec('DROP TABLE instances');
+    harness.db.sqlite.exec('DROP TABLE machines');
     expect((await harness.call('/hooks/a/b/c', { method: 'POST', body: 'x' })).status).toBe(500);
     logged.mockRestore();
   });

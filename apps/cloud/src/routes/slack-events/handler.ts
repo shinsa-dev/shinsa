@@ -13,6 +13,7 @@ import {
   SLACK_MODAL_CALLBACK,
   SLACK_RELAY_PATHS,
   SLACK_RESPONSE_INPUT,
+  SLACK_VIEW_LIMITS,
   SLACK_WRITE_ACTION,
   type SlackDecision,
   type SlackDecisionReply,
@@ -39,6 +40,7 @@ import type { Machine } from '../../store/machines/schema.ts';
 import { Machines } from '../../store/machines/service.ts';
 import type { SlackWorkspace } from '../../store/slack/schema.ts';
 import { SlackStore } from '../../store/slack/service.ts';
+import { resolveSlackMessageText } from './message.ts';
 import {
   type BlockActions,
   BlockActions as BlockActionsSchema,
@@ -94,12 +96,13 @@ export const SlackEventRoutes = Layer.unwrap(
       text: event.text ?? '',
     });
 
-    const resolveThreadEntry = (message: ThreadMessage): ThreadEntry | null => {
+    const resolveThreadEntry = (message: ThreadMessage, botUserId: string): ThreadEntry | null => {
       const userId = message.user ?? message.bot_id;
       if (!userId) return null;
       const botName =
         message.bot_id === undefined ? null : (message.bot_profile?.name ?? message.username ?? 'Bot');
-      return { ts: message.ts, userId, text: message.text ?? '', botName };
+      const text = userId === botUserId ? (message.text ?? '') : resolveSlackMessageText(message);
+      return { ts: message.ts, userId, text, botName };
     };
 
     const resolveCardMessage = (actions: BlockActions): CardMessage => ({
@@ -158,13 +161,14 @@ export const SlackEventRoutes = Layer.unwrap(
           interactionId: (submission.trigger_id ?? view.id).slice(0, SLACK_LIMITS.id),
           teamId: submission.team.id,
           userId: submission.user.id,
-          response: text.slice(0, SLACK_LIMITS.text),
+          response: text.slice(0, SLACK_VIEW_LIMITS.input),
         },
       };
     };
 
     const listThreadEntries = Effect.fn('slackEvents.listThreadEntries')(function* (
       mention: MentionEvent,
+      botUserId: string,
       token: Redacted.Redacted<string>
     ) {
       const own: ThreadEntry = { ts: mention.ts, userId: mention.userId, text: mention.text, botName: null };
@@ -187,7 +191,11 @@ export const SlackEventRoutes = Layer.unwrap(
         .pipe(
           Effect.map((replies) => {
             const entries = (replies.messages ?? [])
-              .map((value) => Option.getOrNull(Option.map(decodeThreadMessage(value), resolveThreadEntry)))
+              .map((value) =>
+                Option.getOrNull(
+                  Option.map(decodeThreadMessage(value), (message) => resolveThreadEntry(message, botUserId))
+                )
+              )
               .filter((entry) => entry !== null);
             return entries.some((entry) => entry.ts === mention.ts) ? entries : [...entries, own];
           }),
@@ -224,7 +232,9 @@ export const SlackEventRoutes = Layer.unwrap(
       workspace: SlackWorkspace,
       token: Redacted.Redacted<string>
     ) {
-      const entries = (yield* listThreadEntries(mention, token)).slice(-SLACK_LIMITS.threadMessages);
+      const entries = (yield* listThreadEntries(mention, workspace.botUserId, token)).slice(
+        -SLACK_LIMITS.threadMessages
+      );
       const users = yield* resolveUserNames(entries, token);
       const names = { users, botUserId: workspace.botUserId };
       const readable = (text: string) => resolveSlackReadableText(text, names).slice(0, SLACK_LIMITS.text);
@@ -329,7 +339,7 @@ export const SlackEventRoutes = Layer.unwrap(
         );
         return;
       }
-      const machine = yield* machines.select(link.value.instanceId);
+      const machine = yield* machines.select(link.value.machineId);
       const now = yield* Clock.currentTimeMillis;
       if (Option.isNone(machine) || !isMachineOnline(machine.value, now)) {
         yield* postInThread(
@@ -339,7 +349,7 @@ export const SlackEventRoutes = Layer.unwrap(
       }
       const forwarded = yield* resolveForwardedMention(mention, workspace, token);
       yield* store.recordThread(
-        { teamId: mention.teamId, channelId: mention.channelId, threadTs: mention.threadTs },
+        { workspaceId: mention.teamId, channelId: mention.channelId, threadTs: mention.threadTs },
         machine.value.id
       );
       if (!(yield* forwardMention(forwarded, machine.value)))
@@ -354,13 +364,13 @@ export const SlackEventRoutes = Layer.unwrap(
       const link = yield* store.selectLink(card.teamId, card.userId);
       if (Option.isNone(link)) return refuse(SLACK_DECISION_REFUSALS.notLinked);
       const poster = yield* store.selectPoster({
-        teamId: card.teamId,
+        workspaceId: card.teamId,
         channelId: card.channelId,
         ts: card.messageTs,
       });
       const machine = Option.isSome(poster) ? yield* machines.select(poster.value) : Option.none<Machine>();
       if (Option.isNone(machine)) return refuse(SLACK_DECISION_REFUSALS.noAccess);
-      const role = yield* selectMachineRole(machine.value.id, machine.value.userId, link.value.userId);
+      const role = yield* selectMachineRole(machine.value.id, machine.value.ownerId, link.value.userId);
       if (Option.isNone(role) || role.value === 'guest') return refuse(SLACK_DECISION_REFUSALS.noAccess);
       if (!isMachineOnline(machine.value, yield* Clock.currentTimeMillis))
         return refuse(serializeOfflineRefusal(machine.value.name));

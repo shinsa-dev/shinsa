@@ -273,6 +273,33 @@ export class Checkout extends Context.Service<
         });
       });
 
+      const readRef = (repo: Repo, ref: string, signal?: AbortSignal) =>
+        Effect.map(git.attempt(['rev-parse', '--verify', '--quiet', ref], repo.path, { signal }), (read) =>
+          read.ok ? read.stdout.trim() : null
+        );
+
+      const isCheckedOut = Effect.fnUntraced(function* (repo: Repo, branch: string, signal?: AbortSignal) {
+        const listed = yield* git.attempt(['worktree', 'list', '--porcelain'], repo.path, { signal });
+        if (!listed.ok) return true;
+        return parseWorktreeList(listed.stdout).some((worktree) => worktree.branch === branch);
+      });
+
+      const advanceLocalBranch = Effect.fnUntraced(function* (
+        repo: Repo,
+        branch: string,
+        signal?: AbortSignal
+      ) {
+        const local = yield* readRef(repo, `refs/heads/${branch}`, signal);
+        const remote = yield* readRef(repo, `refs/remotes/origin/${branch}`, signal);
+        if (!local || !remote || local === remote) return;
+        if (yield* isCheckedOut(repo, branch, signal)) return;
+        const behind = yield* git.attempt(['merge-base', '--is-ancestor', local, remote], repo.path, {
+          signal,
+        });
+        if (!behind.ok) return;
+        yield* git.attempt(['update-ref', `refs/heads/${branch}`, remote, local], repo.path, { signal });
+      });
+
       const resolveStartPoint = Effect.fn('Checkout.resolveStartPoint')(function* (
         repo: Repo,
         baseBranch: string | null,
@@ -280,7 +307,13 @@ export class Checkout extends Context.Service<
       ) {
         if (baseBranch) return yield* decodeRefName(baseBranch);
         const branch = yield* decodeRefName(repo.defaultBranch);
-        yield* syncRemoteBranch(repo, branch, signal);
+        const fetched = yield* syncRemoteBranch(repo, branch, signal);
+        if (fetched.ok) yield* advanceLocalBranch(repo, branch, signal);
+        else {
+          yield* Effect.logWarning(
+            '[Git] Could not fetch the default branch; starting from the last known one'
+          ).pipe(Effect.annotateLogs({ repo: repo.path, branch, error: fetched.stderr.trim() }));
+        }
         const remoteBase = yield* git.attempt(
           ['rev-parse', '--verify', '--quiet', `origin/${branch}`],
           repo.path,

@@ -5,11 +5,19 @@ import {
   listOpenGates,
   type RunUsage,
   RECENT_USAGE_MS,
+  resolvePaceHold,
   resolveRecentUsage,
   resolveTaskCost,
-  USAGE_RATE_LIMITS,
 } from '../../src/index.ts';
-import { createHarness, createTask, type Harness, proposePlan, registerRepo } from '../harness.ts';
+import {
+  completePhase,
+  createHarness,
+  createTask,
+  type Harness,
+  learnUsageRate,
+  proposePlan,
+  registerRepo,
+} from '../harness.ts';
 
 function usage(costUsd: number | null, tokens = 1_000): RunUsage {
   return { inputTokens: tokens, outputTokens: tokens, cacheReadTokens: 0, cacheWriteTokens: 0, costUsd };
@@ -155,33 +163,6 @@ describe('the cost limit per task', () => {
     );
   });
 });
-
-function learnUsageRate(harness: Harness) {
-  const start = harness.now - 100_000;
-  for (let index = 0; index < USAGE_RATE_LIMITS.minTasks; index += 1) {
-    const from = start + index * 1_000;
-    const id = `learned-${index}`;
-    const readings = [
-      { percent: index * 2, at: from, resetsAt: null },
-      { percent: index * 2 + 2, at: from + 100, resetsAt: null },
-    ];
-    harness.state.runs[id] = {
-      id,
-      taskId: `learned-task-${index}`,
-      role: 'agent',
-      purpose: 'build',
-      provider: 'claude',
-      model: null,
-      sessionId: null,
-      startedAt: from,
-      endedAt: from + 100,
-      outcome: 'completed',
-      summary: null,
-      usage: usage(2),
-      meters: [{ attemptId: id, window: 'account:acc-1', from, to: from + 100, usage: usage(2), readings }],
-    };
-  }
-}
 
 function meterWeekly(
   harness: Harness,
@@ -624,6 +605,51 @@ describe('the daily usage limit', () => {
     expect(harness.task(taskId).activity.some((entry) => entry.text === 'Started the held step early')).toBe(
       true
     );
+  });
+
+  test('Resume now ignores the daily limit for the rest of the task', () => {
+    const { harness, taskId, run } = heldAtPace({ daily: -1 });
+    harness.send({ type: 'usage_wait.resume_now', taskId });
+    expect(harness.task(taskId).paceLimitsIgnored).toBe(true);
+    expect(
+      harness
+        .task(taskId)
+        .activity.some(
+          (entry) =>
+            entry.actor === 'you' &&
+            entry.text === 'Ignoring the daily and project usage limits for this task'
+        )
+    ).toBe(true);
+    const [started] = listContinuations(harness, run.id);
+    completePhase(harness, taskId);
+    const next = harness.activeRun(taskId);
+    expect(next.id).not.toBe(started);
+    expect(isDispatched(harness, next.id)).toBe(true);
+    expect(harness.task(taskId).usageWait?.status).not.toBe('armed');
+    expect(resolvePaceHold(harness.state, harness.task(taskId), 'claude', harness.now)).toBeNull();
+  });
+
+  test('another task is still held after one task ignores the limit', () => {
+    const { harness, taskId } = heldAtPace({ daily: -1 });
+    harness.send({ type: 'usage_wait.resume_now', taskId });
+    const otherId = createTask(harness);
+    expect(waitOf(harness, otherId)).toMatchObject({ status: 'armed', cause: 'pace' });
+  });
+
+  test('Resume now on your behalf or by a guest starts only the held step', () => {
+    const guest = { id: 'u-kai', login: 'kai', name: 'Kai Lane', avatarUrl: null };
+    const senders = [
+      () => ({ onBehalf: true }),
+      (taskId: string) => ({ guest: { ...guest, scope: { kind: 'task' as const, taskId } } }),
+    ];
+    for (const sender of senders) {
+      const { harness, taskId, run } = heldAtPace({ daily: -1 });
+      harness.send({ type: 'usage_wait.resume_now', taskId }, sender(taskId));
+      expect(isHeldStepStarted(harness, run.id)).toBe(true);
+      expect(harness.task(taskId).paceLimitsIgnored ?? false).toBe(false);
+      completePhase(harness, taskId);
+      expect(waitOf(harness, taskId)).toMatchObject({ status: 'armed', cause: 'pace' });
+    }
   });
 
   test('raising or clearing the limit starts held steps right away', () => {

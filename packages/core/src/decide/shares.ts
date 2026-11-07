@@ -10,6 +10,7 @@ import {
   type ShareLimit,
   type Task,
 } from '../domain/index.ts';
+import { hasSameShareScopes, resolveShareScopes, SHARE_PRESET_SCOPES } from '../share/presets.ts';
 import { listChangedIds } from '../state/draft.ts';
 import type { Decider } from './decider.ts';
 
@@ -41,6 +42,12 @@ function isShareExpired(decider: Decider, task: Task) {
   return endsAt !== null && endsAt <= decider.context.now;
 }
 
+function resolveCommandScopes(decider: Decider, command: CommandOf<'task.share'>, task: Task) {
+  if (command.scopes) return command.scopes;
+  if (command.preset) return SHARE_PRESET_SCOPES[command.preset];
+  return task.share?.scopes ?? SHARE_PRESET_SCOPES[resolveSharePreset(decider.state.settings)];
+}
+
 export function shareTask(decider: Decider, command: CommandOf<'task.share'>) {
   assertHumanShares(decider);
   const shared = decider.task(command.taskId);
@@ -49,15 +56,15 @@ export function shareTask(decider: Decider, command: CommandOf<'task.share'>) {
   if (task.watchHome)
     throw new DomainError({ code: 'share_refused', message: 'An automation has nothing to share.' });
   const limit = command.limit ?? task.share?.limit ?? resolveShareLimit(decider.state.settings);
-  const preset = command.preset ?? task.share?.preset ?? resolveSharePreset(decider.state.settings);
+  const scopes = resolveShareScopes(resolveCommandScopes(decider, command, task));
   assertShareLimit(task, limit);
-  if (task.share && task.share.limit === limit && task.share.preset === preset) {
+  if (task.share && task.share.limit === limit && hasSameShareScopes(task.share.scopes, scopes)) {
     if (task.share.failure) decider.run({ kind: 'share.link', taskId: task.id });
     return;
   }
   const endsAt =
     task.share?.limit === limit ? task.share.endsAt : resolveShareEnd(limit, decider.context.now);
-  decider.emit({ type: 'task.shared', taskId: task.id, limit, preset, endsAt });
+  decider.emit({ type: 'task.shared', taskId: task.id, limit, scopes, endsAt });
   if (!task.share || task.share.failure) decider.run({ kind: 'share.link', taskId: task.id });
   if (!task.share) decider.run({ kind: 'share.describe', taskId: task.id });
 }
