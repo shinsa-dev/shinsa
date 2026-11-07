@@ -52,15 +52,32 @@ export function writeAccountFiles(data: string) {
   const limits = {
     version: 1,
     accounts: {
-      [PERSONAL.id]: createAccountUsage([
-        window('session', 'session', '5-hour limit', 64, 2 * HOUR),
-        window('weekly_all', 'weekly', 'Weekly · All models', 41, 3 * 24 * HOUR),
-        window('weekly_fable', 'model', 'Weekly · Fable', 72, 3 * 24 * HOUR),
-      ]),
-      [OPS.id]: createAccountUsage([
-        window('session', 'session', '5-hour limit', 100, 40 * MINUTE),
-        window('weekly_all', 'weekly', 'Weekly · All models', 93, 2 * 24 * HOUR),
-      ]),
+      [PERSONAL.id]: {
+        ...createAccountUsage([
+          window('session', 'session', '5-hour limit', 64, 2 * HOUR),
+          window('weekly_all', 'weekly', 'Weekly · All models', 41, 3 * 24 * HOUR),
+          window('weekly_fable', 'model', 'Weekly · Fable', 72, 3 * 24 * HOUR),
+        ]),
+        extraUsage: { enabled: true, noLimit: false, credit: { minor: 1240, exponent: 2, currency: 'USD' } },
+        resetGrants: [
+          {
+            id: 'seed-launch-grant',
+            label: null,
+            left: 1,
+            total: 2,
+            clears: ['five_hour', 'seven_day'],
+            usableNow: true,
+            endsAt: NOW + 14 * 24 * HOUR,
+          },
+        ],
+      },
+      [OPS.id]: {
+        ...createAccountUsage([
+          window('session', 'session', '5-hour limit', 100, 40 * MINUTE),
+          window('weekly_all', 'weekly', 'Weekly · All models', 93, 2 * 24 * HOUR),
+        ]),
+        extraUsage: { enabled: false, noLimit: false, credit: null },
+      },
       [SPARE.id]: {
         ...createAccountUsage([
           window('session', 'session', '5-hour limit', 3, 4 * HOUR),

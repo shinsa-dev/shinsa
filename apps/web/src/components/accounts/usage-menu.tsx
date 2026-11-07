@@ -18,6 +18,7 @@ import { useUsageRecheck } from '@/hooks/use-usage-recheck.ts';
 import { ACCOUNT_LABEL, type AccountProvider, resolveAccountProvider } from '@/lib/accounts/account.ts';
 import {
   type AccountStatus,
+  describeResetsAvailable,
   describeUsageDetail,
   isNextAccount,
   isNextProvider,
@@ -53,12 +54,14 @@ function GlanceRow({
   status,
   detail,
   next,
+  resets = null,
 }: {
   name: AccountProvider;
   row: UsageRow | null;
   status: AccountStatus | null;
   detail: string;
   next: boolean;
+  resets?: string | null;
 }) {
   return (
     <InfoSection>
@@ -92,6 +95,7 @@ function GlanceRow({
             {status && <AccountStatusText status={status} />}
           </span>
         )}
+        {resets && <span className='text-2xs text-fg-3'>{resets}</span>}
       </div>
     </InfoSection>
   );
@@ -115,6 +119,7 @@ function AccountGlance({
       status={resolveAccountStatus(account, model, now)}
       detail={describeUsageDetail(account)}
       next={isNextAccount(next, account)}
+      resets={describeResetsAvailable(account.usage)}
     />
   );
 }

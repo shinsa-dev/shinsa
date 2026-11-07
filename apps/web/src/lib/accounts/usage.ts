@@ -13,6 +13,8 @@ import {
   resolveSpentUntil,
   type Settings,
   selectNextAccount,
+  type UsageMoney,
+  type UsageResetGrant,
   type UsageWindow,
 } from '@shinsa/core';
 import { type AccountProvider, resolveAccountProvider } from '@/lib/accounts/account.ts';
@@ -22,6 +24,34 @@ import { TONE_TEXT, type Tone } from '@/lib/format/tone.ts';
 const USAGE_WARNING = 75;
 
 const USAGE_CRITICAL = 90;
+
+const CURRENCY_CODE = /^[A-Z]{3}$/;
+
+const LIST_FORMAT = new Intl.ListFormat('en-US', { type: 'conjunction' });
+
+export const USAGE_EXTRA_LABEL = {
+  extraUsage: 'Extra usage',
+  on: 'On',
+  off: 'Off',
+  noLimit: 'On, no monthly limit',
+  credit: 'Credit left',
+  reset: 'Usage reset',
+  notUsable: 'Not usable yet',
+};
+
+const CLEARED_LIMITS: Record<string, string> = {
+  five_hour: '5-hour',
+  seven_day: 'weekly',
+  seven_day_opus: 'weekly Opus',
+  seven_day_sonnet: 'weekly Sonnet',
+};
+
+export interface UsageNoteRow {
+  id: string;
+  label: string;
+  value: string;
+  detail: string | null;
+}
 
 export interface UsageRow {
   id: string;
@@ -222,4 +252,75 @@ export function resolveAccountHeader(
     retryAt: account.usage.retryAt ?? null,
     reason: account.usage.detail,
   };
+}
+
+export function hasWholeCredit(credit: UsageMoney) {
+  return credit.minor >= 10 ** credit.exponent;
+}
+
+export function formatUsageMoney(money: UsageMoney) {
+  const amount = money.minor / 10 ** money.exponent;
+  if (!CURRENCY_CODE.test(money.currency)) return `${amount.toFixed(money.exponent)} ${money.currency}`;
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: money.currency,
+    minimumFractionDigits: money.exponent,
+    maximumFractionDigits: money.exponent,
+  }).format(amount);
+}
+
+function describeCleared(clears: string[]) {
+  const limits = clears.flatMap((id) => (CLEARED_LIMITS[id] ? [CLEARED_LIMITS[id]] : []));
+  if (limits.length === 0) return null;
+  return `Clears the ${LIST_FORMAT.format(limits)} ${limits.length === 1 ? 'limit' : 'limits'}`;
+}
+
+function describeGrantDetail(grant: UsageResetGrant, now: number) {
+  const reach = grant.usableNow ? describeCleared(grant.clears) : USAGE_EXTRA_LABEL.notUsable;
+  if (grant.endsAt === null) return reach;
+  const ends = formatMoment(grant.endsAt, now);
+  return reach === null ? `Ends ${ends}` : `${reach} · ends ${ends}`;
+}
+
+function createGrantRow(grant: UsageResetGrant, now: number): UsageNoteRow {
+  return {
+    id: `reset:${grant.id}`,
+    label: grant.label ?? USAGE_EXTRA_LABEL.reset,
+    value: `${grant.left} of ${grant.total} left`,
+    detail: describeGrantDetail(grant, now),
+  };
+}
+
+function describeExtraUsageValue(enabled: boolean, noLimit: boolean) {
+  if (!enabled) return USAGE_EXTRA_LABEL.off;
+  return noLimit ? USAGE_EXTRA_LABEL.noLimit : USAGE_EXTRA_LABEL.on;
+}
+
+export function listUsageNotes(usage: AccountUsage, now: number): UsageNoteRow[] {
+  const extra = usage.extraUsage;
+  const credit = extra?.credit;
+  return [
+    ...(extra
+      ? [
+          {
+            id: 'extra-usage',
+            label: USAGE_EXTRA_LABEL.extraUsage,
+            value: describeExtraUsageValue(extra.enabled, extra.noLimit),
+            detail: null,
+          },
+        ]
+      : []),
+    ...(credit && hasWholeCredit(credit)
+      ? [{ id: 'credit', label: USAGE_EXTRA_LABEL.credit, value: formatUsageMoney(credit), detail: null }]
+      : []),
+    ...(usage.resetGrants ?? []).map((grant) => createGrantRow(grant, now)),
+  ];
+}
+
+export function describeResetsAvailable(usage: AccountUsage) {
+  const count = (usage.resetGrants ?? [])
+    .filter((grant) => grant.usableNow)
+    .reduce((total, grant) => total + grant.left, 0);
+  if (count === 0) return null;
+  return `${count} usage ${count === 1 ? 'reset' : 'resets'} available`;
 }
