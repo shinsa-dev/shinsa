@@ -35,6 +35,7 @@ const GATE_REPLY = {
     done: 'Started. Updating the worktree.',
   },
   revisePlan: { decision: 'revise', done: 'Sent back to the agent.' },
+  keepOneTask: { decision: 'revise', done: 'Sent back as one task.' },
   approveChanges: { decision: 'approve', done: 'Approved. Opening the pull request.' },
   pushChanges: { decision: 'approve', done: 'Approved. Pushing the changes.' },
   approveEdits: { decision: 'approve', done: 'Approved. Committing your edits.' },
