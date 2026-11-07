@@ -1,8 +1,7 @@
-import { rmSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { BunRuntime } from '@effect/platform-bun';
-import { Clock, Config, Console, Duration, Effect, Option, Schedule, Schema } from 'effect';
+import { Clock, Config, Console, Duration, Effect, FileSystem, Option, Schedule, Schema } from 'effect';
 import { ChildProcess, ChildProcessSpawner } from 'effect/process';
 import { Chromium, ChromiumLayer } from '../kit/chromium/index.ts';
 import { writeReport } from './report/write.ts';
@@ -16,6 +15,7 @@ import {
   Paints,
   STARTUP_PORT,
   STARTUP_TIMEOUT,
+  UserDataUnremovable,
 } from './shell/schema.ts';
 
 const APP_DIR = resolve(Bun.argv[2] ?? 'apps/desktop');
@@ -33,6 +33,7 @@ const program = Effect.gen(function* () {
     )
   );
   const chromium = yield* Chromium;
+  const fs = yield* FileSystem.FileSystem;
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const timeout = Duration.fromInputUnsafe(STARTUP_TIMEOUT);
 
@@ -76,10 +77,12 @@ const program = Effect.gen(function* () {
     return launch;
   }, Effect.scoped);
 
-  if (Option.isSome(userData))
-    yield* Effect.sync(() =>
-      rmSync(join(homedir(), 'Library/Application Support', userData.value), { recursive: true, force: true })
-    );
+  if (Option.isSome(userData)) {
+    const path = join(homedir(), 'Library/Application Support', userData.value);
+    yield* fs
+      .remove(path, { recursive: true, force: true })
+      .pipe(Effect.mapError((error) => new UserDataUnremovable({ path, message: error.message })));
+  }
 
   const launches = yield* Effect.forEach(Array.from({ length: runs }), () =>
     Effect.andThen(launchOnce(), (launch) => Effect.as(Effect.sleep(Duration.millis(500)), launch))

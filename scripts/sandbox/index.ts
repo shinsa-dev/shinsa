@@ -1,6 +1,5 @@
-import { existsSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
-import { Console, Effect, type FileSystem } from 'effect';
+import { Console, Effect, FileSystem } from 'effect';
 import { isPreviewHost } from '../../apps/cloud/src/routes/previews/address.ts';
 import { createSandboxCloud } from './cloud.ts';
 import { respondDashboard, respondEnroll } from './dashboard.ts';
@@ -41,17 +40,26 @@ import { seedTeammateWork } from './teammate-work.ts';
 import { TUNNEL_SOCKET, upgradeTunnel } from './tunnel.ts';
 
 export const startSandbox = Effect.fn('Sandbox.start')(function* () {
-  const built = yield* Effect.sync(
-    () => existsSync(join(REMOTE_WEB, 'index.html')) && existsSync(join(LOCAL_WEB, 'index.html'))
+  const fs = yield* FileSystem.FileSystem;
+  const built = yield* Effect.forEach([REMOTE_WEB, LOCAL_WEB], (dir) =>
+    fs.exists(join(dir, 'index.html'))
+  ).pipe(
+    Effect.map((found) => found.every(Boolean)),
+    Effect.mapError(
+      (error) => new SandboxFailed({ message: `Checking the web build failed: ${error.message}` })
+    )
   );
   if (!built)
     return yield* new SandboxFailed({
       message: 'Build the web app first: bun run --cwd apps/web build && bun run --cwd apps/web build:remote',
     });
-  yield* Effect.try({
-    try: () => rmSync(SANDBOX_DIR, { recursive: true, force: true }),
-    catch: (error) => new SandboxFailed({ message: `Clearing ${SANDBOX_DIR} failed: ${String(error)}` }),
-  });
+  yield* fs
+    .remove(SANDBOX_DIR, { recursive: true, force: true })
+    .pipe(
+      Effect.mapError(
+        (error) => new SandboxFailed({ message: `Clearing ${SANDBOX_DIR} failed: ${error.message}` })
+      )
+    );
   const studioData = yield* seedStudio();
   const laptopData = yield* prepareMachine('laptop');
   const studio = yield* startMachine('studio', 'Studio', studioData);

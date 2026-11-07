@@ -33,6 +33,7 @@ import { NativeNoticesLive } from './native-notices.ts';
 import { NativeTrayLive } from './native-tray.ts';
 import { NativeWindowLive } from './native-window.ts';
 import { PageChannelLive } from './page-channel.ts';
+import { PlatformLive } from './platform.ts';
 import { PowerMonitorLive } from './power-monitor.ts';
 import { DesktopShellLive } from './shell.ts';
 import { UpdateClientLive } from './update-client.ts';
@@ -49,7 +50,7 @@ const ElectronLayer = Layer.mergeAll(
   UpdateClientLive,
   DialogsLive,
   DesktopShellLive
-);
+).pipe(Layer.provide(PlatformLive));
 
 const EngineLayer = Layer.mergeAll(EngineSupervisor.layer, FirstHealth.layer, CommandLine.layer).pipe(
   Layer.provideMerge(Layer.mergeAll(EngineServer.layer, Prefs.layer, UpdateLog.layer, EngineActions.layer)),

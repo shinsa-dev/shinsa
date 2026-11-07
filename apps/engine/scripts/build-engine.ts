@@ -3,11 +3,11 @@ import { fileURLToPath } from 'node:url';
 import { BunRuntime, BunServices } from '@effect/platform-bun';
 import { Console, Effect, FileSystem, Layer, Schema } from 'effect';
 import { resolveBuildChangelog } from '../../../scripts/changelog-history.ts';
+import { bundle } from '../../../scripts/kit/bundle.ts';
 import { Command, CommandLayer } from '../../../scripts/kit/command/index.ts';
 import { reportFailure } from '../../../scripts/kit/script.ts';
 import { resolveBuildFolder, resolveBuildTarget } from '../src/instance/targets.ts';
 import { resolveStateVersion } from '../src/store/snapshot/version.ts';
-import { bundle } from './bundle.ts';
 import { COMMIT_PATTERN, EngineBuildFailed, SdkPackage } from './schema.ts';
 
 const engineDir = resolve(import.meta.dirname, '..');

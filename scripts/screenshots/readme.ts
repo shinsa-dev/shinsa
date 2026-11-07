@@ -1,18 +1,10 @@
-import {
-  appendFileSync,
-  copyFileSync,
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from 'node:fs';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { BunRuntime } from '@effect/platform-bun';
-import { Console, Effect, Ref, Schema, Stream } from 'effect';
+import { Console, Effect, FileSystem, Option, Ref, Schema, Stream } from 'effect';
 import { HttpClient, HttpClientResponse } from 'effect/http';
 import { ChildProcess, ChildProcessSpawner } from 'effect/process';
+import { selectOnPath } from '../../apps/engine/src/files/probe.ts';
 import { type CdpPage, Chromium, ChromiumLayer } from '../kit/chromium/index.ts';
 import { reportFailure } from '../kit/script.ts';
 import {
@@ -48,6 +40,7 @@ const program = Effect.gen(function* () {
   const chromium = yield* Chromium;
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const http = yield* HttpClient.HttpClient;
+  const fs = yield* FileSystem.FileSystem;
   const decodeWindows = Schema.decodeUnknownEffect(AppWindowsText);
 
   const runStep = Effect.fn('Readme.runStep')(function* (
@@ -114,11 +107,7 @@ const program = Effect.gen(function* () {
   });
 
   const writeLog = (name: string, output: Stream.Stream<Uint8Array, unknown>) =>
-    output.pipe(
-      Stream.runForEach((chunk) => Effect.sync(() => appendFileSync(join(WORK, name), chunk))),
-      Effect.ignore,
-      Effect.forkScoped
-    );
+    output.pipe(Stream.run(fs.sink(join(WORK, name), { flag: 'a' })), Effect.ignore, Effect.forkScoped);
 
   const startEngine = Effect.fn('Readme.startEngine')(function* (port: number) {
     const data = join(WORK, 'data');
@@ -156,12 +145,18 @@ const program = Effect.gen(function* () {
   });
 
   const keepDevPrefs = Effect.acquireRelease(
-    Effect.sync(() => (existsSync(DEV_PREFS) ? readFileSync(DEV_PREFS, 'utf8') : null)),
+    Effect.gen(function* () {
+      if (!(yield* fs.exists(DEV_PREFS))) return null;
+      return yield* fs.readFileString(DEV_PREFS);
+    }).pipe(
+      Effect.mapError(
+        (error) => new StepFailed({ message: `Reading the dev app's preferences failed: ${error.message}` })
+      )
+    ),
     (saved) =>
-      Effect.sync(() => {
-        if (saved === null) rmSync(DEV_PREFS, { force: true });
-        else writeFileSync(DEV_PREFS, saved);
-      })
+      Effect.ignore(
+        saved === null ? fs.remove(DEV_PREFS, { force: true }) : fs.writeFileString(DEV_PREFS, saved)
+      )
   );
 
   const launchApp = Effect.fn('Readme.launchApp')(function* (origin: string) {
@@ -292,14 +287,18 @@ const program = Effect.gen(function* () {
   });
 
   const writeImage = Effect.fn('Readme.writeImage')(function* (raw: string, target: string) {
-    const pngquant = yield* Effect.sync(() => Bun.which('pngquant'));
-    if (!pngquant) {
+    const pngquant = yield* selectOnPath('pngquant', Bun.env.PATH ?? '');
+    if (Option.isNone(pngquant)) {
       yield* Console.log('  pngquant is not installed (brew install pngquant): writing the capture as is');
-      return yield* Effect.sync(() => copyFileSync(raw, target));
+      return yield* fs
+        .copyFile(raw, target)
+        .pipe(
+          Effect.mapError((error) => new StepFailed({ message: `Copying ${raw} failed: ${error.message}` }))
+        );
     }
     yield* runStep(
       `shrink ${target}`,
-      [pngquant, '--quality', '75-95', '--speed', '1', '--strip', '--force', '--output', target, raw],
+      [pngquant.value, '--quality', '75-95', '--speed', '1', '--strip', '--force', '--output', target, raw],
       ROOT
     );
   });
@@ -332,10 +331,10 @@ const program = Effect.gen(function* () {
     yield* writeImage(raw, join(ASSETS, `shinsa-${theme}.png`));
   });
 
-  yield* Effect.sync(() => {
-    rmSync(WORK, { recursive: true, force: true });
-    mkdirSync(WORK, { recursive: true });
-  });
+  yield* fs.remove(WORK, { recursive: true, force: true }).pipe(
+    Effect.andThen(fs.makeDirectory(WORK, { recursive: true })),
+    Effect.mapError((error) => new StepFailed({ message: `Clearing ${WORK} failed: ${error.message}` }))
+  );
   yield* runStep('seed', ['bun', 'scripts/seed.ts'], ROOT, { SHINSA_SEED_DIR: WORK });
   yield* runStep(
     'build the web app',

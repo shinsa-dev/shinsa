@@ -34,6 +34,7 @@ import { ShareCodeUnreadable, ShareSources } from '../../apps/engine/src/remote/
 import type { EffectAttempt, EffectContext } from '../../apps/engine/src/runtime/engine/schema.ts';
 import { EngineCore } from '../../apps/engine/src/runtime/engine/service.ts';
 import { ShellLayer } from '../../apps/engine/src/shell/layers.ts';
+import { Shell } from '../../apps/engine/src/shell/service.ts';
 import { Evidence } from '../../apps/engine/src/store/evidence/service.ts';
 import { Terminals } from '../../apps/engine/src/terminals/service.ts';
 import type { Engine } from '../../apps/engine/test/helpers/engine.ts';
@@ -101,13 +102,14 @@ function findBranch(
   return Object.values(state.tasks).find((task) => task.repoId === repo.id && matches(task))?.branch;
 }
 
-const runGit = Effect.fn('Kit.runGit')(function* (args: string[], failure: string) {
-  const result = yield* Effect.sync(() => Bun.spawnSync(['git', ...args]));
-  if (result.exitCode !== 0) return yield* new ShareCodeUnreadable({ message: failure });
-  return result.stdout.toString();
-});
-
-function createBranchCodeSource(engine: EngineCore['Service']) {
+function createBranchCodeSource(engine: EngineCore['Service'], shell: Shell['Service']) {
+  const runGit = Effect.fn('Kit.runGit')(function* (args: string[], failure: string) {
+    const result = yield* shell
+      .run({ argv: ['git', ...args], cwd: process.cwd(), timeout: null })
+      .pipe(Effect.mapError(() => new ShareCodeUnreadable({ message: failure })));
+    if (result.code !== 0) return yield* new ShareCodeUnreadable({ message: failure });
+    return result.stdout;
+  });
   return {
     readDiff: Effect.fn('Kit.readDiff')(function* (repo: Repo, number: number) {
       const state = yield* engine.state;
@@ -158,16 +160,21 @@ export function startRemoteServices(input: RemoteServicesInput) {
     Layer.provideMerge(RemoteLayer(resolveRemoteInput(input))),
     Layer.provide(createEdgeLayer(input)),
     Layer.provide(
-      Layer.succeed(ShareSources, { github: createBranchCodeSource(input.engine.core), worktree: null })
+      Layer.effect(
+        ShareSources,
+        Effect.map(Shell, (shell) => ({
+          github: createBranchCodeSource(input.engine.core, shell),
+          worktree: null,
+        }))
+      ).pipe(Layer.provide(ShellLayer))
     ),
     Layer.provideMerge(
       Layer.mergeAll(
-        createFoundationLayer(input),
         Layer.succeed(Transcripts, input.transcripts),
         Layer.succeed(Evidence, input.evidence),
         Layer.succeed(Terminals, input.terminals),
         Layer.merge(GitLayer, GitHubLayer)
-      ).pipe(Layer.provideMerge(ShellLayer))
+      ).pipe(Layer.provideMerge(createFoundationLayer(input)), Layer.provideMerge(ShellLayer))
     )
   );
   return Effect.runPromise(

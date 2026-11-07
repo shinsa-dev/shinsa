@@ -17,8 +17,6 @@ import {
   isEffectIoSource,
   listUnbridgedIoLines,
   listRawIoViolations,
-  listStaleBaselineFiles,
-  RAW_IO_BASELINE_MESSAGE,
   EFFECT_SYNC_IO_MESSAGE,
   listSyncIoLines,
   isEffectSource,
@@ -645,7 +643,6 @@ const run = Effect.fn('Conventions.run')(function* () {
   const fs = yield* FileSystem.FileSystem;
   const violations: Violation[] = [];
   const appSources: Record<string, string> = {};
-  const checked = new Set<string>();
   const apps = [...(yield* fs.readDirectory('apps'))].sort((a, b) => a.localeCompare(b));
   const roots = [
     ...apps.flatMap((app) => APP_ROOT_FOLDERS.map((folder) => `apps/${app}/${folder}`)),
@@ -654,12 +651,9 @@ const run = Effect.fn('Conventions.run')(function* () {
   for (const root of roots) {
     if (!(yield* fs.exists(root))) continue;
     for (const file of yield* listSourceFiles(root)) {
-      checked.add(file);
       yield* checkFile(file, yield* fs.readFileString(file), violations, appSources);
     }
   }
-  for (const file of listStaleBaselineFiles(checked))
-    violations.push({ file, line: 1, message: RAW_IO_BASELINE_MESSAGE });
   violations.push(...listToastViolations(appSources));
   violations.push(...listDialogViolations(appSources));
   for (const root of APP)

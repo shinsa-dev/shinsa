@@ -1,6 +1,5 @@
-import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { Clock, Console, Context, Effect, Layer } from 'effect';
+import { Clock, Console, Context, Effect, FileSystem, Layer } from 'effect';
 import { EngineConfig } from '../../apps/engine/src/config/service.ts';
 import { JsonFile } from '../../apps/engine/src/files/service.ts';
 import { REMOTE_FILE } from '../../apps/engine/src/remote/index.ts';
@@ -52,16 +51,16 @@ export const seedStudio = Effect.fn('Sandbox.seedStudio')(function* () {
 export const prepareMachine = Effect.fn('Sandbox.prepareMachine')(function* (id: string) {
   const dataDir = join(SANDBOX_DIR, id, 'data');
   const onboardedAt = yield* Clock.currentTimeMillis;
-  yield* Effect.try({
-    try: () => {
-      mkdirSync(dataDir, { recursive: true });
-      writeFileSync(
-        join(dataDir, 'config.json'),
-        `${JSON.stringify({ version: 1, roots: [], onboardedAt }, null, 2)}\n`
-      );
-    },
-    catch: (error) => new SandboxFailed({ message: `Preparing ${id} failed: ${String(error)}` }),
-  });
+  const fs = yield* FileSystem.FileSystem;
+  yield* Effect.all([
+    fs.makeDirectory(dataDir, { recursive: true }),
+    fs.writeFileString(
+      join(dataDir, 'config.json'),
+      `${JSON.stringify({ version: 1, roots: [], onboardedAt }, null, 2)}\n`
+    ),
+  ]).pipe(
+    Effect.mapError((error) => new SandboxFailed({ message: `Preparing ${id} failed: ${error.message}` }))
+  );
   return dataDir;
 });
 
@@ -98,14 +97,15 @@ export const startMachine = Effect.fn('Sandbox.startMachine')(function* (
       SHINSA_WEB_DIR: LOCAL_WEB,
     })
   );
-  yield* Effect.try({
-    try: () => {
-      writeFileSync(join(dataDir, REMOTE_FILE), remoteFile);
-      for (const dir of [config.worktreesDir, config.evidenceDir, config.transcriptsDir])
-        mkdirSync(dir, { recursive: true });
-    },
-    catch: (error) => new SandboxFailed({ message: `Preparing ${name} failed: ${String(error)}` }),
-  });
+  const fs = yield* FileSystem.FileSystem;
+  yield* Effect.all([
+    fs.writeFileString(join(dataDir, REMOTE_FILE), remoteFile),
+    Effect.forEach([config.worktreesDir, config.evidenceDir, config.transcriptsDir], (dir) =>
+      fs.makeDirectory(dir, { recursive: true })
+    ),
+  ]).pipe(
+    Effect.mapError((error) => new SandboxFailed({ message: `Preparing ${name} failed: ${error.message}` }))
+  );
   const engine = yield* Effect.acquireRelease(
     Effect.sync(() => new Engine(openEventLog(config.databasePath))),
     (started) => Effect.promise(() => started.dispose())

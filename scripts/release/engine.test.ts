@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from 'bun:test';
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { ConfigProvider, Effect, Layer } from 'effect';
+import { ConfigProvider, Effect, type FileSystem, Layer } from 'effect';
 import { type Command, CommandLayer } from '../kit/command/index.ts';
 import {
   assertEngineFolder,
@@ -16,7 +16,10 @@ import {
 
 const made: string[] = [];
 
-function runRelease<A, E>(effect: Effect.Effect<A, E, Command>, env: Record<string, string> = {}) {
+function runRelease<A, E>(
+  effect: Effect.Effect<A, E, Command | FileSystem.FileSystem>,
+  env: Record<string, string> = {}
+) {
   return Effect.runPromise(
     effect.pipe(
       Effect.provide(Layer.merge(CommandLayer, ConfigProvider.layer(ConfigProvider.fromUnknown(env))))
@@ -167,6 +170,16 @@ describe('packing an engine', () => {
         packEngine({ target: 'bun-linux-x64', folder: createEngine('1.2.0'), outDir, version: '1.2.0' })
       )
     ).rejects.toThrow('Could not pack shinsa-linux-x64.tar.gz');
+  });
+
+  it('says why it cannot write to the out folder', async () => {
+    const outDir = join(createDir(), 'out');
+    writeFileSync(outDir, 'a file');
+    await expect(
+      runRelease(
+        packEngine({ target: 'bun-linux-x64', folder: createEngine('1.2.0'), outDir, version: '1.2.0' })
+      )
+    ).rejects.toThrow('Could not pack shinsa-linux-x64.tar.gz: ');
   });
 });
 

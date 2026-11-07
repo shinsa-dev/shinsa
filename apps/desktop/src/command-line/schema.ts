@@ -10,6 +10,7 @@ export const PATH_MARKER = '__SHINSA_PATH__';
 export const BUNDLED_PROGRAM = /\.app\/Contents\/Resources\/engine\/bin\/shinsa$/;
 
 export const LOGIN_SHELL_TIMEOUT = Duration.seconds(5);
+export const LOGIN_SHELL_ENV = { TERM: 'dumb' };
 
 export const Shell = Schema.Literals(['zsh', 'bash', 'fish']);
 

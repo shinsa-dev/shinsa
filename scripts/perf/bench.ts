@@ -1,7 +1,17 @@
-import { appendFileSync, cpSync, mkdirSync, readdirSync, rmSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { BunRuntime, BunServices } from '@effect/platform-bun';
-import { Clock, Console, Context, Duration, Effect, Fiber, Layer, Schedule } from 'effect';
+import {
+  Clock,
+  Console,
+  Context,
+  Duration,
+  Effect,
+  Fiber,
+  FileSystem,
+  Layer,
+  type PlatformError,
+  Schedule,
+} from 'effect';
 import { Socket } from 'effect/socket';
 import { Transcripts } from '../../apps/engine/src/agents/transcripts/service.ts';
 import type { ServerConfig } from '../../apps/engine/src/config/index.ts';
@@ -34,6 +44,8 @@ const SOURCE = Bun.argv[2] ?? DEFAULT_SOURCE;
 const SCRATCH = Bun.argv[3] ?? DEFAULT_SCRATCH;
 
 const program = Effect.gen(function* () {
+  const fs = yield* FileSystem.FileSystem;
+
   const createHubData = (): SocketData => ({
     kind: 'hub',
     transcripts: new Map(),
@@ -42,8 +54,13 @@ const program = Effect.gen(function* () {
     guest: null,
   });
 
-  const readData = <A>(read: () => A) =>
-    Effect.try({ try: read, catch: (error) => new DataUnreadable({ message: String(error) }) });
+  const toUnreadable = (error: PlatformError.PlatformError) => new DataUnreadable({ message: error.message });
+
+  const readSize = (path: string) =>
+    fs.stat(path).pipe(
+      Effect.map((info) => Number(info.size)),
+      Effect.mapError(toUnreadable)
+    );
 
   const openCore = Effect.fn('Bench.openCore')(function* (stateVersion: string | null) {
     const context = yield* Layer.build(
@@ -240,11 +257,11 @@ const program = Effect.gen(function* () {
     transcripts: Transcripts['Service']
   ) {
     const folder = join(SCRATCH, 'transcripts');
-    const files = yield* readData(() =>
-      readdirSync(folder)
-        .map((name) => ({ name, size: statSync(join(folder, name)).size }))
-        .sort((a, b) => b.size - a.size)
+    const names = yield* fs.readDirectory(folder).pipe(Effect.mapError(toUnreadable));
+    const sized = yield* Effect.forEach(names, (name) =>
+      Effect.map(readSize(join(folder, name)), (size) => ({ name, size }))
     );
+    const files = sized.sort((a, b) => b.size - a.size);
     const longest = files[0];
     if (!longest) return null;
     const runId = longest.name.replace(/\.jsonl$/, '');
@@ -269,12 +286,13 @@ const program = Effect.gen(function* () {
     for (let index = 0; index < EXTERNAL_APPENDS; index += 1) {
       const before = received;
       const started = yield* Clock.currentTimeNanos;
-      yield* readData(() =>
-        appendFileSync(
+      yield* fs
+        .writeFileString(
           join(folder, longest.name),
-          `${JSON.stringify({ v: 2, id: `external-${index}`, at: index, type: 'agent', phase: 'interim', text: 'More.' })}\n`
+          `${JSON.stringify({ v: 2, id: `external-${index}`, at: index, type: 'agent', phase: 'interim', text: 'More.' })}\n`,
+          { flag: 'a' }
         )
-      );
+        .pipe(Effect.mapError(toUnreadable));
       yield* Effect.sync(() => received).pipe(
         Effect.repeat({ schedule: Schedule.spaced(Duration.millis(1)), until: (count) => count !== before })
       );
@@ -291,11 +309,11 @@ const program = Effect.gen(function* () {
     };
   }, Effect.scoped);
 
-  yield* readData(() => {
-    rmSync(SCRATCH, { recursive: true, force: true });
-    mkdirSync(SCRATCH, { recursive: true });
-    cpSync(SOURCE, SCRATCH, { recursive: true });
-  });
+  yield* Effect.gen(function* () {
+    yield* fs.remove(SCRATCH, { recursive: true, force: true });
+    yield* fs.makeDirectory(SCRATCH, { recursive: true });
+    yield* fs.copy(SOURCE, SCRATCH);
+  }).pipe(Effect.mapError(toUnreadable));
   const version = yield* resolveStateVersion();
   const cold = yield* Effect.scoped(
     Effect.gen(function* () {
@@ -315,7 +333,7 @@ const program = Effect.gen(function* () {
     events: state.seq,
     tasks: Object.keys(state.tasks).length,
     runs: Object.keys(state.runs).length,
-    sqliteBytes: yield* readData(() => statSync(join(SCRATCH, 'shinsa.sqlite')).size),
+    sqliteBytes: yield* readSize(join(SCRATCH, 'shinsa.sqlite')),
     bootColdMs: round(cold.bootMs),
     bootWarmMs: round(Duration.toMillis(warmFor)),
     snapshotWriteMs: cold.written ? round(cold.snapshotMs) : null,
