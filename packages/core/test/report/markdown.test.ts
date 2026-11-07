@@ -59,6 +59,28 @@ describe('serializePlanMarkdown', () => {
     expect(markdown).toContain('## Operation\n1. Backfill the widths.\n\n## Impact\nTouches 40 rows.');
   });
 
+  test('lists the other tasks the plan splits off, each with when it starts', () => {
+    const markdown = serializePlanMarkdown({
+      ...PLAN,
+      split: [
+        { title: 'Add export', request: 'Add the export button.', order: 'parallel' },
+        { title: 'Document export', request: 'Write the help page.', order: 'waits_on', on: 1 },
+        { title: 'Move styles', request: 'Move the panel styles.', order: 'stacks_on', on: 0 },
+        { title: 'Lost', request: 'Point past the list.', order: 'waits_on', on: 7 },
+      ],
+    });
+    expect(markdown).toContain(
+      [
+        '## Other tasks',
+        '1. **Add export** (starts now): Add the export button.',
+        '2. **Document export** (waits on **Add export**): Write the help page.',
+        '3. **Move styles** (stacks on this task): Move the panel styles.',
+        '4. **Lost** (waits on **part 7**): Point past the list.',
+      ].join('\n')
+    );
+    expect(serializePlanMarkdown(PLAN)).not.toContain('## Other tasks');
+  });
+
   test('leaves out empty sections', () => {
     const bare = {
       ...PLAN,
