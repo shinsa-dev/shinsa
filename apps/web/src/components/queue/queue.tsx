@@ -10,6 +10,7 @@ import { CARD } from '@/components/layout/surface/card.ts';
 import { RowSummary } from '@/components/queue/row-summary.tsx';
 import { SharedMark } from '@/components/share/shared-mark.tsx';
 import { GateGlyph, TaskGlyph, WorkingGlyph } from '@/components/status/glyphs.tsx';
+import { StatusTile } from '@/components/status/tile.tsx';
 import { BundleMark } from '@/components/task/bundle.tsx';
 import { useTeamEscalations } from '@/components/teams/tasks.tsx';
 import { TimeAgo } from '@/components/text/time-ago.tsx';
@@ -185,7 +186,7 @@ const TEAM_ESCALATIONS_ID = createDisclosureId('queue', 'section', 'team-escalat
 function TeamEscalationsSection({ variant, onNavigate }: { variant: Variant; onNavigate: () => void }) {
   const rows = listTeamEscalationRows(useTeamEscalations());
   if (rows.length === 0) return null;
-  const glyph = <Icon size='sm' name='IconMegaphone' className={TONE_TEXT.amber} />;
+  const glyph = <StatusTile icon='IconMegaphone' tone='amber' label={TEAM_ESCALATIONS_TITLE} />;
   const items = rows.map((row) => (
     <ListRow
       key={row.key}

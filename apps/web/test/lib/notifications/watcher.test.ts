@@ -100,7 +100,19 @@ describe('a teammate’s escalation', () => {
         teamId: 'core',
         instanceId: 'm-kai',
       },
-      escalation: { at: NOW, reason: 'Urgent.' },
+      escalation: {
+        at: NOW,
+        reason: 'Urgent.',
+        handoff: {
+          waitedMinutes: 60,
+          ownerActiveAt: null,
+          foundBy: null,
+          ratings: null,
+          pullRequestUrl: null,
+          mergesAt: null,
+          blockedBy: null,
+        },
+      },
     };
     watcher.observe(state([]));
     watcher.observe(state([]), [escalation]);

@@ -10,11 +10,12 @@ import {
   type Task,
   type TeamEscalation,
 } from '@shinsa/core';
+import { describeTeamEscalationSummary } from '@/lib/autopilot.ts';
 import { flattenWhitespace } from '@/lib/format/count.ts';
 import { stripMarkdown } from '@/lib/format/markdown.ts';
 import { describeOperationIntro } from '@/lib/overview/operation.ts';
 import { resolveGateNow } from '@/lib/tasks/now.ts';
-import { describeTeamTaskOwner, resolveTeamTaskPath, resolveTeamTaskTarget } from '@/lib/teams/feeds.ts';
+import { resolveTeamTaskPath, resolveTeamTaskTarget } from '@/lib/teams/feeds.ts';
 
 type PageStatus = 'working' | 'waiting' | 'failed' | 'idle';
 
@@ -88,7 +89,7 @@ export function describeTeamEscalation(escalation: TeamEscalation): DecisionNoti
     tag: resolveTeamEscalationTag(escalation),
     taskId: entry.task.id,
     title: entry.task.title,
-    body: `${describeTeamTaskOwner(entry)}’s urgent change is still waiting for its merge, so it was sent to your team.`,
+    body: `${describeTeamEscalationSummary(escalation)}, so Autopilot sent it to your team.`,
     path: resolveTeamTaskPath(resolveTeamTaskTarget(entry)),
   };
 }

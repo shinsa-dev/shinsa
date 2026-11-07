@@ -1983,12 +1983,20 @@ action it takes is recorded with its reason. The rules are core's (`decide/autop
   gate no longer open, or a closed task, and clears the deadline once the policy is off or the task is no longer
   urgent. It acts on the urgent rule as it is at the fire, not the one the deadline was set under: `merge` merges,
   `escalate` escalates, `escalate_then_merge` takes the deadline's own step, `wait` does nothing. A `merge` deadline merges for you when nothing refuses it; otherwise, and for an `escalate` deadline, it
-  escalates the task (`task.escalated`, `Task.escalation {at, reason}`, "Escalated by Autopilot" in the activity).
+  escalates the task (`task.escalated`, `Task.escalation {at, reason, handoff}`, "Escalated by Autopilot" in the activity).
   With `escalate_then_merge` the escalation sets a second deadline the same wait later, which merges.
 - **Escalating to your team.** `Task.escalation` is a shared status field, so it travels in your team listing
   (Teams, below). On every teammate's machine `listTeamEscalations` (`queue/escalations.ts`) picks the open escalated
-  tasks out of the team feed: they show in Needs you as "Sent to your team", count in the page badge, and each sends
-  one notification that opens the task. A teammate merges it from the task's page as they would any team task. The
+  tasks out of the team feed: they show in Needs you as "Sent by your team" (an amber megaphone tile and a line such as
+  "Mona’s urgent fix, found by a watchdog, waited 1 hour for its merge"), count in the page badge, and each sends one
+  notification that opens the task. The escalation carries its hand-off (`EscalationHandoff`, `resolveEscalationHandoff`,
+  taken once at the escalation): how long the merge waited, why Autopilot could not merge it (`blockedBy`), when the
+  owner last acted in Shinsa (`ownerActiveAt`, the latest hour of `presence`), the watchdog and shipped change that
+  found the issue (`foundBy`), the reviewer's ratings, the pull request (only with the `pull_request` share group) and
+  when Autopilot merges it next (`mergesAt`). The task's Overview shows it as a panel above the now card
+  (`HandoffPanel`, `listHandoffLines`): "Why this reached you" for a teammate, with the owner's live presence from the
+  team feed, and "Sent to your team" for you. A teammate merges it from the task's page only when your team settings
+  let them answer decisions on your tasks; otherwise they review it read-only and reach you. The
   escalation clears when its merge gate is answered or withdrawn, or a new round starts. A task whose project is in
   no team escalates only in its own activity and Overview ("Sent to your team"), so while none of your projects is
   in a team, Settings → Agents → Autopilot says so under the urgent rule when it escalates (`isEscalationUnseen`).
@@ -3794,7 +3802,7 @@ the read-only view. Teams need remote access on (`Remote` paired and enabled), s
   (`SharedListing.repo`); their rows are `TeamTaskListRow` (`components/teams/tasks.tsx`), read-only. Home stays yours
   alone: it never lists a teammate's task. A teammate's task never waits for you, so it never counts towards Needs you, the queue, the
   guide or a notification, except one Autopilot escalated to the team (`Task.escalation`, Process and structure →
-  Autopilot): it shows in Needs you as "Sent to your team", counts in the page badge and notifies you once. Opening one goes to `/teams/<team>/<machine>/<task>` (`routes/team-task.tsx`), the shared
+  Autopilot): it shows in Needs you as "Sent by your team", counts in the page badge and notifies you once. Opening one goes to `/teams/<team>/<machine>/<task>` (`routes/team-task.tsx`), the shared
   task page (`SharedTaskPage`, read-only, its Chat the agents' output only) fed by the engine relay in the local app and, on app.shinsa.dev, by
   a team channel the browser opens with its own key. On app.shinsa.dev a teammate's machine admitted to the fleet
   opens the task as a full task page at `/tasks/<handle>` instead, straight from the row (`resolveFleetTeamTaskPath`).

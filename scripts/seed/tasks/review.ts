@@ -1,5 +1,6 @@
 import type { ShinsaEventInput } from '../../../packages/core/src/index.ts';
-import { createPlanCheck, listSeedIterations, type SeedTask } from '../kit.ts';
+import { HOUR } from '../../kit/time.ts';
+import { createPlanCheck, listSeedIterations, NOW, type SeedTask } from '../kit.ts';
 import {
   CLI_PATHS,
   REGISTRY_NEW,
@@ -330,6 +331,15 @@ export function listReviewTasks({ paywall }: SeedRepos, worktrees: SeedWorktrees
           type: 'task.escalated',
           taskId: 'task-duplicate',
           reason: 'Urgent, and the merge waited 60 minutes for you. A pre-merge step is not ticked yet.',
+          handoff: {
+            waitedMinutes: 60,
+            ownerActiveAt: NOW - 7 * HOUR,
+            foundBy: { server: 'cloudflare', shippedTaskTitle: 'Duplicate a paywall from its menu' },
+            ratings: { confidence: 'high', risk: 'low' },
+            pullRequestUrl: 'https://github.com/superwall/paywall-next/pull/4531',
+            mergesAt: null,
+            blockedBy: 'A pre-merge step is not ticked yet.',
+          },
         },
       ],
     },

@@ -25,6 +25,7 @@ import type {
   RepoStart,
   ReviewComment,
   ReviewEscalation,
+  EscalationHandoff,
   Round,
   RoundShipping,
   Run,
@@ -255,7 +256,7 @@ type EventBody =
     }
   | { type: 'gate.withdrawn'; gateId: string }
   | { type: 'autopilot.scheduled'; gateId: string; due: AutopilotDue | null }
-  | { type: 'task.escalated'; taskId: string; reason: string }
+  | { type: 'task.escalated'; taskId: string; reason: string; handoff: EscalationHandoff }
   | { type: 'gate.noted'; gateId: string; notes: string | null }
   | { type: 'run.started'; run: Run }
   | { type: 'run.dispatched'; runId: string }

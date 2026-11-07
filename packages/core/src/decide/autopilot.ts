@@ -1,7 +1,9 @@
 import type { CommandOf } from '../commands/index.ts';
 import {
   type AutopilotDue,
+  type EscalationHandoff,
   type Gate,
+  HOUR_MS,
   isTaskClosed,
   MINUTE_MS,
   resolveApprovalPath,
@@ -14,6 +16,7 @@ import {
 } from '../domain/settings.ts';
 import type { Task } from '../domain/types.ts';
 import type { ReviewFinding, ReviewRating } from '../report/types.ts';
+import type { ShinsaState } from '../state/project.ts';
 import { listOpenGates } from '../state/queries.ts';
 import type { Decider } from './decider.ts';
 import { hasOpenPreMergeSteps } from './merge-steps.ts';
@@ -151,9 +154,43 @@ function describeWait(minutes: number) {
   return minutes === 1 ? '1 minute' : `${minutes} minutes`;
 }
 
-function escalate(decider: Decider, task: Task, reason: string) {
+function resolveOwnerActiveAt(state: ShinsaState) {
+  const hours = Object.keys(state.presence).map(Number);
+  return hours.length === 0 ? null : Math.max(...hours) * HOUR_MS;
+}
+
+function resolveFinder(state: ShinsaState, task: Task) {
+  if (task.createdBy?.kind !== 'watchdog') return null;
+  return {
+    server: task.sourceReport?.server ?? null,
+    shippedTaskTitle: state.tasks[task.createdBy.taskId]?.title ?? null,
+  };
+}
+
+type HandoffTiming = Pick<EscalationHandoff, 'waitedMinutes' | 'mergesAt' | 'blockedBy'>;
+
+export function resolveEscalationHandoff(
+  state: ShinsaState,
+  task: Task,
+  timing: HandoffTiming
+): EscalationHandoff {
+  return {
+    ...timing,
+    ownerActiveAt: resolveOwnerActiveAt(state),
+    foundBy: resolveFinder(state, task),
+    ratings: task.reviewRatings ?? null,
+    pullRequestUrl: task.pullRequest?.url ?? null,
+  };
+}
+
+function escalate(decider: Decider, task: Task, reason: string, timing: HandoffTiming) {
   if (task.escalation) return;
-  decider.emit({ type: 'task.escalated', taskId: task.id, reason });
+  decider.emit({
+    type: 'task.escalated',
+    taskId: task.id,
+    reason,
+    handoff: resolveEscalationHandoff(decider.state, task, timing),
+  });
 }
 
 function resolveUrgentAction(urgent: AutopilotPolicy['urgent'], due: AutopilotDue['action']) {
@@ -186,11 +223,15 @@ export function fireAutopilot(decider: Decider, command: CommandOf<'autopilot.fi
     mergeForYou(decider, gate, waited);
     return;
   }
-  escalate(decider, task, action === 'merge' ? `${waited} ${refusal}` : waited);
   const merges = policy.urgent === 'escalate_then_merge' && action === 'escalate' && refusal === null;
-  scheduleAutopilot(
-    decider,
-    gate,
-    merges ? { at: decider.context.now + policy.urgentWaitMinutes * MINUTE_MS, action: 'merge' } : null
-  );
+  const next: AutopilotDue | null = merges
+    ? { at: decider.context.now + policy.urgentWaitMinutes * MINUTE_MS, action: 'merge' }
+    : null;
+  const blockedBy = action === 'merge' ? refusal : null;
+  escalate(decider, task, blockedBy ? `${waited} ${blockedBy}` : waited, {
+    waitedMinutes: policy.urgentWaitMinutes,
+    mergesAt: next?.at ?? null,
+    blockedBy,
+  });
+  scheduleAutopilot(decider, gate, next);
 }

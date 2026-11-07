@@ -1,6 +1,8 @@
 import { describe, expect, test } from 'bun:test';
+import { resolveEscalationHandoff } from '../../src/decide/autopilot.ts';
 import {
   type AutopilotPolicy,
+  HOUR_MS,
   type MergeStep,
   MINUTE_MS,
   type ReviewFinding,
@@ -354,7 +356,20 @@ describe('Autopilot at the merge', () => {
     expect(harness.openGate(taskId).autopilotDue).toEqual({ at: opened + WAIT, action: 'escalate' });
     expect(fire(harness, taskId, opened).events).toEqual([]);
     fire(harness, taskId);
-    expect(harness.task(taskId).escalation).toEqual({ at: harness.now, reason: WAITED });
+    const hours = Object.keys(harness.state.presence).map(Number);
+    expect(harness.task(taskId).escalation).toEqual({
+      at: harness.now,
+      reason: WAITED,
+      handoff: {
+        waitedMinutes: 60,
+        ownerActiveAt: Math.max(...hours) * HOUR_MS,
+        foundBy: null,
+        ratings: HIGH_LOW,
+        pullRequestUrl: pullRequest().url,
+        mergesAt: null,
+        blockedBy: null,
+      },
+    });
     expect(harness.openGate(taskId).autopilotDue).toBeNull();
     expect(harness.task(taskId).activity.at(-1)).toMatchObject({
       actor: 'shinsa',
@@ -383,6 +398,7 @@ describe('Autopilot at the merge', () => {
     fire(harness, taskId);
     expectMergeWaits(harness, taskId);
     expect(harness.task(taskId).escalation?.reason).toBe(`${WAITED} You approved the review yourself.`);
+    expect(harness.task(taskId).escalation?.handoff.blockedBy).toBe('You approved the review yourself.');
   });
 
   test('escalates instead of merging an urgent change with a pre-merge step left', () => {
@@ -401,6 +417,7 @@ describe('Autopilot at the merge', () => {
     fire(harness, taskId);
     expect(harness.task(taskId).escalation?.reason).toBe(WAITED);
     expect(harness.openGate(taskId).autopilotDue).toEqual({ at: harness.now + WAIT, action: 'merge' });
+    expect(harness.task(taskId).escalation?.handoff.mergesAt).toBe(harness.now + WAIT);
     fire(harness, taskId);
     expectMerging(harness, taskId, WAITED);
     expect(harness.task(taskId).escalation).toBeNull();
@@ -493,5 +510,46 @@ describe('Autopilot at the merge', () => {
       response: 'x',
     });
     expect(harness.task(taskId).escalation).toBeNull();
+  });
+});
+
+describe('the hand-off an escalation carries', () => {
+  test('names the watchdog that found it and the change it shipped, and no activity when there is none', () => {
+    const harness = createHarness();
+    const shippedId = createTask(harness);
+    const fixId = createTask(harness);
+    const fix = {
+      ...harness.task(fixId),
+      createdBy: { kind: 'watchdog' as const, taskId: shippedId, runId: 'run-1', requestKey: 'k' },
+      sourceReport: {
+        scheduleId: null,
+        watchdogId: 'w-1',
+        server: 'cloudflare',
+        reportId: null,
+        link: null,
+        author: null,
+        postedAt: null,
+        text: '500s',
+      },
+    };
+    const state = { ...harness.state, presence: {} };
+    expect(
+      resolveEscalationHandoff(state, fix, { waitedMinutes: 15, mergesAt: 9_000, blockedBy: null })
+    ).toEqual({
+      waitedMinutes: 15,
+      ownerActiveAt: null,
+      foundBy: { server: 'cloudflare', shippedTaskTitle: harness.task(shippedId).title },
+      ratings: null,
+      pullRequestUrl: null,
+      mergesAt: 9_000,
+      blockedBy: null,
+    });
+    const orphan = { ...fix, createdBy: { ...fix.createdBy, taskId: 'gone' }, sourceReport: null };
+    expect(
+      resolveEscalationHandoff(state, orphan, { waitedMinutes: 15, mergesAt: null, blockedBy: null }).foundBy
+    ).toEqual({
+      server: null,
+      shippedTaskTitle: null,
+    });
   });
 });

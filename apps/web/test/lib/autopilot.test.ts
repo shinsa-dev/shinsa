@@ -5,6 +5,7 @@ import {
   describeAgentReviewNote,
   isEscalationUnseen,
   listAutopilotWaitItems,
+  listHandoffLines,
   listTeamEscalationRows,
   resolveAutopilotFact,
   resolveAutopilotValue,
@@ -111,7 +112,23 @@ describe('what the task page says', () => {
       hint: 'Autopilot approved the review: High confidence, low risk.',
     });
     expect(resolveAutopilotFact({ autopiloted: null })).toBeNull();
-    expect(resolveEscalationFact({ escalation: { at: 1, reason: 'Urgent.' } })).toEqual({
+    expect(
+      resolveEscalationFact({
+        escalation: {
+          at: 1,
+          reason: 'Urgent.',
+          handoff: {
+            waitedMinutes: 60,
+            ownerActiveAt: null,
+            foundBy: null,
+            ratings: null,
+            pullRequestUrl: null,
+            mergesAt: null,
+            blockedBy: null,
+          },
+        },
+      })
+    ).toEqual({
       label: 'Sent to your team',
       hint: 'Autopilot sent it to your team: Urgent.',
     });
@@ -132,14 +149,103 @@ describe('teammates’ escalated tasks in Needs you', () => {
       teamId: 'core',
       instanceId: 'm-kai',
     };
-    expect(listTeamEscalationRows([{ entry, escalation: { at: 5, reason: 'Urgent.' } }])).toEqual([
+    expect(
+      listTeamEscalationRows([
+        {
+          entry,
+          escalation: {
+            at: 5,
+            reason: 'Urgent.',
+            handoff: {
+              waitedMinutes: 60,
+              ownerActiveAt: null,
+              foundBy: null,
+              ratings: null,
+              pullRequestUrl: null,
+              mergesAt: null,
+              blockedBy: null,
+            },
+          },
+        },
+      ])
+    ).toEqual([
       {
         key: 'm-kai k-1',
         title: 'Fix the checkout',
-        summary: 'Kai’s urgent change is waiting for its merge',
+        summary: 'Kai’s urgent fix waited 1 hour for its merge',
         since: 5,
         path: '/teams/core/m-kai/k-1',
       },
     ]);
+  });
+});
+
+const HOUR = 60 * 60 * 1000;
+
+const FULL_HANDOFF = {
+  at: 0,
+  reason: 'Urgent.',
+  handoff: {
+    waitedMinutes: 15,
+    ownerActiveAt: 0,
+    foundBy: { server: 'cloudflare', shippedTaskTitle: 'Ship checkout' },
+    ratings: { confidence: 'high' as const, risk: 'low' as const },
+    pullRequestUrl: null,
+    mergesAt: 10 * HOUR,
+    blockedBy: 'A pre-merge step is not ticked yet.',
+  },
+};
+
+describe('the hand-off an escalation shows', () => {
+  it('tells a teammate why it reached them, with the owner’s presence, the finder, the ratings and the next merge', () => {
+    expect(listHandoffLines(FULL_HANDOFF, { owner: 'Kai', presence: 'offline', now: 7 * HOUR })).toEqual([
+      'It is urgent, and its merge waited 15 minutes for Kai.',
+      'Autopilot could not merge it: A pre-merge step is not ticked yet.',
+      'Kai is offline now, and last used Shinsa about 7 hours ago.',
+      'A watchdog found the issue in cloudflare after “Ship checkout” shipped.',
+      'The reviewer rated it high confidence, low risk.',
+      'Autopilot merges it in about 3 hours unless someone acts first.',
+      'Review the change and merge it if your team settings let you, or reach Kai.',
+    ]);
+  });
+
+  it('tells you what your team saw, and leaves out what it does not know', () => {
+    const bare = {
+      ...FULL_HANDOFF,
+      handoff: {
+        ...FULL_HANDOFF.handoff,
+        ownerActiveAt: null,
+        foundBy: { server: null, shippedTaskTitle: null },
+        ratings: null,
+        mergesAt: null,
+        blockedBy: null,
+      },
+    };
+    expect(listHandoffLines(bare, { owner: null, presence: null, now: HOUR })).toEqual([
+      'It is urgent, and its merge waited 15 minutes for you.',
+      'A watchdog found the issue.',
+      'Your teammates see it in their Needs you until it merges.',
+    ]);
+    const seen = {
+      ...bare,
+      handoff: { ...bare.handoff, ownerActiveAt: 0, foundBy: null, mergesAt: 2 * HOUR },
+    };
+    expect(listHandoffLines(seen, { owner: null, presence: null, now: HOUR / 2 })).toContain(
+      'You last used Shinsa within the last hour.'
+    );
+    expect(listHandoffLines(seen, { owner: 'Kai', presence: 'online', now: HOUR + 1 })).toEqual([
+      'It is urgent, and its merge waited 15 minutes for Kai.',
+      'Kai is online now, and last used Shinsa about an hour ago.',
+      'Autopilot merges it in 1 hour unless someone acts first.',
+      'Review the change and merge it if your team settings let you, or reach Kai.',
+    ]);
+    expect(listHandoffLines(seen, { owner: 'Kai', presence: 'away', now: 50 * HOUR })[1]).toBe(
+      'Kai is away from Shinsa now, and last used Shinsa about 2 days ago.'
+    );
+    const unseen = { ...seen, handoff: { ...seen.handoff, ownerActiveAt: null } };
+    expect(listHandoffLines(unseen, { owner: 'Kai', presence: 'offline', now: HOUR })[1]).toBe(
+      'Kai is offline now.'
+    );
+    expect(listHandoffLines(unseen, { owner: 'Kai', presence: null, now: HOUR })).toHaveLength(3);
   });
 });

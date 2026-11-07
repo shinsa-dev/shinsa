@@ -332,7 +332,19 @@ describe('a team view of this machine', () => {
   });
 
   test('an escalated task carries its escalation, so a teammate’s Needs you can show it', async () => {
-    const escalation = { at: 40, reason: 'Urgent, and the merge waited 60 minutes for you.' };
+    const escalation = {
+      at: 40,
+      reason: 'Urgent, and the merge waited 60 minutes for you.',
+      handoff: {
+        waitedMinutes: 60,
+        ownerActiveAt: null,
+        foundBy: null,
+        ratings: null,
+        pullRequestUrl: null,
+        mergesAt: null,
+        blockedBy: null,
+      },
+    };
     const { teams } = setUp({
       patch: (state) => {
         state.tasks['task-1'] = createTask({ repoId: 'repo-1', activity: [], escalation });

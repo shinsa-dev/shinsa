@@ -21,13 +21,23 @@ function entry(task: Task, instanceId = 'kai'): TeamFeedTask {
   };
 }
 
+const HANDOFF = {
+  waitedMinutes: 60,
+  ownerActiveAt: null,
+  foundBy: null,
+  ratings: null,
+  pullRequestUrl: null,
+  mergesAt: null,
+  blockedBy: null,
+};
+
 function escalated(
   harness: Harness,
   at: number,
   reason = 'Urgent, and the merge waited 60 minutes for you.'
 ) {
   const taskId = createTask(harness);
-  return { ...harness.task(taskId), escalation: { at, reason } };
+  return { ...harness.task(taskId), escalation: { at, reason, handoff: HANDOFF } };
 }
 
 describe('listTeamEscalations', () => {
@@ -62,7 +72,7 @@ describe('listTeamEscalations', () => {
     const [first] = listTeamEscalations({ machines: [], tasks: [entry(task)] });
     const [again] = listTeamEscalations({
       machines: [],
-      tasks: [entry({ ...task, escalation: { at: 5_000, reason: 'Again.' } })],
+      tasks: [entry({ ...task, escalation: { at: 5_000, reason: 'Again.', handoff: HANDOFF } })],
     });
     const [elsewhere] = listTeamEscalations({ machines: [], tasks: [entry(task, 'mona')] });
     expect(first && resolveTeamEscalationTag(first)).toBe(`escalation:kai ${task.id}:1000`);

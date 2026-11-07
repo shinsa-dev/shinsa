@@ -36,7 +36,19 @@ const ESCALATION: TeamEscalation = {
     teamId: 'core',
     instanceId: 'm-kai',
   },
-  escalation: { at: NOW, reason: 'Urgent, and the merge waited 60 minutes for you.' },
+  escalation: {
+    at: NOW,
+    reason: 'Urgent, and the merge waited 60 minutes for you.',
+    handoff: {
+      waitedMinutes: 60,
+      ownerActiveAt: null,
+      foundBy: null,
+      ratings: null,
+      pullRequestUrl: null,
+      mergesAt: null,
+      blockedBy: null,
+    },
+  },
 };
 
 function withTasks(...gates: ReturnType<typeof createGate>[]) {
@@ -93,7 +105,7 @@ describe('a teammate’s escalated task', () => {
       tag: `escalation:m-kai k-1:${NOW}`,
       taskId: 'k-1',
       title: 'Fix the checkout',
-      body: 'Kai’s urgent change is still waiting for its merge, so it was sent to your team.',
+      body: 'Kai’s urgent fix waited 1 hour for its merge, so Autopilot sent it to your team.',
       path: '/teams/core/m-kai/k-1',
     });
     const seen = listOpenNoticeTags(withTasks(), [ESCALATION]);

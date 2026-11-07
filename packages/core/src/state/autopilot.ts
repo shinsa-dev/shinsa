@@ -7,7 +7,9 @@ export function applyAutopilotScheduled(state: ShinsaState, event: EventOf<'auto
 }
 
 export function applyTaskEscalated(state: ShinsaState, event: EventOf<'task.escalated'>) {
-  updateTask(state, event.taskId, event.at, { escalation: { at: event.at, reason: event.reason } });
+  updateTask(state, event.taskId, event.at, {
+    escalation: { at: event.at, reason: event.reason, handoff: event.handoff },
+  });
   record(state, event.taskId, event.at, {
     actor: 'shinsa',
     kind: 'decision',

@@ -447,9 +447,25 @@ export interface AutopilotDue {
   action: AutopilotAction;
 }
 
+export interface EscalationFinder {
+  server: string | null;
+  shippedTaskTitle: string | null;
+}
+
+export interface EscalationHandoff {
+  waitedMinutes: number;
+  ownerActiveAt: number | null;
+  foundBy: EscalationFinder | null;
+  ratings: ReviewRatings | null;
+  pullRequestUrl: string | null;
+  mergesAt: number | null;
+  blockedBy: string | null;
+}
+
 export interface TaskEscalation {
   at: number;
   reason: string;
+  handoff: EscalationHandoff;
 }
 
 export interface Task {

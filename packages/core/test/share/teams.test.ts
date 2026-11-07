@@ -116,10 +116,24 @@ describe('an escalated team task', () => {
     const shared = teamRepo(harness, 'paywall-next', 'Superwall');
     harness.send({ type: 'project.add_to_team', projectId: shared.projectId, teamId: 'team-1' });
     const taskId = createTask(harness, { repoId: shared.repoId });
-    const escalation = { at: harness.now, reason: 'Urgent, and the merge waited 60 minutes for you.' };
+    const handoff = {
+      waitedMinutes: 60,
+      ownerActiveAt: 1_000,
+      foundBy: { server: 'cloudflare', shippedTaskTitle: 'Ship the paywall list' },
+      ratings: { confidence: 'high' as const, risk: 'low' as const },
+      pullRequestUrl: 'https://github.com/superwall/paywall-next/pull/42',
+      mergesAt: null,
+      blockedBy: null,
+    };
+    const escalation = {
+      at: harness.now,
+      reason: 'Urgent, and the merge waited 60 minutes for you.',
+      handoff,
+    };
     const task = { ...harness.task(taskId), escalation };
     const state = { ...harness.state, tasks: { ...harness.state.tasks, [taskId]: task } };
     expect(listTeamTasks(state, 'team-1', CONTEXT)[0]?.task.escalation).toEqual(escalation);
+    expect(resolveSharedListing(state, task, [], 'standard').task.escalation?.handoff).toEqual(handoff);
     expect(listTeamTasks(harness.state, 'team-1', CONTEXT)[0]?.task.escalation).toBeNull();
     expect(resolveSharedListing(state, task, [], 'status').task.escalation).toBeNull();
   });

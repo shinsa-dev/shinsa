@@ -8,7 +8,9 @@ import {
   resolveAutopilotPolicy,
   type Settings,
   type Task,
+  type TaskEscalation,
   type TeamEscalation,
+  type TeamPresenceStatus,
 } from '@shinsa/core';
 import { describeAgentReview } from '@/lib/review/report.ts';
 import type { SettingItem } from '@/lib/settings.ts';
@@ -179,7 +181,84 @@ export function resolveEscalationFact(task: Pick<Task, 'escalation'>) {
   return { label: 'Sent to your team', hint: `Autopilot sent it to your team: ${task.escalation.reason}` };
 }
 
-export const TEAM_ESCALATIONS_TITLE = 'Sent to your team';
+export const TEAM_ESCALATIONS_TITLE = 'Sent by your team';
+
+export const HANDOFF_TITLE: Record<'owner' | 'teammate', string> = {
+  owner: 'Sent to your team',
+  teammate: 'Why this reached you',
+};
+
+const HOUR = 60 * 60 * 1000;
+
+const PRESENCE_TEXT: Record<TeamPresenceStatus, string> = {
+  online: 'is online now',
+  away: 'is away from Shinsa now',
+  offline: 'is offline now',
+};
+
+function describeHoursAgo(at: number, now: number) {
+  const hours = Math.floor((now - at) / HOUR);
+  if (hours < 1) return 'within the last hour';
+  if (hours < 48) return hours === 1 ? 'about an hour ago' : `about ${hours} hours ago`;
+  return `about ${Math.floor(hours / 24)} days ago`;
+}
+
+function describeIn(at: number, now: number) {
+  const minutes = Math.max(1, Math.round((at - now) / (60 * 1000)));
+  return minutes < 90 ? `in ${describeMinutes(minutes)}` : `in about ${Math.round(minutes / 60)} hours`;
+}
+
+export interface HandoffViewer {
+  owner: string | null;
+  presence: TeamPresenceStatus | null;
+  now: number;
+}
+
+function describeActivity({ handoff }: TaskEscalation, { owner, presence, now }: HandoffViewer) {
+  const who = owner ?? 'You';
+  if (owner && presence) {
+    const seen =
+      handoff.ownerActiveAt === null
+        ? ''
+        : `, and last used Shinsa ${describeHoursAgo(handoff.ownerActiveAt, now)}`;
+    return `${owner} ${PRESENCE_TEXT[presence]}${seen}.`;
+  }
+  if (handoff.ownerActiveAt === null) return null;
+  return `${who} last used Shinsa ${describeHoursAgo(handoff.ownerActiveAt, now)}.`;
+}
+
+function describeFinder({ handoff }: TaskEscalation) {
+  const found = handoff.foundBy;
+  if (!found) return null;
+  const where = found.server ? ` in ${found.server}` : '';
+  const after = found.shippedTaskTitle ? ` after “${found.shippedTaskTitle}” shipped` : '';
+  return `A watchdog found the issue${where}${after}.`;
+}
+
+export function listHandoffLines(escalation: TaskEscalation, viewer: HandoffViewer): string[] {
+  const { handoff } = escalation;
+  const owner = viewer.owner ?? 'you';
+  const ratings = handoff.ratings;
+  return [
+    `It is urgent, and its merge waited ${describeMinutes(handoff.waitedMinutes)} for ${owner}.`,
+    handoff.blockedBy ? `Autopilot could not merge it: ${handoff.blockedBy}` : null,
+    describeActivity(escalation, viewer),
+    describeFinder(escalation),
+    ratings ? `The reviewer rated it ${ratings.confidence} confidence, ${ratings.risk} risk.` : null,
+    handoff.mergesAt !== null && handoff.mergesAt > viewer.now
+      ? `Autopilot merges it ${describeIn(handoff.mergesAt, viewer.now)} unless someone acts first.`
+      : null,
+    viewer.owner
+      ? `Review the change and merge it if your team settings let you, or reach ${viewer.owner}.`
+      : 'Your teammates see it in their Needs you until it merges.',
+  ].filter((line) => line !== null);
+}
+
+export function describeTeamEscalationSummary({ entry, escalation }: TeamEscalation) {
+  const owner = describeTeamTaskOwner(entry);
+  const found = escalation.handoff.foundBy ? ', found by a watchdog,' : '';
+  return `${owner}’s urgent fix${found} waited ${describeMinutes(escalation.handoff.waitedMinutes)} for its merge`;
+}
 
 export interface TeamEscalationRow {
   key: string;
@@ -190,11 +269,11 @@ export interface TeamEscalationRow {
 }
 
 export function listTeamEscalationRows(escalations: readonly TeamEscalation[]): TeamEscalationRow[] {
-  return escalations.map(({ entry, escalation }) => ({
-    key: `${entry.instanceId} ${entry.task.id}`,
-    title: entry.task.title,
-    summary: `${describeTeamTaskOwner(entry)}’s urgent change is waiting for its merge`,
-    since: escalation.at,
-    path: resolveTeamTaskPath(resolveTeamTaskTarget(entry)),
+  return escalations.map((item) => ({
+    key: `${item.entry.instanceId} ${item.entry.task.id}`,
+    title: item.entry.task.title,
+    summary: describeTeamEscalationSummary(item),
+    since: item.escalation.at,
+    path: resolveTeamTaskPath(resolveTeamTaskTarget(item.entry)),
   }));
 }
