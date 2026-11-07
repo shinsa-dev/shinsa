@@ -18,6 +18,7 @@ const MENTION: SlackMention = {
   permalink: null,
   channelName: null,
   thread: [{ ts: '100.1', userId: 'U2', userName: 'Mia', text: 'Export hangs.', bot: false }],
+  linkedThreads: [],
 };
 
 describe('the evaluation prompt', () => {
@@ -32,6 +33,33 @@ describe('the evaluation prompt', () => {
         'Answer with JSON: {"decision": "task" when it asks for work, else "none"}.',
       ].join('\n')
     );
+  });
+});
+
+describe('the evaluation of a mention that links to a thread', () => {
+  test('reads the linked thread after the mention’s own', () => {
+    const linked = {
+      channelId: 'C9',
+      threadTs: '200.1',
+      permalink: 'https://acme.slack.com/archives/C9/p2001',
+      channelName: 'customer-acme',
+      thread: [{ ts: '200.1', userId: 'U7', userName: 'Lee', text: 'Login fails.', bot: false }],
+    };
+    expect(
+      serializeSlackEvaluationPrompt({ ...MENTION, linkedThreads: [linked, { ...linked, thread: [] }] })
+    ).toBe(
+      [
+        'The thread, oldest first:',
+        'Mia: Export hangs.',
+        'Christo (mentioning you): hi',
+        '',
+        'Linked thread 1 in #customer-acme: https://acme.slack.com/archives/C9/p2001, oldest first:',
+        'Lee: Login fails.',
+        '',
+        'Answer with JSON: {"decision": "task" when it asks for work, else "none"}.',
+      ].join('\n')
+    );
+    expect(SLACK_EVALUATION_SYSTEM).toContain('any thread it links to');
   });
 });
 

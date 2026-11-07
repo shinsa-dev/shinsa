@@ -102,6 +102,7 @@ export {
   SlackSessionStatus,
   type SlackSnapshot,
 } from './relay.ts';
+export { listSlackMessageLinks } from './links.ts';
 export { serializeSlackMessage, serializeSlackRequest, serializeSlackThread } from './thread.ts';
 export {
   SLACK_DECISION_LIMITS,
@@ -112,6 +113,8 @@ export {
   SlackDecisionReply,
   SlackDecisionValue,
   type SlackEvaluation,
+  SlackLinkedThread,
   type SlackMention,
+  type SlackMessageLink,
   type SlackThreadMessage,
 } from './schema.ts';

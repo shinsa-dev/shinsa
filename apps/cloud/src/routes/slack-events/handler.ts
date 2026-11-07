@@ -274,6 +274,7 @@ export const SlackEventRoutes = Layer.unwrap(
         permalink,
         channelName,
         thread,
+        linkedThreads: [],
       } satisfies SlackMention;
     });
 

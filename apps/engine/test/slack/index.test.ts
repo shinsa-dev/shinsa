@@ -55,6 +55,7 @@ const MENTION: SlackMention = {
   permalink: null,
   channelName: null,
   thread: [{ ts: '100.1', userId: 'U1', userName: 'Christo', text: 'the build hangs', bot: false }],
+  linkedThreads: [],
 };
 
 interface RelayCall {
