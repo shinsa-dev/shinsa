@@ -2,6 +2,8 @@ import { afterEach, describe, expect, test } from 'bun:test';
 import { UsageReadings } from '../../src/accounts/readings/service.ts';
 import { AccountStore } from '../../src/accounts/store/service.ts';
 import {
+  parseExtraUsage,
+  parseResetGrants,
   parseResetTime,
   parseUsageWindows,
   readRetryAfter,
@@ -198,11 +200,157 @@ describe('resolveClaudeFastMode', () => {
   });
 });
 
+const GRANT = {
+  id: 'opus55-launch-20260921',
+  label: 'Opus 5.5 launch reset',
+  resets_left: 1,
+  resets_total: 2,
+  clears: ['five_hour', 'seven_day', 3],
+  usable_now: true,
+  paused: false,
+  ends_at: '2026-12-21T00:00:00Z',
+};
+
+describe('parseExtraUsage', () => {
+  test('extra usage off with nothing left reads as off without credit', () => {
+    expect(
+      parseExtraUsage({
+        extra_usage: { is_enabled: false, monthly_limit: null, used_credits: null, currency: null },
+        spend: { enabled: false, balance: null },
+      })
+    ).toEqual({ enabled: false, noLimit: false, credit: null });
+  });
+
+  test('a spend balance is the credit, whether or not extra usage is on', () => {
+    const balance = { amount_minor: 1240, currency: 'EUR', exponent: 2 };
+    expect(parseExtraUsage({ extra_usage: { is_enabled: false }, spend: { balance } })).toEqual({
+      enabled: false,
+      noLimit: false,
+      credit: { minor: 1240, exponent: 2, currency: 'EUR' },
+    });
+    expect(parseExtraUsage({ spend: { enabled: true, balance } })?.credit).toEqual({
+      minor: 1240,
+      exponent: 2,
+      currency: 'EUR',
+    });
+  });
+
+  test('without a balance, the monthly limit less what was used is the credit while extra usage is on', () => {
+    expect(
+      parseExtraUsage({
+        extra_usage: {
+          is_enabled: true,
+          monthly_limit: 5000,
+          used_credits: 1260,
+          currency: 'USD',
+          decimal_places: 2,
+        },
+      })
+    ).toEqual({ enabled: true, noLimit: false, credit: { minor: 3740, exponent: 2, currency: 'USD' } });
+    expect(
+      parseExtraUsage({ extra_usage: { is_enabled: true, monthly_limit: 5000, used_credits: 6000 } })?.credit
+    ).toEqual({ minor: 0, exponent: 2, currency: 'USD' });
+    expect(parseExtraUsage({ extra_usage: { is_enabled: false, monthly_limit: 5000 } })?.credit).toBeNull();
+  });
+
+  test('extra usage on without a monthly limit or a balance has no limit', () => {
+    expect(parseExtraUsage({ extra_usage: { is_enabled: true, monthly_limit: null } })).toEqual({
+      enabled: true,
+      noLimit: true,
+      credit: null,
+    });
+  });
+
+  test('spend decides when extra usage is missing, and a malformed field drops only itself', () => {
+    expect(parseExtraUsage({ spend: { enabled: true } })).toEqual({
+      enabled: true,
+      noLimit: true,
+      credit: null,
+    });
+    expect(
+      parseExtraUsage({
+        extra_usage: { is_enabled: true, monthly_limit: 'lots', decimal_places: 40, currency: 7 },
+        spend: { balance: { amount_minor: 'x', currency: 'USD', exponent: 2 } },
+      })
+    ).toEqual({ enabled: true, noLimit: true, credit: null });
+    expect(
+      parseExtraUsage({ spend: { balance: { amount_minor: -50, currency: 'USD', exponent: 2 } } })
+    ).toEqual({
+      enabled: false,
+      noLimit: false,
+      credit: null,
+    });
+  });
+
+  test('an answer without extra usage or spend says nothing', () => {
+    expect(parseExtraUsage({ five_hour: null })).toBeNull();
+    expect(parseExtraUsage({ extra_usage: null, spend: 'none' })).toBeNull();
+    expect(parseExtraUsage('nope')).toBeNull();
+  });
+});
+
+describe('parseResetGrants', () => {
+  test('reads each grant under cedar_ember, then juniper_tide', () => {
+    expect(
+      parseResetGrants({
+        cedar_ember: { grants: [GRANT] },
+        juniper_tide: { grants: [{ id: 'older', resets_left: 1 }] },
+      })
+    ).toEqual([
+      {
+        id: 'opus55-launch-20260921',
+        label: 'Opus 5.5 launch reset',
+        left: 1,
+        total: 2,
+        clears: ['five_hour', 'seven_day'],
+        usableNow: true,
+        endsAt: Date.parse('2026-12-21T00:00:00Z'),
+      },
+      { id: 'older', label: null, left: 1, total: 1, clears: [], usableNow: false, endsAt: null },
+    ]);
+  });
+
+  test('a paused grant is not usable now, whatever usable_now says', () => {
+    expect(parseResetGrants({ cedar_ember: { grants: [{ ...GRANT, paused: true }] } })[0]?.usableNow).toBe(
+      false
+    );
+  });
+
+  test('spent, id-less, repeated and malformed grants are dropped', () => {
+    expect(
+      parseResetGrants({
+        cedar_ember: {
+          grants: [
+            { ...GRANT, resets_left: 0 },
+            { ...GRANT, id: '' },
+            { ...GRANT, id: undefined },
+            { ...GRANT, resets_left: 'one' },
+            'grant',
+          ],
+        },
+        juniper_tide: { grants: [GRANT, GRANT] },
+      }).map((grant) => grant.id)
+    ).toEqual(['opus55-launch-20260921']);
+  });
+
+  test('no programs, empty programs and a body that is not an object have no grants', () => {
+    expect(parseResetGrants({ cedar_ember: null, juniper_tide: null })).toEqual([]);
+    expect(parseResetGrants({ cedar_ember: { grants: 'none' }, juniper_tide: {} })).toEqual([]);
+    expect(parseResetGrants(null)).toEqual([]);
+  });
+});
+
 describe('reading an account’s usage from Claude', () => {
   test('asks the usage endpoint with the account’s token and reads the windows', async () => {
     const { requestHttp, calls } = respondWith(Response.json(BODY));
     const read = await requestUsage('token-1', requestHttp);
-    expect(read).toEqual({ ok: true, windows: parseUsageWindows(BODY), fastMode: 'needs_credits' });
+    expect(read).toEqual({
+      ok: true,
+      windows: parseUsageWindows(BODY),
+      fastMode: 'needs_credits',
+      extraUsage: { enabled: false, noLimit: false, credit: null },
+      resetGrants: [],
+    });
     expect(calls[0]?.[0]).toBe(USAGE_URL);
     expect(Object.fromEntries(new Headers(calls[0]?.[1].headers))).toEqual({
       authorization: 'Bearer token-1',

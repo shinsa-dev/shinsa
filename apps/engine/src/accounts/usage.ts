@@ -2,6 +2,8 @@ import { parseRetryAfter } from './usage/answer.ts';
 
 export {
   listDistinctWindows,
+  parseExtraUsage,
+  parseResetGrants,
   parseResetTime,
   parseUsageWindows,
   resolveClaudeFastMode,

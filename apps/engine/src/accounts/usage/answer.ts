@@ -1,14 +1,27 @@
-import type { FastModeAvailability, UsageWindow } from '@shinsa/core';
+import type {
+  ExtraUsage as AccountExtraUsage,
+  FastModeAvailability,
+  UsageMoney,
+  UsageResetGrant,
+  UsageWindow,
+} from '@shinsa/core';
 import { Option, Predicate, Schema } from 'effect';
 import {
+  DEFAULT_CREDIT_CURRENCY,
+  DEFAULT_CREDIT_EXPONENT,
   ExtraUsage,
   KEYED_WINDOWS,
   type KeyedWindow,
   LIMIT_KINDS,
+  RESET_PROGRAM_KEYS,
   UsageBody,
   UsageKeyedEntry,
   UsageLimitEntry,
   UsageLimitScope,
+  UsageMoneyEntry,
+  UsageResetGrantEntry,
+  UsageResetProgram,
+  UsageSpend,
 } from '../schema.ts';
 
 const decodeBody = Schema.decodeUnknownOption(UsageBody);
@@ -20,6 +33,14 @@ const decodeScope = Schema.decodeUnknownOption(UsageLimitScope);
 const decodeKeyed = Schema.decodeUnknownOption(UsageKeyedEntry);
 
 const decodeExtra = Schema.decodeUnknownOption(ExtraUsage);
+
+const decodeSpend = Schema.decodeUnknownOption(UsageSpend);
+
+const decodeMoney = Schema.decodeUnknownOption(UsageMoneyEntry);
+
+const decodeProgram = Schema.decodeUnknownOption(UsageResetProgram);
+
+const decodeGrant = Schema.decodeUnknownOption(UsageResetGrantEntry);
 
 function clampPercent(value: number) {
   return Math.min(100, Math.max(0, value));
@@ -96,6 +117,71 @@ export function resolveClaudeFastMode(value: unknown): FastModeAvailability {
   const limit = extra.monthly_limit ?? null;
   const used = extra.used_credits ?? 0;
   return limit !== null && used >= limit ? 'needs_credits' : 'available';
+}
+
+function resolveCredit(
+  balance: unknown,
+  extra: typeof ExtraUsage.Type | undefined,
+  enabled: boolean
+): UsageMoney | null {
+  const money = Option.getOrUndefined(decodeMoney(balance));
+  if (money) {
+    return money.amount_minor > 0
+      ? { minor: money.amount_minor, exponent: money.exponent, currency: money.currency }
+      : null;
+  }
+  const limit = extra?.monthly_limit;
+  if (!enabled || limit === undefined) return null;
+  return {
+    minor: Math.max(0, limit - (extra?.used_credits ?? 0)),
+    exponent: extra?.decimal_places ?? DEFAULT_CREDIT_EXPONENT,
+    currency: extra?.currency ?? DEFAULT_CREDIT_CURRENCY,
+  };
+}
+
+export function parseExtraUsage(value: unknown): AccountExtraUsage | null {
+  const body = Option.getOrUndefined(decodeBody(value));
+  if (!body) return null;
+  const extra = Option.getOrUndefined(decodeExtra(body.extra_usage));
+  const spend = Option.getOrUndefined(decodeSpend(body.spend));
+  if (!extra && !spend) return null;
+  const enabled = extra ? extra.is_enabled === true : spend?.enabled === true;
+  const credit = resolveCredit(spend?.balance, extra, enabled);
+  return { enabled, noLimit: enabled && extra?.monthly_limit === undefined && credit === null, credit };
+}
+
+function readGrant(value: unknown): UsageResetGrant[] {
+  return Option.toArray(
+    Option.flatMap(decodeGrant(value), (grant) => {
+      if (grant.resets_left <= 0) return Option.none();
+      return Option.some({
+        id: grant.id,
+        label: grant.label ?? null,
+        left: grant.resets_left,
+        total: Math.max(grant.resets_total ?? grant.resets_left, grant.resets_left),
+        clears: (grant.clears ?? []).filter(Predicate.isString),
+        usableNow: grant.usable_now === true && grant.paused !== true,
+        endsAt: parseResetTime(grant.ends_at),
+      });
+    })
+  );
+}
+
+export function parseResetGrants(value: unknown): UsageResetGrant[] {
+  const body = Option.getOrUndefined(decodeBody(value));
+  if (!body) return [];
+  const grants = RESET_PROGRAM_KEYS.flatMap((key) =>
+    Option.match(decodeProgram(body[key]), {
+      onNone: () => [],
+      onSome: (program) => (program.grants ?? []).flatMap(readGrant),
+    })
+  );
+  const seen = new Set<string>();
+  return grants.filter((grant) => {
+    if (seen.has(grant.id)) return false;
+    seen.add(grant.id);
+    return true;
+  });
 }
 
 export function parseRetryAfter(header: string | null | undefined) {

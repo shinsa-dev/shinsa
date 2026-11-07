@@ -12,7 +12,13 @@ import {
   USAGE_URL,
   UsageReadFailed,
 } from '../schema.ts';
-import { parseRetryAfter, parseUsageWindows, resolveClaudeFastMode } from './answer.ts';
+import {
+  parseExtraUsage,
+  parseResetGrants,
+  parseRetryAfter,
+  parseUsageWindows,
+  resolveClaudeFastMode,
+} from './answer.ts';
 
 export class UsageApi extends Context.Service<
   UsageApi,
@@ -66,6 +72,8 @@ export class UsageApi extends Context.Service<
         return {
           windows: parseUsageWindows(body),
           fastMode: resolveClaudeFastMode(body),
+          extraUsage: parseExtraUsage(body),
+          resetGrants: parseResetGrants(body),
         } satisfies UsageAnswer;
       });
 

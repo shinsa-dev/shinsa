@@ -19,6 +19,28 @@ export interface UsageWindow {
   resetsAt: number | null;
 }
 
+export interface UsageMoney {
+  minor: number;
+  exponent: number;
+  currency: string;
+}
+
+export interface ExtraUsage {
+  enabled: boolean;
+  noLimit: boolean;
+  credit: UsageMoney | null;
+}
+
+export interface UsageResetGrant {
+  id: string;
+  label: string | null;
+  left: number;
+  total: number;
+  clears: string[];
+  usableNow: boolean;
+  endsAt: number | null;
+}
+
 export interface AccountUsage {
   status: UsageReadStatus;
   windows: UsageWindow[];
@@ -26,6 +48,8 @@ export interface AccountUsage {
   checkedAt: number | null;
   source: UsageSource | null;
   fastMode?: FastModeAvailability;
+  extraUsage?: ExtraUsage;
+  resetGrants?: UsageResetGrant[];
   retryAt?: number;
 }
 
