@@ -141,25 +141,30 @@ function splitAt(text: string, size: number) {
   return at > size * 0.3 ? at : -1;
 }
 
-export function listSlackChunks(text: string, size: number, total: number) {
+function resolveChunkCut(text: string, size: number) {
+  const line = splitAt(text, size);
+  if (line !== -1) return { at: line, rest: /^\n+/ };
+  const word = resolveTextCut(text, size).length;
+  return { at: word > 0 ? word : size, rest: /^ +/ };
+}
+
+export function listSlackChunks(text: string, size: number, count: number) {
   const chunks: string[] = [];
   let rest = text;
   let fenceOpen = false;
-  while (rest.length > 0 && chunks.join('').length < total) {
-    const room = Math.min(size, total - chunks.join('').length);
-    if (rest.length <= room) {
-      chunks.push(fenceOpen ? `${FENCE}\n${rest}` : rest);
+  while (rest.length > 0 && chunks.length < count) {
+    const opener = fenceOpen ? `${FENCE}\n` : '';
+    if (opener.length + rest.length <= size) {
+      chunks.push(`${opener}${rest}`);
       rest = '';
       break;
     }
-    const at = splitAt(rest, room - FENCE.length * 2 - 2);
-    if (at === -1) break;
-    const piece = rest.slice(0, at);
-    const opened = fenceOpen ? `${FENCE}\n${piece}` : piece;
+    const cut = resolveChunkCut(rest, size - FENCE.length * 2 - 2);
+    const opened = `${opener}${rest.slice(0, cut.at)}`;
     const closing = closeFence(opened);
     chunks.push(`${opened}${closing}`);
     fenceOpen = closing.length > 0;
-    rest = rest.slice(at).replace(/^\n+/, '');
+    rest = rest.slice(cut.at).replace(cut.rest, '');
   }
   return { chunks, cut: rest.length > 0 };
 }
