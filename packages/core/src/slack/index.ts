@@ -56,7 +56,6 @@ export {
   resolveSlackSessionStatus,
   SLACK_MENTION_REACTIONS,
   SLACK_REACTIONS,
-  SLACK_RESULT_LIMIT,
   type SlackMentionReaction,
   type SlackReaction,
   type SlackTaskRef,

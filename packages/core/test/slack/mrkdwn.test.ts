@@ -86,13 +86,13 @@ describe('fitting Slack limits', () => {
 
 describe('splitting long text into sections', () => {
   test('text that fits is one chunk', () => {
-    expect(listSlackChunks('short', 100, 1000)).toEqual({ chunks: ['short'], cut: false });
+    expect(listSlackChunks('short', 100, 10)).toEqual({ chunks: ['short'], cut: false });
   });
 
   test('splits at paragraph breaks and keeps every chunk within the size', () => {
     const paragraph = `${'word '.repeat(30).trim()}`;
     const text = Array.from({ length: 6 }, () => paragraph).join('\n\n');
-    const { chunks, cut } = listSlackChunks(text, 400, 10_000);
+    const { chunks, cut } = listSlackChunks(text, 400, 10);
     expect(cut).toBe(false);
     expect(chunks.length).toBeGreaterThan(1);
     for (const chunk of chunks) expect(chunk.length).toBeLessThanOrEqual(400);
@@ -101,7 +101,7 @@ describe('splitting long text into sections', () => {
 
   test('a fence split across chunks is closed in one and opened again in the next', () => {
     const text = `\`\`\`\n${Array.from({ length: 40 }, (_, index) => `line ${index}`).join('\n')}\n\`\`\``;
-    const { chunks } = listSlackChunks(text, 120, 10_000);
+    const { chunks } = listSlackChunks(text, 120, 50);
     expect(chunks.length).toBeGreaterThan(1);
     for (const chunk of chunks) {
       expect(chunk.startsWith('```')).toBe(true);
@@ -110,14 +110,21 @@ describe('splitting long text into sections', () => {
     }
   });
 
-  test('stops at the total and says it was cut', () => {
+  test('stops at the number of chunks and says it was cut', () => {
     const text = Array.from({ length: 50 }, (_, index) => `paragraph ${index}`).join('\n\n');
-    const { chunks, cut } = listSlackChunks(text, 100, 250);
+    const { chunks, cut } = listSlackChunks(text, 100, 3);
     expect(cut).toBe(true);
-    expect(chunks.join('').length).toBeLessThanOrEqual(250);
+    expect(chunks).toHaveLength(3);
   });
 
-  test('text without a line break to split at is cut', () => {
-    expect(listSlackChunks('x'.repeat(500), 100, 1000)).toEqual({ chunks: [], cut: true });
+  test('a line without breaks is split at a word, and one without spaces at the size', () => {
+    const words = 'word '.repeat(100).trim();
+    const split = listSlackChunks(words, 100, 10);
+    expect(split.cut).toBe(false);
+    expect(split.chunks.join(' ')).toBe(words);
+    for (const chunk of split.chunks) expect(chunk).toMatch(/^word( word)*$/);
+    const unbroken = listSlackChunks('x'.repeat(500), 100, 10);
+    expect(unbroken.cut).toBe(false);
+    expect(unbroken.chunks.join('')).toBe('x'.repeat(500));
   });
 });

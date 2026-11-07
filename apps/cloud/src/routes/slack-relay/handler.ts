@@ -28,6 +28,11 @@ export const SlackRelayHandlers = HttpApiBuilder.group(
         ? new SlackBlocksRefused({ message: `Slack did not take the blocks in the post (${error.code}).` })
         : new SlackFailed({ message: `Slack did not take the post (${error.code}).` });
 
+    const logRefusedPost = (error: SlackCallFailed) =>
+      Effect.logError('[Cloud] Slack did not take a post').pipe(
+        Effect.annotateLogs({ error, code: error.code })
+      );
+
     const store = yield* SlackStore;
     const slack = yield* SlackApi;
 
@@ -117,7 +122,7 @@ export const SlackRelayHandlers = HttpApiBuilder.group(
                 { token, body: { json: { ...content, ts: payload.replaceTs } } },
                 Schema.Unknown
               )
-              .pipe(Effect.mapError(refusePost));
+              .pipe(Effect.tapError(logRefusedPost), Effect.mapError(refusePost));
             return { ts: payload.replaceTs };
           }
           const posted = yield* slack
@@ -131,7 +136,7 @@ export const SlackRelayHandlers = HttpApiBuilder.group(
               },
               Posted
             )
-            .pipe(Effect.mapError(refusePost));
+            .pipe(Effect.tapError(logRefusedPost), Effect.mapError(refusePost));
           if (!posted.ts)
             return yield* new SlackFailed({ message: 'Slack did not say where the post went.' });
           yield* store.recordPost(

@@ -53,9 +53,48 @@ export const ThreadMessage = Schema.Struct({
   username: Schema.optional(Id),
   bot_profile: Schema.optional(Schema.Struct({ name: Schema.optional(Id) })),
   text: Text,
+  blocks: Schema.optional(Schema.Array(Schema.Unknown)),
+  attachments: Schema.optional(Schema.Array(Schema.Unknown)),
 });
 
 export type ThreadMessage = typeof ThreadMessage.Type;
+
+export const MessageField = Schema.Struct({ text: Schema.String });
+
+export const MessageBlock = Schema.Struct({
+  type: Schema.String,
+  text: Schema.optional(Schema.Union([Schema.String, MessageField])),
+  fields: Schema.optional(Schema.Array(Schema.Unknown)),
+  elements: Schema.optional(Schema.Array(Schema.Unknown)),
+});
+
+export type MessageBlock = typeof MessageBlock.Type;
+
+export const MessageElement = Schema.Struct({
+  type: Schema.String,
+  text: Text,
+  url: Text,
+  user_id: Text,
+  channel_id: Text,
+  usergroup_id: Text,
+  name: Text,
+  range: Text,
+  style: Schema.optional(Schema.Unknown),
+  elements: Schema.optional(Schema.Array(Schema.Unknown)),
+});
+
+export type MessageElement = typeof MessageElement.Type;
+
+export const MessageAttachment = Schema.Struct({
+  pretext: Text,
+  title: Text,
+  text: Text,
+  fallback: Text,
+  fields: Schema.optional(Schema.Array(Schema.Unknown)),
+  blocks: Schema.optional(Schema.Array(Schema.Unknown)),
+});
+
+export const AttachmentField = Schema.Struct({ title: Text, value: Text });
 
 export const Replies = Schema.Struct({ messages: Schema.optional(Schema.Array(Schema.Unknown)) });
 
