@@ -3,15 +3,19 @@ import type { MachineChoice } from '@/lib/connection/socket.ts';
 
 export interface TaskOwnership {
   shared: boolean;
+  sharedHere: boolean;
   viewer: string | null;
   memberHere: boolean;
+  isSharedTask: (task: Task) => boolean;
   isMemberTask: (task: Task) => boolean;
 }
 
 export const PERSONAL_OWNERSHIP: TaskOwnership = {
   shared: false,
+  sharedHere: false,
   viewer: null,
   memberHere: false,
+  isSharedTask: () => false,
   isMemberTask: () => false,
 };
 
@@ -24,19 +28,19 @@ function isSameLogin(a: string, b: string) {
 }
 
 export function isOwnTask(task: Task, ownership: TaskOwnership) {
-  if (!ownership.shared) return true;
+  if (!ownership.isSharedTask(task)) return true;
   if (!task.owner || ownership.viewer === null) return !ownership.isMemberTask(task);
   return isSameLogin(task.owner.login, ownership.viewer);
 }
 
 export function isOwnAccount(owner: string | null | undefined, ownership: TaskOwnership) {
-  if (!ownership.shared) return true;
+  if (!ownership.sharedHere) return true;
   if (!owner || ownership.viewer === null) return !ownership.memberHere;
   return isSameLogin(owner, ownership.viewer);
 }
 
 export function describeAccountOwner(owner: string | null | undefined, ownership: TaskOwnership) {
-  if (!ownership.shared) return null;
+  if (!ownership.sharedHere) return null;
   if (isOwnAccount(owner, ownership)) return 'Yours';
   return owner ? `${owner}’s` : `${MACHINE_OWNER_LABEL}’s`;
 }
@@ -63,29 +67,34 @@ export function filterOwnQueue(queue: Queue, ownership: TaskOwnership): Queue {
 
 export interface OwnershipSources {
   settings: Pick<Settings, 'sharedMachine'> | null;
-  machines: readonly Pick<MachineChoice, 'id' | 'member' | 'state'>[];
+  machines: readonly Pick<MachineChoice, 'id' | 'member' | 'state' | 'current'>[];
   viewer: string | null;
   selectTaskMachine: (taskId: string) => string | null;
 }
 
+type OwnershipMachine = OwnershipSources['machines'][number];
+
+function isSharedMachine(machine: OwnershipMachine) {
+  return machine.state.settings.sharedMachine === true;
+}
+
 export function resolveTaskOwnership(sources: OwnershipSources): TaskOwnership {
   const { machines } = sources;
-  const shared =
-    sources.settings?.sharedMachine === true ||
-    machines.some((machine) => machine.state.settings.sharedMachine === true);
-  if (!shared) return PERSONAL_OWNERSHIP;
+  const here = machines.find((machine) => machine.current) ?? machines[0];
+  const sharedHere = here ? isSharedMachine(here) : sources.settings?.sharedMachine === true;
+  if (!sharedHere && !machines.some(isSharedMachine)) return PERSONAL_OWNERSHIP;
+  const selectMachine = (task: Task) =>
+    machines.length === 1 ? here : machines.find((entry) => entry.id === sources.selectTaskMachine(task.id));
   return {
-    shared,
+    shared: true,
+    sharedHere,
     viewer: sources.viewer,
-    memberHere: machines[0]?.member === true,
-    isMemberTask: (task) => {
-      const [only] = machines;
-      const machine =
-        machines.length === 1
-          ? only
-          : machines.find((entry) => entry.id === sources.selectTaskMachine(task.id));
-      return machine?.member === true;
+    memberHere: here?.member === true,
+    isSharedTask: (task) => {
+      const machine = selectMachine(task);
+      return machine ? isSharedMachine(machine) : machines.length === 0 && sharedHere;
     },
+    isMemberTask: (task) => selectMachine(task)?.member === true,
   };
 }
 
@@ -100,7 +109,7 @@ export interface OwnerFact {
 }
 
 export function resolveOwnerFact(task: Task, ownership: TaskOwnership): OwnerFact | null {
-  if (!ownership.shared) return null;
+  if (!ownership.isSharedTask(task)) return null;
   const you = isOwnTask(task, ownership);
   return { you, owner: task.owner ?? null, label: you ? YOU_LABEL : MACHINE_OWNER_LABEL };
 }

@@ -9,7 +9,7 @@ import { describeGitHubToken, GITHUB_TOKEN_LABEL, isGitHubTokenShown } from '@/l
 import { SETTING_ROW, SettingsBlock } from './group.tsx';
 
 export function GitHubTokenBlock() {
-  const { shared } = useTaskOwnership();
+  const { sharedHere: shared } = useTaskOwnership();
   const supported = useEngineFeature('shared-machine');
   const [answer, setAnswer] = useGitHubToken(shared && supported);
   const [draft, setDraft] = React.useState('');

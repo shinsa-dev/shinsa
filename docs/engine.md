@@ -3219,9 +3219,9 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
     machine's owner and every account from before). A run leases only its task owner's accounts, on renewal and on
     rotation after a usage limit too (`AccountOwnership`, `AccountRotation.listCandidates`), and a task bound to
     someone else's account drops the binding. When the owner has none it can use, the lease fails with
-    `owner_signed_out` and the task stops at a Sign in gate with no account ("Paused: Kai needs a Claude account on
-    this machine", `requestOwnerSignIn`); it never falls back to the machine's login. Any Claude sign-in retries
-    those gates (`recordSignedIn`), and a task whose owner still has none stops there again. Members sign in,
+    `owner_signed_out` and the task stops at a Sign in gate with no account and `cause: 'owner_account'` ("Paused: Kai
+    needs a Claude account on this machine", `requestOwnerSignIn`); it never falls back to the machine's login. Any
+    Claude sign-in retries those gates (`recordSignedIn`), and a task whose owner still has none stops there again. Members sign in,
     import, change and remove only their own accounts from their own device: the `accounts` group is
     `SharedMemberRoute`, which opens an `OwnerOnlyRoute` to members on a shared machine, and the roster refuses a
     member's change to an account that is not theirs (`not_owner`). Pasting a sign-in code and cancelling a sign-in
@@ -3244,7 +3244,10 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
     Everyone's switch (`useOwnQueue`, remembered in the queue preferences), a task's facts name its Owner ("You", the
     teammate, or "The machine's owner" for a task with none), each Claude account shows Yours or the member's login
     with a menu only on your own, and a member gets Your GitHub token with Save and Remove (`github-token.tsx`). The
-    page offers all of it only on an engine that announces `shared-machine`.
+    page offers all of it only on an engine that announces `shared-machine`. Ownership is per machine
+    (`resolveTaskOwnership`): only a task on a shared machine is filtered by its owner and shows an Owner fact, so in a
+    fleet a teammate's task on a machine that is not shared stays in your lists; the accounts, the GitHub token and
+    who is a member are read from the machine Settings is on (`sharedHere`, `memberHere`).
   - **What stays machine-wide.** Task capacity, routing policies, MCP servers, plugins, repository checks,
     notifications and the Dock badge, and usage and cost limits (counted for the whole machine, not per member).
   - **Trust.** A shared machine holds every member's Claude logins and GitHub token under one system user, and an

@@ -232,7 +232,14 @@ describe('a shared machine’s rows', () => {
       createTask({ id: 'old', title: 'Old setup' }),
     ],
   });
-  const ownership = { shared: true, viewer: 'kai', memberHere: true, isMemberTask: () => true };
+  const ownership = {
+    shared: true,
+    sharedHere: true,
+    viewer: 'kai',
+    memberHere: true,
+    isSharedTask: () => true,
+    isMemberTask: () => true,
+  };
   const rows = listTaskRows(state, [], [], NOW, ownership);
 
   it('keys your tasks as yours, a teammate’s by login and an unowned one as the machine owner’s', () => {

@@ -5,6 +5,7 @@ import { BunServices } from '@effect/platform-bun';
 import { createState, type ShinsaState, type TaskOwner } from '@shinsa/core';
 import { Effect, Layer } from 'effect';
 import {
+  MachineGitHubLayer,
   provideTaskGitHub,
   resolveAuthorEnv,
   resolveGitTokenEnv,
@@ -15,12 +16,15 @@ import {
 import {
   type GitHubIdentity,
   MACHINE_LOGIN,
+  MachineGitHub,
   type MachineGitHubShape,
   TaskGitHub,
 } from '../../src/github/identity/schema.ts';
 import { GitHubProcess } from '../../src/github/process/service.ts';
 import type { GitHubAnswer } from '../../src/github/schema.ts';
 import { GitHubCli } from '../../src/github/service.ts';
+import { Remote } from '../../src/remote/machine/service.ts';
+import { SecretStore } from '../../src/secrets/store/service.ts';
 import { Shell } from '../../src/shell/service.ts';
 import { createTempDir, overrideEnv } from '../helpers/index.ts';
 import { createTask } from '../helpers/state.ts';
@@ -163,5 +167,51 @@ describe('gh with a task’s identity', () => {
     } finally {
       restore();
     }
+  });
+});
+
+describe('the machine’s GitHub layer', () => {
+  const build = (owner: TaskOwner | null) => {
+    const remote = {
+      resolveActor: (userId: string | null) => Effect.succeed(userId === null ? owner : null),
+    };
+    const secrets = {
+      selectGitHubToken: (login: string) =>
+        Effect.succeed(login === 'kai' ? { ...KAI_TOKEN, savedAt: 5 } : null),
+    };
+    return Effect.runSync(
+      Effect.gen(function* () {
+        const github = yield* MachineGitHub;
+        if (!github) throw new Error('no MachineGitHub');
+        return {
+          owner: yield* github.machineOwner,
+          kai: yield* github.selectToken('kai'),
+          mona: yield* github.selectToken('mona'),
+        };
+      }).pipe(
+        Effect.provide(
+          MachineGitHubLayer.pipe(
+            Layer.provide(
+              Layer.merge(
+                Layer.succeed(Remote, remote as unknown as Remote['Service']),
+                Layer.succeed(SecretStore, secrets as unknown as SecretStore['Service'])
+              )
+            )
+          )
+        )
+      )
+    );
+  };
+
+  test('names the machine’s owner and hands back a member’s stored token without its save time', () => {
+    expect(build({ login: 'christo', name: null, avatarUrl: null })).toEqual({
+      owner: 'christo',
+      kai: KAI_TOKEN,
+      mona: null,
+    });
+  });
+
+  test('names no owner while remote access is off', () => {
+    expect(build(null).owner).toBeNull();
   });
 });

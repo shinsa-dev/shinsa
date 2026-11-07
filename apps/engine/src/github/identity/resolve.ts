@@ -1,9 +1,12 @@
 import { DomainError, isSharedMachine, type ShinsaState, type TaskOwner } from '@shinsa/core';
-import { Effect } from 'effect';
+import { Effect, Layer } from 'effect';
+import { Remote } from '../../remote/machine/service.ts';
+import { SecretStore } from '../../secrets/store/service.ts';
 import type { CommandEnv } from '../../shell/schema.ts';
 import type { GitHubCli } from '../service.ts';
 import {
   GITHUB_HEADER_KEY,
+  MachineGitHub,
   GITHUB_TOKEN_REFUSED,
   type GitHubIdentity,
   GitHubUser,
@@ -79,3 +82,22 @@ export const verifyGitHubToken = Effect.fn('verifyGitHubToken')(function* (
   };
   return identity;
 });
+
+export function resolveMachineOwner(remote: Remote['Service']) {
+  return Effect.map(remote.resolveActor(null), (owner) => owner?.login ?? null);
+}
+
+export const MachineGitHubLayer = Layer.effect(
+  MachineGitHub,
+  Effect.gen(function* () {
+    const remote = yield* Remote;
+    const secrets = yield* SecretStore;
+    return {
+      machineOwner: resolveMachineOwner(remote),
+      selectToken: (login: string) =>
+        Effect.map(secrets.selectGitHubToken(login), (stored) =>
+          stored ? { token: stored.token, login: stored.login, name: stored.name, email: stored.email } : null
+        ),
+    };
+  })
+);

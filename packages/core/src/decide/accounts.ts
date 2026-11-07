@@ -183,7 +183,7 @@ function requestOwnerSignIn(decider: Decider, run: Run, task: Task) {
   const { title, reason } = describeOwnerSignIn(task.owner ?? null);
   decider.openGate(task.id, 'sign_in', title, reason, {
     runId: run.id,
-    details: { provider: CLAUDE_PROVIDER, account: null },
+    details: { provider: CLAUDE_PROVIDER, account: null, cause: 'owner_account' },
   });
 }
 
@@ -229,7 +229,7 @@ function retryAfterSignIn(decider: Decider, gate: Gate) {
 export function recordSignedIn(decider: Decider, command: CommandOf<'account.signed_in'>) {
   const gates = listSignInGates(
     decider,
-    (gate) => gate.account?.id === command.account.id || (gate.provider === CLAUDE_PROVIDER && !gate.account)
+    (gate) => gate.account?.id === command.account.id || gate.cause === 'owner_account'
   );
   for (const gate of gates) retryAfterSignIn(decider, gate);
 }

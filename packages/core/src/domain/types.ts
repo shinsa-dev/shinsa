@@ -165,7 +165,7 @@ export type GateType =
   | 'post_merge'
   | 'result';
 
-export type GateCause = 'budget' | 'monitor' | 'push_hook' | 'paused';
+export type GateCause = 'budget' | 'monitor' | 'push_hook' | 'paused' | 'owner_account';
 
 export type EditsApproval = 'review' | 'merge';
 

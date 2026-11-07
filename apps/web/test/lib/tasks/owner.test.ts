@@ -18,21 +18,30 @@ import { createGate, createShinsaState, createTask } from '../../support/state.t
 const KAI = { login: 'kai', name: 'Kai Lane', avatarUrl: null };
 const MONA = { login: 'mona', name: 'Mona Park', avatarUrl: null };
 
-const SHARED: TaskOwnership = { shared: true, viewer: 'Kai', memberHere: true, isMemberTask: () => true };
+const SHARED: TaskOwnership = {
+  shared: true,
+  sharedHere: true,
+  viewer: 'Kai',
+  memberHere: true,
+  isSharedTask: () => true,
+  isMemberTask: () => true,
+};
 
 const KAI_TASK = createTask({ id: 'kai-task', owner: KAI });
 const MONA_TASK = createTask({ id: 'mona-task', owner: MONA });
 const UNOWNED = createTask({ id: 'unowned' });
 
-function machine(id: string, sharedMachine: boolean, member = false) {
+function machine(id: string, sharedMachine: boolean, member = false, current = false) {
   const state = { ...createShinsaState({}), settings: { ...createShinsaState({}).settings, sharedMachine } };
-  return { id, state, ...(member ? { member: true as const } : {}) };
+  return { id, state, current, ...(member ? { member: true as const } : {}) };
 }
 
 describe('isOwnTask', () => {
   it('counts every task as yours on a machine that is not shared', () => {
     expect(isOwnTask(MONA_TASK, PERSONAL_OWNERSHIP)).toBe(true);
     expect(PERSONAL_OWNERSHIP.isMemberTask(MONA_TASK)).toBe(false);
+    expect(PERSONAL_OWNERSHIP.isSharedTask(MONA_TASK)).toBe(false);
+    expect(isOwnTask(MONA_TASK, { ...SHARED, isSharedTask: () => false })).toBe(true);
   });
 
   it('matches the owner to the viewer by login, in any case', () => {
@@ -66,6 +75,11 @@ describe('isOwnAccount and describeAccountOwner', () => {
     expect(describeAccountOwner('mona', SHARED)).toBe('mona’s');
     expect(describeAccountOwner(null, SHARED)).toBe(`${MACHINE_OWNER_LABEL}’s`);
     expect(describeAccountOwner(null, { ...SHARED, memberHere: false })).toBe('Yours');
+  });
+
+  it('say nothing about owners when only another machine is shared', () => {
+    expect(describeAccountOwner('mona', { ...SHARED, sharedHere: false })).toBeNull();
+    expect(isOwnAccount('mona', { ...SHARED, sharedHere: false })).toBe(true);
   });
 });
 
@@ -127,8 +141,9 @@ describe('resolveTaskOwnership', () => {
       viewer: 'mona',
       selectTaskMachine: none,
     });
-    expect(local).toMatchObject({ shared: true, viewer: 'mona', memberHere: false });
+    expect(local).toMatchObject({ shared: true, sharedHere: true, viewer: 'mona', memberHere: false });
     expect(local.isMemberTask(UNOWNED)).toBe(false);
+    expect(local.isSharedTask(UNOWNED)).toBe(true);
   });
 
   it('knows a member machine alone, or the machine a task is on among several', () => {
@@ -140,6 +155,7 @@ describe('resolveTaskOwnership', () => {
     });
     expect(alone.memberHere).toBe(true);
     expect(alone.isMemberTask(UNOWNED)).toBe(true);
+    expect(alone.isSharedTask(UNOWNED)).toBe(true);
     const fleet = resolveTaskOwnership({
       settings: null,
       machines: [machine('laptop', false), machine('vps', true, true)],
@@ -147,8 +163,36 @@ describe('resolveTaskOwnership', () => {
       selectTaskMachine: (taskId) => (taskId === 'unowned' ? 'vps' : 'laptop'),
     });
     expect(fleet.memberHere).toBe(false);
+    expect(fleet.sharedHere).toBe(false);
     expect(fleet.isMemberTask(UNOWNED)).toBe(true);
     expect(fleet.isMemberTask(KAI_TASK)).toBe(false);
+    expect(fleet.isSharedTask(UNOWNED)).toBe(true);
+    expect(fleet.isSharedTask(KAI_TASK)).toBe(false);
+  });
+
+  it('reads members and accounts from the machine Settings is on, not the first one', () => {
+    const fleet = resolveTaskOwnership({
+      settings: null,
+      machines: [machine('laptop', false), machine('vps', true, true, true)],
+      viewer: 'kai',
+      selectTaskMachine: () => null,
+    });
+    expect(fleet).toMatchObject({ sharedHere: true, memberHere: true });
+    expect(fleet.isSharedTask(UNOWNED)).toBe(false);
+  });
+
+  it('counts a task handed to you on a teammate’s machine that is not shared as yours', () => {
+    const handed = createTask({ id: 'handed', owner: KAI });
+    const fleet = resolveTaskOwnership({
+      settings: null,
+      machines: [machine('kai-laptop', false, true), machine('vps', true, false, true)],
+      viewer: 'mona',
+      selectTaskMachine: (taskId) => (taskId === 'handed' ? 'kai-laptop' : 'vps'),
+    });
+    expect(isOwnTask(handed, fleet)).toBe(true);
+    expect(resolveOwnerLogin(handed, fleet)).toBeNull();
+    expect(resolveOwnerFact(handed, fleet)).toBeNull();
+    expect(isOwnTask(KAI_TASK, fleet)).toBe(false);
   });
 });
 

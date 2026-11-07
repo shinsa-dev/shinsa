@@ -23,7 +23,7 @@ import { SIGN_IN_CALLBACK_PATH } from '../extensions/sign-in.ts';
 import { FeedbackDrafter } from '../feedback/draft/service.ts';
 import { JsonFile } from '../files/service.ts';
 import { GitCommands, GitLayer } from '../git/layers.ts';
-import { MachineGitHub } from '../github/identity/schema.ts';
+import { MachineGitHubLayer, resolveMachineOwner } from '../github/identity/resolve.ts';
 import { GitHubLayer } from '../github/layers.ts';
 import { EngineModels, ServedChangelog, ServedInstance } from '../http/schema.ts';
 import { EngineServer } from '../http/server/service.ts';
@@ -306,21 +306,6 @@ function createTerminalsLayer(instance: ServerInstance) {
   );
 }
 
-const MachineGitHubLayer = Layer.effect(
-  MachineGitHub,
-  Effect.gen(function* () {
-    const remote = yield* Remote;
-    const secrets = yield* SecretStore;
-    return {
-      machineOwner: Effect.map(remote.resolveActor(null), (owner) => owner?.login ?? null),
-      selectToken: (login: string) =>
-        Effect.map(secrets.selectGitHubToken(login), (stored) =>
-          stored ? { token: stored.token, login: stored.login, name: stored.name, email: stored.email } : null
-        ),
-    };
-  })
-);
-
 function createRunsLayer(options: ShinsaOptions) {
   const access = Layer.effect(
     ManageAccess,
@@ -347,7 +332,7 @@ function createRunsLayer(options: ShinsaOptions) {
         readWeeklyReading: accounts.readWeeklyReading,
         readProviderWeeklyReading: accounts.readProviderWeeklyReading,
         readFastMode: accounts.readFastMode,
-        machineOwner: Effect.map(remote.resolveActor(null), (owner) => owner?.login ?? null),
+        machineOwner: resolveMachineOwner(remote),
       };
     })
   );
