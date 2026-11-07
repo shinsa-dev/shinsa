@@ -23,6 +23,7 @@ export class SlackStore extends Context.Service<
     selectLink(workspaceId: string, slackUserId: string): Effect.Effect<Option.Option<SlackLink>>;
     listMachineLinks(instanceId: InstanceId): Effect.Effect<ReadonlyArray<SlackLink>>;
     removeMachineLinks(instanceId: InstanceId): Effect.Effect<void>;
+    clearUserToken(workspaceId: string, slackUserId: string): Effect.Effect<void>;
     recordThread(thread: SlackThread, instanceId: InstanceId): Effect.Effect<void>;
     hasThread(thread: SlackThread, instanceId: InstanceId): Effect.Effect<boolean>;
     recordPost(post: SlackMessage, instanceId: InstanceId): Effect.Effect<void>;
@@ -72,6 +73,11 @@ export class SlackStore extends Context.Service<
       const linksRemoval = SqlSchema.void({
         Request: InstanceId,
         execute: (id) => sql`DELETE FROM slack_links WHERE machine_id = ${id}`,
+      });
+      const userTokenClearing = SqlSchema.void({
+        Request: Schema.Struct({ workspaceId: Schema.String, slackUserId: Schema.String }),
+        execute: (row) =>
+          sql`UPDATE slack_links SET sealed_user_token = NULL WHERE workspace_id = ${row.workspaceId} AND slack_user_id = ${row.slackUserId}`,
       });
       const ThreadOf = Schema.Struct({ ...SlackThread.fields, machineId: InstanceId });
       const insertThread = SqlSchema.void({
@@ -158,6 +164,10 @@ export class SlackStore extends Context.Service<
         ),
         removeMachineLinks: Effect.fn('SlackStore.removeMachineLinks')(
           (id: InstanceId) => linksRemoval(id),
+          Effect.orDie
+        ),
+        clearUserToken: Effect.fn('SlackStore.clearUserToken')(
+          (workspaceId: string, slackUserId: string) => userTokenClearing({ workspaceId, slackUserId }),
           Effect.orDie
         ),
         recordThread,

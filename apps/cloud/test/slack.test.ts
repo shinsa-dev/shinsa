@@ -125,10 +125,10 @@ function sealedUserTokens(harness: Harness) {
     .all() as { slack_user_id: string; sealed_user_token: string | null }[];
 }
 
-async function bringOnline(harness: Harness, machine: MachineCredentials) {
+async function bringOnline(harness: Harness, machine: MachineCredentials, features: string[] = []) {
   await harness.post(
     REMOTE_PATHS.heartbeat,
-    { localUrl: 'http://127.0.0.1:7446' },
+    { localUrl: 'http://127.0.0.1:7446', features },
     { bearer: machine.machineToken }
   );
 }
@@ -574,13 +574,16 @@ describe('events from Slack', () => {
     expect(forwards).toHaveLength(1);
   });
 
-  test('a revoked bot token forgets the workspace and every link in it; a revoked user token alone keeps it', async () => {
-    const { harness } = await setUp();
+  test('a revoked bot token forgets the workspace and every link in it; a revoked user token alone drops only that token', async () => {
+    const { harness, slack } = await setUp();
     const count = () =>
       harness.db.sqlite.query('SELECT COUNT(*) AS n FROM slack_links').get() as { n: number };
-    await sendEvent(harness, mentionEnvelope({ type: 'tokens_revoked', tokens: { oauth: ['U1'] } }));
     await sendEvent(harness, mentionEnvelope({ type: 'tokens_revoked' }));
+    expect(sealedUserTokens(harness)[0]?.sealed_user_token).not.toBeNull();
+    await sendEvent(harness, mentionEnvelope({ type: 'tokens_revoked', tokens: { oauth: ['U1'] } }));
     expect(count().n).toBe(1);
+    expect(sealedUserTokens(harness)).toEqual([{ slack_user_id: 'U1', sealed_user_token: null }]);
+    expect(slack.callsTo('auth.revoke')).toHaveLength(0);
     await sendEvent(harness, mentionEnvelope({ type: 'tokens_revoked', tokens: { bot: ['B0T'] } }));
     expect(count().n).toBe(0);
   });
@@ -898,6 +901,173 @@ describe('a mention from someone', () => {
       '[Cloud] A Slack mention could not be forwarded',
       expect.anything()
     );
+  });
+});
+
+const CUSTOMER_LINK =
+  '<https://acme.slack.com/archives/C9/p1700000000000200?thread_ts=1700000000.000100&amp;cid=C9|the customer thread>';
+const OPS_LINK = '<https://acme.slack.com/archives/G8/p1700000000000300>';
+
+function linkingMention(text: string, event: Fields = {}) {
+  return mentionEnvelope({ ts: '1700000001.000001', text: `<@B0T> look at ${text}`, ...event });
+}
+
+function answerRepliesByToken(slack: FakeSlack, refused: Record<string, string> = {}) {
+  slack.answers['conversations.replies'] = (body) => {
+    const error = refused[String(body.channel)];
+    if (error) return { ok: false, error };
+    return {
+      ok: true,
+      messages: [
+        { ts: String(body.ts), user: 'U2', text: `Opened in <#${String(body.channel)}|ops>` },
+        {
+          ts: '1700000000.000900',
+          bot_id: 'BX',
+          bot_profile: { name: 'Intercom' },
+          text: 'Customer replied',
+        },
+      ],
+    };
+  };
+  slack.answers['conversations.info'] = (body) => ({
+    ok: true,
+    channel: { id: body.channel, name: body.channel === 'C1' ? 'support' : `shared-${String(body.channel)}` },
+  });
+}
+
+async function setUpLinking() {
+  const setup = await setUp();
+  await bringOnline(setup.harness, setup.machine, ['slack-linked-threads']);
+  answerRepliesByToken(setup.slack);
+  return setup;
+}
+
+function readForward(forwards: Setup['forwards'], index = 0) {
+  return JSON.parse(forwards[index]?.body ?? '') as SlackMention;
+}
+
+describe('a mention that links to other threads', () => {
+  test('reads each linked thread with the mentioner’s own token and forwards it beside their own', async () => {
+    const { harness, slack, forwards } = await setUpLinking();
+    await sendEvent(harness, linkingMention(`${CUSTOMER_LINK} and ${OPS_LINK}`));
+    const linkedReads = slack.callsTo('conversations.replies');
+    expect(linkedReads.map((call) => [call.body.channel, call.body.ts, call.token])).toEqual([
+      ['C9', '1700000000.000100', 'xoxp-user-1'],
+      ['G8', '1700000000.000300', 'xoxp-user-1'],
+    ]);
+    expect(slack.callsTo('conversations.info').map((call) => [call.body.channel, call.token])).toEqual([
+      ['C9', 'xoxp-user-1'],
+      ['G8', 'xoxp-user-1'],
+      ['C1', 'xoxb-bot-token'],
+    ]);
+    const mention = readForward(forwards);
+    expect(mention.linkedThreads).toEqual([
+      {
+        channelId: 'C9',
+        threadTs: '1700000000.000100',
+        permalink:
+          'https://acme.slack.com/archives/C9/p1700000000000200?thread_ts=1700000000.000100&amp;cid=C9',
+        channelName: 'shared-C9',
+        thread: [
+          { ts: '1700000000.000100', userId: 'U2', userName: 'Mia', text: 'Opened in #ops', bot: false },
+          {
+            ts: '1700000000.000900',
+            userId: 'BX',
+            userName: 'Intercom',
+            text: 'Customer replied',
+            bot: true,
+          },
+        ],
+      },
+      {
+        channelId: 'G8',
+        threadTs: '1700000000.000300',
+        permalink: 'https://acme.slack.com/archives/G8/p1700000000000300',
+        channelName: 'shared-G8',
+        thread: [
+          { ts: '1700000000.000300', userId: 'U2', userName: 'Mia', text: 'Opened in #ops', bot: false },
+          {
+            ts: '1700000000.000900',
+            userId: 'BX',
+            userName: 'Intercom',
+            text: 'Customer replied',
+            bot: true,
+          },
+        ],
+      },
+    ]);
+    expect(slack.callsTo('chat.postEphemeral')).toHaveLength(0);
+  });
+
+  test('reads at most three, and skips a link to the thread it was mentioned in', async () => {
+    const { harness, slack, forwards } = await setUpLinking();
+    const links = ['C2', 'C3', 'C4', 'C5'].map(
+      (channel) => `<https://acme.slack.com/archives/${channel}/p1700000000000400>`
+    );
+    const own = '<https://acme.slack.com/archives/C1/p1700000001000001>';
+    await sendEvent(harness, linkingMention([own, ...links].join(' ')));
+    expect(slack.callsTo('conversations.replies').map((call) => call.body.channel)).toEqual(['C2', 'C3']);
+    expect(readForward(forwards).linkedThreads).toHaveLength(2);
+  });
+
+  test('never falls back to the bot’s token, and says privately which links it could not read', async () => {
+    const { harness, slack, forwards } = await setUpLinking();
+    answerRepliesByToken(slack, { C9: 'not_in_channel' });
+    await sendEvent(harness, linkingMention(`${CUSTOMER_LINK} and ${OPS_LINK}`));
+    expect(slack.callsTo('conversations.replies').every((call) => call.token === 'xoxp-user-1')).toBe(true);
+    expect(readForward(forwards).linkedThreads.map((thread) => thread.channelId)).toEqual(['G8']);
+    const [ephemeral] = slack.callsTo('chat.postEphemeral');
+    expect(ephemeral?.token).toBe('xoxb-bot-token');
+    expect(ephemeral?.body).toMatchObject({
+      channel: 'C1',
+      user: 'U1',
+      thread_ts: '1700000001.000001',
+      text: 'I could not read the thread you linked. Check that you can open it in Slack.',
+    });
+    answerRepliesByToken(slack, { C9: 'channel_not_found', G8: 'thread_not_found' });
+    await sendEvent(harness, linkingMention(`${CUSTOMER_LINK} and ${OPS_LINK}`));
+    expect(slack.callsTo('chat.postEphemeral')[1]?.body.text).toBe(
+      'I could not read 2 of the threads you linked. Check that you can open them in Slack.'
+    );
+    expect(readForward(forwards, 1).linkedThreads).toEqual([]);
+  });
+
+  test('asks to connect again when the person has no token yet, or Slack refuses the one kept', async () => {
+    const { harness, slack, forwards } = await setUpLinking();
+    answerRepliesByToken(slack, { C9: 'missing_scope' });
+    await sendEvent(harness, linkingMention(`${CUSTOMER_LINK} and ${OPS_LINK}`));
+    const [refused] = slack.callsTo('chat.postEphemeral');
+    expect(refused?.body.text).toBe('Connect Slack again so I can read the threads you link.');
+    expect(JSON.stringify(refused?.body.blocks)).toContain(`${TEST_CONFIG.origin}/slack/connect`);
+    harness.db.sqlite.query('UPDATE slack_links SET sealed_user_token = NULL').run();
+    const reads = slack.callsTo('conversations.replies').length;
+    await sendEvent(harness, linkingMention(CUSTOMER_LINK));
+    expect(slack.callsTo('conversations.replies')).toHaveLength(reads);
+    expect(slack.callsTo('chat.postEphemeral')[1]?.body.text).toBe(
+      'Connect Slack again so I can read the threads you link.'
+    );
+    expect(readForward(forwards, 1).linkedThreads).toEqual([]);
+  });
+
+  test('reads nothing linked for a machine that does not take linked threads, and asks nothing', async () => {
+    const { harness, machine, slack, forwards } = await setUpLinking();
+    await bringOnline(harness, machine);
+    await sendEvent(harness, linkingMention(CUSTOMER_LINK));
+    expect(slack.callsTo('conversations.replies')).toHaveLength(0);
+    expect(readForward(forwards).linkedThreads).toEqual([]);
+    expect(slack.callsTo('chat.postEphemeral')).toHaveLength(0);
+  });
+
+  test('from someone outside the workspace, such as a customer in a shared channel, gets no reply at all', async () => {
+    const { harness, slack, forwards } = await setUpLinking();
+    await sendEvent(harness, linkingMention(CUSTOMER_LINK, { user: 'U3', user_team: 'T9' }));
+    await sendEvent(harness, linkingMention(CUSTOMER_LINK, { user_team: 'T9' }));
+    expect(forwards).toHaveLength(0);
+    expect(
+      slack.calls.filter((call) => call.method !== 'oauth.v2.access' && call.method !== 'users.info')
+    ).toEqual([]);
+    await sendEvent(harness, linkingMention(CUSTOMER_LINK, { user_team: 'T1' }));
+    expect(forwards).toHaveLength(1);
   });
 });
 

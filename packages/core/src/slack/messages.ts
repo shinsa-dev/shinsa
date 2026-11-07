@@ -615,6 +615,21 @@ export function serializeSlackLinkPrompt(linkUrl: string) {
   ]);
 }
 
+export function serializeSlackReconnectPrompt(linkUrl: string) {
+  return createSlackMessage('Connect Slack again so I can read the threads you link.', [
+    createSlackSection(
+      '*Connect Slack again*\nConnect Slack again so I can read the threads you link. I read them as you, so I only see what you can.'
+    ),
+    createSlackActions([createOpenButton('Connect Slack', linkUrl)]),
+  ]);
+}
+
+export function serializeSlackUnreadLinks(count: number) {
+  return count === 1
+    ? 'I could not read the thread you linked. Check that you can open it in Slack.'
+    : `I could not read ${count} of the threads you linked. Check that you can open them in Slack.`;
+}
+
 export function serializeSlackOffline(machineName: string) {
   return serializeNote(
     `${machineName} is offline, so nothing was started.`,
