@@ -2,9 +2,11 @@ import { describe, expect, test } from 'bun:test';
 import {
   isHandOverTool,
   PLAN_EVIDENCE_KINDS,
+  PLAN_SPLIT_ORDERS,
   PROTOCOL_LIMITS,
   type RunRole,
   SHINSA_TOOL_NAMES,
+  validatePlanHandOver,
   VERIFICATION_RULES,
 } from '@shinsa/core';
 import { TOOL_SPECS } from '../../../src/agents/tools/specs.ts';
@@ -254,6 +256,45 @@ describe('the plan parameters propose_plan publishes', () => {
     expect(check.properties.command.maxLength).toBe(PROTOCOL_LIMITS.checkCommand);
     expect(check.properties.command.description).toContain('scoped to what the change touches');
     expect(check.properties.phases).toMatchObject({ minItems: 1, maxItems: PROTOCOL_LIMITS.planPhases });
+  });
+
+  test('a split is optional, at most the part limit, each part a title, a request and when it starts', () => {
+    expect(plan.split).toMatchObject({ type: 'array', maxItems: PROTOCOL_LIMITS.splitParts });
+    expect(plan.split.description).toContain("The plan's phases cover only what stays in this task.");
+    expect(plan.split.description).toContain('Only for a task that changes code');
+    expect(TOOL_SPECS.propose_plan.inputSchema.required).not.toContain('split');
+    const part = plan.split.items;
+    expect(part.required).toEqual(['title', 'request', 'order']);
+    expect(part.properties.title.maxLength).toBe(PROTOCOL_LIMITS.taskTitle);
+    expect(part.properties.request.maxLength).toBe(PROTOCOL_LIMITS.suggestionRequest);
+    expect(part.properties.order.enum).toEqual([...PLAN_SPLIT_ORDERS]);
+    expect(part.properties.on).toMatchObject({
+      type: 'integer',
+      minimum: 0,
+      maximum: PROTOCOL_LIMITS.splitParts - 1,
+    });
+  });
+
+  test('a split in the shape the schema publishes reaches the plan document', () => {
+    const split = [
+      { title: 'Add the parser', request: 'Add the CSV parser in src/csv.', order: 'parallel' },
+      { title: 'Wire the parser', request: 'Use the CSV parser in the import.', order: 'waits_on', on: 1 },
+    ];
+    const handOver = validatePlanHandOver({
+      goal: 'Import CSV files.',
+      phases: [
+        { title: 'Read the file', detail: 'Read it.' },
+        { title: 'Show the rows', detail: 'Show them.' },
+      ],
+      behaviour: ['Rows show.'],
+      approach: 'Read, then show.',
+      files: [],
+      out_of_scope: [],
+      verification: [{ label: 'Import', command: 'bun test test/import.test.ts', phases: [1, 2] }],
+      questions: [],
+      split,
+    });
+    expect(handOver).toMatchObject({ ok: true, value: { document: { split } } });
   });
 
   test('a phase and a fix can change the checks, a fix can name more to run, and evidence links a check', () => {

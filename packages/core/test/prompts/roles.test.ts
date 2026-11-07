@@ -42,6 +42,25 @@ describe('agent prompts', () => {
   });
 });
 
+describe('splitting the work in the plan', () => {
+  test('a change is told when to split the work and how each part starts', () => {
+    const harness = createHarness();
+    const task = harness.task(createTask(harness));
+    const prompt = resolvePlanningPrompt(task, null, [], null);
+    expect(prompt).toContain('give the rest in `split`: up to 8 parts');
+    expect(prompt).toContain('`parallel` starts the part at once, and is the default.');
+    expect(prompt).toContain('only for pieces of one rewrite');
+    expect(prompt).toContain('Keep a small or cohesive request whole');
+  });
+
+  test('work that opens no pull request is never offered a split', () => {
+    const harness = createHarness();
+    const task = harness.task(createTask(harness));
+    const prompt = resolvePlanningPrompt({ ...task, pipeline: ['plan', 'operate'] }, null, [], null);
+    expect(prompt).not.toContain('`split`');
+  });
+});
+
 describe('what a prompt says about the work it builds on', () => {
   function tasks() {
     const harness = createHarness();
