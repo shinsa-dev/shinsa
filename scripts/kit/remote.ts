@@ -9,6 +9,7 @@ import { JsonFile } from '../../apps/engine/src/files/service.ts';
 import { GitLayer } from '../../apps/engine/src/git/layers.ts';
 import { GitHubLayer } from '../../apps/engine/src/github/layers.ts';
 import { JsonLogger } from '../../apps/engine/src/log/service.ts';
+import { FleetRelay } from '../../apps/engine/src/remote/fleet-relay/service.ts';
 import { TunnelHealth } from '../../apps/engine/src/remote/health/service.ts';
 import {
   createRefusedConnector,
@@ -228,6 +229,7 @@ export function startRemoteServices(input: RemoteServicesInput) {
           shares,
           teams: Context.get(context, Teams),
           teamFeeds,
+          fleetRelay: Context.get(context, FleetRelay),
           previews,
           place: Context.get(context, PlacementAsker),
         },

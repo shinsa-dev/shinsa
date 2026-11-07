@@ -1268,8 +1268,9 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
 - **Presence from what is live.** A machine is offline when its channel drops, and a person is online while a page
   of theirs is in use or they have a teammate's team view open; app.shinsa.dev's five-minute heartbeat is only the
   fallback.
-- **Not yet.** The local Mac app acting on teammate tasks (it keeps the read-only view), teammates creating tasks on
-  someone else's machine, and terminals or Code-tab edits for teammates, both of which write to the owner's disk.
+- **The Mac app too.** Its engine enrols a team device of its own on each teammate's machine and relays it to the
+  page over localhost, so a teammate's task opens as the same full page there; the keys never leave the engine.
+- **Not yet.** Teammates creating tasks on someone else's machine, and terminals or Code-tab edits for teammates, both of which write to the owner's disk.
 
 ### Bundles (2026-11-01)
 

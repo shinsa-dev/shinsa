@@ -41,6 +41,7 @@ import {
 } from '@/lib/code/pane.ts';
 import { type FileSource, hasOneSide } from '@/lib/code/source.ts';
 import { resolveRawUrl, useFileContent } from '@/lib/connection/code.ts';
+import { useMediaUrl } from '@/lib/connection/socket.ts';
 import { formatBytes } from '@/lib/format/count.ts';
 import type { ReviewTarget } from '@/lib/review/targets.ts';
 
@@ -104,11 +105,12 @@ function ImageView({
   label: string;
 }) {
   const [loaded, setLoaded] = React.useState(false);
+  const src = useMediaUrl(resolveRawUrl(task.id, gitRef, path));
   return (
     <figure className='flex min-w-0 flex-1 flex-col items-center gap-2 p-4'>
       <figcaption className='text-2xs text-fg-2'>{label}</figcaption>
       <img
-        src={resolveRawUrl(task.id, gitRef, path)}
+        src={src}
         alt={path}
         onLoad={() => setLoaded(true)}
         style={{ visibility: loaded ? 'visible' : 'hidden' }}

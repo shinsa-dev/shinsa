@@ -20,6 +20,7 @@ import {
   type RemoteFileRead,
   type StoredHandoff,
   type StoredLink,
+  type RelayDevice,
   type StoredTeamKey,
   type TeamGrant,
   type TeammateExtra,
@@ -212,6 +213,27 @@ function readExtras(value: unknown): TeammateExtra[] {
   });
 }
 
+const RELAY_DEVICE_TEXTS = ['instanceId', 'teamId', 'machineKey', 'publicKey', 'privateKey'] as const;
+
+function readRelayDevices(value: unknown): RelayDevice[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((entry) => {
+    if (!isFields(entry) || typeof entry.enrolledAt !== 'number') return [];
+    if (!RELAY_DEVICE_TEXTS.every((field) => typeof entry[field] === 'string')) return [];
+    const texts = entry as Record<(typeof RELAY_DEVICE_TEXTS)[number], string>;
+    return [
+      {
+        instanceId: texts.instanceId,
+        teamId: texts.teamId,
+        machineKey: texts.machineKey,
+        publicKey: texts.publicKey,
+        privateKey: texts.privateKey,
+        enrolledAt: entry.enrolledAt,
+      },
+    ];
+  });
+}
+
 export function readAccess(value: unknown): RemoteAccess | null {
   const owner = isFields(value) ? readUser(value.owner) : null;
   if (!(owner && isFields(value))) return null;
@@ -239,6 +261,7 @@ export function readRemoteFields(fields: Fields | null): RemoteFileRead {
       teamKeys: readTeamKeys(fields.teamKeys),
       grants: readGrants(fields.grants),
       extras: readExtras(fields.extras),
+      relayDevices: readRelayDevices(fields.relayDevices),
     },
     credentialsIncomplete: incomplete,
   };

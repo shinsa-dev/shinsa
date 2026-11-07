@@ -23,6 +23,7 @@ import {
   type TerminalsSnapshot,
 } from '@shinsa/core';
 import type { IconName } from '@shinsa/ui/components/icon';
+import { selectRelayedAppOrigin } from '@/lib/connection/socket.ts';
 import { formatDuration } from '@/lib/format/time.ts';
 import type { Tone } from '@/lib/format/tone.ts';
 import { createDisclosureId } from '@/lib/preferences/disclosure.ts';
@@ -143,14 +144,16 @@ export function resolveServiceLink(
   remote = isRemoteBuild()
 ): ServiceLink | null {
   if (!localUrl) return null;
-  if (!(remote && view.remoteUrl && isServiceActive(view))) return { href: localUrl, text: localUrl };
+  const relayed = remote ? null : selectRelayedAppOrigin(view.taskId);
+  if (!((remote || relayed !== null) && view.remoteUrl && isServiceActive(view)))
+    return { href: localUrl, text: localUrl };
   const local = new URL(localUrl);
   const target = new URL(view.remoteUrl);
   target.pathname = local.pathname;
   target.search = local.search;
   target.hash = local.hash;
   return {
-    href: `${REMOTE_PATHS.previewOpen}?${new URLSearchParams({ url: target.href })}`,
+    href: `${relayed ?? ''}${REMOTE_PATHS.previewOpen}?${new URLSearchParams({ url: target.href })}`,
     text: target.href,
   };
 }

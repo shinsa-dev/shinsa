@@ -1,7 +1,10 @@
+import { BunSocket } from '@effect/platform-bun';
 import { Layer } from 'effect';
 import { FetchHttpClient } from 'effect/http';
 import { AccessScope } from './access/service.ts';
 import { RemoteClient } from './client/service.ts';
+import { DeviceChannels } from './device-channel/service.ts';
+import { FleetRelay } from './fleet-relay/service.ts';
 import { Handoffs } from './handoffs/service.ts';
 import { TunnelHealth } from './health/service.ts';
 import type { RemoteInput } from './machine/schema.ts';
@@ -32,7 +35,12 @@ export const RemoteMachineLayer = (input: RemoteInput) =>
   );
 
 export const RemoteLayer = (input: RemoteInput) =>
-  Teams.layer.pipe(
+  Layer.merge(
+    Teams.layer,
+    FleetRelay.layer.pipe(
+      Layer.provide(DeviceChannels.layer.pipe(Layer.provide(BunSocket.layerWebSocketConstructor)))
+    )
+  ).pipe(
     Layer.provideMerge(Layer.mergeAll(Shares.layer, TeamFeeds.layer, Handoffs.layer, Presence.layer)),
     Layer.provideMerge(RemoteMachineLayer(input))
   );
