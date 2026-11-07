@@ -19,6 +19,7 @@ import {
   HOST,
   LAPTOP_TASKS,
   LOCAL_WEB,
+  MACHINE_APP,
   ORIGIN,
   PORT,
   PREVIEW_ZONE,
@@ -103,6 +104,10 @@ export const startSandbox = Effect.fn('Sandbox.start')(function* () {
       if (share && request.method === 'POST') return respondShareConnect(share, machines);
       const signIn = respondSandboxSignIn(url, studio.engine);
       if (signIn) return yield* signIn;
+      const app = MACHINE_APP.exec(url.pathname);
+      const target = teammates.find((entry) => entry.id === app?.[1]);
+      if (target)
+        return Response.redirect(`http://${HOST}:${target.port}${app?.[2] ?? '/'}${url.search}`, 302);
       const enroll = ENROLL.exec(url.pathname);
       const enrolling = machines.find((entry) => entry.id === enroll?.[1]);
       if (enrolling) return yield* respondEnroll(enrolling, url);
