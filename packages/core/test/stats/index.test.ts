@@ -267,7 +267,31 @@ describe('resolveStats', () => {
     });
     const stats = resolveStats(stateOf([merged], []), windowOf(4));
     expect(stats.days.map((day) => day.pullRequests)).toEqual([0, 1, 0, 0]);
-    expect(stats.days.map((day) => day.tasks)).toEqual([0, 0, 1, 0]);
+    expect(stats.days.map((day) => day.tasks)).toEqual([0, 1, 0, 0]);
+  });
+
+  test('a task counts as finished on the day it first merged, not when it closed or a later round ended', () => {
+    const merged = { number: 7, url: 'u', state: 'merged' as const, base: null, mergedAt: DAY };
+    const closedLater = task('a', {
+      stage: 'done',
+      closedAt: 3 * DAY,
+      rounds: [round(1, { endedAt: DAY, pullRequest: merged })],
+    });
+    const laterRound = task('b', {
+      stage: 'done',
+      closedAt: 3 * DAY,
+      rounds: [
+        round(1, { endedAt: DAY, pullRequest: { ...merged, number: 8 } }),
+        round(2, { status: 'finished', endedAt: 2 * DAY, pullRequest: null }),
+      ],
+    });
+    const unmerged = task('c', {
+      stage: 'done',
+      closedAt: 3 * DAY,
+      rounds: [round(1, { status: 'finished', endedAt: 2 * DAY, pullRequest: null })],
+    });
+    const stats = resolveStats(stateOf([closedLater, laterRound, unmerged], []), windowOf(4));
+    expect(stats.days.map((day) => day.tasks)).toEqual([0, 2, 1, 0]);
   });
 
   test('a merged pull request still counts while its round is reopened or after it finished another way', () => {

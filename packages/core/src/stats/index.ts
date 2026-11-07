@@ -151,13 +151,19 @@ function resolveMergedAt(task: Task, round: Round) {
   return round.pullRequest?.mergedAt ?? round.endedAt ?? task.closedAt ?? task.stageChangedAt;
 }
 
-function resolveFinishedAt(task: Task) {
+function resolveFinishedAt(task: Task, merged: readonly MergedPullRequest[]) {
+  if (merged.length > 0) return Math.min(...merged.map((pullRequest) => pullRequest.at));
   const ends = resolveTaskRounds(task).flatMap((round) => (round.endedAt === null ? [] : [round.endedAt]));
-  return task.closedAt ?? (ends.length > 0 ? Math.max(...ends) : task.stageChangedAt);
+  return ends.length > 0 ? Math.min(...ends) : (task.closedAt ?? task.stageChangedAt);
+}
+
+interface MergedPullRequest {
+  at: number;
+  changes: PullRequestChanges | null;
 }
 
 function listMergedPullRequests(task: Task) {
-  const merged = new Map<number, { at: number; changes: PullRequestChanges | null }>();
+  const merged = new Map<number, MergedPullRequest>();
   for (const round of resolveTaskRounds(task)) {
     const pullRequest = round.pullRequest;
     if (!pullRequest || (round.status !== 'merged' && typeof pullRequest.mergedAt !== 'number')) continue;
@@ -213,14 +219,14 @@ function foldRunUsage(fold: UsageFold, run: Run, dayAt: DayLookup) {
   }
 }
 
-function isTaskShipped(task: Task, merged: readonly unknown[]) {
+function isTaskShipped(task: Task, merged: readonly MergedPullRequest[]) {
   return SHIPPED_STAGES.includes(task.stage) || (merged.length > 0 && task.stage !== 'cancelled');
 }
 
 function foldShipping(task: Task, dayAt: DayLookup) {
   const pullRequests = listMergedPullRequests(task);
   if (isTaskShipped(task, pullRequests)) {
-    const day = dayAt(resolveFinishedAt(task));
+    const day = dayAt(resolveFinishedAt(task, pullRequests));
     if (day) day.tasks += 1;
   }
   for (const merged of pullRequests) {
