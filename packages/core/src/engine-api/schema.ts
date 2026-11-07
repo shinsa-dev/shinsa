@@ -57,7 +57,7 @@ export const BROWSER_ONLY_TERMINALS = 'Only Shinsa’s page opens terminals.';
 
 export const BROWSER_ONLY_INSTALL = 'Only Shinsa’s own page installs the tools setup checks.';
 
-export const GUEST_ACCESS = ['none', 'any', 'own_task', 'task_file'] as const;
+export const GUEST_ACCESS = ['none', 'any', 'filtered', 'own_task', 'task_file'] as const;
 
 export type GuestAccess = (typeof GUEST_ACCESS)[number];
 
@@ -409,6 +409,18 @@ export const TeamLinkAnswer = Schema.Struct({ url: Schema.String });
 export const TeamKeysAnswer = Schema.Struct({
   keys: Schema.Array(Schema.Struct({ teamId: Schema.String, name: Schema.String, key: Schema.String })),
 });
+
+export const TeamRelayEntry = Schema.Struct({
+  instanceId: Schema.String,
+  teamId: Schema.String,
+  name: Schema.String,
+  userId: Schema.String,
+  appOrigin: Schema.String,
+});
+
+export type TeamRelayEntry = typeof TeamRelayEntry.Type;
+
+export const TeamRelaysAnswer = Schema.Struct({ relays: Schema.Array(TeamRelayEntry) });
 
 export const TeamCreateAnswer = Schema.Struct({ teamId: Schema.String, url: Schema.String });
 

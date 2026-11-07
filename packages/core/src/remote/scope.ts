@@ -3,6 +3,7 @@ import type { UserCommand } from '../commands/index.ts';
 import type { Gate, GateType, Run, RunAccount, Task, TaskGuest } from '../domain/index.ts';
 import { resolveEngineInfo } from '../protocol/engine.ts';
 import { resolveStatePatch, type StatePatch } from '../protocol/patch.ts';
+import type { TerminalsSnapshot } from '../protocol/terminals.ts';
 import { hasScope } from '../scopes/index.ts';
 import type { AccessScopes, ActionScope } from '../scopes/schema.ts';
 import { isTeamTask } from '../share/teams.ts';
@@ -228,6 +229,23 @@ export function listScopedTasks(state: ShinsaState, scope: ActorScope) {
     return task ? [task] : [];
   }
   return Object.values(state.tasks).filter((task) => isTeamTask(state, task, scope.teamId));
+}
+
+export function resolveScopedTerminals(
+  state: ShinsaState,
+  scope: ActorScope,
+  snapshot: TerminalsSnapshot
+): TerminalsSnapshot {
+  const allowed = scope.kind === 'task' || hasScope(scope.scopes, 'services');
+  const taskIds = new Set(allowed ? listScopedTasks(state, scope).map((task) => task.id) : []);
+  const terminals = snapshot.terminals.filter(
+    (terminal) => terminal.serviceId !== null && terminal.taskId !== null && taskIds.has(terminal.taskId)
+  );
+  const serviceIds = new Set(terminals.map((terminal) => terminal.serviceId));
+  const services = snapshot.services
+    .filter((service) => serviceIds.has(service.id))
+    .map((service) => ({ ...service, env: {} }));
+  return { home: '', terminals, services };
 }
 
 function mapRecords<T>(records: Record<string, T>, redact: (record: T) => T) {

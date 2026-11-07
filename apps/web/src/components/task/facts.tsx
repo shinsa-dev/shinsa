@@ -144,7 +144,7 @@ function HandoffFact({ task }: { task: Task }) {
   const fact = resolveHandoffFact(task, machine);
   if (!fact) return null;
   return (
-    <span className={cn(FACT, 'max-w-80')}>
+    <span className={cn(FACT, 'max-w-80 gap-0.75')}>
       <Hint label={fact.hint}>
         <span className='inline-flex shrink-0 cursor-default items-center gap-1.5 whitespace-pre'>
           <Icon size='sm' name={fact.icon ?? HANDOFF_ICON} />

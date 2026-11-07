@@ -42,6 +42,7 @@ import {
   resolveRetryReply,
 } from '@/lib/tasks/gates.ts';
 import { type ChangeReply, describeChangeGate } from '@/lib/tasks/shapes.ts';
+import { countSplitTasks, KEEP_ONE_TASK_MESSAGE } from '@/lib/tasks/split.ts';
 import { resolveGateGlyph } from '@/lib/tasks/status.ts';
 import { hasReview, type TaskTab } from '@/lib/tasks/tabs.ts';
 import { resolveTaskPath } from '@/router.ts';
@@ -227,17 +228,33 @@ function listFailureCommands(state: ShinsaState, gate: Gate): Command[] {
   ];
 }
 
+function createKeepOneTaskCommand(task: Task, gate: Gate): Command[] {
+  if (countSplitTasks(task) === 0) return [];
+  return [
+    {
+      kind: 'run',
+      id: `${resolveGateId(gate)}.keep-one-task`,
+      label: 'Keep as one task',
+      icon: 'IconPencil',
+      keywords: ['split', 'merge', 'together', 'whole', 'revise'],
+      run: () => void replyToGate(gate, 'keepOneTask', KEEP_ONE_TASK_MESSAGE),
+    },
+  ];
+}
+
 function listPlanCommands(task: Task, gate: Gate): Command[] {
   const id = resolveGateId(gate);
+  const splits = countSplitTasks(task) > 0;
   return [
     {
       kind: 'run',
       id: `${id}.approve`,
-      label: task.backlog ? describePlanCard(task).approve : 'Approve the plan',
-      icon: 'IconCheckmark1',
-      keywords: ['spec', 'go ahead', 'build', 'accept'],
+      label: task.backlog || splits ? describePlanCard(task).approve : 'Approve the plan',
+      icon: splits ? 'IconSplit' : 'IconCheckmark1',
+      keywords: ['spec', 'go ahead', 'build', 'accept', ...(splits ? ['split', 'tasks'] : [])],
       run: () => void replyToGate(gate, resolvePlanReply(task), null, { planVersion: task.plan?.version }),
     },
+    ...createKeepOneTaskCommand(task, gate),
     {
       kind: 'page',
       id: `${id}.revise`,

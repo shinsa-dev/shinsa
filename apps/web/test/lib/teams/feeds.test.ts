@@ -26,6 +26,7 @@ import {
   resolveTeamTaskPath,
   resolveTeamTaskState,
   resolveTeamTaskTarget,
+  selectTeamFeedTask,
   selectTeamTaskHeldAt,
   TEAM_FEED_REFUSED,
   TEAM_FEED_WAITS_FOR_KEY,
@@ -189,6 +190,14 @@ describe('teammates’ task lists', () => {
     };
     const listed = listTeamFeedTasks(feed, new Set(['team1', 'team2']), new Set());
     expect(listed.map((entry) => `${entry.teamId}:${entry.task.id}`)).toEqual(['team1:shared']);
+  });
+
+  it('finds a teammate’s listed task by its id or its handle, whatever the case', () => {
+    const entry = createTeamFeedTask({ task: createTask({ id: 'kai-task', handle: 'PAY-1' }) });
+    const feed = { machines: [], tasks: [entry] };
+    expect(selectTeamFeedTask(feed, 'kai-task')).toBe(entry);
+    expect(selectTeamFeedTask(feed, 'pay-1')).toBe(entry);
+    expect(selectTeamFeedTask(feed, 'PAY-2')).toBeNull();
   });
 
   it('opens a teammate’s task at its own address and names whose it is', () => {

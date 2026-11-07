@@ -5,6 +5,7 @@ import {
   MAX_OWNED_TEAMS,
   MAX_TEAM_MEMBERS,
   type MachineCredentials,
+  REMOTE_CHANNEL_PATH,
   REMOTE_PATHS,
   type RemoteMember,
   type RemoteTeam,
@@ -316,6 +317,37 @@ describe('team connect tokens', () => {
       )
     );
     expect(claim?.userId).toBe(KAI.id);
+  });
+
+  test('a machine gets a remote token for its owner to a teammate’s machine, for the local relay', async () => {
+    const { harness, studio, laptop, team } = await joinedTeam();
+    const answer = await readJson<ConnectResponse>(
+      await act(harness, laptop, team.id, 'connect/remote', { instanceId: studio.instanceId })
+    );
+    const url = new URL(answer.url);
+    expect(url.pathname).toBe(REMOTE_CHANNEL_PATH);
+    const token = url.searchParams.get('token') ?? '';
+    const remote = { instanceId: studio.instanceId, channel: 'remote' } as const;
+    expect(
+      (await Effect.runPromise(verifyConnectToken(studio.connectKey, token, remote, harness.clock.now)))
+        ?.userId
+    ).toBe(KAI.id);
+    const teamChannel = { instanceId: studio.instanceId, channel: 'team' } as const;
+    expect(
+      await Effect.runPromise(verifyConnectToken(studio.connectKey, token, teamChannel, harness.clock.now))
+    ).toBeNull();
+  });
+
+  test('no remote token for a machine outside the team, nor once its owner left the team', async () => {
+    const { harness, studio, laptop, team } = await joinedTeam();
+    const outside = await pairMachine(harness, await harness.signIn('lee', 3), 'Lee');
+    const stranger = await act(harness, laptop, team.id, 'connect/remote', {
+      instanceId: outside.instanceId,
+    });
+    expect([stranger.status, await readCode(stranger)]).toEqual([404, 'not_found']);
+    await act(harness, studio, team.id, 'members/remove', { userId: KAI.id });
+    const gone = await act(harness, laptop, team.id, 'connect/remote', { instanceId: studio.instanceId });
+    expect([gone.status, await readCode(gone)]).toEqual([404, 'not_found']);
   });
 
   test('a member gets a token for a teammate’s machine channel too, which that machine scopes to the team', async () => {

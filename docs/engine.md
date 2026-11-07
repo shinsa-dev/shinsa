@@ -1489,8 +1489,24 @@ before any agent started. `sign_in` means a provider needs signing in again: the
 (`Gate.provider`, `claude` for a Claude account) and, for Claude, the account (Accounts and usage limits, below).
 The plan gate opens by one rule, `PLAN_GATE_RULE`: always for a task that runs an operation, a task created plan
 first, a task in the backlog (whose plan gate is held out of Needs you until you start it, Scheduling → The backlog)
-or a plan that asks for `approval`; with Approve plans on Large plans, also for a plan with more than 3 phases or
-6 files (`PLAN_SIZE_LIMITS`) or a revised plan; on Always, for every plan. Nothing else waits on you. A failure, configuration or Sign in gate pauses the task (`isPausingGate`).
+or a plan that asks for `approval` or splits the work into other tasks (`splits`); with Approve plans on Large plans,
+also for a plan with more than 3 phases or 6 files (`PLAN_SIZE_LIMITS`) or a revised plan; on Always, for every plan.
+Nothing else waits on you. A failure, configuration or Sign in gate pauses the task (`isPausingGate`).
+
+**Splitting at the plan.** A request often holds work that would ship better as separate pull requests. The Agent
+says so in its plan instead of an agent splitting the request before anyone read the code: `propose_plan`'s `split`
+lists the other parts (a title, a request that stands on its own, and when each starts: now, waiting on this task or
+an earlier part, or stacked on one), and the phases cover only the work that stays (`docs/protocol.md` → Plan
+parameters). The planning prompt says when (`describePlanSplit`, `prompts/roles.ts`): only for a task that opens a
+pull request, parts in parallel by default, waiting only on code on an unmerged branch, stacked only for pieces of one
+rewrite, and a small or cohesive request kept whole. Such a plan always waits for you. The plan card leads with
+Start N tasks (counting this task) over the list of parts, with Keep as one task beside it, and ⌘K offers both.
+Start N tasks approves the plan, and `startPlanSplit` (`decide/couriers.ts`) creates each part as a task under this
+one (`createdBy` `split`, the planning run), forked from it (`forkOf`), so its agent starts from this conversation and
+then plans for itself, with its wait or stack set; it shares the creation with `split_task` and is recorded as the
+same `task.split` for the plan version, made after that plan was proposed (a new round starts again at version 1), so
+neither creates the parts twice. Keep as one task is the plan's revise with a fixed message (drop the split and plan
+all of the work here), so the Agent proposes a plan without one.
 
 **Pausing a task.** Pause (the task's menu, a row's menu, ⌘K, `shinsa tasks pause`, an agent's `tasks_pause`) sends
 `task.pause` (`decide/pause.ts`) while something works on the task: triage, planning, building, checks, review,
@@ -3713,8 +3729,8 @@ view are a share link for a whole project, on the same projection and the same o
 place of the link: nothing is copied to app.shinsa.dev, and a teammate reads each task from your machine over its
 tunnel while it is online, and the last list of it their own machine kept while it is not (Offline teammates, below).
 On app.shinsa.dev a teammate also acts on those tasks, with what the team's owner lets them do, through a device your
-machine admits by itself and scopes to the team's projects (Teammates act on team tasks, below); the local app keeps
-the read-only view. Teams need remote access on (`Remote` paired and enabled), since that is how a teammate reaches you.
+machine admits by itself and scopes to the team's projects, and the Mac app does the same through a device its own
+engine enrols and relays (Teammates act on team tasks, below). Teams need remote access on (`Remote` paired and enabled), since that is how a teammate reaches you.
 
 - **What app.shinsa.dev keeps** (`apps/cloud/src/routes/teams/`, `routes/machine-teams/`, `migrations/0001_schema.sql`): who is in which team. A
   team is an id, a name of 60 characters at most (`TEAM_NAME_LIMIT`), its owner (the account whose machine made it),
@@ -3859,7 +3875,8 @@ the read-only view. Teams need remote access on (`Remote` paired and enabled), s
   alone: it never lists a teammate's task. A teammate's task never waits for you, so it never counts towards Needs you, the queue, the
   guide or a notification. Opening one goes to `/teams/<team>/<machine>/<task>` (`routes/team-task.tsx`), the shared
   task page (`SharedTaskPage`, read-only, its Chat the agents' output only) fed by the engine relay in the local app and, on app.shinsa.dev, by
-  a team channel the browser opens with its own key. On app.shinsa.dev a teammate's machine admitted to the fleet
+  a team channel the browser opens with its own key. On app.shinsa.dev, and in the Mac app for a machine its engine
+  relays (the local fleet relay, Teammates act on team tasks), a teammate's machine in the fleet
   opens the task as a full task page at `/tasks/<handle>` instead, straight from the row (`resolveFleetTeamTaskPath`).
   Your browser takes the keys of the teams your own machines hold when it opens the dashboard
   (`GET /api/remote/teams/keys`, owner devices only, `syncOwnTeamKeys` in `lib/teams/own-keys.ts`), so you never open
@@ -3948,6 +3965,28 @@ the read-only view. Teams need remote access on (`Remote` paired and enabled), s
     grant's secret. The machine admits that device without asking, recording its team (`RemoteDevice.teamId`), while
     the person is still in the team, the team key is here and the proof checks. app.shinsa.dev hands a teammate a
     `remote` connect token for the machine (`findReachableMachine` in `auth/access.ts`); the token alone opens nothing.
+  - **In the Mac app: the local fleet relay** (`apps/engine/src/remote/fleet-relay/`, `remote/device-channel/`;
+    `apps/web/src/lib/teams/relay.ts`). The engine is a team device itself, so a teammate's task opens as the same full
+    page in the local app. For each teammate machine its team feed lists with a grant, the engine enrols its own keys
+    as that machine's team device, with the grant's enroll proof, and keeps them only in `remote.json`
+    (`relayDevices: { instanceId, teamId, machineKey, … }`); it asks app.shinsa.dev for a `remote` token with its
+    machine token (`POST /__remote/machine/teams/<team>/connect/remote`, `machineTeams.remoteConnect`, the same checks
+    as the team view's connect) and opens the sealed channel with core's handshake and frames (`DeviceChannels`), on
+    demand. The page sees only localhost: `GET /api/teams/relays` lists the relayed machines (`TeamRelayEntry`, behind
+    the `team-relay` feature), each machine's API is relayed under `/api/teams/relay/<machine>/…` and its socket at
+    `/ws/teams/relay/<machine>`, and the page builds a `Fleet` of this machine plus one `teammate` member per relayed
+    machine (`startLocalRelays`), asking for the list again only when the team list changes. So the same `ScopedActor`
+    team scope and refusals apply on the teammate's machine, and no key, grant or token reaches the page. The tunnel
+    has no route to either relay path, so only this machine's own page reaches it. A device is removed and its channel
+    closed when you leave the team, the grant or the team key goes, the machine leaves the team or remote access is
+    turned off; a machine that is offline, too old or refuses the device keeps its tasks on the read-only team view,
+    with its offline copy. Images, recordings and raw files of a relayed task load through the same relay
+    (`Fleet.resolveMediaUrl`, `useMediaUrl`: a served path whose task belongs to a relayed member gets that member's
+    `/api/teams/relay/<machine>` prefix), since the Mac app has no service worker to route them as app.shinsa.dev
+    does. A running service of a relayed task opens at its private `shinsa.page` address through the open route of
+    the Shinsa Cloud this engine talks to (`resolveServiceLink`, `<origin>/__remote/previews/open?url=…`, the origin
+    each relay entry carries as `TeamRelayEntry.appOrigin`: `SHINSA_REMOTE_ORIGIN`, app.shinsa.dev by default), which
+    admits a teammate with the `services` scope; its `localhost` address is the teammate's own machine, not yours.
   - **What a team device reaches** (`resolveScopedState`, `resolveScopedRefusal` in core's `remote/scope.ts`; the
     engine's `Remote.#resolveScope`, `http/socket.ts`, `remote/gate/service.ts`). Its channel carries a `ScopedActor`
     with `scope: { kind: 'team', teamId, scopes }`. The state it gets keeps only the tasks of the team's projects
@@ -3989,8 +4028,13 @@ the read-only view. Teams need remote access on (`Remote` paired and enabled), s
   - **Services** (`remote/previews.ts`, `routes/preview-open/` in `apps/cloud`). A teammate with `services` opens any
     running service of a team task at its private address (`<hash>.shinsa.page`), as you do over remote access:
     app.shinsa.dev admits an account that shares a team with the machine's owner, and the machine admits them for a
-    run of a team task only. A service started outside a task stays yours. Losing the right or the project leaving the
-    team closes their open connections.
+    run of a team task only. A service started outside a task stays yours. The task page finds the run because the
+    machine answers a teammate's `/api/terminals`, and sends their socket its `terminals` message, scoped by
+    `resolveScopedTerminals`: only the service runs of tasks in their scope, with each service's environment
+    emptied and no home folder, and nothing at all without `services`. It is the one owner-only route a guest
+    passes (`GuestRoute` `filtered`: the answer is filtered per guest), never one marked `any`. Their Services fact shows each run's state
+    and Open, with no terminal, start, restart or stop. Losing the right or the project leaving the team closes
+    their open connections.
   - **Forking.** Anyone in the team forks a teammate's task onto their own machine, as Forking a task →
     Forking a teammate's task says; no right gates it, since nothing changes on the teammate's machine.
   - **Sharing.** A teammate with `share` makes and stops share links, status shares and service previews of team

@@ -1,4 +1,5 @@
 import {
+  type ConnectChannel,
   type InstanceId,
   type RemoteRole,
   type RemoteTeam,
@@ -107,11 +108,12 @@ export const leaveTeam = Effect.fn('teams.leave')(function* (userId: RemoteUserI
 export const connectTeam = Effect.fn('teams.connect')(function* (
   userId: RemoteUserId,
   teamId: TeamId,
-  instanceId: InstanceId
+  instanceId: InstanceId,
+  channel: ConnectChannel = 'team'
 ) {
   const teams = yield* Teams;
   const { team } = yield* findTeamAccess(userId, teamId);
   const machine = (yield* teams.listMachines(team.id)).find((candidate) => candidate.id === instanceId);
   if (!machine) return yield* new NotFound({ message: 'That machine is not in this team.' });
-  return yield* createConnectAnswer(machine, userId, 'team');
+  return yield* createConnectAnswer(machine, userId, channel);
 });

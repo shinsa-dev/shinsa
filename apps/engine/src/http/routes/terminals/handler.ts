@@ -1,4 +1,4 @@
-import { listTerminalPlaces, TERMINAL_LIMITS } from '@shinsa/core';
+import { listTerminalPlaces, resolveScopedTerminals, TERMINAL_LIMITS } from '@shinsa/core';
 import { EngineApi } from '@shinsa/core/engine-api';
 import { RequestFailed, RouteNotFound, ROUTE_NOT_FOUND_MESSAGE } from '@shinsa/core/engine-api/schema';
 import { Effect, Option, Predicate } from 'effect';
@@ -9,7 +9,7 @@ import { readOptionalText, readText } from '../../../terminals/input.ts';
 import { resolveTerminalStart } from '../../../terminals/places.ts';
 import { Terminals } from '../../../terminals/service.ts';
 import { requestSync, resolveRequestFailure } from '../../failures.ts';
-import { PROJECT_GONE, PROJECT_ID_LIMIT } from '../../schema.ts';
+import { PROJECT_GONE, PROJECT_ID_LIMIT, RequestSource } from '../../schema.ts';
 
 export const TerminalsHandlers = HttpApiBuilder.group(
   EngineApi,
@@ -25,7 +25,15 @@ export const TerminalsHandlers = HttpApiBuilder.group(
       Effect.flatMap(terminals, (found) => Effect.andThen(request(run(found)), found.snapshot));
 
     return handlers
-      .handle('list', () => Effect.flatMap(terminals, (found) => found.snapshot))
+      .handle(
+        'list',
+        Effect.fn('TerminalsHandlers.list')(function* () {
+          const snapshot = yield* (yield* terminals).snapshot;
+          const { guest } = yield* RequestSource;
+          if (!guest) return snapshot;
+          return resolveScopedTerminals(yield* engine.state, guest.scope, snapshot);
+        })
+      )
       .handle('foreground', ({ params }) =>
         Effect.flatMap(terminals, (found) => request(found.readForeground(params.terminalId)))
       )

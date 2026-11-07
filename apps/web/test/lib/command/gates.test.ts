@@ -306,6 +306,60 @@ describe('gate commands', () => {
     ]);
   });
 
+  it('offers Start N tasks and Keep as one task on a plan with a split', () => {
+    const gate = createGate({ id: 'g', taskId: 't', type: 'plan' });
+    const task = createTask({
+      id: 't',
+      stage: 'awaiting_plan',
+      plan: {
+        version: 2,
+        body: '',
+        proposedAt: 0,
+        document: {
+          goal: 'g',
+          phases: [],
+          behaviour: [],
+          approach: '',
+          files: [],
+          outOfScope: [],
+          verification: [],
+          questions: [],
+          split: [{ title: 'A', request: 'a', order: 'parallel' }],
+        },
+      },
+    });
+    const commands = commandsFor(task, gate);
+    expect(commands.map((command) => [command.id, command.label])).toEqual([
+      ['task.t.gate.g.approve', 'Start 2 tasks'],
+      ['task.t.gate.g.keep-one-task', 'Keep as one task'],
+      ['task.t.gate.g.revise', 'Revise the plan'],
+    ]);
+    run(commands[0]);
+    expect(spies.sent).toHaveBeenCalledWith(
+      { type: 'gate.answer', gateId: 'g', decision: 'approve', response: null, planVersion: 2 },
+      'Approved. Building now.'
+    );
+    run(commands[1]);
+    expect(spies.sent).toHaveBeenCalledWith(
+      {
+        type: 'gate.answer',
+        gateId: 'g',
+        decision: 'revise',
+        response: 'Keep this as one task: drop the split and plan all of the work here.',
+      },
+      'Sent back as one task.'
+    );
+  });
+
+  it('offers only Approve the plan and Revise on a plan without a split', () => {
+    const gate = createGate({ id: 'g', taskId: 't', type: 'plan' });
+    const task = createTask({ id: 't', stage: 'awaiting_plan' });
+    expect(commandsFor(task, gate).map((command) => command.label)).toEqual([
+      'Approve the plan',
+      'Revise the plan',
+    ]);
+  });
+
   it('leads with Close when the agent recommends closing a proposal', () => {
     const gate = createGate({
       id: 'g',

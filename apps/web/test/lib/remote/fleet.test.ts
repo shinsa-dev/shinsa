@@ -1,10 +1,7 @@
 import { describe, expect, it, mock } from 'bun:test';
 import type {
   AccountsSnapshot,
-  AttentionPlace,
   ChatEntry,
-  EngineInfo,
-  MachineResources,
   RemoteSnapshot,
   TeamFeedSnapshot,
   TerminalsSnapshot,
@@ -24,7 +21,6 @@ import {
 } from '@shinsa/core';
 import { Effect } from 'effect';
 import { Socket } from 'effect/socket';
-import type { ShinsaConnection, Snapshot } from '@/lib/connection/socket.ts';
 import {
   FLEET_WAIT_MS,
   Fleet,
@@ -39,100 +35,12 @@ import { describeOutdatedMachine } from '@/lib/remote/mode.ts';
 import type { SocketTransport } from '@/lib/runtime/socket/schema.ts';
 import { createSignal } from '@/lib/signal.ts';
 import { resolveCanonicalTaskPath, resolveTaskPath } from '@/router.ts';
+import { FakeConnection } from '../../support/connection.ts';
 import { createMachineResources } from '../../support/resources.ts';
 import { createTask } from '../../support/state.ts';
 
 function createWire(seq: number, records: Partial<WireState> = {}): WireState {
   return { ...(createState() as unknown as WireState), seq, ...records };
-}
-
-class FakeConnection implements ShinsaConnection {
-  current: Snapshot = { state: null, status: 'connecting' };
-  readonly commands: UserCommand[] = [];
-  readonly watched: string[] = [];
-  readonly calls: string[] = [];
-  accounts: AccountsSnapshot | null = null;
-  terminals: TerminalsSnapshot | null = null;
-  resources: MachineResources | null = null;
-  readonly resourcesSignal = createSignal();
-  remote: RemoteSnapshot | null = null;
-  teams: TeamFeedSnapshot = NO_TEAM_FEED;
-  desktop = false;
-  engine: EngineInfo | null = null;
-  transcript: ChatEntry[] = [];
-  readonly signal = createSignal();
-
-  push(snapshot: Snapshot) {
-    this.current = snapshot;
-    this.signal.publish();
-  }
-
-  start = () => {
-    this.calls.push('start');
-  };
-  subscribe = (listener: () => void) => this.signal.subscribe(listener);
-  snapshot = () => this.current;
-  subscribeTranscripts = (listener: () => void) => this.signal.subscribe(listener);
-  selectTranscript = () => this.transcript;
-  watchTranscript = (runId: string) => {
-    this.watched.push(runId);
-    return () => undefined;
-  };
-  readonly details: string[] = [];
-  requestTaskDetail = (taskId: string) => {
-    this.details.push(`request ${taskId}`);
-  };
-  watchTaskDetail = (taskId: string) => {
-    this.details.push(`watch ${taskId}`);
-    return () => undefined;
-  };
-  subscribeAccounts = (listener: () => void) => this.signal.subscribe(listener);
-  selectAccounts = () => this.accounts;
-  replaceAccounts = (accounts: AccountsSnapshot | null) => {
-    this.accounts = accounts;
-  };
-  subscribeSurfaces = (listener: () => void) => this.signal.subscribe(listener);
-  isDesktopConnected = () => this.desktop;
-  attention: AttentionPlace = 'nowhere';
-  presences = 0;
-  reportPresence = () => {
-    this.presences += 1;
-  };
-  selectAttention = () => this.attention;
-  subscribeTerminals = (listener: () => void) => this.signal.subscribe(listener);
-  selectTerminals = () => this.terminals;
-  replaceTerminals = (terminals: TerminalsSnapshot) => {
-    this.terminals = terminals;
-  };
-  pushResources(resources: MachineResources | null) {
-    this.resources = resources;
-    this.resourcesSignal.publish();
-  }
-  subscribeResources = (listener: () => void) => this.resourcesSignal.subscribe(listener);
-  selectResources = () => this.resources;
-  subscribeRemote = (listener: () => void) => this.signal.subscribe(listener);
-  selectRemote = () => this.remote;
-  replaceRemote = (remote: RemoteSnapshot) => {
-    this.remote = remote;
-  };
-  subscribeTeams = (listener: () => void) => this.signal.subscribe(listener);
-  selectTeams = () => this.teams;
-  selectMachine = () => null;
-  listMachines = () => [];
-  listUnreachableMachines = () => [];
-  listMachineAccess = () => [];
-  removeMachine = () => undefined;
-  selectEngine = () => this.engine;
-  command = (command: UserCommand) => {
-    this.commands.push(command);
-    return Promise.resolve();
-  };
-  reset = () => {
-    this.calls.push('reset');
-  };
-  flush = () => {
-    this.calls.push('flush');
-  };
 }
 
 function createTerminals(home: string, serviceIds: string[], terminalIds: string[] = []): TerminalsSnapshot {
@@ -520,6 +428,29 @@ describe('sending to the machine that owns it', () => {
     expect(resolveCommandOwner({ type: 'task.cancel', taskId: 'task-9' }, owners)).toBeNull();
     const deep = { type: 'x', a: { b: { c: { d: { e: 'task-1' } } } } } as unknown as UserCommand;
     expect(resolveCommandOwner(deep, owners)).toBeNull();
+  });
+
+  it('sends a relayed machine’s media through its relay, once, and leaves the rest as they are', () => {
+    const { studio, laptop } = createFleet();
+    const fleet = new Fleet([
+      studio.member,
+      {
+        ...laptop.member,
+        resolveUrl: (path) => `/api/teams/relay/m2${path}`,
+        appOrigin: 'https://app.shinsa.dev',
+      },
+    ]);
+    const image = '/api/evidence/task-laptop/round-1/shot.png';
+    expect(fleet.resolveMediaUrl(image)).toBe(`/api/teams/relay/m2${image}`);
+    expect(fleet.resolveMediaUrl(`/api/teams/relay/m2${image}`)).toBe(`/api/teams/relay/m2${image}`);
+    expect(fleet.resolveMediaUrl('/api/evidence/task-studio/round-1/shot.png')).toBe(
+      '/api/evidence/task-studio/round-1/shot.png'
+    );
+    expect(fleet.resolveMediaUrl('https://example.com/shot.png')).toBe('https://example.com/shot.png');
+    expect(fleet.resolveMediaUrl('//example.com/shot.png')).toBe('//example.com/shot.png');
+    expect(fleet.selectAppOrigin('task-laptop')).toBe('https://app.shinsa.dev');
+    expect(fleet.selectAppOrigin('task-studio')).toBeNull();
+    expect(fleet.selectAppOrigin('task-nowhere')).toBeNull();
   });
 
   it('finds the owner of a request from its path or its query', () => {
