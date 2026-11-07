@@ -200,6 +200,23 @@ function triagedWithout(shape: TaskShape, request = 'Hey') {
   return { harness, taskId };
 }
 
+function triagedIn(harness: Harness, shape: TaskShape) {
+  const before = new Set(Object.keys(harness.state.tasks));
+  harness.send({ type: 'task.create', request: 'Fix it', repoId: null });
+  const taskId = Object.keys(harness.state.tasks).find((id) => !before.has(id)) ?? '';
+  harness.send({
+    type: 'task.triage',
+    taskId,
+    title: 'Fix it',
+    repoId: null,
+    size: 'small',
+    branch: `fix/${taskId}`,
+    waitsOn: [],
+    shape,
+  });
+  return { taskId };
+}
+
 function bind(harness: Harness, taskId: string, repoId: string) {
   return harness.send({ type: 'config.record', taskId, problems: [], repoId });
 }
@@ -293,6 +310,57 @@ describe('a task without a repository', () => {
     });
     bind(harness, taskId, registerRepo(harness));
     expect(harness.task(taskId).projectId).toBe(projectId);
+  });
+
+  test('a task whose project only came from the focus moves to the bound repository’s project on the first round', () => {
+    const harness = createHarness();
+    harness.send({
+      type: 'project.write',
+      project: { name: 'Local', color: 'blue', key: 'LOC', folders: [] },
+    });
+    const local = Object.keys(harness.state.projects)[0] ?? '';
+    harness.send({ type: 'focus.change', projectId: local, until: null });
+    const { taskId } = triagedIn(harness, 'change');
+    expect(harness.task(taskId)).toMatchObject({ projectId: local, handle: 'LOC-1' });
+    const repoId = registerRepo(harness);
+    const superwall = harness.state.repos[repoId]?.projectId;
+    const result = bind(harness, taskId, repoId);
+    expect(result.events.find((event) => event.type === 'task.repo_bound')).toMatchObject({
+      projectId: superwall,
+      handle: 'SUP-1',
+    });
+    expect(harness.task(taskId)).toMatchObject({ repoId, projectId: superwall, handle: 'SUP-1' });
+    expect(harness.state.taskNumbers).toEqual({ LOC: 1, SUP: 1 });
+  });
+
+  test('a focus project is kept when the bound repository has no project, or when a later round binds one', () => {
+    const harness = createHarness();
+    harness.send({
+      type: 'project.write',
+      project: { name: 'Local', color: 'blue', key: 'LOC', folders: [] },
+    });
+    const local = Object.keys(harness.state.projects)[0] ?? '';
+    harness.send({ type: 'focus.change', projectId: local, until: null });
+    const first = triagedIn(harness, 'change');
+    bind(harness, first.taskId, registerRepo(harness, 'scratch', null));
+    expect(harness.task(first.taskId)).toMatchObject({ projectId: local, handle: 'LOC-1' });
+    const later = triagedIn(harness, 'answer');
+    harness.send({
+      type: 'agent.deliver',
+      runId: harness.activeRun(later.taskId).id,
+      step: 'answer',
+      body: 'Hi.',
+    });
+    harness.send({
+      type: 'task.message',
+      taskId: later.taskId,
+      text: 'Fix it',
+      kind: 'new_round',
+      shape: 'change',
+    });
+    const repoId = registerRepo(harness);
+    bind(harness, later.taskId, repoId);
+    expect(harness.task(later.taskId)).toMatchObject({ repoId, projectId: local, handle: 'LOC-2' });
   });
 
   test('a later round that asks for a change binds a repository when it starts', () => {

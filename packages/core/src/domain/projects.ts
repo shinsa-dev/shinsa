@@ -83,3 +83,12 @@ export function selectProjectByReference<T extends Pick<Project, 'id' | 'key' | 
   }
   return null;
 }
+
+export function resolveRepoMove(
+  task: { projectId?: string | null; auto: { project: boolean } },
+  repo: { projectId?: string | null } | null
+) {
+  if (!repo?.projectId || repo.projectId === task.projectId) return null;
+  if (task.projectId && !task.auto.project) return null;
+  return repo.projectId;
+}

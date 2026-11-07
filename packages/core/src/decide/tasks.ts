@@ -7,6 +7,7 @@ import {
   isTaskSettled,
   listQueuedRounds,
   RUN_STAGES,
+  resolveRepoMove,
   resolveShapeOf,
   resolveTaskPipeline,
   resolveTaskRounds,
@@ -180,13 +181,13 @@ export function triageTask(decider: Decider, command: CommandOf<'task.triage'>) 
   const stacked = resolveTriageStack(decider, task, command, shape);
   const inferred = task.auto.start ? inferDependencies(decider, task.id, command.waitsOn, stacked) : [];
   const decisions = resolveDecisions(task, command, { inferred, stacked }, command.reasons ?? {});
-  const projectId = task.projectId ?? decider.repoOf(command)?.projectId ?? null;
+  const projectId = resolveRepoMove(task, decider.repoOf(command)) ?? task.projectId ?? null;
   decider.emit({
     type: 'task.triaged',
     taskId: task.id,
     title: command.title,
     repoId: command.repoId,
-    ...(task.projectId ? {} : { projectId }),
+    ...(projectId === task.projectId ? {} : { projectId }),
     ...(task.handle ? {} : { handle: resolveNextHandle(decider.state, projectId) }),
     size: command.size,
     branch: command.branch,

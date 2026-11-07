@@ -3,13 +3,15 @@ import {
   type ConfigProblem,
   type Gate,
   type GateDecision,
+  isLaterRound,
   needsRepository,
+  resolveRepoMove,
   resolveTaskPipeline,
   DomainError,
   type Repo,
   type Task,
 } from '../domain/index.ts';
-import type { ShinsaState } from '../state/project.ts';
+import { resolveNextHandle, type ShinsaState } from '../state/project.ts';
 import { findRepo, listProjectRepos } from '../state/queries.ts';
 import type { Decider } from './decider.ts';
 import { isSameValue } from './equality.ts';
@@ -133,11 +135,13 @@ function selectChosenRepo(decider: Decider, gate: Gate, response: string | null)
 function bindRepo(decider: Decider, task: Task, repoId: string) {
   if (task.repoId !== null) return;
   const repo = findRepo(decider.state, repoId);
+  const projectId = task.projectId && isLaterRound(task) ? null : resolveRepoMove(task, repo);
   decider.emit({
     type: 'task.repo_bound',
     taskId: task.id,
     repoId,
-    ...(task.projectId ? {} : { projectId: repo.projectId }),
+    ...(projectId ? { projectId } : {}),
+    ...(projectId && task.projectId ? { handle: resolveNextHandle(decider.state, projectId) } : {}),
   });
 }
 

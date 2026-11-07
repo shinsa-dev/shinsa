@@ -236,7 +236,7 @@ function applyTriaged(state: ShinsaState, event: EventOf<'task.triaged'>) {
   const task = state.tasks[event.taskId];
   const pipeline = event.pipeline ?? (task ? [...resolveTaskPipeline(task)] : []);
   const worktree = needsWorktree(pipeline);
-  const projectId = task?.projectId ?? event.projectId ?? null;
+  const projectId = event.projectId ?? task?.projectId ?? null;
   const handle = task?.handle ?? event.handle ?? null;
   if (task && !task.handle && handle) recordHandle(state, handle);
   updateTask(state, event.taskId, event.at, {
@@ -274,9 +274,11 @@ function resolveDuplicateOriginalText(state: ShinsaState, duplicate: TaskDuplica
 }
 
 function applyRepoBound(state: ShinsaState, event: EventOf<'task.repo_bound'>) {
+  if (event.handle) recordHandle(state, event.handle);
   updateTask(state, event.taskId, event.at, {
     repoId: event.repoId,
     ...(event.projectId ? { projectId: event.projectId } : {}),
+    ...(event.handle ? { handle: event.handle } : {}),
   });
   record(state, event.taskId, event.at, {
     actor: 'shinsa',
