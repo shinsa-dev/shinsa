@@ -80,6 +80,7 @@ export interface MachineView {
   name: string;
   current: boolean;
   guest?: true;
+  member?: true;
   handedBy?: RemoteUser;
   teammate?: TeammateMachine;
 }
@@ -87,6 +88,7 @@ export interface MachineView {
 export interface MachineChoice extends PlacementMachine {
   current: boolean;
   guest?: true;
+  member?: true;
   teammate?: TeammateMachine;
   resources?: MachineResources | null;
 }

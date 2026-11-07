@@ -40,6 +40,7 @@ import { WaitsOnItems } from '@/components/task/dependency-items.tsx';
 import { FACT, FACT_INTERACTIVE } from '@/components/task/fact.ts';
 import { useReadOnly, useReadOnlyOwnerName } from '@/components/task/read-only.tsx';
 import { TimeAgo } from '@/components/text/time-ago.tsx';
+import { useTaskOwnership } from '@/hooks/use-task-ownership.ts';
 import { describeRunsOn } from '@/lib/accounts/account.ts';
 import { describeAgentCount, listTaskAgents } from '@/lib/chat/agents.ts';
 import { useShinsaState } from '@/lib/connection/selectors.ts';
@@ -68,6 +69,7 @@ import {
   resolveSlackFact,
   selectDuplicateOriginal,
 } from '@/lib/tasks/facts.ts';
+import { OWNER_FACT_HINT, resolveOwnerFact } from '@/lib/tasks/owner.ts';
 import { resolvePullRequestTone } from '@/lib/tasks/pull-request.ts';
 import { ROUND_ICON, resolveRoundFact } from '@/lib/tasks/rounds.ts';
 import { resolveTaskStatus, resolveTaskStatusIcon } from '@/lib/tasks/status.ts';
@@ -136,6 +138,24 @@ function MachineFact({ task }: { task: Task }) {
         </InfoSection>
       )}
     </FactPopover>
+  );
+}
+
+function OwnerFact({ task }: { task: Task }) {
+  const fact = resolveOwnerFact(task, useTaskOwnership());
+  if (!fact) return null;
+  return (
+    <span className={cn(FACT, 'max-w-80')}>
+      <Hint label={OWNER_FACT_HINT}>
+        <span className='inline-flex shrink-0 cursor-default items-center gap-1.5 whitespace-pre'>
+          <Icon size='sm' name='IconUser' />
+          Owner
+        </span>
+      </Hint>
+      <Truncate>
+        {fact.owner ? <UserTag user={fact.owner} {...(fact.you ? { label: fact.label } : {})} /> : fact.label}
+      </Truncate>
+    </span>
   );
 }
 
@@ -747,6 +767,7 @@ export function TaskFacts({
       {!task.pullRequest && checks && <ChecksFact view={checks} />}
       <CoverageFact task={task} />
       <MachineFact task={task} />
+      <OwnerFact task={task} />
       <HandoffFact task={task} />
       {!readOnly && <TaskServicesFact state={state} task={task} />}
       <PriorityFact state={state} task={task} />

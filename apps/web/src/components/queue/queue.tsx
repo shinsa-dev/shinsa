@@ -1,4 +1,4 @@
-import { resolveBundle, resolveQueue, type ShinsaState, type Task } from '@shinsa/core';
+import { resolveBundle, type ShinsaState, type Task } from '@shinsa/core';
 import { HoverHighlight } from '@shinsa/ui/components/highlight-list';
 import { Icon } from '@shinsa/ui/components/icon';
 import { cn } from '@shinsa/ui/lib/utils';
@@ -7,11 +7,13 @@ import { CompactSection, CompactSections } from '@/components/layout/compact-sec
 import { ListRow } from '@/components/layout/list-row.tsx';
 import { SectionLabel } from '@/components/layout/page/section-label.tsx';
 import { CARD } from '@/components/layout/surface/card.ts';
+import { QueueOwnerSwitch } from '@/components/queue/owner-switch.tsx';
 import { RowSummary } from '@/components/queue/row-summary.tsx';
 import { SharedMark } from '@/components/share/shared-mark.tsx';
 import { GateGlyph, TaskGlyph, WorkingGlyph } from '@/components/status/glyphs.tsx';
 import { BundleMark } from '@/components/task/bundle.tsx';
 import { TimeAgo } from '@/components/text/time-ago.tsx';
+import { useOwnQueue } from '@/hooks/use-own-queue.ts';
 import { useProgressiveCount } from '@/hooks/use-progressive-count.ts';
 import { TONE_TEXT } from '@/lib/format/tone.ts';
 import { resolveHomeSectionId } from '@/lib/home.ts';
@@ -182,7 +184,7 @@ export function TaskQueue({
   state,
   variant,
   activeTaskId = null,
-  sections = listQueueSections(state, resolveQueue(state, Date.now())),
+  sections: given,
   className,
   onNavigate = () => {},
 }: {
@@ -193,6 +195,8 @@ export function TaskQueue({
   className?: string;
   onNavigate?: () => void;
 }) {
+  const own = useOwnQueue(state);
+  const sections = given ?? listQueueSections(state, own.queue);
   const views = sections.map((section) => (
     <QueueSectionView
       key={section.key}
@@ -203,6 +207,12 @@ export function TaskQueue({
       onNavigate={onNavigate}
     />
   ));
-  if (variant === 'compact') return <CompactSections className={className}>{views}</CompactSections>;
+  if (variant === 'compact')
+    return (
+      <CompactSections className={className}>
+        {!given && own.shared && <QueueOwnerSwitch className='px-1.5 pb-1' />}
+        {views}
+      </CompactSections>
+    );
   return <>{views}</>;
 }

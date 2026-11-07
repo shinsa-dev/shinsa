@@ -46,6 +46,7 @@ export interface FleetMember {
   current?: boolean;
   online?: boolean;
   guest?: true;
+  member?: true;
   handedBy?: RemoteUser;
   teammate?: TeammateMachine;
   connection: ShinsaConnection;
@@ -345,6 +346,7 @@ export class Fleet implements ShinsaConnection {
         name: member.name,
         current: member.current === true,
         ...(member.guest ? { guest: true as const } : {}),
+        ...(member.member ? { member: true as const } : {}),
         ...(member.handedBy ? { handedBy: member.handedBy } : {}),
         ...(member.teammate ? { teammate: member.teammate } : {}),
       },

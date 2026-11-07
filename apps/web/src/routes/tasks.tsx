@@ -10,6 +10,7 @@ import { TaskFilterChips, TaskFilterMenu } from '@/components/tasks/filter-menu.
 import { TaskGroupSection } from '@/components/tasks/group.tsx';
 import { TASK_LIST_COLUMNS, TEAM_TASK_LIST_COLUMNS } from '@/components/tasks/row.tsx';
 import { TeamFeedRefusals, useTeamTasks } from '@/components/teams/tasks.tsx';
+import { useTaskOwnership } from '@/hooks/use-task-ownership.ts';
 import { useRegisterCommands } from '@/lib/command/registry.ts';
 import { applySearch, listTaskListSections } from '@/lib/command/tasks.ts';
 import { createDisclosureId } from '@/lib/preferences/disclosure.ts';
@@ -24,15 +25,16 @@ import { describeTaskCounts, listTaskGroupSections } from '@/lib/tasks/groups.ts
 import { useSearchString } from '@/router.ts';
 
 export function TasksPage({ state }: { state: ShinsaState }) {
-  const filters = resolveTaskFilters(useSearchString());
+  const ownership = useTaskOwnership();
+  const filters = resolveTaskFilters(useSearchString(), ownership.shared);
   const team = useTeamTasks();
   const rows = React.useMemo(
-    () => listTaskRows(state, team.entries, team.teams),
-    [state, team.entries, team.teams]
+    () => listTaskRows(state, team.entries, team.teams, Date.now(), ownership),
+    [state, team.entries, team.teams, ownership]
   );
   const fields = listTaskFilterFields(rows, team.teams, filters, resolveFocusTeam(state, Date.now()));
   const sections = listTaskGroupSections(state, filterTaskRows(rows, filters), filters.status);
-  const owners = rows.some((row) => row.team);
+  const owners = ownership.shared || rows.some((row) => row.team);
   const columns = owners ? TEAM_TASK_LIST_COLUMNS : TASK_LIST_COLUMNS;
   const filtered = isFiltering(filters);
   const statusKey = filters.status.join(',');

@@ -94,7 +94,14 @@ export function MachineAccessRequests({
 function OwnedMachineAccess({ machine }: { machine: MachineAccess }) {
   const actions = React.useMemo(() => createMachineAccessActions(machine.id), [machine.id]);
   if (!machine.remote) return null;
-  return <MachineAccessCard name={machine.name} snapshot={machine.remote} actions={actions} />;
+  return (
+    <MachineAccessCard
+      machineId={machine.id}
+      name={machine.name}
+      snapshot={machine.remote}
+      actions={actions}
+    />
+  );
 }
 
 const MACHINES_DESCRIPTION =

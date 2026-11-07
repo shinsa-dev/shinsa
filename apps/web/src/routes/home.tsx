@@ -1,4 +1,4 @@
-import { briefingKey, reconcileBriefing, resolveQueue, type ShinsaState } from '@shinsa/core';
+import { briefingKey, reconcileBriefing, type ShinsaState } from '@shinsa/core';
 import { cn } from '@shinsa/ui/lib/utils';
 import { HomeGuide } from '@/components/home/guide.tsx';
 import { NewTaskForm } from '@/components/home/new-task-form.tsx';
@@ -7,7 +7,9 @@ import { PAGE_COLUMN, PAGE_TOP } from '@/components/layout/page/column.ts';
 import { PAGE_TITLE } from '@/components/layout/page/heading.tsx';
 import { PageScroll } from '@/components/layout/page/page-scroll.tsx';
 import { CARD } from '@/components/layout/surface/card.ts';
+import { QueueOwnerSwitch } from '@/components/queue/owner-switch.tsx';
 import { TaskQueue, WideSections } from '@/components/queue/queue.tsx';
+import { useOwnQueue } from '@/hooks/use-own-queue.ts';
 import { listHomeSections } from '@/lib/command/home.ts';
 import { useRegisterCommands } from '@/lib/command/registry.ts';
 import { resolveGreeting, resolveHomeSections } from '@/lib/home.ts';
@@ -15,7 +17,7 @@ import { listQueueSections } from '@/lib/queue.ts';
 
 export function HomePage({ state }: { state: ShinsaState }) {
   const now = Date.now();
-  const queue = resolveQueue(state, now);
+  const { queue, shared } = useOwnQueue(state, now);
   const briefing = reconcileBriefing(state.briefings[briefingKey(queue.focusProjectId)], queue, now);
   const { first, finished, conversations, last } = resolveHomeSections(
     state,
@@ -37,6 +39,7 @@ export function HomePage({ state }: { state: ShinsaState }) {
         </div>
 
         <WideSections>
+          {shared && <QueueOwnerSwitch />}
           <TaskQueue state={state} variant='wide' sections={first} />
           <RecentlyFinished state={state} finished={finished} />
           <RecentConversations conversations={conversations} />
