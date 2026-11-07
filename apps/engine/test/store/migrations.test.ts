@@ -43,15 +43,16 @@ function renameProject(name: string, to: string): LogMigration {
 const TWO_MIGRATIONS = [renameProject('rename-b', 'b'), renameProject('rename-c', 'c')];
 
 describe('event log migrations', () => {
-  test('the shipped list turns stacks into lists, names Slack channels, stamps what reviews saw, turns share presets into scopes and stamps what proposals recommend, five versions past the baseline', () => {
+  test('the shipped list turns stacks into lists, names Slack channels, stamps what reviews saw, turns share presets into scopes, stamps what proposals recommend and marks old projects as chosen, six versions past the baseline', () => {
     expect(LOG_MIGRATIONS.map((migration) => migration.name)).toEqual([
       'stack-lists',
       'slack-channel-names',
       'review-seen',
       'share-scopes',
       'proposal-recommend',
+      'task-auto-project',
     ]);
-    expect(resolveLogVersion()).toBe(LOG_BASELINE + 5);
+    expect(resolveLogVersion()).toBe(LOG_BASELINE + 6);
     expect(resolveLogVersion(TWO_MIGRATIONS)).toBe(LOG_BASELINE + 2);
   });
 
@@ -61,7 +62,7 @@ describe('event log migrations', () => {
     expect(log.migrate()).toEqual([]);
     expect(() => log.assertCurrent()).not.toThrow();
     log.close();
-    expect(readVersion(path)).toBe(LOG_BASELINE + 5);
+    expect(readVersion(path)).toBe(LOG_BASELINE + 6);
   });
 
   test('a log that already holds events is never stamped on open', () => {
@@ -165,6 +166,7 @@ describe('event log migrations', () => {
       'review-seen',
       'share-scopes',
       'proposal-recommend',
+      'task-auto-project',
     ]);
     expect(log.readEvents().events.slice(1)).toEqual([
       { type: 'task.stack_changed', taskId: 't1', stacksOn: ['p1'], by: 'you', seq: 2, at: 1 },
@@ -175,7 +177,7 @@ describe('event log migrations', () => {
       { type: 'task.stack_based', taskId: 't2', bases: ['fix/p1', 'fix/p2'], seq: 7, at: 1 },
     ]);
     log.close();
-    expect(readVersion(path)).toBe(LOG_BASELINE + 5);
+    expect(readVersion(path)).toBe(LOG_BASELINE + 6);
   });
 
   test('slack-channel-names gives an older Slack thread link a null channel name, and keeps a known one', () => {
@@ -213,6 +215,7 @@ describe('event log migrations', () => {
       'review-seen',
       'share-scopes',
       'proposal-recommend',
+      'task-auto-project',
     ]);
     expect(log.readEvents().events.slice(1)).toEqual([
       {
@@ -231,7 +234,7 @@ describe('event log migrations', () => {
       },
     ]);
     log.close();
-    expect(readVersion(path)).toBe(LOG_BASELINE + 5);
+    expect(readVersion(path)).toBe(LOG_BASELINE + 6);
   });
 
   test('review-seen gives an older review a null input it saw, and keeps a stamped one', () => {
@@ -252,13 +255,13 @@ describe('event log migrations', () => {
     }
     db.close();
     const log = openEventLog(path);
-    expect(log.migrate()).toEqual(['review-seen', 'share-scopes', 'proposal-recommend']);
+    expect(log.migrate()).toEqual(['review-seen', 'share-scopes', 'proposal-recommend', 'task-auto-project']);
     expect(log.readEvents().events.slice(1)).toEqual([
       { type: 'review.reported', taskId: 't1', summary: null, findings: [], seen: null, seq: 2, at: 1 },
       { type: 'review.reported', taskId: 't2', summary: 'Clean', findings: [], seen: 'abc', seq: 3, at: 1 },
     ]);
     log.close();
-    expect(readVersion(path)).toBe(LOG_BASELINE + 5);
+    expect(readVersion(path)).toBe(LOG_BASELINE + 6);
   });
 
   test('share-scopes turns each share preset into the view scopes it showed, and keeps a share with scopes', () => {
@@ -281,7 +284,7 @@ describe('event log migrations', () => {
     }
     db.close();
     const log = openEventLog(path);
-    expect(log.migrate()).toEqual(['share-scopes', 'proposal-recommend']);
+    expect(log.migrate()).toEqual(['share-scopes', 'proposal-recommend', 'task-auto-project']);
     const shared = log.readEvents().events.slice(1);
     expect(shared).toEqual([
       {
@@ -322,7 +325,7 @@ describe('event log migrations', () => {
       },
     ]);
     log.close();
-    expect(readVersion(path)).toBe(LOG_BASELINE + 5);
+    expect(readVersion(path)).toBe(LOG_BASELINE + 6);
   });
 
   test('proposal-recommend has an older proposal recommend going on, and keeps a stamped one', () => {
@@ -350,7 +353,7 @@ describe('event log migrations', () => {
     }
     db.close();
     const log = openEventLog(path);
-    expect(log.migrate()).toEqual(['proposal-recommend']);
+    expect(log.migrate()).toEqual(['proposal-recommend', 'task-auto-project']);
     expect(log.readEvents().events.slice(1)).toEqual([
       {
         type: 'task.change_proposed',
@@ -374,17 +377,96 @@ describe('event log migrations', () => {
       },
     ]);
     log.close();
-    expect(readVersion(path)).toBe(LOG_BASELINE + 5);
+    expect(readVersion(path)).toBe(LOG_BASELINE + 6);
+  });
+
+  test('task-auto-project marks the project of an older task as chosen, and keeps a stamped one', () => {
+    const path = createLogPath();
+    writeLog(path, LOG_BASELINE + 5);
+    const db = new Database(path);
+    const created = {
+      type: 'task.created' as const,
+      request: 'Fix it.',
+      repoId: null,
+      priority: 'normal' as const,
+      planFirst: false,
+      origin: null,
+    };
+    const rows = [
+      {
+        ...created,
+        taskId: 't1',
+        projectId: 'p',
+        handle: 'LOC-1',
+        auto: { shape: true, start: true, priority: true },
+      },
+      {
+        ...created,
+        taskId: 't2',
+        projectId: 'p',
+        auto: { shape: true, start: true, priority: true, project: true },
+      },
+      {
+        type: 'task.change_proposed',
+        taskId: 't1',
+        request: 'Go on.',
+        why: 'Fine.',
+        recommend: 'close',
+        runId: null,
+      },
+    ];
+    for (const [index, row] of rows.entries()) {
+      db.run('INSERT INTO events (seq, at, type, payload) VALUES (?, ?, ?, ?)', [
+        index + 2,
+        1,
+        row.type,
+        JSON.stringify(row),
+      ]);
+    }
+    db.close();
+    const log = openEventLog(path);
+    expect(log.migrate()).toEqual(['task-auto-project']);
+    expect(log.readEvents().events.slice(1)).toEqual([
+      {
+        ...created,
+        taskId: 't1',
+        projectId: 'p',
+        handle: 'LOC-1',
+        auto: { shape: true, start: true, priority: true, project: false },
+        seq: 2,
+        at: 1,
+      },
+      {
+        ...created,
+        taskId: 't2',
+        projectId: 'p',
+        auto: { shape: true, start: true, priority: true, project: true },
+        seq: 3,
+        at: 1,
+      },
+      {
+        type: 'task.change_proposed',
+        taskId: 't1',
+        request: 'Go on.',
+        why: 'Fine.',
+        recommend: 'close',
+        runId: null,
+        seq: 4,
+        at: 1,
+      },
+    ]);
+    log.close();
+    expect(readVersion(path)).toBe(LOG_BASELINE + 6);
   });
 
   test('a log a newer Shinsa wrote opens as it is', () => {
     const path = createLogPath();
-    writeLog(path, LOG_BASELINE + 5);
+    writeLog(path, LOG_BASELINE + 6);
     const log = openEventLog(path);
     expect(log.migrate()).toEqual([]);
     expect(() => log.assertCurrent()).not.toThrow();
     expect(new Engine(log, { readOnly: true }).state.seq).toBe(1);
     log.close();
-    expect(readVersion(path)).toBe(LOG_BASELINE + 5);
+    expect(readVersion(path)).toBe(LOG_BASELINE + 6);
   });
 });

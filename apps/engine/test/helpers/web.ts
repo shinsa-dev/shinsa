@@ -193,7 +193,7 @@ export function createWebHandler<E, R extends RouteNeeds>(
   const web = HttpRouter.toWebHandler(
     Layer.mergeAll(routes, Ingress).pipe(
       Layer.provide(TunnelGate.layer),
-      Layer.provide(GitLayer.pipe(Layer.provide(ShellLayer))),
+      Layer.provide(GitLayer.pipe(Layer.provideMerge(ShellLayer))),
       Layer.provide(HttpServer.layerServices),
       Layer.provide(createHttpLayer(context)),
       Layer.provideMerge(RecordingLogger)

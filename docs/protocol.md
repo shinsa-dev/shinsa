@@ -226,7 +226,8 @@ one reads as its empty value. The fields under Triage and shape, Plan and build,
 
 | Field | Type | Meaning |
 | --- | --- | --- |
-| `repoId` | string \| null | the repository, from triage |
+| `repoId` | string \| null | the repository, from triage, or the one `move_to_repository` moved it to |
+| `movingTo?` | string \| null | the repository a move is taking it to, while the old worktree is removed (`task.moving` to `task.moved`) |
 | `size` | `small` \| `large` \| null | from triage; a large plan can wait for approval |
 | `branch` | string \| null | the task's branch, once its worktree exists |
 | `proposedBranch?` | string \| null | triage's branch for a task with no worktree step yet |
@@ -536,7 +537,7 @@ Which agent role's settings (provider, model, speed) each run role uses is one t
 
 | Run role | Settings role (`RUN_AGENT_ROLE`) | Read-only | Works in | Hands over with |
 | --- | --- | --- | --- | --- |
-| `agent` | agent | while it plans (`purpose: plan`) | worktree | by purpose: `propose_plan` or `reshape_task` (plan), `complete_phase` (build), `complete_fix` (fix), `report_outcome` (operate), `report_read` after any `file_report` (watch and intake, read-only, in the repository) |
+| `agent` | agent | while it plans (`purpose: plan`) | worktree | by purpose: `propose_plan`, `reshape_task` or `move_to_repository` (plan), `complete_phase` (build), `complete_fix` (fix), `report_outcome` (operate), `report_read` after any `file_report` (watch and intake, read-only, in the repository) |
 | `reviewer` | reviewer | yes | worktree | `report_review` |
 | `answerer` | answerer | yes | the repository itself | `answer` |
 | `investigator` | answerer | no (scratch) | worktree | `report_diagnosis` |
@@ -931,6 +932,7 @@ role without the tool (`hasTool`).
 | `agent.report_review` | `report_review` | hands over the review: `summary` (or null), the findings and the `disagreements` with the Agent's judgement calls |
 | `agent.deliver` | `answer`, `report_diagnosis`, `submit_report`, `report_outcome` | hands over an answer, a diagnosis, a report or an outcome (step `answer`, `investigate`, `research`, `operate`), an inquiry optionally with a proposal, each with `reply` while a request of yours is open and only then; an operation without a code change needs its evidence first |
 | `agent.reshape` | `reshape_task` | recomposes the steps before planning |
+| `agent.move_to_repository` | `move_to_repository` | while it plans, moves the task to another repository of its project (`repoId`, `reason`): ends the run, removes the old worktree and, once it is gone, plans again there in the same session; refused for the same repository (`same_repository`), another project's (`other_project`), once a phase reported, a pull request exists or an earlier round shipped (`work_started`) and for a task in a bundle (`task_stacked`) |
 | `agent.ask` | `ask` | asks you (or, from a delegated run, its parent) |
 | `agent.attach_evidence` | `attach_evidence` | attaches evidence, stored under its task and round (`validateEvidence`; `docs/engine.md` → Evidence) |
 | `agent.attach_comparison` | `attach_evidence` with `kind: "comparison"` | attaches one comparison: a piece per part, sharing one `itemId` (`docs/engine.md` → Evidence) |
@@ -1039,9 +1041,9 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `focus.changed` | the focus changes; closes the open entry of `state.focusHistory` and, with a project, opens one (`{ projectId, from, to, until }`, kept a year) |
 | `away.recorded` | the Mac app reported a span you were away (`from`, `to`), kept in `state.away` for a year; never counted as something you did |
 | `settings.changed` | settings change (the whole settings object) |
-| `task.created` | a task is created (`request`, `planFirst`; with its handle when it has a project; `createdBy`, `scheduleId` and `sourceReport` for one a watch's read filed; `watchHome` for a watch's home) |
+| `task.created` | a task is created (`request`, `planFirst`, `auto`; with its handle when it has a project you chose (`auto.project` false); `createdBy`, `scheduleId` and `sourceReport` for one a watch's read filed; `watchHome` for a watch's home) |
 | `task.triaged` | triage set title, repository (or none), size, branch, handle, pipeline, decisions (always) |
-| `task.repo_bound` | a task with no repository got the one the setup check found (`repoId`, and `projectId` when it had none) |
+| `task.repo_bound` | a task with no repository got the one the setup check found (`repoId`; `projectId` when it had none, or when the bind moves it to the repository's project, with that project's `handle`) |
 | `task.repo_started` | the setup check started a repository with no commits: an empty first commit on the default branch (`start`: `branch`, `initialized` when it ran `git init` on an empty folder, `pushed` when it pushed to an origin with no branches) |
 | `task.reshaped` | the pipeline changed (`by` you, agent or Shinsa, with a reason) |
 | `task.shared`, `task.unshared` | you shared a task by link or changed how long or what it shows (`limit`, `endsAt`, `scopes`; the first adds an activity entry), or sharing stopped (`reason`: `you`, `done` when a task shared `until_done` settled, `expired`; each adds an activity entry) |
@@ -1082,6 +1084,7 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `task.suggested`, `suggestion.settled` | a task was suggested (`request`; `splitOff` for a split-off); accepted or dismissed (`keptRound` when it was kept here as a round) |
 | `task.account_bound` | the task's account changed |
 | `task.split` | `split_task` made tasks |
+| `task.moving`, `task.moved` | `move_to_repository` started moving the task (`repoId`, `runId`, `reason`; sets `movingTo`), and the old worktree is gone, so the task now works in `repoId` |
 | `config.verified` | setup verification ran |
 | `budget.acknowledged` | you allowed more past a usage or cost limit |
 | `worktree.requested` | the task asked for its workspace, in this mode (`workspace`) |
@@ -1208,6 +1211,7 @@ non-delegated task run also gets one management tool per surface spec that is no
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | `propose_plan` | ✓ plan | | | | | | |
 | `reshape_task` | ✓ plan | | | | | | |
+| `move_to_repository` | ✓ plan | | | | | | |
 | `complete_phase` | ✓ build | | | | | | |
 | `complete_fix` | ✓ fix | | | | | | |
 | `report_review` | | ✓ | | | | | |
@@ -1267,6 +1271,7 @@ The fields each hand-over tool takes, checked by `validate*` in `packages/core/s
 | `report_read` | **`summary`**: what it read, filed and skipped; `reached` (false when the source still failed after 3 tries; true when left out); `live` (only for a watchdog waiting for production: false while it is not live, true once it is; a report filed counts as true) | 1,000 |
 | `file_report` | **`title`**, **`request`**, **`text`**; `report_id` or `link` (one is required), `author`, `posted_at`, `fork_from` (a task id or handle; a watchdog's is always the shipped task), `repository` (a name or id) | title 100; request 2,000; report_id 200; link 2,000; author 120; posted_at 60; text 4,000 |
 | `reshape_task` | **`reason`**; `shape` (answer, investigate, research) or `steps` (`PIPELINE_ORDER` names) | reason 240 |
+| `move_to_repository` | **`repository`** (a repository of the task's project by name, or the folder name of one in its folders, registered when named), **`reason`** | reason 240 |
 | `attach_evidence` | **`kind`** (comparison, screenshot, recording, test, check, note, preview); for test or check only **`check`** (a check id of the task) and `detail`; otherwise **`title`**: what it shows, the same for a before shot and its after shot; `detail`: what to look at; `width` (CSS pixels), `theme` (light, dark), `stage` (before, after); `key`: what it shows, lower-case words and hyphens (not for a test or check); `replaces`: earlier items by key or id; exactly one of `path`, `url` (http or https) or `text`, or for a comparison **`parts`** (each **`path`**, `stage`, `label`) | title 80; detail 280; check 12; width 1 to 7,680; text 40,000; url 2,000; path 300; 2 to 6 parts, label 40; key 60; replaces 24 |
 | `remove_evidence` | **`items`** (by key or id), **`reason`**: why it no longer applies | 1 to 24 items of 60; reason 200 |
 

@@ -1,0 +1,302 @@
+import type { CommandCommit } from '../../../apps/engine/src/store/commands/schema.ts';
+import {
+  applyEvent,
+  CHAT_PROTOCOL_VERSION,
+  type ChatEntry,
+  createState,
+  decide,
+  listActiveRuns,
+  listOpenGates,
+  type PlanDocument,
+  type ReportCheck,
+  type ShinsaCommand,
+  type ShinsaEvent,
+  type ShinsaState,
+  type StoredBriefing,
+} from '../../../packages/core/src/index.ts';
+import type { SyntheticLog, SyntheticOptions } from './schema.ts';
+
+const PASSING: ReportCheck[] = [
+  { id: 'c1', label: 'Chunk retries', command: 'bun test src/export', outcome: 'pass', detail: null },
+  { id: 'r1', label: 'bun lint', command: 'bun lint', outcome: 'pass', detail: null },
+  { id: 'r2', label: 'bun check-types', command: 'bun check-types', outcome: 'pass', detail: null },
+];
+
+const PLAN: PlanDocument = {
+  goal: 'Make exports retry on timeouts so a slow disk never loses a chunk.',
+  phases: [
+    { title: 'Wrap the write', detail: 'Retry each chunk write three times with a backoff.' },
+    { title: 'Cover it with tests', detail: 'One test per error kind, including a torn write.' },
+    { title: 'Measure it', detail: 'Run the export benchmark before and after.' },
+  ],
+  behaviour: ['A slow write is retried.', 'A failing write reports which chunk failed.'],
+  approach: 'A small retry helper beside the writer, used by every chunk write.',
+  files: [],
+  outOfScope: [],
+  verification: [{ label: 'Chunk retries', command: 'bun test src/export', phases: [1, 2] }],
+  questions: [],
+};
+
+const REPOS = ['paywall-next', 'shinsa', 'superwall-ios', 'dashboard', 'billing'];
+
+function createRandom(seed: number) {
+  let value = seed >>> 0;
+  return () => {
+    value = (value + 0x6d2b79f5) >>> 0;
+    let mixed = value;
+    mixed = Math.imul(mixed ^ (mixed >>> 15), mixed | 1);
+    mixed ^= mixed + Math.imul(mixed ^ (mixed >>> 7), mixed | 61);
+    return ((mixed ^ (mixed >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+class Writer {
+  state: ShinsaState = createState();
+  clock = Date.UTC(2026, 8, 1);
+  counter = 0;
+  readonly commits: CommandCommit[] = [];
+  readonly briefings: StoredBriefing[] = [];
+
+  send(command: ShinsaCommand) {
+    this.clock += 7_000;
+    const result = decide(this.state, command, {
+      now: this.clock,
+      newId: () => `0199${(++this.counter).toString(16).padStart(8, '0')}-0000-7000-8000-000000000000`,
+    });
+    if (result._tag === 'Failure') return null;
+    const decision = result.success;
+    const fromSeq = this.state.seq;
+    this.commits.push({
+      events: decision.events,
+      effects: [],
+      cancellations: [],
+      fromSeq,
+      at: this.clock,
+      receipt: null,
+    });
+    decision.events.forEach((event, index) => {
+      this.state = applyEvent(this.state, {
+        ...event,
+        seq: fromSeq + index + 1,
+        at: this.clock,
+      } as ShinsaEvent);
+    });
+    return decision;
+  }
+
+  activeRun(taskId: string) {
+    return listActiveRuns(this.state, taskId)[0] ?? null;
+  }
+
+  openGate(taskId: string) {
+    return listOpenGates(this.state, taskId)[0] ?? null;
+  }
+}
+
+function meter(writer: Writer, taskId: string, times: number) {
+  const run = writer.activeRun(taskId);
+  if (!run) return;
+  for (let index = 0; index < times; index += 1) {
+    writer.send({
+      type: 'run.meter',
+      runId: run.id,
+      usage: {
+        inputTokens: 1200 + index,
+        outputTokens: 300,
+        cacheReadTokens: 40_000,
+        cacheWriteTokens: 900,
+        costUsd: 0.04,
+      },
+    });
+  }
+}
+
+function brief(writer: Writer, taskIds: string[]) {
+  writer.briefings.push({
+    text: `Start with the export retry; ${taskIds.length} tasks are open and three wait on your review. The billing migration is paused on its usage limit and resumes at noon.`,
+    at: writer.clock,
+    briefing: null,
+  });
+}
+
+function reprioritize(writer: Writer, taskIds: string[], index: number) {
+  const taskId = taskIds[index % taskIds.length] ?? '';
+  const current = writer.state.tasks[taskId]?.priority;
+  writer.send({ type: 'task.prioritize', taskId, priority: current === 'high' ? 'normal' : 'high' });
+}
+
+function link(writer: Writer, taskId: string) {
+  const run = writer.activeRun(taskId);
+  if (!run || run.sessionId) return;
+  writer.send({ type: 'run.link', runId: run.id, sessionId: `session-${run.id}`, provider: 'claude' });
+}
+
+function walkTask(writer: Writer, taskId: string, random: () => number, meterTimes: number) {
+  link(writer, taskId);
+  meter(writer, taskId, meterTimes);
+  const planner = writer.activeRun(taskId);
+  if (!planner) return;
+  writer.send({ type: 'agent.propose_plan', runId: planner.id, document: PLAN });
+  const planGate = writer.openGate(taskId);
+  if (planGate)
+    writer.send({ type: 'gate.answer', gateId: planGate.id, decision: 'approve', response: null });
+  for (let index = 0; index < PLAN.phases.length; index += 1) {
+    link(writer, taskId);
+    meter(writer, taskId, meterTimes);
+    const run = writer.activeRun(taskId);
+    if (!run) return;
+    writer.send({
+      type: 'agent.complete_phase',
+      runId: run.id,
+      summary: `Phase ${index + 1} is done: the writer retries, every error kind has a test and the benchmark holds.`,
+      spots: [{ file: 'src/export/write.ts', start: 10, end: 42, attention: 'critical', why: 'The retry.' }],
+      judgementCalls: [],
+    });
+  }
+  if (random() < 0.15) return;
+  writer.send({ type: 'checks.record', taskId, results: PASSING });
+  link(writer, taskId);
+  meter(writer, taskId, meterTimes);
+  const reviewer = writer.activeRun(taskId);
+  if (!reviewer) return;
+  writer.send({ type: 'agent.report_review', runId: reviewer.id, summary: null, findings: [] });
+  if (random() < 0.2) return;
+  const review = writer.openGate(taskId);
+  if (!review) return;
+  writer.send({ type: 'gate.answer', gateId: review.id, decision: 'approve', response: null });
+  writer.send({ type: 'pull_request.record_push', taskId, sha: `sha-${writer.state.seq}` });
+  const updates = 10 + Math.floor(random() * 40);
+  for (let index = 0; index < updates; index += 1) {
+    writer.send({
+      type: 'pull_request.record',
+      taskId,
+      pullRequest: {
+        number: 100 + index,
+        url: `https://github.com/superwall/repo/pull/${100 + index}`,
+        state: 'open',
+        checks: index % 3 === 0 ? 'pending' : 'passing',
+        unresolvedComments: index % 4,
+        mergeable: true,
+        updatedAt: writer.clock + index,
+      },
+    });
+  }
+  if (random() < 0.3) return;
+  writer.send({
+    type: 'pull_request.record',
+    taskId,
+    pullRequest: {
+      number: 100,
+      url: 'https://github.com/superwall/repo/pull/100',
+      state: 'merged',
+      checks: 'passing',
+      unresolvedComments: 0,
+      mergeable: true,
+      updatedAt: writer.clock,
+    },
+  });
+}
+
+function createTasks(writer: Writer, count: number) {
+  const repoIds = REPOS.map((name) => {
+    writer.send({
+      type: 'repo.register',
+      repo: {
+        name,
+        path: `/code/${name}`,
+        defaultBranch: 'main',
+        remote: `github.com/superwall/${name}`,
+        checkCommands: ['bun lint', 'bun check-types'],
+      },
+      projectName: 'Superwall',
+    });
+    return Object.values(writer.state.repos).find((repo) => repo.name === name)?.id ?? '';
+  });
+  const taskIds: string[] = [];
+  for (let index = 0; index < count; index += 1) {
+    const repoId = repoIds[index % repoIds.length] ?? '';
+    const before = new Set(Object.keys(writer.state.tasks));
+    writer.send({
+      type: 'task.create',
+      request: `Task ${index}: make the export of report ${index} retry on timeouts and say which chunk failed when it gives up.`,
+      repoId,
+    });
+    const taskId = Object.keys(writer.state.tasks).find((id) => !before.has(id)) ?? '';
+    writer.send({
+      type: 'task.triage',
+      taskId,
+      title: `Retry export chunk writes (${index})`,
+      repoId,
+      size: 'small',
+      branch: `fix/export-${index}`,
+      waitsOn: [],
+    });
+    writer.send({ type: 'config.record', taskId, problems: [] });
+    writer.send({ type: 'worktree.ready', taskId, path: `/wt/${taskId}`, branch: `fix/export-${index}` });
+    taskIds.push(taskId);
+  }
+  return taskIds;
+}
+
+export function serializeSyntheticTranscript(runId: string, entries: number) {
+  const lines: string[] = [];
+  for (let index = 0; index < entries; index += 1) {
+    const callId = `call-${index}`;
+    const entry: ChatEntry =
+      index % 3 === 0
+        ? {
+            v: CHAT_PROTOCOL_VERSION,
+            id: `${runId}-${index}`,
+            at: index,
+            type: 'agent',
+            phase: 'interim',
+            text: `Reading the writer to see where a chunk write can time out (${index}).`,
+          }
+        : index % 3 === 1
+          ? {
+              v: CHAT_PROTOCOL_VERSION,
+              id: `${runId}-${index}`,
+              at: index,
+              type: 'tool_call',
+              callId,
+              tool: { kind: 'read', path: 'src/export/write.ts', range: { start: 1, end: 120 } },
+            }
+          : {
+              v: CHAT_PROTOCOL_VERSION,
+              id: `${runId}-${index}`,
+              at: index,
+              type: 'tool_result',
+              callId,
+              status: 'ok',
+              output:
+                'export async function writeChunk(chunk: Chunk) {\n  await disk.write(chunk.path, chunk.bytes);\n}\n'.repeat(
+                  4
+                ),
+              images: [],
+            };
+    lines.push(JSON.stringify(entry));
+  }
+  return `${lines.join('\n')}\n`;
+}
+
+export function buildSyntheticLog(options: SyntheticOptions): SyntheticLog {
+  const writer = new Writer();
+  const random = createRandom(7);
+  const taskIds = createTasks(writer, options.tasks);
+  const perTask = Math.max(1, Math.floor(options.targetEvents / options.tasks / 12));
+  for (const [index, taskId] of taskIds.entries()) {
+    walkTask(writer, taskId, random, perTask);
+    if (index % 3 === 0) brief(writer, taskIds);
+  }
+  for (let index = 0; writer.state.seq < options.targetEvents; index += 1)
+    reprioritize(writer, taskIds, index);
+  const runIds = Object.keys(writer.state.runs);
+  return {
+    commits: writer.commits,
+    briefings: writer.briefings,
+    events: writer.state.seq,
+    tasks: taskIds.length,
+    runIds,
+    longRunIds: runIds.slice(0, options.longTranscripts),
+  };
+}

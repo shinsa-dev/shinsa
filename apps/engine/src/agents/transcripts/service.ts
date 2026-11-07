@@ -103,7 +103,7 @@ export class Transcripts extends Context.Service<
         const size = checked.has(runId) ? 0 : readSize(path);
         const torn = size > 0 && readRange(path, size - 1, size)[0] !== NEWLINE;
         checked.add(runId);
-        appendFileSync(path, `${torn ? '\n' : ''}${JSON.stringify(entry)}\n`);
+        yield* Effect.sync(() => appendFileSync(path, `${torn ? '\n' : ''}${JSON.stringify(entry)}\n`));
         if (!files.has(runId)) emit(runId, [entry], null);
         else readAppended(runId);
       });

@@ -10,7 +10,7 @@ import {
   ROUTE_NOT_FOUND_MESSAGE,
   ScopeRefused,
 } from '@shinsa/core/engine-api/schema';
-import { Cause, Effect, Option, Predicate, Schema, type Types } from 'effect';
+import { Cause, Effect, FileSystem, Option, Predicate, Schema, type Types } from 'effect';
 import { HttpRouter, HttpServerError, HttpServerRequest, HttpServerResponse } from 'effect/http';
 import { EngineConfig } from '../../config/service.ts';
 import { Extensions } from '../../extensions/registry/service.ts';
@@ -35,6 +35,7 @@ export const Ingress = HttpRouter.middleware(
     const config = yield* EngineConfig;
     const extensions = Option.getOrUndefined(yield* Effect.serviceOption(Extensions));
     const gate = yield* TunnelGate;
+    const withFiles = Effect.provideService(FileSystem.FileSystem, yield* FileSystem.FileSystem);
     const allowedHosts = resolveAllowedHosts(config.allowedHosts);
     const isIngressFailure = Schema.is(IngressFailure);
     const notFound = () => new RouteNotFound({ message: ROUTE_NOT_FOUND_MESSAGE });
@@ -52,7 +53,7 @@ export const Ingress = HttpRouter.middleware(
     };
 
     const respondPage = (pathname: string) =>
-      Effect.map(serveStatic(config.webDir, pathname), HttpServerResponse.raw);
+      Effect.map(withFiles(serveStatic(config.webDir, pathname)), HttpServerResponse.raw);
 
     const respondMissing = Effect.fn('Ingress.respondMissing')(function* (
       web: Request,

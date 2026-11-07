@@ -61,7 +61,7 @@ export function listBundleTasks({ paywall }: { paywall: Repo }): SeedTask[] {
       request: 'Restore a saved cart from the checkout screen.',
       title: 'Restore saved carts at checkout',
       repo: paywall,
-      auto: { shape: false, start: true, priority: false },
+      auto: { shape: false, start: true, priority: false, project: false },
       decisions: {
         shape: null,
         start: { value: [], why: 'It needs no other task merged first.' },

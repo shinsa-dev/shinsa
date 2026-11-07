@@ -1,8 +1,8 @@
 import { existsSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import type { Repo } from '@shinsa/core';
-import { Clock, Context, Effect, Layer } from 'effect';
-import { resolveInstallCommand } from '../../checks/install.ts';
+import { Clock, Context, Effect, FileSystem, Layer, Option } from 'effect';
+import { selectInstallCommand } from '../../checks/install.ts';
 import { resolveCancel } from '../../shell/abort.ts';
 import { describeFailure } from '../../shell/failure.ts';
 import { COMMAND_TIMEOUT, type CommandResult, NOT_STARTED_EXIT_CODE } from '../../shell/schema.ts';
@@ -94,6 +94,7 @@ export class Checkout extends Context.Service<
     Effect.gen(function* () {
       const git = yield* Git;
       const shell = yield* Shell;
+      const withFiles = Effect.provideService(FileSystem.FileSystem, yield* FileSystem.FileSystem);
 
       const resolveGitPath = (path: string, name: string) =>
         Effect.map(git.run(['rev-parse', '--git-path', name], path), (relative) => resolve(path, relative));
@@ -191,8 +192,9 @@ export class Checkout extends Context.Service<
           );
 
       const prepare = Effect.fn('Checkout.prepare')(function* (path: string, signal?: AbortSignal) {
-        const install = yield* Effect.sync(() => resolveInstallCommand(path));
-        if (!install || signal?.aborted) return;
+        const selected = yield* withFiles(selectInstallCommand(path));
+        if (Option.isNone(selected) || signal?.aborted) return;
+        const install = selected.value;
         const first = yield* runInstall(install, path, signal);
         if (first.ok || signal?.aborted) return;
         const result = yield* runInstall(install, path, signal);

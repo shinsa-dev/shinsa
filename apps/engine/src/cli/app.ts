@@ -1,7 +1,11 @@
-import { existsSync, realpathSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { resolve } from 'node:path';
 import { APP_IDENTITY, resolveEngineLabel } from '@shinsa/core';
+import { Effect, type FileSystem, Option } from 'effect';
+import { isPresent, selectRealPath } from '../files/probe.ts';
+import { runCommand } from '../shell/command.ts';
+import type { Shell } from '../shell/service.ts';
+import { PLUTIL, PLUTIL_TIMEOUT_MS } from './schema.ts';
 
 export const APP_BUNDLE_ID = process.env.SHINSA_APP_ID || APP_IDENTITY.appId;
 
@@ -48,41 +52,47 @@ export function parseEngineJob(printed: string): EngineJob {
 
 export interface ProgramIdentity {
   program: string;
-  real: (path: string) => string;
-  readBundleId: (app: string) => string | null;
+  real: (path: string) => Effect.Effect<string>;
+  readBundleId: (app: string) => Effect.Effect<string | null>;
 }
 
-export function isJobProgram(job: EngineJob, identity: ProgramIdentity) {
-  if (job.program) return identity.real(job.program) === identity.program;
+export const isJobProgram = Effect.fn('Cli.isJobProgram')(function* (
+  job: EngineJob,
+  identity: ProgramIdentity
+) {
+  if (job.program) return (yield* identity.real(job.program)) === identity.program;
   if (!job.relative || !job.bundleId) return false;
   const suffix = `/${job.relative}`;
   if (!identity.program.endsWith(suffix)) return false;
-  return identity.readBundleId(identity.program.slice(0, -suffix.length)) === job.bundleId;
-}
+  return (yield* identity.readBundleId(identity.program.slice(0, -suffix.length))) === job.bundleId;
+});
 
-export function resolveRealPath(path: string) {
-  try {
-    return realpathSync(path);
-  } catch {
-    return path;
-  }
-}
+export const resolveRealPath = Effect.fn('Cli.resolveRealPath')(function* (path: string) {
+  return Option.getOrElse(yield* selectRealPath(path), () => path);
+});
 
-export function readAppBundleId(app: string, plutil = '/usr/bin/plutil') {
+export const readAppBundleId = Effect.fn('Cli.readAppBundleId')(function* (app: string, plutil = PLUTIL) {
   const plist = `${app}/Contents/Info.plist`;
-  if (!existsSync(plist) || !existsSync(plutil)) return null;
-  const result = Bun.spawnSync([plutil, '-extract', 'CFBundleIdentifier', 'raw', plist]);
-  return result.exitCode === 0 ? result.stdout.toString().trim() || null : null;
-}
-
-export function isInsideApp(program = process.execPath) {
-  return resolveRealPath(program).includes('.app/Contents/');
-}
-
-export function ownsEngineJob(printed: string, program = process.execPath) {
-  return isJobProgram(parseEngineJob(printed), {
-    program: resolveRealPath(program),
-    real: resolveRealPath,
-    readBundleId: readAppBundleId,
+  if (!(yield* isPresent(plist)) || !(yield* isPresent(plutil))) return null;
+  const result = yield* runCommand([plutil, '-extract', 'CFBundleIdentifier', 'raw', plist], app, {
+    timeoutMs: PLUTIL_TIMEOUT_MS,
   });
-}
+  return result.ok ? result.stdout.trim() || null : null;
+});
+
+export const isInsideApp = Effect.fn('Cli.isInsideApp')(function* (program: string = process.execPath) {
+  return (yield* resolveRealPath(program)).includes('.app/Contents/');
+});
+
+export const ownsEngineJob = Effect.fn('Cli.ownsEngineJob')(function* (
+  printed: string,
+  program: string = process.execPath
+) {
+  const context = yield* Effect.context<FileSystem.FileSystem | Shell>();
+  const withContext = Effect.provide(context);
+  return yield* isJobProgram(parseEngineJob(printed), {
+    program: yield* resolveRealPath(program),
+    real: (path) => withContext(resolveRealPath(path)),
+    readBundleId: (app) => withContext(readAppBundleId(app)),
+  });
+});

@@ -1,6 +1,6 @@
-import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { Option, Schema } from 'effect';
+import { Effect, FileSystem, Option, Schema } from 'effect';
+import { selectText } from './probe.ts';
 import {
   DenoManifestText,
   PACKAGE_MANIFEST,
@@ -8,8 +8,6 @@ import {
   PackageManifestText,
   TextList,
 } from './schema.ts';
-
-const readText = Option.liftThrowable((path: string) => readFileSync(path, 'utf8'));
 
 const decodeManifest = Schema.decodeUnknownOption(PackageManifestText);
 
@@ -21,13 +19,19 @@ export function parsePackageManifest(text: string | null): PackageManifest | nul
   return text === null ? null : Option.getOrNull(decodeManifest(text));
 }
 
-export function readPackageManifest(dir: string): PackageManifest | null {
-  return Option.getOrNull(Option.flatMap(readText(join(dir, PACKAGE_MANIFEST)), decodeManifest));
-}
+export const selectPackageManifest = Effect.fn('Files.selectPackageManifest')(function* (dir: string) {
+  const text = yield* selectText(join(dir, PACKAGE_MANIFEST));
+  return Option.flatMap(text, decodeManifest);
+});
 
-export function findManifestFile<A>(path: string, schema: Schema.Decoder<A>): A {
-  return Schema.decodeUnknownSync(schema)(readFileSync(path, 'utf8'));
-}
+export const findManifestFile = Effect.fn('Files.findManifestFile')(function* <A>(
+  path: string,
+  schema: Schema.Decoder<A>
+) {
+  const fs = yield* FileSystem.FileSystem;
+  const text = yield* fs.readFileString(path).pipe(Effect.orDie);
+  return yield* Schema.decodeUnknownEffect(schema)(text).pipe(Effect.orDie);
+});
 
 export function listDependencyNames(manifest: PackageManifest) {
   return [...Object.keys(manifest.dependencies ?? {}), ...Object.keys(manifest.devDependencies ?? {})];

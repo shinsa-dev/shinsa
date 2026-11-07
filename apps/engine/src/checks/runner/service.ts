@@ -1,5 +1,6 @@
 import { type CheckToRun, describeCount } from '@shinsa/core';
-import { Context, Duration, Effect, Layer } from 'effect';
+import { Context, Duration, Effect, FileSystem, Layer, Option } from 'effect';
+import { selectOnPath } from '../../files/probe.ts';
 import { resolveCancel } from '../../shell/abort.ts';
 import {
   CANCELLED_BEFORE_START,
@@ -8,16 +9,16 @@ import {
   NOT_STARTED_EXIT_CODE,
 } from '../../shell/schema.ts';
 import { Shell } from '../../shell/service.ts';
-import { describeFailureDiff, listCheckFailures } from '../failures.ts';
+import { describeFailureDiff, selectCheckFailures } from '../failures.ts';
 import {
   describeFailedRun,
   describeRerunOutput,
   joinOutput,
-  listFailedFiles,
   listRerunPaths,
+  selectFailedFiles,
   tailOutput,
 } from '../output.ts';
-import { isCoverageFloorOnly, isRerunPassed, listFailedTests, resolveRerunCommand } from '../reruns.ts';
+import { isCoverageFloorOnly, isRerunPassed, listFailedTests, selectRerunCommand } from '../reruns.ts';
 import {
   CHECK_ENV,
   type CheckFailure,
@@ -44,7 +45,10 @@ export class CheckRunner extends Context.Service<
     CheckRunner,
     Effect.gen(function* () {
       const shell = yield* Shell;
-      const prefix = (yield* Effect.sync(() => Bun.which('nice'))) ? LOW_PRIORITY : [];
+      const withFiles = Effect.provideService(FileSystem.FileSystem, yield* FileSystem.FileSystem);
+      const prefix = Option.isSome(yield* withFiles(selectOnPath('nice', Bun.env.PATH ?? '')))
+        ? LOW_PRIORITY
+        : [];
 
       const command = Effect.fn('CheckRunner.command')(function* (
         argv: readonly string[],
@@ -108,7 +112,7 @@ export class CheckRunner extends Context.Service<
             failures: [],
           } satisfies CheckRun;
         }
-        return {
+        const failed = {
           check: {
             id,
             label,
@@ -118,8 +122,15 @@ export class CheckRunner extends Context.Service<
           },
           output,
           timedOut: result.timedOut,
-          failedFiles: result.timedOut ? null : listFailedFiles(output, cwd),
-          failures: result.timedOut ? null : listCheckFailures(output, cwd),
+        } as const;
+        if (result.timedOut) return { ...failed, failedFiles: null, failures: null } satisfies CheckRun;
+        const [files, failures] = yield* withFiles(
+          Effect.all([selectFailedFiles(output, cwd), selectCheckFailures(output, cwd)])
+        );
+        return {
+          ...failed,
+          failedFiles: Option.getOrNull(files),
+          failures: Option.getOrNull(failures),
         } satisfies CheckRun;
       });
 
@@ -128,11 +139,13 @@ export class CheckRunner extends Context.Service<
         cwd: string,
         options: CheckOptions
       ) {
-        const commands = groups.map((group) => ({ group, argv: resolveRerunCommand(group, cwd) }));
+        const commands = yield* Effect.forEach(groups, (group) =>
+          Effect.map(withFiles(selectRerunCommand(group, cwd)), (argv) => ({ group, argv }))
+        );
         const reruns: GroupRerun[] = [];
         for (const { group, argv } of commands) {
-          if (!argv) return null;
-          const result = yield* command(argv, group.packageDir, options);
+          if (Option.isNone(argv)) return null;
+          const result = yield* command(argv.value, group.packageDir, options);
           if (options.signal?.aborted) return null;
           const output = joinOutput(result);
           reruns.push({ group, passed: isRerunPassed(group.runner, output, result.ok), output });
@@ -146,7 +159,7 @@ export class CheckRunner extends Context.Service<
         options: CheckOptions
       ) {
         if (checked.check.outcome !== 'fail' || checked.timedOut) return checked;
-        const failed = listFailedTests(checked.output, cwd);
+        const failed = yield* withFiles(listFailedTests(checked.output, cwd));
         if (failed.kind !== 'files') return checked;
         const reruns = yield* rerunGroups(failed.groups, cwd, options);
         if (!reruns) return checked;

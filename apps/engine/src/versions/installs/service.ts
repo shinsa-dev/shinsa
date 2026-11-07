@@ -1,5 +1,5 @@
 import type { ProgramId } from '@shinsa/core';
-import { Context, Effect, Layer } from 'effect';
+import { Context, Effect, FileSystem, Layer } from 'effect';
 import {
   locateClaude,
   parseClaudeVersion,
@@ -30,14 +30,15 @@ export class ProgramInstalls extends Context.Service<
     ProgramInstalls,
     Effect.gen(function* () {
       const versions = yield* ProgramVersions;
+      const withFiles = Effect.provideService(FileSystem.FileSystem, yield* FileSystem.FileSystem);
       return ProgramInstalls.of({
-        locate: (program) => Effect.sync(() => (program === 'claude' ? locateClaude() : locateCodex())),
+        locate: (program) => withFiles(program === 'claude' ? locateClaude() : locateCodex()),
         readVersion: (program, path) =>
           versions.read(path, program === 'claude' ? parseClaudeVersion : parseCodexVersion),
         minimum: (program) =>
-          Effect.sync(() => (program === 'claude' ? resolveSdkClaudeVersion() : CODEX_MINIMUM_VERSION)),
-        sdk: Effect.sync(() => resolveSdkPackage()),
-        updater: (program, path) => Effect.sync(() => resolveUpdater(program, path)),
+          program === 'claude' ? withFiles(resolveSdkClaudeVersion()) : Effect.succeed(CODEX_MINIMUM_VERSION),
+        sdk: withFiles(resolveSdkPackage()),
+        updater: (program, path) => withFiles(resolveUpdater(program, path)),
       });
     })
   );

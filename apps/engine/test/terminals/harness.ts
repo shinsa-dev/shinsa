@@ -1,3 +1,4 @@
+import { BunServices } from '@effect/platform-bun';
 import type { ShinsaState } from '@shinsa/core';
 import { Clock, Context, Duration, Effect, Exit, Layer, Scope } from 'effect';
 import { EngineConfig } from '../../src/config/service.ts';
@@ -66,6 +67,7 @@ function createTerminalsLayer(options: TerminalsHarnessOptions = {}) {
     Layer.provide(
       Layer.mergeAll(
         TerminalFiles.layer.pipe(Layer.provide(JsonFile.layer)),
+        BunServices.layer,
         Layer.succeed(TerminalPty, pty),
         Layer.succeed(EngineConfig, config),
         Layer.succeed(

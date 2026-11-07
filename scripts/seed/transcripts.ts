@@ -1,5 +1,3 @@
-import { readFileSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { convertClaudeSession } from '../../apps/engine/src/agents/index.ts';
 import {
   type RunPurpose,
@@ -11,7 +9,6 @@ import {
   RUN_AGENT_ROLE,
 } from '../../packages/core/src/index.ts';
 import { callTool, NOW, resolveToolOutput, type SeedTask, say } from './kit.ts';
-import { DATA } from './paths.ts';
 import { resolveRunOpening } from './prompts.ts';
 import { resolveShapeHandover } from './tasks/shapes.ts';
 import { SMALL_PLAN } from './timeline.ts';
@@ -197,17 +194,13 @@ export function listRunTimes(tasks: SeedTask[], timeline: { at: number; event: S
   return [...times.entries()];
 }
 
-export function writeSessionTranscript(
-  session: string,
-  runTimes: [string, SeedRunTimes][],
-  transcripts: string
-) {
-  const evidence = join(DATA, 'evidence');
-  let images = 0;
-  const entries = convertClaudeSession(readFileSync(session, 'utf8'), (data, mediaType) => {
-    images += 1;
-    const file = `seed-image-${images}.${mediaType.split('/')[1] ?? 'png'}`;
-    writeFileSync(join(evidence, file), Buffer.from(data, 'base64'));
+export const SESSION_TRANSCRIPT = 'task-embedded-chat-run-1.jsonl';
+
+export function convertSessionTranscript(session: string, runTimes: [string, SeedRunTimes][]) {
+  const images: { file: string; bytes: Uint8Array }[] = [];
+  const entries = convertClaudeSession(session, (data, mediaType) => {
+    const file = `seed-image-${images.length + 1}.${mediaType.split('/')[1] ?? 'png'}`;
+    images.push({ file, bytes: Buffer.from(data, 'base64') });
     return `/api/evidence/${file}`;
   });
   const window = runTimes.find(([runId]) => runId === 'task-embedded-chat-run-1')?.[1];
@@ -221,9 +214,9 @@ export function writeSessionTranscript(
           Math.round(((entry.at - first) / span) * ((window.endedAt ?? NOW) - window.startedAt)),
       }))
     : entries;
-  writeFileSync(
-    join(transcripts, 'task-embedded-chat-run-1.jsonl'),
-    `${fitted.map((entry) => JSON.stringify(entry)).join('\n')}\n`
-  );
-  console.info(`Seeded a crowded chat with ${entries.length} entries from ${session}`);
+  return {
+    images,
+    count: entries.length,
+    transcript: `${fitted.map((entry) => JSON.stringify(entry)).join('\n')}\n`,
+  };
 }

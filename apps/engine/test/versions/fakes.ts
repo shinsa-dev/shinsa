@@ -1,3 +1,4 @@
+import { BunServices } from '@effect/platform-bun';
 import type { ProgramId } from '@shinsa/core';
 import { Context, Effect, Layer, Scope } from 'effect';
 import type { ProgramLocation } from '../../src/agents/providers/versions/schema.ts';
@@ -40,7 +41,11 @@ export function createFakeVersionsLayer(fake: FakePrograms = {}) {
       minimum: (program) =>
         Effect.sync(() => fake.minimum?.(program) ?? (program === 'claude' ? '2.1.280' : '0.153.0')),
       sdk: Effect.sync(() => fake.sdk ?? { version: '0.3.280', claudeCodeVersion: '2.1.280' }),
-      updater: (program, path) => Effect.sync(() => (fake.updater ?? resolveUpdater)(program, path)),
+      updater: (program, path) => {
+        const given = fake.updater;
+        if (given) return Effect.sync(() => given(program, path));
+        return resolveUpdater(program, path).pipe(Effect.provide(BunServices.layer));
+      },
     })
   );
   const registry = Layer.succeed(

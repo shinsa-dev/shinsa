@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { Changelog } from '@shinsa/core';
 import { resolveEngineChangelog } from '../../src/changelog/index.ts';
+import { runFiles } from '../harness.ts';
 
 let root = '';
 
@@ -27,25 +28,31 @@ const BUILT: Changelog = {
 };
 
 describe('resolveEngineChangelog', () => {
-  test('reads the changelog a build embedded', () => {
-    expect(resolveEngineChangelog({ built: JSON.stringify(BUILT), root: null })).toEqual(BUILT);
+  test('reads the changelog a build embedded', async () => {
+    expect(await runFiles(resolveEngineChangelog({ built: JSON.stringify(BUILT), root: null }))).toEqual(
+      BUILT
+    );
   });
 
-  test('answers an empty changelog when the embedded one is broken or missing', () => {
-    expect(resolveEngineChangelog({ built: '{"releases":[{"version":1}]}', root: null })).toEqual({
+  test('answers an empty changelog when the embedded one is broken or missing', async () => {
+    expect(
+      await runFiles(resolveEngineChangelog({ built: '{"releases":[{"version":1}]}', root: null }))
+    ).toEqual({
       releases: [],
     });
-    expect(resolveEngineChangelog({ built: undefined, root: null })).toEqual({ releases: [] });
+    expect(await runFiles(resolveEngineChangelog({ built: undefined, root: null }))).toEqual({
+      releases: [],
+    });
   });
 
-  test('reads a checkout’s entries as unreleased, leaving out internal and broken ones', () => {
+  test('reads a checkout’s entries as unreleased, leaving out internal and broken ones', async () => {
     const checkout = createCheckout({
       'whats-new.md': '---\nkind: added\n---\nA What’s new button shows what changed.\n',
       'tidy-runner.md': '---\nkind: internal\n---\nThe runner is simpler inside.\n',
       'broken.md': 'no front matter',
       '.gitkeep': '',
     });
-    expect(resolveEngineChangelog({ built: undefined, root: checkout })).toEqual({
+    expect(await runFiles(resolveEngineChangelog({ built: undefined, root: checkout }))).toEqual({
       releases: [
         {
           version: null,
@@ -56,8 +63,8 @@ describe('resolveEngineChangelog', () => {
     });
   });
 
-  test('answers an empty changelog for a checkout without entries', () => {
+  test('answers an empty changelog for a checkout without entries', async () => {
     root = mkdtempSync(join(tmpdir(), 'shinsa-changelog-'));
-    expect(resolveEngineChangelog({ built: undefined, root })).toEqual({ releases: [] });
+    expect(await runFiles(resolveEngineChangelog({ built: undefined, root }))).toEqual({ releases: [] });
   });
 });

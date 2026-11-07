@@ -9,9 +9,6 @@ export class SharedCaches extends Context.Service<
   { prune(dataDir: string, repoIds: readonly string[], now: number): Effect.Effect<void> }
 >()('shinsa/engine/checks/caches/SharedCaches') {
   static readonly layer = Layer.sync(SharedCaches, () => {
-    const listEntries = (dir: string) =>
-      existsSync(dir) ? readdirSync(dir).filter((name) => !name.startsWith('.')) : [];
-
     const prune = Effect.fn('SharedCaches.prune')(function* (
       dataDir: string,
       repoIds: readonly string[],
@@ -20,6 +17,8 @@ export class SharedCaches extends Context.Service<
       const known = new Set(repoIds);
       const unused = Duration.toMillis(UNUSED_CACHE);
       yield* Effect.sync(() => {
+        const listEntries = (dir: string) =>
+          existsSync(dir) ? readdirSync(dir).filter((name) => !name.startsWith('.')) : [];
         for (const repoId of listEntries(join(dataDir, CACHES_DIR))) {
           const path = resolveRepoCachePath(dataDir, repoId);
           if (!known.has(repoId)) {

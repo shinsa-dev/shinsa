@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
+import { BunServices } from '@effect/platform-bun';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import {
@@ -669,7 +670,8 @@ export class World {
     const triageContext = Effect.runSync(
       Layer.buildWithScope(
         Layer.merge(TaskTriage.layer, TriageClassifier.layer).pipe(
-          Layer.provide(Layer.succeed(QuickCalls, QuickCalls.of({ classify, write: quick.write })))
+          Layer.provide(Layer.succeed(QuickCalls, QuickCalls.of({ classify, write: quick.write }))),
+          Layer.provide(BunServices.layer)
         ),
         briefingScope
       )

@@ -77,7 +77,7 @@ async function shinsa(...args: string[]) {
       bundled: false,
       service: createLaunchdService({
         uid: 0,
-        ownsJob: () => true,
+        ownsJob: () => Effect.succeed(true),
         launchctl: () => Effect.succeed({ ok: false, output: '' }),
       }),
     },

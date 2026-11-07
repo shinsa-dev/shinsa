@@ -7,6 +7,7 @@ import {
   type DomainError,
   PROTOCOL_LIMITS,
   type Repo,
+  SHAPE_LIMITS,
   type RunRole,
   type ShinsaCommand,
   type ShinsaEvent,
@@ -127,7 +128,7 @@ export const ORCHESTRATION_TOOL_SPECS = {
   create_task: {
     name: 'create_task',
     description:
-      'Create a new task for work outside this one, such as the part of this change that belongs in another repository: each task works in one repository and ships one pull request. It starts at once, or with after_this once this task is finished (merged, or done when it ships no pull request), and ends at the human’s review like any task. Whoever picks it up sees nothing of this task unless it is forked, so the request must stand on its own. Set fork_from to this task for the other part of this change, or to a task that shipped a feature for follow-up work on it: the new task’s agent starts from a copy of that task’s conversation. Set this_task_waits when this task cannot be merged before the new one, and after_this when the new one cannot be merged before this task; never both. Set stack_on_this instead for the next piece of a bundle in this repository: the new task starts once this one is ready to merge, branches off this task’s branch, and the two merge together. Add stack_on to stack it on other tasks of the bundle as well, such as one that joins several parallel pieces. Stack when the new task builds directly on this task’s code and ships with it, such as the next piece of a rewrite split into parts, so a flaw it finds here is fixed in this pull request before anything merges. Use after_this for a separate feature that needs this change merged first: it is worth merging even if the follow-up stalls, the follow-up needs this change live on the default branch, or it works in another repository. Set neither when the new task only touches the same area: it starts at once.',
+      'Create a new task for work outside this one, such as the part of this change that belongs in another repository: each task works in one repository and ships one pull request. It starts at once, or with after_this once this task is finished (merged, or done when it ships no pull request), and ends at the human’s review like any task. Whoever picks it up sees nothing of this task unless it is forked, so the request must stand on its own. Set fork_from to this task for the other part of this change, or to a task that shipped a feature for follow-up work on it: the new task’s agent starts from a copy of that task’s conversation. Set this_task_waits when this task cannot be merged before the new one, and after_this when the new one cannot be merged before this task; never both. Set stack_on_this instead for the next piece of a bundle in this repository: the new task starts once this one is ready to merge, branches off this task’s branch, and the two merge together. Add stack_on to stack it on other tasks of the bundle as well, such as one that joins several parallel pieces. Stack when the new task builds directly on this task’s code and ships with it, such as the next piece of a rewrite split into parts, so a flaw it finds here is fixed in this pull request before anything merges. Use after_this for a separate feature that needs this change merged first: it is worth merging even if the follow-up stalls, the follow-up needs this change live on the default branch, or it works in another repository. Set neither when the new task only touches the same area: it starts at once. When all of this task’s work is in another repository and nothing changes here, move this task with `move_to_repository` while you plan instead of filing a new one.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -216,6 +217,28 @@ export const ORCHESTRATION_TOOL_SPECS = {
         },
       },
       required: ['tasks'],
+    },
+  },
+  move_to_repository: {
+    name: 'move_to_repository',
+    description:
+      'Move this task to another repository of its project, while you plan, when all of its work is there and nothing changes here. The task keeps its handle, title, branch name and this conversation: its worktree here is removed, one is made in that repository and planning carries on there. Use `create_task` instead for work beside this one. Refused once a phase has reported, a pull request exists, an earlier round has shipped or the task is part of a bundle. After the call, stop.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        repository: {
+          type: 'string',
+          maxLength: L.name,
+          description:
+            'The repository to move to, by name: one of the project’s repositories, or the folder name of a repository in its folders.',
+        },
+        reason: {
+          type: 'string',
+          maxLength: SHAPE_LIMITS.reason,
+          description: `Why the work belongs there, in one sentence. At most ${SHAPE_LIMITS.reason} characters.`,
+        },
+      },
+      required: ['repository', 'reason'],
     },
   },
 } satisfies Record<string, ToolSpec>;

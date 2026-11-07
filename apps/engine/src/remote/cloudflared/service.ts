@@ -28,11 +28,8 @@ export class Cloudflared extends Context.Service<
       const shell = yield* Shell;
       const binDir = join(target.dataDir, 'bin');
 
-      const attempt = <A>(message: string, run: () => A) =>
-        Effect.try({
-          try: run,
-          catch: (error) => new CloudflaredInstallFailed({ message: `${message}: ${describeError(error)}` }),
-        });
+      const failInstall = (message: string) => (error: unknown) =>
+        new CloudflaredInstallFailed({ message: `${message}: ${describeError(error)}` });
 
       const download = Effect.fn('Cloudflared.download')(function* (asset: CloudflaredAsset) {
         const bytes = yield* Effect.gen(function* () {
@@ -71,7 +68,7 @@ export class Cloudflared extends Context.Service<
             message: `Could not unpack cloudflared: ${result.stderr}`,
           });
         const binary = join(dir, 'cloudflared');
-        if (!existsSync(binary))
+        if (!(yield* Effect.sync(() => existsSync(binary))))
           return yield* new CloudflaredInstallFailed({
             message: 'The cloudflared download did not contain the program.',
           });
@@ -82,19 +79,31 @@ export class Cloudflared extends Context.Service<
         const { asset } = target;
         if (!asset) return yield* new CloudflaredUnsupported({ message: UNSUPPORTED_MESSAGE });
         const path = resolveCloudflaredPath(target.dataDir, asset);
-        if (existsSync(path)) return path;
+        if (yield* Effect.sync(() => existsSync(path))) return path;
         const bytes = yield* download(asset);
-        yield* attempt('Could not prepare data/bin', () => mkdirSync(binDir, { recursive: true }));
+        yield* Effect.try({
+          try: () => mkdirSync(binDir, { recursive: true }),
+          catch: failInstall('Could not prepare data/bin'),
+        });
         const staging = yield* Effect.acquireRelease(
-          attempt('Could not prepare data/bin', () => mkdtempSync(join(binDir, '.cloudflared-'))),
+          Effect.try({
+            try: () => mkdtempSync(join(binDir, '.cloudflared-')),
+            catch: failInstall('Could not prepare data/bin'),
+          }),
           (dir) => Effect.sync(() => rmSync(dir, { recursive: true, force: true }))
         );
         const file = join(staging, 'download');
-        yield* attempt('Could not save cloudflared', () => writeFileSync(file, bytes));
+        yield* Effect.try({
+          try: () => writeFileSync(file, bytes),
+          catch: failInstall('Could not save cloudflared'),
+        });
         const binary = asset.archive ? yield* unpack(file, staging) : file;
-        yield* attempt('Could not install cloudflared', () => {
-          chmodSync(binary, 0o755);
-          renameSync(binary, path);
+        yield* Effect.try({
+          try: () => {
+            chmodSync(binary, 0o755);
+            renameSync(binary, path);
+          },
+          catch: failInstall('Could not install cloudflared'),
         });
         return path;
       }, Effect.scoped);

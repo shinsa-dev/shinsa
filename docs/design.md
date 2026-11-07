@@ -1177,7 +1177,11 @@ Only these, and they win over anything below:
       `Select` and `DropdownMenu`, controlled or not), `useDialogState` and `useHeldValue` (a
       dialog that closes without a visible change, 26) and `useAnimatedIndicator` (the sliding
       highlight behind menus, lists and tabs).
-    - `scripts/generate-icons.ts` is the icon generator (below), with its logic in `scripts/icons.ts`.
+    - `scripts/generate-icons.ts` is the icon generator (below), an Effect program run with `BunRuntime.runMain`:
+      `scripts/icons-file.ts` walks the workspace and reads and writes through Effect's `FileSystem`, `scripts/icons.ts`
+      is the pure rendering and `scripts/schema.ts` its shapes and errors (`effect` and `@effect/platform-bun` are dev
+      dependencies of the kit for these scripts alone). The test setup keeps Bun's own `AbortController` over
+      happy-dom's, which the platform's file reads need.
       `bun run --cwd packages/ui test` runs `test/` (Bun with happy-dom and Testing Library) and fails
       under 100% line and function coverage of `lib`, `hooks` and `scripts` (the generator's entry point
       excepted); the components that carry behaviour are tested for it (states, roles, names), never for

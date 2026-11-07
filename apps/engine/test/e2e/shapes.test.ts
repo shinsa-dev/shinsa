@@ -152,7 +152,7 @@ describe('the shapes a task can take', () => {
     expect(w.task(taskId)).toMatchObject({
       pipeline: ['investigate'],
       priority: 'high',
-      auto: { shape: true, start: true, priority: true },
+      auto: { shape: true, start: true, priority: true, project: false },
       triageDecisions: {
         shape: { value: 'investigate', why: 'It asks why something is missing, not for a change.' },
         priority: { value: 'high', why: 'People see the missing greeting today.' },

@@ -1,6 +1,6 @@
 import { appendFileSync, cpSync, mkdirSync, readdirSync, rmSync, statSync } from 'node:fs';
 import { join } from 'node:path';
-import { BunRuntime } from '@effect/platform-bun';
+import { BunRuntime, BunServices } from '@effect/platform-bun';
 import { Clock, Console, Context, Duration, Effect, Fiber, Layer, Schedule } from 'effect';
 import { Socket } from 'effect/socket';
 import { Transcripts } from '../../apps/engine/src/agents/transcripts/service.ts';
@@ -296,7 +296,7 @@ const program = Effect.gen(function* () {
     mkdirSync(SCRATCH, { recursive: true });
     cpSync(SOURCE, SCRATCH, { recursive: true });
   });
-  const version = resolveStateVersion();
+  const version = yield* resolveStateVersion();
   const cold = yield* Effect.scoped(
     Effect.gen(function* () {
       const [bootFor, core] = yield* Effect.timed(openCore(version));
@@ -328,4 +328,4 @@ const program = Effect.gen(function* () {
   yield* Console.log(JSON.stringify(result, null, 2));
 });
 
-program.pipe(Effect.scoped, Effect.provide(JsonLogger), BunRuntime.runMain);
+program.pipe(Effect.scoped, Effect.provide([JsonLogger, BunServices.layer]), BunRuntime.runMain);

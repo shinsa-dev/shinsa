@@ -1,6 +1,6 @@
-import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { DomainError } from '@shinsa/core';
+import { Effect, FileSystem, Option, Schema } from 'effect';
 import { resolveShinsaPaths } from '../config/paths.ts';
 import {
   type Display,
@@ -39,13 +39,10 @@ function describeMessage(style: Style, message: string) {
   return message.replace(AREA, (area) => style.bold(area));
 }
 
+const decodeLogLine = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Unknown));
+
 export function describeLogLine(line: string, style: Style = PLAIN_STYLE) {
-  let entry: unknown;
-  try {
-    entry = JSON.parse(line);
-  } catch {
-    return line;
-  }
+  const entry = Option.getOrNull(decodeLogLine(line));
   if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return line;
   const { at, level, message, ...fields } = entry as Record<string, unknown>;
   const time = typeof at === 'string' ? style.dim(at.replace('T', ' ').slice(0, 19)) : '';
@@ -64,34 +61,35 @@ export function describeLogLine(line: string, style: Style = PLAIN_STYLE) {
     .join('  ');
 }
 
-function readLineCount(raw: string | undefined) {
+const readLineCount = Effect.fn('Cli.readLineCount')(function* (raw: string | undefined) {
   if (raw === undefined) return DEFAULT_LINES;
   const count = Number(raw);
   if (!Number.isInteger(count) || count < 1) {
-    throw new DomainError({
+    return yield* new DomainError({
       code: 'arguments_invalid',
       message: '--lines takes a whole number, such as --lines 200.',
     });
   }
   return count;
-}
+});
 
-export function printLogs(args: string[], io: LogsIo) {
+export const printLogs = Effect.fn('Cli.printLogs')(function* (args: string[], io: LogsIo) {
+  const fs = yield* FileSystem.FileSystem;
   const { flags, values } = parseArgs(args);
-  const count = readLineCount(values.get('--lines'));
+  const count = yield* readLineCount(values.get('--lines'));
   const path = join(resolveShinsaPaths(io.env).dataDir, ENGINE_LOG);
-  let text: string;
-  try {
-    text = readFileSync(path, 'utf8');
-  } catch {
-    throw new DomainError({
-      code: 'log_missing',
-      message: `There is no engine log at ${path} yet. The engine writes it when the Shinsa app runs it; \`bun dev\` prints to its terminal instead.`,
-    });
-  }
+  const text = yield* fs.readFileString(path).pipe(
+    Effect.mapError(
+      () =>
+        new DomainError({
+          code: 'log_missing',
+          message: `There is no engine log at ${path} yet. The engine writes it when the Shinsa app runs it; \`bun dev\` prints to its terminal instead.`,
+        })
+    )
+  );
   const lines = text
     .split('\n')
     .filter((line) => line.trim())
     .slice(-count);
   for (const line of lines) io.write(flags.has('--json') ? line : describeLogLine(line, io.display.style));
-}
+});

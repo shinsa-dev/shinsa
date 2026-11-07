@@ -370,6 +370,15 @@ function ReshapeCard({ args }: { args: ChatToolArgs }) {
   );
 }
 
+function MoveCard({ args }: { args: ChatToolArgs }) {
+  const repository = readString(args, 'repository');
+  return (
+    <Card icon='IconFolderOpen' title={repository ? `Moved the task to ${repository}` : 'Moved the task'}>
+      <Markdown text={readString(args, 'reason') ?? ''} />
+    </Card>
+  );
+}
+
 function InsetToolRow({ call, live }: { call: ToolCall; live: boolean }) {
   return (
     <div className={CHAT_INSET}>
@@ -442,6 +451,8 @@ export function HandoverCard({
       return <DeliveryCard title='Reported what it read' args={tool.args} field='summary' />;
     case 'reshape_task':
       return <ReshapeCard args={tool.args} />;
+    case 'move_to_repository':
+      return <MoveCard args={tool.args} />;
     case 'set_schedule':
       return <SuggestedWatchCard args={tool.args} task={task} />;
     case 'attach_evidence':

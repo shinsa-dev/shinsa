@@ -1,6 +1,10 @@
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
+import { BunRuntime, BunServices } from '@effect/platform-bun';
+import { Effect, FileSystem } from 'effect';
+import { readMarkPaths } from './kit/marks.ts';
+import { reportScriptFailure } from './kit/report.ts';
+import { runScriptCommand } from './kit/run.ts';
+import { ScriptStepFailed } from './kit/schema.ts';
 
 const WIDTH = 660;
 
@@ -48,13 +52,6 @@ const logoPath = resolve(desktopDir, '../../packages/ui/src/components/logo.tsx'
 type Channel = 'stable' | 'beta' | 'canary';
 
 const CHANNELS: Channel[] = ['stable', 'beta', 'canary'];
-
-function listMarkPaths() {
-  const source = readFileSync(logoPath, 'utf8');
-  const paths = [...source.matchAll(/<path d='([^']+)'/g)].map((match) => match[1] ?? '');
-  if (paths.length === 0) throw new Error(`No mark paths found in ${logoPath}.`);
-  return paths;
-}
 
 function serializeDots() {
   const dots: string[] = [];
@@ -116,16 +113,14 @@ function serializeGuide() {
   return `${lanes}<g fill="${INK.trace}">${pins}</g>${signal}${tip}`;
 }
 
-function serializeWordmark(channel: Channel) {
+function serializeWordmark(channel: Channel, markPaths: readonly string[]) {
   const pill = channel === 'stable' ? null : PILLS[channel];
   const badge = pill ? PILL.gap + pill.width + PILL.padX * 2 : 0;
   const total = WORDMARK.mark + WORDMARK.gap + WORDMARK.width + badge;
   const left = (WIDTH - total) / 2;
   const scale = WORDMARK.mark / 365;
   const markY = WORDMARK.y - WORDMARK.mark / 2;
-  const marks = listMarkPaths()
-    .map((d) => `<path d="${d}"/>`)
-    .join('');
+  const marks = markPaths.map((d) => `<path d="${d}"/>`).join('');
   const textX = left + WORDMARK.mark + WORDMARK.gap;
   const baseline = WORDMARK.y + WORDMARK.size * 0.358;
   const mark = `<g transform="translate(${left} ${markY}) scale(${scale.toFixed(6)})" fill="${INK.strong}">${marks}</g>`;
@@ -142,7 +137,7 @@ function serializeHint() {
   return `<text x="${WIDTH / 2}" y="${HINT.y}" font-size="${HINT.size}" fill="${INK.muted}" text-anchor="middle">Drag Shinsa into Applications to install</text>`;
 }
 
-function serializeBackground(channel: Channel) {
+function serializeBackground(channel: Channel, markPaths: readonly string[]) {
   const centerY = ICON.y + 20;
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${WIDTH}" height="${HEIGHT}" viewBox="0 0 ${WIDTH} ${HEIGHT}" font-family="ABC Areal Variable">
   <defs>
@@ -160,17 +155,10 @@ function serializeBackground(channel: Channel) {
   ${serializeDots()}
   ${serializeEdgeTraces()}
   ${serializeGuide()}
-  ${serializeWordmark(channel)}
+  ${serializeWordmark(channel, markPaths)}
   ${serializeHint()}
 </svg>
 `;
-}
-
-function run(command: string[], env: Record<string, string>) {
-  const result = Bun.spawnSync(command, { stdout: 'pipe', stderr: 'pipe', env: { ...process.env, ...env } });
-  if (result.exitCode !== 0) {
-    throw new Error(`${command.join(' ')} failed: ${result.stderr.toString()}`);
-  }
 }
 
 function serializeFontConfig(cacheDir: string) {
@@ -183,25 +171,30 @@ function serializeFontConfig(cacheDir: string) {
 `;
 }
 
-function writeBackgrounds() {
-  mkdirSync(outDir, { recursive: true });
-  const scratch = mkdtempSync(join(tmpdir(), 'shinsa-dmg-'));
-  try {
-    const fontConfig = join(scratch, 'fonts.conf');
-    writeFileSync(fontConfig, serializeFontConfig(join(scratch, 'cache')));
-    const env = { FONTCONFIG_FILE: fontConfig };
-    for (const channel of CHANNELS) {
-      const svgPath = join(scratch, `${channel}.svg`);
-      writeFileSync(svgPath, serializeBackground(channel));
-      for (const scale of [1, 2]) {
-        const suffix = scale === 2 ? '@2x' : '';
-        const outPath = join(outDir, `background-${channel}${suffix}.png`);
-        run(['rsvg-convert', '--zoom', String(scale), svgPath, '--output', outPath], env);
-      }
+const writeBackgrounds = Effect.fn('DesktopDmg.writeBackgrounds')(function* (markPaths: readonly string[]) {
+  const fs = yield* FileSystem.FileSystem;
+  yield* fs.makeDirectory(outDir, { recursive: true });
+  const scratch = yield* fs.makeTempDirectoryScoped({ prefix: 'shinsa-dmg-' });
+  const fontConfig = join(scratch, 'fonts.conf');
+  yield* fs.writeFileString(fontConfig, serializeFontConfig(join(scratch, 'cache')));
+  const env = { FONTCONFIG_FILE: fontConfig };
+  for (const channel of CHANNELS) {
+    const svgPath = join(scratch, `${channel}.svg`);
+    yield* fs.writeFileString(svgPath, serializeBackground(channel, markPaths));
+    for (const scale of [1, 2]) {
+      const suffix = scale === 2 ? '@2x' : '';
+      const outPath = join(outDir, `background-${channel}${suffix}.png`);
+      yield* runScriptCommand(['rsvg-convert', '--zoom', String(scale), svgPath, '--output', outPath], {
+        env,
+      });
     }
-  } finally {
-    rmSync(scratch, { recursive: true, force: true });
   }
-}
+}, Effect.scoped);
 
-writeBackgrounds();
+readMarkPaths(logoPath).pipe(
+  Effect.flatMap(writeBackgrounds),
+  Effect.catchTag('PlatformError', (error) => Effect.fail(new ScriptStepFailed({ message: error.message }))),
+  reportScriptFailure,
+  Effect.provide(BunServices.layer),
+  BunRuntime.runMain({ disableErrorReporting: true })
+);

@@ -24,7 +24,7 @@ import {
   SHAPING_LABEL,
   selectCurrentStep,
 } from '@/lib/overview/progress.ts';
-import { describeBundleWait } from '@/lib/tasks/groups.ts';
+import { describeBundleWait, describeHeldWait } from '@/lib/tasks/groups.ts';
 import { resolveRowStatus, resolveStageLabel } from '@/lib/tasks/status.ts';
 
 function LiveActivity({ run, fallback }: { run: Run; fallback: string | null }) {
@@ -70,7 +70,10 @@ export function RowSummary({
   const progress = postMerge ? POST_MERGE_PROGRESS : resolveRowProgress(task, status.label);
   const { track, count } = progress;
   const note =
-    progress.note ?? describeBundleWait(state, task) ?? (postMerge && run ? resolveStageLabel(task) : null);
+    progress.note ??
+    describeBundleWait(state, task) ??
+    describeHeldWait(state, task) ??
+    (postMerge && run ? resolveStageLabel(task) : null);
   const activity = detail && (run || note);
   return (
     <span className='flex min-w-0 flex-1 items-center gap-2'>
