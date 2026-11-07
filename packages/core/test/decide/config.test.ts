@@ -515,7 +515,7 @@ describe('asking which repository a task is for', () => {
     expect(harness.task(taskId)).toMatchObject({ repoId: own, projectId: kanna, handle });
   });
 
-  test('named outside repositories keep their place among the eight choices, and without a name none is added', () => {
+  test('named repositories of other projects keep their place among the eight choices, a named one without a project is left out, and without a name none is added', () => {
     const harness = createHarness();
     for (const index of [1, 2, 3, 4, 5, 6, 7, 8, 9]) registerRepo(harness, `repo-${index}`, 'Kanna');
     registerRepo(harness, 'paywall-next', 'Superwall');
@@ -530,11 +530,11 @@ describe('asking which repository a task is for', () => {
       'repo-4',
       'repo-5',
       'repo-6',
+      'repo-7',
       'paywall-next (Superwall)',
-      'scratch (/code/scratch)',
     ]);
-    reply(harness, named, 'scratch (/code/scratch)');
-    expect(harness.task(named).projectId).toBe(kanna);
+    expect(harness.openGate(named).body).toContain('The request names paywall-next, outside');
+    expect(harness.openGate(named).body).not.toContain('scratch');
     const plain = triagedInProject(harness, kanna, 'Fix the button');
     verifySetup(harness, plain);
     expect(harness.openGate(plain).choices).not.toContain('paywall-next (Superwall)');

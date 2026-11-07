@@ -76,7 +76,8 @@ function listNamedOutsideRepos(state: ShinsaState, task: Task) {
   if (!task.projectId || isLaterRound(task)) return [];
   return sortRepos(
     Object.values(state.repos).filter(
-      (repo) => repo.projectId !== task.projectId && isRepoNamed(task.request, repo.name)
+      (repo) =>
+        repo.projectId !== null && repo.projectId !== task.projectId && isRepoNamed(task.request, repo.name)
     )
   ).slice(0, MAX_REPOSITORY_CHOICES);
 }
