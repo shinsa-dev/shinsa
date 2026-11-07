@@ -298,16 +298,23 @@ test/                gates.test.ts reads every RemoteApi route with HttpApi.refl
   host) that comes with this warn line, and count the warn line apart.
 - **The Slack bot** (`docs/engine.md` → Slack). One Slack app for everyone, on the Events API at `/slack/events`.
   Connecting (`/slack/connect?instance=<id>`, signed in with GitHub, the machine one you own, never one shared with you, else the one you own seen last)
-  signs you in with Slack (OpenID Connect, `openid profile`), and when the workspace has no Shinsa yet, or its bot
+  signs you in with Slack (OAuth v2, the read-only user scopes in `SLACK_USER_SCOPES`: `channels:history`,
+  `groups:history`, `channels:read`, `groups:read`, never a direct message's), and when the workspace has no Shinsa yet, or its bot
   token lacks one of the scopes (`SlackApi.hasBotScopes`, Slack's `x-oauth-scopes` on `auth.test`), goes on to add
-  the app (OAuth v2, the bot scopes in `SLACK_BOT_SCOPES`); either way it writes the link of your Slack user to that
-  machine and lands on `/slack/linked?team=` or `?error=`. The state rides in a 10-minute `__Host-shinsa_slack`
-  cookie, checked in constant time. A bot token is kept sealed with AES-GCM under `SLACK_TOKEN_KEY`, never in clear.
+  the app (OAuth v2, the bot scopes in `SLACK_BOT_SCOPES` and the same user scopes); either way it writes the link of your Slack user to that
+  machine, with your user token sealed beside it (`slack_links.sealed_user_token`), and lands on `/slack/linked?team=` or `?error=`. The state rides in a 10-minute `__Host-shinsa_slack`
+  cookie, checked in constant time. A bot token and a user token are kept sealed with AES-GCM under `SLACK_TOKEN_KEY`, never in clear. A user token is
+  revoked (`auth.revoke`, best effort, `slack/user-tokens.ts`) on unlink, on machine removal and when connecting
+  again brings a different one; a user `tokens_revoked` clears it and keeps the link.
   An event is checked against Slack's signature (`SLACK_SIGNING_SECRET`, five minutes), kept by id for a day so a
   redelivery does nothing, and answered at once; the work runs after (`deferWork`, `waitUntil`). Removing the app
-  or revoking its bot token forgets the workspace and its links. A mention from someone with no link gets a private
-  reply with the link to connect; from someone linked, the Worker reads the thread (100 messages), names the people
-  in it, turns Slack's markup into text and posts it to `https://t-<instance>.shinsa.dev/api/slack/events`, signed
+  or revoking its bot token forgets the workspace and its links. A mention from someone of another organisation
+  (`user_team` not the workspace) is dropped. A mention from someone with no link gets a private
+  reply with the link to connect; from someone linked, the Worker reads the thread (100 messages), reads up to three
+  threads the mention links to with that person's user token and never the bot's (only for a machine that names
+  `slack-linked-threads`; one it cannot read gets a private note, or "Connect Slack again" when the token is missing
+  or refused), names the people
+  in them, turns Slack's markup into text and posts it to `https://t-<instance>.shinsa.dev/api/slack/events`, signed
   with an HMAC over the time and the body keyed by the machine's connect key (`createSlackForwardSignature`); a
   machine offline, or a tunnel that does not answer, gets "offline" in the thread instead. A machine posts and edits
   through `/__remote/slack/post` with its machine token, only in a thread it was sent and only editing what it

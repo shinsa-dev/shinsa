@@ -1586,8 +1586,8 @@ What the engine, the Worker on app.shinsa.dev and the web share for the Slack bo
 
 | Path (`SLACK_RELAY_PATHS`, `SLACK_ENGINE_EVENTS_PATH`, `SLACK_ENGINE_INTERACTIONS_PATH`) | Who calls it | What it does |
 | --- | --- | --- |
-| `GET /slack/connect?instance=<id>` | The browser, from Settings | Signs in with Slack for one of your machines (the one seen last without `instance`) |
-| `GET /slack/connect/callback`, `/slack/install/callback` | Slack | Writes the link, adding the app to the workspace first when it has none; then `/slack/linked?team=` or `?error=` (`resolveSlackLinkedPath`) |
+| `GET /slack/connect?instance=<id>` | The browser, from Settings | Signs in with Slack (OAuth v2 with the read-only user scopes `SLACK_USER_SCOPES`) for one of your machines (the one seen last without `instance`) |
+| `GET /slack/connect/callback`, `/slack/install/callback` | Slack | Writes the link with the user token sealed, adding the app to the workspace first when it has none; then `/slack/linked?team=` or `?error=` (`resolveSlackLinkedPath`) |
 | `POST /slack/events` | Slack | Events API, checked against Slack's signature; a mention is answered at once and forwarded after |
 | `POST /slack/interactions` | Slack | Interactivity (`payload` form field), checked against Slack's signature and answered at once; a `shinsa.decide.*` click, or a `shinsa.decision` form sent after a `shinsa.write.*` click opened it (`views.open`), from the owner or a member of the machine that posted the card is forwarded as a `SlackDecision`; the click's `response_url` (on `hooks.slack.com`) gets the decided card or a private refusal, a form's refusal comes as `chat.postEphemeral`; anything else is dropped |
 | `POST https://t-<instance>.shinsa.dev/api/slack/interactions` | app.shinsa.dev | The `SlackDecision` (`SLACK_ENGINE_INTERACTIONS_PATH`), signed as a mention is → `SlackDecisionReply`: `{ decided: true, text }` or `{ decided: false, reason }` |
@@ -1599,7 +1599,7 @@ What the engine, the Worker on app.shinsa.dev and the web share for the Slack bo
 
 | Shape | Fields |
 | --- | --- |
-| `SlackMention` (`contract.ts`, `parseSlackMention`) | `eventId`, `teamId`, `channelId`, `threadTs`, `messageTs`, `userId`, `userName`, `text`, `permalink`, `thread` (`SlackThreadMessage`: `ts`, `userId`, `userName`, `text`, `bot`; the last 100, at most 4,000 characters each, `SLACK_LIMITS`) |
+| `SlackMention` (`contract.ts`, `parseSlackMention`) | `eventId`, `teamId`, `channelId`, `threadTs`, `messageTs`, `userId`, `userName`, `text`, `permalink`, `thread` (`SlackThreadMessage`: `ts`, `userId`, `userName`, `text`, `bot`; the last 100, at most 4,000 characters each, `SLACK_LIMITS`), `linkedThreads` (`SlackLinkedThread`: `channelId`, `threadTs`, `permalink`, `channelName`, `thread`; at most 3, read with the mentioning person's own token, sent only to a machine that names `slack-linked-threads`) |
 | `SlackPost` (`posts.ts`) | `result` or `completed`, the only new messages; everything else edits the card |
 | `SlackMessage` (`blocks.ts`) | `text`, the notification's fallback, and `blocks` (`header`, `section` with text or fields, `context`, `actions` of buttons) within Slack's limits (`SLACK_BLOCK_LIMITS`: 50 blocks, 3,000 characters a section, 150 a header, 75 a button, 10 fields) |
 | `SlackDecisionValue` (`schema.ts`, `serializeSlackDecisionValue`, `parseSlackDecisionValue`) | a button's value: `gateId`, `decision` (`approve`, `revise`, `reject`, `reply`), `choice` (the index into a question's choices, or null), `planVersion` (the plan a plan's Approve shows, or null) |
