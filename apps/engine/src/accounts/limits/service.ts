@@ -15,6 +15,7 @@ import {
   UsageTtl,
 } from '../schema.ts';
 import { resolveWindowId } from '../usage/answer.ts';
+import { resolveReadUsage } from './read.ts';
 import {
   ACCOUNT_USAGE_FILE,
   NO_PROVIDER_WINDOWS,
@@ -102,18 +103,7 @@ export class UsageLimits extends Context.Service<
           const result = yield* attempt(id);
           const { retryAt: _retryAt, ...previous } = (yield* selectEntry(id)) ?? createUnknownUsage();
           const now = yield* Clock.currentTimeMillis;
-          if (result.ok) {
-            const found = result.windows.length > 0;
-            const fastMode = result.fastMode ?? previous.fastMode;
-            return yield* store(id, {
-              status: found ? 'ok' : 'unavailable',
-              windows: result.windows,
-              detail: found ? null : table.emptyDetail,
-              checkedAt: now,
-              source: 'read',
-              ...(fastMode ? { fastMode } : {}),
-            });
-          }
+          if (result.ok) return yield* store(id, resolveReadUsage(result, previous, now, table.emptyDetail));
           yield* store(id, {
             ...previous,
             status: previous.windows.length > 0 ? previous.status : 'unavailable',

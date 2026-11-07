@@ -70,7 +70,7 @@ builds never reviews its own work.
 | Role | Default model | Session | Hands back with |
 | --- | --- | --- | --- |
 | Classifier | Sonnet | one call, no tools | title, repository (or none), size, branch, and for what you left on Auto: the shape, the priority, the tasks it waits on with the kind of wait, and the open change it stacks on, each with why |
-| Agent | Opus | one session per task, resumed by every run of every round: it plans read-only, then builds, fixes and operates with edits; its watchdog checks, read-only after the merge, resume a watch session of their own; a fresh session only when the old one cannot go on (Recovery) | while planning, 2–8 phases (`propose_plan`) or the task's steps composed anew (`reshape_task`, Task shapes, below); a phase report per phase (`complete_phase`); a summary per fix (`complete_fix`); how the operation went (`report_outcome`), after the evidence its plan asks for; in a watchdog check or the home of a watch, each report a read found (`file_report`) and what it read (`report_read`) |
+| Agent | Opus | one session per task, resumed by every run of every round: it plans read-only, then builds, fixes and operates with edits; its watchdog checks, read-only after the merge, resume a watch session of their own; a fresh session only when the old one cannot go on (Recovery) | while planning, 2–8 phases (`propose_plan`), the task's steps composed anew (`reshape_task`, Task shapes, below) or the task moved to another repository of its project (`move_to_repository`, Work across repositories, below); a phase report per phase (`complete_phase`); a summary per fix (`complete_fix`); how the operation went (`report_outcome`), after the evidence its plan asks for; in a watchdog check or the home of a watch, each report a read found (`file_report`) and what it read (`report_read`) |
 | Reviewer | Opus | one session of its own per task, resumed by every review of every round and never the Agent's; it cannot edit | a summary and findings (`report_review`) |
 | Answerer | Opus | the task's session (fresh only for a task's first run), in the repository itself (a scratch folder of its own when the task has no repository), cannot edit; on another model than the session's it resumes it on its own, on another provider it starts fresh | an answer (`answer`), optionally a proposed change (Task shapes, below) |
 | Investigator | the Answerer's | the task's session, in the task's worktree used as scratch (it may run anything and add logging; nothing it changes ships) | a diagnosis (`report_diagnosis`), optionally a proposed fix |
@@ -487,13 +487,14 @@ whose choice is not clear binds none, and its work asks at the setup gate when i
   and that "the repo" alone names none. The repositories are listed by name, with nothing saying which was used
   last, and the prompt has no preference for recent work.
 - **A repository outside the project is used when the request names it.** A repository on the machine outside the
-  task's project is offered only when the request names it: its name appears in the request as whole words, any
+  task's project is offered only when the request names it and the task's project only came from the focus
+  (`TaskAuto.project`; a project you chose is fixed, `isProjectFixed`, and offers none): its name appears in the request as whole words, any
   case, punctuation ignored (`kanna` in "Fix the button in Kanna's sidebar", `paywall-next` in "paywall next";
   `resolveCandidatePool`). The prompt lists those as offered because the request names them, and the rest as never
   offered, so a request about one of those gets none (and asks at the setup gate) instead of the project's only
   repository. A named one the classifier picks is registered if Shinsa does not know it yet (`<effect key>:repo.register`,
   filed like any repository triage registers, Projects and task identity, below, never into the task's project) and
-  bound; the task keeps its own project, and its agents' brief says the task works in a repository outside it.
+  bound, and the task moves to that repository's project (`resolveRepoMove`, below).
   Without the model the task binds none, unless it was created with a repository or from inside one. `task.triage`
   then carries `repoId: null` and nothing is registered.
 - **Triage may start a new repository.** When the task has no repository pinned, the classifier also answers
@@ -516,6 +517,12 @@ whose choice is not clear binds none, and its work asks at the setup gate when i
   `scratch.remove` (`settleTask`), whatever repository it has now, since an earlier round may have run without one.
   The server waits for the task's runs to stop, then deletes `data/scratch/<task id>` if the task is still settled;
   a task reopened by a new round keeps it. A folder that is already gone is fine, so the effect is replay safe.
+- **A chosen project asks before it moves.** A task whose project you chose never binds a repository outside it at
+  triage, so a request that names one stops at the setup gate. Its choices list the project's repositories and then,
+  on the first round, every registered repository outside the project that the request names, as `name (Project)`
+  (`listNamedOutsideRepos` in `decide/config.ts`), and the question says that picking one moves the task to that
+  repository's project. Your pick binds it, moves the task there and gives it that project's handle
+  (`task.repo_bound` with `projectId` and `handle`); a pick of the project's own repository keeps both.
 - **Work that needs code binds one then.** A step that needs a repository (an investigation, a plan, a build, an
   operation) on a task with none goes through the setup check, which finds the repository first: one quick call on
   the classifier model (`TriageClassifier.repository` in `triage/message/service.ts`) reads the task's rounds, the current
@@ -739,6 +746,27 @@ them in the order they need:
 - **Context carries over by the fork.** With `fork_from` set to this task, the other task's Agent starts from a copy
   of this task's session (Forking a task). A task created with `after_this` copies it only when it starts, after this
   task finished, so it holds this task's whole conversation, and its fork note says where this task's code is.
+- **A task in the wrong repository moves.** Triage picks the repository from the request's text, so it can guess
+  wrong (a screenshot of another app it cannot read). When all of the work is in another repository of the project
+  and nothing changes in this one, the Agent calls `move_to_repository` (`repository`, by name like `create_task`'s,
+  registered from the folders when named; `reason`) while it plans, instead of filing a second task. The guide and
+  `create_task`'s description say so. Core (`decide/moves.ts`) refuses it for the repository the task works in
+  (`same_repository`), one of another project (`other_project`, so the handle never changes), once a phase reported,
+  a pull request exists or an earlier round shipped (`work_started`) and for a task in a bundle (`task_stacked`);
+  each but the first points at `create_task`. The move takes two events, because removing a worktree reads the
+  task's repository:
+
+  ```
+  move_to_repository ─► run ends, task.moving {repoId}   movingTo set,
+                        worktree.remove                  stage triage
+  worktree.gone ─────► worktree.removed, task.moved      repoId changes
+                        startWork ─► setup verification ─► worktree in
+                        the new repository ─► plan run, same session
+  ```
+
+  The task keeps its handle, title and branch name; the old branch stays in the old repository with no commits.
+  `readyWorktree` ignores a late `worktree.ready` while `movingTo` is set. The resumed run starts in the new
+  worktree, so its turn ends with the note that its folder changed (`resolveMovedNote`).
 
 ## Rounds
 
@@ -809,7 +837,10 @@ predicates) and `state/rounds.ts` (the folds); the classifier is `apps/engine/sr
   (a merged change, an operation that ran) gets an answerer that resumes the task's session (the reviewer's
   excepted; `answerFollowUp`, `resolveFollowUpPrompt`, `Decider.taskSession`), runs in the repository like any answerer and answers with
   `answer`, proposing no change (`follow_up_proposal`). The round reopens while it answers (stage `answering`,
-  `isFollowUpOnWork`) and rests again as it was, merged or done, with its result untouched. A message on a resting task
+  `isFollowUpOnWork`) and rests again as it was, merged or done, with its result untouched. A merged round reopened this way, or by a watchdog
+  check (stage `watching`), keeps its first `endedAt` and its pull request's `mergedAt` (stamped once, the first time
+  the fold sees it merged) and settles back to `merged`, even when you then mark the task done, so Statistics never
+  moves a merge to a later day. A message on a resting task
   with no kind (the model off or failed) is such a follow-up, never a new round; only a schedule's message to a
   resting task still starts the next round. The classifier is shown the post-merge steps still waiting on you
   (`describeOpenSteps`), so a question about one, even one that quotes it ("what is this for? <the step>"), is
@@ -2196,7 +2227,7 @@ checks it ran.
   limit resets soonest takes over (Accounts and usage limits, below). Settings → Agent usage → Forecast draws one block per provider (`components/settings/forecast.tsx`,
   `lib/accounts/forecast.ts`): every Claude account together, and each other provider's own login alone, each with
   its pace, a lane per account across the week (blue while the account has usage at the timeline's pace, grey once
-  it runs out, a thin tick at each reset, and an orange band wherever every account is out at once: `outages`), drawn at a
+  it runs out, a small gap before each reset, each limit window its own bar, and an orange band wherever every account is out at once: `outages`), drawn at a
   pace you pick (`resolveForecastTimeline`: the safe pace, the last 24 hours, or one and a half or twice the safe pace;
   the last 24 hours first when it is faster), a dashed amber line at the tightest point when the safe pace is drawn,
   the tightest point in words and the last 24 hours of that provider (meters on an account's window for
@@ -4674,11 +4705,17 @@ description, folders }` (`packages/core/src/domain/types.ts`; the rules in `doma
   the task's project that the request names never joins the task's project.
 - **A task is scoped to a project.** `task.create` takes `projectId`; left out, the task takes its repository's
   project, else the focus project (Home's composer shows that default and lets you change it, or pick No project).
+  `task.created` records which: `auto.project` is true only for the focus default. A chosen project (yours, or the
+  repository's) is fixed; the focus default is a guess the repository corrects.
   Triage then picks the repository among the project's own (registered ones and those in its folders, `listLocalRepos`
   over the folders), one outside the project that the request names (A task without a repository, above), or none,
   and names the project in its prompt; a project with neither falls back to every repository. A task without a
-  project gets one from the repository triage picks, and keeps none when triage picks none; a task with a project
-  keeps it, whichever repository it binds.
+  project gets one from the repository triage picks, and keeps none when triage picks none. A task whose project only
+  came from the focus moves to the project of the repository it binds on its first round, at triage or at the setup
+  check (`resolveRepoMove` in `domain/projects.ts`), so the focus filter and the handle follow the repository; a task
+  whose project was chosen keeps it, and asks before it moves (A task without a repository, above). Later rounds
+  never move a task. The `task-auto-project` log migration marks every older task as chosen, so tasks created
+  before it (LOC-215 in Shinsa's own log) stay where they are.
 - **Agents know the project.** Every fresh task run's brief (not a resumed session, not a delegated run) ends with
   the project: its name and key, description, every
   repository with its path (the task's own marked) and its folders, and the repository the task works in when it is
@@ -4698,8 +4735,10 @@ their own UUIDv7.
     receipts, references (`shinsa://task/<id>`), transcripts and the effect outbox. Nothing ever re-keys it.
   - The **handle** is for people: `<project key>-<number>`, `SW-142`. The key is the project's (2 to 6 capital letters
     or digits starting with a letter, derived from its name, editable; lower case is upper-cased), or `T` for a task
-    with no project. It is given once and never changes: on `task.created` when the task has a project, else on
-    `task.triaged` (the repository's project). The counters live in the log (`state.taskNumbers`, one per key), so
+    with no project. It is given on `task.created` when the task's project was chosen, else on `task.triaged` (the
+    repository's project, or the focus project when it binds none), so a focus task that moves is numbered once, in
+    the project it lands in. It changes only when a first-round setup bind moves the task to another project
+    (`task.repo_bound` with `handle`): the old handle's number stays used. The counters live in the log (`state.taskNumbers`, one per key), so
     replay gives every task the same handle.
     Changing a project's key keeps every old handle; new tasks count from the new key's own counter, and changing the
     key back carries on where it left off, so a handle is never handed out twice. A task that moves projects keeps its
@@ -6359,8 +6398,16 @@ Agent usage glance in the top bar, which shows every connected provider (`docs/d
   account's OAuth token (from the keychain through `/usr/bin/security find-generic-password -w`, else
   `.credentials.json`) and `anthropic-beta: oauth-2025-04-20`. The `limits` array wins: `session` is "5-hour
   limit" (Codex's label for the same window), `weekly_all` "Weekly · All models", a `weekly_scoped` entry with a model is "Weekly · ‹model›" (the Fable
-  window); the keyed `five_hour`, `seven_day`, `seven_day_opus` and `seven_day_sonnet` fill in, and rotating
-  codenames are dropped. A model window has one id whatever reports it, `weekly:<model slug>` (the keyed
+  window); the keyed `five_hour`, `seven_day`, `seven_day_opus` and `seven_day_sonnet` fill in, and other rotating
+  codenames are dropped. Two more parts of the answer are kept on the reading, each decoded on its own so a
+  malformed one drops only itself: `extraUsage` (`extra_usage.is_enabled`, else `spend.enabled`; `noLimit` when it is
+  on with no monthly limit; `credit`, the money left, from `spend.balance`, else `monthly_limit` minus `used_credits`)
+  and `resetGrants`, the usage resets Claude gives an account, read from `grants` under `cedar_ember`, then
+  `juniper_tide` (each with its resets left and total, the windows it clears, whether it is usable now and when it
+  ends; a spent grant or one without an id is dropped). Settings → Agent usage shows extra usage On or Off, the
+  credit only from one whole unit of its currency, and each grant; the usage menu counts the resets usable now.
+  Shinsa never claims a reset or spends extra usage: claiming stays your click in the Claude app. Fast mode reads
+  the same decoded extra usage. A failed read keeps both, like the windows. A model window has one id whatever reports it, `weekly:<model slug>` (the keyed
   `seven_day_opus` is `weekly:opus`, `seven_day_sonnet` `weekly:sonnet`), so one reading never holds two windows with
   one id (the `limits` entry wins), and a pushed notice naming `seven_day_opus` updates `weekly:opus`. Shinsa never refreshes a token itself (Claude Code does, under its own lock): an expired
   token keeps the last reading and says the login refreshes on the next run, and a stored token whose `expiresAt`

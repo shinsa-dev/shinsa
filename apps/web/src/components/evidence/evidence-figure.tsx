@@ -110,7 +110,7 @@ export function EvidenceFigure({
   return (
     <figure className='flex min-w-0 flex-col gap-1.5'>
       <EvidenceMedia view={view} viewer={viewer} />
-      <figcaption className='flex min-w-0 flex-col gap-px'>
+      <figcaption className='flex min-w-0 flex-col'>
         {label === 'part' ? (
           <span className='text-2xs font-medium text-fg-4'>{describeEvidencePart(evidence)}</span>
         ) : (

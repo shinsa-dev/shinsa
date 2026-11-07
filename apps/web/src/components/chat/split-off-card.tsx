@@ -15,7 +15,7 @@ import { canBundleSuggestion } from '@/lib/tasks/suggestions.ts';
 function SettledSplitOff({ state, suggestion }: { state: ShinsaState; suggestion: TaskSuggestion }) {
   const created = suggestion.createdTaskId ? state.tasks[suggestion.createdTaskId] : undefined;
   return (
-    <div className='flex flex-col gap-px text-xs'>
+    <div className='flex flex-col text-xs'>
       {created ? (
         <span className='min-w-0 text-fg-4'>
           <TaskLink state={state} task={created} />

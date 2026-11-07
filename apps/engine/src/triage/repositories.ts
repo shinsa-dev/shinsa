@@ -1,4 +1,6 @@
 import {
+  isProjectFixed,
+  isRepoNamed,
   listProjectRepos,
   resolveTaskProject,
   type ShinsaState,
@@ -38,18 +40,6 @@ function listCandidates(state: ShinsaState, local: LocalRepo[], registered = Obj
   return [...byPath.values()].sort((a, b) => a.name.localeCompare(b.name) || a.path.localeCompare(b.path));
 }
 
-function resolveWords(text: string) {
-  return ` ${text
-    .toLowerCase()
-    .replace(/[^\p{L}\p{N}]+/gu, ' ')
-    .trim()} `;
-}
-
-function isRepoNamed(text: string, name: string) {
-  const words = resolveWords(name);
-  return words.trim() !== '' && resolveWords(text).includes(words);
-}
-
 export const resolveCandidatePool = Effect.fn('Triage.resolveCandidatePool')(function* (
   state: ShinsaState,
   task: Task,
@@ -78,9 +68,10 @@ export const resolveCandidatePool = Effect.fn('Triage.resolveCandidatePool')(fun
   }
   const inside = new Set(candidates.map((candidate) => candidate.path));
   const rest = everywhere.filter((candidate) => !inside.has(candidate.path));
-  const named = rest.filter((candidate) => isRepoNamed(text, candidate.name));
+  const fixed = isProjectFixed(task);
+  const named = fixed ? [] : rest.filter((candidate) => isRepoNamed(text, candidate.name));
   const outside = rest
-    .filter((candidate) => !isRepoNamed(text, candidate.name))
+    .filter((candidate) => fixed || !isRepoNamed(text, candidate.name))
     .map((candidate) => candidate.name);
   return { project, candidates, named, empty: false, outside: [...new Set(outside)] } satisfies CandidatePool;
 });
@@ -112,7 +103,7 @@ export function describeProject(pool: CandidatePool) {
       : []),
     ...(pool.named.length > 0
       ? [
-          `Repositories outside this project, offered because the request names them: ${pool.named.map((candidate) => candidate.name).join(', ')}. Pick one only for the work the request names it for; the task stays in this project.`,
+          `Repositories outside this project, offered because the request names them: ${pool.named.map((candidate) => candidate.name).join(', ')}. Pick one only for the work the request names it for; the task then moves to that repository's project.`,
         ]
       : []),
     ...(pool.outside.length > 0

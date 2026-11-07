@@ -1,19 +1,25 @@
 import { describe, expect, it } from 'bun:test';
 import {
   type AccountSummary,
+  type AccountUsage,
   createSettings,
   pickAccount,
   resolveAccountCandidate,
   type Settings,
+  type UsageResetGrant,
 } from '@shinsa/core';
 import {
   describeAccountStatus,
+  describeResetsAvailable,
   describeResetsIn,
   describeUsageChecked,
   describeUsageDetail,
+  formatUsageMoney,
+  hasWholeCredit,
   isNextAccount,
   isNextProvider,
   listProviderGlances,
+  listUsageNotes,
   listUsageRows,
   resolveAccountHeader,
   resolveAccountStatus,
@@ -23,6 +29,7 @@ import {
   resolveUsageTone,
   selectGlanceRow,
 } from '@/lib/accounts/usage.ts';
+import { formatMoment } from '@/lib/format/time.ts';
 import { createAccount, createProviderLogin, createSnapshot, createWindow } from '../../support/accounts.ts';
 import { NOW } from '../../support/state.ts';
 
@@ -353,5 +360,106 @@ describe('account status', () => {
     );
     expect(describeAccountStatus(out(morning - HOUR), morning)).toBe('Out of usage until 8:00 AM');
     expect(describeAccountStatus({ label: 'Paused', tone: 'neutral', until: null }, morning)).toBe('Paused');
+  });
+});
+
+describe('extra usage, credit and usage resets', () => {
+  const dollars = (minor: number) => ({ minor, exponent: 2, currency: 'USD' });
+  const grant = (extra: Partial<UsageResetGrant> = {}): UsageResetGrant => ({
+    id: 'g',
+    label: null,
+    left: 1,
+    total: 2,
+    clears: ['five_hour', 'seven_day'],
+    usableNow: true,
+    endsAt: null,
+    ...extra,
+  });
+  const notes = (extra: Partial<AccountUsage>) => listUsageNotes({ ...usage(), ...extra }, NOW);
+
+  it('shows nothing for an account Claude reported neither extra usage nor resets for', () => {
+    expect(notes({})).toEqual([]);
+    expect(describeResetsAvailable(usage(), NOW)).toBeNull();
+  });
+
+  it('says whether extra usage is on, off, or on with no monthly limit', () => {
+    const value = (enabled: boolean, noLimit: boolean) =>
+      notes({ extraUsage: { enabled, noLimit, credit: null } }).map((row) => [row.label, row.value]);
+    expect(value(false, false)).toEqual([['Extra usage', 'Off']]);
+    expect(value(true, false)).toEqual([['Extra usage', 'On']]);
+    expect(value(true, true)).toEqual([['Extra usage', 'On, no monthly limit']]);
+  });
+
+  it('shows credit only from one whole unit of its currency', () => {
+    expect(hasWholeCredit(dollars(99))).toBe(false);
+    expect(hasWholeCredit(dollars(100))).toBe(true);
+    expect(hasWholeCredit({ minor: 1, exponent: 0, currency: 'JPY' })).toBe(true);
+    const credit = (minor: number) =>
+      notes({ extraUsage: { enabled: true, noLimit: false, credit: dollars(minor) } }).find(
+        (row) => row.id === 'credit'
+      )?.value;
+    expect(credit(99)).toBeUndefined();
+    expect(credit(100)).toBe('$1.00');
+    expect(credit(124_050)).toBe('$1,240.50');
+  });
+
+  it('formats credit in its own currency, and a code Intl does not take as plain text', () => {
+    expect(formatUsageMoney({ minor: 1240, exponent: 2, currency: 'EUR' })).toBe('€12.40');
+    expect(formatUsageMoney({ minor: 500, exponent: 0, currency: 'JPY' })).toBe('¥500');
+    expect(formatUsageMoney({ minor: 1240, exponent: 2, currency: 'credits' })).toBe('12.40 credits');
+  });
+
+  it('lists each reset with how many are left, the limits it clears and when it ends', () => {
+    const ends = NOW + 2 * HOUR;
+    expect(notes({ resetGrants: [grant({ endsAt: ends })] })).toEqual([
+      {
+        id: 'reset:g',
+        label: 'Usage reset',
+        value: '1 of 2 left',
+        detail: `Clears the 5-hour and weekly limits · ends ${formatMoment(ends, NOW)}`,
+      },
+    ]);
+    expect(
+      notes({ resetGrants: [grant({ label: 'Launch reset', clears: ['five_hour'] })] })[0]
+    ).toMatchObject({
+      label: 'Launch reset',
+      detail: 'Clears the 5-hour limit',
+    });
+    expect(notes({ resetGrants: [grant({ clears: ['something_new'] })] })[0]?.detail).toBeNull();
+    expect(notes({ resetGrants: [grant({ clears: [], endsAt: ends })] })[0]?.detail).toBe(
+      `Ends ${formatMoment(ends, NOW)}`
+    );
+    expect(notes({ resetGrants: [grant({ usableNow: false })] })[0]?.detail).toBe('Not usable yet');
+  });
+
+  it('counts only the resets usable now for the usage menu', () => {
+    expect(describeResetsAvailable({ ...usage(), resetGrants: [grant()] }, NOW)).toBe(
+      '1 usage reset available'
+    );
+    expect(
+      describeResetsAvailable(
+        {
+          ...usage(),
+          resetGrants: [
+            grant({ id: 'a', left: 2 }),
+            grant({ id: 'b' }),
+            grant({ id: 'c', usableNow: false }),
+          ],
+        },
+        NOW
+      )
+    ).toBe('3 usage resets available');
+    expect(
+      describeResetsAvailable({ ...usage(), resetGrants: [grant({ usableNow: false })] }, NOW)
+    ).toBeNull();
+  });
+
+  it('drops a reset kept from an earlier read once it has ended', () => {
+    const ended = grant({ endsAt: NOW - HOUR });
+    expect(notes({ resetGrants: [ended] })).toEqual([]);
+    expect(describeResetsAvailable({ ...usage(), resetGrants: [ended] }, NOW)).toBeNull();
+    expect(describeResetsAvailable({ ...usage(), resetGrants: [grant({ endsAt: NOW + HOUR })] }, NOW)).toBe(
+      '1 usage reset available'
+    );
   });
 });

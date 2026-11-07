@@ -337,7 +337,7 @@ describe('the evidence on the Overview', () => {
 });
 
 describe('the Overview while the steps are still being worked out', () => {
-  const AUTO = { shape: true, start: true, priority: true };
+  const AUTO = { shape: true, start: true, priority: true, project: false };
 
   it('shows no step strip until triage and the agent settle the steps', () => {
     const triage = createTask({ id: 't', stage: 'triage', stageReason: 'choosing the kind', auto: AUTO });

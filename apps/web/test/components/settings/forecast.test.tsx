@@ -90,8 +90,10 @@ describe('the usage forecast', () => {
     expect(container.querySelector('[data-outage]')).toBeNull();
     expect(container.querySelectorAll('[data-tightest]')).toHaveLength(1);
     expect(container.querySelectorAll('[data-usable]').length).toBeGreaterThanOrEqual(4);
-    expect(container.querySelectorAll('[data-reset]')).toHaveLength(2);
-    expect(screen.getByText('Reset')).toBeTruthy();
+    expect(container.querySelectorAll('[data-reset-gap]')).toHaveLength(2);
+    expect(container.querySelectorAll('[data-usable]:not([data-reset-gap])')).toHaveLength(2);
+    expect(container.querySelector('[data-reset]')).toBeNull();
+    expect(screen.queryByText('Reset')).toBeNull();
     fireEvent.click(screen.getByRole('tab', { name: `${Number((pace * 2).toFixed(1))}%` }));
     expect(container.querySelectorAll('[data-outage]').length).toBeGreaterThan(0);
     expect(container.querySelector('[data-tightest]')).toBeNull();

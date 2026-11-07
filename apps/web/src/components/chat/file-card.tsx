@@ -29,7 +29,7 @@ function FileTile({ name, mimeType, busy }: { name: string; mimeType: string | n
 
 function FileLines({ name, meta }: { name: string; meta: string }) {
   return (
-    <span className='flex min-w-0 flex-1 flex-col gap-px'>
+    <span className='flex min-w-0 flex-1 flex-col'>
       <Truncate className='text-xs text-fg-4'>{name}</Truncate>
       {meta && <span className='truncate text-2xs text-fg-2 tabular-nums'>{meta}</span>}
     </span>

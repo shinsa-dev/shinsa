@@ -16,7 +16,7 @@ export function InsetNote({
   tone?: Tone;
 }) {
   return (
-    <div className={cn(TONE_INSET[tone], 'flex flex-col px-3 py-2.5', icon ? 'gap-1' : 'gap-px')}>
+    <div className={cn(TONE_INSET[tone], 'flex flex-col px-3 py-2.5', icon && 'gap-1')}>
       <span className={cn('flex items-center gap-1.5 text-2xs', TONE_TEXT[tone])}>
         {icon && <Icon size='sm' name={icon} />}
         {label}

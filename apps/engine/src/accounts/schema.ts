@@ -3,8 +3,10 @@ import type {
   AccountSignIn,
   ChatNotice,
   DomainError,
+  ExtraUsage as CoreExtraUsage,
   ProviderLogin,
   FastModeAvailability,
+  UsageResetGrant,
   UsageWindow,
   UsageWindowKind,
 } from '@shinsa/core';
@@ -133,6 +135,9 @@ export interface CswapAccount {
 export const UsageBody = Schema.Struct({
   limits: LenientList,
   extra_usage: Schema.optionalKey(Schema.Unknown),
+  spend: Schema.optionalKey(Schema.Unknown),
+  cedar_ember: Schema.optionalKey(Schema.Unknown),
+  juniper_tide: Schema.optionalKey(Schema.Unknown),
   five_hour: Schema.optionalKey(Schema.Unknown),
   seven_day: Schema.optionalKey(Schema.Unknown),
   seven_day_opus: Schema.optionalKey(Schema.Unknown),
@@ -159,7 +164,43 @@ export const ExtraUsage = Schema.Struct({
   is_enabled: Schema.optionalKey(Schema.Unknown),
   monthly_limit: LenientNumber,
   used_credits: LenientNumber,
+  currency: LenientText,
+  decimal_places: Schema.optionalKey(
+    Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 6 })).pipe(
+      Schema.catchDecoding(() => Effect.succeedNone)
+    )
+  ),
 });
+
+export const UsageSpend = Schema.Struct({
+  enabled: Schema.optionalKey(Schema.Unknown),
+  balance: Schema.optionalKey(Schema.Unknown),
+});
+
+export const UsageMoneyEntry = Schema.Struct({
+  amount_minor: Schema.Finite,
+  currency: Text,
+  exponent: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 6 })),
+});
+
+export const UsageResetProgram = Schema.Struct({ grants: LenientList });
+
+export const UsageResetGrantEntry = Schema.Struct({
+  id: Text,
+  resets_left: Schema.Finite,
+  resets_total: LenientNumber,
+  label: LenientText,
+  clears: LenientList,
+  usable_now: Schema.optionalKey(Schema.Unknown),
+  paused: Schema.optionalKey(Schema.Unknown),
+  ends_at: Schema.optionalKey(Schema.Unknown),
+});
+
+export const RESET_PROGRAM_KEYS = ['cedar_ember', 'juniper_tide'] as const;
+
+export const DEFAULT_CREDIT_CURRENCY = 'USD';
+
+export const DEFAULT_CREDIT_EXPONENT = 2;
 
 export const UsageBodyText = Schema.fromJsonString(Schema.Unknown);
 
@@ -173,10 +214,18 @@ export class UsageReadFailed extends Schema.TaggedError<UsageReadFailed, { reado
 export interface UsageAnswer {
   windows: UsageWindow[];
   fastMode: FastModeAvailability;
+  extraUsage: CoreExtraUsage | null;
+  resetGrants: UsageResetGrant[];
 }
 
 export type UsageRead =
-  | { ok: true; windows: UsageWindow[]; fastMode?: FastModeAvailability }
+  | {
+      ok: true;
+      windows: UsageWindow[];
+      fastMode?: FastModeAvailability;
+      extraUsage?: CoreExtraUsage | null;
+      resetGrants?: UsageResetGrant[];
+    }
   | { ok: false; reason: typeof UsageReadReason.Type; detail: string; retryAfterMs: number | null };
 
 export interface KeyedWindow {

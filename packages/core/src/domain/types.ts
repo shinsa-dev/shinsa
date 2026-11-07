@@ -284,6 +284,7 @@ export interface PullRequest {
   queueRemoval?: string | null;
   mergeCommit?: string | null;
   changes?: PullRequestChanges | null;
+  mergedAt?: number | null;
 }
 
 export type PhaseStatus = 'pending' | 'active' | 'done' | 'skipped';
@@ -450,6 +451,7 @@ export interface Task {
   request: string;
   title: string;
   repoId: string | null;
+  movingTo?: string | null;
   size: TaskSize | null;
   planFirst: boolean;
   stage: TaskStage;

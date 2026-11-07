@@ -33,7 +33,7 @@ function TaskPreview({ state, task, action }: { state: ShinsaState; task: Task; 
           <StatusTile {...resolveTaskGlyph(state, task)} size='sm' className='mt-px' />
           <p className='line-clamp-2 text-sm font-medium text-fg-4'>{task.title}</p>
         </div>
-        <div className='flex flex-col gap-px ps-6 text-xs'>
+        <div className='flex flex-col ps-6 text-xs'>
           <p className={cn('font-medium', TONE_TEXT[status.tone])}>{status.label}</p>
           {now && now.toLowerCase() !== status.label.toLowerCase() && (
             <p className='line-clamp-3 text-fg-3'>{now}</p>
@@ -105,7 +105,7 @@ export function TaskPopoverRows({ state, tasks }: { state: ShinsaState; tasks: T
           className='corner-superellipse/1.125 flex w-full cursor-pointer items-start gap-2 rounded-item px-2 py-1.5 text-left text-xs outline-none'
         >
           <StatusTile {...resolveTaskGlyph(state, task)} size='sm' className='mt-px' />
-          <span className='flex min-w-0 flex-col gap-px'>
+          <span className='flex min-w-0 flex-col'>
             <Truncate className='font-medium text-fg-4'>{task.title}</Truncate>
             <Truncate className='text-2xs text-fg-2'>
               <TaskMeta state={state} task={task} />

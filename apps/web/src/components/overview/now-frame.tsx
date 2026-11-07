@@ -29,7 +29,7 @@ export function NowFrame({
     <section className={cn(CARD, 'flex flex-col overflow-hidden')}>
       <div className='flex flex-col gap-3 p-3'>
         <div className='flex flex-col gap-3 sm:flex-row sm:items-start'>
-          <div className='flex min-w-0 flex-1 flex-col gap-px'>
+          <div className='flex min-w-0 flex-1 flex-col'>
             <span className='text-2xs text-fg-2'>{eyebrow}</span>
             {typeof title === 'string' ? (
               <InlineMarkdown text={title} className={NOW_TITLE} />

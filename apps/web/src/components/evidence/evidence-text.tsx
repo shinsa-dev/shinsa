@@ -100,7 +100,7 @@ export function EvidenceText({ view }: { view: EvidenceView }) {
   const ran = runs.length > 0;
   return (
     <figure className='flex min-w-0 flex-col gap-1.5'>
-      <figcaption className='flex min-w-0 flex-col gap-px'>
+      <figcaption className='flex min-w-0 flex-col'>
         <span className='flex min-h-5.5 min-w-0 items-center gap-1.5'>
           <Icon size='sm' name={note ? 'IconNote1' : 'IconConsole'} className='shrink-0 text-fg-2' />
           <span className='min-w-0 text-xs font-medium wrap-anywhere text-fg-4'>{evidence.title}</span>

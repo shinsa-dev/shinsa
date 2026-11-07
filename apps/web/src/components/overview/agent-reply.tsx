@@ -19,7 +19,7 @@ function PointList({ reply }: { reply: AgentReply }) {
           <span className='flex h-5 shrink-0 items-center'>
             <PointGlyph outcome={point.outcome} />
           </span>
-          <div className='flex min-w-0 flex-col gap-px'>
+          <div className='flex min-w-0 flex-col'>
             <span className='flex flex-wrap items-baseline gap-x-2'>
               <InlineMarkdown text={point.ask} className='text-xs leading-5 font-medium text-fg-4' />
               {point.outcome !== 'done' && (
