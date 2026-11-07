@@ -200,6 +200,11 @@ not chat text.
   production. The agent sets each one's schedule from what the change needs; Settings → Agents → Watchdogs holds the
   defaults. When no server has the data, it asks you for one with what the code sends where and the servers worth
   connecting (`docs/engine.md` → Watchdogs).
+- **Auto-ship, when you turn it on.** The reviewer rates every change for confidence and risk. Settings → Agents →
+  Auto-ship (off by default, yours alone) approves a high-confidence review within the risk you allow, so its pull
+  request opens without you, and can merge it for you. An urgent change, such as a fix a watchdog filed as urgent,
+  whose merge waits too long is sent to your team's Needs you, merged for you, or both. It never closes any other
+  gate, and the activity says why it acted (`docs/engine.md` → Auto-ship).
 - **Forks.** A follow-up on what a task did (a bug in a change it shipped) is its own task, kept apart on screen, whose
   agent starts from a copy of that task's conversation (Fork into a new task, `create_task`'s `fork_from`;
   `docs/engine.md` → Forking a task).

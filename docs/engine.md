@@ -1449,7 +1449,9 @@ or a plan that asks for `approval`; with Approve plans on Large plans, also for 
 6 files (`PLAN_SIZE_LIMITS`) or a revised plan; on Always, for every plan. Nothing else waits on you. A failure, configuration or Sign in gate pauses the task (`isPausingGate`).
 
 Every gate is yours: only you close it. Core refuses a `gate.answer` sent on your behalf, and any command on your
-behalf after which an open gate is no longer open, with `human_only` (Who can change Shinsa, below).
+behalf after which an open gate is no longer open, with `human_only` (Who can change Shinsa, below). The one
+exception is the pre-approval you give yourself: with Auto-ship on, a review or merge gate may be approved for you
+by the policy you set, and only those two (Process and structure → Auto-ship).
 
 Each gate takes only the answers that mean something for it (`gate.answer` refuses the rest):
 a plan, review or merge takes approve, revise (ask for changes) or reject; an agent's question takes `reply` with
@@ -1771,7 +1773,7 @@ stops when its window ends. The rules are core (`domain/watchdogs.ts`, `decide/w
   it filed, so the watchdog never passes with the issue open; only a report this watchdog already holds is refused
   (`report_filed`). A watchdog's filing always forks the shipped
   task (`fork_from` naming any other is refused, `fork_watchdog`), so the fix starts from this conversation and goes
-  through every gate; it takes the task's repository unless one is named, and its priority. The filed task keeps
+  through every gate; it takes the task's repository unless one is named, and its priority unless the check sets `urgency` (Auto-ship, below). The filed task keeps
   `Task.sourceReport` with `scheduleId: null` and the `watchdogId`, `createdBy {kind: 'watchdog'}`, and its request
   quotes the report ("Reported in <server> …"); its Filed by fact names the watchdog and opens the shipped task, and its Reported in card holds the report.
   The check ends with `report_read {summary}` (`PURPOSE_HAND_OVERS.watch`). One that filed nothing is healthy and
@@ -1936,6 +1938,55 @@ checks it ran.
 - Dismissed findings are kept on the task (`dismissedFindings`, the last 30) and every later
   reviewer is told not to report them again unless the code around them changed. Your decision
   resets the round count.
+
+### Auto-ship
+
+Auto-ship lets a change you would have approved anyway reach its pull request, or its merge, while you are away.
+It is a pre-approval you give, never a judgement Shinsa makes on its own: the policy is the human-only setting
+`autoShip` (Settings → Agents → Auto-ship, `AutoShipPolicy` in `domain/settings.ts`), off by default, and every
+action it takes is recorded with its reason. The rules are core's (`decide/auto-ship.ts`, the folds in
+`state/auto-ship.ts`); the clock is the engine's (`runtime/auto-ship/`).
+
+- **The reviewer rates every change.** `report_review` requires `confidence` and `risk`, each `low`, `medium` or
+  `high` (`ReviewRatings`), kept on the task as `reviewRatings` from `review.reported` and cleared by a new round.
+  The reviewer's prompt says the human may be approved for on its ratings, and to rate confidence down and risk up
+  when in doubt. The Review tab shows both beside the findings.
+- **Urgency is the task's priority.** A task you mark urgent is urgent; a watchdog check or a watch's read may set
+  `urgency` on `file_report` (a `TaskPriority`), which becomes the filed task's priority instead of the watched task's.
+- **The policy.** `enabled`; `approveUpTo`, the highest risk whose review it approves (`none`, `low`, `medium` or
+  `high`; `low` by default); `urgentApproveUpTo`, the same for an urgent task (`medium`); `merge`, when it merges
+  a change it approved (`never` by default, `low_risk`, or `approved`); `urgent`, what an urgent change's merge gate
+  does once it has waited (`wait`, `escalate` by default, `merge`, or `escalate_then_merge`); `urgentWaitMinutes`,
+  how long (60, 1 to 1440). `settings.change` takes a partial `autoShip` and merges it into the current policy.
+- **The review gate.** With the policy on, `openReviewGate` asks `resolveAutoShipDecision`: it approves only a review
+  that is not escalated, rated `high` confidence, with a risk within `approveUpTo` (or `urgentApproveUpTo` for an
+  urgent task). Then it answers the gate as "Fix and approve" does (`approveReviewAhead`), with `gate.answered`
+  `ahead: true` and `autoShip: <reason>`, so the pull request opens without you; the task keeps
+  `autoShipped {at, reason}` until its next review gate or round, and the activity reads "Approved for you by
+  Auto-ship" by Shinsa, the reason as its detail. Otherwise the gate waits for you as always and keeps why on
+  `Gate.autoShipHeld` ("The reviewer’s confidence is medium."). While a task is a candidate (on, high confidence,
+  risk allowed), `reactToFindings` sends the review's `should_fix` findings to the Agent as well as its blocking
+  ones, as Fix and approve does (`isFindingFixedBeforeReview`), so it never approves past a finding you would have
+  fixed. A review you approved yourself is never merged for you.
+- **The merge gate.** When the merge gate opens (`applyAutoShipMerge`), a change Auto-ship approved merges at once
+  (`gate.answered` with `autoShip`, then the usual merge) when `merge` allows it (`approved`, or `low_risk` and the
+  risk is `low`), no pre-merge step of it or its bundle is open, and your edits are pushed. Otherwise an urgent task
+  whose policy acts on a wait gets a deadline on its gate (`auto_ship.scheduled`, `Gate.autoShipDue {at, action}`).
+- **The idle clock.** `AutoShipClock` fires `auto_ship.fire {taskId, gateId, dueAt}` (command id
+  `auto_ship:<gate>:<dueAt>`) for each open merge gate at its deadline. Core ignores a fire for another deadline, a
+  gate no longer open, or a closed task, and clears the deadline once the policy is off or the task is no longer
+  urgent. A `merge` deadline merges for you when nothing refuses it; otherwise, and for an `escalate` deadline, it
+  escalates the task (`task.escalated`, `Task.escalation {at, reason}`, "Escalated by Auto-ship" in the activity).
+  With `escalate_then_merge` the escalation sets a second deadline the same wait later, which merges.
+- **Escalating to your team.** `Task.escalation` is a shared status field, so it travels in your team listing
+  (Teams, below). On every teammate's machine `listTeamEscalations` (`queue/escalations.ts`) picks the open escalated
+  tasks out of the team feed: they show in Needs you as "Sent to your team", count in the page badge, and each sends
+  one notification that opens the task. A teammate merges it from the task's page as they would any team task. The
+  escalation clears when its merge gate is answered or withdrawn, or a new round starts. A task whose project is in
+  no team escalates only in its own activity and Overview ("Sent to your team").
+- **What it never does.** It never closes a plan, question, operation, proposal, result, failure, setup, Sign in or
+  escalated review gate, never ticks a step around the merge, and never gets past GitHub: a merge GitHub refuses
+  opens the usual failure gate. Usage and cost limits still hold the agent runs of an urgent task.
 
 ### Questions
 
@@ -3723,7 +3774,8 @@ the read-only view. Teams need remote access on (`Remote` paired and enabled), s
   You, or the owner's first name as a user tag, Kai, the machine in its hint) and their repository
   (`SharedListing.repo`); their rows are `TeamTaskListRow` (`components/teams/tasks.tsx`), read-only. Home stays yours
   alone: it never lists a teammate's task. A teammate's task never waits for you, so it never counts towards Needs you, the queue, the
-  guide or a notification. Opening one goes to `/teams/<team>/<machine>/<task>` (`routes/team-task.tsx`), the shared
+  guide or a notification, except one Auto-ship escalated to the team (`Task.escalation`, Process and structure →
+  Auto-ship): it shows in Needs you as "Sent to your team", counts in the page badge and notifies you once. Opening one goes to `/teams/<team>/<machine>/<task>` (`routes/team-task.tsx`), the shared
   task page (`SharedTaskPage`, read-only, its Chat the agents' output only) fed by the engine relay in the local app and, on app.shinsa.dev, by
   a team channel the browser opens with its own key. On app.shinsa.dev a teammate's machine admitted to the fleet
   opens the task as a full task page at `/tasks/<handle>` instead, straight from the row (`resolveFleetTeamTaskPath`).
@@ -4409,7 +4461,8 @@ plainly what protects what.
   - giving or declining a secret (`gates secret`, `gates decline-secret`, `schedules webhook-secret`);
   - the settings that spend money, merge, share or decide for you (`HUMAN_ONLY_SETTINGS` in `domain/settings.ts`:
     `approvePlans`, `mergeMethod`, `taskBudgetUsd`, `taskUsageLimit`, `dailyUsageLimit`, `autoResume`,
-    `snoozeLimited`, `accountSwitchAt`, `fastMode`, `agentFastModes`, `delegationLimit`, `shareLimit`), a
+    `snoozeLimited`, `accountSwitchAt`, `fastMode`, `agentFastModes`, `delegationLimit`, `shareLimit`,
+    `sharePreset`, `autoShip`), a
     project's usage limit (`Project.usageLimit`) and a repository's own check commands,
     workspace and coverage (`HUMAN_ONLY_REPO_FIELDS`: `checkCommands`, `workspace`, `coverage`); agents keep the rest
     (models, providers, fix rounds, attention, compaction), and a task's own checks are the agent's (Checks, above);
