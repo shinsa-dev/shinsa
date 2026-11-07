@@ -395,8 +395,8 @@ function reply(harness: Harness, taskId: string, response: string) {
   return harness.send({ type: 'gate.answer', gateId: gate.id, decision: 'reply', response });
 }
 
-function triagedInProject(harness: Harness, projectId: string) {
-  harness.send({ type: 'task.create', request: 'Fix the button', repoId: null, projectId });
+function triagedInProject(harness: Harness, projectId: string, request = 'Fix the button') {
+  harness.send({ type: 'task.create', request, repoId: null, projectId });
   const taskId = Object.keys(harness.state.tasks).at(-1) ?? '';
   harness.send({
     type: 'task.triage',
@@ -473,6 +473,72 @@ describe('asking which repository a task is for', () => {
     expect(harness.openGate(inEmpty).choices).toEqual(['kanna', 'paywall-next', 'superwall-ios']);
     reply(harness, inEmpty, 'kanna');
     expect(harness.task(inEmpty).projectId).toBe(empty);
+  });
+
+  test('a chosen project also lists the outside repositories the request names, and a pick moves the task there', () => {
+    const harness = createHarness();
+    const paywall = registerRepo(harness, 'paywall-next', 'Superwall');
+    registerRepo(harness, 'superwall-ios', 'Superwall');
+    const kanna = harness.state.repos[registerRepo(harness, 'kanna', 'Kanna')]?.projectId ?? '';
+    const taskId = triagedInProject(harness, kanna, 'Fix the button in paywall-next');
+    expect(harness.task(taskId).auto.project).toBe(false);
+    verifySetup(harness, taskId);
+    const gate = harness.openGate(taskId);
+    expect(gate.choices).toEqual(['kanna', 'paywall-next (Superwall)']);
+    expect(gate.body).toContain(
+      "The request names paywall-next, outside Kanna. Picking one moves the task to that repository's project."
+    );
+    const handle = harness.task(taskId).handle;
+    const result = reply(harness, taskId, 'paywall-next (Superwall)');
+    const superwall = harness.state.repos[paywall]?.projectId;
+    expect(result.events.find((event) => event.type === 'task.repo_bound')).toMatchObject({
+      repoId: paywall,
+      projectId: superwall,
+      handle: 'SUP-1',
+    });
+    expect(harness.task(taskId)).toMatchObject({ repoId: paywall, projectId: superwall, handle: 'SUP-1' });
+    expect(handle).toMatch(/^KAN/);
+  });
+
+  test('picking a repository of the chosen project keeps the project and the handle', () => {
+    const harness = createHarness();
+    registerRepo(harness, 'paywall-next', 'Superwall');
+    const own = registerRepo(harness, 'kanna', 'Kanna');
+    const kanna = harness.state.repos[own]?.projectId ?? '';
+    const taskId = triagedInProject(harness, kanna, 'Fix the button in paywall-next');
+    const handle = harness.task(taskId).handle;
+    verifySetup(harness, taskId);
+    const result = reply(harness, taskId, 'kanna');
+    expect(result.events.find((event) => event.type === 'task.repo_bound')).toEqual(
+      expect.not.objectContaining({ projectId: expect.anything() })
+    );
+    expect(harness.task(taskId)).toMatchObject({ repoId: own, projectId: kanna, handle });
+  });
+
+  test('named outside repositories keep their place among the eight choices, and without a name none is added', () => {
+    const harness = createHarness();
+    for (const index of [1, 2, 3, 4, 5, 6, 7, 8, 9]) registerRepo(harness, `repo-${index}`, 'Kanna');
+    registerRepo(harness, 'paywall-next', 'Superwall');
+    registerRepo(harness, 'scratch', null);
+    const kanna = harness.state.repos[registerRepo(harness, 'repo-1', 'Kanna')]?.projectId ?? '';
+    const named = triagedInProject(harness, kanna, 'Port repo-1 to paywall-next and scratch');
+    verifySetup(harness, named);
+    expect(harness.openGate(named).choices).toEqual([
+      'repo-1',
+      'repo-2',
+      'repo-3',
+      'repo-4',
+      'repo-5',
+      'repo-6',
+      'paywall-next (Superwall)',
+      'scratch (/code/scratch)',
+    ]);
+    reply(harness, named, 'scratch (/code/scratch)');
+    expect(harness.task(named).projectId).toBe(kanna);
+    const plain = triagedInProject(harness, kanna, 'Fix the button');
+    verifySetup(harness, plain);
+    expect(harness.openGate(plain).choices).not.toContain('paywall-next (Superwall)');
+    expect(harness.openGate(plain).body).not.toContain('The request names');
   });
 
   test('repositories with the same name are told apart by project, then by folder', () => {

@@ -35,6 +35,8 @@ function stateWith(patch: (state: ShinsaState) => void = () => undefined) {
 
 const START_ONLY = { shape: false, start: true, priority: false, project: false };
 
+const FOCUS_PROJECT = { shape: false, start: false, priority: false, project: true };
+
 function newTask(overrides: Partial<Task> = {}) {
   return createTask({
     id: 'new',
@@ -212,9 +214,9 @@ describe('the branch triage names', () => {
   });
 
   test('the prompt and the schema list the same commit types', async () => {
-    const calls: { system: string; schema: JsonSchema | undefined }[] = [];
-    const ask: QuickJson = <T>(system: string, _prompt: string, schema?: JsonSchema) => {
-      calls.push({ system, schema });
+    const calls: { system: string; prompt: string; schema: JsonSchema | undefined }[] = [];
+    const ask: QuickJson = <T>(system: string, prompt: string, schema?: JsonSchema) => {
+      calls.push({ system, prompt, schema });
       return Effect.succeed(null as T);
     };
     await resolveTriage(stateWith(), newTask(), LOCAL, ask);
@@ -712,9 +714,9 @@ describe('triage may choose no repository', () => {
   ];
 
   function recordAnswer(repo: string) {
-    const calls: { system: string; schema: JsonSchema | undefined }[] = [];
-    const ask: QuickJson = <T>(system: string, _prompt: string, schema?: JsonSchema) => {
-      calls.push({ system, schema });
+    const calls: { system: string; prompt: string; schema: JsonSchema | undefined }[] = [];
+    const ask: QuickJson = <T>(system: string, prompt: string, schema?: JsonSchema) => {
+      calls.push({ system, prompt, schema });
       return Effect.succeed({ title: 'Hey', repo, size: 'small', branch: 'chore/hey' } as T);
     };
     return { calls, ask };
@@ -739,7 +741,7 @@ describe('triage may choose no repository', () => {
     expect(triage.repoPath).toBe('/code/kanna');
   });
 
-  test('a repository outside the task’s project is offered when the request names it, and binds', async () => {
+  test('a repository outside a focus project is offered when the request names it, and binds', async () => {
     const state = stateWith((draft) => {
       draft.projects.p1 = SHINSA_PROJECT;
       draft.repos.r1 = createRepo({ id: 'r1', name: 'shinsa', path: '/code/shinsa', projectId: 'p1' });
@@ -759,15 +761,40 @@ describe('triage may choose no repository', () => {
       'Fix the button in Kanna’s sidebar',
       'KANNA: fix the button',
     ]) {
-      const triage = await resolveTriage(state, newTask({ projectId: 'p1', request }), KANNA, ask);
+      const triage = await resolveTriage(
+        state,
+        newTask({ projectId: 'p1', request, auto: FOCUS_PROJECT }),
+        KANNA,
+        ask
+      );
       expect(triage.repoPath).toBe('/code/kanna');
     }
     expect(calls[0]?.schema?.properties.repo).toEqual({ type: 'string', enum: ['shinsa', 'kanna', 'none'] });
     expect(calls[0]?.prompt).toContain(
-      'Repositories outside this project, offered because the request names them: kanna. Pick one only for the work the request names it for; the task stays in this project.'
+      "Repositories outside this project, offered because the request names them: kanna. Pick one only for the work the request names it for; the task then moves to that repository's project."
     );
     expect(calls[0]?.prompt).not.toContain('never offered');
     expect(calls[0]?.system).toContain('A request that names a repository that is not listed gets "none".');
+  });
+
+  test('a project you chose never offers an outside repository, even one the request names', async () => {
+    const state = stateWith((draft) => {
+      draft.projects.p1 = SHINSA_PROJECT;
+      draft.repos.r1 = createRepo({ id: 'r1', name: 'shinsa', path: '/code/shinsa', projectId: 'p1' });
+    });
+    const { calls, ask } = recordAnswer('kanna');
+    const triage = await resolveTriage(
+      state,
+      newTask({ projectId: 'p1', request: 'Fix the button in kanna' }),
+      KANNA,
+      ask
+    );
+    expect(triage.repoPath).toBeNull();
+    expect(calls[0]?.schema?.properties.repo).toEqual({ type: 'string', enum: ['shinsa', 'none'] });
+    expect(calls[0]?.prompt).toContain(
+      'Other repositories on the machine outside this project, never offered: kanna. A request that names one of them gets "none".'
+    );
+    expect(calls[0]?.prompt).not.toContain('offered because the request names them');
   });
 
   test('an outside repository the request does not name is never offered, so picking it binds none', async () => {
@@ -779,7 +806,7 @@ describe('triage may choose no repository', () => {
     const { calls, ask } = recordAnswer('kanna');
     const vague = await resolveTriage(
       state,
-      newTask({ projectId: 'p1', request: 'Fix the kannabis typo in paywall next' }),
+      newTask({ projectId: 'p1', request: 'Fix the kannabis typo in paywall next', auto: FOCUS_PROJECT }),
       local,
       ask
     );
