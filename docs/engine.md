@@ -2189,7 +2189,7 @@ checks it ran.
   limit resets soonest takes over (Accounts and usage limits, below). Settings → Agent usage → Forecast draws one block per provider (`components/settings/forecast.tsx`,
   `lib/accounts/forecast.ts`): every Claude account together, and each other provider's own login alone, each with
   its pace, a lane per account across the week (blue while the account has usage at the timeline's pace, grey once
-  it runs out, a thin tick at each reset, and an orange band wherever every account is out at once: `outages`), drawn at a
+  it runs out, a small gap before each reset, each limit window its own bar, and an orange band wherever every account is out at once: `outages`), drawn at a
   pace you pick (`resolveForecastTimeline`: the safe pace, the last 24 hours, or one and a half or twice the safe pace;
   the last 24 hours first when it is faster), a dashed amber line at the tightest point when the safe pace is drawn,
   the tightest point in words and the last 24 hours of that provider (meters on an account's window for
