@@ -1488,7 +1488,7 @@ The plan gate opens by one rule, `PLAN_GATE_RULE`: always for a task that runs a
 first, a task in the backlog (whose plan gate is held out of Needs you until you start it, Scheduling → The backlog)
 or a plan that asks for `approval` or splits the work into other tasks (`splits`); with Approve plans on Large plans,
 also for a plan with more than 3 phases or 6 files (`PLAN_SIZE_LIMITS`) or a revised plan; on Always, for every plan.
-Nothing else waits on you.
+Nothing else waits on you. A failure, configuration or Sign in gate pauses the task (`isPausingGate`).
 
 **Splitting at the plan.** A request often holds work that would ship better as separate pull requests. The Agent
 says so in its plan instead of an agent splitting the request before anyone read the code: `propose_plan`'s `split`
@@ -1501,8 +1501,9 @@ Start N tasks (counting this task) over the list of parts, with Keep as one task
 Start N tasks approves the plan, and `startPlanSplit` (`decide/couriers.ts`) creates each part as a task under this
 one (`createdBy` `split`, the planning run), forked from it (`forkOf`), so its agent starts from this conversation and
 then plans for itself, with its wait or stack set; it shares the creation with `split_task` and is recorded as the
-same `task.split` for the plan version, so neither creates the parts twice. Keep as one task is the plan's revise
-with a fixed message (drop the split and plan all of the work here), so the Agent proposes a plan without one. A failure, configuration or Sign in gate pauses the task (`isPausingGate`).
+same `task.split` for the plan version, made after that plan was proposed (a new round starts again at version 1), so
+neither creates the parts twice. Keep as one task is the plan's revise with a fixed message (drop the split and plan
+all of the work here), so the Agent proposes a plan without one.
 
 **Pausing a task.** Pause (the task's menu, a row's menu, ⌘K, `shinsa tasks pause`, an agent's `tasks_pause`) sends
 `task.pause` (`decide/pause.ts`) while something works on the task: triage, planning, building, checks, review,

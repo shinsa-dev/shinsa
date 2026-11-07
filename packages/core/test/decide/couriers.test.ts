@@ -1,7 +1,12 @@
 import { describe, expect, test } from 'bun:test';
-import type { Task } from '../../src/index.ts';
+import { MINUTE_MS, type Task } from '../../src/index.ts';
 import {
+  approve as approveGate,
+  completePhase,
   createHarness,
+  PASSING,
+  pullRequest,
+  pushed,
   createTask,
   type Harness,
   proposePlan,
@@ -310,6 +315,22 @@ describe('splitting the accepted plan', () => {
   });
 });
 
+function mergeRound(harness: Harness, taskId: string) {
+  refreshWorktree(harness, taskId);
+  const phases = harness.task(taskId).plan?.document?.phases.length ?? 1;
+  for (let index = 0; index < phases; index += 1) completePhase(harness, taskId);
+  harness.send({ type: 'checks.record', taskId, results: PASSING });
+  harness.send({
+    type: 'agent.report_review',
+    runId: harness.activeRun(taskId).id,
+    summary: null,
+    findings: [],
+  });
+  approveGate(harness, taskId);
+  pushed(harness, taskId);
+  harness.send({ type: 'pull_request.record', taskId, pullRequest: pullRequest({ state: 'merged' }) });
+}
+
 describe('a plan that splits the work into other tasks', () => {
   function awaitingSplit() {
     const harness = createHarness();
@@ -406,6 +427,25 @@ describe('a plan that splits the work into other tasks', () => {
     refreshWorktree(harness, taskId);
     expect(split(harness, harness.activeRun(taskId).id, ['Port the sidebar.'])).toEqual([]);
     expect(harness.task(taskId).splits).toHaveLength(1);
+  });
+
+  test('a split in a later round starts its parts, though the plan of that round is version 1 again', () => {
+    const { harness, taskId } = awaitingSplit();
+    expect(approve(harness, taskId)).toHaveLength(3);
+    mergeRound(harness, taskId);
+    harness.advance(MINUTE_MS);
+    harness.send({
+      type: 'task.message',
+      taskId,
+      text: 'Split the next batch.',
+      kind: 'new_round',
+      shape: 'change',
+    });
+    refreshWorktree(harness, taskId);
+    proposePlan(harness, taskId, SPLIT_PLAN);
+    expect(harness.task(taskId).plan?.version).toBe(1);
+    expect(approve(harness, taskId)).toHaveLength(3);
+    expect(harness.task(taskId).splits).toHaveLength(2);
   });
 
   test('a plan without a split creates no tasks when you approve it', () => {

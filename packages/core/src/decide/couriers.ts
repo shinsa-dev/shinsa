@@ -126,8 +126,7 @@ export function createCourierTask(decider: Decider, command: CommandOf<'agent.cr
 
 export function splitTask(decider: Decider, command: CommandOf<'agent.split_task'>) {
   const { run, task } = findCurrentRun(decider, command.runId, 'split_task');
-  const version = task.plan?.version ?? 0;
-  if (task.splits?.some((split) => split.planVersion === version)) return;
+  if (hasSplitPlan(task)) return;
   if (command.requests.length === 0 || command.requests.length > DELEGATION_LIMITS.splitTasks) {
     throw new DomainError({
       code: 'split_size',
@@ -146,6 +145,12 @@ export function splitTask(decider: Decider, command: CommandOf<'agent.split_task
     options: command.stacked ? { stacksOn: [ids.at(-1) ?? task.id] } : {},
   }));
   if (command.thisWaits) waitOn(decider, decider.task(task.id), taskIds);
+}
+
+function hasSplitPlan(task: Task) {
+  const version = task.plan?.version ?? 0;
+  const proposedAt = task.plan?.proposedAt ?? 0;
+  return (task.splits ?? []).some((split) => split.planVersion === version && split.at >= proposedAt);
 }
 
 interface SplitPiece {
@@ -205,9 +210,8 @@ function resolvePartOrder(task: Task, part: PlanSplitPart, taskIds: string[]) {
 export function startPlanSplit(decider: Decider, taskId: string) {
   const task = decider.task(taskId);
   const parts = task.plan?.document?.split ?? [];
-  const version = task.plan?.version ?? 0;
   const run = selectPlanRun(decider, task);
-  if (parts.length === 0 || !run || task.splits?.some((split) => split.planVersion === version)) return;
+  if (parts.length === 0 || !run || hasSplitPlan(task)) return;
   spawnSplit(decider, task, run.id, parts, (part, taskIds) => ({
     request: part.request,
     options: { forkOf: task.id, ...resolvePartOrder(task, part, taskIds) },
