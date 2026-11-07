@@ -1,5 +1,5 @@
 import type { DomainError } from '@shinsa/core';
-import { Duration, type Effect, Schedule, Schema } from 'effect';
+import { Duration, type Effect, type FileSystem, Schedule, Schema } from 'effect';
 import type { MachineConfigFile } from '../config/machine/service.ts';
 import type { Remote } from '../git/remote/service.ts';
 import type {
@@ -21,7 +21,11 @@ export class CliFailed extends Schema.TaggedError<CliFailed, { readonly brand: u
   }
 ) {}
 
-export type CliServices = Shell | Remote | MachineConfigFile;
+export type CliServices = Shell | Remote | MachineConfigFile | FileSystem.FileSystem;
+
+export const PLUTIL = '/usr/bin/plutil';
+
+export const PLUTIL_TIMEOUT_MS = 10_000;
 
 export type CliFailure = SurfaceFailure | CliFailed | ServiceCommandFailed | ServerRunningError;
 

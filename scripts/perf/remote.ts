@@ -144,11 +144,10 @@ const program = Effect.gen(function* () {
       for (const dir of [config.worktreesDir, config.evidenceDir, config.transcriptsDir])
         mkdirSync(dir, { recursive: true });
     });
+    const stateVersion = yield* resolveStateVersion();
     const [bootFor, engine] = yield* Effect.timed(
       Effect.acquireRelease(
-        Effect.sync(
-          () => new Engine(openEventLog(config.databasePath), { stateVersion: resolveStateVersion() })
-        ),
+        Effect.sync(() => new Engine(openEventLog(config.databasePath), { stateVersion })),
         (running) => Effect.sync(() => running.stop())
       )
     );

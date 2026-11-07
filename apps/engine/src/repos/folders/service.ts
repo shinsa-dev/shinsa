@@ -2,7 +2,7 @@ import type { Dirent } from 'node:fs';
 import { readFileSync, statSync } from 'node:fs';
 import { readdir } from 'node:fs/promises';
 import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
-import { Clock, Context, Duration, Effect, Layer, Option } from 'effect';
+import { Clock, Context, Duration, Effect, FileSystem, Layer } from 'effect';
 import { normalizeRemote } from '../../git/remote/output.ts';
 import { Remote } from '../../git/remote/service.ts';
 import { selectErrnoCode } from '../../shell/errno.ts';
@@ -38,6 +38,7 @@ export class RepoFolders extends Context.Service<
     RepoFolders,
     Effect.gen(function* () {
       const remote = yield* Remote;
+      const withFiles = Effect.provideService(FileSystem.FileSystem, yield* FileSystem.FileSystem);
 
       const isSkipped = (name: string) =>
         name.startsWith('.') ||
@@ -58,14 +59,12 @@ export class RepoFolders extends Context.Service<
           catch: (error) => new FolderUnreadable({ path, code: selectErrnoCode(error) }),
         });
 
-      const attempt = <A>(read: () => A) =>
-        Effect.try(read).pipe(Effect.option, Effect.map(Option.getOrNull));
-
-      const readText = (path: string) => attempt(() => readFileSync(path, 'utf8'));
+      const readText = (path: string) =>
+        Effect.try(() => readFileSync(path, 'utf8')).pipe(Effect.orElseSucceed(() => null));
 
       const resolveGitDir = Effect.fn('RepoFolders.resolveGitDir')(function* (repo: string) {
         const dotGit = join(repo, '.git');
-        const stats = yield* attempt(() => statSync(dotGit));
+        const stats = yield* Effect.try(() => statSync(dotGit)).pipe(Effect.orElseSucceed(() => null));
         if (!stats) return null;
         if (stats.isDirectory()) return dotGit;
         const pointer = /^gitdir:\s*(.+)$/m.exec((yield* readText(dotGit)) ?? '')?.[1]?.trim();
@@ -147,8 +146,7 @@ export class RepoFolders extends Context.Service<
         } satisfies Discovery;
       });
 
-      const listLocal = (roots: readonly string[], limit?: number) =>
-        Effect.sync(() => listLocalRepos(roots, limit));
+      const listLocal = (roots: readonly string[], limit?: number) => withFiles(listLocalRepos(roots, limit));
 
       const listCandidates = Effect.fn('RepoFolders.listCandidates')(function* (
         roots: readonly string[],

@@ -1,7 +1,8 @@
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { join } from 'node:path';
+import { Effect, FileSystem } from 'effect';
 import type { Project, Repo } from '../../packages/core/src/index.ts';
 import { runGit } from '../kit/git/index.ts';
+import { removeSeedPath, writeSeedFiles } from './files.ts';
 import { type Files, REPOS, WORKTREES } from './paths.ts';
 import { listCliBaseFiles, listCliNewFiles } from './sources/cli.ts';
 import {
@@ -28,40 +29,39 @@ import {
 } from './sources/paywall.ts';
 import { EXPORT_FILES_BASE, EXPORT_FILES_NEW } from './tasks/process.ts';
 
-function writeFiles(root: string, files: Files) {
-  for (const [path, content] of Object.entries(files)) {
-    const target = join(root, path);
-    mkdirSync(dirname(target), { recursive: true });
-    writeFileSync(target, content);
-  }
-}
-
-function createRepo(name: string, files: Files) {
+const createRepo = Effect.fn('Seed.createRepo')(function* (name: string, files: Files) {
+  const fs = yield* FileSystem.FileSystem;
   const path = join(REPOS, name);
-  mkdirSync(path, { recursive: true });
-  runGit(['init', '-q', '-b', 'main'], path);
-  runGit(['config', 'user.email', 'seed@shinsa.dev'], path);
-  runGit(['config', 'user.name', 'Shinsa seed'], path);
-  writeFiles(path, files);
-  runGit(['add', '-A'], path);
-  runGit(['commit', '-q', '-m', 'chore: initial commit'], path);
+  yield* fs.makeDirectory(path, { recursive: true });
+  yield* runGit(['init', '-q', '-b', 'main'], path);
+  yield* runGit(['config', 'user.email', 'seed@shinsa.dev'], path);
+  yield* runGit(['config', 'user.name', 'Shinsa seed'], path);
+  yield* writeSeedFiles(path, files);
+  yield* runGit(['add', '-A'], path);
+  yield* runGit(['commit', '-q', '-m', 'chore: initial commit'], path);
   return path;
-}
+});
 
-function createWorktree(repoPath: string, taskId: string, branch: string, base: string, files: Files) {
+const createWorktree = Effect.fn('Seed.createWorktree')(function* (
+  repoPath: string,
+  taskId: string,
+  branch: string,
+  base: string,
+  files: Files
+) {
   const path = join(WORKTREES, taskId);
-  runGit(['worktree', 'add', '-q', '-b', branch, path, base], repoPath);
-  writeFiles(path, files);
+  yield* runGit(['worktree', 'add', '-q', '-b', branch, path, base], repoPath);
+  yield* writeSeedFiles(path, files);
   return path;
-}
+});
 
-function commitWorktree(path: string, message: string) {
-  runGit(['add', '-A'], path);
-  runGit(
+const commitWorktree = Effect.fn('Seed.commitWorktree')(function* (path: string, message: string) {
+  yield* runGit(['add', '-A'], path);
+  yield* runGit(
     ['-c', 'user.email=seed@shinsa.dev', '-c', 'user.name=Shinsa seed', 'commit', '-q', '-m', message],
     path
   );
-}
+});
 
 export function createProjects(): Project[] {
   return [
@@ -117,7 +117,7 @@ export interface SeedRepos {
   basketApp: Repo;
 }
 
-export function createRepos(): SeedRepos {
+export const createRepos = Effect.fn('Seed.createRepos')(function* () {
   const paywallBase: Files = {
     'src/chat/embedded-chat.ts': EMBEDDED_CHAT_BASE,
     'src/chat/transport.ts': TRANSPORT_BASE,
@@ -128,25 +128,25 @@ export function createRepos(): SeedRepos {
     ...listCliBaseFiles(),
     'package.json': '{ "name": "paywall-next", "private": true }\n',
   };
-  const paywallPath = createRepo('superwall/paywall-next', paywallBase);
-  const kannaPath = createRepo('kanna', {
+  const paywallPath = yield* createRepo('superwall/paywall-next', paywallBase);
+  const kannaPath = yield* createRepo('kanna', {
     'src/shared/defaults.ts': DEFAULTS_BASE,
     'src/client/theme.css': KANNA_THEME,
     'package.json': '{ "name": "kanna-code" }\n',
   });
-  const docsPath = createRepo('superwall/docs', {
+  const docsPath = yield* createRepo('superwall/docs', {
     'framework/access.mdx': '# Access\n\nRequest access from support.\n',
   });
-  const printsPath = createRepo('prints', { 'src/queue.ts': 'export const queue: string[] = [];\n' });
-  const basketSdkPath = createRepo('basket/basket-ios-sdk', {
+  const printsPath = yield* createRepo('prints', { 'src/queue.ts': 'export const queue: string[] = [];\n' });
+  const basketSdkPath = yield* createRepo('basket/basket-ios-sdk', {
     'Sources/Basket/ListSync.swift': 'public struct ListSync {}\n',
     'Package.swift': '// swift-tools-version:5.10\n',
   });
-  const basketServerPath = createRepo('basket/basket-server', {
+  const basketServerPath = yield* createRepo('basket/basket-server', {
     'src/db/schema.ts': 'export const lists = { id: "uuid", ownerId: "uuid", name: "text" };\n',
     'package.json': '{ "name": "basket-server", "private": true }\n',
   });
-  const basketAppPath = createRepo('basket/basket-app', {
+  const basketAppPath = yield* createRepo('basket/basket-app', {
     'Basket/ListView.swift': 'struct ListView {}\n',
   });
 
@@ -200,8 +200,9 @@ export function createRepos(): SeedRepos {
     'git@github.com:basket/basket-app.git',
     'project-basket'
   );
-  return { paywall, kanna, docs, prints, basketSdk, basketServer, basketApp };
-}
+  const repos: SeedRepos = { paywall, kanna, docs, prints, basketSdk, basketServer, basketApp };
+  return repos;
+});
 
 export interface SeedWorktrees {
   chat: string;
@@ -213,45 +214,60 @@ export interface SeedWorktrees {
   registry: string;
 }
 
-export function createWorktrees({ paywall, kanna }: SeedRepos): SeedWorktrees {
+export const createWorktrees = Effect.fn('Seed.createWorktrees')(function* ({ paywall, kanna }: SeedRepos) {
   const paywallPath = paywall.path;
   const kannaPath = kanna.path;
-  const chatPath = createWorktree(paywallPath, 'task-embedded-chat', 'feat/embedded-chat-mcp', 'main', {
-    'src/chat/embedded-chat.ts': EMBEDDED_CHAT_NEW,
-    'src/chat/mcp-session.ts': MCP_SESSION_NEW,
-    'src/chat/mcp-session.test.ts': MCP_SESSION_TEST_NEW,
-  });
-  rmSync(join(chatPath, 'src/chat/transport.ts'));
-  commitWorktree(chatPath, 'feat(chat): run the embedded chat on MCP v2');
-  const duplicatePath = createWorktree(paywallPath, 'task-duplicate', 'fix/code-first-duplicate', 'main', {
-    'src/paywalls/duplicate.ts': DUPLICATE_NEW,
-    'src/paywalls/errors.ts': ERRORS_NEW,
-    'src/paywalls/duplicate.test.ts': DUPLICATE_TEST_NEW,
-  });
-  commitWorktree(duplicatePath, 'fix(paywalls): refuse to duplicate code-first paywalls');
-  const tabsPath = createWorktree(paywallPath, 'task-tab-scroll', 'fix/tab-group-scroll', 'main', {
+  const chatPath = yield* createWorktree(
+    paywallPath,
+    'task-embedded-chat',
+    'feat/embedded-chat-mcp',
+    'main',
+    {
+      'src/chat/embedded-chat.ts': EMBEDDED_CHAT_NEW,
+      'src/chat/mcp-session.ts': MCP_SESSION_NEW,
+      'src/chat/mcp-session.test.ts': MCP_SESSION_TEST_NEW,
+    }
+  );
+  yield* removeSeedPath(join(chatPath, 'src/chat/transport.ts'));
+  yield* commitWorktree(chatPath, 'feat(chat): run the embedded chat on MCP v2');
+  const duplicatePath = yield* createWorktree(
+    paywallPath,
+    'task-duplicate',
+    'fix/code-first-duplicate',
+    'main',
+    {
+      'src/paywalls/duplicate.ts': DUPLICATE_NEW,
+      'src/paywalls/errors.ts': ERRORS_NEW,
+      'src/paywalls/duplicate.test.ts': DUPLICATE_TEST_NEW,
+    }
+  );
+  yield* commitWorktree(duplicatePath, 'fix(paywalls): refuse to duplicate code-first paywalls');
+  const tabsPath = yield* createWorktree(paywallPath, 'task-tab-scroll', 'fix/tab-group-scroll', 'main', {
     'src/ui/tab-group.tsx': TAB_GROUP_NEW,
     'src/ui/tab-group.test.tsx': TAB_GROUP_TEST_NEW,
   });
-  commitWorktree(tabsPath, 'fix(ui): scroll tab groups horizontally');
-  const exportBackoffPath = createWorktree(
+  yield* commitWorktree(tabsPath, 'fix(ui): scroll tab groups horizontally');
+  const exportBackoffPath = yield* createWorktree(
     paywallPath,
     'task-export-backoff',
     'fix/export-retry-restart',
     'main',
     EXPORT_FILES_NEW
   );
-  commitWorktree(exportBackoffPath, 'fix(export): resume retries inside the chunk and after a restart');
-  const registryPath = createWorktree(
+  yield* commitWorktree(
+    exportBackoffPath,
+    'fix(export): resume retries inside the chunk and after a restart'
+  );
+  const registryPath = yield* createWorktree(
     paywallPath,
     'task-command-registry',
     'refactor/command-registry',
     'main',
     listCliNewFiles()
   );
-  commitWorktree(registryPath, 'refactor(cli): declare every command with defineCommand');
-  runGit(['branch', 'feat/mcp-v2-agent-4', 'main'], paywallPath);
-  const roundsPath = createWorktree(
+  yield* commitWorktree(registryPath, 'refactor(cli): declare every command with defineCommand');
+  yield* runGit(['branch', 'feat/mcp-v2-agent-4', 'main'], paywallPath);
+  const roundsPath = yield* createWorktree(
     paywallPath,
     'task-mcp-rounds',
     'feat/mcp-v2-agent-5',
@@ -260,13 +276,19 @@ export function createWorktrees({ paywall, kanna }: SeedRepos): SeedWorktrees {
       'src/agent/tool-cache.ts': 'export const TOOL_CACHE_TTL_MS = 60 * 60 * 1000;\n',
     }
   );
-  const defaultsPath = createWorktree(kannaPath, 'task-usage-defaults', 'feat/usage-aware-defaults', 'main', {
-    'src/shared/defaults.ts': DEFAULTS_NEW,
-    'src/shared/usage.ts': USAGE_NEW,
-    'src/shared/defaults.test.ts': DEFAULTS_TEST_NEW,
-  });
-  commitWorktree(defaultsPath, 'feat(models): fall back to a cheaper model near the usage limit');
-  return {
+  const defaultsPath = yield* createWorktree(
+    kannaPath,
+    'task-usage-defaults',
+    'feat/usage-aware-defaults',
+    'main',
+    {
+      'src/shared/defaults.ts': DEFAULTS_NEW,
+      'src/shared/usage.ts': USAGE_NEW,
+      'src/shared/defaults.test.ts': DEFAULTS_TEST_NEW,
+    }
+  );
+  yield* commitWorktree(defaultsPath, 'feat(models): fall back to a cheaper model near the usage limit');
+  const worktrees: SeedWorktrees = {
     chat: chatPath,
     duplicate: duplicatePath,
     tabs: tabsPath,
@@ -275,4 +297,5 @@ export function createWorktrees({ paywall, kanna }: SeedRepos): SeedWorktrees {
     exportBackoff: exportBackoffPath,
     registry: registryPath,
   };
-}
+  return worktrees;
+});

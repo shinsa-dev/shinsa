@@ -1,3 +1,4 @@
+import { BunServices } from '@effect/platform-bun';
 import type { ShinsaState, Task, TaskShape, UserCommand } from '@shinsa/core';
 import { Context, Duration, Effect, Layer, Scope } from 'effect';
 import type { QuickJson } from '../../src/agents/quick/schema.ts';
@@ -66,7 +67,10 @@ function createClassifierLayer(classify: Partial<Classifier>) {
 }
 
 function buildClassifier(ask: QuickJson) {
-  return build(TriageClassifier.layer.pipe(Layer.provide(quickLayer(ask))), TriageClassifier);
+  return build(
+    TriageClassifier.layer.pipe(Layer.provide(quickLayer(ask)), Layer.provide(BunServices.layer)),
+    TriageClassifier
+  );
 }
 
 export function createClassifier(ask: QuickJson): Classifier {
@@ -98,7 +102,8 @@ export function resolveTriageEffect(
 ) {
   const layer = TaskTriage.layer.pipe(
     Layer.provide(quickLayer(ask)),
-    Layer.provide(team ? Layer.succeed(TriageTeam, Effect.sync(team)) : Layer.empty)
+    Layer.provide(team ? Layer.succeed(TriageTeam, Effect.sync(team)) : Layer.empty),
+    Layer.provide(BunServices.layer)
   );
   return build(layer, TaskTriage).resolve(state, task, local);
 }

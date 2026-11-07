@@ -1,5 +1,3 @@
-import { writeFileSync } from 'node:fs';
-import { join } from 'node:path';
 import {
   type ChangeEntry,
   type ChangeKind,
@@ -64,8 +62,6 @@ function createSeedChangelog(): Changelog {
   return resolvePublicChangelog(resolveChangelog(changes));
 }
 
-export function writeSeedChangelog(root: string) {
-  const path = join(root, 'changelog.json');
-  writeFileSync(path, JSON.stringify(createSeedChangelog()));
-  return path;
+export function serializeSeedChangelog() {
+  return JSON.stringify(createSeedChangelog());
 }

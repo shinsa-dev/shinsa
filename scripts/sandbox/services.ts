@@ -1,5 +1,5 @@
-import { Effect } from 'effect';
-import { resolveServiceRunIn } from '../../apps/engine/src/terminals/places.ts';
+import { Effect, Option } from 'effect';
+import { selectServiceRunIn } from '../../apps/engine/src/terminals/runs.ts';
 import { isTaskSettled } from '../../packages/core/src/index.ts';
 import type { StartedMachine } from './machine.ts';
 import {
@@ -18,9 +18,10 @@ import { toggleTeammate } from './team.ts';
 const startSharedService = Effect.fn('Sandbox.startSharedService')(function* (shared: SharedService) {
   const { engine, terminals, serviceId, taskId } = shared;
   const service = yield* terminals.findService(serviceId);
-  const run = resolveServiceRunIn(yield* engine.core.state, service, taskId, terminals);
-  if (!run) return yield* new SandboxFailed({ message: 'The shared web service cannot run in its task.' });
-  yield* terminals.startService(serviceId, run);
+  const run = yield* selectServiceRunIn(yield* engine.core.state, service, taskId, terminals);
+  if (Option.isNone(run))
+    return yield* new SandboxFailed({ message: 'The shared web service cannot run in its task.' });
+  yield* terminals.startService(serviceId, run.value);
 });
 
 export const createServicePreview = Effect.fn('Sandbox.createServicePreview')(function* (

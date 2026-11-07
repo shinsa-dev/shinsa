@@ -57,33 +57,32 @@ export class Evidence extends Context.Service<
         return slug || 'evidence';
       };
 
-      const writeEvidence = (
+      const writeEvidence = Effect.fn('Evidence.writeEvidence')(function* (
         folder: string | null,
         base: string,
         extension: string,
-        write: (path: string) => void
-      ) =>
-        Effect.sync(() => {
-          const id = Bun.randomUUIDv7().replace(/-/g, '').slice(-NAME_ID_LENGTH);
-          const name = `${base}${id}.${extension}`;
-          const relative = folder ? `${folder}/${name}` : name;
-          if (folder) mkdirSync(join(dir, folder), { recursive: true });
-          write(join(dir, relative));
-          return `${EVIDENCE_ROUTE}${relative}`;
-        });
+        write: (path: string) => Effect.Effect<void>
+      ) {
+        const id = Bun.randomUUIDv7().replace(/-/g, '').slice(-NAME_ID_LENGTH);
+        const name = `${base}${id}.${extension}`;
+        const relative = folder ? `${folder}/${name}` : name;
+        if (folder) yield* Effect.sync(() => mkdirSync(join(dir, folder), { recursive: true }));
+        yield* write(join(dir, relative));
+        return `${EVIDENCE_ROUTE}${relative}`;
+      });
 
       return Evidence.of({
         writeImage: (base64, mediaType) =>
           Effect.suspend(() => {
             const extension = resolveExtension(mediaType.split('/')[1] ?? '', 'png');
             return writeEvidence(null, '', extension, (path) =>
-              writeFileSync(path, Buffer.from(base64, 'base64'))
+              Effect.sync(() => writeFileSync(path, Buffer.from(base64, 'base64')))
             );
           }),
         writeText: Effect.fn('Evidence.writeText')(function* (text, folder, title, extension) {
           const path = yield* resolveFolderPath(folder);
           return yield* writeEvidence(path, `${resolveSlug(title)}-`, extension, (file) =>
-            writeFileSync(file, text)
+            Effect.sync(() => writeFileSync(file, text))
           );
         }),
         copyFile: Effect.fn('Evidence.copyFile')(function* (source, folder, title) {
@@ -100,7 +99,7 @@ export class Evidence extends Context.Service<
           const path = yield* resolveFolderPath(folder);
           const extension = resolveExtension(extname(source), 'bin');
           return yield* writeEvidence(path, `${resolveSlug(title)}-`, extension, (file) =>
-            copyFileSync(source, file)
+            Effect.sync(() => copyFileSync(source, file))
           );
         }),
         selectFile: (name) =>

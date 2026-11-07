@@ -1,4 +1,4 @@
-import { Effect } from 'effect';
+import { Effect, FileSystem } from 'effect';
 import { NOT_STARTED_EXIT_CODE, type Argv } from '../schema.ts';
 import { Shell } from '../service.ts';
 import { mergeLoginEnvs, parseLoginEnv, resolveFishHandOff } from './env.ts';
@@ -6,6 +6,7 @@ import { LOGIN_MARKER, LOGIN_SHELL_ENV, type LoginEnvDefinition } from './schema
 
 export const makeLoginEnvReader = Effect.fn('LoginEnv.make')(function* (definition: LoginEnvDefinition) {
   const shell = yield* Shell;
+  const withFiles = Effect.provideService(FileSystem.FileSystem, yield* FileSystem.FileSystem);
   const { home } = definition;
 
   const run =
@@ -35,11 +36,8 @@ export const makeLoginEnvReader = Effect.fn('LoginEnv.make')(function* (definiti
     const interactive = yield* readShell(definition.shell, '-lic');
     if (interactive.env) return interactive.env;
     const plain = yield* readShell(definition.shell, '-lc');
-    const fish = resolveFishHandOff(
-      definition.shell,
-      plain.env?.PATH ?? definition.env.PATH ?? '',
-      definition.env,
-      home
+    const fish = yield* withFiles(
+      resolveFishHandOff(definition.shell, plain.env?.PATH ?? definition.env.PATH ?? '', definition.env, home)
     );
     const attempts = [interactive.attempt, plain.attempt];
     const handedOff = fish ? yield* readShell(fish, '-lc') : null;

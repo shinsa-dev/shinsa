@@ -3,6 +3,8 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { inflateSync } from 'node:zlib';
+import { Effect } from 'effect';
+import { ShellLayer } from '../../../apps/engine/src/shell/layers.ts';
 import { runGit } from '../../kit/git/index.ts';
 import {
   bumpLockfileEntry,
@@ -242,10 +244,9 @@ describe('serializeReviewFixture', () => {
 });
 
 describe('serializeFastImport', () => {
-  test('imports commits with their files, dates and modes', () => {
+  test('imports commits with their files, dates and modes', async () => {
     const repo = mkdtempSync(join(tmpdir(), 'seed-code-kit-'));
     try {
-      runGit(['init', '-q', '-b', 'main'], repo);
       const encode = (text: string) => new TextEncoder().encode(text);
       const stream = serializeFastImport('refs/heads/main', 'Seed <seed@example.com>', [
         {
@@ -259,14 +260,22 @@ describe('serializeFastImport', () => {
           files: [{ path: 'bin/run with space', mode: '100755', content: encode('#!/bin/sh\n') }],
         },
       ]);
-      runGit(['fast-import', '--quiet'], repo, { input: stream });
-      expect(runGit(['log', '--format=%s %at %an', 'main'], repo)).toBe('second 2000 Seed\nfirst 1000 Seed');
-      expect(runGit(['show', 'main:a.txt'], repo)).toBe('one');
-      expect(runGit(['ls-tree', '-r', 'main'], repo)).toContain('100755 blob');
-      expect(runGit(['ls-tree', '-r', '--name-only', 'main'], repo).split('\n')).toEqual([
-        'a.txt',
-        'bin/run with space',
-      ]);
+      const read = await Effect.runPromise(
+        Effect.gen(function* () {
+          yield* runGit(['init', '-q', '-b', 'main'], repo);
+          yield* runGit(['fast-import', '--quiet'], repo, { input: stream });
+          return {
+            log: yield* runGit(['log', '--format=%s %at %an', 'main'], repo),
+            file: yield* runGit(['show', 'main:a.txt'], repo),
+            tree: yield* runGit(['ls-tree', '-r', 'main'], repo),
+            names: yield* runGit(['ls-tree', '-r', '--name-only', 'main'], repo),
+          };
+        }).pipe(Effect.provide(ShellLayer))
+      );
+      expect(read.log).toBe('second 2000 Seed\nfirst 1000 Seed');
+      expect(read.file).toBe('one');
+      expect(read.tree).toContain('100755 blob');
+      expect(read.names.split('\n')).toEqual(['a.txt', 'bin/run with space']);
     } finally {
       rmSync(repo, { recursive: true, force: true });
     }

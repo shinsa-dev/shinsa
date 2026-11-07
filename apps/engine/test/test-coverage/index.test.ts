@@ -8,6 +8,7 @@ import { GitLayer } from '../../src/git/layers.ts';
 import { JsonLogger } from '../../src/log/service.ts';
 import { ShellLayer } from '../../src/shell/layers.ts';
 import { type CoverageRequest, listCoverageDetections, TaskCoverage } from '../../src/test-coverage/index.ts';
+import { runFiles } from '../harness.ts';
 import { createWorktree } from '../helpers/git.ts';
 import { createGitRepo, createTempDir, git, until, writeFiles } from '../helpers/index.ts';
 import { createTask } from '../helpers/state.ts';
@@ -236,15 +237,17 @@ describe('measuring the changed lines', () => {
 });
 
 describe('the coverage each repository would measure', () => {
-  test('names the runner found in each repository, and none where there is none', () => {
+  test('names the runner found in each repository, and none where there is none', async () => {
     const bun = createTempDir();
     writeFiles(bun, { 'package.json': JSON.stringify({ scripts: { test: 'bun test' } }) });
     const bare = createTempDir();
     expect(
-      listCoverageDetections([
-        { id: 'bun', path: bun },
-        { id: 'bare', path: bare },
-      ])
+      await runFiles(
+        listCoverageDetections([
+          { id: 'bun', path: bun },
+          { id: 'bare', path: bare },
+        ])
+      )
     ).toEqual({
       bun: {
         tool: "Bun's test runner",

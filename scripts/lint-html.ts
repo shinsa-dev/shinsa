@@ -1,6 +1,9 @@
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
+import { BunRuntime } from '@effect/platform-bun';
+import { Console, Effect, FileSystem, Schema } from 'effect';
+import { CommandLayer } from './kit/command/index.ts';
+import { Command } from './kit/command/service.ts';
+import { reportFailure } from './kit/script.ts';
 
 const VOID_ELEMENTS = new Set([
   'area',
@@ -102,11 +105,24 @@ export function resolveHtmlReport(output: string, folder: string) {
   return Bun.stripANSI(output).replaceAll(`${folder}/`, '').replaceAll('.html.tsx', '.html');
 }
 
-export function runHtmlLint(files: string[], oxlint: string) {
-  const folder = mkdtempSync(join(tmpdir(), 'shinsa-lint-html-'));
-  const config = JSON.parse(readFileSync('.oxlintrc.json', 'utf8')) as { rules: Record<string, unknown> };
-  try {
-    writeFileSync(
+const OxlintConfig = Schema.fromJsonString(
+  Schema.Struct({ rules: Schema.Record(Schema.String, Schema.Unknown) })
+);
+
+const decodeOxlintConfig = Schema.decodeUnknownEffect(OxlintConfig);
+
+export class HtmlLintFailed extends Schema.TaggedError<HtmlLintFailed, { readonly brand: unique symbol }>()(
+  'HtmlLintFailed',
+  { message: Schema.String }
+) {}
+
+export const runHtmlLint = Effect.fn('HtmlLint.run')(
+  function* (files: readonly string[], oxlint: string) {
+    const fs = yield* FileSystem.FileSystem;
+    const command = yield* Command;
+    const folder = yield* fs.makeTempDirectoryScoped({ prefix: 'shinsa-lint-html-' });
+    const config = yield* decodeOxlintConfig(yield* fs.readFileString('.oxlintrc.json'));
+    yield* fs.writeFileString(
       join(folder, '.oxlintrc.json'),
       JSON.stringify({
         plugins: ['react', 'jsx-a11y'],
@@ -117,22 +133,25 @@ export function runHtmlLint(files: string[], oxlint: string) {
     );
     for (const file of files) {
       const target = join(folder, `${file}.tsx`);
-      mkdirSync(dirname(target), { recursive: true });
-      writeFileSync(target, serializeHtmlAsJsx(readFileSync(file, 'utf8')));
+      yield* fs.makeDirectory(dirname(target), { recursive: true });
+      yield* fs.writeFileString(target, serializeHtmlAsJsx(yield* fs.readFileString(file)));
     }
-    const result = Bun.spawnSync([oxlint, '-c', join(folder, '.oxlintrc.json'), folder], { cwd: folder });
-    const output = resolveHtmlReport(`${result.stdout.toString()}${result.stderr.toString()}`, folder);
-    return { ok: result.exitCode === 0, output };
-  } finally {
-    rmSync(folder, { recursive: true, force: true });
-  }
-}
+    const result = yield* command.run([oxlint, '-c', join(folder, '.oxlintrc.json'), folder], {
+      cwd: folder,
+    });
+    return { ok: result.code === 0, output: resolveHtmlReport(`${result.stdout}${result.stderr}`, folder) };
+  },
+  Effect.scoped,
+  Effect.orDie
+);
 
-export function lintHtml() {
-  const files = Bun.spawnSync(['git', 'ls-files', '*.html']).stdout.toString().split('\n').filter(Boolean);
-  const { ok, output } = runHtmlLint(files, join(process.cwd(), 'node_modules/.bin/oxlint'));
-  process.stdout.write(output);
-  return ok ? 0 : 1;
-}
+export const lintHtml = Effect.fn('HtmlLint.lint')(function* () {
+  const files = yield* (yield* Command).lines(['git', 'ls-files', '*.html']).pipe(Effect.orDie);
+  const { ok, output } = yield* runHtmlLint(files, join(process.cwd(), 'node_modules/.bin/oxlint'));
+  if (!ok) return yield* new HtmlLintFailed({ message: output });
+  if (output.trim()) yield* Console.log(output.trimEnd());
+});
 
-if (import.meta.main) process.exit(lintHtml());
+const main = lintHtml().pipe(reportFailure, Effect.provide(CommandLayer));
+
+if (import.meta.main) BunRuntime.runMain(main, { disableErrorReporting: true });

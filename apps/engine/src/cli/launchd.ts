@@ -10,6 +10,7 @@ import {
   SERVICE_MARKER,
   type ServiceRunner,
 } from '../instance/index.ts';
+import type { Shell } from '../shell/service.ts';
 import { APP_BUNDLE_ID, parseEngineJob, resolveEngineTarget } from './app.ts';
 
 type Env = Record<string, string | undefined>;
@@ -27,7 +28,7 @@ const XML_ESCAPES: Record<string, string> = {
 export interface LaunchdOptions {
   uid: number;
   launchctl: ServiceRunner;
-  ownsJob: (printed: string) => boolean;
+  ownsJob: (printed: string) => Effect.Effect<boolean, never, Shell>;
   inApp?: boolean;
   program?: string;
   home?: string;
@@ -105,7 +106,7 @@ export function createLaunchdService(options: LaunchdOptions): EngineService {
           : 'The engine is not set up yet. `shinsa start` sets it up.',
       });
     }
-    if (ownsJob(printed.output)) return;
+    if (yield* ownsJob(printed.output)) return;
     if (inApp) {
       return yield* new DomainError({
         code: 'engine_not_this_app',
@@ -130,7 +131,7 @@ export function createLaunchdService(options: LaunchdOptions): EngineService {
   const writeAgent = Effect.gen(function* () {
     const printed = yield* printJob;
     if (printed.ok && isAppJob(printed.output)) {
-      if (ownsJob(printed.output)) return;
+      if (yield* ownsJob(printed.output)) return;
       return yield* new DomainError({
         code: 'engine_beside_app',
         message:
@@ -150,7 +151,7 @@ export function createLaunchdService(options: LaunchdOptions): EngineService {
 
   const kick = Effect.gen(function* () {
     const printed = yield* printJob;
-    if (!printed.ok || !ownsJob(printed.output)) return false;
+    if (!printed.ok || !(yield* ownsJob(printed.output))) return false;
     return (yield* launchctl(['kickstart', target])).ok;
   });
 

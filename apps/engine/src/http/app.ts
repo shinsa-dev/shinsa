@@ -60,7 +60,7 @@ const EngineRoutes = Layer.mergeAll(ApiRoutes, WebhookRoutes, SignInRoutes, Tunn
 
 const EngineHandlerLayer = Layer.mergeAll(EngineRoutes, Ingress).pipe(
   Layer.provide(TunnelGate.layer),
-  Layer.provide(GitLayer.pipe(Layer.provide(ShellLayer))),
+  Layer.provide(GitLayer.pipe(Layer.provideMerge(ShellLayer))),
   Layer.provide(HttpServer.layerServices)
 );
 

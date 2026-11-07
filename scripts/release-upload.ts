@@ -154,14 +154,19 @@ const program = Effect.gen(function* () {
     canary: yield* requestPointer(bucket, resolveChannelKey('canary')),
   };
   const { version } = release.pointer;
-  yield* writeObject(bucket, resolveBuildKey(version, ZIP_NAME), Bun.file(zip), 'application/zip');
+  const bodies = yield* Effect.sync(() => ({
+    zip: Bun.file(zip),
+    blockmap: Bun.file(join(directory, BLOCKMAP_NAME)),
+    dmg: Bun.file(dmg),
+  }));
+  yield* writeObject(bucket, resolveBuildKey(version, ZIP_NAME), bodies.zip, 'application/zip');
   yield* writeObject(
     bucket,
     resolveBuildKey(version, BLOCKMAP_NAME),
-    Bun.file(join(directory, BLOCKMAP_NAME)),
+    bodies.blockmap,
     'application/octet-stream'
   );
-  yield* writeObject(bucket, release.pointer.key, Bun.file(dmg), 'application/x-apple-diskimage');
+  yield* writeObject(bucket, release.pointer.key, bodies.dmg, 'application/x-apple-diskimage');
   const channels = resolveChannelUpdates(release, current);
   yield* Effect.forEach(listPointerUploads(release, channels), (upload) =>
     writeObject(bucket, upload.key, upload.body, 'application/json')

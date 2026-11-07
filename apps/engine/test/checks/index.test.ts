@@ -2,10 +2,16 @@ import { describe, expect, test } from 'bun:test';
 import { existsSync, readFileSync, realpathSync } from 'node:fs';
 import { join } from 'node:path';
 import type { CheckToRun } from '@shinsa/core';
-import { Effect } from 'effect';
-import { type CheckRun, listFailedFiles, resolveInstallCommand, tailOutput } from '../../src/checks/index.ts';
+import { Effect, Option } from 'effect';
+import {
+  type CheckRun,
+  selectFailedFiles,
+  selectInstallCommand,
+  tailOutput,
+} from '../../src/checks/index.ts';
 import { CheckRunner } from '../../src/checks/runner/service.ts';
 import type { CheckOptions, CheckRoundOptions } from '../../src/checks/schema.ts';
+import { runFiles } from '../harness.ts';
 import { runGit } from '../helpers/git.ts';
 import { createTempDir, writeFiles } from '../helpers/index.ts';
 
@@ -304,15 +310,15 @@ describe('output and setup', () => {
     expect(output.endsWith('noise line 399 xxxxxxxxxxxxxxxxxxxx')).toBe(true);
   });
 
-  test('a failing test file is named relative to the checkout; other output names none', () => {
+  test('a failing test file is named relative to the checkout; other output names none', async () => {
     const dir = createDir();
     writeFiles(dir, { 'package.json': '{}', 'test/a.test.ts': '' });
     const output = 'bun test v1.4.4\ntest/a.test.ts:\n(fail) a > b\n 0 pass\n 1 fail';
-    expect(listFailedFiles(output, dir)).toEqual(['test/a.test.ts']);
-    expect(listFailedFiles('error TS2322', dir)).toBeNull();
+    expect(Option.getOrNull(await runFiles(selectFailedFiles(output, dir)))).toEqual(['test/a.test.ts']);
+    expect(Option.isNone(await runFiles(selectFailedFiles('error TS2322', dir)))).toBe(true);
   });
 
-  test('dependencies install with the lockfile’s package manager, and yarn is left to the agent', () => {
+  test('dependencies install with the lockfile’s package manager, and yarn is left to the agent', async () => {
     for (const [lockfile, install] of [
       ['bun.lock', ['bun', 'install']],
       ['pnpm-lock.yaml', ['pnpm', 'install', '--frozen-lockfile']],
@@ -321,7 +327,9 @@ describe('output and setup', () => {
     ] as const) {
       const dir = createDir();
       writeFiles(dir, { [lockfile]: '' });
-      expect(resolveInstallCommand(dir)).toEqual(install ? [...install] : null);
+      expect(Option.getOrNull(await runFiles(selectInstallCommand(dir)))).toEqual(
+        install ? [...install] : null
+      );
     }
   });
 });

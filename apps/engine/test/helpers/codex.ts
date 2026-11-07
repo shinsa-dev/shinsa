@@ -57,7 +57,7 @@ export class FakeCodex {
     this.env = { FAKE_CODEX_STATE: this.path, ...env };
     this.runtime = {
       resolveExecutable: resolveCodexExecutable().pipe(
-        Effect.provide(ProgramVersions.layer.pipe(Layer.provide(ShellLayer)))
+        Effect.provide(ProgramVersions.layer.pipe(Layer.provideMerge(ShellLayer)))
       ),
       env: this.env,
     };
@@ -86,8 +86,9 @@ export class FakeCodex {
   get log(): FakeCodexEntry[] {
     const path = `${this.path}.log`;
     if (!existsSync(path)) return [];
-    return readFileSync(path, 'utf8')
-      .split('\n')
+    const lines = readFileSync(path, 'utf8').split('\n');
+    return lines
+      .slice(0, -1)
       .filter(Boolean)
       .map((line) => JSON.parse(line) as FakeCodexEntry);
   }

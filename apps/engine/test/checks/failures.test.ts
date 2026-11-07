@@ -1,18 +1,27 @@
 import { describe, expect, test } from 'bun:test';
 import { realpathSync } from 'node:fs';
 import { join } from 'node:path';
+import { Option } from 'effect';
 import {
   type CheckFailure,
   describeFailureDiff,
-  listCheckFailures,
   resolveFailureDiff,
+  selectCheckFailures,
 } from '../../src/checks/failures.ts';
+import { runFiles } from '../harness.ts';
 import { createTempDir, writeFiles } from '../helpers/index.ts';
 
 const ROOT = '/work/task';
 
-function diffOf(now: string, onBase: string, root = ROOT) {
-  return resolveFailureDiff(listCheckFailures(now, root) ?? [], listCheckFailures(onBase, root) ?? []);
+async function listCheckFailures(output: string, root: string) {
+  return Option.getOrNull(await runFiles(selectCheckFailures(output, root)));
+}
+
+async function diffOf(now: string, onBase: string, root = ROOT) {
+  return resolveFailureDiff(
+    (await listCheckFailures(now, root)) ?? [],
+    (await listCheckFailures(onBase, root)) ?? []
+  );
 }
 
 function labelsOf(failures: readonly CheckFailure[] | null) {
@@ -22,11 +31,11 @@ function labelsOf(failures: readonly CheckFailure[] | null) {
 const ESC = String.fromCharCode(27);
 
 describe('reading the errors a check printed', () => {
-  test('tsc errors, plain or pretty, are keyed by file, code and message, never by line', () => {
+  test('tsc errors, plain or pretty, are keyed by file, code and message, never by line', async () => {
     const plain = 'src/a.ts(3,7): error TS2322: Type string is not assignable to type number.';
     const pretty = `${ESC}[96msrc/a.ts${ESC}[0m:${ESC}[93m40${ESC}[0m:${ESC}[93m1${ESC}[0m - ${ESC}[91merror${ESC}[0m${ESC}[90m TS2322: ${ESC}[0mType string is not assignable to type number.`;
-    const [first] = listCheckFailures(plain, ROOT) ?? [];
-    const [second] = listCheckFailures(pretty, ROOT) ?? [];
+    const [first] = (await listCheckFailures(plain, ROOT)) ?? [];
+    const [second] = (await listCheckFailures(pretty, ROOT)) ?? [];
     expect(first).toEqual({
       kind: 'type',
       file: 'src/a.ts',
@@ -34,11 +43,14 @@ describe('reading the errors a check printed', () => {
       label: 'src/a.ts: TS2322 Type string is not assignable to type number.',
     });
     expect(second?.key).toBe(first?.key);
-    const turbo = listCheckFailures('@acme/web:check-types: app/(auth)/page.tsx(1,1): error TS2304: x', ROOT);
+    const turbo = await listCheckFailures(
+      '@acme/web:check-types: app/(auth)/page.tsx(1,1): error TS2304: x',
+      ROOT
+    );
     expect(labelsOf(turbo)).toEqual(['app/(auth)/page.tsx: TS2304 x']);
   });
 
-  test('biome diagnostics take their rule and the first message line under the header', () => {
+  test('biome diagnostics take their rule and the first message line under the header', async () => {
     const output = [
       'src/a.ts:1:1 lint/style/useConst  FIXABLE  ━━━━━━━━━━━━',
       '',
@@ -53,7 +65,7 @@ describe('reading the errors a check printed', () => {
       '  × Ternaries never wrap awaited calls.',
       'src/d.ts:1:1 parse ━━━━━━━━━━━━',
     ].join('\n');
-    expect(labelsOf(listCheckFailures(output, ROOT))).toEqual([
+    expect(labelsOf(await listCheckFailures(output, ROOT))).toEqual([
       'src/a.ts: lint/style/useConst This let declares a variable that is only assigned once.',
       'src/b.ts: format',
       'src/c.ts: lint/suspicious/noDebugger This is an unexpected use of the debugger statement.',
@@ -62,7 +74,7 @@ describe('reading the errors a check printed', () => {
     ]);
   });
 
-  test('eslint’s stylish blocks, prettier’s list and any path:line diagnostic are read too', () => {
+  test('eslint’s stylish blocks, prettier’s list and any path:line diagnostic are read too', async () => {
     const output = [
       '/work/task/src/a.ts',
       "  3:7   error    'x' is assigned a value but never used  @typescript-eslint/no-unused-vars",
@@ -75,7 +87,7 @@ describe('reading the errors a check printed', () => {
       'http://localhost:5180 is ready',
       '✖ 2 problems (2 errors, 0 warnings)',
     ].join('\n');
-    expect(listCheckFailures(output, ROOT)?.map(({ kind, label }) => [kind, label])).toEqual([
+    expect((await listCheckFailures(output, ROOT))?.map(({ kind, label }) => [kind, label])).toEqual([
       ['lint', "src/a.ts: @typescript-eslint/no-unused-vars 'x' is assigned a value but never used"],
       ['lint', 'src/a.ts: Parsing error: Unexpected token'],
       ['lint', 'src/b.css: prettier'],
@@ -84,14 +96,14 @@ describe('reading the errors a check printed', () => {
     ]);
   });
 
-  test('output with no error Shinsa can name reads as nothing, so the failure is never compared', () => {
+  test('output with no error Shinsa can name reads as nothing, so the failure is never compared', async () => {
     expect(
-      listCheckFailures('Segmentation fault\nerror: script "lint" exited with code 139', ROOT)
+      await listCheckFailures('Segmentation fault\nerror: script "lint" exited with code 139', ROOT)
     ).toBeNull();
-    expect(listCheckFailures('', ROOT)).toBeNull();
+    expect(await listCheckFailures('', ROOT)).toBeNull();
   });
 
-  test('a test run is read by failing test names, each once', () => {
+  test('a test run is read by failing test names, each once', async () => {
     const root = realpathSync(createTempDir('shinsa-failures-'));
     writeFiles(root, { 'package.json': '{}', 'test/a.test.ts': '' });
     const output = [
@@ -102,7 +114,7 @@ describe('reading the errors a check printed', () => {
       ' 2 fail',
       'src/a.ts(3,7): error TS2322: ignored, the tests name the failure.',
     ].join('\n');
-    expect(listCheckFailures(output, root)).toEqual([
+    expect(await listCheckFailures(output, root)).toEqual([
       {
         kind: 'test',
         file: 'test/a.test.ts',
@@ -112,7 +124,7 @@ describe('reading the errors a check printed', () => {
     ]);
   });
 
-  test('jest and vitest failures are named by the tests under each FAIL line, or by the file alone', () => {
+  test('jest and vitest failures are named by the tests under each FAIL line, or by the file alone', async () => {
     const root = realpathSync(createTempDir('shinsa-failures-'));
     writeFiles(root, {
       'package.json': JSON.stringify({ devDependencies: { jest: '29' } }),
@@ -126,7 +138,7 @@ describe('reading the errors a check printed', () => {
       'FAIL test/b.test.js',
       'FAIL test/a.test.js > parser > reads open state',
     ].join('\n');
-    expect(labelsOf(listCheckFailures(jest, root))).toEqual([
+    expect(labelsOf(await listCheckFailures(jest, root))).toEqual([
       'test/a.test.js',
       'test/a.test.js › parser › reads merged state',
       'test/b.test.js',
@@ -136,7 +148,7 @@ describe('reading the errors a check printed', () => {
 });
 
 describe('comparing the errors with the base branch', () => {
-  test('errors that only moved lines are already on the base; a repeated one counts each time', () => {
+  test('errors that only moved lines are already on the base; a repeated one counts each time', async () => {
     const now = [
       'src/a.ts(40,1): error TS2322: Type string is not assignable.',
       'src/a.ts(52,1): error TS2322: Type string is not assignable.',
@@ -144,7 +156,7 @@ describe('comparing the errors with the base branch', () => {
     ].join('\n');
     const onBase =
       'src/a.ts(3,1): error TS2322: Type string is not assignable.\nsrc/c.ts(1,1): error TS1: gone';
-    const diff = diffOf(now, onBase);
+    const diff = await diffOf(now, onBase);
     expect(labelsOf(diff.known)).toEqual(['src/a.ts: TS2322 Type string is not assignable.']);
     expect(labelsOf(diff.added)).toEqual([
       'src/a.ts: TS2322 Type string is not assignable.',
@@ -155,8 +167,8 @@ describe('comparing the errors with the base branch', () => {
     );
   });
 
-  test('a base checkout’s absolute paths compare with the change’s relative ones', () => {
-    const diff = diffOf(
+  test('a base checkout’s absolute paths compare with the change’s relative ones', async () => {
+    const diff = await diffOf(
       'src/a.ts:3:1: oops',
       '/work/base/src/a.ts:9:1: oops\n/elsewhere/a.ts:1: oops',
       '/work/base'
@@ -165,14 +177,14 @@ describe('comparing the errors with the base branch', () => {
     expect(describeFailureDiff(diff)).toBe('1 error, all already on the base branch.');
   });
 
-  test('the summary names the kind of failure, mixed kinds as errors, and lists ten new ones at most', () => {
+  test('the summary names the kind of failure, mixed kinds as errors, and lists ten new ones at most', async () => {
     const lint = 'src/a.ts:1:1 lint/style/useConst ━━━━\n  ! Use const.';
-    expect(describeFailureDiff(diffOf(lint, ''))).toBe(
+    expect(describeFailureDiff(await diffOf(lint, ''))).toBe(
       '1 new lint error, none on the base branch:\n- src/a.ts: lint/style/useConst Use const.'
     );
     const many = Array.from({ length: 12 }, (_, index) => `src/f${index}.ts(1,1): error TS1: bad`).join('\n');
     const mixed = `${many}\nsrc/x.py:1: bad`;
-    const summary = describeFailureDiff(diffOf(mixed, 'src/x.py:1: bad'));
+    const summary = describeFailureDiff(await diffOf(mixed, 'src/x.py:1: bad'));
     expect(summary.split('\n')[0]).toBe('12 new errors, 1 already on the base branch:');
     expect(summary.endsWith('- src/f9.ts: TS1 bad\n- and 2 more')).toBe(true);
   });

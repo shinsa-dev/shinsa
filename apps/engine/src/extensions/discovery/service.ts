@@ -77,7 +77,7 @@ export class ExtensionDiscovery extends Context.Service<
         userHome: string,
         problems: string[]
       ) {
-        if (!existsSync(path)) return null;
+        if (!(yield* Effect.sync(() => existsSync(path)))) return null;
         return yield* Effect.try({
           try: (): unknown => Bun.TOML.parse(readFileSync(path, 'utf8')),
           catch: describeError,
@@ -92,9 +92,12 @@ export class ExtensionDiscovery extends Context.Service<
       });
 
       const selectInstallRoot = (entries: readonly unknown[]) =>
-        entries
-          .flatMap((entry) => Option.toArray(decodeInstall(entry)))
-          .find((entry) => existsSync(entry.installPath))?.installPath ?? null;
+        Effect.sync(
+          () =>
+            entries
+              .flatMap((entry) => Option.toArray(decodeInstall(entry)))
+              .find((entry) => existsSync(entry.installPath))?.installPath ?? null
+        );
 
       const listPlugins = Effect.fn('ExtensionDiscovery.listPlugins')(function* (paths: DiscoveryPaths) {
         const problems: string[] = [];
@@ -115,7 +118,7 @@ export class ExtensionDiscovery extends Context.Service<
         if (Option.isNone(installed)) return { plugins: [], problems };
         const plugins: ClaudePlugin[] = [];
         for (const [id, entries] of Object.entries(installed.value.plugins)) {
-          const root = selectInstallRoot(entries);
+          const root = yield* selectInstallRoot(entries);
           if (!root) continue;
           const manifest = yield* readJson(
             join(root, '.claude-plugin', 'plugin.json'),
@@ -160,12 +163,15 @@ export class ExtensionDiscovery extends Context.Service<
         return { servers, problems };
       });
 
-      const listEntries = (dir: string) => (existsSync(dir) ? readdirSync(dir) : []);
+      const listEntries = (dir: string) => Effect.sync(() => (existsSync(dir) ? readdirSync(dir) : []));
 
       const listSkills = Effect.fn('ExtensionDiscovery.listSkills')(function* (roots: readonly SkillRoot[]) {
+        const listed = yield* Effect.forEach(roots, (root) =>
+          Effect.map(listEntries(root.dir), (entries) => ({ root, entries }))
+        );
         return yield* Effect.sync(() =>
-          roots.flatMap((root) =>
-            listEntries(root.dir)
+          listed.flatMap(({ root, entries }) =>
+            entries
               .filter((entry) => !entry.startsWith('.'))
               .sort()
               .flatMap((entry) => {
@@ -177,20 +183,24 @@ export class ExtensionDiscovery extends Context.Service<
         );
       });
 
-      const listMarkdown = (dir: string): MarkdownFile[] =>
-        listEntries(dir)
-          .filter((entry) => entry.endsWith('.md') && !entry.startsWith('.'))
-          .sort()
-          .map((entry) => ({ entry: entry.slice(0, -3), text: readFileSync(join(dir, entry), 'utf8') }));
+      const listMarkdown = (dir: string) =>
+        Effect.flatMap(listEntries(dir), (entries) =>
+          Effect.sync((): MarkdownFile[] =>
+            entries
+              .filter((entry) => entry.endsWith('.md') && !entry.startsWith('.'))
+              .sort()
+              .map((entry) => ({ entry: entry.slice(0, -3), text: readFileSync(join(dir, entry), 'utf8') }))
+          )
+        );
 
       const readPluginFiles = Effect.fn('ExtensionDiscovery.readPluginFiles')(function* (
         plugin: ClaudePlugin
       ) {
-        return yield* Effect.sync(() => ({
+        return yield* Effect.all({
           agents: listMarkdown(join(plugin.root, 'agents')),
           commands: listMarkdown(join(plugin.root, 'commands')),
-          hooks: existsSync(join(plugin.root, 'hooks', 'hooks.json')),
-        }));
+          hooks: Effect.sync(() => existsSync(join(plugin.root, 'hooks', 'hooks.json'))),
+        });
       });
 
       return ExtensionDiscovery.of({ listPlugins, listServers, listSkills, readPluginFiles });
