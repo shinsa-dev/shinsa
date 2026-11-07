@@ -136,8 +136,8 @@ fields are 24, `Input` and `SelectTrigger` 26, one-line list and nav rows 28, ca
 and the ⌘K input 40. Primitives own their heights: never `h-*` on a control. Every control in one row shares one
 height.
 
-**Spacing.** Tailwind's 4px base, a closed scale where each step means one thing: `gap-px` title over its
-description (always) and adjacent icon buttons; `gap-1` popup list padding and icon to label in small controls;
+**Spacing.** Tailwind's 4px base, a closed scale where each step means one thing: a title over its
+description flush (no gap, always); `gap-px` adjacent icon buttons; `gap-1` popup list padding and icon to label in small controls;
 `gap-1.25` from a 20px icon slot to its text (8px from glyph to text); `gap-1.5` icon to label in default
 controls; `gap-2` icon to label in rows and controls in one set; `p-2.5` popover padding; `p-3` card inset;
 `p-4` dialog padding; `gap-6` section to section. The parent owns spacing, never a child's margin.
@@ -672,8 +672,8 @@ Every text in the app has a role. Size, weight, colour and line come from the ro
 | Role | Size / line | Weight | Colour | Owner |
 | --- | --- | --- | --- | --- |
 | Page title | `text-base` on a 20px line (`leading-tight`), `text-balance` | 450 | `fg-4` | `PageHeading` (`PAGE_TITLE`), Home's greeting |
-| Page description or count | `text-xs`, `max-w-2xl`, `text-pretty`, 1px under the title (`gap-px`) | 400 | `fg-2` | `PageHeading` (`PAGE_DESCRIPTION`) |
-| Task page heading | `text-base` medium title over the request as `text-xs` `fg-2` (two lines at most, `gap-px`) | 450 / 400 | `fg-4` / `fg-2` | task page header |
+| Page description or count | `text-xs`, `max-w-2xl`, `text-pretty`, directly under the title (no gap) | 400 | `fg-2` | `PageHeading` (`PAGE_DESCRIPTION`) |
+| Task page heading | `text-base` medium title over the request as `text-xs` `fg-2` (two lines at most, flush) | 450 / 400 | `fg-4` / `fg-2` | task page header |
 | Canvas section label | `text-2xs` on a 16px line (`leading-4`), in a 24px row (`h-6`), the count in normal weight `tabular-nums` 6px after it | 450 (count 400) | `fg-2` | `SectionLabel` |
 | Card header strip title | `text-xs` | 450 | `fg-4` | `CARD_HEADER` (`Panel`) |
 | Card title | inherits the card's size (`text-xs`), `leading-tighter` | 450 | `fg-4` | `CardTitle` |
@@ -688,13 +688,13 @@ Every text in the app has a role. Size, weight, colour and line come from the ro
 | Menu group label | `text-xs` | 450 | `fg-2` | `DropdownMenuLabel`, `SelectGroupLabel`, cmdk group heading |
 | Menu shortcut | `text-xs`, `tracking-widest`, pushed right (`ml-auto`) | 450 | `fg-2` | `DropdownMenuShortcut` |
 | Tab | `text-xs` | 450 (underline tabs: 400, `faux-medium` when selected) | `fg-2` at rest | `TabsTrigger` |
-| List row title / meta | `text-xs` / `text-2xs`, stacked with `gap-px` | 400 | `fg-4` / `fg-2` | `ListRow` (`LIST_ROW_TITLE`, `LIST_ROW_META`) |
+| List row title / meta | `text-xs` / `text-2xs`, stacked flush, with no gap | 400 | `fg-4` / `fg-2` | `ListRow` (`LIST_ROW_TITLE`, `LIST_ROW_META`) |
 | Row trailing meta (a time, a count) | `text-2xs` `tabular-nums` on a 20px line | 400 | `fg-2` | `ListRow` `trailing` |
 | Nav row (rail) | `text-xs` | 400 | `fg-3`; `fg-4` hovered or current | `NavItem` |
 | Badge | `text-2xs` | 450 | variant's `-text` or `fg-2` | `Badge` |
 | Keycap | `text-xs`, `font-sans` | 450 | `fg-2` | `Kbd` |
 | Tooltip | `text-2xs` on a 1.35 line | 400 | `fg-4` | `TooltipPopup` |
-| Info popover header | title over a `text-2xs` description, `gap-px` | 450 / 400 | `fg-4` / `fg-2` | `InfoHeader` |
+| Info popover header | title over a `text-2xs` description, flush | 450 / 400 | `fg-4` / `fg-2` | `InfoHeader` |
 | Inset note label | `text-2xs` | 450 | `fg-2` or the tone's `-text` | `InsetNote` |
 | Path or file name | `text-2xs`, truncated | 400 | inherits (usually `fg-2`) | `FilePath`, `PathRow` |
 | Code (fence) | mono `text-2xs`, `leading-relaxed`, `px-3.5 py-2.5` | 400 | `fg-4` | `CodeFence`, `CodeBlock` |
@@ -707,7 +707,7 @@ Rules:
 
 - Nothing inside a card is larger than its card title, except a state title.
 - The only sizes below 13px are `text-2xs` (12px) roles: meta, counts, badges, tooltips, code, section labels.
-- A title over its description is always `gap-px`, with no exceptions (page headings, list rows, popover headers, findings, steps). A title beside its description on one line is `gap-1.5` (6px).
+- A title over its description always sits flush, with no gap and no exceptions (page headings, list rows, popover headers, findings, steps). A title beside its description on one line is `gap-1.5` (6px).
 - A heading is `fg-4`; body text is `fg-3`; secondary text (descriptions, meta, hints, labels) is `fg-2`; `fg-1` is never text (Colour usage rules).
 
 ### Numerals
@@ -871,7 +871,7 @@ Spacing uses Tailwind's 4px base (`--spacing: 0.25rem`, so `p-3` is 12px and `ga
 | px | Class | Meaning in Shinsa |
 | --- | --- | --- |
 | 0 | `gap-0` | Fused parts that share one border |
-| 1 | `gap-px` | Title over its description, everywhere. Adjacent icon buttons in a row (like an input addon's). |
+| 1 | `gap-px` | Adjacent icon buttons in a row (like an input addon's). Never between a title and its description, which sit flush. |
 | 2 | `p-0.5`, `gap-0.5` | The padding of a tab track (`TabsList` default). `gap-0.5` is banned in the app except between the buttons of a `SectionLabel` action, which owns it. |
 | 4 | `gap-1`, `p-1` | Popup list padding (menus, selects, command, `HighlightList`). A list card's padding around its rows. Badge, `Kbd` and xs/sm button icon to label. Gap between tabs in a track. `SectionLabel` to its card. |
 | 5 | `gap-1.25` | A 20px icon slot to the title beside it (`ICON_SLOT_GAP`), which makes 8px from glyph to text |
@@ -937,7 +937,7 @@ Shinsa's controls are a step denser than a usual web app: 22 / 24 / 26 / 30. Pri
 | --- | --- | --- |
 | Menu / select / command row | 24 | `py-1` around a 16px line (`leading-4`), `pl-2`, `gap-1.5`, `rounded-item`, inside a `p-1` list |
 | List row, one line | 28 | `LIST_ROW` + `h-7 items-center`; `px-2.5`, or `px-1.5` with a leading tile; `gap-2`; `rounded-control` |
-| List row, two lines | ≈ 37 | `items-start pt-1.5 pb-1`: a `text-xs` `fg-4` title over a `text-2xs` `fg-2` meta line, `gap-px`; the row keeps 2px less under its text because a line already carries about 3px below its baseline |
+| List row, two lines | ≈ 36 | `items-start pt-1.5 pb-1`: a `text-xs` `fg-4` title over a `text-2xs` `fg-2` meta line, flush; the row keeps 2px less under its text because a line already carries about 3px below its baseline |
 | Nav row (rail) | 28 | `h-7`, `ps-1.5 pe-2.5`, `gap-2`, a 20px icon slot, `text-xs` `fg-3` |
 | Settings row | 40 minimum | `pl-2 pr-1.5`, `py-1` (so a wrapped line keeps 4px), text 14px from the card's left edge, control 12px from its right |
 | Card header band | 36 | `CARD_HEADER`: `h-9 bg-bg-a1 ps-3 pe-3 gap-1.25`, a 14px icon in a 20px slot on the 12px inset, 8px glyph to a `text-xs` medium `fg-4` title |

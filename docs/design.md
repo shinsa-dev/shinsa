@@ -510,7 +510,7 @@ Only these, and they win over anything below:
 11. **No focus states.** Nothing marks keyboard focus: no ring, outline, border recolour or wash
     (Shape & depth → No focus states). Focus rules below are paywall-next reference only.
 12. **The task page has one left edge and no details panel.** The heading is a `text-base` medium
-    title over the task's request as a `text-xs` `fg-2` description (`gap-px`, two lines at most;
+    title over the task's request as a `text-xs` `fg-2` description (flush, two lines at most;
     a long request expands on click), with the task view tabs at the end. The header carries no
     gate action: "Approve" alone never said whether it approved a plan, the changes or a merge.
     The decision lives on the Overview's first card, next to what it decides on. Its
@@ -883,7 +883,7 @@ Only these, and they win over anything below:
       `PreviewCard`. It opens on hover after 80ms, closes 120ms after the pointer leaves, sits
       8px from its trigger (bottom, start), and a click does nothing to it: it never toggles or
       sticks open. Real menus (priority, the task menu, focus, the queue button) stay click
-      dropdowns. Inside: `InfoHeader` (title over a `text-2xs` description, `gap-px`,
+      dropdowns. Inside: `InfoHeader` (title over a `text-2xs` description, flush,
       `px-3 py-2.5`), `InfoSection` (a hairline above, optional `text-2xs` title) and `InfoRow`
       (a 28px label/value row: icon and label left, value right, 16px minimum between them).
       Task lists inside one are `TaskPopoverRows` (`components/links/task.tsx`): glyph,
@@ -909,7 +909,7 @@ Only these, and they win over anything below:
     - **Page headings** (`components/layout/page/heading.tsx`): one `PageHeading` for Task, All tasks
       and Settings (Home's greeting uses its `PAGE_TITLE`): a `text-base` medium `fg-4` title on a
       20px line (`leading-tight`), the description or count `text-xs` `fg-2` directly under it
-      (`gap-px`), flush with the column's left edge.
+      with no gap, flush with the column's left edge.
     - **Canvas sections** (`components/layout/page/section-label.tsx`): a `SectionLabel` (`h-6`, `text-2xs`
       medium `fg-2` on a 16px line, the count in normal weight, `px-1`) 4px over its card, with an optional action at
       the right. Home's sections and every Settings group use it. The action's buttons sit 2px apart
@@ -1026,10 +1026,10 @@ Only these, and they win over anything below:
     - **Composers**: the task composer, Home's new-task box and the question's answer box share
       `COMPOSER_FIELD` (text 12px in, 10px from the top) and `COMPOSER_FOOTER` (6px around a
       28px `sm` control, no divider).
-    - **Title over description is `gap-px`**: page headings, card eyebrow over
-      title, list rows, activity rows, plan and phase steps, check rows, popover headers and
-      task rows, review findings, message links. The one exception is a tooltip's label over its detail
-      (`Hint`), which sits flush (`gap-0`). A title next to its description on one line
+    - **Title over description sits flush, with no gap**: page headings, card headers, card eyebrow over
+      title, list rows, activity rows, plan and phase steps, check rows, popover and dialog headers,
+      task rows, review findings, message links, settings rows and tooltips. The line height alone
+      separates them; never `gap-px` between a title and its description. A title next to its description on one line
       (⌘K rows, a section label and its count, "Waits on ‹task›") is 6px (`gap-1.5`).
     - **Numbered steps** are `StepNumber` (`components/layout/surface/step-number.tsx`): a 20px `bg-bg-a2` tile,
       `rounded-control-sm`, in the plan, What changed and the chat's plan card.
@@ -1302,7 +1302,7 @@ Only these, and they win over anything below:
       instead of widening the step past the track's clip. The step leaving is `inert` and goes when its slide ends.
       Under reduced motion the steps swap at once.
     - **Options** are one list card (`OptionList`, a `listbox`): a `Card` with a `HighlightList` inside, rows built
-      like Home's `ListRow` (28px for a label alone, label over its meaning `gap-px` when it has one, `text-xs` `fg-4`
+      like Home's `ListRow` (28px for a label alone, label over its meaning, flush, when it has one, `text-xs` `fg-4`
       over `text-2xs` `fg-2`), the recommended one with a quiet `sm` "Recommended" badge after its label, your answer
       marked with the accent `SelectedMark` at the row's end, centred on the whole row, as a select or menu marks the
       current value. The hover and the keyboard highlight are the menus' one surface, which slides to the row on the
@@ -1457,7 +1457,7 @@ Only these, and they win over anything below:
     - **Held up by another task**: under "Waits on ‹A›" the work card names the stalled leaf of
       the chain with its `TaskLink`: "Held up because ‹C› is waiting on you."
     - **Suggested tasks** is a `Panel` right under the now card; a suggested task's
-      row is title over why (`gap-px`) with, at the right, a ghost `sm` When to start select, then
+      row is title over why (flush) with, at the right, a ghost `sm` When to start select, then
       Dismiss (secondary) and Add (outline). The select offers Start now, After this task merges, Bundle
       with this task (`IconLayersThree`, while this task opens a pull request, is not finished and its
       engine announces `suggestion.bundle`) and Backlog (Home's When to start words,
@@ -3590,7 +3590,7 @@ toasts are the inverse, a `border` and no shadow.
 
 ### Gaps
 
-A title over its description is `gap-px`, but in a tooltip (`Hint`'s label over its detail), where it is 0. `gap-0.5` is banned in `apps/web/src`
+A title over its description sits flush, with no gap, everywhere (a tooltip's label over its detail too). `gap-0.5` is banned in `apps/web/src`
 (the lint rejects it): the next step up is `gap-1`. The one 2px gap is between
 the buttons of a section header, and `SectionLabel` owns it.
 

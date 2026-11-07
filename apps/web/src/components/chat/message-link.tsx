@@ -28,7 +28,7 @@ export function MessageLink({
       onClick={() => onOpen(run.id)}
       className={cn(
         INSET,
-        'group flex w-full min-w-0 cursor-pointer flex-col gap-px bg-card px-3 py-2.5 text-left hover:bg-bg-a1 active:bg-bg-a1',
+        'group flex w-full min-w-0 cursor-pointer flex-col bg-card px-3 py-2.5 text-left hover:bg-bg-a1 active:bg-bg-a1',
         className
       )}
     >

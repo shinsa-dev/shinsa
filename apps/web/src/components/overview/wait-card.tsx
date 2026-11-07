@@ -43,7 +43,7 @@ export function WaitCard({
       }
       footer={<TaskTrack task={task} />}
     >
-      <div className='flex flex-col gap-px text-xs'>
+      <div className='flex flex-col text-xs'>
         <InlineMarkdown text={monitor.notes} className='selectable text-fg-4' />
         <span className='text-2xs text-fg-2'>
           {describeCheckInCount(monitor)} ·{' '}

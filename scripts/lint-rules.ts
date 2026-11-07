@@ -100,7 +100,7 @@ export const CLASS_RULES: ClassRule[] = [
   {
     pattern: /(?:^|[\s:'"`])gap(?:-[xy])?-0\.5\b/,
     message:
-      'A 2px gap. A title over its description is gap-px, anything wider is gap-1 or more. The one 2px gap is between the buttons of a section header, and SectionLabel owns it',
+      'A 2px gap. A title over its description sits flush with no gap, anything wider is gap-1 or more. The one 2px gap is between the buttons of a section header, and SectionLabel owns it',
     roots: APP,
     allowedIn: 'apps/web/src/components/layout/page/section-label.tsx',
   },

@@ -96,7 +96,7 @@ function WatchdogRow({
   return (
     <li className='flex flex-col gap-2 py-2.5 first:pt-0 last:pb-0'>
       <div className='flex items-start gap-3'>
-        <div className='flex min-w-0 flex-1 flex-col gap-px text-xs'>
+        <div className='flex min-w-0 flex-1 flex-col text-xs'>
           <div className='flex min-w-0 items-baseline gap-x-2 max-sm:flex-wrap'>
             <span className='min-w-0 truncate leading-5 font-medium text-fg-4'>{watchdog.title}</span>
             <InfoPopover
