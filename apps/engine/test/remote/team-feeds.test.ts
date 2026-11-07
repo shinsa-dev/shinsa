@@ -487,6 +487,11 @@ function createHeldTask(id: string): TeamTask {
   return { owner: 'lee', machine: 'Desk', task: { id } } as unknown as TeamTask;
 }
 
+async function releaseWait(waits: (() => void)[]) {
+  await until('the fetch waits', () => waits.length > 0);
+  waits.shift()?.();
+}
+
 describe('keeping a teammate’s last list', () => {
   test('keeps it on disk, signed, and shows it after a restart while the machine is offline', async () => {
     const { feeds, laptop, restart } = await setUp();
@@ -574,7 +579,7 @@ describe('keeping a teammate’s last list', () => {
     const { feeds, laptop, viewWaits } = await setUp({ live: createFullLive(), now: () => now });
     await feeds.start();
     await until('the list arrives', () => feeds.snapshot().tasks.length === 2);
-    viewWaits.shift()?.();
+    await releaseWait(viewWaits);
     await until('the views are kept', async () => (await (await readKeptViews(laptop)).list()).length === 2);
     await laptop.store.update((file) => ({ ...file, enabled: false }));
     await laptop.publish();
@@ -587,7 +592,7 @@ describe('keeping a teammate’s last list', () => {
     const other = await setUp({ live: createFullLive() });
     await other.feeds.start();
     await until('the list arrives', () => other.feeds.snapshot().tasks.length === 2);
-    other.viewWaits.shift()?.();
+    await releaseWait(other.viewWaits);
     await until(
       'the views are kept',
       async () => (await (await readKeptViews(other.laptop)).list()).length === 2
@@ -974,7 +979,7 @@ describe('keeping a teammate’s full tasks', () => {
     await feeds.start();
     await until('the list arrives', () => feeds.snapshot().tasks.length === 2);
     expect(viewWaits).toHaveLength(1);
-    viewWaits.shift()?.();
+    await releaseWait(viewWaits);
     await until('both views are kept', async () => (await (await readKeptViews(laptop)).list()).length === 2);
     expect(await listKeptViewKinds(laptop, 'task-1')).toEqual(['view', 'file', 'body', 'end']);
     expect(await listKeptViewKinds(laptop, 'task-2')).toEqual(['view', 'file', 'body', 'end']);
@@ -982,7 +987,7 @@ describe('keeping a teammate’s full tasks', () => {
     stub.state.tasks['task-3'] = createTask({ id: 'task-3', repoId: 'repo-1', activity: [] });
     stub.notify();
     await until('the new task arrives', () => feeds.snapshot().tasks.length === 3);
-    viewWaits.shift()?.();
+    await releaseWait(viewWaits);
     await until(
       'the new view is kept',
       async () => (await (await readKeptViews(laptop)).list()).length === 3
@@ -995,7 +1000,7 @@ describe('keeping a teammate’s full tasks', () => {
     const { feeds, laptop, viewWaits } = await setUp({ live: createFullLive() });
     await feeds.start();
     await until('the list arrives', () => feeds.snapshot().tasks.length === 2);
-    viewWaits.shift()?.();
+    await releaseWait(viewWaits);
     await until('the views are kept', async () => (await (await readKeptViews(laptop)).list()).length === 2);
     await laptop.store.recordTeams([createTeam({ role: 'member', machines: [OFFLINE_STUDIO, LAPTOP] })]);
     await laptop.publish();
@@ -1020,7 +1025,7 @@ describe('keeping a teammate’s full tasks', () => {
     const { feeds, laptop, viewWaits } = await setUp({ live: createFullLive() });
     await feeds.start();
     await until('the list arrives', () => feeds.snapshot().tasks.length === 2);
-    viewWaits.shift()?.();
+    await releaseWait(viewWaits);
     await until('the views are kept', async () => (await (await readKeptViews(laptop)).list()).length === 2);
     await laptop.store.recordTeams([createTeam({ role: 'member', machines: [OFFLINE_STUDIO, LAPTOP] })]);
     await laptop.publish();
@@ -1042,9 +1047,9 @@ describe('keeping a teammate’s full tasks', () => {
       async () => (await (await readKeptViews(laptop)).list()).length === 1
     );
     expect(await listKeptViewKinds(laptop, 'task-1')).toEqual(['view']);
-    viewWaits.shift()?.();
+    await releaseWait(viewWaits);
     await until('the fetch starts its clock', () => viewWaits.length === 1);
-    viewWaits.shift()?.();
+    await releaseWait(viewWaits);
     expect(await (await readKeptViews(laptop)).selectEntry('team1', 'inst1', 'task-2')).toBeNull();
     await feeds.stop();
   });
@@ -1053,13 +1058,13 @@ describe('keeping a teammate’s full tasks', () => {
     const { feeds, laptop, stub, viewWaits } = await setUp({ live: createFullLive() });
     await feeds.start();
     await until('the list arrives', () => feeds.snapshot().tasks.length === 2);
-    viewWaits.shift()?.();
+    await releaseWait(viewWaits);
     await until('the views are kept', async () => (await (await readKeptViews(laptop)).list()).length === 2);
     stub.state.tasks['task-3'] = createTask({ id: 'task-3', repoId: 'repo-1', activity: [] });
     stub.notify();
     await until('the new task arrives', () => feeds.snapshot().tasks.length === 3);
     if (stub.state.projects.p1) stub.state.projects.p1.teamIds = [];
-    viewWaits.shift()?.();
+    await releaseWait(viewWaits);
     await until('the refused fetch is done', () => viewWaits.length === 0);
     expect(await (await readKeptViews(laptop)).selectEntry('team1', 'inst1', 'task-3')).toBeNull();
     if (stub.state.projects.p1) stub.state.projects.p1.teamIds = ['team1'];

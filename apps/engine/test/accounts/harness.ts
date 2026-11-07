@@ -290,13 +290,6 @@ export async function buildAccounts(options: AccountsHarnessOptions) {
   return harness;
 }
 
-export function buildAccountsNow(options: AccountsHarnessOptions) {
-  const scope = Effect.runSync(Scope.make());
-  const calls: ShellCall[] = [];
-  const context = Effect.runSync(Layer.buildWithScope(createAccountsLayer(options, calls), scope));
-  return openContext(context, scope, calls);
-}
-
 function openContext(context: Context.Context<AccountsContext>, scope: Scope.Closeable, calls: ShellCall[]) {
   const run = <A, E>(effect: Effect.Effect<A, E, AccountsContext>) => Effect.runPromiseWith(context)(effect);
   const runSync = <A, E>(effect: Effect.Effect<A, E, AccountsContext>) => Effect.runSyncWith(context)(effect);
