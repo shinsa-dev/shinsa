@@ -1454,9 +1454,11 @@ Only these, and they win over anything below:
       the chain with its `TaskLink`: "Held up because ‹C› is waiting on you."
     - **Suggested tasks** is a `Panel` right under the now card; a suggested task's
       row is title over why (`gap-px`) with, at the right, a ghost `sm` When to start select, then
-      Dismiss (secondary) and Add (outline). The select offers Start now and After this task merges
-      (Home's When to start words, `lib/tasks/suggestions.ts`), the agent's pick first, preselected and
-      marked Suggested; Add sends `waitsOnThis` from what is chosen. An Ask task
+      Dismiss (secondary) and Add (outline). The select offers Start now, After this task merges, Bundle
+      with this task (`IconLayersThree`, while this task opens a pull request, is not finished and its
+      engine announces `suggestion.bundle`) and Backlog (Home's When to start words,
+      `lib/tasks/suggestions.ts`), the agent's pick first, preselected and marked Suggested; Add sends
+      `waitsOnThis`, `stackOnThis` or `backlog` from what is chosen. An Ask task
       has no Summary panel, its Code tab browses the repository at its default branch (Files only, 32), and its progress track is Find the repository →
       Answer, or only Answer when it has no repository.
     - **Results live in the now card**, the way a plan and a review do (`ResultCard` in `now-card.tsx`, on

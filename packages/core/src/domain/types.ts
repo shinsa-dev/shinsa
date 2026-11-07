@@ -354,6 +354,7 @@ export interface TaskSuggestion {
   request: string;
   why: string;
   waitsOnThis: boolean;
+  stacksOnThis?: boolean;
   status: SuggestionStatus;
   createdTaskId: string | null;
   suggestedAt: number;

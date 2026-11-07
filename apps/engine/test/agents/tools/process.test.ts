@@ -122,7 +122,12 @@ describe('the process tools', () => {
     const { sent, call } = createCall();
     const reply = await handleProcessTool(
       'suggest_tasks',
-      { tasks: [{ title: 'Cache it', request: 'Cache the export.', why: 'It is slow.', after_this: true }] },
+      {
+        tasks: [
+          { title: 'Cache it', request: 'Cache the export.', why: 'It is slow.', after_this: true },
+          { title: 'Page it', request: 'Page the export.', why: 'It is long.', stack_on_this: true },
+        ],
+      },
       call
     );
     expect(reply).toBe('Suggested. The human decides whether to add them. Carry on with your step.');
@@ -132,6 +137,13 @@ describe('the process tools', () => {
       attemptId: 'a-1',
       suggestions: [
         { title: 'Cache it', request: 'Cache the export.', why: 'It is slow.', waitsOnThis: true },
+        {
+          title: 'Page it',
+          request: 'Page the export.',
+          why: 'It is long.',
+          waitsOnThis: false,
+          stacksOnThis: true,
+        },
       ],
     });
   });

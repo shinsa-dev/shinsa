@@ -1,6 +1,13 @@
 import { describe, expect, test } from 'bun:test';
 import type { SuggestedTask } from '../../src/index.ts';
-import { createHarness, createTask, type Harness, shipAndMerge } from '../harness.ts';
+import {
+  createHarness,
+  createTask,
+  type Harness,
+  registerRepo,
+  shipAndMerge,
+  verifySetup,
+} from '../harness.ts';
 
 function suggestion(title: string, waitsOnThis = false): SuggestedTask {
   return {
@@ -123,5 +130,83 @@ describe('suggested tasks', () => {
     expect(() =>
       harness.send({ type: 'suggestion.accept', taskId: cancelled, suggestionId: id, waitsOnThis: true })
     ).toThrow('That task was cancelled.');
+  });
+
+  test('an agent suggests a task bundled with this one, and accepting it stacks the new task on this one', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    suggest(harness, taskId, [
+      { ...suggestion('Split the export'), stacksOnThis: true },
+      suggestion('Retry the export'),
+    ]);
+    const [bundled, plain] = harness.task(taskId).suggestions ?? [];
+    if (!bundled || !plain) throw new Error('no suggestions');
+    expect(bundled).toMatchObject({ stacksOnThis: true, waitsOnThis: false });
+    expect(plain.stacksOnThis).toBeUndefined();
+    harness.send({
+      type: 'suggestion.accept',
+      taskId,
+      suggestionId: bundled.id,
+      waitsOnThis: false,
+      stackOnThis: true,
+    });
+    const created = harness.task(harness.task(taskId).suggestions?.[0]?.createdTaskId ?? '');
+    expect(created).toMatchObject({ stacksOn: [taskId], waitsOn: [], repoId: harness.task(taskId).repoId });
+  });
+
+  test('a bundled suggestion cannot also wait for the merge, nor bundle with a task that opens no pull request', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    expect(() =>
+      suggest(harness, taskId, [{ ...suggestion('Split the export', true), stacksOnThis: true }])
+    ).toThrow('Set stack_on_this or after_this, not both');
+    expect(harness.task(taskId).suggestions ?? []).toEqual([]);
+
+    const repoId = registerRepo(harness, 'answers');
+    harness.send({ type: 'task.create', request: 'How does the export retry?', repoId: null, mode: 'ask' });
+    const question = Object.keys(harness.state.tasks).at(-1) ?? '';
+    harness.send({
+      type: 'task.triage',
+      taskId: question,
+      title: 'How the export retries',
+      repoId,
+      size: 'small',
+      branch: 'ask/export-retry',
+      waitsOn: [],
+    });
+    verifySetup(harness, question);
+    expect(() =>
+      suggest(harness, question, [{ ...suggestion('Split the export'), stacksOnThis: true }])
+    ).toThrow('This task opens no pull request, so nothing can be bundled with it.');
+    suggest(harness, question, [suggestion('Split the export')]);
+    expect(harness.task(question).suggestions).toHaveLength(1);
+  });
+
+  test('accepting takes one way to start, and a finished task has nothing to bundle with', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    suggest(harness, taskId, [suggestion('Split the export')]);
+    const id = harness.task(taskId).suggestions?.[0]?.id ?? '';
+    for (const other of [{ waitsOnThis: true }, { waitsOnThis: false, backlog: true }]) {
+      expect(() =>
+        harness.send({ type: 'suggestion.accept', taskId, suggestionId: id, stackOnThis: true, ...other })
+      ).toThrow('Pick one way to start it');
+    }
+    expect(harness.task(taskId).suggestions?.[0]?.status).toBe('open');
+
+    const merged = createTask(harness, { request: 'Merged' });
+    suggest(harness, merged, [suggestion('After merge')]);
+    shipAndMerge(harness, merged);
+    const after = harness.task(merged).suggestions?.[0]?.id ?? '';
+    expect(() =>
+      harness.send({
+        type: 'suggestion.accept',
+        taskId: merged,
+        suggestionId: after,
+        waitsOnThis: false,
+        stackOnThis: true,
+      })
+    ).toThrow('That task is finished, so there is nothing to stack on.');
+    expect(harness.task(merged).suggestions?.[0]?.status).toBe('open');
   });
 });

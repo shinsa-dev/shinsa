@@ -278,6 +278,7 @@ export interface SuggestedTask {
   request: string;
   why: string;
   waitsOnThis: boolean;
+  stacksOnThis?: boolean;
   splitOff?: boolean;
 }
 

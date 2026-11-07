@@ -43,6 +43,7 @@ describe('process actions', () => {
     await acceptSuggestion(task, suggestion as never, 'now');
     await acceptSuggestion(task, { ...suggestion, waitsOnThis: false } as never, 'after');
     await acceptSuggestion(task, suggestion as never, 'backlog');
+    await acceptSuggestion(task, suggestion as never, 'bundle');
     await dismissSuggestion(task, suggestion as never);
     await keepSuggestion(task, suggestion as never);
     expect(spies.sent.mock.calls).toEqual([
@@ -57,6 +58,10 @@ describe('process actions', () => {
       [
         { type: 'suggestion.accept', taskId: 't', suggestionId: 's', waitsOnThis: false, backlog: true },
         'Added to the backlog.',
+      ],
+      [
+        { type: 'suggestion.accept', taskId: 't', suggestionId: 's', waitsOnThis: false, stackOnThis: true },
+        'Added to this task’s bundle.',
       ],
       [{ type: 'suggestion.dismiss', taskId: 't', suggestionId: 's' }, 'Dismissed.'],
       [{ type: 'suggestion.keep', taskId: 't', suggestionId: 's' }, 'Kept. The agent takes it now.'],

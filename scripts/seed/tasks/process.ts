@@ -707,6 +707,22 @@ function listLimitTasks({ paywall, kanna }: SeedRepoPair, exportBackoffPath: str
             suggestedAt: NOW - 25 * MINUTE,
           },
         },
+        {
+          type: 'task.suggested',
+          taskId: 'task-export-backoff',
+          suggestion: {
+            id: 'suggestion-export-retry-docs',
+            runId: 'task-export-backoff-run-1',
+            title: 'Document the export retry limits',
+            request: 'Describe the backoff, its retry limit and the give-up message in the export runbook.',
+            why: 'It is its own change, but it should ship with the backoff.',
+            waitsOnThis: false,
+            stacksOnThis: true,
+            status: 'open',
+            createdTaskId: null,
+            suggestedAt: NOW - 25 * MINUTE,
+          },
+        },
       ],
       gate: {
         type: 'review',

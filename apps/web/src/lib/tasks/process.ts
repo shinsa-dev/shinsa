@@ -22,6 +22,7 @@ export function dismissSilence(runId: string) {
 const SUGGESTION_ACCEPTED: Record<SuggestionStart, string> = {
   now: 'Added the task. It starts now.',
   after: 'Added. It starts after this merges.',
+  bundle: 'Added to this task’s bundle.',
   backlog: 'Added to the backlog.',
 };
 
@@ -32,6 +33,7 @@ export function acceptSuggestion(task: Task, suggestion: TaskSuggestion, start: 
       taskId: task.id,
       suggestionId: suggestion.id,
       waitsOnThis: start === 'after',
+      ...(start === 'bundle' ? { stackOnThis: true } : {}),
       ...(start === 'backlog' ? { backlog: true } : {}),
     },
     SUGGESTION_ACCEPTED[start]
