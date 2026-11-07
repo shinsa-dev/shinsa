@@ -805,15 +805,15 @@ describe('waking the engine', () => {
 });
 
 describe('the engine log', () => {
-  test('writes output to the log file and trims a long one to its last half', () => {
+  test('writes output to the log file and trims a long one to its last half', async () => {
     const dir = createTempDir();
     const path = join(dir, 'engine.log');
     writeFiles(dir, { 'engine.log': 'x'.repeat(100) });
-    Effect.runSync(trimEngineLog(path, 40));
+    await runFiles(trimEngineLog(path, 40));
     expect(Bun.file(path).size).toBe(20);
-    Effect.runSync(trimEngineLog(join(dir, 'missing.log'), 40));
+    await runFiles(trimEngineLog(join(dir, 'missing.log'), 40));
     const stream = { write: (() => true) as NodeJS.WriteStream['write'] } as NodeJS.WriteStream;
-    const close = Effect.runSync(writeOutputTo(path, [stream]));
+    const close = await runFiles(writeOutputTo(path, [stream]));
     stream.write('hello\n');
     stream.write(new TextEncoder().encode('bytes\n'));
     close();

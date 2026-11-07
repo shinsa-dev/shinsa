@@ -1,14 +1,14 @@
 import { describe, expect, test } from 'bun:test';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { Effect } from 'effect';
+import { Effect, type FileSystem } from 'effect';
 import { createLaunchdService, isAppJob, resolveLaunchAgent } from '../../src/cli/launchd.ts';
 import type { ServiceRunner } from '../../src/instance/index.ts';
 import type { Shell } from '../../src/shell/service.ts';
 import { createTempDir } from '../helpers/index.ts';
 import { testRuntime } from '../helpers/runtime.ts';
 
-function run<A, E>(effect: Effect.Effect<A, E, Shell>) {
+function run<A, E>(effect: Effect.Effect<A, E, Shell | FileSystem.FileSystem>) {
   return testRuntime.runPromise(effect);
 }
 

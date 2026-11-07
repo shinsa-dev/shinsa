@@ -483,9 +483,9 @@ export function adaptTeamFeeds(test: RemoteTest) {
     };
   return {
     service: feeds,
-    start: () => runSync(feeds.start),
-    stop: () => runSync(feeds.stop),
-    sync: () => runSync(feeds.sync),
+    start: () => test.runPromise(feeds.start),
+    stop: () => test.runPromise(feeds.stop),
+    sync: () => test.runPromise(feeds.sync),
     subscribe: observe(feeds.observe),
     subscribeHeld: observe(feeds.observeHeld),
     listHeld: (teamId: string) => runSync(feeds.listHeld(teamId)),

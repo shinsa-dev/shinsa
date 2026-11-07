@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { dirname } from 'node:path';
 import { Effect, Layer } from 'effect';
@@ -97,7 +97,7 @@ describe('ConfigStore', () => {
     expect((await store.config).roots).toEqual(['/code']);
     expect((await (await openStore(path)).config).roots).toEqual(['/code']);
     expect(statSync(path).mode & 0o777).toBe(0o600);
-    expect(existsSync(`${path}.writing-${process.pid}`)).toBe(false);
+    expect(readdirSync(join(path, '..')).filter((name) => name.includes('.writing-'))).toEqual([]);
   });
 
   test('keeps a broken config.json aside once and logs each problem once, from the read it is given', async () => {

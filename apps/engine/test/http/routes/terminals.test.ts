@@ -223,10 +223,13 @@ describe('services over HTTP', () => {
       'it failed',
       async () => (await runAsync(terminals.find(started.terminal.id))).info.exitCode === 4
     );
+    const failedAt = (await runAsync(terminals.find(started.terminal.id))).info.startedAt;
     const all = (await (
       await post('/api/services/start-all', { projectId }, null)
     ).json()) as TerminalsSnapshot;
-    expect(all.terminals.find((each) => each.id === started.terminal.id)?.status).toBe('running');
+    expect(all.terminals.find((each) => each.id === started.terminal.id)?.startedAt).toBeGreaterThan(
+      failedAt
+    );
     expect(await readCode(await post('/api/services/start-all', { projectId: 'nope' }, null))).toBe(
       'project_not_found'
     );

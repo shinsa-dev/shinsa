@@ -44,6 +44,7 @@ import {
 } from '../../src/remote/shares/schema.ts';
 import { readWorktreeFile as readWorktreeFileEffect } from '../../src/remote/shares/worktree-file.ts';
 import { EffectFailed } from '../../src/runtime/failures/schema.ts';
+import { runFiles } from '../harness.ts';
 import { createTestEvidence } from '../helpers/evidence.ts';
 import { createWorktree } from '../helpers/git.ts';
 import { createGitRepo, createTempDir, overrideEnv, until } from '../helpers/index.ts';
@@ -96,7 +97,7 @@ interface ShareWorktree {
 type Shares = ReturnType<typeof adaptShares>;
 
 function readWorktreeFile(worktree: string, path: string) {
-  return Effect.runPromise(readWorktreeFileEffect(worktree, path));
+  return runFiles(readWorktreeFileEffect(worktree, path));
 }
 
 const enterCode = <A>(run: () => Promise<A>) =>

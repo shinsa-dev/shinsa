@@ -7,6 +7,7 @@ import { Command, CommandLayer } from '../../../scripts/kit/command/index.ts';
 import { reportFailure } from '../../../scripts/kit/script.ts';
 import { resolveBuildFolder, resolveBuildTarget } from '../src/instance/targets.ts';
 import { resolveStateVersion } from '../src/store/snapshot/version.ts';
+import { bundle } from './bundle.ts';
 import { COMMIT_PATTERN, EngineBuildFailed, SdkPackage } from './schema.ts';
 
 const engineDir = resolve(import.meta.dirname, '..');
@@ -39,7 +40,7 @@ const compile = Effect.fn('EngineBuild.compile')(function* (
   const failed = (logs: string) => new EngineBuildFailed({ message: `Could not compile ${name}:\n${logs}` });
   const result = yield* Effect.tryPromise({
     try: () =>
-      Bun.build({
+      bundle({
         entrypoints: [entry],
         compile: { target, outfile: join(outDir, 'bin', name) },
         define,

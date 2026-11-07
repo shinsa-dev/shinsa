@@ -191,8 +191,9 @@ describe('services over HTTP', () => {
       'it failed',
       async () => (await runAsync(terminals.find(started.terminal.id))).info.exitCode === 4
     );
+    const failedAt = (await runAsync(terminals.find(started.terminal.id))).info.startedAt;
     await post('/api/services/start-all', { projectId }, null);
-    expect((await runAsync(terminals.find(started.terminal.id))).info.status).toBe('running');
+    expect((await runAsync(terminals.find(started.terminal.id))).info.startedAt).toBeGreaterThan(failedAt);
 
     const removed = (await (
       await post('/api/services/remove', { ids: [service.id] })

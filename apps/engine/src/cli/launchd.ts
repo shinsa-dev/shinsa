@@ -1,15 +1,17 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { DomainError, resolveEngineLabel } from '@shinsa/core';
-import { Effect } from 'effect';
+import { Effect, FileSystem } from 'effect';
+import { selectText } from '../files/probe.ts';
 import {
   type EngineService,
   runServiceCommand,
   SERVICE_CARRIED_ENV,
   SERVICE_MARKER,
+  ServiceCommandFailed,
   type ServiceRunner,
 } from '../instance/index.ts';
+import { describeError } from '../log/redact.ts';
 import type { Shell } from '../shell/service.ts';
 import { APP_BUNDLE_ID, parseEngineJob, resolveEngineTarget } from './app.ts';
 
@@ -139,13 +141,14 @@ export function createLaunchdService(options: LaunchdOptions): EngineService {
       });
     }
     const agent = resolveLaunchAgent(label, program, env);
-    const written = yield* Effect.sync(() => (existsSync(path) ? readFileSync(path, 'utf8') : null));
-    if (printed.ok && written === agent) return;
+    const fs = yield* FileSystem.FileSystem;
+    const written = yield* selectText(path);
+    if (printed.ok && written._tag === 'Some' && written.value === agent) return;
     if (printed.ok) yield* run(['bootout', target]);
-    yield* Effect.sync(() => {
-      mkdirSync(dirname(path), { recursive: true });
-      writeFileSync(path, agent);
-    });
+    yield* fs.makeDirectory(dirname(path), { recursive: true }).pipe(
+      Effect.andThen(fs.writeFileString(path, agent)),
+      Effect.mapError((error) => new ServiceCommandFailed({ message: describeError(error) }))
+    );
     yield* run(['bootstrap', `gui/${uid}`, path]);
   });
 

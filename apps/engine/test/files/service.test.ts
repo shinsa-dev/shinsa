@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Effect, Option, Schema } from 'effect';
 import { JsonFile } from '../../src/files/service.ts';
@@ -38,7 +38,15 @@ describe('JsonFile', () => {
     expect(await readValue(path)).toEqual(Option.some({ count: 2 }));
     expect(readFileSync(path, 'utf8')).toBe('{\n  "count": 2\n}\n');
     expect(statSync(path).mode & 0o777).toBe(0o600);
-    expect(existsSync(`${path}.writing-${process.pid}`)).toBe(false);
+    expect(readdirSync(join(path, '..'))).toEqual(['counter.json']);
+  });
+
+  test('two writers of one file at once each finish, and leave no staging file behind', async () => {
+    const dir = createTempDir();
+    const path = join(dir, 'counter.json');
+    await Promise.all(Array.from({ length: 8 }, (_, count) => writeJsonFile(path, { count })));
+    expect(readdirSync(dir)).toEqual(['counter.json']);
+    expect(Option.isSome(await readValue(path))).toBe(true);
   });
 
   test('text that is not JSON, or JSON that breaks the schema, is unreadable with its reason', async () => {

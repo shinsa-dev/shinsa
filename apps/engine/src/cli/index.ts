@@ -1,8 +1,7 @@
-import { closeSync, mkdirSync, openSync, readFileSync, statSync, writeFileSync, writeSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { DomainError } from '@shinsa/core';
-import { Cause, Duration, Effect, Exit, Fiber, FileSystem } from 'effect';
+import { Cause, Duration, Effect, Exit, Fiber, FileSystem, Option } from 'effect';
 import { flow } from 'effect/Function';
 import { resolveKeychainAccount } from '../accounts/paths.ts';
 import { resolveServerAddress } from '../config/index.ts';
@@ -40,6 +39,7 @@ import { createTask, openApp, printStatus, readArgs } from './commands.ts';
 import { printVersion, restartEngine, startEngine, stopEngine, waitFor, readHealth } from './engine.ts';
 import { CLI_COMMANDS, describeCliUsage, describeHelp, describeHelpAll, selectCliCommand } from './help.ts';
 import { createLaunchdService } from './launchd.ts';
+import { redirectOutput } from './log-file.ts';
 import { ENGINE_LOG, printLogs } from './logs.ts';
 import {
   CliFailed,
@@ -176,34 +176,25 @@ export const stopEngineFiber = Effect.fn('Cli.stopEngineFiber')(function* <E>(
   yield* Effect.sync(() => exit(1));
 });
 
-export const trimEngineLog = Effect.fn('Cli.trimEngineLog')(function* (
-  path: string,
-  maxBytes: number = ENGINE_LOG_MAX_BYTES
-) {
-  yield* Effect.try({
-    try: () => {
-      if (statSync(path).size <= maxBytes) return;
-      const text = readFileSync(path);
-      writeFileSync(path, text.subarray(text.length - Math.floor(maxBytes / 2)));
-    },
-    catch: (error) => new CliFailed({ message: describeError(error) }),
-  }).pipe(Effect.ignore);
-});
+export const trimEngineLog = Effect.fn('Cli.trimEngineLog')(
+  function* (path: string, maxBytes: number = ENGINE_LOG_MAX_BYTES) {
+    const fs = yield* FileSystem.FileSystem;
+    const info = yield* Effect.option(fs.stat(path));
+    if (Option.isNone(info) || Number(info.value.size) <= maxBytes) return;
+    const text = yield* fs.readFile(path);
+    yield* fs.writeFile(path, text.subarray(text.length - Math.floor(maxBytes / 2)));
+  },
+  (trimmed) => Effect.ignore(trimmed)
+);
 
 export const writeOutputTo = Effect.fn('Cli.writeOutputTo')(function* (
   path: string,
   streams: NodeJS.WriteStream[] = [process.stdout, process.stderr]
 ) {
   yield* trimEngineLog(path);
-  return yield* Effect.sync(() => {
-    const fd = openSync(path, 'a');
-    for (const stream of streams) {
-      stream.write = ((chunk: string | Uint8Array) => {
-        writeSync(fd, typeof chunk === 'string' ? Buffer.from(chunk) : chunk);
-        return true;
-      }) as typeof stream.write;
-    }
-    return () => closeSync(fd);
+  return yield* Effect.try({
+    try: () => redirectOutput(path, streams),
+    catch: (error) => new CliFailed({ message: describeError(error) }),
   });
 });
 
@@ -219,7 +210,9 @@ const startEngineProcess = Effect.fn('Cli.startEngineProcess')(function* (
   });
   const config = yield* Effect.orDie(Effect.provide(EngineConfig, EngineConfig.layer(env, bundle)));
   if (byService && bundle) {
-    yield* Effect.sync(() => mkdirSync(config.dataDir, { recursive: true }));
+    yield* (yield* FileSystem.FileSystem)
+      .makeDirectory(config.dataDir, { recursive: true })
+      .pipe(Effect.mapError((error) => new CliFailed({ message: describeError(error) })));
     yield* writeOutputTo(join(config.dataDir, ENGINE_LOG));
   }
   if (isTerminal()) {
@@ -239,11 +232,12 @@ const startEngineProcess = Effect.fn('Cli.startEngineProcess')(function* (
   }
   const engine = yield* Effect.forkChild(
     runEngineLayer(config, { byService }).pipe(
-      Effect.mapError((error) =>
-        error._tag === 'LogVersionError' || error._tag === 'PortInUse'
+      Effect.mapError((error) => {
+        if (error._tag === 'PlatformError') return new CliFailed({ message: describeError(error) });
+        return error._tag === 'LogVersionError' || error._tag === 'PortInUse'
           ? new CliFailed({ message: error.message })
-          : error
-      )
+          : error;
+      })
     )
   );
   return yield* Fiber.join(engine).pipe(Effect.onInterrupt(() => stopEngineFiber(engine, exit)));

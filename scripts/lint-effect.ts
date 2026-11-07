@@ -76,9 +76,11 @@ const SYNC_IO_MODULES = new Set([
 const BUN_IO = new Set(['spawn', 'spawnSync', 'file', 'write', 'which', 'build']);
 
 export const SYNC_IO_EXEMPT = new Set([
+  'apps/engine/scripts/bundle.ts',
   'apps/engine/src/agents/providers/claude/process/spawn.ts',
   'apps/engine/src/agents/providers/codex/client/spawn.ts',
   'apps/engine/src/agents/transcripts/file.ts',
+  'apps/engine/src/cli/log-file.ts',
   'apps/engine/src/eunoe/files.ts',
   'apps/engine/src/git/blobs/spawn.ts',
   'apps/engine/src/store/evidence/image-file.ts',

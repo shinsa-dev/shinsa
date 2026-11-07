@@ -1,4 +1,4 @@
-import { Effect, Layer } from 'effect';
+import { Effect, type FileSystem, Layer } from 'effect';
 import type { JsonFile } from '../../src/files/service.ts';
 import { JsonLogger } from '../../src/log/service.ts';
 import type { HeldTeamList } from '../../src/remote/team-snapshots/schema.ts';
@@ -13,7 +13,7 @@ import { JsonFileLayer } from '../helpers/files.ts';
 
 const files = Layer.merge(JsonFileLayer, JsonLogger);
 
-function runPromise<A, E>(effect: Effect.Effect<A, E, JsonFile>) {
+function runPromise<A, E>(effect: Effect.Effect<A, E, JsonFile | FileSystem.FileSystem>) {
   return Effect.runPromise(effect.pipe(Effect.provide(files)));
 }
 

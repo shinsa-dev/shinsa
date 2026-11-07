@@ -317,7 +317,7 @@ describe('watching teammates’ machines', () => {
     const { feeds, sockets, plane } = await setUp();
     const changes: number[] = [];
     const unsubscribe = feeds.subscribe(() => changes.push(1));
-    feeds.start();
+    await feeds.start();
     await until('the list arrives', () => feeds.snapshot().tasks.length === 2);
     expect(sockets.map((socket) => [socket.url, socket.origin])).toEqual([
       ['wss://t-inst1.shinsa.dev/team?token=t', plane.origin],
@@ -342,14 +342,14 @@ describe('watching teammates’ machines', () => {
     unsubscribe();
     feeds.subscribeHeld(() => undefined)();
     const heard = changes.length;
-    feeds.sync();
+    await feeds.sync();
     expect(changes).toHaveLength(heard);
-    feeds.stop();
+    await feeds.stop();
   });
 
   test('follows the teammate’s machine as it changes, and keeps its last list while it is offline', async () => {
     const { feeds, stub, laptop, sockets } = await setUp();
-    feeds.start();
+    await feeds.start();
     await until('the list arrives', () => feeds.snapshot().tasks.length === 2);
     stub.state.tasks['task-3'] = createTask({ id: 'task-3', repoId: 'repo-1', activity: [] });
     stub.notify();
@@ -372,12 +372,12 @@ describe('watching teammates’ machines', () => {
     await laptop.publish();
     await until('it connects again', () => feeds.snapshot().machines[0]?.status === 'live');
     expect(sockets).toHaveLength(2);
-    feeds.stop();
+    await feeds.stop();
   });
 
   test('tries again after a dropped channel, and starts over once live', async () => {
     const { feeds, sockets, waits } = await setUp();
-    feeds.start();
+    await feeds.start();
     await until('the list arrives', () => feeds.snapshot().tasks.length === 2);
     expect(feeds.snapshot().machines[0]?.presence).toEqual([
       { userId: MONA.id, status: 'away', seenAt: null },
@@ -390,12 +390,12 @@ describe('watching teammates’ machines', () => {
     waits.shift()?.();
     await until('it is live again', () => feeds.snapshot().machines[0]?.status === 'live');
     expect(sockets).toHaveLength(2);
-    feeds.stop();
+    await feeds.stop();
   });
 
   test('tries a refusing machine again only after a long wait, and at once with a new key', async () => {
     const { feeds, laptop, sockets, waits } = await setUp({ watcherKey: OTHER_KEY });
-    feeds.start();
+    await feeds.start();
     await until('it is refused', () => feeds.snapshot().machines[0]?.status === 'refused');
     expect(listMachineStatus(feeds)).toEqual([['inst1', 'refused', TEAM_REFUSALS.mismatch]]);
     expect(feeds.listGrants()).toEqual([]);
@@ -407,22 +407,22 @@ describe('watching teammates’ machines', () => {
     await laptop.store.upsertTeamKey(createKey());
     await laptop.publish();
     await until('it is live with the new key', () => feeds.snapshot().tasks.length === 2);
-    feeds.stop();
+    await feeds.stop();
   });
 
   test('is refused when app.shinsa.dev says the machine is not in the team', async () => {
     const { feeds, plane } = await setUp();
     plane.answers.set(CONNECT_PATH, () => refuse(NotFound));
-    feeds.start();
+    await feeds.start();
     await until('it is refused', () => feeds.snapshot().machines[0]?.status === 'refused');
     expect(listMachineStatus(feeds)).toEqual([['inst1', 'refused', TEAM_FEED_REFUSED]]);
-    feeds.stop();
+    await feeds.stop();
   });
 
   test('a new member refused before the teammate’s machine heard of them gets in on the next try', async () => {
     const { feeds, plane, waits } = await setUp();
     plane.answers.set(CONNECT_PATH, () => refuse(NotFound));
-    feeds.start();
+    await feeds.start();
     await until('it is refused', () => feeds.snapshot().machines[0]?.status === 'refused');
     plane.answers.set(CONNECT_PATH, () =>
       Response.json({ url: 'wss://t-inst1.shinsa.dev/team?token=t', expiresAt: 1 })
@@ -430,28 +430,28 @@ describe('watching teammates’ machines', () => {
     waits.shift()?.();
     await until('it is live', () => feeds.snapshot().tasks.length === 2);
     expect(listMachineStatus(feeds)).toEqual([['inst1', 'live', null]]);
-    feeds.stop();
+    await feeds.stop();
   });
 
   test('waits and tries again when app.shinsa.dev cannot be reached', async () => {
     const { feeds, plane, waits } = await setUp();
     plane.answers.set(CONNECT_PATH, () => new Response('down', { status: 502 }));
-    feeds.start();
+    await feeds.start();
     await until('it waits', () => waits.length === 1);
     expect(listMachineStatus(feeds)).toEqual([['inst1', 'offline', TEAM_FEED_OFFLINE]]);
-    feeds.stop();
+    await feeds.stop();
     expect(waits).toEqual([]);
   });
 
   test('watches nothing without remote access, a key or a pairing', async () => {
     const off = await setUp({ watcherFile: { enabled: false } });
-    off.feeds.start();
+    await off.feeds.start();
     expect(off.feeds.snapshot()).toEqual({ machines: [], tasks: [] });
     const keyless = await setUp({ watcherFile: { teamKeys: [] } });
-    keyless.feeds.start();
+    await keyless.feeds.start();
     expect(keyless.feeds.snapshot().machines).toEqual([]);
     const { feeds, laptop } = await setUp();
-    feeds.start();
+    await feeds.start();
     await until('the list arrives', () => feeds.snapshot().tasks.length === 2);
     await laptop.store.removeTeam('team1');
     await laptop.publish();
@@ -490,41 +490,41 @@ function createHeldTask(id: string): TeamTask {
 describe('keeping a teammate’s last list', () => {
   test('keeps it on disk, signed, and shows it after a restart while the machine is offline', async () => {
     const { feeds, laptop, restart } = await setUp();
-    feeds.start();
+    await feeds.start();
     await until('the list arrives', () => feeds.snapshot().tasks.length === 2);
     const kept = readKeptFile(resolveKeptPath(laptop));
     expect(kept?.lists.map((list) => [list.teamId, list.instanceId, list.updatedAt])).toEqual([
       ['team1', 'inst1', 50],
     ]);
     expect(kept?.lists[0]?.snapshot?.signature).toEqual(expect.any(String));
-    feeds.stop();
+    await feeds.stop();
     await laptop.store.recordTeams([createTeam({ role: 'member', machines: [OFFLINE_STUDIO, LAPTOP] })]);
     const restarted = await restart({ now: () => 60 });
-    restarted.start();
+    await restarted.start();
     expect(restarted.snapshot().machines).toEqual([
       expect.objectContaining({ instanceId: 'inst1', status: 'offline', updatedAt: 50 }),
     ]);
     expect(restarted.snapshot().tasks).toHaveLength(2);
     expect(restarted.listHeld('team1')).toHaveLength(1);
     expect(restarted.listHeld('other')).toEqual([]);
-    restarted.stop();
+    await restarted.stop();
   });
 
   test('drops it after 30 days, and when the team key changes', async () => {
     const { feeds, laptop, restart } = await setUp();
-    feeds.start();
+    await feeds.start();
     await until('the list arrives', () => feeds.snapshot().tasks.length === 2);
-    feeds.stop();
+    await feeds.stop();
     await laptop.store.recordTeams([createTeam({ role: 'member', machines: [OFFLINE_STUDIO, LAPTOP] })]);
     const late = await restart({ now: () => 51 + TEAM_SNAPSHOT_TTL_MS });
-    late.start();
+    await late.start();
     expect(late.snapshot().tasks).toEqual([]);
     expect(late.snapshot().machines[0]?.updatedAt).toBeUndefined();
     expect(readKeptFile(resolveKeptPath(laptop))).toBeNull();
-    late.stop();
+    await late.stop();
     let now = 60;
     const aging = await setUp({ now: () => now });
-    aging.feeds.start();
+    await aging.feeds.start();
     await until('the list arrives', () => aging.feeds.snapshot().tasks.length === 2);
     await aging.laptop.store.recordTeams([
       createTeam({ role: 'member', machines: [OFFLINE_STUDIO, LAPTOP] }),
@@ -534,9 +534,9 @@ describe('keeping a teammate’s last list', () => {
     now = 51 + TEAM_SNAPSHOT_TTL_MS;
     expect(aging.feeds.snapshot().tasks).toEqual([]);
     expect(aging.feeds.listHeld('team1')).toEqual([]);
-    aging.feeds.stop();
+    await aging.feeds.stop();
     const again = await setUp();
-    again.feeds.start();
+    await again.feeds.start();
     await until('the list arrives', () => again.feeds.snapshot().tasks.length === 2);
     await again.laptop.store.recordTeams([
       createTeam({ role: 'member', machines: [OFFLINE_STUDIO, LAPTOP] }),
@@ -551,7 +551,7 @@ describe('keeping a teammate’s last list', () => {
 
   test('drops it when the machine leaves the team or this machine leaves it, and keeps it while remote access is paused', async () => {
     const { feeds, laptop } = await setUp();
-    feeds.start();
+    await feeds.start();
     await until('the list arrives', () => feeds.snapshot().tasks.length === 2);
     await laptop.store.update((file) => ({ ...file, enabled: false }));
     await laptop.publish();
@@ -561,18 +561,18 @@ describe('keeping a teammate’s last list', () => {
     await laptop.publish();
     expect(readKeptFile(resolveKeptPath(laptop))).toBeNull();
     const other = await setUp();
-    other.feeds.start();
+    await other.feeds.start();
     await until('the list arrives', () => other.feeds.snapshot().tasks.length === 2);
     await other.laptop.store.removeTeam('team1');
     await other.laptop.publish();
     expect(readKeptFile(resolveKeptPath(other.laptop))).toBeNull();
-    other.feeds.stop();
+    await other.feeds.stop();
   });
 
   test('drops every copy and full task once this machine is unpaired, and expired ones while paused', async () => {
     let now = 60;
     const { feeds, laptop, viewWaits } = await setUp({ live: createFullLive(), now: () => now });
-    feeds.start();
+    await feeds.start();
     await until('the list arrives', () => feeds.snapshot().tasks.length === 2);
     viewWaits.shift()?.();
     await until('the views are kept', async () => (await (await readKeptViews(laptop)).list()).length === 2);
@@ -583,9 +583,9 @@ describe('keeping a teammate’s last list', () => {
     await laptop.publish();
     expect(readKeptFile(resolveKeptPath(laptop))).toBeNull();
     expect(await (await readKeptViews(laptop)).list()).toEqual([]);
-    feeds.stop();
+    await feeds.stop();
     const other = await setUp({ live: createFullLive() });
-    other.feeds.start();
+    await other.feeds.start();
     await until('the list arrives', () => other.feeds.snapshot().tasks.length === 2);
     other.viewWaits.shift()?.();
     await until(
@@ -602,12 +602,12 @@ describe('keeping a teammate’s last list', () => {
     await other.laptop.publish();
     expect(readKeptFile(resolveKeptPath(other.laptop))).toBeNull();
     expect(await (await readKeptViews(other.laptop)).list()).toEqual([]);
-    other.feeds.stop();
+    await other.feeds.stop();
   });
 
   test('drops it when the teammate’s machine refuses this one', async () => {
     const { feeds, laptop, plane, sockets, waits } = await setUp();
-    feeds.start();
+    await feeds.start();
     await until('the list arrives', () => feeds.snapshot().tasks.length === 2);
     plane.answers.set(CONNECT_PATH, () => refuse(NotFound));
     sockets[0]?.drop();
@@ -617,7 +617,7 @@ describe('keeping a teammate’s last list', () => {
     expect(feeds.snapshot().tasks).toEqual([]);
     expect(feeds.listHeld('team1')).toEqual([]);
     expect(readKeptFile(resolveKeptPath(laptop))).toBeNull();
-    feeds.stop();
+    await feeds.stop();
   });
 
   test('takes an offline machine’s list from a teammate only when that machine’s own key signed it', async () => {
@@ -652,7 +652,7 @@ describe('keeping a teammate’s last list', () => {
     });
     const heard: number[] = [];
     const stopHearing = feeds.subscribeHeld(() => heard.push(1));
-    feeds.start();
+    await feeds.start();
     await until('the kept list is taken', () =>
       feeds.snapshot().tasks.some((task) => task.instanceId === 'inst3')
     );
@@ -671,7 +671,7 @@ describe('keeping a teammate’s last list', () => {
         ?.lists.map((list) => list.instanceId)
         .sort()
     ).toEqual(['inst1', 'inst3']);
-    feeds.stop();
+    await feeds.stop();
   });
 
   test('never lets an older or expired signed copy replace a newer kept one', async () => {
@@ -712,7 +712,7 @@ describe('keeping a teammate’s last list', () => {
     });
     const heard: number[] = [];
     const stopHearing = feeds.subscribeHeld(() => heard.push(1));
-    feeds.start();
+    await feeds.start();
     await until('every kept list is checked', () => heard.length > 0);
     stopHearing();
     await until('the teammate’s own list arrives', () =>
@@ -726,14 +726,14 @@ describe('keeping a teammate’s last list', () => {
     ).toEqual(['desk-new']);
     expect(feeds.snapshot().machines.find((machine) => machine.instanceId === 'inst3')?.updatedAt).toBe(200);
     expect(feeds.listHeld('team1')).toEqual([fresh]);
-    feeds.stop();
+    await feeds.stop();
   });
 
   test('logs a teammate’s kept lists it cannot read, and keeps the teammate’s own list', async () => {
     const logs = captureLogs();
     const ungated = spyOn(EgressGate, 'serializeView').mockImplementation((view) => JSON.stringify(view));
     const { feeds } = await setUp({ held: [null as unknown as TeamSnapshot] });
-    feeds.start();
+    await feeds.start();
     await until(
       'the garbled list is logged',
       () => logs.fieldsOf('[Teams] Could not check a teammate’s kept snapshots').length > 0
@@ -741,7 +741,7 @@ describe('keeping a teammate’s last list', () => {
     expect(feeds.snapshot().tasks).toHaveLength(2);
     logs.restore();
     ungated.mockRestore();
-    feeds.stop();
+    await feeds.stop();
   });
 
   test('ignores a teammate’s copy for a machine with no signing key', async () => {
@@ -756,10 +756,10 @@ describe('keeping a teammate’s last list', () => {
     );
     const keyless: TeamMachine = { id: 'inst3', name: 'Desk', userId: '9', online: false, lastSeenAt: 1 };
     const { feeds } = await setUp({ watcherMachines: [STUDIO, LAPTOP, keyless], held: [old] });
-    feeds.start();
+    await feeds.start();
     await until('the list arrives', () => feeds.snapshot().tasks.length === 2);
     expect(feeds.snapshot().tasks.every((task) => task.instanceId === 'inst1')).toBe(true);
-    feeds.stop();
+    await feeds.stop();
   });
 });
 
@@ -798,13 +798,13 @@ describe('handing the team key to a machine that has none', () => {
       },
       watcherMachines: [own, LAPTOP],
     });
-    feeds.start();
+    await feeds.start();
     await until('it asks', () => feeds.snapshot().machines[0]?.asking === true);
     expect(selectStudioKey(studio)).toBeNull();
     expect(await feeds.answerKeyRequest('team1', 'inst1', true)).toBe(true);
     await until('it is live with the handed key', () => feeds.snapshot().tasks.length === 2);
     expect(selectStudioKey(studio)).toBe(TEAM_KEY);
-    feeds.stop();
+    await feeds.stop();
   });
 
   test('a teammate’s machine waits for the team’s owner to approve once it asks', async () => {
@@ -819,7 +819,7 @@ describe('handing the team key to a machine that has none', () => {
         teams: [createTeam({ owner: KAI, role: 'owner', machines: [{ ...STUDIO, signingKey }, LAPTOP] })],
       },
     });
-    feeds.start();
+    await feeds.start();
     await until('it is refused for the key', () => feeds.snapshot().machines[0]?.status === 'refused');
     expect(feeds.snapshot().machines[0]?.reason).toBe(TEAM_REFUSALS.key);
     expect(feeds.snapshot().machines[0]?.asking).toBeUndefined();
@@ -831,7 +831,7 @@ describe('handing the team key to a machine that has none', () => {
     await until('it is live with the handed key', () => feeds.snapshot().tasks.length === 2);
     expect(selectStudioKey(studio)).toBe(TEAM_KEY);
     expect(await feeds.answerKeyRequest('team1', 'inst1', true)).toBe(false);
-    feeds.stop();
+    await feeds.stop();
   });
 
   test('a declined request stops asking until the machine asks again', async () => {
@@ -847,7 +847,7 @@ describe('handing the team key to a machine that has none', () => {
       },
     });
     await adaptTeams(studioMachine).requestKey('team1');
-    feeds.start();
+    await feeds.start();
     await until('it asks', () => feeds.snapshot().machines[0]?.asking === true);
     expect(await feeds.answerKeyRequest('team1', 'inst1', false)).toBe(true);
     expect(feeds.snapshot().machines[0]?.asking).toBeUndefined();
@@ -855,7 +855,7 @@ describe('handing the team key to a machine that has none', () => {
     await until('it is refused again', () => waits.length === 1);
     expect(feeds.snapshot().machines[0]?.asking).toBeUndefined();
     expect(selectStudioKey(studio)).toBeNull();
-    feeds.stop();
+    await feeds.stop();
   });
 
   test('a teammate’s machine that has not asked gets nothing, even when approved', async () => {
@@ -870,11 +870,11 @@ describe('handing the team key to a machine that has none', () => {
         teams: [createTeam({ owner: KAI, role: 'owner', machines: [{ ...STUDIO, signingKey }, LAPTOP] })],
       },
     });
-    feeds.start();
+    await feeds.start();
     await until('it is refused for the key', () => waits.length === 1);
     expect(await feeds.answerKeyRequest('team1', 'inst1', true)).toBe(false);
     expect(selectStudioKey(studio)).toBeNull();
-    feeds.stop();
+    await feeds.stop();
   });
 
   test('logs a hand-over app.shinsa.dev does not connect, and keeps the machine refused', async () => {
@@ -898,14 +898,14 @@ describe('handing the team key to a machine that has none', () => {
         : refuse(NotFound);
     });
     const logs = captureLogs();
-    feeds.start();
+    await feeds.start();
     await until('it asks', () => feeds.snapshot().machines[0]?.asking === true);
     expect(await feeds.answerKeyRequest('team1', 'inst1', true)).toBe(true);
     await until('the hand-over fails', () => calls === 3 && waits.length > 0);
     logs.restore();
     expect(logs.fieldsOf('[Teams] Could not hand a machine the team’s key')).toHaveLength(1);
     expect(selectStudioKey(studio)).toBeNull();
-    feeds.stop();
+    await feeds.stop();
   });
 
   test('your own machine with no signing key gets nothing', async () => {
@@ -919,11 +919,11 @@ describe('handing the team key to a machine that has none', () => {
       },
       watcherMachines: [own, LAPTOP],
     });
-    feeds.start();
+    await feeds.start();
     await until('it is refused for the key', () => waits.length === 1);
     expect(feeds.snapshot().machines[0]?.reason).toBe(TEAM_REFUSALS.key);
     expect(selectStudioKey(studio)).toBeNull();
-    feeds.stop();
+    await feeds.stop();
   });
 });
 
@@ -971,7 +971,7 @@ async function listKeptViewKinds(remote: Remote, taskId: string) {
 describe('keeping a teammate’s full tasks', () => {
   test('fetches each listed task’s full view a while after the list, with its files, and only the ones that changed', async () => {
     const { feeds, laptop, stub, sockets, viewWaits } = await setUp({ live: createFullLive() });
-    feeds.start();
+    await feeds.start();
     await until('the list arrives', () => feeds.snapshot().tasks.length === 2);
     expect(viewWaits).toHaveLength(1);
     viewWaits.shift()?.();
@@ -988,12 +988,12 @@ describe('keeping a teammate’s full tasks', () => {
       async () => (await (await readKeptViews(laptop)).list()).length === 3
     );
     expect(sockets.length - opened).toBe(1);
-    feeds.stop();
+    await feeds.stop();
   });
 
   test('opens a kept task in full while its machine is offline, and lets the page reconnect once it is back', async () => {
     const { feeds, laptop, viewWaits } = await setUp({ live: createFullLive() });
-    feeds.start();
+    await feeds.start();
     await until('the list arrives', () => feeds.snapshot().tasks.length === 2);
     viewWaits.shift()?.();
     await until('the views are kept', async () => (await (await readKeptViews(laptop)).list()).length === 2);
@@ -1013,12 +1013,12 @@ describe('keeping a teammate’s full tasks', () => {
     const live = createPeer();
     await feeds.openRelay(live, TARGET_TASK);
     await until('the live view arrives', () => live.messages.length > 0);
-    feeds.stop();
+    await feeds.stop();
   });
 
   test('closes the pages it serves from kept views when it stops', async () => {
     const { feeds, laptop, viewWaits } = await setUp({ live: createFullLive() });
-    feeds.start();
+    await feeds.start();
     await until('the list arrives', () => feeds.snapshot().tasks.length === 2);
     viewWaits.shift()?.();
     await until('the views are kept', async () => (await (await readKeptViews(laptop)).list()).length === 2);
@@ -1027,13 +1027,13 @@ describe('keeping a teammate’s full tasks', () => {
     const peer = createPeer();
     await feeds.openRelay(peer, TARGET_TASK);
     expect(peer.messages.length).toBeGreaterThan(0);
-    feeds.stop();
+    await feeds.stop();
     expect(peer.closed).toBe(TEAM_FEED_OFFLINE);
   });
 
   test('keeps the view of a task opened live, and nothing of a fetch that ran out of time before its view came', async () => {
     const { feeds, laptop, viewWaits } = await setUp({ live: createFullLive(Effect.never) });
-    feeds.start();
+    await feeds.start();
     await until('the list arrives', () => feeds.snapshot().tasks.length === 2);
     const peer = createPeer();
     await feeds.openRelay(peer, TARGET_TASK);
@@ -1046,12 +1046,12 @@ describe('keeping a teammate’s full tasks', () => {
     await until('the fetch starts its clock', () => viewWaits.length === 1);
     viewWaits.shift()?.();
     expect(await (await readKeptViews(laptop)).selectEntry('team1', 'inst1', 'task-2')).toBeNull();
-    feeds.stop();
+    await feeds.stop();
   });
 
   test('drops a task’s view once it leaves the team or the list, and every view of a machine that leaves', async () => {
     const { feeds, laptop, stub, viewWaits } = await setUp({ live: createFullLive() });
-    feeds.start();
+    await feeds.start();
     await until('the list arrives', () => feeds.snapshot().tasks.length === 2);
     viewWaits.shift()?.();
     await until('the views are kept', async () => (await (await readKeptViews(laptop)).list()).length === 2);
@@ -1070,7 +1070,7 @@ describe('keeping a teammate’s full tasks', () => {
     await laptop.store.recordTeams([createTeam({ role: 'member', machines: [LAPTOP] })]);
     await laptop.publish();
     expect(await (await readKeptViews(laptop)).list()).toEqual([]);
-    feeds.stop();
+    await feeds.stop();
   });
 });
 
@@ -1081,7 +1081,7 @@ describe('relaying a teammate’s task to the local app', () => {
 
   test('streams the task in clear over localhost, and ends when it leaves the team', async () => {
     const { feeds, stub } = await setUp();
-    feeds.start();
+    await feeds.start();
     await until('the list arrives', () => feeds.snapshot().tasks.length === 2);
     const peer = createPeer();
     await feeds.openRelay(peer, TARGET);
@@ -1095,12 +1095,12 @@ describe('relaying a teammate’s task to the local app', () => {
     stub.notify();
     await until('the relay ends', () => peer.closed !== null);
     expect(peer.messages.at(-1)).toEqual({ t: 'closed', reason: TEAM_REFUSALS.task });
-    feeds.stop();
+    await feeds.stop();
   });
 
   test('says the machine is offline when its channel drops', async () => {
     const { feeds, sockets } = await setUp();
-    feeds.start();
+    await feeds.start();
     await until('the list arrives', () => feeds.snapshot().tasks.length === 2);
     const peer = createPeer();
     await feeds.openRelay(peer, TARGET);
@@ -1108,12 +1108,12 @@ describe('relaying a teammate’s task to the local app', () => {
     sockets[1]?.drop();
     await until('the relay ends', () => peer.closed !== null);
     expect(peer.messages.at(-1)).toEqual({ t: 'closed', reason: TEAM_FEED_OFFLINE });
-    feeds.stop();
+    await feeds.stop();
   });
 
   test('closes the page when remote access ends', async () => {
     const { feeds, laptop } = await setUp();
-    feeds.start();
+    await feeds.start();
     await until('the list arrives', () => feeds.snapshot().tasks.length === 2);
     const peer = createPeer();
     const relay = await feeds.openRelay(peer, TARGET);
@@ -1122,12 +1122,12 @@ describe('relaying a teammate’s task to the local app', () => {
     expect(peer.closed).toBe(TEAM_FEED_OFFLINE);
     expect(peer.messages.at(-1)).toEqual({ t: 'closed', reason: TEAM_FEED_OFFLINE });
     relay.close();
-    feeds.stop();
+    await feeds.stop();
   });
 
   test('refuses a machine it does not watch, and stops the channel when the page goes', async () => {
     const { feeds, sockets } = await setUp();
-    feeds.start();
+    await feeds.start();
     const unknown = createPeer();
     (await feeds.openRelay(unknown, { ...TARGET, instanceId: 'elsewhere' })).close();
     expect(unknown.closed).toBe(TEAM_VIEW_GONE);
@@ -1141,7 +1141,7 @@ describe('relaying a teammate’s task to the local app', () => {
     const kept = createPeer();
     await feeds.openRelay(kept, TARGET);
     await until('the second view arrives', () => kept.messages.length === 1);
-    feeds.stop();
+    await feeds.stop();
     expect(sockets).toHaveLength(3);
   });
 });
@@ -1296,13 +1296,13 @@ describe('a teammate’s machine that cannot be trusted or read', () => {
         Response.json({ url: `ws://127.0.0.1:${tunnel.port}/team?token=t`, expiresAt: 1 })
       );
       const feeds = await restart();
-      feeds.start();
+      await feeds.start();
       await until(
         'the machine is offline after the drop',
         () => feeds.snapshot().machines[0]?.reason === TEAM_FEED_OFFLINE && origins.length === 1
       );
       expect(origins).toEqual([plane.origin]);
-      feeds.stop();
+      await feeds.stop();
     } finally {
       await tunnel.stop(true);
     }

@@ -1,8 +1,7 @@
 import { createHash } from 'node:crypto';
-import { rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { parseShareMessage } from '@shinsa/core';
-import { Effect, Option, Ref } from 'effect';
+import { Effect, FileSystem, Option, Ref } from 'effect';
 import { JsonFile } from '../../files/service.ts';
 import { describeError } from '../../log/redact.ts';
 import { TeamViewFile, TeamViewsIndexFile, VIEW_FILE_MISSING } from '../schema.ts';
@@ -17,6 +16,7 @@ import {
 
 export const makeTeamViews = Effect.fn('TeamViews.make')(function* (definition: TeamViewsDefinition) {
   const json = yield* JsonFile;
+  const fs = yield* FileSystem.FileSystem;
   const { dir, limit } = definition;
   const indexPath = join(dir, INDEX_FILE);
   const resolveViewKey = (teamId: string, instanceId: string, taskId: string) =>
@@ -24,10 +24,9 @@ export const makeTeamViews = Effect.fn('TeamViews.make')(function* (definition: 
   const resolveViewPath = (key: string) =>
     join(dir, `${createHash('sha256').update(key).digest('hex')}.json`);
   const removeFile = (path: string, options: { recursive?: boolean } = {}) =>
-    Effect.try({
-      try: () => rmSync(path, { force: true, ...options }),
-      catch: (error) => new TeamViewKeepFailed({ message: describeError(error) }),
-    });
+    fs
+      .remove(path, { force: true, ...options })
+      .pipe(Effect.mapError((error) => new TeamViewKeepFailed({ message: describeError(error) })));
   const writeFile = (path: string, value: unknown) =>
     json
       .write(path, value)

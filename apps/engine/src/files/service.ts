@@ -1,5 +1,5 @@
 import { dirname } from 'node:path';
-import { Clock, Context, Effect, FileSystem, Layer, Option, Schema, Semaphore } from 'effect';
+import { Clock, Context, Effect, FileSystem, Layer, Option, Random, Schema, Semaphore } from 'effect';
 import { constFalse } from 'effect/Function';
 import { describeError } from '../log/redact.ts';
 import { JSON_FILE_MODE, JSON_INDENT, JsonFileUnreadable, JsonFileWriteFailed, JsonText } from './schema.ts';
@@ -53,7 +53,7 @@ export class JsonFile extends Context.Service<
       });
 
       const write = Effect.fn('JsonFile.write')(function* (path: string, value: unknown) {
-        const staging = `${path}.writing-${process.pid}`;
+        const staging = `${path}.writing-${process.pid}-${(yield* Random.nextInt).toString(36)}`;
         const writer = yield* selectWriter(path);
         yield* fs.makeDirectory(dirname(path), { recursive: true }).pipe(
           Effect.andThen(

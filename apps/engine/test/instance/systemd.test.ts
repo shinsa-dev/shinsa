@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from 'bun:test';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { Effect } from 'effect';
+import { Effect, type FileSystem } from 'effect';
 import {
   createSystemdService,
   resolveUnit,
@@ -14,7 +14,7 @@ import { runFiles } from '../harness.ts';
 import { testRuntime } from '../helpers/runtime.ts';
 import { createTempDir, removeTempDirs } from '../helpers/temp.ts';
 
-function run<A, E>(effect: Effect.Effect<A, E, Shell>) {
+function run<A, E>(effect: Effect.Effect<A, E, Shell | FileSystem.FileSystem>) {
   return testRuntime.runPromise(effect);
 }
 

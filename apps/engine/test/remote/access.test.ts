@@ -168,7 +168,7 @@ describe('ending remote access', () => {
     shares.openChannel(sharePeer, 'share-1');
     const teamPeer = createPeer();
     teams.openChannel(teamPeer, KAI.id);
-    feeds.start();
+    await feeds.start();
     await until('the feed socket', () => sockets.length === 1);
     const relayPeer = createPeer();
     await feeds.openRelay(relayPeer, { teamId: 'team1', instanceId: 'inst2', taskId: 'task-1' });
@@ -186,6 +186,6 @@ describe('ending remote access', () => {
     expect(relayPeer.sent).toEqual([serializeShareMessage({ t: 'closed', reason: TEAM_FEED_OFFLINE })]);
     expect(sockets.map((socket) => socket.closed)).toEqual([true, true]);
     expect(remote.access.isOpen).toBe(false);
-    feeds.stop();
+    await feeds.stop();
   });
 });

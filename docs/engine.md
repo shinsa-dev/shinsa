@@ -6855,7 +6855,7 @@ The Mac app carries the engine and runs it as a launchd job, `studio.overclock.s
 closing the window, quitting the app, a crash and a reboot (`docs/plans/app-plan.md`; the app's side is
 `apps/desktop/CLAUDE.md`). Nobody installs or starts it by hand.
 
-- **The bundle.** `apps/engine/scripts/build-engine.ts` compiles `scripts/engine-main.ts` with `bun build --compile`
+- **The bundle.** `apps/engine/scripts/build-engine.ts` compiles `scripts/engine-main.ts` with `bun build --compile` (`Bun.build`, called from `scripts/bundle.ts`, the build's one exempt edge)
   into one executable, `Shinsa.app/Contents/Resources/engine/bin/shinsa`, the engine and the command line in one;
   beside it `plugin/` (the plugin agents load) and `web/` (the built interface it serves). The build bakes in the
   version, the commit, the state version and the Agent SDK's versions (`process.env.SHINSA_BUILD_*`, read by
