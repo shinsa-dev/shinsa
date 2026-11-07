@@ -7,8 +7,10 @@ import { SuggestionRow } from '@/components/overview/suggestions-panel.tsx';
 import { InlineMarkdown } from '@/components/text/markdown.tsx';
 import type { SplitOffReference } from '@/lib/chat/timeline.ts';
 import { useShinsaState } from '@/lib/connection/selectors.ts';
+import { useEngineFeature } from '@/lib/connection/socket.ts';
 import { describeSplitOffState } from '@/lib/tasks/messages.ts';
 import { acceptSuggestion, dismissSuggestion, keepSuggestion } from '@/lib/tasks/process.ts';
+import { canBundleSuggestion } from '@/lib/tasks/suggestions.ts';
 
 function SettledSplitOff({ state, suggestion }: { state: ShinsaState; suggestion: TaskSuggestion }) {
   const created = suggestion.createdTaskId ? state.tasks[suggestion.createdTaskId] : undefined;
@@ -27,10 +29,12 @@ function SettledSplitOff({ state, suggestion }: { state: ShinsaState; suggestion
 }
 
 function OpenSplitOff({ task, suggestion }: { task: Task; suggestion: TaskSuggestion }) {
+  const canBundle = canBundleSuggestion(task, useEngineFeature('suggestion.bundle', task.id));
   return (
     <ul className='flex flex-col'>
       <SuggestionRow
         suggestion={suggestion}
+        canBundle={canBundle}
         onAccept={(chosen, start) => acceptSuggestion(task, chosen, start)}
         onDismiss={(chosen) => dismissSuggestion(task, chosen)}
         onKeep={(chosen) => keepSuggestion(task, chosen)}

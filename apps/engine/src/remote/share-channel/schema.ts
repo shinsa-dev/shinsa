@@ -1,4 +1,11 @@
-import type { Bytes, ShareFileType, ShareLiveView, ShareWelcome, TeamListView } from '@shinsa/core';
+import type {
+  Bytes,
+  ShareFileType,
+  ShareLiveView,
+  ShareWelcome,
+  TeamKeyRequest,
+  TeamListView,
+} from '@shinsa/core';
 import { Schema } from 'effect';
 import type { Effect } from 'effect';
 import type { ChannelPeer } from '../channel/schema.ts';
@@ -23,7 +30,12 @@ interface ChannelGrant<Subject> {
   session: CryptoKey;
 }
 
-export type HelloAnswer<Subject> = ChannelGrant<Subject> | { refused: string } | null;
+export interface ChannelRefusal {
+  refused: string;
+  keyRequest?: TeamKeyRequest;
+}
+
+export type HelloAnswer<Subject> = ChannelGrant<Subject> | ChannelRefusal | null;
 
 export type ChannelInput = string | Bytes | ArrayBuffer | Uint8Array;
 

@@ -3,6 +3,7 @@ import type {
   TeamFeedSnapshot,
   TeamFeedTask,
   TeamFeedStatus,
+  TeamKeyRequest,
   TeamMachine,
   TeamPresence,
   TeamSnapshot,
@@ -75,6 +76,7 @@ export type FeedSocketEvent =
 export interface TeamStreamEnd {
   reason: string;
   gone: boolean;
+  keyRequest?: TeamKeyRequest;
 }
 
 export interface TeamStreamHandlers {
@@ -123,6 +125,7 @@ export interface Feed {
   readonly machineKey: string | null;
   readonly grant: string | null;
   readonly attempt: number;
+  readonly asking: boolean;
 }
 
 export interface TeamFeedGrant {
@@ -155,4 +158,5 @@ export interface TeamFeedsHandle {
   readonly listGrants: Effect.Effect<TeamFeedGrant[]>;
   openRelay(peer: ChannelPeer, target: TeamViewTarget): Effect.Effect<TeamRelay>;
   openStream(target: TeamStreamTarget, handlers: TeamStreamHandlers): Effect.Effect<void>;
+  answerKeyRequest(teamId: string, instanceId: string, approve: boolean): Effect.Effect<boolean>;
 }

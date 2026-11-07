@@ -5,6 +5,7 @@ import {
   SHARED_EVIDENCE_PREFIX,
   type SharedTaskContext,
   type Task,
+  SHARE_PRESET_SCOPES,
 } from '../../src/index.ts';
 import {
   createHarness,
@@ -17,7 +18,7 @@ import {
 } from '../harness.ts';
 
 const CONTEXT: SharedTaskContext = {
-  preset: 'standard',
+  scopes: SHARE_PRESET_SCOPES.standard,
   owner: 'mona',
   ownerProfile: { name: 'Mona Lisa', avatarUrl: 'https://avatars.example/mona' },
   machine: 'Studio',
@@ -429,7 +430,14 @@ describe('what a shared task shows', () => {
     const task: Task = {
       ...harness.task(taskId),
       result: { step: 'answer', body: 'It clamps.', runId: 'run-1', at: 5 },
-      proposal: { request: 'Clamp it', why: 'It overflows.', status: 'open', runId: 'run-1', at: 5 },
+      proposal: {
+        request: 'Clamp it',
+        why: 'It overflows.',
+        status: 'open',
+        recommend: 'go_on',
+        runId: 'run-1',
+        at: 5,
+      },
     };
     const shared = resolveSharedTask(harness.state, task, CONTEXT);
     expect(shared.task.result).toEqual({ step: 'answer', body: 'It clamps.', runId: null, at: 5 });
@@ -599,7 +607,8 @@ describe('what a shared task shows', () => {
       teammate,
     });
     expect(
-      resolveSharedTask(harness.state, closed, { ...CONTEXT, preset: 'status' }).task.duplicate
+      resolveSharedTask(harness.state, closed, { ...CONTEXT, scopes: SHARE_PRESET_SCOPES.status }).task
+        .duplicate
     ).toBeUndefined();
   });
 

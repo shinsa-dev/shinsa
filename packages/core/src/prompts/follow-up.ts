@@ -31,6 +31,6 @@ export function resolveFollowUpPrompt(task: Task, repo: Repo | null, question: s
     describeOwedReply(task, 'answer'),
     '',
     `Call \`answer\` with your answer in markdown (at most ${SHAPE_LIMITS.answer} characters): lead with the answer itself, then the evidence (files and lines as shinsa:// links).`,
-    'Propose no change with it: when the human wants more done, they ask, and Shinsa starts a new round. Work worth doing outside this task goes to `suggest_tasks`. Then stop.',
+    'Propose no change with it: when the human wants more done, they ask, and Shinsa starts a new round. Only work you noticed that serves a different goal than this task goes to `suggest_tasks`. Then stop.',
   ].join('\n');
 }

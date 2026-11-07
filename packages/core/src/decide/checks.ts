@@ -3,6 +3,7 @@ import {
   type CheckEvidence,
   DomainError,
   isBlockingCheck,
+  isPausingGate,
   listBlockingChecks,
   listPhaseChecks,
   listRepoChecks,
@@ -14,6 +15,7 @@ import {
 } from '../domain/index.ts';
 import { resolveChecksFixPrompt } from '../prompts/index.ts';
 import type { CheckChange, CheckChangeHandOver, ReportCheck, TaskCheck } from '../report/types.ts';
+import { listOpenGates } from '../state/queries.ts';
 import type { Decider } from './decider.ts';
 import { applyEditsApproval } from './edits.ts';
 import { isReviewInputUnchanged, reuseLastReview, startFix } from './fixes.ts';
@@ -262,6 +264,7 @@ function attachCheckOutput(decider: Decider, task: Task, output: CheckEvidence) 
 export function recordChecks(decider: Decider, command: CommandOf<'checks.record'>) {
   const task = decider.task(command.taskId);
   if (task.stage !== 'checking' || command.results.length === 0) return;
+  if (listOpenGates(decider.state, task.id).some(isPausingGate)) return;
   decider.emit({
     type: 'checks.recorded',
     taskId: command.taskId,

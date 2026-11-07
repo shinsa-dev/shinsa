@@ -117,6 +117,7 @@ export const SettingsPatch = Strict(
     watchdogHours: Schema.optionalKey(WholeNumber),
     watchdogFirstCheckMinutes: Schema.optionalKey(WholeNumber),
     watchdogMaxGapHours: Schema.optionalKey(WholeNumber),
+    watchdogsIgnoreUsageLimits: Schema.optionalKey(Bool),
   } satisfies Record<(typeof SETTINGS_KEYS)[number], Schema.Top>,
   'Settings',
   'patch'

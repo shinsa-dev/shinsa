@@ -105,7 +105,7 @@ export interface RemoteChannel {
   request(input: ChannelRequest): Promise<Response>;
   sendSocket(data: string): Promise<void>;
   subscribeSocket(listener: (data: string) => void): () => void;
-  sendTerminal(message: TerminalSendMessage): Promise<void>;
+  sendTerminal(message: TerminalSendMessage): void;
   subscribeTerminal(listener: (message: TerminalStreamMessage) => void): () => void;
   subscribeClose(listener: (error: ChannelError) => void): () => void;
   close(): void;

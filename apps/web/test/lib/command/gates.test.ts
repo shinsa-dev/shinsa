@@ -306,6 +306,58 @@ describe('gate commands', () => {
     ]);
   });
 
+  it('leads with Close when the agent recommends closing a proposal', () => {
+    const gate = createGate({
+      id: 'g',
+      taskId: 't',
+      type: 'proposal',
+      title: 'The diagnosis found nothing to fix',
+    });
+    const task = createTask({
+      id: 't',
+      pipeline: ['investigate', 'your_ok', 'plan', 'build', 'merge'],
+      stage: 'awaiting_proposal',
+      proposal: { request: 'r', why: 'w', status: 'open', recommend: 'close', runId: null, at: 0 },
+    });
+    const commands = commandsFor(task, gate);
+    expect(commands.map((command) => [command.id, command.label, command.hint])).toEqual([
+      ['task.t.gate.g.closeProposal', 'Close', 'The diagnosis found nothing to fix'],
+      ['task.t.gate.g.makeChange', 'Make it a change', undefined],
+    ]);
+    run(commands[0]);
+    expect(spies.sent).toHaveBeenCalledWith(
+      { type: 'gate.answer', gateId: 'g', decision: 'reject', response: null },
+      'Closed. The task is done.'
+    );
+  });
+
+  it('lists the agent’s suggested replies after a gate that takes a message, and none after a question', () => {
+    const suggestedActions = [
+      { label: 'Do the renames', message: 'Do the renames too.' },
+      { label: 'Skip them', message: 'Leave the names as they are.' },
+    ];
+    const task = createTask({ id: 't', stage: 'awaiting_review', suggestedActions });
+    const review = commandsFor(task, createGate({ id: 'g', taskId: 't', type: 'review' }));
+    expect(
+      review
+        .filter((command) => command.hint === 'Suggested reply')
+        .map((command) => [command.id, command.label])
+    ).toEqual([
+      ['task.t.suggested.0', 'Do the renames'],
+      ['task.t.suggested.1', 'Skip them'],
+    ]);
+    run(review.find((command) => command.id === 'task.t.suggested.0'));
+    expect(spies.sent).toHaveBeenCalledWith(
+      { type: 'task.message', taskId: 't', text: 'Do the renames too.' },
+      'Changes requested.'
+    );
+    const question = commandsFor(
+      createTask({ id: 't', stage: 'building', suggestedActions }),
+      createGate({ id: 'g', taskId: 't', type: 'question' })
+    );
+    expect(question.some((command) => command.hint === 'Suggested reply')).toBe(false);
+  });
+
   it('runs the operation after the merge with the saved notes, or finishes without it after a confirm', () => {
     const gate = createGate({
       id: 'g',

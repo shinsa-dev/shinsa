@@ -18,7 +18,7 @@ describe('suggested tasks', () => {
     expect((await runSpec(fake, ['suggestions', 'list', 'other'])).text).toBe('No suggested tasks.');
   });
 
-  test('accepting adds it, after this task when asked; dismissing drops it', async () => {
+  test('accepting adds it, after this task or bundled with it when asked; dismissing drops it', async () => {
     const fake = createFakeClient({ '/api/tasks/fix': DETAIL });
     expect((await runSpec(fake, ['suggestions', 'accept', 'fix', 'sug-1'])).text).toBe(
       'Added the suggested task.'
@@ -26,6 +26,9 @@ describe('suggested tasks', () => {
     await runSpec(fake, ['suggestions', 'accept', 'fix', 'sug-2', '--after-this']);
     expect((await runSpec(fake, ['suggestions', 'accept', 'fix', 'sug-3', '--backlog'])).text).toBe(
       'Added the suggested task to the backlog.'
+    );
+    expect((await runSpec(fake, ['suggestions', 'accept', 'fix', 'sug-4', '--stack-on-this'])).text).toBe(
+      'Added the suggested task to this task’s bundle.'
     );
     expect((await runSpec(fake, ['suggestions', 'dismiss', 'fix', 'sug-1'])).text).toBe('Dismissed.');
     expect((await runSpec(fake, ['suggestions', 'keep', 'fix', 'sug-1'])).text).toBe(
@@ -40,6 +43,13 @@ describe('suggested tasks', () => {
         suggestionId: 'sug-3',
         waitsOnThis: false,
         backlog: true,
+      },
+      {
+        type: 'suggestion.accept',
+        taskId: 'task-123',
+        suggestionId: 'sug-4',
+        waitsOnThis: false,
+        stackOnThis: true,
       },
       { type: 'suggestion.dismiss', taskId: 'task-123', suggestionId: 'sug-1' },
       { type: 'suggestion.keep', taskId: 'task-123', suggestionId: 'sug-1' },

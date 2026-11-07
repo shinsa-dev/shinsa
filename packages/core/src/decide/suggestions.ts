@@ -2,6 +2,7 @@ import { resolveComparableText } from '../chat/text.ts';
 import type { CommandOf } from '../commands/index.ts';
 import {
   DomainError,
+  hasStep,
   isTaskSettled,
   resolveRoundTitle,
   type Task,
@@ -55,8 +56,27 @@ export function suggestSplitOff(
   });
 }
 
+function assertCanStackOn(task: Task, suggestions: CommandOf<'agent.suggest_tasks'>['suggestions']) {
+  const stacked = suggestions.filter((suggestion) => suggestion.stacksOnThis);
+  if (stacked.length === 0) return;
+  if (stacked.some((suggestion) => suggestion.waitsOnThis)) {
+    throw new DomainError({
+      code: 'dependency_cycle',
+      message:
+        'Set stack_on_this or after_this, not both: a bundled task already waits for this one to be ready and merges with it.',
+    });
+  }
+  if (!hasStep(task, 'pull_request')) {
+    throw new DomainError({
+      code: 'stack_no_pull_request',
+      message: 'This task opens no pull request, so nothing can be bundled with it. Leave stack_on_this out.',
+    });
+  }
+}
+
 export function suggestTasks(decider: Decider, command: CommandOf<'agent.suggest_tasks'>) {
   const { run, task } = findCurrentRun(decider, command.runId, 'suggest_tasks');
+  assertCanStackOn(task, command.suggestions);
   const known = listKnownTitles(decider, task);
   const fresh = command.suggestions.filter((suggestion) => {
     const title = resolveComparableText(suggestion.title);
@@ -82,6 +102,7 @@ export function suggestTasks(decider: Decider, command: CommandOf<'agent.suggest
         request: suggestion.request.trim(),
         why: suggestion.why.trim(),
         waitsOnThis: suggestion.waitsOnThis,
+        ...(suggestion.stacksOnThis ? { stacksOnThis: true } : {}),
         status: 'open',
         createdTaskId: null,
         suggestedAt: decider.context.now,
@@ -101,8 +122,17 @@ export function findOpenSuggestion(decider: Decider, taskId: string, suggestionI
   return suggestion;
 }
 
+function assertOneStart(command: CommandOf<'suggestion.accept'>) {
+  if (!command.stackOnThis || (!command.waitsOnThis && !command.backlog)) return;
+  throw new DomainError({
+    code: 'suggestion_start',
+    message: 'Pick one way to start it: bundled with this task, after it merges, or in the backlog.',
+  });
+}
+
 export function acceptSuggestion(decider: Decider, command: CommandOf<'suggestion.accept'>) {
   const suggestion = findOpenSuggestion(decider, command.taskId, command.suggestionId);
+  assertOneStart(command);
   const parent = decider.task(command.taskId);
   const createdTaskId = createTask(decider, {
     type: 'task.create',
@@ -111,6 +141,7 @@ export function acceptSuggestion(decider: Decider, command: CommandOf<'suggestio
     priority: parent.priority,
     origin: parent.origin,
     waitsOn: command.waitsOnThis ? [parent.id] : [],
+    ...(command.stackOnThis ? { stacksOn: [parent.id] } : {}),
     ...(command.backlog ? { backlog: true } : {}),
   });
   decider.emit({

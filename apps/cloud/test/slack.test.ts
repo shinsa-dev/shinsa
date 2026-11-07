@@ -10,6 +10,7 @@ import {
   SLACK_MODAL_CALLBACK,
   SLACK_RELAY_PATHS,
   SLACK_RESPONSE_INPUT,
+  SLACK_VIEW_LIMITS,
   SLACK_WRITE_ACTION,
   type SlackLinks,
   type SlackMention,
@@ -308,10 +309,10 @@ describe('connecting Slack to a machine', () => {
     expect(linked.headers.get('location')).toBe('/slack/linked?team=Acme');
     expect(readSetCookie(linked, '__Host-shinsa_slack')).toBe('__Host-shinsa_slack=');
     expect(slack.callsTo('oauth.v2.access')[0]?.body.client_secret).toBe(TEST_CONFIG.slackClientSecret);
-    const stored = harness.db.sqlite.query('SELECT bot_token FROM slack_workspaces').get() as {
-      bot_token: string;
+    const stored = harness.db.sqlite.query('SELECT sealed_bot_token FROM slack_workspaces').get() as {
+      sealed_bot_token: string;
     };
-    expect(stored.bot_token).not.toContain('xoxb');
+    expect(stored.sealed_bot_token).not.toContain('xoxb');
     const links = await readJson<SlackLinks>(
       await harness.call(SLACK_RELAY_PATHS.links, {
         headers: { authorization: `Bearer ${machine.machineToken}` },
@@ -1126,6 +1127,16 @@ describe('deciding from the card', () => {
       },
     ]);
     expect(setup.slack.callsTo('views.open')[0]?.token).toBe('xoxb-bot-token');
+    const sent = setup.slack.callsTo('views.open')[0]?.body as {
+      view: { private_metadata: string; blocks: unknown[] };
+    };
+    expect(sent.view.blocks).toEqual([
+      expect.objectContaining({
+        element: expect.objectContaining({ max_length: SLACK_VIEW_LIMITS.input }),
+      }),
+    ]);
+    expect(SLACK_VIEW_LIMITS.input).toBe(3000);
+    expect(sent.view.private_metadata.length).toBeLessThanOrEqual(SLACK_VIEW_LIMITS.privateMetadata);
   });
 
   test('a form Slack will not open is told to the clicker and logged', async () => {

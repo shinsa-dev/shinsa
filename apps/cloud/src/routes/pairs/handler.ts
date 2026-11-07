@@ -46,7 +46,7 @@ export const PairsHandlers = HttpApiBuilder.group(
       const connectKey = yield* crypto.createToken();
       yield* machines.create({
         id: instanceId,
-        userId,
+        ownerId: userId,
         name: pairing.name,
         fingerprint: yield* resolveKeyFingerprint(pairing.publicKey),
         tunnelId: tunnel.tunnelId,

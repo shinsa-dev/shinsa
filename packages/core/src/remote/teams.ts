@@ -49,6 +49,15 @@ export interface TeamRelayTarget {
   path: string;
 }
 
+export const TEAM_REFUSALS = {
+  team: 'That machine has left this team.',
+  key: 'That machine has no key for this team. Its owner can rejoin from the team’s join link.',
+  member:
+    'That machine does not list you in this team yet. It catches up the next time it reaches Shinsa Cloud.',
+  mismatch: 'Your key for this team does not match that machine’s. Open the team’s join link again.',
+  task: 'This task is no longer shown to the team.',
+} as const;
+
 export const DEFAULT_TEAM_SCOPES: AccessScopes = ACCESS_PRESETS.collaborate;
 
 type TeamPeople = Pick<RemoteTeam, 'owner' | 'members'>;
@@ -169,6 +178,7 @@ export interface TeamFeedMachine {
   reason: string | null;
   updatedAt?: number;
   presence?: TeamPresence[];
+  asking?: boolean;
 }
 
 export interface TeamFeedTask extends TeamTask {

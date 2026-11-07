@@ -82,7 +82,7 @@ async function claimTask() {
 describe('hand-off links', () => {
   test('opening one gives a connect token to claim the task, without making a guest', async () => {
     const { harness, kai, studio, handoff } = await handOff();
-    const stored = harness.db.sqlite.query('SELECT token_hash FROM instance_handoffs').all() as {
+    const stored = harness.db.sqlite.query('SELECT token_hash FROM machine_handoffs').all() as {
       token_hash: string;
     }[];
     expect(stored[0]?.token_hash).not.toBe(handoff.token);
@@ -157,7 +157,7 @@ describe('guests of a machine', () => {
     await acceptHandoff(harness, kai, handoff.token);
     const added = await readJson<RemoteMember>(await addGuest(harness, studio, KAI.id));
     expect(added).toEqual({ user: KAI, addedAt: harness.clock.now });
-    expect(harness.db.sqlite.query('SELECT * FROM instance_requesters').all()).toEqual([]);
+    expect(harness.db.sqlite.query('SELECT * FROM machine_requesters').all()).toEqual([]);
     expect((await addGuest(harness, studio, KAI.id)).status).toBe(200);
     expect(await listInstances(harness, kai)).toEqual([
       expect.objectContaining({ id: studio.instanceId, owner: MONA, role: 'guest' }),
@@ -211,7 +211,7 @@ describe('guests of a machine', () => {
         .query('INSERT INTO users (id, login, created_at) VALUES (?, ?, 0)')
         .run(`filler-${index}`, `filler-${index}`);
       harness.db.sqlite
-        .query('INSERT INTO instance_guests (instance_id, user_id, added_at) VALUES (?, ?, 0)')
+        .query('INSERT INTO machine_guests (machine_id, user_id, added_at) VALUES (?, ?, 0)')
         .run(studio.instanceId, `filler-${index}`);
     }
     await acceptHandoff(harness, kai, handoff.token);
@@ -246,7 +246,7 @@ describe('guests of a machine', () => {
     expect(await readCode(byGuest)).toBe('not_owner');
     await harness.post(resolveInstanceRemovePath(studio.instanceId), {}, { session: mona });
     expect(await listInstances(harness, kai)).toEqual([]);
-    expect(harness.db.sqlite.query('SELECT * FROM instance_guests').all()).toEqual([]);
+    expect(harness.db.sqlite.query('SELECT * FROM machine_guests').all()).toEqual([]);
     expect((await acceptHandoff(harness, kai, pending.token)).status).toBe(404);
   });
 

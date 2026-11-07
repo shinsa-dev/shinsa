@@ -365,6 +365,12 @@ export const TeamBody = Schema.Struct({ teamId: FilledText });
 
 export const TeamMemberBody = Schema.Struct({ teamId: FilledText, userId: FilledText });
 
+export const TeamKeyDecisionBody = Schema.Struct({
+  teamId: FilledText,
+  instanceId: FilledText,
+  approve: Schema.Boolean,
+});
+
 export const TeamScopesBody = Schema.Struct({
   teamId: FilledText,
   userId: Schema.optionalKey(FilledText),

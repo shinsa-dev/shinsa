@@ -249,6 +249,56 @@ describe('NowCard on the Overview', () => {
     expect(actions.indexOf('Review')).toBeLessThan(actions.indexOf('Approve changes'));
   });
 
+  it('puts the agent’s suggested replies beside Approve changes and sends one as your message', async () => {
+    const { gate } = reviewing();
+    const task = createTask({
+      id: 'task-1',
+      stage: 'awaiting_review',
+      suggestedActions: [{ label: 'Do the renames', message: 'Do the renames too.' }],
+    });
+    const { view } = renderOverview(createShinsaState({ tasks: [task], gates: [gate] }), task, gate);
+    const actions = view.getAllByRole('button').map((button) => button.textContent);
+    expect(actions.indexOf('Review')).toBeLessThan(actions.indexOf('Do the renames'));
+    expect(actions.indexOf('Do the renames')).toBeLessThan(actions.indexOf('Approve changes'));
+    fireEvent.click(view.getByRole('button', { name: 'Do the renames' }));
+    await waitFor(() =>
+      expect(listSentCommands()).toEqual([
+        { type: 'task.message', taskId: 'task-1', text: 'Do the renames too.' },
+      ])
+    );
+  });
+
+  it('leads a proposal the agent recommends closing with Close, and keeps Make it a change as the quiet link', async () => {
+    const task = createTask({
+      id: 'task-1',
+      pipeline: ['investigate', 'your_ok', 'plan', 'build', 'merge'],
+      stage: 'awaiting_proposal',
+      proposal: {
+        request: 'Plan it.',
+        why: 'Nothing leaks.',
+        status: 'open',
+        recommend: 'close',
+        runId: null,
+        at: 0,
+      },
+    });
+    const gate = createGate({
+      id: 'gate-1',
+      taskId: 'task-1',
+      type: 'proposal',
+      title: 'The diagnosis found nothing to fix',
+    });
+    const { view } = renderOverview(createShinsaState({ tasks: [task], gates: [gate] }), task, gate);
+    expect(view.getByText('The diagnosis found nothing to fix')).toBeTruthy();
+    expect(view.getByRole('button', { name: 'Make it a change' })).toBeTruthy();
+    fireEvent.click(view.getByRole('button', { name: 'Close' }));
+    await waitFor(() =>
+      expect(listSentCommands()).toEqual([
+        { type: 'gate.answer', gateId: 'gate-1', decision: 'reject', response: null },
+      ])
+    );
+  });
+
   it('opens the code review from the Review button', () => {
     const { task, gate, state } = reviewing();
     const { view, onOpen } = renderOverview(state, task, gate);

@@ -11,6 +11,8 @@ import {
   isTeamSnapshotExpired,
   parseShareMessage,
   parseShareWelcome,
+  parseTeamKeyRefusal,
+  sealTeamKey,
   type ShareMessage,
   selectTeamSnapshotSigner,
   serializeShareMessage,
@@ -18,11 +20,16 @@ import {
   type TeamFeedSnapshot,
   type TeamFeedTask,
   type TeamId,
+  TEAM_KEY_IV_BYTES,
+  TEAM_KEY_RECEIVED,
+  type TeamKeyDelivery,
+  type TeamKeyRequest,
   type TeamMachine,
   type TeamPresence,
   type TeamSnapshot,
   type TeamTask,
   type TeamViewTarget,
+  verifyTeamKeyRequest,
   verifyTeamSnapshot,
   verifyTeamWelcome,
 } from '@shinsa/core';
@@ -51,7 +58,7 @@ import type { ChannelPeer } from '../channel/schema.ts';
 import { RemoteOrigin } from '../client/schema.ts';
 import { RemoteClient } from '../client/service.ts';
 import { Remote } from '../machine/service.ts';
-import { NORMAL_CLOSE, POLICY_VIOLATION } from '../schema.ts';
+import { NORMAL_CLOSE, POLICY_VIOLATION, RandomBytes } from '../schema.ts';
 import { createEphemeralKeys } from '../share-channel/ephemeral.ts';
 import { RemoteStore } from '../store/service.ts';
 import { resolveKeyDigest } from '../team-snapshots/digest.ts';
@@ -98,6 +105,7 @@ export class TeamFeeds extends Context.Service<TeamFeeds, TeamFeedsHandle>()(
       const client = yield* RemoteClient;
       const appOrigin = yield* RemoteOrigin;
       const settings = yield* TeamFeedSettings;
+      const randomBytes = yield* RandomBytes;
       const snapshots = yield* makeTeamSnapshots({ path: join(config.dataDir, TEAM_SNAPSHOTS_FILE) });
       const views = yield* makeTeamViews({
         dir: join(config.dataDir, TEAM_VIEWS_DIR),
@@ -117,6 +125,8 @@ export class TeamFeeds extends Context.Service<TeamFeeds, TeamFeedsHandle>()(
       const heldRelays = yield* Ref.make<ReadonlyMap<string, HeldCloses>>(new Map());
       const started = yield* Ref.make(false);
       const heldKey = yield* Ref.make('');
+      const approvals = yield* Ref.make<ReadonlySet<string>>(new Set());
+      const declines = yield* Ref.make<ReadonlySet<string>>(new Set());
       const counter = yield* Ref.make(0);
       const listeners = new Set<Effect.Effect<void>>();
       const heldListeners = new Set<Effect.Effect<void>>();
@@ -141,6 +151,12 @@ export class TeamFeeds extends Context.Service<TeamFeeds, TeamFeedsHandle>()(
           next.delete(key);
           return next;
         };
+
+      const dropFrom = (id: string) => (all: ReadonlySet<string>) => {
+        const next = new Set(all);
+        next.delete(id);
+        return next;
+      };
 
       const selectFeed = (id: string) => Effect.map(Ref.get(feeds), (all) => all.get(id) ?? null);
 
@@ -213,6 +229,24 @@ export class TeamFeeds extends Context.Service<TeamFeeds, TeamFeedsHandle>()(
         yield* removeViews(feed.teamId, feed.machine.id);
       });
 
+      const openSocket = (url: string, events: Queue.Queue<FeedSocketEvent>) =>
+        Effect.acquireRelease(
+          Effect.try({
+            try: () => {
+              const opened = settings.createSocket(url, appOrigin);
+              opened.binaryType = 'arraybuffer';
+              opened.addEventListener('open', () => Queue.offerUnsafe(events, { type: 'open' }));
+              opened.addEventListener('close', () => Queue.offerUnsafe(events, { type: 'close' }));
+              opened.addEventListener('message', (event) =>
+                Queue.offerUnsafe(events, { type: 'message', data: event.data })
+              );
+              return opened;
+            },
+            catch: unreachable,
+          }),
+          (opened) => Effect.sync(() => opened.close())
+        );
+
       const connect = Effect.fn('TeamFeeds.connect')(function* (
         target: TeamStreamTarget,
         onMessage: (message: ShareMessage) => Effect.Effect<void, TeamFeedUnreadable>
@@ -230,29 +264,17 @@ export class TeamFeeds extends Context.Service<TeamFeeds, TeamFeedsHandle>()(
             ephemeral.publicKey,
             'machine'
           ).pipe(Effect.mapError(unreachable));
-          const origin = appOrigin;
           const events = yield* Queue.unbounded<FeedSocketEvent>();
-          const socket = yield* Effect.acquireRelease(
-            Effect.try({
-              try: () => {
-                const opened = settings.createSocket(url, origin);
-                opened.binaryType = 'arraybuffer';
-                opened.addEventListener('open', () => Queue.offerUnsafe(events, { type: 'open' }));
-                opened.addEventListener('close', () => Queue.offerUnsafe(events, { type: 'close' }));
-                opened.addEventListener('message', (event) =>
-                  Queue.offerUnsafe(events, { type: 'message', data: event.data })
-                );
-                return opened;
-              },
-              catch: unreachable,
-            }),
-            (opened) => Effect.sync(() => opened.close())
-          );
+          const socket = yield* openSocket(url, events);
           let openFrame: ((frame: Bytes) => Effect.Effect<Bytes, FrameError>) | null = null;
 
           const readWelcome = Effect.fn('TeamFeeds.readWelcome')(function* (text: string) {
             const welcome = yield* Effect.try({ try: () => parseShareWelcome(text), catch: unreadable });
-            if (welcome?.type === 'refused') return { reason: welcome.reason, gone: true };
+            if (welcome?.type === 'refused') {
+              const keyRequest = parseTeamKeyRefusal(text);
+              const end: TeamStreamEnd = { reason: welcome.reason, gone: true };
+              return keyRequest ? { ...end, keyRequest } : end;
+            }
             if (welcome?.type !== 'welcome' || openFrame) return offline;
             const keys = {
               team: target.teamId,
@@ -490,6 +512,77 @@ export class TeamFeeds extends Context.Service<TeamFeeds, TeamFeedsHandle>()(
           presence: [],
         }));
 
+      const deliverKey = Effect.fn('TeamFeeds.deliverKey')(function* (
+        teamId: string,
+        instanceId: string,
+        delivery: TeamKeyDelivery
+      ) {
+        return yield* Effect.gen(function* () {
+          const credentials = (yield* store.file).credentials;
+          if (!credentials) return false;
+          const url = yield* requestTeamConnect(credentials.machineToken, teamId, instanceId);
+          if (!url) return false;
+          const events = yield* Queue.unbounded<FeedSocketEvent>();
+          const socket = yield* openSocket(url, events);
+          for (;;) {
+            const event = yield* Queue.take(events);
+            if (event.type === 'open') {
+              yield* Effect.sync(() => socket.send(JSON.stringify(delivery)));
+              continue;
+            }
+            if (event.type === 'close' || typeof event.data !== 'string') return false;
+            const answer = parseShareWelcome(event.data);
+            return answer?.type === 'refused' && answer.reason === TEAM_KEY_RECEIVED;
+          }
+        }).pipe(
+          Effect.scoped,
+          Effect.catchTag('TeamConnectFailed', (failure) =>
+            Effect.logWarning('[Teams] Could not hand a machine the team’s key').pipe(
+              Effect.annotateLogs({ teamId, instanceId, error: failure.message }),
+              Effect.as(false)
+            )
+          )
+        );
+      });
+
+      const mayAnswer = Effect.fn('TeamFeeds.mayAnswer')(function* (feed: Feed, request: TeamKeyRequest) {
+        const file = yield* store.file;
+        if (feed.machine.userId === file.access?.owner.id) return true;
+        const team = file.teams.find((entry) => entry.id === feed.teamId);
+        return request.ask && team?.role === 'owner';
+      });
+
+      const canHandKey = Effect.fn('TeamFeeds.canHandKey')(function* (feed: Feed, request: TeamKeyRequest) {
+        return (yield* mayAnswer(feed, request)) && (yield* Ref.get(approvals)).has(feed.id);
+      });
+
+      const handKey = Effect.fn('TeamFeeds.handKey')(function* (feed: Feed, request: TeamKeyRequest) {
+        const signingKey = feed.machine.signingKey;
+        if (!(signingKey && (yield* canHandKey(feed, request)))) return false;
+        const subject = { teamId: feed.teamId, instanceId: feed.machine.id };
+        if (!(yield* verifyTeamKeyRequest(signingKey, subject, request))) return false;
+        const delivery = yield* sealTeamKey(
+          {
+            teamId: feed.teamId,
+            recipient: request.ephemeral,
+            ephemeral: yield* createEphemeralKeys,
+            iv: randomBytes(TEAM_KEY_IV_BYTES),
+          },
+          feed.key
+        );
+        if (!(delivery && (yield* deliverKey(feed.teamId, feed.machine.id, delivery)))) return false;
+        yield* Ref.update(approvals, dropFrom(feed.id));
+        return true;
+      });
+
+      const resolveAsking = Effect.fn('TeamFeeds.resolveAsking')(function* (
+        feed: Feed,
+        request: TeamKeyRequest | undefined
+      ) {
+        if (!request || (yield* Ref.get(declines)).has(feed.id)) return false;
+        return yield* mayAnswer(feed, request);
+      });
+
       const watch = Effect.fn('TeamFeeds.watch')(function* (id: string, token: number) {
         for (;;) {
           const feed = yield* updateFeed(id, token, (before) =>
@@ -501,14 +594,21 @@ export class TeamFeeds extends Context.Service<TeamFeeds, TeamFeedsHandle>()(
             (message) => receiveList(id, token, message)
           );
           if (end === null) return yield* Effect.never;
-          if (!(yield* selectCurrent(id, token))) return;
+          const current = yield* selectCurrent(id, token);
+          if (!current) return;
+          if (end.keyRequest && (yield* handKey(current, end.keyRequest))) {
+            yield* updateFeed(id, token, (before) => ({ ...before, asking: false, attempt: 0 }));
+            continue;
+          }
           if (end.gone) yield* forget(id, token);
+          const asking = yield* resolveAsking(current, end.keyRequest);
           const ended = yield* updateFeed(id, token, (before) => ({
             ...before,
             status: end.gone ? 'refused' : 'offline',
             reason: end.reason,
             presence: [],
             attempt: before.attempt + 1,
+            asking,
           }));
           if (!ended) return;
           yield* publish;
@@ -555,6 +655,7 @@ export class TeamFeeds extends Context.Service<TeamFeeds, TeamFeedsHandle>()(
           machineKey: null,
           grant: null,
           attempt: 0,
+          asking: false,
         };
         return feed;
       });
@@ -684,6 +785,7 @@ export class TeamFeeds extends Context.Service<TeamFeeds, TeamFeedsHandle>()(
           reason: feed.reason,
           ...(feed.updatedAt === null || isExpired(feed, now) ? {} : { updatedAt: feed.updatedAt }),
           ...(feed.presence.length > 0 ? { presence: feed.presence } : {}),
+          ...(feed.asking ? { asking: true } : {}),
         }));
         const tasks: TeamFeedTask[] = all.flatMap((feed) =>
           isExpired(feed, now)
@@ -794,6 +896,28 @@ export class TeamFeeds extends Context.Service<TeamFeeds, TeamFeedsHandle>()(
           Effect.flatMap((end) => (end ? Effect.sync(() => handlers.onEnd(end)) : Effect.void))
         );
 
+      const answerKeyRequest = Effect.fn('TeamFeeds.answerKeyRequest')(function* (
+        teamId: string,
+        instanceId: string,
+        approve: boolean
+      ) {
+        const id = resolveFeedKey(teamId, instanceId);
+        const feed = yield* selectFeed(id);
+        if (!feed?.asking) return false;
+        yield* Ref.update(approve ? approvals : declines, (all) => new Set(all).add(id));
+        yield* Ref.update(approve ? declines : approvals, dropFrom(id));
+        const next = yield* updateFeed(id, feed.token, (before) => ({
+          ...before,
+          asking: false,
+          attempt: 0,
+        }));
+        yield* publish;
+        if (!(approve && next)) return true;
+        yield* halt(id);
+        yield* reconcile(next);
+        return true;
+      });
+
       yield* remote.observe(changed);
 
       return TeamFeeds.of({
@@ -808,6 +932,7 @@ export class TeamFeeds extends Context.Service<TeamFeeds, TeamFeedsHandle>()(
         listTasks,
         openRelay,
         openStream,
+        answerKeyRequest,
       });
     })
   );

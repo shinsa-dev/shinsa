@@ -13,6 +13,8 @@ import {
   DomainError,
   type Gate,
   isDelegatedRun,
+  isWatchHome,
+  resolveWatchdogsIgnoreUsageLimits,
   type Run,
   type RunUsage,
   type Task,
@@ -107,7 +109,12 @@ function describeEstimate(budget: TaskBudget) {
   return budget.estimated ? ' The share is an early estimate while Shinsa learns the account’s rate.' : '';
 }
 
+function isExemptWatchCheck(decider: Decider, run: Run) {
+  return run.purpose === 'watch' && resolveWatchdogsIgnoreUsageLimits(decider.state.settings);
+}
+
 export function holdForBudget(decider: Decider, run: Run) {
+  if (isExemptWatchCheck(decider, run)) return false;
   const task = decider.task(run.taskId);
   const budget = selectSpentBudget(decider.state, task);
   if (!budget) return false;
@@ -135,10 +142,20 @@ export function acknowledgeBudget(decider: Decider, gate: Gate) {
   });
 }
 
-export function releaseBudgetHolds(decider: Decider) {
-  const released = listOpenGates(decider.state).filter(
-    (gate) => gate.cause === 'budget' && !isOverBudget(decider.state, decider.task(gate.taskId))
+function isExemptWatchTask(decider: Decider, task: Task) {
+  return (
+    task.stage === 'watching' &&
+    !isWatchHome(task) &&
+    resolveWatchdogsIgnoreUsageLimits(decider.state.settings)
   );
+}
+
+export function releaseBudgetHolds(decider: Decider) {
+  const released = listOpenGates(decider.state).filter((gate) => {
+    if (gate.cause !== 'budget') return false;
+    const task = decider.task(gate.taskId);
+    return isExemptWatchTask(decider, task) || !isOverBudget(decider.state, task);
+  });
   for (const gate of released) retryTask(decider, gate.taskId, null);
 }
 
@@ -158,7 +175,7 @@ function isStartedEarly(wait: UsageWait | null | undefined, run: Run, now: numbe
 }
 
 export function holdForPace(decider: Decider, run: Run) {
-  if (isDelegatedRun(run)) return false;
+  if (isDelegatedRun(run) || isExemptWatchCheck(decider, run)) return false;
   const task = decider.task(run.taskId);
   const wait = task.usageWait;
   const { now } = decider.context;
@@ -213,7 +230,11 @@ export function releasePaceHolds(decider: Decider) {
   for (const task of Object.values(decider.state.tasks)) {
     const wait = task.usageWait;
     if (wait?.cause !== 'pace' || wait.status !== 'armed') continue;
+    const held = decider.state.runs[wait.runId];
     const provider = wait.provider ?? CLAUDE_PROVIDER;
-    if (resolvePaceHold(decider.state, task, provider, now) === null) releasePaceWait(decider, task, wait);
+    const exempt = held !== undefined && isExemptWatchCheck(decider, held);
+    if (exempt || resolvePaceHold(decider.state, task, provider, now) === null) {
+      releasePaceWait(decider, task, wait);
+    }
   }
 }

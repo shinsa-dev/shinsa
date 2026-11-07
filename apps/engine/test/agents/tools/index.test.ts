@@ -96,6 +96,25 @@ describe('the shinsa tool server', () => {
     ]);
   });
 
+  test('every hand-over to the human publishes the same suggested replies with their limits', () => {
+    const actions = TOOL_SPECS.complete_phase.inputSchema.properties.actions;
+    expect(actions.maxItems).toBe(PROTOCOL_LIMITS.actions);
+    expect(actions.items.properties.label.maxLength).toBe(PROTOCOL_LIMITS.actionLabel);
+    expect(actions.items.properties.message.maxLength).toBe(PROTOCOL_LIMITS.actionMessage);
+    for (const tool of [
+      'propose_plan',
+      'complete_fix',
+      'answer',
+      'report_diagnosis',
+      'submit_report',
+      'report_outcome',
+    ] as const) {
+      const properties: Record<string, unknown> = TOOL_SPECS[tool].inputSchema.properties;
+      expect(properties.actions).toBe(actions);
+    }
+    expect('actions' in TOOL_SPECS.report_review.inputSchema.properties).toBe(false);
+  });
+
   test('every tool a role can call has a published schema', () => {
     for (const spec of Object.values(TOOL_SPECS)) expect(spec.inputSchema.type).toBe('object');
   });

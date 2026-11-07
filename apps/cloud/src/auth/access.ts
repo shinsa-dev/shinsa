@@ -26,7 +26,7 @@ export const selectMachineRole = Effect.fn('selectMachineRole')(function* (
 });
 
 export function isTeamOwner(team: Team, userId: RemoteUserId) {
-  return team.userId === userId;
+  return team.ownerId === userId;
 }
 
 export const selectTeamRole = Effect.fn('selectTeamRole')(function* (team: Team, userId: RemoteUserId) {
@@ -43,7 +43,7 @@ export const findMachineAccess = Effect.fn('findMachineAccess')(function* (
   const machines = yield* Machines;
   const machine = yield* machines.select(instanceId);
   const role = Option.isSome(machine)
-    ? yield* selectMachineRole(machine.value.id, machine.value.userId, userId)
+    ? yield* selectMachineRole(machine.value.id, machine.value.ownerId, userId)
     : Option.none<RemoteRole>();
   if (Option.isNone(machine) || Option.isNone(role)) return yield* new NotFound({ message: NO_SUCH_MACHINE });
   return { machine: machine.value, role: role.value } satisfies MachineAccessGrant;
@@ -57,8 +57,8 @@ export const findReachableMachine = Effect.fn('findReachableMachine')(function* 
   const teams = yield* Teams;
   const machine = yield* machines.select(instanceId);
   if (Option.isNone(machine)) return yield* new NotFound({ message: NO_SUCH_MACHINE });
-  const role = yield* selectMachineRole(machine.value.id, machine.value.userId, userId);
-  if (Option.isSome(role) || (yield* teams.shareTeam(userId, machine.value.userId))) return machine.value;
+  const role = yield* selectMachineRole(machine.value.id, machine.value.ownerId, userId);
+  if (Option.isSome(role) || (yield* teams.shareTeam(userId, machine.value.ownerId))) return machine.value;
   return yield* new NotFound({ message: NO_SUCH_MACHINE });
 });
 

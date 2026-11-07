@@ -30,12 +30,25 @@ export interface TaskResult {
 
 export type ChangeProposalStatus = 'open' | 'accepted' | 'declined';
 
+export type ProposalRecommendation = 'go_on' | 'close';
+
+export const PROPOSAL_RECOMMENDATIONS: readonly [ProposalRecommendation, ...ProposalRecommendation[]] = [
+  'go_on',
+  'close',
+];
+
 export interface ChangeProposal {
   request: string;
   why: string;
   status: ChangeProposalStatus;
+  recommend: ProposalRecommendation;
   runId: string | null;
   at: number;
+}
+
+export interface SuggestedAction {
+  label: string;
+  message: string;
 }
 
 export interface TaskAuto {

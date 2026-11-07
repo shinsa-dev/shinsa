@@ -1,6 +1,6 @@
 import { Effect, Layer } from 'effect';
 import { Socket } from 'effect/socket';
-import { runApp } from '@/lib/runtime/app.ts';
+import { forkApp, runApp } from '@/lib/runtime/app.ts';
 import { provideTransport } from '@/lib/runtime/socket/transport.ts';
 import type { ChannelLink, ChannelOptions, RemoteChannel } from './remote-channel/schema.ts';
 import { RemoteChannels } from './remote-channel/service.ts';
@@ -16,7 +16,9 @@ function adoptChannel(link: ChannelLink): RemoteChannel {
     request: (input) => runApp(link.request(input)),
     sendSocket: (data) => runApp(link.sendSocket(data)),
     subscribeSocket: link.subscribeSocket,
-    sendTerminal: (message) => runApp(link.sendTerminal(message)),
+    sendTerminal: (message) => {
+      forkApp(Effect.ignore(link.sendTerminal(message)));
+    },
     subscribeTerminal: link.subscribeTerminal,
     subscribeClose: link.subscribeClose,
     close: link.close,

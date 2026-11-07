@@ -22,6 +22,7 @@ export const SCOPED_COMMANDS = [
   'task.cancel',
   'task.clear_duplicate',
   'task.complete',
+  'task.pause',
   'task.retry',
   'task.message',
   'round.ship',

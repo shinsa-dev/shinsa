@@ -65,6 +65,7 @@ function proposing() {
       request: 'Release the connection on a timeout.',
       why: 'The stall comes from leaked connections.',
       status: 'open',
+      recommend: 'go_on',
       runId: null,
       at: 0,
     },
@@ -248,6 +249,7 @@ describe('steps the agent composed, on the Overview', () => {
         request: 'Plan the operation. You approve the plan before anything runs.',
         why: 'Find what is stuck first.',
         status: 'open',
+        recommend: 'go_on',
         runId: null,
         at: 0,
       },
@@ -484,6 +486,12 @@ describe('the activity on the Overview', () => {
     const task = createTask({ id: 't', activity });
     return { task, state: createShinsaState({ tasks: [task] }) };
   }
+
+  it('shows no Activity panel for a task with no activity, as a share without the activity scope', () => {
+    const task = createTask({ id: 't', activity: [] });
+    const view = renderOverview(createShinsaState({ tasks: [task] }), task);
+    expect(view.queryByText('Activity')).toBeNull();
+  });
 
   it(
     'shows the newest entries and older ones a page at a time',

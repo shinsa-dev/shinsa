@@ -166,6 +166,7 @@ export const SAMPLE_EVIDENCE_CHECKS: ChecksView | null = resolveChecksView(
       },
     },
     evidence: Object.fromEntries(EVIDENCE.map((piece) => [piece.id, piece])),
+    gates: {},
   },
   TASK
 );

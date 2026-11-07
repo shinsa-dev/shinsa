@@ -7,7 +7,6 @@ export const NewPairing = Schema.Struct({
   pollSecretHash: TokenHash,
   name: Schema.String,
   publicKey: Schema.String,
-  version: Schema.String,
   features: Schema.fromJsonString(MachineFeatures),
   expiresAt: Schema.Number,
 });

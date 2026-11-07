@@ -76,6 +76,7 @@ export interface Settings {
   watchdogHours?: number;
   watchdogFirstCheckMinutes?: number;
   watchdogMaxGapHours?: number;
+  watchdogsIgnoreUsageLimits?: boolean;
   taskCapacity?: number | null;
   placementPolicies?: string[];
   shareLimit?: ShareLimit;
@@ -106,6 +107,7 @@ export const SETTINGS_KEYS = [
   'watchdogHours',
   'watchdogFirstCheckMinutes',
   'watchdogMaxGapHours',
+  'watchdogsIgnoreUsageLimits',
   'taskCapacity',
   'placementPolicies',
   'shareLimit',
@@ -126,6 +128,7 @@ export const HUMAN_ONLY_SETTINGS = [
   'delegationLimit',
   'shareLimit',
   'sharePreset',
+  'watchdogsIgnoreUsageLimits',
 ] as const satisfies readonly (keyof Settings)[];
 
 export const HUMAN_ONLY_REPO_FIELDS = ['checkCommands', 'workspace', 'coverage'] as const;
@@ -152,6 +155,10 @@ export function resolveWatchdogDefaults(settings: Settings) {
   };
 }
 
+export function resolveWatchdogsIgnoreUsageLimits(settings: Settings) {
+  return settings.watchdogsIgnoreUsageLimits ?? true;
+}
+
 const DEFAULT_SETTINGS: Settings = {
   defaultProvider: CLAUDE_PROVIDER,
   defaultModel: DEFAULT_MODEL,
@@ -175,6 +182,7 @@ const DEFAULT_SETTINGS: Settings = {
   watchdogHours: WATCHDOG_DEFAULTS.hours,
   watchdogFirstCheckMinutes: WATCHDOG_DEFAULTS.firstCheckMinutes,
   watchdogMaxGapHours: WATCHDOG_DEFAULTS.maxGapHours,
+  watchdogsIgnoreUsageLimits: true,
   taskCapacity: null,
   placementPolicies: [],
   shareLimit: DEFAULT_SHARE_LIMIT,

@@ -18,12 +18,7 @@ import {
   type TeammateMachine,
 } from '@/lib/connection/socket.ts';
 import { Fleet, type FleetMember } from '@/lib/remote/fleet.ts';
-import {
-  forkApp,
-  GLOBAL_APP_TRANSPORT,
-  replaceAppTransport,
-  resolveAppTransport,
-} from '@/lib/runtime/app.ts';
+import { forkApp, PAGE_TRANSPORT, replaceAppTransport, resolveAppTransport } from '@/lib/runtime/app.ts';
 import { EngineClient } from '@/lib/runtime/engine/service.ts';
 import type { SocketTransport } from '@/lib/runtime/socket/schema.ts';
 import { TERMINAL_SOCKET_PATH } from '@/lib/terminal/terminal-socket/schema.ts';
@@ -254,7 +249,7 @@ export function startLocalRelays(onSwitch: () => void, options: Partial<LocalRel
     stop();
     if (!relays.fleet) return;
     relays.stop();
-    replaceAppTransport(GLOBAL_APP_TRANSPORT);
+    replaceAppTransport(PAGE_TRANSPORT);
     replaceConnection(null);
   };
 }

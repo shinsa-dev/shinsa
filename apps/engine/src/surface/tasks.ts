@@ -3,12 +3,17 @@ import {
   type MessageKind,
   ROUND_SHIPPINGS,
   type RoundShipping,
+  DomainError,
+  resolveSharePreset,
   SHARE_LIMITS,
+  SHARE_PRESET_SCOPES,
   SHARE_PRESETS,
   type ShareLimit,
   type SharePreset,
   TASK_PRIORITIES,
   type TaskDiff,
+  VIEW_SCOPES,
+  type ViewScope,
 } from '@shinsa/core';
 import type { ChatPage, OpenTarget } from '@shinsa/core/engine-api/schema';
 import { Effect } from 'effect';
@@ -139,6 +144,34 @@ const buildTaskCreate = Effect.fn('Surface.buildTaskCreate')(function* (
     ...(forkOf ? { forkOf } : {}),
     ...(account ? { account } : {}),
   };
+});
+
+const SHARE_SCOPE_NAMES: ReadonlySet<string> = new Set(VIEW_SCOPES);
+
+const readShareScopeNames = Effect.fn('Surface.shareScopeNames')(function* (values: Values, name: string) {
+  const names: ViewScope[] = [];
+  for (const raw of (values[name] as string[] | undefined) ?? []) {
+    if (!SHARE_SCOPE_NAMES.has(raw))
+      return yield* new DomainError({
+        code: 'arguments_invalid',
+        message: `${raw} is not a view scope. A share link shows these: ${VIEW_SCOPES.join(', ')}.`,
+      });
+    names.push(raw as ViewScope);
+  }
+  return names;
+});
+
+const resolveShareScopesChange = Effect.fn('Surface.shareScopesChange')(function* (
+  client: SurfaceClient,
+  values: Values,
+  preset: SharePreset | undefined
+) {
+  const allow = yield* readShareScopeNames(values, 'allow');
+  const deny = yield* readShareScopeNames(values, 'deny');
+  if (allow.length === 0 && deny.length === 0) return null;
+  const base = preset ?? resolveSharePreset((yield* client.api.state.settings()).settings);
+  const shown = new Set([...SHARE_PRESET_SCOPES[base], ...allow]);
+  return VIEW_SCOPES.filter((scope) => shown.has(scope) && !deny.includes(scope));
 });
 
 export const TASK_SPECS: SurfaceSpec[] = [
@@ -412,6 +445,20 @@ export const TASK_SPECS: SurfaceSpec[] = [
     done: () => 'Sent the queued round to the current round.',
   }),
   defineCommand({
+    path: ['tasks', 'pause'],
+    summary:
+      'Pause a working task: its agent stops at once and the task waits for you. `shinsa tasks retry` resumes it.',
+    command: 'task.pause',
+    fields: [TASK_FIELD],
+    build: Effect.fn('Surface.tasksPause')(function* (values, client) {
+      return {
+        type: 'task.pause' as const,
+        taskId: yield* findTaskId(client, readValue(values, 'task')),
+      };
+    }),
+    done: () => 'Paused. Retry or send a message to resume it.',
+  }),
+  defineCommand({
     path: ['tasks', 'retry'],
     summary: "Restart a paused task's current step with a fresh fix budget.",
     command: 'task.retry',
@@ -486,15 +533,30 @@ export const TASK_SPECS: SurfaceSpec[] = [
         description:
           "What the link shows: status (an anonymous status card), standard (the whole task with the agents' live output and tool calls, without your messages) or full (standard and your messages). Left out, the sharePreset setting.",
       },
+      {
+        name: 'allow',
+        kind: 'list',
+        description: `A view scope to show on top of the preset: ${VIEW_SCOPES.join(', ')}. Repeat for each.`,
+      },
+      {
+        name: 'deny',
+        kind: 'list',
+        description: 'A view scope to leave out of the preset, such as code or messages. Repeat for each.',
+      },
     ],
     build: Effect.fn('Surface.tasksShare')(function* (values, client) {
       const limit = readValue(values, 'until');
       const preset = readValue(values, 'preset');
+      const scopes = yield* resolveShareScopesChange(
+        client,
+        values,
+        preset ? (preset as SharePreset) : undefined
+      );
       return {
         type: 'task.share' as const,
         taskId: yield* findTaskId(client, readValue(values, 'task')),
         ...(limit ? { limit: limit as ShareLimit } : {}),
-        ...(preset ? { preset: preset as SharePreset } : {}),
+        ...(scopes ? { scopes } : preset ? { preset: preset as SharePreset } : {}),
       };
     }),
     done: () => 'Shared. Its link shows on the task in a moment.',

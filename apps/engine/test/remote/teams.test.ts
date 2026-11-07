@@ -25,12 +25,13 @@ import {
   type TeamSnapshot,
   type TeamView,
   verifyTeamSnapshot,
+  TEAM_REFUSALS,
 } from '@shinsa/core';
 import { InviteInvalid, MembersFull, NotFound, NotOwner, TeamsFull } from '@shinsa/core/remote/errors';
 import { Clock, Effect, Layer } from 'effect';
 import { Presence } from '../../src/remote/presence/service.ts';
 import { RandomBytes } from '../../src/remote/schema.ts';
-import { TEAM_REFUSALS, TEAM_REMOTE_CHANGED } from '../../src/remote/teams/schema.ts';
+import { TEAM_REMOTE_CHANGED } from '../../src/remote/teams/schema.ts';
 import { EngineStopped } from '../../src/runtime/engine/schema.ts';
 import { createFixedClock } from '../helpers/clock.ts';
 import { captureLogs, until } from '../helpers/index.ts';

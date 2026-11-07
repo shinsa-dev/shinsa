@@ -105,7 +105,7 @@ export class ChannelTerminalSocket extends EventTarget {
       channel.subscribeClose((error) => this.#finish(CHANNEL_GONE, error.message))
     );
     this.readyState = OPEN;
-    void channel.sendTerminal({ t: 'terminal-open', id: this.#id, terminal: this.#terminal });
+    channel.sendTerminal({ t: 'terminal-open', id: this.#id, terminal: this.#terminal });
     this.dispatchEvent(new Event('open'));
   }
 
@@ -126,7 +126,7 @@ export class ChannelTerminalSocket extends EventTarget {
     const channel = this.#channel;
     if (this.readyState !== OPEN || !channel) return;
     const bytes = toBytes(data);
-    void channel.sendTerminal(
+    channel.sendTerminal(
       bytes
         ? { t: 'terminal-bytes', id: this.#id, chunk: serializeBase64Url(bytes as Bytes) }
         : { t: 'terminal-text', id: this.#id, data: data as string }
@@ -136,7 +136,7 @@ export class ChannelTerminalSocket extends EventTarget {
   close() {
     const channel = this.#channel;
     if (this.readyState === OPEN && channel)
-      void channel.sendTerminal({
+      channel.sendTerminal({
         t: 'terminal-close',
         id: this.#id,
         code: TERMINAL_STREAM_CLOSE.normal,

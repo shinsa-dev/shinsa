@@ -324,6 +324,7 @@ export {
   TEAM_PRESENCE_STATUSES,
   TEAM_RELAY_PATH,
   TEAM_RELAY_SOCKET_PATH,
+  TEAM_REFUSALS,
   TEAM_SNAPSHOT_TTL_MS,
   TEAM_TASKS_PATH,
   TEAM_VIEW_PATH,
@@ -346,6 +347,22 @@ export {
   verifyTeamSnapshot,
   verifyTeamWelcome,
 } from './teams.ts';
+export {
+  createTeamKeyRequest,
+  openTeamKey,
+  parseTeamKeyDelivery,
+  parseTeamKeyRefusal,
+  readTeamKeyRequest,
+  sealTeamKey,
+  TEAM_KEY_IV_BYTES,
+  TEAM_KEY_RECEIVED,
+  TEAM_KEY_UNWANTED,
+  type TeamKeyDelivery,
+  type TeamKeyRequest,
+  type TeamKeyRequestSubject,
+  type TeamKeySealInput,
+  verifyTeamKeyRequest,
+} from './team-keys.ts';
 export {
   CONNECT_CHANNELS,
   ConnectChannel,

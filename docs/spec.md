@@ -287,6 +287,11 @@ Desktop-first and responsive: built for a full window, still right in a ~900px f
   and builds; Remove from the backlog (the task's menu or ⌘K) makes it a plan to approve. You put work there yourself (When to start → Backlog,
   Move to the backlog, `shinsa do --backlog`, accepting a suggested task into it), or an agent you asked does;
   Shinsa never decides it for you. Questions, research and investigations never wait there.
+- **Pausing.** Pause (the task's menu, a row's menu, ⌘K or `shinsa tasks pause`) stops a working task where it is:
+  its agent and any agents it delegated to are interrupted at once, and the task waits at a Paused gate, "You paused
+  the task". Resume restarts the same step in the same agent session; a message in the chat resumes it with your
+  words as guidance, and Cancel still cancels it. Pause shows only while something works on the task, never while it
+  rests at a decision of yours.
 - **Snoozing.** Snooze (the task's menu, a row's menu, ⌘K or `shinsa tasks snooze`) takes an open task in any step
   out of Needs you, In progress, the queue, the guide, the Dock badge and notifications, and changes nothing else:
   its agent keeps working, and a gate it reaches waits quietly. Home and the queue show it in a folded Snoozed

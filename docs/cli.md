@@ -334,6 +334,20 @@ Every task agent's tool: `tasks_message`. Sends `task.message`.
 | `<text>` | text, required | The message. |
 | `--as` | choice, optional | feedback on the current round (a follow-up on a finished one), acknowledge for a message that needs nothing, new_round for new work in this task, or separate_task to suggest it as its own task. Left out, Shinsa decides. |
 
+#### shinsa tasks pause
+
+Pause a working task: its agent stops at once and the task waits for you. `shinsa tasks retry` resumes it.
+
+```
+shinsa tasks pause <task> [--json]
+```
+
+Every task agent's tool: `tasks_pause`. Sends `task.pause`.
+
+| Argument | Kind | What it is |
+| --- | --- | --- |
+| `<task>` | text, required | The task: its handle (SW-142), its id, the start of its id, or its exact title. |
+
 #### shinsa tasks retry
 
 Restart a paused task's current step with a fresh fix budget.
@@ -383,7 +397,7 @@ Every task agent's tool: `tasks_cancel`. Sends `task.cancel`.
 Share a task by a link that reads it live from this machine: read-only, without its chat.
 
 ```
-shinsa tasks share <task> [--until <until_done|hour|day|week|none>] [--preset <status|standard|full>] [--json]
+shinsa tasks share <task> [--until <until_done|hour|day|week|none>] [--preset <status|standard|full>] [--allow <list>] [--deny <list>] [--json]
 ```
 
 Yours alone: no agent has a tool for it, and an agent’s shell may not run it. Sends `task.share`.
@@ -393,6 +407,8 @@ Yours alone: no agent has a tool for it, and an agent’s shell may not run it. 
 | `<task>` | text, required | The task: its handle (SW-142), its id, the start of its id, or its exact title. |
 | `--until` | choice, optional | How long it stays shared: until_done (until the task finishes), hour, day, week or none (until you stop it). Left out, the shareLimit setting. |
 | `--preset` | choice, optional | What the link shows: status (an anonymous status card), standard (the whole task with the agents' live output and tool calls, without your messages) or full (standard and your messages). Left out, the sharePreset setting. |
+| `--allow` | list, optional | A view scope to show on top of the preset: identity, description, requests, progress, summary, people, plan, reports, review, evidence, checks, pull_request, activity, code, runs, live, messages. Repeat for each. |
+| `--deny` | list, optional | A view scope to leave out of the preset, such as code or messages. Repeat for each. |
 
 #### shinsa tasks unshare
 
@@ -1046,7 +1062,7 @@ Every task agent's tool: `suggestions_list` (reads).
 Add a suggested task as a task of its own.
 
 ```
-shinsa suggestions accept <task> <suggestion> [--after-this] [--backlog] [--json]
+shinsa suggestions accept <task> <suggestion> [--after-this] [--stack-on-this] [--backlog] [--json]
 ```
 
 Every task agent's tool: `suggestions_accept`. Sends `suggestion.accept`.
@@ -1056,6 +1072,7 @@ Every task agent's tool: `suggestions_accept`. Sends `suggestion.accept`.
 | `<task>` | text, required | The task: its handle (SW-142), its id, the start of its id, or its exact title. |
 | `<suggestion>` | text, required | The suggested task id, from `shinsa suggestions list`. |
 | `--after-this` | boolean, optional | Start it only after this task merges. |
+| `--stack-on-this` | boolean, optional | Bundle it with this task: it builds on this task’s branch and merges together with it. |
 | `--backlog` | boolean, optional | Plan it now and keep it in the backlog until you start building it. |
 
 #### shinsa suggestions dismiss
@@ -1448,7 +1465,7 @@ Every task agent's tool: `settings_get` (reads).
 
 | Argument | Kind | What it is |
 | --- | --- | --- |
-| `<key>` | text, optional | One of defaultProvider, defaultModel, maxFixRounds, delegationLimit, mergeMethod, attentionLimit, approvePlans, agentModels, agentProviders, agentFastModes, taskBudgetUsd, taskUsageLimit, dailyUsageLimit, autoResume, snoozeLimited, accountSwitchAt, idleCompaction, compactionLeadMinutes, compaction, fastMode, watchdogHours, watchdogFirstCheckMinutes, watchdogMaxGapHours, taskCapacity, placementPolicies, shareLimit, sharePreset. |
+| `<key>` | text, optional | One of defaultProvider, defaultModel, maxFixRounds, delegationLimit, mergeMethod, attentionLimit, approvePlans, agentModels, agentProviders, agentFastModes, taskBudgetUsd, taskUsageLimit, dailyUsageLimit, autoResume, snoozeLimited, accountSwitchAt, idleCompaction, compactionLeadMinutes, compaction, fastMode, watchdogHours, watchdogFirstCheckMinutes, watchdogMaxGapHours, watchdogsIgnoreUsageLimits, taskCapacity, placementPolicies, shareLimit, sharePreset. |
 
 #### shinsa settings set
 
@@ -1462,7 +1479,7 @@ Every task agent's tool: `settings_set`. Sends `settings.change`.
 
 | Argument | Kind | What it is |
 | --- | --- | --- |
-| `<key>` | text, required | One of defaultProvider, defaultModel, maxFixRounds, delegationLimit, mergeMethod, attentionLimit, approvePlans, agentModels, agentProviders, agentFastModes, taskBudgetUsd, taskUsageLimit, dailyUsageLimit, autoResume, snoozeLimited, accountSwitchAt, idleCompaction, compactionLeadMinutes, compaction, fastMode, watchdogHours, watchdogFirstCheckMinutes, watchdogMaxGapHours, taskCapacity, placementPolicies, shareLimit, sharePreset. Only the human changes approvePlans, mergeMethod, taskBudgetUsd, taskUsageLimit, dailyUsageLimit, autoResume, snoozeLimited, accountSwitchAt, fastMode, agentFastModes, delegationLimit, shareLimit, sharePreset. |
+| `<key>` | text, required | One of defaultProvider, defaultModel, maxFixRounds, delegationLimit, mergeMethod, attentionLimit, approvePlans, agentModels, agentProviders, agentFastModes, taskBudgetUsd, taskUsageLimit, dailyUsageLimit, autoResume, snoozeLimited, accountSwitchAt, idleCompaction, compactionLeadMinutes, compaction, fastMode, watchdogHours, watchdogFirstCheckMinutes, watchdogMaxGapHours, watchdogsIgnoreUsageLimits, taskCapacity, placementPolicies, shareLimit, sharePreset. Only the human changes approvePlans, mergeMethod, taskBudgetUsd, taskUsageLimit, dailyUsageLimit, autoResume, snoozeLimited, accountSwitchAt, fastMode, agentFastModes, delegationLimit, shareLimit, sharePreset, watchdogsIgnoreUsageLimits. |
 | `<value>` | text, required | The new value. |
 
 ### projects

@@ -161,6 +161,18 @@ describe('joining a team', () => {
     expect((await joinTeam(harness, kai, next.invite)).status).toBe(404);
   });
 
+  test('someone with no paired machine is told to turn on remote access first, and records no request', async () => {
+    const { harness, mona, invite } = await startTeam();
+    const lone = await harness.signIn('lone', 3);
+    const refused = await joinTeam(harness, lone, invite);
+    expect(refused.status).toBe(409);
+    expect(await readCode(refused)).toBe('no_machine');
+    expect((await listTeams(harness, mona))[0]?.requests).toEqual([]);
+    await pairMachine(harness, lone, 'Lone');
+    const answer = await readJson<TeamJoinResponse>(await joinTeam(harness, lone, invite));
+    expect(answer.status).toBe('requested');
+  });
+
   test('a page asking to join must come from app.shinsa.dev', async () => {
     const { harness, kai, invite } = await startTeam();
     const forged = await harness.post(REMOTE_PATHS.teamJoin, { invite }, { session: kai, sameOrigin: false });
@@ -191,6 +203,7 @@ describe('the owner and the members', () => {
     const { harness, studio, team, invite } = await startTeam();
     for (let index = 0; index <= MAX_TEAM_MEMBERS; index++) {
       const session = await harness.signIn(`user${index}`, 100 + index);
+      await pairMachine(harness, session, `Machine ${index}`);
       await joinTeam(harness, session, invite);
     }
     for (let index = 0; index < MAX_TEAM_MEMBERS; index++)

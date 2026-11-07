@@ -72,7 +72,7 @@ async function joinMachine() {
 describe('machine members', () => {
   test('opening an invite gives a connect token to ask the machine, without making a member', async () => {
     const { harness, kai, studio, invite } = await shareMachine();
-    const stored = harness.db.sqlite.query('SELECT token_hash FROM instance_invites').all() as {
+    const stored = harness.db.sqlite.query('SELECT token_hash FROM machine_invites').all() as {
       token_hash: string;
     }[];
     expect(stored[0]?.token_hash).not.toBe(invite.token);
@@ -182,7 +182,7 @@ describe('machine members', () => {
     const byOwner = await harness.post(resolveInstanceRemovePath(studio.instanceId), {}, { session: mona });
     expect(byOwner.status).toBe(200);
     expect(await listInstances(harness, kai)).toEqual([]);
-    expect(harness.db.sqlite.query('SELECT * FROM instance_members').all()).toEqual([]);
+    expect(harness.db.sqlite.query('SELECT * FROM machine_members').all()).toEqual([]);
     expect((await acceptInvite(harness, kai, invite.token)).status).toBe(404);
   });
 
@@ -211,7 +211,7 @@ describe('machine members', () => {
         .query('INSERT INTO users (id, login, created_at) VALUES (?, ?, 0)')
         .run(`filler-${index}`, `filler-${index}`);
       harness.db.sqlite
-        .query('INSERT INTO instance_members (instance_id, user_id, added_at) VALUES (?, ?, 0)')
+        .query('INSERT INTO machine_members (machine_id, user_id, added_at) VALUES (?, ?, 0)')
         .run(studio.instanceId, `filler-${index}`);
     }
     await acceptInvite(harness, kai, invite.token);

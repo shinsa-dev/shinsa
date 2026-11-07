@@ -90,6 +90,8 @@ describe('team actions on this machine', () => {
       '/remove',
       '/scopes',
       '/extra',
+      '/key/request',
+      '/key/answer',
     ])
       answers[`/api/remote/teams${path}`] = snapshot;
     answers['/api/remote/members/grant'] = snapshot;
@@ -103,6 +105,8 @@ describe('team actions on this machine', () => {
     await TEAM_ACTIONS.updateScopes('team1', null, ['share']);
     await TEAM_ACTIONS.updateScopes('team1', '7', null);
     await TEAM_ACTIONS.updateExtra('team1', '7', ['message']);
+    await TEAM_ACTIONS.requestKey('team1');
+    await TEAM_ACTIONS.answerKey('team1', 'jake1', true);
     expect(sent.slice(1).map((entry) => [entry.path, entry.body])).toEqual([
       ['/api/remote/teams/link/remove', { teamId: 'team1' }],
       ['/api/remote/teams/requests/accept', { teamId: 'team1', userId: '9' }],
@@ -114,8 +118,10 @@ describe('team actions on this machine', () => {
       ['/api/remote/teams/scopes', { teamId: 'team1', scopes: ['share'] }],
       ['/api/remote/teams/scopes', { teamId: 'team1', userId: '7', scopes: null }],
       ['/api/remote/teams/extra', { teamId: 'team1', userId: '7', scopes: ['message'] }],
+      ['/api/remote/teams/key/request', { teamId: 'team1' }],
+      ['/api/remote/teams/key/answer', { teamId: 'team1', instanceId: 'jake1', approve: true }],
     ]);
-    expect(replaced).toHaveBeenCalledTimes(10);
+    expect(replaced).toHaveBeenCalledTimes(12);
     expect(replaced).toHaveBeenLastCalledWith(snapshot);
   });
 });

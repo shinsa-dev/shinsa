@@ -50,7 +50,7 @@ export function describeUsageWaitBody(wait: UsageWait, project: Project | null =
 
 export function describeUsageWaitNote(wait: UsageWait) {
   if (isPaceWait(wait)) {
-    return 'It starts by itself once older usage drops out of the last 24 hours. Raise the limit to start it sooner.';
+    return 'Starts by itself as older usage drops out. Resume now ignores the limits for this task.';
   }
   return wait.autoResume
     ? 'Shinsa resumes it by itself when the limit resets.'
