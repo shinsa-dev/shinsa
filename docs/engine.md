@@ -1288,6 +1288,16 @@ arrow, ⌘K's Wait for another task… and Stop waiting, all `task.wait_on` with
   repository locks its merge to that part (`create_task` with `this_task_waits`, Work across repositories): the
   pre-merge steps list each task it waits on as a row that ticks itself once that task finishes (`listMergeWaits`),
   on the review gate's card, the merge gate's card and the Review tab, so the hold is visible before you approve.
+- **A decision held by a wait.** A task at its plan, review or proposal gate (`awaiting_plan`, `awaiting_review`,
+  `awaiting_proposal`) that waits on an unfinished task is not asking for you yet: `resolveQueue` leaves that gate out
+  of `ready` (`isGateHeld`, `queue/rank.ts`) and lists the task in `queue.waiting`, reading "Waits on ‹task›"
+  (`listWaitsOn`). So it is not in Needs you, the queue button, the guide, the Dock badge, a notification or `shinsa
+  status`, and `--status needs_you` leaves it out (`isTaskListed` in `http/task-views.ts`). The gate stays open: the
+  task page and the Review tab still let you decide early. Its All tasks row and `read_task` name what it waits on in place of its gate's words, a
+  dependent's stall trace (`traceStalledLeaf`) walks on past it to what holds it, and the notification watcher counts
+  the gate as new when it is released (`listOpenGateIds` skips a held gate), so it alerts you then. Nothing is recorded; once every task it waits on is merged
+  or marked done, the gate is back in Needs you. Any other gate on the task (an agent's question, a secret, a sign-in,
+  a failure, Post-merge) still reaches you, and a task still building with a wait stays in progress.
 - **Stacking is a bundle.** A plain dependent waits for its parents to finish and branches off the default branch. To
   build on a parent's unmerged branch instead, stack it on that parent: a bundle (below). The line between them: a
   wait is for a separate feature that needs another's code merged first and ships on its own; a stack is for pieces

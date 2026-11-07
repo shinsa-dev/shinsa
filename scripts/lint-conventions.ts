@@ -16,6 +16,9 @@ import {
   isSyncIoSource,
   isEffectIoSource,
   listUnbridgedIoLines,
+  listRawIoViolations,
+  listStaleBaselineFiles,
+  RAW_IO_BASELINE_MESSAGE,
   EFFECT_SYNC_IO_MESSAGE,
   listSyncIoLines,
   isEffectSource,
@@ -59,21 +62,9 @@ type BabelNode = {
   [key: string]: unknown;
 };
 
-const ROOTS = [
-  'apps/cloud/src',
-  'apps/cloud/test',
-  'apps/engine/src',
-  'apps/engine/test',
-  'apps/web/src',
-  'apps/web/test',
-  'apps/desktop/src',
-  'apps/desktop/test',
-  'apps/desktop/scripts',
-  'apps/engine/scripts',
-  'apps/marketing/src',
-  'packages',
-  'scripts',
-];
+const APP_ROOT_FOLDERS = ['src', 'test', 'scripts'];
+
+const SHARED_ROOTS = ['packages', 'scripts'];
 
 const SKIPPED_SEGMENTS = new Set(['node_modules', 'dist']);
 
@@ -645,6 +636,7 @@ const checkFile = Effect.fn('Conventions.checkFile')(function* (
   collectSyncIoViolations(file, source, violations);
   collectEffectIoViolations(file, source, violations);
   collectEngineRuntimeViolations(file, source, violations);
+  for (const violation of listRawIoViolations(file, source)) violations.push({ file, ...violation });
   if (isUnder(file, VERB_CHECK_ROOTS)) collectVerbViolations(file, parsed.program, violations);
   if (isUnder(file, APP)) appSources[file] = source;
 });
@@ -653,11 +645,21 @@ const run = Effect.fn('Conventions.run')(function* () {
   const fs = yield* FileSystem.FileSystem;
   const violations: Violation[] = [];
   const appSources: Record<string, string> = {};
-  for (const root of ROOTS) {
+  const checked = new Set<string>();
+  const apps = [...(yield* fs.readDirectory('apps'))].sort((a, b) => a.localeCompare(b));
+  const roots = [
+    ...apps.flatMap((app) => APP_ROOT_FOLDERS.map((folder) => `apps/${app}/${folder}`)),
+    ...SHARED_ROOTS,
+  ];
+  for (const root of roots) {
     if (!(yield* fs.exists(root))) continue;
-    for (const file of yield* listSourceFiles(root))
+    for (const file of yield* listSourceFiles(root)) {
+      checked.add(file);
       yield* checkFile(file, yield* fs.readFileString(file), violations, appSources);
+    }
   }
+  for (const file of listStaleBaselineFiles(checked))
+    violations.push({ file, line: 1, message: RAW_IO_BASELINE_MESSAGE });
   violations.push(...listToastViolations(appSources));
   violations.push(...listDialogViolations(appSources));
   for (const root of APP)

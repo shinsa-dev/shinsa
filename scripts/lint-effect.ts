@@ -1,5 +1,6 @@
 import { parse } from '@babel/parser';
 import { type AstNode, listChildren } from './lint-ast.ts';
+import { RAW_IO_BASELINE } from './lint-effect-baseline.ts';
 
 export const EFFECT_IMPORT = /from\s+['"](?:effect(?:\/[\w-]+)?|@effect\/[\w-]+)['"]/;
 
@@ -50,12 +51,18 @@ export const SYNC_IO_MESSAGE =
 export const EFFECT_SYNC_IO_MESSAGE =
   'File or process I/O outside an effect in Effect code. Read and write through FileSystem from effect, run a process through the Shell or Command service, or call it inside Effect.try (Effect.sync only for a call that cannot fail); a plain helper that does I/O hides it from the type (the effect skill → What is Effect code)';
 
+export const RAW_IO_MESSAGE =
+  'Raw node:fs, node:child_process or Bun I/O in Effect code. Read and write through FileSystem and Path from effect and run a process through the Shell or Command service; RAW_IO_BASELINE (scripts/lint-effect-baseline.ts) lists the files still left to move, and the list only shrinks (the effect skill → What is Effect code)';
+
+export const RAW_IO_BASELINE_MESSAGE =
+  'This file no longer does raw file or process I/O, or no longer exists. Remove it from RAW_IO_BASELINE in scripts/lint-effect-baseline.ts so it cannot come back';
+
 export const ENGINE_RUNTIME_MESSAGE =
   'A runtime or a Promise class in the engine. Write the module as a Context.Service with its Layer, yield what it needs, and run effects only at the process edge, main.ts; a callback from outside enters with Effect.runForkWith on the context the layer captured (the effect skill → Services and layers)';
 
 const ENGINE_SOURCE = /^apps\/engine\/src\//;
 
-const PROMISE_IO_SOURCE = /^(?:apps\/[\w-]+\/(?:src|scripts)|packages\/[\w-]+\/src|scripts)\//;
+const PROMISE_IO_SOURCE = /^(?:(?:apps|packages)\/[\w-]+\/(?:src|scripts)|scripts)\//;
 
 const SYNC_IO_MODULES = new Set([
   'node:fs',
@@ -332,6 +339,16 @@ function isPassedToHelper(chain: AstNode[], helpers: ReadonlySet<string>) {
       (parent.arguments as AstNode[]).includes(node)
     );
   });
+}
+
+export function listRawIoViolations(file: string, source: string) {
+  const lines = isEffectIoSource(file, source) ? listSyncIoLines(source) : [];
+  if (!RAW_IO_BASELINE.has(file)) return lines.map((line) => ({ line, message: RAW_IO_MESSAGE }));
+  return lines.length === 0 ? [{ line: 1, message: RAW_IO_BASELINE_MESSAGE }] : [];
+}
+
+export function listStaleBaselineFiles(files: ReadonlySet<string>) {
+  return [...RAW_IO_BASELINE].filter((file) => !files.has(file));
 }
 
 export function listUnbridgedIoLines(source: string) {

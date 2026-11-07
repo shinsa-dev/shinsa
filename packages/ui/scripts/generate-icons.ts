@@ -1,25 +1,13 @@
-/**
- * Pre-renders the Central Icons the workspace uses into
- * `src/components/icon/paths.ts`, so the bundle carries only referenced icons
- * (the logic is in `icons.ts`). Run it after using a new icon name;
- * `--check` fails instead of writing when the file is out of date.
- */
-import { readFileSync, writeFileSync } from 'node:fs';
-import { generateIcons, OUT } from './icons';
+import { BunRuntime, BunServices } from '@effect/platform-bun';
+import { Effect } from 'effect';
+import { INDEX, OUT, SCAN_ROOTS } from './icons';
+import { syncIconsFile } from './icons-file';
 
-const { module, icons } = generateIcons();
-const current = readFileSync(OUT, 'utf8');
+const program = syncIconsFile({
+  roots: SCAN_ROOTS,
+  out: OUT,
+  index: INDEX,
+  check: process.argv.includes('--check'),
+}).pipe(Effect.provide(BunServices.layer));
 
-if (process.argv.includes('--check')) {
-  if (current !== module) {
-    // oxlint-disable-next-line eslint/no-console -- build script output
-    console.error('[icons] paths.ts is out of date. Run: bun run --cwd packages/ui generate:icons');
-    process.exit(1);
-  }
-  // oxlint-disable-next-line eslint/no-console -- build script output
-  console.log(`[icons] paths.ts is current (${icons} icons)`);
-} else {
-  if (current !== module) writeFileSync(OUT, module);
-  // oxlint-disable-next-line eslint/no-console -- build script output
-  console.log(`[icons] ${icons} icons written to paths.ts`);
-}
+if (import.meta.main) BunRuntime.runMain(program);
