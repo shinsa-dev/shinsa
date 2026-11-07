@@ -100,14 +100,14 @@ describe('webhook settings over HTTP', () => {
     });
   });
 
-  test('a webhook whose hook is gone is not found', async () => {
+  test('a webhook whose token is not written yet gets one at once', async () => {
     const world = await createWorld();
     const schedule = await addSchedule(world, { kind: 'webhook', signature: null, replayKey: null });
     const { call } = await setUp(world);
     await world.secrets.pruneHooks(new Set());
-    await expect(call('GET', `/api/schedules/${schedule.id}/webhook`)).rejects.toMatchObject({
-      code: 'schedule_not_found',
-    });
+    const shown = (await call('GET', `/api/schedules/${schedule.id}/webhook`)) as { url: string };
+    const hook = await world.secrets.selectHook(schedule.id);
+    expect(shown.url).toEndWith(`/${schedule.id}/${hook?.token}`);
   });
 
   test('without schedules the routes are not found', async () => {

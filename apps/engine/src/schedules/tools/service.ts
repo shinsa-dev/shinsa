@@ -1,5 +1,4 @@
 import {
-  DomainError,
   describeScheduleTarget,
   describeScheduleTrigger,
   listOpenWatchSuggestions,
@@ -61,16 +60,6 @@ export class ScheduleTools extends Context.Service<ScheduleTools, ScheduleToolsS
           const remote = yield* urls.hookUrl(scheduleId, token);
           if (remote) return remote;
           return `${yield* urls.baseUrl}${WEBHOOK_ROUTE_PREFIX}/${encodeURIComponent(scheduleId)}/${token}`;
-        });
-
-        const findHookUrl = Effect.fn('ScheduleTools.findHookUrl')(function* (scheduleId: string) {
-          const hook = yield* secrets.selectHook(scheduleId);
-          if (!hook)
-            return yield* new DomainError({
-              code: 'schedule_not_found',
-              message: 'This schedule has no webhook.',
-            });
-          return yield* resolveHookUrl(scheduleId, hook.token);
         });
 
         const upsertHookUrl = Effect.fn('ScheduleTools.upsertHookUrl')(function* (scheduleId: string) {
@@ -327,7 +316,7 @@ export class ScheduleTools extends Context.Service<ScheduleTools, ScheduleToolsS
           }
         };
 
-        return ScheduleTools.of({ findHookUrl, assertSigningSecret, writeScheduleSecret, handle });
+        return ScheduleTools.of({ upsertHookUrl, assertSigningSecret, writeScheduleSecret, handle });
       })
     );
 }

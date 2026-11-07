@@ -166,7 +166,7 @@ describe('the tool calls of an agent', () => {
     const schedules = Layer.succeed(
       ScheduleTools,
       ScheduleTools.of({
-        findHookUrl: () => Effect.succeed(''),
+        upsertHookUrl: () => Effect.succeed(''),
         assertSigningSecret: () => Effect.void,
         writeScheduleSecret: () => Effect.succeed(null),
         handle: (name, _input, run) => {
@@ -194,7 +194,7 @@ describe('the tool calls of an agent', () => {
     const schedules = Layer.succeed(
       ScheduleTools,
       ScheduleTools.of({
-        findHookUrl: () => Effect.succeed(''),
+        upsertHookUrl: () => Effect.succeed(''),
         assertSigningSecret: () => Effect.void,
         writeScheduleSecret: () => Effect.succeed(null),
         handle: (_name, _input, run) =>

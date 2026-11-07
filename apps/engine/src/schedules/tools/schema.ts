@@ -27,7 +27,7 @@ export interface ScheduleToolRun {
 }
 
 export interface ScheduleToolsShape {
-  readonly findHookUrl: (scheduleId: string) => Effect.Effect<string, DomainError>;
+  readonly upsertHookUrl: (scheduleId: string) => Effect.Effect<string>;
   readonly assertSigningSecret: (
     scheduleId: string | null,
     ref: string | null,

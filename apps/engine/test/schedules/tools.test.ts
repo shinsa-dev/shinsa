@@ -568,15 +568,17 @@ describe('file_report', () => {
 });
 
 describe('a webhook’s URL', () => {
-  test('is the local route with its token, and a schedule without a webhook has none', async () => {
+  test('is the local route with its token, made at once when the background sync has not written it yet', async () => {
     const world = await createWorld();
     const { harness, tool } = await setUp(world);
     await tool('set_schedule', { message: 'Hook', webhook: {} });
     const schedule = only(world);
     const hook = await world.secrets.selectHook(schedule.id);
-    expect(await harness.findHookUrl(schedule.id)).toBe(
+    expect(await harness.upsertHookUrl(schedule.id)).toBe(
       `http://127.0.0.1:5180/api/hooks/${schedule.id}/${hook?.token}`
     );
-    await expect(harness.findHookUrl('nope')).rejects.toThrow('This schedule has no webhook.');
+    const fresh = await harness.upsertHookUrl('unsynced');
+    const made = await world.secrets.selectHook('unsynced');
+    expect(fresh).toBe(`http://127.0.0.1:5180/api/hooks/unsynced/${made?.token}`);
   });
 });

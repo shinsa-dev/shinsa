@@ -58,7 +58,7 @@ export async function openSchedules(
     start: () => harness.run(schedules.start),
     stop: () => harness.run(schedules.stop),
     fireDue: () => harness.run(schedules.fireDue),
-    findHookUrl: (scheduleId: string) => harness.run(schedules.findHookUrl(scheduleId)),
+    upsertHookUrl: (scheduleId: string) => harness.run(schedules.upsertHookUrl(scheduleId)),
     handleWebhook: (request: Request, url: URL) => harness.run(schedules.handleWebhook(request, url)),
     tool,
   };
