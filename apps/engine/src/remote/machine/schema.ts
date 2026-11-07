@@ -6,6 +6,7 @@ import type {
   PairingView,
   RemoteSnapshot,
   TaskGuest,
+  TaskOwner,
 } from '@shinsa/core';
 import type { NotFound, RateLimited, Revoked } from '@shinsa/core/remote/errors';
 import { type Effect, Schema, type Scope } from 'effect';
@@ -102,6 +103,7 @@ export interface RemoteHandle {
   spendConnect(claim: ConnectClaim): Effect.Effect<boolean>;
   isOwner(userId: string | null): Effect.Effect<boolean>;
   hasAccess(userId: string): Effect.Effect<boolean>;
+  resolveActor(userId: string | null): Effect.Effect<TaskOwner | null>;
   resolveTeamScope(userId: string, teamId: string): Effect.Effect<TeamScope | null>;
   listTeamScopes(userId: string): Effect.Effect<TeamScope[]>;
   resolveTeamGrant(userId: string, teamId: string): Effect.Effect<string | null>;

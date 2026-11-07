@@ -3,7 +3,7 @@ import { Schema } from 'effect';
 import type { DispatchOptions, EngineStopped } from '../../runtime/engine/schema.ts';
 import type { ClassifierFailed } from '../schema.ts';
 
-export type RouteSource = Pick<DispatchOptions, 'onBehalf' | 'byTask' | 'guest'>;
+export type RouteSource = Pick<DispatchOptions, 'onBehalf' | 'byTask' | 'guest' | 'actor'>;
 
 export type TaskMessage = Extract<UserCommand, { type: 'task.message' }>;
 

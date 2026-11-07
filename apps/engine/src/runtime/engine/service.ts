@@ -330,6 +330,7 @@ export class EngineCore extends Context.Service<
             onBehalf: dispatchOptions.onBehalf === true,
             byTask: dispatchOptions.byTask ?? null,
             guest: dispatchOptions.guest ?? null,
+            actor: dispatchOptions.actor ?? null,
           };
           return yield* Semaphore.withPermit(
             queue,

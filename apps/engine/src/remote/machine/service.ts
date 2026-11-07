@@ -418,6 +418,14 @@ export class Remote extends Context.Service<Remote, RemoteHandle>()('shinsa/engi
           return userId !== null && (yield* file).access?.owner.id === userId;
         });
 
+        const resolveActor = Effect.fn('Remote.resolveActor')(function* (userId: string | null) {
+          const known = (yield* file).access;
+          if (!known) return null;
+          const people = [known.owner, ...known.members.map((member) => member.user)];
+          const person = userId === null ? known.owner : people.find((user) => user.id === userId);
+          return person ? { login: person.login, name: person.name, avatarUrl: person.avatarUrl } : null;
+        });
+
         const resolveRequester = Effect.fn('Remote.resolveRequester')(function* (userId: string) {
           const { access: known, credentials } = yield* file;
           if (!(known && credentials)) return 'This machine is still connecting. Try again in a moment.';
@@ -967,6 +975,7 @@ export class Remote extends Context.Service<Remote, RemoteHandle>()('shinsa/engi
             isEnrolled: (device) => admits(device, userId),
             resolveGuest,
             isOwner: isOwner(userId),
+            userId,
             requestAccess: (proof, keys, name) =>
               requestAccess(proof, keys, name, userId).pipe(Effect.mapError(toBroken)),
             resumeAccess: (device) => resumeAccess(device, userId),
@@ -1053,6 +1062,7 @@ export class Remote extends Context.Service<Remote, RemoteHandle>()('shinsa/engi
           spendConnect,
           isOwner,
           hasAccess,
+          resolveActor,
           resolveTeamScope,
           listTeamScopes,
           resolveTeamGrant,

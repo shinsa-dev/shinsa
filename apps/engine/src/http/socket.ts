@@ -32,7 +32,7 @@ import type { EngineCore } from '../runtime/engine/service.ts';
 import type { Terminals } from '../terminals/index.ts';
 import type { CommandRouter } from '../triage/index.ts';
 import { makeAttentionTracker } from './attention/service.ts';
-import { dispatchUserCommand } from './commands.ts';
+import { dispatchUserCommand, resolveRequestActor } from './commands.ts';
 import { REQUEST_FAILED } from './schema.ts';
 
 export interface SocketData {
@@ -41,6 +41,7 @@ export interface SocketData {
   surface: Surface | null;
   origin: RequestOrigin;
   guest: ScopedActor | null;
+  userId: string | null;
 }
 
 interface FeedSource<T> {
@@ -58,7 +59,7 @@ export interface SocketHubInput {
   readonly teamFeeds?: FeedSource<TeamFeedSnapshot> | undefined;
   readonly version?: string | undefined;
   readonly resources?: ResourceMonitor['Service'] | undefined;
-  readonly teams?: Pick<RemoteHandle, 'resolveTeamScope'> | undefined;
+  readonly teams?: Pick<RemoteHandle, 'resolveTeamScope' | 'resolveActor'> | undefined;
   readonly presence?: Presence['Service'] | undefined;
 }
 
@@ -259,6 +260,14 @@ export const makeSocketHub = Effect.fn('SocketHub.make')(function* (input: Socke
           router,
           origin: socket.data.origin,
           guest: socket.data.guest,
+          actor: yield* resolveRequestActor(
+            {
+              via: socket.data.origin === 'local' ? 'local' : 'channel',
+              guest: socket.data.guest,
+              userId: socket.data.userId,
+            },
+            teams
+          ),
           teams: teams ?? null,
         }).pipe(
           Effect.as(null),

@@ -407,6 +407,7 @@ export function adaptRemote(test: RemoteTest) {
     removeDevice: (publicKey: string) => runSync(remote.removeDevice(publicKey)),
     isOwner: (userId: string | null) => runSync(remote.isOwner(userId)),
     hasAccess: (userId: string) => runSync(remote.hasAccess(userId)),
+    resolveActor: (userId: string | null) => runSync(remote.resolveActor(userId)),
     resolveTeamScope: (userId: string, teamId: string) => runSync(remote.resolveTeamScope(userId, teamId)),
     listTeamScopes: (userId: string) => runSync(remote.listTeamScopes(userId)),
     resolveTeamGrant: (userId: string, teamId: string) => runSync(remote.resolveTeamGrant(userId, teamId)),
