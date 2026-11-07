@@ -1,4 +1,5 @@
 export {
+  isDecisionHeld,
   isInFocus,
   isListedInFocus,
   listWaitsOn,

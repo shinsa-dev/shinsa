@@ -2,6 +2,7 @@ import { describeUnblocks } from '../briefing/text.ts';
 import { capitalise, describeCount } from '../chat/text.ts';
 import {
   compareTasks,
+  type Gate,
   type GateType,
   hasArmedWait,
   isDecisionGate,
@@ -81,13 +82,31 @@ export function isListedInFocus(state: ShinsaState, task: Task, now: number) {
   return !isWatchHome(task) && isInFocus(state, task, now);
 }
 
+const HELD_DECISIONS: Partial<Record<TaskStage, GateType>> = {
+  awaiting_plan: 'plan',
+  awaiting_review: 'review',
+  awaiting_proposal: 'proposal',
+};
+
+export function isDecisionHeld(state: ShinsaState, task: Task) {
+  return HELD_DECISIONS[task.stage] !== undefined && listOpenBlockers(state, task).length > 0;
+}
+
+function isGateHeld(state: ShinsaState, gate: Gate) {
+  const task = state.tasks[gate.taskId];
+  if (!task || HELD_DECISIONS[task.stage] !== gate.type) return false;
+  return isDecisionHeld(state, task);
+}
+
 export function listWaitsOn(state: ShinsaState, task: Task): Task[] {
   if (task.stage === 'waiting_on_tasks') {
     const pending = listPendingDependencies(state, task);
     const holder = pending.length === 0 ? selectCheckoutHolder(state, task) : null;
     return holder ? [holder] : pending;
   }
-  if (task.stage === 'shipping' || task.stage === 'awaiting_merge') return listOpenBlockers(state, task);
+  if (task.stage === 'shipping' || task.stage === 'awaiting_merge' || HELD_DECISIONS[task.stage]) {
+    return listOpenBlockers(state, task);
+  }
   return [];
 }
 
@@ -127,7 +146,7 @@ function countDependents(state: ShinsaState) {
 
 function listQueuedGates(state: ShinsaState): QueuedGate[] {
   const open = listOpenGates(state).filter(
-    (gate) => !isHeldInBacklog(state, gate) && !state.tasks[gate.taskId]?.snoozed
+    (gate) => !isHeldInBacklog(state, gate) && !state.tasks[gate.taskId]?.snoozed && !isGateHeld(state, gate)
   );
   const dependents = open.length > 0 ? countDependents(state) : new Map<string, number>();
   return open.flatMap((gate) => {
