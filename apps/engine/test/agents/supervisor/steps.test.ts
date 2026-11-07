@@ -14,11 +14,12 @@ import { prepareWorkspace } from '../../../src/agents/supervisor/workspace.ts';
 import { RunWorld } from '../../../src/agents/supervisor/world/service.ts';
 import { EngineConfig } from '../../../src/config/service.ts';
 import { ConfigStore } from '../../../src/config/store/service.ts';
-import { JsonFile } from '../../../src/files/service.ts';
 import { GitLayer } from '../../../src/git/layers.ts';
 import { EngineCore } from '../../../src/runtime/engine/service.ts';
 import { ShellLayer } from '../../../src/shell/layers.ts';
 import { WorktreeRoot } from '../../../src/workspaces/root/service.ts';
+import { runFiles } from '../../harness.ts';
+import { JsonFileLayer } from '../../helpers/files.ts';
 import { createTempDir, createTestConfig } from '../../helpers/index.ts';
 import { createRun, createStubEngine } from '../../helpers/state.ts';
 import { createTranscriptsLayer } from '../../helpers/transcripts.ts';
@@ -46,7 +47,7 @@ function provideWorld(lease: () => Promise<null>, stub = createStubEngine()) {
   return Effect.provide(
     RunWorld.layer.pipe(
       Layer.provide(AccountLeasing.layer),
-      Layer.provide(WorktreeRoot.layer.pipe(Layer.provide(ConfigStore.layer), Layer.provide(JsonFile.layer))),
+      Layer.provide(WorktreeRoot.layer.pipe(Layer.provide(ConfigStore.layer), Layer.provide(JsonFileLayer))),
       Layer.provideMerge(
         Layer.mergeAll(
           createTranscriptsLayer(config.transcriptsDir),
@@ -91,8 +92,8 @@ describe('the steps of a turn', () => {
   test('a scratch folder that cannot be made fails with WorkspaceUnavailable', async () => {
     const file = join(createTempDir(), 'taken');
     writeFileSync(file, '');
-    const exit = await Effect.runPromiseExit(
-      prepareWorkspace({ cwd: join(file, 'scratch'), repo: null, defaultBranch: 'main' })
+    const exit = await runFiles(
+      Effect.exit(prepareWorkspace({ cwd: join(file, 'scratch'), repo: null, defaultBranch: 'main' }))
     );
     expect(exit).toMatchObject(Exit.fail(expect.objectContaining({ _tag: 'WorkspaceUnavailable' })));
   });

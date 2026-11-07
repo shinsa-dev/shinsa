@@ -14,43 +14,43 @@ import { createGitRepo, createTempDir, git, overrideEnv } from '../helpers/index
 import { createTestMachine } from '../helpers/machine.ts';
 import { createStubEngine } from '../helpers/state.ts';
 
-const machines = new WeakMap<Engine, ReturnType<typeof createTestMachine>>();
+const machines = new WeakMap<Engine, Awaited<ReturnType<typeof createTestMachine>>>();
 
-function openMachine(engine: Engine) {
+async function openMachine(engine: Engine) {
   const known = machines.get(engine);
   if (known) return known;
-  const machine = createTestMachine(engine, createConfigAt(createTempDir()));
+  const machine = await createTestMachine(engine, createConfigAt(createTempDir()));
   machines.set(engine, machine);
   return machine;
 }
 
-function upsertRepo(
+async function upsertRepo(
   engine: Engine,
   path: string,
   projectId: string | null = null,
   from: DispatchOptions = {}
 ) {
-  return Effect.runPromise(openMachine(engine).registry.upsert(path, null, projectId, from));
+  return Effect.runPromise((await openMachine(engine)).registry.upsert(path, null, projectId, from));
 }
 
-function syncRepoRemote(engine: Engine, repo: Repo) {
-  return Effect.runPromise(openMachine(engine).registry.syncRemote(repo));
+async function syncRepoRemote(engine: Engine, repo: Repo) {
+  return Effect.runPromise((await openMachine(engine)).registry.syncRemote(repo));
 }
 
-function upsertProjectFolderRepo(engine: Engine, projectId: string | null, name: string) {
-  return Effect.runPromise(openMachine(engine).registry.upsertProjectFolder(projectId, name));
+async function upsertProjectFolderRepo(engine: Engine, projectId: string | null, name: string) {
+  return Effect.runPromise((await openMachine(engine)).registry.upsertProjectFolder(projectId, name));
 }
 
-function createProjectRepository(engine: Engine, projectId: string, name: string) {
-  return Effect.runPromise(openMachine(engine).registry.createInProject(projectId, name));
+async function createProjectRepository(engine: Engine, projectId: string, name: string) {
+  return Effect.runPromise((await openMachine(engine)).registry.createInProject(projectId, name));
 }
 
-function createRepository(engine: Engine, parent: string, name: string, projectId: string | null) {
-  return Effect.runPromise(openMachine(engine).registry.create(parent, name, projectId));
+async function createRepository(engine: Engine, parent: string, name: string, projectId: string | null) {
+  return Effect.runPromise((await openMachine(engine)).registry.create(parent, name, projectId));
 }
 
-function listCandidateRepos(roots: readonly string[], origin: string | null) {
-  const folders = Context.get(openMachine(new Engine(openEventLog())).context, RepoFolders);
+async function listCandidateRepos(roots: readonly string[], origin: string | null) {
+  const folders = Context.get((await openMachine(new Engine(openEventLog()))).context, RepoFolders);
   return Effect.runPromise(folders.listCandidates(roots, origin));
 }
 
@@ -89,7 +89,7 @@ describe('project names', () => {
   });
 
   test('the GitHub login is read from gh once it answers, and a failed read is tried again', async () => {
-    const { login } = createTestMachine(new Engine(openEventLog()), createConfigAt(createTempDir()), {
+    const { login } = await createTestMachine(new Engine(openEventLog()), createConfigAt(createTempDir()), {
       resolveLogin: undefined,
     });
     const resolveLogin = () => Effect.runPromise(login);

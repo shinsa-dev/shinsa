@@ -14,7 +14,7 @@ import {
 } from '../helpers/terminals.ts';
 import { until } from '../helpers/until.ts';
 import { createFakeViewer } from './fakes.ts';
-import { createTerminals, run } from './harness.ts';
+import { createTerminals, runAsync } from './harness.ts';
 
 setDefaultTimeout(30_000);
 
@@ -49,8 +49,11 @@ describe('terminals over HTTP and their socket', () => {
     await until('the shell is in the folder', () => view.state.output.includes(realpathSync(repoPath)));
 
     view.socket.send(new TextEncoder().encode('exit 7\r'));
-    await until('the exit is recorded', () => run(terminals.select(terminal.id))?.info.status === 'exited');
-    expect(run(terminals.select(terminal.id))?.info.exitCode).toBe(7);
+    await until(
+      'the exit is recorded',
+      async () => (await runAsync(terminals.select(terminal.id)))?.info.status === 'exited'
+    );
+    expect((await runAsync(terminals.select(terminal.id)))?.info.exitCode).toBe(7);
 
     const again = attach(base, terminal.id);
     await again.opened;
@@ -124,7 +127,7 @@ describe('terminals over HTTP and their socket', () => {
     expect(await (await post('/api/terminals', { projectId, path: repoPath })).json()).toMatchObject({
       error: { code: 'terminal_place_missing' },
     });
-    expect(run(terminals.snapshot).terminals).toEqual([]);
+    expect((await runAsync(terminals.snapshot)).terminals).toEqual([]);
     await expect(attach(base, 'some-id', null).opened).rejects.toThrow('socket refused');
     const unknown = attach(base, 'some-id');
     await unknown.opened;
@@ -140,7 +143,7 @@ describe('terminals over HTTP and their socket', () => {
     const view = attach(base, terminal.id);
     await view.opened;
     await until('the screen arrives', () => view.state.controls.length > 0);
-    const session = run(terminals.find(terminal.id));
+    const session = await runAsync(terminals.find(terminal.id));
     terminals.select = () => Effect.succeed(null);
     view.socket.send('{"type":"resize","cols":90,"rows":20}');
     view.socket.close();
@@ -150,12 +153,14 @@ describe('terminals over HTTP and their socket', () => {
 });
 
 describe('createTerminalSockets', () => {
-  test('a socket that drains catches up with the screen, and one without a viewer is skipped', () => {
-    const { terminals, fake } = createTerminals();
-    const terminal = run(terminals.create({ projectId: 'p1', cwd: '/tmp', place: 'folder', taskId: null }));
-    const sockets = run(createTerminalSockets(terminals));
+  test('a socket that drains catches up with the screen, and one without a viewer is skipped', async () => {
+    const { terminals, fake } = await createTerminals();
+    const terminal = await runAsync(
+      terminals.create({ projectId: 'p1', cwd: '/tmp', place: 'folder', taskId: null })
+    );
+    const sockets = await runAsync(createTerminalSockets(terminals));
     const viewer = createFakeViewer();
-    run(terminals.attach(terminal.id, viewer));
+    await runAsync(terminals.attach(terminal.id, viewer));
     viewer.bufferedBytes = Number.MAX_SAFE_INTEGER;
     fake.spawned[0]?.emit('x'.repeat(300_000));
     viewer.bufferedBytes = 0;

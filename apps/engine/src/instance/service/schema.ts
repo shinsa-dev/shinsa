@@ -1,5 +1,5 @@
 import type { DomainError } from '@shinsa/core';
-import { type Effect, Schema } from 'effect';
+import { type Effect, type FileSystem, Schema } from 'effect';
 import type { Shell } from '../../shell/service.ts';
 
 export const SERVICE_MARKER = 'SHINSA_SERVICE';
@@ -27,7 +27,7 @@ export type ServiceRunner = (args: string[]) => Effect.Effect<ServiceResult, nev
 export interface EngineService {
   manager: 'launchd' | 'systemd';
   revivesKilled: boolean;
-  prepare: Effect.Effect<string | null, DomainError | ServiceCommandFailed, Shell>;
+  prepare: Effect.Effect<string | null, DomainError | ServiceCommandFailed, Shell | FileSystem.FileSystem>;
   assertInstalled: Effect.Effect<void, DomainError, Shell>;
   start: Effect.Effect<void, ServiceCommandFailed, Shell>;
   stop: Effect.Effect<void, ServiceCommandFailed, Shell>;

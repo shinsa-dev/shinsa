@@ -14,7 +14,7 @@ export const compactSession = Effect.fn('RunSupervisor.compact')(function* (
   sessionId: string
 ) {
   const world = yield* RunWorld;
-  const runSync = Effect.runSyncWith(yield* Effect.context<never>());
+  const runFork = Effect.runForkWith(yield* Effect.context<never>());
   const state = yield* world.state;
   const run = state.runs[runId];
   const task = run ? state.tasks[run.taskId] : undefined;
@@ -50,7 +50,7 @@ export const compactSession = Effect.fn('RunSupervisor.compact')(function* (
     onSession: () => undefined,
     onEntry: (entry) => {
       if (entry.type === 'notice' && entry.notice.kind === 'compaction')
-        runSync(world.transcripts.record(runId, entry));
+        runFork(world.transcripts.record(runId, entry));
     },
   });
   const result = yield* session.done.pipe(

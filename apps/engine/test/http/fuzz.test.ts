@@ -239,7 +239,7 @@ async function startFuzzServer() {
     transcripts: createTestTranscripts(config.transcriptsDir),
     evidence: createTestEvidence(config.evidenceDir),
     models: { listModels: Effect.succeed([]) } as ModelSource,
-    onboarding: createTestOnboarding(engine, config).onboarding,
+    onboarding: (await createTestOnboarding(engine, config)).onboarding,
   });
   stops.push(http.stop);
   return { config, engine, base: `http://127.0.0.1:${http.server.port}` };

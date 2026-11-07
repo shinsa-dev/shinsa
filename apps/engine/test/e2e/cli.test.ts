@@ -30,7 +30,7 @@ async function open() {
     transcripts: createTestTranscripts(world.config.transcriptsDir),
     evidence: createTestEvidence(world.config.evidenceDir),
     models: { listModels: () => Promise.resolve([]) } as unknown as ModelSource,
-    onboarding: createTestOnboarding(world.engine, world.config).onboarding,
+    onboarding: (await createTestOnboarding(world.engine, world.config)).onboarding,
   });
   stops.push(http.stop);
   return { w: world, port: String(http.server.port) };

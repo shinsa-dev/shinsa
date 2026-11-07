@@ -1,20 +1,24 @@
-import { execFile } from 'node:child_process';
-import { Duration, Effect, Layer } from 'effect';
+import { Effect, Layer, Option } from 'effect';
+import { ChildProcessSpawner } from 'effect/process';
 import { LAUNCHCTL_PROGRAM, LAUNCHCTL_TIMEOUT } from '../launchctl/schema.ts';
 import { Launchctl } from '../launchctl/service.ts';
+import { runProcess } from '../processes/run.ts';
 
-export const LaunchctlLive = Layer.succeed(
+export const LaunchctlLive = Layer.effect(
   Launchctl,
-  Launchctl.of({
-    run: (args) =>
-      Effect.callback<{ ok: boolean; output: string }>((resume) => {
-        const child = execFile(
-          LAUNCHCTL_PROGRAM,
-          [...args],
-          { timeout: Duration.toMillis(LAUNCHCTL_TIMEOUT) },
-          (error, stdout, stderr) => resume(Effect.succeed({ ok: !error, output: `${stdout}${stderr}` }))
-        );
-        return Effect.sync(() => child.kill());
-      }),
+  Effect.gen(function* () {
+    const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+    return Launchctl.of({
+      run: (args) =>
+        runProcess(LAUNCHCTL_PROGRAM, args, { timeout: LAUNCHCTL_TIMEOUT }).pipe(
+          Effect.map(
+            Option.match({
+              onNone: () => ({ ok: false, output: '' }),
+              onSome: (result) => ({ ok: result.ok, output: `${result.stdout}${result.stderr}` }),
+            })
+          ),
+          Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner)
+        ),
+    });
   })
 );

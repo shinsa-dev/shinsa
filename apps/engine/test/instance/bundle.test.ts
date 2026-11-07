@@ -49,7 +49,7 @@ describe('the engine bundle', () => {
 
   test('a bundled engine reads its plugin, interface and versions from beside itself', async () => {
     const bundle = createBundle();
-    const config = resolveConfig({ SHINSA_HOME: createTempDir() }, bundle);
+    const config = await resolveConfig({ SHINSA_HOME: createTempDir() }, bundle);
     expect(config.pluginDir).toBe(join(bundle.root, 'plugin'));
     expect(config.webDir).toBe(join(bundle.root, 'web'));
     expect(await runFiles(resolveSdkPackage(undefined, bundle))).toEqual(bundle.sdk);

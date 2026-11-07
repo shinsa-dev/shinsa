@@ -22,8 +22,8 @@ describe('readOriginRemote', () => {
       ['origin', 'git@github.com:acme/ssh.git']
     );
     const https = await createRepo(root, 'https', ['origin', 'https://token@github.com/acme/https.git']);
-    expect(readOriginRemote(ssh)).toBe('github.com/acme/ssh');
-    expect(readOriginRemote(https)).toBe('github.com/acme/https');
+    expect(await readOriginRemote(ssh)).toBe('github.com/acme/ssh');
+    expect(await readOriginRemote(https)).toBe('github.com/acme/https');
   });
 
   test('follows a worktree’s .git file to the main repository’s config', async () => {
@@ -31,7 +31,7 @@ describe('readOriginRemote', () => {
     const main = await createRepo(root, 'main', ['origin', 'git@github.com:acme/main.git']);
     await git(main, 'commit', '-q', '--allow-empty', '-m', 'chore: start');
     await git(main, 'worktree', 'add', '-q', join(root, 'linked'));
-    expect(readOriginRemote(join(root, 'linked'))).toBe('github.com/acme/main');
+    expect(await readOriginRemote(join(root, 'linked'))).toBe('github.com/acme/main');
   });
 
   test('a .git file pointing at a folder of its own reads that folder’s config', async () => {
@@ -40,8 +40,8 @@ describe('readOriginRemote', () => {
     const checkout = join(root, 'checkout');
     mkdirSync(checkout);
     writeFileSync(join(checkout, '.git'), `gitdir: ../store/.git\n`);
-    expect(readOriginRemote(checkout)).toBe('github.com/acme/store');
-    expect(readOriginRemote(store)).toBe('github.com/acme/store');
+    expect(await readOriginRemote(checkout)).toBe('github.com/acme/store');
+    expect(await readOriginRemote(store)).toBe('github.com/acme/store');
   });
 
   test('is null with no origin, no .git, an unreadable .git file or a folder that is not there', async () => {
@@ -54,10 +54,10 @@ describe('readOriginRemote', () => {
     writeFileSync(join(broken, '.git'), 'nothing here\n');
     const empty = join(root, 'empty');
     mkdirSync(join(empty, '.git'), { recursive: true });
-    expect(readOriginRemote(bare)).toBeNull();
-    expect(readOriginRemote(plain)).toBeNull();
-    expect(readOriginRemote(broken)).toBeNull();
-    expect(readOriginRemote(empty)).toBeNull();
-    expect(readOriginRemote(join(root, 'nowhere'))).toBeNull();
+    expect(await readOriginRemote(bare)).toBeNull();
+    expect(await readOriginRemote(plain)).toBeNull();
+    expect(await readOriginRemote(broken)).toBeNull();
+    expect(await readOriginRemote(empty)).toBeNull();
+    expect(await readOriginRemote(join(root, 'nowhere'))).toBeNull();
   });
 });

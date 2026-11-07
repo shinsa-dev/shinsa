@@ -1,5 +1,5 @@
-import { Effect, Layer } from 'effect';
-import { JsonFile } from '../../src/files/service.ts';
+import { Effect, type FileSystem, Layer } from 'effect';
+import type { JsonFile } from '../../src/files/service.ts';
 import { JsonLogger } from '../../src/log/service.ts';
 import type { HeldTeamList } from '../../src/remote/team-snapshots/schema.ts';
 import { makeTeamSnapshots } from '../../src/remote/team-snapshots/service.ts';
@@ -9,36 +9,37 @@ import {
   type TeamViewEntry,
 } from '../../src/remote/team-views/schema.ts';
 import { makeTeamViews } from '../../src/remote/team-views/service.ts';
+import { JsonFileLayer } from '../helpers/files.ts';
 
-const files = Layer.merge(JsonFile.layer, JsonLogger);
+const files = Layer.merge(JsonFileLayer, JsonLogger);
 
-function runSync<A, E>(effect: Effect.Effect<A, E, JsonFile>) {
-  return Effect.runSync(effect.pipe(Effect.provide(files)));
+function runPromise<A, E>(effect: Effect.Effect<A, E, JsonFile | FileSystem.FileSystem>) {
+  return Effect.runPromise(effect.pipe(Effect.provide(files)));
 }
 
-export function openTeamSnapshots(path: string) {
-  const handle = runSync(makeTeamSnapshots({ path }));
+export async function openTeamSnapshots(path: string) {
+  const handle = await runPromise(makeTeamSnapshots({ path }));
   return {
-    list: () => runSync(handle.list),
-    select: (teamId: string, instanceId: string) => runSync(handle.select(teamId, instanceId)),
-    write: (held: HeldTeamList) => runSync(handle.write(held)),
-    remove: (teamId: string, instanceId: string) => runSync(handle.remove(teamId, instanceId)),
+    list: () => runPromise(handle.list),
+    select: (teamId: string, instanceId: string) => runPromise(handle.select(teamId, instanceId)),
+    write: (held: HeldTeamList) => runPromise(handle.write(held)),
+    remove: (teamId: string, instanceId: string) => runPromise(handle.remove(teamId, instanceId)),
   };
 }
 
 export function readTeamSnapshotsFile(path: string) {
-  return runSync(Effect.flatMap(makeTeamSnapshots({ path }), (held) => held.list));
+  return runPromise(Effect.flatMap(makeTeamSnapshots({ path }), (held) => held.list));
 }
 
-export function openTeamViews(dir: string, limit = TEAM_VIEWS_LIMIT) {
-  const handle = runSync(makeTeamViews({ dir, limit }));
+export async function openTeamViews(dir: string, limit = TEAM_VIEWS_LIMIT) {
+  const handle = await runPromise(makeTeamViews({ dir, limit }));
   return {
-    list: () => runSync(handle.list),
+    list: () => runPromise(handle.list),
     selectEntry: (teamId: string, instanceId: string, taskId: string) =>
-      runSync(handle.selectEntry(teamId, instanceId, taskId)),
+      runPromise(handle.selectEntry(teamId, instanceId, taskId)),
     select: (teamId: string, instanceId: string, taskId: string) =>
-      runSync(handle.select(teamId, instanceId, taskId)),
-    write: (view: HeldTeamView) => runSync(handle.write(view)),
-    removeWhere: (matches: (entry: TeamViewEntry) => boolean) => runSync(handle.removeWhere(matches)),
+      runPromise(handle.select(teamId, instanceId, taskId)),
+    write: (view: HeldTeamView) => runPromise(handle.write(view)),
+    removeWhere: (matches: (entry: TeamViewEntry) => boolean) => runPromise(handle.removeWhere(matches)),
   };
 }

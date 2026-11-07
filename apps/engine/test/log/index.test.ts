@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, spyOn, test } from 'bun:test';
+import { badArgument, systemError } from 'effect/PlatformError';
 import { describeError, log, redactSecrets } from '../../src/log/index.ts';
 
 const spies: { mockRestore: () => void }[] = [];
@@ -35,6 +36,38 @@ describe('describeError', () => {
   test('reads an Error or any thrown value, redacted', () => {
     expect(describeError(new Error('https://me:pw@host/x broke'))).toBe('https://***@host/x broke');
     expect(describeError('plain')).toBe('plain');
+  });
+
+  test('reads a file system failure by the error under it and its path, and by its own message when there is none', () => {
+    const cause = new Error('EISDIR: illegal operation on a directory, read');
+    const withCause = systemError({ _tag: 'BadResource', module: 'FileSystem', method: 'readFile', cause });
+    expect(describeError(withCause)).toBe('EISDIR: illegal operation on a directory, read');
+    const atPath = systemError({
+      _tag: 'BadResource',
+      module: 'FileSystem',
+      method: 'readFile',
+      pathOrDescriptor: '/x',
+      cause,
+    });
+    expect(describeError(atPath)).toBe("EISDIR: illegal operation on a directory, read '/x'");
+    const named = new Error("ENOENT: no such file or directory, open '/x'");
+    const already = systemError({
+      _tag: 'NotFound',
+      module: 'FileSystem',
+      method: 'open',
+      pathOrDescriptor: '/x',
+      cause: named,
+    });
+    expect(describeError(already)).toBe(named.message);
+    const argument = badArgument({ module: 'FileSystem', method: 'open', description: 'bad', cause });
+    expect(describeError(argument)).toBe('EISDIR: illegal operation on a directory, read');
+    const bare = systemError({
+      _tag: 'NotFound',
+      module: 'FileSystem',
+      method: 'stat',
+      pathOrDescriptor: '/x',
+    });
+    expect(describeError(bare)).toBe('NotFound: FileSystem.stat (/x)');
   });
 });
 

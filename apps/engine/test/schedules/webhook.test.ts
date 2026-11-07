@@ -61,8 +61,8 @@ async function hooked(options: { signed?: boolean; replayKey?: string | null; te
     },
     { newTask: true, text: options.text ?? 'Look at {{body.pull.title}}.' }
   );
-  const hook = world.secrets.upsertHook(schedule.id);
-  if (options.signed) world.secrets.writeHookSecret(schedule.id, 'shh');
+  const hook = await world.secrets.upsertHook(schedule.id);
+  if (options.signed) await world.secrets.writeHookSecret(schedule.id, 'shh');
   let counter = 0;
   let dispatch: Dispatch | null = null;
   const receiver = await openReceiver(world, {
@@ -144,7 +144,7 @@ describe('receiving a webhook', () => {
     const good = await send(receiver, post(url, body, { 'x-hub-signature-256': sign(body) }));
     expect(good.status).toBe(202);
     expect(runsOf(world, schedule.id)).toHaveLength(1);
-    world.secrets.writeHookSecret(schedule.id, null);
+    await world.secrets.writeHookSecret(schedule.id, null);
     expect((await send(receiver, post(url, body, { 'x-hub-signature-256': sign(body) }))).status).toBe(401);
   });
 
@@ -154,7 +154,7 @@ describe('receiving a webhook', () => {
     expect((await send(receiver, post(url.replace(schedule.id, 'nope'), '{}'))).status).toBe(404);
     expect((await send(receiver, post('http://127.0.0.1/api/hooks/only-one', '{}'))).status).toBe(404);
     const timed = await addSchedule(world, { kind: 'interval', everyMinutes: 5 });
-    const token = world.secrets.upsertHook(timed.id).token;
+    const token = (await world.secrets.upsertHook(timed.id)).token;
     expect((await send(receiver, post(`http://127.0.0.1/api/hooks/${timed.id}/${token}`, '{}'))).status).toBe(
       404
     );

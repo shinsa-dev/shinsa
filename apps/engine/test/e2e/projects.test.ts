@@ -29,7 +29,7 @@ afterEach(async () => {
 async function open() {
   world = await World.create();
   const w = world;
-  const { onboarding, roots, machine } = createTestOnboarding(w.engine, w.config);
+  const { onboarding, roots, machine } = await createTestOnboarding(w.engine, w.config);
   const http = startHttpServer({
     engine: w.engine,
     config: w.config,

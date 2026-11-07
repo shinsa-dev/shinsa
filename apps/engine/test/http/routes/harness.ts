@@ -10,7 +10,18 @@ type ContextExtras = Partial<HttpContext> | ((base: HttpContext) => Partial<Http
 
 export function startRoutes(extras: ContextExtras = {}, config: Partial<ServerConfig> = {}) {
   const base = createHttpContext({}, config);
-  const context = { ...base, ...(typeof extras === 'function' ? extras(base) : extras) };
+  return serveRoutes({ ...base, ...(typeof extras === 'function' ? extras(base) : extras) });
+}
+
+export async function startMachineRoutes(
+  extras: (base: HttpContext) => Promise<Partial<HttpContext>>,
+  config: Partial<ServerConfig> = {}
+) {
+  const base = createHttpContext({}, config);
+  return serveRoutes({ ...base, ...(await extras(base)) });
+}
+
+function serveRoutes(context: HttpContext) {
   const handle = createWebHandler(context, ApiRoutes);
   const send = (input: string, init: RequestInit = {}, source?: RequestSourceShape) => {
     const headers = new Headers(init.headers);

@@ -1,10 +1,18 @@
-import { appendFileSync } from 'node:fs';
-import { Config, Effect } from 'effect';
+import { Config, Effect, FileSystem } from 'effect';
+import { ActionsFileFailed } from './schema.ts';
 
 const appendToActionsFile = Effect.fn('appendToActionsFile')(function* (variable: string, text: string) {
   const file = yield* Effect.orDie(Config.String(variable).pipe(Config.withDefault('')));
   if (!file) return;
-  yield* Effect.sync(() => appendFileSync(file, text));
+  const fs = yield* FileSystem.FileSystem;
+  yield* fs
+    .writeFileString(file, text, { flag: 'a' })
+    .pipe(
+      Effect.mapError(
+        (error) =>
+          new ActionsFileFailed({ message: `Could not write ${variable} at ${file}: ${error.message}` })
+      )
+    );
 });
 
 export const recordActionsOutputs = Effect.fn('recordActionsOutputs')(function* (lines: readonly string[]) {

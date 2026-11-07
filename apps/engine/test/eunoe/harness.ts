@@ -1,10 +1,10 @@
 import type { CoreConfig } from '@chroxify/eunoe';
+import { BunServices } from '@effect/platform-bun';
 import type { ChatNotice } from '@shinsa/core';
 import { Context, Effect, Exit, Layer, Scope } from 'effect';
 import { EngineConfig } from '../../src/config/service.ts';
 import { EunoeSettings, type EunoeSettingsShape } from '../../src/eunoe/schema.ts';
 import { EunoeServer } from '../../src/eunoe/service.ts';
-import { JsonFile } from '../../src/files/service.ts';
 import { JsonLogger } from '../../src/log/service.ts';
 import { createConfigAt } from '../helpers/config.ts';
 import { createTempDir } from '../helpers/temp.ts';
@@ -22,7 +22,7 @@ function createEunoeLayer(options: EunoeOptions = {}, root = createTempDir()) {
       Layer.mergeAll(
         Layer.succeed(EngineConfig, createConfigAt(root)),
         Layer.succeed(EunoeSettings, settings),
-        JsonFile.layer
+        BunServices.layer
       )
     )
   );

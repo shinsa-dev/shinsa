@@ -1,11 +1,11 @@
-import { existsSync, mkdtempSync, readdirSync, rmSync } from 'node:fs';
-import { homedir, tmpdir } from 'node:os';
+import { homedir } from 'node:os';
 import { join } from 'node:path';
 import {
   Config,
   Context,
   Deferred,
   Effect,
+  FileSystem,
   Layer,
   Option,
   PubSub,
@@ -85,6 +85,7 @@ export class Chromium extends Context.Service<
     Chromium,
     Effect.gen(function* () {
       const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+      const fs = yield* FileSystem.FileSystem;
       const http = yield* HttpClient.HttpClient;
       const chosenBinary = yield* Config.option(Config.String('SHINSA_PERF_CHROME'));
       const chosenPort = yield* Config.option(Config.Int('PERF_CDP_PORT'));
@@ -104,19 +105,26 @@ export class Chromium extends Context.Service<
 
       const findBinary = Effect.gen(function* () {
         if (Option.isSome(chosenBinary)) return chosenBinary.value;
-        const found = yield* Effect.sync(() => {
-          const cache = join(homedir(), PLAYWRIGHT_CACHE);
-          const builds = existsSync(cache)
-            ? readdirSync(cache).filter((name) => CHROMIUM_BUILD.test(name))
-            : [];
-          return [
-            ...builds
-              .sort()
-              .reverse()
-              .map((build) => join(cache, build, CHROMIUM_IN_BUILD)),
-            SYSTEM_CHROME,
-          ].find((binary) => existsSync(binary));
-        });
+        const isPresent = (path: string) => fs.exists(path).pipe(Effect.orElseSucceed(() => false));
+        const cache = join(homedir(), PLAYWRIGHT_CACHE);
+        const builds = (yield* isPresent(cache))
+          ? yield* fs
+              .readDirectory(cache)
+              .pipe(
+                Effect.mapError(
+                  (error) => new ChromiumNotFound({ message: `Reading ${cache} failed: ${error.message}` })
+                )
+              )
+          : [];
+        const candidates = [
+          ...builds
+            .filter((name) => CHROMIUM_BUILD.test(name))
+            .sort()
+            .reverse()
+            .map((build) => join(cache, build, CHROMIUM_IN_BUILD)),
+          SYSTEM_CHROME,
+        ];
+        const found = yield* Effect.findFirst(candidates, isPresent).pipe(Effect.map(Option.getOrUndefined));
         if (!found)
           return yield* new ChromiumNotFound({
             message: 'No Chromium found: set SHINSA_PERF_CHROME to a Chrome binary.',
@@ -267,10 +275,14 @@ export class Chromium extends Context.Service<
         const port = Option.isSome(chosenPort)
           ? chosenPort.value
           : yield* Random.nextIntBetween(CDP_PORT_RANGE.from, CDP_PORT_RANGE.to);
-        const profile = yield* Effect.acquireRelease(
-          Effect.sync(() => mkdtempSync(join(tmpdir(), 'shinsa-perf-'))),
-          (directory) => Effect.sync(() => rmSync(directory, { recursive: true, force: true }))
-        );
+        const profile = yield* fs
+          .makeTempDirectoryScoped({ prefix: 'shinsa-perf-' })
+          .pipe(
+            Effect.mapError(
+              (error) =>
+                new ChromiumLaunchFailed({ message: `Making a Chromium profile failed: ${error.message}` })
+            )
+          );
         const handle = yield* spawner
           .spawn(
             ChildProcess.make(

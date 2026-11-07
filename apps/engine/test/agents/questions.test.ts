@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { BunServices } from '@effect/platform-bun';
 import type { Gate } from '@shinsa/core';
 import { Effect, Layer } from 'effect';
 import { Questions } from '../../src/agents/questions/service.ts';
@@ -21,7 +22,11 @@ describe('answers to an agent’s questions', () => {
     });
     stub.reject((command) => command.type === 'message.deliver', new Error('The task is gone.'));
     const layer = Questions.layer.pipe(
-      Layer.provide(Layer.merge(createLiveRuns().layer, Layer.succeed(EngineCore, stub.engine.core)))
+      Layer.provide(
+        Layer.merge(createLiveRuns().layer, Layer.succeed(EngineCore, stub.engine.core)).pipe(
+          Layer.provideMerge(BunServices.layer)
+        )
+      )
     );
     const failure = await Effect.runPromise(
       Effect.flip(Questions.use((questions) => questions.resolve('gate-1'))).pipe(Effect.provide(layer))

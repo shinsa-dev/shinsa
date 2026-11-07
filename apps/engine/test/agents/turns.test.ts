@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { BunServices } from '@effect/platform-bun';
 import {
   applyEvent,
   type ChatEvent,
@@ -45,13 +46,17 @@ function provider(overrides: Partial<AgentProvider> = {}): AgentProvider {
 function createTranscripts() {
   return Effect.runSync(
     Transcripts.use(Effect.succeed).pipe(
-      Effect.provide(Transcripts.layer.pipe(Layer.provide(Layer.succeed(EngineConfig, createTestConfig()))))
+      Effect.provide(
+        Transcripts.layer.pipe(
+          Layer.provide(Layer.merge(Layer.succeed(EngineConfig, createTestConfig()), BunServices.layer))
+        )
+      )
     )
   );
 }
 
-function record(transcripts: Transcripts['Service'], runId: string, entry: ChatEvent) {
-  Effect.runSync(transcripts.record(runId, entry));
+async function record(transcripts: Transcripts['Service'], runId: string, entry: ChatEvent) {
+  await Effect.runPromise(transcripts.record(runId, entry));
 }
 
 function resolveTurnPrompt(...input: Parameters<typeof resolvePrompt>) {
@@ -99,7 +104,12 @@ describe('resolveTurnPlan', () => {
     ];
     const turn = context(run, runs);
     for (const id of ['r1', 'r2', 'other-session', 'other-task']) {
-      record(turn.transcripts, id, { type: 'user', from: 'shinsa', text: `brief of ${id}`, attachments: [] });
+      await record(turn.transcripts, id, {
+        type: 'user',
+        from: 'shinsa',
+        text: `brief of ${id}`,
+        attachments: [],
+      });
     }
     const plan = await runTest(resolveTurnPlan(turn));
     const text = plan.handoff?.text ?? '';
@@ -123,7 +133,7 @@ describe('resolveTurnPlan', () => {
   test('a provider that is no longer registered is named by its id', async () => {
     const run = createRun({ sessionId: 's', sessionProvider: 'gemini' });
     const turn = context(run, [], { labelOf: (id) => (id === 'claude' ? 'Claude' : id) });
-    record(turn.transcripts, run.id, { type: 'user', from: 'shinsa', text: 'Brief.', attachments: [] });
+    await record(turn.transcripts, run.id, { type: 'user', from: 'shinsa', text: 'Brief.', attachments: [] });
     const plan = await runTest(resolveTurnPlan(turn));
     expect(plan.handoff?.text).toContain('from another coding agent (gemini)');
   });
@@ -150,9 +160,9 @@ describe('forking a task', () => {
     ],
   });
 
-  function forkContext(overrides: Partial<TurnContext> = {}) {
+  async function forkContext(overrides: Partial<TurnContext> = {}) {
     const turn = context(createRun({ id: 'forked-run', fork, startedAt: 30 }), [source], overrides);
-    record(turn.transcripts, 'source-run', {
+    await record(turn.transcripts, 'source-run', {
       type: 'user',
       from: 'shinsa',
       text: 'The source task’s brief.',
@@ -163,7 +173,7 @@ describe('forking a task', () => {
 
   test('the first run copies the source session when the provider can fork it and still has it', async () => {
     const inspected: string[] = [];
-    const turn = forkContext({
+    const turn = await forkContext({
       provider: provider({
         inspectSession: (query) => {
           inspected.push(query.sessionId);
@@ -181,12 +191,14 @@ describe('forking a task', () => {
   });
 
   test('a provider that cannot check its sessions forks without checking', async () => {
-    const plan = await runTest(resolveTurnPlan(forkContext()));
+    const plan = await runTest(resolveTurnPlan(await forkContext()));
     expect(plan).toMatchObject({ resume: 'source-session', fork: true });
   });
 
   test('a source session the provider lost is restored from the source task’s transcript', async () => {
-    const turn = forkContext({ provider: provider({ inspectSession: () => Effect.succeed('missing') }) });
+    const turn = await forkContext({
+      provider: provider({ inspectSession: () => Effect.succeed('missing') }),
+    });
     const plan = await runTest(resolveTurnPlan(turn));
     expect(plan).toMatchObject({ resume: null, fork: false });
     expect(plan.handoff?.text).toContain('The source task’s brief.');
@@ -197,19 +209,19 @@ describe('forking a task', () => {
 
   test('a provider that cannot fork gets the source task’s conversation as a handoff', async () => {
     const capabilities = { ...CLAUDE_CAPABILITIES, sessions: { resume: true, inspect: true, fork: false } };
-    const plan = await runTest(resolveTurnPlan(forkContext({ provider: provider({ capabilities }) })));
+    const plan = await runTest(resolveTurnPlan(await forkContext({ provider: provider({ capabilities }) })));
     expect(plan.record).toMatchObject({ reason: 'fork', fromProvider: 'claude' });
   });
 
   test('a source session on another provider is handed over instead of forked', async () => {
-    const turn = forkContext({ provider: provider({ id: 'codex', label: 'Codex' }) });
+    const turn = await forkContext({ provider: provider({ id: 'codex', label: 'Codex' }) });
     const plan = await runTest(resolveTurnPlan(turn));
     expect(plan).toMatchObject({ resume: null, fork: false });
     expect(plan.record).toMatchObject({ reason: 'fork', fromProvider: 'claude' });
   });
 
   test('a fork the provider refuses mid-start is restored from the source task’s transcript', async () => {
-    const turn = forkContext();
+    const turn = await forkContext();
     const plan = await runTest(
       resolveRestorePlan(
         turn,
@@ -224,10 +236,15 @@ describe('forking a task', () => {
     expect(own).toMatchObject({ resume: null, handoff: null });
   });
 
-  test('the forked turn reads the source session’s house rules and is told where it works now', () => {
+  test('the forked turn reads the source session’s house rules and is told where it works now', async () => {
     const rules = resolveHouseRules('agent');
-    const turn = forkContext();
-    record(turn.transcripts, 'source-run', { type: 'user', from: 'shinsa', text: rules, attachments: [] });
+    const turn = await forkContext();
+    await record(turn.transcripts, 'source-run', {
+      type: 'user',
+      from: 'shinsa',
+      text: rules,
+      attachments: [],
+    });
     const plan = { resume: 'source-session', fork: true, handoff: null, record: null };
     const prompt = resolveTurnPrompt(
       turn,
@@ -249,7 +266,7 @@ describe('a message kept for the next agent', () => {
     );
   }
 
-  test('reaches a resumed session that already has the house rules', () => {
+  test('reaches a resumed session that already has the house rules', async () => {
     const rules = resolveHouseRules('agent');
     const built = createRun({
       id: 'built-run',
@@ -274,7 +291,12 @@ describe('a message kept for the next agent', () => {
     if (!fix) throw new Error('no fix run');
     expect(fix).toMatchObject({ purpose: 'fix', resume: true, sessionId: 'session-1' });
     const turn = context(fix, [built], { state });
-    record(turn.transcripts, 'built-run', { type: 'user', from: 'shinsa', text: rules, attachments: [] });
+    await record(turn.transcripts, 'built-run', {
+      type: 'user',
+      from: 'shinsa',
+      text: rules,
+      attachments: [],
+    });
     const plan = { resume: 'session-1', fork: false, handoff: null, record: null };
     const prompt = resolveTurnPrompt(turn, plan, fix.prompt ?? '', resolveTurnBrief(state, fix, null));
     expect(prompt.startsWith(rules)).toBe(false);
@@ -323,12 +345,12 @@ describe('folding at a step boundary', () => {
     expect(folds(createRun({ role: 'agent', purpose: 'build', continues: 'run-0' }))).toBe(false);
   });
 
-  test('a folded turn sends the round brief instead of the bare instruction, without the house rules it already has', () => {
+  test('a folded turn sends the round brief instead of the bare instruction, without the house rules it already has', async () => {
     const rules = resolveHouseRules('agent');
     const run = createRun({ id: 'run-2', sessionId: 'session-1', role: 'agent', purpose: 'build' });
     const earlier = createRun({ id: 'run-1', sessionId: 'session-1', role: 'agent', purpose: 'plan' });
     const turn = context(run, [earlier]);
-    record(turn.transcripts, 'run-1', { type: 'user', from: 'shinsa', text: rules, attachments: [] });
+    await record(turn.transcripts, 'run-1', { type: 'user', from: 'shinsa', text: rules, attachments: [] });
     const prompt = `${rules}\n\nNow build phase 1 of 2.`;
     const brief = `${rules}\n\nThe plan in full.\n\nNow build phase 1 of 2.`;
     expect(resolveTurnPrompt(turn, resumed, prompt, brief)).toBe('Now build phase 1 of 2.');
@@ -347,7 +369,7 @@ describe('folding at a step boundary', () => {
     expect(isSessionCacheWarm(context({ ...run, cacheExpiresAt: 9_999 }, []), 's', 0)).toBe(false);
   });
 
-  test('an eunoe fold or cut keeps the session’s first message, so the house rules are not sent again; Claude Code’s own summary drops them', () => {
+  test('an eunoe fold or cut keeps the session’s first message, so the house rules are not sent again; Claude Code’s own summary drops them', async () => {
     const rules = resolveHouseRules('agent');
     const run = createRun({ id: 'run-3', sessionId: 'session-1', role: 'agent', purpose: 'build' });
     const plan = createRun({
@@ -365,14 +387,17 @@ describe('folding at a step boundary', () => {
       startedAt: 2,
     });
     const turn = context(run, [plan, build]);
-    record(turn.transcripts, 'run-1', { type: 'user', from: 'shinsa', text: rules, attachments: [] });
+    await record(turn.transcripts, 'run-1', { type: 'user', from: 'shinsa', text: rules, attachments: [] });
     const fold = { kind: 'compaction' as const, trigger: 'fold' as const, preTokens: null, summary: null };
-    record(turn.transcripts, 'run-2', { type: 'notice', notice: { ...fold, by: 'eunoe' as const } });
+    await record(turn.transcripts, 'run-2', { type: 'notice', notice: { ...fold, by: 'eunoe' as const } });
     const prompt = `${rules}\n\nNow build phase 2 of 2.`;
     const brief = `${rules}\n\nThe plan in full.\n\nNow build phase 2 of 2.`;
     const folded = 'The plan in full.\n\nNow build phase 2 of 2.';
     expect(resolveTurnPrompt(turn, resumed, prompt, brief, true)).toBe(folded);
-    record(turn.transcripts, 'run-2', { type: 'notice', notice: { ...fold, trigger: 'auto' as const } });
+    await record(turn.transcripts, 'run-2', {
+      type: 'notice',
+      notice: { ...fold, trigger: 'auto' as const },
+    });
     expect(resolveTurnPrompt(turn, resumed, prompt, brief, true)).toBe(brief);
   });
 });

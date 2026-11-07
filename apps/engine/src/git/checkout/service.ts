@@ -1,14 +1,16 @@
-import { existsSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import type { Repo } from '@shinsa/core';
 import { Clock, Context, Effect, FileSystem, Layer, Option } from 'effect';
+import { constFalse, constNull } from 'effect/Function';
+import type { PlatformError } from 'effect/PlatformError';
 import { selectInstallCommand } from '../../checks/install.ts';
+import { describeError } from '../../log/redact.ts';
 import { resolveCancel } from '../../shell/abort.ts';
 import { describeFailure } from '../../shell/failure.ts';
 import { COMMAND_TIMEOUT, type CommandResult, NOT_STARTED_EXIT_CODE } from '../../shell/schema.ts';
 import { Shell } from '../../shell/service.ts';
 import { decodeRefName } from '../ref-name.ts';
-import type { GitFailed, RefNameInvalid } from '../schema.ts';
+import { GitFailed, type RefNameInvalid } from '../schema.ts';
 import { Git } from '../service.ts';
 import {
   isDelegationCheckout,
@@ -77,7 +79,7 @@ export class Checkout extends Context.Service<
       others: readonly string[],
       signal?: AbortSignal
     ): Effect.Effect<string[], GitFailed | RefNameInvalid>;
-    remove(repo: Repo, path: string): Effect.Effect<void>;
+    remove(repo: Repo, path: string): Effect.Effect<void, GitFailed>;
     createIsolated(
       repo: Repo,
       worktreesDir: string,
@@ -86,7 +88,7 @@ export class Checkout extends Context.Service<
       baseCommit: string
     ): Effect.Effect<string, GitFailed | CommitInvalid>;
     describeIsolated(path: string): Effect.Effect<number | null>;
-    removeIsolated(repo: Repo, worktreesDir: string, taskId: string): Effect.Effect<void>;
+    removeIsolated(repo: Repo, worktreesDir: string, taskId: string): Effect.Effect<void, GitFailed>;
   }
 >()('shinsa/engine/git/checkout/Checkout') {
   static readonly layer = Layer.effect(
@@ -94,13 +96,18 @@ export class Checkout extends Context.Service<
     Effect.gen(function* () {
       const git = yield* Git;
       const shell = yield* Shell;
-      const withFiles = Effect.provideService(FileSystem.FileSystem, yield* FileSystem.FileSystem);
+      const fs = yield* FileSystem.FileSystem;
+      const withFiles = Effect.provideService(FileSystem.FileSystem, fs);
+      const toGitFailed = (error: PlatformError) =>
+        new GitFailed({ message: describeError(error), retryable: false });
+      const isPresent = (path: string) => fs.exists(path).pipe(Effect.orElseSucceed(constFalse));
+      const removeFolder = (path: string) =>
+        fs.remove(path, { recursive: true, force: true }).pipe(Effect.mapError(toGitFailed));
 
       const resolveGitPath = (path: string, name: string) =>
         Effect.map(git.run(['rev-parse', '--git-path', name], path), (relative) => resolve(path, relative));
 
-      const readOptional = (file: string) =>
-        Effect.sync(() => (existsSync(file) ? readFileSync(file, 'utf8') : null));
+      const readOptional = (file: string) => fs.readFileString(file).pipe(Effect.orElseSucceed(constNull));
 
       const resolveMergeMessage = Effect.fnUntraced(function* (path: string, fallback: string) {
         const text = yield* readOptional(yield* resolveGitPath(path, 'MERGE_MSG'));
@@ -138,9 +145,9 @@ export class Checkout extends Context.Service<
         merge: PendingMerge
       ) {
         const head = yield* resolveGitPath(path, 'MERGE_HEAD');
-        yield* Effect.sync(() => writeFileSync(head, merge.mergeHead));
+        yield* fs.writeFileString(head, merge.mergeHead).pipe(Effect.mapError(toGitFailed));
         const subject = yield* resolveGitPath(path, 'MERGE_MSG');
-        yield* Effect.sync(() => writeFileSync(subject, `${merge.mergeMessage}\n`));
+        yield* fs.writeFileString(subject, `${merge.mergeMessage}\n`).pipe(Effect.mapError(toGitFailed));
       });
 
       const listCommitFiles = Effect.fn('Checkout.listCommitFiles')(function* (
@@ -213,8 +220,11 @@ export class Checkout extends Context.Service<
       const listRegistered = (repo: Repo, signal?: AbortSignal) =>
         Effect.map(git.run(['worktree', 'list', '--porcelain'], repo.path, { signal }), parseWorktreeList);
 
-      const isSamePath = (a: string, b: string) =>
-        Effect.sync(() => existsSync(a) && existsSync(b) && realpathSync(a) === realpathSync(b));
+      const isSamePath = Effect.fnUntraced(function* (a: string, b: string) {
+        const left = yield* Effect.option(fs.realPath(a));
+        const right = yield* Effect.option(fs.realPath(b));
+        return Option.isSome(left) && Option.isSome(right) && left.value === right.value;
+      });
 
       const isLeftBehind = Effect.fnUntraced(function* (
         repo: Repo,
@@ -352,7 +362,7 @@ export class Checkout extends Context.Service<
           return { path, branch: registered.value.branch };
         }
         if (registered._tag === 'None') {
-          yield* Effect.sync(() => rmSync(path, { recursive: true, force: true }));
+          yield* removeFolder(path);
           yield* git.attempt(['worktree', 'prune'], repo.path, { signal });
           const base = yield* resolveStartPoint(repo, baseBranch, signal);
           yield* git.run(['worktree', 'add', '--detach', path, base], repo.path, { signal });
@@ -400,10 +410,10 @@ export class Checkout extends Context.Service<
       });
 
       const remove = Effect.fn('Checkout.remove')(function* (repo: Repo, path: string) {
-        if (yield* Effect.sync(() => existsSync(path))) {
+        if (yield* isPresent(path)) {
           yield* git.attempt(['worktree', 'remove', '--force', path], repo.path);
         }
-        yield* Effect.sync(() => rmSync(path, { recursive: true, force: true }));
+        yield* removeFolder(path);
         yield* git.attempt(['worktree', 'prune'], repo.path);
       });
 
@@ -427,8 +437,8 @@ export class Checkout extends Context.Service<
           });
         }
         const path = resolveIsolatedPath(worktreesDir, taskId, runId);
-        if ((yield* Effect.sync(() => existsSync(path))) && (yield* isRegistered(repo, path))) return path;
-        yield* Effect.sync(() => rmSync(path, { recursive: true, force: true }));
+        if ((yield* isPresent(path)) && (yield* isRegistered(repo, path))) return path;
+        yield* removeFolder(path);
         yield* git.attempt(['worktree', 'prune'], repo.path);
         yield* git.run(['worktree', 'add', '--detach', path, baseCommit], repo.path);
         yield* prepare(path);
@@ -456,11 +466,14 @@ export class Checkout extends Context.Service<
       ) {
         const folder = resolveDelegationFolder(worktreesDir, taskId);
         const registered = yield* listDelegationCheckouts(repo, taskId);
-        const loose = yield* Effect.sync(() =>
-          existsSync(folder) ? readdirSync(folder).map((entry) => join(folder, entry)) : []
-        );
+        const present = yield* isPresent(folder);
+        const loose = present
+          ? (yield* fs.readDirectory(folder).pipe(Effect.mapError(toGitFailed))).map((entry) =>
+              join(folder, entry)
+            )
+          : [];
         const paths = [...new Set([...registered, ...loose])];
-        if (paths.length === 0 && !(yield* Effect.sync(() => existsSync(folder)))) return;
+        if (paths.length === 0 && !present) return;
         for (const path of paths) {
           const removed = yield* git.attempt(['worktree', 'remove', '--force', path], repo.path);
           if (!removed.ok) {
@@ -470,9 +483,7 @@ export class Checkout extends Context.Service<
           }
         }
         const folders = new Set([folder, ...registered.map((path) => dirname(path))]);
-        yield* Effect.sync(() => {
-          for (const each of folders) rmSync(each, { recursive: true, force: true });
-        });
+        for (const each of folders) yield* removeFolder(each);
         yield* git.attempt(['worktree', 'prune'], repo.path);
       });
 

@@ -1,59 +1,37 @@
-import {
-  appendFileSync,
-  existsSync,
-  lstatSync,
-  mkdirSync,
-  readFileSync,
-  readlinkSync,
-  renameSync,
-  rmSync,
-  statSync,
-  symlinkSync,
-  writeFileSync,
-} from 'node:fs';
 import { dirname } from 'node:path';
-import { Effect, Layer } from 'effect';
+import { Effect, FileSystem, Layer, type PlatformError } from 'effect';
 import { type FileEntry, FileWriteFailed } from '../files/schema.ts';
 import { Files } from '../files/service.ts';
 
-const failWrite = (path: string) => (cause: unknown) => new FileWriteFailed({ path, message: String(cause) });
-
-export const FilesLive = Layer.succeed(
+export const FilesLive = Layer.effect(
   Files,
-  Files.of({
-    readText: (path) => Effect.option(Effect.try(() => readFileSync(path, 'utf8'))),
-    readSize: (path) => Effect.option(Effect.try(() => statSync(path).size)),
-    exists: (path) => Effect.sync(() => existsSync(path)),
-    readEntry: (path) =>
-      Effect.try((): FileEntry => {
-        if (!lstatSync(path).isSymbolicLink()) return { kind: 'file' };
-        return { kind: 'link', target: readlinkSync(path) };
-      }).pipe(Effect.orElseSucceed((): FileEntry => ({ kind: 'missing' }))),
-    link: (target, path) =>
-      Effect.try({
-        try: () => {
-          mkdirSync(dirname(path), { recursive: true });
-          symlinkSync(target, path);
-        },
-        catch: failWrite(path),
-      }),
-    writeText: (path, text) =>
-      Effect.try({
-        try: () => {
-          mkdirSync(dirname(path), { recursive: true });
-          writeFileSync(path, text);
-        },
-        catch: failWrite(path),
-      }),
-    appendText: (path, text) =>
-      Effect.try({
-        try: () => {
-          mkdirSync(dirname(path), { recursive: true });
-          appendFileSync(path, text);
-        },
-        catch: failWrite(path),
-      }),
-    rename: (from, to) => Effect.try({ try: () => renameSync(from, to), catch: failWrite(from) }),
-    remove: (path) => Effect.ignore(Effect.try(() => rmSync(path, { recursive: true, force: true }))),
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const failWrite = (path: string) => (error: PlatformError.PlatformError) =>
+      new FileWriteFailed({ path, message: error.message });
+    const writeBeside = (path: string, write: Effect.Effect<void, PlatformError.PlatformError>) =>
+      fs
+        .makeDirectory(dirname(path), { recursive: true })
+        .pipe(Effect.andThen(write), Effect.mapError(failWrite(path)));
+
+    return Files.of({
+      readText: (path) => Effect.option(fs.readFileString(path)),
+      readSize: (path) => Effect.option(Effect.map(fs.stat(path), (info) => Number(info.size))),
+      exists: (path) => Effect.orElseSucceed(fs.exists(path), () => false),
+      readEntry: (path) =>
+        fs.lstat(path).pipe(
+          Effect.flatMap((info): Effect.Effect<FileEntry, PlatformError.PlatformError> =>
+            info.type === 'SymbolicLink'
+              ? Effect.map(fs.readLink(path), (target) => ({ kind: 'link', target }))
+              : Effect.succeed({ kind: 'file' })
+          ),
+          Effect.orElseSucceed((): FileEntry => ({ kind: 'missing' }))
+        ),
+      link: (target, path) => writeBeside(path, fs.symlink(target, path)),
+      writeText: (path, text) => writeBeside(path, fs.writeFileString(path, text)),
+      appendText: (path, text) => writeBeside(path, fs.writeFileString(path, text, { flag: 'a' })),
+      rename: (from, to) => fs.rename(from, to).pipe(Effect.mapError(failWrite(from))),
+      remove: (path) => Effect.ignore(fs.remove(path, { recursive: true, force: true })),
+    });
   })
 );

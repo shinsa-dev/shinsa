@@ -41,7 +41,7 @@ function writePhase(phase: number, lastPhase: Record<string, unknown> | null) {
 
 async function merged() {
   world = await World.create({
-    supervise: (current, engine) => {
+    supervise: async (current, engine) => {
       const layer = SchedulesLayer({
         baseUrl: Effect.succeed('http://localhost'),
         hookUrl: () => Effect.succeed(null),
@@ -49,7 +49,7 @@ async function merged() {
         Layer.provide(
           Layer.mergeAll(
             Layer.succeed(EngineCore, engine.core),
-            Layer.succeed(SecretStore, openTestSecrets(join(current.root, 'secrets.json')).store),
+            Layer.succeed(SecretStore, (await openTestSecrets(join(current.root, 'secrets.json'))).store),
             Layer.succeed(ScheduleTimeZone, 'UTC')
           )
         )

@@ -1,6 +1,5 @@
-import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { Effect } from 'effect';
+import { Effect, FileSystem } from 'effect';
 import type { Engine } from '../../apps/engine/test/helpers/engine.ts';
 import { resolveTaskProject, type Task } from '../../packages/core/src/index.ts';
 import { SandboxFailed, type SeedProject, TEAMMATE } from './schema.ts';
@@ -13,10 +12,14 @@ export const seedProject = Effect.fn('Sandbox.seedProject')(function* (
 ) {
   const { core } = engine;
   const repoPath = join(dataDir, '..', seed.repo);
-  yield* Effect.try({
-    try: () => mkdirSync(repoPath, { recursive: true }),
-    catch: (error) => new SandboxFailed({ message: `Making ${repoPath} failed: ${String(error)}` }),
-  });
+  const fs = yield* FileSystem.FileSystem;
+  yield* fs
+    .makeDirectory(repoPath, { recursive: true })
+    .pipe(
+      Effect.mapError(
+        (error) => new SandboxFailed({ message: `Making ${repoPath} failed: ${error.message}` })
+      )
+    );
   yield* core.dispatch({
     type: 'repo.register',
     repo: { name: seed.repo, path: repoPath, defaultBranch: 'main', remote: null, checkCommands: [] },

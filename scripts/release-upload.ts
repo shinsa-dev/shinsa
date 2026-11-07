@@ -1,8 +1,7 @@
-import { readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { BunRuntime } from '@effect/platform-bun';
 import { S3Client } from 'bun';
-import { Config, Console, Effect, Layer, Option, Redacted, Schema } from 'effect';
+import { Config, Console, Effect, FileSystem, Layer, Option, Redacted, Schema, Stream } from 'effect';
 import { FetchHttpClient, HttpClient, HttpClientRequest } from 'effect/http';
 import { resolveChannelKey } from '../apps/marketing/src/worker/download/paths.ts';
 import { DMG_NAME } from '../apps/marketing/src/worker/releases/schema.ts';
@@ -41,6 +40,7 @@ const decodeJson = Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Unkno
 
 const program = Effect.gen(function* () {
   const command = yield* Command;
+  const fs = yield* FileSystem.FileSystem;
   const client = yield* HttpClient.HttpClient;
   const settings = yield* Effect.orDie(
     Config.all({
@@ -68,20 +68,24 @@ const program = Effect.gen(function* () {
       try: step,
       catch: (error) => new UploadFailed({ message: error instanceof Error ? error.message : String(error) }),
     });
+  const unreadable = (file: string) => (error: { readonly message: string }) =>
+    new UploadFailed({ message: `Could not read ${file} from the release: ${error.message}` });
   const resolveDigest = Effect.fn('releaseUpload.digest')(function* (
     file: string,
     algorithm: 'sha256' | 'sha512',
     encoding: 'hex' | 'base64'
   ) {
     const hasher = new Bun.CryptoHasher(algorithm);
-    yield* Effect.promise(async () => {
-      for await (const chunk of Bun.file(file).stream()) hasher.update(chunk);
-    });
+    yield* fs.stream(file).pipe(
+      Stream.runForEach((chunk) => Effect.sync(() => hasher.update(chunk))),
+      Effect.mapError(unreadable(file))
+    );
     return hasher.digest(encoding);
   });
   const resolveSize = Effect.fn('releaseUpload.size')(function* (file: string) {
-    return Number((yield* Effect.sync(() => statSync(file))).size);
+    return Number((yield* fs.stat(file).pipe(Effect.mapError(unreadable(file)))).size);
   });
+  const readBody = (file: string) => fs.readFile(file).pipe(Effect.mapError(unreadable(file)));
   const withRetry = (label: string) => retryStep({ label, delays: R2_REQUEST_DELAYS, onRetry: warnRetry });
   const requestBucket = Effect.fn('releaseUpload.bucket')(function* () {
     const tokenId = yield* HttpClientRequest.get(TOKEN_VERIFY_URL).pipe(
@@ -106,7 +110,7 @@ const program = Effect.gen(function* () {
     });
     return yield* read.pipe(withRetry(`Read ${key}`));
   });
-  const writeObject = (bucket: S3Client, key: string, body: string | Blob, type: string) =>
+  const writeObject = (bucket: S3Client, key: string, body: string | Uint8Array, type: string) =>
     request(() => bucket.write(key, body, { type })).pipe(withRetry(`Upload ${key}`));
 
   const directory = yield* createTempDirectory('shinsa-release-');
@@ -143,7 +147,8 @@ const program = Effect.gen(function* () {
   const zip = join(directory, ZIP_NAME);
   const dmgFile = { size: yield* resolveSize(dmg), sha256: yield* resolveDigest(dmg, 'sha256', 'hex') };
   yield* check(() => assertDownloadFile(release, dmgFile));
-  const updateText = yield* Effect.sync(() => readFileSync(join(directory, updateName), 'utf8'));
+  const updatePath = join(directory, updateName);
+  const updateText = yield* fs.readFileString(updatePath).pipe(Effect.mapError(unreadable(updatePath)));
   const update = yield* check(() => parseUpdateFile(release, updateText));
   const zipFile = { size: yield* resolveSize(zip), sha512: yield* resolveDigest(zip, 'sha512', 'base64') };
   yield* check(() => assertUpdateZip(release, update, zipFile));
@@ -154,19 +159,14 @@ const program = Effect.gen(function* () {
     canary: yield* requestPointer(bucket, resolveChannelKey('canary')),
   };
   const { version } = release.pointer;
-  const bodies = yield* Effect.sync(() => ({
-    zip: Bun.file(zip),
-    blockmap: Bun.file(join(directory, BLOCKMAP_NAME)),
-    dmg: Bun.file(dmg),
-  }));
-  yield* writeObject(bucket, resolveBuildKey(version, ZIP_NAME), bodies.zip, 'application/zip');
+  yield* writeObject(bucket, resolveBuildKey(version, ZIP_NAME), yield* readBody(zip), 'application/zip');
   yield* writeObject(
     bucket,
     resolveBuildKey(version, BLOCKMAP_NAME),
-    bodies.blockmap,
+    yield* readBody(join(directory, BLOCKMAP_NAME)),
     'application/octet-stream'
   );
-  yield* writeObject(bucket, release.pointer.key, bodies.dmg, 'application/x-apple-diskimage');
+  yield* writeObject(bucket, release.pointer.key, yield* readBody(dmg), 'application/x-apple-diskimage');
   const channels = resolveChannelUpdates(release, current);
   yield* Effect.forEach(listPointerUploads(release, channels), (upload) =>
     writeObject(bucket, upload.key, upload.body, 'application/json')

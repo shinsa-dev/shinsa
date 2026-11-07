@@ -8,9 +8,9 @@ import { StoreLayer } from '../src/store/layers.ts';
 const TestLayer = Layer.mergeAll(
   JsonLogger,
   MachineConfigFile.layer,
-  Shell.layer.pipe(Layer.provideMerge(BunServices.layer)),
+  Shell.layer,
   StoreLayer(':memory:')
-);
+).pipe(Layer.provideMerge(BunServices.layer));
 
 export function runTest<A, E>(effect: Effect.Effect<A, E, Layer.Success<typeof TestLayer>>) {
   return Effect.runPromise(effect.pipe(Effect.provide(TestLayer)));

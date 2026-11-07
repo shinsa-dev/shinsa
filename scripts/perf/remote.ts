@@ -1,10 +1,20 @@
 import { Database } from 'bun:sqlite';
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { BunRuntime, BunServices } from '@effect/platform-bun';
-import { Clock, Console, Deferred, Duration, Effect, Exit, Layer, Stream } from 'effect';
+import {
+  Clock,
+  Console,
+  Deferred,
+  Duration,
+  Effect,
+  Exit,
+  FileSystem,
+  Layer,
+  type PlatformError,
+  Stream,
+} from 'effect';
 import { FetchHttpClient, HttpBody, HttpClient, HttpClientResponse } from 'effect/http';
 import { ChildProcess, ChildProcessSpawner } from 'effect/process';
 import { EngineConfig } from '../../apps/engine/src/config/service.ts';
@@ -76,28 +86,33 @@ const program = Effect.gen(function* () {
   const http = yield* HttpClient.HttpClient;
   const clock = yield* Clock.Clock;
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+  const fs = yield* FileSystem.FileSystem;
   const requests = Number(args.requests);
   const connects = Number(args.connects);
 
   const attempt = <A>(run: () => A) =>
     Effect.try({ try: run, catch: (error) => new RemoteBenchFailed({ message: String(error) }) });
 
+  const toFailed = (error: PlatformError.PlatformError) => new RemoteBenchFailed({ message: error.message });
+
   const attemptPromise = <A>(run: () => Promise<A>) =>
     Effect.tryPromise({ try: run, catch: (error) => new RemoteBenchFailed({ message: String(error) }) });
 
   const copyLog = Effect.fn('RemoteBench.copyLog')(function* (dataDir: string) {
     const onboardedAt = yield* Clock.currentTimeMillis;
+    yield* fs.remove(dataDir, { recursive: true, force: true }).pipe(Effect.mapError(toFailed));
+    yield* fs.makeDirectory(dataDir, { recursive: true }).pipe(Effect.mapError(toFailed));
     yield* attempt(() => {
-      rmSync(dataDir, { recursive: true, force: true });
-      mkdirSync(dataDir, { recursive: true });
       const database = new Database(join(args.source, 'shinsa.sqlite'), { readonly: true });
       database.run(`VACUUM INTO '${join(dataDir, 'shinsa.sqlite').replaceAll("'", "''")}'`);
       database.close();
-      writeFileSync(
+    });
+    yield* fs
+      .writeFileString(
         join(dataDir, 'config.json'),
         `${JSON.stringify({ version: 1, roots: [], onboardedAt }, null, 2)}\n`
-      );
-    });
+      )
+      .pipe(Effect.mapError(toFailed));
   });
 
   const writeRemoteFile = Effect.fn('RemoteBench.writeRemoteFile')(function* (
@@ -110,8 +125,8 @@ const program = Effect.gen(function* () {
     const publicKey = yield* serializePublicKey(device.publicKey);
     const enrolledAt = yield* Clock.currentTimeMillis;
     const owner = { id: USER_ID, login: 'bench', name: 'Bench', avatarUrl: null };
-    yield* attempt(() =>
-      writeFileSync(
+    yield* fs
+      .writeFileString(
         join(dataDir, REMOTE_FILE),
         JSON.stringify({
           version: 1,
@@ -128,7 +143,7 @@ const program = Effect.gen(function* () {
           access: { owner, members: [] },
         })
       )
-    );
+      .pipe(Effect.mapError(toFailed));
     return device;
   });
 
@@ -140,10 +155,9 @@ const program = Effect.gen(function* () {
         null
       )
     );
-    yield* attempt(() => {
-      for (const dir of [config.worktreesDir, config.evidenceDir, config.transcriptsDir])
-        mkdirSync(dir, { recursive: true });
-    });
+    yield* Effect.forEach([config.worktreesDir, config.evidenceDir, config.transcriptsDir], (dir) =>
+      fs.makeDirectory(dir, { recursive: true })
+    ).pipe(Effect.mapError(toFailed));
     const stateVersion = yield* resolveStateVersion();
     const [bootFor, engine] = yield* Effect.timed(
       Effect.acquireRelease(
@@ -163,15 +177,13 @@ const program = Effect.gen(function* () {
       })
     );
     const server = yield* Effect.acquireRelease(
-      attempt(() =>
-        startIdleServer({
-          engine,
-          config,
-          transcripts: createTranscripts(config.transcriptsDir),
-          evidence: createTestEvidence(config.evidenceDir),
-          ...remote.services,
-        })
-      ),
+      startIdleServer({
+        engine,
+        config,
+        transcripts: createTranscripts(config.transcriptsDir),
+        evidence: createTestEvidence(config.evidenceDir),
+        ...remote.services,
+      }).pipe(Effect.catchDefect((error) => Effect.fail(new RemoteBenchFailed({ message: String(error) })))),
       (running) => Effect.promise(running.stop)
     );
     return {

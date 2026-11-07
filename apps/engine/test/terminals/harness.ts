@@ -2,7 +2,6 @@ import { BunServices } from '@effect/platform-bun';
 import type { ShinsaState } from '@shinsa/core';
 import { Clock, Context, Duration, Effect, Exit, Layer, Scope } from 'effect';
 import { EngineConfig } from '../../src/config/service.ts';
-import { JsonFile } from '../../src/files/service.ts';
 import { JsonLogger } from '../../src/log/service.ts';
 import { EngineCore } from '../../src/runtime/engine/service.ts';
 import { TerminalPty } from '../../src/terminals/pty/service.ts';
@@ -11,6 +10,7 @@ import { Terminals } from '../../src/terminals/service.ts';
 import { TerminalFiles } from '../../src/terminals/store/service.ts';
 import { createFixedClock } from '../helpers/clock.ts';
 import { createConfigAt } from '../helpers/config.ts';
+import { JsonFileLayer } from '../helpers/files.ts';
 import { createStubEngine } from '../helpers/state.ts';
 import { createTempDir } from '../helpers/temp.ts';
 import { createFakeSpawner } from './fakes.ts';
@@ -34,9 +34,9 @@ export interface TerminalsHarnessOptions {
   env?: Record<string, string>;
 }
 
-function buildScoped<A, E>(layer: Layer.Layer<A, E>) {
+async function buildScoped<A, E>(layer: Layer.Layer<A, E>) {
   const scope = Effect.runSync(Scope.make());
-  const context = Effect.runSync(Layer.buildWithScope(Layer.provide(layer, JsonLogger), scope));
+  const context = await Effect.runPromise(Layer.buildWithScope(Layer.provide(layer, JsonLogger), scope));
   return { context, close: () => Effect.runPromise(Scope.close(scope, Exit.void)) };
 }
 
@@ -66,7 +66,7 @@ function createTerminalsLayer(options: TerminalsHarnessOptions = {}) {
   const layer = Terminals.layer({ version: '1.0.0', env }).pipe(
     Layer.provide(
       Layer.mergeAll(
-        TerminalFiles.layer.pipe(Layer.provide(JsonFile.layer)),
+        TerminalFiles.layer.pipe(Layer.provide(JsonFileLayer)),
         BunServices.layer,
         Layer.succeed(TerminalPty, pty),
         Layer.succeed(EngineConfig, config),
@@ -88,8 +88,8 @@ function createTerminalsLayer(options: TerminalsHarnessOptions = {}) {
   return { layer, fake, dataDir };
 }
 
-export function createTerminals(options: TerminalsHarnessOptions = {}) {
+export async function createTerminals(options: TerminalsHarnessOptions = {}) {
   const { layer, fake, dataDir } = createTerminalsLayer(options);
-  const { context, close } = buildScoped(layer);
+  const { context, close } = await buildScoped(layer);
   return { terminals: Context.get(context, Terminals), fake, dataDir, close };
 }

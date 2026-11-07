@@ -1,4 +1,3 @@
-import { lstatSync, readFileSync, readlinkSync } from 'node:fs';
 import {
   CODE_LIMITS,
   type FileContent,
@@ -9,7 +8,8 @@ import {
   type SearchResult,
   WORKING_REF,
 } from '@shinsa/core';
-import { Context, Effect, Layer } from 'effect';
+import { Context, Effect, FileSystem, Layer, Option } from 'effect';
+import { constNull } from 'effect/Function';
 import { ObjectCache } from '../objects/service.ts';
 import type { GitRead } from '../schema.ts';
 import { Git } from '../service.ts';
@@ -95,6 +95,7 @@ export class CodeFiles extends Context.Service<
     Effect.gen(function* () {
       const git = yield* Git;
       const cache = yield* ObjectCache;
+      const fs = yield* FileSystem.FileSystem;
       const verified = new Set<string>();
 
       const assertRead = (read: GitRead, what: string) => {
@@ -277,16 +278,16 @@ export class CodeFiles extends Context.Service<
         return yield* readObject(repoPath, blob.object, undefined, reader);
       });
 
-      const statPath = (absolute: string) =>
-        Effect.orElseSucceed(
-          Effect.try(() => lstatSync(absolute)),
-          () => null
-        );
+      const statPath = Effect.fn('CodeFiles.statPath')(function* (absolute: string) {
+        const info = yield* Effect.option(fs.lstat(absolute));
+        return Option.map(info, (found) => ({ type: found.type, size: Number(found.size) }));
+      });
 
       const readWorkingBytes = Effect.fn('CodeFiles.readWorkingBytes')(function* (absolute: string) {
         const stat = yield* statPath(absolute);
-        if (!stat?.isFile() || stat.size > CODE_LIMITS.blobBytes) return null;
-        return yield* Effect.sync(() => new Uint8Array(readFileSync(absolute)));
+        if (Option.isNone(stat) || stat.value.type !== 'File' || stat.value.size > CODE_LIMITS.blobBytes)
+          return null;
+        return yield* fs.readFile(absolute).pipe(Effect.orElseSucceed(constNull));
       });
 
       const readWorkingFile = Effect.fn('CodeFiles.readWorkingFile')(function* (
@@ -294,14 +295,20 @@ export class CodeFiles extends Context.Service<
         path: string
       ) {
         const stat = yield* statPath(absolute);
-        if (stat?.isSymbolicLink()) {
-          const target = new TextEncoder().encode(yield* Effect.sync(() => readlinkSync(absolute)));
+        const absent = describeAbsent(WORKING_REF, path, 0, false);
+        if (Option.isNone(stat)) return absent;
+        const { type, size } = stat.value;
+        if (type === 'SymbolicLink') {
+          const link = yield* Effect.option(fs.readLink(absolute));
+          if (Option.isNone(link)) return absent;
+          const target = new TextEncoder().encode(link.value);
           return describeBytes(WORKING_REF, path, target, target.length);
         }
-        if (!stat?.isFile()) return describeAbsent(WORKING_REF, path, 0, false);
-        if (stat.size > CODE_LIMITS.blobBytes) return describeAbsent(WORKING_REF, path, stat.size, true);
-        const bytes = yield* Effect.sync(() => new Uint8Array(readFileSync(absolute)));
-        return describeBytes(WORKING_REF, path, bytes, stat.size);
+        if (type !== 'File') return absent;
+        if (size > CODE_LIMITS.blobBytes) return describeAbsent(WORKING_REF, path, size, true);
+        const bytes = yield* Effect.option(fs.readFile(absolute));
+        if (Option.isNone(bytes)) return absent;
+        return describeBytes(WORKING_REF, path, bytes.value, size);
       });
 
       const matchReader = (sha: string | null, onMatches: (matches: SearchMatch[]) => void) => {

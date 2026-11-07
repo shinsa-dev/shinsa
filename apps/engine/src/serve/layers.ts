@@ -1,5 +1,4 @@
-import { mkdirSync } from 'node:fs';
-import { Duration, Effect, Layer } from 'effect';
+import { Duration, Effect, FileSystem, Layer } from 'effect';
 import { constant } from 'effect/Function';
 import { Accounts, AccountsInput, AccountsLayer } from '../accounts/index.ts';
 import { AccountBroker } from '../agents/accounts/schema.ts';
@@ -474,7 +473,10 @@ export function EngineLayer(config: ServerConfig, options: ShinsaOptions, stop: 
   return Layer.unwrap(
     Effect.gen(function* () {
       const instance = yield* resolveServerInstance().pipe(Effect.provide(GitCommands));
-      yield* Effect.sync(() => mkdirSync(config.dataDir, { recursive: true }));
+      yield* FileSystem.FileSystem.pipe(
+        Effect.flatMap((fs) => fs.makeDirectory(config.dataDir, { recursive: true })),
+        Effect.provide(ShellLayer)
+      );
       const lock = config.inspect
         ? Layer.empty
         : ServeLock.layer(config.dataDir, {
@@ -484,7 +486,7 @@ export function EngineLayer(config: ServerConfig, options: ShinsaOptions, stop: 
           });
       return createServeLayer(config, options, instance, stop).pipe(
         Layer.provideMerge(Layer.effectDiscard(prepareDataDir(config)).pipe(Layer.provide(ShellLayer))),
-        Layer.provideMerge(lock)
+        Layer.provideMerge(lock.pipe(Layer.provide(ShellLayer)))
       );
     })
   );

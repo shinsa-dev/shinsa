@@ -1,8 +1,8 @@
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { ServiceDefinition, TerminalInfo } from '@shinsa/core';
-import { Context, Effect, Layer, Option, Schema } from 'effect';
+import { Context, Effect, FileSystem, Layer, Option, Schema } from 'effect';
 import { JsonFile } from '../../files/service.ts';
+import { describeError } from '../../log/redact.ts';
 import {
   SCREEN_MODE,
   SERVICES_FILE,
@@ -30,6 +30,7 @@ export class TerminalFiles extends Context.Service<
     TerminalFiles,
     Effect.gen(function* () {
       const files = yield* JsonFile;
+      const fs = yield* FileSystem.FileSystem;
       const decodeTerminal = Schema.decodeUnknownOption(StoredTerminal);
       const decodeService = Schema.decodeUnknownOption(StoredService);
       const decodeTerminals = Schema.decodeUnknownOption(StoredTerminals);
@@ -93,9 +94,7 @@ export class TerminalFiles extends Context.Service<
       });
 
       const readScreen = Effect.fn('TerminalFiles.readScreen')(function* (dataDir: string, id: string) {
-        return yield* Effect.try(() => readFileSync(resolveScreen(dataDir, id), 'utf8')).pipe(
-          Effect.orElseSucceed(() => null)
-        );
+        return yield* fs.readFileString(resolveScreen(dataDir, id)).pipe(Effect.orElseSucceed(() => null));
       });
 
       const writeScreen = Effect.fn('TerminalFiles.writeScreen')(function* (
@@ -103,14 +102,26 @@ export class TerminalFiles extends Context.Service<
         id: string,
         screen: string
       ) {
-        yield* Effect.sync(() => {
-          mkdirSync(resolveDir(dataDir), { recursive: true });
-          writeFileSync(resolveScreen(dataDir, id), screen, { mode: SCREEN_MODE });
-        });
+        yield* fs.makeDirectory(resolveDir(dataDir), { recursive: true }).pipe(
+          Effect.andThen(fs.writeFileString(resolveScreen(dataDir, id), screen, { mode: SCREEN_MODE })),
+          Effect.catch((error) =>
+            Effect.logWarning('[Terminals] Could not save a terminal’s screen').pipe(
+              Effect.annotateLogs({ terminalId: id, error: describeError(error) })
+            )
+          )
+        );
       });
 
       const removeScreen = Effect.fn('TerminalFiles.removeScreen')(function* (dataDir: string, id: string) {
-        yield* Effect.sync(() => rmSync(resolveScreen(dataDir, id), { force: true }));
+        yield* fs
+          .remove(resolveScreen(dataDir, id), { force: true })
+          .pipe(
+            Effect.catch((error) =>
+              Effect.logWarning('[Terminals] Could not remove a terminal’s saved screen').pipe(
+                Effect.annotateLogs({ terminalId: id, error: describeError(error) })
+              )
+            )
+          );
       });
 
       return TerminalFiles.of({

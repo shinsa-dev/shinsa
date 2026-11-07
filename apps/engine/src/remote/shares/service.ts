@@ -1,4 +1,3 @@
-import { statSync } from 'node:fs';
 import { extname } from 'node:path';
 import {
   type Bytes,
@@ -39,6 +38,7 @@ import {
   verifyShareHello,
 } from '@shinsa/core';
 import { Clock, Context, Effect, FileSystem, Layer, Option, Ref } from 'effect';
+import { constant } from 'effect/Function';
 import { Transcripts } from '../../agents/transcripts/service.ts';
 import { selectTaskCheckout } from '../../git/history/checkout.ts';
 import { History } from '../../git/history/service.ts';
@@ -104,7 +104,8 @@ export class Shares extends Context.Service<Shares, SharesHandle>()('shinsa/engi
       const origin = yield* RemoteOrigin;
       const randomBytes = yield* RandomBytes;
       const sources = yield* ShareSources;
-      const withFiles = Effect.provideService(FileSystem.FileSystem, yield* FileSystem.FileSystem);
+      const fs = yield* FileSystem.FileSystem;
+      const withFiles = Effect.provideService(FileSystem.FileSystem, fs);
       const context = yield* Effect.context<never>();
       const runSync = Effect.runSyncWith(context);
       const hashes = yield* Ref.make<ReadonlyMap<string, HashedFile>>(new Map());
@@ -138,7 +139,7 @@ export class Shares extends Context.Service<Shares, SharesHandle>()('shinsa/engi
             Effect.mapError(unreadable)
           ),
         readPatch: (path, base) => history.workingPatch(path, base).pipe(Effect.mapError(unreadable)),
-        readFile: readWorktreeFile,
+        readFile: (path, file) => withFiles(readWorktreeFile(path, file)),
       };
 
       const forkChannel = (run: Effect.Effect<void, ShareChannelBroke>) =>
@@ -357,13 +358,17 @@ export class Shares extends Context.Service<Shares, SharesHandle>()('shinsa/engi
         const path = Option.getOrNull(yield* evidence.selectFile(original.uri.slice(EVIDENCE_ROUTE.length)));
         const type = path ? SHARE_FILE_TYPES[extname(path).toLowerCase()] : undefined;
         if (!path || !type) return null;
-        const stat = yield* Effect.option(Effect.try(() => statSync(path)));
-        if (Option.isNone(stat) || stat.value.size > SHARE_FILE_BYTES) return null;
-        const read = Effect.tryPromise({
-          try: () => Bun.file(path).arrayBuffer(),
-          catch: (error) => new ShareFileUnreadable({ path, message: describeError(error) }),
-        }).pipe(Effect.map((buffer): Bytes => new Uint8Array(buffer)));
-        const version = yield* Effect.option(resolveFileHash(path, stat.value, read));
+        const info = yield* Effect.option(fs.stat(path));
+        if (Option.isNone(info) || Number(info.value.size) > SHARE_FILE_BYTES) return null;
+        const read = fs.readFile(path).pipe(
+          Effect.map((buffer): Bytes => new Uint8Array(buffer)),
+          Effect.mapError((error) => new ShareFileUnreadable({ path, message: describeError(error) }))
+        );
+        const stat = {
+          size: Number(info.value.size),
+          mtimeMs: Option.match(info.value.mtime, { onNone: constant(0), onSome: (date) => date.getTime() }),
+        };
+        const version = yield* Effect.option(resolveFileHash(path, stat, read));
         if (Option.isNone(version)) return null;
         const file: ShareFile = { id: evidenceId, version: version.value, type, read };
         return file;

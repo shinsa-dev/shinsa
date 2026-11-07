@@ -1,39 +1,48 @@
-import { existsSync, readdirSync, rmSync, statSync } from 'node:fs';
 import { join } from 'node:path';
-import { Context, Duration, Effect, Layer } from 'effect';
+import { Context, Duration, Effect, FileSystem, Layer, Option } from 'effect';
+import type { PlatformError } from 'effect/PlatformError';
 import { CACHES_DIR, TURBO_CACHE, UNUSED_CACHE } from '../schema.ts';
 import { resolveRepoCachePath } from './paths.ts';
 
 export class SharedCaches extends Context.Service<
   SharedCaches,
-  { prune(dataDir: string, repoIds: readonly string[], now: number): Effect.Effect<void> }
+  { prune(dataDir: string, repoIds: readonly string[], now: number): Effect.Effect<void, PlatformError> }
 >()('shinsa/engine/checks/caches/SharedCaches') {
-  static readonly layer = Layer.sync(SharedCaches, () => {
-    const prune = Effect.fn('SharedCaches.prune')(function* (
-      dataDir: string,
-      repoIds: readonly string[],
-      now: number
-    ) {
-      const known = new Set(repoIds);
+  static readonly layer = Layer.effect(
+    SharedCaches,
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
       const unused = Duration.toMillis(UNUSED_CACHE);
-      yield* Effect.sync(() => {
-        const listEntries = (dir: string) =>
-          existsSync(dir) ? readdirSync(dir).filter((name) => !name.startsWith('.')) : [];
-        for (const repoId of listEntries(join(dataDir, CACHES_DIR))) {
-          const path = resolveRepoCachePath(dataDir, repoId);
-          if (!known.has(repoId)) {
-            rmSync(path, { recursive: true, force: true });
-            continue;
-          }
-          const turbo = join(path, TURBO_CACHE);
-          for (const name of listEntries(turbo)) {
-            const entry = join(turbo, name);
-            if (now - statSync(entry).mtimeMs > unused) rmSync(entry, { recursive: true, force: true });
-          }
+
+      const listEntries = Effect.fn('SharedCaches.listEntries')(function* (dir: string) {
+        if (!(yield* fs.exists(dir))) return [];
+        return (yield* fs.readDirectory(dir)).filter((name) => !name.startsWith('.'));
+      });
+
+      const remove = (path: string) => fs.remove(path, { recursive: true, force: true });
+
+      const pruneTurbo = Effect.fn('SharedCaches.pruneTurbo')(function* (turbo: string, now: number) {
+        for (const name of yield* listEntries(turbo)) {
+          const entry = join(turbo, name);
+          const modified = Option.getOrUndefined((yield* fs.stat(entry)).mtime)?.getTime() ?? now;
+          if (now - modified > unused) yield* remove(entry);
         }
       });
-    });
 
-    return SharedCaches.of({ prune });
-  });
+      const prune = Effect.fn('SharedCaches.prune')(function* (
+        dataDir: string,
+        repoIds: readonly string[],
+        now: number
+      ) {
+        const known = new Set(repoIds);
+        for (const repoId of yield* listEntries(join(dataDir, CACHES_DIR))) {
+          const path = resolveRepoCachePath(dataDir, repoId);
+          if (known.has(repoId)) yield* pruneTurbo(join(path, TURBO_CACHE), now);
+          else yield* remove(path);
+        }
+      });
+
+      return SharedCaches.of({ prune });
+    })
+  );
 }

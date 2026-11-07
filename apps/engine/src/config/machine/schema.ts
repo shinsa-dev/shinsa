@@ -50,11 +50,6 @@ export const NOT_AN_OBJECT_PROBLEM = 'The file is not a JSON object.';
 
 export const MachineConfigJson = Schema.fromJsonString(Schema.Unknown);
 
-export class MachineConfigUnreadable extends Schema.TaggedError<
-  MachineConfigUnreadable,
-  { readonly brand: unique symbol }
->()('MachineConfigUnreadable', { path: Schema.String, reason: Schema.String }) {}
-
 export interface MachineConfigRead {
   config: MachineConfig;
   problems: string[];

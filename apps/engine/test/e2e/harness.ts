@@ -558,7 +558,8 @@ export class World {
   readonly github: FakeGitHub;
   daemon!: Daemon;
   providers: Providers['Service'] | null = null;
-  supervise: ((engine: Engine) => Partial<SupervisorOptions>) | null = null;
+  supervise: ((engine: Engine) => Partial<SupervisorOptions> | Promise<Partial<SupervisorOptions>>) | null =
+    null;
   dependOn: string[] = [];
   readonly #shapes = new Map<string, TaskShape>();
   classify: QuickJson | null = null;
@@ -586,7 +587,10 @@ export class World {
       live?: boolean;
       files?: Record<string, string>;
       providers?: (world: World) => Providers['Service'];
-      supervise?: (world: World, engine: Engine) => Partial<SupervisorOptions>;
+      supervise?: (
+        world: World,
+        engine: Engine
+      ) => Partial<SupervisorOptions> | Promise<Partial<SupervisorOptions>>;
     } = {}
   ) {
     const world = new World();
@@ -622,7 +626,7 @@ export class World {
     await git(world.repoPath, 'remote', 'add', 'origin', world.origin);
     await git(world.repoPath, 'push', '-q', '-u', 'origin', 'main');
     await git(world.repoPath, 'remote', 'set-head', 'origin', 'main');
-    world.boot();
+    await world.boot();
     const candidate = await inspectRepo(world.repoPath);
     await world.engine.dispatch({
       type: 'repo.register',
@@ -644,7 +648,7 @@ export class World {
     }
   }
 
-  boot() {
+  async boot() {
     const log = openEventLog(this.config.databasePath);
     const engine = new Engine(log);
     this.agents.state = () => engine.state;
@@ -653,7 +657,7 @@ export class World {
     const runs = createSupervisor(engine, this.config, transcripts, evidence, {
       startSession: this.live || this.providers ? undefined : this.agents.startSession,
       providers: this.providers ?? undefined,
-      ...this.supervise?.(engine),
+      ...(await this.supervise?.(engine)),
     });
     const quick = createTestQuickCalls(engine, this.providers ?? undefined);
     const briefingScope = Scope.makeUnsafe();
@@ -726,7 +730,7 @@ export class World {
     await this.daemon.runs.interruptForShutdown();
     this.daemon.stop();
     await this.daemon.engine.settle();
-    this.boot();
+    await this.boot();
     await this.daemon.runs.recover();
     await this.daemon.effects.recover();
   }
@@ -735,7 +739,7 @@ export class World {
     this.daemon.stop();
     await this.daemon.runs.interruptForShutdown();
     await this.daemon.engine.settle();
-    this.boot();
+    await this.boot();
     await this.daemon.runs.recover();
     await this.daemon.effects.recover();
   }

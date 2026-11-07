@@ -1,6 +1,5 @@
-import { rmSync } from 'node:fs';
 import { readTeamSnapshot, type TeamTask } from '@shinsa/core';
-import { Effect, Option, Ref } from 'effect';
+import { Effect, FileSystem, Option, Ref } from 'effect';
 import { JsonFile } from '../../files/service.ts';
 import { describeError } from '../../log/redact.ts';
 import { TeamSnapshotsFile } from '../schema.ts';
@@ -15,6 +14,7 @@ export const makeTeamSnapshots = Effect.fn('TeamSnapshots.make')(function* (
   definition: TeamSnapshotsDefinition
 ) {
   const json = yield* JsonFile;
+  const fs = yield* FileSystem.FileSystem;
   const { path } = definition;
   const resolveListKey = (teamId: string, instanceId: string) => `${teamId} ${instanceId}`;
 
@@ -46,10 +46,9 @@ export const makeTeamSnapshots = Effect.fn('TeamSnapshots.make')(function* (
   const save = Effect.gen(function* () {
     const kept = yield* list;
     if (kept.length === 0)
-      return yield* Effect.try({
-        try: () => rmSync(path, { force: true }),
-        catch: (error) => new TeamSnapshotsKeepFailed({ message: describeError(error) }),
-      });
+      return yield* fs
+        .remove(path, { force: true })
+        .pipe(Effect.mapError((error) => new TeamSnapshotsKeepFailed({ message: describeError(error) })));
     yield* json
       .write(path, { version: 1, lists: kept })
       .pipe(Effect.mapError((failure) => new TeamSnapshotsKeepFailed({ message: failure.message })));

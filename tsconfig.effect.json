@@ -18,7 +18,8 @@
           "effect/PlatformError",
           "@effect/sql-d1",
           "@effect/sql-sqlite-bun",
-          "@effect/platform-bun"
+          "@effect/platform-bun",
+          "@effect/platform-node-shared"
         ],
         "allowedExperimentalApis": [],
         "diagnosticSeverity": {

@@ -97,6 +97,18 @@ describe('measuring the changed lines', () => {
     });
   });
 
+  test('measures nothing when it cannot make a folder for the reports', async () => {
+    const { repo, worktree } = await createChangedWorktree();
+    const temp = process.env.TMPDIR;
+    process.env.TMPDIR = join(worktree, 'no-such-folder');
+    try {
+      expect(await measure(repo, { worktreePath: worktree }, custom(writeReport(LCOV)))).toBeNull();
+    } finally {
+      if (temp === undefined) delete process.env.TMPDIR;
+      else process.env.TMPDIR = temp;
+    }
+  });
+
   test('a stale report from an earlier run is removed first, so a command that writes none is unavailable', async () => {
     const { repo, worktree } = await createChangedWorktree();
     mkdirSync(join(worktree, 'coverage'), { recursive: true });

@@ -1,3 +1,4 @@
+import { BunHttpPlatform } from '@effect/platform-bun';
 import { EngineApi } from '@shinsa/core/engine-api';
 import { type Context, Layer } from 'effect';
 import { HttpRouter, HttpServer } from 'effect/http';
@@ -61,6 +62,7 @@ const EngineRoutes = Layer.mergeAll(ApiRoutes, WebhookRoutes, SignInRoutes, Tunn
 const EngineHandlerLayer = Layer.mergeAll(EngineRoutes, Ingress).pipe(
   Layer.provide(TunnelGate.layer),
   Layer.provide(GitLayer.pipe(Layer.provideMerge(ShellLayer))),
+  Layer.provide(BunHttpPlatform.layer),
   Layer.provide(HttpServer.layerServices)
 );
 

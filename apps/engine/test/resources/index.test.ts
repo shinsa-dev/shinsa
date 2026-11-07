@@ -6,6 +6,7 @@ import { readMemoryWith, readResourceText } from '../../src/resources/memory.ts'
 import { ResourceReadFailed } from '../../src/resources/monitor/schema.ts';
 import { ResourceTimings } from '../../src/resources/schema.ts';
 import type { CommandResult } from '../../src/shell/schema.ts';
+import { runFiles } from '../harness.ts';
 import { captureLogs } from '../helpers/logs.ts';
 import { createTempDir } from '../helpers/temp.ts';
 import { until } from '../helpers/until.ts';
@@ -231,8 +232,8 @@ describe('reading the machine’s own numbers', () => {
   test('a monitor with nothing faked reads this machine', async () => {
     const dataDir = createTempDir();
     await Bun.write(join(dataDir, 'note.txt'), 'hello');
-    expect(await runAsync(readResourceText(join(dataDir, 'note.txt')))).toBe('hello');
-    const missing = await runAsync(Effect.flip(readResourceText(join(dataDir, 'missing.txt'))));
+    expect(await runFiles(readResourceText(join(dataDir, 'note.txt')))).toBe('hello');
+    const missing = await runFiles(Effect.flip(readResourceText(join(dataDir, 'missing.txt'))));
     expect(missing._tag).toBe('ResourceReadFailed');
     const { monitor, ledger, close } = createMonitor({
       machine: true,

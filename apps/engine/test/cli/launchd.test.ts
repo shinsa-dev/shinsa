@@ -1,14 +1,14 @@
 import { describe, expect, test } from 'bun:test';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
-import { Effect } from 'effect';
+import { dirname, join } from 'node:path';
+import { Effect, type FileSystem } from 'effect';
 import { createLaunchdService, isAppJob, resolveLaunchAgent } from '../../src/cli/launchd.ts';
 import type { ServiceRunner } from '../../src/instance/index.ts';
 import type { Shell } from '../../src/shell/service.ts';
 import { createTempDir } from '../helpers/index.ts';
 import { testRuntime } from '../helpers/runtime.ts';
 
-function run<A, E>(effect: Effect.Effect<A, E, Shell>) {
+function run<A, E>(effect: Effect.Effect<A, E, Shell | FileSystem.FileSystem>) {
   return testRuntime.runPromise(effect);
 }
 
@@ -139,6 +139,13 @@ describe('the engine on a Mac without the app', () => {
       ['bootstrap', 'gui/501', current.plist],
     ]);
     expect(readFileSync(current.plist, 'utf8')).toBe(written);
+  });
+
+  test('an agent folder it cannot make fails the setup before anything is loaded', async () => {
+    const { service, calls, plist } = createStandalone(null);
+    writeFileSync(dirname(dirname(plist)), '');
+    await expect(run(service.prepare)).rejects.toThrow();
+    expect(calls).toEqual([['print', TARGET]]);
   });
 
   test('takes over the job another standalone shinsa set up', async () => {

@@ -1,5 +1,3 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
 import { dirname, isAbsolute, join } from 'node:path';
 import {
   COVERAGE_LIMITS,
@@ -12,6 +10,7 @@ import {
   resolveRepoCoverage,
 } from '@shinsa/core';
 import { Context, Effect, FileSystem, Layer, Option } from 'effect';
+import { constFalse } from 'effect/Function';
 import { CheckRunner } from '../checks/runner/service.ts';
 import { CHECK_TIMEOUT_MS } from '../checks/schema.ts';
 import { History } from '../git/history/service.ts';
@@ -35,7 +34,8 @@ export class TaskCoverage extends Context.Service<
     Effect.gen(function* () {
       const runner = yield* CheckRunner;
       const history = yield* History;
-      const withFiles = Effect.provideService(FileSystem.FileSystem, yield* FileSystem.FileSystem);
+      const fs = yield* FileSystem.FileSystem;
+      const withFiles = Effect.provideService(FileSystem.FileSystem, fs);
 
       const resolveUnavailable = (command: string, reason: string): Coverage => ({
         status: 'unavailable',
@@ -71,10 +71,7 @@ export class TaskCoverage extends Context.Service<
       };
 
       const listRoots = (worktree: string) =>
-        Effect.sync(() => {
-          const real = realpathSync(worktree);
-          return real === worktree ? [worktree] : [worktree, real];
-        });
+        fs.realPath(worktree).pipe(Effect.map((real) => (real === worktree ? [worktree] : [worktree, real])));
 
       const mergeHits = (into: CoverageHits, run: CoverageRun, hits: CoverageHits) => {
         for (const [path, lines] of hits) {
@@ -90,24 +87,22 @@ export class TaskCoverage extends Context.Service<
         worktree: string,
         run: CoverageRun
       ) {
-        yield* Effect.try({
-          try: () => {
-            rmSync(run.report, { force: true });
-            mkdirSync(dirname(run.report), { recursive: true });
-          },
-          catch: (error) => new CoverageReportUnreadable({ path: run.report, message: describeError(error) }),
-        });
+        const unreadable = (error: unknown) =>
+          new CoverageReportUnreadable({ path: run.report, message: describeError(error) });
+        yield* fs
+          .remove(run.report, { force: true })
+          .pipe(
+            Effect.andThen(fs.makeDirectory(dirname(run.report), { recursive: true })),
+            Effect.mapError(unreadable)
+          );
         const result = yield* runner.command(['sh', '-c', run.command], worktree, {
           timeoutMs: request.timeoutMs ?? CHECK_TIMEOUT_MS,
           signal: request.signal,
         });
         if (result.timedOut) return 'It ran too long and was stopped.';
-        if (!(yield* Effect.sync(() => existsSync(run.report))))
+        if (!(yield* fs.exists(run.report).pipe(Effect.orElseSucceed(constFalse))))
           return `It wrote no report at ${run.report} (exit ${result.code}).`;
-        const text = yield* Effect.try({
-          try: () => readFileSync(run.report, 'utf8'),
-          catch: (error) => new CoverageReportUnreadable({ path: run.report, message: describeError(error) }),
-        });
+        const text = yield* fs.readFileString(run.report).pipe(Effect.mapError(unreadable));
         const hits = parseCoverageReport(run.format, text);
         return hits.size === 0 ? `The report at ${run.report} lists no files.` : hits;
       });
@@ -154,10 +149,12 @@ export class TaskCoverage extends Context.Service<
       const measure = Effect.fn('TaskCoverage.measure')(function* (request: CoverageRequest) {
         const worktree = request.task.worktreePath;
         if (!worktree || request.signal?.aborted) return null;
-        const dir = yield* Effect.acquireRelease(
-          Effect.sync(() => mkdtempSync(join(tmpdir(), COVERAGE_DIR_PREFIX))),
-          (made) => Effect.sync(() => rmSync(made, { recursive: true, force: true }))
-        );
+        const made = yield* Effect.option(fs.makeTempDirectoryScoped({ prefix: COVERAGE_DIR_PREFIX }));
+        if (Option.isNone(made)) {
+          yield* Effect.logWarning('[Coverage] Could not make a folder for the coverage reports');
+          return null;
+        }
+        const dir = made.value;
         const choice = resolveRunChoice(request, worktree, dir);
         if (!choice) return null;
         if ('refusal' in choice) return resolveUnavailable(choice.command, choice.refusal);

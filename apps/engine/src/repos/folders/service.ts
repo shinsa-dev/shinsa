@@ -1,8 +1,5 @@
-import type { Dirent } from 'node:fs';
-import { readFileSync, statSync } from 'node:fs';
-import { readdir } from 'node:fs/promises';
 import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
-import { Clock, Context, Duration, Effect, FileSystem, Layer } from 'effect';
+import { Clock, Context, Duration, Effect, FileSystem, Layer, Option } from 'effect';
 import { normalizeRemote } from '../../git/remote/output.ts';
 import { Remote } from '../../git/remote/service.ts';
 import { selectErrnoCode } from '../../shell/errno.ts';
@@ -12,7 +9,6 @@ import {
   type Discovery,
   type DiscoveryOptions,
   type DiscoveryScan,
-  FolderUnreadable,
   type LocalRepo,
   MAX_DEPTH,
   MAX_DIRS,
@@ -38,35 +34,31 @@ export class RepoFolders extends Context.Service<
     RepoFolders,
     Effect.gen(function* () {
       const remote = yield* Remote;
-      const withFiles = Effect.provideService(FileSystem.FileSystem, yield* FileSystem.FileSystem);
+      const fs = yield* FileSystem.FileSystem;
+      const withFiles = Effect.provideService(FileSystem.FileSystem, fs);
 
       const isSkipped = (name: string) =>
         name.startsWith('.') ||
         SKIPPED_DIRS.has(name) ||
         BUNDLE_SUFFIXES.some((suffix) => name.endsWith(suffix));
 
-      const listChildren = (dir: string, entries: Dirent[]) =>
+      const listChildren = (dir: string, entries: readonly FileSystem.DirectoryEntry[]) =>
         entries
-          .filter((entry) => entry.isDirectory() && !isSkipped(entry.name))
+          .filter((entry) => entry.type === 'Directory' && !isSkipped(entry.name))
           .map((entry) => join(dir, entry.name));
 
-      const isRepo = (entries: Dirent[]) =>
-        entries.some((entry) => entry.name === '.git' && (entry.isDirectory() || entry.isFile()));
+      const isRepo = (entries: readonly FileSystem.DirectoryEntry[]) =>
+        entries.some(
+          (entry) => entry.name === '.git' && (entry.type === 'Directory' || entry.type === 'File')
+        );
 
-      const readEntries = (path: string) =>
-        Effect.tryPromise({
-          try: () => readdir(path, { withFileTypes: true }),
-          catch: (error) => new FolderUnreadable({ path, code: selectErrnoCode(error) }),
-        });
-
-      const readText = (path: string) =>
-        Effect.try(() => readFileSync(path, 'utf8')).pipe(Effect.orElseSucceed(() => null));
+      const readText = (path: string) => fs.readFileString(path).pipe(Effect.orElseSucceed(() => null));
 
       const resolveGitDir = Effect.fn('RepoFolders.resolveGitDir')(function* (repo: string) {
         const dotGit = join(repo, '.git');
-        const stats = yield* Effect.try(() => statSync(dotGit)).pipe(Effect.orElseSucceed(() => null));
-        if (!stats) return null;
-        if (stats.isDirectory()) return dotGit;
+        const stats = yield* Effect.option(fs.stat(dotGit));
+        if (Option.isNone(stats)) return null;
+        if (stats.value.type === 'Directory') return dotGit;
         const pointer = /^gitdir:\s*(.+)$/m.exec((yield* readText(dotGit)) ?? '')?.[1]?.trim();
         if (!pointer) return null;
         const gitDir = isAbsolute(pointer) ? pointer : resolve(repo, pointer);
@@ -88,7 +80,12 @@ export class RepoFolders extends Context.Service<
         return null;
       };
 
-      const recordEntries = (scan: DiscoveryScan, dir: string, entries: Dirent[], descend: boolean) => {
+      const recordEntries = (
+        scan: DiscoveryScan,
+        dir: string,
+        entries: readonly FileSystem.DirectoryEntry[],
+        descend: boolean
+      ) => {
         if (dir !== scan.home && isRepo(entries)) {
           const parent = dirname(dir);
           scan.parents.set(parent, [...(scan.parents.get(parent) ?? []), basename(dir)]);
@@ -98,11 +95,11 @@ export class RepoFolders extends Context.Service<
       };
 
       const visit = (scan: DiscoveryScan, dir: string, descend: boolean) =>
-        readEntries(dir).pipe(
+        fs.readDirectoryEntries(dir).pipe(
           Effect.map((entries) => recordEntries(scan, dir, entries, descend)),
-          Effect.catchTag('FolderUnreadable', (failure) =>
+          Effect.catchTag('PlatformError', (failure) =>
             Effect.sync(() => {
-              if (REFUSED_CODES.has(failure.code ?? '')) scan.refused.push(dir);
+              if (REFUSED_CODES.has(selectErrnoCode(failure.reason.cause) ?? '')) scan.refused.push(dir);
               return [];
             })
           )

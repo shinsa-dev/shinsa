@@ -130,11 +130,11 @@ describe('the silent-run watch', () => {
     await watch.stop();
     const quiet = setup({ value: 0 });
     quiet.reject((command) => command.type === 'run.silence');
-    quiet.transcripts.record('run-3', { type: 'agent', phase: 'interim', text: 'back' });
+    await quiet.transcripts.record('run-3', { type: 'agent', phase: 'interim', text: 'back' });
     const quietWatch = await quiet.start(5);
     const logs = captureLogs();
     try {
-      quiet.transcripts.record('run-3', { type: 'agent', phase: 'interim', text: 'back' });
+      await quiet.transcripts.record('run-3', { type: 'agent', phase: 'interim', text: 'back' });
       await until(
         'the failed record to be logged',
         () => logs.fieldsOf('[Silence] Could not record a quiet run').length > 0

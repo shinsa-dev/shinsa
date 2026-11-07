@@ -23,13 +23,13 @@ import type { ProviderUsageReading } from '../../src/agents/providers/types.ts';
 import { ProgramVersions } from '../../src/agents/providers/versions/service.ts';
 import type { ServerConfig } from '../../src/config/index.ts';
 import { EngineConfig } from '../../src/config/service.ts';
-import { JsonFile } from '../../src/files/service.ts';
 import { JsonLogger } from '../../src/log/service.ts';
 import { EngineCore } from '../../src/runtime/engine/service.ts';
 import { ShellLayer } from '../../src/shell/layers.ts';
 import type { CommandResult } from '../../src/shell/schema.ts';
 import { Shell } from '../../src/shell/service.ts';
 import { TerminalPty } from '../../src/terminals/pty/service.ts';
+import { JsonFileLayer } from '../helpers/files.ts';
 import { createTempDir, createTestConfig } from '../helpers/index.ts';
 import { createStubEngine, type StubEngine } from '../helpers/state.ts';
 
@@ -269,7 +269,7 @@ function createAccountsLayer(options: AccountsHarnessOptions, calls: ShellCall[]
         Layer.succeed(EngineConfig, options.config),
         Layer.succeed(EngineCore, options.engine),
         ProgramVersions.layer.pipe(Layer.provide(ShellLayer)),
-        JsonFile.layer.pipe(Layer.provide(BunServices.layer)),
+        JsonFileLayer,
         BunServices.layer
       )
     ),
@@ -288,13 +288,6 @@ export async function buildAccounts(options: AccountsHarnessOptions) {
   const harness = openContext(context, scope, calls);
   if (options.now !== undefined) await harness.setTime(options.now);
   return harness;
-}
-
-export function buildAccountsNow(options: AccountsHarnessOptions) {
-  const scope = Effect.runSync(Scope.make());
-  const calls: ShellCall[] = [];
-  const context = Effect.runSync(Layer.buildWithScope(createAccountsLayer(options, calls), scope));
-  return openContext(context, scope, calls);
 }
 
 function openContext(context: Context.Context<AccountsContext>, scope: Scope.Closeable, calls: ShellCall[]) {

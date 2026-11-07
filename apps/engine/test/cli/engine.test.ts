@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test';
-import { Effect } from 'effect';
+import { Effect, type FileSystem } from 'effect';
 import {
   describeDuration,
   ENGINE_STOPPED,
@@ -20,7 +20,7 @@ import { testRuntime } from '../helpers/runtime.ts';
 
 const COLOR = { style: createStyle({ color: true, symbols: UNICODE_SYMBOLS }), width: 80 };
 
-function run<A, E>(effect: Effect.Effect<A, E, Shell>) {
+function run<A, E>(effect: Effect.Effect<A, E, Shell | FileSystem.FileSystem>) {
   return testRuntime.runPromise(effect);
 }
 

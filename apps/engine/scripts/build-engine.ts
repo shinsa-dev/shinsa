@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { BunRuntime, BunServices } from '@effect/platform-bun';
 import { Console, Effect, FileSystem, Layer, Schema } from 'effect';
 import { resolveBuildChangelog } from '../../../scripts/changelog-history.ts';
+import { bundle } from '../../../scripts/kit/bundle.ts';
 import { Command, CommandLayer } from '../../../scripts/kit/command/index.ts';
 import { reportFailure } from '../../../scripts/kit/script.ts';
 import { resolveBuildFolder, resolveBuildTarget } from '../src/instance/targets.ts';
@@ -39,7 +40,7 @@ const compile = Effect.fn('EngineBuild.compile')(function* (
   const failed = (logs: string) => new EngineBuildFailed({ message: `Could not compile ${name}:\n${logs}` });
   const result = yield* Effect.tryPromise({
     try: () =>
-      Bun.build({
+      bundle({
         entrypoints: [entry],
         compile: { target, outfile: join(outDir, 'bin', name) },
         define,

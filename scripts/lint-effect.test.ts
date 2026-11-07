@@ -1,5 +1,4 @@
 import { describe, expect, test } from 'bun:test';
-import { RAW_IO_BASELINE } from './lint-effect-baseline.ts';
 import {
   EFFECT_CLOCK_MESSAGE,
   EFFECT_DATA_ERROR_MESSAGE,
@@ -22,8 +21,6 @@ import {
   listEngineRuntimeLines,
   listSyncIoLines,
   listRawIoViolations,
-  listStaleBaselineFiles,
-  RAW_IO_BASELINE_MESSAGE,
   RAW_IO_MESSAGE,
   SYNC_IO_EXEMPT,
 } from './lint-effect.ts';
@@ -298,7 +295,7 @@ describe('no file or process I/O runs outside Effect', () => {
   });
 });
 
-describe('raw file and process I/O in Effect code only shrinks', () => {
+describe('raw file and process I/O in Effect code', () => {
   const raw = [
     "import { readFileSync } from 'node:fs';",
     "import { Effect } from 'effect';",
@@ -306,33 +303,17 @@ describe('raw file and process I/O in Effect code only shrinks', () => {
     "export const which = Effect.sync(() => Bun.which('git'));",
   ].join('\n');
   const clean = "import { Effect, FileSystem } from 'effect';\nexport const fs = FileSystem.FileSystem;";
-  const [listed = ''] = RAW_IO_BASELINE;
 
-  test('a new Effect file that imports node:fs or calls Bun I/O fails, even inside Effect.try', () => {
+  test('fails in every Effect source file, even inside Effect.try, and a type import or a test is fine', () => {
     expect(listRawIoViolations('apps/engine/src/new.ts', raw)).toEqual([
       { line: 1, message: RAW_IO_MESSAGE },
       { line: 4, message: RAW_IO_MESSAGE },
     ]);
+    expect(listRawIoViolations('scripts/release/new.ts', raw)).toHaveLength(2);
     expect(listRawIoViolations('apps/engine/src/new.ts', clean)).toEqual([]);
     expect(listRawIoViolations('apps/engine/test/new.test.ts', raw)).toEqual([]);
     expect(
       listRawIoViolations('apps/engine/src/new.ts', `import type { Stats } from 'node:fs';\n${clean}`)
     ).toEqual([]);
-  });
-
-  test('a listed file may keep its raw I/O until it moves, then must leave the list', () => {
-    expect(listed).not.toBe('');
-    expect(listRawIoViolations(listed, raw)).toEqual([]);
-    expect(listRawIoViolations(listed, clean)).toEqual([{ line: 1, message: RAW_IO_BASELINE_MESSAGE }]);
-    expect(listRawIoViolations(listed, 'export const a = 1;')).toEqual([
-      { line: 1, message: RAW_IO_BASELINE_MESSAGE },
-    ]);
-  });
-
-  test('a listed file the lint never reached, because it moved or was deleted, is stale', () => {
-    expect(listStaleBaselineFiles(new Set(RAW_IO_BASELINE))).toEqual([]);
-    expect(listStaleBaselineFiles(new Set([...RAW_IO_BASELINE].filter((file) => file !== listed)))).toEqual([
-      listed,
-    ]);
   });
 });

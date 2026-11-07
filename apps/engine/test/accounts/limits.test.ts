@@ -11,8 +11,8 @@ import { UsageReadings } from '../../src/accounts/readings/service.ts';
 import { AccountRegistry } from '../../src/accounts/registry/service.ts';
 import { AccountStepFailed, USAGE_TTL, type UsageRead, UsageTtl } from '../../src/accounts/schema.ts';
 import { EngineConfig } from '../../src/config/service.ts';
-import { JsonFile } from '../../src/files/service.ts';
 import { JsonLogger } from '../../src/log/service.ts';
+import { JsonFileLayer } from '../helpers/files.ts';
 import { captureLogs, createTempDir, createTestConfig } from '../helpers/index.ts';
 
 const USAGE_TTL_MS = Duration.toMillis(USAGE_TTL);
@@ -41,7 +41,7 @@ async function openLimits(read: UsageReader, path: string, ttlMs?: number) {
     Layer.provideMerge(
       Layer.mergeAll(
         Layer.succeed(UsageReadings, readings),
-        AccountRegistry.layer.pipe(Layer.provide(JsonFile.layer)),
+        AccountRegistry.layer.pipe(Layer.provide(JsonFileLayer)),
         AccountChanges.layer,
         Layer.succeed(EngineConfig, { ...createTestConfig(createTempDir()), dataDir: dirname(path) }),
         ...(ttlMs === undefined ? [] : [Layer.succeed(UsageTtl, Duration.millis(ttlMs))])
@@ -69,8 +69,8 @@ async function openLimits(read: UsageReader, path: string, ttlMs?: number) {
     snapshot: (id: string) => sync(usage.snapshot(id)),
     isFresh: (id: string) => sync(usage.isFresh(id)),
     refresh: (ids: string[], force = false) => run(usage.refresh(ids, force)),
-    remove: (id: string) => sync(usage.remove(id)),
-    recordPush: (id: string, notice: RateLimitNotice) => sync(usage.recordPush(id, notice)),
+    remove: (id: string) => run(usage.remove(id)),
+    recordPush: (id: string, notice: RateLimitNotice) => run(usage.recordPush(id, notice)),
     subscribe: (listener: () => void) => {
       const listening = sync(Scope.make());
       sync(changes.listen(Effect.sync(listener)).pipe(Scope.provide(listening)));
@@ -479,9 +479,9 @@ describe('usage limits', () => {
     await limits.refresh(['a']);
     let changes = 0;
     const unsubscribe = limits.subscribe(() => changes++);
-    limits.remove('missing');
+    await limits.remove('missing');
     expect(changes).toBe(0);
-    limits.remove('a');
+    await limits.remove('a');
     expect(changes).toBe(1);
     expect(limits.snapshot('a')).toEqual(createUnknownUsage());
     expect(JSON.parse(readFileSync(path, 'utf8')).accounts).toEqual({});
@@ -496,7 +496,7 @@ describe('pushed rate limits', () => {
     const { limits, clock } = await createLimits([{ ok: true, windows: [SESSION, FABLE] }]);
     await limits.refresh(['a']);
     await clock.advance(2 * 60 * 60_000);
-    limits.recordPush('a', createNotice({ limit: 'weekly:fable', utilization: 0.5 }));
+    await limits.recordPush('a', createNotice({ limit: 'weekly:fable', utilization: 0.5 }));
     expect(limits.snapshot('a')).toEqual({
       status: 'ok',
       windows: [SESSION, { ...FABLE, usedPercent: 50 }],
@@ -504,7 +504,7 @@ describe('pushed rate limits', () => {
       checkedAt: clock.now,
       source: 'push',
     });
-    limits.recordPush('a', createNotice({ limit: 'five_hour', utilization: 2, resetsAt: 12_000 }));
+    await limits.recordPush('a', createNotice({ limit: 'five_hour', utilization: 2, resetsAt: 12_000 }));
     expect(limits.snapshot('a').windows[0]).toEqual({ ...SESSION, usedPercent: 100, resetsAt: 12_000 });
   });
 
@@ -512,10 +512,13 @@ describe('pushed rate limits', () => {
     const opus: UsageWindow = { ...FABLE, id: 'weekly:opus', label: 'Weekly · Opus', model: 'Opus' };
     const { limits } = await createLimits([{ ok: true, windows: [SESSION, opus] }]);
     await limits.refresh(['a']);
-    limits.recordPush('a', createNotice({ status: 'rejected', limit: 'seven_day_opus', resetsAt: 60_000 }));
+    await limits.recordPush(
+      'a',
+      createNotice({ status: 'rejected', limit: 'seven_day_opus', resetsAt: 60_000 })
+    );
     expect(limits.snapshot('a').windows).toEqual([SESSION, { ...opus, usedPercent: 100, resetsAt: 60_000 }]);
     const fresh = await createLimits([]);
-    fresh.limits.recordPush('a', createNotice({ limit: 'seven_day_sonnet', utilization: 0.3 }));
+    await fresh.limits.recordPush('a', createNotice({ limit: 'seven_day_sonnet', utilization: 0.3 }));
     expect(fresh.limits.snapshot('a').windows.map((window) => [window.id, window.usedPercent])).toEqual([
       ['weekly:sonnet', 30],
     ]);
@@ -523,7 +526,7 @@ describe('pushed rate limits', () => {
 
   test('a rejection marks the window spent, even before anything was read', async () => {
     const { limits } = await createLimits([]);
-    limits.recordPush('a', createNotice({ status: 'rejected', limit: 'seven_day', resetsAt: 70_000 }));
+    await limits.recordPush('a', createNotice({ status: 'rejected', limit: 'seven_day', resetsAt: 70_000 }));
     expect(limits.snapshot('a')).toEqual({
       status: 'ok',
       windows: [
@@ -546,9 +549,9 @@ describe('pushed rate limits', () => {
     const { limits } = await createLimits([{ ok: true, windows: [SESSION] }]);
     let changes = 0;
     limits.subscribe(() => changes++);
-    limits.recordPush('a', createNotice({ limit: null, status: 'rejected' }));
-    limits.recordPush('a', createNotice({ limit: 'nimbus_quill', status: 'rejected' }));
-    limits.recordPush('a', createNotice({ limit: 'seven_day', utilization: null }));
+    await limits.recordPush('a', createNotice({ limit: null, status: 'rejected' }));
+    await limits.recordPush('a', createNotice({ limit: 'nimbus_quill', status: 'rejected' }));
+    await limits.recordPush('a', createNotice({ limit: 'seven_day', utilization: null }));
     expect(changes).toBe(0);
     expect(limits.snapshot('a')).toEqual(createUnknownUsage());
   });
@@ -556,9 +559,9 @@ describe('pushed rate limits', () => {
   test('a push without a percent keeps the known percent and refreshes the reset time', async () => {
     const { limits } = await createLimits([{ ok: true, windows: [SESSION] }]);
     await limits.refresh(['a']);
-    limits.recordPush('a', createNotice({ limit: 'five_hour', utilization: null, resetsAt: 20_000 }));
+    await limits.recordPush('a', createNotice({ limit: 'five_hour', utilization: null, resetsAt: 20_000 }));
     expect(limits.snapshot('a').windows).toEqual([{ ...SESSION, resetsAt: 20_000 }]);
-    limits.recordPush('a', createNotice({ limit: 'five_hour', utilization: -1 }));
+    await limits.recordPush('a', createNotice({ limit: 'five_hour', utilization: -1 }));
     expect(limits.snapshot('a').windows[0]?.usedPercent).toBe(0);
   });
 
@@ -566,7 +569,7 @@ describe('pushed rate limits', () => {
     const limited: UsageRead = { ok: false, reason: 'limited', detail: 'slow down', retryAfterMs: null };
     const { limits, asked } = await createLimits([limited, { ok: true, windows: [] }]);
     await limits.refresh(['a']);
-    limits.recordPush('a', createNotice({ status: 'rejected' }));
+    await limits.recordPush('a', createNotice({ status: 'rejected' }));
     await limits.refresh(['a'], true);
     expect(asked).toHaveLength(1);
     expect(limits.snapshot('a').windows.map((window) => window.usedPercent)).toEqual([100]);

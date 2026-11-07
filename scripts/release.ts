@@ -1,8 +1,7 @@
-import { writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { BunRuntime } from '@effect/platform-bun';
-import { Config, Console, Effect, Option } from 'effect';
+import { Config, Console, Effect, FileSystem, Option } from 'effect';
 import { listReleaseEntries, serializeReleaseBody } from './changelog-rules.ts';
 import { Command, CommandLayer } from './kit/command/index.ts';
 import { reportFailure } from './kit/script.ts';
@@ -18,6 +17,7 @@ import { ReleaseRefused } from './release/schema.ts';
 
 const program = Effect.gen(function* () {
   const command = yield* Command;
+  const fs = yield* FileSystem.FileSystem;
   const settings = yield* Effect.orDie(
     Config.all({
       channel: Config.option(Config.String('RELEASE_CHANNEL')),
@@ -40,8 +40,13 @@ const program = Effect.gen(function* () {
   const released = since ? yield* listReleasedSlugs(root, since) : [];
   const notes = listReleaseEntries(entries, released);
   const notesFile = join(settings.notesDir, 'release-notes.md');
-  yield* Effect.sync(() =>
-    writeFileSync(notesFile, serializeReleaseBody(describeReleaseChannel(plan), notes))
+  yield* fs.writeFileString(notesFile, serializeReleaseBody(describeReleaseChannel(plan), notes)).pipe(
+    Effect.mapError(
+      (error) =>
+        new ReleaseRefused({
+          message: `Could not write the release notes to ${notesFile}: ${error.message}`,
+        })
+    )
   );
 
   const outputs = [

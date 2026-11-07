@@ -1,3 +1,4 @@
+import { BunHttpPlatform } from '@effect/platform-bun';
 import type { AgentProviderInfo, Changelog } from '@shinsa/core';
 import { Cause, Context, Effect, Exit, Layer, Logger, ManagedRuntime, References } from 'effect';
 import { ensure } from 'effect/Array';
@@ -194,6 +195,7 @@ export function createWebHandler<E, R extends RouteNeeds>(
     Layer.mergeAll(routes, Ingress).pipe(
       Layer.provide(TunnelGate.layer),
       Layer.provide(GitLayer.pipe(Layer.provideMerge(ShellLayer))),
+      Layer.provide(BunHttpPlatform.layer),
       Layer.provide(HttpServer.layerServices),
       Layer.provide(createHttpLayer(context)),
       Layer.provideMerge(RecordingLogger)

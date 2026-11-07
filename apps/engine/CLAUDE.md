@@ -103,8 +103,8 @@ src/
 │                        read once through the ConfigProvider of provider.ts, the environment first, then config.json,
 │                        then the default; settings.ts reads the port, lists and numbers, a bad value the typed
 │                        SettingInvalid), machine/ (MachineConfigFile in service.ts: read, an Effect.fn reading
-│                        config.json, unreadable text or JSON a MachineConfigUnreadable answered as the defaults; the
-│                        pure parseMachineConfig in decode.ts decodes it field by field, a bad field dropped and
+│                        config.json through FileSystem, unreadable text or JSON answered as the defaults with the reason; the
+│                        pure resolveMachineConfigText and parseMachineConfig in decode.ts decode it field by field, a bad field dropped and
 │                        named; the shapes and each field's schema in schema.ts), paths.ts (where ~/.config/shinsa, config.json and data/
 │                        are), store/ (ConfigStore: config.json from EngineConfig's read, kept in a Ref and written
 │                        atomically through JsonFile; a file it could not read kept aside and each problem logged),
@@ -153,7 +153,8 @@ src/
 │                        or effect for both tables); schema.ts (EventLog: a built StoreLayer's context, which tests open
 │                        with test/helpers/event-log.ts; the engine composes StoreLayer under EngineCore.layer). Beside the log, evidence/ (Evidence: attached
 │                        evidence under `<task id>/round-<n>/` of EngineConfig's evidenceDir, chat tool images at the
-│                        top, all served under /api/evidence by http/routes/files, immutable and in byte ranges)
+│                        top, written by image-file.ts, the synchronous edge a provider's result mapper needs (SYNC_IO_EXEMPT), all served
+│                        under /api/evidence by http/routes/files through HttpServerResponse.file, immutable and in byte ranges)
 │                        and attachments/ (Attachments: the files you attach to a request or message,
 │                        `<UUIDv7>/<file name>`, the upload read by a schema in upload.ts, uploaded by POST
 │                        /api/attachments and served under it the same way)
@@ -338,7 +339,8 @@ src/
 │                        ForwarderUnavailable; data/eunoe from EngineConfig, the upstream, port, window and tuning
 │                        in the EunoeSettings reference; the request log in data/eunoe; compaction notices and the
 │                        stuck signal per session, notices.ts reading them from a request's entry), threads.ts
-│                        (makeFileStore: thread state in data/eunoe/threads on JsonFile, decoded by StoredThread,
+│                        (makeFileStore: thread state in data/eunoe/threads, decoded by StoredThread, read and written by files.ts, the
+│                        synchronous edge the library's store and request log need (SYNC_IO_EXEMPT),
 │                        the library's synchronous store run on the context it captured), schema.ts
 ├── schedules/           Schedules: the clock (clock/: ScheduleClock on makeEngineClock, ScheduleClockTimings), the
 │                        agent tools (tools/: ScheduleTools, its layer taking the base and hook URLs only the
@@ -482,7 +484,8 @@ src/
 │                        layers.ts (VersionsLayer: the three on HttpClient and ProgramVersions, needs Shell)
 ├── files/               service.ts (JsonFile: read(path, schema), a missing file Option.none and broken text or a
 │                        breaking value the typed JsonFileUnreadable; keepAside, the `<name>.unreadable-<time>` copy;
-│                        write, atomic through `<name>.writing-<pid>` and mode 600), schema.ts, manifest.ts (the
+│                        write, atomic through `<name>.writing-<pid>` and mode 600, one write per file at a time on a
+│                        Semaphore, so concurrent writes land in the order asked; all through Effect's FileSystem), schema.ts, manifest.ts (the
 │                        one reader of a checkout's package.json and deno.json, and the Claude SDK's, through the
 │                        lenient PackageManifest schema: a field that breaks its shape is dropped, the rest kept),
 │                        lenient-list.ts (createLenientList: a list keeping the entries that decode), probe.ts
@@ -748,7 +751,7 @@ random points of a task's life; `test/http/fuzz.test.ts` throws malformed reques
   | `Events`, `Outbox`, `Receipts`, `Briefings`, `Snapshots`, `LogMigrator`, `CommandLog` (`store/`) | `StoreLayer(path)` | the event log's tables on one `SqlClient`, every row decoded |
   | `Evidence`, `Attachments` (`store/`) | `Evidence.layer`, `Attachments.layer`, need `EngineConfig` | the files beside the log |
   | `ServeLock` (`instance/lock/service.ts`) | `ServeLock.acquire(dataDir, owner)` in a scope, or `ServeLock.layer` | `data/serve.lock`, tried at most three times while a stopped holder's file is taken over (`TAKEOVER_SCHEDULE`), and given back when its scope closes; `ServerRunning`, `LockContended` |
-  | `JsonFile` (`files/service.ts`) | `JsonFile.layer` | the JSON files Shinsa keeps: `read(path, schema)` → `Option` or `JsonFileUnreadable`, `keepAside`, an atomic `write`; `JsonFileWriteFailed` |
+  | `JsonFile` (`files/service.ts`) | `JsonFile.layer`, needs `FileSystem` (`BunServices.layer`; tests use `JsonFileLayer` from `test/helpers/files.ts`) | the JSON files Shinsa keeps: `read(path, schema)` → `Option` or `JsonFileUnreadable`, `keepAside`, an atomic `write`; `JsonFileWriteFailed` |
   | `Git` (`git/service.ts`) | `Git.layer`, needs `Shell` and `BunServices.layer` | `attempt`, `run` (`GitFailed`, `LOCK_RETRY` on a held index.lock), `read` (raw bytes, caps, timeout, abort) |
   | `Checkout`, `Remote`, `History`, `CodeFiles`, `LeftoverProcesses`, `CatFiles`, `ObjectCache` (`git/`) | `GitLayer` (`git/layers.ts`), needs `Shell` and `BunServices.layer` | worktrees and commits; pushes (`PushError`), the base and bundles; refs, changed files and diffs; the Code tab's reads (`CodeReadFailed`); processes left in a worktree; the long-lived `git cat-file` per repository; the cache of what a commit addresses |
   | `GitHubProcess`, `GitHubCli`, `PullRequests`, `RepoCiReader` (`github/`) | `GitHubLayer` (`github/layers.ts`), needs `Shell`; a test gives `GitHubProcess.layerTest(answer)` instead | gh with its timeout, gh's answers decoded (`GitHubFailed`, `GitHubAnswerInvalid`), pull requests (`MergeMethodInvalid`, `NoGitHubRemote`), CI and its cache |

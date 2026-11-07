@@ -193,7 +193,7 @@ describe('startShinsa', () => {
     const logs = captureLogs();
     try {
       const shinsa = await startShinsa(
-        resolveConfig({ SHINSA_HOME: home, HOME: home, SHINSA_PORT: '0', SHINSA_INSPECT: '1' }),
+        await resolveConfig({ SHINSA_HOME: home, HOME: home, SHINSA_PORT: '0', SHINSA_INSPECT: '1' }),
         { models }
       );
       started.push(shinsa);
@@ -378,7 +378,7 @@ describe('one Shinsa per data directory', () => {
   test('a second Shinsa on the same data folder is refused with the first one’s address, until it stops', async () => {
     const config = createTestConfig(createTempDir());
     const first = await startShinsa(config, { models });
-    expect(selectLockHolder(config.dataDir)).toMatchObject({
+    expect(await selectLockHolder(config.dataDir)).toMatchObject({
       pid: process.pid,
       url: first.url,
       port: Number(new URL(first.url).port),
@@ -390,7 +390,7 @@ describe('one Shinsa per data directory', () => {
     expect(existsSync(join(config.dataDir, LOCK_FILE))).toBe(false);
     const second = await startShinsa(config, { models });
     started.push(second);
-    expect(selectLockHolder(config.dataDir)?.url).toBe(second.url);
+    expect((await selectLockHolder(config.dataDir))?.url).toBe(second.url);
   });
 
   test('the lock a crashed Shinsa left behind is taken over', async () => {
@@ -411,7 +411,7 @@ describe('one Shinsa per data directory', () => {
     try {
       const shinsa = await startShinsa(config, { models });
       started.push(shinsa);
-      expect(selectLockHolder(config.dataDir)).toMatchObject({ pid: process.pid, url: shinsa.url });
+      expect(await selectLockHolder(config.dataDir)).toMatchObject({ pid: process.pid, url: shinsa.url });
       expect(logs.fieldsOf('[Serve] Took over the lock a stopped Shinsa left behind')).toEqual([
         { path: join(config.dataDir, LOCK_FILE), pid: crashed.pid },
       ]);
@@ -452,7 +452,7 @@ describe('one Shinsa per data directory', () => {
     expect(existsSync(join(config.dataDir, LOCK_FILE))).toBe(false);
     const again = await startShinsa(config, { models });
     started.push(again);
-    expect(selectLockHolder(config.dataDir)?.url).toBe(again.url);
+    expect((await selectLockHolder(config.dataDir))?.url).toBe(again.url);
   });
 
   test('stopping releases the effects, then Eunoe, then the server, then the log, then the lock', async () => {
@@ -501,9 +501,9 @@ describe('one Shinsa per data directory', () => {
     const live = await startShinsa(config, { models });
     started.push(live);
     const inspect = await startShinsa({ ...config, inspect: true }, { models });
-    expect(selectLockHolder(config.dataDir)).toMatchObject({ pid: process.pid, url: live.url });
+    expect(await selectLockHolder(config.dataDir)).toMatchObject({ pid: process.pid, url: live.url });
     await inspect.stop();
-    expect(selectLockHolder(config.dataDir)?.url).toBe(live.url);
+    expect((await selectLockHolder(config.dataDir))?.url).toBe(live.url);
     const alone = createTestConfig(createTempDir(), { inspect: true });
     started.push(await startShinsa(alone, { models }));
     expect(existsSync(join(alone.dataDir, LOCK_FILE))).toBe(false);

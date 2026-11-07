@@ -45,7 +45,7 @@ async function start(
     transcripts: transcripts.service,
     evidence,
     models: createModels([{ id: 'opus', label: 'Opus', description: 'x' }]),
-    onboarding: createTestOnboarding(engine, config).onboarding,
+    onboarding: (await createTestOnboarding(engine, config)).onboarding,
     launch: options.launch,
     restarter: options.restarter,
     fleetRelay: options.fleetRelay,

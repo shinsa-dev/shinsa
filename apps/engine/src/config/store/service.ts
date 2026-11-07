@@ -1,4 +1,4 @@
-import { Context, Effect, Layer, Ref } from 'effect';
+import { Context, Effect, Layer, SynchronizedRef } from 'effect';
 import type { JsonFileWriteFailed } from '../../files/schema.ts';
 import { JsonFile } from '../../files/service.ts';
 import type { MachineConfig } from '../machine/schema.ts';
@@ -23,18 +23,18 @@ export class ConfigStore extends Context.Service<
           Effect.annotateLogs({ path, problem, ...(copy?._tag === 'Some' ? { copy: copy.value } : {}) })
         );
       }
-      const current = yield* Ref.make(read.config);
+      const current = yield* SynchronizedRef.make(read.config);
 
       const update = Effect.fn('ConfigStore.update')(function* (
         patch: Partial<Omit<MachineConfig, 'version'>>
       ) {
-        const next = { ...(yield* Ref.get(current)), ...patch };
-        yield* files.write(path, next);
-        yield* Ref.set(current, next);
-        return next;
+        return yield* SynchronizedRef.modifyEffect(current, (before) => {
+          const next = { ...before, ...patch };
+          return Effect.as(files.write(path, next), [next, next] as const);
+        });
       });
 
-      return ConfigStore.of({ path, config: Ref.get(current), update });
+      return ConfigStore.of({ path, config: SynchronizedRef.get(current), update });
     })
   );
 }
