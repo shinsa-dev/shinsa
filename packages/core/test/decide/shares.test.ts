@@ -70,7 +70,7 @@ describe('sharing a task', () => {
       priority: 'normal',
       planFirst: false,
       origin: null,
-      auto: { shape: false, start: false, priority: false },
+      auto: { shape: false, start: false, priority: false, project: false },
       watchHome: true,
     });
     expect(() => harness.send({ type: 'task.share', taskId: 'home' })).toThrow(

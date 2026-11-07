@@ -487,13 +487,14 @@ whose choice is not clear binds none, and its work asks at the setup gate when i
   and that "the repo" alone names none. The repositories are listed by name, with nothing saying which was used
   last, and the prompt has no preference for recent work.
 - **A repository outside the project is used when the request names it.** A repository on the machine outside the
-  task's project is offered only when the request names it: its name appears in the request as whole words, any
+  task's project is offered only when the request names it and the task's project only came from the focus
+  (`TaskAuto.project`; a project you chose is fixed, `isProjectFixed`, and offers none): its name appears in the request as whole words, any
   case, punctuation ignored (`kanna` in "Fix the button in Kanna's sidebar", `paywall-next` in "paywall next";
   `resolveCandidatePool`). The prompt lists those as offered because the request names them, and the rest as never
   offered, so a request about one of those gets none (and asks at the setup gate) instead of the project's only
   repository. A named one the classifier picks is registered if Shinsa does not know it yet (`<effect key>:repo.register`,
   filed like any repository triage registers, Projects and task identity, below, never into the task's project) and
-  bound; the task keeps its own project, and its agents' brief says the task works in a repository outside it.
+  bound, and the task moves to that repository's project (`resolveRepoMove`, below).
   Without the model the task binds none, unless it was created with a repository or from inside one. `task.triage`
   then carries `repoId: null` and nothing is registered.
 - **Triage may start a new repository.** When the task has no repository pinned, the classifier also answers
@@ -516,6 +517,12 @@ whose choice is not clear binds none, and its work asks at the setup gate when i
   `scratch.remove` (`settleTask`), whatever repository it has now, since an earlier round may have run without one.
   The server waits for the task's runs to stop, then deletes `data/scratch/<task id>` if the task is still settled;
   a task reopened by a new round keeps it. A folder that is already gone is fine, so the effect is replay safe.
+- **A chosen project asks before it moves.** A task whose project you chose never binds a repository outside it at
+  triage, so a request that names one stops at the setup gate. Its choices list the project's repositories and then,
+  on the first round, every registered repository outside the project that the request names, as `name (Project)`
+  (`listNamedOutsideRepos` in `decide/config.ts`), and the question says that picking one moves the task to that
+  repository's project. Your pick binds it, moves the task there and gives it that project's handle
+  (`task.repo_bound` with `projectId` and `handle`); a pick of the project's own repository keeps both.
 - **Work that needs code binds one then.** A step that needs a repository (an investigation, a plan, a build, an
   operation) on a task with none goes through the setup check, which finds the repository first: one quick call on
   the classifier model (`TriageClassifier.repository` in `triage/message/service.ts`) reads the task's rounds, the current
@@ -4695,11 +4702,17 @@ description, folders }` (`packages/core/src/domain/types.ts`; the rules in `doma
   the task's project that the request names never joins the task's project.
 - **A task is scoped to a project.** `task.create` takes `projectId`; left out, the task takes its repository's
   project, else the focus project (Home's composer shows that default and lets you change it, or pick No project).
+  `task.created` records which: `auto.project` is true only for the focus default. A chosen project (yours, or the
+  repository's) is fixed; the focus default is a guess the repository corrects.
   Triage then picks the repository among the project's own (registered ones and those in its folders, `listLocalRepos`
   over the folders), one outside the project that the request names (A task without a repository, above), or none,
   and names the project in its prompt; a project with neither falls back to every repository. A task without a
-  project gets one from the repository triage picks, and keeps none when triage picks none; a task with a project
-  keeps it, whichever repository it binds.
+  project gets one from the repository triage picks, and keeps none when triage picks none. A task whose project only
+  came from the focus moves to the project of the repository it binds on its first round, at triage or at the setup
+  check (`resolveRepoMove` in `domain/projects.ts`), so the focus filter and the handle follow the repository; a task
+  whose project was chosen keeps it, and asks before it moves (A task without a repository, above). Later rounds
+  never move a task. The `task-auto-project` log migration marks every older task as chosen, so tasks created
+  before it (LOC-215 in Shinsa's own log) stay where they are.
 - **Agents know the project.** Every fresh task run's brief (not a resumed session, not a delegated run) ends with
   the project: its name and key, description, every
   repository with its path (the task's own marked) and its folders, and the repository the task works in when it is
@@ -4719,8 +4732,10 @@ their own UUIDv7.
     receipts, references (`shinsa://task/<id>`), transcripts and the effect outbox. Nothing ever re-keys it.
   - The **handle** is for people: `<project key>-<number>`, `SW-142`. The key is the project's (2 to 6 capital letters
     or digits starting with a letter, derived from its name, editable; lower case is upper-cased), or `T` for a task
-    with no project. It is given once and never changes: on `task.created` when the task has a project, else on
-    `task.triaged` (the repository's project). The counters live in the log (`state.taskNumbers`, one per key), so
+    with no project. It is given on `task.created` when the task's project was chosen, else on `task.triaged` (the
+    repository's project, or the focus project when it binds none), so a focus task that moves is numbered once, in
+    the project it lands in. It changes only when a first-round setup bind moves the task to another project
+    (`task.repo_bound` with `handle`): the old handle's number stays used. The counters live in the log (`state.taskNumbers`, one per key), so
     replay gives every task the same handle.
     Changing a project's key keeps every old handle; new tasks count from the new key's own counter, and changing the
     key back carries on where it left off, so a handle is never handed out twice. A task that moves projects keeps its

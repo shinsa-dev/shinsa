@@ -425,7 +425,11 @@ describe('resolvePlannedOperation', () => {
 
 describe('a task whose kind triage has not chosen yet', () => {
   it('names no kind and says Shinsa is still choosing it', () => {
-    const task = createTask({ id: 't', stage: 'triage', auto: { shape: true, start: true, priority: true } });
+    const task = createTask({
+      id: 't',
+      stage: 'triage',
+      auto: { shape: true, start: true, priority: true, project: false },
+    });
     expect(isShapeChosen(task)).toBe(false);
     expect(resolveShapeLabel(task)).toBe('Kind not chosen yet');
     expect(resolveShapeIcon(task)).toBe('IconCircleDotted');

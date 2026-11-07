@@ -7,6 +7,7 @@ import {
   isTaskSettled,
   listQueuedRounds,
   RUN_STAGES,
+  resolveRepoMove,
   resolveShapeOf,
   resolveTaskPipeline,
   resolveTaskRounds,
@@ -52,12 +53,14 @@ function assertRepo(decider: Decider, repoId: string | null) {
 function resolveCreatedProject(decider: Decider, command: CommandOf<'task.create'>) {
   if (command.projectId !== undefined) {
     if (command.projectId !== null) findProject(decider.state, command.projectId);
-    return command.projectId;
+    return { projectId: command.projectId, auto: false };
   }
   const repoProject = command.repoId ? decider.state.repos[command.repoId]?.projectId : null;
-  if (repoProject) return repoProject;
+  if (repoProject) return { projectId: repoProject, auto: false };
   const focus = resolveFocusProject(decider.state, decider.context.now);
-  return focus && decider.state.projects[focus] ? focus : null;
+  return focus && decider.state.projects[focus]
+    ? { projectId: focus, auto: true }
+    : { projectId: null, auto: false };
 }
 
 interface TaskLineage {
@@ -77,7 +80,8 @@ export function createTask(decider: Decider, command: CommandOf<'task.create'>, 
   const waitsOn = resolveDependencies(decider, null, command.waitsOn ?? []).filter(
     (id) => !stacksOn.includes(id)
   );
-  const projectId = resolveCreatedProject(decider, command);
+  const created = resolveCreatedProject(decider, command);
+  const projectId = created.projectId;
   if (command.forkOf !== undefined) decider.task(command.forkOf);
   if (command.forkOf !== undefined && command.teammateFork !== undefined)
     throw new DomainError({ code: 'fork_twice', message: 'Fork one task at a time.' });
@@ -86,13 +90,15 @@ export function createTask(decider: Decider, command: CommandOf<'task.create'>, 
     shape: command.mode === undefined && lineage.shape === undefined,
     start: command.waitsOn === undefined && stacksOn.length === 0,
     priority: command.priority === undefined,
+    project: created.auto,
   };
   decider.emit({
     type: 'task.created',
     taskId,
     request,
     repoId: command.repoId,
-    ...(projectId ? { projectId, handle: resolveNextHandle(decider.state, projectId) } : {}),
+    ...(projectId ? { projectId } : {}),
+    ...(projectId && !auto.project ? { handle: resolveNextHandle(decider.state, projectId) } : {}),
     priority: command.priority ?? 'normal',
     planFirst: command.planFirst ?? false,
     origin: command.origin ?? null,
@@ -176,13 +182,13 @@ export function triageTask(decider: Decider, command: CommandOf<'task.triage'>) 
   const stacked = resolveTriageStack(decider, task, command, shape);
   const inferred = task.auto.start ? inferDependencies(decider, task.id, command.waitsOn, stacked) : [];
   const decisions = resolveDecisions(task, command, { inferred, stacked }, command.reasons ?? {});
-  const projectId = task.projectId ?? decider.repoOf(command)?.projectId ?? null;
+  const projectId = resolveRepoMove(task, decider.repoOf(command)) ?? task.projectId ?? null;
   decider.emit({
     type: 'task.triaged',
     taskId: task.id,
     title: command.title,
     repoId: command.repoId,
-    ...(task.projectId ? {} : { projectId }),
+    ...(projectId === task.projectId ? {} : { projectId }),
     ...(task.handle ? {} : { handle: resolveNextHandle(decider.state, projectId) }),
     size: command.size,
     branch: command.branch,

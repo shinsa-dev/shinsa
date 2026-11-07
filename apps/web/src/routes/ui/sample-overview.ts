@@ -376,7 +376,7 @@ export function createOverviewScene(now: number) {
       id: 'shaping',
       title: 'Why does the export stall?',
       stage: 'triage',
-      auto: { shape: true, start: true, priority: true },
+      auto: { shape: true, start: true, priority: true, project: false },
     }),
     change: createSampleTask(now, {
       id: 'change',

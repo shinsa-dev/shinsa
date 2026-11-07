@@ -919,7 +919,7 @@ describe('finding the repository a round needs', () => {
     expect(prompts[0]).not.toContain('added since');
   });
 
-  test('a repository outside the task’s project is offered once the round or a message names it', async () => {
+  test('a later round keeps its project, so an outside repository is never offered even when named', async () => {
     const state = createState();
     state.projects.p1 = {
       id: 'p1',
@@ -935,11 +935,11 @@ describe('finding the repository a round needs', () => {
       calls.push({ prompt, schema });
       return Effect.succeed({ repo: 'kanna' } as T);
     };
-    const named = { ...unbound(), projectId: 'p1' };
-    expect(await resolveRoundRepository(state, named, LOCAL, ask)).toBe('/code/kanna');
-    expect(calls[0]?.schema?.properties.repo).toEqual({ type: 'string', enum: ['shinsa', 'kanna', 'none'] });
+    const named = { ...unbound(), projectId: 'p1', auto: { ...unbound().auto, project: true } };
+    expect(await resolveRoundRepository(state, named, LOCAL, ask)).toBeNull();
+    expect(calls[0]?.schema?.properties.repo).toEqual({ type: 'string', enum: ['shinsa', 'none'] });
     expect(calls[0]?.prompt).toContain(
-      'Repositories outside this project, offered because the request names them: kanna.'
+      'Other repositories on the machine outside this project, never offered: kanna.'
     );
     const vague = createTask({
       repoId: null,
