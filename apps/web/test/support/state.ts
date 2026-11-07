@@ -45,7 +45,7 @@ export function createTask(overrides: Partial<Task> & { id: string }): Task {
     updatedAt: NOW - 30_000,
     stageChangedAt: NOW - 30_000,
     activity: [],
-    auto: { shape: false, start: false, priority: false },
+    auto: { shape: false, start: false, priority: false, project: false },
     ...overrides,
   };
 }

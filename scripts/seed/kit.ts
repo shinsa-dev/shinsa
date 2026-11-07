@@ -34,7 +34,7 @@ import { MINUTE } from '../kit/time.ts';
 
 export const NOW = Date.now();
 
-export const CHOSEN_BY_YOU: TaskAuto = { shape: false, start: false, priority: false };
+export const CHOSEN_BY_YOU: TaskAuto = { shape: false, start: false, priority: false, project: false };
 
 export const NO_TRIAGE_DECISIONS: TriageDecisions = { shape: null, start: null, priority: null };
 

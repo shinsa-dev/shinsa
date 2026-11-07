@@ -8,7 +8,7 @@ import type {
 import { resolveProposalUpgrade, SHAPE_PIPELINES } from '../../../packages/core/src/index.ts';
 import { createPlanCheck, type SeedTask } from '../kit.ts';
 
-const AUTO = { shape: true, start: true, priority: true };
+const AUTO = { shape: true, start: true, priority: true, project: false };
 
 const LEAK_DIAGNOSIS = [
   'The nightly export opens one ClickHouse connection per chunk in `exportChunk` and only releases it on success.',

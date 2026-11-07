@@ -101,7 +101,7 @@ function resolveDuplicateQuestion(open: Task[], teammates: TeammateTask[]): Choi
 }
 
 function resolveAsks(task: Task): TriageAsks {
-  return { ...task.auto, why: true };
+  return { shape: task.auto.shape, priority: task.auto.priority, start: task.auto.start, why: true };
 }
 
 function listWhyKeys(asks: TriageAsks) {

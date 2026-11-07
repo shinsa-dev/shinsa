@@ -33,7 +33,7 @@ function stateWith(patch: (state: ShinsaState) => void = () => undefined) {
   return state;
 }
 
-const START_ONLY = { shape: false, start: true, priority: false };
+const START_ONLY = { shape: false, start: true, priority: false, project: false };
 
 function newTask(overrides: Partial<Task> = {}) {
   return createTask({
@@ -328,7 +328,7 @@ describe('resolveTriage with structured output', () => {
 });
 
 describe('resolveTriage for what the task left to Shinsa', () => {
-  const AUTO = { shape: true, start: true, priority: true };
+  const AUTO = { shape: true, start: true, priority: true, project: false };
   const state = stateWith((draft) => {
     draft.repos.r1 = createRepo({ id: 'r1', path: '/code/api', name: 'api' });
     draft.tasks.same = createTask({ id: 'same', repoId: 'r1', title: 'Add the export' });
@@ -356,7 +356,7 @@ describe('resolveTriage for what the task left to Shinsa', () => {
     });
     const question = await resolveTriage(
       state,
-      newTask({ mode: 'ask', auto: { shape: true, start: false, priority: false } }),
+      newTask({ mode: 'ask', auto: { shape: true, start: false, priority: false, project: false } }),
       LOCAL,
       silent
     );
@@ -570,7 +570,7 @@ describe('resolveTriage for what the task left to Shinsa', () => {
         pipeline: ['answer'],
         priority: 'high',
         waitsOn: ['same', 'gone'],
-        auto: { shape: false, start: false, priority: false },
+        auto: { shape: false, start: false, priority: false, project: false },
       }),
       LOCAL,
       ask
@@ -592,7 +592,12 @@ describe('resolveTriage for what the task left to Shinsa', () => {
     ]);
     expect(prompt).not.toContain('waits_on');
 
-    await resolveTriage(state, newTask({ auto: { shape: true, start: false, priority: true } }), LOCAL, ask);
+    await resolveTriage(
+      state,
+      newTask({ auto: { shape: true, start: false, priority: true, project: false } }),
+      LOCAL,
+      ask
+    );
     expect(calls[1]?.prompt).toContain('The human chose: it starts now.');
     await resolveTriage(state, newTask({ mode: 'ask', auto: AUTO }), LOCAL, ask);
     expect(calls[2]?.prompt).not.toContain('a question to answer');
@@ -674,7 +679,7 @@ describe('triage in a project', () => {
     };
     const triage = await resolveTriage(
       state,
-      newTask({ projectId: 'p1', auto: { shape: false, priority: false, start: true } }),
+      newTask({ projectId: 'p1', auto: { shape: false, priority: false, start: true, project: false } }),
       LOCAL,
       ask
     );
@@ -1236,7 +1241,7 @@ describe('resolveTriage for teammates’ duplicates', () => {
 });
 
 describe('triage stacking a task on an open change', () => {
-  const AUTO = { shape: true, start: true, priority: true };
+  const AUTO = { shape: true, start: true, priority: true, project: false };
   const state = stateWith((draft) => {
     draft.repos.r1 = createRepo({ id: 'r1', path: '/code/api', name: 'api' });
     draft.repos.r2 = createRepo({ id: 'r2', path: '/code/web', name: 'web' });

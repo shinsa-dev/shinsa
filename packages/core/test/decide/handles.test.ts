@@ -87,12 +87,34 @@ describe('task handles', () => {
     expect(harness.task(taskId)).toMatchObject({ projectId: null, handle: null });
   });
 
-  test('without a project or repository, a task joins the project in focus', () => {
+  test('without a project or repository, a task joins the project in focus and gets its handle at triage', () => {
     const harness = createHarness();
     const projectId = writeProject(harness, 'Superwall', 'SW');
+    const repoId = registerRepo(harness, 'scratch', null);
     harness.send({ type: 'focus.change', projectId, until: harness.now + 100 });
     const taskId = create(harness);
+    expect(harness.task(taskId)).toMatchObject({ projectId, handle: null });
+    expect(harness.task(taskId).auto.project).toBe(true);
+    expect(harness.state.taskNumbers).toEqual({});
+    triage(harness, taskId, repoId);
     expect(harness.task(taskId)).toMatchObject({ projectId, handle: 'SW-1' });
+    expect(harness.state.taskNumbers).toEqual({ SW: 1 });
+  });
+
+  test('a project you pick, or one a repository brings, is not the focus default', () => {
+    const harness = createHarness();
+    const repoId = registerRepo(harness);
+    const focus = writeProject(harness, 'Basket', 'BAS');
+    harness.send({ type: 'focus.change', projectId: focus, until: null });
+    const picked = create(harness, { projectId: focus });
+    const fromRepo = create(harness, { repoId });
+    const none = create(harness, { projectId: null });
+    expect([picked, fromRepo, none].map((id) => harness.task(id).auto.project)).toEqual([
+      false,
+      false,
+      false,
+    ]);
+    expect(handleOf(harness, picked)).toBe('BAS-1');
   });
 
   test('a repository’s project wins over the focus project', () => {
