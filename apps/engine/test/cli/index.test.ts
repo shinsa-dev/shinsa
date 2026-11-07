@@ -57,7 +57,7 @@ afterEach(async () => {
   for (const stop of stops.splice(0)) await stop();
 });
 
-function startTestServer() {
+async function startTestServer() {
   const config = createTestConfig(createTempDir(), { home: HOME_DIR });
   const engine = new Engine(openEventLog(config.databasePath));
   const http = startHttpServer({
@@ -66,7 +66,7 @@ function startTestServer() {
     transcripts: createTestTranscripts(config.transcriptsDir),
     evidence: createTestEvidence(config.evidenceDir),
     models: { listModels: () => Promise.resolve([]) } as unknown as ModelSource,
-    onboarding: createTestOnboarding(engine, config).onboarding,
+    onboarding: (await createTestOnboarding(engine, config)).onboarding,
   });
   stops.push(http.stop);
   return { engine, port: String(http.server.port) };
@@ -304,7 +304,7 @@ describe('shinsa engine', () => {
 
 describe('shinsa do', () => {
   test('hands the request over from the current directory and prints the task link', async () => {
-    const { engine, port } = startTestServer();
+    const { engine, port } = await startTestServer();
     const { io, out } = createIo(port);
     expect(await runCli(['do', 'fix', 'the', 'scroll', '--urgent', '--plan-first'], io)).toBe(0);
     const task = Object.values(engine.state.tasks)[0];
@@ -329,7 +329,7 @@ describe('shinsa do', () => {
   });
 
   test('--backlog files the task for the backlog', async () => {
-    const { engine, port } = startTestServer();
+    const { engine, port } = await startTestServer();
     const { io, out } = createIo(port);
     expect(await runCli(['do', 'add', 'search', '--backlog'], io)).toBe(0);
     const task = Object.values(engine.state.tasks)[0];
@@ -517,7 +517,7 @@ describe('shinsa status and open', () => {
   });
 
   test('a folder opens the app focused on its project, or says why it cannot', async () => {
-    const { port } = startTestServer();
+    const { port } = await startTestServer();
     const repoPath = join(createTempDir(), 'shop');
     const { io, opened, out } = createIo(port, {
       readRepoRoot: (dir) => Effect.succeed(dir === '/code/app' ? repoPath : null),
@@ -746,7 +746,7 @@ describe('the process io', () => {
 
 describe('waking the engine', () => {
   test('asks launchd only in the app, and waits until the engine answers', async () => {
-    const { port } = startTestServer();
+    const { port } = await startTestServer();
     const live = `http://127.0.0.1:${port}`;
     const kicked = Effect.succeed(true);
     expect(await runCliEffect(Effect.flatten(createWakeEngine(live, { bundled: false, kick: kicked })))).toBe(
@@ -839,7 +839,7 @@ describe('managing Shinsa from the command line', () => {
   });
 
   test('a command with --help prints its usage and sends nothing', async () => {
-    const { engine, port } = startTestServer();
+    const { engine, port } = await startTestServer();
     const { io, out } = createIo(port);
     expect(await runCli(['tasks', 'create', '--help'], io)).toBe(0);
     expect(out[0]).toContain('Usage\n  shinsa tasks create <request...>');
@@ -847,7 +847,7 @@ describe('managing Shinsa from the command line', () => {
   });
 
   test('creates a task, then lists and shows it by the start of its id, as text or JSON', async () => {
-    const { engine, port } = startTestServer();
+    const { engine, port } = await startTestServer();
     const created = createIo(port);
     expect(await runCli(['tasks', 'create', 'Fix', 'the', 'scroll', '--priority', 'high'], created.io)).toBe(
       0
@@ -869,7 +869,7 @@ describe('managing Shinsa from the command line', () => {
   });
 
   test('a command repeated under the same --idempotency-key is applied once', async () => {
-    const { engine, port } = startTestServer();
+    const { engine, port } = await startTestServer();
     for (let attempt = 0; attempt < 2; attempt += 1) {
       const { io } = createIo(port);
       expect(await runCli(['tasks', 'create', 'Fix it', '--idempotency-key', 'retry-1'], io)).toBe(0);
@@ -878,7 +878,7 @@ describe('managing Shinsa from the command line', () => {
   });
 
   test('a failure is an error line, or a JSON error with the server’s code under --json', async () => {
-    const { port } = startTestServer();
+    const { port } = await startTestServer();
     const plain = createIo(port);
     expect(await runCli(['tasks', 'show', 'nope'], plain.io)).toBe(1);
     expect(plain.errors).toEqual(['Error: No task nope.', '`shinsa tasks list` lists them.']);

@@ -5,16 +5,16 @@ import { Effect } from 'effect';
 import { createGitRepo, createTempDir } from '../../helpers/index.ts';
 import { createTestMachine } from '../../helpers/machine.ts';
 import { disposeWebHandlers } from '../../helpers/web.ts';
-import { readFailure, startRoutes } from './harness.ts';
+import { readFailure, startMachineRoutes, startRoutes } from './harness.ts';
 
 afterEach(disposeWebHandlers);
 
 async function setup(roots: string[] = []) {
   const home = createTempDir();
-  const routes = startRoutes(
-    ({ engine, config }) => ({
+  const routes = await startMachineRoutes(
+    async ({ engine, config }) => ({
       roots: { listRoots: Effect.succeed(roots) },
-      projects: createTestMachine(engine, config).projects,
+      projects: (await createTestMachine(engine, config)).projects,
     }),
     { userHome: home }
   );
@@ -130,9 +130,9 @@ describe('a project’s repositories and folders over HTTP', () => {
     expect((await bare.send('/api/repos/coverage')).status).toBe(404);
     expect((await bare.post('/api/projects/x/repos', { path: '/tmp' })).status).toBe(404);
     expect((await bare.post('/api/projects/x/folders', { path: '/tmp' })).status).toBe(404);
-    const roots = startRoutes(({ engine, config }) => ({
+    const roots = await startMachineRoutes(async ({ engine, config }) => ({
       roots: { listRoots: Effect.succeed([]) },
-      projects: createTestMachine(engine, config, { resolveLogin: undefined }).projects,
+      projects: (await createTestMachine(engine, config, { resolveLogin: undefined })).projects,
     }));
     expect(await readFailure(await roots.post('/api/projects/x/repos', { path: '/tmp' }))).toMatchObject({
       code: 'project_not_found',

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from 'bun:test';
 import { join } from 'node:path';
 import { createState, type McpServerSummary, type ShinsaState } from '@shinsa/core';
-import { Effect } from 'effect';
+import { Deferred, Effect } from 'effect';
 import { isSameExtensionSet, resolveDeferredInstructions } from '../../src/extensions/index.ts';
 import { captureLogs } from '../helpers/logs.ts';
 import { until } from '../helpers/until.ts';
@@ -22,7 +22,7 @@ const check = () =>
     tokens: 4000,
   });
 
-function createWorld(faults: Pick<ExtensionsWorldOptions, 'discovery' | 'usage'> = {}) {
+async function createWorld(faults: Pick<ExtensionsWorldOptions, 'discovery' | 'usage'> = {}) {
   const machine = createFakeMachine();
   writeFile(
     machine.claudeConfig,
@@ -64,18 +64,26 @@ function createWorld(faults: Pick<ExtensionsWorldOptions, 'discovery' | 'usage'>
     checkCommands: [],
   };
   let now = NOW;
-  const extensions = openExtensions({
+  const scanned = Effect.runSync(Deferred.make<void>());
+  const extensions = await openExtensions({
     config: { home: machine.shinsaHome, userHome: machine.userHome, pluginDir: machine.pluginDir },
     state: () => state,
     env: machine.env,
     check,
     now: () => now,
+    usage: (real) => ({
+      scan: (scan, previous) => Effect.andThen(Deferred.await(scanned), real.scan(scan, previous)),
+    }),
     ...faults,
   });
+  const refresh = () => {
+    Effect.runSync(Deferred.succeed(scanned, undefined));
+    return extensions.refreshUsage();
+  };
   return {
     machine,
     extensions,
-    usage: { refresh: extensions.refreshUsage },
+    usage: { refresh },
     advance: (ms: number) => {
       now += ms;
     },
@@ -89,9 +97,9 @@ function findServer(servers: McpServerSummary[], name: string) {
 }
 
 describe('one server defined in several places', () => {
-  test('is one row that lists where it is defined, led by the place that wins', () => {
-    const { extensions, machine } = createWorld();
-    const servers = extensions.snapshot().servers.filter((server) => server.name === 'maple');
+  test('is one row that lists where it is defined, led by the place that wins', async () => {
+    const { extensions, machine } = await createWorld();
+    const servers = (await extensions.snapshot()).servers.filter((server) => server.name === 'maple');
     expect(servers).toHaveLength(1);
     expect(servers[0]?.id).toBe(`claude_project:${machine.repo}:maple`);
     expect(servers[0]?.scope).toEqual({ kind: 'everywhere' });
@@ -102,16 +110,16 @@ describe('one server defined in several places', () => {
       'codex:maple',
     ]);
     expect(
-      findServer(extensions.snapshot().servers, 'kampala').definedIn.map((place) => place.source)
+      findServer((await extensions.snapshot()).servers, 'kampala').definedIn.map((place) => place.source)
     ).toEqual(['claude', 'codex']);
   });
 
   test('turns on and off as one, checks once and loads once', async () => {
-    const { extensions } = createWorld();
-    const off = extensions.updateServerChoice('codex:maple', { enabled: false });
+    const { extensions } = await createWorld();
+    const off = await extensions.updateServerChoice('codex:maple', { enabled: false });
     expect(findServer(off.servers, 'maple').enabled).toBe(false);
     expect(findServer(off.servers, 'maple').definedIn.every((place) => !place.enabled)).toBe(true);
-    const on = extensions.updateServerChoice('claude:maple', { enabled: true });
+    const on = await extensions.updateServerChoice('claude:maple', { enabled: true });
     expect(findServer(on.servers, 'maple').enabled).toBe(true);
     const checked = await extensions.check('claude_project:/code/ios:maple');
     expect(findServer(checked.servers, 'maple').status.tokens).toBe(4000);
@@ -123,14 +131,14 @@ describe('one server defined in several places', () => {
 
 describe('the context optimizer', () => {
   test('starts on for MCPs and skills unused for 14 days, and once off a run loads every server it has', async () => {
-    const { extensions, usage } = createWorld();
-    extensions.snapshot();
+    const { extensions, usage } = await createWorld();
+    await extensions.snapshot();
     await usage.refresh();
-    expect(extensions.snapshot().optimizer).toEqual({ enabled: true, days: 14, skills: true });
+    expect((await extensions.snapshot()).optimizer).toEqual({ enabled: true, days: 14, skills: true });
     const optimized = await extensions.resolveSession({ repoPath: null, project: null });
     expect(optimized.deferred.map((server) => server.name)).toContain('kampala');
     expect(optimized.deferredSkills.map((skill) => skill.name)).toContain('stale');
-    extensions.updateOptimizer({ enabled: false });
+    await extensions.updateOptimizer({ enabled: false });
     const session = await extensions.resolveSession({ repoPath: null, project: null });
     expect(session.servers.map((server) => server.name).sort()).toEqual([
       'kampala',
@@ -139,15 +147,15 @@ describe('the context optimizer', () => {
       'plugin_docs_context',
     ]);
     expect(session.deferred).toEqual([]);
-    expect(extensions.createLoader(session)).toBeNull();
+    expect(await extensions.createLoader(session)).toBeNull();
   });
 
   test('leaves out what agents have not used in its window and offers to load it', async () => {
-    const { extensions, usage } = createWorld();
-    extensions.snapshot();
+    const { extensions, usage } = await createWorld();
+    await extensions.snapshot();
     await usage.refresh();
     await extensions.check();
-    const chosen = extensions.updateOptimizer({ enabled: true, days: 30, skills: true });
+    const chosen = await extensions.updateOptimizer({ enabled: true, days: 30, skills: true });
     expect(chosen.optimizer).toEqual({ enabled: true, days: 30, skills: true });
     expect(chosen.usage).toEqual({ readAt: NOW, since: NOW - 90 * DAY });
     expect(findServer(chosen.servers, 'kampala')).toMatchObject({
@@ -187,7 +195,7 @@ describe('the context optimizer', () => {
       '- Skills: the ones `load_skill` lists. Read one with `load_skill`.',
     ]);
     expect(resolveDeferredInstructions({ deferred: [], deferredSkills: [] })).toBeNull();
-    const loader = extensions.createLoader(session);
+    const loader = await extensions.createLoader(session);
     expect(loader?.specs.map((spec) => spec.name)).toEqual([
       'load_mcp_server',
       'call_mcp_tool',
@@ -196,10 +204,10 @@ describe('the context optimizer', () => {
   });
 
   test('a server an agent used since the last read is loaded by the next run', async () => {
-    const { extensions, usage, machine, advance } = createWorld();
-    extensions.snapshot();
+    const { extensions, usage, machine, advance } = await createWorld();
+    await extensions.snapshot();
     await usage.refresh();
-    extensions.updateOptimizer({ enabled: true, days: 30 });
+    await extensions.updateOptimizer({ enabled: true, days: 30 });
     writeFile(
       join(machine.claudeDir, 'projects', '-code-app', 'later.jsonl'),
       `${serializeClaudeToolUse('mcp__kampala__flows', NOW)}\n`
@@ -211,8 +219,8 @@ describe('the context optimizer', () => {
   });
 
   test('a resumed session keeps what it loaded and left out, so its prompt does not change between turns', async () => {
-    const { extensions, usage, machine, advance } = createWorld();
-    extensions.snapshot();
+    const { extensions, usage, machine, advance } = await createWorld();
+    await extensions.snapshot();
     const place = { repoPath: null, project: null };
     const pin = {
       servers: [{ name: 'maple', tokens: 4000 }],
@@ -229,7 +237,7 @@ describe('the context optimizer', () => {
     expect(early.deferredSkills.map((skill) => skill.name)).toEqual(['animate']);
 
     await usage.refresh();
-    extensions.updateOptimizer({ enabled: true, days: 30 });
+    await extensions.updateOptimizer({ enabled: true, days: 30 });
     const first = await extensions.resolveSession(place);
     expect(first.deferred.map((server) => server.name)).toContain('kampala');
     writeFile(
@@ -246,41 +254,47 @@ describe('the context optimizer', () => {
     expect(pinned.servers.map((server) => server.name)).toContain('maple');
     expect(pinned.skills.map((skill) => skill.name)).toContain('stale');
     expect(pinned.deferredSkills.map((skill) => skill.name)).toContain('animate');
-    extensions.updateOptimizer({ enabled: false });
+    await extensions.updateOptimizer({ enabled: false });
     expect((await extensions.resolveSession(place, pin)).deferred).toEqual([]);
   });
 
   test('never leaves out something added since Shinsa started watching until its window has passed', async () => {
-    const { extensions, usage, advance, machine } = createWorld();
-    extensions.snapshot();
+    const { extensions, usage, advance, machine } = await createWorld();
+    await extensions.snapshot();
     await usage.refresh();
-    extensions.updateOptimizer({ enabled: true, days: 7 });
+    await extensions.updateOptimizer({ enabled: true, days: 7 });
     writeFile(
       machine.claudeConfig,
       JSON.stringify({ mcpServers: { fresh: { type: 'http', url: 'https://fresh.example/mcp' } } })
     );
-    expect(findServer(extensions.snapshot().servers, 'fresh').deferred).toBe(false);
+    expect(findServer((await extensions.snapshot()).servers, 'fresh').deferred).toBe(false);
     advance(8 * DAY);
-    expect(findServer(extensions.snapshot().servers, 'fresh').deferred).toBe(true);
+    expect(findServer((await extensions.snapshot()).servers, 'fresh').deferred).toBe(true);
   });
 
-  test('does nothing until it has read the sessions, and refuses settings it cannot keep', () => {
-    const { extensions } = createWorld();
-    extensions.updateOptimizer({ enabled: true });
-    expect(findServer(extensions.snapshot().servers, 'kampala').deferred).toBe(false);
-    expect(() => extensions.updateOptimizer('on')).toThrow('Say what to change.');
-    expect(() => extensions.updateOptimizer({ enabled: 'yes' })).toThrow('Turn the optimizer on or off.');
-    expect(() => extensions.updateOptimizer({ skills: 1 })).toThrow('also leaves out skills');
-    expect(() => extensions.updateOptimizer({ days: 0 })).toThrow('Pick 1 to 365 days.');
-    expect(() => extensions.updateOptimizer({ days: 2.5 })).toThrow('Pick 1 to 365 days.');
-    expect(extensions.updateOptimizer({}).optimizer).toEqual({ enabled: true, days: 14, skills: true });
+  test('does nothing until it has read the sessions, and refuses settings it cannot keep', async () => {
+    const { extensions } = await createWorld();
+    await extensions.updateOptimizer({ enabled: true });
+    expect(findServer((await extensions.snapshot()).servers, 'kampala').deferred).toBe(false);
+    await expect(extensions.updateOptimizer('on')).rejects.toThrow('Say what to change.');
+    await expect(extensions.updateOptimizer({ enabled: 'yes' })).rejects.toThrow(
+      'Turn the optimizer on or off.'
+    );
+    await expect(extensions.updateOptimizer({ skills: 1 })).rejects.toThrow('also leaves out skills');
+    await expect(extensions.updateOptimizer({ days: 0 })).rejects.toThrow('Pick 1 to 365 days.');
+    await expect(extensions.updateOptimizer({ days: 2.5 })).rejects.toThrow('Pick 1 to 365 days.');
+    expect((await extensions.updateOptimizer({})).optimizer).toEqual({
+      enabled: true,
+      days: 14,
+      skills: true,
+    });
   });
 });
 
 describe('Shinsa’s own skills', () => {
-  test('are always on and cannot be turned off', () => {
-    const { extensions } = createWorld();
-    expect(() => extensions.updateSkillChoice('shinsa:review', false)).toThrow(
+  test('are always on and cannot be turned off', async () => {
+    const { extensions } = await createWorld();
+    await expect(extensions.updateSkillChoice('shinsa:review', false)).rejects.toThrow(
       'Shinsa’s own skills are always on.'
     );
   });
@@ -288,7 +302,7 @@ describe('Shinsa’s own skills', () => {
 
 describe('reading usage in the background', () => {
   test('a read that fails is logged, and stopping waits for the read', async () => {
-    const { extensions } = createWorld({
+    const { extensions } = await createWorld({
       usage: () => ({ scan: () => Effect.die(new Error('disk gone')) }),
     });
     const logs = captureLogs();
@@ -302,21 +316,21 @@ describe('reading usage in the background', () => {
 
 describe('the snapshot Settings reads', () => {
   test('answers the last snapshot at once and reads the files again in the background', async () => {
-    const { extensions, machine } = createWorld();
-    const first = extensions.readSnapshot();
+    const { extensions, machine } = await createWorld();
+    const first = await extensions.readSnapshot();
     writeFile(
       machine.claudeConfig,
       JSON.stringify({ mcpServers: { fresh: { type: 'http', url: 'https://fresh.example/mcp' } } })
     );
-    expect(extensions.readSnapshot()).toBe(first);
-    await until('the snapshot is read again', () => extensions.readSnapshot() !== first);
-    expect(extensions.readSnapshot().servers.map((server) => server.name)).toContain('fresh');
+    expect(await extensions.readSnapshot()).toBe(first);
+    await until('the snapshot is read again', async () => (await extensions.readSnapshot()) !== first);
+    expect((await extensions.readSnapshot()).servers.map((server) => server.name)).toContain('fresh');
     await extensions.stop();
   });
 
   test('is read again once the usage is, and a refresh that fails is logged', async () => {
     const state = { fail: false, failed: false };
-    const { extensions, usage } = createWorld({
+    const { extensions, usage } = await createWorld({
       discovery: (real) => ({
         ...real,
         listPlugins: (paths) =>
@@ -327,26 +341,29 @@ describe('the snapshot Settings reads', () => {
             : real.listPlugins(paths),
       }),
     });
-    const before = extensions.snapshot();
+    const before = await extensions.snapshot();
     await usage.refresh();
     await extensions.syncUsage();
-    await until('the snapshot carries the usage', () => extensions.readSnapshot().usage.readAt !== null);
+    await until(
+      'the snapshot carries the usage',
+      async () => (await extensions.readSnapshot()).usage.readAt !== null
+    );
     expect(before.usage.readAt).toBeNull();
     const logs = captureLogs();
     state.fail = true;
-    extensions.syncSnapshot();
+    await extensions.syncSnapshot();
     await until('the refresh ran', () => state.failed).finally(() => logs.restore());
     expect(logs.fieldsOf('[Extensions] Could not refresh the MCPs, plugins and skills')).toEqual([
       { error: 'disk gone' },
     ]);
     state.fail = false;
     await extensions.stop();
-    extensions.syncSnapshot();
+    await extensions.syncSnapshot();
   });
 
   test('is ready before anyone asks once Shinsa warms it', async () => {
     let reads = 0;
-    const { extensions } = createWorld({
+    const { extensions } = await createWorld({
       discovery: (real) => ({
         ...real,
         listPlugins: (paths) =>
@@ -356,11 +373,11 @@ describe('the snapshot Settings reads', () => {
           }),
       }),
     });
-    extensions.syncSnapshot();
-    extensions.syncSnapshot();
+    await extensions.syncSnapshot();
+    await extensions.syncSnapshot();
     await until('the snapshot is warm', () => reads > 0);
-    const warm = extensions.readSnapshot();
-    expect(extensions.readSnapshot()).toBe(warm);
+    const warm = await extensions.readSnapshot();
+    expect(await extensions.readSnapshot()).toBe(warm);
     await extensions.stop();
   });
 });

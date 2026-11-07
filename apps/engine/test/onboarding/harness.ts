@@ -5,7 +5,6 @@ import type { QuickJson } from '../../src/agents/quick/schema.ts';
 import { QuickCalls } from '../../src/agents/quick/service.ts';
 import type { ServerConfig } from '../../src/config/index.ts';
 import { EngineConfig } from '../../src/config/service.ts';
-import { JsonFile } from '../../src/files/service.ts';
 import {
   type AccountSource,
   type InstallTerminals,
@@ -18,6 +17,7 @@ import type { CommandResult } from '../../src/shell/index.ts';
 import { ShellLayer } from '../../src/shell/layers.ts';
 import { Shell } from '../../src/shell/service.ts';
 import type { Engine } from '../helpers/engine.ts';
+import { JsonFileLayer } from '../helpers/files.ts';
 import type { createTestMachine } from '../helpers/machine.ts';
 import { type Promised, promised } from '../helpers/promised.ts';
 
@@ -30,7 +30,7 @@ export type FakeCommand = (
 export interface TestOnboardingOptions {
   engine: Engine;
   config: ServerConfig;
-  machine: ReturnType<typeof createTestMachine>['context'];
+  machine: Awaited<ReturnType<typeof createTestMachine>>['context'];
   run?: FakeCommand;
   ask?: QuickJson;
   models?: ModelSource;
@@ -70,7 +70,7 @@ function createOnboardingLayer(options: TestOnboardingOptions) {
         Layer.succeed(EngineConfig, options.config),
         Layer.succeed(EngineCore, options.engine.core),
         Layer.succeed(QuickCalls, QuickCalls.of({ classify: ask, write: ask })),
-        JsonFile.layer,
+        JsonFileLayer,
         options.run ? createFakeShell(options.run) : ShellLayer
       )
     ),

@@ -14,7 +14,6 @@ import { NotFound } from '@shinsa/core/remote/errors';
 import { Context, Effect, Exit, Layer, Redacted, Scope } from 'effect';
 import type { ServerConfig } from '../../src/config/index.ts';
 import { EngineConfig } from '../../src/config/service.ts';
-import { JsonFile } from '../../src/files/service.ts';
 import { describeBodyLimit } from '../../src/http/guard.ts';
 import { JsonLogger } from '../../src/log/service.ts';
 import type { ChannelPeer } from '../../src/remote/channel/schema.ts';
@@ -40,6 +39,7 @@ import type { RelayDevice, RemoteFile } from '../../src/remote/store/schema.ts';
 import { RemoteStore } from '../../src/remote/store/service.ts';
 import type { TeamFeedGrant } from '../../src/remote/team-feeds/schema.ts';
 import { TeamFeeds } from '../../src/remote/team-feeds/service.ts';
+import { JsonFileLayer } from '../helpers/files.ts';
 import { createTempDir, until } from '../helpers/index.ts';
 import { captureLogs } from '../helpers/logs.ts';
 
@@ -175,7 +175,7 @@ function createWorld(dataDir = createTempDir()): World {
   };
 }
 
-function startRelay(world: World, file: Partial<RemoteFile> = PAIRED) {
+async function startRelay(world: World, file: Partial<RemoteFile> = PAIRED) {
   const observe = (listener: Effect.Effect<void>) => Effect.sync(() => void world.listeners.push(listener));
   const stubs = Layer.mergeAll(
     Layer.succeed(TeamFeeds, {
@@ -205,13 +205,13 @@ function startRelay(world: World, file: Partial<RemoteFile> = PAIRED) {
     Layer.provide(
       Layer.mergeAll(
         Layer.succeed(EngineConfig, { dataDir: world.dataDir } as ServerConfig),
-        JsonFile.layer,
+        JsonFileLayer,
         JsonLogger
       )
     )
   );
   const scope = Effect.runSync(Scope.make());
-  const context = Effect.runSync(
+  const context = (await Effect.runPromise(
     Layer.buildWithScope(
       FleetRelay.layer.pipe(
         Layer.provideMerge(Layer.mergeAll(storeLayer, stubs)),
@@ -219,9 +219,9 @@ function startRelay(world: World, file: Partial<RemoteFile> = PAIRED) {
       ),
       scope
     )
-  ) as Context.Context<FleetRelay | RemoteStore>;
+  )) as Context.Context<FleetRelay | RemoteStore>;
   const store = Context.get(context, RemoteStore);
-  Effect.runSync(store.update((before) => ({ ...before, ...file })));
+  await Effect.runPromise(store.update((before) => ({ ...before, ...file })));
   const relay = Context.get(context, FleetRelay);
   const run = <A, E>(effect: Effect.Effect<A, E>) => Effect.runPromiseWith(context)(effect);
   const stop = () => Effect.runPromise(Scope.close(scope, Exit.void));
@@ -234,7 +234,7 @@ function startRelay(world: World, file: Partial<RemoteFile> = PAIRED) {
     request: (instanceId: string, path: string, init?: RequestInit, url = `http://localhost${path}`) =>
       run(relay.request(instanceId, path, new Request(url, init))),
     file: () => Effect.runSync(store.file),
-    update: (change: (file: RemoteFile) => RemoteFile) => Effect.runSync(store.update(change)),
+    update: (change: (file: RemoteFile) => RemoteFile) => run(store.update(change)),
     sync: () => run(Effect.forEach(world.listeners, (listener) => listener, { discard: true })),
   };
 }
@@ -282,7 +282,7 @@ describe('the relay list', () => {
       { teamId: 'team1', machine: LEE_MAC, machineKey: 'lee-key', grant: null },
       { teamId: 'team2', machine: KAI_MAC, machineKey: 'kai-key', grant: 'second' },
     ];
-    const relay = startRelay(world);
+    const relay = await startRelay(world);
     expect(await relay.list()).toEqual([
       {
         instanceId: 'kai-mac',
@@ -292,26 +292,26 @@ describe('the relay list', () => {
         appOrigin: REMOTE_APP_ORIGIN,
       },
     ]);
-    relay.update((file) => ({
+    await relay.update((file) => ({
       ...file,
       relayDevices: [{ ...KAI_DEVICE, instanceId: 'lee-mac', machineKey: 'lee-key' }],
     }));
     expect((await relay.list()).map((entry) => entry.instanceId)).toEqual(['kai-mac', 'lee-mac']);
-    relay.update((file) => ({ ...file, enabled: false }));
+    await relay.update((file) => ({ ...file, enabled: false }));
     expect(await relay.list()).toEqual([]);
   });
 
   test('takes the team whose grant it has when a machine is in two teams', async () => {
     const world = createWorld();
     world.grants = [{ ...KAI_GRANT, teamId: 'team0', grant: null }, KAI_GRANT];
-    expect((await startRelay(world).list()).map((entry) => entry.teamId)).toEqual(['team1']);
+    expect((await (await startRelay(world)).list()).map((entry) => entry.teamId)).toEqual(['team1']);
   });
 });
 
 describe('a request to a teammate’s machine', () => {
   test('enrols this machine’s own device with the grant once, keeps its keys, and relays every request on one channel', async () => {
     const world = createWorld();
-    const relay = startRelay(world);
+    const relay = await startRelay(world);
     const answer = await relay.request(
       'kai-mac',
       '/api/tasks/SW-1',
@@ -365,7 +365,7 @@ describe('a request to a teammate’s machine', () => {
   test('comes back as the device it enrolled after a restart, without the grant', async () => {
     const world = createWorld();
     const stored = await createStoredDevice();
-    const relay = startRelay(world, { ...PAIRED, relayDevices: [stored] });
+    const relay = await startRelay(world, { ...PAIRED, relayDevices: [stored] });
     expect((await relay.request('kai-mac', '/api/health')).status).toBe(200);
     expect(world.opens.map((open) => open.enrollSecret)).toEqual([null]);
     expect(relay.file().relayDevices).toEqual([stored]);
@@ -374,16 +374,16 @@ describe('a request to a teammate’s machine', () => {
   test('enrols again when its device was refused, its keys are unreadable, or the machine’s key changed', async () => {
     const world = createWorld();
     world.next = [new DeviceChannelError({ message: 'Not this device.', refused: true })];
-    const refused = startRelay(world, { ...PAIRED, relayDevices: [await createStoredDevice()] });
+    const refused = await startRelay(world, { ...PAIRED, relayDevices: [await createStoredDevice()] });
     expect((await refused.request('kai-mac', '/api/health')).status).toBe(200);
     expect(world.opens.map((open) => open.enrollSecret)).toEqual([null, 'kai-grant']);
     const broken = createWorld();
-    const unreadable = startRelay(broken, { ...PAIRED, relayDevices: [{ ...KAI_DEVICE }] });
+    const unreadable = await startRelay(broken, { ...PAIRED, relayDevices: [{ ...KAI_DEVICE }] });
     expect((await unreadable.request('kai-mac', '/api/health')).status).toBe(200);
     expect(broken.opens.map((open) => open.enrollSecret)).toEqual(['kai-grant']);
     expect(unreadable.file().relayDevices[0]?.publicKey).not.toBe('pk');
     const moved = createWorld();
-    const repaired = startRelay(moved, {
+    const repaired = await startRelay(moved, {
       ...PAIRED,
       relayDevices: [await createStoredDevice({ machineKey: 'old-key' })],
     });
@@ -394,7 +394,7 @@ describe('a request to a teammate’s machine', () => {
 
   test('opens a new channel once the last one closed', async () => {
     const world = createWorld();
-    const relay = startRelay(world);
+    const relay = await startRelay(world);
     await relay.request('kai-mac', '/api/health');
     world.links[0]?.drop(new DeviceChannelError({ message: 'Gone.', refused: false }));
     await relay.request('kai-mac', '/api/health');
@@ -403,7 +403,7 @@ describe('a request to a teammate’s machine', () => {
 
   test('says why it cannot reach the machine, in the engine’s own failure shape', async () => {
     const world = createWorld();
-    const relay = startRelay(world);
+    const relay = await startRelay(world);
     expect(await readFailure(await relay.request('nobody', '/api/health'))).toEqual([
       403,
       { code: 'relay_refused', message: FLEET_RELAY_MESSAGES.unknown },
@@ -428,7 +428,7 @@ describe('a request to a teammate’s machine', () => {
   test('keeps a stored device when its channel fails for any reason but a refusal', async () => {
     const world = createWorld();
     world.next = [new DeviceChannelError({ message: 'Timed out.', refused: false })];
-    const relay = startRelay(world, { ...PAIRED, relayDevices: [await createStoredDevice()] });
+    const relay = await startRelay(world, { ...PAIRED, relayDevices: [await createStoredDevice()] });
     expect((await relay.request('kai-mac', '/api/health')).status).toBe(502);
     expect(relay.file().relayDevices).toHaveLength(1);
   });
@@ -436,27 +436,27 @@ describe('a request to a teammate’s machine', () => {
   test('refuses without a grant to enrol with, or while remote access is off', async () => {
     const world = createWorld();
     world.grants = [{ ...KAI_GRANT, grant: null }];
-    expect(await readFailure(await startRelay(world).request('kai-mac', '/api/health'))).toEqual([
+    expect(await readFailure(await (await startRelay(world)).request('kai-mac', '/api/health'))).toEqual([
       403,
       { code: 'relay_refused', message: FLEET_RELAY_MESSAGES.refused },
     ]);
     const off = createWorld();
     expect(
       await readFailure(
-        await startRelay(off, { ...PAIRED, enabled: false }).request('kai-mac', '/api/health')
+        await (await startRelay(off, { ...PAIRED, enabled: false })).request('kai-mac', '/api/health')
       )
     ).toEqual([403, { code: 'relay_refused', message: FLEET_RELAY_MESSAGES.unpaired }]);
     const unpaired = createWorld();
     expect(
       await readFailure(
-        await startRelay(unpaired, { ...PAIRED, credentials: null }).request('kai-mac', '/api/health')
+        await (await startRelay(unpaired, { ...PAIRED, credentials: null })).request('kai-mac', '/api/health')
       )
     ).toEqual([403, { code: 'relay_refused', message: FLEET_RELAY_MESSAGES.unpaired }]);
   });
 
   test('closes the new channel and says so when it cannot keep or forget a device', async () => {
     const world = createWorld();
-    const relay = startRelay(world);
+    const relay = await startRelay(world);
     const path = join(world.dataDir, 'remote.json');
     rmSync(path);
     mkdirSync(path);
@@ -464,7 +464,7 @@ describe('a request to a teammate’s machine', () => {
     expect(world.links[0]?.closed).toBe(true);
     const refused = createWorld();
     refused.next = [new DeviceChannelError({ message: 'Not this device.', refused: true })];
-    const stored = startRelay(refused, { ...PAIRED, relayDevices: [await createStoredDevice()] });
+    const stored = await startRelay(refused, { ...PAIRED, relayDevices: [await createStoredDevice()] });
     const storedPath = join(refused.dataDir, 'remote.json');
     rmSync(storedPath);
     mkdirSync(storedPath);
@@ -476,12 +476,12 @@ describe('a request to a teammate’s machine', () => {
     world.next = [
       createLink(() => Effect.fail(new DeviceRequestAborted({ message: DEVICE_CHANNEL_MESSAGES.aborted }))),
     ];
-    expect((await startRelay(world).request('kai-mac', '/api/health')).status).toBe(499);
+    expect((await (await startRelay(world)).request('kai-mac', '/api/health')).status).toBe(499);
   });
 
   test('refuses a body over the engine’s request limit, declared or read, before it reaches the machine', async () => {
     const world = createWorld();
-    const relay = startRelay(world);
+    const relay = await startRelay(world);
     const declared = await relay.request('kai-mac', '/api/commands', {
       method: 'POST',
       headers: { 'content-length': String(RELAY_BODY_LIMIT_BYTES + 1) },
@@ -504,7 +504,9 @@ describe('a request to a teammate’s machine', () => {
     const broken = new ReadableStream({
       start: (controller) => controller.error(new Error('gone')),
     });
-    const answer = await startRelay(world).request('kai-mac', '/api/commands', {
+    const answer = await (
+      await startRelay(world)
+    ).request('kai-mac', '/api/commands', {
       method: 'POST',
       body: broken,
     });
@@ -516,7 +518,7 @@ describe('a request to a teammate’s machine', () => {
 describe('a page socket to a teammate’s machine', () => {
   test('relays the app socket both ways on a channel of its own, and closes it when the page leaves', async () => {
     const world = createWorld();
-    const relay = startRelay(world);
+    const relay = await startRelay(world);
     const peer = createPeer();
     const socket = await Effect.runPromise(relay.relay.openSocket('kai-mac', peer as ChannelPeer));
     await until('the channel opens', () => world.links.length === 1);
@@ -534,7 +536,7 @@ describe('a page socket to a teammate’s machine', () => {
 
   test('closes the page’s socket with the reason the channel ended, or why it never opened', async () => {
     const world = createWorld();
-    const relay = startRelay(world);
+    const relay = await startRelay(world);
     const dropped = createPeer();
     await Effect.runPromise(relay.relay.openSocket('kai-mac', dropped as ChannelPeer));
     await until('the channel opens', () => world.links.length === 1);
@@ -549,7 +551,7 @@ describe('a page socket to a teammate’s machine', () => {
 
   test('ends when a message no longer reaches the machine', async () => {
     const world = createWorld();
-    const relay = startRelay(world);
+    const relay = await startRelay(world);
     const peer = createPeer();
     const socket = await Effect.runPromise(relay.relay.openSocket('kai-mac', peer as ChannelPeer));
     await until('the channel opens', () => world.links.length === 1);
@@ -563,7 +565,7 @@ describe('a page socket to a teammate’s machine', () => {
 describe('when access ends', () => {
   test('closes the channels of a machine it no longer reaches, but keeps its device while the team lists it', async () => {
     const world = createWorld();
-    const relay = startRelay(world);
+    const relay = await startRelay(world);
     await relay.request('kai-mac', '/api/health');
     const peer = createPeer();
     await Effect.runPromise(relay.relay.openSocket('kai-mac', peer as ChannelPeer));
@@ -577,7 +579,7 @@ describe('when access ends', () => {
 
   test('forgets the device once the machine says it has no grant, leaves the team, or remote access is off', async () => {
     const world = createWorld();
-    const relay = startRelay(world, {
+    const relay = await startRelay(world, {
       ...PAIRED,
       relayDevices: [KAI_DEVICE, { ...KAI_DEVICE, instanceId: 'lee-mac' }],
     });
@@ -586,13 +588,13 @@ describe('when access ends', () => {
     world.grants = [{ ...KAI_GRANT, grant: null }];
     await relay.sync();
     expect(relay.file().relayDevices.map((device) => device.instanceId)).toEqual(['lee-mac']);
-    relay.update((file) => ({ ...file, teams: [{ ...TEAM, machines: [KAI_MAC] }] }));
+    await relay.update((file) => ({ ...file, teams: [{ ...TEAM, machines: [KAI_MAC] }] }));
     await relay.sync();
     expect(relay.file().relayDevices).toEqual([]);
-    relay.update((file) => ({ ...file, relayDevices: [KAI_DEVICE], teamKeys: [] }));
+    await relay.update((file) => ({ ...file, relayDevices: [KAI_DEVICE], teamKeys: [] }));
     await relay.sync();
     expect(relay.file().relayDevices).toEqual([]);
-    relay.update((file) => ({
+    await relay.update((file) => ({
       ...file,
       relayDevices: [KAI_DEVICE],
       teamKeys: PAIRED.teamKeys ?? [],
@@ -605,7 +607,7 @@ describe('when access ends', () => {
 
   test('logs a device it could not forget and carries on', async () => {
     const world = createWorld();
-    const relay = startRelay(world, { ...PAIRED, relayDevices: [KAI_DEVICE] });
+    const relay = await startRelay(world, { ...PAIRED, relayDevices: [KAI_DEVICE] });
     world.grants = [{ ...KAI_GRANT, grant: null }];
     const path = join(world.dataDir, 'remote.json');
     rmSync(path);
@@ -618,7 +620,7 @@ describe('when access ends', () => {
 
   test('closes every channel when the engine stops', async () => {
     const world = createWorld();
-    const relay = startRelay(world);
+    const relay = await startRelay(world);
     await relay.request('kai-mac', '/api/health');
     await relay.stop();
     expect(world.links[0]?.closed).toBe(true);
@@ -628,7 +630,7 @@ describe('when access ends', () => {
 describe('where the relay keeps its keys', () => {
   test('only in this machine’s remote.json', async () => {
     const world = createWorld();
-    const relay = startRelay(world);
+    const relay = await startRelay(world);
     await relay.request('kai-mac', '/api/health');
     const text = await Bun.file(join(world.dataDir, 'remote.json')).text();
     const device = relay.file().relayDevices[0];

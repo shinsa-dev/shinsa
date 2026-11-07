@@ -3,7 +3,6 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 
 import { join } from 'node:path';
 import { Effect } from 'effect';
 import { isStuck, makeFileStore, resolveCompactionNotice } from '../../src/eunoe/index.ts';
-import { JsonFile } from '../../src/files/service.ts';
 import {
   createMessagesBody,
   type FakeAnthropic,
@@ -251,7 +250,7 @@ describe('EunoeServer', () => {
 describe('the thread store', () => {
   test('keeps each thread in a file named after its key and reads an unknown or damaged one as empty', () => {
     const dir = join(createTempDir(), 'threads');
-    const store = Effect.runSync(makeFileStore(dir).pipe(Effect.provide(JsonFile.layer)));
+    const store = Effect.runSync(makeFileStore(dir));
     expect(store.read('missing')).toEqual({});
     store.save('session/1-abc', { keep: 2 });
     expect(existsSync(join(dir, 'session_1-abc.json'))).toBe(true);

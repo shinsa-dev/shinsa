@@ -8,7 +8,6 @@ import { ChecksLayer } from '../../src/checks/layers.ts';
 import type { ServerConfig } from '../../src/config/index.ts';
 import { EngineConfig } from '../../src/config/service.ts';
 import { ConfigStore } from '../../src/config/store/service.ts';
-import { JsonFile } from '../../src/files/service.ts';
 import { GitLayer } from '../../src/git/layers.ts';
 import { GitHubLayer } from '../../src/github/layers.ts';
 import { JsonLogger } from '../../src/log/service.ts';
@@ -23,6 +22,7 @@ import { ShellLayer } from '../../src/shell/layers.ts';
 import { Evidence } from '../../src/store/evidence/service.ts';
 import { WorkspacesServiceLayer } from '../../src/workspaces/layers.ts';
 import type { Engine } from './engine.ts';
+import { JsonFileLayer } from './files.ts';
 
 function awaitAbort(signal: AbortSignal) {
   return Effect.callback<void>((resume) => {
@@ -45,7 +45,7 @@ function createEffectRunnerLayer(
     CurrentLogin.layer.pipe(Layer.provideMerge(RepoWorkLayer)),
     WorkspacesServiceLayer
   ).pipe(
-    Layer.provideMerge(ConfigStore.layer.pipe(Layer.provide(JsonFile.layer))),
+    Layer.provideMerge(ConfigStore.layer.pipe(Layer.provide(JsonFileLayer))),
     Layer.provideMerge(Layer.mergeAll(ChecksLayer, GitHubLayer)),
     Layer.provideMerge(GitLayer),
     Layer.provideMerge(

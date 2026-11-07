@@ -2,8 +2,9 @@ import { describe, expect, test } from 'bun:test';
 import { chmodSync, existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
+import { BunServices } from '@effect/platform-bun';
 import { APP_IDENTITY } from '@shinsa/core';
-import { Effect } from 'effect';
+import { Effect, Layer } from 'effect';
 import {
   prepareDataDir,
   resolveServerAddress as readServerAddress,
@@ -14,8 +15,12 @@ import { runTest } from '../harness.ts';
 import { resolveConfig } from '../helpers/config.ts';
 import { createTempDir } from '../helpers/index.ts';
 
-function resolveServerAddress(env: Record<string, string>) {
-  return Effect.runSync(readServerAddress(env).pipe(Effect.provide(MachineConfigFile.layer)));
+async function resolveServerAddress(env: Record<string, string>) {
+  return Effect.runPromise(
+    readServerAddress(env).pipe(
+      Effect.provide(MachineConfigFile.layer.pipe(Layer.provide(BunServices.layer)))
+    )
+  );
 }
 
 const DEFAULT_PORT = APP_IDENTITY.port;
@@ -46,10 +51,10 @@ describe('resolveShinsaPaths', () => {
 });
 
 describe('resolveConfig', () => {
-  test('reads every setting from the environment, which wins over config.json', () => {
+  test('reads every setting from the environment, which wins over config.json', async () => {
     const home = createTempDir();
     writeFileSync(join(home, 'config.json'), JSON.stringify({ port: 6000, hostname: 'box', editor: 'vim' }));
-    const config = resolveConfig({
+    const config = await resolveConfig({
       HOME: '/home/me',
       SHINSA_HOME: home,
       SHINSA_PORT: '5190',
@@ -94,19 +99,19 @@ describe('resolveConfig', () => {
     expect(config.webDir.endsWith('apps/web/dist')).toBe(true);
   });
 
-  test('takes the port, host, editor and terminal from config.json when the environment is silent', () => {
+  test('takes the port, host, editor and terminal from config.json when the environment is silent', async () => {
     const home = createTempDir();
     writeFileSync(
       join(home, 'config.json'),
       JSON.stringify({ port: 6000, hostname: '0.0.0.0', editor: 'vim', terminal: 'iTerm' })
     );
-    const config = resolveConfig({ SHINSA_HOME: home });
+    const config = await resolveConfig({ SHINSA_HOME: home });
     expect(config).toMatchObject({ port: 6000, hostname: '0.0.0.0', editor: 'vim', terminal: 'iTerm' });
     expect(config.allowedHosts).toEqual(['localhost', '127.0.0.1', '[::1]']);
   });
 
-  test('SHINSA_WEB_DIR and SHINSA_PLUGIN_DIR serve the web app and load the plugin from elsewhere', () => {
-    const config = resolveConfig({
+  test('SHINSA_WEB_DIR and SHINSA_PLUGIN_DIR serve the web app and load the plugin from elsewhere', async () => {
+    const config = await resolveConfig({
       SHINSA_HOME: createTempDir(),
       SHINSA_WEB_DIR: '/bundle/web',
       SHINSA_PLUGIN_DIR: '/bundle/plugin',
@@ -114,10 +119,10 @@ describe('resolveConfig', () => {
     expect(config).toMatchObject({ webDir: '/bundle/web', pluginDir: '/bundle/plugin' });
   });
 
-  test('reads config.json once and leaves a broken one for the server to keep aside', () => {
+  test('reads config.json once and leaves a broken one for the server to keep aside', async () => {
     const home = createTempDir();
     writeFileSync(join(home, 'config.json'), '{ broken');
-    const config = resolveConfig({ SHINSA_HOME: home });
+    const config = await resolveConfig({ SHINSA_HOME: home });
     expect(config.machine).toMatchObject({
       unreadable: true,
       problems: [expect.stringContaining('not valid JSON')],
@@ -126,12 +131,15 @@ describe('resolveConfig', () => {
     expect(readdirSync(home)).toEqual(['config.json']);
   });
 
-  test('defaults to the loopback address and the standard port', () => {
+  test('defaults to the loopback address and the standard port', async () => {
     const dataDir = join(createTempDir(), 'data');
-    const config = resolveConfig({ SHINSA_DATA_DIR: dataDir, SHINSA_WORKTREES_DIR: join(dataDir, 'wt') });
+    const config = await resolveConfig({
+      SHINSA_DATA_DIR: dataDir,
+      SHINSA_WORKTREES_DIR: join(dataDir, 'wt'),
+    });
     expect(config.worktreesDir).toBe(join(dataDir, 'wt'));
     expect(config.worktreesDirFromEnvironment).toBe(true);
-    expect(resolveConfig({ SHINSA_DATA_DIR: dataDir }).worktreesDirFromEnvironment).toBe(false);
+    expect((await resolveConfig({ SHINSA_DATA_DIR: dataDir })).worktreesDirFromEnvironment).toBe(false);
     expect(config).toMatchObject({
       port: DEFAULT_PORT,
       hostname: '127.0.0.1',
@@ -146,7 +154,7 @@ describe('resolveConfig', () => {
   });
 
   test('the installed app defaults to 7446, and a dev engine pins 5180 so the two never meet', async () => {
-    expect(resolveConfig({ SHINSA_HOME: createTempDir() }, null).port).toBe(7446);
+    expect((await resolveConfig({ SHINSA_HOME: createTempDir() }, null)).port).toBe(7446);
     const { scripts } = await Bun.file(join(import.meta.dir, '../../package.json')).json();
     for (const script of [scripts.dev, scripts.start]) {
       expect(script).toMatch(/^SHINSA_PORT=\$\{SHINSA_PORT:-5180\} /);
@@ -157,14 +165,14 @@ describe('resolveConfig', () => {
 
 describe('prepareDataDir', () => {
   test('creates the data directories', async () => {
-    const config = resolveConfig({ SHINSA_HOME: createTempDir() });
+    const config = await resolveConfig({ SHINSA_HOME: createTempDir() });
     await runTest(prepareDataDir(config));
     for (const dir of [config.dataDir, config.worktreesDir, config.evidenceDir, config.transcriptsDir])
       expect(existsSync(dir)).toBe(true);
   });
 
   test('keeps the worktree, check-base, scratch and cache folders out of indexing and Time Machine', async () => {
-    const config = resolveConfig({ SHINSA_HOME: createTempDir() });
+    const config = await resolveConfig({ SHINSA_HOME: createTempDir() });
     await runTest(prepareDataDir(config));
     const folders = [config.worktreesDir, config.checkBasesDir, config.scratchDir, config.cachesDir];
     for (const dir of folders) expect(existsSync(join(dir, '.metadata_never_index'))).toBe(true);
@@ -182,7 +190,7 @@ describe('prepareDataDir', () => {
     const fake = join(bin, 'xattr');
     writeFileSync(fake, `#!/bin/sh\necho run >> '${calls}'\necho denied >&2\nexit 1\n`);
     chmodSync(fake, 0o755);
-    const config = resolveConfig({ SHINSA_HOME: createTempDir() });
+    const config = await resolveConfig({ SHINSA_HOME: createTempDir() });
     const path = process.env.PATH;
     process.env.PATH = `${bin}:${path}`;
     try {
@@ -196,7 +204,7 @@ describe('prepareDataDir', () => {
   });
 
   test('a Mac without xattr still gets the marker, and nothing fails', async () => {
-    const config = resolveConfig({ SHINSA_HOME: createTempDir() });
+    const config = await resolveConfig({ SHINSA_HOME: createTempDir() });
     const path = process.env.PATH;
     process.env.PATH = createTempDir();
     try {
@@ -213,7 +221,7 @@ describe('prepareDataDir', () => {
     const fake = join(bin, 'xattr');
     writeFileSync(fake, `#!/bin/sh\necho run >> '${calls}'\n`);
     chmodSync(fake, 0o755);
-    const config = resolveConfig({ SHINSA_HOME: createTempDir() });
+    const config = await resolveConfig({ SHINSA_HOME: createTempDir() });
     const path = process.env.PATH;
     process.env.PATH = `${bin}:${path}`;
     try {
@@ -227,28 +235,33 @@ describe('prepareDataDir', () => {
 });
 
 describe('the address the command line reaches the server on', () => {
-  test('rejects anything that is not a port', () => {
+  test('rejects anything that is not a port', async () => {
     const home = createTempDir();
-    expect(resolveServerAddress({ SHINSA_HOME: home }).port).toBe(DEFAULT_PORT);
-    expect(resolveServerAddress({ SHINSA_HOME: home, SHINSA_PORT: '' }).port).toBe(DEFAULT_PORT);
-    expect(() => resolveServerAddress({ SHINSA_HOME: home, SHINSA_PORT: 'abc' })).toThrow(
+    expect((await resolveServerAddress({ SHINSA_HOME: home })).port).toBe(DEFAULT_PORT);
+    expect((await resolveServerAddress({ SHINSA_HOME: home, SHINSA_PORT: '' })).port).toBe(DEFAULT_PORT);
+    await expect(resolveServerAddress({ SHINSA_HOME: home, SHINSA_PORT: 'abc' })).rejects.toThrow(
       'SHINSA_PORT must be a whole number'
     );
-    expect(() => resolveServerAddress({ SHINSA_HOME: home, SHINSA_PORT: '-1' })).toThrow('whole number');
-    expect(() => resolveServerAddress({ SHINSA_HOME: home, SHINSA_PORT: '70000' })).toThrow(
+    await expect(resolveServerAddress({ SHINSA_HOME: home, SHINSA_PORT: '-1' })).rejects.toThrow(
+      'whole number'
+    );
+    await expect(resolveServerAddress({ SHINSA_HOME: home, SHINSA_PORT: '70000' })).rejects.toThrow(
       'must be a port number'
     );
   });
 
-  test('is the host and port the server is configured on, and loopback when it listens on every address', () => {
+  test('is the host and port the server is configured on, and loopback when it listens on every address', async () => {
     const home = createTempDir();
-    expect(resolveServerAddress({ SHINSA_HOME: home })).toEqual({
+    expect(await resolveServerAddress({ SHINSA_HOME: home })).toEqual({
       hostname: '127.0.0.1',
       port: DEFAULT_PORT,
     });
     writeFileSync(join(home, 'config.json'), JSON.stringify({ port: 5300, hostname: 'shinsa.local' }));
-    expect(resolveServerAddress({ SHINSA_HOME: home })).toEqual({ hostname: 'shinsa.local', port: 5300 });
-    expect(resolveServerAddress({ SHINSA_HOME: home, SHINSA_HOST: '0.0.0.0' })).toEqual({
+    expect(await resolveServerAddress({ SHINSA_HOME: home })).toEqual({
+      hostname: 'shinsa.local',
+      port: 5300,
+    });
+    expect(await resolveServerAddress({ SHINSA_HOME: home, SHINSA_HOST: '0.0.0.0' })).toEqual({
       hostname: '127.0.0.1',
       port: 5300,
     });

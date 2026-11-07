@@ -72,8 +72,8 @@ interface Setup {
   engine: Engine;
 }
 
-function createToolCalls({ config, engine }: Setup, extra: Layer.Layer<never> = Layer.empty) {
-  const machine = createTestMachine(engine, config);
+async function createToolCalls({ config, engine }: Setup, extra: Layer.Layer<never> = Layer.empty) {
+  const machine = await createTestMachine(engine, config);
   const dependencies = Layer.mergeAll(
     createLiveRuns().layer,
     Layer.succeedContext(machine.context),
@@ -102,7 +102,7 @@ function parse(text: string) {
 describe('the tool calls of an agent', () => {
   test('a delegation in a worktree of its own starts from the commit the task’s checkout is on', async () => {
     const setup = await startBuilding();
-    const handle = createToolCalls(setup);
+    const handle = await createToolCalls(setup);
     const reply = parse(
       await handle('delegate_task', {
         runId: setup.run.id,
@@ -117,7 +117,7 @@ describe('the tool calls of an agent', () => {
 
   test('a delegation it waits for gives up after its timeout and asks to be woken by the result', async () => {
     const setup = await startBuilding();
-    const handle = createToolCalls(setup);
+    const handle = await createToolCalls(setup);
     const reply = parse(
       await handle('delegate_task', {
         runId: setup.run.id,
@@ -131,7 +131,7 @@ describe('the tool calls of an agent', () => {
 
   test('a delegation it waits for answers as soon as the agent ends', async () => {
     const setup = await startBuilding();
-    const handle = createToolCalls(setup);
+    const handle = await createToolCalls(setup);
     const waiting = handle('delegate_task', {
       runId: setup.run.id,
       attemptId: '',
@@ -145,7 +145,7 @@ describe('the tool calls of an agent', () => {
 
   test('reads a task, and refuses what this Shinsa cannot do', async () => {
     const setup = await startBuilding();
-    const handle = createToolCalls(setup);
+    const handle = await createToolCalls(setup);
     const call = { runId: setup.run.id, attemptId: '' };
     expect(await handle('read_task', { ...call, input: { task_id: setup.run.taskId } })).toContain(
       'Fix the tab scroll'
@@ -182,7 +182,7 @@ describe('the tool calls of an agent', () => {
         },
       })
     );
-    const handle = createToolCalls(setup, schedules);
+    const handle = await createToolCalls(setup, schedules);
     const call = { runId: setup.run.id, attemptId: '', input: {} };
     expect(await handle('list_schedules', call)).toBe('No schedules.');
     await expect(handle('set_schedule', call)).rejects.toThrow('The schedule needs a time.');
@@ -206,7 +206,7 @@ describe('the tool calls of an agent', () => {
       ...setup.engine.core,
       dispatch: () => Effect.fail(new EngineStopped({ message: 'Shinsa is stopping.' })),
     });
-    const handle = createToolCalls(setup, Layer.merge(schedules, stopped));
+    const handle = await createToolCalls(setup, Layer.merge(schedules, stopped));
     await expect(handle('set_schedule', { runId: setup.run.id, attemptId: '', input: {} })).rejects.toThrow(
       'Shinsa is stopping.'
     );

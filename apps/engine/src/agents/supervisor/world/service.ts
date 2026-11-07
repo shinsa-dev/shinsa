@@ -46,10 +46,12 @@ export class RunWorld extends Context.Service<
       const leasing = yield* AccountLeasing;
       const checkout = yield* Checkout;
       const { onNotice } = yield* RunHooks;
+      const lifetime = yield* Effect.scope;
 
       const recordEntry = Effect.fn('RunWorld.recordEntry')(function* (runId: string, entry: ChatEvent) {
         yield* transcripts.record(runId, entry);
-        if (entry.type === 'notice' && onNotice) yield* onNotice(runId, entry.notice);
+        if (entry.type === 'notice' && onNotice)
+          yield* Effect.forkIn(onNotice(runId, entry.notice), lifetime);
       });
 
       return RunWorld.of({

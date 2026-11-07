@@ -1,7 +1,9 @@
-import type { BunFile } from 'bun';
-import { HttpServerResponse } from 'effect/http';
+import { Effect, FileSystem, Option } from 'effect';
+import { HttpServerResponse, Mime } from 'effect/http';
 
 const IMMUTABLE = 'private, max-age=31536000, immutable';
+
+const UNKNOWN_TYPE = 'application/octet-stream';
 
 const BYTE_RANGE = /^bytes=(\d*)-(\d*)$/;
 
@@ -35,27 +37,35 @@ export function resolveAttachmentHeaders(type: string, fileName: string): Record
   return { ...safety, 'Content-Disposition': `attachment; filename="${fileName}"` };
 }
 
-export function respondFile(file: BunFile, range: string | undefined, extra: Record<string, string> = {}) {
+export function resolveFileType(path: string) {
+  return Option.getOrElse(Mime.getType(path), () => UNKNOWN_TYPE);
+}
+
+export const respondFile = Effect.fn('Http.respondFile')(function* (
+  path: string,
+  range: string | undefined,
+  extra: Record<string, string> = {}
+) {
+  const fs = yield* FileSystem.FileSystem;
   const headers = {
     'Cache-Control': IMMUTABLE,
     'Accept-Ranges': 'bytes',
-    'Content-Type': file.type,
     ...extra,
   };
-  if (!range) return HttpServerResponse.raw(file, { headers });
-  const size = file.size;
+  const contentType = resolveFileType(path);
+  if (!range) return yield* HttpServerResponse.file(path, { headers, contentType });
+  const size = Number((yield* fs.stat(path)).size);
   const bytes = resolveByteRange(range, size);
   if (!bytes)
     return HttpServerResponse.empty({
       status: 416,
-      headers: { ...headers, 'Content-Range': `bytes */${size}` },
+      headers: { ...headers, 'Content-Type': contentType, 'Content-Range': `bytes */${size}` },
     });
-  return HttpServerResponse.raw(file.slice(bytes.start, bytes.end + 1), {
+  return yield* HttpServerResponse.file(path, {
     status: 206,
-    headers: {
-      ...headers,
-      'Content-Range': `bytes ${bytes.start}-${bytes.end}/${size}`,
-      'Content-Length': String(bytes.end - bytes.start + 1),
-    },
+    contentType,
+    offset: bytes.start,
+    bytesToRead: bytes.end - bytes.start + 1,
+    headers: { ...headers, 'Content-Range': `bytes ${bytes.start}-${bytes.end}/${size}` },
   });
-}
+});

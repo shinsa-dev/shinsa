@@ -9,7 +9,7 @@ import { createTestEvidence } from '../helpers/evidence.ts';
 import { createTempDir, writeFiles } from '../helpers/index.ts';
 
 const storeEvidence = (...args: Parameters<typeof storeEvidenceEffect>) =>
-  Effect.runSync(storeEvidenceEffect(...args));
+  Effect.runPromise(storeEvidenceEffect(...args));
 
 describe('commits', () => {
   const task = {
@@ -83,11 +83,11 @@ describe('assertProtocol', () => {
 const FOLDER = { taskId: 'task-1', round: 2 };
 
 describe('storeEvidence', () => {
-  test('a relative path is read from the worktree into the task and round folder, with its facts', () => {
+  test('a relative path is read from the worktree into the task and round folder, with its facts', async () => {
     const worktree = createTempDir();
     writeFiles(worktree, { 'shots/home.png': 'png' });
     const evidence = createTestEvidence(createTempDir());
-    const stored = storeEvidence(
+    const stored = await storeEvidence(
       {
         kind: 'screenshot',
         title: 'Home page',
@@ -116,7 +116,7 @@ describe('storeEvidence', () => {
       uri: expect.stringMatching(/^\/api\/evidence\/task-1\/round-2\/home-page-\w+\.png$/),
     });
     expect(
-      storeEvidence(
+      await storeEvidence(
         { kind: 'note', title: 'Home', path: join(worktree, 'shots/home.png') },
         null,
         evidence,
@@ -125,29 +125,39 @@ describe('storeEvidence', () => {
     ).toMatchObject({ kind: 'note', title: 'Home', detail: null, width: null });
   });
 
-  test('a URL must be a web address, text is written to a file and a note to a markdown file', () => {
+  test('a URL must be a web address, text is written to a file and a note to a markdown file', async () => {
     const evidence = createTestEvidence(createTempDir());
     expect(
-      storeEvidence({ kind: 'preview', title: 'Preview', url: 'https://preview.dev' }, null, evidence, FOLDER)
+      await storeEvidence(
+        { kind: 'preview', title: 'Preview', url: 'https://preview.dev' },
+        null,
+        evidence,
+        FOLDER
+      )
     ).toMatchObject({ uri: 'https://preview.dev' });
-    expect(() =>
+    await expect(
       storeEvidence({ kind: 'preview', title: 'P', url: 'javascript:alert(1)' }, null, evidence, FOLDER)
-    ).toThrow('http or https');
-    expect(() =>
+    ).rejects.toThrow('http or https');
+    await expect(
       storeEvidence({ kind: 'preview', title: 'P', url: 'not a url' }, null, evidence, FOLDER)
-    ).toThrow('http or https');
+    ).rejects.toThrow('http or https');
     expect(
-      storeEvidence({ kind: 'screenshot', title: 'Tests', text: '12 pass' }, null, evidence, FOLDER)
+      await storeEvidence({ kind: 'screenshot', title: 'Tests', text: '12 pass' }, null, evidence, FOLDER)
     ).toMatchObject({ uri: expect.stringMatching(/\/round-2\/tests-\w+\.txt$/) });
     expect(
-      storeEvidence({ kind: 'note', title: 'Ratios', text: '| a | b |' }, null, evidence, FOLDER)
+      await storeEvidence({ kind: 'note', title: 'Ratios', text: '| a | b |' }, null, evidence, FOLDER)
     ).toMatchObject({ uri: expect.stringMatching(/\/round-2\/ratios-\w+\.md$/) });
   });
 
-  test('a test or check links a check by id, and anything else given with it is refused', () => {
+  test('a test or check links a check by id, and anything else given with it is refused', async () => {
     const evidence = createTestEvidence(createTempDir());
     expect(
-      storeEvidence({ kind: 'test', check: 'c2', detail: 'The new file is read.' }, null, evidence, FOLDER)
+      await storeEvidence(
+        { kind: 'test', check: 'c2', detail: 'The new file is read.' },
+        null,
+        evidence,
+        FOLDER
+      )
     ).toEqual({
       type: 'agent.attach_check',
       kind: 'test',
@@ -155,16 +165,16 @@ describe('storeEvidence', () => {
       detail: 'The new file is read.',
       replaces: [],
     });
-    expect(() =>
+    await expect(
       storeEvidence({ kind: 'check', check: 'c1', text: '12 pass' }, null, evidence, FOLDER)
-    ).toThrow('leave out text');
+    ).rejects.toThrow('leave out text');
   });
 
-  test('a comparison copies each part, a video as a recording, and names each file by its part', () => {
+  test('a comparison copies each part, a video as a recording, and names each file by its part', async () => {
     const worktree = createTempDir();
     writeFiles(worktree, { 'before.png': 'png', 'after.webm': 'webm' });
     const evidence = createTestEvidence(createTempDir());
-    const stored = storeEvidence(
+    const stored = await storeEvidence(
       {
         kind: 'comparison',
         title: 'Tabs',
@@ -203,7 +213,7 @@ describe('storeEvidence', () => {
     });
   });
 
-  test('a comparison with a missing part copies none of them', () => {
+  test('a comparison with a missing part copies none of them', async () => {
     const worktree = createTempDir();
     writeFiles(worktree, { 'before.png': 'png' });
     const dir = createTempDir();
@@ -211,18 +221,18 @@ describe('storeEvidence', () => {
       { path: 'before.png', stage: 'before' },
       { path: 'gone.png', stage: 'after' },
     ];
-    expect(() =>
+    await expect(
       storeEvidence({ kind: 'comparison', title: 'Tabs', parts }, worktree, createTestEvidence(dir), FOLDER)
-    ).toThrow(`No file at ${join(worktree, 'gone.png')}.`);
+    ).rejects.toThrow(`No file at ${join(worktree, 'gone.png')}.`);
     expect(readdirSync(dir)).toEqual([]);
   });
 
-  test('a hand-over that breaks the protocol is refused with every reason', () => {
+  test('a hand-over that breaks the protocol is refused with every reason', async () => {
     const evidence = createTestEvidence(createTempDir());
-    expect(() => storeEvidence({ kind: 'virus', text: 'x' }, null, evidence, FOLDER)).toThrow(
+    await expect(storeEvidence({ kind: 'virus', text: 'x' }, null, evidence, FOLDER)).rejects.toThrow(
       'Shinsa did not attach it. Fix these and call `attach_evidence` again:\n- kind must be one of screenshot, recording, test, check, note, preview, comparison.\n- title is required.'
     );
-    expect(() => storeEvidence({ kind: 'note', title: 'Nothing' }, null, evidence, FOLDER)).toThrow(
+    await expect(storeEvidence({ kind: 'note', title: 'Nothing' }, null, evidence, FOLDER)).rejects.toThrow(
       'Give exactly one of path, url or text.'
     );
   });

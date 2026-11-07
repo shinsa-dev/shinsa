@@ -88,14 +88,16 @@ export const startMachine = Effect.fn('Sandbox.startMachine')(function* (
     teams: resolvePreviewTeams(owner),
     teamKeys: listPreviewTeamKeys(owner),
   });
-  const config = resolveConfig({
-    ...Bun.env,
-    SHINSA_DATA_DIR: dataDir,
-    SHINSA_PORT: '0',
-    SHINSA_REMOTE_ORIGIN: ORIGIN,
-    SHINSA_PREVIEW_ORIGIN: PREVIEW_ZONE,
-    SHINSA_WEB_DIR: LOCAL_WEB,
-  });
+  const config = yield* Effect.promise(() =>
+    resolveConfig({
+      ...Bun.env,
+      SHINSA_DATA_DIR: dataDir,
+      SHINSA_PORT: '0',
+      SHINSA_REMOTE_ORIGIN: ORIGIN,
+      SHINSA_PREVIEW_ORIGIN: PREVIEW_ZONE,
+      SHINSA_WEB_DIR: LOCAL_WEB,
+    })
+  );
   yield* Effect.try({
     try: () => {
       writeFileSync(join(dataDir, REMOTE_FILE), remoteFile);
@@ -172,20 +174,20 @@ export const startMachine = Effect.fn('Sandbox.startMachine')(function* (
     measureDisk: Effect.void,
   };
   const http = yield* Effect.acquireRelease(
-    Effect.try({
-      try: () =>
-        startIdleServer({
-          engine,
-          config,
-          transcripts,
-          evidence,
-          remoteOrigin: config.remoteOrigin,
-          ...remote.services,
-          resources,
-          terminals,
-        }),
-      catch: (error) => new SandboxFailed({ message: `Starting ${name}’s server failed: ${String(error)}` }),
-    }),
+    startIdleServer({
+      engine,
+      config,
+      transcripts,
+      evidence,
+      remoteOrigin: config.remoteOrigin,
+      ...remote.services,
+      resources,
+      terminals,
+    }).pipe(
+      Effect.catchDefect((error) =>
+        Effect.fail(new SandboxFailed({ message: `Starting ${name}’s server failed: ${String(error)}` }))
+      )
+    ),
     (started) => Effect.promise(() => started.stop())
   );
   engine.onEffect(remote.applyEffect);

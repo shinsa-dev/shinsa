@@ -163,15 +163,13 @@ const program = Effect.gen(function* () {
       })
     );
     const server = yield* Effect.acquireRelease(
-      attempt(() =>
-        startIdleServer({
-          engine,
-          config,
-          transcripts: createTranscripts(config.transcriptsDir),
-          evidence: createTestEvidence(config.evidenceDir),
-          ...remote.services,
-        })
-      ),
+      startIdleServer({
+        engine,
+        config,
+        transcripts: createTranscripts(config.transcriptsDir),
+        evidence: createTestEvidence(config.evidenceDir),
+        ...remote.services,
+      }).pipe(Effect.catchDefect((error) => Effect.fail(new RemoteBenchFailed({ message: String(error) })))),
       (running) => Effect.promise(running.stop)
     );
     return {

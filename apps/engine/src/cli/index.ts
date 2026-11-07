@@ -114,7 +114,7 @@ export const createPlatformService = Effect.fn('Cli.createPlatformService')(func
   env: Record<string, string | undefined> = Bun.env
 ) {
   if (platform === 'linux') {
-    return createSystemdService({
+    return yield* createSystemdService({
       env,
       program: process.execPath,
       user: resolveKeychainAccount(env),

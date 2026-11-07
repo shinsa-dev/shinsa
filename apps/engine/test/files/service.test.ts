@@ -3,20 +3,21 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSy
 import { join } from 'node:path';
 import { Effect, Option, Schema } from 'effect';
 import { JsonFile } from '../../src/files/service.ts';
+import { JsonFileLayer } from '../helpers/files.ts';
 import { createTempDir } from '../helpers/index.ts';
 
 const writeJsonFile = (path: string, value: unknown) =>
-  Effect.runSync(JsonFile.use((file) => file.write(path, value)).pipe(Effect.provide(JsonFile.layer)));
+  Effect.runPromise(JsonFile.use((file) => file.write(path, value)).pipe(Effect.provide(JsonFileLayer)));
 
 const keepJsonFileAside = (path: string) =>
-  Effect.runSync(JsonFile.use((file) => file.keepAside(path)).pipe(Effect.provide(JsonFile.layer)));
+  Effect.runPromise(JsonFile.use((file) => file.keepAside(path)).pipe(Effect.provide(JsonFileLayer)));
 
 const Counter = Schema.Struct({ count: Schema.Number });
 
 function read(path: string) {
   return Effect.runPromise(
     JsonFile.use((file) => file.read(path, Counter)).pipe(
-      Effect.provide(JsonFile.layer),
+      Effect.provide(JsonFileLayer),
       Effect.flip,
       Effect.option
     )
@@ -25,7 +26,7 @@ function read(path: string) {
 
 function readValue(path: string) {
   return Effect.runPromise(
-    JsonFile.use((file) => file.read(path, Counter)).pipe(Effect.provide(JsonFile.layer))
+    JsonFile.use((file) => file.read(path, Counter)).pipe(Effect.provide(JsonFileLayer))
   );
 }
 
@@ -33,7 +34,7 @@ describe('JsonFile', () => {
   test('a missing file reads as nothing, and what it writes reads back through the schema', async () => {
     const path = join(createTempDir(), 'nested', 'counter.json');
     expect(await readValue(path)).toEqual(Option.none());
-    writeJsonFile(path, { count: 2 });
+    await writeJsonFile(path, { count: 2 });
     expect(await readValue(path)).toEqual(Option.some({ count: 2 }));
     expect(readFileSync(path, 'utf8')).toBe('{\n  "count": 2\n}\n');
     expect(statSync(path).mode & 0o777).toBe(0o600);
@@ -59,12 +60,25 @@ describe('JsonFile', () => {
     const dir = createTempDir();
     const path = join(dir, 'broken.json');
     writeFileSync(path, '{"count": ');
-    const copy = keepJsonFileAside(path);
+    const copy = await keepJsonFileAside(path);
     expect(copy).toStartWith(`${path}.unreadable-`);
     expect(readFileSync(copy, 'utf8')).toBe('{"count": ');
-    expect(() => keepJsonFileAside(join(dir, 'gone.json'))).toThrow('ENOENT');
+    await expect(keepJsonFileAside(join(dir, 'gone.json'))).rejects.toThrow('ENOENT');
     writeFileSync(join(dir, 'file'), '');
-    expect(() => writeJsonFile(join(dir, 'file', 'inside.json'), {})).toThrow();
+    await expect(writeJsonFile(join(dir, 'file', 'inside.json'), {})).rejects.toThrow();
     expect(readdirSync(dir).sort()).toEqual(['broken.json', copy.slice(dir.length + 1), 'file'].sort());
+  });
+
+  test('writes to one file one at a time, in the order they were asked for', async () => {
+    const path = join(createTempDir(), 'counter.json');
+    await Effect.runPromise(
+      JsonFile.use((file) =>
+        Effect.all(
+          [1, 2, 3, 4].map((count) => file.write(path, { count })),
+          { concurrency: 'unbounded' }
+        )
+      ).pipe(Effect.provide(JsonFileLayer))
+    );
+    expect(await readValue(path)).toEqual(Option.some({ count: 4 }));
   });
 });

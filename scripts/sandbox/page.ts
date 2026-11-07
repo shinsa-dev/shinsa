@@ -1,5 +1,7 @@
 import { join } from 'node:path';
+import { BunHttpPlatform } from '@effect/platform-bun';
 import { Effect, FileSystem } from 'effect';
+import { HttpServerResponse } from 'effect/http';
 import { SECURITY_HEADERS } from '../../apps/cloud/src/http/ingress/schema.ts';
 import { serveStatic } from '../../apps/engine/src/http/static.ts';
 import {
@@ -35,9 +37,10 @@ export const findRemoteStylesheet = Effect.fn('Sandbox.findRemoteStylesheet')(fu
 });
 
 export const respondStatic = Effect.fn('Sandbox.respondStatic')(function* (pathname: string) {
-  const response = yield* serveStatic(REMOTE_WEB, `/${pathname.replace(/^\/+/, '')}`);
-  for (const [name, value] of Object.entries(SECURITY_HEADERS)) response.headers.set(name, value);
-  return response;
+  const response = yield* serveStatic(REMOTE_WEB, `/${pathname.replace(/^\/+/, '')}`).pipe(
+    Effect.provide(BunHttpPlatform.layer)
+  );
+  return HttpServerResponse.toWeb(HttpServerResponse.setHeaders(response, SECURITY_HEADERS));
 });
 
 export function listSandboxSections(

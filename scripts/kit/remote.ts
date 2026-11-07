@@ -1,3 +1,4 @@
+import { BunServices } from '@effect/platform-bun';
 import { Context, Effect, Layer, Scope } from 'effect';
 import { FetchHttpClient } from 'effect/http';
 import { ProvidersLayer } from '../../apps/engine/src/agents/providers/index.ts';
@@ -74,7 +75,7 @@ function createFoundationLayer(input: RemoteMachineInput) {
     Layer.succeed(EngineCore, input.engine.core),
     JsonFile.layer,
     JsonLogger
-  );
+  ).pipe(Layer.provideMerge(BunServices.layer));
 }
 
 function resolveRemoteInput(input: RemoteMachineInput) {

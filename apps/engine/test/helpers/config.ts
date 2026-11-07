@@ -1,20 +1,21 @@
-import { mkdirSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { Effect } from 'effect';
+import { BunServices } from '@effect/platform-bun';
+import { Effect, Layer } from 'effect';
 import type { ServerConfig } from '../../src/config/index.ts';
 import type { Env } from '../../src/config/index.ts';
-import { MachineConfigFile } from '../../src/config/machine/service.ts';
+import { resolveMachineConfigText } from '../../src/config/machine/decode.ts';
 import { EngineConfig } from '../../src/config/service.ts';
 import type { ShinsaBundle } from '../../src/instance/bundle.ts';
 
 export function readMachineConfig(path: string) {
-  return Effect.runSync(
-    MachineConfigFile.use((file) => file.read(path)).pipe(Effect.provide(MachineConfigFile.layer))
-  );
+  return resolveMachineConfigText(existsSync(path) ? readFileSync(path, 'utf8') : null);
 }
 
 export function resolveConfig(env: Env, bundle: ShinsaBundle | null = null) {
-  return Effect.runSync(Effect.provide(EngineConfig, EngineConfig.layer(env, bundle)));
+  return Effect.runPromise(
+    Effect.provide(EngineConfig, EngineConfig.layer(env, bundle).pipe(Layer.provide(BunServices.layer)))
+  );
 }
 
 export function createConfigAt(root: string, overrides: Partial<ServerConfig> = {}): ServerConfig {

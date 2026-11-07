@@ -4,6 +4,7 @@ import { Effect } from 'effect';
 import { createManageClient } from '../../src/agents/manage/client.ts';
 import type { ScheduleToolCall } from '../../src/schedules/index.ts';
 import { readArgv, selectSpec } from '../../src/surface/index.ts';
+import { until } from '../helpers/until.ts';
 import { createWorld, startTask, type World } from './fixtures.ts';
 import { openSchedules, type SchedulesHarness, type SchedulesHarnessOptions } from './harness.ts';
 
@@ -124,18 +125,18 @@ describe('set_schedule', () => {
   test('a webhook gets a URL, and its signing secret comes from a one-use ref', async () => {
     const world = await createWorld();
     const { tool } = await setUp(world);
-    const ref = world.secrets.writeRef('gate-1', world.taskId, 'shh');
+    const ref = await world.secrets.writeRef('gate-1', world.taskId, 'shh');
     const reply = await tool('set_schedule', {
       message: 'A push: {{body.ref}}',
       webhook: { signature: { header: 'X-Hub-Signature-256', prefix: 'sha256=', secret_ref: ref } },
     });
     const schedule = only(world);
-    const hook = world.secrets.selectHook(schedule.id);
+    const hook = await world.secrets.selectHook(schedule.id);
     expect(hook?.secret).toBe('shh');
     expect(reply).toContain(`Its URL is http://127.0.0.1:5180/api/hooks/${schedule.id}/${hook?.token}.`);
     expect(reply).toContain('Requests must carry a valid x-hub-signature-256 signature.');
     expect(reply).not.toContain('shh');
-    expect(() => world.secrets.removeRef(ref, world.taskId)).toThrow('has been used');
+    await expect(world.secrets.removeRef(ref, world.taskId)).rejects.toThrow('has been used');
   });
 
   test('a signature check without a secret is refused until a ref is given', async () => {
@@ -165,19 +166,19 @@ describe('set_schedule', () => {
       ...call,
       dispatch: (command: ShinsaCommand) => world.engine.core.dispatch(command, { id: 'mcp:7' }),
     };
-    const ref = world.secrets.writeRef('gate-1', world.taskId, 'shh');
+    const ref = await world.secrets.writeRef('gate-1', world.taskId, 'shh');
     const input = { message: 'Hook', webhook: { signature: { header: 'x-sig', secret_ref: ref } } };
     const first = await handle('set_schedule', input, repeated);
     const again = await handle('set_schedule', input, repeated);
     expect(again).toBe(first ?? '');
     expect(again).not.toContain('was not');
-    expect(world.secrets.selectHook(only(world).id)?.secret).toBe('shh');
+    expect((await world.secrets.selectHook(only(world).id))?.secret).toBe('shh');
   });
 
   test('changing a signed webhook keeps its secret without a new ref', async () => {
     const world = await createWorld();
     const { tool } = await setUp(world);
-    const ref = world.secrets.writeRef('gate-1', world.taskId, 'shh');
+    const ref = await world.secrets.writeRef('gate-1', world.taskId, 'shh');
     await tool('set_schedule', {
       message: 'Hook',
       webhook: { signature: { header: 'x-sig', secret_ref: ref } },
@@ -189,7 +190,7 @@ describe('set_schedule', () => {
       webhook: { signature: { header: 'x-sig' } },
     });
     expect(reply).toContain('Saved “Renamed hook”');
-    expect(world.secrets.selectHook(id)?.secret).toBe('shh');
+    expect((await world.secrets.selectHook(id))?.secret).toBe('shh');
   });
 
   test('an edit that does not restate the time zone keeps the schedule’s own zone', async () => {
@@ -346,7 +347,7 @@ describe('a schedule an agent writes with schedules_write', () => {
   test('its signing secret comes from the ref, as with set_schedule', async () => {
     const world = await createWorld();
     const { schedules } = await setUp(world);
-    const ref = world.secrets.writeRef('gate-1', world.taskId, 'shh');
+    const ref = await world.secrets.writeRef('gate-1', world.taskId, 'shh');
     const hook = [
       '--message',
       'Push',
@@ -364,11 +365,11 @@ describe('a schedule an agent writes with schedules_write', () => {
     const result = await writeThroughSurface(world, schedules, [...hook, '--signature-secret-ref', ref]);
     const id = only(world).id;
     expect(result.data).toEqual({ ok: true, taskId: null, scheduleId: id });
-    expect(world.secrets.selectHook(id)?.secret).toBe('shh');
+    expect((await world.secrets.selectHook(id))?.secret).toBe('shh');
     expect(result.text).not.toContain('was not');
     const again = await writeThroughSurface(world, schedules, ['--id', id, ...hook]);
     expect(again.text).toContain('Saved the schedule.');
-    expect(world.secrets.selectHook(id)?.secret).toBe('shh');
+    expect((await world.secrets.selectHook(id))?.secret).toBe('shh');
   });
 
   test('a spent ref still saves the schedule and says how to set the secret', async () => {
@@ -393,9 +394,9 @@ describe('a schedule an agent writes with schedules_write', () => {
   test('a secret for a schedule that is gone is not written', async () => {
     const world = await createWorld();
     const { harness, schedules } = await setUp(world);
-    const ref = world.secrets.writeRef('gate-1', world.taskId, 'shh');
+    const ref = await world.secrets.writeRef('gate-1', world.taskId, 'shh');
     expect(await harness.run(schedules.hookSecrets(world.taskId).writeSecret('gone', ref))).toBeNull();
-    expect(world.secrets.hasRef(ref)).toBe(true);
+    expect(await world.secrets.hasRef(ref)).toBe(true);
   });
 });
 
@@ -444,7 +445,10 @@ describe('list_schedules and delete_schedule', () => {
     await tool('set_schedule', { message: 'Hook', name: 'The hook', webhook: true });
     const id = only(world).id;
     expect(await tool('delete_schedule', { schedule_id: id })).toBe('Deleted “The hook”.');
-    expect(world.secrets.selectHook(id)).toBeNull();
+    await until(
+      'the deleted webhook loses its credentials',
+      async () => (await world.secrets.selectHook(id)) === null
+    );
     await expect(tool('delete_schedule', {})).rejects.toThrow('schedule_id is required.');
   });
 
@@ -569,7 +573,7 @@ describe('a webhook’s URL', () => {
     const { harness, tool } = await setUp(world);
     await tool('set_schedule', { message: 'Hook', webhook: {} });
     const schedule = only(world);
-    const hook = world.secrets.selectHook(schedule.id);
+    const hook = await world.secrets.selectHook(schedule.id);
     expect(await harness.findHookUrl(schedule.id)).toBe(
       `http://127.0.0.1:5180/api/hooks/${schedule.id}/${hook?.token}`
     );

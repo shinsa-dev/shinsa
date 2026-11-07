@@ -33,7 +33,6 @@ import { EngineConfig } from '../../../src/config/service.ts';
 import { ConfigStore } from '../../../src/config/store/service.ts';
 import type { SessionExtensionSource } from '../../../src/extensions/index.ts';
 import { Extensions } from '../../../src/extensions/registry/service.ts';
-import { JsonFile } from '../../../src/files/service.ts';
 import { GitLayer } from '../../../src/git/layers.ts';
 import { JsonLogger } from '../../../src/log/service.ts';
 import { StandaloneRepoWorkLayer } from '../../../src/repos/layers.ts';
@@ -49,6 +48,7 @@ import { WorkspacesServiceLayer } from '../../../src/workspaces/layers.ts';
 import { WorktreeRoot } from '../../../src/workspaces/root/service.ts';
 import { Workspaces } from '../../../src/workspaces/service.ts';
 import type { Engine } from '../../helpers/engine.ts';
+import { JsonFileLayer } from '../../helpers/files.ts';
 
 interface ClockTimers {
   now: () => number;
@@ -230,7 +230,7 @@ function createSupervisorLayer(
     Layer.succeed(TranscriptsService, transcripts),
     Layer.succeed(EvidenceService, evidence)
   );
-  const machine = Layer.merge(base, ConfigStore.layer.pipe(Layer.provide(Layer.merge(base, JsonFile.layer))));
+  const machine = Layer.merge(base, ConfigStore.layer.pipe(Layer.provide(Layer.merge(base, JsonFileLayer))));
   const workspaces = options.workspaces
     ? Layer.merge(
         Layer.succeed(Workspaces, options.workspaces),

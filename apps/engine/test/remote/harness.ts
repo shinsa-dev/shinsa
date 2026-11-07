@@ -66,6 +66,7 @@ import { ShellLayer } from '../../src/shell/layers.ts';
 import { Evidence } from '../../src/store/evidence/service.ts';
 import type { Terminals } from '../../src/terminals/service.ts';
 import { Terminals as TerminalsTag } from '../../src/terminals/service.ts';
+import { JsonFileLayer } from '../helpers/files.ts';
 import { createTempDir } from '../helpers/index.ts';
 import { createTestTranscripts } from '../helpers/transcripts.ts';
 
@@ -141,7 +142,7 @@ export function createRemoteFoundation(
   ).pipe(Layer.provideMerge(ShellLayer));
 }
 
-export function createRemoteTest(options: RemoteTestOptions = {}) {
+export async function createRemoteTest(options: RemoteTestOptions = {}) {
   const dataDir = options.dataDir ?? createTempDir();
   const path = join(dataDir, REMOTE_FILE);
   if (options.file) writeFileSync(path, JSON.stringify(options.file));
@@ -200,27 +201,27 @@ export function createRemoteTest(options: RemoteTestOptions = {}) {
     Layer.provideMerge(settings),
     Layer.provide(foundation)
   );
-  const context: Context.Context<never> = Effect.runSync(Layer.buildWithScope(services, scope));
+  const context: Context.Context<never> = await Effect.runPromise(Layer.buildWithScope(services, scope));
   return createHarness(context, scope, path);
 }
 
-export function openTestStore(path: string) {
+export async function openTestStore(path: string) {
   const scope = Effect.runSync(Scope.make());
   const layer = RemoteStore.layer.pipe(
     Layer.provide(
       Layer.mergeAll(
         Layer.succeed(EngineConfig, { dataDir: dirname(path) } as ServerConfig),
-        JsonFile.layer,
+        JsonFileLayer,
         JsonLogger
       )
     )
   );
-  const context: Context.Context<never> = Effect.runSync(Layer.buildWithScope(layer, scope));
+  const context: Context.Context<never> = await Effect.runPromise(Layer.buildWithScope(layer, scope));
   return adaptStore(createHarness(context, scope, path));
 }
 
-export function readRemoteFile(path: string) {
-  return openTestStore(path).file;
+export async function readRemoteFile(path: string) {
+  return (await openTestStore(path)).file;
 }
 
 function createHarness(context: Context.Context<never>, scope: Scope.Closeable, path: string) {
@@ -255,33 +256,34 @@ function adaptStore(test: RemoteTest) {
     get file(): RemoteFile {
       return runSync(store.file);
     },
-    update: (change: (file: RemoteFile) => RemoteFile) => runSync(store.update(change)),
+    update: (change: (file: RemoteFile) => RemoteFile) => runPromise(store.update(change)),
     resolveMachineKey: () => runPromise(store.resolveMachineKey),
     resolveSigningKey: () => runPromise(store.resolveSigningKey),
     selectDevice: (publicKey: string) => runSync(store.selectDevice(publicKey)),
-    upsertDevice: (device: RemoteDevice) => runSync(store.upsertDevice(device)),
+    upsertDevice: (device: RemoteDevice) => runPromise(store.upsertDevice(device)),
     removeDevicesOutside: (userIds: ReadonlySet<string>, guestIds: ReadonlySet<string>) =>
-      runSync(store.removeDevicesOutside(userIds, guestIds)),
-    removeDevice: (publicKey: string) => runSync(store.removeDevice(publicKey)),
-    recordTeams: (teams: RemoteTeam[]) => runSync(store.recordTeams(teams)),
+      runPromise(store.removeDevicesOutside(userIds, guestIds)),
+    removeDevice: (publicKey: string) => runPromise(store.removeDevice(publicKey)),
+    recordTeams: (teams: RemoteTeam[]) => runPromise(store.recordTeams(teams)),
     selectTeamKey: (teamId: string) => runSync(store.selectTeamKey(teamId)),
     selectTeam: (teamId: string) => runSync(store.selectTeam(teamId)),
-    upsertTeamKey: (stored: StoredTeamKey) => runSync(store.upsertTeamKey(stored)),
-    writeGrant: (grant: TeamGrant) => runSync(store.writeGrant(grant)),
+    upsertTeamKey: (stored: StoredTeamKey) => runPromise(store.upsertTeamKey(stored)),
+    writeGrant: (grant: TeamGrant) => runPromise(store.writeGrant(grant)),
     selectGrant: (userId: string, teamId: string) => runSync(store.selectGrant(userId, teamId)),
     listGrants: (userId: string) => runSync(store.listGrants(userId)),
-    removeGrantsWhere: (match: (grant: TeamGrant) => boolean) => runSync(store.removeGrantsWhere(match)),
+    removeGrantsWhere: (match: (grant: TeamGrant) => boolean) => runPromise(store.removeGrantsWhere(match)),
     removeDevicesWhere: (match: (device: RemoteDevice) => boolean) =>
-      runSync(store.removeDevicesWhere(match)),
+      runPromise(store.removeDevicesWhere(match)),
     selectExtra: (userId: string, teamId: string) => runSync(store.selectExtra(userId, teamId)),
-    writeExtra: (extra: TeammateExtra) => runSync(store.writeExtra(extra)),
-    removeExtrasWhere: (match: (extra: TeammateExtra) => boolean) => runSync(store.removeExtrasWhere(match)),
+    writeExtra: (extra: TeammateExtra) => runPromise(store.writeExtra(extra)),
+    removeExtrasWhere: (match: (extra: TeammateExtra) => boolean) =>
+      runPromise(store.removeExtrasWhere(match)),
     selectRelayDevice: (instanceId: string) => runSync(store.selectRelayDevice(instanceId)),
-    writeRelayDevice: (device: RelayDevice) => runSync(store.writeRelayDevice(device)),
+    writeRelayDevice: (device: RelayDevice) => runPromise(store.writeRelayDevice(device)),
     removeRelayDevicesWhere: (match: (device: RelayDevice) => boolean) =>
-      runSync(store.removeRelayDevicesWhere(match)),
-    removeTeam: (teamId: string) => runSync(store.removeTeam(teamId)),
-    recordDeviceSeen: (publicKey: string, at: number) => runSync(store.recordDeviceSeen(publicKey, at)),
+      runPromise(store.removeRelayDevicesWhere(match)),
+    removeTeam: (teamId: string) => runPromise(store.removeTeam(teamId)),
+    recordDeviceSeen: (publicKey: string, at: number) => runPromise(store.recordDeviceSeen(publicKey, at)),
   };
 }
 
@@ -349,7 +351,7 @@ export function adaptRemote(test: RemoteTest) {
     startPairing: () => runPromise(remote.startPairing),
     resolveHookUrl: (scheduleId: string, token: string) => runSync(remote.resolveHookUrl(scheduleId, token)),
     cancelPairing: () => runSync(remote.cancelPairing),
-    enable: () => runSync(remote.enable),
+    enable: () => runPromise(remote.enable),
     disable: () => runPromise(remote.disable),
     remove: () => runPromise(remote.remove),
     createLink: () => runPromise(remote.createLink),
@@ -370,15 +372,15 @@ export function adaptRemote(test: RemoteTest) {
       runPromise(remote.removeHandoff(taskId, guestId)),
     grantTeammate: (userId: string, teamId: string) => runPromise(remote.grantTeammate(userId, teamId)),
     acceptRequest: (requestId: string) => runPromise(remote.acceptRequest(requestId)),
-    declineRequest: (requestId: string) => runSync(remote.declineRequest(requestId)),
+    declineRequest: (requestId: string) => runPromise(remote.declineRequest(requestId)),
     removeMember: (userId: string) => runPromise(remote.removeMember(userId)),
-    publish: () => runSync(remote.publish),
+    publish: () => runPromise(remote.publish),
     subscribe: (listener: () => void) => {
       const scope = runSync(Scope.make());
       runSync(remote.observe(Effect.sync(listener)).pipe(Scope.provide(scope)));
       return () => runSync(Scope.close(scope, Exit.void));
     },
-    start: () => runSync(remote.start),
+    start: () => runPromise(remote.start),
     requestHeartbeat: () => runPromise(remote.requestHeartbeat),
     stop: () => runPromise(remote.stop),
     verifyConnect: (token: string | null, channel: ConnectChannel) =>
@@ -409,12 +411,12 @@ export function adaptRemote(test: RemoteTest) {
         )
       ),
     closeChannel: (channel: { handle: RemoteChannelHandle }) => runSync(remote.closeChannel(channel.handle)),
-    removeDevice: (publicKey: string) => runSync(remote.removeDevice(publicKey)),
+    removeDevice: (publicKey: string) => runPromise(remote.removeDevice(publicKey)),
     isOwner: (userId: string | null) => runSync(remote.isOwner(userId)),
     hasAccess: (userId: string) => runSync(remote.hasAccess(userId)),
     resolveTeamScope: (userId: string, teamId: string) => runSync(remote.resolveTeamScope(userId, teamId)),
     listTeamScopes: (userId: string) => runSync(remote.listTeamScopes(userId)),
-    resolveTeamGrant: (userId: string, teamId: string) => runSync(remote.resolveTeamGrant(userId, teamId)),
+    resolveTeamGrant: (userId: string, teamId: string) => runPromise(remote.resolveTeamGrant(userId, teamId)),
     canForkTeamTask: (teamId: string) => runSync(remote.canForkTeamTask({ teamId })),
   };
 }
@@ -490,8 +492,8 @@ export function adaptTeamFeeds(test: RemoteTest) {
     snapshot: () => runSync(feeds.snapshot),
     listGrants: () => runSync(feeds.listGrants),
     listTasks: (filter: TeamTaskFilter = {}) => runSync(feeds.listTasks(filter)),
-    openRelay: (peer: ChannelPeer, target: TeamViewTarget) => {
-      const relay = runSync(feeds.openRelay(peer, target));
+    openRelay: async (peer: ChannelPeer, target: TeamViewTarget) => {
+      const relay = await test.runPromise(feeds.openRelay(peer, target));
       return { close: () => runSync(relay.close) };
     },
     answerKeyRequest: (teamId: string, instanceId: string, approve: boolean) =>

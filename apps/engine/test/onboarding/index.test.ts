@@ -22,7 +22,7 @@ import { promised } from '../helpers/promised.ts';
 import { createTask } from '../helpers/state.ts';
 import { createTestOnboardingService, type FakeCommand } from './harness.ts';
 
-function setup(
+async function setup(
   run?: FakeCommand,
   terminals?: InstallTerminals,
   simulateMissing: string[] = [],
@@ -33,7 +33,7 @@ function setup(
   const engine = new Engine(openEventLog(config.databasePath));
   const developer = join(root, 'Developer');
   mkdirSync(join(developer, 'app', '.git'), { recursive: true });
-  const { store, context } = createTestMachine(engine, config, {
+  const { store, context } = await createTestMachine(engine, config, {
     discover: () =>
       Promise.resolve({
         candidates: [{ path: developer, repoCount: 1, repos: ['app'] }],
@@ -55,7 +55,7 @@ function setup(
 
 describe('Onboarding', () => {
   test('starts not done, with discovered folders standing in for the chosen ones', async () => {
-    const { onboarding, config, developer } = setup();
+    const { onboarding, config, developer } = await setup();
     expect(await onboarding.resolveStatus()).toEqual({
       completed: false,
       completedAt: null,
@@ -83,7 +83,7 @@ describe('Onboarding', () => {
   });
 
   test('saves the folders to config.json and the defaults as settings, then completes', async () => {
-    const { onboarding, engine, store, developer, root } = setup();
+    const { onboarding, engine, store, developer, root } = await setup();
     expect(() => onboarding.complete()).toThrow('Choose your repository folders first.');
     const status = await onboarding.applySetup({
       roots: ['~/Developer', `${developer}/`],
@@ -110,7 +110,7 @@ describe('Onboarding', () => {
   });
 
   test('refuses a setup it cannot use, and changes nothing', async () => {
-    const { onboarding, store, root } = setup();
+    const { onboarding, store, root } = await setup();
     for (const [body, message] of [
       [{ roots: [] }, 'Choose a folder with your repositories.'],
       [{ roots: 'x' }, 'Choose a folder with your repositories.'],
@@ -129,7 +129,7 @@ describe('Onboarding', () => {
   });
 
   test('saves the worktree folder to config.json, and goes back to the default with null', async () => {
-    const { onboarding, store, config, root } = setup();
+    const { onboarding, store, config, root } = await setup();
     const mount = join(root, 'Bucket');
     mkdirSync(mount);
     const status = await onboarding.applyWorktreesDir({ path: '~/Bucket/' });
@@ -160,7 +160,7 @@ describe('Onboarding', () => {
   });
 
   test('refuses a worktree folder it cannot use, and keeps the one it had', async () => {
-    const { onboarding, store, root } = setup();
+    const { onboarding, store, root } = await setup();
     const file = join(root, 'notes.txt');
     writeFileSync(file, 'x');
     const locked = join(root, 'Locked');
@@ -182,7 +182,7 @@ describe('Onboarding', () => {
   });
 
   test('refuses a worktree folder it can see but cannot mark as its own', async () => {
-    const { onboarding, store, root } = setup();
+    const { onboarding, store, root } = await setup();
     const readOnly = join(root, 'ReadOnly');
     mkdirSync(readOnly);
     writeFileSync(join(readOnly, WORKTREE_ROOT_MARKER), '');
@@ -194,7 +194,7 @@ describe('Onboarding', () => {
   });
 
   test('shows a worktree folder the environment sets, and refuses to change it', async () => {
-    const { onboarding, store, root } = setup(undefined, undefined, [], {
+    const { onboarding, store, root } = await setup(undefined, undefined, [], {
       worktreesDir: join(createTempDir(), 'env-wt'),
       worktreesDirFromEnvironment: true,
     });
@@ -209,7 +209,7 @@ describe('Onboarding', () => {
   });
 
   test('checks the prerequisites with the injected runner', async () => {
-    const { onboarding } = setup();
+    const { onboarding } = await setup();
     expect((await onboarding.resolvePrerequisites()).ready).toBe(true);
   });
 
@@ -222,7 +222,7 @@ describe('Onboarding', () => {
         stderr: '',
         timedOut: false,
       });
-    const { onboarding, developer } = setup(run);
+    const { onboarding, developer } = await setup(run);
     expect((await onboarding.resolvePrerequisites()).ready).toBe(true);
     writeFileSync(join(developer, 'app', 'bun.lock'), '');
     const report = await onboarding.resolvePrerequisites();
@@ -234,7 +234,7 @@ describe('Onboarding', () => {
   });
 
   test('finds a tool installed since Shinsa started: each check puts the install folders on PATH', async () => {
-    const { onboarding, config } = setup();
+    const { onboarding, config } = await setup();
     const restore = overrideEnv({ PATH: '/usr/bin:/bin' });
     try {
       await onboarding.resolvePrerequisites();
@@ -257,7 +257,7 @@ describe('Onboarding', () => {
       run: (_id, command) => Effect.sync(() => void opened.push(command)),
       close: () => Effect.void,
     };
-    const { onboarding, config } = setup(undefined, terminals);
+    const { onboarding, config } = await setup(undefined, terminals);
     expect(await onboarding.openInstall({ id: 'gh' })).toEqual({
       terminal: expect.objectContaining({ id: 't1', cwd: config.userHome, name: 'Set up GitHub CLI' }),
     });
@@ -268,7 +268,7 @@ describe('Onboarding', () => {
     expect(onboarding.openInstall({ id: 3 })).rejects.toThrow(
       'Send “id” as the check to fix, such as gh, “all” for every missing tool, or a “command” from the help task.'
     );
-    expect(setup().onboarding.openInstall({ id: 'gh' })).rejects.toThrow(
+    expect((await setup()).onboarding.openInstall({ id: 'gh' })).rejects.toThrow(
       'Terminals are off, so run the command yourself.'
     );
     expect(opened).toEqual([expect.stringMatching(/\|\| brew install gh; } && \{ gh auth status .*; exit$/)]);
@@ -283,7 +283,7 @@ describe('Onboarding', () => {
       run: (_id, command) => Effect.sync(() => void opened.push(command)),
       close: () => Effect.void,
     };
-    const { onboarding } = setup(undefined, terminals, ['gh', 'bun']);
+    const { onboarding } = await setup(undefined, terminals, ['gh', 'bun']);
     const before = await onboarding.resolvePrerequisites();
     expect(before.checks.filter((check) => !check.ok).map((check) => check.id)).toEqual(['gh', 'bun']);
     await onboarding.openInstall({ all: true });
@@ -294,7 +294,7 @@ describe('Onboarding', () => {
   });
 
   test('resolveChosenRoots expands ~ and drops duplicates', async () => {
-    const { root, developer } = setup();
+    const { root, developer } = await setup();
     expect(await runFiles(resolveChosenRoots(['~', '~/Developer', developer], root))).toEqual([
       root,
       developer,
@@ -302,7 +302,7 @@ describe('Onboarding', () => {
   });
 
   test('resolveChosenRoots names every folder macOS keeps private, once, and how to allow them', async () => {
-    const { root, developer } = setup();
+    const { root, developer } = await setup();
     const refuse = (reason: SystemErrorTag) => (path: string) =>
       path === developer
         ? Effect.succeed([])
@@ -336,7 +336,7 @@ describe('Onboarding', () => {
 
   test('opens the Full Disk Access pane of System Settings', async () => {
     const calls: string[][] = [];
-    const { onboarding } = setup((command) => {
+    const { onboarding } = await setup((command) => {
       calls.push(command);
       return Promise.resolve({ ok: true, code: 0, stdout: '', stderr: '', timedOut: false });
     });
@@ -401,7 +401,7 @@ describe('worktree usage', () => {
   });
 
   test('Onboarding measures the folder in use', async () => {
-    const { onboarding, config } = setup();
+    const { onboarding, config } = await setup();
     const usage = await onboarding.resolveWorktreeUsage();
     expect(usage).toMatchObject({ folder: config.worktreesDir, worktrees: 0, bytes: 0 });
   });

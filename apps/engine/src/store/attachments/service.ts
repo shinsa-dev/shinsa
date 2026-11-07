@@ -1,8 +1,8 @@
-import { existsSync, mkdirSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { DomainError, type StoredAttachment } from '@shinsa/core';
-import { Context, Effect, Layer, Option, Schema } from 'effect';
+import { Context, Effect, FileSystem, Layer, Option, Schema } from 'effect';
 import { EngineConfig } from '../../config/service.ts';
+import { isFile } from '../../files/probe.ts';
 import {
   ATTACHMENT_LIMIT_BYTES,
   ATTACHMENT_ROUTE,
@@ -25,6 +25,7 @@ export class Attachments extends Context.Service<
     Attachments,
     Effect.gen(function* () {
       const dir = (yield* EngineConfig).attachmentsDir;
+      const fs = yield* FileSystem.FileSystem;
       const isId = Schema.is(AttachmentId);
       const isFileName = Schema.is(AttachmentFileName);
 
@@ -42,30 +43,31 @@ export class Attachments extends Context.Service<
           const bytes = Buffer.from(upload.data, 'base64');
           if (bytes.byteLength === 0) return yield* new DomainError(EMPTY);
           if (bytes.byteLength > ATTACHMENT_LIMIT_BYTES) return yield* new DomainError(TOO_LARGE);
-          return yield* Effect.sync((): StoredAttachment => {
-            const id = Bun.randomUUIDv7();
-            const fileName = resolveFileName(upload.name);
-            const folder = join(dir, id);
-            mkdirSync(folder, { recursive: true });
-            const path = join(folder, fileName);
-            writeFileSync(path, bytes);
-            return {
-              kind: upload.mimeType?.startsWith('image/') ? 'image' : 'file',
-              name: upload.name,
-              url: `${ATTACHMENT_ROUTE}${id}/${fileName}`,
-              path,
-              mimeType: upload.mimeType,
-              size: bytes.byteLength,
-            };
-          });
+          const id = Bun.randomUUIDv7();
+          const fileName = resolveFileName(upload.name);
+          const folder = join(dir, id);
+          const path = join(folder, fileName);
+          yield* fs
+            .makeDirectory(folder, { recursive: true })
+            .pipe(Effect.andThen(fs.writeFile(path, bytes)), Effect.orDie);
+          const stored: StoredAttachment = {
+            kind: upload.mimeType?.startsWith('image/') ? 'image' : 'file',
+            name: upload.name,
+            url: `${ATTACHMENT_ROUTE}${id}/${fileName}`,
+            path,
+            mimeType: upload.mimeType,
+            size: bytes.byteLength,
+          };
+          return stored;
         }),
-        selectFile: (name) =>
-          Effect.sync(() => {
-            const [id = '', fileName = '', ...rest] = name.split('/');
-            if (rest.length > 0 || !isId(id) || !isFileName(fileName)) return Option.none();
-            const path = join(dir, id, fileName);
-            return existsSync(path) && statSync(path).isFile() ? Option.some(path) : Option.none();
-          }),
+        selectFile: Effect.fn('Attachments.selectFile')(function* (name) {
+          const [id = '', fileName = '', ...rest] = name.split('/');
+          if (rest.length > 0 || !isId(id) || !isFileName(fileName)) return Option.none<string>();
+          const path = join(dir, id, fileName);
+          return (yield* isFile(path).pipe(Effect.provideService(FileSystem.FileSystem, fs)))
+            ? Option.some(path)
+            : Option.none<string>();
+        }),
       });
     })
   );

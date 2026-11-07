@@ -124,8 +124,12 @@ export function overrideEnv(values: Record<string, string | undefined>) {
 const FAKE_RUN: FakeCommand = (command) =>
   Promise.resolve({ ok: true, code: 0, stdout: `${command[0]} 1.0`, stderr: '', timedOut: false });
 
-export function createTestOnboarding(engine: Engine, config: ServerConfig, run: FakeCommand = FAKE_RUN) {
-  const machine = createTestMachine(engine, config);
+export async function createTestOnboarding(
+  engine: Engine,
+  config: ServerConfig,
+  run: FakeCommand = FAKE_RUN
+) {
+  const machine = await createTestMachine(engine, config);
   const { store, roots } = machine;
   return {
     store,

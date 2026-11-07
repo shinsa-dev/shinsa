@@ -11,30 +11,32 @@ import {
 import { ExtensionDiscovery } from '../../src/extensions/discovery/service.ts';
 import { listSkillRoots, parseFrontmatter } from '../../src/extensions/discovery/skills.ts';
 import type { ClaudePlugin, DiscoveryPaths } from '../../src/extensions/schema.ts';
-import { JsonFile } from '../../src/files/service.ts';
 import { JsonLogger } from '../../src/log/service.ts';
+import { JsonFileLayer } from '../helpers/files.ts';
 import { createFakeMachine, type FakeMachine, writeFile } from './fixtures.ts';
 
 const runtime = ManagedRuntime.make(
-  ExtensionDiscovery.layer.pipe(Layer.provide(JsonFile.layer), Layer.provideMerge(JsonLogger))
+  ExtensionDiscovery.layer.pipe(Layer.provide(JsonFileLayer), Layer.provideMerge(JsonLogger))
 );
 
 afterAll(() => runtime.dispose());
 
-function listClaudePlugins(paths: DiscoveryPaths, problems: string[]) {
-  const read = runtime.runSync(ExtensionDiscovery.use((discovery) => discovery.listPlugins(paths)));
+async function listClaudePlugins(paths: DiscoveryPaths, problems: string[]) {
+  const read = await runtime.runPromise(ExtensionDiscovery.use((discovery) => discovery.listPlugins(paths)));
   problems.push(...read.problems);
   return read.plugins;
 }
 
-function discoverServers(paths: DiscoveryPaths, plugins: ClaudePlugin[], problems: string[]) {
-  const read = runtime.runSync(ExtensionDiscovery.use((discovery) => discovery.listServers(paths, plugins)));
+async function discoverServers(paths: DiscoveryPaths, plugins: ClaudePlugin[], problems: string[]) {
+  const read = await runtime.runPromise(
+    ExtensionDiscovery.use((discovery) => discovery.listServers(paths, plugins))
+  );
   problems.push(...read.problems);
   return read.servers;
 }
 
 function discoverSkills(paths: DiscoveryPaths, plugins: ClaudePlugin[], pluginDir: string) {
-  return runtime.runSync(
+  return runtime.runPromise(
     ExtensionDiscovery.use((discovery) => discovery.listSkills(listSkillRoots(paths, plugins, pluginDir)))
   );
 }
@@ -133,15 +135,15 @@ describe('the browser an agent starts', () => {
 });
 
 describe('finding MCP servers', () => {
-  test('lists Claude Code’s own and per-project servers, a repository’s .mcp.json, Codex’s and each plugin’s', () => {
+  test('lists Claude Code’s own and per-project servers, a repository’s .mcp.json, Codex’s and each plugin’s', async () => {
     const machine = createFakeMachine();
     const problems: string[] = [];
-    const plugins = listClaudePlugins(resolvePaths(machine), problems);
+    const plugins = await listClaudePlugins(resolvePaths(machine), problems);
     expect(plugins).toEqual([
       { id: 'docs@market', name: 'docs', root: machine.pluginRoot, enabled: true, manifest: null },
       { id: 'off@market', name: 'off', root: machine.pluginRoot, enabled: false, manifest: null },
     ]);
-    const servers = discoverServers(resolvePaths(machine), plugins.slice(0, 1), problems);
+    const servers = await discoverServers(resolvePaths(machine), plugins.slice(0, 1), problems);
     expect(problems).toEqual([]);
     expect(servers.map((server) => [server.id, server.source, server.origin])).toEqual([
       ['claude:linear', 'claude', '~/.claude/.claude.json'],
@@ -168,20 +170,20 @@ describe('finding MCP servers', () => {
     });
   });
 
-  test('never writes to the files it reads', () => {
+  test('never writes to the files it reads', async () => {
     const machine = createFakeMachine();
     const before = readFileSync(machine.claudeConfig, 'utf8');
-    discoverServers(resolvePaths(machine), listClaudePlugins(resolvePaths(machine), []), []);
+    await discoverServers(resolvePaths(machine), await listClaudePlugins(resolvePaths(machine), []), []);
     expect(readFileSync(machine.claudeConfig, 'utf8')).toBe(before);
   });
 
-  test('a plugin can declare its servers in its manifest, or as a bare map', () => {
+  test('a plugin can declare its servers in its manifest, or as a bare map', async () => {
     const machine = createFakeMachine();
     writeFileSync(join(machine.pluginRoot, '.mcp.json'), JSON.stringify({ bare: { command: 'b' } }));
-    const plugins = listClaudePlugins(resolvePaths(machine), []);
-    expect(discoverServers(resolvePaths(machine), plugins, []).at(-1)?.name).toBe('bare');
+    const plugins = await listClaudePlugins(resolvePaths(machine), []);
+    expect((await discoverServers(resolvePaths(machine), plugins, [])).at(-1)?.name).toBe('bare');
     const manifestRoot = join(machine.userHome, 'manifest-plugin');
-    const fromManifest = discoverServers(
+    const fromManifest = await discoverServers(
       resolvePaths(machine),
       [
         {
@@ -198,21 +200,23 @@ describe('finding MCP servers', () => {
     const emptyRoot = join(machine.userHome, 'empty-plugin');
     mkdirSync(emptyRoot);
     expect(
-      discoverServers(
-        resolvePaths(machine),
-        [{ id: 'e@x', name: 'e', root: emptyRoot, enabled: true, manifest: null }],
-        []
+      (
+        await discoverServers(
+          resolvePaths(machine),
+          [{ id: 'e@x', name: 'e', root: emptyRoot, enabled: true, manifest: null }],
+          []
+        )
       ).some((s) => s.source === 'plugin')
     ).toBe(false);
   });
 
-  test('servers you turned off in Claude Code for a project start off here too', () => {
+  test('servers you turned off in Claude Code for a project start off here too', async () => {
     const machine = createFakeMachine();
     const config = JSON.parse(readFileSync(machine.claudeConfig, 'utf8'));
     config.projects[machine.repo].disabledMcpServers = ['local'];
     config.projects[machine.repo].disabledMcpjsonServers = ['repo_tools'];
     writeFileSync(machine.claudeConfig, JSON.stringify(config));
-    const servers = discoverServers(resolvePaths(machine), [], []);
+    const servers = await discoverServers(resolvePaths(machine), [], []);
     expect(servers.filter((server) => !server.enabled).map((server) => server.name)).toEqual([
       'local',
       'repo_tools',
@@ -220,15 +224,15 @@ describe('finding MCP servers', () => {
     ]);
   });
 
-  test('files it cannot read are named as problems, and the rest still loads', () => {
+  test('files it cannot read are named as problems, and the rest still loads', async () => {
     const machine = createFakeMachine();
     writeFileSync(machine.claudeConfig, '{ not json');
     writeFileSync(join(machine.codexHome, 'config.toml'), '[[[ not toml');
     writeFileSync(join(machine.claudeDir, 'plugins', 'installed_plugins.json'), '[]');
     const problems: string[] = [];
-    const servers = discoverServers(
+    const servers = await discoverServers(
       resolvePaths(machine),
-      listClaudePlugins(resolvePaths(machine), problems),
+      await listClaudePlugins(resolvePaths(machine), problems),
       problems
     );
     expect(servers.map((server) => server.source)).toEqual(['project']);
@@ -237,7 +241,7 @@ describe('finding MCP servers', () => {
     expect(problems[1]).toStartWith('Could not read ~/.codex/config.toml');
   });
 
-  test('a machine without Claude Code or Codex has nothing to find', () => {
+  test('a machine without Claude Code or Codex has nothing to find', async () => {
     const empty = {
       userHome: '/nowhere',
       claudeDir: '/nowhere/.claude',
@@ -245,16 +249,16 @@ describe('finding MCP servers', () => {
       codexHome: '/nowhere/.codex',
       repos: [],
     };
-    expect(listClaudePlugins(empty, [])).toEqual([]);
-    expect(discoverServers(empty, [], [])).toEqual([]);
+    expect(await listClaudePlugins(empty, [])).toEqual([]);
+    expect(await discoverServers(empty, [], [])).toEqual([]);
     const machine = createFakeMachine();
     writeFileSync(machine.claudeConfig, JSON.stringify({ theme: 'dark' }));
     writeFileSync(join(machine.claudeDir, 'settings.json'), '[]');
     writeFileSync(join(machine.codexHome, 'config.toml'), 'model = "x"');
     writeFileSync(join(machine.repo, '.mcp.json'), '[]');
-    const plugins = listClaudePlugins(resolvePaths(machine), []);
+    const plugins = await listClaudePlugins(resolvePaths(machine), []);
     expect(plugins.map((plugin) => plugin.enabled)).toEqual([false, false]);
-    expect(discoverServers(resolvePaths(machine), [], [])).toEqual([]);
+    expect(await discoverServers(resolvePaths(machine), [], [])).toEqual([]);
   });
 });
 
@@ -276,15 +280,15 @@ describe('finding skills', () => {
     expect(parseFrontmatter('no frontmatter')).toEqual({ name: null, description: '' });
   });
 
-  test('lists Shinsa’s, your Claude Code skills, each plugin’s, each repository’s and Codex’s', () => {
+  test('lists Shinsa’s, your Claude Code skills, each plugin’s, each repository’s and Codex’s', async () => {
     const machine = createFakeMachine();
     writeFile(
       join(machine.claudeDir, 'skills', 'unnamed', 'SKILL.md'),
       `---\ndescription: ${'x'.repeat(400)}\n---`
     );
     mkdirSync(join(machine.claudeDir, 'skills', 'empty-folder'), { recursive: true });
-    const plugins = listClaudePlugins(resolvePaths(machine), []);
-    const skills = discoverSkills(resolvePaths(machine), plugins, machine.pluginDir);
+    const plugins = await listClaudePlugins(resolvePaths(machine), []);
+    const skills = await discoverSkills(resolvePaths(machine), plugins, machine.pluginDir);
     expect(skills.map((skill) => [skill.id, skill.source, skill.claudeName, skill.origin])).toEqual([
       ['shinsa:review', 'shinsa', 'shinsa:review', 'Shinsa'],
       ['user:animate', 'user', 'animate', '~/.claude/skills'],

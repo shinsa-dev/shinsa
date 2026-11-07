@@ -102,7 +102,7 @@ interface FakeFeedSocket extends FeedSocket {
   closed: boolean;
 }
 
-function setUp() {
+async function setUp() {
   const plane = startFakeControlPlane();
   running = plane;
   plane.answers.set(resolveMachineTeamPath('team1', 'connect'), () =>
@@ -122,7 +122,7 @@ function setUp() {
     sockets.push(socket);
     return socket;
   };
-  const machine = createRemoteTest({
+  const machine = await createRemoteTest({
     origin: plane.origin,
     engine: createStubEngine().engine.core,
     layers: Layer.succeed(TeamFeedSettings, {
@@ -154,7 +154,7 @@ function setUp() {
 
 describe('ending remote access', () => {
   test('turning remote access off closes the app, share and team channels and every team feed', async () => {
-    const { remote, shares, teams, feeds, sockets } = setUp();
+    const { remote, shares, teams, feeds, sockets } = await setUp();
     const parts = {
       hub: { open: () => undefined, close: () => undefined, message: () => undefined },
       terminals: null,
@@ -171,7 +171,7 @@ describe('ending remote access', () => {
     feeds.start();
     await until('the feed socket', () => sockets.length === 1);
     const relayPeer = createPeer();
-    feeds.openRelay(relayPeer, { teamId: 'team1', instanceId: 'inst2', taskId: 'task-1' });
+    await feeds.openRelay(relayPeer, { teamId: 'team1', instanceId: 'inst2', taskId: 'task-1' });
     await until('the relay socket', () => sockets.length === 2);
     expect(remote.access.isOpen).toBe(true);
 

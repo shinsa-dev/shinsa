@@ -7,18 +7,18 @@ import { createMachineConfig, parseMachineConfig } from '../../src/config/machin
 import type { MachineConfigRead } from '../../src/config/machine/schema.ts';
 import { EngineConfig } from '../../src/config/service.ts';
 import { ConfigStore } from '../../src/config/store/service.ts';
-import { JsonFile } from '../../src/files/service.ts';
 import { JsonLogger } from '../../src/log/service.ts';
 import { createConfigAt, readMachineConfig } from '../helpers/config.ts';
+import { JsonFileLayer } from '../helpers/files.ts';
 import { captureLogs, createTempDir } from '../helpers/index.ts';
 
-function openStore(path: string, read: MachineConfigRead = readMachineConfig(path)) {
+async function openStore(path: string, read: MachineConfigRead = readMachineConfig(path)) {
   const config = { ...createConfigAt(dirname(path)), configPath: path, machine: read };
-  const store = Effect.runSync(
+  const store = await Effect.runPromise(
     ConfigStore.pipe(
       Effect.provide(
         ConfigStore.layer.pipe(
-          Layer.provide(Layer.mergeAll(Layer.succeed(EngineConfig, config), JsonFile.layer, JsonLogger))
+          Layer.provide(Layer.mergeAll(Layer.succeed(EngineConfig, config), JsonFileLayer, JsonLogger))
         )
       )
     )
@@ -26,9 +26,9 @@ function openStore(path: string, read: MachineConfigRead = readMachineConfig(pat
   return {
     path: store.path,
     get config() {
-      return Effect.runSync(store.config);
+      return Effect.runPromise(store.config);
     },
-    update: (patch: Parameters<typeof store.update>[0]) => Effect.runSync(store.update(patch)),
+    update: (patch: Parameters<typeof store.update>[0]) => Effect.runPromise(store.update(patch)),
   };
 }
 
@@ -89,26 +89,26 @@ describe('readMachineConfig', () => {
 });
 
 describe('ConfigStore', () => {
-  test('writes atomically, privately, and reads back what it wrote', () => {
+  test('writes atomically, privately, and reads back what it wrote', async () => {
     const path = join(createTempDir(), 'nested', 'config.json');
-    const store = openStore(path);
-    expect(store.config.roots).toEqual([]);
-    store.update({ roots: ['/code'] });
-    expect(store.config.roots).toEqual(['/code']);
-    expect(openStore(path).config.roots).toEqual(['/code']);
+    const store = await openStore(path);
+    expect((await store.config).roots).toEqual([]);
+    await store.update({ roots: ['/code'] });
+    expect((await store.config).roots).toEqual(['/code']);
+    expect((await (await openStore(path)).config).roots).toEqual(['/code']);
     expect(statSync(path).mode & 0o777).toBe(0o600);
     expect(existsSync(`${path}.writing-${process.pid}`)).toBe(false);
   });
 
-  test('keeps a broken config.json aside once and logs each problem once, from the read it is given', () => {
+  test('keeps a broken config.json aside once and logs each problem once, from the read it is given', async () => {
     const dir = createTempDir();
     const path = join(dir, 'config.json');
     writeFileSync(path, '{"roots": [');
     const read = readMachineConfig(path);
     const logs = captureLogs();
     try {
-      const store = openStore(path, read);
-      expect(store.config).toEqual(createMachineConfig());
+      const store = await openStore(path, read);
+      expect(await store.config).toEqual(createMachineConfig());
       const copies = readdirSync(dir).filter((name) => name.startsWith('config.json.unreadable-'));
       expect(copies).toHaveLength(1);
       expect(readFileSync(join(dir, copies[0] ?? ''), 'utf8')).toBe('{"roots": [');
@@ -120,9 +120,9 @@ describe('ConfigStore', () => {
     }
   });
 
-  test('loads a config.json with problems and keeps the good parts', () => {
+  test('loads a config.json with problems and keeps the good parts', async () => {
     const path = join(createTempDir(), 'config.json');
     writeFileSync(path, JSON.stringify({ roots: ['/code'], port: 'x' }));
-    expect(openStore(path).config).toMatchObject({ roots: ['/code'], port: null });
+    expect(await (await openStore(path)).config).toMatchObject({ roots: ['/code'], port: null });
   });
 });

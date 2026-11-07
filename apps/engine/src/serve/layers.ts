@@ -484,7 +484,7 @@ export function EngineLayer(config: ServerConfig, options: ShinsaOptions, stop: 
           });
       return createServeLayer(config, options, instance, stop).pipe(
         Layer.provideMerge(Layer.effectDiscard(prepareDataDir(config)).pipe(Layer.provide(ShellLayer))),
-        Layer.provideMerge(lock)
+        Layer.provideMerge(lock.pipe(Layer.provide(ShellLayer)))
       );
     })
   );

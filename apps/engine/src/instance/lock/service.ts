@@ -1,5 +1,5 @@
 import { join } from 'node:path';
-import { Clock, Context, Effect, Layer, Option, Ref, type Scope } from 'effect';
+import { Clock, Context, Effect, FileSystem, Layer, Option, Ref, type Scope } from 'effect';
 import {
   HeldLocks,
   parseLockHolder,
@@ -35,9 +35,10 @@ export class ServeLock extends Context.Service<
     dataDir: string,
     owner: LockOwner,
     options: LockOptions = {}
-  ): Effect.Effect<ServeLock['Service'], ServerRunning | LockContended, Scope.Scope> {
+  ): Effect.Effect<ServeLock['Service'], ServerRunning | LockContended, Scope.Scope | FileSystem.FileSystem> {
     return Effect.gen(function* () {
       const path = join(dataDir, LOCK_FILE);
+      const withFiles = Effect.provideService(FileSystem.FileSystem, yield* FileSystem.FileSystem);
       const held = yield* HeldLocks;
       const isAlive = options.isAlive ?? isProcessAlive;
       const bootedAt = options.bootedAt ?? resolveBootedAt(yield* Clock.currentTimeMillis);
@@ -88,7 +89,7 @@ export class ServeLock extends Context.Service<
         holder: Ref.get(holder),
         update: (address) =>
           Ref.updateAndGet(holder, (current) => ({ ...current, ...address })).pipe(
-            Effect.flatMap((next) => replaceLock(path, next))
+            Effect.flatMap((next) => withFiles(replaceLock(path, next)))
           ),
       });
     });

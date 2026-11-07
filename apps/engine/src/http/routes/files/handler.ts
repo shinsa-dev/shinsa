@@ -8,7 +8,7 @@ import { Attachments } from '../../../store/attachments/service.ts';
 import { parseAttachmentUpload } from '../../../store/attachments/upload.ts';
 import { Evidence } from '../../../store/evidence/service.ts';
 import { resolveRequestFailure } from '../../failures.ts';
-import { resolveAttachmentHeaders, respondFile } from '../../files.ts';
+import { resolveAttachmentHeaders, resolveFileType, respondFile } from '../../files.ts';
 
 export const FilesHandlers = HttpApiBuilder.group(
   EngineApi,
@@ -26,7 +26,9 @@ export const FilesHandlers = HttpApiBuilder.group(
         Effect.fn('FilesHandlers.evidence')(function* ({ params, request }) {
           const path = yield* evidence.selectFile(params['*']);
           if (path._tag === 'None') return yield* new FileNotFound();
-          return respondFile(yield* Effect.sync(() => Bun.file(path.value)), request.headers.range);
+          return yield* respondFile(path.value, request.headers.range).pipe(
+            Effect.mapError(() => new FileNotFound())
+          );
         })
       )
       .handle('uploadAttachment', ({ payload }) =>
@@ -39,9 +41,10 @@ export const FilesHandlers = HttpApiBuilder.group(
         Effect.fn('FilesHandlers.attachment')(function* ({ params, request }) {
           const found = yield* attachments.selectFile(params['*']);
           if (found._tag === 'None') return yield* new FileNotFound();
-          const file = yield* Effect.sync(() => Bun.file(found.value));
-          const headers = resolveAttachmentHeaders(file.type, basename(found.value));
-          return respondFile(file, request.headers.range, headers);
+          const headers = resolveAttachmentHeaders(resolveFileType(found.value), basename(found.value));
+          return yield* respondFile(found.value, request.headers.range, headers).pipe(
+            Effect.mapError(() => new FileNotFound())
+          );
         })
       );
   })

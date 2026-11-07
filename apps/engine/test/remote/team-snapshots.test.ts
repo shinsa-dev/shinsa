@@ -16,28 +16,31 @@ const HELD = {
 };
 
 describe('the kept team snapshots', () => {
-  test('writes each list, reads it back, and removes the file with the last one', () => {
+  test('writes each list, reads it back, and removes the file with the last one', async () => {
     const path = join(createTempDir(), 'team-snapshots.json');
-    const store = openTeamSnapshots(path);
-    store.write(HELD);
-    store.write({ ...HELD, instanceId: 'inst2', snapshot: null });
-    expect(openTeamSnapshots(path).list()).toEqual([HELD, { ...HELD, instanceId: 'inst2', snapshot: null }]);
-    expect(store.select('team1', 'inst1')).toEqual(HELD);
-    expect(store.select('team1', 'inst9')).toBeNull();
-    store.remove('team1', 'inst9');
-    store.remove('team1', 'inst1');
+    const store = await openTeamSnapshots(path);
+    await store.write(HELD);
+    await store.write({ ...HELD, instanceId: 'inst2', snapshot: null });
+    expect(await (await openTeamSnapshots(path)).list()).toEqual([
+      HELD,
+      { ...HELD, instanceId: 'inst2', snapshot: null },
+    ]);
+    expect(await store.select('team1', 'inst1')).toEqual(HELD);
+    expect(await store.select('team1', 'inst9')).toBeNull();
+    await store.remove('team1', 'inst9');
+    await store.remove('team1', 'inst1');
     expect(JSON.parse(readFileSync(path, 'utf8')).lists).toHaveLength(1);
-    store.remove('team1', 'inst2');
+    await store.remove('team1', 'inst2');
     expect(existsSync(path)).toBe(false);
   });
 
-  test('reads leniently: a missing file, bad JSON and entries out of shape give nothing', () => {
+  test('reads leniently: a missing file, bad JSON and entries out of shape give nothing', async () => {
     const dir = createTempDir();
     const logs = captureLogs();
-    expect(readTeamSnapshotsFile(join(dir, 'none.json'))).toEqual([]);
+    expect(await readTeamSnapshotsFile(join(dir, 'none.json'))).toEqual([]);
     const broken = join(dir, 'broken.json');
     writeFileSync(broken, '{');
-    expect(readTeamSnapshotsFile(broken)).toEqual([]);
+    expect(await readTeamSnapshotsFile(broken)).toEqual([]);
     logs.restore();
     expect(logs.fieldsOf('[Teams] Could not read the kept team snapshots')).toEqual([
       { path: broken, error: expect.any(String) },
@@ -49,21 +52,21 @@ describe('the kept team snapshots', () => {
         lists: [null, { ...HELD, teamId: 3 }, { ...HELD, tasks: 'none' }, { ...HELD, snapshot: { body: 1 } }],
       })
     );
-    expect(readTeamSnapshotsFile(odd)).toEqual([{ ...HELD, snapshot: null }]);
+    expect(await readTeamSnapshotsFile(odd)).toEqual([{ ...HELD, snapshot: null }]);
     writeFileSync(odd, JSON.stringify({ lists: 'none' }));
-    expect(readTeamSnapshotsFile(odd)).toEqual([]);
+    expect(await readTeamSnapshotsFile(odd)).toEqual([]);
     writeFileSync(odd, 'null');
-    expect(readTeamSnapshotsFile(odd)).toEqual([]);
+    expect(await readTeamSnapshotsFile(odd)).toEqual([]);
   });
 
-  test('logs a list it could not keep', () => {
+  test('logs a list it could not keep', async () => {
     const dir = createTempDir();
     const path = join(dir, 'taken');
     mkdirSync(join(path, 'inside'), { recursive: true });
     const logs = captureLogs();
-    const store = openTeamSnapshots(path);
-    store.write(HELD);
-    store.remove('team1', 'inst1');
+    const store = await openTeamSnapshots(path);
+    await store.write(HELD);
+    await store.remove('team1', 'inst1');
     logs.restore();
     expect(logs.fieldsOf('[Teams] Could not keep the team snapshots')).toEqual([
       { path, error: expect.any(String) },

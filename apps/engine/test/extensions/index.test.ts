@@ -28,7 +28,7 @@ function resolveOptions(machine: FakeMachine, state: ShinsaState): ExtensionsWor
   };
 }
 
-function createWorld(machine: FakeMachine = createFakeMachine()) {
+async function createWorld(machine: FakeMachine = createFakeMachine()) {
   const state: ShinsaState = createState();
   state.repos.r1 = {
     id: 'r1',
@@ -42,7 +42,7 @@ function createWorld(machine: FakeMachine = createFakeMachine()) {
   state.projects.p1 = { id: 'p1', name: 'Work', color: 'blue', key: 'W', description: '', folders: [] };
   const checked: McpDefinition[] = [];
   writeFile(join(machine.shinsaHome, 'extensions.json'), JSON.stringify({ optimizer: { enabled: false } }));
-  const extensions = openExtensions({
+  const extensions = await openExtensions({
     ...resolveOptions(machine, state),
     now: () => 42,
     check: (definition) =>
@@ -66,9 +66,9 @@ function findServer(servers: McpServerSummary[], id: string) {
 }
 
 describe('the MCP servers and skills Shinsa shows', () => {
-  test('lists every source, on as the user set them up, without ever showing a secret value', () => {
-    const { extensions, machine } = createWorld();
-    const snapshot = extensions.snapshot();
+  test('lists every source, on as the user set them up, without ever showing a secret value', async () => {
+    const { extensions, machine } = await createWorld();
+    const snapshot = await extensions.snapshot();
     expect(snapshot.problems).toEqual([]);
     expect(snapshot.servers.filter((server) => !server.enabled).map((server) => server.id)).toEqual([
       'codex:kampala',
@@ -95,9 +95,9 @@ describe('the MCP servers and skills Shinsa shows', () => {
     });
   });
 
-  test('every skill starts on, with what its listing costs an agent', () => {
-    const { extensions } = createWorld();
-    const skills = extensions.snapshot().skills;
+  test('every skill starts on, with what its listing costs an agent', async () => {
+    const { extensions } = await createWorld();
+    const skills = (await extensions.snapshot()).skills;
     expect(skills.map((skill) => skill.id)).toEqual([
       'shinsa:review',
       'user:animate',
@@ -110,17 +110,17 @@ describe('the MCP servers and skills Shinsa shows', () => {
     expect(skills[1]?.tokens).toBe(8);
   });
 
-  test('a plugin manifest it cannot read is reported once', () => {
-    const { extensions, machine } = createWorld();
+  test('a plugin manifest it cannot read is reported once', async () => {
+    const { extensions, machine } = await createWorld();
     writeFile(join(machine.pluginRoot, '.claude-plugin', 'plugin.json'), '{ broken');
-    const problems = extensions.snapshot().problems;
+    const problems = (await extensions.snapshot()).problems;
     expect(problems).toHaveLength(1);
     expect(problems[0]).toContain('plugin.json');
   });
 
-  test('every installed plugin, on as Claude Code has it, with what it brings and costs', () => {
-    const { extensions, machine } = createWorld();
-    const plugins = extensions.snapshot().plugins;
+  test('every installed plugin, on as Claude Code has it, with what it brings and costs', async () => {
+    const { extensions, machine } = await createWorld();
+    const plugins = (await extensions.snapshot()).plugins;
     expect(plugins).toEqual([
       {
         id: 'docs@market',
@@ -140,9 +140,9 @@ describe('the MCP servers and skills Shinsa shows', () => {
 });
 
 describe('adding and changing servers', () => {
-  test('a new server is on and used everywhere, and its secrets stay in Shinsa', () => {
-    const { extensions } = createWorld();
-    const snapshot = extensions.createServer({
+  test('a new server is on and used everywhere, and its secrets stay in Shinsa', async () => {
+    const { extensions } = await createWorld();
+    const snapshot = await extensions.createServer({
       name: 'docs',
       transport: 'http',
       url: 'https://docs.example/mcp',
@@ -155,7 +155,7 @@ describe('adding and changing servers', () => {
       headerKeys: ['Authorization'],
       origin: 'Shinsa',
     });
-    const stdio = extensions.createServer({
+    const stdio = await extensions.createServer({
       name: 'files_2',
       transport: 'stdio',
       command: 'npx',
@@ -174,13 +174,13 @@ describe('adding and changing servers', () => {
   });
 
   test('never shows a secret written into a server’s address or arguments, and keeps it on edit', async () => {
-    const { extensions } = createWorld();
-    extensions.createServer({
+    const { extensions } = await createWorld();
+    await extensions.createServer({
       name: 'keyed',
       transport: 'http',
       url: 'https://keyed.dev/mcp?api_key=k-123&team=core',
     });
-    const shown = extensions.createServer({
+    const shown = await extensions.createServer({
       name: 'tokened',
       transport: 'stdio',
       command: 'tool',
@@ -194,12 +194,12 @@ describe('adding and changing servers', () => {
       'plain',
     ]);
     expect(JSON.stringify(shown)).not.toMatch(/k-123|t-456|a-789/);
-    extensions.updateServer('shinsa:tokened', {
+    await extensions.updateServer('shinsa:tokened', {
       transport: 'stdio',
       command: 'tool',
       args: ['--token', '***', '--api-key=***', 'plain', '--fast'],
     });
-    extensions.updateServer('shinsa:keyed', {
+    await extensions.updateServer('shinsa:keyed', {
       transport: 'http',
       url: 'https://keyed.dev/mcp?api_key=***&team=core',
     });
@@ -216,40 +216,46 @@ describe('adding and changing servers', () => {
     );
   });
 
-  test('refuses a server it could not run, saying what to fix', () => {
-    const { extensions, machine } = createWorld();
+  test('refuses a server it could not run, saying what to fix', async () => {
+    const { extensions, machine } = await createWorld();
     const base = { name: 'docs', transport: 'http', url: 'https://docs.example/mcp' };
-    expect(() => extensions.createServer('docs')).toThrow('Describe the MCP to add.');
-    expect(() => extensions.createServer({ ...base, name: 'has space' })).toThrow('letters, digits');
-    expect(() => extensions.createServer({ ...base, name: 'shinsa' })).toThrow('Shinsa’s own');
-    expect(() => extensions.createServer({ ...base, transport: 'ws' })).toThrow('a command, HTTP or SSE');
-    expect(() => extensions.createServer({ ...base, url: 'ftp://x' })).toThrow('http or https address');
-    expect(() => extensions.createServer({ ...base, url: 'not a url' })).toThrow('http or https address');
-    expect(() => extensions.createServer({ name: 'x', transport: 'stdio' })).toThrow(
+    await expect(extensions.createServer('docs')).rejects.toThrow('Describe the MCP to add.');
+    await expect(extensions.createServer({ ...base, name: 'has space' })).rejects.toThrow('letters, digits');
+    await expect(extensions.createServer({ ...base, name: 'shinsa' })).rejects.toThrow('Shinsa’s own');
+    await expect(extensions.createServer({ ...base, transport: 'ws' })).rejects.toThrow(
+      'a command, HTTP or SSE'
+    );
+    await expect(extensions.createServer({ ...base, url: 'ftp://x' })).rejects.toThrow(
+      'http or https address'
+    );
+    await expect(extensions.createServer({ ...base, url: 'not a url' })).rejects.toThrow(
+      'http or https address'
+    );
+    await expect(extensions.createServer({ name: 'x', transport: 'stdio' })).rejects.toThrow(
       'the command that starts'
     );
-    expect(() => extensions.createServer({ name: 'x', transport: 'stdio', command: 'a', args: 'b' })).toThrow(
-      'list of text'
-    );
-    expect(() =>
+    await expect(
+      extensions.createServer({ name: 'x', transport: 'stdio', command: 'a', args: 'b' })
+    ).rejects.toThrow('list of text');
+    await expect(
       extensions.createServer({ name: 'x', transport: 'stdio', command: 'a', env: { A: 1 } })
-    ).toThrow('The environment must map');
-    expect(() => extensions.createServer({ ...base, scope: { kind: 'project', project: 'nope' } })).toThrow(
-      'no project'
-    );
-    expect(() => extensions.createServer({ ...base, scope: { kind: 'repo', path: '/other' } })).toThrow(
-      'No agent has worked there yet.'
-    );
-    expect(() => extensions.createServer({ ...base, scope: 'here' })).toThrow(
+    ).rejects.toThrow('The environment must map');
+    await expect(
+      extensions.createServer({ ...base, scope: { kind: 'project', project: 'nope' } })
+    ).rejects.toThrow('no project');
+    await expect(
+      extensions.createServer({ ...base, scope: { kind: 'repo', path: '/other' } })
+    ).rejects.toThrow('No agent has worked there yet.');
+    await expect(extensions.createServer({ ...base, scope: 'here' })).rejects.toThrow(
       'Pick all, a project or a repository.'
     );
-    extensions.createServer({ ...base, scope: { kind: 'repo', path: machine.repo } });
-    expect(() => extensions.createServer(base)).toThrow('An MCP named docs exists.');
+    await extensions.createServer({ ...base, scope: { kind: 'repo', path: machine.repo } });
+    await expect(extensions.createServer(base)).rejects.toThrow('An MCP named docs exists.');
   });
 
   test('editing keeps a secret you leave empty, and renaming moves the server', async () => {
-    const { extensions, secrets } = createWorld();
-    extensions.createServer({
+    const { extensions, secrets } = await createWorld();
+    await extensions.createServer({
       name: 'docs',
       transport: 'http',
       url: 'https://a.dev/mcp',
@@ -258,14 +264,14 @@ describe('adding and changing servers', () => {
     await secrets.updateMcpCredentials('shinsa:docs', {
       tokens: { access_token: 'x', token_type: 'Bearer' },
     });
-    const edited = extensions.updateServer('shinsa:docs', {
+    const edited = await extensions.updateServer('shinsa:docs', {
       name: 'docs',
       transport: 'http',
       url: 'https://b.dev/mcp',
       headers: { Authorization: '', 'X-New': 'n' },
     });
     expect(findServer(edited.servers, 'shinsa:docs').url).toBe('https://b.dev/mcp');
-    const renamed = extensions.updateServer('shinsa:docs', {
+    const renamed = await extensions.updateServer('shinsa:docs', {
       name: 'library',
       transport: 'http',
       url: 'https://b.dev/mcp',
@@ -273,14 +279,14 @@ describe('adding and changing servers', () => {
     });
     expect(renamed.servers.some((server) => server.id === 'shinsa:docs')).toBe(false);
     expect(findServer(renamed.servers, 'shinsa:library')).toMatchObject({ enabled: false, headerKeys: [] });
-    expect(() => extensions.updateServer('shinsa:library', null)).toThrow('Describe the MCP.');
-    expect(() => extensions.updateServer('shinsa:none', {})).toThrow('no MCP with that id');
+    await expect(extensions.updateServer('shinsa:library', null)).rejects.toThrow('Describe the MCP.');
+    await expect(extensions.updateServer('shinsa:none', {})).rejects.toThrow('no MCP with that id');
   });
 
   test('editing a server from another tool copies it into Shinsa, whose copy then leads its row', async () => {
-    const { extensions } = createWorld();
-    extensions.updateServerChoice('claude:linear', { enabled: true });
-    const copied = extensions.updateServer('claude:linear', {
+    const { extensions } = await createWorld();
+    await extensions.updateServerChoice('claude:linear', { enabled: true });
+    const copied = await extensions.updateServer('claude:linear', {
       transport: 'http',
       url: 'https://mcp.linear.example/mcp',
       headers: { 'X-Key': '' },
@@ -299,17 +305,17 @@ describe('adding and changing servers', () => {
         definition: expect.objectContaining({ headers: { 'X-Key': 'secret' } }),
       },
     ]);
-    const moved = extensions.updateServer('shinsa:linear', {
+    const moved = await extensions.updateServer('shinsa:linear', {
       transport: 'http',
       url: 'https://own.linear/mcp',
     });
     expect(findServer(moved.servers, 'claude:linear').shadowedBy).toBe('shinsa:linear');
   });
 
-  test('editing a server you turned off keeps it off', () => {
-    const { extensions } = createWorld();
-    extensions.updateServerChoice('claude:linear', { enabled: false });
-    const edited = extensions.updateServer('claude:linear', {
+  test('editing a server you turned off keeps it off', async () => {
+    const { extensions } = await createWorld();
+    await extensions.updateServerChoice('claude:linear', { enabled: false });
+    const edited = await extensions.updateServer('claude:linear', {
       transport: 'http',
       url: 'https://mcp.linear.example/mcp',
       headers: { 'X-Key': '', 'X-Team': 'core' },
@@ -318,12 +324,12 @@ describe('adding and changing servers', () => {
   });
 
   test('editing a Codex server that signs in from a variable keeps signing it in', async () => {
-    const { extensions, machine } = createWorld();
+    const { extensions, machine } = await createWorld();
     writeFile(
       join(machine.codexHome, 'config.toml'),
       '[mcp_servers.tracker]\nurl = "https://tracker.example/mcp"\nbearer_token_env_var = "LINEAR_TOKEN"\n'
     );
-    extensions.updateServer('codex:tracker', {
+    await extensions.updateServer('codex:tracker', {
       transport: 'http',
       url: 'https://tracker.example/mcp',
       headers: { 'X-Team': 'core' },
@@ -336,12 +342,12 @@ describe('adding and changing servers', () => {
   });
 
   test('editing a command server keeps the folder it starts in', async () => {
-    const { extensions, machine } = createWorld();
+    const { extensions, machine } = await createWorld();
     writeFile(
       join(machine.repo, '.mcp.json'),
       JSON.stringify({ mcpServers: { repo_tools: { command: 'node', args: ['tools.js'], cwd: 'tools' } } })
     );
-    extensions.updateServer(`project:${machine.repo}:repo_tools`, {
+    await extensions.updateServer(`project:${machine.repo}:repo_tools`, {
       transport: 'stdio',
       command: 'node',
       args: ['tools.js', '--fast'],
@@ -353,20 +359,20 @@ describe('adding and changing servers', () => {
     });
   });
 
-  test('only Shinsa’s own servers can be removed; the others are turned off', () => {
-    const { extensions } = createWorld();
-    extensions.createServer({ name: 'docs', transport: 'http', url: 'https://a.dev/mcp' });
-    expect(extensions.removeServer('shinsa:docs').servers.some((server) => server.id === 'shinsa:docs')).toBe(
-      false
-    );
-    expect(() => extensions.removeServer('claude:linear')).toThrow(
+  test('only Shinsa’s own servers can be removed; the others are turned off', async () => {
+    const { extensions } = await createWorld();
+    await extensions.createServer({ name: 'docs', transport: 'http', url: 'https://a.dev/mcp' });
+    expect(
+      (await extensions.removeServer('shinsa:docs')).servers.some((server) => server.id === 'shinsa:docs')
+    ).toBe(false);
+    await expect(extensions.removeServer('claude:linear')).rejects.toThrow(
       'It comes from ~/.claude/.claude.json. Turn it off.'
     );
   });
 
-  test('turning a server on or off and choosing where it is used', () => {
-    const { extensions, machine } = createWorld();
-    const on = extensions.updateServerChoice('codex:maple', {
+  test('turning a server on or off and choosing where it is used', async () => {
+    const { extensions, machine } = await createWorld();
+    const on = await extensions.updateServerChoice('codex:maple', {
       enabled: true,
       scope: { kind: 'repo', path: machine.repo },
     });
@@ -375,39 +381,46 @@ describe('adding and changing servers', () => {
       scope: { kind: 'repo', path: machine.repo },
     });
     expect(
-      findServer(extensions.updateServerChoice('codex:maple', { enabled: false }).servers, 'codex:maple')
-        .enabled
+      findServer(
+        (await extensions.updateServerChoice('codex:maple', { enabled: false })).servers,
+        'codex:maple'
+      ).enabled
     ).toBe(false);
-    extensions.createServer({ name: 'docs', transport: 'http', url: 'https://a.dev/mcp' });
+    await extensions.createServer({ name: 'docs', transport: 'http', url: 'https://a.dev/mcp' });
     expect(
-      findServer(extensions.updateServerChoice('shinsa:docs', { enabled: false }).servers, 'shinsa:docs')
-        .enabled
+      findServer(
+        (await extensions.updateServerChoice('shinsa:docs', { enabled: false })).servers,
+        'shinsa:docs'
+      ).enabled
     ).toBe(false);
     expect(
       findServer(
-        extensions.updateServerChoice('shinsa:docs', { scope: { kind: 'project', project: 'p1' } }).servers,
+        (await extensions.updateServerChoice('shinsa:docs', { scope: { kind: 'project', project: 'p1' } }))
+          .servers,
         'shinsa:docs'
       )
     ).toMatchObject({ enabled: false, scope: { kind: 'project', project: 'p1' } });
-    expect(() => extensions.updateServerChoice('shinsa:docs', 'on')).toThrow('Say what to change.');
+    await expect(extensions.updateServerChoice('shinsa:docs', 'on')).rejects.toThrow('Say what to change.');
   });
 
-  test('turning a skill on or off', () => {
-    const { extensions } = createWorld();
-    const on = extensions.updateSkillChoice('user:animate', true);
+  test('turning a skill on or off', async () => {
+    const { extensions } = await createWorld();
+    const on = await extensions.updateSkillChoice('user:animate', true);
     expect(on.skills.find((skill) => skill.id === 'user:animate')?.enabled).toBe(true);
-    expect(() => extensions.updateSkillChoice('user:animate', 'yes')).toThrow('Turn the skill on or off.');
-    expect(() => extensions.updateSkillChoice('user:none', true)).toThrow('no skill with that id');
+    await expect(extensions.updateSkillChoice('user:animate', 'yes')).rejects.toThrow(
+      'Turn the skill on or off.'
+    );
+    await expect(extensions.updateSkillChoice('user:none', true)).rejects.toThrow('no skill with that id');
   });
 });
 
 describe('checking servers', () => {
   test('checks every server that is on, or the one you name, and keeps when it checked', async () => {
-    const { extensions, checked, machine } = createWorld();
-    extensions.updateServerChoice('claude:linear', { enabled: false });
-    extensions.updateServerChoice(`claude_project:${machine.repo}:local`, { enabled: false });
-    extensions.updateServerChoice('codex:maple', { enabled: false });
-    extensions.updatePluginChoice('docs@market', false);
+    const { extensions, checked, machine } = await createWorld();
+    await extensions.updateServerChoice('claude:linear', { enabled: false });
+    await extensions.updateServerChoice(`claude_project:${machine.repo}:local`, { enabled: false });
+    await extensions.updateServerChoice('codex:maple', { enabled: false });
+    await extensions.updatePluginChoice('docs@market', false);
     const snapshot = await extensions.check();
     expect(checked.map((definition) => definition.command)).toEqual(['npx', 'node']);
     expect(checked[0]?.env).toEqual({ ...RETINA, ROOT: machine.userHome, PLAYWRIGHT_MCP_HEADLESS: 'true' });
@@ -423,29 +436,32 @@ describe('checking servers', () => {
   });
 
   test('a checker that fails fails the check, and without one Shinsa starts the server itself', async () => {
-    const { machine, state } = createWorld();
+    const { machine, state } = await createWorld();
     const options = resolveOptions(machine, state);
-    const failing = openExtensions({
+    const failing = await openExtensions({
       ...options,
       check: () => Effect.die(new McpServerFailed({ message: 'The checker is gone.', unauthorized: false })),
     });
     await expect(failing.check('claude:files')).rejects.toThrow('The checker is gone.');
-    const own = openExtensions(options);
-    own.createServer({ name: 'missing', transport: 'stdio', command: '/nonexistent/mcp-server' });
+    const own = await openExtensions(options);
+    await own.createServer({ name: 'missing', transport: 'stdio', command: '/nonexistent/mcp-server' });
     const snapshot = await own.check('shinsa:missing');
     expect(findServer(snapshot.servers, 'shinsa:missing').status.state).toBe('failing');
   });
 
   test('a check outlives a restart, and editing the server forgets it', async () => {
-    const { extensions, machine, state } = createWorld();
+    const { extensions, machine, state } = await createWorld();
     await extensions.check('claude:files');
-    const again = openExtensions(resolveOptions(machine, state));
-    expect(findServer(again.snapshot().servers, 'claude:files').status.tokens).toBe(30);
-    extensions.createServer({ name: 'docs', transport: 'http', url: 'https://a.dev/mcp' });
+    const again = await openExtensions(resolveOptions(machine, state));
+    expect(findServer((await again.snapshot()).servers, 'claude:files').status.tokens).toBe(30);
+    await extensions.createServer({ name: 'docs', transport: 'http', url: 'https://a.dev/mcp' });
     await extensions.check('shinsa:docs');
-    const edited = extensions.updateServer('shinsa:docs', { transport: 'http', url: 'https://b.dev/mcp' });
+    const edited = await extensions.updateServer('shinsa:docs', {
+      transport: 'http',
+      url: 'https://b.dev/mcp',
+    });
     expect(findServer(edited.servers, 'shinsa:docs').status.state).toBe('unchecked');
-    const copied = extensions.updateServer('claude:files', {
+    const copied = await extensions.updateServer('claude:files', {
       transport: 'stdio',
       command: 'npx',
       args: ['files-mcp'],
@@ -461,8 +477,8 @@ describe('checking servers', () => {
 describe('signing in from Shinsa', () => {
   test('Connect sends you to the server, the callback page signs you in, and agents get the token', async () => {
     fake = startFakeMcpHttp({ oauth: true });
-    const { extensions, checked } = createWorld();
-    extensions.createServer({ name: 'remote', transport: 'http', url: fake.mcpUrl });
+    const { extensions, checked } = await createWorld();
+    await extensions.createServer({ name: 'remote', transport: 'http', url: fake.mcpUrl });
     const started = await extensions.startSignIn('shinsa:remote');
     expect(started.authorizationUrl).toContain('/authorize');
     const redirect = await fetch(started.authorizationUrl ?? '', { redirect: 'manual' });
@@ -471,17 +487,19 @@ describe('signing in from Shinsa', () => {
     const page = await extensions.finishSignIn(callback);
     expect(page).toContain('Signed in to remote');
     expect(checked.at(-1)?.headers.Authorization).toBe('Bearer access-1');
-    expect(findServer(extensions.snapshot().servers, 'shinsa:remote').signedIn).toBe(true);
+    expect(findServer((await extensions.snapshot()).servers, 'shinsa:remote').signedIn).toBe(true);
     const session = await extensions.resolveSession({ repoPath: null, project: null });
     expect(session.servers[0]?.definition.headers.Authorization).toBe('Bearer access-1');
     const again = await extensions.startSignIn('shinsa:remote');
     expect(again.authorizationUrl).toBeNull();
-    expect(findServer(extensions.signOut('shinsa:remote').servers, 'shinsa:remote').signedIn).toBe(false);
+    expect(findServer((await extensions.signOut('shinsa:remote')).servers, 'shinsa:remote').signedIn).toBe(
+      false
+    );
   });
 
   test('Connect on a copied server knows you already signed in to the original', async () => {
     fake = startFakeMcpHttp({ oauth: true });
-    const { extensions, machine } = createWorld();
+    const { extensions, machine } = await createWorld();
     writeFile(
       machine.claudeConfig,
       JSON.stringify({ mcpServers: { remote: { type: 'http', url: fake.mcpUrl } } })
@@ -489,7 +507,7 @@ describe('signing in from Shinsa', () => {
     const started = await extensions.startSignIn('claude:remote');
     const redirect = await fetch(started.authorizationUrl ?? '', { redirect: 'manual' });
     await extensions.finishSignIn(new URL(redirect.headers.get('location') ?? ''));
-    extensions.updateServer('claude:remote', {
+    await extensions.updateServer('claude:remote', {
       transport: 'http',
       url: fake.mcpUrl,
       headers: { 'X-Team': 'core' },
@@ -500,12 +518,12 @@ describe('signing in from Shinsa', () => {
   });
 
   test('a server on this machine has no sign-in', async () => {
-    const { extensions } = createWorld();
+    const { extensions } = await createWorld();
     await expect(extensions.startSignIn('claude:files')).rejects.toThrow('It runs here and has no sign-in.');
   });
 
   test('the callback page says why a sign-in did not finish', async () => {
-    const { extensions } = createWorld();
+    const { extensions } = await createWorld();
     const base = 'http://127.0.0.1:5180/api/mcp/oauth/callback';
     expect(
       await extensions.finishSignIn(new URL(`${base}?error=access_denied&error_description=You%20said%20no`))
@@ -528,9 +546,9 @@ describe('signing in from Shinsa', () => {
 
 describe('what an agent run loads', () => {
   test('every server that is on and used where the task runs, one per name', async () => {
-    const { extensions, machine } = createWorld();
-    extensions.updateServerChoice('codex:maple', { scope: { kind: 'project', project: 'p1' } });
-    extensions.createServer({
+    const { extensions, machine } = await createWorld();
+    await extensions.updateServerChoice('codex:maple', { scope: { kind: 'project', project: 'p1' } });
+    await extensions.createServer({
       name: 'linear',
       transport: 'http',
       url: 'https://own.linear/mcp',
@@ -562,7 +580,7 @@ describe('what an agent run loads', () => {
   });
 
   test('every server a run starts on this machine keeps its browser out of sight', async () => {
-    const { extensions, machine } = createWorld();
+    const { extensions, machine } = await createWorld();
     writeFile(
       join(machine.repo, '.mcp.json'),
       JSON.stringify({
@@ -583,7 +601,7 @@ describe('what an agent run loads', () => {
   });
 
   test('two repositories that run the same command each get their own environment', async () => {
-    const { extensions, machine, state } = createWorld();
+    const { extensions, machine, state } = await createWorld();
     const other = join(machine.userHome, 'code', 'other');
     state.repos.r2 = {
       id: 'r2',
@@ -613,7 +631,7 @@ describe('what an agent run loads', () => {
   });
 
   test('every skill that is on, a repository’s only in that repository, and the plugins as they are switched', async () => {
-    const { extensions, machine } = createWorld();
+    const { extensions, machine } = await createWorld();
     const before = await extensions.resolveSession({ repoPath: machine.repo, project: null });
     expect(before.skills.map((skill) => skill.claudeName)).toEqual([
       'shinsa:review',
@@ -624,8 +642,8 @@ describe('what an agent run loads', () => {
     ]);
     expect(before.plugins).toEqual({ 'docs@market': true, 'off@market': false });
     expect(before.skillsOff).toEqual([]);
-    extensions.updateSkillChoice('user:animate', false);
-    extensions.updateSkillChoice('codex:release', false);
+    await extensions.updateSkillChoice('user:animate', false);
+    await extensions.updateSkillChoice('codex:release', false);
     const after = await extensions.resolveSession({ repoPath: '/other', project: null });
     expect(after.skills.map((skill) => [skill.claudeName, skill.source])).toEqual([
       ['shinsa:review', 'shinsa'],
@@ -635,9 +653,9 @@ describe('what an agent run loads', () => {
   });
 
   test('a plugin turned off takes its skills and servers with it, and a run says what it loaded', async () => {
-    const { extensions } = createWorld();
+    const { extensions } = await createWorld();
     await extensions.check('claude:files');
-    const off = extensions.updatePluginChoice('docs@market', false);
+    const off = await extensions.updatePluginChoice('docs@market', false);
     expect(off.plugins.find((plugin) => plugin.id === 'docs@market')?.enabled).toBe(false);
     const session = await extensions.resolveSession({ repoPath: null, project: null });
     expect(session.servers.map((server) => server.name)).toEqual(['linear', 'files', 'maple']);
@@ -657,10 +675,14 @@ describe('what an agent run loads', () => {
       plugins: [],
       deferred: [],
     });
-    extensions.updatePluginChoice('off@market', true);
+    await extensions.updatePluginChoice('off@market', true);
     const on = await extensions.resolveSession({ repoPath: null, project: null });
     expect(on.loaded.plugins).toEqual([{ name: 'off', tokens: 18 }]);
-    expect(() => extensions.updatePluginChoice('off@market', 'yes')).toThrow('Turn the plugin on or off.');
-    expect(() => extensions.updatePluginChoice('none@market', true)).toThrow('no plugin with that id');
+    await expect(extensions.updatePluginChoice('off@market', 'yes')).rejects.toThrow(
+      'Turn the plugin on or off.'
+    );
+    await expect(extensions.updatePluginChoice('none@market', true)).rejects.toThrow(
+      'no plugin with that id'
+    );
   });
 });

@@ -84,7 +84,7 @@ async function openAccounts(stub: StubEngine, options: AccountsHarnessOptions) {
   const limits = harness.service(UsageLimits).claude;
   const accounts = {
     start: () => run(roster.start),
-    stop: () => runSync(roster.stop),
+    stop: () => run(roster.stop),
     snapshot: () => runSync(roster.snapshot),
     subscribe: (listener: (snapshot: AccountsSnapshot) => void) => {
       const release = runSync(roster.subscribe((snapshot) => Effect.sync(() => listener(snapshot))));
@@ -99,33 +99,33 @@ async function openAccounts(stub: StubEngine, options: AccountsHarnessOptions) {
     readFastMode: (provider: string, accountId: string | null) =>
       run(roster.readFastMode(provider, accountId)),
     onRejection: (rejection: RunRejection) => run(roster.onRejection(rejection)),
-    rejectNow: (rejection: RunRejection) => runSync(roster.onRejection(rejection)),
-    onNotice: (runId: string, notice: ChatNotice) => runSync(roster.onNotice(runId, notice)),
+    rejectNow: (rejection: RunRejection) => run(roster.onRejection(rejection)),
+    onNotice: (runId: string, notice: ChatNotice) => run(roster.onNotice(runId, notice)),
     refresh: () => run(roster.refresh),
     refreshUsage: () => run(roster.refreshUsage),
     startLogin: (accountId: string | null) => run(roster.startLogin(accountId)),
     submitLoginCode: (loginId: unknown, code: unknown) => runSync(roster.submitLoginCode(loginId, code)),
     cancelLogin: (loginId: unknown) => runSync(roster.cancelLogin(loginId)),
     importAccount: (origin: unknown, email: unknown) => run(roster.importAccount(origin, email)),
-    update: (accountId: unknown, patch: unknown) => runSync(roster.update(accountId, patch)),
+    update: (accountId: unknown, patch: unknown) => run(roster.update(accountId, patch)),
     remove: (accountId: unknown) => run(roster.remove(accountId)),
     snapshotEffect: roster.snapshot,
     store: {
       get exists() {
-        return runSync(store.exists);
+        return run(store.exists);
       },
       list: () => runSync(store.list),
       select: (id: string) => runSync(store.select(id)),
       find: (id: string) => runSync(store.find(id)),
-      create: (details?: AccountDetails) => runSync(store.create(details)),
-      update: (id: string, patch: AccountChange) => runSync(store.update(id, patch)),
-      remove: (id: string) => runSync(store.remove(id)),
+      create: (details?: AccountDetails) => run(store.create(details)),
+      update: (id: string, patch: AccountChange) => run(store.update(id, patch)),
+      remove: (id: string) => run(store.remove(id)),
     },
     logins: { current: () => runSync(logins.current) },
     limits: {
       refresh: (ids: string[], force = false) => run(limits.refresh(ids, force)),
       recordPush: (id: string, notice: Extract<ChatNotice, { kind: 'rate_limit' }>) =>
-        runSync(limits.recordPush(id, notice)),
+        run(limits.recordPush(id, notice)),
     },
   };
   return { accounts, harness, stub };
@@ -351,9 +351,9 @@ describe('starting', () => {
     world.login(null, 'token-me');
     await world.accounts.start();
     expect(world.accounts.snapshot()).toMatchObject({ accounts: [], imports: [] });
-    expect(world.accounts.store.exists).toBe(false);
+    expect(await world.accounts.store.exists).toBe(false);
     expect(world.calls.some((call) => call.command[2] === 'status')).toBe(false);
-    world.accounts.stop();
+    await world.accounts.stop();
   });
 
   test('a change to an account or a run starting on it shows in the snapshot pushed to listeners', async () => {
@@ -362,7 +362,7 @@ describe('starting', () => {
     await world.accounts.start();
     const heard: number[] = [];
     world.accounts.subscribe((snapshot) => heard.push(snapshot.accounts[0]?.runs ?? -1));
-    world.accounts.store.update(account.id, { paused: true });
+    await world.accounts.store.update(account.id, { paused: true });
     world.stub.update((state) => {
       state.runs['run-1'] = createRun({
         attempts: [
@@ -380,7 +380,7 @@ describe('starting', () => {
     });
     world.stub.notify();
     expect(heard).toEqual([0, 1]);
-    world.accounts.stop();
+    await world.accounts.stop();
   });
 
   test('the other providers’ sign-ins ride along in the snapshot, and one that cannot be read is logged', async () => {
@@ -409,7 +409,7 @@ describe('starting', () => {
     await accounts.start();
     expect(accounts.snapshot().providers).toEqual([codex]);
     expect((await accounts.refresh()).providers).toEqual([codex]);
-    accounts.stop();
+    await accounts.stop();
     logs.restore();
     expect(logs.fieldsOf('[Accounts] Could not check the other providers’ sign-ins')).toEqual([
       { error: 'codex hung' },
@@ -420,9 +420,9 @@ describe('starting', () => {
   test('stopping before the start finishes never leaves a timer behind', async () => {
     const world = await createWorld();
     const starting = world.accounts.start();
-    world.accounts.stop();
+    await world.accounts.stop();
     await starting;
-    world.accounts.stop();
+    await world.accounts.stop();
   });
 });
 
@@ -523,7 +523,7 @@ describe('signing in an account', () => {
     const world = await createWorld({ registry: true });
     const account = await addAccount(world, 'work@example.com', 10);
     await world.accounts.startLogin(account.id);
-    world.accounts.store.remove(account.id);
+    await world.accounts.store.remove(account.id);
     world.processes.at(-1)?.exit(0);
     await until('the sign-in to fail', () => world.accounts.logins.current()?.phase === 'failed');
     expect(world.accounts.snapshot().login?.message).toBe('The account was removed while you signed in.');
@@ -534,15 +534,17 @@ describe('inspect mode', () => {
   test('shows the stored accounts without reading a login or usage, and refuses to refresh or change them', async () => {
     const live = await createWorld({ registry: true });
     const account = await addAccount(live, 'seen@example.com', 20);
-    live.accounts.stop();
+    await live.accounts.stop();
     const registry = readFileSync(join(live.root, 'accounts.json'), 'utf8');
     const world = await createWorld({ root: live.root, inspect: true });
     await world.accounts.start();
     expect(world.accounts.snapshot().accounts.map((listed) => listed.email)).toEqual(['seen@example.com']);
     const refused = { code: 'inspect_read_only' };
     await expect(world.accounts.refresh()).rejects.toMatchObject(refused);
-    expect(() => world.accounts.update(account.id, { paused: true })).toThrow('Inspect mode is read-only.');
-    world.accounts.stop();
+    await expect(world.accounts.update(account.id, { paused: true })).rejects.toThrow(
+      'Inspect mode is read-only.'
+    );
+    await world.accounts.stop();
     expect(world.calls).toEqual([]);
     expect(world.secretReads).toEqual([]);
     expect(readFileSync(join(live.root, 'accounts.json'), 'utf8')).toBe(registry);
@@ -633,7 +635,7 @@ describe('one login, one account', () => {
     const root = createTempDir();
     writeImportedAccount(root, 'claude', 'me@example.com');
     const world = await createWorld({ root });
-    const own = world.accounts.store.create({ email: 'me@example.com' });
+    const own = await world.accounts.store.create({ email: 'me@example.com' });
     world.statuses.set(own.configDir as string, { loggedIn: true, email: 'me@example.com' });
     const snapshot = await world.accounts.refresh();
     expect(snapshot.accounts.map((account) => account.id)).toEqual([own.id]);
@@ -709,7 +711,7 @@ describe('choosing the account for an attempt', () => {
     const world = await createWorld({ registry: true });
     const account = await addAccount(world, 'pushed@example.com', 20);
     await world.accounts.refresh();
-    world.accounts.limits.recordPush(account.id, {
+    await world.accounts.limits.recordPush(account.id, {
       kind: 'rate_limit',
       status: 'allowed_warning',
       limit: 'seven_day',
@@ -754,8 +756,8 @@ describe('choosing the account for an attempt', () => {
     const world = await createWorld({ registry: true });
     await addAccount(world, 'late@example.com', 10);
     const early = await addAccount(world, 'early@example.com', 10);
-    reject(world, world.accounts.store.list()[0]?.id ?? '', { resetAt: world.now + 3 * HOUR });
-    reject(world, early.id, { resetAt: world.now + HOUR });
+    await reject(world, world.accounts.store.list()[0]?.id ?? '', { resetAt: world.now + 3 * HOUR });
+    await reject(world, early.id, { resetAt: world.now + HOUR });
     expect((await lease(world, { previous: { id: early.id, email: early.email } }))?.id).toBe(early.id);
   });
 });
@@ -770,12 +772,14 @@ describe('moving a rejected attempt to another account', () => {
       state.tasks['task-1'] = createTask();
       state.runs['run-1'] = createRun({ model: 'opus' });
     });
-    expect(reject(world, a.id, { resetAt: world.now + HOUR })).toEqual({ retry: true });
+    expect(await reject(world, a.id, { resetAt: world.now + HOUR })).toEqual({ retry: true });
     expect(world.accounts.snapshot().accounts[0]?.spentUntil).toBe(world.now + HOUR);
     expect((await lease(world, { previous: { id: a.id, email: a.email }, exclude: [a.id] }))?.id).toBe(b.id);
-    expect(reject(world, b.id, { resetAt: world.now + 2 * HOUR }, [a.id, b.id])).toEqual({ retry: true });
+    expect(await reject(world, b.id, { resetAt: world.now + 2 * HOUR }, [a.id, b.id])).toEqual({
+      retry: true,
+    });
     expect((await lease(world, { exclude: [a.id, b.id] }))?.id).toBe(c.id);
-    const last = reject(world, c.id, { resetAt: world.now + 3 * HOUR }, [a.id, b.id, c.id]);
+    const last = await reject(world, c.id, { resetAt: world.now + 3 * HOUR }, [a.id, b.id, c.id]);
     expect(last.retry).toBe(false);
     expect(last.failure).toMatchObject({
       class: 'usage_limit',
@@ -791,9 +795,11 @@ describe('moving a rejected attempt to another account', () => {
     const c = await addAccount(world, 'c@example.com', 10);
     await addAccount(world, 'd@example.com', 10);
     for (const account of [a, b, c]) {
-      expect(reject(world, account.id, { resetAt: world.now + 60_000 })).toEqual({ retry: true });
+      expect(await reject(world, account.id, { resetAt: world.now + 60_000 })).toEqual({ retry: true });
     }
-    expect(reject(world, a.id, { resetAt: world.now + 60_000 }, [b.id, c.id, a.id]).retry).toBe(false);
+    expect((await reject(world, a.id, { resetAt: world.now + 60_000 }, [b.id, c.id, a.id])).retry).toBe(
+      false
+    );
     await world.advance(60_000);
     expect((await lease(world))?.email).toBe('a@example.com');
   });
@@ -805,7 +811,7 @@ describe('moving a rejected attempt to another account', () => {
     world.stub.update((state) => {
       state.tasks['task-1'] = createTask({ account: { id: bound.id, email: bound.email } });
     });
-    const verdict = reject(world, bound.id, { resetAt: world.now + 4 * HOUR });
+    const verdict = await reject(world, bound.id, { resetAt: world.now + 4 * HOUR });
     expect(verdict).toEqual({
       retry: false,
       failure: failure({
@@ -823,14 +829,14 @@ describe('moving a rejected attempt to another account', () => {
       state.tasks['task-1'] = createTask({ account: null });
       state.runs['run-1'] = createRun({ account: { id: bound.id, email: bound.email } });
     });
-    const verdict = reject(world, bound.id, { resetAt: world.now + 4 * HOUR });
+    const verdict = await reject(world, bound.id, { resetAt: world.now + 4 * HOUR });
     expect(verdict).toMatchObject({ retry: false, failure: { resetAt: world.now + 4 * HOUR } });
   });
 
   test('an unknown reset blocks for a while, but never invents a time to resume at', async () => {
     const world = await createWorld({ registry: true });
     const only = await addAccount(world, 'only@example.com', 10);
-    const verdict = reject(world, only.id, { resetAt: null });
+    const verdict = await reject(world, only.id, { resetAt: null });
     expect(verdict.failure?.resetAt).toBeNull();
     expect(world.accounts.snapshot().accounts[0]?.spentUntil).toBe(world.now + 15 * 60_000);
   });
@@ -839,7 +845,7 @@ describe('moving a rejected attempt to another account', () => {
     const world = await createWorld({ registry: true });
     const a = await addAccount(world, 'a@example.com', 10);
     const b = await addAccount(world, 'b@example.com', 10);
-    reject(world, a.id, { resetAt: world.now + HOUR });
+    await reject(world, a.id, { resetAt: world.now + HOUR });
     const restarted = await createWorld({ root: world.root, now: world.now + 1 });
     const spentUntil = (current: World) =>
       current.accounts.snapshot().accounts.find((account) => account.id === a.id)?.spentUntil;
@@ -851,7 +857,7 @@ describe('moving a rejected attempt to another account', () => {
     await until('the sign-in', () => restarted.accounts.logins.current()?.phase === 'done');
     expect(spentUntil(await createWorld({ root: world.root, now: world.now + 2 }))).toBeNull();
 
-    reject(world, a.id, { resetAt: world.now + HOUR });
+    await reject(world, a.id, { resetAt: world.now + HOUR });
     expect(spentUntil(await createWorld({ root: world.root, now: world.now + HOUR }))).toBeNull();
     expect((await lease(await createWorld({ root: world.root, now: world.now + HOUR })))?.id).toBe(a.id);
   });
@@ -887,7 +893,7 @@ describe('moving a rejected attempt to another account', () => {
     mkdirSync(join(world.config.dataDir, 'account-marks.json'), { recursive: true });
     const logs = captureLogs();
     try {
-      reject(world, a.id, { resetAt: world.now + HOUR });
+      await reject(world, a.id, { resetAt: world.now + HOUR });
       expect(world.accounts.snapshot().accounts[0]?.spentUntil).toBe(world.now + HOUR);
     } finally {
       logs.restore();
@@ -900,7 +906,7 @@ describe('moving a rejected attempt to another account', () => {
   test('a signed-out account asks for a sign-in unless another account can take over', async () => {
     const world = await createWorld({ registry: true });
     const a = await addAccount(world, 'a@example.com', 10);
-    expect(reject(world, a.id, { class: 'auth', message: 'Signed out.' })).toEqual({
+    expect(await reject(world, a.id, { class: 'auth', message: 'Signed out.' })).toEqual({
       retry: false,
       failure: failure({
         class: 'auth',
@@ -913,7 +919,7 @@ describe('moving a rejected attempt to another account', () => {
       signInDetail: 'Signed out.',
     });
     await addAccount(world, 'b@example.com', 10);
-    expect(reject(world, a.id, { class: 'auth', message: 'Signed out.' })).toEqual({ retry: true });
+    expect(await reject(world, a.id, { class: 'auth', message: 'Signed out.' })).toEqual({ retry: true });
   });
 
   function storeLogin(world: World, dir: string | null, refreshToken: string, expiresAt: number) {
@@ -947,8 +953,8 @@ describe('moving a rejected attempt to another account', () => {
 
   test('a copied claude-swap login Claude could not refresh is never copied again; the gate asks for a login of its own', async () => {
     const world = await createWorld({ registry: true });
-    const swapped = world.accounts.store.create({ email: 'a@example.com' });
-    world.accounts.store.update(swapped.id, { origin: 'cswap' });
+    const swapped = await world.accounts.store.create({ email: 'a@example.com' });
+    await world.accounts.store.update(swapped.id, { origin: 'cswap' });
     const dir = swapped.configDir as string;
     storeLogin(world, dir, 'dead', world.now - HOUR);
     const last = await rejectToken(world, swapped.id, [swapped.id]);
@@ -970,8 +976,8 @@ describe('moving a rejected attempt to another account', () => {
 
   test('a copied claude-swap login needs signing in, is never leased, and works again only once signed in here', async () => {
     const world = await createWorld({ registry: true });
-    const swapped = world.accounts.store.create({ email: 'a@example.com' });
-    world.accounts.store.update(swapped.id, { origin: 'cswap' });
+    const swapped = await world.accounts.store.create({ email: 'a@example.com' });
+    await world.accounts.store.update(swapped.id, { origin: 'cswap' });
     const dir = swapped.configDir as string;
     world.statuses.set(dir, { loggedIn: true, email: 'a@example.com' });
     storeLogin(world, dir, 'copied', world.now + HOUR);
@@ -1185,9 +1191,9 @@ describe('moving a rejected attempt to another account', () => {
   test('other failures, and attempts without a known account, are left alone', async () => {
     const world = await createWorld({ registry: true });
     const a = await addAccount(world, 'a@example.com', 10);
-    expect(reject(world, a.id, { class: 'overloaded' })).toEqual({ retry: false });
-    expect(reject(world, null, {})).toEqual({ retry: false });
-    expect(reject(world, 'removed', {})).toEqual({ retry: false });
+    expect(await reject(world, a.id, { class: 'overloaded' })).toEqual({ retry: false });
+    expect(await reject(world, null, {})).toEqual({ retry: false });
+    expect(await reject(world, 'removed', {})).toEqual({ retry: false });
   });
 });
 
@@ -1197,9 +1203,9 @@ describe('a run’s failure shows on its account at once', () => {
     const a = await addAccount(world, 'a@example.com', 10);
     const heard: AccountsSnapshot[] = [];
     const unsubscribe = world.accounts.subscribe((snapshot) => heard.push(snapshot));
-    reject(world, a.id, { resetAt: world.now + HOUR });
+    await reject(world, a.id, { resetAt: world.now + HOUR });
     expect(heard.at(-1)?.accounts[0]).toMatchObject({ id: a.id, spentUntil: world.now + HOUR });
-    reject(world, a.id, { class: 'auth', message: 'Signed out.' });
+    await reject(world, a.id, { class: 'auth', message: 'Signed out.' });
     expect(heard.at(-1)?.accounts[0]).toMatchObject({ signIn: 'signed_out', signInDetail: 'Signed out.' });
     await world.accounts.startLogin(a.id);
     world.processes.at(-1)?.exit(0);
@@ -1266,7 +1272,7 @@ describe('what runs report back', () => {
     });
     world.stub.notify();
     expect(world.accounts.snapshot().accounts[0]?.runs).toBe(1);
-    world.accounts.onNotice('run-1', {
+    await world.accounts.onNotice('run-1', {
       kind: 'rate_limit',
       status: 'rejected',
       limit: 'five_hour',
@@ -1277,7 +1283,7 @@ describe('what runs report back', () => {
       id: 'five_hour',
       usedPercent: 100,
     });
-    world.accounts.onNotice('run-1', {
+    await world.accounts.onNotice('run-1', {
       kind: 'account',
       email: 'renamed@example.com',
       organization: null,
@@ -1287,11 +1293,11 @@ describe('what runs report back', () => {
       email: 'renamed@example.com',
       plan: 'max',
     });
-    world.accounts.onNotice('run-1', { kind: 'account', email: null, organization: null, plan: null });
-    world.accounts.onNotice('run-1', { kind: 'interrupted' });
-    world.accounts.onNotice('run-2', { kind: 'interrupted' });
-    world.accounts.store.remove(account.id);
-    world.accounts.onNotice('run-1', {
+    await world.accounts.onNotice('run-1', { kind: 'account', email: null, organization: null, plan: null });
+    await world.accounts.onNotice('run-1', { kind: 'interrupted' });
+    await world.accounts.onNotice('run-2', { kind: 'interrupted' });
+    await world.accounts.store.remove(account.id);
+    await world.accounts.onNotice('run-1', {
       kind: 'account',
       email: 'x@example.com',
       organization: null,
@@ -1318,7 +1324,7 @@ describe('what runs report back', () => {
         ],
       });
     });
-    world.accounts.onNotice('run-1', {
+    await world.accounts.onNotice('run-1', {
       kind: 'account',
       email: 'a@example.com',
       organization: null,
@@ -1326,7 +1332,7 @@ describe('what runs report back', () => {
     });
     await world.accounts.refresh();
     expect(world.accounts.store.find(account.id).plan).toBe('Claude Ultra');
-    world.accounts.store.update(account.id, { plan: null });
+    await world.accounts.store.update(account.id, { plan: null });
     await world.accounts.limits.refresh([account.id], true);
     expect(world.accounts.store.find(account.id).plan).toBe('max');
   });
@@ -1341,7 +1347,7 @@ describe('what runs report back', () => {
       detail: 'Shinsa could not find this account’s login. Sign in again.',
     });
     expect(world.accounts.snapshot().accounts[0]?.usage.windows[0]?.usedPercent).toBe(25);
-    world.accounts.store.remove(account.id);
+    await world.accounts.store.remove(account.id);
     expect(await world.accounts.limits.refresh([account.id], true)).toBeUndefined();
   });
 
@@ -1395,9 +1401,9 @@ describe('changing and removing accounts', () => {
     const world = await createWorld({ registry: true });
     const a = await addAccount(world, 'a@example.com', 10);
     const b = await addAccount(world, 'b@example.com', 10);
-    world.accounts.update(b.id, { isDefault: true });
-    world.accounts.update(a.id, { paused: true, switchAt: 80 });
-    world.accounts.update(b.id, { position: 0 });
+    await world.accounts.update(b.id, { isDefault: true });
+    await world.accounts.update(a.id, { paused: true, switchAt: 80 });
+    await world.accounts.update(b.id, { position: 0 });
     expect(
       world.accounts
         .snapshot()
@@ -1406,7 +1412,7 @@ describe('changing and removing accounts', () => {
       ['b@example.com', true, false, null],
       ['a@example.com', false, true, 80],
     ]);
-    world.accounts.update(a.id, { switchAt: null });
+    await world.accounts.update(a.id, { switchAt: null });
     expect(world.accounts.store.find(a.id).switchAt).toBeNull();
   });
 
@@ -1423,10 +1429,10 @@ describe('changing and removing accounts', () => {
       [{ switchAt: 50.5 }, 'Switch accounts at 1 to 100%.'],
       [{ position: 1.5 }, 'Give the position as a whole number.'],
     ] as [unknown, string][]) {
-      expect(() => world.accounts.update(a.id, patch)).toThrow(message);
+      await expect(world.accounts.update(a.id, patch)).rejects.toThrow(message);
     }
-    expect(() => world.accounts.update(42, {})).toThrow('Name the account to change.');
-    expect(() => world.accounts.update('missing', {})).toThrow('That account was removed.');
+    await expect(world.accounts.update(42, {})).rejects.toThrow('Name the account to change.');
+    await expect(world.accounts.update('missing', {})).rejects.toThrow('That account was removed.');
   });
 
   test('removing an account signs it out, deletes its folder and releases the tasks bound to it', async () => {
@@ -1495,7 +1501,7 @@ describe('when the outside world fails', () => {
       'Shinsa could not find this account’s login. Sign in again.'
     );
     expect(accounts.snapshot().accounts[0]?.usage.windows[0]?.usedPercent).toBe(10);
-    accounts.stop();
+    await accounts.stop();
     const leasing = await brittle(world);
     await leasing.lease({ runId: 'r', taskId: 't', model: null, bound: null, previous: null, exclude: [] });
     await until(
@@ -1576,7 +1582,7 @@ describe('when the outside world fails', () => {
         resolveClaude: () => Promise.resolve(claude),
         readSecret: () => Promise.resolve(null),
       });
-      const account = accounts.store.create();
+      const account = await accounts.store.create();
       await accounts.syncSignIns();
       await accounts.remove(account.id);
     } finally {
@@ -1596,7 +1602,7 @@ describe('when the outside world fails', () => {
       env: { CLAUDE_CONFIG_DIR: world.shared, USER: 'tester' },
       run: () => Promise.resolve(result('')),
     });
-    const account = accounts.store.create({ email: 'a@example.com' });
+    const account = await accounts.store.create({ email: 'a@example.com' });
     await expect(accounts.remove(account.id)).rejects.toMatchObject({
       _tag: 'AccountStepFailed',
       message: 'Shinsa is stopping.',
@@ -1611,7 +1617,7 @@ describe('when the outside world fails', () => {
     });
     const found = await accounts.startLogin(null);
     expect(found.login?.phase).toBe('starting');
-    accounts.stop();
+    await accounts.stop();
     const path = Bun.env.PATH;
     Bun.env.PATH = '/nonexistent';
     try {
@@ -1831,7 +1837,7 @@ describe('a provider with a sign-in of its own (Codex)', () => {
         ],
       });
     });
-    world.accounts.onNotice('run-1', {
+    await world.accounts.onNotice('run-1', {
       kind: 'rate_limit',
       status: 'rejected',
       limit: 'five_hour',
@@ -1986,9 +1992,9 @@ describe('a provider with a sign-in of its own (Codex)', () => {
       resetsAt: 9_500_000,
       utilization: 1,
     } as const;
-    world.accounts.onNotice('run-1', notice);
-    world.accounts.onNotice('run-2', notice);
-    world.accounts.onNotice('run-1', { kind: 'interrupted' });
+    await world.accounts.onNotice('run-1', notice);
+    await world.accounts.onNotice('run-2', notice);
+    await world.accounts.onNotice('run-1', { kind: 'interrupted' });
     expect(
       world.accounts.snapshot().providers?.[0]?.usage?.windows.find((window) => window.id === 'seven_day')
     ).toMatchObject({

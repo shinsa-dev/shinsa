@@ -126,7 +126,7 @@ interface SetUp {
   connectKey?: string;
 }
 
-function setUp(options: SetUp = {}) {
+async function setUp(options: SetUp = {}) {
   plane = startFakeControlPlane();
   const stub = createStubEngine((state) => {
     const preview = options.preview === undefined ? createPreview() : options.preview;
@@ -136,7 +136,7 @@ function setUp(options: SetUp = {}) {
   const snapshot: TerminalsSnapshot = { terminals: [createRun()], services: [createService()], home: '/tmp' };
   const urls: { source: RemoteUrlSource | null } = { source: null };
   let fill = 7;
-  const machine = createRemoteTest({
+  const machine = await createRemoteTest({
     ...((options.paired ?? true)
       ? {
           file: {
@@ -181,7 +181,7 @@ function setUp(options: SetUp = {}) {
   return { stub, remote: adaptRemote(machine), previews, snapshot };
 }
 
-type Previews = ReturnType<typeof setUp>['previews'];
+type Previews = Awaited<ReturnType<typeof setUp>>['previews'];
 
 function ask(previews: Previews, path: string, init: RequestInit & { key?: string | null } = {}) {
   const { key = KEY, ...rest } = init;
@@ -270,7 +270,7 @@ function createPeer(): FakePeer {
 
 describe('making a preview link', () => {
   test('a new preview gets a link on its own host under the preview origin, with a fresh id and key', async () => {
-    const { previews, stub } = setUp({ preview: createPreview({ url: null }) });
+    const { previews, stub } = await setUp({ preview: createPreview({ url: null }) });
     await previews.link('task-1', 'web', CONTEXT);
     const [command] = stub.dispatched;
     expect(command).toMatchObject({ type: 'preview.record', taskId: 'task-1', serviceId: 'web' });
@@ -287,7 +287,7 @@ describe('making a preview link', () => {
   test('two new links never share an id or a key', async () => {
     const urls: (string | null)[] = [];
     for (let made = 0; made < 2; made++) {
-      const { previews, stub } = setUp({ preview: createPreview({ url: null }), seeded: false });
+      const { previews, stub } = await setUp({ preview: createPreview({ url: null }), seeded: false });
       await previews.link('task-1', 'web', CONTEXT);
       const [command] = stub.dispatched;
       urls.push(command?.type === 'preview.record' ? command.url : null);
@@ -299,7 +299,7 @@ describe('making a preview link', () => {
   });
 
   test('a link that already reaches this machine is kept, and a preview gone in the meantime makes nothing', async () => {
-    const { previews, stub } = setUp();
+    const { previews, stub } = await setUp();
     await previews.link('task-1', 'web', CONTEXT);
     expect(stub.dispatched).toEqual([
       { type: 'preview.record', taskId: 'task-1', serviceId: 'web', url: null },
@@ -309,13 +309,13 @@ describe('making a preview link', () => {
   });
 
   test('an unpaired machine and a service without a preview URL cannot make one, and say why', async () => {
-    const unpaired = setUp({ paired: false });
+    const unpaired = await setUp({ paired: false });
     await expect(unpaired.previews.link('task-1', 'web', CONTEXT)).rejects.toMatchObject({
       _tag: 'EffectFailed',
       message: PREVIEW_NOT_PAIRED,
       retryable: false,
     });
-    const plain = setUp();
+    const plain = await setUp();
     plain.snapshot.services[0] = createService({ previewUrl: null });
     await expect(plain.previews.link('task-1', 'web', CONTEXT)).rejects.toMatchObject({
       _tag: 'EffectFailed',
@@ -324,7 +324,7 @@ describe('making a preview link', () => {
   });
 
   test('unpairing marks every live link as lost, and a failure to say so is logged', async () => {
-    const { remote, stub } = setUp({
+    const { remote, stub } = await setUp({
       patch: (state) => {
         state.tasks['task-2'] = createTask({
           id: 'task-2',
@@ -351,7 +351,7 @@ describe('making a preview link', () => {
 describe('answering a preview request', () => {
   test('a wrong, missing or stale key, an ended share and a path that names no preview are all one page', async () => {
     let now = 10;
-    const { previews } = setUp({ preview: createPreview({ endsAt: 20 }), now: () => now });
+    const { previews } = await setUp({ preview: createPreview({ endsAt: 20 }), now: () => now });
     const wrong = serializeBase64Url(new Uint8Array(PREVIEW_KEY_BYTES).fill(6));
     for (const key of [wrong, null, 'short']) {
       const response = readResponse(await ask(previews, '/', { key }));
@@ -365,14 +365,14 @@ describe('answering a preview request', () => {
   });
 
   test('an unpaired machine and a link to another machine answer nothing', async () => {
-    expect(readResponse(await ask(setUp({ paired: false }).previews, '/')).status).toBe(404);
+    expect(readResponse(await ask((await setUp({ paired: false })).previews, '/')).status).toBe(404);
     const elsewhere = serializePreviewUrl({ instanceId: 'inst9', previewId: PREVIEW_ID, key: KEY }, ORIGIN);
-    const other = setUp({ preview: createPreview({ url: elsewhere }) });
+    const other = await setUp({ preview: createPreview({ url: elsewhere }) });
     expect(readResponse(await ask(other.previews, '/')).status).toBe(404);
   });
 
   test('a service that is not running says so, until it runs again', async () => {
-    const { previews, snapshot } = setUp();
+    const { previews, snapshot } = await setUp();
     snapshot.terminals[0] = createRun({ status: 'exited', port: null });
     const stopped = readResponse(await ask(previews, '/'));
     expect(stopped.status).toBe(503);
@@ -385,7 +385,7 @@ describe('answering a preview request', () => {
 
   test('a request reaches the run as if made on the machine itself, and its answer comes back as it is', async () => {
     const dev = startDevServer();
-    const { previews, snapshot } = setUp();
+    const { previews, snapshot } = await setUp();
     snapshot.terminals[0] = createRun({ port: dev.port });
     const response = readResponse(
       await ask(previews, '/api/save?draft=1', {
@@ -421,7 +421,7 @@ describe('answering a preview request', () => {
 
   test('a redirect to the run stays on the preview, and a run that refuses the connection says it is not running', async () => {
     const dev = startDevServer();
-    const { previews, snapshot } = setUp();
+    const { previews, snapshot } = await setUp();
     snapshot.terminals[0] = createRun({ port: dev.port });
     const redirect = readResponse(await ask(previews, '/away'));
     expect(redirect.status).toBe(302);
@@ -445,7 +445,7 @@ describe('answering a preview request', () => {
 describe('relaying a preview socket', () => {
   async function openRelay(protocols = ['vite-hmr']) {
     const dev = startDevServer();
-    const setup = setUp();
+    const setup = await setUp();
     setup.snapshot.terminals[0] = createRun({ port: dev.port });
     const answer = await ask(setup.previews, '/hmr?token=1', {
       headers: {
@@ -568,7 +568,7 @@ function askPrivately(
 
 describe('a private address for every running service', () => {
   test('a running service gets its own address on the preview origin, kept the same, once remote access is on', async () => {
-    const { previews } = setUp({ preview: null, now: () => 10 });
+    const { previews } = await setUp({ preview: null, now: () => 10 });
     const published: number[] = [];
     previews.subscribe(() => published.push(1));
     const url = await resolvePrivateUrl(previews, createRun({ port: 4123 }));
@@ -591,19 +591,19 @@ describe('a private address for every running service', () => {
   });
 
   test('a stopped service, one with no preview URL and a machine without remote access have none', async () => {
-    const { previews, remote } = setUp({ preview: null, now: () => 10 });
+    const { previews, remote } = await setUp({ preview: null, now: () => 10 });
     expect(previews.resolveRemoteUrl(createRun({ status: 'exited', port: null }), SERVICE)).toBeNull();
     expect(previews.resolveRemoteUrl(createRun(), createService({ previewUrl: null }))).toBeNull();
     await resolvePrivateUrl(previews, createRun());
     await remote.disable();
     expect(previews.resolveRemoteUrl(createRun(), SERVICE)).toBeNull();
     expect(previews.resolveRemoteUrl(createRun(), createService({ id: 'api' }))).toBeNull();
-    expect(setUp({ paired: false }).previews.resolveRemoteUrl(createRun(), SERVICE)).toBeNull();
+    expect((await setUp({ paired: false })).previews.resolveRemoteUrl(createRun(), SERVICE)).toBeNull();
   });
 
   test('a connect key that cannot sign makes no address, says so once, and lets no one in', async () => {
     const logs = captureLogs();
-    const { previews } = setUp({ preview: null, connectKey: '!!' });
+    const { previews } = await setUp({ preview: null, connectKey: '!!' });
     expect(previews.resolveRemoteUrl(createRun(), SERVICE)).toBeNull();
     await until('the failure is logged', () =>
       logs.entries.some((entry) => entry.message.startsWith('[Preview]'))
@@ -619,7 +619,7 @@ describe('a private address for every running service', () => {
   test('the owner and a member get in with their access; anyone else, a forged, stale or missing one do not', async () => {
     const dev = startDevServer();
     const now = 10;
-    const { previews, snapshot } = setUp({ preview: null, now: () => now });
+    const { previews, snapshot } = await setUp({ preview: null, now: () => now });
     snapshot.terminals[0] = createRun({ port: dev.port });
     const previewId = resolvePrivateId(await resolvePrivateUrl(previews, createRun({ port: dev.port })));
     for (const userId of [OWNER.id, MEMBER.id]) {
@@ -646,7 +646,7 @@ describe('a private address for every running service', () => {
 
   test('a teammate opens a team task’s services with the right to; a machine-wide one, or without it, stays shut', async () => {
     const dev = startDevServer();
-    const { previews, snapshot, remote, stub } = setUp({
+    const { previews, snapshot, remote, stub } = await setUp({
       preview: null,
       now: () => 10,
       patch: (state) => {
@@ -677,7 +677,7 @@ describe('a private address for every running service', () => {
       overrides: [{ userId: VIEWER.id, scopes: toggleScope(DEFAULT_TEAM_SCOPES, 'services', false) }],
       createdAt: 1,
     };
-    remote.store.update((file) => ({
+    await remote.store.update((file) => ({
       ...file,
       teams: [team],
       teamKeys: [{ teamId: 'team1', name: 'Platform', key: 'key', invite: null, addedAt: 1 }],
@@ -707,7 +707,7 @@ describe('a private address for every running service', () => {
   });
 
   test('an address made before a restart still opens, a stopped run says so, and a run gone is not shared', async () => {
-    const { previews, snapshot } = setUp({ preview: null, now: () => 10 });
+    const { previews, snapshot } = await setUp({ preview: null, now: () => 10 });
     const previewId = await Effect.runPromise(
       resolvePrivatePreviewId(CREDENTIALS.connectKey, {
         serviceId: 'web',
@@ -731,12 +731,12 @@ describe('a private address for every running service', () => {
   });
 
   test('a machine that has not heard who has access yet, or has remote access off, lets no one in', async () => {
-    const plain = setUp({ preview: null, now: () => 10 });
+    const plain = await setUp({ preview: null, now: () => 10 });
     const previewId = resolvePrivateId(await resolvePrivateUrl(plain.previews, createRun()));
     const access = await createAccess(previewId, OWNER.id);
-    plain.remote.store.update((file) => ({ ...file, access: null }));
+    await plain.remote.store.update((file) => ({ ...file, access: null }));
     expect(readResponse(await askPrivately(plain.previews, previewId, '/', { access })).status).toBe(404);
-    const off = setUp({ preview: null, now: () => 10 });
+    const off = await setUp({ preview: null, now: () => 10 });
     await off.remote.disable();
     expect(readResponse(await askPrivately(off.previews, previewId, '/', { access })).status).toBe(404);
   });
@@ -744,7 +744,7 @@ describe('a private address for every running service', () => {
   test('a private socket closes as soon as its account loses access or remote access goes off', async () => {
     const dev = startDevServer();
     const open = async () => {
-      const setup = setUp({ preview: null, now: () => 10 });
+      const setup = await setUp({ preview: null, now: () => 10 });
       setup.snapshot.terminals[0] = createRun({ port: dev.port });
       const previewId = resolvePrivateId(
         await resolvePrivateUrl(setup.previews, createRun({ port: dev.port }))
@@ -764,7 +764,7 @@ describe('a private address for every running service', () => {
     const removed = await open();
     removed.stub.notify();
     expect(removed.peer.closed).toBeNull();
-    removed.remote.store.update((file) => ({ ...file, access: { owner: OWNER, members: [] } }));
+    await removed.remote.store.update((file) => ({ ...file, access: { owner: OWNER, members: [] } }));
     removed.stub.notify();
     expect(removed.peer.closed).toEqual({ code: 1000, reason: PREVIEW_GONE });
     const paused = await open();
@@ -773,12 +773,12 @@ describe('a private address for every running service', () => {
   });
 
   test('pairing again changes the connect key, so every earlier address stops working', async () => {
-    const { previews, remote, snapshot } = setUp({ preview: null, now: () => 10 });
+    const { previews, remote, snapshot } = await setUp({ preview: null, now: () => 10 });
     snapshot.terminals[0] = createRun();
     const before = resolvePrivateId(await resolvePrivateUrl(previews, createRun()));
     const access = await createAccess(before, OWNER.id);
     const connectKey = serializeBase64Url(new Uint8Array(32).fill(2));
-    remote.store.update((file) => ({
+    await remote.store.update((file) => ({
       ...file,
       credentials: file.credentials && { ...file.credentials, connectKey },
     }));

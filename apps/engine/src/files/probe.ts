@@ -15,6 +15,14 @@ export const isFolder = Effect.fn('Files.isFolder')(function* (path: string) {
   );
 });
 
+export const isFile = Effect.fn('Files.isFile')(function* (path: string) {
+  const fs = yield* FileSystem.FileSystem;
+  return yield* fs.stat(path).pipe(
+    Effect.map((info) => info.type === 'File'),
+    Effect.orElseSucceed(() => false)
+  );
+});
+
 export const selectText = Effect.fn('Files.selectText')(function* (path: string) {
   const fs = yield* FileSystem.FileSystem;
   return yield* Effect.option(fs.readFileString(path));

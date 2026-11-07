@@ -16,7 +16,7 @@ import type { EngineRestarter } from '../../../src/instance/index.ts';
 import { createWorktree } from '../../helpers/git.ts';
 import { createGitRepo, createTempDir, createTestOnboarding } from '../../helpers/index.ts';
 import { disposeWebHandlers } from '../../helpers/web.ts';
-import { startRoutes } from './harness.ts';
+import { startMachineRoutes } from './harness.ts';
 
 afterEach(disposeWebHandlers);
 
@@ -24,20 +24,20 @@ function createModels(models: AgentModel[]) {
   return { listModels: Effect.succeed(models) } as unknown as ModelSource;
 }
 
-function start(
+async function start(
   options: { config?: Partial<ServerConfig>; launch?: Launcher; restarter?: EngineRestarter['Service'] } = {}
 ) {
-  const routes = startRoutes(
-    ({ engine, config }) => ({
+  const routes = await startMachineRoutes(
+    async ({ engine, config }) => ({
       models: createModels([{ id: 'opus', label: 'Opus', description: 'x' }]),
-      onboarding: createTestOnboarding(engine, config).onboarding,
+      onboarding: (await createTestOnboarding(engine, config)).onboarding,
       launch: options.launch,
       restarter: options.restarter,
     }),
     options.config
   );
   const { context } = routes;
-  return Promise.resolve({
+  return {
     config: context.config,
     engine: context.engine,
     transcripts: context.transcripts,
@@ -46,7 +46,7 @@ function start(
     call: routes.send,
     send: routes.send,
     post: routes.post,
-  });
+  };
 }
 
 async function startWithWorktree(launch?: Launcher) {
@@ -429,7 +429,7 @@ describe('read endpoints', () => {
 
   test('evidence is served by its task, round and name only, cached and in ranges', async () => {
     const { call, evidence, config } = await start();
-    const uri = Effect.runSync(
+    const uri = await Effect.runPromise(
       evidence.writeText('proof of work', { taskId: 'task-1', round: 1 }, 'Proof', 'txt')
     );
     writeFileSync(join(config.dataDir, 'secret.txt'), 'secret');
