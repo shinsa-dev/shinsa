@@ -379,7 +379,7 @@ describe('extra usage, credit and usage resets', () => {
 
   it('shows nothing for an account Claude reported neither extra usage nor resets for', () => {
     expect(notes({})).toEqual([]);
-    expect(describeResetsAvailable(usage())).toBeNull();
+    expect(describeResetsAvailable(usage(), NOW)).toBeNull();
   });
 
   it('says whether extra usage is on, off, or on with no monthly limit', () => {
@@ -419,7 +419,9 @@ describe('extra usage, credit and usage resets', () => {
         detail: `Clears the 5-hour and weekly limits · ends ${formatMoment(ends, NOW)}`,
       },
     ]);
-    expect(notes({ resetGrants: [grant({ label: 'Launch reset', clears: ['five_hour'] })] })[0]).toMatchObject({
+    expect(
+      notes({ resetGrants: [grant({ label: 'Launch reset', clears: ['five_hour'] })] })[0]
+    ).toMatchObject({
       label: 'Launch reset',
       detail: 'Clears the 5-hour limit',
     });
@@ -431,13 +433,33 @@ describe('extra usage, credit and usage resets', () => {
   });
 
   it('counts only the resets usable now for the usage menu', () => {
-    expect(describeResetsAvailable({ ...usage(), resetGrants: [grant()] })).toBe('1 usage reset available');
+    expect(describeResetsAvailable({ ...usage(), resetGrants: [grant()] }, NOW)).toBe(
+      '1 usage reset available'
+    );
     expect(
-      describeResetsAvailable({
-        ...usage(),
-        resetGrants: [grant({ id: 'a', left: 2 }), grant({ id: 'b' }), grant({ id: 'c', usableNow: false })],
-      })
+      describeResetsAvailable(
+        {
+          ...usage(),
+          resetGrants: [
+            grant({ id: 'a', left: 2 }),
+            grant({ id: 'b' }),
+            grant({ id: 'c', usableNow: false }),
+          ],
+        },
+        NOW
+      )
     ).toBe('3 usage resets available');
-    expect(describeResetsAvailable({ ...usage(), resetGrants: [grant({ usableNow: false })] })).toBeNull();
+    expect(
+      describeResetsAvailable({ ...usage(), resetGrants: [grant({ usableNow: false })] }, NOW)
+    ).toBeNull();
+  });
+
+  it('drops a reset kept from an earlier read once it has ended', () => {
+    const ended = grant({ endsAt: NOW - HOUR });
+    expect(notes({ resetGrants: [ended] })).toEqual([]);
+    expect(describeResetsAvailable({ ...usage(), resetGrants: [ended] }, NOW)).toBeNull();
+    expect(describeResetsAvailable({ ...usage(), resetGrants: [grant({ endsAt: NOW + HOUR })] }, NOW)).toBe(
+      '1 usage reset available'
+    );
   });
 });

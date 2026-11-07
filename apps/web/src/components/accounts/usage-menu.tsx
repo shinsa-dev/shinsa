@@ -119,7 +119,7 @@ function AccountGlance({
       status={resolveAccountStatus(account, model, now)}
       detail={describeUsageDetail(account)}
       next={isNextAccount(next, account)}
-      resets={describeResetsAvailable(account.usage)}
+      resets={describeResetsAvailable(account.usage, now)}
     />
   );
 }

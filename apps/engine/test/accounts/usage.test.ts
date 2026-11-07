@@ -253,6 +253,21 @@ describe('parseExtraUsage', () => {
     expect(parseExtraUsage({ extra_usage: { is_enabled: false, monthly_limit: 5000 } })?.credit).toBeNull();
   });
 
+  test('an empty balance falls back to the monthly limit, and alone is not "no limit"', () => {
+    const empty = { amount_minor: 0, currency: 'USD', exponent: 2 };
+    expect(
+      parseExtraUsage({
+        extra_usage: { is_enabled: true, monthly_limit: 5000, used_credits: 1000 },
+        spend: { balance: empty },
+      })?.credit
+    ).toEqual({ minor: 4000, exponent: 2, currency: 'USD' });
+    expect(parseExtraUsage({ extra_usage: { is_enabled: true }, spend: { balance: empty } })).toEqual({
+      enabled: true,
+      noLimit: false,
+      credit: null,
+    });
+  });
+
   test('extra usage on without a monthly limit or a balance has no limit', () => {
     expect(parseExtraUsage({ extra_usage: { is_enabled: true, monthly_limit: null } })).toEqual({
       enabled: true,

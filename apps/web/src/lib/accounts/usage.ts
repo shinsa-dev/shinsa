@@ -296,6 +296,10 @@ function describeExtraUsageValue(enabled: boolean, noLimit: boolean) {
   return noLimit ? USAGE_EXTRA_LABEL.noLimit : USAGE_EXTRA_LABEL.on;
 }
 
+function listLiveGrants(usage: AccountUsage, now: number) {
+  return (usage.resetGrants ?? []).filter((grant) => grant.endsAt === null || grant.endsAt > now);
+}
+
 export function listUsageNotes(usage: AccountUsage, now: number): UsageNoteRow[] {
   const extra = usage.extraUsage;
   const credit = extra?.credit;
@@ -313,12 +317,12 @@ export function listUsageNotes(usage: AccountUsage, now: number): UsageNoteRow[]
     ...(credit && hasWholeCredit(credit)
       ? [{ id: 'credit', label: USAGE_EXTRA_LABEL.credit, value: formatUsageMoney(credit), detail: null }]
       : []),
-    ...(usage.resetGrants ?? []).map((grant) => createGrantRow(grant, now)),
+    ...listLiveGrants(usage, now).map((grant) => createGrantRow(grant, now)),
   ];
 }
 
-export function describeResetsAvailable(usage: AccountUsage) {
-  const count = (usage.resetGrants ?? [])
+export function describeResetsAvailable(usage: AccountUsage, now: number) {
+  const count = listLiveGrants(usage, now)
     .filter((grant) => grant.usableNow)
     .reduce((total, grant) => total + grant.left, 0);
   if (count === 0) return null;

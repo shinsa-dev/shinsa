@@ -120,15 +120,12 @@ export function resolveClaudeFastMode(value: unknown): FastModeAvailability {
 }
 
 function resolveCredit(
-  balance: unknown,
+  money: typeof UsageMoneyEntry.Type | undefined,
   extra: typeof ExtraUsage.Type | undefined,
   enabled: boolean
 ): UsageMoney | null {
-  const money = Option.getOrUndefined(decodeMoney(balance));
-  if (money) {
-    return money.amount_minor > 0
-      ? { minor: money.amount_minor, exponent: money.exponent, currency: money.currency }
-      : null;
+  if (money && money.amount_minor > 0) {
+    return { minor: money.amount_minor, exponent: money.exponent, currency: money.currency };
   }
   const limit = extra?.monthly_limit;
   if (!enabled || limit === undefined) return null;
@@ -146,8 +143,9 @@ export function parseExtraUsage(value: unknown): AccountExtraUsage | null {
   const spend = Option.getOrUndefined(decodeSpend(body.spend));
   if (!extra && !spend) return null;
   const enabled = extra ? extra.is_enabled === true : spend?.enabled === true;
-  const credit = resolveCredit(spend?.balance, extra, enabled);
-  return { enabled, noLimit: enabled && extra?.monthly_limit === undefined && credit === null, credit };
+  const balance = Option.getOrUndefined(decodeMoney(spend?.balance));
+  const credit = resolveCredit(balance, extra, enabled);
+  return { enabled, noLimit: enabled && extra?.monthly_limit === undefined && balance === undefined, credit };
 }
 
 function readGrant(value: unknown): UsageResetGrant[] {
