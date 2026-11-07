@@ -86,8 +86,9 @@ export class FakeCodex {
   get log(): FakeCodexEntry[] {
     const path = `${this.path}.log`;
     if (!existsSync(path)) return [];
-    return readFileSync(path, 'utf8')
-      .split('\n')
+    const lines = readFileSync(path, 'utf8').split('\n');
+    return lines
+      .slice(0, -1)
       .filter(Boolean)
       .map((line) => JSON.parse(line) as FakeCodexEntry);
   }
