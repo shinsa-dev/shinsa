@@ -47,7 +47,7 @@ import {
   WATCHDOG_SETTING_FIELDS,
   WATCHDOG_SETTINGS_TITLE,
 } from '@/lib/settings.ts';
-import { AutoShipSettings } from './auto-ship.tsx';
+import { AutopilotSettings } from './autopilot.tsx';
 import { DelegationLimitDialog } from './delegation-limit-dialog.tsx';
 import { DescribedRow, SETTINGS_SHELF, SettingRow, SettingsGroup } from './group.tsx';
 
@@ -269,7 +269,7 @@ export function AgentSettings({ settings }: { settings: Settings }) {
           />
         </SettingRow>
       </SettingsGroup>
-      <AutoShipSettings settings={settings} />
+      <AutopilotSettings settings={settings} />
       <SettingsGroup title={WATCHDOG_SETTINGS_TITLE}>
         {WATCHDOG_SETTING_FIELDS.map((field) => (
           <SettingRow key={field.key} title={field.title}>

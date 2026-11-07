@@ -21,6 +21,7 @@ import {
   type WeeklyReading,
 } from '../domain/index.ts';
 import { listOpenGates } from '../state/queries.ts';
+import { isUsageLimitExempt } from './autopilot.ts';
 import type { Decider } from './decider.ts';
 import { retryTask } from './retry.ts';
 import { moveWatchCheck } from './watchdogs.ts';
@@ -109,6 +110,7 @@ function describeEstimate(budget: TaskBudget) {
 
 export function holdForBudget(decider: Decider, run: Run) {
   const task = decider.task(run.taskId);
+  if (isUsageLimitExempt(decider.state.settings, task)) return false;
   const budget = selectSpentBudget(decider.state, task);
   if (!budget) return false;
   decider.fail(
@@ -135,9 +137,13 @@ export function acknowledgeBudget(decider: Decider, gate: Gate) {
   });
 }
 
+function isBudgetHeld(decider: Decider, task: Task) {
+  return isOverBudget(decider.state, task) && !isUsageLimitExempt(decider.state.settings, task);
+}
+
 export function releaseBudgetHolds(decider: Decider) {
   const released = listOpenGates(decider.state).filter(
-    (gate) => gate.cause === 'budget' && !isOverBudget(decider.state, decider.task(gate.taskId))
+    (gate) => gate.cause === 'budget' && !isBudgetHeld(decider, decider.task(gate.taskId))
   );
   for (const gate of released) retryTask(decider, gate.taskId, null);
 }
@@ -162,7 +168,7 @@ export function holdForPace(decider: Decider, run: Run) {
   const task = decider.task(run.taskId);
   const wait = task.usageWait;
   const { now } = decider.context;
-  if (isStartedEarly(wait, run, now)) return false;
+  if (isStartedEarly(wait, run, now) || isUsageLimitExempt(decider.state.settings, task)) return false;
   const hold = resolvePaceHold(decider.state, task, run.provider, now);
   if (!hold) return false;
   const { freesAt, ...limit } = hold;
@@ -214,6 +220,8 @@ export function releasePaceHolds(decider: Decider) {
     const wait = task.usageWait;
     if (wait?.cause !== 'pace' || wait.status !== 'armed') continue;
     const provider = wait.provider ?? CLAUDE_PROVIDER;
-    if (resolvePaceHold(decider.state, task, provider, now) === null) releasePaceWait(decider, task, wait);
+    const exempt = isUsageLimitExempt(decider.state.settings, task);
+    if (exempt || resolvePaceHold(decider.state, task, provider, now) === null)
+      releasePaceWait(decider, task, wait);
   }
 }

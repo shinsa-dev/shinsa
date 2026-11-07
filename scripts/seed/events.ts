@@ -2,7 +2,7 @@ import {
   type Project,
   type Repo,
   type ShinsaEventInput,
-  AUTO_SHIP_DEFAULTS,
+  AUTOPILOT_DEFAULTS,
   createSettings,
   formatTaskHandle,
   NO_PROJECT_KEY,
@@ -27,7 +27,7 @@ export function buildEvents(tasks: SeedTask[], projects: Project[], repos: Repo[
     settings: {
       ...createSettings(),
       taskUsageLimit: 10,
-      autoShip: { ...AUTO_SHIP_DEFAULTS, enabled: true, merge: 'low_risk', urgent: 'escalate_then_merge' },
+      autopilot: { ...AUTOPILOT_DEFAULTS, enabled: true, merge: 'low_risk', urgent: 'escalate_then_merge' },
     },
   });
   for (const task of tasks) pushTask(task, push);

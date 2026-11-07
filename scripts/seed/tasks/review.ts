@@ -44,7 +44,7 @@ export function listReviewTasks({ paywall }: SeedRepos, worktrees: SeedWorktrees
       reviewSummary:
         'The guard covers the dashboard button and the public API, and the new test fails without it.',
       reviewRatings: { confidence: 'high', risk: 'low' },
-      review: { minutes: 0, autoShip: 'High confidence, low risk, urgent.' },
+      review: { minutes: 0, autopilot: 'High confidence, low risk, urgent.' },
       ageHours: 30,
       worktreePath: duplicatePath,
       report: {

@@ -435,16 +435,16 @@ export interface BundlePullRequest {
   number: number;
 }
 
-export interface AutoShipped {
+export interface Autopiloted {
   at: number;
   reason: string;
 }
 
-export type AutoShipAction = 'escalate' | 'merge';
+export type AutopilotAction = 'escalate' | 'merge';
 
-export interface AutoShipDue {
+export interface AutopilotDue {
   at: number;
-  action: AutoShipAction;
+  action: AutopilotAction;
 }
 
 export interface TaskEscalation {
@@ -510,7 +510,7 @@ export interface Task {
   approveAfterFix?: boolean;
   reviewDisagreements?: ReviewDisagreement[];
   reviewRatings?: ReviewRatings | null;
-  autoShipped?: AutoShipped | null;
+  autopiloted?: Autopiloted | null;
   escalation?: TaskEscalation | null;
   reviewedInput?: string | null;
   monitor?: Monitor | null;
@@ -749,8 +749,8 @@ export interface Gate {
   recommendation?: string | null;
   cause?: GateCause;
   escalation?: ReviewEscalation;
-  autoShipHeld?: string;
-  autoShipDue?: AutoShipDue | null;
+  autopilotHeld?: string;
+  autopilotDue?: AutopilotDue | null;
   verdicts?: FindingVerdict[];
   supersededBy?: string | null;
   provider?: string;

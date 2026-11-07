@@ -597,7 +597,7 @@ function listUserCommands(state: ShinsaState, random: Random): ShinsaCommand[] {
         maxFixRounds: pick(random, [null, 1, 3]) ?? null,
         agentModels: chance(random, 0.5) ? { answerer: 'sonnet' } : {},
         agentProviders: chance(random, 0.3) ? { answerer: 'codex' } : {},
-        autoShip: { enabled: approvePlans === 'large' },
+        autopilot: { enabled: approvePlans === 'large' },
       },
     });
   }

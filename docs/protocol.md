@@ -62,7 +62,7 @@ One definition per term. **Code** is the name in `packages/core`; **UI** is the 
 | judgement call | A choice the agent made in a phase, with its reason and the alternatives it rejected | `JudgementCall` | Judgement call, "Judgement calls" |
 | disagreement | A judgement call the reviewer would have made differently, with why | `ReviewDisagreement`, `report_review`'s `disagreements`, `Task.reviewDisagreements` | Disputed, "The agent review disagrees" |
 | rating | The reviewer's two ratings of a change: how sure it is (`confidence`) and what breaks if it is wrong (`risk`), each low, medium or high | `ReviewRatings`, `ReviewRating`, `report_review`'s `confidence` and `risk`, `Task.reviewRatings` | Confidence, Risk |
-| Auto-ship | Your pre-approval: a policy that approves a review, merges, or escalates an urgent change to your team for you | `autoShip` (`AutoShipPolicy`), `Task.autoShipped`, `Task.escalation`, `Gate.autoShipDue`, `auto_ship.fire` | Auto-ship, Approved for you, Sent to your team |
+| Autopilot | Your pre-approval: a policy that approves a review, merges, or escalates an urgent change to your team for you | `autopilot` (`AutopilotPolicy`), `Task.autopiloted`, `Task.escalation`, `Gate.autopilotDue`, `autopilot.fire` | Autopilot, Approved for you, Sent to your team |
 | spot | A line range the work report points you at, ranked critical, high or normal; a key piece of code also has a title and an explanation | `CodeSpot` | spot, "Key code" |
 | walkthrough | The Agent's technical account of the whole change on its last phase: approach, flow, risks, testing (what the tests cover and a guide to try it by hand) and the steps around the merge; a fix revises the parts it changes | `ReportWalkthrough`, `complete_phase`'s `walkthrough`; `ReportWalkthroughRevision`, `complete_fix`'s | Approach, How it works, Risks and edge cases, How to test, Pre-merge, Post-merge |
 | request (an iteration) | Something you sent an agent that its next hand-over answers (changes at a gate, line comments, feedback on a plan, a message to a running or resting agent, a follow-up, a restarted step), with its reply: a headline, each point you raised marked done, answered or not changed with a note, and what you do now. The chat shows it on the hand-over's card and the overview on the card it belongs to, the earlier ones under Earlier requests, so you never read the chat to know what changed | `Iteration` (`Task.iterations`), `IterationRequest`, `AgentReply` (the `reply` of every hand-over that answers one), `ReplyingHandOver`, `ReplyPoint`, `ReplyOutcome`, `iteration.requested`, `iteration.answered` | "Your request", Earlier requests, Done, Answered, Not changed, "What to do now" |
@@ -281,8 +281,8 @@ one reads as its empty value. The fields under Triage and shape, Plan and build,
 | `approvedEdits?` | `review` \| `merge` \| null | you approved that gate while `editedPaths` had files: every check runs before the push (`review`), or CI before the merge (`merge`); `task.edits_approved`, dropped by a real fix turn |
 | `approveAfterFix?` | boolean | you asked for changes with Fix N findings and approve (`gate.answered` with `thenApprove`): the next review gate that opens without an escalation is approved at once (`ahead`); written by every review answer, false in a new round |
 | `reviewRatings?` | `ReviewRatings` \| null | the last agent review's `confidence` and `risk` (`review.reported`'s `ratings`); a new round clears them |
-| `autoShipped?` | `{ at, reason }` \| null | Auto-ship approved this round's review for you (`gate.answered` with `autoShip`), why; cleared by the next review gate or a new round. Only such a change merges for you |
-| `escalation?` | `{ at, reason }` \| null | Auto-ship sent this urgent change to your team (`task.escalated`); a shared status field, so it travels in the team listing. Cleared when its merge gate is answered or withdrawn, or a new round starts |
+| `autopiloted?` | `{ at, reason }` \| null | Autopilot approved this round's review for you (`gate.answered` with `autopilot`), why; cleared by the next review gate or a new round. Only such a change merges for you |
+| `escalation?` | `{ at, reason }` \| null | Autopilot sent this urgent change to your team (`task.escalated`); a shared status field, so it travels in the team listing. Cleared when its merge gate is answered or withdrawn, or a new round starts |
 | `untoldEdits?` | string[] | those of them no agent has been told about; the next run's prompt names them (`task.edits_told`) |
 | `untoldMessages?` | `UntoldMessage[]` (`at`, `text`, `sender`: `agent` \| `schedule`, `comments?`) | messages sent for you while a gate was open (`task.messaged` with `kept`), not yet told; the next run of the task's session is told them (`task.messages_told`) |
 | `overlaps?` | `TaskOverlap[]` (`taskId`, `paths`, `untold`) | per other open task of the repository, the files both change (`task.overlapped`), and those the Agent has not been told yet; its next run's prompt names them (`task.overlaps_told`) |
@@ -662,8 +662,8 @@ Soft gates, decided by Shinsa or the reviewer:
 | `choices?`, `recommendation?` | | a question's one-click answers |
 | `cause?` | `budget` \| `monitor` \| `push_hook` | why a failure gate opened, when not plain recovery; `push_hook` is the same pre-push hook failure after a fix round, whose approve (Send to the agent again) starts another fix round |
 | `escalation?` | reason (`rounds`, `stalled`, `exhausted`), rounds | an escalated review |
-| `autoShipHeld?` | string | why Auto-ship left this review gate for you ("The reviewer’s confidence is medium.") |
-| `autoShipDue?` | `{ at, action: 'escalate' \| 'merge' }` \| null | an open merge gate's Auto-ship deadline (`auto_ship.scheduled`); `AutoShipClock` fires `auto_ship.fire` at `at` |
+| `autopilotHeld?` | string | why Autopilot left this review gate for you ("The reviewer’s confidence is medium.") |
+| `autopilotDue?` | `{ at, action: 'escalate' \| 'merge' }` \| null | an open merge gate's Autopilot deadline (`autopilot.scheduled`); `AutopilotClock` fires `autopilot.fire` at `at` |
 | `verdicts?` | `{ index, verdict: fix \| dismiss, note }[]` | your per-finding decisions |
 | `supersededBy?` | string \| null | the message that withdrew a question |
 | `provider?` | string | the provider a Sign in gate is for, set on every one (`claude` for a Claude account) |
@@ -877,7 +877,7 @@ your behalf (`onBehalf`, `byTask`). **Human** = only you: its specs are `humanOn
 | `repo.remove` | forgets a repository | `repos remove` | agent |
 | `focus.change` | sets or clears the focus: `projectId` or `teamId`, never both (`focus_refused`), and `until` | `focus set`, `focus clear` | agent |
 | `away.record` | records a span you were away from your Mac (`from`, `to`), sent by the Mac app's page; refused when it ends before it starts, after now or lasts over 30 days (`away_refused`) | none | **human** |
-| `settings.change` | changes settings (`SETTINGS_KEYS`) | `settings set` | agent; **human** for `approvePlans`, `mergeMethod`, `taskBudgetUsd`, `taskUsageLimit`, `dailyUsageLimit`, `autoResume`, `snoozeLimited`, `accountSwitchAt`, `fastMode`, `agentFastModes`, `delegationLimit`, `shareLimit`, `sharePreset`, `autoShip` (`HUMAN_ONLY_SETTINGS`); a partial `autoShip` is merged into the current policy, `urgentWaitMinutes` 1 to 1,440 |
+| `settings.change` | changes settings (`SETTINGS_KEYS`) | `settings set` | agent; **human** for `approvePlans`, `mergeMethod`, `taskBudgetUsd`, `taskUsageLimit`, `dailyUsageLimit`, `autoResume`, `snoozeLimited`, `accountSwitchAt`, `fastMode`, `agentFastModes`, `delegationLimit`, `shareLimit`, `sharePreset`, `autopilot` (`HUMAN_ONLY_SETTINGS`); a partial `autopilot` is merged into the current policy, `urgentWaitMinutes` 1 to 1,440, `ignoreUsageLimits` (true by default) lets an urgent task's runs skip the usage and cost limits |
 
 Core refuses a command sent on your behalf with `human_only`, recording nothing, when it is a `gate.answer`
 (`assertHumanDecides`), when a gate that was open before it is no longer open after it (`assertGatesStayOpen` in
@@ -1007,7 +1007,7 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `message.route`, `message.drop` | `MessageInbox` (`triage/inbox/service.ts`) | delivers the messages waiting in an inbox, together, with the classifier's answer, or drops the ones core refused, with the reason |
 | `monitor.fire` | `MonitorClock` | wakes a monitor |
 | `watchdog.fire` | `WatchdogClock` | checks a watchdog at its `nextCheckAt` (`dueAt`), defers it while the task works, or passes it once its window ended |
-| `auto_ship.fire` | `AutoShipClock` | acts on an open merge gate's Auto-ship deadline (`dueAt`): merges for you, or escalates to your team and, with `escalate_then_merge`, sets the merge deadline |
+| `autopilot.fire` | `AutopilotClock` | acts on an open merge gate's Autopilot deadline (`dueAt`): merges for you, or escalates to your team and, with `escalate_then_merge`, sets the merge deadline |
 | `usage_wait.resume` | `UsageResume` | resumes a step after the reset |
 | `watch_suggestion.record` | the `watch.suggest` effect | records the suggested watch for a new integration (`projectId`, `server`, the Writer's `name` and `text` or null for plain wording, `timeZone`), hourly; does nothing when the integration is gone or watched, was suggested before, or 10 suggestions are open |
 | `feedback.record_draft` | the `feedback.draft` effect | the drafted `title` and `body` of an entry still `drafting`; an empty one fails it |
@@ -1116,9 +1116,9 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `evidence.attached` | evidence was attached (`checkId` on a check's output or a linked check; `replaces`: the ids of the pieces it replaced, which get `replacedBy`) |
 | `evidence.removed` | an agent removed evidence that no longer applies (`ids`, `reason`, `runId`; each piece gets `removedAt` and `removedReason`) |
 | `evidence.uploaded` | pieces were uploaded to GitHub for the pull request description (`taskId`, `uploads`; each piece gets `uploadUrl`) |
-| `gate.opened`, `gate.answered`, `gate.withdrawn`, `gate.superseded` | a gate opened (`type`), was answered (`thenApprove` when you asked to approve after the fix, `ahead` when that approval was made for you, `autoShip` with the reason when Auto-ship made it), withdrawn, or replaced by your message |
-| `auto_ship.scheduled` | an open merge gate's Auto-ship deadline was set or cleared (`gateId`, `due` or null) |
-| `task.escalated` | Auto-ship sent the urgent change to your team (`reason`; sets `Task.escalation`) |
+| `gate.opened`, `gate.answered`, `gate.withdrawn`, `gate.superseded` | a gate opened (`type`), was answered (`thenApprove` when you asked to approve after the fix, `ahead` when that approval was made for you, `autopilot` with the reason when Autopilot made it), withdrawn, or replaced by your message |
+| `autopilot.scheduled` | an open merge gate's Autopilot deadline was set or cleared (`gateId`, `due` or null) |
+| `task.escalated` | Autopilot sent the urgent change to your team (`reason`; sets `Task.escalation`) |
 | `gate.noted` | the open operation gate's notes were replaced (`notes`, null clears them; the same gate, no new notification) |
 | `run.started`, `run.dispatched` | a run was created; it started |
 | `run.attempted`, `run.linked` | an attempt began; it linked its session |

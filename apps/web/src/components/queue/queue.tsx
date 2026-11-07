@@ -14,7 +14,7 @@ import { BundleMark } from '@/components/task/bundle.tsx';
 import { useTeamEscalations } from '@/components/teams/tasks.tsx';
 import { TimeAgo } from '@/components/text/time-ago.tsx';
 import { useProgressiveCount } from '@/hooks/use-progressive-count.ts';
-import { listTeamEscalationRows, TEAM_ESCALATIONS_TITLE } from '@/lib/auto-ship.ts';
+import { listTeamEscalationRows, TEAM_ESCALATIONS_TITLE } from '@/lib/autopilot.ts';
 import { TONE_TEXT } from '@/lib/format/tone.ts';
 import { resolveHomeSectionId } from '@/lib/home.ts';
 import { createDisclosureId, type DisclosureId, useDisclosure } from '@/lib/preferences/disclosure.ts';

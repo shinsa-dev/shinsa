@@ -30,7 +30,7 @@ import {
   removeEvidence,
   reportReview,
 } from './agents.ts';
-import { fireAutoShip } from './auto-ship.ts';
+import { fireAutopilot } from './autopilot.ts';
 import { moveToBacklog, removeFromBacklog } from './backlog.ts';
 import { reviewBundles } from './bundles.ts';
 import { recordChecks } from './checks.ts';
@@ -486,8 +486,8 @@ function apply(decider: Decider, command: ShinsaCommand) {
       return connectWatchdog(decider, command);
     case 'watchdog.fire':
       return fireWatchdog(decider, command);
-    case 'auto_ship.fire':
-      return fireAutoShip(decider, command);
+    case 'autopilot.fire':
+      return fireAutopilot(decider, command);
     case 'watch_source.write':
       return writeWatchSource(decider, command);
     case 'watch_source.remove':

@@ -35,6 +35,7 @@ import { SilenceNote } from '@/components/overview/silence-note.tsx';
 import { UsageWaitCard } from '@/components/overview/usage-wait-card.tsx';
 import { WaitCard } from '@/components/overview/wait-card.tsx';
 import { MergeStepsBlock } from '@/components/review/merge-steps.tsx';
+import { ReviewRatings } from '@/components/review/ratings.tsx';
 import { useReadOnly, useReadOnlyOwner } from '@/components/task/read-only.tsx';
 import { InsetNote } from '@/components/text/inset-note.tsx';
 import { Markdown } from '@/components/text/markdown.tsx';
@@ -356,6 +357,7 @@ function ReviewCard({
       }
       footer={<ProgressTrack progress={resolveTaskProgress(task)} />}
     >
+      <ReviewRatings task={task} />
       {reply && <ShownReply task={task} iteration={reply} />}
       {gate.escalation ? (
         <p className='text-xs text-fg-3'>{describeEscalationBody(gate.escalation)}</p>

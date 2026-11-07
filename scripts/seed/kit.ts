@@ -124,7 +124,7 @@ export interface SeedTask {
   timed?: TimedSeedEvent[];
   provider?: 'codex';
   revision?: { afterRun: number; response: string };
-  review?: { minutes: number; autoShip?: string };
+  review?: { minutes: number; autopilot?: string };
   script?: (push: Push, clock: SeedClock) => void;
 }
 

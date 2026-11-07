@@ -1,6 +1,6 @@
 import type { TaskCreator } from '../domain/delegations.ts';
 import type {
-  AutoShipDue,
+  AutopilotDue,
   BacklogCause,
   BundleConflict,
   BundleReady,
@@ -251,10 +251,10 @@ type EventBody =
       comments?: ReviewComment[];
       thenApprove?: boolean;
       ahead?: boolean;
-      autoShip?: string;
+      autopilot?: string;
     }
   | { type: 'gate.withdrawn'; gateId: string }
-  | { type: 'auto_ship.scheduled'; gateId: string; due: AutoShipDue | null }
+  | { type: 'autopilot.scheduled'; gateId: string; due: AutopilotDue | null }
   | { type: 'task.escalated'; taskId: string; reason: string }
   | { type: 'gate.noted'; gateId: string; notes: string | null }
   | { type: 'run.started'; run: Run }

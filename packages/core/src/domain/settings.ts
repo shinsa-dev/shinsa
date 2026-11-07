@@ -53,45 +53,47 @@ export function resolveShareEnd(limit: ShareLimit, now: number) {
   return span === undefined ? null : now + span;
 }
 
-export type AutoShipRisk = 'none' | ReviewRating;
+export type AutopilotRisk = 'none' | ReviewRating;
 
-export const AUTO_SHIP_RISKS: readonly AutoShipRisk[] = ['none', 'low', 'medium', 'high'];
+export const AUTOPILOT_RISKS: readonly AutopilotRisk[] = ['none', 'low', 'medium', 'high'];
 
-export type AutoShipMerge = 'never' | 'low_risk' | 'approved';
+export type AutopilotMerge = 'never' | 'low_risk' | 'approved';
 
-export const AUTO_SHIP_MERGES: readonly AutoShipMerge[] = ['never', 'low_risk', 'approved'];
+export const AUTOPILOT_MERGES: readonly AutopilotMerge[] = ['never', 'low_risk', 'approved'];
 
-export type AutoShipUrgent = 'wait' | 'escalate' | 'merge' | 'escalate_then_merge';
+export type AutopilotUrgent = 'wait' | 'escalate' | 'merge' | 'escalate_then_merge';
 
-export const AUTO_SHIP_URGENT_ACTIONS: readonly AutoShipUrgent[] = [
+export const AUTOPILOT_URGENT_ACTIONS: readonly AutopilotUrgent[] = [
   'wait',
   'escalate',
   'merge',
   'escalate_then_merge',
 ];
 
-export interface AutoShipPolicy {
+export interface AutopilotPolicy {
   enabled: boolean;
-  approveUpTo: AutoShipRisk;
-  urgentApproveUpTo: AutoShipRisk;
-  merge: AutoShipMerge;
-  urgent: AutoShipUrgent;
+  approveUpTo: AutopilotRisk;
+  urgentApproveUpTo: AutopilotRisk;
+  merge: AutopilotMerge;
+  urgent: AutopilotUrgent;
   urgentWaitMinutes: number;
+  ignoreUsageLimits: boolean;
 }
 
 export const MAX_URGENT_WAIT_MINUTES = 1440;
 
-export const AUTO_SHIP_DEFAULTS: AutoShipPolicy = {
+export const AUTOPILOT_DEFAULTS: AutopilotPolicy = {
   enabled: false,
   approveUpTo: 'low',
   urgentApproveUpTo: 'medium',
   merge: 'never',
   urgent: 'escalate',
   urgentWaitMinutes: 60,
+  ignoreUsageLimits: true,
 };
 
-export function resolveAutoShipPolicy(settings: Settings): AutoShipPolicy {
-  return { ...AUTO_SHIP_DEFAULTS, ...settings.autoShip };
+export function resolveAutopilotPolicy(settings: Settings): AutopilotPolicy {
+  return { ...AUTOPILOT_DEFAULTS, ...settings.autopilot };
 }
 
 export interface Settings {
@@ -122,7 +124,7 @@ export interface Settings {
   placementPolicies?: string[];
   shareLimit?: ShareLimit;
   sharePreset?: SharePreset;
-  autoShip?: AutoShipPolicy;
+  autopilot?: AutopilotPolicy;
 }
 
 export const SETTINGS_KEYS = [
@@ -153,7 +155,7 @@ export const SETTINGS_KEYS = [
   'placementPolicies',
   'shareLimit',
   'sharePreset',
-  'autoShip',
+  'autopilot',
 ] as const satisfies readonly (keyof Settings)[];
 
 export const HUMAN_ONLY_SETTINGS = [
@@ -170,7 +172,7 @@ export const HUMAN_ONLY_SETTINGS = [
   'delegationLimit',
   'shareLimit',
   'sharePreset',
-  'autoShip',
+  'autopilot',
 ] as const satisfies readonly (keyof Settings)[];
 
 export const HUMAN_ONLY_REPO_FIELDS = ['checkCommands', 'workspace', 'coverage'] as const;
@@ -224,7 +226,7 @@ const DEFAULT_SETTINGS: Settings = {
   placementPolicies: [],
   shareLimit: DEFAULT_SHARE_LIMIT,
   sharePreset: DEFAULT_SHARE_PRESET,
-  autoShip: AUTO_SHIP_DEFAULTS,
+  autopilot: AUTOPILOT_DEFAULTS,
 };
 
 export function createSettings(): Settings {

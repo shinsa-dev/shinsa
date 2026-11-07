@@ -236,7 +236,7 @@ function pushTaskReview(task: SeedTask, push: Push, clock: SeedClock) {
     gateId,
     decision: 'approve',
     response: null,
-    ...(task.review.autoShip ? { ahead: true, autoShip: task.review.autoShip } : {}),
+    ...(task.review.autopilot ? { ahead: true, autopilot: task.review.autopilot } : {}),
   });
 }
 

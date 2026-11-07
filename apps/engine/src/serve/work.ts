@@ -11,7 +11,7 @@ import { ServeLock } from '../instance/lock/service.ts';
 import { describeError } from '../log/redact.ts';
 import { Remote, TeamFeeds } from '../remote/index.ts';
 import { ShareClock } from '../remote/share-clock/service.ts';
-import { AutoShipClock } from '../runtime/auto-ship/service.ts';
+import { AutopilotClock } from '../runtime/autopilot/service.ts';
 import { EffectRunner } from '../runtime/effects/service.ts';
 import { EngineCore } from '../runtime/engine/service.ts';
 import { MonitorClock } from '../runtime/monitors/service.ts';
@@ -41,7 +41,7 @@ export const WorkLayer = Layer.effectDiscard(
     const terminals = yield* Terminals;
     const extensions = yield* Extensions;
     const eunoe = yield* EunoeServer;
-    const clocks = [yield* MonitorClock, yield* WatchdogClock, yield* AutoShipClock, yield* ShareClock];
+    const clocks = [yield* MonitorClock, yield* WatchdogClock, yield* AutopilotClock, yield* ShareClock];
     const lock = yield* Effect.serviceOption(ServeLock);
     if (Option.isSome(lock)) yield* lock.value.update({ port: server.port, url: server.url });
     yield* (yield* ServerAddress).replace(server.url);

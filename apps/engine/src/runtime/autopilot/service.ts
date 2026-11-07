@@ -3,33 +3,33 @@ import { Context, Effect, Layer } from 'effect';
 import { makeEngineClock } from '../clock/engine.ts';
 import type { EngineClock, EngineClockTick } from '../clock/schema.ts';
 import type { EngineCore } from '../engine/service.ts';
-import { AutoShipClockTimings } from './schema.ts';
+import { AutopilotClockTimings } from './schema.ts';
 
-export class AutoShipClock extends Context.Service<AutoShipClock, EngineClock>()(
-  'shinsa/engine/runtime/auto-ship/AutoShipClock'
+export class AutopilotClock extends Context.Service<AutopilotClock, EngineClock>()(
+  'shinsa/engine/runtime/autopilot/AutopilotClock'
 ) {
   static readonly layer = Layer.effect(
-    AutoShipClock,
+    AutopilotClock,
     Effect.gen(function* () {
-      const listAutoShipTicks = (state: ShinsaState, engine: EngineCore['Service']) => {
+      const listAutopilotTicks = (state: ShinsaState, engine: EngineCore['Service']) => {
         return Object.values(state.gates).flatMap((gate): EngineClockTick[] => {
-          const due = gate.autoShipDue;
+          const due = gate.autopilotDue;
           if (gate.type !== 'merge' || gate.status !== 'open' || !due) return [];
-          const id = `auto_ship:${gate.id}:${due.at}`;
+          const id = `autopilot:${gate.id}:${due.at}`;
           const fire = engine.dispatch(
-            { type: 'auto_ship.fire', taskId: gate.taskId, gateId: gate.id, dueAt: due.at },
+            { type: 'autopilot.fire', taskId: gate.taskId, gateId: gate.id, dueAt: due.at },
             { id }
           );
           return [{ id, dueAt: due.at, fire }];
         });
       };
       const clock = yield* makeEngineClock({
-        area: 'Auto-ship',
+        area: 'Autopilot',
         failure: 'Could not act on an urgent change for you',
-        timings: yield* AutoShipClockTimings,
-        list: listAutoShipTicks,
+        timings: yield* AutopilotClockTimings,
+        list: listAutopilotTicks,
       });
-      return AutoShipClock.of(clock);
+      return AutopilotClock.of(clock);
     })
   );
 }

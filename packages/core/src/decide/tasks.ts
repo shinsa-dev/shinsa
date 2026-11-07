@@ -27,13 +27,14 @@ import {
   listPendingDependencies,
   resolveTaskWorkspace,
 } from '../state/queries.ts';
-import { syncAutoShipDeadlines } from './auto-ship.ts';
+import { syncAutopilotDeadlines } from './autopilot.ts';
 import {
   addToBacklog,
   buildFromBacklog,
   isStartingFromBacklog,
   releaseInquiryFromBacklog,
 } from './backlog.ts';
+import { releasePaceHolds } from './costs.ts';
 import { type Decider, describeWaiting } from './decider.ts';
 import { changeDependencies, changeStack, resolveDependencies, resolveStackParents } from './dependencies.ts';
 import { closeTeammateDuplicate, closeTriageDuplicate, selectTriageDuplicate } from './duplicates.ts';
@@ -183,7 +184,8 @@ export function prioritizeTask(decider: Decider, command: CommandOf<'task.priori
   if (decider.task(command.taskId).priority === command.priority) return;
   decider.emit({ type: 'task.prioritized', taskId: command.taskId, priority: command.priority, by: 'you' });
   decider.requestBriefing(command.taskId);
-  syncAutoShipDeadlines(decider, command.taskId);
+  syncAutopilotDeadlines(decider, command.taskId);
+  releasePaceHolds(decider);
 }
 
 export function waitOnTasks(decider: Decider, command: CommandOf<'task.wait_on'>) {

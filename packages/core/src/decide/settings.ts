@@ -10,7 +10,7 @@ import {
   PROJECT_COLORS,
   PROJECT_LIMITS,
   type Project,
-  resolveAutoShipPolicy,
+  resolveAutopilotPolicy,
   resolveProjectKey,
   type Settings,
   selectFolderProject,
@@ -19,7 +19,7 @@ import {
 import { isPlacementPoliciesValid } from '../remote/placement.ts';
 import { PLACEMENT_POLICY_LIMITS } from '../remote/schema.ts';
 import { findProject, findRepo } from '../state/queries.ts';
-import { syncAutoShipDeadlines } from './auto-ship.ts';
+import { syncAutopilotDeadlines } from './autopilot.ts';
 import { releaseBudgetHolds, releasePaceHolds } from './costs.ts';
 import type { Decider } from './decider.ts';
 import { isSameValue } from './equality.ts';
@@ -74,7 +74,7 @@ function assertSettings(patch: Partial<Settings>) {
     });
   }
   assertWatchdogSettings(patch);
-  const wait = patch.autoShip?.urgentWaitMinutes;
+  const wait = patch.autopilot?.urgentWaitMinutes;
   if (wait !== undefined && !isWholeBetween(wait, 1, MAX_URGENT_WAIT_MINUTES)) {
     throw new DomainError({
       code: 'settings_invalid',
@@ -344,9 +344,9 @@ function resolveSettingsPatch(
   previous: Settings,
   patch: CommandOf<'settings.change'>['patch']
 ): Partial<Settings> {
-  const { autoShip, ...rest } = patch;
-  if (!autoShip) return rest;
-  return { ...rest, autoShip: { ...resolveAutoShipPolicy(previous), ...autoShip } };
+  const { autopilot, ...rest } = patch;
+  if (!autopilot) return rest;
+  return { ...rest, autopilot: { ...resolveAutopilotPolicy(previous), ...autopilot } };
 }
 
 export function changeSettings(decider: Decider, command: CommandOf<'settings.change'>) {
@@ -358,5 +358,5 @@ export function changeSettings(decider: Decider, command: CommandOf<'settings.ch
   decider.emit({ type: 'settings.changed', settings });
   releaseBudgetHolds(decider);
   releasePaceHolds(decider);
-  syncAutoShipDeadlines(decider);
+  syncAutopilotDeadlines(decider);
 }

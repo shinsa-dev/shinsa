@@ -52,7 +52,7 @@ import {
   describeStage,
   describeUnreachedTeammates,
 } from './activity.ts';
-import { applyAutoShipScheduled, applyTaskEscalated } from './auto-ship.ts';
+import { applyAutopilotScheduled, applyTaskEscalated } from './autopilot.ts';
 import { applyDelegationEvent, recordCourierTask, resolveLineage } from './delegations.ts';
 import { removeEntry, writeEntry } from './draft.ts';
 import { applyFeedbackEvent } from './feedback.ts';
@@ -990,8 +990,8 @@ function applyEventBody(state: ShinsaState, event: ShinsaEvent): ShinsaState {
     case 'gate.superseded':
       applyGateEvent(state, event);
       break;
-    case 'auto_ship.scheduled':
-      applyAutoShipScheduled(state, event);
+    case 'autopilot.scheduled':
+      applyAutopilotScheduled(state, event);
       break;
     case 'task.escalated':
       applyTaskEscalated(state, event);

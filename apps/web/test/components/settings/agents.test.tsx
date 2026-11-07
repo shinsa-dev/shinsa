@@ -1,9 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, type Mock, spyOn } from 'bun:test';
-import { AUTO_SHIP_DEFAULTS, createSettings, resolveEngineInfo, type Settings } from '@shinsa/core';
+import { AUTOPILOT_DEFAULTS, createSettings, resolveEngineInfo, type Settings } from '@shinsa/core';
 import { TooltipProvider } from '@shinsa/ui/components/tooltip';
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { AgentSettings } from '@/components/settings/agents.tsx';
-import { AUTO_SHIP_NO_TEAM } from '@/lib/auto-ship.ts';
+import { AUTOPILOT_NO_TEAM, AUTOPILOT_ROWS } from '@/lib/autopilot.ts';
 import { createAccount, createSnapshot } from '../../support/accounts.ts';
 import { spyOnToasts } from '../../support/commands.ts';
 import { spyOnEngine } from '../../support/engine.ts';
@@ -225,31 +225,33 @@ describe('Settings → Agents → Engine', () => {
   });
 });
 
-describe('Settings → Agents → Auto-ship', () => {
+describe('Settings → Agents → Autopilot', () => {
   const ESCALATING: Settings = {
     ...createSettings(),
-    autoShip: { ...AUTO_SHIP_DEFAULTS, enabled: true, urgent: 'escalate' },
+    autopilot: { ...AUTOPILOT_DEFAULTS, enabled: true, urgent: 'escalate' },
   };
 
-  it('shows only on an engine that has Auto-ship', () => {
+  it('shows only on an engine that has Autopilot', () => {
     const engine = resolveEngineInfo('1.0.0');
-    spyOnEngine({ ...engine, features: engine.features.filter((feature) => feature !== 'auto_ship') });
+    spyOnEngine({ ...engine, features: engine.features.filter((feature) => feature !== 'autopilot') });
     renderAgents(ESCALATING);
-    expect(screen.queryByRole('combobox', { name: 'Auto-ship' })).toBeNull();
+    expect(screen.queryByRole('combobox', { name: 'Autopilot' })).toBeNull();
   });
 
   it('warns that an escalation reaches only you while no project is in a team', () => {
     spyOnEngine();
     renderAgents(ESCALATING);
-    expect(screen.getByRole('combobox', { name: 'Auto-ship' })).toBeTruthy();
-    expect(screen.getByText(AUTO_SHIP_NO_TEAM)).toBeTruthy();
+    expect(screen.getByRole('combobox', { name: 'Autopilot' })).toBeTruthy();
+    expect(screen.getByText(AUTOPILOT_NO_TEAM)).toBeTruthy();
   });
 
   it('leaves the warning out once a project is in a team', () => {
     spyOnEngine();
     pushState(createShinsaState({ projects: [createProject({ id: 'p1', teamIds: ['team-1'] })] }));
     renderAgents(ESCALATING);
-    expect(screen.getByRole('combobox', { name: 'When an urgent merge waits' })).toBeTruthy();
-    expect(screen.queryByText(AUTO_SHIP_NO_TEAM)).toBeNull();
+    expect(screen.getByRole('combobox', { name: 'When an urgent merge waits for you' })).toBeTruthy();
+    expect(screen.queryByText(AUTOPILOT_NO_TEAM)).toBeNull();
+    expect(screen.getByText(AUTOPILOT_ROWS.urgent.description)).toBeTruthy();
+    expect(screen.getByRole('combobox', { name: AUTOPILOT_ROWS.usage.title })).toBeTruthy();
   });
 });

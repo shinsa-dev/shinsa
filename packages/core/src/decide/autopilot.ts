@@ -1,15 +1,15 @@
 import type { CommandOf } from '../commands/index.ts';
 import {
-  type AutoShipDue,
+  type AutopilotDue,
   type Gate,
   isTaskClosed,
   MINUTE_MS,
   resolveApprovalPath,
 } from '../domain/index.ts';
 import {
-  type AutoShipPolicy,
-  type AutoShipRisk,
-  resolveAutoShipPolicy,
+  type AutopilotPolicy,
+  type AutopilotRisk,
+  resolveAutopilotPolicy,
   type Settings,
 } from '../domain/settings.ts';
 import type { Task } from '../domain/types.ts';
@@ -19,11 +19,11 @@ import type { Decider } from './decider.ts';
 import { hasOpenPreMergeSteps } from './merge-steps.ts';
 import { startMerge } from './pull-requests.ts';
 
-export type AutoShipDecision = { approve: true; reason: string } | { approve: false; reason: string };
+export type AutopilotDecision = { approve: true; reason: string } | { approve: false; reason: string };
 
 const RISK_ORDER: Record<ReviewRating, number> = { low: 0, medium: 1, high: 2 };
 
-function isRiskWithin(risk: ReviewRating, upTo: AutoShipRisk) {
+function isRiskWithin(risk: ReviewRating, upTo: AutopilotRisk) {
   return upTo !== 'none' && RISK_ORDER[risk] <= RISK_ORDER[upTo];
 }
 
@@ -32,14 +32,19 @@ function isUrgent(task: Task) {
 }
 
 function isRiskAllowed(settings: Settings, task: Task, risk: ReviewRating) {
-  const policy = resolveAutoShipPolicy(settings);
+  const policy = resolveAutopilotPolicy(settings);
   if (isRiskWithin(risk, policy.approveUpTo)) return true;
   return isUrgent(task) && isRiskWithin(risk, policy.urgentApproveUpTo);
 }
 
-export function isAutoShipCandidate(settings: Settings, task: Task) {
+export function isUsageLimitExempt(settings: Settings, task: Task) {
+  const policy = resolveAutopilotPolicy(settings);
+  return policy.enabled && policy.ignoreUsageLimits && isUrgent(task);
+}
+
+export function isAutopilotCandidate(settings: Settings, task: Task) {
   const ratings = task.reviewRatings;
-  if (!resolveAutoShipPolicy(settings).enabled || !ratings) return false;
+  if (!resolveAutopilotPolicy(settings).enabled || !ratings) return false;
   return ratings.confidence === 'high' && isRiskAllowed(settings, task, ratings.risk);
 }
 
@@ -56,40 +61,40 @@ export function isFindingFixedBeforeReview(settings: Settings, task: Task, findi
   if (isDismissed(task, finding)) return false;
   if (finding.severity === 'blocking') return true;
   if (finding.severity !== 'should_fix') return false;
-  return task.approveAfterFix === true || isAutoShipCandidate(settings, task);
+  return task.approveAfterFix === true || isAutopilotCandidate(settings, task);
 }
 
 function describeApproval(task: Task, risk: ReviewRating) {
   return isUrgent(task) ? `High confidence, ${risk} risk, urgent.` : `High confidence, ${risk} risk.`;
 }
 
-export function resolveAutoShipDecision(
+export function resolveAutopilotDecision(
   settings: Settings,
   task: Task,
   escalated: boolean
-): AutoShipDecision | null {
+): AutopilotDecision | null {
   const ratings = task.reviewRatings;
-  if (!resolveAutoShipPolicy(settings).enabled) return null;
+  if (!resolveAutopilotPolicy(settings).enabled) return null;
   if (escalated) return { approve: false, reason: 'The agents could not settle the review.' };
   if (!ratings) return { approve: false, reason: 'The reviewer did not rate the change.' };
   if (ratings.confidence !== 'high') {
     return { approve: false, reason: `The reviewer’s confidence is ${ratings.confidence}.` };
   }
   if (!isRiskAllowed(settings, task, ratings.risk)) {
-    return { approve: false, reason: `The risk is ${ratings.risk}, above what Auto-ship approves.` };
+    return { approve: false, reason: `The risk is ${ratings.risk}, above what Autopilot approves.` };
   }
   return { approve: true, reason: describeApproval(task, ratings.risk) };
 }
 
 function resolveMergeRefusal(decider: Decider, task: Task) {
-  if (!task.autoShipped) return 'You approved the review yourself.';
+  if (!task.autopiloted) return 'You approved the review yourself.';
   if (hasOpenPreMergeSteps(decider, task)) return 'A pre-merge step is not ticked yet.';
   if (resolveApprovalPath(task, 'merge') !== 'merge') return 'Your edits are not pushed yet.';
   return null;
 }
 
 function isMergeAllowed(settings: Settings, task: Task) {
-  const merge = resolveAutoShipPolicy(settings).merge;
+  const merge = resolveAutopilotPolicy(settings).merge;
   if (merge === 'approved') return true;
   return merge === 'low_risk' && task.reviewRatings?.risk === 'low';
 }
@@ -101,19 +106,19 @@ function mergeForYou(decider: Decider, gate: Gate, reason: string) {
     decision: 'approve',
     response: null,
     ahead: true,
-    autoShip: reason,
+    autopilot: reason,
   });
   decider.requestBriefing(gate.taskId);
   startMerge(decider, gate.taskId, gate.commit ?? null);
 }
 
-function scheduleAutoShip(decider: Decider, gate: Gate, due: AutoShipDue | null) {
-  if ((gate.autoShipDue ?? null) === null && due === null) return;
-  decider.emit({ type: 'auto_ship.scheduled', gateId: gate.id, due });
+function scheduleAutopilot(decider: Decider, gate: Gate, due: AutopilotDue | null) {
+  if ((gate.autopilotDue ?? null) === null && due === null) return;
+  decider.emit({ type: 'autopilot.scheduled', gateId: gate.id, due });
 }
 
-function resolveUrgentDue(decider: Decider, task: Task): AutoShipDue | null {
-  const policy = resolveAutoShipPolicy(decider.state.settings);
+function resolveUrgentDue(decider: Decider, task: Task): AutopilotDue | null {
+  const policy = resolveAutopilotPolicy(decider.state.settings);
   if (!policy.enabled || !isUrgent(task) || policy.urgent === 'wait') return null;
   return {
     at: decider.context.now + policy.urgentWaitMinutes * MINUTE_MS,
@@ -121,25 +126,25 @@ function resolveUrgentDue(decider: Decider, task: Task): AutoShipDue | null {
   };
 }
 
-export function syncAutoShipDeadlines(decider: Decider, taskId?: string) {
+export function syncAutopilotDeadlines(decider: Decider, taskId?: string) {
   for (const gate of listOpenGates(decider.state, taskId)) {
     if (gate.type !== 'merge') continue;
     const due = resolveUrgentDue(decider, decider.task(gate.taskId));
-    if (due === null) scheduleAutoShip(decider, gate, null);
-    else if (!gate.autoShipDue) scheduleAutoShip(decider, gate, due);
+    if (due === null) scheduleAutopilot(decider, gate, null);
+    else if (!gate.autopilotDue) scheduleAutopilot(decider, gate, due);
   }
 }
 
-export function applyAutoShipMerge(decider: Decider, gate: Gate) {
+export function applyAutopilotMerge(decider: Decider, gate: Gate) {
   const task = decider.task(gate.taskId);
   const settings = decider.state.settings;
-  if (resolveAutoShipPolicy(settings).enabled && isMergeAllowed(settings, task)) {
+  if (resolveAutopilotPolicy(settings).enabled && isMergeAllowed(settings, task)) {
     if (resolveMergeRefusal(decider, task) === null) {
-      mergeForYou(decider, gate, task.autoShipped?.reason ?? '');
+      mergeForYou(decider, gate, task.autopiloted?.reason ?? '');
       return;
     }
   }
-  scheduleAutoShip(decider, gate, resolveUrgentDue(decider, task));
+  scheduleAutopilot(decider, gate, resolveUrgentDue(decider, task));
 }
 
 function describeWait(minutes: number) {
@@ -151,28 +156,28 @@ function escalate(decider: Decider, task: Task, reason: string) {
   decider.emit({ type: 'task.escalated', taskId: task.id, reason });
 }
 
-function resolveUrgentAction(urgent: AutoShipPolicy['urgent'], due: AutoShipDue['action']) {
+function resolveUrgentAction(urgent: AutopilotPolicy['urgent'], due: AutopilotDue['action']) {
   if (urgent === 'wait') return null;
   return urgent === 'escalate_then_merge' ? due : urgent;
 }
 
-function selectDueGate(decider: Decider, command: CommandOf<'auto_ship.fire'>) {
+function selectDueGate(decider: Decider, command: CommandOf<'autopilot.fire'>) {
   const gate = decider.state.gates[command.gateId];
   const task = decider.state.tasks[command.taskId];
   if (!gate || !task || gate.taskId !== task.id || gate.type !== 'merge' || gate.status !== 'open')
     return null;
-  if (gate.autoShipDue?.at !== command.dueAt || isTaskClosed(task)) return null;
-  return { gate, task, due: gate.autoShipDue };
+  if (gate.autopilotDue?.at !== command.dueAt || isTaskClosed(task)) return null;
+  return { gate, task, due: gate.autopilotDue };
 }
 
-export function fireAutoShip(decider: Decider, command: CommandOf<'auto_ship.fire'>) {
+export function fireAutopilot(decider: Decider, command: CommandOf<'autopilot.fire'>) {
   const found = selectDueGate(decider, command);
   if (!found) return;
   const { gate, task, due } = found;
-  const policy = resolveAutoShipPolicy(decider.state.settings);
+  const policy = resolveAutopilotPolicy(decider.state.settings);
   const action = resolveUrgentAction(policy.urgent, due.action);
   if (!policy.enabled || !isUrgent(task) || action === null) {
-    scheduleAutoShip(decider, gate, null);
+    scheduleAutopilot(decider, gate, null);
     return;
   }
   const waited = `Urgent, and the merge waited ${describeWait(policy.urgentWaitMinutes)} for you.`;
@@ -183,7 +188,7 @@ export function fireAutoShip(decider: Decider, command: CommandOf<'auto_ship.fir
   }
   escalate(decider, task, action === 'merge' ? `${waited} ${refusal}` : waited);
   const merges = policy.urgent === 'escalate_then_merge' && action === 'escalate' && refusal === null;
-  scheduleAutoShip(
+  scheduleAutopilot(
     decider,
     gate,
     merges ? { at: decider.context.now + policy.urgentWaitMinutes * MINUTE_MS, action: 'merge' } : null

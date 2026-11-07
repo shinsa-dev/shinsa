@@ -182,14 +182,14 @@ function approveReview(decider: Decider, taskId: string) {
   shipReviewedWork(decider, taskId);
 }
 
-export function approveReviewAhead(decider: Decider, gate: Gate, autoShip: string | null = null) {
+export function approveReviewAhead(decider: Decider, gate: Gate, autopilot: string | null = null) {
   decider.emit({
     type: 'gate.answered',
     gateId: gate.id,
     decision: 'approve',
     response: null,
     ahead: true,
-    ...(autoShip === null ? {} : { autoShip }),
+    ...(autopilot === null ? {} : { autopilot }),
   });
   decider.requestBriefing(gate.taskId);
   approveReview(decider, gate.taskId);

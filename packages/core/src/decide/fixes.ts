@@ -8,7 +8,7 @@ import {
 } from '../domain/index.ts';
 import { describeEvidenceForFix, resolveAgentPrompt, resolveReviewFixPrompt } from '../prompts/index.ts';
 import type { ReviewFinding } from '../report/types.ts';
-import { isFindingFixedBeforeReview } from './auto-ship.ts';
+import { isFindingFixedBeforeReview } from './autopilot.ts';
 import type { Decider } from './decider.ts';
 import {
   countFixRepeats,

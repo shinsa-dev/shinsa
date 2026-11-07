@@ -23,7 +23,7 @@ import {
 } from '../prompts/index.ts';
 import { describeRetryDelay } from '../state/activity.ts';
 import { listActiveRuns, listOpenBlockers, listOpenGates } from '../state/queries.ts';
-import { applyAutoShipMerge } from './auto-ship.ts';
+import { applyAutopilotMerge } from './autopilot.ts';
 import {
   clearBundleReady,
   describeBundleMerge,
@@ -170,7 +170,7 @@ function openMergeGate(decider: Decider, task: Task, pullRequest: PullRequest, r
   );
   const body = [removal, describeBundleMerge(decider.state, task), task.summary].filter(Boolean).join('\n\n');
   const gate = decider.openGate(task.id, 'merge', task.title, body, { details: { commit: headSha } });
-  applyAutoShipMerge(decider, gate);
+  applyAutopilotMerge(decider, gate);
 }
 
 function recordWatch(

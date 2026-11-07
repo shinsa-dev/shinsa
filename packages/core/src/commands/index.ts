@@ -47,7 +47,7 @@ import type {
   SuggestedTask,
 } from '../report/types.ts';
 import type { Coverage } from '../test-coverage/types.ts';
-import type { AutoShipSystemCommand } from './auto-ship.ts';
+import type { AutopilotSystemCommand } from './autopilot.ts';
 import type { DelegationAgentCommand, DelegationSystemCommand } from './delegations.ts';
 import type { FeedbackAgentCommand, FeedbackSystemCommand } from './feedback.ts';
 import type { HandoffSystemCommand } from './handoffs.ts';
@@ -314,7 +314,7 @@ type SystemCommand =
   | ScheduleSystemCommand
   | SlackSystemCommand
   | WatchdogSystemCommand
-  | AutoShipSystemCommand
+  | AutopilotSystemCommand
   | FeedbackSystemCommand
   | ShareSystemCommand
   | HandoffSystemCommand;

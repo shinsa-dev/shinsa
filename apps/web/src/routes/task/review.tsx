@@ -22,6 +22,7 @@ import { ReviewActions } from '@/components/overview/review-actions.tsx';
 import { MergeStepsPanel } from '@/components/review/merge-steps.tsx';
 import { REVIEW_SELECTED, RemoveNoteButton, ReviewNote } from '@/components/review/note.tsx';
 import { PointIndex } from '@/components/review/point-index.tsx';
+import { ReviewRatings } from '@/components/review/ratings.tsx';
 import { TestingPanel } from '@/components/review/testing.tsx';
 import { FindingVerdictChoice } from '@/components/review/verdict-choice.tsx';
 import { LoadingLine } from '@/components/status/loading-line.tsx';
@@ -34,7 +35,7 @@ import { Markdown } from '@/components/text/markdown.tsx';
 import { useReviewDraft } from '@/hooks/use-review-draft.ts';
 import { useReviewKeys } from '@/hooks/use-review-keys.ts';
 import { useStructuralValue } from '@/hooks/use-structural-value.ts';
-import { describeAgentReviewNote } from '@/lib/auto-ship.ts';
+import { describeAgentReviewNote } from '@/lib/autopilot.ts';
 import { useRegisterCommands } from '@/lib/command/registry.ts';
 import { listReviewCommands } from '@/lib/command/review.ts';
 import { type Loaded, useTaskDiff, useTaskRefs } from '@/lib/connection/code.ts';
@@ -561,6 +562,7 @@ function ReviewSummary({
       title={report.headline}
       action={gate && <ReviewActions state={state} task={task} gate={gate} />}
     >
+      <ReviewRatings task={task} />
       {gate?.escalation && <p className='text-xs text-fg-3'>{describeEscalationBody(gate.escalation)}</p>}
       <p className='text-xs text-fg-3'>{describePointCount(points)}</p>
       {!task.report && (

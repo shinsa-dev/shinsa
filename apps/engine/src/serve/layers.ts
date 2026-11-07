@@ -62,7 +62,7 @@ import { GitHubLogins } from '../repos/login/service.ts';
 import { RepoRegistry } from '../repos/registry/service.ts';
 import { RepoSetup } from '../repos/setup/service.ts';
 import { ProcessLedger, ResourceMachine, ResourceMonitor } from '../resources/index.ts';
-import { AutoShipClock } from '../runtime/auto-ship/service.ts';
+import { AutopilotClock } from '../runtime/autopilot/service.ts';
 import { EffectRunnerLayer } from '../runtime/effects/layers.ts';
 import { EngineCore } from '../runtime/engine/service.ts';
 import { MonitorClock } from '../runtime/monitors/service.ts';
@@ -292,7 +292,7 @@ function createClocksLayer(options: ShinsaOptions) {
     schedules,
     MonitorClock.layer,
     WatchdogClock.layer,
-    AutoShipClock.layer,
+    AutopilotClock.layer,
     ShareClock.layer
   ).pipe(
     Layer.provide(
