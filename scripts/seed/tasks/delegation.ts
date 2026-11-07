@@ -17,10 +17,10 @@ import {
   NOW,
   resolveToolOutput,
   type SeedTask,
+  type SeedTranscript,
   say,
   spreadEvents,
   type TimedSeedEvent,
-  writeTranscript,
 } from '../kit.ts';
 import { listRunOpenings } from '../prompts.ts';
 
@@ -340,7 +340,7 @@ function brief(delegate: Delegate): ChatEvent {
   };
 }
 
-function writeRetryStep(dir: string, openings: ReadonlyMap<string, string>) {
+function listRetryStep(openings: ReadonlyMap<string, string>): SeedTranscript {
   const review = findDelegate(`${RETRY}-review`);
   const callers = findDelegate(`${RETRY}-callers`);
   const streaming = findDelegate(`${RETRY}-streaming`);
@@ -360,171 +360,174 @@ function writeRetryStep(dir: string, openings: ReadonlyMap<string, string>) {
     },
     RETRY_AGENT
   );
-  writeTranscript(dir, RETRY_STEP, [
-    ...spreadEvents(
-      [
-        { type: 'status', status: 'started', outcome: null },
-        { type: 'user', from: 'shinsa', text: findOpening(openings, RETRY_STEP), attachments: [] },
-        say('I will wrap the write first, and ask a reviewer to check which errors deserve a retry.'),
-        callTool('read-1', { kind: 'read', path: 'src/export/clickhouse.ts', range: { start: 1, end: 40 } }),
-        resolveToolOutput('read-1', '1\texport async function runExport(app: App) {'),
-        ...delegateCall(review),
-      ],
-      NOW - 24 * MINUTE,
-      NOW - 22 * MINUTE
-    ),
-    ...spreadEvents(
-      [
-        { type: 'user', from: 'shinsa', text: report, attachments: [] },
-        notice('reported', [review.id]),
-        say('The review is right about 400s. I will retry only timeouts and 5xx, with doubling backoff.'),
-        ...delegateCall(callers),
-      ],
-      NOW - 15 * MINUTE,
-      NOW - 14 * MINUTE
-    ),
-    ...spreadEvents(
-      [
-        ...delegateCall(streaming),
-        callTool('status-1', {
-          kind: 'shinsa',
-          name: 'delegation_status',
-          args: { delegation_id: callers.id },
-        }),
-        resolveToolOutput(
-          'status-1',
-          JSON.stringify({
-            delegation_id: callers.id,
-            status: 'running',
-            has_pending_question: false,
-            result: null,
-          })
-        ),
-        callTool('edit-1', {
-          kind: 'edit',
-          path: 'src/export/clickhouse.ts',
-          hunks: [
-            { before: 'await writeChunk(chunk);', after: 'await retryTransient(() => writeChunk(chunk));' },
-          ],
-        }),
-        resolveToolOutput('edit-1', 'The file has been updated.'),
-        callTool('test-1', {
-          kind: 'command',
-          action: 'run',
-          command: 'bun test src/export',
-          description: 'Run the export tests',
-        }),
-      ],
-      NOW - 12 * MINUTE,
-      NOW - 2 * MINUTE
-    ),
-  ]);
+  return {
+    runId: RETRY_STEP,
+    timed: [
+      ...spreadEvents(
+        [
+          { type: 'status', status: 'started', outcome: null },
+          { type: 'user', from: 'shinsa', text: findOpening(openings, RETRY_STEP), attachments: [] },
+          say('I will wrap the write first, and ask a reviewer to check which errors deserve a retry.'),
+          callTool('read-1', {
+            kind: 'read',
+            path: 'src/export/clickhouse.ts',
+            range: { start: 1, end: 40 },
+          }),
+          resolveToolOutput('read-1', '1\texport async function runExport(app: App) {'),
+          ...delegateCall(review),
+        ],
+        NOW - 24 * MINUTE,
+        NOW - 22 * MINUTE
+      ),
+      ...spreadEvents(
+        [
+          { type: 'user', from: 'shinsa', text: report, attachments: [] },
+          notice('reported', [review.id]),
+          say('The review is right about 400s. I will retry only timeouts and 5xx, with doubling backoff.'),
+          ...delegateCall(callers),
+        ],
+        NOW - 15 * MINUTE,
+        NOW - 14 * MINUTE
+      ),
+      ...spreadEvents(
+        [
+          ...delegateCall(streaming),
+          callTool('status-1', {
+            kind: 'shinsa',
+            name: 'delegation_status',
+            args: { delegation_id: callers.id },
+          }),
+          resolveToolOutput(
+            'status-1',
+            JSON.stringify({
+              delegation_id: callers.id,
+              status: 'running',
+              has_pending_question: false,
+              result: null,
+            })
+          ),
+          callTool('edit-1', {
+            kind: 'edit',
+            path: 'src/export/clickhouse.ts',
+            hunks: [
+              { before: 'await writeChunk(chunk);', after: 'await retryTransient(() => writeChunk(chunk));' },
+            ],
+          }),
+          resolveToolOutput('edit-1', 'The file has been updated.'),
+          callTool('test-1', {
+            kind: 'command',
+            action: 'run',
+            command: 'bun test src/export',
+            description: 'Run the export tests',
+          }),
+        ],
+        NOW - 12 * MINUTE,
+        NOW - 2 * MINUTE
+      ),
+    ],
+  };
 }
 
-function writeDelegates(dir: string, openings: ReadonlyMap<string, string>) {
-  writeTranscript(
-    dir,
-    `${RETRY}-review`,
-    spreadEvents(
-      [
-        brief(findDelegate(`${RETRY}-review`)),
-        callTool('r-1', { kind: 'read', path: 'src/export/clickhouse.ts', range: null }),
-        resolveToolOutput('r-1', 'export async function runExport(app: App) {'),
-        callTool('r-2', { kind: 'search', mode: 'content', query: 'retry', path: 'src/export' }),
-        resolveToolOutput('r-2', 'src/export/chunks.ts:18'),
-        say(REVIEW_RESULT, 'final'),
-        { type: 'status', status: 'ended', outcome: 'completed' },
-      ],
-      NOW - 22 * MINUTE,
-      NOW - 15 * MINUTE
-    )
-  );
-  writeTranscript(
-    dir,
-    `${RETRY}-callers`,
-    spreadEvents(
-      [
-        brief(findDelegate(`${RETRY}-callers`)),
-        callTool('c-1', { kind: 'search', mode: 'content', query: 'runExport(', path: 'src' }),
-        resolveToolOutput('c-1', 'src/jobs/nightly.ts:12\nsrc/admin/export-button.ts:30'),
-        ...delegateCall(findDelegate(`${RETRY}-timeouts`)),
-        say('Two callers can overlap for the same app. That is a decision for the agent that sent me.'),
-        callTool('ask-1', {
-          kind: 'shinsa',
-          name: 'ask',
-          args: { question: QUESTION.question, context: QUESTION.context },
-        }),
-        { type: 'status', status: 'waiting', outcome: null },
-      ],
-      NOW - 14 * MINUTE,
-      NOW - 4 * MINUTE
-    )
-  );
-  writeTranscript(
-    dir,
-    `${RETRY}-timeouts`,
-    spreadEvents(
-      [
-        brief(findDelegate(`${RETRY}-timeouts`)),
-        say('Reading the ClickHouse client config.'),
-        callTool('t-1', { kind: 'read', path: 'src/clickhouse/client.ts', range: null }),
-      ],
-      NOW - 9 * MINUTE,
-      NOW - 3 * MINUTE
-    )
-  );
-  writeTranscript(
-    dir,
-    `${RETRY}-streaming`,
-    spreadEvents(
-      [
-        brief(findDelegate(`${RETRY}-streaming`)),
-        callTool('s-1', { kind: 'read', path: 'src/export/chunks.ts', range: null }),
-        resolveToolOutput('s-1', 'export function planChunks(app: App) {'),
-        { type: 'status', status: 'ended', outcome: 'cancelled' },
-      ],
-      NOW - 12 * MINUTE,
-      NOW - 6 * MINUTE
-    )
-  );
+function listDelegates(openings: ReadonlyMap<string, string>): SeedTranscript[] {
   const suite = findDelegate(`${SUITE}-integration`);
-  writeTranscript(
-    dir,
-    suite.id,
-    spreadEvents(
-      [
-        brief(suite),
-        callTool('i-1', {
-          kind: 'command',
-          action: 'run',
-          command: 'bun test:integration',
-          description: 'Run the integration suite',
-        }),
-      ],
-      NOW - 11 * MINUTE,
-      NOW - 1 * MINUTE
-    )
-  );
-  writeTranscript(
-    dir,
-    SUITE_STEP,
-    spreadEvents(
-      [
-        { type: 'status', status: 'started', outcome: null },
-        { type: 'user', from: 'shinsa', text: findOpening(openings, SUITE_STEP), attachments: [] },
-        callTool('e-1', {
-          kind: 'edit',
-          path: 'test/export/setup.ts',
-          hunks: [{ before: 'createClickHouse()', after: 'useSharedClickHouse()' }],
-        }),
-        resolveToolOutput('e-1', 'The file has been updated.'),
-        ...delegateCall(suite),
-        say('The integration suite takes about twenty minutes. I will end my turn; its result wakes me.'),
-      ],
-      NOW - 12 * MINUTE,
-      NOW - 8 * MINUTE
-    )
-  );
+  return [
+    {
+      runId: `${RETRY}-review`,
+      timed: spreadEvents(
+        [
+          brief(findDelegate(`${RETRY}-review`)),
+          callTool('r-1', { kind: 'read', path: 'src/export/clickhouse.ts', range: null }),
+          resolveToolOutput('r-1', 'export async function runExport(app: App) {'),
+          callTool('r-2', { kind: 'search', mode: 'content', query: 'retry', path: 'src/export' }),
+          resolveToolOutput('r-2', 'src/export/chunks.ts:18'),
+          say(REVIEW_RESULT, 'final'),
+          { type: 'status', status: 'ended', outcome: 'completed' },
+        ],
+        NOW - 22 * MINUTE,
+        NOW - 15 * MINUTE
+      ),
+    },
+    {
+      runId: `${RETRY}-callers`,
+      timed: spreadEvents(
+        [
+          brief(findDelegate(`${RETRY}-callers`)),
+          callTool('c-1', { kind: 'search', mode: 'content', query: 'runExport(', path: 'src' }),
+          resolveToolOutput('c-1', 'src/jobs/nightly.ts:12\nsrc/admin/export-button.ts:30'),
+          ...delegateCall(findDelegate(`${RETRY}-timeouts`)),
+          say('Two callers can overlap for the same app. That is a decision for the agent that sent me.'),
+          callTool('ask-1', {
+            kind: 'shinsa',
+            name: 'ask',
+            args: { question: QUESTION.question, context: QUESTION.context },
+          }),
+          { type: 'status', status: 'waiting', outcome: null },
+        ],
+        NOW - 14 * MINUTE,
+        NOW - 4 * MINUTE
+      ),
+    },
+    {
+      runId: `${RETRY}-timeouts`,
+      timed: spreadEvents(
+        [
+          brief(findDelegate(`${RETRY}-timeouts`)),
+          say('Reading the ClickHouse client config.'),
+          callTool('t-1', { kind: 'read', path: 'src/clickhouse/client.ts', range: null }),
+        ],
+        NOW - 9 * MINUTE,
+        NOW - 3 * MINUTE
+      ),
+    },
+    {
+      runId: `${RETRY}-streaming`,
+      timed: spreadEvents(
+        [
+          brief(findDelegate(`${RETRY}-streaming`)),
+          callTool('s-1', { kind: 'read', path: 'src/export/chunks.ts', range: null }),
+          resolveToolOutput('s-1', 'export function planChunks(app: App) {'),
+          { type: 'status', status: 'ended', outcome: 'cancelled' },
+        ],
+        NOW - 12 * MINUTE,
+        NOW - 6 * MINUTE
+      ),
+    },
+    {
+      runId: suite.id,
+      timed: spreadEvents(
+        [
+          brief(suite),
+          callTool('i-1', {
+            kind: 'command',
+            action: 'run',
+            command: 'bun test:integration',
+            description: 'Run the integration suite',
+          }),
+        ],
+        NOW - 11 * MINUTE,
+        NOW - 1 * MINUTE
+      ),
+    },
+    {
+      runId: SUITE_STEP,
+      timed: spreadEvents(
+        [
+          { type: 'status', status: 'started', outcome: null },
+          { type: 'user', from: 'shinsa', text: findOpening(openings, SUITE_STEP), attachments: [] },
+          callTool('e-1', {
+            kind: 'edit',
+            path: 'test/export/setup.ts',
+            hunks: [{ before: 'createClickHouse()', after: 'useSharedClickHouse()' }],
+          }),
+          resolveToolOutput('e-1', 'The file has been updated.'),
+          ...delegateCall(suite),
+          say('The integration suite takes about twenty minutes. I will end my turn; its result wakes me.'),
+        ],
+        NOW - 12 * MINUTE,
+        NOW - 8 * MINUTE
+      ),
+    },
+  ];
 }
 
 function findOpening(openings: ReadonlyMap<string, string>, runId: string) {
@@ -533,8 +536,7 @@ function findOpening(openings: ReadonlyMap<string, string>, runId: string) {
   return opening;
 }
 
-export function writeDelegationTranscripts(dir: string, timeline: TimedSeedEvent[]) {
+export function listDelegationTranscripts(timeline: TimedSeedEvent[]): SeedTranscript[] {
   const openings = listRunOpenings(timeline);
-  writeRetryStep(dir, openings);
-  writeDelegates(dir, openings);
+  return [listRetryStep(openings), ...listDelegates(openings)];
 }

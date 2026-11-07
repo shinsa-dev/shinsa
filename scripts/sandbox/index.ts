@@ -1,6 +1,6 @@
 import { existsSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
-import { Console, Effect } from 'effect';
+import { Console, Effect, type FileSystem } from 'effect';
 import { isPreviewHost } from '../../apps/cloud/src/routes/previews/address.ts';
 import { createSandboxCloud } from './cloud.ts';
 import { respondDashboard, respondEnroll } from './dashboard.ts';
@@ -87,11 +87,12 @@ export const startSandbox = Effect.fn('Sandbox.start')(function* () {
     duplicate: keptOver.handle ?? keptOver.id,
     original: teamTask?.handle ?? null,
   });
-  let page = serializeSandboxPage(sections, findRemoteStylesheet());
-  const cloud = yield* Effect.try({
-    try: () => createSandboxCloud(SANDBOX_DIR, new URL(PREVIEW_ZONE).host, USER.id, teammates),
-    catch: (error) => new SandboxFailed({ message: `Starting the stand-in cloud failed: ${String(error)}` }),
-  });
+  let page = serializeSandboxPage(sections, yield* findRemoteStylesheet());
+  const cloud = yield* createSandboxCloud(SANDBOX_DIR, new URL(PREVIEW_ZONE).host, USER.id, teammates).pipe(
+    Effect.mapError(
+      (error) => new SandboxFailed({ message: `Starting the stand-in cloud failed: ${String(error)}` })
+    )
+  );
 
   const respond = Effect.fn('Sandbox.respond')(
     function* (request: Request, url: URL) {
@@ -113,7 +114,7 @@ export const startSandbox = Effect.fn('Sandbox.start')(function* () {
       if (enrolling) return yield* respondEnroll(enrolling, url);
       if (url.pathname.startsWith('/__remote/'))
         return yield* respondDashboard(request, url, machines, teammates);
-      return respondStatic(url.pathname);
+      return yield* respondStatic(url.pathname);
     },
     Effect.catchTag('SandboxBodyInvalid', (error) =>
       Effect.succeed(
@@ -121,7 +122,7 @@ export const startSandbox = Effect.fn('Sandbox.start')(function* () {
       )
     )
   );
-  const run = Effect.runPromiseWith(yield* Effect.context<never>());
+  const run = Effect.runPromiseWith(yield* Effect.context<FileSystem.FileSystem>());
 
   yield* Effect.acquireRelease(
     Effect.try({
@@ -153,7 +154,7 @@ export const startSandbox = Effect.fn('Sandbox.start')(function* () {
       { title: 'Handing off a task', links: handoffs },
       { title: 'A task handed to a teammate', links: handedToTeammate },
     ],
-    findRemoteStylesheet()
+    yield* findRemoteStylesheet()
   );
   yield* Console.log(`The sandbox: ${ORIGIN}${SANDBOX_PATH}`);
 });

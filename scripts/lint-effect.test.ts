@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { RAW_IO_BASELINE } from './lint-effect-baseline.ts';
 import {
   EFFECT_CLOCK_MESSAGE,
   EFFECT_DATA_ERROR_MESSAGE,
@@ -15,7 +16,16 @@ import {
   listEffectViolations,
   listPromiseLines,
   isEngineRuntimeSource,
+  isSyncIoSource,
+  isEffectIoSource,
+  listUnbridgedIoLines,
   listEngineRuntimeLines,
+  listSyncIoLines,
+  listRawIoViolations,
+  listStaleBaselineFiles,
+  RAW_IO_BASELINE_MESSAGE,
+  RAW_IO_MESSAGE,
+  SYNC_IO_EXEMPT,
 } from './lint-effect.ts';
 
 const messages = (source: string) =>
@@ -156,6 +166,9 @@ describe('every workspace does its I/O in Effect', () => {
     expect(isPromiseIoSource('apps/web/src/lib/api.ts', plain)).toBe(true);
     expect(isPromiseIoSource('packages/core/src/remote/keys.ts', plain)).toBe(true);
     expect(isPromiseIoSource('scripts/release.ts', plain)).toBe(true);
+    expect(isPromiseIoSource('apps/desktop/scripts/build.ts', plain)).toBe(true);
+    expect(isPromiseIoSource('apps/engine/scripts/build-engine.ts', plain)).toBe(true);
+    expect(isPromiseIoSource('packages/ui/scripts/icons.ts', plain)).toBe(true);
     expect(isPromiseIoSource('apps/engine/src/remote/teams.ts', "import { Effect } from 'effect';")).toBe(
       false
     );
@@ -207,5 +220,119 @@ describe('the engine runs effects only at its edge', () => {
       'export class Odd extends (class {}) {}',
     ].join('\n');
     expect(listEngineRuntimeLines('apps/engine/src/a.ts', source)).toEqual([1, 2, 3, 5, 6, 7, 13]);
+  });
+});
+
+describe('no file or process I/O runs outside Effect', () => {
+  test('the Promise I/O files are checked, and the one synchronous transcript reader is exempt', () => {
+    const plain = 'export const a = 1;';
+    expect(isSyncIoSource('apps/engine/src/files/probe.ts', plain)).toBe(true);
+    expect(isSyncIoSource('apps/desktop/scripts/icon.ts', plain)).toBe(true);
+    expect(isSyncIoSource('scripts/seed.ts', plain)).toBe(true);
+    expect(isSyncIoSource('apps/engine/src/files/probe.ts', "import { Effect } from 'effect';")).toBe(false);
+    expect(isSyncIoSource('apps/engine/test/files/probe.test.ts', plain)).toBe(false);
+    expect(isSyncIoSource('apps/web/src/components/row.tsx', plain)).toBe(false);
+    expect(isSyncIoSource('packages/ui/scripts/icons.ts', plain)).toBe(true);
+    for (const file of SYNC_IO_EXEMPT) expect(isSyncIoSource(file, plain)).toBe(false);
+  });
+
+  test('fs and child_process value imports and Bun process and file calls are found, with their lines', () => {
+    const source = [
+      "import { existsSync } from 'node:fs';",
+      "import { readFile } from 'fs/promises';",
+      "import { spawnSync } from 'node:child_process';",
+      "import type { Stats } from 'node:fs';",
+      "import { type Dirent } from 'node:fs';",
+      "import { join } from 'node:path';",
+      "const found = Bun.which('git');",
+      'Bun.spawnSync(["ls"]); Bun.spawn(["ls"]);',
+      "const text = Bun.file('a').text;",
+      "Bun.write('a', 'b');",
+      'const run = Bun.build;',
+      'const id = Bun.randomUUIDv7();',
+      'const env = Bun.env.HOME;',
+    ].join('\n');
+    expect(listSyncIoLines(source)).toEqual([1, 2, 3, 7, 8, 9, 10, 11]);
+  });
+
+  test('a file with no I/O has nothing to report', () => {
+    expect(listSyncIoLines("import { join } from 'node:path';\nexport const a = join('x', 'y');")).toEqual(
+      []
+    );
+  });
+
+  test('Effect files are checked too, but not tests, components or the exempt transcript reader', () => {
+    const effect = "import { Effect } from 'effect';";
+    expect(isEffectIoSource('apps/engine/src/changelog/changelog.ts', effect)).toBe(true);
+    expect(isEffectIoSource('scripts/zz.ts', "import { Option } from 'effect';")).toBe(true);
+    expect(isEffectIoSource('apps/desktop/scripts/build.ts', effect)).toBe(true);
+    expect(isEffectIoSource('scripts/zz.ts', 'export const a = 1;')).toBe(false);
+    expect(isEffectIoSource('apps/engine/test/a.test.ts', effect)).toBe(false);
+    expect(isEffectIoSource('apps/web/src/components/row.tsx', effect)).toBe(false);
+    for (const file of SYNC_IO_EXEMPT) expect(isEffectIoSource(file, effect)).toBe(false);
+  });
+
+  test('in an Effect file, I/O outside an effect is found and I/O inside one is not', () => {
+    const source = [
+      "import { readFileSync, existsSync } from 'node:fs';",
+      "import * as fs from 'node:fs';",
+      "import type { Stats } from 'node:fs';",
+      "import { Effect } from 'effect';",
+      "export function plain() { return readFileSync('a', 'utf8'); }",
+      'const helper = (path: string) => existsSync(path);',
+      "const read = Effect.try(() => readFileSync('a', 'utf8'));",
+      "const tried = Effect.try({ try: () => fs.statSync('a'), catch: String });",
+      "const quiet = Effect.sync(() => existsSync('a'));",
+      'const attempt = <A>(run: () => A) => Effect.try({ try: run, catch: String });',
+      'const probe = (run: () => boolean) => Effect.try(run);',
+      "const viaHelper = attempt(() => readFileSync('a'));",
+      "const viaShort = probe(() => existsSync('a'));",
+      "export const found = Effect.fn('found')(function* () { return Bun.which('git'); });",
+      "const lazy = Effect.sync(() => Bun.file('a'));",
+      "const direct = fs.readdirSync('.');",
+      'const other = (run: () => void) => Effect.succeed(run);',
+      "const notHelper = other(() => existsSync('a'));",
+      'const id = Bun.randomUUIDv7();',
+    ].join('\n');
+    expect(listUnbridgedIoLines(source)).toEqual([5, 6, 14, 16, 18]);
+  });
+});
+
+describe('raw file and process I/O in Effect code only shrinks', () => {
+  const raw = [
+    "import { readFileSync } from 'node:fs';",
+    "import { Effect } from 'effect';",
+    "export const read = Effect.try({ try: () => readFileSync('a'), catch: () => 'no' });",
+    "export const which = Effect.sync(() => Bun.which('git'));",
+  ].join('\n');
+  const clean = "import { Effect, FileSystem } from 'effect';\nexport const fs = FileSystem.FileSystem;";
+  const [listed = ''] = RAW_IO_BASELINE;
+
+  test('a new Effect file that imports node:fs or calls Bun I/O fails, even inside Effect.try', () => {
+    expect(listRawIoViolations('apps/engine/src/new.ts', raw)).toEqual([
+      { line: 1, message: RAW_IO_MESSAGE },
+      { line: 4, message: RAW_IO_MESSAGE },
+    ]);
+    expect(listRawIoViolations('apps/engine/src/new.ts', clean)).toEqual([]);
+    expect(listRawIoViolations('apps/engine/test/new.test.ts', raw)).toEqual([]);
+    expect(
+      listRawIoViolations('apps/engine/src/new.ts', `import type { Stats } from 'node:fs';\n${clean}`)
+    ).toEqual([]);
+  });
+
+  test('a listed file may keep its raw I/O until it moves, then must leave the list', () => {
+    expect(listed).not.toBe('');
+    expect(listRawIoViolations(listed, raw)).toEqual([]);
+    expect(listRawIoViolations(listed, clean)).toEqual([{ line: 1, message: RAW_IO_BASELINE_MESSAGE }]);
+    expect(listRawIoViolations(listed, 'export const a = 1;')).toEqual([
+      { line: 1, message: RAW_IO_BASELINE_MESSAGE },
+    ]);
+  });
+
+  test('a listed file the lint never reached, because it moved or was deleted, is stale', () => {
+    expect(listStaleBaselineFiles(new Set(RAW_IO_BASELINE))).toEqual([]);
+    expect(listStaleBaselineFiles(new Set([...RAW_IO_BASELINE].filter((file) => file !== listed)))).toEqual([
+      listed,
+    ]);
   });
 });

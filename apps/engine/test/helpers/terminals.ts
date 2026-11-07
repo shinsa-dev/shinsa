@@ -1,5 +1,6 @@
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { BunServices } from '@effect/platform-bun';
 import { Context, Duration, Effect, Exit, Layer, Scope } from 'effect';
 import type { ModelSource } from '../../src/agents/index.ts';
 import type { QuickJson } from '../../src/agents/quick/schema.ts';
@@ -51,7 +52,8 @@ export async function startRealTerminals(config: ServerConfig, home: string) {
 }
 
 export function createTestRefiner(ask: QuickJson) {
-  return Effect.runSync(ServiceRefiner.use(Effect.succeed).pipe(Effect.provide(ServiceRefiner.layer(ask))));
+  const layer = ServiceRefiner.layer(ask).pipe(Layer.provide(BunServices.layer));
+  return Effect.runSync(ServiceRefiner.use(Effect.succeed).pipe(Effect.provide(layer)));
 }
 
 export async function stopTerminalServers() {

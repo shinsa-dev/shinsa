@@ -2,8 +2,10 @@ import { afterEach, describe, expect, setDefaultTimeout, test } from 'bun:test';
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { ServiceDefinition, ServiceSuggestion, TerminalInfo, TerminalsSnapshot } from '@shinsa/core';
-import { Effect } from 'effect';
-import { resolveServicePlace, resolveServiceRunIn } from '../../../src/terminals/places.ts';
+import { Effect, Option } from 'effect';
+import { resolveServicePlace } from '../../../src/terminals/places.ts';
+import { selectServiceRunIn } from '../../../src/terminals/runs.ts';
+import { runFiles } from '../../harness.ts';
 import { until, writeFiles } from '../../helpers/index.ts';
 import {
   attachTerminal as attach,
@@ -356,9 +358,11 @@ describe('services for a task over HTTP', () => {
     const refused = await call(outside.id, 'start', { taskId });
     expect(refused.error?.code).toBe('service_place_invalid');
     expect(refused.error?.message).toContain('It cannot run in this task.');
-    expect(resolveServiceRunIn(engine.state, service, taskId, terminals)?.env).toEqual({});
+    const envOf = async () =>
+      Option.getOrNull(await runFiles(selectServiceRunIn(engine.state, service, taskId, terminals)))?.env;
+    expect(await envOf()).toEqual({});
     writeFiles(worktree, { 'turbo.json': '{}' });
-    expect(resolveServiceRunIn(engine.state, service, taskId, terminals)?.env).toEqual({
+    expect(await envOf()).toEqual({
       TURBO_CACHE_DIR: join(terminals.dataDir, 'caches', repoId, 'turbo'),
     });
   });

@@ -31,7 +31,7 @@ export const applyLoginEnv = Effect.fn('applyLoginEnv')(function* (
   const login = yield* read;
   const current = env.PATH ?? '';
   if (!login) {
-    refreshInstallFolders(env, home);
+    yield* refreshInstallFolders(env, home);
     return [];
   }
   const added = Object.keys(login).filter((key) => key !== 'PATH' && env[key] === undefined);

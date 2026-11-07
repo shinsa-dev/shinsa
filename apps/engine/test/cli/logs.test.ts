@@ -1,8 +1,10 @@
 import { describe, expect, test } from 'bun:test';
 import { join } from 'node:path';
+import { Effect } from 'effect';
 import { describeLogLine, printLogs } from '../../src/cli/logs.ts';
 import { PLAIN_DISPLAY } from '../../src/terminal/index.ts';
 import { createStyle, UNICODE_SYMBOLS } from '../../src/terminal/style.ts';
+import { runFiles } from '../harness.ts';
 import { createTempDir, writeFiles } from '../helpers/index.ts';
 
 const COLOR = createStyle({ color: true, symbols: UNICODE_SYMBOLS });
@@ -52,29 +54,29 @@ describe('reading a log line', () => {
 });
 
 describe('shinsa logs', () => {
-  test('prints the last lines of the engine log, read or as written', () => {
+  test('prints the last lines of the engine log, read or as written', async () => {
     const home = createTempDir();
     writeFiles(home, { 'data/engine.log': `${ENTRIES.join('\n')}\n` });
     const all = createLogsIo(home);
-    printLogs([], all.io);
+    await runFiles(printLogs([], all.io));
     expect(all.out).toEqual([
       '2026-10-26 09:00:00  info   [Serve] Listening  port=5180',
       'shinsa engine: Failed to start server. Is port 5180 in use?',
       '2026-10-26 09:00:05  warn   [Accounts] Could not check your Claude Code login  error=Claude Code is not installed.  retry={"in":30}',
     ]);
     const last = createLogsIo(home);
-    printLogs(['--lines', '1', '--json'], last.io);
+    await runFiles(printLogs(['--lines', '1', '--json'], last.io));
     expect(last.out).toEqual([ENTRIES[3] ?? '']);
   });
 
-  test('a bad line count and a missing log are explained', () => {
+  test('a bad line count and a missing log are explained', async () => {
     const home = createTempDir();
     const { io } = createLogsIo(home);
-    expect(() => printLogs(['--lines', 'all'], io)).toThrow(
-      '--lines takes a whole number, such as --lines 200.'
-    );
-    expect(() => printLogs(['--lines', '0'], io)).toThrow('--lines takes a whole number');
-    expect(() => printLogs([], io)).toThrow(
+    const failure = (args: string[]) =>
+      runFiles(Effect.flip(printLogs(args, io))).then((error) => error.message);
+    expect(await failure(['--lines', 'all'])).toBe('--lines takes a whole number, such as --lines 200.');
+    expect(await failure(['--lines', '0'])).toContain('--lines takes a whole number');
+    expect(await failure([])).toBe(
       `There is no engine log at ${join(home, 'data', 'engine.log')} yet. The engine writes it when the Shinsa app runs it; \`bun dev\` prints to its terminal instead.`
     );
   });

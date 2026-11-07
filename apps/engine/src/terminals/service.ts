@@ -9,11 +9,10 @@ import {
   type TerminalInfo,
   type TerminalsSnapshot,
 } from '@shinsa/core';
-import { Clock, Context, Effect, Fiber, Layer, Option, Ref } from 'effect';
+import { Clock, Context, Effect, Fiber, FileSystem, Layer, Option, Ref } from 'effect';
 import { EngineConfig } from '../config/service.ts';
 import { EngineCore } from '../runtime/engine/service.ts';
 import { listReclaimable, resolveLimitMessage } from './limit.ts';
-import { resolveServiceRunIn } from './places.ts';
 import {
   listenOnce,
   resolveLoginShell,
@@ -22,6 +21,7 @@ import {
   resolveTerminalEnv,
 } from './pty.ts';
 import { TerminalPty } from './pty/service.ts';
+import { selectServiceRunIn } from './runs.ts';
 import {
   type RemoteUrlSource,
   type ServiceInput,
@@ -77,6 +77,7 @@ export class Terminals extends Context.Service<
         const files = yield* TerminalFiles;
         const pty = yield* TerminalPty;
         const config = yield* EngineConfig;
+        const withFiles = Effect.provideService(FileSystem.FileSystem, yield* FileSystem.FileSystem);
         const timings = yield* TerminalTimings;
         const newId = yield* TerminalIds;
         const clock = yield* Clock.Clock;
@@ -568,9 +569,12 @@ export class Terminals extends Context.Service<
           for (const terminalId of yield* Ref.get(resumable)) {
             const info = (yield* select(terminalId))?.info;
             const service = (yield* Ref.get(services)).get(info?.serviceId ?? '');
-            const serviceRun =
-              info && service ? resolveServiceRunIn(state, service, info.taskId, { home, dataDir }) : null;
-            if (service && serviceRun) yield* startService(service.id, serviceRun).pipe(Effect.orDie);
+            if (!(info && service)) continue;
+            const serviceRun = yield* withFiles(
+              selectServiceRunIn(state, service, info.taskId, { home, dataDir })
+            );
+            if (Option.isSome(serviceRun))
+              yield* startService(service.id, serviceRun.value).pipe(Effect.orDie);
           }
           yield* Ref.set(resumable, new Set());
         });

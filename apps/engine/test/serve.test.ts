@@ -14,6 +14,7 @@ import { REMOTE_FILE, TunnelConnectFailed, TunnelConnector } from '../src/remote
 import { Shell } from '../src/shell/service.ts';
 import { resolveStateVersion } from '../src/store/index.ts';
 import { TerminalPty } from '../src/terminals/pty/service.ts';
+import { runFiles } from './harness.ts';
 import { resolveConfig } from './helpers/config.ts';
 import { openEventLog } from './helpers/event-log.ts';
 import { inspectRepo } from './helpers/git.ts';
@@ -141,7 +142,10 @@ describe('startShinsa', () => {
     const seq = first.engine.state.seq;
     await first.stop();
     const reader = openEventLog(config.databasePath);
-    expect(reader.selectSnapshot(resolveStateVersion() ?? '')).toMatchObject({ ok: true, seq });
+    expect(reader.selectSnapshot((await runFiles(resolveStateVersion())) ?? '')).toMatchObject({
+      ok: true,
+      seq,
+    });
     reader.close();
     expect(seq).toBeGreaterThan(1);
     const db = new Database(config.databasePath);

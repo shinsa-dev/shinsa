@@ -45,7 +45,7 @@ const storeComparison = Effect.fn('storeComparison')(function* (
   folder: EvidenceFolder
 ) {
   const resolved = parts.map((part) => ({ ...part, path: resolveSourcePath(part.path, worktreePath) }));
-  const missing = resolved.find((part) => !existsSync(part.path));
+  const missing = yield* Effect.sync(() => resolved.find((part) => !existsSync(part.path)));
   if (missing) return yield* new ToolCallFailed({ message: `No file at ${missing.path}.` });
   const stored = yield* Effect.forEach(resolved, ({ path, stage, label }) =>
     Effect.map(evidence.copyFile(path, folder, `${facts.title} ${label ?? stage}`), (uri): EvidencePart => ({

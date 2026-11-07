@@ -21,9 +21,9 @@ function setup(now: { value: number }) {
     });
   });
   const transcripts = createSyncTranscripts(createTempDir());
-  const start = (intervalMs = 60_000) => {
+  const start = async (intervalMs = 60_000) => {
     const scope = Scope.makeUnsafe();
-    const handle = testRuntime.runSync(
+    const handle = await testRuntime.runPromise(
       watchSilence(stub.engine.core, transcripts.service, { now: () => now.value, intervalMs }).pipe(
         Scope.provide(scope)
       )
@@ -44,7 +44,7 @@ describe('the silent-run watch', () => {
   test('a running run quiet for five minutes is marked from its last output, once', async () => {
     const now = { value: 4 * MINUTE };
     const { start, dispatched, commandIds } = setup(now);
-    const watch = start();
+    const watch = await start();
     await watch.check();
     expect(silences(dispatched)).toEqual([]);
     now.value = 5 * MINUTE;
@@ -57,7 +57,7 @@ describe('the silent-run watch', () => {
   test('a run waiting on an answer, from the human or from the agent that delegated it, is never marked', async () => {
     const now = { value: 10 * MINUTE };
     const { start, dispatched, update } = setup(now);
-    const watch = start();
+    const watch = await start();
     update((state) => {
       state.runs['run-1'] = createRun({ startedAt: 0, status: 'waiting' });
       Reflect.deleteProperty(state.runs, 'run-3');
@@ -104,7 +104,7 @@ describe('the silent-run watch', () => {
     transcripts.record('run-1', { type: 'agent', phase: 'interim', text: 'working' });
     const last = transcripts.listEntries('run-1').at(-1)?.at ?? 0;
     now.value = last + 6 * MINUTE;
-    const watch = start();
+    const watch = await start();
     await watch.check();
     expect(silences(dispatched)).toEqual([{ type: 'run.silence', runId: 'run-1', since: last }]);
     transcripts.record('run-3', { type: 'agent', phase: 'interim', text: 'back' });
@@ -125,13 +125,13 @@ describe('the silent-run watch', () => {
     const now = { value: 10 * MINUTE };
     const { start, dispatched, reject } = setup(now);
     reject((command) => command.type === 'run.silence');
-    const watch = start(5);
+    const watch = await start(5);
     await until('a check', () => silences(dispatched).length > 0);
     await watch.stop();
     const quiet = setup({ value: 0 });
     quiet.reject((command) => command.type === 'run.silence');
     quiet.transcripts.record('run-3', { type: 'agent', phase: 'interim', text: 'back' });
-    const quietWatch = quiet.start(5);
+    const quietWatch = await quiet.start(5);
     const logs = captureLogs();
     try {
       quiet.transcripts.record('run-3', { type: 'agent', phase: 'interim', text: 'back' });

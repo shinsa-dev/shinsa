@@ -1,7 +1,6 @@
-import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { Effect } from 'effect';
-import { resolveServiceRunIn } from '../../apps/engine/src/terminals/places.ts';
+import { Effect, FileSystem, Option } from 'effect';
+import { selectServiceRunIn } from '../../apps/engine/src/terminals/runs.ts';
 import type { Task } from '../../packages/core/src/index.ts';
 import { SANDBOX_SERVICE_COMMAND } from '../seed/services.ts';
 import type { StartedMachine } from './machine.ts';
@@ -19,10 +18,14 @@ export const seedTeammateWork = Effect.fn('Sandbox.seedTeammateWork')(function* 
   if (!(task && repo && task.branch))
     return yield* new SandboxFailed({ message: 'No teammate task to give a screenshot and a service.' });
   const worktree = join(dataDir, '..', 'worktrees', task.handle ?? task.id);
-  yield* Effect.try({
-    try: () => mkdirSync(worktree, { recursive: true }),
-    catch: (error) => new SandboxFailed({ message: `Making ${worktree} failed: ${String(error)}` }),
-  });
+  const fs = yield* FileSystem.FileSystem;
+  yield* fs
+    .makeDirectory(worktree, { recursive: true })
+    .pipe(
+      Effect.mapError(
+        (error) => new SandboxFailed({ message: `Making ${worktree} failed: ${error.message}` })
+      )
+    );
   yield* engine.core.dispatch({
     type: 'worktree.ready',
     taskId: task.id,
@@ -62,7 +65,8 @@ export const seedTeammateWork = Effect.fn('Sandbox.seedTeammateWork')(function* 
         (error) => new SandboxFailed({ message: `Adding Kai’s web service failed: ${error.message}` })
       )
     );
-  const place = resolveServiceRunIn(yield* engine.core.state, service, task.id, terminals);
-  if (!place) return yield* new SandboxFailed({ message: 'Kai’s web service cannot run in his task.' });
-  yield* terminals.startService(service.id, place);
+  const place = yield* selectServiceRunIn(yield* engine.core.state, service, task.id, terminals);
+  if (Option.isNone(place))
+    return yield* new SandboxFailed({ message: 'Kai’s web service cannot run in his task.' });
+  yield* terminals.startService(service.id, place.value);
 });

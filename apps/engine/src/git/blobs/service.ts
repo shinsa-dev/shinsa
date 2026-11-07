@@ -27,18 +27,6 @@ export class CatFiles extends Context.Service<
       const readers = yield* Ref.make(new Map<string, CatFile>());
       const selecting = yield* Semaphore.make(1);
 
-      const spawnBatch = (repoPath: string): BatchChild =>
-        Bun.spawn(['git', 'cat-file', '--batch-command'], {
-          cwd: repoPath,
-          stdin: 'pipe',
-          stdout: 'pipe',
-          stderr: 'ignore',
-          detached: true,
-          env: { ...Bun.env, ...READ_ENV },
-        });
-
-      const spawn = settings.spawn ?? spawnBatch;
-
       const makeReader = Effect.fn('CatFiles.makeReader')(
         function* (repoPath: string) {
           const session = yield* Ref.make<BatchSession | null>(null);
@@ -124,7 +112,17 @@ export class CatFiles extends Context.Service<
             const current = yield* Ref.get(session);
             if (current) return current;
             const child = yield* Effect.try({
-              try: () => spawn(repoPath),
+              try: (): BatchChild =>
+                settings.spawn
+                  ? settings.spawn(repoPath)
+                  : Bun.spawn(['git', 'cat-file', '--batch-command'], {
+                      cwd: repoPath,
+                      stdin: 'pipe',
+                      stdout: 'pipe',
+                      stderr: 'ignore',
+                      detached: true,
+                      env: { ...Bun.env, ...READ_ENV },
+                    }),
               catch: (error) => new ObjectReaderStopped({ message: describeError(error) }),
             });
             const reader = yield* Effect.forkIn(

@@ -2,6 +2,8 @@ import { afterEach, describe, expect, setDefaultTimeout, test } from 'bun:test';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { BunServices } from '@effect/platform-bun';
+import { Effect, type FileSystem } from 'effect';
 import {
   PREVIEW_ID_BYTES,
   PREVIEW_KEY_BYTES,
@@ -10,6 +12,9 @@ import {
   serializeBase64Url,
 } from '../../packages/core/src/index.ts';
 import { createSandboxCloud } from './cloud.ts';
+
+const runCloud = <A, E>(effect: Effect.Effect<A, E, FileSystem.FileSystem>) =>
+  Effect.runPromise(effect.pipe(Effect.provide(BunServices.layer)));
 
 setDefaultTimeout(30_000);
 
@@ -52,9 +57,11 @@ describe('the sandbox’s stand-in for app.shinsa.dev', () => {
   test('serves a preview through the Worker’s own preview code to the machine’s local port', async () => {
     const port = serveMachine();
     const connectKey = serializeBase64Url(new Uint8Array(32).fill(5));
-    const cloud = createSandboxCloud(createFolder(), new URL(ZONE).host, '1', [
-      { id: 'studio', name: 'Studio', port, connectKey },
-    ]);
+    const cloud = await runCloud(
+      createSandboxCloud(createFolder(), new URL(ZONE).host, '1', [
+        { id: 'studio', name: 'Studio', port, connectKey },
+      ])
+    );
     const origin = resolvePreviewOrigin({ instanceId: 'studio', previewId: PREVIEW_ID }, ZONE);
     const answer = await cloud.respond(
       new Request(`${origin}/docs`, { headers: { cookie: `__Host-shinsa_preview=${KEY}` } })
@@ -71,7 +78,7 @@ describe('the sandbox’s stand-in for app.shinsa.dev', () => {
   });
 
   test('says a machine it does not know is gone', async () => {
-    const cloud = createSandboxCloud(createFolder(), 'localhost:5998', '1', []);
+    const cloud = await runCloud(createSandboxCloud(createFolder(), 'localhost:5998', '1', []));
     const unknown = resolvePreviewOrigin(
       { instanceId: 'nowhere', previewId: PREVIEW_ID },
       'http://localhost:5998'
@@ -81,9 +88,11 @@ describe('the sandbox’s stand-in for app.shinsa.dev', () => {
   });
 
   test('says a machine whose tunnel it cannot reach is offline', async () => {
-    const cloud = createSandboxCloud(createFolder(), 'localhost:5998', '1', [
-      { id: 'laptop', name: 'Laptop', port: 1, connectKey: serializeBase64Url(new Uint8Array(32)) },
-    ]);
+    const cloud = await runCloud(
+      createSandboxCloud(createFolder(), 'localhost:5998', '1', [
+        { id: 'laptop', name: 'Laptop', port: 1, connectKey: serializeBase64Url(new Uint8Array(32)) },
+      ])
+    );
     const laptop = resolvePreviewOrigin(
       { instanceId: 'laptop', previewId: PREVIEW_ID },
       'http://localhost:5998'

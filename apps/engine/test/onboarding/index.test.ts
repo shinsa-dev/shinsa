@@ -3,6 +3,7 @@ import { chmodSync, existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs
 import { join } from 'node:path';
 import type { TerminalInfo } from '@shinsa/core';
 import { Effect } from 'effect';
+import { type SystemErrorTag, systemError } from 'effect/PlatformError';
 import type { ServerConfig } from '../../src/config/index.ts';
 import type { InstallTerminals } from '../../src/onboarding/index.ts';
 import { PRIVACY_SETTINGS_URL, resolveChosenRoots } from '../../src/onboarding/roots.ts';
@@ -11,6 +12,7 @@ import { measureWorktreeUsage } from '../../src/onboarding/worktrees.ts';
 import { runCommand } from '../../src/shell/command.ts';
 import { ShellLayer } from '../../src/shell/layers.ts';
 import { WORKTREE_ROOT_MARKER } from '../../src/workspaces/root/schema.ts';
+import { runFiles } from '../harness.ts';
 import { readMachineConfig } from '../helpers/config.ts';
 import { Engine } from '../helpers/engine.ts';
 import { openEventLog } from '../helpers/event-log.ts';
@@ -291,33 +293,45 @@ describe('Onboarding', () => {
     expect(onboarding.openInstall({ all: true })).rejects.toThrow('Every tool Shinsa needs is installed.');
   });
 
-  test('resolveChosenRoots expands ~ and drops duplicates', () => {
+  test('resolveChosenRoots expands ~ and drops duplicates', async () => {
     const { root, developer } = setup();
-    expect(resolveChosenRoots(['~', '~/Developer', developer], root)).toEqual([root, developer]);
+    expect(await runFiles(resolveChosenRoots(['~', '~/Developer', developer], root))).toEqual([
+      root,
+      developer,
+    ]);
   });
 
-  test('resolveChosenRoots names every folder macOS keeps private, once, and how to allow them', () => {
+  test('resolveChosenRoots names every folder macOS keeps private, once, and how to allow them', async () => {
     const { root, developer } = setup();
-    const refuse = (code: string) => (path: string) => {
-      if (path === developer) return [];
-      throw Object.assign(new Error(code), { code });
-    };
-    for (const code of ['EPERM', 'EACCES']) {
-      let refusal: unknown = null;
-      try {
-        resolveChosenRoots(['~', '~/Developer', root], root, refuse(code));
-      } catch (error) {
-        refusal = error;
-      }
-      expect(refusal).toMatchObject({
-        code: 'roots_private',
-        folders: [root],
-        picked: [root, developer],
-        message:
-          'macOS keeps ~ private. Turn on Shinsa in System Settings → Privacy & Security → Full Disk Access, then check again.',
-      });
+    const refuse = (reason: SystemErrorTag) => (path: string) =>
+      path === developer
+        ? Effect.succeed([])
+        : Effect.fail(
+            systemError({
+              _tag: reason,
+              module: 'FileSystem',
+              method: 'readDirectory',
+              pathOrDescriptor: path,
+            })
+          );
+    const resolveRefused = (values: string[], reason: SystemErrorTag) =>
+      runFiles(Effect.flip(resolveChosenRoots(values, root, refuse(reason))));
+    expect(await resolveRefused(['~', '~/Developer', root], 'PermissionDenied')).toMatchObject({
+      code: 'roots_private',
+      folders: [root],
+      picked: [root, developer],
+      message:
+        'macOS keeps ~ private. Turn on Shinsa in System Settings → Privacy & Security → Full Disk Access, then check again.',
+    });
+    expect(await resolveRefused(['~'], 'Unknown')).toMatchObject({ _tag: 'OnboardingCallFailed' });
+    const real = createTempDir();
+    chmodSync(real, 0o000);
+    try {
+      const failure = await runFiles(Effect.flip(resolveChosenRoots([real], root)));
+      expect(failure).toMatchObject({ code: 'roots_private', folders: [real] });
+    } finally {
+      chmodSync(real, 0o755);
     }
-    expect(() => resolveChosenRoots(['~'], root, refuse('EIO'))).toThrow('EIO');
   });
 
   test('opens the Full Disk Access pane of System Settings', async () => {

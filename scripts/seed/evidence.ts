@@ -1,5 +1,5 @@
-import { copyFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { Effect, FileSystem } from 'effect';
 import type { Evidence, ShinsaEventInput } from '../../packages/core/src/index.ts';
 import { MINUTE } from '../kit/time.ts';
 import {} from './kit.ts';
@@ -448,16 +448,17 @@ function listSeedRemovalEvents(runEnds: ReadonlyMap<string, number>) {
   });
 }
 
-export function writeSeedEvidence(dataDir: string) {
+export const writeSeedEvidence = Effect.fn('Seed.writeEvidence')(function* (dataDir: string) {
+  const fs = yield* FileSystem.FileSystem;
   for (const piece of SEED_EVIDENCE) {
     if ('url' in piece || 'check' in piece) continue;
     const folder = join(dataDir, 'evidence', resolveTaskId(piece.runId), 'round-1');
-    mkdirSync(folder, { recursive: true });
+    yield* fs.makeDirectory(folder, { recursive: true });
     const target = join(folder, resolveName(piece));
-    if ('file' in piece) copyFileSync(join(MEDIA, piece.file), target);
-    else writeFileSync(target, piece.text);
+    if ('file' in piece) yield* fs.copyFile(join(MEDIA, piece.file), target);
+    else yield* fs.writeFileString(target, piece.text);
   }
-}
+});
 
 export function listSeedEvidenceEvents(runEnds: ReadonlyMap<string, number>) {
   return [...listSeedAttachEvents(runEnds), ...listSeedRemovalEvents(runEnds)];

@@ -5,6 +5,7 @@ import { DomainError } from '@shinsa/core';
 import { Effect } from 'effect';
 import { listLocalRepoViews } from '../../src/projects/changes.ts';
 import { EngineStopped } from '../../src/runtime/engine/schema.ts';
+import { runFiles } from '../harness.ts';
 import { createConfigAt } from '../helpers/config.ts';
 import { Engine } from '../helpers/engine.ts';
 import { openEventLog, type TestEventLog } from '../helpers/event-log.ts';
@@ -110,7 +111,11 @@ describe('a project’s repositories and folders', () => {
     const inside = await createGitRepo({ root: home, name: 'basket', remote: false });
     await Effect.runPromise(createProjectChanges(engine, home).upsertFolder(projectId, home));
     expect(
-      listLocalRepoViews(engine.state, [chosen]).map(({ name, repoId, projectId: id }) => [name, repoId, id])
+      (await runFiles(listLocalRepoViews(engine.state, [chosen]))).map(({ name, repoId, projectId: id }) => [
+        name,
+        repoId,
+        id,
+      ])
     ).toEqual([
       ['basket', null, projectId],
       ['loose', null, null],
@@ -118,7 +123,7 @@ describe('a project’s repositories and folders', () => {
     const { repo } = await Effect.runPromise(
       createProjectChanges(engine, home).upsertRepo(projectId, inside.path)
     );
-    expect(listLocalRepoViews(engine.state, [chosen])).toEqual([
+    expect(await runFiles(listLocalRepoViews(engine.state, [chosen]))).toEqual([
       { path: repo.path, name: 'basket', repoId: repo.id, projectId },
       { path: realpathSync(loose.path), name: 'loose', repoId: null, projectId: null },
     ]);

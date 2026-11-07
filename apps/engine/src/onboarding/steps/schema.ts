@@ -33,6 +33,7 @@ export interface StepReadContext {
   readonly listModels: Effect.Effect<AgentModel[], OnboardingFailure>;
   readonly listAccounts: Effect.Effect<ClaudeAccount[], OnboardingFailure>;
   readonly checkPrerequisites: Effect.Effect<PrerequisiteReport, OnboardingFailure>;
+  readonly resolveRoots: (value: unknown) => Effect.Effect<string[], OnboardingFailure>;
 }
 
 interface StepContext extends StepReadContext {

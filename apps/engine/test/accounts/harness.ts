@@ -269,7 +269,8 @@ function createAccountsLayer(options: AccountsHarnessOptions, calls: ShellCall[]
         Layer.succeed(EngineConfig, options.config),
         Layer.succeed(EngineCore, options.engine),
         ProgramVersions.layer.pipe(Layer.provide(ShellLayer)),
-        JsonFile.layer.pipe(Layer.provide(BunServices.layer))
+        JsonFile.layer.pipe(Layer.provide(BunServices.layer)),
+        BunServices.layer
       )
     ),
     Layer.provideMerge(references),
