@@ -4,6 +4,7 @@ import { INSET } from '@/components/layout/surface/card.ts';
 import { Hint } from '@/components/overlays/hint.tsx';
 import { ImageViewer } from '@/components/overlays/image-viewer.tsx';
 import { useImageViewer, type ViewerImage } from '@/hooks/use-image-viewer.ts';
+import { useMediaUrls } from '@/lib/connection/socket.ts';
 import { describeOpenImage } from '@/lib/image-view.ts';
 
 const THUMB_SIZE = {
@@ -73,6 +74,7 @@ export function ImageStrip({
         .filter((image) => !broken.includes(image.src)),
     [images, broken]
   );
+  const sources = useMediaUrls(shown);
   if (shown.length === 0) return null;
   return (
     <div className={cn('flex min-w-0 flex-wrap gap-2', className)}>
@@ -80,7 +82,7 @@ export function ImageStrip({
         <ImageThumb
           // oxlint-disable-next-line shinsa/no-array-index-key -- the same image can appear twice in one strip
           key={`${index}-${image.src}`}
-          image={image}
+          image={{ ...image, src: sources[index]?.src ?? image.src }}
           size={size}
           corner={corner}
           onOpen={() => viewer.show(index)}

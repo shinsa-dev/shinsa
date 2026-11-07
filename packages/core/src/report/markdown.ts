@@ -9,6 +9,7 @@ import type {
   MergeStepTiming,
   PlanCheck,
   PlanDocument,
+  PlanSplitPart,
   ReportCheck,
   ReportTesting,
   WorkReport,
@@ -48,6 +49,24 @@ function describeReportCheck(check: ReportCheck) {
   return `${CHECK_MARK[check.outcome]} ${check.label}${describeCheckCommand(check.command)}${note}`;
 }
 
+function describeSplitTarget(split: PlanSplitPart[], on: number) {
+  return on === 0 ? 'this task' : `**${split[on - 1]?.title ?? `part ${on}`}**`;
+}
+
+function describeSplitStart(split: PlanSplitPart[], part: PlanSplitPart) {
+  if (part.order === 'parallel' || part.on === undefined) return 'starts now';
+  const target = describeSplitTarget(split, part.on);
+  return part.order === 'waits_on' ? `waits on ${target}` : `stacks on ${target}`;
+}
+
+function describeSplit(split: PlanSplitPart[]) {
+  return split
+    .map(
+      (part, index) => `${index + 1}. **${part.title}** (${describeSplitStart(split, part)}): ${part.request}`
+    )
+    .join('\n');
+}
+
 export function serializePlanMarkdown(plan: PlanDocument) {
   return [
     `## Goal\n${plan.goal}`,
@@ -59,6 +78,7 @@ export function serializePlanMarkdown(plan: PlanDocument) {
     `## Approach\n${plan.approach}`,
     describeSection('## Files', bulletList(plan.files.map((file) => `\`${file.path}\`: ${file.change}`))),
     describeSection('## Out of scope', bulletList(plan.outOfScope)),
+    describeSection('## Other tasks', describeSplit(plan.split ?? [])),
     describeSection('## Checks', bulletList(plan.verification.map(describePlanCheck))),
     describeSection('## Evidence', (plan.evidence ?? []).join(', ')),
     describeSection(

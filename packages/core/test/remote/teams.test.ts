@@ -20,7 +20,11 @@ import {
   parseTeamHello,
   parseTeamJoinFragment,
   parseTeamJoinUrl,
+  parseTeamRelayPath,
+  parseTeamRelaySocketPath,
   parseTeamViewTarget,
+  resolveTeamRelayPath,
+  resolveTeamRelaySocketPath,
   readTeamSnapshot,
   resolveMachineTeamPath,
   resolveTeamChannelUrl,
@@ -47,6 +51,24 @@ const OTHER_KEY = serializeBase64Url(new Uint8Array(32).fill(6));
 const LIST: TeamView = { kind: 'list' };
 
 const TASK: TeamView = { kind: 'task', taskId: 'task-1' };
+
+describe('the local relay to a teammate’s machine', () => {
+  test('names the machine and the route it relays, and reads them back', () => {
+    const path = `${resolveTeamRelayPath('kai-mac')}/api/tasks/SW-1/diff`;
+    expect(path).toBe('/api/teams/relay/kai-mac/api/tasks/SW-1/diff');
+    expect(parseTeamRelayPath(path)).toEqual({ instanceId: 'kai-mac', path: '/api/tasks/SW-1/diff' });
+    expect(resolveTeamRelaySocketPath('kai-mac')).toBe('/ws/teams/relay/kai-mac');
+    expect(parseTeamRelaySocketPath('/ws/teams/relay/kai-mac')).toBe('kai-mac');
+  });
+
+  test('refuses a machine out of shape and a route that is not the API', () => {
+    expect(parseTeamRelayPath('/api/teams/relay/kai-mac/ws')).toBeNull();
+    expect(parseTeamRelayPath('/api/teams/relay/kai.mac/api/tasks')).toBeNull();
+    expect(parseTeamRelayPath('/api/teams/relays')).toBeNull();
+    expect(parseTeamRelaySocketPath('/ws/teams/relay/kai.mac')).toBeNull();
+    expect(parseTeamRelaySocketPath('/ws/teams/relay/kai-mac/more')).toBeNull();
+  });
+});
 
 describe('the local view of a teammate’s task', () => {
   test('names the team, the machine and the task, and reads them back', () => {

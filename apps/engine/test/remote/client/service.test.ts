@@ -159,6 +159,7 @@ describe('the client for app.shinsa.dev', () => {
     answer(plane, resolveMachineTeamPath('team1', 'invite'), { invite: 'i2' });
     answer(plane, resolveMachineTeamPath('team1', 'members/add'), MEMBER);
     answer(plane, resolveMachineTeamPath('team1', 'connect'), { url: 'wss://x', expiresAt: 1 });
+    answer(plane, resolveMachineTeamPath('team1', 'connect/remote'), { url: 'wss://y', expiresAt: 2 });
     answer(plane, resolveMachineTeamPath('team1', 'scopes'), TEAM);
     await callClient(plane, (client) => client.teams.create(Redacted.make('m'), 'Growth'));
     await callClient(plane, (client) => client.teams.join(Redacted.make('m'), 'i'));
@@ -178,6 +179,11 @@ describe('the client for app.shinsa.dev', () => {
     ).toEqual({ url: 'wss://x', expiresAt: 1 });
     expect(
       await callClient(plane, (client) =>
+        client.teams.remoteConnect(Redacted.make('m'), TEAM_ID, INSTANCE_ID)
+      )
+    ).toEqual({ url: 'wss://y', expiresAt: 2 });
+    expect(
+      await callClient(plane, (client) =>
         client.teams.scopes(Redacted.make('m'), TEAM_ID, { scopes: ['message'] })
       )
     ).toEqual(TEAM);
@@ -192,6 +198,7 @@ describe('the client for app.shinsa.dev', () => {
       [resolveMachineTeamPath('team1', 'leave'), null],
       [resolveMachineTeamPath('team1', 'remove'), null],
       [resolveMachineTeamPath('team1', 'connect'), { instanceId: 'k3x9' }],
+      [resolveMachineTeamPath('team1', 'connect/remote'), { instanceId: 'k3x9' }],
       [resolveMachineTeamPath('team1', 'scopes'), { scopes: ['message'] }],
     ]);
   });

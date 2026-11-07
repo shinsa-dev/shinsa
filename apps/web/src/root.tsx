@@ -17,6 +17,7 @@ import { ForkDialog } from '@/components/task/fork-dialog.tsx';
 import { HandoffRemoveConfirm, ShareDialog, UnshareConfirm } from '@/components/task/share-dialog.tsx';
 import { useAttention } from '@/hooks/use-attention.ts';
 import { useIdle, useIdleValue } from '@/hooks/use-idle.ts';
+import { useLocalRelays } from '@/hooks/use-local-relays.ts';
 import { useCommandMenuOpen, writeCommandMenuOpen } from '@/lib/command/registry.ts';
 import { useOnboardingStatus } from '@/lib/connection/onboarding.ts';
 import { useShinsaState } from '@/lib/connection/selectors.ts';
@@ -174,6 +175,11 @@ function GuardedCommandMenu({ route }: { route: PageRoute }) {
 }
 
 function App({ route }: { route: PageRoute }) {
+  const generation = useLocalRelays();
+  return <AppContent key={generation} route={route} />;
+}
+
+function AppContent({ route }: { route: PageRoute }) {
   const onboarding = useOnboardingStatus();
   const redirect = resolveOnboardingRedirect(route, onboarding);
   React.useEffect(() => {

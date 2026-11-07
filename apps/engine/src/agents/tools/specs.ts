@@ -9,6 +9,7 @@ import {
   MERGE_STEP_KINDS,
   MERGE_STEP_TIMINGS,
   PLAN_EVIDENCE_KINDS,
+  PLAN_SPLIT_ORDERS,
   PROTOCOL_LIMITS,
   type ShinsaToolName,
   VERIFICATION_RULES,
@@ -308,6 +309,36 @@ const WALKTHROUGH_REVISION = {
   properties: WALKTHROUGH_PARTS,
 };
 
+const SPLIT = {
+  type: 'array',
+  description: `Only when the request holds work that ships better as separate pull requests, each reviewed on its own: the other parts, each a task of its own. The plan's phases cover only what stays in this task. Shinsa holds the plan for the human, who starts the parts as tasks forked from this one or keeps it as one task. Leave it out for small or cohesive work. ${CODE_ONLY}`,
+  maxItems: L.splitParts,
+  items: {
+    type: 'object',
+    properties: {
+      title: limitedText('The part as a task title, in a few words.', L.taskTitle),
+      request: limitedText(
+        'The part as a request that stands on its own: what to change, where, and why.',
+        L.suggestionRequest
+      ),
+      order: {
+        type: 'string',
+        enum: [...PLAN_SPLIT_ORDERS],
+        description:
+          'When it starts. parallel: now, beside this task (the default choice). waits_on: once the task named in on is merged, only when it needs code that exists only on that branch. stacks_on: on top of the branch of the task named in on, merging together with it, only for pieces of one rewrite.',
+      },
+      on: {
+        type: 'integer',
+        minimum: 0,
+        maximum: L.splitParts - 1,
+        description:
+          'With waits_on or stacks_on: 0 for this task, or the number of an earlier part, counted from 1. Leave it out with parallel.',
+      },
+    },
+    required: ['title', 'request', 'order'],
+  },
+};
+
 export const TOOL_SPECS = {
   propose_plan: {
     name: 'propose_plan',
@@ -381,6 +412,7 @@ export const TOOL_SPECS = {
           L.planPhases,
           L.listItem
         ),
+        split: SPLIT,
         questions: {
           type: 'array',
           description: 'Decisions only the human can make. Empty when there are none.',

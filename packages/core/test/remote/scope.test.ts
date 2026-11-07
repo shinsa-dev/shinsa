@@ -10,6 +10,7 @@ import {
   resolveScopedPatch,
   resolveScopedRefusal,
   resolveScopedState,
+  resolveScopedTerminals,
   SCOPE_MESSAGES,
   SCOPED_COMMANDS,
   TEAM_SCOPE_MESSAGES,
@@ -452,5 +453,70 @@ describe('a teammate’s scope', () => {
     expect(viewOnly).not.toContain('task.share');
     expect(viewOnly).toContain('task.message');
     expect(viewOnly).toContain('task.give_back');
+  });
+});
+
+describe('resolveScopedTerminals', () => {
+  function createSnapshot(shared: string, own: string) {
+    const run = (id: string, taskId: string | null, serviceId: string | null) => ({
+      id,
+      projectId: 'p',
+      name: 'web',
+      title: null,
+      cwd: '/Users/mona/repo',
+      place: 'worktree' as const,
+      taskId,
+      serviceId,
+      port: 4000,
+      remoteUrl: 'https://abc.shinsa.page/',
+      status: 'running' as const,
+      exitCode: null,
+      startedAt: 1,
+      endedAt: null,
+    });
+    const service = (id: string) => ({
+      id,
+      projectId: 'p',
+      name: 'web',
+      cwd: '/Users/mona/repo',
+      command: 'bun dev',
+      env: { TOKEN: 'secret' },
+      previewUrl: 'http://localhost:{port}/',
+      portVariable: 'PORT',
+    });
+    return {
+      home: '/Users/mona',
+      terminals: [
+        run('t1', shared, 's1'),
+        run('t2', own, 's2'),
+        run('t3', shared, null),
+        run('t4', null, 's3'),
+      ],
+      services: [service('s1'), service('s2'), service('s3')],
+    };
+  }
+
+  test('keeps only the running services of the team’s tasks, without their environment', () => {
+    const { harness, shared, own } = createTeamTasks();
+    const scoped = resolveScopedTerminals(harness.state, teamScope(), createSnapshot(shared, own));
+    expect(scoped.home).toBe('');
+    expect(scoped.terminals.map((terminal) => terminal.id)).toEqual(['t1']);
+    expect(scoped.services.map((service) => [service.id, service.env])).toEqual([['s1', {}]]);
+  });
+
+  test('keeps nothing for a teammate the team does not let open services', () => {
+    const { harness, shared, own } = createTeamTasks();
+    const scoped = resolveScopedTerminals(
+      harness.state,
+      teamScope({ services: false }),
+      createSnapshot(shared, own)
+    );
+    expect(scoped).toEqual({ home: '', terminals: [], services: [] });
+  });
+
+  test('keeps the services of the one task handed off', () => {
+    const { harness, shared, own } = createTeamTasks();
+    const scoped = resolveScopedTerminals(harness.state, taskScope(own), createSnapshot(shared, own));
+    expect(scoped.terminals.map((terminal) => terminal.id)).toEqual(['t2']);
   });
 });
