@@ -20,6 +20,7 @@ import {
   type ShinsaEvent,
   type ShinsaEventInput,
   type ShinsaState,
+  type TaskOwner,
   type UserCommand,
   selectOpenIteration,
   splitHouseRules,
@@ -50,7 +51,12 @@ export function createHarness() {
 
   function send(
     command: ShinsaCommand,
-    options: { onBehalf?: boolean; byTask?: string | null; guest?: ScopedActor | null } = {}
+    options: {
+      onBehalf?: boolean;
+      byTask?: string | null;
+      guest?: ScopedActor | null;
+      actor?: TaskOwner | null;
+    } = {}
   ) {
     clock += 1;
     const decision = decideOrThrow(state, command, { now: clock, newId: () => `id${++counter}`, ...options });

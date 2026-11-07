@@ -81,6 +81,7 @@ export interface Settings {
   placementPolicies?: string[];
   shareLimit?: ShareLimit;
   sharePreset?: SharePreset;
+  sharedMachine?: boolean;
 }
 
 export const SETTINGS_KEYS = [
@@ -112,6 +113,7 @@ export const SETTINGS_KEYS = [
   'placementPolicies',
   'shareLimit',
   'sharePreset',
+  'sharedMachine',
 ] as const satisfies readonly (keyof Settings)[];
 
 export const HUMAN_ONLY_SETTINGS = [
@@ -129,6 +131,7 @@ export const HUMAN_ONLY_SETTINGS = [
   'shareLimit',
   'sharePreset',
   'watchdogsIgnoreUsageLimits',
+  'sharedMachine',
 ] as const satisfies readonly (keyof Settings)[];
 
 export const HUMAN_ONLY_REPO_FIELDS = ['checkCommands', 'workspace', 'coverage'] as const;
@@ -153,6 +156,10 @@ export function resolveWatchdogDefaults(settings: Settings) {
     firstCheckMinutes: settings.watchdogFirstCheckMinutes ?? WATCHDOG_DEFAULTS.firstCheckMinutes,
     maxGapHours: settings.watchdogMaxGapHours ?? WATCHDOG_DEFAULTS.maxGapHours,
   };
+}
+
+export function isSharedMachine(settings: Settings) {
+  return settings.sharedMachine ?? false;
 }
 
 export function resolveWatchdogsIgnoreUsageLimits(settings: Settings) {
@@ -187,6 +194,7 @@ const DEFAULT_SETTINGS: Settings = {
   placementPolicies: [],
   shareLimit: DEFAULT_SHARE_LIMIT,
   sharePreset: DEFAULT_SHARE_PRESET,
+  sharedMachine: false,
 };
 
 export function createSettings(): Settings {

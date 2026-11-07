@@ -199,6 +199,7 @@ export {
   resolveSharePreset,
   resolveWatchdogDefaults,
   resolveWatchdogsIgnoreUsageLimits,
+  isSharedMachine,
   SETTINGS_KEYS,
   type Settings,
   SHARE_LIMITS,

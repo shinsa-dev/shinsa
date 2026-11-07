@@ -1,7 +1,12 @@
 import { describe, expect, test } from 'bun:test';
 import { resolveCurrentPhase } from '../../src/decide/lifecycle.ts';
 import { findTask } from '../../src/index.ts';
-import { buildAll, createHarness, createTask, registerRepo, shipAndMerge } from '../harness.ts';
+import type { TaskOwner } from '../../src/index.ts';
+import { buildAll, createHarness, createTask, proposePlan, registerRepo, shipAndMerge } from '../harness.ts';
+
+const KAI: TaskOwner = { login: 'kai', name: 'Kai Lee', avatarUrl: 'https://avatars.example/kai' };
+
+const MIA: TaskOwner = { login: 'mia', name: null, avatarUrl: null };
 
 describe('creating a task', () => {
   test('a task needs words and, when one is named, a repository that exists', () => {
@@ -219,5 +224,62 @@ describe('looking up tasks', () => {
     const taskId = createTask(harness);
     expect(findTask(harness.state, taskId).id).toBe(taskId);
     expect(() => findTask(harness.state, 'nope')).toThrow('No task nope');
+  });
+});
+
+describe('who owns a task', () => {
+  test('a task records the person who asked for it, and none when no one is named', () => {
+    const harness = createHarness();
+    harness.send({ type: 'task.create', request: 'Fix the tabs', repoId: null }, { actor: KAI });
+    harness.send({ type: 'task.create', request: 'Fix the menu', repoId: null });
+    const [kais, nobodys] = Object.values(harness.state.tasks);
+    expect(kais?.owner).toEqual(KAI);
+    expect(nobodys?.owner).toBeUndefined();
+    expect(harness.events.find((event) => event.type === 'task.created')).toMatchObject({ owner: KAI });
+  });
+
+  test('a task an agent files from a task belongs to that task’s owner, whoever sent the command', () => {
+    const harness = createHarness();
+    harness.send({ type: 'task.create', request: 'Fix the tabs', repoId: null }, { actor: KAI });
+    const [source] = Object.keys(harness.state.tasks);
+    harness.send(
+      { type: 'task.create', request: 'Fix the menu too', repoId: null },
+      { onBehalf: true, byTask: source ?? null }
+    );
+    harness.send(
+      { type: 'task.create', request: 'Fix the footer', repoId: null },
+      { onBehalf: true, byTask: source ?? null, actor: MIA }
+    );
+    expect(Object.values(harness.state.tasks).map((task) => task.owner)).toEqual([KAI, KAI, KAI]);
+  });
+
+  test('a sub-task of a split belongs to the owner of the task it came from, not whoever is acting', () => {
+    const harness = createHarness();
+    const repoId = registerRepo(harness);
+    harness.send({ type: 'task.create', request: 'Port the page', repoId }, { actor: KAI });
+    const [taskId = ''] = Object.keys(harness.state.tasks);
+    harness.send({
+      type: 'task.triage',
+      taskId,
+      title: 'Port the page',
+      repoId,
+      size: 'large',
+      branch: 'feat/page',
+      waitsOn: [],
+    });
+    harness.send({ type: 'worktree.ready', taskId, path: `/wt/${taskId}`, branch: 'feat/page' });
+    harness.send({ type: 'config.record', taskId, problems: [] });
+    proposePlan(harness, taskId);
+    harness.send(
+      {
+        type: 'agent.split_task',
+        runId: harness.activeRun(taskId).id,
+        requests: ['Port the header.'],
+        thisWaits: false,
+      },
+      { actor: MIA }
+    );
+    const sub = Object.values(harness.state.tasks).find((task) => task.parentTaskId === taskId);
+    expect(sub?.owner).toEqual(KAI);
   });
 });

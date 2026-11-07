@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { PROJECT_LIMITS, resolveQueue } from '../../src/index.ts';
+import { isSharedMachine, PROJECT_LIMITS, resolveQueue } from '../../src/index.ts';
 import { parseCommand, createHarness, createTask, type Harness, registerRepo } from '../harness.ts';
 
 function registerAt(
@@ -398,6 +398,19 @@ describe('settings', () => {
     expect(harness.state.seq).toBe(events);
     harness.send({ type: 'settings.change', patch: { maxFixRounds: null } });
     expect(harness.state.settings.maxFixRounds).toBeNull();
+  });
+
+  test('a machine is not shared until you turn it on, and only you can, never an agent for you', () => {
+    const harness = createHarness();
+    expect(isSharedMachine(harness.state.settings)).toBe(false);
+    expect(() =>
+      harness.send({ type: 'settings.change', patch: { sharedMachine: true } }, { onBehalf: true })
+    ).toThrow('Only the human changes the settings sharedMachine.');
+    expect(isSharedMachine(harness.state.settings)).toBe(false);
+    harness.send({ type: 'settings.change', patch: { sharedMachine: true } });
+    expect(isSharedMachine(harness.state.settings)).toBe(true);
+    expect(isSharedMachine({ ...harness.state.settings, sharedMachine: undefined })).toBe(false);
+    expect(() => parseCommand({ type: 'settings.change', patch: { sharedMachine: 'yes' } })).toThrow();
   });
 
   test('counts must be whole numbers of one or more', () => {

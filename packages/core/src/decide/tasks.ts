@@ -67,6 +67,13 @@ interface TaskLineage {
   shape?: TaskShape;
 }
 
+function resolveCreatedOwner(decider: Decider, lineage: TaskLineage) {
+  const { actor, byTask } = decider.context;
+  const source = lineage.parentTaskId ?? byTask;
+  const inherited = source ? decider.state.tasks[source]?.owner : null;
+  return inherited ?? actor ?? null;
+}
+
 export function createTask(decider: Decider, command: CommandOf<'task.create'>, lineage: TaskLineage = {}) {
   const request = command.request.trim();
   if (request.length === 0)
@@ -80,6 +87,7 @@ export function createTask(decider: Decider, command: CommandOf<'task.create'>, 
   if (command.forkOf !== undefined) decider.task(command.forkOf);
   if (command.forkOf !== undefined && command.teammateFork !== undefined)
     throw new DomainError({ code: 'fork_twice', message: 'Fork one task at a time.' });
+  const owner = resolveCreatedOwner(decider, lineage);
   const taskId = decider.context.newId();
   const auto: TaskAuto = {
     shape: command.mode === undefined && lineage.shape === undefined,
@@ -100,6 +108,7 @@ export function createTask(decider: Decider, command: CommandOf<'task.create'>, 
     ...(command.account ? { account: command.account } : {}),
     ...(command.forkOf ? { forkOf: command.forkOf } : {}),
     ...(command.teammateFork ? { teammateFork: command.teammateFork } : {}),
+    ...(owner ? { owner } : {}),
     ...lineage,
   });
   const by = lineage.createdBy ? 'shinsa' : 'you';

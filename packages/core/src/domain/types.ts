@@ -514,6 +514,7 @@ export interface Task {
   usageWait?: UsageWait | null;
   parentTaskId?: string | null;
   createdBy?: TaskCreator | null;
+  owner?: TaskOwner | null;
   forkOf?: string | null;
   teammateFork?: TeammateFork | null;
   splits?: TaskSplit[];
@@ -658,6 +659,8 @@ export interface TaskGuest {
 }
 
 export type ActivityPerson = Pick<TaskGuest, 'login' | 'name' | 'avatarUrl'>;
+
+export type TaskOwner = ActivityPerson;
 
 export interface TaskHandoff {
   at: number;
