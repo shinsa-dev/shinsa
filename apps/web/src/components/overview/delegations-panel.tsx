@@ -75,12 +75,8 @@ export function DelegationsPanel({
   if (tree.length === 0) return null;
   const summary = describeDelegations(tree.map((entry) => entry.view));
   return (
-    <Panel
-      persistId={resolveOverviewPanelId(task, 'delegations')}
-      title='Delegations'
-      icon='IconAgents'
-      meta={summary && <span className='text-2xs font-normal text-fg-2 tabular-nums'>{summary}</span>}
-    >
+    <Panel persistId={resolveOverviewPanelId(task, 'delegations')} title='Delegations' icon='IconAgents'>
+      {summary && <p className='text-2xs text-fg-2 tabular-nums'>{summary}</p>}
       <ul className='flex flex-col divide-y divide-border'>
         {tree.map(({ view, depth }) => (
           <DelegationRow key={view.run.id} view={view} depth={depth} onOpen={onOpen} onStop={onStop} />

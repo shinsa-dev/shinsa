@@ -5,7 +5,7 @@ import {
   describeAgentReviewNote,
   isEscalationUnseen,
   listAutopilotWaitItems,
-  listHandoffLines,
+  listHandoffParagraphs,
   listTeamEscalationRows,
   resolveAutopilotFact,
   resolveAutopilotValue,
@@ -197,16 +197,23 @@ const FULL_HANDOFF = {
 };
 
 describe('the hand-off an escalation shows', () => {
-  it('tells a teammate why it reached them, with the owner’s presence, the finder, the ratings and the next merge', () => {
-    expect(listHandoffLines(FULL_HANDOFF, { owner: 'Kai', presence: 'offline', now: 7 * HOUR })).toEqual([
-      'It is urgent, and its merge waited 15 minutes for Kai.',
-      'Autopilot could not merge it: A pre-merge step is not ticked yet.',
-      'Kai is offline now, and last used Shinsa about 7 hours ago.',
-      'A watchdog found the issue in cloudflare after “Ship checkout” shipped.',
-      'The reviewer rated it high confidence, low risk.',
-      'Autopilot merges it in about 3 hours unless someone acts first.',
-      'Review the change and merge it if your team settings let you, or reach Kai.',
-    ]);
+  it('tells a teammate why it reached them, what it fixes and what to do now', () => {
+    expect(listHandoffParagraphs(FULL_HANDOFF, { owner: 'Kai', presence: 'offline', now: 7 * HOUR })).toEqual(
+      [
+        {
+          label: 'Why it reached you',
+          text: 'It is urgent and waited 15 minutes for Kai to merge it. Kai is offline and was last online about 7 hours ago.',
+        },
+        {
+          label: 'What it fixes',
+          text: 'A watchdog found an issue in cloudflare after “Ship checkout” shipped, and this change fixes it. The reviewer rated the fix high confidence, low risk.',
+        },
+        {
+          label: 'What to do now',
+          text: 'Review the change and merge it if your team settings let you, or reach Kai. Autopilot could not merge it: a pre-merge step is not ticked yet.',
+        },
+      ]
+    );
   });
 
   it('tells you what your team saw, and leaves out what it does not know', () => {
@@ -215,37 +222,53 @@ describe('the hand-off an escalation shows', () => {
       handoff: {
         ...FULL_HANDOFF.handoff,
         ownerActiveAt: null,
-        foundBy: { server: null, shippedTaskTitle: null },
+        foundBy: null,
         ratings: null,
         mergesAt: null,
         blockedBy: null,
       },
     };
-    expect(listHandoffLines(bare, { owner: null, presence: null, now: HOUR })).toEqual([
-      'It is urgent, and its merge waited 15 minutes for you.',
-      'A watchdog found the issue.',
-      'Your teammates see it in their Needs you until it merges.',
+    expect(listHandoffParagraphs(bare, { owner: null, presence: null, now: HOUR })).toEqual([
+      {
+        label: 'Why your team has it',
+        text: 'It is urgent and waited 15 minutes for you to merge it, so Autopilot sent it to your team.',
+      },
+      { label: 'What happens now', text: 'Your teammates see it in their Needs you until it merges.' },
     ]);
-    const seen = {
+    const unnamed = {
       ...bare,
-      handoff: { ...bare.handoff, ownerActiveAt: 0, foundBy: null, mergesAt: 2 * HOUR },
+      handoff: { ...bare.handoff, foundBy: { server: null, shippedTaskTitle: null } },
     };
-    expect(listHandoffLines(seen, { owner: null, presence: null, now: HOUR / 2 })).toContain(
-      'You last used Shinsa within the last hour.'
-    );
-    expect(listHandoffLines(seen, { owner: 'Kai', presence: 'online', now: HOUR + 1 })).toEqual([
-      'It is urgent, and its merge waited 15 minutes for Kai.',
-      'Kai is online now, and last used Shinsa about an hour ago.',
-      'Autopilot merges it in 1 hour unless someone acts first.',
-      'Review the change and merge it if your team settings let you, or reach Kai.',
+    expect(listHandoffParagraphs(unnamed, { owner: null, presence: null, now: HOUR })[1]).toEqual({
+      label: 'What it fixes',
+      text: 'A watchdog found an issue, and this change fixes it.',
+    });
+    const seen = { ...bare, handoff: { ...bare.handoff, ownerActiveAt: 0, mergesAt: 2 * HOUR } };
+    expect(listHandoffParagraphs(seen, { owner: 'Kai', presence: 'online', now: HOUR + 1 })).toEqual([
+      {
+        label: 'Why it reached you',
+        text: 'It is urgent and waited 15 minutes for Kai to merge it. Kai is online now.',
+      },
+      {
+        label: 'What to do now',
+        text: 'Review the change and merge it if your team settings let you, or reach Kai. Autopilot merges it in 1 hour unless someone acts first.',
+      },
     ]);
-    expect(listHandoffLines(seen, { owner: 'Kai', presence: 'away', now: 50 * HOUR })[1]).toBe(
-      'Kai is away from Shinsa now, and last used Shinsa about 2 days ago.'
+    expect(listHandoffParagraphs(seen, { owner: 'Kai', presence: 'away', now: 50 * HOUR })[0]?.text).toBe(
+      'It is urgent and waited 15 minutes for Kai to merge it. Kai is away and was last active about 2 days ago.'
+    );
+    expect(listHandoffParagraphs(seen, { owner: 'Kai', presence: null, now: HOUR / 2 })[0]?.text).toBe(
+      'It is urgent and waited 15 minutes for Kai to merge it. Kai was last online within the last hour.'
+    );
+    expect(listHandoffParagraphs(seen, { owner: 'Kai', presence: null, now: 3 * HOUR })[1]?.text).toBe(
+      'Review the change and merge it if your team settings let you, or reach Kai.'
     );
     const unseen = { ...seen, handoff: { ...seen.handoff, ownerActiveAt: null } };
-    expect(listHandoffLines(unseen, { owner: 'Kai', presence: 'offline', now: HOUR })[1]).toBe(
-      'Kai is offline now.'
+    expect(listHandoffParagraphs(unseen, { owner: 'Kai', presence: 'offline', now: HOUR })[0]?.text).toBe(
+      'It is urgent and waited 15 minutes for Kai to merge it. Kai is offline.'
     );
-    expect(listHandoffLines(unseen, { owner: 'Kai', presence: null, now: HOUR })).toHaveLength(3);
+    expect(listHandoffParagraphs(unseen, { owner: 'Kai', presence: null, now: HOUR })[0]?.text).toBe(
+      'It is urgent and waited 15 minutes for Kai to merge it.'
+    );
   });
 });

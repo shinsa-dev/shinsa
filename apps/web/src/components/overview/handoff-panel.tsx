@@ -4,29 +4,39 @@ import { Panel } from '@/components/layout/surface/panel.tsx';
 import { SMART_LINK } from '@/components/links/link.tsx';
 import { useReadOnly, useReadOnlyOwner } from '@/components/task/read-only.tsx';
 import { usePersonPresence } from '@/hooks/use-team-presence.ts';
-import { HANDOFF_TITLE, listHandoffLines } from '@/lib/autopilot.ts';
+import { HANDOFF_TITLE, listHandoffParagraphs } from '@/lib/autopilot.ts';
 import { useTeamFeed } from '@/lib/connection/socket.ts';
 import { resolveOverviewPanelId } from '@/lib/preferences/disclosure.ts';
 import { resolveSourceTaskId } from '@/lib/share/view.ts';
 import { selectFeedMachine } from '@/lib/teams/presence.ts';
 
-function HandoffLines({
+function HandoffParagraphs({
   escalation,
   owner,
   ownerId,
+  url,
 }: {
   escalation: TaskEscalation;
   owner: string | null;
   ownerId: string | null;
+  url: string | null;
 }) {
   const presence = usePersonPresence(ownerId)?.status ?? null;
-  const lines = listHandoffLines(escalation, { owner, presence, now: Date.now() });
+  const paragraphs = listHandoffParagraphs(escalation, { owner, presence, now: Date.now() });
   return (
-    <ul className='flex list-disc flex-col gap-1.5 pl-4 text-xs text-fg-4'>
-      {lines.map((line) => (
-        <li key={line}>{line}</li>
+    <div className='flex flex-col gap-3 text-xs'>
+      {paragraphs.map((paragraph) => (
+        <section key={paragraph.label} className='flex flex-col gap-px'>
+          <h3 className='font-medium text-fg-4'>{paragraph.label}</h3>
+          <p className='text-fg-3'>{paragraph.text}</p>
+        </section>
       ))}
-    </ul>
+      {url && (
+        <a data-smart href={url} target='_blank' rel='noreferrer' className={cn(SMART_LINK, 'w-fit')}>
+          Open the pull request
+        </a>
+      )}
+    </div>
   );
 }
 
@@ -44,27 +54,18 @@ export function HandoffPanel({ task }: { task: Task }) {
   if (!task.escalation || isTaskSettled(task)) return null;
   const user = readOnly ? (shared?.user ?? null) : null;
   const owner = readOnly ? (user ? resolveFirstName(user) : (shared?.name ?? null)) : null;
-  const url = task.escalation.handoff.pullRequestUrl;
   return (
     <Panel
       persistId={resolveOverviewPanelId(task, 'handoff')}
       title={HANDOFF_TITLE[readOnly ? 'teammate' : 'owner']}
       icon='IconMegaphone'
-      meta={
-        url ? (
-          <a
-            data-smart
-            href={url}
-            target='_blank'
-            rel='noreferrer'
-            className={cn(SMART_LINK, 'text-xs font-normal')}
-          >
-            Open the pull request
-          </a>
-        ) : undefined
-      }
     >
-      <HandoffLines escalation={task.escalation} owner={owner} ownerId={readOnly ? ownerId : null} />
+      <HandoffParagraphs
+        escalation={task.escalation}
+        owner={owner}
+        ownerId={readOnly ? ownerId : null}
+        url={task.escalation.handoff.pullRequestUrl}
+      />
     </Panel>
   );
 }

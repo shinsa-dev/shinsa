@@ -221,22 +221,6 @@ describe('the headers that fold', () => {
     expect(again.getByRole('button', { name: 'Expand summary' })).toBeTruthy();
   });
 
-  it('show a panel’s passive meta inside the trigger', () => {
-    const view = render(
-      <Panel
-        persistId={createDisclosureId('ui', 'panel', 'delegations')}
-        title='Delegations'
-        icon='IconAgents'
-        meta='2 running'
-      >
-        <p>Body</p>
-      </Panel>
-    );
-    assertOneTrigger(view);
-    fireEvent.click(view.getByText('2 running'));
-    expect(view.queryByText('Body')).toBeNull();
-  });
-
   it('fold a change snippet from its header, its place a link that does not fold it', () => {
     const fetch = spyOn(globalThis, 'fetch').mockImplementation(
       (async () => new Response(null, { status: 503 })) as unknown as typeof globalThis.fetch

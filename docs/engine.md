@@ -1994,7 +1994,7 @@ action it takes is recorded with its reason. The rules are core's (`decide/autop
   owner last acted in Shinsa (`ownerActiveAt`, the latest hour of `presence`), the watchdog and shipped change that
   found the issue (`foundBy`), the reviewer's ratings, the pull request (only with the `pull_request` share group) and
   when Autopilot merges it next (`mergesAt`). The task's Overview shows it as a panel above the now card
-  (`HandoffPanel`, `listHandoffLines`): "Why this reached you" for a teammate, with the owner's live presence from the
+  (`HandoffPanel`, `listHandoffParagraphs`): "Why this reached you" for a teammate, in three short paragraphs (why it reached them, what it fixes, what to do now) with the owner's live presence from the
   team feed, and "Sent to your team" for you. A teammate merges it from the task's page only when your team settings
   let them answer decisions on your tasks; otherwise they review it read-only and reach you. The
   escalation clears when its merge gate is answered or withdrawn, or a new round starts. A task whose project is in

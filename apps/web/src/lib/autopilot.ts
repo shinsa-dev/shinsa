@@ -192,8 +192,14 @@ const HOUR = 60 * 60 * 1000;
 
 const PRESENCE_TEXT: Record<TeamPresenceStatus, string> = {
   online: 'is online now',
-  away: 'is away from Shinsa now',
-  offline: 'is offline now',
+  away: 'is away',
+  offline: 'is offline',
+};
+
+const LAST_SEEN: Record<TeamPresenceStatus, string | null> = {
+  online: null,
+  away: 'was last active',
+  offline: 'was last online',
 };
 
 function describeHoursAgo(at: number, now: number) {
@@ -208,50 +214,81 @@ function describeIn(at: number, now: number) {
   return minutes < 90 ? `in ${describeMinutes(minutes)}` : `in about ${Math.round(minutes / 60)} hours`;
 }
 
+function lowerFirst(text: string) {
+  return text.charAt(0).toLowerCase() + text.slice(1);
+}
+
 export interface HandoffViewer {
   owner: string | null;
   presence: TeamPresenceStatus | null;
   now: number;
 }
 
-function describeActivity({ handoff }: TaskEscalation, { owner, presence, now }: HandoffViewer) {
-  const who = owner ?? 'You';
-  if (owner && presence) {
-    const seen =
-      handoff.ownerActiveAt === null
-        ? ''
-        : `, and last used Shinsa ${describeHoursAgo(handoff.ownerActiveAt, now)}`;
-    return `${owner} ${PRESENCE_TEXT[presence]}${seen}.`;
+export interface HandoffParagraph {
+  label: string;
+  text: string;
+}
+
+function describeOwnerPresence({ handoff }: TaskEscalation, { owner, presence, now }: HandoffViewer) {
+  if (!owner) return null;
+  const ago = handoff.ownerActiveAt === null ? null : describeHoursAgo(handoff.ownerActiveAt, now);
+  if (presence) {
+    const seen = LAST_SEEN[presence];
+    return seen && ago
+      ? `${owner} ${PRESENCE_TEXT[presence]} and ${seen} ${ago}.`
+      : `${owner} ${PRESENCE_TEXT[presence]}.`;
   }
-  if (handoff.ownerActiveAt === null) return null;
-  return `${who} last used Shinsa ${describeHoursAgo(handoff.ownerActiveAt, now)}.`;
+  return ago ? `${owner} was last online ${ago}.` : null;
 }
 
-function describeFinder({ handoff }: TaskEscalation) {
+function describeWhy(escalation: TaskEscalation, viewer: HandoffViewer) {
+  const waited = describeMinutes(escalation.handoff.waitedMinutes);
+  if (!viewer.owner)
+    return `It is urgent and waited ${waited} for you to merge it, so Autopilot sent it to your team.`;
+  const presence = describeOwnerPresence(escalation, viewer);
+  const urgent = `It is urgent and waited ${waited} for ${viewer.owner} to merge it.`;
+  return presence ? `${urgent} ${presence}` : urgent;
+}
+
+function describeFix({ handoff }: TaskEscalation) {
   const found = handoff.foundBy;
-  if (!found) return null;
-  const where = found.server ? ` in ${found.server}` : '';
-  const after = found.shippedTaskTitle ? ` after “${found.shippedTaskTitle}” shipped` : '';
-  return `A watchdog found the issue${where}${after}.`;
+  const where = found?.server ? ` in ${found.server}` : '';
+  const after = found?.shippedTaskTitle ? ` after “${found.shippedTaskTitle}” shipped` : '';
+  const finder = found ? `A watchdog found an issue${where}${after}, and this change fixes it.` : null;
+  const ratings = handoff.ratings
+    ? `The reviewer rated the fix ${handoff.ratings.confidence} confidence, ${handoff.ratings.risk} risk.`
+    : null;
+  const text = [finder, ratings].filter((sentence) => sentence !== null).join(' ');
+  return text || null;
 }
 
-export function listHandoffLines(escalation: TaskEscalation, viewer: HandoffViewer): string[] {
-  const { handoff } = escalation;
-  const owner = viewer.owner ?? 'you';
-  const ratings = handoff.ratings;
+function describeAutopilotNext({ handoff }: TaskEscalation, now: number) {
+  if (handoff.blockedBy) return `Autopilot could not merge it: ${lowerFirst(handoff.blockedBy)}`;
+  if (handoff.mergesAt !== null && handoff.mergesAt > now) {
+    return `Autopilot merges it ${describeIn(handoff.mergesAt, now)} unless someone acts first.`;
+  }
+  return null;
+}
+
+function describeNext(escalation: TaskEscalation, viewer: HandoffViewer) {
+  const ask = viewer.owner
+    ? `Review the change and merge it if your team settings let you, or reach ${viewer.owner}.`
+    : 'Your teammates see it in their Needs you until it merges.';
+  const autopilot = describeAutopilotNext(escalation, viewer.now);
+  return autopilot ? `${ask} ${autopilot}` : ask;
+}
+
+export function listHandoffParagraphs(escalation: TaskEscalation, viewer: HandoffViewer): HandoffParagraph[] {
+  const teammate = viewer.owner !== null;
+  const fix = describeFix(escalation);
   return [
-    `It is urgent, and its merge waited ${describeMinutes(handoff.waitedMinutes)} for ${owner}.`,
-    handoff.blockedBy ? `Autopilot could not merge it: ${handoff.blockedBy}` : null,
-    describeActivity(escalation, viewer),
-    describeFinder(escalation),
-    ratings ? `The reviewer rated it ${ratings.confidence} confidence, ${ratings.risk} risk.` : null,
-    handoff.mergesAt !== null && handoff.mergesAt > viewer.now
-      ? `Autopilot merges it ${describeIn(handoff.mergesAt, viewer.now)} unless someone acts first.`
-      : null,
-    viewer.owner
-      ? `Review the change and merge it if your team settings let you, or reach ${viewer.owner}.`
-      : 'Your teammates see it in their Needs you until it merges.',
-  ].filter((line) => line !== null);
+    {
+      label: teammate ? 'Why it reached you' : 'Why your team has it',
+      text: describeWhy(escalation, viewer),
+    },
+    ...(fix ? [{ label: 'What it fixes', text: fix }] : []),
+    { label: teammate ? 'What to do now' : 'What happens now', text: describeNext(escalation, viewer) },
+  ];
 }
 
 export function describeTeamEscalationSummary({ entry, escalation }: TeamEscalation) {
