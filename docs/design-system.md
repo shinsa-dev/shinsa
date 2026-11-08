@@ -915,8 +915,8 @@ Shinsa's controls are a step denser than a usual web app: 22 / 24 / 26 / 30. Pri
 
 | Height | Button | Field | Also on this step |
 | --- | --- | --- | --- |
-| 18 | `icon-2xs` (only a close mark inside a 24px row, such as a terminal tab) | | `Badge` `sm` |
-| 20 | | | `Badge` default, `Kbd`, `StepNumber` tile, `Switch` (20 × 32), a 20px icon slot |
+| 18 | `icon-2xs` (only a close mark inside a 24px row, such as a terminal tab) | | `Badge` `sm`, `Switch` (18 × 28) |
+| 20 | | | `Badge` default, `Kbd`, `StepNumber` tile, a 20px icon slot |
 | 22 | `xs`, `icon-xs` | | |
 | 24 | `sm`, `icon-sm` | `Input` `sm`, `SelectTrigger` `sm` | menu, select and command rows, tooltip minimum height, `SectionLabel` row, disclosure `line` strip |
 | 26 | `default`, `icon` | `Input`, `SelectTrigger` | default and ghost tab lists |
@@ -3774,10 +3774,10 @@ A 12.5px ring at 30% of the ink with a quarter arc at full ink, 1.5px strokes (i
 
 **Classes:**
 
-- Root: `peer group/switch relative inline-flex h-5 w-8 shrink-0 items-center rounded-full border border-transparent bg-bg-3 transition-[background-color,box-shadow] duration-200 ease-out outline-none after:absolute after:-inset-x-3 after:-inset-y-2 not-data-disabled:cursor-pointer data-checked:bg-primary-4 data-disabled:cursor-not-allowed data-disabled:[&>span]:opacity-50`
-- Thumb: `pointer-events-none flex size-4 items-center justify-center rounded-full bg-background text-primary-4 ring-0 transition-transform duration-150 ease-out shadow-control-knob translate-x-px data-checked:translate-x-[calc(100%-3px)]`
+- Root: `peer group/switch relative inline-flex h-4.5 w-7 shrink-0 items-center rounded-full border border-transparent bg-bg-3 transition-[background-color,box-shadow] duration-200 ease-out outline-none after:absolute after:-inset-x-3 after:-inset-y-2 not-data-disabled:cursor-pointer data-checked:bg-primary-4 data-disabled:cursor-not-allowed data-disabled:[&>span]:opacity-50`
+- Thumb: `pointer-events-none flex size-3.5 items-center justify-center rounded-full bg-background text-primary-4 ring-0 transition-transform duration-150 ease-out shadow-control-knob translate-x-px data-checked:translate-x-[calc(100%-3px)]`
 
-**Geometry:** track 32 × 20px, fully round, 1px transparent border; knob 16px, 2px from every edge (1px border + 1px translate); checked, its translate becomes 13px (`100% − 3px`), 12px further right, so it sits 2px from the right edge. The invisible `::after` extends the hit area 12px left and right and 8px up and down (56 × 36px).
+**Geometry:** track 28 × 18px, fully round, 1px transparent border; knob 14px, 2px from every edge (1px border + 1px translate); checked, its translate becomes 11px (`100% − 3px`), 10px further right, so it sits 2px from the right edge. The invisible `::after` extends the hit area 12px left and right and 8px up and down (52 × 34px).
 
 | State | Track | Knob |
 | --- | --- | --- |
@@ -9625,7 +9625,7 @@ and the user's setting has to win.
   | Input, select trigger, default tab list | 26px |
   | Underline tab list | 32px |
   | Checkbox `sm` / `md` | 14 / 16px |
-  | Switch | 32 × 20px track, 16px thumb |
+  | Switch | 28 × 18px track, 14px thumb |
 
 - **Whole rows and tiles are the target**: a list row, a task row, a disclosure header is one click target end to
   end, never a small link inside a row.
