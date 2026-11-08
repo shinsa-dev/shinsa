@@ -365,7 +365,6 @@ describe('Autopilot at the merge', () => {
         ownerActiveAt: Math.max(...hours) * HOUR_MS,
         foundBy: null,
         ratings: HIGH_LOW,
-        pullRequestUrl: pullRequest().url,
         mergesAt: null,
         blockedBy: null,
       },
@@ -398,7 +397,7 @@ describe('Autopilot at the merge', () => {
     fire(harness, taskId);
     expectMergeWaits(harness, taskId);
     expect(harness.task(taskId).escalation?.reason).toBe(`${WAITED} You approved the review yourself.`);
-    expect(harness.task(taskId).escalation?.handoff.blockedBy).toBe('You approved the review yourself.');
+    expect(harness.task(taskId).escalation?.handoff.blockedBy).toBe('self_approved');
   });
 
   test('escalates instead of merging an urgent change with a pre-merge step left', () => {
@@ -540,7 +539,6 @@ describe('the hand-off an escalation carries', () => {
       ownerActiveAt: null,
       foundBy: { server: 'cloudflare', shippedTaskTitle: harness.task(shippedId).title },
       ratings: null,
-      pullRequestUrl: null,
       mergesAt: 9_000,
       blockedBy: null,
     });

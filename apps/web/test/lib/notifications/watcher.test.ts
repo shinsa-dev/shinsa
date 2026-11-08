@@ -108,7 +108,6 @@ describe('a teammate’s escalation', () => {
           ownerActiveAt: null,
           foundBy: null,
           ratings: null,
-          pullRequestUrl: null,
           mergesAt: null,
           blockedBy: null,
         },

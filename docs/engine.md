@@ -1990,9 +1990,9 @@ action it takes is recorded with its reason. The rules are core's (`decide/autop
   tasks out of the team feed: they show in Needs you as "Sent by your team" (an amber megaphone tile and a line such as
   "Mona’s urgent fix, found by a watchdog, waited 1 hour for its merge"), count in the page badge, and each sends one
   notification that opens the task. The escalation carries its hand-off (`EscalationHandoff`, `resolveEscalationHandoff`,
-  taken once at the escalation): how long the merge waited, why Autopilot could not merge it (`blockedBy`), when the
+  taken once at the escalation): how long the merge waited, why Autopilot could not merge it (`blockedBy`, a `MergeBlock` code each reader's page words for them, so a teammate never reads "you approved"), when the
   owner last acted in Shinsa (`ownerActiveAt`, the latest hour of `presence`), the watchdog and shipped change that
-  found the issue (`foundBy`), the reviewer's ratings, the pull request (only with the `pull_request` share group) and
+  found the issue (`foundBy`), the reviewer's ratings and
   when Autopilot merges it next (`mergesAt`). The task's Overview shows it as a panel above the now card
   (`HandoffPanel`, `listHandoffParagraphs`): "Why this reached you" for a teammate, in three short paragraphs (why it reached them, what it fixes, what to do now) with the owner's live presence from the
   team feed, and "Sent to your team" for you. A teammate merges it from the task's page only when your team settings

@@ -340,7 +340,6 @@ describe('a team view of this machine', () => {
         ownerActiveAt: null,
         foundBy: null,
         ratings: null,
-        pullRequestUrl: null,
         mergesAt: null,
         blockedBy: null,
       },

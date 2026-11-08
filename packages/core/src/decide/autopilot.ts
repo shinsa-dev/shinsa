@@ -4,6 +4,7 @@ import {
   type EscalationHandoff,
   type Gate,
   HOUR_MS,
+  type MergeBlock,
   isTaskClosed,
   MINUTE_MS,
   resolveApprovalPath,
@@ -89,10 +90,16 @@ export function resolveAutopilotDecision(
   return { approve: true, reason: describeApproval(task, ratings.risk) };
 }
 
-function resolveMergeRefusal(decider: Decider, task: Task) {
-  if (!task.autopiloted) return 'You approved the review yourself.';
-  if (hasOpenPreMergeSteps(decider, task)) return 'A pre-merge step is not ticked yet.';
-  if (resolveApprovalPath(task, 'merge') !== 'merge') return 'Your edits are not pushed yet.';
+const MERGE_BLOCK_TEXT: Record<MergeBlock, string> = {
+  self_approved: 'You approved the review yourself.',
+  pre_merge_steps: 'A pre-merge step is not ticked yet.',
+  edits_not_pushed: 'Your edits are not pushed yet.',
+};
+
+function resolveMergeRefusal(decider: Decider, task: Task): MergeBlock | null {
+  if (!task.autopiloted) return 'self_approved';
+  if (hasOpenPreMergeSteps(decider, task)) return 'pre_merge_steps';
+  if (resolveApprovalPath(task, 'merge') !== 'merge') return 'edits_not_pushed';
   return null;
 }
 
@@ -179,7 +186,6 @@ export function resolveEscalationHandoff(
     ownerActiveAt: resolveOwnerActiveAt(state),
     foundBy: resolveFinder(state, task),
     ratings: task.reviewRatings ?? null,
-    pullRequestUrl: task.pullRequest?.url ?? null,
   };
 }
 
@@ -228,7 +234,7 @@ export function fireAutopilot(decider: Decider, command: CommandOf<'autopilot.fi
     ? { at: decider.context.now + policy.urgentWaitMinutes * MINUTE_MS, action: 'merge' }
     : null;
   const blockedBy = action === 'merge' ? refusal : null;
-  escalate(decider, task, blockedBy ? `${waited} ${blockedBy}` : waited, {
+  escalate(decider, task, blockedBy ? `${waited} ${MERGE_BLOCK_TEXT[blockedBy]}` : waited, {
     waitedMinutes: policy.urgentWaitMinutes,
     mergesAt: next?.at ?? null,
     blockedBy,

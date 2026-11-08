@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { AUTOPILOT_DEFAULTS, createSettings } from '@shinsa/core';
+import { AUTOPILOT_DEFAULTS, createSettings, type MergeBlock } from '@shinsa/core';
 import {
   AUTOPILOT_RISK_ITEMS,
   describeAgentReviewNote,
@@ -122,7 +122,6 @@ describe('what the task page says', () => {
             ownerActiveAt: null,
             foundBy: null,
             ratings: null,
-            pullRequestUrl: null,
             mergesAt: null,
             blockedBy: null,
           },
@@ -161,7 +160,6 @@ describe('teammates’ escalated tasks in Needs you', () => {
               ownerActiveAt: null,
               foundBy: null,
               ratings: null,
-              pullRequestUrl: null,
               mergesAt: null,
               blockedBy: null,
             },
@@ -190,9 +188,8 @@ const FULL_HANDOFF = {
     ownerActiveAt: 0,
     foundBy: { server: 'cloudflare', shippedTaskTitle: 'Ship checkout' },
     ratings: { confidence: 'high' as const, risk: 'low' as const },
-    pullRequestUrl: null,
     mergesAt: 10 * HOUR,
-    blockedBy: 'A pre-merge step is not ticked yet.',
+    blockedBy: 'pre_merge_steps' as MergeBlock,
   },
 };
 
@@ -214,6 +211,17 @@ describe('the hand-off an escalation shows', () => {
         },
       ]
     );
+  });
+
+  it.each([
+    ['self_approved', 'Kai', 'Kai approved the review by hand, so it waits for a person to merge it.'],
+    ['self_approved', null, 'you approved the review by hand, so it waits for a person to merge it.'],
+    ['edits_not_pushed', 'Kai', 'Kai’s edits are not pushed yet.'],
+    ['edits_not_pushed', null, 'your edits are not pushed yet.'],
+  ] as const)('words why Autopilot could not merge it (%s) for the reader', (blockedBy, owner, expected) => {
+    const escalation = { ...FULL_HANDOFF, handoff: { ...FULL_HANDOFF.handoff, blockedBy } };
+    const paragraphs = listHandoffParagraphs(escalation, { owner, presence: null, now: HOUR });
+    expect(paragraphs.at(-1)?.text).toEndWith(`Autopilot could not merge it: ${expected}`);
   });
 
   it('tells you what your team saw, and leaves out what it does not know', () => {

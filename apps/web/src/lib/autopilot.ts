@@ -1,5 +1,8 @@
 import {
   type AutopilotMerge,
+  HOUR_MS,
+  type MergeBlock,
+  MINUTE_MS,
   type AutopilotPolicy,
   type AutopilotRisk,
   type AutopilotUrgent,
@@ -188,8 +191,6 @@ export const HANDOFF_TITLE: Record<'owner' | 'teammate', string> = {
   teammate: 'Why this reached you',
 };
 
-const HOUR = 60 * 60 * 1000;
-
 const PRESENCE_TEXT: Record<TeamPresenceStatus, string> = {
   online: 'is online now',
   away: 'is away',
@@ -203,19 +204,15 @@ const LAST_SEEN: Record<TeamPresenceStatus, string | null> = {
 };
 
 function describeHoursAgo(at: number, now: number) {
-  const hours = Math.floor((now - at) / HOUR);
+  const hours = Math.floor((now - at) / HOUR_MS);
   if (hours < 1) return 'within the last hour';
   if (hours < 48) return hours === 1 ? 'about an hour ago' : `about ${hours} hours ago`;
   return `about ${Math.floor(hours / 24)} days ago`;
 }
 
 function describeIn(at: number, now: number) {
-  const minutes = Math.max(1, Math.round((at - now) / (60 * 1000)));
+  const minutes = Math.max(1, Math.round((at - now) / MINUTE_MS));
   return minutes < 90 ? `in ${describeMinutes(minutes)}` : `in about ${Math.round(minutes / 60)} hours`;
-}
-
-function lowerFirst(text: string) {
-  return text.charAt(0).toLowerCase() + text.slice(1);
 }
 
 export interface HandoffViewer {
@@ -262,8 +259,15 @@ function describeFix({ handoff }: TaskEscalation) {
   return text || null;
 }
 
-function describeAutopilotNext({ handoff }: TaskEscalation, now: number) {
-  if (handoff.blockedBy) return `Autopilot could not merge it: ${lowerFirst(handoff.blockedBy)}`;
+const MERGE_BLOCK_TEXT: Record<MergeBlock, (owner: string | null) => string> = {
+  self_approved: (owner) =>
+    `${owner ?? 'you'} approved the review by hand, so it waits for a person to merge it.`,
+  pre_merge_steps: () => 'a pre-merge step is not ticked yet.',
+  edits_not_pushed: (owner) => `${owner ? `${owner}’s` : 'your'} edits are not pushed yet.`,
+};
+
+function describeAutopilotNext({ handoff }: TaskEscalation, { owner, now }: HandoffViewer) {
+  if (handoff.blockedBy) return `Autopilot could not merge it: ${MERGE_BLOCK_TEXT[handoff.blockedBy](owner)}`;
   if (handoff.mergesAt !== null && handoff.mergesAt > now) {
     return `Autopilot merges it ${describeIn(handoff.mergesAt, now)} unless someone acts first.`;
   }
@@ -274,7 +278,7 @@ function describeNext(escalation: TaskEscalation, viewer: HandoffViewer) {
   const ask = viewer.owner
     ? `Review the change and merge it if your team settings let you, or reach ${viewer.owner}.`
     : 'Your teammates see it in their Needs you until it merges.';
-  const autopilot = describeAutopilotNext(escalation, viewer.now);
+  const autopilot = describeAutopilotNext(escalation, viewer);
   return autopilot ? `${ask} ${autopilot}` : ask;
 }
 

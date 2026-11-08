@@ -799,7 +799,10 @@ describe('Autopilot and usage limits', () => {
     expect(harness.openGate(taskId)).toMatchObject({ cause: 'budget' });
     const held = heldAtPace({ daily: -1 });
     held.harness.send(AUTOPILOT_ON);
-    held.harness.send({ type: 'task.prioritize', taskId: held.taskId, priority: 'urgent' }, { onBehalf: true });
+    held.harness.send(
+      { type: 'task.prioritize', taskId: held.taskId, priority: 'urgent' },
+      { onBehalf: true }
+    );
     expect(isHeldStepStarted(held.harness, held.run.id)).toBe(false);
     held.harness.send({ type: 'task.prioritize', taskId: held.taskId, priority: 'high' });
     makeUrgent(held.harness, held.taskId);

@@ -121,7 +121,6 @@ describe('an escalated team task', () => {
       ownerActiveAt: 1_000,
       foundBy: { server: 'cloudflare', shippedTaskTitle: 'Ship the paywall list' },
       ratings: { confidence: 'high' as const, risk: 'low' as const },
-      pullRequestUrl: 'https://github.com/superwall/paywall-next/pull/42',
       mergesAt: null,
       blockedBy: null,
     };

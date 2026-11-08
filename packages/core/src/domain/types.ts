@@ -452,14 +452,15 @@ export interface EscalationFinder {
   shippedTaskTitle: string | null;
 }
 
+export type MergeBlock = 'self_approved' | 'pre_merge_steps' | 'edits_not_pushed';
+
 export interface EscalationHandoff {
   waitedMinutes: number;
   ownerActiveAt: number | null;
   foundBy: EscalationFinder | null;
   ratings: ReviewRatings | null;
-  pullRequestUrl: string | null;
   mergesAt: number | null;
-  blockedBy: string | null;
+  blockedBy: MergeBlock | null;
 }
 
 export interface TaskEscalation {

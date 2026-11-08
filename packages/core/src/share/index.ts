@@ -299,7 +299,7 @@ function redactDuplicate(duplicate: TaskDuplicate): TaskDuplicate {
   };
 }
 
-function redactEscalation(escalation: TaskEscalation, grants: Grants): TaskEscalation {
+function copyEscalation(escalation: TaskEscalation): TaskEscalation {
   const { handoff } = escalation;
   return {
     ...escalation,
@@ -307,7 +307,6 @@ function redactEscalation(escalation: TaskEscalation, grants: Grants): TaskEscal
       ...handoff,
       foundBy: handoff.foundBy ? { ...handoff.foundBy } : null,
       ratings: handoff.ratings ? { ...handoff.ratings } : null,
-      pullRequestUrl: grants('pull_request') ? handoff.pullRequestUrl : null,
     },
   };
 }
@@ -321,13 +320,13 @@ const TASK_GROUP_FIELDS: Partial<Record<ShareGroup, (task: Task, grants: Grants)
     ...(task.pipeline ? { pipeline: task.pipeline } : {}),
   }),
   summary: (task) => ({ summary: task.summary }),
-  people: (task, grants) => ({
+  people: (task) => ({
     projectId: task.projectId ?? null,
     repoId: task.repoId,
     branch: task.branch,
     stageReason: task.stageReason,
     duplicate: task.duplicate ? redactDuplicate(task.duplicate) : null,
-    escalation: task.escalation ? redactEscalation(task.escalation, grants) : null,
+    escalation: task.escalation ? copyEscalation(task.escalation) : null,
   }),
   plan: (task) => ({ triageDecisions: task.triageDecisions ?? null }),
   reports: (task) => ({ phaseReports: task.phaseReports.map(redactPhaseReport), fixRounds: task.fixRounds }),

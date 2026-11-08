@@ -26,7 +26,6 @@ const HANDOFF = {
   ownerActiveAt: null,
   foundBy: null,
   ratings: null,
-  pullRequestUrl: null,
   mergesAt: null,
   blockedBy: null,
 };
