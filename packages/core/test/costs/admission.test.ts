@@ -74,6 +74,18 @@ describe('the admission queue', () => {
     expect(resolveProjectResponses(harness.state, NOW)).toBe(responses);
   });
 
+  test('forgets answers once they leave the window, and reads the tasks again when they change', () => {
+    const { harness, answer } = queueOf();
+    answer('p-known', 2 * HOUR_MS, NOW - HOUR_MS);
+    expect([...resolveProjectResponses(harness.state, NOW).keys()]).toEqual(['p-known']);
+    expect(resolveProjectResponses(harness.state, NOW + 30 * DAY_MS).size).toBe(0);
+    expect(resolveProjectResponses(harness.state, NOW - HOUR_MS).size).toBe(1);
+    const moved = Object.fromEntries(
+      Object.entries(harness.state.tasks).map(([id, task]) => [id, { ...task, projectId: 'p-other' }])
+    );
+    expect([...resolveProjectResponses({ ...harness.state, tasks: moved }, NOW).keys()]).toEqual(['p-other']);
+  });
+
   test('within the same rank, a task others wait on goes first, then the id breaks a tie', () => {
     const { harness, make } = queueOf();
     const blocker = make('b-blocker', { createdAt: 5 });

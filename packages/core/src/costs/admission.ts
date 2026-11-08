@@ -25,7 +25,14 @@ export const ENGAGEMENT_LIMITS = {
 
 const PRIORITY_RANK: Record<TaskPriority, number> = { urgent: 0, high: 1, normal: 2, low: 3 };
 
-const RESPONSES = new WeakMap<Record<string, Gate>, Map<string, number>>();
+interface KnownResponses {
+  tasks: ShinsaState['tasks'];
+  from: number;
+  until: number;
+  responses: Map<string, number>;
+}
+
+const RESPONSES = new WeakMap<Record<string, Gate>, KnownResponses>();
 
 export interface AdmissionVerdict {
   fits: boolean;
@@ -71,19 +78,21 @@ function resolveMedian(values: number[]) {
 
 export function resolveProjectResponses(state: Pick<ShinsaState, 'gates' | 'tasks'>, now: number) {
   const known = RESPONSES.get(state.gates);
-  if (known) return known;
+  if (known && known.tasks === state.tasks && now >= known.from && now < known.until) return known.responses;
   const byProject = new Map<string, number[]>();
+  let until = Number.POSITIVE_INFINITY;
   for (const gate of Object.values(state.gates)) {
     const projectId = state.tasks[gate.taskId]?.projectId;
     if (!projectId || gate.answeredAt === null || now - gate.answeredAt > ENGAGEMENT_LIMITS.windowMs)
       continue;
+    until = Math.min(until, gate.answeredAt + ENGAGEMENT_LIMITS.windowMs + 1);
     byProject.set(projectId, [...(byProject.get(projectId) ?? []), gate.answeredAt - gate.openedAt]);
   }
   const responses = new Map<string, number>();
   for (const [projectId, waits] of byProject) {
     if (waits.length >= ENGAGEMENT_LIMITS.minAnswers) responses.set(projectId, resolveMedian(waits));
   }
-  RESPONSES.set(state.gates, responses);
+  RESPONSES.set(state.gates, { tasks: state.tasks, from: now, until, responses });
   return responses;
 }
 
