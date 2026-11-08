@@ -661,6 +661,8 @@ describe('keeping a teammate’s last list', () => {
     await until('the kept list is taken', () =>
       feeds.snapshot().tasks.some((task) => task.instanceId === 'inst3')
     );
+    await until('the kept list is announced', () => heard.length > 0);
+    await until('the kept list is written', () => readKeptFile(resolveKeptPath(laptop))?.lists.length === 2);
     expect(
       feeds
         .listTasks()
