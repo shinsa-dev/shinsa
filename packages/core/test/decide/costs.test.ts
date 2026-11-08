@@ -895,6 +895,27 @@ describe('Auto pace', () => {
     expect(isAdmissionHeld(harness, later.taskId)).toBe(true);
   });
 
+  test('a build that fits behind the queue head waits for the head’s time, not every minute', () => {
+    const harness = autoPaced(0.01);
+    const large = plannedTask(harness, { priority: 'high', plan: LARGE_PLAN });
+    const probe = plannedTask(harness);
+    recordPace(harness, paceFitting(harness, needOf(harness, probe.taskId) * 2.5));
+    const small = plannedTask(harness);
+    const head = waitOf(harness, large.taskId);
+    expect(waitOf(harness, small.taskId).resetAt).toBeGreaterThanOrEqual(head.resetAt);
+    const armed = () => harness.events.filter((event) => event.type === 'usage_wait.armed').length;
+    const before = armed();
+    for (let minute = 0; minute < 60; minute += 1) {
+      harness.advance(60_000);
+      const wait = waitOf(harness, small.taskId);
+      harness.send({ type: 'usage_wait.resume', taskId: small.taskId, waitId: wait.id });
+    }
+    expect(armed() - before).toBeLessThanOrEqual(2);
+    expect(waitOf(harness, small.taskId).resetAt).toBeGreaterThanOrEqual(
+      waitOf(harness, large.taskId).resetAt
+    );
+  });
+
   test('checks again at the time it expected room, and keeps one wait when there is still none', () => {
     const harness = autoPaced(10_000);
     const building = plannedTask(harness);

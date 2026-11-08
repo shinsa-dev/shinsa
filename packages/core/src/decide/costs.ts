@@ -265,17 +265,32 @@ export function holdForAdmission(decider: Decider, run: Run) {
   );
   const first = sortAdmissionQueue(decider.state, [...waiting, task])[0];
   if (verdict.fits && first?.id === task.id) return false;
-  armPaceWait(decider, run, resolveAdmissionLimit(verdict), verdict.freesAt);
+  const ahead = first && first.id !== task.id ? (first.usageWait?.resetAt ?? null) : null;
+  armPaceWait(decider, run, resolveAdmissionLimit(verdict), resolveQueuedFreesAt(verdict, ahead));
   return true;
 }
 
-function rearmAdmission(decider: Decider, task: Task, wait: UsageWait, verdict: AdmissionVerdict | null) {
+function resolveQueuedFreesAt(verdict: AdmissionVerdict, ahead: number | null) {
+  return ahead === null ? verdict.freesAt : Math.max(verdict.freesAt, ahead);
+}
+
+function rearmAdmission(
+  decider: Decider,
+  task: Task,
+  wait: UsageWait,
+  verdict: AdmissionVerdict | null,
+  ahead: number | null
+) {
   const { now } = decider.context;
   if (wait.resetAt > now || !verdict || !wait.pace) return;
   decider.emit({
     type: 'usage_wait.armed',
     taskId: task.id,
-    wait: { ...wait, resetAt: verdict.freesAt, pace: { ...wait.pace, ...resolveAdmissionLimit(verdict) } },
+    wait: {
+      ...wait,
+      resetAt: resolveQueuedFreesAt(verdict, ahead),
+      pace: { ...wait.pace, ...resolveAdmissionLimit(verdict) },
+    },
   });
 }
 
@@ -283,7 +298,7 @@ export function admitBuilds(decider: Decider) {
   const waiting = listAdmissionWaits(decider);
   if (waiting.length === 0) return;
   const autoPace = resolveAutoPace(decider.state.settings);
-  const blocked = new Set<string>();
+  const blocked = new Map<string, number>();
   for (const queued of sortAdmissionQueue(decider.state, waiting)) {
     const task = decider.task(queued.id);
     const wait = task.usageWait;
@@ -295,8 +310,9 @@ export function admitBuilds(decider: Decider) {
       releasePaceWait(decider, task, wait);
       continue;
     }
-    blocked.add(provider);
-    rearmAdmission(decider, task, wait, verdict);
+    const ahead = blocked.get(provider) ?? null;
+    rearmAdmission(decider, task, wait, verdict, ahead);
+    if (ahead === null) blocked.set(provider, decider.task(task.id).usageWait?.resetAt ?? wait.resetAt);
   }
 }
 
