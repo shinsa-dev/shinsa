@@ -28,7 +28,7 @@ const PROJECTS = {
       repos: [],
     },
   ],
-  focus: { projectId: null, teamId: null, until: null },
+  focus: { projectIds: [], except: false, teamId: null, until: null },
 };
 
 const REPOS = { repos: [{ id: 'repo-1', name: 'app', path: '/code/app', defaultBranch: 'main' }] };
@@ -90,7 +90,10 @@ describe('projects and focus', () => {
 
   test('shows a project found by key, name or id, with its repositories and folders', async () => {
     const fake = createFakeClient({
-      '/api/projects': { ...PROJECTS, focus: { projectId: 'project-1', teamId: null, until: null } },
+      '/api/projects': {
+        ...PROJECTS,
+        focus: { projectIds: ['project-1'], except: false, teamId: null, until: null },
+      },
     });
     const work = [
       'Work (WK), in focus',
@@ -283,15 +286,32 @@ describe('projects and focus', () => {
     });
     expect((await runSpec(fake, ['focus', 'show'])).text).toBe('No focus: everything shows.');
     const focused = createFakeClient({
-      '/api/projects': { ...PROJECTS, focus: { projectId: 'project-1', until } },
+      '/api/projects': {
+        ...PROJECTS,
+        focus: { projectIds: ['project-1'], except: false, teamId: null, until },
+      },
     });
     expect((await runSpec(focused, ['focus', 'show'])).text).toBe(
       'Focused on Work until 2026-10-23T18:00:00.000Z.'
     );
-    const open = createFakeClient({
+    const both = createFakeClient({
+      '/api/projects': {
+        ...PROJECTS,
+        focus: { projectIds: ['project-1', 'project-2'], except: false, teamId: null, until: null },
+      },
+    });
+    expect((await runSpec(both, ['focus', 'show'])).text).toBe('Focused on Home and Work.');
+    const allBut = createFakeClient({
+      '/api/projects': {
+        ...PROJECTS,
+        focus: { projectIds: ['project-1'], except: true, teamId: null, until: null },
+      },
+    });
+    expect((await runSpec(allBut, ['focus', 'show'])).text).toBe('Focused on everything but Work.');
+    const older = createFakeClient({
       '/api/projects': { ...PROJECTS, focus: { projectId: 'project-2', teamId: null, until: null } },
     });
-    expect((await runSpec(open, ['focus', 'show'])).text).toBe('Focused on Home.');
+    expect((await runSpec(older, ['focus', 'show'])).text).toBe('Focused on Home.');
   });
 
   test('records a span you were away', async () => {
@@ -302,17 +322,31 @@ describe('projects and focus', () => {
     expect(fake.sent).toEqual([{ type: 'away.record', from: 1_000, to: 5_000 }]);
   });
 
-  test('focuses on a project for a while or until cleared', async () => {
+  test('focuses on projects, on all but some, for a while or until cleared', async () => {
     setSystemTime(new Date(1_000));
     try {
       const fake = createFakeClient({ '/api/projects': PROJECTS });
       expect((await runSpec(fake, ['focus', 'set', 'Work', '--hours', '1.5'])).text).toBe('Focused.');
-      await runSpec(fake, ['focus', 'set', 'project-2']);
+      await runSpec(fake, ['focus', 'set', 'project-2', 'WK']);
+      await runSpec(fake, ['focus', 'set', 'Work', '--except']);
       expect((await runSpec(fake, ['focus', 'clear'])).text).toBe('Everything shows again.');
       expect(fake.sent).toEqual([
-        { type: 'focus.change', projectId: 'project-1', until: 1_000 + 1.5 * HOUR_MS },
-        { type: 'focus.change', projectId: 'project-2', until: null },
-        { type: 'focus.change', projectId: null, until: null },
+        {
+          type: 'focus.change',
+          projectId: null,
+          projectIds: ['project-1'],
+          except: false,
+          until: 1_000 + 1.5 * HOUR_MS,
+        },
+        {
+          type: 'focus.change',
+          projectId: null,
+          projectIds: ['project-2', 'project-1'],
+          except: false,
+          until: null,
+        },
+        { type: 'focus.change', projectId: null, projectIds: ['project-1'], except: true, until: null },
+        { type: 'focus.change', projectId: null, projectIds: [], except: false, until: null },
       ]);
     } finally {
       setSystemTime();

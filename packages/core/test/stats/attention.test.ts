@@ -107,7 +107,7 @@ describe('tasks at once', () => {
     const you = {
       tasks: {},
       away: { a: { from: 8 * H, to: 10 * H } },
-      focusHistory: { f: { projectId: 'a', from: 0, to: 4 * H, until: null } },
+      focusHistory: { f: { projectIds: ['a'], except: false, from: 0, to: 4 * H, until: null } },
     };
     const clock = resolveYourClock(you, DAY, hourOf);
     expect(listGoingSpans(task('b', { projectId: 'b' }), clock, windowOf(1))).toEqual([

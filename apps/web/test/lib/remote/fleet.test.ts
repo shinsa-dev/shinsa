@@ -208,7 +208,7 @@ describe('merging the state of several machines', () => {
 
   it('keeps your time away and focus from every machine, and reads a machine that sends none as none', () => {
     const { away: _, focusHistory: __, ...older } = createWire(1);
-    const focus = { projectId: 'p', from: 5, to: null, until: null };
+    const focus = { projectIds: ['p'], except: false, from: 5, to: null, until: null };
     const merged = mergeFleetStates([
       { id: 'm1', state: createWire(1, { away: { '1': { from: 1, to: 2 } } }) },
       { id: 'm2', state: createWire(1, { away: { '3': { from: 3, to: 4 } }, focusHistory: { '5': focus } }) },

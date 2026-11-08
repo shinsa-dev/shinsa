@@ -41,9 +41,10 @@ export function recordFocus(state: ShinsaState, focus: Focus, at: number) {
   for (const [id, span] of Object.entries(state.focusHistory)) {
     if (span.to === null) writeEntry(state, 'focusHistory', id, { ...span, to: at });
   }
-  if (focus.projectId) {
+  if (focus.projectIds.length > 0) {
     writeEntry(state, 'focusHistory', String(at), {
-      projectId: focus.projectId,
+      projectIds: [...focus.projectIds],
+      except: focus.except,
       from: at,
       to: null,
       until: focus.until,

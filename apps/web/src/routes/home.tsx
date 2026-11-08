@@ -16,7 +16,7 @@ import { listQueueSections } from '@/lib/queue.ts';
 export function HomePage({ state }: { state: ShinsaState }) {
   const now = Date.now();
   const queue = resolveQueue(state, now);
-  const briefing = reconcileBriefing(state.briefings[briefingKey(queue.focusProjectId)], queue, now);
+  const briefing = reconcileBriefing(state.briefings[briefingKey(queue.focus)], queue, now);
   const { first, finished, conversations, last } = resolveHomeSections(
     state,
     listQueueSections(state, queue),

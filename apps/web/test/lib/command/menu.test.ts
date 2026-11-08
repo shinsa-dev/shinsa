@@ -323,7 +323,7 @@ describe('listRecentTasks', () => {
     const focused = createShinsaState({
       repos: [createRepo({ id: 'api', projectId: 'work' }), createRepo({ id: 'garden', projectId: 'home' })],
       tasks: [createTask({ id: 'login', repoId: 'api' }), createTask({ id: 'beds', repoId: 'garden' })],
-      patch: { focus: { projectId: 'work', teamId: null, until: NOW + 1000 } },
+      patch: { focus: { projectIds: ['work'], except: false, teamId: null, until: NOW + 1000 } },
     });
     const ids = (now: number) =>
       listRecentTasks(focused, ['beds', 'login'], null, new Set(), now).map((task: Task) => task.id);

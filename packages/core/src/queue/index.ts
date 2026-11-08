@@ -5,6 +5,7 @@ export {
   isListedInFocus,
   listWaitsOn,
   resolveFocusProject,
+  resolveFocusProjects,
   resolveFocusTeam,
   resolveQueue,
 } from './rank.ts';

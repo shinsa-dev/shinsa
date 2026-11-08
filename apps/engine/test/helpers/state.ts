@@ -150,7 +150,7 @@ export interface StubEngine {
 }
 
 interface StubBriefing {
-  projectId: string | null;
+  key: string;
   text: string;
   briefing: Briefing;
 }
@@ -181,8 +181,8 @@ export function createStubEngine(patch: (state: ShinsaState) => void = () => und
       const response = responses.find((candidate) => candidate.predicate(command));
       return Promise.resolve(response?.events ?? []);
     },
-    writeBriefing: (projectId: string | null, written: { text: string; briefing: Briefing }) => {
-      briefed.push({ projectId, ...written });
+    writeBriefing: (key: string, written: { text: string; briefing: Briefing }) => {
+      briefed.push({ key, ...written });
       if (briefingRefusals.some((refused) => refused())) return Promise.reject(new Error('rejected'));
       return Promise.resolve();
     },

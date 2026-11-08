@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import {
   FOCUS_GRACE_MS,
+  type FocusSpan,
   HOUR_MS,
   type HourOfWeek,
   listSetAside,
@@ -154,12 +155,18 @@ describe('time away from your Mac', () => {
 describe('a task set aside by your focus', () => {
   const day = at(5, 0);
 
-  function clockWith(focus: { projectId: string; from: number; to: number | null; until: number | null }) {
+  function clockWith(focus: FocusSpan) {
     return resolveYourClock({ tasks: {}, focusHistory: { f: focus } }, NOW, hourOf);
   }
 
   test('sets aside a task in another project from 30 minutes into the focus until it ends', () => {
-    const clock = clockWith({ projectId: 'a', from: day, to: day + 4 * HOUR_MS, until: null });
+    const clock = clockWith({
+      projectIds: ['a'],
+      except: false,
+      from: day,
+      to: day + 4 * HOUR_MS,
+      until: null,
+    });
     expect(listSetAside(clock, taskIn('b'), NOW)).toEqual([
       { from: day + FOCUS_GRACE_MS, to: day + 4 * HOUR_MS },
     ]);
@@ -168,23 +175,60 @@ describe('a task set aside by your focus', () => {
   });
 
   test('ends a focus at its end time, or now while it lasts', () => {
-    const timed = clockWith({ projectId: 'a', from: day, to: null, until: day + 2 * HOUR_MS });
+    const timed = clockWith({
+      projectIds: ['a'],
+      except: false,
+      from: day,
+      to: null,
+      until: day + 2 * HOUR_MS,
+    });
     expect(listSetAside(timed, taskIn('b'), NOW)).toEqual([
       { from: day + FOCUS_GRACE_MS, to: day + 2 * HOUR_MS },
     ]);
-    const open = clockWith({ projectId: 'a', from: day, to: null, until: null });
+    const open = clockWith({ projectIds: ['a'], except: false, from: day, to: null, until: null });
     expect(listSetAside(open, taskIn('b'), day + HOUR_MS)).toEqual([
       { from: day + FOCUS_GRACE_MS, to: day + HOUR_MS },
     ]);
   });
 
+  test('a focus on all but some projects sets aside only the projects it leaves out', () => {
+    const clock = clockWith({
+      projectIds: ['a'],
+      except: true,
+      from: day,
+      to: day + 4 * HOUR_MS,
+      until: null,
+    });
+    expect(listSetAside(clock, taskIn('a'), NOW)).toHaveLength(1);
+    expect(listSetAside(clock, taskIn('b'), NOW)).toEqual([]);
+    expect(listSetAside(clock, taskIn(null), NOW)).toEqual([]);
+  });
+
+  test('reads a focus an older engine recorded on one project', () => {
+    const older = { projectId: 'a', from: day, to: day + 4 * HOUR_MS, until: null } as unknown as FocusSpan;
+    expect(listSetAside(clockWith(older), taskIn('b'), NOW)).toHaveLength(1);
+    expect(listSetAside(clockWith(older), taskIn('a'), NOW)).toEqual([]);
+  });
+
   test('sets nothing aside for a focus shorter than 30 minutes, so a quick switch changes nothing', () => {
-    const quick = clockWith({ projectId: 'a', from: day, to: day + FOCUS_GRACE_MS, until: null });
+    const quick = clockWith({
+      projectIds: ['a'],
+      except: false,
+      from: day,
+      to: day + FOCUS_GRACE_MS,
+      until: null,
+    });
     expect(listSetAside(quick, taskIn('b'), NOW)).toEqual([]);
   });
 
   test('sets nothing aside for a task you answered or messaged during the focus', () => {
-    const clock = clockWith({ projectId: 'a', from: day, to: day + 4 * HOUR_MS, until: null });
+    const clock = clockWith({
+      projectIds: ['a'],
+      except: false,
+      from: day,
+      to: day + 4 * HOUR_MS,
+      until: null,
+    });
     const answered = taskIn('b', [
       { at: day + 3 * HOUR_MS, kind: 'gate', gate: 'question', decision: 'reply' },
     ]);
