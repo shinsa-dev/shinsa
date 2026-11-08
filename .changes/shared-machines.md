@@ -1,4 +1,4 @@
 ---
 kind: added
 ---
-A machine with members can now be marked as shared in Settings. Each task on it belongs to whoever started it and runs on their own Claude accounts and GitHub token, and everyone sees their own tasks first.
+You can now share a machine with a team from Settings → Teams. Everyone in the team can use it, and each task runs on the Claude accounts and GitHub token of whoever started it.

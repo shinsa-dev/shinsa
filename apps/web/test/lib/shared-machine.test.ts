@@ -1,17 +1,23 @@
 import { describe, expect, it } from 'bun:test';
 import {
   describeGitHubToken,
-  describeSharedMachineSaved,
+  describeShareMachine,
   GITHUB_TOKEN_LABEL,
   isGitHubTokenShown,
-  resolveSharedPatch,
 } from '@/lib/shared-machine.ts';
 
 describe('the shared machine settings', () => {
-  it('says whether the machine is shared and writes the setting', () => {
-    expect(describeSharedMachineSaved(true)).toBe('Shared machine is on.');
-    expect(describeSharedMachineSaved(false)).toBe('Shared machine is off.');
-    expect(resolveSharedPatch(true)).toEqual({ sharedMachine: true });
+  it('asks before sharing a machine with a team and before taking it back', () => {
+    expect(describeShareMachine('Laptop', 'Platform', true)).toMatchObject({
+      title: 'Share Laptop with Platform?',
+      action: 'Share machine',
+      done: 'Shared with Platform.',
+    });
+    expect(describeShareMachine('Laptop', 'Platform', false)).toMatchObject({
+      title: 'Stop sharing Laptop with Platform?',
+      action: 'Stop sharing',
+      done: 'Stopped sharing with Platform.',
+    });
   });
 
   it('describes your GitHub token and shows it only to a member of a shared machine', () => {

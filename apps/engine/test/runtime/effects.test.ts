@@ -1673,7 +1673,7 @@ describe('pull requests', () => {
         machineGitHub,
       });
       update((state) => {
-        state.settings = { ...state.settings, sharedMachine: true };
+        state.settings = { ...state.settings, sharedTeams: ['team-1'] };
       });
       await runner.apply({ kind: 'pull_request.open', taskId: 'task-1' }, createContext());
       await runner.stop();

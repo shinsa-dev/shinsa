@@ -18,10 +18,8 @@ export const TEAM_KEY = createRandomKey(32);
 
 export const MACHINE_OWNERS: Record<string, RemoteUser> = { studio: USER, laptop: USER, kai: TEAMMATE };
 
-export const SHARED_MACHINE = 'laptop';
-
 export const MACHINE_MEMBERS: Record<string, RemoteMember[]> = {
-  [SHARED_MACHINE]: [{ user: TEAMMATE, addedAt: Date.now() - 2 * DAY }],
+  laptop: [{ user: TEAMMATE, addedAt: Date.now() - 2 * DAY }],
 };
 
 export const TEAM: Omit<RemoteTeam, 'role'> = {

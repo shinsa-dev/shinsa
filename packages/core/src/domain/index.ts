@@ -200,6 +200,8 @@ export {
   resolveWatchdogDefaults,
   resolveWatchdogsIgnoreUsageLimits,
   isSharedMachine,
+  isSharedWithTeam,
+  resolveSharedTeams,
   OWNER_SIGNED_OUT_CODE,
   SETTINGS_KEYS,
   type Settings,

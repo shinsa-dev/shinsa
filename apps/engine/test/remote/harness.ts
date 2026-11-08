@@ -364,6 +364,9 @@ export function adaptRemote(test: RemoteTest) {
     removeHandoff: (taskId: string, guestId: string | null) =>
       runPromise(remote.removeHandoff(taskId, guestId)),
     grantTeammate: (userId: string, teamId: string) => runPromise(remote.grantTeammate(userId, teamId)),
+    shareWithTeam: (teamId: string) => runPromise(remote.shareWithTeam(teamId)),
+    syncSharedTeams: (teamIds: readonly string[]) => runPromise(remote.syncSharedTeams(teamIds)),
+    unshareTeam: (teamId: string) => runPromise(remote.unshareTeam(teamId)),
     acceptRequest: (requestId: string) => runPromise(remote.acceptRequest(requestId)),
     declineRequest: (requestId: string) => runSync(remote.declineRequest(requestId)),
     removeMember: (userId: string) => runPromise(remote.removeMember(userId)),

@@ -45,7 +45,7 @@ export const seedProject = Effect.fn('Sandbox.seedProject')(function* (
 });
 
 export const shareMachine = Effect.fn('Sandbox.shareMachine')(function* (engine: Engine) {
-  yield* engine.core.dispatch({ type: 'settings.change', patch: { sharedMachine: true } });
+  yield* engine.core.dispatch({ type: 'settings.change', patch: { sharedTeams: [TEAM.id] } });
 });
 
 export const shareProjectWithTeam = Effect.fn('Sandbox.shareProjectWithTeam')(function* (

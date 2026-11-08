@@ -140,7 +140,7 @@ const FEATURE_ROUTES = {
   'usage.watchdog_limits': [],
   'share.scopes': [],
   'suggestion.bundle': [],
-  'shared-machine': ['GET /api/github-token', 'POST /api/github-token'],
+  'shared-machine': ['GET /api/github-token', 'POST /api/github-token', 'POST /api/remote/teams/share'],
 };
 
 const LOCAL_ONLY = [
@@ -157,6 +157,7 @@ const OWNER_ONLY = [
   'POST /api/remote/link/remove',
   'POST /api/remote/members/grant',
   'POST /api/remote/members/remove',
+  'POST /api/remote/teams/share',
   'POST /api/remote/devices/remove',
   'POST /api/remote/teams/create',
   'POST /api/remote/teams/join',

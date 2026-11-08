@@ -1409,7 +1409,7 @@ describe('on a shared machine', () => {
     const mine = await addAccount(world, 'me@example.com', 10);
     const kais = await addAccount(world, 'kai@example.com', 50, undefined, 'kai');
     world.stub.update((state) => {
-      state.settings.sharedMachine = true;
+      state.settings.sharedTeams = ['team-1'];
     });
     return { world, mine, kais };
   }
@@ -1466,7 +1466,7 @@ describe('on a shared machine', () => {
   test('a machine that is not shared lets a member change any account, as before', async () => {
     const { world, mine } = await createShared();
     world.stub.update((state) => {
-      state.settings.sharedMachine = false;
+      state.settings.sharedTeams = [];
     });
     world.accounts.update(mine.id, { paused: true }, 'kai');
     expect(world.accounts.store.find(mine.id).paused).toBe(true);

@@ -31,8 +31,11 @@ const KAI_TASK = createTask({ id: 'kai-task', owner: KAI });
 const MONA_TASK = createTask({ id: 'mona-task', owner: MONA });
 const UNOWNED = createTask({ id: 'unowned' });
 
-function machine(id: string, sharedMachine: boolean, member = false, current = false) {
-  const state = { ...createShinsaState({}), settings: { ...createShinsaState({}).settings, sharedMachine } };
+function machine(id: string, shared: boolean, member = false, current = false) {
+  const state = {
+    ...createShinsaState({}),
+    settings: { ...createShinsaState({}).settings, sharedTeams: shared ? ['team-1'] : [] },
+  };
   return { id, state, current, ...(member ? { member: true as const } : {}) };
 }
 
@@ -123,7 +126,7 @@ describe('resolveTaskOwnership', () => {
   it('is personal when no machine is shared', () => {
     expect(
       resolveTaskOwnership({
-        settings: { sharedMachine: false },
+        settings: { sharedTeams: [] },
         machines: [machine('m1', false)],
         viewer: 'kai',
         selectTaskMachine: none,
@@ -136,7 +139,7 @@ describe('resolveTaskOwnership', () => {
 
   it('reads the setting of this machine or of any machine in the fleet', () => {
     const local = resolveTaskOwnership({
-      settings: { sharedMachine: true },
+      settings: { sharedTeams: ['team-1'] },
       machines: [],
       viewer: 'mona',
       selectTaskMachine: none,

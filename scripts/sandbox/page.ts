@@ -56,7 +56,7 @@ export function listSharedMachineLinks(machine: Machine, tasks: readonly Task[])
     ...task(`${machine.name}: a task of Kai’s, with its Owner`, owned),
     ...task(`${machine.name}: a task of yours`, yours),
     ...task(`${machine.name}: a task from before owners`, unowned),
-    { label: `${machine.name}: Settings, with the Shared machine switch`, url: `${local}/settings` },
+    { label: `${machine.name}: Settings, with the Shared switch in Teams`, url: `${local}/settings` },
     {
       label: 'The remote dashboard’s Settings → Machines, its switch per machine',
       url: `${ORIGIN}/settings`,

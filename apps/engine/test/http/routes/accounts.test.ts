@@ -94,7 +94,7 @@ describe('account routes', () => {
 
   test('a member’s account changes carry their login, and the machine’s owner and a stranger do not', async () => {
     const { routes, calls } = createAccounts({ remote });
-    await routes.context.engine.dispatch({ type: 'settings.change', patch: { sharedMachine: true } });
+    await routes.context.engine.dispatch({ type: 'settings.change', patch: { sharedTeams: ['team-1'] } });
     const as = (userId: string, path: string, body: string) =>
       routes.send(
         path,

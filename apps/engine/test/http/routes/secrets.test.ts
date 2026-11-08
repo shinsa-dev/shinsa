@@ -230,7 +230,7 @@ describe('a member’s GitHub token over HTTP', () => {
 
   test('a member on a shared machine saves, reads and removes their own token', async () => {
     const { routes, secrets, asked, as } = setUpTokens(kaiUser);
-    await routes.context.engine.dispatch({ type: 'settings.change', patch: { sharedMachine: true } });
+    await routes.context.engine.dispatch({ type: 'settings.change', patch: { sharedTeams: ['team-1'] } });
     expect(await as('u-kai', 'GET')).toEqual({
       login: 'kai',
       saved: false,
@@ -249,7 +249,7 @@ describe('a member’s GitHub token over HTTP', () => {
 
   test('the machine’s owner uses its own login and has no token to save', async () => {
     const { routes, as } = setUpTokens(kaiUser);
-    await routes.context.engine.dispatch({ type: 'settings.change', patch: { sharedMachine: true } });
+    await routes.context.engine.dispatch({ type: 'settings.change', patch: { sharedTeams: ['team-1'] } });
     expect(await as(null, 'GET')).toEqual({
       login: 'owner',
       saved: false,
@@ -261,7 +261,10 @@ describe('a member’s GitHub token over HTTP', () => {
 
   test('a token GitHub refuses, one of another account, or no token at all is not saved', async () => {
     const refused = setUpTokens(() => ({ ok: false, stdout: 'Bad credentials' }));
-    await refused.routes.context.engine.dispatch({ type: 'settings.change', patch: { sharedMachine: true } });
+    await refused.routes.context.engine.dispatch({
+      type: 'settings.change',
+      patch: { sharedTeams: ['team-1'] },
+    });
     expect(await refused.as('u-kai', 'POST', { token: 'ghp_old' })).toMatchObject({
       code: 'github_token_refused',
     });
@@ -273,7 +276,10 @@ describe('a member’s GitHub token over HTTP', () => {
       ok: true,
       stdout: JSON.stringify({ id: 9, login: 'mona', name: null }),
     }));
-    await other.routes.context.engine.dispatch({ type: 'settings.change', patch: { sharedMachine: true } });
+    await other.routes.context.engine.dispatch({
+      type: 'settings.change',
+      patch: { sharedTeams: ['team-1'] },
+    });
     expect(await other.as('u-kai', 'POST', { token: 'ghp_mona' })).toMatchObject({
       code: 'github_token_other_account',
     });
@@ -284,7 +290,7 @@ describe('a member’s GitHub token over HTTP', () => {
   test('a member reaches it only on a shared machine, and a stranger never', async () => {
     const { routes, as } = setUpTokens(kaiUser);
     expect(await as('u-kai', 'GET')).toMatchObject({ status: 403, message: OWNER_ONLY_MESSAGE });
-    await routes.context.engine.dispatch({ type: 'settings.change', patch: { sharedMachine: true } });
+    await routes.context.engine.dispatch({ type: 'settings.change', patch: { sharedTeams: ['team-1'] } });
     expect(await as('u-gone', 'GET')).toMatchObject({ status: 400, message: OWNER_ONLY_MESSAGE });
   });
 

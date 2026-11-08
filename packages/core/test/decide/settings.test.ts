@@ -1,5 +1,11 @@
 import { describe, expect, test } from 'bun:test';
-import { isSharedMachine, PROJECT_LIMITS, resolveQueue } from '../../src/index.ts';
+import {
+  isSharedMachine,
+  isSharedWithTeam,
+  PROJECT_LIMITS,
+  resolveQueue,
+  resolveSharedTeams,
+} from '../../src/index.ts';
 import { parseCommand, createHarness, createTask, type Harness, registerRepo } from '../harness.ts';
 
 function registerAt(
@@ -400,17 +406,27 @@ describe('settings', () => {
     expect(harness.state.settings.maxFixRounds).toBeNull();
   });
 
-  test('a machine is not shared until you turn it on, and only you can, never an agent for you', () => {
+  test('a machine is shared with no team until you share it, and only you can, never an agent for you', () => {
     const harness = createHarness();
     expect(isSharedMachine(harness.state.settings)).toBe(false);
     expect(() =>
-      harness.send({ type: 'settings.change', patch: { sharedMachine: true } }, { onBehalf: true })
-    ).toThrow('Only the human changes the settings sharedMachine.');
+      harness.send({ type: 'settings.change', patch: { sharedTeams: ['team-1'] } }, { onBehalf: true })
+    ).toThrow('Only the human changes the settings sharedTeams.');
     expect(isSharedMachine(harness.state.settings)).toBe(false);
-    harness.send({ type: 'settings.change', patch: { sharedMachine: true } });
+    harness.send({ type: 'settings.change', patch: { sharedTeams: ['team-1'] } });
     expect(isSharedMachine(harness.state.settings)).toBe(true);
-    expect(isSharedMachine({ ...harness.state.settings, sharedMachine: undefined })).toBe(false);
-    expect(() => parseCommand({ type: 'settings.change', patch: { sharedMachine: 'yes' } })).toThrow();
+    expect(isSharedWithTeam(harness.state.settings, 'team-1')).toBe(true);
+    expect(isSharedWithTeam(harness.state.settings, 'team-2')).toBe(false);
+    expect(isSharedMachine({ sharedTeams: undefined })).toBe(false);
+    expect(isSharedWithTeam({}, 'team-1')).toBe(false);
+    expect(() => parseCommand({ type: 'settings.change', patch: { sharedTeams: 'team-1' } })).toThrow();
+  });
+
+  test('sharing with one team keeps the others, and stopping takes only that team out', () => {
+    expect(resolveSharedTeams({}, 'a', true)).toEqual(['a']);
+    expect(resolveSharedTeams({ sharedTeams: ['a', 'b'] }, 'a', true)).toEqual(['b', 'a']);
+    expect(resolveSharedTeams({ sharedTeams: ['a', 'b'] }, 'a', false)).toEqual(['b']);
+    expect(resolveSharedTeams({}, 'a', false)).toEqual([]);
   });
 
   test('counts must be whole numbers of one or more', () => {

@@ -11,7 +11,7 @@ import { describeNeedsCount } from '@/lib/queue.ts';
 
 export function QueueMenu({ state, activeTaskId }: { state: ShinsaState; activeTaskId: string | null }) {
   const [open, setOpen] = React.useState(false);
-  const count = useOwnQueue(state).queue.ready.length;
+  const count = useOwnQueue(state).ready.length;
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger

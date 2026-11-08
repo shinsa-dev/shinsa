@@ -48,7 +48,6 @@ import {
 import { THIS_MACHINE } from '@/lib/remote/mode.ts';
 import { resolveFirstName } from '@/lib/remote/users.ts';
 import { SETTING_ROW, SETTINGS_SUBHEADING, SettingsCard, SettingsEmpty, SettingsGroup } from './group.tsx';
-import { SharedMachineRow } from './shared-machine.tsx';
 import { UserRow } from './user-row.tsx';
 
 const NO_MEMBERS: readonly RemoteMember[] = [];
@@ -400,13 +399,11 @@ function InviteLinkButton({ onClick }: { onClick: () => void }) {
 function AccessBody({
   snapshot,
   place,
-  machineId,
   actions,
   onDialog,
 }: {
   snapshot: RemoteSnapshot;
   place: string;
-  machineId: string | null;
   actions: MachineAccessActions;
   onDialog: (dialog: RemoteDialog) => void;
 }) {
@@ -433,7 +430,6 @@ function AccessBody({
           onRevoke={() => onDialog({ kind: 'revoke', device })}
         />
       ))}
-      <SharedMachineRow machineId={machineId} />
       <PeopleSection
         place={place}
         owner={snapshot.access?.owner ?? null}
@@ -469,13 +465,7 @@ export function RemoteAccessGroup({
         <StatusRow snapshot={snapshot} actions={actions} onRemove={() => dialog.show({ kind: 'remove' })} />
       )}
       {canAdd && (
-        <AccessBody
-          snapshot={snapshot}
-          place={LOCAL_PLACE}
-          machineId={null}
-          actions={actions}
-          onDialog={dialog.show}
-        />
+        <AccessBody snapshot={snapshot} place={LOCAL_PLACE} actions={actions} onDialog={dialog.show} />
       )}
       <RemoteDialogs
         dialog={dialog}
@@ -493,12 +483,10 @@ export const MACHINE_ACCESS_DESCRIPTION =
   'Who can reach each machine through Shinsa Cloud, and from which devices. Pausing, removing or pairing it again is done on the machine itself.';
 
 export function MachineAccessCard({
-  machineId,
   name,
   snapshot,
   actions,
 }: {
-  machineId: string;
   name: string;
   snapshot: RemoteSnapshot;
   actions: MachineAccessActions;
@@ -511,13 +499,7 @@ export function MachineAccessCard({
         <Truncate className='min-w-0 flex-1 text-xs font-medium text-fg-4'>{name}</Truncate>
         {canEnroll && <InviteLinkButton onClick={() => dialog.show({ kind: 'link' })} />}
       </div>
-      <AccessBody
-        snapshot={snapshot}
-        place={name}
-        machineId={machineId}
-        actions={actions}
-        onDialog={dialog.show}
-      />
+      <AccessBody snapshot={snapshot} place={name} actions={actions} onDialog={dialog.show} />
       <RemoteDialogs
         dialog={dialog}
         snapshot={snapshot}

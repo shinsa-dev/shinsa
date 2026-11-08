@@ -359,6 +359,8 @@ export const RemoteGrantBody = Schema.Struct({ userId: FilledText, teamId: Fille
 
 export const RemoteMemberBody = Schema.Struct({ userId: FilledText });
 
+export const RemoteShareBody = Schema.Struct({ teamId: FilledText, shared: Schema.Boolean });
+
 export const RemoteDeviceBody = Schema.Struct({ publicKey: FilledText });
 
 export const TeamCreateBody = Schema.Struct({ name: FilledText });

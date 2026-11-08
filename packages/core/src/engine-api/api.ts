@@ -64,6 +64,7 @@ import {
   RemoteAnswer,
   RemoteDeviceBody,
   RemoteGrantBody,
+  RemoteShareBody,
   RemoteMemberBody,
   RemoteRequestBody,
   RepoAnswer,
@@ -451,6 +452,15 @@ class RemoteGroup extends HttpApiGroup.make('remote')
       .annotate(RouteFieldFailures, {
         userId: { code: 'userId_invalid', message: 'Name the teammate by their GitHub id.' },
         teamId: { code: 'teamId_invalid', message: 'Name the team you share with them.' },
+      }),
+    HttpApiEndpoint.post('shareMachine', '/api/remote/teams/share', {
+      payload: RemoteShareBody,
+      success: RemoteAnswer,
+    })
+      .annotate(EngineFeatureRoute, 'shared-machine')
+      .annotate(RouteFieldFailures, {
+        teamId: { code: 'teamId_invalid', message: 'Name the team to share this machine with.' },
+        shared: { code: 'shared_invalid', message: 'Say whether the machine is shared, true or false.' },
       }),
     HttpApiEndpoint.post('removeMember', '/api/remote/members/remove', {
       payload: RemoteMemberBody,

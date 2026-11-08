@@ -3203,9 +3203,21 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   account's connect tokens, then forgets their devices at once. A member controls the machine exactly as its owner
   does, except on a shared machine (below); the channel never checks the mirrored list, since Shinsa Cloud already
   refuses tokens to anyone else.
-- **Shared machines** (`sharedMachine`, a human-only setting, off by default; `isSharedMachine`). A team's always-on
-  machine (a VPS, a Mac mini) where everything a member starts belongs to them and runs as them. The machine gives the
-  compute; the person who starts a task owns it:
+- **Shared machines** (`sharedTeams`, a human-only setting listing the teams a machine is shared with, empty by
+  default; `isSharedMachine`, `isSharedWithTeam`). A team's always-on machine (a VPS, a Mac mini) where everything a
+  teammate starts belongs to them and runs as them. The machine gives the compute; the person who starts a task owns
+  it. Remote access stays personal (your own devices, and anyone you invite yourself); sharing is a team's:
+  - **Sharing with a team.** The machine's owner turns on Shared beside this machine in the team's Machines list
+    (Settings → Teams, `TeamMachines`, after a confirm), only once the machine holds the team's key, which sends
+    `POST /api/remote/teams/share { teamId, shared }` (owner-only, engine feature `shared-machine`). Turning it on
+    gives every person in the team this machine first (`Remote.shareWithTeam`, the same grant as Give machine access:
+    a member here, and a grant their browser adds itself with), then adds the team to `sharedTeams`. Someone who joins
+    the team later gets it on the next heartbeat (`SharedTeams`, `remote/shared-teams/service.ts`, which calls
+    `Remote.syncSharedTeams` whenever remote access changes; a grant that fails is logged and tried again then).
+    Turning it off takes the team out of `sharedTeams` first, then drops the team's grants and removes from the
+    machine's members everyone who reached it only through that team (`Remote.unshareTeam`); their tasks stay, with
+    their owners. Teammates on a shared machine are members, so they reach every project, Settings and terminals
+    as the owner does, except other people's accounts and the human-only settings.
   - **Who owns a task.** Every task records its owner as `Task.owner` (`TaskOwner`: login, name, avatar), on any
     machine, shared or not. The engine resolves who sent each command (`resolveRequestActor`, `http/commands.ts`)
     and passes it to `EngineCore.dispatch` as `actor`, which core's `DecideContext.actor` stamps on `task.created`
@@ -3237,11 +3249,9 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
     error; an SSH remote still pushes with the machine's key), and commits and merges are authored as the owner while
     the machine stays the committer. A member with no token yet ships with the machine's own login, and the pull
     request's description says so (`serializeMachineLoginNote`).
-  - **The web app.** Settings → General → Remote access, and each machine you own in the remote build's Settings →
-    Machines, has a Shared machine switch in the owner's card (`SharedMachineSwitch`); members never see it. On a
-    shared machine All tasks opens on your own tasks with an Owner column (removing the filter writes
-    `owner=everyone`, which sticks), Home, the queue and the "N need you" count show only yours with a Your tasks /
-    Everyone's switch (`useOwnQueue`, remembered in the queue preferences), a task's facts name its Owner ("You", the
+  - **The web app.** On a shared machine All tasks opens on your own tasks with an Owner column (removing the filter
+    writes `owner=everyone`, which sticks), Home, the queue and the "N need you" count only ever show yours
+    (`useOwnQueue`), a task's facts name its Owner ("You", the
     teammate, or "The machine's owner" for a task with none), each Claude account shows Yours or the member's login
     with a menu only on your own, and a member gets Your GitHub token with Save and Remove (`github-token.tsx`). The
     page offers all of it only on an engine that announces `shared-machine`. Ownership is per machine

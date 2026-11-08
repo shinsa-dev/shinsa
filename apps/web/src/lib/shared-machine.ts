@@ -1,16 +1,22 @@
-import type { Settings } from '@shinsa/core';
+export const SHARE_MACHINE_HINT =
+  "Everyone in the team can use this machine, and each person's tasks run on their own Claude accounts and GitHub token.";
 
-export const SHARED_MACHINE_TITLE = 'Shared machine';
+export const SHARED_LABEL = 'Shared';
 
-export const SHARED_MACHINE_HINT =
-  "Each member's tasks run on their own Claude accounts and GitHub token, and the lists show your own tasks first.";
-
-export function describeSharedMachineSaved(shared: boolean) {
-  return shared ? 'Shared machine is on.' : 'Shared machine is off.';
-}
-
-export function resolveSharedPatch(shared: boolean): Partial<Settings> {
-  return { sharedMachine: shared };
+export function describeShareMachine(machine: string, team: string, shared: boolean) {
+  return shared
+    ? {
+        title: `Share ${machine} with ${team}?`,
+        body: `Everyone in ${team} gets access to ${machine}, and their tasks run on their own accounts.`,
+        action: 'Share machine',
+        done: `Shared with ${team}.`,
+      }
+    : {
+        title: `Stop sharing ${machine} with ${team}?`,
+        body: `People who reach ${machine} only through ${team} lose access. Their tasks stay on it.`,
+        action: 'Stop sharing',
+        done: `Stopped sharing with ${team}.`,
+      };
 }
 
 export const GITHUB_TOKEN_LABEL = {

@@ -881,6 +881,62 @@ export class Remote extends Context.Service<Remote, RemoteHandle>()('shinsa/engi
           });
         });
 
+        const findSharedTeam = Effect.fn('Remote.findSharedTeam')(function* (teamId: string) {
+          const team = yield* store.selectTeam(teamId);
+          if (!(team && (yield* store.selectTeamKey(teamId))))
+            return yield* new DomainError({
+              code: 'team_not_found',
+              message: 'This machine is not in that team.',
+            });
+          return team;
+        });
+
+        const listWithoutGrant = Effect.fn('Remote.listWithoutGrant')(function* (team: RemoteTeam) {
+          const people = [team.owner.id, ...team.members.map((member) => member.user.id)];
+          const missing: string[] = [];
+          for (const userId of people) {
+            if ((yield* isOwner(userId)) || (yield* store.selectGrant(userId, team.id))) continue;
+            missing.push(userId);
+          }
+          return missing;
+        });
+
+        const shareWithTeam = Effect.fn('Remote.shareWithTeam')(function* (teamId: string) {
+          yield* assertPaired;
+          const team = yield* findSharedTeam(teamId);
+          for (const userId of yield* listWithoutGrant(team)) yield* grantTeammate(userId, teamId);
+        });
+
+        const syncSharedTeams = Effect.fn('Remote.syncSharedTeams')(function* (teamIds: readonly string[]) {
+          if (!(yield* isEnabled)) return;
+          for (const teamId of teamIds) {
+            const team = yield* store.selectTeam(teamId);
+            if (!(team && (yield* store.selectTeamKey(teamId)))) continue;
+            for (const userId of yield* listWithoutGrant(team)) {
+              yield* grantTeammate(userId, teamId).pipe(
+                Effect.catch((error) =>
+                  Effect.logWarning(
+                    '[Remote] A teammate of a shared team could not be given this machine'
+                  ).pipe(Effect.annotateLogs({ teamId, userId, error: describeError(error) }))
+                )
+              );
+            }
+          }
+        });
+
+        const unshareTeam = Effect.fn('Remote.unshareTeam')(function* (teamId: string) {
+          const leaving = new Set(
+            (yield* file).grants.filter((grant) => grant.teamId === teamId).map((grant) => grant.userId)
+          );
+          yield* Effect.orDie(store.removeGrantsWhere((grant) => grant.teamId === teamId));
+          const { grants, access: known } = yield* file;
+          for (const userId of leaving) {
+            if (grants.some((grant) => grant.userId === userId)) continue;
+            if (known?.members.some((member) => member.user.id === userId)) yield* removeMember(userId);
+          }
+          yield* publish;
+        });
+
         const admits = Effect.fn('Remote.admits')(function* (device: string, userId: string) {
           const enrolled = yield* store.selectDevice(device);
           if (enrolled?.userId !== userId) return false;
@@ -1050,6 +1106,9 @@ export class Remote extends Context.Service<Remote, RemoteHandle>()('shinsa/engi
           createHandoff,
           removeHandoff,
           grantTeammate,
+          shareWithTeam,
+          syncSharedTeams,
+          unshareTeam,
           acceptRequest,
           declineRequest,
           removeMember,

@@ -697,9 +697,9 @@ describe('the owner of a task on a shared machine', () => {
   const KAI = { login: 'kai', name: 'Kai Lane', avatarUrl: null };
   const MONA = { login: 'mona', name: 'Mona Park', avatarUrl: null };
 
-  function renderOwned(task: Task, sharedMachine: boolean) {
+  function renderOwned(task: Task, shared: boolean) {
     const base = createShinsaState({ tasks: [task] });
-    const state = { ...base, settings: { ...base.settings, sharedMachine } };
+    const state = { ...base, settings: { ...base.settings, sharedTeams: shared ? ['team-1'] : [] } };
     pushState(state);
     return render(
       <TooltipProvider>
@@ -729,7 +729,7 @@ describe('the owner of a task on a shared machine', () => {
     const local = connection;
     const task = createTask({ id: 'n', handle: 'SW-3' });
     const base = createShinsaState({ tasks: [task] });
-    const shared = { ...base, settings: { ...base.settings, sharedMachine: true } };
+    const shared = { ...base, settings: { ...base.settings, sharedTeams: ['team-1'] } };
     const machines: MachineChoice[] = [
       { id: 'laptop', name: 'Laptop', current: true, state: base },
       { id: 'vps', name: 'Team box', current: false, member: true, state: shared },

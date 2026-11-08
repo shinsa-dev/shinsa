@@ -56,6 +56,7 @@ import {
   TeamFeeds,
 } from '../remote/index.ts';
 import { ShareClock } from '../remote/share-clock/service.ts';
+import { SharedTeams } from '../remote/shared-teams/service.ts';
 import { CurrentLogin } from '../repos/current-login/service.ts';
 import { RepoFolders } from '../repos/folders/service.ts';
 import { Roots } from '../repos/index.ts';
@@ -449,7 +450,7 @@ function createServeLayer(
     Layer.provideMerge(createServedLayer(options, instance, stop)),
     Layer.provideMerge(createEffectsLayer(options, instance)),
     Layer.provideMerge(createRunsLayer(options)),
-    Layer.provideMerge(Previews.layer),
+    Layer.provideMerge(Layer.merge(Previews.layer, SharedTeams.layer)),
     Layer.provideMerge(
       Layer.mergeAll(
         createTriageLayer(),

@@ -812,7 +812,7 @@ describe('a shared machine’s accounts', () => {
   function withOwnedTask(owner: typeof KAI | null, shared: boolean) {
     return (state: ShinsaState) => {
       withTask(createTempDir())(state);
-      state.settings.sharedMachine = shared;
+      state.settings.sharedTeams = shared ? ['team-1'] : [];
       state.tasks['task-1'] = { ...state.tasks['task-1']!, owner };
     };
   }

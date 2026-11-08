@@ -145,11 +145,11 @@ function OwnerFact({ task }: { task: Task }) {
   const fact = resolveOwnerFact(task, useTaskOwnership());
   if (!fact) return null;
   return (
-    <span className={cn(FACT, 'max-w-80')}>
+    <span className={cn(FACT, 'max-w-80 gap-0')}>
       <Hint label={OWNER_FACT_HINT}>
         <span className='inline-flex shrink-0 cursor-default items-center gap-1.5 whitespace-pre'>
           <Icon size='sm' name='IconUser' />
-          Owner
+          {'Owner '}
         </span>
       </Hint>
       <Truncate>

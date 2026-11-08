@@ -1,4 +1,10 @@
-import type { Queue, Settings, Task, TaskOwner } from '@shinsa/core';
+import {
+  isSharedMachine as isSharedSettings,
+  type Queue,
+  type Settings,
+  type Task,
+  type TaskOwner,
+} from '@shinsa/core';
 import type { MachineChoice } from '@/lib/connection/socket.ts';
 
 export interface TaskOwnership {
@@ -66,7 +72,7 @@ export function filterOwnQueue(queue: Queue, ownership: TaskOwnership): Queue {
 }
 
 export interface OwnershipSources {
-  settings: Pick<Settings, 'sharedMachine'> | null;
+  settings: Pick<Settings, 'sharedTeams'> | null;
   machines: readonly Pick<MachineChoice, 'id' | 'member' | 'state' | 'current'>[];
   viewer: string | null;
   selectTaskMachine: (taskId: string) => string | null;
@@ -75,13 +81,15 @@ export interface OwnershipSources {
 type OwnershipMachine = OwnershipSources['machines'][number];
 
 function isSharedMachine(machine: OwnershipMachine) {
-  return machine.state.settings.sharedMachine === true;
+  return isSharedSettings(machine.state.settings);
 }
 
 export function resolveTaskOwnership(sources: OwnershipSources): TaskOwnership {
   const { machines } = sources;
   const here = machines.find((machine) => machine.current) ?? machines[0];
-  const sharedHere = here ? isSharedMachine(here) : sources.settings?.sharedMachine === true;
+  const sharedHere = here
+    ? isSharedMachine(here)
+    : sources.settings !== null && isSharedSettings(sources.settings);
   if (!sharedHere && !machines.some(isSharedMachine)) return PERSONAL_OWNERSHIP;
   const selectMachine = (task: Task) =>
     machines.length === 1 ? here : machines.find((entry) => entry.id === sources.selectTaskMachine(task.id));
@@ -113,8 +121,3 @@ export function resolveOwnerFact(task: Task, ownership: TaskOwnership): OwnerFac
   const you = isOwnTask(task, ownership);
   return { you, owner: task.owner ?? null, label: you ? YOU_LABEL : MACHINE_OWNER_LABEL };
 }
-
-export const QUEUE_OWNER_CHOICES = [
-  { label: 'Your tasks', everyone: false },
-  { label: "Everyone's", everyone: true },
-] as const;

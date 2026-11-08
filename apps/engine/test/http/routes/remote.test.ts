@@ -45,6 +45,8 @@ function createRemote() {
     acceptRequest: record('acceptRequest'),
     declineRequest: record('declineRequest'),
     grantTeammate: record('grantTeammate'),
+    shareWithTeam: record('shareWithTeam'),
+    unshareTeam: record('unshareTeam'),
     removeMember: record('removeMember'),
     removeDevice: (key: string) =>
       Effect.sync(() => {
@@ -110,6 +112,30 @@ describe('remote access over HTTP', () => {
       ['removeMember', 'u2'],
       ['removeDevice', 'known'],
     ]);
+  });
+
+  test('sharing with a team gives it the machine first, and stopping takes it back after the setting', async () => {
+    const { calls, remote } = createRemote();
+    const routes = startRoutes({ remote });
+    const sharedTeams = async () => routes.context.engine.state.settings.sharedTeams;
+    expect(
+      await (await routes.post('/api/remote/teams/share', { teamId: 't1', shared: true })).json()
+    ).toEqual(SNAPSHOT);
+    expect(await sharedTeams()).toEqual(['t1']);
+    await routes.post('/api/remote/teams/share', { teamId: 't2', shared: true });
+    await routes.post('/api/remote/teams/share', { teamId: 't1', shared: false });
+    expect(await sharedTeams()).toEqual(['t2']);
+    expect(calls).toEqual([
+      ['shareWithTeam', 't1'],
+      ['shareWithTeam', 't2'],
+      ['unshareTeam', 't1'],
+    ]);
+    expect(await readFailure(await routes.post('/api/remote/teams/share', { teamId: 't1' }))).toMatchObject({
+      code: 'shared_invalid',
+    });
+    expect(await readFailure(await routes.post('/api/remote/teams/share', { shared: true }))).toMatchObject({
+      code: 'teamId_invalid',
+    });
   });
 
   test('a missing or blank field names what to send, and an unknown device is refused', async () => {

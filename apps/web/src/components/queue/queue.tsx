@@ -7,7 +7,6 @@ import { CompactSection, CompactSections } from '@/components/layout/compact-sec
 import { ListRow } from '@/components/layout/list-row.tsx';
 import { SectionLabel } from '@/components/layout/page/section-label.tsx';
 import { CARD } from '@/components/layout/surface/card.ts';
-import { QueueOwnerSwitch } from '@/components/queue/owner-switch.tsx';
 import { RowSummary } from '@/components/queue/row-summary.tsx';
 import { SharedMark } from '@/components/share/shared-mark.tsx';
 import { GateGlyph, TaskGlyph, WorkingGlyph } from '@/components/status/glyphs.tsx';
@@ -196,7 +195,7 @@ export function TaskQueue({
   onNavigate?: () => void;
 }) {
   const own = useOwnQueue(state);
-  const sections = given ?? listQueueSections(state, own.queue);
+  const sections = given ?? listQueueSections(state, own);
   const views = sections.map((section) => (
     <QueueSectionView
       key={section.key}
@@ -207,12 +206,6 @@ export function TaskQueue({
       onNavigate={onNavigate}
     />
   ));
-  if (variant === 'compact')
-    return (
-      <CompactSections className={className}>
-        {!given && own.shared && <QueueOwnerSwitch className='px-1.5 pb-1' />}
-        {views}
-      </CompactSections>
-    );
+  if (variant === 'compact') return <CompactSections className={className}>{views}</CompactSections>;
   return <>{views}</>;
 }

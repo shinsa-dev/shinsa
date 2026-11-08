@@ -21,7 +21,7 @@ export interface PlacementMachine {
     tasks: Record<string, Pick<Task, 'stage'>>;
     projects: Record<string, Pick<Project, 'name' | 'description'>>;
     repos: Record<string, Pick<Repo, 'name' | 'projectId'>>;
-    settings: Pick<Settings, 'taskCapacity' | 'placementPolicies' | 'sharedMachine'>;
+    settings: Pick<Settings, 'taskCapacity' | 'placementPolicies' | 'sharedTeams'>;
   };
   resources?: ResourceSummary | null;
 }

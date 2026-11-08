@@ -1,21 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 import { createSettings, type RemoteUser } from '@shinsa/core';
 import { TooltipProvider } from '@shinsa/ui/components/tooltip';
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { AccountSettings } from '@/components/settings/accounts.tsx';
-import { SharedMachineRow } from '@/components/settings/shared-machine.tsx';
 import * as connectionAccounts from '@/lib/connection/accounts.ts';
 import { ViewerContext } from '@/lib/remote/viewer.ts';
 import { createAccount, createSnapshot } from '../../support/accounts.ts';
 import { spyOnToasts } from '../../support/commands.ts';
 import { startFakeOnboarding } from '../../support/onboarding.ts';
-import {
-  listSentCommands,
-  pushAccounts,
-  pushState,
-  startFakeServer,
-  stopFakeServer,
-} from '../../support/server.ts';
+import { pushAccounts, pushState, startFakeServer, stopFakeServer } from '../../support/server.ts';
 import { createShinsaState } from '../../support/state.ts';
 
 const KAI: RemoteUser = { id: 'u-kai', login: 'kai', name: 'Kai Lane', avatarUrl: null };
@@ -50,31 +43,14 @@ afterEach(() => {
   stopFakeServer();
 });
 
-function pushShared(sharedMachine: boolean) {
+function pushShared(shared: boolean) {
   const state = createShinsaState({});
-  pushState({ ...state, settings: { ...state.settings, sharedMachine } });
+  pushState({ ...state, settings: { ...state.settings, sharedTeams: shared ? ['team1'] : [] } });
 }
 
 async function settle() {
   await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
 }
-
-describe('the Shared machine switch', () => {
-  it('turns the machine into a shared one and says so', async () => {
-    pushShared(false);
-    render(
-      <TooltipProvider>
-        <SharedMachineRow machineId={null} />
-      </TooltipProvider>
-    );
-    const toggle = screen.getByRole('switch', { name: 'Shared machine' });
-    expect(toggle.getAttribute('aria-checked')).toBe('false');
-    fireEvent.click(toggle);
-    await waitFor(() =>
-      expect(listSentCommands()).toContainEqual({ type: 'settings.change', patch: { sharedMachine: true } })
-    );
-  });
-});
 
 describe('the accounts of a shared machine', () => {
   function renderAccounts() {

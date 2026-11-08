@@ -45,7 +45,7 @@ const machine: MachineGitHubShape = {
 
 function createShared(shared: boolean, owners: Record<string, TaskOwner | null>): ShinsaState {
   const state = createState();
-  state.settings = { ...state.settings, sharedMachine: shared };
+  state.settings = { ...state.settings, sharedTeams: shared ? ['team-1'] : [] };
   for (const [id, owner] of Object.entries(owners)) state.tasks[id] = createTask({ id, owner });
   return state;
 }
