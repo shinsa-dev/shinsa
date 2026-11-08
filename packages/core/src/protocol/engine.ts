@@ -22,6 +22,7 @@ export const ENGINE_FEATURES = [
   'usage.watchdog_limits',
   'share.scopes',
   'suggestion.bundle',
+  'focus.projects',
 ] as const;
 
 export type EngineFeature = (typeof ENGINE_FEATURES)[number];

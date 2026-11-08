@@ -11,9 +11,11 @@ import {
   HUMAN_ONLY_SETTINGS,
   type OnboardingStatus,
   PROJECT_COLORS,
+  describeFocusProjects,
   type ProjectInput,
   SETTINGS_KEYS,
   type Settings,
+  selectSingleFocusProject,
   type UserCommand,
   WORKSPACE_MODES,
   type WorkspaceMode,
@@ -184,7 +186,7 @@ function describeProjectLine(project: ProjectView) {
 
 function describeProject(project: ProjectView, focus: ProjectsRead['focus']) {
   return [
-    `${project.name} (${project.key})${focus.projectId === project.id ? ', in focus' : ''}`,
+    `${project.name} (${project.key})${selectSingleFocusProject(focus) === project.id ? ', in focus' : ''}`,
     project.description || 'No description.',
     '',
     project.repos.length === 0 ? 'No repositories yet.' : 'Repositories:',
@@ -389,27 +391,41 @@ export const CONFIG_SPECS: SurfaceSpec[] = [
   }),
   defineRead({
     path: ['focus', 'show'],
-    summary: 'Show the project you are focused on.',
+    summary: 'Show the projects you are focused on.',
     fields: [],
     read: (_values, client) => client.api.state.projects(),
     format: ({ projects, focus }) => {
-      const project = projects.find((candidate) => candidate.id === focus.projectId);
-      if (!project) return 'No focus: everything shows.';
+      const names = new Map(projects.map((project) => [project.id, project.name]));
+      const described = describeFocusProjects(focus, (projectId) => names.get(projectId));
+      if (!described) return 'No focus: everything shows.';
       const until = focus.until ? ` until ${DateTime.formatIso(DateTime.makeUnsafe(focus.until))}` : '';
-      return `Focused on ${project.name}${until}.`;
+      return `Focused on ${described}${until}.`;
     },
   }),
   defineCommand({
     path: ['focus', 'set'],
-    summary: 'Focus on one project: Shinsa shows only its work.',
+    summary: 'Focus on projects, or with --except on everything but them.',
     command: 'focus.change',
-    fields: [PROJECT_FIELD, { name: 'hours', kind: 'number', description: 'Only for this many hours.' }],
+    fields: [
+      {
+        name: 'projects',
+        kind: 'list',
+        positional: 'rest',
+        required: true,
+        description: 'The projects: each one’s key, name or id.',
+      },
+      { name: 'except', kind: 'boolean', description: 'Show everything but these projects.' },
+      { name: 'hours', kind: 'number', description: 'Only for this many hours.' },
+    ],
     build: Effect.fn('Surface.focusSet')(function* (values, client) {
-      const projectId = yield* findProjectId(client, readValue(values, 'project'));
+      const refs = Array.isArray(values.projects) ? values.projects.map(String) : [];
+      const projectIds = yield* Effect.forEach(refs, (ref) => findProjectId(client, ref));
       const now = yield* Clock.currentTimeMillis;
       return {
         type: 'focus.change' as const,
-        projectId,
+        projectId: null,
+        projectIds,
+        except: values.except === true,
         until: typeof values.hours === 'number' ? now + values.hours * HOUR_MS : null,
       };
     }),
@@ -417,10 +433,10 @@ export const CONFIG_SPECS: SurfaceSpec[] = [
   }),
   defineCommand({
     path: ['focus', 'clear'],
-    summary: 'Stop focusing on one project.',
+    summary: 'Stop focusing: everything shows.',
     command: 'focus.change',
     fields: [],
-    build: () => ({ type: 'focus.change', projectId: null, until: null }),
+    build: () => ({ type: 'focus.change', projectId: null, projectIds: [], except: false, until: null }),
     done: () => 'Everything shows again.',
   }),
   defineCommand({

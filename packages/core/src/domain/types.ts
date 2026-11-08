@@ -243,8 +243,12 @@ export interface Project {
   usageLimit?: number | null;
 }
 
-export interface Focus {
-  projectId: string | null;
+export interface FocusProjects {
+  projectIds: string[];
+  except: boolean;
+}
+
+export interface Focus extends FocusProjects {
   teamId: string | null;
   until: number | null;
 }
@@ -665,8 +669,7 @@ export interface TimingSpan {
   to: number;
 }
 
-export interface FocusSpan {
-  projectId: string;
+export interface FocusSpan extends FocusProjects {
   from: number;
   to: number | null;
   until: number | null;

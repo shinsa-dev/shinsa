@@ -129,7 +129,7 @@ describe('the socket hub', () => {
     hub.open(socket);
     await engine.dispatch({ type: 'focus.change', projectId: null, until: 1 });
     const briefing = { now: null, next: [], running: 'No agent is working right now.', note: null };
-    await engine.writeBriefing(null, { text: 'Nothing needs you right now.', briefing });
+    await engine.writeBriefing('*', { text: 'Nothing needs you right now.', briefing });
     const last = sent.at(-1);
     expect(last?.type === 'state.patch' && last.patch).toMatchObject({
       from: 1,

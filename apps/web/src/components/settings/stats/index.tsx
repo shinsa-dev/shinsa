@@ -9,7 +9,7 @@ import {
 import * as React from 'react';
 import { SelectField } from '@/components/controls/select-field.tsx';
 import { useMinute } from '@/hooks/use-minute.ts';
-import { selectFocus } from '@/lib/focus.ts';
+import { resolveFocusLabel, describeStatsScope, selectFocusProjects } from '@/lib/focus.ts';
 import { ATTENTION_DESCRIPTION, ATTENTION_SECTION, listAttentionTiles } from '@/lib/stats/attention.ts';
 import {
   DEFAULT_STATS_RANGE,
@@ -58,11 +58,11 @@ export function StatisticsSettings({ state }: { state: ShinsaState }) {
   const [range] = useStatsRange();
   const minute = useMinute();
   const day = resolveDayKey(minute * MINUTE_MS);
-  const focus = selectFocus(state);
-  const projectId = focus?.id ?? null;
+  const selection = selectFocusProjects(state);
+  const focusKey = `${selection.except}:${selection.projectIds.join(',')}`;
   const source = React.useMemo(
-    () => resolveProjectStatsSource(state, projectId),
-    [state.tasks, state.runs, state.repos, projectId]
+    () => resolveProjectStatsSource(state, selection),
+    [state.tasks, state.runs, state.repos, focusKey]
   );
   const year = React.useMemo(
     () => resolveStats(source, resolveYearWindow(parseDayKey(day).getTime())),
@@ -85,7 +85,8 @@ export function StatisticsSettings({ state }: { state: ShinsaState }) {
     () => resolveAttention(source, state, turnaroundWindow),
     [source, state.tasks, state.presence, state.away, state.focusHistory, turnaroundWindow]
   );
-  const scope = focus && <span className='font-normal'>Only {focus.name}, the project in focus</span>;
+  const focus = resolveFocusLabel(state, selection);
+  const scope = focus && <span className='font-normal'>{describeStatsScope(focus, selection)}</span>;
   const rangeLabel = STATS_RANGES.find((entry) => entry.value === `${range}`)?.label ?? '';
   return (
     <>
