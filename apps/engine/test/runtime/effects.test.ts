@@ -412,7 +412,7 @@ describe('the Slack effects', () => {
     await runner.apply({ kind: 'slack.evaluate', mention }, createContext());
     await runner.apply({ kind: 'slack.status', taskId: 't1', thread: THREAD }, createContext());
     await runner.apply(
-      { kind: 'slack.post', thread: THREAD, taskId: 't1', post: { kind: 'result' } },
+      { kind: 'slack.post', thread: THREAD, taskId: 't1', post: { kind: 'tripped', watchdogId: 'w1' } },
       createContext()
     );
     await runner.apply({ kind: 'slack.merge', thread: THREAD, taskId: 't1', round: 1 }, createContext());
