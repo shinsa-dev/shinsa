@@ -1,6 +1,7 @@
-import type { SlackSnapshot } from '@shinsa/core';
+import type { SlackDirectoryView, SlackSnapshot } from '@shinsa/core';
 import { Effect } from 'effect';
 import * as React from 'react';
+import { useAppEffect } from '@/hooks/use-app-effect.ts';
 import { runApp } from '@/lib/runtime/app.ts';
 import { EngineClient } from '@/lib/runtime/engine/service.ts';
 import { createSharedRun } from '@/lib/runtime/shared-run.ts';
@@ -74,4 +75,26 @@ export function useSlack() {
     };
   }, []);
   return current;
+}
+
+export function useSlackDirectory(teamId: string | null) {
+  const [directory, setDirectory] = React.useState<SlackDirectoryView | null>(null);
+  useAppEffect(
+    () =>
+      Effect.gen(function* () {
+        setDirectory(null);
+        if (!teamId) return;
+        const engine = yield* EngineClient;
+        const found = yield* engine.slack.directory({ query: { teamId } });
+        setDirectory(found);
+      }).pipe(
+        Effect.catch((error) =>
+          Effect.sync(() =>
+            setDirectory({ teamId: teamId ?? '', channels: [], people: [], problem: error.message })
+          )
+        )
+      ),
+    [teamId]
+  );
+  return directory;
 }

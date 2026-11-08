@@ -1,7 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, type Mock, spyOn } from 'bun:test';
 import type { SlackSnapshot } from '@shinsa/core';
 import { act, renderHook, waitFor } from '@testing-library/react';
-import { refreshSlack, resetSlack, SLACK_ACTIONS, selectSlack, useSlack } from '@/lib/connection/slack.ts';
+import {
+  refreshSlack,
+  resetSlack,
+  SLACK_ACTIONS,
+  selectSlack,
+  useSlack,
+  useSlackDirectory,
+} from '@/lib/connection/slack.ts';
 import { readFetchCall } from '../../support/fetch.ts';
 
 const SNAPSHOT: SlackSnapshot = {
@@ -73,5 +80,39 @@ describe('Slack on this machine', () => {
     });
     Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' });
     expect(reads()).toBe(before + 1);
+  });
+});
+
+describe('the Slack directory', () => {
+  const DIRECTORY = { teamId: 'T1', channels: [{ id: 'C1', name: 'oncall' }], people: [], problem: null };
+
+  it('reads nothing without a workspace', async () => {
+    const { result } = renderHook(() => useSlackDirectory(null));
+    await act(async () => {});
+    expect(result.current).toBeNull();
+    expect(sent.some((entry) => entry.path.startsWith('/api/slack/directory'))).toBe(false);
+  });
+
+  it('reads the workspace’s channels and people, again for another workspace', async () => {
+    answers['GET /api/slack/directory?teamId=T1'] = () => Response.json(DIRECTORY);
+    answers['GET /api/slack/directory?teamId=T2'] = () => Response.json({ ...DIRECTORY, teamId: 'T2' });
+    const { result, rerender } = renderHook(({ teamId }) => useSlackDirectory(teamId), {
+      initialProps: { teamId: 'T1' },
+    });
+    await waitFor(() => expect(result.current).toEqual(DIRECTORY));
+    rerender({ teamId: 'T2' });
+    await waitFor(() => expect(result.current?.teamId).toBe('T2'));
+  });
+
+  it('shows an empty directory with the problem when the engine cannot answer', async () => {
+    const { result } = renderHook(() => useSlackDirectory('T1'));
+    await waitFor(() =>
+      expect(result.current).toEqual({
+        teamId: 'T1',
+        channels: [],
+        people: [],
+        problem: 'Shinsa answered with status 503.',
+      })
+    );
   });
 });

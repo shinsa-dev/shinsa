@@ -1,5 +1,9 @@
 import {
+  type AutopilotContact,
+  type AutopilotContactKind,
   type AutopilotMerge,
+  type AutopilotSlackContact,
+  type AutopilotSlackContactKind,
   HOUR_MS,
   type MergeBlock,
   MINUTE_MS,
@@ -10,6 +14,8 @@ import {
   type ReviewRating,
   resolveAutopilotPolicy,
   type Settings,
+  type SlackDirectoryView,
+  type SlackSnapshot,
   type Task,
   type TaskEscalation,
   type TeamEscalation,
@@ -73,6 +79,16 @@ export const AUTOPILOT_ROWS = {
     description: 'Send it to my team puts it in your teammates’ Needs you and notifies each of them once.',
   },
   wait: { title: 'How long it waits for you', description: 'How long an urgent merge waits before it acts.' },
+  contact: {
+    title: 'Escalate to',
+    description: 'Your team always sees it in Needs you. Slack gets the task link and why it needs someone.',
+  },
+  workspace: { title: 'Slack workspace', description: 'One of the workspaces you connected in Slack.' },
+  slack_channel: {
+    title: 'Channel',
+    description: 'Only channels Shinsa is in are listed. Invite @Shinsa to a channel to add it.',
+  },
+  slack_person: { title: 'Teammate', description: 'They get a direct message from the Shinsa app.' },
   usage: {
     title: 'Ignore usage limits for urgent work',
     description: 'An urgent task keeps going past your daily, project and task limits.',
@@ -90,6 +106,140 @@ export const AUTOPILOT_NO_TEAM =
 export function isEscalationUnseen(policy: AutopilotPolicy, projects: readonly Pick<Project, 'teamIds'>[]) {
   if (policy.urgent !== 'escalate' && policy.urgent !== 'escalate_then_merge') return false;
   return !projects.some((project) => (project.teamIds?.length ?? 0) > 0);
+}
+
+export function isContactShown(policy: AutopilotPolicy) {
+  return policy.urgent === 'escalate' || policy.urgent === 'escalate_then_merge';
+}
+
+const CONTACT_ITEMS: Record<AutopilotContactKind, Omit<SettingItem<AutopilotContactKind>, 'value'>> = {
+  team: { label: 'Your team in Shinsa', icon: 'IconUserDuo' },
+  slack_channel: { label: 'Your team and a Slack channel', icon: 'IconHashtag' },
+  slack_person: { label: 'Your team and a teammate on Slack', icon: 'IconSlack' },
+};
+
+export function resolveSlackUnavailable(
+  available: boolean,
+  { snapshot, failure }: { snapshot: SlackSnapshot | null; failure: string | null }
+) {
+  if (!available) return 'Update Shinsa on this machine first';
+  if (!snapshot) return failure ? 'Slack could not be checked' : 'Checking Slack';
+  if (!snapshot.remote || snapshot.links.length === 0) return 'Connect Slack in Settings → General first';
+  return null;
+}
+
+export function listAutopilotContactItems(unavailable: string | null): SettingItem<AutopilotContactKind>[] {
+  return (['team', 'slack_channel', 'slack_person'] as const).map((value) => ({
+    value,
+    ...CONTACT_ITEMS[value],
+    ...(value !== 'team' && unavailable ? { disabled: unavailable } : {}),
+  }));
+}
+
+export interface ContactDraft {
+  kind: AutopilotContactKind;
+  teamId: string | null;
+}
+
+export function resolveContactDraft(
+  contact: AutopilotContact,
+  draft: Partial<ContactDraft>,
+  snapshot: SlackSnapshot | null
+): ContactDraft {
+  const saved = contact.kind === 'team' ? null : contact.teamId;
+  const kind = draft.kind ?? contact.kind;
+  if (kind === 'team') return { kind, teamId: null };
+  return { kind, teamId: draft.teamId ?? saved ?? snapshot?.links[0]?.teamId ?? null };
+}
+
+export function listSlackWorkspaceItems(
+  snapshot: SlackSnapshot | null,
+  contact: AutopilotContact
+): SettingItem<string>[] {
+  const items = new Map<string, SettingItem<string>>();
+  for (const link of snapshot?.links ?? []) {
+    items.set(link.teamId, { value: link.teamId, label: link.teamName, icon: 'IconSlack' });
+  }
+  if (contact.kind !== 'team' && !items.has(contact.teamId)) {
+    items.set(contact.teamId, {
+      value: contact.teamId,
+      label: contact.teamId,
+      icon: 'IconSlack',
+      disabled: 'Not connected any more',
+    });
+  }
+  return [...items.values()];
+}
+
+export const NO_CONTACT = 'none';
+
+const CONTACT_PLACEHOLDER: Record<AutopilotSlackContactKind, string> = {
+  slack_channel: 'Choose a channel',
+  slack_person: 'Choose a teammate',
+};
+
+const CONTACT_ICON: Record<AutopilotSlackContactKind, 'IconHashtag' | 'IconUser'> = {
+  slack_channel: 'IconHashtag',
+  slack_person: 'IconUser',
+};
+
+const EMPTY_DIRECTORY: Record<AutopilotSlackContactKind, string> = {
+  slack_channel: 'Shinsa is in no channel yet',
+  slack_person: 'No one to message yet',
+};
+
+export interface ContactPicker {
+  items: SettingItem<string>[];
+  value: string;
+  description: string;
+}
+
+function listDirectoryEntries(directory: SlackDirectoryView, kind: AutopilotSlackContactKind) {
+  return kind === 'slack_channel' ? directory.channels : directory.people;
+}
+
+function describePlaceholder(
+  kind: AutopilotSlackContactKind,
+  directory: SlackDirectoryView | null,
+  count: number
+) {
+  if (!directory) return 'Loading';
+  return count === 0 ? EMPTY_DIRECTORY[kind] : 'Not chosen yet';
+}
+
+export function resolveContactPicker(
+  draft: { kind: AutopilotSlackContactKind; teamId: string },
+  contact: AutopilotContact,
+  directory: SlackDirectoryView | null
+): ContactPicker {
+  const icon = CONTACT_ICON[draft.kind];
+  const saved = contact.kind === draft.kind && contact.teamId === draft.teamId ? contact : null;
+  const entries = directory ? listDirectoryEntries(directory, draft.kind) : [];
+  const items: SettingItem<string>[] = entries.map((entry) => ({ value: entry.id, label: entry.name, icon }));
+  if (saved && !entries.some((entry) => entry.id === saved.id)) {
+    items.unshift({ value: saved.id, label: saved.name, icon });
+  }
+  const placeholder: SettingItem<string> = {
+    value: NO_CONTACT,
+    label: CONTACT_PLACEHOLDER[draft.kind],
+    icon,
+    disabled: describePlaceholder(draft.kind, directory, entries.length),
+  };
+  return {
+    items: saved ? items : [placeholder, ...items],
+    value: saved?.id ?? NO_CONTACT,
+    description: directory?.problem ?? AUTOPILOT_ROWS[draft.kind].description,
+  };
+}
+
+export function resolveSlackContact(
+  draft: { kind: AutopilotSlackContactKind; teamId: string },
+  picker: ContactPicker,
+  id: string
+): AutopilotSlackContact | null {
+  const item = picker.items.find((entry) => entry.value === id);
+  if (!item || id === NO_CONTACT) return null;
+  return { kind: draft.kind, teamId: draft.teamId, id, name: item.label };
 }
 
 const WAIT_CHOICES = [15, 30, 60, 120, 240, 480];

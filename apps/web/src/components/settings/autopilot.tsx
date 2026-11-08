@@ -1,4 +1,5 @@
-import type { AutopilotPolicy, Settings } from '@shinsa/core';
+import type { AutopilotContact, AutopilotPolicy, AutopilotSlackContactKind, Settings } from '@shinsa/core';
+import * as React from 'react';
 import { SelectField } from '@/components/controls/select-field.tsx';
 import {
   AUTOPILOT_DESCRIPTION,
@@ -10,14 +11,105 @@ import {
   AUTOPILOT_TITLE,
   AUTOPILOT_URGENT_ITEMS,
   AUTOPILOT_USAGE_ITEMS,
+  type ContactDraft,
+  isContactShown,
   isEscalationUnseen,
+  listAutopilotContactItems,
   listAutopilotWaitItems,
+  listSlackWorkspaceItems,
+  NO_CONTACT,
   resolveAutopilotValue,
+  resolveContactDraft,
+  resolveContactPicker,
+  resolveSlackContact,
+  resolveSlackUnavailable,
 } from '@/lib/autopilot.ts';
 import { useShinsaSelector } from '@/lib/connection/selectors.ts';
+import { useSlack, useSlackDirectory } from '@/lib/connection/slack.ts';
 import { useEngineFeature } from '@/lib/connection/socket.ts';
 import { updateSettings } from '@/lib/settings.ts';
 import { DescribedRow, SettingRow, SettingsGroup } from './group.tsx';
+
+function ContactPickerRow({
+  draft,
+  contact,
+  onPick,
+}: {
+  draft: { kind: AutopilotSlackContactKind; teamId: string };
+  contact: AutopilotContact;
+  onPick: (contact: AutopilotContact) => void;
+}) {
+  const directory = useSlackDirectory(draft.teamId);
+  const picker = resolveContactPicker(draft, contact, directory);
+  const title = AUTOPILOT_ROWS[draft.kind].title;
+  return (
+    <DescribedRow title={title} description={picker.description}>
+      <SelectField
+        label={title}
+        items={picker.items}
+        value={picker.value}
+        onValueChange={(id) => {
+          const picked = resolveSlackContact(draft, picker, id);
+          if (picked) onPick(picked);
+        }}
+      />
+    </DescribedRow>
+  );
+}
+
+function ContactRows({
+  contact,
+  onContactChange,
+}: {
+  contact: AutopilotContact;
+  onContactChange: (contact: AutopilotContact) => void;
+}) {
+  const available = useEngineFeature('autopilot-slack');
+  const slack = useSlack();
+  const { snapshot } = slack;
+  const [pending, setPending] = React.useState<Partial<ContactDraft>>({});
+  const draft = resolveContactDraft(contact, pending, snapshot);
+  const unavailable = resolveSlackUnavailable(available, slack);
+  const pick = (next: AutopilotContact) => {
+    setPending({});
+    onContactChange(next);
+  };
+  return (
+    <>
+      <DescribedRow title={AUTOPILOT_ROWS.contact.title} description={AUTOPILOT_ROWS.contact.description}>
+        <SelectField
+          label={AUTOPILOT_ROWS.contact.title}
+          items={listAutopilotContactItems(unavailable)}
+          value={draft.kind}
+          onValueChange={(kind) => {
+            if (kind === 'team') pick({ kind });
+            else setPending({ kind, teamId: pending.teamId });
+          }}
+        />
+      </DescribedRow>
+      {draft.kind !== 'team' && (
+        <DescribedRow
+          title={AUTOPILOT_ROWS.workspace.title}
+          description={AUTOPILOT_ROWS.workspace.description}
+        >
+          <SelectField
+            label={AUTOPILOT_ROWS.workspace.title}
+            items={listSlackWorkspaceItems(snapshot, contact)}
+            value={draft.teamId ?? NO_CONTACT}
+            onValueChange={(teamId) => setPending({ kind: draft.kind, teamId })}
+          />
+        </DescribedRow>
+      )}
+      {draft.kind !== 'team' && draft.teamId && (
+        <ContactPickerRow
+          draft={{ kind: draft.kind, teamId: draft.teamId }}
+          contact={contact}
+          onPick={pick}
+        />
+      )}
+    </>
+  );
+}
 
 export function AutopilotSettings({ settings }: { settings: Settings }) {
   const available = useEngineFeature('autopilot');
@@ -78,6 +170,12 @@ export function AutopilotSettings({ settings }: { settings: Settings }) {
               onValueChange={(urgent) => updateAutopilot({ urgent })}
             />
           </DescribedRow>
+          {isContactShown(policy) && (
+            <ContactRows
+              contact={policy.contact}
+              onContactChange={(contact) => updateAutopilot({ contact })}
+            />
+          )}
           {policy.urgent !== 'wait' && (
             <DescribedRow title={AUTOPILOT_ROWS.wait.title} description={AUTOPILOT_ROWS.wait.description}>
               <SelectField

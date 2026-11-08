@@ -7,6 +7,7 @@ import { AUTOPILOT_NO_TEAM, AUTOPILOT_ROWS } from '@/lib/autopilot.ts';
 import { createAccount, createSnapshot } from '../../support/accounts.ts';
 import { spyOnToasts } from '../../support/commands.ts';
 import { spyOnEngine } from '../../support/engine.ts';
+import { readFetchCall } from '../../support/fetch.ts';
 import {
   holdAcks,
   listSentCommands,
@@ -238,20 +239,137 @@ describe('Settings → Agents → Autopilot', () => {
     expect(screen.queryByRole('combobox', { name: 'Autopilot' })).toBeNull();
   });
 
-  it('warns that an escalation reaches only you while no project is in a team', () => {
+  it('warns that an escalation reaches only you while no project is in a team', async () => {
     spyOnEngine();
     renderAgents(ESCALATING);
+    await settle();
     expect(screen.getByRole('combobox', { name: 'Autopilot' })).toBeTruthy();
     expect(screen.getByText(AUTOPILOT_NO_TEAM)).toBeTruthy();
   });
 
-  it('leaves the warning out once a project is in a team', () => {
+  it('leaves the warning out once a project is in a team', async () => {
     spyOnEngine();
     pushState(createShinsaState({ projects: [createProject({ id: 'p1', teamIds: ['team-1'] })] }));
     renderAgents(ESCALATING);
+    await settle();
     expect(screen.getByRole('combobox', { name: 'When an urgent merge waits for you' })).toBeTruthy();
     expect(screen.queryByText(AUTOPILOT_NO_TEAM)).toBeNull();
     expect(screen.getByText(AUTOPILOT_ROWS.urgent.description)).toBeTruthy();
     expect(screen.getByRole('combobox', { name: AUTOPILOT_ROWS.usage.title })).toBeTruthy();
+  });
+
+  describe('Escalate to', () => {
+    const SLACK = {
+      remote: true,
+      connectUrl: null,
+      links: [{ teamId: 'T1', teamName: 'Overclock', userId: 'U1', userName: 'Christo', linkedAt: 1 }],
+      problem: null,
+    };
+    const DIRECTORY = {
+      teamId: 'T1',
+      channels: [
+        { id: 'C1', name: 'oncall' },
+        { id: 'C2', name: 'eng' },
+      ],
+      people: [{ id: 'U7', name: 'Kai' }],
+      problem: null,
+    };
+
+    function answerSlack(slack: unknown = SLACK) {
+      providers.mockImplementation((async (input: RequestInfo | URL, init?: RequestInit) => {
+        const { path } = readFetchCall(input, init);
+        if (path === '/api/slack') return Response.json(slack);
+        if (path === '/api/slack/directory?teamId=T1') return Response.json(DIRECTORY);
+        return new Response('offline', { status: 503 });
+      }) as typeof fetch);
+    }
+
+    async function openContact() {
+      fireEvent.click(screen.getByRole('combobox', { name: 'Escalate to' }));
+      await settle();
+      return screen.getAllByRole('listbox').at(-1) as HTMLElement;
+    }
+
+    it('reads your team by default, and is left out while urgent changes only wait or merge', async () => {
+      spyOnEngine();
+      const { unmount } = renderAgents(ESCALATING);
+      await settle();
+      expect(screen.getByRole('combobox', { name: 'Escalate to' }).textContent).toBe('Your team in Shinsa');
+      expect(screen.queryByRole('combobox', { name: 'Slack workspace' })).toBeNull();
+      unmount();
+      renderAgents({ ...ESCALATING, autopilot: { ...ESCALATING.autopilot, urgent: 'merge' } } as Settings);
+      expect(screen.queryByRole('combobox', { name: 'Escalate to' })).toBeNull();
+    });
+
+    it('disables the Slack choices until Slack is connected, saying where', async () => {
+      spyOnEngine();
+      answerSlack({ ...SLACK, links: [] });
+      renderAgents(ESCALATING);
+      await settle();
+      const list = await openContact();
+      const channel = within(list).getByRole('option', { name: /a Slack channel/ });
+      expect(channel.textContent).toContain('Connect Slack in Settings → General first');
+      expect(channel.getAttribute('aria-disabled')).toBe('true');
+    });
+
+    it('disables them on an engine that cannot send to Slack', async () => {
+      const engine = resolveEngineInfo('1.0.0');
+      spyOnEngine({
+        ...engine,
+        features: engine.features.filter((feature) => feature !== 'autopilot-slack'),
+      });
+      answerSlack();
+      renderAgents(ESCALATING);
+      await settle();
+      const list = await openContact();
+      expect(within(list).getByRole('option', { name: /a teammate on Slack/ }).textContent).toContain(
+        'Update Shinsa on this machine first'
+      );
+    });
+
+    it('saves a channel only once one is picked, from the channels Shinsa is in', async () => {
+      spyOnEngine();
+      answerSlack();
+      renderAgents(ESCALATING);
+      await settle();
+      await choose('Escalate to', 'Your team and a Slack channel');
+      expect(listSentCommands()).toEqual([]);
+      expect(screen.getByRole('combobox', { name: 'Slack workspace' }).textContent).toBe('Overclock');
+      await settle();
+      expect(screen.getByRole('combobox', { name: 'Channel' }).textContent).toBe('Choose a channel');
+      expect(screen.getByText(AUTOPILOT_ROWS.slack_channel.description)).toBeTruthy();
+      await choose('Channel', 'eng');
+      expect(listSentCommands()).toEqual([
+        {
+          type: 'settings.change',
+          patch: {
+            autopilot: {
+              ...ESCALATING.autopilot,
+              contact: { kind: 'slack_channel', teamId: 'T1', id: 'C2', name: 'eng' },
+            },
+          },
+        },
+      ]);
+    });
+
+    it('shows a saved teammate, and going back to your team saves at once', async () => {
+      spyOnEngine();
+      answerSlack();
+      const contact = { kind: 'slack_person' as const, teamId: 'T1', id: 'U7', name: 'Kai' };
+      renderAgents({ ...ESCALATING, autopilot: { ...ESCALATING.autopilot!, contact } } as Settings);
+      await settle();
+      expect(screen.getByRole('combobox', { name: 'Escalate to' }).textContent).toBe(
+        'Your team and a teammate on Slack'
+      );
+      expect(screen.getByRole('combobox', { name: 'Teammate' }).textContent).toBe('Kai');
+      await choose('Slack workspace', 'Overclock');
+      await choose('Escalate to', 'Your team in Shinsa');
+      expect(listSentCommands()).toEqual([
+        {
+          type: 'settings.change',
+          patch: { autopilot: { ...ESCALATING.autopilot, contact: { kind: 'team' } } },
+        },
+      ]);
+    });
   });
 });
