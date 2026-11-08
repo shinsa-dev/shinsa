@@ -1,8 +1,14 @@
 import { CLAUDE_PROVIDER } from '../agent-models/index.ts';
 import type { CommandOf } from '../commands/index.ts';
 import {
+  type AdmissionVerdict,
   describeBudgetAmount,
+  isBuildRun,
   isOverBudget,
+  listBuildingTasks,
+  type PaceHold,
+  resolveAdmission,
+  sortAdmissionQueue,
   listSpentBudgets,
   resolvePaceHold,
   resolveUsageDelta,
@@ -14,10 +20,12 @@ import {
   type Gate,
   isDelegatedRun,
   isWatchHome,
+  resolveAutoPace,
   resolveWatchdogsIgnoreUsageLimits,
   type Run,
   type RunUsage,
   type Task,
+  type UsagePace,
   type UsagePaceScope,
   type UsageWait,
   type WeeklyReading,
@@ -162,6 +170,7 @@ export function releaseBudgetHolds(decider: Decider) {
 const PACE_REASON: Record<UsagePaceScope, string> = {
   daily: 'held at the daily usage limit',
   project: 'held at the project’s usage limit',
+  admission: 'waiting its turn to build within today’s usage',
 };
 
 const HELD_SUMMARY = 'Held at a usage limit before it started.';
@@ -171,18 +180,18 @@ function resolveHeldReason(task: Task, wait: UsageWait | null | undefined, run: 
 }
 
 function isStartedEarly(wait: UsageWait | null | undefined, run: Run, now: number) {
-  return wait?.cause === 'pace' && wait.id === run.usageWaitId && now < wait.resetAt;
+  return (
+    wait?.cause === 'pace' &&
+    wait.pace?.scope !== 'admission' &&
+    wait.id === run.usageWaitId &&
+    now < wait.resetAt
+  );
 }
 
-export function holdForPace(decider: Decider, run: Run) {
-  if (isDelegatedRun(run) || isExemptWatchCheck(decider, run)) return false;
+function armPaceWait(decider: Decider, run: Run, limit: Omit<UsagePace, 'stageReason'>, freesAt: number) {
   const task = decider.task(run.taskId);
   const wait = task.usageWait;
   const { now } = decider.context;
-  if (isStartedEarly(wait, run, now)) return false;
-  const hold = resolvePaceHold(decider.state, task, run.provider, now);
-  if (!hold) return false;
-  const { freesAt, ...limit } = hold;
   decider.endRun(run, 'cancelled', HELD_SUMMARY);
   decider.emit({
     type: 'usage_wait.armed',
@@ -202,8 +211,93 @@ export function holdForPace(decider: Decider, run: Run) {
       pace: { ...limit, stageReason: resolveHeldReason(task, wait, run) },
     },
   });
-  decider.stage(task.id, task.stage, PACE_REASON[hold.scope]);
+  decider.stage(task.id, task.stage, PACE_REASON[limit.scope]);
+}
+
+export function holdForPace(decider: Decider, run: Run) {
+  if (isDelegatedRun(run) || isExemptWatchCheck(decider, run)) return false;
+  const task = decider.task(run.taskId);
+  const { now } = decider.context;
+  if (isStartedEarly(task.usageWait, run, now)) return false;
+  const hold: PaceHold | null = resolvePaceHold(decider.state, task, run.provider, now);
+  if (!hold) return false;
+  const { freesAt, ...limit } = hold;
+  armPaceWait(decider, run, limit, freesAt);
   return true;
+}
+
+function isAdmissionWait(wait: UsageWait | null | undefined): wait is UsageWait {
+  return wait?.cause === 'pace' && wait.pace?.scope === 'admission' && wait.status === 'armed';
+}
+
+function listAdmissionWaits(decider: Decider) {
+  return Object.values(decider.state.tasks).filter((task) => isAdmissionWait(task.usageWait));
+}
+
+function resolveAdmissionLimit(verdict: AdmissionVerdict): Omit<UsagePace, 'stageReason'> {
+  return {
+    scope: 'admission',
+    limit: verdict.limit,
+    percent: verdict.percent,
+    projectId: null,
+    need: verdict.need,
+  };
+}
+
+function needsAdmission(decider: Decider, task: Task, run: Run) {
+  return (
+    resolveAutoPace(decider.state.settings) &&
+    isBuildRun(run) &&
+    !isDelegatedRun(run) &&
+    !task.paceLimitsIgnored &&
+    !listBuildingTasks(decider.state).has(task.id)
+  );
+}
+
+export function holdForAdmission(decider: Decider, run: Run) {
+  const task = decider.task(run.taskId);
+  if (!needsAdmission(decider, task, run)) return false;
+  const provider = run.provider ?? CLAUDE_PROVIDER;
+  const verdict = resolveAdmission(decider.state, task, provider, decider.context.now);
+  if (!verdict) return false;
+  const waiting = listAdmissionWaits(decider).filter(
+    (other) => other.id !== task.id && (other.usageWait?.provider ?? CLAUDE_PROVIDER) === provider
+  );
+  const first = sortAdmissionQueue(decider.state, [...waiting, task])[0];
+  if (verdict.fits && first?.id === task.id) return false;
+  armPaceWait(decider, run, resolveAdmissionLimit(verdict), verdict.freesAt);
+  return true;
+}
+
+function rearmAdmission(decider: Decider, task: Task, wait: UsageWait, verdict: AdmissionVerdict | null) {
+  const { now } = decider.context;
+  if (wait.resetAt > now || !verdict || !wait.pace) return;
+  decider.emit({
+    type: 'usage_wait.armed',
+    taskId: task.id,
+    wait: { ...wait, resetAt: verdict.freesAt, pace: { ...wait.pace, ...resolveAdmissionLimit(verdict) } },
+  });
+}
+
+export function admitBuilds(decider: Decider) {
+  const waiting = listAdmissionWaits(decider);
+  if (waiting.length === 0) return;
+  const autoPace = resolveAutoPace(decider.state.settings);
+  const blocked = new Set<string>();
+  for (const queued of sortAdmissionQueue(decider.state, waiting)) {
+    const task = decider.task(queued.id);
+    const wait = task.usageWait;
+    if (!isAdmissionWait(wait)) continue;
+    const provider = wait.provider ?? CLAUDE_PROVIDER;
+    const verdict = autoPace ? resolveAdmission(decider.state, task, provider, decider.context.now) : null;
+    const admitted = !autoPace || task.paceLimitsIgnored || !verdict || verdict.fits;
+    if (admitted && !blocked.has(provider)) {
+      releasePaceWait(decider, task, wait);
+      continue;
+    }
+    blocked.add(provider);
+    rearmAdmission(decider, task, wait, verdict);
+  }
 }
 
 export function releasePaceWait(decider: Decider, task: Task, wait: UsageWait) {
@@ -229,7 +323,7 @@ export function releasePaceHolds(decider: Decider) {
   const { now } = decider.context;
   for (const task of Object.values(decider.state.tasks)) {
     const wait = task.usageWait;
-    if (wait?.cause !== 'pace' || wait.status !== 'armed') continue;
+    if (wait?.cause !== 'pace' || wait.status !== 'armed' || wait.pace?.scope === 'admission') continue;
     const held = decider.state.runs[wait.runId];
     const provider = wait.provider ?? CLAUDE_PROVIDER;
     const exempt = held !== undefined && isExemptWatchCheck(decider, held);

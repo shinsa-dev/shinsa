@@ -1,5 +1,4 @@
 import { resolvePlanKey } from '../accounts/plan.ts';
-import { isPaceMoved, resolveRecordablePace } from '../forecast/index.ts';
 import { CLAUDE_PROVIDER, resolveProviderLabel } from '../agent-models/index.ts';
 import type { CommandOf } from '../commands/index.ts';
 import {
@@ -14,6 +13,7 @@ import {
   type Task,
   type UsageWait,
 } from '../domain/index.ts';
+import { isPaceMoved, resolveRecordablePace } from '../forecast/index.ts';
 import { resolveUsageResumeNudge } from '../prompts/session.ts';
 import { listOpenGates } from '../state/queries.ts';
 import { releasePaceWait } from './costs.ts';
@@ -114,7 +114,7 @@ export function resumeUsageWait(decider: Decider, command: CommandOf<'usage_wait
   const task = decider.state.tasks[command.taskId];
   const wait = task?.usageWait;
   if (!task || !RUN_STAGES.has(task.stage) || wait?.id !== command.waitId || wait.status !== 'armed') return;
-  if (decider.context.now < wait.resetAt) return;
+  if (decider.context.now < wait.resetAt || wait.pace?.scope === 'admission') return;
   if (wait.cause === 'pace') {
     releasePaceWait(decider, task, wait);
     return;

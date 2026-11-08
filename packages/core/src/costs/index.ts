@@ -14,6 +14,15 @@ export {
 } from './window.ts';
 
 export {
+  ADMISSION_LIMITS,
+  type AdmissionVerdict,
+  isBuildRun,
+  listBuildingTasks,
+  resolveAdmission,
+  sortAdmissionQueue,
+} from './admission.ts';
+
+export {
   BUILD_ESTIMATE_LIMITS,
   type BuildEstimate,
   DEFAULT_BUILD_COSTS,

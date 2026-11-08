@@ -1,10 +1,12 @@
 import { describe, expect, test } from 'bun:test';
 import {
+  ADMISSION_LIMITS,
   isOverBudget,
   listActiveRuns,
   listOpenGates,
   type RunUsage,
   RECENT_USAGE_MS,
+  resolveBuildEstimate,
   resolvePaceHold,
   resolveRecentUsage,
   resolveTaskCost,
@@ -14,6 +16,7 @@ import {
   createHarness,
   createTask,
   type Harness,
+  LARGE_PLAN,
   learnUsageRate,
   proposePlan,
   registerRepo,
@@ -759,5 +762,179 @@ describe('a project’s usage limit', () => {
     const { usageLimit: _kept, ...withoutLimit } = project;
     harness.send({ type: 'project.write', project: { ...withoutLimit, description: 'Paywalls' } });
     expect(harness.state.projects[projectId]?.usageLimit).toBe(project.usageLimit);
+  });
+});
+
+function recordPace(harness: Harness, pace: number | null) {
+  harness.send({ type: 'usage.pace_recorded', provider: 'claude', pace });
+}
+
+function autoPaced(pace: number) {
+  const harness = createHarness();
+  learnUsageRate(harness);
+  harness.send({ type: 'settings.change', patch: { autoPace: true } });
+  recordPace(harness, pace);
+  return harness;
+}
+
+function plannedTask(
+  harness: Harness,
+  options: { priority?: 'urgent' | 'high' | 'normal' | 'low'; plan?: typeof LARGE_PLAN } = {}
+) {
+  const taskId = createTask(harness, options.priority ? { priority: options.priority } : {});
+  proposePlan(harness, taskId, options.plan);
+  const run = Object.values(harness.state.runs)
+    .filter((candidate) => candidate.taskId === taskId)
+    .at(-1);
+  if (!run) throw new Error('no run');
+  return { taskId, run };
+}
+
+function needOf(harness: Harness, taskId: string) {
+  const need = resolveBuildEstimate(harness.state, harness.task(taskId))?.remainingPercent;
+  if (need === undefined || need === null) throw new Error('no estimate');
+  return need;
+}
+
+function paceFitting(harness: Harness, percent: number, share = 1 - ADMISSION_LIMITS.reserve) {
+  return (recentPercent(harness) + percent) / share;
+}
+
+function isAdmissionHeld(harness: Harness, taskId: string) {
+  const wait = harness.task(taskId).usageWait;
+  return wait?.status === 'armed' && wait.pace?.scope === 'admission';
+}
+
+describe('Auto pace', () => {
+  test('is off by default, so a build starts at once whatever the pace', () => {
+    const harness = createHarness();
+    learnUsageRate(harness);
+    recordPace(harness, 0.01);
+    const { taskId, run } = plannedTask(harness);
+    expect(isDispatched(harness, run.id)).toBe(true);
+    expect(isAdmissionHeld(harness, taskId)).toBe(false);
+  });
+
+  test('holds a build that does not fit today’s usage before it starts, and says why', () => {
+    const harness = autoPaced(0.01);
+    const { taskId, run } = plannedTask(harness);
+    expect(run.purpose).toBe('build');
+    expect(isDispatched(harness, run.id)).toBe(false);
+    const wait = waitOf(harness, taskId);
+    expect(wait).toMatchObject({
+      runId: run.id,
+      cause: 'pace',
+      status: 'armed',
+      pace: { scope: 'admission' },
+    });
+    expect(wait.pace?.limit).toBeCloseTo(0.01 * (1 - ADMISSION_LIMITS.reserve));
+    expect(wait.pace?.need).toBeCloseTo(wait.pace?.limit as number);
+    expect(wait.resetAt).toBeGreaterThan(harness.now);
+    expect(harness.task(taskId).stageReason).toBe('waiting its turn to build within today’s usage');
+    expect(harness.task(taskId).activity.at(-1)?.text).toBe(
+      'Held the build until its estimate fits today’s usage; it starts in queue order'
+    );
+  });
+
+  test('planning, a build that fits and work without a recorded pace never wait', () => {
+    const fitting = autoPaced(10_000);
+    const fits = plannedTask(fitting);
+    expect(isDispatched(fitting, fits.run.id)).toBe(true);
+    const unpaced = createHarness();
+    learnUsageRate(unpaced);
+    unpaced.send({ type: 'settings.change', patch: { autoPace: true } });
+    const planning = createTask(unpaced);
+    expect(isDispatched(unpaced, unpaced.activeRun(planning).id)).toBe(true);
+    proposePlan(unpaced, planning);
+    expect(isDispatched(unpaced, unpaced.activeRun(planning).id)).toBe(true);
+  });
+
+  test('starts the held build once the pace makes room, and its later phases never wait', () => {
+    const harness = autoPaced(0.01);
+    const { taskId, run } = plannedTask(harness);
+    recordPace(harness, paceFitting(harness, needOf(harness, taskId)) + 1);
+    expect(isHeldStepStarted(harness, run.id)).toBe(true);
+    expect(waitOf(harness, taskId).status).toBe('resumed');
+    recordPace(harness, 0.01);
+    completePhase(harness, taskId);
+    const next = harness.activeRun(taskId);
+    expect(next.purpose).toBe('build');
+    expect(isDispatched(harness, next.id)).toBe(true);
+  });
+
+  test('releases builds one at a time, counting what each started build has left', () => {
+    const harness = autoPaced(0.01);
+    const first = plannedTask(harness, { priority: 'high' });
+    const second = plannedTask(harness);
+    const need = needOf(harness, first.taskId);
+    recordPace(harness, paceFitting(harness, need * 1.5));
+    expect(isHeldStepStarted(harness, first.run.id)).toBe(true);
+    expect(isAdmissionHeld(harness, second.taskId)).toBe(true);
+  });
+
+  test('an urgent build may use the reserve, and starts ahead of the queue', () => {
+    const harness = autoPaced(0.01);
+    const normal = plannedTask(harness);
+    const need = needOf(harness, normal.taskId);
+    recordPace(harness, paceFitting(harness, need, 1) * 1.05);
+    expect(isAdmissionHeld(harness, normal.taskId)).toBe(true);
+    const urgent = plannedTask(harness, { priority: 'urgent' });
+    expect(isDispatched(harness, urgent.run.id)).toBe(true);
+    expect(isAdmissionHeld(harness, normal.taskId)).toBe(true);
+  });
+
+  test('a build that fits still waits behind one ahead of it in the queue', () => {
+    const harness = autoPaced(0.01);
+    const large = plannedTask(harness, { priority: 'high', plan: LARGE_PLAN });
+    const small = plannedTask(harness);
+    recordPace(harness, paceFitting(harness, needOf(harness, small.taskId) * 1.1));
+    expect(isAdmissionHeld(harness, large.taskId)).toBe(true);
+    expect(isAdmissionHeld(harness, small.taskId)).toBe(true);
+    expect(isHeldStepStarted(harness, small.run.id)).toBe(false);
+    const later = plannedTask(harness);
+    expect(isAdmissionHeld(harness, later.taskId)).toBe(true);
+  });
+
+  test('checks again at the time it expected room, and keeps one wait when there is still none', () => {
+    const harness = autoPaced(10_000);
+    const building = plannedTask(harness);
+    expect(isDispatched(harness, building.run.id)).toBe(true);
+    recordPace(harness, 0.01);
+    const { taskId } = plannedTask(harness);
+    const wait = waitOf(harness, taskId);
+    const lines = harness.task(taskId).activity.length;
+    harness.send({ type: 'usage_wait.resume', taskId, waitId: wait.id });
+    expect(waitOf(harness, taskId).resetAt).toBe(wait.resetAt);
+    harness.advance(wait.resetAt - harness.now);
+    harness.send({ type: 'usage_wait.resume', taskId, waitId: wait.id });
+    const again = waitOf(harness, taskId);
+    expect(again).toMatchObject({ id: wait.id, status: 'armed' });
+    expect(again.resetAt).toBe(harness.now + ADMISSION_LIMITS.recheckMs);
+    expect(harness.task(taskId).activity).toHaveLength(lines);
+  });
+
+  test('Build now starts the held build at once', () => {
+    const harness = autoPaced(0.01);
+    const { taskId, run } = plannedTask(harness);
+    harness.send({ type: 'usage_wait.resume_now', taskId });
+    expect(isHeldStepStarted(harness, run.id)).toBe(true);
+    expect(harness.task(taskId).paceLimitsIgnored).toBe(true);
+  });
+
+  test('turning Auto pace off starts every held build', () => {
+    const harness = autoPaced(0.01);
+    const first = plannedTask(harness);
+    const second = plannedTask(harness);
+    harness.send({ type: 'settings.change', patch: { autoPace: false } });
+    expect(isHeldStepStarted(harness, first.run.id)).toBe(true);
+    expect(isHeldStepStarted(harness, second.run.id)).toBe(true);
+  });
+
+  test('a released build still stops at the daily usage limit', () => {
+    const harness = autoPaced(0.01);
+    const { taskId } = plannedTask(harness);
+    harness.send({ type: 'settings.change', patch: { dailyUsageLimit: recentPercent(harness) / 2 } });
+    recordPace(harness, paceFitting(harness, needOf(harness, taskId)) + 1);
+    expect(waitOf(harness, taskId)).toMatchObject({ status: 'armed', pace: { scope: 'daily' } });
   });
 });
