@@ -390,7 +390,12 @@ describe('event log migrations', () => {
     }
     db.close();
     const log = openEventLog(path);
-    expect(log.migrate()).toEqual(['proposal-recommend', 'task-auto-project', 'focus-projects', 'review-ratings']);
+    expect(log.migrate()).toEqual([
+      'proposal-recommend',
+      'task-auto-project',
+      'focus-projects',
+      'review-ratings',
+    ]);
     expect(log.readEvents().events.slice(1)).toEqual([
       {
         type: 'task.change_proposed',
