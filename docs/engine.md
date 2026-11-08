@@ -1271,10 +1271,12 @@ and only the order in which finished work reaches you is managed.
   OK, an operation and a secret rank as questions), paused (a failure, a setup to fix, a sign-in),
   then the oldest first), and the guide never leads with a low priority decision while anything else waits
   (`parseBriefing` drops such an answer; low ones go to the end of next).
-- **No hold but the one you choose.** Shinsa never parks new work on its own while decisions pile up or usage runs
-  low: holding the compute only delays work you asked for, and priority already keeps finished work out of your way.
-  Work you want planned now and built later goes in the backlog, and only you (or an agent you asked) put it there;
-  triage never does.
+- **No hold but the one you choose.** Shinsa never parks new work on its own while decisions pile up, and never
+  because usage runs low unless you switched Auto pace on (Agent usage → Auto pace, below): holding the compute only
+  delays work you asked for, and priority already keeps finished work out of your way. With Auto pace on, a build
+  waits its turn within the forecast's safe pace, ordered by priority and your project order; planning, questions
+  and answers still never wait. Work you want planned now and built later goes in the backlog, and only you (or an
+  agent you asked) put it there; triage and Auto pace never do.
 
 ### Dependencies
 
@@ -2122,9 +2124,21 @@ checks it ran.
 - **A run's share is its cost at the account's learned rate** (`resolveUsageShares` over `resolveUsageRates` in
   `costs/rate.ts`, each worked out once per `state.runs`), the way its cost is its tokens at the model's prices. The subscription meter tracks
   model-weighted compute, which the API-equivalent cost already weighs by model and token type, so the rate is
-  "percent of the weekly window per dollar", learned per window (each account, or a provider's own login), so plans
-  of different sizes (Max 5x, Max 20x) and providers (Claude, Codex) each have their own. It is derived from the log
-  every time state is built, never stored.
+  "percent of the weekly window per dollar", learned per pool, so plans of different sizes (Max 5x, Max 20x) and
+  providers (Claude, Codex) each have their own. It is derived from the log every time state is built, never stored.
+  - **One pool per provider and plan.** A meter's window stays the account (`account:<id>`), so overlapping runs line
+    up per account, but its observations are learned in the pool `resolveRatePool` gives it: `plan:<provider>:<plan>`
+    for an account whose plan is known, so every account on one plan teaches and reads one rate, and the window
+    itself otherwise (an account with no known plan, a provider's own login). The plan is each account's current one
+    (`state.accountPlans`, `account.plan_recorded`, which the account roster sends whenever an account's plan differs
+    from state, under one key per plan, `resolvePlanKey`: `Claude Ultra`, `ultra` and `claude_ultra` are `ultra`), so
+    the whole log pools at once and an account that changes plan moves to that plan's pool; removing an account
+    forgets its plan. A plan of none is recorded as no plan.
+  - **A starting rate.** A known plan with a measured rate (`STARTING_RATES`, dated: Claude Ultra 0.0255% per dollar,
+    measured on 2026-11-08 from 276 tasks on four Ultra accounts) starts from it, counted as 2 points of movement at
+    that rate (`USAGE_RATE_LIMITS.startingMovement`), so a pool with no observation has an early estimate from its
+    first task and real readings outweigh it within a few. It never makes a rate trusted: trust counts only the
+    pool's own tasks and movement. Update the table when the provider changes its limits.
   - **What it learns from.** Every attempt with two readings is an observation: the window moved from its first
     reading to its last, while every run on that window cost something in that interval (each attempt's cost spread
     evenly over its time, counted for the part inside the interval). An observation is left out when the window's
@@ -2212,6 +2226,58 @@ checks it ran.
   ⌘K) changes it, shown only on an engine with `usage.watchdog_limits`; turning it on starts a check a pace hold
   held (`releasePaceHolds`) and retries one a budget gate held, over the limit or not (`releaseBudgetHolds`). An account out of usage still holds a check as it holds any run, and the tasks a
   watchdog files are ordinary tasks that follow every limit.
+- **What a build will cost** (`costs/estimate.ts`, `resolveBuildEstimate`, pure, derived every time). A task with a
+  plan has an estimate of its build: the build, fix and review runs of the current round. Its shape is the plan's
+  phases, files and checks; a finished build is a sample of its cost per phase. With at least 3 samples
+  (`BUILD_ESTIMATE_LIMITS`) the estimate takes the 20 nearest by shape (log distance on phases and files, half
+  weight on checks) and their 70th percentile per phase, times the task's phases: on 303 past builds the median came
+  in under the real cost 55% of the time and the 70th percentile about a third, so it errs toward starting one task
+  fewer. With fewer samples it uses `DEFAULT_BUILD_COSTS`, measured on 2026-11-08 from those builds ($3.80 a phase
+  for one or two phases, rising to $20 a phase at six or more). Before a phase is done, what is left is the estimate
+  minus what was spent; after each phase, the rest is the remaining phases times the average of the estimate (worth
+  one phase) and the real cost per finished phase. In percent it uses the rate of the task's account, or its last
+  meter's window, else the best learned rate, and stays in dollars with none. The task's cost popover shows it
+  under Build estimate, and the task's facts "About 16% to build" while a build waits for admission.
+- **The safe pace, recorded** (`usage.pace_recorded`, `state.usagePaces`). The forecast below runs where the account
+  readings are, so the engine's account roster works out each provider's safe pace (`listProviderPaces`, the forecast
+  with every usable reset grant that clears the weekly limit counted as a full refill) on every accounts refresh and
+  records it when it moved by a whole point (`isPaceMoved`, `FORECAST_LIMITS.paceStep`) or appeared or went away. Settings'
+  own forecast still leaves grants out, since you claim them in the Claude app, so it can read lower.
+- **Auto pace** (`autoPace`, off by default, and the project order, `projectOrder`, both only yours, in
+  `HUMAN_ONLY_SETTINGS`, offered only on an engine with `usage.auto_pace`). With it off everything starts at once,
+  as above. With it on, a task's first build run in a round waits for admission (`holdForAdmission` in
+  `dispatchRuns`, after the task limits and before the daily and project limits) unless its build already started, it is delegated, or
+  you started it with Build now (`Task.paceLimitsIgnored`). Planning, answers, research, investigations, operations,
+  later phases, checks, fixes, reviews and watchdog checks never wait, and a build that started finishes. A task
+  with no recorded pace or no estimate does not wait either.
+  - **The budget** is the recorded safe pace for the next 24 hours, less 10% kept for urgent tasks
+    (`ADMISSION_LIMITS.reserve`; an urgent build may use all of it), minus the provider's last 24 hours and the
+    estimated rest of every build already started (`resolveAdmission`). A build fits when its estimate does; one
+    larger than the whole budget counts as the budget, so it starts once nothing else is using it.
+  - **The queue** (`sortAdmissionQueue`): urgent first, then the project order you set (Settings → Agent usage → Auto
+    pace, by dragging or the arrows; a project not in it comes after those that are), then task priority, then how
+    many open tasks wait on it, then age. A build that fits still waits behind one ranked ahead of it on the same
+    provider, so smaller tasks never starve a larger one.
+  - **The hold** is a pace hold with scope `admission` (`usage_wait.armed`, `cause: pace`, stage reason "waiting its
+    turn to build within today's usage", `resetAt` the time the last 24 hours free enough room, else 30 minutes).
+    Each time runs are dispatched, `admitBuilds` first walks the queue: it releases the first build that fits, counts its estimate,
+    and goes on, so held builds start one at a time in order; a hold whose time passed with no room is armed again
+    for a new time. Build now is Resume now (`usage_wait.resume_now`), and from you it also sets
+    `paceLimitsIgnored`, as for the other pace holds. Switching Auto pace off releases every admission hold. A build
+    admitted still stops at the daily and project limits.
+  - **On screen** a held task's status is "Waiting to build", its card "Builds tonight" (when you are here now and
+    its time falls in your away hours) or "Builds after 3:40 AM", with Build now. Settings → Agent usage → Auto pace has the switch, the
+    budget for the next 24 hours with the reserve and how many builds wait, and the project order. Home adds "1 task
+    builds tonight" and, once you are back, how many tasks built overnight are ready for your review.
+- **The night shift** (`costs/away.ts`, `prompts/night.ts`), on top of Auto pace and needing no setting of its own.
+  Your away hours are learned from the last 14 days (`AWAY_LIMITS`): an hour of the day is away when the `away`
+  spans cover at least half of it on at least half the days observed, given at least 3 days of spans; with fewer,
+  it falls back to activity, an hour with any presence on under 15% of the days. With neither, there is no night
+  shift. Only the Agent is told, in its user turn, never its system prompt (`resolveNightShiftTold`): while it plans
+  a task whose build will probably wait (you are away, admission holds are queued, or the budget has no room), that
+  it builds unattended and should ask every question now; while it builds or fixes during your away hours, that it
+  should decide what it can, record each choice as a judgement call (a summary line for a fix), and use `ask` only
+  for what it must not decide alone. A night build stops at your review like any other.
 - **The usage forecast** (`forecast/`, `resolveUsageForecast`, pure; the web runs it on the accounts it reads).
   It answers how fast you can go without every account running out, not how fast you went. Each unpaused,
   signed-in account is a budget that expires: what is left of its weekly window now lasts until its reset, and
@@ -3416,8 +3482,8 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   `review.approve_after_fix` for `gate.answer`'s `thenApprove`, `message.line_comments` for `task.message`'s
   `comments`, `changelog` for `GET /api/changelog`, `remote.terminals` for terminal streams on the sealed channel,
   `attention` for routing notifications to the device you use, `worktree-root` for the worktree folder and
-  `usage.pace_limits` for `dailyUsageLimit` and `Project.usageLimit` and `usage.watchdog_limits` for
-  `watchdogsIgnoreUsageLimits`, today;
+  `usage.pace_limits` for `dailyUsageLimit` and `Project.usageLimit`, `usage.watchdog_limits` for
+  `watchdogsIgnoreUsageLimits` and `usage.auto_pace` for `autoPace` and `projectOrder`, today;
   Settings → Teams, the review's Fix and approve choice and
   What's new show only on an engine that has them). `ENGINE_PROTOCOL` is the hard floor: a machine whose protocol differs from the page's is left out of the
   dashboard, merges nothing and gets no command, and Settings → Machines says "Update Shinsa on <name> to reach it from
@@ -4677,7 +4743,7 @@ plainly what protects what.
   - the settings that spend money, merge, share or decide for you (`HUMAN_ONLY_SETTINGS` in `domain/settings.ts`:
     `approvePlans`, `mergeMethod`, `taskBudgetUsd`, `taskUsageLimit`, `dailyUsageLimit`, `autoResume`,
     `snoozeLimited`, `accountSwitchAt`, `fastMode`, `agentFastModes`, `delegationLimit`, `shareLimit`, `sharePreset`,
-    `watchdogsIgnoreUsageLimits`), a
+    `watchdogsIgnoreUsageLimits`, `autoPace`, `projectOrder`), a
     project's usage limit (`Project.usageLimit`) and a repository's own check commands,
     workspace and coverage (`HUMAN_ONLY_REPO_FIELDS`: `checkCommands`, `workspace`, `coverage`); agents keep the rest
     (models, providers, fix rounds, attention, compaction), and a task's own checks are the agent's (Checks, above);
