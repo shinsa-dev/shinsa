@@ -46,7 +46,7 @@ export function isUsageLimitExempt(settings: Settings, task: Task) {
   return policy.enabled && policy.ignoreUsageLimits && isUrgent(task);
 }
 
-export function isAutopilotCandidate(settings: Settings, task: Task) {
+function isAutopilotCandidate(settings: Settings, task: Task) {
   const ratings = task.reviewRatings;
   if (!resolveAutopilotPolicy(settings).enabled || !ratings) return false;
   return ratings.confidence === 'high' && isRiskAllowed(settings, task, ratings.risk);

@@ -111,9 +111,9 @@ export function resolveAutopilotValue(settings: Settings) {
   return { policy, enabled: policy.enabled ? ('on' as const) : ('off' as const) };
 }
 
-export type RatingTone = 'green' | 'amber' | 'red';
+type RatingTone = 'green' | 'amber' | 'red';
 
-export interface RatingBadge {
+interface RatingBadge {
   key: 'confidence' | 'risk';
   label: string;
   tone: RatingTone;

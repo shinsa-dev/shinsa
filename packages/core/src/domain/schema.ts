@@ -91,7 +91,7 @@ export type Unbranded<T> =
       ? { [Key in keyof T]: Unbranded<T[Key]> }
       : T;
 
-export const AutopilotPatch = Strict(
+const AutopilotPatch = Strict(
   {
     enabled: Schema.optionalKey(Bool),
     approveUpTo: Schema.optionalKey(Choice(AUTOPILOT_RISKS)),
