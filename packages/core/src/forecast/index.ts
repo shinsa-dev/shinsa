@@ -1,5 +1,6 @@
 import { DAY_MS } from '../domain/time.ts';
-import type { AccountSummary, AccountUsage } from '../protocol/accounts.ts';
+import { CLAUDE_PROVIDER } from '../agent-models/index.ts';
+import type { AccountSummary, AccountsSnapshot, AccountUsage } from '../protocol/accounts.ts';
 import type {
   ForecastAccount,
   ForecastOutage,
@@ -24,7 +25,25 @@ export const FORECAST_LIMITS = {
   fullPercent: 100,
   searchSteps: 40,
   paceScale: 10,
+  weeklyClear: 'seven_day',
+  paceStep: 1,
 } as const;
+
+export interface ForecastOptions {
+  grants?: boolean;
+}
+
+export function resolveGrantRefill(usage: AccountUsage, now: number) {
+  const resets = (usage.resetGrants ?? [])
+    .filter(
+      (grant) =>
+        grant.usableNow &&
+        grant.clears.includes(FORECAST_LIMITS.weeklyClear) &&
+        (grant.endsAt === null || grant.endsAt > now)
+    )
+    .reduce((total, grant) => total + Math.max(0, grant.left), 0);
+  return resets * FORECAST_LIMITS.fullPercent;
+}
 
 interface Simulation {
   dryAt: number | null;
@@ -47,7 +66,8 @@ export function resolveForecastAccount(
   label: string,
   usage: AccountUsage,
   spentUntil: number | null,
-  now: number
+  now: number,
+  options: ForecastOptions = {}
 ): ForecastAccount | null {
   const weekly = usage.windows.find((window) => window.kind === 'weekly');
   if (!weekly) return null;
@@ -59,16 +79,70 @@ export function resolveForecastAccount(
     resetsAt += FORECAST_LIMITS.weekMs;
     left = FORECAST_LIMITS.fullPercent;
   }
-  return { id, label, left, resetsAt };
+  const refill = options.grants ? resolveGrantRefill(usage, now) : 0;
+  return { id, label, left: left + refill, resetsAt };
 }
 
-export function listForecastAccounts(accounts: AccountSummary[], now: number): ForecastAccount[] {
+export function listForecastAccounts(
+  accounts: AccountSummary[],
+  now: number,
+  options: ForecastOptions = {}
+): ForecastAccount[] {
   return accounts
     .filter((account) => !account.paused && account.signIn !== 'signed_out')
     .map((account) =>
-      resolveForecastAccount(account.id, account.email ?? account.id, account.usage, account.spentUntil, now)
+      resolveForecastAccount(
+        account.id,
+        account.email ?? account.id,
+        account.usage,
+        account.spentUntil,
+        now,
+        options
+      )
     )
     .filter((account) => account !== null);
+}
+
+export function listForecastProviders(snapshot: AccountsSnapshot) {
+  const others = (snapshot.providers ?? [])
+    .map((login) => login.provider)
+    .filter((provider) => provider !== CLAUDE_PROVIDER);
+  return [CLAUDE_PROVIDER, ...others];
+}
+
+export function listProviderForecastAccounts(
+  snapshot: AccountsSnapshot,
+  provider: string,
+  now: number,
+  options: ForecastOptions = {}
+): ForecastAccount[] {
+  if (provider === CLAUDE_PROVIDER) return listForecastAccounts(snapshot.accounts, now, options);
+  const login = snapshot.providers?.find((entry) => entry.provider === provider);
+  if (!login?.usage || login.status === 'signed_out') return [];
+  const account = resolveForecastAccount(provider, login.email ?? login.label, login.usage, null, now, options);
+  return account ? [account] : [];
+}
+
+export function resolveRecordablePace(pace: number | null) {
+  return pace !== null && Number.isFinite(pace) ? Math.max(0, pace) : null;
+}
+
+export function isPaceMoved(known: number | null, pace: number | null) {
+  const next = resolveRecordablePace(pace);
+  if (next === null || known === null) return next !== known;
+  return Math.abs(known - next) >= FORECAST_LIMITS.paceStep;
+}
+
+export interface ProviderPace {
+  provider: string;
+  pace: number | null;
+}
+
+export function listProviderPaces(snapshot: AccountsSnapshot, now: number): ProviderPace[] {
+  return listForecastProviders(snapshot).map((provider) => {
+    const accounts = listProviderForecastAccounts(snapshot, provider, now, { grants: true });
+    return { provider, pace: resolveUsageForecast(accounts, now)?.safePace ?? null };
+  });
 }
 
 function sumLeft(budgets: readonly { left: number }[]) {

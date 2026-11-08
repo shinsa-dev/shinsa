@@ -18,6 +18,7 @@ export const STATE_RECORDS = [
   'away',
   'focusHistory',
   'accountPlans',
+  'usagePaces',
 ] as const;
 
 export type StateRecordKey = (typeof STATE_RECORDS)[number];

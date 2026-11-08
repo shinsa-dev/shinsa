@@ -6,8 +6,10 @@ import {
   type ChatNotice,
   DomainError,
   type FastModeAvailability,
+  isPaceMoved,
   listActiveRuns,
   listOpenGates,
+  listProviderPaces,
   type ProviderLogin,
   resolveAgentModel,
   resolveCandidateSpentUntil,
@@ -249,6 +251,27 @@ export class Accounts extends Context.Service<
         for (const account of changedPlans) yield* recordPlan(account, state.seq);
       });
 
+      const recordPaces = Effect.fn('Accounts.recordPaces')(function* (next: AccountsSnapshot) {
+        if (inspect) return;
+        const state = yield* engine.state;
+        const now = yield* Clock.currentTimeMillis;
+        const moved = listProviderPaces(next, now).filter(({ provider, pace }) =>
+          isPaceMoved(state.usagePaces[provider]?.pace ?? null, pace)
+        );
+        for (const { provider, pace } of moved) {
+          yield* dispatch(
+            { type: 'usage.pace_recorded', provider, pace },
+            `usage-pace:${provider}:${pace ?? 'none'}:${state.seq}`
+          ).pipe(
+            Effect.catch((failure) =>
+              Effect.logWarning('[Accounts] Could not record the safe usage pace').pipe(
+                Effect.annotateLogs({ provider, error: describeError(failure) })
+              )
+            )
+          );
+        }
+      });
+
       const changed = Effect.gen(function* () {
         if (yield* Ref.get(stopped)) return;
         const next = yield* snapshot;
@@ -257,6 +280,7 @@ export class Accounts extends Context.Service<
         yield* recordDuplicates(next.duplicates ?? []);
         for (const listener of yield* Ref.get(listeners)) yield* listener(next);
         yield* recordPlans(next.accounts);
+        yield* recordPaces(next);
       });
 
       const subscribe = (listener: (snapshot: AccountsSnapshot) => Effect.Effect<void>) =>

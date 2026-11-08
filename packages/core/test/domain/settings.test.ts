@@ -8,10 +8,12 @@ import {
   resolveAccountSwitchAt,
   resolveAgentFastMode,
   resolveAttentionLimit,
+  resolveAutoPace,
   resolveCompaction,
   resolveDelegationLimit,
   resolveFastMode,
   resolveIdleCompaction,
+  resolveProjectOrder,
   resolveWatchdogDefaults,
   resolveWatchdogsIgnoreUsageLimits,
   SETTINGS_KEYS,
@@ -66,6 +68,8 @@ describe('the settings a command may change', () => {
       placementPolicies: [],
       shareLimit: 'until_done',
       sharePreset: 'standard',
+      autoPace: false,
+      projectOrder: [],
     };
     expect(Object.keys(every).sort()).toEqual([...SETTINGS_KEYS].sort());
   });
@@ -80,6 +84,16 @@ describe('resolveWatchdogsIgnoreUsageLimits', () => {
     expect(
       resolveWatchdogsIgnoreUsageLimits({ ...createSettings(), watchdogsIgnoreUsageLimits: false })
     ).toBe(false);
+  });
+});
+
+describe('resolveAutoPace and resolveProjectOrder', () => {
+  test('Auto pace is off and no project is ranked unless you set them', () => {
+    const unset = { ...createSettings(), autoPace: undefined, projectOrder: undefined };
+    expect(resolveAutoPace(unset)).toBe(false);
+    expect(resolveProjectOrder(unset)).toEqual([]);
+    expect(resolveAutoPace({ ...createSettings(), autoPace: true })).toBe(true);
+    expect(resolveProjectOrder({ ...createSettings(), projectOrder: ['a', 'b'] })).toEqual(['a', 'b']);
   });
 });
 

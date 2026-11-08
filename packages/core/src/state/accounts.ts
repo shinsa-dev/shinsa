@@ -28,3 +28,11 @@ export function applyAccountPlan(state: ShinsaState, event: EventOf<'account.pla
     at: event.at,
   });
 }
+
+export function applyUsagePace(state: ShinsaState, event: EventOf<'usage.pace_recorded'>) {
+  if (event.pace === null) {
+    removeEntry(state, 'usagePaces', event.provider);
+    return;
+  }
+  writeEntry(state, 'usagePaces', event.provider, { provider: event.provider, pace: event.pace, at: event.at });
+}

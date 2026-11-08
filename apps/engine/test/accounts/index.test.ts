@@ -611,6 +611,42 @@ describe('recording each account’s plan', () => {
   });
 });
 
+describe('recording the safe usage pace', () => {
+  function paceCommands(world: World) {
+    return dispatched(world).filter((command) => command.type === 'usage.pace_recorded');
+  }
+
+  test('records each provider’s safe pace from its usage, again only once it moves', async () => {
+    const world = await createWorld({ registry: true });
+    await addAccount(world, 'a@example.com', 10);
+    const recorded = paceCommands(world).at(-1);
+    expect(recorded).toMatchObject({ type: 'usage.pace_recorded', provider: 'claude' });
+    const pace = recorded?.type === 'usage.pace_recorded' ? recorded.pace : null;
+    expect(pace).toBeGreaterThan(0);
+    world.stub.update((state) => {
+      state.usagePaces.claude = { provider: 'claude', pace: pace ?? 0, at: 1 };
+    });
+    const before = paceCommands(world).length;
+    await world.accounts.store.update(world.accounts.store.list()[0]?.id ?? '', { switchAt: 80 });
+    expect(paceCommands(world)).toHaveLength(before);
+  });
+
+  test('a pace the log refuses is only logged, and inspect mode records none', async () => {
+    const world = await createWorld({ registry: true });
+    const logs = captureLogs();
+    world.stub.reject((command) => command.type === 'usage.pace_recorded', new Error('the log is closed'));
+    await addAccount(world, 'a@example.com', 10);
+    expect(logs.fieldsOf('[Accounts] Could not record the safe usage pace')[0]).toMatchObject({
+      provider: 'claude',
+    });
+    await world.accounts.stop();
+    const inspected = await createWorld({ root: world.root, inspect: true });
+    await inspected.accounts.start();
+    expect(paceCommands(inspected)).toEqual([]);
+    await inspected.accounts.stop();
+  });
+});
+
 describe('importing logins', () => {
   test('an account from claude-swap gets a sign-in of its own, and claude-swap’s login is never read', async () => {
     const world = await createWorld({ registry: true });
@@ -1971,7 +2007,7 @@ describe('a provider with a sign-in of its own (Codex)', () => {
       { type: 'provider.record_sign_in', provider: 'codex' },
     ]);
     expect(world.stub.dispatched.some((command) => command.type === 'account.signed_in')).toBe(false);
-    expect(world.stub.commandIds.at(-1)).toBe('provider-login:codex:gate-1');
+    expect(world.stub.commandIds).toContain('provider-login:codex:gate-1');
   });
 
   test('a sign-in that cannot be carried on is logged, and a failed sign-in check keeps the last one', async () => {

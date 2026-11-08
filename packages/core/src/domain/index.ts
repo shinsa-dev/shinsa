@@ -202,6 +202,8 @@ export {
   resolveSharePreset,
   resolveWatchdogDefaults,
   resolveWatchdogsIgnoreUsageLimits,
+  resolveAutoPace,
+  resolveProjectOrder,
   SETTINGS_KEYS,
   type Settings,
   SHARE_LIMITS,

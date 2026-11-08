@@ -1,4 +1,5 @@
 import { resolvePlanKey } from '../accounts/plan.ts';
+import { isPaceMoved, resolveRecordablePace } from '../forecast/index.ts';
 import { CLAUDE_PROVIDER, resolveProviderLabel } from '../agent-models/index.ts';
 import type { CommandOf } from '../commands/index.ts';
 import {
@@ -220,6 +221,16 @@ export function recordAccountPlan(decider: Decider, command: CommandOf<'account.
     accountId: command.accountId,
     provider: command.provider,
     plan,
+  });
+}
+
+export function recordUsagePace(decider: Decider, command: CommandOf<'usage.pace_recorded'>) {
+  const known = decider.state.usagePaces[command.provider]?.pace ?? null;
+  if (!isPaceMoved(known, command.pace)) return;
+  decider.emit({
+    type: 'usage.pace_recorded',
+    provider: command.provider,
+    pace: resolveRecordablePace(command.pace),
   });
 }
 

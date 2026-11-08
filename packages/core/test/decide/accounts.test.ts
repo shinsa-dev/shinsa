@@ -725,3 +725,34 @@ describe('recording the plan each account is on', () => {
     expect(harness.state.accountPlans[HOME.id]?.plan).toBe('pro');
   });
 });
+
+describe('recording the safe pace of each provider', () => {
+  function recordPace(harness: Harness, pace: number | null, provider = 'claude') {
+    return harness.send({ type: 'usage.pace_recorded', provider, pace });
+  }
+
+  test('records a provider’s pace, and again only once it moves by a whole point', () => {
+    const harness = createHarness();
+    recordPace(harness, 140.4);
+    expect(harness.state.usagePaces.claude).toMatchObject({ provider: 'claude', pace: 140.4 });
+    expect(recordPace(harness, 141).events).toHaveLength(0);
+    recordPace(harness, 138.9);
+    expect(harness.state.usagePaces.claude?.pace).toBe(138.9);
+  });
+
+  test('keeps a pace at zero, never below, and treats a pace that is not a number as none', () => {
+    const harness = createHarness();
+    recordPace(harness, -3, 'codex');
+    expect(harness.state.usagePaces.codex?.pace).toBe(0);
+    recordPace(harness, Number.NaN, 'codex');
+    expect(harness.state.usagePaces.codex).toBeUndefined();
+  });
+
+  test('forgets a provider with nothing left to forecast, and records nothing for one it never paced', () => {
+    const harness = createHarness();
+    expect(recordPace(harness, null).events).toHaveLength(0);
+    recordPace(harness, 20);
+    recordPace(harness, null);
+    expect(harness.state.usagePaces.claude).toBeUndefined();
+  });
+});
