@@ -1,7 +1,5 @@
 import { isTaskSettled, resolveFirstName, type Task, type TaskEscalation } from '@shinsa/core';
-import { cn } from '@shinsa/ui/lib/utils';
 import { Panel } from '@/components/layout/surface/panel.tsx';
-import { SMART_LINK } from '@/components/links/link.tsx';
 import { useReadOnly, useReadOnlyOwner } from '@/components/task/read-only.tsx';
 import { usePersonPresence } from '@/hooks/use-team-presence.ts';
 import { HANDOFF_TITLE, listHandoffParagraphs } from '@/lib/autopilot.ts';
@@ -14,12 +12,10 @@ function HandoffParagraphs({
   escalation,
   owner,
   ownerId,
-  url,
 }: {
   escalation: TaskEscalation;
   owner: string | null;
   ownerId: string | null;
-  url: string | null;
 }) {
   const presence = usePersonPresence(ownerId)?.status ?? null;
   const paragraphs = listHandoffParagraphs(escalation, { owner, presence, now: Date.now() });
@@ -31,11 +27,6 @@ function HandoffParagraphs({
           <p className='text-fg-3'>{paragraph.text}</p>
         </section>
       ))}
-      {url && (
-        <a data-smart href={url} target='_blank' rel='noreferrer' className={cn(SMART_LINK, 'w-fit')}>
-          Open the pull request
-        </a>
-      )}
     </div>
   );
 }
@@ -60,12 +51,7 @@ export function HandoffPanel({ task }: { task: Task }) {
       title={HANDOFF_TITLE[readOnly ? 'teammate' : 'owner']}
       icon='IconMegaphone'
     >
-      <HandoffParagraphs
-        escalation={task.escalation}
-        owner={owner}
-        ownerId={readOnly ? ownerId : null}
-        url={task.escalation.handoff.pullRequestUrl}
-      />
+      <HandoffParagraphs escalation={task.escalation} owner={owner} ownerId={readOnly ? ownerId : null} />
     </Panel>
   );
 }
