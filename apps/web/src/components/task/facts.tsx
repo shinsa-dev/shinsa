@@ -357,6 +357,13 @@ function CostFact({ state, task }: { state: ShinsaState; task: Task }) {
           ))}
         </InfoSection>
       )}
+      {cost.build && (
+        <InfoSection title='Build estimate'>
+          {cost.build.map((row) => (
+            <InfoRow key={row.key} label={row.label} value={row.value} />
+          ))}
+        </InfoSection>
+      )}
     </FactPopover>
   );
 }

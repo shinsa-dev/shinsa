@@ -14,6 +14,13 @@ export {
 } from './window.ts';
 
 export {
+  BUILD_ESTIMATE_LIMITS,
+  type BuildEstimate,
+  DEFAULT_BUILD_COSTS,
+  resolveBuildEstimate,
+} from './estimate.ts';
+
+export {
   resolveMeterWindow,
   resolveRatePool,
   resolveUsageRates,

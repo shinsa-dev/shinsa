@@ -67,6 +67,7 @@ describe('the cost of a task', () => {
       budget: { share: 1, over: true },
       byRole: [{ key: 'agent', label: 'Agent', cost: '$1.75', tokens: '1.2M tokens' }],
       byPhase: [{ key: 'phase-0', label: 'Write a', cost: '$1.25', tokens: '1.2M tokens' }],
+      build: null,
     });
     expect(describeBudgetRetry(state, task)).toBe('Allow another $1.00');
   });
@@ -111,6 +112,7 @@ describe('the cost of a task', () => {
       budget: null,
       byRole: [{ key: 'agent', label: 'Agent', cost: '4%', tokens: '5k tokens' }],
       byPhase: [{ key: 'phase-0', label: 'Write a', cost: '3%', tokens: '2.5k tokens' }],
+      build: null,
     });
     const costLimited = createShinsaState({
       tasks: [task],
@@ -187,5 +189,49 @@ describe('the cost of a task', () => {
       heading: '$3.00',
       budget: null,
     });
+  });
+
+  it('estimates the build before it starts, says what is left once it has, and drops it once every phase is done', () => {
+    const plan = {
+      version: 1,
+      body: '',
+      document: {
+        ...DOCUMENT,
+        phases: [
+          { title: 'Write a', detail: 'd' },
+          { title: 'Write b', detail: 'd' },
+        ],
+      },
+      proposedAt: 1,
+    };
+    const pending = { status: 'pending' as const, at: 1 };
+    const done = { status: 'done' as const, at: 1 };
+    const planning = createRun({ id: 'p', taskId: 't', purpose: 'plan', usage: usage(0.5) });
+    const fresh = createTask({ id: 't', plan, phases: [pending, pending] });
+    expect(resolveCostFacts(createShinsaState({ tasks: [fresh], runs: [planning] }), fresh)?.build).toEqual([
+      { key: 'whole', label: 'Whole build', value: 'About $7.60' },
+      { key: 'basis', label: 'Based on', value: 'The usual cost of a plan this size' },
+    ]);
+    const past = Array.from({ length: 3 }, (_, index) =>
+      createTask({ id: `past-${index}`, plan, phases: [done, done] })
+    );
+    const pastRuns = past.map((task) =>
+      createRun({ id: `${task.id}-b`, taskId: task.id, purpose: 'build', usage: usage(4) })
+    );
+    const halfway = createTask({ id: 't', plan, phases: [done, pending] });
+    const building = createRun({ id: 'b', taskId: 't', purpose: 'build', ...charge(9_000, usage(3)) });
+    const state = createShinsaState({
+      tasks: [halfway, ...past],
+      runs: [planning, building, ...pastRuns, ...LEARNED],
+    });
+    expect(resolveCostFacts(state, halfway)?.build).toEqual([
+      { key: 'whole', label: 'Whole build', value: 'About 11%' },
+      { key: 'left', label: 'Left to build', value: 'About 5%' },
+      { key: 'basis', label: 'Based on', value: '3 similar builds you ran' },
+    ]);
+    const finished = createTask({ id: 't', plan, phases: [done, done] });
+    expect(
+      resolveCostFacts(createShinsaState({ tasks: [finished], runs: [planning] }), finished)?.build
+    ).toBeNull();
   });
 });
