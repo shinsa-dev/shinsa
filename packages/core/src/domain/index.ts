@@ -323,6 +323,7 @@ export {
   TASK_SESSION_ROLES,
 } from './tools.ts';
 export {
+  describeFocusProjects,
   isProjectInFocus,
   NO_FOCUS,
   NO_FOCUS_PROJECTS,
@@ -330,6 +331,7 @@ export {
   resolveFocusSelection,
   type SingleProjectFocus,
   selectSingleFocusProject,
+  serializeNames,
 } from './focus.ts';
 export type * from './types.ts';
 export {

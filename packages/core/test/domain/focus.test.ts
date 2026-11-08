@@ -1,10 +1,12 @@
 import { describe, expect, test } from 'bun:test';
 import {
+  describeFocusProjects,
   isProjectInFocus,
   NO_FOCUS_PROJECTS,
   normaliseFocusProjects,
   resolveFocusSelection,
   selectSingleFocusProject,
+  serializeNames,
 } from '../../src/index.ts';
 
 describe('the projects in focus', () => {
@@ -41,5 +43,18 @@ describe('the projects in focus', () => {
     expect(resolveFocusSelection({ projectId: 'a' })).toEqual({ projectIds: ['a'], except: false });
     expect(resolveFocusSelection({ projectId: null })).toEqual(NO_FOCUS_PROJECTS);
     expect(isProjectInFocus({ projectId: 'a' }, 'b')).toBe(false);
+  });
+
+  test('names the projects in focus in order, all but some, or nothing it knows', () => {
+    const names: Record<string, string> = { a: 'Work', b: 'Home', c: 'Shinsa' };
+    const nameOf = (projectId: string) => names[projectId];
+    expect(serializeNames([])).toBe('');
+    expect(serializeNames(['Work'])).toBe('Work');
+    expect(serializeNames(['Home', 'Shinsa', 'Work'])).toBe('Home, Shinsa and Work');
+    expect(describeFocusProjects({ projectIds: ['a', 'b'], except: false }, nameOf)).toBe('Home and Work');
+    expect(describeFocusProjects({ projectIds: ['a'], except: true }, nameOf)).toBe('everything but Work');
+    expect(describeFocusProjects({ projectId: 'c' }, nameOf)).toBe('Shinsa');
+    expect(describeFocusProjects({ projectIds: ['gone'], except: true }, nameOf)).toBeNull();
+    expect(describeFocusProjects(NO_FOCUS_PROJECTS, nameOf)).toBeNull();
   });
 });

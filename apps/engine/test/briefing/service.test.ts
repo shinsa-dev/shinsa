@@ -185,6 +185,13 @@ describe('what the model is told', () => {
       NOW
     );
     expect(prompt).toContain('Focus: Superwall.');
+    const allBut = describeBriefingPrompt(
+      { ...state, projects: { a1: { name: 'Superwall' }, a2: { name: 'Work' } } } as unknown as ShinsaState,
+      { ...queue, focus: { projectIds: ['a2'], except: true } },
+      NOW
+    );
+    expect(allBut).toContain('Focus: everything but Work.');
+    expect(describeBriefingPrompt(state, queue, NOW)).toContain('No focus set.');
     expect(prompt).toContain(
       'plan approval: the plan is written, nothing is built yet; opened under an hour ago'
     );

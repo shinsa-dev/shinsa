@@ -29,3 +29,18 @@ export function selectSingleFocusProject(focus: FocusProjects | SingleProjectFoc
   const { projectIds, except } = resolveFocusSelection(focus);
   return !except && projectIds.length === 1 ? (projectIds[0] ?? null) : null;
 }
+
+export function serializeNames(names: readonly string[]) {
+  if (names.length <= 1) return names[0] ?? '';
+  return `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`;
+}
+
+export function describeFocusProjects(
+  focus: FocusProjects | SingleProjectFocus,
+  nameOf: (projectId: string) => string | undefined
+) {
+  const { projectIds, except } = resolveFocusSelection(focus);
+  const names = projectIds.flatMap((projectId) => nameOf(projectId) ?? []).sort((a, b) => a.localeCompare(b));
+  if (names.length === 0) return null;
+  return except ? `everything but ${serializeNames(names)}` : serializeNames(names);
+}
