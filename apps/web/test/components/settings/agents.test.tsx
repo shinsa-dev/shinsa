@@ -284,35 +284,48 @@ describe('Settings → Agents → Autopilot', () => {
       }) as typeof fetch);
     }
 
-    async function openContact() {
-      fireEvent.click(screen.getByRole('combobox', { name: 'Escalate to' }));
+    const ADD = 'Add from Slack';
+
+    async function openPicker() {
+      fireEvent.click(screen.getByRole('button', { name: ADD }));
       await settle();
-      return screen.getAllByRole('listbox').at(-1) as HTMLElement;
+      await settle();
+      return screen.getByRole('dialog');
+    }
+
+    function pick(dialog: HTMLElement, name: string) {
+      fireEvent.click(within(dialog).getByRole('option', { name }));
     }
 
     it('reads your team by default, and is left out while urgent changes only wait or merge', async () => {
       spyOnEngine();
+      answerSlack();
       const { unmount } = renderAgents(ESCALATING);
       await settle();
-      expect(screen.getByRole('combobox', { name: 'Escalate to' }).textContent).toBe('Your team in Shinsa');
+      expect(screen.getByText(AUTOPILOT_ROWS.contacts.title)).toBeTruthy();
+      expect(
+        screen.getByText('Your team in Needs you. Add Slack channels or teammates to tell them too.')
+      ).toBeTruthy();
       expect(screen.queryByRole('combobox', { name: 'Slack workspace' })).toBeNull();
       unmount();
       renderAgents({ ...ESCALATING, autopilot: { ...ESCALATING.autopilot, urgent: 'merge' } } as Settings);
-      expect(screen.queryByRole('combobox', { name: 'Escalate to' })).toBeNull();
+      expect(screen.queryByText(AUTOPILOT_ROWS.contacts.title)).toBeNull();
     });
 
-    it('disables the Slack choices until Slack is connected, saying where', async () => {
+    it('disables adding from Slack until Slack is connected, saying where', async () => {
       spyOnEngine();
       answerSlack({ ...SLACK, links: [] });
       renderAgents(ESCALATING);
       await settle();
-      const list = await openContact();
-      const channel = within(list).getByRole('option', { name: /a Slack channel/ });
-      expect(channel.textContent).toContain('Connect Slack in Settings → General first');
-      expect(channel.getAttribute('aria-disabled')).toBe('true');
+      expect((screen.getByRole('button', { name: ADD }) as HTMLButtonElement).disabled).toBe(true);
+      expect(
+        screen.getByText(
+          'Your team in Needs you. To tell Slack too: Connect Slack in Settings → General first.'
+        )
+      ).toBeTruthy();
     });
 
-    it('disables them on an engine that cannot send to Slack', async () => {
+    it('disables it on an engine that cannot send to Slack', async () => {
       const engine = resolveEngineInfo('1.0.0');
       spyOnEngine({
         ...engine,
@@ -321,55 +334,76 @@ describe('Settings → Agents → Autopilot', () => {
       answerSlack();
       renderAgents(ESCALATING);
       await settle();
-      const list = await openContact();
-      expect(within(list).getByRole('option', { name: /a teammate on Slack/ }).textContent).toContain(
-        'Update Shinsa on this machine first'
-      );
+      expect((screen.getByRole('button', { name: ADD }) as HTMLButtonElement).disabled).toBe(true);
+      expect(screen.getByText(/Update Shinsa on this machine first/)).toBeTruthy();
     });
 
-    it('saves a channel only once one is picked, from the channels Shinsa is in', async () => {
+    it('searches the channels Shinsa is in and the people, and adds the one you pick', async () => {
       spyOnEngine();
       answerSlack();
       renderAgents(ESCALATING);
       await settle();
-      await choose('Escalate to', 'Your team and a Slack channel');
-      expect(listSentCommands()).toEqual([]);
-      expect(screen.getByRole('combobox', { name: 'Slack workspace' }).textContent).toBe('Overclock');
+      const dialog = await openPicker();
+      expect(within(dialog).getByText('Channels Shinsa is in')).toBeTruthy();
+      expect(within(dialog).getByText('People')).toBeTruthy();
+      fireEvent.change(within(dialog).getByPlaceholderText('Search channels and people'), {
+        target: { value: 'ka' },
+      });
       await settle();
-      expect(screen.getByRole('combobox', { name: 'Channel' }).textContent).toBe('Choose a channel');
-      expect(screen.getByText(AUTOPILOT_ROWS.slack_channel.description)).toBeTruthy();
-      await choose('Channel', 'eng');
+      expect(within(dialog).queryByRole('option', { name: 'eng' })).toBeNull();
+      pick(dialog, 'Kai');
       expect(listSentCommands()).toEqual([
         {
           type: 'settings.change',
           patch: {
             autopilot: {
               ...ESCALATING.autopilot,
-              contact: { kind: 'slack_channel', teamId: 'T1', id: 'C2', name: 'eng' },
+              contacts: [{ kind: 'slack_person', teamId: 'T1', id: 'U7', name: 'Kai' }],
             },
           },
         },
       ]);
     });
 
-    it('shows a saved teammate, and going back to your team saves at once', async () => {
+    it('keeps a channel and a teammate both, each removable on its own', async () => {
       spyOnEngine();
       answerSlack();
-      const contact = { kind: 'slack_person' as const, teamId: 'T1', id: 'U7', name: 'Kai' };
-      renderAgents({ ...ESCALATING, autopilot: { ...ESCALATING.autopilot!, contact } } as Settings);
+      const channel = { kind: 'slack_channel' as const, teamId: 'T1', id: 'C1', name: 'oncall' };
+      const person = { kind: 'slack_person' as const, teamId: 'T1', id: 'U7', name: 'Kai' };
+      renderAgents({
+        ...ESCALATING,
+        autopilot: { ...ESCALATING.autopilot!, contacts: [channel, person] },
+      } as Settings);
       await settle();
-      expect(screen.getByRole('combobox', { name: 'Escalate to' }).textContent).toBe(
-        'Your team and a teammate on Slack'
-      );
-      expect(screen.getByRole('combobox', { name: 'Teammate' }).textContent).toBe('Kai');
-      await choose('Slack workspace', 'Overclock');
-      await choose('Escalate to', 'Your team in Shinsa');
+      expect(screen.getByText('#oncall')).toBeTruthy();
+      expect(screen.getByText('Posts in this Slack channel in Overclock.')).toBeTruthy();
+      expect(screen.getByText('Sends a direct message in Slack in Overclock.')).toBeTruthy();
+      const dialog = await openPicker();
+      expect(within(dialog).getByRole('option', { name: 'oncall' }).querySelector('.invisible')).toBeNull();
+      expect(within(dialog).getByRole('option', { name: 'eng' }).querySelector('.invisible')).toBeTruthy();
+      fireEvent.click(screen.getByRole('button', { name: 'Stop telling #oncall' }));
       expect(listSentCommands()).toEqual([
         {
           type: 'settings.change',
-          patch: { autopilot: { ...ESCALATING.autopilot, contact: { kind: 'team' } } },
+          patch: { autopilot: { ...ESCALATING.autopilot, contacts: [person] } },
         },
       ]);
+    });
+
+    it('asks which workspace when Slack is connected in more than one', async () => {
+      spyOnEngine();
+      answerSlack({
+        ...SLACK,
+        links: [
+          ...SLACK.links,
+          { teamId: 'T2', teamName: 'Acme', userId: 'U1', userName: 'Christo', linkedAt: 1 },
+        ],
+      });
+      renderAgents(ESCALATING);
+      await settle();
+      expect(screen.getByRole('combobox', { name: 'Slack workspace' }).textContent).toBe('Overclock');
+      await choose('Slack workspace', 'Acme');
+      expect(screen.getByRole('combobox', { name: 'Slack workspace' }).textContent).toBe('Acme');
     });
   });
 });

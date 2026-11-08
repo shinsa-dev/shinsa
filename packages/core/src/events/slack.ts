@@ -1,4 +1,4 @@
-import type { AutopilotSlackContact } from '../domain/settings.ts';
+import type { AutopilotContact } from '../domain/settings.ts';
 import type { SlackDecided, SlackThreadLink } from '../domain/slack.ts';
 
 export type SlackEventBody =
@@ -11,7 +11,7 @@ export type SlackEventBody =
       type: 'slack.escalation_sent';
       taskId: string;
       escalatedAt: number;
-      contact: AutopilotSlackContact;
+      contact: AutopilotContact;
       channelId: string | null;
       ts: string | null;
       problem: string | null;

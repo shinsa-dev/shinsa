@@ -62,7 +62,7 @@ One definition per term. **Code** is the name in `packages/core`; **UI** is the 
 | judgement call | A choice the agent made in a phase, with its reason and the alternatives it rejected | `JudgementCall` | Judgement call, "Judgement calls" |
 | disagreement | A judgement call the reviewer would have made differently, with why | `ReviewDisagreement`, `report_review`'s `disagreements`, `Task.reviewDisagreements` | Disputed, "The agent review disagrees" |
 | rating | The reviewer's two ratings of a change: how sure it is (`confidence`) and what breaks if it is wrong (`risk`), each low, medium or high | `ReviewRatings`, `ReviewRating`, `report_review`'s `confidence` and `risk`, `Task.reviewRatings` | Confidence, Risk |
-| Autopilot | Your pre-approval: a policy that approves a review, merges, or escalates an urgent change to your team for you | `autopilot` (`AutopilotPolicy`, its `contact` an `AutopilotContact`), `Task.autopiloted`, `Task.escalation`, `Task.slackEscalation`, `Gate.autopilotDue`, `autopilot.fire` | Autopilot, Approved for you, Sent to your team, Sent by your team, Why this reached you, Escalate to |
+| Autopilot | Your pre-approval: a policy that approves a review, merges, or escalates an urgent change to your team for you | `autopilot` (`AutopilotPolicy`, its `contacts` a list of `AutopilotContact`), `Task.autopiloted`, `Task.escalation`, `Task.slackEscalation`, `Gate.autopilotDue`, `autopilot.fire` | Autopilot, Approved for you, Sent to your team, Sent by your team, Why this reached you, Escalate to |
 | spot | A line range the work report points you at, ranked critical, high or normal; a key piece of code also has a title and an explanation | `CodeSpot` | spot, "Key code" |
 | walkthrough | The Agent's technical account of the whole change on its last phase: approach, flow, risks, testing (what the tests cover and a guide to try it by hand) and the steps around the merge; a fix revises the parts it changes | `ReportWalkthrough`, `complete_phase`'s `walkthrough`; `ReportWalkthroughRevision`, `complete_fix`'s | Approach, How it works, Risks and edge cases, How to test, Pre-merge, Post-merge |
 | request (an iteration) | Something you sent an agent that its next hand-over answers (changes at a gate, line comments, feedback on a plan, a message to a running or resting agent, a follow-up, a restarted step), with its reply: a headline, each point you raised marked done, answered or not changed with a note, and what you do now. The chat shows it on the hand-over's card and the overview on the card it belongs to, the earlier ones under Earlier requests, so you never read the chat to know what changed | `Iteration` (`Task.iterations`), `IterationRequest`, `AgentReply` (the `reply` of every hand-over that answers one), `ReplyingHandOver`, `ReplyPoint`, `ReplyOutcome`, `iteration.requested`, `iteration.answered` | "Your request", Earlier requests, Done, Answered, Not changed, "What to do now" |
@@ -1038,7 +1038,7 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `slack.mention` | `POST /api/slack/events`, command id `slack:<event id>` | a signed `SlackMention`: messages the open task of its thread with 👀 on the mention (kept with 📥 while a gate is open, `slack.react`), else asks for `slack.evaluate` |
 | `slack.start_task` | the `slack.evaluate` effect, when the mention is work | the mention: starts a task as Home does and links it to the thread, or messages the thread's task when one opened meanwhile |
 | `slack.record_status` | the `slack.status` effect | the ts of the task's card and the reaction now on the mention, once Slack has them |
-| `slack.record_escalation` | the `slack.escalate` effect | where an Autopilot escalation went in Slack (`channelId`, `ts`) or why it could not (`problem`), once per escalation: `slack.escalation_sent` |
+| `slack.record_escalation` | the `slack.escalate` effect | where an Autopilot escalation went in Slack (`channelId`, `ts`) or why it could not (`problem`), once per escalation and contact: `slack.escalation_sent` |
 | `slack.decide` | `POST /api/slack/interactions`, command id `slack-decide:<trigger id>` | a signed `SlackDecision` from someone app.shinsa.dev found to be an owner or member of the machine: decides an open gate of the task linked to that thread as Shinsa does (`answerGate`, so `plan_changed` and `gate_closed` hold), for the decisions `SLACK_DECIDABLE` allows, then `slack.decided`; refused `slack_decision_closed`, `slack_decision_refused` or `slack_decision_choice` |
 
 ## Events
@@ -1168,7 +1168,7 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `on_behalf.acted` | a command sent on your behalf changed something (command, task, sentence, acting task) |
 | `slack.thread_linked` | a task was started from a Slack thread (the whole `link`, `Task.slack`; "Started from a Slack thread") |
 | `slack.status_posted` | the task's card has this `ts` and its mention this `reaction` now |
-| `slack.escalation_sent` | an Autopilot escalation was posted in Slack, or could not be: `Task.slackEscalation`, and "Sent to #oncall in Slack" or "Could not reach #oncall in Slack" in the activity |
+| `slack.escalation_sent` | an Autopilot escalation was posted in Slack, or could not be, one per contact: `Task.slackEscalations`, and "Sent to #oncall in Slack" or "Could not reach #oncall in Slack" in the activity |
 | `slack.decided` | a gate of the task was decided from Slack: the Slack user and what they did ("approved the plan"), shown on the card's status (`Task.slack.decided`) |
 
 ## Effects
@@ -1209,7 +1209,7 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `slack.post` | replay_safe | `slack:<thread key>` | none: posts the result, or "Merged" or "Done" when the task ends, as a new message through app.shinsa.dev |
 | `slack.status` | replay_safe | `slack:<thread key>` | `slack.record_status` for a new card or reaction; edits the card (the open gate with its buttons, else the status) at most every 5 s and moves the mention's reaction |
 | `slack.react` | replay_safe | `slack:<thread key>` | none: 👀 or 📥 on a later mention in the thread, through `/__remote/slack/react`; key `slack.react:<thread key>:<message ts>` |
-| `slack.escalate` | replay_safe | `slack-escalation:<task>` | `slack.record_escalation` after posting an open escalation to the policy's channel or person through `/__remote/slack/notify`; once it cleared, edits that message and records nothing; key `slack.escalate:<task>:<escalated at>:<seq>` |
+| `slack.escalate` | replay_safe | `slack-escalation:<task>` | `slack.record_escalation` after posting an open escalation to one of the policy's channels or people through `/__remote/slack/notify`; once it cleared, edits that message and records nothing; key `slack.escalate:<task>:<escalated at>:<seq>` |
 
 Any effect that gives up sends `effect.fail`; it opens a failure gate when its kind has a title in `FAILURE_TITLE`.
 

@@ -1,10 +1,12 @@
 import { AGENT_ROLES, resolveAgentProvider } from '../agent-models/index.ts';
 import type { CommandOf } from '../commands/index.ts';
 import {
+  type AutopilotContact,
   DomainError,
   HUMAN_ONLY_REPO_FIELDS,
   HUMAN_ONLY_SETTINGS,
   isProjectKey,
+  isSameAutopilotContact,
   MAX_COMPACTION_LEAD_MINUTES,
   MAX_URGENT_WAIT_MINUTES,
   PROJECT_COLORS,
@@ -81,6 +83,7 @@ function assertSettings(patch: Partial<Settings>) {
       message: `An urgent change waits 1 to ${MAX_URGENT_WAIT_MINUTES} minutes.`,
     });
   }
+  assertAutopilotContacts(patch.autopilot?.contacts);
   const budget = patch.taskBudgetUsd;
   if (budget !== undefined && budget !== null && !(Number.isFinite(budget) && budget > 0)) {
     throw new DomainError({ code: 'settings_invalid', message: 'The cost limit must be above zero.' });
@@ -92,6 +95,18 @@ function assertSettings(patch: Partial<Settings>) {
   if (!isPaceLimit(patch.dailyUsageLimit)) {
     throw new DomainError({ code: 'settings_invalid', message: 'The daily usage limit must be above zero.' });
   }
+}
+
+function assertAutopilotContacts(contacts: readonly AutopilotContact[] | undefined) {
+  if (!contacts) return;
+  const repeated = contacts.some((contact, index) =>
+    contacts.slice(0, index).some((earlier) => isSameAutopilotContact(earlier, contact))
+  );
+  if (repeated)
+    throw new DomainError({
+      code: 'settings_invalid',
+      message: 'Each Slack channel or person is listed once.',
+    });
 }
 
 function isPaceLimit(limit: number | null | undefined) {

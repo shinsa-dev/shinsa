@@ -850,7 +850,7 @@ describe('an escalation the outbox asks to send to Slack', () => {
     stub.update((state) => {
       const task = state.tasks.t1;
       if (!task) return;
-      task.slackEscalation = { escalatedAt: ESCALATED_AT, contact: CONTACT, channelId: 'C9', ts: '300.1' };
+      task.slackEscalations = [{ escalatedAt: ESCALATED_AT, contact: CONTACT, channelId: 'C9', ts: '300.1' }];
     });
   }
 

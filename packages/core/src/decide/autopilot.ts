@@ -12,7 +12,6 @@ import {
 import {
   type AutopilotPolicy,
   type AutopilotRisk,
-  isSlackContact,
   resolveAutopilotPolicy,
   type Settings,
 } from '../domain/settings.ts';
@@ -198,8 +197,7 @@ function escalate(decider: Decider, task: Task, reason: string, timing: HandoffT
     reason,
     handoff: resolveEscalationHandoff(decider.state, task, timing),
   });
-  const contact = resolveAutopilotPolicy(decider.state.settings).contact;
-  if (isSlackContact(contact))
+  for (const contact of resolveAutopilotPolicy(decider.state.settings).contacts)
     decider.run({ kind: 'slack.escalate', taskId: task.id, escalatedAt: decider.context.now, contact });
 }
 

@@ -171,7 +171,7 @@ describe('slack effects', () => {
   test('an escalation’s post and its edit run in order, in a lane of their own per task', () => {
     const contact = { kind: 'slack_channel' as const, teamId: 'T1', id: 'C9', name: 'oncall' };
     const escalate = { kind: 'slack.escalate' as const, taskId: 't', escalatedAt: 500, contact };
-    expect(resolveEffectKey(escalate, 9)).toBe('slack.escalate:t:500:9');
+    expect(resolveEffectKey(escalate, 9)).toBe('slack.escalate:t:500:T1:C9:9');
     expect(resolveEffectLane(escalate)).toBe('slack-escalation:t');
   });
 });

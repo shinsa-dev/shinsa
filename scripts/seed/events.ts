@@ -27,7 +27,16 @@ export function buildEvents(tasks: SeedTask[], projects: Project[], repos: Repo[
     settings: {
       ...createSettings(),
       taskUsageLimit: 10,
-      autopilot: { ...AUTOPILOT_DEFAULTS, enabled: true, merge: 'low_risk', urgent: 'escalate_then_merge' },
+      autopilot: {
+        ...AUTOPILOT_DEFAULTS,
+        enabled: true,
+        merge: 'low_risk',
+        urgent: 'escalate_then_merge',
+        contacts: [
+          { kind: 'slack_channel', teamId: 'T02SUPERWALL', id: 'C07ONCALL', name: 'oncall' },
+          { kind: 'slack_person', teamId: 'T02SUPERWALL', id: 'U04MAYA', name: 'Maya Chen' },
+        ],
+      },
     },
   });
   for (const task of tasks) pushTask(task, push);

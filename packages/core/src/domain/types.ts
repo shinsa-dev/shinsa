@@ -582,7 +582,7 @@ export interface Task {
   carriedMergeSteps?: CarriedMergeStep[];
   watchdogs?: Watchdog[];
   slack?: SlackThreadLink | null;
-  slackEscalation?: SlackEscalationPost | null;
+  slackEscalations?: SlackEscalationPost[];
   backlog?: TaskBacklog | null;
   share?: TaskShare | null;
   previews?: PreviewShare[];

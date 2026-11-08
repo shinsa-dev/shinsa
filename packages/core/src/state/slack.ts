@@ -54,14 +54,16 @@ function applyMergePosted(state: ShinsaState, event: EventOf<'slack.merge_posted
 }
 
 function applyEscalationSent(state: ShinsaState, event: EventOf<'slack.escalation_sent'>) {
-  updateTask(state, event.taskId, event.at, {
-    slackEscalation: {
-      escalatedAt: event.escalatedAt,
-      contact: event.contact,
-      channelId: event.channelId,
-      ts: event.ts,
-    },
-  });
+  const earlier = (state.tasks[event.taskId]?.slackEscalations ?? []).filter(
+    (post) => post.escalatedAt === event.escalatedAt
+  );
+  const post = {
+    escalatedAt: event.escalatedAt,
+    contact: event.contact,
+    channelId: event.channelId,
+    ts: event.ts,
+  };
+  updateTask(state, event.taskId, event.at, { slackEscalations: [...earlier, post] });
   const contact = describeSlackContact(event.contact);
   record(state, event.taskId, event.at, {
     actor: 'shinsa',

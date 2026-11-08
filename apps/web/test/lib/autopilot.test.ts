@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 import {
   AUTOPILOT_DEFAULTS,
-  type AutopilotSlackContact,
+  type AutopilotContact,
   createSettings,
   type MergeBlock,
   type SlackDirectoryView,
@@ -9,15 +9,17 @@ import {
 } from '@shinsa/core';
 import {
   AUTOPILOT_RISK_ITEMS,
-  AUTOPILOT_ROWS,
+  CONTACT_PICKER_HINT,
+  describeAutopilotContact,
+  describeAutopilotContacts,
+  describeContactPickerEmpty,
   isContactShown,
-  listAutopilotContactItems,
+  listContactOptions,
   listSlackWorkspaceItems,
-  NO_CONTACT,
-  resolveContactDraft,
-  resolveContactPicker,
-  resolveSlackContact,
+  resolveContactAddBlock,
+  resolveContactWorkspace,
   resolveSlackUnavailable,
+  toggleAutopilotContact,
   describeAgentReviewNote,
   isEscalationUnseen,
   listAutopilotWaitItems,
@@ -41,7 +43,7 @@ const SNAPSHOT: SlackSnapshot = {
   problem: null,
 };
 
-const ONCALL: AutopilotSlackContact = { kind: 'slack_channel', teamId: 'T1', id: 'C1', name: 'oncall' };
+const ONCALL: AutopilotContact = { kind: 'slack_channel', teamId: 'T1', id: 'C1', name: 'oncall' };
 
 const DIRECTORY: SlackDirectoryView = {
   teamId: 'T1',
@@ -81,104 +83,107 @@ describe('who an escalation reaches', () => {
     expect(resolveSlackUnavailable(true, { snapshot: SNAPSHOT, failure: null })).toBeNull();
   });
 
-  it('keeps the team the default and disables the Slack choices with the reason', () => {
-    expect(listAutopilotContactItems(null).map((item) => [item.value, item.label, item.disabled])).toEqual([
-      ['team', 'Your team in Shinsa', undefined],
-      ['slack_channel', 'Your team and a Slack channel', undefined],
-      ['slack_person', 'Your team and a teammate on Slack', undefined],
-    ]);
-    expect(listAutopilotContactItems('Checking Slack').map((item) => item.disabled)).toEqual([
-      undefined,
-      'Checking Slack',
-      'Checking Slack',
-    ]);
+  it('says who hears of an escalation: always the team, and Slack once it is set up', () => {
+    expect(describeAutopilotContacts([], null)).toBe(
+      'Your team in Needs you. Add Slack channels or teammates to tell them too.'
+    );
+    expect(describeAutopilotContacts([], 'Connect Slack in Settings → General first')).toBe(
+      'Your team in Needs you. To tell Slack too: Connect Slack in Settings → General first.'
+    );
+    expect(describeAutopilotContacts([ONCALL], 'Checking Slack')).toBe(
+      'Your team in Needs you, and each channel and teammate below in Slack, with the task link and why.'
+    );
+    expect(describeAutopilotContacts([], 'Checking Slack')).toBe(
+      'Your team in Needs you. Add Slack channels or teammates to tell them too.'
+    );
+    expect(describeAutopilotContacts([ONCALL], 'Update Shinsa on this machine first')).toBe(
+      'Your team in Needs you. Slack hears nothing until then: Update Shinsa on this machine first.'
+    );
   });
 
-  it('starts a Slack choice in the saved workspace, else the first connected one', () => {
-    expect(resolveContactDraft({ kind: 'team' }, {}, SNAPSHOT)).toEqual({ kind: 'team', teamId: null });
-    expect(resolveContactDraft(ONCALL, { kind: 'team' }, SNAPSHOT)).toEqual({ kind: 'team', teamId: null });
-    expect(resolveContactDraft(ONCALL, {}, null)).toEqual({ kind: 'slack_channel', teamId: 'T1' });
-    expect(resolveContactDraft({ kind: 'team' }, { kind: 'slack_person' }, SNAPSHOT)).toEqual({
-      kind: 'slack_person',
-      teamId: 'T1',
-    });
-    expect(
-      resolveContactDraft({ kind: 'team' }, { kind: 'slack_person', teamId: 'T9' }, SNAPSHOT)
-    ).toMatchObject({
-      teamId: 'T9',
-    });
-    expect(resolveContactDraft({ kind: 'team' }, { kind: 'slack_person' }, null).teamId).toBeNull();
+  it('lets you add from Slack until it is unavailable or five are chosen', () => {
+    expect(resolveContactAddBlock([], null)).toBeNull();
+    expect(resolveContactAddBlock([], 'Checking Slack')).toBe('Checking Slack');
+    const five = Array.from({ length: 5 }, (_, index) => ({ ...ONCALL, id: `C${index}` }));
+    expect(resolveContactAddBlock(five, null)).toBe('Up to 5 in Slack');
   });
 
-  it('lists each connected workspace once, and keeps a saved one no longer connected', () => {
-    expect(listSlackWorkspaceItems(SNAPSHOT, { kind: 'team' })).toEqual([
+  it('picks from the workspace you chose, else the first connected one', () => {
+    expect(resolveContactWorkspace(SNAPSHOT, null)).toBe('T1');
+    const two = { ...SNAPSHOT, links: [LINK, { ...LINK, teamId: 'T2', teamName: 'Acme' }] };
+    expect(resolveContactWorkspace(two, 'T2')).toBe('T2');
+    expect(resolveContactWorkspace(two, 'T9')).toBe('T1');
+    expect(resolveContactWorkspace(null, 'T2')).toBeNull();
+  });
+
+  it('lists each connected workspace once', () => {
+    expect(listSlackWorkspaceItems(SNAPSHOT)).toEqual([
       { value: 'T1', label: 'Overclock', icon: 'IconSlack' },
     ]);
-    expect(listSlackWorkspaceItems(null, { ...ONCALL, teamId: 'T9' })).toEqual([
-      { value: 'T9', label: 'T9', icon: 'IconSlack', disabled: 'Not connected any more' },
-    ]);
+    expect(listSlackWorkspaceItems(null)).toEqual([]);
   });
 
-  it('offers the directory’s channels or people, with a placeholder until one is chosen', () => {
-    const channel = { kind: 'slack_channel' as const, teamId: 'T1' };
-    const loading = resolveContactPicker(channel, { kind: 'team' }, null);
-    expect(loading).toEqual({
-      items: [{ value: NO_CONTACT, label: 'Choose a channel', icon: 'IconHashtag', disabled: 'Loading' }],
-      value: NO_CONTACT,
-      description: AUTOPILOT_ROWS.slack_channel.description,
-    });
-    const loaded = resolveContactPicker(channel, { kind: 'team' }, DIRECTORY);
-    expect(loaded.items.map((item) => [item.value, item.label, item.disabled])).toEqual([
-      [NO_CONTACT, 'Choose a channel', 'Not chosen yet'],
-      ['C1', 'oncall', undefined],
-      ['C2', 'eng', undefined],
+  it('offers the channels and the people to search, the chosen ones ticked', () => {
+    expect(listContactOptions(null, [])).toEqual([]);
+    const groups = listContactOptions(DIRECTORY, [ONCALL]);
+    expect(groups.map((group) => [group.kind, group.heading])).toEqual([
+      ['slack_channel', 'Channels Shinsa is in'],
+      ['slack_person', 'People'],
     ]);
-    const person = resolveContactPicker({ kind: 'slack_person', teamId: 'T1' }, ONCALL, {
-      ...DIRECTORY,
-      people: [],
-    });
-    expect(person.items).toEqual([
-      { value: NO_CONTACT, label: 'Choose a teammate', icon: 'IconUser', disabled: 'No one to message yet' },
+    expect(groups[0]?.options.map((option) => [option.contact.id, option.chosen, option.disabled])).toEqual([
+      ['C1', true, false],
+      ['C2', false, false],
     ]);
-    expect(person.description).toBe(AUTOPILOT_ROWS.slack_person.description);
-    const empty = resolveContactPicker(channel, { kind: 'team' }, { ...DIRECTORY, channels: [] });
-    expect(empty.items[0]?.disabled).toBe('Shinsa is in no channel yet');
-  });
-
-  it('shows the saved contact even when the directory no longer lists it, and the directory’s problem', () => {
-    const channel = { kind: 'slack_channel' as const, teamId: 'T1' };
-    const saved = resolveContactPicker(channel, ONCALL, DIRECTORY);
-    expect(saved.value).toBe('C1');
-    expect(saved.items.map((item) => item.value)).toEqual(['C1', 'C2']);
-    const gone = resolveContactPicker(
-      channel,
-      { ...ONCALL, id: 'C9', name: 'old' },
-      {
-        ...DIRECTORY,
-        problem: 'Slack could not be reached.',
-      }
-    );
-    expect(gone.items.map((item) => [item.value, item.label])).toEqual([
-      ['C9', 'old'],
-      ['C1', 'oncall'],
-      ['C2', 'eng'],
-    ]);
-    expect(gone.description).toBe('Slack could not be reached.');
-    const otherWorkspace = resolveContactPicker({ ...channel, teamId: 'T2' }, ONCALL, null);
-    expect(otherWorkspace.value).toBe(NO_CONTACT);
-  });
-
-  it('saves the picked entry with its name, and nothing for the placeholder', () => {
-    const channel = { kind: 'slack_channel' as const, teamId: 'T1' };
-    const picker = resolveContactPicker(channel, { kind: 'team' }, DIRECTORY);
-    expect(resolveSlackContact(channel, picker, 'C2')).toEqual({
-      kind: 'slack_channel',
+    expect(groups[1]?.options[0]?.contact).toEqual({
+      kind: 'slack_person',
       teamId: 'T1',
-      id: 'C2',
-      name: 'eng',
+      id: 'U7',
+      name: 'Kai',
     });
-    expect(resolveSlackContact(channel, picker, NO_CONTACT)).toBeNull();
-    expect(resolveSlackContact(channel, picker, 'C404')).toBeNull();
+    expect(listContactOptions({ ...DIRECTORY, channels: [] }, []).map((group) => group.kind)).toEqual([
+      'slack_person',
+    ]);
+  });
+
+  it('disables the rest once five are chosen, but still lets you untick one', () => {
+    const four = Array.from({ length: 4 }, (_, index) => ({ ...ONCALL, id: `X${index}` }));
+    const options = listContactOptions(DIRECTORY, [...four, ONCALL]).flatMap((group) => group.options);
+    expect(options.map((option) => [option.contact.id, option.disabled])).toEqual([
+      ['C1', false],
+      ['C2', true],
+      ['U7', true],
+    ]);
+  });
+
+  it('says why the search is empty: loading, Slack’s problem, or nothing matches', () => {
+    expect(describeContactPickerEmpty(null)).toBe('Loading the channels and people in Slack…');
+    expect(describeContactPickerEmpty({ ...DIRECTORY, problem: 'Slack could not be reached.' })).toBe(
+      'Slack could not be reached.'
+    );
+    expect(describeContactPickerEmpty(DIRECTORY)).toContain('invite @Shinsa');
+    expect(CONTACT_PICKER_HINT).toContain('Invite @Shinsa');
+  });
+
+  it('adds a channel or a person, removes it when picked again, and stops at five', () => {
+    const kai = { kind: 'slack_person' as const, teamId: 'T1', id: 'U7', name: 'Kai' };
+    expect(toggleAutopilotContact([], ONCALL)).toEqual([ONCALL]);
+    expect(toggleAutopilotContact([ONCALL], kai)).toEqual([ONCALL, kai]);
+    expect(toggleAutopilotContact([ONCALL, kai], { ...ONCALL, name: 'renamed' })).toEqual([kai]);
+    const five = Array.from({ length: 5 }, (_, index) => ({ ...ONCALL, id: `C${index}` }));
+    expect(toggleAutopilotContact(five, kai)).toEqual(five);
+  });
+
+  it('names each contact with its workspace when it is still connected', () => {
+    expect(describeAutopilotContact(ONCALL, SNAPSHOT)).toEqual({
+      title: '#oncall',
+      description: 'Posts in this Slack channel in Overclock.',
+      icon: 'IconHashtag',
+    });
+    expect(describeAutopilotContact({ ...ONCALL, kind: 'slack_person', name: 'Kai' }, null)).toEqual({
+      title: 'Kai',
+      description: 'Sends a direct message in Slack.',
+      icon: 'IconUser',
+    });
   });
 });
 

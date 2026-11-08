@@ -1,6 +1,21 @@
-import type { AutopilotContact, AutopilotPolicy, AutopilotSlackContactKind, Settings } from '@shinsa/core';
+import type { AutopilotContact, AutopilotPolicy, Settings } from '@shinsa/core';
+import { Button } from '@shinsa/ui/components/button';
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '@shinsa/ui/components/command';
+import { Icon } from '@shinsa/ui/components/icon';
+import { Popover, PopoverContent, PopoverTrigger } from '@shinsa/ui/components/popover';
+import { Truncate } from '@shinsa/ui/components/truncate';
+import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
+import { HintButton } from '@/components/controls/hint-button.tsx';
 import { SelectField } from '@/components/controls/select-field.tsx';
+import { Hint } from '@/components/overlays/hint.tsx';
 import {
   AUTOPILOT_DESCRIPTION,
   AUTOPILOT_ENABLED_ITEMS,
@@ -11,18 +26,20 @@ import {
   AUTOPILOT_TITLE,
   AUTOPILOT_URGENT_ITEMS,
   AUTOPILOT_USAGE_ITEMS,
-  type ContactDraft,
+  CONTACT_PICKER_HINT,
+  describeAutopilotContact,
+  describeAutopilotContacts,
+  describeContactPickerEmpty,
   isContactShown,
   isEscalationUnseen,
-  listAutopilotContactItems,
   listAutopilotWaitItems,
+  listContactOptions,
   listSlackWorkspaceItems,
-  NO_CONTACT,
   resolveAutopilotValue,
-  resolveContactDraft,
-  resolveContactPicker,
-  resolveSlackContact,
+  resolveContactAddBlock,
+  resolveContactWorkspace,
   resolveSlackUnavailable,
+  toggleAutopilotContact,
 } from '@/lib/autopilot.ts';
 import { useShinsaSelector } from '@/lib/connection/selectors.ts';
 import { useSlack, useSlackDirectory } from '@/lib/connection/slack.ts';
@@ -30,83 +47,125 @@ import { useEngineFeature } from '@/lib/connection/socket.ts';
 import { updateSettings } from '@/lib/settings.ts';
 import { DescribedRow, SettingRow, SettingsGroup } from './group.tsx';
 
-function ContactPickerRow({
-  draft,
-  contact,
-  onPick,
+function ContactPicker({
+  teamId,
+  contacts,
+  onToggle,
 }: {
-  draft: { kind: AutopilotSlackContactKind; teamId: string };
-  contact: AutopilotContact;
-  onPick: (contact: AutopilotContact) => void;
+  teamId: string;
+  contacts: readonly AutopilotContact[];
+  onToggle: (contact: AutopilotContact) => void;
 }) {
-  const directory = useSlackDirectory(draft.teamId);
-  const picker = resolveContactPicker(draft, contact, directory);
-  const title = AUTOPILOT_ROWS[draft.kind].title;
+  const directory = useSlackDirectory(teamId);
   return (
-    <DescribedRow title={title} description={picker.description}>
-      <SelectField
-        label={title}
-        items={picker.items}
-        value={picker.value}
-        onValueChange={(id) => {
-          const picked = resolveSlackContact(draft, picker, id);
-          if (picked) onPick(picked);
-        }}
-      />
-    </DescribedRow>
+    <Command>
+      <CommandInput placeholder='Search channels and people' aria-label='Search channels and people' />
+      <CommandList>
+        <CommandEmpty>{describeContactPickerEmpty(directory)}</CommandEmpty>
+        {listContactOptions(directory, contacts).map((group) => (
+          <CommandGroup key={group.kind} heading={group.heading}>
+            {group.options.map(({ contact, chosen, disabled }) => (
+              <CommandItem
+                key={contact.id}
+                value={`${contact.name} ${contact.id}`}
+                icon={group.kind === 'slack_channel' ? 'IconHashtag' : 'IconUser'}
+                disabled={disabled}
+                onSelect={() => onToggle(contact)}
+              >
+                <Truncate className='min-w-0 flex-1'>{contact.name}</Truncate>
+                <Icon
+                  name='IconCheckmark1Small'
+                  className={cn('shrink-0 text-primary', !chosen && 'invisible')}
+                />
+              </CommandItem>
+            ))}
+          </CommandGroup>
+        ))}
+      </CommandList>
+      <p className='border-t border-border px-2.5 py-2 text-2xs text-fg-2'>{CONTACT_PICKER_HINT}</p>
+    </Command>
   );
 }
 
 function ContactRows({
-  contact,
-  onContactChange,
+  contacts,
+  onContactsChange,
 }: {
-  contact: AutopilotContact;
-  onContactChange: (contact: AutopilotContact) => void;
+  contacts: readonly AutopilotContact[];
+  onContactsChange: (contacts: AutopilotContact[]) => void;
 }) {
   const available = useEngineFeature('autopilot-slack');
   const slack = useSlack();
   const { snapshot } = slack;
-  const [pending, setPending] = React.useState<Partial<ContactDraft>>({});
-  const draft = resolveContactDraft(contact, pending, snapshot);
+  const [chosenWorkspace, setChosenWorkspace] = React.useState<string | null>(null);
+  const teamId = resolveContactWorkspace(snapshot, chosenWorkspace);
   const unavailable = resolveSlackUnavailable(available, slack);
-  const pick = (next: AutopilotContact) => {
-    setPending({});
-    onContactChange(next);
-  };
+  const blocked = resolveContactAddBlock(contacts, unavailable);
+  const workspaces = listSlackWorkspaceItems(snapshot);
+  const toggle = (contact: AutopilotContact) => onContactsChange(toggleAutopilotContact(contacts, contact));
+  const add = (
+    <Popover>
+      <PopoverTrigger
+        render={<Button variant='secondary' size='sm' icon='IconPlusSmall' disabled={blocked !== null} />}
+      >
+        Add from Slack
+      </PopoverTrigger>
+      {teamId && (
+        <PopoverContent align='end' className='w-80 overflow-hidden p-0'>
+          <ContactPicker teamId={teamId} contacts={contacts} onToggle={toggle} />
+        </PopoverContent>
+      )}
+    </Popover>
+  );
   return (
     <>
-      <DescribedRow title={AUTOPILOT_ROWS.contact.title} description={AUTOPILOT_ROWS.contact.description}>
-        <SelectField
-          label={AUTOPILOT_ROWS.contact.title}
-          items={listAutopilotContactItems(unavailable)}
-          value={draft.kind}
-          onValueChange={(kind) => {
-            if (kind === 'team') pick({ kind });
-            else setPending({ kind, teamId: pending.teamId });
-          }}
-        />
+      <DescribedRow
+        title={AUTOPILOT_ROWS.contacts.title}
+        description={describeAutopilotContacts(contacts, unavailable)}
+      >
+        {blocked ? (
+          <Hint label={blocked}>
+            <span>{add}</span>
+          </Hint>
+        ) : (
+          add
+        )}
       </DescribedRow>
-      {draft.kind !== 'team' && (
+      {!unavailable && workspaces.length > 1 && (
         <DescribedRow
           title={AUTOPILOT_ROWS.workspace.title}
           description={AUTOPILOT_ROWS.workspace.description}
         >
           <SelectField
             label={AUTOPILOT_ROWS.workspace.title}
-            items={listSlackWorkspaceItems(snapshot, contact)}
-            value={draft.teamId ?? NO_CONTACT}
-            onValueChange={(teamId) => setPending({ kind: draft.kind, teamId })}
+            items={workspaces}
+            value={teamId ?? ''}
+            onValueChange={setChosenWorkspace}
           />
         </DescribedRow>
       )}
-      {draft.kind !== 'team' && draft.teamId && (
-        <ContactPickerRow
-          draft={{ kind: draft.kind, teamId: draft.teamId }}
-          contact={contact}
-          onPick={pick}
-        />
-      )}
+      {contacts.map((contact) => {
+        const shown = describeAutopilotContact(contact, snapshot);
+        return (
+          <DescribedRow
+            key={`${contact.teamId}:${contact.kind}:${contact.id}`}
+            title={
+              <>
+                <Icon size='sm' name={shown.icon} className='text-fg-2' />
+                <Truncate className='min-w-0'>{shown.title}</Truncate>
+              </>
+            }
+            description={shown.description}
+          >
+            <HintButton
+              size='icon-sm'
+              icon='IconCrossSmall'
+              label={`Stop telling ${shown.title}`}
+              onClick={() => toggle(contact)}
+            />
+          </DescribedRow>
+        );
+      })}
     </>
   );
 }
@@ -172,8 +231,8 @@ export function AutopilotSettings({ settings }: { settings: Settings }) {
           </DescribedRow>
           {isContactShown(policy) && (
             <ContactRows
-              contact={policy.contact}
-              onContactChange={(contact) => updateAutopilot({ contact })}
+              contacts={policy.contacts}
+              onContactsChange={(contacts) => updateAutopilot({ contacts })}
             />
           )}
           {policy.urgent !== 'wait' && (

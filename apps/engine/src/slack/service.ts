@@ -14,6 +14,7 @@ import {
   resolveSlackMergeMessage,
   resolveSlackTaskUrl,
   resolveSlackThreadKey,
+  selectSlackEscalationPost,
   SLACK_ENGINE_INTERACTIONS_PATH,
   SLACK_EVALUATION_SCHEMA,
   SLACK_EVALUATION_SYSTEM,
@@ -370,8 +371,8 @@ export class Slack extends Context.Service<
           const task = state.tasks[effect.taskId];
           if (!task || !message) return;
           const open = task.escalation?.at === effect.escalatedAt;
-          const sent = task.slackEscalation?.escalatedAt === effect.escalatedAt ? task.slackEscalation : null;
           const { contact } = effect;
+          const sent = selectSlackEscalationPost(task.slackEscalations, effect.escalatedAt, contact);
           const target = { teamId: contact.teamId, kind: contact.kind, id: contact.id, message };
           if (!open) {
             if (!credentials || !sent?.channelId || !sent.ts) return;

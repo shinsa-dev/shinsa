@@ -30,6 +30,7 @@ import {
   AUTOPILOT_RISKS,
   AUTOPILOT_URGENT_ACTIONS,
   COMPACTION_MODES,
+  MAX_AUTOPILOT_CONTACTS,
   MERGE_METHODS,
   PLAN_APPROVALS,
   type SETTINGS_KEYS,
@@ -101,7 +102,6 @@ const SlackContactId = Id(64).check(
 const SlackContactFields = { teamId: SlackContactId, id: SlackContactId, name: Id(80) };
 
 export const AutopilotContactPatch = Tagged('kind', AUTOPILOT_CONTACT_KINDS, [
-  Schema.Struct({ kind: Schema.Literal('team') }),
   Schema.Struct({ kind: Schema.Literal('slack_channel'), ...SlackContactFields }),
   Schema.Struct({ kind: Schema.Literal('slack_person'), ...SlackContactFields }),
 ]);
@@ -115,7 +115,7 @@ const AutopilotPatch = Strict(
     urgent: Schema.optionalKey(Choice(AUTOPILOT_URGENT_ACTIONS)),
     urgentWaitMinutes: Schema.optionalKey(WholeNumber),
     ignoreUsageLimits: Schema.optionalKey(Bool),
-    contact: Schema.optionalKey(AutopilotContactPatch),
+    contacts: Schema.optionalKey(List(AutopilotContactPatch, MAX_AUTOPILOT_CONTACTS)),
   },
   'Autopilot',
   'autopilot'

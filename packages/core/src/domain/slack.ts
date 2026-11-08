@@ -1,13 +1,25 @@
-import type { AutopilotSlackContact } from './settings.ts';
+import { type AutopilotContact, isSameAutopilotContact } from './settings.ts';
 
 export interface SlackEscalationPost {
   escalatedAt: number;
-  contact: AutopilotSlackContact;
+  contact: AutopilotContact;
   channelId: string | null;
   ts: string | null;
 }
 
-export function describeSlackContact(contact: AutopilotSlackContact) {
+export function selectSlackEscalationPost(
+  posts: readonly SlackEscalationPost[] | undefined,
+  escalatedAt: number,
+  contact: AutopilotContact
+) {
+  return (
+    posts?.find(
+      (post) => post.escalatedAt === escalatedAt && isSameAutopilotContact(post.contact, contact)
+    ) ?? null
+  );
+}
+
+export function describeSlackContact(contact: AutopilotContact) {
   return contact.kind === 'slack_channel' ? `#${contact.name}` : contact.name;
 }
 

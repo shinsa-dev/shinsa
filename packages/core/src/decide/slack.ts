@@ -1,7 +1,7 @@
 import type { CommandOf } from '../commands/index.ts';
 import { DomainError } from '../domain/errors.ts';
 import { isTaskClosed, resolveCurrentRound } from '../domain/rounds.ts';
-import { isSameSlackThread, type SlackThreadRef } from '../domain/slack.ts';
+import { isSameSlackThread, selectSlackEscalationPost, type SlackThreadRef } from '../domain/slack.ts';
 import type { Gate, Task } from '../domain/types.ts';
 import type { ShinsaEventInput } from '../events/index.ts';
 import { resolveSlackMentionThread } from '../slack/contract.ts';
@@ -87,7 +87,7 @@ export function recordSlackMerge(decider: Decider, command: CommandOf<'slack.rec
 
 export function recordSlackEscalation(decider: Decider, command: CommandOf<'slack.record_escalation'>) {
   const task = decider.state.tasks[command.taskId];
-  if (!task || task.slackEscalation?.escalatedAt === command.escalatedAt) return;
+  if (!task || selectSlackEscalationPost(task.slackEscalations, command.escalatedAt, command.contact)) return;
   decider.emit({
     type: 'slack.escalation_sent',
     taskId: command.taskId,
@@ -262,10 +262,12 @@ function listClosedGateTasks(state: ShinsaState, events: readonly ShinsaEventInp
 export function syncSlackEscalations(decider: Decider, before: ShinsaState) {
   for (const taskId of listClosedGateTasks(decider.state, decider.events)) {
     const escalation = before.tasks[taskId]?.escalation;
-    const sent = decider.state.tasks[taskId]?.slackEscalation;
-    if (!escalation || sent?.escalatedAt !== escalation.at) continue;
-    if (decider.state.tasks[taskId]?.escalation?.at === escalation.at) continue;
-    decider.run({ kind: 'slack.escalate', taskId, escalatedAt: escalation.at, contact: sent.contact });
+    const task = decider.state.tasks[taskId];
+    if (!escalation || task?.escalation?.at === escalation.at) continue;
+    for (const sent of task?.slackEscalations ?? []) {
+      if (sent.escalatedAt !== escalation.at) continue;
+      decider.run({ kind: 'slack.escalate', taskId, escalatedAt: escalation.at, contact: sent.contact });
+    }
   }
 }
 
