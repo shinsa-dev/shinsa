@@ -618,7 +618,7 @@ describe('the result', () => {
     );
   });
 
-  test('leaves the card once the task is cancelled, or once its change is merged', () => {
+  test('leaves the card once the task is cancelled, or once it went on to a change', () => {
     const harness = createHarness();
     const taskId = startShaped(harness, 'answer');
     deliver(harness, taskId, 'It is the buffer.');
@@ -626,8 +626,24 @@ describe('the result', () => {
     expect(readText(serializeSlackCard({ ...task, stage: 'cancelled' }, [], URL))).not.toStartWith(
       'Answer\n'
     );
-    const merged = { ...task, stage: 'done' as const, pullRequest: pullRequest({ state: 'merged' }) };
+    const done = { ...task, stage: 'done' as const };
+    expect(readText(serializeSlackCard(done, [], URL))).toStartWith('Answer\n');
+    const merged = { ...done, pullRequest: pullRequest({ state: 'merged' }) };
     expect(readText(serializeSlackCard(merged, [], URL))).not.toStartWith('Answer\n');
+    const closed = { ...done, pullRequest: pullRequest({ state: 'closed' }) };
+    expect(readText(serializeSlackCard(closed, [], URL))).not.toStartWith('Answer\n');
+    const accepted = {
+      ...done,
+      proposal: {
+        request: 'Fix it.',
+        why: 'It breaks.',
+        status: 'accepted' as const,
+        recommend: 'go_on' as const,
+        runId: null,
+        at: 0,
+      },
+    };
+    expect(readText(serializeSlackCard(accepted, [], URL))).not.toStartWith('Answer\n');
     expect(readText(serializeSlackCard({ ...task, stage: 'building' }, [], URL))).not.toStartWith('Answer\n');
   });
 

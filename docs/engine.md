@@ -4537,8 +4537,9 @@ Slack ──a card's button──► app.shinsa.dev /slack/interactions
   task on app.shinsa.dev (`resolveSlackTaskUrl`), and a small last line naming the task (its handle and title,
   linked) and its pull request as `PR #<number>`, linked. The card shows the first open gate in the order failure,
   sign-in, question, secret, proposal, operation, plan, review, merge, result (`SLACK_CARD_GATES`); with none open it
-  shows the result while the task rests at done with one, is not cancelled and has no merged pull request (so closing
-  it or "Keep as is" leaves the result in place, with "@someone closed it" under it), else the status:
+  shows the result while the task rests at done with one, is not cancelled and never went on to a change (its
+  proposal accepted, a plan or a pull request, merged or closed), so closing it or "Keep as is" leaves the result in
+  place, with "@someone closed it" under it; else the status:
   - the status: what the task is doing now in bold (its stage reason, else its stage), "@someone approved the plan"
     under it while the last decision on the task was made in Slack (`SlackThreadLink.decided`, cleared by any
     `gate.answered` before `slack.decided` sets it again, so a decision made in Shinsa drops it), then the task

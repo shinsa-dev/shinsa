@@ -220,8 +220,12 @@ function resolveCardGate(gates: readonly Gate[]) {
   return null;
 }
 
+function hasGoneOnToChange(task: Task) {
+  return task.proposal?.status === 'accepted' || task.plan !== null || task.pullRequest !== null;
+}
+
 function selectKeptResult(task: Task) {
-  if (!task.result || resolveSlackStage(task) !== 'done' || task.pullRequest?.state === 'merged') return null;
+  if (!task.result || resolveSlackStage(task) !== 'done' || hasGoneOnToChange(task)) return null;
   return task.result;
 }
 
