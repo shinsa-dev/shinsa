@@ -3416,10 +3416,11 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   `review.approve_after_fix` for `gate.answer`'s `thenApprove`, `message.line_comments` for `task.message`'s
   `comments`, `changelog` for `GET /api/changelog`, `remote.terminals` for terminal streams on the sealed channel,
   `attention` for routing notifications to the device you use, `worktree-root` for the worktree folder and
-  `usage.pace_limits` for `dailyUsageLimit` and `Project.usageLimit` and `usage.watchdog_limits` for
-  `watchdogsIgnoreUsageLimits`, today;
+  `usage.pace_limits` for `dailyUsageLimit` and `Project.usageLimit`, `usage.watchdog_limits` for
+  `watchdogsIgnoreUsageLimits` and `focus.projects` for `focus.change`'s `projectIds` and `except`, today;
   Settings → Teams, the review's Fix and approve choice and
-  What's new show only on an engine that has them). `ENGINE_PROTOCOL` is the hard floor: a machine whose protocol differs from the page's is left out of the
+  What's new show only on an engine that has them, and the Focus menu stays a single choice on an engine without
+  `focus.projects`). `ENGINE_PROTOCOL` is the hard floor: a machine whose protocol differs from the page's is left out of the
   dashboard, merges nothing and gets no command, and Settings → Machines says "Update Shinsa on <name> to reach it from
   here." in its row, as do New task's machine picker and a routing policy's on that machine's disabled entry. When every
   machine of the dashboard is on another protocol, the dashboard opens on that message instead of the app

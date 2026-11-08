@@ -133,7 +133,7 @@ describe('the focus', () => {
         createProject({ id: 'paywall', name: 'Paywall' }),
       ],
     });
-    renderPage({ ...state, focus: { projectId: 'basket', teamId: null, until: null } });
+    renderPage({ ...state, focus: { projectIds: ['basket'], except: false, teamId: null, until: null } });
     expect(screen.getByText('1 open · 1 done')).toBeTruthy();
     expect(screen.getByText('Ship the basket tier')).toBeTruthy();
     expect(screen.queryByText('Rotate paywall keys')).toBeNull();
