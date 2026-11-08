@@ -30,7 +30,7 @@ import type {
   TaskResult,
   TriageDecisions,
 } from './shapes.ts';
-import type { SlackThreadLink } from './slack.ts';
+import type { SlackEscalationPost, SlackThreadLink } from './slack.ts';
 import type { PipelineStep } from './steps.ts';
 import type { Watchdog, WatchSource } from './watchdogs.ts';
 import type { WorkspaceMode } from './workspaces.ts';
@@ -582,6 +582,7 @@ export interface Task {
   carriedMergeSteps?: CarriedMergeStep[];
   watchdogs?: Watchdog[];
   slack?: SlackThreadLink | null;
+  slackEscalation?: SlackEscalationPost | null;
   backlog?: TaskBacklog | null;
   share?: TaskShare | null;
   previews?: PreviewShare[];

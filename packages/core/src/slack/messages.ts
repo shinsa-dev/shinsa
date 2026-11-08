@@ -2,7 +2,7 @@ import { STAGE_WORDS } from '../chat/references.ts';
 import { capitalise, describeCount } from '../chat/text.ts';
 import { isTaskClosed, isTaskResting } from '../domain/rounds.ts';
 import type { SlackDecided } from '../domain/slack.ts';
-import type { Gate, GateDecision, GateType, Task, TaskStage } from '../domain/types.ts';
+import type { Gate, GateDecision, GateType, Task, TaskEscalation, TaskStage } from '../domain/types.ts';
 import type { Watchdog, WatchdogStatus } from '../domain/watchdogs.ts';
 import { assembleReport } from '../report/assemble.ts';
 import { serializePlanMarkdown, serializeReportMarkdown } from '../report/markdown.ts';
@@ -600,6 +600,66 @@ function serializeSlackTripped(
     summary: watchdog.checks.at(-1)?.summary ?? null,
     filed,
   });
+}
+
+function describeSlackWait(minutes: number) {
+  return describeCount(minutes, 'minute');
+}
+
+function describeSlackRatings(escalation: TaskEscalation) {
+  const ratings = escalation.handoff.ratings;
+  return ratings ? `${capitalise(ratings.confidence)} confidence, ${ratings.risk} risk` : 'Not rated';
+}
+
+function describeSlackMergeTime(escalation: TaskEscalation) {
+  const mergesAt = escalation.handoff.mergesAt;
+  return mergesAt === null ? 'Not on its own' : serializeSlackDate(mergesAt);
+}
+
+export function serializeSlackEscalation(task: Task, escalation: TaskEscalation, taskUrl: string) {
+  const ref = resolveTaskRef(task, taskUrl);
+  return createSlackMessage(`${ref.label} is urgent and needs someone.`, [
+    createSlackHeader('Urgent change needs someone'),
+    createSlackSection(
+      serializeLines([`*${escapeSlackText(task.title)}*`, serializeQuote(resolveLead(escalation.reason))])
+    ),
+    createSlackFields([
+      { label: 'Waited', value: describeSlackWait(escalation.handoff.waitedMinutes) },
+      { label: 'Review', value: describeSlackRatings(escalation) },
+      { label: 'Merges', value: describeSlackMergeTime(escalation) },
+    ]),
+    createSlackActions([createOpenButton('Open in Shinsa', taskUrl)]),
+    serializeFooter(ref),
+  ]);
+}
+
+function describeSlackEscalationEnd(task: Task) {
+  if (task.pullRequest?.state === 'merged') return 'The change is merged.';
+  if (isTaskClosed(task)) return 'The task is closed.';
+  return 'The merge was decided in Shinsa.';
+}
+
+export function serializeSlackEscalationCleared(task: Task, taskUrl: string) {
+  const ref = resolveTaskRef(task, taskUrl);
+  return serializeNote(
+    `${ref.label} no longer needs anyone.`,
+    'No longer needs anyone',
+    describeSlackEscalationEnd(task),
+    ref
+  );
+}
+
+export function resolveSlackEscalationMessage(
+  state: ShinsaState,
+  taskId: string,
+  escalatedAt: number,
+  taskUrl: string
+): SlackMessage | null {
+  const task = state.tasks[taskId];
+  if (!task) return null;
+  const escalation = task.escalation;
+  if (escalation?.at === escalatedAt) return serializeSlackEscalation(task, escalation, taskUrl);
+  return serializeSlackEscalationCleared(task, taskUrl);
 }
 
 export function serializeSlackDeclined() {

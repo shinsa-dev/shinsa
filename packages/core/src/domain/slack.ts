@@ -1,3 +1,15 @@
+import type { AutopilotSlackContact } from './settings.ts';
+
+export interface SlackEscalationPost {
+  escalatedAt: number;
+  contact: AutopilotSlackContact;
+  ts: string | null;
+}
+
+export function describeSlackContact(contact: AutopilotSlackContact) {
+  return contact.kind === 'slack_channel' ? `#${contact.name}` : contact.name;
+}
+
 export interface SlackThreadRef {
   teamId: string;
   channelId: string;

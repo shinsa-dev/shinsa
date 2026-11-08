@@ -151,6 +151,8 @@ import {
   recordSlackMerge,
   recordSlackStatus,
   startSlackTask,
+  recordSlackEscalation,
+  syncSlackEscalations,
   syncSlackThreads,
 } from './slack.ts';
 import { snoozeTask, unsnoozeTask } from './snooze.ts';
@@ -511,6 +513,8 @@ function apply(decider: Decider, command: ShinsaCommand) {
       return recordSlackStatus(decider, command);
     case 'slack.record_merge':
       return recordSlackMerge(decider, command);
+    case 'slack.record_escalation':
+      return recordSlackEscalation(decider, command);
     case 'slack.decide':
       return decideSlackGate(decider, command);
     case 'onboarding.welcome':
@@ -554,6 +558,7 @@ function resolveDecision(state: ShinsaState, command: ShinsaCommand, context: De
   enforceLiveness(decider);
   dispatchRuns(decider);
   syncSlackThreads(decider);
+  syncSlackEscalations(decider, state);
   assertGatesStayOpen(decider, state);
   if (context.onBehalf) recordOnBehalfAction(decider, command);
   const changes = sealDraft(decider.state);

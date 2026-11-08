@@ -1,3 +1,4 @@
+import { describeSlackContact } from '../domain/slack.ts';
 import type { EventOf, ShinsaEvent } from '../events/index.ts';
 import type { ShinsaState } from './project.ts';
 import { record, updateTask } from './write.ts';
@@ -10,7 +11,8 @@ type SlackEvent = Extract<
       | 'slack.status_posted'
       | 'slack.decided'
       | 'slack.merge_announced'
-      | 'slack.merge_posted';
+      | 'slack.merge_posted'
+      | 'slack.escalation_sent';
   }
 >;
 
@@ -51,6 +53,19 @@ function applyMergePosted(state: ShinsaState, event: EventOf<'slack.merge_posted
   });
 }
 
+function applyEscalationSent(state: ShinsaState, event: EventOf<'slack.escalation_sent'>) {
+  updateTask(state, event.taskId, event.at, {
+    slackEscalation: { escalatedAt: event.escalatedAt, contact: event.contact, ts: event.ts },
+  });
+  const contact = describeSlackContact(event.contact);
+  record(state, event.taskId, event.at, {
+    actor: 'shinsa',
+    kind: 'decision',
+    text: event.problem === null ? `Sent to ${contact} in Slack` : `Could not reach ${contact} in Slack`,
+    detail: event.problem,
+  });
+}
+
 export function applySlackEvent(state: ShinsaState, event: SlackEvent) {
   switch (event.type) {
     case 'slack.thread_linked':
@@ -67,6 +82,9 @@ export function applySlackEvent(state: ShinsaState, event: SlackEvent) {
       return;
     case 'slack.merge_posted':
       applyMergePosted(state, event);
+      return;
+    case 'slack.escalation_sent':
+      applyEscalationSent(state, event);
       return;
   }
 }

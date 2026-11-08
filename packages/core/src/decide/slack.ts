@@ -85,6 +85,19 @@ export function recordSlackMerge(decider: Decider, command: CommandOf<'slack.rec
   decider.emit({ type: 'slack.merge_posted', taskId: command.taskId, round: command.round, ts: command.ts });
 }
 
+export function recordSlackEscalation(decider: Decider, command: CommandOf<'slack.record_escalation'>) {
+  const task = decider.state.tasks[command.taskId];
+  if (!task || task.slackEscalation?.escalatedAt === command.escalatedAt) return;
+  decider.emit({
+    type: 'slack.escalation_sent',
+    taskId: command.taskId,
+    escalatedAt: command.escalatedAt,
+    contact: command.contact,
+    ts: command.ts,
+    problem: command.problem,
+  });
+}
+
 export function recordSlackStatus(decider: Decider, command: CommandOf<'slack.record_status'>) {
   const link = decider.state.tasks[command.taskId]?.slack;
   if (!link || (link.statusTs === command.ts && link.reaction === command.reaction)) return;
@@ -231,6 +244,27 @@ function requestMergeMessages(decider: Decider, taskIds: ReadonlySet<string>) {
     if (!link?.merge) continue;
     const thread = { teamId: link.teamId, channelId: link.channelId, threadTs: link.threadTs };
     decider.run({ kind: 'slack.merge', thread, taskId, round: link.merge.round });
+  }
+}
+
+function listClosedGateTasks(state: ShinsaState, events: readonly ShinsaEventInput[]) {
+  return new Set(
+    events.flatMap((event) => {
+      const closed =
+        event.type === 'gate.answered' || event.type === 'gate.withdrawn' || event.type === 'gate.superseded';
+      const taskId = closed ? state.gates[event.gateId]?.taskId : undefined;
+      return taskId ? [taskId] : [];
+    })
+  );
+}
+
+export function syncSlackEscalations(decider: Decider, before: ShinsaState) {
+  for (const taskId of listClosedGateTasks(decider.state, decider.events)) {
+    const escalation = before.tasks[taskId]?.escalation;
+    const sent = decider.state.tasks[taskId]?.slackEscalation;
+    if (!escalation || sent?.escalatedAt !== escalation.at) continue;
+    if (decider.state.tasks[taskId]?.escalation?.at === escalation.at) continue;
+    decider.run({ kind: 'slack.escalate', taskId, escalatedAt: escalation.at, contact: sent.contact });
   }
 }
 

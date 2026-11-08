@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { resolveEscalationHandoff } from '../../src/decide/autopilot.ts';
 import {
   type AutopilotPolicy,
+  type AutopilotSlackContact,
   HOUR_MS,
   type MergeStep,
   MINUTE_MS,
@@ -193,6 +194,7 @@ describe('the Autopilot setting', () => {
       urgent: 'escalate',
       urgentWaitMinutes: 30,
       ignoreUsageLimits: true,
+      contact: { kind: 'team' },
     });
   });
 
@@ -551,3 +553,125 @@ describe('the hand-off an escalation carries', () => {
     });
   });
 });
+
+const ONCALL: AutopilotSlackContact = { kind: 'slack_channel', teamId: 'T1', id: 'C9', name: 'oncall' };
+
+const KAI: AutopilotSlackContact = { kind: 'slack_person', teamId: 'T1', id: 'U7', name: 'Kai Tanaka' };
+
+function escalateTo(contact: AutopilotSlackContact | null) {
+  const policy: Partial<AutopilotPolicy> = contact ? { urgent: 'escalate', contact } : { urgent: 'escalate' };
+  const { harness, taskId } = reachMerge({ policy, priority: 'urgent' });
+  fire(harness, taskId);
+  return { harness, taskId, escalatedAt: harness.task(taskId).escalation?.at ?? 0 };
+}
+
+function recordSent(harness: Harness, taskId: string, escalatedAt: number, problem: string | null = null) {
+  return harness.send({
+    type: 'slack.record_escalation',
+    taskId,
+    escalatedAt,
+    contact: ONCALL,
+    ts: problem === null ? '500.1' : null,
+    problem,
+  });
+}
+
+function answerMerge(harness: Harness, taskId: string) {
+  harness.send({
+    type: 'gate.answer',
+    gateId: harness.openGate(taskId).id,
+    decision: 'revise',
+    response: 'x',
+  });
+}
+
+describe('the escalation contact', () => {
+  test('keeps a Slack channel or person you choose, and goes back to your team', () => {
+    const harness = createHarness();
+    harness.send({ type: 'settings.change', patch: { autopilot: { contact: ONCALL } } });
+    expect(harness.state.settings.autopilot?.contact).toEqual(ONCALL);
+    harness.send({ type: 'settings.change', patch: { autopilot: { contact: KAI } } });
+    expect(harness.state.settings.autopilot?.contact).toEqual(KAI);
+    harness.send({ type: 'settings.change', patch: { autopilot: { contact: { kind: 'team' } } } });
+    expect(harness.state.settings.autopilot?.contact).toEqual({ kind: 'team' });
+  });
+});
+
+describe('escalating to Slack', () => {
+  test('sends nothing to Slack by default, so only your team sees the escalation', () => {
+    const { harness, taskId } = escalateTo(null);
+    expect(harness.task(taskId).escalation?.reason).toBe(WAITED);
+    expect(harness.effectsOf('slack.escalate')).toHaveLength(0);
+  });
+
+  test.each([ONCALL, KAI])('asks Slack to tell $name, beside the team escalation', (contact) => {
+    const { harness, taskId, escalatedAt } = escalateTo(contact);
+    expect(harness.task(taskId).escalation?.at).toBe(escalatedAt);
+    expect(harness.effectsOf('slack.escalate')).toEqual([
+      { kind: 'slack.escalate', taskId, escalatedAt, contact },
+    ]);
+  });
+
+  test('records where it went once, in the task’s activity', () => {
+    const { harness, taskId, escalatedAt } = escalateTo(ONCALL);
+    recordSent(harness, taskId, escalatedAt);
+    expect(harness.task(taskId).slackEscalation).toEqual({ escalatedAt, contact: ONCALL, ts: '500.1' });
+    expect(harness.task(taskId).activity.at(-1)).toMatchObject({
+      actor: 'shinsa',
+      text: 'Sent to #oncall in Slack',
+      detail: null,
+    });
+    expect(recordSent(harness, taskId, escalatedAt).events).toEqual([]);
+    expect(harness.send({ ...recordCommand(taskId, escalatedAt), taskId: 'gone' }).events).toEqual([]);
+  });
+
+  test('says when Slack could not be reached, with Slack’s reason', () => {
+    const { harness, taskId, escalatedAt } = escalateTo(ONCALL);
+    recordSent(harness, taskId, escalatedAt, 'The Shinsa app is not in #oncall.');
+    expect(harness.task(taskId).slackEscalation?.ts).toBeNull();
+    expect(harness.task(taskId).activity.at(-1)).toMatchObject({
+      text: 'Could not reach #oncall in Slack',
+      detail: 'The Shinsa app is not in #oncall.',
+    });
+  });
+
+  test('names a person without a hash', () => {
+    const { harness, taskId, escalatedAt } = escalateTo(KAI);
+    harness.send({ ...recordCommand(taskId, escalatedAt), contact: KAI });
+    expect(harness.task(taskId).activity.at(-1)?.text).toBe('Sent to Kai Tanaka in Slack');
+  });
+
+  test('edits the Slack message once the escalation clears, with the contact it went to', () => {
+    const { harness, taskId, escalatedAt } = escalateTo(ONCALL);
+    recordSent(harness, taskId, escalatedAt);
+    harness.send({ type: 'settings.change', patch: { autopilot: { contact: KAI } } });
+    answerMerge(harness, taskId);
+    expect(harness.task(taskId).escalation).toBeNull();
+    expect(harness.effectsOf('slack.escalate')).toEqual([
+      { kind: 'slack.escalate', taskId, escalatedAt, contact: ONCALL },
+      { kind: 'slack.escalate', taskId, escalatedAt, contact: ONCALL },
+    ]);
+  });
+
+  test('edits nothing when the escalation never reached Slack, or another gate closes', () => {
+    const { harness, taskId } = escalateTo(ONCALL);
+    answerMerge(harness, taskId);
+    expect(harness.effectsOf('slack.escalate')).toHaveLength(1);
+    const other = escalateTo(ONCALL);
+    recordSent(other.harness, other.taskId, other.escalatedAt);
+    other.harness.send({ type: 'task.prioritize', taskId: other.taskId, priority: 'normal' });
+    expect(other.harness.task(other.taskId).escalation?.at).toBe(other.escalatedAt);
+    expect(other.harness.effectsOf('slack.escalate')).toHaveLength(1);
+  });
+});
+
+function recordCommand(taskId: string, escalatedAt: number) {
+  return {
+    type: 'slack.record_escalation' as const,
+    taskId,
+    escalatedAt,
+    contact: ONCALL,
+    ts: '500.1',
+    problem: null,
+  };
+}

@@ -447,6 +447,26 @@ describe('parseUserCommand', () => {
     expect(() => parseCommand({ type: 'task.cancel' })).toThrow(DomainError);
   });
 
+  test('reads an Autopilot contact, and refuses one it cannot reach', () => {
+    const channel = { kind: 'slack_channel' as const, teamId: 'T1', id: 'C9', name: 'oncall' };
+    expect(parseCommand({ type: 'settings.change', patch: { autopilot: { contact: channel } } })).toEqual({
+      type: 'settings.change',
+      patch: { autopilot: { contact: channel } },
+    });
+    const refused: [unknown, string][] = [
+      [{ ...channel, id: 'C9 <!channel>' }, 'A Slack id is letters, digits, dots, dashes and underscores.'],
+      [{ ...channel, name: '' }, 'name must not be empty.'],
+      [{ ...channel, name: 'x'.repeat(81) }, 'name is longer than 80 characters.'],
+      [{ kind: 'slack_person', teamId: 'T1', name: 'Kai' }, 'id'],
+      [{ kind: 'pager' }, 'kind must be one of team, slack_channel, slack_person.'],
+    ];
+    for (const [contact, message] of refused) {
+      expect(() => parseCommand({ type: 'settings.change', patch: { autopilot: { contact } } })).toThrow(
+        message
+      );
+    }
+  });
+
   test('never carries prototype keys into the command', () => {
     const parsed = parseCommand(JSON.parse('{"type":"task.cancel","taskId":"t1","__proto__":{"x":1}}'));
     expect(Object.keys(parsed)).toEqual(['type', 'taskId']);

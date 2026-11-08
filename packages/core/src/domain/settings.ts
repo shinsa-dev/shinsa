@@ -70,6 +70,29 @@ export const AUTOPILOT_URGENT_ACTIONS: readonly AutopilotUrgent[] = [
   'escalate_then_merge',
 ];
 
+export type AutopilotSlackContactKind = 'slack_channel' | 'slack_person';
+
+export type AutopilotContactKind = 'team' | AutopilotSlackContactKind;
+
+export const AUTOPILOT_CONTACT_KINDS: readonly AutopilotContactKind[] = [
+  'team',
+  'slack_channel',
+  'slack_person',
+];
+
+export interface AutopilotSlackContact {
+  kind: AutopilotSlackContactKind;
+  teamId: string;
+  id: string;
+  name: string;
+}
+
+export type AutopilotContact = { kind: 'team' } | AutopilotSlackContact;
+
+export function isSlackContact(contact: AutopilotContact): contact is AutopilotSlackContact {
+  return contact.kind !== 'team';
+}
+
 export interface AutopilotPolicy {
   enabled: boolean;
   approveUpTo: AutopilotRisk;
@@ -78,6 +101,7 @@ export interface AutopilotPolicy {
   urgent: AutopilotUrgent;
   urgentWaitMinutes: number;
   ignoreUsageLimits: boolean;
+  contact: AutopilotContact;
 }
 
 export const MAX_URGENT_WAIT_MINUTES = 1440;
@@ -90,6 +114,7 @@ export const AUTOPILOT_DEFAULTS: AutopilotPolicy = {
   urgent: 'escalate',
   urgentWaitMinutes: 60,
   ignoreUsageLimits: true,
+  contact: { kind: 'team' },
 };
 
 export function resolveAutopilotPolicy(settings: Settings): AutopilotPolicy {

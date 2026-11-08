@@ -15,6 +15,8 @@ export const SLACK_RELAY_PATHS = {
   post: '/__remote/slack/post',
   session: '/__remote/slack/session',
   react: '/__remote/slack/react',
+  directory: '/__remote/slack/directory',
+  notify: '/__remote/slack/notify',
 } as const;
 
 export const SLACK_RELAY_MESSAGE_LIMITS = {
@@ -31,15 +33,17 @@ const withNullDefault = <S extends Schema.Top>(schema: S) =>
 
 const SlackThread = Schema.Struct({ teamId: SlackId, channelId: SlackId, threadTs: SlackId });
 
+const SlackRelayMessage = Schema.Struct({
+  text: Schema.String.check(Schema.isNonEmpty(), Schema.isMaxLength(SLACK_RELAY_MESSAGE_LIMITS.text)),
+  blocks: Schema.Array(Schema.Record(Schema.String, Schema.Unknown)).check(
+    Schema.isMaxLength(SLACK_RELAY_MESSAGE_LIMITS.blocks)
+  ),
+});
+
 export const SlackRelayPost = Schema.Struct({
   ...SlackThread.fields,
   replaceTs: withNullDefault(SlackId),
-  message: Schema.Struct({
-    text: Schema.String.check(Schema.isNonEmpty(), Schema.isMaxLength(SLACK_RELAY_MESSAGE_LIMITS.text)),
-    blocks: Schema.Array(Schema.Record(Schema.String, Schema.Unknown)).check(
-      Schema.isMaxLength(SLACK_RELAY_MESSAGE_LIMITS.blocks)
-    ),
-  }),
+  message: SlackRelayMessage,
 });
 
 export type SlackRelayPost = typeof SlackRelayPost.Type;
@@ -47,6 +51,34 @@ export type SlackRelayPost = typeof SlackRelayPost.Type;
 export const SlackRelayPosted = Schema.Struct({ ts: Schema.String });
 
 export type SlackRelayPosted = typeof SlackRelayPosted.Type;
+
+export const SLACK_CONTACT_KINDS = ['slack_channel', 'slack_person'] as const;
+
+export const SlackRelayNotify = Schema.Struct({
+  teamId: SlackId,
+  kind: Schema.Literals(SLACK_CONTACT_KINDS),
+  id: SlackId,
+  replaceTs: withNullDefault(SlackId),
+  message: SlackRelayMessage,
+});
+
+export type SlackRelayNotify = typeof SlackRelayNotify.Type;
+
+export const SlackDirectoryQuery = Schema.Struct({ teamId: SlackId });
+
+export type SlackDirectoryQuery = typeof SlackDirectoryQuery.Type;
+
+export const SlackDirectoryEntry = Schema.Struct({ id: SlackId, name: Schema.String });
+
+export type SlackDirectoryEntry = typeof SlackDirectoryEntry.Type;
+
+export const SlackDirectory = Schema.Struct({
+  teamId: SlackId,
+  channels: Schema.Array(SlackDirectoryEntry),
+  people: Schema.Array(SlackDirectoryEntry),
+});
+
+export type SlackDirectory = typeof SlackDirectory.Type;
 
 export const SlackSessionStatus = Schema.Literals(SLACK_SESSION_STATUSES);
 

@@ -25,6 +25,7 @@ import {
 } from './fields.ts';
 import { SCHEDULE_TRIGGER_KINDS, WEBHOOK_ENCODINGS } from './schedules.ts';
 import {
+  AUTOPILOT_CONTACT_KINDS,
   AUTOPILOT_MERGES,
   AUTOPILOT_RISKS,
   AUTOPILOT_URGENT_ACTIONS,
@@ -91,6 +92,26 @@ export type Unbranded<T> =
       ? { [Key in keyof T]: Unbranded<T[Key]> }
       : T;
 
+const SLACK_CONTACT_ID_MESSAGE = 'A Slack id is letters, digits, dots, dashes and underscores.';
+
+const SlackContactId = Id(64).check(
+  Schema.isPattern(/^[A-Za-z0-9._-]+$/, { message: SLACK_CONTACT_ID_MESSAGE })
+);
+
+const SlackContact = <const K extends 'slack_channel' | 'slack_person'>(kind: K) =>
+  Schema.Struct({
+    kind: Schema.Literal(kind),
+    teamId: SlackContactId,
+    id: SlackContactId,
+    name: Id(80),
+  });
+
+export const AutopilotContactPatch = Tagged('kind', AUTOPILOT_CONTACT_KINDS, [
+  Schema.Struct({ kind: Schema.Literal('team') }),
+  SlackContact('slack_channel'),
+  SlackContact('slack_person'),
+]);
+
 const AutopilotPatch = Strict(
   {
     enabled: Schema.optionalKey(Bool),
@@ -100,6 +121,7 @@ const AutopilotPatch = Strict(
     urgent: Schema.optionalKey(Choice(AUTOPILOT_URGENT_ACTIONS)),
     urgentWaitMinutes: Schema.optionalKey(WholeNumber),
     ignoreUsageLimits: Schema.optionalKey(Bool),
+    contact: Schema.optionalKey(AutopilotContactPatch),
   },
   'Autopilot',
   'autopilot'
