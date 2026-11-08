@@ -978,6 +978,7 @@ describe('keeping a teammate’s full tasks', () => {
     const { feeds, laptop, stub, sockets, viewWaits } = await setUp({ live: createFullLive() });
     await feeds.start();
     await until('the list arrives', () => feeds.snapshot().tasks.length === 2);
+    await until('the view fetch waits', () => viewWaits.length > 0);
     expect(viewWaits).toHaveLength(1);
     await releaseWait(viewWaits);
     await until('both views are kept', async () => (await (await readKeptViews(laptop)).list()).length === 2);
