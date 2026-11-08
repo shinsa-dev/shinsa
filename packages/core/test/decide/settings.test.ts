@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { PROJECT_LIMITS, resolveQueue } from '../../src/index.ts';
+import { NO_FOCUS, NO_FOCUS_PROJECTS, PROJECT_LIMITS, resolveQueue } from '../../src/index.ts';
 import { parseCommand, createHarness, createTask, type Harness, registerRepo } from '../harness.ts';
 
 function registerAt(
@@ -291,7 +291,7 @@ describe('projects', () => {
     expect(harness.state.projects[projectId]).toBeUndefined();
     expect(harness.state.repos[repoId]?.projectId).toBeNull();
     expect(harness.state.repos[other]?.projectId).not.toBeNull();
-    expect(harness.state.focus).toEqual({ projectId: null, teamId: null, until: null });
+    expect(harness.state.focus).toEqual(NO_FOCUS);
     expect(harness.lastEffect('briefing.request').projectId).toBeNull();
     expect(resolveQueue(harness.state, 0).working).toHaveLength(1);
   });
@@ -303,7 +303,7 @@ describe('projects', () => {
     const two = writeProject(harness, { name: 'Two' })?.id ?? '';
     harness.send({ type: 'focus.change', projectId: two, until: null });
     harness.send({ type: 'project.remove', projectId: one ?? '' });
-    expect(harness.state.focus.projectId).toBe(two);
+    expect(harness.state.focus.projectIds).toEqual([two]);
     const events = harness.state.seq;
     harness.send({ type: 'project.remove', projectId: 'gone' });
     expect(harness.state.seq).toBe(events);
@@ -315,11 +315,85 @@ describe('focus', () => {
     const harness = createHarness();
     const work = writeProject(harness, { name: 'Work' })?.id ?? '';
     harness.send({ type: 'focus.change', projectId: work, until: 9_000 });
-    expect(harness.state.focus).toEqual({ projectId: work, teamId: null, until: 9_000 });
+    expect(harness.state.focus).toEqual({ projectIds: [work], except: false, teamId: null, until: 9_000 });
     expect(harness.lastEffect('briefing.request').projectId).toBe(work);
     const events = harness.state.seq;
     harness.send({ type: 'focus.change', projectId: work, until: 9_000 });
     expect(harness.state.seq).toBe(events);
+  });
+
+  test('focuses on several projects, or on all but some, in one stable order', () => {
+    const harness = createHarness();
+    const work = writeProject(harness, { name: 'Work' })?.id ?? '';
+    const home = writeProject(harness, { name: 'Home' })?.id ?? '';
+    const [first = '', second = ''] = [work, home].sort();
+    harness.send({
+      type: 'focus.change',
+      projectId: null,
+      projectIds: [second, first, second],
+      until: null,
+    });
+    expect(harness.state.focus).toEqual({
+      projectIds: [first, second],
+      except: false,
+      teamId: null,
+      until: null,
+    });
+    expect(harness.lastEffect('briefing.request').projectId).toBeNull();
+    const events = harness.state.seq;
+    harness.send({
+      type: 'focus.change',
+      projectId: null,
+      projectIds: [first, second],
+      until: null,
+    });
+    expect(harness.state.seq).toBe(events);
+    harness.send({ type: 'focus.change', projectId: null, projectIds: [work], except: true, until: null });
+    expect(harness.state.focus).toEqual({ projectIds: [work], except: true, teamId: null, until: null });
+    expect(harness.lastEffect('briefing.request').projectId).toBeNull();
+  });
+
+  test('a focus that leaves nothing out is no focus at all', () => {
+    const harness = createHarness();
+    const work = writeProject(harness, { name: 'Work' })?.id ?? '';
+    harness.send({ type: 'focus.change', projectId: work, until: null });
+    harness.send({ type: 'focus.change', projectId: null, projectIds: [], except: true, until: null });
+    expect(harness.state.focus).toEqual(NO_FOCUS);
+  });
+
+  test('projects and a team cannot share a focus, and every project must exist', () => {
+    const harness = createHarness();
+    const work = writeProject(harness, { name: 'Work' })?.id ?? '';
+    expect(() =>
+      harness.send({
+        type: 'focus.change',
+        projectId: null,
+        projectIds: [work],
+        teamId: 'team-1',
+        until: null,
+      })
+    ).toThrow('Focus on projects or on a team, not both at once.');
+    expect(() =>
+      harness.send({ type: 'focus.change', projectId: null, projectIds: [work, 'nope'], until: null })
+    ).toThrow('No project nope');
+  });
+
+  test('removing one project of several keeps the rest in focus, and removing the last clears it', () => {
+    const harness = createHarness();
+    const work = writeProject(harness, { name: 'Work' })?.id ?? '';
+    const home = writeProject(harness, { name: 'Home' })?.id ?? '';
+    harness.send({
+      type: 'focus.change',
+      projectId: null,
+      projectIds: [work, home],
+      except: true,
+      until: 9_000,
+    });
+    harness.send({ type: 'project.remove', projectId: work });
+    expect(harness.state.focus).toEqual({ projectIds: [home], except: true, teamId: null, until: 9_000 });
+    expect(harness.lastEffect('briefing.request').projectId).toBeNull();
+    harness.send({ type: 'project.remove', projectId: home });
+    expect(harness.state.focus).toEqual(NO_FOCUS);
   });
 
   test('focus must name a project that exists', () => {
@@ -338,11 +412,11 @@ describe('focus', () => {
     const inTeam = createTask(harness, { repoId: shared });
     createTask(harness, { repoId: own });
     harness.send({ type: 'focus.change', projectId: null, teamId: 'team-1', until: 9_000 });
-    expect(harness.state.focus).toEqual({ projectId: null, teamId: 'team-1', until: 9_000 });
+    expect(harness.state.focus).toEqual({ ...NO_FOCUS, teamId: 'team-1', until: 9_000 });
     expect(harness.lastEffect('briefing.request').projectId).toBeNull();
     const focused = resolveQueue(harness.state, 0);
     expect(focused.focusTeamId).toBe('team-1');
-    expect(focused.focusProjectId).toBeNull();
+    expect(focused.focus).toEqual(NO_FOCUS_PROJECTS);
     expect(focused.working.map((task) => task.id)).toEqual([inTeam]);
     const ended = resolveQueue(harness.state, 9_000);
     expect(ended.focusTeamId).toBeNull();
@@ -354,7 +428,7 @@ describe('focus', () => {
     const work = writeProject(harness, { name: 'Work' })?.id ?? '';
     expect(() =>
       harness.send({ type: 'focus.change', projectId: work, teamId: 'team-1', until: null })
-    ).toThrow('Focus on a project or on a team, not both at once.');
+    ).toThrow('Focus on projects or on a team, not both at once.');
     expect(harness.state.seq).toBe(1);
   });
 

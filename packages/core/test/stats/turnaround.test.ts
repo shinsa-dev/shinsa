@@ -185,7 +185,7 @@ describe('turnaround', () => {
     const you = {
       tasks: {},
       away: { a: { from: 2 * H, to: 3 * H } },
-      focusHistory: { f: { projectId: 'a', from: 3 * H, to: 6.5 * H, until: null } },
+      focusHistory: { f: { projectIds: ['a'], except: false, from: 3 * H, to: 6.5 * H, until: null } },
     };
     const turnaround = resolveTurnaround(source(waiting), you, windowOf(7));
     expect(turnaround.yourTurnaround.median).toBe(2 * H);

@@ -322,6 +322,15 @@ export {
   type ShinsaToolName,
   TASK_SESSION_ROLES,
 } from './tools.ts';
+export {
+  isProjectInFocus,
+  NO_FOCUS,
+  NO_FOCUS_PROJECTS,
+  normaliseFocusProjects,
+  resolveFocusSelection,
+  type SingleProjectFocus,
+  selectSingleFocusProject,
+} from './focus.ts';
 export type * from './types.ts';
 export {
   EVIDENCE_KINDS,

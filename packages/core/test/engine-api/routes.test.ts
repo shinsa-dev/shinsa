@@ -141,6 +141,7 @@ const FEATURE_ROUTES = {
   'usage.watchdog_limits': [],
   'share.scopes': [],
   'suggestion.bundle': [],
+  'focus.projects': [],
 };
 
 const LOCAL_ONLY = [

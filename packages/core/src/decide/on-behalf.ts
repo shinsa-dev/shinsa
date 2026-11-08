@@ -78,8 +78,10 @@ const DESCRIPTIONS: Descriptions = {
   'project.write': (_state, command) => `Saved the project “${command.project.name}”`,
   'project.remove': () => 'Removed a project',
   'focus.change': (state, command) => {
-    if (command.projectId) return `Focused on ${state.projects[command.projectId]?.name ?? 'a project'}`;
-    return command.teamId ? 'Focused on a team' : 'Cleared the focus';
+    const projectIds = command.projectIds ?? (command.projectId ? [command.projectId] : []);
+    if (projectIds.length === 0) return command.teamId ? 'Focused on a team' : 'Cleared the focus';
+    const names = describeList(projectIds.map((id) => state.projects[id]?.name ?? 'a project'));
+    return command.except ? `Focused on everything but ${names}` : `Focused on ${names}`;
   },
   'settings.change': (_state, command) => `Changed settings: ${Object.keys(command.patch).join(', ')}`,
   'task.prioritize': (state, command) =>

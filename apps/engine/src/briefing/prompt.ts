@@ -5,6 +5,7 @@ import {
   type QueuedGate,
   type ShinsaState,
   BRIEFING_LIMITS,
+  selectSingleFocusProject,
 } from '@shinsa/core';
 import type { JsonSchema } from '../agents/providers/index.ts';
 import {
@@ -110,7 +111,8 @@ export function describeBriefingPrompt(state: ShinsaState, queue: Queue, now: nu
     const blocker = task.waitsOn.map((id) => state.tasks[id]?.title).find(Boolean);
     return `- “${task.title}”, not started: waiting for “${blocker ?? 'another task'}” to finish`;
   });
-  const project = queue.focusProjectId ? state.projects[queue.focusProjectId]?.name : null;
+  const focused = selectSingleFocusProject(queue.focus);
+  const project = focused ? state.projects[focused]?.name : null;
   return [
     project ? `Focus: ${project}.` : 'No focus set.',
     'Decisions that need the developer, in ranked order:',

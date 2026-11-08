@@ -6,13 +6,16 @@ import {
   type Evidence,
   type Feedback,
   type Focus,
+  type FocusProjects,
   type FocusSpan,
   formatTaskHandle,
   type Gate,
   isTaskSettled,
   type MemoryEntry,
+  NO_FOCUS,
   NO_PROJECT_KEY,
   needsWorktree,
+  normaliseFocusProjects,
   type OnBehalfAction,
   type PhaseReport,
   type Project,
@@ -22,11 +25,14 @@ import {
   type RepoStart,
   type Run,
   type RunUsage,
+  resolveFocusSelection,
   resolveShapeOf,
   resolveTaskPipeline,
   type Schedule,
   type Settings,
   SHAPE_PIPELINES,
+  type SingleProjectFocus,
+  selectSingleFocusProject,
   type Task,
   type TaskDuplicate,
   type TaskShape,
@@ -114,7 +120,7 @@ export function createState(): ShinsaState {
     seq: 0,
     repos: {},
     projects: {},
-    focus: { projectId: null, teamId: null, until: null },
+    focus: NO_FOCUS,
     taskNumbers: {},
     settings: createSettings(),
     tasks: {},
@@ -134,12 +140,15 @@ export function createState(): ShinsaState {
   };
 }
 
-export function briefingKey(projectId: string | null) {
-  return projectId ?? '*';
+export function briefingKey(focus: FocusProjects | SingleProjectFocus) {
+  const selection = resolveFocusSelection(focus);
+  const { projectIds, except } = normaliseFocusProjects(selection.projectIds, selection.except);
+  if (projectIds.length === 0) return '*';
+  return selectSingleFocusProject({ projectIds, except }) ?? `${except ? '-' : '+'}${projectIds.join(',')}`;
 }
 
-export function replaceBriefing(state: ShinsaState, projectId: string | null, stored: StoredBriefing) {
-  return { ...state, briefings: { ...state.briefings, [briefingKey(projectId)]: stored } };
+export function replaceBriefing(state: ShinsaState, key: string, stored: StoredBriefing) {
+  return { ...state, briefings: { ...state.briefings, [key]: stored } };
 }
 
 function recordHandle(state: ShinsaState, handle: string) {
@@ -812,7 +821,7 @@ function applyWorkspaceEvent(state: ShinsaState, event: WorkspaceEvent) {
       removeEntry(state, 'projects', event.projectId);
       return;
     case 'focus.changed':
-      state.focus = { ...event.focus };
+      state.focus = { ...event.focus, projectIds: [...event.focus.projectIds] };
       recordFocus(state, event.focus, event.at);
       return;
     case 'settings.changed':

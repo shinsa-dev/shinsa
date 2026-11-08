@@ -14,6 +14,7 @@ import {
   type ProjectInput,
   SETTINGS_KEYS,
   type Settings,
+  selectSingleFocusProject,
   type UserCommand,
   WORKSPACE_MODES,
   type WorkspaceMode,
@@ -184,7 +185,7 @@ function describeProjectLine(project: ProjectView) {
 
 function describeProject(project: ProjectView, focus: ProjectsRead['focus']) {
   return [
-    `${project.name} (${project.key})${focus.projectId === project.id ? ', in focus' : ''}`,
+    `${project.name} (${project.key})${selectSingleFocusProject(focus) === project.id ? ', in focus' : ''}`,
     project.description || 'No description.',
     '',
     project.repos.length === 0 ? 'No repositories yet.' : 'Repositories:',
@@ -393,7 +394,7 @@ export const CONFIG_SPECS: SurfaceSpec[] = [
     fields: [],
     read: (_values, client) => client.api.state.projects(),
     format: ({ projects, focus }) => {
-      const project = projects.find((candidate) => candidate.id === focus.projectId);
+      const project = projects.find((candidate) => candidate.id === selectSingleFocusProject(focus));
       if (!project) return 'No focus: everything shows.';
       const until = focus.until ? ` until ${DateTime.formatIso(DateTime.makeUnsafe(focus.until))}` : '';
       return `Focused on ${project.name}${until}.`;

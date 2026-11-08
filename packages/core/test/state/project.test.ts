@@ -1,8 +1,11 @@
 import { describe, expect, test } from 'bun:test';
 import {
   applyEvent,
+  briefingKey,
   createSettings,
   createState,
+  NO_FOCUS,
+  NO_FOCUS_PROJECTS,
   replaceBriefing,
   replayEventLog,
   resolveFallbackBriefing,
@@ -23,7 +26,7 @@ describe('briefings', () => {
   test('replacing one stores the guide per project and leaves the state it came from as it was', () => {
     const guide = resolveFallbackBriefing(queueOf(ready), NOW);
     const empty = createState();
-    const withGuide = replaceBriefing(empty, null, {
+    const withGuide = replaceBriefing(empty, briefingKey(NO_FOCUS_PROJECTS), {
       text: 'Start with the chat.',
       at: NOW,
       briefing: guide,
@@ -33,6 +36,17 @@ describe('briefings', () => {
     const both = replaceBriefing(withGuide, 'project-1', { text: 'Plain.', at: NOW, briefing: null });
     expect(Object.keys(both.briefings)).toEqual(['*', 'project-1']);
     expect(both.tasks).toBe(withGuide.tasks);
+  });
+});
+
+describe('briefing keys', () => {
+  test('keys a guide by the whole focus, the same for one project as before', () => {
+    expect(briefingKey(NO_FOCUS_PROJECTS)).toBe('*');
+    expect(briefingKey({ projectIds: ['b'], except: false })).toBe('b');
+    expect(briefingKey({ projectIds: ['b', 'a', 'b'], except: false })).toBe('+a,b');
+    expect(briefingKey({ projectIds: ['b'], except: true })).toBe('-b');
+    expect(briefingKey({ projectId: 'b' })).toBe('b');
+    expect(briefingKey({ projectId: null })).toBe('*');
   });
 });
 
@@ -151,9 +165,9 @@ describe('task activity', () => {
 describe('replayEventLog', () => {
   test('applies every event it can, reports the ones it cannot, and keeps the highest sequence', () => {
     const events = [
-      { type: 'focus.changed', focus: { projectId: null, teamId: null, until: 5 }, seq: 1, at: 1 },
+      { type: 'focus.changed', focus: { ...NO_FOCUS, until: 5 }, seq: 1, at: 1 },
       { type: 'task.suggested', seq: 2, at: 2 },
-      { type: 'focus.changed', focus: { projectId: null, teamId: null, until: 9 }, seq: 3, at: 3 },
+      { type: 'focus.changed', focus: { ...NO_FOCUS, until: 9 }, seq: 3, at: 3 },
       { type: 'task.suggested', seq: 4, at: 4 },
     ] as unknown as ShinsaEvent[];
     const { state, failures } = replayEventLog(events);
