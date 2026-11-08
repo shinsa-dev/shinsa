@@ -146,6 +146,8 @@ export class EffectHandlers extends Context.Service<
             return yield* withSlack((slack) => slack.merge(effect, attempt.key));
           case 'slack.react':
             return yield* withSlack((slack) => slack.react(effect));
+          case 'slack.escalate':
+            return yield* withSlack((slack) => slack.escalate(effect, attempt.key));
           case 'feedback.draft':
             return yield* Effect.mapError(
               world.feedback.draft(effect.feedbackId, attempt.key),

@@ -38,7 +38,7 @@ import type { RemoteSnapshot } from '../remote/status.ts';
 import type { TeamFeedSnapshot } from '../remote/teams.ts';
 import type { MergeStepView } from '../report/merge-steps.ts';
 import { AccessScopes } from '../scopes/schema.ts';
-import type { SlackSnapshot } from '../slack/relay.ts';
+import type { SlackDirectoryView, SlackSnapshot } from '../slack/relay.ts';
 import type { CoverageDetection } from '../test-coverage/types.ts';
 
 export const ENGINE_BODY_LIMIT_BYTES = 8 * 1024 * 1024;
@@ -689,6 +689,12 @@ export const PlacementAnswerBody = Schema.Unknown.pipe(
 export const SlackAnswer = Schema.Unknown.pipe(
   Schema.refine((value): value is SlackSnapshot => Predicate.isObject(value))
 );
+
+export const SlackDirectoryAnswer = Schema.Unknown.pipe(
+  Schema.refine((value): value is SlackDirectoryView => Predicate.isObject(value))
+);
+
+export const SlackDirectoryParams = { teamId: Schema.String };
 
 export const SignInAnswer = Schema.Unknown.pipe(
   Schema.refine((value): value is { readonly authorizationUrl: string | null } => Predicate.isObject(value))

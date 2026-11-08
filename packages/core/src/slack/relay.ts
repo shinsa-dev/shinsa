@@ -86,6 +86,10 @@ export const SlackDirectory = Schema.Struct({
 
 export type SlackDirectory = typeof SlackDirectory.Type;
 
+export interface SlackDirectoryView extends SlackDirectory {
+  problem: string | null;
+}
+
 export const SlackSessionStatus = Schema.Literals(SLACK_SESSION_STATUSES);
 
 export type SlackSessionStatus = typeof SlackSessionStatus.Type;
@@ -151,6 +155,18 @@ export function resolveSlackConnectUrl(origin: string, instanceId: string) {
 
 export function resolveSlackTaskUrl(origin: string, taskId: string) {
   return `${origin}/tasks/${encodeURIComponent(taskId)}`;
+}
+
+export function resolveSlackEscalationUrl(
+  origin: string,
+  state: ShinsaState,
+  taskId: string,
+  instanceId: string
+) {
+  const projectId = state.tasks[taskId]?.projectId;
+  const teamId = projectId ? state.projects[projectId]?.teamIds?.[0] : undefined;
+  if (!teamId) return resolveSlackTaskUrl(origin, taskId);
+  return `${origin}/teams/${[teamId, instanceId, taskId].map(encodeURIComponent).join('/')}`;
 }
 
 export interface SlackNames {

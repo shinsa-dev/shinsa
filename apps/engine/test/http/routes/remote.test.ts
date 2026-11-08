@@ -356,4 +356,25 @@ describe('Slack over HTTP', () => {
     expect((await startRoutes().send('/api/slack')).status).toBe(404);
     expect((await startRoutes().post('/api/slack/disconnect', {})).status).toBe(404);
   });
+
+  test('lists the channels and people of one workspace for Autopilot', async () => {
+    const asked: string[] = [];
+    const slack = {
+      directory: (teamId: string) =>
+        Effect.sync(() => {
+          asked.push(teamId);
+          return { teamId, channels: [], people: [], problem: null };
+        }),
+    } as unknown as Slack['Service'];
+    const { send } = startRoutes({ slack });
+    expect(await (await send('/api/slack/directory?teamId=T1')).json()).toEqual({
+      teamId: 'T1',
+      channels: [],
+      people: [],
+      problem: null,
+    });
+    expect(asked).toEqual(['T1']);
+    expect((await send('/api/slack/directory')).status).toBe(400);
+    expect((await startRoutes().send('/api/slack/directory?teamId=T1')).status).toBe(404);
+  });
 });

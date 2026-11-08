@@ -802,6 +802,222 @@ describe('without injected clocks and networks', () => {
   });
 });
 
+describe('an escalation the outbox asks to send to Slack', () => {
+  const CONTACT = { kind: 'slack_channel' as const, teamId: 'T1', id: 'C9', name: 'on-call' };
+  const ESCALATED_AT = NOW - 1000;
+  const effect = {
+    kind: 'slack.escalate' as const,
+    taskId: 't1',
+    escalatedAt: ESCALATED_AT,
+    contact: CONTACT,
+  };
+  const ESCALATION = {
+    at: ESCALATED_AT,
+    reason: 'Waited 60 minutes for a review.',
+    handoff: {
+      waitedMinutes: 60,
+      ownerActiveAt: null,
+      foundBy: null,
+      ratings: null,
+      mergesAt: null,
+      blockedBy: null,
+    },
+  };
+
+  function setUpEscalated(options: { enabled?: boolean; teamIds?: string[] } = {}) {
+    const setup = setUp({ link: null, enabled: options.enabled });
+    setup.stub.update((state) => {
+      state.projects.p1 = {
+        id: 'p1',
+        name: 'Shinsa',
+        color: 'blue',
+        key: 'LOC',
+        description: '',
+        folders: [],
+        ...(options.teamIds ? { teamIds: options.teamIds } : {}),
+      };
+      const task = state.tasks.t1;
+      if (!task) return;
+      task.projectId = 'p1';
+      task.escalation = ESCALATION;
+    });
+    setup.answers['/__remote/slack/notify'] = (body) =>
+      Response.json((body?.replace as Record<string, unknown> | null) ?? { channelId: 'C9', ts: '300.1' });
+    return setup;
+  }
+
+  function markSent(stub: Setup['stub']) {
+    stub.update((state) => {
+      const task = state.tasks.t1;
+      if (!task) return;
+      task.slackEscalation = { escalatedAt: ESCALATED_AT, contact: CONTACT, channelId: 'C9', ts: '300.1' };
+    });
+  }
+
+  test('posts it to the chosen channel with the task linked, and records where it went', async () => {
+    const { slack, stub, relay } = setUpEscalated();
+    await slack.escalate(effect, context('escalate-1'));
+    const [call] = callsTo(relay, 'notify');
+    expect(call).toMatchObject({
+      method: 'POST',
+      token: 'machine-token',
+      body: { teamId: 'T1', kind: 'slack_channel', id: 'C9', replace: null },
+    });
+    const sent = JSON.stringify(call?.body?.message);
+    expect(sent).toContain('Urgent change needs someone');
+    expect(sent).toContain('https://app.test/tasks/t1');
+    expect(stub.dispatched).toEqual([
+      {
+        type: 'slack.record_escalation',
+        taskId: 't1',
+        escalatedAt: ESCALATED_AT,
+        contact: CONTACT,
+        channelId: 'C9',
+        ts: '300.1',
+        problem: null,
+      },
+    ]);
+    expect(stub.commandIds).toEqual(['escalate-1:slack.record_escalation']);
+  });
+
+  test('links the team’s page when the project is in a team', async () => {
+    const { slack, relay } = setUpEscalated({ teamIds: ['team 1'] });
+    await slack.escalate(effect, context());
+    expect(JSON.stringify(callsTo(relay, 'notify')[0]?.body?.message)).toContain(
+      'https://app.test/teams/team%201/k3x9/t1'
+    );
+  });
+
+  test('sends nothing again once it was sent, or for a task that is gone', async () => {
+    const { slack, stub, relay } = setUpEscalated();
+    markSent(stub);
+    await slack.escalate(effect, context());
+    await slack.escalate({ ...effect, taskId: 'gone' }, context());
+    expect(relay).toEqual([]);
+    expect(stub.dispatched).toEqual([]);
+  });
+
+  test('edits the same message once the escalation clears', async () => {
+    const { slack, stub, relay } = setUpEscalated();
+    markSent(stub);
+    stub.update((state) => {
+      const task = state.tasks.t1;
+      if (task) task.escalation = null;
+    });
+    await slack.escalate(effect, context());
+    const [call] = callsTo(relay, 'notify');
+    expect(call?.body).toMatchObject({ replace: { channelId: 'C9', ts: '300.1' } });
+    expect(JSON.stringify(call?.body?.message)).toContain('No longer needs anyone');
+    expect(stub.dispatched).toEqual([]);
+  });
+
+  test('edits nothing for an escalation that cleared before it was posted, or while remote access is off', async () => {
+    const cleared = setUpEscalated();
+    cleared.stub.update((state) => {
+      const task = state.tasks.t1;
+      if (task) task.escalation = null;
+    });
+    await cleared.slack.escalate(effect, context());
+    const off = setUpEscalated({ enabled: false });
+    markSent(off.stub);
+    off.stub.update((state) => {
+      const task = state.tasks.t1;
+      if (task) task.escalation = null;
+    });
+    await off.slack.escalate(effect, context());
+    expect([...cleared.relay, ...off.relay]).toEqual([]);
+    expect([...cleared.stub.dispatched, ...off.stub.dispatched]).toEqual([]);
+  });
+
+  test('logs and carries on when the edit is refused', async () => {
+    const { slack, stub, answers } = setUpEscalated();
+    markSent(stub);
+    stub.update((state) => {
+      const task = state.tasks.t1;
+      if (task) task.escalation = null;
+    });
+    answers['/__remote/slack/notify'] = () =>
+      Response.json({ error: { code: 'post_not_yours', message: 'Refused.' } }, { status: 403 });
+    await slack.escalate(effect, context());
+    expect(logs.fieldsOf('[Slack] The escalation could not be marked as handled')).toHaveLength(1);
+  });
+
+  test('records Slack’s reason when it will not take the post', async () => {
+    const { slack, stub, answers } = setUpEscalated();
+    answers['/__remote/slack/notify'] = () =>
+      Response.json(
+        {
+          error: {
+            code: 'slack_failed',
+            message: 'The Shinsa app is not in that channel. Invite it with /invite @Shinsa.',
+          },
+        },
+        { status: 502 }
+      );
+    await slack.escalate(effect, context());
+    expect(stub.dispatched[0]).toMatchObject({
+      type: 'slack.record_escalation',
+      channelId: null,
+      ts: null,
+      problem: 'The Shinsa app is not in that channel. Invite it with /invite @Shinsa.',
+    });
+  });
+
+  test('records that remote access is off, or that app.shinsa.dev could not be reached', async () => {
+    const off = setUpEscalated({ enabled: false });
+    await off.slack.escalate(effect, context());
+    expect(off.stub.dispatched[0]).toMatchObject({
+      problem: 'Remote access is off, so Shinsa cannot reach Slack.',
+    });
+    const broken = setUpEscalated();
+    broken.answers['/__remote/slack/notify'] = () => new Response('{', { status: 400 });
+    await broken.slack.escalate(effect, context());
+    expect(broken.stub.dispatched[0]).toMatchObject({ problem: 'app.shinsa.dev could not be reached.' });
+  });
+
+  test('throws while the relay is down, so the outbox tries again', async () => {
+    const { slack, stub, answers } = setUpEscalated();
+    answers['/__remote/slack/notify'] = () => new Response('', { status: 503 });
+    await expect(slack.escalate(effect, context())).rejects.toMatchObject({ _tag: 'RemoteUnreachable' });
+    expect(stub.dispatched).toEqual([]);
+  });
+});
+
+describe('the Slack channels and people Autopilot can escalate to', () => {
+  const DIRECTORY = {
+    teamId: 'T1',
+    channels: [{ id: 'C9', name: 'on-call' }],
+    people: [{ id: 'U2', name: 'Kai' }],
+  };
+
+  test('are read from app.shinsa.dev for one workspace', async () => {
+    const { slack, relay, answers } = setUp();
+    answers['/__remote/slack/directory'] = () => Response.json(DIRECTORY);
+    expect(await slack.directory('T1')).toEqual({ ...DIRECTORY, problem: null });
+    expect(relay[0]).toMatchObject({
+      path: '/__remote/slack/directory',
+      method: 'GET',
+      token: 'machine-token',
+    });
+  });
+
+  test('say why there are none when remote access is off or the workspace is not linked', async () => {
+    expect(await setUp({ enabled: false }).slack.directory('T1')).toEqual({
+      teamId: 'T1',
+      channels: [],
+      people: [],
+      problem: 'Remote access is off, so Shinsa cannot reach Slack.',
+    });
+    const { slack, answers } = setUp();
+    answers['/__remote/slack/directory'] = () =>
+      Response.json(
+        { error: { code: 'slack_not_linked', message: 'This machine is not linked in that workspace.' } },
+        { status: 403 }
+      );
+    expect((await slack.directory('T1')).problem).toBe('This machine is not linked in that workspace.');
+  });
+});
+
 describe('Settings → General → Slack', () => {
   test('shows the connect link and who is connected through app.shinsa.dev', async () => {
     const { slack, relay } = setUp();

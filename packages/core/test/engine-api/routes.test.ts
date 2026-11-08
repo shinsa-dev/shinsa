@@ -142,6 +142,7 @@ const FEATURE_ROUTES = {
   'usage.watchdog_limits': [],
   'share.scopes': [],
   'suggestion.bundle': [],
+  'autopilot-slack': ['GET /api/slack/directory'],
 };
 
 const LOCAL_ONLY = [

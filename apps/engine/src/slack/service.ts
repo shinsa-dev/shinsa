@@ -5,6 +5,8 @@ import {
   parseSlackEvaluation,
   parseSlackMention,
   resolveSlackConnectUrl,
+  resolveSlackEscalationMessage,
+  resolveSlackEscalationUrl,
   resolveSlackPostMessage,
   resolveSlackReaction,
   resolveSlackSessionStatus,
@@ -18,6 +20,7 @@ import {
   SLACK_FORWARD_HEADERS,
   SLACK_REACTIONS,
   type SlackDecisionReply,
+  type SlackDirectoryView,
   type SlackMessage,
   type SlackSessionStatus,
   type SlackSnapshot,
@@ -44,7 +47,10 @@ import {
   type SlackRefusal,
   type SlackRelayFailure,
   SlackRequestUnreadable,
+  SLACK_REMOTE_OFF_PROBLEM,
+  SLACK_UNREACHABLE_PROBLEM,
   SlackStatusInterval,
+  type SlackNotifyRefusal,
 } from './schema.ts';
 
 export class Slack extends Context.Service<
@@ -70,6 +76,11 @@ export class Slack extends Context.Service<
       key: string
     ) => Effect.Effect<void, SlackRefusal | SlackRelayFailure>;
     readonly react: (effect: SlackEffect<'slack.react'>) => Effect.Effect<void>;
+    readonly escalate: (
+      effect: SlackEffect<'slack.escalate'>,
+      key: string
+    ) => Effect.Effect<void, SlackRefusal | SlackRelayFailure>;
+    readonly directory: (teamId: string) => Effect.Effect<SlackDirectoryView>;
     readonly status: (
       effect: SlackEffect<'slack.status'>,
       key: string
@@ -343,6 +354,84 @@ export class Slack extends Context.Service<
         const react = (effect: SlackEffect<'slack.react'>) =>
           applyReaction(effect.thread, effect.messageTs, effect.reaction, null);
 
+        const describeEscalationProblem = (failure: SlackRelayFailure | SlackNotifyRefusal) =>
+          failure._tag === 'RemoteUnreachable' ? SLACK_UNREACHABLE_PROBLEM : failure.message;
+
+        const escalate = Effect.fn('Slack.escalate')(function* (
+          effect: SlackEffect<'slack.escalate'>,
+          key: string
+        ) {
+          const state = yield* engine.state;
+          const credentials = yield* input.credentials;
+          const url = credentials
+            ? resolveSlackEscalationUrl(input.appOrigin, state, effect.taskId, credentials.instanceId)
+            : resolveTaskUrl(effect.taskId);
+          const message = resolveSlackEscalationMessage(state, effect.taskId, effect.escalatedAt, url);
+          const task = state.tasks[effect.taskId];
+          if (!task || !message) return;
+          const open = task.escalation?.at === effect.escalatedAt;
+          const sent = task.slackEscalation?.escalatedAt === effect.escalatedAt ? task.slackEscalation : null;
+          const { contact } = effect;
+          const target = { teamId: contact.teamId, kind: contact.kind, id: contact.id, message };
+          if (!open) {
+            if (!credentials || !sent?.channelId || !sent.ts) return;
+            yield* relay
+              .notify(token(credentials.machineToken), {
+                ...target,
+                replace: { channelId: sent.channelId, ts: sent.ts },
+              })
+              .pipe(
+                Effect.catch((failure) =>
+                  Effect.logWarning('[Slack] The escalation could not be marked as handled').pipe(
+                    Effect.annotateLogs({ taskId: task.id, error: describeError(failure) })
+                  )
+                )
+              );
+            return;
+          }
+          if (sent) return;
+          const outcome = credentials
+            ? yield* relay.notify(token(credentials.machineToken), { ...target, replace: null }).pipe(
+                Effect.map((posted) => ({ ...posted, problem: null })),
+                Effect.catch((failure) =>
+                  failure._tag === 'RemoteUnreachable' && failure.retryable
+                    ? Effect.fail(failure)
+                    : Effect.logWarning('[Slack] The escalation could not be posted').pipe(
+                        Effect.annotateLogs({ taskId: task.id, error: describeError(failure) }),
+                        Effect.as({ channelId: null, ts: null, problem: describeEscalationProblem(failure) })
+                      )
+                )
+              )
+            : { channelId: null, ts: null, problem: SLACK_REMOTE_OFF_PROBLEM };
+          yield* dispatch(
+            {
+              type: 'slack.record_escalation',
+              taskId: task.id,
+              escalatedAt: effect.escalatedAt,
+              contact,
+              channelId: outcome.channelId,
+              ts: outcome.ts,
+              problem: outcome.problem,
+            },
+            `${key}:slack.record_escalation`
+          );
+        });
+
+        const directory = Effect.fn('Slack.directory')(function* (teamId: string) {
+          const empty = { teamId, channels: [], people: [] };
+          const credentials = yield* input.credentials;
+          if (!credentials) return { ...empty, problem: SLACK_REMOTE_OFF_PROBLEM };
+          return yield* relay.directory(token(credentials.machineToken), { teamId }).pipe(
+            Effect.map((found): SlackDirectoryView => ({ ...found, problem: null })),
+            Effect.catch((failure) =>
+              Effect.logWarning('[Slack] Could not list the Slack channels and people').pipe(
+                Effect.annotateLogs({ teamId, error: describeError(failure) }),
+                Effect.as<SlackDirectoryView>({ ...empty, problem: describeEscalationProblem(failure) })
+              )
+            )
+          );
+        });
+
         const status = Effect.fn('Slack.status')(function* (
           effect: SlackEffect<'slack.status'>,
           key: string
@@ -434,6 +523,8 @@ export class Slack extends Context.Service<
           post,
           merge,
           react,
+          escalate,
+          directory,
           status,
           snapshot,
           disconnect,

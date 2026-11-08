@@ -395,6 +395,7 @@ describe('the Slack effects', () => {
       post: () => record('post'),
       merge: () => record('merge'),
       react: () => record('react'),
+      escalate: () => record('escalate'),
     } as unknown as Slack['Service'];
     const { runner } = setup(() => undefined, { slack });
     const mention = {
@@ -420,7 +421,16 @@ describe('the Slack effects', () => {
       { kind: 'slack.react', thread: THREAD, messageTs: '1.2', reaction: 'eyes' },
       createContext()
     );
-    expect(handled).toEqual(['evaluate', 'status', 'post', 'merge', 'react']);
+    await runner.apply(
+      {
+        kind: 'slack.escalate',
+        taskId: 't1',
+        escalatedAt: 1,
+        contact: { kind: 'slack_person', teamId: 'T1', id: 'U2', name: 'Kai' },
+      },
+      createContext()
+    );
+    expect(handled).toEqual(['evaluate', 'status', 'post', 'merge', 'react', 'escalate']);
   });
 
   test('fail without one, so they wait in the outbox', async () => {

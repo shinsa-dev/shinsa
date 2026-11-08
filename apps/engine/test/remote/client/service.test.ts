@@ -275,6 +275,8 @@ describe('the client for app.shinsa.dev', () => {
     answer(plane, SLACK_RELAY_PATHS.post, { ts: '2.1' });
     answer(plane, SLACK_RELAY_PATHS.session, { applied: true });
     answer(plane, SLACK_RELAY_PATHS.react, { applied: false });
+    answer(plane, SLACK_RELAY_PATHS.directory, { teamId: 'T1', channels: [], people: [] });
+    answer(plane, SLACK_RELAY_PATHS.notify, { channelId: 'D1', ts: '3.1' });
     expect(await callClient(plane, (client) => client.slack.links(Redacted.make('m')))).toEqual({
       links: [],
     });
@@ -299,12 +301,28 @@ describe('the client for app.shinsa.dev', () => {
         client.slack.react(Redacted.make('m'), { ...thread, messageTs: '1.2', add: 'eyes', remove: null })
       )
     ).toEqual({ applied: false });
+    expect(
+      await callClient(plane, (client) => client.slack.directory(Redacted.make('m'), { teamId: 'T1' }))
+    ).toEqual({ teamId: 'T1', channels: [], people: [] });
+    expect(
+      await callClient(plane, (client) =>
+        client.slack.notify(Redacted.make('m'), {
+          teamId: 'T1',
+          kind: 'slack_person',
+          id: 'U2',
+          replace: null,
+          message,
+        })
+      )
+    ).toEqual({ channelId: 'D1', ts: '3.1' });
     expect(plane.calls.map((call) => [call.path, call.token])).toEqual([
       [SLACK_RELAY_PATHS.links, 'm'],
       [SLACK_RELAY_PATHS.unlink, 'm'],
       [SLACK_RELAY_PATHS.post, 'm'],
       [SLACK_RELAY_PATHS.session, 'm'],
       [SLACK_RELAY_PATHS.react, 'm'],
+      [SLACK_RELAY_PATHS.directory, 'm'],
+      [SLACK_RELAY_PATHS.notify, 'm'],
     ]);
   });
 

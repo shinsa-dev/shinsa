@@ -85,6 +85,8 @@ import {
   SettingsAnswer,
   SignInAnswer,
   SlackAnswer,
+  SlackDirectoryAnswer,
+  SlackDirectoryParams,
   TaskDetailAnswer,
   TaskListQuery,
   TaskParams,
@@ -587,6 +589,10 @@ class PlacementGroup extends HttpApiGroup.make('placement')
 class SlackGroup extends HttpApiGroup.make('slack')
   .add(
     HttpApiEndpoint.get('snapshot', '/api/slack', { success: SlackAnswer }),
+    HttpApiEndpoint.get('directory', '/api/slack/directory', {
+      query: SlackDirectoryParams,
+      success: SlackDirectoryAnswer,
+    }).annotate(EngineFeatureRoute, 'autopilot-slack'),
     HttpApiEndpoint.post('disconnect', '/api/slack/disconnect', { success: SlackAnswer }).annotate(
       OwnerOnlyRoute,
       true

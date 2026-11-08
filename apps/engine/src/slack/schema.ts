@@ -1,5 +1,13 @@
 import type { DomainError, MachineCredentials, ShinsaEffect } from '@shinsa/core';
-import type { NotFound, Revoked, SlackFailed } from '@shinsa/core/remote/errors';
+import type {
+  NotFound,
+  PostNotYours,
+  Revoked,
+  SlackBlocksRefused,
+  SlackFailed,
+  SlackNotInstalled,
+  SlackNotLinked,
+} from '@shinsa/core/remote/errors';
 import { Context, Duration, Schema } from 'effect';
 import type { Effect } from 'effect';
 import type { RemoteUnreachable } from '../remote/client/schema.ts';
@@ -31,5 +39,17 @@ export class SlackRequestUnreadable extends Schema.TaggedError<
 export type SlackRefusal = DomainError | EngineStopped;
 
 export type SlackRelayFailure = RemoteUnreachable | SlackFailed;
+
+export type SlackNotifyRefusal =
+  | NotFound
+  | Revoked
+  | SlackNotLinked
+  | SlackNotInstalled
+  | PostNotYours
+  | SlackBlocksRefused;
+
+export const SLACK_REMOTE_OFF_PROBLEM = 'Remote access is off, so Shinsa cannot reach Slack.';
+
+export const SLACK_UNREACHABLE_PROBLEM = 'app.shinsa.dev could not be reached.';
 
 export type SlackLinksFailure = DomainError | NotFound | RemoteUnreachable | Revoked;
