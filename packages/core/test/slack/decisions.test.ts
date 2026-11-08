@@ -87,6 +87,8 @@ describe('what Slack may decide', () => {
     expect(isSlackDecidable('review', 'reject')).toBe(false);
     expect(isSlackDecidable('failure', 'reject')).toBe(false);
     expect(isSlackDecidable('operation', 'reject')).toBe(true);
+    expect(isSlackDecidable('result', 'approve')).toBe(true);
+    expect(isSlackDecidable('result', 'reject')).toBe(false);
     expect(isSlackWriteDecision('revise')).toBe(true);
     expect(isSlackWriteDecision('approve')).toBe(false);
   });
@@ -94,6 +96,7 @@ describe('what Slack may decide', () => {
   test('says what was decided, in words for the card', () => {
     expect(resolveSlackDecidedText('plan', 'approve', null)).toBe('approved the plan');
     expect(resolveSlackDecidedText('proposal', 'reject', null)).toBe('kept the task as it is');
+    expect(resolveSlackDecidedText('result', 'approve', null)).toBe('closed it');
     expect(resolveSlackDecidedText('question', 'reply', ' CSV & <b> ')).toBe(
       'answered *CSV &amp; &lt;b&gt;*'
     );

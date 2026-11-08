@@ -1193,7 +1193,7 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `delegation.steer` | process_bound | `steer:<id>` | `delegation.record_delivery`, `delegation.release` |
 | `delegation.reply` | process_bound | `reply:<id>` | none: answers the child's question |
 | `slack.evaluate` | replay_safe | `slack:<thread key>` | ⏳ on the mention first; `slack.start_task` for work; otherwise ⏳ off and "Not a task, so nothing was started.", once per thread; key `slack.evaluate:<event id>` |
-| `slack.post` | replay_safe | `slack:<thread key>` | none: posts the result, or "Merged" or "Done" when the task ends, as a new message through app.shinsa.dev |
+| `slack.post` | replay_safe | `slack:<thread key>` | none: posts a watchdog that found a problem as a new message through app.shinsa.dev |
 | `slack.status` | replay_safe | `slack:<thread key>` | `slack.record_status` for a new card or reaction; edits the card (the open gate with its buttons, else the status) at most every 5 s and moves the mention's reaction |
 | `slack.react` | replay_safe | `slack:<thread key>` | none: 👀 or 📥 on a later mention in the thread, through `/__remote/slack/react`; key `slack.react:<thread key>:<message ts>` |
 
@@ -1612,7 +1612,7 @@ What the engine, the Worker on app.shinsa.dev and the web share for the Slack bo
 | Shape | Fields |
 | --- | --- |
 | `SlackMention` (`contract.ts`, `parseSlackMention`) | `eventId`, `teamId`, `channelId`, `threadTs`, `messageTs`, `userId`, `userName`, `text`, `permalink`, `thread` (`SlackThreadMessage`: `ts`, `userId`, `userName`, `text`, `bot`; the last 100, at most 4,000 characters each, `SLACK_LIMITS`), `linkedThreads` (`SlackLinkedThread`: `channelId`, `threadTs`, `permalink`, `channelName`, `thread`; at most 3, read with the mentioning person's own token, sent only to a machine that names `slack-linked-threads`) |
-| `SlackPost` (`posts.ts`) | `result` or `completed`, the only new messages; everything else edits the card |
+| `SlackPost` (`posts.ts`) | only `tripped`, a watchdog that found a problem; the merge has its own message, and everything else, the result and the end included, edits the card |
 | `SlackMessage` (`blocks.ts`) | `text`, the notification's fallback, and `blocks` (`header`, `section` with text or fields, `context`, `actions` of buttons) within Slack's limits (`SLACK_BLOCK_LIMITS`: 50 blocks, 3,000 characters a section, 150 a header, 75 a button, 10 fields) |
 | `SlackDecisionValue` (`schema.ts`, `serializeSlackDecisionValue`, `parseSlackDecisionValue`) | a button's value: `gateId`, `decision` (`approve`, `revise`, `reject`, `reply`), `choice` (the index into a question's choices, or null), `planVersion` (the plan a plan's Approve shows, or null) |
 | `SlackDecisionModal` (`parseSlackDecisionModal`) | a form's `private_metadata`: the value with the card's `channelId`, `threadTs` and `messageTs` |

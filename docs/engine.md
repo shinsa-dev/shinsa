@@ -4390,9 +4390,8 @@ Slack ──event──► app.shinsa.dev /slack/events
                               task.create, as from Home
    the task moves or a gate opens or closes
                   ──► slack.status: the one card, edited
-                      (the open gate with its buttons, else the status)
-                      + the mention's one reaction
-   the result, or done ──► slack.post, a new message
+                      (the open gate with its buttons, the result,
+                      else the status) + the mention's one reaction
    the round merged ──► slack.merge_announced + slack.merge:
                   "Merged", posted once, its ts kept (slack.record_merge)
                   └─ a watchdog moves or a post-merge step is ticked
@@ -4520,10 +4519,10 @@ Slack ──a card's button──► app.shinsa.dev /slack/interactions
   moving, a gate opening (any gate a person decides: a failure, a sign-in, a question, a secret, a proposal, an
   operation, a plan, a review, a merge), a gate answered, withdrawn or superseded, and a decision made in Slack
   (`slack.decided`). Nothing else is posted while the task runs, since the mention's reaction (below) already tells
-  its author in Slack's Activity. Three things are a new message, so the thread is notified once for each: the
-  result (`task.delivered`: an answer, a diagnosis, a report, an outcome), the end of the task (done without a result
-  or merge) and a watchdog that found a problem (`watchdog.checked` with `tripped`), each a `slack.post` (`SlackPost`
-  is `result`, `completed` or `tripped`); and the merge, once per round. The `task.staged` to `merged` that comes with
+  its author in Slack's Activity. The result (`task.delivered`: an answer, a diagnosis, a report, an outcome) and the
+  end of the task edit the card too, so the card stays the one place the thread reads the task. Two things are a new
+  message, so the thread is notified once for each: a watchdog that found a problem (`watchdog.checked` with
+  `tripped`), a `slack.post` (`SlackPost` is only `tripped`), and the merge, once per round. The `task.staged` to `merged` that comes with
   the pull request recorded merged, in a round with no merge message yet, emits `slack.merge_announced`
   (`SlackThreadLink.merge`, the round and later its ts) and a `slack.merge` effect, in the thread's lane: the engine
   posts "Merged" the first time and records its ts with `slack.record_merge` (`slack.merge_posted`), and every later
@@ -4538,8 +4537,10 @@ Slack ──a card's button──► app.shinsa.dev /slack/interactions
   their markup), details as fields, a numbered list or a context line, the decision buttons with a button to open the
   task on app.shinsa.dev (`resolveSlackTaskUrl`), and a small last line naming the task (its handle and title,
   linked) and its pull request as `PR #<number>`, linked. The card shows the first open gate in the order failure,
-  sign-in, question, secret, proposal, operation, plan, review, merge (`SLACK_CARD_GATES`); with none open it shows
-  the status:
+  sign-in, question, secret, proposal, operation, plan, review, merge, result (`SLACK_CARD_GATES`); with none open it
+  shows the result while the task rests at done with one, is not cancelled and never went on to a change (its
+  proposal accepted, a plan or a pull request, merged or closed), so closing it or "Keep as is" leaves the result in
+  place, with "@someone closed it" under it; else the status:
   - the status: what the task is doing now in bold (its stage reason, else its stage), "@someone approved the plan"
     under it while the last decision on the task was made in Slack (`SlackThreadLink.decided`, cleared by any
     `gate.answered` before `slack.decided` sets it again, so a decision made in Shinsa drops it), then the task
@@ -4550,7 +4551,9 @@ Slack ──a card's button──► app.shinsa.dev /slack/interactions
     recommendation, a button per choice (the recommended one primary) when it has one to five choices of at most 75
     characters, otherwise the choices numbered, and Answer… for any other answer;
   - a secret: "Secret needed", what is needed in bold, to give it in Shinsa and never in Slack, "Give it in Shinsa";
-  - a proposal: "Proposed change", the change quoted, Approve and Keep as is;
+  - a proposal: "Proposed change", the change quoted, Approve and Keep as is; after a diagnosis or a report, its
+    header ("Diagnosis", "Report") and the whole result first, then the change under "Proposed change", so Approve
+    shows what it approves;
   - an operation: "Ready to run", the operation and its whole detail quoted, Run and Finish without it;
   - a plan: "Plan ready for your approval", the whole plan (`serializePlanMarkdown`: goal, every phase with its detail,
     behaviour, approach, files, checks), Approve and Request changes…, "Read the plan";
@@ -4558,8 +4561,10 @@ Slack ──a card's button──► app.shinsa.dev /slack/interactions
     (`serializeReportMarkdown`), the fields Checks (how they went) and Pull request (`PR #<number>`, or "Opens once
     you approve"), Approve and Request changes…, "Review in Shinsa";
   - a merge: "Ready to merge", the same report and fields, Merge;
-  - the result, a new message: "Result", the whole result in mrkdwn (`serializeSlackResult`); the end, a new message:
-    "Done" (`serializeSlackCompleted`); the merge, a new message edited afterwards: "Merged", the round's watchdogs
+  - a result: "Answer", "Diagnosis", "Report" or "Outcome" (from its step), the whole result in mrkdwn, Close (the
+    result gate's approve, which closes the task) and Open in Shinsa;
+  - the end of a task with no result: the status, "Done";
+  - the merge, a new message edited afterwards: "Merged", the round's watchdogs
     each with its state (waits for a data source or for production, watching with the next check in the reader's
     time, passed with its number of checks, found a problem, stopped) and the open post-merge steps under "Still to do
     after the merge" (`serializeSlackMerged`, `resolveSlackMergeMessage`); a trip, a new message: "Watchdog found a
