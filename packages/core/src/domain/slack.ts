@@ -3,6 +3,7 @@ import type { AutopilotSlackContact } from './settings.ts';
 export interface SlackEscalationPost {
   escalatedAt: number;
   contact: AutopilotSlackContact;
+  channelId: string | null;
   ts: string | null;
 }
 

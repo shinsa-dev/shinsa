@@ -52,17 +52,23 @@ export const SlackRelayPosted = Schema.Struct({ ts: Schema.String });
 
 export type SlackRelayPosted = typeof SlackRelayPosted.Type;
 
+const SlackRelayMessageRef = Schema.Struct({ channelId: SlackId, ts: SlackId });
+
 export const SLACK_CONTACT_KINDS = ['slack_channel', 'slack_person'] as const;
 
 export const SlackRelayNotify = Schema.Struct({
   teamId: SlackId,
   kind: Schema.Literals(SLACK_CONTACT_KINDS),
   id: SlackId,
-  replaceTs: withNullDefault(SlackId),
+  replace: withNullDefault(SlackRelayMessageRef),
   message: SlackRelayMessage,
 });
 
 export type SlackRelayNotify = typeof SlackRelayNotify.Type;
+
+export const SlackRelayNotified = SlackRelayMessageRef;
+
+export type SlackRelayNotified = typeof SlackRelayNotified.Type;
 
 export const SlackDirectoryQuery = Schema.Struct({ teamId: SlackId });
 

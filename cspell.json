@@ -5,6 +5,8 @@
   "ignoreRegExpList": ["gh\\[[a-z]+\\]_", "\\\\bxox\\[[a-z]+\\]-", "AKIA\\["],
   "words": [
     "seqno",
+    "Slackbot",
+    "USLACKBOT",
     "usergroup",
     "EPERM",
     "EACCES",

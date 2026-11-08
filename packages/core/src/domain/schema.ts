@@ -98,18 +98,12 @@ const SlackContactId = Id(64).check(
   Schema.isPattern(/^[A-Za-z0-9._-]+$/, { message: SLACK_CONTACT_ID_MESSAGE })
 );
 
-const SlackContact = <const K extends 'slack_channel' | 'slack_person'>(kind: K) =>
-  Schema.Struct({
-    kind: Schema.Literal(kind),
-    teamId: SlackContactId,
-    id: SlackContactId,
-    name: Id(80),
-  });
+const SlackContactFields = { teamId: SlackContactId, id: SlackContactId, name: Id(80) };
 
 export const AutopilotContactPatch = Tagged('kind', AUTOPILOT_CONTACT_KINDS, [
   Schema.Struct({ kind: Schema.Literal('team') }),
-  SlackContact('slack_channel'),
-  SlackContact('slack_person'),
+  Schema.Struct({ kind: Schema.Literal('slack_channel'), ...SlackContactFields }),
+  Schema.Struct({ kind: Schema.Literal('slack_person'), ...SlackContactFields }),
 ]);
 
 const AutopilotPatch = Strict(

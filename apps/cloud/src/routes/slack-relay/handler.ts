@@ -4,6 +4,7 @@ import {
   SlackBlocksRefused,
   SlackFailed,
   SlackNotInstalled,
+  SlackNotLinked,
   ThreadNotForwarded,
 } from '@shinsa/core/remote/errors';
 import { Effect, Option, type Redacted, Schema } from 'effect';
@@ -14,10 +15,19 @@ import { revokeMachineUserTokens } from '../../slack/user-tokens.ts';
 import { selectWorkspaceToken } from '../../slack/workspace.ts';
 import { SlackStore } from '../../store/slack/service.ts';
 import {
+  ChannelPage,
+  DIRECTORY_CHANNEL_TYPES,
+  DIRECTORY_PAGE_LIMIT,
+  DIRECTORY_PAGE_SIZE,
+  MemberPage,
+  NOTIFY_REFUSALS,
+  Notified,
+  type PagedAnswer,
   Posted,
   REFUSED_BLOCK_CODES,
   type RelayThread,
   SETTLED_REACTION_CODES,
+  SLACKBOT_USER_ID,
   STATUS_UNAVAILABLE_CODES,
 } from './schema.ts';
 export const SlackRelayHandlers = HttpApiBuilder.group(
@@ -34,10 +44,22 @@ export const SlackRelayHandlers = HttpApiBuilder.group(
         Effect.annotateLogs({ error, code: error.code })
       );
 
+    const refuseNotify = (error: SlackCallFailed) =>
+      REFUSED_BLOCK_CODES.has(error.code)
+        ? refusePost(error)
+        : new SlackFailed({
+            message: NOTIFY_REFUSALS[error.code] ?? `Slack did not take the post (${error.code}).`,
+          });
+
+    const byName = (left: { name: string }, right: { name: string }) => left.name.localeCompare(right.name);
+
     const store = yield* SlackStore;
     const slack = yield* SlackApi;
 
-    const assertOwnPost = Effect.fn('slackRelay.assertOwnPost')(function* (thread: RelayThread, ts: string) {
+    const assertOwnPost = Effect.fn('slackRelay.assertOwnPost')(function* (
+      thread: Pick<RelayThread, 'teamId' | 'channelId'>,
+      ts: string
+    ) {
       const { instanceId } = yield* CurrentMachine;
       if (
         !(yield* store.hasPost({ workspaceId: thread.teamId, channelId: thread.channelId, ts }, instanceId))
@@ -58,6 +80,52 @@ export const SlackRelayHandlers = HttpApiBuilder.group(
       if (Option.isNone(opened))
         return yield* new SlackNotInstalled({ message: 'Shinsa is no longer in that Slack workspace.' });
       return opened.value.token;
+    });
+
+    const findWorkspaceToken = Effect.fn('slackRelay.findWorkspaceToken')(function* (teamId: string) {
+      const { instanceId } = yield* CurrentMachine;
+      const opened = yield* selectWorkspaceToken(teamId);
+      if (Option.isNone(opened))
+        return yield* new SlackNotInstalled({ message: 'Shinsa is not in that Slack workspace.' });
+      const links = yield* store.listMachineLinks(instanceId);
+      if (!links.some((link) => link.workspaceId === teamId))
+        return yield* new SlackNotLinked({
+          message: 'This machine is not connected to that Slack workspace.',
+        });
+      return opened.value.token;
+    });
+
+    const listPages = Effect.fn('slackRelay.listPages')(function* <P extends PagedAnswer, I, A>(
+      method: string,
+      token: Redacted.Redacted<string>,
+      form: Readonly<Record<string, string>>,
+      Page: Schema.Codec<P, I>,
+      read: (page: P) => readonly A[]
+    ) {
+      const entries: A[] = [];
+      let cursor = '';
+      for (let page = 0; page < DIRECTORY_PAGE_LIMIT; page++) {
+        const answer = yield* slack
+          .call(
+            method,
+            { token, body: { form: { ...form, limit: String(DIRECTORY_PAGE_SIZE), cursor } } },
+            Page
+          )
+          .pipe(
+            Effect.tapError((error) =>
+              Effect.logError('[Cloud] Slack did not list a directory').pipe(
+                Effect.annotateLogs({ error, method })
+              )
+            ),
+            Effect.mapError(
+              (error) => new SlackFailed({ message: `Slack did not list the workspace (${error.code}).` })
+            )
+          );
+        entries.push(...read(answer));
+        cursor = answer.response_metadata?.next_cursor ?? '';
+        if (!cursor) break;
+      }
+      return entries;
     });
 
     const requestReaction = Effect.fn('slackRelay.requestReaction')(function* (
@@ -180,6 +248,67 @@ export const SlackRelayHandlers = HttpApiBuilder.group(
           const removed = yield* requestReaction('reactions.remove', token, target, payload.remove);
           const added = yield* requestReaction('reactions.add', token, target, payload.add);
           return { applied: removed && added };
+        })
+      )
+      .handle(
+        'directory',
+        Effect.fn('slackRelay.directory')(function* ({ query }) {
+          const token = yield* findWorkspaceToken(query.teamId);
+          const channels = yield* listPages(
+            'conversations.list',
+            token,
+            { types: DIRECTORY_CHANNEL_TYPES, exclude_archived: 'true' },
+            ChannelPage,
+            (page) =>
+              page.channels.flatMap((channel) =>
+                channel.is_member ? [{ id: channel.id, name: channel.name }] : []
+              )
+          );
+          const people = yield* listPages('users.list', token, {}, MemberPage, (page) =>
+            page.members.flatMap((member) => {
+              if (member.deleted || member.is_bot || member.id === SLACKBOT_USER_ID) return [];
+              const name = member.profile?.real_name || member.profile?.display_name || member.name;
+              return name ? [{ id: member.id, name }] : [];
+            })
+          );
+          return { teamId: query.teamId, channels: channels.sort(byName), people: people.sort(byName) };
+        })
+      )
+      .handle(
+        'notify',
+        Effect.fn('slackRelay.notify')(function* ({ payload }) {
+          const { instanceId } = yield* CurrentMachine;
+          const token = yield* findWorkspaceToken(payload.teamId);
+          const content = { text: payload.message.text, blocks: payload.message.blocks };
+          if (payload.replace) {
+            const { channelId, ts } = payload.replace;
+            yield* assertOwnPost({ teamId: payload.teamId, channelId }, ts);
+            yield* slack
+              .call(
+                'chat.update',
+                { token, body: { json: { ...content, channel: channelId, ts } } },
+                Schema.Unknown
+              )
+              .pipe(Effect.tapError(logRefusedPost), Effect.mapError(refuseNotify));
+            return payload.replace;
+          }
+          const posted = yield* slack
+            .call(
+              'chat.postMessage',
+              {
+                token,
+                body: { json: { ...content, channel: payload.id, unfurl_links: false, unfurl_media: false } },
+              },
+              Notified
+            )
+            .pipe(Effect.tapError(logRefusedPost), Effect.mapError(refuseNotify));
+          if (!posted.ts || !posted.channel)
+            return yield* new SlackFailed({ message: 'Slack did not say where the post went.' });
+          yield* store.recordPost(
+            { workspaceId: payload.teamId, channelId: posted.channel, ts: posted.ts },
+            instanceId
+          );
+          return { channelId: posted.channel, ts: posted.ts };
         })
       );
   })

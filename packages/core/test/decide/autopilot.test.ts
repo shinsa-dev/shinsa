@@ -571,6 +571,7 @@ function recordSent(harness: Harness, taskId: string, escalatedAt: number, probl
     taskId,
     escalatedAt,
     contact: ONCALL,
+    channelId: problem === null ? ONCALL.id : null,
     ts: problem === null ? '500.1' : null,
     problem,
   });
@@ -615,7 +616,12 @@ describe('escalating to Slack', () => {
   test('records where it went once, in the task’s activity', () => {
     const { harness, taskId, escalatedAt } = escalateTo(ONCALL);
     recordSent(harness, taskId, escalatedAt);
-    expect(harness.task(taskId).slackEscalation).toEqual({ escalatedAt, contact: ONCALL, ts: '500.1' });
+    expect(harness.task(taskId).slackEscalation).toEqual({
+      escalatedAt,
+      contact: ONCALL,
+      channelId: ONCALL.id,
+      ts: '500.1',
+    });
     expect(harness.task(taskId).activity.at(-1)).toMatchObject({
       actor: 'shinsa',
       text: 'Sent to #oncall in Slack',
@@ -671,6 +677,7 @@ function recordCommand(taskId: string, escalatedAt: number) {
     taskId,
     escalatedAt,
     contact: ONCALL,
+    channelId: ONCALL.id,
     ts: '500.1',
     problem: null,
   };

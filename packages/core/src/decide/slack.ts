@@ -93,6 +93,7 @@ export function recordSlackEscalation(decider: Decider, command: CommandOf<'slac
     taskId: command.taskId,
     escalatedAt: command.escalatedAt,
     contact: command.contact,
+    channelId: command.channelId,
     ts: command.ts,
     problem: command.problem,
   });

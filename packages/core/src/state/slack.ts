@@ -55,7 +55,12 @@ function applyMergePosted(state: ShinsaState, event: EventOf<'slack.merge_posted
 
 function applyEscalationSent(state: ShinsaState, event: EventOf<'slack.escalation_sent'>) {
   updateTask(state, event.taskId, event.at, {
-    slackEscalation: { escalatedAt: event.escalatedAt, contact: event.contact, ts: event.ts },
+    slackEscalation: {
+      escalatedAt: event.escalatedAt,
+      contact: event.contact,
+      channelId: event.channelId,
+      ts: event.ts,
+    },
   });
   const contact = describeSlackContact(event.contact);
   record(state, event.taskId, event.at, {

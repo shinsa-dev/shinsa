@@ -12,6 +12,7 @@ export type SlackEventBody =
       taskId: string;
       escalatedAt: number;
       contact: AutopilotSlackContact;
+      channelId: string | null;
       ts: string | null;
       problem: string | null;
     };

@@ -77,7 +77,8 @@ src/
 │                    yours), instances/ (your machines, connect, remove, leave, accepting an invite or a hand-off),
 │                    shares/ (a share's connect), machine/ (every machine-token route: heartbeat, offline, removal,
 │                    invites, hand-offs, members, guests), teams/ and machine-teams/ (a page's teams and the
-│                    machine's), slack-relay/ (a machine's links, posts, thread status and reactions), slack-link/
+│                    machine's), slack-relay/ (a machine's links, posts, thread status and reactions, an
+│                    escalation's post or direct message, and the channels and people to send it to), slack-link/
 │                    (Sign in with Slack, adding the app), slack-events/ (events, a card's decision buttons and
 │                    forms, who may decide; each Slack payload a schema: EventEnvelope, MentionEnvelope,
 │                    UninstallEvent, ThreadMessage, BlockActions, ViewSubmission), hooks/ (/hooks/<instance>/<schedule>/<token> to the machine), preview-open/ (the
@@ -319,6 +320,11 @@ test/                gates.test.ts reads every RemoteApi route with HttpApi.refl
   machine offline, or a tunnel that does not answer, gets "offline" in the thread instead. A machine posts and edits
   through `/__remote/slack/post` with its machine token, only in a thread it was sent and only editing what it
   posted (`slack_threads`, `slack_posts`, kept until their workspace or machine is removed), `/__remote/slack/react` moves the one reaction on a mention it was sent (`reactions.remove` then `reactions.add`, best effort),
+  `/__remote/slack/notify` posts an Autopilot escalation to a channel or a person's direct message, and edits it
+  once it clears (`chat.postMessage` with the user's id opens the app's direct message, which the manifest's Messages
+  tab shows, read-only), and `/__remote/slack/directory?teamId=` lists the channels the app is in and the people who
+  are neither bots nor deactivated (`conversations.list`, `users.list`, ten pages of 200 at most), both only in a
+  workspace the machine is linked in (403 `slack_not_linked`) and editing only what it posted;
   `/slack/interactions` takes a card's decision buttons and forms (signed, acknowledged at once). It lets through
   only the owner or a member of the machine that posted the card (`selectPoster`, then the linked account's role
   there; a guest, someone not connected and anyone else get a private refusal, `SLACK_DECISION_REFUSALS`, and
