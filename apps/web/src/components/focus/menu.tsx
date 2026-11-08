@@ -1,6 +1,7 @@
-import type { Project, ShinsaState } from '@shinsa/core';
+import { type FocusProjects, NO_FOCUS_PROJECTS, type Project, type ShinsaState } from '@shinsa/core';
 import {
   DropdownMenu,
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuGroup,
   DropdownMenuItem,
@@ -14,8 +15,20 @@ import { Icon } from '@shinsa/ui/components/icon';
 import { cn } from '@shinsa/ui/lib/utils';
 import { ProjectDot, ProjectOption } from '@/components/status/project-dot.tsx';
 import { sendCommandWithToast } from '@/lib/connection/commands.ts';
-import { useRemoteSnapshot } from '@/lib/connection/socket.ts';
-import { listFocusTeams, resolveFocusUntil, selectFocus, selectFocusTeam, YOUR_WORK } from '@/lib/focus.ts';
+import { useEngineFeature, useRemoteSnapshot } from '@/lib/connection/socket.ts';
+import {
+  resolveFocusLabel,
+  type FocusTarget,
+  listFocusTeams,
+  resolveFocusTarget,
+  resolveFocusUntil,
+  resolveKeptUntil,
+  selectFocus,
+  selectFocusProjects,
+  selectFocusTeam,
+  toggleFocusProject,
+  YOUR_WORK,
+} from '@/lib/focus.ts';
 import { listProjects } from '@/lib/projects.ts';
 import { resolveSettingsPath } from '@/lib/settings-tabs.ts';
 import { TEAMS_SECTION } from '@/lib/teams/settings.ts';
@@ -83,47 +96,106 @@ function resolveRadioValue(projectId: string | null, teamId: string | null) {
   return projectId ?? YOUR_WORK_VALUE;
 }
 
-function parseRadioValue(value: string) {
+function parseRadioValue(value: string): FocusTarget {
   if (value === YOUR_WORK_VALUE) return { projectId: null, teamId: null };
   if (value.startsWith(TEAM_VALUE_PREFIX))
     return { projectId: null, teamId: value.slice(TEAM_VALUE_PREFIX.length) };
   return { projectId: value, teamId: null };
 }
 
+function changeFocus(target: FocusTarget, until: number | null) {
+  void sendCommandWithToast({ type: 'focus.change', ...target, until });
+}
+
+function ProjectCheckboxItems({
+  state,
+  projects,
+  selection,
+  team,
+}: {
+  state: ShinsaState;
+  projects: Project[];
+  selection: FocusProjects;
+  team: boolean;
+}) {
+  const nothing = selection.projectIds.length === 0 && !team;
+  const until = team ? null : resolveKeptUntil(state);
+  return (
+    <DropdownMenuGroup>
+      <DropdownMenuLabel>Focus on</DropdownMenuLabel>
+      <DropdownMenuCheckboxItem
+        checked={nothing}
+        onCheckedChange={() => changeFocus({ projectId: null, teamId: null }, null)}
+      >
+        <ProjectOption color='gray' name={YOUR_WORK} />
+      </DropdownMenuCheckboxItem>
+      {projects.map((project) => (
+        <DropdownMenuCheckboxItem
+          key={project.id}
+          checked={!team && selection.projectIds.includes(project.id)}
+          onCheckedChange={() => {
+            const next = toggleFocusProject(team ? NO_FOCUS_PROJECTS : selection, project.id);
+            changeFocus(resolveFocusTarget(next), next.projectIds.length > 0 ? until : null);
+          }}
+        >
+          <ProjectOption color={project.color} name={project.name} />
+        </DropdownMenuCheckboxItem>
+      ))}
+      {!team && selection.projectIds.length > 0 && (
+        <>
+          <DropdownMenuSeparator />
+          <DropdownMenuCheckboxItem
+            checked={selection.except}
+            onCheckedChange={(except) => changeFocus(resolveFocusTarget({ ...selection, except }), until)}
+          >
+            Show all but these
+          </DropdownMenuCheckboxItem>
+        </>
+      )}
+    </DropdownMenuGroup>
+  );
+}
+
 export function FocusMenu({ state, compact = false }: { state: ShinsaState; compact?: boolean }) {
   const projects = listProjects(state);
   const teams = listFocusTeams(useRemoteSnapshot());
-  const focus = selectFocus(state);
+  const multiple = useEngineFeature('focus.projects');
+  const selection = selectFocusProjects(state);
+  const single = selectFocus(state);
   const focusTeam = selectFocusTeam(state, teams);
-  const kept = focusTeam ?? focus;
-
-  function changeFocus(target: { projectId: string | null; teamId: string | null }, until: number | null) {
-    void sendCommandWithToast({ type: 'focus.change', ...target, until });
-  }
-
-  const keptTarget = { projectId: focus?.id ?? null, teamId: focusTeam?.id ?? null };
-  const radioValue = resolveRadioValue(keptTarget.projectId, keptTarget.teamId);
+  const label = focusTeam?.name ?? resolveFocusLabel(state, selection);
+  const keptTarget = resolveFocusTarget(selection, focusTeam?.id ?? null);
+  const radioValue = resolveRadioValue(single?.id ?? null, focusTeam?.id ?? null);
 
   return (
     <DropdownMenu>
       <ProjectMenuTrigger
-        color={focus ? focus.color : 'gray'}
+        color={single ? single.color : 'gray'}
         prefix='Focus'
-        value={kept ? kept.name : YOUR_WORK}
+        value={label ?? YOUR_WORK}
         compact={compact}
         team={focusTeam !== null}
       />
       <DropdownMenuContent align={compact ? 'end' : 'start'} className='min-w-52'>
-        <DropdownMenuRadioGroup
-          value={radioValue}
-          onValueChange={(value) => changeFocus(parseRadioValue(String(value)), null)}
-        >
-          <DropdownMenuLabel>Focus on</DropdownMenuLabel>
-          <DropdownMenuRadioItem value={YOUR_WORK_VALUE}>
-            <ProjectOption color='gray' name={YOUR_WORK} />
-          </DropdownMenuRadioItem>
-          <ProjectRadioItems projects={projects} />
-        </DropdownMenuRadioGroup>
+        {multiple ? (
+          <ProjectCheckboxItems
+            state={state}
+            projects={projects}
+            selection={selection}
+            team={focusTeam !== null}
+          />
+        ) : (
+          <DropdownMenuRadioGroup
+            value={radioValue}
+            onValueChange={(value) => changeFocus(parseRadioValue(String(value)), null)}
+          >
+            <DropdownMenuLabel>Focus on</DropdownMenuLabel>
+            <DropdownMenuRadioItem value={YOUR_WORK_VALUE}>
+              <ProjectOption color='gray' name={YOUR_WORK} />
+            </DropdownMenuRadioItem>
+            <ProjectRadioItems projects={projects} />
+          </DropdownMenuRadioGroup>
+        )}
         {teams.length > 0 && (
           <>
             <DropdownMenuSeparator />
@@ -143,11 +215,11 @@ export function FocusMenu({ state, compact = false }: { state: ShinsaState; comp
             </DropdownMenuRadioGroup>
           </>
         )}
-        {kept && (
+        {label && (
           <>
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
-              <DropdownMenuLabel>Keep {kept.name} in focus</DropdownMenuLabel>
+              <DropdownMenuLabel>Keep {label} in focus</DropdownMenuLabel>
               <DropdownMenuItem onClick={() => changeFocus(keptTarget, resolveFocusUntil('hours'))}>
                 For 2 hours
               </DropdownMenuItem>

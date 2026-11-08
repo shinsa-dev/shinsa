@@ -2,14 +2,19 @@ import { describeUnblocks } from '../briefing/text.ts';
 import { capitalise, describeCount } from '../chat/text.ts';
 import {
   compareTasks,
+  type FocusProjects,
   type Gate,
   type GateType,
   hasArmedWait,
   isDecisionGate,
+  isProjectInFocus,
   isTaskSettled,
   isWatchHome,
+  NO_FOCUS_PROJECTS,
   PRIORITY_RANK,
   resolveAttentionLimit,
+  resolveFocusSelection,
+  selectSingleFocusProject,
   type Task,
   type TaskStage,
 } from '../domain/index.ts';
@@ -62,8 +67,13 @@ function isFocusOver(state: ShinsaState, now: number) {
   return until !== null && until <= now;
 }
 
+export function resolveFocusProjects(state: ShinsaState, now: number): FocusProjects {
+  if (isFocusOver(state, now) || state.focus.teamId !== null) return NO_FOCUS_PROJECTS;
+  return resolveFocusSelection(state.focus);
+}
+
 export function resolveFocusProject(state: ShinsaState, now: number) {
-  return isFocusOver(state, now) ? null : state.focus.projectId;
+  return selectSingleFocusProject(resolveFocusProjects(state, now));
 }
 
 export function resolveFocusTeam(state: ShinsaState, now: number) {
@@ -74,8 +84,7 @@ export function isInFocus(state: ShinsaState, task: Task, now: number) {
   if (state.teammateTasks?.[task.id]) return false;
   const teamId = resolveFocusTeam(state, now);
   if (teamId !== null) return isTeamTask(state, task, teamId);
-  const projectId = resolveFocusProject(state, now);
-  return projectId === null || resolveTaskProject(state, task) === projectId;
+  return isProjectInFocus(resolveFocusProjects(state, now), resolveTaskProject(state, task));
 }
 
 export function isListedInFocus(state: ShinsaState, task: Task, now: number) {
@@ -190,7 +199,7 @@ export function resolveQueue(state: ShinsaState, now: number): Queue {
   const ready = entries.filter((entry) => isInFocus(state, entry.task, now)).sort(compareGates);
   const limit = resolveAttentionLimit(state.settings);
   return {
-    focusProjectId: resolveFocusProject(state, now),
+    focus: resolveFocusProjects(state, now),
     focusTeamId: resolveFocusTeam(state, now),
     ready,
     upNow: ready.slice(0, limit),

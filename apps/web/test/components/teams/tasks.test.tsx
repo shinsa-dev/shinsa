@@ -23,7 +23,7 @@ const PROJECTS = [
 const FOCUSED = createShinsaState({
   tasks: TASKS,
   projects: PROJECTS,
-  patch: { focus: { projectId: null, teamId: 'team1', until: null } },
+  patch: { focus: { projectIds: [], except: false, teamId: 'team1', until: null } },
 });
 
 const UNFOCUSED = createShinsaState({ tasks: TASKS, projects: PROJECTS });
@@ -195,7 +195,7 @@ describe('teammates’ tasks', () => {
       createShinsaState({
         tasks: TASKS,
         projects: PROJECTS,
-        patch: { focus: { projectId: 'solo', teamId: null, until: null } },
+        patch: { focus: { projectIds: ['solo'], except: false, teamId: null, until: null } },
       })
     );
     expect(screen.getByText('My private task')).toBeDefined();

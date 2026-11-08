@@ -218,6 +218,8 @@ describe('the command line drives the whole lifecycle of a task', () => {
     expect(Object.values(w.state.projects)).toEqual([expect.objectContaining({ name: 'Work', key: 'WK' })]);
     expect((await shinsa(port, 'focus', 'set', 'WK')).code).toBe(0);
     expect((await shinsa(port, 'focus', 'show')).text).toBe('Focused on Work.');
+    expect((await shinsa(port, 'focus', 'set', 'WK', '--except')).code).toBe(0);
+    expect((await shinsa(port, 'focus', 'show')).text).toBe('Focused on everything but Work.');
     expect((await shinsa(port, 'focus', 'clear')).code).toBe(0);
     expect((await shinsa(port, 'projects', 'remove', 'work')).code).toBe(0);
     expect(w.state.projects).toEqual({});

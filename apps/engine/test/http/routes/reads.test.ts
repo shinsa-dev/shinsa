@@ -343,7 +343,7 @@ describe('the other read endpoints', () => {
           repos: [{ id: repoId, name: 'app', path: '/code/app' }],
         },
       ],
-      focus: { projectId: null },
+      focus: { projectIds: [], except: false },
     };
     expect((await read('/api/projects')).body).toMatchObject(expected);
     expect((await read('/api/schedules')).body).toEqual({ schedules: [], suggestions: [] });

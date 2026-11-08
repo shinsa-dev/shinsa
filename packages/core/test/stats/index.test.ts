@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import {
+  NO_FOCUS_PROJECTS,
   type Repo,
   type Round,
   type Run,
@@ -377,14 +378,22 @@ describe('resolveProjectStatsSource', () => {
   };
 
   test('no project keeps every task and run', () => {
-    const scoped = resolveProjectStatsSource(source, null);
+    const scoped = resolveProjectStatsSource(source, NO_FOCUS_PROJECTS);
     expect(scoped.tasks).toBe(source.tasks);
     expect(scoped.runs).toBe(source.runs);
   });
 
   test('a project keeps its tasks, by their own project or their repository, and only their runs', () => {
-    const scoped = resolveProjectStatsSource(source, 'project-a');
+    const scoped = resolveProjectStatsSource(source, { projectIds: ['project-a'], except: false });
     expect(Object.keys(scoped.tasks).sort()).toEqual(['by-repo', 'own']);
     expect(Object.keys(scoped.runs).sort()).toEqual(['r-by-repo', 'r-own']);
+  });
+
+  test('several projects keep the tasks of each, and all but a project keeps everything else', () => {
+    const both = resolveProjectStatsSource(source, { projectIds: ['project-a', 'project-b'], except: false });
+    expect(Object.keys(both.tasks).sort()).toEqual(['by-repo', 'other', 'own']);
+    const allBut = resolveProjectStatsSource(source, { projectIds: ['project-a'], except: true });
+    expect(Object.keys(allBut.tasks).sort()).toEqual(['loose', 'other']);
+    expect(Object.keys(allBut.runs)).toEqual(['r-other']);
   });
 });

@@ -3,7 +3,7 @@ import {
   isTeamTask,
   isWatchHome,
   listProjectRepos,
-  resolveFocusProject,
+  resolveFocusProjects,
   resolveFocusTeam,
   resolveTaskProject,
   resolveTaskShape,
@@ -136,8 +136,10 @@ function isTeamRowInProject(state: ShinsaState, team: TeamEntry, projectId: stri
 function isTeamRowInFocus(state: ShinsaState, team: TeamEntry, now: number) {
   const teamId = resolveFocusTeam(state, now);
   if (teamId !== null) return team.entry.teamId === teamId;
-  const projectId = resolveFocusProject(state, now);
-  return projectId === null || isTeamRowInProject(state, team, projectId);
+  const { projectIds, except } = resolveFocusProjects(state, now);
+  if (projectIds.length === 0) return true;
+  const listed = projectIds.some((projectId) => isTeamRowInProject(state, team, projectId));
+  return except ? !listed : listed;
 }
 
 export function listTaskRows(

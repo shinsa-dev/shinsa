@@ -3,6 +3,7 @@ import { Console, Effect, FileSystem } from 'effect';
 import { Briefings } from '../../apps/engine/src/store/briefings/service.ts';
 import { CommandLog } from '../../apps/engine/src/store/commands/service.ts';
 import { StoreLayer } from '../../apps/engine/src/store/layers.ts';
+import { briefingKey, NO_FOCUS_PROJECTS } from '../../packages/core/src/index.ts';
 import { MINUTE } from '../kit/time.ts';
 import { serializeSeedChangelog } from './changelog.ts';
 import { createCodeSample, listCodeTasks } from './code/sample.ts';
@@ -41,7 +42,7 @@ export const seed = Effect.fn('Seed.run')(function* () {
     for (const [seq, { at, event }] of timeline.entries())
       yield* log.commit({ events: [event], effects: [], cancellations: [], fromSeq: seq, at, receipt: null });
     const briefings = yield* Briefings;
-    yield* briefings.write(null, {
+    yield* briefings.write(briefingKey(NO_FOCUS_PROJECTS), {
       at: NOW - 3 * MINUTE,
       text: 'Start with “Run the embedded chat on MCP v2”: it is ready for review, and the tool calls work waits on it. Then “Refuse to duplicate code-first paywalls” and “Rewrite the framework command registry”.',
       briefing: {

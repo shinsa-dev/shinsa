@@ -198,7 +198,7 @@ function assertWellFormed(state: ShinsaState) {
   expect('worktreesDirectory' in state.settings).toBe(false);
   for (const model of Object.values(state.settings.agentModels ?? {})) expect(typeof model).toBe('string');
   expect(state.focus.until === null || typeof state.focus.until === 'number').toBe(true);
-  expect(state.focus.projectId === null || state.projects[state.focus.projectId] !== undefined).toBe(true);
+  expect(state.focus.projectIds.every((projectId) => state.projects[projectId] !== undefined)).toBe(true);
   for (const project of Object.values(state.projects)) {
     expect(typeof project.name).toBe('string');
     expect(typeof project.color).toBe('string');

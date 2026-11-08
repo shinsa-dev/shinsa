@@ -3416,10 +3416,11 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   `review.approve_after_fix` for `gate.answer`'s `thenApprove`, `message.line_comments` for `task.message`'s
   `comments`, `changelog` for `GET /api/changelog`, `remote.terminals` for terminal streams on the sealed channel,
   `attention` for routing notifications to the device you use, `worktree-root` for the worktree folder and
-  `usage.pace_limits` for `dailyUsageLimit` and `Project.usageLimit` and `usage.watchdog_limits` for
-  `watchdogsIgnoreUsageLimits`, today;
+  `usage.pace_limits` for `dailyUsageLimit` and `Project.usageLimit`, `usage.watchdog_limits` for
+  `watchdogsIgnoreUsageLimits` and `focus.projects` for `focus.change`'s `projectIds` and `except`, today;
   Settings → Teams, the review's Fix and approve choice and
-  What's new show only on an engine that has them). `ENGINE_PROTOCOL` is the hard floor: a machine whose protocol differs from the page's is left out of the
+  What's new show only on an engine that has them, and the Focus menu stays a single choice on an engine without
+  `focus.projects`). `ENGINE_PROTOCOL` is the hard floor: a machine whose protocol differs from the page's is left out of the
   dashboard, merges nothing and gets no command, and Settings → Machines says "Update Shinsa on <name> to reach it from
   here." in its row, as do New task's machine picker and a routing policy's on that machine's disabled entry. When every
   machine of the dashboard is on another protocol, the dashboard opens on that message instead of the app
@@ -4764,10 +4765,21 @@ description, folders }` (`packages/core/src/domain/types.ts`; the rules in `doma
   repository with its path (the task's own marked) and its folders, and the repository the task works in when it is
   outside the project (`resolveProjectContext`, appended in `Decider.startRun`), so you never have to say which
   repository "the server" is.
-- **The focus is a project or a team** (`focus.change` `projectId` or `teamId`, or neither for your work). It filters:
-  `resolveQueue` keeps only the focus project's decisions and tasks, or those of the team's projects, and every list
-  built on it (Home, the queue button, the guide, ⌘K's decisions, the tab count and notifications) shows nothing from
-  other projects. To see other work, you switch the focus. A team focus also shows your teammates' tasks (Teams).
+- **The focus is projects or a team** (`Focus { projectIds, except, teamId, until }`, `domain/focus.ts`; neither for
+  your work). `projectIds` with `except` false shows only those projects; with `except` true it shows every project
+  but those, so you can leave the work project out on a weekend. One predicate, `isProjectInFocus`, decides it
+  everywhere: `resolveQueue` keeps only the decisions and tasks in focus, or those of the team's projects, and every
+  list built on it (Home, the queue button, the guide, ⌘K's decisions, the tab count and notifications) shows nothing
+  else. A task with no project shows under all but some and hides under a list of projects. `focus.change` takes
+  `projectIds` and `except`, or the older `projectId` a page from before them sends; `changeFocus` sorts and dedupes
+  the list, drops `except` when it is empty, and refuses projects with a team (`focus_refused`). Removing a project
+  drops it from the focus, and the focus clears when none are left. `resolveFocusProject` names a project only when
+  exactly one is included, for the new task's default project and the terminal's default folder. `shinsa focus set`
+  takes several projects and `--except`; `focus show` names them (`describeFocusProjects`). The page offers the
+  multi-select only to an engine that lists the `focus.projects` feature. The `focus-projects` log migration
+  (`apps/engine/src/store/migrations/focus-projects.ts`) turns every older `focus.changed` event's `projectId` into a
+  list of one, or an empty list, with `except` false. To see other work, you switch the focus. A team focus also
+  shows your teammates' tasks (Teams).
 
 **Task identity.** Every id Shinsa makes for the log (tasks, runs, gates, schedules, projects) is a UUIDv7 from the
 engine (`Bun.randomUUIDv7()` behind `DecideContext.newId`); accounts use 8 hex characters and webhook deliveries
@@ -4807,9 +4819,10 @@ finishing), so a burst of changes costs one call: each request interrupts the fi
   first), `next` (up to three more, each with a why), `running` (one line on what agents are
   doing) and `note` (a heads-up, or null). It is stored beside a plain `text` rendering, which
   `shinsa status` prints.
-- **Kept beside the log, not in it.** Only the newest guide per focus project matters and the writer rewrites it
+- **Kept beside the log, not in it.** Only the newest guide per focus matters and the writer rewrites it
   after every gate change, so it is not an event: `Engine.writeBriefing` keeps it in the `briefings` table of
-  `shinsa.sqlite` (one row per project, `*` for the whole queue) and puts it into the state as `state.briefings`
+  `shinsa.sqlite` (one row per focus, `briefingKey`: the project's id for one project, `+a,b` for several, `-a,b` for
+  all but some, `*` for the whole queue) and puts it into the state as `state.briefings`
   (the state's shape is unchanged), and every socket gets a `state.patch` at the same log position (`from` equal to
   `to`), which the page applies like any other. On boot the engine reads the table after the events, so a snapshot's
   older guide never wins. Inspect mode writes none.
@@ -4833,8 +4846,8 @@ finishing), so a burst of changes costs one call: each request interrupts the fi
   Used when the model is off, fails or answers badly. A task is paused when its gate is a failure,
   a setup to fix or a sign-in (`isPausingGate`); the fallback, the ranking and `shinsa status`
   (`Paused`) all read that one predicate.
-- **Only the focus.** The queue the guide is written from (`resolveQueue`) holds only the focus project's decisions
-  and tasks, so the writer is never told about others.
+- **Only the focus.** The queue the guide is written from (`resolveQueue`) holds only the decisions and tasks
+  in focus, so the writer is never told about others; its prompt names the focus (`Focus: everything but Work.`).
 - **Showing it** (`reconcileBriefing`): Home checks the stored guide against the live queue.
   A `now` that no longer needs you means the plain guide until the next write; `next` drops
   decisions that are gone; `running` is always recomputed. Briefings stored as text only, before
