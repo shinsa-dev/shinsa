@@ -88,7 +88,7 @@ export function sortAdmissionQueue(state: ShinsaState, tasks: readonly Task[]) {
   return keyed.map((entry) => entry.task);
 }
 
-function resolveCommitted(state: ShinsaState, provider: string, skip: string) {
+function resolveCommitted(state: ShinsaState, provider: string, skip: string | null) {
   let committed = 0;
   for (const [taskId, buildProvider] of listBuildingTasks(state)) {
     const task = state.tasks[taskId];
@@ -117,4 +117,11 @@ export function resolveAdmission(
     : (resolveRecentUsageFreesAt(recent, limit - (percent - recent.percent) - need) ??
       now + ADMISSION_LIMITS.recheckMs);
   return { fits, need, limit, percent, freesAt: Math.max(freesAt, now + MINUTE_MS) };
+}
+
+export function resolveAdmissionRoom(state: ShinsaState, provider: string, now: number) {
+  const pace = state.usagePaces[provider]?.pace ?? null;
+  if (pace === null) return null;
+  const used = resolveRecentUsage(state, now, { provider }).percent + resolveCommitted(state, provider, null);
+  return pace * (1 - ADMISSION_LIMITS.reserve) - used;
 }
