@@ -9,7 +9,7 @@ import {
 import * as React from 'react';
 import { SelectField } from '@/components/controls/select-field.tsx';
 import { useMinute } from '@/hooks/use-minute.ts';
-import { describeFocusProjects, describeStatsScope, selectFocusProjects } from '@/lib/focus.ts';
+import { resolveFocusLabel, describeStatsScope, selectFocusProjects } from '@/lib/focus.ts';
 import { ATTENTION_DESCRIPTION, ATTENTION_SECTION, listAttentionTiles } from '@/lib/stats/attention.ts';
 import {
   DEFAULT_STATS_RANGE,
@@ -85,7 +85,7 @@ export function StatisticsSettings({ state }: { state: ShinsaState }) {
     () => resolveAttention(source, state, turnaroundWindow),
     [source, state.tasks, state.presence, state.away, state.focusHistory, turnaroundWindow]
   );
-  const focus = describeFocusProjects(state, selection);
+  const focus = resolveFocusLabel(state, selection);
   const scope = focus && <span className='font-normal'>{describeStatsScope(focus, selection)}</span>;
   const rangeLabel = STATS_RANGES.find((entry) => entry.value === `${range}`)?.label ?? '';
   return (

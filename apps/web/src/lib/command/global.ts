@@ -4,7 +4,7 @@ import { type Command, type CommandSection, RANK } from '@/lib/command/registry.
 import { sendCommandWithToast } from '@/lib/connection/commands.ts';
 import { FEEDBACK_ICON, openFeedback } from '@/lib/feedback.ts';
 import {
-  describeFocusProjects,
+  resolveFocusLabel,
   type FocusTarget,
   type FocusTeam,
   resolveFocusTarget,
@@ -70,7 +70,7 @@ function createFocusSwitch(state: ShinsaState, teams: readonly FocusTeam[]): Com
     kind: 'choice',
     id: 'focus.switch',
     label: 'Switch focus',
-    hint: team?.name ?? describeFocusProjects(state, selection) ?? YOUR_WORK,
+    hint: team?.name ?? resolveFocusLabel(state, selection) ?? YOUR_WORK,
     icon: FOCUS_ICON,
     keywords: ['focus', 'project', 'team', 'filter', 'scope'],
     heading: 'Focus on',
@@ -105,7 +105,7 @@ function createFocusSwitch(state: ShinsaState, teams: readonly FocusTeam[]): Com
 function listFocusCommands(state: ShinsaState, teams: readonly FocusTeam[]): Command[] {
   const team = selectFocusTeam(state, teams);
   const selection = selectFocusProjects(state);
-  const kept = team?.name ?? describeFocusProjects(state, selection);
+  const kept = team?.name ?? resolveFocusLabel(state, selection);
   if (!kept) return [createFocusSwitch(state, teams)];
   const target = resolveFocusTarget(selection, team?.id ?? null);
   return [

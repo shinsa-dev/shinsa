@@ -17,7 +17,7 @@ import { ProjectDot, ProjectOption } from '@/components/status/project-dot.tsx';
 import { sendCommandWithToast } from '@/lib/connection/commands.ts';
 import { useEngineFeature, useRemoteSnapshot } from '@/lib/connection/socket.ts';
 import {
-  describeFocusProjects,
+  resolveFocusLabel,
   type FocusTarget,
   listFocusTeams,
   resolveFocusTarget,
@@ -163,7 +163,7 @@ export function FocusMenu({ state, compact = false }: { state: ShinsaState; comp
   const selection = selectFocusProjects(state);
   const single = selectFocus(state);
   const focusTeam = selectFocusTeam(state, teams);
-  const label = focusTeam?.name ?? describeFocusProjects(state, selection);
+  const label = focusTeam?.name ?? resolveFocusLabel(state, selection);
   const keptTarget = resolveFocusTarget(selection, focusTeam?.id ?? null);
   const radioValue = resolveRadioValue(single?.id ?? null, focusTeam?.id ?? null);
 

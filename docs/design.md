@@ -293,7 +293,7 @@ Only these, and they win over anything below:
    `lib/focus.ts`, the rest through `resolveQueue`). Picking Your work, a project or a team in the Focus menu (the current focus checked)
    redraws the whole page from the next state push. Projects are checkbox rows: ticking one adds it to the focus
    and keeps the menu open, and once one is ticked a Show all but these row turns the set into every project but
-   those. The trigger names the focus (`describeFocusProjects` in `lib/focus.ts`): the project, "Home and Work",
+   those. The trigger names the focus (`resolveFocusLabel` in `lib/focus.ts`): the project, "Home and Work",
    "3 projects" or "All but Work". Nothing on Home or in the queue button's list shows
    work from other projects, and ⌘K's decisions across tasks follow the focus too; only Jump to a task, a
    search of every task, reaches past it. **Every Home section folds** from its `SectionLabel` header (a chevron, `aria-expanded`), is

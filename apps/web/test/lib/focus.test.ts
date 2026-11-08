@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import {
-  describeFocusProjects,
+  resolveFocusLabel,
   describeStatsScope,
   listFocusTeams,
   resolveFocusTarget,
@@ -68,7 +68,7 @@ describe('a focus on several projects', () => {
     [['work', 'shop'], true, 'All but Shop and Work'],
     [['work', 'home', 'shop'], true, 'All but 3 projects'],
   ])('names %j with except %s as %s', (projectIds, except, label) => {
-    expect(describeFocusProjects(focusOn([]), { projectIds, except })).toBe(label);
+    expect(resolveFocusLabel(focusOn([]), { projectIds, except })).toBe(label);
   });
 
   it('ticks a project in or out, and drops the exclusion with the last one', () => {

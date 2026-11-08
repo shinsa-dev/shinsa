@@ -45,7 +45,7 @@ export function selectFocusProjects(state: ShinsaState, now = Date.now()): Focus
   );
 }
 
-export function describeFocusProjects(state: ShinsaState, selection: FocusProjects) {
+export function resolveFocusLabel(state: ShinsaState, selection: FocusProjects) {
   const names = selection.projectIds
     .flatMap((projectId) => state.projects[projectId]?.name ?? [])
     .sort((left, right) => left.localeCompare(right));
