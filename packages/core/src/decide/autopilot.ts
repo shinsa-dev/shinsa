@@ -210,19 +210,16 @@ function selectDueGate(decider: Decider, command: CommandOf<'autopilot.fire'>) {
   if (!gate || !task || gate.taskId !== task.id || gate.type !== 'merge' || gate.status !== 'open')
     return null;
   if (gate.autopilotDue?.at !== command.dueAt || isTaskClosed(task)) return null;
-  return { gate, task, due: gate.autopilotDue };
+  const policy = resolveAutopilotPolicy(decider.state.settings);
+  const action = resolveUrgentAction(policy.urgent, gate.autopilotDue.action);
+  if (!policy.enabled || !isUrgent(task) || action === null) return null;
+  return { gate, task, policy, action };
 }
 
 export function fireAutopilot(decider: Decider, command: CommandOf<'autopilot.fire'>) {
   const found = selectDueGate(decider, command);
   if (!found) return;
-  const { gate, task, due } = found;
-  const policy = resolveAutopilotPolicy(decider.state.settings);
-  const action = resolveUrgentAction(policy.urgent, due.action);
-  if (!policy.enabled || !isUrgent(task) || action === null) {
-    scheduleAutopilot(decider, gate, null);
-    return;
-  }
+  const { gate, task, policy, action } = found;
   const waited = `Urgent, and the merge waited ${describeWait(policy.urgentWaitMinutes)} for you.`;
   const refusal = resolveMergeRefusal(decider, task);
   if (action === 'merge' && refusal === null) {
