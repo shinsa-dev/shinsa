@@ -107,7 +107,7 @@ function TabSections({ state, tab }: { state: ShinsaState; tab: SettingsTabId })
           <ForecastSettings state={state} />
           <LimitSettings
             settings={state.settings}
-            rates={resolveUsageRates(state.runs)}
+            rates={resolveUsageRates(state.runs, state.accountPlans)}
             recentUsage={resolveRecentUsage(state, Date.now(), { provider: CLAUDE_PROVIDER }).percent}
           />
         </>
@@ -147,7 +147,7 @@ export function SettingsPage({ state }: { state: ShinsaState }) {
       repos,
       explorerSide,
       updateChannel,
-      resolveUsageRates(state.runs)
+      resolveUsageRates(state.runs, state.accountPlans)
     )
   );
   const extensions = useExtensions();

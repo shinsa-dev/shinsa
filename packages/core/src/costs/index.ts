@@ -15,9 +15,11 @@ export {
 
 export {
   resolveMeterWindow,
+  resolveRatePool,
   resolveUsageRates,
   resolveUsageShares,
   resolveWindowProvider,
+  STARTING_RATES,
   USAGE_RATE_LIMITS,
   type UsageRate,
 } from './rate.ts';
@@ -132,7 +134,7 @@ export function resolveUsageDelta(previous: RunUsage | null, total: RunUsage): R
 }
 
 export function resolveTaskCost(state: ShinsaState, task: Task): TaskCost {
-  const shares = resolveUsageShares(state.runs);
+  const shares = resolveUsageShares(state.runs, state.accountPlans);
   const runs = Object.values(state.runs).filter((run) => run.taskId === task.id);
   const plan = task.plan?.document?.phases ?? [];
   const byRole = new Map<RunRole, CostLine>();
