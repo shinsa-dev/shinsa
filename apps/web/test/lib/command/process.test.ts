@@ -3,6 +3,7 @@ import type { Monitor, TaskSuggestion } from '@shinsa/core';
 import { listProcessCommands } from '@/lib/command/process.ts';
 import type { Command } from '@/lib/command/registry.ts';
 import { spyOnCommands } from '../../support/commands.ts';
+import { spyOnEngine } from '../../support/engine.ts';
 import { createRound } from '../../support/rounds.ts';
 import { createRun, createShinsaState, createTask, NOW } from '../../support/state.ts';
 
@@ -127,6 +128,27 @@ describe('process commands', () => {
         { type: 'suggestion.accept', taskId: 't', suggestionId: 's', waitsOnThis: false, backlog: true },
       ] as never);
     }
+  });
+
+  it('offers bundling an added suggested task with this one on an engine that supports it', () => {
+    spyOnEngine();
+    const task = createTask({
+      id: 't',
+      suggestions: [{ ...SUGGESTION, waitsOnThis: false, stacksOnThis: true }],
+    });
+    const add = listProcessCommands(createShinsaState({ tasks: [task] }), task, NOW)[0];
+    if (add?.kind !== 'page' || add.page.kind !== 'list') throw new Error('not a list page');
+    const choices = add.page.sections.flatMap((section) => section.commands);
+    expect(choices.map((choice) => [choice.label, choice.hint])).toEqual([
+      ['Bundle with this task', 'Suggested'],
+      ['Start now', undefined],
+      ['After this task merges', undefined],
+      ['Backlog', undefined],
+    ]);
+    run(choices[0]);
+    expect(spies.sent.mock.calls.map(([command]) => command)).toEqual([
+      { type: 'suggestion.accept', taskId: 't', suggestionId: 's', waitsOnThis: false, stackOnThis: true },
+    ] as never);
   });
 
   it('keeps a separate-task suggestion here, and switches how a waiting round ships', () => {

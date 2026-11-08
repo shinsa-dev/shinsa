@@ -10,7 +10,7 @@ import {
   resolveBundlePath,
   resolveServerInstance,
 } from '../../src/instance/index.ts';
-import { runTest } from '../harness.ts';
+import { runFiles, runTest } from '../harness.ts';
 import { resolveConfig } from '../helpers/config.ts';
 import { createTempDir } from '../helpers/index.ts';
 
@@ -49,10 +49,10 @@ describe('the engine bundle', () => {
 
   test('a bundled engine reads its plugin, interface and versions from beside itself', async () => {
     const bundle = createBundle();
-    const config = resolveConfig({ SHINSA_HOME: createTempDir() }, bundle);
+    const config = await resolveConfig({ SHINSA_HOME: createTempDir() }, bundle);
     expect(config.pluginDir).toBe(join(bundle.root, 'plugin'));
     expect(config.webDir).toBe(join(bundle.root, 'web'));
-    expect(resolveSdkPackage(undefined, bundle)).toEqual(bundle.sdk);
+    expect(await runFiles(resolveSdkPackage(undefined, bundle))).toEqual(bundle.sdk);
     expect(createServerInstance(null, 5, bundle).version).toBe('1.4.0');
     const instance = await runTest(
       resolveServerInstance('/nowhere', bundle).pipe(Effect.provide(GitCommands))

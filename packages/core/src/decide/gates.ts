@@ -11,10 +11,11 @@ import {
 import { resolveHumanFixPrompt, resolveVerdictFixPrompt } from '../prompts/index.ts';
 import type { ShinsaState } from '../state/project.ts';
 import { listOpenGates } from '../state/queries.ts';
-import { startFromBacklog } from './backlog.ts';
+import { startApprovedPlan } from './backlog.ts';
 import { startEditsChecks } from './checks.ts';
-import { answerConfiguration } from './config.ts';
+import { answerConfiguration, assertConfigurationReply } from './config.ts';
 import { acknowledgeBudget } from './costs.ts';
+import { startPlanSplit } from './couriers.ts';
 import type { Decider } from './decider.ts';
 import { recordEditsApproval } from './edits.ts';
 import { clearFixLoop, startFix } from './fixes.ts';
@@ -24,7 +25,7 @@ import { assertMergeStepsDone } from './merge-steps.ts';
 import { requestPush, retryHookFix, shipReviewedWork, startMerge } from './pull-requests.ts';
 import { retryTask } from './retry.ts';
 import { assertSecretAnswer } from './secrets.ts';
-import { answerOperation, answerProposal, closeResult, startAfterPlan } from './shapes.ts';
+import { answerOperation, answerProposal, closeResult } from './shapes.ts';
 
 interface AnswerOptions {
   planVersion?: number;
@@ -241,8 +242,8 @@ function answerDecision(
     const version = decider.task(taskId).plan?.version ?? 1;
     decider.emit({ type: 'plan.approved', taskId, version });
     if (response?.trim()) decider.emit({ type: 'plan.answered', taskId, answers: response.trim() });
-    if (decider.task(taskId).backlog) startFromBacklog(decider, taskId);
-    else startAfterPlan(decider, taskId);
+    startPlanSplit(decider, taskId);
+    startApprovedPlan(decider, taskId);
     return;
   }
   if (gate.type === 'review') {
@@ -266,6 +267,7 @@ export function answerGate(
   assertComments(gate, decision, options.comments);
   assertThenApprove(gate, decision, options.thenApprove);
   assertMergeStepsDone(decider, gate, decision);
+  assertConfigurationReply(decider, gate, decision, response);
   const verdicts = options.verdicts && options.verdicts.length > 0 ? { verdicts: options.verdicts } : {};
   const comments = options.comments && options.comments.length > 0 ? { comments: options.comments } : {};
   const thenApprove = options.thenApprove ? { thenApprove: true } : {};
@@ -290,7 +292,7 @@ export function answerGate(
       answerFailure(decider, gate, decision, response);
       return;
     case 'configuration':
-      answerConfiguration(decider, gate, decision);
+      answerConfiguration(decider, gate, decision, response);
       return;
     case 'proposal':
       answerProposal(decider, gate, decision);

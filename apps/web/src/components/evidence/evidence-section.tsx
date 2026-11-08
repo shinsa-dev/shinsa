@@ -72,7 +72,7 @@ function listAttachedUris(layout: EvidenceLayout) {
 function Comparison({ entry, viewer }: { entry: EvidenceEntry; viewer: Viewer }) {
   return (
     <section className={cn('flex min-w-0 flex-col gap-1.5', SKIPPED_OFFSCREEN)}>
-      <div className='flex min-w-0 flex-col gap-px'>
+      <div className='flex min-w-0 flex-col'>
         <h3 className='flex min-w-0 items-center gap-1.5 text-xs'>
           <span className='min-w-0 font-medium text-fg-4'>{entry.title}</span>
           {entry.facts && <span className='shrink-0 text-2xs text-fg-2'>{entry.facts}</span>}
@@ -349,7 +349,7 @@ export function EvidenceSection({
   showEmpty?: boolean;
 }) {
   const dataDir = useServerHealth()?.dataDir ?? null;
-  const { evidence, runs, repos } = state;
+  const { evidence, runs, repos, gates } = state;
   const layout = useStructuralValue(
     React.useMemo(
       () => resolveEvidenceLayout({ evidence, runs }, task, dataDir),
@@ -357,7 +357,7 @@ export function EvidenceSection({
     )
   );
   const checks = useStructuralValue(
-    React.useMemo(() => resolveChecksView({ evidence, repos }, task), [evidence, repos, task])
+    React.useMemo(() => resolveChecksView({ evidence, repos, gates }, task), [evidence, repos, gates, task])
   );
   const previews = useStructuralValue(useTaskPreviews(state, task));
   const persistId = resolveTaskDisclosureId(task.id, 'evidence', 'panel');

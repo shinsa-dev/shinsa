@@ -1,5 +1,5 @@
 import type { ServiceSuggestion } from '@shinsa/core';
-import { Context, Effect, Layer, Ref } from 'effect';
+import { Context, Effect, FileSystem, Layer, Ref } from 'effect';
 import type { QuickJson } from '../../agents/quick/schema.ts';
 import { parseRefinedEntries } from '../answer.ts';
 import type { RefinedSuggestions } from '../schema.ts';
@@ -20,6 +20,7 @@ export class ServiceRefiner extends Context.Service<
       ServiceRefiner,
       Effect.gen(function* () {
         const cache = yield* Ref.make<ReadonlyMap<string, CachedRefinement>>(new Map());
+        const withFiles = Effect.provideService(FileSystem.FileSystem, yield* FileSystem.FileSystem);
 
         const request = Effect.fn('ServiceRefiner.request')(function* (
           candidates: ServiceSuggestion[],
@@ -44,9 +45,8 @@ export class ServiceRefiner extends Context.Service<
         ) {
           const unrefined: RefinedSuggestions = { suggestions: candidates, refined: false };
           if (candidates.length === 0) return unrefined;
-          const digests = yield* Effect.sync(() =>
-            [...new Set(candidates.map((each) => each.cwd))].map(readFolderDigest)
-          );
+          const folders = [...new Set(candidates.map((each) => each.cwd))];
+          const digests = yield* withFiles(Effect.forEach(folders, readFolderDigest));
           const prompt = serializeRefinePrompt(candidates, digests);
           const fresh = yield* Effect.cached(request(candidates, prompt));
           const cached = yield* Ref.modify(

@@ -249,7 +249,7 @@ describe('composed steps', () => {
 });
 
 describe('whether a task’s steps are settled', () => {
-  const AUTO = { shape: true, start: true, priority: true };
+  const AUTO = { shape: true, start: true, priority: true, project: false };
 
   test('triage has not chosen the steps while an auto task has no pipeline in triage', () => {
     expect(resolveShapeState({ stage: 'triage', auto: AUTO, plan: null })).toBe('triage');

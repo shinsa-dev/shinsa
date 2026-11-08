@@ -1,13 +1,20 @@
 import { describe, expect, test } from 'bun:test';
-import type { Task } from '../../src/index.ts';
+import { MINUTE_MS, type Task } from '../../src/index.ts';
 import {
+  approve as approveGate,
+  completePhase,
   createHarness,
+  PASSING,
+  pullRequest,
+  pushed,
   createTask,
   type Harness,
   proposePlan,
   readyWorktree,
   registerRepo,
+  refreshWorktree,
   shipAndMerge,
+  SPLIT_PLAN,
 } from '../harness.ts';
 
 function building() {
@@ -55,9 +62,9 @@ function courier(
   return created(harness, before);
 }
 
-function split(harness: Harness, runId: string, requests: string[], thisWaits = false) {
+function split(harness: Harness, runId: string, requests: string[], thisWaits = false, stacked = false) {
   const before = new Set(Object.keys(harness.state.tasks));
-  harness.send({ type: 'agent.split_task', runId, requests, thisWaits });
+  harness.send({ type: 'agent.split_task', runId, requests, thisWaits, ...(stacked ? { stacked } : {}) });
   return created(harness, before);
 }
 
@@ -266,6 +273,32 @@ describe('splitting the accepted plan', () => {
     expect(harness.task(taskId).activity.at(-2)?.text).toBe('Split the accepted plan into 1 task');
   });
 
+  test('stacked, chains the parts as one bundle: the first on this task, each next on the one before', () => {
+    const { harness, taskId } = building();
+    const parts = split(
+      harness,
+      harness.activeRun(taskId).id,
+      ['Move the store.', 'Move the views.', 'Drop the shim.'],
+      false,
+      true
+    );
+    expect(parts.map((part) => part.stacksOn)).toEqual([
+      [taskId],
+      [parts[0]?.id ?? ''],
+      [parts[1]?.id ?? ''],
+    ]);
+    expect(parts.every((part) => part.waitsOn.length === 0)).toBe(true);
+    expect(harness.task(taskId).waitsOn).toEqual([]);
+  });
+
+  test('stacked parts never also make this task wait on them', () => {
+    const { harness, taskId } = building();
+    expect(() => split(harness, harness.activeRun(taskId).id, ['Move the store.'], true, true)).toThrow(
+      'Set stacked or this_task_waits, not both'
+    );
+    expect(harness.task(taskId).splits).toBeUndefined();
+  });
+
   test('takes one to eight tasks', () => {
     const { harness, taskId } = building();
     const builder = harness.activeRun(taskId);
@@ -279,5 +312,149 @@ describe('splitting the accepted plan', () => {
         Array.from({ length: 9 }, (_, index) => `Part ${index}.`)
       )
     ).toThrow('this asked for 9');
+  });
+});
+
+function mergeRound(harness: Harness, taskId: string) {
+  refreshWorktree(harness, taskId);
+  const phases = harness.task(taskId).plan?.document?.phases.length ?? 1;
+  for (let index = 0; index < phases; index += 1) completePhase(harness, taskId);
+  harness.send({ type: 'checks.record', taskId, results: PASSING });
+  harness.send({
+    type: 'agent.report_review',
+    runId: harness.activeRun(taskId).id,
+    summary: null,
+    ratings: { confidence: 'high', risk: 'low' },
+    findings: [],
+  });
+  approveGate(harness, taskId);
+  pushed(harness, taskId);
+  harness.send({ type: 'pull_request.record', taskId, pullRequest: pullRequest({ state: 'merged' }) });
+}
+
+describe('a plan that splits the work into other tasks', () => {
+  function awaitingSplit() {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    proposePlan(harness, taskId, SPLIT_PLAN);
+    const planRun = Object.values(harness.state.runs).find(
+      (run) => run.taskId === taskId && run.purpose === 'plan'
+    );
+    return { harness, taskId, planRun };
+  }
+
+  function approve(harness: Harness, taskId: string) {
+    const before = new Set(Object.keys(harness.state.tasks));
+    harness.send({
+      type: 'gate.answer',
+      gateId: harness.openGate(taskId).id,
+      decision: 'approve',
+      response: null,
+    });
+    return created(harness, before);
+  }
+
+  test('waits for you, and creates nothing until you approve it', () => {
+    const { harness, taskId } = awaitingSplit();
+    expect(harness.task(taskId).stage).toBe('awaiting_plan');
+    expect(Object.keys(harness.state.tasks)).toEqual([taskId]);
+  });
+
+  test('approving it starts each part as a task under this one, forked from it, in the order it names', () => {
+    const { harness, taskId, planRun } = awaitingSplit();
+    const parts = approve(harness, taskId);
+    expect(
+      parts.map((part) => ({
+        request: part.request,
+        parentTaskId: part.parentTaskId,
+        forkOf: part.forkOf,
+        createdBy: part.createdBy?.kind,
+        waitsOn: part.waitsOn,
+        stacksOn: part.stacksOn ?? [],
+      }))
+    ).toEqual([
+      {
+        request: 'Add an export button to the reports page.',
+        parentTaskId: taskId,
+        forkOf: taskId,
+        createdBy: 'split',
+        waitsOn: [],
+        stacksOn: [],
+      },
+      {
+        request: 'Document the reports export in the help centre.',
+        parentTaskId: taskId,
+        forkOf: taskId,
+        createdBy: 'split',
+        waitsOn: [parts[0]?.id ?? ''],
+        stacksOn: [],
+      },
+      {
+        request: 'Move the panel styles onto the new tokens.',
+        parentTaskId: taskId,
+        forkOf: taskId,
+        createdBy: 'split',
+        waitsOn: [],
+        stacksOn: [taskId],
+      },
+    ]);
+    expect(harness.task(taskId).splits).toEqual([
+      {
+        planVersion: 1,
+        runId: planRun?.id ?? '',
+        taskIds: parts.map((part) => part.id),
+        at: expect.any(Number),
+      },
+    ]);
+    expect(harness.task(taskId).waitsOn).toEqual([]);
+    refreshWorktree(harness, taskId);
+    expect(harness.task(taskId).stage).toBe('building');
+  });
+
+  test('a part that waits on this task starts once it merges', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    proposePlan(harness, taskId, {
+      ...SPLIT_PLAN,
+      split: [{ title: 'Follow up', request: 'Use the new export.', order: 'waits_on', on: 0 }],
+    });
+    const [part] = approve(harness, taskId);
+    expect(part?.waitsOn).toEqual([taskId]);
+  });
+
+  test('splitting with split_task afterwards adds nothing for the same plan version', () => {
+    const { harness, taskId } = awaitingSplit();
+    approve(harness, taskId);
+    refreshWorktree(harness, taskId);
+    expect(split(harness, harness.activeRun(taskId).id, ['Port the sidebar.'])).toEqual([]);
+    expect(harness.task(taskId).splits).toHaveLength(1);
+  });
+
+  test('a split in a later round starts its parts, though the plan of that round is version 1 again', () => {
+    const { harness, taskId } = awaitingSplit();
+    expect(approve(harness, taskId)).toHaveLength(3);
+    mergeRound(harness, taskId);
+    harness.advance(MINUTE_MS);
+    harness.send({
+      type: 'task.message',
+      taskId,
+      text: 'Split the next batch.',
+      kind: 'new_round',
+      shape: 'change',
+    });
+    refreshWorktree(harness, taskId);
+    proposePlan(harness, taskId, SPLIT_PLAN);
+    expect(harness.task(taskId).plan?.version).toBe(1);
+    expect(approve(harness, taskId)).toHaveLength(3);
+    expect(harness.task(taskId).splits).toHaveLength(2);
+  });
+
+  test('a plan without a split creates no tasks when you approve it', () => {
+    const harness = createHarness();
+    harness.send({ type: 'settings.change', patch: { approvePlans: 'always' } });
+    const taskId = createTask(harness);
+    proposePlan(harness, taskId);
+    expect(approve(harness, taskId)).toEqual([]);
+    expect(harness.task(taskId).splits).toBeUndefined();
   });
 });

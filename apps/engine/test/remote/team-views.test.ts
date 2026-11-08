@@ -67,67 +67,67 @@ describe('recording a teammate’s task view', () => {
 });
 
 describe('keeping teammates’ task views on disk', () => {
-  test('writes each view to its own file with an index, reads it back after a restart, and removes them', () => {
+  test('writes each view to its own file with an index, reads it back after a restart, and removes them', async () => {
     const dir = join(createTempDir(), 'team-views');
-    const views = openTeamViews(dir);
-    expect(views.select('team1', 'inst1', 'task1')).toBeNull();
-    views.write({ ...ENTRY, messages: [view(5)] });
-    views.write({ ...ENTRY, taskId: 'task2', messages: [view(6)] });
-    const restarted = openTeamViews(dir);
-    expect(restarted.list().map((entry) => entry.taskId)).toEqual(['task1', 'task2']);
-    expect(restarted.selectEntry('team1', 'inst1', 'task1')).toEqual({ ...ENTRY, size: SIZE });
-    expect(restarted.select('team1', 'inst1', 'task1')?.messages).toEqual([view(5)]);
-    restarted.removeWhere((entry) => entry.taskId === 'task1');
-    restarted.removeWhere(() => false);
+    const views = await openTeamViews(dir);
+    expect(await views.select('team1', 'inst1', 'task1')).toBeNull();
+    await views.write({ ...ENTRY, messages: [view(5)] });
+    await views.write({ ...ENTRY, taskId: 'task2', messages: [view(6)] });
+    const restarted = await openTeamViews(dir);
+    expect((await restarted.list()).map((entry) => entry.taskId)).toEqual(['task1', 'task2']);
+    expect(await restarted.selectEntry('team1', 'inst1', 'task1')).toEqual({ ...ENTRY, size: SIZE });
+    expect((await restarted.select('team1', 'inst1', 'task1'))?.messages).toEqual([view(5)]);
+    await restarted.removeWhere((entry) => entry.taskId === 'task1');
+    await restarted.removeWhere(() => false);
     expect(readdirSync(dir)).toHaveLength(2);
-    restarted.removeWhere(() => true);
+    await restarted.removeWhere(() => true);
     expect(existsSync(dir)).toBe(false);
   });
 
-  test('reads a kept view that is not an object as no view', () => {
+  test('reads a kept view that is not an object as no view', async () => {
     const dir = join(createTempDir(), 'team-views');
-    const views = openTeamViews(dir);
-    views.write({ ...ENTRY, messages: [view(5)] });
+    const views = await openTeamViews(dir);
+    await views.write({ ...ENTRY, messages: [view(5)] });
     const [kept] = readdirSync(dir).filter((name) => name !== 'index.json');
     writeFileSync(join(dir, String(kept)), '5');
-    expect(views.select('team1', 'inst1', 'task1')).toBeNull();
+    expect(await views.select('team1', 'inst1', 'task1')).toBeNull();
     writeFileSync(join(dir, String(kept)), '{');
     const logs = captureLogs();
-    expect(views.select('team1', 'inst1', 'task1')).toBeNull();
+    expect(await views.select('team1', 'inst1', 'task1')).toBeNull();
     logs.restore();
     expect(logs.fieldsOf('[Teams] Could not read a kept team task view')).toEqual([
       { taskId: 'task1', error: expect.any(String) },
     ]);
   });
 
-  test('reads a broken index or view as nothing kept, and logs what it could not write', () => {
+  test('reads a broken index or view as nothing kept, and logs what it could not write', async () => {
     const dir = join(createTempDir(), 'team-views');
     mkdirSync(dir, { recursive: true });
     const logs = captureLogs();
     writeFileSync(join(dir, 'index.json'), '{');
-    expect(openTeamViews(dir).list()).toEqual([]);
+    expect(await (await openTeamViews(dir)).list()).toEqual([]);
     writeFileSync(
       join(dir, 'index.json'),
       JSON.stringify({ entries: [null, { ...ENTRY, updatedAt: 'x' }, ENTRY, { ...ENTRY, size: 1 }] })
     );
-    const views = openTeamViews(dir);
-    expect(views.list()).toEqual([{ ...ENTRY, size: 1 }]);
-    expect(views.select('team1', 'inst1', 'task1')).toBeNull();
+    const views = await openTeamViews(dir);
+    expect(await views.list()).toEqual([{ ...ENTRY, size: 1 }]);
+    expect(await views.select('team1', 'inst1', 'task1')).toBeNull();
     writeFileSync(join(dir, 'index.json'), JSON.stringify({ entries: 'none' }));
-    expect(openTeamViews(dir).list()).toEqual([]);
+    expect(await (await openTeamViews(dir)).list()).toEqual([]);
     writeFileSync(join(dir, 'index.json'), '[]');
-    expect(openTeamViews(dir).list()).toEqual([]);
-    views.write({ ...ENTRY, messages: [] });
-    expect(views.select('team1', 'inst1', 'task1')).toBeNull();
+    expect(await (await openTeamViews(dir)).list()).toEqual([]);
+    await views.write({ ...ENTRY, messages: [] });
+    expect(await views.select('team1', 'inst1', 'task1')).toBeNull();
     const taken = join(createTempDir(), 'taken');
     writeFileSync(taken, 'a file where the folder goes');
-    openTeamViews(taken).write({ ...ENTRY, messages: [view(5)] });
+    await (await openTeamViews(taken)).write({ ...ENTRY, messages: [view(5)] });
     expect(logs.fieldsOf('[Teams] Could not keep a team task view')).toEqual([
       { dir: taken, error: expect.any(String) },
     ]);
     const blocked = join(createTempDir(), 'blocked');
     mkdirSync(join(blocked, 'index.json', 'inside'), { recursive: true });
-    openTeamViews(blocked).write({ ...ENTRY, messages: [view(5)] });
+    await (await openTeamViews(blocked)).write({ ...ENTRY, messages: [view(5)] });
     logs.restore();
     expect(logs.fieldsOf('[Teams] Could not keep the team task views')).toEqual([
       { dir: blocked, error: expect.any(String) },
@@ -136,33 +136,33 @@ describe('keeping teammates’ task views on disk', () => {
     expect(logs.fieldsOf('[Teams] Could not read a kept team task view')).toHaveLength(1);
   });
 
-  test('logs a folder it could not remove', () => {
+  test('logs a folder it could not remove', async () => {
     const parent = createTempDir();
     const dir = join(parent, 'team-views');
-    const views = openTeamViews(dir);
-    views.write({ ...ENTRY, messages: [view(5)] });
+    const views = await openTeamViews(dir);
+    await views.write({ ...ENTRY, messages: [view(5)] });
     chmodSync(parent, 0o555);
     const logs = captureLogs();
-    views.removeWhere(() => true);
+    await views.removeWhere(() => true);
     logs.restore();
     chmodSync(parent, 0o755);
-    expect(views.list()).toEqual([]);
+    expect(await views.list()).toEqual([]);
     expect(logs.fieldsOf('[Teams] Could not keep the team task views')).toEqual([
       { dir, error: expect.any(String) },
     ]);
   });
 
-  test('keeps every view under one size limit, emptying the least recently updated first', () => {
+  test('keeps every view under one size limit, emptying the least recently updated first', async () => {
     const dir = join(createTempDir(), 'team-views');
-    const views = openTeamViews(dir, SIZE * 2);
-    views.write({ ...ENTRY, taskId: 'task2', updatedAt: 6, messages: [view(5)] });
-    views.write({ ...ENTRY, messages: [view(5)] });
-    views.write({ ...ENTRY, taskId: 'task3', updatedAt: 4, messages: [view(5)] });
-    const restarted = openTeamViews(dir, SIZE * 2);
-    expect(restarted.selectEntry('team1', 'inst1', 'task1')?.size).toBe(0);
-    expect(restarted.select('team1', 'inst1', 'task1')).toBeNull();
-    expect(restarted.select('team1', 'inst1', 'task2')?.messages).toEqual([view(5)]);
-    expect(restarted.select('team1', 'inst1', 'task3')?.messages).toEqual([view(5)]);
+    const views = await openTeamViews(dir, SIZE * 2);
+    await views.write({ ...ENTRY, taskId: 'task2', updatedAt: 6, messages: [view(5)] });
+    await views.write({ ...ENTRY, messages: [view(5)] });
+    await views.write({ ...ENTRY, taskId: 'task3', updatedAt: 4, messages: [view(5)] });
+    const restarted = await openTeamViews(dir, SIZE * 2);
+    expect((await restarted.selectEntry('team1', 'inst1', 'task1'))?.size).toBe(0);
+    expect(await restarted.select('team1', 'inst1', 'task1')).toBeNull();
+    expect((await restarted.select('team1', 'inst1', 'task2'))?.messages).toEqual([view(5)]);
+    expect((await restarted.select('team1', 'inst1', 'task3'))?.messages).toEqual([view(5)]);
     expect(readdirSync(dir)).toHaveLength(3);
     expect(TEAM_VIEWS_LIMIT).toBe(64 * 1024 * 1024);
   });

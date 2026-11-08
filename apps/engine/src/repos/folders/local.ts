@@ -1,31 +1,30 @@
-import { existsSync, readdirSync, realpathSync, statSync } from 'node:fs';
 import { join } from 'node:path';
+import { Effect, FileSystem, Option } from 'effect';
+import { isFolder, isPresent, listEntries } from '../../files/probe.ts';
 import { type LocalRepo, MAX_LOCAL_REPOS } from '../schema.ts';
 
-function attempt<A>(read: () => A) {
-  try {
-    return read();
-  } catch {
-    return null;
-  }
-}
+const selectLocalRepo = Effect.fn('RepoFolders.selectLocalRepo')(function* (path: string, name: string) {
+  const fs = yield* FileSystem.FileSystem;
+  const info = yield* Effect.option(fs.stat(path));
+  if (Option.isNone(info) || info.value.type !== 'Directory') return Option.none<LocalRepo>();
+  if (!(yield* isPresent(join(path, '.git')))) return Option.none<LocalRepo>();
+  const real = yield* Effect.option(fs.realPath(path));
+  const { mtime } = info.value;
+  const touchedAt = Option.isSome(mtime) ? mtime.value.getTime() : 0;
+  return Option.map(real, (resolved): LocalRepo => ({ path: resolved, name, touchedAt }));
+});
 
-function selectLocalRepo(path: string, name: string) {
-  return attempt((): LocalRepo | null => {
-    const stats = statSync(path);
-    if (!stats.isDirectory() || !existsSync(join(path, '.git'))) return null;
-    return { path: realpathSync(path), name, touchedAt: stats.mtimeMs };
-  });
-}
-
-export function listLocalRepos(roots: readonly string[], limit = MAX_LOCAL_REPOS) {
+export const listLocalRepos = Effect.fn('RepoFolders.listLocalRepos')(function* (
+  roots: readonly string[],
+  limit = MAX_LOCAL_REPOS
+) {
   const found = new Map<string, LocalRepo>();
   for (const root of roots) {
-    const entries = attempt(() => (statSync(root).isDirectory() ? readdirSync(root) : []));
-    for (const entry of entries ?? []) {
-      const repo = selectLocalRepo(join(root, entry), entry);
-      if (repo && !found.has(repo.path)) found.set(repo.path, repo);
+    const entries = (yield* isFolder(root)) ? yield* listEntries(root) : [];
+    for (const entry of entries) {
+      const repo = yield* selectLocalRepo(join(root, entry), entry);
+      if (Option.isSome(repo) && !found.has(repo.value.path)) found.set(repo.value.path, repo.value);
     }
   }
   return [...found.values()].sort((a, b) => b.touchedAt - a.touchedAt).slice(0, limit);
-}
+});

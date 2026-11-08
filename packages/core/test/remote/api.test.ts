@@ -66,6 +66,7 @@ const ROUTES = [
   'POST /__remote/machine/teams/:teamId/leave',
   'POST /__remote/machine/teams/:teamId/remove',
   'POST /__remote/machine/teams/:teamId/connect',
+  'POST /__remote/machine/teams/:teamId/connect/remote',
   'GET /__remote/slack/links',
   'POST /__remote/slack/unlink',
   'POST /__remote/slack/post',

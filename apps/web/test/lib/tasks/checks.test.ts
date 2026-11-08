@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import type { CiRun, PhaseReport, ReportCheck, Task, TaskCheck } from '@shinsa/core';
+import type { CiRun, PhaseReport, ReportCheck, ShinsaState, Task, TaskCheck } from '@shinsa/core';
 import {
   CHECK_STATE_LABEL,
   type ChecksView,
@@ -12,7 +12,13 @@ import {
   selectCheckOutput,
 } from '@/lib/tasks/checks.ts';
 import { createPullRequest } from '../../support/pull-request.ts';
-import { createEvidence, createRepo, createShinsaState, createTask } from '../../support/state.ts';
+import {
+  createEvidence,
+  createGate,
+  createRepo,
+  createShinsaState,
+  createTask,
+} from '../../support/state.ts';
 
 const PLAN_DOCUMENT = {
   goal: '',
@@ -81,8 +87,12 @@ function task(overrides: Partial<Task> = {}) {
   });
 }
 
-function view(subject: Task, evidence = createShinsaState({ repos: [REPO] }).evidence) {
-  return resolveChecksView({ repos: { repo: REPO }, evidence }, subject) as ChecksView;
+function view(
+  subject: Task,
+  evidence = createShinsaState({ repos: [REPO] }).evidence,
+  gates: ShinsaState['gates'] = {}
+) {
+  return resolveChecksView({ repos: { repo: REPO }, evidence, gates }, subject) as ChecksView;
 }
 
 function states(subject: Task) {
@@ -132,9 +142,12 @@ describe('the Building stage', () => {
       plan: { ...PLAN, document: { ...PLAN_DOCUMENT, phases: [{ title: 'One', detail: '' }] } },
     });
     expect(view(one).stages[0]?.rows[0]?.meta).toBe('From the plan');
-    expect(resolveChecksView({ repos: {}, evidence: {} }, createTask({ id: 'q' }))).toBeNull();
+    expect(resolveChecksView({ repos: {}, evidence: {}, gates: {} }, createTask({ id: 'q' }))).toBeNull();
     expect(
-      resolveChecksView({ repos: {}, evidence: {} }, createTask({ id: 'q', checkResults: [result(UNIT)] }))
+      resolveChecksView(
+        { repos: {}, evidence: {}, gates: {} },
+        createTask({ id: 'q', checkResults: [result(UNIT)] })
+      )
     ).toBeNull();
   });
 
@@ -204,10 +217,12 @@ describe('the Building stage', () => {
   });
 });
 
+const NO_GATES = { gates: {} };
+
 describe('listRunningCheckIds', () => {
   it('runs nothing outside the checking stage, whatever is left over', () => {
-    expect(listRunningCheckIds(task({ runningChecks: ['c1'] })).size).toBe(0);
-    expect(listRunningCheckIds(task({ stage: 'checking' })).size).toBe(0);
+    expect(listRunningCheckIds(NO_GATES, task({ runningChecks: ['c1'] })).size).toBe(0);
+    expect(listRunningCheckIds(NO_GATES, task({ stage: 'checking' })).size).toBe(0);
   });
 
   it('marks exactly the checks of the run Shinsa started, and keeps the others’ results', () => {
@@ -221,7 +236,7 @@ describe('listRunningCheckIds', () => {
         result(DRY, { outcome: 'fail', note: 'fails_on_base' }),
       ],
     });
-    expect([...listRunningCheckIds(subject)]).toEqual(['c2', 'r1']);
+    expect([...listRunningCheckIds(NO_GATES, subject)]).toEqual(['c2', 'r1']);
     expect(states(subject)).toEqual([
       ['c1', 'passed'],
       ['c2', 'running'],
@@ -231,6 +246,16 @@ describe('listRunningCheckIds', () => {
     expect(view(subject).summary).toBe('Running 2 checks');
     expect(view(subject).status).toBe('running');
     expect(view(subject).stages[0]?.rows[1]?.note).toBeNull();
+  });
+
+  it('shows no check running while the task is paused, though the checks wait to run again', () => {
+    const subject = task({ stage: 'checking', runningChecks: ['c2', 'r1'] });
+    const paused = createGate({ id: 'g', taskId: subject.id, type: 'failure', cause: 'paused' });
+    const gates = { g: paused };
+    expect(listRunningCheckIds({ gates }, subject).size).toBe(0);
+    expect(view(subject, undefined, gates).status).not.toBe('running');
+    const answered = { g: { ...paused, status: 'answered' as const } };
+    expect([...listRunningCheckIds({ gates: answered }, subject)]).toEqual(['c2', 'r1']);
   });
 });
 
@@ -268,7 +293,7 @@ describe('the CI stage', () => {
   it('sums CI up from the pull request when it lists no runs, and leaves it out when there is no CI', () => {
     const only = (checks: 'passing' | 'failing' | 'pending' | 'none') =>
       resolveChecksView(
-        { repos: {}, evidence: {} },
+        { repos: {}, evidence: {}, gates: {} },
         createTask({ id: 'p', pullRequest: createPullRequest({ number: 1, checks }) })
       );
     expect(only('passing')?.stages.map((stage) => [stage.summary, stage.status])).toEqual([
@@ -282,7 +307,9 @@ describe('the CI stage', () => {
       id: 'p',
       pullRequest: createPullRequest({ number: 1, checkRuns: [RUNS[2] as CiRun, RUNS[0] as CiRun] }),
     });
-    expect(resolveChecksView({ repos: {}, evidence: {} }, failing)?.stages[0]?.summary).toBe('1 of 2 failed');
+    expect(resolveChecksView({ repos: {}, evidence: {}, gates: {} }, failing)?.stages[0]?.summary).toBe(
+      '1 of 2 failed'
+    );
   });
 
   it('leads the summary with Building when both stages share its status', () => {

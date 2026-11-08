@@ -249,6 +249,56 @@ describe('NowCard on the Overview', () => {
     expect(actions.indexOf('Review')).toBeLessThan(actions.indexOf('Approve changes'));
   });
 
+  it('puts the agent’s suggested replies beside Approve changes and sends one as your message', async () => {
+    const { gate } = reviewing();
+    const task = createTask({
+      id: 'task-1',
+      stage: 'awaiting_review',
+      suggestedActions: [{ label: 'Do the renames', message: 'Do the renames too.' }],
+    });
+    const { view } = renderOverview(createShinsaState({ tasks: [task], gates: [gate] }), task, gate);
+    const actions = view.getAllByRole('button').map((button) => button.textContent);
+    expect(actions.indexOf('Review')).toBeLessThan(actions.indexOf('Do the renames'));
+    expect(actions.indexOf('Do the renames')).toBeLessThan(actions.indexOf('Approve changes'));
+    fireEvent.click(view.getByRole('button', { name: 'Do the renames' }));
+    await waitFor(() =>
+      expect(listSentCommands()).toEqual([
+        { type: 'task.message', taskId: 'task-1', text: 'Do the renames too.' },
+      ])
+    );
+  });
+
+  it('leads a proposal the agent recommends closing with Close, and keeps Make it a change as the quiet link', async () => {
+    const task = createTask({
+      id: 'task-1',
+      pipeline: ['investigate', 'your_ok', 'plan', 'build', 'merge'],
+      stage: 'awaiting_proposal',
+      proposal: {
+        request: 'Plan it.',
+        why: 'Nothing leaks.',
+        status: 'open',
+        recommend: 'close',
+        runId: null,
+        at: 0,
+      },
+    });
+    const gate = createGate({
+      id: 'gate-1',
+      taskId: 'task-1',
+      type: 'proposal',
+      title: 'The diagnosis found nothing to fix',
+    });
+    const { view } = renderOverview(createShinsaState({ tasks: [task], gates: [gate] }), task, gate);
+    expect(view.getByText('The diagnosis found nothing to fix')).toBeTruthy();
+    expect(view.getByRole('button', { name: 'Make it a change' })).toBeTruthy();
+    fireEvent.click(view.getByRole('button', { name: 'Close' }));
+    await waitFor(() =>
+      expect(listSentCommands()).toEqual([
+        { type: 'gate.answer', gateId: 'gate-1', decision: 'reject', response: null },
+      ])
+    );
+  });
+
   it('opens the code review from the Review button', () => {
     const { task, gate, state } = reviewing();
     const { view, onOpen } = renderOverview(state, task, gate);
@@ -357,6 +407,64 @@ describe('NowCard on the Overview', () => {
       { type: 'gate.answer', gateId: 'gate-1', decision: 'approve', response: null, planVersion: 1 },
     ]);
     expect(await view.findByText('Approved. Building now.')).toBeTruthy();
+  });
+
+  it('lists the parts of a split and offers Start N tasks or Keep as one task', async () => {
+    const task = createTask({
+      id: 'task-1',
+      stage: 'awaiting_plan',
+      plan: {
+        version: 1,
+        body: '',
+        proposedAt: 0,
+        document: {
+          goal: 'Show the price.',
+          phases: [{ title: 'Read the price', detail: 'From the plan.' }],
+          behaviour: [],
+          approach: '',
+          files: [],
+          outOfScope: [],
+          verification: [],
+          questions: [],
+          split: [
+            { title: 'Add coupons', request: 'Add a coupon field.', order: 'parallel' },
+            { title: 'Send receipts', request: 'Email a receipt.', order: 'waits_on', on: 0 },
+          ],
+        },
+      },
+    });
+    const gate = createGate({ id: 'gate-1', taskId: 'task-1', type: 'plan' });
+    const { view } = renderOverview(createShinsaState({ tasks: [task], gates: [gate] }), task, gate);
+    const card = within(view.container.querySelector('section') as HTMLElement);
+    expect(card.getByText('The agent wants to split this into 3 tasks')).toBeTruthy();
+    expect(card.getByText('Other tasks')).toBeTruthy();
+    expect(card.getByText('Add coupons')).toBeTruthy();
+    expect(card.getByText('Starts now')).toBeTruthy();
+    expect(card.getByText('Waits on this task')).toBeTruthy();
+    expect(card.queryByRole('button', { name: 'Approve plan' })).toBeNull();
+    const actions = card.getAllByRole('button').map((button) => button.textContent);
+    expect(actions.indexOf('Keep as one task')).toBeLessThan(actions.indexOf('Start 3 tasks'));
+    fireEvent.click(card.getByRole('button', { name: 'Keep as one task' }));
+    expect(await view.findByText('Sent back as one task.')).toBeTruthy();
+    fireEvent.click(card.getByRole('button', { name: 'Start 3 tasks' }));
+    expect(await view.findByText('Approved. Building now.')).toBeTruthy();
+    expect(listSentCommands()).toEqual([
+      {
+        type: 'gate.answer',
+        gateId: 'gate-1',
+        decision: 'revise',
+        response: 'Keep this as one task: drop the split and plan all of the work here.',
+      },
+      { type: 'gate.answer', gateId: 'gate-1', decision: 'approve', response: null, planVersion: 1 },
+    ]);
+  });
+
+  it('shows no split list or Keep as one task on a plan without parts', () => {
+    const task = createTask({ id: 'task-1', stage: 'awaiting_plan' });
+    const gate = createGate({ id: 'gate-1', taskId: 'task-1', type: 'plan' });
+    const { view } = renderOverview(createShinsaState({ tasks: [task], gates: [gate] }), task, gate);
+    expect(view.queryByText('Other tasks')).toBeNull();
+    expect(view.queryByRole('button', { name: 'Keep as one task' })).toBeNull();
   });
 
   it('offers only Start building on a plan kept in the backlog', async () => {

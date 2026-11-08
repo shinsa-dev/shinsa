@@ -1,6 +1,5 @@
-import { existsSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
-import { Context, Effect, Layer, Option, Predicate, Schema } from 'effect';
+import { Context, Effect, FileSystem, Layer, Option, Predicate, Schema } from 'effect';
 import { NEWLINE } from '../../files/schema.ts';
 import { describeError } from '../../log/redact.ts';
 import {
@@ -26,15 +25,22 @@ export class ExtensionUsage extends Context.Service<
     ExtensionUsage,
     Effect.gen(function* () {
       const files = yield* ExtensionFiles;
+      const fs = yield* FileSystem.FileSystem;
       const decodeLine = Schema.decodeUnknownEffect(TranscriptLine);
       const decodeToolCall = Schema.decodeUnknownOption(TranscriptToolCall);
 
       const listSessionFiles = (dir: string) =>
-        existsSync(dir)
-          ? readdirSync(dir, { recursive: true, encoding: 'utf8' })
-              .filter((entry) => entry.endsWith('.jsonl'))
-              .map((entry) => join(dir, entry))
-          : [];
+        fs.readDirectory(dir, { recursive: true }).pipe(
+          Effect.map((entries) =>
+            entries.filter((entry) => entry.endsWith('.jsonl')).map((entry) => join(dir, entry))
+          ),
+          Effect.orElseSucceed((): string[] => [])
+        );
+
+      const readRange = (path: string, offset: number, end: number) =>
+        Effect.scoped(
+          Effect.flatMap(fs.open(path), (file) => file.readAlloc(end - offset, { position: BigInt(offset) }))
+        ).pipe(Effect.map(Option.getOrUndefined), Effect.mapError(describeError));
 
       const recordLatest = (target: Record<string, number>, key: string, at: number) => {
         if (!key || !Number.isFinite(at)) return;
@@ -110,12 +116,7 @@ export class ExtensionUsage extends Context.Service<
         let offset = start;
         while (offset < size) {
           const end = Math.min(size, offset + chunk);
-          const bytes = new Uint8Array(
-            yield* Effect.tryPromise({
-              try: () => Bun.file(path).slice(offset, end).arrayBuffer(),
-              catch: describeError,
-            })
-          );
+          const bytes = (yield* readRange(path, offset, end)) ?? new Uint8Array();
           const last = bytes.lastIndexOf(NEWLINE);
           if (last === -1) {
             if (end >= size) return offset;
@@ -138,8 +139,13 @@ export class ExtensionUsage extends Context.Service<
         path: string,
         horizon: number
       ) {
-        const stat = statSync(path, { throwIfNoEntry: false });
-        if (!stat || stat.mtimeMs < horizon) return;
+        const info = yield* Effect.option(fs.stat(path));
+        if (Option.isNone(info)) return;
+        const stat = {
+          size: Number(info.value.size),
+          mtimeMs: Option.getOrUndefined(info.value.mtime)?.getTime() ?? 0,
+        };
+        if (stat.mtimeMs < horizon) return;
         const known = previous.files[path];
         if (known && known.size === stat.size && known.mtimeMs === stat.mtimeMs) {
           next.files[path] = known;
@@ -170,7 +176,7 @@ export class ExtensionUsage extends Context.Service<
           skills: { ...previous.skills },
         };
         for (const source of request.sources) {
-          for (const path of listSessionFiles(source.dir)) {
+          for (const path of yield* listSessionFiles(source.dir)) {
             yield* scanFile(request, previous, next, source.kind, path, horizon);
           }
         }

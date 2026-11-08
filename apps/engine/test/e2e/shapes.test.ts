@@ -152,7 +152,7 @@ describe('the shapes a task can take', () => {
     expect(w.task(taskId)).toMatchObject({
       pipeline: ['investigate'],
       priority: 'high',
-      auto: { shape: true, start: true, priority: true },
+      auto: { shape: true, start: true, priority: true, project: false },
       triageDecisions: {
         shape: { value: 'investigate', why: 'It asks why something is missing, not for a change.' },
         priority: { value: 'high', why: 'People see the missing greeting today.' },
@@ -282,6 +282,12 @@ describe('the shapes a task can take', () => {
       await agent.call('reshape_task', {
         steps: ['investigate', 'your_ok', 'plan', 'operate'],
         reason: 'Find what is stuck, then clear it.',
+      });
+    });
+    w.agents.queue('investigator', async (agent) => {
+      await agent.call('report_diagnosis', {
+        diagnosis: 'The greeting files were never written.',
+        recommend: 'go_on',
       });
     });
     const taskId = await w.createTask('The nightly exports are stuck. Clear them.');

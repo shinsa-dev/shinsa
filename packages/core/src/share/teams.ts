@@ -1,13 +1,13 @@
-import type { SharePreset } from '../domain/settings.ts';
 import { isTaskSettled } from '../domain/stages.ts';
 import type { ActivityPerson, Gate, Task } from '../domain/types.ts';
 import type { ShinsaState } from '../state/project.ts';
 import { resolveTaskProject } from '../state/queries.ts';
 import { resolveSharedListing, type SharedListing, type SharedPerson } from './index.ts';
+import { SHARE_PRESET_SCOPES } from './presets.ts';
 
 export const TEAM_SETTLED_LIMIT = 50;
 
-export const TEAM_SHARE_PRESET: SharePreset = 'standard';
+export const TEAM_SHARE_SCOPES = SHARE_PRESET_SCOPES.standard;
 
 export interface TeamTaskContext {
   owner: string | null;
@@ -59,7 +59,7 @@ function listTeamTaskSubjects(state: ShinsaState, teamId: string) {
 export function listTeamTasks(state: ShinsaState, teamId: string, context: TeamTaskContext): TeamTask[] {
   const gates = listGatesByTask(state);
   return listTeamTaskSubjects(state, teamId).map((task) => ({
-    ...resolveSharedListing(state, task, gates.get(task.id) ?? [], TEAM_SHARE_PRESET),
+    ...resolveSharedListing(state, task, gates.get(task.id) ?? [], TEAM_SHARE_SCOPES),
     owner: context.owner,
     ownerProfile: context.ownerProfile,
     machine: context.machine,

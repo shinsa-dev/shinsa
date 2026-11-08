@@ -13,6 +13,7 @@ import type { QuickJson } from '../../src/agents/quick/index.ts';
 import type { LocalRepo } from '../../src/repos/index.ts';
 import { SHAPE_QUESTION } from '../../src/triage/decisions.ts';
 import { resolveRepoProject, type TeamReading } from '../../src/triage/index.ts';
+import { runFiles } from '../harness.ts';
 import { createRepo, createTask } from '../helpers/state.ts';
 import { resolveTriage } from './harness.ts';
 
@@ -33,7 +34,9 @@ function stateWith(patch: (state: ShinsaState) => void = () => undefined) {
   return state;
 }
 
-const START_ONLY = { shape: false, start: true, priority: false };
+const START_ONLY = { shape: false, start: true, priority: false, project: false };
+
+const FOCUS_PROJECT = { shape: false, start: false, priority: false, project: true };
 
 function newTask(overrides: Partial<Task> = {}) {
   return createTask({
@@ -145,6 +148,7 @@ describe('resolveTriage with the model', () => {
         size: 'large',
         branch: 'fix/login-mobile',
         waits_on: ['same', 'loose', 'other'],
+        waits_on_kind: 'needs_its_code',
       })
     );
     expect(triage).toMatchObject({
@@ -162,7 +166,14 @@ describe('resolveTriage with the model', () => {
         state,
         newTask(),
         LOCAL,
-        answer({ title: 'Fix it', repo: 'api', size: 'small', branch: 'fix/it', waits_on })
+        answer({
+          title: 'Fix it',
+          repo: 'api',
+          size: 'small',
+          branch: 'fix/it',
+          waits_on,
+          waits_on_kind: 'needs_its_code',
+        })
       );
       expect(triage?.waitsOn).toEqual([]);
     }
@@ -204,9 +215,9 @@ describe('the branch triage names', () => {
   });
 
   test('the prompt and the schema list the same commit types', async () => {
-    const calls: { system: string; schema: JsonSchema | undefined }[] = [];
-    const ask: QuickJson = <T>(system: string, _prompt: string, schema?: JsonSchema) => {
-      calls.push({ system, schema });
+    const calls: { system: string; prompt: string; schema: JsonSchema | undefined }[] = [];
+    const ask: QuickJson = <T>(system: string, prompt: string, schema?: JsonSchema) => {
+      calls.push({ system, prompt, schema });
       return Effect.succeed(null as T);
     };
     await resolveTriage(stateWith(), newTask(), LOCAL, ask);
@@ -252,6 +263,7 @@ describe('resolveTriage with structured output', () => {
         size: 'large',
         branch: 'fix/it',
         waits_on: ['same'],
+        waits_on_kind: 'asked_for',
       } as T);
     };
     const triage = await resolveTriage(state, newTask({ auto: START_ONLY }), LOCAL, recording);
@@ -265,11 +277,19 @@ describe('resolveTriage with structured output', () => {
       items: { type: 'string', enum: ['same'] },
       uniqueItems: true,
     });
+    expect(schema?.properties.waits_on_kind).toEqual({
+      type: 'string',
+      enum: ['none', 'needs_its_code', 'asked_for', 'shared_rewrite'],
+    });
     expect(calls[0]?.prompt).toContain(
       'Decisions:\n- size (choice): How big is the work? Options: "small": a contained fix'
     );
     expect(calls[0]?.prompt).toContain(
-      '- waits_on (choices): Which open tasks must be finished before this one can start? Often none.'
+      '- waits_on (choices): Which open tasks must be merged before this one can start? Usually none'
+    );
+    expect(calls[0]?.prompt).toContain('When in doubt, answer an empty list.');
+    expect(calls[0]?.prompt).toContain(
+      '- waits_on_kind (choice): Which direct dependency makes this task wait'
     );
     expect(calls[0]?.prompt).toContain('Options: "same": Add the export.');
 
@@ -311,7 +331,7 @@ describe('resolveTriage with structured output', () => {
 });
 
 describe('resolveTriage for what the task left to Shinsa', () => {
-  const AUTO = { shape: true, start: true, priority: true };
+  const AUTO = { shape: true, start: true, priority: true, project: false };
   const state = stateWith((draft) => {
     draft.repos.r1 = createRepo({ id: 'r1', path: '/code/api', name: 'api' });
     draft.tasks.same = createTask({ id: 'same', repoId: 'r1', title: 'Add the export' });
@@ -339,7 +359,7 @@ describe('resolveTriage for what the task left to Shinsa', () => {
     });
     const question = await resolveTriage(
       state,
-      newTask({ mode: 'ask', auto: { shape: true, start: false, priority: false } }),
+      newTask({ mode: 'ask', auto: { shape: true, start: false, priority: false, project: false } }),
       LOCAL,
       silent
     );
@@ -359,6 +379,7 @@ describe('resolveTriage for what the task left to Shinsa', () => {
       shape: 'investigate',
       priority: 'high',
       waits_on: ['same'],
+      waits_on_kind: 'needs_its_code',
       shape_why: '  It asks why the export is slow, not for a change.  ',
       priority_why: 'x'.repeat(200),
       waits_on_why: 'It measures the export that task adds.',
@@ -393,6 +414,9 @@ describe('resolveTriage for what the task left to Shinsa', () => {
       'shape',
       'priority',
       'waits_on',
+      'waits_on_kind',
+      'stacks_on',
+      'stacks_on_why',
       'duplicate_of',
       'duplicate_why',
       'shape_why',
@@ -404,7 +428,7 @@ describe('resolveTriage for what the task left to Shinsa', () => {
     expect(prompt).toContain('"operation": run a one-off action in the repository');
     expect(prompt).toContain('- priority (choice): How soon does this need doing');
     expect(prompt).toContain(
-      'Then say why for each, in one plain sentence: shape_why, priority_why, waits_on_why, duplicate_why.'
+      'Then say why for each, in one plain sentence: shape_why, priority_why, waits_on_why, stacks_on_why, duplicate_why.'
     );
     expect(prompt).not.toContain('The human chose');
   });
@@ -457,8 +481,16 @@ describe('resolveTriage for what the task left to Shinsa', () => {
       state,
       newTask({ auto: AUTO }),
       LOCAL,
-      answer({ title: 'Fix it', repo: 'api', size: 'small', branch: 'fix/it', waits_on: ['same'] })
+      answer({
+        title: 'Fix it',
+        repo: 'api',
+        size: 'small',
+        branch: 'fix/it',
+        waits_on: ['same'],
+        waits_on_kind: 'shared_rewrite',
+      })
     );
+    expect(waiting?.waitsOn.map((task) => task.id)).toEqual(['same']);
     expect(waiting?.reasons?.start).toBe('It needs the work of another open task first.');
   });
 
@@ -473,12 +505,59 @@ describe('resolveTriage for what the task left to Shinsa', () => {
         size: 'small',
         branch: 'feat/export-button',
         waits_on: ['same'],
+        waits_on_kind: 'needs_its_code',
         waits_on_why: 'It calls the endpoint that task adds.',
       })
     );
     expect(triage?.repoPath).toBe('/code/web');
     expect(triage?.waitsOn).toEqual([]);
     expect(triage?.reasons?.start).toBe('It does not need the work of another open task.');
+  });
+
+  test('a wait that names no direct dependency is dropped along with its reason, so the task starts now', async () => {
+    for (const waits_on_kind of ['none', 'same_area', undefined]) {
+      const triage = await resolveTriage(
+        state,
+        newTask({ auto: AUTO }),
+        LOCAL,
+        answer({
+          title: 'Escalate to teammates',
+          repo: 'api',
+          size: 'large',
+          branch: 'feat/escalate',
+          waits_on: ['same'],
+          waits_on_kind,
+          waits_on_why: 'Escalating to teammates relies on the teams task.',
+        })
+      );
+      expect(triage?.waitsOn).toEqual([]);
+      expect(triage?.reasons?.start).toBe('It does not need the work of another open task.');
+    }
+  });
+
+  test('each open task is shown with its request and plan goal, clipped, so overlap is judged on the work', async () => {
+    const planned = stateWith((draft) => {
+      draft.repos.r1 = createRepo({ id: 'r1', path: '/code/api', name: 'api' });
+      draft.tasks.teams = createTask({
+        id: 'teams',
+        repoId: 'r1',
+        title: 'Improve teams',
+        request: `Hand a task\n  to a teammate. ${'x'.repeat(400)}`,
+        plan: { version: 1, document: { goal: 'Teammates take over each other’s tasks.' } } as never,
+      });
+      draft.tasks.bare = createTask({ id: 'bare', repoId: 'r1', title: 'Fix the tab', request: 'Fix it' });
+    });
+    const { calls, ask } = record(null);
+    await resolveTriage(planned, newTask({ auto: AUTO }), LOCAL, ask);
+    const prompt = calls[0]?.prompt ?? '';
+    expect(prompt).toContain(
+      'Open tasks (not finished yet), each with its repository, stage, request and plan:'
+    );
+    expect(prompt).toContain(
+      '- teams: Improve teams (api, building). Request: Hand a task to a teammate. xxx'
+    );
+    expect(prompt).toContain('… Plan: Teammates take over each other’s tasks.');
+    expect(prompt).toContain('- bare: Fix the tab (api, building). Request: Fix it\n');
   });
 
   test('what the human chose is stated and not asked again', async () => {
@@ -494,7 +573,7 @@ describe('resolveTriage for what the task left to Shinsa', () => {
         pipeline: ['answer'],
         priority: 'high',
         waitsOn: ['same', 'gone'],
-        auto: { shape: false, start: false, priority: false },
+        auto: { shape: false, start: false, priority: false, project: false },
       }),
       LOCAL,
       ask
@@ -516,7 +595,12 @@ describe('resolveTriage for what the task left to Shinsa', () => {
     ]);
     expect(prompt).not.toContain('waits_on');
 
-    await resolveTriage(state, newTask({ auto: { shape: true, start: false, priority: true } }), LOCAL, ask);
+    await resolveTriage(
+      state,
+      newTask({ auto: { shape: true, start: false, priority: true, project: false } }),
+      LOCAL,
+      ask
+    );
     expect(calls[1]?.prompt).toContain('The human chose: it starts now.');
     await resolveTriage(state, newTask({ mode: 'ask', auto: AUTO }), LOCAL, ask);
     expect(calls[2]?.prompt).not.toContain('a question to answer');
@@ -592,12 +676,13 @@ describe('triage in a project', () => {
         size: 'small',
         branch: 'feat/export-button',
         waits_on: ['backend', 'unfiled'],
+        waits_on_kind: 'needs_its_code',
         waits_on_why: 'It calls the endpoint that task adds.',
       } as T);
     };
     const triage = await resolveTriage(
       state,
-      newTask({ projectId: 'p1', auto: { shape: false, priority: false, start: true } }),
+      newTask({ projectId: 'p1', auto: { shape: false, priority: false, start: true, project: false } }),
       LOCAL,
       ask
     );
@@ -630,9 +715,9 @@ describe('triage may choose no repository', () => {
   ];
 
   function recordAnswer(repo: string) {
-    const calls: { system: string; schema: JsonSchema | undefined }[] = [];
-    const ask: QuickJson = <T>(system: string, _prompt: string, schema?: JsonSchema) => {
-      calls.push({ system, schema });
+    const calls: { system: string; prompt: string; schema: JsonSchema | undefined }[] = [];
+    const ask: QuickJson = <T>(system: string, prompt: string, schema?: JsonSchema) => {
+      calls.push({ system, prompt, schema });
       return Effect.succeed({ title: 'Hey', repo, size: 'small', branch: 'chore/hey' } as T);
     };
     return { calls, ask };
@@ -657,7 +742,7 @@ describe('triage may choose no repository', () => {
     expect(triage.repoPath).toBe('/code/kanna');
   });
 
-  test('a repository outside the task’s project is offered when the request names it, and binds', async () => {
+  test('a repository outside a focus project is offered when the request names it, and binds', async () => {
     const state = stateWith((draft) => {
       draft.projects.p1 = SHINSA_PROJECT;
       draft.repos.r1 = createRepo({ id: 'r1', name: 'shinsa', path: '/code/shinsa', projectId: 'p1' });
@@ -677,15 +762,40 @@ describe('triage may choose no repository', () => {
       'Fix the button in Kanna’s sidebar',
       'KANNA: fix the button',
     ]) {
-      const triage = await resolveTriage(state, newTask({ projectId: 'p1', request }), KANNA, ask);
+      const triage = await resolveTriage(
+        state,
+        newTask({ projectId: 'p1', request, auto: FOCUS_PROJECT }),
+        KANNA,
+        ask
+      );
       expect(triage.repoPath).toBe('/code/kanna');
     }
     expect(calls[0]?.schema?.properties.repo).toEqual({ type: 'string', enum: ['shinsa', 'kanna', 'none'] });
     expect(calls[0]?.prompt).toContain(
-      'Repositories outside this project, offered because the request names them: kanna. Pick one only for the work the request names it for; the task stays in this project.'
+      "Repositories outside this project, offered because the request names them: kanna. Pick one only for the work the request names it for; the task then moves to that repository's project."
     );
     expect(calls[0]?.prompt).not.toContain('never offered');
     expect(calls[0]?.system).toContain('A request that names a repository that is not listed gets "none".');
+  });
+
+  test('a project you chose never offers an outside repository, even one the request names', async () => {
+    const state = stateWith((draft) => {
+      draft.projects.p1 = SHINSA_PROJECT;
+      draft.repos.r1 = createRepo({ id: 'r1', name: 'shinsa', path: '/code/shinsa', projectId: 'p1' });
+    });
+    const { calls, ask } = recordAnswer('kanna');
+    const triage = await resolveTriage(
+      state,
+      newTask({ projectId: 'p1', request: 'Fix the button in kanna' }),
+      KANNA,
+      ask
+    );
+    expect(triage.repoPath).toBeNull();
+    expect(calls[0]?.schema?.properties.repo).toEqual({ type: 'string', enum: ['shinsa', 'none'] });
+    expect(calls[0]?.prompt).toContain(
+      'Other repositories on the machine outside this project, never offered: kanna. A request that names one of them gets "none".'
+    );
+    expect(calls[0]?.prompt).not.toContain('offered because the request names them');
   });
 
   test('an outside repository the request does not name is never offered, so picking it binds none', async () => {
@@ -697,7 +807,7 @@ describe('triage may choose no repository', () => {
     const { calls, ask } = recordAnswer('kanna');
     const vague = await resolveTriage(
       state,
-      newTask({ projectId: 'p1', request: 'Fix the kannabis typo in paywall next' }),
+      newTask({ projectId: 'p1', request: 'Fix the kannabis typo in paywall next', auto: FOCUS_PROJECT }),
       local,
       ask
     );
@@ -832,17 +942,18 @@ describe('the project a repository triage registers goes to', () => {
     } as ShinsaState['projects'][string];
   }
 
-  test('the project whose folder holds it, else the task’s project while it has no repository, else none', () => {
+  test('the project whose folder holds it, else the task’s project while it has no repository, else none', async () => {
     const state = stateWith((draft) => {
       draft.projects.full = project('full');
       draft.projects.empty = project('empty');
       draft.projects.home = project('home', ['/code/home']);
       draft.repos.r1 = createRepo({ id: 'r1', name: 'shinsa', path: '/code/shinsa', projectId: 'full' });
     });
-    expect(resolveRepoProject(state, newTask({ projectId: 'full' }), '/code/home/site')).toBe('home');
-    expect(resolveRepoProject(state, newTask({ projectId: 'empty' }), '/code/kanna')).toBe('empty');
-    expect(resolveRepoProject(state, newTask({ projectId: 'full' }), '/code/kanna')).toBeNull();
-    expect(resolveRepoProject(state, newTask(), '/code/kanna')).toBeNull();
+    const projectOf = (task: Task, path: string) => runFiles(resolveRepoProject(state, task, path));
+    expect(await projectOf(newTask({ projectId: 'full' }), '/code/home/site')).toBe('home');
+    expect(await projectOf(newTask({ projectId: 'empty' }), '/code/kanna')).toBe('empty');
+    expect(await projectOf(newTask({ projectId: 'full' }), '/code/kanna')).toBeNull();
+    expect(await projectOf(newTask(), '/code/kanna')).toBeNull();
   });
 });
 
@@ -1155,5 +1266,76 @@ describe('resolveTriage for teammates’ duplicates', () => {
     const lone = await resolveTriage(state, newTask(), LOCAL, ask, team);
     expect(lone.unreached).toBeUndefined();
     expect(prompts[0]).not.toContain('teammate-1');
+  });
+});
+
+describe('triage stacking a task on an open change', () => {
+  const AUTO = { shape: true, start: true, priority: true, project: false };
+  const state = stateWith((draft) => {
+    draft.repos.r1 = createRepo({ id: 'r1', path: '/code/api', name: 'api' });
+    draft.repos.r2 = createRepo({ id: 'r2', path: '/code/web', name: 'web' });
+    draft.tasks.store = createTask({ id: 'store', repoId: 'r1', title: 'Rewrite the store in Effect' });
+    draft.tasks.question = createTask({ id: 'question', repoId: 'r1', pipeline: ['answer'] });
+    draft.tasks.loose = createTask({ id: 'loose', repoId: null });
+    draft.tasks.web = createTask({ id: 'web', repoId: 'r2', title: 'Restyle the page' });
+  });
+
+  function stacking(value: Record<string, unknown>) {
+    return answer({ title: 'Move the outbox', repo: 'api', size: 'large', branch: 'feat/outbox', ...value });
+  }
+
+  test('offers only open changes with a pull request and says when to stack instead of wait', async () => {
+    const calls: { prompt: string; schema?: JsonSchema }[] = [];
+    const ask: QuickJson = <T>(_system: string, prompt: string, schema?: JsonSchema) => {
+      calls.push({ prompt, schema });
+      return Effect.succeed(null as T);
+    };
+    await resolveTriage(state, newTask({ auto: AUTO }), LOCAL, ask);
+    expect(calls[0]?.schema?.properties.stacks_on).toEqual({
+      type: 'string',
+      enum: ['none', 'store', 'web'],
+    });
+    const prompt = calls[0]?.prompt ?? '';
+    expect(prompt).toContain('- stacks_on (choice): Is this request the next piece of an open change');
+    expect(prompt).toContain('A separate feature is never a stack, even one that needs the other’s code');
+    await resolveTriage(state, newTask({ auto: START_ONLY }), LOCAL, ask);
+    expect(calls[1]?.prompt).toContain('stacks_on');
+    await resolveTriage(state, newTask({ auto: { ...AUTO, start: false } }), LOCAL, ask);
+    expect(calls[2]?.schema?.properties).not.toHaveProperty('stacks_on');
+    await resolveTriage(stateWith(), newTask({ auto: AUTO }), LOCAL, ask);
+    expect(calls[3]?.schema?.properties).not.toHaveProperty('stacks_on');
+  });
+
+  test('stacks on the change it names in the same repository, with the reason it gave', async () => {
+    const triage = await resolveTriage(
+      state,
+      newTask({ auto: AUTO }),
+      LOCAL,
+      stacking({ stacks_on: 'store', stacks_on_why: '  It is the next piece of the store rewrite.  ' })
+    );
+    expect(triage?.stacksOn?.map((task) => task.id)).toEqual(['store']);
+    expect(triage?.reasons?.stack).toBe('It is the next piece of the store rewrite.');
+    const unexplained = await resolveTriage(
+      state,
+      newTask({ auto: AUTO }),
+      LOCAL,
+      stacking({ stacks_on: 'store' })
+    );
+    expect(unexplained?.reasons?.stack).toBe('It continues “Rewrite the store in Effect” and ships with it.');
+  });
+
+  test('a stack on none, another repository, an unknown task, or with no repository is dropped', async () => {
+    for (const value of [
+      { stacks_on: 'none' },
+      { stacks_on: 'web' },
+      { stacks_on: 'question' },
+      { stacks_on: 'loose' },
+      { stacks_on: 'gone' },
+      { stacks_on: 'store', repo: 'none' },
+    ]) {
+      const triage = await resolveTriage(state, newTask({ auto: AUTO }), LOCAL, stacking(value));
+      expect(triage?.stacksOn).toBeUndefined();
+      expect(triage?.reasons?.stack).toBeUndefined();
+    }
   });
 });

@@ -25,6 +25,7 @@ import { SelectField } from '@/components/controls/select-field.tsx';
 import { FoldingBlock, SETTING_ROW } from '@/components/settings/group.tsx';
 import { requestWithToast } from '@/lib/connection/commands.ts';
 import { createDisclosureId } from '@/lib/preferences/disclosure.ts';
+import { describeMachineName } from '@/lib/remote/setup-steps.ts';
 import { resolveFirstName } from '@/lib/remote/users.ts';
 import {
   describeExtraHint,
@@ -72,7 +73,7 @@ function ScopeCheck({
         aria-label={label}
         onCheckedChange={(next) => onToggle(scope, next)}
       />
-      <label htmlFor={id} className='flex min-w-0 flex-col gap-px'>
+      <label htmlFor={id} className='flex min-w-0 flex-col'>
         <span className='text-xs text-fg-4'>{row.title}</span>
         <span className='text-2xs text-pretty text-fg-2'>{row.hint}</span>
       </label>
@@ -110,7 +111,7 @@ function ScopeGrid({
 function PresetRow({ label, hint, children }: { label: string; hint: string; children: React.ReactNode }) {
   return (
     <div className={cn(SETTING_ROW, 'py-1.5')}>
-      <div className='flex min-w-0 flex-1 flex-col gap-px'>
+      <div className='flex min-w-0 flex-1 flex-col'>
         <span className='text-xs text-fg-4'>{label}</span>
         <span className='text-2xs text-pretty text-fg-2'>{hint}</span>
       </div>
@@ -235,9 +236,9 @@ export function MachineExtraDialog({
     <Dialog {...control}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{`What ${name} can do on ${machineName}`}</DialogTitle>
+          <DialogTitle>{`What ${name} can do on ${describeMachineName(machineName)}`}</DialogTitle>
           <DialogDescription>
-            {`Give ${name} more than ${team.name} gives, on ${machineName} only.`}
+            {`Give ${name} more than ${team.name} gives, on ${describeMachineName(machineName)} only.`}
           </DialogDescription>
         </DialogHeader>
         <div className='-mx-2 grid grid-cols-1 gap-x-4 gap-y-2 px-3 py-2 sm:grid-cols-2'>
@@ -247,7 +248,7 @@ export function MachineExtraDialog({
         </div>
         <DialogFooter>
           <Button variant='secondary' onClick={onFullAccess}>
-            {`Give full access to ${machineName}`}
+            {`Give full access to ${describeMachineName(machineName)}`}
           </Button>
           <DialogClose render={<Button />}>Done</DialogClose>
         </DialogFooter>
@@ -277,7 +278,7 @@ function ExtraCheck({
         aria-label={`${SCOPE_ROWS[row.scope].title} for ${name}`}
         onCheckedChange={(next) => onToggle(row.scope, next)}
       />
-      <label htmlFor={id} className='flex min-w-0 flex-col gap-px'>
+      <label htmlFor={id} className='flex min-w-0 flex-col'>
         <span className='text-xs text-fg-4'>{SCOPE_ROWS[row.scope].title}</span>
         <span className='text-2xs text-pretty text-fg-2'>{describeExtraHint(row)}</span>
       </label>

@@ -12,7 +12,6 @@ import type { SessionExtensions } from '../../src/extensions/session.ts';
 import { ExtensionFiles } from '../../src/extensions/store/service.ts';
 import { UsageIndex } from '../../src/extensions/usage-index/service.ts';
 import { ExtensionUsage } from '../../src/extensions/usage/service.ts';
-import { JsonFile } from '../../src/files/service.ts';
 import { JsonLogger } from '../../src/log/service.ts';
 import type { EngineCore as EngineCoreService } from '../../src/runtime/engine/service.ts';
 import { EngineCore } from '../../src/runtime/engine/service.ts';
@@ -20,6 +19,7 @@ import { SecretFiles } from '../../src/secrets/files/service.ts';
 import { SecretStore } from '../../src/secrets/store/service.ts';
 import { createFixedClock } from '../helpers/clock.ts';
 import { createConfigAt } from '../helpers/config.ts';
+import { JsonFileLayer } from '../helpers/files.ts';
 import { createTempDir } from '../helpers/temp.ts';
 
 export interface ExtensionsWorldOptions {
@@ -84,7 +84,7 @@ export function createFoundation(options: ExtensionsWorldOptions = {}) {
   ).pipe(
     Layer.provideMerge(ExtensionFiles.layer),
     Layer.provideMerge(Layer.succeed(EngineConfig, config)),
-    Layer.provideMerge(JsonFile.layer),
+    Layer.provideMerge(JsonFileLayer),
     Layer.provideMerge(JsonLogger),
     Layer.provideMerge(options.now ? Layer.succeed(Clock.Clock, createFixedClock(options.now)) : Layer.empty)
   );
@@ -102,33 +102,32 @@ function createExtensionsRuntime(options: ExtensionsWorldOptions = {}) {
   return runtime;
 }
 
-export function openExtensions(options: ExtensionsWorldOptions = {}) {
+export async function openExtensions(options: ExtensionsWorldOptions = {}) {
   const runtime = createExtensionsRuntime(options);
-  const extensions = runtime.runSync(Extensions.use(Effect.succeed));
-  const sync = <A, E>(effect: Effect.Effect<A, E>) => runtime.runSync(effect);
+  const extensions = await runtime.runPromise(Extensions.use(Effect.succeed));
   const run = <A, E>(effect: Effect.Effect<A, E>) => runtime.runPromise(effect);
   return {
     service: extensions,
     refreshUsage: () => runtime.runPromise(UsageIndex.use((usage) => usage.refresh)),
-    snapshot: () => sync(extensions.snapshot),
-    readSnapshot: () => sync(extensions.readSnapshot),
-    syncSnapshot: () => sync(extensions.syncSnapshot),
+    snapshot: () => run(extensions.snapshot),
+    readSnapshot: () => run(extensions.readSnapshot),
+    syncSnapshot: () => run(extensions.syncSnapshot),
     syncUsage: () => run(extensions.syncUsage),
     stop: () => run(extensions.stop),
-    createServer: (fields: unknown) => sync(extensions.createServer(fields)),
-    updateServer: (id: unknown, fields: unknown) => sync(extensions.updateServer(id, fields)),
-    removeServer: (id: unknown) => sync(extensions.removeServer(id)),
-    updateServerChoice: (id: unknown, fields: unknown) => sync(extensions.updateServerChoice(id, fields)),
-    updateSkillChoice: (id: unknown, enabled: unknown) => sync(extensions.updateSkillChoice(id, enabled)),
-    updatePluginChoice: (id: unknown, enabled: unknown) => sync(extensions.updatePluginChoice(id, enabled)),
-    updateOptimizer: (fields: unknown) => sync(extensions.updateOptimizer(fields)),
+    createServer: (fields: unknown) => run(extensions.createServer(fields)),
+    updateServer: (id: unknown, fields: unknown) => run(extensions.updateServer(id, fields)),
+    removeServer: (id: unknown) => run(extensions.removeServer(id)),
+    updateServerChoice: (id: unknown, fields: unknown) => run(extensions.updateServerChoice(id, fields)),
+    updateSkillChoice: (id: unknown, enabled: unknown) => run(extensions.updateSkillChoice(id, enabled)),
+    updatePluginChoice: (id: unknown, enabled: unknown) => run(extensions.updatePluginChoice(id, enabled)),
+    updateOptimizer: (fields: unknown) => run(extensions.updateOptimizer(fields)),
     check: (id?: unknown) => run(extensions.check(id)),
     startSignIn: (id: unknown) => run(extensions.startSignIn(id)),
     finishSignIn: (url: URL) => run(extensions.finishSignIn(url)),
-    signOut: (id: unknown) => sync(extensions.signOut(id)),
+    signOut: (id: unknown) => run(extensions.signOut(id)),
     resolveSession: (place: ExtensionPlace, pin: LoadedExtensions | null = null) =>
       run(extensions.resolveSession(place, pin)),
-    createLoader: (session: SessionExtensions) => sync(extensions.createLoader(session)),
+    createLoader: (session: SessionExtensions) => run(extensions.createLoader(session)),
     secrets: {
       selectMcpCredentials: (serverId: string) =>
         runtime.runPromise(SecretStore.use((store) => store.selectMcpCredentials(serverId))),

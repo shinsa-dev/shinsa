@@ -151,19 +151,29 @@ describe('describeChangeGate', () => {
     const task = createTask({
       id: 't',
       pipeline: ['investigate'],
-      proposal: { request: 'Release the connection.', why: 'It leaks.', status: 'open', runId: null, at: 0 },
+      proposal: {
+        request: 'Release the connection.',
+        why: 'It leaks.',
+        status: 'open',
+        recommend: 'go_on',
+        runId: null,
+        at: 0,
+      },
     });
-    expect(describeChangeGate(task, createGate({ id: 'g', taskId: 't', body: 'ignored' }))).toEqual({
+    expect(
+      describeChangeGate(task, createGate({ id: 'g', taskId: 't', title: 'Fix it?', body: 'ignored' }))
+    ).toEqual({
       eyebrow: 'The investigation proposes a fix',
-      keep: 'Keep it as an investigation',
+      title: 'Fix it?',
       why: 'It leaks.',
       request: 'Release the connection.',
       requestLabel: 'What it would change',
-      goOn: {
+      primary: {
         label: 'Make it a change',
         reply: 'makeChange',
         note: 'A change gets a plan, then your review before it merges.',
       },
+      quiet: { label: 'Keep it as an investigation', reply: 'keepAsIs' },
     });
   });
 
@@ -172,6 +182,7 @@ describe('describeChangeGate', () => {
       request: 'Release the connection.',
       why: 'It leaks.',
       status: 'open',
+      recommend: 'go_on',
       runId: null,
       at: 5,
     } as const;
@@ -215,7 +226,11 @@ describe('describeChangeGate', () => {
     const answer = createTask({ id: 't', pipeline: ['answer'] });
     expect(
       describeChangeGate(answer, createGate({ id: 'g', taskId: 't', body: 'Why.\n\nDo this.\n\nThen that.' }))
-    ).toMatchObject({ keep: 'Keep it as an answer', why: 'Why.', request: 'Do this.\n\nThen that.' });
+    ).toMatchObject({
+      quiet: { label: 'Keep it as an answer' },
+      why: 'Why.',
+      request: 'Do this.\n\nThen that.',
+    });
     expect(
       describeChangeGate(
         createTask({ id: 't', pipeline: ['research'] }),
@@ -270,22 +285,93 @@ describe('composed steps', () => {
     const task = createTask({ id: 't', pipeline: [...OPERATION_AFTER_FINDINGS], stage: 'awaiting_proposal' });
     expect(
       describeChangeGate(task, createGate({ id: 'g', taskId: 't', body: 'Find it.\n\nPlan it.' }))
-    ).toEqual({
+    ).toMatchObject({
       eyebrow: 'The diagnosis is in',
-      keep: 'Keep it as an investigation',
       why: 'Find it.',
       request: 'Plan it.',
       requestLabel: 'What comes next',
-      goOn: {
+      primary: {
         label: 'Plan the operation',
         reply: 'planOperation',
         note: 'An operation gets a plan you approve before anything runs.',
       },
+      quiet: { label: 'Keep it as an investigation', reply: 'keepAsIs' },
     });
     const research = createTask({ id: 't', pipeline: [...CHANGE_AFTER_RESEARCH] });
     expect(describeChangeGate(research, createGate({ id: 'g', taskId: 't' }))).toMatchObject({
       eyebrow: 'The report is in',
-      goOn: { label: 'Make it a change' },
+      primary: { label: 'Make it a change' },
+    });
+  });
+
+  it('leads with Close when the agent recommends closing, and keeps going on as the quiet link', () => {
+    const proposal = {
+      request: 'Plan the change and build it.',
+      why: 'Found nothing worth changing.',
+      status: 'open',
+      recommend: 'close',
+      runId: null,
+      at: 5,
+    } as const;
+    const fix = createTask({
+      id: 't',
+      pipeline: ['investigate', 'your_ok', 'plan', 'build', 'merge'],
+      proposal,
+      shapeChanges: [
+        {
+          from: ['investigate', 'plan', 'build', 'merge'],
+          to: ['investigate', 'your_ok', 'plan', 'build', 'merge'],
+          by: 'agent',
+          reason: 'Found nothing worth changing.',
+          at: 5,
+        },
+      ],
+    });
+    expect(
+      describeChangeGate(
+        fix,
+        createGate({ id: 'g', taskId: 't', title: 'The diagnosis found nothing to fix' })
+      )
+    ).toEqual({
+      eyebrow: 'The diagnosis is in',
+      title: 'The diagnosis found nothing to fix',
+      why: 'Found nothing worth changing.',
+      request: 'Plan the change and build it.',
+      requestLabel: 'If you go on',
+      primary: {
+        label: 'Close',
+        reply: 'closeProposal',
+        note: 'The agent recommends closing. Close ends the task here and changes nothing.',
+      },
+      quiet: { label: 'Make it a change', reply: 'makeChange' },
+    });
+    const operation = createTask({
+      id: 't',
+      pipeline: ['research', 'your_ok', 'plan', 'operate'],
+      proposal,
+    });
+    expect(describeChangeGate(operation, createGate({ id: 'g', taskId: 't' }))).toMatchObject({
+      quiet: { label: 'Plan the operation', reply: 'planOperation' },
+    });
+  });
+
+  it('goes back to the usual buttons once the closing proposal is no longer open', () => {
+    const task = createTask({
+      id: 't',
+      pipeline: ['answer', 'your_ok', 'plan', 'build', 'merge'],
+      proposal: {
+        request: 'Plan it.',
+        why: 'Nothing.',
+        status: 'declined',
+        recommend: 'close',
+        runId: null,
+        at: 0,
+      },
+    });
+    expect(describeChangeGate(task, createGate({ id: 'g', taskId: 't', title: 'Go on?' }))).toMatchObject({
+      title: 'Go on?',
+      primary: { reply: 'makeChange' },
+      quiet: { label: 'Keep it as an answer', reply: 'keepAsIs' },
     });
   });
 });
@@ -339,7 +425,11 @@ describe('resolvePlannedOperation', () => {
 
 describe('a task whose kind triage has not chosen yet', () => {
   it('names no kind and says Shinsa is still choosing it', () => {
-    const task = createTask({ id: 't', stage: 'triage', auto: { shape: true, start: true, priority: true } });
+    const task = createTask({
+      id: 't',
+      stage: 'triage',
+      auto: { shape: true, start: true, priority: true, project: false },
+    });
     expect(isShapeChosen(task)).toBe(false);
     expect(resolveShapeLabel(task)).toBe('Kind not chosen yet');
     expect(resolveShapeIcon(task)).toBe('IconCircleDotted');

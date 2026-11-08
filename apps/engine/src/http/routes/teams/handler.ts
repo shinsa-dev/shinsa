@@ -2,6 +2,7 @@ import { EngineApi } from '@shinsa/core/engine-api';
 import { RouteNotFound, ROUTE_NOT_FOUND_MESSAGE } from '@shinsa/core/engine-api/schema';
 import { Effect, Option } from 'effect';
 import { HttpApiBuilder } from 'effect/http-api';
+import { FleetRelay } from '../../../remote/fleet-relay/service.ts';
 import { Remote } from '../../../remote/machine/service.ts';
 import { TeamFeeds } from '../../../remote/team-feeds/service.ts';
 import { Teams } from '../../../remote/teams/service.ts';
@@ -14,6 +15,7 @@ export const TeamsHandlers = HttpApiBuilder.group(
     const remote = Option.getOrUndefined(yield* Effect.serviceOption(Remote));
     const given = Option.getOrUndefined(yield* Effect.serviceOption(Teams));
     const teamFeeds = Option.getOrUndefined(yield* Effect.serviceOption(TeamFeeds));
+    const fleetRelay = Option.getOrUndefined(yield* Effect.serviceOption(FleetRelay));
     const notFound = Effect.fail(new RouteNotFound({ message: ROUTE_NOT_FOUND_MESSAGE }));
     const services = remote && given ? Effect.succeed({ remote, teams: given }) : notFound;
     const teams = Effect.map(services, (found) => found.teams);
@@ -71,6 +73,14 @@ export const TeamsHandlers = HttpApiBuilder.group(
       .handle('keys', () =>
         Effect.flatMap(teams, (found) => Effect.map(found.listKeys, (keys) => ({ keys })))
       )
+      .handle('requestKey', ({ payload }) => change((found) => found.requestKey(payload.teamId)))
+      .handle('answerKey', ({ payload }) =>
+        teamFeeds
+          ? change(() =>
+              Effect.asVoid(teamFeeds.answerKeyRequest(payload.teamId, payload.instanceId, payload.approve))
+            )
+          : notFound
+      )
       .handle('leave', ({ payload }) => change((found) => found.leave(payload.teamId)))
       .handle('remove', ({ payload }) => change((found) => found.remove(payload.teamId)))
       .handle('tasks', ({ query }) =>
@@ -85,6 +95,9 @@ export const TeamsHandlers = HttpApiBuilder.group(
               };
             })
           : notFound
+      )
+      .handle('relays', () =>
+        fleetRelay ? Effect.map(fleetRelay.list, (relays) => ({ relays })) : Effect.succeed({ relays: [] })
       );
   })
 );

@@ -39,7 +39,7 @@ export async function createWorld() {
   });
   const repoId = Object.keys(engine.state.repos)[0] ?? '';
   const { taskId, runId } = await startTask(engine, repoId, dir, 'Watch the nightly builds');
-  const secrets = openTestSecrets(join(dir, 'secrets.json'));
+  const secrets = await openTestSecrets(join(dir, 'secrets.json'));
   return { dir, engine, repoId, taskId, runId, secrets };
 }
 

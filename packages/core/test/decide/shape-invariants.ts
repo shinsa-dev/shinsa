@@ -103,6 +103,7 @@ function listAgentCommands(state: ShinsaState, random: Random, combined: boolean
   return listActiveRuns(state).flatMap((run): ShinsaCommand[] => {
     if (isDelegatedRun(run)) return [];
     const proposal = chance(random, 0.5) ? PROPOSAL : null;
+    const recommend = chance(random, 0.5) ? 'close' : 'go_on';
     if (run.role === 'answerer')
       return [
         {
@@ -111,6 +112,7 @@ function listAgentCommands(state: ShinsaState, random: Random, combined: boolean
           step: 'answer',
           body: 'Because.',
           proposal,
+          recommend,
           ...resolveOwedReply(state, run.id),
         },
       ];
@@ -143,6 +145,7 @@ function listAgentCommands(state: ShinsaState, random: Random, combined: boolean
           step: DELIVERING[delivering],
           body: 'Found it.',
           proposal,
+          recommend,
           ...resolveOwedReply(state, run.id),
         },
       ];

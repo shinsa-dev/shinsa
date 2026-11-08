@@ -165,7 +165,7 @@ describe('projecting delegation events', () => {
       priority: 'normal',
       planFirst: false,
       origin: null,
-      auto: { shape: true, start: true, priority: true },
+      auto: { shape: true, start: true, priority: true, project: false },
       seq: 1,
       at: 0,
     });
@@ -178,7 +178,7 @@ describe('projecting delegation events', () => {
       priority: 'normal',
       planFirst: false,
       origin: null,
-      auto: { shape: true, start: true, priority: true },
+      auto: { shape: true, start: true, priority: true, project: false },
       createdBy: { kind: 'split', taskId: 't', runId: 'r', requestKey: 'plan:1' },
       parentTaskId: 't',
       seq: 2,

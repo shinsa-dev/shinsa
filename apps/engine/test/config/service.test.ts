@@ -42,14 +42,6 @@ describe('EngineConfig', () => {
 });
 
 describe('readMachineConfig', () => {
-  test('a config.json that cannot be read is unreadable, like broken JSON', () => {
-    const path = join(createTempDir(), 'config.json');
-    mkdirSync(path);
-    const read = readMachineConfig(path);
-    expect(read.unreadable).toBe(true);
-    expect(read.problems[0]).toStartWith('The file is not valid JSON (');
-  });
-
   test('editor and terminal must be text', () => {
     const path = join(createTempDir(), 'config.json');
     writeFileSync(path, JSON.stringify({ editor: ' ', terminal: ['x'] }));
@@ -64,6 +56,14 @@ describe('MachineConfigFile', () => {
   function readFile(path: string) {
     return runTest(MachineConfigFile.use((file) => file.read(path)));
   }
+
+  test('a config.json that cannot be read is unreadable, like broken JSON', async () => {
+    const path = join(createTempDir(), 'config.json');
+    mkdirSync(path);
+    const read = await readFile(path);
+    expect(read.unreadable).toBe(true);
+    expect(read.problems[0]).toStartWith('The file is not valid JSON (');
+  });
 
   test('a missing config.json reads as the defaults with no problems', async () => {
     const read = await readFile(join(createTempDir(), 'config.json'));

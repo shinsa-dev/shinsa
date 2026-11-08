@@ -13,6 +13,7 @@ import {
   type PullRequest,
   type ReportCheck,
   type Run,
+  type RunUsage,
   resolveTaskPipeline,
   type ShinsaCommand,
   type ShinsaEffect,
@@ -22,6 +23,7 @@ import {
   type UserCommand,
   selectOpenIteration,
   splitHouseRules,
+  USAGE_RATE_LIMITS,
 } from '../src/index.ts';
 
 export type Harness = ReturnType<typeof createHarness>;
@@ -175,6 +177,29 @@ export const LARGE_PLAN: PlanDocument = {
   ],
 };
 
+export const SPLIT_PLAN: PlanDocument = {
+  ...PLAN,
+  split: [
+    {
+      title: 'Add the export button',
+      request: 'Add an export button to the reports page.',
+      order: 'parallel',
+    },
+    {
+      title: 'Document the export',
+      request: 'Document the reports export in the help centre.',
+      order: 'waits_on',
+      on: 1,
+    },
+    {
+      title: 'Move the panel styles',
+      request: 'Move the panel styles onto the new tokens.',
+      order: 'stacks_on',
+      on: 0,
+    },
+  ],
+};
+
 export const IMPACT =
   'Touches the 1,240 accounts without a plan; the dry run lists them. Undo by clearing the column.';
 
@@ -263,7 +288,14 @@ export function readyWorktree(harness: Harness, taskId: string) {
 }
 
 export function approve(harness: Harness, taskId: string, response: string | null = null) {
-  harness.send({ type: 'gate.answer', gateId: harness.openGate(taskId).id, decision: 'approve', response });
+  const gate = harness.openGate(taskId);
+  harness.send({ type: 'gate.answer', gateId: gate.id, decision: 'approve', response });
+  if (gate.type === 'plan') refreshWorktree(harness, taskId);
+}
+
+export function refreshWorktree(harness: Harness, taskId: string) {
+  if (harness.task(taskId).stage !== 'triage') return;
+  harness.send({ type: 'worktree.ready', taskId, path: `/wt/${taskId}`, branch: `fix/${taskId}` });
 }
 
 export function pushed(harness: Harness, taskId: string, sha = `sha-${harness.state.seq}`) {
@@ -332,4 +364,49 @@ export function reachReviewGate(harness: Harness, taskId: string) {
 
 export function linkSession(harness: Harness, taskId: string, sessionId = 'session-1') {
   harness.send({ type: 'run.link', runId: harness.activeRun(taskId).id, sessionId, provider: 'claude' });
+}
+
+function pastUsage(costUsd: number): RunUsage {
+  return { inputTokens: 1_000, outputTokens: 1_000, cacheReadTokens: 0, cacheWriteTokens: 0, costUsd };
+}
+
+export function writePastRun(
+  harness: Harness,
+  run: { id: string; taskId: string; from: number; percent: number; costUsd: number }
+) {
+  const { id, taskId, from, percent, costUsd } = run;
+  const readings = [
+    { percent, at: from, resetsAt: null },
+    { percent: percent + 2, at: from + 100, resetsAt: null },
+  ];
+  harness.state.runs[id] = {
+    id,
+    taskId,
+    role: 'agent',
+    purpose: 'build',
+    provider: 'claude',
+    model: null,
+    sessionId: null,
+    startedAt: from,
+    endedAt: from + 100,
+    outcome: 'completed',
+    summary: null,
+    usage: pastUsage(costUsd),
+    meters: [
+      { attemptId: id, window: 'account:acc-1', from, to: from + 100, usage: pastUsage(costUsd), readings },
+    ],
+  };
+}
+
+export function learnUsageRate(harness: Harness) {
+  const start = harness.now - 100_000;
+  for (let index = 0; index < USAGE_RATE_LIMITS.minTasks; index += 1) {
+    writePastRun(harness, {
+      id: `learned-${index}`,
+      taskId: `learned-task-${index}`,
+      from: start + index * 1_000,
+      percent: index * 2,
+      costUsd: 2,
+    });
+  }
 }

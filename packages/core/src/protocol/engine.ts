@@ -15,8 +15,13 @@ export const ENGINE_FEATURES = [
   'attention',
   'worktree-root',
   'team-access',
+  'team-keys',
   'usage.pace_limits',
   'autopilot',
+  'team-relay',
+  'usage.watchdog_limits',
+  'share.scopes',
+  'suggestion.bundle',
 ] as const;
 
 export type EngineFeature = (typeof ENGINE_FEATURES)[number];

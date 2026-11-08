@@ -1,5 +1,5 @@
 import { CLAUDE_PROVIDER } from '@shinsa/core';
-import { Context, Duration, Effect, Layer } from 'effect';
+import { Context, Duration, Effect, FileSystem, Layer } from 'effect';
 import { Shell } from '../../../../shell/service.ts';
 import { COMPLETION_TIMEOUT_MS, ProviderCallFailed } from '../../schema.ts';
 import type { AgentProvider, AgentSessionInput } from '../../types.ts';
@@ -21,6 +21,7 @@ export class ClaudeProvider extends Context.Service<ClaudeProvider, AgentProvide
       const runtime = yield* ClaudeSdk;
       const options = yield* ClaudeProviderOptions;
       const shell = yield* Shell;
+      const withFiles = Effect.provideService(FileSystem.FileSystem, yield* FileSystem.FileSystem);
       const catalog = yield* makeModelCatalog({ runtime, timeout: Duration.millis(CATALOG_TIMEOUT_MS) });
       const failed = (error: { readonly message: string }) =>
         new ProviderCallFailed({ provider: CLAUDE_PROVIDER, message: error.message });
@@ -45,7 +46,7 @@ export class ClaudeProvider extends Context.Service<ClaudeProvider, AgentProvide
         startSession,
         compactSession: (input) => startSession({ ...input, prompt: COMPACT_PROMPT }),
         inspectSession: (query) =>
-          Effect.sync(() => resolveClaudeSessionStatus({ ...query, env: options.env, home: options.home })),
+          withFiles(resolveClaudeSessionStatus({ ...query, env: options.env, home: options.home })),
         listModels: catalog.list,
         complete: (request) =>
           makeClaudeCompletions(runtime).pipe(

@@ -1,14 +1,20 @@
 import { afterEach, describe, expect, setDefaultTimeout, test } from 'bun:test';
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { ServiceDefinition, ServiceSuggestion, TerminalInfo, TerminalsSnapshot } from '@shinsa/core';
+import {
+  DEFAULT_TEAM_SCOPES,
+  type ServiceDefinition,
+  type ServiceSuggestion,
+  type TerminalInfo,
+  type TerminalsSnapshot,
+} from '@shinsa/core';
 import { Effect } from 'effect';
-import type { ServiceRefiner } from '../../../src/terminals/index.ts';
+import type { ServiceRefiner, Terminals } from '../../../src/terminals/index.ts';
 import { createConfigAt } from '../../helpers/config.ts';
 import { createTempDir, until } from '../../helpers/index.ts';
 import { createTestRefiner, startRealTerminals } from '../../helpers/terminals.ts';
 import { disposeWebHandlers } from '../../helpers/web.ts';
-import { run, runAsync } from '../../terminals/harness.ts';
+import { runAsync } from '../../terminals/harness.ts';
 import { startRoutes } from './harness.ts';
 
 setDefaultTimeout(30_000);
@@ -68,7 +74,9 @@ describe('terminals over HTTP', () => {
       status: 'running',
     });
     await until('the command ran', async () =>
-      (await runAsync(run(terminals.find(created.terminal.id)).serializeScreen)).includes('hi-42')
+      (await runAsync((await runAsync(terminals.find(created.terminal.id))).serializeScreen)).includes(
+        'hi-42'
+      )
     );
     expect(await read(`/api/terminals/${created.terminal.id}/foreground`)).toEqual({ program: null });
     const second = (
@@ -111,7 +119,7 @@ describe('terminals over HTTP', () => {
     expect(await readCode(await post('/api/terminals', { projectId, path: repoPath }))).toBe(
       'terminal_place_missing'
     );
-    expect(run(terminals.snapshot).terminals).toEqual([]);
+    expect((await runAsync(terminals.snapshot)).terminals).toEqual([]);
   });
 
   test('without terminals every terminal and service route is not found', async () => {
@@ -153,7 +161,7 @@ describe('services over HTTP', () => {
       writeFileSync(join(repoPath, `apps/${app}/package.json`), JSON.stringify({ scripts: { dev: 'x' } }));
     }
     writeFileSync(join(repoPath, 'package.json'), JSON.stringify({ workspaces: ['apps/*'] }));
-    run(
+    await runAsync(
       terminals.addService(projectId, {
         name: 'gateway',
         cwd: repoPath,
@@ -199,7 +207,7 @@ describe('services over HTTP', () => {
     };
     expect(started.terminal).toMatchObject({ serviceId: service.id, status: 'running', port: 4100 });
     await post(`/api/services/${service.id}/stop`, {}, null);
-    expect(run(terminals.find(started.terminal.id)).info.status).toBe('stopped');
+    expect((await runAsync(terminals.find(started.terminal.id))).info.status).toBe('stopped');
     const restarted = (await (await post(`/api/services/${service.id}/restart`, {}, null)).json()) as {
       terminal: TerminalInfo;
     };
@@ -211,11 +219,17 @@ describe('services over HTTP', () => {
       env: {},
     });
     await post(`/api/services/${service.id}/restart`, undefined, null);
-    await until('it failed', () => run(terminals.find(started.terminal.id)).info.exitCode === 4);
+    await until(
+      'it failed',
+      async () => (await runAsync(terminals.find(started.terminal.id))).info.exitCode === 4
+    );
+    const failedAt = (await runAsync(terminals.find(started.terminal.id))).info.startedAt;
     const all = (await (
       await post('/api/services/start-all', { projectId }, null)
     ).json()) as TerminalsSnapshot;
-    expect(all.terminals.find((each) => each.id === started.terminal.id)?.status).toBe('running');
+    expect(all.terminals.find((each) => each.id === started.terminal.id)?.startedAt).toBeGreaterThan(
+      failedAt
+    );
     expect(await readCode(await post('/api/services/start-all', { projectId: 'nope' }, null))).toBe(
       'project_not_found'
     );
@@ -234,7 +248,7 @@ describe('services over HTTP', () => {
     expect(await refusal({ projectId, services: [one, { ...one, name: 'API' }] })).toBe('service_name_taken');
     expect(await refusal({ projectId: 'nope', services: [one] })).toBe('project_not_found');
     for (let index = 0; index < 31; index += 1)
-      run(
+      await runAsync(
         terminals.addService(projectId, {
           name: `s${index}`,
           cwd: repoPath,
@@ -244,7 +258,8 @@ describe('services over HTTP', () => {
         })
       );
     expect(await refusal({ projectId, services: [one, { ...one, name: 'web' }] })).toBe('service_limit');
-    for (const service of run(terminals.snapshot).services) run(terminals.removeServices([service.id]));
+    for (const service of (await runAsync(terminals.snapshot)).services)
+      await runAsync(terminals.removeServices([service.id]));
     const added = (await (
       await post('/api/services/batch', { projectId, services: [one, { ...one, name: 'web' }] })
     ).json()) as { added: ServiceDefinition[] } & TerminalsSnapshot;
@@ -270,7 +285,7 @@ describe('services over HTTP', () => {
     expect(await readCode(await post(`/api/services/${added.id}/start`, {}, null))).toBe(
       'terminal_place_missing'
     );
-    const stray = run(
+    const stray = await runAsync(
       terminals.addService(projectId, {
         name: 'x',
         cwd: '/etc',
@@ -288,7 +303,7 @@ describe('services over HTTP', () => {
     const { post, projectId, repoPath, root, terminals, engine } = await start();
     const appPath = join(repoPath, 'apps/api');
     mkdirSync(appPath, { recursive: true });
-    const service = run(
+    const service = await runAsync(
       terminals.addService(projectId, {
         name: 'api',
         cwd: appPath,
@@ -330,7 +345,7 @@ describe('services over HTTP', () => {
     ]);
     expect((await call(service.id, 'start', { taskId: 'nope' })).error?.code).toBe('task_not_found');
     expect((await call(service.id, 'start', { taskId: 7 })).error?.code).toBe('body_invalid');
-    const outside = run(
+    const outside = await runAsync(
       terminals.addService(projectId, {
         name: 'notes',
         cwd: root,
@@ -341,5 +356,51 @@ describe('services over HTTP', () => {
     );
     const refused = await call(outside.id, 'start', { taskId });
     expect(refused.error?.message).toBe('It cannot run in this task.');
+  });
+});
+
+describe('terminals for a teammate', () => {
+  const SNAPSHOT: TerminalsSnapshot = {
+    home: '/Users/mona',
+    terminals: [
+      {
+        id: 't1',
+        projectId: 'p',
+        name: 'web',
+        title: null,
+        cwd: '/Users/mona/web',
+        place: 'repository',
+        taskId: 'task-mine',
+        serviceId: 's1',
+        port: 4000,
+        status: 'running',
+        exitCode: null,
+        startedAt: 1,
+        endedAt: null,
+      },
+    ],
+    services: [],
+  };
+  const fake = { snapshot: Effect.succeed(SNAPSHOT) } as unknown as Terminals['Service'];
+  const teammate = {
+    via: 'channel' as const,
+    userId: 'u-kai',
+    guest: {
+      id: 'u-kai',
+      login: 'kai',
+      name: null,
+      avatarUrl: null,
+      scope: { kind: 'team' as const, teamId: 'team-1', scopes: [...DEFAULT_TEAM_SCOPES] },
+    },
+  };
+
+  test('lists everything here, and to a teammate only the services of the team’s tasks', async () => {
+    const routes = startRoutes({ terminals: fake });
+    expect(await (await routes.send('/api/terminals')).json()).toEqual(SNAPSHOT);
+    expect(await (await routes.send('/api/terminals', {}, teammate)).json()).toEqual({
+      home: '',
+      terminals: [],
+      services: [],
+    });
   });
 });

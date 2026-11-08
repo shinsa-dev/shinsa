@@ -371,6 +371,7 @@ describe('acting for the human', () => {
       shareLimit: 'week',
       sharePreset: 'status',
       autopilot: { ...AUTOPILOT_DEFAULTS, enabled: true },
+      watchdogsIgnoreUsageLimits: false,
     };
     const fields: Required<Pick<Repo, (typeof HUMAN_ONLY_REPO_FIELDS)[number]>> = {
       checkCommands: ['bun test'],
@@ -496,6 +497,16 @@ describe('the summary of each action', () => {
       expect(lastAction(harness)).toMatchObject({ command: command.type, summary });
       expect(lastAction(harness).taskId).toBe('taskId' in command ? command.taskId : null);
     }
+  });
+
+  test('pausing a task on its behalf names the task, and its gate stays for you', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness, { request: 'Second' });
+    actOnBehalf(harness, { type: 'task.pause', taskId });
+    expect(lastAction(harness)).toMatchObject({ command: 'task.pause', summary: 'Paused “Second”', taskId });
+    expect(() => actOnBehalf(harness, { type: 'task.retry', taskId })).toThrow(
+      'This task waits for a decision only the human makes.'
+    );
   });
 
   test('records nothing for a gate answered on its behalf, an agent’s question included', () => {

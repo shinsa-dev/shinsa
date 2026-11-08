@@ -12,20 +12,18 @@ import { CurrentUrl, readCookie } from '../../http/request.ts';
 import { resolveFailureCode, respondRedirect, respondSignInRedirect } from '../../http/responses.ts';
 import { SLACK_BOT_SCOPES, SlackCallFailed } from '../../integrations/slack/schema.ts';
 import { SlackApi } from '../../integrations/slack/service.ts';
+import { replaceUserToken } from '../../slack/user-tokens.ts';
 import { selectWorkspaceToken } from '../../slack/workspace.ts';
 import type { Machine } from '../../store/machines/schema.ts';
 import { Machines } from '../../store/machines/service.ts';
 import { SlackStore } from '../../store/slack/service.ts';
 import {
-  IdentityAnswer,
-  InstallAnswer,
-  SLACK_CONNECT_AUTHORIZE,
+  OAuthAnswer,
+  SLACK_AUTHORIZE,
   SLACK_COOKIE,
   SLACK_COOKIE_TTL,
-  SLACK_INSTALL_AUTHORIZE,
   SLACK_USER_SCOPES,
   type SlackIdentity,
-  TokenAnswer,
 } from './schema.ts';
 
 export const SlackLinkRoutes = Layer.unwrap(
@@ -42,13 +40,14 @@ export const SlackLinkRoutes = Layer.unwrap(
 
     const respondAuthorize = Effect.fn('slackLink.respondAuthorize')(function* (
       authorize: URL,
-      machine: Machine,
-      options: { readonly nonce: boolean }
+      machine: Machine
     ) {
       const crypto = yield* CloudCrypto;
+      const config = yield* CloudConfig;
       const state = Redacted.value(yield* crypto.createToken(OAUTH_STATE_BYTES));
+      authorize.searchParams.set('client_id', config.slackClientId);
+      authorize.searchParams.set('user_scope', SLACK_USER_SCOPES.join(','));
       authorize.searchParams.set('state', state);
-      if (options.nonce) authorize.searchParams.set('nonce', state);
       return respondRedirect(authorize.toString(), {
         cookies: [serializeCookie(SLACK_COOKIE, `${state}.${machine.id}`, SLACK_COOKIE_TTL)],
       });
@@ -77,12 +76,9 @@ export const SlackLinkRoutes = Layer.unwrap(
       if (Option.isNone(user)) return respondSignInRedirect(config.origin, url);
       const machine = yield* selectConnectMachine(user.value.id, url.searchParams.get('instance'));
       if (Option.isNone(machine)) return respondLinked({ error: 'no_machine' });
-      const authorize = new URL(SLACK_CONNECT_AUTHORIZE);
-      authorize.searchParams.set('response_type', 'code');
-      authorize.searchParams.set('scope', SLACK_USER_SCOPES.join(' '));
-      authorize.searchParams.set('client_id', config.slackClientId);
+      const authorize = new URL(SLACK_AUTHORIZE);
       authorize.searchParams.set('redirect_uri', config.slackConnectCallbackUrl);
-      return yield* respondAuthorize(authorize, machine.value, { nonce: true });
+      return yield* respondAuthorize(authorize, machine.value);
     });
 
     const findCallbackMachine = Effect.gen(function* () {
@@ -101,40 +97,29 @@ export const SlackLinkRoutes = Layer.unwrap(
       return { machine: yield* findOwnMachine(user.value.id, machineId.value), code };
     });
 
-    const requestIdentity = Effect.fn('slackLink.requestIdentity')(function* (code: string) {
+    const requestAccess = Effect.fn('slackLink.requestAccess')(function* (code: string, redirectUri: string) {
       const config = yield* CloudConfig;
       const slack = yield* SlackApi;
-      const exchange = yield* slack.call(
-        'openid.connect.token',
+      const answer = yield* slack.call(
+        'oauth.v2.access',
         {
           body: {
             form: {
               client_id: config.slackClientId,
               client_secret: Redacted.value(config.slackClientSecret),
               code,
-              redirect_uri: config.slackConnectCallbackUrl,
+              redirect_uri: redirectUri,
             },
           },
         },
-        TokenAnswer
+        OAuthAnswer
       );
-      const token = present(exchange.access_token);
-      if (!token) return yield* new SlackCallFailed({ method: 'openid.connect.token', code: 'no_token' });
-      const info = yield* slack.call(
-        'openid.connect.userInfo',
-        { token: Redacted.make(token), body: { empty: true } },
-        IdentityAnswer
-      );
-      const teamId = present(info['https://slack.com/team_id']);
-      const userId = present(info['https://slack.com/user_id']);
-      if (!teamId || !userId)
-        return yield* new SlackCallFailed({ method: 'openid.connect.userInfo', code: 'no_identity' });
-      return {
-        teamId,
-        userId,
-        teamName: present(info['https://slack.com/team_name']) ?? teamId,
-        userName: present(info.name) ?? userId,
-      } satisfies SlackIdentity;
+      const teamId = present(answer.team?.id);
+      const userId = present(answer.authed_user?.id);
+      const userToken = present(answer.authed_user?.access_token);
+      if (!teamId || !userId || !userToken)
+        return yield* new SlackCallFailed({ method: 'oauth.v2.access', code: 'no_user' });
+      return { answer, teamId, userId, userToken: Redacted.make(userToken) };
     });
 
     const recordLink = Effect.fn('slackLink.recordLink')(function* (
@@ -142,37 +127,44 @@ export const SlackLinkRoutes = Layer.unwrap(
       machine: Machine
     ) {
       const store = yield* SlackStore;
+      const crypto = yield* CloudCrypto;
+      const previous = yield* store.selectLink(identity.teamId, identity.userId);
+      if (Option.isSome(previous))
+        yield* replaceUserToken(previous.value.sealedUserToken, identity.userToken);
       yield* store.upsertLink({
-        teamId: identity.teamId,
+        workspaceId: identity.teamId,
         slackUserId: identity.userId,
         slackUserName: identity.userName,
-        userId: machine.userId,
-        instanceId: machine.id,
+        userId: machine.ownerId,
+        machineId: machine.id,
+        sealedUserToken: yield* crypto.sealToken(identity.userToken),
       });
     });
 
     const respondInstall = Effect.fn('slackLink.respondInstall')(function* (
-      identity: SlackIdentity,
+      teamId: string,
       machine: Machine
     ) {
       const config = yield* CloudConfig;
-      const authorize = new URL(SLACK_INSTALL_AUTHORIZE);
-      authorize.searchParams.set('client_id', config.slackClientId);
+      const authorize = new URL(SLACK_AUTHORIZE);
       authorize.searchParams.set('scope', SLACK_BOT_SCOPES.join(','));
-      authorize.searchParams.set('team', identity.teamId);
+      authorize.searchParams.set('team', teamId);
       authorize.searchParams.set('redirect_uri', config.slackInstallCallbackUrl);
-      return yield* respondAuthorize(authorize, machine, { nonce: false });
+      return yield* respondAuthorize(authorize, machine);
     });
 
     const connectCallback = Effect.gen(function* () {
+      const config = yield* CloudConfig;
       const slack = yield* SlackApi;
       const { machine, code } = yield* findCallbackMachine;
-      const identity = yield* requestIdentity(code);
-      const opened = yield* selectWorkspaceToken(identity.teamId);
+      const { teamId, userId, userToken } = yield* requestAccess(code, config.slackConnectCallbackUrl);
+      const opened = yield* selectWorkspaceToken(teamId);
       if (Option.isNone(opened) || !(yield* slack.hasBotScopes(opened.value.token)))
-        return yield* respondInstall(identity, machine);
-      yield* recordLink(identity, machine);
-      return respondLinked({ team: opened.value.workspace.teamName });
+        return yield* respondInstall(teamId, machine);
+      const { workspace, token } = opened.value;
+      const userName = Option.getOrElse(yield* slack.selectUserName(token, userId), () => userId);
+      yield* recordLink({ teamId, teamName: workspace.name, userId, userName, userToken }, machine);
+      return respondLinked({ team: workspace.name });
     });
 
     const installCallback = Effect.gen(function* () {
@@ -181,36 +173,26 @@ export const SlackLinkRoutes = Layer.unwrap(
       const slack = yield* SlackApi;
       const store = yield* SlackStore;
       const { machine, code } = yield* findCallbackMachine;
-      const install = yield* slack.call(
-        'oauth.v2.access',
-        {
-          body: {
-            form: {
-              client_id: config.slackClientId,
-              client_secret: Redacted.value(config.slackClientSecret),
-              code,
-              redirect_uri: config.slackInstallCallbackUrl,
-            },
-          },
-        },
-        InstallAnswer
-      );
-      const teamId = present(install.team?.id);
+      const {
+        answer: install,
+        teamId,
+        userId,
+        userToken,
+      } = yield* requestAccess(code, config.slackInstallCallbackUrl);
       const botToken = present(install.access_token);
       const botUserId = present(install.bot_user_id);
-      const userId = present(install.authed_user?.id);
-      if (!teamId || !botToken || !botUserId || !userId)
+      if (!botToken || !botUserId)
         return yield* new SlackCallFailed({ method: 'oauth.v2.access', code: 'no_bot' });
       const teamName = present(install.team?.name) ?? teamId;
       const token = Redacted.make(botToken);
       yield* store.upsertWorkspace({
-        teamId,
-        teamName,
+        id: teamId,
+        name: teamName,
         botUserId,
         sealedBotToken: yield* crypto.sealToken(token),
       });
       const userName = Option.getOrElse(yield* slack.selectUserName(token, userId), () => userId);
-      yield* recordLink({ teamId, teamName, userId, userName }, machine);
+      yield* recordLink({ teamId, teamName, userId, userName, userToken }, machine);
       return respondLinked({ team: teamName });
     });
 

@@ -23,6 +23,7 @@ import {
   type ResolvedKey,
   type StoredTeamKey,
   type TeamGrant,
+  type RelayDevice,
   type TeammateExtra,
 } from './schema.ts';
 
@@ -219,6 +220,35 @@ export class RemoteStore extends Context.Service<RemoteStore, RemoteStoreHandle>
         yield* update((stored) => ({ ...stored, extras: stored.extras.filter((extra) => !match(extra)) }));
       });
 
+      const selectRelayDevice = (instanceId: string) =>
+        Effect.map(
+          file,
+          (stored) => stored.relayDevices.find((device) => device.instanceId === instanceId) ?? null
+        );
+
+      const writeRelayDevice = (device: RelayDevice) =>
+        Effect.asVoid(
+          update((stored) => ({
+            ...stored,
+            relayDevices: [
+              ...stored.relayDevices.filter((entry) => entry.instanceId !== device.instanceId),
+              device,
+            ],
+          }))
+        );
+
+      const removeRelayDevicesWhere = Effect.fn('RemoteStore.removeRelayDevicesWhere')(function* (
+        match: (device: RelayDevice) => boolean
+      ) {
+        const removed = (yield* file).relayDevices.filter(match).map((device) => device.instanceId);
+        if (removed.length === 0) return removed;
+        yield* update((stored) => ({
+          ...stored,
+          relayDevices: stored.relayDevices.filter((device) => !match(device)),
+        }));
+        return removed;
+      });
+
       const removeTeam = (teamId: string) =>
         Effect.asVoid(
           update((stored) => ({
@@ -262,6 +292,9 @@ export class RemoteStore extends Context.Service<RemoteStore, RemoteStoreHandle>
         selectExtra,
         writeExtra,
         removeExtrasWhere,
+        selectRelayDevice,
+        writeRelayDevice,
+        removeRelayDevicesWhere,
         removeTeam,
         recordDeviceSeen,
       });

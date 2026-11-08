@@ -76,7 +76,7 @@ function ChangesPanel({ task, onOpen }: { task: Task; onOpen: (target: NowTarget
         {report.sections.map((section, index) => (
           <li key={section.title} className='flex gap-2.5'>
             <StepNumber index={index} />
-            <div className='flex min-w-0 flex-1 flex-col gap-px'>
+            <div className='flex min-w-0 flex-1 flex-col'>
               <InlineMarkdown text={section.title} className='text-xs leading-5 font-medium text-fg-4' />
               <Markdown text={section.summary} className='text-xs text-fg-3' />
             </div>
@@ -118,6 +118,7 @@ function ActivityPanel({
   const shown = useProgressiveCount(Math.min(entries.length, limit), FIRST_ACTIVITY);
   const older = entries.length - limit;
   useOnHide(() => setLimit(ACTIVITY_PAGE));
+  if (entries.length === 0) return null;
   return (
     <Panel persistId={resolveOverviewPanelId(task, 'activity')} title='Activity' icon='IconClock'>
       <ol className='flex flex-col'>

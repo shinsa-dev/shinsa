@@ -1,4 +1,9 @@
 import { resolve } from 'node:path';
+import { BunRuntime } from '@effect/platform-bun';
+import { Console, Effect } from 'effect';
+import { bundle as runBundle } from '../../../scripts/kit/bundle.ts';
+import { reportScriptFailure } from './kit/report.ts';
+import { ScriptStepFailed } from './kit/schema.ts';
 
 const desktopDir = resolve(import.meta.dirname, '..');
 
@@ -7,16 +12,28 @@ const BUNDLES = [
   { entry: 'src/preload/index.ts', name: 'preload.cjs', target: 'browser' },
 ] as const;
 
-for (const { entry, name, target } of BUNDLES) {
-  const result = await Bun.build({
-    entrypoints: [resolve(desktopDir, entry)],
-    outdir: resolve(desktopDir, 'dist'),
-    naming: name,
-    target,
-    format: 'cjs',
-    external: ['electron'],
+const bundle = Effect.fn('DesktopBuild.bundle')(function* ({
+  entry,
+  name,
+  target,
+}: (typeof BUNDLES)[number]) {
+  const failed = (logs: string) => new ScriptStepFailed({ message: `Could not bundle ${entry}:\n${logs}` });
+  const result = yield* Effect.tryPromise({
+    try: () =>
+      runBundle({
+        entrypoints: [resolve(desktopDir, entry)],
+        outdir: resolve(desktopDir, 'dist'),
+        naming: name,
+        target,
+        format: 'cjs',
+        external: ['electron'],
+      }),
+    catch: (error) => failed(String(error)),
   });
-  if (!result.success) throw new Error(`Could not bundle ${entry}:\n${result.logs.map(String).join('\n')}`);
-}
+  if (!result.success) return yield* failed(result.logs.map(String).join('\n'));
+});
 
-process.stdout.write(`Shinsa for Mac in ${resolve(desktopDir, 'dist')}\n`);
+Effect.gen(function* () {
+  for (const each of BUNDLES) yield* bundle(each);
+  yield* Console.log(`Shinsa for Mac in ${resolve(desktopDir, 'dist')}`);
+}).pipe(reportScriptFailure, BunRuntime.runMain({ disableErrorReporting: true }));

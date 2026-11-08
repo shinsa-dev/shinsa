@@ -1,8 +1,6 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { BunRuntime } from '@effect/platform-bun';
-import { Clock, Config, Console, Duration, Effect, Fiber, Ref, Schema, Stream } from 'effect';
+import { Clock, Config, Console, Duration, Effect, Fiber, FileSystem, Ref, Schema, Stream } from 'effect';
 import { ChildProcess, ChildProcessSpawner } from 'effect/process';
 import { type CdpEvent, type CdpPage, Chromium, ChromiumLayer } from '../kit/chromium/index.ts';
 import { reportFailure } from '../kit/script.ts';
@@ -35,6 +33,7 @@ const FIXTURES = join(import.meta.dirname, 'fixtures');
 const program = Effect.gen(function* () {
   const chromium = yield* Chromium;
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+  const fs = yield* FileSystem.FileSystem;
   const origin = Bun.argv[2] ?? null;
   const only = yield* Config.String('SEED_MEDIA_ONLY').pipe(Config.withDefault(''));
   const decodeFrame = Schema.decodeUnknownEffect(ScreencastFrame);
@@ -145,10 +144,22 @@ const program = Effect.gen(function* () {
   });
 
   const createWorkDirectory = (prefix: string) =>
-    Effect.acquireRelease(
-      Effect.sync(() => mkdtempSync(join(tmpdir(), prefix))),
-      (directory) => Effect.sync(() => rmSync(directory, { recursive: true, force: true }))
-    );
+    fs
+      .makeTempDirectoryScoped({ prefix })
+      .pipe(
+        Effect.mapError(
+          (error) => new ShotEncodeFailed({ message: `Making a work directory failed: ${error.message}` })
+        )
+      );
+
+  const writeBytes = (path: string, data: Uint8Array) =>
+    fs
+      .writeFile(path, data)
+      .pipe(
+        Effect.mapError(
+          (error) => new ShotEncodeFailed({ message: `Writing ${path} failed: ${error.message}` })
+        )
+      );
 
   const encodeVideo = Effect.fn('SeedMedia.encodeVideo')(function* (
     frames: readonly RecordedFrame[],
@@ -162,7 +173,13 @@ const program = Effect.gen(function* () {
       try: () => serializeFrameList(frames, end),
       catch: () => new ShotEncodeFailed({ message: `The recording of ${shot.file} has no frames.` }),
     });
-    yield* Effect.sync(() => writeFileSync(list, frameList));
+    yield* fs
+      .writeFileString(list, frameList)
+      .pipe(
+        Effect.mapError(
+          (error) => new ShotEncodeFailed({ message: `Writing ${list} failed: ${error.message}` })
+        )
+      );
     const failed = (message: string) => new ShotEncodeFailed({ message });
     const ffmpeg = yield* spawner
       .spawn(
@@ -212,7 +229,7 @@ const program = Effect.gen(function* () {
       const frame = yield* decodeFrame(event.params).pipe(Effect.orDie);
       const recorded = yield* Ref.get(frames);
       const path = join(work, `${String(recorded.length).padStart(5, '0')}.jpg`);
-      yield* Effect.sync(() => writeFileSync(path, Buffer.from(frame.data, 'base64')));
+      yield* writeBytes(path, Buffer.from(frame.data, 'base64'));
       yield* Ref.set(frames, [...recorded, { path, at: frame.metadata.timestamp }]);
       yield* Effect.forkScoped(
         Effect.ignore(page.send('Page.screencastFrameAck', { sessionId: frame.sessionId }))
@@ -241,7 +258,7 @@ const program = Effect.gen(function* () {
   ) {
     yield* openShot(page, shot, url);
     const { data } = yield* page.request('Page.captureScreenshot', { format: 'png' }, Captured);
-    yield* Effect.sync(() => writeFileSync(target, Buffer.from(data, 'base64')));
+    yield* writeBytes(target, Buffer.from(data, 'base64'));
   });
 
   const page = yield* chromium.launch(BROWSER_WINDOW);
@@ -254,7 +271,13 @@ const program = Effect.gen(function* () {
       continue;
     }
     const target = resolveShotPath(ROOT, shot);
-    yield* Effect.sync(() => mkdirSync(dirname(target), { recursive: true }));
+    yield* fs
+      .makeDirectory(dirname(target), { recursive: true })
+      .pipe(
+        Effect.mapError(
+          (error) => new ShotEncodeFailed({ message: `Making ${dirname(target)} failed: ${error.message}` })
+        )
+      );
     if (shot.steps) yield* recordShot(page, shot, url, target);
     else yield* captureShot(page, shot, url, target);
     yield* Console.log(`wrote ${target}`);

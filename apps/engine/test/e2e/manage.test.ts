@@ -38,12 +38,14 @@ function answerAs(kind: MessageKind, title: string): QuickJson {
 
 async function open(ask: QuickJson = answerAs('feedback', 'Keep going')) {
   world = await World.create({
-    supervise: (_, engine) => ({
+    supervise: async (_, engine) => ({
       manage: {
         baseUrl: () => address.url,
-        projects: createTestMachine(
-          engine,
-          createConfigAt(createTempDir(), { userHome: world?.config.userHome ?? '' })
+        projects: (
+          await createTestMachine(
+            engine,
+            createConfigAt(createTempDir(), { userHome: world?.config.userHome ?? '' })
+          )
         ).projects,
         route: createManageRoute(engine, createClassifier(ask)),
       },
@@ -56,7 +58,7 @@ async function open(ask: QuickJson = answerAs('feedback', 'Keep going')) {
     transcripts: createTestTranscripts(w.config.transcriptsDir),
     evidence: createTestEvidence(w.config.evidenceDir),
     models: { listModels: () => Promise.resolve([]) } as unknown as ModelSource,
-    onboarding: createTestOnboarding(w.engine, w.config).onboarding,
+    onboarding: (await createTestOnboarding(w.engine, w.config)).onboarding,
   });
   address.url = http.url;
   stops.push(() => http.stop());
@@ -77,7 +79,7 @@ async function shinsa(...args: string[]) {
       bundled: false,
       service: createLaunchdService({
         uid: 0,
-        ownsJob: () => true,
+        ownsJob: () => Effect.succeed(true),
         launchctl: () => Effect.succeed({ ok: false, output: '' }),
       }),
     },

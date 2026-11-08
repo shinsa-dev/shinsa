@@ -1,10 +1,11 @@
-import type {
-  ChatTool,
-  CodeSpot,
-  PlanDocument,
-  Repo,
-  ReviewFinding,
-  RunUsage,
+import {
+  type ChatTool,
+  type CodeSpot,
+  type PlanDocument,
+  type Repo,
+  type ReviewFinding,
+  type RunUsage,
+  serializePlanMarkdown,
 } from '../../../packages/core/src/index.ts';
 import { HOUR, MINUTE } from '../../kit/time.ts';
 import { resolveLine } from '../code/kit.ts';
@@ -255,6 +256,33 @@ const DOCS_SEARCH_PLAN: PlanDocument = {
   outOfScope: ['Searching the API reference.'],
   verification: [createPlanCheck('Docs build', 'bun run --cwd docs build', [1, 2])],
   questions: [],
+};
+
+const CHECKOUT_SPLIT_PLAN: PlanDocument = {
+  goal: 'Show the plan’s price on the checkout page. The coupon field and the receipt email ship as their own tasks.',
+  phases: [
+    { title: 'Read the price', detail: 'The checkout page reads the price from the selected plan.' },
+    { title: 'Show it in the summary', detail: 'The order summary shows the price and the billing period.' },
+  ],
+  behaviour: ['The checkout summary shows the selected plan’s price and period.'],
+  approach: 'The page reads the price from the plan it already loads, so no new request.',
+  files: [{ path: 'app/checkout/summary.tsx', change: 'Show the price and the period.' }],
+  outOfScope: ['Coupons and the receipt email, which are their own tasks.'],
+  verification: [createPlanCheck('Checkout tests', 'bun test app/checkout', [1, 2])],
+  questions: [],
+  split: [
+    {
+      title: 'Add a coupon field to checkout',
+      request: 'Add a coupon field to the checkout page that applies a Stripe promotion code to the order.',
+      order: 'parallel',
+    },
+    {
+      title: 'Send a receipt email after checkout',
+      request: 'Send a receipt email with the price and the plan once a checkout succeeds.',
+      order: 'waits_on',
+      on: 0,
+    },
+  ],
 };
 
 const RATE_LIMIT_REVISED: PlanDocument = {
@@ -619,6 +647,33 @@ function listLimitTasks({ paywall, kanna }: SeedRepoPair, exportBackoffPath: str
       gate: { type: 'plan', title: 'Add search to the docs', body: DOCS_SEARCH_PLAN.goal },
     },
     {
+      id: 'task-checkout-split',
+      request:
+        'On checkout, show the plan price, add a coupon field, and send a receipt email after the purchase.',
+      title: 'Checkout price, coupons and receipts',
+      repo: paywall,
+      size: 'small',
+      stage: 'awaiting_plan',
+      reason: 'the plan splits the work into other tasks',
+      branch: 'feat/checkout-price',
+      ageHours: 0.5,
+      plan: CHECKOUT_SPLIT_PLAN,
+      runs: [
+        {
+          role: 'agent',
+          purpose: 'plan',
+          minutes: 5,
+          summary: 'Planned the price here and split off coupons and receipts.',
+          handover: createPlanHandover(CHECKOUT_SPLIT_PLAN),
+        },
+      ],
+      gate: {
+        type: 'plan',
+        title: 'Checkout price, coupons and receipts',
+        body: serializePlanMarkdown(CHECKOUT_SPLIT_PLAN),
+      },
+    },
+    {
       id: 'task-export-backoff',
       request: 'ClickHouse export retries need to survive a restart',
       title: 'Make export retries survive a restart',
@@ -702,6 +757,22 @@ function listLimitTasks({ paywall, kanna }: SeedRepoPair, exportBackoffPath: str
               'Add a dashboard panel with ClickHouse export durations per app, so slow exports show up early.',
             why: 'The review found slow exports only by reading logs.',
             waitsOnThis: true,
+            status: 'open',
+            createdTaskId: null,
+            suggestedAt: NOW - 25 * MINUTE,
+          },
+        },
+        {
+          type: 'task.suggested',
+          taskId: 'task-export-backoff',
+          suggestion: {
+            id: 'suggestion-export-retry-docs',
+            runId: 'task-export-backoff-run-1',
+            title: 'Document the export retry limits',
+            request: 'Describe the backoff, its retry limit and the give-up message in the export runbook.',
+            why: 'It is its own change, but it should ship with the backoff.',
+            waitsOnThis: false,
+            stacksOnThis: true,
             status: 'open',
             createdTaskId: null,
             suggestedAt: NOW - 25 * MINUTE,

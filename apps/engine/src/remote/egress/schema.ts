@@ -1,3 +1,4 @@
+import { ViewScopes } from '@shinsa/core';
 import { Schema } from 'effect';
 
 const Data = Schema.Unknown;
@@ -24,6 +25,7 @@ const SharedPullRequest = Schema.Struct({
   mergeQueue: Schema.optionalKey(Data),
   queueRemoval: Schema.optionalKey(Data),
   mergeCommit: Schema.optionalKey(Data),
+  mergedAt: Schema.optionalKey(Data),
   changes: Schema.optionalKey(Data),
 });
 
@@ -220,7 +222,7 @@ const SharedProject = Schema.Struct({
 });
 
 const SharedTask = Schema.Struct({
-  preset: Data,
+  scopes: ViewScopes,
   task: SharedTaskRecord,
   gates: Schema.Array(SharedGate),
   runs: Schema.Array(SharedRun),

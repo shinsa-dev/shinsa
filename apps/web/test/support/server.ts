@@ -5,6 +5,7 @@ import {
   type ChatEvent,
   type ClientMessage,
   listSummarizedTasks,
+  type EngineInfo,
   resolveEngineInfo,
   resolveTaskDetail,
   type ServerMessage,
@@ -127,6 +128,10 @@ export function pushState(state: ShinsaState | null) {
     else push({ type: 'state', state: serializeState(state) });
     if (!connection.selectEngine()) push({ type: 'engine', engine: resolveEngineInfo('1.0.0') });
   });
+}
+
+export function pushEngine(engine: EngineInfo) {
+  act(() => push({ type: 'engine', engine }));
 }
 
 export function pushViewState(state: ShinsaState) {

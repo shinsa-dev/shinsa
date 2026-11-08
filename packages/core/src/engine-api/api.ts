@@ -99,9 +99,11 @@ import {
   TeamJoinBody,
   TeamKeysAnswer,
   TeamLinkAnswer,
+  TeamKeyDecisionBody,
   TeamMemberBody,
   TeamExtraBody,
   TeamScopesBody,
+  TeamRelaysAnswer,
   TeamTasksAnswer,
   TeamTasksQuery,
   TerminalsAnswer,
@@ -557,7 +559,24 @@ class TeamsGroup extends HttpApiGroup.make('teams')
       .annotate(EngineFeatureRoute, 'team-access'),
     HttpApiEndpoint.get('keys', '/api/remote/teams/keys', { success: TeamKeysAnswer })
       .annotate(OwnerOnlyRoute, true)
-      .annotate(EngineFeatureRoute, 'team-access')
+      .annotate(EngineFeatureRoute, 'team-access'),
+    HttpApiEndpoint.get('relays', '/api/teams/relays', { success: TeamRelaysAnswer })
+      .annotate(LocalOnlyRoute, true)
+      .annotate(EngineFeatureRoute, 'team-relay'),
+    HttpApiEndpoint.post('requestKey', '/api/remote/teams/key/request', {
+      payload: TeamBody,
+      success: RemoteAnswer,
+    })
+      .annotate(RouteFieldFailures, TEAM_FAILURES)
+      .annotate(OwnerOnlyRoute, true)
+      .annotate(EngineFeatureRoute, 'team-keys'),
+    HttpApiEndpoint.post('answerKey', '/api/remote/teams/key/answer', {
+      payload: TeamKeyDecisionBody,
+      success: RemoteAnswer,
+    })
+      .annotate(RouteFieldFailures, TEAM_FAILURES)
+      .annotate(OwnerOnlyRoute, true)
+      .annotate(EngineFeatureRoute, 'team-keys')
   )
   .middleware(EngineGate) {}
 
@@ -598,7 +617,10 @@ const ServiceParams = { serviceId: Schema.String };
 
 class TerminalsGroup extends HttpApiGroup.make('terminals')
   .add(
-    HttpApiEndpoint.get('list', '/api/terminals', { success: TerminalsAnswer }),
+    HttpApiEndpoint.get('list', '/api/terminals', { success: TerminalsAnswer }).annotate(
+      GuestRoute,
+      'filtered'
+    ),
     HttpApiEndpoint.get('foreground', '/api/terminals/:terminalId/foreground', {
       params: TerminalParams,
       success: ObjectAnswer,

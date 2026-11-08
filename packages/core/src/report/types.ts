@@ -1,3 +1,4 @@
+import type { SuggestedAction } from '../domain/shapes.ts';
 import type { EvidenceKind, EvidenceStage, EvidenceTheme } from '../domain/types.ts';
 
 export type Attention = 'critical' | 'high' | 'normal';
@@ -172,6 +173,7 @@ export interface AgentReply {
 export interface FixHandOver {
   summary: string;
   reply: AgentReply | null;
+  actions: SuggestedAction[];
   walkthrough: ReportWalkthroughRevision | null;
   checks: string[];
   checkChanges: CheckChangeHandOver[];
@@ -216,6 +218,16 @@ export interface PlanDocument {
   impact?: string;
   evidence?: Exclude<EvidenceKind, 'check'>[];
   approval?: boolean;
+  split?: PlanSplitPart[];
+}
+
+export type PlanSplitOrder = 'parallel' | 'waits_on' | 'stacks_on';
+
+export interface PlanSplitPart {
+  title: string;
+  request: string;
+  order: PlanSplitOrder;
+  on?: number;
 }
 
 export interface ReviewFinding {
@@ -254,6 +266,7 @@ export interface PhaseHandOver {
   spots: CodeSpot[];
   judgementCalls: JudgementCall[];
   reply: AgentReply | null;
+  actions: SuggestedAction[];
   walkthrough: ReportWalkthrough | null;
   checkChanges: CheckChangeHandOver[];
 }
@@ -261,6 +274,7 @@ export interface PhaseHandOver {
 export interface PlanHandOver {
   document: PlanDocument;
   reply: AgentReply | null;
+  actions: SuggestedAction[];
 }
 
 export interface QuestionHandOver {
@@ -282,6 +296,7 @@ export interface SuggestedTask {
   request: string;
   why: string;
   waitsOnThis: boolean;
+  stacksOnThis?: boolean;
   splitOff?: boolean;
 }
 

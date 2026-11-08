@@ -56,7 +56,6 @@ export {
   resolveSlackSessionStatus,
   SLACK_MENTION_REACTIONS,
   SLACK_REACTIONS,
-  SLACK_RESULT_LIMIT,
   type SlackMentionReaction,
   type SlackReaction,
   type SlackTaskRef,
@@ -67,7 +66,9 @@ export {
   serializeSlackLinkPrompt,
   serializeSlackMerged,
   serializeSlackOffline,
+  serializeSlackReconnectPrompt,
   serializeSlackResult,
+  serializeSlackUnreadLinks,
 } from './messages.ts';
 export {
   escapeSlackText,
@@ -103,15 +104,19 @@ export {
   SlackSessionStatus,
   type SlackSnapshot,
 } from './relay.ts';
+export { listSlackMessageLinks } from './links.ts';
 export { serializeSlackMessage, serializeSlackRequest, serializeSlackThread } from './thread.ts';
 export {
   SLACK_DECISION_LIMITS,
   SLACK_LIMITS,
+  SLACK_VIEW_LIMITS,
   SlackDecision,
   SlackDecisionModal,
   SlackDecisionReply,
   SlackDecisionValue,
   type SlackEvaluation,
+  SlackLinkedThread,
   type SlackMention,
+  type SlackMessageLink,
   type SlackThreadMessage,
 } from './schema.ts';

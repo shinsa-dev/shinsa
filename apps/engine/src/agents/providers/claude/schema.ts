@@ -8,3 +8,9 @@ const SdkVersion = Schema.String.pipe(
 export const SdkManifestText = Schema.fromJsonString(
   Schema.Struct({ version: SdkVersion, claudeCodeVersion: SdkVersion })
 );
+
+export const ConversationLine = Schema.Struct({ type: Schema.Literals(['user', 'assistant']) });
+
+export const SAFE_SESSION_ID = /^[A-Za-z0-9][\w.-]*$/;
+
+export const CHUNK_BYTES = 64 * 1024;

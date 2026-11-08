@@ -36,6 +36,28 @@ export const TEAM_TASKS_PATH = '/api/teams/tasks';
 
 export const TEAM_VIEW_PATH = '/api/teams/view';
 
+export const TEAM_RELAY_PATH = '/api/teams/relay';
+
+export const TEAM_RELAY_SOCKET_PATH = '/ws/teams/relay';
+
+const TEAM_RELAY_PATTERN = /^\/api\/teams\/relay\/([^/]+)(\/api\/.*)$/;
+
+const TEAM_RELAY_SOCKET_PATTERN = /^\/ws\/teams\/relay\/([^/]+)$/;
+
+export interface TeamRelayTarget {
+  instanceId: string;
+  path: string;
+}
+
+export const TEAM_REFUSALS = {
+  team: 'That machine has left this team.',
+  key: 'That machine has no key for this team. Its owner can rejoin from the team’s join link.',
+  member:
+    'That machine does not list you in this team yet. It catches up the next time it reaches Shinsa Cloud.',
+  mismatch: 'Your key for this team does not match that machine’s. Open the team’s join link again.',
+  task: 'This task is no longer shown to the team.',
+} as const;
+
 export const DEFAULT_TEAM_SCOPES: AccessScopes = ACCESS_PRESETS.collaborate;
 
 type TeamPeople = Pick<RemoteTeam, 'owner' | 'members'>;
@@ -156,6 +178,7 @@ export interface TeamFeedMachine {
   reason: string | null;
   updatedAt?: number;
   presence?: TeamPresence[];
+  asking?: boolean;
 }
 
 export interface TeamFeedTask extends TeamTask {
@@ -245,6 +268,25 @@ export function parseTeamViewTarget(url: URL): TeamViewTarget | null {
   if (!(teamId && instanceId && taskId)) return null;
   if (![teamId, instanceId, taskId].every((part) => URL_SAFE_SEGMENT.test(part))) return null;
   return { teamId, instanceId, taskId };
+}
+
+export function resolveTeamRelayPath(instanceId: string) {
+  return `${TEAM_RELAY_PATH}/${encodeURIComponent(instanceId)}`;
+}
+
+export function resolveTeamRelaySocketPath(instanceId: string) {
+  return `${TEAM_RELAY_SOCKET_PATH}/${encodeURIComponent(instanceId)}`;
+}
+
+export function parseTeamRelayPath(pathname: string): TeamRelayTarget | null {
+  const match = TEAM_RELAY_PATTERN.exec(pathname);
+  if (!(match?.[1] && match[2] && URL_SAFE_SEGMENT.test(match[1]))) return null;
+  return { instanceId: match[1], path: match[2] };
+}
+
+export function parseTeamRelaySocketPath(pathname: string) {
+  const instanceId = TEAM_RELAY_SOCKET_PATTERN.exec(pathname)?.[1];
+  return instanceId && URL_SAFE_SEGMENT.test(instanceId) ? instanceId : null;
 }
 
 function serializeTeamView(view: TeamView) {

@@ -176,7 +176,7 @@ describe('handing a task off', () => {
       priority: 'normal',
       planFirst: false,
       origin: null,
-      auto: { shape: false, start: false, priority: false },
+      auto: { shape: false, start: false, priority: false, project: false },
       watchHome: true,
     });
     expect(() => harness.send({ type: 'task.hand_off', taskId: 'home' })).toThrow(

@@ -20,6 +20,7 @@ import { Clock, Duration, Effect, Option, Redacted } from 'effect';
 import { NO_SUCH_MACHINE } from '../auth/schema.ts';
 import { CloudCrypto } from '../crypto/service.ts';
 import { Cloudflare } from '../integrations/cloudflare/service.ts';
+import { revokeMachineUserTokens } from '../slack/user-tokens.ts';
 import { MachineAccess } from '../store/access/service.ts';
 import { Accounts } from '../store/accounts/service.ts';
 import type { Machine, SharedMachine } from '../store/machines/schema.ts';
@@ -42,7 +43,7 @@ export function serializeTeamMachine(machine: Machine, now: number): TeamMachine
   return {
     id: machine.id,
     name: machine.name,
-    userId: machine.userId,
+    userId: machine.ownerId,
     online: isMachineOnline(machine, now),
     lastSeenAt: machine.lastSeenAt,
     ...(machine.signingKey ? { signingKey: machine.signingKey } : {}),
@@ -91,7 +92,7 @@ export const findOwner = Effect.fn('findOwner')(function* (ownerId: RemoteUserId
   return owner.value satisfies RemoteUser;
 });
 
-export const findMachineOwner = (machine: Machine) => findOwner(machine.userId, NO_SUCH_MACHINE);
+export const findMachineOwner = (machine: Machine) => findOwner(machine.ownerId, NO_SUCH_MACHINE);
 
 export const listMachinePeople = Effect.fn('listMachinePeople')(function* (machine: Machine) {
   const access = yield* MachineAccess;
@@ -110,5 +111,6 @@ export const removeMachine = Effect.fn('removeMachine')(function* (machine: Mach
   const cloudflare = yield* Cloudflare;
   const machines = yield* Machines;
   yield* cloudflare.removeTunnel(machine.tunnelId, machine.dnsRecordId);
+  yield* revokeMachineUserTokens(machine.id);
   yield* machines.remove(machine.id);
 });

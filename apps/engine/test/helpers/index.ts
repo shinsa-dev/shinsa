@@ -121,11 +121,24 @@ export function overrideEnv(values: Record<string, string | undefined>) {
   };
 }
 
-const FAKE_RUN: FakeCommand = (command) =>
-  Promise.resolve({ ok: true, code: 0, stdout: `${command[0]} 1.0`, stderr: '', timedOut: false });
+const FAKE_DISK =
+  'Filesystem 1024-blocks Used Available Capacity Mounted on\n/dev/disk1 1000 400 600 40% /\n';
 
-export function createTestOnboarding(engine: Engine, config: ServerConfig, run: FakeCommand = FAKE_RUN) {
-  const machine = createTestMachine(engine, config);
+const FAKE_RUN: FakeCommand = (command) =>
+  Promise.resolve({
+    ok: true,
+    code: 0,
+    stdout: command[0] === 'df' ? FAKE_DISK : `${command[0]} 1.0`,
+    stderr: '',
+    timedOut: false,
+  });
+
+export async function createTestOnboarding(
+  engine: Engine,
+  config: ServerConfig,
+  run: FakeCommand = FAKE_RUN
+) {
+  const machine = await createTestMachine(engine, config);
   const { store, roots } = machine;
   return {
     store,

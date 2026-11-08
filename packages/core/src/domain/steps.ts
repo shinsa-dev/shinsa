@@ -75,7 +75,14 @@ export interface StepGate {
   when: string | null;
 }
 
-export type PlanGateReason = 'operates' | 'plan_first' | 'backlog' | 'asks_approval' | 'large' | 'revised';
+export type PlanGateReason =
+  | 'operates'
+  | 'plan_first'
+  | 'backlog'
+  | 'asks_approval'
+  | 'splits'
+  | 'large'
+  | 'revised';
 
 export interface PlanGateRule {
   always: readonly PlanGateReason[];
@@ -83,7 +90,7 @@ export interface PlanGateRule {
 }
 
 export const PLAN_GATE_RULE: PlanGateRule = {
-  always: ['operates', 'plan_first', 'backlog', 'asks_approval'],
+  always: ['operates', 'plan_first', 'backlog', 'asks_approval', 'splits'],
   withLargePlans: ['large', 'revised'],
 };
 
@@ -94,6 +101,7 @@ const PLAN_GATE_REASON_TEXT: Record<PlanGateReason, string> = {
   plan_first: 'it was created plan first',
   backlog: 'it is in the backlog',
   asks_approval: 'the plan asks for approval',
+  splits: 'the plan splits the work into other tasks',
   large: `the plan has more than ${PLAN_SIZE_LIMITS.phases} phases or ${PLAN_SIZE_LIMITS.files} files`,
   revised: 'the plan is a revision',
 };
@@ -642,8 +650,19 @@ const HARD_GATES = {
     strength: 'hard',
     decidedBy: 'you',
     title: 'Setup incomplete',
-    shows: ['each setup problem', 'how to fix it'],
-    decisions: [{ decision: 'approve', does: 'Verifies the setup again.' }, CANCEL],
+    shows: [
+      'each setup problem',
+      'how to fix it',
+      'the repositories to pick from, when the repository is the only problem',
+    ],
+    decisions: [
+      { decision: 'approve', does: 'Verifies the setup again.' },
+      {
+        decision: 'reply',
+        does: 'Points the task at the repository you picked, then verifies the setup again.',
+      },
+      CANCEL,
+    ],
     refusal: 'Verify the setup again, or cancel.',
     pauses: true,
   },

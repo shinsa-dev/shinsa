@@ -47,6 +47,15 @@ export interface TeammateExtra {
   scopes: AccessScope[];
 }
 
+export interface RelayDevice {
+  instanceId: string;
+  teamId: string;
+  machineKey: string;
+  publicKey: string;
+  privateKey: string;
+  enrolledAt: number;
+}
+
 export interface StoredTeamKey {
   teamId: string;
   name: string;
@@ -72,6 +81,7 @@ export interface RemoteFile {
   teamKeys: StoredTeamKey[];
   grants: TeamGrant[];
   extras: TeammateExtra[];
+  relayDevices: RelayDevice[];
 }
 
 export interface RemoteFileRead {
@@ -113,6 +123,11 @@ export interface RemoteStoreHandle {
   selectExtra(userId: string, teamId: string): Effect.Effect<TeammateExtra | null>;
   writeExtra(extra: TeammateExtra): Effect.Effect<void, JsonFileWriteFailed>;
   removeExtrasWhere(match: (extra: TeammateExtra) => boolean): Effect.Effect<void, JsonFileWriteFailed>;
+  selectRelayDevice(instanceId: string): Effect.Effect<RelayDevice | null>;
+  writeRelayDevice(device: RelayDevice): Effect.Effect<void, JsonFileWriteFailed>;
+  removeRelayDevicesWhere(
+    match: (device: RelayDevice) => boolean
+  ): Effect.Effect<string[], JsonFileWriteFailed>;
   removeTeam(teamId: string): Effect.Effect<void, JsonFileWriteFailed>;
   recordDeviceSeen(publicKey: string, at: number): Effect.Effect<void, JsonFileWriteFailed>;
 }

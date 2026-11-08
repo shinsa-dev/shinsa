@@ -121,7 +121,7 @@ function StorageRow({ folder }: { folder: string }) {
   return (
     <div className={cn(SETTING_ROW, 'items-start gap-2 py-2 text-xs')}>
       <Icon size='sm' name='IconStorage' className='mt-0.5 shrink-0 text-fg-2' />
-      <div className='flex min-w-0 flex-1 flex-col gap-px'>
+      <div className='flex min-w-0 flex-1 flex-col'>
         <span className='text-fg-4'>{describeWorktreeUsage(usage)}</span>
         <span className='text-2xs text-fg-2'>{WORKTREE_CLEANUP_NOTE}</span>
       </div>

@@ -30,18 +30,32 @@ export interface TaskResult {
 
 export type ChangeProposalStatus = 'open' | 'accepted' | 'declined';
 
+export type ProposalRecommendation = 'go_on' | 'close';
+
+export const PROPOSAL_RECOMMENDATIONS: readonly [ProposalRecommendation, ...ProposalRecommendation[]] = [
+  'go_on',
+  'close',
+];
+
 export interface ChangeProposal {
   request: string;
   why: string;
   status: ChangeProposalStatus;
+  recommend: ProposalRecommendation;
   runId: string | null;
   at: number;
+}
+
+export interface SuggestedAction {
+  label: string;
+  message: string;
 }
 
 export interface TaskAuto {
   shape: boolean;
   start: boolean;
   priority: boolean;
+  project: boolean;
 }
 
 export interface AutoChoice<T> {
@@ -53,6 +67,7 @@ export interface TriageDecisions {
   shape: AutoChoice<TaskShape> | null;
   start: AutoChoice<string[]> | null;
   priority: AutoChoice<Task['priority']> | null;
+  stack?: AutoChoice<string[]>;
   duplicate?: TriageDuplicateCheck | null;
 }
 

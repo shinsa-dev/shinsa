@@ -1,17 +1,24 @@
-import { existsSync, realpathSync, statSync } from 'node:fs';
 import { isAbsolute, resolve } from 'node:path';
 import { DomainError } from '@shinsa/core';
+import { Effect, Option } from 'effect';
+import { isFolder, selectRealPath } from '../files/probe.ts';
 import { expandHome } from '../onboarding/roots.ts';
 
-export function resolveProjectFolder(raw: string, userHome: string) {
+export const resolveProjectFolder = Effect.fn('Projects.resolveProjectFolder')(function* (
+  raw: string,
+  userHome: string
+) {
   const text = raw.trim();
   const path = expandHome(text, userHome);
   if (!text || !isAbsolute(path)) {
-    throw new DomainError({ code: 'folder_invalid', message: 'Give a full path, or one with ~/.' });
+    return yield* new DomainError({ code: 'folder_invalid', message: 'Give a full path, or one with ~/.' });
   }
-  const folder = resolve(path);
-  if (!existsSync(folder) || !statSync(folder).isDirectory()) {
-    throw new DomainError({ code: 'folder_invalid', message: 'That is not a folder on this machine.' });
+  const real = yield* selectRealPath(resolve(path));
+  if (Option.isNone(real) || !(yield* isFolder(real.value))) {
+    return yield* new DomainError({
+      code: 'folder_invalid',
+      message: 'That is not a folder on this machine.',
+    });
   }
-  return realpathSync(folder);
-}
+  return real.value;
+});

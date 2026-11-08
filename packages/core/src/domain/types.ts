@@ -13,6 +13,7 @@ import type {
   TaskCheck,
   WorkReport,
 } from '../report/types.ts';
+import type { ViewScope } from '../scopes/schema.ts';
 import type { Coverage, CoverageSetting } from '../test-coverage/types.ts';
 import type { UsageWait, WeeklyReading } from './accounts.ts';
 import type { DeliveryCohort, RunDelegation, RunWait, TaskCreator, TaskSplit } from './delegations.ts';
@@ -20,8 +21,15 @@ import type { CiRun, MergeQueueEntry, PullRequestWatch, PushHookFailure } from '
 import type { Round } from './rounds.ts';
 import type { GateSecret, SourceReport } from './schedules.ts';
 import type { FindingVerdict, ReviewComment, RunAccount } from './schema.ts';
-import type { ShareLimit, SharePreset } from './settings.ts';
-import type { ChangeProposal, ShapeChange, TaskAuto, TaskResult, TriageDecisions } from './shapes.ts';
+import type { ShareLimit } from './settings.ts';
+import type {
+  ChangeProposal,
+  ShapeChange,
+  SuggestedAction,
+  TaskAuto,
+  TaskResult,
+  TriageDecisions,
+} from './shapes.ts';
 import type { SlackThreadLink } from './slack.ts';
 import type { PipelineStep } from './steps.ts';
 import type { Watchdog, WatchSource } from './watchdogs.ts';
@@ -158,7 +166,7 @@ export type GateType =
   | 'post_merge'
   | 'result';
 
-export type GateCause = 'budget' | 'monitor' | 'push_hook';
+export type GateCause = 'budget' | 'monitor' | 'push_hook' | 'paused';
 
 export type EditsApproval = 'review' | 'merge';
 
@@ -277,6 +285,7 @@ export interface PullRequest {
   queueRemoval?: string | null;
   mergeCommit?: string | null;
   changes?: PullRequestChanges | null;
+  mergedAt?: number | null;
 }
 
 export type PhaseStatus = 'pending' | 'active' | 'done' | 'skipped';
@@ -347,6 +356,7 @@ export interface TaskSuggestion {
   request: string;
   why: string;
   waitsOnThis: boolean;
+  stacksOnThis?: boolean;
   status: SuggestionStatus;
   createdTaskId: string | null;
   suggestedAt: number;
@@ -476,6 +486,7 @@ export interface Task {
   request: string;
   title: string;
   repoId: string | null;
+  movingTo?: string | null;
   size: TaskSize | null;
   planFirst: boolean;
   stage: TaskStage;
@@ -538,6 +549,7 @@ export interface Task {
   suggestions?: TaskSuggestion[];
   budgetAcknowledgedUsd?: number;
   usageAcknowledgedPercent?: number;
+  paceLimitsIgnored?: boolean;
   configProblems?: ConfigProblem[];
   account?: RunAccount | null;
   usageWait?: UsageWait | null;
@@ -554,6 +566,7 @@ export interface Task {
   triageDecisions?: TriageDecisions | null;
   result?: TaskResult | null;
   proposal?: ChangeProposal | null;
+  suggestedActions?: SuggestedAction[];
   shapeChanges?: ShapeChange[];
   proposedBranch?: string | null;
   rounds?: Round[];
@@ -622,7 +635,7 @@ export interface TaskShare {
   at: number;
   url: string | null;
   limit: ShareLimit;
-  preset: SharePreset;
+  scopes: readonly ViewScope[];
   endsAt: number | null;
   failure?: string | null;
   description?: string | null;

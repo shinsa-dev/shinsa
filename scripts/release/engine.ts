@@ -1,6 +1,5 @@
-import { cpSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { Config, Effect, Option, Schema } from 'effect';
+import { Config, Effect, FileSystem, Option, Schema } from 'effect';
 import { Command } from '../kit/command/index.ts';
 import { createTempDirectory } from '../kit/temp.ts';
 import { EngineInvalid, EngineVersionReport, ScriptUsage } from './schema.ts';
@@ -22,7 +21,9 @@ export interface PackOptions {
   version: string;
 }
 
-const ENGINE_CONTENTS = ['bin/shinsa', 'plugin', 'web/index.html'];
+const ENGINE_BINARY = 'bin/shinsa';
+
+const ENGINE_CONTENTS = [ENGINE_BINARY, 'plugin', 'web/index.html'];
 
 const decodeTarget = Schema.decodeUnknownEffect(Schema.Literals(PUBLISHED_ENGINE_TARGETS));
 
@@ -49,17 +50,23 @@ export function serializeChecksum(sha256: string, name: string) {
 }
 
 export const assertEngineFolder = Effect.fn('assertEngineFolder')(function* (folder: string) {
-  const present = yield* Effect.forEach(ENGINE_CONTENTS, (entry) =>
-    Effect.sync(() => existsSync(join(folder, entry)))
+  const fs = yield* FileSystem.FileSystem;
+  const found = yield* Effect.forEach(ENGINE_CONTENTS, (entry) =>
+    fs.stat(join(folder, entry)).pipe(
+      Effect.option,
+      Effect.map((info) => ({ entry, info }))
+    )
   );
-  const missing = ENGINE_CONTENTS.filter((_, index) => !present[index]);
+  const missing = found.filter(({ info }) => Option.isNone(info)).map(({ entry }) => entry);
   if (missing.length > 0)
     return yield* new EngineInvalid({
       message: `${folder} is not a built engine: it has no ${missing.join(', ')}`,
     });
-  const binary = join(folder, 'bin/shinsa');
-  const info = yield* Effect.sync(() => statSync(binary));
-  if ((info.mode & 0o111) === 0) return yield* new EngineInvalid({ message: `${binary} is not executable` });
+  const executable = found.some(
+    ({ entry, info }) => entry === ENGINE_BINARY && Option.exists(info, (stat) => (stat.mode & 0o111) !== 0)
+  );
+  if (!executable)
+    return yield* new EngineInvalid({ message: `${join(folder, ENGINE_BINARY)} is not executable` });
 });
 
 const assertEngineVersion = Effect.fn('assertEngineVersion')(function* (binary: string, version: string) {
@@ -86,24 +93,26 @@ export const packEngine = Effect.fn('packEngine')(function* ({
   version,
 }: PackOptions) {
   const command = yield* Command;
+  const fs = yield* FileSystem.FileSystem;
   const names = resolveEngineArchive(yield* resolvePublishedTarget(target));
   yield* assertEngineFolder(folder);
-  yield* assertEngineVersion(join(folder, 'bin/shinsa'), version);
+  yield* assertEngineVersion(join(folder, ENGINE_BINARY), version);
   const staging = yield* createTempDirectory('shinsa-pack-');
-  yield* Effect.sync(() => cpSync(folder, join(staging, names.folder), { recursive: true }));
-  yield* Effect.sync(() => mkdirSync(outDir, { recursive: true }));
+  const unwritable = (error: { readonly message: string }) =>
+    new EngineInvalid({ message: `Could not pack ${names.archive}: ${error.message}` });
+  yield* fs.copy(folder, join(staging, names.folder)).pipe(Effect.mapError(unwritable));
+  yield* fs.makeDirectory(outDir, { recursive: true }).pipe(Effect.mapError(unwritable));
   const archive = join(outDir, names.archive);
   const tar = yield* command.run(['tar', '-czf', archive, '-C', staging, names.folder], {
     env: { COPYFILE_DISABLE: '1' },
   });
   if (tar.code !== 0)
     return yield* new EngineInvalid({ message: `Could not pack ${names.archive}: ${tar.stderr}` });
-  const sha256 = new Bun.CryptoHasher('sha256')
-    .update(yield* Effect.sync(() => readFileSync(archive)))
-    .digest('hex');
-  yield* Effect.sync(() =>
-    writeFileSync(join(outDir, names.checksum), serializeChecksum(sha256, names.archive))
-  );
+  const bytes = yield* fs.readFile(archive).pipe(Effect.mapError(unwritable));
+  const sha256 = new Bun.CryptoHasher('sha256').update(bytes).digest('hex');
+  yield* fs
+    .writeFileString(join(outDir, names.checksum), serializeChecksum(sha256, names.archive))
+    .pipe(Effect.mapError(unwritable));
   return { ...names, sha256 };
 }, Effect.scoped);
 

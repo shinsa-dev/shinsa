@@ -874,6 +874,23 @@ export function listReviewTasks({ paywall }: SeedRepos, worktrees: SeedWorktrees
           summary: 'Two blocking findings in the flag parser, one suggestion.',
         },
       ],
+      extra: [
+        {
+          type: 'task.actions_suggested',
+          taskId: 'task-command-registry',
+          actions: [
+            {
+              label: 'Do the renames',
+              message: 'Rename the four commands the plan left alone so every name matches its folder.',
+            },
+            {
+              label: 'Keep the old names',
+              message: 'Keep the four old command names. Leave a note in the docs on why they differ.',
+            },
+          ],
+          runId: 'task-command-registry-run-1',
+        },
+      ],
       gate: {
         type: 'review',
         title: 'Review the command registry rewrite',

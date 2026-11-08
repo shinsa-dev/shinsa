@@ -1,20 +1,20 @@
 import { afterEach, describe, expect, test } from 'bun:test';
-import { readFileSync, symlinkSync } from 'node:fs';
+import { mkdirSync, readFileSync, symlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import { CODE_LIMITS, type FileChanged, type FileWritten } from '@shinsa/core';
 import { createWorktree } from '../../helpers/git.ts';
 import { createGitRepo, git, writeFiles } from '../../helpers/index.ts';
 import { createTestMachine } from '../../helpers/machine.ts';
 import { disposeWebHandlers } from '../../helpers/web.ts';
-import { startRoutes } from './harness.ts';
+import { startMachineRoutes } from './harness.ts';
 
 afterEach(disposeWebHandlers);
 
 const HEAD_TEXT = 'export const value = 2;\n';
 
 async function startWithTask() {
-  const { context, post } = startRoutes(({ config, engine }) => ({
-    workspaces: createTestMachine(engine, config).workspaces,
+  const { context, post } = await startMachineRoutes(async ({ config, engine }) => ({
+    workspaces: (await createTestMachine(engine, config)).workspaces,
   }));
   const { config, engine } = context;
   const { repo } = await createGitRepo({ files: { 'src/app.ts': 'export const value = 1;\n' } });
@@ -70,6 +70,16 @@ describe('saving a file from the editor', () => {
     const response = await save({ path: 'src/new/b.ts', content: 'b\n', base: null });
     expect((await response.json()) as FileWritten).toEqual({ path: 'src/new/b.ts', changed: true });
     expect(readFileSync(join(worktree, 'src/new/b.ts'), 'utf8')).toBe('b\n');
+  });
+
+  test('answers a disk failure as a refusal with its reason, not a server error', async () => {
+    const { worktree, save } = await startWithTask();
+    mkdirSync(join(worktree, 'src/folder'));
+    const response = await save({ path: 'src/folder', content: 'x\n', base: null });
+    expect(response.status).toBe(400);
+    const body = (await response.json()) as { error: { code: string; message: string } };
+    expect(body.error.code).toBe('request_failed');
+    expect(body.error.message).toContain('src/folder');
   });
 
   test('refuses paths outside the working copy, bad bodies and files too large to keep', async () => {

@@ -6,15 +6,14 @@ import {
   resolveToolOutput,
   say,
   spreadEvents,
+  type SeedTranscript,
   type TimedSeedEvent,
-  writeTranscript,
 } from '../kit.ts';
 import { listRunOpenings } from '../prompts.ts';
 import { listEditHunks, resolveLine, serializeNumberedLines } from './kit.ts';
 import {
   type CodeSample,
   LIVE_PLAN,
-  listGrepMatches,
   listReviewDisagreements,
   listReviewFindings,
   MERGED_PLAN,
@@ -168,7 +167,7 @@ function listReviewRuns(sample: CodeSample, openings: ReadonlyMap<string, string
         say('I’ll find every place the web still says target, then check what core calls the same thing.'),
         search('lib/review/targets.ts', review.importers, 'apps'),
         read(SAMPLE_PATHS.targets, review.spots.before, 1, 60),
-        search('listRankedSpots', listGrepMatches(sample.repo.path, 'listRankedSpots', 'main'), 'packages'),
+        search('listRankedSpots', sample.searches.rankedSpots, 'packages'),
         read(SAMPLE_PATHS.ranking, review.ranking, Math.max(1, rankedLine - 4), rankedLine + 12),
         say(
           'Core already ranks spots with listRankedSpots; only the web module and its three callers say target. Settings, schedules and MCP code use target for something else and stay out of it.'
@@ -369,11 +368,7 @@ function listMergedRuns(sample: CodeSample, openings: ReadonlyMap<string, string
       `${SAMPLE_MERGED}-run-0`,
       [resolveOpening(openings, `${SAMPLE_MERGED}-run-0`)],
       [
-        search(
-          'resolveQueue',
-          listGrepMatches(sample.repo.path, 'export function resolveQueue', 'main~1'),
-          'packages/core'
-        ),
+        search('resolveQueue', sample.searches.resolveQueue, 'packages/core'),
         read(SAMPLE_PATHS.queueIndex, index.before),
         handOver('propose_plan', { ...MERGED_PLAN }, 'Plan recorded.'),
       ],
@@ -425,7 +420,7 @@ function listLiveRuns(sample: CodeSample, openings: ReadonlyMap<string, string>)
       [resolveOpening(openings, `${SAMPLE_LIVE}-run-0`)],
       [
         read(SAMPLE_PATHS.highlight, live.highlight.before),
-        search('--shiki', listGrepMatches(sample.repo.path, '--shiki', 'main'), 'apps/web'),
+        search('--shiki', sample.searches.shiki, 'apps/web'),
         handOver('propose_plan', { ...LIVE_PLAN }, 'Plan recorded.'),
       ],
       finish('Three phases: the tokens, the highlighter theme, then screenshots in both themes.')
@@ -480,7 +475,7 @@ function listAnswerRuns(sample: CodeSample) {
         ),
       ],
       [
-        search("'attention'", listGrepMatches(sample.repo.path, "'attention'", 'main'), 'apps/web/src'),
+        search("'attention'", sample.searches.attention, 'apps/web/src'),
         read(SAMPLE_PATHS.ranking, ranking, Math.max(1, line - 4), line + 12),
         read(SAMPLE_PATHS.targets, sample.review.spots.before, 1, 60),
         handOver(
@@ -512,7 +507,7 @@ function resolveWindow(timeline: TimedSeedEvent[], runId: string) {
   return from === null ? null : { from, to: to ?? NOW - MINUTE };
 }
 
-export function writeCodeTranscripts(dir: string, timeline: TimedSeedEvent[], sample: CodeSample) {
+export function listCodeTranscripts(timeline: TimedSeedEvent[], sample: CodeSample) {
   const openings = listRunOpenings(timeline);
   const runs: [string, Record<number, ChatEvent[]>][] = [
     [SAMPLE_REVIEW, listReviewRuns(sample, openings)],
@@ -520,12 +515,12 @@ export function writeCodeTranscripts(dir: string, timeline: TimedSeedEvent[], sa
     [SAMPLE_LIVE, listLiveRuns(sample, openings)],
     [SAMPLE_ANSWER, listAnswerRuns(sample)],
   ];
-  for (const [taskId, events] of runs) {
-    for (const [index, list] of Object.entries(events)) {
+  return runs.flatMap(([taskId, events]) =>
+    Object.entries(events).map(([index, list]): SeedTranscript => {
       const runId = `${taskId}-run-${index}`;
       const window = resolveWindow(timeline, runId);
       if (!window) throw new Error(`The seed has no run ${runId}.`);
-      writeTranscript(dir, runId, spreadEvents(list, window.from, window.to));
-    }
-  }
+      return { runId, timed: spreadEvents(list, window.from, window.to) };
+    })
+  );
 }

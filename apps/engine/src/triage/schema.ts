@@ -33,6 +33,7 @@ export interface TriageResult {
   size: TaskSize;
   branch: string;
   waitsOn: Task[];
+  stacksOn?: Task[];
   duplicateOf?: string;
   duplicateOfTeammate?: TeammateOriginal;
   unreached?: UnreachedTeammate[];

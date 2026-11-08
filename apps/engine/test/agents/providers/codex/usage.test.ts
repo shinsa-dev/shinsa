@@ -23,18 +23,19 @@ import {
 } from '../../../../src/agents/providers/codex/usage/schema.ts';
 import { readUsage } from '../../../../src/agents/providers/codex/usage/service.ts';
 import { describeError } from '../../../../src/log/redact.ts';
+import { runFiles } from '../../../harness.ts';
 import { FakeCodex } from '../../../helpers/codex.ts';
 import { createTempDir } from '../../../helpers/index.ts';
 
 const NOW = 1_800_000_000_000;
 
 function readCodexOAuthLogin(home: string) {
-  return Effect.runSync(selectCodexOAuthLogin(home));
+  return runFiles(selectCodexOAuthLogin(home));
 }
 
 function readCodexUsage(runtime: CodexRuntime, options: CodexUsageOptions & { now?: () => number } = {}) {
   const request = options.requestHttp ?? fetch;
-  return Effect.runPromise(
+  return runFiles(
     readUsage({
       home: resolveCodexHome({ ...Bun.env, ...options.env }),
       now: Effect.sync(options.now ?? Date.now),
@@ -202,25 +203,25 @@ describe('Codex’s usage endpoint, read the way CodexBar reads it', () => {
     expect(parseChatGptBaseUrl('model = "x"')).toBeNull();
   });
 
-  test('the login is Codex’s own auth.json under CODEX_HOME, never refreshed by Shinsa', () => {
+  test('the login is Codex’s own auth.json under CODEX_HOME, never refreshed by Shinsa', async () => {
     expect(resolveCodexHome({ CODEX_HOME: ' /tmp/codex-home ' })).toBe('/tmp/codex-home');
     expect(resolveCodexHome({ HOME: '/Users/someone' })).toBe('/Users/someone/.codex');
     expect(resolveCodexHome({})).toBe(join(homedir(), '.codex'));
-    expect(readCodexOAuthLogin(createHome(SIGNED_IN))).toEqual({
+    expect(await readCodexOAuthLogin(createHome(SIGNED_IN))).toEqual({
       accessToken: 'access-1',
       accountId: 'account-1',
     });
-    expect(readCodexOAuthLogin(createHome({ tokens: { access_token: 'access-2' } }))).toEqual({
+    expect(await readCodexOAuthLogin(createHome({ tokens: { access_token: 'access-2' } }))).toEqual({
       accessToken: 'access-2',
       accountId: null,
     });
-    expect(readCodexOAuthLogin(createHome({ OPENAI_API_KEY: 'sk-1', tokens: null }))).toBeNull();
-    expect(readCodexOAuthLogin(createHome({ tokens: { access_token: '' } }))).toBeNull();
-    expect(readCodexOAuthLogin(createHome('{ broken'))).toBeNull();
-    expect(readCodexOAuthLogin(createHome(undefined))).toBeNull();
+    expect(await readCodexOAuthLogin(createHome({ OPENAI_API_KEY: 'sk-1', tokens: null }))).toBeNull();
+    expect(await readCodexOAuthLogin(createHome({ tokens: { access_token: '' } }))).toBeNull();
+    expect(await readCodexOAuthLogin(createHome('{ broken'))).toBeNull();
+    expect(await readCodexOAuthLogin(createHome(undefined))).toBeNull();
     const unreadable = createHome(undefined);
     mkdirSync(join(unreadable, 'auth.json'));
-    expect(readCodexOAuthLogin(unreadable)).toBeNull();
+    expect(await readCodexOAuthLogin(unreadable)).toBeNull();
   });
 });
 

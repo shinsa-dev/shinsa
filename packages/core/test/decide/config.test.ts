@@ -92,13 +92,13 @@ describe('checking the setup before any agent starts', () => {
     expect(listOpenGates(harness.state, taskId)).toHaveLength(1);
   });
 
-  test('nothing can be skipped: the gate takes only verify again or cancel', () => {
+  test('nothing can be skipped: a reply that names no listed repository is refused', () => {
     const { harness, taskId } = triaged();
     verifySetup(harness, taskId, [MISSING_BRANCH, MISSING_REPOSITORY]);
     const gate = harness.openGate(taskId);
     expect(() =>
       harness.send({ type: 'gate.answer', gateId: gate.id, decision: 'reply', response: 'Go.' })
-    ).toThrow('Verify the setup again, or cancel.');
+    ).toThrow('Pick one of the repositories listed.');
     expect(listOpenGates(harness.state, taskId)).toHaveLength(1);
   });
 
@@ -200,6 +200,23 @@ function triagedWithout(shape: TaskShape, request = 'Hey') {
   return { harness, taskId };
 }
 
+function triagedIn(harness: Harness, shape: TaskShape) {
+  const before = new Set(Object.keys(harness.state.tasks));
+  harness.send({ type: 'task.create', request: 'Fix it', repoId: null });
+  const taskId = Object.keys(harness.state.tasks).find((id) => !before.has(id)) ?? '';
+  harness.send({
+    type: 'task.triage',
+    taskId,
+    title: 'Fix it',
+    repoId: null,
+    size: 'small',
+    branch: `fix/${taskId}`,
+    waitsOn: [],
+    shape,
+  });
+  return { taskId };
+}
+
 function bind(harness: Harness, taskId: string, repoId: string) {
   return harness.send({ type: 'config.record', taskId, problems: [], repoId });
 }
@@ -295,6 +312,57 @@ describe('a task without a repository', () => {
     expect(harness.task(taskId).projectId).toBe(projectId);
   });
 
+  test('a task whose project only came from the focus moves to the bound repository’s project on the first round', () => {
+    const harness = createHarness();
+    harness.send({
+      type: 'project.write',
+      project: { name: 'Local', color: 'blue', key: 'LOC', folders: [] },
+    });
+    const local = Object.keys(harness.state.projects)[0] ?? '';
+    harness.send({ type: 'focus.change', projectId: local, until: null });
+    const { taskId } = triagedIn(harness, 'change');
+    expect(harness.task(taskId)).toMatchObject({ projectId: local, handle: 'LOC-1' });
+    const repoId = registerRepo(harness);
+    const superwall = harness.state.repos[repoId]?.projectId;
+    const result = bind(harness, taskId, repoId);
+    expect(result.events.find((event) => event.type === 'task.repo_bound')).toMatchObject({
+      projectId: superwall,
+      handle: 'SUP-1',
+    });
+    expect(harness.task(taskId)).toMatchObject({ repoId, projectId: superwall, handle: 'SUP-1' });
+    expect(harness.state.taskNumbers).toEqual({ LOC: 1, SUP: 1 });
+  });
+
+  test('a focus project is kept when the bound repository has no project, or when a later round binds one', () => {
+    const harness = createHarness();
+    harness.send({
+      type: 'project.write',
+      project: { name: 'Local', color: 'blue', key: 'LOC', folders: [] },
+    });
+    const local = Object.keys(harness.state.projects)[0] ?? '';
+    harness.send({ type: 'focus.change', projectId: local, until: null });
+    const first = triagedIn(harness, 'change');
+    bind(harness, first.taskId, registerRepo(harness, 'scratch', null));
+    expect(harness.task(first.taskId)).toMatchObject({ projectId: local, handle: 'LOC-1' });
+    const later = triagedIn(harness, 'answer');
+    harness.send({
+      type: 'agent.deliver',
+      runId: harness.activeRun(later.taskId).id,
+      step: 'answer',
+      body: 'Hi.',
+    });
+    harness.send({
+      type: 'task.message',
+      taskId: later.taskId,
+      text: 'Fix it',
+      kind: 'new_round',
+      shape: 'change',
+    });
+    const repoId = registerRepo(harness);
+    bind(harness, later.taskId, repoId);
+    expect(harness.task(later.taskId)).toMatchObject({ repoId, projectId: local, handle: 'LOC-2' });
+  });
+
   test('a later round that asks for a change binds a repository when it starts', () => {
     const { harness, taskId } = triagedWithout('answer');
     harness.send({ type: 'agent.deliver', runId: harness.activeRun(taskId).id, step: 'answer', body: 'Hi.' });
@@ -310,5 +378,199 @@ describe('a task without a repository', () => {
     bind(harness, taskId, repoId);
     expect(harness.task(taskId).repoId).toBe(repoId);
     expect(harness.lastEffect('worktree.create').taskId).toBe(taskId);
+  });
+});
+
+function registerAt(harness: Harness, name: string, path: string, projectName: string | null) {
+  harness.send({
+    type: 'repo.register',
+    repo: { name, path, defaultBranch: 'main', remote: null, checkCommands: [] },
+    projectName,
+  });
+  return Object.values(harness.state.repos).find((repo) => repo.path === path)?.id ?? '';
+}
+
+function reply(harness: Harness, taskId: string, response: string) {
+  const gate = harness.openGate(taskId);
+  return harness.send({ type: 'gate.answer', gateId: gate.id, decision: 'reply', response });
+}
+
+function triagedInProject(harness: Harness, projectId: string, request = 'Fix the button') {
+  harness.send({ type: 'task.create', request, repoId: null, projectId });
+  const taskId = Object.keys(harness.state.tasks).at(-1) ?? '';
+  harness.send({
+    type: 'task.triage',
+    taskId,
+    title: 'Fix the button',
+    repoId: null,
+    size: 'small',
+    branch: 'fix/button',
+    waitsOn: [],
+    shape: 'change',
+  });
+  return taskId;
+}
+
+describe('asking which repository a task is for', () => {
+  test('with no repository as the only problem, the gate lists every repository to pick from', () => {
+    const { harness, taskId } = triagedWithout('change', 'Fix the button');
+    registerRepo(harness, 'paywall-next');
+    registerRepo(harness, 'kanna', 'Kanna');
+    verifySetup(harness, taskId);
+    const gate = harness.openGate(taskId);
+    expect(gate).toMatchObject({
+      type: 'configuration',
+      title: 'Which repository is this task for?',
+      choices: ['kanna', 'paywall-next'],
+    });
+    expect(gate.body).toContain('Pick one below, or say in a message which repository it is.');
+  });
+
+  test('picking a repository binds it with its project and verifies the setup again', () => {
+    const { harness, taskId } = triagedWithout('change', 'Fix the button');
+    registerRepo(harness, 'paywall-next');
+    const kanna = registerRepo(harness, 'kanna', 'Kanna');
+    verifySetup(harness, taskId);
+    reply(harness, taskId, 'kanna');
+    expect(harness.task(taskId)).toMatchObject({
+      repoId: kanna,
+      projectId: harness.state.repos[kanna]?.projectId,
+      stage: 'triage',
+      stageReason: 'verifying the setup',
+    });
+    expect(harness.effectsOf('config.verify')).toHaveLength(2);
+    verifySetup(harness, taskId);
+    expect(harness.lastEffect('worktree.create').taskId).toBe(taskId);
+  });
+
+  test('a reply that is not one of the repositories is refused, and so is a reply to other problems', () => {
+    const { harness, taskId } = triagedWithout('change', 'Fix the button');
+    registerRepo(harness, 'paywall-next');
+    verifySetup(harness, taskId);
+    expect(() => reply(harness, taskId, 'kanna')).toThrow('Pick one of the repositories listed.');
+    expect(harness.task(taskId).repoId).toBeNull();
+    const other = triaged();
+    verifySetup(other.harness, other.taskId, [MISSING_BRANCH]);
+    expect(other.harness.openGate(other.taskId).choices).toBeUndefined();
+    expect(() => reply(other.harness, other.taskId, 'paywall-next')).toThrow(
+      'Pick one of the repositories listed.'
+    );
+  });
+
+  test('a task in a project picks from its own repositories, or from all when its project has none', () => {
+    const harness = createHarness();
+    registerRepo(harness, 'paywall-next', 'Superwall');
+    registerRepo(harness, 'superwall-ios', 'Superwall');
+    registerRepo(harness, 'kanna', 'Kanna');
+    const superwall = harness.state.repos[registerRepo(harness, 'paywall-next')]?.projectId ?? '';
+    const inSuperwall = triagedInProject(harness, superwall);
+    verifySetup(harness, inSuperwall);
+    expect(harness.openGate(inSuperwall).choices).toEqual(['paywall-next', 'superwall-ios']);
+    harness.send({ type: 'project.write', project: { name: 'Empty', color: 'blue', folders: [] } });
+    const empty = Object.values(harness.state.projects).find((project) => project.name === 'Empty')?.id ?? '';
+    const inEmpty = triagedInProject(harness, empty);
+    verifySetup(harness, inEmpty);
+    expect(harness.openGate(inEmpty).choices).toEqual(['kanna', 'paywall-next', 'superwall-ios']);
+    reply(harness, inEmpty, 'kanna');
+    expect(harness.task(inEmpty).projectId).toBe(empty);
+  });
+
+  test('a chosen project also lists the outside repositories the request names, and a pick moves the task there', () => {
+    const harness = createHarness();
+    const paywall = registerRepo(harness, 'paywall-next', 'Superwall');
+    registerRepo(harness, 'superwall-ios', 'Superwall');
+    const kanna = harness.state.repos[registerRepo(harness, 'kanna', 'Kanna')]?.projectId ?? '';
+    const taskId = triagedInProject(harness, kanna, 'Fix the button in paywall-next');
+    expect(harness.task(taskId).auto.project).toBe(false);
+    verifySetup(harness, taskId);
+    const gate = harness.openGate(taskId);
+    expect(gate.choices).toEqual(['kanna', 'paywall-next (Superwall)']);
+    expect(gate.body).toContain(
+      "The request names paywall-next, outside Kanna. Picking one moves the task to that repository's project."
+    );
+    const handle = harness.task(taskId).handle;
+    const result = reply(harness, taskId, 'paywall-next (Superwall)');
+    const superwall = harness.state.repos[paywall]?.projectId;
+    expect(result.events.find((event) => event.type === 'task.repo_bound')).toMatchObject({
+      repoId: paywall,
+      projectId: superwall,
+      handle: 'SUP-1',
+    });
+    expect(harness.task(taskId)).toMatchObject({ repoId: paywall, projectId: superwall, handle: 'SUP-1' });
+    expect(handle).toMatch(/^KAN/);
+  });
+
+  test('picking a repository of the chosen project keeps the project and the handle', () => {
+    const harness = createHarness();
+    registerRepo(harness, 'paywall-next', 'Superwall');
+    const own = registerRepo(harness, 'kanna', 'Kanna');
+    const kanna = harness.state.repos[own]?.projectId ?? '';
+    const taskId = triagedInProject(harness, kanna, 'Fix the button in paywall-next');
+    const handle = harness.task(taskId).handle;
+    verifySetup(harness, taskId);
+    const result = reply(harness, taskId, 'kanna');
+    expect(result.events.find((event) => event.type === 'task.repo_bound')).toEqual(
+      expect.not.objectContaining({ projectId: expect.anything() })
+    );
+    expect(harness.task(taskId)).toMatchObject({ repoId: own, projectId: kanna, handle });
+  });
+
+  test('named repositories of other projects keep their place among the eight choices, a named one without a project is left out, and without a name none is added', () => {
+    const harness = createHarness();
+    for (const index of [1, 2, 3, 4, 5, 6, 7, 8, 9]) registerRepo(harness, `repo-${index}`, 'Kanna');
+    registerRepo(harness, 'paywall-next', 'Superwall');
+    registerRepo(harness, 'scratch', null);
+    const kanna = harness.state.repos[registerRepo(harness, 'repo-1', 'Kanna')]?.projectId ?? '';
+    const named = triagedInProject(harness, kanna, 'Port repo-1 to paywall-next and scratch');
+    verifySetup(harness, named);
+    expect(harness.openGate(named).choices).toEqual([
+      'repo-1',
+      'repo-2',
+      'repo-3',
+      'repo-4',
+      'repo-5',
+      'repo-6',
+      'repo-7',
+      'paywall-next (Superwall)',
+    ]);
+    expect(harness.openGate(named).body).toContain('The request names paywall-next, outside');
+    expect(harness.openGate(named).body).not.toContain('scratch');
+    const plain = triagedInProject(harness, kanna, 'Fix the button');
+    verifySetup(harness, plain);
+    expect(harness.openGate(plain).choices).not.toContain('paywall-next (Superwall)');
+    expect(harness.openGate(plain).body).not.toContain('The request names');
+  });
+
+  test('repositories with the same name are told apart by project, then by folder', () => {
+    const { harness, taskId } = triagedWithout('change', 'Fix the button');
+    registerAt(harness, 'web', '/code/superwall/web', 'Superwall');
+    registerAt(harness, 'web', '/code/kanna/web', 'Kanna');
+    registerAt(harness, 'app', '/code/a/app', null);
+    registerAt(harness, 'app', '/code/b/app', null);
+    verifySetup(harness, taskId);
+    expect(harness.openGate(taskId).choices).toEqual([
+      'app (/code/a/app)',
+      'app (/code/b/app)',
+      'web (Superwall)',
+      'web (Kanna)',
+    ]);
+    reply(harness, taskId, 'app (/code/b/app)');
+    expect(harness.state.repos[harness.task(taskId).repoId ?? '']?.path).toBe('/code/b/app');
+  });
+
+  test('at most eight repositories are offered', () => {
+    const { harness, taskId } = triagedWithout('change', 'Fix the button');
+    for (const index of [1, 2, 3, 4, 5, 6, 7, 8, 9]) registerRepo(harness, `repo-${index}`);
+    verifySetup(harness, taskId);
+    expect(harness.openGate(taskId).choices).toHaveLength(8);
+  });
+
+  test('another problem besides the missing repository keeps the setup text, with nothing to pick', () => {
+    const { harness, taskId } = triagedWithout('change', 'Fix the button');
+    registerRepo(harness, 'paywall-next');
+    verifySetup(harness, taskId, [MISSING_BRANCH]);
+    const gate = harness.openGate(taskId);
+    expect(gate.title).toBe('The setup has 2 problems');
+    expect(gate.choices).toBeUndefined();
   });
 });

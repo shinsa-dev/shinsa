@@ -72,7 +72,7 @@ function ManualStep({ task, step, index }: { task: Task; step: ManualTestStep; i
       <div className='flex min-w-0 flex-1 flex-col gap-2'>
         <Markdown text={step.action} className={PROSE} />
         <TestTarget task={task} step={step} />
-        <div className='flex flex-col gap-px'>
+        <div className='flex flex-col'>
           <span className={PART_LABEL}>You should see</span>
           <Markdown text={step.expect} className={PROSE} />
         </div>

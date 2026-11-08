@@ -1,6 +1,7 @@
 import {
   isAgentQuestion,
   isDecisionGate,
+  isGateHeld,
   isPausingGate,
   listOpenGates,
   type QueuedGate,
@@ -96,7 +97,9 @@ export function describeTeamEscalation(escalation: TeamEscalation): DecisionNoti
 
 export function listOpenNoticeTags(state: ShinsaState, escalations: readonly TeamEscalation[] = []) {
   return new Set([
-    ...listOpenGates(state).map((gate) => gate.id),
+    ...listOpenGates(state)
+      .filter((gate) => !isGateHeld(state, gate))
+      .map((gate) => gate.id),
     ...escalations.map(resolveTeamEscalationTag),
   ]);
 }

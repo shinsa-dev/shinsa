@@ -57,7 +57,8 @@ static/waiting.html The "Shinsa is not running" page; trayTemplate.png and @2x, 
 resources/          The app icons: icon.svg (the source), icon.png (1024px), icon.icns (electron-builder's `mac.icon`),
                     all written by scripts/icon.ts; the engine's job in LaunchAgents/; app-update.yml, the updater's
                     config the build copies into Contents/Resources (Updates, below)
-scripts/            build.ts (bundles main and preload), dev.ts, icon.ts, dmg-background.ts
+scripts/            build.ts (bundles main and preload), dev.ts, icon.ts, dmg-background.ts, each one Effect program run
+                    with BunRuntime.runMain; kit/ holds what they share (runScriptCommand, readMarkPaths, ScriptStepFailed)
 electron-builder.shared.yml    The build settings; electron-builder.yml extends it with what names the app (its id,
                                scheme, icon and engine job). Every channel builds this one app, so a stable, beta or
                                canary release updates the same Shinsa in place

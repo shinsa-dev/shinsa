@@ -1,21 +1,23 @@
-import { listTerminalPlaces, TERMINAL_LIMITS } from '@shinsa/core';
+import { listTerminalPlaces, resolveScopedTerminals, TERMINAL_LIMITS } from '@shinsa/core';
 import { EngineApi } from '@shinsa/core/engine-api';
 import { RequestFailed, RouteNotFound, ROUTE_NOT_FOUND_MESSAGE } from '@shinsa/core/engine-api/schema';
-import { Effect, Option, Predicate } from 'effect';
+import { Effect, FileSystem, Option, Predicate } from 'effect';
 import { HttpApiBuilder } from 'effect/http-api';
 import { PATH_LIMIT } from '../../../files/schema.ts';
 import { EngineCore } from '../../../runtime/engine/service.ts';
+import { assertFolderPresent } from '../../../terminals/folders.ts';
 import { readOptionalText, readText } from '../../../terminals/input.ts';
 import { resolveTerminalStart } from '../../../terminals/places.ts';
 import { Terminals } from '../../../terminals/service.ts';
 import { requestSync, resolveRequestFailure } from '../../failures.ts';
-import { PROJECT_GONE, PROJECT_ID_LIMIT } from '../../schema.ts';
+import { PROJECT_GONE, PROJECT_ID_LIMIT, RequestSource } from '../../schema.ts';
 
 export const TerminalsHandlers = HttpApiBuilder.group(
   EngineApi,
   'terminals',
   Effect.fn('TerminalsHandlers')(function* (handlers) {
     const engine = yield* EngineCore;
+    const withFiles = Effect.provideService(FileSystem.FileSystem, yield* FileSystem.FileSystem);
     const given = Option.getOrUndefined(yield* Effect.serviceOption(Terminals));
     const terminals = given
       ? Effect.succeed(given)
@@ -25,7 +27,15 @@ export const TerminalsHandlers = HttpApiBuilder.group(
       Effect.flatMap(terminals, (found) => Effect.andThen(request(run(found)), found.snapshot));
 
     return handlers
-      .handle('list', () => Effect.flatMap(terminals, (found) => found.snapshot))
+      .handle(
+        'list',
+        Effect.fn('TerminalsHandlers.list')(function* () {
+          const snapshot = yield* (yield* terminals).snapshot;
+          const { guest } = yield* RequestSource;
+          if (!guest) return snapshot;
+          return resolveScopedTerminals(yield* engine.state, guest.scope, snapshot);
+        })
+      )
       .handle('foreground', ({ params }) =>
         Effect.flatMap(terminals, (found) => request(found.readForeground(params.terminalId)))
       )
@@ -42,6 +52,7 @@ export const TerminalsHandlers = HttpApiBuilder.group(
             const places = listTerminalPlaces(state, projectId);
             return { start: resolveTerminalStart(places, projectId, path, found.home), command: typed };
           });
+          yield* request(withFiles(assertFolderPresent(start.cwd)));
           const terminal = yield* request(found.create(start));
           if (command) yield* request(found.run(terminal.id, command));
           return { terminal, ...(yield* found.snapshot) };

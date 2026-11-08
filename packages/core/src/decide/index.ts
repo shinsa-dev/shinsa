@@ -77,10 +77,12 @@ import {
   sendQueuedRound,
 } from './messages.ts';
 import { checkInNow, fireMonitor, waitFor } from './monitors.ts';
+import { moveToRepository } from './moves.ts';
 import { recordOnBehalfAction } from './on-behalf.ts';
 import { recordWelcome } from './onboarding.ts';
 import { applyOrchestration } from './orchestration.ts';
 import { recordOverlaps } from './overlaps.ts';
+import { pauseTask } from './pause.ts';
 import { recordAway } from './presence.ts';
 import {
   recordBundleCheck,
@@ -180,6 +182,7 @@ export type { DecideContext, Decision } from './decider.ts';
 export { describeFeedbackLeaks } from './feedback.ts';
 export { type MessageEffect, needsMessageKind, resolveMessageEffect } from './messages.ts';
 export { type RoundRelease, resolveRoundRelease } from './rounds.ts';
+export { isTaskPausable, PAUSED_TITLE } from './pause.ts';
 export { assertRunTool } from './runs.ts';
 export {
   CI_GRACE_MS,
@@ -238,6 +241,8 @@ function apply(decider: Decider, command: ShinsaCommand) {
       return clearDuplicate(decider, command);
     case 'task.complete':
       return completeTask(decider, command);
+    case 'task.pause':
+      return pauseTask(decider, command);
     case 'task.retry':
       return retryTaskCommand(decider, command);
     case 'task.message':
@@ -364,6 +369,8 @@ function apply(decider: Decider, command: ShinsaCommand) {
       return readyWorktree(decider, command);
     case 'worktree.gone':
       return removeWorktree(decider, command);
+    case 'agent.move_to_repository':
+      return moveToRepository(decider, command);
     case 'task.record_edit':
       return recordEdit(decider, command);
     case 'task.commit_edits':

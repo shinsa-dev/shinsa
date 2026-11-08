@@ -10,6 +10,7 @@ import {
   SLACK_MODAL_CALLBACK,
   SLACK_RELAY_PATHS,
   SLACK_RESPONSE_INPUT,
+  SLACK_VIEW_LIMITS,
   SLACK_WRITE_ACTION,
   type SlackLinks,
   type SlackMention,
@@ -51,21 +52,21 @@ function createFakeSlack(harness: Harness): FakeSlack {
   const calls: SlackCall[] = [];
   let posted = 0;
   const answers: Record<string, (body: Fields) => Fields> = {
-    'openid.connect.token': () => ({ ok: true, access_token: 'xoxp-user' }),
-    'openid.connect.userInfo': () => ({
-      ok: true,
-      'https://slack.com/team_id': 'T1',
-      'https://slack.com/user_id': 'U1',
-      'https://slack.com/team_name': 'Acme',
-      name: 'Christo T',
-    }),
-    'oauth.v2.access': () => ({
-      ok: true,
-      access_token: 'xoxb-bot-token',
-      bot_user_id: 'B0T',
-      team: { id: 'T1', name: 'Acme' },
-      authed_user: { id: 'U1' },
-    }),
+    'oauth.v2.access': (body) =>
+      body.code === 'connect'
+        ? {
+            ok: true,
+            team: { id: 'T1', name: 'Acme' },
+            authed_user: { id: 'U1', access_token: 'xoxp-user-1' },
+          }
+        : {
+            ok: true,
+            access_token: 'xoxb-bot-token',
+            bot_user_id: 'B0T',
+            team: { id: 'T1', name: 'Acme' },
+            authed_user: { id: 'U1', access_token: 'xoxp-user-1' },
+          },
+    'auth.revoke': () => ({ ok: true, revoked: true }),
     'users.info': (body) => {
       if (body.user === 'U5') return { ok: true, user: { name: 'sam', profile: { real_name: 'Sam Real' } } };
       if (body.user === 'U6') return { ok: true, user: { name: 'kit', profile: {} } };
@@ -110,10 +111,24 @@ function createFakeSlack(harness: Harness): FakeSlack {
   return { calls, answers, callsTo: (method) => calls.filter((call) => call.method === method) };
 }
 
-async function bringOnline(harness: Harness, machine: MachineCredentials) {
+function answerConnectAs(slack: FakeSlack, userId: string, token: string) {
+  const install = slack.answers['oauth.v2.access'];
+  slack.answers['oauth.v2.access'] = (body) =>
+    body.code === 'connect'
+      ? { ok: true, team: { id: 'T1', name: 'Acme' }, authed_user: { id: userId, access_token: token } }
+      : (install?.(body) ?? {});
+}
+
+function sealedUserTokens(harness: Harness) {
+  return harness.db.sqlite
+    .query('SELECT slack_user_id, sealed_user_token FROM slack_links ORDER BY slack_user_id')
+    .all() as { slack_user_id: string; sealed_user_token: string | null }[];
+}
+
+async function bringOnline(harness: Harness, machine: MachineCredentials, features: string[] = []) {
   await harness.post(
     REMOTE_PATHS.heartbeat,
-    { localUrl: 'http://127.0.0.1:7446' },
+    { localUrl: 'http://127.0.0.1:7446', features },
     { bearer: machine.machineToken }
   );
 }
@@ -148,7 +163,7 @@ async function connectSlack(harness: Harness, session: string, instanceId: strin
     session,
     start,
     SLACK_RELAY_PATHS.connectCallback,
-    'oidc'
+    'connect'
   );
   if (readLocation(identified).hostname !== 'slack.com') return identified;
   return followAuthorize(harness, session, identified, SLACK_RELAY_PATHS.installCallback, 'install');
@@ -280,8 +295,11 @@ describe('connecting Slack to a machine', () => {
       session,
     });
     const authorize = readLocation(start);
-    expect(authorize.origin + authorize.pathname).toBe('https://slack.com/openid/connect/authorize');
-    expect(authorize.searchParams.get('scope')).toBe('openid profile');
+    expect(authorize.origin + authorize.pathname).toBe('https://slack.com/oauth/v2/authorize');
+    expect(authorize.searchParams.get('scope')).toBeNull();
+    expect(authorize.searchParams.get('user_scope')).toBe(
+      'channels:history,groups:history,channels:read,groups:read'
+    );
     expect(authorize.searchParams.get('redirect_uri')).toBe(
       `${TEST_CONFIG.origin}${SLACK_RELAY_PATHS.connectCallback}`
     );
@@ -290,7 +308,7 @@ describe('connecting Slack to a machine', () => {
       session,
       start,
       SLACK_RELAY_PATHS.connectCallback,
-      'oidc'
+      'connect'
     );
     const install = readLocation(identified);
     expect(install.origin + install.pathname).toBe('https://slack.com/oauth/v2/authorize');
@@ -298,6 +316,7 @@ describe('connecting Slack to a machine', () => {
     expect(install.searchParams.get('scope')).toBe(
       'app_mentions:read,channels:history,channels:read,groups:history,groups:read,chat:write,reactions:write,users:read'
     );
+    expect(install.searchParams.get('user_scope')).toBe(authorize.searchParams.get('user_scope'));
     const linked = await followAuthorize(
       harness,
       session,
@@ -307,11 +326,19 @@ describe('connecting Slack to a machine', () => {
     );
     expect(linked.headers.get('location')).toBe('/slack/linked?team=Acme');
     expect(readSetCookie(linked, '__Host-shinsa_slack')).toBe('__Host-shinsa_slack=');
-    expect(slack.callsTo('oauth.v2.access')[0]?.body.client_secret).toBe(TEST_CONFIG.slackClientSecret);
-    const stored = harness.db.sqlite.query('SELECT bot_token FROM slack_workspaces').get() as {
-      bot_token: string;
+    expect(slack.callsTo('oauth.v2.access').map((call) => call.body.client_secret)).toEqual([
+      TEST_CONFIG.slackClientSecret,
+      TEST_CONFIG.slackClientSecret,
+    ]);
+    const stored = harness.db.sqlite.query('SELECT sealed_bot_token FROM slack_workspaces').get() as {
+      sealed_bot_token: string;
     };
-    expect(stored.bot_token).not.toContain('xoxb');
+    expect(stored.sealed_bot_token).not.toContain('xoxb');
+    const [userToken] = sealedUserTokens(harness);
+    expect(userToken?.slack_user_id).toBe('U1');
+    expect(userToken?.sealed_user_token).not.toBeNull();
+    expect(userToken?.sealed_user_token).not.toContain('xoxp');
+    expect(slack.callsTo('auth.revoke')).toEqual([]);
     const links = await readJson<SlackLinks>(
       await harness.call(SLACK_RELAY_PATHS.links, {
         headers: { authorization: `Bearer ${machine.machineToken}` },
@@ -324,23 +351,39 @@ describe('connecting Slack to a machine', () => {
 
   test('a teammate in a workspace that has the app links without adding it again, to their own machine', async () => {
     const { harness, slack } = await setUp();
-    slack.answers['openid.connect.userInfo'] = () => ({
-      ok: true,
-      'https://slack.com/team_id': 'T1',
-      'https://slack.com/user_id': 'U2',
-      name: 'Mia',
-    });
+    answerConnectAs(slack, 'U2', 'xoxp-user-2');
     const mia = await harness.signIn('mia', 7);
     const laptop = await pairMachine(harness, mia, 'Laptop');
     const linked = await connectSlack(harness, mia, laptop.instanceId);
     expect(linked.headers.get('location')).toBe('/slack/linked?team=Acme');
-    expect(slack.callsTo('oauth.v2.access')).toHaveLength(1);
+    expect(slack.callsTo('oauth.v2.access').filter((call) => call.body.code === 'install')).toHaveLength(1);
+    expect(slack.callsTo('users.info').at(-1)).toMatchObject({
+      token: 'xoxb-bot-token',
+      body: { user: 'U2' },
+    });
+    expect(sealedUserTokens(harness).map((row) => row.sealed_user_token === null)).toEqual([false, false]);
     const links = await readJson<SlackLinks>(
       await harness.call(SLACK_RELAY_PATHS.links, {
         headers: { authorization: `Bearer ${laptop.machineToken}` },
       })
     );
     expect(links.links.map((link) => [link.userId, link.userName])).toEqual([['U2', 'Mia']]);
+  });
+
+  test('names someone by their Slack user id when Slack will not say their name', async () => {
+    const { harness, slack } = await setUp();
+    answerConnectAs(slack, 'U9', 'xoxp-user-9');
+    const mia = await harness.signIn('mia', 7);
+    const laptop = await pairMachine(harness, mia, 'Laptop');
+    expect((await connectSlack(harness, mia, laptop.instanceId)).headers.get('location')).toBe(
+      '/slack/linked?team=Acme'
+    );
+    const links = await readJson<SlackLinks>(
+      await harness.call(SLACK_RELAY_PATHS.links, {
+        headers: { authorization: `Bearer ${laptop.machineToken}` },
+      })
+    );
+    expect(links.links.map((link) => [link.userId, link.userName])).toEqual([['U9', 'U9']]);
   });
 
   test('adds the app again when its bot token lacks a scope the relay now asks for', async () => {
@@ -354,7 +397,7 @@ describe('connecting Slack to a machine', () => {
       session,
       start,
       SLACK_RELAY_PATHS.connectCallback,
-      'oidc'
+      'connect'
     );
     expect(readLocation(identified).pathname).toBe('/oauth/v2/authorize');
     expect(readLocation(identified).searchParams.get('scope')).toContain('reactions:write');
@@ -365,7 +408,7 @@ describe('connecting Slack to a machine', () => {
     expect((await connectSlack(harness, session, machine.instanceId)).headers.get('location')).toBe(
       '/slack/linked?team=Acme'
     );
-    expect(slack.callsTo('oauth.v2.access')).toHaveLength(1);
+    expect(slack.callsTo('oauth.v2.access').filter((call) => call.body.code === 'install')).toHaveLength(1);
     harness.handlers.unshift((call) =>
       call.url.endsWith('/api/auth.test')
         ? Promise.reject(new Error('offline'))
@@ -374,6 +417,23 @@ describe('connecting Slack to a machine', () => {
     expect((await connectSlack(harness, session, machine.instanceId)).headers.get('location')).toBe(
       '/slack/linked?team=Acme'
     );
+  });
+
+  test('connecting again keeps a token Slack hands back unchanged, and revokes one it replaced', async () => {
+    const { harness, session, machine, slack } = await setUp();
+    const before = sealedUserTokens(harness);
+    await connectSlack(harness, session, machine.instanceId);
+    expect(slack.callsTo('auth.revoke')).toEqual([]);
+    expect(sealedUserTokens(harness)).toHaveLength(1);
+    expect(sealedUserTokens(harness)[0]?.sealed_user_token).not.toBe(before[0]?.sealed_user_token);
+    answerConnectAs(slack, 'U1', 'xoxp-user-1b');
+    await connectSlack(harness, session, machine.instanceId);
+    expect(slack.callsTo('auth.revoke').map((call) => call.token)).toEqual(['xoxp-user-1']);
+    answerConnectAs(slack, 'U1', 'xoxp-user-1c');
+    slack.answers['auth.revoke'] = () => ({ ok: false, error: 'ratelimited' });
+    const linked = await connectSlack(harness, session, machine.instanceId);
+    expect(linked.headers.get('location')).toBe('/slack/linked?team=Acme');
+    expect(slack.callsTo('auth.revoke').map((call) => call.token)).toEqual(['xoxp-user-1', 'xoxp-user-1b']);
   });
 
   test('without a machine named it links the one seen last, and says so when there is none', async () => {
@@ -432,19 +492,22 @@ describe('connecting Slack to a machine', () => {
     });
     expect(reasonOf(signedOut)).toBe('signed_out');
 
-    slack.answers['openid.connect.token'] = () => ({ ok: false, error: 'invalid_code' });
-    expect(
-      reasonOf(await followAuthorize(harness, session, await begin(), SLACK_RELAY_PATHS.connectCallback, 'c'))
-    ).toBe('slack_failed');
-    slack.answers['openid.connect.token'] = () => ({ ok: true });
-    expect(
-      reasonOf(await followAuthorize(harness, session, await begin(), SLACK_RELAY_PATHS.connectCallback, 'c'))
-    ).toBe('slack_failed');
-    slack.answers['openid.connect.token'] = () => ({ ok: true, access_token: 'xoxp' });
-    slack.answers['openid.connect.userInfo'] = () => ({ ok: true });
-    expect(
-      reasonOf(await followAuthorize(harness, session, await begin(), SLACK_RELAY_PATHS.connectCallback, 'c'))
-    ).toBe('slack_failed');
+    const refusedWith = async (answer: Fields) => {
+      slack.answers['oauth.v2.access'] = () => answer;
+      return reasonOf(
+        await followAuthorize(harness, session, await begin(), SLACK_RELAY_PATHS.connectCallback, 'connect')
+      );
+    };
+    expect(await refusedWith({ ok: false, error: 'invalid_code' })).toBe('slack_failed');
+    expect(await refusedWith({ ok: true, team: { id: 'T1' }, authed_user: { id: 'U1' } })).toBe(
+      'slack_failed'
+    );
+    expect(await refusedWith({ ok: true, authed_user: { id: 'U1', access_token: 'xoxp' } })).toBe(
+      'slack_failed'
+    );
+    expect(await refusedWith({ ok: true, team: { id: 'T1' }, authed_user: { access_token: 'xoxp' } })).toBe(
+      'slack_failed'
+    );
   });
 
   test('an install Slack answers without a bot is refused, and an unreadable store fails as a server error', async () => {
@@ -452,7 +515,11 @@ describe('connecting Slack to a machine', () => {
     const slack = createFakeSlack(harness);
     const session = await harness.signIn();
     const machine = await pairMachine(harness, session);
-    slack.answers['oauth.v2.access'] = () => ({ ok: true, team: { id: 'T1' }, authed_user: { id: 'U1' } });
+    slack.answers['oauth.v2.access'] = () => ({
+      ok: true,
+      team: { id: 'T1' },
+      authed_user: { id: 'U1', access_token: 'xoxp' },
+    });
     const refused = await connectSlack(harness, session, machine.instanceId);
     expect(refused.headers.get('location')).toBe('/slack/linked?error=slack_failed');
 
@@ -461,7 +528,7 @@ describe('connecting Slack to a machine', () => {
       access_token: 'xoxb',
       bot_user_id: 'B0T',
       team: { id: 'T1' },
-      authed_user: { id: 'U9' },
+      authed_user: { id: 'U9', access_token: 'xoxp' },
     });
     harness.world.config.slackTokenKey = 'short';
     const broken = await connectSlack(harness, session, machine.instanceId);
@@ -523,13 +590,16 @@ describe('events from Slack', () => {
     expect(forwards).toHaveLength(1);
   });
 
-  test('a revoked bot token forgets the workspace and every link in it; a revoked user token alone keeps it', async () => {
-    const { harness } = await setUp();
+  test('a revoked bot token forgets the workspace and every link in it; a revoked user token alone drops only that token', async () => {
+    const { harness, slack } = await setUp();
     const count = () =>
       harness.db.sqlite.query('SELECT COUNT(*) AS n FROM slack_links').get() as { n: number };
-    await sendEvent(harness, mentionEnvelope({ type: 'tokens_revoked', tokens: { oauth: ['U1'] } }));
     await sendEvent(harness, mentionEnvelope({ type: 'tokens_revoked' }));
+    expect(sealedUserTokens(harness)[0]?.sealed_user_token).not.toBeNull();
+    await sendEvent(harness, mentionEnvelope({ type: 'tokens_revoked', tokens: { oauth: ['U1'] } }));
     expect(count().n).toBe(1);
+    expect(sealedUserTokens(harness)).toEqual([{ slack_user_id: 'U1', sealed_user_token: null }]);
+    expect(slack.callsTo('auth.revoke')).toHaveLength(0);
     await sendEvent(harness, mentionEnvelope({ type: 'tokens_revoked', tokens: { bot: ['B0T'] } }));
     expect(count().n).toBe(0);
   });
@@ -625,6 +695,157 @@ describe('a mention from someone', () => {
     ]);
   });
 
+  test('in a thread reads a bot report from its blocks and attachments, not its preview text', async () => {
+    const { harness, slack, forwards } = await setUp();
+    const report = {
+      ts: '90.2',
+      bot_id: 'BS',
+      bot_profile: { name: 'Superwall CLI' },
+      text: 'feedback: BUG: Android sw-auto selects wrong offer token. On Android, when a paywall product uses sw-a',
+      blocks: [
+        {
+          type: 'header',
+          text: { type: 'plain_text', text: 'BUG: Android sw-auto selects wrong offer token' },
+        },
+        { type: 'divider' },
+        {
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: 'On Android, when a paywall product uses sw-auto on a base plan that is not current, the 2023 plan is billed.',
+          },
+          fields: [{ type: 'mrkdwn', text: '*App* Audiomack' }, 'noise'],
+        },
+        { type: 'markdown', text: '**Expected** the 2026 plan.' },
+        {
+          type: 'context',
+          elements: [
+            { type: 'mrkdwn', text: 'Reported by' },
+            { type: 'image', image_url: 'https://x.test/a.png' },
+            { type: 'user', user_id: 'U2' },
+          ],
+        },
+        {
+          type: 'rich_text',
+          elements: [
+            {
+              type: 'rich_text_section',
+              elements: [
+                { type: 'text', text: 'Steps from ' },
+                { type: 'user', user_id: 'U2' },
+                { type: 'text', text: ' in ' },
+                { type: 'channel', channel_id: 'C9' },
+                { type: 'text', text: ' for ' },
+                { type: 'usergroup', usergroup_id: 'S1' },
+                { type: 'text', text: ' and ' },
+                { type: 'broadcast', range: 'here' },
+                { type: 'emoji', name: 'bug' },
+                { type: 'link', url: 'https://docs.test/a', text: 'docs' },
+                { type: 'link', url: 'https://docs.test/b' },
+                { type: 'link', text: 'no address' },
+                { type: 'user' },
+                { type: 'channel' },
+                { type: 'usergroup' },
+                { type: 'broadcast' },
+                { type: 'emoji' },
+                { type: 'color' },
+              ],
+            },
+            {
+              type: 'rich_text_list',
+              style: 'ordered',
+              elements: [
+                { type: 'rich_text_section', elements: [{ type: 'text', text: 'Open the paywall' }] },
+                { type: 'rich_text_section', elements: [{ type: 'text', text: 'Buy' }] },
+              ],
+            },
+            {
+              type: 'rich_text_list',
+              style: 'bullet',
+              elements: [{ type: 'rich_text_section', elements: [{ type: 'text', text: 'on Pixel 8' }] }],
+            },
+            { type: 'rich_text_preformatted', elements: [{ type: 'text', text: 'basePlan=audiomack-2023' }] },
+            { type: 'rich_text_quote', elements: [{ type: 'text', text: 'first line\nsecond line' }] },
+            { type: 'rich_text_section' },
+          ],
+        },
+        { type: 'section', text: 42 },
+        'noise',
+      ],
+      attachments: [
+        {
+          pretext: 'Logs',
+          title: 'Device',
+          text: 'Pixel 8, Android 15',
+          fields: [{ title: 'SDK', value: '2.3.0' }, { title: 'Store' }, 7],
+          blocks: [{ type: 'section', text: { type: 'mrkdwn', text: 'Attached block' } }],
+        },
+        { fallback: 'Only the fallback' },
+        { fallback: '  ' },
+        {},
+        'noise',
+      ],
+    };
+    slack.answers['conversations.replies'] = () => ({
+      ok: true,
+      messages: [
+        report,
+        {
+          ts: '90.3',
+          user: 'U2',
+          text: 'same on <@U2> side',
+          blocks: [
+            {
+              type: 'rich_text',
+              elements: [
+                {
+                  type: 'rich_text_section',
+                  elements: [
+                    { type: 'text', text: 'same on ' },
+                    { type: 'user', user_id: 'U2' },
+                    { type: 'text', text: ' side' },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+        { ts: '90.4', bot_id: 'BA', username: 'Alerts', attachments: [{ fallback: 'Disk full on db-1' }] },
+        {
+          ts: '90.5',
+          user: 'B0T',
+          bot_id: 'BSH',
+          bot_profile: { name: 'Shinsa' },
+          text: 'The parser drops blocks.',
+          blocks: [
+            { type: 'header', text: { type: 'plain_text', text: 'Result' } },
+            { type: 'section', text: { type: 'mrkdwn', text: 'x'.repeat(2800) } },
+          ],
+        },
+      ],
+    });
+    await sendEvent(harness, mentionEnvelope({ ts: '90.9', thread_ts: '90.2' }));
+    const mention = JSON.parse(forwards[0]?.body ?? '') as SlackMention;
+    expect(mention.thread.map((message) => [message.userName, message.text])).toEqual([
+      [
+        'Superwall CLI',
+        [
+          'BUG: Android sw-auto selects wrong offer token',
+          'On Android, when a paywall product uses sw-auto on a base plan that is not current, the 2023 plan is billed.\n*App* Audiomack',
+          '**Expected** the 2026 plan.',
+          'Reported by @Mia',
+          'Steps from @Mia in <#C9> for <!subteam^S1> and @here:bug:docs (https://docs.test/a)https://docs.test/bno address\n1. Open the paywall\n2. Buy\n• on Pixel 8\n```\nbasePlan=audiomack-2023\n```\n> first line\n> second line',
+          'Logs\nDevice\nPixel 8, Android 15\nSDK: 2.3.0\nStore\nAttached block',
+          'Only the fallback',
+        ].join('\n\n'),
+      ],
+      ['Mia', 'same on @Mia side'],
+      ['Alerts', 'Disk full on db-1'],
+      ['Shinsa', 'The parser drops blocks.'],
+      ['Christo', 'the build hangs'],
+    ]);
+  });
+
   test('in a thread Slack will not show still carries their own message', async () => {
     const { harness, slack, forwards } = await setUp();
     slack.answers['conversations.replies'] = () => ({ ok: false, error: 'not_in_channel' });
@@ -699,6 +920,207 @@ describe('a mention from someone', () => {
   });
 });
 
+const CUSTOMER_LINK =
+  '<https://acme.slack.com/archives/C9/p1700000000000200?thread_ts=1700000000.000100&amp;cid=C9|the customer thread>';
+const OPS_LINK = '<https://acme.slack.com/archives/G8/p1700000000000300>';
+
+function linkingMention(text: string, event: Fields = {}) {
+  return mentionEnvelope({ ts: '1700000001.000001', text: `<@B0T> look at ${text}`, ...event });
+}
+
+function answerRepliesByToken(slack: FakeSlack, refused: Record<string, string> = {}) {
+  slack.answers['conversations.replies'] = (body) => {
+    const error = refused[String(body.channel)];
+    if (error) return { ok: false, error };
+    return {
+      ok: true,
+      messages: [
+        { ts: String(body.ts), user: 'U2', text: `Opened in <#${String(body.channel)}|ops>` },
+        {
+          ts: '1700000000.000900',
+          bot_id: 'BX',
+          bot_profile: { name: 'Intercom' },
+          text: 'Customer replied',
+        },
+      ],
+    };
+  };
+  slack.answers['conversations.info'] = (body) => ({
+    ok: true,
+    channel: { id: body.channel, name: body.channel === 'C1' ? 'support' : `shared-${String(body.channel)}` },
+  });
+}
+
+async function setUpLinking() {
+  const setup = await setUp();
+  await bringOnline(setup.harness, setup.machine, ['slack-linked-threads']);
+  answerRepliesByToken(setup.slack);
+  return setup;
+}
+
+const UNOPENABLE_TOKEN = 'A'.repeat(64);
+
+function readForward(forwards: Setup['forwards'], index = 0) {
+  return JSON.parse(forwards[index]?.body ?? '') as SlackMention;
+}
+
+describe('a mention that links to other threads', () => {
+  test('reads each linked thread with the mentioner’s own token and forwards it beside their own', async () => {
+    const { harness, slack, forwards } = await setUpLinking();
+    await sendEvent(harness, linkingMention(`${CUSTOMER_LINK} and ${OPS_LINK}`));
+    const linkedReads = slack.callsTo('conversations.replies');
+    expect(linkedReads.map((call) => [call.body.channel, call.body.ts, call.token])).toEqual([
+      ['C9', '1700000000.000100', 'xoxp-user-1'],
+      ['G8', '1700000000.000300', 'xoxp-user-1'],
+    ]);
+    expect(slack.callsTo('conversations.info').map((call) => [call.body.channel, call.token])).toEqual([
+      ['C9', 'xoxp-user-1'],
+      ['G8', 'xoxp-user-1'],
+      ['C1', 'xoxb-bot-token'],
+    ]);
+    const mention = readForward(forwards);
+    expect(mention.linkedThreads).toEqual([
+      {
+        channelId: 'C9',
+        threadTs: '1700000000.000100',
+        permalink:
+          'https://acme.slack.com/archives/C9/p1700000000000200?thread_ts=1700000000.000100&amp;cid=C9',
+        channelName: 'shared-C9',
+        thread: [
+          { ts: '1700000000.000100', userId: 'U2', userName: 'Mia', text: 'Opened in #ops', bot: false },
+          {
+            ts: '1700000000.000900',
+            userId: 'BX',
+            userName: 'Intercom',
+            text: 'Customer replied',
+            bot: true,
+          },
+        ],
+      },
+      {
+        channelId: 'G8',
+        threadTs: '1700000000.000300',
+        permalink: 'https://acme.slack.com/archives/G8/p1700000000000300',
+        channelName: 'shared-G8',
+        thread: [
+          { ts: '1700000000.000300', userId: 'U2', userName: 'Mia', text: 'Opened in #ops', bot: false },
+          {
+            ts: '1700000000.000900',
+            userId: 'BX',
+            userName: 'Intercom',
+            text: 'Customer replied',
+            bot: true,
+          },
+        ],
+      },
+    ]);
+    expect(slack.callsTo('chat.postEphemeral')).toHaveLength(0);
+  });
+
+  test('reads at most three, and skips a link to the thread it was mentioned in', async () => {
+    const { harness, slack, forwards } = await setUpLinking();
+    const links = ['C2', 'C3', 'C4', 'C5'].map(
+      (channel) => `<https://acme.slack.com/archives/${channel}/p1700000000000400>`
+    );
+    const own = '<https://acme.slack.com/archives/C1/p1700000001000001>';
+    await sendEvent(harness, linkingMention([own, ...links].join(' ')));
+    expect(slack.callsTo('conversations.replies').map((call) => call.body.channel)).toEqual(['C2', 'C3']);
+    expect(readForward(forwards).linkedThreads).toHaveLength(2);
+  });
+
+  test('never falls back to the bot’s token, and says privately which links it could not read', async () => {
+    const { harness, slack, forwards } = await setUpLinking();
+    const warnings = spyOn(console, 'warn').mockImplementation(() => undefined);
+    answerRepliesByToken(slack, { C9: 'not_in_channel' });
+    await sendEvent(harness, linkingMention(`${CUSTOMER_LINK} and ${OPS_LINK}`));
+    expect(warnings).toHaveBeenCalledWith(
+      '[Cloud] A linked Slack thread could not be read',
+      expect.objectContaining({ code: 'not_in_channel', teamId: 'T1' })
+    );
+    warnings.mockRestore();
+    expect(failures).not.toHaveBeenCalled();
+    expect(slack.callsTo('conversations.replies').every((call) => call.token === 'xoxp-user-1')).toBe(true);
+    expect(readForward(forwards).linkedThreads.map((thread) => thread.channelId)).toEqual(['G8']);
+    const [ephemeral] = slack.callsTo('chat.postEphemeral');
+    expect(ephemeral?.token).toBe('xoxb-bot-token');
+    expect(ephemeral?.body).toMatchObject({
+      channel: 'C1',
+      user: 'U1',
+      thread_ts: '1700000001.000001',
+      text: 'I could not read the thread you linked. Check that you can open it in Slack.',
+    });
+    answerRepliesByToken(slack, { C9: 'channel_not_found', G8: 'thread_not_found' });
+    await sendEvent(harness, linkingMention(`${CUSTOMER_LINK} and ${OPS_LINK}`));
+    expect(slack.callsTo('chat.postEphemeral')[1]?.body.text).toBe(
+      'I could not read 2 of the threads you linked. Check that you can open them in Slack.'
+    );
+    expect(readForward(forwards, 1).linkedThreads).toEqual([]);
+  });
+
+  test('asks to connect again when the person has no token yet, or Slack refuses the one kept', async () => {
+    const { harness, slack, forwards } = await setUpLinking();
+    answerRepliesByToken(slack, { C9: 'missing_scope' });
+    await sendEvent(harness, linkingMention(`${CUSTOMER_LINK} and ${OPS_LINK}`));
+    const [refused] = slack.callsTo('chat.postEphemeral');
+    expect(refused?.body.text).toBe('Connect Slack again so I can read the threads you link.');
+    expect(failures).toHaveBeenCalledWith(
+      '[Cloud] A linked Slack thread could not be read',
+      expect.objectContaining({ code: 'missing_scope', teamId: 'T1' })
+    );
+    expect(JSON.stringify(refused?.body.blocks)).toContain(`${TEST_CONFIG.origin}/slack/connect`);
+    harness.db.sqlite.query('UPDATE slack_links SET sealed_user_token = NULL').run();
+    const reads = slack.callsTo('conversations.replies').length;
+    await sendEvent(harness, linkingMention(CUSTOMER_LINK));
+    expect(slack.callsTo('conversations.replies')).toHaveLength(reads);
+    expect(slack.callsTo('chat.postEphemeral')[1]?.body.text).toBe(
+      'Connect Slack again so I can read the threads you link.'
+    );
+    expect(readForward(forwards, 1).linkedThreads).toEqual([]);
+  });
+
+  test('asks to connect again, and still forwards the mention, when the kept token no longer opens', async () => {
+    const { harness, session, machine, slack, forwards } = await setUpLinking();
+    const warnings = spyOn(console, 'warn').mockImplementation(() => undefined);
+    harness.db.sqlite.query('UPDATE slack_links SET sealed_user_token = ?').run(UNOPENABLE_TOKEN);
+    await sendEvent(harness, linkingMention(CUSTOMER_LINK));
+    expect(slack.callsTo('conversations.replies')).toHaveLength(0);
+    expect(readForward(forwards).linkedThreads).toEqual([]);
+    expect(slack.callsTo('chat.postEphemeral')[0]?.body.text).toBe(
+      'Connect Slack again so I can read the threads you link.'
+    );
+    expect(warnings).toHaveBeenCalledWith(
+      '[Cloud] A stored Slack user token does not open',
+      expect.anything()
+    );
+    warnings.mockRestore();
+    const linked = await connectSlack(harness, session, machine.instanceId);
+    expect(linked.headers.get('location')).toBe('/slack/linked?team=Acme');
+    expect(slack.callsTo('auth.revoke')).toEqual([]);
+    expect(sealedUserTokens(harness)[0]?.sealed_user_token).not.toBe(UNOPENABLE_TOKEN);
+  });
+
+  test('reads nothing linked for a machine that does not take linked threads, and asks nothing', async () => {
+    const { harness, machine, slack, forwards } = await setUpLinking();
+    await bringOnline(harness, machine);
+    await sendEvent(harness, linkingMention(CUSTOMER_LINK));
+    expect(slack.callsTo('conversations.replies')).toHaveLength(0);
+    expect(readForward(forwards).linkedThreads).toEqual([]);
+    expect(slack.callsTo('chat.postEphemeral')).toHaveLength(0);
+  });
+
+  test('from someone outside the workspace, such as a customer in a shared channel, gets no reply at all', async () => {
+    const { harness, slack, forwards } = await setUpLinking();
+    await sendEvent(harness, linkingMention(CUSTOMER_LINK, { user: 'U3', user_team: 'T9' }));
+    await sendEvent(harness, linkingMention(CUSTOMER_LINK, { user_team: 'T9' }));
+    expect(forwards).toHaveLength(0);
+    expect(
+      slack.calls.filter((call) => call.method !== 'oauth.v2.access' && call.method !== 'users.info')
+    ).toEqual([]);
+    await sendEvent(harness, linkingMention(CUSTOMER_LINK, { user_team: 'T1' }));
+    expect(forwards).toHaveLength(1);
+  });
+});
+
 describe('what a machine does through the relay', () => {
   async function forwardedSetup() {
     const setup = await setUp();
@@ -758,6 +1180,12 @@ describe('what a machine does through the relay', () => {
     const blocks = await post(POST);
     expect(blocks.status).toBe(422);
     expect((await readJson<{ error: { code: string } }>(blocks)).error.code).toBe('slack_blocks_refused');
+    slack.answers['chat.postMessage'] = () => ({ ok: false, error: 'msg_blocks_too_long' });
+    expect((await post(POST)).status).toBe(422);
+    expect(failures).toHaveBeenCalledWith('[Cloud] Slack did not take a post', {
+      error: expect.objectContaining({ code: 'msg_blocks_too_long' }),
+      code: 'msg_blocks_too_long',
+    });
     slack.answers['chat.postMessage'] = () => ({ ok: true });
     expect((await post(POST)).status).toBe(502);
     harness.handlers.unshift((call) => {
@@ -788,6 +1216,44 @@ describe('what a machine does through the relay', () => {
     expect(links.links).toEqual([]);
     await sendEvent(harness, mentionEnvelope());
     expect(slack.callsTo('chat.postEphemeral')).toHaveLength(1);
+  });
+
+  test('disconnecting and removing the machine revoke each linked person’s Slack token, whatever Slack answers', async () => {
+    const { harness, session, machine, slack } = await forwardedSetup();
+    answerConnectAs(slack, 'U2', 'xoxp-user-2');
+    await connectSlack(harness, session, machine.instanceId);
+    slack.answers['auth.revoke'] = (body) => ({ ok: false, error: 'token_revoked', ...body });
+    const unlinked = await harness.post(
+      SLACK_RELAY_PATHS.unlink,
+      {},
+      { bearer: machine.machineToken, sameOrigin: false }
+    );
+    expect(unlinked.status).toBe(200);
+    expect(
+      slack
+        .callsTo('auth.revoke')
+        .map((call) => call.token)
+        .sort()
+    ).toEqual(['xoxp-user-1', 'xoxp-user-2']);
+    expect(sealedUserTokens(harness)).toEqual([]);
+
+    answerConnectAs(slack, 'U1', 'xoxp-user-3');
+    await connectSlack(harness, session, machine.instanceId);
+    answerConnectAs(slack, 'U2', 'xoxp-user-4');
+    await connectSlack(harness, session, machine.instanceId);
+    harness.db.sqlite.exec(
+      "UPDATE slack_links SET sealed_user_token = 'not-sealed' WHERE slack_user_id = 'U2'"
+    );
+    slack.answers['auth.revoke'] = () => ({ ok: false, error: 'ratelimited' });
+    const removed = await harness.post(
+      REMOTE_PATHS.machineRemove,
+      {},
+      { bearer: machine.machineToken, sameOrigin: false }
+    );
+    expect(removed.status).toBe(200);
+    expect(slack.callsTo('auth.revoke').at(-1)?.token).toBe('xoxp-user-3');
+    expect(slack.callsTo('auth.revoke')).toHaveLength(3);
+    expect(sealedUserTokens(harness)).toEqual([]);
   });
 
   test('sets the thread’s status in Slack, says so when the workspace cannot show one, and fails and logs any other refusal', async () => {
@@ -900,12 +1366,7 @@ describe('deciding from the card', () => {
 
   async function addTeammate(setup: CardSetup, role: 'member' | 'guest' | 'stranger') {
     const { harness, slack, machine } = setup;
-    slack.answers['openid.connect.userInfo'] = () => ({
-      ok: true,
-      'https://slack.com/team_id': 'T1',
-      'https://slack.com/user_id': 'U2',
-      name: 'Mia',
-    });
+    answerConnectAs(slack, 'U2', 'xoxp-user-2');
     const mia = await harness.signIn('mia', 7);
     const laptop = await pairMachine(harness, mia, 'Laptop');
     await connectSlack(harness, mia, laptop.instanceId);
@@ -1126,6 +1587,16 @@ describe('deciding from the card', () => {
       },
     ]);
     expect(setup.slack.callsTo('views.open')[0]?.token).toBe('xoxb-bot-token');
+    const sent = setup.slack.callsTo('views.open')[0]?.body as {
+      view: { private_metadata: string; blocks: unknown[] };
+    };
+    expect(sent.view.blocks).toEqual([
+      expect.objectContaining({
+        element: expect.objectContaining({ max_length: SLACK_VIEW_LIMITS.input }),
+      }),
+    ]);
+    expect(SLACK_VIEW_LIMITS.input).toBe(3000);
+    expect(sent.view.private_metadata.length).toBeLessThanOrEqual(SLACK_VIEW_LIMITS.privateMetadata);
   });
 
   test('a form Slack will not open is told to the clicker and logged', async () => {

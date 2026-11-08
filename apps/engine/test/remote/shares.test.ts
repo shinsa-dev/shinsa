@@ -28,6 +28,8 @@ import {
   serializeBase64Url,
   serializeShareUrl,
   type Task,
+  SHARE_PRESET_SCOPES,
+  type ViewScope,
 } from '@shinsa/core';
 import { Clock, Effect, Layer } from 'effect';
 import type { Transcripts } from '../../src/agents/transcripts/service.ts';
@@ -42,6 +44,7 @@ import {
 } from '../../src/remote/shares/schema.ts';
 import { readWorktreeFile as readWorktreeFileEffect } from '../../src/remote/shares/worktree-file.ts';
 import { EffectFailed } from '../../src/runtime/failures/schema.ts';
+import { runFiles } from '../harness.ts';
 import { createTestEvidence } from '../helpers/evidence.ts';
 import { createWorktree } from '../helpers/git.ts';
 import { createGitRepo, createTempDir, overrideEnv, until } from '../helpers/index.ts';
@@ -71,7 +74,7 @@ const SHARE_URL = serializeShareUrl('https://app.shinsa.dev', {
   key: SHARE_KEY,
 });
 
-const SHARING = { at: 1, limit: 'none', preset: 'standard', endsAt: null } as const;
+const SHARING = { at: 1, limit: 'none', scopes: SHARE_PRESET_SCOPES.standard, endsAt: null } as const;
 
 let running: FakeControlPlane | null = null;
 
@@ -94,7 +97,7 @@ interface ShareWorktree {
 type Shares = ReturnType<typeof adaptShares>;
 
 function readWorktreeFile(worktree: string, path: string) {
-  return Effect.runPromise(readWorktreeFileEffect(worktree, path));
+  return runFiles(readWorktreeFileEffect(worktree, path));
 }
 
 const enterCode = <A>(run: () => Promise<A>) =>
@@ -221,7 +224,7 @@ interface SetUp {
   onClock?: () => void;
 }
 
-function setUp(options: SetUp = {}) {
+async function setUp(options: SetUp = {}) {
   const plane = startFakeControlPlane();
   running = plane;
   const dir = createTempDir();
@@ -239,7 +242,7 @@ function setUp(options: SetUp = {}) {
   const transcripts = options.transcripts ?? createTranscripts();
   const { worktree } = options;
   let fill = 7;
-  const machine = createRemoteTest({
+  const machine = await createRemoteTest({
     dataDir: dir,
     ...((options.paired ?? true)
       ? {
@@ -359,12 +362,16 @@ async function openViewer(publisher: Shares, url = SHARE_URL, shareId = SHARE_ID
   return viewer;
 }
 
-function sharedSetUp(options: SetUp & { preset?: SharePreset } = {}) {
+async function sharedSetUp(options: SetUp & { preset?: SharePreset; scopes?: readonly ViewScope[] } = {}) {
   return setUp({
     ...options,
     patch: (state) => {
       state.tasks['task-1'] = shareTask({
-        share: { ...SHARING, preset: options.preset ?? 'standard', url: SHARE_URL },
+        share: {
+          ...SHARING,
+          scopes: options.scopes ?? SHARE_PRESET_SCOPES[options.preset ?? 'standard'],
+          url: SHARE_URL,
+        },
       });
       state.runs['run-1'] = createRun();
       options.patch?.(state);
@@ -374,7 +381,7 @@ function sharedSetUp(options: SetUp & { preset?: SharePreset } = {}) {
 
 describe('making a share link', () => {
   test('a new share gets a link to this machine with a fresh id and a key only in its fragment', async () => {
-    const { stub, publisher, plane } = setUp();
+    const { stub, publisher, plane } = await setUp();
     await publisher.link('task-1', CONTEXT);
     const recorded = stub.dispatched[0] as { url: string };
     const key = serializeBase64Url(new Uint8Array(32).fill(8));
@@ -386,7 +393,7 @@ describe('making a share link', () => {
   });
 
   test('a link to this machine is kept, and one to an earlier pairing is replaced', async () => {
-    const { stub, publisher } = sharedSetUp();
+    const { stub, publisher } = await sharedSetUp();
     await publisher.link('task-1', CONTEXT);
     expect(stub.dispatched).toEqual([{ type: 'share.record', taskId: 'task-1', url: null }]);
     stub.state.tasks['task-1'] = shareTask({
@@ -404,7 +411,7 @@ describe('making a share link', () => {
   });
 
   test('a key and an id come from the system random source by default', async () => {
-    const { stub, publisher: shares } = setUp({ random: false });
+    const { stub, publisher: shares } = await setUp({ random: false });
     await shares.link('task-1', CONTEXT);
     const link = parseShareUrl((stub.dispatched[0] as { url: string }).url);
     expect(link?.key).toHaveLength(43);
@@ -412,7 +419,7 @@ describe('making a share link', () => {
   });
 
   test('a machine that is not paired fails for good, saying how to turn remote access on', async () => {
-    const { publisher } = setUp({ paired: false });
+    const { publisher } = await setUp({ paired: false });
     const failure = await publisher.link('task-1', CONTEXT).catch((error: unknown) => error);
     expect(failure).toBeInstanceOf(EffectFailed);
     expect((failure as EffectFailed).message).toBe(SHARE_NOT_PAIRED);
@@ -420,7 +427,7 @@ describe('making a share link', () => {
   });
 
   test('a task that is no longer shared gets no link', async () => {
-    const { stub, publisher } = setUp({
+    const { stub, publisher } = await setUp({
       patch: (state) => {
         state.tasks['task-1'] = shareTask({ share: null });
       },
@@ -433,7 +440,7 @@ describe('making a share link', () => {
 
 describe('a share link opened live', () => {
   test('streams the task and its files, sealed with the key in the link, and nothing goes to app.shinsa.dev', async () => {
-    const { plane, publisher } = sharedSetUp();
+    const { plane, publisher } = await sharedSetUp();
     expect(publisher.acceptsShare(SHARE_ID)).toBe(true);
     expect(publisher.acceptsShare('other')).toBe(false);
     const viewer = await openViewer(publisher);
@@ -462,7 +469,7 @@ describe('a share link opened live', () => {
   });
 
   test('a field the redaction does not name never leaves', async () => {
-    const { publisher } = sharedSetUp({
+    const { publisher } = await sharedSetUp({
       preset: 'full',
       patch: (state) => {
         const task = state.tasks['task-1'] as Task;
@@ -496,7 +503,7 @@ describe('a share link opened live', () => {
   });
 
   test('pushes a change at once, sends a file again only when it changed, and reads GitHub once per head', async () => {
-    const { stub, publisher, github } = sharedSetUp();
+    const { stub, publisher, github } = await sharedSetUp();
     const viewer = await openViewer(publisher);
     await until('the viewer reads it', () =>
       viewer.messages.some((message) => message.t === 'end' && message.id === SHARE_CODE_FILE)
@@ -514,7 +521,7 @@ describe('a share link opened live', () => {
   });
 
   test('ends when you stop sharing, and refuses a link whose key is wrong', async () => {
-    const { stub, publisher } = sharedSetUp();
+    const { stub, publisher } = await sharedSetUp();
     const viewer = await openViewer(publisher);
     stub.state.tasks['task-1'] = shareTask({ share: null });
     stub.notify();
@@ -531,16 +538,16 @@ describe('a share link opened live', () => {
   });
 
   test('refuses a link whose time ran out, even before the clock ends the share', async () => {
-    const { stub, publisher } = sharedSetUp();
+    const { stub, publisher } = await sharedSetUp();
     stub.state.tasks['task-1'] = shareTask({
-      share: { ...SHARING, limit: 'hour', preset: 'standard', endsAt: 0, url: SHARE_URL },
+      share: { ...SHARING, limit: 'hour', scopes: SHARE_PRESET_SCOPES.standard, endsAt: 0, url: SHARE_URL },
     });
     const expired = await openViewer(publisher);
     expect(expired.refused).toBe(SHARE_GONE_REASON);
   });
 
   test('takes nothing from the viewer: any message after the hello closes it', async () => {
-    const { publisher } = sharedSetUp();
+    const { publisher } = await sharedSetUp();
     const viewer = await openViewer(publisher);
     await viewer.send(JSON.stringify({ type: 'task.prioritize', taskId: 'task-1', priority: 'urgent' }));
     expect(viewer.closed).toEqual({ code: 1008, reason: 'A share link only listens.' });
@@ -549,7 +556,7 @@ describe('a share link opened live', () => {
   });
 
   test('ends every open link when remote access is turned off', async () => {
-    const { publisher, remote } = sharedSetUp();
+    const { publisher, remote } = await sharedSetUp();
     const viewer = await openViewer(publisher);
     await remote.disable();
     await until('the viewer reads it', () => viewer.closed !== null);
@@ -559,7 +566,7 @@ describe('a share link opened live', () => {
 
   test('a file too large to stream is left out, and the evidence it shows with it', async () => {
     const github = createGitHub('x'.repeat(SHARE_FILE_BYTES + 1));
-    const { publisher } = sharedSetUp({
+    const { publisher } = await sharedSetUp({
       github,
       patch: (state) => {
         state.evidence.page = createEvidence({
@@ -584,7 +591,7 @@ describe('a share link opened live', () => {
       github.diffReads += 1;
       return Promise.reject(new Error('gh: not logged in'));
     };
-    const { stub, publisher } = sharedSetUp({ github });
+    const { stub, publisher } = await sharedSetUp({ github });
     const viewer = await openViewer(publisher);
     await until('the viewer reads it', () => viewer.views().length === 1);
     expect(Object.keys(viewer.views()[0]?.files ?? {})).toEqual(['shot-1']);
@@ -599,7 +606,7 @@ describe('a share link opened live', () => {
   });
 
   test('a closed channel is forgotten', async () => {
-    const { stub, publisher } = sharedSetUp();
+    const { stub, publisher } = await sharedSetUp();
     const viewer = await openViewer(publisher);
     const channel = publisher.openChannel({ send: () => undefined, close: () => undefined }, SHARE_ID);
     publisher.closeChannel(channel);
@@ -610,7 +617,7 @@ describe('a share link opened live', () => {
 
 describe('when this machine is paired again', () => {
   test('every link it shared is marked as no longer working, so Share again makes a new one', async () => {
-    const { stub, remote } = setUp({
+    const { stub, remote } = await setUp({
       patch: (state) => {
         state.tasks['task-1'] = shareTask({ share: { ...SHARING, url: SHARE_URL } });
         state.tasks['task-2'] = shareTask({ id: 'task-2', share: { ...SHARING, url: null } });
@@ -628,7 +635,7 @@ describe('when this machine is paired again', () => {
   });
 
   test('a failure to record a lost link is logged, never thrown', async () => {
-    const { stub, remote } = setUp({
+    const { stub, remote } = await setUp({
       patch: (state) => {
         state.tasks['task-1'] = shareTask({ share: { ...SHARING, url: SHARE_URL } });
       },
@@ -647,7 +654,7 @@ async function readLiveFile(publisher: Shares, id: string) {
 
 describe('what a link shows', () => {
   test('lists the evidence a viewer can open and the code, and leaves out what it cannot send', async () => {
-    const { plane, publisher } = setUp({
+    const { plane, publisher } = await setUp({
       paired: false,
       patch: (state) => {
         state.tasks['task-1'] = shareTask({ share: null });
@@ -663,7 +670,7 @@ describe('what a link shows', () => {
   });
 
   test('a task without a pull request or a working copy shows no code and reads nothing from GitHub', async () => {
-    const { publisher, github } = setUp({
+    const { publisher, github } = await setUp({
       patch: (state) => {
         state.tasks['task-1'] = shareTask({ pullRequest: null, worktreePath: null });
       },
@@ -685,7 +692,7 @@ describe('what a link shows', () => {
       },
       readFile: (path, file) => Promise.resolve(`working ${file} in ${path}`),
     };
-    const { publisher, github, stub } = setUp({
+    const { publisher, github, stub } = await setUp({
       worktree,
       patch: (state) => {
         state.tasks['task-1'] = shareTask({ pullRequest: null, worktreePath, updatedAt: 5 });
@@ -715,7 +722,7 @@ describe('what a link shows', () => {
       readFile: () => Promise.resolve('edited'),
     };
     const worktreePath = createTempDir();
-    const { publisher, transcripts } = setUp({
+    const { publisher, transcripts } = await setUp({
       worktree,
       patch: (state) => {
         state.tasks['task-1'] = shareTask({ pullRequest: null, worktreePath, updatedAt: 5 });
@@ -757,7 +764,7 @@ describe('what a link shows', () => {
   });
 
   test('an evidence file removed after it was listed fails to read', async () => {
-    const { publisher, evidenceDir } = setUp();
+    const { publisher, evidenceDir } = await setUp();
     const shot = (await publisher.resolveLive('task-1')).files.find((file) => file.id === 'shot-1');
     rmSync(join(evidenceDir, 'settings.png'));
     await expect(shot?.read() ?? Promise.resolve()).rejects.toBeDefined();
@@ -785,7 +792,7 @@ describe('what a link shows', () => {
     );
     const restore = overrideEnv({ FAKE_GH_STATE: state });
     try {
-      const { stub, publisher: shares } = setUp({
+      const { stub, publisher: shares } = await setUp({
         sources: false,
         patch: (current) => {
           current.repos['repo-1'] = createRepo({ path: createTempDir() });
@@ -812,7 +819,7 @@ describe('what a link shows', () => {
     const { repo } = await createGitRepo({ remote: false, files: { 'src/a.ts': 'export const a = 1;\n' } });
     const checkout = await createWorktree(repo, createTempDir(), 'task-eeeeee', 'fix/live', null);
     writeFileSync(join(checkout.path, 'src/a.ts'), 'export const a = 2;\n');
-    const { publisher } = setUp({
+    const { publisher } = await setUp({
       patch: (state) => {
         state.repos['repo-1'] = createRepo({ path: repo.path });
         state.tasks['task-1'] = shareTask({
@@ -838,7 +845,7 @@ describe('what a link shows', () => {
       readFile: () => Promise.resolve(''),
     };
     const worktreePath = createTempDir();
-    const { publisher } = setUp({
+    const { publisher } = await setUp({
       worktree,
       patch: (state) => {
         state.tasks['task-1'] = shareTask({ pullRequest: null, worktreePath });
@@ -849,7 +856,7 @@ describe('what a link shows', () => {
   });
 
   test('a working copy that is gone shows no code', async () => {
-    const { publisher } = setUp({
+    const { publisher } = await setUp({
       patch: (state) => {
         state.tasks['task-1'] = shareTask({ pullRequest: null, worktreePath: '/nowhere/at/all' });
       },
@@ -859,7 +866,7 @@ describe('what a link shows', () => {
   });
 
   test('an unknown task shows nothing', async () => {
-    const { publisher } = setUp();
+    const { publisher } = await setUp();
     await expect(publisher.resolveLive('missing')).rejects.toThrow('No such task.');
   });
 
@@ -877,7 +884,7 @@ describe('what a link shows', () => {
     const github = createGitHub(diff, (_repo, ref, path) =>
       path === 'src/lost.ts' ? Promise.reject(new Error('Not Found')) : Promise.resolve(`${path}@${ref}`)
     );
-    const { publisher } = setUp({ github });
+    const { publisher } = await setUp({ github });
     expect(JSON.parse((await readLiveFile(publisher, SHARE_CODE_FILE)) ?? '')).toEqual({
       files: { 'src/a.ts': 'src/a.ts@abc123' },
     });
@@ -888,14 +895,14 @@ describe('what a link shows', () => {
     const big = 'x'.repeat(SHARE_FILE_BYTES);
     const diff = ['diff --git a/a.ts b/a.ts', 'diff --git a/b.ts b/b.ts'].join('\n');
     const github = createGitHub(diff, (_repo, _ref, path) => Promise.resolve(path === 'a.ts' ? 'a' : big));
-    const { publisher } = setUp({ github });
+    const { publisher } = await setUp({ github });
     expect(JSON.parse((await readLiveFile(publisher, SHARE_CODE_FILE)) ?? '')).toEqual({
       files: { 'a.ts': 'a' },
     });
   });
 
   test('a pull request with no pushed head shares its diff and no whole files', async () => {
-    const { publisher, github } = setUp({
+    const { publisher, github } = await setUp({
       patch: (state) => {
         const task = shareTask();
         state.tasks['task-1'] = {
@@ -914,10 +921,10 @@ describe('what a link shows', () => {
 
 describe('a share by preset', () => {
   test('a status share names no one, no machine and no repository, and reads no code or evidence', async () => {
-    const { publisher, github } = sharedSetUp({ preset: 'status' });
+    const { publisher, github } = await sharedSetUp({ preset: 'status' });
     const live = await publisher.resolveLive('task-1');
     expect(live.view.shared).toMatchObject({
-      preset: 'status',
+      scopes: [...SHARE_PRESET_SCOPES.status],
       owner: null,
       machine: null,
       repository: null,
@@ -934,7 +941,7 @@ describe('a share by preset', () => {
     const transcripts = createTranscripts();
     transcripts.record('run-1', { type: 'agent', phase: 'final', text: 'Done.' });
     let builds = 0;
-    const { publisher } = sharedSetUp({
+    const { publisher } = await sharedSetUp({
       transcripts,
       preset: 'status',
       onClock: () => {
@@ -957,7 +964,7 @@ describe('a share by preset', () => {
     for (let index = 0; index <= SHARE_TRANSCRIPT_PAGE; index += 1) {
       transcripts.record('run-1', { type: 'agent', phase: 'interim', text: `Step ${index}` });
     }
-    const { publisher } = sharedSetUp({ preset: 'standard', transcripts });
+    const { publisher } = await sharedSetUp({ preset: 'standard', transcripts });
     const viewer = await openViewer(publisher);
     await until('the viewer reads both pages', () => 'transcript-run-1-1' in viewer.files());
     transcripts.record('run-1', { type: 'agent', phase: 'final', text: 'Done.' });
@@ -990,7 +997,7 @@ describe('a share by preset', () => {
     });
     transcripts.record('run-1', { type: 'agent', phase: 'interim', text: 'Reading.' });
     transcripts.record('run-2', { type: 'agent', phase: 'interim', text: 'Another task.' });
-    const { publisher } = sharedSetUp({ preset: 'standard', transcripts });
+    const { publisher } = await sharedSetUp({ preset: 'standard', transcripts });
     const viewer = await openViewer(publisher);
     await until('the viewer reads the transcript', () => 'transcript-run-1-0' in viewer.files());
     expect(viewer.views()[0]?.files['transcript-run-1-0']).toEqual({
@@ -1024,7 +1031,7 @@ describe('a share by preset', () => {
     });
     transcripts.record('run-1', { type: 'user', from: 'you', text: 'Try the left pane.', attachments: [] });
     transcripts.record('run-1', { type: 'agent', phase: 'final', text: 'Done.' });
-    const { publisher } = sharedSetUp({ preset: 'full', transcripts });
+    const { publisher } = await sharedSetUp({ preset: 'full', transcripts });
     const file = (await publisher.resolveLive('task-1')).files.find(
       (item) => item.id === 'transcript-run-1-0'
     );
@@ -1034,9 +1041,44 @@ describe('a share by preset', () => {
     expect(JSON.stringify(shared)).not.toContain('sk-0000');
   });
 
+  test('a custom share without code and with messages reads no diff, names its scopes and streams your own turns', async () => {
+    const transcripts = createTranscripts();
+    transcripts.record('run-1', { type: 'user', from: 'you', text: 'Try the left pane.', attachments: [] });
+    transcripts.record('run-1', { type: 'agent', phase: 'final', text: 'Done.' });
+    const scopes = [
+      ...SHARE_PRESET_SCOPES.standard.filter((scope) => scope !== 'code'),
+      'messages',
+    ] as const satisfies readonly ViewScope[];
+    const { publisher, github } = await sharedSetUp({ scopes, transcripts });
+    const live = await publisher.resolveLive('task-1');
+    expect(live.view.shared.scopes).not.toContain('code');
+    expect(live.view.shared.scopes).toContain('messages');
+    expect(live.view.shared.code).toBe(false);
+    expect(Object.keys(live.view.files)).not.toContain(SHARE_DIFF_FILE);
+    expect(Object.keys(live.view.files)).not.toContain(SHARE_CODE_FILE);
+    expect(github.diffReads).toBe(0);
+    const file = live.files.find((item) => item.id === 'transcript-run-1-0');
+    expect(file?.version).toBe('messages:2');
+  });
+
+  test('a custom share with code but without people shows the code and still names no one and no repository', async () => {
+    const scopes = ['identity', 'progress', 'code'] as const satisfies readonly ViewScope[];
+    const { publisher } = await sharedSetUp({ scopes });
+    const live = await publisher.resolveLive('task-1');
+    expect(live.view.shared).toMatchObject({ code: true, owner: null, machine: null, repository: null });
+    expect(Object.keys(live.view.files)).toContain(SHARE_DIFF_FILE);
+  });
+
+  test('a scope list passed to the live view replaces the share’s own, as a team view does', async () => {
+    const { publisher } = await sharedSetUp({ preset: 'full' });
+    const live = await publisher.resolveLive('task-1', SHARE_PRESET_SCOPES.status);
+    expect(live.view.shared.scopes).toEqual([...SHARE_PRESET_SCOPES.status]);
+    expect(live.view.shared.owner).toBeNull();
+  });
+
   test('a run with no transcript yet streams nothing, and one past the size a file carries keeps its latest entries', async () => {
     const transcripts = createTranscripts();
-    const { publisher } = sharedSetUp({ preset: 'standard', transcripts });
+    const { publisher } = await sharedSetUp({ preset: 'standard', transcripts });
     expect(Object.keys((await publisher.resolveLive('task-1')).view.files)).not.toContain(
       'transcript-run-1-0'
     );

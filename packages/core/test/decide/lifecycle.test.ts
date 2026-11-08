@@ -16,6 +16,7 @@ import {
   createTask,
   type Harness,
   LARGE_PLAN,
+  SPLIT_PLAN,
   linkSession,
   PASSING,
   PLAN,
@@ -23,6 +24,7 @@ import {
   reachReviewGate,
   readInstruction,
   readyWorktree,
+  refreshWorktree,
 } from '../harness.ts';
 
 function withApproval(approvePlans: PlanApproval) {
@@ -104,6 +106,12 @@ describe('planning', () => {
         proposePlan(harness, taskId, { ...PLAN, approval: true });
         return { harness, taskId };
       },
+      splits: (approvePlans) => {
+        const harness = withApproval(approvePlans);
+        const taskId = createTask(harness);
+        proposePlan(harness, taskId, SPLIT_PLAN);
+        return { harness, taskId };
+      },
       large: (approvePlans) => {
         const harness = withApproval(approvePlans);
         const taskId = createTask(harness);
@@ -157,6 +165,7 @@ describe('planning', () => {
     const gate = harness.openGate(taskId);
     expect(gate.type).toBe('plan');
     harness.send({ type: 'gate.answer', gateId: gate.id, decision: 'approve', response: 'Use option B.' });
+    refreshWorktree(harness, taskId);
     expect(harness.task(taskId).stage).toBe('building');
     expect(harness.task(taskId).planAnswers).toBe('Use option B.');
     expect(harness.activeRun(taskId).prompt).toContain('The human answered:\nUse option B.');

@@ -1,4 +1,3 @@
-import { existsSync } from 'node:fs';
 import { isAbsolute, resolve } from 'node:path';
 import {
   type ComparisonHandOver,
@@ -7,6 +6,7 @@ import {
   validateEvidence,
 } from '@shinsa/core';
 import { Effect } from 'effect';
+import { isPresent } from '../files/probe.ts';
 import type { EvidenceFolder } from '../store/evidence/index.ts';
 import type { Evidence } from '../store/evidence/service.ts';
 import { ToolCallFailed } from './tools/schema.ts';
@@ -45,8 +45,9 @@ const storeComparison = Effect.fn('storeComparison')(function* (
   folder: EvidenceFolder
 ) {
   const resolved = parts.map((part) => ({ ...part, path: resolveSourcePath(part.path, worktreePath) }));
-  const missing = resolved.find((part) => !existsSync(part.path));
-  if (missing) return yield* new ToolCallFailed({ message: `No file at ${missing.path}.` });
+  for (const part of resolved)
+    if (!(yield* isPresent(part.path)))
+      return yield* new ToolCallFailed({ message: `No file at ${part.path}.` });
   const stored = yield* Effect.forEach(resolved, ({ path, stage, label }) =>
     Effect.map(evidence.copyFile(path, folder, `${facts.title} ${label ?? stage}`), (uri): EvidencePart => ({
       kind: VIDEO.test(path) ? 'recording' : 'screenshot',

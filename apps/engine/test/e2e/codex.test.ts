@@ -5,7 +5,7 @@ import { isDelegatedRun, type Run } from '@shinsa/core';
 import { Effect } from 'effect';
 import { Accounts } from '../../src/accounts/index.ts';
 import type { AgentProvider } from '../../src/agents/providers/index.ts';
-import { type AccountsHarness, buildAccountsNow } from '../accounts/harness.ts';
+import { type AccountsHarness, buildAccounts } from '../accounts/harness.ts';
 import { FakeCodex, type FakeCodexStep } from '../helpers/codex.ts';
 import type { Engine } from '../helpers/engine.ts';
 import { buildCodexProvider, createTestProviders } from '../helpers/providers.ts';
@@ -31,11 +31,11 @@ interface Opened {
   codex: FakeCodex;
 }
 
-function superviseAccounts(current: World, engine: Engine) {
+async function superviseAccounts(current: World, engine: Engine) {
   const shared = join(current.root, 'claude');
   mkdirSync(shared, { recursive: true });
   const unused = () => Promise.resolve({ ok: false, code: 1, stdout: '', stderr: '', timedOut: false });
-  const harness = buildAccountsNow({
+  const harness = await buildAccounts({
     engine: engine.core,
     config: current.config,
     env: { CLAUDE_CONFIG_DIR: shared },

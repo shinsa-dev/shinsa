@@ -3,6 +3,7 @@ import type { TaskSuggestion } from '@shinsa/core';
 import { TooltipProvider } from '@shinsa/ui/components/tooltip';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { SuggestionsPanel } from '@/components/overview/suggestions-panel.tsx';
+import { spyOnEngine } from '../../support/engine.ts';
 import { listSentCommands, startFakeServer, stopFakeServer } from '../../support/server.ts';
 import { createTask } from '../../support/state.ts';
 import { waitForGone } from '../../support/wait.ts';
@@ -86,6 +87,45 @@ describe('suggested follow-ups', () => {
         .getAllByRole('option')
         .map((option) => option.textContent)
     ).toEqual(['After this task mergesSuggested', 'Start now', 'Backlog']);
+  });
+});
+
+describe('bundling a suggested task with this one', () => {
+  it('picks Bundle with this task when the agent suggested it, and sends it stacked on this task', async () => {
+    spyOnEngine();
+    const task = createTask({ id: 't', suggestions: [{ ...suggestion('a', false), stacksOnThis: true }] });
+    render(
+      <TooltipProvider>
+        <SuggestionsPanel task={task} />
+      </TooltipProvider>
+    );
+    const row = rowOf('Follow-up a');
+    expect(within(row).getByRole('combobox', { name: 'When to start' }).textContent).toBe(
+      'Bundle with this task'
+    );
+    fireEvent.click(within(row).getByRole('button', { name: 'Add' }));
+    await waitFor(() =>
+      expect(listSentCommands()).toEqual([
+        { type: 'suggestion.accept', taskId: 't', suggestionId: 'a', waitsOnThis: false, stackOnThis: true },
+      ])
+    );
+  });
+
+  it('is not offered on an engine that does not support it', async () => {
+    spyOnEngine(null);
+    const task = createTask({ id: 't', suggestions: [{ ...suggestion('a', false), stacksOnThis: true }] });
+    render(
+      <TooltipProvider>
+        <SuggestionsPanel task={task} />
+      </TooltipProvider>
+    );
+    fireEvent.click(within(rowOf('Follow-up a')).getByRole('combobox', { name: 'When to start' }));
+    const list = (await screen.findAllByRole('listbox')).at(-1) as HTMLElement;
+    expect(
+      within(list)
+        .getAllByRole('option')
+        .map((option) => option.textContent)
+    ).toEqual(['Start nowSuggested', 'After this task merges', 'Backlog']);
   });
 });
 

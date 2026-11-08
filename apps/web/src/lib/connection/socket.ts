@@ -124,6 +124,8 @@ export interface ShinsaConnection {
   replaceTerminals: (terminals: TerminalsSnapshot) => void;
   canOpenTerminals?: (projectId: string) => boolean;
   resolveTerminalTransport?: (terminalId: string) => SocketTransport | null;
+  resolveMediaUrl?: (uri: string) => string;
+  selectAppOrigin?: (id: string) => string | null;
   subscribeResources: (listener: () => void) => () => void;
   selectResources: () => MachineResources | null;
   subscribeRemote: (listener: () => void) => () => void;
@@ -684,6 +686,26 @@ export function useMachine(id: string | null) {
   return useSyncExternalStore(connection.subscribe, () => (id ? connection.selectMachine(id) : null));
 }
 
+export function resolveMediaUrl(uri: string) {
+  return connection.resolveMediaUrl?.(uri) ?? uri;
+}
+
+export function selectRelayedAppOrigin(id: string | null) {
+  return id === null ? null : (connection.selectAppOrigin?.(id) ?? null);
+}
+
+export function useMediaUrl(uri: string) {
+  return useSyncExternalStore(connection.subscribe, () => resolveMediaUrl(uri));
+}
+
+export function useMediaUrls<T extends { src: string }>(images: T[]) {
+  const snapshot = useSyncExternalStore(connection.subscribe, connection.snapshot);
+  return useMemo(
+    () => images.map((image) => ({ ...image, src: resolveMediaUrl(image.src) })),
+    [images, snapshot]
+  );
+}
+
 export function useConnection() {
   return useSyncExternalStore(connection.subscribe, connection.snapshot);
 }
@@ -736,6 +758,10 @@ export function hasEngineCommand(type: EngineCommand, id?: string | null) {
 
 export function useEngineCommand(type: EngineCommand, id?: string | null) {
   return useEngineCommands(id).has(type);
+}
+
+export function hasTaskEngineFeature(feature: EngineFeature, id?: string | null) {
+  return hasEngineFeature(connection.selectEngine(id), feature);
 }
 
 export function useEngineFeature(feature: EngineFeature, id?: string | null) {

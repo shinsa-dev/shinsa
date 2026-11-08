@@ -27,6 +27,7 @@ const WIRE = [
   ['MembersFull', 'members_full', 409],
   ['GuestsFull', 'guests_full', 409],
   ['TeamsFull', 'teams_full', 409],
+  ['NoMachine', 'no_machine', 409],
   ['InstancesFull', 'instances_full', 409],
   ['ServiceFull', 'service_full', 503],
   ['PairExpired', 'pair_expired', 404],

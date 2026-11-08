@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { serializeReportMarkdown, type TeamEscalation } from '@shinsa/core';
+import { serializeReportMarkdown, type Task, type TeamEscalation } from '@shinsa/core';
 import {
   describeDecision,
   describeTeamEscalation,
@@ -112,6 +112,23 @@ describe('a teammate’s escalated task', () => {
       `escalation:m-kai k-1:${NOW}`,
     ]);
     expect(listNewDecisions(seen, withTasks(), NOW, [ESCALATION])).toEqual([]);
+  });
+});
+
+describe('a decision held by a wait', () => {
+  it('alerts on the review once what its task waits on settles', () => {
+    const review = createGate({ id: 'g-review', taskId: 't-2' });
+    const open = withTasks(review);
+    const waitOn = (blocker: Task) => ({
+      ...open,
+      tasks: { 't-1': blocker, 't-2': { ...open.tasks['t-2']!, waitsOn: ['t-1'] } },
+    });
+    const held = waitOn(open.tasks['t-1']!);
+    const seen = listOpenNoticeTags(held);
+    expect(seen).toEqual(new Set());
+    expect(listNewDecisions(seen, held, NOW)).toEqual([]);
+    const released = waitOn({ ...open.tasks['t-1']!, stage: 'merged' });
+    expect(listNewDecisions(seen, released, NOW).map((notice) => notice.tag)).toEqual(['g-review']);
   });
 });
 

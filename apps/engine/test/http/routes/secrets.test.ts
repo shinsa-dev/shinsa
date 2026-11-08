@@ -55,7 +55,7 @@ describe('webhook settings over HTTP', () => {
     const schedule = await addSchedule(world, { kind: 'webhook', signature: null, replayKey: null });
     const { call } = await setUp(world, (id, hook) => `https://app.shinsa.dev/hooks/k3x9/${id}/${hook}`);
     const shown = await call('GET', `/api/schedules/${schedule.id}/webhook`);
-    const token = world.secrets.selectHook(schedule.id)?.token;
+    const token = (await world.secrets.selectHook(schedule.id))?.token;
     expect(shown.url).toBe(`https://app.shinsa.dev/hooks/k3x9/${schedule.id}/${token}`);
   });
 
@@ -68,7 +68,7 @@ describe('webhook settings over HTTP', () => {
     });
     const { call } = await setUp(world);
     expect(await call('GET', `/api/schedules/${schedule.id}/webhook`)).toEqual({
-      url: `http://127.0.0.1:5180/api/hooks/${schedule.id}/${world.secrets.selectHook(schedule.id)?.token}`,
+      url: `http://127.0.0.1:5180/api/hooks/${schedule.id}/${(await world.secrets.selectHook(schedule.id))?.token}`,
       signature: { header: 'x-sig', encoding: 'hex', prefix: '' },
       hasSecret: false,
       replayKey: null,
@@ -100,14 +100,14 @@ describe('webhook settings over HTTP', () => {
     });
   });
 
-  test('a webhook whose hook is gone is not found', async () => {
+  test('a webhook whose token is not written yet gets one at once', async () => {
     const world = await createWorld();
     const schedule = await addSchedule(world, { kind: 'webhook', signature: null, replayKey: null });
     const { call } = await setUp(world);
-    world.secrets.pruneHooks(new Set());
-    await expect(call('GET', `/api/schedules/${schedule.id}/webhook`)).rejects.toMatchObject({
-      code: 'schedule_not_found',
-    });
+    await world.secrets.pruneHooks(new Set());
+    const shown = (await call('GET', `/api/schedules/${schedule.id}/webhook`)) as { url: string };
+    const hook = await world.secrets.selectHook(schedule.id);
+    expect(shown.url).toEndWith(`/${schedule.id}/${hook?.token}`);
   });
 
   test('without schedules the routes are not found', async () => {
@@ -125,9 +125,9 @@ describe('answering a secret request over HTTP', () => {
     expect(await call('POST', '/api/secrets/gate-1', { value: 'hunter2' })).toEqual({ ok: true });
     const gate = world.engine.state.gates['gate-1'];
     expect(gate?.status).toBe('answered');
-    expect(gate?.response).toBe(world.secrets.resolveRef('gate-1'));
+    expect(gate?.response).toBe(await world.secrets.resolveRef('gate-1'));
     expect(JSON.stringify(world.engine.state)).not.toContain('hunter2');
-    expect(world.secrets.removeRef(gate?.response ?? '', world.taskId)).toBe('hunter2');
+    expect(await world.secrets.removeRef(gate?.response ?? '', world.taskId)).toBe('hunter2');
   });
 
   test('a decline answers without a value', async () => {
@@ -168,8 +168,8 @@ describe('answering a secret request over HTTP', () => {
     await expect(call('POST', '/api/secrets/gate-1', { value: 'hunter2' })).rejects.toMatchObject({
       message: 'disk full',
     });
-    expect(() => world.secrets.removeRef(world.secrets.resolveRef('gate-1'), world.taskId)).toThrow(
-      'has been used'
-    );
+    await expect(
+      world.secrets.removeRef(await world.secrets.resolveRef('gate-1'), world.taskId)
+    ).rejects.toThrow('has been used');
   });
 });

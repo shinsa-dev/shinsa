@@ -1,7 +1,8 @@
-import { existsSync, statfsSync } from 'node:fs';
 import { isAbsolute, join, resolve } from 'node:path';
 import { DomainError, type OnboardingStatus, type Task, type WorktreeUsage } from '@shinsa/core';
-import { Effect } from 'effect';
+import { Effect, FileSystem } from 'effect';
+import { constFalse } from 'effect/Function';
+import { parseDiskFree } from '../resources/sample.ts';
 import type { WorktreeRoot } from '../workspaces/root/service.ts';
 import { expandHome } from './roots.ts';
 import {
@@ -69,12 +70,13 @@ export const measureWorktreeUsage = Effect.fn('Onboarding.measureWorktreeUsage')
   for (const task of Object.values(tasks)) {
     if (task.worktreePath && task.workspace !== 'main_checkout') paths.add(task.worktreePath);
   }
-  const worktrees = yield* Effect.sync(() => [...paths].filter((path) => existsSync(path)));
+  const fs = yield* FileSystem.FileSystem;
+  const isPresent = (path: string) => fs.exists(path).pipe(Effect.orElseSucceed(constFalse));
+  const worktrees = yield* Effect.filter([...paths], isPresent);
   const delegations = join(folder, DELEGATIONS_FOLDER);
-  const measured = (yield* Effect.sync(() => existsSync(delegations)))
-    ? [...worktrees, delegations]
-    : worktrees;
-  const cwd = (yield* Effect.sync(() => existsSync(folder))) ? folder : '/';
+  const measured = (yield* isPresent(delegations)) ? [...worktrees, delegations] : worktrees;
+  const present = yield* isPresent(folder);
+  const cwd = present ? folder : '/';
   let bytes: number | null = 0;
   if (measured.length > 0) {
     const result = yield* run(['du', '-sk', '--', ...measured], cwd, {
@@ -87,10 +89,8 @@ export const measureWorktreeUsage = Effect.fn('Onboarding.measureWorktreeUsage')
       .reduce((total, size) => total + size, 0);
     bytes = result.timedOut || !result.stdout.trim() ? null : kilobytes * KILOBYTE;
   }
-  const freeBytes = yield* Effect.try(() => {
-    const stats = statfsSync(folder);
-    return stats.bavail * stats.bsize;
-  }).pipe(Effect.orElseSucceed(() => null));
+  const listing = present ? yield* run(['df', '-k', '-P', folder], folder) : null;
+  const freeBytes = listing?.ok ? (parseDiskFree(listing.stdout)?.freeBytes ?? null) : null;
   const usage: WorktreeUsage = {
     folder,
     worktrees: worktrees.length,

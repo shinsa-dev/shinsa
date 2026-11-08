@@ -6,6 +6,7 @@ import {
   type PullRequest,
   type Round,
   type RoundOutcome,
+  type RoundPullRequest,
   resolveCurrentRound,
   resolveSettledStatus,
   resolveTaskPipeline,
@@ -60,14 +61,29 @@ function writeRounds(state: ShinsaState, task: Task, at: number, rounds: Round[]
   updateTask(state, task.id, at, { rounds, ...patch });
 }
 
+function markMerged(pullRequest: RoundPullRequest, at: number): RoundPullRequest {
+  return { ...pullRequest, state: 'merged', mergedAt: pullRequest.mergedAt ?? at };
+}
+
+function keepMergedAt(previous: RoundPullRequest | null, next: RoundPullRequest): RoundPullRequest {
+  const kept = previous?.number === next.number ? previous.mergedAt : null;
+  return typeof kept === 'number' ? { ...next, mergedAt: kept } : next;
+}
+
+function isReopenedMerge(round: Round) {
+  return round.status === 'active' && round.endedAt !== null;
+}
+
 function endRound(task: Task, round: Round, status: Round['status'], at: number): Round {
   return {
     ...round,
-    status,
-    endedAt: at,
+    status: isReopenedMerge(round) ? 'merged' : status,
+    endedAt: round.endedAt ?? at,
     pipeline: [...resolveTaskPipeline(task)],
     branch: round.branch ?? task.branch,
-    pullRequest: task.pullRequest ? toRoundPullRequest(task.pullRequest) : round.pullRequest,
+    pullRequest: task.pullRequest
+      ? keepMergedAt(round.pullRequest, toRoundPullRequest(task.pullRequest))
+      : round.pullRequest,
     outcome: resolveRoundOutcome(task),
   };
 }
@@ -112,6 +128,7 @@ function resolveOntoPullRequest(task: Task, onto: number | null, at: number): Pu
     url: shipped.url,
     state: shipped.state,
     ...(shipped.base ? { base: shipped.base } : {}),
+    ...(typeof shipped.mergedAt === 'number' ? { mergedAt: shipped.mergedAt } : {}),
     checks: 'pending',
     unresolvedComments: 0,
     mergeable: null,
@@ -242,7 +259,7 @@ function applyRoundPullRequestMerged(state: ShinsaState, event: EventOf<'round.p
   const rounds = resolveTaskRounds(task).map((round): Round => {
     if (round.number === current) return { ...round, branch: event.branch, base: null, pullRequest: null };
     if (round.status !== 'shipped' || round.pullRequest?.number !== event.pullRequest) return round;
-    return { ...round, status: 'merged', pullRequest: { ...round.pullRequest, state: 'merged' } };
+    return { ...round, status: 'merged', pullRequest: markMerged(round.pullRequest, event.at) };
   });
   const patch = resolveBranchPatch(task, choice, needsWorktree(resolveTaskPipeline(task)), event.at);
   writeRounds(state, task, event.at, rounds, patch);
@@ -259,13 +276,18 @@ function resolveSettledRound(task: Task, round: Round, stage: TaskStage, at: num
     return {
       ...round,
       status: 'merged',
-      pullRequest: round.pullRequest ? { ...round.pullRequest, state: 'merged' } : null,
+      pullRequest: round.pullRequest ? markMerged(round.pullRequest, at) : null,
     };
   }
   if ((round.status === 'shipped' && stage === 'cancelled') || round.status === 'waiting') {
     return stage === 'merged' ? round : { ...round, status: 'cancelled', endedAt: at };
   }
   return round;
+}
+
+function reopen(round: Round): Round {
+  const endedAt = round.status === 'merged' ? round.endedAt : null;
+  return { ...round, status: 'active', endedAt, outcome: null };
 }
 
 function reopenRound(state: ShinsaState, task: Task, at: number) {
@@ -276,9 +298,7 @@ function reopenRound(state: ShinsaState, task: Task, at: number) {
     state,
     task,
     at,
-    rounds.map((round) =>
-      round.number === current ? { ...round, status: 'active' as const, endedAt: null, outcome: null } : round
-    )
+    rounds.map((round) => (round.number === current ? reopen(round) : round))
   );
 }
 
@@ -318,7 +338,7 @@ export function recordRoundPullRequest(state: ShinsaState, taskId: string, at: n
       return {
         ...round,
         status: merged ? 'merged' : round.status,
-        pullRequest: toRoundPullRequest(pullRequest),
+        pullRequest: keepMergedAt(round.pullRequest, toRoundPullRequest(pullRequest)),
       };
     })
   );

@@ -1,8 +1,8 @@
-import { closeSync, mkdirSync, openSync, readFileSync, statSync, writeFileSync, writeSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { DomainError } from '@shinsa/core';
-import { Cause, Duration, Effect, Exit, Fiber } from 'effect';
+import { Cause, Duration, Effect, Exit, Fiber, FileSystem, Option } from 'effect';
+import { flow } from 'effect/Function';
 import { resolveKeychainAccount } from '../accounts/paths.ts';
 import { resolveServerAddress } from '../config/index.ts';
 import { EngineConfig } from '../config/service.ts';
@@ -12,7 +12,6 @@ import {
   BUNDLE,
   createSystemdService,
   describeVersion,
-  type EngineService,
   isStartedByService,
   SERVICE_MARKER,
   ServerRunningError,
@@ -40,6 +39,7 @@ import { createTask, openApp, printStatus, readArgs } from './commands.ts';
 import { printVersion, restartEngine, startEngine, stopEngine, waitFor, readHealth } from './engine.ts';
 import { CLI_COMMANDS, describeCliUsage, describeHelp, describeHelpAll, selectCliCommand } from './help.ts';
 import { createLaunchdService } from './launchd.ts';
+import { redirectOutput } from './log-file.ts';
 import { ENGINE_LOG, printLogs } from './logs.ts';
 import {
   CliFailed,
@@ -84,9 +84,9 @@ const runOrFail = Effect.fn('Cli.runOrFail')(function* (argv: Argv) {
 
 export function createOpenApp(base: string, options: OpenAppOptions) {
   const platform = options.platform ?? process.platform;
-  const inApp = (options.inApp ?? (Boolean(BUNDLE) && isInsideApp())) && platform === 'darwin';
   return Effect.fn('Cli.openApp')(function* (link: string) {
-    if (inApp) {
+    const inside = options.inApp ?? (Boolean(BUNDLE) && (yield* isInsideApp()));
+    if (inside && platform === 'darwin') {
       yield* runOrFail(['open', '-b', APP_BUNDLE_ID, link]);
       return;
     }
@@ -109,12 +109,12 @@ function createServiceRunner(tool: Argv): ServiceRunner {
     }));
 }
 
-export function createPlatformService(
+export const createPlatformService = Effect.fn('Cli.createPlatformService')(function* (
   platform: string = process.platform,
   env: Record<string, string | undefined> = Bun.env
-): EngineService {
+) {
   if (platform === 'linux') {
-    return createSystemdService({
+    return yield* createSystemdService({
       env,
       program: process.execPath,
       user: resolveKeychainAccount(env),
@@ -122,23 +122,23 @@ export function createPlatformService(
       loginctl: createServiceRunner(['loginctl']),
     });
   }
+  const withFiles = Effect.provideService(FileSystem.FileSystem, yield* FileSystem.FileSystem);
   return createLaunchdService({
     uid: process.getuid?.() ?? 0,
     launchctl: createServiceRunner(['launchctl']),
-    ownsJob: ownsEngineJob,
-    inApp: isInsideApp(),
+    ownsJob: flow(ownsEngineJob, withFiles),
+    inApp: yield* isInsideApp(),
     program: process.execPath,
     home: env.HOME || homedir(),
     env,
   });
-}
-
-const PLATFORM_SERVICE = createPlatformService();
+});
 
 export const createWakeEngine = Effect.fn('Cli.createWakeEngine')(function* (
   base: string,
-  options: WakeOptions = { bundled: IS_BUNDLED, kick: PLATFORM_SERVICE.kick }
+  given?: WakeOptions
 ) {
+  const options = given ?? { bundled: IS_BUNDLED, kick: (yield* createPlatformService()).kick };
   const shell = yield* Shell;
   return Effect.gen(function* () {
     if (!options.bundled || !(yield* options.kick)) return false;
@@ -176,34 +176,25 @@ export const stopEngineFiber = Effect.fn('Cli.stopEngineFiber')(function* <E>(
   yield* Effect.sync(() => exit(1));
 });
 
-export const trimEngineLog = Effect.fn('Cli.trimEngineLog')(function* (
-  path: string,
-  maxBytes: number = ENGINE_LOG_MAX_BYTES
-) {
-  yield* Effect.try({
-    try: () => {
-      if (statSync(path).size <= maxBytes) return;
-      const text = readFileSync(path);
-      writeFileSync(path, text.subarray(text.length - Math.floor(maxBytes / 2)));
-    },
-    catch: (error) => new CliFailed({ message: describeError(error) }),
-  }).pipe(Effect.ignore);
-});
+export const trimEngineLog = Effect.fn('Cli.trimEngineLog')(
+  function* (path: string, maxBytes: number = ENGINE_LOG_MAX_BYTES) {
+    const fs = yield* FileSystem.FileSystem;
+    const info = yield* Effect.option(fs.stat(path));
+    if (Option.isNone(info) || Number(info.value.size) <= maxBytes) return;
+    const text = yield* fs.readFile(path);
+    yield* fs.writeFile(path, text.subarray(text.length - Math.floor(maxBytes / 2)));
+  },
+  (trimmed) => Effect.ignore(trimmed)
+);
 
 export const writeOutputTo = Effect.fn('Cli.writeOutputTo')(function* (
   path: string,
   streams: NodeJS.WriteStream[] = [process.stdout, process.stderr]
 ) {
   yield* trimEngineLog(path);
-  return yield* Effect.sync(() => {
-    const fd = openSync(path, 'a');
-    for (const stream of streams) {
-      stream.write = ((chunk: string | Uint8Array) => {
-        writeSync(fd, typeof chunk === 'string' ? Buffer.from(chunk) : chunk);
-        return true;
-      }) as typeof stream.write;
-    }
-    return () => closeSync(fd);
+  return yield* Effect.try({
+    try: () => redirectOutput(path, streams),
+    catch: (error) => new CliFailed({ message: describeError(error) }),
   });
 });
 
@@ -219,7 +210,9 @@ const startEngineProcess = Effect.fn('Cli.startEngineProcess')(function* (
   });
   const config = yield* Effect.orDie(Effect.provide(EngineConfig, EngineConfig.layer(env, bundle)));
   if (byService && bundle) {
-    yield* Effect.sync(() => mkdirSync(config.dataDir, { recursive: true }));
+    yield* (yield* FileSystem.FileSystem)
+      .makeDirectory(config.dataDir, { recursive: true })
+      .pipe(Effect.mapError((error) => new CliFailed({ message: describeError(error) })));
     yield* writeOutputTo(join(config.dataDir, ENGINE_LOG));
   }
   if (isTerminal()) {
@@ -239,11 +232,12 @@ const startEngineProcess = Effect.fn('Cli.startEngineProcess')(function* (
   }
   const engine = yield* Effect.forkChild(
     runEngineLayer(config, { byService }).pipe(
-      Effect.mapError((error) =>
-        error._tag === 'LogVersionError' || error._tag === 'PortInUse'
+      Effect.mapError((error) => {
+        if (error._tag === 'PlatformError') return new CliFailed({ message: describeError(error) });
+        return error._tag === 'LogVersionError' || error._tag === 'PortInUse'
           ? new CliFailed({ message: error.message })
-          : error
-      )
+          : error;
+      })
     )
   );
   return yield* Fiber.join(engine).pipe(Effect.onInterrupt(() => stopEngineFiber(engine, exit)));
@@ -268,7 +262,7 @@ export const createProcessIo = Effect.fn('Cli.createProcessIo')(function* (optio
     openApp: createOpenApp(base, { write }),
     readRepoRoot,
     wakeEngine: yield* createWakeEngine(base),
-    engine: { bundled: IS_BUNDLED, service: PLATFORM_SERVICE },
+    engine: { bundled: IS_BUNDLED, service: yield* createPlatformService() },
     runEngine: (env) => startEngineProcess(env, isTerminal, bundle, exit),
     terminal: resolveTerminal(Bun.env, process.stdout, process.stderr),
   };
@@ -364,7 +358,7 @@ const routeTopLevel = Effect.fn('Cli.routeTopLevel')(function* (command: string,
       yield* restartEngine(yield* createEngineIo(io), (yield* readArgs(args)).flags.has('--when-idle'));
       return 0;
     case 'logs':
-      printLogs(args, { env: io.env, display: io.terminal.display, write: io.write });
+      yield* printLogs(args, { env: io.env, display: io.terminal.display, write: io.write });
       return 0;
     default:
       yield* printVersion(yield* createEngineIo(io), (yield* readArgs(args)).flags.has('--json'));

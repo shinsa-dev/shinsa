@@ -138,7 +138,7 @@ async function start(
   const opened: string[] = [];
   const connectors: { stopped: boolean }[] = [];
   const engine = new Engine(openEventLog(config.databasePath));
-  const machine = createRemoteTest({
+  const machine = await createRemoteTest({
     dataDir: config.dataDir,
     config,
     ...((options.paired ?? true)
@@ -191,7 +191,7 @@ async function start(
     transcripts: createTestTranscripts(config.transcriptsDir),
     evidence: createTestEvidence(config.evidenceDir),
     models: createModels([]),
-    onboarding: createTestOnboarding(engine, config).onboarding,
+    onboarding: (await createTestOnboarding(engine, config)).onboarding,
     schedules: createFakeSchedules(),
     remote: remote.service,
     remoteOrigin: plane.origin,
@@ -331,7 +331,7 @@ function settleChannel(opening: Promise<OpenChannel>) {
 
 async function addDevice(remote: StartedRemote, userId = OWNER.id) {
   const device = await createKeyPair();
-  remote.store.upsertDevice({
+  await remote.store.upsertDevice({
     publicKey: await serializeDeviceKey(device),
     name: 'Phone',
     enrolledAt: 1,
@@ -500,8 +500,14 @@ describe('the tunnel entry point', () => {
   test('opens a team view only from app.shinsa.dev, with a connect token, for a member of the team', async () => {
     const { tunnel, port, plane, remote } = await start({ teams: true });
     const key = serializeBase64Url(new Uint8Array(32).fill(3));
-    remote.store.recordTeams([TEAM]);
-    remote.store.upsertTeamKey({ teamId: 'team1', name: 'Platform', key, invite: 'invite-1', addedAt: 1 });
+    await remote.store.recordTeams([TEAM]);
+    await remote.store.upsertTeamKey({
+      teamId: 'team1',
+      name: 'Platform',
+      key,
+      invite: 'invite-1',
+      addedAt: 1,
+    });
     expect((await tunnel('/team')).status).toBe(403);
     expect((await tunnel('/team', { headers: { origin: plane.origin } })).status).toBe(401);
     const token = encodeURIComponent(await createToken(undefined, KAI.id, 'team'));
@@ -735,7 +741,7 @@ describe('the sealed channel over the tunnel', () => {
       ])
     );
     const device = remote.snapshot().devices[0]?.publicKey ?? '';
-    expect(remote.removeDevice(device)).toBe(true);
+    expect(await remote.removeDevice(device)).toBe(true);
     expect(await channel.closed).toBe(1008);
   });
 
@@ -781,7 +787,7 @@ describe('the sealed channel over the tunnel', () => {
 
   test('closes every channel when remote access stops', async () => {
     const { remote, port, connectors } = await start();
-    remote.start();
+    await remote.start();
     const machine = await remote.store.resolveMachineKey();
     const channel = await openChannel(remote.appOrigin, port, '', machine.publicKey, {
       device: await addDevice(remote),
@@ -834,14 +840,14 @@ describe('the remote service', () => {
     expect(remote.tunnelHost).toBe('t-k3x9.shinsa.dev');
     expect(await remote.verifyConnect(null, 'remote')).toBeNull();
     plane.answers.set('/__remote/machine/heartbeat', () => refuse(Revoked));
-    remote.start();
+    await remote.start();
     const deadline = performance.now() + 2_000;
     while (remote.snapshot().paired && performance.now() < deadline) await Bun.sleep(1);
     expect(remote.snapshot()).toMatchObject({ paired: false, enabled: false, status: 'revoked' });
     expect(connectors[0]?.stopped).toBe(true);
     expect(changes.length).toBeGreaterThan(0);
     unsubscribe();
-    remote.start();
+    await remote.start();
     expect(connectors).toHaveLength(1);
     expect(remote.tunnelHost).toBeNull();
   });
@@ -891,7 +897,7 @@ describe('pairing this machine', () => {
       name: 'Studio',
       publicKey: started.machineKey,
       version: '1',
-      features: ['bound-connect-tokens', 'sealed-pairing'],
+      features: ['bound-connect-tokens', 'sealed-pairing', 'slack-linked-threads'],
     });
     expect((await readSnapshot(await local('/api/remote/pair', {}))).pairing?.claimCode).toBe('K7PQ');
     await until('paired', () => remote.snapshot().paired);
@@ -929,7 +935,7 @@ describe('pairing this machine', () => {
 describe('managing remote access on the machine', () => {
   test('pauses, resumes and removes the instance through its routes', async () => {
     const { remote, local, plane, connectors } = await start();
-    remote.start();
+    await remote.start();
     await until('connected', () => remote.snapshot().status === 'connected');
     const paused = await readSnapshot(await local('/api/remote/disable', {}));
     expect(paused).toMatchObject({ paired: true, enabled: false, status: 'off' });
@@ -1251,7 +1257,7 @@ describe('links, access requests and members', () => {
     expect(await readError(await local('/api/remote/requests/accept', { requestId }))).not.toBe(
       'members_full'
     );
-    remote.declineRequest(requestId);
+    await remote.declineRequest(requestId);
   });
 
   test('a request from a member adds only the device', async () => {
@@ -1369,7 +1375,7 @@ describe('links, access requests and members', () => {
       REMOTE_PATHS.heartbeat,
       answerAccess({ owner: OWNER, members: [{ user: KAI, addedAt: 1 }] })
     );
-    remote.start();
+    await remote.start();
     await until('connected', () => remote.snapshot().status === 'connected');
     const settled = pushes.length;
     await remote.requestHeartbeat();
@@ -1393,7 +1399,7 @@ describe('links, access requests and members', () => {
     });
     const logs = captureLogs();
     try {
-      remote.start();
+      await remote.start();
       await until('connected', () => remote.snapshot().status === 'connected');
       await remote.requestHeartbeat();
       const beats = plane.calls.filter((call) => call.path === REMOTE_PATHS.heartbeat);
@@ -1412,7 +1418,7 @@ describe('links, access requests and members', () => {
     plane.answers.set(REMOTE_PATHS.heartbeat, () =>
       Response.json({ ok: true, ...ACCESS, guests: [], teams: [TEAM] })
     );
-    remote.start();
+    await remote.start();
     await until('connected', () => remote.snapshot().status === 'connected');
     expect(remote.snapshot().teams).toEqual([
       {
@@ -1586,7 +1592,11 @@ describe('handing off a task', () => {
   test('a guest follows only the transcripts of their task', async () => {
     const { remote, engine, port, taskId, machine } = await startHandoff();
     const LEE = { user: { id: '9', login: 'lee', name: null, avatarUrl: null }, addedAt: 2 };
-    remote.store.update((file) => ({ ...file, guests: [LEE], access: { owner: OWNER, members: [LEE] } }));
+    await remote.store.update((file) => ({
+      ...file,
+      guests: [LEE],
+      access: { owner: OWNER, members: [LEE] },
+    }));
     const channel = await openChannel(
       remote.appOrigin,
       port,
@@ -1644,10 +1654,10 @@ describe('handing off a task', () => {
 
   test('a guest still handed another task keeps their place at Shinsa Cloud', async () => {
     const { remote, handoffs, plane, taskId, otherId } = await startHandoff();
-    remote.store.update((file) => ({ ...file, guests: [GUEST_MEMBER] }));
+    await remote.store.update((file) => ({ ...file, guests: [GUEST_MEMBER] }));
     const device = { name: 'Phone', enrolledAt: 1, lastSeenAt: null, userId: KAI.id };
-    remote.store.upsertDevice({ ...device, publicKey: 'a', taskId });
-    remote.store.upsertDevice({ ...device, publicKey: 'b', taskId: otherId });
+    await remote.store.upsertDevice({ ...device, publicKey: 'a', taskId });
+    await remote.store.upsertDevice({ ...device, publicKey: 'b', taskId: otherId });
     await handoffs.revoke(taskId, KAI.id);
     expect(remote.snapshot().devices.map((entry) => entry.publicKey)).toEqual(['b']);
     expect(plane.calls.some((call) => call.path === REMOTE_PATHS.machineGuestRemove)).toBe(false);
@@ -1685,7 +1695,7 @@ describe('handing off a task', () => {
       await settleChannel(openChannel(remote.appOrigin, port, secret, machine.publicKey, { userId: KAI.id }))
     ).toContain('This machine cannot hand off tasks right now');
     plane.answers.set(REMOTE_PATHS.heartbeat, () => refuse(Revoked));
-    remote.start();
+    await remote.start();
     await until('forgotten', () => remote.store.file.credentials === null);
     expect(remote.store.file.handoffs).toEqual([]);
   });
@@ -1698,7 +1708,7 @@ describe('handing off a task', () => {
     await engine.dispatch({ type: 'task.hand_off', taskId });
     plane.answers.set(REMOTE_PATHS.machineHandoffs, () => new Response('', { status: 500 }));
     await expect(handoffs.link(taskId, { key: 'down' } as never)).rejects.toThrow('status 500');
-    remote.store.update((file) => ({
+    await remote.store.update((file) => ({
       ...file,
       handoffs: [{ taskId, secret, invite: 'handoff-token', createdAt: 1 }],
     }));
@@ -1741,11 +1751,11 @@ describe('handing off a task', () => {
   test('a heartbeat keeps the devices of the guests it lists and forgets the rest', async () => {
     const { remote, plane, taskId } = await startHandoff();
     const device = { name: 'Phone', enrolledAt: 1, lastSeenAt: null, userId: KAI.id, taskId };
-    remote.store.upsertDevice({ ...device, publicKey: 'guest' });
+    await remote.store.upsertDevice({ ...device, publicKey: 'guest' });
     plane.answers.set(REMOTE_PATHS.heartbeat, () =>
       Response.json({ ok: true, ...ACCESS, guests: [GUEST_MEMBER], teams: [] })
     );
-    remote.start();
+    await remote.start();
     await until('connected', () => remote.snapshot().status === 'connected');
     await remote.requestHeartbeat();
     expect(remote.store.file.guests).toEqual([GUEST_MEMBER]);
@@ -1760,11 +1770,11 @@ describe('handing off a task', () => {
   test('a guest who left at Shinsa Cloud gives the task back, so it can be handed off again', async () => {
     const { remote, engine, plane, taskId } = await startHandoff();
     await engine.dispatch({ type: 'handoff.claim', taskId, guest: { ...KAI } });
-    remote.store.update((file) => ({ ...file, guests: [GUEST_MEMBER] }));
+    await remote.store.update((file) => ({ ...file, guests: [GUEST_MEMBER] }));
     plane.answers.set(REMOTE_PATHS.heartbeat, () =>
       Response.json({ ok: true, ...ACCESS, guests: [], teams: [] })
     );
-    remote.start();
+    await remote.start();
     await until('given back', () => engine.state.tasks[taskId]?.handoff === null);
     expect(engine.state.tasks[taskId]?.activity.at(-1)?.text).toBe('kai gave this task back');
     await engine.dispatch({ type: 'task.hand_off', taskId });
@@ -1777,7 +1787,7 @@ describe('handing off a task', () => {
     plane.answers.set(REMOTE_PATHS.heartbeat, () =>
       Response.json({ ok: true, ...access, guests: [], teams: [] })
     );
-    remote.start();
+    await remote.start();
     await until('connected', () => remote.snapshot().status === 'connected');
     const secret = readClaim(engine, taskId)?.secret ?? '';
     const channel = await openChannel(remote.appOrigin, port, secret, machine.publicKey, { userId: KAI.id });
@@ -1794,7 +1804,7 @@ describe('handing off a task', () => {
     plane.answers.set(REMOTE_PATHS.heartbeat, () =>
       Response.json({ ok: true, ...ACCESS, guests: [], teams: [] })
     );
-    remote.start();
+    await remote.start();
     await until('connected', () => remote.snapshot().status === 'connected');
     const held = Promise.withResolvers<Response>();
     plane.answers.set(REMOTE_PATHS.heartbeat, () => held.promise);
@@ -1812,7 +1822,7 @@ describe('handing off a task', () => {
   test('a guest leaving is logged when the task cannot take it back', async () => {
     const { remote, engine, plane, taskId } = await startHandoff();
     await engine.dispatch({ type: 'handoff.claim', taskId, guest: { ...KAI } });
-    remote.store.update((file) => ({ ...file, guests: [GUEST_MEMBER] }));
+    await remote.store.update((file) => ({ ...file, guests: [GUEST_MEMBER] }));
     const logs = captureLogs();
     const dispatch = spyOn(engine.core, 'dispatch').mockImplementation(() =>
       Effect.fail(new EngineStopped({ message: 'disk full' }))
@@ -1821,7 +1831,7 @@ describe('handing off a task', () => {
       plane.answers.set(REMOTE_PATHS.heartbeat, () =>
         Response.json({ ok: true, ...ACCESS, guests: [], teams: [] })
       );
-      remote.start();
+      await remote.start();
       await until('logged', () => logs.fieldsOf('[Handoff] Could not give a task back').length > 0);
       expect(logs.fieldsOf('[Handoff] Could not give a task back')).toEqual([{ taskId, error: 'disk full' }]);
     } finally {
@@ -1882,7 +1892,7 @@ describe('a teammate on this machine', () => {
   async function startTeammate(scopes: AccessScopes = DEFAULT_TEAM_SCOPES) {
     const started = await start();
     const { engine, remote, port } = started;
-    remote.store.update((file) => ({
+    await remote.store.update((file) => ({
       ...file,
       teams: [{ ...TEAM, scopes }],
       teamKeys: [{ teamId: TEAM.id, name: TEAM.name, key: TEAM_KEY, invite: null, addedAt: 1 }],
@@ -1895,7 +1905,7 @@ describe('a teammate on this machine', () => {
     await engine.dispatch({ type: 'task.create', request: 'Mine alone', repoId: null, projectId: kept });
     const [taskId, otherId] = Object.keys(engine.state.tasks);
     const machine = await remote.store.resolveMachineKey();
-    const secret = remote.resolveTeamGrant(KAI.id, TEAM.id) ?? '';
+    const secret = (await remote.resolveTeamGrant(KAI.id, TEAM.id)) ?? '';
     const channel = await openChannel(remote.appOrigin, port, secret, machine.publicKey, {
       userId: KAI.id,
       onPending: () => {
@@ -1984,8 +1994,8 @@ describe('a teammate on this machine', () => {
 
   test('removing them from the team closes their channel at once', async () => {
     const { channel, remote } = await startTeammate();
-    remote.store.recordTeams([{ ...TEAM, members: [] }]);
-    remote.publish();
+    await remote.store.recordTeams([{ ...TEAM, members: [] }]);
+    await remote.publish();
     expect(await channel.closed).toBe(1008);
     expect(remote.snapshot().devices).toEqual([]);
   });

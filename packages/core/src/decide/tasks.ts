@@ -2,10 +2,12 @@ import type { CommandOf, TriageReasons } from '../commands/index.ts';
 import {
   copyUnreachedTeammate,
   DomainError,
+  hasStep,
   isTaskResting,
   isTaskSettled,
   listQueuedRounds,
   RUN_STAGES,
+  resolveRepoMove,
   resolveShapeOf,
   resolveTaskPipeline,
   resolveTaskRounds,
@@ -26,12 +28,13 @@ import {
   isWaitingForCheckout,
   listPendingDependencies,
   resolveTaskWorkspace,
+  selectStackRefusal,
 } from '../state/queries.ts';
 import { syncAutopilotDeadlines } from './autopilot.ts';
 import {
   addToBacklog,
-  buildFromBacklog,
-  isStartingFromBacklog,
+  buildApprovedPlan,
+  isStartingApprovedPlan,
   releaseInquiryFromBacklog,
 } from './backlog.ts';
 import { releaseBudgetHolds, releasePaceHolds } from './costs.ts';
@@ -40,6 +43,7 @@ import { changeDependencies, changeStack, resolveDependencies, resolveStackParen
 import { closeTeammateDuplicate, closeTriageDuplicate, selectTriageDuplicate } from './duplicates.ts';
 import { settleTask, startWork } from './lifecycle.ts';
 import { assertNoMergeStepsLeft } from './merge-steps.ts';
+import { finishMove } from './moves.ts';
 import { retryTask } from './retry.ts';
 import { isShapeLocked, resolveNextStep, startStep } from './shapes.ts';
 import { assertNoWatchdogsLeft, stopAllWatchdogs } from './watchdogs.ts';
@@ -51,12 +55,14 @@ function assertRepo(decider: Decider, repoId: string | null) {
 function resolveCreatedProject(decider: Decider, command: CommandOf<'task.create'>) {
   if (command.projectId !== undefined) {
     if (command.projectId !== null) findProject(decider.state, command.projectId);
-    return command.projectId;
+    return { projectId: command.projectId, auto: false };
   }
   const repoProject = command.repoId ? decider.state.repos[command.repoId]?.projectId : null;
-  if (repoProject) return repoProject;
+  if (repoProject) return { projectId: repoProject, auto: false };
   const focus = resolveFocusProject(decider.state, decider.context.now);
-  return focus && decider.state.projects[focus] ? focus : null;
+  return focus && decider.state.projects[focus]
+    ? { projectId: focus, auto: true }
+    : { projectId: null, auto: false };
 }
 
 interface TaskLineage {
@@ -76,7 +82,8 @@ export function createTask(decider: Decider, command: CommandOf<'task.create'>, 
   const waitsOn = resolveDependencies(decider, null, command.waitsOn ?? []).filter(
     (id) => !stacksOn.includes(id)
   );
-  const projectId = resolveCreatedProject(decider, command);
+  const created = resolveCreatedProject(decider, command);
+  const projectId = created.projectId;
   if (command.forkOf !== undefined) decider.task(command.forkOf);
   if (command.forkOf !== undefined && command.teammateFork !== undefined)
     throw new DomainError({ code: 'fork_twice', message: 'Fork one task at a time.' });
@@ -85,13 +92,15 @@ export function createTask(decider: Decider, command: CommandOf<'task.create'>, 
     shape: command.mode === undefined && lineage.shape === undefined,
     start: command.waitsOn === undefined && stacksOn.length === 0,
     priority: command.priority === undefined,
+    project: created.auto,
   };
   decider.emit({
     type: 'task.created',
     taskId,
     request,
     repoId: command.repoId,
-    ...(projectId ? { projectId, handle: resolveNextHandle(decider.state, projectId) } : {}),
+    ...(projectId ? { projectId } : {}),
+    ...(projectId && !auto.project ? { handle: resolveNextHandle(decider.state, projectId) } : {}),
     priority: command.priority ?? 'normal',
     planFirst: command.planFirst ?? false,
     origin: command.origin ?? null,
@@ -110,12 +119,13 @@ export function createTask(decider: Decider, command: CommandOf<'task.create'>, 
   return taskId;
 }
 
-function inferDependencies(decider: Decider, taskId: string, ids: string[]) {
+function inferDependencies(decider: Decider, taskId: string, ids: string[], stacked: string[]) {
   return [...new Set(ids)].filter((id) => {
     const dependency = decider.state.tasks[id];
     return (
       dependency !== undefined &&
       id !== taskId &&
+      !stacked.includes(id) &&
       !decider.state.tasks[taskId]?.stacksOn?.includes(id) &&
       !isTaskSettled(dependency) &&
       !isDependencyOf(decider.state, taskId, id)
@@ -123,10 +133,35 @@ function inferDependencies(decider: Decider, taskId: string, ids: string[]) {
   });
 }
 
+function resolveTriageStack(
+  decider: Decider,
+  task: Task,
+  command: CommandOf<'task.triage'>,
+  shape: TaskShape | undefined
+) {
+  const { repoId } = command;
+  if (!task.auto.start || !command.stacksOn?.length || task.stacksOn?.length || repoId === null) return [];
+  const pipeline = shape ? [...SHAPE_PIPELINES[shape]] : task.pipeline;
+  if (!hasStep({ pipeline, mode: task.mode }, 'pull_request')) return [];
+  return [...new Set(command.stacksOn)].filter((id) => {
+    const parent = decider.state.tasks[id];
+    return (
+      parent !== undefined &&
+      parent.repoId === repoId &&
+      selectStackRefusal(decider.state, task, parent, repoId) === null
+    );
+  });
+}
+
+interface TriageChoices {
+  inferred: string[];
+  stacked: string[];
+}
+
 function resolveDecisions(
   task: Task,
   command: CommandOf<'task.triage'>,
-  inferred: string[],
+  { inferred, stacked }: TriageChoices,
   reasons: TriageReasons
 ): TriageDecisions {
   const shape = command.shape ?? resolveShapeOf(resolveTaskPipeline(task));
@@ -136,6 +171,7 @@ function resolveDecisions(
     priority: task.auto.priority
       ? { value: command.priority ?? task.priority, why: reasons.priority ?? '' }
       : null,
+    ...(stacked.length > 0 ? { stack: { value: stacked, why: reasons.stack ?? '' } } : {}),
     ...(command.unreached ? { duplicate: { unreached: command.unreached.map(copyUnreachedTeammate) } } : {}),
   };
 }
@@ -144,16 +180,17 @@ export function triageTask(decider: Decider, command: CommandOf<'task.triage'>) 
   const task = decider.task(command.taskId);
   if (isTaskSettled(task) || isTriaged(task)) return;
   assertRepo(decider, command.repoId);
-  const inferred = task.auto.start ? inferDependencies(decider, task.id, command.waitsOn) : [];
-  const decisions = resolveDecisions(task, command, inferred, command.reasons ?? {});
   const shape = task.auto.shape && !isShapeLocked(task) ? command.shape : undefined;
-  const projectId = task.projectId ?? decider.repoOf(command)?.projectId ?? null;
+  const stacked = resolveTriageStack(decider, task, command, shape);
+  const inferred = task.auto.start ? inferDependencies(decider, task.id, command.waitsOn, stacked) : [];
+  const decisions = resolveDecisions(task, command, { inferred, stacked }, command.reasons ?? {});
+  const projectId = resolveRepoMove(task, decider.repoOf(command)) ?? task.projectId ?? null;
   decider.emit({
     type: 'task.triaged',
     taskId: task.id,
     title: command.title,
     repoId: command.repoId,
-    ...(task.projectId ? {} : { projectId }),
+    ...(projectId === task.projectId ? {} : { projectId }),
     ...(task.handle ? {} : { handle: resolveNextHandle(decider.state, projectId) }),
     size: command.size,
     branch: command.branch,
@@ -163,6 +200,7 @@ export function triageTask(decider: Decider, command: CommandOf<'task.triage'>) 
   if (task.auto.priority && command.priority && command.priority !== task.priority) {
     decider.emit({ type: 'task.prioritized', taskId: task.id, priority: command.priority });
   }
+  if (stacked.length > 0) changeStack(decider, task.id, stacked, 'shinsa');
   if (inferred.length > 0) {
     decider.emit({ type: 'task.waits_on_changed', taskId: task.id, waitsOn: inferred, by: 'shinsa' });
   }
@@ -254,7 +292,7 @@ export function retryTaskCommand(decider: Decider, command: CommandOf<'task.retr
 
 export function readyWorktree(decider: Decider, command: CommandOf<'worktree.ready'>) {
   const current = decider.task(command.taskId);
-  if (current.repoId === null || isWaitingForCheckout(decider.state, current)) return;
+  if (current.repoId === null || current.movingTo || isWaitingForCheckout(decider.state, current)) return;
   const workspace = resolveTaskWorkspace(decider.state, current);
   const unchanged =
     current.worktreePath === command.path &&
@@ -284,8 +322,8 @@ export function readyWorktree(decider: Decider, command: CommandOf<'worktree.rea
     decider.stage(task.id, 'waiting_on_tasks', describeWaiting(task, pending));
     return;
   }
-  if (isStartingFromBacklog(task)) {
-    buildFromBacklog(decider, task.id);
+  if (isStartingApprovedPlan(task)) {
+    buildApprovedPlan(decider, task.id);
     return;
   }
   startStep(decider, task.id, resolveNextStep(task));
@@ -294,6 +332,7 @@ export function readyWorktree(decider: Decider, command: CommandOf<'worktree.rea
 export function removeWorktree(decider: Decider, command: CommandOf<'worktree.gone'>) {
   if (decider.task(command.taskId).worktreePath === null) return;
   decider.emit({ type: 'worktree.removed', taskId: command.taskId });
+  finishMove(decider, command.taskId);
 }
 
 export function failEffect(decider: Decider, command: CommandOf<'effect.fail'>) {

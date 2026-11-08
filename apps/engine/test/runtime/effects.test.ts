@@ -10,6 +10,7 @@ import {
   type ShinsaCommand,
   type ShinsaState,
   type Task,
+  SHARE_PRESET_SCOPES,
 } from '@shinsa/core';
 import { Effect } from 'effect';
 import type { RunSupervisor } from '../../src/agents/supervisor/service.ts';
@@ -406,6 +407,7 @@ describe('the Slack effects', () => {
       permalink: null,
       channelName: null,
       thread: [],
+      linkedThreads: [],
     };
     await runner.apply({ kind: 'slack.evaluate', mention }, createContext());
     await runner.apply({ kind: 'slack.status', taskId: 't1', thread: THREAD }, createContext());
@@ -485,7 +487,9 @@ describe('describing a shared task', () => {
   test('writes the description of a shared task and records it under an id the effect decides', async () => {
     const asked: string[] = [];
     const { runner, dispatched, commandIds } = setup(
-      withTask({ share: { at: 1, url: null, limit: 'until_done', preset: 'status', endsAt: null } }),
+      withTask({
+        share: { at: 1, url: null, limit: 'until_done', scopes: SHARE_PRESET_SCOPES.status, endsAt: null },
+      }),
       {
         describeShare: (task) =>
           Effect.sync(() => {
@@ -510,7 +514,9 @@ describe('describing a shared task', () => {
     await unshared.runner.apply({ kind: 'share.describe', taskId: 'task-1' }, createContext());
     expect(unshared.dispatched).toEqual([]);
     const silent = setup(
-      withTask({ share: { at: 1, url: null, limit: 'until_done', preset: 'standard', endsAt: null } })
+      withTask({
+        share: { at: 1, url: null, limit: 'until_done', scopes: SHARE_PRESET_SCOPES.standard, endsAt: null },
+      })
     );
     await silent.runner.apply({ kind: 'share.describe', taskId: 'task-1' }, createContext());
     expect(silent.dispatched).toEqual([]);
@@ -643,7 +649,41 @@ describe('triage', () => {
     expect(Object.values(engine.state.repos).map((repo) => repo.name)).toEqual(['app']);
   });
 
-  test('a repository outside the task’s project is bound while the task keeps its project, and filed by its owner', async () => {
+  test('a task triage stacks is triaged onto the open change it names, in the same repository', async () => {
+    const { root } = await createGitRepo();
+    const config = createTestConfig(createTempDir(), { roots: [root] });
+    const eventLog = openEventLog(config.databasePath);
+    const engine = new Engine(eventLog);
+    await engine.dispatch({ type: 'task.create', request: 'Rewrite the store', repoId: null });
+    await engine.dispatch({
+      type: 'task.create',
+      request: 'Move the readers onto the new store',
+      repoId: null,
+    });
+    const [parent, task] = Object.values(engine.state.tasks);
+    const { runs } = createRuns();
+    const runner = new EffectRunner(engine, config, runs, createBriefings().briefings, {
+      shares: NO_SHARES,
+      previews: NO_PREVIEWS,
+      handoffs: NO_HANDOFFS,
+      resolveLogin: () => Promise.resolve(null),
+      triage: (_state, triaging, local) =>
+        Effect.succeed({
+          title: triaging.request,
+          repoPath: local[0]?.path ?? '',
+          size: 'small',
+          branch: triaging.id === parent?.id ? 'refactor/store' : 'refactor/store-readers',
+          waitsOn: [],
+          ...(triaging.id === task?.id && parent ? { stacksOn: [parent] } : {}),
+        }),
+    });
+    await runner.apply({ kind: 'task.triage', taskId: parent?.id ?? '' }, createContext());
+    await runner.apply({ kind: 'task.triage', taskId: task?.id ?? '' }, createContext());
+    expect(engine.state.tasks[task?.id ?? '']?.stacksOn).toEqual([parent?.id ?? '']);
+    expect(engine.state.tasks[parent?.id ?? '']?.stacksOn ?? []).toEqual([]);
+  });
+
+  async function triageOutsideRepo(options: { chosen: boolean }) {
     const { root } = await createGitRepo();
     const config = createTestConfig(createTempDir(), { roots: [root] });
     const engine = new Engine(openEventLog(config.databasePath));
@@ -656,7 +696,13 @@ describe('triage', () => {
       projectName: null,
       projectId,
     });
-    await engine.dispatch({ type: 'task.create', request: 'Fix the button in app', repoId: null, projectId });
+    if (!options.chosen) await engine.dispatch({ type: 'focus.change', projectId, until: null });
+    await engine.dispatch({
+      type: 'task.create',
+      request: 'Fix the button in app',
+      repoId: null,
+      ...(options.chosen ? { projectId } : {}),
+    });
     const [task] = Object.values(engine.state.tasks);
     const runner = new EffectRunner(engine, config, createRuns().runs, createBriefings().briefings, {
       shares: NO_SHARES,
@@ -669,12 +715,24 @@ describe('triage', () => {
         ),
     });
     await runner.apply({ kind: 'task.triage', taskId: task?.id ?? '' }, createContext());
+    const triaged = engine.state.tasks[task?.id ?? ''];
     const app = Object.values(engine.state.repos).find((repo) => repo.name === 'app');
-    expect(app?.projectId).not.toBe(projectId);
-    expect(engine.state.tasks[task?.id ?? '']).toMatchObject({ repoId: app?.id, projectId });
     await runner.stop();
     engine.stop();
     await engine.settle();
+    return { projectId, triaged, app };
+  }
+
+  test('a project you chose never binds a repository outside it, even one the request names', async () => {
+    const { projectId, triaged, app } = await triageOutsideRepo({ chosen: true });
+    expect(app).toBeUndefined();
+    expect(triaged).toMatchObject({ repoId: null, projectId, handle: 'SHI-1' });
+  });
+
+  test('a task whose project only came from the focus binds a named repository outside it', async () => {
+    const { projectId, triaged, app } = await triageOutsideRepo({ chosen: false });
+    expect(app?.projectId).not.toBe(projectId);
+    expect(triaged).toMatchObject({ repoId: app?.id, projectId: app?.projectId, auto: { project: true } });
   });
 
   async function triageNewRepo(options: { roots?: string[]; folders?: string[]; newRepo?: string } = {}) {

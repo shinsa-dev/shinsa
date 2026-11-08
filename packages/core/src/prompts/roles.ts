@@ -117,6 +117,16 @@ function describeReshapeNote(task: Task) {
   ].join('\n');
 }
 
+function describePlanSplit(task: Task) {
+  if (!resolveTaskPipeline(task).includes('pull_request')) return '';
+  return [
+    '',
+    `When the request holds work that would ship better as separate pull requests, each worth reviewing on its own, plan only the part that stays in this task and give the rest in \`split\`: up to ${PROTOCOL_LIMITS.splitParts} parts, each a \`title\`, a \`request\` that stands on its own and an \`order\`.`,
+    "`parallel` starts the part at once, and is the default. `waits_on` starts it once the task in `on` merges, only when it needs code that sits on that unmerged branch. `stacks_on` builds it on that task's branch so the two merge together, only for pieces of one rewrite. `on` is 0 for this task, or an earlier part's number, counted from 1.",
+    'The human approves the split with the plan, and each part then plans for itself, starting from this conversation. Keep a small or cohesive request whole: split only what you would otherwise file as separate tasks.',
+  ].join('\n');
+}
+
 export function resolvePlanningPrompt(
   task: Task,
   repo: Repo | null,
@@ -142,6 +152,7 @@ export function resolvePlanningPrompt(
     describeEarlierWork(task),
     describeOperationNote(task),
     describePlanParameters(task),
+    describePlanSplit(task),
     task.auto.shape && !feedback && !task.plan && !isComposedByAgent(task)
       ? ['', describeReshapeNote(task)].join('\n')
       : '',
@@ -508,7 +519,7 @@ export function resolveInvestigatorPrompt(task: Task, repo: Repo | null, followU
     'Lead with the cause in one or two sentences (or what is still unknown), then how you reproduced it and the evidence (files and lines as shinsa:// links).',
     describeWhatFollows(task) ??
       (continues
-        ? 'The human already asked for a fix: an agent plans it from your diagnosis next, so end with what the fix should change.'
+        ? 'The human already asked for a fix: an agent plans it from your diagnosis next, so end with what the fix should change. If you found nothing worth fixing, set `recommend` to `close`: the task then waits for the human to close it or go on anyway.'
         : PROPOSAL_RULE),
     'Then stop.',
   ].join('\n');
@@ -581,6 +592,6 @@ export function resolveAnswererPrompt(task: Task, repo: Repo | null, followUp: s
     '',
     `Call \`answer\` with your answer in markdown (at most ${SHAPE_LIMITS.answer} characters): lead with the answer itself, then the evidence (files and lines as shinsa:// links).`,
     describeWhatFollows(task) ?? PROPOSAL_RULE,
-    'For other work worth doing, propose it with `suggest_tasks`. Then stop.',
+    'Only for work you noticed that serves a different goal than this task, propose it with `suggest_tasks`. Then stop.',
   ].join('\n');
 }

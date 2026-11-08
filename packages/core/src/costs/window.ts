@@ -104,6 +104,7 @@ export function resolvePaceHold(
   provider: string,
   now: number
 ): PaceHold | null {
+  if (task.paceLimitsIgnored) return null;
   const daily = state.settings.dailyUsageLimit;
   const projectId = task.projectId ?? null;
   const project = projectId === null ? null : (state.projects[projectId] ?? null);

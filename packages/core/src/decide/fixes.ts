@@ -6,7 +6,12 @@ import {
   type ReviewEscalationReason,
   type Task,
 } from '../domain/index.ts';
-import { describeEvidenceForFix, resolveAgentPrompt, resolveReviewFixPrompt } from '../prompts/index.ts';
+import {
+  describeEvidenceForFix,
+  describeRepeatedFailure,
+  resolveAgentPrompt,
+  resolveReviewFixPrompt,
+} from '../prompts/index.ts';
 import type { ReviewFinding } from '../report/types.ts';
 import { isFindingFixedBeforeReview } from './autopilot.ts';
 import type { Decider } from './decider.ts';
@@ -18,7 +23,9 @@ import {
 } from './fingerprints.ts';
 import { openReviewGate } from './lifecycle.ts';
 
-const MAX_STALLED_FIXES = 2;
+const MAX_STALLED_FIXES = 8;
+
+const MAX_STALLED_REVIEW_FIXES = 2;
 
 const MAX_REVIEW_ROUNDS = 3;
 
@@ -59,9 +66,18 @@ export function clearFixLoop(decider: Decider, taskId: string) {
   decider.emit({ type: 'fix.started', taskId, round: 0 });
 }
 
-function resolveFixStop(decider: Decider, task: Task, stalled: number): FixStop | null {
+function resolveStallLimit(reason: Exclude<FixReason, 'you'>) {
+  return reason === 'review' ? MAX_STALLED_REVIEW_FIXES : MAX_STALLED_FIXES;
+}
+
+function resolveFixStop(
+  decider: Decider,
+  task: Task,
+  reason: Exclude<FixReason, 'you'>,
+  stalled: number
+): FixStop | null {
   const limit = decider.state.settings.maxFixRounds;
-  if (stalled >= MAX_STALLED_FIXES) return { reason: 'stalled', stalled, limit: limit ?? 0 };
+  if (stalled >= resolveStallLimit(reason)) return { reason: 'stalled', stalled, limit: limit ?? 0 };
   if (limit !== null && task.fixRounds >= limit) return { reason: 'exhausted', stalled, limit };
   return null;
 }
@@ -147,7 +163,7 @@ export function startFix(
 ) {
   const task = decider.task(taskId);
   const stalled = commentsOnly ? 0 : countFixRepeats(task, reason, signature);
-  const stop = reason === 'you' ? null : resolveFixStop(decider, task, stalled);
+  const stop = reason === 'you' ? null : resolveFixStop(decider, task, reason, stalled);
   if (stop && reason !== 'you') {
     stopFixing(decider, task, reason, stop);
     return;
@@ -164,10 +180,11 @@ export function startFix(
   });
   decider.stage(taskId, 'fixing', resolveFixStageReason(reason, base));
   const evidence = describeEvidenceForFix(listAgentEvidence(decider, task));
+  const repeated = reason !== 'you' && stalled > 0 ? describeRepeatedFailure(stalled) : '';
   decider.startRun(
     decider.task(taskId),
     'agent',
-    resolveAgentPrompt([prompt, evidence].filter(Boolean).join('\n\n')),
+    resolveAgentPrompt([prompt, repeated, evidence].filter(Boolean).join('\n\n')),
     {
       purpose: 'fix',
       resumeFrom: decider.taskSession(taskId, 'agent'),

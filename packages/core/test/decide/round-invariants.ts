@@ -228,8 +228,16 @@ function listLaterComposingCommands(state: ShinsaState, random: Random): ShinsaC
     }
     if (run.role === 'investigator' || run.role === 'researcher') {
       const step = run.role === 'investigator' ? 'investigate' : 'research';
+      const recommend = chance(random, 0.5) ? 'close' : 'go_on';
       return [
-        { type: 'agent.deliver', runId: run.id, step, body: 'Found it.', ...resolveOwedReply(state, run.id) },
+        {
+          type: 'agent.deliver',
+          runId: run.id,
+          step,
+          body: 'Found it.',
+          recommend,
+          ...resolveOwedReply(state, run.id),
+        },
       ];
     }
     return [];

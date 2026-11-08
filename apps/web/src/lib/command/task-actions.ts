@@ -1,4 +1,10 @@
-import { type ShinsaState, TASK_PRIORITIES, type Task, type TaskPriority } from '@shinsa/core';
+import {
+  isTaskPausable,
+  type ShinsaState,
+  TASK_PRIORITIES,
+  type Task,
+  type TaskPriority,
+} from '@shinsa/core';
 import { compose } from '@/lib/command/gates.ts';
 import { type Command, RANK } from '@/lib/command/registry.ts';
 import { sendCommandWithToast } from '@/lib/connection/commands.ts';
@@ -27,6 +33,7 @@ const ACTION_KEYWORDS: Record<Exclude<TaskActionKey, 'open'>, string[]> = {
   removeFromBacklog: ['backlog', 'remove', 'plan to approve', 'needs you'],
   snooze: ['hide', 'later', 'not now', 'put aside', 'pause'],
   unsnooze: ['wake', 'resume', 'pick up', 'show', 'needs you'],
+  pause: ['stop', 'interrupt', 'halt', 'hold'],
   restart: ['retry', 'rerun', 'again'],
   complete: ['complete', 'finish', 'close', 'resolve'],
   duplicate: ['duplicate', 'same', 'repeat', 'already', 'close'],
@@ -132,7 +139,8 @@ export function listTaskActionCommands(state: ShinsaState, task: Task): Command[
     task,
     selectEngineCommands(connection.selectEngine(task.id)),
     Date.now(),
-    connection.selectMachine(task.id)?.teammate ?? null
+    connection.selectMachine(task.id)?.teammate ?? null,
+    isTaskPausable(state, task)
   )
     .flat()
     .flatMap((key) => (key === 'open' ? [] : [createActionCommand(task, key)]));

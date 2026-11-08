@@ -141,7 +141,7 @@ export function CheckRowItem({
     <li className='flex min-w-0 flex-col gap-1.5 px-3 py-2'>
       <div className={CHECK_ROW_GRID}>
         <CheckGlyph state={row.state} className='group-has-[[data-facts]]/check:mt-px' />
-        <div className='flex min-w-0 flex-1 flex-col gap-px max-sm:col-start-2 max-sm:row-start-1'>
+        <div className='flex min-w-0 flex-1 flex-col max-sm:col-start-2 max-sm:row-start-1'>
           <span className='flex min-w-0 flex-wrap items-baseline gap-x-1.5'>
             <RowLabel row={row} />
             <span className='text-2xs text-fg-2'>{row.meta}</span>
@@ -227,7 +227,7 @@ function PopoverRow({ row }: { row: CheckRow }) {
   return (
     <li className='flex min-w-0 items-start gap-2'>
       <CheckGlyph state={row.state} />
-      <span className='flex min-w-0 flex-1 flex-col gap-px'>
+      <span className='flex min-w-0 flex-1 flex-col'>
         <Truncate className='text-xs leading-4 text-fg-4'>{row.label}</Truncate>
         <RowFacts row={row} />
       </span>

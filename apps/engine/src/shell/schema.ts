@@ -40,7 +40,7 @@ export interface CommandOptions {
 export interface CommandRequest {
   readonly argv: Argv;
   readonly cwd: string;
-  readonly input?: string | undefined;
+  readonly input?: string | Uint8Array | undefined;
   readonly env?: CommandEnv | undefined;
   readonly timeout: Duration.Duration | null;
   readonly cancel?: Effect.Effect<void> | undefined;

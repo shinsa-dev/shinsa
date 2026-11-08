@@ -32,6 +32,7 @@ import { SecretCard } from '@/components/overview/secret-card.tsx';
 import { SetupCard } from '@/components/overview/setup-card.tsx';
 import { SignInCard } from '@/components/overview/sign-in-card.tsx';
 import { SilenceNote } from '@/components/overview/silence-note.tsx';
+import { SuggestedReplies } from '@/components/overview/suggested-replies.tsx';
 import { UsageWaitCard } from '@/components/overview/usage-wait-card.tsx';
 import { WaitCard } from '@/components/overview/wait-card.tsx';
 import { MergeStepsBlock } from '@/components/review/merge-steps.tsx';
@@ -71,7 +72,8 @@ import {
   resolveRetryReply,
 } from '@/lib/tasks/gates.ts';
 import { describeMergeable, describePullRequestChecks } from '@/lib/tasks/pull-request.ts';
-import { describeChangeGate, resolvePlannedOperation } from '@/lib/tasks/shapes.ts';
+import { type ChangeReply, describeChangeGate, resolvePlannedOperation } from '@/lib/tasks/shapes.ts';
+import { KEEP_ONE_TASK_MESSAGE, listSplitParts } from '@/lib/tasks/split.ts';
 
 function PlannedOperation({ task }: { task: Task }) {
   const operation = resolvePlannedOperation(task);
@@ -91,6 +93,27 @@ function PlannedOperation({ task }: { task: Task }) {
   );
 }
 
+function PlanSplitList({ task }: { task: Task }) {
+  const parts = listSplitParts(task);
+  if (parts.length === 0) return null;
+  return (
+    <div className='flex flex-col gap-1.5'>
+      <span className='text-xs leading-5 font-medium text-fg-4'>Other tasks</span>
+      <ul className='flex flex-col gap-2.5'>
+        {parts.map((part) => (
+          <li key={part.title} className='flex min-w-0 flex-col gap-px'>
+            <span className='flex min-w-0 flex-wrap items-baseline gap-x-1.5'>
+              <span className='text-xs font-medium text-fg-3'>{part.title}</span>
+              <span className='text-2xs text-fg-2'>{part.start}</span>
+            </span>
+            <Markdown text={part.request} className='text-xs text-fg-3' />
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 function PlanList({ task }: { task: Task }) {
   const document = task.plan?.document;
   if (!document) return null;
@@ -102,13 +125,14 @@ function PlanList({ task }: { task: Task }) {
         {document.phases.map((phase, index) => (
           <li key={phase.title} className='flex gap-2.5'>
             <StepNumber index={index} />
-            <div className='flex min-w-0 flex-col gap-px'>
+            <div className='flex min-w-0 flex-col'>
               <PlanPhaseTitle title={phase.title} change={resolvePhaseChange(changes, phase.title)} />
               <Markdown text={phase.detail} className='text-xs text-fg-3' />
             </div>
           </li>
         ))}
       </ol>
+      <PlanSplitList task={task} />
       <PlannedOperation task={task} />
       <PlanParameterList document={document} />
     </div>
@@ -225,19 +249,36 @@ export function PlanCard({
   const { busy, run } = useBusy<GateReply>();
   const approve = resolvePlanReply(task);
   const copy = describePlanCard(task);
+  const splits = listSplitParts(task).length > 0;
   const reply = selectShownReply(state, task, gate);
   return (
     <NowFrame
       eyebrow={<Eyebrow state={state} task={task} extra={describePlanEyebrow(task)} />}
       title={copy.title}
       action={
-        <Button
-          size='sm'
-          loading={busy === approve}
-          onClick={() => void run(approve, () => onReply(approve, null, { planVersion: task.plan?.version }))}
-        >
-          {copy.approve}
-        </Button>
+        <>
+          <SuggestedReplies state={state} task={task} />
+          {splits && (
+            <Button
+              variant='outline'
+              size='sm'
+              loading={busy === 'keepOneTask'}
+              disabled={busy !== null && busy !== 'keepOneTask'}
+              onClick={() => void run('keepOneTask', () => onReply('keepOneTask', KEEP_ONE_TASK_MESSAGE))}
+            >
+              Keep as one task
+            </Button>
+          )}
+          <Button
+            size='sm'
+            loading={busy === approve}
+            onClick={() =>
+              void run(approve, () => onReply(approve, null, { planVersion: task.plan?.version }))
+            }
+          >
+            {copy.approve}
+          </Button>
+        </>
       }
       footer={
         <FooterNote note={copy.note}>
@@ -264,27 +305,30 @@ export function ChangeCard({
   gate: Gate;
   onReply?: GateReplier;
 }) {
-  const { busy, run } = useBusy<'makeChange' | 'planOperation' | 'keepAsIs'>();
   const change = describeChangeGate(task, gate);
-  const goOn = change.goOn;
+  const { primary, quiet } = change;
+  const { busy, run } = useBusy<ChangeReply>();
   const reply = selectShownReply(state, task, gate);
   return (
     <NowFrame
       eyebrow={<Eyebrow state={state} task={task} extra={change.eyebrow} />}
-      title={gate.title}
+      title={change.title}
       action={
-        <Button
-          size='sm'
-          loading={busy === goOn.reply}
-          onClick={() => void run(goOn.reply, () => onReply(goOn.reply))}
-        >
-          {goOn.label}
-        </Button>
+        <>
+          <SuggestedReplies state={state} task={task} />
+          <Button
+            size='sm'
+            loading={busy === primary.reply}
+            onClick={() => void run(primary.reply, () => onReply(primary.reply))}
+          >
+            {primary.label}
+          </Button>
+        </>
       }
       footer={
-        <FooterNote note={goOn.note}>
-          <QuietLink busy={busy !== null} onClick={() => void run('keepAsIs', () => onReply('keepAsIs'))}>
-            {change.keep}
+        <FooterNote note={primary.note}>
+          <QuietLink busy={busy !== null} onClick={() => void run(quiet.reply, () => onReply(quiet.reply))}>
+            {quiet.label}
           </QuietLink>
         </FooterNote>
       }
@@ -352,6 +396,7 @@ function ReviewCard({
           <Button variant='outline' size='sm' onClick={() => onOpen('review')}>
             Review
           </Button>
+          <SuggestedReplies state={state} task={task} />
           <ReviewActions state={state} task={task} gate={gate} />
         </>
       }
@@ -512,7 +557,14 @@ export function ResultCard({
     <NowFrame
       eyebrow={<Eyebrow state={state} task={task} extra={<TimeAgo at={result.at} />} />}
       title={describeResultTitle(result.step, owner)}
-      action={gate && <CloseButton onReply={onReply} />}
+      action={
+        gate && (
+          <>
+            <SuggestedReplies state={state} task={task} />
+            <CloseButton onReply={onReply} />
+          </>
+        )
+      }
       footer={
         <FooterNote note={describeFollowUpNote(result.step, run?.role ?? null)}>
           <QuietLink onClick={() => onOpen('agent', result.runId ?? undefined)}>Open the chat</QuietLink>

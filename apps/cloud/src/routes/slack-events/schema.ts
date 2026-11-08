@@ -1,8 +1,23 @@
-import type { SlackDecision, SlackDecisionModal } from '@shinsa/core';
+import type { SlackDecision, SlackDecisionModal, SlackMessageLink } from '@shinsa/core';
 import { Schema } from 'effect';
 import type { Machine } from '../../store/machines/schema.ts';
 
 export const SLACK_NAMED_USERS_LIMIT = 30;
+
+export const RECONNECT_CODES: ReadonlySet<string> = new Set([
+  'missing_scope',
+  'invalid_auth',
+  'not_authed',
+  'token_revoked',
+  'token_expired',
+  'account_inactive',
+]);
+
+export const HIDDEN_THREAD_CODES: ReadonlySet<string> = new Set([
+  'not_in_channel',
+  'channel_not_found',
+  'thread_not_found',
+]);
 
 export const RESPONSE_URL_ORIGIN = 'https://hooks.slack.com/';
 
@@ -29,6 +44,14 @@ export const UninstallEvent = Schema.Struct({
   ]),
 });
 
+export const UserTokensRevokedEvent = Schema.Struct({
+  team_id: Id,
+  event: Schema.Struct({
+    type: Schema.Literal('tokens_revoked'),
+    tokens: Schema.Struct({ oauth: Schema.NonEmptyArray(Id) }),
+  }),
+});
+
 export const MentionEnvelope = Schema.Struct({
   event_id: Id,
   team_id: Id,
@@ -39,6 +62,7 @@ export const MentionEnvelope = Schema.Struct({
     channel: Id,
     ts: Id,
     user: Id,
+    user_team: Text,
     thread_ts: Text,
     text: Text,
   }),
@@ -53,9 +77,48 @@ export const ThreadMessage = Schema.Struct({
   username: Schema.optional(Id),
   bot_profile: Schema.optional(Schema.Struct({ name: Schema.optional(Id) })),
   text: Text,
+  blocks: Schema.optional(Schema.Array(Schema.Unknown)),
+  attachments: Schema.optional(Schema.Array(Schema.Unknown)),
 });
 
 export type ThreadMessage = typeof ThreadMessage.Type;
+
+export const MessageField = Schema.Struct({ text: Schema.String });
+
+export const MessageBlock = Schema.Struct({
+  type: Schema.String,
+  text: Schema.optional(Schema.Union([Schema.String, MessageField])),
+  fields: Schema.optional(Schema.Array(Schema.Unknown)),
+  elements: Schema.optional(Schema.Array(Schema.Unknown)),
+});
+
+export type MessageBlock = typeof MessageBlock.Type;
+
+export const MessageElement = Schema.Struct({
+  type: Schema.String,
+  text: Text,
+  url: Text,
+  user_id: Text,
+  channel_id: Text,
+  usergroup_id: Text,
+  name: Text,
+  range: Text,
+  style: Schema.optional(Schema.Unknown),
+  elements: Schema.optional(Schema.Array(Schema.Unknown)),
+});
+
+export type MessageElement = typeof MessageElement.Type;
+
+export const MessageAttachment = Schema.Struct({
+  pretext: Text,
+  title: Text,
+  text: Text,
+  fallback: Text,
+  fields: Schema.optional(Schema.Array(Schema.Unknown)),
+  blocks: Schema.optional(Schema.Array(Schema.Unknown)),
+});
+
+export const AttachmentField = Schema.Struct({ title: Text, value: Text });
 
 export const Replies = Schema.Struct({ messages: Schema.optional(Schema.Array(Schema.Unknown)) });
 
@@ -114,6 +177,7 @@ export interface MentionEvent {
   readonly ts: string;
   readonly threadTs: string;
   readonly userId: string;
+  readonly userTeam: string | null;
   readonly text: string;
 }
 
@@ -122,6 +186,18 @@ export interface ThreadEntry {
   readonly userId: string;
   readonly text: string;
   readonly botName: string | null;
+}
+
+export interface LinkedThreadRead {
+  readonly link: SlackMessageLink;
+  readonly entries: ReadonlyArray<ThreadEntry>;
+  readonly channelName: string | null;
+}
+
+export interface LinkedThreads {
+  readonly read: ReadonlyArray<LinkedThreadRead>;
+  readonly unread: number;
+  readonly reconnect: boolean;
 }
 
 export interface SlackCard {

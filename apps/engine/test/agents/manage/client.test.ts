@@ -111,7 +111,8 @@ describe('what an agent changes through its management tools', () => {
       base: 'http://127.0.0.1:1',
       key: null,
       byTask: 'task-1',
-      projects: createTestMachine(engine, createConfigAt(createTempDir(), { userHome: home })).projects,
+      projects: (await createTestMachine(engine, createConfigAt(createTempDir(), { userHome: home })))
+        .projects,
     });
     const projects = client.projects;
     if (!projects) throw new Error('The client has no project changes.');

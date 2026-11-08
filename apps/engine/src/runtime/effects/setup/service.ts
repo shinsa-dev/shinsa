@@ -7,7 +7,7 @@ import {
   resolveTaskWorkspace,
   type Task,
 } from '@shinsa/core';
-import { Context, Effect, Layer } from 'effect';
+import { Context, Effect, FileSystem, Layer } from 'effect';
 import { RepoFolders } from '../../../repos/folders/service.ts';
 import { resolveTaskRepoTarget } from '../../../repos/index.ts';
 import { RepoRegistry } from '../../../repos/registry/service.ts';
@@ -34,6 +34,7 @@ export class TaskSetup extends Context.Service<
       const folders = yield* RepoFolders;
       const registry = yield* RepoRegistry;
       const setup = yield* RepoSetup;
+      const withFiles = Effect.provideService(FileSystem.FileSystem, yield* FileSystem.FileSystem);
 
       const listCandidates = Effect.fn('TaskSetup.listCandidates')(function* (task: Task) {
         return yield* folders.listCandidates(yield* world.roots.listRoots, task.origin);
@@ -45,7 +46,7 @@ export class TaskSetup extends Context.Service<
         attempt: EffectAttempt
       ) {
         if (!path) return null;
-        const projectId = resolveRepoProject(yield* world.state, task, path);
+        const projectId = yield* withFiles(resolveRepoProject(yield* world.state, task, path));
         return yield* registry
           .upsert(path, world.resolveLogin, projectId, { id: `${attempt.key}:repo.register` })
           .pipe(Effect.mapError(resolveEffectFailure));
@@ -110,6 +111,7 @@ export class TaskSetup extends Context.Service<
             size: triaged.size,
             branch: triaged.branch,
             waitsOn: triaged.waitsOn.map((dependency) => dependency.id),
+            ...(triaged.stacksOn?.length ? { stacksOn: triaged.stacksOn.map((parent) => parent.id) } : {}),
             duplicateOf: triaged.duplicateOf,
             duplicateOfTeammate: triaged.duplicateOfTeammate,
             unreached: triaged.unreached,

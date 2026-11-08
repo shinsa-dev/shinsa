@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test } from 'bun:test';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
+import { BunServices } from '@effect/platform-bun';
 import { Effect, Fiber, Layer, ManagedRuntime } from 'effect';
 import { TestClock } from 'effect/testing';
 import { ClaudeSessionEnded } from '../../src/agents/providers/claude/session/schema.ts';
@@ -42,7 +43,11 @@ function openLoader(extensions: LoadableExtensions, openClient?: OpenClient) {
       ).pipe(Layer.provide(McpClients.layer))
     : McpClients.layer;
   const runtime = ManagedRuntime.make(
-    ExtensionLoader.layer.pipe(Layer.provide(clients), Layer.provideMerge(JsonLogger))
+    ExtensionLoader.layer.pipe(
+      Layer.provide(clients),
+      Layer.provide(BunServices.layer),
+      Layer.provideMerge(JsonLogger)
+    )
   );
   const loader = runtime.runSync(ExtensionLoader.use((loaders) => loaders.create(extensions)));
   const handle = {
@@ -246,7 +251,11 @@ describe('loading what a run left out', () => {
         return answer;
       }).pipe(
         Effect.provide(
-          Layer.mergeAll(ExtensionLoader.layer.pipe(Layer.provide(clients)), JsonLogger, TestClock.layer())
+          Layer.mergeAll(
+            ExtensionLoader.layer.pipe(Layer.provide(clients), Layer.provide(BunServices.layer)),
+            JsonLogger,
+            TestClock.layer()
+          )
         )
       )
     );

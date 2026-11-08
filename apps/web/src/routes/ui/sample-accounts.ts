@@ -1,4 +1,10 @@
-import type { AccountSummary, AccountsSnapshot, ProviderLogin, UsageWindow } from '@shinsa/core';
+import type {
+  AccountSummary,
+  AccountsSnapshot,
+  AccountUsage,
+  ProviderLogin,
+  UsageWindow,
+} from '@shinsa/core';
 import { HOUR, MINUTE } from './samples.ts';
 
 function createSampleWindow(
@@ -21,9 +27,10 @@ function createSampleAccount(
     email: string;
     usedPercent: number;
     weeklyPercent?: number;
+    extras?: Pick<AccountUsage, 'extraUsage' | 'resetGrants'>;
   }
 ): AccountSummary {
-  const { usedPercent, weeklyPercent = usedPercent / 2, ...account } = overrides;
+  const { usedPercent, weeklyPercent = usedPercent / 2, extras, ...account } = overrides;
   return {
     organization: null,
     plan: 'max',
@@ -48,6 +55,7 @@ function createSampleAccount(
       detail: null,
       checkedAt: now - 2 * MINUTE,
       source: 'read',
+      ...extras,
     },
     spentUntil: null,
     runs: 0,
@@ -63,8 +71,31 @@ export function createSampleAccounts(now: number): AccountsSnapshot {
         email: 'christo@superwall.com',
         usedPercent: 42,
         isDefault: true,
+        extras: {
+          extraUsage: {
+            enabled: true,
+            noLimit: false,
+            credit: { minor: 1240, exponent: 2, currency: 'USD' },
+          },
+          resetGrants: [
+            {
+              id: 'sample-launch-grant',
+              label: null,
+              left: 1,
+              total: 2,
+              clears: ['five_hour', 'seven_day'],
+              usableNow: true,
+              endsAt: now + 14 * 24 * HOUR,
+            },
+          ],
+        },
       }),
-      createSampleAccount(now, { id: 'side', email: 'christo@example.com', usedPercent: 81 }),
+      createSampleAccount(now, {
+        id: 'side',
+        email: 'christo@example.com',
+        usedPercent: 81,
+        extras: { extraUsage: { enabled: false, noLimit: false, credit: null } },
+      }),
       createSampleAccount(now, {
         id: 'team',
         email: 'agents@superwall.com',

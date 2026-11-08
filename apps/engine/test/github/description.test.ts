@@ -51,12 +51,12 @@ function createStore() {
   const copy = (name: string, bytes = 'x') => {
     const file = join(source, name);
     writeFileSync(file, bytes);
-    return Effect.runSync(store.copyFile(file, folder, name));
+    return Effect.runPromise(store.copyFile(file, folder, name));
   };
   return {
     store,
     copy,
-    note: (text: string) => Effect.runSync(store.writeText(text, folder, 'note', 'md')),
+    note: (text: string) => Effect.runPromise(store.writeText(text, folder, 'note', 'md')),
   };
 }
 
@@ -70,17 +70,17 @@ describe('PullRequestDescriber', () => {
     const { store, copy, note } = createStore();
     const task = createTask();
     const evidence = [
-      piece(task, 'shot', { kind: 'screenshot', uri: copy('shot.png') }),
-      piece(task, 'clip', { kind: 'recording', uri: copy('clip.MP4') }),
+      piece(task, 'shot', { kind: 'screenshot', uri: await copy('shot.png') }),
+      piece(task, 'clip', { kind: 'recording', uri: await copy('clip.MP4') }),
       piece(task, 'done', {
         kind: 'screenshot',
-        uri: copy('done.png'),
+        uri: await copy('done.png'),
         uploadUrl: 'https://github.com/user-attachments/assets/old',
       }),
       piece(task, 'web', { kind: 'screenshot', uri: 'https://cdn.example.com/web.png' }),
-      piece(task, 'bitmap', { kind: 'screenshot', uri: copy('bitmap.bmp') }),
+      piece(task, 'bitmap', { kind: 'screenshot', uri: await copy('bitmap.bmp') }),
       piece(task, 'elsewhere', { kind: 'screenshot', uri: '/tmp/elsewhere.png' }),
-      piece(task, 'notes', { kind: 'note', uri: note('Load time fell from 2s to 300ms.') }),
+      piece(task, 'notes', { kind: 'note', uri: await note('Load time fell from 2s to 300ms.') }),
       piece(task, 'lost', { kind: 'note', uri: '/api/evidence/missing.md' }),
     ];
     const descriptions = createDescriber(store);
@@ -125,7 +125,7 @@ describe('PullRequestDescriber', () => {
     const logs = captureLogs();
     const { store, copy } = createStore();
     const task = createTask();
-    const evidence = [piece(task, 'shot', { kind: 'screenshot', uri: copy('shot.png') })];
+    const evidence = [piece(task, 'shot', { kind: 'screenshot', uri: await copy('shot.png') })];
     const description = await createDescriber(store).describe(
       createRepo({ path: createTempDir() }),
       task,
@@ -144,7 +144,7 @@ describe('PullRequestDescriber', () => {
     const logs = captureLogs();
     const { store, copy } = createStore();
     const task = createTask();
-    const evidence = [piece(task, 'shot', { kind: 'screenshot', uri: copy('shot.png') })];
+    const evidence = [piece(task, 'shot', { kind: 'screenshot', uri: await copy('shot.png') })];
     const description = await createDescriber(store).describe(
       createRepo({ path: createTempDir() }),
       task,

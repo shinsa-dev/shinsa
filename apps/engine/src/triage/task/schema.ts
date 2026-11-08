@@ -13,6 +13,9 @@ export interface TriageAnswer {
   size?: unknown;
   branch?: unknown;
   waits_on?: unknown;
+  waits_on_kind?: unknown;
+  stacks_on?: unknown;
+  stacks_on_why?: unknown;
   shape?: unknown;
   priority?: unknown;
   shape_why?: unknown;
@@ -48,6 +51,7 @@ export interface TriagePlan {
   optional: boolean;
   open: Task[];
   waitsOnQuestion: ChoicesQuestion;
+  stacksOnQuestion: ChoiceQuestion | null;
   duplicateQuestion: ChoiceQuestion | null;
   teammates: TeammateCheck | null;
   fallback: TriageResult;
@@ -117,3 +121,20 @@ export const SHAPE_NOUN: Record<TaskShape, string> = {
 export const UNCLASSIFIED = 'Shinsa could not classify the request, so';
 
 export const NOT_A_DUPLICATE = 'none';
+
+export const NO_WAIT = 'none';
+
+export const NO_STACK = 'none';
+
+export const WAITS_ON_KIND_QUESTION: ChoiceQuestion = {
+  type: 'choice',
+  instructions: `Which direct dependency makes this task wait on the tasks in waits_on? "${NO_WAIT}" when waits_on is empty; a wait without one of the other kinds is dropped.`,
+  criteria: {
+    [NO_WAIT]: 'it waits on no task',
+    needs_its_code:
+      'it edits or calls code that exists only on that task’s unmerged branch, so it cannot be built against the default branch',
+    asked_for: 'the request itself asks for this task to come after that one',
+    shared_rewrite:
+      'both tasks heavily rewrite the same files, as in a rewrite or migration of shared code, so building them side by side would surely conflict',
+  },
+};

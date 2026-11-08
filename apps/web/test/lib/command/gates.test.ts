@@ -306,6 +306,112 @@ describe('gate commands', () => {
     ]);
   });
 
+  it('offers Start N tasks and Keep as one task on a plan with a split', () => {
+    const gate = createGate({ id: 'g', taskId: 't', type: 'plan' });
+    const task = createTask({
+      id: 't',
+      stage: 'awaiting_plan',
+      plan: {
+        version: 2,
+        body: '',
+        proposedAt: 0,
+        document: {
+          goal: 'g',
+          phases: [],
+          behaviour: [],
+          approach: '',
+          files: [],
+          outOfScope: [],
+          verification: [],
+          questions: [],
+          split: [{ title: 'A', request: 'a', order: 'parallel' }],
+        },
+      },
+    });
+    const commands = commandsFor(task, gate);
+    expect(commands.map((command) => [command.id, command.label])).toEqual([
+      ['task.t.gate.g.approve', 'Start 2 tasks'],
+      ['task.t.gate.g.keep-one-task', 'Keep as one task'],
+      ['task.t.gate.g.revise', 'Revise the plan'],
+    ]);
+    run(commands[0]);
+    expect(spies.sent).toHaveBeenCalledWith(
+      { type: 'gate.answer', gateId: 'g', decision: 'approve', response: null, planVersion: 2 },
+      'Approved. Building now.'
+    );
+    run(commands[1]);
+    expect(spies.sent).toHaveBeenCalledWith(
+      {
+        type: 'gate.answer',
+        gateId: 'g',
+        decision: 'revise',
+        response: 'Keep this as one task: drop the split and plan all of the work here.',
+      },
+      'Sent back as one task.'
+    );
+  });
+
+  it('offers only Approve the plan and Revise on a plan without a split', () => {
+    const gate = createGate({ id: 'g', taskId: 't', type: 'plan' });
+    const task = createTask({ id: 't', stage: 'awaiting_plan' });
+    expect(commandsFor(task, gate).map((command) => command.label)).toEqual([
+      'Approve the plan',
+      'Revise the plan',
+    ]);
+  });
+
+  it('leads with Close when the agent recommends closing a proposal', () => {
+    const gate = createGate({
+      id: 'g',
+      taskId: 't',
+      type: 'proposal',
+      title: 'The diagnosis found nothing to fix',
+    });
+    const task = createTask({
+      id: 't',
+      pipeline: ['investigate', 'your_ok', 'plan', 'build', 'merge'],
+      stage: 'awaiting_proposal',
+      proposal: { request: 'r', why: 'w', status: 'open', recommend: 'close', runId: null, at: 0 },
+    });
+    const commands = commandsFor(task, gate);
+    expect(commands.map((command) => [command.id, command.label, command.hint])).toEqual([
+      ['task.t.gate.g.closeProposal', 'Close', 'The diagnosis found nothing to fix'],
+      ['task.t.gate.g.makeChange', 'Make it a change', undefined],
+    ]);
+    run(commands[0]);
+    expect(spies.sent).toHaveBeenCalledWith(
+      { type: 'gate.answer', gateId: 'g', decision: 'reject', response: null },
+      'Closed. The task is done.'
+    );
+  });
+
+  it('lists the agent’s suggested replies after a gate that takes a message, and none after a question', () => {
+    const suggestedActions = [
+      { label: 'Do the renames', message: 'Do the renames too.' },
+      { label: 'Skip them', message: 'Leave the names as they are.' },
+    ];
+    const task = createTask({ id: 't', stage: 'awaiting_review', suggestedActions });
+    const review = commandsFor(task, createGate({ id: 'g', taskId: 't', type: 'review' }));
+    expect(
+      review
+        .filter((command) => command.hint === 'Suggested reply')
+        .map((command) => [command.id, command.label])
+    ).toEqual([
+      ['task.t.suggested.0', 'Do the renames'],
+      ['task.t.suggested.1', 'Skip them'],
+    ]);
+    run(review.find((command) => command.id === 'task.t.suggested.0'));
+    expect(spies.sent).toHaveBeenCalledWith(
+      { type: 'task.message', taskId: 't', text: 'Do the renames too.' },
+      'Changes requested.'
+    );
+    const question = commandsFor(
+      createTask({ id: 't', stage: 'building', suggestedActions }),
+      createGate({ id: 'g', taskId: 't', type: 'question' })
+    );
+    expect(question.some((command) => command.hint === 'Suggested reply')).toBe(false);
+  });
+
   it('runs the operation after the merge with the saved notes, or finishes without it after a confirm', () => {
     const gate = createGate({
       id: 'g',
@@ -348,6 +454,28 @@ describe('gate commands', () => {
       [
         { type: 'gate.answer', gateId: 'g', decision: 'approve', response: null },
         'Verifying the setup again.',
+      ],
+    ]);
+  });
+
+  it('offers each repository the setup question lists instead of verifying again', () => {
+    const gate = createGate({
+      id: 'g',
+      taskId: 't',
+      type: 'configuration',
+      title: 'Which repository is this task for?',
+      choices: ['shinsa', 'paywall-next'],
+    });
+    const commands = commandsFor(createTask({ id: 't' }), gate);
+    expect(commands.map((command) => [command.label, command.hint, command.icon])).toEqual([
+      ['Use shinsa', 'Which repository is this task for?', 'IconToolbox'],
+      ['Use paywall-next', 'Which repository is this task for?', 'IconToolbox'],
+    ]);
+    run(commands[1]);
+    expect(spies.sent.mock.calls).toEqual([
+      [
+        { type: 'gate.answer', gateId: 'g', decision: 'reply', response: 'paywall-next' },
+        'Checking that repository.',
       ],
     ]);
   });

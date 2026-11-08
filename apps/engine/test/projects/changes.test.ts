@@ -5,6 +5,7 @@ import { DomainError } from '@shinsa/core';
 import { Effect } from 'effect';
 import { listLocalRepoViews } from '../../src/projects/changes.ts';
 import { EngineStopped } from '../../src/runtime/engine/schema.ts';
+import { runFiles } from '../harness.ts';
 import { createConfigAt } from '../helpers/config.ts';
 import { Engine } from '../helpers/engine.ts';
 import { openEventLog, type TestEventLog } from '../helpers/event-log.ts';
@@ -17,8 +18,8 @@ afterEach(() => {
   for (const log of logs.splice(0)) log.close();
 });
 
-function createProjectChanges(engine: Engine, userHome: string) {
-  return createTestMachine(engine, createConfigAt(createTempDir(), { userHome })).projects;
+async function createProjectChanges(engine: Engine, userHome: string) {
+  return (await createTestMachine(engine, createConfigAt(createTempDir(), { userHome }))).projects;
 }
 
 async function setup() {
@@ -38,7 +39,7 @@ describe('a project’s repositories and folders', () => {
   test('a folder added on your behalf is logged as such, and adding it again changes nothing', async () => {
     const { home, engine, projectId } = await setup();
     mkdirSync(join(home, 'basket'));
-    const changes = createProjectChanges(engine, home);
+    const changes = await createProjectChanges(engine, home);
     await Effect.runPromise(
       changes.upsertFolder(projectId, '~/basket', { onBehalf: true, byTask: 'task-1' })
     );
@@ -52,7 +53,7 @@ describe('a project’s repositories and folders', () => {
   test('a repository added on your behalf is registered as yours from that task, and records no action', async () => {
     const { home, engine, log, projectId } = await setup();
     const repo = await createGitRepo({ root: home, name: 'basket', remote: false });
-    const changes = createProjectChanges(engine, home);
+    const changes = await createProjectChanges(engine, home);
     const { repo: added } = await Effect.runPromise(
       changes.upsertRepo(projectId, repo.path, { onBehalf: true, byTask: 'task-1' })
     );
@@ -70,7 +71,7 @@ describe('a project’s repositories and folders', () => {
     const broken = {
       core: { ...engine.core, dispatch: () => Effect.fail(new EngineStopped({ message: 'log closed' })) },
     } as unknown as typeof engine;
-    const changes = createProjectChanges(broken, home);
+    const changes = await createProjectChanges(broken, home);
     const failure = await Effect.runPromise(Effect.flip(changes.upsertFolder(projectId, '~/shelf')));
     expect(failure).toMatchObject({ _tag: 'EngineStopped', message: 'log closed' });
   });
@@ -85,14 +86,14 @@ describe('a project’s repositories and folders', () => {
           Effect.fail(new DomainError({ code: 'project_not_found', message: 'No such project.' })),
       },
     } as unknown as typeof engine;
-    const changes = createProjectChanges(refusing, home);
+    const changes = await createProjectChanges(refusing, home);
     const failure = await Effect.runPromise(Effect.flip(changes.upsertFolder(projectId, '~/shelf')));
     expect(failure).toMatchObject({ _tag: 'DomainError', code: 'project_not_found' });
   });
 
   test('a missing project and a path that is not a folder are refused', async () => {
     const { home, engine, projectId } = await setup();
-    const changes = createProjectChanges(engine, home);
+    const changes = await createProjectChanges(engine, home);
     expect(await Effect.runPromise(Effect.flip(changes.upsertFolder('nope', '~/shelf')))).toMatchObject({
       _tag: 'DomainError',
       code: 'project_not_found',
@@ -108,17 +109,21 @@ describe('a project’s repositories and folders', () => {
     const chosen = createTempDir();
     const loose = await createGitRepo({ root: chosen, name: 'loose', remote: false });
     const inside = await createGitRepo({ root: home, name: 'basket', remote: false });
-    await Effect.runPromise(createProjectChanges(engine, home).upsertFolder(projectId, home));
+    await Effect.runPromise((await createProjectChanges(engine, home)).upsertFolder(projectId, home));
     expect(
-      listLocalRepoViews(engine.state, [chosen]).map(({ name, repoId, projectId: id }) => [name, repoId, id])
+      (await runFiles(listLocalRepoViews(engine.state, [chosen]))).map(({ name, repoId, projectId: id }) => [
+        name,
+        repoId,
+        id,
+      ])
     ).toEqual([
       ['basket', null, projectId],
       ['loose', null, null],
     ]);
     const { repo } = await Effect.runPromise(
-      createProjectChanges(engine, home).upsertRepo(projectId, inside.path)
+      (await createProjectChanges(engine, home)).upsertRepo(projectId, inside.path)
     );
-    expect(listLocalRepoViews(engine.state, [chosen])).toEqual([
+    expect(await runFiles(listLocalRepoViews(engine.state, [chosen]))).toEqual([
       { path: repo.path, name: 'basket', repoId: repo.id, projectId },
       { path: realpathSync(loose.path), name: 'loose', repoId: null, projectId: null },
     ]);

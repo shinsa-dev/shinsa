@@ -7,7 +7,6 @@ import {
   type ServiceDefinition,
   type TerminalPlace,
 } from '@shinsa/core';
-import { isFolder } from '../files/paths.ts';
 import { PATH_LIMIT } from '../files/schema.ts';
 import type { JsonObject } from '../http/schema.ts';
 import { resolveServicePlace } from './places.ts';
@@ -78,8 +77,6 @@ export function readServiceInput(
   const cwd = readText(body, 'path', PATH_LIMIT);
   if (!resolveServicePlace(places, cwd, home))
     throw new DomainError({ code: 'service_place_invalid', message: 'Pick one of the project’s folders.' });
-  if (!isFolder(cwd))
-    throw new DomainError({ code: 'terminal_place_missing', message: 'That folder is not there anymore.' });
   const command = readText(body, 'command', SERVICE_LIMITS.command).trim();
   if (!command)
     throw new DomainError({ code: 'body_invalid', message: 'Give the service a command to run.' });

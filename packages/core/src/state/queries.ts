@@ -17,7 +17,7 @@ import {
 import { listLiveChildRuns } from './delegations.ts';
 import type { ShinsaState } from './project.ts';
 
-export function listOpenGates(state: ShinsaState, taskId?: string) {
+export function listOpenGates(state: Pick<ShinsaState, 'gates'>, taskId?: string) {
   return Object.values(state.gates).filter(
     (gate) => gate.status === 'open' && (taskId === undefined || gate.taskId === taskId)
   );

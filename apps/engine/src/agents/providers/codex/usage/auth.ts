@@ -1,16 +1,13 @@
-import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { Effect, Option, Schema } from 'effect';
+import { Effect, FileSystem, Option, Schema } from 'effect';
 import { readTrimmedText } from './readings.ts';
-import { CodexAuthFile, type CodexOAuthLogin, CodexUsageUnreachable } from './schema.ts';
+import { CodexAuthFile, type CodexOAuthLogin } from './schema.ts';
 
 const decodeAuthFile = Schema.decodeUnknownOption(CodexAuthFile);
 
 export const readCodexText = Effect.fn('CodexUsage.readText')(function* (path: string) {
-  return yield* Effect.try({
-    try: () => (existsSync(path) ? readFileSync(path, 'utf8') : null),
-    catch: (error) => new CodexUsageUnreachable({ message: String(error) }),
-  }).pipe(Effect.orElseSucceed(() => null));
+  const fs = yield* FileSystem.FileSystem;
+  return yield* fs.readFileString(path).pipe(Effect.orElseSucceed(() => null));
 });
 
 export const selectCodexOAuthLogin = Effect.fn('CodexUsage.selectLogin')(function* (home: string) {

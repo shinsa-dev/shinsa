@@ -1,5 +1,5 @@
 import { describe, expect, setDefaultTimeout, test } from 'bun:test';
-import { utimesSync, writeFileSync } from 'node:fs';
+import { chmodSync, utimesSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { DIFF_PATCH_LIMITS } from '@shinsa/core';
 import { History } from '../../src/git/history/service.ts';
@@ -48,6 +48,19 @@ describe('resolveWorkingDiff', () => {
     utimesSync(file, second, second);
     const files = await resolveWorkingDiff(worktree.path, await git(worktree.path, 'rev-parse', 'HEAD'));
     expect(files.map((entry) => entry.path)).toEqual(['app.ts']);
+  });
+
+  test('an index it cannot copy fails as a git failure that names the index', async () => {
+    const { repo } = await createGitRepo({ remote: false });
+    const worktree = await createWorktree(repo, createTempDir(), 'task-aaaaac', 'fix/index', null);
+    const head = await git(worktree.path, 'rev-parse', 'HEAD');
+    const index = await git(worktree.path, 'rev-parse', '--path-format=absolute', '--git-path', 'index');
+    chmodSync(index, 0o000);
+    try {
+      await expect(resolveWorkingDiff(worktree.path, head)).rejects.toThrow('Could not copy the git index');
+    } finally {
+      chmodSync(index, 0o644);
+    }
   });
 
   test('names a path with spaces and accents as it is, unquoted', async () => {

@@ -6,6 +6,8 @@ import {
   type RemoteSnapshot,
   type RemoteTeam,
   type ShinsaState,
+  TEAM_REFUSALS,
+  type TeamFeedSnapshot,
   type TeamJoinFragment,
 } from '@shinsa/core';
 import { Effect } from 'effect';
@@ -44,7 +46,10 @@ export function createSampleTeams(now: number) {
     role: 'owner',
     members: [{ user: KAI, addedAt: now - 30 * HOUR_MS }],
     requests: [{ user: BOB, addedAt: now - 4 * 60_000 }],
-    machines: [],
+    machines: [
+      { id: 'k3x9', name: 'Studio', userId: MONA.id, online: true, lastSeenAt: now },
+      { id: 'p7m2', name: 'Mac.lan', userId: KAI.id, online: true, lastSeenAt: now },
+    ],
     scopes: DEFAULT_TEAM_SCOPES,
     overrides: [{ userId: KAI.id, scopes: ACCESS_PRESETS.full }],
     createdAt: now - 72 * HOUR_MS,
@@ -59,7 +64,10 @@ export function createSampleTeams(now: number) {
       { user: KAI, addedAt: now - 6 * HOUR_MS },
     ],
     requests: [],
-    machines: [],
+    machines: [
+      { id: 'w2c8', name: 'Lee’s iMac', userId: LEE.id, online: true, lastSeenAt: now },
+      { id: 'k3x9', name: 'Studio', userId: MONA.id, online: true, lastSeenAt: now },
+    ],
     scopes: DEFAULT_TEAM_SCOPES,
     overrides: [],
     createdAt: now - 240 * HOUR_MS,
@@ -88,8 +96,23 @@ export function createSampleTeams(now: number) {
     requests: [],
     teams: [],
   };
+  const feed: TeamFeedSnapshot = {
+    tasks: [],
+    machines: [
+      {
+        teamId: platform.id,
+        instanceId: 'p7m2',
+        name: 'Mac.lan',
+        userId: KAI.id,
+        status: 'refused',
+        reason: TEAM_REFUSALS.key,
+        asking: true,
+      },
+    ],
+  };
   return {
     state,
+    feed,
     presence: [
       { user: LEE, base: 'Owner', presence: { userId: LEE.id, status: 'online' as const, seenAt: now } },
       {
@@ -106,7 +129,7 @@ export function createSampleTeams(now: number) {
     scenes: [
       {
         label:
-          'TeamsGroup · a team you own with a request waiting, a team you are in, and a request you sent',
+          'TeamsGroup · a team you own with a request waiting, a team you are in whose key this machine lacks, and a request you sent',
         snapshot: {
           ...base,
           teams: [
@@ -123,7 +146,7 @@ export function createSampleTeams(now: number) {
               id: paywalls.id,
               name: paywalls.name,
               status: 'member',
-              onMachine: true,
+              onMachine: false,
               invite: false,
               team: paywalls,
               extras: [],
@@ -165,6 +188,8 @@ export function createSampleTeamActions(): TeamActions {
     grantAccess: refuse,
     updateScopes: refuse,
     updateExtra: refuse,
+    requestKey: refuse,
+    answerKey: refuse,
   };
 }
 
@@ -191,9 +216,22 @@ export function openSampleJoinMachines(): Promise<JoinMachines> {
           { id: 'paywalls', name: 'Paywalls', color: 'blue' },
           { id: 'web', name: 'Web', color: 'green' },
         ],
-        share: () => Promise.resolve(),
+        join: () => Promise.resolve(),
       },
     ],
+    setup: null,
+    close: () => undefined,
+  });
+}
+
+export function openUnpairedSampleJoinMachines(): Promise<JoinMachines> {
+  return Promise.resolve({ machines: [], setup: { kind: 'pair' }, close: () => undefined });
+}
+
+export function openUnreachedSampleJoinMachines(): Promise<JoinMachines> {
+  return Promise.resolve({
+    machines: [],
+    setup: { kind: 'add', machines: ['Studio'] },
     close: () => undefined,
   });
 }

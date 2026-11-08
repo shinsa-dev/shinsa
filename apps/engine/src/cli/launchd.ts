@@ -1,15 +1,18 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { DomainError, resolveEngineLabel } from '@shinsa/core';
-import { Effect } from 'effect';
+import { Effect, FileSystem } from 'effect';
+import { selectText } from '../files/probe.ts';
 import {
   type EngineService,
   runServiceCommand,
   SERVICE_CARRIED_ENV,
   SERVICE_MARKER,
+  ServiceCommandFailed,
   type ServiceRunner,
 } from '../instance/index.ts';
+import { describeError } from '../log/redact.ts';
+import type { Shell } from '../shell/service.ts';
 import { APP_BUNDLE_ID, parseEngineJob, resolveEngineTarget } from './app.ts';
 
 type Env = Record<string, string | undefined>;
@@ -27,7 +30,7 @@ const XML_ESCAPES: Record<string, string> = {
 export interface LaunchdOptions {
   uid: number;
   launchctl: ServiceRunner;
-  ownsJob: (printed: string) => boolean;
+  ownsJob: (printed: string) => Effect.Effect<boolean, never, Shell>;
   inApp?: boolean;
   program?: string;
   home?: string;
@@ -105,7 +108,7 @@ export function createLaunchdService(options: LaunchdOptions): EngineService {
           : 'The engine is not set up yet. `shinsa start` sets it up.',
       });
     }
-    if (ownsJob(printed.output)) return;
+    if (yield* ownsJob(printed.output)) return;
     if (inApp) {
       return yield* new DomainError({
         code: 'engine_not_this_app',
@@ -130,7 +133,7 @@ export function createLaunchdService(options: LaunchdOptions): EngineService {
   const writeAgent = Effect.gen(function* () {
     const printed = yield* printJob;
     if (printed.ok && isAppJob(printed.output)) {
-      if (ownsJob(printed.output)) return;
+      if (yield* ownsJob(printed.output)) return;
       return yield* new DomainError({
         code: 'engine_beside_app',
         message:
@@ -138,19 +141,20 @@ export function createLaunchdService(options: LaunchdOptions): EngineService {
       });
     }
     const agent = resolveLaunchAgent(label, program, env);
-    const written = yield* Effect.sync(() => (existsSync(path) ? readFileSync(path, 'utf8') : null));
-    if (printed.ok && written === agent) return;
+    const fs = yield* FileSystem.FileSystem;
+    const written = yield* selectText(path);
+    if (printed.ok && written._tag === 'Some' && written.value === agent) return;
     if (printed.ok) yield* run(['bootout', target]);
-    yield* Effect.sync(() => {
-      mkdirSync(dirname(path), { recursive: true });
-      writeFileSync(path, agent);
-    });
+    yield* fs.makeDirectory(dirname(path), { recursive: true }).pipe(
+      Effect.andThen(fs.writeFileString(path, agent)),
+      Effect.mapError((error) => new ServiceCommandFailed({ message: describeError(error) }))
+    );
     yield* run(['bootstrap', `gui/${uid}`, path]);
   });
 
   const kick = Effect.gen(function* () {
     const printed = yield* printJob;
-    if (!printed.ok || !ownsJob(printed.output)) return false;
+    if (!printed.ok || !(yield* ownsJob(printed.output))) return false;
     return (yield* launchctl(['kickstart', target])).ok;
   });
 

@@ -652,9 +652,9 @@ export function ReviewTab({
     [report, task, hasWaits]
   );
   const points = React.useMemo(() => listReviewPoints(chapters), [chapters]);
-  const { repos, evidence } = state;
+  const { repos, evidence, gates } = state;
   const checks = useStructuralValue(
-    React.useMemo(() => resolveChecksView({ repos, evidence }, task), [repos, evidence, task])
+    React.useMemo(() => resolveChecksView({ repos, evidence, gates }, task), [repos, evidence, gates, task])
   );
   const stops = React.useMemo(() => listReviewStops(chapters), [chapters]);
   const selection = useReviewSelection(new URLSearchParams(location.search).get('spot'));

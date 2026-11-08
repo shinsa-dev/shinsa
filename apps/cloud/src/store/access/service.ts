@@ -23,21 +23,21 @@ export class MachineAccess extends Context.Service<
     Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
 
-      const Handoff = Schema.Struct({ instanceId: InstanceId, tokenHash: TokenHash });
+      const Handoff = Schema.Struct({ machineId: InstanceId, tokenHash: TokenHash });
       const insertHandoff = SqlSchema.void({
         Request: Schema.Struct({ ...Handoff.fields, at: Schema.Number }),
         execute: (row) =>
-          sql`INSERT INTO instance_handoffs (token_hash, instance_id, created_at) VALUES (${row.tokenHash}, ${row.instanceId}, ${row.at})`,
+          sql`INSERT INTO machine_handoffs (token_hash, machine_id, created_at) VALUES (${row.tokenHash}, ${row.machineId}, ${row.at})`,
       });
       const handoffRemoval = SqlSchema.void({
         Request: Handoff,
         execute: (row) =>
-          sql`DELETE FROM instance_handoffs WHERE instance_id = ${row.instanceId} AND token_hash = ${row.tokenHash}`,
+          sql`DELETE FROM machine_handoffs WHERE machine_id = ${row.machineId} AND token_hash = ${row.tokenHash}`,
       });
       const handoffLookup = SqlSchema.findOneOption({
         Request: TokenHash,
-        Result: Schema.Struct({ instanceId: InstanceId }),
-        execute: (hash) => sql`SELECT instance_id FROM instance_handoffs WHERE token_hash = ${hash}`,
+        Result: Schema.Struct({ machineId: InstanceId }),
+        execute: (hash) => sql`SELECT machine_id FROM machine_handoffs WHERE token_hash = ${hash}`,
       });
 
       const handoffs: Handoffs = {
@@ -45,17 +45,18 @@ export class MachineAccess extends Context.Service<
           instanceId: InstanceId,
           tokenHash: TokenHash
         ) {
-          yield* insertHandoff({ instanceId, tokenHash, at: yield* Clock.currentTimeMillis });
+          yield* insertHandoff({ machineId: instanceId, tokenHash, at: yield* Clock.currentTimeMillis });
         }, Effect.orDie),
         remove: Effect.fn('MachineAccess.handoffs.remove')(
-          (instanceId: InstanceId, tokenHash: TokenHash) => handoffRemoval({ instanceId, tokenHash }),
+          (instanceId: InstanceId, tokenHash: TokenHash) =>
+            handoffRemoval({ machineId: instanceId, tokenHash }),
           Effect.orDie
         ),
         select: Effect.fn('MachineAccess.handoffs.select')(
           (tokenHash: TokenHash) =>
             Effect.map(
               handoffLookup(tokenHash),
-              Option.map((row) => row.instanceId)
+              Option.map((row) => row.machineId)
             ),
           Effect.orDie
         ),
@@ -64,27 +65,27 @@ export class MachineAccess extends Context.Service<
       return MachineAccess.of({
         invites: createInvites(sql, InstanceId, {
           name: 'MachineAccess.invites',
-          table: 'instance_invites',
-          scope: 'instance_id',
+          table: 'machine_invites',
+          scope: 'machine_id',
         }),
         requesters: createMembership(sql, InstanceId, {
           name: 'MachineAccess.requesters',
-          table: 'instance_requesters',
-          scope: 'instance_id',
+          table: 'machine_requesters',
+          scope: 'machine_id',
           time: 'requested_at',
           onRepeat: 'refresh',
         }),
         members: createMembership(sql, InstanceId, {
           name: 'MachineAccess.members',
-          table: 'instance_members',
-          scope: 'instance_id',
+          table: 'machine_members',
+          scope: 'machine_id',
           time: 'added_at',
           onRepeat: 'keep',
         }),
         guests: createMembership(sql, InstanceId, {
           name: 'MachineAccess.guests',
-          table: 'instance_guests',
-          scope: 'instance_id',
+          table: 'machine_guests',
+          scope: 'machine_id',
           time: 'added_at',
           onRepeat: 'keep',
         }),

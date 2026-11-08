@@ -46,7 +46,7 @@ function EmptyState({
           <Icon name={icon} size={small ? 'md' : 'lg'} />
         </span>
       </div>
-      <div className='flex flex-col gap-px'>
+      <div className='flex flex-col'>
         <h2
           className={cn('leading-tighter font-medium text-balance text-fg-4', small ? 'text-xs' : 'text-sm')}
         >

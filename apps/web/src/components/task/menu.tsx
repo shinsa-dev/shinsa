@@ -22,7 +22,7 @@ export function TaskMenu({ state, task }: { state: ShinsaState; task: Task }) {
         <DependencyItems state={state} task={task} />
         <AccountSubmenu task={task} />
         {!isTaskSettled(task) && <DropdownMenuSeparator />}
-        <TaskActionItems task={task} />
+        <TaskActionItems state={state} task={task} />
       </DropdownMenuContent>
     </DropdownMenu>
   );

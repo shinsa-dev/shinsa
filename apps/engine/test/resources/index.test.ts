@@ -6,6 +6,7 @@ import { readMemoryWith, readResourceText } from '../../src/resources/memory.ts'
 import { ResourceReadFailed } from '../../src/resources/monitor/schema.ts';
 import { ResourceTimings } from '../../src/resources/schema.ts';
 import type { CommandResult } from '../../src/shell/schema.ts';
+import { runFiles } from '../harness.ts';
 import { captureLogs } from '../helpers/logs.ts';
 import { createTempDir } from '../helpers/temp.ts';
 import { until } from '../helpers/until.ts';
@@ -231,8 +232,8 @@ describe('reading the machine’s own numbers', () => {
   test('a monitor with nothing faked reads this machine', async () => {
     const dataDir = createTempDir();
     await Bun.write(join(dataDir, 'note.txt'), 'hello');
-    expect(await runAsync(readResourceText(join(dataDir, 'note.txt')))).toBe('hello');
-    const missing = await runAsync(Effect.flip(readResourceText(join(dataDir, 'missing.txt'))));
+    expect(await runFiles(readResourceText(join(dataDir, 'note.txt')))).toBe('hello');
+    const missing = await runFiles(Effect.flip(readResourceText(join(dataDir, 'missing.txt'))));
     expect(missing._tag).toBe('ResourceReadFailed');
     const { monitor, ledger, close } = createMonitor({
       machine: true,
@@ -242,11 +243,16 @@ describe('reading the machine’s own numbers', () => {
     });
     run(Effect.asVoid(ledger.track('task-a', 'agent', process.pid)));
     const { seen } = listen(monitor.subscribe);
-    await until('a sample of this machine', () => seen.length > 0, 5_000);
+    await until(
+      'a sample of this machine with its disk',
+      () => seen.some((sample) => sample.diskFreeBytes !== null),
+      5_000
+    );
     await close();
-    expect(seen[0]?.memoryTotalBytes).toBeGreaterThan(0);
-    expect(seen[0]?.diskFreeBytes).toBeGreaterThan(0);
-    expect(seen[0]?.tasks[0]?.agent.memoryBytes).toBeGreaterThan(0);
+    const sample = seen.find((reading) => reading.diskFreeBytes !== null);
+    expect(sample?.memoryTotalBytes).toBeGreaterThan(0);
+    expect(sample?.diskFreeBytes).toBeGreaterThan(0);
+    expect(sample?.tasks[0]?.agent.memoryBytes).toBeGreaterThan(0);
   });
 
   test('memory comes from /proc on Linux, vm_stat on macOS and the os elsewhere', async () => {

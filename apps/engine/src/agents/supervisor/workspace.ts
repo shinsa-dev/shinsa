@@ -1,4 +1,3 @@
-import { mkdirSync } from 'node:fs';
 import {
   type DelegatedRun,
   isDelegatedRun,
@@ -7,7 +6,7 @@ import {
   type ShinsaState,
   type Task,
 } from '@shinsa/core';
-import { Effect } from 'effect';
+import { Effect, FileSystem } from 'effect';
 import { resolveScratchPath, type ServerConfig } from '../../config/index.ts';
 import { resolveIsolatedPath } from '../../git/checkout/paths.ts';
 import { describeError } from '../../log/index.ts';
@@ -49,10 +48,10 @@ export function isSharedCheckout(run: Run, workspace: Workspace) {
 
 export const prepareWorkspace = Effect.fn('RunSupervisor.prepareWorkspace')(function* (workspace: Workspace) {
   if (workspace.repo) return workspace;
-  yield* Effect.try({
-    try: () => mkdirSync(workspace.cwd, { recursive: true }),
-    catch: (error) => new WorkspaceUnavailable({ message: describeError(error) }),
-  });
+  const fs = yield* FileSystem.FileSystem;
+  yield* fs
+    .makeDirectory(workspace.cwd, { recursive: true })
+    .pipe(Effect.mapError((error) => new WorkspaceUnavailable({ message: describeError(error) })));
   return workspace;
 });
 

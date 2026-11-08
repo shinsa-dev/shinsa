@@ -537,7 +537,8 @@ function listSystemCommands(state: ShinsaState, random: Random): ShinsaCommand[]
     commands.push(...listPullRequestReads(state, task, random));
     if (chance(random, 0.03))
       commands.push({ type: 'effect.fail', taskId, title: 'Effect failed', detail: 'x' });
-    if (task.worktreePath && isTaskSettled(task)) commands.push({ type: 'worktree.gone', taskId });
+    if (task.worktreePath && (isTaskSettled(task) || task.movingTo))
+      commands.push({ type: 'worktree.gone', taskId });
     if (chance(random, 0.03)) commands.push({ type: 'message.deliver', taskId, text: 'Missed steer.' });
     commands.push(...listWorkingCopyCommands(task, random));
   }
@@ -646,6 +647,7 @@ function listProcessAgentCommands(state: ShinsaState, random: Random): ShinsaCom
             request: 'Do more.',
             why: 'Seen.',
             waitsOnThis: chance(random, 0.5),
+            stacksOnThis: state.seq % 4 === 0,
           },
         ],
       },
@@ -783,6 +785,7 @@ function listProcessUserCommands(state: ShinsaState, random: Random): ShinsaComm
           taskId: task.id,
           suggestionId: suggestion.id,
           waitsOnThis: chance(random, 0.5),
+          stackOnThis: state.seq % 3 === 0,
         },
         { type: 'suggestion.dismiss', taskId: task.id, suggestionId: suggestion.id }
       );
@@ -813,6 +816,28 @@ const RERUN_ACCOUNTS = [
   { id: 'acc-work', email: 'work@example.com' },
   { id: 'acc-home', email: null },
 ];
+
+function selectMoveCommand(state: ShinsaState, random: Random): ShinsaCommand | null {
+  if (!chance(random, 0.3)) return null;
+  const planning = Object.values(state.runs).filter((run) => run.endedAt === null && run.purpose === 'plan');
+  const run = pick(random, planning);
+  if (!run) return null;
+  const repoId = state.tasks[run.taskId]?.repoId === 'repo' ? 'other' : pick(random, ['repo', 'other']);
+  return {
+    type: 'agent.move_to_repository',
+    runId: run.id,
+    repoId: repoId ?? 'repo',
+    reason: 'It lives there.',
+  };
+}
+
+function listMoveMarks(state: ShinsaState) {
+  return Object.values(state.tasks).flatMap((task) => [
+    task.activity.some((entry) => entry.text.startsWith('Moving the task to')) ? 'moving task' : null,
+    task.activity.some((entry) => entry.text.startsWith('Moved the task to')) ? 'moved task' : null,
+    task.repoId === 'other' && task.phaseReports.length > 0 ? 'built after the move' : null,
+  ]);
+}
 
 function selectRerun(state: ShinsaState, side: Random): ShinsaCommand | null {
   if (!chance(side, OUTAGE_ODDS)) return null;
@@ -910,6 +935,15 @@ function assertProcessInvariants(state: ShinsaState, task: Task, gates: Gate[], 
   ).toBeLessThanOrEqual(10);
 }
 
+function assertMoveInvariants(state: ShinsaState) {
+  for (const task of Object.values(state.tasks)) {
+    if (!task.movingTo) continue;
+    expect(task.movingTo, `${task.id} moves to the repository it works in`).not.toBe(task.repoId);
+    expect(listActiveRuns(state, task.id), `${task.id} runs an agent while it moves`).toHaveLength(0);
+    expect(task.phaseReports, `${task.id} moves after a phase reported`).toHaveLength(0);
+  }
+}
+
 function assertInvariants(state: ShinsaState, now: number) {
   const queue = resolveQueue(state, now);
   const seen = new Map<string, string>();
@@ -934,6 +968,7 @@ function assertInvariants(state: ShinsaState, now: number) {
   assertScheduleInvariants(state);
   assertHandleInvariants(state);
   assertWorkspaceInvariants(state);
+  assertMoveInvariants(state);
   for (const task of Object.values(state.tasks)) {
     const runs = listActiveRuns(state, task.id);
     const gates = listOpenGates(state, task.id);
@@ -1019,6 +1054,7 @@ type SideStream =
   | 'duplicates'
   | 'bundles'
   | 'paces'
+  | 'moves'
   | null;
 
 const PACE_LIMITS = [null, 4, 12, 40];
@@ -1364,6 +1400,8 @@ function selectSideCommand(
       return selectBundleCommand(state, randoms.planner);
     case 'paces':
       return selectPaceCommand(state, randoms.planner, now);
+    case 'moves':
+      return selectMoveCommand(state, randoms.planner);
     default:
       return null;
   }
@@ -1438,22 +1476,26 @@ function simulate(
     pushes: createRandom(seed * 122_949_829),
   };
   let state = createState();
-  state = applyEvent(state, {
-    type: 'repo.registered',
-    repo: {
-      id: 'repo',
-      name: 'shinsa',
-      path: '/code/shinsa',
-      defaultBranch: 'main',
-      remote: null,
-      projectId: null,
-      checkCommands: [],
+  const repo = { defaultBranch: 'main', remote: null, projectId: null, checkCommands: [] };
+  const registered: ShinsaEvent[] = [
+    {
+      type: 'repo.registered',
+      repo: { ...repo, id: 'repo', name: 'shinsa', path: '/code/shinsa' },
+      seq: 1,
+      at: 0,
     },
-    seq: 1,
-    at: 0,
-  });
+  ];
+  if (sideStream === 'moves') {
+    registered.push({
+      type: 'repo.registered',
+      repo: { ...repo, id: 'other', name: 'kanna', path: '/code/kanna' },
+      seq: 2,
+      at: 0,
+    });
+  }
+  for (const event of registered) state = applyEvent(state, event);
   freezeState(state);
-  const log: ShinsaEvent[] = [{ type: 'repo.registered', repo: state.repos.repo!, seq: 1, at: 0 }];
+  const log: ShinsaEvent[] = [...registered];
   let client = JSON.parse(JSON.stringify(serializeState(state))) as WireState;
   let replayed = JSON.parse(JSON.stringify(state)) as ShinsaState;
   let view = connectView(state);
@@ -1835,6 +1877,19 @@ describe('decide under random command sequences', () => {
         'held at a usage limit',
         'held step started again',
       ]);
+    },
+    SEEDS * 2_000
+  );
+
+  test(
+    'keeps every invariant while agents move their tasks to another repository as they plan',
+    () => {
+      const reached = new Set<string>();
+      const collect = (state: ShinsaState) => {
+        for (const mark of listMoveMarks(state)) if (mark) reached.add(mark);
+      };
+      for (let seed = 1; seed <= SEEDS; seed += 1) simulate(seed, STEPS, 'moves', collect);
+      expect([...reached].sort()).toEqual(['built after the move', 'moved task', 'moving task']);
     },
     SEEDS * 2_000
   );

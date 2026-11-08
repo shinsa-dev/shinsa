@@ -1,7 +1,7 @@
-import { existsSync, statSync } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
 import type { BundleConflict, Repo, RepoCandidate } from '@shinsa/core';
-import { Context, Effect, Layer } from 'effect';
+import { Context, Effect, FileSystem, Layer } from 'effect';
+import { isExecutable, isPresent } from '../../files/probe.ts';
 import { describeFailure } from '../../shell/failure.ts';
 import { decodeRefName } from '../ref-name.ts';
 import { GitFailed, type RefNameInvalid } from '../schema.ts';
@@ -48,6 +48,7 @@ export class Remote extends Context.Service<
     Remote,
     Effect.gen(function* () {
       const git = yield* Git;
+      const withFiles = Effect.provideService(FileSystem.FileSystem, yield* FileSystem.FileSystem);
 
       const hasPrePushHook = Effect.fn('Remote.hasPrePushHook')(function* (
         cwd: string,
@@ -56,11 +57,9 @@ export class Remote extends Context.Service<
         const result = yield* git.attempt(['rev-parse', '--git-path', 'hooks/pre-push'], cwd, { signal });
         if (!result.ok) return false;
         const path = resolve(cwd, result.stdout);
-        return yield* Effect.sync(() => {
-          if (!existsSync(path) || (statSync(path).mode & 0o111) === 0) return false;
-          const folder = dirname(path);
-          return basename(folder) !== '_' || existsSync(join(dirname(folder), 'pre-push'));
-        });
+        if (!(yield* withFiles(isExecutable(path)))) return false;
+        const folder = dirname(path);
+        return basename(folder) !== '_' || (yield* withFiles(isPresent(join(dirname(folder), 'pre-push'))));
       });
 
       const push = Effect.fn('Remote.push')(function* (

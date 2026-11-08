@@ -38,6 +38,27 @@ describe('Settings → Teams on a browser that reaches none of your machines', (
     expect(screen.getByText(/Own scopes/)).toBeTruthy();
   });
 
+  it('lists every machine in the team with its owner and status', () => {
+    renderHosted(
+      createTeam({
+        machines: [
+          { id: 'm1', name: 'Mac.lan', userId: KAI.id, online: true, lastSeenAt: Date.now() },
+          { id: 'm2', name: 'Studio', userId: MONA.id, online: false, lastSeenAt: null },
+        ],
+      })
+    );
+    expect(screen.getByText('Mac.lan')).toBeTruthy();
+    expect(screen.getByText('Studio')).toBeTruthy();
+    expect(screen.getAllByText(/^Owned by/)).toHaveLength(2);
+    expect(screen.getByText('Online')).toBeTruthy();
+    expect(screen.getByText('Never connected')).toBeTruthy();
+  });
+
+  it('says when no one in the team has turned on remote access', () => {
+    renderHosted(createTeam({ machines: [] }));
+    expect(screen.getByText('No one in this team has turned on remote access yet.')).toBeTruthy();
+  });
+
   it('lets the owner change the team’s scopes and one person’s from the page', async () => {
     const onUpdate = mock<Update>(() => Promise.resolve());
     renderHosted(createTeam(), true, onUpdate);

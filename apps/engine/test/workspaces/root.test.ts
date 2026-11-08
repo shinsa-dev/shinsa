@@ -5,10 +5,10 @@ import { Effect, Layer } from 'effect';
 import type { ServerConfig } from '../../src/config/index.ts';
 import { EngineConfig } from '../../src/config/service.ts';
 import { ConfigStore } from '../../src/config/store/service.ts';
-import { JsonFile } from '../../src/files/service.ts';
 import { WORKTREE_ROOT_MARKER } from '../../src/workspaces/root/schema.ts';
 import { WorktreeRoot } from '../../src/workspaces/root/service.ts';
 import { createConfigAt } from '../helpers/config.ts';
+import { JsonFileLayer } from '../helpers/files.ts';
 import { createTempDir } from '../helpers/index.ts';
 
 function runRoot<A, E>(
@@ -21,7 +21,7 @@ function runRoot<A, E>(
       Effect.provide(
         WorktreeRoot.layer.pipe(
           Layer.provideMerge(ConfigStore.layer),
-          Layer.provide(Layer.merge(Layer.succeed(EngineConfig, config), JsonFile.layer))
+          Layer.provide(Layer.merge(Layer.succeed(EngineConfig, config), JsonFileLayer))
         )
       )
     )

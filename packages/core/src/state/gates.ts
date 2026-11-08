@@ -5,6 +5,7 @@ import { clearEscalation } from './autopilot.ts';
 import { writeEntry } from './draft.ts';
 import type { ShinsaState } from './project.ts';
 import { applyVerdicts } from './reviews.ts';
+import { clearSuggestedActions } from './shapes.ts';
 import { record, updateGate, updateTask } from './write.ts';
 
 type GateEvent = Extract<
@@ -72,6 +73,7 @@ function applyGateAnswered(state: ShinsaState, event: EventOf<'gate.answered'>) 
   if (event.verdicts) applyVerdicts(state, gate.taskId, event.at, event.verdicts);
   clearSlackDecided(state, gate.taskId, event.at);
   clearMergeEscalation(state, gate.id, event.at);
+  clearSuggestedActions(state, gate.taskId, event.at);
   if (gate.type === 'review') writeApproveAfterFix(state, gate.taskId, event.at, event.thenApprove === true);
   if (event.autopilot && gate.type === 'review')
     updateTask(state, gate.taskId, event.at, { autopiloted: { at: event.at, reason: event.autopilot } });

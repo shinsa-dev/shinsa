@@ -1,4 +1,5 @@
 import { join, relative } from 'node:path';
+import { Effect, Option } from 'effect';
 import type { CommandResult } from '../shell/schema.ts';
 import { listFailedTests } from './reruns.ts';
 import { type FailedTestGroup, type GroupRerun, OUTPUT_TAIL, SIGNAL, SIGNAL_LINES } from './schema.ts';
@@ -28,10 +29,13 @@ function listGroupPaths(groups: readonly FailedTestGroup[], cwd: string) {
   return groups.flatMap((group) => group.files.map((file) => relative(cwd, join(group.packageDir, file))));
 }
 
-export function listFailedFiles(output: string, cwd: string) {
-  const failed = listFailedTests(output, cwd);
-  return failed.kind === 'files' ? listGroupPaths(failed.groups, cwd) : null;
-}
+export const selectFailedFiles = Effect.fn('Checks.selectFailedFiles')(function* (
+  output: string,
+  cwd: string
+) {
+  const failed = yield* listFailedTests(output, cwd);
+  return failed.kind === 'files' ? Option.some(listGroupPaths(failed.groups, cwd)) : Option.none<string[]>();
+});
 
 export function describeRerunOutput(reruns: readonly GroupRerun[]) {
   return reruns.map((rerun) => rerun.output).join('\n');

@@ -94,6 +94,8 @@ One definition per term. **Code** is the name in `packages/core`; **UI** is the 
 | usage wait | A step paused until a usage limit resets, then resumed on the same session | `UsageWait` | "Waiting for the usage limit" |
 | pace hold | A step held before it starts because the last 24 hours reached the daily or a project's usage limit; it starts when older usage drops out | `UsageWait` with `cause: pace`, `UsagePace` | "Held at a usage limit" |
 | usage forecast | The highest steady daily pace the accounts allow without all of them running out, with each account's timeline | `UsageForecast` (`resolveUsageForecast`) | forecast |
+| usage reset | A reset of usage limits Claude grants an account, which you claim in the Claude app; Shinsa shows it and never claims it | `UsageResetGrant`, `AccountUsage.resetGrants` | "Usage reset", "1 usage reset available" |
+| extra usage | Paid usage past a plan's limits, on or off per account, with the credit left | `ExtraUsage`, `UsageMoney`, `AccountUsage.extraUsage` | "Extra usage", "credit left" |
 | account | A Claude login a run is leased on | `RunAccount` | account |
 | provider sign-in | A provider's own login (Codex), named on a Sign in gate with no account | `ProviderSignIn`, `Gate.provider` | "Paused: ‹email› needs signing in" |
 | command | A request to change state; `decide` turns it into events and effects or refuses it | `ShinsaCommand` (`UserCommand`, `AgentCommand`, `SystemCommand`) | not shown |
@@ -113,7 +115,7 @@ One definition per term. **Code** is the name in `packages/core`; **UI** is the 
 | The kind of task | `TaskShape`, `shape`, `reshape_task`, `task.reshaped`; UI "kind of task"; `mode: 'ask'` for an answer task asked for as one (`tasks create --ask`, a schedule's `just_answer`) |
 | Your request | `request` everywhere new; the refusal code for an empty one is still `intent_required` (`decide/tasks.ts`) |
 | Waiting on another task | `waitsOn`, `task.wait_on`, `task.waits_on_changed`, stage `waiting_on_tasks`, triage's `waits_on`; the rules in `decide/dependencies.ts` (`resolveDependencies`, `listPendingDependencies`); UI "Waits on" |
-| A bundle | `stacksOn` (on `Task`, `task.create`, `task.stack_on_tasks`), `stack_on_this` and `stack_on` (`create_task`), `task.stack_changed`, `stackBases` and `task.stack_based`, the lead and its followers, `bundleReady` and `task.bundle_ready`, `bundleConflict`, `bundle.record_check` and `task.bundle_conflict`, `bundle` on `pull_request.merge`, `tasks stack-on` and `tasks unstack`; UI "Bundle", "Stack on another task", "Ready". Never "stack" alone on screen: that is a round stack |
+| A bundle | `stacksOn` (on `Task`, `task.create`, `task.stack_on_tasks`), `stack_on_this` and `stack_on` (`create_task`), `stack_on_this` (`suggest_tasks`) and `stackOnThis` (`suggestion.accept`), `task.stack_changed`, `stackBases` and `task.stack_based`, the lead and its followers, `bundleReady` and `task.bundle_ready`, `bundleConflict`, `bundle.record_check` and `task.bundle_conflict`, `bundle` on `pull_request.merge`, `tasks stack-on` and `tasks unstack`; UI "Bundle", "Stack on another task", "Ready". Never "stack" alone on screen: that is a round stack |
 | Snoozing | `Task.snoozed` (`TaskSnooze`), `task.snooze_changed`, `task.snooze`, `task.unsnooze`, `queue.snoozed`, `decide/snooze.ts`, the task group and queue section `snoozed`; UI "Snooze", "Unsnooze", "Snoozed". Never "pause" for it: Paused is a step that stopped for you |
 | The backlog | `Task.backlog`, `task.backlog_changed`, `task.move_to_backlog`, `task.remove_from_backlog`, `backlog: true` on `task.create`, `suggestion.accept` and `create_task`; the rules in `domain/backlog.ts` (`canWaitInBacklog`, `resolveBacklogRefusal`) and `decide/backlog.ts`; UI "Backlog" |
 | A round that waits to start | `RoundStatus 'waiting'`; event `round.queued`, `Round.queuedAt`, `ROUND_LIMITS.queued` |
@@ -228,18 +230,20 @@ one reads as its empty value. The fields under Triage and shape, Plan and build,
 
 | Field | Type | Meaning |
 | --- | --- | --- |
-| `repoId` | string \| null | the repository, from triage |
+| `repoId` | string \| null | the repository, from triage, or the one `move_to_repository` moved it to |
+| `movingTo?` | string \| null | the repository a move is taking it to, while the old worktree is removed (`task.moving` to `task.moved`) |
 | `size` | `small` \| `large` \| null | from triage; a large plan can wait for approval |
 | `branch` | string \| null | the task's branch, once its worktree exists |
 | `proposedBranch?` | string \| null | triage's branch for a task with no worktree step yet |
 | `pipeline?` | `PipelineStep[]` | the steps; absent means change (or answer for `mode: 'ask'`) |
 | `auto` | `{ shape, start, priority }` booleans | which parts you left to Shinsa; `shape` is true unless `mode` was given |
-| `triageDecisions?` | `{ shape, start, priority }` each `{ value, why }` \| null, and `duplicate?` `{ unreached }` | triage's choice and why, per Auto part; `duplicate.unreached` lists the team machines (`UnreachedTeammate`: `{ teamId, machineId, name, owner }`, `owner` a `TeammateOwner` `{ login, name, avatarUrl }` or null) whose tasks the team-wide duplicate check could not read |
+| `triageDecisions?` | `{ shape, start, priority }` each `{ value, why }` \| null, `stack?` `{ value, why }`, and `duplicate?` `{ unreached }` | triage's choice and why, per Auto part; `stack` is the tasks triage stacked it on, present only when it did; `duplicate.unreached` lists the team machines (`UnreachedTeammate`: `{ teamId, machineId, name, owner }`, `owner` a `TeammateOwner` `{ login, name, avatarUrl }` or null) whose tasks the team-wide duplicate check could not read |
 | `shapeChanges?` | `ShapeChange[]` (last 20) | each pipeline change: from, to, by (`you`, `agent`, `shinsa`), reason |
-| `proposal?` | `ChangeProposal` \| null | an inquiry's proposal: request, why, status (`open`, `accepted`, `declined`) |
+| `proposal?` | `ChangeProposal` \| null | an inquiry's proposal: request, why, status (`open`, `accepted`, `declined`), `recommend` (`go_on` or `close`, the agent's advice; `close` puts Close first on the card) |
+| `suggestedActions?` | `SuggestedAction[]` (at most 3) | the replies the agent's last hand-over suggested, each a `label` and the `message` it sends as yours; cleared when your message reaches the agent or you answer a gate, replaced by the next hand-over |
 | `planFirst` | boolean | plan first: the plan always waits at a gate |
 | `backlog?` | `{ at }` \| null | in the backlog since `at`: its plan gate opens and is held out of Needs you until you start it |
-| `share?` | `TaskShare` \| null | shared by link since `at`: `url` once the engine made the link (null while `share.link` runs), which holds the share id and, in its fragment, the key; `limit` how long (`ShareLimit`: `until_done`, `hour`, `day`, `week`, `none`), `preset` what it shows (`SharePreset`: `status`, `standard`, `full`, each a list of `ShareGroup`s in `SHARE_PRESET_GROUPS`) and `endsAt` when a time limit runs out (null otherwise); `failure` the reason the link could not be made, cleared once it is; `description` the summary the writer wrote of what the task addresses when sharing started (`share.describe`) (`docs/engine.md` → Sharing a task) |
+| `share?` | `TaskShare` \| null | shared by link since `at`: `url` once the engine made the link (null while `share.link` runs), which holds the share id and, in its fragment, the key; `limit` how long (`ShareLimit`: `until_done`, `hour`, `day`, `week`, `none`), `scopes` the view scopes it shows (`ViewScope`s in order, identity always among them; a preset is a list in `SHARE_PRESET_SCOPES`, and the label Status, Standard, Full access or Custom comes from `resolveShareScopesPreset`) and `endsAt` when a time limit runs out (null otherwise); `failure` the reason the link could not be made, cleared once it is; `description` the summary the writer wrote of what the task addresses when sharing started (`share.describe`) (`docs/engine.md` → Sharing a task) |
 | `previews?` | `PreviewShare[]` | the task's service runs shared by link, one per `serviceId`: `at`, `url` (`https://<label>.shinsa.page/?key=<key>` once the engine made it, null while `preview.link` runs), `limit` and `endsAt` as on `share`, `failure` the reason the link could not be made (`docs/engine.md` → Sharing a preview) |
 | `handoff?` | `TaskHandoff` \| null | handed off by a link since `at`: `url` once the engine made the link (null while `handoff.link` runs and once someone claimed it), `failure` the reason the link could not be made, `guest` the account that took it over (`TaskGuest`: `id`, `login`, `name`, `avatarUrl`) and `claimedAt` when (`docs/engine.md` → Handing off a task) |
 
@@ -332,6 +336,7 @@ one reads as its empty value. The fields under Triage and shape, Plan and build,
 | `usageWait?` | `UsageWait` \| null | a step waiting for a usage reset, or held at a daily or project limit (`cause: pace`, with `pace`: `scope` `daily` or `project`, `limit`, `percent`, `projectId`, `stageReason`) |
 | `account?` | `RunAccount` \| null | the account the task is bound to |
 | `budgetAcknowledgedUsd?`, `usageAcknowledgedPercent?` | number | what you allowed past the cost and usage limits |
+| `paceLimitsIgnored?` | boolean | you pressed Resume now on a pace hold, so the daily and project usage limits no longer hold this task |
 | `configProblems?` | `ConfigProblem[]` | the problems setup verification found, each a `kind` (`repository`, `no_repository`, `default_branch` or `workspace`) and a `detail`; the checks are never one (`docs/engine.md` → Setup verification) |
 
 **Agents and other tasks**
@@ -375,6 +380,7 @@ export interface RoundPullRequest {
   state: PullRequest['state'];
   base: string | null;
   changes?: PullRequestChanges | null;
+  mergedAt?: number | null;
 }
 
 export interface RoundOutcome {
@@ -539,7 +545,7 @@ Which agent role's settings (provider, model, speed) each run role uses is one t
 
 | Run role | Settings role (`RUN_AGENT_ROLE`) | Read-only | Works in | Hands over with |
 | --- | --- | --- | --- | --- |
-| `agent` | agent | while it plans (`purpose: plan`) | worktree | by purpose: `propose_plan` or `reshape_task` (plan), `complete_phase` (build), `complete_fix` (fix), `report_outcome` (operate), `report_read` after any `file_report` (watch and intake, read-only, in the repository) |
+| `agent` | agent | while it plans (`purpose: plan`) | worktree | by purpose: `propose_plan`, `reshape_task` or `move_to_repository` (plan), `complete_phase` (build), `complete_fix` (fix), `report_outcome` (operate), `report_read` after any `file_report` (watch and intake, read-only, in the repository) |
 | `reviewer` | reviewer | yes | worktree | `report_review` |
 | `answerer` | answerer | yes | the repository itself | `answer` |
 | `investigator` | answerer | no (scratch) | worktree | `report_diagnosis` |
@@ -600,7 +606,7 @@ An inquiry's own gate is `result`, which opens only when nothing follows it (sta
 pull_request, merge]` (`resolveProposalUpgrade`) and waits at `your_ok`, so a proposal and a composed OK take one path.
 
 **The plan gate rule** is data, `PLAN_GATE_RULE` (`domain/steps.ts`): `always` when the task operates, was created
-plan first, is in the backlog or the plan asks for approval (`operates`, `plan_first`, `backlog`, `asks_approval`); with Approve plans
+plan first, is in the backlog, the plan asks for approval or the plan splits the work into other tasks (`operates`, `plan_first`, `backlog`, `asks_approval`, `splits`); with Approve plans
 (`approvePlans`, a `PlanApproval`: `when_asked`, `large`, `always`) on Large plans, also when the plan has more than 3
 phases or 6 files or is a revision (`withLargePlans`: `large`, `revised`; the limits are `PLAN_SIZE_LIMITS`, counted on
 the plan document, never the triage size); on Always, every plan. `describePlanGateRule()` writes
@@ -637,7 +643,7 @@ secret.
 | `proposal` | Your OK | the answer, report or diagnosis, the proposal and why | approve (setup verified again, then planned) · reject (keeps the inquiry, finishes) | "Approve the proposal or keep the task." | no |
 | `operation` | Run the operation | the merged commit and pull request, the steps, the impact, your notes | approve (runs with the notes on the gate) · reply (replaces the notes with your words, then runs; empty clears them) · reject (finishes without it) | "Run the operation or finish without it." | no |
 | `failure` | Paused | what stopped, why, what Retry does | approve (retry) · reply (retry with guidance) · reject (cancel) | "Retry or cancel the task." | yes |
-| `configuration` | Setup incomplete | each setup problem and its fix | approve (verifies the setup again) · reject | "Verify the setup again, or cancel." | yes |
+| `configuration` | Setup incomplete | each setup problem and its fix, and the repositories to pick from when the repository is the only problem | approve (verifies the setup again) · reply (binds the picked repository, then verifies again) · reject | "Verify the setup again, or cancel." | yes |
 | `sign_in` | Sign in | the provider and the account | approve (retry) · reply (retry with guidance) · reject (cancel) | "Sign in, retry or cancel the task." | yes |
 | `post_merge` | Post-merge | each step left for you after the merge, which are ticked | none: ticking the last step withdraws it (`merge_step.tick`), unticking one opens it again | "Tick each step under Post-merge once you did it; the gate closes with the last one." | no |
 | `result` | Answered (titled "Read the answer", "Read the report" or "Read the diagnosis") | the answer, report or diagnosis | approve (Close: settles the task as done, still open to follow-ups) | "Close the task once you have read the result." | no |
@@ -661,7 +667,7 @@ Soft gates, decided by Shinsa or the reviewer:
 | `openedAt`, `answeredAt`, `decision`, `response` | | your answer and its words |
 | `planVersion?` | number | the plan version a plan gate is for |
 | `choices?`, `recommendation?` | | a question's one-click answers |
-| `cause?` | `budget` \| `monitor` \| `push_hook` | why a failure gate opened, when not plain recovery; `push_hook` is the same pre-push hook failure after a fix round, whose approve (Send to the agent again) starts another fix round |
+| `cause?` | `budget` \| `monitor` \| `push_hook` \| `paused` | why a failure gate opened, when not plain recovery; `push_hook` is the same pre-push hook failure after a fix round, whose approve (Send to the agent again) starts another fix round; `paused` is your `task.pause`, whose approve (Resume) restarts the step |
 | `escalation?` | reason (`rounds`, `stalled`, `exhausted`), rounds | an escalated review |
 | `autopilotHeld?` | string | why Autopilot left this review gate for you ("The reviewer’s confidence is medium.") |
 | `autopilotDue?` | `{ at, action: 'escalate' \| 'merge' }` \| null | an open merge gate's Autopilot deadline (`autopilot.scheduled`); `AutopilotClock` fires `autopilot.fire` at `at` |
@@ -711,8 +717,12 @@ The agent composes steps and sets plan parameters while it plans; it cannot add 
   without it; Checks, below), `evidence` (`screenshot`, `recording`, `test`, `note`, `preview`; for a code change or an
   operation), `impact` (required for an operation), `operation` (its steps, required with code), `approval` (asks for
   the plan gate), `title` (a new title, only when the work moved away from the task's, such as a question that became
-  a change; the plan gate shows it and the round takes it once the plan is accepted, `task.retitled`). A refusal is
-  `plan_invalid`.
+  a change; the plan gate shows it and the round takes it once the plan is accepted, `task.retitled`), `split` (the
+  other parts of the request that ship as their own pull requests, only for a task that opens one: up to 8
+  (`PROTOCOL_LIMITS.splitParts`), each a `title` (named once), a `request` that stands on its own, an `order`
+  (`PLAN_SPLIT_ORDERS`: `parallel`, `waits_on`, `stacks_on`) and, for `waits_on` and `stacks_on` only, `on`: 0 for this
+  task or an earlier part's number, so the parts cannot wait on each other in a loop; the phases cover only the work
+  that stays here, and the plan gate always opens for it, `splits`). A refusal is `plan_invalid`.
 - **Checks later**: `check_changes` on `complete_phase` and `complete_fix` (Checks, below).
 - The only hard gates an agent can add: your OK (`your_ok`, after an inquiry) and plan approval (`approval`).
 
@@ -830,9 +840,10 @@ your behalf (`onBehalf`, `byTask`). **Human** = only you: its specs are `humanOn
 | `task.remove_from_backlog` | takes it out; its plan waits in Needs you ("plan ready for you"); a task not there records nothing | `tasks remove-from-backlog` | agent |
 | `task.snooze` | snoozes an open task in any step: its gates leave `ready` and it is listed in `queue.snoozed`, nothing else changes; refused for a settled task (`task_settled`); a snoozed task records nothing | `tasks snooze` | agent |
 | `task.unsnooze` | clears the snooze: the task shows where it is now; a task not snoozed records nothing | `tasks unsnooze` | agent |
+| `task.pause` | pauses a working task: cancels its active runs (delegations included) and its running triage, setup, worktree, checks and push effects, then opens the failure gate "You paused the task" (`cause: paused`) on the same stage; refused (`not_pausable`) unless the task is triaging or in a working stage (`isTaskPausable`) with no pausing gate open | `tasks pause` | agent |
 | `task.retry` | restarts the current step with a fresh budget, optionally on an account | `tasks retry`, `tasks rerun` | agent |
 | `task.cancel` | cancels it, and stops its watchdogs | `tasks cancel` | agent |
-| `task.share` | shares it by a link that reads it live from this machine (`share.link` makes it), for `limit` and as `preset` (the `shareLimit` and `sharePreset` settings when left out); again with another `limit` or `preset` it changes how long or what it shows and keeps the link; again on a failed share it asks for the link once more; an automation's home, or `until_done` on a finished task, is refused (`share_refused`) | `tasks share [--until] [--preset]` | **human** |
+| `task.share` | shares it by a link that reads it live from this machine (`share.link` makes it), for `limit` and as `preset` or as `scopes`, any list of view scopes (the `shareLimit` and `sharePreset` settings when left out); again with another `limit`, `preset` or `scopes` it changes how long or what it shows and keeps the link; again on a failed share it asks for the link once more; an automation's home, or `until_done` on a finished task, is refused (`share_refused`) | `tasks share [--until] [--preset] [--allow] [--deny]` | **human** |
 | `task.unshare` | stops sharing it: every open link ends at once and the link stops working | `tasks unshare` | **human** |
 | `preview.share` | shares the task's run of a service (`serviceId`) by a link on `shinsa.page` (`preview.link` makes it), for `limit` (the `shareLimit` setting when left out); again with another `limit` it changes how long and keeps the link; again on a failed share it asks for the link once more; an automation's home or a finished task is refused (`share_refused`) | `services share <service> --task [--until]` | **human** |
 | `preview.unshare` | stops sharing that run: its open pages and sockets end at once and the link stops working | `services unshare <service> --task` | **human** |
@@ -849,7 +860,7 @@ your behalf (`onBehalf`, `byTask`). **Human** = only you: its specs are `humanOn
 | `task.bind_account` | binds it to an account, or any | `tasks bind` | agent |
 | `gate.answer` | decides a gate, any gate; at a review or merge gate, Request changes (`revise`) may carry `comments` (Line comments, below); at a review gate, `revise` may carry `thenApprove: true`, which approves the next review that opens without an escalation by itself (`then_approve_invalid`, `then_approve_conflict`); approving a merge gate needs every step before the merge ticked, on every task of its bundle too (`merge_steps_open`) | `gates answer`, `plans *`, `reviews *`, `merges approve`, `merges reject`, `operations *`, `questions answer`, `command` | **human** |
 | `merge_step.tick` | ticks or unticks a step around the merge (`key`, `done`); a step that is not due is refused (`merge_step_early`: one after the merge before its pull request merged, one before the merge once it merged), a step the task does not have is refused (`merge_step_not_found`), and a closed task's not at all (`task_settled`); ticking the last open step after the merge withdraws the Post-merge gate | `merges tick [--undo]` | **human** |
-| `suggestion.accept` | adds a suggested task, optionally waiting on this one or in the backlog (`backlog`) | `suggestions accept` | agent |
+| `suggestion.accept` | adds a suggested task, optionally waiting on this one (`waitsOnThis`), bundled with it (`stackOnThis`, stacked on this task) or in the backlog (`backlog`) | `suggestions accept` | agent |
 | `suggestion.dismiss` | dismisses one | `suggestions dismiss` | agent |
 | `suggestion.keep` | keeps a split-off in this task and sends it now: feedback to the open round, or a new round on a resting task (`shape` optional; the server asks the classifier for a new round when it is left out) | `suggestions keep` | agent |
 | `memory.write` | writes a rule (`text`, `projectId` or null for every project) or, with `memoryId`, changes one; writing over a proposal keeps it; at most 240 characters and 20 kept rules per scope (`memory_invalid`, `memory_full`) | `memory write` | **human** |
@@ -878,7 +889,7 @@ your behalf (`onBehalf`, `byTask`). **Human** = only you: its specs are `humanOn
 | `repo.remove` | forgets a repository | `repos remove` | agent |
 | `focus.change` | sets or clears the focus: `projectId` or `teamId`, never both (`focus_refused`), and `until` | `focus set`, `focus clear` | agent |
 | `away.record` | records a span you were away from your Mac (`from`, `to`), sent by the Mac app's page; refused when it ends before it starts, after now or lasts over 30 days (`away_refused`) | none | **human** |
-| `settings.change` | changes settings (`SETTINGS_KEYS`) | `settings set` | agent; **human** for `approvePlans`, `mergeMethod`, `taskBudgetUsd`, `taskUsageLimit`, `dailyUsageLimit`, `autoResume`, `snoozeLimited`, `accountSwitchAt`, `fastMode`, `agentFastModes`, `delegationLimit`, `shareLimit`, `sharePreset`, `autopilot` (`HUMAN_ONLY_SETTINGS`); a partial `autopilot` is merged into the current policy, `urgentWaitMinutes` 1 to 1,440, `ignoreUsageLimits` (true by default) lets an urgent task's runs skip the usage and cost limits |
+| `settings.change` | changes settings (`SETTINGS_KEYS`) | `settings set` | agent; **human** for `approvePlans`, `mergeMethod`, `taskBudgetUsd`, `taskUsageLimit`, `dailyUsageLimit`, `autoResume`, `snoozeLimited`, `accountSwitchAt`, `fastMode`, `agentFastModes`, `delegationLimit`, `shareLimit`, `sharePreset`, `watchdogsIgnoreUsageLimits`, `autopilot` (`HUMAN_ONLY_SETTINGS`); a partial `autopilot` is merged into the current policy, `urgentWaitMinutes` 1 to 1,440, `ignoreUsageLimits` (true by default) lets an urgent task's runs skip the usage and cost limits |
 
 Core refuses a command sent on your behalf with `human_only`, recording nothing, when it is a `gate.answer`
 (`assertHumanDecides`), when a gate that was open before it is no longer open after it (`assertGatesStayOpen` in
@@ -931,6 +942,7 @@ role without the tool (`hasTool`).
 | `agent.report_review` | `report_review` | hands over the review: `summary` (or null), the `ratings` (`confidence`, `risk`), the findings and the `disagreements` with the Agent's judgement calls |
 | `agent.deliver` | `answer`, `report_diagnosis`, `submit_report`, `report_outcome` | hands over an answer, a diagnosis, a report or an outcome (step `answer`, `investigate`, `research`, `operate`), an inquiry optionally with a proposal, each with `reply` while a request of yours is open and only then; an operation without a code change needs its evidence first |
 | `agent.reshape` | `reshape_task` | recomposes the steps before planning |
+| `agent.move_to_repository` | `move_to_repository` | while it plans, moves the task to another repository of its project (`repoId`, `reason`): ends the run, removes the old worktree and, once it is gone, plans again there in the same session; refused for the same repository (`same_repository`), another project's (`other_project`), once a phase reported, a pull request exists or an earlier round shipped (`work_started`) and for a task in a bundle (`task_stacked`) |
 | `agent.ask` | `ask` | asks you (or, from a delegated run, its parent) |
 | `agent.attach_evidence` | `attach_evidence` | attaches evidence, stored under its task and round (`validateEvidence`; `docs/engine.md` → Evidence) |
 | `agent.attach_comparison` | `attach_evidence` with `kind: "comparison"` | attaches one comparison: a piece per part, sharing one `itemId` (`docs/engine.md` → Evidence) |
@@ -949,7 +961,7 @@ role without the tool (`hasTool`).
 | `agent.file_report` | `file_report` | in a watch's read or a watchdog check only: files a task from one report (`title`, `request`, `reportId` or `link`, `author`, `postedAt`, `text`, `repoId`, `forkOf`, `urgency`: the filed task's priority, the watched task's or the default when null); refuses a report the project already has a task for (`report_filed`) and a repository of another project (`repo_project`); a watchdog's always forks the shipped task (`fork_watchdog`), and links a report another watch or watchdog filed first (`watchdog.report_linked`) rather than refusing it |
 | `agent.report_read` | `report_read` | ends a read with its `summary`, as not finished with `reached: false`: a watch's next read covers the same time, a watchdog's check is missed; a watchdog check that filed a report trips it, one that filed none is healthy, and `live` answers a watchdog waiting for production; the task rests again |
 | `agent.create_task` | `create_task` | files a courier task from its `request`, optionally waiting on it (`thisWaits`), waiting on this task (`afterThis`, never with `thisWaits`), in the backlog (`backlog`), stacked on this task as a bundle (`stackOnThis`, never with `thisWaits` or `afterThis`) or forked from a task (`forkOf`) or a teammate's task (`teammateFork`), in another project (`projectId`, from `project`; without a repository, triage picks one there); `new_repository` makes the engine create and register the named repository first |
-| `agent.split_task` | `split_task` | splits the approved plan into tasks (`requests`) |
+| `agent.split_task` | `split_task` | splits the approved plan into tasks (`requests`); `stacked` chains them as a bundle on this task |
 | `agent.set_schedule` | `set_schedule` | writes one of its task's schedules; `source` names an integration of the task's project to watch: a new watch is recorded as a suggested watch for you to accept (origin the task and run, in its activity), at most 10 open at once (`suggestion_limit`) |
 | `agent.delete_schedule` | `delete_schedule` | deletes one |
 
@@ -967,7 +979,7 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 
 | Command | Sender | Does |
 | --- | --- | --- |
-| `task.triage` | `task.triage` effect (`triage/`) | records title, repository, size, branch, waits on, and the Auto parts; a `duplicateOf` naming an open task, or a `duplicateOfTeammate` (`TeammateOriginal`), closes it as that task's duplicate before any work (a local one wins when both come); `unreached` lists the team machines the duplicate check could not read |
+| `task.triage` | `task.triage` effect (`triage/`) | records title, repository, size, branch, waits on, the open change it stacks on (`stacksOn`, applied only while start is Auto and the stack is allowed), and the Auto parts; a `duplicateOf` naming an open task, or a `duplicateOfTeammate` (`TeammateOriginal`), closes it as that task's duplicate before any work (a local one wins when both come); `unreached` lists the team machines the duplicate check could not read |
 | `repo.register` | `repos/index.ts` | registers a repository on first use |
 | `config.record` | `config.verify` effect | records what setup verification found, with the repository it found (`repoId`) for a task that had none, and how it started a repository with no commits (`started`: `branch`, `initialized`, `pushed`) |
 | `worktree.ready`, `worktree.gone` | worktree effects | the worktree exists (with the branch a main checkout was on, `returnBranch`), or is gone |
@@ -1040,12 +1052,12 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `focus.changed` | the focus changes; closes the open entry of `state.focusHistory` and, with a project, opens one (`{ projectId, from, to, until }`, kept a year) |
 | `away.recorded` | the Mac app reported a span you were away (`from`, `to`), kept in `state.away` for a year; never counted as something you did |
 | `settings.changed` | settings change (the whole settings object) |
-| `task.created` | a task is created (`request`, `planFirst`; with its handle when it has a project; `createdBy`, `scheduleId` and `sourceReport` for one a watch's read filed; `watchHome` for a watch's home) |
+| `task.created` | a task is created (`request`, `planFirst`, `auto`; with its handle when it has a project you chose (`auto.project` false); `createdBy`, `scheduleId` and `sourceReport` for one a watch's read filed; `watchHome` for a watch's home) |
 | `task.triaged` | triage set title, repository (or none), size, branch, handle, pipeline, decisions (always) |
-| `task.repo_bound` | a task with no repository got the one the setup check found (`repoId`, and `projectId` when it had none) |
+| `task.repo_bound` | a task with no repository got the one the setup check found (`repoId`; `projectId` when it had none, or when the bind moves it to the repository's project, with that project's `handle`) |
 | `task.repo_started` | the setup check started a repository with no commits: an empty first commit on the default branch (`start`: `branch`, `initialized` when it ran `git init` on an empty folder, `pushed` when it pushed to an origin with no branches) |
 | `task.reshaped` | the pipeline changed (`by` you, agent or Shinsa, with a reason) |
-| `task.shared`, `task.unshared` | you shared a task by link or changed how long or what it shows (`limit`, `endsAt`, `preset`; the first adds an activity entry), or sharing stopped (`reason`: `you`, `done` when a task shared `until_done` settled, `expired`; each adds an activity entry) |
+| `task.shared`, `task.unshared` | you shared a task by link or changed how long or what it shows (`limit`, `endsAt`, `scopes`; the first adds an activity entry), or sharing stopped (`reason`: `you`, `done` when a task shared `until_done` settled, `expired`; each adds an activity entry) |
 | `share.recorded`, `share.failed` | the engine made the link (`url`, null when unchanged), or could not (`detail`) |
 | `share.described` | the writer described a shared task (`description`) |
 | `preview.shared`, `preview.unshared` | you shared a service run by link or changed how long (`serviceId`, `limit`, `endsAt`; the first adds an activity entry), or sharing stopped (`reason`: `you`, `done` when the task settled, whatever its limit, `expired`; each adds an activity entry) |
@@ -1078,10 +1090,12 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `task.noted` | an agent kept a note |
 | `task.recovered` | the recovery count changed |
 | `task.delivered` | an answer, a diagnosis, a report or an outcome was handed over (`step`) |
-| `task.change_proposed`, `task.change_approved`, `task.change_declined` | a proposal was made, approved, declined |
+| `task.change_proposed`, `task.change_approved`, `task.change_declined` | a proposal was made (with its `recommend`), approved, declined |
+| `task.actions_suggested` | a hand-over suggested replies (`actions`, empty to clear them); also cleared by your message or a gate answer |
 | `task.suggested`, `suggestion.settled` | a task was suggested (`request`; `splitOff` for a split-off); accepted or dismissed (`keptRound` when it was kept here as a round) |
 | `task.account_bound` | the task's account changed |
 | `task.split` | `split_task` made tasks |
+| `task.moving`, `task.moved` | `move_to_repository` started moving the task (`repoId`, `runId`, `reason`; sets `movingTo`), and the old worktree is gone, so the task now works in `repoId` |
 | `config.verified` | setup verification ran |
 | `budget.acknowledged` | you allowed more past a usage or cost limit |
 | `worktree.requested` | the task asked for its workspace, in this mode (`workspace`) |
@@ -1132,6 +1146,7 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `run.waiting` | a step's turn ended while its delegations work |
 | `monitor.armed`, `monitor.fired`, `monitor.ended` | a monitor was armed, fired, ran out or was cleared |
 | `usage_wait.armed`, `usage_wait.ended` | a usage wait was armed; resumed, reset or cleared |
+| `task.pace_limits_ignored` | you resumed a pace hold, so the daily and project usage limits no longer hold the task |
 | `pull_request.opened`, `pull_request.updated` | the pull request was opened; a read changed it |
 | `pull_request.push_requested`, `pull_request.pushed`, `pull_request.head_moved` | a push was asked for, made; someone else moved the head |
 | `pull_request.read_failed`, `pull_request.read_failures_cleared` | a read failed; the count reset |
@@ -1209,6 +1224,7 @@ non-delegated task run also gets one management tool per surface spec that is no
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | `propose_plan` | ✓ plan | | | | | | |
 | `reshape_task` | ✓ plan | | | | | | |
+| `move_to_repository` | ✓ plan | | | | | | |
 | `complete_phase` | ✓ build | | | | | | |
 | `complete_fix` | ✓ fix | | | | | | |
 | `report_review` | | ✓ | | | | | |
@@ -1225,7 +1241,7 @@ non-delegated task run also gets one management tool per surface spec that is no
 | `list_services`, `run_service` | ✓ | ✓ | | ✓ | | | |
 | `add_service`, `remove_service` | ✓ | | | ✓ | | | |
 | `wait_for` | ✓ | | | ✓ | | | |
-| `suggest_tasks` (`split_off`) | ✓ | ✓ | ✓ | ✓ | ✓ | | |
+| `suggest_tasks` (`split_off`, `after_this`, `stack_on_this`) | ✓ | ✓ | ✓ | ✓ | ✓ | | |
 | `remember` | ✓ | | ✓ | ✓ | ✓ | | |
 | `report_feedback` | ✓ | ✓ | ✓ | ✓ | ✓ | | |
 | `delegate_task`, `delegation_status`, `delegation_cancel`, `delegation_answer` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | |
@@ -1257,17 +1273,18 @@ The fields each hand-over tool takes, checked by `validate*` in `packages/core/s
 
 | Tool | Fields (required in bold) | Limits |
 | --- | --- | --- |
-| `propose_plan` | **`goal`**, **`phases`** (**`title`**, **`detail`**), **`behaviour`**, **`approach`**, **`files`** (**`path`**, **`change`**), **`out_of_scope`**, **`verification`** (**`label`**, **`command`**, **`phases`**), **`questions`** (**`question`**, **`options`**, `recommendation`); `title`, `impact`, `evidence`, `approval`, `operation`, `reply` (as in `complete_fix`) | title 60; goal 300; 2 to 8 phases (title 60, detail 160); behaviour 8 × 200; approach 700; files 20 (change 140); out of scope 6 × 200; verification 12 checks (label 60, command 200, never a whole-suite command or one listed twice; phases 1-based, at least one, within the plan); questions 4 (question 200, 2 to 4 options of 100); impact 1,000; operation 8 × 200; reply as in `complete_fix` |
-| `complete_phase` | `reply` (as in `complete_fix`); **`summary`**, **`spots`** (**`file`**, **`start`**, **`end`**, **`attention`**: critical, high or normal, **`why`**, `title`, `explain`), **`judgement_calls`** (**`title`**: a few words naming the decision, **`call`**, **`reason`**, `file`, `line`, `end`, `alternatives` (**`option`**, **`rejected`**)); `walkthrough` (**`approach`**, **`flow`**, `risks` (**`title`**: a few words naming the risk, **`risk`**, `file`, `line`, `end`), `testing` (`automated`, `manual` (**`action`**, `target` (**`kind`**: url, file, command or screen, **`value`**), **`expect`**)), `steps` (**`when`**: pre_merge or post_merge, **`kind`**: env, secret, migration, deploy, config or other, **`title`**, **`detail`**, `command`)), asked for on the last phase; `watchdogs` (**`title`**, **`check`**, `first_check_minutes`, `max_gap_hours`, `for_hours`, `starts` (`merge` or `production`) with `production_check`, and exactly one of `source` (**`server`**, **`data`**) or `source_request` (**`data`**, **`evidence`**, **`suggestions`**)), beside `walkthrough` and only with it; `check_changes` (**`action`**: add, change or remove, `id` (not for add), `label`, `command`, `phases`, **`reason`**) | summary 240; 8 spots (why 180, title 80, explain 400); 5 judgement calls (title 60, call 120, reason 240; 3 alternatives, option 100, rejected 200); walkthrough approach 1,200, flow 2,400, 8 risks (title 60, risk 280), testing automated 4 × 240 and 10 manual steps (action 240, target 400, expect 240), 8 steps (title 80, unique per `when`; detail 400; command 400); 5 watchdogs (title 80, unique; check 600; server 128; data 200; evidence 600; 1 to 4 suggestions of 160; first check 1 to 720 minutes, gaps up to 1 to 24 hours, for 1 to 720 hours and no less than the first check; production check 400, required with `starts: production`; a `source_request` whose suggestions name a server the run already has is refused unless its `evidence` says it checked that server (“checked <server>” in one clause), here and on `complete_fix`); 6 check changes (id 12, label 60, command 200, reason 200; an add needs a label and a command); reply as in `complete_fix` |
-| `complete_fix` | **`summary`**; `reply` (**`headline`**, **`points`** (**`ask`**, **`outcome`**: done, answered or not_changed, **`note`**), `next`), required while a request of yours is open and refused otherwise; `walkthrough` (`approach`, `flow`, `risks` (**`title`**, **`risk`**, `file`, `line`, `end`), `testing`, `steps`), only when the fix changes how the change works, with only the parts that changed and at least one; `testing` and `steps` replace the part whole, an empty one included; `watchdogs` as in `complete_phase`, beside `walkthrough`, replacing the list whole (an empty one removes them) and enough on its own; `checks` (ids of checks to run again besides the failing ones); `check_changes` as in `complete_phase`; `evidence_kept` (earlier items, by key or id, that still show the work as it is) | summary 240; reply headline 240, 1 to 8 points (ask 160, note 280), next 1,200; walkthrough as in `complete_phase`; checks 12 ids of 12; check changes as in `complete_phase`; evidence kept 24 of 60; watchdogs as in `complete_phase`. Both hand-overs and their `walkthrough` refuse a field they do not take, naming the ones they do |
+| `propose_plan` | **`goal`**, **`phases`** (**`title`**, **`detail`**), **`behaviour`**, **`approach`**, **`files`** (**`path`**, **`change`**), **`out_of_scope`**, **`verification`** (**`label`**, **`command`**, **`phases`**), **`questions`** (**`question`**, **`options`**, `recommendation`); `title`, `impact`, `evidence`, `approval`, `operation`, `split` (**`title`**, **`request`**, **`order`**, `on`), `reply` (as in `complete_fix`), `actions` (as in `complete_fix`) | title 60; goal 300; 2 to 8 phases (title 60, detail 160); behaviour 8 × 200; approach 700; files 20 (change 140); out of scope 6 × 200; verification 12 checks (label 60, command 200, never a whole-suite command or one listed twice; phases 1-based, at least one, within the plan); questions 4 (question 200, 2 to 4 options of 100); impact 1,000; operation 8 × 200; split 8 parts (title as a task's title, request as a suggestion's, `on` 0 to 7 and before its own part); reply as in `complete_fix` |
+| `complete_phase` | `reply` and `actions` (as in `complete_fix`); **`summary`**, **`spots`** (**`file`**, **`start`**, **`end`**, **`attention`**: critical, high or normal, **`why`**, `title`, `explain`), **`judgement_calls`** (**`title`**: a few words naming the decision, **`call`**, **`reason`**, `file`, `line`, `end`, `alternatives` (**`option`**, **`rejected`**)); `walkthrough` (**`approach`**, **`flow`**, `risks` (**`title`**: a few words naming the risk, **`risk`**, `file`, `line`, `end`), `testing` (`automated`, `manual` (**`action`**, `target` (**`kind`**: url, file, command or screen, **`value`**), **`expect`**)), `steps` (**`when`**: pre_merge or post_merge, **`kind`**: env, secret, migration, deploy, config or other, **`title`**, **`detail`**, `command`)), asked for on the last phase; `watchdogs` (**`title`**, **`check`**, `first_check_minutes`, `max_gap_hours`, `for_hours`, `starts` (`merge` or `production`) with `production_check`, and exactly one of `source` (**`server`**, **`data`**) or `source_request` (**`data`**, **`evidence`**, **`suggestions`**)), beside `walkthrough` and only with it; `check_changes` (**`action`**: add, change or remove, `id` (not for add), `label`, `command`, `phases`, **`reason`**) | summary 240; 8 spots (why 180, title 80, explain 400); 5 judgement calls (title 60, call 120, reason 240; 3 alternatives, option 100, rejected 200); walkthrough approach 1,200, flow 2,400, 8 risks (title 60, risk 280), testing automated 4 × 240 and 10 manual steps (action 240, target 400, expect 240), 8 steps (title 80, unique per `when`; detail 400; command 400); 5 watchdogs (title 80, unique; check 600; server 128; data 200; evidence 600; 1 to 4 suggestions of 160; first check 1 to 720 minutes, gaps up to 1 to 24 hours, for 1 to 720 hours and no less than the first check; production check 400, required with `starts: production`; a `source_request` whose suggestions name a server the run already has is refused unless its `evidence` says it checked that server (“checked <server>” in one clause), here and on `complete_fix`); 6 check changes (id 12, label 60, command 200, reason 200; an add needs a label and a command); reply as in `complete_fix` |
+| `complete_fix` | **`summary`**; `reply` (**`headline`**, **`points`** (**`ask`**, **`outcome`**: done, answered or not_changed, **`note`**), `next`), required while a request of yours is open and refused otherwise; `walkthrough` (`approach`, `flow`, `risks` (**`title`**, **`risk`**, `file`, `line`, `end`), `testing`, `steps`), only when the fix changes how the change works, with only the parts that changed and at least one; `testing` and `steps` replace the part whole, an empty one included; `watchdogs` as in `complete_phase`, beside `walkthrough`, replacing the list whole (an empty one removes them) and enough on its own; `checks` (ids of checks to run again besides the failing ones); `check_changes` as in `complete_phase`; `evidence_kept` (earlier items, by key or id, that still show the work as it is); `actions` (**`label`**, **`message`**: one-click replies shown beside the gate's main button, each sending its message as yours) | summary 240; actions 3 (label 40, unique ignoring case; message 2,000); reply headline 240, 1 to 8 points (ask 160, note 280), next 1,200; walkthrough as in `complete_phase`; checks 12 ids of 12; check changes as in `complete_phase`; evidence kept 24 of 60; watchdogs as in `complete_phase`. Both hand-overs and their `walkthrough` refuse a field they do not take, naming the ones they do |
 | `report_review` | **`confidence`** and **`risk`** (`low`, `medium` or `high`); **`findings`** (**`severity`**: `blocking`, `should_fix` or `optional`, **`message`**: what is wrong and why it matters, `title`, `fix`, `file`, `line`, `end`); `summary`; `disagreements` (**`call`**: the judgement call's number in the brief, **`reason`**) | summary 400; 12 findings (title 80, message 280, fix 600); 8 disagreements (reason 280), each call once |
-| `answer` | **`answer`**; `propose_change` (**`request`**, **`why`**); `reply` (as in `complete_fix`) | answer 8,000; request 2,000, why 240; reply as in `complete_fix` |
-| `report_diagnosis` | **`diagnosis`**; `propose_change`; `reply` | 12,000; reply as in `complete_fix` |
-| `submit_report` | **`report`**; `propose_change`; `reply` | 40,000; reply as in `complete_fix` |
-| `report_outcome` | **`outcome`**; `reply` | 8,000; reply as in `complete_fix` |
+| `answer` | **`answer`**; `propose_change` (**`request`**, **`why`**); `recommend` (`go_on` or `close`), required when your OK comes next, ignored on a follow-up on finished work, and refused as `close` beside `propose_change`; `reply` and `actions` (as in `complete_fix`) | answer 8,000; request 2,000, why 240; reply and actions as in `complete_fix` |
+| `report_diagnosis` | **`diagnosis`**; `propose_change`; `recommend`; `reply`; `actions` | 12,000; the rest as in `answer` |
+| `submit_report` | **`report`**; `propose_change`; `recommend`; `reply`; `actions` | 40,000; the rest as in `answer` |
+| `report_outcome` | **`outcome`**; `reply`; `actions` | 8,000; reply and actions as in `complete_fix` |
 | `report_read` | **`summary`**: what it read, filed and skipped; `reached` (false when the source still failed after 3 tries; true when left out); `live` (only for a watchdog waiting for production: false while it is not live, true once it is; a report filed counts as true) | 1,000 |
 | `file_report` | **`title`**, **`request`**, **`text`**; `report_id` or `link` (one is required), `author`, `posted_at`, `fork_from` (a task id or handle; a watchdog's is always the shipped task), `repository` (a name or id), `urgency` (`low`, `normal`, `high` or `urgent`: the filed task's priority) | title 100; request 2,000; report_id 200; link 2,000; author 120; posted_at 60; text 4,000 |
 | `reshape_task` | **`reason`**; `shape` (answer, investigate, research) or `steps` (`PIPELINE_ORDER` names) | reason 240 |
+| `move_to_repository` | **`repository`** (a repository of the task's project by name, or the folder name of one in its folders, registered when named), **`reason`** | reason 240 |
 | `attach_evidence` | **`kind`** (comparison, screenshot, recording, test, check, note, preview); for test or check only **`check`** (a check id of the task) and `detail`; otherwise **`title`**: what it shows, the same for a before shot and its after shot; `detail`: what to look at; `width` (CSS pixels), `theme` (light, dark), `stage` (before, after); `key`: what it shows, lower-case words and hyphens (not for a test or check); `replaces`: earlier items by key or id; exactly one of `path`, `url` (http or https) or `text`, or for a comparison **`parts`** (each **`path`**, `stage`, `label`) | title 80; detail 280; check 12; width 1 to 7,680; text 40,000; url 2,000; path 300; 2 to 6 parts, label 40; key 60; replaces 24 |
 | `remove_evidence` | **`items`** (by key or id), **`reason`**: why it no longer applies | 1 to 24 items of 60; reason 200 |
 
@@ -1592,8 +1609,8 @@ What the engine, the Worker on app.shinsa.dev and the web share for the Slack bo
 
 | Path (`SLACK_RELAY_PATHS`, `SLACK_ENGINE_EVENTS_PATH`, `SLACK_ENGINE_INTERACTIONS_PATH`) | Who calls it | What it does |
 | --- | --- | --- |
-| `GET /slack/connect?instance=<id>` | The browser, from Settings | Signs in with Slack for one of your machines (the one seen last without `instance`) |
-| `GET /slack/connect/callback`, `/slack/install/callback` | Slack | Writes the link, adding the app to the workspace first when it has none; then `/slack/linked?team=` or `?error=` (`resolveSlackLinkedPath`) |
+| `GET /slack/connect?instance=<id>` | The browser, from Settings | Signs in with Slack (OAuth v2 with the read-only user scopes `SLACK_USER_SCOPES`) for one of your machines (the one seen last without `instance`) |
+| `GET /slack/connect/callback`, `/slack/install/callback` | Slack | Writes the link with the user token sealed, adding the app to the workspace first when it has none; then `/slack/linked?team=` or `?error=` (`resolveSlackLinkedPath`) |
 | `POST /slack/events` | Slack | Events API, checked against Slack's signature; a mention is answered at once and forwarded after |
 | `POST /slack/interactions` | Slack | Interactivity (`payload` form field), checked against Slack's signature and answered at once; a `shinsa.decide.*` click, or a `shinsa.decision` form sent after a `shinsa.write.*` click opened it (`views.open`), from the owner or a member of the machine that posted the card is forwarded as a `SlackDecision`; the click's `response_url` (on `hooks.slack.com`) gets the decided card or a private refusal, a form's refusal comes as `chat.postEphemeral`; anything else is dropped |
 | `POST https://t-<instance>.shinsa.dev/api/slack/interactions` | app.shinsa.dev | The `SlackDecision` (`SLACK_ENGINE_INTERACTIONS_PATH`), signed as a mention is → `SlackDecisionReply`: `{ decided: true, text }` or `{ decided: false, reason }` |
@@ -1605,12 +1622,12 @@ What the engine, the Worker on app.shinsa.dev and the web share for the Slack bo
 
 | Shape | Fields |
 | --- | --- |
-| `SlackMention` (`contract.ts`, `parseSlackMention`) | `eventId`, `teamId`, `channelId`, `threadTs`, `messageTs`, `userId`, `userName`, `text`, `permalink`, `thread` (`SlackThreadMessage`: `ts`, `userId`, `userName`, `text`, `bot`; the last 100, at most 4,000 characters each, `SLACK_LIMITS`) |
+| `SlackMention` (`contract.ts`, `parseSlackMention`) | `eventId`, `teamId`, `channelId`, `threadTs`, `messageTs`, `userId`, `userName`, `text`, `permalink`, `thread` (`SlackThreadMessage`: `ts`, `userId`, `userName`, `text`, `bot`; the last 100, at most 4,000 characters each, `SLACK_LIMITS`), `linkedThreads` (`SlackLinkedThread`: `channelId`, `threadTs`, `permalink`, `channelName`, `thread`; at most 3, read with the mentioning person's own token, sent only to a machine that names `slack-linked-threads`) |
 | `SlackPost` (`posts.ts`) | `result` or `completed`, the only new messages; everything else edits the card |
 | `SlackMessage` (`blocks.ts`) | `text`, the notification's fallback, and `blocks` (`header`, `section` with text or fields, `context`, `actions` of buttons) within Slack's limits (`SLACK_BLOCK_LIMITS`: 50 blocks, 3,000 characters a section, 150 a header, 75 a button, 10 fields) |
 | `SlackDecisionValue` (`schema.ts`, `serializeSlackDecisionValue`, `parseSlackDecisionValue`) | a button's value: `gateId`, `decision` (`approve`, `revise`, `reject`, `reply`), `choice` (the index into a question's choices, or null), `planVersion` (the plan a plan's Approve shows, or null) |
 | `SlackDecisionModal` (`parseSlackDecisionModal`) | a form's `private_metadata`: the value with the card's `channelId`, `threadTs` and `messageTs` |
-| `SlackDecision` (`parseSlackDecision`) | the modal's fields with `interactionId`, `teamId`, `userId` and `response` (the form's text, at most 4,000 characters, or null) |
+| `SlackDecision` (`parseSlackDecision`) | the modal's fields with `interactionId`, `teamId`, `userId` and `response` (the form's text, at most 3,000 characters, `SLACK_VIEW_LIMITS.input`, or null) |
 | `SlackDecisionReply` (`parseSlackDecisionReply`) | `{ decided: true, text }` (what the card says they did) or `{ decided: false, reason }` |
 | `SlackSnapshot` (the engine's `GET /api/slack`) | `remote`, `connectUrl`, `links`, `problem` |
 

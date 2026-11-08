@@ -109,7 +109,7 @@ export function UserIdentity({
   return (
     <div className={cn('flex min-w-0 items-center gap-2', className)}>
       <UserAvatar user={user} size='row' presence={presence} />
-      <div className='flex min-w-0 flex-col gap-px'>
+      <div className='flex min-w-0 flex-col'>
         <Truncate className='text-xs'>
           <span className='font-medium text-fg-4'>{title}</span>
           {handle && <span className='ms-1 text-fg-2'>{handle}</span>}

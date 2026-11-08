@@ -16,6 +16,7 @@ import {
 } from '../../src/shell/login.ts';
 import type { LoginEnvOptions } from '../../src/shell/login/schema.ts';
 import type { CommandResult } from '../../src/shell/schema.ts';
+import { runFiles } from '../harness.ts';
 import { createTempDir, overrideEnv } from '../helpers/index.ts';
 import { captureLogs } from '../helpers/logs.ts';
 
@@ -284,17 +285,17 @@ describe('applying it to the server’s environment', () => {
     expect(bare.PATH?.includes('missing')).toBe(false);
   });
 
-  test('adding the install folders again picks up one created since, once', () => {
+  test('adding the install folders again picks up one created since, once', async () => {
     const home = createTempDir();
     const env: Record<string, string | undefined> = { PATH: '/usr/bin', HOME: home };
-    refreshInstallFolders(env);
+    await runFiles(refreshInstallFolders(env));
     const before = env.PATH;
     mkdirSync(join(home, '.bun/bin'), { recursive: true });
-    refreshInstallFolders(env);
-    refreshInstallFolders(env);
+    await runFiles(refreshInstallFolders(env));
+    await runFiles(refreshInstallFolders(env));
     expect(env.PATH).toBe(`${before}:${join(home, '.bun/bin')}`);
     const empty: Record<string, string | undefined> = {};
-    refreshInstallFolders(empty, home);
+    await runFiles(refreshInstallFolders(empty, home));
     expect(empty.PATH?.split(':')[0]).toBe(join(home, '.bun/bin'));
   });
 });

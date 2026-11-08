@@ -73,7 +73,7 @@ export const MachineTeamsHandlers = HttpApiBuilder.group(
             });
           const team = yield* teams.create({
             id: yield* crypto.createTeamId,
-            userId: owner.id,
+            ownerId: owner.id,
             name: payload.name,
           });
           const invite = yield* replaceInvite(team.id);
@@ -124,6 +124,11 @@ export const MachineTeamsHandlers = HttpApiBuilder.group(
       )
       .handle('connect', ({ params, payload }) =>
         Effect.flatMap(MachineOwner, (owner) => connectTeam(owner.id, params.teamId, payload.instanceId))
+      )
+      .handle('remoteConnect', ({ params, payload }) =>
+        Effect.flatMap(MachineOwner, (owner) =>
+          connectTeam(owner.id, params.teamId, payload.instanceId, 'remote')
+        )
       )
       .handle(
         'scopes',

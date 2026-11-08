@@ -1,6 +1,7 @@
-import { type FSWatcher, watch } from 'node:fs';
+import type { FSWatcher } from 'node:fs';
 import type { ChatEntry } from '@shinsa/core';
 import { Context, Duration, Schedule } from 'effect';
+import { watchTranscript } from './file.ts';
 
 export type TranscriptListener = (runId: string, entries: ChatEntry[], start: number | null) => void;
 
@@ -24,7 +25,7 @@ export type FileWatcher = (path: string, onChange: () => void) => FSWatcher;
 export const TranscriptWatch = Context.Reference<FileWatcher>(
   'shinsa/engine/agents/transcripts/TranscriptWatch',
   {
-    defaultValue: () => watch,
+    defaultValue: () => watchTranscript,
   }
 );
 

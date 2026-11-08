@@ -31,7 +31,7 @@ import {
 } from './checks.ts';
 import type { Decider } from './decider.ts';
 import { reactToFindings, resolveReviewInput } from './fixes.ts';
-import { answerIteration } from './iterations.ts';
+import { answerIteration, suggestActions } from './iterations.ts';
 import { isLastPhase, needsPlanApproval, resolveCurrentPhase } from './lifecycle.ts';
 import { requestPush } from './pull-requests.ts';
 import { findCurrentRun } from './runs.ts';
@@ -73,6 +73,7 @@ export function proposePlan(decider: Decider, command: CommandOf<'agent.propose_
   const { run, task } = findCurrentRun(decider, command.runId, 'propose_plan');
   assertPlanRules(task, command.document);
   answerIteration(decider, task, run.id, command.reply ?? null, 'propose_plan');
+  suggestActions(decider, task, run.id, command.actions);
   const body = serializePlanMarkdown(command.document);
   decider.emit({ type: 'plan.proposed', taskId: task.id, body, document: command.document });
   decider.endRun(run, 'completed', 'proposed the plan');
@@ -94,6 +95,7 @@ export function completePhase(decider: Decider, command: CommandOf<'agent.comple
   if (isLastPhase(task, index)) assertEvidence(decider, task, 'complete the last phase');
   const changes = resolveCheckChanges(decider, task, command.checkChanges ?? [], index + 1);
   answerIteration(decider, task, run.id, command.reply ?? null, 'complete_phase');
+  suggestActions(decider, task, run.id, command.actions);
   recordTree(decider, task.id, command.treeHash);
   decider.emit({
     type: 'phase.completed',
@@ -248,6 +250,7 @@ export function completeFix(decider: Decider, command: CommandOf<'agent.complete
   const done = new Set(task.phaseReports.map((report) => report.index)).size;
   const changes = resolveCheckChanges(decider, task, command.checkChanges ?? [], done);
   answerIteration(decider, task, run.id, command.reply ?? null, 'complete_fix');
+  suggestActions(decider, task, run.id, command.actions);
   recordTree(decider, task.id, command.treeHash);
   decider.emit({ type: 'task.noted', taskId: task.id, note: command.summary, runId: run.id });
   if (command.walkthrough) {

@@ -33,11 +33,6 @@ export interface DiscoveryScan {
   readonly refused: string[];
 }
 
-export class FolderUnreadable extends Schema.TaggedError<
-  FolderUnreadable,
-  { readonly brand: unique symbol }
->()('FolderUnreadable', { path: Schema.String, code: Schema.NullOr(Schema.String) }) {}
-
 export interface SetupScope {
   readonly defaultBranch: boolean;
 }

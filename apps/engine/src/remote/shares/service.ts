@@ -1,4 +1,3 @@
-import { statSync } from 'node:fs';
 import { extname } from 'node:path';
 import {
   type Bytes,
@@ -18,6 +17,8 @@ import {
   resolveRoundBase,
   resolveSharedTask,
   resolveSharePreset,
+  resolveShareScopes,
+  SHARE_PRESET_SCOPES,
   resolveShareTranscriptFile,
   SHARE_CODE_FILE,
   SHARE_DIFF_FILE,
@@ -28,17 +29,18 @@ import {
   SHARED_EVIDENCE_PREFIX,
   type SharedTask,
   type ShareLiveView,
-  type SharePreset,
   type ShinsaCommand,
   serializeBase64Url,
   serializePublicKey,
   serializeShareUrl,
   type Task,
+  type ViewScope,
   verifyShareHello,
 } from '@shinsa/core';
-import { Clock, Context, Effect, Layer, Option, Ref } from 'effect';
+import { Clock, Context, Effect, FileSystem, Layer, Option, Ref } from 'effect';
+import { constant } from 'effect/Function';
 import { Transcripts } from '../../agents/transcripts/service.ts';
-import { resolveTaskCheckout } from '../../git/history/checkout.ts';
+import { selectTaskCheckout } from '../../git/history/checkout.ts';
 import { History } from '../../git/history/service.ts';
 import { resolveRepoSlug } from '../../github/index.ts';
 import { PullRequests } from '../../github/pulls/service.ts';
@@ -102,6 +104,8 @@ export class Shares extends Context.Service<Shares, SharesHandle>()('shinsa/engi
       const origin = yield* RemoteOrigin;
       const randomBytes = yield* RandomBytes;
       const sources = yield* ShareSources;
+      const fs = yield* FileSystem.FileSystem;
+      const withFiles = Effect.provideService(FileSystem.FileSystem, fs);
       const context = yield* Effect.context<never>();
       const runSync = Effect.runSyncWith(context);
       const hashes = yield* Ref.make<ReadonlyMap<string, HashedFile>>(new Map());
@@ -135,7 +139,7 @@ export class Shares extends Context.Service<Shares, SharesHandle>()('shinsa/engi
             Effect.mapError(unreadable)
           ),
         readPatch: (path, base) => history.workingPatch(path, base).pipe(Effect.mapError(unreadable)),
-        readFile: readWorktreeFile,
+        readFile: (path, file) => withFiles(readWorktreeFile(path, file)),
       };
 
       const forkChannel = (run: Effect.Effect<void, ShareChannelBroke>) =>
@@ -170,8 +174,8 @@ export class Shares extends Context.Service<Shares, SharesHandle>()('shinsa/engi
       const pushTranscript = Effect.fn('Shares.pushTranscript')(function* (runId: string) {
         const state = yield* engine.state;
         const taskId = state.runs[runId]?.taskId;
-        const preset = taskId ? state.tasks[taskId]?.share?.preset : undefined;
-        if (!(taskId && preset && hasShareGroup(preset, 'live'))) return;
+        const scopes = taskId ? state.tasks[taskId]?.share?.scopes : undefined;
+        if (!(taskId && scopes && hasShareGroup(scopes, 'live'))) return;
         for (const channel of (yield* Ref.get(channels)).keys())
           if ((yield* channel.subject) === taskId) yield* forkChannel(channel.push);
       });
@@ -287,15 +291,21 @@ export class Shares extends Context.Service<Shares, SharesHandle>()('shinsa/engi
         return bytes;
       };
 
-      const resolveShared = Effect.fn('Shares.resolveShared')(function* (task: Task, chosen?: SharePreset) {
+      const resolveShared = Effect.fn('Shares.resolveShared')(function* (
+        task: Task,
+        chosen?: readonly ViewScope[]
+      ) {
         const state = yield* engine.state;
         const file = yield* store.file;
-        const preset = chosen ?? task.share?.preset ?? resolveSharePreset(state.settings);
-        const people = hasShareGroup(preset, 'people');
-        const repo = people && task.repoId ? (state.repos[task.repoId] ?? null) : null;
+        const scopes = resolveShareScopes(
+          chosen ?? task.share?.scopes ?? SHARE_PRESET_SCOPES[resolveSharePreset(state.settings)]
+        );
+        const people = hasShareGroup(scopes, 'people');
+        const reads = people || hasShareGroup(scopes, 'code');
+        const repo = reads && task.repoId ? (state.repos[task.repoId] ?? null) : null;
         const slug = repo ? resolveRepoSlug(repo) : null;
         const shared = resolveSharedTask(state, task, {
-          preset,
+          scopes,
           owner: people ? file.owner : null,
           ownerProfile: people ? resolveOwnerProfile(file) : null,
           machine: people ? remote.machineName : null,
@@ -321,8 +331,8 @@ export class Shares extends Context.Service<Shares, SharesHandle>()('shinsa/engi
       });
 
       const listTranscriptFiles = Effect.fn('Shares.listTranscriptFiles')(function* (shared: SharedTask) {
-        if (!hasShareGroup(shared.preset, 'live')) return [];
-        const messages = hasShareGroup(shared.preset, 'messages');
+        if (!hasShareGroup(shared.scopes, 'live')) return [];
+        const messages = hasShareGroup(shared.scopes, 'messages');
         const pages = yield* Effect.forEach(shared.runs, (run) => listTranscriptPages(run.id, messages));
         return pages.flat();
       });
@@ -348,13 +358,17 @@ export class Shares extends Context.Service<Shares, SharesHandle>()('shinsa/engi
         const path = Option.getOrNull(yield* evidence.selectFile(original.uri.slice(EVIDENCE_ROUTE.length)));
         const type = path ? SHARE_FILE_TYPES[extname(path).toLowerCase()] : undefined;
         if (!path || !type) return null;
-        const stat = yield* Effect.option(Effect.try(() => statSync(path)));
-        if (Option.isNone(stat) || stat.value.size > SHARE_FILE_BYTES) return null;
-        const read = Effect.tryPromise({
-          try: () => Bun.file(path).arrayBuffer(),
-          catch: (error) => new ShareFileUnreadable({ path, message: describeError(error) }),
-        }).pipe(Effect.map((buffer): Bytes => new Uint8Array(buffer)));
-        const version = yield* Effect.option(resolveFileHash(path, stat.value, read));
+        const info = yield* Effect.option(fs.stat(path));
+        if (Option.isNone(info) || Number(info.value.size) > SHARE_FILE_BYTES) return null;
+        const read = fs.readFile(path).pipe(
+          Effect.map((buffer): Bytes => new Uint8Array(buffer)),
+          Effect.mapError((error) => new ShareFileUnreadable({ path, message: describeError(error) }))
+        );
+        const stat = {
+          size: Number(info.value.size),
+          mtimeMs: Option.match(info.value.mtime, { onNone: constant(0), onSome: (date) => date.getTime() }),
+        };
+        const version = yield* Effect.option(resolveFileHash(path, stat, read));
         if (Option.isNone(version)) return null;
         const file: ShareFile = { id: evidenceId, version: version.value, type, read };
         return file;
@@ -461,8 +475,9 @@ export class Shares extends Context.Service<Shares, SharesHandle>()('shinsa/engi
         const pullRequest = task.pullRequest;
         if (pullRequest && PULL_REQUEST_CODE.has(pullRequest.state))
           return yield* listPullRequestFiles(task, repo, pullRequest);
-        const checkout = resolveTaskCheckout(task);
-        return checkout ? yield* listWorkingFiles(task, repo, checkout) : [];
+        const checkout = yield* withFiles(selectTaskCheckout(task));
+        if (Option.isNone(checkout)) return [];
+        return yield* listWorkingFiles(task, repo, checkout.value);
       });
 
       const listLiveCodeFiles = (shared: SharedTask, task: Task, repo: Repo | null) =>
@@ -475,10 +490,13 @@ export class Shares extends Context.Service<Shares, SharesHandle>()('shinsa/engi
           )
         );
 
-      const resolveLive = Effect.fn('Shares.resolveLive')(function* (taskId: string, preset?: SharePreset) {
+      const resolveLive = Effect.fn('Shares.resolveLive')(function* (
+        taskId: string,
+        scopes?: readonly ViewScope[]
+      ) {
         const task = (yield* engine.state).tasks[taskId];
         if (!task) return yield* new DomainError({ code: 'task_not_found', message: 'No such task.' });
-        const { shared, repo } = yield* resolveShared(task, preset);
+        const { shared, repo } = yield* resolveShared(task, scopes);
         const files = [
           ...(yield* listEvidenceFiles(shared)),
           ...(yield* listLiveCodeFiles(shared, task, repo)),

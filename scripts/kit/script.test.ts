@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, spyOn, test } from 'bun:test';
 import { existsSync } from 'node:fs';
+import { BunServices } from '@effect/platform-bun';
 import { Effect, Exit, Fiber } from 'effect';
 import { reportFailure } from './script.ts';
 import { createTempDirectory } from './temp.ts';
@@ -50,7 +51,7 @@ describe('createTempDirectory', () => {
           const directory = yield* createTempDirectory('shinsa-kit-');
           return { directory, existed: existsSync(directory) };
         })
-      )
+      ).pipe(Effect.provide(BunServices.layer))
     );
     expect(inside.directory).toContain('shinsa-kit-');
     expect(inside.existed).toBe(true);

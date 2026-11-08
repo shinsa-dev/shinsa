@@ -144,7 +144,7 @@ export function PointIndex({
         <HoverHighlight indicatorClassName='rounded-md'>
           <div ref={list} className='flex flex-col gap-2'>
             {chapters.map((chapter) => (
-              <div key={chapter.id} className='flex flex-col gap-px'>
+              <div key={chapter.id} className='flex flex-col'>
                 <span className='px-1.5 py-1 text-2xs text-fg-2'>{chapter.title}</span>
                 <ol className='flex flex-col'>
                   {stops

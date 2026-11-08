@@ -23,6 +23,7 @@
   },
   "devDependencies": {
     "@central-icons-react/all": "^1.1.303",
+    "@effect/platform-bun": "4.1.1",
     "@happy-dom/global-registrator": "^21.0.4",
     "@testing-library/dom": "^10.4.2",
     "@testing-library/react": "^16.3.3",
@@ -30,6 +31,7 @@
     "@types/node": "^24.0.0",
     "@types/react": "^19.2.10",
     "@types/react-dom": "^19.2.3",
+    "effect": "4.1.1",
     "tailwindcss": "^4.3.3",
     "typescript": "^7.0.2"
   },

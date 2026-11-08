@@ -22,6 +22,10 @@ export const VIEW_SCOPES = [
 
 export type ViewScope = (typeof VIEW_SCOPES)[number];
 
+export const ViewScope = Schema.Literals(VIEW_SCOPES);
+
+export const ViewScopes = Schema.Array(ViewScope);
+
 export const ACTION_SCOPES = ['gates', 'actions', 'message', 'fork', 'share', 'services'] as const;
 
 export type ActionScope = (typeof ACTION_SCOPES)[number];

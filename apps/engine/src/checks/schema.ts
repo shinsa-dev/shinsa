@@ -1,5 +1,6 @@
 import type { Repo, ReportCheck } from '@shinsa/core';
 import { Context, Duration, type Effect } from 'effect';
+import type { PlatformError } from 'effect/PlatformError';
 import type { CodeUnavailable } from '../git/history/schema.ts';
 import type { GitFailed } from '../git/schema.ts';
 
@@ -73,7 +74,7 @@ export interface BaseCheckout {
   key: string;
   repo: Repo;
   path: string;
-  ready: Effect.Effect<string, GitFailed>;
+  ready: Effect.Effect<string, GitFailed | PlatformError>;
   users: number;
 }
 

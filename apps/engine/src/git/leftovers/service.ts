@@ -1,6 +1,6 @@
-import { existsSync, realpathSync } from 'node:fs';
 import { sep } from 'node:path';
-import { Context, Duration, Effect, Layer, Option, Schedule } from 'effect';
+import { Context, Duration, Effect, FileSystem, Layer, Option, Schedule } from 'effect';
+import { isPresent, selectOnPath, selectRealPath } from '../../files/probe.ts';
 import { Shell } from '../../shell/service.ts';
 import {
   LIST_TIMEOUT,
@@ -23,6 +23,7 @@ export class LeftoverProcesses extends Context.Service<
     LeftoverProcesses,
     Effect.gen(function* () {
       const shell = yield* Shell;
+      const withFiles = Effect.provideService(FileSystem.FileSystem, yield* FileSystem.FileSystem);
 
       const runListing = (argv: readonly [string, ...string[]]) =>
         shell
@@ -36,9 +37,11 @@ export class LeftoverProcesses extends Context.Service<
         );
 
       const list = Effect.fn('LeftoverProcesses.list')(function* (path: string) {
-        const listable = yield* Effect.sync(() => existsSync(path) && Bun.which('lsof') !== null);
-        if (!listable) return [];
-        const root = yield* Effect.sync(() => realpathSync(path));
+        if (!(yield* withFiles(isPresent(path)))) return [];
+        if (Option.isNone(yield* withFiles(selectOnPath('lsof', Bun.env.PATH ?? '')))) return [];
+        const real = yield* withFiles(selectRealPath(path));
+        if (Option.isNone(real)) return [];
+        const root = real.value;
         const listed = yield* runListing(LSOF_COMMAND);
         return listWorkingFolderPids(listed?.stdout ?? '', root);
       });

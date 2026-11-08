@@ -2,17 +2,20 @@ import { afterAll, describe, expect, it, spyOn } from 'bun:test';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { BunServices } from '@effect/platform-bun';
+import { Effect, type FileSystem } from 'effect';
 import {
   DEFAULT_RADIUS,
   discoverIcons,
-  generateIcons,
+  INDEX,
   isKnownIcon,
-  listKnownIcons,
-  listSourceFiles,
   OUT,
   renderIconMarkup,
   renderIconsModule,
+  resolveKnownIcons,
+  SCAN_ROOTS,
 } from '../../scripts/icons';
+import { generateIcons, listSourceFiles, syncIconsFile } from '../../scripts/icons-file';
 
 const scratch = mkdtempSync(join(tmpdir(), 'shinsa-icons-'));
 afterAll(() => rmSync(scratch, { recursive: true, force: true }));
@@ -26,10 +29,18 @@ function tree(root: string, files: Record<string, string>) {
   return root;
 }
 
-const known = listKnownIcons();
+function run<A, E>(effect: Effect.Effect<A, E, FileSystem.FileSystem>) {
+  return Effect.runPromise(effect.pipe(Effect.provide(BunServices.layer)));
+}
+
+function fail<A, E>(effect: Effect.Effect<A, E, FileSystem.FileSystem>) {
+  return run(Effect.flip(effect));
+}
+
+const known = resolveKnownIcons(JSON.parse(readFileSync(INDEX, 'utf8')));
 
 describe('listSourceFiles', () => {
-  it('walks source files, skipping dependencies, builds, tests and dotfiles', () => {
+  it('walks source files, skipping dependencies, builds, tests and dotfiles', async () => {
     const root = tree(join(scratch, 'walk'), {
       'a.tsx': '',
       'sub/c.ts': '',
@@ -41,7 +52,7 @@ describe('listSourceFiles', () => {
       'test/z.ts': '',
       '.cache/w.ts': '',
     });
-    expect([...listSourceFiles(root)].map((file) => file.slice(root.length + 1)).sort()).toEqual([
+    expect((await run(listSourceFiles(root))).map((file) => file.slice(root.length + 1)).sort()).toEqual([
       'a.tsx',
       'sub/c.ts',
       'sub/d.mdx',
@@ -199,21 +210,54 @@ describe('renderIconsModule', () => {
 });
 
 describe('generateIcons', () => {
-  it('scans the given roots', () => {
+  it('scans the given roots', async () => {
     const root = tree(join(scratch, 'scan'), {
       'page.tsx': "<Icon name='IconBell' /><Icon name='IconClock' />",
     });
-    const { module, icons } = generateIcons([root]);
+    const { module, icons } = await run(generateIcons({ roots: [root], out: OUT, index: INDEX }));
     expect(icons).toBe(2);
     expect(module).toContain("'IconBell',\n  'IconClock',\n] as const;");
   });
 
-  it('refuses to write an empty icon set', () => {
+  it('refuses to write an empty icon set', async () => {
     const root = tree(join(scratch, 'empty'), { 'page.tsx': 'export {};' });
-    expect(() => generateIcons([root])).toThrow('No icon usages found');
+    const error = await fail(generateIcons({ roots: [root], out: OUT, index: INDEX }));
+    expect(error._tag).toBe('IconsNotFound');
   });
 
-  it('matches the committed paths.ts, so the bundle carries exactly the icons the workspace uses', () => {
-    expect(generateIcons().module).toBe(readFileSync(OUT, 'utf8'));
+  it('matches the committed paths.ts, so the bundle carries exactly the icons the workspace uses', async () => {
+    const { module } = await run(generateIcons({ roots: SCAN_ROOTS, out: OUT, index: INDEX }));
+    expect(module).toBe(readFileSync(OUT, 'utf8'));
+  });
+});
+
+describe('syncIconsFile', () => {
+  const root = tree(join(scratch, 'sync'), { 'page.tsx': "<Icon name='IconBell' />" });
+  const request = (out: string, check: boolean) => ({ roots: [root], out, index: INDEX, check });
+
+  it('writes an out-of-date file and leaves a current one alone', async () => {
+    const out = join(scratch, 'paths-write.ts');
+    writeFileSync(out, 'stale');
+    const log = spyOn(console, 'log').mockImplementation(() => undefined);
+    await run(syncIconsFile(request(out, false)));
+    const written = readFileSync(out, 'utf8');
+    expect(written).toContain("'IconBell',");
+    await run(syncIconsFile(request(out, false)));
+    expect(readFileSync(out, 'utf8')).toBe(written);
+    expect(log).toHaveBeenCalledWith('[icons] 1 icons written to paths.ts');
+    log.mockRestore();
+  });
+
+  it('checks without writing, and fails when the file is out of date', async () => {
+    const out = join(scratch, 'paths-check.ts');
+    writeFileSync(out, 'stale');
+    const error = await fail(syncIconsFile(request(out, true)));
+    expect(error._tag).toBe('IconsOutOfDate');
+    expect(readFileSync(out, 'utf8')).toBe('stale');
+    const log = spyOn(console, 'log').mockImplementation(() => undefined);
+    await run(syncIconsFile(request(out, false)));
+    await run(syncIconsFile(request(out, true)));
+    expect(log).toHaveBeenCalledWith('[icons] paths.ts is current (1 icons)');
+    log.mockRestore();
   });
 });

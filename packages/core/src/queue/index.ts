@@ -1,5 +1,7 @@
 export { listTeamEscalations, resolveTeamEscalationTag, type TeamEscalation } from './escalations.ts';
 export {
+  isDecisionHeld,
+  isGateHeld,
   isInFocus,
   isListedInFocus,
   listWaitsOn,

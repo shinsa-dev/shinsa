@@ -34,7 +34,13 @@ describe('isHandover', () => {
   });
 
   it('treats the diagnosis, the report, the outcome and a change of kind as hand-overs', () => {
-    for (const name of ['report_diagnosis', 'submit_report', 'report_outcome', 'reshape_task'] as const) {
+    for (const name of [
+      'report_diagnosis',
+      'submit_report',
+      'report_outcome',
+      'reshape_task',
+      'move_to_repository',
+    ] as const) {
       expect(isHandover({ kind: 'shinsa', name, args: {} })).toBe(true);
     }
   });
@@ -285,6 +291,9 @@ describe('describeTool', () => {
         reason: 'Find it first.',
       })
     ).toBe('Set the steps: investigate, your OK, plan, run the operation');
+    expect(shinsa('move_to_repository', { repository: 'superwall', reason: 'The badge is there.' })).toBe(
+      'Moved the task to superwall'
+    );
   });
 
   it('describes the delegation tools by what they handed to whom', () => {
@@ -519,11 +528,13 @@ describe('resolveGroupPhrase', () => {
       phrase('submit_report', 1),
       phrase('report_outcome', 1),
       phrase('reshape_task', 1),
+      phrase('move_to_repository', 1),
     ]).toEqual([
       'Reported the diagnosis',
       'Wrote the report',
       'Reported the outcome',
       'Changed the kind of task',
+      'Moved the task to another repository',
     ]);
     expect([
       phrase('delegate_task', 2),

@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import {
   createState,
+  DAY_MS,
   isTaskClosed,
   isTaskResting,
   listOpenGates,
@@ -32,6 +33,7 @@ import {
   pushed,
   REPLY,
   reachReviewGate,
+  resolveReply,
   reachShipping,
   registerRepo,
   shipAndMerge,
@@ -228,6 +230,10 @@ describe('a task is a conversation of rounds', () => {
       [2, 'merged'],
     ]);
     expect(resolveTaskRounds(task).map((round) => round.pullRequest?.state)).toEqual(['merged', 'merged']);
+    expect(resolveTaskRounds(task).map((round) => round.pullRequest?.mergedAt)).toEqual([
+      expect.any(Number),
+      task.pullRequest?.mergedAt,
+    ]);
     expect(listStackedPullRequests(task)).toEqual([]);
   });
 
@@ -681,7 +687,10 @@ describe('how a round ships', () => {
       [1, 'merged'],
       [2, 'active'],
     ]);
-    expect(resolveTaskRounds(harness.task(taskId))[0]?.pullRequest?.state).toBe('merged');
+    expect(resolveTaskRounds(harness.task(taskId))[0]?.pullRequest).toMatchObject({
+      state: 'merged',
+      mergedAt: harness.now,
+    });
     expect(harness.task(taskId)).toMatchObject({
       stage: 'planning',
       pullRequest: null,
@@ -739,6 +748,40 @@ describe('ending a task', () => {
     expect(() => harness.send({ type: 'round.ship', taskId, number: 1, shipping: 'stacked' })).toThrow(
       'This task is finished.'
     );
+  });
+
+  test('a follow-up on a merged task a day later keeps its round merged at its first end, through marking it done', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    shipAndMerge(harness, taskId);
+    const [merged] = resolveTaskRounds(harness.task(taskId));
+    const mergedAt = merged?.pullRequest?.mergedAt;
+    expect(mergedAt).toBe(merged?.endedAt ?? 0);
+    harness.advance(DAY_MS);
+    harness.send({ type: 'task.message', taskId, text: 'Why this key?', kind: 'feedback' });
+    expect(harness.task(taskId).stage).toBe('answering');
+    const runId = harness.activeRun(taskId).id;
+    harness.send({
+      type: 'agent.deliver',
+      runId,
+      step: 'answer',
+      body: 'Because.',
+      ...resolveReply(harness, runId),
+    });
+    expect(resolveTaskRounds(harness.task(taskId))[0]).toMatchObject({
+      status: 'merged',
+      endedAt: merged?.endedAt,
+      pullRequest: { mergedAt },
+    });
+    harness.send({ type: 'task.message', taskId, text: 'And this one?', kind: 'feedback' });
+    harness.send({ type: 'task.complete', taskId });
+    expect(harness.task(taskId).stage).toBe('done');
+    expect(resolveTaskRounds(harness.task(taskId))[0]).toMatchObject({
+      status: 'merged',
+      endedAt: merged?.endedAt,
+      pullRequest: { mergedAt },
+    });
+    expect(replayEventLog(harness.events).state).toEqual(harness.state);
   });
 
   test('cancelling cancels the open round and every waiting one', () => {

@@ -2,11 +2,13 @@ import type { CommandOf } from '../commands/index.ts';
 import {
   DELEGATION_LIMITS,
   DomainError,
+  isDelegatedRun,
   type Run,
   type Task,
   type TaskCreator,
   type TeammateFork,
 } from '../domain/index.ts';
+import type { PlanSplitPart } from '../report/types.ts';
 import { resolveTaskProject } from '../state/queries.ts';
 import type { Decider } from './decider.ts';
 import { changeDependencies } from './dependencies.ts';
@@ -124,28 +126,94 @@ export function createCourierTask(decider: Decider, command: CommandOf<'agent.cr
 
 export function splitTask(decider: Decider, command: CommandOf<'agent.split_task'>) {
   const { run, task } = findCurrentRun(decider, command.runId, 'split_task');
-  const version = task.plan?.version ?? 0;
-  if (task.splits?.some((split) => split.planVersion === version)) return;
+  if (hasSplitPlan(task)) return;
   if (command.requests.length === 0 || command.requests.length > DELEGATION_LIMITS.splitTasks) {
     throw new DomainError({
       code: 'split_size',
       message: `Split the plan into 1 to ${DELEGATION_LIMITS.splitTasks} tasks; this asked for ${command.requests.length}.`,
     });
   }
+  if (command.stacked && command.thisWaits) {
+    throw new DomainError({
+      code: 'dependency_cycle',
+      message:
+        'Set stacked or this_task_waits, not both: stacked parts already merge together with this task as one bundle.',
+    });
+  }
+  const taskIds = spawnSplit(decider, task, run.id, command.requests, (request, ids) => ({
+    request,
+    options: command.stacked ? { stacksOn: [ids.at(-1) ?? task.id] } : {},
+  }));
+  if (command.thisWaits) waitOn(decider, decider.task(task.id), taskIds);
+}
+
+function hasSplitPlan(task: Task) {
+  const version = task.plan?.version ?? 0;
+  const proposedAt = task.plan?.proposedAt ?? 0;
+  return (task.splits ?? []).some((split) => split.planVersion === version && split.at >= proposedAt);
+}
+
+interface SplitPiece {
+  request: string;
+  options: Omit<SpawnOptions, 'parent'>;
+}
+
+function spawnSplit<Item>(
+  decider: Decider,
+  task: Task,
+  runId: string,
+  items: readonly Item[],
+  resolvePiece: (item: Item, taskIds: string[]) => SplitPiece
+) {
+  const version = task.plan?.version ?? 0;
   const requestKey = `plan:${version}`;
-  const taskIds = command.requests.map((request) =>
-    spawnTask(
-      decider,
-      task,
-      request,
-      { kind: 'split', taskId: task.id, runId: run.id, requestKey },
-      { parent: true }
-    )
-  );
+  const taskIds: string[] = [];
+  for (const item of items) {
+    const { request, options } = resolvePiece(item, taskIds);
+    taskIds.push(
+      spawnTask(
+        decider,
+        task,
+        request,
+        { kind: 'split', taskId: task.id, runId, requestKey },
+        { parent: true, ...options }
+      )
+    );
+  }
   decider.emit({
     type: 'task.split',
     taskId: task.id,
-    split: { planVersion: version, runId: run.id, taskIds, at: decider.context.now },
+    split: { planVersion: version, runId, taskIds, at: decider.context.now },
   });
-  if (command.thisWaits) waitOn(decider, decider.task(task.id), taskIds);
+  return taskIds;
+}
+
+function selectPlanRun(decider: Decider, task: Task) {
+  return Object.values(decider.state.runs).reduce<Run | null>(
+    (latest, run) =>
+      run.taskId === task.id &&
+      run.purpose === 'plan' &&
+      !isDelegatedRun(run) &&
+      (!latest || run.startedAt >= latest.startedAt)
+        ? run
+        : latest,
+    null
+  );
+}
+
+function resolvePartOrder(task: Task, part: PlanSplitPart, taskIds: string[]) {
+  if (part.order === 'parallel' || part.on === undefined) return {};
+  const target = part.on === 0 ? task.id : (taskIds[part.on - 1] ?? task.id);
+  return part.order === 'waits_on' ? { waitsOn: [target] } : { stacksOn: [target] };
+}
+
+export function startPlanSplit(decider: Decider, taskId: string) {
+  const task = decider.task(taskId);
+  const parts = task.plan?.document?.split ?? [];
+  const run = selectPlanRun(decider, task);
+  if (parts.length === 0 || !run || hasSplitPlan(task)) return;
+  spawnSplit(decider, task, run.id, parts, (part, taskIds) => ({
+    request: part.request,
+    options: { forkOf: task.id, ...resolvePartOrder(task, part, taskIds) },
+  }));
 }

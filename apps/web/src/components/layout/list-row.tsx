@@ -51,7 +51,7 @@ export function ListRow({
   const content = (
     <>
       {leading}
-      <span className='flex min-w-0 flex-1 flex-col gap-px'>
+      <span className='flex min-w-0 flex-1 flex-col'>
         {mark ? (
           <span className='flex min-w-0 items-center gap-1.5'>
             <Truncate className={cn(LIST_ROW_TITLE, 'min-w-0')}>{title}</Truncate>

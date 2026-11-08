@@ -53,6 +53,7 @@ function createKindScenes(now: number): Record<TaskShape, KindScene> {
       request: 'Send refund amounts in euros in `refunds/provider.ts`, and add a test for a €1,250 refund.',
       why: 'The amount is converted twice. The fix is one line and a test.',
       status: 'open',
+      recommend: 'go_on',
       runId: null,
       at: now - 3 * MINUTE,
     },

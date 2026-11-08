@@ -290,3 +290,111 @@ describe('your requests and their replies', () => {
     expect(answered.tasks).toEqual({});
   });
 });
+
+const LEAVE = { label: 'Leave them', message: 'Keep the names as they are.' };
+
+const RENAMES = [{ label: 'Do the renames', message: 'Rename them as you listed.' }, LEAVE];
+
+function reachReviewOffering(harness: Harness, taskId: string, actions = RENAMES) {
+  proposePlan(harness, taskId);
+  const phases = harness.task(taskId).plan?.document?.phases.length ?? 1;
+  for (let index = 1; index < phases; index += 1) completePhase(harness, taskId);
+  harness.send({
+    type: 'agent.complete_phase',
+    runId: harness.activeRun(taskId).id,
+    summary: 'Last phase.',
+    spots: [],
+    judgementCalls: [],
+    actions,
+  });
+  harness.send({ type: 'checks.record', taskId, results: PASSING });
+  harness.send({
+    type: 'agent.report_review',
+    runId: harness.activeRun(taskId).id,
+    summary: null,
+    ratings: { confidence: 'high', risk: 'low' },
+    findings: [],
+  });
+}
+
+function countSuggested(harness: Harness) {
+  return harness.events.filter((event) => event.type === 'task.actions_suggested').length;
+}
+
+describe('suggested replies', () => {
+  test('the last phase offers its replies at the review gate', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    reachReviewOffering(harness, taskId);
+    expect(harness.task(taskId).stage).toBe('awaiting_review');
+    expect(harness.task(taskId).suggestedActions).toEqual(RENAMES);
+  });
+
+  test('a hand-over without replies records nothing when none were offered before', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    reachReviewGate(harness, taskId);
+    expect(countSuggested(harness)).toBe(0);
+    expect(harness.task(taskId).suggestedActions).toBeUndefined();
+  });
+
+  test('your message clears them, and the fix that answers it offers its own', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    reachReviewOffering(harness, taskId);
+    askForChanges(harness, taskId, 'Rename them as you listed.');
+    expect(harness.task(taskId).suggestedActions).toEqual([]);
+    harness.send({
+      type: 'agent.complete_fix',
+      runId: harness.activeRun(taskId).id,
+      summary: 'Renamed.',
+      reply: REPLY,
+      actions: [LEAVE],
+    });
+    expect(harness.task(taskId).suggestedActions).toEqual([LEAVE]);
+  });
+
+  test('a later hand-over without replies replaces the ones before', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    reachReviewOffering(harness, taskId);
+    harness.send({ type: 'task.message', taskId, text: 'Leave them.' });
+    harness.send({
+      type: 'agent.complete_fix',
+      runId: harness.activeRun(taskId).id,
+      summary: 'Left.',
+      reply: REPLY,
+    });
+    expect(countSuggested(harness)).toBe(1);
+    expect(harness.task(taskId).suggestedActions).toEqual([]);
+  });
+
+  test('answering the gate clears them', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    reachReviewOffering(harness, taskId);
+    harness.send({
+      type: 'gate.answer',
+      gateId: harness.openGate(taskId).id,
+      decision: 'approve',
+      response: null,
+    });
+    expect(harness.task(taskId).suggestedActions).toEqual([]);
+  });
+
+  test('a plan offers replies at the plan gate', () => {
+    const { harness, taskId } = atPlanGate();
+    harness.send({ type: 'task.message', taskId, text: 'Smaller, please.' });
+    const document = harness.task(taskId).plan?.document;
+    harness.send({
+      type: 'agent.propose_plan',
+      runId: harness.activeRun(taskId).id,
+      document: document ?? PLAN,
+      reply: REPLY,
+      actions: [{ label: 'Keep three phases', message: 'Keep the three phases.' }],
+    });
+    expect(harness.task(taskId).suggestedActions).toEqual([
+      { label: 'Keep three phases', message: 'Keep the three phases.' },
+    ]);
+  });
+});

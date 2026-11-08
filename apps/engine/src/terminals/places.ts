@@ -1,17 +1,14 @@
 import {
   DomainError,
   listTerminalPlaces,
-  resolveTaskServiceCwd,
   type ServiceDefinition,
   type ServiceSuggestion,
   type ShinsaState,
   type TerminalPlace,
   type TerminalPlaceKind,
 } from '@shinsa/core';
-import { resolveSharedCacheEnv } from '../checks/caches/paths.ts';
-import { isFolder, isInside } from '../files/paths.ts';
-import { listServiceSuggestions } from './detect.ts';
-import type { ServiceMachine, ServiceRun, TerminalStart } from './schema.ts';
+import { isInside } from '../files/paths.ts';
+import type { TerminalStart } from './schema.ts';
 
 export function resolveTerminalStart(
   places: TerminalPlace[],
@@ -23,8 +20,6 @@ export function resolveTerminalStart(
   const homePlace: TerminalPlaceKind | null = places.length === 0 && path === home ? 'folder' : null;
   if (!(place || homePlace))
     throw new DomainError({ code: 'terminal_place_invalid', message: 'Pick one of the project’s folders.' });
-  if (!isFolder(path))
-    throw new DomainError({ code: 'terminal_place_missing', message: 'That folder is not there anymore.' });
   return { projectId, cwd: path, place: place?.kind ?? 'folder', taskId: place?.taskId ?? null };
 }
 
@@ -50,32 +45,10 @@ export function listNewServiceSuggestions(suggestions: ServiceSuggestion[], serv
   );
 }
 
-export function listNewSuggestions(
-  places: TerminalPlace[],
-  services: ServiceDefinition[]
-): ServiceSuggestion[] {
-  const roots = places.filter((place) => place.kind !== 'worktree').map((place) => place.path);
-  return listNewServiceSuggestions(listServiceSuggestions(roots), services);
+export function listSuggestionRoots(places: TerminalPlace[]) {
+  return places.filter((place) => place.kind !== 'worktree').map((place) => place.path);
 }
 
 export function resolveServicePlaceIn(state: ShinsaState, service: ServiceDefinition, home: string) {
   return resolveServicePlace(listTerminalPlaces(state, service.projectId), service.cwd, home);
-}
-
-export function resolveServiceRunIn(
-  state: ShinsaState,
-  service: ServiceDefinition,
-  taskId: string | null,
-  machine: ServiceMachine
-): ServiceRun | null {
-  if (taskId === null) {
-    const place = resolveServicePlaceIn(state, service, machine.home);
-    return place ? { cwd: service.cwd, place, taskId: null } : null;
-  }
-  const task = state.tasks[taskId];
-  if (!(task?.worktreePath && task.repoId)) return null;
-  const cwd = resolveTaskServiceCwd(state, service, task);
-  if (cwd === null) return null;
-  const env = resolveSharedCacheEnv(task.worktreePath, machine.dataDir, task.repoId);
-  return { cwd, place: 'worktree', taskId, env };
 }

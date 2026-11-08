@@ -196,7 +196,7 @@ describe('a preview link', () => {
   test('answers a failure inside the Worker as an error, not the app', async () => {
     const harness = createHarness();
     const { origin } = await shareMachine(harness);
-    harness.db.sqlite.exec('DROP TABLE instances');
+    harness.db.sqlite.exec('DROP TABLE machines');
     const answer = await visit(harness, `${origin}/`, withKey());
     expect(answer.status).toBe(500);
     expect(answer.headers.get('x-robots-tag')).toBe('noindex, nofollow, noarchive');
@@ -299,6 +299,7 @@ describe('a private address', () => {
     const { team, invite } = await readJson<TeamCreateResponse>(
       await harness.post(REMOTE_PATHS.machineTeams, { name: 'Payments' }, machine)
     );
+    await pairMachine(harness, kai, 'Laptop');
     await harness.post(REMOTE_PATHS.teamJoin, { invite }, { session: kai });
     expect((await harness.call(openPath(`${origin}/`), { session: kai })).status).toBe(404);
     await harness.post(resolveMachineTeamPath(team.id, 'members/add'), { userId: '2' }, machine);

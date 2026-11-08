@@ -1,5 +1,6 @@
 import { homedir } from 'node:os';
 import { resolve } from 'node:path';
+import { BunServices } from '@effect/platform-bun';
 import {
   COVERAGE_FORMATS,
   COVERAGE_MODES,
@@ -18,7 +19,6 @@ import {
   type WorkspaceMode,
 } from '@shinsa/core';
 import { Clock, DateTime, Effect, Option, Schema } from 'effect';
-import { describeError } from '../log/index.ts';
 import { resolveProjectFolder } from '../projects/folders.ts';
 import type { FieldSpec, Values } from './fields.ts';
 import {
@@ -30,7 +30,7 @@ import {
   resolveOptionalProjectId,
   selectProject,
 } from './resolve.ts';
-import { SurfaceCallFailed, type SurfaceClient } from './schema.ts';
+import type { SurfaceClient } from './schema.ts';
 import { defineAction, defineCommand, defineRead, readValue, type SurfaceSpec } from './spec.ts';
 import { findTeamId } from './teams.ts';
 
@@ -151,11 +151,9 @@ const buildProjectInput = Effect.fn('Surface.buildProjectInput')(function* (
   const resolvedFolders =
     folders === undefined
       ? undefined
-      : yield* Effect.try({
-          try: () => folders.map((folder) => resolveProjectFolder(resolveFolderPath(folder), homedir())),
-          catch: (error) =>
-            error instanceof DomainError ? error : new SurfaceCallFailed({ message: describeError(error) }),
-        });
+      : yield* Effect.forEach(folders, (folder) =>
+          resolveProjectFolder(resolveFolderPath(folder), homedir())
+        ).pipe(Effect.provide(BunServices.layer));
   const input: ProjectInput = {
     ...(existing ? { id: existing.id } : {}),
     name,

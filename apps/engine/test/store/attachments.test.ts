@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { BunServices } from '@effect/platform-bun';
 import { Effect, Layer, Option } from 'effect';
 import { EngineConfig } from '../../src/config/service.ts';
 import type { AttachmentUpload } from '../../src/store/attachments/schema.ts';
@@ -15,16 +16,18 @@ class AttachmentStore {
   constructor(attachmentsDir: string) {
     const config = Layer.succeed(EngineConfig, createConfigAt(createTempDir(), { attachmentsDir }));
     this.#attachments = Effect.runSync(
-      Attachments.pipe(Effect.provide(Attachments.layer.pipe(Layer.provide(config))))
+      Attachments.pipe(
+        Effect.provide(Attachments.layer.pipe(Layer.provide(Layer.merge(config, BunServices.layer))))
+      )
     );
   }
 
   write(upload: AttachmentUpload) {
-    return Effect.runSync(this.#attachments.write(upload));
+    return Effect.runPromise(this.#attachments.write(upload));
   }
 
-  selectFile(name: string) {
-    return Option.getOrNull(Effect.runSync(this.#attachments.selectFile(name)));
+  async selectFile(name: string) {
+    return Option.getOrNull(await Effect.runPromise(this.#attachments.selectFile(name)));
   }
 }
 
@@ -35,10 +38,10 @@ function readAttachmentUpload(body: Record<string, unknown>) {
 const PNG = Buffer.from('fake png bytes').toString('base64');
 
 describe('AttachmentStore', () => {
-  test('writes an upload under its own id, with a safe file name, and finds it again by that name', () => {
+  test('writes an upload under its own id, with a safe file name, and finds it again by that name', async () => {
     const dir = createTempDir();
     const store = new AttachmentStore(join(dir, 'attachments'));
-    const image = store.write({ name: 'Screen Shot 1 (copy).PNG', mimeType: 'image/png', data: PNG });
+    const image = await store.write({ name: 'Screen Shot 1 (copy).PNG', mimeType: 'image/png', data: PNG });
     expect(image).toMatchObject({
       kind: 'image',
       name: 'Screen Shot 1 (copy).PNG',
@@ -47,23 +50,25 @@ describe('AttachmentStore', () => {
     });
     expect(image.url).toMatch(/^\/api\/attachments\/[0-9a-f-]{36}\/Screen-Shot-1-copy\.png$/);
     expect(readFileSync(image.path, 'utf8')).toBe('fake png bytes');
-    expect(store.selectFile(image.url.slice(ATTACHMENT_ROUTE.length))).toBe(image.path);
+    expect(await store.selectFile(image.url.slice(ATTACHMENT_ROUTE.length))).toBe(image.path);
 
-    const odd = store.write({ name: '…', mimeType: null, data: PNG });
+    const odd = await store.write({ name: '…', mimeType: null, data: PNG });
     expect(odd).toMatchObject({ kind: 'file', name: '…', mimeType: null });
     expect(odd.url.endsWith('/file')).toBe(true);
   });
 
-  test('refuses an empty or oversized file', () => {
+  test('refuses an empty or oversized file', async () => {
     const store = new AttachmentStore(createTempDir());
-    expect(() => store.write({ name: 'a.txt', mimeType: null, data: '' })).toThrow('The file is empty.');
+    await expect(store.write({ name: 'a.txt', mimeType: null, data: '' })).rejects.toThrow(
+      'The file is empty.'
+    );
     const big = Buffer.alloc(ATTACHMENT_LIMIT_BYTES + 1).toString('base64');
-    expect(() => store.write({ name: 'a.bin', mimeType: null, data: big })).toThrow(
+    await expect(store.write({ name: 'a.bin', mimeType: null, data: big })).rejects.toThrow(
       'The file is over 25 MB.'
     );
   });
 
-  test('selects only an id and a plain file name that exist', () => {
+  test('selects only an id and a plain file name that exist', async () => {
     const dir = createTempDir();
     const store = new AttachmentStore(dir);
     const id = '01a17e51-96e1-7058-b2a3-52fd491e6258';
@@ -76,7 +81,7 @@ describe('AttachmentStore', () => {
       'not-an-id/a.txt',
       `${id}/.hidden`,
     ]) {
-      expect(store.selectFile(name)).toBeNull();
+      expect(await store.selectFile(name)).toBeNull();
     }
   });
 });

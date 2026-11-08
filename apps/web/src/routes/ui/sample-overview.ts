@@ -376,7 +376,7 @@ export function createOverviewScene(now: number) {
       id: 'shaping',
       title: 'Why does the export stall?',
       stage: 'triage',
-      auto: { shape: true, start: true, priority: true },
+      auto: { shape: true, start: true, priority: true, project: false },
     }),
     change: createSampleTask(now, {
       id: 'change',
@@ -424,6 +424,7 @@ export function createOverviewScene(now: number) {
           'Release the ClickHouse connection in `exportChunk` when a chunk times out, and cap the pool at 20.',
         why: 'The stall comes from leaked connections, and the fix is two lines in one function.',
         status: 'open',
+        recommend: 'go_on',
         runId: null,
         at: now - 4 * MINUTE,
       },
@@ -444,6 +445,7 @@ export function createOverviewScene(now: number) {
         request: 'Plan the operation. You approve the plan before anything runs.',
         why: 'Find what holds the exports first, then clear it with a one-off script.',
         status: 'open',
+        recommend: 'go_on',
         runId: null,
         at: now - 6 * MINUTE,
       },
@@ -497,6 +499,18 @@ export function createOverviewScene(now: number) {
         '',
         'Set the default branch in the repository settings, then verify the setup again.',
       ].join('\n'),
+    }),
+    pickRepository: createSampleGate(now, {
+      id: 'pick-repository-gate',
+      taskId: 'setup',
+      type: 'configuration',
+      title: 'Which repository is this task for?',
+      body: [
+        'Shinsa could not tell which repository this task works in, and its work needs one.',
+        '',
+        'Pick one below, or say in a message which repository it is. A repository Shinsa does not know yet can be added to the project in Settings.',
+      ].join('\n'),
+      choices: ['buzzkit', 'paywall-next', 'superwall-ios'],
     }),
     signIn: createSampleGate(now, {
       id: 'sign-in-gate',

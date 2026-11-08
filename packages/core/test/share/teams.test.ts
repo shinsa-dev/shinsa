@@ -6,6 +6,7 @@ import {
   resolveSharedListing,
   TEAM_SETTLED_LIMIT,
 } from '../../src/index.ts';
+import { SHARE_PRESET_SCOPES } from '../../src/share/presets.ts';
 import {
   approve,
   createHarness,
@@ -132,8 +133,10 @@ describe('an escalated team task', () => {
     const task = { ...harness.task(taskId), escalation };
     const state = { ...harness.state, tasks: { ...harness.state.tasks, [taskId]: task } };
     expect(listTeamTasks(state, 'team-1', CONTEXT)[0]?.task.escalation).toEqual(escalation);
-    expect(resolveSharedListing(state, task, [], 'standard').task.escalation?.handoff).toEqual(handoff);
+    expect(
+      resolveSharedListing(state, task, [], SHARE_PRESET_SCOPES.standard).task.escalation?.handoff
+    ).toEqual(handoff);
     expect(listTeamTasks(harness.state, 'team-1', CONTEXT)[0]?.task.escalation).toBeNull();
-    expect(resolveSharedListing(state, task, [], 'status').task.escalation).toBeNull();
+    expect(resolveSharedListing(state, task, [], SHARE_PRESET_SCOPES.status).task.escalation).toBeNull();
   });
 });

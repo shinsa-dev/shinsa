@@ -109,6 +109,7 @@ const PLAN_GATE_TEST: Record<PlanGateReason, (task: Task) => boolean> = {
   plan_first: (task) => task.planFirst,
   backlog: (task) => Boolean(task.backlog),
   asks_approval: (task) => task.plan?.document?.approval === true,
+  splits: (task) => (task.plan?.document?.split ?? []).length > 0,
   large: isLargePlan,
   revised: (task) => (task.plan?.version ?? 0) > 1,
 };

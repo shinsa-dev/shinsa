@@ -1,8 +1,9 @@
-import { type ChildProcess, spawn as spawnChild } from 'node:child_process';
+import type { ChildProcess } from 'node:child_process';
 import type { SpawnedProcess, SpawnOptions } from '@anthropic-ai/claude-agent-sdk';
 import { Effect, Ref, Stream } from 'effect';
 import { Shell } from '../../../../shell/service.ts';
 import { type ClaudeProcessDefinition, type ClaudeProcessHandle, STDERR_TAIL_CHARS } from './schema.ts';
+import { spawnClaudeProcess } from './spawn.ts';
 
 export const makeClaudeProcess = Effect.fn('ClaudeProcess.make')(function* (
   definition: ClaudeProcessDefinition
@@ -12,18 +13,7 @@ export const makeClaudeProcess = Effect.fn('ClaudeProcess.make')(function* (
   const stderr = yield* Ref.make('');
 
   const spawn = Effect.fn('ClaudeProcess.spawn')(function* (options: SpawnOptions) {
-    const started = yield* Effect.sync(() => {
-      const process = spawnChild(options.command, options.args, {
-        cwd: options.cwd,
-        env: options.env,
-        signal: options.signal,
-        stdio: ['pipe', 'pipe', 'pipe'],
-        detached: true,
-        windowsHide: true,
-      });
-      process.stderr.setEncoding('utf8');
-      return process;
-    });
+    const started = yield* Effect.sync(() => spawnClaudeProcess(options));
     yield* Ref.set(child, started);
     yield* Stream.fromAsyncIterable(started.stderr as AsyncIterable<string>, String).pipe(
       Stream.runForEach((chunk) => Ref.update(stderr, (tail) => `${tail}${chunk}`.slice(-STDERR_TAIL_CHARS))),

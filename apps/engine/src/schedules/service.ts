@@ -16,7 +16,7 @@ export class Schedules extends Context.Service<
     readonly stop: Effect.Effect<void>;
     readonly fireDue: Effect.Effect<void>;
     readonly handleWebhook: (request: Request, url: URL) => Effect.Effect<Response>;
-    readonly findHookUrl: (scheduleId: string) => Effect.Effect<string, DomainError>;
+    readonly upsertHookUrl: (scheduleId: string) => Effect.Effect<string>;
     readonly hookSecrets: (taskId: string) => SurfaceHookSecrets;
     readonly handleTool: (
       name: string,
@@ -82,7 +82,7 @@ export class Schedules extends Context.Service<
         stop,
         fireDue: clock.fireDue,
         handleWebhook: receiver.handle,
-        findHookUrl: tools.findHookUrl,
+        upsertHookUrl: tools.upsertHookUrl,
         hookSecrets,
         handleTool,
       });

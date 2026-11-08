@@ -6,9 +6,11 @@ import { Panel } from '@/components/layout/surface/panel.tsx';
 import { useReadOnly } from '@/components/task/read-only.tsx';
 import { InlineMarkdown } from '@/components/text/markdown.tsx';
 import { useBusy } from '@/hooks/use-busy.ts';
+import { useEngineFeature } from '@/lib/connection/socket.ts';
 import { resolveOverviewPanelId } from '@/lib/preferences/disclosure.ts';
 import { acceptSuggestion, dismissSuggestion, keepSuggestion } from '@/lib/tasks/process.ts';
 import {
+  canBundleSuggestion,
   listOpenSuggestions,
   listSuggestionStarts,
   resolveSuggestionStart,
@@ -24,22 +26,24 @@ type SuggestionKeeper = (suggestion: TaskSuggestion) => Promise<boolean>;
 
 export function SuggestionRow({
   suggestion,
+  canBundle,
   onAccept,
   onDismiss,
   onKeep,
 }: {
   suggestion: TaskSuggestion;
+  canBundle: boolean;
   onAccept: SuggestionAccepter;
   onDismiss: SuggestionDismisser;
   onKeep: SuggestionKeeper;
 }) {
   const readOnly = useReadOnly();
   const { busy, run } = useBusy<'accept' | 'dismiss' | 'keep'>();
-  const [start, setStart] = React.useState<SuggestionStart>(resolveSuggestionStart(suggestion));
+  const [start, setStart] = React.useState<SuggestionStart>(resolveSuggestionStart(suggestion, canBundle));
 
   return (
     <li className='flex flex-col gap-2 py-2 first:pt-0 last:pb-0 sm:flex-row sm:items-start sm:gap-3'>
-      <div className='flex min-w-0 flex-1 flex-col gap-px text-xs'>
+      <div className='flex min-w-0 flex-1 flex-col text-xs'>
         <InlineMarkdown text={suggestion.title} className='leading-5 font-medium text-fg-4' />
         <InlineMarkdown text={suggestion.why} className='text-fg-3' />
       </div>
@@ -49,7 +53,7 @@ export function SuggestionRow({
             label={SUGGESTION_START_LABEL}
             size='sm'
             variant='ghost'
-            items={listSuggestionStarts(suggestion)}
+            items={listSuggestionStarts(suggestion, canBundle)}
             value={start}
             onValueChange={setStart}
           />
@@ -97,6 +101,7 @@ export function SuggestionsPanel({
   onDismiss?: SuggestionDismisser;
   onKeep?: SuggestionKeeper;
 }) {
+  const canBundle = canBundleSuggestion(task, useEngineFeature('suggestion.bundle', task.id));
   const open = listOpenSuggestions(task);
   if (open.length === 0) return null;
   return (
@@ -110,6 +115,7 @@ export function SuggestionsPanel({
           <SuggestionRow
             key={suggestion.id}
             suggestion={suggestion}
+            canBundle={canBundle}
             onAccept={onAccept}
             onDismiss={onDismiss}
             onKeep={onKeep}

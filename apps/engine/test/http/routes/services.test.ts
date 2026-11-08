@@ -2,8 +2,10 @@ import { afterEach, describe, expect, setDefaultTimeout, test } from 'bun:test';
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { ServiceDefinition, ServiceSuggestion, TerminalInfo, TerminalsSnapshot } from '@shinsa/core';
-import { Effect } from 'effect';
-import { resolveServicePlace, resolveServiceRunIn } from '../../../src/terminals/places.ts';
+import { Effect, Option } from 'effect';
+import { resolveServicePlace } from '../../../src/terminals/places.ts';
+import { selectServiceRunIn } from '../../../src/terminals/runs.ts';
+import { runFiles } from '../../harness.ts';
 import { until, writeFiles } from '../../helpers/index.ts';
 import {
   attachTerminal as attach,
@@ -13,7 +15,7 @@ import {
   startTerminalServer as start,
   stopTerminalServers,
 } from '../../helpers/terminals.ts';
-import { run, runAsync } from '../../terminals/harness.ts';
+import { runAsync } from '../../terminals/harness.ts';
 
 setDefaultTimeout(30_000);
 
@@ -75,7 +77,7 @@ describe('services over HTTP', () => {
       writeFileSync(join(repoPath, `apps/${app}/package.json`), JSON.stringify({ scripts: { dev: 'x' } }));
     }
     writeFileSync(join(repoPath, 'package.json'), JSON.stringify({ workspaces: ['apps/*'] }));
-    run(
+    await runAsync(
       terminals.addService(projectId, {
         name: 'gateway',
         cwd: repoPath,
@@ -136,7 +138,7 @@ describe('services over HTTP', () => {
       `/api/services/suggestions?projectId=${projectId}`
     );
     expect(left.suggestions).toEqual([]);
-    run(
+    await runAsync(
       terminals.addService(projectId, {
         name: 'gateway',
         cwd: join(repoPath, 'apps/api'),
@@ -145,7 +147,7 @@ describe('services over HTTP', () => {
         ...NO_PREVIEW,
       })
     );
-    run(
+    await runAsync(
       terminals.updateService(service.id, {
         name: 'renamed',
         cwd: service.cwd,
@@ -159,18 +161,20 @@ describe('services over HTTP', () => {
       `/api/services/suggestions?projectId=${projectId}`
     );
     expect(same.suggestions).toEqual([]);
-    for (const each of run(terminals.snapshot).services)
-      if (each.id !== service.id) run(terminals.removeServices([each.id]));
+    for (const each of (await runAsync(terminals.snapshot)).services)
+      if (each.id !== service.id) await runAsync(terminals.removeServices([each.id]));
 
     const started = (await (await post(`/api/services/${service.id}/start`, {}, null)).json()) as {
       terminal: TerminalInfo;
     };
     expect(started.terminal).toMatchObject({ serviceId: service.id, status: 'running', port: 4100 });
     await until('it printed', async () =>
-      (await runAsync(run(terminals.find(started.terminal.id)).serializeScreen)).includes('up-4100')
+      (await runAsync((await runAsync(terminals.find(started.terminal.id))).serializeScreen)).includes(
+        'up-4100'
+      )
     );
     await post(`/api/services/${service.id}/stop`, {}, null);
-    expect(run(terminals.find(started.terminal.id)).info.status).toBe('stopped');
+    expect((await runAsync(terminals.find(started.terminal.id))).info.status).toBe('stopped');
     const restarted = (await (await post(`/api/services/${service.id}/restart`, {}, null)).json()) as {
       terminal: TerminalInfo;
     };
@@ -183,9 +187,13 @@ describe('services over HTTP', () => {
       env: {},
     });
     await post(`/api/services/${service.id}/restart`, {}, null);
-    await until('it failed', () => run(terminals.find(started.terminal.id)).info.exitCode === 4);
+    await until(
+      'it failed',
+      async () => (await runAsync(terminals.find(started.terminal.id))).info.exitCode === 4
+    );
+    const failedAt = (await runAsync(terminals.find(started.terminal.id))).info.startedAt;
     await post('/api/services/start-all', { projectId }, null);
-    expect(run(terminals.find(started.terminal.id)).info.status).toBe('running');
+    expect((await runAsync(terminals.find(started.terminal.id))).info.startedAt).toBeGreaterThan(failedAt);
 
     const removed = (await (
       await post('/api/services/remove', { ids: [service.id] })
@@ -205,9 +213,9 @@ describe('services over HTTP', () => {
     expect(await refusal({ projectId, services: [one, { ...one, name: 'web', path: '/etc' }] })).toBe(
       'service_place_invalid'
     );
-    expect(run(terminals.snapshot).services).toEqual([]);
+    expect((await runAsync(terminals.snapshot)).services).toEqual([]);
     for (let index = 0; index < 31; index += 1)
-      run(
+      await runAsync(
         terminals.addService(projectId, {
           name: `s${index}`,
           cwd: repoPath,
@@ -217,7 +225,8 @@ describe('services over HTTP', () => {
         })
       );
     expect(await refusal({ projectId, services: [one, { ...one, name: 'web' }] })).toBe('service_limit');
-    for (const service of run(terminals.snapshot).services) run(terminals.removeServices([service.id]));
+    for (const service of (await runAsync(terminals.snapshot)).services)
+      await runAsync(terminals.removeServices([service.id]));
     const added = (await (
       await post('/api/services/batch', { projectId, services: [one, { ...one, name: 'web' }] })
     ).json()) as { added: ServiceDefinition[] } & TerminalsSnapshot;
@@ -228,11 +237,15 @@ describe('services over HTTP', () => {
   test('removes several services at once, finding every one before it removes any', async () => {
     const { post, projectId, repoPath, terminals } = await start();
     const add = (name: string) =>
-      run(
+      runAsync(
         terminals.addService(projectId, { name, cwd: repoPath, command: 'sleep 30', env: {}, ...NO_PREVIEW })
       );
-    const [api, web, docs] = [add('api'), add('web'), add('docs')];
-    const started = run(terminals.startService(api.id, { cwd: repoPath, place: 'repository', taskId: null }));
+    const api = await add('api');
+    const web = await add('web');
+    const docs = await add('docs');
+    const started = await runAsync(
+      terminals.startService(api.id, { cwd: repoPath, place: 'repository', taskId: null })
+    );
     const refusal = async (body: unknown, origin: string | null = ORIGIN) =>
       ((await (await post('/api/services/remove', body, origin)).json()) as { error: { code: string } }).error
         .code;
@@ -241,7 +254,7 @@ describe('services over HTTP', () => {
     expect(await refusal({ ids: [api.id, 3] })).toBe('body_invalid');
     expect(await refusal({ ids: [api.id, 'gone'] })).toBe('service_not_found');
     expect(await refusal({ ids: [api.id] }, null)).toBe('browser_only');
-    expect(run(terminals.snapshot).services).toHaveLength(3);
+    expect((await runAsync(terminals.snapshot)).services).toHaveLength(3);
     const removed = (await (
       await post('/api/services/remove', { ids: [api.id, web.id, api.id] })
     ).json()) as TerminalsSnapshot;
@@ -280,7 +293,7 @@ describe('services over HTTP', () => {
       error: { code: string };
     };
     expect(moved.error.code).toBe('terminal_place_missing');
-    const stray = run(
+    const stray = await runAsync(
       terminals.addService(projectId, {
         name: 'x',
         cwd: '/etc',
@@ -302,7 +315,7 @@ describe('services for a task over HTTP', () => {
     const { post, projectId, repoPath, root, terminals, engine } = await start();
     const appPath = join(repoPath, 'apps/api');
     mkdirSync(appPath, { recursive: true });
-    const service = run(
+    const service = await runAsync(
       terminals.addService(projectId, {
         name: 'api',
         cwd: appPath,
@@ -344,7 +357,7 @@ describe('services for a task over HTTP', () => {
       [null, 'running'],
     ]);
     expect((await call(service.id, 'start', { taskId: 'nope' })).error?.code).toBe('task_not_found');
-    const outside = run(
+    const outside = await runAsync(
       terminals.addService(projectId, {
         name: 'notes',
         cwd: root,
@@ -356,9 +369,11 @@ describe('services for a task over HTTP', () => {
     const refused = await call(outside.id, 'start', { taskId });
     expect(refused.error?.code).toBe('service_place_invalid');
     expect(refused.error?.message).toContain('It cannot run in this task.');
-    expect(resolveServiceRunIn(engine.state, service, taskId, terminals)?.env).toEqual({});
+    const envOf = async () =>
+      Option.getOrNull(await runFiles(selectServiceRunIn(engine.state, service, taskId, terminals)))?.env;
+    expect(await envOf()).toEqual({});
     writeFiles(worktree, { 'turbo.json': '{}' });
-    expect(resolveServiceRunIn(engine.state, service, taskId, terminals)?.env).toEqual({
+    expect(await envOf()).toEqual({
       TURBO_CACHE_DIR: join(terminals.dataDir, 'caches', repoId, 'turbo'),
     });
   });

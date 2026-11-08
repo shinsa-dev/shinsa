@@ -1,6 +1,7 @@
-import { afterEach, describe, expect, spyOn, test } from 'bun:test';
+import { afterEach, describe, expect, test } from 'bun:test';
 import {
   appendFileSync,
+  chmodSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -195,18 +196,14 @@ describe('reading which servers and skills agents used', () => {
 
   test('a session it cannot read is logged and skipped', async () => {
     const dirs = createDirs();
-    writeFile(join(dirs.claude, 'p', 'gone.jsonl'), `${serializeClaudeToolUse('mcp__maple__a', NOW)}\n`);
-    const file = spyOn(Bun, 'file').mockImplementation(() => {
-      throw new Error('denied');
-    });
+    const gone = join(dirs.claude, 'p', 'gone.jsonl');
+    writeFile(gone, `${serializeClaudeToolUse('mcp__maple__a', NOW)}\n`);
+    chmodSync(gone, 0o000);
     const logs = captureLogs();
     const index = await createIndex(dirs);
-    await index.refresh().finally(() => {
-      file.mockRestore();
-      logs.restore();
-    });
+    await index.refresh().finally(() => logs.restore());
     expect(logs.fieldsOf('[Extensions] Could not read a session for usage')).toEqual([
-      expect.objectContaining({ error: 'denied' }),
+      expect.objectContaining({ path: gone, error: expect.stringContaining('permission denied') }),
     ]);
   });
 

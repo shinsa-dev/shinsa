@@ -10,8 +10,14 @@ import {
   ROUTE_NOT_FOUND_MESSAGE,
   ScopeRefused,
 } from '@shinsa/core/engine-api/schema';
-import { Cause, Effect, Option, Predicate, Schema, type Types } from 'effect';
-import { HttpRouter, HttpServerError, HttpServerRequest, HttpServerResponse } from 'effect/http';
+import { Cause, Context, Effect, FileSystem, Option, Predicate, Schema, type Types } from 'effect';
+import {
+  HttpPlatform,
+  HttpRouter,
+  HttpServerError,
+  HttpServerRequest,
+  type HttpServerResponse,
+} from 'effect/http';
 import { EngineConfig } from '../../config/service.ts';
 import { Extensions } from '../../extensions/registry/service.ts';
 import { SIGN_IN_CALLBACK_PATH } from '../../extensions/sign-in.ts';
@@ -35,6 +41,11 @@ export const Ingress = HttpRouter.middleware(
     const config = yield* EngineConfig;
     const extensions = Option.getOrUndefined(yield* Effect.serviceOption(Extensions));
     const gate = yield* TunnelGate;
+    const withFiles = Effect.provide(
+      Context.make(FileSystem.FileSystem, yield* FileSystem.FileSystem).pipe(
+        Context.add(HttpPlatform.HttpPlatform, yield* HttpPlatform.HttpPlatform)
+      )
+    );
     const allowedHosts = resolveAllowedHosts(config.allowedHosts);
     const isIngressFailure = Schema.is(IngressFailure);
     const notFound = () => new RouteNotFound({ message: ROUTE_NOT_FOUND_MESSAGE });
@@ -51,8 +62,7 @@ export const Ingress = HttpRouter.middleware(
       return { via: 'tunnel', guest: null, userId: null };
     };
 
-    const respondPage = (pathname: string) =>
-      Effect.map(serveStatic(config.webDir, pathname), HttpServerResponse.raw);
+    const respondPage = (pathname: string) => withFiles(serveStatic(config.webDir, pathname));
 
     const respondMissing = Effect.fn('Ingress.respondMissing')(function* (
       web: Request,
