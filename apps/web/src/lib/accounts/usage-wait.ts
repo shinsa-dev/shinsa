@@ -1,11 +1,14 @@
 import {
+  type AwayHours,
   CLAUDE_PROVIDER,
+  isAwayAt,
   type Project,
   resolveProviderLabel,
   type Task,
   type UsagePace,
   type UsageWait,
 } from '@shinsa/core';
+import { ACCOUNT_LABEL } from '@/lib/accounts/account.ts';
 import { describeResetsIn } from '@/lib/accounts/usage.ts';
 import { formatMoment, formatUntil } from '@/lib/format/time.ts';
 
@@ -16,6 +19,12 @@ export function isUsageWaitArmed(task: Task): task is Task & { usageWait: UsageW
 export function isPaceWait(wait: UsageWait): wait is UsageWait & { pace: UsagePace } {
   return wait.cause === 'pace' && wait.pace !== undefined;
 }
+
+export function isAdmissionWait(wait: UsageWait): wait is UsageWait & { pace: UsagePace } {
+  return isPaceWait(wait) && wait.pace.scope === 'admission';
+}
+
+export const BUILD_NOW = 'Build now';
 
 function formatLimit(percent: number) {
   return `${Number(percent.toFixed(1))}%`;
@@ -32,14 +41,27 @@ export function describeUsageWaitCountdown(wait: UsageWait, now: number) {
   return wait.resetAt <= now ? 'Starts now' : formatUntil('Starts', wait.resetAt, now);
 }
 
-export function describeUsageWaitTitle(wait: UsageWait, now = Date.now()) {
+function describeAdmissionTitle(wait: UsageWait, now: number, away: AwayHours | null) {
+  if (isAwayAt(away, wait.resetAt) && !isAwayAt(away, now)) return 'Builds tonight';
+  return `Builds after ${formatMoment(wait.resetAt, now)}`;
+}
+
+export function describeUsageWaitTitle(wait: UsageWait, now = Date.now(), away: AwayHours | null = null) {
+  if (isAdmissionWait(wait)) return describeAdmissionTitle(wait, now, away);
   if (isPaceWait(wait)) return `Held at a usage limit: starts at ${formatMoment(wait.resetAt, now)}`;
   const next = wait.autoResume ? 'continues' : 'pauses for you';
   const account = wait.account?.email ? ` on ${wait.account.email}` : '';
   return `Waiting for usage: ${next} at ${formatMoment(wait.resetAt, now)}${account}`;
 }
 
+function describeAdmissionBody(pace: UsagePace) {
+  const used = `${formatLimit(pace.percent)} of today’s ${formatLimit(pace.limit)} is already used or set aside`;
+  if (pace.need === undefined) return `${used}, so the build waits its turn.`;
+  return `Its build needs about ${formatLimit(pace.need)}, and ${used}, so it waits its turn.`;
+}
+
 export function describeUsageWaitBody(wait: UsageWait, project: Project | null = null) {
+  if (isAdmissionWait(wait)) return describeAdmissionBody(wait.pace);
   if (isPaceWait(wait)) {
     return `The last 24 hours used ${formatLimit(wait.pace.percent)}, which reached ${describePaceLimit(wait.pace, project)}, so the next step did not start.`;
   }
@@ -49,6 +71,9 @@ export function describeUsageWaitBody(wait: UsageWait, project: Project | null =
 }
 
 export function describeUsageWaitNote(wait: UsageWait) {
+  if (isAdmissionWait(wait)) {
+    return 'Auto pace starts it by itself in queue order once it fits. Build now starts it at once.';
+  }
   if (isPaceWait(wait)) {
     return 'Starts by itself as older usage drops out. Resume now ignores the limits for this task.';
   }
@@ -63,4 +88,8 @@ export function describeUsageWaitToggle(wait: UsageWait) {
 
 export function describeUsageWaitToggled(autoResume: boolean) {
   return autoResume ? 'Resumes at the reset.' : 'Waits for you at the reset.';
+}
+
+export function describeUsageWaitAction(wait: UsageWait) {
+  return isAdmissionWait(wait) ? BUILD_NOW : ACCOUNT_LABEL.resumeNow;
 }

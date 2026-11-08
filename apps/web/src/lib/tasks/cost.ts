@@ -118,6 +118,13 @@ function listEstimateRows(state: ShinsaState, task: Task): EstimateRow[] | null 
   ];
 }
 
+export function describeBuildEstimateFact(state: ShinsaState, task: Task) {
+  const estimate = resolveBuildEstimate(state, task);
+  if (!estimate || estimate.donePhases === estimate.phases) return null;
+  if (estimate.spentUsd === 0) return `${describeEstimateAmount(estimate.usd, estimate.percent)} to build`;
+  return `${describeEstimateAmount(estimate.remainingUsd, estimate.remainingPercent)} left to build`;
+}
+
 function selectShownBudget(state: ShinsaState, task: Task, unit: BudgetUnit) {
   const spent = selectSpentBudget(state, task);
   if (spent) return spent;

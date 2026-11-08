@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'bun:test';
-import { type Activity, resolveQueue, type Task } from '@shinsa/core';
+import { type Activity, createSettings, resolveQueue, type Task } from '@shinsa/core';
 import {
   dropPullRequestNumbers,
+  listOvernightLines,
   listRecentConversations,
   listRecentlyFinished,
   resolveGreeting,
@@ -11,6 +12,7 @@ import {
   resolveRunningVerb,
 } from '@/lib/home.ts';
 import { listQueueSections } from '@/lib/queue.ts';
+import { createNights } from '../support/away.ts';
 import { createGate, createRepo, createShinsaState, createTask, NOW } from '../support/state.ts';
 
 const DAY = 24 * 60 * 60_000;
@@ -227,6 +229,15 @@ describe('resolveRunningVerb', () => {
     expect(resolveRunningVerb(createTask({ id: 'pace', stage: 'building', usageWait: pace }))).toBe(
       'held at a usage limit on'
     );
+    const admission = {
+      id: 'w',
+      status: 'armed',
+      cause: 'pace',
+      pace: { scope: 'admission' },
+    } as Task['usageWait'];
+    expect(resolveRunningVerb(createTask({ id: 'queued', stage: 'building', usageWait: admission }))).toBe(
+      'waiting to build'
+    );
     expect(resolveRunningVerb(createTask({ id: 'fix', stage: 'fixing', fixFor: 'checks' }))).toBe('fixing');
     expect(resolveRunningVerb(createTask({ id: 'conflict', stage: 'fixing', fixFor: 'conflict' }))).toBe(
       'resolving conflicts on'
@@ -272,5 +283,70 @@ describe('dropPullRequestNumbers', () => {
   it('leaves text without a numbered pull request alone', () => {
     expect(dropPullRequestNumbers('Open a pull request when ready.')).toBe('Open a pull request when ready.');
     expect(dropPullRequestNumbers('Issue #12 is separate.')).toBe('Issue #12 is separate.');
+  });
+});
+
+describe('listOvernightLines', () => {
+  const HOUR = 3_600_000;
+  const tonight = Math.floor(NOW / DAY) * DAY + DAY + 3 * HOUR;
+  const wait = (resetAt: number) =>
+    ({ id: 'w', status: 'armed', cause: 'pace', pace: { scope: 'admission' }, resetAt }) as Task['usageWait'];
+
+  it('says nothing while Auto pace is off', () => {
+    const task = createTask({ id: 'a', usageWait: wait(tonight) });
+    expect(listOvernightLines(createShinsaState({ tasks: [task] }), NOW)).toEqual([]);
+  });
+
+  it('counts the builds that wait, tonight when they will start while you are away', () => {
+    const settings = { ...createSettings(), autoPace: true };
+    const away = createNights();
+    const one = createShinsaState({
+      tasks: [createTask({ id: 'a', usageWait: wait(tonight) })],
+      patch: { settings, away },
+    });
+    expect(listOvernightLines(one, NOW)).toEqual([
+      '1 task builds tonight, when there is room in today’s usage',
+    ]);
+    const soon = createShinsaState({
+      tasks: [
+        createTask({ id: 'a', usageWait: wait(NOW + HOUR) }),
+        createTask({ id: 'b', usageWait: wait(NOW + HOUR) }),
+      ],
+      patch: { settings, away },
+    });
+    expect(listOvernightLines(soon, NOW)).toEqual(['2 tasks wait for room in today’s usage to build']);
+    const unknown = createShinsaState({
+      tasks: [createTask({ id: 'a', usageWait: wait(tonight) })],
+      patch: { settings },
+    });
+    expect(listOvernightLines(unknown, NOW)).toEqual(['1 task waits for room in today’s usage to build']);
+    const many = createShinsaState({
+      tasks: [
+        createTask({ id: 'a', usageWait: wait(tonight) }),
+        createTask({ id: 'b', usageWait: wait(tonight) }),
+      ],
+      patch: { settings, away },
+    });
+    expect(listOvernightLines(many, NOW)).toEqual([
+      '2 tasks build tonight, when there is room in today’s usage',
+    ]);
+  });
+
+  it('counts the reviews that opened overnight, once you are back', () => {
+    const settings = { ...createSettings(), autoPace: true };
+    const away = createNights();
+    const night = Math.floor(NOW / DAY) * DAY + 3 * HOUR;
+    const gates = [
+      createGate({ id: 'g1', taskId: 'a', type: 'review', status: 'open', openedAt: night }),
+      createGate({ id: 'g2', taskId: 'b', type: 'review', status: 'open', openedAt: night }),
+      createGate({ id: 'g3', taskId: 'c', type: 'review', status: 'open', openedAt: NOW - HOUR }),
+      createGate({ id: 'g4', taskId: 'd', type: 'review', status: 'open', openedAt: night - 2 * DAY }),
+      createGate({ id: 'g5', taskId: 'e', type: 'question', status: 'open', openedAt: night }),
+    ];
+    const state = createShinsaState({ gates, patch: { settings, away } });
+    expect(listOvernightLines(state, NOW)).toEqual(['2 tasks built overnight are ready for your review']);
+    const single = createShinsaState({ gates: gates.slice(1, 2), patch: { settings, away } });
+    expect(listOvernightLines(single, NOW)).toEqual(['1 task built overnight is ready for your review']);
+    expect(listOvernightLines(state, night + HOUR)).toEqual([]);
   });
 });

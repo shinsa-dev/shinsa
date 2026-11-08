@@ -6,7 +6,7 @@ import {
   formatTaskHandle,
   NO_PROJECT_KEY,
 } from '../../packages/core/src/index.ts';
-import { DAY } from '../kit/time.ts';
+import { DAY, HOUR } from '../kit/time.ts';
 import { listSeedEvidenceEvents } from './evidence.ts';
 import { pushSeedFeedback } from './feedback.ts';
 import { NOW, type SeedTask } from './kit.ts';
@@ -21,7 +21,16 @@ export function buildEvents(tasks: SeedTask[], projects: Project[], repos: Repo[
   for (const repo of repos) push(start, { type: 'repo.registered', repo });
   pushSeedMemory(start, push);
 
-  push(start, { type: 'settings.changed', settings: { ...createSettings(), taskUsageLimit: 10 } });
+  push(start, {
+    type: 'settings.changed',
+    settings: {
+      ...createSettings(),
+      taskUsageLimit: 10,
+      autoPace: true,
+      projectOrder: ['project-superwall', 'project-basket', 'project-personal'],
+    },
+  });
+  push(NOW - HOUR, { type: 'usage.pace_recorded', provider: 'claude', pace: 140 });
   for (const task of tasks) pushTask(task, push);
   pushSeedFeedback(push);
   const runEnds = new Map(

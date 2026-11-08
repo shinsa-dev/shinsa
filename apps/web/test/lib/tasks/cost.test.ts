@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import type { Run, RunUsage } from '@shinsa/core';
-import { describeBudgetRetry, resolveCostFacts } from '@/lib/tasks/cost.ts';
+import { describeBudgetRetry, describeBuildEstimateFact, resolveCostFacts } from '@/lib/tasks/cost.ts';
 import { createRun, createShinsaState, createTask } from '../../support/state.ts';
 
 function usage(costUsd: number | null, tokens = 1_000): RunUsage {
@@ -229,7 +229,14 @@ describe('the cost of a task', () => {
       { key: 'left', label: 'Left to build', value: 'About 5%' },
       { key: 'basis', label: 'Based on', value: '3 similar builds you ran' },
     ]);
+    expect(describeBuildEstimateFact(createShinsaState({ tasks: [fresh], runs: [planning] }), fresh)).toBe(
+      'About $7.60 to build'
+    );
+    expect(describeBuildEstimateFact(state, halfway)).toBe('About 5% left to build');
     const finished = createTask({ id: 't', plan, phases: [done, done] });
+    expect(
+      describeBuildEstimateFact(createShinsaState({ tasks: [finished], runs: [planning] }), finished)
+    ).toBeNull();
     expect(
       resolveCostFacts(createShinsaState({ tasks: [finished], runs: [planning] }), finished)?.build
     ).toBeNull();

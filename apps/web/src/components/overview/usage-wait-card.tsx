@@ -1,10 +1,10 @@
-import type { ShinsaState, Task, UsageWait } from '@shinsa/core';
+import { resolveAwayHours, type ShinsaState, type Task, type UsageWait } from '@shinsa/core';
 import { Button } from '@shinsa/ui/components/button';
 import { Eyebrow, FooterNote, NowFrame, QuietLink } from '@/components/overview/now-frame.tsx';
 import { TimeAgo } from '@/components/text/time-ago.tsx';
 import { useBusy } from '@/hooks/use-busy.ts';
-import { ACCOUNT_LABEL } from '@/lib/accounts/account.ts';
 import {
+  describeUsageWaitAction,
   describeUsageWaitBody,
   describeUsageWaitCountdown,
   describeUsageWaitNote,
@@ -28,6 +28,7 @@ export function UsageWaitCard({
   onToggle?: () => Promise<boolean>;
 }) {
   const { busy, run } = useBusy<'resume' | 'toggle'>();
+  const shownAt = Date.now();
   const project = task.projectId ? (state.projects[task.projectId] ?? null) : null;
   return (
     <NowFrame
@@ -38,7 +39,7 @@ export function UsageWaitCard({
           extra={<TimeAgo at={wait.resetAt} text={(now) => describeUsageWaitCountdown(wait, now)} />}
         />
       }
-      title={describeUsageWaitTitle(wait)}
+      title={describeUsageWaitTitle(wait, shownAt, resolveAwayHours(state, shownAt))}
       action={
         <Button
           variant='outline'
@@ -46,7 +47,7 @@ export function UsageWaitCard({
           loading={busy === 'resume'}
           onClick={() => void run('resume', onResume)}
         >
-          {ACCOUNT_LABEL.resumeNow}
+          {describeUsageWaitAction(wait)}
         </Button>
       }
       footer={

@@ -13,7 +13,7 @@ import { GuideText } from '@/components/home/guide-text.tsx';
 import { TaskLink, TaskPopoverRows } from '@/components/links/task.tsx';
 import { InfoPopover } from '@/components/overlays/info-popover.tsx';
 import { endSentence } from '@/lib/format/count.ts';
-import { resolveRunningVerb } from '@/lib/home.ts';
+import { listOvernightLines, resolveRunningVerb } from '@/lib/home.ts';
 
 const NEXT_LEAD = ['Then', 'After that,', 'Finally,'];
 
@@ -125,6 +125,11 @@ export function HomeGuide({
       {briefing.now ? <Lead state={state} item={briefing.now} /> : <Clear />}
       {briefing.now && <UpNext state={state} items={briefing.next} />}
       {queue.working.length > 0 && <Running state={state} queue={queue} />}
+      {listOvernightLines(state, Date.now()).map((line) => (
+        <Aside key={line} marker={<Icon size='sm' name='IconMoon' />}>
+          {endSentence(line)}
+        </Aside>
+      ))}
       {briefing.note && <Note state={state} note={briefing.note} />}
     </section>
   );

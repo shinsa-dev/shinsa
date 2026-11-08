@@ -53,7 +53,7 @@ import { describeMachineResources, listTaskUseLines } from '@/lib/remote/resourc
 import { resolveFirstName, resolveSharedProfile, type UserProfile } from '@/lib/remote/users.ts';
 import { HANDOFF_ICON, resolveHandoffFact } from '@/lib/share/handoff.ts';
 import { type ChecksView, resolveChecksView, resolveStatusState } from '@/lib/tasks/checks.ts';
-import { resolveCostFacts } from '@/lib/tasks/cost.ts';
+import { describeBuildEstimateFact, resolveCostFacts } from '@/lib/tasks/cost.ts';
 import {
   describeDuplicateHint,
   describePullRequestFact,
@@ -328,6 +328,19 @@ function CoverageFact({ task }: { task: Task }) {
         <Icon size='sm' name='IconShieldCheck' />
         <span className='tabular-nums'>{fact}</span>
       </InAppLink>
+    </Hint>
+  );
+}
+
+function BuildEstimateFact({ state, task }: { state: ShinsaState; task: Task }) {
+  const fact = describeBuildEstimateFact(state, task);
+  if (!fact) return null;
+  return (
+    <Hint label='An estimate from similar builds you ran. With Auto pace on, a build starts once it fits today’s usage.'>
+      <span className={FACT}>
+        <Icon size='sm' name='IconHourglass' />
+        <span className='tabular-nums'>{fact}</span>
+      </span>
     </Hint>
   );
 }
@@ -759,6 +772,7 @@ export function TaskFacts({
       <PriorityFact state={state} task={task} />
       <StartedFact state={state} task={task} />
       <CostFact state={state} task={task} />
+      <BuildEstimateFact state={state} task={task} />
       <AccountFact task={task} />
       <AgentsFact state={state} task={task} />
       <WaitsOnFact state={state} task={task} />
