@@ -3215,8 +3215,12 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
     the team later gets it on the next heartbeat (`SharedTeams`, `remote/shared-teams/service.ts`, which calls
     `Remote.syncSharedTeams` whenever remote access changes; a grant that fails is logged and tried again then).
     Turning it off takes the team out of `sharedTeams` first, then drops the team's grants and removes from the
-    machine's members everyone who reached it only through that team (`Remote.unshareTeam`); their tasks stay, with
-    their owners. Teammates on a shared machine are members, so they reach every project, Settings and terminals
+    machine's members everyone the sharing made a member and no other team still reaches (`Remote.unshareTeam`: a
+    grant that added its person as a member is marked `joined`, and that mark passes to their grant from another team;
+    someone who was a member before keeps their access); their tasks stay, with their owners. When the machine leaves
+    a shared team, or the team is deleted, the next sync finds the team gone (`Remote.syncSharedTeams` returns it),
+    takes it out of `sharedTeams` and drops its grants the same way, so the machine never stays shared with a team
+    whose card is no longer there to turn it off. Teammates on a shared machine are members, so they reach every project, Settings and terminals
     as the owner does, except other people's accounts and the human-only settings.
   - **Who owns a task.** Every task records its owner as `Task.owner` (`TaskOwner`: login, name, avatar), on any
     machine, shared or not. The engine resolves who sent each command (`resolveRequestActor`, `http/commands.ts`)

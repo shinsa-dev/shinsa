@@ -92,7 +92,7 @@ export interface RemoteHandle {
   removeHandoff(taskId: string, guestId: string | null): Effect.Effect<void, RemoteCallFailure>;
   grantTeammate(userId: string, teamId: string): Effect.Effect<void, RemoteCallFailure>;
   shareWithTeam(teamId: string): Effect.Effect<void, RemoteCallFailure>;
-  syncSharedTeams(teamIds: readonly string[]): Effect.Effect<void>;
+  syncSharedTeams(teamIds: readonly string[]): Effect.Effect<string[]>;
   unshareTeam(teamId: string): Effect.Effect<void, RemoteCallFailure>;
   acceptRequest(requestId: string): Effect.Effect<void, RemoteCallFailure>;
   declineRequest(requestId: string): Effect.Effect<void, DomainError>;

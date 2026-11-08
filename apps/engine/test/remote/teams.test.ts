@@ -884,6 +884,34 @@ describe('a machine shared with a team', () => {
     expect(remote.store.file.grants).toMatchObject([{ userId: KAI.id, teamId: 'team2' }]);
   });
 
+  test('stopping keeps someone who was already a member before the machine was shared', async () => {
+    const { remote, plane } = setUp({
+      file: { access: { owner: MONA, members: [{ user: KAI, addedAt: 2 }] } },
+    });
+    await remote.shareWithTeam('team1');
+    expect(remote.store.selectGrant(KAI.id, 'team1')?.joined).toBeUndefined();
+    await remote.unshareTeam('team1');
+    expect(plane.calls.some((call) => call.path === REMOTE_PATHS.machineMemberRemove)).toBe(false);
+    expect(remote.snapshot().access?.members.map((member) => member.user.id)).toEqual([KAI.id]);
+  });
+
+  test('a member who joined through one team stays while another team still reaches them', async () => {
+    const { remote, plane } = setUp({
+      file: {
+        teams: [createTeam(), createTeam({ id: 'team2', name: 'Growth' })],
+        teamKeys: [STORED_KEY, { ...STORED_KEY, teamId: 'team2', name: 'Growth' }],
+      },
+    });
+    plane.answers.set(REMOTE_PATHS.machineMemberAdd, () => Response.json({ user: KAI, addedAt: 9 }));
+    await remote.grantTeammate(KAI.id, 'team1');
+    await remote.grantTeammate(KAI.id, 'team2');
+    await remote.unshareTeam('team1');
+    expect(remote.store.selectGrant(KAI.id, 'team2')?.joined).toBe(true);
+    plane.answers.set(REMOTE_PATHS.machineMemberRemove, () => Response.json({ ok: true }));
+    await remote.unshareTeam('team2');
+    expect(remote.snapshot().access?.members).toEqual([]);
+  });
+
   test('a teammate who joins later gets the machine on the next sync, and a failure is only logged', async () => {
     const { remote, plane } = setUp({
       file: { access: { owner: MONA, members: [{ user: KAI, addedAt: 2 }] } },
@@ -898,7 +926,7 @@ describe('a machine shared with a team', () => {
       }),
     ]);
     plane.answers.set(REMOTE_PATHS.machineMemberAdd, () => new Response('full', { status: 409 }));
-    await remote.syncSharedTeams(['team1', 'gone']);
+    expect(await remote.syncSharedTeams(['team1', 'gone'])).toEqual(['gone']);
     expect(remote.store.selectGrant(BOB.id, 'team1')).toBeNull();
     plane.answers.set(REMOTE_PATHS.machineMemberAdd, () => Response.json({ user: BOB, addedAt: 9 }));
     await remote.syncSharedTeams(['team1']);
@@ -909,7 +937,7 @@ describe('a machine shared with a team', () => {
     const { remote, plane } = setUp();
     await expect(remote.shareWithTeam('other')).rejects.toThrow('This machine is not in that team.');
     await remote.disable();
-    await remote.syncSharedTeams(['team1']);
+    expect(await remote.syncSharedTeams(['gone'])).toEqual([]);
     expect(plane.calls.some((call) => call.path === REMOTE_PATHS.machineMemberAdd)).toBe(false);
   });
 });

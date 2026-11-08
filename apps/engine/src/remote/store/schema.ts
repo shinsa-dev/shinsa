@@ -39,6 +39,7 @@ export interface TeamGrant {
   userId: string;
   teamId: string;
   secret: string;
+  joined?: boolean;
 }
 
 export interface TeammateExtra {
