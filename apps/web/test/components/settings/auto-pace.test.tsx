@@ -53,33 +53,11 @@ describe('the Auto pace settings', () => {
     expect(listSentCommands()).toEqual([{ type: 'settings.change', patch: { autoPace: true } }]);
   });
 
-  it('shows the budget left and orders projects by dragging or by their arrows', async () => {
+  it('shows the budget left, with no project order to keep', () => {
     renderAutoPace({ autoPace: true });
     expect(screen.getByText('Claude for the next 24 hours')).toBeTruthy();
     expect(screen.getByText('126% left')).toBeTruthy();
-    expect(screen.getByText('Project order')).toBeTruthy();
-    fireEvent.click(screen.getAllByRole('button', { name: 'Move down' })[0] as HTMLElement);
-    await settle();
-    expect(listSentCommands().at(-1)).toEqual({
-      type: 'settings.change',
-      patch: { projectOrder: ['web', 'app'] },
-    });
-    const rows = screen.getByText('Web').closest('[draggable]') as HTMLElement;
-    const first = screen.getByText('App').closest('[draggable]') as HTMLElement;
-    fireEvent.dragStart(rows, { dataTransfer: { effectAllowed: '' } });
-    fireEvent.dragOver(first);
-    fireEvent.drop(first);
-    await settle();
-    expect(listSentCommands().at(-1)).toEqual({
-      type: 'settings.change',
-      patch: { projectOrder: ['web', 'app'] },
-    });
-    fireEvent.click(screen.getAllByRole('button', { name: 'Move up' })[1] as HTMLElement);
-    await settle();
-    expect(listSentCommands().at(-1)).toEqual({
-      type: 'settings.change',
-      patch: { projectOrder: ['web', 'app'] },
-    });
+    expect(screen.queryByText('Project order')).toBeNull();
   });
 
   it('waits for the first usage reading before it shows a budget', () => {

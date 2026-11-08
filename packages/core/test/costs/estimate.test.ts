@@ -135,23 +135,39 @@ describe('resolveBuildEstimate', () => {
     expect(estimate?.trusted).toBe(true);
   });
 
-  test('takes the 70th percentile of the past builds nearest the plan, leaving out the task itself', () => {
+  test('fits past builds by plan size and sets the estimate at the 70th percentile of what they missed by', () => {
     const harness = createHarness();
     const base = createPlanned(harness);
-    for (let index = 1; index <= BUILD_ESTIMATE_LIMITS.neighbours; index += 1) {
-      writeFinished(harness, base, `near-${index}`, 2, index);
+    for (let index = 0; index < BUILD_ESTIMATE_LIMITS.minSamples; index += 1) {
+      writeFinished(harness, base, `past-${index}`, 2, index % 2 === 0 ? 5 : 15);
     }
-    for (let index = 0; index < 5; index += 1) writeFinished(harness, base, `far-${index}`, 8, 100);
-    const target = writeTask(harness, base, 'near-1', { phases: 2 });
+    const target = writeTask(harness, base, 'target', { phases: 2 });
     const estimate = resolveBuildEstimate(harness.state, target);
-    expect(estimate?.samples).toBe(BUILD_ESTIMATE_LIMITS.neighbours);
-    expect(estimate?.usd).toBe(15 * 2);
+    expect(estimate?.samples).toBe(BUILD_ESTIMATE_LIMITS.minSamples);
+    expect(estimate?.usd).toBeCloseTo(30, 0);
+  });
+
+  test('a larger plan is estimated to cost more, as the past builds say', () => {
+    const harness = createHarness();
+    const base = createPlanned(harness);
+    for (let index = 0; index < BUILD_ESTIMATE_LIMITS.minSamples; index += 1) {
+      const phases = (index % 5) + 1;
+      writeFinished(harness, base, `past-${index}`, phases, 4 * phases);
+    }
+    const small = resolveBuildEstimate(harness.state, writeTask(harness, base, 'small', { phases: 1 }));
+    const large = resolveBuildEstimate(harness.state, writeTask(harness, base, 'large', { phases: 4 }));
+    expect(small?.usd).toBeLessThan(8);
+    expect(large?.usd).toBeGreaterThan(40);
+    expect(large?.usd).toBeLessThan(90);
+    expect(large?.usd).toBeGreaterThan(8 * (small?.usd as number));
   });
 
   test('a past build is a sample only once it is finished, priced and has cost something', () => {
     const harness = createHarness();
     const base = createPlanned(harness);
-    writeFinished(harness, base, 'priced', 2, 5);
+    for (let index = 2; index < BUILD_ESTIMATE_LIMITS.minSamples; index += 1) {
+      writeFinished(harness, base, `priced-${index}`, 2, 5);
+    }
     writeFinished(harness, base, 'free', 2, 0);
     writeTask(harness, base, 'unpriced', { phases: 2, done: 2 });
     writeBuildRun(harness, 'unpriced', null);
@@ -159,15 +175,36 @@ describe('resolveBuildEstimate', () => {
     writeBuildRun(harness, 'unfinished', 50);
     writeTask(harness, base, 'skipped', { phases: 2, done: 2, status: 'skipped' });
     writeBuildRun(harness, 'skipped', 6, { role: 'reviewer', purpose: undefined });
-    writeBuildRun(harness, 'skipped', 1000, { purpose: 'plan' });
     writeBuildRun(harness, 'skipped', 1000, { round: 2 });
     writeBuildRun(harness, 'skipped', 1000, { usage: undefined });
     const target = writeTask(harness, base, 'target', { phases: 2 });
     expect(resolveBuildEstimate(harness.state, target)?.samples).toBe(0);
-    writeFinished(harness, base, 'third', 2, 4);
+    writeFinished(harness, base, 'last', 2, 5);
     const estimate = resolveBuildEstimate(harness.state, target);
-    expect(estimate?.samples).toBe(3);
-    expect(estimate?.usd).toBe(5 * 2);
+    expect(estimate?.samples).toBe(BUILD_ESTIMATE_LIMITS.minSamples);
+    expect(estimate?.usd).toBeCloseTo(10, 0);
+  });
+
+  test('counts what planning cost as a sign of how big the build is', () => {
+    const harness = createHarness();
+    const base = createPlanned(harness);
+    for (let index = 0; index < BUILD_ESTIMATE_LIMITS.minSamples; index += 1) {
+      const planUsd = index % 2 === 0 ? 1 : 9;
+      writeFinished(harness, base, `past-${index}`, 2, planUsd * 3);
+      writeBuildRun(harness, `past-${index}`, planUsd, { purpose: 'plan' });
+    }
+    const cheap = writeTask(harness, base, 'cheap', { phases: 2 });
+    writeBuildRun(harness, 'cheap', 1, {
+      purpose: 'plan',
+      usage: { inputTokens: 1, outputTokens: 1, cacheReadTokens: 0, cacheWriteTokens: 0, costUsd: 1 },
+    });
+    const dear = writeTask(harness, base, 'dear', { phases: 2 });
+    writeBuildRun(harness, 'dear', 9, { purpose: 'plan' });
+    const unpriced = writeTask(harness, base, 'unpriced-plan', { phases: 2 });
+    writeBuildRun(harness, 'unpriced-plan', null, { purpose: 'plan' });
+    const cheapUsd = resolveBuildEstimate(harness.state, cheap)?.usd as number;
+    expect(resolveBuildEstimate(harness.state, dear)?.usd).toBeGreaterThan(cheapUsd * 3);
+    expect(resolveBuildEstimate(harness.state, unpriced)?.usd).toBeLessThan(cheapUsd);
   });
 
   test('before a phase is done it subtracts what the build has spent, and never goes below nothing', () => {

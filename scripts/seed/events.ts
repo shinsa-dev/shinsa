@@ -27,7 +27,6 @@ export function buildEvents(tasks: SeedTask[], projects: Project[], repos: Repo[
       ...createSettings(),
       taskUsageLimit: 10,
       autoPace: true,
-      projectOrder: ['project-superwall', 'project-basket', 'project-personal'],
     },
   });
   push(NOW - HOUR, { type: 'usage.pace_recorded', provider: 'claude', pace: 140 });

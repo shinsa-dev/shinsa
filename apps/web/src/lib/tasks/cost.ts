@@ -95,7 +95,7 @@ function describeEstimateAmount(usd: number, percent: number | null) {
 
 function describeEstimateBasis(estimate: BuildEstimate) {
   return estimate.samples > 0
-    ? `${describeCount(estimate.samples, 'similar build')} you ran`
+    ? `What ${describeCount(estimate.samples, 'past build')} cost, by plan size`
     : 'The usual cost of a plan this size';
 }
 

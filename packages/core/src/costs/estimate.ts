@@ -5,11 +5,10 @@ import type { ShinsaState } from '../state/project.ts';
 import { resolveMeterWindow, resolveUsageRates, type UsageRate } from './rate.ts';
 
 export const BUILD_ESTIMATE_LIMITS = {
-  neighbours: 20,
   quantile: 0.7,
-  minSamples: 3,
+  minSamples: 20,
+  ridge: 2,
   priorPhases: 1,
-  checksWeight: 0.5,
 } as const;
 
 export const DEFAULT_BUILD_COSTS = {
@@ -33,26 +32,39 @@ export interface BuildEstimate {
 interface BuildShape {
   phases: number;
   files: number;
-  checks: number;
+  text: number;
+  planUsd: number;
 }
 
 interface BuildSample extends BuildShape {
-  taskId: string;
-  usdPerPhase: number;
+  usd: number;
+}
+
+interface BuildModel {
+  weights: number[];
+  offset: number;
+  samples: number;
 }
 
 type EstimateState = Pick<ShinsaState, 'tasks' | 'runs' | 'accountPlans'>;
 
-const SAMPLES = new WeakMap<Record<string, Task>, WeakMap<Record<string, Run>, BuildSample[]>>();
+const MODELS = new WeakMap<Record<string, Task>, WeakMap<Record<string, Run>, BuildModel | null>>();
 const SETTLED_PHASES = new Set(['done', 'skipped']);
 
-function resolveBuildShape(task: Task): BuildShape | null {
+function resolvePlanUsd(runs: Record<string, Run>, task: Task) {
+  return Object.values(runs)
+    .filter((run) => run.taskId === task.id && run.purpose === 'plan' && isOfCurrentRound(task, run))
+    .reduce((sum, run) => sum + (run.usage?.costUsd ?? 0), 0);
+}
+
+function resolveBuildShape(runs: Record<string, Run>, task: Task): BuildShape | null {
   const document = task.plan?.document;
   if (!document || document.phases.length === 0 || task.phases.length === 0) return null;
   return {
     phases: document.phases.length,
     files: document.files.length,
-    checks: document.verification.length,
+    text: JSON.stringify(document).length,
+    planUsd: resolvePlanUsd(runs, task),
   };
 }
 
@@ -75,36 +87,39 @@ function resolveSpentUsd(runs: Run[]) {
 }
 
 function resolveSample(runs: Record<string, Run>, task: Task): BuildSample | null {
-  const shape = resolveBuildShape(task);
+  const shape = resolveBuildShape(runs, task);
   if (!shape || countDonePhases(task) < task.phases.length) return null;
   const built = listBuildRuns(runs, task).filter((run) => run.usage);
   if (built.some((run) => run.usage?.costUsd === null)) return null;
   const usd = resolveSpentUsd(built);
-  return usd > 0 ? { ...shape, taskId: task.id, usdPerPhase: usd / shape.phases } : null;
+  return usd > 0 ? { ...shape, usd } : null;
 }
 
-function listBuildSamples(state: EstimateState) {
-  const byRuns = SAMPLES.get(state.tasks) ?? new WeakMap<Record<string, Run>, BuildSample[]>();
-  SAMPLES.set(state.tasks, byRuns);
-  const known = byRuns.get(state.runs);
-  if (known) return known;
-  const samples = Object.values(state.tasks)
-    .map((task) => resolveSample(state.runs, task))
-    .filter((sample) => sample !== null);
-  byRuns.set(state.runs, samples);
-  return samples;
-}
-
-function resolveLogDistance(a: number, b: number) {
-  return Math.abs(Math.log((a + 1) / (b + 1)));
-}
-
-function resolveDistance(shape: BuildShape, sample: BuildSample) {
-  return (
-    resolveLogDistance(shape.phases, sample.phases) +
-    resolveLogDistance(shape.files, sample.files) +
-    BUILD_ESTIMATE_LIMITS.checksWeight * resolveLogDistance(shape.checks, sample.checks)
+function resolveFeatures(shape: BuildShape) {
+  return [1, shape.phases, shape.files, shape.text, shape.planUsd].map((value, index) =>
+    index === 0 ? value : Math.log(value + 1)
   );
+}
+
+function solveLinear(matrix: number[][], vector: number[]) {
+  const size = vector.length;
+  const rows = matrix.map((row, index) => [...row, vector[index] as number]);
+  for (let column = 0; column < size; column += 1) {
+    let pivot = column;
+    for (let row = column + 1; row < size; row += 1) {
+      if (Math.abs(rows[row]?.[column] as number) > Math.abs(rows[pivot]?.[column] as number)) pivot = row;
+    }
+    [rows[column], rows[pivot]] = [rows[pivot] as number[], rows[column] as number[]];
+    const lead = rows[column] as number[];
+    for (let row = 0; row < size; row += 1) {
+      const current = rows[row] as number[];
+      const factor = row === column ? 0 : (current[column] as number) / (lead[column] as number);
+      for (let index = column; index <= size; index += 1) {
+        current[index] = (current[index] as number) - factor * (lead[index] as number);
+      }
+    }
+  }
+  return rows.map((row, index) => (row[size] as number) / (row[index] as number));
 }
 
 function resolveQuantile(values: number[], quantile: number) {
@@ -112,21 +127,58 @@ function resolveQuantile(values: number[], quantile: number) {
   return sorted[Math.max(0, Math.ceil(quantile * sorted.length) - 1)] as number;
 }
 
+function resolvePrediction(weights: number[], features: number[]) {
+  return features.reduce((sum, value, index) => sum + value * (weights[index] as number), 0);
+}
+
+function fitBuildModel(samples: BuildSample[]): BuildModel | null {
+  if (samples.length < BUILD_ESTIMATE_LIMITS.minSamples) return null;
+  const rows = samples.map(resolveFeatures);
+  const targets = samples.map((sample) => Math.log(sample.usd));
+  const size = rows[0]?.length as number;
+  const gram = Array.from({ length: size }, (_, row) =>
+    Array.from({ length: size }, (_unused, column) =>
+      rows.reduce(
+        (sum, features) => sum + (features[row] as number) * (features[column] as number),
+        row === column && row > 0 ? BUILD_ESTIMATE_LIMITS.ridge / rows.length : 0
+      )
+    )
+  );
+  const moment = Array.from({ length: size }, (_, row) =>
+    rows.reduce((sum, features, index) => sum + (features[row] as number) * (targets[index] as number), 0)
+  );
+  const weights = solveLinear(gram, moment);
+  const residuals = rows.map(
+    (features, index) => (targets[index] as number) - resolvePrediction(weights, features)
+  );
+  return {
+    weights,
+    offset: resolveQuantile(residuals, BUILD_ESTIMATE_LIMITS.quantile),
+    samples: samples.length,
+  };
+}
+
+function resolveBuildModel(state: EstimateState) {
+  const byRuns = MODELS.get(state.tasks) ?? new WeakMap<Record<string, Run>, BuildModel | null>();
+  MODELS.set(state.tasks, byRuns);
+  if (byRuns.has(state.runs)) return byRuns.get(state.runs) ?? null;
+  const samples = Object.values(state.tasks)
+    .map((task) => resolveSample(state.runs, task))
+    .filter((sample) => sample !== null);
+  const model = fitBuildModel(samples);
+  byRuns.set(state.runs, model);
+  return model;
+}
+
 function resolveDefaultPerPhase(phases: number) {
   const table = DEFAULT_BUILD_COSTS.usdPerPhase;
   return table[Math.min(phases, table.length) - 1] as number;
 }
 
-function resolvePriorPerPhase(samples: BuildSample[], shape: BuildShape) {
-  if (samples.length < BUILD_ESTIMATE_LIMITS.minSamples) {
-    return { perPhase: resolveDefaultPerPhase(shape.phases), samples: 0 };
-  }
-  const nearest = samples
-    .map((sample) => ({ sample, distance: resolveDistance(shape, sample) }))
-    .sort((a, b) => a.distance - b.distance)
-    .slice(0, BUILD_ESTIMATE_LIMITS.neighbours)
-    .map(({ sample }) => sample.usdPerPhase);
-  return { perPhase: resolveQuantile(nearest, BUILD_ESTIMATE_LIMITS.quantile), samples: nearest.length };
+function resolvePriorPerPhase(model: BuildModel | null, shape: BuildShape) {
+  if (!model) return { perPhase: resolveDefaultPerPhase(shape.phases), samples: 0 };
+  const usd = Math.exp(resolvePrediction(model.weights, resolveFeatures(shape)) + model.offset);
+  return { perPhase: usd / shape.phases, samples: model.samples };
 }
 
 function isBetterRate(rate: UsageRate, best: UsageRate) {
@@ -167,10 +219,9 @@ function resolveRemainingUsd(perPhase: number, shape: BuildShape, done: number, 
 }
 
 export function resolveBuildEstimate(state: EstimateState, task: Task): BuildEstimate | null {
-  const shape = resolveBuildShape(task);
+  const shape = resolveBuildShape(state.runs, task);
   if (!shape) return null;
-  const samples = listBuildSamples(state).filter((sample) => sample.taskId !== task.id);
-  const prior = resolvePriorPerPhase(samples, shape);
+  const prior = resolvePriorPerPhase(resolveBuildModel(state), shape);
   const done = countDonePhases(task);
   const spentUsd = resolveSpentUsd(listBuildRuns(state.runs, task));
   const remainingUsd = resolveRemainingUsd(prior.perPhase, shape, done, spentUsd);

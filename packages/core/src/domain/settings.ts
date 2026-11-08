@@ -82,7 +82,6 @@ export interface Settings {
   shareLimit?: ShareLimit;
   sharePreset?: SharePreset;
   autoPace?: boolean;
-  projectOrder?: string[];
 }
 
 export const SETTINGS_KEYS = [
@@ -115,7 +114,6 @@ export const SETTINGS_KEYS = [
   'shareLimit',
   'sharePreset',
   'autoPace',
-  'projectOrder',
 ] as const satisfies readonly (keyof Settings)[];
 
 export const HUMAN_ONLY_SETTINGS = [
@@ -134,7 +132,6 @@ export const HUMAN_ONLY_SETTINGS = [
   'sharePreset',
   'watchdogsIgnoreUsageLimits',
   'autoPace',
-  'projectOrder',
 ] as const satisfies readonly (keyof Settings)[];
 
 export const HUMAN_ONLY_REPO_FIELDS = ['checkCommands', 'workspace', 'coverage'] as const;
@@ -169,10 +166,6 @@ export function resolveAutoPace(settings: Settings) {
   return settings.autoPace ?? false;
 }
 
-export function resolveProjectOrder(settings: Settings): readonly string[] {
-  return settings.projectOrder ?? [];
-}
-
 const DEFAULT_SETTINGS: Settings = {
   defaultProvider: CLAUDE_PROVIDER,
   defaultModel: DEFAULT_MODEL,
@@ -202,7 +195,6 @@ const DEFAULT_SETTINGS: Settings = {
   shareLimit: DEFAULT_SHARE_LIMIT,
   sharePreset: DEFAULT_SHARE_PRESET,
   autoPace: false,
-  projectOrder: [],
 };
 
 export function createSettings(): Settings {

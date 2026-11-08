@@ -263,7 +263,7 @@ export function holdForAdmission(decider: Decider, run: Run) {
   const waiting = listAdmissionWaits(decider).filter(
     (other) => other.id !== task.id && (other.usageWait?.provider ?? CLAUDE_PROVIDER) === provider
   );
-  const first = sortAdmissionQueue(decider.state, [...waiting, task])[0];
+  const first = sortAdmissionQueue(decider.state, [...waiting, task], decider.context.now)[0];
   if (verdict.fits && first?.id === task.id) return false;
   const ahead = first && first.id !== task.id ? (first.usageWait?.resetAt ?? null) : null;
   armPaceWait(decider, run, resolveAdmissionLimit(verdict), resolveQueuedFreesAt(verdict, ahead));
@@ -299,7 +299,7 @@ export function admitBuilds(decider: Decider) {
   if (waiting.length === 0) return;
   const autoPace = resolveAutoPace(decider.state.settings);
   const blocked = new Map<string, number>();
-  for (const queued of sortAdmissionQueue(decider.state, waiting)) {
+  for (const queued of sortAdmissionQueue(decider.state, waiting, decider.context.now)) {
     const task = decider.task(queued.id);
     const wait = task.usageWait;
     if (!isAdmissionWait(wait)) continue;

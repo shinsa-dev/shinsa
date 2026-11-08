@@ -449,14 +449,11 @@ describe('settings', () => {
     }
   });
 
-  test('Auto pace is off until you switch it on, and the project order lists each project once', () => {
+  test('Auto pace is off until you switch it on', () => {
     const harness = createHarness();
     expect(harness.state.settings.autoPace).toBe(false);
-    harness.send({ type: 'settings.change', patch: { autoPace: true, projectOrder: ['shinsa', 'superwall'] } });
-    expect(harness.state.settings).toMatchObject({ autoPace: true, projectOrder: ['shinsa', 'superwall'] });
-    expect(() =>
-      harness.send({ type: 'settings.change', patch: { projectOrder: ['shinsa', 'shinsa'] } })
-    ).toThrow('List each project once in the project order.');
+    harness.send({ type: 'settings.change', patch: { autoPace: true } });
+    expect(harness.state.settings.autoPace).toBe(true);
   });
 
   test('accounts switch at a whole percentage from 1 to 100', () => {

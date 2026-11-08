@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import type { Run, RunUsage } from '@shinsa/core';
+import { BUILD_ESTIMATE_LIMITS, type Run, type RunUsage } from '@shinsa/core';
 import { describeBudgetRetry, describeBuildEstimateFact, resolveCostFacts } from '@/lib/tasks/cost.ts';
 import { createRun, createShinsaState, createTask } from '../../support/state.ts';
 
@@ -212,7 +212,7 @@ describe('the cost of a task', () => {
       { key: 'whole', label: 'Whole build', value: 'About $7.60' },
       { key: 'basis', label: 'Based on', value: 'The usual cost of a plan this size' },
     ]);
-    const past = Array.from({ length: 3 }, (_, index) =>
+    const past = Array.from({ length: BUILD_ESTIMATE_LIMITS.minSamples }, (_, index) =>
       createTask({ id: `past-${index}`, plan, phases: [done, done] })
     );
     const pastRuns = past.map((task) =>
@@ -227,7 +227,7 @@ describe('the cost of a task', () => {
     expect(resolveCostFacts(state, halfway)?.build).toEqual([
       { key: 'whole', label: 'Whole build', value: 'About 11%' },
       { key: 'left', label: 'Left to build', value: 'About 5%' },
-      { key: 'basis', label: 'Based on', value: '3 similar builds you ran' },
+      { key: 'basis', label: 'Based on', value: 'What 20 past builds cost, by plan size' },
     ]);
     expect(describeBuildEstimateFact(createShinsaState({ tasks: [fresh], runs: [planning] }), fresh)).toBe(
       'About $7.60 to build'

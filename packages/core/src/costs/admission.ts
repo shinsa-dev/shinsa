@@ -1,8 +1,9 @@
 import { CLAUDE_PROVIDER } from '../agent-models/index.ts';
 import {
+  DAY_MS,
+  type Gate,
   isTaskSettled,
   MINUTE_MS,
-  resolveProjectOrder,
   type Run,
   type Task,
   type TaskPriority,
@@ -17,7 +18,14 @@ export const ADMISSION_LIMITS = {
   recheckMs: 30 * MINUTE_MS,
 } as const;
 
+export const ENGAGEMENT_LIMITS = {
+  windowMs: 14 * DAY_MS,
+  minAnswers: 3,
+} as const;
+
 const PRIORITY_RANK: Record<TaskPriority, number> = { urgent: 0, high: 1, normal: 2, low: 3 };
+
+const RESPONSES = new WeakMap<Record<string, Gate>, Map<string, number>>();
 
 export interface AdmissionVerdict {
   fits: boolean;
@@ -56,9 +64,33 @@ export function listBuildingTasks(state: ShinsaState) {
   return building;
 }
 
-function resolveProjectRank(order: readonly string[], task: Task) {
-  const index = task.projectId ? order.indexOf(task.projectId) : -1;
-  return index === -1 ? order.length : index;
+function resolveMedian(values: number[]) {
+  const sorted = [...values].sort((a, b) => a - b);
+  return sorted[Math.floor(sorted.length / 2)] as number;
+}
+
+export function resolveProjectResponses(state: Pick<ShinsaState, 'gates' | 'tasks'>, now: number) {
+  const known = RESPONSES.get(state.gates);
+  if (known) return known;
+  const byProject = new Map<string, number[]>();
+  for (const gate of Object.values(state.gates)) {
+    const projectId = state.tasks[gate.taskId]?.projectId;
+    if (!projectId || gate.answeredAt === null || now - gate.answeredAt > ENGAGEMENT_LIMITS.windowMs)
+      continue;
+    byProject.set(projectId, [...(byProject.get(projectId) ?? []), gate.answeredAt - gate.openedAt]);
+  }
+  const responses = new Map<string, number>();
+  for (const [projectId, waits] of byProject) {
+    if (waits.length >= ENGAGEMENT_LIMITS.minAnswers) responses.set(projectId, resolveMedian(waits));
+  }
+  RESPONSES.set(state.gates, responses);
+  return responses;
+}
+
+function resolveProjectRank(state: ShinsaState, responses: Map<string, number>, task: Task) {
+  if (!task.projectId) return Number.POSITIVE_INFINITY;
+  if (task.projectId === state.focus.projectId) return Number.NEGATIVE_INFINITY;
+  return responses.get(task.projectId) ?? Number.POSITIVE_INFINITY;
 }
 
 function countUnblocked(state: ShinsaState, task: Task) {
@@ -67,20 +99,23 @@ function countUnblocked(state: ShinsaState, task: Task) {
   ).length;
 }
 
-export function sortAdmissionQueue(state: ShinsaState, tasks: readonly Task[]) {
-  const order = resolveProjectOrder(state.settings);
+function compareRanks(a: number, b: number) {
+  if (a === b) return 0;
+  return a < b ? -1 : 1;
+}
+
+export function sortAdmissionQueue(state: ShinsaState, tasks: readonly Task[], now: number) {
+  const responses = resolveProjectResponses(state, now);
   const keyed = tasks.map((task) => ({
     task,
-    urgent: task.priority === 'urgent' ? 0 : 1,
-    project: resolveProjectRank(order, task),
     priority: PRIORITY_RANK[task.priority],
+    project: resolveProjectRank(state, responses, task),
     unblocks: countUnblocked(state, task),
   }));
   keyed.sort(
     (a, b) =>
-      a.urgent - b.urgent ||
-      a.project - b.project ||
       a.priority - b.priority ||
+      compareRanks(a.project, b.project) ||
       b.unblocks - a.unblocks ||
       a.task.createdAt - b.task.createdAt ||
       a.task.id.localeCompare(b.task.id)

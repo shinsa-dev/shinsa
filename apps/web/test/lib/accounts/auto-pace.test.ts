@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import { createSettings, type UsageWait } from '@shinsa/core';
-import { listPaceBudgets, listRankedProjects, moveProject, shiftProject } from '@/lib/accounts/auto-pace.ts';
+import { listPaceBudgets } from '@/lib/accounts/auto-pace.ts';
 import { createProject, createShinsaState, createTask, NOW } from '../../support/state.ts';
 
 function admission(provider?: string): UsageWait {
@@ -55,27 +55,5 @@ describe('Auto pace in Settings', () => {
     expect(listPaceBudgets(idle, NOW)[0]?.detail).toBe(
       'Of 2% of a weekly limit, with 10% kept for urgent tasks'
     );
-  });
-
-  it('ranks projects by your order, the rest by name, and moves one by dragging or by a step', () => {
-    const projects = [
-      createProject({ id: 'side', name: 'Side' }),
-      createProject({ id: 'web', name: 'Web' }),
-      createProject({ id: 'app', name: 'App' }),
-    ];
-    const state = createShinsaState({
-      projects,
-      patch: { settings: { ...createSettings(), projectOrder: ['web'] } },
-    });
-    expect(listRankedProjects(state).map((project) => project.id)).toEqual(['web', 'app', 'side']);
-    const order = ['web', 'app', 'side'];
-    expect(moveProject(order, 'side', 'web')).toEqual(['side', 'web', 'app']);
-    expect(moveProject(order, 'web', 'side')).toEqual(['app', 'side', 'web']);
-    expect(moveProject(order, 'web', 'web')).toEqual(order);
-    expect(moveProject(order, 'gone', 'web')).toEqual(order);
-    expect(shiftProject(order, 'app', -1)).toEqual(['app', 'web', 'side']);
-    expect(shiftProject(order, 'app', 1)).toEqual(['web', 'side', 'app']);
-    expect(shiftProject(order, 'web', -1)).toEqual(order);
-    expect(shiftProject(order, 'side', 1)).toEqual(order);
   });
 });

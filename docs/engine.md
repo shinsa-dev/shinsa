@@ -1274,7 +1274,7 @@ and only the order in which finished work reaches you is managed.
 - **No hold but the one you choose.** Shinsa never parks new work on its own while decisions pile up, and never
   because usage runs low unless you switched Auto pace on (Agent usage → Auto pace, below): holding the compute only
   delays work you asked for, and priority already keeps finished work out of your way. With Auto pace on, a build
-  waits its turn within the forecast's safe pace, ordered by priority and your project order; planning, questions
+  waits its turn within the forecast's safe pace, ordered by priority and then the projects you work on most; planning, questions
   and answers still never wait. Work you want planned now and built later goes in the backlog, and only you (or an
   agent you asked) put it there; triage and Auto pace never do.
 
@@ -2227,12 +2227,13 @@ checks it ran.
   held (`releasePaceHolds`) and retries one a budget gate held, over the limit or not (`releaseBudgetHolds`). An account out of usage still holds a check as it holds any run, and the tasks a
   watchdog files are ordinary tasks that follow every limit.
 - **What a build will cost** (`costs/estimate.ts`, `resolveBuildEstimate`, pure, derived every time). A task with a
-  plan has an estimate of its build: the build, fix and review runs of the current round. Its shape is the plan's
-  phases, files and checks; a finished build is a sample of its cost per phase. With at least 3 samples
-  (`BUILD_ESTIMATE_LIMITS`) the estimate takes the 20 nearest by shape (log distance on phases and files, half
-  weight on checks) and their 70th percentile per phase, times the task's phases: on 303 past builds the median came
-  in under the real cost 55% of the time and the 70th percentile about a third, so it errs toward starting one task
-  fewer. With fewer samples it uses `DEFAULT_BUILD_COSTS`, measured on 2026-11-08 from those builds ($3.80 a phase
+  plan has an estimate of its build: the build, fix and review runs of the current round. A finished build is a
+  sample, described by the log of its plan's phases, files and length, and of what planning it cost. With at least
+  20 samples (`BUILD_ESTIMATE_LIMITS`) a ridge-regularised linear fit of the log cost over those four, fitted once
+  per state change on every sample, predicts the build, raised by the 70th percentile of how far the fit missed past
+  builds, so it errs toward starting one task fewer. Tested on 303 past builds, each estimated only from those
+  before it, its typical miss was a factor of 1.5 (a factor of 1.8 for the 20 nearest builds by plan shape it
+  replaced) and it came in under the real cost about 25% of the time. With fewer samples it uses `DEFAULT_BUILD_COSTS`, measured on 2026-11-08 from those builds ($3.80 a phase
   for one or two phases, rising to $20 a phase at six or more). Before a phase is done, what is left is the estimate
   minus what was spent; after each phase, the rest is the remaining phases times the average of the estimate (worth
   one phase) and the real cost per finished phase. In percent it uses the rate of the task's account, or its last
@@ -2243,7 +2244,7 @@ checks it ran.
   with every usable reset grant that clears the weekly limit counted as a full refill) on every accounts refresh and
   records it when it moved by a whole point (`isPaceMoved`, `FORECAST_LIMITS.paceStep`) or appeared or went away. Settings'
   own forecast still leaves grants out, since you claim them in the Claude app, so it can read lower.
-- **Auto pace** (`autoPace`, off by default, and the project order, `projectOrder`, both only yours, in
+- **Auto pace** (`autoPace`, off by default, only yours, in
   `HUMAN_ONLY_SETTINGS`, offered only on an engine with `usage.auto_pace`). With it off everything starts at once,
   as above. With it on, a task's first build run in a round waits for admission (`holdForAdmission` in
   `dispatchRuns`, after the task limits and before the daily and project limits) unless its build already started, it is delegated, or
@@ -2254,9 +2255,10 @@ checks it ran.
     (`ADMISSION_LIMITS.reserve`; an urgent build may use all of it), minus the provider's last 24 hours and the
     estimated rest of every build already started (`resolveAdmission`). A build fits when its estimate does; one
     larger than the whole budget counts as the budget, so it starts once nothing else is using it.
-  - **The queue** (`sortAdmissionQueue`): urgent first, then the project order you set (Settings → Agent usage → Auto
-    pace, by dragging or the arrows; a project not in it comes after those that are), then task priority, then how
-    many open tasks wait on it, then age. A build that fits still waits behind one ranked ahead of it on the same
+  - **The queue** (`sortAdmissionQueue`), with nothing to set: task priority (urgent first), then the focus project,
+    then the projects you act on most, learned as the median time from a gate opening to your answer over the last 14
+    days (`resolveProjectResponses`, `ENGAGEMENT_LIMITS`, at least 3 answers; a project without them comes after),
+    then how many open tasks wait on it, then age. A build that fits still waits behind one ranked ahead of it on the same
     provider, so smaller tasks never starve a larger one.
   - **The hold** is a pace hold with scope `admission` (`usage_wait.armed`, `cause: pace`, stage reason "waiting its
     turn to build within today's usage", `resetAt` the time the last 24 hours free enough room, else 30 minutes).
@@ -2267,7 +2269,7 @@ checks it ran.
     admitted still stops at the daily and project limits.
   - **On screen** a held task's status is "Waiting to build", its card "Builds tonight" (when you are here now and
     its time falls in your away hours) or "Builds after 3:40 AM", with Build now. Settings → Agent usage → Auto pace has the switch, the
-    budget for the next 24 hours with the reserve and how many builds wait, and the project order. Home adds "1 task
+    budget for the next 24 hours with the reserve and how many builds wait. Home adds "1 task
     builds tonight" and, once you are back, how many tasks built overnight are ready for your review.
 - **The night shift** (`costs/away.ts`, `prompts/night.ts`), on top of Auto pace and needing no setting of its own.
   Your away hours are learned from the last 14 days (`AWAY_LIMITS`): an hour of the day is away when the `away`
@@ -3483,7 +3485,7 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   `comments`, `changelog` for `GET /api/changelog`, `remote.terminals` for terminal streams on the sealed channel,
   `attention` for routing notifications to the device you use, `worktree-root` for the worktree folder and
   `usage.pace_limits` for `dailyUsageLimit` and `Project.usageLimit`, `usage.watchdog_limits` for
-  `watchdogsIgnoreUsageLimits` and `usage.auto_pace` for `autoPace` and `projectOrder`, today;
+  `watchdogsIgnoreUsageLimits` and `usage.auto_pace` for `autoPace`, today;
   Settings → Teams, the review's Fix and approve choice and
   What's new show only on an engine that has them). `ENGINE_PROTOCOL` is the hard floor: a machine whose protocol differs from the page's is left out of the
   dashboard, merges nothing and gets no command, and Settings → Machines says "Update Shinsa on <name> to reach it from
@@ -4743,7 +4745,7 @@ plainly what protects what.
   - the settings that spend money, merge, share or decide for you (`HUMAN_ONLY_SETTINGS` in `domain/settings.ts`:
     `approvePlans`, `mergeMethod`, `taskBudgetUsd`, `taskUsageLimit`, `dailyUsageLimit`, `autoResume`,
     `snoozeLimited`, `accountSwitchAt`, `fastMode`, `agentFastModes`, `delegationLimit`, `shareLimit`, `sharePreset`,
-    `watchdogsIgnoreUsageLimits`, `autoPace`, `projectOrder`), a
+    `watchdogsIgnoreUsageLimits`, `autoPace`), a
     project's usage limit (`Project.usageLimit`) and a repository's own check commands,
     workspace and coverage (`HUMAN_ONLY_REPO_FIELDS`: `checkCommands`, `workspace`, `coverage`); agents keep the rest
     (models, providers, fix rounds, attention, compaction), and a task's own checks are the agent's (Checks, above);

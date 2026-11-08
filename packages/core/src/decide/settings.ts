@@ -52,10 +52,6 @@ function assertSettings(patch: Partial<Settings>) {
   if (capacity !== undefined && capacity !== null && !isWholeBetween(capacity, 1, Number.MAX_SAFE_INTEGER)) {
     throw new DomainError({ code: 'settings_invalid', message: 'Task capacity must be 1 or more.' });
   }
-  const order = patch.projectOrder;
-  if (order && new Set(order).size !== order.length) {
-    throw new DomainError({ code: 'settings_invalid', message: 'List each project once in the project order.' });
-  }
   const policies = patch.placementPolicies;
   if (policies && !isPlacementPoliciesValid(policies)) {
     throw new DomainError({
