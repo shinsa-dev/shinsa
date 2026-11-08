@@ -1,6 +1,7 @@
 import { STAGE_WORDS } from '../chat/references.ts';
 import { capitalise, describeCount } from '../chat/text.ts';
 import { isTaskClosed, isTaskResting } from '../domain/rounds.ts';
+import type { DeliveringStep, TaskResult } from '../domain/shapes.ts';
 import type { SlackDecided } from '../domain/slack.ts';
 import type { Gate, GateDecision, GateType, Task, TaskStage } from '../domain/types.ts';
 import type { Watchdog, WatchdogStatus } from '../domain/watchdogs.ts';
@@ -61,7 +62,15 @@ const SLACK_CARD_GATES: readonly GateType[] = [
   'plan',
   'review',
   'merge',
+  'result',
 ];
+
+const RESULT_HEADERS: Record<DeliveringStep, string> = {
+  answer: 'Answer',
+  research: 'Report',
+  investigate: 'Diagnosis',
+  operate: 'Outcome',
+};
 
 const NEEDS_YOU_STAGES: ReadonlySet<TaskStage> = new Set<TaskStage>([
   'awaiting_plan',
@@ -211,13 +220,19 @@ function resolveCardGate(gates: readonly Gate[]) {
   return null;
 }
 
+function selectKeptResult(task: Task) {
+  if (!task.result || resolveSlackStage(task) !== 'done' || task.pullRequest?.state === 'merged') return null;
+  return task.result;
+}
+
 export function serializeSlackCard(task: Task, gates: readonly Gate[], taskUrl: string): SlackMessage {
   const gate = resolveCardGate(gates);
   const view = gate ? serializeSlackGate(task, gate, taskUrl) : null;
-  return (
-    view ??
-    serializeSlackStatusView(resolveTaskRef(task, taskUrl), resolveStatusLabel(task), task.slack?.decided)
-  );
+  if (view) return view;
+  const ref = resolveTaskRef(task, taskUrl);
+  const kept = selectKeptResult(task);
+  if (kept) return serializeSlackKeptResultView(ref, kept, task.slack?.decided);
+  return serializeSlackStatusView(ref, resolveStatusLabel(task), task.slack?.decided);
 }
 
 function resolveDecisionValue(
@@ -367,11 +382,20 @@ function serializeSlackMergeView(ref: SlackTaskRef, gate: Gate, view: SlackRevie
   ]);
 }
 
-function serializeSlackProposalView(ref: SlackTaskRef, gate: Gate, request: string): SlackMessage {
-  const { sections, cut } = listBodySections(serializeQuote(request || 'A change to the code.'), 3);
+function serializeSlackProposalView(
+  ref: SlackTaskRef,
+  gate: Gate,
+  request: string,
+  result: TaskResult | null
+): SlackMessage {
+  const change = serializeQuote(request || 'A change to the code.');
+  const { sections, cut } = result
+    ? listBodySections(serializeSlackMrkdwn(result.body.trim()), 4)
+    : listBodySections(change, 3);
   return createSlackMessage(`${ref.label} proposes a change.`, [
-    createSlackHeader('Proposed change'),
+    createSlackHeader(result ? RESULT_HEADERS[result.step] : 'Proposed change'),
     ...sections,
+    ...(result ? [createSlackSection(`*Proposed change*\n${change}`)] : []),
     createGateActions(gate, [
       createDecideButton('Approve', resolveDecisionValue(gate, 'approve'), true),
       createDecideButton('Keep as is', resolveDecisionValue(gate, 'reject')),
@@ -460,15 +484,16 @@ export function serializeSlackGate(task: Task, gate: Gate, taskUrl: string): Sla
     case 'merge':
       return serializeSlackMergeView(ref, gate, resolveReviewView(task));
     case 'proposal':
-      return serializeSlackProposalView(ref, gate, task.proposal?.request ?? '');
+      return serializeSlackProposalView(ref, gate, task.proposal?.request ?? '', task.result ?? null);
     case 'failure':
     case 'sign_in':
       return serializeSlackFailureView(ref, gate);
     case 'operation':
       return serializeSlackOperationView(ref, gate);
+    case 'result':
+      return task.result ? serializeSlackResultView(ref, gate, task.result) : null;
     case 'configuration':
     case 'post_merge':
-    case 'result':
       return null;
   }
 }
@@ -483,20 +508,34 @@ function listBodySections(mrkdwn: string, fixedBlocks: number) {
   return { sections: sections.map((chunk) => createSlackSection(chunk)), cut };
 }
 
-function serializeSlackResultView(ref: SlackTaskRef, markdown: string): SlackMessage {
-  const body = markdown.trim();
+function serializeSlackResultView(ref: SlackTaskRef, gate: Gate, result: TaskResult): SlackMessage {
+  const body = result.body.trim();
   const { sections, cut } = listBodySections(serializeSlackMrkdwn(body), 3);
   return createSlackMessage(resolveLead(body) || ref.label, [
-    createSlackHeader('Result'),
+    createSlackHeader(RESULT_HEADERS[result.step]),
     ...sections,
-    createSlackActions([createOpenButton(resolveOpenLabel(cut, 'Open in Shinsa'), ref.url, false)]),
+    createGateActions(gate, [
+      createDecideButton('Close', resolveDecisionValue(gate, 'approve'), true),
+      createOpenButton(resolveOpenLabel(cut, 'Open in Shinsa'), ref.url, false),
+    ]),
     serializeFooter(ref),
   ]);
 }
 
-export function serializeSlackResult(task: Task, taskUrl: string): SlackMessage | null {
-  if (!task.result) return null;
-  return serializeSlackResultView(resolveTaskRef(task, taskUrl), task.result.body);
+function serializeSlackKeptResultView(
+  ref: SlackTaskRef,
+  result: TaskResult,
+  decided: SlackDecided | null | undefined
+): SlackMessage {
+  const body = result.body.trim();
+  const fixedBlocks = 2 + (decided ? 1 : 0);
+  const { sections } = listBodySections(serializeSlackMrkdwn(body), fixedBlocks);
+  return createSlackMessage(resolveLead(body) || ref.label, [
+    createSlackHeader(RESULT_HEADERS[result.step]),
+    ...sections,
+    ...serializeDecided(decided),
+    serializeFooter(ref),
+  ]);
 }
 
 function serializeNote(fallback: string, title: string, detail: string, ref: SlackTaskRef | null) {
@@ -504,11 +543,6 @@ function serializeNote(fallback: string, title: string, detail: string, ref: Sla
     createSlackSection(`*${escapeSlackText(title)}*\n${escapeSlackText(detail)}`),
     ...(ref ? [serializeFooter(ref)] : []),
   ]);
-}
-
-export function serializeSlackCompleted(task: Task, taskUrl: string) {
-  const ref = resolveTaskRef(task, taskUrl);
-  return serializeNote(`${ref.label} is done.`, 'Done', 'The task is finished.', ref);
 }
 
 interface SlackMergedView {
@@ -646,15 +680,7 @@ export function resolveSlackPostMessage(
   resolveTaskUrl: (taskId: string) => string
 ): SlackMessage | null {
   const task = state.tasks[taskId];
-  if (!task) return null;
-  switch (post.kind) {
-    case 'completed':
-      return serializeSlackCompleted(task, resolveTaskUrl(taskId));
-    case 'tripped':
-      return serializeSlackTripped(state, task, post.watchdogId, resolveTaskUrl);
-    case 'result':
-      return serializeSlackResult(task, resolveTaskUrl(taskId));
-  }
+  return task ? serializeSlackTripped(state, task, post.watchdogId, resolveTaskUrl) : null;
 }
 
 export function resolveSlackMergeMessage(

@@ -60,14 +60,12 @@ export {
   type SlackReaction,
   type SlackTaskRef,
   serializeSlackCard,
-  serializeSlackCompleted,
   serializeSlackDeclined,
   serializeSlackGate,
   serializeSlackLinkPrompt,
   serializeSlackMerged,
   serializeSlackOffline,
   serializeSlackReconnectPrompt,
-  serializeSlackResult,
   serializeSlackUnreadLinks,
 } from './messages.ts';
 export {
