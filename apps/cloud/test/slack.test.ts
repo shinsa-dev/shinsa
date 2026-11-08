@@ -1352,14 +1352,20 @@ describe('telling a channel or a person about an escalation', () => {
       ts: '700.1',
       channel: body.channel === 'U7' ? 'D7' : body.channel,
     });
+    setup.slack.answers['users.conversations'] = () => ({ ok: true, channels: [] });
+    setup.slack.answers['users.info'] = (body) =>
+      body.user === 'U7'
+        ? { ok: true, user: { name: 'kai', profile: { real_name: 'Kai Tanaka' } } }
+        : { ok: false, error: 'user_not_found' };
     return { ...setup, notify, directory };
   }
 
   const errorOf = async (response: Response) =>
     (await readJson<{ error: { code: string; message: string } }>(response)).error;
 
-  test('lists the channels the app is in and the people who can get a message, page by page, by name', async () => {
+  test('lists the public channels the app is in, the private ones it shares with you, and the people who can get a message, by name', async () => {
     const { slack, directory } = await linkedSetup();
+    slack.answers['users.conversations'] = () => ({ ok: true, channels: [{ id: 'G5', name: 'leads' }] });
     slack.answers['conversations.list'] = (body) =>
       body.cursor
         ? { ok: true, channels: [{ id: 'C3', name: 'alerts', is_member: true }] }
@@ -1390,6 +1396,7 @@ describe('telling a channel or a person about an escalation', () => {
       teamId: 'T1',
       channels: [
         { id: 'C3', name: 'alerts' },
+        { id: 'G5', name: 'leads' },
         { id: 'C9', name: 'oncall' },
       ],
       people: [
@@ -1399,8 +1406,13 @@ describe('telling a channel or a person about an escalation', () => {
       ],
     });
     const [first, second] = slack.callsTo('conversations.list');
+    expect(slack.callsTo('users.conversations')[0]?.body).toMatchObject({
+      user: 'U1',
+      types: 'private_channel',
+      exclude_archived: 'true',
+    });
     expect(first?.body).toMatchObject({
-      types: 'public_channel,private_channel',
+      types: 'public_channel',
       exclude_archived: 'true',
       limit: '200',
       cursor: '',
@@ -1454,6 +1466,51 @@ describe('telling a channel or a person about an escalation', () => {
     const replace = { channelId: 'D7', ts: '700.1' };
     expect((await notify({ ...NOTIFY, kind: 'slack_person', id: 'U7', replace })).status).toBe(200);
     expect(slack.callsTo('chat.update').at(-1)?.body).toMatchObject({ channel: 'D7', ts: '700.1' });
+  });
+
+  test('posts in a private channel only when the Slack account connected to this machine is in it', async () => {
+    const { slack, notify } = await linkedSetup();
+    slack.answers['conversations.info'] = (body) => ({
+      ok: true,
+      channel: { id: body.channel, is_private: true },
+    });
+    const outside = await notify({ ...NOTIFY, id: 'G6' });
+    expect(outside.status).toBe(502);
+    expect((await errorOf(outside)).message).toBe(
+      'Shinsa posts in a private channel only when the Slack account connected to this machine is in it.'
+    );
+    expect(slack.callsTo('chat.postMessage')).toHaveLength(0);
+    slack.answers['users.conversations'] = () => ({ ok: true, channels: [{ id: 'G6', name: 'leads' }] });
+    expect(await (await notify({ ...NOTIFY, id: 'G6' })).json()).toEqual({ channelId: 'G6', ts: '700.1' });
+  });
+
+  test('posts to a channel only when it is one, and to a person only when they can get a message', async () => {
+    const { slack, notify } = await linkedSetup();
+    slack.answers['conversations.info'] = (body) => ({
+      ok: true,
+      channel: { id: body.channel, is_im: true },
+    });
+    expect((await errorOf(await notify({ ...NOTIFY, id: 'D3' }))).message).toBe(
+      'That is not a Slack channel.'
+    );
+    slack.answers['conversations.info'] = (body) => ({
+      ok: true,
+      channel: { id: body.channel, is_mpim: true },
+    });
+    expect((await errorOf(await notify({ ...NOTIFY, id: 'G3' }))).message).toBe(
+      'That is not a Slack channel.'
+    );
+    slack.answers['conversations.info'] = () => ({ ok: false, error: 'channel_not_found' });
+    expect((await errorOf(await notify({ ...NOTIFY, id: 'G9' }))).message).toBe(
+      'Slack could not find that channel or person.'
+    );
+    const person = (id: string) => notify({ ...NOTIFY, kind: 'slack_person', id });
+    expect((await errorOf(await person('G9'))).message).toBe('Slack could not find that person.');
+    slack.answers['users.info'] = () => ({ ok: true, user: { is_bot: true } });
+    expect((await errorOf(await person('B1'))).message).toBe('Slack could not find that person.');
+    slack.answers['users.info'] = () => ({ ok: true, user: { deleted: true } });
+    expect((await errorOf(await person('U2'))).message).toBe('That person’s Slack account is deactivated.');
+    expect(slack.callsTo('chat.postMessage')).toHaveLength(0);
   });
 
   test('is refused in a workspace this machine is not connected to, or once the app was removed', async () => {

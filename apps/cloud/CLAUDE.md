@@ -322,9 +322,11 @@ test/                gates.test.ts reads every RemoteApi route with HttpApi.refl
   posted (`slack_threads`, `slack_posts`, kept until their workspace or machine is removed), `/__remote/slack/react` moves the one reaction on a mention it was sent (`reactions.remove` then `reactions.add`, best effort),
   `/__remote/slack/notify` posts an Autopilot escalation to a channel or a person's direct message, and edits it
   once it clears (`chat.postMessage` with the user's id opens the app's direct message, which the manifest's Messages
-  tab shows, read-only), and `/__remote/slack/directory?teamId=` lists the channels the app is in and the people who
-  are neither bots nor deactivated (`conversations.list`, `users.list`, ten pages of 200 at most), both only in a
-  workspace the machine is linked in (403 `slack_not_linked`) and editing only what it posted;
+  tab shows, read-only), and `/__remote/slack/directory?teamId=` lists the public channels the app is in, the private
+  ones it shares with a Slack account linked to the machine (`users.conversations` for that account with the bot
+  token) and the people who are neither bots nor deactivated (`conversations.list`, `users.list`, ten pages of 200 at
+  most), both only in a workspace the machine is linked in (403 `slack_not_linked`), `notify` posting only to a channel
+  that list would show (`conversations.info`) or a person (`users.info`), and editing only what it posted;
   `/slack/interactions` takes a card's decision buttons and forms (signed, acknowledged at once). It lets through
   only the owner or a member of the machine that posted the card (`selectPoster`, then the linked account's role
   there; a guest, someone not connected and anyone else get a private refusal, `SLACK_DECISION_REFUSALS`, and

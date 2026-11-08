@@ -15,18 +15,25 @@ import { revokeMachineUserTokens } from '../../slack/user-tokens.ts';
 import { selectWorkspaceToken } from '../../slack/workspace.ts';
 import { SlackStore } from '../../store/slack/service.ts';
 import {
+  ChannelInfo,
   ChannelPage,
   DIRECTORY_CHANNEL_TYPES,
   DIRECTORY_PAGE_LIMIT,
   DIRECTORY_PAGE_SIZE,
   MemberPage,
+  NOT_A_CHANNEL,
+  NOT_A_PERSON,
   NOTIFY_REFUSALS,
   Notified,
   type PagedAnswer,
+  PERSON_DEACTIVATED,
+  PersonInfo,
   Posted,
+  PRIVATE_CHANNEL_REFUSED,
   REFUSED_BLOCK_CODES,
   type RelayThread,
   SETTLED_REACTION_CODES,
+  SHARED_CHANNEL_TYPES,
   SLACKBOT_USER_ID,
   STATUS_UNAVAILABLE_CODES,
 } from './schema.ts';
@@ -87,12 +94,12 @@ export const SlackRelayHandlers = HttpApiBuilder.group(
       const opened = yield* selectWorkspaceToken(teamId);
       if (Option.isNone(opened))
         return yield* new SlackNotInstalled({ message: 'Shinsa is not in that Slack workspace.' });
-      const links = yield* store.listMachineLinks(instanceId);
-      if (!links.some((link) => link.workspaceId === teamId))
+      const links = (yield* store.listMachineLinks(instanceId)).filter((link) => link.workspaceId === teamId);
+      if (links.length === 0)
         return yield* new SlackNotLinked({
           message: 'This machine is not connected to that Slack workspace.',
         });
-      return opened.value.token;
+      return { token: opened.value.token, userIds: links.map((link) => link.slackUserId) };
     });
 
     const listPages = Effect.fn('slackRelay.listPages')(function* <P extends PagedAnswer, I, A>(
@@ -126,6 +133,47 @@ export const SlackRelayHandlers = HttpApiBuilder.group(
         if (!cursor) break;
       }
       return entries;
+    });
+
+    const listSharedChannels = Effect.fn('slackRelay.listSharedChannels')(function* (
+      token: Redacted.Redacted<string>,
+      userIds: readonly string[]
+    ) {
+      const shared = new Map<string, { id: string; name: string }>();
+      for (const user of userIds) {
+        const channels = yield* listPages(
+          'users.conversations',
+          token,
+          { user, types: SHARED_CHANNEL_TYPES, exclude_archived: 'true' },
+          ChannelPage,
+          (page) => page.channels.map((channel) => ({ id: channel.id, name: channel.name }))
+        );
+        for (const channel of channels) shared.set(channel.id, channel);
+      }
+      return [...shared.values()];
+    });
+
+    const assertTarget = Effect.fn('slackRelay.assertTarget')(function* (
+      token: Redacted.Redacted<string>,
+      userIds: readonly string[],
+      target: { readonly kind: 'slack_channel' | 'slack_person'; readonly id: string }
+    ) {
+      if (target.kind === 'slack_person') {
+        const { user } = yield* slack
+          .call('users.info', { token, body: { form: { user: target.id } } }, PersonInfo)
+          .pipe(Effect.mapError(refuseNotify));
+        if (user.is_bot) return yield* new SlackFailed({ message: NOT_A_PERSON });
+        if (user.deleted) return yield* new SlackFailed({ message: PERSON_DEACTIVATED });
+        return;
+      }
+      const { channel } = yield* slack
+        .call('conversations.info', { token, body: { form: { channel: target.id } } }, ChannelInfo)
+        .pipe(Effect.mapError(refuseNotify));
+      if (channel.is_im || channel.is_mpim) return yield* new SlackFailed({ message: NOT_A_CHANNEL });
+      if (!channel.is_private) return;
+      const shared = yield* listSharedChannels(token, userIds);
+      if (!shared.some((entry) => entry.id === channel.id))
+        return yield* new SlackFailed({ message: PRIVATE_CHANNEL_REFUSED });
     });
 
     const requestReaction = Effect.fn('slackRelay.requestReaction')(function* (
@@ -253,8 +301,8 @@ export const SlackRelayHandlers = HttpApiBuilder.group(
       .handle(
         'directory',
         Effect.fn('slackRelay.directory')(function* ({ query }) {
-          const token = yield* findWorkspaceToken(query.teamId);
-          const channels = yield* listPages(
+          const { token, userIds } = yield* findWorkspaceToken(query.teamId);
+          const open = yield* listPages(
             'conversations.list',
             token,
             { types: DIRECTORY_CHANNEL_TYPES, exclude_archived: 'true' },
@@ -264,6 +312,7 @@ export const SlackRelayHandlers = HttpApiBuilder.group(
                 channel.is_member ? [{ id: channel.id, name: channel.name }] : []
               )
           );
+          const channels = [...open, ...(yield* listSharedChannels(token, userIds))];
           const people = yield* listPages('users.list', token, {}, MemberPage, (page) =>
             page.members.flatMap((member) => {
               if (member.deleted || member.is_bot || member.id === SLACKBOT_USER_ID) return [];
@@ -278,7 +327,7 @@ export const SlackRelayHandlers = HttpApiBuilder.group(
         'notify',
         Effect.fn('slackRelay.notify')(function* ({ payload }) {
           const { instanceId } = yield* CurrentMachine;
-          const token = yield* findWorkspaceToken(payload.teamId);
+          const { token, userIds } = yield* findWorkspaceToken(payload.teamId);
           const content = { text: payload.message.text, blocks: payload.message.blocks };
           if (payload.replace) {
             const { channelId, ts } = payload.replace;
@@ -292,6 +341,7 @@ export const SlackRelayHandlers = HttpApiBuilder.group(
               .pipe(Effect.tapError(logRefusedPost), Effect.mapError(refuseNotify));
             return payload.replace;
           }
+          yield* assertTarget(token, userIds, payload);
           const posted = yield* slack
             .call(
               'chat.postMessage',

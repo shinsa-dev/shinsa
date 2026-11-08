@@ -4740,7 +4740,11 @@ Slack ──a card's button──► app.shinsa.dev /slack/interactions
   Slack): `/__remote/slack/notify` posts to a channel or a person's id, which opens the app's direct message (the
   manifest turns on the app's Messages tab, read-only, so the message shows; no new scope), and edits that message
   once it clears; `/__remote/slack/directory` lists who it may go to. Both work only in a workspace the machine is
-  linked in. A post Slack refuses (the app not in the channel, the channel archived, the person deactivated), or
+  linked in, and a private channel only when a Slack account linked to that machine is in it too (`users.conversations`
+  for that account with the bot's token, which lists only the private channels the two share), so a linked person who
+  is not in a private channel can neither see its name nor post into it as the bot. The target is checked before each
+  first post: a channel with `conversations.info` (never a direct message), a person with `users.info` (never a bot or
+  a deactivated account). A post Slack refuses (the app not in the channel, the channel archived, the person deactivated), or
   remote access off, is recorded once with the reason and never retried; app.shinsa.dev busy or unreachable is
   retried by the outbox. A failed edit is only logged.
 - **Failures.** `slack.evaluate`, `slack.post`, `slack.merge`, `slack.react` and `slack.status` are replay-safe effects in the thread's lane
