@@ -52,9 +52,9 @@ describe('away hours', () => {
     expect(away?.hours).toEqual(NIGHT_HOURS);
   });
 
-  test('ignore time away from before the last 14 days and an open span runs to now', () => {
+  test('ignore time away from before the last 14 days and a span past now counts only up to now', () => {
     const old = nights(5, NOW - 20 * DAY_MS, 12, 20);
-    const open = { open: { from: NOW - HOUR_MS, to: null } };
+    const open = { open: { from: NOW - HOUR_MS, to: NOW + DAY_MS } };
     const away = resolveAwayHours({ away: { ...old, ...open, ...nights(4) }, presence: {} }, NOW);
     expect(away?.hours).toEqual(NIGHT_HOURS);
   });

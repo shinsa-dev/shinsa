@@ -40,7 +40,7 @@ function listCoveredHours(spans: readonly TimingSpan[], from: number, to: number
   const covered = new Set<number>();
   for (const span of spans) {
     const start = Math.max(span.from, from);
-    const end = Math.min(span.to ?? to, to);
+    const end = Math.min(span.to, to);
     for (let hour = Math.floor(start / HOUR_MS); hour * HOUR_MS < end; hour += 1) {
       const overlap = Math.min(end, (hour + 1) * HOUR_MS) - Math.max(start, hour * HOUR_MS);
       if (overlap >= HOUR_MS * AWAY_LIMITS.coveredShare) covered.add(hour);
