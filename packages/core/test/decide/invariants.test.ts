@@ -835,7 +835,14 @@ function listMoveMarks(state: ShinsaState) {
   ]);
 }
 
+const RERUN_PLANS = ['Claude Ultra', 'max', null];
+
 function selectRerun(state: ShinsaState, side: Random): ShinsaCommand | null {
+  if (chance(side, OUTAGE_ODDS)) {
+    const account = pick(side, ACCOUNTS);
+    const plan = pick(side, RERUN_PLANS) ?? null;
+    if (account) return { type: 'account.plan_recorded', accountId: account.id, provider: 'claude', plan };
+  }
   if (!chance(side, OUTAGE_ODDS)) return null;
   const working = Object.values(state.tasks).filter(
     (task) => RUN_STAGES.has(task.stage) || chance(side, 0.05)
@@ -1894,11 +1901,14 @@ describe('decide under random command sequences', () => {
     'keeps every invariant while steps are rerun on chosen accounts',
     () => {
       let bound = 0;
+      const plans = new Set<string>();
       for (let seed = 1; seed <= SEEDS; seed += 1) {
         const state = simulate(seed, STEPS, 'reruns');
         bound += Object.values(state.runs).filter((run) => run.account).length;
+        for (const known of Object.values(state.accountPlans)) plans.add(known.plan);
       }
       expect(bound).toBeGreaterThan(0);
+      expect([...plans].sort()).toEqual(['max', 'ultra']);
     },
     SEEDS * 2_000
   );

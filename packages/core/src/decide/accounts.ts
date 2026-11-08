@@ -1,3 +1,4 @@
+import { resolvePlanKey } from '../accounts/plan.ts';
 import { CLAUDE_PROVIDER, resolveProviderLabel } from '../agent-models/index.ts';
 import type { CommandOf } from '../commands/index.ts';
 import {
@@ -209,7 +210,29 @@ export function recordProviderSignIn(decider: Decider, command: CommandOf<'provi
   for (const gate of gates) retryAfterSignIn(decider, gate);
 }
 
+export function recordAccountPlan(decider: Decider, command: CommandOf<'account.plan_recorded'>) {
+  const plan = resolvePlanKey(command.plan);
+  const known = decider.state.accountPlans[command.accountId];
+  if (!known && !plan) return;
+  if (known?.plan === plan && known.provider === command.provider) return;
+  decider.emit({
+    type: 'account.plan_recorded',
+    accountId: command.accountId,
+    provider: command.provider,
+    plan,
+  });
+}
+
 export function recordAccountRemoved(decider: Decider, command: CommandOf<'account.removed'>) {
+  const known = decider.state.accountPlans[command.accountId];
+  if (known) {
+    decider.emit({
+      type: 'account.plan_recorded',
+      accountId: command.accountId,
+      provider: known.provider,
+      plan: null,
+    });
+  }
   for (const task of Object.values(decider.state.tasks)) {
     if (task.account?.id !== command.accountId || isTaskClosed(task)) continue;
     decider.emit({ type: 'task.account_bound', taskId: task.id, account: null, by: 'shinsa' });

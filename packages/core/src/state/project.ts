@@ -1,5 +1,6 @@
 import type { StoredBriefing } from '../briefing/types.ts';
 import {
+  type AccountPlan,
   type BacklogCause,
   copyTeammateOriginal,
   createSettings,
@@ -40,7 +41,7 @@ import { resolveMergeStepKey } from '../report/merge-steps.ts';
 import { resolvePlanChanges } from '../report/plan-changes.ts';
 import { createTesting } from '../report/testing.ts';
 import type { ReportCheck, ReportWalkthroughRevision } from '../report/types.ts';
-import { applyAccountBound } from './accounts.ts';
+import { applyAccountBound, applyAccountPlan } from './accounts.ts';
 import {
   describeCheckChange,
   describeChecks,
@@ -100,6 +101,7 @@ export interface ShinsaState {
   presence: Record<string, number>;
   away: Record<string, TimingSpan>;
   focusHistory: Record<string, FocusSpan>;
+  accountPlans: Record<string, AccountPlan>;
   onBehalfActions: OnBehalfAction[];
   teammateTasks?: Readonly<Record<string, true>>;
   teammateRepos?: Readonly<Record<string, true>>;
@@ -130,6 +132,7 @@ export function createState(): ShinsaState {
     presence: {},
     away: {},
     focusHistory: {},
+    accountPlans: {},
     onBehalfActions: [],
   };
 }
@@ -869,6 +872,9 @@ function applyEventBody(state: ShinsaState, event: ShinsaEvent): ShinsaState {
       break;
     case 'away.recorded':
       recordAway(state, event);
+      break;
+    case 'account.plan_recorded':
+      applyAccountPlan(state, event);
       break;
     case 'task.created':
       applyTaskCreated(state, event);

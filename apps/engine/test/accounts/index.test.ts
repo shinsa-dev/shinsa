@@ -547,7 +547,67 @@ describe('inspect mode', () => {
     await world.accounts.stop();
     expect(world.calls).toEqual([]);
     expect(world.secretReads).toEqual([]);
+    expect(dispatched(world).some((command) => command.type === 'account.plan_recorded')).toBe(false);
     expect(readFileSync(join(live.root, 'accounts.json'), 'utf8')).toBe(registry);
+  });
+});
+
+describe('recording each account’s plan', () => {
+  function planCommands(world: World) {
+    return dispatched(world).filter((command) => command.type === 'account.plan_recorded');
+  }
+
+  test('records the plan an account is on, again only once it changes', async () => {
+    const world = await createWorld({ registry: true });
+    const account = await addAccount(world, 'a@example.com', 10);
+    expect(planCommands(world)).toContainEqual({
+      type: 'account.plan_recorded',
+      accountId: account.id,
+      provider: 'claude',
+      plan: 'max',
+    });
+    expect(world.stub.commandIds).toContain(`account-plan:${account.id}:max:0`);
+    world.stub.update((state) => {
+      state.seq = 7;
+      state.accountPlans[account.id] = { provider: 'claude', plan: 'max', at: 1 };
+    });
+    const before = planCommands(world).length;
+    await world.accounts.store.update(account.id, { paused: true });
+    expect(planCommands(world)).toHaveLength(before);
+    world.stub.update((state) => {
+      state.runs['run-1'] = createRun({
+        attempts: [
+          {
+            attemptId: 'a1',
+            provider: 'claude',
+            model: null,
+            resumed: false,
+            handoff: null,
+            startedAt: 1,
+            account: { id: account.id, email: account.email },
+          },
+        ],
+      });
+    });
+    await world.accounts.onNotice('run-1', {
+      kind: 'account',
+      email: 'a@example.com',
+      organization: null,
+      plan: 'Claude Ultra',
+    });
+    expect(planCommands(world).at(-1)).toMatchObject({ accountId: account.id, plan: 'ultra' });
+    expect(world.stub.commandIds).toContain(`account-plan:${account.id}:ultra:7`);
+  });
+
+  test('a plan the log refuses is only logged', async () => {
+    const world = await createWorld({ registry: true });
+    const logs = captureLogs();
+    world.stub.reject((command) => command.type === 'account.plan_recorded', new Error('the log is closed'));
+    const account = await addAccount(world, 'a@example.com', 10);
+    expect(logs.fieldsOf('[Accounts] Could not record the plan an account is on')[0]).toMatchObject({
+      accountId: account.id,
+    });
+    expect(world.accounts.snapshot().accounts[0]?.plan).toBe('max');
   });
 });
 

@@ -315,6 +315,7 @@ type SystemCommand =
   | { type: 'account.signed_in'; account: RunAccount }
   | { type: 'provider.record_sign_in'; provider: string }
   | { type: 'account.removed'; accountId: string }
+  | { type: 'account.plan_recorded'; accountId: string; provider: string; plan: string | null }
   | { type: 'onboarding.welcome'; body: string }
   | DelegationSystemCommand
   | ScheduleSystemCommand

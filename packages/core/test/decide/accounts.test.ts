@@ -688,3 +688,40 @@ describe('the sign-in gate', () => {
     expect(harness.send({ type: 'provider.record_sign_in', provider: 'codex' }).events).toEqual([]);
   });
 });
+
+describe('recording the plan each account is on', () => {
+  function recordPlan(harness: Harness, plan: string | null, accountId = WORK.id) {
+    return harness.send({ type: 'account.plan_recorded', accountId, provider: 'claude', plan });
+  }
+
+  test('records an account’s plan by its key, once', () => {
+    const harness = createHarness();
+    recordPlan(harness, 'Claude Ultra');
+    expect(harness.state.accountPlans[WORK.id]).toMatchObject({ provider: 'claude', plan: 'ultra' });
+    expect(recordPlan(harness, 'ultra').events).toHaveLength(0);
+  });
+
+  test('records a changed plan and moves the account to it', () => {
+    const harness = createHarness();
+    recordPlan(harness, 'max');
+    recordPlan(harness, 'Claude Ultra');
+    expect(harness.state.accountPlans[WORK.id]?.plan).toBe('ultra');
+  });
+
+  test('forgets a plan Claude no longer names, and records nothing for an account it never named', () => {
+    const harness = createHarness();
+    expect(recordPlan(harness, null, HOME.id).events).toHaveLength(0);
+    recordPlan(harness, 'max');
+    recordPlan(harness, null);
+    expect(harness.state.accountPlans[WORK.id]).toBeUndefined();
+  });
+
+  test('forgets a removed account’s plan', () => {
+    const harness = createHarness();
+    recordPlan(harness, 'max');
+    recordPlan(harness, 'pro', HOME.id);
+    harness.send({ type: 'account.removed', accountId: WORK.id });
+    expect(harness.state.accountPlans[WORK.id]).toBeUndefined();
+    expect(harness.state.accountPlans[HOME.id]?.plan).toBe('pro');
+  });
+});

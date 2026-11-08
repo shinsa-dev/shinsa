@@ -621,6 +621,12 @@ export interface TaskSnooze {
   at: number;
 }
 
+export interface AccountPlan {
+  provider: string;
+  plan: string;
+  at: number;
+}
+
 export interface TimingSpan {
   from: number;
   to: number;
