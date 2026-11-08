@@ -62,7 +62,7 @@ One definition per term. **Code** is the name in `packages/core`; **UI** is the 
 | judgement call | A choice the agent made in a phase, with its reason and the alternatives it rejected | `JudgementCall` | Judgement call, "Judgement calls" |
 | disagreement | A judgement call the reviewer would have made differently, with why | `ReviewDisagreement`, `report_review`'s `disagreements`, `Task.reviewDisagreements` | Disputed, "The agent review disagrees" |
 | rating | The reviewer's two ratings of a change: how sure it is (`confidence`) and what breaks if it is wrong (`risk`), each low, medium or high | `ReviewRatings`, `ReviewRating`, `report_review`'s `confidence` and `risk`, `Task.reviewRatings` | Confidence, Risk |
-| Autopilot | Your pre-approval: a policy that approves a review, merges, or escalates an urgent change to your team for you | `autopilot` (`AutopilotPolicy`), `Task.autopiloted`, `Task.escalation`, `Gate.autopilotDue`, `autopilot.fire` | Autopilot, Approved for you, Sent to your team, Sent by your team, Why this reached you |
+| Autopilot | Your pre-approval: a policy that approves a review, merges, or escalates an urgent change to your team for you | `autopilot` (`AutopilotPolicy`, its `contact` an `AutopilotContact`), `Task.autopiloted`, `Task.escalation`, `Task.slackEscalation`, `Gate.autopilotDue`, `autopilot.fire` | Autopilot, Approved for you, Sent to your team, Sent by your team, Why this reached you, Escalate to |
 | spot | A line range the work report points you at, ranked critical, high or normal; a key piece of code also has a title and an explanation | `CodeSpot` | spot, "Key code" |
 | walkthrough | The Agent's technical account of the whole change on its last phase: approach, flow, risks, testing (what the tests cover and a guide to try it by hand) and the steps around the merge; a fix revises the parts it changes | `ReportWalkthrough`, `complete_phase`'s `walkthrough`; `ReportWalkthroughRevision`, `complete_fix`'s | Approach, How it works, Risks and edge cases, How to test, Pre-merge, Post-merge |
 | request (an iteration) | Something you sent an agent that its next hand-over answers (changes at a gate, line comments, feedback on a plan, a message to a running or resting agent, a follow-up, a restarted step), with its reply: a headline, each point you raised marked done, answered or not changed with a note, and what you do now. The chat shows it on the hand-over's card and the overview on the card it belongs to, the earlier ones under Earlier requests, so you never read the chat to know what changed | `Iteration` (`Task.iterations`), `IterationRequest`, `AgentReply` (the `reply` of every hand-over that answers one), `ReplyingHandOver`, `ReplyPoint`, `ReplyOutcome`, `iteration.requested`, `iteration.answered` | "Your request", Earlier requests, Done, Answered, Not changed, "What to do now" |
@@ -889,7 +889,7 @@ your behalf (`onBehalf`, `byTask`). **Human** = only you: its specs are `humanOn
 | `repo.remove` | forgets a repository | `repos remove` | agent |
 | `focus.change` | sets or clears the focus: `projectId` or `teamId`, never both (`focus_refused`), and `until` | `focus set`, `focus clear` | agent |
 | `away.record` | records a span you were away from your Mac (`from`, `to`), sent by the Mac app's page; refused when it ends before it starts, after now or lasts over 30 days (`away_refused`) | none | **human** |
-| `settings.change` | changes settings (`SETTINGS_KEYS`) | `settings set` | agent; **human** for `approvePlans`, `mergeMethod`, `taskBudgetUsd`, `taskUsageLimit`, `dailyUsageLimit`, `autoResume`, `snoozeLimited`, `accountSwitchAt`, `fastMode`, `agentFastModes`, `delegationLimit`, `shareLimit`, `sharePreset`, `watchdogsIgnoreUsageLimits`, `autopilot` (`HUMAN_ONLY_SETTINGS`); a partial `autopilot` is merged into the current policy, `urgentWaitMinutes` 1 to 1,440, `ignoreUsageLimits` (true by default) lets an urgent task's runs skip the usage and cost limits |
+| `settings.change` | changes settings (`SETTINGS_KEYS`) | `settings set` | agent; **human** for `approvePlans`, `mergeMethod`, `taskBudgetUsd`, `taskUsageLimit`, `dailyUsageLimit`, `autoResume`, `snoozeLimited`, `accountSwitchAt`, `fastMode`, `agentFastModes`, `delegationLimit`, `shareLimit`, `sharePreset`, `watchdogsIgnoreUsageLimits`, `autopilot` (`HUMAN_ONLY_SETTINGS`); a partial `autopilot` is merged into the current policy, `urgentWaitMinutes` 1 to 1,440, `ignoreUsageLimits` (true by default) lets an urgent task's runs skip the usage and cost limits, `contact` (`{ kind: 'team' }` by default, or `slack_channel` or `slack_person` with `teamId`, `id` and `name`) is replaced whole |
 
 Core refuses a command sent on your behalf with `human_only`, recording nothing, when it is a `gate.answer`
 (`assertHumanDecides`), when a gate that was open before it is no longer open after it (`assertGatesStayOpen` in
@@ -1038,6 +1038,7 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `slack.mention` | `POST /api/slack/events`, command id `slack:<event id>` | a signed `SlackMention`: messages the open task of its thread with 👀 on the mention (kept with 📥 while a gate is open, `slack.react`), else asks for `slack.evaluate` |
 | `slack.start_task` | the `slack.evaluate` effect, when the mention is work | the mention: starts a task as Home does and links it to the thread, or messages the thread's task when one opened meanwhile |
 | `slack.record_status` | the `slack.status` effect | the ts of the task's card and the reaction now on the mention, once Slack has them |
+| `slack.record_escalation` | the `slack.escalate` effect | where an Autopilot escalation went in Slack (`channelId`, `ts`) or why it could not (`problem`), once per escalation: `slack.escalation_sent` |
 | `slack.decide` | `POST /api/slack/interactions`, command id `slack-decide:<trigger id>` | a signed `SlackDecision` from someone app.shinsa.dev found to be an owner or member of the machine: decides an open gate of the task linked to that thread as Shinsa does (`answerGate`, so `plan_changed` and `gate_closed` hold), for the decisions `SLACK_DECIDABLE` allows, then `slack.decided`; refused `slack_decision_closed`, `slack_decision_refused` or `slack_decision_choice` |
 
 ## Events
@@ -1167,6 +1168,7 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `on_behalf.acted` | a command sent on your behalf changed something (command, task, sentence, acting task) |
 | `slack.thread_linked` | a task was started from a Slack thread (the whole `link`, `Task.slack`; "Started from a Slack thread") |
 | `slack.status_posted` | the task's card has this `ts` and its mention this `reaction` now |
+| `slack.escalation_sent` | an Autopilot escalation was posted in Slack, or could not be: `Task.slackEscalation`, and "Sent to #oncall in Slack" or "Could not reach #oncall in Slack" in the activity |
 | `slack.decided` | a gate of the task was decided from Slack: the Slack user and what they did ("approved the plan"), shown on the card's status (`Task.slack.decided`) |
 
 ## Effects
@@ -1207,6 +1209,7 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `slack.post` | replay_safe | `slack:<thread key>` | none: posts the result, or "Merged" or "Done" when the task ends, as a new message through app.shinsa.dev |
 | `slack.status` | replay_safe | `slack:<thread key>` | `slack.record_status` for a new card or reaction; edits the card (the open gate with its buttons, else the status) at most every 5 s and moves the mention's reaction |
 | `slack.react` | replay_safe | `slack:<thread key>` | none: 👀 or 📥 on a later mention in the thread, through `/__remote/slack/react`; key `slack.react:<thread key>:<message ts>` |
+| `slack.escalate` | replay_safe | `slack-escalation:<task>` | `slack.record_escalation` after posting an open escalation to the policy's channel or person through `/__remote/slack/notify`; once it cleared, edits that message and records nothing; key `slack.escalate:<task>:<escalated at>:<seq>` |
 
 Any effect that gives up sends `effect.fail`; it opens a failure gate when its kind has a title in `FAILURE_TITLE`.
 
@@ -1618,6 +1621,8 @@ What the engine, the Worker on app.shinsa.dev and the web share for the Slack bo
 | `POST /__remote/slack/post` | The engine, with its machine token | `SlackRelayPost` (`teamId`, `channelId`, `threadTs`, `replaceTs`, `message` of `text` and Block Kit `blocks`; `parseSlackRelayPost`) → `SlackRelayPosted` `{ ts }`; 403 for a thread not sent to it or a message it did not post, 410 when the app was removed, 502 when Slack refused |
 | `POST /__remote/slack/session` | The engine, with its machine token | `SlackRelaySession` (the thread and a `status` of `SLACK_SESSION_STATUSES`: `processing`, `suspended`, `active`, `closed`; `parseSlackRelaySession`) → `SlackRelaySessionSet` `{ applied }`: `agents.sessions.setStatus`, `applied: false` when the workspace cannot show one (`not_authorized` from an app not on Agent Sessions, `feature_disabled` from a workspace without agent features), after which the engine stops asking for that workspace until it restarts; any other refusal is 502 `slack_failed`, logged, and tried again at the next change |
 | `POST /__remote/slack/react` | The engine, with its machine token | `SlackRelayReaction` (the thread, the mention's `messageTs`, the emoji name to `add` and to `remove`, at least one; `parseSlackRelayReaction`) → `SlackRelayReacted` `{ applied }`: `reactions.remove` then `reactions.add` on a message of a thread sent to that machine; `no_reaction` and `already_reacted` count as done, anything else (`missing_scope` on a workspace that added the app before `reactions:write`) is `applied: false` |
+| `POST /__remote/slack/notify` | The engine, with its machine token | `SlackRelayNotify` (`teamId`, `kind` `slack_channel` or `slack_person`, the Slack `id`, `replace` `{ channelId, ts }` or null, `message`) → `SlackRelayNotified` `{ channelId, ts }`: `chat.postMessage` to the channel or the person's id (their direct message with the app), or `chat.update` of a message it posted; 403 `slack_not_linked` in a workspace the machine is not linked in, 410 when the app was removed, 502 with Slack's reason in words (`not_in_channel`, `is_archived`, `user_disabled`…) |
+| `GET /__remote/slack/directory?teamId=` | The engine, with its machine token | `SlackDirectory` (`teamId`, `channels` the app is in, `people` neither bots nor deactivated, each `{ id, name }`, sorted by name; `conversations.list` and `users.list`, ten pages of 200 at most); 403 `slack_not_linked` as above |
 | `GET /__remote/slack/links`, `POST /__remote/slack/unlink` | The engine, with its machine token | `SlackLinks` (`teamId`, `teamName`, `userId`, `userName`, `linkedAt` each); removes every link of the machine |
 
 | Shape | Fields |
@@ -1630,6 +1635,7 @@ What the engine, the Worker on app.shinsa.dev and the web share for the Slack bo
 | `SlackDecision` (`parseSlackDecision`) | the modal's fields with `interactionId`, `teamId`, `userId` and `response` (the form's text, at most 3,000 characters, `SLACK_VIEW_LIMITS.input`, or null) |
 | `SlackDecisionReply` (`parseSlackDecisionReply`) | `{ decided: true, text }` (what the card says they did) or `{ decided: false, reason }` |
 | `SlackSnapshot` (the engine's `GET /api/slack`) | `remote`, `connectUrl`, `links`, `problem` |
+| `SlackDirectoryView` (the engine's `GET /api/slack/directory?teamId=`, feature `autopilot-slack`) | `teamId`, `channels`, `people`, `problem` (remote access off, or why the relay could not list them; the lists empty then) |
 
 ## The changelog
 

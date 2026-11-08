@@ -2070,7 +2070,9 @@ action it takes is recorded with its reason. The rules are core's (`decide/autop
   a change it approved (`never` by default, `low_risk`, or `approved`); `urgent`, what an urgent change's merge gate
   does once it has waited (`wait`, `escalate` by default, `merge`, or `escalate_then_merge`); `urgentWaitMinutes`,
   how long (60, 1 to 1440); `ignoreUsageLimits` (`true` by default), whether an urgent task's runs skip the usage and
-  cost limits. `settings.change` takes a partial `autopilot` and merges it into the current policy.
+  cost limits; `contact`, who else hears of an escalation (`AutopilotContact`: `{ kind: 'team' }` by default, or a
+  `slack_channel` or `slack_person` with its workspace `teamId`, Slack `id` and `name`; Escalating in Slack, below).
+  `settings.change` takes a partial `autopilot` and merges it into the current policy, `contact` replaced whole.
 - **The review gate.** With the policy on, `openReviewGate` asks `resolveAutopilotDecision`: it approves only a review
   that is not escalated, rated `high` confidence, with a risk within `approveUpTo` (or `urgentApproveUpTo` for an
   urgent task). Then it answers the gate as "Fix and approve" does (`approveReviewAhead`), with `gate.answered`
@@ -2110,6 +2112,24 @@ action it takes is recorded with its reason. The rules are core's (`decide/autop
   escalation clears when its merge gate is answered or withdrawn, or a new round starts. A task whose project is in
   no team escalates only in its own activity and Overview ("Sent to your team"), so while none of your projects is
   in a team, Settings → Agents → Autopilot says so under the urgent rule when it escalates (`isEscalationUnseen`).
+- **Escalating in Slack.** The team escalation always happens; `contact` adds one Slack message to it. With a
+  `slack_channel` or `slack_person` contact, `escalate()` also asks for `slack.escalate {taskId, escalatedAt,
+  contact}` (lane `slack-escalation:<task>`), and the engine posts "Urgent change needs someone" through
+  app.shinsa.dev's `/__remote/slack/notify` (`serializeSlackEscalation`: the title, the reason, how long it waited,
+  the reviewer's ratings, when Autopilot merges it next and Open in Shinsa). A channel gets it as a post, a person as
+  a direct message from the Shinsa app. The link opens the team's task page (`/teams/<team>/<machine>/<task>`) when
+  the project is in a team, its first team when in several, else the owner's task page (`resolveSlackEscalationUrl`).
+  The engine records where it went or why not with `slack.record_escalation` (`slack.escalation_sent`,
+  `Task.slackEscalation {escalatedAt, contact, channelId, ts}`), and the activity reads "Sent to #oncall in Slack"
+  or "Could not reach #oncall in Slack" with the reason as its detail. When the escalation clears (its merge gate
+  answered, withdrawn or superseded), `syncSlackEscalations` asks for the same effect again and the engine edits
+  that message to "No longer needs anyone" with why (merged, closed, or decided in Shinsa); one that never posted
+  sends nothing. The contact is picked in Settings → Agents → Autopilot (Escalate to: "Your team in Shinsa", "Your
+  team and a Slack channel" or "Your team and a teammate on Slack", then the Slack workspace and the Channel or
+  Teammate, saved only once all three are chosen); the lists come from `GET /api/slack/directory?teamId=`
+  (`SlackDirectoryView`: the channels the app is in, the people who are neither bots nor deactivated, and a
+  `problem` instead of an error). The Slack choices are disabled, with why, while Slack is not connected or the
+  engine does not announce `autopilot-slack`.
 - **What it never does.** It never closes a plan, question, operation, proposal, result, failure, setup, Sign in or
   escalated review gate, never ticks a step around the merge, and never gets past GitHub: a merge GitHub refuses
   opens the usual failure gate.
@@ -3495,7 +3515,8 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   `comments`, `changelog` for `GET /api/changelog`, `remote.terminals` for terminal streams on the sealed channel,
   `attention` for routing notifications to the device you use, `worktree-root` for the worktree folder and
   `usage.pace_limits` for `dailyUsageLimit` and `Project.usageLimit`, `usage.watchdog_limits` for
-  `watchdogsIgnoreUsageLimits` and `autopilot` for the `autopilot` setting, today;
+  `watchdogsIgnoreUsageLimits`, `autopilot` for the `autopilot` setting and `autopilot-slack` for its Slack
+  `contact` and `GET /api/slack/directory`, today;
   Settings → Teams, Settings → Agents → Autopilot, the review's Fix and approve choice and
   What's new show only on an engine that has them). `ENGINE_PROTOCOL` is the hard floor: a machine whose protocol differs from the page's is left out of the
   dashboard, merges nothing and gets no command, and Settings → Machines says "Update Shinsa on <name> to reach it from
@@ -4715,6 +4736,13 @@ Slack ──a card's button──► app.shinsa.dev /slack/interactions
   restarts (`#sessionRefused`). Any other refusal (`channel_not_found`, `ratelimited`, `invalid_auth`) is logged and
   answered 502 `slack_failed`, which the engine logs as a warning and tries again at the next status change, so a
   passing failure never turns the status off. The posts, reactions and status message carry on as they are.
+- **Autopilot escalations** are the one post outside a thread (Process and structure → Autopilot, Escalating in
+  Slack): `/__remote/slack/notify` posts to a channel or a person's id, which opens the app's direct message (the
+  manifest turns on the app's Messages tab, read-only, so the message shows; no new scope), and edits that message
+  once it clears; `/__remote/slack/directory` lists who it may go to. Both work only in a workspace the machine is
+  linked in. A post Slack refuses (the app not in the channel, the channel archived, the person deactivated), or
+  remote access off, is recorded once with the reason and never retried; app.shinsa.dev busy or unreachable is
+  retried by the outbox. A failed edit is only logged.
 - **Failures.** `slack.evaluate`, `slack.post`, `slack.merge`, `slack.react` and `slack.status` are replay-safe effects in the thread's lane
   (`slack:<thread key>`), so a thread's posts go out in order. A post app.shinsa.dev answers with 429, a 5xx or not
   at all is retried by the outbox (the relay call through `RemoteClient` fails with `SlackFailed` or a retryable
