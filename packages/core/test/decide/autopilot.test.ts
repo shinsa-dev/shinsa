@@ -517,7 +517,7 @@ describe('the hand-off an escalation carries', () => {
     const harness = createHarness();
     const shippedId = createTask(harness);
     const fixId = createTask(harness);
-    const fix = {
+    const forked = {
       ...harness.task(fixId),
       createdBy: { kind: 'watchdog' as const, taskId: shippedId, runId: 'run-1', requestKey: 'k' },
       sourceReport: {
@@ -533,7 +533,7 @@ describe('the hand-off an escalation carries', () => {
     };
     const state = { ...harness.state, presence: {} };
     expect(
-      resolveEscalationHandoff(state, fix, { waitedMinutes: 15, mergesAt: 9_000, blockedBy: null })
+      resolveEscalationHandoff(state, forked, { waitedMinutes: 15, mergesAt: 9_000, blockedBy: null })
     ).toEqual({
       waitedMinutes: 15,
       ownerActiveAt: null,
@@ -542,7 +542,7 @@ describe('the hand-off an escalation carries', () => {
       mergesAt: 9_000,
       blockedBy: null,
     });
-    const orphan = { ...fix, createdBy: { ...fix.createdBy, taskId: 'gone' }, sourceReport: null };
+    const orphan = { ...forked, createdBy: { ...forked.createdBy, taskId: 'gone' }, sourceReport: null };
     expect(
       resolveEscalationHandoff(state, orphan, { waitedMinutes: 15, mergesAt: null, blockedBy: null }).foundBy
     ).toEqual({
