@@ -356,9 +356,10 @@ describe('Terminals services', () => {
       terminals.create({ ...START, cwd: '/wt/a', place: 'worktree', taskId: 'a' })
     );
     fake.spawned[4]?.exit(0);
-    await until(
-      'the shell ends',
-      async () => (await runAsync(terminals.find(ended.id))).info.status === 'exited'
+    await until('the shell’s exit is published', async () =>
+      seen.some((snapshot) =>
+        snapshot.terminals.some((each) => each.id === ended.id && each.status === 'exited')
+      )
     );
     const before = seen.length;
     await runAsync(terminals.closeTaskTerminals('a'));
