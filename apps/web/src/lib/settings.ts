@@ -282,12 +282,16 @@ export const COST_LIMIT_TITLE = 'Cost limit per task';
 
 type UsageRates = Map<string, UsageRate | null>;
 
-function isLearningRate(account: AccountSummary, rates: UsageRates) {
+function selectAccountRate(account: AccountSummary, rates: UsageRates) {
   const window = resolveMeterWindow({
     account: { id: account.id, email: account.email },
     provider: 'claude',
   });
-  return rates.get(window)?.trusted !== true;
+  return rates.get(window) ?? null;
+}
+
+function isLearningRate(account: AccountSummary, rates: UsageRates) {
+  return selectAccountRate(account, rates)?.trusted !== true;
 }
 
 function listWeeklyAccounts(accounts: AccountSummary[]) {
@@ -308,6 +312,9 @@ export function needsCostLimit(
   return listWeeklyAccounts(accounts).length === 0 || hasLearningAccount(accounts, rates);
 }
 
+const USAGE_LIMIT_ESTIMATED =
+  'While Shinsa learns an account’s rate, the usage limit counts an estimate from its plan’s usual rate. A cost limit holds from the start.';
+
 const USAGE_LIMIT_LEARNING =
   'While Shinsa learns an account’s rate, the usage limit counts an early estimate, and nothing before the first measured step. A cost limit holds from the start.';
 
@@ -317,7 +324,12 @@ export function describeUsageLimitNote(
   rates: UsageRates | null
 ) {
   if (settings.taskUsageLimit == null || settings.taskBudgetUsd != null || accounts === null) return null;
-  return hasLearningAccount(accounts, rates) ? USAGE_LIMIT_LEARNING : null;
+  if (rates === null) return null;
+  const learning = listWeeklyAccounts(accounts).filter((account) => isLearningRate(account, rates));
+  if (learning.length === 0) return null;
+  return learning.every((account) => selectAccountRate(account, rates))
+    ? USAGE_LIMIT_ESTIMATED
+    : USAGE_LIMIT_LEARNING;
 }
 
 const USAGE_LIMITS = [5, 10, 20, 30, 50];

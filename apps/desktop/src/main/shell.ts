@@ -56,6 +56,7 @@ export const DesktopShellLive = Layer.effect(
       quit: Effect.sync(() => app.quit()),
       setBadge: (text) => Effect.sync(() => app.dock?.setBadge(text)),
       openExternal: (url) => Effect.ignore(Effect.tryPromise(() => shell.openExternal(url))),
+      openPath: (path) => Effect.ignore(Effect.tryPromise(() => shell.openPath(path))),
       writeClipboard: (text) => Effect.ignore(Effect.tryPromise(() => clipboard.writeText(text))),
       setAboutPanel: (panel) => Effect.sync(() => app.setAboutPanelOptions(panel)),
       applyMenu: (sections) =>

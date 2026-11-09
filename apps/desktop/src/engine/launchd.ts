@@ -7,6 +7,7 @@ import {
   APP_ID,
   CRASHES_BEFORE_GIVING_UP,
   ENGINE_LABEL,
+  ENGINE_LOG,
   ENGINE_VARIABLES,
   EX_CONFIG,
   LAUNCHD_FIELDS,
@@ -158,4 +159,8 @@ export function resolveDataDir(env: Record<string, string | undefined>, home: st
   if (env.SHINSA_HOME) return join(env.SHINSA_HOME, 'data');
   if (env.SHINSA_DATA_DIR) return env.SHINSA_DATA_DIR;
   return join(resolveConfigHome(env, home), 'data');
+}
+
+export function resolveEngineLog(env: Record<string, string | undefined>, home: string) {
+  return join(resolveDataDir(env, home), ENGINE_LOG);
 }

@@ -442,6 +442,7 @@ function makeNativeLayer(world: DesktopWorld) {
           quit: push('quit'),
           setBadge: (text) => push(`badge ${text}`),
           openExternal: (url) => push(`open ${url}`),
+          openPath: (path) => push(`open path ${path}`),
           writeClipboard: (text) => push(`copy ${text}`),
           setAboutPanel: (panel) =>
             Effect.sync(() => {

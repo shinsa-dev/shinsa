@@ -70,7 +70,7 @@ These are the rules every other section applies. When a case is not covered anyw
 14. **One keyboard shortcut.** ⌘K opens the command menu everywhere. Only three workspaces bind keys of their own,
     and only while open: the Code tab (⌘P, ⇧⌘F, ⌘F, ⌘G), the Review tab (J, K) and the Terminal page (⌘T, ⌘W);
     the image viewer takes Esc, ←, →, `+`, `-` and `0` while it is open, and the Mac app's menu has its own
-    (⌘, ⌘R ⌘[ ⌘] ⇧⌘H). Invent no others.
+    (⌘, ⌘N ⌘W ⌘[ ⌘] ⇧⌘H). Invent no others.
 15. **Every collapsible remembers.** Open or folded, it comes back as you left it.
 16. **Each string has one job.** Sentence case, a full sentence, plain words, no exclamation marks, no em dashes, no
     selling. A button is a verb and its object.
@@ -7012,7 +7012,7 @@ Example: tabbing onto a list row shows no ring; its tooltip, if any, appears imm
 
 #### One keyboard shortcut
 
-- The app binds one global key: ⌘K (Ctrl K) for the command menu. Views bind their own keys only while they are open (a code view's ⌘P, ⇧⌘F, ⌘F, ⌘G; a review's J and K; a terminal's ⌘T, ⌘W; the image viewer's Esc, ← and →, and `+`, `-`, `0` for zoom). Enter sends in every input. A focused list box takes arrows, Home, End, Enter and Space. The Mac app's menu adds its own (Settings ⌘,, Reload ⌘R, Back ⌘[, Forward ⌘], Home ⇧⌘H).
+- The app binds one global key: ⌘K (Ctrl K) for the command menu. Views bind their own keys only while they are open (a code view's ⌘P, ⇧⌘F, ⌘F, ⌘G; a review's J and K; a terminal's ⌘T, ⌘W; the image viewer's Esc, ← and →, and `+`, `-`, `0` for zoom). Enter sends in every input. A focused list box takes arrows, Home, End, Enter and Space. The Mac app's menu adds its own (Settings ⌘,, New Task ⌘N, Close Window ⌘W, Back ⌘[, Forward ⌘], Home ⇧⌘H); it never zooms the page and has no Reload or developer tools.
 
 Example: pressing J on the Review tab moves to the next point; pressing J elsewhere does nothing.
 
@@ -8043,7 +8043,8 @@ These patterns cover the desktop window, the code workbench, how code and diffs 
 
 **Rules**
 
-- The menu is the OS's own: Settings… ⌘, (opens settings) and Restart Engine in the first menu; View has Reload ⌘R, zoom and full screen; Go has Back ⌘[, Forward ⌘] and Home ⇧⌘H, as in Finder and Safari. No other app-level shortcut.
+- The menu is the OS's own: Settings… ⌘, (opens settings) and Restart Engine in the first menu; File has New Task ⌘N (opens Home's new task field), Command Menu… ⌘K and Close Window ⌘W; Edit; no View menu, so macOS puts Enter Full Screen in Window; Go has Back ⌘[, Forward ⌘], Home ⇧⌘H, Tasks, Terminal and Settings, as in Finder and Safari; Help has macOS's menu search, What's New, the website, Report an Issue… and Show Engine Log. No other app-level shortcut.
+- Like a native app it never zooms (⌘+, ⌘− and ⌘0 do nothing, pinch never zooms the page) and shows nothing of a browser: no Reload, no developer tools, no Inspect Element. A right click on selected text or in a field opens macOS's own text menu (spelling guesses, Look Up, Cut, Copy, Paste); anywhere else nothing opens.
 - A menu bar (status) item shows while the app runs: the product mark as a template image with the count of decisions waiting beside it, and a menu with the engine's state, what needs you and what is working (each task opens its page), Open and Quit, Quit saying the engine and its agents keep running.
 - Back and Forward step through the page's own history and never onto the engine's waiting page.
 - A focused code editor keeps ⌘[ and ⌘] for outdent and indent: the page sees the key before the menu does.
@@ -9509,7 +9510,7 @@ keyboard usable instead:
   | Terminal page, while open | ⌘T new terminal, ⌘W close it; a focused terminal takes every key a terminal would (Ctrl K included) |
   | Image viewer | Esc close, ← → previous / next, `+` `-` zoom, `0` fit |
   | Find bar | Enter next match, ⇧Enter previous, Escape closes and returns focus to what it searched |
-  | Mac app menu | ⌘[ back, ⌘] forward, ⇧⌘H Home, ⌘, Settings, ⌘R reload |
+  | Mac app menu | ⌘N new task, ⌘W close window, ⌘[ back, ⌘] forward, ⇧⌘H Home, ⌘, Settings |
 
   The linter rejects any `addEventListener('keydown' | 'keyup')` in the app outside the four hooks that own these
   shortcuts; every other key handler sits on the element that has focus (`onKeyDown`). A shortcut that
