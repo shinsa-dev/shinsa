@@ -99,7 +99,7 @@ export const runServiceTool = Effect.fn('ServiceTools.run')(function* (
     const views = listTaskServices(state, snapshot, task, now);
     const reference = readString(input, 'service');
     if (!reference) {
-      const projectId = resolveTaskProject(state, task);
+      const projectId = Option.getOrNull(resolveTaskProject(state, task));
       const others = snapshot.services.filter(
         (service) => service.projectId === projectId && !views.some((each) => each.service.id === service.id)
       );
@@ -148,7 +148,7 @@ export const runServiceTool = Effect.fn('ServiceTools.run')(function* (
 
   const addService = Effect.fn('ServiceTools.add')(function* () {
     const repo = task.repoId ? state.repos[task.repoId] : undefined;
-    const projectId = resolveTaskProject(state, task);
+    const projectId = Option.getOrNull(resolveTaskProject(state, task));
     if (!(repo && projectId))
       return yield* refuse('add_service needs a task that works in a project’s repository.');
     const { relative, cwd } = yield* resolveServiceFolder(repo.path);
@@ -207,7 +207,7 @@ export const runServiceTool = Effect.fn('ServiceTools.run')(function* (
   });
 
   const removeServices = Effect.fn('ServiceTools.remove')(function* () {
-    const projectId = resolveTaskProject(state, task);
+    const projectId = Option.getOrNull(resolveTaskProject(state, task));
     if (!projectId) return yield* refuse('remove_service needs a task in a project.');
     const snapshot = yield* runner.snapshot;
     const removed = new Map<string, ServiceDefinition>();

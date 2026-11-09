@@ -90,7 +90,9 @@ export const CodeHandlers = HttpApiBuilder.group(
     const resolveRefs = Effect.fn('CodeHandlers.resolveRefs')(function* (found: CodeTask) {
       const repo = (yield* engine.state).repos[found.task.repoId ?? ''];
       if (!repo) return yield* new RequestFailed(NO_REPOSITORY);
-      return yield* requestRead(history.taskRefs(repo, found.task, resolveRoundBase(found.task)));
+      return yield* requestRead(
+        history.taskRefs(repo, found.task, Option.getOrNull(resolveRoundBase(found.task)))
+      );
     });
 
     const resolveRef = Effect.fn('CodeHandlers.resolveRef')(function* (

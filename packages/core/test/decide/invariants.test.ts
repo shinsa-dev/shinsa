@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { Result } from 'effect';
+import { Result, Option } from 'effect';
 import { isTaskLive } from '../../src/decide/liveness.ts';
 import {
   applyEvent,
@@ -1054,7 +1054,7 @@ function assertInvariants(state: ShinsaState, now: number) {
     }
     if (task.stage === 'waiting_on_tasks') {
       const waiting = listPendingDependencies(state, task).length > 0 || gates.length > 0;
-      expect(waiting || selectCheckoutHolder(state, task) !== null, context).toBe(true);
+      expect(waiting || Option.getOrNull(selectCheckoutHolder(state, task)) !== null, context).toBe(true);
     }
     assertProcessInvariants(state, task, gates, context);
   }

@@ -134,7 +134,7 @@ export class Shares extends Context.Service<Shares, SharesHandle>()('shinsa/engi
 
       const worktree: ShareWorkingSource = sources.worktree ?? {
         readBase: (repo, task) =>
-          history.taskRefs(repo, task, resolveRoundBase(task)).pipe(
+          history.taskRefs(repo, task, Option.getOrNull(resolveRoundBase(task))).pipe(
             Effect.map((refs) => refs.base ?? refs.head),
             Effect.mapError(unreadable)
           ),

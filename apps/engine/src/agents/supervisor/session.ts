@@ -7,7 +7,7 @@ import {
   type Run,
   resolveTaskProject,
 } from '@shinsa/core';
-import { Clock, Effect, FiberSet, Scope } from 'effect';
+import { Clock, Effect, FiberSet, Scope, Option } from 'effect';
 import { isSameExtensionSet } from '../../extensions/index.ts';
 import { describeError } from '../../log/index.ts';
 import type { AccountLease } from '../accounts/schema.ts';
@@ -78,7 +78,10 @@ const resolveExtensions = Effect.fn('RunSupervisor.resolveExtensions')(function*
   const state = yield* (yield* RunWorld).state;
   const task = state.tasks[run.taskId];
   const repo = task?.repoId ? state.repos[task.repoId] : undefined;
-  const place = { repoPath: repo?.path ?? null, project: task ? resolveTaskProject(state, task) : null };
+  const place = {
+    repoPath: repo?.path ?? null,
+    project: task ? Option.getOrNull(resolveTaskProject(state, task)) : null,
+  };
   return yield* source.resolveSession(place, pin).pipe(
     Effect.catchDefect((defect) =>
       Effect.fail(new ExtensionsUnavailable({ message: describeError(defect) }))

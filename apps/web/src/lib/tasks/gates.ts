@@ -10,6 +10,7 @@ import {
   type ShinsaState,
   type Task,
 } from '@shinsa/core';
+import { Option } from 'effect';
 import { sendCommandWithToast } from '@/lib/connection/commands.ts';
 import { describeBudgetRetry } from '@/lib/tasks/cost.ts';
 
@@ -97,7 +98,7 @@ export function resolveRetryReply(gate: Gate): GateReply {
 }
 
 export function resolvePlanReply(task: Task): GateReply {
-  if (resolveWorkStep(resolveTaskPipeline(task)) === 'operate') return 'approveOperationPlan';
+  if (Option.contains(resolveWorkStep(resolveTaskPipeline(task)), 'operate')) return 'approveOperationPlan';
   return task.backlog ? 'startBacklog' : 'approvePlan';
 }
 

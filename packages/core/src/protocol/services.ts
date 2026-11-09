@@ -1,3 +1,4 @@
+import { Option } from 'effect';
 import { isTaskSettled } from '../domain/stages.ts';
 import type { Task } from '../domain/types.ts';
 import type { ShinsaState } from '../state/project.ts';
@@ -153,7 +154,7 @@ function isInside(path: string, folder: string) {
 export function resolveTaskServiceCwd(state: ShinsaState, service: ServiceDefinition, task: Task) {
   const repo = task.repoId ? state.repos[task.repoId] : undefined;
   if (!(repo && task.worktreePath) || isTaskSettled(task)) return null;
-  if (resolveTaskProject(state, task) !== service.projectId) return null;
+  if (Option.getOrNull(resolveTaskProject(state, task)) !== service.projectId) return null;
   const root = repo.path.replace(/\/+$/, '');
   const worktree = task.worktreePath.replace(/\/+$/, '');
   if (worktree === root || !isInside(service.cwd, root)) return null;

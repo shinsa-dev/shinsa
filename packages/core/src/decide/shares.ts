@@ -1,3 +1,4 @@
+import { Option } from 'effect';
 import type { CommandOf } from '../commands/index.ts';
 import {
   DomainError,
@@ -63,7 +64,9 @@ export function shareTask(decider: Decider, command: CommandOf<'task.share'>) {
     return;
   }
   const endsAt =
-    task.share?.limit === limit ? task.share.endsAt : resolveShareEnd(limit, decider.context.now);
+    task.share?.limit === limit
+      ? task.share.endsAt
+      : Option.getOrNull(resolveShareEnd(limit, decider.context.now));
   decider.emit({ type: 'task.shared', taskId: task.id, limit, scopes, endsAt });
   if (!task.share || task.share.failure) decider.run({ kind: 'share.link', taskId: task.id });
   if (!task.share) decider.run({ kind: 'share.describe', taskId: task.id });
@@ -155,7 +158,7 @@ export function sharePreview(decider: Decider, command: CommandOf<'preview.share
     if (preview.failure) decider.run(link);
     return;
   }
-  const endsAt = resolveShareEnd(limit, decider.context.now);
+  const endsAt = Option.getOrNull(resolveShareEnd(limit, decider.context.now));
   decider.emit({ type: 'preview.shared', taskId: task.id, serviceId: command.serviceId, limit, endsAt });
   if (!preview || preview.failure) decider.run(link);
 }

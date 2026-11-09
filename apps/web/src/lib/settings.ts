@@ -412,7 +412,7 @@ function createDelegationLimitItem(limit: number): SettingItem<string> {
 }
 
 export function listDelegationLimitItems(settings: Settings): SettingItem<string>[] {
-  const current = resolveDelegationLimit(settings);
+  const current = Option.getOrNull(resolveDelegationLimit(settings));
   const limits =
     current === null || DELEGATION_LIMITS.includes(current)
       ? DELEGATION_LIMITS
@@ -425,8 +425,7 @@ export function listDelegationLimitItems(settings: Settings): SettingItem<string
 }
 
 export function resolveDelegationLimitValue(settings: Settings) {
-  const limit = resolveDelegationLimit(settings);
-  return limit === null ? 'off' : String(limit);
+  return Option.match(resolveDelegationLimit(settings), { onNone: () => 'off', onSome: String });
 }
 
 export function parseDelegationLimit(value: string) {

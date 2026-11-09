@@ -1,3 +1,4 @@
+import { Option } from 'effect';
 import type { WatchdogSource, WatchdogSourceRequest, WatchdogStart } from '../report/types.ts';
 
 export type WatchdogStatus =
@@ -79,8 +80,8 @@ export function listActiveWatchdogs(task: { watchdogs?: Watchdog[] }) {
   return (task.watchdogs ?? []).filter(isWatchdogActive);
 }
 
-export function selectWatchingRun(task: { watchdogs?: Watchdog[] }, runId: string) {
-  return (task.watchdogs ?? []).find((watchdog) => watchdog.runId === runId) ?? null;
+export function selectWatchingRun(task: { watchdogs?: Watchdog[] }, runId: string): Option.Option<Watchdog> {
+  return Option.fromNullishOr((task.watchdogs ?? []).find((watchdog) => watchdog.runId === runId));
 }
 
 export function isSourceForRepo(source: Pick<WatchSource, 'repoIds'>, repoId: string | null) {

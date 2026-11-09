@@ -38,10 +38,12 @@ function resolveFileHref(text: string) {
   return `${REFERENCE_SCHEME}file/${match[1]}#L${match[2]}${match[3] ? `-L${match[3]}` : ''}`;
 }
 
-export function parseTestFile(value: string): TestFile | null {
-  const reference = Option.getOrNull(parseReference(resolveFileHref(value.trim())));
-  if (reference?.kind !== 'file') return null;
-  return { path: reference.path, line: reference.line, end: reference.end };
+export function parseTestFile(value: string): Option.Option<TestFile> {
+  return Option.flatMap(parseReference(resolveFileHref(value.trim())), (reference) =>
+    reference.kind === 'file'
+      ? Option.some({ path: reference.path, line: reference.line, end: reference.end })
+      : Option.none()
+  );
 }
 
 export function serializeTestFile(file: TestFile) {

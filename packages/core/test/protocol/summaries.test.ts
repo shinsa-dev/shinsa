@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { Option } from 'effect';
 import {
   applyStatePatch,
   applyTaskDetail,
@@ -126,7 +127,9 @@ describe('the view state a socket gets on connect', () => {
     for (const id of [merged, cancelled, open]) {
       const task = harness.task(id);
       expect(resolveTaskCost(view, task).total).toEqual(resolveTaskCost(harness.state, task).total);
-      expect(selectLeadGate(view, task)).toEqual(selectLeadGate(harness.state, task));
+      expect(Option.getOrNull(selectLeadGate(view, task))).toEqual(
+        Option.getOrNull(selectLeadGate(harness.state, task))
+      );
     }
   });
 });

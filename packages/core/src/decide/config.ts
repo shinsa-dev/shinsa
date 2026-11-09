@@ -1,3 +1,4 @@
+import { Option } from 'effect';
 import type { CommandOf } from '../commands/index.ts';
 import {
   type ConfigProblem,
@@ -174,7 +175,7 @@ function selectChosenRepo(decider: Decider, gate: Gate, response: string | null)
 
 function resolveBindProject(task: Task, repo: Repo, outside: boolean) {
   if (outside) return repo.projectId ?? null;
-  return resolveRepoMove(task, repo);
+  return Option.getOrNull(resolveRepoMove(task, repo));
 }
 
 function bindRepo(decider: Decider, task: Task, repoId: string, outside = false) {

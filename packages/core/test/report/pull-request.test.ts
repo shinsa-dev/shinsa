@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { Option } from 'effect';
 import type { Evidence, PhaseReport, Round, Task } from '../../src/index.ts';
 import {
   listPullRequestEvidence,
@@ -408,12 +409,12 @@ describe('resolvePublicUrl', () => {
   test('prefers the uploaded address, then a public web address, else nothing', () => {
     const task = builtTask();
     const shot = piece(task, { id: 's', kind: 'screenshot', title: 'S', uri: '/api/evidence/s.png' });
-    expect(resolvePublicUrl(shot)).toBeNull();
-    expect(resolvePublicUrl({ ...shot, uploadUrl: `${UPLOADED}/s` })).toBe(`${UPLOADED}/s`);
-    expect(resolvePublicUrl({ ...shot, uri: 'https://cdn.example.com/s.png' })).toBe(
+    expect(Option.getOrNull(resolvePublicUrl(shot))).toBeNull();
+    expect(Option.getOrNull(resolvePublicUrl({ ...shot, uploadUrl: `${UPLOADED}/s` }))).toBe(`${UPLOADED}/s`);
+    expect(Option.getOrNull(resolvePublicUrl({ ...shot, uri: 'https://cdn.example.com/s.png' }))).toBe(
       'https://cdn.example.com/s.png'
     );
-    expect(resolvePublicUrl({ ...shot, uri: 'http://127.0.0.1:7446/s.png' })).toBeNull();
+    expect(Option.getOrNull(resolvePublicUrl({ ...shot, uri: 'http://127.0.0.1:7446/s.png' }))).toBeNull();
   });
 });
 

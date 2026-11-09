@@ -211,6 +211,20 @@ describe('delegating a task', () => {
     expect(child(harness, parent.id).delegation?.depth).toBe(1);
   });
 
+  test('a delegated run in a parent loop counts the limit from itself', () => {
+    const { harness, taskId } = building();
+    harness.send({ type: 'settings.change', patch: { delegationLimit: 1 } });
+    const parent = harness.activeRun(taskId);
+    const nested = child(harness, parent.id, { role: 'builder' });
+    const looped = current(harness, nested.id);
+    if (!looped.delegation) throw new Error('no delegation');
+    harness.state.runs[nested.id] = {
+      ...looped,
+      delegation: { ...looped.delegation, parentRunId: nested.id },
+    };
+    expect(child(harness, nested.id).delegation?.parentRunId).toBe(nested.id);
+  });
+
   test('isolation needs the task’s worktree and the parent’s commit', () => {
     const { harness, taskId } = building();
     const parent = harness.activeRun(taskId);

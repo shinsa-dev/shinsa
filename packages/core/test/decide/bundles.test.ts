@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { Option } from 'effect';
 import {
   isBundleFollower,
   listBundleBlockers,
@@ -105,7 +106,7 @@ describe('stacking a task on another', () => {
     reachReady(harness, parent);
     expect(harness.task(child).stage).toBe('triage');
     expect(harness.task(child).stackBases).toEqual([`fix/${parent}`]);
-    expect(resolveRoundBase(harness.task(child))).toBe(`fix/${parent}`);
+    expect(Option.getOrNull(resolveRoundBase(harness.task(child)))).toBe(`fix/${parent}`);
     readyWorktree(harness, child);
     expect(harness.task(child).stage).toBe('planning');
   });
@@ -126,7 +127,7 @@ describe('stacking a task on another', () => {
     harness.send({ type: 'task.complete', taskId: parent });
     expect(harness.task(child).stage).toBe('triage');
     expect(harness.task(child).stackBases ?? []).toEqual([]);
-    expect(resolveRoundBase(harness.task(child))).toBeNull();
+    expect(Option.getOrNull(resolveRoundBase(harness.task(child)))).toBeNull();
   });
 
   test('waiting on other tasks and stacking combine in the reason', () => {
@@ -443,12 +444,12 @@ describe('a bundle on its way to the merge', () => {
     reachReady(harness, parent, 1);
     readyWorktree(harness, child);
     reachShipping(harness, child);
-    expect(resolveRoundBase(harness.task(child))).toBe(`fix/${parent}`);
+    expect(Option.getOrNull(resolveRoundBase(harness.task(child)))).toBe(`fix/${parent}`);
     recordClean(harness, child, 2, { checks: 'pending' });
     const watches = harness.effectsOf('pull_request.watch').length;
     recordMerged(harness, parent, 1);
     expect(harness.task(child).stackBases).toEqual([]);
-    expect(resolveRoundBase(harness.task(child))).toBeNull();
+    expect(Option.getOrNull(resolveRoundBase(harness.task(child)))).toBeNull();
     expect(
       harness
         .effectsOf('pull_request.watch')
@@ -498,7 +499,7 @@ describe('a bundle on its way to the merge', () => {
     stackOn(harness, child, []);
     expect(harness.task(child).stacksOn).toEqual([]);
     expect(harness.task(child).stackBases).toEqual([]);
-    expect(resolveRoundBase(harness.task(child))).toBeNull();
+    expect(Option.getOrNull(resolveRoundBase(harness.task(child)))).toBeNull();
     verifySetup(harness, child);
     expect(harness.effectsOf('worktree.create').length).toBe(creates + 1);
     expect(harness.task(parent).bundleReady).toBeNull();
@@ -680,7 +681,7 @@ describe('a bundle that branches and joins', () => {
     reachReady(harness, d, 4);
     expect(harness.task(f).stage).toBe('triage');
     expect(harness.task(f).stackBases).toEqual([`fix/${b}`, `fix/${c}`, `fix/${d}`]);
-    expect(resolveRoundBase(harness.task(f))).toBe(`fix/${b}`);
+    expect(Option.getOrNull(resolveRoundBase(harness.task(f)))).toBe(`fix/${b}`);
     expect(resolveRoundBases(harness.task(f))).toEqual([`fix/${b}`, `fix/${c}`, `fix/${d}`]);
   });
 
@@ -751,7 +752,7 @@ describe('a bundle that branches and joins', () => {
     const watches = harness.effectsOf('pull_request.watch').length;
     recordMerged(harness, b, 2);
     expect(harness.task(f).stackBases).toEqual([`fix/${c}`, `fix/${d}`]);
-    expect(resolveRoundBase(harness.task(f))).toBe(`fix/${c}`);
+    expect(Option.getOrNull(resolveRoundBase(harness.task(f)))).toBe(`fix/${c}`);
     expect(
       harness
         .effectsOf('pull_request.watch')

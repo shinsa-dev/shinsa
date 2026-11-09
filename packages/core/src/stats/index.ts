@@ -277,7 +277,9 @@ export function resolveProjectStatsSource(
 ): StatsSource {
   if (focus.projectIds.length === 0) return { tasks: state.tasks, runs: state.runs };
   const tasks = Object.fromEntries(
-    Object.entries(state.tasks).filter(([, task]) => isProjectInFocus(focus, resolveTaskProject(state, task)))
+    Object.entries(state.tasks).filter(([, task]) =>
+      isProjectInFocus(focus, Option.getOrNull(resolveTaskProject(state, task)))
+    )
   );
   const runs = Object.fromEntries(Object.entries(state.runs).filter(([, run]) => run.taskId in tasks));
   return { tasks, runs };

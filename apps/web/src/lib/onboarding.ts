@@ -263,7 +263,7 @@ export type HelpView =
 
 export function resolveHelpView(state: ShinsaState | null, task: Task | null): HelpView {
   if (!(state && task)) return { kind: 'loading' };
-  const gate = selectLeadGate(state, task);
+  const gate = Option.getOrNull(selectLeadGate(state, task));
   if (gate && gate.type !== 'result') return { kind: 'gate', gate };
   if (task.result) return { kind: 'result', body: task.result.body };
   return STOPPED_STAGES.has(task.stage) ? { kind: 'stopped' } : { kind: 'loading' };

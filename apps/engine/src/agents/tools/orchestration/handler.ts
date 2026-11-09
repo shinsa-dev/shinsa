@@ -19,7 +19,7 @@ import {
   validateDelegationRequest,
   validateSplit,
 } from '@shinsa/core';
-import { Duration, Effect } from 'effect';
+import { Duration, Effect, Option } from 'effect';
 import { describeError } from '../../../log/index.ts';
 import { HANDED_OVER } from '../../handover.ts';
 import { assertToolInput } from '../attempts.ts';
@@ -189,7 +189,7 @@ export const handleOrchestrationTool = Effect.fn('OrchestrationTool.handle')(fun
   const findProjectId = Effect.fn('OrchestrationTool.findProjectId')(function* (reference: string) {
     const projects = Object.values((yield* call.state).projects);
     const project = selectProjectByReference(projects, reference);
-    if (project) return project.id;
+    if (Option.isSome(project)) return project.value.id;
     const known = projects.map((candidate) => `${candidate.name} (${candidate.key})`);
     return yield* refuse(`There is no project "${reference}". Known: ${known.join(', ') || 'none'}.`);
   });
@@ -270,7 +270,7 @@ export const handleOrchestrationTool = Effect.fn('OrchestrationTool.handle')(fun
     const requestKey = request.requestKey ?? call.requestKey;
     const projectId = request.project
       ? yield* findProjectId(request.project)
-      : resolveTaskProject(yield* call.state, source);
+      : Option.getOrNull(resolveTaskProject(yield* call.state, source));
     const fork = yield* resolveFork(request.forkFrom);
     const named = yield* resolveRepoId(source, request, projectId);
     const repoId = named ?? resolveForkRepo(fork, source);
@@ -332,7 +332,7 @@ export const handleOrchestrationTool = Effect.fn('OrchestrationTool.handle')(fun
     const { repository, reason } = yield* readMoveInput();
     const task = yield* findTaskOf(yield* findParent());
     const state = yield* call.state;
-    const projectId = resolveTaskProject(state, task);
+    const projectId = Option.getOrNull(resolveTaskProject(state, task));
     const repo =
       selectKnownRepo(state, repository, projectId, true) ??
       (yield* call.registerRepo(projectId, repository)) ??

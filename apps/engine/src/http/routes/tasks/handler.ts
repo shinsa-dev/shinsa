@@ -189,8 +189,11 @@ export const TasksHandlers = HttpApiBuilder.group(
             return yield* new RequestFailed({ code: 'code_unavailable', message: CODE_TO_EDIT_MISSING });
           const refusal = resolveEditRefusal(task);
           const root = task.worktreePath;
-          if (refusal || !root)
-            return yield* new RequestFailed({ code: 'edit_refused', message: refusal ?? '' });
+          if (Option.isSome(refusal) || !root)
+            return yield* new RequestFailed({
+              code: 'edit_refused',
+              message: Option.getOrElse(refusal, () => ''),
+            });
           const path = yield* requestSync(() =>
             assertRepoPath(Predicate.isString(payload.path) ? payload.path : null)
           );

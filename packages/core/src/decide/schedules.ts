@@ -551,7 +551,7 @@ export function removeSchedule(decider: Decider, command: CommandOf<'schedule.re
 }
 
 function selectGoneReason(decider: Decider, schedule: Schedule) {
-  if (schedule.source && !selectProjectSource(decider, schedule.source)) {
+  if (schedule.source && Option.isNone(selectProjectSource(decider, schedule.source))) {
     return 'Its data source was removed from the project.';
   }
   const target = schedule.target;
@@ -628,7 +628,7 @@ function send(decider: Decider, schedule: Schedule, text: string) {
   if (schedule.source) {
     return {
       taskId: target.taskId,
-      runId: startIntake(decider, schedule, decider.task(target.taskId), text),
+      runId: Option.getOrNull(startIntake(decider, schedule, decider.task(target.taskId), text)),
     };
   }
   messageTask(decider, { type: 'task.message', taskId: target.taskId, text }, schedule.id);

@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { Option } from 'effect';
 import type { RunRole } from '../../src/index.ts';
 import {
   resolveAgentPrompt,
@@ -189,7 +190,7 @@ describe('splitting the house rules off a brief', () => {
       ['investigator', resolveInvestigatorPrompt(task, repo, null)],
     ];
     for (const [role, brief] of briefs) {
-      const split = splitHouseRules(brief);
+      const split = Option.getOrNull(splitHouseRules(brief));
       expect(split?.rules).toBe(resolveHouseRules(role));
       expect(split?.instruction.startsWith('Your role: ')).toBe(true);
       expect(`${split?.rules}\n\n${split?.instruction}`).toBe(brief);
@@ -197,8 +198,8 @@ describe('splitting the house rules off a brief', () => {
   });
 
   test('a brief without house rules, such as a fix prompt, has nothing to split', () => {
-    expect(splitHouseRules(resolveHumanFixPrompt('Rename it.', []))).toBeNull();
-    expect(splitHouseRules(resolveHouseRules('agent'))).toBeNull();
+    expect(Option.getOrNull(splitHouseRules(resolveHumanFixPrompt('Rename it.', [])))).toBeNull();
+    expect(Option.getOrNull(splitHouseRules(resolveHouseRules('agent')))).toBeNull();
   });
 
   test('the round agent’s short instructions carry its house rules and split back to the instruction', () => {
@@ -208,7 +209,7 @@ describe('splitting the house rules off a brief', () => {
       resolveOperationInstruction(task, null),
       resolveHumanFixPrompt('Rename it.', []),
     ]) {
-      const split = splitHouseRules(resolveAgentPrompt(instruction));
+      const split = Option.getOrNull(splitHouseRules(resolveAgentPrompt(instruction)));
       expect(split?.rules).toBe(resolveHouseRules('agent'));
       expect(split?.instruction).toBe(instruction);
     }

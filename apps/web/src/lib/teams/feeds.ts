@@ -161,7 +161,7 @@ export function resolveFleetTeamTaskPath(
 }
 
 export function selectTeamFeedTask(feed: TeamFeedSnapshot, reference: string) {
-  const handle = parseTaskHandle(reference);
+  const handle = Option.getOrNull(parseTaskHandle(reference));
   return feed.tasks.find((entry) => entry.task.id === reference || entry.task.handle === handle) ?? null;
 }
 

@@ -9,6 +9,7 @@ import {
 } from '@shinsa/core';
 import { Icon, type IconName } from '@shinsa/ui/components/icon';
 import { cn } from '@shinsa/ui/lib/utils';
+import { Option } from 'effect';
 import * as React from 'react';
 import { SuggestedWatchButtons } from '@/components/automations/suggested-watch.tsx';
 import { CardLine, ROW_INDENT } from '@/components/chat/chat-line.tsx';
@@ -104,7 +105,10 @@ function PlanCard({ args, task, at }: { args: ChatToolArgs; task: Task | null; a
                 <li key={index} className='flex gap-2.5'>
                   <StepNumber index={index} />
                   <div className='flex min-w-0 flex-col'>
-                    <PlanPhaseTitle title={title} change={resolvePhaseChange(changes, title)} />
+                    <PlanPhaseTitle
+                      title={title}
+                      change={Option.getOrNull(resolvePhaseChange(changes, title))}
+                    />
                     {readString(phase, 'detail') && (
                       <span className='selectable text-xs text-fg-3'>
                         <InlineMarkdown text={readString(phase, 'detail') ?? ''} />

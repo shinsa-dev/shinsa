@@ -66,7 +66,12 @@ export function listTerminalPlaces(state: ShinsaState, projectId: string): Termi
   for (const folder of state.projects[projectId]?.folders ?? [])
     add({ path: folder, label: resolveBaseName(folder), kind: 'folder', taskId: null });
   for (const task of Object.values(state.tasks)) {
-    if (!task.worktreePath || isTaskSettled(task) || resolveTaskProject(state, task) !== projectId) continue;
+    if (
+      !task.worktreePath ||
+      isTaskSettled(task) ||
+      Option.getOrNull(resolveTaskProject(state, task)) !== projectId
+    )
+      continue;
     add({ path: task.worktreePath, label: describeTaskPlace(task), kind: 'worktree', taskId: task.id });
   }
   return places;

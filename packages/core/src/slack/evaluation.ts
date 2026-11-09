@@ -29,6 +29,6 @@ export function serializeSlackEvaluationPrompt(mention: SlackMention) {
   ].join('\n');
 }
 
-export function parseSlackEvaluation(value: unknown): SlackEvaluation | null {
-  return Option.getOrNull(Option.map(decodeSlackEvaluationReply(value), ({ decision }) => decision));
+export function parseSlackEvaluation(value: unknown): Option.Option<SlackEvaluation> {
+  return Option.map(decodeSlackEvaluationReply(value), ({ decision }) => decision);
 }

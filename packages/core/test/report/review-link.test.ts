@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { Option } from 'effect';
 import type { Evidence, PhaseReport, Task } from '../../src/index.ts';
 import {
   listReviewPayloadFits,
@@ -137,7 +138,7 @@ describe('serializeReviewPayload', () => {
       detail: 'Scrolls.',
       label: null,
     });
-    expect(parseReviewPayload(JSON.parse(JSON.stringify(payload)))).toEqual(payload);
+    expect(Option.getOrNull(parseReviewPayload(JSON.parse(JSON.stringify(payload))))).toEqual(payload);
   });
 
   test('carries the agent review’s summary and findings without their code, and none before it ran', () => {
@@ -164,7 +165,7 @@ describe('serializeReviewPayload', () => {
         { severity: 'blocking', file: null, line: null, message: 'Breaks the build.' },
       ],
     });
-    expect(parseReviewPayload(JSON.parse(JSON.stringify(payload)))).toEqual(payload);
+    expect(Option.getOrNull(parseReviewPayload(JSON.parse(JSON.stringify(payload))))).toEqual(payload);
     expect(serializeReviewPayload({ ...task, reviewSummary: null }, []).review).toBeNull();
   });
 
@@ -204,7 +205,7 @@ describe('serializeReviewPayload', () => {
       name: 'shinsa',
       remote: 'github.com/shinsa-dev/shinsa',
     });
-    expect(parseReviewPayload(JSON.parse(JSON.stringify(payload)))).toEqual(payload);
+    expect(Option.getOrNull(parseReviewPayload(JSON.parse(JSON.stringify(payload))))).toEqual(payload);
   });
 
   test('a task without a handle, summary or walkthrough still reads back', () => {
@@ -212,7 +213,7 @@ describe('serializeReviewPayload', () => {
     const payload = serializeReviewPayload(task, []);
     expect(payload.task).toMatchObject({ handle: null, summary: null });
     expect(payload.report.walkthrough).toBeNull();
-    expect(parseReviewPayload(JSON.parse(JSON.stringify(payload)))).toEqual(payload);
+    expect(Option.getOrNull(parseReviewPayload(JSON.parse(JSON.stringify(payload))))).toEqual(payload);
   });
 });
 
@@ -226,7 +227,9 @@ describe('parseReviewPayload', () => {
       branch: 'a b',
       coverage: { covered: 9, executable: 3 },
     };
-    expect(parseReviewPayload({ v: REVIEW_PAYLOAD_VERSION, task, report: {} })?.task).toMatchObject({
+    expect(
+      Option.getOrNull(parseReviewPayload({ v: REVIEW_PAYLOAD_VERSION, task, report: {} }))?.task
+    ).toMatchObject({
       repo: null,
       slug: null,
       branch: null,
@@ -234,18 +237,20 @@ describe('parseReviewPayload', () => {
     });
     const partial = { ...task, coverage: { covered: 1 } };
     expect(
-      parseReviewPayload({ v: REVIEW_PAYLOAD_VERSION, task: partial, report: {} })?.task.coverage
+      Option.getOrNull(parseReviewPayload({ v: REVIEW_PAYLOAD_VERSION, task: partial, report: {} }))?.task
+        .coverage
     ).toBeNull();
     const raw = { ...task, coverage: 'all' };
     expect(
-      parseReviewPayload({ v: REVIEW_PAYLOAD_VERSION, task: raw, report: {} })?.task.coverage
+      Option.getOrNull(parseReviewPayload({ v: REVIEW_PAYLOAD_VERSION, task: raw, report: {} }))?.task
+        .coverage
     ).toBeNull();
   });
 
   test('reads a malformed agent review as none and drops malformed findings', () => {
     const base = { v: REVIEW_PAYLOAD_VERSION, task: { id: 'a', title: 'T' }, report: {} };
-    expect(parseReviewPayload({ ...base, review: 'yes' })?.review).toBeNull();
-    expect(parseReviewPayload({ ...base, review: { findings: [] } })?.review).toBeNull();
+    expect(Option.getOrNull(parseReviewPayload({ ...base, review: 'yes' }))?.review).toBeNull();
+    expect(Option.getOrNull(parseReviewPayload({ ...base, review: { findings: [] } }))?.review).toBeNull();
     const review = {
       summary: 'Fine.',
       findings: [
@@ -254,73 +259,79 @@ describe('parseReviewPayload', () => {
         { severity: 'blocking', message: 'Ok.' },
       ],
     };
-    expect(parseReviewPayload({ ...base, review })?.review).toEqual({
+    expect(Option.getOrNull(parseReviewPayload({ ...base, review }))?.review).toEqual({
       summary: 'Fine.',
       findings: [{ severity: 'blocking', file: null, line: null, message: 'Ok.' }],
     });
   });
 
   test('refuses anything that is not a review of this version', () => {
-    expect(parseReviewPayload(null)).toBeNull();
-    expect(parseReviewPayload([])).toBeNull();
-    expect(parseReviewPayload({ v: 2 })).toBeNull();
-    expect(parseReviewPayload({ v: REVIEW_PAYLOAD_VERSION, task: {}, report: {} })).toBeNull();
-    expect(parseReviewPayload({ v: REVIEW_PAYLOAD_VERSION, task: { id: 'a', title: 'T' } })).toBeNull();
+    expect(Option.getOrNull(parseReviewPayload(null))).toBeNull();
+    expect(Option.getOrNull(parseReviewPayload([]))).toBeNull();
+    expect(Option.getOrNull(parseReviewPayload({ v: 2 }))).toBeNull();
+    expect(
+      Option.getOrNull(parseReviewPayload({ v: REVIEW_PAYLOAD_VERSION, task: {}, report: {} }))
+    ).toBeNull();
+    expect(
+      Option.getOrNull(parseReviewPayload({ v: REVIEW_PAYLOAD_VERSION, task: { id: 'a', title: 'T' } }))
+    ).toBeNull();
   });
 
   test('keeps only well-formed parts, no check output, and only images GitHub hosts', () => {
-    const payload = parseReviewPayload({
-      v: REVIEW_PAYLOAD_VERSION,
-      task: { id: 'a', title: 'T', handle: 7, pullRequest: 1.5 },
-      report: {
-        sections: [
-          { title: 'One', summary: 'Did it.', spots: [{ file: 'x' }] },
-          { title: 'No summary' },
-          'junk',
-        ],
-        checks: [
-          { id: 'c1', label: 'Tests', command: 'bun test', outcome: 'pass', detail: 'secret output' },
-          { id: 'c2', label: 'Odd', command: 'x', outcome: 'maybe' },
-        ],
-        judgementCalls: [
-          { title: 'Call', call: 'Do it', alternatives: [{ option: 'a' }, 'b'] },
-          { title: 'Half' },
-        ],
-        walkthrough: {
-          approach: 'A',
-          risks: [{ title: 'R', risk: 'Bad' }, { title: 'Only title' }],
-          testing: {
-            automated: ['ok', 3],
-            manual: [
-              { action: 'Go', expect: 'It works', target: { kind: 'url', value: 'https://x.dev' } },
-              { action: 'Go', expect: 'Odd target', target: { kind: 'planet', value: 'x' } },
-              { action: 'No expect' },
-            ],
+    const payload = Option.getOrNull(
+      parseReviewPayload({
+        v: REVIEW_PAYLOAD_VERSION,
+        task: { id: 'a', title: 'T', handle: 7, pullRequest: 1.5 },
+        report: {
+          sections: [
+            { title: 'One', summary: 'Did it.', spots: [{ file: 'x' }] },
+            { title: 'No summary' },
+            'junk',
+          ],
+          checks: [
+            { id: 'c1', label: 'Tests', command: 'bun test', outcome: 'pass', detail: 'secret output' },
+            { id: 'c2', label: 'Odd', command: 'x', outcome: 'maybe' },
+          ],
+          judgementCalls: [
+            { title: 'Call', call: 'Do it', alternatives: [{ option: 'a' }, 'b'] },
+            { title: 'Half' },
+          ],
+          walkthrough: {
+            approach: 'A',
+            risks: [{ title: 'R', risk: 'Bad' }, { title: 'Only title' }],
+            testing: {
+              automated: ['ok', 3],
+              manual: [
+                { action: 'Go', expect: 'It works', target: { kind: 'url', value: 'https://x.dev' } },
+                { action: 'Go', expect: 'Odd target', target: { kind: 'planet', value: 'x' } },
+                { action: 'No expect' },
+              ],
+            },
           },
         },
-      },
-      evidence: [
-        {
-          id: 'e1',
-          itemId: 'i',
-          kind: 'screenshot',
-          title: 'Shot',
-          url: 'https://github.com/user-attachments/assets/a',
-          width: '9',
-          theme: 'dim',
-        },
-        { id: 'e2', itemId: 'i', kind: 'screenshot', title: 'Bad', url: 'javascript:alert(1)' },
-        { id: 'e4', itemId: 'i', kind: 'screenshot', title: 'Fake', url: 'https://evil.example/pass.png' },
-        {
-          id: 'e5',
-          itemId: 'i',
-          kind: 'recording',
-          title: 'Raw',
-          url: 'https://private-user-images.githubusercontent.com/1/v.mp4',
-        },
-        { id: 'e3', itemId: 'i', kind: 'note', title: 'Note', url: 'https://x.dev/n' },
-      ],
-    });
+        evidence: [
+          {
+            id: 'e1',
+            itemId: 'i',
+            kind: 'screenshot',
+            title: 'Shot',
+            url: 'https://github.com/user-attachments/assets/a',
+            width: '9',
+            theme: 'dim',
+          },
+          { id: 'e2', itemId: 'i', kind: 'screenshot', title: 'Bad', url: 'javascript:alert(1)' },
+          { id: 'e4', itemId: 'i', kind: 'screenshot', title: 'Fake', url: 'https://evil.example/pass.png' },
+          {
+            id: 'e5',
+            itemId: 'i',
+            kind: 'recording',
+            title: 'Raw',
+            url: 'https://private-user-images.githubusercontent.com/1/v.mp4',
+          },
+          { id: 'e3', itemId: 'i', kind: 'note', title: 'Note', url: 'https://x.dev/n' },
+        ],
+      })
+    );
     expect(payload?.task).toEqual({
       id: 'a',
       handle: null,
@@ -334,11 +345,13 @@ describe('parseReviewPayload', () => {
       stage: 'shipping',
       startedAt: null,
     });
-    const numbered = parseReviewPayload({
-      v: REVIEW_PAYLOAD_VERSION,
-      task: { id: 'a', title: 'T', pullRequest: 23 },
-      report: {},
-    });
+    const numbered = Option.getOrNull(
+      parseReviewPayload({
+        v: REVIEW_PAYLOAD_VERSION,
+        task: { id: 'a', title: 'T', pullRequest: 23 },
+        report: {},
+      })
+    );
     expect(numbered?.task.pullRequest).toBe(23);
     expect(payload?.report.headline).toBe('');
     expect(payload?.report.sections).toEqual([{ title: 'One', summary: 'Did it.', spots: [] }]);
@@ -389,11 +402,13 @@ describe('parseReviewPayload', () => {
   });
 
   test('a walkthrough without testing, and fields of the wrong kind, read as empty', () => {
-    const payload = parseReviewPayload({
-      v: REVIEW_PAYLOAD_VERSION,
-      task: { id: 'a', title: 'T' },
-      report: { sections: 'x', walkthrough: { risks: 'x' } },
-    });
+    const payload = Option.getOrNull(
+      parseReviewPayload({
+        v: REVIEW_PAYLOAD_VERSION,
+        task: { id: 'a', title: 'T' },
+        report: { sections: 'x', walkthrough: { risks: 'x' } },
+      })
+    );
     expect(payload?.report).toEqual({
       headline: '',
       sections: [],
@@ -449,6 +464,6 @@ describe('listReviewPayloadFits', () => {
     expect(last?.evidence).toEqual([]);
     expect(payload.task.stage).toBe('awaiting_merge');
     expect(serializeReviewPayload({ ...task, stage: 'building' }, []).task.stage).toBe('shipping');
-    expect(parseReviewPayload(JSON.parse(JSON.stringify(last)))).toEqual(last ?? null);
+    expect(Option.getOrNull(parseReviewPayload(JSON.parse(JSON.stringify(last))))).toEqual(last ?? null);
   });
 });

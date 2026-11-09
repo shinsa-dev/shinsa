@@ -1,3 +1,4 @@
+import { Option } from 'effect';
 import type { Iteration, Run, RunPurpose, RunRole, Task } from './types.ts';
 
 export type ReplyingHandOver =
@@ -13,9 +14,9 @@ const REPLYING_ROLES: ReadonlySet<RunRole> = new Set<RunRole>(['answerer', 'inve
 
 const REPLYING_PURPOSES: ReadonlySet<RunPurpose> = new Set<RunPurpose>(['plan', 'build', 'fix', 'operate']);
 
-export function selectOpenIteration(task: Pick<Task, 'iterations'>): Iteration | null {
+export function selectOpenIteration(task: Pick<Task, 'iterations'>): Option.Option<Iteration> {
   const last = task.iterations?.at(-1);
-  return last && last.reply === null ? last : null;
+  return last && last.reply === null ? Option.some(last) : Option.none();
 }
 
 export function isReplyingRun(run: Pick<Run, 'role' | 'purpose' | 'delegation'>) {

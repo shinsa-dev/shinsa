@@ -13,7 +13,7 @@ import {
   selectSessionCwd,
   splitHouseRules,
 } from '@shinsa/core';
-import { Effect } from 'effect';
+import { Effect, Option } from 'effect';
 import { resolveCapabilities } from '../providers/index.ts';
 import { type TurnPlan, type TurnContext, FRESH, type TurnFoldInput } from './schema.ts';
 
@@ -50,12 +50,13 @@ const resolveHandoffPlan = Effect.fn('TurnPlan.resolveHandoff')(function* (
     );
     return FRESH;
   }
-  const handoff = resolveHandoff({
+  const found = resolveHandoff({
     reason,
     fromProvider: context.labelOf(fromProvider),
     sources: yield* listConversation(context, sessionId),
   });
-  if (!handoff) return FRESH;
+  if (Option.isNone(found)) return FRESH;
+  const handoff = found.value;
   const plan: TurnPlan = {
     resume: null,
     fork: false,
@@ -159,10 +160,13 @@ const resolveResumedPrompt = Effect.fn('TurnPlan.resolveResumedPrompt')(function
   prompt: string,
   brief: string
 ) {
-  const rules = splitHouseRules(brief)?.rules;
-  if (!rules) return prompt;
-  if (!(yield* hasHouseRules(context, resume, rules))) return brief;
-  return splitHouseRules(prompt)?.instruction ?? prompt;
+  const split = splitHouseRules(brief);
+  if (Option.isNone(split)) return prompt;
+  if (!(yield* hasHouseRules(context, resume, split.value.rules))) return brief;
+  return Option.match(splitHouseRules(prompt), {
+    onNone: () => prompt,
+    onSome: ({ instruction }) => instruction,
+  });
 });
 
 export function resolveTurnFold({ run, plan, stepPrompt, firstAttempt, folds }: TurnFoldInput) {
@@ -189,7 +193,7 @@ export const resolveTurnPrompt = Effect.fn('TurnPlan.resolvePrompt')(function* (
   if (plan.handoff) return resolveHandoffPrompt(plan.handoff.text, brief);
   if (!plan.resume) return brief;
   const turn = yield* resolveResumedPrompt(context, plan.resume, fold ? brief : prompt, brief);
-  const started = selectSessionCwd(context.state, plan.resume, context.run.id);
+  const started = Option.getOrNull(selectSessionCwd(context.state, plan.resume, context.run.id));
   if (!started || started === context.cwd) return turn;
   return `${turn}\n\n${resolveMovedNote(context.cwd)}`;
 });

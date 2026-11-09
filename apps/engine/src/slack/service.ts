@@ -137,8 +137,10 @@ export class Slack extends Context.Service<
         const handleEvents = Effect.fn('Slack.handleEvents')(function* (request: Request) {
           const read = yield* readSigned(request);
           if (read instanceof Response) return read;
-          const mention = parseSlackMention(read.value);
-          if (!mention) return respondJsonError('body_invalid', 'The mention is missing a part.', 400);
+          const parsed = parseSlackMention(read.value);
+          if (Option.isNone(parsed))
+            return respondJsonError('body_invalid', 'The mention is missing a part.', 400);
+          const mention = parsed.value;
           yield* dispatch({ type: 'slack.mention', mention }, `slack:${mention.eventId}`);
           return Response.json({ ok: true }, { status: 202 });
         });
@@ -146,8 +148,10 @@ export class Slack extends Context.Service<
         const handleInteractions = Effect.fn('Slack.handleInteractions')(function* (request: Request) {
           const read = yield* readSigned(request);
           if (read instanceof Response) return read;
-          const decision = parseSlackDecision(read.value);
-          if (!decision) return respondJsonError('body_invalid', 'The decision is missing a part.', 400);
+          const parsed = parseSlackDecision(read.value);
+          if (Option.isNone(parsed))
+            return respondJsonError('body_invalid', 'The decision is missing a part.', 400);
+          const decision = parsed.value;
           return yield* dispatch(
             { type: 'slack.decide', decision },
             `slack-decide:${decision.interactionId}`
@@ -302,7 +306,7 @@ export class Slack extends Context.Service<
             serializeSlackEvaluationPrompt(mention),
             SLACK_EVALUATION_SCHEMA
           );
-          if (parseSlackEvaluation(said) === 'none') {
+          if (Option.contains(parseSlackEvaluation(said), 'none')) {
             yield* applyReaction(mention, mention.messageTs, null, SLACK_REACTIONS.sizing);
             const threadKey = resolveSlackThreadKey(mention);
             const seen = yield* Ref.modify(declined, (keys) => [
@@ -323,17 +327,14 @@ export class Slack extends Context.Service<
             effect.taskId,
             resolveTaskUrl
           );
-          if (!message) return;
-          yield* send(effect.thread, null, message);
+          if (Option.isNone(message)) return;
+          yield* send(effect.thread, null, message.value);
         });
 
         const merge = Effect.fn('Slack.merge')(function* (effect: SlackEffect<'slack.merge'>, key: string) {
           const state = yield* engine.state;
-          const message = resolveSlackMergeMessage(
-            state,
-            effect.taskId,
-            effect.round,
-            resolveTaskUrl(effect.taskId)
+          const message = Option.getOrNull(
+            resolveSlackMergeMessage(state, effect.taskId, effect.round, resolveTaskUrl(effect.taskId))
           );
           const posted = state.tasks[effect.taskId]?.slack?.merge;
           if (!message || posted?.round !== effect.round) return;

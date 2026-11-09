@@ -1,3 +1,4 @@
+import { Option } from 'effect';
 import { AGENT_ROLES, resolveAgentProvider } from '../agent-models/index.ts';
 import type { CommandOf } from '../commands/index.ts';
 import {
@@ -306,7 +307,7 @@ function dropFromFocus(decider: Decider, projectId: string) {
   const projectIds = focus.projectIds.filter((id) => id !== projectId);
   const next = projectIds.length === 0 ? NO_FOCUS : { ...focus, projectIds };
   decider.emit({ type: 'focus.changed', focus: next });
-  decider.run({ kind: 'briefing.request', projectId: selectSingleFocusProject(next) });
+  decider.run({ kind: 'briefing.request', projectId: Option.getOrNull(selectSingleFocusProject(next)) });
 }
 
 export function changeFocus(decider: Decider, command: CommandOf<'focus.change'>) {
@@ -326,7 +327,7 @@ export function changeFocus(decider: Decider, command: CommandOf<'focus.change'>
   };
   if (isSameValue(focus, decider.state.focus)) return;
   decider.emit({ type: 'focus.changed', focus });
-  decider.run({ kind: 'briefing.request', projectId: selectSingleFocusProject(focus) });
+  decider.run({ kind: 'briefing.request', projectId: Option.getOrNull(selectSingleFocusProject(focus)) });
 }
 
 function dropStaleModels(previous: Settings, patch: Partial<Settings>): Settings {

@@ -1,6 +1,6 @@
 import { diff } from '@codemirror/merge';
 import { resolveEditRefusal, type Task, type TaskRefs, WORKING_REF } from '@shinsa/core';
-import { Deferred, Effect } from 'effect';
+import { Deferred, Effect, Option } from 'effect';
 import { forkApp } from '@/lib/runtime/app.ts';
 import { enterPromise } from '@/lib/runtime/promise.ts';
 
@@ -18,7 +18,7 @@ export function resolveEditState(input: {
   headPath: string | null;
 }): EditState {
   const refusal = resolveEditRefusal(input.task);
-  if (refusal) return { editable: false, reason: refusal };
+  if (Option.isSome(refusal)) return { editable: false, reason: refusal.value };
   if (input.gitRef !== input.refs.head && input.gitRef !== WORKING_REF)
     return {
       editable: false,

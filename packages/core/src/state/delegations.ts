@@ -1,3 +1,4 @@
+import { Option } from 'effect';
 import { describeCount } from '../chat/text.ts';
 import {
   type DeliveryCohort,
@@ -47,12 +48,12 @@ function serializeDeliveryItem(item: DeliveryItem) {
   }
 }
 
-export function parseDeliveryItem(item: string): DeliveryItem | null {
+export function parseDeliveryItem(item: string): Option.Option<DeliveryItem> {
   const [kind, first, second] = item.split(':');
-  if (kind === 'result' && first) return { kind, runId: first };
-  if (kind === 'question' && first && second) return { kind, runId: first, questionId: second };
-  if (kind === 'message' && first) return { kind, messageId: first };
-  return null;
+  if (kind === 'result' && first) return Option.some({ kind, runId: first });
+  if (kind === 'question' && first && second) return Option.some({ kind, runId: first, questionId: second });
+  if (kind === 'message' && first) return Option.some({ kind, messageId: first });
+  return Option.none();
 }
 
 export function listChildRuns(state: ShinsaState, runId: string): DelegatedRun[] {
@@ -65,20 +66,23 @@ export function listLiveChildRuns(state: ShinsaState, runId: string) {
   return listChildRuns(state, runId).filter((run) => run.endedAt === null);
 }
 
-export function selectRootRun(state: ShinsaState, run: Run): Run | null {
+export function selectRootRun(state: ShinsaState, run: Run): Option.Option<Run> {
   const seen = new Set<string>();
   let current: Run | undefined = run;
   while (current && isDelegatedRun(current)) {
-    if (seen.has(current.id)) return null;
+    if (seen.has(current.id)) return Option.none();
     seen.add(current.id);
     current = state.runs[current.delegation.parentRunId];
   }
-  return current ?? null;
+  return Option.fromNullishOr(current);
 }
 
 export function countLiveUnderRoot(state: ShinsaState, rootRunId: string) {
   return Object.values(state.runs).filter(
-    (run) => isDelegatedRun(run) && run.endedAt === null && selectRootRun(state, run)?.id === rootRunId
+    (run) =>
+      isDelegatedRun(run) &&
+      run.endedAt === null &&
+      Option.getOrNull(selectRootRun(state, run))?.id === rootRunId
   ).length;
 }
 
@@ -181,7 +185,7 @@ function markQuestion(state: ShinsaState, runId: string, questionId: string, del
 
 function markItems(state: ShinsaState, items: string[], delivered: boolean) {
   for (const raw of items) {
-    const item = parseDeliveryItem(raw);
+    const item = Option.getOrNull(parseDeliveryItem(raw));
     if (item?.kind === 'result') markResult(state, item.runId, delivered);
     if (item?.kind === 'question') markQuestion(state, item.runId, item.questionId, delivered);
   }
