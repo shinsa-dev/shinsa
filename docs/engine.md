@@ -232,9 +232,11 @@ suite is CI's job on the pull request, never a check's, so no task runs the whol
   proves its change with a test or a check links that check by its id instead of pasting its output (Evidence,
   below).
 - **Headless.** Checks run with `CI=1`, which test runners and Playwright read as headless, and every browser Shinsa
-  or its agents start is headless (`resolveBrowserEnv`), so nothing a check runs opens a window on your screen. The
-  same environment gives the Playwright MCP a device scale factor of 2 (`Desktop Chrome HiDPI`), so evidence an agent
-  captures stays sharp on a Retina screen (Evidence, below).
+  or its agents start is headless (`resolveBrowserEnv`), so nothing a check runs opens a window on your screen; the
+  one window is the sign-in window you open yourself (The shared browser, below). An agent's Playwright MCP drives its
+  project's shared browser, which Chrome renders at a device scale factor of 2; without one, the same environment gives
+  the MCP's own browser that scale (`Desktop Chrome HiDPI`), so evidence an agent captures stays sharp on a Retina
+  screen either way (Evidence, below).
 
 ### Test coverage of the change
 
@@ -1515,8 +1517,9 @@ stops here.
 ## Gates
 
 Every gate stores one `type` (`GateType`). `plan`, `review` and `merge` are your decisions (`isDecisionGate`).
-`question` is an agent waiting for an answer and `secret` an agent waiting for a secret (`request_secret`); both are an
-agent's question to you (`isAgentQuestion`). `proposal` is your OK on what an inquiry proposes next (Task shapes,
+`question` is an agent waiting for an answer, `secret` an agent waiting for a secret (`request_secret`) and
+`browser_sign_in` an agent waiting for its project's shared browser to be signed in to a site
+(`request_browser_sign_in`, The shared browser, below); all three are an agent's question to you (`isAgentQuestion`). `proposal` is your OK on what an inquiry proposes next (Task shapes,
 above), `operation` an operation after the merge waiting for your OK on the merged commit, and `result` a finished
 answer, report or diagnosis waiting for you to read and close it (Task shapes → Answered, not done). `failure` means the
 engine ran out of automatic recovery, an agent's wait ran out of time or check-ins (`cause: monitor`), the task
@@ -1916,8 +1919,8 @@ stops when its window ends. The rules are core (`domain/watchdogs.ts`, `decide/w
 ### Evidence
 
 The review opens with proof, not the diff: screenshots before and after, a recording of an interaction, the checks
-that prove the logic (`docs/spec.md` 6). Shinsa does not run a browser of its own; the agents capture evidence with
-the tools they have and hand it over with `attach_evidence` (since 2026-10-26), and Shinsa keeps the output of the
+that prove the logic (`docs/spec.md` 6). The agents capture evidence with the tools they have, in their project's
+shared browser when the screen needs a sign-in (The shared browser, below), and hand it over with `attach_evidence` (since 2026-10-26), and Shinsa keeps the output of the
 checks it ran.
 
 - **Who captures it.** The Agent proves its own work. Every phase instruction (`resolvePhaseInstruction`,
@@ -6022,6 +6025,80 @@ what it costs at the start of every run, so you can turn off what you do not use
 | `POST /api/extensions/skills/choose {skillId, enabled}`, `/plugins/choose {pluginId, enabled}` | A skill or a plugin on or off (Shinsa's own skills are refused) |
 | `POST /api/extensions/optimizer {enabled?, days?, skills?}` | The context optimizer's settings |
 
+## The shared browser
+
+Each project has one Chrome its agents share, kept by the engine rather than by an agent, so it outlives every run and
+task and keeps its sign-ins (since 2026-11-09). You sign it in once per site, by copying the sign-in from your everyday
+browser or by hand in a plain window, and every later task of that project starts signed in. Before it, each agent's
+Playwright MCP made a fresh profile per worktree, headless, that closed with the run, and Google refuses to sign in to
+a browser a program drives. The module is `apps/engine/src/browser/`: `host/`, `proxy/`, `cookies/` and `cdp/`.
+
+```
+agent's Playwright MCP ──ws──► engine /browser/cdp/<run key>   BrowserProxy
+                                 │ loopback only, key of a live run
+                                 ▼
+                        BrowserHost.acquire(project) ──► Chrome, headless
+                                 ▲                      ~/.config/shinsa/browser/<project id>/
+you: Settings → Browser ─────────┤
+  Copy sign-ins ── BrowserCookies: your browser's cookie file ──► Storage.setCookies
+  Open sign-in window ── the same profile, a normal window, nothing attached
+```
+
+- **The host** (`BrowserHost`) runs installed Google Chrome (`CHROME_EXECUTABLES`: Chrome, Chrome Beta, Chromium) on
+  one profile per project at `~/.config/shinsa/browser/<project id>/`, never Playwright's Chromium. It starts it
+  headless the first time an agent connects (`--headless=new`, `--force-device-scale-factor=2`, a debugging port on
+  127.0.0.1 only), shares it between every agent of the project, and stops it after 10 idle minutes with no
+  connection (`BrowserHostSettings`). Stopping asks Chrome to close and waits for it to exit, so it writes its cookies
+  first; a kill would lose the sign-ins made since the last write. Both modes run with `--use-mock-keychain`, so the
+  profile encrypts the same way in each and Chrome never asks for your Keychain. Browser state lives in these folders,
+  never in the event log.
+- **Agents reach it through the engine** (`BrowserProxy`). Each run of a task in a project is issued a key
+  (`RunSupervisor.issueBrowser`) that the run's scope revokes when it ends, closing its connections; the endpoint,
+  `ws://127.0.0.1:<port>/browser/cdp/<key>`, goes into the run's environment as `PLAYWRIGHT_MCP_CDP_ENDPOINT`
+  (`resolveBrowserEnv`), for Claude's process and Codex's app server alike, never into the prompt (Caching, below).
+  The route refuses a connection from outside this machine, from another site's Origin, or with a key that is not a
+  live run's, and answers `browser_unavailable` (503) when Chrome is not installed, fails to start or the sign-in
+  window is open. It relays the debugging protocol both ways and refuses `Browser.close` and `Browser.crash`, so one
+  agent cannot take every other agent's pages down. A key names its project, so one project's agents never reach
+  another's browser. Since Playwright will not start with both a device and an endpoint, Shinsa's default
+  `Desktop Chrome HiDPI` is left out on the shared browser; a device or endpoint you set on the server yourself wins.
+  A task with no project gets no key, and its MCP starts a headless browser of its own as before.
+- **Copying sign-ins** (`BrowserCookies`). It finds your Chromium browsers (Dia, Chrome, Arc, Brave, Edge;
+  `SOURCE_BROWSERS`), your default one first (Launch Services), and lists the sites each is signed in to from its
+  Default profile's cookie file, copied to a temporary folder first so the browser is never locked or written to.
+  Listing reads only host names, so it asks for nothing; a site counts as signed in only by a cookie that is not an
+  analytics, bot or load-balancer one (`NOT_SIGN_IN_COOKIES`), and sites group by registrable domain with a short list
+  of shared hosting suffixes (`MULTI_PART_SUFFIXES`), not the full public suffix list. Copying the sites you tick reads
+  that browser's key from your Keychain (`security find-generic-password`, the `<Browser> Safe Storage` item; macOS
+  asks you once), decrypts their cookies and writes them into the project's Chrome with `Storage.setCookies`. Expired
+  and partitioned cookies are skipped, and a session cookie gets 14 days (`SESSION_COOKIE_LIFETIME`), since it would
+  otherwise go each time the shared Chrome stops. Google refuses a copied session (tried when this was built), so
+  Google sites are signed in in the window instead. Safari and Firefox are not read, and all of this is macOS only.
+- **The sign-in window.** Open sign-in window stops the headless Chrome and opens the same profile as a normal Chrome
+  window, with no debugging port and nothing attached, so Google lets you sign in. While it is open, agents are
+  refused with `signing_in`; Done (or closing the window) hands the profile back, and the next agent starts it
+  headless again with your sign-in in it.
+- **Agents ask with `request_browser_sign_in {url, reason}`** (`agent.request_browser_sign_in`), the building Agent and
+  the investigator only. It opens a `browser_sign_in` gate naming the site (`browserSignIn: {url, site}`) and the run
+  waits on it like a question (Gates, above); a task with no project is refused (`browser_no_project`). The task
+  overview shows it as a card (`BrowserSignInCard`): Copy from your default browser copies that site and answers the
+  gate in one click (not offered for Google sites), Open sign-in window then Done answers it the same way, Choose
+  sites… opens the copy dialog, and Skip rejects it. Approve tells the agent the browser is signed in and to open the
+  page again; reject to carry on without it (`resolveBrowserSignInReply`). Only you answer it, and copying and the
+  window happen on this machine, so on app.shinsa.dev the card offers only I signed in and Skip, and a guest or a
+  teammate cannot answer it (`KEYBOARD_GATES`). The evidence skill tells agents to open the page first, to use the
+  repository's own test users where it has them, and never to launch a browser of their own to sign in.
+- **Settings → Projects → Browser** lists each project with the sites its browser is signed in to (asked of its Chrome,
+  started headless if needed, or read from the profile's cookie file when Chrome cannot run; nothing for a project
+  never signed in), Copy sign-ins, Open sign-in window (Done while it is open) and Sign out of
+  everything, which stops the browser and removes the profile. The routes are owner-only, behind the `browser` engine
+  feature (`docs/protocol.md` → The socket): `GET /api/browser/projects/:projectId`, `GET /api/browser/sources`,
+  `GET /api/browser/sources/:sourceId/sites`, and `POST` `copy`, `window`, `window/close` and `sign-out` under
+  `/api/browser/projects/:projectId/`. The section is hidden on app.shinsa.dev.
+- **Limits.** Agents of one project share one cookie jar, so two tasks that need different users of the same site
+  collide. A copied `localhost` cookie works on any port, but a token a dev app keeps in localStorage does not carry
+  across a task's ports.
+
 ## The agent loop
 
 How one run executes, from the supervisor (`agents/supervisor/`, `agents/turns/plan.ts`) down to the Claude adapter
@@ -6963,6 +7040,8 @@ update channel: a canary or a beta is the same app with the same identity (`APP_
 │                    (MCP servers, plugins and skills, above)
 ├── accounts.json    The Claude accounts Shinsa runs on (Accounts and usage limits, above)
 ├── accounts/<id>/   One Claude config folder per account Shinsa signed in or imported
+├── browser/<project id>/  Each project's shared Chrome profile, its sign-ins included (The shared browser, above);
+│                    Sign out of everything removes it
 └── data/
     ├── shinsa.sqlite  The event log, the effect outbox, the command receipts, the latest state snapshot and the
     │                  Home guide per project (`briefings`)

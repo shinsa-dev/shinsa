@@ -398,8 +398,9 @@ Review is where Shinsa earns its name. It replaces "open GitHub, read the diff t
   with `attach_evidence`, guided by the evidence skill: for UI work screenshots and a short screen
   recording of the flows it touched (both themes, desktop and phone width); for iOS, simulator
   recordings; for logic, the test it wrote, shown failing before and passing after. It opens the
-  Review tab, before and after side by side (Evidence in the review, below). Shinsa does not run a
-  browser of its own yet (M5).
+  Review tab, before and after side by side (Evidence in the review, below). Agents capture signed-in
+  screens in their project's shared browser (The shared browser, below); Shinsa does not capture
+  screens itself yet (M5).
 - **Diff ranked by risk, not by file order.** Hot spots first (public API, data, auth, money),
   boilerplate collapsed. The ranking explains itself.
 - **Comments go to the agent.** A comment on a line is a change request. (Planned: a second review
@@ -1321,6 +1322,21 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
 - **Your click.** Agents propose with `report_feedback`, like memory rules; nothing opens an issue but you, with no
   setting to change that. Feedback is an entry, not a task: no worktree, no pipeline. Issue-scoped tasks,
   automations over the issues and shared task views are later work.
+
+### The shared browser (2026-11-09)
+
+- **Why.** Each agent's browser was a fresh headless profile per worktree that closed with its run, so nothing stayed
+  signed in, you could not sign in to it, and Google refuses to sign in to a browser a program drives. You signed in
+  again for every task that needed a signed-in screen, or the agent went without.
+- **One browser per project.** The engine keeps one Chrome per project, headless, started when an agent needs it and
+  stopped when idle, and every agent of the project drives it through a key that lasts as long as its run. Its
+  sign-ins stay until the site signs you out (`docs/engine.md` → The shared browser).
+- **Sign in from your own browser.** Settings → Projects → Browser copies the sign-ins of the sites you tick from your
+  everyday Chromium browser (Dia, Chrome, Arc, Brave, Edge), or opens the project's browser as a plain window, with
+  nothing attached, to sign in by hand; Google needs the window. An agent that meets a sign-in page asks with
+  `request_browser_sign_in`, and you answer from a card on the task, often in one click.
+- **Not yet.** Safari and Firefox, Linux and Windows, two users of one site in one project, and fixed addresses for
+  dev apps that keep their sign-in in localStorage across ports.
 
 ## 11. Open questions
 
