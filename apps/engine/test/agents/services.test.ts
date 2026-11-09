@@ -232,7 +232,7 @@ describe('the service tools', () => {
       await add('p1', `s${index}`);
     }
     expect(call('add_service', { name: 'api', command: 'bun dev' })).rejects.toThrow(
-      `This project keeps ${SERVICE_LIMITS.services} services at most, and has ${SERVICE_LIMITS.services}: ${new Intl.ListFormat('en').format(names)}. Remove one with remove_service, or under Services, to add another.`
+      `This project keeps ${SERVICE_LIMITS.services} services at most, and has ${SERVICE_LIMITS.services}: ${new Intl.ListFormat('en').format(names)}. Remove one under Services to add another. You can remove one with remove_service.`
     );
   });
 

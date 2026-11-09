@@ -2946,8 +2946,8 @@ beside your run (Runs for a task, below).
   project with none can always add one however many the other projects on this machine hold. `Terminals.addService`
   and `POST /api/services/batch` (its services plus the batch, before any is added) refuse past it with
   `service_limit`, whose message from `resolveServiceLimitMessage` (`terminals/limit.ts`) names the project's
-  services and says how many to remove with `remove_service` or under Services, so an agent's `add_service` or you
-  can free one.
+  services and says how many to remove under Services; an agent's `add_service` adds that it can remove one with
+  `remove_service`, so the tool name never reaches the screen.
 - **Kept beside the terminals, not in the event log.** The definitions are in `data/terminals/services.json` (mode
   600: a variable can be a secret). They are not events because nothing `decide` reads depends on them, no agent may
   change them (an event would need a user command, and every user command has a surface spec that agents' tools are

@@ -230,7 +230,7 @@ describe('services over HTTP', () => {
     const names = Array.from({ length: 31 }, (_, index) => `s${index}`);
     expect(limited.error).toEqual({
       code: 'service_limit',
-      message: `This project keeps 32 services at most, and has 31: ${new Intl.ListFormat('en').format(names)}. Remove one with remove_service, or under Services, to add these 2.`,
+      message: `This project keeps 32 services at most, and has 31: ${new Intl.ListFormat('en').format(names)}. Remove one under Services to add these 2.`,
     });
     for (const service of (await runAsync(terminals.snapshot)).services)
       await runAsync(terminals.removeServices([service.id]));

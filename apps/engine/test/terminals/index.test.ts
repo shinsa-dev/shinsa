@@ -578,7 +578,7 @@ describe('Terminals services', () => {
       await runAsync(terminals.addService('p1', SERVICE));
     const names = Array.from({ length: SERVICE_LIMITS.services }, () => SERVICE.name);
     await expect(runAsync(terminals.addService('p1', SERVICE))).rejects.toThrow(
-      `This project keeps ${SERVICE_LIMITS.services} services at most, and has ${SERVICE_LIMITS.services}: ${new Intl.ListFormat('en').format(names)}. Remove one with remove_service, or under Services, to add another.`
+      `This project keeps ${SERVICE_LIMITS.services} services at most, and has ${SERVICE_LIMITS.services}: ${new Intl.ListFormat('en').format(names)}. Remove one under Services to add another.`
     );
     expect((await runAsync(terminals.addService('p2', SERVICE))).projectId).toBe('p2');
     await expect(

@@ -40,6 +40,6 @@ export function resolveServiceLimitMessage(names: readonly string[], adding: num
   const over = names.length + adding - SERVICE_LIMITS.services;
   return [
     `This project keeps ${SERVICE_LIMITS.services} services at most, and has ${names.length}: ${LIST.format(names)}.`,
-    `Remove ${over === 1 ? 'one' : over} with remove_service, or under Services, to add ${adding === 1 ? 'another' : `these ${adding}`}.`,
+    `Remove ${over === 1 ? 'one' : over} under Services to add ${adding === 1 ? 'another' : `these ${adding}`}.`,
   ].join(' ');
 }
