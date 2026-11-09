@@ -20,7 +20,7 @@ export function HomePage({ state }: { state: ShinsaState }) {
   const briefing = reconcileBriefing(state.briefings[briefingKey(queue.focus)], queue, now);
   const { first, finished, conversations, last } = resolveHomeSections(
     state,
-    listQueueSections(state, queue, now),
+    listQueueSections(state, queue),
     now
   );
   useRegisterCommands(listHomeSections(state));

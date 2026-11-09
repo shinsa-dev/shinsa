@@ -1,17 +1,10 @@
 import {
-  describeCount,
   NO_PHASE_NAME,
-  type Initiative,
   type Activity,
   type InitiativeDecision,
   type InitiativePhaseGroup,
   type InitiativeSheet,
-  listInitiativeProgress,
-  listInitiatives,
-  resolveInitiativeTotals,
-  selectInitiativeLead,
   type ShinsaState,
-  type Task,
 } from '@shinsa/core';
 import type { IconName } from '@shinsa/ui/components/icon';
 import {
@@ -33,41 +26,10 @@ const WAITING = 'Waiting';
 
 const NEXT_ICON: IconName = 'IconHourglass';
 
-export interface InitiativeRow {
-  initiative: Initiative;
-  lead: Task;
-  total: number;
-  open: number;
-  shipped: number;
-  dropped: number;
-  summary: string;
-}
-
 export interface InitiativeTaskSection {
   key: string;
   group: Pick<TaskGroup, 'title' | 'icon' | 'tone' | 'defaultOpen'>;
   entries: ChainEntry[];
-}
-
-function describeOpenAndShipped(open: number, shipped: number, total: number) {
-  if (total === 0) return 'No tasks yet';
-  return `${describeCount(total, 'task')} · ${open} open · ${shipped} shipped`;
-}
-
-export function listInitiativeRows(state: ShinsaState): InitiativeRow[] {
-  return listInitiatives(state).flatMap((initiative) => {
-    const lead = selectInitiativeLead(state, initiative);
-    if (!lead) return [];
-    const totals = resolveInitiativeTotals(listInitiativeProgress(state, initiative));
-    return [
-      {
-        initiative,
-        lead,
-        ...totals,
-        summary: describeOpenAndShipped(totals.open, totals.shipped, totals.total),
-      },
-    ];
-  });
 }
 
 function describeDecision(state: ShinsaState, decision: InitiativeDecision): Activity {

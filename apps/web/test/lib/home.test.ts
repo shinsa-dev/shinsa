@@ -140,7 +140,7 @@ describe('resolveHomeSections', () => {
     });
     const { first, last } = resolveHomeSections(
       state,
-      listQueueSections(state, resolveQueue(state, NOW), NOW),
+      listQueueSections(state, resolveQueue(state, NOW)),
       NOW
     );
     expect(first.map((section) => section.key)).toEqual(['needs', 'working']);
@@ -168,7 +168,7 @@ describe('resolveHomeSections', () => {
         createGate({ id: 'g-operate', taskId: 'operate', type: 'review' }),
       ],
     });
-    const home = resolveHomeSections(state, listQueueSections(state, resolveQueue(state, NOW), NOW), NOW);
+    const home = resolveHomeSections(state, listQueueSections(state, resolveQueue(state, NOW)), NOW);
     const ids = [
       ...home.first.flatMap((section) => section.items.map((item) => item.task.id)),
       ...home.finished.map((task) => task.id),
@@ -190,7 +190,7 @@ describe('resolveHomeSections', () => {
       })
     );
     const state = createShinsaState({ tasks });
-    const home = resolveHomeSections(state, listQueueSections(state, resolveQueue(state, NOW), NOW), NOW);
+    const home = resolveHomeSections(state, listQueueSections(state, resolveQueue(state, NOW)), NOW);
     expect(home.finished.map((task) => task.id)).toEqual(['t0', 't1']);
     expect(home.conversations.map(({ task }) => task.id)).toEqual(['t2', 't3', 't4', 't5', 't6']);
   });

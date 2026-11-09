@@ -3188,9 +3188,9 @@ Only these, and they win over anything below:
     tasks: its column header and its `TaskGroupSection`s in the same order and words (a gate's group, In progress),
     then one section per phase titled with its name ("Tools in the chat", or Waiting without phases) where the waiting rows sit, then Done and
     Cancelled, closed at first. There is no phase track and no Decisions panel: approved plans and the members'
-    judgement calls are entries of the lead's Activity, among its own. On Home and in the queue an open initiative is
-    one row in In progress, its lead task with its progress ("5 tasks · 3 open · 1 shipped"); its members sit under it
-    and leave In progress and Waiting, and only a member at a gate stays in Needs you. The composer's Kind of task stays on Auto unless you
+    judgement calls are entries of the lead's Activity, among its own. Home and the queue are for tasks: they list an
+    initiative's members where any task sits (Needs you, In progress, Waiting) and never its lead, which you reach from a
+    member's initiative fact or ⌘K. The composer's Kind of task stays on Auto unless you
     pick Initiative. A member's Overview facts name its initiative and phase and open the lead task, and its menus
     carry Add to an initiative, Phase, Take out of the initiative and Make an initiative from this task; the lead's
     menu carries Edit the initiative.

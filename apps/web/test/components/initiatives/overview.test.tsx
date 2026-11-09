@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 import { resolveInitiativeSheet, resolveQueue, type ShinsaState } from '@shinsa/core';
 import { TooltipProvider } from '@shinsa/ui/components/tooltip';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import { InitiativeOverview } from '@/components/initiatives/sheet.tsx';
 import { TaskQueue } from '@/components/queue/queue.tsx';
 import { listQueueSections } from '@/lib/queue.ts';
@@ -80,23 +80,19 @@ describe('the lead task’s overview', () => {
   });
 });
 
-describe('Home’s initiatives', () => {
-  it('lists the initiative in In progress with how far it is, and opens its lead task', () => {
-    history.replaceState(null, '', '/');
+describe('Home with an initiative', () => {
+  it('lists its member tasks and never its lead', () => {
     const state = createSplitState({ narrative: 'Going.' });
     render(
       <TooltipProvider>
         <TaskQueue
           state={state}
           variant='wide'
-          sections={listQueueSections(state, resolveQueue(state, NOW), NOW)}
+          sections={listQueueSections(state, resolveQueue(state, NOW))}
         />
       </TooltipProvider>
     );
-    expect(screen.getByText('3 tasks · 3 open · 0 shipped')).toBeTruthy();
-    expect(screen.queryByText('Add the studio chat')).toBeNull();
     expect(screen.getByText('Rewrite the agent dock')).toBeTruthy();
-    fireEvent.click(screen.getByText('Chat split'));
-    expect(location.pathname).toBe('/tasks/SW-130');
+    expect(screen.queryByText('Chat split')).toBeNull();
   });
 });

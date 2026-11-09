@@ -1,29 +1,20 @@
 import {
   type Gate,
-  isListedInFocus,
+  isLeadTask,
   type Queue,
   type QueuedGate,
   type ShinsaState,
-  selectInitiativeLead,
   type Task,
 } from '@shinsa/core';
 import type { IconName } from '@shinsa/ui/components/icon';
 import type { Tone } from '@/lib/format/tone.ts';
-import { listInitiativeRows } from '@/lib/initiatives/view.ts';
 import { createDisclosureId } from '@/lib/preferences/disclosure.ts';
 import { orderChains, TASK_GROUP } from '@/lib/tasks/groups.ts';
 import type { Route } from '@/router.ts';
 
 export type QueueItem =
   | { kind: 'gate'; key: string; task: Task; gate: Gate; since: number; sinceLabel: string }
-  | {
-      kind: 'working' | 'idle';
-      key: string;
-      task: Task;
-      since: number;
-      sinceLabel: string;
-      initiative?: string;
-    };
+  | { kind: 'working' | 'idle'; key: string; task: Task; since: number; sinceLabel: string };
 
 export interface QueueSection {
   key: 'needs' | 'working' | 'waiting' | 'snoozed';
@@ -67,32 +58,8 @@ function createGroupSection(
   };
 }
 
-function isLeadRowShown(state: ShinsaState, lead: Task, now: number) {
-  return !lead.snoozed && !lead.backlog && isListedInFocus(state, lead, now);
-}
-
-function selectShownLead(state: ShinsaState, task: Task, now: number) {
-  const initiative = task.initiativeId ? state.initiatives[task.initiativeId] : undefined;
-  const lead = initiative ? selectInitiativeLead(state, initiative) : null;
-  return lead && isLeadRowShown(state, lead, now) ? lead : null;
-}
-
-function listInitiativeItems(state: ShinsaState, queue: Queue, now: number): QueueItem[] {
-  const running = new Set(queue.working.map((task) => task.id));
-  return listInitiativeRows(state)
-    .filter(({ lead }) => isLeadRowShown(state, lead, now))
-    .map(({ initiative, lead, summary }) => ({
-      kind: running.has(lead.id) ? 'working' : 'idle',
-      key: lead.id,
-      task: lead,
-      since: initiative.report?.at ?? lead.stageChangedAt,
-      sinceLabel: initiative.report ? 'The lead last reported' : 'Started',
-      initiative: summary,
-    }));
-}
-
-export function listQueueSections(state: ShinsaState, queue: Queue, now: number): QueueSection[] {
-  const nested = (task: Task) => selectShownLead(state, task, now) !== null;
+export function listQueueSections(state: ShinsaState, queue: Queue): QueueSection[] {
+  const listed = (task: Task) => !isLeadTask(task);
   return [
     {
       key: 'needs',
@@ -107,25 +74,19 @@ export function listQueueSections(state: ShinsaState, queue: Queue, now: number)
     createGroupSection(
       'working',
       [
-        ...listInitiativeItems(state, queue, now),
-        ...queue.working
-          .filter((task) => !nested(task))
-          .map((task) => ({
-            kind: 'working' as const,
-            key: task.id,
-            task,
-            since: task.stageChangedAt,
-            sinceLabel: 'Step started',
-          })),
+        ...queue.working.filter(listed).map((task) => ({
+          kind: 'working' as const,
+          key: task.id,
+          task,
+          since: task.stageChangedAt,
+          sinceLabel: 'Step started',
+        })),
       ],
       'No agent is working right now.'
     ),
     createGroupSection(
       'waiting',
-      orderChains(
-        state,
-        queue.waiting.filter((task) => !nested(task))
-      ).map(({ task }) => ({
+      orderChains(state, queue.waiting.filter(listed)).map(({ task }) => ({
         kind: 'idle',
         key: task.id,
         task,
@@ -136,7 +97,7 @@ export function listQueueSections(state: ShinsaState, queue: Queue, now: number)
     ),
     createGroupSection(
       'snoozed',
-      queue.snoozed.map((task) => ({
+      queue.snoozed.filter(listed).map((task) => ({
         kind: 'idle',
         key: task.id,
         task,

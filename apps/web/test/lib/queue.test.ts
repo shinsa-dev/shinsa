@@ -55,7 +55,7 @@ function createWorld() {
 
 function sectionsFor() {
   const state = createWorld();
-  return listQueueSections(state, resolveQueue(state, NOW), NOW);
+  return listQueueSections(state, resolveQueue(state, NOW));
 }
 
 function sectionOf(key: QueueSection['key']) {
@@ -112,7 +112,7 @@ describe('listQueueSections', () => {
 
   it('says so when nothing waits on you and no agent is working', () => {
     const state = createShinsaState({});
-    const [needs, working, waiting] = listQueueSections(state, resolveQueue(state, NOW), NOW);
+    const [needs, working, waiting] = listQueueSections(state, resolveQueue(state, NOW));
     expect(needs?.empty).toBe('Nothing is waiting on you.');
     expect(working?.empty).toBe('No agent is working right now.');
     expect(waiting?.empty).toBeNull();
@@ -176,19 +176,13 @@ describe('initiative members on Home', () => {
     return sections.find((section) => section.key === key)?.items.map((item) => item.key);
   }
 
-  it('nests members under a lead shown on Home', () => {
-    const state = createInitiativeWorld({});
-    const sections = listQueueSections(state, resolveQueue(state, NOW), NOW);
-    expect(listKeys(sections, 'working')).toEqual(['lead']);
-    expect(listKeys(sections, 'waiting')).toEqual([]);
-  });
-
-  it('lists members on their own when the lead is snoozed or in the backlog', () => {
-    for (const lead of [{ snoozed: { at: NOW } }, { backlog: { at: NOW } }]) {
+  it('lists the members where any task sits and leaves the lead out', () => {
+    for (const lead of [{}, { snoozed: { at: NOW } }, { backlog: { at: NOW } }]) {
       const state = createInitiativeWorld(lead);
-      const sections = listQueueSections(state, resolveQueue(state, NOW), NOW);
+      const sections = listQueueSections(state, resolveQueue(state, NOW));
       expect(listKeys(sections, 'working')).toEqual(['build']);
       expect(listKeys(sections, 'waiting')).toEqual(['later']);
+      expect(listKeys(sections, 'snoozed')).toEqual([]);
     }
   });
 });

@@ -1,10 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import { describePhaseProgress, resolveInitiativeSheet } from '@shinsa/core';
-import {
-  listInitiativeActivity,
-  listInitiativeRows,
-  listInitiativeTaskSections,
-} from '@/lib/initiatives/view.ts';
+import { listInitiativeActivity, listInitiativeTaskSections } from '@/lib/initiatives/view.ts';
 import { createGate, createInitiative, createShinsaState, createTask, NOW } from '../../support/state.ts';
 
 const PHASES = [
@@ -50,19 +46,6 @@ function createSplitState() {
     gates: [createGate({ id: 'g', taskId: 'review', type: 'review' })],
   });
 }
-
-describe('listInitiativeRows', () => {
-  it('counts each initiative’s open, shipped and dropped tasks in creation order', () => {
-    const rows = listInitiativeRows(createSplitState());
-    expect(rows.map((row) => [row.initiative.id, row.lead.id])).toEqual([
-      ['split', 'lead-split'],
-      ['empty', 'lead-empty'],
-    ]);
-    expect(rows[0]).toMatchObject({ total: 5, open: 3, shipped: 1, dropped: 1 });
-    expect(rows[0]?.summary).toBe('5 tasks · 3 open · 1 shipped');
-    expect(rows[1]?.summary).toBe('No tasks yet');
-  });
-});
 
 describe('the sheet', () => {
   const state = createSplitState();

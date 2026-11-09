@@ -1513,7 +1513,7 @@ it on the lead task's Overview (`components/initiatives/`, `lib/initiatives/`).
   first, at most 100). A lead is never one of the initiative's tasks there or in any count (`listInitiativeWork`).
   The Overview shows these as the All tasks list does (a gate's group, In progress, one section per phase named after it, Done and
   Cancelled) and puts Decisions into the lead's Activity (`listInitiativeTaskSections`, `listInitiativeActivity` in
-  `apps/web/src/lib/initiatives/view.ts`). On Home and in the queue an open initiative is one In progress row, its lead task with its progress, and its members leave In progress and Waiting; a member at a gate stays in Needs you (`listQueueSections`, `apps/web/src/lib/queue.ts`); both routes are
+  `apps/web/src/lib/initiatives/view.ts`). Home and the queue list the members where any task sits and leave the lead out, so an initiative never stands in for its tasks (`listQueueSections`, `apps/web/src/lib/queue.ts`); both routes are
   behind the `initiatives` engine feature, whose views link the lead task.
 - **Focus.** `Focus.initiativeId` is a third focus target beside projects and a team, one at a time (`focus_refused`
   for two), from the Focus menu, ⌘K or `shinsa focus initiative`. `resolveQueue` then keeps only the initiative's

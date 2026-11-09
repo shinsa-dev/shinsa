@@ -158,12 +158,12 @@ src/
     │                    and Stop sharing's confirmation,
     │                    components/task/sharing-banner.tsx the banner a shared task's page shows
     ├── initiatives/     Initiatives, each a lead task (docs/engine.md → Initiatives): view.ts (the sheet's sections and
-    │                    progress, Home's rows), draft.ts (the Edit initiative draft and its phases), membership.ts
+    │                    progress), draft.ts (the Edit initiative draft and its phases), membership.ts
     │                    (Add to an initiative, Phase and Take out of the initiative choices, the open initiatives),
     │                    lead.ts (the initiative a task leads, its report); the pieces are components/initiatives/
     │                    (sheet.tsx: the lead task's Overview, lead.tsx: Where it stands, write-dialog.tsx,
-    │                    task-items.tsx: the task's initiative fact and menu items), lib/queue.ts (an initiative as
-    │                    one In progress row with its members under it) and ⌘K's lib/command/initiatives.ts
+    │                    task-items.tsx: the task's initiative fact and menu items) and ⌘K's lib/command/initiatives.ts;
+    │                    Home and the queue list the members themselves and leave the lead out (lib/queue.ts)
     ├── teams/           Teams (docs/engine.md → Teams): settings.ts (Settings → Teams' words, the new team draft,
     │                    the shared projects dropdown's label, who can reach this machine), admit.ts (adding this
     │                    browser to a teammate's machine with the team key), join.ts (the join page's fragment and the
