@@ -153,7 +153,7 @@ src/
 │                        or effect for both tables); schema.ts (EventLog: a built StoreLayer's context, which tests open
 │                        with test/helpers/event-log.ts; the engine composes StoreLayer under EngineCore.layer). Beside the log, evidence/ (Evidence: attached
 │                        evidence under `<task id>/round-<n>/` of EngineConfig's evidenceDir, chat tool images at the
-│                        top, written through FileSystem like the rest, all served
+│                        top, written by image-file.ts, the synchronous edge a provider's result mapper needs (SYNC_IO_EXEMPT), all served
 │                        under /api/evidence by http/routes/files through HttpServerResponse.file, immutable and in byte ranges)
 │                        and attachments/ (Attachments: the files you attach to a request or message,
 │                        `<UUIDv7>/<file name>`, the upload read by a schema in upload.ts, uploaded by POST
