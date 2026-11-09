@@ -19,7 +19,8 @@ echo "$*" >> "$here/launches"
 echo $$ > "$profile/pid"
 [ -f "$here/fail" ] && exit 3
 case "$*" in *--headless=new*)
-  if [ -f "$here/garbage" ]; then echo "not a port" > "$profile/DevToolsActivePort"; else printf '9222\\n/devtools/browser/fake-%s\\n' "$$" > "$profile/DevToolsActivePort"; fi;;
+  port=9222; [ -f "$here/port" ] && port="$(cat "$here/port")"
+  if [ -f "$here/garbage" ]; then echo "not a port" > "$profile/DevToolsActivePort"; else printf '%s\\n/devtools/browser/fake-%s\\n' "$port" "$$" > "$profile/DevToolsActivePort"; fi;;
 esac
 exec sleep 30
 `;
@@ -32,6 +33,7 @@ export interface FakeChrome {
   pidOf(profile: BrowserProfile): number;
   fail(): void;
   writeGarbage(): void;
+  listenOn(port: number): void;
 }
 
 export function createFakeChrome(): FakeChrome {
@@ -51,6 +53,7 @@ export function createFakeChrome(): FakeChrome {
     pidOf: (profile) => Number(readFileSync(join(home, 'browser', profile, 'pid'), 'utf8').trim()),
     fail: () => writeFileSync(join(dir, 'fail'), ''),
     writeGarbage: () => writeFileSync(join(dir, 'garbage'), ''),
+    listenOn: (port) => writeFileSync(join(dir, 'port'), String(port)),
   };
 }
 

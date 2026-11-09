@@ -478,7 +478,7 @@ export const makeCodexSession = Effect.fn('CodexSession.make')(function* (
     });
     yield* Ref.set(endpoint, Option.some(tools));
     const active = yield* makeCodexClient(
-      { path, cwd: input.cwd, env: definition.env },
+      { path, cwd: input.cwd, env: definition.env, browserEndpoint: input.browserEndpoint ?? null },
       {
         notification: (method, params) => runSync(observe(method, params)),
         request: (method, params) => runPromise(answer(method, params)),
