@@ -1,8 +1,9 @@
-import { Context, Effect, Exit, Layer, Scope } from 'effect';
+import { Context, Deferred, Effect, Exit, Layer, Schedule, Scope } from 'effect';
 import { constNull } from 'effect/Function';
 import { Shell } from '../../shell/service.ts';
 import {
   FOREGROUND_TIMEOUT,
+  GROUP_POLL_SCHEDULE,
   HANG_UP_GRACE,
   NO_FREE_PORT,
   PORT_RETRY,
@@ -33,19 +34,28 @@ export class TerminalPty extends Context.Service<
       const context = yield* Effect.context<never>();
       const runFork = Effect.runForkWith(context);
 
-      const signal = (child: Bun.Subprocess, name: NodeJS.Signals) =>
-        Effect.sync(() => {
-          if (child.exitCode === null && child.signalCode === null) child.kill(name);
-        });
+      const runPromise = Effect.runPromiseWith(context);
 
-      const hangUpChild = Effect.fn('TerminalPty.hangUp')(function* (child: Bun.Subprocess) {
-        yield* signal(child, 'SIGHUP');
-        yield* Effect.sync(() => child.terminal?.close());
-        yield* Effect.raceFirst(
-          Effect.promise(() => child.exited),
-          Effect.sleep(HANG_UP_GRACE)
+      const signalGroup = (pid: number, name: NodeJS.Signals | 0) =>
+        Effect.try(() => process.kill(-pid, name)).pipe(
+          Effect.as(true),
+          Effect.orElseSucceed(() => false)
         );
-        yield* signal(child, 'SIGKILL');
+
+      const waitForGroup = (pid: number) =>
+        signalGroup(pid, 0).pipe(
+          Effect.repeat({
+            schedule: GROUP_POLL_SCHEDULE.pipe(Schedule.upTo({ duration: HANG_UP_GRACE })),
+            until: (alive) => !alive,
+          })
+        );
+
+      const hangUpGroup = Effect.fn('TerminalPty.hangUp')(function* (child: Bun.Subprocess) {
+        yield* signalGroup(child.pid, 'SIGHUP');
+        yield* Effect.sync(() => child.terminal?.close());
+        if (!(yield* waitForGroup(child.pid))) return;
+        yield* signalGroup(child.pid, 'SIGKILL');
+        yield* waitForGroup(child.pid);
       });
 
       const spawn = Effect.fn('TerminalPty.spawn')(function* (
@@ -53,15 +63,16 @@ export class TerminalPty extends Context.Service<
         options: TerminalSpawnOptions
       ) {
         const scope = yield* Scope.make();
+        const ended = yield* Deferred.make<void>();
         const child = yield* Effect.acquireRelease(
           Effect.sync(() => spawnTerminal(command, options)),
-          hangUpChild
+          (spawned) => hangUpGroup(spawned).pipe(Effect.ensuring(Deferred.done(ended, Exit.void)))
         ).pipe(Scope.provide(scope));
         const close = () => runFork(Scope.close(scope, Exit.void));
-        runFork(
-          Effect.andThen(
-            Effect.promise(() => child.exited),
-            Scope.close(scope, Exit.void)
+        const exited = runPromise(
+          Effect.promise(() => child.exited).pipe(
+            Effect.tap(() => Scope.close(scope, Exit.void)),
+            Effect.tap(() => Deferred.await(ended))
           )
         );
         const { terminal } = child;
@@ -76,7 +87,7 @@ export class TerminalPty extends Context.Service<
           hangUp: () => {
             close();
           },
-          exited: child.exited,
+          exited,
         } satisfies TerminalProcess;
       });
 

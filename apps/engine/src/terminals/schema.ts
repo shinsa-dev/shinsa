@@ -236,6 +236,10 @@ export const FOLDER_GONE_MESSAGE = 'That folder is not there anymore.';
 
 export const HANG_UP_GRACE = Duration.seconds(3);
 
+const GROUP_POLL = Duration.millis(50);
+
+export const GROUP_POLL_SCHEDULE = Schedule.spaced(GROUP_POLL);
+
 export const FOREGROUND_TIMEOUT = Duration.seconds(5);
 
 export const REFINE_LIMITS = { scripts: 12, script: 200, dependencies: 60 };

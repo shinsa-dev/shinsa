@@ -69,6 +69,57 @@ describe('TerminalPty.spawn', () => {
   });
 });
 
+function spawnCommand(script: string, onText: (text: string) => void) {
+  const decoder = new TextDecoder();
+  return spawnTerminalProcess(['/bin/sh', '-c', script], {
+    cwd: createTempDir(),
+    cols: 80,
+    rows: 24,
+    env: { PATH: '/usr/bin:/bin', TERM: 'xterm-256color' },
+    onData: (data) => onText(decoder.decode(data, { stream: true })),
+  });
+}
+
+function isAlive(pid: number) {
+  const state = Bun.spawnSync(['ps', '-o', 'stat=', '-p', String(pid)])
+    .stdout.toString()
+    .trim();
+  return state !== '' && !state.startsWith('Z');
+}
+
+async function readChildPid(read: () => string) {
+  await until('the command prints its child', () => /child-(\d+)\r?\n/.test(read()));
+  return Number(/child-(\d+)\r?\n/.exec(read())?.[1]);
+}
+
+describe('TerminalPty process group', () => {
+  it('stops a grandchild that ignores the hang-up before it counts the stop as done', async () => {
+    let output = '';
+    const service = spawnCommand(`sh -c 'trap "" HUP; echo "child-$$"; exec sleep 60' & wait`, (text) => {
+      output += text;
+    });
+    const grandchild = await readChildPid(() => output);
+    expect(isAlive(grandchild)).toBe(true);
+    service.hangUp();
+    await service.exited;
+    expect(isAlive(grandchild)).toBe(false);
+  }, 10_000);
+
+  it('stops what a command left running, even when it ignores the hang-up, once the command exits on its own', async () => {
+    let output = '';
+    const service = spawnCommand(
+      `sh -c 'trap "" HUP; echo "child-$$"; exec sleep 60' & read line`,
+      (text) => {
+        output += text;
+      }
+    );
+    const left = await readChildPid(() => output);
+    service.write('\r');
+    expect(await service.exited).toBe(0);
+    expect(isAlive(left)).toBe(false);
+  }, 10_000);
+});
+
 describe('resolveLoginShell', () => {
   it('uses $SHELL, then the account’s shell, then the platform’s default', () => {
     expect(resolveLoginShell({ SHELL: '/opt/homebrew/bin/fish' })).toBe('/opt/homebrew/bin/fish');
