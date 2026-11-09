@@ -8,7 +8,9 @@ import {
   type TerminalPlaceKind,
   type TerminalsSnapshot,
 } from '@shinsa/core';
-import { Duration, Effect } from 'effect';
+import { Duration, Effect, Layer } from 'effect';
+import { ShellLayer } from '../../src/shell/layers.ts';
+import { TerminalPty } from '../../src/terminals/pty/service.ts';
 import { PortUnavailable, TerminalIds, TerminalTimings } from '../../src/terminals/schema.ts';
 import { TYPE_LIMITS } from '../../src/terminals/session.ts';
 import { parseStoredService, parseStoredTerminal } from '../../src/terminals/store.ts';
@@ -524,6 +526,22 @@ describe('Terminals services', () => {
     const forTask = { cwd: '/wt/a', place: 'worktree', taskId: 'a' } as const;
     const first = await runAsync(terminals.startService(service.id, forTask));
     expect((await runAsync(terminals.restartService(service.id, forTask))).port).toBe(first.port);
+  });
+
+  it('comes back on the same port when the last run lets go of it late', async () => {
+    const pty = Effect.runSync(
+      TerminalPty.use((real) => Effect.succeed(real)).pipe(
+        Effect.provide(TerminalPty.layer.pipe(Layer.provide(ShellLayer)))
+      )
+    );
+    const { terminals } = await createTerminals({ pty: { pickPort: pty.pickPort } });
+    const service = await runAsync(terminals.addService('p1', SERVICE));
+    const forTask = { cwd: '/wt/a', place: 'worktree', taskId: 'a' } as const;
+    const first = await runAsync(terminals.startService(service.id, forTask));
+    const port = first.port ?? 0;
+    const lingering = Bun.listen({ hostname: '127.0.0.1', port, socket: { data() {} } });
+    setTimeout(() => lingering.stop(true), 300);
+    expect((await runAsync(terminals.restartService(service.id, forTask))).port).toBe(port);
   });
 
   it('leaves your run’s port to its command unless the service has a preview URL', async () => {

@@ -1085,12 +1085,12 @@ folds in `state/shapes.ts`).
   (a veto, `closeProposal`) leads, and going on drops to the quiet link; ⌘K orders them the same way. A find-and-fix
   diagnosis with `close` reshapes the task to `[investigate, your_ok, …]` (`by: agent`) so it stops for your OK instead
   of planning a fix.
-- **Suggested replies.** Any hand-over but the reviewer's can carry up to three `actions` (`label`, `message`).
+- **Suggested replies.** Any hand-over but the reviewer's can carry at most two `actions` (`label`, `message`), and agents are told to add them rarely: only for a real fork the gate's own buttons do not cover.
   `task.actions_suggested` keeps them on `task.suggestedActions`; the next hand-over replaces them, and your message
   that reaches the agent or your answer to a gate clears them (a message only kept for a later agent does not). The
-  plan, proposal, review, merge and result cards show them as outline buttons before the main one, ⌘K lists them as
-  "Suggested reply" while one of those gates is open, and both show them only while a message can reach the agent. A
-  click sends the message as yours (`task.message`), so it does what typing it does there: at review it asks for
+  plan, proposal, review, merge and result cards list them in one outline Replies menu before the main button, each label with its message under it, ⌘K lists them as
+  "Suggested reply" while one of those gates is open, and both show them only while a message can reach the agent.
+  Choosing one sends the message as yours (`task.message`), so it does what typing it does there: at review it asks for
   changes in this round, at your OK it declines the proposal and resumes the inquiry.
 - **Changing shape mid-task.** An answerer, investigator or researcher can end with `propose_change` (`request` at most 2,000
   characters, `why` at most 240). On a task without `your_ok` whose pipeline does not already go on to a plan (a fix
@@ -2968,8 +2968,9 @@ running when the window closes or the app quits, and a page that comes back find
   would not free enough. When all of them run, `terminal_limit` names who holds them, each task by its handle with
   its services and shells, and how many are yours (`resolveLimitMessage`), so an agent's `run_service` or you can free
   one. On start, `resumeServices` drops the ended terminals of finished and unknown tasks before anything resumes.
-- **When the engine stops.** `stop()` hangs up every shell (`SIGHUP` and the PTY closed, as closing a terminal window
-  does, then `SIGKILL` after 3 s), so nothing it started outlives the engine, and saves each screen. A restarted
+- **When the engine stops.** `stop()` hangs up every shell and its process group (`SIGHUP` and the PTY closed, as
+  closing a terminal window does, then `SIGKILL` after 3 s) and waits until each group is empty, so nothing it started
+  outlives the engine, and saves each screen. A restarted
   engine cannot have the shell back: a terminal that was running shows as `stopped`, with its last screen and Start
   again, which starts a new shell in the same folder below the old output. Closing a terminal hangs it up and deletes
   its screen.
@@ -3038,8 +3039,12 @@ beside your run (Runs for a task, below).
   adds how long it has been so, `resolveServicesSummary` the counts the header shows.
 - **Start, stop, restart.** `POST /api/services/<id>/start` opens the service's terminal the first time and starts its
   command again in the same tab after that, below the old output (a start of a running one does nothing). `/stop`
-  hangs it up as closing a terminal window does (`SIGHUP` and the PTY closed, `SIGKILL` 3 s later): the whole
-  process group, so a dev server and the watchers it started end together, and the tab stays with its last screen.
+  hangs it up as closing a terminal window does, but to the whole process group the shell leads, not the shell alone
+  (`SIGHUP` to `-pid` and the PTY closed, `SIGKILL` to the group 3 s later), so a dev server and the watchers it
+  started end together, and the tab stays with its last screen. The stop counts as done only once no process in the
+  group is alive (`TerminalPty`'s `hangUpGroup` polls signal 0 on `GROUP_POLL_SCHEDULE`, 3 s after each signal), so a
+  server that takes a moment to let go of its port has let go by the time a start runs. A shell that exits on its own
+  has whatever it left in its group stopped the same way, so no server outlives its run as an orphan.
   `/restart` stops and starts. `POST /api/services/start-all { projectId }` starts every service of a project that is
   not running. Closing a service's tab stops it and forgets the tab; the service stays.
 - **Runs for a task.** A run is a service's terminal with its `taskId`: `null` for yours, in the service's own
@@ -3055,8 +3060,10 @@ beside your run (Runs for a task, below).
   `service_place_invalid`, a worktree without the folder `terminal_place_missing`. Renaming a service renames every
   run's tab and removing one closes them all.
 - **A port per run.** Every task run gets a port of its own, chosen as it starts (`Terminals.#resolvePort`,
-  `pickFreePort` in `pty.ts`: the run's last port while it is still free, else a port the system hands out for
-  `Bun.listen` on port 0, never one another running service holds; `service_port_unavailable` when none is), kept on
+  `TerminalPty.pickPort`: the run's last port, tried again every 100 ms for up to 5 s while something still holds it
+  (`PORT_RELEASE_SCHEDULE`), so a restart comes back on the same port and every link to it keeps working; only after
+  that a port the system hands out for `Bun.listen` on port 0, never one another running service holds;
+  `service_port_unavailable` when none is), kept on
   `TerminalInfo.port` and put in the service's port variable over its own variables, so a task's run never meets
   yours or another task's. Your run is unchanged unless the service has a preview URL; with one it uses the port its
   own variables set, else a free port it keeps across restarts. The command must listen on that variable: Next and
@@ -6933,8 +6940,9 @@ main.ts ──► BunRuntime.runMain(the CLI's program)       the one run in the
   scope, a report it cannot place or read the typed `CoverageReportUnreadable`, answered as unavailable with its
   reason. `TerminalFiles` keeps data/terminals/ on `JsonFile`, every saved terminal and service decoded by a schema
   (`StoredTerminal`, `StoredService`) and one that breaks it dropped; `TerminalPty` spawns your shell in Bun's PTY as
-  a scoped resource whose release hangs it up and kills it after `HANG_UP_GRACE` (3 s), reads the program in front
-  through `Shell`, and picks a free port with `PORT_RETRY` (20 tries), `PortUnavailable` when none is free. Every
+  a scoped resource whose release hangs up its process group and kills it after `HANG_UP_GRACE` (3 s), waiting until
+  the group is empty, reads the program in front through `Shell`, and picks a port: the run's last one on
+  `PORT_RELEASE_SCHEDULE` (5 s), else a free one with `PORT_RETRY` (20 tries), `PortUnavailable` when none is free. Every
   `package.json` and `deno.json` a check, the coverage detection or the service detection reads goes through one
   lenient schema (`files/schema.ts`: `PackageManifest`), which keeps the fields it can read and drops the rest.
 - **Accounts and secrets.** `AccountRegistry` keeps `accounts.json`, `usage-limits.json`, `provider-usage.json` and
