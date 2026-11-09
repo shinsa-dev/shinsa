@@ -1,4 +1,4 @@
-import type { DomainError, MachineCredentials, ShinsaEffect } from '@shinsa/core';
+import type { DomainError, MachineCredentials, ShinsaEffect, TaskOwner } from '@shinsa/core';
 import type {
   NotFound,
   PostNotYours,
@@ -22,6 +22,8 @@ export type SlackEffect<Kind extends ShinsaEffect['kind']> = Extract<ShinsaEffec
 export interface SlackInput {
   readonly credentials: Effect.Effect<MachineCredentials | null>;
   readonly appOrigin: string;
+  readonly resolveActor: (userId: string) => Effect.Effect<TaskOwner | null>;
+  readonly isOwner: (userId: string) => Effect.Effect<boolean>;
 }
 
 export const SlackStatusInterval = Context.Reference<Duration.Duration>(

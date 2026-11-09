@@ -213,9 +213,9 @@ test/                gates.test.ts reads every RemoteApi route with HttpApi.refl
   whoever opens the join link and signs in sees the team's name and owner (`POST /__remote/teams/preview { invite }`,
   which records nothing), then sends `POST /__remote/teams/join { invite }` (or the engine
   `/__remote/machine/teams/join`), which records that the account asked (`team_requesters`) and makes it no member
-  (404 `invite_invalid` for a link turned off). A page's join needs at least one machine the account paired (409
-  `no_machine` otherwise): a teammate reaches your work only through your machines, so the join page turns on remote
-  access first; the engine's join comes from a paired machine already. Only the owner's machine answers a request (`members/add` and
+  (404 `invite_invalid` for a link turned off). An account with no paired machine may join too: it shares
+  nothing and reaches the team only through machines shared with it, whose grant makes it a member there
+  (`/__remote/machine/members/add`, allowed by `sharesTeam`). Only the owner's machine answers a request (`members/add` and
   `requests/decline` with `{ userId }`, only of an account that asked), removes a member (`members/remove`) or the
   team (`remove`), each 403 `not_owner` for anyone else; a member leaves with `…/leave` from the engine or
   `/__remote/teams/<team>/leave` from a page, and the owner cannot (409). The team key lives in the join link's
@@ -298,12 +298,12 @@ test/                gates.test.ts reads every RemoteApi route with HttpApi.refl
   `console.error` behind it, so a watch on the Worker's errors must leave out a 503 on `/hooks/` (and on a preview
   host) that comes with this warn line, and count the warn line apart.
 - **The Slack bot** (`docs/engine.md` → Slack). One Slack app for everyone, on the Events API at `/slack/events`.
-  Connecting (`/slack/connect?instance=<id>`, signed in with GitHub, the machine one you own, never one shared with you, else the one you own seen last)
+  Connecting (`/slack/connect?instance=<id>`, signed in with GitHub, the machine one you own or are a member of, never a guest's, a member's only on a machine that names `slack-task-owner`; else your own seen last, then one you are a member of)
   signs you in with Slack (OAuth v2, the read-only user scopes in `SLACK_USER_SCOPES`: `channels:history`,
   `groups:history`, `channels:read`, `groups:read`, never a direct message's), and when the workspace has no Shinsa yet, or its bot
   token lacks one of the scopes (`SlackApi.hasBotScopes`, Slack's `x-oauth-scopes` on `auth.test`), goes on to add
   the app (OAuth v2, the bot scopes in `SLACK_BOT_SCOPES` and the same user scopes); either way it writes the link of your Slack user to that
-  machine, with your user token sealed beside it (`slack_links.sealed_user_token`), and lands on `/slack/linked?team=` or `?error=`. The state rides in a 10-minute `__Host-shinsa_slack`
+  machine as the GitHub account that signed in (`slack_links.user_id`), with your user token sealed beside it (`slack_links.sealed_user_token`), and lands on `/slack/linked?team=` or `?error=`. The state rides in a 10-minute `__Host-shinsa_slack`
   cookie, checked in constant time. A bot token and a user token are kept sealed with AES-GCM under `SLACK_TOKEN_KEY`, never in clear. A user token is
   revoked (`auth.revoke`, best effort, `slack/user-tokens.ts`) on unlink, on machine removal and when connecting
   again brings a different one; a user `tokens_revoked` clears it and keeps the link.
@@ -311,11 +311,11 @@ test/                gates.test.ts reads every RemoteApi route with HttpApi.refl
   redelivery does nothing, and answered at once; the work runs after (`deferWork`, `waitUntil`). Removing the app
   or revoking its bot token forgets the workspace and its links. A mention from someone of another organisation
   (`user_team` not the workspace) is dropped. A mention from someone with no link gets a private
-  reply with the link to connect; from someone linked, the Worker reads the thread (100 messages), reads up to three
+  reply with the link to connect, and so does one whose linked account is no longer the machine's owner or a member; from someone linked, the Worker reads the thread (100 messages), reads up to three
   threads the mention links to with that person's user token and never the bot's (only for a machine that names
   `slack-linked-threads`; one it cannot read gets a private note, or "Connect Slack again" when the token is missing
   or refused), names the people
-  in them, turns Slack's markup into text and posts it to `https://t-<instance>.shinsa.dev/api/slack/events`, signed
+  in them, turns Slack's markup into text, adds the linked account (`linkedUserId`, whose task it starts) and posts it to `https://t-<instance>.shinsa.dev/api/slack/events`, signed
   with an HMAC over the time and the body keyed by the machine's connect key (`createSlackForwardSignature`); a
   machine offline, or a tunnel that does not answer, gets "offline" in the thread instead. A machine posts and edits
   through `/__remote/slack/post` with its machine token, only in a thread it was sent and only editing what it
@@ -335,7 +335,7 @@ test/                gates.test.ts reads every RemoteApi route with HttpApi.refl
   buttons, or a private refusal. A write click opens a form (`views.open`), checked again when it is sent; its
   refusal comes as `chat.postEphemeral` in the thread. `/__remote/slack/session` sets the thread's status
   (`agents.sessions.setStatus`, best effort: `applied: false`, not logged, for `not_authorized` from an app not on
-  Agent Sessions (`agent_view` stays off) and `feature_disabled`; any other refusal is logged and answered 502); `/__remote/slack/links` and `/unlink` read and remove its links. Message
+  Agent Sessions (`agent_view` stays off) and `feature_disabled`; any other refusal is logged and answered 502); `/__remote/slack/links` (each with the GitHub account that linked it, `accountId`) and `/unlink` read and remove its links. Message
   text passes through the Worker on its way and is never stored: D1 keeps ids, names and the sealed tokens.
 - **Requests from a page.** Every signed-in route reads the session from `Authorization: Bearer` first, then the
   cookie (`PageSession`; a bearer that does not open a session is refused, never retried as the cookie). Every POST a page makes (sign-out, approve, connect, remove, accept, leave) needs an `Origin` of the

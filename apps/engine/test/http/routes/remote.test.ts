@@ -366,10 +366,11 @@ describe('Slack over HTTP', () => {
   test('reads the links and disconnects, and is not found without Slack', async () => {
     const calls: string[] = [];
     const slack = {
-      snapshot: Effect.sync(() => {
-        calls.push('snapshot');
-        return { remote: true, links: [] };
-      }),
+      snapshot: (viewer: string | null) =>
+        Effect.sync(() => {
+          calls.push(`snapshot ${viewer}`);
+          return { remote: true, links: [] };
+        }),
       disconnect: Effect.sync(() => {
         calls.push('disconnect');
         return { remote: true, links: [] };
@@ -378,7 +379,7 @@ describe('Slack over HTTP', () => {
     const { send, post } = startRoutes({ slack });
     expect(await (await send('/api/slack')).json()).toEqual({ remote: true, links: [] });
     expect((await post('/api/slack/disconnect', {})).status).toBe(200);
-    expect(calls).toEqual(['snapshot', 'disconnect']);
+    expect(calls).toEqual(['snapshot null', 'disconnect']);
     expect((await startRoutes().send('/api/slack')).status).toBe(404);
     expect((await startRoutes().post('/api/slack/disconnect', {})).status).toBe(404);
   });
@@ -419,5 +420,26 @@ describe('Slack over HTTP', () => {
     expect(tested).toEqual([contact]);
     expect((await post('/api/slack/test', { contact: { kind: 'team' } })).status).toBe(400);
     expect((await startRoutes().post('/api/slack/test', { contact })).status).toBe(404);
+  });
+
+  test('reads a member’s own links, and the owner’s from the owner or the keyboard', async () => {
+    const viewers: (string | null)[] = [];
+    const slack = {
+      snapshot: (viewer: string | null) =>
+        Effect.sync(() => {
+          viewers.push(viewer);
+          return { remote: true, links: [] };
+        }),
+    } as unknown as Slack['Service'];
+    const remote = {
+      ...createRemote().remote,
+      isOwner: (userId: string | null) => Effect.succeed(userId === 'u-owner'),
+    };
+    const { send } = startRoutes({ slack, remote });
+    await send('/api/slack');
+    await send('/api/slack', {}, { via: 'channel', guest: null, userId: 'u-owner' });
+    await send('/api/slack', {}, { via: 'channel', guest: null, userId: 'u-kai' });
+    await startRoutes({ slack }).send('/api/slack', {}, { via: 'channel', guest: null, userId: 'u-kai' });
+    expect(viewers).toEqual([null, null, 'u-kai', null]);
   });
 });

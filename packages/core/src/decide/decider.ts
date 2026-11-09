@@ -30,6 +30,7 @@ import type { ShinsaEventInput } from '../events/index.ts';
 import { describeUntoldMessages } from '../prompts/context.ts';
 import { describeForkSource, describeTeammateForkSource, resolveForkNote } from '../prompts/forks.ts';
 import { resolveMemoryTold } from '../prompts/memory.ts';
+import { resolveNightShiftTold } from '../prompts/night.ts';
 import { resolveAdoptionNote } from '../prompts/orchestration.ts';
 import { resolveProjectContext } from '../prompts/project.ts';
 import { listTaskBases, needsRoundBrief, resolveRoundBrief } from '../prompts/root.ts';
@@ -334,7 +335,8 @@ export class Decider {
         : prompt;
     const fresh = resumeFrom ? '' : this.#describeFreshContext(task, role, fork);
     const told = this.#tell(task.id, role, purpose, `${options.told ?? ''}${adoption.note}`);
-    const appended = `${fresh}${resolveMemoryTold(this.state, task, role, resumeFrom)}${told}${tellOverlaps(this, task.id, role)}`;
+    const night = resolveNightShiftTold(this.state, task, role, purpose, this.context.now);
+    const appended = `${fresh}${resolveMemoryTold(this.state, task, role, resumeFrom)}${told}${tellOverlaps(this, task.id, role)}${night}`;
     const run: Run = {
       id: adoption.id ?? this.context.newId(),
       taskId: task.id,

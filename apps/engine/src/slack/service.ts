@@ -31,11 +31,14 @@ import {
   type SlackSessionStatus,
   type SlackSnapshot,
   type ShinsaCommand,
+  type TaskOwner,
   type SlackThreadRef,
   serializeSlackCard,
   serializeSlackDeclined,
   serializeSlackEvaluationPrompt,
+  serializeSlackNoAccess,
   verifySlackForwardSignature,
+  type SlackLink,
 } from '@shinsa/core';
 import type { SlackTestOutcome } from '@shinsa/core/engine-api/schema';
 import { serializeRemoteFailure } from '@shinsa/core/remote/errors';
@@ -93,7 +96,7 @@ export class Slack extends Context.Service<
       effect: SlackEffect<'slack.status'>,
       key: string
     ) => Effect.Effect<void, SlackRefusal | SlackRelayFailure>;
-    readonly snapshot: Effect.Effect<SlackSnapshot>;
+    readonly snapshot: (viewer: string | null) => Effect.Effect<SlackSnapshot>;
     readonly disconnect: Effect.Effect<SlackSnapshot, SlackLinksFailure>;
   }
 >()('shinsa/engine/slack/Slack') {
@@ -106,7 +109,8 @@ export class Slack extends Context.Service<
         const relay = (yield* RemoteClient).slack;
         const statusInterval = yield* SlackStatusInterval;
         const token = (machineToken: string) => Redacted.make(machineToken);
-        const dispatch = (command: ShinsaCommand, id: string) => engine.dispatch(command, { id });
+        const dispatch = (command: ShinsaCommand, id: string, actor: TaskOwner | null = null) =>
+          engine.dispatch(command, { id, actor });
         const statusAt = yield* Ref.make<ReadonlyMap<string, number>>(new Map());
         const statusShown = yield* Ref.make<ReadonlyMap<string, string>>(new Map());
         const mergeShown = yield* Ref.make<ReadonlyMap<string, string>>(new Map());
@@ -305,6 +309,12 @@ export class Slack extends Context.Service<
           key: string
         ) {
           const { mention } = effect;
+          const actor =
+            mention.linkedUserId === null ? null : yield* input.resolveActor(mention.linkedUserId);
+          if (mention.linkedUserId !== null && actor === null) {
+            yield* send(mention, null, serializeSlackNoAccess());
+            return;
+          }
           yield* applyReaction(mention, mention.messageTs, SLACK_REACTIONS.sizing, null);
           const said = yield* quick.classify<unknown>(
             SLACK_EVALUATION_SYSTEM,
@@ -322,7 +332,7 @@ export class Slack extends Context.Service<
             yield* send(mention, null, serializeSlackDeclined());
             return;
           }
-          yield* dispatch({ type: 'slack.start_task', mention }, `${key}:slack.start_task`);
+          yield* dispatch({ type: 'slack.start_task', mention }, `${key}:slack.start_task`, actor);
         });
 
         const post = Effect.fn('Slack.post')(function* (effect: SlackEffect<'slack.post'>) {
@@ -593,7 +603,12 @@ export class Slack extends Context.Service<
           );
         });
 
-        const snapshot = Effect.gen(function* () {
+        const isViewers = (viewer: string | null) => (link: SlackLink) => {
+          if (viewer !== null) return Effect.succeed(link.accountId === viewer);
+          return link.accountId === null ? Effect.succeed(true) : input.isOwner(link.accountId);
+        };
+
+        const snapshot = Effect.fn('Slack.snapshot')(function* (viewer: string | null) {
           const credentials = yield* input.credentials;
           if (!credentials) {
             const off: SlackSnapshot = { remote: false, connectUrl: null, links: [], problem: null };
@@ -601,14 +616,21 @@ export class Slack extends Context.Service<
           }
           const connectUrl = resolveSlackConnectUrl(input.appOrigin, credentials.instanceId);
           return yield* relay.links(token(credentials.machineToken)).pipe(
-            Effect.andThen((answer) => Effect.map(engine.state, (state) => ({ answer, state }))),
-            Effect.map(({ answer, state }): SlackSnapshot => ({
+            Effect.andThen((answer) =>
+              Effect.map(Effect.filter(answer.links, isViewers(viewer)), (links) => ({
+                links,
+                othersLinked: answer.links.length - links.length,
+              }))
+            ),
+            Effect.andThen((seen) => Effect.map(engine.state, (state) => ({ ...seen, state }))),
+            Effect.map(({ links, othersLinked, state }): SlackSnapshot => ({
               remote: true,
               connectUrl,
-              links: answer.links.map((link) => ({
+              links: links.map((link) => ({
                 ...link,
                 lastUsedAt: resolveSlackLastUsedAt(state, link),
               })),
+              othersLinked,
               problem: null,
             })),
             Effect.catch((failure) =>
@@ -634,7 +656,7 @@ export class Slack extends Context.Service<
               message: 'Turn on remote access first.',
             });
           yield* relay.unlink(token(credentials.machineToken));
-          return yield* snapshot;
+          return yield* snapshot(null);
         });
 
         return Slack.of({

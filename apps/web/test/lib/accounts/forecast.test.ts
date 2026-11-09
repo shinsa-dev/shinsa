@@ -16,7 +16,6 @@ import {
   describeTightest,
   formatForecastDay,
   formatPace,
-  isPaceApplied,
   listForecastDays,
   listForecastLanes,
   listForecastPaces,
@@ -208,14 +207,6 @@ describe('the forecast in words', () => {
     expect(describeTightest(lone, NOW)).toMatch(
       /^Tightest point at the safe pace: .+ left just before work resets in 15h\.$/
     );
-  });
-
-  it('knows whether the pace is already the daily limit', () => {
-    const forecast = resolveUsageForecast(accounts, NOW, null);
-    if (!forecast) throw new Error('expected a forecast');
-    expect(isPaceApplied(forecast, forecast.safePace)).toBe(true);
-    expect(isPaceApplied(forecast, null)).toBe(false);
-    expect(isPaceApplied(forecast, undefined)).toBe(false);
   });
 
   it('formats a pace to one decimal place', () => {

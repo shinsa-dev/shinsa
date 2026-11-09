@@ -25,7 +25,20 @@ export interface SlackStatusView {
   detail: string;
 }
 
-export function describeSlackStatus(snapshot: SlackSnapshot): SlackStatusView {
+export function resolveSlackConnectLabel(connected: boolean, member: boolean) {
+  if (connected) return 'Connect another workspace';
+  return member ? 'Connect your Slack' : 'Connect Slack';
+}
+
+function describeOwnerNotConnected(othersLinked: number) {
+  if (othersLinked === 0)
+    return 'Connect signs you in with Slack and adds Shinsa to your workspace if it is not there yet.';
+  const accounts =
+    othersLinked === 1 ? '1 member’s Slack account starts' : `${othersLinked} members’ Slack accounts start`;
+  return `${accounts} tasks here. Connect your own so your mentions do too.`;
+}
+
+export function describeSlackStatus(snapshot: SlackSnapshot, member = false): SlackStatusView {
   if (!snapshot.remote)
     return {
       label: 'Needs remote access',
@@ -37,13 +50,17 @@ export function describeSlackStatus(snapshot: SlackSnapshot): SlackStatusView {
     return {
       label: 'Not connected',
       tone: 'neutral',
-      detail: 'Connect signs you in with Slack and adds Shinsa to your workspace if it is not there yet.',
+      detail: member
+        ? 'Connect your own Slack so your mentions start tasks here as yours.'
+        : describeOwnerNotConnected(snapshot.othersLinked ?? 0),
     };
   const workspaces = snapshot.links.length === 1 ? 'workspace' : 'workspaces';
   return {
     label: 'Connected',
     tone: 'green',
-    detail: `Only your own mentions start tasks here, in ${snapshot.links.length} ${workspaces}.`,
+    detail: member
+      ? `Your mentions start tasks here as yours, in ${snapshot.links.length} ${workspaces}.`
+      : `Only your own mentions start tasks here, in ${snapshot.links.length} ${workspaces}.`,
   };
 }
 

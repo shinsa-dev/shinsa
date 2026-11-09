@@ -1,10 +1,13 @@
 import {
   type BudgetUnit,
+  type BuildEstimate,
   type CostLine,
   describeBudgetAmount,
   describeCount,
   describeWeeklyPercent,
   listTaskBudgets,
+  describeUsd,
+  resolveBuildEstimate,
   resolveCostUnit,
   resolveTaskCost,
   type ShinsaState,
@@ -23,6 +26,12 @@ interface CostRow {
   tokens: string;
 }
 
+interface EstimateRow {
+  key: string;
+  label: string;
+  value: string;
+}
+
 interface CostFacts {
   icon: IconName;
   total: string;
@@ -31,6 +40,7 @@ interface CostFacts {
   budget: { share: number; over: boolean } | null;
   byRole: CostRow[];
   byPhase: CostRow[];
+  build: EstimateRow[] | null;
 }
 
 const UNIT_ICON: Record<BudgetUnit, IconName> = { percent: 'IconGauge', usd: 'IconCoins' };
@@ -79,6 +89,42 @@ function describeDetail(line: CostLine, unit: BudgetUnit) {
   return `${provider}${describeShareBasis(line, unit)}`;
 }
 
+function describeEstimateAmount(usd: number, percent: number | null) {
+  return `About ${percent === null ? describeUsd(usd) : describeWeeklyPercent(percent)}`;
+}
+
+function describeEstimateBasis(estimate: BuildEstimate) {
+  return estimate.samples > 0
+    ? `What ${describeCount(estimate.samples, 'past build')} cost, by plan size`
+    : 'The usual cost of a plan this size';
+}
+
+function listEstimateRows(state: ShinsaState, task: Task): EstimateRow[] | null {
+  const estimate = resolveBuildEstimate(state, task);
+  if (!estimate || estimate.donePhases === estimate.phases) return null;
+  const started = estimate.spentUsd > 0;
+  return [
+    { key: 'whole', label: 'Whole build', value: describeEstimateAmount(estimate.usd, estimate.percent) },
+    ...(started
+      ? [
+          {
+            key: 'left',
+            label: 'Left to build',
+            value: describeEstimateAmount(estimate.remainingUsd, estimate.remainingPercent),
+          },
+        ]
+      : []),
+    { key: 'basis', label: 'Based on', value: describeEstimateBasis(estimate) },
+  ];
+}
+
+export function describeBuildEstimateFact(state: ShinsaState, task: Task) {
+  const estimate = resolveBuildEstimate(state, task);
+  if (!estimate || estimate.donePhases === estimate.phases) return null;
+  if (estimate.spentUsd === 0) return `${describeEstimateAmount(estimate.usd, estimate.percent)} to build`;
+  return `${describeEstimateAmount(estimate.remainingUsd, estimate.remainingPercent)} left to build`;
+}
+
 function selectShownBudget(state: ShinsaState, task: Task, unit: BudgetUnit) {
   const spent = selectSpentBudget(state, task);
   if (spent) return spent;
@@ -98,5 +144,6 @@ export function resolveCostFacts(state: ShinsaState, task: Task): CostFacts | nu
     budget: budget && { share: Math.min(1, budget.share), over: budget.spent >= budget.limit },
     byRole: cost.byRole.map(({ role, cost: line }) => toRow(role, RUN_ROLE[role].name, line, unit)),
     byPhase: cost.byPhase.map(({ index, title, cost: line }) => toRow(`phase-${index}`, title, line, unit)),
+    build: listEstimateRows(state, task),
   };
 }

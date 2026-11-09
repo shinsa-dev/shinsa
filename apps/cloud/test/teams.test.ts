@@ -161,16 +161,20 @@ describe('joining a team', () => {
     expect((await joinTeam(harness, kai, next.invite)).status).toBe(404);
   });
 
-  test('someone with no paired machine is told to turn on remote access first, and records no request', async () => {
-    const { harness, mona, invite } = await startTeam();
+  test('someone with no paired machine asks to join and is accepted like anyone else', async () => {
+    const { harness, mona, studio, team, invite } = await startTeam();
     const lone = await harness.signIn('lone', 3);
-    const refused = await joinTeam(harness, lone, invite);
-    expect(refused.status).toBe(409);
-    expect(await readCode(refused)).toBe('no_machine');
-    expect((await listTeams(harness, mona))[0]?.requests).toEqual([]);
-    await pairMachine(harness, lone, 'Lone');
     const answer = await readJson<TeamJoinResponse>(await joinTeam(harness, lone, invite));
     expect(answer.status).toBe('requested');
+    expect((await listTeams(harness, mona))[0]?.requests.map((request) => request.user.login)).toEqual([
+      'lone',
+    ]);
+    expect((await act(harness, studio, team.id, 'members/add', { userId: '3' })).status).toBe(200);
+    const [seen] = await listTeams(harness, lone);
+    expect(seen).toMatchObject({ id: team.id, role: 'member' });
+    expect(seen?.machines.map((machine) => machine.id)).toEqual([studio.instanceId]);
+    const granted = await harness.post(REMOTE_PATHS.machineMemberAdd, { userId: '3' }, machineAuth(studio));
+    expect((await readJson<RemoteMember>(granted)).user.login).toBe('lone');
   });
 
   test('a page asking to join must come from app.shinsa.dev', async () => {

@@ -22,6 +22,7 @@ export const ENGINE_FEATURES = [
   'usage.watchdog_limits',
   'share.scopes',
   'suggestion.bundle',
+  'usage.auto_pace',
   'autopilot-slack',
   'shared-machine',
   'focus.projects',

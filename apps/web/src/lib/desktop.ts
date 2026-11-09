@@ -22,6 +22,12 @@ export interface DesktopNotice {
 
 export type UpdateChannel = 'stable' | 'beta' | 'canary';
 
+const DESKTOP_ACTIONS = ['new-task', 'command-menu', 'whats-new'] as const;
+
+export type DesktopAction = (typeof DESKTOP_ACTIONS)[number];
+
+export type DesktopActions = Record<DesktopAction, () => void>;
+
 export type DesktopUpdate =
   | { status: 'none' }
   | { status: 'checking' }
@@ -51,6 +57,7 @@ export interface DesktopBridge {
   onWindowState: (listener: (state: DesktopWindowState) => void) => () => void;
   onUpdate: (listener: (update: DesktopUpdate) => void) => () => void;
   onAway: (listener: (span: TimingSpan) => void) => () => void;
+  onAction?: (listener: (action: DesktopAction) => void) => () => void;
 }
 
 declare global {
@@ -83,7 +90,11 @@ export function isAlertQuiet(where: AttentionPlace, desktopConnected: boolean, r
   return isPageQuiet(desktopConnected, remote);
 }
 
-export function applyDesktop(navigate: (path: string) => void) {
+function isDesktopAction(value: unknown): value is DesktopAction {
+  return DESKTOP_ACTIONS.some((action) => action === value);
+}
+
+export function applyDesktop(navigate: (path: string) => void, actions: DesktopActions) {
   const desktop = selectDesktop();
   if (!desktop) return () => undefined;
   const root = document.documentElement;
@@ -92,9 +103,14 @@ export function applyDesktop(navigate: (path: string) => void) {
   const stopWindowState = desktop.onWindowState((state) => {
     root.dataset.desktop = state;
   });
+  const stopAction =
+    desktop.onAction?.((action) => {
+      if (isDesktopAction(action)) actions[action]();
+    }) ?? (() => undefined);
   return () => {
     stopNavigate();
     stopWindowState();
+    stopAction();
     delete root.dataset.desktop;
   };
 }

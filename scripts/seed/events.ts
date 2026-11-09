@@ -7,7 +7,7 @@ import {
   formatTaskHandle,
   NO_PROJECT_KEY,
 } from '../../packages/core/src/index.ts';
-import { DAY } from '../kit/time.ts';
+import { DAY, HOUR } from '../kit/time.ts';
 import { listSeedEvidenceEvents } from './evidence.ts';
 import { pushSeedFeedback } from './feedback.ts';
 import { NOW, type SeedTask } from './kit.ts';
@@ -43,8 +43,10 @@ export function buildEvents(tasks: SeedTask[], projects: Project[], repos: Repo[
           },
         ],
       },
+      autoPace: true,
     },
   });
+  push(NOW - HOUR, { type: 'usage.pace_recorded', provider: 'claude', pace: 45 });
   for (const task of tasks) pushTask(task, push);
   pushSeedFeedback(push);
   const runEnds = new Map(

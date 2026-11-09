@@ -1,4 +1,4 @@
-import type { MachineCredentials } from '@shinsa/core';
+import type { MachineCredentials, RemoteUserId, TaskOwner } from '@shinsa/core';
 import { Clock, Context, Duration, Effect, Layer, Scope } from 'effect';
 import { FetchHttpClient } from 'effect/http';
 import type { QuickJson } from '../../src/agents/quick/schema.ts';
@@ -12,6 +12,8 @@ import { createFixedClock } from '../helpers/clock.ts';
 import type { Engine } from '../helpers/engine.ts';
 import { promised } from '../helpers/promised.ts';
 
+export const OWNER_ACCOUNT = 'gh-owner' as RemoteUserId;
+
 export type Relay = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
 
 export interface TestSlackOptions {
@@ -22,6 +24,7 @@ export interface TestSlackOptions {
   ask?: QuickJson;
   statusIntervalMs?: number;
   startAt?: number;
+  actors?: Record<string, TaskOwner>;
 }
 
 export function createTestSlackService(options: TestSlackOptions) {
@@ -42,6 +45,8 @@ export function createTestSlackService(options: TestSlackOptions) {
   const layer = Slack.layer({
     credentials: Effect.succeed(options.credentials),
     appOrigin: options.origin,
+    resolveActor: (userId) => Effect.succeed(options.actors?.[userId] ?? null),
+    isOwner: (userId) => Effect.succeed(userId === OWNER_ACCOUNT),
   }).pipe(
     Layer.provide(
       Layer.mergeAll(

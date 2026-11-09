@@ -10,7 +10,7 @@ export {
   resolvePoolResetAt,
   selectNextAccount,
 } from './pick.ts';
-export { resolvePlanLabel } from './plan.ts';
+export { resolvePlanKey, resolvePlanLabel } from './plan.ts';
 export {
   listRelevantWindows,
   resolveHeadroom,

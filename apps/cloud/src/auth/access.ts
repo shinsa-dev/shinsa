@@ -71,6 +71,15 @@ export const findOwnMachine = Effect.fn('findOwnMachine')(function* (
   return machine;
 });
 
+export const findMemberMachine = Effect.fn('findMemberMachine')(function* (
+  userId: RemoteUserId,
+  instanceId: InstanceId
+) {
+  const grant = yield* findMachineAccess(userId, instanceId);
+  if (grant.role === 'guest') return yield* new NotFound({ message: NO_SUCH_MACHINE });
+  return grant;
+});
+
 export const findTeamAccess = Effect.fn('findTeamAccess')(function* (userId: RemoteUserId, teamId: TeamId) {
   const teams = yield* Teams;
   const team = yield* teams.select(teamId);

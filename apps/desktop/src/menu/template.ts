@@ -1,10 +1,15 @@
 import { APP_NAME } from '../app/schema.ts';
-import type { MenuEntry, MenuRole, MenuSection, MenuUpdate } from './schema.ts';
+import { HELP_LINKS, type MenuEntry, type MenuRole, type MenuSection, type MenuUpdate } from './schema.ts';
 
 const separator: MenuEntry = { kind: 'separator' };
 
 function role(name: MenuRole, label?: string): MenuEntry {
   return label === undefined ? { kind: 'role', role: name } : { kind: 'role', role: name, label };
+}
+
+function open(label: string, path: string, accelerator?: string): MenuEntry {
+  const entry: MenuEntry = { kind: 'command', label, command: { _tag: 'Open', path } };
+  return accelerator === undefined ? entry : { ...entry, accelerator };
 }
 
 export function listMenuSections(update: MenuUpdate): MenuSection[] {
@@ -21,12 +26,7 @@ export function listMenuSections(update: MenuUpdate): MenuSection[] {
           command: { _tag: 'Update', install: update.install },
         },
         separator,
-        {
-          kind: 'command',
-          label: 'Settings…',
-          accelerator: 'CmdOrCtrl+,',
-          command: { _tag: 'Open', path: '/settings' },
-        },
+        open('Settings…', '/settings', 'CmdOrCtrl+,'),
         { kind: 'command', label: 'Restart Engine', command: { _tag: 'RestartEngine' } },
         separator,
         role('services'),
@@ -36,6 +36,25 @@ export function listMenuSections(update: MenuUpdate): MenuSection[] {
         role('unhide'),
         separator,
         role('quit', `Quit ${APP_NAME}`),
+      ],
+    },
+    {
+      label: 'File',
+      entries: [
+        {
+          kind: 'command',
+          label: 'New Task',
+          accelerator: 'CmdOrCtrl+N',
+          command: { _tag: 'PageAction', action: 'new-task' },
+        },
+        {
+          kind: 'command',
+          label: 'Command Menu…',
+          accelerator: 'CmdOrCtrl+K',
+          command: { _tag: 'PageAction', action: 'command-menu' },
+        },
+        separator,
+        role('close', 'Close Window'),
       ],
     },
     {
@@ -53,19 +72,6 @@ export function listMenuSections(update: MenuUpdate): MenuSection[] {
       ],
     },
     {
-      label: 'View',
-      entries: [
-        { kind: 'command', label: 'Reload', accelerator: 'CmdOrCtrl+R', command: { _tag: 'Reload' } },
-        separator,
-        role('resetZoom'),
-        role('zoomIn'),
-        role('zoomOut'),
-        separator,
-        role('togglefullscreen'),
-        role('toggleDevTools'),
-      ],
-    },
-    {
       label: 'Go',
       entries: [
         { kind: 'command', label: 'Back', accelerator: 'CmdOrCtrl+[', command: { _tag: 'Step', offset: -1 } },
@@ -76,12 +82,10 @@ export function listMenuSections(update: MenuUpdate): MenuSection[] {
           command: { _tag: 'Step', offset: 1 },
         },
         separator,
-        {
-          kind: 'command',
-          label: 'Home',
-          accelerator: 'Shift+CmdOrCtrl+H',
-          command: { _tag: 'Open', path: '/' },
-        },
+        open('Home', '/', 'Shift+CmdOrCtrl+H'),
+        open('Tasks', '/tasks'),
+        open('Terminal', '/terminal'),
+        open('Settings', '/settings'),
       ],
     },
     {
@@ -94,6 +98,26 @@ export function listMenuSections(update: MenuUpdate): MenuSection[] {
         { kind: 'command', label: APP_NAME, command: { _tag: 'Show' } },
         separator,
         role('front'),
+      ],
+    },
+    {
+      label: 'Help',
+      role: 'help',
+      entries: [
+        { kind: 'command', label: "What's New", command: { _tag: 'PageAction', action: 'whats-new' } },
+        separator,
+        {
+          kind: 'command',
+          label: `${APP_NAME} Website`,
+          command: { _tag: 'OpenExternal', url: HELP_LINKS.website },
+        },
+        {
+          kind: 'command',
+          label: 'Report an Issue…',
+          command: { _tag: 'OpenExternal', url: HELP_LINKS.issue },
+        },
+        separator,
+        { kind: 'command', label: 'Show Engine Log', command: { _tag: 'ShowEngineLog' } },
       ],
     },
   ];

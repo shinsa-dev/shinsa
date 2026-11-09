@@ -414,6 +414,7 @@ describe('the Slack effects', () => {
       channelName: null,
       thread: [],
       linkedThreads: [],
+      linkedUserId: null,
     };
     await runner.apply({ kind: 'slack.evaluate', mention }, createContext());
     await runner.apply({ kind: 'slack.status', taskId: 't1', thread: THREAD }, createContext());

@@ -1,8 +1,16 @@
-import { InstanceId, isSameSecret, resolveSlackLinkedPath, SLACK_RELAY_PATHS } from '@shinsa/core';
-import { SignedOut, SlackDenied, SlackExpired } from '@shinsa/core/remote/errors';
+import {
+  hasMachineFeature,
+  InstanceId,
+  isSameSecret,
+  type RemoteRole,
+  type RemoteUserId,
+  resolveSlackLinkedPath,
+  SLACK_RELAY_PATHS,
+} from '@shinsa/core';
+import { NotOwner, SignedOut, SlackDenied, SlackExpired } from '@shinsa/core/remote/errors';
 import { Cause, Effect, Layer, Option, Redacted, Schema } from 'effect';
 import { HttpRouter, HttpServerRequest } from 'effect/http';
-import { findOwnMachine } from '../../auth/access.ts';
+import { findMemberMachine } from '../../auth/access.ts';
 import { OAUTH_STATE_BYTES } from '../../auth/schema.ts';
 import { selectRequestUser } from '../../auth/tokens.ts';
 import { CloudConfig } from '../../config/service.ts';
@@ -53,20 +61,39 @@ export const SlackLinkRoutes = Layer.unwrap(
       });
     });
 
+    const canLink = (machine: Machine, role: RemoteRole) =>
+      role === 'owner' || hasMachineFeature(machine.features, 'slack-task-owner');
+
+    const findLinkableMachine = Effect.fn('slackLink.findLinkableMachine')(function* (
+      userId: RemoteUserId,
+      instanceId: InstanceId
+    ) {
+      const { machine, role } = yield* findMemberMachine(userId, instanceId);
+      if (!canLink(machine, role))
+        return yield* new NotOwner({
+          message: "Only this machine's owner can connect Slack until Shinsa on it is updated.",
+        });
+      return machine;
+    });
+
     const selectConnectMachine = Effect.fn('slackLink.selectConnectMachine')(function* (
-      userId: Parameters<typeof findOwnMachine>[0],
+      userId: RemoteUserId,
       requested: string | null
     ) {
       const machines = yield* Machines;
       if (requested !== null) {
         const instanceId = decodeInstanceId(requested);
-        if (Option.isSome(instanceId)) return Option.some(yield* findOwnMachine(userId, instanceId.value));
+        if (Option.isSome(instanceId))
+          return Option.some(yield* findLinkableMachine(userId, instanceId.value));
       }
-      const owned = (yield* machines.listOfUser(userId))
-        .filter((shared) => shared.role === 'owner')
-        .map((shared) => shared.machine)
-        .sort((left, right) => (right.lastSeenAt ?? 0) - (left.lastSeenAt ?? 0));
-      return Option.fromNullishOr(owned[0]);
+      const linkable = (yield* machines.listOfUser(userId))
+        .filter((shared) => shared.role !== 'guest' && canLink(shared.machine, shared.role))
+        .sort(
+          (left, right) =>
+            Number(right.role === 'owner') - Number(left.role === 'owner') ||
+            (right.machine.lastSeenAt ?? 0) - (left.machine.lastSeenAt ?? 0)
+        );
+      return Option.fromNullishOr(linkable[0]?.machine);
     });
 
     const respondConnect = Effect.gen(function* () {
@@ -94,7 +121,11 @@ export const SlackLinkRoutes = Layer.unwrap(
       if (!code) return yield* new SlackDenied({ message: 'Slack was not connected.' });
       const user = yield* selectRequestUser;
       if (Option.isNone(user)) return yield* new SignedOut({ message: 'Sign in with GitHub first.' });
-      return { machine: yield* findOwnMachine(user.value.id, machineId.value), code };
+      return {
+        machine: yield* findLinkableMachine(user.value.id, machineId.value),
+        account: user.value.id,
+        code,
+      };
     });
 
     const requestAccess = Effect.fn('slackLink.requestAccess')(function* (code: string, redirectUri: string) {
@@ -124,7 +155,8 @@ export const SlackLinkRoutes = Layer.unwrap(
 
     const recordLink = Effect.fn('slackLink.recordLink')(function* (
       identity: SlackIdentity,
-      machine: Machine
+      machine: Machine,
+      userId: RemoteUserId
     ) {
       const store = yield* SlackStore;
       const crypto = yield* CloudCrypto;
@@ -135,7 +167,7 @@ export const SlackLinkRoutes = Layer.unwrap(
         workspaceId: identity.teamId,
         slackUserId: identity.userId,
         slackUserName: identity.userName,
-        userId: machine.ownerId,
+        userId,
         machineId: machine.id,
         sealedUserToken: yield* crypto.sealToken(identity.userToken),
       });
@@ -156,14 +188,14 @@ export const SlackLinkRoutes = Layer.unwrap(
     const connectCallback = Effect.gen(function* () {
       const config = yield* CloudConfig;
       const slack = yield* SlackApi;
-      const { machine, code } = yield* findCallbackMachine;
+      const { machine, account, code } = yield* findCallbackMachine;
       const { teamId, userId, userToken } = yield* requestAccess(code, config.slackConnectCallbackUrl);
       const opened = yield* selectWorkspaceToken(teamId);
       if (Option.isNone(opened) || !(yield* slack.hasBotScopes(opened.value.token)))
         return yield* respondInstall(teamId, machine);
       const { workspace, token } = opened.value;
       const userName = Option.getOrElse(yield* slack.selectUserName(token, userId), () => userId);
-      yield* recordLink({ teamId, teamName: workspace.name, userId, userName, userToken }, machine);
+      yield* recordLink({ teamId, teamName: workspace.name, userId, userName, userToken }, machine, account);
       return respondLinked({ team: workspace.name });
     });
 
@@ -172,7 +204,7 @@ export const SlackLinkRoutes = Layer.unwrap(
       const crypto = yield* CloudCrypto;
       const slack = yield* SlackApi;
       const store = yield* SlackStore;
-      const { machine, code } = yield* findCallbackMachine;
+      const { machine, account, code } = yield* findCallbackMachine;
       const {
         answer: install,
         teamId,
@@ -192,7 +224,7 @@ export const SlackLinkRoutes = Layer.unwrap(
         sealedBotToken: yield* crypto.sealToken(token),
       });
       const userName = Option.getOrElse(yield* slack.selectUserName(token, userId), () => userId);
-      yield* recordLink({ teamId, teamName, userId, userName, userToken }, machine);
+      yield* recordLink({ teamId, teamName, userId, userName, userToken }, machine, account);
       return respondLinked({ team: teamName });
     });
 

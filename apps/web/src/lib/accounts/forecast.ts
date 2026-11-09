@@ -1,14 +1,13 @@
 import {
   type AccountsSnapshot,
-  CLAUDE_PROVIDER,
   DAY_MS,
   FORECAST_LIMITS,
   type ForecastAccount,
   type ForecastOutage,
   type ForecastSegment,
   type ForecastTimeline,
-  listForecastAccounts,
-  resolveForecastAccount,
+  listForecastProviders,
+  listProviderForecastAccounts,
   resolveProviderLabel,
   resolveRecentUsage,
   resolveUsageForecast,
@@ -49,8 +48,6 @@ const WHAT_IF_PACES = [
 
 export const FORECAST_TITLE = 'Forecast';
 
-export const APPLY_PACE_LABEL = 'Use as daily limit';
-
 export const FORECAST_LEGEND = [
   { key: 'usable', label: 'Has usage' },
   { key: 'empty', label: 'Out of usage' },
@@ -65,29 +62,14 @@ export function resolveRecentPace(state: ShinsaState, provider: string, now: num
   return recent.spends.length === 0 ? null : recent.percent;
 }
 
-function listProviderAccounts(snapshot: AccountsSnapshot, provider: string, now: number) {
-  if (provider === CLAUDE_PROVIDER) return listForecastAccounts(snapshot.accounts, now);
-  const login = snapshot.providers?.find((entry) => entry.provider === provider);
-  if (!login?.usage || login.status === 'signed_out') return [];
-  const account = resolveForecastAccount(provider, login.email ?? login.label, login.usage, null, now);
-  return account ? [account] : [];
-}
-
-function listProviders(snapshot: AccountsSnapshot) {
-  const others = (snapshot.providers ?? [])
-    .map((login) => login.provider)
-    .filter((provider) => provider !== CLAUDE_PROVIDER);
-  return [CLAUDE_PROVIDER, ...others];
-}
-
 export function listProviderForecasts(
   snapshot: AccountsSnapshot | null,
   state: ShinsaState,
   now: number
 ): ProviderForecast[] {
   if (!snapshot) return [];
-  return listProviders(snapshot).flatMap((provider) => {
-    const accounts = listProviderAccounts(snapshot, provider, now);
+  return listForecastProviders(snapshot).flatMap((provider) => {
+    const accounts = listProviderForecastAccounts(snapshot, provider, now);
     const forecast = resolveUsageForecast(accounts, now, resolveRecentPace(state, provider, now));
     return forecast ? [{ provider, title: resolveProviderLabel(provider), forecast }] : [];
   });
@@ -118,10 +100,6 @@ export function describeRecentPace(forecast: UsageForecast, now: number) {
   const pace = `In the last 24 hours you used ${formatPace(forecast.currentPace)}.`;
   if (forecast.runsOutAt === null) return `${pace} At that pace your accounts last the week.`;
   return `${pace} At that pace every account runs out in ${formatDaysAndHours(forecast.runsOutAt - now)}.`;
-}
-
-export function isPaceApplied(forecast: UsageForecast, dailyUsageLimit: number | null | undefined) {
-  return dailyUsageLimit === forecast.safePace;
 }
 
 export function listForecastLanes(forecast: UsageForecast, timeline: ForecastTimeline): ForecastLane[] {

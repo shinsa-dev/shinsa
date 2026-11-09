@@ -37,7 +37,14 @@ import { createTask } from '../support/state.ts';
 
 const FINDING = { severity: 'should_fix' as const, file: 'a.ts', line: 3, message: 'Name it.' };
 
-const LINK = { teamId: 'T1', teamName: 'Overclock', userId: 'U1', userName: 'Christo', linkedAt: 1 };
+const LINK = {
+  teamId: 'T1',
+  teamName: 'Overclock',
+  userId: 'U1',
+  userName: 'Christo',
+  linkedAt: 1,
+  accountId: null,
+};
 
 const SNAPSHOT: SlackSnapshot = {
   remote: true,
