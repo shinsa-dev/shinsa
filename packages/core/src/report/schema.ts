@@ -160,7 +160,7 @@ export const PROTOCOL_LIMITS = {
   replyAsk: 160,
   replyNote: 280,
   replyNext: 1_200,
-  actions: 3,
+  actions: 2,
   actionLabel: 40,
   actionMessage: 2_000,
   splitParts: 8,
