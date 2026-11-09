@@ -99,11 +99,21 @@ const SlackContactId = Id(64).check(
   Schema.isPattern(/^[A-Za-z0-9._-]+$/, { message: SLACK_CONTACT_ID_MESSAGE })
 );
 
+const SLACK_IMAGE_MESSAGE = 'A Slack picture is an https address.';
+
+const SlackContactImage = Id(500).check(
+  Schema.isPattern(/^https:\/\/\S+$/, { message: SLACK_IMAGE_MESSAGE })
+);
+
 const SlackContactFields = { teamId: SlackContactId, id: SlackContactId, name: Id(80) };
 
 export const AutopilotContactPatch = Tagged('kind', AUTOPILOT_CONTACT_KINDS, [
   Schema.Struct({ kind: Schema.Literal('slack_channel'), ...SlackContactFields }),
-  Schema.Struct({ kind: Schema.Literal('slack_person'), ...SlackContactFields }),
+  Schema.Struct({
+    kind: Schema.Literal('slack_person'),
+    ...SlackContactFields,
+    image: Schema.optionalKey(SlackContactImage),
+  }),
 ]);
 
 const AutopilotPatch = Strict(

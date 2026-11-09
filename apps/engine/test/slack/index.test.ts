@@ -810,6 +810,7 @@ describe('an escalation the outbox asks to send to Slack', () => {
     taskId: 't1',
     escalatedAt: ESCALATED_AT,
     contact: CONTACT,
+    part: 'message' as const,
   };
   const ESCALATION = {
     at: ESCALATED_AT,
@@ -846,11 +847,13 @@ describe('an escalation the outbox asks to send to Slack', () => {
     return setup;
   }
 
-  function markSent(stub: Setup['stub']) {
+  function markSent(stub: Setup['stub'], followUpTs: string | null = null) {
     stub.update((state) => {
       const task = state.tasks.t1;
       if (!task) return;
-      task.slackEscalations = [{ escalatedAt: ESCALATED_AT, contact: CONTACT, channelId: 'C9', ts: '300.1' }];
+      task.slackEscalations = [
+        { escalatedAt: ESCALATED_AT, contact: CONTACT, channelId: 'C9', ts: '300.1', followUpTs },
+      ];
     });
   }
 
@@ -864,7 +867,7 @@ describe('an escalation the outbox asks to send to Slack', () => {
       body: { teamId: 'T1', kind: 'slack_channel', id: 'C9', replace: null },
     });
     const sent = JSON.stringify(call?.body?.message);
-    expect(sent).toContain('Urgent change needs someone');
+    expect(sent).toContain('Urgent change needs a review');
     expect(sent).toContain('https://app.test/tasks/t1');
     expect(stub.dispatched).toEqual([
       {
@@ -980,6 +983,148 @@ describe('an escalation the outbox asks to send to Slack', () => {
     answers['/__remote/slack/notify'] = () => new Response('', { status: 503 });
     await expect(slack.escalate(effect, context())).rejects.toMatchObject({ _tag: 'RemoteUnreachable' });
     expect(stub.dispatched).toEqual([]);
+  });
+});
+
+describe('the reply in an escalation’s thread once it merges', () => {
+  const CONTACT = { kind: 'slack_channel' as const, teamId: 'T1', id: 'C9', name: 'on-call' };
+  const ESCALATED_AT = NOW - 1000;
+  const effect = {
+    kind: 'slack.escalate' as const,
+    taskId: 't1',
+    escalatedAt: ESCALATED_AT,
+    contact: CONTACT,
+    part: 'follow_up' as const,
+  };
+
+  function setUpMergedEscalation(
+    options: { enabled?: boolean; followUpTs?: string | null; merged?: boolean; sent?: boolean } = {}
+  ) {
+    const setup = setUp({ link: null, enabled: options.enabled });
+    setup.stub.update((state) => {
+      const task = state.tasks.t1;
+      if (!task) return;
+      task.escalation = null;
+      task.watchdogs = [watchdogOf()];
+      task.pullRequest = {
+        number: 7,
+        url: 'https://github.com/acme/app/pull/7',
+        state: options.merged === false ? 'open' : 'merged',
+        checks: 'passing',
+        unresolvedComments: 0,
+        mergeable: true,
+        updatedAt: NOW,
+      };
+      task.slackEscalations =
+        options.sent === false
+          ? []
+          : [
+              {
+                escalatedAt: ESCALATED_AT,
+                contact: CONTACT,
+                channelId: 'D7',
+                ts: '300.1',
+                followUpTs: options.followUpTs ?? null,
+              },
+            ];
+    });
+    setup.answers['/__remote/slack/notify'] = (body) =>
+      Response.json((body?.replace as Record<string, unknown> | null) ?? { channelId: 'D7', ts: '400.1' });
+    return setup;
+  }
+
+  test('replies under the escalation that it merged and is still watched, and records the reply', async () => {
+    const { slack, stub, relay } = setUpMergedEscalation();
+    await slack.escalate(effect, context('follow-1'));
+    const [call] = callsTo(relay, 'notify');
+    expect(call?.body).toMatchObject({ replace: null, reply: { channelId: 'D7', threadTs: '300.1' } });
+    expect(JSON.stringify(call?.body?.message)).toContain('Shinsa keeps watching it after the merge');
+    expect(stub.dispatched).toEqual([
+      {
+        type: 'slack.record_escalation_follow_up',
+        taskId: 't1',
+        escalatedAt: ESCALATED_AT,
+        contact: CONTACT,
+        ts: '400.1',
+      },
+    ]);
+    expect(stub.commandIds).toEqual(['follow-1:slack.record_escalation_follow_up']);
+  });
+
+  test('edits that reply as its watchdogs move', async () => {
+    const { slack, stub, relay } = setUpMergedEscalation({ followUpTs: '400.1' });
+    await slack.escalate(effect, context());
+    expect(callsTo(relay, 'notify')[0]?.body).toMatchObject({
+      replace: { channelId: 'D7', ts: '400.1' },
+      reply: null,
+    });
+    expect(stub.dispatched).toEqual([]);
+  });
+
+  test('says nothing before the merge, without the first post, or while remote access is off', async () => {
+    const setups = [
+      setUpMergedEscalation({ merged: false }),
+      setUpMergedEscalation({ sent: false }),
+      setUpMergedEscalation({ enabled: false }),
+    ];
+    for (const { slack } of setups) await slack.escalate(effect, context());
+    expect(setups.flatMap((setup) => setup.relay)).toEqual([]);
+  });
+
+  test('logs a refused reply or edit and records nothing', async () => {
+    for (const followUpTs of [null, '400.1']) {
+      const { slack, stub, answers } = setUpMergedEscalation({ followUpTs });
+      answers['/__remote/slack/notify'] = () =>
+        Response.json({ error: { code: 'post_not_yours', message: 'Refused.' } }, { status: 403 });
+      await slack.escalate(effect, context());
+      expect(stub.dispatched).toEqual([]);
+    }
+    expect(logs.fieldsOf('[Slack] The escalation’s follow-up could not be posted')).toHaveLength(1);
+    expect(logs.fieldsOf('[Slack] The escalation’s follow-up could not be edited')).toHaveLength(1);
+  });
+
+  test('throws while the relay is down, so the outbox tries again', async () => {
+    const { slack, answers } = setUpMergedEscalation();
+    answers['/__remote/slack/notify'] = () => new Response('', { status: 503 });
+    await expect(slack.escalate(effect, context())).rejects.toMatchObject({ _tag: 'RemoteUnreachable' });
+  });
+});
+
+describe('a test message to a Slack contact', () => {
+  const PERSON = { kind: 'slack_person' as const, teamId: 'T1', id: 'U2', name: 'Kai' };
+
+  test('posts a sample escalation that says nothing needs anyone', async () => {
+    const { slack, relay, answers } = setUp();
+    answers['/__remote/slack/notify'] = () => Response.json({ channelId: 'D2', ts: '1.1' });
+    expect(await slack.testContact(PERSON)).toEqual({ sent: true, problem: null });
+    const [call] = callsTo(relay, 'notify');
+    expect(call?.body).toMatchObject({
+      teamId: 'T1',
+      kind: 'slack_person',
+      id: 'U2',
+      replace: null,
+      reply: null,
+    });
+    expect(JSON.stringify(call?.body?.message)).toContain('A test from Shinsa’s Autopilot settings');
+  });
+
+  test('says why it could not be sent', async () => {
+    expect(await setUp({ enabled: false }).slack.testContact(PERSON)).toEqual({
+      sent: false,
+      problem: 'Remote access is off, so Shinsa cannot reach Slack.',
+    });
+    const { slack, answers } = setUp();
+    answers['/__remote/slack/notify'] = () =>
+      Response.json(
+        { error: { code: 'slack_failed', message: 'That person’s Slack account is deactivated.' } },
+        {
+          status: 502,
+        }
+      );
+    expect(await slack.testContact(PERSON)).toEqual({
+      sent: false,
+      problem: 'That person’s Slack account is deactivated.',
+    });
   });
 });
 

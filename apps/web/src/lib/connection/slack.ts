@@ -1,4 +1,4 @@
-import type { SlackDirectoryView, SlackSnapshot } from '@shinsa/core';
+import type { AutopilotContact, SlackDirectoryView, SlackSnapshot } from '@shinsa/core';
 import { Effect } from 'effect';
 import * as React from 'react';
 import { useAppEffect } from '@/hooks/use-app-effect.ts';
@@ -97,4 +97,26 @@ export function useSlackDirectory(teamId: string | null) {
     [teamId]
   );
   return directory;
+}
+
+export interface SlackTestResult {
+  contact: AutopilotContact;
+  sent: boolean;
+  problem: string | null;
+}
+
+export function sendSlackTests(contacts: readonly AutopilotContact[]) {
+  return runApp(
+    Effect.gen(function* () {
+      const engine = yield* EngineClient;
+      return yield* Effect.forEach(contacts, (contact) =>
+        engine.slack.test({ payload: { contact } }).pipe(
+          Effect.map((outcome): SlackTestResult => ({ contact, ...outcome })),
+          Effect.catch((error) =>
+            Effect.succeed<SlackTestResult>({ contact, sent: false, problem: error.message })
+          )
+        )
+      );
+    })
+  );
 }

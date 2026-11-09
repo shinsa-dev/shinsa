@@ -142,7 +142,7 @@ const FEATURE_ROUTES = {
   'usage.watchdog_limits': [],
   'share.scopes': [],
   'suggestion.bundle': [],
-  'autopilot-slack': ['GET /api/slack/directory'],
+  'autopilot-slack': ['GET /api/slack/directory', 'POST /api/slack/test'],
 };
 
 const LOCAL_ONLY = [
@@ -173,6 +173,7 @@ const OWNER_ONLY = [
   'POST /api/remote/teams/extra',
   'POST /api/remote/teams/key/request',
   'POST /api/remote/teams/key/answer',
+  'POST /api/slack/test',
   'POST /api/slack/disconnect',
   'POST /api/engine/restart',
   'POST /api/onboarding/setup',

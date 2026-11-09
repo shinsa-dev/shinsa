@@ -427,6 +427,7 @@ describe('the Slack effects', () => {
         taskId: 't1',
         escalatedAt: 1,
         contact: { kind: 'slack_person', teamId: 'T1', id: 'U2', name: 'Kai' },
+        part: 'message',
       },
       createContext()
     );

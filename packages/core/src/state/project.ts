@@ -1184,6 +1184,7 @@ function applyEventBody(state: ShinsaState, event: ShinsaEvent): ShinsaState {
     case 'slack.merge_announced':
     case 'slack.merge_posted':
     case 'slack.escalation_sent':
+    case 'slack.escalation_followed_up':
       applySlackEvent(state, event);
       break;
     case 'memory.written':

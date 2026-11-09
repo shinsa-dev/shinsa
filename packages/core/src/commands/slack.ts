@@ -15,4 +15,11 @@ export type SlackSystemCommand =
       ts: string | null;
       problem: string | null;
     }
+  | {
+      type: 'slack.record_escalation_follow_up';
+      taskId: string;
+      escalatedAt: number;
+      contact: AutopilotContact;
+      ts: string;
+    }
   | { type: 'slack.decide'; decision: SlackDecision };

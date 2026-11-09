@@ -61,6 +61,7 @@ export const SlackRelayNotify = Schema.Struct({
   kind: Schema.Literals(SLACK_CONTACT_KINDS),
   id: SlackId,
   replace: withNullDefault(SlackRelayMessageRef),
+  reply: withNullDefault(Schema.Struct({ channelId: SlackId, threadTs: SlackId })),
   message: SlackRelayMessage,
 });
 
@@ -74,7 +75,11 @@ export const SlackDirectoryQuery = Schema.Struct({ teamId: SlackId });
 
 export type SlackDirectoryQuery = typeof SlackDirectoryQuery.Type;
 
-export const SlackDirectoryEntry = Schema.Struct({ id: SlackId, name: Schema.String });
+export const SlackDirectoryEntry = Schema.Struct({
+  id: SlackId,
+  name: Schema.String,
+  image: Schema.optionalKey(Schema.String),
+});
 
 export type SlackDirectoryEntry = typeof SlackDirectoryEntry.Type;
 

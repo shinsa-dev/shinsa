@@ -87,6 +87,8 @@ import {
   SlackAnswer,
   SlackDirectoryAnswer,
   SlackDirectoryParams,
+  SlackTestBody,
+  SlackTestOutcome,
   TaskDetailAnswer,
   TaskListQuery,
   TaskParams,
@@ -593,6 +595,9 @@ class SlackGroup extends HttpApiGroup.make('slack')
       query: SlackDirectoryParams,
       success: SlackDirectoryAnswer,
     }).annotate(EngineFeatureRoute, 'autopilot-slack'),
+    HttpApiEndpoint.post('test', '/api/slack/test', { payload: SlackTestBody, success: SlackTestOutcome })
+      .annotate(EngineFeatureRoute, 'autopilot-slack')
+      .annotate(OwnerOnlyRoute, true),
     HttpApiEndpoint.post('disconnect', '/api/slack/disconnect', { success: SlackAnswer }).annotate(
       OwnerOnlyRoute,
       true

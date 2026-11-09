@@ -79,6 +79,7 @@ export interface AutopilotContact {
   teamId: string;
   id: string;
   name: string;
+  image?: string;
 }
 
 export const MAX_AUTOPILOT_CONTACTS = 5;

@@ -5,7 +5,10 @@ export interface SlackEscalationPost {
   contact: AutopilotContact;
   channelId: string | null;
   ts: string | null;
+  followUpTs: string | null;
 }
+
+export type SlackEscalationPart = 'message' | 'follow_up';
 
 export function selectSlackEscalationPost(
   posts: readonly SlackEscalationPost[] | undefined,

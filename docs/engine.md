@@ -2114,29 +2114,42 @@ action it takes is recorded with its reason. The rules are core's (`decide/autop
   no team escalates only in its own activity and Overview ("Sent to your team"), so while none of your projects is
   in a team, Settings → Agents → Autopilot says so under the urgent rule when it escalates (`isEscalationUnseen`).
 - **Escalating in Slack.** The team escalation always happens; each of `contacts` adds one Slack message to it, so
-  a channel and a teammate, or several of each, hear of it at once. `escalate()` asks for one
-  `slack.escalate {taskId, escalatedAt, contact}` per contact (lane `slack-escalation:<task>`, so they go one after
-  the other), and the engine posts "Urgent change needs someone" through app.shinsa.dev's `/__remote/slack/notify`
-  (`serializeSlackEscalation`: the title, the reason, how long it waited, the reviewer's ratings, when Autopilot
-  merges it next and Open in Shinsa). A channel gets it as a post, a person as a direct message from the Shinsa
-  app. The link opens the team's task page (`/teams/<team>/<machine>/<task>`) when the project is in a team, its
-  first team when in several, else the owner's task page (`resolveSlackEscalationUrl`). The engine records where
-  each went or why not with `slack.record_escalation` (`slack.escalation_sent`, one entry per contact in
-  `Task.slackEscalations [{escalatedAt, contact, channelId, ts}]`, which a later escalation's first record
+  a channel and a teammate, or several of each, are asked at once. Without a project shared with a team and with no
+  contacts there is no one to ask, so the two asking choices of the urgent rule are disabled ("Add someone to ask
+  first", `listAutopilotUrgentItems`) and a saved one shows a warning. `escalate()` asks for one
+  `slack.escalate {taskId, escalatedAt, contact, part: 'message'}` per contact (lane `slack-escalation:<task>`, so they
+  go one after the other), and the engine posts "Urgent change needs a review" through app.shinsa.dev's
+  `/__remote/slack/notify` (`serializeSlackEscalation`: the title, why it reached them, what Autopilot does next (merges
+  it at a time unless someone acts first, waits, or what blocks it), the reviewer's ratings, the pull request and
+  Review in Shinsa, laid out like the review card). A channel gets it as a post, a person as a direct message from
+  the Shinsa app. The link opens the team's task page (`/teams/<team>/<machine>/<task>`) when the project is in a
+  team, its first team when in several, else the owner's task page (`resolveSlackEscalationUrl`). The engine records
+  where each went or why not with `slack.record_escalation` (`slack.escalation_sent`, one entry per contact in
+  `Task.slackEscalations [{escalatedAt, contact, channelId, ts, followUpTs}]`, which a later escalation's first record
   replaces; `selectSlackEscalationPost` finds one), and the activity reads "Sent to #oncall in Slack" or "Could not
   reach #oncall in Slack" with the reason as its detail, once per contact. When the escalation clears (its merge
-  gate answered, withdrawn or superseded), `syncSlackEscalations` asks again for every contact it was sent to, even
-  one removed from the settings since, and the engine edits each message to "No longer needs anyone" with why
-  (merged, closed, or decided in Shinsa); one that never posted sends nothing. The contacts are chosen in Settings →
-  Agents → Autopilot under Escalate to: Add from Slack opens one search over the channels the app is in and the
-  people of the workspace (`listContactOptions`, the chosen ones ticked, the rest disabled at five), each pick saves
-  at once, and each chosen contact is a row of its own with a button to stop telling it (`toggleAutopilotContact`).
-  A Slack workspace row shows only when Slack is connected in more than one. The lists come from
-  `GET /api/slack/directory?teamId=` (`SlackDirectoryView`: the public channels the app is in, the private ones it
-  shares with an account linked to the machine, every person who is neither a bot nor deactivated, up to ten pages
-  of 200 each, and a `problem` instead of an error), searched in the page. Add from Slack is disabled, with why,
-  while Slack is not connected or the engine does not announce `autopilot-slack`, and a saved contact then reads
-  that Slack hears nothing until it is.
+  gate answered, withdrawn or superseded) and again when the pull request is recorded merged, `syncSlackEscalations`
+  asks for every message that posted, even to a contact removed from the settings since, and the engine edits each
+  to "No longer needs anyone" with why (merged, closed, or decided in Shinsa). Once merged it also replies in each
+  message's thread (`part: 'follow_up'`, `resolveSlackEscalationFollowUp`): "Merged", that Shinsa keeps watching it
+  with each watchdog's state and the steps still to do after the merge, and to keep an eye on it too (or, with no
+  watchdog, only to keep an eye on it). The reply's ts is kept with `slack.record_escalation_follow_up`
+  (`slack.escalation_followed_up`), and every later watchdog event or ticked step edits it, as the merge message of a
+  thread is. The contacts are chosen in Settings → Agents → Autopilot, in the Who it asks block (below the Approving
+  for you and When an urgent merge waits blocks, the on and off choice in the section's header): your team in Shinsa
+  first, with whether a project is shared with one, then each Slack channel (its name, no #) and person (their Slack
+  picture, `image` from `users.list`'s `image_72`, kept on the contact) with a button to remove it. Add from Slack
+  opens one search over Channels and People (`listContactOptions`, the chosen ones ticked, the rest disabled at five,
+  a workspace choice at its top when Slack is connected in more than one), and each pick saves at once. Send a test
+  (`POST /api/slack/test {contact}`, owner only, feature `autopilot-slack`) posts a sample escalation to each contact
+  with a line saying it is a test (`serializeSlackEscalationTest`) and says in a toast whether each arrived. The lists
+  come from `GET /api/slack/directory?teamId=` (`SlackDirectoryView`: the public channels the app is in, the private
+  ones it shares with an account linked to the machine, every person who is neither a bot nor deactivated, with
+  their picture, up to ten pages of 200 each, and a `problem` instead of an error), searched in the page. Add from
+  Slack and Send a test are disabled, with why, while Slack is not connected or the engine does not announce
+  `autopilot-slack`. The sandbox (`bun run sandbox`) stands in for Slack on Studio (`scripts/sandbox/slack.ts`): the
+  directory, the posts and their edits, drawn as Slack draws them on `/sandbox/slack`, with a sample escalation and
+  its merged reply, and #leads refusing posts to try a failure.
 - **What it never does.** It never closes a plan, question, operation, proposal, result, failure, setup, Sign in or
   escalated review gate, never ticks a step around the merge, and never gets past GitHub: a merge GitHub refuses
   opens the usual failure gate.
@@ -3523,7 +3536,7 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   `attention` for routing notifications to the device you use, `worktree-root` for the worktree folder and
   `usage.pace_limits` for `dailyUsageLimit` and `Project.usageLimit`, `usage.watchdog_limits` for
   `watchdogsIgnoreUsageLimits`, `autopilot` for the `autopilot` setting and `autopilot-slack` for its Slack
-  `contacts` and `GET /api/slack/directory`, today;
+  `contacts`, `GET /api/slack/directory` and `POST /api/slack/test`, today;
   Settings → Teams, Settings → Agents → Autopilot, the review's Fix and approve choice and
   What's new show only on an engine that has them). `ENGINE_PROTOCOL` is the hard floor: a machine whose protocol differs from the page's is left out of the
   dashboard, merges nothing and gets no command, and Settings → Machines says "Update Shinsa on <name> to reach it from
@@ -4745,8 +4758,10 @@ Slack ──a card's button──► app.shinsa.dev /slack/interactions
   passing failure never turns the status off. The posts, reactions and status message carry on as they are.
 - **Autopilot escalations** are the one post outside a thread (Process and structure → Autopilot, Escalating in
   Slack): `/__remote/slack/notify` posts to a channel or a person's id, which opens the app's direct message (the
-  manifest turns on the app's Messages tab, read-only, so the message shows; no new scope), and edits that message
-  once it clears; `/__remote/slack/directory` lists who it may go to. Both work only in a workspace the machine is
+  manifest turns on the app's Messages tab, read-only, so the message shows; no new scope), edits that message
+  once it clears, and replies in its thread once merged (`reply`, only under a message the machine posted);
+  `/__remote/slack/directory` lists who it may go to, each person with their picture. The hosted page's CSP allows
+  Slack's picture hosts (`avatars.slack-edge.com`, `a.slack-edge.com`, `secure.gravatar.com`). Both work only in a workspace the machine is
   linked in, and a private channel only when a Slack account linked to that machine is in it too (`users.conversations`
   for that account with the bot's token, which lists only the private channels the two share), so a linked person who
   is not in a private channel can neither see its name nor post into it as the bot. The target is checked before each

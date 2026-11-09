@@ -15,4 +15,11 @@ export type SlackEventBody =
       channelId: string | null;
       ts: string | null;
       problem: string | null;
+    }
+  | {
+      type: 'slack.escalation_followed_up';
+      taskId: string;
+      escalatedAt: number;
+      contact: AutopilotContact;
+      ts: string;
     };

@@ -623,15 +623,15 @@ describe('escalating to Slack', () => {
     const { harness, taskId, escalatedAt } = escalateTo(contact);
     expect(harness.task(taskId).escalation?.at).toBe(escalatedAt);
     expect(harness.effectsOf('slack.escalate')).toEqual([
-      { kind: 'slack.escalate', taskId, escalatedAt, contact },
+      { kind: 'slack.escalate', taskId, escalatedAt, contact, part: 'message' },
     ]);
   });
 
   test('tells every contact at once, a channel and a person both', () => {
     const { harness, taskId, escalatedAt } = escalateTo(ONCALL, KAI);
     expect(harness.effectsOf('slack.escalate')).toEqual([
-      { kind: 'slack.escalate', taskId, escalatedAt, contact: ONCALL },
-      { kind: 'slack.escalate', taskId, escalatedAt, contact: KAI },
+      { kind: 'slack.escalate', taskId, escalatedAt, contact: ONCALL, part: 'message' },
+      { kind: 'slack.escalate', taskId, escalatedAt, contact: KAI, part: 'message' },
     ]);
   });
 
@@ -640,8 +640,8 @@ describe('escalating to Slack', () => {
     recordSent(harness, taskId, escalatedAt);
     recordSent(harness, taskId, escalatedAt, null, KAI);
     expect(harness.task(taskId).slackEscalations).toEqual([
-      { escalatedAt, contact: ONCALL, channelId: ONCALL.id, ts: '500.1' },
-      { escalatedAt, contact: KAI, channelId: KAI.id, ts: '500.1' },
+      { escalatedAt, contact: ONCALL, channelId: ONCALL.id, ts: '500.1', followUpTs: null },
+      { escalatedAt, contact: KAI, channelId: KAI.id, ts: '500.1', followUpTs: null },
     ]);
     expect(harness.task(taskId).activity.at(-2)).toMatchObject({
       actor: 'shinsa',
@@ -678,10 +678,10 @@ describe('escalating to Slack', () => {
     answerMerge(harness, taskId);
     expect(harness.task(taskId).escalation).toBeNull();
     expect(harness.effectsOf('slack.escalate')).toEqual([
-      { kind: 'slack.escalate', taskId, escalatedAt, contact: ONCALL },
-      { kind: 'slack.escalate', taskId, escalatedAt, contact: KAI },
-      { kind: 'slack.escalate', taskId, escalatedAt, contact: ONCALL },
-      { kind: 'slack.escalate', taskId, escalatedAt, contact: KAI },
+      { kind: 'slack.escalate', taskId, escalatedAt, contact: ONCALL, part: 'message' },
+      { kind: 'slack.escalate', taskId, escalatedAt, contact: KAI, part: 'message' },
+      { kind: 'slack.escalate', taskId, escalatedAt, contact: ONCALL, part: 'message' },
+      { kind: 'slack.escalate', taskId, escalatedAt, contact: KAI, part: 'message' },
     ]);
   });
 
@@ -694,6 +694,50 @@ describe('escalating to Slack', () => {
     other.harness.send({ type: 'task.prioritize', taskId: other.taskId, priority: 'normal' });
     expect(other.harness.task(other.taskId).escalation?.at).toBe(other.escalatedAt);
     expect(other.harness.effectsOf('slack.escalate')).toHaveLength(1);
+  });
+});
+
+describe('following up in Slack once it merges', () => {
+  const sentAndMerged = () => {
+    const { harness, taskId, escalatedAt } = escalateTo(ONCALL);
+    recordSent(harness, taskId, escalatedAt);
+    answerMerge(harness, taskId);
+    harness.send({ type: 'pull_request.record', taskId, pullRequest: pullRequest({ state: 'merged' }) });
+    return { harness, taskId, escalatedAt };
+  };
+
+  test('marks the message merged and replies in its thread that it is still watched', () => {
+    const { harness, taskId, escalatedAt } = sentAndMerged();
+    expect(harness.effectsOf('slack.escalate').slice(-2)).toEqual([
+      { kind: 'slack.escalate', taskId, escalatedAt, contact: ONCALL, part: 'message' },
+      { kind: 'slack.escalate', taskId, escalatedAt, contact: ONCALL, part: 'follow_up' },
+    ]);
+  });
+
+  test('records the reply in its thread once', () => {
+    const { harness, taskId, escalatedAt } = sentAndMerged();
+    const follow = {
+      type: 'slack.record_escalation_follow_up' as const,
+      taskId,
+      escalatedAt,
+      contact: ONCALL,
+      ts: '600.1',
+    };
+    expect(harness.send(follow).events).toHaveLength(1);
+    expect(harness.task(taskId).slackEscalations?.[0]?.followUpTs).toBe('600.1');
+    expect(harness.send({ ...follow, ts: '600.2' }).events).toEqual([]);
+    expect(harness.send({ ...follow, escalatedAt: 1 }).events).toEqual([]);
+  });
+
+  test('replies nowhere when the escalation never reached Slack or the change is not merged', () => {
+    const { harness, taskId } = escalateTo(ONCALL);
+    answerMerge(harness, taskId);
+    harness.send({ type: 'pull_request.record', taskId, pullRequest: pullRequest({ state: 'merged' }) });
+    expect(harness.effectsOf('slack.escalate').map((effect) => effect.part)).toEqual(['message']);
+    const other = escalateTo(ONCALL);
+    recordSent(other.harness, other.taskId, other.escalatedAt);
+    other.harness.send({ type: 'pull_request.record', taskId: other.taskId, pullRequest: pullRequest() });
+    expect(other.harness.effectsOf('slack.escalate').map((effect) => effect.part)).toEqual(['message']);
   });
 });
 

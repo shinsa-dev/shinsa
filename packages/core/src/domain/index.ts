@@ -274,6 +274,8 @@ export {
   resolveSlackThreadUrl,
   selectSlackEscalationPost,
   type SlackDecided,
+  type SlackEscalationPart,
+  type SlackEscalationPost,
   type SlackThreadLink,
   type SlackThreadRef,
 } from './slack.ts';

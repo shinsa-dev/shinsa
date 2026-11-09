@@ -198,7 +198,13 @@ function escalate(decider: Decider, task: Task, reason: string, timing: HandoffT
     handoff: resolveEscalationHandoff(decider.state, task, timing),
   });
   for (const contact of resolveAutopilotPolicy(decider.state.settings).contacts)
-    decider.run({ kind: 'slack.escalate', taskId: task.id, escalatedAt: decider.context.now, contact });
+    decider.run({
+      kind: 'slack.escalate',
+      taskId: task.id,
+      escalatedAt: decider.context.now,
+      contact,
+      part: 'message',
+    });
 }
 
 function resolveUrgentAction(urgent: AutopilotPolicy['urgent'], due: AutopilotDue['action']) {

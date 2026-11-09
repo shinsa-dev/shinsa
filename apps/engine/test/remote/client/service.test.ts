@@ -311,6 +311,7 @@ describe('the client for app.shinsa.dev', () => {
           kind: 'slack_person',
           id: 'U2',
           replace: null,
+          reply: null,
           message,
         })
       )

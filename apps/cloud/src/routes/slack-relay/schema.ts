@@ -55,7 +55,9 @@ export const MemberPage = Schema.Struct({
       name: Name,
       deleted: Schema.optional(Schema.Boolean),
       is_bot: Schema.optional(Schema.Boolean),
-      profile: Schema.optional(Schema.Struct({ display_name: Name, real_name: Name })),
+      profile: Schema.optional(
+        Schema.Struct({ display_name: Name, real_name: Name, image_72: Schema.optional(Schema.String) })
+      ),
     })
   ),
   response_metadata: NextCursor,

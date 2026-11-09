@@ -27,8 +27,9 @@ import { describeTeamTaskOwner, resolveTeamTaskPath, resolveTeamTaskTarget } fro
 
 export const AUTOPILOT_TITLE = 'Autopilot';
 
-export const AUTOPILOT_DESCRIPTION =
-  'Approves and merges a change for you when the reviewer is highly confident in it. Off, every change waits for you.';
+export const AUTOPILOT_DESCRIPTION = 'Approves and merges changes the reviewer is highly confident in.';
+
+export const AUTOPILOT_OFF = 'Off. Every change waits for you.';
 
 export const AUTOPILOT_ENABLED_ITEMS: SettingItem<'on' | 'off'>[] = [
   { value: 'off', label: 'Off', icon: 'IconCircleX' },
@@ -56,38 +57,34 @@ export const AUTOPILOT_MERGE_ITEMS: SettingItem<AutopilotMerge>[] = [
   { value: 'approved', label: 'Every change it approved', icon: 'IconMerged' },
 ];
 
-export const AUTOPILOT_URGENT_ITEMS: SettingItem<AutopilotUrgent>[] = [
-  { value: 'wait', label: 'Keep waiting for me', icon: 'IconClock' },
-  { value: 'escalate', label: 'Send it to my team', icon: 'IconMegaphone' },
-  { value: 'merge', label: 'Merge it for me', icon: 'IconMerged' },
-  { value: 'escalate_then_merge', label: 'Send it to my team, then merge', icon: 'IconMegaphone' },
-];
+const NOBODY_TO_ASK = 'Add someone to ask first';
+
+const ASKS: ReadonlySet<AutopilotUrgent> = new Set(['escalate', 'escalate_then_merge']);
+
+export function listAutopilotUrgentItems(reachable: boolean): SettingItem<AutopilotUrgent>[] {
+  const items: SettingItem<AutopilotUrgent>[] = [
+    { value: 'wait', label: 'Keep waiting for me', icon: 'IconClock' },
+    { value: 'escalate', label: 'Ask for a review', icon: 'IconMegaphone' },
+    { value: 'escalate_then_merge', label: 'Ask for a review, then merge', icon: 'IconMegaphone' },
+    { value: 'merge', label: 'Merge it for me', icon: 'IconMerged' },
+  ];
+  if (reachable) return items;
+  return items.map((item) => (ASKS.has(item.value) ? { ...item, disabled: NOBODY_TO_ASK } : item));
+}
+
+export const AUTOPILOT_BLOCKS = {
+  approving: { title: 'Approving for you', icon: 'IconShieldCheck' },
+  urgent: { title: 'When an urgent merge waits', icon: 'IconClock' },
+  asks: { title: 'Who it asks', icon: 'IconMegaphone' },
+} as const;
 
 export const AUTOPILOT_ROWS = {
-  approve: {
-    title: 'Approve reviews for you',
-    description:
-      'A change the reviewer rated high confidence, up to this risk, goes to its pull request without you.',
-  },
-  urgentApprove: {
-    title: 'Approve urgent reviews for you',
-    description: 'The same, for a task marked urgent.',
-  },
-  merge: { title: 'Merge for you', description: 'Merges a pull request it approved once its checks pass.' },
-  urgent: {
-    title: 'When an urgent merge waits for you',
-    description: 'Send it to my team puts it in your teammates’ Needs you and notifies each of them once.',
-  },
-  wait: { title: 'How long it waits for you', description: 'How long an urgent merge waits before it acts.' },
-  contacts: { title: 'Escalate to' },
-  workspace: {
-    title: 'Slack workspace',
-    description: 'Where you pick the channels and teammates below from.',
-  },
-  usage: {
-    title: 'Ignore usage limits for urgent work',
-    description: 'An urgent task keeps going past your daily, project and task limits.',
-  },
+  approve: 'Reviews',
+  urgentApprove: 'Urgent reviews',
+  merge: 'Merges',
+  urgent: 'Then',
+  wait: 'After waiting',
+  usage: 'Usage limits',
 } as const;
 
 export const AUTOPILOT_USAGE_ITEMS: SettingItem<'on' | 'off'>[] = [
@@ -95,16 +92,22 @@ export const AUTOPILOT_USAGE_ITEMS: SettingItem<'on' | 'off'>[] = [
   { value: 'off', label: 'Keep them', icon: 'IconCircleX' },
 ];
 
-export const AUTOPILOT_NO_TEAM =
-  'None of your projects is in a team yet, so only you see an urgent change it sends on.';
-
-export function isEscalationUnseen(policy: AutopilotPolicy, projects: readonly Pick<Project, 'teamIds'>[]) {
-  if (policy.urgent !== 'escalate' && policy.urgent !== 'escalate_then_merge') return false;
-  return !projects.some((project) => (project.teamIds?.length ?? 0) > 0);
+function isAskingOthers(policy: AutopilotPolicy) {
+  return ASKS.has(policy.urgent);
 }
 
-export function isContactShown(policy: AutopilotPolicy) {
-  return policy.urgent === 'escalate' || policy.urgent === 'escalate_then_merge';
+export function hasTeamProject(projects: readonly Pick<Project, 'teamIds'>[]) {
+  return projects.some((project) => (project.teamIds?.length ?? 0) > 0);
+}
+
+export const TEAM_CONTACT = {
+  title: 'Your team in Shinsa',
+  shared: 'Needs you',
+  alone: 'No project shared with a team',
+} as const;
+
+export function isAskWaiting(policy: AutopilotPolicy, team: boolean) {
+  return isAskingOthers(policy) && !team && policy.contacts.length === 0;
 }
 
 const SLACK_CHECKING = 'Checking Slack';
@@ -119,20 +122,14 @@ export function resolveSlackUnavailable(
   return null;
 }
 
-export function describeAutopilotContacts(contacts: readonly AutopilotContact[], unavailable: string | null) {
-  const blocked = unavailable === SLACK_CHECKING ? null : unavailable;
-  if (blocked && contacts.length > 0)
-    return `Your team in Needs you. Slack hears nothing until then: ${blocked}.`;
-  if (blocked) return `Your team in Needs you. To tell Slack too: ${blocked}.`;
-  if (contacts.length > 0) {
-    return 'Your team in Needs you, and each channel and teammate below in Slack, with the task link and why.';
-  }
-  return 'Your team in Needs you. Add Slack channels or teammates to tell them too.';
-}
-
 export function resolveContactAddBlock(contacts: readonly AutopilotContact[], unavailable: string | null) {
   if (unavailable) return unavailable;
   return contacts.length >= MAX_AUTOPILOT_CONTACTS ? `Up to ${MAX_AUTOPILOT_CONTACTS} in Slack` : null;
+}
+
+export function resolveContactTestBlock(contacts: readonly AutopilotContact[], unavailable: string | null) {
+  if (unavailable) return unavailable;
+  return contacts.length === 0 ? 'Add a channel or person first' : null;
 }
 
 export function resolveContactWorkspace(snapshot: SlackSnapshot | null, chosen: string | null) {
@@ -149,11 +146,6 @@ export function listSlackWorkspaceItems(snapshot: SlackSnapshot | null): Setting
   return [...items.values()];
 }
 
-export const CONTACT_ICON: Record<AutopilotContactKind, 'IconHashtag' | 'IconUser'> = {
-  slack_channel: 'IconHashtag',
-  slack_person: 'IconUser',
-};
-
 export interface ContactOption {
   contact: AutopilotContact;
   chosen: boolean;
@@ -167,7 +159,7 @@ export interface ContactOptionGroup {
 }
 
 const CONTACT_GROUPS: { kind: AutopilotContactKind; heading: string }[] = [
-  { kind: 'slack_channel', heading: 'Channels Shinsa is in' },
+  { kind: 'slack_channel', heading: 'Channels' },
   { kind: 'slack_person', heading: 'People' },
 ];
 
@@ -180,7 +172,8 @@ export function listContactOptions(
   return CONTACT_GROUPS.flatMap(({ kind, heading }) => {
     const entries = kind === 'slack_channel' ? directory.channels : directory.people;
     const options = entries.map((entry) => {
-      const contact = { kind, teamId: directory.teamId, id: entry.id, name: entry.name };
+      const image = kind === 'slack_person' && entry.image ? { image: entry.image } : {};
+      const contact = { kind, teamId: directory.teamId, id: entry.id, name: entry.name, ...image };
       const chosen = contacts.some((saved) => isSameAutopilotContact(saved, contact));
       return { contact, chosen, disabled: full && !chosen };
     });
@@ -189,13 +182,12 @@ export function listContactOptions(
 }
 
 export function describeContactPickerEmpty(directory: SlackDirectoryView | null) {
-  if (!directory) return 'Loading the channels and people in Slack…';
+  if (!directory) return 'Loading Slack…';
   if (directory.problem) return directory.problem;
-  return 'Nothing matches. Only channels Shinsa is in are listed: invite @Shinsa to add one.';
+  return 'Nothing matches.';
 }
 
-export const CONTACT_PICKER_HINT =
-  'Only channels Shinsa is in are listed. Invite @Shinsa to a channel to add it.';
+export const CONTACT_PICKER_HINT = 'Missing a channel? Invite @Shinsa to it in Slack.';
 
 export function toggleAutopilotContact(contacts: readonly AutopilotContact[], contact: AutopilotContact) {
   if (contacts.some((saved) => isSameAutopilotContact(saved, contact))) {
@@ -205,16 +197,29 @@ export function toggleAutopilotContact(contacts: readonly AutopilotContact[], co
 }
 
 export function describeAutopilotContact(contact: AutopilotContact, snapshot: SlackSnapshot | null) {
-  const workspace = snapshot?.links.find((link) => link.teamId === contact.teamId)?.teamName;
-  const where = workspace ? ` in ${workspace}` : '';
-  const channel = contact.kind === 'slack_channel';
+  const workspaces = listSlackWorkspaceItems(snapshot);
+  const workspace = workspaces.find((item) => item.value === contact.teamId)?.label;
   return {
-    title: channel ? `#${contact.name}` : contact.name,
-    description: channel
-      ? `Posts in this Slack channel${where}.`
-      : `Sends a direct message in Slack${where}.`,
-    icon: CONTACT_ICON[contact.kind],
+    title: contact.name,
+    detail: workspaces.length > 1 && workspace ? workspace : null,
+    removeLabel:
+      contact.kind === 'slack_channel'
+        ? `Stop posting in #${contact.name}`
+        : `Stop messaging ${contact.name}`,
   };
+}
+
+export function isSlackTestSent(results: readonly { sent: boolean }[]) {
+  return results.every((result) => result.sent);
+}
+
+export function describeSlackTestResults(
+  results: readonly { contact: AutopilotContact; sent: boolean; problem: string | null }[]
+) {
+  const failed = results.find((result) => !result.sent);
+  if (!failed) return results.length === 1 ? 'Sent a test to Slack' : `Sent ${results.length} tests to Slack`;
+  const name = failed.contact.kind === 'slack_channel' ? `#${failed.contact.name}` : failed.contact.name;
+  return `Not sent to ${name}: ${failed.problem ?? 'Slack refused it.'}`;
 }
 
 const WAIT_CHOICES = [15, 30, 60, 120, 240, 480];

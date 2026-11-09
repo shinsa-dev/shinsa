@@ -1,7 +1,12 @@
 import type { CommandOf } from '../commands/index.ts';
 import { DomainError } from '../domain/errors.ts';
 import { isTaskClosed, resolveCurrentRound } from '../domain/rounds.ts';
-import { isSameSlackThread, selectSlackEscalationPost, type SlackThreadRef } from '../domain/slack.ts';
+import {
+  isSameSlackThread,
+  type SlackEscalationPart,
+  selectSlackEscalationPost,
+  type SlackThreadRef,
+} from '../domain/slack.ts';
 import type { Gate, Task } from '../domain/types.ts';
 import type { ShinsaEventInput } from '../events/index.ts';
 import { resolveSlackMentionThread } from '../slack/contract.ts';
@@ -96,6 +101,22 @@ export function recordSlackEscalation(decider: Decider, command: CommandOf<'slac
     channelId: command.channelId,
     ts: command.ts,
     problem: command.problem,
+  });
+}
+
+export function recordSlackEscalationFollowUp(
+  decider: Decider,
+  command: CommandOf<'slack.record_escalation_follow_up'>
+) {
+  const task = decider.state.tasks[command.taskId];
+  const post = selectSlackEscalationPost(task?.slackEscalations, command.escalatedAt, command.contact);
+  if (!post || post.followUpTs !== null) return;
+  decider.emit({
+    type: 'slack.escalation_followed_up',
+    taskId: command.taskId,
+    escalatedAt: command.escalatedAt,
+    contact: command.contact,
+    ts: command.ts,
   });
 }
 
@@ -259,15 +280,48 @@ function listClosedGateTasks(state: ShinsaState, events: readonly ShinsaEventInp
   );
 }
 
+function requestEscalationEdits(
+  decider: Decider,
+  taskId: string,
+  escalatedAt: number,
+  part: SlackEscalationPart
+) {
+  for (const sent of decider.state.tasks[taskId]?.slackEscalations ?? []) {
+    if (sent.escalatedAt !== escalatedAt || sent.ts === null) continue;
+    decider.run({ kind: 'slack.escalate', taskId, escalatedAt, contact: sent.contact, part });
+  }
+}
+
+function listFollowUpTasks(state: ShinsaState, events: readonly ShinsaEventInput[]) {
+  const merged = listMergedTasks(events);
+  const watched = events.flatMap((event) => {
+    const taskId = MERGE_EDIT_EVENTS.has(event.type) ? resolveEventTask(state, event) : null;
+    return taskId ? [taskId] : [];
+  });
+  return { merged, followUps: new Set([...merged, ...watched]) };
+}
+
+function resolveLastEscalation(task: Task) {
+  const sent = (task.slackEscalations ?? []).filter((post) => post.ts !== null);
+  return sent.length === 0 ? null : Math.max(...sent.map((post) => post.escalatedAt));
+}
+
 export function syncSlackEscalations(decider: Decider, before: ShinsaState) {
+  const cleared = new Set<string>();
   for (const taskId of listClosedGateTasks(decider.state, decider.events)) {
     const escalation = before.tasks[taskId]?.escalation;
+    if (!escalation || decider.state.tasks[taskId]?.escalation?.at === escalation.at) continue;
+    cleared.add(taskId);
+    requestEscalationEdits(decider, taskId, escalation.at, 'message');
+  }
+  const { merged, followUps } = listFollowUpTasks(decider.state, decider.events);
+  for (const taskId of followUps) {
     const task = decider.state.tasks[taskId];
-    if (!escalation || task?.escalation?.at === escalation.at) continue;
-    for (const sent of task?.slackEscalations ?? []) {
-      if (sent.escalatedAt !== escalation.at) continue;
-      decider.run({ kind: 'slack.escalate', taskId, escalatedAt: escalation.at, contact: sent.contact });
-    }
+    const escalatedAt = task ? resolveLastEscalation(task) : null;
+    if (!task || escalatedAt === null || task.pullRequest?.state !== 'merged') continue;
+    if (merged.has(taskId) && !cleared.has(taskId))
+      requestEscalationEdits(decider, taskId, escalatedAt, 'message');
+    requestEscalationEdits(decider, taskId, escalatedAt, 'follow_up');
   }
 }
 

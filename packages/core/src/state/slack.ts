@@ -1,3 +1,4 @@
+import { isSameAutopilotContact } from '../domain/settings.ts';
 import { describeSlackContact } from '../domain/slack.ts';
 import type { EventOf, ShinsaEvent } from '../events/index.ts';
 import type { ShinsaState } from './project.ts';
@@ -12,7 +13,8 @@ type SlackEvent = Extract<
       | 'slack.decided'
       | 'slack.merge_announced'
       | 'slack.merge_posted'
-      | 'slack.escalation_sent';
+      | 'slack.escalation_sent'
+      | 'slack.escalation_followed_up';
   }
 >;
 
@@ -62,6 +64,7 @@ function applyEscalationSent(state: ShinsaState, event: EventOf<'slack.escalatio
     contact: event.contact,
     channelId: event.channelId,
     ts: event.ts,
+    followUpTs: null,
   };
   updateTask(state, event.taskId, event.at, { slackEscalations: [...earlier, post] });
   const contact = describeSlackContact(event.contact);
@@ -70,6 +73,17 @@ function applyEscalationSent(state: ShinsaState, event: EventOf<'slack.escalatio
     kind: 'decision',
     text: event.problem === null ? `Sent to ${contact} in Slack` : `Could not reach ${contact} in Slack`,
     detail: event.problem,
+  });
+}
+
+function applyEscalationFollowedUp(state: ShinsaState, event: EventOf<'slack.escalation_followed_up'>) {
+  const posts = state.tasks[event.taskId]?.slackEscalations ?? [];
+  updateTask(state, event.taskId, event.at, {
+    slackEscalations: posts.map((post) =>
+      post.escalatedAt === event.escalatedAt && isSameAutopilotContact(post.contact, event.contact)
+        ? { ...post, followUpTs: event.ts }
+        : post
+    ),
   });
 }
 
@@ -92,6 +106,9 @@ export function applySlackEvent(state: ShinsaState, event: SlackEvent) {
       return;
     case 'slack.escalation_sent':
       applyEscalationSent(state, event);
+      return;
+    case 'slack.escalation_followed_up':
+      applyEscalationFollowedUp(state, event);
       return;
   }
 }

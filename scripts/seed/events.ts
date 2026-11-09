@@ -34,7 +34,13 @@ export function buildEvents(tasks: SeedTask[], projects: Project[], repos: Repo[
         urgent: 'escalate_then_merge',
         contacts: [
           { kind: 'slack_channel', teamId: 'T02SUPERWALL', id: 'C07ONCALL', name: 'oncall' },
-          { kind: 'slack_person', teamId: 'T02SUPERWALL', id: 'U04MAYA', name: 'Maya Chen' },
+          {
+            kind: 'slack_person',
+            teamId: 'T02SUPERWALL',
+            id: 'U04MAYA',
+            name: 'Maya Chen',
+            image: 'https://avatars.githubusercontent.com/u/9919?s=72',
+          },
         ],
       },
     },

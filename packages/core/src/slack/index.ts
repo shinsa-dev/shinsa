@@ -50,7 +50,10 @@ export {
 } from './forward.ts';
 export {
   listSlackStatusGates,
+  resolveSlackEscalationFollowUp,
   resolveSlackEscalationMessage,
+  serializeSlackEscalationTest,
+  SLACK_ESCALATION_TEST_NOTE,
   resolveSlackMergeMessage,
   resolveSlackPostMessage,
   resolveSlackReaction,

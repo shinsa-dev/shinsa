@@ -152,6 +152,7 @@ import {
   recordSlackStatus,
   startSlackTask,
   recordSlackEscalation,
+  recordSlackEscalationFollowUp,
   syncSlackEscalations,
   syncSlackThreads,
 } from './slack.ts';
@@ -515,6 +516,8 @@ function apply(decider: Decider, command: ShinsaCommand) {
       return recordSlackMerge(decider, command);
     case 'slack.record_escalation':
       return recordSlackEscalation(decider, command);
+    case 'slack.record_escalation_follow_up':
+      return recordSlackEscalationFollowUp(decider, command);
     case 'slack.decide':
       return decideSlackGate(decider, command);
     case 'onboarding.welcome':

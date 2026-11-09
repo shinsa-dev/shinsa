@@ -6,6 +6,7 @@ import {
   resetSlack,
   SLACK_ACTIONS,
   selectSlack,
+  sendSlackTests,
   useSlack,
   useSlackDirectory,
 } from '@/lib/connection/slack.ts';
@@ -114,5 +115,24 @@ describe('the Slack directory', () => {
         problem: 'Shinsa answered with status 503.',
       })
     );
+  });
+});
+
+describe('a test message to Slack', () => {
+  const ONCALL = { kind: 'slack_channel' as const, teamId: 'T1', id: 'C1', name: 'oncall' };
+  const KAI = { kind: 'slack_person' as const, teamId: 'T1', id: 'U7', name: 'Kai' };
+
+  it('sends one per contact and says how each went, an engine that cannot answer included', async () => {
+    let calls = 0;
+    answers['POST /api/slack/test'] = () => {
+      calls += 1;
+      return calls === 1
+        ? Response.json({ sent: true, problem: null })
+        : new Response('offline', { status: 503 });
+    };
+    const results = await sendSlackTests([ONCALL, KAI]);
+    expect(results[0]).toEqual({ contact: ONCALL, sent: true, problem: null });
+    expect(results[1]).toMatchObject({ contact: KAI, sent: false });
+    expect(results[1]?.problem).toBeTruthy();
   });
 });

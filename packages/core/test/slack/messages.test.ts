@@ -5,7 +5,10 @@ import {
   type Gate,
   listSlackStatusGates,
   parseSlackDecisionValue,
+  resolveSlackEscalationFollowUp,
   resolveSlackEscalationMessage,
+  serializeSlackEscalationTest,
+  SLACK_ESCALATION_TEST_NOTE,
   resolveSlackMergeMessage,
   resolveSlackPostMessage,
   resolveSlackReaction,
@@ -843,52 +846,86 @@ function escalatedState(harness: Harness, fields: Partial<Task>) {
 }
 
 describe('the escalation message', () => {
-  test('says an urgent change needs someone, with its reason, wait, ratings and merge time', () => {
+  test('asks for a review, with why, what Autopilot does next, the ratings and the pull request', () => {
     const harness = createHarness();
     const { taskId, state } = escalatedState(harness, { escalation: ESCALATION });
     const message = resolveSlackEscalationMessage(state, taskId, AT, URL) ?? never();
     const merges = `<!date^${AT / 1000 + 3600}^{date_short_pretty} at {time}|2026-11-04T15:00:00.000Z>`;
-    expect(message.text).toBe('SUP-1 · Fix it is urgent and needs someone.');
+    expect(message.text).toBe('SUP-1 · Fix it is urgent and needs a review.');
     expect(readText(message)).toBe(
       [
-        'Urgent change needs someone',
-        '*Fix it*\n> Urgent, and the merge waited 60 minutes for you.',
-        `*Waited*\n60 minutes\n*Review*\nHigh confidence, medium risk\n*Merges*\n${merges}`,
-        `<${URL}|Open in Shinsa>`,
+        'Urgent change needs a review',
+        `*Fix it*\nIt is urgent and waited 1 hour for a merge.\nAutopilot merges it ${merges} unless someone acts first.`,
+        '*Review*\nHigh confidence, medium risk\n*Pull request*\nNot open yet',
+        `<${URL}|Review in Shinsa>`,
         footerOf(harness, taskId),
       ].join('\n')
     );
   });
 
-  test('says when the change is not rated and does not merge on its own', () => {
+  test.each([
+    [{ ratings: null, mergesAt: null }, 'It waits until someone merges it.', 'Not rated'],
+    [{ blockedBy: 'pre_merge_steps' as const }, 'A step before the merge is not ticked yet.', 'High'],
+    [
+      { foundBy: { server: null, shippedTaskTitle: null }, waitedMinutes: 45 },
+      'A watchdog found the issue it fixes. It is urgent and waited 45 minutes for a merge.',
+      'High',
+    ],
+  ])('says what happens next when the handoff is %o', (handoff, text, review) => {
     const harness = createHarness();
-    const escalation = { ...ESCALATION, handoff: { ...ESCALATION.handoff, ratings: null, mergesAt: null } };
+    const escalation = { ...ESCALATION, handoff: { ...ESCALATION.handoff, ...handoff } };
     const { taskId, state } = escalatedState(harness, { escalation });
-    expect(readText(resolveSlackEscalationMessage(state, taskId, AT, URL) ?? never())).toContain(
-      '*Review*\nNot rated\n*Merges*\nNot on its own'
-    );
+    const shown = readText(resolveSlackEscalationMessage(state, taskId, AT, URL) ?? never());
+    expect(shown).toContain(text);
+    expect(shown).toContain(`*Review*\n${review}`);
   });
 
   test.each([
-    ['the merge was decided', {}, 'The merge was decided in Shinsa.'],
-    ['the change merged', { pullRequest: pullRequest({ state: 'merged' }) }, 'The change is merged.'],
+    ['the merge was decided', {}, 'Its owner decided the merge in Shinsa.'],
+    [
+      'the change merged',
+      { pullRequest: pullRequest({ state: 'merged' }) },
+      'Merged. What happens next is in the thread.',
+    ],
     ['the task closed', { stage: 'cancelled' as const }, 'The task is closed.'],
     [
       'a later escalation replaced it',
       { escalation: { ...ESCALATION, at: AT + 1 } },
-      'The merge was decided in Shinsa.',
+      'Its owner decided the merge in Shinsa.',
     ],
   ])('says it no longer needs anyone once %s', (_case, fields: Partial<Task>, detail) => {
     const harness = createHarness();
     const { taskId, state } = escalatedState(harness, { escalation: null, ...fields });
     const message = resolveSlackEscalationMessage(state, taskId, AT, URL) ?? never();
     expect(message.text).toBe('SUP-1 · Fix it no longer needs anyone.');
-    expect(readText(message)).toStartWith(
-      `*No longer needs anyone*\n${detail}\n${footerOf(harness, taskId)}`
-    );
+    expect(readText(message)).toStartWith(`*No longer needs anyone*\n${detail}\n`);
   });
 
   test('has nothing to say for a task it does not know', () => {
     expect(resolveSlackEscalationMessage(createHarness().state, 'gone', AT, URL)).toBeNull();
+  });
+
+  test('replies once merged that Shinsa keeps watching, with each watchdog, or asks to keep an eye on it', () => {
+    const harness = createHarness();
+    const merged = pullRequest({ state: 'merged' });
+    const { taskId, state } = escalatedState(harness, { pullRequest: merged });
+    const bare = resolveSlackEscalationFollowUp(state, taskId, URL) ?? never();
+    expect(bare.text).toBe('SUP-1 · Fix it is merged.');
+    expect(readText(bare)).toStartWith('*Merged*\nNothing watches it after the merge, so keep an eye on it.');
+    const watchdog = watchdogOf({ round: 1 });
+    const watched = escalatedState(harness, { pullRequest: merged, watchdogs: [watchdog] });
+    const shown = readText(resolveSlackEscalationFollowUp(watched.state, watched.taskId, URL) ?? never());
+    expect(shown).toStartWith('*Merged*\nShinsa keeps watching it after the merge. Keep an eye on it too.');
+    expect(shown).toContain(`*${watchdog.title}*`);
+    const open = escalatedState(harness, {});
+    expect(resolveSlackEscalationFollowUp(open.state, open.taskId, URL)).toBeNull();
+    expect(resolveSlackEscalationFollowUp(createHarness().state, 'gone', URL)).toBeNull();
+  });
+
+  test('sends a test that looks like a real escalation and says nothing needs anyone', () => {
+    const message = serializeSlackEscalationTest(URL, AT);
+    expect(message.text).toBe('Settings → Agents → Autopilot is urgent and needs a review.');
+    expect(readText(message)).toStartWith(`${SLACK_ESCALATION_TEST_NOTE}\nUrgent change needs a review\n`);
+    expect(readText(message)).toContain('*Fix the checkout timeout*');
   });
 });

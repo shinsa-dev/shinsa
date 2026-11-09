@@ -1,5 +1,5 @@
 import type { AutopilotContact } from '../domain/settings.ts';
-import { resolveSlackThreadKey, type SlackThreadRef } from '../domain/slack.ts';
+import { resolveSlackThreadKey, type SlackEscalationPart, type SlackThreadRef } from '../domain/slack.ts';
 import type { BundlePullRequest } from '../domain/types.ts';
 import type { SlackMentionReaction } from '../slack/messages.ts';
 import type { SlackPost } from '../slack/posts.ts';
@@ -42,7 +42,13 @@ export type ShinsaEffect =
   | { kind: 'slack.post'; thread: SlackThreadRef; taskId: string; post: SlackPost }
   | { kind: 'slack.merge'; thread: SlackThreadRef; taskId: string; round: number }
   | { kind: 'slack.react'; thread: SlackThreadRef; messageTs: string; reaction: SlackMentionReaction }
-  | { kind: 'slack.escalate'; taskId: string; escalatedAt: number; contact: AutopilotContact }
+  | {
+      kind: 'slack.escalate';
+      taskId: string;
+      escalatedAt: number;
+      contact: AutopilotContact;
+      part: SlackEscalationPart;
+    }
   | { kind: 'feedback.draft'; feedbackId: string }
   | { kind: 'feedback.file'; feedbackId: string };
 
@@ -121,7 +127,7 @@ export function resolveEffectKey(effect: ShinsaEffect, seq: number) {
     case 'slack.status':
       return `${effect.kind}:${effect.taskId}:${seq}`;
     case 'slack.escalate':
-      return `${effect.kind}:${effect.taskId}:${effect.escalatedAt}:${effect.contact.teamId}:${effect.contact.id}:${seq}`;
+      return `${effect.kind}:${effect.part}:${effect.taskId}:${effect.escalatedAt}:${effect.contact.teamId}:${effect.contact.id}:${seq}`;
     case 'preview.link':
       return `${effect.kind}:${effect.taskId}:${effect.serviceId}:${seq}`;
     case 'slack.post':

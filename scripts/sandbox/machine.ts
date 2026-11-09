@@ -11,6 +11,7 @@ import { resolveConfig } from '../../apps/engine/test/helpers/config.ts';
 import { Engine } from '../../apps/engine/test/helpers/engine.ts';
 import { openEventLog } from '../../apps/engine/test/helpers/event-log.ts';
 import { createTestEvidence } from '../../apps/engine/test/helpers/evidence.ts';
+import { createTestSlackService } from '../../apps/engine/test/slack/harness.ts';
 import { isTaskSettled, type MachineResources } from '../../packages/core/src/index.ts';
 import { startRemoteServices } from '../kit/remote.ts';
 import { startIdleServer } from '../kit/server.ts';
@@ -71,15 +72,16 @@ export const startMachine = Effect.fn('Sandbox.startMachine')(function* (
 ) {
   const connectKey = createRandomKey(32);
   const owner = MACHINE_OWNERS[id] ?? USER;
+  const credentials = {
+    instanceId: id,
+    machineToken: `preview-${id}`,
+    tunnelToken: `preview-${id}`,
+    tunnelHost: `t-${id}.shinsa.dev`,
+    connectKey,
+  };
   const remoteFile = JSON.stringify({
     version: 1,
-    credentials: {
-      instanceId: id,
-      machineToken: `preview-${id}`,
-      tunnelToken: `preview-${id}`,
-      tunnelHost: `t-${id}.shinsa.dev`,
-      connectKey,
-    },
+    credentials,
     enabled: true,
     owner: owner.login,
     devices: [],
@@ -183,6 +185,12 @@ export const startMachine = Effect.fn('Sandbox.startMachine')(function* (
       ...remote.services,
       resources,
       terminals,
+      slack: createTestSlackService({
+        engine,
+        origin: ORIGIN,
+        credentials,
+        fetch: (input, init) => fetch(input, init),
+      }),
     }).pipe(
       Effect.catchDefect((error) =>
         Effect.fail(new SandboxFailed({ message: `Starting ${name}’s server failed: ${String(error)}` }))

@@ -1380,7 +1380,15 @@ describe('telling a channel or a person about an escalation', () => {
     slack.answers['users.list'] = () => ({
       ok: true,
       members: [
-        { id: 'U7', name: 'kai', profile: { real_name: 'Kai Tanaka', display_name: 'kai' } },
+        {
+          id: 'U7',
+          name: 'kai',
+          profile: {
+            real_name: 'Kai Tanaka',
+            display_name: 'kai',
+            image_72: 'https://avatars.slack-edge.com/kai_72.png',
+          },
+        },
         { id: 'U8', name: 'mo', profile: { real_name: '', display_name: 'Mo' } },
         { id: 'U9', name: 'zed' },
         { id: 'U2', name: 'gone', deleted: true },
@@ -1400,7 +1408,7 @@ describe('telling a channel or a person about an escalation', () => {
         { id: 'C9', name: 'oncall' },
       ],
       people: [
-        { id: 'U7', name: 'Kai Tanaka' },
+        { id: 'U7', name: 'Kai Tanaka', image: 'https://avatars.slack-edge.com/kai_72.png' },
         { id: 'U8', name: 'Mo' },
         { id: 'U9', name: 'zed' },
       ],
@@ -1419,6 +1427,22 @@ describe('telling a channel or a person about an escalation', () => {
     });
     expect(first?.token).toBe('xoxb-bot-token');
     expect(second?.body).toMatchObject({ cursor: 'next' });
+  });
+
+  test('replies in the thread of its own post, and only there', async () => {
+    const { slack, notify } = await linkedSetup();
+    await notify(NOTIFY);
+    const reply = { channelId: 'C9', threadTs: '700.1' };
+    const replied = await notify({ ...NOTIFY, reply, message: { ...MESSAGE, text: 'Merged' } });
+    expect(replied.status).toBe(200);
+    expect(slack.callsTo('chat.postMessage').at(-1)?.body).toMatchObject({
+      channel: 'C9',
+      thread_ts: '700.1',
+      text: 'Merged',
+    });
+    expect(slack.callsTo('conversations.info')).toHaveLength(1);
+    const elsewhere = await notify({ ...NOTIFY, reply: { channelId: 'C9', threadTs: '1.1' } });
+    expect(elsewhere.status).toBe(403);
   });
 
   test('stops after ten pages of a very large workspace', async () => {

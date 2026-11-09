@@ -11,9 +11,13 @@ import {
   AUTOPILOT_RISK_ITEMS,
   CONTACT_PICKER_HINT,
   describeAutopilotContact,
-  describeAutopilotContacts,
   describeContactPickerEmpty,
-  isContactShown,
+  describeSlackTestResults,
+  hasTeamProject,
+  isSlackTestSent,
+  isAskWaiting,
+  listAutopilotUrgentItems,
+  resolveContactTestBlock,
   listContactOptions,
   listSlackWorkspaceItems,
   resolveContactAddBlock,
@@ -21,7 +25,6 @@ import {
   resolveSlackUnavailable,
   toggleAutopilotContact,
   describeAgentReviewNote,
-  isEscalationUnseen,
   listAutopilotWaitItems,
   listHandoffParagraphs,
   listTeamEscalationRows,
@@ -51,16 +54,36 @@ const DIRECTORY: SlackDirectoryView = {
     { id: 'C1', name: 'oncall' },
     { id: 'C2', name: 'eng' },
   ],
-  people: [{ id: 'U7', name: 'Kai' }],
+  people: [{ id: 'U7', name: 'Kai', image: 'https://avatars.slack-edge.com/kai.png' }],
   problem: null,
 };
 
 describe('who an escalation reaches', () => {
-  it('asks only while urgent changes go to the team', () => {
-    expect(isContactShown({ ...AUTOPILOT_DEFAULTS, urgent: 'wait' })).toBe(false);
-    expect(isContactShown({ ...AUTOPILOT_DEFAULTS, urgent: 'merge' })).toBe(false);
-    expect(isContactShown({ ...AUTOPILOT_DEFAULTS, urgent: 'escalate' })).toBe(true);
-    expect(isContactShown({ ...AUTOPILOT_DEFAULTS, urgent: 'escalate_then_merge' })).toBe(true);
+  it('offers asking for a review only once someone can be asked', () => {
+    const asks = (reachable: boolean) =>
+      listAutopilotUrgentItems(reachable).map((item) => [item.value, item.disabled ?? null]);
+    expect(asks(true)).toEqual([
+      ['wait', null],
+      ['escalate', null],
+      ['escalate_then_merge', null],
+      ['merge', null],
+    ]);
+    expect(asks(false)).toEqual([
+      ['wait', null],
+      ['escalate', 'Add someone to ask first'],
+      ['escalate_then_merge', 'Add someone to ask first'],
+      ['merge', null],
+    ]);
+  });
+
+  it('knows whether a project is shared with a team, and warns while an ask reaches no one', () => {
+    expect(hasTeamProject([{ teamIds: [] }, {}])).toBe(false);
+    expect(hasTeamProject([{}, { teamIds: ['team-1'] }])).toBe(true);
+    const asking = { ...AUTOPILOT_DEFAULTS, urgent: 'escalate_then_merge' as const };
+    expect(isAskWaiting(asking, false)).toBe(true);
+    expect(isAskWaiting(asking, true)).toBe(false);
+    expect(isAskWaiting({ ...asking, contacts: [ONCALL] }, false)).toBe(false);
+    expect(isAskWaiting({ ...AUTOPILOT_DEFAULTS, urgent: 'merge' }, false)).toBe(false);
   });
 
   it('says why Slack cannot be picked: an older engine, still checking, unreachable, or not connected', () => {
@@ -83,21 +106,29 @@ describe('who an escalation reaches', () => {
     expect(resolveSlackUnavailable(true, { snapshot: SNAPSHOT, failure: null })).toBeNull();
   });
 
-  it('says who hears of an escalation: always the team, and Slack once it is set up', () => {
-    expect(describeAutopilotContacts([], null)).toBe(
-      'Your team in Needs you. Add Slack channels or teammates to tell them too.'
+  it('lets you send a test once Slack is ready and someone is chosen', () => {
+    expect(resolveContactTestBlock([ONCALL], null)).toBeNull();
+    expect(resolveContactTestBlock([], null)).toBe('Add a channel or person first');
+    expect(resolveContactTestBlock([ONCALL], 'Checking Slack')).toBe('Checking Slack');
+  });
+
+  it('says the tests went out, or names the first one that did not and why', () => {
+    const kai = { kind: 'slack_person' as const, teamId: 'T1', id: 'U7', name: 'Kai' };
+    expect(describeSlackTestResults([{ contact: ONCALL, sent: true, problem: null }])).toBe(
+      'Sent a test to Slack'
     );
-    expect(describeAutopilotContacts([], 'Connect Slack in Settings → General first')).toBe(
-      'Your team in Needs you. To tell Slack too: Connect Slack in Settings → General first.'
+    expect(isSlackTestSent([{ sent: true }, { sent: false }])).toBe(false);
+    const both = [
+      { contact: ONCALL, sent: true, problem: null },
+      { contact: kai, sent: true, problem: null },
+    ];
+    expect(describeSlackTestResults(both)).toBe('Sent 2 tests to Slack');
+    expect(isSlackTestSent(both)).toBe(true);
+    expect(describeSlackTestResults([{ contact: ONCALL, sent: false, problem: 'Not in it.' }])).toBe(
+      'Not sent to #oncall: Not in it.'
     );
-    expect(describeAutopilotContacts([ONCALL], 'Checking Slack')).toBe(
-      'Your team in Needs you, and each channel and teammate below in Slack, with the task link and why.'
-    );
-    expect(describeAutopilotContacts([], 'Checking Slack')).toBe(
-      'Your team in Needs you. Add Slack channels or teammates to tell them too.'
-    );
-    expect(describeAutopilotContacts([ONCALL], 'Update Shinsa on this machine first')).toBe(
-      'Your team in Needs you. Slack hears nothing until then: Update Shinsa on this machine first.'
+    expect(describeSlackTestResults([{ contact: kai, sent: false, problem: null }])).toBe(
+      'Not sent to Kai: Slack refused it.'
     );
   });
 
@@ -127,7 +158,7 @@ describe('who an escalation reaches', () => {
     expect(listContactOptions(null, [])).toEqual([]);
     const groups = listContactOptions(DIRECTORY, [ONCALL]);
     expect(groups.map((group) => [group.kind, group.heading])).toEqual([
-      ['slack_channel', 'Channels Shinsa is in'],
+      ['slack_channel', 'Channels'],
       ['slack_person', 'People'],
     ]);
     expect(groups[0]?.options.map((option) => [option.contact.id, option.chosen, option.disabled])).toEqual([
@@ -139,7 +170,10 @@ describe('who an escalation reaches', () => {
       teamId: 'T1',
       id: 'U7',
       name: 'Kai',
+      image: 'https://avatars.slack-edge.com/kai.png',
     });
+    const faceless = { ...DIRECTORY, people: [{ id: 'U8', name: 'Mo' }] };
+    expect(listContactOptions(faceless, [])[1]?.options[0]?.contact).not.toHaveProperty('image');
     expect(listContactOptions({ ...DIRECTORY, channels: [] }, []).map((group) => group.kind)).toEqual([
       'slack_person',
     ]);
@@ -156,11 +190,11 @@ describe('who an escalation reaches', () => {
   });
 
   it('says why the search is empty: loading, Slack’s problem, or nothing matches', () => {
-    expect(describeContactPickerEmpty(null)).toBe('Loading the channels and people in Slack…');
+    expect(describeContactPickerEmpty(null)).toBe('Loading Slack…');
     expect(describeContactPickerEmpty({ ...DIRECTORY, problem: 'Slack could not be reached.' })).toBe(
       'Slack could not be reached.'
     );
-    expect(describeContactPickerEmpty(DIRECTORY)).toContain('invite @Shinsa');
+    expect(describeContactPickerEmpty(DIRECTORY)).toBe('Nothing matches.');
     expect(CONTACT_PICKER_HINT).toContain('Invite @Shinsa');
   });
 
@@ -173,16 +207,17 @@ describe('who an escalation reaches', () => {
     expect(toggleAutopilotContact(five, kai)).toEqual(five);
   });
 
-  it('names each contact with its workspace when it is still connected', () => {
+  it('names each contact without a hash, and its workspace only when there are several', () => {
     expect(describeAutopilotContact(ONCALL, SNAPSHOT)).toEqual({
-      title: '#oncall',
-      description: 'Posts in this Slack channel in Overclock.',
-      icon: 'IconHashtag',
+      title: 'oncall',
+      detail: null,
+      removeLabel: 'Stop posting in #oncall',
     });
-    expect(describeAutopilotContact({ ...ONCALL, kind: 'slack_person', name: 'Kai' }, null)).toEqual({
+    const two = { ...SNAPSHOT, links: [LINK, { ...LINK, teamId: 'T2', teamName: 'Acme' }] };
+    expect(describeAutopilotContact({ ...ONCALL, kind: 'slack_person', name: 'Kai' }, two)).toEqual({
       title: 'Kai',
-      description: 'Sends a direct message in Slack.',
-      icon: 'IconUser',
+      detail: 'Overclock',
+      removeLabel: 'Stop messaging Kai',
     });
   });
 });
@@ -195,16 +230,6 @@ describe('the Autopilot settings', () => {
       autopilot: { ...AUTOPILOT_DEFAULTS, enabled: true, merge: 'approved' as const },
     };
     expect(resolveAutopilotValue(settings)).toMatchObject({ enabled: 'on', policy: { merge: 'approved' } });
-  });
-
-  it('warns that an escalation reaches only you while no project is in a team', () => {
-    const escalate = { ...AUTOPILOT_DEFAULTS, urgent: 'escalate' as const };
-    const later = { ...AUTOPILOT_DEFAULTS, urgent: 'escalate_then_merge' as const };
-    const merge = { ...AUTOPILOT_DEFAULTS, urgent: 'merge' as const };
-    expect(isEscalationUnseen(escalate, [])).toBe(true);
-    expect(isEscalationUnseen(later, [{ teamIds: [] }, {}])).toBe(true);
-    expect(isEscalationUnseen(escalate, [{}, { teamIds: ['team-1'] }])).toBe(false);
-    expect(isEscalationUnseen(merge, [])).toBe(false);
   });
 
   it('names each risk limit, and never approving is not a shield', () => {

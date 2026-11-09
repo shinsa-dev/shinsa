@@ -317,7 +317,9 @@ export const SlackRelayHandlers = HttpApiBuilder.group(
             page.members.flatMap((member) => {
               if (member.deleted || member.is_bot || member.id === SLACKBOT_USER_ID) return [];
               const name = member.profile?.real_name || member.profile?.display_name || member.name;
-              return name ? [{ id: member.id, name }] : [];
+              const image = member.profile?.image_72;
+              if (!name) return [];
+              return [image ? { id: member.id, name, image } : { id: member.id, name }];
             })
           );
           return { teamId: query.teamId, channels: channels.sort(byName), people: people.sort(byName) };
@@ -341,13 +343,18 @@ export const SlackRelayHandlers = HttpApiBuilder.group(
               .pipe(Effect.tapError(logRefusedPost), Effect.mapError(refuseNotify));
             return payload.replace;
           }
-          yield* assertTarget(token, userIds, payload);
+          if (payload.reply)
+            yield* assertOwnPost({ teamId: payload.teamId, ...payload.reply }, payload.reply.threadTs);
+          else yield* assertTarget(token, userIds, payload);
+          const where = payload.reply
+            ? { channel: payload.reply.channelId, thread_ts: payload.reply.threadTs }
+            : { channel: payload.id };
           const posted = yield* slack
             .call(
               'chat.postMessage',
               {
                 token,
-                body: { json: { ...content, channel: payload.id, unfurl_links: false, unfurl_media: false } },
+                body: { json: { ...content, ...where, unfurl_links: false, unfurl_media: false } },
               },
               Notified
             )
