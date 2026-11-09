@@ -17,7 +17,7 @@ export function PageHeading({
   className?: string;
 }) {
   return (
-    <div className={cn('flex min-w-0 flex-col gap-px', className)}>
+    <div className={cn('flex min-w-0 flex-col', className)}>
       <h1 className={PAGE_TITLE}>{title}</h1>
       {description &&
         (typeof description === 'string' ? <p className={PAGE_DESCRIPTION}>{description}</p> : description)}

@@ -106,6 +106,7 @@ import {
   TeamMemberBody,
   TeamExtraBody,
   TeamScopesBody,
+  TeamRelaysAnswer,
   TeamTasksAnswer,
   TeamTasksQuery,
   TerminalsAnswer,
@@ -583,6 +584,9 @@ class TeamsGroup extends HttpApiGroup.make('teams')
     HttpApiEndpoint.get('keys', '/api/remote/teams/keys', { success: TeamKeysAnswer })
       .annotate(OwnerOnlyRoute, true)
       .annotate(EngineFeatureRoute, 'team-access'),
+    HttpApiEndpoint.get('relays', '/api/teams/relays', { success: TeamRelaysAnswer })
+      .annotate(LocalOnlyRoute, true)
+      .annotate(EngineFeatureRoute, 'team-relay'),
     HttpApiEndpoint.post('requestKey', '/api/remote/teams/key/request', {
       payload: TeamBody,
       success: RemoteAnswer,
@@ -637,7 +641,10 @@ const ServiceParams = { serviceId: Schema.String };
 
 class TerminalsGroup extends HttpApiGroup.make('terminals')
   .add(
-    HttpApiEndpoint.get('list', '/api/terminals', { success: TerminalsAnswer }),
+    HttpApiEndpoint.get('list', '/api/terminals', { success: TerminalsAnswer }).annotate(
+      GuestRoute,
+      'filtered'
+    ),
     HttpApiEndpoint.get('foreground', '/api/terminals/:terminalId/foreground', {
       params: TerminalParams,
       success: ObjectAnswer,

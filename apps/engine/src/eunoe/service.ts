@@ -1,10 +1,10 @@
-import { appendFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { type Body, claudeCodeSessionId, createForwarder, foldThread, rewriteAsync } from '@chroxify/eunoe';
-import { Cause, Context, DateTime, Effect, Exit, Layer, Ref, Scope } from 'effect';
+import { Cause, Context, DateTime, Effect, Exit, FileSystem, Layer, Ref, Scope } from 'effect';
 import type { EunoeStatus, EunoeWatcher } from '../agents/providers/claude/route/schema.ts';
 import { EngineConfig } from '../config/service.ts';
 import { describeError } from '../log/redact.ts';
+import { appendFileLine } from './files.ts';
 import { isStuck, resolveCompactionNotice } from './notices.ts';
 import {
   CHARS_PER_TOKEN,
@@ -39,6 +39,7 @@ export class EunoeServer extends Context.Service<
     EunoeServer,
     Effect.gen(function* () {
       const config = yield* EngineConfig;
+      const fs = yield* FileSystem.FileSystem;
       const settings = yield* EunoeSettings;
       const dir = join(config.dataDir, EUNOE_DIR);
       const store = yield* makeFileStore(join(dir, THREADS_DIR));
@@ -121,7 +122,7 @@ export class EunoeServer extends Context.Service<
         const ts = DateTime.formatIso(yield* DateTime.now);
         const line = JSON.stringify({ ts, mode: settings.config.mode, ...entry });
         yield* Effect.try({
-          try: () => appendFileSync(join(dir, REQUEST_LOG), `${line}\n`),
+          try: () => appendFileLine(join(dir, REQUEST_LOG), line),
           catch: (error) => new RequestLogUnwritable({ message: describeError(error) }),
         }).pipe(
           Effect.catch((failure) =>
@@ -148,24 +149,28 @@ export class EunoeServer extends Context.Service<
         });
       });
 
-      const serve = Effect.try({
-        try: () => {
-          mkdirSync(dir, { recursive: true });
-          const forward = createForwarder({
-            store,
-            upstream: settings.upstream,
-            prepare: (request, body, mayCompact) => runPromise(prepare(request, body, mayCompact)),
-            record: (entry) => runSync(record(entry)),
-          });
-          return Bun.serve({
-            hostname: LOOPBACK,
-            port: settings.port,
-            idleTimeout: IDLE_TIMEOUT_S,
-            fetch: forward,
-          });
-        },
-        catch: (error) => new ForwarderUnavailable({ message: describeError(error) }),
-      });
+      const serve = fs.makeDirectory(dir, { recursive: true }).pipe(
+        Effect.mapError((error) => new ForwarderUnavailable({ message: describeError(error) })),
+        Effect.andThen(
+          Effect.try({
+            try: () => {
+              const forward = createForwarder({
+                store,
+                upstream: settings.upstream,
+                prepare: (request, body, mayCompact) => runPromise(prepare(request, body, mayCompact)),
+                record: (entry) => runSync(record(entry)),
+              });
+              return Bun.serve({
+                hostname: LOOPBACK,
+                port: settings.port,
+                idleTimeout: IDLE_TIMEOUT_S,
+                fetch: forward,
+              });
+            },
+            catch: (error) => new ForwarderUnavailable({ message: describeError(error) }),
+          })
+        )
+      );
 
       const open = Effect.acquireRelease(serve, (started) => Effect.promise(() => started.stop(true))).pipe(
         Effect.tap((started) =>

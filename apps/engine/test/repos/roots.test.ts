@@ -9,20 +9,20 @@ import { openEventLog } from '../helpers/event-log.ts';
 import { createTempDir } from '../helpers/index.ts';
 import { createTestMachine } from '../helpers/machine.ts';
 
-function openRoots(fromEnvironment: string[], userHome: string, discover?: Discoverer | null) {
+async function openRoots(fromEnvironment: string[], userHome: string, discover?: Discoverer | null) {
   const config = createConfigAt(createTempDir(), { roots: fromEnvironment, userHome });
-  const { roots, store } = createTestMachine(new Engine(openEventLog()), config, { discover });
+  const { roots, store } = await createTestMachine(new Engine(openEventLog()), config, { discover });
   return {
     kind: () => Effect.runSync(roots.kind),
     listRoots: () => Effect.runPromise(roots.listRoots),
     discover: (force = false) => Effect.runPromise(roots.discover(force)),
     configured: () => Effect.runSync(roots.configured),
     fromEnvironment: roots.fromEnvironment,
-    update: (configured: string[]) => Effect.runSync(store.update({ roots: configured })),
+    update: (configured: string[]) => Effect.runPromise(store.update({ roots: configured })),
   };
 }
 
-function createRoots(fromEnvironment: string[] = []) {
+async function createRoots(fromEnvironment: string[] = []) {
   let calls = 0;
   const discover: Discoverer = (home) => {
     calls += 1;
@@ -32,12 +32,12 @@ function createRoots(fromEnvironment: string[] = []) {
       refused: [],
     });
   };
-  return { roots: openRoots(fromEnvironment, '/home/me', discover), calls: () => calls };
+  return { roots: await openRoots(fromEnvironment, '/home/me', discover), calls: () => calls };
 }
 
 describe('Roots', () => {
   test('without chosen folders it falls back to discovery, once per period', async () => {
-    const { roots, calls } = createRoots();
+    const { roots, calls } = await createRoots();
     expect(roots.kind()).toBe('discovered');
     expect(await roots.listRoots()).toEqual(['/home/me/Developer']);
     await roots.listRoots();
@@ -47,7 +47,7 @@ describe('Roots', () => {
   });
 
   test('discovery runs again once its result is ten minutes old', async () => {
-    const { roots, calls } = createRoots();
+    const { roots, calls } = await createRoots();
     const start = Date.now();
     try {
       setSystemTime(start);
@@ -64,10 +64,10 @@ describe('Roots', () => {
   });
 
   test('chosen folders and SHINSA_ROOTS replace discovery, chosen ones first in the kind', async () => {
-    const { roots, calls } = createRoots(['/env']);
+    const { roots, calls } = await createRoots(['/env']);
     expect(roots.kind()).toBe('environment');
     expect(await roots.listRoots()).toEqual(['/env']);
-    roots.update(['/code', '/env']);
+    await roots.update(['/code', '/env']);
     expect(roots.kind()).toBe('configured');
     expect(await roots.listRoots()).toEqual(['/env', '/code']);
     expect(roots.configured()).toEqual(['/code', '/env']);
@@ -78,6 +78,6 @@ describe('Roots', () => {
   test('without a discoverer of its own it looks through the home folder', async () => {
     const home = createTempDir();
     mkdirSync(join(home, 'Developer', 'app', '.git'), { recursive: true });
-    expect(await openRoots([], home, null).listRoots()).toEqual([join(home, 'Developer')]);
+    expect(await (await openRoots([], home, null)).listRoots()).toEqual([join(home, 'Developer')]);
   });
 });

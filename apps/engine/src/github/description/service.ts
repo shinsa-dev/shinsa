@@ -1,4 +1,3 @@
-import { readFileSync, statSync } from 'node:fs';
 import { basename, extname } from 'node:path';
 import {
   type Evidence,
@@ -9,7 +8,7 @@ import {
   serializePullRequestMarkdown,
   type Task,
 } from '@shinsa/core';
-import { Context, Effect, Layer, Option, Ref } from 'effect';
+import { Context, Effect, FileSystem, Layer, Option, Ref } from 'effect';
 import { describeError } from '../../log/redact.ts';
 import { EVIDENCE_ROUTE } from '../../store/evidence/schema.ts';
 import { Evidence as EvidenceFiles } from '../../store/evidence/service.ts';
@@ -34,6 +33,7 @@ export class PullRequestDescriber extends Context.Service<
     Effect.gen(function* () {
       const pulls = yield* PullRequests;
       const files = yield* EvidenceFiles;
+      const fs = yield* FileSystem.FileSystem;
       const repositoryIds = yield* Ref.make(new Map<string, number>());
 
       const selectPath = (piece: Evidence) =>
@@ -48,10 +48,21 @@ export class PullRequestDescriber extends Context.Service<
         if (resolvePublicUrl(piece) !== null) return null;
         const path = yield* selectPath(piece);
         const type = path ? ATTACHMENT_TYPES[extname(path).toLowerCase()] : undefined;
-        if (!path || !type || statSync(path).size > type.limit) return null;
+        if (!path || !type) return null;
+        const info = yield* Effect.option(fs.stat(path));
+        if (Option.isNone(info) || Number(info.value.size) > type.limit) return null;
         const attachment: Attachment = { path, name: basename(path), contentType: type.contentType };
         return attachment;
       });
+      const readNote = Effect.fn('PullRequestDescriber.readNote')(function* (piece: Evidence) {
+        const path = yield* selectPath(piece);
+        const text = path ? yield* Effect.option(fs.readFileString(path)) : Option.none<string>();
+        return Option.match(text, {
+          onNone: (): [string, string][] => [],
+          onSome: (read) => [[piece.id, read]],
+        });
+      });
+
       const resolveRepositoryId = Effect.fn('PullRequestDescriber.resolveRepositoryId')(function* (
         repo: Repo,
         signal?: AbortSignal
@@ -118,11 +129,7 @@ export class PullRequestDescriber extends Context.Service<
         });
         const notePieces = items.filter((item) => item.kind === 'note').flatMap((item) => item.parts);
         const notes = Object.fromEntries(
-          (yield* Effect.forEach(notePieces, (piece) =>
-            Effect.map(selectPath(piece), (path): [string, string][] =>
-              path ? [[piece.id, readFileSync(path, 'utf8')]] : []
-            )
-          )).flat()
+          (yield* Effect.forEach(notePieces, (piece) => readNote(piece))).flat()
         );
         const review = serializeReviewLink(task, published, repo);
         return {

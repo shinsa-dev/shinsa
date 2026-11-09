@@ -54,7 +54,7 @@ import { GitHubTokenBlock } from './github-token.tsx';
 import { SettingsEmpty, SettingsGroup } from './group.tsx';
 import { ProviderLoginBlock } from './providers.tsx';
 import { UsageAccountBlock } from './usage-account.tsx';
-import { UsageWindows } from './usage.tsx';
+import { UsageNotes, UsageWindows } from './usage.tsx';
 
 export interface AccountActions {
   signIn: (accountId: string | null) => void;
@@ -252,13 +252,15 @@ function AccountMenu(props: AccountProps) {
 function AccountBlock(props: AccountProps) {
   const { account, settings } = props;
   const ownership = useTaskOwnership();
+  const now = Date.now();
   return (
     <UsageAccountBlock
-      header={resolveAccountHeader(account, resolveUsageModel(settings), Date.now())}
+      header={resolveAccountHeader(account, resolveUsageModel(settings), now)}
       owner={describeAccountOwner(account.owner, ownership)}
       menu={isOwnAccount(account.owner, ownership) && <AccountMenu {...props} />}
     >
       <UsageWindows account={account} />
+      <UsageNotes usage={account.usage} now={now} />
     </UsageAccountBlock>
   );
 }

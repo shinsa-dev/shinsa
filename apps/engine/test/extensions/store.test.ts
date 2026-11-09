@@ -6,9 +6,9 @@ import { Effect, Layer, ManagedRuntime } from 'effect';
 import { EngineConfig } from '../../src/config/service.ts';
 import { ExtensionStore } from '../../src/extensions/settings/service.ts';
 import { ExtensionFiles } from '../../src/extensions/store/service.ts';
-import { JsonFile } from '../../src/files/service.ts';
 import { JsonLogger } from '../../src/log/service.ts';
 import { createConfigAt } from '../helpers/config.ts';
+import { JsonFileLayer } from '../helpers/files.ts';
 import { captureLogs } from '../helpers/logs.ts';
 
 const runtimes: ManagedRuntime.ManagedRuntime<ExtensionStore, never>[] = [];
@@ -24,7 +24,7 @@ function openStore(root: string) {
     ExtensionStore.layer.pipe(
       Layer.provide(ExtensionFiles.layer),
       Layer.provide(Layer.succeed(EngineConfig, createConfigAt(root))),
-      Layer.provide(JsonFile.layer),
+      Layer.provide(JsonFileLayer),
       Layer.provide(JsonLogger)
     )
   );

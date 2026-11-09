@@ -1,6 +1,6 @@
-import { existsSync } from 'node:fs';
 import { DomainError } from '@shinsa/core';
-import { Clock, Context, Effect, Layer, Ref } from 'effect';
+import { Clock, Context, Effect, FileSystem, Layer, Ref } from 'effect';
+import { constFalse } from 'effect/Function';
 import { EngineConfig } from '../../config/service.ts';
 import { AccountChanges } from '../changes/service.ts';
 import { AccountFolders } from '../folders/service.ts';
@@ -51,6 +51,7 @@ export class AccountStore extends Context.Service<
   static readonly layer = Layer.effect(
     AccountStore,
     Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
       const config = yield* EngineConfig;
       const env = yield* AccountsEnv;
       const newId = yield* NewAccountId;
@@ -208,7 +209,7 @@ export class AccountStore extends Context.Service<
       });
 
       return AccountStore.of({
-        exists: Effect.sync(() => existsSync(path)),
+        exists: fs.exists(path).pipe(Effect.orElseSucceed(constFalse)),
         list,
         defaultAccountId: Effect.map(Ref.get(registry), (current) => current.defaultAccountId),
         select,

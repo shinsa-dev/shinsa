@@ -1,13 +1,15 @@
 import { describe, expect, test } from 'bun:test';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { Option } from 'effect';
 import {
   listDependencyNames,
   listWorkspacePatterns,
   parseDenoTasks,
   parsePackageManifest,
-  readPackageManifest,
+  selectPackageManifest,
 } from '../../src/files/manifest.ts';
+import { runFiles } from '../harness.ts';
 import { createTempDir } from '../helpers/index.ts';
 
 describe('a package.json', () => {
@@ -46,7 +48,7 @@ describe('a package.json', () => {
     expect(listWorkspacePatterns({})).toEqual([]);
   });
 
-  test('reads the tasks of a deno.json, dropping the ones that are not commands', () => {
+  test('reads the tasks of a deno.json, dropping the ones that are not commands', async () => {
     expect(parseDenoTasks(JSON.stringify({ tasks: { dev: 'deno run -A main.ts', bad: 1 } }))).toEqual({
       dev: 'deno run -A main.ts',
     });
@@ -55,25 +57,26 @@ describe('a package.json', () => {
     expect(parseDenoTasks(null)).toEqual({});
   });
 
-  test('text that is not an object, or no text, is no manifest', () => {
+  test('text that is not an object, or no text, is no manifest', async () => {
     expect(parsePackageManifest('{')).toBeNull();
     expect(parsePackageManifest('null')).toBeNull();
     expect(parsePackageManifest('[1]')).toBeNull();
     expect(parsePackageManifest(null)).toBeNull();
   });
 
-  test('is read from a folder, and a folder without one, or with a folder in its place, has none', () => {
+  test('is read from a folder, and a folder without one, or with a folder in its place, has none', async () => {
     const dir = createTempDir();
-    expect(readPackageManifest(dir)).toBeNull();
+    const read = async (path: string) => Option.getOrNull(await runFiles(selectPackageManifest(path)));
+    expect(await read(dir)).toBeNull();
     writeFileSync(
       join(dir, 'package.json'),
       JSON.stringify({ name: 'app', devDependencies: { vitest: '3' } })
     );
-    const manifest = readPackageManifest(dir);
+    const manifest = await read(dir);
     expect(manifest?.name).toBe('app');
     expect(manifest ? listDependencyNames(manifest) : []).toEqual(['vitest']);
     const nested = join(dir, 'nested');
     mkdirSync(join(nested, 'package.json'), { recursive: true });
-    expect(readPackageManifest(nested)).toBeNull();
+    expect(await read(nested)).toBeNull();
   });
 });

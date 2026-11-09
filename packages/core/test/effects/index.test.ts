@@ -140,14 +140,18 @@ describe('slack effects', () => {
     permalink: null,
     channelName: null,
     thread: [],
+    linkedThreads: [],
   };
 
   test('a mention is read once per Slack event; posts and status edits run once per decision', () => {
     expect(resolveEffectKey({ kind: 'slack.evaluate', mention }, 9)).toBe('slack.evaluate:Ev1');
     expect(resolveEffectKey({ kind: 'slack.status', taskId: 't', thread }, 9)).toBe('slack.status:t:9');
-    expect(resolveEffectKey({ kind: 'slack.post', thread, taskId: 't', post: { kind: 'result' } }, 9)).toBe(
-      'slack.post:T1:C1:100.1:9'
-    );
+    expect(
+      resolveEffectKey(
+        { kind: 'slack.post', thread, taskId: 't', post: { kind: 'tripped', watchdogId: 'w1' } },
+        9
+      )
+    ).toBe('slack.post:T1:C1:100.1:9');
     expect(resolveEffectKey({ kind: 'slack.merge', thread, taskId: 't', round: 1 }, 9)).toBe(
       'slack.merge:T1:C1:100.1:9'
     );
@@ -160,7 +164,12 @@ describe('slack effects', () => {
     const lanes = [
       resolveEffectLane({ kind: 'slack.evaluate', mention }),
       resolveEffectLane({ kind: 'slack.status', taskId: 't', thread }),
-      resolveEffectLane({ kind: 'slack.post', thread, taskId: 't', post: { kind: 'completed' } }),
+      resolveEffectLane({
+        kind: 'slack.post',
+        thread,
+        taskId: 't',
+        post: { kind: 'tripped', watchdogId: 'w1' },
+      }),
       resolveEffectLane({ kind: 'slack.merge', thread, taskId: 't', round: 1 }),
       resolveEffectLane({ kind: 'slack.react', thread, messageTs: '100.3', reaction: 'inbox_tray' }),
     ];

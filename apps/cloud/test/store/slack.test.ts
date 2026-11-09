@@ -13,6 +13,7 @@ const LINK = {
   slackUserName: 'mona',
   userId: MONA.id,
   machineId: STUDIO,
+  sealedUserToken: 'sealed-user-1',
 };
 
 const THREAD = { workspaceId: 'T1', channelId: 'C1', threadTs: '1.000' };
@@ -65,6 +66,21 @@ describe('Slack workspaces and links', () => {
       { ...LINK, machineId: LAPTOP, workspaceName: 'Acme', linkedAt: TEST_NOW + 1000 },
     ]);
     expect(afterRemove).toEqual([]);
+  });
+
+  test('linking again replaces the sealed user token, and a link may have none', async () => {
+    const [replaced, cleared] = await runTest(
+      Effect.gen(function* () {
+        const slack = yield* seedWorkspace;
+        yield* slack.upsertLink(LINK);
+        yield* slack.upsertLink({ ...LINK, sealedUserToken: 'sealed-user-2' });
+        const readReplaced = yield* slack.selectLink('T1', 'U1');
+        yield* slack.upsertLink({ ...LINK, sealedUserToken: null });
+        return [readReplaced, yield* slack.selectLink('T1', 'U1')] as const;
+      })
+    );
+    expect(Option.map(replaced, (link) => link.sealedUserToken)).toEqual(Option.some('sealed-user-2'));
+    expect(Option.map(cleared, (link) => link.sealedUserToken)).toEqual(Option.some(null));
   });
 });
 

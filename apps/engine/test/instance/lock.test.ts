@@ -74,10 +74,10 @@ describe('the data directory lock', () => {
   test('records who holds it, and a second server on the same folder is refused with the first one’s address', async () => {
     const dataDir = createTempDir();
     const lock = await acquire(dataDir);
-    expect(selectLockHolder(dataDir)).toEqual({ ...createOwner(), bootedAt: BOOTED_AT });
+    expect(await selectLockHolder(dataDir)).toEqual({ ...createOwner(), bootedAt: BOOTED_AT });
     await runTest(lock.update({ port: 6123, url: 'http://127.0.0.1:6123' }));
     expect(await runTest(lock.holder)).toMatchObject({ port: 6123, url: 'http://127.0.0.1:6123' });
-    expect(selectLockHolder(dataDir)).toMatchObject({ port: 6123, pid: process.pid });
+    expect(await selectLockHolder(dataDir)).toMatchObject({ port: 6123, pid: process.pid });
     await expect(acquire(dataDir)).rejects.toThrow(
       `Shinsa is already running on ${dataDir}: http://127.0.0.1:6123 (pid ${process.pid}, version 0.0.0 (ccccccc)). Stop it first, or set SHINSA_HOME to another folder.`
     );
@@ -115,7 +115,7 @@ describe('the data directory lock', () => {
     await acquireIn(second, dataDir);
     writeHolder(dataDir, { pid: process.pid, startedAt: 1 });
     await release(second);
-    expect(selectLockHolder(dataDir)?.startedAt).toBe(1);
+    expect((await selectLockHolder(dataDir))?.startedAt).toBe(1);
   });
 
   test('a lock a stopped server left behind is taken over: a dead pid, another boot, this pid from before, or garbage', async () => {
@@ -133,7 +133,7 @@ describe('the data directory lock', () => {
       const { result, warnings } = await quietly(() => acquire(dir, { isAlive: (pid) => pid !== 999_999 }));
       expect({ name, pid: (await runTest(result.holder)).pid }).toEqual({ name, pid: process.pid });
       expect(warnings).toEqual(['[Serve] Took over the lock a stopped Shinsa left behind']);
-      expect(selectLockHolder(dir)?.pid).toBe(process.pid);
+      expect((await selectLockHolder(dir))?.pid).toBe(process.pid);
     }
   });
 
@@ -158,15 +158,15 @@ describe('the data directory lock', () => {
     chmodSync(join(dataDir, LOCK_FILE), 0o000);
     try {
       await expect(acquire(dataDir)).rejects.toThrow('EACCES');
-      expect(() => selectLockHolder(dataDir)).toThrow('EACCES');
+      await expect(selectLockHolder(dataDir)).rejects.toThrow('EACCES');
     } finally {
       chmodSync(join(dataDir, LOCK_FILE), 0o600);
     }
     expect(JSON.parse(readFileSync(join(dataDir, LOCK_FILE), 'utf8')).pid).toBe(999_999);
   });
 
-  test('without a lock there is no holder', () => {
-    expect(selectLockHolder(createTempDir())).toBeNull();
+  test('without a lock there is no holder', async () => {
+    expect(await selectLockHolder(createTempDir())).toBeNull();
   });
 
   test('a missing folder is an error, not a lock', async () => {

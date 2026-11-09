@@ -12,6 +12,7 @@ import {
   type TerminalProcess,
   type TerminalSpawnOptions,
 } from '../schema.ts';
+import { spawnTerminal } from './spawn.ts';
 
 export class TerminalPty extends Context.Service<
   TerminalPty,
@@ -53,18 +54,7 @@ export class TerminalPty extends Context.Service<
       ) {
         const scope = yield* Scope.make();
         const child = yield* Effect.acquireRelease(
-          Effect.sync(() =>
-            Bun.spawn([...command], {
-              cwd: options.cwd,
-              env: options.env,
-              terminal: {
-                cols: options.cols,
-                rows: options.rows,
-                name: 'xterm-256color',
-                data: (_terminal, data) => options.onData(data),
-              },
-            })
-          ),
+          Effect.sync(() => spawnTerminal(command, options)),
           hangUpChild
         ).pipe(Scope.provide(scope));
         const close = () => runFork(Scope.close(scope, Exit.void));

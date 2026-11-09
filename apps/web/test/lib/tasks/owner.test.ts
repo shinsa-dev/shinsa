@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { type Queue, type ShinsaState, type Task } from '@shinsa/core';
+import { NO_FOCUS_PROJECTS, type Queue, type ShinsaState, type Task } from '@shinsa/core';
 import {
   describeAccountOwner,
   filterOwnQueue,
@@ -93,7 +93,7 @@ describe('filterOwnQueue', () => {
   });
   const gate = (task: Task, id: string) => ({ task, gate: state.gates[id]! });
   const queue: Queue = {
-    focusProjectId: null,
+    focus: NO_FOCUS_PROJECTS,
     focusTeamId: null,
     ready: [gate(KAI_TASK, 'g1'), gate(MONA_TASK, 'g2')],
     upNow: [gate(MONA_TASK, 'g2')],

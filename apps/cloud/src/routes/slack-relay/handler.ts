@@ -10,6 +10,7 @@ import { Effect, Option, type Redacted, Schema } from 'effect';
 import { HttpApiBuilder } from 'effect/http-api';
 import type { SlackCallFailed } from '../../integrations/slack/schema.ts';
 import { SlackApi } from '../../integrations/slack/service.ts';
+import { revokeMachineUserTokens } from '../../slack/user-tokens.ts';
 import { selectWorkspaceToken } from '../../slack/workspace.ts';
 import { SlackStore } from '../../store/slack/service.ts';
 import {
@@ -100,7 +101,9 @@ export const SlackRelayHandlers = HttpApiBuilder.group(
       .handle(
         'unlink',
         Effect.fn('slackRelay.unlink')(function* () {
-          yield* store.removeMachineLinks((yield* CurrentMachine).instanceId);
+          const { instanceId } = yield* CurrentMachine;
+          yield* revokeMachineUserTokens(instanceId);
+          yield* store.removeMachineLinks(instanceId);
           return { ok: true as const };
         })
       )

@@ -263,7 +263,7 @@ describe('the project choice', () => {
   });
 
   it('shows the focus project until you pick, and No project without a focus', () => {
-    const focused = { ...state, focus: { projectId: 'p1', teamId: null, until: null } };
+    const focused = { ...state, focus: { projectIds: ['p1'], except: false, teamId: null, until: null } };
     expect(resolveShownProject(focused, 'auto')).toBe('p1');
     expect(resolveShownProject(state, 'auto')).toBe(NO_PROJECT);
     expect(resolveShownProject(focused, NO_PROJECT)).toBe(NO_PROJECT);

@@ -6,12 +6,16 @@ import {
   type Evidence,
   type Feedback,
   type Focus,
+  type FocusProjects,
   type FocusSpan,
   formatTaskHandle,
   type Gate,
+  isTaskSettled,
   type MemoryEntry,
+  NO_FOCUS,
   NO_PROJECT_KEY,
   needsWorktree,
+  normaliseFocusProjects,
   type OnBehalfAction,
   type PhaseReport,
   type Project,
@@ -21,11 +25,14 @@ import {
   type RepoStart,
   type Run,
   type RunUsage,
+  resolveFocusSelection,
   resolveShapeOf,
   resolveTaskPipeline,
   type Schedule,
   type Settings,
   SHAPE_PIPELINES,
+  type SingleProjectFocus,
+  selectSingleFocusProject,
   type Task,
   type TaskDuplicate,
   type TaskShape,
@@ -61,6 +68,7 @@ import { applyHandoffEvent } from './handoffs.ts';
 import { applyInboxEvent } from './inbox.ts';
 import { applyIterationEvent } from './iterations.ts';
 import { applyMemoryEvent } from './memory.ts';
+import { applyMoveEvent } from './moves.ts';
 import { applyOnBehalfActed } from './on-behalf.ts';
 import { applyOverlapEvent } from './overlaps.ts';
 import { recordAway, recordFocus, recordPresence } from './presence.ts';
@@ -112,7 +120,7 @@ export function createState(): ShinsaState {
     seq: 0,
     repos: {},
     projects: {},
-    focus: { projectId: null, teamId: null, until: null },
+    focus: NO_FOCUS,
     taskNumbers: {},
     settings: createSettings(),
     tasks: {},
@@ -132,12 +140,15 @@ export function createState(): ShinsaState {
   };
 }
 
-export function briefingKey(projectId: string | null) {
-  return projectId ?? '*';
+export function briefingKey(focus: FocusProjects | SingleProjectFocus) {
+  const selection = resolveFocusSelection(focus);
+  const { projectIds, except } = normaliseFocusProjects(selection.projectIds, selection.except);
+  if (projectIds.length === 0) return '*';
+  return selectSingleFocusProject({ projectIds, except }) ?? `${except ? '-' : '+'}${projectIds.join(',')}`;
 }
 
-export function replaceBriefing(state: ShinsaState, projectId: string | null, stored: StoredBriefing) {
-  return { ...state, briefings: { ...state.briefings, [briefingKey(projectId)]: stored } };
+export function replaceBriefing(state: ShinsaState, key: string, stored: StoredBriefing) {
+  return { ...state, briefings: { ...state.briefings, [key]: stored } };
 }
 
 function recordHandle(state: ShinsaState, handle: string) {
@@ -237,7 +248,7 @@ function applyTriaged(state: ShinsaState, event: EventOf<'task.triaged'>) {
   const task = state.tasks[event.taskId];
   const pipeline = event.pipeline ?? (task ? [...resolveTaskPipeline(task)] : []);
   const worktree = needsWorktree(pipeline);
-  const projectId = task?.projectId ?? event.projectId ?? null;
+  const projectId = event.projectId ?? task?.projectId ?? null;
   const handle = task?.handle ?? event.handle ?? null;
   if (task && !task.handle && handle) recordHandle(state, handle);
   updateTask(state, event.taskId, event.at, {
@@ -275,9 +286,11 @@ function resolveDuplicateOriginalText(state: ShinsaState, duplicate: TaskDuplica
 }
 
 function applyRepoBound(state: ShinsaState, event: EventOf<'task.repo_bound'>) {
+  if (event.handle) recordHandle(state, event.handle);
   updateTask(state, event.taskId, event.at, {
     repoId: event.repoId,
     ...(event.projectId ? { projectId: event.projectId } : {}),
+    ...(event.handle ? { handle: event.handle } : {}),
   });
   record(state, event.taskId, event.at, {
     actor: 'shinsa',
@@ -318,6 +331,7 @@ function applyStaged(state: ShinsaState, event: EventOf<'task.staged'>) {
     stageChangedAt: event.at,
     ...resolveCancelledFrom(task, stage),
     ...(stage === 'checking' ? {} : { runningChecks: [] }),
+    ...(task?.movingTo && isTaskSettled({ stage }) ? { movingTo: null } : {}),
   });
   const closed = previous === 'answered' && event.by !== 'you';
   const answered = (previous === 'answering' || closed) && (stage === 'done' || stage === 'merged');
@@ -808,7 +822,7 @@ function applyWorkspaceEvent(state: ShinsaState, event: WorkspaceEvent) {
       removeEntry(state, 'projects', event.projectId);
       return;
     case 'focus.changed':
-      state.focus = { ...event.focus };
+      state.focus = { ...event.focus, projectIds: [...event.focus.projectIds] };
       recordFocus(state, event.focus, event.at);
       return;
     case 'settings.changed':
@@ -946,6 +960,10 @@ function applyEventBody(state: ShinsaState, event: ShinsaEvent): ShinsaState {
       break;
     case 'worktree.removed':
       updateTask(state, event.taskId, event.at, { worktreePath: null });
+      break;
+    case 'task.moving':
+    case 'task.moved':
+      applyMoveEvent(state, event);
       break;
     case 'plan.proposed':
       applyPlanProposed(state, event);

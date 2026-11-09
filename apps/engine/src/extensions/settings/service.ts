@@ -1,6 +1,6 @@
 import { join } from 'node:path';
 import type { ContextOptimizer, McpServerStatus } from '@shinsa/core';
-import { Context, Effect, Layer, Ref } from 'effect';
+import { Context, Effect, Layer, SynchronizedRef } from 'effect';
 import { EngineConfig } from '../../config/service.ts';
 import { EXTENSIONS_FILE, type ExtensionsSettings, type ServerChoice, type StoredServer } from '../schema.ts';
 import { ExtensionFiles } from '../store/service.ts';
@@ -25,20 +25,20 @@ export class ExtensionStore extends Context.Service<
     Effect.gen(function* () {
       const files = yield* ExtensionFiles;
       const path = join((yield* EngineConfig).home, EXTENSIONS_FILE);
-      const file = yield* Ref.make(yield* files.readSettings(path));
+      const file = yield* SynchronizedRef.make(yield* files.readSettings(path));
 
       const write = Effect.fn('ExtensionStore.write')(function* (
         change: (current: ExtensionsSettings) => ExtensionsSettings | null
       ) {
-        const next = change(yield* Ref.get(file));
-        if (next === null) return;
-        yield* files.writeSettings(path, next);
-        yield* Ref.set(file, next);
+        yield* SynchronizedRef.updateEffect(file, (current) => {
+          const next = change(current);
+          return next === null ? Effect.succeed(current) : Effect.as(files.writeSettings(path, next), next);
+        });
       });
 
       return ExtensionStore.of({
         path,
-        read: Ref.get(file),
+        read: SynchronizedRef.get(file),
         recordSeen: (keys, at) =>
           write((current) => {
             const fresh = keys.filter((key) => current.seen[key] === undefined);

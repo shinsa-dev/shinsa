@@ -1,13 +1,14 @@
 import { afterEach, describe, expect, test } from 'bun:test';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { Effect, Layer, ManagedRuntime } from 'effect';
+import { Effect, Layer, ManagedRuntime, Option } from 'effect';
 import { BaseCheckouts } from '../../src/checks/base/service.ts';
-import { type CheckFailure, listCheckFailures } from '../../src/checks/failures.ts';
+import { type CheckFailure, selectCheckFailures } from '../../src/checks/failures.ts';
 import type { CheckRun } from '../../src/checks/index.ts';
 import { type BaseRequest, KeptCheckouts } from '../../src/checks/schema.ts';
 import { EngineConfig } from '../../src/config/service.ts';
 import { CodeUnavailable } from '../../src/git/history/schema.ts';
+import { runFiles } from '../harness.ts';
 import { GitTestLayer } from '../helpers/git.ts';
 import {
   captureLogs,
@@ -45,14 +46,16 @@ test('is broken', () => {
 
 const TYPE_ERROR = 'src/a.ts(3,1): error TS2322: Type string is not assignable.';
 
-function failuresOf(output: string, root = '/repo') {
-  return listCheckFailures(output, root);
+async function failuresOf(output: string, root = '/repo') {
+  return Option.getOrNull(await runFiles(selectCheckFailures(output, root)));
 }
+
+const TYPE_FAILURES = await failuresOf(TYPE_ERROR);
 
 function runOf(
   command: string,
   failedFiles: string[] | null = null,
-  failures: CheckFailure[] | null = failuresOf(TYPE_ERROR)
+  failures: CheckFailure[] | null = TYPE_FAILURES
 ): CheckRun {
   return {
     check: { id: 'c1', label: 'Tests', command, outcome: 'fail', detail: null },
@@ -143,12 +146,12 @@ describe('running a failing check on the base commit', () => {
         ...tests.map((name) => `(fail) ${name}`),
         ` ${tests.length} fail`,
       ].join('\n');
-    const same = runOf(command, ['a.test.ts'], failuresOf(output(['is broken']), setup.path));
+    const same = runOf(command, ['a.test.ts'], await failuresOf(output(['is broken']), setup.path));
     expect(countOf(await bases.compareWithBase(requestOf(setup, same)))).toEqual({ added: 0, known: 1 });
     const more = runOf(
       command,
       ['a.test.ts'],
-      failuresOf(output(['is broken', 'is new [2.00ms]']), setup.path)
+      await failuresOf(output(['is broken', 'is new [2.00ms]']), setup.path)
     );
     const diff = await bases.compareWithBase(requestOf(setup, more));
     expect(diff?.added.map((failure) => failure.label)).toEqual(['a.test.ts › is new']);

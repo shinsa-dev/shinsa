@@ -1,8 +1,9 @@
-import { existsSync, mkdirSync, readdirSync } from 'node:fs';
 import type { ConfigProblem, Repo, RepoStart } from '@shinsa/core';
-import { Context, Effect, Layer } from 'effect';
+import { Context, Effect, FileSystem, Layer } from 'effect';
+import { constFalse } from 'effect/Function';
 import { decodeRefName } from '../../git/ref-name.ts';
 import { Git } from '../../git/service.ts';
+import { describeError } from '../../log/redact.ts';
 import {
   FALLBACK_DEFAULT_BRANCH,
   FIRST_COMMIT_MESSAGE,
@@ -25,6 +26,7 @@ export class RepoSetup extends Context.Service<
     RepoSetup,
     Effect.gen(function* () {
       const git = yield* Git;
+      const fs = yield* FileSystem.FileSystem;
 
       const isGitRepo = Effect.fn('RepoSetup.isGitRepo')(function* (path: string) {
         const result = yield* git.attempt(['rev-parse', '--is-inside-work-tree'], path);
@@ -74,7 +76,7 @@ export class RepoSetup extends Context.Service<
         scope: SetupScope,
         signal?: AbortSignal
       ) {
-        if (!(yield* Effect.sync(() => existsSync(repo.path)))) {
+        if (!(yield* fs.exists(repo.path).pipe(Effect.orElseSucceed(constFalse)))) {
           return [
             { kind: 'repository', detail: `The folder ${repo.path} no longer exists.` },
           ] satisfies ConfigProblem[];
@@ -88,8 +90,13 @@ export class RepoSetup extends Context.Service<
         return branch ? [branch] : [];
       });
 
-      const isEmptyFolder = (path: string) =>
-        Effect.sync(() => existsSync(path) && readdirSync(path).length === 0);
+      const isEmptyFolder = Effect.fn('RepoSetup.isEmptyFolder')(function* (path: string) {
+        if (!(yield* fs.exists(path).pipe(Effect.orElseSucceed(constFalse)))) return false;
+        return yield* fs.readDirectory(path).pipe(
+          Effect.map((entries) => entries.length === 0),
+          Effect.orElseSucceed(constFalse)
+        );
+      });
 
       const hasCommits = Effect.fn('RepoSetup.hasCommits')(function* (path: string) {
         const result = yield* git.attempt(['for-each-ref', '--count=1', '--format=%(refname)'], path);
@@ -150,17 +157,15 @@ export class RepoSetup extends Context.Service<
         return yield* startRepo(target.path, branch, false, signal);
       });
 
-      const makeFolder = (path: string) =>
-        Effect.try({
-          try: () => {
-            if (existsSync(path) && readdirSync(path).length > 0) {
-              throw new Error(`${path} already exists and is not empty.`);
-            }
-            mkdirSync(path, { recursive: true });
-          },
-          catch: (error) =>
-            new RepoNotCreated({ path, message: error instanceof Error ? error.message : String(error) }),
-        });
+      const makeFolder = Effect.fn('RepoSetup.makeFolder')(function* (path: string) {
+        const failed = (error: unknown) => new RepoNotCreated({ path, message: describeError(error) });
+        if (yield* fs.exists(path).pipe(Effect.mapError(failed))) {
+          const entries = yield* fs.readDirectory(path).pipe(Effect.mapError(failed));
+          if (entries.length > 0)
+            return yield* new RepoNotCreated({ path, message: `${path} already exists and is not empty.` });
+        }
+        yield* fs.makeDirectory(path, { recursive: true }).pipe(Effect.mapError(failed));
+      });
 
       const resolveInitialBranch = Effect.fn('RepoSetup.resolveInitialBranch')(function* (path: string) {
         const configured = yield* git.attempt(['config', '--get', 'init.defaultBranch'], path);

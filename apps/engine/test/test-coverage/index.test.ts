@@ -8,6 +8,7 @@ import { GitLayer } from '../../src/git/layers.ts';
 import { JsonLogger } from '../../src/log/service.ts';
 import { ShellLayer } from '../../src/shell/layers.ts';
 import { type CoverageRequest, listCoverageDetections, TaskCoverage } from '../../src/test-coverage/index.ts';
+import { runFiles } from '../harness.ts';
 import { createWorktree } from '../helpers/git.ts';
 import { createGitRepo, createTempDir, git, until, writeFiles } from '../helpers/index.ts';
 import { createTask } from '../helpers/state.ts';
@@ -94,6 +95,18 @@ describe('measuring the changed lines', () => {
         { path: 'src/fresh.js', covered: 1, executable: 1, uncovered: [] },
       ],
     });
+  });
+
+  test('measures nothing when it cannot make a folder for the reports', async () => {
+    const { repo, worktree } = await createChangedWorktree();
+    const temp = process.env.TMPDIR;
+    process.env.TMPDIR = join(worktree, 'no-such-folder');
+    try {
+      expect(await measure(repo, { worktreePath: worktree }, custom(writeReport(LCOV)))).toBeNull();
+    } finally {
+      if (temp === undefined) delete process.env.TMPDIR;
+      else process.env.TMPDIR = temp;
+    }
   });
 
   test('a stale report from an earlier run is removed first, so a command that writes none is unavailable', async () => {
@@ -236,15 +249,17 @@ describe('measuring the changed lines', () => {
 });
 
 describe('the coverage each repository would measure', () => {
-  test('names the runner found in each repository, and none where there is none', () => {
+  test('names the runner found in each repository, and none where there is none', async () => {
     const bun = createTempDir();
     writeFiles(bun, { 'package.json': JSON.stringify({ scripts: { test: 'bun test' } }) });
     const bare = createTempDir();
     expect(
-      listCoverageDetections([
-        { id: 'bun', path: bun },
-        { id: 'bare', path: bare },
-      ])
+      await runFiles(
+        listCoverageDetections([
+          { id: 'bun', path: bun },
+          { id: 'bare', path: bare },
+        ])
+      )
     ).toEqual({
       bun: {
         tool: "Bun's test runner",

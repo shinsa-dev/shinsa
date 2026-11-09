@@ -1,5 +1,5 @@
 import { freemem, totalmem } from 'node:os';
-import { Effect } from 'effect';
+import { Effect, FileSystem } from 'effect';
 import { describeError } from '../log/redact.ts';
 import type { Argv, CommandResult } from '../shell/schema.ts';
 import { ResourceReadFailed } from './monitor/schema.ts';
@@ -20,8 +20,8 @@ export const readMemoryWith = Effect.fn('ResourceMonitor.readMemory')(function* 
 });
 
 export const readResourceText = Effect.fn('ResourceMonitor.readText')(function* (path: string) {
-  return yield* Effect.tryPromise({
-    try: () => Bun.file(path).text(),
-    catch: (error) => new ResourceReadFailed({ message: describeError(error) }),
-  });
+  const fs = yield* FileSystem.FileSystem;
+  return yield* fs
+    .readFileString(path)
+    .pipe(Effect.mapError((error) => new ResourceReadFailed({ message: describeError(error) })));
 });

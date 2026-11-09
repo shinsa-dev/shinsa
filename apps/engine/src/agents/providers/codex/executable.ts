@@ -31,7 +31,7 @@ export const resolveCodexExecutable = Effect.fn('CodexExecutable.resolveInstalle
 ) {
   const versions = yield* ProgramVersions;
   return yield* resolveExecutable({
-    path: locateCodex(deps).path,
+    path: (yield* locateCodex(deps)).path,
     readVersion: deps.readVersion ?? ((path) => versions.read(path, parseCodexVersion)),
     minimumVersion: deps.minimumVersion ?? CODEX_MINIMUM_VERSION,
   });

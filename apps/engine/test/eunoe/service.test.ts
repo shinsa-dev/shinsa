@@ -1,9 +1,8 @@
 import { afterEach, describe, expect, test } from 'bun:test';
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import { Effect } from 'effect';
 import { isStuck, makeFileStore, resolveCompactionNotice } from '../../src/eunoe/index.ts';
-import { JsonFile } from '../../src/files/service.ts';
 import {
   createMessagesBody,
   type FakeAnthropic,
@@ -237,6 +236,16 @@ describe('EunoeServer', () => {
     expect(dropped.stuck).toEqual([]);
   });
 
+  test('a folder it cannot make leaves runs to talk to Claude directly', async () => {
+    const { server, dir } = openServer();
+    mkdirSync(dirname(dir), { recursive: true });
+    writeFileSync(dir, '');
+    expect(await server.ensure()).toEqual({
+      ok: false,
+      reason: expect.stringMatching(/^Eunoe could not start: /),
+    });
+  });
+
   test('a port it cannot take leaves runs to talk to Claude directly, and a stopped server never starts again', async () => {
     const taken = Bun.serve({ hostname: '127.0.0.1', port: 0, fetch: () => new Response('') });
     const { server } = openServer({ port: taken.port });
@@ -251,7 +260,7 @@ describe('EunoeServer', () => {
 describe('the thread store', () => {
   test('keeps each thread in a file named after its key and reads an unknown or damaged one as empty', () => {
     const dir = join(createTempDir(), 'threads');
-    const store = Effect.runSync(makeFileStore(dir).pipe(Effect.provide(JsonFile.layer)));
+    const store = Effect.runSync(makeFileStore(dir));
     expect(store.read('missing')).toEqual({});
     store.save('session/1-abc', { keep: 2 });
     expect(existsSync(join(dir, 'session_1-abc.json'))).toBe(true);
@@ -260,6 +269,16 @@ describe('the thread store', () => {
     expect(store.read('damaged')).toEqual({});
     writeFileSync(join(dir, 'odd.json'), JSON.stringify({ keep: 'two' }));
     expect(store.read('odd')).toEqual({});
+    writeFileSync(join(dir, 'locked.json'), JSON.stringify({ keep: 3 }));
+    chmodSync(join(dir, 'locked.json'), 0o000);
+    expect(store.read('locked')).toEqual({});
+  });
+
+  test('a thread it cannot write fails instead of saving nothing', () => {
+    const root = createTempDir();
+    writeFileSync(join(root, 'threads'), '');
+    const store = Effect.runSync(makeFileStore(join(root, 'threads')));
+    expect(() => store.save('session-1', { keep: 1 })).toThrow();
   });
 });
 

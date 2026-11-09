@@ -23,6 +23,19 @@ describe('Shell', () => {
     expect(result).toEqual({ ok: false, code: 2, stdout: realpathSync(cwd), stderr: '', timedOut: false });
   });
 
+  test('writes standard input from text or from bytes, bytes passed through as they are', async () => {
+    const cwd = createTempDir();
+    const bytes = new Uint8Array([0, 255, 10, 104, 105]);
+    const [text, raw] = await runTest(
+      Effect.all([
+        Shell.use((shell) => shell.run({ argv: ['wc', '-c'], cwd, input: 'héllo', timeout: null })),
+        Shell.use((shell) => shell.run({ argv: ['od', '-An', '-tu1'], cwd, input: bytes, timeout: null })),
+      ])
+    );
+    expect(text.stdout).toBe('6');
+    expect(raw.stdout.split(/\s+/).map(Number)).toEqual([0, 255, 10, 104, 105]);
+  });
+
   test.each([0, 1])('a command that exits %i leaves the processes it started running', async (code) => {
     const cwd = createTempDir();
     const result = await runTest(

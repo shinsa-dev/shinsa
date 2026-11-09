@@ -124,6 +124,26 @@ describe('transcripts', () => {
         expect(transcripts.resolvePath('ru/n:1')).toBe(join(dir, 'run1.jsonl'));
       })
     ));
+
+  test('a line it cannot write is logged, and nobody hears an entry that is not on disk', () =>
+    run(
+      Effect.gen(function* () {
+        const dir = join(createDir(), 'missing');
+        const transcripts = yield* build(dir);
+        const heard: ChatEntry[] = [];
+        const unsubscribe = yield* transcripts.subscribe((_runId, entries) => {
+          heard.push(...entries);
+        });
+        const logs = captureLogs();
+        yield* transcripts.record('run-1', { type: 'agent', phase: 'final', text: 'done' });
+        logs.restore();
+        expect(logs.fieldsOf('[Transcripts] Could not write a line of the transcript')).toMatchObject([
+          { runId: 'run-1', error: expect.stringContaining('ENOENT') },
+        ]);
+        expect(heard).toEqual([]);
+        yield* unsubscribe;
+      })
+    ));
 });
 
 describe('reading a transcript', () => {

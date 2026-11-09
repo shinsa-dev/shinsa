@@ -15,6 +15,7 @@ import {
   resolvePrerequisiteLabel,
 } from '../../src/onboarding/prerequisites.ts';
 import type { CommandResult } from '../../src/shell/schema.ts';
+import { runFiles } from '../harness.ts';
 import { createTempDir } from '../helpers/index.ts';
 import type { FakeCommand } from './harness.ts';
 
@@ -231,19 +232,19 @@ describe('the install scripts', () => {
 });
 
 describe('isBunUsed', () => {
-  test('finds a Bun lockfile or bunfig in a folder or a repository one level inside it', () => {
+  test('finds a Bun lockfile or bunfig in a folder or a repository one level inside it', async () => {
     const root = createTempDir();
     mkdirSync(join(root, 'plain'), { recursive: true });
     mkdirSync(join(root, '.hidden'), { recursive: true });
     writeFileSync(join(root, '.hidden', 'bun.lock'), '');
     writeFileSync(join(root, 'notes.txt'), '');
-    expect(isBunUsed([root, join(root, 'missing')])).toBe(false);
+    expect(await runFiles(isBunUsed([root, join(root, 'missing')]))).toBe(false);
     mkdirSync(join(root, 'app'), { recursive: true });
     writeFileSync(join(root, 'app', 'bun.lockb'), '');
-    expect(isBunUsed([root])).toBe(true);
+    expect(await runFiles(isBunUsed([root]))).toBe(true);
     const own = createTempDir();
     writeFileSync(join(own, 'bunfig.toml'), '');
-    expect(isBunUsed([own])).toBe(true);
-    expect(isBunUsed([])).toBe(false);
+    expect(await runFiles(isBunUsed([own]))).toBe(true);
+    expect(await runFiles(isBunUsed([]))).toBe(false);
   });
 });

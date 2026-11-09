@@ -1,6 +1,6 @@
-import { existsSync } from 'node:fs';
 import { isLaterRound, type Repo, resolveRoundBases, type Task } from '@shinsa/core';
-import { Context, Effect, Layer } from 'effect';
+import { Context, Effect, FileSystem, Layer } from 'effect';
+import { constFalse } from 'effect/Function';
 import type { MergeUnresolved } from '../../git/checkout/schema.ts';
 import { Checkout } from '../../git/checkout/service.ts';
 import { Remote } from '../../git/remote/service.ts';
@@ -21,6 +21,7 @@ export class WorktreeWorkspaces extends Context.Service<
     WorktreeWorkspaces,
     Effect.gen(function* () {
       const git = yield* Git;
+      const fs = yield* FileSystem.FileSystem;
       const checkout = yield* Checkout;
       const remote = yield* Remote;
 
@@ -71,7 +72,11 @@ export class WorktreeWorkspaces extends Context.Service<
         ) {
           const { worktreePath, branch } = task;
           const [base = null, ...others] = resolveRoundBases(task);
-          if (worktreePath && branch && (yield* Effect.sync(() => existsSync(worktreePath)))) {
+          if (
+            worktreePath &&
+            branch &&
+            (yield* fs.exists(worktreePath).pipe(Effect.orElseSucceed(constFalse)))
+          ) {
             if (task.phaseReports.length === 0 && isLaterRound(task)) {
               yield* checkout.discard(worktreePath, signal);
               yield* mergeLatestBase(worktreePath, base ?? repo.defaultBranch, branch, task.id, signal);

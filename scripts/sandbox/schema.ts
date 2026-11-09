@@ -35,6 +35,8 @@ export const SERVICE_TOGGLE = new RegExp(`^${SANDBOX_PATH}/service/(start|stop)$
 
 export const TEAMMATE_TOGGLE = new RegExp(`^${SANDBOX_PATH}/teammate/(online|offline)$`);
 
+export const MACHINE_APP = new RegExp(`^${SANDBOX_PATH}/app/([a-z]+)(/.*)?$`);
+
 export const ENROLL = new RegExp(`^${SANDBOX_PATH}/enroll/([a-z]+)$`);
 
 export const HANDOFF_FRESH = new RegExp(`^${SANDBOX_PATH}/handoff/([A-Z]+-\\d+)$`);

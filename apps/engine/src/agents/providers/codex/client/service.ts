@@ -20,6 +20,7 @@ import {
   STDERR_LINES,
   STOPPED,
 } from './schema.ts';
+import { spawnAppServer } from './spawn.ts';
 
 export const makeCodexClient = Effect.fn('CodexClient.make')(function* (
   options: CodexClientOptions,
@@ -32,15 +33,7 @@ export const makeCodexClient = Effect.fn('CodexClient.make')(function* (
   const { CLAUDECODE: _claudeCode, ...inherited } = Bun.env;
 
   const child = yield* Effect.try({
-    try: () =>
-      Bun.spawn([options.path, 'app-server'], {
-        cwd: options.cwd,
-        stdin: 'pipe',
-        stdout: 'pipe',
-        stderr: 'pipe',
-        detached: true,
-        env: { ...resolveBrowserEnv(inherited), ...options.env },
-      }),
+    try: () => spawnAppServer(options.path, options.cwd, { ...resolveBrowserEnv(inherited), ...options.env }),
     catch: (error) => new CodexRequestError({ method: 'app-server', message: describeError(error) }),
   });
   const closed = yield* Ref.make(false);

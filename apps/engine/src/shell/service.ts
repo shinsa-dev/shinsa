@@ -63,7 +63,11 @@ export class Shell extends Context.Service<
                   stdin:
                     request.input === undefined
                       ? 'ignore'
-                      : Stream.make(new TextEncoder().encode(request.input)),
+                      : Stream.make(
+                          typeof request.input === 'string'
+                            ? new TextEncoder().encode(request.input)
+                            : request.input
+                        ),
                   detached: true,
                   killSignal: GROUP_LEFT_RUNNING_SIGNAL,
                 })

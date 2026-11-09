@@ -1,5 +1,5 @@
-import { linkSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
-import { Context, Effect, Option, Schema } from 'effect';
+import { Context, Effect, FileSystem, Option, Schema } from 'effect';
+import type { PlatformError } from 'effect/PlatformError';
 import { describeError } from '../../log/redact.ts';
 import { selectErrnoCode } from '../../shell/errno.ts';
 import { LockFileFailed, type LockHolder, LockHolderJson } from './schema.ts';
@@ -12,57 +12,63 @@ export const parseLockHolder = Schema.decodeUnknownOption(LockHolderJson);
 
 const encodeLockHolder = Schema.encodeEffect(LockHolderJson);
 
-function toFileFailure(error: unknown) {
-  return new LockFileFailed({ code: selectErrnoCode(error), message: describeError(error) });
+function toFileFailure(error: PlatformError) {
+  return new LockFileFailed({ code: selectErrnoCode(error.reason.cause), message: describeError(error) });
 }
 
-export function readLockText(path: string) {
-  return Effect.try({ try: () => Option.some(readFileSync(path, 'utf8')), catch: toFileFailure }).pipe(
+export const readLockText = Effect.fn('ServeLock.readText')(function* (path: string) {
+  const fs = yield* FileSystem.FileSystem;
+  return yield* fs.readFileString(path).pipe(
+    Effect.map(Option.some),
+    Effect.mapError(toFileFailure),
     Effect.catchIf(
       (failure) => failure.code === 'ENOENT',
       () => Effect.succeedNone
     ),
     Effect.orDie
   );
-}
+});
 
-export function readLockHolder(path: string) {
-  return readLockText(path).pipe(Effect.map(Option.flatMap(parseLockHolder)));
-}
+export const readLockHolder = Effect.fn('ServeLock.readHolder')(function* (path: string) {
+  return Option.flatMap(yield* readLockText(path), parseLockHolder);
+});
 
-function writeDraft(path: string, holder: LockHolder) {
-  return encodeLockHolder(holder).pipe(
-    Effect.orDie,
-    Effect.flatMap((text) =>
-      Effect.sync(() => {
-        const draft = `${path}.${process.pid}.${Bun.randomUUIDv7()}`;
-        writeFileSync(draft, text);
-        return draft;
-      })
-    )
-  );
-}
+const writeDraft = Effect.fn('ServeLock.writeDraft')(function* (path: string, holder: LockHolder) {
+  const fs = yield* FileSystem.FileSystem;
+  const text = yield* encodeLockHolder(holder).pipe(Effect.orDie);
+  const draft = `${path}.${process.pid}.${Bun.randomUUIDv7()}`;
+  yield* fs.writeFileString(draft, text).pipe(Effect.mapError(toFileFailure), Effect.orDie);
+  return draft;
+});
 
-export function writeLockExclusive(path: string, holder: LockHolder) {
-  return Effect.acquireUseRelease(
+export const writeLockExclusive = Effect.fn('ServeLock.writeExclusive')(function* (
+  path: string,
+  holder: LockHolder
+) {
+  const fs = yield* FileSystem.FileSystem;
+  return yield* Effect.acquireUseRelease(
     writeDraft(path, holder),
     (draft) =>
-      Effect.try({ try: () => linkSync(draft, path), catch: toFileFailure }).pipe(
+      fs.link(draft, path).pipe(
         Effect.as(true),
+        Effect.mapError(toFileFailure),
         Effect.catchIf(
           (failure) => failure.code === 'EEXIST',
           () => Effect.succeed(false)
         ),
         Effect.orDie
       ),
-    (draft) => Effect.sync(() => rmSync(draft, { force: true }))
+    (draft) => fs.remove(draft, { force: true }).pipe(Effect.mapError(toFileFailure), Effect.orDie)
   );
-}
+});
 
-export function replaceLock(path: string, holder: LockHolder) {
-  return writeDraft(path, holder).pipe(Effect.flatMap((draft) => Effect.sync(() => renameSync(draft, path))));
-}
+export const replaceLock = Effect.fn('ServeLock.replace')(function* (path: string, holder: LockHolder) {
+  const fs = yield* FileSystem.FileSystem;
+  const draft = yield* writeDraft(path, holder);
+  yield* fs.rename(draft, path).pipe(Effect.mapError(toFileFailure), Effect.orDie);
+});
 
-export function removeLock(path: string) {
-  return Effect.sync(() => rmSync(path, { force: true }));
-}
+export const removeLock = Effect.fn('ServeLock.remove')(function* (path: string) {
+  const fs = yield* FileSystem.FileSystem;
+  yield* fs.remove(path, { force: true }).pipe(Effect.mapError(toFileFailure), Effect.orDie);
+});

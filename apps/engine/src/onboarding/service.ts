@@ -14,7 +14,7 @@ import {
   type TerminalInfo,
   type WorktreeUsage,
 } from '@shinsa/core';
-import { Clock, Context, Effect, Layer } from 'effect';
+import { Clock, Context, Effect, FileSystem, Layer } from 'effect';
 import { QuickCalls } from '../agents/quick/service.ts';
 import type { MachineConfig } from '../config/machine/schema.ts';
 import { EngineConfig } from '../config/service.ts';
@@ -86,6 +86,8 @@ export class Onboarding extends Context.Service<
         const commands = yield* SetupCommands;
         const prerequisites = yield* Prerequisites;
         const worktreeRoot = yield* WorktreeRoot;
+        const withFiles = Effect.provideService(FileSystem.FileSystem, yield* FileSystem.FileSystem);
+        const resolveRoots = (value: unknown) => withFiles(resolveChosenRoots(value, config.userHome));
         const { terminals } = input;
         const { userHome } = config;
         const paths = { home: config.home, configPath: config.configPath, dataDir: config.dataDir, userHome };
@@ -193,10 +195,7 @@ export class Onboarding extends Context.Service<
           fields: JsonObject,
           commandId?: string
         ) {
-          const chosen = yield* Effect.try({
-            try: () => resolveChosenRoots(fields.roots, userHome),
-            catch: resolveOnboardingFailure,
-          });
+          const chosen = yield* resolveRoots(fields.roots);
           const defaults = yield* resolveDefaults(fields);
           if (Object.keys(defaults).length > 0) {
             yield* dispatch({ type: 'settings.change', patch: defaults }, commandId ? { id: commandId } : {});
@@ -220,17 +219,21 @@ export class Onboarding extends Context.Service<
         });
 
         const resolveWorktreeUsage = Effect.gen(function* () {
-          return yield* measureWorktreeUsage(
-            yield* worktreeRoot.path,
-            (yield* engine.state).tasks,
-            commands.run,
-            yield* Clock.currentTimeMillis
+          return yield* withFiles(
+            measureWorktreeUsage(
+              yield* worktreeRoot.path,
+              (yield* engine.state).tasks,
+              commands.run,
+              yield* Clock.currentTimeMillis
+            )
           );
         });
 
         const resolvePrerequisites = Effect.gen(function* () {
-          yield* Effect.sync(() => refreshInstallFolders(Bun.env, userHome));
-          return yield* prerequisites.resolve(userHome, { bun: isBunUsed(yield* roots.list) });
+          yield* withFiles(refreshInstallFolders(Bun.env, userHome));
+          return yield* prerequisites.resolve(userHome, {
+            bun: yield* withFiles(isBunUsed(yield* roots.list)),
+          });
         });
 
         const resolveContext = Effect.fn('Onboarding.resolveContext')(function* (
@@ -256,6 +259,7 @@ export class Onboarding extends Context.Service<
             listModels: input.models.listModels,
             listAccounts: input.accounts,
             checkPrerequisites: resolvePrerequisites,
+            resolveRoots,
             save: saveAnswer,
             createProjects: (choices: OnboardingProjectChoice[] | undefined, commandId: string) =>
               createChosenProjects(projects, configured, choices, commandId, revision),

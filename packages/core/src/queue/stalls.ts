@@ -8,7 +8,7 @@ import {
 } from '../domain/index.ts';
 import type { ShinsaState } from '../state/project.ts';
 import { listOpenGates } from '../state/queries.ts';
-import { listWaitsOn } from './rank.ts';
+import { isGateHeld, listWaitsOn } from './rank.ts';
 
 export type StalledReason = 'needs_you' | 'paused' | 'cancelled';
 
@@ -30,7 +30,7 @@ export function selectLeadGate(state: ShinsaState, task: Task) {
 function resolveStall(state: ShinsaState, task: Task): Omit<WaitLeaf, 'path' | 'task'> | null {
   if (task.stage === 'cancelled') return { reason: 'cancelled', gate: null };
   const gate = selectLeadGate(state, task);
-  if (!gate) return null;
+  if (!gate || isGateHeld(state, gate)) return null;
   return { reason: isPausingGate(gate) ? 'paused' : 'needs_you', gate };
 }
 

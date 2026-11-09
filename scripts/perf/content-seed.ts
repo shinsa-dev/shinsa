@@ -1,21 +1,18 @@
-import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { openEventLog } from '../../apps/engine/test/helpers/event-log.ts';
+import { BunRuntime, BunServices } from '@effect/platform-bun';
+import { Clock, Console, Effect, FileSystem } from 'effect';
+import { CommandLog } from '../../apps/engine/src/store/commands/service.ts';
+import { Events } from '../../apps/engine/src/store/events/service.ts';
+import { StoreLayer } from '../../apps/engine/src/store/layers.ts';
 import type { ChatEvent, Run, ShinsaEvent, ShinsaEventInput } from '../../packages/core/src/index.ts';
 import { CHAT_PROTOCOL_VERSION } from '../../packages/core/src/index.ts';
+import { reportFailure } from '../kit/script.ts';
 import { MINUTE } from '../kit/time.ts';
 import { buildLongRun, LONG_CHAT_TASK, listScaledTasks, type ScaledTask } from './content-scale.ts';
+import { SCALE_EMPTY, SCALE_USAGE, ScaleDataMissing } from './content/schema.ts';
 
-const DATA = Bun.argv[2];
 const TASKS = Number(Bun.env.SHINSA_PERF_TASKS ?? 300);
 const RUNS = Number(Bun.env.SHINSA_PERF_RUNS ?? 60);
-
-if (!DATA) {
-  console.error('Usage: bun scripts/perf/seed-scale.ts <data dir>   (a copy of `bun run seed`)');
-  process.exit(1);
-}
-
-const NOW = Date.now();
 
 function listTemplates(events: ShinsaEvent[]) {
   const created = new Map<string, EventOf<'task.created'>>();
@@ -54,7 +51,7 @@ function cloneTask(task: ScaledTask, template: ReturnType<typeof listTemplates>[
   ];
 }
 
-function writeTranscript(dir: string, runId: string, events: ChatEvent[], from: number, to: number) {
+function serializeTranscript(runId: string, events: ChatEvent[], from: number, to: number) {
   const step = (to - from) / Math.max(1, events.length);
   const lines = events.map((event, index) =>
     JSON.stringify({
@@ -64,69 +61,82 @@ function writeTranscript(dir: string, runId: string, events: ChatEvent[], from: 
       at: Math.round(from + step * index),
     })
   );
-  writeFileSync(join(dir, `${runId}.jsonl`), `${lines.join('\n')}\n`);
+  return `${lines.join('\n')}\n`;
 }
 
-function seedScale() {
-  const log = openEventLog(join(DATA as string, 'shinsa.sqlite'));
-  const read = log.readEvents();
-  const templates = listTemplates(read.events);
-  const template = templates[0];
-  if (!template) throw new Error('The data dir has no tasks to copy: run `bun run seed` into it first.');
-  let seq = read.lastSeq;
-  const commit = (at: number, events: ShinsaEventInput[]) => {
-    log.commitCommand({ events, effects: [], cancellations: [], fromSeq: seq, at, receipt: null });
-    seq += events.length;
-  };
-  const extra = Math.max(0, TASKS - templates.length);
-  listScaledTasks(extra).forEach((task, index) => {
-    const source = templates[index % templates.length] ?? template;
-    commit(NOW - (index + 1) * 7 * MINUTE, cloneTask(task, source));
-  });
-
-  const transcripts = join(DATA as string, 'transcripts');
-  mkdirSync(transcripts, { recursive: true });
-  const start = NOW - RUNS * 6 * MINUTE;
-  const created = cloneTask(LONG_CHAT_TASK, template).map((event) =>
-    event.type === 'task.staged' ? { ...event, stage: 'building' as const, reason: 'building' } : event
-  );
-  commit(start - MINUTE, created);
-  for (let index = 0; index < RUNS; index += 1) {
-    const live = index === RUNS - 1;
-    const startedAt = start + index * 6 * MINUTE;
-    const endedAt = live ? null : startedAt + 5 * MINUTE;
-    const run: Run = {
-      id: `${LONG_CHAT_TASK.id}-run-${index}`,
-      taskId: LONG_CHAT_TASK.id,
-      role: 'agent',
-      purpose: index === 0 ? 'build' : 'fix',
-      provider: 'claude',
-      model: 'claude-opus-4-1',
-      sessionId: `${LONG_CHAT_TASK.id}-session`,
-      startedAt,
-      endedAt: null,
-      outcome: null,
-      summary: null,
-    };
-    if (index > 0) {
-      commit(startedAt - 30_000, [
-        {
-          type: 'task.messaged',
-          taskId: LONG_CHAT_TASK.id,
-          text: `Follow-up ${index}: also cover the case where the list is empty and the header wraps.`,
-        },
-      ]);
+const seedScale = Effect.fn('ContentSeed.scale')(function* (data: string) {
+  const fs = yield* FileSystem.FileSystem;
+  const now = yield* Clock.currentTimeMillis;
+  const transcripts = join(data, 'transcripts');
+  yield* Effect.gen(function* () {
+    const log = yield* CommandLog;
+    const read = yield* (yield* Events).read(0);
+    const templates = listTemplates(read.events);
+    const template = templates[0];
+    if (!template) return yield* new ScaleDataMissing({ message: SCALE_EMPTY });
+    yield* fs.makeDirectory(transcripts, { recursive: true });
+    let seq = read.lastSeq;
+    const commit = Effect.fnUntraced(function* (at: number, events: ShinsaEventInput[]) {
+      yield* log.commit({ events, effects: [], cancellations: [], fromSeq: seq, at, receipt: null });
+      seq += events.length;
+    });
+    const extra = Math.max(0, TASKS - templates.length);
+    for (const [index, task] of listScaledTasks(extra).entries()) {
+      const source = templates[index % templates.length] ?? template;
+      yield* commit(now - (index + 1) * 7 * MINUTE, cloneTask(task, source));
     }
-    commit(startedAt, [{ type: 'run.started', run }]);
-    writeTranscript(transcripts, run.id, buildLongRun(index, live), startedAt, endedAt ?? NOW - MINUTE);
-    if (endedAt !== null) {
-      commit(endedAt, [
-        { type: 'run.ended', runId: run.id, outcome: 'completed', summary: `Finished step ${index}.` },
-      ]);
+    const start = now - RUNS * 6 * MINUTE;
+    const created = cloneTask(LONG_CHAT_TASK, template).map((event) =>
+      event.type === 'task.staged' ? { ...event, stage: 'building' as const, reason: 'building' } : event
+    );
+    yield* commit(start - MINUTE, created);
+    for (let index = 0; index < RUNS; index += 1) {
+      const live = index === RUNS - 1;
+      const startedAt = start + index * 6 * MINUTE;
+      const endedAt = live ? null : startedAt + 5 * MINUTE;
+      const run: Run = {
+        id: `${LONG_CHAT_TASK.id}-run-${index}`,
+        taskId: LONG_CHAT_TASK.id,
+        role: 'agent',
+        purpose: index === 0 ? 'build' : 'fix',
+        provider: 'claude',
+        model: 'claude-opus-4-1',
+        sessionId: `${LONG_CHAT_TASK.id}-session`,
+        startedAt,
+        endedAt: null,
+        outcome: null,
+        summary: null,
+      };
+      if (index > 0) {
+        yield* commit(startedAt - 30_000, [
+          {
+            type: 'task.messaged',
+            taskId: LONG_CHAT_TASK.id,
+            text: `Follow-up ${index}: also cover the case where the list is empty and the header wraps.`,
+          },
+        ]);
+      }
+      yield* commit(startedAt, [{ type: 'run.started', run }]);
+      yield* fs.writeFileString(
+        join(transcripts, `${run.id}.jsonl`),
+        serializeTranscript(run.id, buildLongRun(index, live), startedAt, endedAt ?? now - MINUTE)
+      );
+      if (endedAt !== null) {
+        yield* commit(endedAt, [
+          { type: 'run.ended', runId: run.id, outcome: 'completed', summary: `Finished step ${index}.` },
+        ]);
+      }
     }
-  }
-  log.close();
-  console.info(`Scaled ${DATA}: ${TASKS} tasks, ${LONG_CHAT_TASK.id} with ${RUNS} runs.`);
-}
+  }).pipe(Effect.provide(StoreLayer(join(data, 'shinsa.sqlite'))));
+  yield* Console.info(`Scaled ${data}: ${TASKS} tasks, ${LONG_CHAT_TASK.id} with ${RUNS} runs.`);
+});
 
-seedScale();
+Effect.gen(function* () {
+  const data = Bun.argv[2];
+  if (!data) return yield* new ScaleDataMissing({ message: SCALE_USAGE });
+  yield* seedScale(data);
+}).pipe(
+  reportFailure,
+  Effect.provide(BunServices.layer),
+  BunRuntime.runMain({ disableErrorReporting: true })
+);

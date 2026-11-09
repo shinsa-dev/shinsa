@@ -62,7 +62,7 @@ describe('sharing a preview', () => {
       priority: 'normal',
       planFirst: false,
       origin: null,
-      auto: { shape: false, start: false, priority: false },
+      auto: { shape: false, start: false, priority: false, project: false },
       watchHome: true,
     });
     expect(() => harness.send({ type: 'preview.share', taskId: 'home', serviceId: 'web' })).toThrow(

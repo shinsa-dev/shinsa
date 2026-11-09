@@ -1,5 +1,4 @@
-import { readdirSync, readFileSync, statSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { resolve } from 'node:path';
 import { CentralIcon } from '@central-icons-react/all';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
@@ -13,11 +12,14 @@ export const DEFAULT_RADIUS: IconRadius = '3';
 
 const ROOT = resolve(import.meta.dirname, '../../..');
 
-const SCAN_ROOTS = ['apps', 'packages'].map((dir) => resolve(ROOT, dir));
+export const SCAN_ROOTS = ['apps', 'packages'].map((dir) => resolve(ROOT, dir));
 
 export const OUT = resolve(import.meta.dirname, '../src/components/icon/paths.ts');
 
-const INDEX = resolve(import.meta.dirname, '../node_modules/@central-icons-react/all/icons-index.json');
+export const INDEX = resolve(
+  import.meta.dirname,
+  '../node_modules/@central-icons-react/all/icons-index.json'
+);
 
 const SKIP_DIRS = new Set([
   'node_modules',
@@ -126,21 +128,20 @@ const OPTICAL_OFFSET: Record<string, [number, number]> = {
   IconAndroid: [0, -0.92],
 };
 
-/** Every source file under `dir` that can name an icon, skipping builds, dependencies and tests. */
-export function* listSourceFiles(dir: string): Generator<string> {
-  for (const entry of readdirSync(dir)) {
-    if (SKIP_DIRS.has(entry) || entry.startsWith('.')) continue;
-    const path = join(dir, entry);
-    if (statSync(path).isDirectory()) yield* listSourceFiles(path);
-    else if (SOURCE_FILE.test(entry) && !TEST_FILE.test(entry)) yield path;
-  }
+/** Whether a folder entry is skipped by the scan: dependencies, builds, tests and dotfiles. */
+export function isSkippedEntry(entry: string): boolean {
+  return SKIP_DIRS.has(entry) || entry.startsWith('.');
+}
+
+/** Whether a file can name an icon: a source file that is not a test. */
+export function isSourceEntry(entry: string): boolean {
+  return SOURCE_FILE.test(entry) && !TEST_FILE.test(entry);
 }
 
 /** Central's catalog (outline names; a `Filled` suffix picks the filled style) plus our custom marks. */
-export function listKnownIcons(): Set<string> {
-  const index = JSON.parse(readFileSync(INDEX, 'utf8')) as {
-    categories: Record<string, { icons: string[] }>;
-  };
+export function resolveKnownIcons(index: {
+  readonly categories: Record<string, { readonly icons: readonly string[] }>;
+}): Set<string> {
   return new Set([
     ...Object.values(index.categories).flatMap((category) => category.icons),
     ...Object.keys(CUSTOM_ICON_PATHS),
@@ -257,14 +258,4 @@ export const ICON_PATHS: Record<IconName, Partial<Record<IconRadius, string>>> =
 ${entries.join('\n')}
 };
 `;
-}
-
-/** Scans the workspace and renders `paths.ts`; throws when nothing references an icon. */
-export function generateIcons(roots: readonly string[] = SCAN_ROOTS): { module: string; icons: number } {
-  const sources = roots.flatMap((root) =>
-    [...listSourceFiles(root)].filter((file) => file !== OUT).map((file) => readFileSync(file, 'utf8'))
-  );
-  const discovered = discoverIcons(sources, listKnownIcons());
-  if (discovered.size === 0) throw new Error('No icon usages found — did the scan roots change?');
-  return { module: renderIconsModule(discovered), icons: discovered.size };
 }

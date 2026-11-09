@@ -6,9 +6,12 @@ import {
   type MachineConfig,
   type MachineConfigRead,
   type MachineField,
+  MachineConfigJson,
   MachineFields,
   NOT_AN_OBJECT_PROBLEM,
 } from './schema.ts';
+
+const decodeJson = Schema.decodeUnknownResult(MachineConfigJson);
 
 const decodeRoots = Schema.decodeUnknownResult(MachineFields.fields.roots);
 const decodeTime = Schema.decodeUnknownResult(MachineFields.fields.onboardedAt);
@@ -61,4 +64,19 @@ export function parseMachineConfig(value: unknown): MachineConfigRead {
     worktreesDir: selectValue(fields.worktreesDir),
   };
   return { config, problems, unreadable: false };
+}
+
+export function resolveUnreadableMachineConfig(reason: string): MachineConfigRead {
+  return {
+    config: createMachineConfig(),
+    problems: [`The file is not valid JSON (${reason}).`],
+    unreadable: true,
+  };
+}
+
+export function resolveMachineConfigText(text: string | null): MachineConfigRead {
+  if (text === null) return { config: createMachineConfig(), problems: [], unreadable: false };
+  const value = decodeJson(text);
+  if (Result.isFailure(value)) return resolveUnreadableMachineConfig(value.failure.message);
+  return parseMachineConfig(value.success);
 }

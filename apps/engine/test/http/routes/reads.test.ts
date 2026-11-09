@@ -2,7 +2,7 @@ import { afterEach, describe, expect, setSystemTime, test } from 'bun:test';
 import type { ChatEvent } from '@shinsa/core';
 import { Effect } from 'effect';
 import type { Engine } from '../../helpers/engine.ts';
-import { createRepo, createRun, createStubEngine, createTask } from '../../helpers/state.ts';
+import { createGate, createRepo, createRun, createStubEngine, createTask } from '../../helpers/state.ts';
 import { disposeWebHandlers } from '../../helpers/web.ts';
 import { startRoutes } from './harness.ts';
 
@@ -146,6 +146,26 @@ describe('GET /api/tasks', () => {
       ['Fix the tab scroll', true],
       ['Add search', false],
     ]);
+  });
+
+  test('leaves out a review held by what its task waits on until that task settles, but not a question', async () => {
+    const { engine, update } = createStubEngine((state) => {
+      state.tasks['task-1'] = createTask({ stage: 'awaiting_review', waitsOn: ['task-2'] } as never);
+      state.tasks['task-2'] = createTask({ id: 'task-2', title: 'Add search' } as never);
+      state.gates['gate-1'] = createGate({ type: 'review', title: 'Review it' } as never);
+    });
+    const { send } = startRoutes({ engine: engine as unknown as Engine });
+    const needsYou = async () => titles((await (await send('/api/tasks?status=needs_you')).json()) as never);
+    expect(await needsYou()).toEqual([]);
+    update((state) => {
+      state.gates['gate-2'] = createGate({ id: 'gate-2' } as never);
+    });
+    expect(await needsYou()).toEqual(['Fix the tab scroll']);
+    update((state) => {
+      state.gates['gate-2'] = createGate({ id: 'gate-2', status: 'withdrawn' } as never);
+      state.tasks['task-2'] = createTask({ id: 'task-2', title: 'Add search', stage: 'merged' } as never);
+    });
+    expect(await needsYou()).toEqual(['Fix the tab scroll']);
   });
 
   test('filters by what needs you, what is settled, or shows all', async () => {
@@ -323,7 +343,7 @@ describe('the other read endpoints', () => {
           repos: [{ id: repoId, name: 'app', path: '/code/app' }],
         },
       ],
-      focus: { projectId: null },
+      focus: { projectIds: [], except: false },
     };
     expect((await read('/api/projects')).body).toMatchObject(expected);
     expect((await read('/api/schedules')).body).toEqual({ schedules: [], suggestions: [] });

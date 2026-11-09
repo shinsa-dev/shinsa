@@ -40,6 +40,11 @@ export class UploadFailed extends Schema.TaggedError<UploadFailed, { readonly br
   { message: Schema.String }
 ) {}
 
+export class ActionsFileFailed extends Schema.TaggedError<
+  ActionsFileFailed,
+  { readonly brand: unique symbol }
+>()('ActionsFileFailed', { message: Schema.String }) {}
+
 export const NotarySubmission = Schema.Struct({ id: Schema.String, status: Schema.String });
 export type NotarySubmission = typeof NotarySubmission.Type;
 

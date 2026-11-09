@@ -55,6 +55,7 @@ export interface TaskAuto {
   shape: boolean;
   start: boolean;
   priority: boolean;
+  project: boolean;
 }
 
 export interface AutoChoice<T> {

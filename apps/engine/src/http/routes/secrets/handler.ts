@@ -56,7 +56,7 @@ export const SecretsHandlers = HttpApiBuilder.group(
     const serializeWebhook = Effect.fn('SecretsHandlers.serializeWebhook')(function* (scheduleId: string) {
       const { context, trigger } = yield* findWebhook(scheduleId);
       return {
-        url: yield* Effect.mapError(context.schedules.findHookUrl(scheduleId), resolveRequestFailure),
+        url: yield* context.schedules.upsertHookUrl(scheduleId),
         signature: trigger.signature,
         hasSecret: Boolean((yield* context.secrets.selectHook(scheduleId))?.secret),
         replayKey: trigger.replayKey,

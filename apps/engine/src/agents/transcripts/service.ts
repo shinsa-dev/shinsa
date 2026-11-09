@@ -1,11 +1,10 @@
-import { appendFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { CHAT_PROTOCOL_VERSION, type ChatEntry, type ChatEvent } from '@shinsa/core';
 import { Clock, Context, Effect, FiberMap, Layer } from 'effect';
 import { EngineConfig } from '../../config/service.ts';
 import { NEWLINE } from '../../files/schema.ts';
 import { describeError } from '../../log/index.ts';
-import { readRange, readSize } from './file.ts';
+import { appendLine, readRange, readSize } from './file.ts';
 import { parseLines } from './lines.ts';
 import {
   CACHED_RUNS,
@@ -103,7 +102,21 @@ export class Transcripts extends Context.Service<
         const size = checked.has(runId) ? 0 : readSize(path);
         const torn = size > 0 && readRange(path, size - 1, size)[0] !== NEWLINE;
         checked.add(runId);
-        appendFileSync(path, `${torn ? '\n' : ''}${JSON.stringify(entry)}\n`);
+        const appended = yield* Effect.try({
+          try: () => appendLine(path, `${torn ? '\n' : ''}${JSON.stringify(entry)}\n`),
+          catch: describeError,
+        }).pipe(
+          Effect.as(true),
+          Effect.catch((reason) =>
+            Effect.as(
+              Effect.logWarning('[Transcripts] Could not write a line of the transcript').pipe(
+                Effect.annotateLogs({ runId, error: reason })
+              ),
+              false
+            )
+          )
+        );
+        if (!appended) return;
         if (!files.has(runId)) emit(runId, [entry], null);
         else readAppended(runId);
       });

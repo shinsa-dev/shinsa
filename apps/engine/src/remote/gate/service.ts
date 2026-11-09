@@ -10,6 +10,7 @@ import {
   REMOTE_CONNECT_PARAM,
   SCOPE_MESSAGES,
   SHARE_CHANNEL_PARAM,
+  TEAM_RELAY_PATH,
   splitMessageAttachments,
   TEAM_SCOPE_MESSAGES,
 } from '@shinsa/core';
@@ -170,6 +171,8 @@ export class TunnelGate extends Context.Service<
 
       const admitChannelRequest = (url: URL, source: RequestSourceShape) => {
         if (!url.pathname.startsWith('/api/')) return Effect.fail(notFound());
+        if (url.pathname.startsWith(`${TEAM_RELAY_PATH}/`))
+          return Effect.fail(new LocalOnly({ message: LOCAL_ONLY_MESSAGE }));
         if (extensions === undefined || url.pathname !== SIGN_IN_CALLBACK_PATH) return Effect.void;
         if (source.guest) return Effect.fail(refuseScope(source.guest.scope, url.pathname));
         return Effect.fail(new LocalOnly({ message: LOCAL_ONLY_MESSAGE }));
@@ -206,13 +209,20 @@ export class TunnelGate extends Context.Service<
         const access = Context.get(annotations, GuestRoute);
         const admitsGuest =
           access === 'any' ||
+          access === 'filtered' ||
           (access !== 'none' && source.guest !== null && (yield* isGuestRoute(source.guest.scope, request)));
         if (source.guest && !admitsGuest) return yield* refuseScope(source.guest.scope, request.pathname);
         if (Context.get(annotations, LocalOnlyRoute))
           return yield* new LocalOnly({ message: LOCAL_ONLY_MESSAGE });
         const sharedMember =
           Context.get(annotations, SharedMemberRoute) && isSharedMachine((yield* engine.state).settings);
-        if (Context.get(annotations, OwnerOnlyRoute) && !sharedMember && !(yield* isOwner(source.userId)))
+        const scopedRead = source.guest !== null && access === 'filtered';
+        if (
+          Context.get(annotations, OwnerOnlyRoute) &&
+          !scopedRead &&
+          !sharedMember &&
+          !(yield* isOwner(source.userId))
+        )
           return yield* new NotMachineOwner({ message: OWNER_ONLY_MESSAGE });
         yield* assertWritable(request.method);
       });

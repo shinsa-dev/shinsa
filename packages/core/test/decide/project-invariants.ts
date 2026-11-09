@@ -104,6 +104,6 @@ export function listProjectMarks(state: ShinsaState) {
     tasks.some((task) => task.projectId && !state.projects[task.projectId])
       ? 'task of a removed project'
       : null,
-    state.focus.projectId ? 'project in focus' : null,
+    state.focus.projectIds.length > 0 ? 'project in focus' : null,
   ];
 }

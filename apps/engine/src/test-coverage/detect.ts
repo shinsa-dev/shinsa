@@ -1,7 +1,8 @@
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { CoverageDetection } from '@shinsa/core';
-import { listDependencyNames, readPackageManifest } from '../files/manifest.ts';
+import { Effect, Option } from 'effect';
+import { listDependencyNames, selectPackageManifest } from '../files/manifest.ts';
+import { isPresent, listEntries, selectText } from '../files/probe.ts';
 import {
   CD_PREFIX,
   type CoverageRun,
@@ -126,45 +127,44 @@ export function resolveCoverageRun(command: string, worktree: string, dir: strin
   };
 }
 
-function readText(path: string) {
-  return existsSync(path) ? readFileSync(path, 'utf8') : null;
-}
-
-function resolveJavaScriptTool(path: string) {
-  const manifest = readPackageManifest(path);
-  if (!manifest) return null;
-  const dependencies = new Set(listDependencyNames(manifest));
+const resolveJavaScriptTool = Effect.fn('CoverageDetection.resolveJavaScriptTool')(function* (path: string) {
+  const manifest = yield* selectPackageManifest(path);
+  if (Option.isNone(manifest)) return null;
+  const dependencies = new Set(listDependencyNames(manifest.value));
   const has = (name: string) => dependencies.has(name);
   if (has('vitest') && VITEST_PROVIDERS.some(has)) return RUNNERS.vitest.tool;
   if (has('jest')) return RUNNERS.jest.tool;
-  if (/^bun test\b/.test((manifest.scripts?.test ?? '').trim())) return RUNNERS.bun.tool;
+  if (/^bun test\b/.test((manifest.value.scripts?.test ?? '').trim())) return RUNNERS.bun.tool;
   return null;
-}
+});
 
-function listRequirementFiles(path: string) {
-  return readdirSync(path).filter((name) => /^requirements.*\.txt$/.test(name));
-}
+const hasPytestCov = Effect.fn('CoverageDetection.hasPytestCov')(function* (path: string) {
+  const requirements = (yield* listEntries(path)).filter((name) => /^requirements.*\.txt$/.test(name));
+  for (const file of [...PYTHON_MANIFESTS, ...requirements]) {
+    const text = yield* selectText(join(path, file));
+    if (Option.isSome(text) && /pytest[-_]cov\b/i.test(text.value)) return true;
+  }
+  return false;
+});
 
-function hasPytestCov(path: string) {
-  return [...PYTHON_MANIFESTS, ...listRequirementFiles(path)].some((file) =>
-    /pytest[-_]cov\b/i.test(readText(join(path, file)) ?? '')
-  );
-}
-
-function resolveTool(path: string) {
-  if (!existsSync(path)) return null;
-  const javascript = resolveJavaScriptTool(path);
+const resolveTool = Effect.fn('CoverageDetection.resolveTool')(function* (path: string) {
+  if (!(yield* isPresent(path))) return null;
+  const javascript = yield* resolveJavaScriptTool(path);
   if (javascript) return javascript;
-  if (hasPytestCov(path)) return RUNNERS.pytest.tool;
-  return existsSync(join(path, 'go.mod')) ? RUNNERS.go.tool : null;
-}
+  if (yield* hasPytestCov(path)) return RUNNERS.pytest.tool;
+  return (yield* isPresent(join(path, 'go.mod'))) ? RUNNERS.go.tool : null;
+});
 
-export function resolveCoverageDetection(path: string): CoverageDetection | null {
-  const tool = resolveTool(path);
-  if (!tool) return null;
-  return { tool, command: `The test checks of each task, run once more with ${tool}'s coverage report.` };
-}
+export const selectCoverageDetection = Effect.fn('CoverageDetection.select')(function* (path: string) {
+  const tool = yield* resolveTool(path);
+  if (!tool) return Option.none<CoverageDetection>();
+  return Option.some<CoverageDetection>({
+    tool,
+    command: `The test checks of each task, run once more with ${tool}'s coverage report.`,
+  });
+});
 
-export function resolveGoModule(path: string) {
-  return /^module\s+(\S+)/m.exec(readText(join(path, 'go.mod')) ?? '')?.[1] ?? null;
-}
+export const selectGoModule = Effect.fn('CoverageDetection.selectGoModule')(function* (path: string) {
+  const text = yield* selectText(join(path, 'go.mod'));
+  return Option.flatMap(text, (each) => Option.fromNullishOr(/^module\s+(\S+)/m.exec(each)?.[1]));
+});

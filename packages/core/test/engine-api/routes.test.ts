@@ -137,10 +137,12 @@ const FEATURE_ROUTES = {
   ],
   'team-keys': ['POST /api/remote/teams/key/request', 'POST /api/remote/teams/key/answer'],
   'usage.pace_limits': [],
+  'team-relay': ['GET /api/teams/relays'],
   'usage.watchdog_limits': [],
   'share.scopes': [],
   'suggestion.bundle': [],
   'shared-machine': ['GET /api/github-token', 'POST /api/github-token', 'POST /api/remote/teams/share'],
+  'focus.projects': [],
 };
 
 const LOCAL_ONLY = [
@@ -148,6 +150,7 @@ const LOCAL_ONLY = [
   { pattern: /^\/api\/extensions\/servers\/sign-in$/, writesOnly: true },
   { pattern: /^\/api\/tasks\/[^/]+\/open$/, writesOnly: true },
   { pattern: /^\/api\/onboarding\/install$/, writesOnly: true },
+  { pattern: /^\/api\/teams\/relays$/, writesOnly: false },
 ];
 
 const OWNER_ONLY = [
@@ -224,6 +227,7 @@ function isLocalOnly(method: string, path: string) {
 function resolveOldGuest(method: string, path: string) {
   if (method !== 'GET') return 'none';
   if (path === '/api/health') return 'any';
+  if (path === '/api/terminals') return 'filtered';
   if (OLD_TASK_READS.test(path)) return 'own_task';
   if (path === '/api/evidence/*' || path === '/api/attachments/*') return 'task_file';
   return 'none';
@@ -251,7 +255,7 @@ describe('EngineApi routes', () => {
       expect([route.key, route.localOnly]).toEqual([route.key, isLocalOnly(route.method, route.path)]);
   });
 
-  test('lets a guest read only the health check, its own task and that task’s files', () => {
+  test('lets a guest read only the health check, the scoped terminals list, its own task and that task’s files', () => {
     for (const route of listEngineRoutes())
       expect([route.key, route.guest]).toEqual([route.key, resolveOldGuest(route.method, route.path)]);
   });

@@ -47,6 +47,19 @@ export const respondConnect = Effect.fn('Sandbox.respondConnect')(function* (
   return Response.json(yield* createConnect(machine, user));
 });
 
+const NOT_IN_TEAM = { error: { code: 'not_found', message: 'That machine is not in this team.' } };
+
+export const respondTeamRemoteConnect = Effect.fn('Sandbox.respondTeamRemoteConnect')(function* (
+  request: Request,
+  owner: RemoteUser,
+  teammates: Machine[]
+) {
+  const { instanceId } = yield* parseRequestBody(request, decodeInstanceBody);
+  const target = teammates.find((entry) => entry.id === instanceId);
+  if (!target) return Response.json(NOT_IN_TEAM, { status: 404 });
+  return Response.json(yield* createConnect(target, owner));
+});
+
 export const respondTeamConnect = Effect.fn('Sandbox.respondTeamConnect')(function* (
   request: Request,
   viewer: RemoteUser,
@@ -54,11 +67,7 @@ export const respondTeamConnect = Effect.fn('Sandbox.respondTeamConnect')(functi
 ) {
   const { instanceId } = yield* parseRequestBody(request, decodeInstanceBody);
   const target = teammates.find((entry) => entry.id === instanceId);
-  if (!target)
-    return Response.json(
-      { error: { code: 'not_found', message: 'That machine is not in this team.' } },
-      { status: 404 }
-    );
+  if (!target) return Response.json(NOT_IN_TEAM, { status: 404 });
   const { token, expiresAt } = yield* signConnect(target, viewer, 'team');
   const answer: ConnectResponse = {
     url: resolveTeamChannelUrl(`ws://${HOST}:${PORT}${SANDBOX_PATH}/tunnel/${target.id}`, token),

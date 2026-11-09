@@ -1,8 +1,11 @@
 export {
+  isDecisionHeld,
+  isGateHeld,
   isInFocus,
   isListedInFocus,
   listWaitsOn,
   resolveFocusProject,
+  resolveFocusProjects,
   resolveFocusTeam,
   resolveQueue,
 } from './rank.ts';

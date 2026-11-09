@@ -7,7 +7,7 @@ import { resolveResumeCommandId } from '../../src/accounts/resume/command.ts';
 import type { StoredAccount } from '../../src/accounts/schema.ts';
 import { AccountStore } from '../../src/accounts/store/service.ts';
 import type { CommandResult } from '../../src/shell/schema.ts';
-import { type AccountsHarness, buildAccountsNow } from '../accounts/harness.ts';
+import { type AccountsHarness, buildAccounts } from '../accounts/harness.ts';
 import { createSyncTranscripts } from '../helpers/transcripts.ts';
 import { AgentFailure, PLAN, toolPlan, World } from './harness.ts';
 
@@ -53,10 +53,10 @@ interface Bench {
 async function createBench(emails: string[]): Promise<Bench> {
   let harness: AccountsHarness | null = null;
   const world = await World.create({
-    supervise: (current, engine) => {
+    supervise: async (current, engine) => {
       const shared = join(current.root, 'claude');
       mkdirSync(join(shared, 'projects'), { recursive: true });
-      const opened = buildAccountsNow({
+      const opened = await buildAccounts({
         engine: engine.core,
         config: current.config,
         env: { CLAUDE_CONFIG_DIR: shared },
@@ -83,7 +83,8 @@ async function createBench(emails: string[]): Promise<Bench> {
   const store = ready.service(AccountStore);
   const roster = ready.service(Accounts);
   const resume = ready.service(UsageResume);
-  const added = emails.map((email) => ready.runSync(store.create({ email, plan: 'max' })));
+  const added = [];
+  for (const email of emails) added.push(await ready.run(store.create({ email, plan: 'max' })));
   await ready.run(resume.start);
   return {
     world,

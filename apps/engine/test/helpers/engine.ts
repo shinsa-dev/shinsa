@@ -158,8 +158,8 @@ export class Engine {
     return this.#running.runner.runPromise(this.core.dispatch(command, options));
   }
 
-  writeBriefing(projectId: string | null, written: WrittenBriefing) {
-    return this.#running.runner.runPromise(this.core.writeBriefing(projectId, written));
+  writeBriefing(key: string, written: WrittenBriefing) {
+    return this.#running.runner.runPromise(this.core.writeBriefing(key, written));
   }
 
   hasReceipt(id: string) {

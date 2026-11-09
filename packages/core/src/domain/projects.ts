@@ -1,4 +1,5 @@
-import type { Project } from './types.ts';
+import { isLaterRound } from './rounds.ts';
+import type { Project, Task } from './types.ts';
 
 export const PROJECT_COLORS = ['blue', 'purple', 'green', 'orange', 'pink', 'sky', 'amber', 'red'] as const;
 
@@ -82,4 +83,25 @@ export function selectProjectByReference<T extends Pick<Project, 'id' | 'key' | 
     }
   }
   return null;
+}
+
+export function isProjectFixed(task: Task) {
+  return Boolean(task.projectId) && (!task.auto.project || isLaterRound(task));
+}
+
+export function resolveRepoMove(task: Task, repo: { projectId?: string | null } | null) {
+  if (!repo?.projectId || repo.projectId === task.projectId || isProjectFixed(task)) return null;
+  return repo.projectId;
+}
+
+function resolveWords(text: string) {
+  return ` ${text
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .trim()} `;
+}
+
+export function isRepoNamed(text: string, name: string) {
+  const words = resolveWords(name);
+  return words.trim() !== '' && resolveWords(text).includes(words);
 }

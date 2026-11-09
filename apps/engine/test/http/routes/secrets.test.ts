@@ -61,7 +61,7 @@ describe('webhook settings over HTTP', () => {
     const schedule = await addSchedule(world, { kind: 'webhook', signature: null, replayKey: null });
     const { call } = await setUp(world, (id, hook) => `https://app.shinsa.dev/hooks/k3x9/${id}/${hook}`);
     const shown = await call('GET', `/api/schedules/${schedule.id}/webhook`);
-    const token = world.secrets.selectHook(schedule.id)?.token;
+    const token = (await world.secrets.selectHook(schedule.id))?.token;
     expect(shown.url).toBe(`https://app.shinsa.dev/hooks/k3x9/${schedule.id}/${token}`);
   });
 
@@ -74,7 +74,7 @@ describe('webhook settings over HTTP', () => {
     });
     const { call } = await setUp(world);
     expect(await call('GET', `/api/schedules/${schedule.id}/webhook`)).toEqual({
-      url: `http://127.0.0.1:5180/api/hooks/${schedule.id}/${world.secrets.selectHook(schedule.id)?.token}`,
+      url: `http://127.0.0.1:5180/api/hooks/${schedule.id}/${(await world.secrets.selectHook(schedule.id))?.token}`,
       signature: { header: 'x-sig', encoding: 'hex', prefix: '' },
       hasSecret: false,
       replayKey: null,
@@ -106,14 +106,14 @@ describe('webhook settings over HTTP', () => {
     });
   });
 
-  test('a webhook whose hook is gone is not found', async () => {
+  test('a webhook whose token is not written yet gets one at once', async () => {
     const world = await createWorld();
     const schedule = await addSchedule(world, { kind: 'webhook', signature: null, replayKey: null });
     const { call } = await setUp(world);
-    world.secrets.pruneHooks(new Set());
-    await expect(call('GET', `/api/schedules/${schedule.id}/webhook`)).rejects.toMatchObject({
-      code: 'schedule_not_found',
-    });
+    await world.secrets.pruneHooks(new Set());
+    const shown = (await call('GET', `/api/schedules/${schedule.id}/webhook`)) as { url: string };
+    const hook = await world.secrets.selectHook(schedule.id);
+    expect(shown.url).toEndWith(`/${schedule.id}/${hook?.token}`);
   });
 
   test('without schedules the routes are not found', async () => {
@@ -131,9 +131,9 @@ describe('answering a secret request over HTTP', () => {
     expect(await call('POST', '/api/secrets/gate-1', { value: 'hunter2' })).toEqual({ ok: true });
     const gate = world.engine.state.gates['gate-1'];
     expect(gate?.status).toBe('answered');
-    expect(gate?.response).toBe(world.secrets.resolveRef('gate-1'));
+    expect(gate?.response).toBe(await world.secrets.resolveRef('gate-1'));
     expect(JSON.stringify(world.engine.state)).not.toContain('hunter2');
-    expect(world.secrets.removeRef(gate?.response ?? '', world.taskId)).toBe('hunter2');
+    expect(await world.secrets.removeRef(gate?.response ?? '', world.taskId)).toBe('hunter2');
   });
 
   test('a decline answers without a value', async () => {
@@ -174,9 +174,9 @@ describe('answering a secret request over HTTP', () => {
     await expect(call('POST', '/api/secrets/gate-1', { value: 'hunter2' })).rejects.toMatchObject({
       message: 'disk full',
     });
-    expect(() => world.secrets.removeRef(world.secrets.resolveRef('gate-1'), world.taskId)).toThrow(
-      'has been used'
-    );
+    await expect(
+      world.secrets.removeRef(await world.secrets.resolveRef('gate-1'), world.taskId)
+    ).rejects.toThrow('has been used');
   });
 });
 
@@ -191,8 +191,11 @@ describe('a member’s GitHub token over HTTP', () => {
     isEnabled: Effect.succeed(true),
   };
 
-  function setUpTokens(gh: (token: string | undefined) => { ok: boolean; stdout: string }, extras = {}) {
-    const secrets = openTestSecrets(join(createTempDir(), 'secrets.json'));
+  async function setUpTokens(
+    gh: (token: string | undefined) => { ok: boolean; stdout: string },
+    extras = {}
+  ) {
+    const secrets = await openTestSecrets(join(createTempDir(), 'secrets.json'));
     const asked: string[] = [];
     const github = Effect.runSync(
       GitHubCli.use(Effect.succeed).pipe(
@@ -229,7 +232,7 @@ describe('a member’s GitHub token over HTTP', () => {
   const kaiUser = () => ({ ok: true, stdout: JSON.stringify({ id: 7, login: 'kai', name: 'Kai Lane' }) });
 
   test('a member on a shared machine saves, reads and removes their own token', async () => {
-    const { routes, secrets, asked, as } = setUpTokens(kaiUser);
+    const { routes, secrets, asked, as } = await setUpTokens(kaiUser);
     await routes.context.engine.dispatch({ type: 'settings.change', patch: { sharedTeams: ['team-1'] } });
     expect(await as('u-kai', 'GET')).toEqual({
       login: 'kai',
@@ -239,16 +242,16 @@ describe('a member’s GitHub token over HTTP', () => {
     });
     expect(await as('u-kai', 'POST', { token: '  ghp_kai  ' })).toMatchObject({ login: 'kai', saved: true });
     expect(asked).toEqual(['api user']);
-    expect(secrets.selectGitHubToken('kai')).toMatchObject({
+    expect(await secrets.selectGitHubToken('kai')).toMatchObject({
       token: 'ghp_kai',
       email: '7+kai@users.noreply.github.com',
     });
     expect(await as('u-kai', 'POST', { token: null })).toMatchObject({ saved: false });
-    expect(secrets.selectGitHubToken('kai')).toBeNull();
+    expect(await secrets.selectGitHubToken('kai')).toBeNull();
   });
 
   test('the machine’s owner uses its own login and has no token to save', async () => {
-    const { routes, as } = setUpTokens(kaiUser);
+    const { routes, as } = await setUpTokens(kaiUser);
     await routes.context.engine.dispatch({ type: 'settings.change', patch: { sharedTeams: ['team-1'] } });
     expect(await as(null, 'GET')).toEqual({
       login: 'owner',
@@ -260,7 +263,7 @@ describe('a member’s GitHub token over HTTP', () => {
   });
 
   test('a token GitHub refuses, one of another account, or no token at all is not saved', async () => {
-    const refused = setUpTokens(() => ({ ok: false, stdout: 'Bad credentials' }));
+    const refused = await setUpTokens(() => ({ ok: false, stdout: 'Bad credentials' }));
     await refused.routes.context.engine.dispatch({
       type: 'settings.change',
       patch: { sharedTeams: ['team-1'] },
@@ -272,7 +275,7 @@ describe('a member’s GitHub token over HTTP', () => {
       code: 'github_token_invalid',
     });
     expect(await refused.as('u-kai', 'POST', { token: 7 })).toMatchObject({ code: 'github_token_invalid' });
-    const other = setUpTokens(() => ({
+    const other = await setUpTokens(() => ({
       ok: true,
       stdout: JSON.stringify({ id: 9, login: 'mona', name: null }),
     }));
@@ -283,21 +286,21 @@ describe('a member’s GitHub token over HTTP', () => {
     expect(await other.as('u-kai', 'POST', { token: 'ghp_mona' })).toMatchObject({
       code: 'github_token_other_account',
     });
-    expect(refused.secrets.selectGitHubToken('kai')).toBeNull();
-    expect(other.secrets.selectGitHubToken('kai')).toBeNull();
+    expect(await refused.secrets.selectGitHubToken('kai')).toBeNull();
+    expect(await other.secrets.selectGitHubToken('kai')).toBeNull();
   });
 
   test('a member reaches it only on a shared machine, and a stranger never', async () => {
-    const { routes, as } = setUpTokens(kaiUser);
+    const { routes, as } = await setUpTokens(kaiUser);
     expect(await as('u-kai', 'GET')).toMatchObject({ status: 403, message: OWNER_ONLY_MESSAGE });
     await routes.context.engine.dispatch({ type: 'settings.change', patch: { sharedTeams: ['team-1'] } });
     expect(await as('u-gone', 'GET')).toMatchObject({ status: 400, message: OWNER_ONLY_MESSAGE });
   });
 
   test('without remote access the token has no owner, and without a store the route is not served', async () => {
-    const { as } = setUpTokens(kaiUser, { remote: undefined });
+    const { as } = await setUpTokens(kaiUser, { remote: undefined });
     expect(await as(null, 'GET')).toMatchObject({ code: 'github_token_no_owner' });
-    const noOwner = setUpTokens(kaiUser, {
+    const noOwner = await setUpTokens(kaiUser, {
       remote: { ...remote, resolveActor: () => Effect.succeed(null) },
     });
     expect(await noOwner.as(null, 'GET')).toMatchObject({ code: 'github_token_no_owner' });

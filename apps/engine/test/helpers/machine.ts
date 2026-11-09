@@ -21,14 +21,18 @@ export interface TestMachineOptions {
   resolveLogin?: LoginResolver;
 }
 
-export function createTestMachine(engine: Engine, config: ServerConfig, options: TestMachineOptions = {}) {
+export async function createTestMachine(
+  engine: Engine,
+  config: ServerConfig,
+  options: TestMachineOptions = {}
+) {
   const layer = createMachineLayer({
     ...(options.discover === null ? {} : { discover: options.discover ?? NOTHING_FOUND }),
     resolveLogin: 'resolveLogin' in options ? options.resolveLogin : () => Promise.resolve(null),
   }).pipe(
     Layer.provide(Layer.merge(Layer.succeed(EngineConfig, config), Layer.succeed(EngineCore, engine.core)))
   );
-  const context = Effect.runSync(Layer.buildWithScope(layer, Effect.runSync(Scope.make())));
+  const context = await Effect.runPromise(Layer.buildWithScope(layer, Effect.runSync(Scope.make())));
   return {
     context,
     store: Context.get(context, ConfigStore),

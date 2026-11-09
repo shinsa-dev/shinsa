@@ -8,6 +8,7 @@ import * as React from 'react';
 import { Choice } from '@/components/controls/choice.tsx';
 import { Hint } from '@/components/overlays/hint.tsx';
 import type { useImageViewer, ViewerImage } from '@/hooks/use-image-viewer.ts';
+import { useMediaUrls } from '@/lib/connection/socket.ts';
 import {
   type Box,
   type Clip,
@@ -704,10 +705,11 @@ export function ImageViewer({
   images: ViewerImage[];
   viewer: ReturnType<typeof useImageViewer>;
 }) {
+  const shown = useMediaUrls(images);
   if (viewer.index === null) return null;
   return (
     <ImageViewerDialog
-      images={images}
+      images={shown}
       index={viewer.index}
       onIndexChange={viewer.show}
       onClose={viewer.close}

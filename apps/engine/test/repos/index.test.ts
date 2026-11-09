@@ -6,6 +6,7 @@ import { Context, Effect } from 'effect';
 import { listLocalRepos, RepoFolders, resolveContainingRepo } from '../../src/repos/index.ts';
 import { resolveOwnerProjectName } from '../../src/repos/project-name.ts';
 import { type DispatchOptions, EngineStopped } from '../../src/runtime/engine/schema.ts';
+import { runFiles } from '../harness.ts';
 import { createConfigAt } from '../helpers/config.ts';
 import { Engine } from '../helpers/engine.ts';
 import { openEventLog } from '../helpers/event-log.ts';
@@ -13,43 +14,43 @@ import { createGitRepo, createTempDir, git, overrideEnv } from '../helpers/index
 import { createTestMachine } from '../helpers/machine.ts';
 import { createStubEngine } from '../helpers/state.ts';
 
-const machines = new WeakMap<Engine, ReturnType<typeof createTestMachine>>();
+const machines = new WeakMap<Engine, Awaited<ReturnType<typeof createTestMachine>>>();
 
-function openMachine(engine: Engine) {
+async function openMachine(engine: Engine) {
   const known = machines.get(engine);
   if (known) return known;
-  const machine = createTestMachine(engine, createConfigAt(createTempDir()));
+  const machine = await createTestMachine(engine, createConfigAt(createTempDir()));
   machines.set(engine, machine);
   return machine;
 }
 
-function upsertRepo(
+async function upsertRepo(
   engine: Engine,
   path: string,
   projectId: string | null = null,
   from: DispatchOptions = {}
 ) {
-  return Effect.runPromise(openMachine(engine).registry.upsert(path, null, projectId, from));
+  return Effect.runPromise((await openMachine(engine)).registry.upsert(path, null, projectId, from));
 }
 
-function syncRepoRemote(engine: Engine, repo: Repo) {
-  return Effect.runPromise(openMachine(engine).registry.syncRemote(repo));
+async function syncRepoRemote(engine: Engine, repo: Repo) {
+  return Effect.runPromise((await openMachine(engine)).registry.syncRemote(repo));
 }
 
-function upsertProjectFolderRepo(engine: Engine, projectId: string | null, name: string) {
-  return Effect.runPromise(openMachine(engine).registry.upsertProjectFolder(projectId, name));
+async function upsertProjectFolderRepo(engine: Engine, projectId: string | null, name: string) {
+  return Effect.runPromise((await openMachine(engine)).registry.upsertProjectFolder(projectId, name));
 }
 
-function createProjectRepository(engine: Engine, projectId: string, name: string) {
-  return Effect.runPromise(openMachine(engine).registry.createInProject(projectId, name));
+async function createProjectRepository(engine: Engine, projectId: string, name: string) {
+  return Effect.runPromise((await openMachine(engine)).registry.createInProject(projectId, name));
 }
 
-function createRepository(engine: Engine, parent: string, name: string, projectId: string | null) {
-  return Effect.runPromise(openMachine(engine).registry.create(parent, name, projectId));
+async function createRepository(engine: Engine, parent: string, name: string, projectId: string | null) {
+  return Effect.runPromise((await openMachine(engine)).registry.create(parent, name, projectId));
 }
 
-function listCandidateRepos(roots: readonly string[], origin: string | null) {
-  const folders = Context.get(openMachine(new Engine(openEventLog())).context, RepoFolders);
+async function listCandidateRepos(roots: readonly string[], origin: string | null) {
+  const folders = Context.get((await openMachine(new Engine(openEventLog()))).context, RepoFolders);
   return Effect.runPromise(folders.listCandidates(roots, origin));
 }
 
@@ -69,9 +70,9 @@ function createRoot() {
 }
 
 describe('listLocalRepos', () => {
-  test('finds git repositories one level down, newest first, once each, skipping files and missing roots', () => {
+  test('finds git repositories one level down, newest first, once each, skipping files and missing roots', async () => {
     const root = createRoot();
-    const repos = listLocalRepos([root, root, join(root, 'file.txt'), join(root, 'nowhere')]);
+    const repos = await runFiles(listLocalRepos([root, root, join(root, 'file.txt'), join(root, 'nowhere')]));
     expect(repos.map((repo) => repo.name)).toEqual(['newer', 'older']);
     expect(repos[0]?.path).toBe(realpathSync(join(root, 'newer')));
   });
@@ -88,7 +89,7 @@ describe('project names', () => {
   });
 
   test('the GitHub login is read from gh once it answers, and a failed read is tried again', async () => {
-    const { login } = createTestMachine(new Engine(openEventLog()), createConfigAt(createTempDir()), {
+    const { login } = await createTestMachine(new Engine(openEventLog()), createConfigAt(createTempDir()), {
       resolveLogin: undefined,
     });
     const resolveLogin = () => Effect.runPromise(login);

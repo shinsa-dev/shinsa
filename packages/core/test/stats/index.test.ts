@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import {
+  NO_FOCUS_PROJECTS,
   type Repo,
   type Round,
   type Run,
@@ -123,7 +124,7 @@ describe('resolveStats', () => {
     expect(stats.total).toMatchObject({ pullRequests: 1, tasks: 1, additions: 120 });
   });
 
-  test('a merged round without an end time is dated when its task closed or changed stage', () => {
+  test('a merged round without an end time is dated when its task closed or changed stage, and its task counts as finished', () => {
     const closed = task('a', { stage: 'done', closedAt: DAY, rounds: [round(1, { endedAt: null })] });
     const open = task('b', {
       stage: 'shipping',
@@ -133,7 +134,14 @@ describe('resolveStats', () => {
     });
     const stats = resolveStats(stateOf([closed, open], []), windowOf(3));
     expect(stats.days.map((day) => day.pullRequests)).toEqual([0, 1, 1]);
-    expect(stats.days.map((day) => day.tasks)).toEqual([0, 1, 0]);
+    expect(stats.days.map((day) => day.tasks)).toEqual([0, 1, 1]);
+  });
+
+  test('a cancelled task keeps its merged pull request but does not count as finished', () => {
+    const cancelled = task('a', { stage: 'cancelled', closedAt: DAY, rounds: [round(1, { endedAt: DAY })] });
+    const stats = resolveStats(stateOf([cancelled], []), windowOf(3));
+    expect(stats.days.map((day) => day.pullRequests)).toEqual([0, 1, 0]);
+    expect(stats.total.tasks).toBe(0);
   });
 
   test('work outside the window is left out', () => {
@@ -246,6 +254,87 @@ describe('resolveStats', () => {
     const stats = resolveStats(harness.state, { days: ['all'], dayOf: () => 'all' });
     expect(stats.total).toMatchObject({ pullRequests: 1, tasks: 1, additions: 3, deletions: 1 });
   });
+  test('a pull request counts on the day it merged, even when its round ended later', () => {
+    const merged = task('a', {
+      stage: 'merged',
+      closedAt: null,
+      stageChangedAt: 3 * DAY,
+      rounds: [
+        round(1, {
+          endedAt: 2 * DAY,
+          pullRequest: { number: 7, url: 'u', state: 'merged', base: null, mergedAt: DAY + 5 },
+        }),
+      ],
+    });
+    const stats = resolveStats(stateOf([merged], []), windowOf(4));
+    expect(stats.days.map((day) => day.pullRequests)).toEqual([0, 1, 0, 0]);
+    expect(stats.days.map((day) => day.tasks)).toEqual([0, 1, 0, 0]);
+  });
+
+  test('a task counts as finished on the day it first merged, not when it closed or a later round ended', () => {
+    const merged = { number: 7, url: 'u', state: 'merged' as const, base: null, mergedAt: DAY };
+    const closedLater = task('a', {
+      stage: 'done',
+      closedAt: 3 * DAY,
+      rounds: [round(1, { endedAt: DAY, pullRequest: merged })],
+    });
+    const laterRound = task('b', {
+      stage: 'done',
+      closedAt: 3 * DAY,
+      rounds: [
+        round(1, { endedAt: DAY, pullRequest: { ...merged, number: 8 } }),
+        round(2, { status: 'finished', endedAt: 2 * DAY, pullRequest: null }),
+      ],
+    });
+    const unmerged = task('c', {
+      stage: 'done',
+      closedAt: 3 * DAY,
+      rounds: [round(1, { status: 'finished', endedAt: 2 * DAY, pullRequest: null })],
+    });
+    const stats = resolveStats(stateOf([closedLater, laterRound, unmerged], []), windowOf(4));
+    expect(stats.days.map((day) => day.tasks)).toEqual([0, 2, 1, 0]);
+  });
+
+  test('a merged pull request still counts while its round is reopened or after it finished another way', () => {
+    const merged = { number: 7, url: 'u', state: 'merged' as const, base: null, mergedAt: DAY };
+    const watching = task('a', {
+      rounds: [round(1, { status: 'active', endedAt: DAY, pullRequest: merged })],
+    });
+    const operated = task('b', {
+      rounds: [round(1, { status: 'finished', pullRequest: { ...merged, number: 8 } })],
+    });
+    const unmerged = task('c', { rounds: [round(1, { status: 'finished' })] });
+    const stats = resolveStats(stateOf([watching, operated, unmerged], []), windowOf(3));
+    expect(stats.days.map((day) => day.pullRequests)).toEqual([0, 2, 0]);
+  });
+
+  test('a watchdog check on a later day leaves every shipping count where it was', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    reachShipping(harness, taskId);
+    harness.send({
+      type: 'pull_request.record',
+      taskId,
+      pullRequest: pullRequest({ state: 'merged', changes: { additions: 3, deletions: 1, changedFiles: 1 } }),
+    });
+    const mergeDay = Math.floor(harness.now / DAY);
+    const window: StatsWindow = {
+      days: ['merge', 'later'],
+      dayOf: (at) => (Math.floor(at / DAY) === mergeDay ? 'merge' : 'later'),
+    };
+    const before = resolveStats(harness.state, window);
+    harness.advance(DAY);
+    harness.replay({ type: 'task.staged', taskId, stage: 'watching', reason: 'Watch check' });
+    expect(resolveStats(harness.state, window).days).toEqual(before.days);
+    harness.replay({ type: 'task.staged', taskId, stage: 'answering', reason: 'Follow-up' });
+    expect(resolveStats(harness.state, window).days).toEqual(before.days);
+    harness.replay({ type: 'task.staged', taskId, stage: 'merged', reason: 'Watch check done' });
+    expect(harness.task(taskId).stageChangedAt).toBeGreaterThan((mergeDay + 1) * DAY);
+    const after = resolveStats(harness.state, window);
+    expect(after.days).toEqual(before.days);
+    expect(after.days[0]).toMatchObject({ pullRequests: 1, tasks: 1, additions: 3 });
+    expect(after.streak).toEqual(before.streak);
+  });
 });
 
 describe('cache rates', () => {
@@ -289,14 +378,22 @@ describe('resolveProjectStatsSource', () => {
   };
 
   test('no project keeps every task and run', () => {
-    const scoped = resolveProjectStatsSource(source, null);
+    const scoped = resolveProjectStatsSource(source, NO_FOCUS_PROJECTS);
     expect(scoped.tasks).toBe(source.tasks);
     expect(scoped.runs).toBe(source.runs);
   });
 
   test('a project keeps its tasks, by their own project or their repository, and only their runs', () => {
-    const scoped = resolveProjectStatsSource(source, 'project-a');
+    const scoped = resolveProjectStatsSource(source, { projectIds: ['project-a'], except: false });
     expect(Object.keys(scoped.tasks).sort()).toEqual(['by-repo', 'own']);
     expect(Object.keys(scoped.runs).sort()).toEqual(['r-by-repo', 'r-own']);
+  });
+
+  test('several projects keep the tasks of each, and all but a project keeps everything else', () => {
+    const both = resolveProjectStatsSource(source, { projectIds: ['project-a', 'project-b'], except: false });
+    expect(Object.keys(both.tasks).sort()).toEqual(['by-repo', 'other', 'own']);
+    const allBut = resolveProjectStatsSource(source, { projectIds: ['project-a'], except: true });
+    expect(Object.keys(allBut.tasks).sort()).toEqual(['loose', 'other']);
+    expect(Object.keys(allBut.runs)).toEqual(['r-other']);
   });
 });

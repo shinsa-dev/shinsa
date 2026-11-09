@@ -1,3 +1,4 @@
+import { BunHttpPlatform } from '@effect/platform-bun';
 import type { AgentProviderInfo, Changelog } from '@shinsa/core';
 import { Cause, Context, Effect, Exit, Layer, Logger, ManagedRuntime, References } from 'effect';
 import { ensure } from 'effect/Array';
@@ -29,6 +30,7 @@ import { JsonLogger } from '../../src/log/service.ts';
 import { Onboarding } from '../../src/onboarding/service.ts';
 import { ProjectChanges } from '../../src/projects/changes/service.ts';
 import { RemoteOrigin } from '../../src/remote/client/schema.ts';
+import { FleetRelay } from '../../src/remote/fleet-relay/service.ts';
 import { TunnelGate } from '../../src/remote/gate/service.ts';
 import { Remote } from '../../src/remote/machine/service.ts';
 import { PlacementAsker } from '../../src/remote/placement/service.ts';
@@ -67,6 +69,7 @@ export interface HttpContext {
   shares?: ShareLinks;
   teams?: Teams['Service'];
   teamFeeds?: TeamFeeds['Service'];
+  fleetRelay?: FleetRelay['Service'];
   previews?: PreviewLinks;
   slack?: Slack['Service'];
   config: ServerConfig;
@@ -101,6 +104,7 @@ const OPTIONAL_SERVICES = [
   ['shares', Shares],
   ['teams', Teams],
   ['teamFeeds', TeamFeeds],
+  ['fleetRelay', FleetRelay],
   ['previews', Previews],
   ['slack', Slack],
   ['accounts', Accounts],
@@ -193,7 +197,8 @@ export function createWebHandler<E, R extends RouteNeeds>(
   const web = HttpRouter.toWebHandler(
     Layer.mergeAll(routes, Ingress).pipe(
       Layer.provide(TunnelGate.layer),
-      Layer.provide(GitLayer.pipe(Layer.provide(ShellLayer))),
+      Layer.provide(GitLayer.pipe(Layer.provideMerge(ShellLayer))),
+      Layer.provide(BunHttpPlatform.layer),
       Layer.provide(HttpServer.layerServices),
       Layer.provide(createHttpLayer(context)),
       Layer.provideMerge(RecordingLogger)

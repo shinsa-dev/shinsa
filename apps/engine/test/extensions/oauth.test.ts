@@ -3,12 +3,12 @@ import { Clock, Effect, Layer, ManagedRuntime } from 'effect';
 import { EngineConfig } from '../../src/config/service.ts';
 import type { FetchLike } from '../../src/extensions/oauth/schema.ts';
 import { McpOAuth } from '../../src/extensions/oauth/service.ts';
-import { JsonFile } from '../../src/files/service.ts';
 import { JsonLogger } from '../../src/log/service.ts';
 import { SecretFiles } from '../../src/secrets/files/service.ts';
 import { SecretStore } from '../../src/secrets/store/service.ts';
 import { createFixedClock } from '../helpers/clock.ts';
 import { createConfigAt } from '../helpers/config.ts';
+import { JsonFileLayer } from '../helpers/files.ts';
 import { type FakeMcpHttp, startFakeMcpHttp } from '../helpers/mcp/http.ts';
 import { createTempDir } from '../helpers/temp.ts';
 
@@ -25,7 +25,7 @@ function createStore() {
     SecretStore.layer.pipe(
       Layer.provide(SecretFiles.layer),
       Layer.provideMerge(Layer.succeed(EngineConfig, createConfigAt(createTempDir('shinsa-oauth-')))),
-      Layer.provideMerge(JsonFile.layer),
+      Layer.provideMerge(JsonFileLayer),
       Layer.provideMerge(JsonLogger)
     )
   );

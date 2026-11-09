@@ -83,7 +83,7 @@ const NOBODY = teamEntry({ task: createTask({ id: 'nobody' }), owner: null, inst
 const TEAM = [KAI, LEE, NOBODY];
 
 function focused(focus: Partial<ShinsaState['focus']>): ShinsaState {
-  return { ...STATE, focus: { projectId: null, teamId: null, until: null, ...focus } };
+  return { ...STATE, focus: { projectIds: [], except: false, teamId: null, until: null, ...focus } };
 }
 
 function ids(state: ShinsaState, filters: Partial<TaskFilters> = {}) {
@@ -103,12 +103,28 @@ describe('listTaskRows', () => {
   });
 
   it('lists only the focused project’s tasks, and a teammate’s only in that same project', () => {
-    expect(ids(focused({ projectId: 'apps' }))).toEqual(['@kai-task', 'web']);
-    expect(ids(focused({ projectId: 'core' }))).toEqual(['api', 'ask', 'shipped']);
+    expect(ids(focused({ projectIds: ['apps'] }))).toEqual(['@kai-task', 'web']);
+    expect(ids(focused({ projectIds: ['core'] }))).toEqual(['api', 'ask', 'shipped']);
+  });
+
+  it('lists the tasks of every project in focus, or of every project but those, teammates’ included', () => {
+    expect(ids(focused({ projectIds: ['apps', 'core'] }))).toEqual([
+      '@kai-task',
+      'api',
+      'ask',
+      'shipped',
+      'web',
+    ]);
+    expect(ids(focused({ projectIds: ['core'], except: true }))).toEqual([
+      '@kai-task',
+      '@lee-task',
+      '@nobody',
+      'web',
+    ]);
   });
 
   it('matches a teammate’s row to your project by its repository’s remote, then by project name, never by id', () => {
-    const state = focused({ projectId: 'apps' });
+    const state = focused({ projectIds: ['apps'] });
     const renamed = teamEntry({
       task: createTask({ id: 'same-repo' }),
       project: createProject({ id: 'p9', name: 'Billing' }),

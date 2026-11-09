@@ -1,5 +1,5 @@
 import { cpus } from 'node:os';
-import { Context, Effect, Layer } from 'effect';
+import { Context, Effect, FileSystem, Layer } from 'effect';
 import { constant } from 'effect/Function';
 import type { Argv, CommandResult } from '../../shell/schema.ts';
 import { Shell } from '../../shell/service.ts';
@@ -20,6 +20,7 @@ export class ResourceMachine extends Context.Service<
     ResourceMachine,
     Effect.gen(function* () {
       const shell = yield* Shell;
+      const withFiles = Effect.provideService(FileSystem.FileSystem, yield* FileSystem.FileSystem);
 
       const run = Effect.fn('ResourceMachine.run')(function* (argv: Argv, cwd = '/') {
         return yield* shell
@@ -40,7 +41,7 @@ export class ResourceMachine extends Context.Service<
       return ResourceMachine.of({
         cores: cpus().length,
         cpuTimes,
-        memory: readMemoryWith(process.platform, run, readResourceText),
+        memory: readMemoryWith(process.platform, run, (path) => withFiles(readResourceText(path))),
         run,
       });
     })

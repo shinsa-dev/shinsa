@@ -33,8 +33,12 @@ describe('shinsa engine on a data directory another one holds', () => {
     const home = createTempDir();
     const dataDir = join(home, 'data');
     const first = serve(home);
-    await until('the first server to listen', () => (selectLockHolder(dataDir)?.port ?? 0) > 0, 20_000);
-    const holder = selectLockHolder(dataDir);
+    await until(
+      'the first server to listen',
+      async () => ((await selectLockHolder(dataDir))?.port ?? 0) > 0,
+      20_000
+    );
+    const holder = await selectLockHolder(dataDir);
     expect(holder?.pid).toBe(first.pid);
     const health = (await (await fetch(`${holder?.url}/api/health`)).json()) as ServerHealth;
     expect(health.pid).toBe(first.pid);
@@ -50,21 +54,29 @@ describe('shinsa engine on a data directory another one holds', () => {
     expect(existsSync(join(dataDir, LOCK_FILE))).toBe(false);
 
     const third = serve(home);
-    await until('the third server to listen', () => selectLockHolder(dataDir)?.pid === third.pid, 20_000);
+    await until(
+      'the third server to listen',
+      async () => (await selectLockHolder(dataDir))?.pid === third.pid,
+      20_000
+    );
   });
 
   test('takes over the lock a killed server left behind', async () => {
     const home = createTempDir();
     const dataDir = join(home, 'data');
     const killed = serve(home);
-    await until('the server to listen', () => (selectLockHolder(dataDir)?.port ?? 0) > 0, 20_000);
+    await until(
+      'the server to listen',
+      async () => ((await selectLockHolder(dataDir))?.port ?? 0) > 0,
+      20_000
+    );
     killed.kill('SIGKILL');
     await killed.exited;
-    expect(selectLockHolder(dataDir)?.pid).toBe(killed.pid);
+    expect((await selectLockHolder(dataDir))?.pid).toBe(killed.pid);
     const next = serve(home);
     await until(
       'the next server to take the lock',
-      () => selectLockHolder(dataDir)?.pid === next.pid,
+      async () => (await selectLockHolder(dataDir))?.pid === next.pid,
       20_000
     );
   });

@@ -1,6 +1,5 @@
-import { rmSync } from 'node:fs';
 import { isTaskSettled, type Repo } from '@shinsa/core';
-import { Clock, Context, Effect, Layer } from 'effect';
+import { Clock, Context, Effect, FileSystem, Layer } from 'effect';
 import { SharedCaches } from '../../../checks/caches/service.ts';
 import { resolveScratchPath } from '../../../config/index.ts';
 import { Checkout } from '../../../git/checkout/service.ts';
@@ -25,14 +24,15 @@ export class Cleanup extends Context.Service<
       const checkout = yield* Checkout;
       const leftovers = yield* LeftoverProcesses;
       const caches = yield* SharedCaches;
+      const fs = yield* FileSystem.FileSystem;
 
       const removeIsolated = Effect.fn('Cleanup.removeIsolated')(function* (repo: Repo, taskId: string) {
         yield* checkout
           .removeIsolated(repo, yield* world.workspaces.root.path, taskId)
           .pipe(
-            Effect.catchDefect((defect) =>
+            Effect.catch((error) =>
               Effect.logWarning('[Effects] Could not remove the checkouts of delegations').pipe(
-                Effect.annotateLogs({ taskId, error: describeError(defect) })
+                Effect.annotateLogs({ taskId, error: error.message })
               )
             )
           );
@@ -73,9 +73,9 @@ export class Cleanup extends Context.Service<
         yield* caches
           .prune(world.config.dataDir, repoIds, now)
           .pipe(
-            Effect.catchDefect((defect) =>
+            Effect.catch((error) =>
               Effect.logWarning('[Effects] Could not prune the shared build caches').pipe(
-                Effect.annotateLogs({ error: describeError(defect) })
+                Effect.annotateLogs({ error: describeError(error) })
               )
             )
           );
@@ -92,11 +92,9 @@ export class Cleanup extends Context.Service<
         yield* world.runs.quiesce(taskId);
         if (yield* isReopened(taskId)) return;
         yield* closeTerminals(taskId);
-        yield* Effect.try({
-          try: () =>
-            rmSync(resolveScratchPath(world.config.dataDir, taskId), { recursive: true, force: true }),
-          catch: resolveEffectFailure,
-        });
+        yield* fs
+          .remove(resolveScratchPath(world.config.dataDir, taskId), { recursive: true, force: true })
+          .pipe(Effect.mapError(resolveEffectFailure));
       });
 
       return Cleanup.of({ removeWorktree, removeScratch });

@@ -72,6 +72,7 @@ import {
 } from '@/lib/tasks/gates.ts';
 import { describeMergeable, describePullRequestChecks } from '@/lib/tasks/pull-request.ts';
 import { type ChangeReply, describeChangeGate, resolvePlannedOperation } from '@/lib/tasks/shapes.ts';
+import { KEEP_ONE_TASK_MESSAGE, listSplitParts } from '@/lib/tasks/split.ts';
 
 function PlannedOperation({ task }: { task: Task }) {
   const operation = resolvePlannedOperation(task);
@@ -91,6 +92,27 @@ function PlannedOperation({ task }: { task: Task }) {
   );
 }
 
+function PlanSplitList({ task }: { task: Task }) {
+  const parts = listSplitParts(task);
+  if (parts.length === 0) return null;
+  return (
+    <div className='flex flex-col gap-1.5'>
+      <span className='text-xs leading-5 font-medium text-fg-4'>Other tasks</span>
+      <ul className='flex flex-col gap-2.5'>
+        {parts.map((part) => (
+          <li key={part.title} className='flex min-w-0 flex-col gap-px'>
+            <span className='flex min-w-0 flex-wrap items-baseline gap-x-1.5'>
+              <span className='text-xs font-medium text-fg-3'>{part.title}</span>
+              <span className='text-2xs text-fg-2'>{part.start}</span>
+            </span>
+            <Markdown text={part.request} className='text-xs text-fg-3' />
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 function PlanList({ task }: { task: Task }) {
   const document = task.plan?.document;
   if (!document) return null;
@@ -102,13 +124,14 @@ function PlanList({ task }: { task: Task }) {
         {document.phases.map((phase, index) => (
           <li key={phase.title} className='flex gap-2.5'>
             <StepNumber index={index} />
-            <div className='flex min-w-0 flex-col gap-px'>
+            <div className='flex min-w-0 flex-col'>
               <PlanPhaseTitle title={phase.title} change={resolvePhaseChange(changes, phase.title)} />
               <Markdown text={phase.detail} className='text-xs text-fg-3' />
             </div>
           </li>
         ))}
       </ol>
+      <PlanSplitList task={task} />
       <PlannedOperation task={task} />
       <PlanParameterList document={document} />
     </div>
@@ -225,6 +248,7 @@ export function PlanCard({
   const { busy, run } = useBusy<GateReply>();
   const approve = resolvePlanReply(task);
   const copy = describePlanCard(task);
+  const splits = listSplitParts(task).length > 0;
   const reply = selectShownReply(state, task, gate);
   return (
     <NowFrame
@@ -233,6 +257,17 @@ export function PlanCard({
       action={
         <>
           <SuggestedReplies state={state} task={task} />
+          {splits && (
+            <Button
+              variant='outline'
+              size='sm'
+              loading={busy === 'keepOneTask'}
+              disabled={busy !== null && busy !== 'keepOneTask'}
+              onClick={() => void run('keepOneTask', () => onReply('keepOneTask', KEEP_ONE_TASK_MESSAGE))}
+            >
+              Keep as one task
+            </Button>
+          )}
           <Button
             size='sm'
             loading={busy === approve}

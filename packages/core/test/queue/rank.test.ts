@@ -1,7 +1,9 @@
 import { describe, expect, test } from 'bun:test';
 import {
   type Gate,
+  isDecisionHeld,
   listWaitsOn,
+  NO_FOCUS_PROJECTS,
   resolveFocusProject,
   resolveQueue,
   type ShinsaState,
@@ -16,6 +18,8 @@ import {
   pullRequest,
   reachReviewGate,
   reachShipping,
+  registerRepo,
+  shipAndMerge,
 } from '../harness.ts';
 
 describe('attention', () => {
@@ -45,11 +49,11 @@ describe('attention', () => {
       context: null,
     });
     const before = resolveQueue(harness.state, 2_000);
-    expect(before.focusProjectId).toBeNull();
+    expect(before.focus).toEqual(NO_FOCUS_PROJECTS);
     expect(before.ready.map((entry) => entry.projectId)).toEqual([superwall]);
     harness.send({ type: 'focus.change', projectId: side, until: null });
     const queue = resolveQueue(harness.state, 2_000);
-    expect(queue.focusProjectId).toBe(side);
+    expect(queue.focus).toEqual({ projectIds: [side], except: false });
     expect(queue.ready).toHaveLength(0);
     harness.send({ type: 'focus.change', projectId: superwall, until: null });
     expect(resolveQueue(harness.state, 2_000).ready.map((entry) => entry.task.id)).toEqual([taskId]);
@@ -149,6 +153,36 @@ describe('what is working and what is waiting', () => {
     expect(listWaitsOn(harness.state, harness.task(child)).map((task) => task.id)).toEqual([parent]);
   });
 
+  test('a focus on all but some projects shows every other project and tasks without one', () => {
+    const harness = createHarness();
+    const work = createTask(harness, { repoId: registerRepo(harness, 'work', 'Work') });
+    const home = createTask(harness, { repoId: registerRepo(harness, 'home', 'Home') });
+    const loose = createTask(harness, { repoId: registerRepo(harness, 'loose', null) });
+    const workProject = harness.task(work).projectId ?? '';
+    const homeProject = harness.task(home).projectId ?? '';
+    harness.send({
+      type: 'focus.change',
+      projectId: null,
+      projectIds: [workProject],
+      except: true,
+      until: null,
+    });
+    const ids = (queue: ReturnType<typeof resolveQueue>) => queue.working.map((task) => task.id).sort();
+    expect(ids(resolveQueue(harness.state, 0))).toEqual([home, loose].sort());
+    expect(resolveFocusProject(harness.state, 0)).toBeNull();
+    harness.send({
+      type: 'focus.change',
+      projectId: null,
+      projectIds: [workProject, homeProject],
+      until: null,
+    });
+    expect(ids(resolveQueue(harness.state, 0))).toEqual([work, home].sort());
+    expect(resolveFocusProject(harness.state, 0)).toBeNull();
+    const olderEngine = { ...harness.state, focus: { projectId: workProject, teamId: null, until: null } };
+    expect(ids(resolveQueue(olderEngine as unknown as ShinsaState, 0))).toEqual([work]);
+    expect(resolveFocusProject(olderEngine as unknown as ShinsaState, 0)).toBe(workProject);
+  });
+
   test('settled tasks are neither working nor waiting', () => {
     const harness = createHarness();
     const taskId = createTask(harness);
@@ -204,6 +238,79 @@ describe('what is working and what is waiting', () => {
     expect(resolveGateWords(gate).why(gate, {} as Task)).toBe(
       'Read the answer, and the task moves to Done once you close it'
     );
+  });
+});
+
+describe('a decision held by what its task waits on', () => {
+  function reachHeldReview() {
+    const harness = createHarness();
+    const blocker = createTask(harness, { request: 'Blocker' });
+    const held = createTask(harness, { request: 'Held' });
+    reachReviewGate(harness, held);
+    harness.send({ type: 'task.wait_on', taskId: held, waitsOn: [blocker] });
+    return { harness, blocker, held };
+  }
+
+  test('a review waiting on an open task is under Waiting, not in Needs you', () => {
+    const { harness, blocker, held } = reachHeldReview();
+    const queue = resolveQueue(harness.state, 0);
+    expect(queue.ready.map((entry) => entry.task.id)).not.toContain(held);
+    expect(queue.waiting.map((task) => task.id)).toEqual([held]);
+    expect(listWaitsOn(harness.state, harness.task(held)).map((task) => task.id)).toEqual([blocker]);
+    expect(isDecisionHeld(harness.state, harness.task(held))).toBe(true);
+  });
+
+  test('the review is back in Needs you once what it waits on merges', () => {
+    const { harness, blocker, held } = reachHeldReview();
+    shipAndMerge(harness, blocker);
+    const queue = resolveQueue(harness.state, 0);
+    expect(queue.ready.map((entry) => [entry.task.id, entry.gate.type])).toContainEqual([held, 'review']);
+    expect(queue.waiting).toHaveLength(0);
+    expect(isDecisionHeld(harness.state, harness.task(held))).toBe(false);
+  });
+
+  test('a plan waiting on an open task is held too', () => {
+    const harness = createHarness();
+    harness.send({ type: 'settings.change', patch: { approvePlans: 'always' } });
+    const blocker = createTask(harness, { request: 'Blocker' });
+    const held = createTask(harness, { request: 'Held', size: 'large' });
+    proposePlan(harness, held);
+    harness.send({ type: 'task.wait_on', taskId: held, waitsOn: [blocker] });
+    expect(harness.task(held).stage).toBe('awaiting_plan');
+    const queue = resolveQueue(harness.state, 0);
+    expect(queue.ready.map((entry) => entry.task.id)).not.toContain(held);
+    expect(queue.waiting.map((task) => task.id)).toEqual([held]);
+  });
+
+  test('another gate on a held task still needs you', () => {
+    const { harness, held } = reachHeldReview();
+    const question = {
+      id: 'q1',
+      taskId: held,
+      type: 'question',
+      status: 'open',
+      title: 'Which tab?',
+      openedAt: 0,
+    } as Gate;
+    const state = { ...harness.state, gates: { ...harness.state.gates, [question.id]: question } };
+    const queue = resolveQueue(state, 0);
+    expect(queue.ready.filter((entry) => entry.task.id === held).map((entry) => entry.gate.type)).toEqual([
+      'question',
+    ]);
+    expect(queue.waiting).toHaveLength(0);
+  });
+
+  test('a building task that waits on another stays in progress', () => {
+    const harness = createHarness();
+    const blocker = createTask(harness, { request: 'Blocker' });
+    const building = createTask(harness, { request: 'Building' });
+    proposePlan(harness, building);
+    harness.send({ type: 'task.wait_on', taskId: building, waitsOn: [blocker] });
+    expect(harness.task(building).stage).toBe('building');
+    const queue = resolveQueue(harness.state, 0);
+    expect(queue.working.map((task) => task.id)).toContain(building);
+    expect(queue.waiting).toHaveLength(0);
+    expect(isDecisionHeld(harness.state, harness.task(building))).toBe(false);
   });
 });
 

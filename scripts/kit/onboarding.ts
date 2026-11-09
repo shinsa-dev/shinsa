@@ -9,7 +9,13 @@ import { createMachineLayer } from '../../apps/engine/src/serve/layers.ts';
 import { ShellLayer } from '../../apps/engine/src/shell/layers.ts';
 import type { Engine } from '../../apps/engine/test/helpers/engine.ts';
 
-export function createIdleOnboarding({ engine, config }: { engine: Engine; config: ServerConfig }) {
+export const createIdleOnboarding = Effect.fn('Kit.createIdleOnboarding')(function* ({
+  engine,
+  config,
+}: {
+  engine: Engine;
+  config: ServerConfig;
+}) {
   const base = Layer.merge(Layer.succeed(EngineConfig, config), Layer.succeed(EngineCore, engine.core));
   const local = createMachineLayer({
     discover: () => Promise.resolve({ candidates: [], truncated: false, refused: [] }),
@@ -36,10 +42,9 @@ export function createIdleOnboarding({ engine, config }: { engine: Engine; confi
       Layer.mergeAll(
         base,
         Layer.succeed(QuickCalls, QuickCalls.of({ classify: silent, write: silent })),
-        JsonFile.layer,
-        ShellLayer
-      )
+        JsonFile.layer
+      ).pipe(Layer.provideMerge(ShellLayer))
     )
   );
-  return Context.get(Effect.runSync(Layer.buildWithScope(layer, Effect.runSync(Scope.make()))), Onboarding);
-}
+  return Context.get(yield* Layer.buildWithScope(layer, yield* Scope.make()), Onboarding);
+});

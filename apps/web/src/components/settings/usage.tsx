@@ -20,7 +20,13 @@ import {
   WATCHDOG_LIMITS_ITEMS,
   WATCHDOG_LIMITS_TITLE,
 } from '@/lib/accounts/limits.ts';
-import { describeUsageDetail, listUsageRows, type UsageRow } from '@/lib/accounts/usage.ts';
+import {
+  describeUsageDetail,
+  listUsageNotes,
+  listUsageRows,
+  type UsageNoteRow,
+  type UsageRow,
+} from '@/lib/accounts/usage.ts';
 import { useAccounts } from '@/lib/connection/accounts.ts';
 import { useEngineFeature } from '@/lib/connection/socket.ts';
 import {
@@ -45,7 +51,7 @@ import { SETTING_ROW, SettingRow, SettingsEmpty, SettingsGroup } from './group.t
 function WindowRow({ row }: { row: UsageRow }) {
   return (
     <div className={SETTING_ROW}>
-      <div className='flex min-w-0 flex-1 flex-col gap-px'>
+      <div className='flex min-w-0 flex-1 flex-col'>
         <Truncate className='text-xs text-fg-4'>{row.label}</Truncate>
         {row.resetsAt !== null && (
           <span className='text-2xs text-fg-2'>
@@ -71,6 +77,22 @@ export function UsageWindows({ account }: { account: { usage: AccountUsage } }) 
   const rows = listUsageRows(account);
   if (rows.length === 0) return <DetailRow text={describeUsageDetail(account)} />;
   return rows.map((row) => <WindowRow key={row.id} row={row} />);
+}
+
+function NoteRow({ row }: { row: UsageNoteRow }) {
+  return (
+    <div className={SETTING_ROW}>
+      <div className='flex min-w-0 flex-1 flex-col'>
+        <Truncate className='text-xs text-fg-4'>{row.label}</Truncate>
+        {row.detail && <span className='text-2xs text-fg-2'>{row.detail}</span>}
+      </div>
+      <span className='shrink-0 text-xs text-fg-3 tabular-nums'>{row.value}</span>
+    </div>
+  );
+}
+
+export function UsageNotes({ usage, now }: { usage: AccountUsage; now: number }) {
+  return listUsageNotes(usage, now).map((row) => <NoteRow key={row.id} row={row} />);
 }
 
 function SwitchAtField({ settings }: { settings: Settings }) {

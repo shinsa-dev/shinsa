@@ -2,10 +2,14 @@ import { describe, expect, test } from 'bun:test';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { BunServices } from '@effect/platform-bun';
+import { Effect, Layer } from 'effect';
+import { JsonFile } from '../../apps/engine/src/files/service.ts';
 import { parseStoredService } from '../../apps/engine/src/terminals/store.ts';
+import { TerminalFiles } from '../../apps/engine/src/terminals/store/service.ts';
 import type { Project, Repo } from '../../packages/core/src/index.ts';
-import { readTerminalServices } from '../kit/terminals.ts';
-import { listSeedServices, SANDBOX_SERVICE_COMMAND, writeSeedServices } from './services.ts';
+import { writeSeedServices } from './files.ts';
+import { listSeedServices, SANDBOX_SERVICE_COMMAND } from './services.ts';
 
 function createProject(id: string, name: string): Project {
   return { id, name, color: 'blue', key: name.slice(0, 3).toUpperCase(), description: '', folders: [] };
@@ -65,11 +69,22 @@ describe('listSeedServices', () => {
 });
 
 describe('writeSeedServices', () => {
-  test('writes the services where the engine reads them', () => {
+  test('writes the services where the engine reads them', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'seed-services-'));
+    const layer = TerminalFiles.layer.pipe(
+      Layer.provideMerge(JsonFile.layer),
+      Layer.provideMerge(BunServices.layer)
+    );
     try {
-      const written = writeSeedServices(dir, PROJECTS, REPOS);
-      expect(readTerminalServices(dir)).toEqual(written);
+      const { written, read } = await Effect.runPromise(
+        Effect.gen(function* () {
+          return {
+            written: yield* writeSeedServices(dir, PROJECTS, REPOS),
+            read: yield* TerminalFiles.use((files) => files.readServices(dir)),
+          };
+        }).pipe(Effect.provide(layer))
+      );
+      expect(read).toEqual(written);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

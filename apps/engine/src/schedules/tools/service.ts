@@ -1,5 +1,4 @@
 import {
-  DomainError,
   describeScheduleTarget,
   describeScheduleTrigger,
   listOpenWatchSuggestions,
@@ -54,16 +53,17 @@ export class ScheduleTools extends Context.Service<ScheduleTools, ScheduleToolsS
           return task;
         });
 
-        const findHookUrl = Effect.fn('ScheduleTools.findHookUrl')(function* (scheduleId: string) {
-          const hook = yield* secrets.selectHook(scheduleId);
-          if (!hook)
-            return yield* new DomainError({
-              code: 'schedule_not_found',
-              message: 'This schedule has no webhook.',
-            });
-          const remote = yield* urls.hookUrl(scheduleId, hook.token);
+        const resolveHookUrl = Effect.fn('ScheduleTools.resolveHookUrl')(function* (
+          scheduleId: string,
+          token: string
+        ) {
+          const remote = yield* urls.hookUrl(scheduleId, token);
           if (remote) return remote;
-          return `${yield* urls.baseUrl}${WEBHOOK_ROUTE_PREFIX}/${encodeURIComponent(scheduleId)}/${hook.token}`;
+          return `${yield* urls.baseUrl}${WEBHOOK_ROUTE_PREFIX}/${encodeURIComponent(scheduleId)}/${token}`;
+        });
+
+        const upsertHookUrl = Effect.fn('ScheduleTools.upsertHookUrl')(function* (scheduleId: string) {
+          return yield* resolveHookUrl(scheduleId, (yield* secrets.upsertHook(scheduleId)).token);
         });
 
         const describeTarget = (state: ShinsaState, schedule: Schedule, ownTaskId: string) => {
@@ -75,7 +75,7 @@ export class ScheduleTools extends Context.Service<ScheduleTools, ScheduleToolsS
         const describeWebhook = Effect.fn('ScheduleTools.describeWebhook')(function* (schedule: Schedule) {
           if (schedule.trigger.kind !== 'webhook') return [];
           const lines = [
-            `Its URL is ${yield* findHookUrl(schedule.id)}. Give it to the sender as it is: the token in it is what lets a request in, so do not post it anywhere public.`,
+            `Its URL is ${yield* upsertHookUrl(schedule.id)}. Give it to the sender as it is: the token in it is what lets a request in, so do not post it anywhere public.`,
           ];
           const signature = schedule.trigger.signature;
           if (signature) lines.push(`Requests must carry a valid ${signature.header} signature.`);
@@ -231,7 +231,7 @@ export class ScheduleTools extends Context.Service<ScheduleTools, ScheduleToolsS
             runs: schedule.runCount,
             max_runs: schedule.maxRuns,
             yours: own,
-            ...(own && schedule.trigger.kind === 'webhook' ? { url: yield* findHookUrl(schedule.id) } : {}),
+            ...(own && schedule.trigger.kind === 'webhook' ? { url: yield* upsertHookUrl(schedule.id) } : {}),
             last_runs: schedule.runs.slice(-RECENT_RUNS).map((entry) => ({
               at: serializeTime(entry.at),
               outcome: entry.outcome,
@@ -316,7 +316,7 @@ export class ScheduleTools extends Context.Service<ScheduleTools, ScheduleToolsS
           }
         };
 
-        return ScheduleTools.of({ findHookUrl, assertSigningSecret, writeScheduleSecret, handle });
+        return ScheduleTools.of({ upsertHookUrl, assertSigningSecret, writeScheduleSecret, handle });
       })
     );
 }

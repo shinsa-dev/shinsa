@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test';
-import { Effect } from 'effect';
+import { Effect, type FileSystem } from 'effect';
 import {
   describeDuration,
   ENGINE_STOPPED,
@@ -20,7 +20,7 @@ import { testRuntime } from '../helpers/runtime.ts';
 
 const COLOR = { style: createStyle({ color: true, symbols: UNICODE_SYMBOLS }), width: 80 };
 
-function run<A, E>(effect: Effect.Effect<A, E, Shell>) {
+function run<A, E>(effect: Effect.Effect<A, E, Shell | FileSystem.FileSystem>) {
   return testRuntime.runPromise(effect);
 }
 
@@ -84,7 +84,7 @@ function createEngineIo(base: string, engine: FakeEngine | null, overrides: Engi
   const { launchctl, ownsJob, ...rest } = overrides;
   const service: EngineService = createLaunchdService({
     uid: 501,
-    ownsJob: ownsJob ?? (() => true),
+    ownsJob: ownsJob ?? (() => Effect.succeed(true)),
     launchctl:
       launchctl ??
       ((args) => {
@@ -171,14 +171,14 @@ describe('shinsa start', () => {
     const other = createEngineIo(
       base,
       { pid: 100, version: '0.0.0', restartWhenIdle: false },
-      { ownsJob: () => false }
+      { ownsJob: () => Effect.succeed(false) }
     );
     const message =
       'This shinsa is not the one inside the Shinsa app that runs your engine, so it leaves that engine alone. Use `shinsa` from your PATH, which the app keeps pointing at itself.';
     await expect(run(stopEngine(other.io))).rejects.toThrow(message);
     await expect(run(restartEngine(other.io, false))).rejects.toThrow(message);
     const stopped = startFakeEngine({ pid: null });
-    const elsewhere = createEngineIo(stopped.base, null, { ownsJob: () => false });
+    const elsewhere = createEngineIo(stopped.base, null, { ownsJob: () => Effect.succeed(false) });
     await expect(run(startEngine(elsewhere.io))).rejects.toThrow(message);
     expect([...other.calls, ...elsewhere.calls].every((call) => call[0] === 'print')).toBe(true);
   });

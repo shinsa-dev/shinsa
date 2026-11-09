@@ -17,7 +17,7 @@ import {
   type ShinsaCommand,
   type WeeklyReading,
 } from '@shinsa/core';
-import { Clock, Context, Effect, Exit, Fiber, Layer, Ref } from 'effect';
+import { Clock, Context, Effect, Exit, Fiber, FileSystem, Layer, Ref } from 'effect';
 import type {
   AccountLease,
   AccountLeaseRequest,
@@ -126,6 +126,7 @@ export class Accounts extends Context.Service<
       const duplicates = yield* Ref.make<ReadonlySet<string>>(new Set());
       const timer = yield* Ref.make<Fiber.Fiber<never> | null>(null);
       const stopped = yield* Ref.make(false);
+      const files = yield* FileSystem.FileSystem;
       const listeners = yield* Ref.make<ReadonlySet<(snapshot: AccountsSnapshot) => Effect.Effect<void>>>(
         new Set()
       );
@@ -134,6 +135,7 @@ export class Accounts extends Context.Service<
         claudePath ??
         resolveClaudeExecutable().pipe(
           Effect.provideService(ProgramVersions, versions),
+          Effect.provideService(FileSystem.FileSystem, files),
           Effect.flatMap((executable) =>
             executable.ok
               ? Effect.succeed(executable.path)

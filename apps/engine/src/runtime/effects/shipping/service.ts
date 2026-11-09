@@ -6,8 +6,8 @@ import {
   type ShippingStep,
   type Task,
 } from '@shinsa/core';
-import { Context, Effect, Layer } from 'effect';
-import { listCheckFailures } from '../../../checks/failures.ts';
+import { Context, Effect, FileSystem, Layer, Option } from 'effect';
+import { selectCheckFailures } from '../../../checks/failures.ts';
 import { resolveOutputTail } from '../../../git/remote/output.ts';
 import { PushError } from '../../../git/remote/schema.ts';
 import { Remote } from '../../../git/remote/service.ts';
@@ -39,6 +39,7 @@ export class Shipping extends Context.Service<
       const remote = yield* Remote;
       const pulls = yield* PullRequests;
       const describer = yield* PullRequestDescriber;
+      const withFiles = Effect.provideService(FileSystem.FileSystem, yield* FileSystem.FileSystem);
 
       const asShipping =
         (step: ShippingStepKind) =>
@@ -93,13 +94,13 @@ export class Shipping extends Context.Service<
         attempt: EffectAttempt
       ) {
         const output = resolveOutputTail(rejected.output);
-        const failures = listCheckFailures(output, task.worktreePath ?? '');
+        const failures = yield* withFiles(selectCheckFailures(output, task.worktreePath ?? ''));
         yield* world.dispatch(
           {
             type: 'pull_request.record_hook_failure',
             taskId: task.id,
             output,
-            failures: failures ? failures.map((failure) => failure.label) : null,
+            failures: Option.getOrNull(Option.map(failures, (each) => each.map((failure) => failure.label))),
           },
           { id: `${attempt.key}:${attempt.attempt}:pull_request.record_hook_failure` }
         );

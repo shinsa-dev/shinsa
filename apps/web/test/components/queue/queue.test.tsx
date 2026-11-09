@@ -38,7 +38,7 @@ const FULL = createShinsaState({
     createGate({ id: 'g-merge', taskId: 'merge', type: 'merge', title: 'Merge #12' }),
     createGate({ id: 'g-garden', taskId: 'garden', type: 'review' }),
   ],
-  patch: { focus: { projectId: 'work', teamId: null, until: null } },
+  patch: { focus: { projectIds: ['work'], except: false, teamId: null, until: null } },
 });
 
 function renderQueue(props: Partial<React.ComponentProps<typeof TaskQueue>> & { state?: ShinsaState } = {}) {
@@ -432,7 +432,7 @@ describe('a row’s summary line', () => {
             title: 'Shape me',
             stage: 'waiting_on_tasks',
             waitsOn: ['build'],
-            auto: { shape: true, start: false, priority: false },
+            auto: { shape: true, start: false, priority: false, project: false },
             pipeline: [],
           }),
           BUILDING,
@@ -451,7 +451,7 @@ describe('a row’s summary line', () => {
             id: 'planning',
             title: 'Plan the export',
             stage: 'planning',
-            auto: { shape: true, start: false, priority: false },
+            auto: { shape: true, start: false, priority: false, project: false },
             pipeline: ['plan', 'build'],
           }),
         ],

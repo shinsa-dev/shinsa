@@ -1,7 +1,7 @@
 import { createHmac, randomBytes } from 'node:crypto';
 import { join } from 'node:path';
 import { DomainError, SECRET_REF_PATTERN } from '@shinsa/core';
-import { Clock, Context, Effect, Layer, Ref } from 'effect';
+import { Clock, Context, Effect, Layer, Ref, Semaphore } from 'effect';
 import { EngineConfig } from '../../config/service.ts';
 import type { GitHubIdentity } from '../../github/identity/schema.ts';
 import { SecretFiles } from '../files/service.ts';
@@ -45,6 +45,11 @@ export class SecretStore extends Context.Service<
       const clock = yield* Clock.Clock;
       const current = yield* Ref.make(yield* files.read(path));
       const file = Ref.get(current);
+      const serial = yield* Semaphore.make(1);
+      const serially =
+        <Args extends unknown[], A, E>(step: (...args: Args) => Effect.Effect<A, E>) =>
+        (...args: Args) =>
+          Semaphore.withPermit(serial, step(...args));
 
       const write = Effect.fn('SecretStore.write')(function* (next: SecretFile) {
         yield* files.write(path, next);
@@ -177,20 +182,20 @@ export class SecretStore extends Context.Service<
 
       return SecretStore.of({
         resolveRef,
-        writeRef,
+        writeRef: serially(writeRef),
         hasRef,
-        removeRef,
-        removeExpiredRefs,
+        removeRef: serially(removeRef),
+        removeExpiredRefs: Semaphore.withPermit(serial, removeExpiredRefs),
         selectHook,
-        upsertHook,
-        writeHookSecret,
-        pruneHooks,
+        upsertHook: serially(upsertHook),
+        writeHookSecret: serially(writeHookSecret),
+        pruneHooks: serially(pruneHooks),
         selectMcpCredentials,
-        updateMcpCredentials,
-        removeMcpCredentials,
+        updateMcpCredentials: serially(updateMcpCredentials),
+        removeMcpCredentials: serially(removeMcpCredentials),
         selectGitHubToken,
-        writeGitHubToken,
-        removeGitHubToken,
+        writeGitHubToken: serially(writeGitHubToken),
+        removeGitHubToken: serially(removeGitHubToken),
       });
     })
   );

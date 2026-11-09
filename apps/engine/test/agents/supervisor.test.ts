@@ -907,9 +907,13 @@ describe('steering, cancelling and recovering', () => {
     continueRuns(respond, ['run-1', 'run-4', 'run-5']);
     await supervisor.recover();
     await until('two sessions', () => sessions.started.length === 2);
-    expect(sessions.started.map((fake) => [fake.input.prompt.length > 0, fake.input.resume])).toEqual([
-      [true, 'sess-1'],
+    expect(
+      sessions.started
+        .map((fake) => [fake.input.prompt.length > 0, fake.input.resume])
+        .sort(([, a], [, b]) => String(a).localeCompare(String(b)))
+    ).toEqual([
       [true, null],
+      [true, 'sess-1'],
     ]);
     expect(dispatched.filter((command) => command.type === 'runs.dispatch')).toHaveLength(1);
     expect(
@@ -1413,7 +1417,7 @@ function fakeProvider(
   };
 }
 
-function withSessionHistory(transcripts: SyncTranscripts, runId = 'run-0') {
+async function withSessionHistory(transcripts: SyncTranscripts, runId = 'run-0') {
   transcripts.record(runId, { type: 'user', from: 'shinsa', text: 'Build phase 1.', attachments: [] });
   transcripts.record(runId, { type: 'agent', phase: 'final', text: 'Wrote a.ts.' });
 }
@@ -1509,7 +1513,7 @@ describe('provider capabilities', () => {
 });
 
 describe('resume fallback', () => {
-  function restoreSetup(
+  async function restoreSetup(
     patch: (state: ShinsaState) => void,
     providerOverrides: Partial<AgentProvider> = {},
     defaultProvider = 'claude',
@@ -1531,12 +1535,12 @@ describe('resume fallback', () => {
       },
       { providers, ...options }
     );
-    withSessionHistory(context.transcripts);
+    await withSessionHistory(context.transcripts);
     return { ...context, sessions };
   }
 
   async function runOnce(
-    context: ReturnType<typeof restoreSetup>,
+    context: Awaited<ReturnType<typeof restoreSetup>>,
     finish: (fake: FakeSession) => void = (fake) => fake.finish()
   ) {
     const running = context.supervisor.execute('run-1', 'Carry on.');
@@ -1547,7 +1551,7 @@ describe('resume fallback', () => {
 
   test('a session whose file is gone is marked lost and the step starts fresh with the conversation handed over', async () => {
     for (const status of ['missing', 'empty'] as const) {
-      const context = restoreSetup(() => undefined, { inspectSession: () => Effect.succeed(status) });
+      const context = await restoreSetup(() => undefined, { inspectSession: () => Effect.succeed(status) });
       await runOnce(context);
       const input = context.sessions.started[0]?.input;
       expect(input?.resume).toBeNull();
@@ -1583,17 +1587,17 @@ describe('resume fallback', () => {
   });
 
   test('a session that is still there is resumed, and one the provider cannot check is resumed too', async () => {
-    const present = restoreSetup(() => undefined, { inspectSession: () => Effect.succeed('present') });
+    const present = await restoreSetup(() => undefined, { inspectSession: () => Effect.succeed('present') });
     await runOnce(present);
     expect(present.sessions.started[0]?.input).toMatchObject({ resume: 'old', prompt: 'Carry on.' });
-    const unchecked = restoreSetup(() => undefined, { inspectSession: undefined });
+    const unchecked = await restoreSetup(() => undefined, { inspectSession: undefined });
     await runOnce(unchecked);
     expect(unchecked.sessions.started[0]?.input.resume).toBe('old');
   });
 
   test('a session known to be lost, or a provider without sessions, is never resumed', async () => {
     let checked = 0;
-    const lost = restoreSetup(
+    const lost = await restoreSetup(
       (state) => {
         state.runs['run-1'] = createRun({ sessionId: 'old', sessionLost: true });
       },
@@ -1607,7 +1611,7 @@ describe('resume fallback', () => {
     await runOnce(lost);
     expect(lost.sessions.started[0]?.input.resume).toBeNull();
     expect(checked).toBe(0);
-    const sessionless = restoreSetup(() => undefined, {
+    const sessionless = await restoreSetup(() => undefined, {
       capabilities: { ...CLAUDE_CAPABILITIES, sessions: { resume: false, inspect: false, fork: false } },
     });
     await runOnce(sessionless);
@@ -1615,7 +1619,7 @@ describe('resume fallback', () => {
   });
 
   test('switching provider mid-run hands the conversation to the new one instead of resuming the old session', async () => {
-    const context = restoreSetup(() => undefined, {}, 'codex');
+    const context = await restoreSetup(() => undefined, {}, 'codex');
     await runOnce(context);
     const input = context.sessions.started[0]?.input;
     expect(input?.resume).toBeNull();
@@ -1633,7 +1637,7 @@ describe('resume fallback', () => {
   });
 
   test('a role moved to another provider is handed over and runs on that provider’s model for the role', async () => {
-    const context = restoreSetup((state) => {
+    const context = await restoreSetup((state) => {
       state.settings.agentProviders = { agent: 'codex' };
     });
     await runOnce(context);
@@ -1647,13 +1651,13 @@ describe('resume fallback', () => {
   });
 
   test('the Agent’s next step on its resumed session folds the turns before it and starts from the round brief', async () => {
-    const step = restoreSetup(() => undefined);
+    const step = await restoreSetup(() => undefined);
     const running = step.supervisor.execute('run-1');
     await until('the session', () => step.sessions.started.length > 0);
     (step.sessions.started[0] as FakeSession).finish();
     await running;
     expect(step.sessions.started[0]?.input).toMatchObject({ resume: 'old', fold: true, cacheWarm: false });
-    const warm = restoreSetup((state) => {
+    const warm = await restoreSetup((state) => {
       const earlier = state.runs['run-0'];
       if (earlier) earlier.cacheExpiresAt = Date.now() + 60_000;
     });
@@ -1662,10 +1666,10 @@ describe('resume fallback', () => {
     (warm.sessions.started[0] as FakeSession).finish();
     await warmRun;
     expect(warm.sessions.started[0]?.input).toMatchObject({ fold: true, cacheWarm: true });
-    const continued = restoreSetup(() => undefined);
+    const continued = await restoreSetup(() => undefined);
     await runOnce(continued);
     expect(continued.sessions.started[0]?.input.fold).toBeUndefined();
-    const retried = restoreSetup((state) => {
+    const retried = await restoreSetup((state) => {
       const run = state.runs['run-1'];
       if (run)
         run.attempts = [
@@ -1678,7 +1682,7 @@ describe('resume fallback', () => {
     await again;
     expect(retried.sessions.started[0]?.input.fold).toBeUndefined();
     for (const compaction of ['provider', 'compact'] as const) {
-      const direct = restoreSetup((state) => {
+      const direct = await restoreSetup((state) => {
         state.settings.compaction = compaction;
       });
       const plain = direct.supervisor.execute('run-1');
@@ -1690,7 +1694,7 @@ describe('resume fallback', () => {
   });
 
   test('a provider without a context handoff, or a history with nothing to hand over, starts plainly fresh', async () => {
-    const plain = restoreSetup(() => undefined, {
+    const plain = await restoreSetup(() => undefined, {
       capabilities: {
         ...CLAUDE_CAPABILITIES,
         sessions: { resume: false, inspect: false, fork: false },
@@ -1699,7 +1703,7 @@ describe('resume fallback', () => {
     });
     await runOnce(plain);
     expect(plain.sessions.started[0]?.input).toMatchObject({ resume: null, prompt: 'Carry on.' });
-    const empty = restoreSetup((state) => {
+    const empty = await restoreSetup((state) => {
       state.runs['run-1'] = createRun({ sessionId: 'unknown-history', sessionLost: true });
     });
     await runOnce(empty);
@@ -1710,15 +1714,18 @@ describe('resume fallback', () => {
     const rules = resolveHouseRules('answerer');
     const brief = (text: string) => `${rules}\n\nYour role: answerer. ${text}`;
 
-    function briefedSetup(provider: 'claude' | 'codex', history: (transcripts: SyncTranscripts) => void) {
-      const context = restoreSetup(
+    async function briefedSetup(
+      provider: 'claude' | 'codex',
+      history: (transcripts: SyncTranscripts) => void | Promise<void>
+    ) {
+      const context = await restoreSetup(
         (state) => {
           for (const run of Object.values(state.runs)) Object.assign(run, { role: 'answerer', provider });
         },
         { inspectSession: () => Effect.succeed('present') },
         provider
       );
-      history(context.transcripts);
+      await history(context.transcripts);
       return context;
     }
 
@@ -1727,7 +1734,7 @@ describe('resume fallback', () => {
       fake.finish();
     }
 
-    async function send(context: ReturnType<typeof briefedSetup>, runId: string, text: string) {
+    async function send(context: Awaited<ReturnType<typeof briefedSetup>>, runId: string, text: string) {
       const count = context.sessions.started.length;
       const running = context.supervisor.execute(runId, brief(text));
       await until('the session', () => context.sessions.started.length > count);
@@ -1738,7 +1745,7 @@ describe('resume fallback', () => {
     }
 
     function briefedWith(text: string) {
-      return (transcripts: SyncTranscripts) => {
+      return async (transcripts: SyncTranscripts) => {
         transcripts.record('run-0', { type: 'user', from: 'shinsa', text, attachments: [] });
         transcripts.record('run-0', { type: 'agent', phase: 'final', text: 'Answered.' });
       };
@@ -1746,7 +1753,7 @@ describe('resume fallback', () => {
 
     test('a resumed session that has them gets only the new instruction, on Claude and on Codex, turn after turn', async () => {
       for (const provider of ['claude', 'codex'] as const) {
-        const context = briefedSetup(provider, briefedWith(brief('The question: why?')));
+        const context = await briefedSetup(provider, briefedWith(brief('The question: why?')));
         const second = await send(context, 'run-1', 'The follow-up: and then?');
         expect(second).toMatchObject({
           resume: 'old',
@@ -1766,13 +1773,13 @@ describe('resume fallback', () => {
     });
 
     test('a session that never had these rules, or lost them to a compaction, gets the full brief', async () => {
-      const builder = briefedSetup(
+      const builder = await briefedSetup(
         'claude',
         briefedWith(`${resolveHouseRules('builder')}\n\nBuild phase 1.`)
       );
       expect((await send(builder, 'run-1', 'The follow-up: why?')).prompt).toBe(brief('The follow-up: why?'));
-      const compacted = briefedSetup('codex', (transcripts) => {
-        briefedWith(brief('The question: why?'))(transcripts);
+      const compacted = await briefedSetup('codex', async (transcripts) => {
+        await briefedWith(brief('The question: why?'))(transcripts);
         transcripts.record('run-0', {
           type: 'notice',
           notice: { kind: 'compaction', trigger: 'auto', preTokens: 180_000, summary: null },
@@ -1781,16 +1788,16 @@ describe('resume fallback', () => {
       expect((await send(compacted, 'run-1', 'The follow-up: why?')).prompt).toBe(
         brief('The follow-up: why?')
       );
-      const unknown = briefedSetup('claude', () => undefined);
+      const unknown = await briefedSetup('claude', () => undefined);
       expect((await send(unknown, 'run-1', 'The follow-up: why?')).prompt).toBe(brief('The follow-up: why?'));
     });
 
     test('a fresh session, a provider switch or a lost session gets the full brief', async () => {
-      const fresh = briefedSetup('claude', briefedWith(brief('The question: why?')));
+      const fresh = await briefedSetup('claude', briefedWith(brief('The question: why?')));
       fresh.state.runs['run-1'] = createRun({ role: 'answerer', sessionId: null });
       expect((await send(fresh, 'run-1', 'Why?')).prompt).toBe(brief('Why?'));
-      const lost = restoreSetup(() => undefined, { inspectSession: () => Effect.succeed('missing') });
-      briefedWith(brief('The question: why?'))(lost.transcripts);
+      const lost = await restoreSetup(() => undefined, { inspectSession: () => Effect.succeed('missing') });
+      await briefedWith(brief('The question: why?'))(lost.transcripts);
       const running = lost.supervisor.execute('run-1', brief('Why?'));
       await until('the session', () => lost.sessions.started.length > 0);
       const input = (lost.sessions.started[0] as FakeSession).input;
@@ -1798,15 +1805,15 @@ describe('resume fallback', () => {
       expect(input.prompt).toEndWith(brief('Why?'));
       lost.sessions.started[0]?.finish();
       await running;
-      const switched = restoreSetup(() => undefined, {}, 'codex');
-      briefedWith(brief('The question: why?'))(switched.transcripts);
+      const switched = await restoreSetup(() => undefined, {}, 'codex');
+      await briefedWith(brief('The question: why?'))(switched.transcripts);
       await runOnce(switched);
       expect(switched.sessions.started[0]?.input.prompt).toContain('This step is being handed to you');
     });
   });
 
   test('a resume the CLI refuses is retried once on a fresh session with the history', async () => {
-    const context = restoreSetup(() => undefined, { inspectSession: () => Effect.succeed('present') });
+    const context = await restoreSetup(() => undefined, { inspectSession: () => Effect.succeed('present') });
     const lost = {
       class: 'session_lost',
       message: 'gone',
@@ -1834,7 +1841,7 @@ describe('resume fallback', () => {
   });
 
   test('a session lost on a later attempt, after the turn moved, is also restored with the history', async () => {
-    const context = restoreSetup(
+    const context = await restoreSetup(
       () => undefined,
       { inspectSession: () => Effect.succeed('present') },
       'claude',
@@ -1869,8 +1876,8 @@ describe('resume fallback', () => {
   });
 
   test('a history too large to hand over fails the step as a full context instead of dropping it silently', async () => {
-    const context = restoreSetup(() => undefined, { inspectSession: () => Effect.succeed('missing') });
-    context.transcripts.record('run-0', { type: 'agent', phase: 'final', text: 'x'.repeat(450_000) });
+    const context = await restoreSetup(() => undefined, { inspectSession: () => Effect.succeed('missing') });
+    await context.transcripts.record('run-0', { type: 'agent', phase: 'final', text: 'x'.repeat(450_000) });
     await supervisorRuns(context);
     expect(context.sessions.started).toHaveLength(0);
     expect(endedRuns(context.dispatched)[0]).toMatchObject({
@@ -1879,7 +1886,7 @@ describe('resume fallback', () => {
     });
   });
 
-  async function supervisorRuns(context: ReturnType<typeof restoreSetup>) {
+  async function supervisorRuns(context: Awaited<ReturnType<typeof restoreSetup>>) {
     await context.supervisor.execute('run-1', 'Carry on.');
   }
 });

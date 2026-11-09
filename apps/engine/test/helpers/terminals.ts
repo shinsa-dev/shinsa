@@ -1,17 +1,18 @@
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { BunServices } from '@effect/platform-bun';
 import { Context, Duration, Effect, Exit, Layer, Scope } from 'effect';
 import type { ModelSource } from '../../src/agents/index.ts';
 import type { QuickJson } from '../../src/agents/quick/schema.ts';
 import type { ServerConfig } from '../../src/config/index.ts';
 import { EngineConfig } from '../../src/config/service.ts';
-import { JsonFile } from '../../src/files/service.ts';
 import { ShellLayer } from '../../src/shell/layers.ts';
 import { ServiceRefiner, Terminals, TerminalTimings } from '../../src/terminals/index.ts';
 import { TerminalsLayer } from '../../src/terminals/layers.ts';
 import { Engine } from './engine.ts';
 import { openEventLog } from './event-log.ts';
 import { createTestEvidence } from './evidence.ts';
+import { JsonFileLayer } from './files.ts';
 import { createTestConfig, createTestOnboarding } from './index.ts';
 import { createTempDir } from './temp.ts';
 import { createTestTranscripts } from './transcripts.ts';
@@ -35,7 +36,7 @@ export async function startRealTerminals(config: ServerConfig, home: string) {
         Layer.provide(
           Layer.mergeAll(
             ShellLayer,
-            JsonFile.layer,
+            JsonFileLayer,
             Layer.succeed(EngineConfig, config),
             Layer.succeed(TerminalTimings, { notify: Duration.millis(1), screen: Duration.seconds(2) })
           )
@@ -51,7 +52,8 @@ export async function startRealTerminals(config: ServerConfig, home: string) {
 }
 
 export function createTestRefiner(ask: QuickJson) {
-  return Effect.runSync(ServiceRefiner.use(Effect.succeed).pipe(Effect.provide(ServiceRefiner.layer(ask))));
+  const layer = ServiceRefiner.layer(ask).pipe(Layer.provide(BunServices.layer));
+  return Effect.runSync(ServiceRefiner.use(Effect.succeed).pipe(Effect.provide(layer)));
 }
 
 export async function stopTerminalServers() {
@@ -71,7 +73,7 @@ export async function startTerminalServer(
     transcripts: createTestTranscripts(config.transcriptsDir),
     evidence: createTestEvidence(config.evidenceDir),
     models: { listModels: Effect.succeed([]) } as unknown as ModelSource,
-    onboarding: createTestOnboarding(engine, config).onboarding,
+    onboarding: (await createTestOnboarding(engine, config)).onboarding,
     terminals,
     ...(options.refiner ? { refiner: options.refiner } : {}),
   });

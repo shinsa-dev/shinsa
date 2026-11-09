@@ -1,3 +1,4 @@
+import type { PullRequest } from '../domain/index.ts';
 import type { EventOf, ShinsaEvent } from '../events/index.ts';
 import {
   describeHookFailure,
@@ -27,9 +28,20 @@ type PullRequestEvent = Extract<
   }
 >;
 
+function stampMergedAt(previous: PullRequest | null | undefined, next: PullRequest, at: number) {
+  if (next.state !== 'merged') return next;
+  const kept = previous?.number === next.number ? previous.mergedAt : null;
+  return { ...next, mergedAt: kept ?? next.mergedAt ?? at };
+}
+
+function writePullRequest(state: ShinsaState, taskId: string, pullRequest: PullRequest, at: number) {
+  const previous = state.tasks[taskId]?.pullRequest;
+  updateTask(state, taskId, at, { pullRequest: stampMergedAt(previous, pullRequest, at) });
+  recordRoundPullRequest(state, taskId, at);
+}
+
 function applyPullRequestOpened(state: ShinsaState, event: EventOf<'pull_request.opened'>) {
-  updateTask(state, event.taskId, event.at, { pullRequest: event.pullRequest });
-  recordRoundPullRequest(state, event.taskId, event.at);
+  writePullRequest(state, event.taskId, event.pullRequest, event.at);
   record(state, event.taskId, event.at, {
     actor: 'shinsa',
     kind: 'pull_request',
@@ -86,8 +98,7 @@ export function applyPullRequestEvent(state: ShinsaState, event: PullRequestEven
       applyPullRequestOpened(state, event);
       return;
     case 'pull_request.updated':
-      updateTask(state, event.taskId, event.at, { pullRequest: event.pullRequest });
-      recordRoundPullRequest(state, event.taskId, event.at);
+      writePullRequest(state, event.taskId, event.pullRequest, event.at);
       return;
     case 'pull_request.push_requested':
       updateTask(state, event.taskId, event.at, { pushPending: true });

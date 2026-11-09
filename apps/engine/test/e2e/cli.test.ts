@@ -30,7 +30,7 @@ async function open() {
     transcripts: createTestTranscripts(world.config.transcriptsDir),
     evidence: createTestEvidence(world.config.evidenceDir),
     models: { listModels: () => Promise.resolve([]) } as unknown as ModelSource,
-    onboarding: createTestOnboarding(world.engine, world.config).onboarding,
+    onboarding: (await createTestOnboarding(world.engine, world.config)).onboarding,
   });
   stops.push(http.stop);
   return { w: world, port: String(http.server.port) };
@@ -51,7 +51,7 @@ async function shinsa(port: string, ...args: string[]) {
       bundled: false,
       service: createLaunchdService({
         uid: 0,
-        ownsJob: () => true,
+        ownsJob: () => Effect.succeed(true),
         launchctl: () => Effect.succeed({ ok: false, output: '' }),
       }),
     },
@@ -218,6 +218,8 @@ describe('the command line drives the whole lifecycle of a task', () => {
     expect(Object.values(w.state.projects)).toEqual([expect.objectContaining({ name: 'Work', key: 'WK' })]);
     expect((await shinsa(port, 'focus', 'set', 'WK')).code).toBe(0);
     expect((await shinsa(port, 'focus', 'show')).text).toBe('Focused on Work.');
+    expect((await shinsa(port, 'focus', 'set', 'WK', '--except')).code).toBe(0);
+    expect((await shinsa(port, 'focus', 'show')).text).toBe('Focused on everything but Work.');
     expect((await shinsa(port, 'focus', 'clear')).code).toBe(0);
     expect((await shinsa(port, 'projects', 'remove', 'work')).code).toBe(0);
     expect(w.state.projects).toEqual({});

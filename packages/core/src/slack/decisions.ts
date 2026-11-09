@@ -34,6 +34,7 @@ const SLACK_DECIDABLE: Readonly<Partial<Record<GateType, readonly GateDecision[]
   proposal: ['approve', 'reject'],
   failure: ['approve'],
   operation: ['approve', 'reject'],
+  result: ['approve'],
 };
 
 const DECIDED_TEXT: Readonly<Partial<Record<GateType, Partial<Record<GateDecision, string>>>>> = {
@@ -43,6 +44,7 @@ const DECIDED_TEXT: Readonly<Partial<Record<GateType, Partial<Record<GateDecisio
   proposal: { approve: 'approved the change', reject: 'kept the task as it is' },
   failure: { approve: 'retried it' },
   operation: { approve: 'ran the operation', reject: 'finished without the operation' },
+  result: { approve: 'closed it' },
 };
 
 export type SlackWriteDecision = Extract<GateDecision, 'revise' | 'reply'>;

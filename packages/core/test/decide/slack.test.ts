@@ -36,6 +36,7 @@ function mention(overrides: Partial<SlackMention> = {}): SlackMention {
     permalink: 'https://acme.slack.com/archives/C1/p1003',
     channelName: 'support',
     thread: [{ ts: '100.1', userId: 'U2', userName: 'Mia', text: 'Export hangs on big files.', bot: false }],
+    linkedThreads: [],
     ...overrides,
   };
 }
@@ -191,9 +192,10 @@ describe('a mention in a thread no task holds', () => {
   test('takes the project, the kind of task and the priority the way Home does: the focus project, then triage', () => {
     const harness = createHarness();
     const focus = writeProject(harness, 'Site');
+    registerRepo(harness, 'site', 'Site');
     harness.send({ type: 'focus.change', projectId: focus, until: null });
     const taskId = startFromSlack(harness, { shape: 'answer' });
-    expect(harness.task(taskId).projectId).toBe(focus);
+    expect(harness.task(taskId)).toMatchObject({ projectId: focus, auto: { project: true } });
   });
 });
 
@@ -290,17 +292,19 @@ describe('what a linked task sends to its thread', () => {
     expect(harness.effectsOf('slack.status').length).toBe(before + 1);
   });
 
-  test('the result of an inquiry is a new message', () => {
+  test('the result of an inquiry edits the card and posts nothing', () => {
     const harness = createHarness();
     const taskId = startFromSlack(harness, { shape: 'answer' });
     verifySetup(harness, taskId);
+    const before = harness.effectsOf('slack.status').length;
     harness.send({
       type: 'agent.deliver',
       runId: harness.activeRun(taskId).id,
       step: 'answer',
       body: 'It is the buffer.',
     });
-    expect(postsOf(harness)).toEqual([{ kind: 'result' }]);
+    expect(harness.effectsOf('slack.status').length).toBe(before + 1);
+    expect(postsOf(harness)).toEqual([]);
   });
 
   test('a merge is one merge message, and marking it done afterwards sends nothing more', () => {
@@ -317,13 +321,15 @@ describe('what a linked task sends to its thread', () => {
     expect(postsOf(harness)).toEqual([]);
   });
 
-  test('a task done with no result and no merge is a new message once', () => {
+  test('a task done with no result and no merge edits the card and posts nothing', () => {
     const harness = createHarness();
     const taskId = startFromSlack(harness);
     readyWorktree(harness, taskId);
+    const before = harness.effectsOf('slack.status').length;
     harness.send({ type: 'task.complete', taskId });
     expect(harness.task(taskId).stage).toBe('done');
-    expect(postsOf(harness)).toEqual([{ kind: 'completed' }]);
+    expect(harness.effectsOf('slack.status').length).toBe(before + 1);
+    expect(postsOf(harness)).toEqual([]);
   });
 
   test('nothing for a task that did not come from Slack', () => {
@@ -454,6 +460,25 @@ describe('a decision from a button or a form in Slack', () => {
     expect(harness.state.gates[gate.id]?.decision).toBe('revise');
     expect(harness.task(taskId).stage).toBe('planning');
     expect(harness.task(taskId).slack?.decided?.text).toBe('asked for changes to the plan');
+  });
+
+  test('closes a result from its card and says who closed it', () => {
+    const harness = createHarness();
+    const taskId = startFromSlack(harness, { shape: 'answer' });
+    verifySetup(harness, taskId);
+    harness.send({
+      type: 'agent.deliver',
+      runId: harness.activeRun(taskId).id,
+      step: 'answer',
+      body: 'It is the buffer.',
+    });
+    const gate = harness.openGate(taskId);
+    expect(gate.type).toBe('result');
+    harness.send({ type: 'slack.decide', decision: decision({ gateId: gate.id, decision: 'approve' }) });
+    expect(harness.state.gates[gate.id]?.status).toBe('answered');
+    expect(harness.task(taskId).stage).toBe('done');
+    expect(harness.task(taskId).slack?.decided).toEqual({ userId: 'U7', text: 'closed it' });
+    expect(postsOf(harness)).toEqual([]);
   });
 
   test('refuses what is only decided in Shinsa: cancelling, or a gate Slack does not decide', () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { serializeReportMarkdown } from '@shinsa/core';
+import { serializeReportMarkdown, type Task } from '@shinsa/core';
 import {
   describeDecision,
   listNewDecisions,
@@ -52,7 +52,10 @@ describe('the page status and badge', () => {
 
   it('counts only what the focus project lets through', () => {
     const review = createGate({ id: 'g-review', taskId: 't-2' });
-    const state = { ...withTasks(question, review), focus: { projectId: 'a-1', teamId: null, until: null } };
+    const state = {
+      ...withTasks(question, review),
+      focus: { projectIds: ['a-1'], except: false, teamId: null, until: null },
+    };
     expect(resolvePageAttention(state, NOW).badge).toBe(1);
     expect(listOpenGateIds(state)).toEqual(new Set(['g-question', 'g-review']));
   });
@@ -60,6 +63,23 @@ describe('the page status and badge', () => {
   it('puts the count in front of the name', () => {
     expect(resolveWindowTitle(0)).toBe('Shinsa');
     expect(resolveWindowTitle(3)).toBe('[3] Shinsa');
+  });
+});
+
+describe('a decision held by a wait', () => {
+  it('alerts on the review once what its task waits on settles', () => {
+    const review = createGate({ id: 'g-review', taskId: 't-2' });
+    const open = withTasks(review);
+    const waitOn = (blocker: Task) => ({
+      ...open,
+      tasks: { 't-1': blocker, 't-2': { ...open.tasks['t-2']!, waitsOn: ['t-1'] } },
+    });
+    const held = waitOn(open.tasks['t-1']!);
+    const seen = listOpenGateIds(held);
+    expect(seen).toEqual(new Set());
+    expect(listNewDecisions(seen, held, NOW)).toEqual([]);
+    const released = waitOn({ ...open.tasks['t-1']!, stage: 'merged' });
+    expect(listNewDecisions(seen, released, NOW).map((notice) => notice.gateId)).toEqual(['g-review']);
   });
 });
 
@@ -182,7 +202,7 @@ describe('which decisions are new', () => {
     const review = createGate({ id: 'g-review', taskId: 't-2' });
     const focused = {
       ...withTasks(question, review),
-      focus: { projectId: 'a-1', teamId: null, until: null },
+      focus: { projectIds: ['a-1'], except: false, teamId: null, until: null },
     };
     expect(listNewDecisions(new Set(), focused, NOW).map((entry) => entry.gateId)).toEqual(['g-question']);
     expect(listNewDecisions(new Set(['g-question']), focused, NOW)).toEqual([]);

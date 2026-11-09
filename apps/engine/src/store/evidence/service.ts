@@ -1,8 +1,9 @@
-import { copyFileSync, existsSync, mkdirSync, statSync, writeFileSync } from 'node:fs';
 import { extname, join } from 'node:path';
-import { Context, Effect, Layer, Option } from 'effect';
+import { Context, Effect, FileSystem, Layer, Option } from 'effect';
+import type { PlatformError } from 'effect/PlatformError';
 import { EngineConfig } from '../../config/service.ts';
 import { isEvidencePath, resolveFolderPath } from './folder.ts';
+import { writeImageFile } from './image-file.ts';
 import {
   EVIDENCE_COPY_LIMIT_BYTES,
   EVIDENCE_ROUTE,
@@ -38,6 +39,12 @@ export class Evidence extends Context.Service<
     Evidence,
     Effect.gen(function* () {
       const dir = (yield* EngineConfig).evidenceDir;
+      const fs = yield* FileSystem.FileSystem;
+      const statFile = (path: string) =>
+        fs.stat(path).pipe(
+          Effect.map((info) => (info.type === 'File' ? Option.some(info) : Option.none())),
+          Effect.orElseSucceed(() => Option.none<FileSystem.File.Info>())
+        );
 
       const resolveExtension = (text: string, fallback: string) => {
         const extension = text
@@ -57,59 +64,58 @@ export class Evidence extends Context.Service<
         return slug || 'evidence';
       };
 
-      const writeEvidence = (
+      const writeEvidence = Effect.fn('Evidence.writeEvidence')(function* (
         folder: string | null,
         base: string,
         extension: string,
-        write: (path: string) => void
-      ) =>
-        Effect.sync(() => {
-          const id = Bun.randomUUIDv7().replace(/-/g, '').slice(-NAME_ID_LENGTH);
-          const name = `${base}${id}.${extension}`;
-          const relative = folder ? `${folder}/${name}` : name;
-          if (folder) mkdirSync(join(dir, folder), { recursive: true });
-          write(join(dir, relative));
-          return `${EVIDENCE_ROUTE}${relative}`;
-        });
+        write: (path: string) => Effect.Effect<void, PlatformError>
+      ) {
+        const id = Bun.randomUUIDv7().replace(/-/g, '').slice(-NAME_ID_LENGTH);
+        const name = `${base}${id}.${extension}`;
+        const relative = folder ? `${folder}/${name}` : name;
+        if (folder) yield* fs.makeDirectory(join(dir, folder), { recursive: true }).pipe(Effect.orDie);
+        yield* write(join(dir, relative)).pipe(Effect.orDie);
+        return `${EVIDENCE_ROUTE}${relative}`;
+      });
 
       return Evidence.of({
         writeImage: (base64, mediaType) =>
           Effect.suspend(() => {
             const extension = resolveExtension(mediaType.split('/')[1] ?? '', 'png');
             return writeEvidence(null, '', extension, (path) =>
-              writeFileSync(path, Buffer.from(base64, 'base64'))
+              Effect.sync(() => writeImageFile(path, base64))
             );
           }),
         writeText: Effect.fn('Evidence.writeText')(function* (text, folder, title, extension) {
           const path = yield* resolveFolderPath(folder);
           return yield* writeEvidence(path, `${resolveSlug(title)}-`, extension, (file) =>
-            writeFileSync(file, text)
+            fs.writeFileString(file, text)
           );
         }),
         copyFile: Effect.fn('Evidence.copyFile')(function* (source, folder, title) {
-          const stats = yield* Effect.sync(() => (existsSync(source) ? statSync(source) : null));
-          if (!stats?.isFile())
+          const found = yield* statFile(source);
+          if (Option.isNone(found))
             return yield* new EvidenceSourceMissing({ source, message: `No file at ${source}.` });
-          if (stats.size > EVIDENCE_COPY_LIMIT_BYTES) {
+          const size = Number(found.value.size);
+          if (size > EVIDENCE_COPY_LIMIT_BYTES) {
             return yield* new EvidenceTooLarge({
               source,
-              size: stats.size,
-              message: `${source} is ${Math.ceil(stats.size / MEGABYTE)} MB; the limit is ${EVIDENCE_COPY_LIMIT_BYTES / MEGABYTE} MB. Record a shorter clip or a smaller window.`,
+              size,
+              message: `${source} is ${Math.ceil(size / MEGABYTE)} MB; the limit is ${EVIDENCE_COPY_LIMIT_BYTES / MEGABYTE} MB. Record a shorter clip or a smaller window.`,
             });
           }
           const path = yield* resolveFolderPath(folder);
           const extension = resolveExtension(extname(source), 'bin');
           return yield* writeEvidence(path, `${resolveSlug(title)}-`, extension, (file) =>
-            copyFileSync(source, file)
+            fs.copyFile(source, file)
           );
         }),
-        selectFile: (name) =>
-          Effect.sync(() => {
-            const segments = name.split('/');
-            if (!isEvidencePath(segments)) return Option.none();
-            const path = join(dir, ...segments);
-            return existsSync(path) && statSync(path).isFile() ? Option.some(path) : Option.none();
-          }),
+        selectFile: Effect.fn('Evidence.selectFile')(function* (name) {
+          const segments = name.split('/');
+          if (!isEvidencePath(segments)) return Option.none<string>();
+          const path = join(dir, ...segments);
+          return Option.map(yield* statFile(path), () => path);
+        }),
       });
     })
   );

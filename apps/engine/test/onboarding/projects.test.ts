@@ -35,7 +35,7 @@ async function setup(answers: unknown[] = []) {
     notes: await createRepo(projects, 'notes', 'jane/notes'),
     scratch: await createRepo(projects, 'scratch', null),
   };
-  const machine = createTestMachine(engine, config, {
+  const machine = await createTestMachine(engine, config, {
     resolveLogin: () => Promise.resolve('jane'),
   });
   const onboarding = createPromisedOnboarding({

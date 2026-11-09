@@ -7,7 +7,7 @@ import {
   resolveRoundBase,
   type Task,
 } from '@shinsa/core';
-import { Context, Effect, Layer } from 'effect';
+import { Context, Effect, FileSystem, Layer } from 'effect';
 import { BaseCheckouts } from '../../../checks/base/service.ts';
 import { resolveSharedCacheEnv } from '../../../checks/caches/paths.ts';
 import { serializeCheckOutput } from '../../../checks/evidence.ts';
@@ -35,6 +35,7 @@ export class CheckRuns extends Context.Service<
       const bases = yield* BaseCheckouts;
       const taskCoverage = yield* TaskCoverage;
       const history = yield* History;
+      const withFiles = Effect.provideService(FileSystem.FileSystem, yield* FileSystem.FileSystem);
 
       const storeOutputs = Effect.fn('CheckRuns.storeOutputs')(function* (
         task: Task,
@@ -58,7 +59,7 @@ export class CheckRuns extends Context.Service<
         if (task.stage !== 'checking' || !worktree) return;
         yield* world.runs.quiesce(task.id);
         if (task.approvedEdits === 'review') yield* edits.commit(task, repo, attempt);
-        const env = resolveSharedCacheEnv(worktree, world.config.dataDir, repo.id);
+        const env = yield* withFiles(resolveSharedCacheEnv(worktree, world.config.dataDir, repo.id));
         const track = world.trackProcess;
         const runSync = Effect.runSyncWith(yield* Effect.context<never>());
         const runs = yield* Effect.acquireUseRelease(

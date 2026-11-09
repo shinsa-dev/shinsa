@@ -711,3 +711,84 @@ describe('create_task and split_task', () => {
     expect(await handleOrchestrationTool('wait_for', {}, createCall(core, run.id).call)).toBeNull();
   });
 });
+
+describe('move_to_repository', () => {
+  test('moves a planning task to a repository Shinsa knows and hands over', async () => {
+    const { core, run, taskId } = await building('plan');
+    const reply = await handleOrchestrationTool(
+      'move_to_repository',
+      { repository: 'admin', reason: 'The badge lives in the admin app.' },
+      createCall(core, run.id).call
+    );
+    const admin = Object.values(core.state.repos).find((repo) => repo.name === 'admin');
+    expect(reply).toContain('Handed over');
+    expect(core.dispatched.at(-1)).toEqual({
+      type: 'agent.move_to_repository',
+      runId: run.id,
+      repoId: admin?.id ?? '',
+      reason: 'The badge lives in the admin app.',
+    });
+    expect(core.state.tasks[taskId]?.movingTo).toBe(admin?.id);
+    expect(core.state.runs[run.id]?.endedAt).not.toBeNull();
+  });
+
+  test('registers a repository from the project folders before moving there', async () => {
+    const { core, run, taskId } = await building('plan');
+    const named: string[] = [];
+    const registerRepo: RegisterRepo = async (projectId, name) => {
+      named.push(`${projectId}:${name}`);
+      await core.dispatch({
+        type: 'repo.register',
+        repo: { name, path: `/code/${name}`, defaultBranch: 'main', remote: null, checkCommands: [] },
+        projectName: null,
+      });
+      return Object.values(core.state.repos).find((repo) => repo.name === name) ?? null;
+    };
+    await handleOrchestrationTool(
+      'move_to_repository',
+      { repository: 'studio', reason: 'Studio holds the canvas.' },
+      createCall(core, run.id, { registerRepo }).call
+    );
+    const studio = Object.values(core.state.repos).find((repo) => repo.name === 'studio');
+    expect(named).toEqual(['null:studio']);
+    expect(core.state.tasks[taskId]?.movingTo).toBe(studio?.id);
+  });
+
+  test('passes on the core’s refusal for a repository of another project', async () => {
+    const { core, run } = await building('plan');
+    await core.dispatch({ type: 'project.write', project: { name: 'Islands', color: 'green', key: 'ISL' } });
+    const islands = Object.values(core.state.projects)[0]?.id ?? '';
+    const admin = Object.values(core.state.repos).find((repo) => repo.name === 'admin');
+    await core.dispatch({ type: 'repo.update', repoId: admin?.id ?? '', patch: { projectId: islands } });
+    await expect(
+      handleOrchestrationTool(
+        'move_to_repository',
+        { repository: 'admin', reason: 'It is there.' },
+        createCall(core, run.id).call
+      )
+    ).rejects.toThrow('admin belongs to another project');
+  });
+
+  test('refuses a repository it cannot find, and input without a repository or a reason', async () => {
+    const { core, run } = await building('plan');
+    const { call } = createCall(core, run.id);
+    await expect(
+      handleOrchestrationTool('move_to_repository', { repository: 'web', reason: 'It is there.' }, call)
+    ).rejects.toThrow(
+      'There is no repository "web" in this task\'s project or its folders. Known: app, admin.'
+    );
+    await expect(
+      handleOrchestrationTool('move_to_repository', { reason: 'It is there.' }, call)
+    ).rejects.toThrow('Set repository to the name of the repository to move to.');
+    await expect(
+      handleOrchestrationTool('move_to_repository', { repository: 'admin' }, call)
+    ).rejects.toThrow('Set reason to why the work belongs there, in one sentence.');
+    await expect(
+      handleOrchestrationTool('move_to_repository', { repository: 'admin', reason: 'x'.repeat(2000) }, call)
+    ).rejects.toThrow('reason is 2000 characters');
+    const empty = createCall(core, run.id, { state: () => ({ ...core.state, repos: {} }) }).call;
+    await expect(
+      handleOrchestrationTool('move_to_repository', { repository: 'web', reason: 'It is there.' }, empty)
+    ).rejects.toThrow('Known: none.');
+  });
+});

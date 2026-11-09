@@ -131,6 +131,9 @@ export {
   PROJECT_LIMITS,
   parseTaskHandle,
   resolveProjectKey,
+  isProjectFixed,
+  isRepoNamed,
+  resolveRepoMove,
   selectFolderProject,
   selectProjectByReference,
 } from './projects.ts';
@@ -323,6 +326,17 @@ export {
   type ShinsaToolName,
   TASK_SESSION_ROLES,
 } from './tools.ts';
+export {
+  describeFocusProjects,
+  isProjectInFocus,
+  NO_FOCUS,
+  NO_FOCUS_PROJECTS,
+  normaliseFocusProjects,
+  resolveFocusSelection,
+  type SingleProjectFocus,
+  selectSingleFocusProject,
+  serializeNames,
+} from './focus.ts';
 export type * from './types.ts';
 export {
   EVIDENCE_KINDS,

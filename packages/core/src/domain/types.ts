@@ -242,8 +242,12 @@ export interface Project {
   usageLimit?: number | null;
 }
 
-export interface Focus {
-  projectId: string | null;
+export interface FocusProjects {
+  projectIds: string[];
+  except: boolean;
+}
+
+export interface Focus extends FocusProjects {
   teamId: string | null;
   until: number | null;
 }
@@ -284,6 +288,7 @@ export interface PullRequest {
   queueRemoval?: string | null;
   mergeCommit?: string | null;
   changes?: PullRequestChanges | null;
+  mergedAt?: number | null;
 }
 
 export type PhaseStatus = 'pending' | 'active' | 'done' | 'skipped';
@@ -450,6 +455,7 @@ export interface Task {
   request: string;
   title: string;
   repoId: string | null;
+  movingTo?: string | null;
   size: TaskSize | null;
   planFirst: boolean;
   stage: TaskStage;
@@ -625,8 +631,7 @@ export interface TimingSpan {
   to: number;
 }
 
-export interface FocusSpan {
-  projectId: string;
+export interface FocusSpan extends FocusProjects {
   from: number;
   to: number | null;
   until: number | null;

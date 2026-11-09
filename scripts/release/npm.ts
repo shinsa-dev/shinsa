@@ -1,6 +1,5 @@
-import { chmodSync, copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { Config, Console, Duration, Effect, Schema } from 'effect';
+import { Config, Console, Duration, Effect, FileSystem, Schema } from 'effect';
 import { Command } from '../kit/command/index.ts';
 import { isOnGitHubActions, retryStep, serializeRetryWarning } from '../release-retry.ts';
 import type { ReleaseChannel } from '../release-version.ts';
@@ -115,16 +114,18 @@ export const assertArchiveChecksum = Effect.fn('assertArchiveChecksum')(function
   archive: string,
   checksumFile: string
 ) {
-  const [expected = '', name] = (yield* Effect.sync(() => readFileSync(checksumFile, 'utf8')))
+  const fs = yield* FileSystem.FileSystem;
+  const unreadable = (error: { readonly message: string }) =>
+    new ArchiveInvalid({ message: `Could not read ${archive} or its checksum: ${error.message}` });
+  const [expected = '', name] = (yield* fs.readFileString(checksumFile).pipe(Effect.mapError(unreadable)))
     .trim()
     .split(/\s+/);
   if (!SHA256_PATTERN.test(expected))
     return yield* new ArchiveInvalid({ message: `${checksumFile} holds no SHA-256` });
   if (name !== archive.split('/').at(-1))
     return yield* new ArchiveInvalid({ message: `${checksumFile} names ${name}, not ${archive}` });
-  const actual = new Bun.CryptoHasher('sha256')
-    .update(yield* Effect.sync(() => readFileSync(archive)))
-    .digest('hex');
+  const bytes = yield* fs.readFile(archive).pipe(Effect.mapError(unreadable));
+  const actual = new Bun.CryptoHasher('sha256').update(bytes).digest('hex');
   if (actual !== expected)
     return yield* new ArchiveInvalid({ message: `${archive} does not match its checksum` });
 });
@@ -135,18 +136,23 @@ export const writeNpmPackages = Effect.fn('writeNpmPackages')(function* (
   version: string
 ) {
   const command = yield* Command;
+  const fs = yield* FileSystem.FileSystem;
+  const unwritable = (error: { readonly message: string }) =>
+    new ArchiveInvalid({ message: `Could not write the npm packages in ${outDir}: ${error.message}` });
   const writeManifest = (dir: string, manifest: object) =>
-    Effect.sync(() => writeFileSync(join(dir, 'package.json'), `${JSON.stringify(manifest, null, 2)}\n`));
+    fs
+      .writeFileString(join(dir, 'package.json'), `${JSON.stringify(manifest, null, 2)}\n`)
+      .pipe(Effect.mapError(unwritable));
   const writeEngine = Effect.fn('writeNpmPackages.engine')(function* (target: PublishedEngineTarget) {
     const names = resolveEngineArchive(target);
     const archive = join(archivesDir, names.archive);
-    if (!(yield* Effect.sync(() => existsSync(archive))))
+    if (!(yield* fs.exists(archive).pipe(Effect.mapError(unwritable))))
       return yield* new ArchiveInvalid({
         message: `${archive} is missing: the release has no ${names.archive}`,
       });
     yield* assertArchiveChecksum(archive, join(archivesDir, names.checksum));
     const dir = join(outDir, names.folder);
-    yield* Effect.sync(() => mkdirSync(dir, { recursive: true }));
+    yield* fs.makeDirectory(dir, { recursive: true }).pipe(Effect.mapError(unwritable));
     const tar = yield* command.run(['tar', '-xzf', archive, '-C', dir, '--strip-components=1']);
     if (tar.code !== 0)
       return yield* new ArchiveInvalid({ message: `Could not unpack ${archive}: ${tar.stderr}` });
@@ -156,14 +162,16 @@ export const writeNpmPackages = Effect.fn('writeNpmPackages')(function* (
     return written;
   });
 
-  yield* Effect.sync(() => rmSync(outDir, { recursive: true, force: true }));
+  yield* fs.remove(outDir, { recursive: true, force: true }).pipe(Effect.mapError(unwritable));
   const engines = yield* Effect.forEach(PUBLISHED_ENGINE_TARGETS, writeEngine);
   const launcher = join(outDir, LAUNCHER_PACKAGE);
   const bin = join(launcher, 'bin/shinsa.js');
-  yield* Effect.sync(() => mkdirSync(join(launcher, 'bin'), { recursive: true }));
-  yield* Effect.sync(() => copyFileSync(LAUNCHER_SOURCE, bin));
-  yield* Effect.sync(() => chmodSync(bin, 0o755));
-  yield* Effect.sync(() => writeFileSync(join(launcher, 'README.md'), serializeLauncherReadme()));
+  yield* Effect.all([
+    fs.makeDirectory(join(launcher, 'bin'), { recursive: true }),
+    fs.copyFile(LAUNCHER_SOURCE, bin),
+    fs.chmod(bin, 0o755),
+    fs.writeFileString(join(launcher, 'README.md'), serializeLauncherReadme()),
+  ]).pipe(Effect.mapError(unwritable));
   yield* writeManifest(launcher, createLauncherManifest(version));
   const packages: NpmPackage[] = [...engines, { name: LAUNCHER_PACKAGE, dir: launcher }];
   return packages;

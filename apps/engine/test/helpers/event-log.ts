@@ -37,8 +37,8 @@ export function openEventLog(path = ':memory:') {
     selectSnapshot: (version: string) =>
       Option.getOrNull(run(Snapshots.use((snapshots) => snapshots.select(version)))),
     listBriefings: () => run(Briefings.use((briefings) => briefings.list)),
-    writeBriefing: (projectId: string | null, stored: StoredBriefing) =>
-      run(Briefings.use((briefings) => briefings.write(projectId, stored))),
+    writeBriefing: (key: string, stored: StoredBriefing) =>
+      run(Briefings.use((briefings) => briefings.write(key, stored))),
     commitCommand: (input: CommandCommit) => run(CommandLog.use((log) => log.commit(input))),
     recordReceipt: (receipt: CommandReceipt) => run(Receipts.use((receipts) => receipts.record(receipt))),
     selectReceipt: (id: string) => Option.getOrNull(run(Receipts.use((receipts) => receipts.select(id)))),

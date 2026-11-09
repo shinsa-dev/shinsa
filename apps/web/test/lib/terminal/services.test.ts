@@ -1,5 +1,6 @@
 import { describe, expect, it, spyOn } from 'bun:test';
 import { resolveServiceView, SERVICE_LIMITS, type Task } from '@shinsa/core';
+import { connection, replaceConnection } from '@/lib/connection/socket.ts';
 import {
   canStartAll,
   createServiceDraft,
@@ -161,6 +162,24 @@ describe('a service’s private address', () => {
     expect(resolveServiceLink(stopped, undefined, true)).toBeNull();
   });
 
+  it('opens a relayed teammate’s service at its private address through the engine’s Shinsa Cloud, from this machine too', () => {
+    const relayed = { ...running, taskId: 'task-kai' };
+    replaceConnection(
+      Object.assign(Object.create(connection), {
+        selectAppOrigin: (id: string) => (id === 'task-kai' ? 'http://127.0.0.1:5195' : null),
+      })
+    );
+    expect(resolveServiceLink(relayed, undefined, false)).toEqual({
+      href: `http://127.0.0.1:5195${opened}`,
+      text: remoteUrl,
+    });
+    expect(resolveServiceLink(running, undefined, false)?.href).toBe('http://localhost:4123/tasks/SH-4');
+    expect(resolveServiceLink({ ...older, taskId: 'task-kai' }, undefined, false)?.href).toBe(
+      'http://localhost:4123/tasks/SH-4'
+    );
+    replaceConnection(null);
+  });
+
   it('carries the path of a preview the agent attached onto the private address', () => {
     expect(resolveServiceLink(running, 'http://localhost:4123/cart?x=1#top', true)).toEqual({
       href: `/__remote/previews/open?url=${encodeURIComponent('https://abc.shinsa.page/cart?x=1#top')}`,
@@ -276,7 +295,7 @@ describe('which services the menu shows', () => {
   it('shows the project you are in, else the focus project, else every project', () => {
     expect(resolveServicesProjects(state, 'docs', NOW).map((project) => project.id)).toEqual(['docs']);
     expect(resolveServicesProjects(state, null, NOW).map((project) => project.id)).toEqual(['docs', 'shop']);
-    const focused = { ...state, focus: { projectId: 'shop', teamId: null, until: null } };
+    const focused = { ...state, focus: { projectIds: ['shop'], except: false, teamId: null, until: null } };
     expect(resolveServicesProjects(focused, null, NOW).map((project) => project.id)).toEqual(['shop']);
   });
 

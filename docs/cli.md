@@ -1606,7 +1606,7 @@ Every task agent's tool: `projects_add_folder`.
 
 #### shinsa focus show
 
-Show the project you are focused on.
+Show the projects you are focused on.
 
 ```
 shinsa focus show [--json]
@@ -1616,22 +1616,23 @@ Every task agent's tool: `focus_show` (reads).
 
 #### shinsa focus set
 
-Focus on one project: Shinsa shows only its work.
+Focus on projects, or with --except on everything but them.
 
 ```
-shinsa focus set <project> [--hours <number>] [--json]
+shinsa focus set <projects...> [--except] [--hours <number>] [--json]
 ```
 
 Every task agent's tool: `focus_set`. Sends `focus.change`.
 
 | Argument | Kind | What it is |
 | --- | --- | --- |
-| `<project>` | text, required | The project: its key, name or id. |
+| `<projects>` | list, required | The projects: each one’s key, name or id. |
+| `--except` | boolean, optional | Show everything but these projects. |
 | `--hours` | number, optional | Only for this many hours. |
 
 #### shinsa focus clear
 
-Stop focusing on one project.
+Stop focusing: everything shows.
 
 ```
 shinsa focus clear [--json]

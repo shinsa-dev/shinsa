@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { mkdirSync, readFileSync, truncateSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { Effect } from 'effect';
+import { Effect, Option } from 'effect';
 import { resolveFolderPath } from '../../src/store/evidence/folder.ts';
 import { EVIDENCE_COPY_LIMIT_BYTES, EVIDENCE_ROUTE } from '../../src/store/evidence/index.ts';
 import { createTestEvidence } from '../helpers/evidence.ts';
@@ -11,15 +11,14 @@ const FOLDER = { taskId: 'task-1', round: 1 };
 
 function openStore(dir: string) {
   const evidence = createTestEvidence(dir);
-  const run = <A, E>(effect: Effect.Effect<A, E>) => Effect.runSync(effect);
+  const run = <A, E>(effect: Effect.Effect<A, E>) => Effect.runPromise(effect);
   return {
     writeImage: (base64: string, mediaType: string) => run(evidence.writeImage(base64, mediaType)),
     writeText: (text: string, folder: typeof FOLDER, title: string, extension: 'txt' | 'md' = 'txt') =>
       run(evidence.writeText(text, folder, title, extension)),
     copyFile: (source: string, folder: typeof FOLDER, title: string) =>
       run(evidence.copyFile(source, folder, title)),
-    selectFile: (name: string) =>
-      run(evidence.selectFile(name)).pipe((found) => (found._tag === 'Some' ? found.value : null)),
+    selectFile: async (name: string) => Option.getOrNull(await run(evidence.selectFile(name))),
   };
 }
 
@@ -28,16 +27,16 @@ function nameOf(uri: string) {
 }
 
 describe('Evidence', () => {
-  test('chat images stay at the top, attached evidence goes under its task and round', () => {
+  test('chat images stay at the top, attached evidence goes under its task and round', async () => {
     const dir = createTempDir();
     const store = openStore(dir);
-    const image = store.writeImage(Buffer.from('png').toString('base64'), 'image/png');
-    const odd = store.writeImage('', 'image/');
-    const text = store.writeText('all green', FOLDER, 'Unit tests: all pass!');
-    const note = store.writeText('| a | b |', FOLDER, 'Contrast', 'md');
+    const image = await store.writeImage(Buffer.from('png').toString('base64'), 'image/png');
+    const odd = await store.writeImage('', 'image/');
+    const text = await store.writeText('all green', FOLDER, 'Unit tests: all pass!');
+    const note = await store.writeText('| a | b |', FOLDER, 'Contrast', 'md');
     const source = join(createTempDir(), 'Screen Shot.PNG');
     writeFileSync(source, 'shot');
-    const copied = store.copyFile(source, { taskId: 'task-1', round: 3 }, '---');
+    const copied = await store.copyFile(source, { taskId: 'task-1', round: 3 }, '---');
     const bare = join(createTempDir(), 'LOG');
     writeFileSync(bare, 'log');
     expect(image).toMatch(/^\/api\/evidence\/\w+\.png$/);
@@ -45,21 +44,21 @@ describe('Evidence', () => {
     expect(text).toMatch(/^\/api\/evidence\/task-1\/round-1\/unit-tests-all-pass-\w+\.txt$/);
     expect(note).toMatch(/^\/api\/evidence\/task-1\/round-1\/contrast-\w+\.md$/);
     expect(copied).toMatch(/^\/api\/evidence\/task-1\/round-3\/evidence-\w+\.png$/);
-    expect(store.copyFile(bare, FOLDER, 'Log').endsWith('.bin')).toBe(true);
+    expect((await store.copyFile(bare, FOLDER, 'Log')).endsWith('.bin')).toBe(true);
     expect(readFileSync(join(dir, nameOf(text)), 'utf8')).toBe('all green');
     expect(readFileSync(join(dir, nameOf(copied)), 'utf8')).toBe('shot');
-    expect(store.selectFile(nameOf(copied))).toBe(join(dir, nameOf(copied)));
+    expect(await store.selectFile(nameOf(copied))).toBe(join(dir, nameOf(copied)));
   });
 
-  test('copying something that is not a file, or too large, is refused', () => {
+  test('copying something that is not a file, or too large, is refused', async () => {
     const store = openStore(createTempDir());
     const folder = createTempDir();
-    expect(() => store.copyFile(join(folder, 'missing.png'), FOLDER, 'x')).toThrow('No file at');
-    expect(() => store.copyFile(folder, FOLDER, 'x')).toThrow('No file at');
+    await expect(store.copyFile(join(folder, 'missing.png'), FOLDER, 'x')).rejects.toThrow('No file at');
+    await expect(store.copyFile(folder, FOLDER, 'x')).rejects.toThrow('No file at');
     const huge = join(folder, 'huge.webm');
     writeFileSync(huge, '');
     truncateSync(huge, EVIDENCE_COPY_LIMIT_BYTES + 1);
-    expect(() => store.copyFile(huge, FOLDER, 'x')).toThrow('is 201 MB; the limit is 200 MB.');
+    await expect(store.copyFile(huge, FOLDER, 'x')).rejects.toThrow('is 201 MB; the limit is 200 MB.');
   });
 
   test('a task id that cannot name a folder is refused', () => {
@@ -69,7 +68,7 @@ describe('Evidence', () => {
     );
   });
 
-  test('only plain names, or a task, a round and a name, resolve inside the evidence directory', () => {
+  test('only plain names, or a task, a round and a name, resolve inside the evidence directory', async () => {
     const dir = createTempDir();
     mkdirSync(join(dir, 'nested'));
     mkdirSync(join(dir, 'task-1', 'round-1', 'deep'), { recursive: true });
@@ -77,9 +76,11 @@ describe('Evidence', () => {
     writeFileSync(join(dir, 'nested', 'x'), 'x');
     writeFileSync(join(dir, 'task-1', 'round-1', 'shot.png'), 'x');
     const store = openStore(dir);
-    expect(store.selectFile('seed-image-1.png')).toBe(join(dir, 'seed-image-1.png'));
-    expect(store.selectFile('task-1/round-1/shot.png')).toBe(join(dir, 'task-1', 'round-1', 'shot.png'));
-    expect(store.selectFile('missing.png')).toBeNull();
+    expect(await store.selectFile('seed-image-1.png')).toBe(join(dir, 'seed-image-1.png'));
+    expect(await store.selectFile('task-1/round-1/shot.png')).toBe(
+      join(dir, 'task-1', 'round-1', 'shot.png')
+    );
+    expect(await store.selectFile('missing.png')).toBeNull();
     for (const name of [
       '..',
       '.hidden',
@@ -92,7 +93,7 @@ describe('Evidence', () => {
       'a/round-1/b/c',
       '',
     ]) {
-      expect(store.selectFile(name)).toBeNull();
+      expect(await store.selectFile(name)).toBeNull();
     }
   });
 });

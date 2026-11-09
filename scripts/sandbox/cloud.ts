@@ -1,8 +1,7 @@
 import { Database } from 'bun:sqlite';
-import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { SqliteClient } from '@effect/sql-sqlite-bun';
-import { ConfigProvider, Context, Layer } from 'effect';
+import { ConfigProvider, Context, Effect, FileSystem, Layer } from 'effect';
 import { constVoid } from 'effect/Function';
 import { FetchHttpClient } from 'effect/http';
 import { makeCloudHandler } from '../../apps/cloud/src/app.ts';
@@ -21,12 +20,14 @@ const MIGRATIONS = join(import.meta.dirname, '../../apps/cloud/migrations');
 
 const SEEN_UNTIL = Number.MAX_SAFE_INTEGER;
 
-function seedDatabase(filename: string, ownerId: string, tunnels: ReadonlyArray<SandboxTunnel>) {
+function seedDatabase(
+  filename: string,
+  ownerId: string,
+  tunnels: ReadonlyArray<SandboxTunnel>,
+  migrations: readonly string[]
+) {
   const sqlite = new Database(filename);
-  for (const file of readdirSync(MIGRATIONS)
-    .filter((name) => name.endsWith('.sql'))
-    .sort())
-    sqlite.exec(readFileSync(join(MIGRATIONS, file), 'utf8'));
+  for (const migration of migrations) sqlite.exec(migration);
   sqlite.query('INSERT INTO users (id, login, created_at) VALUES (?, ?, 0)').run(ownerId, 'sandbox');
   for (const tunnel of tunnels)
     sqlite
@@ -48,14 +49,19 @@ function seedDatabase(filename: string, ownerId: string, tunnels: ReadonlyArray<
   return sqlite;
 }
 
-export function createSandboxCloud(
+export const createSandboxCloud = Effect.fn('Sandbox.createSandboxCloud')(function* (
   folder: string,
   zone: string,
   ownerId: string,
   tunnels: ReadonlyArray<SandboxTunnel>
 ) {
+  const fs = yield* FileSystem.FileSystem;
+  const names = yield* fs.readDirectory(MIGRATIONS);
+  const migrations = yield* Effect.forEach(names.filter((name) => name.endsWith('.sql')).sort(), (name) =>
+    fs.readFileString(join(MIGRATIONS, name))
+  );
   const filename = join(folder, 'cloud.sqlite');
-  const sqlite = seedDatabase(filename, ownerId, tunnels);
+  const sqlite = yield* Effect.try(() => seedDatabase(filename, ownerId, tunnels, migrations));
   const reachTunnel = (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
     const url = new URL(input instanceof Request ? input.url : input);
     const tunnel = tunnels.find((entry) => url.host === `t-${entry.id}.shinsa.dev`);
@@ -74,4 +80,4 @@ export function createSandboxCloud(
   );
   const worker = Context.make(WorkerContext, { waitUntil: constVoid });
   return { sqlite, respond: (request: Request) => handler(request, worker) };
-}
+});

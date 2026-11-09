@@ -1,6 +1,5 @@
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { join } from 'node:path';
+import { Effect, FileSystem } from 'effect';
 import type {
   CodeSpot,
   Gate,
@@ -24,8 +23,10 @@ import {
   resolveCoverageRanges,
   serializeReportMarkdown,
 } from '../../../packages/core/src/index.ts';
-import { runGit } from '../../kit/git/index.ts';
+import { Command } from '../../kit/command/index.ts';
+import { CLEAN_GIT_CONFIG, runGit } from '../../kit/git/index.ts';
 import { DAY, HOUR, MINUTE } from '../../kit/time.ts';
+import { readSeedText, removeSeedPath, writeSeedFile } from '../files.ts';
 import {
   createPlanCheck,
   listSeedCheckResults,
@@ -340,60 +341,60 @@ function serializeReviewScreenshot(version: 'before' | 'after') {
   return serializeRectsPng(SCREEN.width, SCREEN.height, PALETTE.page, listScreenRects(version));
 }
 
-function readText(root: string, path: string) {
-  return readFileSync(join(root, path), 'utf8');
-}
+const readText = (root: string, path: string) => readSeedText(join(root, path));
 
-function writeText(root: string, path: string, content: string | Uint8Array) {
-  const target = join(root, path);
-  mkdirSync(dirname(target), { recursive: true });
-  writeFileSync(target, content);
-}
+const writeText = (root: string, path: string, content: string | Uint8Array) =>
+  writeSeedFile(join(root, path), content);
 
-function commit(path: string, message: string, at: number, paths: readonly string[]) {
-  runGit(['update-index', '--add', '--remove', '--', ...paths], path);
-  const tree = runGit(['write-tree'], path);
-  const sha = runGit(['commit-tree', tree, '-p', 'HEAD', '-m', message], path, { at });
-  runGit(['update-ref', '-m', `commit: ${message}`, 'HEAD', sha], path);
+const commit = Effect.fn('Seed.commit')(function* (
+  path: string,
+  message: string,
+  at: number,
+  paths: readonly string[]
+) {
+  yield* runGit(['update-index', '--add', '--remove', '--', ...paths], path);
+  const tree = yield* runGit(['write-tree'], path);
+  const sha = yield* runGit(['commit-tree', tree, '-p', 'HEAD', '-m', message], path, { at });
+  yield* runGit(['update-ref', '-m', `commit: ${message}`, 'HEAD', sha], path);
   return { sha, tree };
-}
+});
 
-function commitFiles(
+const commitFiles = Effect.fn('Seed.commitFiles')(function* (
   repo: string,
   parent: string,
   files: Record<string, string>,
   message: string,
   at: number
 ) {
-  const scratch = mkdtempSync(join(tmpdir(), 'shinsa-seed-'));
-  const index = join(scratch, 'index');
-  try {
-    runGit(['read-tree', parent], repo, { index });
-    const entries = Object.entries(files).map(([path, content]) => {
-      const blob = runGit(['hash-object', '-w', '--stdin'], repo, { input: content });
-      return `100644 ${blob}\t${path}`;
-    });
-    runGit(['update-index', '--index-info'], repo, { index, input: `${entries.join('\n')}\n` });
-    const tree = runGit(['write-tree'], repo, { index });
-    return { sha: runGit(['commit-tree', tree, '-p', parent, '-m', message], repo, { at }), tree };
-  } finally {
-    rmSync(scratch, { recursive: true, force: true });
+  const fs = yield* FileSystem.FileSystem;
+  const index = join(yield* fs.makeTempDirectoryScoped({ prefix: 'shinsa-seed-' }), 'index');
+  yield* runGit(['read-tree', parent], repo, { index });
+  const entries: string[] = [];
+  for (const [path, content] of Object.entries(files)) {
+    const blob = yield* runGit(['hash-object', '-w', '--stdin'], repo, { input: content });
+    entries.push(`100644 ${blob}\t${path}`);
   }
-}
+  yield* runGit(['update-index', '--index-info'], repo, { index, input: `${entries.join('\n')}\n` });
+  const tree = yield* runGit(['write-tree'], repo, { index });
+  return { sha: yield* runGit(['commit-tree', tree, '-p', parent, '-m', message], repo, { at }), tree };
+}, Effect.scoped);
 
-export function listGrepMatches(path: string, query: string, ref = 'HEAD') {
-  const result = Bun.spawnSync(['git', 'grep', '-n', '-F', query, ref, '--', 'apps', 'packages'], {
+const listGrepMatches = Effect.fn('Seed.listGrepMatches')(function* (
+  path: string,
+  query: string,
+  ref: string
+) {
+  const command = yield* Command;
+  const result = yield* command.run(['git', 'grep', '-n', '-F', query, ref, '--', 'apps', 'packages'], {
     cwd: path,
-    env: { ...Bun.env, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' },
+    env: CLEAN_GIT_CONFIG,
   });
   return result.stdout
-    .toString()
-    .trim()
     .split('\n')
     .map((line) => line.replace(`${ref}:`, ''))
     .slice(0, 14)
     .join('\n');
-}
+});
 
 const HISTORY: { message: string; areas: string[] }[] = [
   { message: 'chore: set up the monorepo', areas: [] },
@@ -406,19 +407,21 @@ const HISTORY: { message: string; areas: string[] }[] = [
 
 const SEED_AUTHOR = 'Shinsa seed <seed@shinsa.dev>';
 
-function extractSource(path: string) {
-  const archive = Bun.spawnSync(['git', 'archive', '--format=tar', SOURCE_COMMIT], { cwd: SOURCE });
-  if (archive.exitCode !== 0) throw new Error(`git archive: ${archive.stderr.toString()}`);
-  const tar = Bun.spawnSync(['tar', '-x', '-C', path], { stdin: archive.stdout });
-  if (tar.exitCode !== 0) throw new Error(`tar: ${tar.stderr.toString()}`);
-  return runGit(['ls-tree', '-r', '-z', SOURCE_COMMIT], SOURCE)
+const extractSource = Effect.fn('Seed.extractSource')(function* (path: string) {
+  const fs = yield* FileSystem.FileSystem;
+  const archive = join(yield* fs.makeTempDirectoryScoped({ prefix: 'shinsa-seed-' }), 'source.tar');
+  yield* runGit(['archive', '--format=tar', '-o', archive, SOURCE_COMMIT], SOURCE);
+  const command = yield* Command;
+  yield* command.text(['tar', '-x', '-f', archive, '-C', path]);
+  const tree = yield* runGit(['ls-tree', '-r', '-z', SOURCE_COMMIT], SOURCE);
+  return tree
     .split('\0')
     .filter(Boolean)
     .map((entry) => {
       const [meta = '', file = ''] = entry.split('\t');
       return { path: file, mode: meta.split(' ')[0] ?? '100644' };
     });
-}
+}, Effect.scoped);
 
 function resolveHistoryStep(path: string) {
   const index = HISTORY.findIndex(({ areas }) =>
@@ -427,19 +430,23 @@ function resolveHistoryStep(path: string) {
   return Math.max(0, index);
 }
 
-function commitHistory(path: string, files: { path: string; mode: string }[]) {
+const commitHistory = Effect.fn('Seed.commitHistory')(function* (
+  path: string,
+  files: { path: string; mode: string }[]
+) {
+  const fs = yield* FileSystem.FileSystem;
   const start = NOW - 12 * DAY;
   const fixture = serializeReviewFixture('target', FIXTURE_SECTIONS);
   const screenshot = serializeReviewScreenshot('before');
-  writeText(path, SAMPLE_PATHS.fixture, fixture);
-  writeText(path, SAMPLE_PATHS.screenshot, screenshot);
-  const commits: ImportCommit[] = HISTORY.map((step, index) => ({
-    message: step.message,
-    at: start + index * DAY,
-    files: files
-      .filter((file) => resolveHistoryStep(file.path) === index)
-      .map((file) => ({ ...file, content: readFileSync(join(path, file.path)) })),
-  }));
+  yield* writeText(path, SAMPLE_PATHS.fixture, fixture);
+  yield* writeText(path, SAMPLE_PATHS.screenshot, screenshot);
+  const commits: ImportCommit[] = [];
+  for (const [index, step] of HISTORY.entries()) {
+    const stepFiles: ImportCommit['files'] = [];
+    for (const file of files.filter((each) => resolveHistoryStep(each.path) === index))
+      stepFiles.push({ ...file, content: yield* fs.readFile(join(path, file.path)) });
+    commits.push({ message: step.message, at: start + index * DAY, files: stepFiles });
+  }
   commits.push(
     {
       message: 'test(web): record a large review report as a fixture',
@@ -452,11 +459,11 @@ function commitHistory(path: string, files: { path: string; mode: string }[]) {
       files: [{ path: SAMPLE_PATHS.screenshot, mode: '100644', content: screenshot }],
     }
   );
-  runGit(['fast-import', '--quiet'], path, {
+  yield* runGit(['fast-import', '--quiet'], path, {
     input: serializeFastImport('refs/heads/main', SEED_AUTHOR, commits),
   });
-  runGit(['reset', '-q'], path);
-}
+  yield* runGit(['reset', '-q'], path);
+});
 
 const SAMPLE_COVERAGE_COMMAND = 'bun test --coverage --coverage-reporter=lcov';
 
@@ -464,40 +471,51 @@ const COVERED_SOURCE = /\.tsx?$/;
 
 const TEST_PATH = /(^|\/)test\/|\.test\.tsx?$/;
 
-function measureSampleFile(cwd: string, path: string, lines: number[], missed: number): CoverageFile {
-  const text = readText(cwd, path).split('\n');
+const measureSampleFile = Effect.fn('Seed.measureSampleFile')(function* (
+  cwd: string,
+  path: string,
+  lines: number[],
+  missed: number
+) {
+  const text = (yield* readText(cwd, path)).split('\n');
   const executable = lines.filter((line) => (text[line - 1] ?? '').trim().length > 1);
   const runs = resolveCoverageRanges(executable).sort((x, y) => y[1] - y[0] - (x[1] - x[0]));
   const uncovered = runs
     .flatMap(([start, end]) => Array.from({ length: end - start + 1 }, (_, offset) => start + offset))
     .slice(0, missed);
-  return {
+  const file: CoverageFile = {
     path,
     covered: executable.length - uncovered.length,
     executable: executable.length,
     uncovered: resolveCoverageRanges(uncovered),
   };
-}
+  return file;
+});
 
-function measureSampleCoverage(
+const measureSampleCoverage = Effect.fn('Seed.measureSampleCoverage')(function* (
   cwd: string,
   range: string[],
   missed: Record<string, number>
-): MeasuredCoverage {
-  const changed = parseChangedLines(runGit(['diff', '-U0', '--no-color', '--find-renames', ...range], cwd));
+) {
+  const changed = parseChangedLines(
+    yield* runGit(['diff', '-U0', '--no-color', '--find-renames', ...range], cwd)
+  );
   const sources = [...changed].filter(([path]) => COVERED_SOURCE.test(path) && !TEST_PATH.test(path));
-  const files = sources
-    .map(([path, lines]) => measureSampleFile(cwd, path, lines, missed[path] ?? 0))
+  const measured: CoverageFile[] = [];
+  for (const [path, lines] of sources)
+    measured.push(yield* measureSampleFile(cwd, path, lines, missed[path] ?? 0));
+  const files = measured
     .filter((file) => file.executable > 0)
     .sort((a, b) => b.executable - b.covered - (a.executable - a.covered) || a.path.localeCompare(b.path));
-  return {
+  const coverage: MeasuredCoverage = {
     status: 'measured',
     command: SAMPLE_COVERAGE_COMMAND,
     covered: files.reduce((sum, file) => sum + file.covered, 0),
     executable: files.reduce((sum, file) => sum + file.executable, 0),
     files,
   };
-}
+  return coverage;
+});
 
 interface FileChange {
   before: string;
@@ -515,29 +533,29 @@ interface MergedNotes {
   coverage: MeasuredCoverage;
 }
 
-function createMergedTask(repo: string, worktrees: string): MergedNotes {
+const createMergedTask = Effect.fn('Seed.createMergedTask')(function* (repo: string, worktrees: string) {
   const start = NOW - MERGED_AGE_HOURS * HOUR;
   const at = (minutes: number) => start + minutes * MINUTE;
   const branch = 'feat/queue-priority-stack';
-  const main = runGit(['rev-parse', 'main'], repo);
-  const before = readText(repo, SAMPLE_PATHS.queueIndex);
+  const main = yield* runGit(['rev-parse', 'main'], repo);
+  const before = yield* readText(repo, SAMPLE_PATHS.queueIndex);
   const after = `${before.trimEnd()}\nexport { stackByPriority } from './stack.ts';\n`;
-  const first = commitFiles(
+  const first = yield* commitFiles(
     repo,
     main,
     { [SAMPLE_PATHS.queueStack]: QUEUE_STACK, [SAMPLE_PATHS.queueIndex]: after },
     'feat: stack entries by priority',
     at(MERGED_MARKS.builders[0][1] - 0.2)
   );
-  const second = commitFiles(
+  const second = yield* commitFiles(
     repo,
     first.sha,
     { [SAMPLE_PATHS.queueTest]: QUEUE_TEST },
     'feat: cover the order with tests',
     at(MERGED_MARKS.builders[1][1] - 0.2)
   );
-  runGit(['branch', branch, second.sha], repo);
-  runGit(
+  yield* runGit(['branch', branch, second.sha], repo);
+  yield* runGit(
     [
       'merge',
       '-q',
@@ -549,17 +567,18 @@ function createMergedTask(repo: string, worktrees: string): MergedNotes {
     repo,
     { at: at(MERGED_MARKS.merge) }
   );
-  return {
+  const notes: MergedNotes = {
     worktree: join(worktrees, SAMPLE_MERGED),
     index: { before, after },
     stack: QUEUE_STACK,
     test: QUEUE_TEST,
     head: second.sha,
-    mergeCommit: runGit(['rev-parse', 'HEAD'], repo),
+    mergeCommit: yield* runGit(['rev-parse', 'HEAD'], repo),
     trees: [first.tree, second.tree],
-    coverage: measureSampleCoverage(repo, [main, second.sha], {}),
+    coverage: yield* measureSampleCoverage(repo, [main, second.sha], {}),
   };
-}
+  return notes;
+});
 
 interface ReviewNotes {
   worktree: string;
@@ -582,9 +601,9 @@ interface ReviewNotes {
   coverage: MeasuredCoverage;
 }
 
-function renameModule(worktree: string) {
-  const targets = readText(worktree, SAMPLE_PATHS.targets);
-  runGit(['mv', SAMPLE_PATHS.targets, SAMPLE_PATHS.spots], worktree);
+const renameModule = Effect.fn('Seed.renameModule')(function* (worktree: string) {
+  const targets = yield* readText(worktree, SAMPLE_PATHS.targets);
+  yield* runGit(['mv', SAMPLE_PATHS.targets, SAMPLE_PATHS.spots], worktree);
   const renamed = replaceAllRequired(
     targets,
     [...RENAMES, ['targets', 'spots'], ['target', 'spot']],
@@ -598,96 +617,99 @@ function renameModule(worktree: string) {
     SAMPLE_PATHS.targets
   );
   const spots = insertAfterImports(keyed, "import { formatSpotKey } from './spot-keys.ts';");
-  writeText(worktree, SAMPLE_PATHS.spots, spots);
-  writeText(worktree, SAMPLE_PATHS.spotKeys, SPOT_KEYS);
-  const targetsTest = readText(worktree, SAMPLE_PATHS.targetsTest);
-  rmSync(join(worktree, SAMPLE_PATHS.targetsTest));
-  writeText(worktree, SAMPLE_PATHS.spotsTest, SPOTS_TEST);
-  const lock = bumpLockfileEntry(readText(worktree, SAMPLE_PATHS.lockfile));
-  writeText(worktree, SAMPLE_PATHS.lockfile, lock.content);
+  yield* writeText(worktree, SAMPLE_PATHS.spots, spots);
+  yield* writeText(worktree, SAMPLE_PATHS.spotKeys, SPOT_KEYS);
+  const targetsTest = yield* readText(worktree, SAMPLE_PATHS.targetsTest);
+  yield* removeSeedPath(join(worktree, SAMPLE_PATHS.targetsTest));
+  yield* writeText(worktree, SAMPLE_PATHS.spotsTest, SPOTS_TEST);
+  const lock = bumpLockfileEntry(yield* readText(worktree, SAMPLE_PATHS.lockfile));
+  yield* writeText(worktree, SAMPLE_PATHS.lockfile, lock.content);
   return { spots: { before: targets, after: spots }, spotsRenamed: keyed, targetsTest, lock };
-}
+});
 
-function updateCallers(worktree: string) {
-  const callers = [SAMPLE_PATHS.review, SAMPLE_PATHS.changes, SAMPLE_PATHS.codeView].map((path) => {
-    const before = readText(worktree, path);
+const updateCallers = Effect.fn('Seed.updateCallers')(function* (worktree: string) {
+  const callers: FileChange[] = [];
+  for (const path of [SAMPLE_PATHS.review, SAMPLE_PATHS.changes, SAMPLE_PATHS.codeView]) {
+    const before = yield* readText(worktree, path);
     const moved = replaceRequired(before, '@/lib/review/targets.ts', '@/lib/review/spots.ts', path);
     const after = RENAMES.reduce(
       (text, [from, to]) => (text.includes(from) ? replaceRequired(text, from, to, path) : text),
       moved
     );
-    writeText(worktree, path, after);
-    return { before, after };
-  });
+    yield* writeText(worktree, path, after);
+    callers.push({ before, after });
+  }
   const fixture = {
-    before: readText(worktree, SAMPLE_PATHS.fixture),
+    before: yield* readText(worktree, SAMPLE_PATHS.fixture),
     after: serializeReviewFixture('spot', FIXTURE_SECTIONS),
   };
-  writeText(worktree, SAMPLE_PATHS.fixture, fixture.after);
+  yield* writeText(worktree, SAMPLE_PATHS.fixture, fixture.after);
   const testAfter = replaceRequired(
     SPOTS_TEST,
     'LARGE_REVIEW_TARGET_COUNT',
     'LARGE_REVIEW_SPOT_COUNT',
     SAMPLE_PATHS.spotsTest
   );
-  writeText(worktree, SAMPLE_PATHS.spotsTest, testAfter);
+  yield* writeText(worktree, SAMPLE_PATHS.spotsTest, testAfter);
   const [review, changes, codeView] = callers as [FileChange, FileChange, FileChange];
   return { review, changes, codeView, fixture, spotsTest: { before: SPOTS_TEST, after: testAfter } };
-}
+});
 
-function createReviewTask(repo: string, worktrees: string): ReviewNotes {
+const createReviewTask = Effect.fn('Seed.createReviewTask')(function* (repo: string, worktrees: string) {
   const start = NOW - REVIEW_AGE_HOURS * HOUR;
   const at = (minutes: number) => start + minutes * MINUTE;
   const worktree = join(worktrees, SAMPLE_REVIEW);
-  const importers = listGrepMatches(repo, 'lib/review/targets.ts');
-  const ranking = readText(repo, SAMPLE_PATHS.ranking);
-  runGit(['worktree', 'add', '-q', '-b', 'refactor/review-spots', worktree, 'main'], repo);
+  const importers = yield* listGrepMatches(repo, 'lib/review/targets.ts', 'HEAD');
+  const ranking = yield* readText(repo, SAMPLE_PATHS.ranking);
+  yield* runGit(['worktree', 'add', '-q', '-b', 'refactor/review-spots', worktree, 'main'], repo);
   const [phase0, phase1, phase2] = REVIEW_MARKS.builders;
 
-  const renamed = renameModule(worktree);
+  const renamed = yield* renameModule(worktree);
   const trees = [
-    commit(worktree, 'refactor: rename the module', at(phase0[1] - 0.2), [
+    (yield* commit(worktree, 'refactor: rename the module', at(phase0[1] - 0.2), [
       SAMPLE_PATHS.spots,
       SAMPLE_PATHS.spotKeys,
       SAMPLE_PATHS.targetsTest,
       SAMPLE_PATHS.spotsTest,
       SAMPLE_PATHS.lockfile,
-    ]).tree,
+    ])).tree,
   ];
 
-  const callers = updateCallers(worktree);
+  const callers = yield* updateCallers(worktree);
   trees.push(
-    commit(worktree, 'refactor: update the callers', at(phase1[1] - 0.2), [
+    (yield* commit(worktree, 'refactor: update the callers', at(phase1[1] - 0.2), [
       SAMPLE_PATHS.review,
       SAMPLE_PATHS.changes,
       SAMPLE_PATHS.codeView,
       SAMPLE_PATHS.fixture,
       SAMPLE_PATHS.spotsTest,
-    ]).tree
+    ])).tree
   );
 
-  const design = { before: readText(worktree, SAMPLE_PATHS.design), after: '' };
+  const design = { before: yield* readText(worktree, SAMPLE_PATHS.design), after: '' };
   design.after = insertBeforeLastHeading(design.before, DESIGN_SECTION);
-  writeText(worktree, SAMPLE_PATHS.design, design.after);
-  writeText(worktree, SAMPLE_PATHS.screenshot, serializeReviewScreenshot('after'));
+  yield* writeText(worktree, SAMPLE_PATHS.design, design.after);
+  yield* writeText(worktree, SAMPLE_PATHS.screenshot, serializeReviewScreenshot('after'));
   trees.push(
-    commit(worktree, 'refactor: update the docs', at(phase2[1] - 0.2), [
+    (yield* commit(worktree, 'refactor: update the docs', at(phase2[1] - 0.2), [
       SAMPLE_PATHS.design,
       SAMPLE_PATHS.screenshot,
-    ]).tree
+    ])).tree
   );
 
   const spotKeys = {
     before: SPOT_KEYS,
     after: replaceRequired(SPOT_KEYS, 'export interface SpotKey', 'interface SpotKey', SAMPLE_PATHS.spotKeys),
   };
-  writeText(worktree, SAMPLE_PATHS.spotKeys, spotKeys.after);
+  yield* writeText(worktree, SAMPLE_PATHS.spotKeys, spotKeys.after);
   trees.push(
-    commit(worktree, 'fix: make the checks pass', at(REVIEW_MARKS.fix[1] - 0.2), [SAMPLE_PATHS.spotKeys]).tree
+    (yield* commit(worktree, 'fix: make the checks pass', at(REVIEW_MARKS.fix[1] - 0.2), [
+      SAMPLE_PATHS.spotKeys,
+    ])).tree
   );
-  const diffStat = runGit(['diff', '--stat', '--find-renames', 'main'], worktree);
+  const diffStat = yield* runGit(['diff', '--stat', '--find-renames', 'main'], worktree);
 
-  const guide = readText(worktree, SAMPLE_PATHS.webGuide);
+  const guide = yield* readText(worktree, SAMPLE_PATHS.webGuide);
   const webGuide = {
     before: guide,
     after: replaceRequired(
@@ -697,12 +719,12 @@ function createReviewTask(repo: string, worktrees: string): ReviewNotes {
       SAMPLE_PATHS.webGuide
     ),
   };
-  writeText(worktree, SAMPLE_PATHS.webGuide, webGuide.after);
-  const coverage = measureSampleCoverage(worktree, ['main'], {
+  yield* writeText(worktree, SAMPLE_PATHS.webGuide, webGuide.after);
+  const coverage = yield* measureSampleCoverage(worktree, ['main'], {
     [SAMPLE_PATHS.review]: 4,
     [SAMPLE_PATHS.spots]: 3,
   });
-  return {
+  const notes: ReviewNotes = {
     worktree,
     coverage,
     ...renamed,
@@ -715,7 +737,8 @@ function createReviewTask(repo: string, worktrees: string): ReviewNotes {
     diffStat,
     trees,
   };
-}
+  return notes;
+});
 
 interface LiveNotes {
   worktree: string;
@@ -725,28 +748,29 @@ interface LiveNotes {
   trees: string[];
 }
 
-function createLiveTask(repo: string, worktrees: string): LiveNotes {
+const createLiveTask = Effect.fn('Seed.createLiveTask')(function* (repo: string, worktrees: string) {
   const start = NOW - LIVE_AGE_HOURS * HOUR;
   const worktree = join(worktrees, SAMPLE_LIVE);
-  runGit(['worktree', 'add', '-q', '-b', 'feat/code-view-dark-theme', worktree, 'main'], repo);
-  const tokensBefore = readText(worktree, SAMPLE_PATHS.tokens);
+  yield* runGit(['worktree', 'add', '-q', '-b', 'feat/code-view-dark-theme', worktree, 'main'], repo);
+  const tokensBefore = yield* readText(worktree, SAMPLE_PATHS.tokens);
   const tokens = { before: tokensBefore, after: `${tokensBefore.trimEnd()}\n${CODE_TOKENS}` };
-  writeText(worktree, SAMPLE_PATHS.tokens, tokens.after);
-  const first = commit(
+  yield* writeText(worktree, SAMPLE_PATHS.tokens, tokens.after);
+  const first = yield* commit(
     worktree,
     'feat: add the code tokens',
     start + (LIVE_MARKS.builder[1] - 0.2) * MINUTE,
     [SAMPLE_PATHS.tokens]
   );
-  writeText(worktree, SAMPLE_PATHS.theme, CODE_THEME);
-  const highlightBefore = readText(worktree, SAMPLE_PATHS.highlight);
+  yield* writeText(worktree, SAMPLE_PATHS.theme, CODE_THEME);
+  const highlightBefore = yield* readText(worktree, SAMPLE_PATHS.highlight);
   const highlight = {
     before: highlightBefore,
     after: insertAfterImports(highlightBefore, "import { resolveTokenColor } from './theme.ts';"),
   };
-  writeText(worktree, SAMPLE_PATHS.highlight, highlight.after);
-  return { worktree, theme: CODE_THEME, tokens, highlight, trees: [first.tree] };
-}
+  yield* writeText(worktree, SAMPLE_PATHS.highlight, highlight.after);
+  const notes: LiveNotes = { worktree, theme: CODE_THEME, tokens, highlight, trees: [first.tree] };
+  return notes;
+});
 
 export interface CodeSample {
   project: Project;
@@ -754,19 +778,29 @@ export interface CodeSample {
   merged: MergedNotes;
   review: ReviewNotes;
   live: LiveNotes;
+  searches: { rankedSpots: string; resolveQueue: string; shiki: string; attention: string };
 }
 
-export function createCodeSample(repos: string, worktrees: string): CodeSample {
+export const createCodeSample = Effect.fn('Seed.createCodeSample')(function* (
+  repos: string,
+  worktrees: string
+) {
   const path = join(repos, 'shinsa-sample');
-  mkdirSync(path, { recursive: true });
-  runGit(['init', '-q', '-b', 'main'], path);
-  runGit(['config', 'user.email', 'seed@shinsa.dev'], path);
-  runGit(['config', 'user.name', 'Shinsa seed'], path);
-  commitHistory(path, extractSource(path));
-  const merged = createMergedTask(path, worktrees);
-  const review = createReviewTask(path, worktrees);
-  const live = createLiveTask(path, worktrees);
-  return {
+  yield* (yield* FileSystem.FileSystem).makeDirectory(path, { recursive: true });
+  yield* runGit(['init', '-q', '-b', 'main'], path);
+  yield* runGit(['config', 'user.email', 'seed@shinsa.dev'], path);
+  yield* runGit(['config', 'user.name', 'Shinsa seed'], path);
+  yield* commitHistory(path, yield* extractSource(path));
+  const merged = yield* createMergedTask(path, worktrees);
+  const review = yield* createReviewTask(path, worktrees);
+  const live = yield* createLiveTask(path, worktrees);
+  const searches = {
+    rankedSpots: yield* listGrepMatches(path, 'listRankedSpots', 'main'),
+    resolveQueue: yield* listGrepMatches(path, 'export function resolveQueue', 'main~1'),
+    shiki: yield* listGrepMatches(path, '--shiki', 'main'),
+    attention: yield* listGrepMatches(path, "'attention'", 'main'),
+  };
+  const sample: CodeSample = {
     project: {
       id: PROJECT_ID,
       name: 'Sample',
@@ -794,8 +828,10 @@ export function createCodeSample(repos: string, worktrees: string): CodeSample {
     merged,
     review,
     live,
+    searches,
   };
-}
+  return sample;
+});
 
 function runId(taskId: string, index: number) {
   return `${taskId}-run-${index}`;

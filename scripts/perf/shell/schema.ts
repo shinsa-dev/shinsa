@@ -45,6 +45,11 @@ export class AppNeverOpened extends Schema.TaggedError<AppNeverOpened, { readonl
   { message: Schema.String }
 ) {}
 
+export class UserDataUnremovable extends Schema.TaggedError<
+  UserDataUnremovable,
+  { readonly brand: unique symbol }
+>()('UserDataUnremovable', { path: Schema.String, message: Schema.String }) {}
+
 export const HOME = `document.querySelector('header [aria-label="Home"]') || __shell.byPrefix('header button', '^Shinsa') || __shell.byText('nav [data-highlight-item]', 'New task')`;
 
 export const HOME_DONE = `location.pathname === '/' && !!document.querySelector('main textarea')`;

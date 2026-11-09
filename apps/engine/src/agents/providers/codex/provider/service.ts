@@ -1,6 +1,6 @@
 import { tmpdir } from 'node:os';
 import { CODEX_PROVIDER } from '@shinsa/core';
-import { Clock, Context, Duration, Effect, Layer, Option, Schema } from 'effect';
+import { Clock, Context, Duration, Effect, FileSystem, Layer, Option, Schema } from 'effect';
 import { STATUS_TIMEOUT } from '../../../../accounts/schema.ts';
 import { describeError } from '../../../../log/redact.ts';
 import { NOT_STARTED_EXIT_CODE } from '../../../../shell/schema.ts';
@@ -29,6 +29,7 @@ export class CodexProvider extends Context.Service<CodexProvider, AgentProvider>
       const runtime = yield* CodexCli;
       const options = yield* CodexProviderOptions;
       const shell = yield* Shell;
+      const withFiles = Effect.provideService(FileSystem.FileSystem, yield* FileSystem.FileSystem);
       const usage = options.usage ?? {};
       const decodeObject = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Unknown));
       const failed = (error: { readonly message: string }) =>
@@ -108,19 +109,21 @@ export class CodexProvider extends Context.Service<CodexProvider, AgentProvider>
                 )
               ),
         }),
-        readUsage: readUsage({
-          home: resolveCodexHome({ ...Bun.env, ...(usage.env ?? runtime.env) }),
-          now: Clock.currentTimeMillis,
-          requestHttp: (url, init) =>
-            Effect.tryPromise({
-              try: (signal) => request(url, { ...init, signal }),
-              catch: (error) => new CodexUsageUnreachable({ message: describeError(error) }),
-            }),
-          executable: runtime.resolveExecutable,
-          env: runtime.env,
-          cwd: tmpdir(),
-          timeout: Duration.millis(usage.timeoutMs ?? USAGE_TIMEOUT_MS),
-        }).pipe(Effect.mapError(failed)),
+        readUsage: withFiles(
+          readUsage({
+            home: resolveCodexHome({ ...Bun.env, ...(usage.env ?? runtime.env) }),
+            now: Clock.currentTimeMillis,
+            requestHttp: (url, init) =>
+              Effect.tryPromise({
+                try: (signal) => request(url, { ...init, signal }),
+                catch: (error) => new CodexUsageUnreachable({ message: describeError(error) }),
+              }),
+            executable: runtime.resolveExecutable,
+            env: runtime.env,
+            cwd: tmpdir(),
+            timeout: Duration.millis(usage.timeoutMs ?? USAGE_TIMEOUT_MS),
+          })
+        ).pipe(Effect.mapError(failed)),
       });
     })
   );

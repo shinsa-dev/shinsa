@@ -1,8 +1,8 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { DomainError } from '@shinsa/core';
-import { Effect } from 'effect';
+import { Effect, FileSystem } from 'effect';
+import { isPresent, selectText } from '../files/probe.ts';
 import { STOP_DEADLINE_MS } from './restart/schema.ts';
 import {
   type EngineService,
@@ -60,11 +60,13 @@ export function resolveUnit(program: string, env: Env) {
   ].join('\n');
 }
 
-export function createSystemdService(options: SystemdOptions): EngineService {
+export const createSystemdService = Effect.fn('Systemd.createService')(function* (options: SystemdOptions) {
+  const fs = yield* FileSystem.FileSystem;
+  const withFiles = Effect.provideService(FileSystem.FileSystem, fs);
   const { systemctl, loginctl, user } = options;
   const path = resolveUnitPath(options.env);
   const run = (args: string[]) => runServiceCommand('systemctl', systemctl, args);
-  const isInstalled = Effect.sync(() => existsSync(path));
+  const isInstalled = withFiles(isPresent(path));
 
   const assertInstalled = Effect.gen(function* () {
     if (yield* isInstalled) return;
@@ -82,12 +84,11 @@ export function createSystemdService(options: SystemdOptions): EngineService {
 
   const writeUnit = Effect.gen(function* () {
     const unit = resolveUnit(options.program, options.env);
-    const written = yield* Effect.sync(() => (existsSync(path) ? readFileSync(path, 'utf8') : null));
-    if (written === unit) return;
-    yield* Effect.sync(() => {
-      mkdirSync(dirname(path), { recursive: true });
-      writeFileSync(path, unit);
-    });
+    const written = yield* withFiles(selectText(path));
+    if (written._tag === 'Some' && written.value === unit) return;
+    yield* fs
+      .makeDirectory(dirname(path), { recursive: true })
+      .pipe(Effect.andThen(fs.writeFileString(path, unit)), Effect.orDie);
     yield* run(['daemon-reload']);
   });
 
@@ -109,7 +110,7 @@ export function createSystemdService(options: SystemdOptions): EngineService {
     return (yield* systemctl(['start', SYSTEMD_UNIT])).ok;
   });
 
-  return {
+  const service: EngineService = {
     manager: 'systemd',
     revivesKilled: false,
     prepare,
@@ -120,4 +121,5 @@ export function createSystemdService(options: SystemdOptions): EngineService {
     restart: run(['restart', SYSTEMD_UNIT]),
     kick,
   };
-}
+  return service;
+});

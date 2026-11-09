@@ -1,14 +1,13 @@
 import { DomainError, type Project, type Repo } from '@shinsa/core';
-import { Context, Effect, Layer, Schema } from 'effect';
+import { Context, Effect, FileSystem, Layer } from 'effect';
 import { EngineConfig } from '../../config/service.ts';
 import { Remote } from '../../git/remote/service.ts';
-import { describeError } from '../../log/redact.ts';
 import { CurrentLogin } from '../../repos/current-login/service.ts';
 import { RepoRegistry } from '../../repos/registry/service.ts';
 import type { DispatchOptions } from '../../runtime/engine/schema.ts';
 import { EngineCore } from '../../runtime/engine/service.ts';
 import { resolveProjectFolder } from '../folders.ts';
-import { ProjectChangeFailed, type ProjectChangeFailure } from './schema.ts';
+import type { ProjectChangeFailure } from './schema.ts';
 
 export class ProjectChanges extends Context.Service<
   ProjectChanges,
@@ -33,7 +32,6 @@ export class ProjectChanges extends Context.Service<
       const { lookup } = yield* CurrentLogin;
       const { userHome } = yield* EngineConfig;
       const remote = yield* Remote;
-      const isDomainError = Schema.is(DomainError);
 
       const findProject = Effect.fn('ProjectChanges.findProject')(function* (projectId: string) {
         const project = (yield* engine.state).projects[projectId];
@@ -42,12 +40,8 @@ export class ProjectChanges extends Context.Service<
         return project;
       });
 
-      const resolveFolder = (raw: string) =>
-        Effect.try({
-          try: () => resolveProjectFolder(raw, userHome),
-          catch: (error) =>
-            isDomainError(error) ? error : new ProjectChangeFailed({ message: describeError(error) }),
-        });
+      const withFiles = Effect.provideService(FileSystem.FileSystem, yield* FileSystem.FileSystem);
+      const resolveFolder = (raw: string) => withFiles(resolveProjectFolder(raw, userHome));
 
       const upsertRepo = Effect.fn('ProjectChanges.upsertRepo')(function* (
         projectId: string,

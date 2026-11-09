@@ -1,11 +1,6 @@
-import { mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { Effect } from 'effect';
+import { Effect, FileSystem } from 'effect';
 
 export const createTempDirectory = Effect.fn('createTempDirectory')(function* (prefix: string) {
-  return yield* Effect.acquireRelease(
-    Effect.sync(() => mkdtempSync(join(tmpdir(), prefix))),
-    (directory) => Effect.sync(() => rmSync(directory, { recursive: true, force: true }))
-  );
+  const fs = yield* FileSystem.FileSystem;
+  return yield* fs.makeTempDirectoryScoped({ prefix }).pipe(Effect.orDie);
 });

@@ -11,7 +11,8 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { ConfigProvider, Duration, Effect, Fiber, Layer } from 'effect';
+import { BunServices } from '@effect/platform-bun';
+import { ConfigProvider, Duration, Effect, Fiber, type FileSystem, Layer } from 'effect';
 import { TestClock } from 'effect/testing';
 import { Shell } from '../../apps/engine/src/shell/index.ts';
 import { ShellLayer } from '../../apps/engine/src/shell/layers.ts';
@@ -70,7 +71,7 @@ function createDir() {
   return dir;
 }
 
-function runReal<A, E>(effect: Effect.Effect<A, E, Command>) {
+function runReal<A, E>(effect: Effect.Effect<A, E, Command | FileSystem.FileSystem>) {
   return Effect.runPromise(effect.pipe(Effect.provide(CommandLayer)));
 }
 
@@ -122,7 +123,10 @@ function createRunner(answers: (argv: string[]) => NpmAnswer = () => ({})) {
   const layer = Command.layer.pipe(Layer.provide(NpmShell));
   return {
     calls,
-    run: <A, E>(effect: Effect.Effect<A, E, Command>, env: Record<string, string> = {}) =>
+    run: <A, E>(
+      effect: Effect.Effect<A, E, Command | FileSystem.FileSystem>,
+      env: Record<string, string> = {}
+    ) =>
       Effect.runPromise(
         Effect.gen(function* () {
           const fiber = yield* Effect.forkChild(effect);
@@ -130,7 +134,12 @@ function createRunner(answers: (argv: string[]) => NpmAnswer = () => ({})) {
           return yield* Fiber.join(fiber);
         }).pipe(
           Effect.provide(
-            Layer.mergeAll(layer, TestClock.layer(), ConfigProvider.layer(ConfigProvider.fromUnknown(env)))
+            Layer.mergeAll(
+              layer,
+              BunServices.layer,
+              TestClock.layer(),
+              ConfigProvider.layer(ConfigProvider.fromUnknown(env))
+            )
           )
         )
       ),
@@ -249,6 +258,19 @@ describe('writing the packages', () => {
     await expect(runReal(assertArchiveChecksum(archive, sums))).rejects.toThrow('holds no SHA-256');
     writeFileSync(sums, `${'a'.repeat(64)}  other.tar.gz\n`);
     await expect(runReal(assertArchiveChecksum(archive, sums))).rejects.toThrow('names other.tar.gz');
+  });
+
+  it('says why it cannot read a checksum or write the packages', async () => {
+    const archives = await createArchives();
+    const archive = join(archives, 'shinsa-linux-x64.tar.gz');
+    await expect(runReal(assertArchiveChecksum(archive, join(archives, 'none.sha256')))).rejects.toThrow(
+      `Could not read ${archive} or its checksum: `
+    );
+    const blocked = join(createDir(), 'file');
+    writeFileSync(blocked, 'a file');
+    await expect(runReal(writeNpmPackages(archives, join(blocked, 'out'), VERSION))).rejects.toThrow(
+      `Could not write the npm packages in ${join(blocked, 'out')}: `
+    );
   });
 
   it('refuses an archive that will not unpack', async () => {

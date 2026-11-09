@@ -16,7 +16,7 @@ import { ProgramVersions } from '../../../../src/agents/providers/versions/servi
 import { ShellLayer } from '../../../../src/shell/layers.ts';
 import { createTempDir } from '../../../helpers/index.ts';
 
-const runtime = ManagedRuntime.make(ProgramVersions.layer.pipe(Layer.provide(ShellLayer)));
+const runtime = ManagedRuntime.make(ProgramVersions.layer.pipe(Layer.provideMerge(ShellLayer)));
 
 function readClaudeVersion(path: string) {
   return runtime.runPromise(readVersionEffect(path));
@@ -44,16 +44,22 @@ describe('versions', () => {
     expect(compareVersions('2.x.1', '2.0.1')).toBe(0);
   });
 
-  test('the minimum is the Claude Code version the SDK was built against', () => {
-    expect(resolveSdkClaudeVersion()).toMatch(/^\d+\.\d+\.\d+$/);
+  test('the minimum is the Claude Code version the SDK was built against', async () => {
+    expect(await runtime.runPromise(resolveSdkClaudeVersion())).toMatch(/^\d+\.\d+\.\d+$/);
     const dir = createTempDir();
     const bare = join(dir, 'package.json');
     writeFileSync(bare, '{}');
-    expect(resolveSdkClaudeVersion(bare)).toBe('0.0.0');
-    expect(resolveSdkPackage(bare)).toEqual({ version: '0.0.0', claudeCodeVersion: '0.0.0' });
+    expect(await runtime.runPromise(resolveSdkClaudeVersion(bare))).toBe('0.0.0');
+    expect(await runtime.runPromise(resolveSdkPackage(bare))).toEqual({
+      version: '0.0.0',
+      claudeCodeVersion: '0.0.0',
+    });
     writeFileSync(bare, JSON.stringify({ version: 3, claudeCodeVersion: '2.1.0' }));
-    expect(resolveSdkPackage(bare)).toEqual({ version: '0.0.0', claudeCodeVersion: '2.1.0' });
-    expect(resolveSdkPackage().version).toMatch(/^0\.\d+\.\d+$/);
+    expect(await runtime.runPromise(resolveSdkPackage(bare))).toEqual({
+      version: '0.0.0',
+      claudeCodeVersion: '2.1.0',
+    });
+    expect((await runtime.runPromise(resolveSdkPackage())).version).toMatch(/^0\.\d+\.\d+$/);
   });
 
   test('asks the binary once and again only after it changes on disk', async () => {

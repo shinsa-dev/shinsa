@@ -2,7 +2,6 @@ import { Context, Deferred, Effect, Fiber, FiberHandle, Layer, Ref, Scope, Semap
 import { NEWLINE } from '../../files/schema.ts';
 import { describeError } from '../../log/redact.ts';
 import { stopProcessGroup } from '../../shell/processes.ts';
-import { READ_ENV } from '../schema.ts';
 import { parseInfoLine } from '../tree/entries.ts';
 import { ObjectReaderStopped } from '../tree/schema.ts';
 import {
@@ -14,6 +13,7 @@ import {
   CatFileSettings,
   READER_STOPPED,
 } from './schema.ts';
+import { spawnCatFile } from './spawn.ts';
 
 export class CatFiles extends Context.Service<
   CatFiles,
@@ -26,18 +26,6 @@ export class CatFiles extends Context.Service<
       const settings = yield* CatFileSettings;
       const readers = yield* Ref.make(new Map<string, CatFile>());
       const selecting = yield* Semaphore.make(1);
-
-      const spawnBatch = (repoPath: string): BatchChild =>
-        Bun.spawn(['git', 'cat-file', '--batch-command'], {
-          cwd: repoPath,
-          stdin: 'pipe',
-          stdout: 'pipe',
-          stderr: 'ignore',
-          detached: true,
-          env: { ...Bun.env, ...READ_ENV },
-        });
-
-      const spawn = settings.spawn ?? spawnBatch;
 
       const makeReader = Effect.fn('CatFiles.makeReader')(
         function* (repoPath: string) {
@@ -124,7 +112,7 @@ export class CatFiles extends Context.Service<
             const current = yield* Ref.get(session);
             if (current) return current;
             const child = yield* Effect.try({
-              try: () => spawn(repoPath),
+              try: (): BatchChild => (settings.spawn ? settings.spawn(repoPath) : spawnCatFile(repoPath)),
               catch: (error) => new ObjectReaderStopped({ message: describeError(error) }),
             });
             const reader = yield* Effect.forkIn(

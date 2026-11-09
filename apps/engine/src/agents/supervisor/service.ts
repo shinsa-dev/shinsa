@@ -1,4 +1,4 @@
-import { Context, Deferred, Effect, Layer, Option } from 'effect';
+import { Context, Deferred, Effect, type FileSystem, Layer, Option } from 'effect';
 import { Extensions } from '../../extensions/registry/service.ts';
 import { describeError } from '../../log/index.ts';
 import { ProcessLedger } from '../../resources/index.ts';
@@ -43,8 +43,8 @@ export class RunSupervisor extends Context.Service<RunSupervisor, RunSupervisorS
       const manage = yield* Effect.serviceOption(ManageAccess);
       const evidence = yield* Evidence;
       const extensionSets = yield* SessionExtensionSets;
-      const ready = yield* Deferred.make<Context.Context<RunWorld | RunHost>>();
-      const within = <A, E>(effect: Effect.Effect<A, E, RunWorld | RunHost>) =>
+      const ready = yield* Deferred.make<Context.Context<RunWorld | RunHost | FileSystem.FileSystem>>();
+      const within = <A, E>(effect: Effect.Effect<A, E, RunWorld | RunHost | FileSystem.FileSystem>) =>
         Deferred.await(ready).pipe(Effect.flatMap((services) => Effect.provide(effect, services)));
       const active = new Map<string, ActiveRun>();
       const live = LiveRuns.of({
@@ -84,9 +84,9 @@ export class RunSupervisor extends Context.Service<RunSupervisor, RunSupervisorS
         },
       });
       const built = yield* Layer.build(Layer.mergeAll(RunWorld.layer, host));
-      const services = Context.merge(yield* Effect.context<never>(), built);
+      const services = Context.merge(yield* Effect.context<FileSystem.FileSystem>(), built);
       yield* Deferred.succeed(ready, services);
-      const provide = <A, E>(effect: Effect.Effect<A, E, RunWorld | RunHost>) =>
+      const provide = <A, E>(effect: Effect.Effect<A, E, RunWorld | RunHost | FileSystem.FileSystem>) =>
         Effect.provide(effect, services);
       return RunSupervisor.of({
         execute: (runId, override, delivery) => provide(runToEnd(runId, override, delivery)),

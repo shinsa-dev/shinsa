@@ -9,6 +9,8 @@ export const SLACK_LIMITS = {
   channelName: 80,
   threadMessages: 100,
   threadChars: 12_000,
+  linkedThreads: 3,
+  linkedThreadChars: 6_000,
 } as const;
 
 export const SLACK_VIEW_LIMITS = {
@@ -35,6 +37,26 @@ export const SlackThreadMessage = Schema.Struct({
 
 export type SlackThreadMessage = typeof SlackThreadMessage.Type;
 
+const SlackPermalink = Truncated(SLACK_LIMITS.permalink).check(Schema.isStartingWith('https://'));
+
+const SlackChannelName = Truncated(SLACK_LIMITS.channelName).check(Schema.isNonEmpty());
+
+export interface SlackMessageLink {
+  channelId: string;
+  threadTs: string;
+  permalink: string;
+}
+
+export const SlackLinkedThread = Schema.Struct({
+  channelId: SlackId,
+  threadTs: SlackId,
+  permalink: SlackPermalink,
+  channelName: SalvagedOrNull(SlackChannelName),
+  thread: SalvagedItems(SlackThreadMessage, SLACK_LIMITS.threadMessages),
+});
+
+export type SlackLinkedThread = typeof SlackLinkedThread.Type;
+
 export const SlackMention = Schema.Struct({
   eventId: SlackId,
   teamId: SlackId,
@@ -44,9 +66,10 @@ export const SlackMention = Schema.Struct({
   userId: SlackId,
   userName: Truncated(SLACK_LIMITS.userName),
   text: Truncated(SLACK_LIMITS.text),
-  permalink: SalvagedOrNull(Truncated(SLACK_LIMITS.permalink).check(Schema.isStartingWith('https://'))),
-  channelName: SalvagedOrNull(Truncated(SLACK_LIMITS.channelName).check(Schema.isNonEmpty())),
+  permalink: SalvagedOrNull(SlackPermalink),
+  channelName: SalvagedOrNull(SlackChannelName),
   thread: SalvagedItems(SlackThreadMessage, SLACK_LIMITS.threadMessages),
+  linkedThreads: SalvagedItems(SlackLinkedThread, SLACK_LIMITS.linkedThreads),
 });
 
 export type SlackMention = typeof SlackMention.Type;

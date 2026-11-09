@@ -70,7 +70,7 @@ builds never reviews its own work.
 | Role | Default model | Session | Hands back with |
 | --- | --- | --- | --- |
 | Classifier | Sonnet | one call, no tools | title, repository (or none), size, branch, and for what you left on Auto: the shape, the priority, the tasks it waits on with the kind of wait, and the open change it stacks on, each with why |
-| Agent | Opus | one session per task, resumed by every run of every round: it plans read-only, then builds, fixes and operates with edits; its watchdog checks, read-only after the merge, resume a watch session of their own; a fresh session only when the old one cannot go on (Recovery) | while planning, 2–8 phases (`propose_plan`) or the task's steps composed anew (`reshape_task`, Task shapes, below); a phase report per phase (`complete_phase`); a summary per fix (`complete_fix`); how the operation went (`report_outcome`), after the evidence its plan asks for; in a watchdog check or the home of a watch, each report a read found (`file_report`) and what it read (`report_read`) |
+| Agent | Opus | one session per task, resumed by every run of every round: it plans read-only, then builds, fixes and operates with edits; its watchdog checks, read-only after the merge, resume a watch session of their own; a fresh session only when the old one cannot go on (Recovery) | while planning, 2–8 phases (`propose_plan`), the task's steps composed anew (`reshape_task`, Task shapes, below) or the task moved to another repository of its project (`move_to_repository`, Work across repositories, below); a phase report per phase (`complete_phase`); a summary per fix (`complete_fix`); how the operation went (`report_outcome`), after the evidence its plan asks for; in a watchdog check or the home of a watch, each report a read found (`file_report`) and what it read (`report_read`) |
 | Reviewer | Opus | one session of its own per task, resumed by every review of every round and never the Agent's; it cannot edit | a summary and findings (`report_review`) |
 | Answerer | Opus | the task's session (fresh only for a task's first run), in the repository itself (a scratch folder of its own when the task has no repository), cannot edit; on another model than the session's it resumes it on its own, on another provider it starts fresh | an answer (`answer`), optionally a proposed change (Task shapes, below) |
 | Investigator | the Answerer's | the task's session, in the task's worktree used as scratch (it may run anything and add logging; nothing it changes ships) | a diagnosis (`report_diagnosis`), optionally a proposed fix |
@@ -199,7 +199,7 @@ suite is CI's job on the pull request, never a check's, so no task runs the whol
   in a detached checkout of it (`BaseCheckouts` in `checks/base/service.ts`; cached per base commit and command, the last few
   checkouts kept under `data/check-bases/`, each with its dependencies installed once). A command failing on the base
   is not enough: Shinsa compares the failures themselves (`checks/failures.ts`). It reads each output into failures
-  with an identity (`listCheckFailures`):
+  with an identity (`selectCheckFailures`):
   - a test run (Bun, Vitest, Jest, read as in the re-run above): each failing test, keyed by its file (relative to the
     checkout) and its full name, durations dropped; a file that failed without a named test is keyed by the file;
   - otherwise each diagnostic: tsc (`file(line,col): error TS2322: …` and the pretty `file:line:col - error …`, a
@@ -268,7 +268,7 @@ or modifies, the ones the report marks executable, and of those the ones a test 
 
   Each run writes into its own fresh temporary folder (`<dir>`) that Shinsa removes afterwards, so a stale report is
   never read, and the reports are merged; a custom report is deleted before its command runs.
-  `GET /api/repos/coverage` says which runner Auto found in each repository (`resolveCoverageDetection`), for
+  `GET /api/repos/coverage` says which runner Auto found in each repository (`selectCoverageDetection`), for
   Settings.
 - **The run** shares the checks' environment, timeout (15 minutes) and cancellation, while the task still holds its
   workspace. A command that exits non-zero but leaves a report still counts (a coverage floor fails the run, not the
@@ -487,13 +487,14 @@ whose choice is not clear binds none, and its work asks at the setup gate when i
   and that "the repo" alone names none. The repositories are listed by name, with nothing saying which was used
   last, and the prompt has no preference for recent work.
 - **A repository outside the project is used when the request names it.** A repository on the machine outside the
-  task's project is offered only when the request names it: its name appears in the request as whole words, any
+  task's project is offered only when the request names it and the task's project only came from the focus
+  (`TaskAuto.project`; a project you chose is fixed, `isProjectFixed`, and offers none): its name appears in the request as whole words, any
   case, punctuation ignored (`kanna` in "Fix the button in Kanna's sidebar", `paywall-next` in "paywall next";
   `resolveCandidatePool`). The prompt lists those as offered because the request names them, and the rest as never
   offered, so a request about one of those gets none (and asks at the setup gate) instead of the project's only
   repository. A named one the classifier picks is registered if Shinsa does not know it yet (`<effect key>:repo.register`,
   filed like any repository triage registers, Projects and task identity, below, never into the task's project) and
-  bound; the task keeps its own project, and its agents' brief says the task works in a repository outside it.
+  bound, and the task moves to that repository's project (`resolveRepoMove`, below).
   Without the model the task binds none, unless it was created with a repository or from inside one. `task.triage`
   then carries `repoId: null` and nothing is registered.
 - **Triage may start a new repository.** When the task has no repository pinned, the classifier also answers
@@ -516,6 +517,12 @@ whose choice is not clear binds none, and its work asks at the setup gate when i
   `scratch.remove` (`settleTask`), whatever repository it has now, since an earlier round may have run without one.
   The server waits for the task's runs to stop, then deletes `data/scratch/<task id>` if the task is still settled;
   a task reopened by a new round keeps it. A folder that is already gone is fine, so the effect is replay safe.
+- **A chosen project asks before it moves.** A task whose project you chose never binds a repository outside it at
+  triage, so a request that names one stops at the setup gate. Its choices list the project's repositories and then,
+  on the first round, every registered repository outside the project that the request names, as `name (Project)`
+  (`listNamedOutsideRepos` in `decide/config.ts`), and the question says that picking one moves the task to that
+  repository's project. Your pick binds it, moves the task there and gives it that project's handle
+  (`task.repo_bound` with `projectId` and `handle`); a pick of the project's own repository keeps both.
 - **Work that needs code binds one then.** A step that needs a repository (an investigation, a plan, a build, an
   operation) on a task with none goes through the setup check, which finds the repository first: one quick call on
   the classifier model (`TriageClassifier.repository` in `triage/message/service.ts`) reads the task's rounds, the current
@@ -580,7 +587,7 @@ modes (`WORKSPACE_MODES`), each a service in `apps/engine/src/workspaces/` behin
   or cancelled (`settleTask`, below). It asks `GET /api/onboarding/worktrees/usage` each time the page opens and
   after the folder changes; nothing measures in the background.
 - **A new worktree comes with its dependencies.** `prepareWorktree` runs the install its lockfile names
-  (`resolveInstallCommand`: `bun install`, `pnpm install --frozen-lockfile` or `npm ci`; nothing for Yarn) before the
+  (`selectInstallCommand`: `bun install`, `pnpm install --frozen-lockfile` or `npm ci`; nothing for Yarn) before the
   agent is handed the worktree. A failed install runs once more at once, since a first `pnpm install` with the hoisted
   linker can fail on files it is still writing (`ERR_PNPM_EEXIST`) and pass the second time; only when that run fails
   too is it logged, and the agent sets the dependencies up itself. Base checkouts for checks are prepared the same way.
@@ -617,7 +624,7 @@ every commit.
   (`FileWrite`): the file's new text and the text the editor last knew on disk (`null` for none). It writes into the
   task's checkout, `worktreePath`, which each strategy sets: the worktree, or the repository itself for the main
   checkout. The path passes `assertRepoPath` and must stay inside the checkout with its nearest existing
-  folder's real path (`resolveWritableInside`), so neither `..` nor a symlinked folder leads out. A text over 2 MB is
+  folder's real path (`selectWritableInside`), so neither `..` nor a symlinked folder leads out. A text over 2 MB is
   refused (`file_too_large`), and so is a task core will not let you edit (`edit_refused`, `resolveEditRefusal`: merged,
   cancelled or done, or no checkout). Inspect mode refuses it with every other write.
 - **Never over someone else's write.** When the file on disk is not `base`, nothing is written and the answer is
@@ -739,6 +746,27 @@ them in the order they need:
 - **Context carries over by the fork.** With `fork_from` set to this task, the other task's Agent starts from a copy
   of this task's session (Forking a task). A task created with `after_this` copies it only when it starts, after this
   task finished, so it holds this task's whole conversation, and its fork note says where this task's code is.
+- **A task in the wrong repository moves.** Triage picks the repository from the request's text, so it can guess
+  wrong (a screenshot of another app it cannot read). When all of the work is in another repository of the project
+  and nothing changes in this one, the Agent calls `move_to_repository` (`repository`, by name like `create_task`'s,
+  registered from the folders when named; `reason`) while it plans, instead of filing a second task. The guide and
+  `create_task`'s description say so. Core (`decide/moves.ts`) refuses it for the repository the task works in
+  (`same_repository`), one of another project (`other_project`, so the handle never changes), once a phase reported,
+  a pull request exists or an earlier round shipped (`work_started`) and for a task in a bundle (`task_stacked`);
+  each but the first points at `create_task`. The move takes two events, because removing a worktree reads the
+  task's repository:
+
+  ```
+  move_to_repository ─► run ends, task.moving {repoId}   movingTo set,
+                        worktree.remove                  stage triage
+  worktree.gone ─────► worktree.removed, task.moved      repoId changes
+                        startWork ─► setup verification ─► worktree in
+                        the new repository ─► plan run, same session
+  ```
+
+  The task keeps its handle, title and branch name; the old branch stays in the old repository with no commits.
+  `readyWorktree` ignores a late `worktree.ready` while `movingTo` is set. The resumed run starts in the new
+  worktree, so its turn ends with the note that its folder changed (`resolveMovedNote`).
 
 ## Rounds
 
@@ -809,7 +837,10 @@ predicates) and `state/rounds.ts` (the folds); the classifier is `apps/engine/sr
   (a merged change, an operation that ran) gets an answerer that resumes the task's session (the reviewer's
   excepted; `answerFollowUp`, `resolveFollowUpPrompt`, `Decider.taskSession`), runs in the repository like any answerer and answers with
   `answer`, proposing no change (`follow_up_proposal`). The round reopens while it answers (stage `answering`,
-  `isFollowUpOnWork`) and rests again as it was, merged or done, with its result untouched. A message on a resting task
+  `isFollowUpOnWork`) and rests again as it was, merged or done, with its result untouched. A merged round reopened this way, or by a watchdog
+  check (stage `watching`), keeps its first `endedAt` and its pull request's `mergedAt` (stamped once, the first time
+  the fold sees it merged) and settles back to `merged`, even when you then mark the task done, so Statistics never
+  moves a merge to a later day. A message on a resting task
   with no kind (the model off or failed) is such a follow-up, never a new round; only a schedule's message to a
   resting task still starts the next round. The classifier is shown the post-merge steps still waiting on you
   (`describeOpenSteps`), so a question about one, even one that quotes it ("what is this for? <the step>"), is
@@ -1288,6 +1319,16 @@ arrow, ⌘K's Wait for another task… and Stop waiting, all `task.wait_on` with
   repository locks its merge to that part (`create_task` with `this_task_waits`, Work across repositories): the
   pre-merge steps list each task it waits on as a row that ticks itself once that task finishes (`listMergeWaits`),
   on the review gate's card, the merge gate's card and the Review tab, so the hold is visible before you approve.
+- **A decision held by a wait.** A task at its plan, review or proposal gate (`awaiting_plan`, `awaiting_review`,
+  `awaiting_proposal`) that waits on an unfinished task is not asking for you yet: `resolveQueue` leaves that gate out
+  of `ready` (`isGateHeld`, `queue/rank.ts`) and lists the task in `queue.waiting`, reading "Waits on ‹task›"
+  (`listWaitsOn`). So it is not in Needs you, the queue button, the guide, the Dock badge, a notification or `shinsa
+  status`, and `--status needs_you` leaves it out (`isTaskListed` in `http/task-views.ts`). The gate stays open: the
+  task page and the Review tab still let you decide early. Its All tasks row and `read_task` name what it waits on in place of its gate's words, a
+  dependent's stall trace (`traceStalledLeaf`) walks on past it to what holds it, and the notification watcher counts
+  the gate as new when it is released (`listOpenGateIds` skips a held gate), so it alerts you then. Nothing is recorded; once every task it waits on is merged
+  or marked done, the gate is back in Needs you. Any other gate on the task (an agent's question, a secret, a sign-in,
+  a failure, Post-merge) still reaches you, and a task still building with a wait stays in progress.
 - **Stacking is a bundle.** A plain dependent waits for its parents to finish and branches off the default branch. To
   build on a parent's unmerged branch instead, stack it on that parent: a bundle (below). The line between them: a
   wait is for a separate feature that needs another's code merged first and ships on its own; a stack is for pieces
@@ -1486,8 +1527,24 @@ before any agent started. `sign_in` means a provider needs signing in again: the
 (`Gate.provider`, `claude` for a Claude account) and, for Claude, the account (Accounts and usage limits, below).
 The plan gate opens by one rule, `PLAN_GATE_RULE`: always for a task that runs an operation, a task created plan
 first, a task in the backlog (whose plan gate is held out of Needs you until you start it, Scheduling → The backlog)
-or a plan that asks for `approval`; with Approve plans on Large plans, also for a plan with more than 3 phases or
-6 files (`PLAN_SIZE_LIMITS`) or a revised plan; on Always, for every plan. Nothing else waits on you. A failure, configuration or Sign in gate pauses the task (`isPausingGate`).
+or a plan that asks for `approval` or splits the work into other tasks (`splits`); with Approve plans on Large plans,
+also for a plan with more than 3 phases or 6 files (`PLAN_SIZE_LIMITS`) or a revised plan; on Always, for every plan.
+Nothing else waits on you. A failure, configuration or Sign in gate pauses the task (`isPausingGate`).
+
+**Splitting at the plan.** A request often holds work that would ship better as separate pull requests. The Agent
+says so in its plan instead of an agent splitting the request before anyone read the code: `propose_plan`'s `split`
+lists the other parts (a title, a request that stands on its own, and when each starts: now, waiting on this task or
+an earlier part, or stacked on one), and the phases cover only the work that stays (`docs/protocol.md` → Plan
+parameters). The planning prompt says when (`describePlanSplit`, `prompts/roles.ts`): only for a task that opens a
+pull request, parts in parallel by default, waiting only on code on an unmerged branch, stacked only for pieces of one
+rewrite, and a small or cohesive request kept whole. Such a plan always waits for you. The plan card leads with
+Start N tasks (counting this task) over the list of parts, with Keep as one task beside it, and ⌘K offers both.
+Start N tasks approves the plan, and `startPlanSplit` (`decide/couriers.ts`) creates each part as a task under this
+one (`createdBy` `split`, the planning run), forked from it (`forkOf`), so its agent starts from this conversation and
+then plans for itself, with its wait or stack set; it shares the creation with `split_task` and is recorded as the
+same `task.split` for the plan version, made after that plan was proposed (a new round starts again at version 1), so
+neither creates the parts twice. Keep as one task is the plan's revise with a fixed message (drop the split and plan
+all of the work here), so the Agent proposes a plan without one.
 
 **Pausing a task.** Pause (the task's menu, a row's menu, ⌘K, `shinsa tasks pause`, an agent's `tasks_pause`) sends
 `task.pause` (`decide/pause.ts`) while something works on the task: triage, planning, building, checks, review,
@@ -2170,7 +2227,7 @@ checks it ran.
   limit resets soonest takes over (Accounts and usage limits, below). Settings → Agent usage → Forecast draws one block per provider (`components/settings/forecast.tsx`,
   `lib/accounts/forecast.ts`): every Claude account together, and each other provider's own login alone, each with
   its pace, a lane per account across the week (blue while the account has usage at the timeline's pace, grey once
-  it runs out, a thin tick at each reset, and an orange band wherever every account is out at once: `outages`), drawn at a
+  it runs out, a small gap before each reset, each limit window its own bar, and an orange band wherever every account is out at once: `outages`), drawn at a
   pace you pick (`resolveForecastTimeline`: the safe pace, the last 24 hours, or one and a half or twice the safe pace;
   the last 24 hours first when it is faster), a dashed amber line at the tightest point when the safe pace is drawn,
   the tightest point in words and the last 24 hours of that provider (meters on an account's window for
@@ -2752,7 +2809,7 @@ file you edit, is `POST /api/tasks/<id>/file` (Where agents work → Your edits)
 | `GET /api/tasks/<id>/refs` | `TaskRefs`: the head commit, the base, the branch, the default branch, whether a working copy exists and has uncommitted edits, and the commits between base and head (100 at most) | the worktree's `HEAD`; without a worktree the branch, then the pull request's head, then the last pushed commit; a task without a branch reads the default branch (`origin` first). The base is the merge base with the round's base branch or the default branch; once the branch is merged, the merge base with the commit before the merge, so a merged task keeps its diff |
 | `GET /api/tasks/<id>/paths?ref=` | `RepoPaths`: every file path (200,000 at most, `truncated`) | `git ls-tree -r`; the working copy `git ls-files --cached --others --exclude-standard` without the deleted ones |
 | `GET /api/tasks/<id>/tree?ref=&dir=` | `RepoTree`: one folder's entries, folders first | the folder's tree object through the same long-lived reader as `blob` (`info <commit>:<dir>`, `contents`, then `info` for each file's size), kept in the cache by commit and folder (a cold folder of paywall-next went from about 27 ms to 2 to 10 ms); a path git cannot take on one line falls back to `git ls-tree --long`; the working copy from its paths |
-| `GET /api/tasks/<id>/blob?ref=&path=` | `FileContent`: the text, or `binary` (a NUL in the first 8 KB, with the image type for an image), `tooLarge` (over 2 MB) or `missing` | one long-lived `git cat-file --batch-command` per repository (`git/blobs/service.ts`, `CatFiles`): `info <commit>:<path>` for the object and its size, then `contents <object>`, so a file costs no process (a cold read went from about 40 ms, three `git` processes, to 1 to 2 ms); the reader stops after 30 s idle or a 5 s stall and starts again on the next read; a path git cannot take on one line falls back to `git ls-tree` and `git cat-file blob`; the working copy through `resolveInside` |
+| `GET /api/tasks/<id>/blob?ref=&path=` | `FileContent`: the text, or `binary` (a NUL in the first 8 KB, with the image type for an image), `tooLarge` (over 2 MB) or `missing` | one long-lived `git cat-file --batch-command` per repository (`git/blobs/service.ts`, `CatFiles`): `info <commit>:<path>` for the object and its size, then `contents <object>`, so a file costs no process (a cold read went from about 40 ms, three `git` processes, to 1 to 2 ms); the reader stops after 30 s idle or a 5 s stall and starts again on the next read; a path git cannot take on one line falls back to `git ls-tree` and `git cat-file blob`; the working copy through `selectInside` |
 | `GET /api/tasks/<id>/raw?ref=&path=` | an image's bytes, with `default-src 'none'` and `nosniff`; anything but an image is refused | as `blob` |
 | `GET /api/tasks/<id>/search?ref=&q=&regex=1&case=1&word=1&glob=` | `SearchResult`: up to 2,000 matches with path, line, column and text, `truncated` and `timedOut`; asked with `Accept: application/x-ndjson` (the web does), a stream of `SearchLine`s instead: `matches` lines as git finds them, then one `done` line with how it ended (or one `failed` line), `no-store` | `git grep -n -I --column`: a plain search that ignores case is `-E` with each letter folded into a class (`[cC][oO]…`, the rest escaped; `-i` made git grep up to twenty times slower), a case-sensitive one `-F`, `regex=1` is `-E` with `-i` unless `case=1`, `-w` with `word=1`, the glob as a `:(glob)` pathspec (`**/` in front when it names no folder); the working copy adds `--untracked`. git is stopped at the 2,001st line, so a common word answers at once |
 | `GET /api/tasks/<id>/diff?base=&head=&path=&previous=` | `TaskDiff` with both ends: every changed file with its status, counts and risk, and the patch of the small ones only; the rest have `patch: ''` and `patchOmitted` (with `path`, and `previous` for a rename, the named file alone with its whole patch) | `git diff --raw --numstat -z --find-renames base head` for the list (`parseDiffSummary`), then one `git diff` over the files that fit the patch budget, in risk order (`selectPatchedFiles`, `mergeDiffPatches`: none over 2,000 changed lines or 256 KB, 20,000 lines and 1 MB in all, 400 files; a named file up to 2 MB); `head=working` diffs the working copy through a copy of its index (below). Without both ends it is the task's base against its working copy, or its head once the worktree is gone (what `shinsa tasks diff` reads) |
@@ -2764,7 +2821,7 @@ file you edit, is `POST /api/tasks/<id>/file` (Where agents work → Your edits)
   commit once found is remembered per repository (`assertCommit`), so later reads at it start no process. Leaving `ref` out
   reads the head and is never cached.
 - **Paths.** Relative, without an empty, `.` or `..` segment, a leading `/` or a NUL (`path_invalid`); they reach git
-  after `--` and with `GIT_LITERAL_PATHSPECS`, and the working copy is read through `resolveInside`, so a symlink
+  after `--` and with `GIT_LITERAL_PATHSPECS`, and the working copy is read through `selectInside`, so a symlink
   cannot leave it. A search glob may not start with `-` or `:`, and the query is at most 500 characters.
 - **Limits.** Each read runs with argv only, in its own process group, for 5 s (30 s for a diff) and stops when the
   client goes away; output is capped (64 MB for listings and diffs, 4 MB or 2,000 lines for a search, 2 MB for a
@@ -2909,8 +2966,8 @@ beside your run (Runs for a task, below).
   run for a task that is settled, has no worktree of its own (one that works in the repository's own checkout uses
   your run), belongs to another project, or whose repository does not hold the service's folder (a project folder
   outside every repository). `listTaskServices` lists what a task can run, `listServiceTaskRuns` every task's run of
-  one service. Start, stop and restart take an optional `{ taskId }` in their body (`resolveServiceRunIn` in
-  `terminals/places.ts`; no body is your run, as before); an unknown task is `task_not_found`, a service the task cannot run
+  one service. Start, stop and restart take an optional `{ taskId }` in their body (`selectServiceRunIn` in
+  `terminals/runs.ts`; no body is your run, as before); an unknown task is `task_not_found`, a service the task cannot run
   `service_place_invalid`, a worktree without the folder `terminal_place_missing`. Renaming a service renames every
   run's tab and removing one closes them all.
 - **A port per run.** Every task run gets a port of its own, chosen as it starts (`Terminals.#resolvePort`,
@@ -2935,7 +2992,7 @@ beside your run (Runs for a task, below).
   finished agent left working in the worktree, such as a dev server an agent started from its shell (Where agents work → A removed
   worktree takes its processes with it), so no dev server keeps running in a deleted folder; your own shells opened
   in that worktree, and what runs in them, are left as they are.
-- **A task run's own variables.** `resolveServiceRunIn` gives a task's run the shared Turbo cache in a Turbo
+- **A task run's own variables.** `selectServiceRunIn` gives a task's run the shared Turbo cache in a Turbo
   repository (`ServiceRun.env`, Where agents work → Turbo's cache is shared per repository), kept for the run's
   restarts and under the service's own variables and its port.
 - **Across a restart of the engine.** `Terminals.stop()` saves a service that was running as running, and the next
@@ -3116,7 +3173,7 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   upgrade (404, the token kept), then spends the nonce (`Remote.spendConnect`, held until the token expires), so a
   token seen in a log or on the wire opens nothing (401). The token only keeps random traffic off the endpoint; trust
   rests on the handshake. Every engine names what it speaks in each heartbeat and pairing start (`features`:
-  `bound-connect-tokens`, `sealed-pairing`, `MACHINE_FEATURES` in core), and app.shinsa.dev mints these tokens and
+  `bound-connect-tokens`, `sealed-pairing`, `slack-linked-threads`, `MACHINE_FEATURES` in core), and app.shinsa.dev mints these tokens and
   seals pairing credentials only for a machine that named them; an engine that predates them, which names nothing,
   still gets the old unlabelled token over the instance, user and expiry and its credentials in the clear, so the
   Worker can deploy before every machine has updated. This engine only accepts the new token and refuses clear
@@ -3424,10 +3481,11 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   `review.approve_after_fix` for `gate.answer`'s `thenApprove`, `message.line_comments` for `task.message`'s
   `comments`, `changelog` for `GET /api/changelog`, `remote.terminals` for terminal streams on the sealed channel,
   `attention` for routing notifications to the device you use, `worktree-root` for the worktree folder and
-  `usage.pace_limits` for `dailyUsageLimit` and `Project.usageLimit` and `usage.watchdog_limits` for
-  `watchdogsIgnoreUsageLimits`, today;
+  `usage.pace_limits` for `dailyUsageLimit` and `Project.usageLimit`, `usage.watchdog_limits` for
+  `watchdogsIgnoreUsageLimits` and `focus.projects` for `focus.change`'s `projectIds` and `except`, today;
   Settings → Teams, the review's Fix and approve choice and
-  What's new show only on an engine that has them). `ENGINE_PROTOCOL` is the hard floor: a machine whose protocol differs from the page's is left out of the
+  What's new show only on an engine that has them, and the Focus menu stays a single choice on an engine without
+  `focus.projects`). `ENGINE_PROTOCOL` is the hard floor: a machine whose protocol differs from the page's is left out of the
   dashboard, merges nothing and gets no command, and Settings → Machines says "Update Shinsa on <name> to reach it from
   here." in its row, as do New task's machine picker and a routing policy's on that machine's disabled entry. When every
   machine of the dashboard is on another protocol, the dashboard opens on that message instead of the app
@@ -3775,8 +3833,8 @@ view are a share link for a whole project, on the same projection and the same o
 place of the link: nothing is copied to app.shinsa.dev, and a teammate reads each task from your machine over its
 tunnel while it is online, and the last list of it their own machine kept while it is not (Offline teammates, below).
 On app.shinsa.dev a teammate also acts on those tasks, with what the team's owner lets them do, through a device your
-machine admits by itself and scopes to the team's projects (Teammates act on team tasks, below); the local app keeps
-the read-only view. Teams need remote access on (`Remote` paired and enabled), since that is how a teammate reaches you.
+machine admits by itself and scopes to the team's projects, and the Mac app does the same through a device its own
+engine enrols and relays (Teammates act on team tasks, below). Teams need remote access on (`Remote` paired and enabled), since that is how a teammate reaches you.
 
 - **What app.shinsa.dev keeps** (`apps/cloud/src/routes/teams/`, `routes/machine-teams/`, `migrations/0001_schema.sql`): who is in which team. A
   team is an id, a name of 60 characters at most (`TEAM_NAME_LIMIT`), its owner (the account whose machine made it),
@@ -3921,7 +3979,8 @@ the read-only view. Teams need remote access on (`Remote` paired and enabled), s
   alone: it never lists a teammate's task. A teammate's task never waits for you, so it never counts towards Needs you, the queue, the
   guide or a notification. Opening one goes to `/teams/<team>/<machine>/<task>` (`routes/team-task.tsx`), the shared
   task page (`SharedTaskPage`, read-only, its Chat the agents' output only) fed by the engine relay in the local app and, on app.shinsa.dev, by
-  a team channel the browser opens with its own key. On app.shinsa.dev a teammate's machine admitted to the fleet
+  a team channel the browser opens with its own key. On app.shinsa.dev, and in the Mac app for a machine its engine
+  relays (the local fleet relay, Teammates act on team tasks), a teammate's machine in the fleet
   opens the task as a full task page at `/tasks/<handle>` instead, straight from the row (`resolveFleetTeamTaskPath`).
   Your browser takes the keys of the teams your own machines hold when it opens the dashboard
   (`GET /api/remote/teams/keys`, owner devices only, `syncOwnTeamKeys` in `lib/teams/own-keys.ts`), so you never open
@@ -4010,6 +4069,28 @@ the read-only view. Teams need remote access on (`Remote` paired and enabled), s
     grant's secret. The machine admits that device without asking, recording its team (`RemoteDevice.teamId`), while
     the person is still in the team, the team key is here and the proof checks. app.shinsa.dev hands a teammate a
     `remote` connect token for the machine (`findReachableMachine` in `auth/access.ts`); the token alone opens nothing.
+  - **In the Mac app: the local fleet relay** (`apps/engine/src/remote/fleet-relay/`, `remote/device-channel/`;
+    `apps/web/src/lib/teams/relay.ts`). The engine is a team device itself, so a teammate's task opens as the same full
+    page in the local app. For each teammate machine its team feed lists with a grant, the engine enrols its own keys
+    as that machine's team device, with the grant's enroll proof, and keeps them only in `remote.json`
+    (`relayDevices: { instanceId, teamId, machineKey, … }`); it asks app.shinsa.dev for a `remote` token with its
+    machine token (`POST /__remote/machine/teams/<team>/connect/remote`, `machineTeams.remoteConnect`, the same checks
+    as the team view's connect) and opens the sealed channel with core's handshake and frames (`DeviceChannels`), on
+    demand. The page sees only localhost: `GET /api/teams/relays` lists the relayed machines (`TeamRelayEntry`, behind
+    the `team-relay` feature), each machine's API is relayed under `/api/teams/relay/<machine>/…` and its socket at
+    `/ws/teams/relay/<machine>`, and the page builds a `Fleet` of this machine plus one `teammate` member per relayed
+    machine (`startLocalRelays`), asking for the list again only when the team list changes. So the same `ScopedActor`
+    team scope and refusals apply on the teammate's machine, and no key, grant or token reaches the page. The tunnel
+    has no route to either relay path, so only this machine's own page reaches it. A device is removed and its channel
+    closed when you leave the team, the grant or the team key goes, the machine leaves the team or remote access is
+    turned off; a machine that is offline, too old or refuses the device keeps its tasks on the read-only team view,
+    with its offline copy. Images, recordings and raw files of a relayed task load through the same relay
+    (`Fleet.resolveMediaUrl`, `useMediaUrl`: a served path whose task belongs to a relayed member gets that member's
+    `/api/teams/relay/<machine>` prefix), since the Mac app has no service worker to route them as app.shinsa.dev
+    does. A running service of a relayed task opens at its private `shinsa.page` address through the open route of
+    the Shinsa Cloud this engine talks to (`resolveServiceLink`, `<origin>/__remote/previews/open?url=…`, the origin
+    each relay entry carries as `TeamRelayEntry.appOrigin`: `SHINSA_REMOTE_ORIGIN`, app.shinsa.dev by default), which
+    admits a teammate with the `services` scope; its `localhost` address is the teammate's own machine, not yours.
   - **What a team device reaches** (`resolveScopedState`, `resolveScopedRefusal` in core's `remote/scope.ts`; the
     engine's `Remote.#resolveScope`, `http/socket.ts`, `remote/gate/service.ts`). Its channel carries a `ScopedActor`
     with `scope: { kind: 'team', teamId, scopes }`. The state it gets keeps only the tasks of the team's projects
@@ -4051,8 +4132,13 @@ the read-only view. Teams need remote access on (`Remote` paired and enabled), s
   - **Services** (`remote/previews.ts`, `routes/preview-open/` in `apps/cloud`). A teammate with `services` opens any
     running service of a team task at its private address (`<hash>.shinsa.page`), as you do over remote access:
     app.shinsa.dev admits an account that shares a team with the machine's owner, and the machine admits them for a
-    run of a team task only. A service started outside a task stays yours. Losing the right or the project leaving the
-    team closes their open connections.
+    run of a team task only. A service started outside a task stays yours. The task page finds the run because the
+    machine answers a teammate's `/api/terminals`, and sends their socket its `terminals` message, scoped by
+    `resolveScopedTerminals`: only the service runs of tasks in their scope, with each service's environment
+    emptied and no home folder, and nothing at all without `services`. It is the one owner-only route a guest
+    passes (`GuestRoute` `filtered`: the answer is filtered per guest), never one marked `any`. Their Services fact shows each run's state
+    and Open, with no terminal, start, restart or stop. Losing the right or the project leaving the team closes
+    their open connections.
   - **Forking.** Anyone in the team forks a teammate's task onto their own machine, as Forking a task →
     Forking a teammate's task says; no right gates it, since nothing changes on the teammate's machine.
   - **Sharing.** A teammate with `share` makes and stops share links, status shares and service previews of team
@@ -4343,15 +4429,20 @@ Mention the Shinsa bot in Slack and the machine of the person who mentioned it d
 for everyone, on app.shinsa.dev; each person connects their own Slack user to one of their own machines, so the same
 mention from a teammate who connected their Shinsa runs on their machine, and from one who did not, runs nowhere. It
 needs remote access (above): the relay reaches the machine through its tunnel, and the machine posts back through the
-relay with its machine token. No machine holds a Slack token. The rules are core's (`packages/core/src/slack/`,
+relay with its machine token. No machine holds a Slack token. A thread the mention links to is read with the token of
+the person who mentioned the bot, never the bot's, so a thread in a channel the bot is not in, such as a shared
+customer channel, reaches the task as long as that person can read it. The rules are core's (`packages/core/src/slack/`,
 `decide/slack.ts`, `state/slack.ts`); the relay is `apps/cloud` (`routes/slack-events/`, `routes/slack-relay/`, `routes/slack-link/`, `apps/cloud/CLAUDE.md`);
 the machine side is `apps/engine/src/slack/`.
 
 ```
 Slack ──event──► app.shinsa.dev /slack/events
                   ├─ Slack's signature, the event id seen once
+                  ├─ author of another org ─► nothing
                   ├─ author not connected ──► private "Connect Slack"
                   ├─ machine offline ───────► "<machine> is offline"
+                  ├─ linked threads, read with the author's token
+                  │  └─ one unreadable ──► a private note after
                   └─ the thread, signed ──► t-<id>.shinsa.dev
                                              /api/slack/events
                                                └─ slack.mention
@@ -4364,9 +4455,8 @@ Slack ──event──► app.shinsa.dev /slack/events
                               task.create, as from Home
    the task moves or a gate opens or closes
                   ──► slack.status: the one card, edited
-                      (the open gate with its buttons, else the status)
-                      + the mention's one reaction
-   the result, or done ──► slack.post, a new message
+                      (the open gate with its buttons, the result,
+                      else the status) + the mention's one reaction
    the round merged ──► slack.merge_announced + slack.merge:
                   "Merged", posted once, its ts kept (slack.record_merge)
                   └─ a watchdog moves or a post-merge step is ticked
@@ -4388,15 +4478,23 @@ Slack ──a card's button──► app.shinsa.dev /slack/interactions
 
 - **Connecting** (Settings → General → Slack, `components/settings/slack.tsx`): with remote access on, Connect
   Slack opens `https://app.shinsa.dev/slack/connect?instance=<this machine>` (`resolveSlackConnectUrl`). You sign in
-  with GitHub there if you are not, then with Slack (OpenID Connect, `openid profile`); a workspace without Shinsa
-  goes on to add the app, which asks for the bot scopes `app_mentions:read`, `channels:history`, `channels:read`,
-  `groups:history`, `groups:read`, `chat:write`, `reactions:write` and `users:read` (`SLACK_BOT_SCOPES`, `apps/cloud/slack-manifest.json`). Either way your Slack user is
-  linked to that machine and you land on `/slack/linked` (`routes/remote/slack.tsx`), which names the workspace or
+  with GitHub there if you are not, then with Slack (OAuth v2, `oauth.v2.access`), which asks for your own
+  read-only user scopes `channels:history`, `groups:history`, `channels:read` and `groups:read` (`SLACK_USER_SCOPES`)
+  and never a direct message's; a workspace without Shinsa goes on to add the app, which asks for the bot scopes `app_mentions:read`, `channels:history`, `channels:read`,
+  `groups:history`, `groups:read`, `chat:write`, `reactions:write` and `users:read` (`SLACK_BOT_SCOPES`, `apps/cloud/slack-manifest.json`) and the same user scopes, so its installer is linked in that one step. Either way your Slack user is
+  linked to that machine with your user token kept sealed (`slack_links.sealed_user_token`, AES-GCM under
+  `SLACK_TOKEN_KEY`, as a bot token is) and you land on `/slack/linked` (`routes/remote/slack.tsx`), which names the workspace or
   says what went wrong. A machine can be linked in several workspaces; a Slack user to one machine at a time
   (connecting again from another machine moves it). The section reads `GET /api/slack` (`SlackSnapshot`: remote access
   on, the connect link, the links with workspace, user and when, or the problem when app.shinsa.dev cannot be
   reached) when Settings opens and when the window comes back. Disconnect (`POST /api/slack/disconnect`) removes every
-  link of this machine; from another device only its owner may (`OwnerOnlyRoute`). Each row leads with when that
+  link of this machine; from another device only its owner may (`OwnerOnlyRoute`). Your user token is revoked
+  (`auth.revoke`, best effort: a failure is logged as `[Cloud] A Slack user token could not be revoked` and the
+  links still go) when you disconnect, when the machine is removed (`revokeMachineUserTokens`) and when connecting
+  again brings a different token (`replaceUserToken`; Slack gives the same one back while it is valid, which is
+  kept). Revoking Shinsa in Slack sends `tokens_revoked` with your user id, which drops your token and keeps the
+  link; removing the app still forgets the workspace and every link. A link made before user tokens has none until
+  you connect again. Each row leads with when that
   account last started work here ("Last used 2h ago · Connected 3d ago", or "Not used yet"): the engine
   adds `lastUsedAt` to each link from its own state (`resolveSlackLastUsedAt`, the newest task whose Slack thread
   that user in that workspace started), so app.shinsa.dev stores nothing for it. Replies in a task's thread and
@@ -4411,7 +4509,8 @@ Slack ──a card's button──► app.shinsa.dev /slack/interactions
   thread (`threadTs`, the mention's own `ts` for a mention outside a thread: the bot always answers in a thread), the
   author with their Slack name, the text with Slack's markup turned into words and the bot's own mention dropped
   (`resolveSlackReadableText`), a permalink, the channel's name (`conversations.info`; null without `channels:read` or
-  `groups:read`, in a direct message, or when Slack refuses), and the thread's last 100 messages, bots marked. Each
+  `groups:read`, in a direct message, or when Slack refuses), the thread's last 100 messages, bots marked, and
+  `linkedThreads` (below). Each
   message is read from its `text`, its `blocks` (section, header, context and rich text) and its `attachments`
   (pretext, title, text and fields, else the fallback), taking the longer of the text and the blocks and adding the
   attachments (`resolveSlackMessageText`, `apps/cloud/src/routes/slack-events/message.ts`), so a bot whose `text`
@@ -4423,6 +4522,27 @@ Slack ──a card's button──► app.shinsa.dev /slack/interactions
   whose `x-shinsa-slack-timestamp` is more than five minutes off (`verifySlackForwardSignature`, 401), then
   dispatches `slack.mention` with command id `slack:<event id>`, so a forward that comes twice is answered by its
   receipt.
+- **Threads a mention links to** (`SlackLinkedThread`, `listSlackMessageLinks`): a mention's text may link to other
+  Slack messages (`https://<workspace>.slack.com/archives/<channel>/p<ts>`, with `?thread_ts=` for a reply). The
+  relay reads the first three distinct threads it links to, other than its own (`SLACK_LIMITS.linkedThreads`), each
+  with `conversations.replies` and `conversations.info` called with the mentioning person's own user token, never
+  the bot's: Slack shows that token only the public and private channels that person is in, so the bot never reads
+  a thread to someone who could not read it themselves, and never needs to join a channel. People in a linked thread
+  are named with the bot token's `users:read`. Each reaches the machine with its channel, thread root, permalink,
+  channel name and up to 100 messages, read and named as the mention's own thread is. The relay reads them only for
+  a machine that names `slack-linked-threads` in `MACHINE_FEATURES`, so an older engine, which would drop the field,
+  is never sent them. When one cannot be read, the mention still goes on with the rest, and its author gets one
+  private message in the thread after it is forwarded: "Connect Slack again" with the connect link when the link has
+  no user token, its sealed token no longer opens with `SLACK_TOKEN_KEY` (`selectUserToken`, logged as a warning
+  `[Cloud] A stored Slack user token does not open`), or Slack refuses the token (`RECONNECT_CODES`: `missing_scope`,
+  `invalid_auth`, `token_revoked`…, `serializeSlackReconnectPrompt`), otherwise "I could not read the thread you
+  linked." (`serializeSlackUnreadLinks`). Each refusal is logged as `[Cloud] A linked Slack thread could not be read`
+  with Slack's `code`: a warning for a thread the person cannot see (`HIDDEN_THREAD_CODES`: `not_in_channel`,
+  `channel_not_found`, `thread_not_found`), an error for anything else, such as a missing scope. A token that no
+  longer opens is never revoked when it is replaced, unlinked or its machine removed; it is overwritten or dropped.
+- **Mentions from outside the workspace are ignored.** In a channel shared with another organisation, a mention
+  whose author's `user_team` is not the workspace that installed the app gets no reply, no connect prompt and no
+  forward.
 - **How a thread maps to a task** (`Task.slack`, `SlackThreadLink`: workspace, channel, thread, author, the mention's
   own `messageTs`, permalink, the status message's ts and the reaction on the mention; the key is `resolveSlackThreadKey`, `team:channel:threadTs`). A thread holds at most one
   open task. A mention in a thread whose task is open (not done or cancelled) messages that task like any message you
@@ -4454,17 +4574,20 @@ Slack ──a card's button──► app.shinsa.dev /slack/interactions
   with everything on Auto, so the focus project, then triage, decide the project, the repository, the kind of task
   (a question is an answer and ends with it) and the priority. Its request is what the person wrote (or "Do what this
   Slack thread asks for." for a bare mention), who asked with the permalink, and the thread fenced in a nonce-tagged
-  `<slack-thread-…>` element marked as untrusted data (`serializeSlackRequest`). It is linked to the thread
+  `<slack-thread-…>` element marked as untrusted data (`serializeSlackRequest`), then each linked thread under
+  "Linked thread 1 in #channel: <permalink>" in its own `<slack-linked-…-n>` element, also marked as untrusted
+  data and kept to 6,000 characters (`SLACK_LIMITS.linkedThreadChars`, its root always kept, then its latest
+  replies). A message to an open task fences them the same way, and the classifier reads them with the thread. It is linked to the thread
   (`slack.thread_linked`, "Started from a Slack thread"), and its first `slack.status` posts its card.
 - **One card per thread, edited in place** (`syncSlackThreads`, after every command, for the tasks it changed): the
   task's first `slack.status` posts one message in the thread, the card, and every later change edits it: the task
   moving, a gate opening (any gate a person decides: a failure, a sign-in, a question, a secret, a proposal, an
   operation, a plan, a review, a merge), a gate answered, withdrawn or superseded, and a decision made in Slack
   (`slack.decided`). Nothing else is posted while the task runs, since the mention's reaction (below) already tells
-  its author in Slack's Activity. Three things are a new message, so the thread is notified once for each: the
-  result (`task.delivered`: an answer, a diagnosis, a report, an outcome), the end of the task (done without a result
-  or merge) and a watchdog that found a problem (`watchdog.checked` with `tripped`), each a `slack.post` (`SlackPost`
-  is `result`, `completed` or `tripped`); and the merge, once per round. The `task.staged` to `merged` that comes with
+  its author in Slack's Activity. The result (`task.delivered`: an answer, a diagnosis, a report, an outcome) and the
+  end of the task edit the card too, so the card stays the one place the thread reads the task. Two things are a new
+  message, so the thread is notified once for each: a watchdog that found a problem (`watchdog.checked` with
+  `tripped`), a `slack.post` (`SlackPost` is only `tripped`), and the merge, once per round. The `task.staged` to `merged` that comes with
   the pull request recorded merged, in a round with no merge message yet, emits `slack.merge_announced`
   (`SlackThreadLink.merge`, the round and later its ts) and a `slack.merge` effect, in the thread's lane: the engine
   posts "Merged" the first time and records its ts with `slack.record_merge` (`slack.merge_posted`), and every later
@@ -4479,8 +4602,10 @@ Slack ──a card's button──► app.shinsa.dev /slack/interactions
   their markup), details as fields, a numbered list or a context line, the decision buttons with a button to open the
   task on app.shinsa.dev (`resolveSlackTaskUrl`), and a small last line naming the task (its handle and title,
   linked) and its pull request as `PR #<number>`, linked. The card shows the first open gate in the order failure,
-  sign-in, question, secret, proposal, operation, plan, review, merge (`SLACK_CARD_GATES`); with none open it shows
-  the status:
+  sign-in, question, secret, proposal, operation, plan, review, merge, result (`SLACK_CARD_GATES`); with none open it
+  shows the result while the task rests at done with one, is not cancelled and never went on to a change (its
+  proposal accepted, a plan or a pull request, merged or closed), so closing it or "Keep as is" leaves the result in
+  place, with "@someone closed it" under it; else the status:
   - the status: what the task is doing now in bold (its stage reason, else its stage), "@someone approved the plan"
     under it while the last decision on the task was made in Slack (`SlackThreadLink.decided`, cleared by any
     `gate.answered` before `slack.decided` sets it again, so a decision made in Shinsa drops it), then the task
@@ -4491,7 +4616,9 @@ Slack ──a card's button──► app.shinsa.dev /slack/interactions
     recommendation, a button per choice (the recommended one primary) when it has one to five choices of at most 75
     characters, otherwise the choices numbered, and Answer… for any other answer;
   - a secret: "Secret needed", what is needed in bold, to give it in Shinsa and never in Slack, "Give it in Shinsa";
-  - a proposal: "Proposed change", the change quoted, Approve and Keep as is;
+  - a proposal: "Proposed change", the change quoted, Approve and Keep as is; after a diagnosis or a report, its
+    header ("Diagnosis", "Report") and the whole result first, then the change under "Proposed change", so Approve
+    shows what it approves;
   - an operation: "Ready to run", the operation and its whole detail quoted, Run and Finish without it;
   - a plan: "Plan ready for your approval", the whole plan (`serializePlanMarkdown`: goal, every phase with its detail,
     behaviour, approach, files, checks), Approve and Request changes…, "Read the plan";
@@ -4499,8 +4626,10 @@ Slack ──a card's button──► app.shinsa.dev /slack/interactions
     (`serializeReportMarkdown`), the fields Checks (how they went) and Pull request (`PR #<number>`, or "Opens once
     you approve"), Approve and Request changes…, "Review in Shinsa";
   - a merge: "Ready to merge", the same report and fields, Merge;
-  - the result, a new message: "Result", the whole result in mrkdwn (`serializeSlackResult`); the end, a new message:
-    "Done" (`serializeSlackCompleted`); the merge, a new message edited afterwards: "Merged", the round's watchdogs
+  - a result: "Answer", "Diagnosis", "Report" or "Outcome" (from its step), the whole result in mrkdwn, Close (the
+    result gate's approve, which closes the task) and Open in Shinsa;
+  - the end of a task with no result: the status, "Done";
+  - the merge, a new message edited afterwards: "Merged", the round's watchdogs
     each with its state (waits for a data source or for production, watching with the next check in the reader's
     time, passed with its number of checks, found a problem, stopped) and the open post-merge steps under "Still to do
     after the merge" (`serializeSlackMerged`, `resolveSlackMergeMessage`); a trip, a new message: "Watchdog found a
@@ -4586,8 +4715,8 @@ Slack ──a card's button──► app.shinsa.dev /slack/interactions
   With remote access off nothing is posted. A machine that is offline when someone mentions the bot gets "is offline"
   in the thread from app.shinsa.dev, and the mention is not kept: mention it again once Shinsa runs there.
 - **What app.shinsa.dev sees.** Slack's messages and the posts back pass through the Worker on their way and are never
-  stored: D1 keeps the workspaces with their bot tokens sealed (AES-GCM, `SLACK_TOKEN_KEY`), the links (Slack user to
-  account and machine), which threads were sent to which machine and which messages each machine posted (so a machine
+  stored, linked threads included: D1 keeps the workspaces with their bot tokens sealed (AES-GCM, `SLACK_TOKEN_KEY`), the links (Slack user to
+  account and machine, with that person's read-only user token sealed the same way), which threads were sent to which machine and which messages each machine posted (so a machine
   posts only in its own threads and edits only its own messages), and Slack's event ids for a day. The sealed channel
   of remote access is not involved; this is the one path where the Worker reads what goes by.
 
@@ -4685,20 +4814,37 @@ description, folders }` (`packages/core/src/domain/types.ts`; the rules in `doma
   the task's project that the request names never joins the task's project.
 - **A task is scoped to a project.** `task.create` takes `projectId`; left out, the task takes its repository's
   project, else the focus project (Home's composer shows that default and lets you change it, or pick No project).
+  `task.created` records which: `auto.project` is true only for the focus default. A chosen project (yours, or the
+  repository's) is fixed; the focus default is a guess the repository corrects.
   Triage then picks the repository among the project's own (registered ones and those in its folders, `listLocalRepos`
   over the folders), one outside the project that the request names (A task without a repository, above), or none,
   and names the project in its prompt; a project with neither falls back to every repository. A task without a
-  project gets one from the repository triage picks, and keeps none when triage picks none; a task with a project
-  keeps it, whichever repository it binds.
+  project gets one from the repository triage picks, and keeps none when triage picks none. A task whose project only
+  came from the focus moves to the project of the repository it binds on its first round, at triage or at the setup
+  check (`resolveRepoMove` in `domain/projects.ts`), so the focus filter and the handle follow the repository; a task
+  whose project was chosen keeps it, and asks before it moves (A task without a repository, above). Later rounds
+  never move a task. The `task-auto-project` log migration marks every older task as chosen, so tasks created
+  before it (LOC-215 in Shinsa's own log) stay where they are.
 - **Agents know the project.** Every fresh task run's brief (not a resumed session, not a delegated run) ends with
   the project: its name and key, description, every
   repository with its path (the task's own marked) and its folders, and the repository the task works in when it is
   outside the project (`resolveProjectContext`, appended in `Decider.startRun`), so you never have to say which
   repository "the server" is.
-- **The focus is a project or a team** (`focus.change` `projectId` or `teamId`, or neither for your work). It filters:
-  `resolveQueue` keeps only the focus project's decisions and tasks, or those of the team's projects, and every list
-  built on it (Home, the queue button, the guide, ⌘K's decisions, the tab count and notifications) shows nothing from
-  other projects. To see other work, you switch the focus. A team focus also shows your teammates' tasks (Teams).
+- **The focus is projects or a team** (`Focus { projectIds, except, teamId, until }`, `domain/focus.ts`; neither for
+  your work). `projectIds` with `except` false shows only those projects; with `except` true it shows every project
+  but those, so you can leave the work project out on a weekend. One predicate, `isProjectInFocus`, decides it
+  everywhere: `resolveQueue` keeps only the decisions and tasks in focus, or those of the team's projects, and every
+  list built on it (Home, the queue button, the guide, ⌘K's decisions, the tab count and notifications) shows nothing
+  else. A task with no project shows under all but some and hides under a list of projects. `focus.change` takes
+  `projectIds` and `except`, or the older `projectId` a page from before them sends; `changeFocus` sorts and dedupes
+  the list, drops `except` when it is empty, and refuses projects with a team (`focus_refused`). Removing a project
+  drops it from the focus, and the focus clears when none are left. `resolveFocusProject` names a project only when
+  exactly one is included, for the new task's default project and the terminal's default folder. `shinsa focus set`
+  takes several projects and `--except`; `focus show` names them (`describeFocusProjects`). The page offers the
+  multi-select only to an engine that lists the `focus.projects` feature. The `focus-projects` log migration
+  (`apps/engine/src/store/migrations/focus-projects.ts`) turns every older `focus.changed` event's `projectId` into a
+  list of one, or an empty list, with `except` false. To see other work, you switch the focus. A team focus also
+  shows your teammates' tasks (Teams).
 
 **Task identity.** Every id Shinsa makes for the log (tasks, runs, gates, schedules, projects) is a UUIDv7 from the
 engine (`Bun.randomUUIDv7()` behind `DecideContext.newId`); accounts use 8 hex characters and webhook deliveries
@@ -4709,8 +4855,10 @@ their own UUIDv7.
     receipts, references (`shinsa://task/<id>`), transcripts and the effect outbox. Nothing ever re-keys it.
   - The **handle** is for people: `<project key>-<number>`, `SW-142`. The key is the project's (2 to 6 capital letters
     or digits starting with a letter, derived from its name, editable; lower case is upper-cased), or `T` for a task
-    with no project. It is given once and never changes: on `task.created` when the task has a project, else on
-    `task.triaged` (the repository's project). The counters live in the log (`state.taskNumbers`, one per key), so
+    with no project. It is given on `task.created` when the task's project was chosen, else on `task.triaged` (the
+    repository's project, or the focus project when it binds none), so a focus task that moves is numbered once, in
+    the project it lands in. It changes only when a first-round setup bind moves the task to another project
+    (`task.repo_bound` with `handle`): the old handle's number stays used. The counters live in the log (`state.taskNumbers`, one per key), so
     replay gives every task the same handle.
     Changing a project's key keeps every old handle; new tasks count from the new key's own counter, and changing the
     key back carries on where it left off, so a handle is never handed out twice. A task that moves projects keeps its
@@ -4736,9 +4884,10 @@ finishing), so a burst of changes costs one call: each request interrupts the fi
   first), `next` (up to three more, each with a why), `running` (one line on what agents are
   doing) and `note` (a heads-up, or null). It is stored beside a plain `text` rendering, which
   `shinsa status` prints.
-- **Kept beside the log, not in it.** Only the newest guide per focus project matters and the writer rewrites it
+- **Kept beside the log, not in it.** Only the newest guide per focus matters and the writer rewrites it
   after every gate change, so it is not an event: `Engine.writeBriefing` keeps it in the `briefings` table of
-  `shinsa.sqlite` (one row per project, `*` for the whole queue) and puts it into the state as `state.briefings`
+  `shinsa.sqlite` (one row per focus, `briefingKey`: the project's id for one project, `+a,b` for several, `-a,b` for
+  all but some, `*` for the whole queue) and puts it into the state as `state.briefings`
   (the state's shape is unchanged), and every socket gets a `state.patch` at the same log position (`from` equal to
   `to`), which the page applies like any other. On boot the engine reads the table after the events, so a snapshot's
   older guide never wins. Inspect mode writes none.
@@ -4762,8 +4911,8 @@ finishing), so a burst of changes costs one call: each request interrupts the fi
   Used when the model is off, fails or answers badly. A task is paused when its gate is a failure,
   a setup to fix or a sign-in (`isPausingGate`); the fallback, the ranking and `shinsa status`
   (`Paused`) all read that one predicate.
-- **Only the focus.** The queue the guide is written from (`resolveQueue`) holds only the focus project's decisions
-  and tasks, so the writer is never told about others.
+- **Only the focus.** The queue the guide is written from (`resolveQueue`) holds only the decisions and tasks
+  in focus, so the writer is never told about others; its prompt names the focus (`Focus: everything but Work.`).
 - **Showing it** (`reconcileBriefing`): Home checks the stored guide against the live queue.
   A `now` that no longer needs you means the plain guide until the next write; `next` drops
   decisions that are gone; `running` is always recomputed. Briefings stored as text only, before
@@ -5071,7 +5220,7 @@ reason (`describeShippingStep`) while the task ships with a push pending and no 
    authentication failure), `hook` (a hook is there and git refused with no rejected ref), or `other`.
    - **A hook rejection is deterministic and never retried.** The effect sends
      `pull_request.record_hook_failure` with the last 80 lines of the output (6000 characters at most) and the
-     failures `listCheckFailures` reads from it (failing tests by file and name, or diagnostics), and settles. Core
+     failures `selectCheckFailures` reads from it (failing tests by file and name, or diagnostics), and settles. Core
      starts a fix round (`fixFor: 'hook'`, "fixing what the pre-push hook found") with the output and the failures, and
      tells the agent to run only those tests or checks, scoped to their files, never the whole suite the hook runs.
      After the fix the touched checks run and Shinsa pushes again, which runs the hook again. Its failure identity is
@@ -6371,8 +6520,16 @@ Agent usage glance in the top bar, which shows every connected provider (`docs/d
   account's OAuth token (from the keychain through `/usr/bin/security find-generic-password -w`, else
   `.credentials.json`) and `anthropic-beta: oauth-2025-04-20`. The `limits` array wins: `session` is "5-hour
   limit" (Codex's label for the same window), `weekly_all` "Weekly · All models", a `weekly_scoped` entry with a model is "Weekly · ‹model›" (the Fable
-  window); the keyed `five_hour`, `seven_day`, `seven_day_opus` and `seven_day_sonnet` fill in, and rotating
-  codenames are dropped. A model window has one id whatever reports it, `weekly:<model slug>` (the keyed
+  window); the keyed `five_hour`, `seven_day`, `seven_day_opus` and `seven_day_sonnet` fill in, and other rotating
+  codenames are dropped. Two more parts of the answer are kept on the reading, each decoded on its own so a
+  malformed one drops only itself: `extraUsage` (`extra_usage.is_enabled`, else `spend.enabled`; `noLimit` when it is
+  on with no monthly limit; `credit`, the money left, from `spend.balance`, else `monthly_limit` minus `used_credits`)
+  and `resetGrants`, the usage resets Claude gives an account, read from `grants` under `cedar_ember`, then
+  `juniper_tide` (each with its resets left and total, the windows it clears, whether it is usable now and when it
+  ends; a spent grant or one without an id is dropped). Settings → Agent usage shows extra usage On or Off, the
+  credit only from one whole unit of its currency, and each grant; the usage menu counts the resets usable now.
+  Shinsa never claims a reset or spends extra usage: claiming stays your click in the Claude app. Fast mode reads
+  the same decoded extra usage. A failed read keeps both, like the windows. A model window has one id whatever reports it, `weekly:<model slug>` (the keyed
   `seven_day_opus` is `weekly:opus`, `seven_day_sonnet` `weekly:sonnet`), so one reading never holds two windows with
   one id (the `limits` entry wins), and a pushed notice naming `seven_day_opus` updates `weekly:opus`. Shinsa never refreshes a token itself (Claude Code does, under its own lock): an expired
   token keeps the last reading and says the login refreshes on the next run, and a stored token whose `expiresAt`
@@ -6732,7 +6889,7 @@ scratch copy is one directory, and the event log, worktrees and config.json only
   (checkouts, installed dependencies, build output): on APFS they cost a fraction of their size, but a backup copies
   every cloned file in full. `prepareDataDir` marks each with `.metadata_never_index` for Spotlight and with Time
   Machine's exclusion, the `com.apple.metadata:com_apple_backup_excludeItem` attribute `tmutil addexclusion` writes,
-  set with `xattr` directly because `tmutil` takes seconds per folder. The marker says the folder is done, so a later
+  set with `xattr` directly through `Shell` because `tmutil` takes seconds per folder (a Mac without `xattr` gets the marker alone). The marker says the folder is done, so a later
   start does nothing (clearing out `check-bases/` leaves the markers, as every dot entry, in place); one Time Machine could not exclude is logged, and deleting its marker tries again. The event
   log, evidence, transcripts and settings are backed up as before.
 
@@ -6867,7 +7024,7 @@ The Mac app carries the engine and runs it as a launchd job, `studio.overclock.s
 closing the window, quitting the app, a crash and a reboot (`docs/plans/app-plan.md`; the app's side is
 `apps/desktop/CLAUDE.md`). Nobody installs or starts it by hand.
 
-- **The bundle.** `apps/engine/scripts/build-engine.ts` compiles `scripts/engine-main.ts` with `bun build --compile`
+- **The bundle.** `apps/engine/scripts/build-engine.ts` compiles `scripts/engine-main.ts` with `bun build --compile` (`Bun.build`, called from `scripts/bundle.ts`, the build's one exempt edge)
   into one executable, `Shinsa.app/Contents/Resources/engine/bin/shinsa`, the engine and the command line in one;
   beside it `plugin/` (the plugin agents load) and `web/` (the built interface it serves). The build bakes in the
   version, the commit, the state version and the Agent SDK's versions (`process.env.SHINSA_BUILD_*`, read by
@@ -6875,7 +7032,9 @@ closing the window, quitting the app, a crash and a reboot (`docs/plans/app-plan
   the SDK's `package.json`. `shinsa eunoe …` runs eunoe's CLI from the same executable (the agents' `eunoe load` and
   `eunoe peek`), importing its `src/cli/main.ts` by path through `node_modules`, since eunoe's `exports` map lists only
   the library; the Test workflow bundles `scripts/engine-main.ts` so a dependency bump that breaks the import fails
-  before merge. The forwarder itself is the library, in the engine.
+  before merge. The forwarder itself is the library, in the engine. Both scripts are Effect programs run once with
+  `BunRuntime.runMain`, their files read through `FileSystem` and their commands run through the kit's `Command`; a
+  build that cannot go on fails with `EngineBuildFailed` (`scripts/schema.ts`), printed as its message, and exits 1.
   Claude Code and Codex stay the user's own installs, found on the login shell's `PATH`.
 - **The job.** `Contents/Library/LaunchAgents/studio.overclock.shinsa.engine.plist` runs `shinsa engine` from the bundle
   (`BundleProgram`), with `SHINSA_SERVICE=1`, `RunAtLoad`, `KeepAlive` with `SuccessfulExit: false` (a crash or a
@@ -6913,7 +7072,7 @@ closing the window, quitting the app, a crash and a reboot (`docs/plans/app-plan
   from setup you opened. A folder macOS refuses to list (`EPERM` or `EACCES`) is
   not read as empty: discovery returns it in `refused`, and the Folders step offers it unpicked as "macOS keeps this
   folder private". A folder chosen at setup that
-  the engine may not read is not an error but access to ask for: `resolveChosenRoots` throws `PrivateFoldersError`
+  the engine may not read is not an error but access to ask for: `resolveChosenRoots` fails with `PrivateFoldersError`
   (`roots_private`, naming the folders), the setup step keeps your picks and shows them as `access`, and the web
   offers Open System Settings (`POST /api/onboarding/privacy`, which runs `open` on the Full Disk Access pane, since
   the desktop app does not open `x-apple.systempreferences:` links from the page), Check again and Leave it out.

@@ -2,26 +2,26 @@ import { dirname } from 'node:path';
 import { Effect, Layer, ManagedRuntime } from 'effect';
 import { TestClock } from 'effect/testing';
 import { EngineConfig } from '../../src/config/service.ts';
-import { JsonFile } from '../../src/files/service.ts';
 import type { GitHubIdentity } from '../../src/github/identity/schema.ts';
 import { JsonLogger } from '../../src/log/service.ts';
 import { SecretFiles } from '../../src/secrets/files/service.ts';
 import { SecretStore } from '../../src/secrets/index.ts';
 import { createConfigAt } from './config.ts';
+import { JsonFileLayer } from './files.ts';
 import { createTempDir } from './temp.ts';
 
-export function openTestSecrets(path: string) {
+export async function openTestSecrets(path: string) {
   const config = createConfigAt(createTempDir(), { dataDir: dirname(path) });
   const runtime = ManagedRuntime.make(
     SecretStore.layer.pipe(
       Layer.provide(SecretFiles.layer),
-      Layer.provide(JsonFile.layer),
+      Layer.provide(JsonFileLayer),
       Layer.provide(Layer.succeed(EngineConfig, config)),
       Layer.provideMerge(Layer.merge(TestClock.layer(), JsonLogger))
     )
   );
-  const store = runtime.runSync(SecretStore.use(Effect.succeed));
-  const run = <A, E>(effect: Effect.Effect<A, E>) => runtime.runSync(effect);
+  const store = await runtime.runPromise(SecretStore.use(Effect.succeed));
+  const run = <A, E>(effect: Effect.Effect<A, E>) => runtime.runPromise(effect);
   return {
     store,
     setTime: (time: number) => runtime.runPromise(TestClock.setTime(time)),

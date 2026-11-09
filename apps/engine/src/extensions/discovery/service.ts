@@ -1,7 +1,7 @@
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { resolveDisplayPath } from '@shinsa/core';
-import { Context, Effect, Layer, Option, Schema } from 'effect';
+import { Context, Effect, FileSystem, flow, Layer, Option, Schema } from 'effect';
+import { isPresent as isPathPresent, selectText as selectPathText } from '../../files/probe.ts';
 import { JsonFile } from '../../files/service.ts';
 import { describeError } from '../../log/redact.ts';
 import {
@@ -45,6 +45,7 @@ export class ExtensionDiscovery extends Context.Service<
     ExtensionDiscovery,
     Effect.gen(function* () {
       const files = yield* JsonFile;
+      const fs = yield* FileSystem.FileSystem;
       const decodeSettings = Schema.decodeUnknownOption(ClaudeSettings);
       const decodeInstalled = Schema.decodeUnknownOption(InstalledPlugins);
       const decodeInstall = Schema.decodeUnknownOption(InstallEntry);
@@ -52,6 +53,10 @@ export class ExtensionDiscovery extends Context.Service<
       const decodeConfig = Schema.decodeUnknownOption(ClaudeConfig);
       const decodeMcpJson = Schema.decodeUnknownOption(McpJson);
       const decodeCodex = Schema.decodeUnknownOption(CodexConfig);
+
+      const withFiles = Effect.provideService(FileSystem.FileSystem, fs);
+      const isPresent = flow(isPathPresent, withFiles);
+      const selectText = flow(selectPathText, withFiles);
 
       const describeProblem = (path: string, userHome: string, reason: string) =>
         `Could not read ${resolveDisplayPath(path, userHome)}: ${reason}`;
@@ -77,11 +82,12 @@ export class ExtensionDiscovery extends Context.Service<
         userHome: string,
         problems: string[]
       ) {
-        if (!existsSync(path)) return null;
-        return yield* Effect.try({
-          try: (): unknown => Bun.TOML.parse(readFileSync(path, 'utf8')),
-          catch: describeError,
-        }).pipe(
+        if (!(yield* isPresent(path))) return null;
+        return yield* fs.readFileString(path).pipe(
+          Effect.mapError(describeError),
+          Effect.flatMap((text) =>
+            Effect.try({ try: (): unknown => Bun.TOML.parse(text), catch: describeError })
+          ),
           Effect.catch((reason) =>
             Effect.sync(() => {
               problems.push(describeProblem(path, userHome, reason));
@@ -91,10 +97,13 @@ export class ExtensionDiscovery extends Context.Service<
         );
       });
 
-      const selectInstallRoot = (entries: readonly unknown[]) =>
-        entries
-          .flatMap((entry) => Option.toArray(decodeInstall(entry)))
-          .find((entry) => existsSync(entry.installPath))?.installPath ?? null;
+      const selectInstallRoot = Effect.fn('ExtensionDiscovery.selectInstallRoot')(function* (
+        entries: readonly unknown[]
+      ) {
+        const roots = entries.flatMap((entry) => Option.toArray(decodeInstall(entry)));
+        for (const { installPath } of roots) if (yield* isPresent(installPath)) return installPath;
+        return null;
+      });
 
       const listPlugins = Effect.fn('ExtensionDiscovery.listPlugins')(function* (paths: DiscoveryPaths) {
         const problems: string[] = [];
@@ -115,7 +124,7 @@ export class ExtensionDiscovery extends Context.Service<
         if (Option.isNone(installed)) return { plugins: [], problems };
         const plugins: ClaudePlugin[] = [];
         for (const [id, entries] of Object.entries(installed.value.plugins)) {
-          const root = selectInstallRoot(entries);
+          const root = yield* selectInstallRoot(entries);
           if (!root) continue;
           const manifest = yield* readJson(
             join(root, '.claude-plugin', 'plugin.json'),
@@ -160,37 +169,42 @@ export class ExtensionDiscovery extends Context.Service<
         return { servers, problems };
       });
 
-      const listEntries = (dir: string) => (existsSync(dir) ? readdirSync(dir) : []);
+      const listEntries = (dir: string) =>
+        fs.readDirectory(dir).pipe(
+          Effect.map((entries) => entries.filter((entry) => !entry.startsWith('.')).sort()),
+          Effect.orElseSucceed((): string[] => [])
+        );
 
       const listSkills = Effect.fn('ExtensionDiscovery.listSkills')(function* (roots: readonly SkillRoot[]) {
-        return yield* Effect.sync(() =>
-          roots.flatMap((root) =>
-            listEntries(root.dir)
-              .filter((entry) => !entry.startsWith('.'))
-              .sort()
-              .flatMap((entry) => {
-                const path = join(root.dir, entry, 'SKILL.md');
-                if (!existsSync(path)) return [];
-                return [resolveFoundSkill(root, entry, path, readFileSync(path, 'utf8'))];
-              })
-          )
-        );
+        const found: FoundSkill[] = [];
+        for (const root of roots) {
+          for (const entry of yield* listEntries(root.dir)) {
+            const path = join(root.dir, entry, 'SKILL.md');
+            const text = yield* selectText(path);
+            if (Option.isSome(text)) found.push(resolveFoundSkill(root, entry, path, text.value));
+          }
+        }
+        return found;
       });
 
-      const listMarkdown = (dir: string): MarkdownFile[] =>
-        listEntries(dir)
-          .filter((entry) => entry.endsWith('.md') && !entry.startsWith('.'))
-          .sort()
-          .map((entry) => ({ entry: entry.slice(0, -3), text: readFileSync(join(dir, entry), 'utf8') }));
+      const listMarkdown = Effect.fn('ExtensionDiscovery.listMarkdown')(function* (dir: string) {
+        const found: MarkdownFile[] = [];
+        for (const entry of yield* listEntries(dir)) {
+          if (!entry.endsWith('.md')) continue;
+          const text = yield* selectText(join(dir, entry));
+          if (Option.isSome(text)) found.push({ entry: entry.slice(0, -3), text: text.value });
+        }
+        return found;
+      });
 
       const readPluginFiles = Effect.fn('ExtensionDiscovery.readPluginFiles')(function* (
         plugin: ClaudePlugin
       ) {
-        return yield* Effect.sync(() => ({
+        return yield* Effect.all({
           agents: listMarkdown(join(plugin.root, 'agents')),
           commands: listMarkdown(join(plugin.root, 'commands')),
-          hooks: existsSync(join(plugin.root, 'hooks', 'hooks.json')),
-        }));
+          hooks: isPresent(join(plugin.root, 'hooks', 'hooks.json')),
+        });
       });
 
       return ExtensionDiscovery.of({ listPlugins, listServers, listSkills, readPluginFiles });

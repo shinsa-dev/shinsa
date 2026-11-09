@@ -7,7 +7,7 @@ function NoticeGroups({ groups }: { groups: NoticeGroup[] }) {
   return (
     <div className='flex min-w-0 flex-col gap-3 text-xs'>
       {groups.map((group) => (
-        <div key={group.title} className='flex min-w-0 flex-col gap-px'>
+        <div key={group.title} className='flex min-w-0 flex-col'>
           <span className='text-2xs text-fg-2'>{group.title}</span>
           <ul className='flex w-full max-w-80 min-w-0 flex-col'>
             {group.lines.map((line) => (

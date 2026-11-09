@@ -1,9 +1,17 @@
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { basename, join, relative } from 'node:path';
-import { SERVICE_PORT_VARIABLE, type ServiceSource, type ServiceSuggestion } from '@shinsa/core';
+import {
+  SERVICE_PORT_VARIABLE,
+  type ServiceDefinition,
+  type ServiceSource,
+  type ServiceSuggestion,
+  type TerminalPlace,
+} from '@shinsa/core';
+import { Effect, Option } from 'effect';
 import { listWorkspacePatterns, parseDenoTasks, parsePackageManifest } from '../files/manifest.ts';
-import { isFolder, isInside } from '../files/paths.ts';
+import { isInside } from '../files/paths.ts';
+import { findFirstPresent, isFolder, isPresent, listEntries, selectText } from '../files/probe.ts';
 import { PACKAGE_MANIFEST } from '../files/schema.ts';
+import { listNewServiceSuggestions, listSuggestionRoots } from './places.ts';
 
 export { parseDenoTasks } from '../files/manifest.ts';
 
@@ -41,20 +49,13 @@ const SUGGESTION_LIMIT = 24;
 
 const SKIPPED_FOLDERS = new Set(['node_modules', '.git']);
 
-function readText(path: string) {
-  try {
-    return readFileSync(path, 'utf8');
-  } catch {
-    return null;
-  }
-}
+const readText = (path: string) => Effect.map(selectText(path), Option.getOrNull);
 
-function listFolders(parent: string) {
-  if (!isFolder(parent)) return [];
-  return readdirSync(parent)
-    .sort()
-    .filter((entry) => !SKIPPED_FOLDERS.has(entry) && isFolder(join(parent, entry)));
-}
+const listFolders = Effect.fn('ServiceDetection.listFolders')(function* (parent: string) {
+  if (!(yield* isFolder(parent))) return [];
+  const entries = (yield* listEntries(parent)).filter((entry) => !SKIPPED_FOLDERS.has(entry));
+  return yield* Effect.filter(entries, (entry) => isFolder(join(parent, entry)));
+});
 
 export function parsePackageFile(text: string | null): PackageFile | null {
   const manifest = parsePackageManifest(text);
@@ -127,28 +128,34 @@ export function parseCargoName(text: string | null) {
   return /^\s*name\s*=\s*"([^"]+)"/m.exec(section)?.[1] ?? '';
 }
 
-function resolvePackageManager(root: string, file: PackageFile): PackageManager {
-  const locked = LOCKFILES.find(([name]) => existsSync(join(root, name)));
-  if (locked) return locked[1];
+const resolvePackageManager = Effect.fn('ServiceDetection.resolvePackageManager')(function* (
+  root: string,
+  file: PackageFile
+) {
+  for (const [name, manager] of LOCKFILES) if (yield* isPresent(join(root, name))) return manager;
   const named = file.packageManager?.split('@')[0];
-  return named === 'bun' || named === 'pnpm' || named === 'yarn' ? named : 'npm';
-}
+  const manager: PackageManager = named === 'bun' || named === 'pnpm' || named === 'yarn' ? named : 'npm';
+  return manager;
+});
 
-export function expandWorkspaces(root: string, patterns: string[]) {
+export const expandWorkspaces = Effect.fn('ServiceDetection.expandWorkspaces')(function* (
+  root: string,
+  patterns: string[]
+) {
   const folders: string[] = [];
   for (const pattern of patterns) {
     if (pattern.startsWith('!')) continue;
     const clean = pattern.replace(/\/+$/, '').replace(/^\.\//, '');
     const star = clean.match(/^(.*?)\/\*{1,2}$/);
     if (!star) {
-      if (isFolder(join(root, clean))) folders.push(join(root, clean));
+      if (yield* isFolder(join(root, clean))) folders.push(join(root, clean));
       continue;
     }
     const parent = join(root, star[1] ?? '');
-    for (const entry of listFolders(parent)) folders.push(join(parent, entry));
+    for (const entry of yield* listFolders(parent)) folders.push(join(parent, entry));
   }
   return [...new Set(folders)];
-}
+});
 
 function resolveServiceName(file: PackageFile | null, folder: string) {
   const named = file?.name?.split('/').pop()?.trim();
@@ -173,18 +180,22 @@ function createSuggestion(
   return { name, cwd, command, source, recommended, previewUrl: null, portVariable: SERVICE_PORT_VARIABLE };
 }
 
-function listDeclaredWorkspaces(root: string, file: PackageFile) {
-  const declared = [...file.workspaces, ...parsePnpmWorkspaces(readText(join(root, 'pnpm-workspace.yaml')))];
+const listDeclaredWorkspaces = Effect.fn('ServiceDetection.listDeclaredWorkspaces')(function* (
+  root: string,
+  file: PackageFile
+) {
+  const pnpm = parsePnpmWorkspaces(yield* readText(join(root, 'pnpm-workspace.yaml')));
+  const declared = [...file.workspaces, ...pnpm];
   return declared.length > 0 ? declared : CONVENTIONAL_WORKSPACES;
-}
+});
 
-function listPackageSuggestions(root: string): ServiceSuggestion[] {
-  const file = parsePackageFile(readText(join(root, PACKAGE_MANIFEST)));
+const listPackageSuggestions = Effect.fn('ServiceDetection.listPackageSuggestions')(function* (root: string) {
+  const file = parsePackageFile(yield* readText(join(root, PACKAGE_MANIFEST)));
   if (!file) return [];
-  const manager = resolvePackageManager(root, file);
+  const manager = yield* resolvePackageManager(root, file);
   const suggestions: ServiceSuggestion[] = [];
-  for (const folder of expandWorkspaces(root, listDeclaredWorkspaces(root, file))) {
-    const workspace = parsePackageFile(readText(join(folder, PACKAGE_MANIFEST)));
+  for (const folder of yield* expandWorkspaces(root, yield* listDeclaredWorkspaces(root, file))) {
+    const workspace = parsePackageFile(yield* readText(join(folder, PACKAGE_MANIFEST)));
     const script = workspace ? resolveRunScript(workspace) : null;
     if (!script) continue;
     suggestions.push(
@@ -210,71 +221,75 @@ function listPackageSuggestions(root: string): ServiceSuggestion[] {
       !whole
     ),
   ];
-}
+});
 
-function listDenoSuggestions(root: string): ServiceSuggestion[] {
-  if (existsSync(join(root, PACKAGE_MANIFEST))) return [];
-  const file = DENO_FILES.find((name) => existsSync(join(root, name)));
-  if (!file) return [];
-  const tasks = parseDenoTasks(readText(join(root, file)));
+const listDenoSuggestions = Effect.fn('ServiceDetection.listDenoSuggestions')(function* (root: string) {
+  if (yield* isPresent(join(root, PACKAGE_MANIFEST))) return [];
+  const file = yield* findFirstPresent(DENO_FILES.map((name) => join(root, name)));
+  if (Option.isNone(file)) return [];
+  const tasks = parseDenoTasks(yield* readText(file.value));
   const task = RUN_SCRIPTS.find((name) => tasks[name]);
   return task ? [createSuggestion(basename(root), root, `deno task ${task}`, 'deno')] : [];
-}
+});
 
-function listProcfileSuggestions(root: string): ServiceSuggestion[] {
-  if (existsSync(join(root, 'bin/dev'))) return [createSuggestion(basename(root), root, 'bin/dev', 'script')];
-  const file = ['Procfile.dev', 'Procfile'].find((name) => existsSync(join(root, name))) ?? 'Procfile';
-  return parseProcfile(readText(join(root, file))).map(({ name, command }) =>
-    createSuggestion(name, root, command, 'procfile')
-  );
-}
+const listProcfileSuggestions = Effect.fn('ServiceDetection.listProcfileSuggestions')(function* (
+  root: string
+) {
+  if (yield* isPresent(join(root, 'bin/dev')))
+    return [createSuggestion(basename(root), root, 'bin/dev', 'script')];
+  const file = yield* findFirstPresent(['Procfile.dev', 'Procfile'].map((name) => join(root, name)));
+  const text = yield* readText(Option.getOrElse(file, () => join(root, 'Procfile')));
+  return parseProcfile(text).map(({ name, command }) => createSuggestion(name, root, command, 'procfile'));
+});
 
-function listComposeSuggestions(root: string): ServiceSuggestion[] {
-  const file = COMPOSE_FILES.find((name) => existsSync(join(root, name)));
-  if (!file) return [];
-  const services = parseComposeServices(readText(join(root, file)));
+const listComposeSuggestions = Effect.fn('ServiceDetection.listComposeSuggestions')(function* (root: string) {
+  const file = yield* findFirstPresent(COMPOSE_FILES.map((name) => join(root, name)));
+  if (Option.isNone(file)) return [];
+  const services = parseComposeServices(yield* readText(file.value));
   if (services.length === 0) return [createSuggestion('compose', root, 'docker compose up', 'compose')];
   return services.map((name) => createSuggestion(name, root, `docker compose up ${name}`, 'compose'));
-}
+});
 
-function listCargoSuggestions(root: string): ServiceSuggestion[] {
-  if (!existsSync(join(root, 'src/main.rs'))) return [];
-  const name = parseCargoName(readText(join(root, 'Cargo.toml')));
+const listCargoSuggestions = Effect.fn('ServiceDetection.listCargoSuggestions')(function* (root: string) {
+  if (!(yield* isPresent(join(root, 'src/main.rs')))) return [];
+  const name = parseCargoName(yield* readText(join(root, 'Cargo.toml')));
   return name === null ? [] : [createSuggestion(name || basename(root), root, 'cargo run', 'cargo')];
-}
+});
 
-function listGoSuggestions(root: string): ServiceSuggestion[] {
-  if (!existsSync(join(root, 'go.mod'))) return [];
-  const commands = listFolders(join(root, 'cmd'))
-    .filter((entry) => existsSync(join(root, 'cmd', entry, 'main.go')))
-    .map((entry) => createSuggestion(entry, root, `go run ./cmd/${entry}`, 'go'));
-  if (existsSync(join(root, 'main.go')))
+const listGoSuggestions = Effect.fn('ServiceDetection.listGoSuggestions')(function* (root: string) {
+  if (!(yield* isPresent(join(root, 'go.mod')))) return [];
+  const entries = yield* listFolders(join(root, 'cmd'));
+  const commands = (yield* Effect.filter(entries, (entry) =>
+    isPresent(join(root, 'cmd', entry, 'main.go'))
+  )).map((entry) => createSuggestion(entry, root, `go run ./cmd/${entry}`, 'go'));
+  if (yield* isPresent(join(root, 'main.go')))
     return [createSuggestion(basename(root), root, 'go run .', 'go'), ...commands];
   return commands;
-}
+});
 
-function listDjangoSuggestions(root: string): ServiceSuggestion[] {
-  if (!existsSync(join(root, 'manage.py'))) return [];
+const listDjangoSuggestions = Effect.fn('ServiceDetection.listDjangoSuggestions')(function* (root: string) {
+  if (!(yield* isPresent(join(root, 'manage.py')))) return [];
   return [createSuggestion(basename(root), root, 'python manage.py runserver', 'django')];
-}
+});
 
-function listMakeSuggestions(root: string): ServiceSuggestion[] {
-  const target = parseMakeTarget(readText(join(root, 'Makefile')));
+const listMakeSuggestions = Effect.fn('ServiceDetection.listMakeSuggestions')(function* (root: string) {
+  const target = parseMakeTarget(yield* readText(join(root, 'Makefile')));
   return target ? [createSuggestion(basename(root), root, `make ${target}`, 'make')] : [];
-}
+});
 
-function listRootSuggestions(root: string): ServiceSuggestion[] {
-  const found = [
-    ...listPackageSuggestions(root),
-    ...listDenoSuggestions(root),
-    ...listProcfileSuggestions(root),
-    ...listComposeSuggestions(root),
-    ...listCargoSuggestions(root),
-    ...listGoSuggestions(root),
-    ...listDjangoSuggestions(root),
-  ];
-  return found.length > 0 ? found : listMakeSuggestions(root);
-}
+const listRootSuggestions = Effect.fn('ServiceDetection.listRootSuggestions')(function* (root: string) {
+  const found = (yield* Effect.all([
+    listPackageSuggestions(root),
+    listDenoSuggestions(root),
+    listProcfileSuggestions(root),
+    listComposeSuggestions(root),
+    listCargoSuggestions(root),
+    listGoSuggestions(root),
+    listDjangoSuggestions(root),
+  ])).flat();
+  if (found.length > 0) return found;
+  return yield* listMakeSuggestions(root);
+});
 
 function resolveUniqueNames(suggestions: ServiceSuggestion[], roots: string[]) {
   const counts = new Map<string, number>();
@@ -287,6 +302,16 @@ function resolveUniqueNames(suggestions: ServiceSuggestion[], roots: string[]) {
   });
 }
 
-export function listServiceSuggestions(roots: string[]): ServiceSuggestion[] {
-  return resolveUniqueNames(roots.flatMap(listRootSuggestions), roots).slice(0, SUGGESTION_LIMIT);
-}
+export const listServiceSuggestions = Effect.fn('ServiceDetection.listServiceSuggestions')(function* (
+  roots: string[]
+) {
+  const found = (yield* Effect.forEach(roots, listRootSuggestions)).flat();
+  return resolveUniqueNames(found, roots).slice(0, SUGGESTION_LIMIT);
+});
+
+export const listNewSuggestions = Effect.fn('ServiceDetection.listNewSuggestions')(function* (
+  places: TerminalPlace[],
+  services: ServiceDefinition[]
+) {
+  return listNewServiceSuggestions(yield* listServiceSuggestions(listSuggestionRoots(places)), services);
+});

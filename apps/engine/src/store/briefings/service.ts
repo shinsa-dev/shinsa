@@ -1,13 +1,13 @@
-import { type Briefing, briefingKey, type StoredBriefing } from '@shinsa/core';
+import type { Briefing, StoredBriefing } from '@shinsa/core';
 import { Context, Effect, Layer, Option, Predicate, Schema } from 'effect';
 import { SqlClient, SqlSchema } from 'effect/sql';
-import { BriefingRow, type ProjectBriefing, StoredBriefingPayload } from './schema.ts';
+import { BriefingRow, type KeyedBriefing, StoredBriefingPayload } from './schema.ts';
 
 export class Briefings extends Context.Service<
   Briefings,
   {
-    readonly list: Effect.Effect<ProjectBriefing[]>;
-    write(projectId: string | null, stored: StoredBriefing): Effect.Effect<void>;
+    readonly list: Effect.Effect<KeyedBriefing[]>;
+    write(key: string, stored: StoredBriefing): Effect.Effect<void>;
   }
 >()('shinsa/engine/store/briefings/Briefings') {
   static readonly layer = Layer.effect(
@@ -19,7 +19,7 @@ export class Briefings extends Context.Service<
       const listRows = SqlSchema.findAll({
         Request: Schema.Void,
         Result: BriefingRow,
-        execute: () => sql`SELECT payload FROM briefings ORDER BY project`,
+        execute: () => sql`SELECT project, payload FROM briefings ORDER BY project`,
       });
       const upsertRow = SqlSchema.void({
         Request: Schema.Struct({ project: Schema.String, at: Schema.Number, payload: Schema.String }),
@@ -28,9 +28,9 @@ export class Briefings extends Context.Service<
               ON CONFLICT (project) DO UPDATE SET at = excluded.at, payload = excluded.payload`,
       });
 
-      const readBriefing = (payload: string) =>
-        Option.map(decodePayload(payload), (value): ProjectBriefing => ({
-          projectId: Predicate.isString(value.projectId) ? value.projectId : null,
+      const readBriefing = (row: typeof BriefingRow.Type) =>
+        Option.map(decodePayload(row.payload), (value): KeyedBriefing => ({
+          key: row.project,
           stored: {
             text: value.text,
             at: value.at,
@@ -40,17 +40,14 @@ export class Briefings extends Context.Service<
 
       const list = listRows(undefined).pipe(
         Effect.orDie,
-        Effect.map((rows) => rows.flatMap((row) => Option.toArray(readBriefing(row.payload))))
+        Effect.map((rows) => rows.flatMap((row) => Option.toArray(readBriefing(row))))
       );
 
-      const write = Effect.fn('Briefings.write')(function* (
-        projectId: string | null,
-        stored: StoredBriefing
-      ) {
+      const write = Effect.fn('Briefings.write')(function* (key: string, stored: StoredBriefing) {
         yield* upsertRow({
-          project: briefingKey(projectId),
+          project: key,
           at: stored.at,
-          payload: JSON.stringify({ projectId, ...stored }),
+          payload: JSON.stringify(stored),
         }).pipe(Effect.orDie);
       });
 

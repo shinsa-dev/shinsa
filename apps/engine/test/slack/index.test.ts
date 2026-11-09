@@ -55,6 +55,7 @@ const MENTION: SlackMention = {
   permalink: null,
   channelName: null,
   thread: [{ ts: '100.1', userId: 'U1', userName: 'Christo', text: 'the build hangs', bot: false }],
+  linkedThreads: [],
 };
 
 interface RelayCall {
@@ -303,45 +304,6 @@ describe('a reaction the outbox asks for', () => {
   });
 });
 
-describe('a post the outbox asks for', () => {
-  const effect = {
-    kind: 'slack.post' as const,
-    thread: THREAD,
-    taskId: 't1',
-    post: { kind: 'completed' as const },
-  };
-
-  test('a relay that is down or overloaded throws, so the outbox tries again', async () => {
-    const { slack, answers } = setUp();
-    answers['/__remote/slack/post'] = () => new Response('busy', { status: 503 });
-    const failed = slack.post(effect);
-    await expect(failed).rejects.toMatchObject({ _tag: 'RemoteUnreachable', status: 503, retryable: true });
-    answers['/__remote/slack/post'] = () => Promise.reject(new Error('offline'));
-    await expect(slack.post(effect)).rejects.toMatchObject({ _tag: 'RemoteUnreachable', status: null });
-  });
-
-  test('a finished task is posted as a new message that links to it on app.shinsa.dev', async () => {
-    const { slack, relay } = setUp();
-    await slack.post(effect);
-    expect(callsTo(relay, 'post')[0]?.body).toMatchObject({ replaceTs: null });
-    const message = JSON.stringify(callsTo(relay, 'post')[0]?.body?.message);
-    expect(message).toContain('https://app.test/tasks/t1');
-    expect(message).toContain('is done.');
-  });
-
-  test('posts nothing for a task that is gone, or while remote access is off', async () => {
-    const { slack, relay } = setUp();
-    await slack.post({ ...effect, taskId: 'gone' });
-    expect(relay).toEqual([]);
-    const off = setUp({ enabled: false });
-    await off.slack.post(effect);
-    expect(off.relay).toEqual([]);
-    expect(logs.fieldsOf('[Slack] Remote access is off, so nothing was posted')).toEqual([
-      { threadTs: '100.1' },
-    ]);
-  });
-});
-
 function watchdogOf(fields: Partial<Watchdog> = {}): Watchdog {
   return {
     id: 'w1',
@@ -422,6 +384,46 @@ describe('the merge message of a task', () => {
       Response.json({ error: { code: 'post_not_yours', message: 'Refused.' } }, { status: 403 });
     await slack.merge(effect, context());
     expect(stub.dispatched).toEqual([]);
+  });
+});
+
+describe('a post the outbox asks for', () => {
+  const effect = {
+    kind: 'slack.post' as const,
+    thread: THREAD,
+    taskId: 't1',
+    post: { kind: 'tripped' as const, watchdogId: 'w1' },
+  };
+
+  function setUpTripped(options: Parameters<typeof setUp>[0] = {}) {
+    const setup = setUp(options);
+    setup.stub.update((state) => {
+      const task = state.tasks.t1;
+      if (task) task.watchdogs = [watchdogOf({ status: 'tripped' })];
+    });
+    return setup;
+  }
+
+  test('a relay that is down or overloaded throws, so the outbox tries again', async () => {
+    const { slack, answers } = setUpTripped();
+    answers['/__remote/slack/post'] = () => new Response('busy', { status: 503 });
+    const failed = slack.post(effect);
+    await expect(failed).rejects.toMatchObject({ _tag: 'RemoteUnreachable', status: 503, retryable: true });
+    answers['/__remote/slack/post'] = () => Promise.reject(new Error('offline'));
+    await expect(slack.post(effect)).rejects.toMatchObject({ _tag: 'RemoteUnreachable', status: null });
+  });
+
+  test('posts nothing for a task that is gone, a watchdog it does not have, or while remote access is off', async () => {
+    const { slack, relay } = setUpTripped();
+    await slack.post({ ...effect, taskId: 'gone' });
+    await slack.post({ ...effect, post: { kind: 'tripped', watchdogId: 'w9' } });
+    expect(relay).toEqual([]);
+    const off = setUpTripped({ enabled: false });
+    await off.slack.post(effect);
+    expect(off.relay).toEqual([]);
+    expect(logs.fieldsOf('[Slack] Remote access is off, so nothing was posted')).toEqual([
+      { threadTs: '100.1' },
+    ]);
   });
 });
 
@@ -713,26 +715,30 @@ describe('reading a mention', () => {
 });
 
 describe('the result of a task', () => {
-  const effect = {
-    kind: 'slack.post' as const,
-    thread: THREAD,
-    taskId: 't1',
-    post: { kind: 'result' as const },
-  };
-
-  test('is posted as one message with a link to the task', async () => {
-    const { slack, stub, relay } = setUp();
+  test('is shown on the card, edited in place, with Close and no new message', async () => {
+    const { slack, stub, relay } = setUp({ link: { ...LINK, statusTs: '200.0' } });
     stub.update((state) => {
       const task = state.tasks.t1;
-      if (task) task.result = { step: 'answer', body: 'It is the **buffer**.', at: NOW, runId: null };
+      if (task) {
+        task.stage = 'answered';
+        task.result = { step: 'answer', body: 'It is the **buffer**.', at: NOW, runId: null };
+      }
+      state.gates.r1 = createGate({
+        id: 'r1',
+        taskId: 't1',
+        type: 'result',
+        title: 'Read the answer',
+        body: '',
+      });
     });
-    await slack.post(effect);
-    const message = JSON.stringify(callsTo(relay, 'post')[0]?.body?.message);
+    await slack.status({ kind: 'slack.status', taskId: 't1', thread: THREAD }, context());
+    const posts = callsTo(relay, 'post');
+    expect(posts).toHaveLength(1);
+    expect(posts[0]?.body).toMatchObject({ replaceTs: '200.0' });
+    const message = JSON.stringify(posts[0]?.body?.message);
     expect(message).toContain('It is the *buffer*.');
-    expect(message).toContain('"text":"Open in Shinsa","emoji":false},"url":"https://app.test/tasks/t1"');
-    const none = setUp();
-    await none.slack.post(effect);
-    expect(none.relay).toEqual([]);
+    expect(message).toContain('"block_id":"shinsa.gate.r1"');
+    expect(message).toContain('"action_id":"shinsa.decide.approve"');
   });
 });
 

@@ -1,4 +1,10 @@
-import { parseTeamViewTarget, TEAM_VIEW_PATH, type ScopedActor } from '@shinsa/core';
+import {
+  parseTeamRelayPath,
+  parseTeamRelaySocketPath,
+  parseTeamViewTarget,
+  TEAM_VIEW_PATH,
+  type ScopedActor,
+} from '@shinsa/core';
 import { ENGINE_BODY_LIMIT_BYTES, RequestForbidden } from '@shinsa/core/engine-api/schema';
 import { Context, Effect, Layer, Option, Predicate } from 'effect';
 import { Accounts } from '../../accounts/roster/service.ts';
@@ -6,6 +12,7 @@ import { Transcripts } from '../../agents/transcripts/service.ts';
 import { EngineConfig } from '../../config/service.ts';
 import { createServerInstance } from '../../instance/index.ts';
 import type { ChannelPeer } from '../../remote/channel/schema.ts';
+import { FleetRelay } from '../../remote/fleet-relay/service.ts';
 import { TunnelGate } from '../../remote/gate/service.ts';
 import { Remote } from '../../remote/machine/service.ts';
 import { Presence } from '../../remote/presence/service.ts';
@@ -53,6 +60,7 @@ export class EngineServer extends Context.Service<
       const terminals = Option.getOrUndefined(yield* Effect.serviceOption(Terminals));
       const remote = Option.getOrUndefined(yield* Effect.serviceOption(Remote));
       const teamFeeds = Option.getOrUndefined(yield* Effect.serviceOption(TeamFeeds));
+      const fleetRelay = Option.getOrUndefined(yield* Effect.serviceOption(FleetRelay));
       const resources = Option.getOrUndefined(yield* Effect.serviceOption(ResourceMonitor));
       const shares = Option.getOrUndefined(yield* Effect.serviceOption(Shares));
       const teams = Option.getOrUndefined(yield* Effect.serviceOption(Teams));
@@ -193,6 +201,32 @@ export class EngineServer extends Context.Service<
         return upgrade(request, bunServer, { kind: 'live', open, channel: null });
       }
 
+      function respondRelaySocket(
+        request: Request,
+        bunServer: Bun.Server<ServerSocketData>,
+        instanceId: string
+      ) {
+        if (!fleetRelay) return respondNotFound();
+        const open = (peer: ChannelPeer) => {
+          const socket = runSync(fleetRelay.openSocket(instanceId, peer));
+          return {
+            receive: (raw: string | Buffer) =>
+              runFork(socket.receive(typeof raw === 'string' ? raw : new Uint8Array(raw))),
+            close: () => runFork(socket.close),
+          };
+        };
+        return upgrade(request, bunServer, { kind: 'live', open, channel: null });
+      }
+
+      function respondLocalRelay(request: Request, url: URL) {
+        const target = parseTeamRelayPath(url.pathname);
+        if (!target) return null;
+        const refusal = resolveRefusal(request, allowedHosts);
+        if (refusal) return respondRefusal(RequestForbidden, refusal);
+        if (!fleetRelay) return respondNotFound();
+        return run(fleetRelay.request(target.instanceId, target.path, request));
+      }
+
       const respondTunnelSocket = Effect.fn('serveHttp.respondTunnelSocket')(function* (
         request: Request,
         url: URL,
@@ -213,11 +247,13 @@ export class EngineServer extends Context.Service<
       function respondLocalSocket(request: Request, url: URL, bunServer: Bun.Server<ServerSocketData>) {
         const isPage = url.pathname === '/ws';
         const isTeamView = url.pathname === TEAM_VIEW_PATH;
+        const relayId = parseTeamRelaySocketPath(url.pathname);
         const terminalId = terminalSockets ? readTerminalSocketId(url.pathname) : null;
-        if (!(isPage || isTeamView || terminalId)) return null;
+        if (!(isPage || isTeamView || relayId || terminalId)) return null;
         const refusal = resolveRefusal(request, allowedHosts);
         if (refusal) return respondRefusal(RequestForbidden, refusal);
         if (isTeamView) return respondTeamView(request, url, bunServer);
+        if (relayId) return respondRelaySocket(request, bunServer, relayId);
         if (terminalId) return upgrade(request, bunServer, { kind: 'terminal', terminalId, viewer: null });
         return upgrade(request, bunServer, {
           kind: 'hub',
@@ -238,7 +274,11 @@ export class EngineServer extends Context.Service<
             fetch(request, bunServer) {
               const url = new URL(request.url);
               if (gate.isTunnel(request)) return run(respondTunnelSocket(request, url, bunServer));
-              return respondLocalSocket(request, url, bunServer) ?? handle(request, Context.empty());
+              return (
+                respondLocalSocket(request, url, bunServer) ??
+                respondLocalRelay(request, url) ??
+                handle(request, Context.empty())
+              );
             },
             websocket: {
               ...createSocketHandlers(hub, terminalSockets, remoteSockets, previewSockets),

@@ -11,6 +11,7 @@ import {
   isTaskInScope,
   resolveScopedEngineInfo,
   resolveScopedPatch,
+  resolveScopedTerminals,
   resolveScopedState,
   resolveStatePatch,
   resolveTaskDetail,
@@ -20,6 +21,7 @@ import {
   serializeState,
   serializeViewState,
   type TeamFeedSnapshot,
+  type TerminalsSnapshot,
 } from '@shinsa/core';
 import { Cause, Effect, type Scope } from 'effect';
 import type { Accounts } from '../accounts/index.ts';
@@ -135,6 +137,15 @@ export const makeSocketHub = Effect.fn('SocketHub.make')(function* (input: Socke
     send(socket, { type: 'state', state: serializeViewState(state, summarized) });
   }
 
+  function sendScopedTerminals(socket: Socket, snapshot: TerminalsSnapshot) {
+    const { guest } = socket.data;
+    if (!guest) return;
+    send(socket, {
+      type: 'terminals',
+      terminals: resolveScopedTerminals(readState(), guest.scope, snapshot),
+    });
+  }
+
   function sendTaskDetail(socket: Socket, taskId: string) {
     views.set(socket.data, new Set([...selectView(socket)].filter((id) => id !== taskId)));
     send(socket, { type: 'task.detail', detail: resolveTaskDetail(readState(), taskId) });
@@ -155,9 +166,10 @@ export const makeSocketHub = Effect.fn('SocketHub.make')(function* (input: Socke
   }
 
   if (terminals) {
-    const unsubscribe = yield* terminals.subscribe((snapshot) =>
-      broadcast({ type: 'terminals', terminals: snapshot })
-    );
+    const unsubscribe = yield* terminals.subscribe((snapshot) => {
+      broadcast({ type: 'terminals', terminals: snapshot });
+      for (const socket of sockets) if (socket.data.guest) sendScopedTerminals(socket, snapshot);
+    });
     yield* Effect.addFinalizer(() => unsubscribe);
   }
 
@@ -310,6 +322,7 @@ export const makeSocketHub = Effect.fn('SocketHub.make')(function* (input: Socke
       send(socket, { type: 'surfaces', desktop: desktopConnected });
       if (socket.data.guest) {
         send(socket, { type: 'engine', engine: resolveScopedEngineInfo(version, socket.data.guest.scope) });
+        if (terminals) sendScopedTerminals(socket, runSync(terminals.snapshot));
         sendState(socket);
         return;
       }

@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'bun:test';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
+import type { ServiceSuggestion } from '@shinsa/core';
 import {
   expandWorkspaces,
-  listServiceSuggestions,
+  listServiceSuggestions as listSuggestionsEffect,
   parseCargoName,
   parseComposeServices,
   parseDenoTasks,
@@ -12,6 +13,7 @@ import {
   parsePnpmWorkspaces,
   parseProcfile,
 } from '../../src/terminals/detect.ts';
+import { runFiles } from '../harness.ts';
 import { createTempDir } from '../helpers/index.ts';
 
 const DETECTED = { previewUrl: null, portVariable: 'PORT' };
@@ -24,12 +26,16 @@ function writeFiles(root: string, files: Record<string, unknown>) {
   return root;
 }
 
-function listFound(root: string) {
-  return listServiceSuggestions([root]).map((each) => [each.name, each.command, each.recommended]);
+function listServiceSuggestions(roots: string[]): Promise<ServiceSuggestion[]> {
+  return runFiles(listSuggestionsEffect(roots));
+}
+
+async function listFound(root: string) {
+  return (await listServiceSuggestions([root])).map((each) => [each.name, each.command, each.recommended]);
 }
 
 describe('listServiceSuggestions', () => {
-  it('offers each workspace’s dev script in a monorepo, named after its package, and the root’s as “all”', () => {
+  it('offers each workspace’s dev script in a monorepo, named after its package, and the root’s as “all”', async () => {
     const root = writeFiles(createTempDir(), {
       'package.json': {
         workspaces: ['apps/*', 'packages/*', '!packages/skip'],
@@ -43,7 +49,7 @@ describe('listServiceSuggestions', () => {
       'apps/README.md': 'not a folder',
       'packages/ui/package.json': { scripts: { dev: 'tsc -w' } },
     });
-    expect(listServiceSuggestions([root])).toEqual([
+    expect(await listServiceSuggestions([root])).toEqual([
       {
         name: 'api',
         cwd: join(root, 'apps/api'),
@@ -72,7 +78,7 @@ describe('listServiceSuggestions', () => {
     ]);
   });
 
-  it('falls back to start and then serve, and to apps/* and packages/* when no workspaces are named', () => {
+  it('falls back to start and then serve, and to apps/* and packages/* when no workspaces are named', async () => {
     const root = writeFiles(createTempDir(), {
       'package.json': { name: 'turbo-shop' },
       'package-lock.json': '',
@@ -80,16 +86,16 @@ describe('listServiceSuggestions', () => {
       'apps/docs/package.json': { scripts: { serve: 'docusaurus serve' } },
       'services/queue/package.json': { scripts: { dev: 'node --watch .' } },
     });
-    expect(listFound(root)).toEqual([
+    expect(await listFound(root)).toEqual([
       ['docs', 'npm run serve', true],
       ['site', 'npm run start', true],
       ['queue', 'npm run dev', true],
     ]);
     const single = writeFiles(createTempDir(), { 'package.json': { name: 'one', scripts: { start: 'x' } } });
-    expect(listFound(single)).toEqual([['one', 'npm run start', true]]);
+    expect(await listFound(single)).toEqual([['one', 'npm run start', true]]);
   });
 
-  it('follows the package manager the lockfile or packageManager names, and pnpm’s workspace file', () => {
+  it('follows the package manager the lockfile or packageManager names, and pnpm’s workspace file', async () => {
     const pnpm = writeFiles(createTempDir(), {
       'package.json': { name: 'shop' },
       'pnpm-workspace.yaml': "packages:\n  - 'apps/*'\n  - \"tools/cli\" # the cli\nother:\n  - 'x/*'\n",
@@ -97,35 +103,35 @@ describe('listServiceSuggestions', () => {
       'apps/site/package.json': { scripts: { dev: 'next dev' } },
       'tools/cli/package.json': { name: 'cli', scripts: { dev: 'tsx watch' } },
     });
-    expect(listServiceSuggestions([pnpm]).map((each) => [each.name, each.command])).toEqual([
+    expect((await listServiceSuggestions([pnpm])).map((each) => [each.name, each.command])).toEqual([
       ['site', 'pnpm run dev'],
       ['cli', 'pnpm run dev'],
     ]);
     const yarn = writeFiles(createTempDir(), { 'package.json': { name: 'one', scripts: { dev: 'x' } } });
     writeFileSync(join(yarn, 'yarn.lock'), '');
-    expect(listServiceSuggestions([yarn])[0]).toMatchObject({ name: 'one', command: 'yarn run dev' });
+    expect((await listServiceSuggestions([yarn]))[0]).toMatchObject({ name: 'one', command: 'yarn run dev' });
     const named = writeFiles(createTempDir(), {
       'package.json': { packageManager: 'pnpm@9.1.0', scripts: { dev: 'x' } },
     });
-    expect(listServiceSuggestions([named])[0]?.command).toBe('pnpm run dev');
+    expect((await listServiceSuggestions([named]))[0]?.command).toBe('pnpm run dev');
     const plain = writeFiles(createTempDir(), {
       'package.json': { packageManager: 'deno@2', workspaces: { packages: ['lib'] }, scripts: { dev: 'x' } },
       'lib/package.json': { scripts: { dev: 'y' } },
     });
-    expect(listFound(plain)).toEqual([
+    expect(await listFound(plain)).toEqual([
       ['lib', 'npm run dev', false],
       ['all', 'npm run dev', false],
     ]);
   });
 
-  it('reads a Procfile, each Compose service, and tells apart two services of the same name', () => {
+  it('reads a Procfile, each Compose service, and tells apart two services of the same name', async () => {
     const one = writeFiles(createTempDir(), {
       Procfile: 'web: bundle exec puma\nworker: sidekiq\n# comment\nnot a line\n',
       'compose.yaml':
         'services:\n  db:\n    image: postgres\n  cache: # redis\n    image: redis\nvolumes:\n  data:\n',
     });
     const two = writeFiles(createTempDir(), { 'package.json': { name: 'web', scripts: { dev: 'x' } } });
-    expect(listServiceSuggestions([one, two]).map((each) => [each.name, each.command])).toEqual([
+    expect((await listServiceSuggestions([one, two])).map((each) => [each.name, each.command])).toEqual([
       [expect.stringMatching(/-web$/), 'bundle exec puma'],
       ['worker', 'sidekiq'],
       ['db', 'docker compose up db'],
@@ -133,41 +139,41 @@ describe('listServiceSuggestions', () => {
       [expect.stringMatching(/-web$/), 'npm run dev'],
     ]);
     const empty = writeFiles(createTempDir(), { 'docker-compose.yml': 'services: {}' });
-    expect(listFound(empty)).toEqual([['compose', 'docker compose up', true]]);
-    expect(listServiceSuggestions([createTempDir()])).toEqual([]);
+    expect(await listFound(empty)).toEqual([['compose', 'docker compose up', true]]);
+    expect(await listServiceSuggestions([createTempDir()])).toEqual([]);
   });
 
-  it('prefers bin/dev, then Procfile.dev, to the production Procfile', () => {
+  it('prefers bin/dev, then Procfile.dev, to the production Procfile', async () => {
     const rails = writeFiles(createTempDir(), {
       'bin/dev': '#!/bin/sh',
       'Procfile.dev': 'web: rails s',
       Procfile: 'web: puma',
     });
-    expect(listFound(rails)).toEqual([[basename(rails), 'bin/dev', true]]);
+    expect(await listFound(rails)).toEqual([[basename(rails), 'bin/dev', true]]);
     const foreman = writeFiles(createTempDir(), {
       'Procfile.dev': 'css: tailwind -w',
       Procfile: 'web: puma',
     });
-    expect(listFound(foreman)).toEqual([['css', 'tailwind -w', true]]);
+    expect(await listFound(foreman)).toEqual([['css', 'tailwind -w', true]]);
   });
 
-  it('finds Deno tasks, a Cargo binary, Go commands and Django, and make only when nothing else is there', () => {
+  it('finds Deno tasks, a Cargo binary, Go commands and Django, and make only when nothing else is there', async () => {
     const deno = writeFiles(createTempDir(), { 'deno.json': { tasks: { start: 'deno run main.ts' } } });
-    expect(listFound(deno)).toEqual([[basename(deno), 'deno task start', true]]);
+    expect(await listFound(deno)).toEqual([[basename(deno), 'deno task start', true]]);
     const denoless = writeFiles(createTempDir(), { 'deno.jsonc': '{ // tasks\n}' });
-    expect(listFound(denoless)).toEqual([]);
+    expect(await listFound(denoless)).toEqual([]);
     const both = writeFiles(createTempDir(), { 'deno.json': { tasks: { dev: 'x' } }, 'package.json': {} });
-    expect(listFound(both)).toEqual([]);
+    expect(await listFound(both)).toEqual([]);
 
     const cargo = writeFiles(createTempDir(), {
       'Cargo.toml': '[package]\nname = "api-server"\nversion = "0.1.0"\n\n[dependencies]\nname = "x"\n',
       'src/main.rs': 'fn main() {}',
     });
-    expect(listFound(cargo)).toEqual([['api-server', 'cargo run', true]]);
+    expect(await listFound(cargo)).toEqual([['api-server', 'cargo run', true]]);
     const unnamed = writeFiles(createTempDir(), { 'Cargo.toml': '', 'src/main.rs': '' });
-    expect(listFound(unnamed)).toEqual([[basename(unnamed), 'cargo run', true]]);
+    expect(await listFound(unnamed)).toEqual([[basename(unnamed), 'cargo run', true]]);
     const workspace = writeFiles(createTempDir(), { 'Cargo.toml': '[workspace]\n', 'src/main.rs': '' });
-    expect(listFound(workspace)).toEqual([]);
+    expect(await listFound(workspace)).toEqual([]);
 
     const go = writeFiles(createTempDir(), {
       'go.mod': 'module shop',
@@ -175,36 +181,39 @@ describe('listServiceSuggestions', () => {
       'cmd/worker/main.go': 'package main',
       'cmd/notes/README.md': '',
     });
-    expect(listFound(go)).toEqual([
+    expect(await listFound(go)).toEqual([
       [basename(go), 'go run .', true],
       ['worker', 'go run ./cmd/worker', true],
     ]);
     const tools = writeFiles(createTempDir(), { 'go.mod': '', 'cmd/api/main.go': '' });
-    expect(listFound(tools)).toEqual([['api', 'go run ./cmd/api', true]]);
+    expect(await listFound(tools)).toEqual([['api', 'go run ./cmd/api', true]]);
 
     const django = writeFiles(createTempDir(), { 'manage.py': '' });
-    expect(listFound(django)).toEqual([[basename(django), 'python manage.py runserver', true]]);
+    expect(await listFound(django)).toEqual([[basename(django), 'python manage.py runserver', true]]);
 
     const make = writeFiles(createTempDir(), {
       Makefile: 'VAR := 1\nbuild:\n\tgo build\nserve: build\n\t./x\n',
     });
-    expect(listFound(make)).toEqual([[basename(make), 'make serve', true]]);
+    expect(await listFound(make)).toEqual([[basename(make), 'make serve', true]]);
     const covered = writeFiles(createTempDir(), { Makefile: 'dev:\n\tx\n', 'manage.py': '' });
-    expect(listFound(covered)).toEqual([[basename(covered), 'python manage.py runserver', true]]);
+    expect(await listFound(covered)).toEqual([[basename(covered), 'python manage.py runserver', true]]);
   });
 
-  it('names a nested duplicate by its folder', () => {
+  it('names a nested duplicate by its folder', async () => {
     const root = writeFiles(createTempDir(), {
       'package.json': { workspaces: ['apps/*', 'tools/*'] },
       'apps/web/package.json': { name: 'web', scripts: { dev: 'x' } },
       'tools/web/package.json': { name: 'web', scripts: { dev: 'y' } },
     });
-    expect(listServiceSuggestions([root]).map((each) => each.name)).toEqual(['apps/web', 'tools/web']);
+    expect((await listServiceSuggestions([root])).map((each) => each.name)).toEqual([
+      'apps/web',
+      'tools/web',
+    ]);
   });
 });
 
 describe('the readers', () => {
-  it('reads a package file leniently', () => {
+  it('reads a package file leniently', async () => {
     expect(parsePackageFile(null)).toBeNull();
     expect(parsePackageFile('{')).toBeNull();
     expect(parsePackageFile('3')).toBeNull();
@@ -234,8 +243,10 @@ describe('the readers', () => {
     expect(parseCargoName('[package]\nname = "last"')).toBe('last');
   });
 
-  it('expands exact folders and skips the ones that are missing', () => {
+  it('expands exact folders and skips the ones that are missing', async () => {
     const root = writeFiles(createTempDir(), { 'lib/package.json': {} });
-    expect(expandWorkspaces(root, ['./lib/', 'missing', 'gone/*'])).toEqual([join(root, 'lib')]);
+    expect(await runFiles(expandWorkspaces(root, ['./lib/', 'missing', 'gone/*']))).toEqual([
+      join(root, 'lib'),
+    ]);
   });
 });

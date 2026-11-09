@@ -51,10 +51,10 @@ interface Setup {
 }
 
 function runUpdate(store: ConfigStore['Service'], patch: Parameters<ConfigStore['Service']['update']>[0]) {
-  return Effect.runSync(store.update(patch));
+  return Effect.runPromise(store.update(patch));
 }
 
-function setup(options: Setup = {}) {
+async function setup(options: Setup = {}) {
   const root = createTempDir();
   const config = createTestConfig(root, { roots: [], inspect: options.inspect ?? false });
   const engine = new Engine(openEventLog(config.databasePath));
@@ -66,9 +66,9 @@ function setup(options: Setup = {}) {
   mkdirSync(work, { recursive: true });
   mkdirSync(documents, { recursive: true });
   const accounts = [...(options.accounts ?? [ME])];
-  function open() {
+  async function open() {
     const machine = { ...config, machine: readMachineConfig(config.configPath) };
-    const { store, context } = createTestMachine(engine, machine, {
+    const { store, context } = await createTestMachine(engine, machine, {
       discover: () =>
         Promise.resolve({
           candidates:
@@ -92,7 +92,7 @@ function setup(options: Setup = {}) {
     });
     return { onboarding, store };
   }
-  const first = open();
+  const first = await open();
   return { root, config, engine, developer, work, documents, accounts, open, ...first };
 }
 
@@ -119,14 +119,14 @@ function listPicked(flow: OnboardingFlow) {
   );
 }
 
-async function reachAccounts(world: ReturnType<typeof setup>) {
+async function reachAccounts(world: Awaited<ReturnType<typeof setup>>) {
   await answerFolders(world.onboarding, world.developer);
   return answer(world.onboarding, 'defaults', 'model=opus', 'merge=squash', 'plans=large');
 }
 
 describe('the setup steps', () => {
   test('opens on the folders, the one with the most repositories picked, and the rest of the steps ahead', async () => {
-    const { onboarding, developer, work } = setup();
+    const { onboarding, developer, work } = await setup();
     const flow = await onboarding.setup.resolve();
     expect(flow.index).toBe(0);
     expect(flow.revisit).toBe(false);
@@ -151,7 +151,7 @@ describe('the setup steps', () => {
   });
 
   test('without suggestions it asks for a path, and a typed folder is saved like a picked one', async () => {
-    const { onboarding, store, work } = setup({ suggestions: false });
+    const { onboarding, store, work } = await setup({ suggestions: false });
     const flow = await onboarding.setup.resolve();
     expect(flow.step?.options).toEqual([]);
     expect(flow.step?.description).toContain('found no repositories');
@@ -166,7 +166,7 @@ describe('the setup steps', () => {
   });
 
   test('the defaults come with the recommended choices picked, and Continue saves all three at once', async () => {
-    const { onboarding, engine, store, developer, work } = setup();
+    const { onboarding, engine, store, developer, work } = await setup();
     const defaults = await answerFolders(onboarding, developer, work);
     expect(Effect.runSync(store.config).roots).toEqual([developer, work]);
     expect(defaults.step).toMatchObject({ id: 'defaults', title: 'How should agents work?', options: [] });
@@ -203,7 +203,7 @@ describe('the setup steps', () => {
   });
 
   test('going back to the defaults shows what you saved, and each role’s own model saves no model', async () => {
-    const { onboarding, engine, developer } = setup();
+    const { onboarding, engine, developer } = await setup();
     await answerFolders(onboarding, developer);
     await answer(onboarding, 'defaults', 'model=:roles', 'merge=merge', 'plans=when_asked');
     expect(engine.state.settings.defaultModel).toBeNull();
@@ -219,13 +219,13 @@ describe('the setup steps', () => {
   });
 
   test('refuses a step you have not reached and an answer for a step that is not open', async () => {
-    const { onboarding } = setup();
+    const { onboarding } = await setup();
     await expect(openStep(onboarding, 'defaults')).rejects.toMatchObject({ code: 'step_unreached' });
     await expect(answer(onboarding, 'defaults', 'model=opus')).rejects.toMatchObject({ code: 'step_stale' });
   });
 
   test('a refused answer stays on its step with the reason, and the next answer clears it', async () => {
-    const { onboarding, developer } = setup();
+    const { onboarding, developer } = await setup();
     const refused = await answer(onboarding, 'roots', '/no/such/folder');
     expect(refused.step).toMatchObject({
       id: 'roots',
@@ -249,14 +249,14 @@ describe('the setup steps', () => {
   });
 
   test('a folder macOS keeps private stays on the step as access to ask for, not as an error', async () => {
-    const world = setup();
+    const world = await setup();
     const { onboarding, store, developer, work } = world;
     chmodSync(work, 0o000);
     try {
       const blocked = await answer(onboarding, 'roots', developer, work);
       expect(blocked.step).toMatchObject({ id: 'roots', problem: null, access: [work] });
       expect(listChosen(blocked)).toEqual([developer, work]);
-      expect(listChosen(await world.open().onboarding.setup.resolve())).toEqual([developer, work]);
+      expect(listChosen(await (await world.open()).onboarding.setup.resolve())).toEqual([developer, work]);
       expect(Effect.runSync(store.config).roots).toEqual([]);
       chmodSync(work, 0o755);
       const allowed = await answer(onboarding, 'roots', developer, work);
@@ -268,7 +268,7 @@ describe('the setup steps', () => {
   });
 
   test('a folder the scan could not read is offered unpicked, and picking it asks for access', async () => {
-    const { onboarding, store, developer, work, documents } = setup({ refused: true });
+    const { onboarding, store, developer, work, documents } = await setup({ refused: true });
     const flow = await onboarding.setup.resolve();
     expect(flow.step?.options.map((option) => [option.value, option.detail, option.chosen])).toEqual([
       [developer, '3 repositories', true],
@@ -287,7 +287,7 @@ describe('the setup steps', () => {
   });
 
   test('leaving the private folder out moves on with the others', async () => {
-    const { onboarding, store, developer, work } = setup();
+    const { onboarding, store, developer, work } = await setup();
     chmodSync(work, 0o000);
     try {
       await answer(onboarding, 'roots', developer, work);
@@ -303,7 +303,7 @@ describe('the setup steps', () => {
   });
 
   test('a saved model outside the catalog is still listed', async () => {
-    const { onboarding, engine, developer } = setup();
+    const { onboarding, engine, developer } = await setup();
     await engine.dispatch({ type: 'settings.change', patch: { defaultModel: 'claude-legacy' } });
     const back = await answerFolders(onboarding, developer);
     expect(back.step?.groups[0]?.options[0]).toMatchObject({
@@ -317,7 +317,7 @@ describe('the setup steps', () => {
   });
 
   test('refuses replies it cannot read', async () => {
-    const { onboarding } = setup();
+    const { onboarding } = await setup();
     for (const [body, code] of [
       [{ type: 'answer', stepId: 'nope', values: ['x'] }, 'step_invalid'],
       [{ type: 'answer', stepId: 'roots', values: [] }, 'values_invalid'],
@@ -332,7 +332,7 @@ describe('the setup steps', () => {
 
 describe('the accounts step', () => {
   test('with no account signed in it is not ready, and refuses to continue until one is', async () => {
-    const world = setup({ accounts: [{ id: 'a-1', email: null, signedIn: false }] });
+    const world = await setup({ accounts: [{ id: 'a-1', email: null, signedIn: false }] });
     const flow = await reachAccounts(world);
     expect(flow.step).toMatchObject({ ready: false, submitLabel: 'Continue' });
     await expect(answer(world.onboarding, 'accounts', 'later')).resolves.toMatchObject({
@@ -348,26 +348,26 @@ describe('the accounts step', () => {
   });
 
   test('with no account at all it is not ready', async () => {
-    const world = setup({ accounts: [] });
+    const world = await setup({ accounts: [] });
     expect((await reachAccounts(world)).step?.ready).toBe(false);
   });
 });
 
 describe('the Claude step', () => {
   test('shows Claude Code as installed and the accounts agents work under', async () => {
-    const flow = await reachAccounts(setup());
+    const flow = await reachAccounts(await setup());
     expect(flow.step).toMatchObject({ id: 'accounts', title: 'Sign in with Claude', ready: true });
     expect(flow.step?.description).toStartWith('Agents work under these Claude accounts.');
     expect(flow.step?.checks.map((check) => [check.id, check.ok])).toEqual([['claude', true]]);
   });
 
   test('asks you to sign in when no account is signed in', async () => {
-    const flow = await reachAccounts(setup({ accounts: [] }));
+    const flow = await reachAccounts(await setup({ accounts: [] }));
     expect(flow.step?.description).toStartWith('Sign in to the Claude account agents work under.');
   });
 
   test('asks you to install Claude Code first when it is missing', async () => {
-    const flow = await reachAccounts(setup({ run: NO_CLAUDE }));
+    const flow = await reachAccounts(await setup({ run: NO_CLAUDE }));
     expect(flow.step).toMatchObject({ ready: false });
     expect(flow.step?.description).toStartWith('Agents run on Claude Code. Install it here');
     expect(flow.step?.checks[0]).toMatchObject({
@@ -380,7 +380,7 @@ describe('the Claude step', () => {
 
 describe('asking for help', () => {
   test('starts a question task with the checks that fail, and keeps it with the run', async () => {
-    const world = setup({ run: NO_BUN });
+    const world = await setup({ run: NO_BUN });
     await reachAccounts(world);
     await answer(world.onboarding, 'accounts', 'continue');
     const flow = await world.onboarding.setup.reply({ type: 'help', stepId: 'prerequisites' });
@@ -391,12 +391,12 @@ describe('asking for help', () => {
       "- Bun: Not installed. Shinsa's fix is `curl -fsSL https://bun.sh/install | bash`."
     );
     expect(task?.request).not.toContain('Git');
-    expect((await world.open().onboarding.setup.resolve()).step?.help).toBe(taskId);
+    expect((await (await world.open()).onboarding.setup.resolve()).step?.help).toBe(taskId);
     expect(await world.onboarding.setup.selectHelp()).toBe(taskId);
   });
 
   test('refuses when every check passes, or for a step that is not on screen', async () => {
-    const world = setup();
+    const world = await setup();
     await reachAccounts(world);
     await expect(world.onboarding.setup.reply({ type: 'help', stepId: 'accounts' })).rejects.toMatchObject({
       code: 'help_unneeded',
@@ -410,7 +410,7 @@ describe('asking for help', () => {
 
 describe('finishing', () => {
   test('records one welcome task with what you set up, and lands on it', async () => {
-    const world = setup();
+    const world = await setup();
     expect((await world.onboarding.setup.resolve()).welcome).toBeNull();
     await reachAccounts(world);
     await answer(world.onboarding, 'accounts', 'continue');
@@ -432,7 +432,7 @@ describe('finishing', () => {
 
   test('refuses to finish while a tool is missing, then finishes and stays finished', async () => {
     let bun = false;
-    const world = setup({ run: (command, cwd) => (bun ? ALL_OK : NO_BUN)(command, cwd) });
+    const world = await setup({ run: (command, cwd) => (bun ? ALL_OK : NO_BUN)(command, cwd) });
     await reachAccounts(world);
     const tools = await answer(world.onboarding, 'accounts', 'continue');
     expect(tools.step).toMatchObject({ id: 'prerequisites', ready: false, submitLabel: 'Finish setup' });
@@ -448,19 +448,19 @@ describe('finishing', () => {
     const done = await answer(world.onboarding, 'prerequisites', 'continue');
     expect(done).toMatchObject({ index: 5, step: null });
     expect(Effect.runSync(world.store.config).onboardedAt).not.toBeNull();
-    expect((await world.open().onboarding.setup.resolve()).step).toBeNull();
+    expect((await (await world.open()).onboarding.setup.resolve()).step).toBeNull();
     await expect(openStep(world.onboarding, 'roots')).rejects.toMatchObject({ code: 'setup_finished' });
   });
 
   test('says when every tool is installed', async () => {
-    const world = setup();
+    const world = await setup();
     await reachAccounts(world);
     const tools = await answer(world.onboarding, 'accounts', 'continue');
     expect(tools.step).toMatchObject({ ready: true, submitLabel: 'Finish setup' });
   });
 
   test('a restart after setup shows every step reached and your answers picked', async () => {
-    const world = setup();
+    const world = await setup();
     await reachAccounts(world);
     await answer(world.onboarding, 'accounts', 'continue');
     await answer(world.onboarding, 'prerequisites', 'continue');
@@ -479,32 +479,32 @@ describe('finishing', () => {
 
 describe('the saved setup', () => {
   test('a restart of the server resumes the step you were on', async () => {
-    const world = setup();
+    const world = await setup();
     await answerFolders(world.onboarding, world.developer);
-    const resumed = await world.open().onboarding.setup.resolve();
+    const resumed = await (await world.open()).onboarding.setup.resolve();
     expect(resumed.step?.id).toBe('defaults');
   });
 
   test('a finished setup whose completion was undone starts again', async () => {
-    const world = setup();
+    const world = await setup();
     await reachAccounts(world);
     await answer(world.onboarding, 'accounts', 'continue');
     await answer(world.onboarding, 'prerequisites', 'continue');
-    runUpdate(world.store, { onboardedAt: null });
-    expect((await world.open().onboarding.setup.resolve()).step?.id).toBe('roots');
+    await runUpdate(world.store, { onboardedAt: null });
+    expect((await (await world.open()).onboarding.setup.resolve()).step?.id).toBe('roots');
   });
 
   test('a saved change to the projects comes back, and one without the repositories it saw starts again', async () => {
-    const world = setup();
+    const world = await setup();
     await reachAccounts(world);
     const path = join(world.config.dataDir, 'onboarding.json');
     const saved = JSON.parse(readFileSync(path, 'utf8')) as Record<string, unknown>;
     const revision = { projects: [], turns: [{ request: 'a', reply: 'b' }] };
     writeFileSync(path, JSON.stringify({ ...saved, revision: { ...revision, seen: [] } }));
-    expect((await world.open().onboarding.setup.resolve()).step?.id).toBe('accounts');
+    expect((await (await world.open()).onboarding.setup.resolve()).step?.id).toBe('accounts');
     const logs = captureLogs();
     writeFileSync(path, JSON.stringify({ ...saved, revision }));
-    expect((await world.open().onboarding.setup.resolve()).index).toBe(0);
+    expect((await (await world.open()).onboarding.setup.resolve()).index).toBe(0);
     logs.restore();
     expect(logs.fieldsOf('[Onboarding] The saved setup is not one Shinsa wrote; starting again')).toEqual([
       { path },
@@ -512,15 +512,15 @@ describe('the saved setup', () => {
   });
 
   test('a file it cannot read, or one it did not write, starts again', async () => {
-    const world = setup();
+    const world = await setup();
     const path = join(world.config.dataDir, 'onboarding.json');
     const logs = captureLogs();
     writeFileSync(path, '{');
-    expect((await world.open().onboarding.setup.resolve()).index).toBe(0);
+    expect((await (await world.open()).onboarding.setup.resolve()).index).toBe(0);
     writeFileSync(path, JSON.stringify({ version: 1, messages: [] }));
-    expect((await world.open().onboarding.setup.resolve()).index).toBe(0);
+    expect((await (await world.open()).onboarding.setup.resolve()).index).toBe(0);
     writeFileSync(path, 'null');
-    expect((await world.open().onboarding.setup.resolve()).index).toBe(0);
+    expect((await (await world.open()).onboarding.setup.resolve()).index).toBe(0);
     logs.restore();
     expect(logs.fieldsOf('[Onboarding] The saved setup could not be read; starting again')).toEqual([
       { path, error: expect.any(String) },
@@ -533,11 +533,11 @@ describe('the saved setup', () => {
   });
 
   test('in inspect mode it shows the first step and writes nothing', async () => {
-    const world = setup({ inspect: true });
+    const world = await setup({ inspect: true });
     expect((await world.onboarding.setup.resolve()).step?.id).toBe('roots');
     expect(() => readFileSync(join(world.config.dataDir, 'onboarding.json'))).toThrow();
-    runUpdate(world.store, { onboardedAt: 1 });
-    const inspected = world.open().onboarding;
+    await runUpdate(world.store, { onboardedAt: 1 });
+    const inspected = (await world.open()).onboarding;
     expect((await inspected.setup.reply({ type: 'open', stepId: 'accounts' })).step?.id).toBe('accounts');
   });
 });

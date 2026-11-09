@@ -3,21 +3,22 @@ import { existsSync, mkdirSync, utimesSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { resolveRepoCachePath, resolveSharedCacheEnv } from '../../src/checks/caches/paths.ts';
 import { SharedCaches } from '../../src/checks/caches/service.ts';
+import { runFiles } from '../harness.ts';
 import { runGit } from '../helpers/git.ts';
 import { createTempDir, writeFiles } from '../helpers/index.ts';
 
 describe('the caches a repository’s checkouts share', () => {
-  test('a Turbo repository gets one Turbo cache per repository, in Shinsa’s data folder', () => {
+  test('a Turbo repository gets one Turbo cache per repository, in Shinsa’s data folder', async () => {
     const checkout = createTempDir();
     writeFiles(checkout, { 'turbo.json': '{}' });
-    expect(resolveSharedCacheEnv(checkout, '/data', 'repo-1')).toEqual({
+    expect(await runFiles(resolveSharedCacheEnv(checkout, '/data', 'repo-1'))).toEqual({
       TURBO_CACHE_DIR: join('/data', 'caches', 'repo-1', 'turbo'),
     });
     expect(resolveRepoCachePath('/data', 'repo-1')).toBe(join('/data', 'caches', 'repo-1'));
   });
 
-  test('a repository without Turbo gets no variables', () => {
-    expect(resolveSharedCacheEnv(createTempDir(), '/data', 'repo-1')).toEqual({});
+  test('a repository without Turbo gets no variables', async () => {
+    expect(await runFiles(resolveSharedCacheEnv(createTempDir(), '/data', 'repo-1'))).toEqual({});
   });
 
   test('pruning drops what has not been written in two weeks and the caches of repositories Shinsa forgot', async () => {

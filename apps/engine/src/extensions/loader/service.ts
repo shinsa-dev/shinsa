@@ -1,6 +1,5 @@
-import { readFileSync } from 'node:fs';
 import { DomainError } from '@shinsa/core';
-import { Context, Deferred, Duration, Effect, Exit, Layer, Option, Ref, Scope } from 'effect';
+import { Context, Deferred, Duration, Effect, Exit, FileSystem, Layer, Option, Ref, Scope } from 'effect';
 import { describeError } from '../../log/redact.ts';
 import { McpClients } from '../health/service.ts';
 import {
@@ -31,6 +30,7 @@ export class ExtensionLoader extends Context.Service<
     ExtensionLoader,
     Effect.gen(function* () {
       const clients = yield* McpClients;
+      const fs = yield* FileSystem.FileSystem;
 
       const create = Effect.fn('ExtensionLoader.create')(function* (extensions: LoadableExtensions) {
         const session = yield* Ref.make(Option.none<HotLoadSession>());
@@ -215,10 +215,9 @@ export class ExtensionLoader extends Context.Service<
               message: `There is no skill named ${wanted} to load. These can be loaded: ${extensions.deferredSkills.map((entry) => entry.name).join(', ')}.`,
             });
           }
-          const text = yield* Effect.try({
-            try: () => readFileSync(skill.path, 'utf8'),
-            catch: (error) => new ExtensionLoadFailed({ message: describeError(error) }),
-          });
+          const text = yield* fs
+            .readFileString(skill.path)
+            .pipe(Effect.mapError((error) => new ExtensionLoadFailed({ message: describeError(error) })));
           return resolveSkillBody(text);
         });
 
