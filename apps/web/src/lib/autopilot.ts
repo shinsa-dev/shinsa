@@ -147,7 +147,7 @@ export function listSlackWorkspaceItems(snapshot: SlackSnapshot | null): Setting
   return [...items.values()];
 }
 
-export interface ContactOption {
+interface ContactOption {
   contact: AutopilotContact;
   chosen: boolean;
   disabled: boolean;
