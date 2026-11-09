@@ -18,24 +18,24 @@ function createFakeEngine(answer: 'nothing' | 'failure') {
   state.gates['g-due'] = createGate({
     ...merge,
     id: 'g-due',
-    autopilotDue: { at: 1_000, action: 'escalate' },
+    autopilotDue: { at: 1_000, action: 'escalate', wait: 'configured', waitedMinutes: 60 },
   });
   state.gates['g-later'] = createGate({
     ...merge,
     id: 'g-later',
-    autopilotDue: { at: 9_000, action: 'merge' },
+    autopilotDue: { at: 9_000, action: 'merge', wait: 'configured', waitedMinutes: 60 },
   });
   state.gates['g-none'] = createGate({ ...merge, id: 'g-none', autopilotDue: null });
   state.gates['g-answered'] = createGate({
     ...merge,
     id: 'g-answered',
     status: 'answered',
-    autopilotDue: { at: 1_000, action: 'merge' },
+    autopilotDue: { at: 1_000, action: 'merge', wait: 'configured', waitedMinutes: 60 },
   });
   state.gates['g-review'] = createGate({
     type: 'review',
     id: 'g-review',
-    autopilotDue: { at: 1_000, action: 'merge' },
+    autopilotDue: { at: 1_000, action: 'merge', wait: 'configured', waitedMinutes: 60 },
   });
   return createFakeEngineCore(state, () =>
     answer === 'failure' ? new EngineStopped({ message: 'log full' }) : []

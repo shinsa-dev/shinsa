@@ -1,6 +1,7 @@
 import type { CommandOf } from '../commands/index.ts';
 import {
   type AutopilotDue,
+  type AutopilotWait,
   type EscalationHandoff,
   type Gate,
   HOUR_MS,
@@ -16,6 +17,7 @@ import {
   type Settings,
 } from '../domain/settings.ts';
 import type { Task } from '../domain/types.ts';
+import { isActiveAt, resolveActiveHours, resolveNextActiveChange } from '../presence/hours.ts';
 import type { ReviewFinding, ReviewRating } from '../report/types.ts';
 import type { ShinsaState } from '../state/project.ts';
 import { listOpenGates } from '../state/queries.ts';
@@ -138,10 +140,23 @@ function resolveUrgentPolicy(decider: Decider, task: Task) {
   return policy.enabled && isUrgent(task) ? policy : null;
 }
 
+function resolveWait(state: ShinsaState, now: number, policy: AutopilotPolicy) {
+  const hours = resolveActiveHours(state, now);
+  const configured = now + policy.urgentWaitMinutes * MINUTE_MS;
+  if (!isActiveAt(hours, now))
+    return { wait: 'outside_hours' as const, at: now + policy.quietWaitMinutes * MINUTE_MS };
+  const ended = resolveNextActiveChange(hours, now);
+  const quiet = ended === null ? null : ended + policy.quietWaitMinutes * MINUTE_MS;
+  if (quiet !== null && quiet < configured) return { wait: 'hours_ended' as const, at: quiet };
+  return { wait: 'configured' as const, at: configured };
+}
+
 function resolveUrgentDue(decider: Decider, task: Task): AutopilotDue | null {
   const policy = resolveUrgentPolicy(decider, task);
   if (!policy || !MERGES_AFTER_WAIT.has(policy.urgent)) return null;
-  return { at: decider.context.now + policy.urgentWaitMinutes * MINUTE_MS, action: 'merge' };
+  const now = decider.context.now;
+  const { wait, at } = resolveWait(decider.state, now, policy);
+  return { at, action: 'merge', wait, waitedMinutes: Math.round((at - now) / MINUTE_MS) };
 }
 
 function askAtOnce(decider: Decider, task: Task, mergesAt: number | null) {
@@ -180,9 +195,16 @@ export function applyAutopilotMerge(decider: Decider, gate: Gate) {
   askAtOnce(decider, task, due?.at ?? null);
 }
 
-function describeWait(minutes: number) {
+function describeMinutes(minutes: number) {
   return minutes === 1 ? '1 minute' : `${minutes} minutes`;
 }
+
+const WAIT_TEXT: Record<AutopilotWait, (minutes: string) => string> = {
+  configured: (minutes) => `Urgent, and the merge waited ${minutes} for you.`,
+  outside_hours: (minutes) => `Urgent, outside your usual hours, and the merge waited ${minutes} for you.`,
+  hours_ended: (minutes) =>
+    `Urgent, and the merge waited ${minutes} for you, until shortly after your usual hours ended.`,
+};
 
 function resolveOwnerActiveAt(state: ShinsaState) {
   const hours = Object.keys(state.presence).map(Number);
@@ -244,24 +266,25 @@ function selectDueGate(decider: Decider, command: CommandOf<'autopilot.fire'>) {
   const task = decider.state.tasks[command.taskId];
   if (!gate || !task || gate.taskId !== task.id || gate.type !== 'merge' || gate.status !== 'open')
     return null;
-  if (gate.autopilotDue?.at !== command.dueAt || isTaskClosed(task)) return null;
+  const due = gate.autopilotDue;
+  if (due?.at !== command.dueAt || isTaskClosed(task)) return null;
   const policy = resolveUrgentPolicy(decider, task);
   if (!policy || !MERGES_AFTER_WAIT.has(policy.urgent)) return null;
-  return { gate, task, policy };
+  return { gate, task, due };
 }
 
 export function fireAutopilot(decider: Decider, command: CommandOf<'autopilot.fire'>) {
   const found = selectDueGate(decider, command);
   if (!found) return;
-  const { gate, task, policy } = found;
-  const waited = `Urgent, and the merge waited ${describeWait(policy.urgentWaitMinutes)} for you.`;
+  const { gate, task, due } = found;
+  const waited = WAIT_TEXT[due.wait](describeMinutes(due.waitedMinutes));
   const refusal = resolveMergeRefusal(decider, task);
   if (refusal === null) {
     mergeForYou(decider, gate, waited);
     return;
   }
   const reason = `${waited} ${MERGE_BLOCK_TEXT[refusal]}`;
-  const timing = { waitedMinutes: policy.urgentWaitMinutes, mergesAt: null, blockedBy: refusal };
+  const timing = { waitedMinutes: due.waitedMinutes, mergesAt: null, blockedBy: refusal };
   if (!task.escalation) escalate(decider, task, reason, timing);
   else if (task.escalation.handoff.mergesAt !== null) reviseEscalation(decider, task, reason, timing);
   scheduleAutopilot(decider, gate, null);

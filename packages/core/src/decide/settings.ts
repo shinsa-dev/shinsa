@@ -80,12 +80,13 @@ function assertSettings(patch: Partial<Settings>) {
     });
   }
   assertWatchdogSettings(patch);
-  const wait = patch.autopilot?.urgentWaitMinutes;
-  if (wait !== undefined && !isWholeBetween(wait, 1, MAX_URGENT_WAIT_MINUTES)) {
-    throw new DomainError({
-      code: 'settings_invalid',
-      message: `An urgent change waits 1 to ${MAX_URGENT_WAIT_MINUTES} minutes.`,
-    });
+  for (const wait of [patch.autopilot?.urgentWaitMinutes, patch.autopilot?.quietWaitMinutes]) {
+    if (wait !== undefined && !isWholeBetween(wait, 1, MAX_URGENT_WAIT_MINUTES)) {
+      throw new DomainError({
+        code: 'settings_invalid',
+        message: `An urgent change waits 1 to ${MAX_URGENT_WAIT_MINUTES} minutes.`,
+      });
+    }
   }
   assertAutopilotContacts(patch.autopilot?.contacts);
   assertActiveHours(patch.activeHours);
@@ -103,7 +104,11 @@ function assertSettings(patch: Partial<Settings>) {
 }
 
 function isActiveDay(day: ActiveDay) {
-  return isWholeBetween(day.weekday, 0, 6) && isWholeBetween(day.from, 0, 23) && isWholeBetween(day.to, day.from + 1, 24);
+  return (
+    isWholeBetween(day.weekday, 0, 6) &&
+    isWholeBetween(day.from, 0, 23) &&
+    isWholeBetween(day.to, day.from + 1, 24)
+  );
 }
 
 function hasOverlap(days: readonly ActiveDay[]) {
@@ -119,7 +124,8 @@ function assertActiveHours(days: readonly ActiveDay[] | null | undefined) {
   if (days.every(isActiveDay) && !hasOverlap(days)) return;
   throw new DomainError({
     code: 'settings_invalid',
-    message: 'Active hours run from 0 to 24 on weekdays 0 to 6, each span ending after it starts, without overlaps.',
+    message:
+      'Active hours run from 0 to 24 on weekdays 0 to 6, each span ending after it starts, without overlaps.',
   });
 }
 

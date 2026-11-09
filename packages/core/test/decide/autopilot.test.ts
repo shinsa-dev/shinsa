@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { resolveEscalationHandoff } from '../../src/decide/autopilot.ts';
 import {
+  type ActiveDay,
   type AutopilotPolicy,
   type AutopilotContact,
   HOUR_MS,
@@ -194,6 +195,7 @@ describe('the Autopilot setting', () => {
       merge: 'approved',
       urgent: 'escalate',
       urgentWaitMinutes: 30,
+      quietWaitMinutes: 15,
       ignoreUsageLimits: true,
       contacts: [],
     });
@@ -245,10 +247,12 @@ interface MergeSetup {
   priority?: TaskPriority;
   ratings?: ReviewRatings;
   steps?: MergeStep[];
+  activeHours?: ActiveDay[];
 }
 
-function reachMerge({ policy, priority = 'normal', ratings = HIGH_LOW, steps }: MergeSetup) {
+function reachMerge({ policy, priority = 'normal', ratings = HIGH_LOW, steps, activeHours }: MergeSetup) {
   const harness = createHarness();
+  if (activeHours) harness.send({ type: 'settings.change', patch: { activeHours } });
   harness.send({ type: 'settings.change', patch: { autopilot: { enabled: true, ...policy } } });
   const taskId = createTask(harness, { priority });
   if (steps) handOverWithSteps(harness, taskId, steps);
@@ -416,7 +420,12 @@ describe('Autopilot at the merge', () => {
   test('asks for a review at once, then merges after the wait', () => {
     const { harness, taskId } = reachMerge({ policy: { urgent: 'escalate_then_merge' }, priority: 'urgent' });
     expect(harness.task(taskId).escalation?.reason).toBe(READY);
-    expect(harness.openGate(taskId).autopilotDue).toEqual({ at: harness.now + WAIT, action: 'merge' });
+    expect(harness.openGate(taskId).autopilotDue).toEqual({
+      at: harness.now + WAIT,
+      action: 'merge',
+      wait: 'configured',
+      waitedMinutes: 60,
+    });
     expect(harness.task(taskId).escalation?.handoff.mergesAt).toBe(harness.now + WAIT);
     fire(harness, taskId);
     expectMerging(harness, taskId, WAITED);
@@ -504,7 +513,12 @@ describe('Autopilot at the merge', () => {
     expect(harness.task(taskId).escalation ?? null).toBeNull();
     harness.advance(5 * MINUTE_MS);
     harness.send({ type: 'task.prioritize', taskId, priority: 'urgent' });
-    expect(harness.openGate(taskId).autopilotDue).toEqual({ at: harness.now + WAIT, action: 'merge' });
+    expect(harness.openGate(taskId).autopilotDue).toEqual({
+      at: harness.now + WAIT,
+      action: 'merge',
+      wait: 'configured',
+      waitedMinutes: 60,
+    });
     expect(harness.task(taskId).escalation?.reason).toBe(READY);
     harness.send({ type: 'task.prioritize', taskId, priority: 'normal' });
     expect(harness.openGate(taskId).autopilotDue ?? null).toBeNull();
@@ -534,6 +548,87 @@ describe('Autopilot at the merge', () => {
     const { harness, taskId } = reachMerge({ policy: { urgent: 'escalate' }, priority: 'urgent' });
     answerMerge(harness, taskId);
     expect(harness.task(taskId).escalation).toBeNull();
+  });
+});
+
+describe('Autopilot and your hours', () => {
+  const THURSDAY = 4;
+
+  test('outside your usual hours, acts after the short wait and says why', () => {
+    const { harness, taskId } = reachMerge({
+      policy: { urgent: 'merge' },
+      priority: 'urgent',
+      activeHours: [{ weekday: 1, from: 9, to: 17 }],
+    });
+    expect(harness.openGate(taskId).autopilotDue).toEqual({
+      at: harness.now + 15 * MINUTE_MS,
+      action: 'merge',
+      wait: 'outside_hours',
+      waitedMinutes: 15,
+    });
+    fire(harness, taskId);
+    expectMerging(
+      harness,
+      taskId,
+      'Urgent, outside your usual hours, and the merge waited 15 minutes for you.'
+    );
+  });
+
+  test('takes the short wait you set', () => {
+    const { harness, taskId } = reachMerge({
+      policy: { urgent: 'merge', quietWaitMinutes: 5 },
+      priority: 'urgent',
+      activeHours: [{ weekday: 1, from: 9, to: 17 }],
+    });
+    expect(harness.openGate(taskId).autopilotDue).toMatchObject({
+      at: harness.now + 5 * MINUTE_MS,
+      waitedMinutes: 5,
+    });
+  });
+
+  test('inside your hours, waits the configured time when your hours outlast it', () => {
+    const { harness, taskId } = reachMerge({
+      policy: { urgent: 'merge' },
+      priority: 'urgent',
+      activeHours: [{ weekday: THURSDAY, from: 0, to: 12 }],
+    });
+    expect(harness.openGate(taskId).autopilotDue).toEqual({
+      at: harness.now + WAIT,
+      action: 'merge',
+      wait: 'configured',
+      waitedMinutes: 60,
+    });
+  });
+
+  test('acts shortly after your hours end when they end during the wait', () => {
+    const { harness, taskId } = reachMerge({
+      policy: { urgent: 'escalate_then_merge', urgentWaitMinutes: 180 },
+      priority: 'urgent',
+      activeHours: [{ weekday: THURSDAY, from: 0, to: 1 }],
+    });
+    const ended = HOUR_MS + 15 * MINUTE_MS;
+    const waited = Math.round((ended - harness.now) / MINUTE_MS);
+    expect(harness.openGate(taskId).autopilotDue).toEqual({
+      at: ended,
+      action: 'merge',
+      wait: 'hours_ended',
+      waitedMinutes: waited,
+    });
+    expect(harness.task(taskId).escalation?.handoff.mergesAt).toBe(ended);
+    harness.send({ type: 'task.record_edit', taskId, path: 'src/a.ts', changed: true });
+    fire(harness, taskId);
+    const reason = `Urgent, and the merge waited ${waited} minutes for you, until shortly after your usual hours ended.`;
+    expect(harness.task(taskId).escalation).toMatchObject({
+      reason: `${reason} Your edits are not pushed yet.`,
+      handoff: { waitedMinutes: waited, mergesAt: null },
+    });
+  });
+
+  test('refuses a short wait outside 1 to 1440 minutes', () => {
+    const harness = createHarness();
+    expect(() =>
+      harness.send({ type: 'settings.change', patch: { autopilot: { quietWaitMinutes: 0 } } })
+    ).toThrow('An urgent change waits 1 to 1440 minutes.');
   });
 });
 

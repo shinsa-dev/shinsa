@@ -125,6 +125,7 @@ const AutopilotPatch = Strict(
     merge: Schema.optionalKey(Choice(AUTOPILOT_MERGES)),
     urgent: Schema.optionalKey(Choice(AUTOPILOT_URGENT_ACTIONS)),
     urgentWaitMinutes: Schema.optionalKey(WholeNumber),
+    quietWaitMinutes: Schema.optionalKey(WholeNumber),
     ignoreUsageLimits: Schema.optionalKey(Bool),
     contacts: Schema.optionalKey(List(AutopilotContactPatch, MAX_AUTOPILOT_CONTACTS)),
   },

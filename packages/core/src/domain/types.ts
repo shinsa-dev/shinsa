@@ -456,9 +456,13 @@ export interface Autopiloted {
 
 export type AutopilotAction = 'escalate' | 'merge';
 
+export type AutopilotWait = 'configured' | 'outside_hours' | 'hours_ended';
+
 export interface AutopilotDue {
   at: number;
   action: AutopilotAction;
+  wait: AutopilotWait;
+  waitedMinutes: number;
 }
 
 export interface EscalationFinder {

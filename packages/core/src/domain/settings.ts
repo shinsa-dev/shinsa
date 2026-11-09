@@ -103,6 +103,7 @@ export interface AutopilotPolicy {
   merge: AutopilotMerge;
   urgent: AutopilotUrgent;
   urgentWaitMinutes: number;
+  quietWaitMinutes: number;
   ignoreUsageLimits: boolean;
   contacts: AutopilotContact[];
 }
@@ -116,6 +117,7 @@ export const AUTOPILOT_DEFAULTS: AutopilotPolicy = {
   merge: 'never',
   urgent: 'escalate',
   urgentWaitMinutes: 60,
+  quietWaitMinutes: 15,
   ignoreUsageLimits: true,
   contacts: [],
 };
