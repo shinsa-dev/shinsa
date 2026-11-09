@@ -63,8 +63,6 @@ export const LaunchServicesHandlers = Schema.fromJsonString(
   )
 );
 
-export const CookieMetaRow = Schema.Struct({ value: Schema.String });
-
 export const SiteCookieRow = Schema.Struct({
   hostKey: Schema.String,
   name: Schema.String,
@@ -115,7 +113,7 @@ export interface CookieParam {
   readonly priority: 'Low' | 'Medium' | 'High';
 }
 
-export const CookieSourceReason = Schema.Literals(['not_installed', 'unreadable']);
+const CookieSourceReason = Schema.Literals(['not_installed', 'unreadable']);
 
 export class CookieSourceUnavailable extends Schema.TaggedError<
   CookieSourceUnavailable,

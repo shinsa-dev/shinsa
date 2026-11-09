@@ -103,7 +103,7 @@ function BrowserMenu({
   );
 }
 
-export function BrowserProjectRow({ project, actions }: { project: Project; actions: BrowserActions }) {
+function BrowserProjectRow({ project, actions }: { project: Project; actions: BrowserActions }) {
   const { answer, replaceAnswer, refresh } = useBrowserProject(project.id, actions);
   const [busy, setBusy] = React.useState<BrowserBusy>(null);
   const copy = useDialogState<'copy'>();

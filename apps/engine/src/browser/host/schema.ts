@@ -13,8 +13,7 @@ export type SignInUrl = typeof SignInUrl.Type;
 export const BrowserMode = Schema.Literals(['stopped', 'headless', 'window']);
 export type BrowserMode = typeof BrowserMode.Type;
 
-export const BrowserUnavailableReason = Schema.Literals(['not_installed', 'launch_failed', 'signing_in']);
-export type BrowserUnavailableReason = typeof BrowserUnavailableReason.Type;
+const BrowserUnavailableReason = Schema.Literals(['not_installed', 'launch_failed', 'signing_in']);
 
 export class BrowserUnavailable extends Schema.TaggedError<
   BrowserUnavailable,
