@@ -11,6 +11,7 @@ import {
 import { ExtensionDiscovery } from '../../src/extensions/discovery/service.ts';
 import { listSkillRoots, parseFrontmatter } from '../../src/extensions/discovery/skills.ts';
 import type { ClaudePlugin, DiscoveryPaths } from '../../src/extensions/schema.ts';
+import { resolveSessionBrowser, type SessionExtensions } from '../../src/extensions/session.ts';
 import { JsonLogger } from '../../src/log/service.ts';
 import { JsonFileLayer } from '../helpers/files.ts';
 import { createFakeMachine, type FakeMachine, writeFile } from './fixtures.ts';
@@ -131,6 +132,61 @@ describe('the browser an agent starts', () => {
       PLAYWRIGHT_MCP_DEVICE: 'Desktop Chrome HiDPI',
       PLAYWRIGHT_MCP_HEADLESS: 'true',
     });
+  });
+
+  test("connects to the project's shared browser when the run has one, unless the server picks its own", () => {
+    const endpoint = 'ws://127.0.0.1:7446/browser/cdp/key';
+    expect(resolveBrowserEnv({ ROOT: '/r' }, [], endpoint)).toEqual({
+      ROOT: '/r',
+      PLAYWRIGHT_MCP_CDP_ENDPOINT: endpoint,
+      PLAYWRIGHT_MCP_HEADLESS: 'true',
+    });
+    expect(resolveBrowserEnv({ PLAYWRIGHT_MCP_DEVICE: 'iPhone 15' }, [], endpoint)).toEqual({
+      PLAYWRIGHT_MCP_DEVICE: 'iPhone 15',
+      PLAYWRIGHT_MCP_HEADLESS: 'true',
+    });
+    expect(resolveBrowserEnv({}, ['--extension'], endpoint)).toEqual({ PLAYWRIGHT_MCP_HEADLESS: 'true' });
+    expect(resolveBrowserEnv({ PLAYWRIGHT_MCP_DEVICE: 'Desktop Chrome HiDPI' }, [], endpoint)).toEqual({
+      PLAYWRIGHT_MCP_CDP_ENDPOINT: endpoint,
+      PLAYWRIGHT_MCP_HEADLESS: 'true',
+    });
+  });
+
+  test('gives every stdio server of a session, loaded or left out, the run’s browser', () => {
+    const stdio = (name: string) => ({
+      name,
+      claudeName: name,
+      definition: {
+        transport: 'stdio' as const,
+        command: 'npx',
+        args: ['@playwright/mcp@latest'],
+        env: {},
+        cwd: null,
+        url: null,
+        headers: {},
+        bearerTokenEnv: null,
+      },
+    });
+    const remote = {
+      ...stdio('linear'),
+      definition: { ...stdio('linear').definition, transport: 'http' as const, url: 'https://x' },
+    };
+    const extensions: SessionExtensions = {
+      servers: [stdio('browser'), remote],
+      skills: [],
+      plugins: {},
+      skillsOff: [],
+      codexServersOff: [],
+      deferred: [{ ...stdio('later'), tools: [], tokens: null }],
+      deferredSkills: [],
+      loaded: { servers: [], skills: [], plugins: [], deferred: [] },
+    };
+    const endpoint = 'ws://127.0.0.1:7446/browser/cdp/key';
+    const resolved = resolveSessionBrowser(extensions, endpoint);
+    const shared = { PLAYWRIGHT_MCP_CDP_ENDPOINT: endpoint, PLAYWRIGHT_MCP_HEADLESS: 'true' };
+    expect(resolved.servers[0]?.definition.env).toEqual(shared);
+    expect(resolved.servers[1]).toBe(remote);
+    expect(resolved.deferred[0]?.definition.env).toEqual(shared);
   });
 });
 

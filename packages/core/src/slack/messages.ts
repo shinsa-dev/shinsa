@@ -57,6 +57,7 @@ const SLACK_CARD_GATES: readonly GateType[] = [
   'sign_in',
   'question',
   'secret',
+  'browser_sign_in',
   'proposal',
   'operation',
   'plan',
@@ -156,7 +157,9 @@ function resolveAttentionGate(gates: readonly Gate[]) {
   const open = gates.filter((gate) => gate.status === 'open');
   return (
     open.find((gate) => gate.type === 'failure' || gate.type === 'sign_in') ??
-    open.find((gate) => gate.type === 'question' || gate.type === 'secret') ??
+    open.find(
+      (gate) => gate.type === 'question' || gate.type === 'secret' || gate.type === 'browser_sign_in'
+    ) ??
     null
   );
 }
@@ -326,6 +329,15 @@ function serializeSlackSecretView(ref: SlackTaskRef, label: string): SlackMessag
   ]);
 }
 
+function serializeSlackBrowserSignInView(ref: SlackTaskRef, site: string): SlackMessage {
+  return createSlackMessage(`${ref.label} needs its browser signed in to ${site}`, [
+    createSlackHeader('Sign-in needed'),
+    createSlackSection(`*${escapeSlackText(site)}*\nSign in from Shinsa on the machine that runs the task.`),
+    createSlackActions([createOpenButton('Open in Shinsa', ref.url)]),
+    serializeFooter(ref),
+  ]);
+}
+
 function listApproveButtons(gate: Gate, planVersion: number | null = null) {
   return [
     createDecideButton('Approve', resolveDecisionValue(gate, 'approve', { planVersion }), true),
@@ -478,6 +490,8 @@ export function serializeSlackGate(task: Task, gate: Gate, taskUrl: string): Sla
       });
     case 'secret':
       return serializeSlackSecretView(ref, gate.secret?.label ?? gate.title);
+    case 'browser_sign_in':
+      return serializeSlackBrowserSignInView(ref, gate.browserSignIn?.site ?? gate.title);
     case 'plan':
       return serializeSlackPlanView(ref, gate, {
         body: resolvePlanBody(task),

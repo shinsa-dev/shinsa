@@ -5,6 +5,7 @@ import { CommandLog } from '../../apps/engine/src/store/commands/service.ts';
 import { StoreLayer } from '../../apps/engine/src/store/layers.ts';
 import { briefingKey, NO_FOCUS_PROJECTS } from '../../packages/core/src/index.ts';
 import { MINUTE } from '../kit/time.ts';
+import { writeSeedBrowsers } from './browser.ts';
 import { serializeSeedChangelog } from './changelog.ts';
 import { createCodeSample, listCodeTasks } from './code/sample.ts';
 import { listCodeTranscripts } from './code/transcripts.ts';
@@ -69,6 +70,7 @@ export const seed = Effect.fn('Seed.run')(function* () {
   for (const [name, content] of Object.entries(listAccountFiles(DATA)))
     yield* writeSeedFile(join(DATA, name), content);
   yield* writeSeedServices(DATA, projects, seedRepos);
+  yield* writeSeedBrowsers(DATA);
   const transcripts = join(DATA, 'transcripts');
   const runTimes = listRunTimes(tasks, timeline);
   const runs = runTimes.map(([runId, times]): SeedTranscript => ({

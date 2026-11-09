@@ -330,6 +330,9 @@ describe('describeTool', () => {
     expect(shinsa('request_secret', { label: 'GitHub webhook secret' })).toBe(
       'Asked you for a secret: GitHub webhook secret'
     );
+    expect(shinsa('request_browser_sign_in', { url: 'https://vercel.com/login' })).toBe(
+      'Asked you to sign its browser in: https://vercel.com/login'
+    );
   });
 
   it('describes any other tool by name and its main argument', () => {
@@ -413,6 +416,7 @@ describe('resolveRunningLabel', () => {
           'list_schedules',
           'delete_schedule',
           'request_secret',
+          'request_browser_sign_in',
         ] as const
       ).map((name): ChatTool => ({ kind: 'shinsa', name, args: {} })),
       { kind: 'shinsa', name: 'find_tasks', args: { query: 'x' } },
@@ -550,6 +554,7 @@ describe('resolveGroupPhrase', () => {
       phrase('list_schedules', 1),
       phrase('delete_schedule', 1),
       phrase('request_secret', 1),
+      phrase('request_browser_sign_in', 1),
     ]).toEqual([
       'Started 2 delegations',
       'Checked a delegation',
@@ -564,6 +569,7 @@ describe('resolveGroupPhrase', () => {
       'Listed the schedules',
       'Deleted 1 schedule',
       'Asked you for a secret',
+      'Asked you to sign its browser in',
     ]);
   });
 

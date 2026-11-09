@@ -33,6 +33,7 @@ import {
   reportReview,
 } from './agents.ts';
 import { moveToBacklog, removeFromBacklog } from './backlog.ts';
+import { requestBrowserSignIn } from './browser-sign-in.ts';
 import { reviewBundles } from './bundles.ts';
 import { recordChecks } from './checks.ts';
 import { recordCompaction } from './compaction.ts';
@@ -472,6 +473,8 @@ function apply(decider: Decider, command: ShinsaCommand) {
       return removeOwnSchedule(decider, command);
     case 'agent.request_secret':
       return requestSecret(decider, command);
+    case 'agent.request_browser_sign_in':
+      return requestBrowserSignIn(decider, command);
     case 'schedule.enable':
       return enableSchedule(decider, command);
     case 'schedule.remove':

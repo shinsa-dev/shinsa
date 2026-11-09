@@ -64,6 +64,13 @@ describe('resolveTaskAction', () => {
     });
   });
 
+  it('opens the asking run for a browser sign-in, like a question', () => {
+    expect(actionFor({ type: 'browser_sign_in', runId: 'run-1' })).toEqual({
+      label: 'Answer',
+      path: '/tasks/t?tab=chat&run=run-1',
+    });
+  });
+
   it('opens the task for a question no run asked', () => {
     expect(actionFor({ type: 'question' })).toEqual({ label: 'Answer', path: '/tasks/t' });
   });

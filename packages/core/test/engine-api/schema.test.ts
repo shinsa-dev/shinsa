@@ -4,6 +4,10 @@ import * as shapes from '../../src/engine-api/schema.ts';
 import {
   AccountLoginRequest,
   AnyBody,
+  BrowserCopyAnswer,
+  BrowserProjectAnswer,
+  BrowserSourceSitesAnswer,
+  BrowserSourcesAnswer,
   CommandAnswer,
   OkAnswer,
   TeamCreateAnswer,
@@ -32,6 +36,11 @@ const STRUCT_ANSWERS = new Set([
   'TeamRelaysAnswer',
   'ProvidersAnswer',
   'ModelsAnswer',
+  'BrowserProjectAnswer',
+  'SourceBrowserAnswer',
+  'BrowserSourcesAnswer',
+  'BrowserSourceSitesAnswer',
+  'BrowserCopyAnswer',
 ]);
 
 const ANSWERS = Object.entries(shapes).filter(
@@ -64,6 +73,27 @@ describe('EngineApi shapes', () => {
       teamId: 't',
       url: 'u',
     });
+  });
+
+  test('the browser answers are checked field by field', () => {
+    const site = { site: 'github.com', cookies: 12, signedIn: true };
+    const project = { mode: 'headless', sites: [site] } as const;
+    expect(Schema.decodeUnknownSync(BrowserProjectAnswer)(project)).toEqual(project);
+    expect(() => Schema.decodeUnknownSync(BrowserProjectAnswer)({ mode: 'open', sites: [] })).toThrow();
+    const sources = { sources: [{ id: 'dia', name: 'Dia', isDefault: true }] } as const;
+    expect(Schema.decodeUnknownSync(BrowserSourcesAnswer)(sources)).toEqual(sources);
+    expect(() =>
+      Schema.decodeUnknownSync(BrowserSourcesAnswer)({
+        sources: [{ id: 'safari', name: 'Safari', isDefault: false }],
+      })
+    ).toThrow();
+    expect(Schema.decodeUnknownSync(BrowserSourceSitesAnswer)({ sites: [site] })).toEqual({ sites: [site] });
+    expect(() => Schema.decodeUnknownSync(BrowserSourceSitesAnswer)({ sites: [{ site: 'a' }] })).toThrow();
+    const copy = { copied: 47, skipped: 1, sites: [site] };
+    expect(Schema.decodeUnknownSync(BrowserCopyAnswer)(copy)).toEqual(copy);
+    expect(() =>
+      Schema.decodeUnknownSync(BrowserCopyAnswer)({ copied: '47', skipped: 1, sites: [] })
+    ).toThrow();
   });
 
   test('the providers and the models answers are lists', () => {

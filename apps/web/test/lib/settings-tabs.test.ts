@@ -43,7 +43,12 @@ describe('settings tabs', () => {
     expect(findSettingsTab('statistics').sections).toEqual(['Shipping', 'Token usage']);
     expect(findSettingsTab('accounts').sections).toEqual(['Accounts', 'Limits']);
     expect(findSettingsTab('agents').sections).toEqual(['Models', 'Engine', 'Memory', 'Versions']);
-    expect(findSettingsTab('projects').sections).toEqual(['Repository folders', 'Worktrees', 'Projects']);
+    expect(findSettingsTab('projects').sections).toEqual([
+      'Repository folders',
+      'Worktrees',
+      'Projects',
+      'Browser',
+    ]);
   });
 
   it('opens Integrations for a link to the context optimizer', () => {
