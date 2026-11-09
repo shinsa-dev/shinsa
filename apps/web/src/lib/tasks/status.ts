@@ -11,7 +11,7 @@ import {
   type TaskStage,
 } from '@shinsa/core';
 import type { IconName } from '@shinsa/ui/components/icon';
-import { isPaceWait, isUsageWaitArmed } from '@/lib/accounts/usage-wait.ts';
+import { isAdmissionWait, isPaceWait, isUsageWaitArmed } from '@/lib/accounts/usage-wait.ts';
 import { GATE, STAGE_ICON, STAGE_LABEL, STAGE_TONE } from '@/lib/format/labels.ts';
 import { TONE_TEXT, type Tone } from '@/lib/format/tone.ts';
 import { describePostMergeStatus, describePreMergeStatus } from '@/lib/review/merge-steps.ts';
@@ -42,12 +42,15 @@ const WAITING_FOR_USAGE: Status = { label: 'Waiting for the usage limit', tone: 
 
 const HELD_AT_LIMIT: Status = { label: 'Held at a usage limit', tone: 'neutral' };
 
+const WAITING_TO_BUILD: Status = { label: 'Waiting to build', tone: 'neutral' };
+
 const WAITING_FOR_DELEGATIONS: Status = { label: 'Waiting for delegations', tone: 'neutral' };
 
 const PAUSED: ReadonlySet<Status> = new Set([
   WAITING_TO_CHECK_IN,
   WAITING_FOR_USAGE,
   HELD_AT_LIMIT,
+  WAITING_TO_BUILD,
   WAITING_FOR_DELEGATIONS,
 ]);
 
@@ -117,7 +120,10 @@ export function resolveTaskStatus(state: ShinsaState, task: Task): Status {
   if (task.duplicate) return DUPLICATE;
   if (isWatchedTask(task)) return WATCHING;
   if (task.monitor?.status === 'armed') return WAITING_TO_CHECK_IN;
-  if (isUsageWaitArmed(task)) return isPaceWait(task.usageWait) ? HELD_AT_LIMIT : WAITING_FOR_USAGE;
+  if (isUsageWaitArmed(task)) {
+    if (isAdmissionWait(task.usageWait)) return WAITING_TO_BUILD;
+    return isPaceWait(task.usageWait) ? HELD_AT_LIMIT : WAITING_FOR_USAGE;
+  }
   if (isWaitingForDelegations(state, task)) return WAITING_FOR_DELEGATIONS;
   if (task.stage !== 'waiting_on_tasks' && isHeldByTasks(state, task)) {
     return { label: 'Waiting on another task', tone: 'neutral' };

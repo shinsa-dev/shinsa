@@ -2,13 +2,18 @@ import {
   type Activity,
   capitalise,
   DAY_MS,
+  describeCount,
+  isAwayAt,
   isListedInFocus,
   isTaskComplete,
+  resolveAutoPace,
+  resolveAwayHours,
   type ShinsaState,
   type Task,
   type TaskStage,
 } from '@shinsa/core';
-import { isPaceWait, isUsageWaitArmed } from '@/lib/accounts/usage-wait.ts';
+import { isAdmissionWait, isPaceWait, isUsageWaitArmed } from '@/lib/accounts/usage-wait.ts';
+import { formatMoment } from '@/lib/format/time.ts';
 import { createDisclosureId } from '@/lib/preferences/disclosure.ts';
 import type { QueueSection } from '@/lib/queue.ts';
 import { isResolvingConflicts } from '@/lib/tasks/status.ts';
@@ -85,6 +90,7 @@ export function resolveGreeting(now: number) {
 
 export function resolveRunningVerb(task: Task) {
   if (isUsageWaitArmed(task)) {
+    if (isAdmissionWait(task.usageWait)) return 'waiting to build';
     return isPaceWait(task.usageWait) ? 'held at a usage limit on' : 'waiting for the usage limit on';
   }
   if (task.monitor?.status === 'armed') return 'waiting to check in again on';
@@ -102,4 +108,48 @@ export function dropPullRequestNumbers(text: string) {
     const startsSentence = /^[A-Z][a-z]/.test(match) || /(?:^|[.!?]\s+)$/.test(text.slice(0, offset));
     return startsSentence ? capitalise(phrase) : phrase;
   });
+}
+
+function listOvernightReviews(state: ShinsaState, now: number) {
+  const away = resolveAwayHours(state, now);
+  if (!away || isAwayAt(away, now)) return [];
+  return Object.values(state.gates).filter(
+    (gate) =>
+      gate.type === 'review' &&
+      gate.status === 'open' &&
+      now - gate.openedAt < DAY_MS &&
+      isAwayAt(away, gate.openedAt)
+  );
+}
+
+export interface WaitingBuild {
+  task: Task;
+  when: string;
+}
+
+export function isWaitingToBuild(task: Task) {
+  return isUsageWaitArmed(task) && isAdmissionWait(task.usageWait);
+}
+
+function describeBuildTime(state: ShinsaState, task: Task, now: number) {
+  const at = task.usageWait?.resetAt ?? now;
+  const away = resolveAwayHours(state, now);
+  if (isAwayAt(away, at) && !isAwayAt(away, now)) return 'tonight';
+  return at <= now ? 'next' : `after ${formatMoment(at, now)}`;
+}
+
+export function listWaitingBuilds(state: ShinsaState, working: readonly Task[], now: number): WaitingBuild[] {
+  if (!resolveAutoPace(state.settings)) return [];
+  return working
+    .filter(isWaitingToBuild)
+    .sort((a, b) => (a.usageWait?.resetAt ?? now) - (b.usageWait?.resetAt ?? now))
+    .map((task) => ({ task, when: describeBuildTime(state, task, now) }));
+}
+
+export function describeOvernightReviews(state: ShinsaState, now: number) {
+  if (!resolveAutoPace(state.settings)) return null;
+  const built = listOvernightReviews(state, now);
+  if (built.length === 0) return null;
+  const verb = built.length === 1 ? 'is' : 'are';
+  return `${describeCount(built.length, 'task')} built overnight ${verb} ready for your review`;
 }

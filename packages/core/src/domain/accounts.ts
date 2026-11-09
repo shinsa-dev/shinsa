@@ -13,7 +13,7 @@ export type UsageWaitStatus = 'armed' | 'resumed';
 
 export type UsageWaitCause = 'usage_limit' | 'pace';
 
-export type UsagePaceScope = 'daily' | 'project';
+export type UsagePaceScope = 'daily' | 'project' | 'admission';
 
 export interface UsagePace {
   scope: UsagePaceScope;
@@ -21,6 +21,7 @@ export interface UsagePace {
   percent: number;
   projectId: string | null;
   stageReason: string;
+  need?: number;
 }
 
 export interface UsageWait {

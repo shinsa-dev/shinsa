@@ -285,10 +285,10 @@ class OnboardingGroup extends HttpApiGroup.make('onboarding')
       success: WorktreeUsageAnswer,
     }).annotate(EngineFeatureRoute, 'worktree-root'),
     HttpApiEndpoint.get('prerequisites', '/api/onboarding/prerequisites', { success: ObjectAnswer }),
-    HttpApiEndpoint.post('privacy', '/api/onboarding/privacy', { success: ObjectAnswer }).annotate(
-      OwnerOnlyRoute,
-      true
-    ),
+    HttpApiEndpoint.post('privacy', '/api/onboarding/privacy', {
+      payload: EmptyBody,
+      success: ObjectAnswer,
+    }).annotate(OwnerOnlyRoute, true),
     HttpApiEndpoint.post('install', '/api/onboarding/install', { payload: AnyBody, success: ObjectAnswer })
       .annotate(LocalOnlyRoute, true)
       .annotate(BrowserOnlyRoute, BROWSER_ONLY_INSTALL),
@@ -418,7 +418,7 @@ class ExtensionsGroup extends HttpApiGroup.make('extensions')
 class VersionsGroup extends HttpApiGroup.make('versions')
   .add(
     HttpApiEndpoint.get('snapshot', '/api/versions', { success: VersionsAnswer }),
-    HttpApiEndpoint.post('refresh', '/api/versions/refresh', { success: VersionsAnswer }),
+    HttpApiEndpoint.post('refresh', '/api/versions/refresh', { payload: EmptyBody, success: VersionsAnswer }),
     HttpApiEndpoint.post('update', '/api/versions/update', {
       payload: Schema.Struct({ program: Field }),
       success: UpdateAnswer,
@@ -611,10 +611,10 @@ class PlacementGroup extends HttpApiGroup.make('placement')
 class SlackGroup extends HttpApiGroup.make('slack')
   .add(
     HttpApiEndpoint.get('snapshot', '/api/slack', { success: SlackAnswer }),
-    HttpApiEndpoint.post('disconnect', '/api/slack/disconnect', { success: SlackAnswer }).annotate(
-      OwnerOnlyRoute,
-      true
-    )
+    HttpApiEndpoint.post('disconnect', '/api/slack/disconnect', {
+      payload: EmptyBody,
+      success: SlackAnswer,
+    }).annotate(OwnerOnlyRoute, true)
   )
   .middleware(EngineGate) {}
 
