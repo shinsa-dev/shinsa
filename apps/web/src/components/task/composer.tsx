@@ -16,6 +16,7 @@ import {
   resolveTaskDraft,
   subscribeTaskDrafts,
   takeCarriedCaret,
+  takeFocusRequest,
   updateTaskDraft,
 } from '@/lib/chat/task-drafts.ts';
 import { isSubmitKey } from '@/lib/keys.ts';
@@ -23,6 +24,19 @@ import { describeCommentsWithMessage } from '@/lib/review/draft.ts';
 
 function isTabSwitch(target: EventTarget | null) {
   return target instanceof Element && target.closest('[data-task-tabs] [role="tab"]') !== null;
+}
+
+function useRequestedFocus(draftKey: string, field: React.RefObject<HTMLTextAreaElement | null>) {
+  const requested = React.useSyncExternalStore(
+    subscribeTaskDrafts,
+    () => resolveTaskDraft(draftKey).focusRequested
+  );
+  React.useLayoutEffect(() => {
+    if (!requested || !takeFocusRequest(draftKey) || !field.current) return;
+    const end = field.current.value.length;
+    field.current.focus();
+    field.current.setSelectionRange(end, end);
+  }, [draftKey, field, requested]);
 }
 
 function useCarriedFocus(draftKey: string, field: React.RefObject<HTMLTextAreaElement | null>) {
@@ -55,6 +69,7 @@ export function Composer({
   const [busy, setBusy] = React.useState(false);
   const field = React.useRef<HTMLTextAreaElement>(null);
   useCarriedFocus(draftKey, field);
+  useRequestedFocus(draftKey, field);
   const attachments = useAttachments(draftKey);
   const { dragging, dropProps, onPaste } = useFileDrop(attachments);
   const ready = canSendDraft(text, attachments.drafts, busy, comments);

@@ -36,8 +36,9 @@ export function buildEvents(tasks: SeedTask[], projects: Project[], repos: Repo[
 function stampTaskHandles(timeline: Timeline, projects: Project[], repos: Repo[]): Timeline {
   const counts = new Map<string, number>();
   const stamped = new Set<string>();
-  const resolveHandle = (repoId: string | null) => {
-    const projectId = repos.find((repo) => repo.id === repoId)?.projectId ?? null;
+  const resolveProjectId = (repoId: string | null) =>
+    repos.find((repo) => repo.id === repoId)?.projectId ?? null;
+  const resolveHandle = (projectId: string | null) => {
     const key = projects.find((project) => project.id === projectId)?.key;
     const counted = projectId && key ? key : NO_PROJECT_KEY;
     const number = (counts.get(counted) ?? 0) + 1;
@@ -49,13 +50,13 @@ function stampTaskHandles(timeline: Timeline, projects: Project[], repos: Repo[]
     if (event.type === 'task.created' && event.watchHome) homes.add(event.taskId);
     if (homes.has('taskId' in event ? String(event.taskId) : '')) return { at, event };
     if (event.type === 'task.created') {
-      const projectId = repos.find((repo) => repo.id === event.repoId)?.projectId ?? null;
+      const projectId = event.projectId ?? resolveProjectId(event.repoId);
       if (!projectId || !projects.some((project) => project.id === projectId)) return { at, event };
       stamped.add(event.taskId);
-      return { at, event: { ...event, ...resolveHandle(event.repoId) } };
+      return { at, event: { ...event, ...resolveHandle(projectId) } };
     }
     if (event.type !== 'task.triaged' || stamped.has(event.taskId)) return { at, event };
     stamped.add(event.taskId);
-    return { at, event: { ...event, ...resolveHandle(event.repoId) } };
+    return { at, event: { ...event, ...resolveHandle(resolveProjectId(event.repoId)) } };
   });
 }

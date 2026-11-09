@@ -1511,7 +1511,9 @@ it on the lead task's Overview (`components/initiatives/`, `lib/initiatives/`).
   each with the tasks it waits or stacks on), **Shipped** (merged or done, with pull requests), **Dropped** (cancelled,
   with the reason) and **Decisions** (each accepted plan's goal and each judgement call the members handed over, newest
   first, at most 100). A lead is never one of the initiative's tasks there or in any count (`listInitiativeWork`).
-  Home's Initiatives section lists each open initiative with its progress and opens its lead task; both routes are
+  The Overview shows these as the All tasks list does (a gate's group, In progress, one Up next per phase, Done and
+  Cancelled) and puts Decisions into the lead's Activity (`listInitiativeTaskSections`, `listInitiativeActivity` in
+  `apps/web/src/lib/initiatives/view.ts`); a question in the report quotes itself into the lead's composer. Home's Initiatives section lists each open initiative with its progress and opens its lead task; both routes are
   behind the `initiatives` engine feature, whose views link the lead task.
 - **Focus.** `Focus.initiativeId` is a third focus target beside projects and a team, one at a time (`focus_refused`
   for two), from the Focus menu, ⌘K or `shinsa focus initiative`. `resolveQueue` then keeps only the initiative's

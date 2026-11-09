@@ -9,9 +9,10 @@ export interface TaskDraft {
   text: string;
   attachments: AttachmentDraft[];
   carriedCaret: DraftCaret | null;
+  focusRequested: boolean;
 }
 
-const EMPTY_DRAFT: TaskDraft = { text: '', attachments: [], carriedCaret: null };
+const EMPTY_DRAFT: TaskDraft = { text: '', attachments: [], carriedCaret: null, focusRequested: false };
 
 const drafts = new Map<string, TaskDraft>();
 const files = new Map<string, File>();
@@ -36,6 +37,19 @@ export function updateTaskDraft(key: string, change: (draft: TaskDraft) => Parti
   const current = resolveTaskDraft(key);
   drafts.set(key, { ...current, ...change(current) });
   notify();
+}
+
+export function requestDraftReply(key: string, quote: string) {
+  updateTaskDraft(key, (draft) => ({
+    text: `> ${quote}\n\n${draft.text}`,
+    focusRequested: true,
+  }));
+}
+
+export function takeFocusRequest(key: string) {
+  if (!resolveTaskDraft(key).focusRequested) return false;
+  updateTaskDraft(key, () => ({ focusRequested: false }));
+  return true;
 }
 
 export function carryDraftFocus(key: string, caret: DraftCaret) {

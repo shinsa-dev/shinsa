@@ -1,10 +1,9 @@
 import { describe, expect, it } from 'bun:test';
 import { describePhaseProgress, resolveInitiativeSheet } from '@shinsa/core';
 import {
-  describeSheetSummary,
-  isPhaseDone,
+  listInitiativeActivity,
   listInitiativeRows,
-  listInitiativeSections,
+  listInitiativeTaskSections,
 } from '@/lib/initiatives/view.ts';
 import { createGate, createInitiative, createShinsaState, createTask, NOW } from '../../support/state.ts';
 
@@ -82,26 +81,52 @@ describe('the sheet', () => {
     expect(describePhaseProgress({ phase: null, total: 0, shipped: 0, dropped: 0 }).detail).toBe(
       'No tasks yet'
     );
-    expect(isPhaseDone(first)).toBe(false);
-    expect(isPhaseDone({ phase: null, total: 2, shipped: 1, dropped: 1 })).toBe(true);
-    expect(isPhaseDone({ phase: null, total: 0, shipped: 0, dropped: 0 })).toBe(false);
   });
 
-  it('sums up the whole initiative, or says how to start one', () => {
-    expect(describeSheetSummary(sheet)).toBe('5 tasks · 3 open · 1 shipped');
-    const empty = resolveInitiativeSheet(state, 'empty', NOW);
-    if (!empty) throw new Error('No sheet');
-    expect(describeSheetSummary(empty)).toStartWith('No tasks yet.');
+  it('groups the tasks as All tasks does, with what comes next by phase after In progress', () => {
+    expect(
+      listInitiativeTaskSections(state, sheet).map((section) => [
+        section.group.title,
+        section.entries.map((entry) => entry.task.id),
+      ])
+    ).toEqual([
+      ['Changes to review', ['review']],
+      ['Up next: Studio chat', ['waiting']],
+      ['Up next: No phase', ['loose']],
+      ['Done', ['merged']],
+      ['Cancelled', ['dropped']],
+    ]);
   });
 
-  it('lists the sections in reading order with their counts', () => {
-    expect(listInitiativeSections(sheet).map((section) => [section.key, section.count])).toEqual([
-      ['needsYou', 1],
-      ['now', 0],
-      ['next', 2],
-      ['shipped', 1],
-      ['dropped', 1],
-      ['decisions', 0],
+  it('says only Up next when the initiative has no phases', () => {
+    const flat = createShinsaState({
+      initiatives: [createInitiative({ id: 'flat', leadTaskId: 'lead' })],
+      tasks: [
+        createTask({ id: 'lead', pipeline: ['lead'], stage: 'leading', initiativeId: 'flat' }),
+        createTask({ id: 'working', stage: 'building', initiativeId: 'flat' }),
+        createTask({ id: 'later', stage: 'waiting_on_tasks', initiativeId: 'flat' }),
+      ],
+    });
+    const flatSheet = resolveInitiativeSheet(flat, 'flat', NOW);
+    if (!flatSheet) throw new Error('No sheet');
+    expect(listInitiativeTaskSections(flat, flatSheet).map((section) => section.group.title)).toEqual([
+      'In progress',
+      'Up next',
+    ]);
+  });
+
+  it('turns approved plans and judgement calls into activity entries', () => {
+    const named = createShinsaState({ tasks: [createTask({ id: 'a', handle: 'SW-1' })] });
+    const entries = listInitiativeActivity(named, {
+      ...sheet,
+      decisions: [
+        { taskId: 'a', kind: 'plan', title: 'Dock', text: 'Rewrite the dock', at: 2 },
+        { taskId: 'gone', kind: 'call', title: 'Keep the API', text: 'Kept it', at: 1 },
+      ],
+    });
+    expect(entries.map((entry) => [entry.actor, entry.kind, entry.text, entry.detail])).toEqual([
+      ['you', 'decision', 'Approved the plan of SW-1', 'Rewrite the dock'],
+      ['agent', 'shape', '“Keep the API” chose: Keep the API', 'Kept it'],
     ]);
   });
 });

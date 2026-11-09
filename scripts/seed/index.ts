@@ -17,6 +17,7 @@ import {
   writeSeedServices,
   writeSeedTranscripts,
 } from './files.ts';
+import { listLeadTranscripts } from './initiatives.ts';
 import { NOW, type SeedTranscript, spreadEvents } from './kit.ts';
 import { DATA, REPOS, ROOT, WORKTREES } from './paths.ts';
 import { stampRunPrompts } from './prompts.ts';
@@ -83,6 +84,7 @@ export const seed = Effect.fn('Seed.run')(function* () {
   yield* writeSeedTranscripts(transcripts, [
     ...runs,
     ...listDelegationTranscripts(timeline),
+    ...listLeadTranscripts(),
     ...listCodeTranscripts(timeline, sample),
   ]);
   yield* writeSeedEvidence(DATA);

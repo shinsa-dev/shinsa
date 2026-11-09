@@ -3183,13 +3183,13 @@ Only these, and they win over anything below:
 
 45. **An initiative is a task whose Overview is its report sheet** (since 2026-11-09; `components/initiatives/`,
     `components/home/initiatives.tsx`, `lib/initiatives/`). There is no Initiatives page or nav entry. The lead task's
-    Overview shows, in order: Where it stands (a `Panel`: the lead's narrative, "Anything to discuss" with its open
-    questions, when it last reported), the phase track (one bordered cell per phase with its progress and a checkmark
-    once every task in it finished), then the sections in reading order, each a `Panel` with its count that remembers
-    whether it is open (40): Needs you, Now, Next, Shipped and Dropped with the reason (both closed at first), and
-    Decisions. Next groups its rows under a phase heading that carries no fill (the phase name and its count, set low
-    in a taller row), so it never reads as a hovered row. Tasks are the All tasks rows (`TaskListRow`), so a member
-    reads the same everywhere; an empty section says so in one line. Home's Initiatives section (only when one is
+    Overview shows, in order: Where it stands (a `Panel` with no time or other text in its header: the lead's
+    narrative, "To discuss with you" with each open question as a `ListRow` whose click quotes it into the lead's
+    composer and focuses it, then "Reported 25m ago" as the last line), then the members in one card laid out as All
+    tasks: its column header and its `TaskGroupSection`s in the same order and words (a gate's group, In progress),
+    then one Up next section per phase ("Up next: Tools in the chat") where the waiting rows sit, then Done and
+    Cancelled, closed at first. There is no phase track and no Decisions panel: approved plans and the members'
+    judgement calls are entries of the lead's Activity, among its own. Home's Initiatives section (only when one is
     open) lists each with its progress and opens its lead task. The composer's Kind of task stays on Auto unless you
     pick Initiative. A member's Overview facts name its initiative and phase and open the lead task, and its menus
     carry Add to an initiative, Phase, Take out of the initiative and Make an initiative from this task; the lead's

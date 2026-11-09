@@ -4,6 +4,7 @@ import {
   ACTOR_LABEL,
   listActivityDetail,
   listActivityNewestFirst,
+  mergeActivity,
   resolveActivityActor,
   resolveActivityGlyph,
   resolveActivityText,
@@ -44,6 +45,24 @@ describe('resolveOverviewSummary', () => {
   it('has no summary before there is anything to say', () => {
     expect(resolveOverviewSummary(createTask({ id: 'a' }))).toBeNull();
     expect(resolveOverviewSummary(createTask({ id: 'b', plan: { ...PLAN, document: null } }))).toBeNull();
+  });
+});
+
+describe('mergeActivity', () => {
+  it('slots extra entries in among the task’s own, newest first', () => {
+    const entry = (at: number, text: string) => ({
+      at,
+      actor: 'you' as const,
+      kind: 'note' as const,
+      text,
+      detail: null,
+      evidenceId: null,
+    });
+    expect(mergeActivity([entry(3, 'c'), entry(1, 'a')], [entry(2, 'b')]).map((item) => item.text)).toEqual([
+      'c',
+      'b',
+      'a',
+    ]);
   });
 });
 

@@ -19,7 +19,7 @@ export const STAGE_LABEL: Record<TaskStage, string> = {
   researching: 'Researching',
   operating: 'Running the operation',
   watching: 'Checking a watchdog',
-  leading: 'Leading an initiative',
+  leading: 'Following its tasks',
   awaiting_proposal: 'Change to approve',
   awaiting_operation: 'Operation to confirm',
   answered: 'Answered',

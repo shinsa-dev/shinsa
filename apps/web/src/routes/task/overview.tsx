@@ -1,6 +1,7 @@
 import {
   describeCount,
   type Gate,
+  type InitiativeSheet,
   listOpenGates,
   resolveInitiativeSheet,
   type ShinsaState,
@@ -32,7 +33,8 @@ import { InlineMarkdown, Markdown } from '@/components/text/markdown.tsx';
 import { useOnHide } from '@/hooks/use-on-hide.ts';
 import { useProgressiveCount } from '@/hooks/use-progressive-count.ts';
 import { selectLedInitiative } from '@/lib/initiatives/lead.ts';
-import { listActivityNewestFirst, resolveOverviewSummary } from '@/lib/overview/activity.ts';
+import { listInitiativeActivity } from '@/lib/initiatives/view.ts';
+import { listActivityNewestFirst, mergeActivity, resolveOverviewSummary } from '@/lib/overview/activity.ts';
 import { selectShownReply } from '@/lib/overview/exchanges.ts';
 import { type NowTarget, resolveNowKind, resolveResultPlace } from '@/lib/overview/now.ts';
 import { resolveOverviewPanelId } from '@/lib/preferences/disclosure.ts';
@@ -115,13 +117,17 @@ function PostMergePanel({ state, task, gate }: { state: ShinsaState; task: Task;
 function ActivityPanel({
   state,
   task,
+  sheet,
   onOpenRun,
 }: {
   state: ShinsaState;
   task: Task;
+  sheet: InitiativeSheet | null;
   onOpenRun: (runId: string) => void;
 }) {
-  const entries = listActivityNewestFirst(task);
+  const entries = sheet
+    ? mergeActivity(listActivityNewestFirst(task), listInitiativeActivity(state, sheet))
+    : listActivityNewestFirst(task);
   const [limit, setLimit] = React.useState(ACTIVITY_PAGE);
   const shown = useProgressiveCount(Math.min(entries.length, limit), FIRST_ACTIVITY);
   const older = entries.length - limit;
@@ -202,7 +208,12 @@ export function OverviewTab({
           <EvidencePlace state={state} task={task} onOpen={onOpen} />
           {code && <ChangesPanel task={task} onOpen={onOpen} />}
           <RoundsPanel state={state} task={task} onOpen={(runId) => onOpen('agent', runId)} />
-          <ActivityPanel state={state} task={task} onOpenRun={(runId) => onOpen('agent', runId)} />
+          <ActivityPanel
+            state={state}
+            task={task}
+            sheet={sheet}
+            onOpenRun={(runId) => onOpen('agent', runId)}
+          />
         </div>
       </PageScroll>
       {hint && <TaskComposer state={state} task={task} hint={hint} />}

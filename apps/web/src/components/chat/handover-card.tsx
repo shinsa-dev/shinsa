@@ -362,7 +362,7 @@ function InitiativeReportCard({ args }: { args: ChatToolArgs }) {
       <Markdown text={readString(args, 'narrative') ?? ''} />
       {questions.length > 0 && (
         <div className='flex flex-col border-t border-border pt-2.5 text-xs'>
-          <span className='text-2xs text-fg-2'>Anything to discuss</span>
+          <span className='text-2xs text-fg-2'>To discuss with you</span>
           {questions.map((question) => (
             <InlineMarkdown key={question} text={question} className='selectable text-fg-4' />
           ))}

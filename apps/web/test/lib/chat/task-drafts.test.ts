@@ -1,5 +1,7 @@
 import { describe, expect, it, mock } from 'bun:test';
 import {
+  requestDraftReply,
+  takeFocusRequest,
   carryDraftFocus,
   clearTaskDraft,
   removeCarriedCaret,
@@ -23,15 +25,29 @@ const attachment = {
 
 describe('task drafts', () => {
   it('starts every task empty and keeps each task’s draft apart', () => {
-    expect(resolveTaskDraft('task-a')).toEqual({ text: '', attachments: [], carriedCaret: null });
+    expect(resolveTaskDraft('task-a')).toEqual({
+      text: '',
+      attachments: [],
+      carriedCaret: null,
+      focusRequested: false,
+    });
     updateTaskDraft('task-a', () => ({ text: 'Hello' }));
     updateTaskDraft('task-a', (draft) => ({ attachments: [...draft.attachments, attachment] }));
     expect(resolveTaskDraft('task-a')).toEqual({
       text: 'Hello',
       attachments: [attachment],
       carriedCaret: null,
+      focusRequested: false,
     });
     expect(resolveTaskDraft('task-b').text).toBe('');
+  });
+
+  it('quotes a question above the draft and asks the composer to focus once', () => {
+    updateTaskDraft('task-q', () => ({ text: 'Earlier' }));
+    requestDraftReply('task-q', 'Merge it first?');
+    expect(resolveTaskDraft('task-q').text).toBe('> Merge it first?\n\nEarlier');
+    expect(takeFocusRequest('task-q')).toBe(true);
+    expect(takeFocusRequest('task-q')).toBe(false);
   });
 
   it('tells every subscriber of a change until it unsubscribes', () => {

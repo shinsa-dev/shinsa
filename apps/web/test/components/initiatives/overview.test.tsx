@@ -4,6 +4,7 @@ import { TooltipProvider } from '@shinsa/ui/components/tooltip';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { HomeInitiatives } from '@/components/home/initiatives.tsx';
 import { InitiativeOverview } from '@/components/initiatives/sheet.tsx';
+import { resolveTaskDraft } from '@/lib/chat/task-drafts.ts';
 import { createGate, createInitiative, createShinsaState, createTask, NOW } from '../../support/state.ts';
 
 const LEAD = createTask({
@@ -62,16 +63,21 @@ function renderOverview(state: ShinsaState) {
 }
 
 describe('the lead task’s overview', () => {
-  it('shows where it stands, its questions, its phases and its tasks grouped by phase', () => {
+  it('shows where it stands and the tasks grouped as All tasks does, by phase', () => {
     renderOverview(createSplitState({ narrative: 'The dock is in review.', questions: ['Merge it first?'] }));
     expect(screen.getByRole('heading', { name: /Where it stands/ })).toBeTruthy();
     expect(screen.getByText('The dock is in review.')).toBeTruthy();
-    expect(screen.getByText('Merge it first?')).toBeTruthy();
-    expect(screen.getByRole('list', { name: 'Phases' }).textContent).toContain('Dock host');
+    expect(screen.getByText(/Reported/)).toBeTruthy();
     expect(screen.getByText('Rewrite the agent dock')).toBeTruthy();
-    expect(screen.getByText('Add the studio chat')).toBeTruthy();
-    expect(screen.getAllByText('Studio chat')).toHaveLength(2);
-    expect(screen.getAllByText('No phase').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Changes to review').length).toBeGreaterThan(0);
+    expect(screen.getByText('Up next: Studio chat')).toBeTruthy();
+    expect(screen.getByText('Up next: No phase')).toBeTruthy();
+  });
+
+  it('puts a question in the lead’s reply box when you click it', () => {
+    renderOverview(createSplitState({ narrative: 'The dock is in review.', questions: ['Merge it first?'] }));
+    fireEvent.click(screen.getByText('Merge it first?'));
+    expect(resolveTaskDraft('lead').text).toBe('> Merge it first?\n\n');
   });
 
   it('says the lead has not reported before its first report', () => {

@@ -318,7 +318,8 @@ function pushPlanProposal(task: SeedTask, progress: SeedProgress, push: Push, cl
 function pushPhaseDone(task: SeedTask, progress: SeedProgress, push: Push, clock: SeedClock) {
   const index = progress.built;
   const phase = progress.plan?.phases[index];
-  push(clock.step(2), {
+  const at = clock.step(2);
+  push(at, {
     type: 'phase.completed',
     taskId: task.id,
     report: {
@@ -328,7 +329,7 @@ function pushPhaseDone(task: SeedTask, progress: SeedProgress, push: Push, clock
       judgementCalls: index === 0 ? (task.report?.judgementCalls ?? []) : [],
       walkthrough:
         index === (progress.plan?.phases.length ?? 1) - 1 ? (task.report?.walkthrough ?? null) : null,
-      at: 0,
+      at,
     },
   });
   push(clock.step(0), { type: 'phase.updated', taskId: task.id, index, status: 'done' });

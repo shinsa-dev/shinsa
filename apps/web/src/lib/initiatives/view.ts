@@ -1,8 +1,10 @@
 import {
   describeCount,
+  NO_PHASE_NAME,
   type Initiative,
-  type InitiativeDecisionKind,
-  type InitiativePhaseProgress,
+  type Activity,
+  type InitiativeDecision,
+  type InitiativePhaseGroup,
   type InitiativeSheet,
   listInitiativeProgress,
   listInitiatives,
@@ -12,13 +14,24 @@ import {
   type Task,
 } from '@shinsa/core';
 import type { IconName } from '@shinsa/ui/components/icon';
-import type { Glyph } from '@/lib/tasks/status.ts';
+import {
+  type ChainEntry,
+  listTaskGroupSections,
+  orderChains,
+  resolveTaskGroup,
+  type TaskGroup,
+  type TaskGroupRow,
+} from '@/lib/tasks/groups.ts';
 
 export const INITIATIVE_ICON: IconName = 'IconTarget';
 
 export const INITIATIVES_TITLE = 'Initiatives';
 
 export const NO_PHASE_VALUE = '';
+
+const UP_NEXT = 'Up next';
+
+const NEXT_ICON: IconName = 'IconHourglass';
 
 export interface InitiativeRow {
   initiative: Initiative;
@@ -30,18 +43,11 @@ export interface InitiativeRow {
   summary: string;
 }
 
-export interface InitiativeSection {
-  key: 'needsYou' | 'now' | 'next' | 'shipped' | 'dropped' | 'decisions';
-  title: string;
-  icon: IconName;
-  count: number;
-  empty: string;
+export interface InitiativeTaskSection {
+  key: string;
+  group: Pick<TaskGroup, 'title' | 'icon' | 'tone' | 'defaultOpen'>;
+  entries: ChainEntry[];
 }
-
-export const DECISION_KIND: Record<InitiativeDecisionKind, { label: string; glyph: Glyph }> = {
-  plan: { label: 'Plan approved', glyph: { icon: 'IconCheckCircle2', tone: 'blue' } },
-  call: { label: 'Judgement call', glyph: { icon: 'IconSplit', tone: 'purple' } },
-};
 
 function describeOpenAndShipped(open: number, shipped: number, total: number) {
   if (total === 0) return 'No tasks yet';
@@ -64,60 +70,60 @@ export function listInitiativeRows(state: ShinsaState): InitiativeRow[] {
   });
 }
 
-export function isPhaseDone(progress: InitiativePhaseProgress) {
-  return progress.total > 0 && progress.shipped + progress.dropped === progress.total;
+function describeDecision(state: ShinsaState, decision: InitiativeDecision): Activity {
+  const task = state.tasks[decision.taskId];
+  const name = task?.handle ?? `“${decision.title}”`;
+  const plan = decision.kind === 'plan';
+  return {
+    at: decision.at,
+    actor: plan ? 'you' : 'agent',
+    kind: plan ? 'decision' : 'shape',
+    text: plan ? `Approved the plan of ${name}` : `${name} chose: ${decision.title}`,
+    detail: decision.text,
+    evidenceId: null,
+  };
 }
 
-export function describeSheetSummary(sheet: InitiativeSheet) {
-  const { total, shipped, open } = resolveInitiativeTotals(sheet.progress);
-  if (total === 0) return 'No tasks yet. Add tasks from their menu, or make an initiative from a task.';
-  return describeOpenAndShipped(open, shipped, total);
+export function listInitiativeActivity(state: ShinsaState, sheet: InitiativeSheet): Activity[] {
+  return sheet.decisions.map((decision) => describeDecision(state, decision));
 }
 
-export function listInitiativeSections(sheet: InitiativeSheet): InitiativeSection[] {
-  const waiting = sheet.next.reduce((sum, group) => sum + group.tasks.length, 0);
-  return [
-    {
-      key: 'needsYou',
-      title: 'Needs you',
-      icon: 'IconBell',
-      count: sheet.needsYou.length,
-      empty: 'Nothing in this initiative waits for you.',
-    },
-    {
-      key: 'now',
-      title: 'Now',
-      icon: 'IconAgents',
-      count: sheet.now.length,
-      empty: 'No agent works on this initiative right now.',
-    },
-    {
-      key: 'next',
-      title: 'Next',
-      icon: 'IconHourglass',
-      count: waiting,
-      empty: 'Nothing else is lined up.',
-    },
-    {
-      key: 'shipped',
-      title: 'Shipped',
-      icon: 'IconCheckCircle2',
-      count: sheet.shipped.length,
-      empty: 'Nothing has shipped yet.',
-    },
-    {
-      key: 'dropped',
-      title: 'Dropped',
-      icon: 'IconCircleX',
-      count: sheet.dropped.length,
-      empty: 'Nothing was dropped.',
-    },
-    {
-      key: 'decisions',
-      title: 'Decisions',
-      icon: 'IconSplit',
-      count: sheet.decisions.length,
-      empty: 'Approved plans and the agents’ judgement calls show here.',
-    },
+function resolveNextTitle(group: InitiativePhaseGroup, phased: boolean) {
+  if (!phased) return UP_NEXT;
+  return `${UP_NEXT}: ${group.phase?.name ?? NO_PHASE_NAME}`;
+}
+
+export function listInitiativeTaskSections(
+  state: ShinsaState,
+  sheet: InitiativeSheet
+): InitiativeTaskSection[] {
+  const rows: TaskGroupRow[] = [
+    ...sheet.needsYou.map(({ task }) => ({ task, group: resolveTaskGroup(state, task) })),
+    ...sheet.now.map((task) => ({ task, group: 'working' as const })),
+    ...sheet.shipped.map((task) => ({ task, group: 'done' as const })),
+    ...sheet.dropped.map(({ task }) => ({ task, group: 'cancelled' as const })),
   ];
+  const grouped = listTaskGroupSections(state, rows).map(({ group, entries }) => ({
+    key: group.key,
+    group,
+    entries,
+  }));
+  const phased = sheet.next.some((group) => group.phase !== null);
+  const next = sheet.next.map((group) => ({
+    key: `next:${group.phase?.id ?? 'none'}`,
+    group: {
+      title: resolveNextTitle(group, phased),
+      icon: NEXT_ICON,
+      tone: 'neutral' as const,
+      defaultOpen: true,
+    },
+    entries: orderChains(
+      state,
+      group.tasks.map(({ task }) => task)
+    ),
+  }));
+  const working = grouped.findIndex((section) => section.key === 'working');
+  return [...grouped.slice(0, working + 1), ...next, ...grouped.slice(working + 1)].filter(
+    (section) => section.entries.length > 0
+  );
 }

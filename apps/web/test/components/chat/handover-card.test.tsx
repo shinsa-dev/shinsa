@@ -327,12 +327,12 @@ describe('HandoverCard for the process tools', () => {
     );
     expect(view.getByText('Reported on the initiative')).toBeTruthy();
     expect(view.getByText('The dock is in review.')).toBeTruthy();
-    expect(view.getByText('Anything to discuss')).toBeTruthy();
+    expect(view.getByText('To discuss with you')).toBeTruthy();
     expect(view.getByText('Ship the studio first?')).toBeTruthy();
     view.unmount();
     const plain = renderCard(call('report_initiative', { questions: [] }));
     expect(plain.getByText('Reported on the initiative')).toBeTruthy();
-    expect(plain.queryByText('Anything to discuss')).toBeNull();
+    expect(plain.queryByText('To discuss with you')).toBeNull();
   });
 
   it('shows the reply to your message first, then the plan, the summary or the report below it', () => {
