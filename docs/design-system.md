@@ -2308,7 +2308,7 @@ Dialog (Root)
    └─ DialogCloseButton          (when showCloseButton)
 ```
 
-Exports: `Dialog`, `DialogTrigger`, `DialogPortal`, `DialogClose`, `DialogOverlay`, `DialogContent`, `DialogCloseButton`, `DialogHeader`, `DialogFooter`, `DialogTitle`, `DialogDescription`, the motion strings `DIALOG_MOTION`, `DIALOG_SCRIM_MOTION`, and the layout strings `DIALOG_BODY` (the body that scrolls) and `DIALOG_HEADER_STICKY` (the header that stays).
+Exports: `Dialog`, `DialogTrigger`, `DialogPortal`, `DialogClose`, `DialogOverlay`, `DialogContent`, `DialogCloseButton`, `DialogHeader`, `DialogFooter`, `DialogTitle`, `DialogDescription`, the motion strings `DIALOG_MOTION`, `DIALOG_SCRIM_MOTION`, and the layout strings `DIALOG_BODY` (the body that scrolls), `DIALOG_HEADER_STICKY` (the header that stays) and `DIALOG_EDGE` (the popup's edge drawn again above its content, so the sticky header's background never hides the top of the dark inset ring; `AlertDialogContent` uses it too).
 
 **Props**
 
