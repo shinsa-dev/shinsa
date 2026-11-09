@@ -1540,7 +1540,7 @@ pull request; parts that serve one goal (pieces of one feature, a change and its
 stacked as a bundle, which is how most splits end; in parallel only for a part with a different goal worth merging
 alone; waiting only on code on an unmerged branch that should ship apart; and a small or cohesive request kept whole. Such a plan always waits for you. The plan card leads with
 Start N tasks (counting this task) over the list of parts, with Keep as one task beside it, and ⌘K offers both; when
-every part stacks back onto this task the split is one bundle, and the card says so (Start a bundle of N tasks,
+every part stacks back onto this task the split is one bundle, and the card says so (Start N-task bundle,
 `countBundledTasks`, `lib/tasks/split.ts`), and a mixed split names how many of its tasks form the bundle.
 Start N tasks approves the plan, and `startPlanSplit` (`decide/couriers.ts`) creates each part as a task under this
 one (`createdBy` `split`, the planning run), forked from it (`forkOf`), so its agent starts from this conversation and

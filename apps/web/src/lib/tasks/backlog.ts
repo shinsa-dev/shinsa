@@ -17,17 +17,17 @@ const NEEDS_YOU: PlanCardCopy = {
 function describeBundleCard(task: Task, count: number): PlanCardCopy {
   return {
     title: task.backlog
-      ? `Planned as a bundle of ${count} tasks and kept in the backlog`
-      : `The agent wants to split this into a bundle of ${count} tasks`,
-    approve: `Start a bundle of ${count} tasks`,
-    note: 'The other parts stack on this task and each plans for itself, and the bundle merges as one. To change the parts, say it in the chat.',
+      ? `Planned as a ${count}-task bundle and kept in the backlog`
+      : `The agent wants to split this into a ${count}-task bundle`,
+    approve: `Start ${count}-task bundle`,
+    note: 'The parts stack on this task and merge as one. To change them, say it in the chat.',
   };
 }
 
 function describeSplitCard(task: Task, count: number): PlanCardCopy {
   const bundled = countBundledTasks(task);
   if (bundled === count) return describeBundleCard(task, count);
-  const inBundle = bundled > 0 ? `, ${bundled} of them as a bundle` : '';
+  const inBundle = bundled > 0 ? `, ${bundled} in a bundle` : '';
   return {
     title: task.backlog
       ? `Planned as ${count} tasks${inBundle} and kept in the backlog`

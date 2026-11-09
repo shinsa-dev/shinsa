@@ -49,15 +49,15 @@ describe('describePlanCard', () => {
       { title: 'B', request: 'b', order: 'stacks_on', on: 1 },
     ]);
     expect(describePlanCard(createTask({ id: 't', stage: 'awaiting_plan', plan }))).toEqual({
-      title: 'The agent wants to split this into a bundle of 3 tasks',
-      approve: 'Start a bundle of 3 tasks',
-      note: 'The other parts stack on this task and each plans for itself, and the bundle merges as one. To change the parts, say it in the chat.',
+      title: 'The agent wants to split this into a 3-task bundle',
+      approve: 'Start 3-task bundle',
+      note: 'The parts stack on this task and merge as one. To change them, say it in the chat.',
     });
     expect(
       describePlanCard(createTask({ id: 't', stage: 'awaiting_plan', plan, backlog: { at: 1 } }))
     ).toMatchObject({
-      title: 'Planned as a bundle of 3 tasks and kept in the backlog',
-      approve: 'Start a bundle of 3 tasks',
+      title: 'Planned as a 3-task bundle and kept in the backlog',
+      approve: 'Start 3-task bundle',
     });
   });
 
@@ -67,12 +67,12 @@ describe('describePlanCard', () => {
       { title: 'B', request: 'b', order: 'parallel' },
     ]);
     expect(describePlanCard(createTask({ id: 't', stage: 'awaiting_plan', plan }))).toMatchObject({
-      title: 'The agent wants to split this into 3 tasks, 2 of them as a bundle',
+      title: 'The agent wants to split this into 3 tasks, 2 in a bundle',
       approve: 'Start 3 tasks',
     });
     expect(
       describePlanCard(createTask({ id: 't', stage: 'awaiting_plan', plan, backlog: { at: 1 } })).title
-    ).toBe('Planned as 3 tasks, 2 of them as a bundle and kept in the backlog');
+    ).toBe('Planned as 3 tasks, 2 in a bundle and kept in the backlog');
   });
 });
 

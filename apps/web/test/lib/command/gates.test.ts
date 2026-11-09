@@ -351,7 +351,7 @@ describe('gate commands', () => {
     );
   });
 
-  it('offers Start a bundle of N tasks on a plan whose parts stack on this task', () => {
+  it('offers Start N-task bundle on a plan whose parts stack on this task', () => {
     const gate = createGate({ id: 'g', taskId: 't', type: 'plan' });
     const task = createTask({
       id: 't',
@@ -374,7 +374,7 @@ describe('gate commands', () => {
       },
     });
     const approve = commandsFor(task, gate)[0];
-    expect(approve?.label).toBe('Start a bundle of 2 tasks');
+    expect(approve?.label).toBe('Start 2-task bundle');
     expect(approve?.keywords).toContain('bundle');
   });
 
