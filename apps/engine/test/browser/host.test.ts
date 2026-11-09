@@ -11,6 +11,7 @@ import {
 } from '../../src/browser/host/schema.ts';
 import { BrowserHost } from '../../src/browser/host/service.ts';
 import { until } from '../helpers/until.ts';
+import { startFakeCdp } from './cdp.ts';
 import { awaitLaunches, awaitPid, createFakeChrome, isAlive, runHost, SHINSA, SUPERWALL } from './harness.ts';
 
 const SIGN_IN = SignInUrl.make('https://accounts.google.com/');
@@ -207,6 +208,24 @@ describe('the browser host', () => {
       })
     );
     expect(existsSync(profile)).toBe(false);
+  });
+
+  test('asks Chrome to close itself first, so it writes its cookies to disk', async () => {
+    const chrome = createFakeChrome();
+    const cdp = startFakeCdp({ onBrowserClose: () => process.kill(chrome.pidOf(SHINSA), 'SIGKILL') });
+    chrome.listenOn(cdp.port);
+    const started = Date.now();
+    await runHost(
+      chrome,
+      Effect.gen(function* () {
+        const host = yield* BrowserHost;
+        yield* Effect.scoped(host.acquire(SHINSA));
+        yield* host.stop(SHINSA);
+      })
+    );
+    cdp.stop();
+    expect(cdp.received.map((text) => JSON.parse(text).method)).toEqual(['Browser.close']);
+    expect(Date.now() - started).toBeLessThan(1500);
   });
 
   test('stops every browser when the engine stops', async () => {

@@ -1,4 +1,4 @@
-import { Context, Duration, Schedule, Schema, SchemaTransformation, type Scope } from 'effect';
+import { Context, Duration, type Effect, Schedule, Schema, SchemaTransformation, type Scope } from 'effect';
 
 export const BrowserProfile = Schema.String.check(Schema.isPattern(/^[A-Za-z0-9_-]{1,80}$/)).pipe(
   Schema.brand('BrowserProfile')
@@ -42,6 +42,7 @@ export interface RunningBrowser {
   readonly mode: 'headless' | 'window';
   readonly generation: number;
   readonly scope: Scope.Closeable;
+  readonly exited: Effect.Effect<number>;
   readonly webSocketUrl: string | null;
   readonly leases: number;
   readonly uses: number;

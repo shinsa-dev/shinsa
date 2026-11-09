@@ -3,6 +3,7 @@ import { Context, Effect, Exit, FileSystem, Layer, Option, Ref, Schema, Scope, S
 import { constant, constFalse } from 'effect/Function';
 import { ChildProcess, ChildProcessSpawner } from 'effect/process';
 import { EngineConfig } from '../../config/service.ts';
+import { sendCdpCommand } from '../cdp/command.ts';
 import {
   ACTIVE_PORT_FILE,
   BROWSER_DIR,
@@ -26,7 +27,7 @@ export class BrowserHost extends Context.Service<
   BrowserHost,
   {
     acquire(profile: BrowserProfile): Effect.Effect<BrowserEndpoint, BrowserUnavailable, Scope.Scope>;
-    openWindow(profile: BrowserProfile, url: SignInUrl): Effect.Effect<void, BrowserUnavailable>;
+    openWindow(profile: BrowserProfile, url: SignInUrl | null): Effect.Effect<void, BrowserUnavailable>;
     closeWindow(profile: BrowserProfile): Effect.Effect<void>;
     stop(profile: BrowserProfile): Effect.Effect<void>;
     remove(profile: BrowserProfile): Effect.Effect<void>;
@@ -63,10 +64,21 @@ export class BrowserHost extends Context.Service<
       const selectRunning = (profile: BrowserProfile) =>
         Effect.map(Ref.get(running), (all) => Option.fromNullishOr(all.get(profile)));
 
+      const closeGracefully = Effect.fn('BrowserHost.closeGracefully')(function* (browser: RunningBrowser) {
+        if (!browser.webSocketUrl) return;
+        const closed = yield* Effect.exit(sendCdpCommand(browser.webSocketUrl, 'Browser.close'));
+        const reached =
+          Exit.isSuccess(closed) ||
+          Exit.findErrorOption(closed).pipe(Option.exists((error) => error.reason !== 'unreachable'));
+        if (!reached) return;
+        yield* browser.exited.pipe(Effect.timeoutOption(settings.stopTimeout));
+      });
+
       const stopRunning = Effect.fn('BrowserHost.stopRunning')(function* (profile: BrowserProfile) {
         const current = yield* selectRunning(profile);
         if (Option.isNone(current)) return;
         yield* write(profile, null);
+        yield* closeGracefully(current.value);
         yield* Scope.close(current.value.scope, Exit.void);
       });
 
@@ -135,7 +147,7 @@ export class BrowserHost extends Context.Service<
                 }),
                 Effect.onError(closeScope)
               );
-        const started: RunningBrowser = { mode, generation, scope, webSocketUrl, leases: 0, uses: 0 };
+        const started: RunningBrowser = { mode, generation, scope, exited, webSocketUrl, leases: 0, uses: 0 };
         yield* write(profile, started);
         return started;
       });
@@ -190,14 +202,14 @@ export class BrowserHost extends Context.Service<
 
       const openWindow = Effect.fn('BrowserHost.openWindow')(function* (
         profile: BrowserProfile,
-        url: SignInUrl
+        url: SignInUrl | null
       ) {
         yield* lock.withPermit(
           Effect.gen(function* () {
             const current = yield* selectRunning(profile);
             if (Option.isSome(current) && current.value.mode === 'window') return;
             yield* stopRunning(profile);
-            yield* launch(profile, 'window', [url]);
+            yield* launch(profile, 'window', url ? [url] : []);
           })
         );
       });

@@ -4,12 +4,40 @@ export interface FakeCdp {
   readonly url: string;
   readonly port: number;
   readonly received: string[];
+  readonly cookies: Record<string, unknown>[];
   dropAll(): void;
   stop(): void;
 }
 
-export function startFakeCdp(): FakeCdp {
+export interface FakeCdpOptions {
+  readonly onBrowserClose?: () => void;
+}
+
+function answerCdp(
+  method: string,
+  params: { cookies?: Record<string, unknown>[] },
+  cookies: Record<string, unknown>[],
+  text: string
+) {
+  if (method === 'Storage.setCookies') {
+    cookies.push(...(params.cookies ?? []));
+    return {};
+  }
+  if (method === 'Storage.getCookies') {
+    return {
+      cookies: cookies.map((cookie) => ({
+        domain: cookie.domain ?? new URL(String(cookie.url)).hostname,
+        name: cookie.name,
+        httpOnly: cookie.httpOnly,
+      })),
+    };
+  }
+  return { echoed: text };
+}
+
+export function startFakeCdp(options: FakeCdpOptions = {}): FakeCdp {
   const received: string[] = [];
+  const cookies: Record<string, unknown>[] = [];
   const open = new Set<ServerWebSocket<undefined>>();
   const server = Bun.serve({
     hostname: '127.0.0.1',
@@ -28,8 +56,13 @@ export function startFakeCdp(): FakeCdp {
       message: (socket, message) => {
         const text = String(message);
         received.push(text);
-        const { id } = JSON.parse(text) as { id: number };
-        socket.send(JSON.stringify({ id, result: { echoed: text } }));
+        const { id, method, params } = JSON.parse(text) as {
+          id: number;
+          method: string;
+          params?: { cookies?: Record<string, unknown>[] };
+        };
+        socket.send(JSON.stringify({ id, result: answerCdp(method, params ?? {}, cookies, text) }));
+        if (method === 'Browser.close') options.onBrowserClose?.();
       },
     },
   });
@@ -37,6 +70,7 @@ export function startFakeCdp(): FakeCdp {
     url: `ws://127.0.0.1:${server.port}/devtools/browser/fake`,
     port: server.port ?? 0,
     received,
+    cookies,
     dropAll: () => {
       for (const socket of open) socket.close(1000, 'gone');
     },
