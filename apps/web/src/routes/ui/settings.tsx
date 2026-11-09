@@ -549,7 +549,7 @@ export function SettingsSpecimens() {
           />
         </div>
       </Specimen>
-      <Specimen label='TeamJoinPage · with no paired machine, remote access comes first'>
+      <Specimen label='TeamJoinPage · with no paired machine, ask to join and share no projects'>
         <div className='w-full max-w-sm'>
           <TeamJoinPage
             link={SAMPLE_TEAM_LINK}
