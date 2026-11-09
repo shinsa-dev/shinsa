@@ -124,9 +124,9 @@ export const seedSlackSamples = Effect.fn('Sandbox.seedSlackSamples')(function* 
   if (!base) return;
   const escalation = {
     at: now - 20 * MINUTE,
-    reason: 'Urgent, and the merge waited 60 minutes for you.',
+    reason: 'Urgent, and ready to merge.',
     handoff: {
-      waitedMinutes: 60,
+      waitedMinutes: 0,
       ownerActiveAt: now - 3 * HOUR,
       foundBy: null,
       ratings: { confidence: 'high' as const, risk: 'low' as const },

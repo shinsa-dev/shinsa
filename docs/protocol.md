@@ -1020,7 +1020,7 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `message.route`, `message.drop` | `MessageInbox` (`triage/inbox/service.ts`) | delivers the messages waiting in an inbox, together, with the classifier's answer, or drops the ones core refused, with the reason |
 | `monitor.fire` | `MonitorClock` | wakes a monitor |
 | `watchdog.fire` | `WatchdogClock` | checks a watchdog at its `nextCheckAt` (`dueAt`), defers it while the task works, or passes it once its window ended |
-| `autopilot.fire` | `AutopilotClock` | acts on an open merge gate's Autopilot deadline (`dueAt`): merges for you, or escalates to your team and, with `escalate_then_merge`, sets the merge deadline |
+| `autopilot.fire` | `AutopilotClock` | acts on an open merge gate's Autopilot deadline (`dueAt`): merges for you, or escalates to your team with why it could not |
 | `usage_wait.resume` | `UsageResume` | resumes a step after the reset |
 | `watch_suggestion.record` | the `watch.suggest` effect | records the suggested watch for a new integration (`projectId`, `server`, the Writer's `name` and `text` or null for plain wording, `timeZone`), hourly; does nothing when the integration is gone or watched, was suggested before, or 10 suggestions are open |
 | `feedback.record_draft` | the `feedback.draft` effect | the drafted `title` and `body` of an entry still `drafting`; an empty one fails it |

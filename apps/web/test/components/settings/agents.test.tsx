@@ -3,7 +3,13 @@ import { AUTOPILOT_DEFAULTS, createSettings, resolveEngineInfo, type Settings } 
 import { TooltipProvider } from '@shinsa/ui/components/tooltip';
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { AgentSettings } from '@/components/settings/agents.tsx';
-import { AUTOPILOT_BLOCKS, AUTOPILOT_OFF, AUTOPILOT_ROWS, TEAM_CONTACT } from '@/lib/autopilot.ts';
+import {
+  AUTOPILOT_BLOCKS,
+  AUTOPILOT_OFF,
+  AUTOPILOT_ROWS,
+  AUTOPILOT_TURN_ON,
+  TEAM_CONTACT,
+} from '@/lib/autopilot.ts';
 import { createAccount, createSnapshot } from '../../support/accounts.ts';
 import { spyOnToasts } from '../../support/commands.ts';
 import { spyOnEngine } from '../../support/engine.ts';
@@ -245,11 +251,26 @@ describe('Settings → Agents → Autopilot', () => {
     await settle();
     expect(screen.getByText(AUTOPILOT_OFF)).toBeTruthy();
     expect(screen.queryByText(AUTOPILOT_BLOCKS.approving.title)).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: AUTOPILOT_TURN_ON }));
+    expect(listSentCommands()).toEqual([
+      { type: 'settings.change', patch: { autopilot: { ...AUTOPILOT_DEFAULTS, enabled: true } } },
+    ]);
     unmount();
     renderAgents(ESCALATING);
     await settle();
     for (const block of Object.values(AUTOPILOT_BLOCKS)) expect(screen.getByText(block.title)).toBeTruthy();
     expect(screen.getByRole('combobox', { name: AUTOPILOT_ROWS.usage })).toBeTruthy();
+  });
+
+  it('shows how long it waits only when it merges after the wait', async () => {
+    spyOnEngine();
+    const { unmount } = renderAgents(ESCALATING);
+    await settle();
+    expect(screen.queryByRole('combobox', { name: AUTOPILOT_ROWS.wait })).toBeNull();
+    unmount();
+    renderAgents({ ...ESCALATING, autopilot: { ...AUTOPILOT_DEFAULTS, enabled: true, urgent: 'merge' } });
+    await settle();
+    expect(screen.getByRole('combobox', { name: AUTOPILOT_ROWS.wait })).toBeTruthy();
   });
 
   it('cannot ask for a review while no one can be asked, and says so', async () => {

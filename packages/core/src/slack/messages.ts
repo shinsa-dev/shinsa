@@ -633,7 +633,10 @@ function describeSlackEscalationNext({ handoff }: TaskEscalation) {
 }
 
 function describeSlackEscalationWhy({ handoff }: TaskEscalation) {
-  const waited = `It is urgent and waited ${describeSlackWait(handoff.waitedMinutes)} for a merge.`;
+  const waited =
+    handoff.waitedMinutes === 0
+      ? 'It is urgent and ready to merge.'
+      : `It is urgent and waited ${describeSlackWait(handoff.waitedMinutes)} for a merge.`;
   return handoff.foundBy ? `A watchdog found the issue it fixes. ${waited}` : waited;
 }
 
@@ -678,7 +681,7 @@ export function serializeSlackEscalationTest(settingsUrl: string, now: number) {
     { label: 'Settings → Agents → Autopilot', url: settingsUrl, pullRequest: null },
     {
       title: 'Fix the checkout timeout',
-      why: 'It is urgent and waited 1 hour for a merge.',
+      why: 'It is urgent and ready to merge.',
       next: `Autopilot merges it ${serializeSlackDate(now + 3_600_000)} unless someone acts first.`,
       review: 'High confidence, low risk',
       note: SLACK_ESCALATION_TEST_NOTE,

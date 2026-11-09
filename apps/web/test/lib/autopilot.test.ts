@@ -372,6 +372,30 @@ describe('teammates’ escalated tasks in Needs you', () => {
       },
     ]);
   });
+
+  it('says a fix sent on at once is ready to merge', () => {
+    const entry = {
+      task: createTask({ id: 'k-2', title: 'Fix the login' }),
+      gates: [],
+      project: null,
+      repo: null,
+      owner: 'kai',
+      ownerProfile: { name: 'Kai Lee', avatarUrl: null },
+      machine: 'Studio',
+      teamId: 'core',
+      instanceId: 'm-kai',
+    };
+    const handoff = {
+      waitedMinutes: 0,
+      ownerActiveAt: null,
+      foundBy: null,
+      ratings: null,
+      mergesAt: null,
+      blockedBy: null,
+    };
+    const rows = listTeamEscalationRows([{ entry, escalation: { at: 5, reason: 'Urgent.', handoff } }]);
+    expect(rows[0]?.summary).toBe('Kai’s urgent fix is ready to merge');
+  });
 });
 
 const HOUR = 60 * 60 * 1000;
@@ -473,6 +497,13 @@ describe('the hand-off an escalation shows', () => {
     );
     expect(listHandoffParagraphs(unseen, { owner: 'Kai', presence: null, now: HOUR })[0]?.text).toBe(
       'It is urgent and waited 15 minutes for Kai to merge it.'
+    );
+    const ready = { ...unseen, handoff: { ...unseen.handoff, waitedMinutes: 0 } };
+    expect(listHandoffParagraphs(ready, { owner: 'Kai', presence: null, now: HOUR })[0]?.text).toBe(
+      'It is urgent and ready for Kai to merge.'
+    );
+    expect(listHandoffParagraphs(ready, { owner: null, presence: null, now: HOUR })[0]?.text).toBe(
+      'It is urgent and ready for you to merge, so Autopilot sent it to your team.'
     );
   });
 });

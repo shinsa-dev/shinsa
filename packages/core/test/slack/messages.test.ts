@@ -871,6 +871,7 @@ describe('the escalation message', () => {
       'A watchdog found the issue it fixes. It is urgent and waited 45 minutes for a merge.',
       'High',
     ],
+    [{ waitedMinutes: 0 }, 'It is urgent and ready to merge.', 'High'],
   ])('says what happens next when the handoff is %o', (handoff, text, review) => {
     const harness = createHarness();
     const escalation = { ...ESCALATION, handoff: { ...ESCALATION.handoff, ...handoff } };

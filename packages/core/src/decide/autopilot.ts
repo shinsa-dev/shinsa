@@ -127,21 +127,42 @@ function scheduleAutopilot(decider: Decider, gate: Gate, due: AutopilotDue | nul
   decider.emit({ type: 'autopilot.scheduled', gateId: gate.id, due });
 }
 
-function resolveUrgentDue(decider: Decider, task: Task): AutopilotDue | null {
+const ASKS_AT_ONCE: ReadonlySet<AutopilotPolicy['urgent']> = new Set(['escalate', 'escalate_then_merge']);
+
+const MERGES_AFTER_WAIT: ReadonlySet<AutopilotPolicy['urgent']> = new Set(['merge', 'escalate_then_merge']);
+
+const READY = 'Urgent, and ready to merge.';
+
+function resolveUrgentPolicy(decider: Decider, task: Task) {
   const policy = resolveAutopilotPolicy(decider.state.settings);
-  if (!policy.enabled || !isUrgent(task) || policy.urgent === 'wait') return null;
-  return {
-    at: decider.context.now + policy.urgentWaitMinutes * MINUTE_MS,
-    action: policy.urgent === 'merge' ? 'merge' : 'escalate',
-  };
+  return policy.enabled && isUrgent(task) ? policy : null;
+}
+
+function resolveUrgentDue(decider: Decider, task: Task): AutopilotDue | null {
+  const policy = resolveUrgentPolicy(decider, task);
+  if (!policy || !MERGES_AFTER_WAIT.has(policy.urgent)) return null;
+  return { at: decider.context.now + policy.urgentWaitMinutes * MINUTE_MS, action: 'merge' };
+}
+
+function askAtOnce(decider: Decider, task: Task, mergesAt: number | null) {
+  const policy = resolveUrgentPolicy(decider, task);
+  if (!policy || !ASKS_AT_ONCE.has(policy.urgent)) return;
+  const refusal = mergesAt === null ? null : resolveMergeRefusal(decider, task);
+  escalate(decider, task, refusal ? `${READY} ${MERGE_BLOCK_TEXT[refusal]}` : READY, {
+    waitedMinutes: 0,
+    mergesAt: refusal ? null : mergesAt,
+    blockedBy: refusal,
+  });
 }
 
 export function syncAutopilotDeadlines(decider: Decider, taskId?: string) {
   for (const gate of listOpenGates(decider.state, taskId)) {
     if (gate.type !== 'merge') continue;
-    const due = resolveUrgentDue(decider, decider.task(gate.taskId));
+    const task = decider.task(gate.taskId);
+    const due = resolveUrgentDue(decider, task);
     if (due === null) scheduleAutopilot(decider, gate, null);
     else if (!gate.autopilotDue) scheduleAutopilot(decider, gate, due);
+    askAtOnce(decider, task, due === null ? null : (gate.autopilotDue?.at ?? due.at));
   }
 }
 
@@ -154,7 +175,9 @@ export function applyAutopilotMerge(decider: Decider, gate: Gate) {
       return;
     }
   }
-  scheduleAutopilot(decider, gate, resolveUrgentDue(decider, task));
+  const due = resolveUrgentDue(decider, task);
+  scheduleAutopilot(decider, gate, due);
+  askAtOnce(decider, task, due?.at ?? null);
 }
 
 function describeWait(minutes: number) {
@@ -207,42 +230,31 @@ function escalate(decider: Decider, task: Task, reason: string, timing: HandoffT
     });
 }
 
-function resolveUrgentAction(urgent: AutopilotPolicy['urgent'], due: AutopilotDue['action']) {
-  if (urgent === 'wait') return null;
-  return urgent === 'escalate_then_merge' ? due : urgent;
-}
-
 function selectDueGate(decider: Decider, command: CommandOf<'autopilot.fire'>) {
   const gate = decider.state.gates[command.gateId];
   const task = decider.state.tasks[command.taskId];
   if (!gate || !task || gate.taskId !== task.id || gate.type !== 'merge' || gate.status !== 'open')
     return null;
   if (gate.autopilotDue?.at !== command.dueAt || isTaskClosed(task)) return null;
-  const policy = resolveAutopilotPolicy(decider.state.settings);
-  const action = resolveUrgentAction(policy.urgent, gate.autopilotDue.action);
-  if (!policy.enabled || !isUrgent(task) || action === null) return null;
-  return { gate, task, policy, action };
+  const policy = resolveUrgentPolicy(decider, task);
+  if (!policy || !MERGES_AFTER_WAIT.has(policy.urgent)) return null;
+  return { gate, task, policy };
 }
 
 export function fireAutopilot(decider: Decider, command: CommandOf<'autopilot.fire'>) {
   const found = selectDueGate(decider, command);
   if (!found) return;
-  const { gate, task, policy, action } = found;
+  const { gate, task, policy } = found;
   const waited = `Urgent, and the merge waited ${describeWait(policy.urgentWaitMinutes)} for you.`;
   const refusal = resolveMergeRefusal(decider, task);
-  if (action === 'merge' && refusal === null) {
+  if (refusal === null) {
     mergeForYou(decider, gate, waited);
     return;
   }
-  const merges = policy.urgent === 'escalate_then_merge' && action === 'escalate' && refusal === null;
-  const next: AutopilotDue | null = merges
-    ? { at: decider.context.now + policy.urgentWaitMinutes * MINUTE_MS, action: 'merge' }
-    : null;
-  const blockedBy = action === 'merge' ? refusal : null;
-  escalate(decider, task, blockedBy ? `${waited} ${MERGE_BLOCK_TEXT[blockedBy]}` : waited, {
+  escalate(decider, task, `${waited} ${MERGE_BLOCK_TEXT[refusal]}`, {
     waitedMinutes: policy.urgentWaitMinutes,
-    mergesAt: next?.at ?? null,
-    blockedBy,
+    mergesAt: null,
+    blockedBy: refusal,
   });
-  scheduleAutopilot(decider, gate, next);
+  scheduleAutopilot(decider, gate, null);
 }

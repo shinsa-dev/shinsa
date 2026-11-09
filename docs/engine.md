@@ -2068,8 +2068,9 @@ action it takes is recorded with its reason. The rules are core's (`decide/autop
 - **The policy.** `enabled`; `approveUpTo`, the highest risk whose review it approves (`none`, `low`, `medium` or
   `high`; `low` by default); `urgentApproveUpTo`, the same for an urgent task (`medium`); `merge`, when it merges
   a change it approved (`never` by default, `low_risk`, or `approved`); `urgent`, what an urgent change's merge gate
-  does once it has waited (`wait`, `escalate` by default, `merge`, or `escalate_then_merge`); `urgentWaitMinutes`,
-  how long (60, 1 to 1440); `ignoreUsageLimits` (`true` by default), whether an urgent task's runs skip the usage and
+  does once it is ready (`wait`; `escalate` by default, which asks for a review at once; `merge`, which merges after
+  the wait; or `escalate_then_merge`, which asks at once and merges after the wait); `urgentWaitMinutes`, how long it
+  waits before it merges (60, 1 to 1440); `ignoreUsageLimits` (`true` by default), whether an urgent task's runs skip the usage and
   cost limits; `contacts`, who in Slack also hears of an escalation (none by default, at most
   `MAX_AUTOPILOT_CONTACTS`, 5; each an `AutopilotContact`, a `slack_channel` or `slack_person` with its workspace
   `teamId`, Slack `id` and `name`, listed once, `isSameAutopilotContact`; Escalating in Slack, below).
@@ -2087,17 +2088,21 @@ action it takes is recorded with its reason. The rules are core's (`decide/autop
 - **The merge gate.** When the merge gate opens (`applyAutopilotMerge`), a change Autopilot approved merges at once
   (`gate.answered` with `autopilot`, then the usual merge) when `merge` allows it (`approved`, or `low_risk` and the
   risk is `low`), no pre-merge step of it or its bundle is open, and your edits are pushed. Otherwise an urgent task
-  whose policy acts on a wait gets a deadline on its gate (`autopilot.scheduled`, `Gate.autopilotDue {at, action}`).
-  The deadline follows you while the gate waits (`syncAutopilotDeadlines`, after `task.prioritize` and
-  `settings.change`): a task you mark urgent, or a policy you turn on or set to act, gets one a full wait from then;
-  a task no longer urgent, or a policy off or set to `wait`, loses it; a deadline already set keeps its time.
+  asks first and waits after: with `escalate` or `escalate_then_merge` it is escalated at once (`askAtOnce`, "Urgent,
+  and ready to merge.", `handoff.waitedMinutes` 0, with `mergesAt` the deadline, or the reason it will not merge
+  as `blockedBy`), and with `merge` or `escalate_then_merge` its gate gets a merge deadline a full wait later
+  (`autopilot.scheduled`, `Gate.autopilotDue {at, action: 'merge'}`). Both follow you while the gate waits
+  (`syncAutopilotDeadlines`, after `task.prioritize` and `settings.change`): a task you mark urgent, or a policy you
+  turn on or set to ask or merge, is asked for at once and gets its deadline a full wait from then; a task no longer
+  urgent, or a policy off or set not to merge, loses the deadline; a deadline already set keeps its time, and an
+  escalation already sent is not sent again.
 - **The idle clock.** `AutopilotClock` fires `autopilot.fire {taskId, gateId, dueAt}` (command id
   `autopilot:<gate>:<dueAt>`) for each open merge gate at its deadline. Core ignores a fire for another deadline, a
   gate no longer open, or a closed task, and clears the deadline once the policy is off or the task is no longer
-  urgent. It acts on the urgent rule as it is at the fire, not the one the deadline was set under: `merge` merges,
-  `escalate` escalates, `escalate_then_merge` takes the deadline's own step, `wait` does nothing. A `merge` deadline merges for you when nothing refuses it; otherwise, and for an `escalate` deadline, it
-  escalates the task (`task.escalated`, `Task.escalation {at, reason, handoff}`, "Escalated by Autopilot" in the activity).
-  With `escalate_then_merge` the escalation sets a second deadline the same wait later, which merges.
+  urgent. It acts on the urgent rule as it is at the fire, not the one the deadline was set under: only `merge` and
+  `escalate_then_merge` merge, and only when nothing refuses it; otherwise it escalates the task with why
+  (`task.escalated`, `Task.escalation {at, reason, handoff}`, "Escalated by Autopilot" in the activity), unless it
+  was already asked for at once, and clears the deadline.
 - **Escalating to your team.** `Task.escalation` is a shared status field, so it travels in your team listing
   (Teams, below). On every teammate's machine `listTeamEscalations` (`queue/escalations.ts`) picks the open escalated
   tasks out of the team feed: they show in Needs you as "Sent by your team" (an amber megaphone tile and a line such as
@@ -2136,8 +2141,9 @@ action it takes is recorded with its reason. The rules are core's (`decide/autop
   watchdog, only to keep an eye on it). The reply's ts is kept with `slack.record_escalation_follow_up`
   (`slack.escalation_followed_up`), and every later watchdog event or ticked step edits it, as the merge message of a
   thread is. The contacts are chosen in Settings → Agents → Autopilot, in the Who it asks block (below the Approving
-  for you and When an urgent merge waits blocks, the on and off choice in the section's header): your team in Shinsa
-  first, with whether a project is shared with one, then each Slack channel (its name, no #) and person (their Slack
+  for you and Urgent changes blocks; the section's header has Turn on while Autopilot is off, with one line on what it
+  does, and the on and off choice once on; Merges after shows only for a rule that merges): your team in Shinsa
+  first, "Always on" or "No project shared with a team", then each Slack channel (its name, no #) and person (their Slack
   picture, `image` from `users.list`'s `image_72`, kept on the contact) with a button to remove it. Add from Slack
   opens one search over Channels and People (`listContactOptions`, the chosen ones ticked, the rest disabled at five,
   a workspace choice at its top when Slack is connected in more than one), and each pick saves at once. Send a test

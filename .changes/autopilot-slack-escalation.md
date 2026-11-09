@@ -1,4 +1,4 @@
 ---
 kind: added
 ---
-Autopilot can ask Slack channels and teammates to review an urgent change, beside your team in Shinsa, and replies in the thread once it merges. Pick them in Settings → Agents → Autopilot and send a test.
+Autopilot asks your team and chosen Slack channels and teammates to review an urgent change as soon as it is ready, then merges after the wait if you set it to. It replies in the Slack thread once it merges.

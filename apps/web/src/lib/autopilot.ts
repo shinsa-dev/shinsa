@@ -27,9 +27,10 @@ import { describeTeamTaskOwner, resolveTeamTaskPath, resolveTeamTaskTarget } fro
 
 export const AUTOPILOT_TITLE = 'Autopilot';
 
-export const AUTOPILOT_DESCRIPTION = 'Approves and merges changes the reviewer is highly confident in.';
+export const AUTOPILOT_OFF =
+  'Approves and merges changes the reviewer is highly confident in. While it is off, every change waits for you.';
 
-export const AUTOPILOT_OFF = 'Off. Every change waits for you.';
+export const AUTOPILOT_TURN_ON = 'Turn on';
 
 export const AUTOPILOT_ENABLED_ITEMS: SettingItem<'on' | 'off'>[] = [
   { value: 'off', label: 'Off', icon: 'IconCircleX' },
@@ -63,10 +64,10 @@ const ASKS: ReadonlySet<AutopilotUrgent> = new Set(['escalate', 'escalate_then_m
 
 export function listAutopilotUrgentItems(reachable: boolean): SettingItem<AutopilotUrgent>[] {
   const items: SettingItem<AutopilotUrgent>[] = [
-    { value: 'wait', label: 'Keep waiting for me', icon: 'IconClock' },
+    { value: 'wait', label: 'Wait for me', icon: 'IconClock' },
     { value: 'escalate', label: 'Ask for a review', icon: 'IconMegaphone' },
     { value: 'escalate_then_merge', label: 'Ask for a review, then merge', icon: 'IconMegaphone' },
-    { value: 'merge', label: 'Merge it for me', icon: 'IconMerged' },
+    { value: 'merge', label: 'Merge after a wait', icon: 'IconMerged' },
   ];
   if (reachable) return items;
   return items.map((item) => (ASKS.has(item.value) ? { ...item, disabled: NOBODY_TO_ASK } : item));
@@ -74,7 +75,7 @@ export function listAutopilotUrgentItems(reachable: boolean): SettingItem<Autopi
 
 export const AUTOPILOT_BLOCKS = {
   approving: { title: 'Approving for you', icon: 'IconShieldCheck' },
-  urgent: { title: 'When an urgent merge waits', icon: 'IconClock' },
+  urgent: { title: 'Urgent changes', icon: 'IconClock' },
   asks: { title: 'Who it asks', icon: 'IconMegaphone' },
 } as const;
 
@@ -82,8 +83,8 @@ export const AUTOPILOT_ROWS = {
   approve: 'Reviews',
   urgentApprove: 'Urgent reviews',
   merge: 'Merges',
-  urgent: 'Then',
-  wait: 'After waiting',
+  urgent: 'When ready to merge',
+  wait: 'Merges after',
   usage: 'Usage limits',
 } as const;
 
@@ -102,7 +103,7 @@ export function hasTeamProject(projects: readonly Pick<Project, 'teamIds'>[]) {
 
 export const TEAM_CONTACT = {
   title: 'Your team in Shinsa',
-  shared: 'Needs you',
+  shared: 'Always on',
   alone: 'No project shared with a team',
 } as const;
 
@@ -234,6 +235,12 @@ function describeMinutes(minutes: number) {
 export function listAutopilotWaitItems(policy: AutopilotPolicy): SettingItem<string>[] {
   const values = [...new Set([...WAIT_CHOICES, policy.urgentWaitMinutes])].sort((a, b) => a - b);
   return values.map((value) => ({ value: String(value), label: describeMinutes(value), icon: 'IconClock' }));
+}
+
+const MERGES_AFTER_WAIT: ReadonlySet<AutopilotUrgent> = new Set(['merge', 'escalate_then_merge']);
+
+export function isMergedAfterWait(policy: AutopilotPolicy) {
+  return MERGES_AFTER_WAIT.has(policy.urgent);
 }
 
 export function resolveAutopilotValue(settings: Settings) {
@@ -368,12 +375,15 @@ function describeOwnerPresence({ handoff }: TaskEscalation, { owner, presence, n
   return ago ? `${owner} was last online ${ago}.` : null;
 }
 
+function describeUrgentWait({ handoff }: TaskEscalation, owner: string) {
+  if (handoff.waitedMinutes === 0) return `It is urgent and ready for ${owner} to merge`;
+  return `It is urgent and waited ${describeMinutes(handoff.waitedMinutes)} for ${owner} to merge it`;
+}
+
 function describeWhy(escalation: TaskEscalation, viewer: HandoffViewer) {
-  const waited = describeMinutes(escalation.handoff.waitedMinutes);
-  if (!viewer.owner)
-    return `It is urgent and waited ${waited} for you to merge it, so Autopilot sent it to your team.`;
+  if (!viewer.owner) return `${describeUrgentWait(escalation, 'you')}, so Autopilot sent it to your team.`;
   const presence = describeOwnerPresence(escalation, viewer);
-  const urgent = `It is urgent and waited ${waited} for ${viewer.owner} to merge it.`;
+  const urgent = `${describeUrgentWait(escalation, viewer.owner)}.`;
   return presence ? `${urgent} ${presence}` : urgent;
 }
 
@@ -428,7 +438,9 @@ export function listHandoffParagraphs(escalation: TaskEscalation, viewer: Handof
 export function describeTeamEscalationSummary({ entry, escalation }: TeamEscalation) {
   const owner = describeTeamTaskOwner(entry);
   const found = escalation.handoff.foundBy ? ', found by a watchdog,' : '';
-  return `${owner}’s urgent fix${found} waited ${describeMinutes(escalation.handoff.waitedMinutes)} for its merge`;
+  const minutes = escalation.handoff.waitedMinutes;
+  if (minutes === 0) return `${owner}’s urgent fix${found} is ready to merge`;
+  return `${owner}’s urgent fix${found} waited ${describeMinutes(minutes)} for its merge`;
 }
 
 export interface TeamEscalationRow {

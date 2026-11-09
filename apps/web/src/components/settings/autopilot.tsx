@@ -19,13 +19,13 @@ import { SelectField } from '@/components/controls/select-field.tsx';
 import { Hint } from '@/components/overlays/hint.tsx';
 import {
   AUTOPILOT_BLOCKS,
-  AUTOPILOT_DESCRIPTION,
   AUTOPILOT_ENABLED_ITEMS,
   AUTOPILOT_MERGE_ITEMS,
   AUTOPILOT_OFF,
   AUTOPILOT_RISK_ITEMS,
   AUTOPILOT_ROWS,
   AUTOPILOT_TITLE,
+  AUTOPILOT_TURN_ON,
   AUTOPILOT_USAGE_ITEMS,
   CONTACT_PICKER_HINT,
   describeAutopilotContact,
@@ -33,6 +33,7 @@ import {
   describeSlackTestResults,
   hasTeamProject,
   isAskWaiting,
+  isMergedAfterWait,
   isSlackTestSent,
   listAutopilotUrgentItems,
   listAutopilotWaitItems,
@@ -141,8 +142,8 @@ function ContactPicker({
                 <ContactFace contact={contact} />
                 <Truncate className='min-w-0 flex-1'>{contact.name}</Truncate>
                 <Icon
-                  name='IconCheckmark1Small'
-                  className={cn('shrink-0 text-primary', !chosen && 'invisible')}
+                  name='IconCheckmark1'
+                  className={cn('shrink-0 rotate-[4deg] text-primary-text', !chosen && 'invisible')}
                 />
               </CommandItem>
             ))}
@@ -194,7 +195,7 @@ function AskBlock({
             <Button
               variant='secondary'
               size='sm'
-              icon='IconSend'
+              icon='IconTestTube'
               loading={testing}
               disabled={testBlock !== null}
               onClick={() => void test()}
@@ -257,16 +258,26 @@ export function AutopilotSettings({ settings }: { settings: Settings }) {
   return (
     <SettingsGroup
       title={AUTOPILOT_TITLE}
-      description={AUTOPILOT_DESCRIPTION}
       className='gap-1.5'
       action={
-        <SelectField
-          label={AUTOPILOT_TITLE}
-          size='sm'
-          items={AUTOPILOT_ENABLED_ITEMS}
-          value={enabled}
-          onValueChange={(value) => updateAutopilot({ enabled: value === 'on' })}
-        />
+        policy.enabled ? (
+          <SelectField
+            label={AUTOPILOT_TITLE}
+            size='sm'
+            items={AUTOPILOT_ENABLED_ITEMS}
+            value={enabled}
+            onValueChange={(value) => updateAutopilot({ enabled: value === 'on' })}
+          />
+        ) : (
+          <Button
+            variant='secondary'
+            size='sm'
+            icon='IconRocket'
+            onClick={() => updateAutopilot({ enabled: true })}
+          >
+            {AUTOPILOT_TURN_ON}
+          </Button>
+        )
       }
     >
       {!policy.enabled && <SettingsEmpty>{AUTOPILOT_OFF}</SettingsEmpty>}
@@ -305,16 +316,6 @@ export function AutopilotSettings({ settings }: { settings: Settings }) {
           <SettingsBlock
             header={<BlockHeader icon={AUTOPILOT_BLOCKS.urgent.icon} title={AUTOPILOT_BLOCKS.urgent.title} />}
           >
-            {policy.urgent !== 'wait' && (
-              <SettingRow title={AUTOPILOT_ROWS.wait}>
-                <SelectField
-                  label={AUTOPILOT_ROWS.wait}
-                  items={listAutopilotWaitItems(policy)}
-                  value={String(policy.urgentWaitMinutes)}
-                  onValueChange={(value) => updateAutopilot({ urgentWaitMinutes: Number(value) })}
-                />
-              </SettingRow>
-            )}
             <SettingRow
               title={
                 <>
@@ -334,6 +335,16 @@ export function AutopilotSettings({ settings }: { settings: Settings }) {
                 onValueChange={(urgent) => updateAutopilot({ urgent })}
               />
             </SettingRow>
+            {isMergedAfterWait(policy) && (
+              <SettingRow title={AUTOPILOT_ROWS.wait}>
+                <SelectField
+                  label={AUTOPILOT_ROWS.wait}
+                  items={listAutopilotWaitItems(policy)}
+                  value={String(policy.urgentWaitMinutes)}
+                  onValueChange={(value) => updateAutopilot({ urgentWaitMinutes: Number(value) })}
+                />
+              </SettingRow>
+            )}
             <SettingRow title={AUTOPILOT_ROWS.usage}>
               <SelectField
                 label={AUTOPILOT_ROWS.usage}
