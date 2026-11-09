@@ -201,6 +201,8 @@ describe('the remote dashboard', () => {
     expect(await screen.findByText('Reached through your team')).toBeTruthy();
     expect(screen.getByText(/you reach Platform through a machine a teammate shares/)).toBeTruthy();
     expect(screen.queryByText('Pair a machine')).toBeNull();
+    expect(screen.getByText('Run tasks on a shared machine')).toBeTruthy();
+    expect(screen.queryByText('Every machine in one place')).toBeNull();
   });
 
   it('says a device that asked and left is still waiting for an answer, on a machine listed or not yet', async () => {

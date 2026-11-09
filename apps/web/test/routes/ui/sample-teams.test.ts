@@ -14,7 +14,7 @@ const NOW = 1_800_000_000_000;
 const REFUSED = 'This is a sample. Nothing changes here.';
 
 describe('the /ui teams samples', () => {
-  it('show a team you own, one you are in and a request you sent, then no team and remote access off', () => {
+  it('show a team you own, one you are in and a request you sent, a team this machine shares nothing with, then no team and remote access off', () => {
     const { state, scenes } = createSampleTeams(NOW);
     expect(Object.values(state.projects).map((project) => project.teamIds)).toEqual([
       ['tm4k2q'],
@@ -24,6 +24,7 @@ describe('the /ui teams samples', () => {
     ]);
     expect(scenes.map((scene) => scene.snapshot.teams.map((team) => team.status))).toEqual([
       ['member', 'member', 'requested'],
+      ['member'],
       [],
       [],
     ]);

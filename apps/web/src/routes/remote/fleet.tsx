@@ -11,6 +11,7 @@ import {
   MACHINE_ICON,
   SERVICE_WORKER_PATH,
   SERVICE_WORKER_SCOPE,
+  type RemotePoint,
 } from '@/lib/remote/mode.ts';
 import { serveRelayedRequests, startServiceWorker } from '@/lib/remote/relay.ts';
 import type { RemoteServices } from '@/lib/remote/services.ts';
@@ -43,13 +44,31 @@ function WaitingPage({ machines }: { machines: string[] }) {
   );
 }
 
+const TEAM_REACH_POINTS: RemotePoint[] = [
+  {
+    icon: 'IconEyeOpen',
+    title: 'Your team’s work, live',
+    detail: 'Every task in the projects your teammates share, on a machine shared with the team.',
+  },
+  {
+    icon: MACHINE_ICON,
+    title: 'Run tasks on a shared machine',
+    detail: 'What you start there is yours and runs as you.',
+  },
+  {
+    icon: 'IconShieldCheck',
+    title: 'Encrypted end to end',
+    detail: 'This device gets its own key from the shared machine. app.shinsa.dev cannot read your work.',
+  },
+];
+
 function TeamReachPage({ teams }: { teams: string[] }) {
   return (
     <section className='flex flex-col items-center gap-6 pt-4'>
       <RemoteHero icon='IconUserAdd' title='Reached through your team'>
         {`You have no machine of your own, so you reach ${describeList(teams)} through a machine a teammate shares with it. It opens here once one is shared.`}
       </RemoteHero>
-      <RemoteBenefits />
+      <RemoteBenefits points={TEAM_REACH_POINTS} />
       <RemoteCheckAgain />
     </section>
   );
