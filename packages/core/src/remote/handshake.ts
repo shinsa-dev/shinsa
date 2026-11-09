@@ -1,4 +1,4 @@
-import { Effect } from 'effect';
+import { Effect, Option } from 'effect';
 import { parseJsonRecord } from '../domain/records.ts';
 import { type Bytes, concatBytes, encodeText, parseBase64Url, serializeBase64Url } from './bytes.ts';
 import { CHANNEL_COMPRESSION, type ChannelCompression } from './frames.ts';
@@ -57,7 +57,7 @@ interface ServerSessionInput {
 }
 
 export function parseClientHello(text: string): ClientHello | null {
-  const fields = parseJsonRecord(text);
+  const fields = Option.getOrUndefined(parseJsonRecord(text));
   if (fields?.type !== 'hello' || fields.version !== REMOTE_PROTOCOL_VERSION) return null;
   if (typeof fields.device !== 'string' || typeof fields.ephemeral !== 'string') return null;
   if (fields.enroll !== null && typeof fields.enroll !== 'string') return null;
@@ -81,7 +81,7 @@ export function resolveCompression(hello: ClientHello): ChannelCompression | nul
 }
 
 export function parseServerHello(text: string): ServerHello | null {
-  const fields = parseJsonRecord(text);
+  const fields = Option.getOrUndefined(parseJsonRecord(text));
   if (fields?.type === 'welcome' && typeof fields.ephemeral === 'string')
     return {
       type: 'welcome',

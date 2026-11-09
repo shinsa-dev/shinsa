@@ -1,4 +1,4 @@
-import { Effect } from 'effect';
+import { Effect, Option } from 'effect';
 import { isText, parseJsonRecord } from '../domain/records.ts';
 import { type Bytes, concatBytes, encodeText, parseBase64Url, serializeBase64Url } from './bytes.ts';
 import { REMOTE_PROTOCOL_VERSION } from './handshake.ts';
@@ -106,7 +106,7 @@ export const createShareHello = Effect.fn('createShareHello')(function* (
 });
 
 export function parseShareHello(text: string): ShareHello | null {
-  const fields = parseJsonRecord(text);
+  const fields = Option.getOrUndefined(parseJsonRecord(text));
   if (fields?.type !== 'share-hello' || fields.version !== REMOTE_PROTOCOL_VERSION) return null;
   if (!(isText(fields.share) && isText(fields.ephemeral) && isText(fields.proof))) return null;
   return {
@@ -132,7 +132,7 @@ export const createShareWelcome = Effect.fn('createShareWelcome')(function* (key
 });
 
 export function parseShareWelcome(text: string): ShareWelcome | null {
-  const fields = parseJsonRecord(text);
+  const fields = Option.getOrUndefined(parseJsonRecord(text));
   if (fields?.type === 'welcome' && isText(fields.ephemeral) && isText(fields.proof))
     return { type: 'welcome', ephemeral: fields.ephemeral, proof: fields.proof };
   if (fields?.type === 'refused' && isText(fields.reason)) return { type: 'refused', reason: fields.reason };
@@ -174,8 +174,7 @@ function readShareMessage(fields: Record<string, unknown>): ShareMessage | null 
 }
 
 export function parseShareMessage(text: string): ShareMessage | null {
-  const fields = parseJsonRecord(text);
-  return fields ? readShareMessage(fields) : null;
+  return Option.getOrNull(Option.flatMapNullishOr(parseJsonRecord(text), readShareMessage));
 }
 
 export function serializeShareMessage(message: ShareMessage) {

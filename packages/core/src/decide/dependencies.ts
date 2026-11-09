@@ -1,3 +1,4 @@
+import { Option } from 'effect';
 import type { CommandOf } from '../commands/index.ts';
 import {
   compareTasks,
@@ -100,7 +101,7 @@ export function resolveStackParents(
   const shared = repoId ?? parents.find((parent) => parent.repoId)?.repoId ?? null;
   for (const parent of parents) {
     const refusal = selectStackRefusal(decider.state, task, parent, shared);
-    if (refusal) throw refusal;
+    if (Option.isSome(refusal)) throw new DomainError(refusal.value);
   }
   return parents.map((parent) => parent.id);
 }

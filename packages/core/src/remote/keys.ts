@@ -1,4 +1,4 @@
-import { Effect } from 'effect';
+import { Effect, Option } from 'effect';
 import { parseJsonRecord } from '../domain/records.ts';
 import { type Bytes, hasBytes, parseBase64Url, serializeBase64Url, serializeHex } from './bytes.ts';
 
@@ -29,7 +29,7 @@ export const serializePrivateKey = Effect.fn('serializePrivateKey')(function* (k
 });
 
 export const parsePrivateKey = Effect.fn('parsePrivateKey')(function* (text: string) {
-  const jwk = parseJsonRecord(text);
+  const jwk = Option.getOrUndefined(parseJsonRecord(text));
   if (!jwk) return null;
   return yield* importKeyOrNull(() =>
     crypto.subtle.importKey('jwk', jwk, REMOTE_KEY_ALGORITHM, false, ['deriveBits'])
@@ -49,7 +49,7 @@ export const parseSigningPublicKey = Effect.fn('parseSigningPublicKey')(function
 });
 
 export const parseSigningPrivateKey = Effect.fn('parseSigningPrivateKey')(function* (text: string) {
-  const jwk = parseJsonRecord(text);
+  const jwk = Option.getOrUndefined(parseJsonRecord(text));
   if (!jwk) return null;
   return yield* importKeyOrNull(() =>
     crypto.subtle.importKey('jwk', jwk, SIGNING_KEY_ALGORITHM, false, ['sign'])

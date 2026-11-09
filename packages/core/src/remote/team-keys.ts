@@ -77,7 +77,7 @@ export function readTeamKeyRequest(value: unknown): TeamKeyRequest | null {
 }
 
 export function parseTeamKeyRefusal(text: string) {
-  const fields = parseJsonRecord(text);
+  const fields = Option.getOrUndefined(parseJsonRecord(text));
   return fields?.type === 'refused' ? readTeamKeyRequest(fields.keyRequest) : null;
 }
 
@@ -157,7 +157,7 @@ export const sealTeamKey = Effect.fn('sealTeamKey')(function* (input: TeamKeySea
 });
 
 export function parseTeamKeyDelivery(text: string): TeamKeyDelivery | null {
-  const fields = parseJsonRecord(text);
+  const fields = Option.getOrUndefined(parseJsonRecord(text));
   if (fields?.type !== 'team-key' || fields.version !== REMOTE_PROTOCOL_VERSION) return null;
   const { team, recipient, sealed } = fields;
   if (!(typeof team === 'string' && typeof recipient === 'string' && typeof sealed === 'string')) return null;

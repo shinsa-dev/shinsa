@@ -1,3 +1,4 @@
+import { Result } from 'effect';
 import { isWatchHome, type Task, type TaskStage } from '../domain/index.ts';
 import type { TeamFeedTask } from '../remote/teams.ts';
 import type { ShinsaState } from '../state/project.ts';
@@ -47,11 +48,10 @@ const CODE = /```[\s\S]*?(?:```|$)|`[^`\n]*`/g;
 const ANY_LINK = /\[[^\]\n]*\]\([^)\n]*\)|<?https?:\/\/[^\s>]+>?/g;
 
 function decode(part: string) {
-  try {
-    return decodeURIComponent(part);
-  } catch {
-    return part;
-  }
+  return Result.getOrElse(
+    Result.try(() => decodeURIComponent(part)),
+    () => part
+  );
 }
 
 function parseNumber(text: string | undefined) {

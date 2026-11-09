@@ -47,7 +47,7 @@ export {
   quoteDuplicateOriginal,
   resolveTeammateMachineLabel,
 } from './duplicates.ts';
-export { DomainError } from './errors.ts';
+export { DomainError, type DomainRefusal } from './errors.ts';
 export {
   FeedbackId,
   GateId,

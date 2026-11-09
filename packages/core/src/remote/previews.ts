@@ -147,7 +147,7 @@ export function resolvePrivatePreviewUrl(
 
 function readAccessClaim(payload: Bytes): PreviewAccessClaim | null {
   const text = Option.getOrNull(selectText(payload));
-  const fields = text === null ? null : parseJsonRecord(text);
+  const fields = text === null ? undefined : Option.getOrUndefined(parseJsonRecord(text));
   if (typeof fields?.i !== 'string' || typeof fields.p !== 'string') return null;
   if (typeof fields.u !== 'string' || typeof fields.e !== 'number') return null;
   return { instanceId: fields.i, previewId: fields.p, userId: fields.u, expiresAt: fields.e };

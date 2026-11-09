@@ -3,6 +3,15 @@ import { type AstNode, listChildren } from './lint-ast.ts';
 
 export const EFFECT_IMPORT = /from\s+['"](?:effect(?:\/[\w-]+)?|@effect\/[\w-]+)['"]/;
 
+const EFFECT_VALUE_IMPORT = /import\s*\{[^}]*\bEffect\b[^}]*\}\s*from\s*['"]effect['"]/;
+
+const PURE_CORE_SOURCE = /^packages\/core\/src\//;
+
+export function isEffectCode(file: string, source: string) {
+  if (!EFFECT_IMPORT.test(source)) return false;
+  return !PURE_CORE_SOURCE.test(file) || EFFECT_VALUE_IMPORT.test(source);
+}
+
 const PROMISE_BRIDGES = new Set(['try', 'tryPromise', 'promise']);
 
 const IO_BRIDGES = new Set(['try', 'tryPromise', 'promise', 'sync', 'callback']);
@@ -242,12 +251,12 @@ function listMessages(node: AstNode, ancestors: AstNode[]) {
 
 export function isEffectSource(file: string, source: string) {
   const isTest = /\.test\.tsx?$/.test(file) || /(?:^|\/)test\//.test(file);
-  return !isTest && EFFECT_IMPORT.test(source);
+  return !isTest && isEffectCode(file, source);
 }
 
 export function isPromiseIoSource(file: string, source: string) {
   const isTest = /\.test\.ts$/.test(file) || /(?:^|\/)test\//.test(file);
-  return PROMISE_IO_SOURCE.test(file) && file.endsWith('.ts') && !isTest && !EFFECT_IMPORT.test(source);
+  return PROMISE_IO_SOURCE.test(file) && file.endsWith('.ts') && !isTest && !isEffectCode(file, source);
 }
 
 export function isSyncIoSource(file: string, source: string) {
@@ -284,7 +293,7 @@ export function isEffectIoSource(file: string, source: string) {
     PROMISE_IO_SOURCE.test(file) &&
     file.endsWith('.ts') &&
     !isTest &&
-    EFFECT_IMPORT.test(source) &&
+    isEffectCode(file, source) &&
     !SYNC_IO_EXEMPT.has(file)
   );
 }
@@ -485,8 +494,6 @@ const BASELINE_MESSAGES: Record<BaselineRule, string> = {
   timer: TIMER_MESSAGE,
 };
 
-const PURE_CORE_SOURCE = /^packages\/core\/src\//;
-
 const TIMERS = new Set(['setTimeout', 'setInterval']);
 
 const TIMER_BRIDGES = new Set(['callback']);
@@ -498,7 +505,7 @@ export function isBaselineSource(file: string) {
 
 function listRulesFor(file: string, source: string) {
   if (!isBaselineSource(file)) return new Set<BaselineRule>();
-  const effect = EFFECT_IMPORT.test(source);
+  const effect = isEffectCode(file, source);
   const component = file.endsWith('.tsx');
   const rules = new Set<BaselineRule>(['timer']);
   if (!effect && !component) {
@@ -508,6 +515,15 @@ function listRulesFor(file: string, source: string) {
   if (!effect) rules.add('json-parse');
   if (PURE_CORE_SOURCE.test(file) && !component) rules.add('null-return');
   return rules;
+}
+
+function isDomainRefusal(file: string, node: AstNode) {
+  const argument = node.argument as AstNode | undefined;
+  return (
+    PURE_CORE_SOURCE.test(file) &&
+    argument?.type === 'NewExpression' &&
+    readName(argument.callee) === 'DomainError'
+  );
 }
 
 function isTimerCall(node: AstNode) {
@@ -569,12 +585,12 @@ function listExportedFunctions(program: AstNode) {
   return functions;
 }
 
-function listRuleLines(program: AstNode, rules: ReadonlySet<BaselineRule>) {
+function listRuleLines(file: string, program: AstNode, rules: ReadonlySet<BaselineRule>) {
   const found: { rule: BaselineRule; line: number }[] = [];
   const lineOf = (node: AstNode) => node.loc?.start.line ?? 0;
   walk(program, (node, ancestors) => {
     const checks: [BaselineRule, boolean][] = [
-      ['throw', node.type === 'ThrowStatement'],
+      ['throw', node.type === 'ThrowStatement' && !isDomainRefusal(file, node)],
       ['try-catch', node.type === 'TryStatement'],
       ['json-parse', isJsonParse(node)],
       ['timer', isTimerCall(node) && !isInsideBridge([...ancestors, node], TIMER_BRIDGES)],
@@ -593,7 +609,7 @@ export function listBaselineRuleViolations(file: string, source: string) {
   if (rules.size === 0) return [];
   const plugins: ('typescript' | 'jsx')[] = file.endsWith('.tsx') ? ['typescript', 'jsx'] : ['typescript'];
   const program = parse(source, { sourceType: 'module', plugins }).program as unknown as AstNode;
-  return listRuleLines(program, rules)
+  return listRuleLines(file, program, rules)
     .sort((a, b) => a.line - b.line)
     .map(({ rule, line }) => ({ rule, line, message: BASELINE_MESSAGES[rule] }));
 }

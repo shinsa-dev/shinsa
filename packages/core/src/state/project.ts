@@ -1,3 +1,4 @@
+import { Result } from 'effect';
 import type { StoredBriefing } from '../briefing/types.ts';
 import {
   type AccountPlan,
@@ -1225,16 +1226,17 @@ export function replayEventLog(events: Iterable<ShinsaEvent>, from: ShinsaState 
   let state = from;
   const failures: ReplayFailure[] = [];
   for (const event of events) {
-    try {
-      state = applyEvent(state, event);
-    } catch (error) {
-      state.seq = Math.max(state.seq, event.seq);
-      failures.push({
-        seq: event.seq,
-        type: event.type,
-        error: error instanceof Error ? error.message : String(error),
-      });
+    const applied = Result.try(() => applyEvent(state, event));
+    if (Result.isSuccess(applied)) {
+      state = applied.success;
+      continue;
     }
+    state.seq = Math.max(state.seq, event.seq);
+    failures.push({
+      seq: event.seq,
+      type: event.type,
+      error: applied.failure instanceof Error ? applied.failure.message : String(applied.failure),
+    });
   }
   return { state, failures };
 }

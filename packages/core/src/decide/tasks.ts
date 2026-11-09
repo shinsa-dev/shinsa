@@ -1,3 +1,4 @@
+import { Option } from 'effect';
 import type { CommandOf, TriageReasons } from '../commands/index.ts';
 import {
   copyUnreachedTeammate,
@@ -155,7 +156,7 @@ function resolveTriageStack(
     return (
       parent !== undefined &&
       parent.repoId === repoId &&
-      selectStackRefusal(decider.state, task, parent, repoId) === null
+      Option.isNone(selectStackRefusal(decider.state, task, parent, repoId))
     );
   });
 }

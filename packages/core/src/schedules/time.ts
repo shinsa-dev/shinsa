@@ -1,3 +1,4 @@
+import { Result } from 'effect';
 import { SCHEDULE_LIMITS } from '../domain/schedules.ts';
 import { type ScheduleTrigger } from '../domain/schema.ts';
 import { HOUR_MS, MINUTE_MS } from '../domain/time.ts';
@@ -34,12 +35,7 @@ function resolveFormatter(timeZone: string) {
 }
 
 export function isTimeZone(value: string) {
-  try {
-    resolveFormatter(value);
-    return true;
-  } catch {
-    return false;
-  }
+  return Result.isSuccess(Result.try(() => resolveFormatter(value)));
 }
 
 export function parseTimeOfDay(value: string): { hour: number; minute: number } | null {

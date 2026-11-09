@@ -1,4 +1,4 @@
-import { Effect } from 'effect';
+import { Effect, Option } from 'effect';
 import { isRecord, parseJsonRecord } from '../domain/records.ts';
 import { DAY_MS } from '../domain/time.ts';
 import { ACCESS_PRESETS } from '../scopes/index.ts';
@@ -336,7 +336,7 @@ export const createTeamHello = Effect.fn('createTeamHello')(function* (
 });
 
 export function parseTeamHello(text: string): TeamHello | null {
-  const fields = parseJsonRecord(text);
+  const fields = Option.getOrUndefined(parseJsonRecord(text));
   if (fields?.type !== 'team-hello' || fields.version !== REMOTE_PROTOCOL_VERSION) return null;
   const view = readTeamView(fields.view);
   const { team, ephemeral, proof } = fields;
@@ -406,7 +406,7 @@ export function readTeamSnapshot(value: unknown): TeamSnapshot | null {
 }
 
 function readSnapshotBody(text: string): TeamSnapshotBody | null {
-  const fields = parseJsonRecord(text);
+  const fields = Option.getOrUndefined(parseJsonRecord(text));
   if (!fields) return null;
   const { teamId, instanceId, tasks, updatedAt } = fields;
   if (!(typeof teamId === 'string' && typeof instanceId === 'string' && typeof updatedAt === 'number'))
@@ -415,7 +415,7 @@ function readSnapshotBody(text: string): TeamSnapshotBody | null {
 }
 
 export function selectTeamSnapshotSigner(snapshot: TeamSnapshot) {
-  const instanceId = parseJsonRecord(snapshot.body)?.instanceId;
+  const instanceId = Option.getOrUndefined(parseJsonRecord(snapshot.body))?.instanceId;
   return typeof instanceId === 'string' ? instanceId : null;
 }
 

@@ -1,5 +1,7 @@
+import { Option } from 'effect';
 import {
   DomainError,
+  type DomainRefusal,
   type Gate,
   hasStep,
   isAgentQuestion,
@@ -101,33 +103,33 @@ export function selectStackRefusal(
   task: Task | null,
   parent: Task,
   repoId = task?.repoId ?? null
-) {
+): Option.Option<DomainRefusal> {
   if (parent.id === task?.id)
-    return new DomainError({ code: 'stack_self', message: 'A task cannot stack on itself.' });
+    return Option.some({ code: 'stack_self', message: 'A task cannot stack on itself.' });
   if (parent.stage === 'cancelled')
-    return new DomainError({ code: 'dependency_cancelled', message: 'That task was cancelled.' });
+    return Option.some({ code: 'dependency_cancelled', message: 'That task was cancelled.' });
   if (isTaskSettled(parent)) {
-    return new DomainError({
+    return Option.some({
       code: 'stack_parent_settled',
       message: 'That task is finished, so there is nothing to stack on.',
     });
   }
   if (!hasStep(parent, 'pull_request')) {
-    return new DomainError({
+    return Option.some({
       code: 'stack_no_pull_request',
       message: 'That task opens no pull request to stack on.',
     });
   }
   if (repoId && parent.repoId && repoId !== parent.repoId) {
-    return new DomainError({
+    return Option.some({
       code: 'stack_repository',
       message: 'The tasks of a bundle work in one repository.',
     });
   }
   if (task && isDependencyOf(state, task.id, parent.id)) {
-    return new DomainError({ code: 'dependency_cycle', message: 'That task already waits on this one.' });
+    return Option.some({ code: 'dependency_cycle', message: 'That task already waits on this one.' });
   }
-  return null;
+  return Option.none();
 }
 
 function isReadyToStackOn(state: ShinsaState, task: Task) {

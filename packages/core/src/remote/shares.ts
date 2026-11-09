@@ -1,3 +1,4 @@
+import { Result } from 'effect';
 import type { SharedTask } from '../share/index.ts';
 import {
   concatBytes,
@@ -67,13 +68,9 @@ function serializeShareToken(instanceId: string, shareId: string) {
 function parseShareToken(token: string) {
   const bytes = parseBase64Url(token);
   if (!bytes || bytes.length <= SHARE_ID_BYTES) return null;
-  try {
-    const instanceId = decodeText(bytes.slice(SHARE_ID_BYTES));
-    if (!URL_SAFE_SEGMENT.test(instanceId)) return null;
-    return { instanceId, shareId: serializeBase64Url(bytes.slice(0, SHARE_ID_BYTES)) };
-  } catch {
-    return null;
-  }
+  const instanceId = Result.getOrNull(Result.try(() => decodeText(bytes.slice(SHARE_ID_BYTES))));
+  if (instanceId === null || !URL_SAFE_SEGMENT.test(instanceId)) return null;
+  return { instanceId, shareId: serializeBase64Url(bytes.slice(0, SHARE_ID_BYTES)) };
 }
 
 export function resolveSharePagePath(instanceId: string, shareId: string) {
@@ -90,12 +87,8 @@ export function parseShareLocation(pathname: string, hash: string): ShareLink | 
 
 export function parseShareUrl(url: string | null): ShareLink | null {
   if (!url) return null;
-  try {
-    const parsed = new URL(url);
-    return parseShareLocation(parsed.pathname, parsed.hash);
-  } catch {
-    return null;
-  }
+  const parsed = URL.parse(url);
+  return parsed ? parseShareLocation(parsed.pathname, parsed.hash) : null;
 }
 
 export function isShareId(value: string) {

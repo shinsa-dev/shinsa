@@ -85,12 +85,8 @@ export function isServiceEnvKey(key: string) {
 
 export function isServicePreviewUrl(url: string) {
   if (!url.includes(PORT_PLACEHOLDER)) return false;
-  try {
-    const { protocol } = new URL(url.replaceAll(PORT_PLACEHOLDER, '1'));
-    return protocol === 'http:' || protocol === 'https:';
-  } catch {
-    return false;
-  }
+  const protocol = URL.parse(url.replaceAll(PORT_PLACEHOLDER, '1'))?.protocol;
+  return protocol === 'http:' || protocol === 'https:';
 }
 
 export function resolveServiceUrl(

@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { Option } from 'effect';
 import { isRecord, parseJsonRecord } from '../../src/domain/records.ts';
 
 describe('isRecord', () => {
@@ -12,9 +13,10 @@ describe('isRecord', () => {
 
 describe('parseJsonRecord', () => {
   test('reads a JSON object and refuses an array, a primitive or broken JSON', () => {
-    expect(parseJsonRecord('{"id":"a"}')).toEqual({ id: 'a' });
-    expect(parseJsonRecord('[1]')).toBeNull();
-    expect(parseJsonRecord('1')).toBeNull();
-    expect(parseJsonRecord('{')).toBeNull();
+    expect(parseJsonRecord('{"id":"a"}')).toEqual(Option.some({ id: 'a' }));
+    expect(parseJsonRecord('[1]')).toEqual(Option.none());
+    expect(parseJsonRecord('1')).toEqual(Option.none());
+    expect(parseJsonRecord('null')).toEqual(Option.none());
+    expect(parseJsonRecord('{')).toEqual(Option.none());
   });
 });

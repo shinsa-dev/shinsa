@@ -47,6 +47,22 @@ describe('Effect code is held to the house style', () => {
     expect(isEffectSource('scripts/effect-guide/domain.test.ts', source)).toBe(false);
   });
 
+  test('a core file that only uses Option, Result or Schema is pure code, one that imports Effect is not', () => {
+    const pure = "import { Option, Result, Schema } from 'effect';";
+    expect(isEffectSource('packages/core/src/state/queries.ts', pure)).toBe(false);
+    expect(isPromiseIoSource('packages/core/src/state/queries.ts', pure)).toBe(true);
+    expect(
+      isEffectSource('packages/core/src/remote/keys.ts', "import { Effect, Option } from 'effect';")
+    ).toBe(true);
+    expect(isEffectSource('apps/web/src/lib/a.ts', pure)).toBe(true);
+    expect(
+      listBaselineRuleViolations(
+        'packages/core/src/state/queries.ts',
+        `${pure}\nthrow new DomainError({ code: 'a', message: 'A.' });\nJSON.parse(t);`
+      ).map(({ rule, line }) => `${rule}:${line}`)
+    ).toEqual(['json-parse:3']);
+  });
+
   test('a .tsx file is parsed with JSX', () => {
     expect(messages('const a = 1;')).toEqual([]);
     expect(listEffectViolations('a.tsx', 'const view = () => <Row at={Date.now()} />;')).toEqual([
@@ -351,6 +367,16 @@ describe('the baseline rules', () => {
       { rule: 'throw', line: 2, message: PLAIN_THROW_MESSAGE },
       { rule: 'try-catch', line: 3, message: PLAIN_TRY_MESSAGE },
     ]);
+  });
+
+  test('a DomainError refusal thrown in core passes, any other throw there or one outside core fails', () => {
+    const refusal = "throw new DomainError({ code: 'no', message: 'No.' });";
+    expect(rules('packages/core/src/decide/tasks.ts', refusal)).toEqual([]);
+    expect(rules('packages/core/src/decide/tasks.ts', 'throw refusal;\nthrow new Error("no");')).toEqual([
+      'throw:1',
+      'throw:2',
+    ]);
+    expect(rules('apps/engine/src/terminals/input.ts', refusal)).toEqual(['throw:1']);
   });
 
   test('Effect files and components are left to their own rules for a throw and a try/catch', () => {
