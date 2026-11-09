@@ -457,3 +457,144 @@ export function listEffectViolations(file: string, source: string) {
   });
   return violations;
 }
+
+export const PLAIN_THROW_MESSAGE =
+  'A throw outside Effect. Return an Option or a Result from pure code, or fail an effect with a Schema.TaggedError, so the caller sees the failure in the type (the effect skill → Pure code)';
+
+export const PLAIN_TRY_MESSAGE =
+  'A try/catch outside Effect. Use Result.try in pure code or Effect.try in an effect, and handle the failure as a value (the effect skill → Pure code)';
+
+export const NULL_RETURN_MESSAGE =
+  'An exported core function that returns null. Return an Option, Option.some(value) or Option.none(), so every caller handles the empty case (the effect skill → Pure code)';
+
+export const PLAIN_JSON_MESSAGE =
+  'JSON.parse outside Effect. Decode text with a schema, Schema.decodeUnknownResult(Schema.fromJsonString(Shape)) in pure code or Schema.fromJsonString in an effect, so outside input is checked (the effect skill → Schemas)';
+
+export const TIMER_MESSAGE =
+  'setTimeout or setInterval outside Effect. Wait with Effect.sleep or repeat with a named Schedule, and in a component through useAppEffect, so the timer is interrupted with its scope (the effect skill → Resources, concurrency and retries)';
+
+export const BASELINE_RULES = ['throw', 'try-catch', 'null-return', 'json-parse', 'timer'] as const;
+
+export type BaselineRule = (typeof BASELINE_RULES)[number];
+
+const BASELINE_MESSAGES: Record<BaselineRule, string> = {
+  throw: PLAIN_THROW_MESSAGE,
+  'try-catch': PLAIN_TRY_MESSAGE,
+  'null-return': NULL_RETURN_MESSAGE,
+  'json-parse': PLAIN_JSON_MESSAGE,
+  timer: TIMER_MESSAGE,
+};
+
+const PURE_CORE_SOURCE = /^packages\/core\/src\//;
+
+const TIMERS = new Set(['setTimeout', 'setInterval']);
+
+const TIMER_BRIDGES = new Set(['callback']);
+
+export function isBaselineSource(file: string) {
+  const isTest = /\.test\.tsx?$/.test(file) || /(?:^|\/)test\//.test(file);
+  return PROMISE_IO_SOURCE.test(file) && /\.tsx?$/.test(file) && !file.endsWith('.d.ts') && !isTest;
+}
+
+function listRulesFor(file: string, source: string) {
+  if (!isBaselineSource(file)) return new Set<BaselineRule>();
+  const effect = EFFECT_IMPORT.test(source);
+  const component = file.endsWith('.tsx');
+  const rules = new Set<BaselineRule>(['timer']);
+  if (!effect && !component) {
+    rules.add('throw');
+    rules.add('try-catch');
+  }
+  if (!effect) rules.add('json-parse');
+  if (PURE_CORE_SOURCE.test(file) && !component) rules.add('null-return');
+  return rules;
+}
+
+function isTimerCall(node: AstNode) {
+  if (node.type !== 'CallExpression') return false;
+  const callee = node.callee as AstNode;
+  const name = callee.type === 'MemberExpression' ? readName(callee.property) : readName(callee);
+  return name !== null && TIMERS.has(name);
+}
+
+function walkOwnScope(node: AstNode, visit: (node: AstNode) => void) {
+  visit(node);
+  for (const child of listChildren(node)) if (!isFunction(child)) walkOwnScope(child, visit);
+}
+
+function isNullValue(node: AstNode | undefined | null): boolean {
+  if (!node) return false;
+  if (node.type === 'NullLiteral') return true;
+  if (node.type === 'ConditionalExpression')
+    return isNullValue(node.consequent as AstNode) || isNullValue(node.alternate as AstNode);
+  if (node.type === 'LogicalExpression') return isNullValue(node.right as AstNode);
+  if (node.type === 'TSAsExpression' || node.type === 'TSSatisfiesExpression')
+    return isNullValue(node.expression as AstNode);
+  return false;
+}
+
+function hasNullType(node: AstNode | undefined) {
+  if (!node) return false;
+  let found = false;
+  walk(node, (child) => {
+    if (child.type === 'TSNullKeyword') found = true;
+  });
+  return found;
+}
+
+function returnsNull(fn: AstNode) {
+  if (hasNullType(fn.returnType as AstNode | undefined)) return true;
+  const body = fn.body as AstNode;
+  if (body.type !== 'BlockStatement') return isNullValue(body);
+  let found = false;
+  walkOwnScope(body, (node) => {
+    if (node.type === 'ReturnStatement' && isNullValue(node.argument as AstNode | undefined)) found = true;
+  });
+  return found;
+}
+
+function listExportedFunctions(program: AstNode) {
+  const functions: AstNode[] = [];
+  for (const statement of program.body as AstNode[]) {
+    if (statement.type !== 'ExportNamedDeclaration' && statement.type !== 'ExportDefaultDeclaration')
+      continue;
+    const declaration = statement.declaration as AstNode | undefined;
+    if (!declaration) continue;
+    if (isFunction(declaration)) functions.push(declaration);
+    if (declaration.type !== 'VariableDeclaration') continue;
+    for (const declarator of declaration.declarations as AstNode[]) {
+      const init = declarator.init as AstNode | undefined;
+      if (init && isFunction(init)) functions.push(init);
+    }
+  }
+  return functions;
+}
+
+function listRuleLines(program: AstNode, rules: ReadonlySet<BaselineRule>) {
+  const found: { rule: BaselineRule; line: number }[] = [];
+  const lineOf = (node: AstNode) => node.loc?.start.line ?? 0;
+  walk(program, (node, ancestors) => {
+    const checks: [BaselineRule, boolean][] = [
+      ['throw', node.type === 'ThrowStatement'],
+      ['try-catch', node.type === 'TryStatement'],
+      ['json-parse', isJsonParse(node)],
+      ['timer', isTimerCall(node) && !isInsideBridge([...ancestors, node], TIMER_BRIDGES)],
+    ];
+    for (const [rule, broken] of checks)
+      if (broken && rules.has(rule)) found.push({ rule, line: lineOf(node) });
+  });
+  if (rules.has('null-return'))
+    for (const fn of listExportedFunctions(program))
+      if (returnsNull(fn)) found.push({ rule: 'null-return', line: lineOf(fn) });
+  return found;
+}
+
+export function listBaselineRuleViolations(file: string, source: string) {
+  const rules = listRulesFor(file, source);
+  if (rules.size === 0) return [];
+  const plugins: ('typescript' | 'jsx')[] = file.endsWith('.tsx') ? ['typescript', 'jsx'] : ['typescript'];
+  const program = parse(source, { sourceType: 'module', plugins }).program as unknown as AstNode;
+  return listRuleLines(program, rules)
+    .sort((a, b) => a.line - b.line)
+    .map(({ rule, line }) => ({ rule, line, message: BASELINE_MESSAGES[rule] }));
+}

@@ -23,6 +23,13 @@ import {
   listRawIoViolations,
   RAW_IO_MESSAGE,
   SYNC_IO_EXEMPT,
+  isBaselineSource,
+  listBaselineRuleViolations,
+  NULL_RETURN_MESSAGE,
+  PLAIN_JSON_MESSAGE,
+  PLAIN_THROW_MESSAGE,
+  PLAIN_TRY_MESSAGE,
+  TIMER_MESSAGE,
 } from './lint-effect.ts';
 
 const messages = (source: string) =>
@@ -315,5 +322,106 @@ describe('raw file and process I/O in Effect code', () => {
     expect(
       listRawIoViolations('apps/engine/src/new.ts', `import type { Stats } from 'node:fs';\n${clean}`)
     ).toEqual([]);
+  });
+});
+
+describe('the baseline rules', () => {
+  const rules = (file: string, source: string) =>
+    listBaselineRuleViolations(file, source).map(({ rule, line }) => `${rule}:${line}`);
+
+  test('every source file and script is checked, never a test, a declaration file or a doc', () => {
+    expect(isBaselineSource('packages/core/src/costs/index.ts')).toBe(true);
+    expect(isBaselineSource('apps/web/src/components/task/row.tsx')).toBe(true);
+    expect(isBaselineSource('scripts/seed/tasks/index.ts')).toBe(true);
+    expect(isBaselineSource('apps/desktop/scripts/build.ts')).toBe(true);
+    expect(isBaselineSource('apps/engine/test/harness.ts')).toBe(false);
+    expect(isBaselineSource('scripts/lint-effect.test.ts')).toBe(false);
+    expect(isBaselineSource('apps/web/src/env.d.ts')).toBe(false);
+    expect(isBaselineSource('docs/notes.ts')).toBe(false);
+    expect(listBaselineRuleViolations('apps/engine/test/a.ts', 'throw x;')).toEqual([]);
+  });
+
+  test('a throw and a try/catch outside Effect are found in plain .ts files, with their messages', () => {
+    expect(
+      listBaselineRuleViolations(
+        'apps/web/src/lib/a.ts',
+        'const a = 1;\nthrow new Error("no");\ntry { a(); } catch {}'
+      )
+    ).toEqual([
+      { rule: 'throw', line: 2, message: PLAIN_THROW_MESSAGE },
+      { rule: 'try-catch', line: 3, message: PLAIN_TRY_MESSAGE },
+    ]);
+  });
+
+  test('Effect files and components are left to their own rules for a throw and a try/catch', () => {
+    const effect = "import { Effect } from 'effect';\nthrow x;\ntry { a(); } catch {}\nJSON.parse(t);";
+    expect(rules('apps/engine/src/a.ts', effect)).toEqual([]);
+    expect(rules('apps/web/src/components/row.tsx', 'throw x;\ntry { a(); } catch {}')).toEqual([]);
+  });
+
+  test('JSON.parse is found in plain files and components, never twice in Effect files', () => {
+    expect(listBaselineRuleViolations('scripts/perf/a.ts', 'const v = JSON.parse(text);')).toEqual([
+      { rule: 'json-parse', line: 1, message: PLAIN_JSON_MESSAGE },
+    ]);
+    expect(rules('apps/web/src/components/row.tsx', 'const v = () => <A v={JSON.parse(t)} />;')).toEqual([
+      'json-parse:1',
+    ]);
+    expect(rules('apps/web/src/lib/a.ts', 'const t = JSON.stringify(v);')).toEqual([]);
+  });
+
+  test('timers are found everywhere, Effect files included, unless Effect.callback owns them', () => {
+    const source = [
+      "import { Effect } from 'effect';",
+      'setTimeout(run, 10);',
+      'window.setInterval(run, 10);',
+      'globalThis.setTimeout(run);',
+      'Effect.callback((resume) => { const id = setTimeout(resume, 10); return Effect.sync(() => clearTimeout(id)); });',
+      'Effect.sync(() => setTimeout(run));',
+      'clearTimeout(id);',
+    ].join('\n');
+    expect(listBaselineRuleViolations('apps/engine/src/a.ts', source)).toEqual(
+      [2, 3, 4, 6].map((line) => ({ rule: 'timer', line, message: TIMER_MESSAGE }))
+    );
+    expect(
+      rules('apps/web/src/components/row.tsx', 'const v = () => <A on={() => setTimeout(a)} />;')
+    ).toEqual(['timer:1']);
+    expect(rules('apps/web/src/lib/a.ts', 'const timer = setTimeout;\nrun()();')).toEqual([]);
+  });
+
+  test('an exported core function that returns null is found once, on its first line', () => {
+    const source = [
+      'export function a() { return null; }',
+      'export function b(): string | null { return x; }',
+      'export const c = () => null;',
+      'export const d = (v) => (v ? v : null);',
+      'export const e = function () { return v ?? null; };',
+      'export function f() { if (x) return null; return null; }',
+      'export const g = () => (null as unknown as string);',
+      'export default function h() { return null; }',
+      'export function ok() { const inner = () => null; return inner; }',
+      'export const k = (v) => v || 1;',
+      'function local() { return null; }',
+      'export const value = null;',
+      'export { local };',
+      'export const l = (v) => v satisfies string;',
+      'export default value;',
+      'export function m() { return; }',
+      'export class N { run() { return null; } }',
+      'export const o = 1, p = () => null;',
+    ].join('\n');
+    expect(listBaselineRuleViolations('packages/core/src/a.ts', source)).toEqual(
+      [1, 2, 3, 4, 5, 6, 7, 8, 18].map((line) => ({
+        rule: 'null-return',
+        line,
+        message: NULL_RETURN_MESSAGE,
+      }))
+    );
+  });
+
+  test('null returns are only checked in core, never in other packages or components', () => {
+    const source = 'export function a() { return null; }';
+    expect(rules('apps/engine/src/a.ts', source)).toEqual([]);
+    expect(rules('packages/core/src/a.tsx', source)).toEqual([]);
+    expect(rules('packages/core/test/a.ts', source)).toEqual([]);
   });
 });
