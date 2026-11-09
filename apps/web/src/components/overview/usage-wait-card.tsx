@@ -1,4 +1,4 @@
-import { resolveAwayHours, type ShinsaState, type Task, type UsageWait } from '@shinsa/core';
+import { resolveActiveHours, type ShinsaState, type Task, type UsageWait } from '@shinsa/core';
 import { Button } from '@shinsa/ui/components/button';
 import { Eyebrow, FooterNote, NowFrame, QuietLink } from '@/components/overview/now-frame.tsx';
 import { TimeAgo } from '@/components/text/time-ago.tsx';
@@ -39,7 +39,7 @@ export function UsageWaitCard({
           extra={<TimeAgo at={wait.resetAt} text={(now) => describeUsageWaitCountdown(wait, now)} />}
         />
       }
-      title={describeUsageWaitTitle(wait, shownAt, resolveAwayHours(state, shownAt))}
+      title={describeUsageWaitTitle(wait, shownAt, resolveActiveHours(state, shownAt))}
       action={
         <Button
           variant='outline'

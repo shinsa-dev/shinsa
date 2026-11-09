@@ -3,11 +3,11 @@ import {
   capitalise,
   DAY_MS,
   describeCount,
-  isAwayAt,
+  isActiveAt,
   isListedInFocus,
   isTaskComplete,
   resolveAutoPace,
-  resolveAwayHours,
+  resolveActiveHours,
   type ShinsaState,
   type Task,
   type TaskStage,
@@ -111,14 +111,14 @@ export function dropPullRequestNumbers(text: string) {
 }
 
 function listOvernightReviews(state: ShinsaState, now: number) {
-  const away = resolveAwayHours(state, now);
-  if (!away || isAwayAt(away, now)) return [];
+  const hours = resolveActiveHours(state, now);
+  if (!hours || !isActiveAt(hours, now)) return [];
   return Object.values(state.gates).filter(
     (gate) =>
       gate.type === 'review' &&
       gate.status === 'open' &&
       now - gate.openedAt < DAY_MS &&
-      isAwayAt(away, gate.openedAt)
+      !isActiveAt(hours, gate.openedAt)
   );
 }
 
@@ -133,8 +133,8 @@ export function isWaitingToBuild(task: Task) {
 
 function describeBuildTime(state: ShinsaState, task: Task, now: number) {
   const at = task.usageWait?.resetAt ?? now;
-  const away = resolveAwayHours(state, now);
-  if (isAwayAt(away, at) && !isAwayAt(away, now)) return 'tonight';
+  const hours = resolveActiveHours(state, now);
+  if (!isActiveAt(hours, at) && isActiveAt(hours, now)) return 'tonight';
   return at <= now ? 'next' : `after ${formatMoment(at, now)}`;
 }
 

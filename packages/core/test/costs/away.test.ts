@@ -1,13 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import {
-  AWAY_LIMITS,
-  DAY_MS,
-  HOUR_MS,
-  isAwayAt,
-  resolveAwayHours,
-  resolveNightShift,
-  type TimingSpan,
-} from '../../src/index.ts';
+import { DAY_MS, HOUR_MS, resolveNightShift, type TimingSpan } from '../../src/index.ts';
 import { resolveNightShiftTold } from '../../src/prompts/night.ts';
 import { createHarness, createTask, type Harness } from '../harness.ts';
 
@@ -25,54 +17,6 @@ function nights(days: number, now = NOW, fromHour = 0, toHour = 8): Record<strin
     })
   );
 }
-
-function daytime(days: number, now = NOW) {
-  const today = Math.floor(now / DAY_MS);
-  const presence: Record<string, number> = {};
-  for (let day = today - days; day < today; day += 1) {
-    for (let hour = 9; hour < 18; hour += 1) presence[String(day * 24 + hour)] = 2;
-  }
-  return presence;
-}
-
-const NIGHT_HOURS = [0, 1, 2, 3, 4, 5, 6, 7];
-
-describe('away hours', () => {
-  test('are learned from the time you were away, by the hour of the day', () => {
-    expect(resolveAwayHours({ away: nights(10), presence: {} }, NOW)).toEqual({
-      hours: NIGHT_HOURS,
-      source: 'away',
-    });
-  });
-
-  test('an hour counts only when at least half of it was away, on at least half of the days', () => {
-    const half = nights(10, NOW, 0, 8.4);
-    const rare = nights(2, NOW, 10, 11);
-    const away = resolveAwayHours({ away: { ...half, ...rare }, presence: {} }, NOW);
-    expect(away?.hours).toEqual(NIGHT_HOURS);
-  });
-
-  test('ignore time away from before the last 14 days and a span past now counts only up to now', () => {
-    const old = nights(5, NOW - 20 * DAY_MS, 12, 20);
-    const open = { open: { from: NOW - HOUR_MS, to: NOW + DAY_MS } };
-    const away = resolveAwayHours({ away: { ...old, ...open, ...nights(4) }, presence: {} }, NOW);
-    expect(away?.hours).toEqual(NIGHT_HOURS);
-  });
-
-  test('fall back to the hours you were not active when too few days were away', () => {
-    const away = resolveAwayHours({ away: nights(AWAY_LIMITS.minDays - 1), presence: daytime(10) }, NOW);
-    expect(away?.source).toBe('activity');
-    expect(away?.hours).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 18, 19, 20, 21, 22, 23]);
-  });
-
-  test('are unknown with too little of either, and nothing is away then', () => {
-    const away = resolveAwayHours({ away: nights(2), presence: daytime(2) }, NOW);
-    expect(away).toBeNull();
-    expect(isAwayAt(away, NOW)).toBe(false);
-    expect(isAwayAt({ hours: [3], source: 'away' }, 21 * DAY_MS + 3.5 * HOUR_MS)).toBe(true);
-    expect(isAwayAt({ hours: [3], source: 'away' }, 21 * DAY_MS + 4 * HOUR_MS)).toBe(false);
-  });
-});
 
 function nightHarness(options: { autoPace?: boolean; pace?: number | null } = {}) {
   const harness = createHarness();
@@ -138,6 +82,19 @@ describe('the night shift', () => {
     };
     expect(shiftOf(queued, 'plan')).toBe('unattended');
     expect(resolveNightShiftTold(queued.state, queued.task(waiting), 'agent', 'plan', queued.now)).toBe('');
+  });
+
+  test('learns each day of the week on its own, so a weekend away does not count on Friday', () => {
+    const harness = nightHarness();
+    const saturdays = [9, 16, 23].map((day) => [
+      String(day),
+      { from: day * DAY_MS + 9 * HOUR_MS, to: day * DAY_MS + 17 * HOUR_MS },
+    ]);
+    Object.assign(harness.state.away, Object.fromEntries(saturdays));
+    harness.advance(29 * DAY_MS + 12 * HOUR_MS - harness.now);
+    expect(shiftOf(harness, 'build')).toBeNull();
+    harness.advance(DAY_MS);
+    expect(shiftOf(harness, 'build')).toBe('night');
   });
 
   test('reaches the agent at the end of its turn', () => {

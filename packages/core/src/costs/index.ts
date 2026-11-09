@@ -25,15 +25,7 @@ export {
   sortAdmissionQueue,
 } from './admission.ts';
 
-export {
-  AWAY_LIMITS,
-  type AwayHours,
-  type AwaySource,
-  isAwayAt,
-  type NightShift,
-  resolveAwayHours,
-  resolveNightShift,
-} from './away.ts';
+export { type NightShift, resolveNightShift } from './away.ts';
 
 export {
   BUILD_ESTIMATE_LIMITS,
