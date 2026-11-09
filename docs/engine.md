@@ -2427,7 +2427,7 @@ action it takes is recorded with its reason. The rules are core's (`decide/autop
     `resolveNextActiveChange(hours, at)`, the next 15-minute step where you go from here to away or back, or null
     when the week never changes. Settings → Agents → Your hours (`ActiveHoursSettings`, `lib/active-hours.ts`) shows
     each weekday's hours as a strip with its ranges and where they come from, says when it is still learning, and
-    sets them by hand (Set by hand copies what was learned, up to the two longest spans of each day and never the gaps between them, or weekdays 9:00 to 17:00) or clears them
+    sets them by hand (Set by hand copies the longest learned span of each day, never the gaps around it, so a short blip such as an hour at 1:00 stays outside your hours and every day keeps its start and end pickers; with nothing learned it starts from weekdays 9:00 to 17:00) or clears them
     (Use learned hours); it and the Autopilot row "Outside your hours, after" show only on an engine with
     `active-hours`.
 - **The night shift** (`costs/away.ts`, `prompts/night.ts`), on top of Auto pace and needing no setting of its own.

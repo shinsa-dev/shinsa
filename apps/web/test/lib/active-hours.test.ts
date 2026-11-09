@@ -99,7 +99,7 @@ describe('your hours, read', () => {
 });
 
 describe('your hours, set by hand', () => {
-  test('starts from the learned hours as they are, never filling the gaps between them', () => {
+  test('starts from the longest learned span of each day, never filling the gaps around it', () => {
     expect(
       resolveOverrideDays(
         createHours({
@@ -111,13 +111,12 @@ describe('your hours, set by hand', () => {
         })
       )
     ).toEqual([
-      { weekday: 1, from: 1, to: 2 },
       { weekday: 1, from: 7, to: 19 },
       { weekday: 6, from: 10, to: 11 },
     ]);
   });
 
-  test('keeps the two longest spans of a day, so the week fits the override', () => {
+  test('keeps only the longest span of a day, so every day stays editable', () => {
     const days = resolveOverrideDays(
       createHours({
         2: [
@@ -128,10 +127,8 @@ describe('your hours, set by hand', () => {
         ],
       })
     );
-    expect(days).toEqual([
-      { weekday: 2, from: 9, to: 12 },
-      { weekday: 2, from: 13, to: 18 },
-    ]);
+    expect(days).toEqual([{ weekday: 2, from: 13, to: 18 }]);
+    expect(listActiveHourRows(createHours({}), days).every((row) => !row.split)).toBe(true);
   });
 
   test('with nothing learned, starts from weekdays 9 to 17', () => {

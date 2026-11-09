@@ -1,11 +1,4 @@
-import {
-  ACTIVE_DAY_LIMIT,
-  type ActiveDay,
-  type ActiveHours,
-  ACTIVE_HOURS_LIMITS,
-  DAY_HOURS,
-  WEEK_DAYS,
-} from '@shinsa/core';
+import { type ActiveDay, type ActiveHours, ACTIVE_HOURS_LIMITS, DAY_HOURS } from '@shinsa/core';
 import type { SettingItem } from '@/lib/settings.ts';
 
 export const ACTIVE_HOURS_LABEL = {
@@ -98,10 +91,10 @@ export function describeActiveHoursSource(hours: ActiveHours) {
 export function resolveOverrideDays(hours: ActiveHours | null): ActiveDay[] {
   if (!hours) return [1, 2, 3, 4, 5].map((weekday) => ({ weekday, ...WORKDAY }));
   return WEEKDAY_ORDER.flatMap((weekday) => {
-    const longest = listRuns(resolveDayCells(hours, weekday))
-      .sort((left, right) => right.to - right.from - (left.to - left.from) || left.from - right.from)
-      .slice(0, ACTIVE_DAY_LIMIT / WEEK_DAYS);
-    return longest.sort((left, right) => left.from - right.from).map((run) => ({ weekday, ...run }));
+    const [longest] = listRuns(resolveDayCells(hours, weekday)).sort(
+      (left, right) => right.to - right.from - (left.to - left.from) || left.from - right.from
+    );
+    return longest ? [{ weekday, ...longest }] : [];
   });
 }
 
