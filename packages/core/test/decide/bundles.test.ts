@@ -624,6 +624,23 @@ describe('a bundle on its way to the merge', () => {
     );
   });
 
+  test('a question stacked on the task it waits on moves that wait into the stack', () => {
+    const harness = createHarness();
+    const parent = createTask(harness, { request: 'Parent' });
+    const before = new Set(Object.keys(harness.state.tasks));
+    harness.send({
+      type: 'task.create',
+      request: 'Why is it slow?',
+      repoId: null,
+      mode: 'ask',
+      waitsOn: [parent],
+    });
+    const question = Object.keys(harness.state.tasks).find((id) => !before.has(id)) ?? '';
+    stackOn(harness, question, [parent]);
+    expect(harness.task(question).waitsOn).toEqual([]);
+    expect(harness.task(question).stacksOn).toEqual([parent]);
+  });
+
   test('a loose task is in no bundle', () => {
     const harness = createHarness();
     const loose = createTask(harness, { request: 'Loose' });

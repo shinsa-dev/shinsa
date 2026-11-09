@@ -149,13 +149,17 @@ function restartForStack(decider: Decider, taskId: string) {
 
 export function changeStack(decider: Decider, taskId: string, stacksOn: string[], by: 'you' | 'shinsa') {
   decider.emit({ type: 'task.stack_changed', taskId, stacksOn, by });
-  const members = resolveBundleMembers(decider.state, decider.task(taskId));
-  const bundle = new Set([...stacksOn, ...members.map((member) => member.id)]);
-  for (const member of members) {
-    const waitsOn = member.waitsOn.filter((id) => !bundle.has(id));
-    if (waitsOn.length === member.waitsOn.length) continue;
-    if (member.id === taskId) decider.emit({ type: 'task.waits_on_changed', taskId, waitsOn, by });
-    else changeDependencies(decider, member.id, waitsOn, by);
+  const task = decider.task(taskId);
+  const members = resolveBundleMembers(decider.state, task);
+  const joined = members.some((member) => member.id === taskId) ? members : [];
+  const bundle = new Set([...stacksOn, ...joined.map((member) => member.id)]);
+  const waitsOn = task.waitsOn.filter((id) => !bundle.has(id));
+  if (waitsOn.length < task.waitsOn.length)
+    decider.emit({ type: 'task.waits_on_changed', taskId, waitsOn, by });
+  for (const member of joined) {
+    if (member.id === taskId) continue;
+    const kept = member.waitsOn.filter((id) => !bundle.has(id));
+    if (kept.length < member.waitsOn.length) changeDependencies(decider, member.id, kept, by);
   }
 }
 
