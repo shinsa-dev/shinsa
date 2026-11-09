@@ -98,6 +98,7 @@ export interface SlackSnapshot {
   remote: boolean;
   connectUrl: string | null;
   links: readonly SlackLinkUse[];
+  othersLinked?: number;
   problem: string | null;
 }
 

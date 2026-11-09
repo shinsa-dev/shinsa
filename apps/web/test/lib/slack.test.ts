@@ -50,6 +50,17 @@ describe('Slack’s status in Settings', () => {
     );
   });
 
+  it('tells an owner who has not linked how many members’ Slack accounts already reach the machine', () => {
+    expect(describeSlackStatus(snapshot({ othersLinked: 1 }))).toEqual({
+      label: 'Not connected',
+      tone: 'neutral',
+      detail: '1 member’s Slack account starts tasks here. Connect your own so your mentions do too.',
+    });
+    expect(describeSlackStatus(snapshot({ othersLinked: 3 })).detail).toBe(
+      '3 members’ Slack accounts start tasks here. Connect your own so your mentions do too.'
+    );
+  });
+
   it('shows a member their own Slack only: not connected until they link it', () => {
     expect(describeSlackStatus(snapshot(), true)).toEqual({
       label: 'Not connected',

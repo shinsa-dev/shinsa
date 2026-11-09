@@ -70,6 +70,22 @@ describe('Settings → General → Slack', () => {
     await waitFor(() => expect(actions.disconnect).toHaveBeenCalled());
   });
 
+  it('keeps Disconnect for an owner who has not linked, while members’ Slack accounts reach the machine', async () => {
+    const actions = renderGroup(snapshot({ othersLinked: 2 }));
+    expect(screen.getByText('Not connected')).toBeTruthy();
+    expect(screen.getByText(/2 members’ Slack accounts start tasks here/)).toBeTruthy();
+    expect(screen.getByText('Connect Slack')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Disconnect' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Disconnect Slack' }));
+    await waitFor(() => expect(actions.disconnect).toHaveBeenCalled());
+  });
+
+  it('never offers a member Disconnect, even with other people linked', () => {
+    renderGroup(snapshot({ othersLinked: 1 }), null, true);
+    expect(screen.getByText('Not connected')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Disconnect' })).toBeNull();
+  });
+
   it('lets a member connect their own Slack, and leaves Disconnect to the owner', () => {
     renderGroup(snapshot(), null, true);
     expect(screen.getByText('Not connected')).toBeTruthy();

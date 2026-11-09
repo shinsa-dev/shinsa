@@ -70,13 +70,13 @@ export function SlackGroup({
   actions?: SlackActions;
 }) {
   const dialog = useDialogState<true>();
-  const connected = (snapshot?.links.length ?? 0) > 0;
+  const linked = (snapshot?.links.length ?? 0) + (snapshot?.othersLinked ?? 0) > 0;
   return (
     <SettingsGroup
       title={SLACK_SECTION}
       description={SLACK_DESCRIPTION}
       action={
-        connected && !member ? (
+        linked && !member ? (
           <Button variant='secondary' size='sm' onClick={() => dialog.show(true)}>
             Disconnect
           </Button>

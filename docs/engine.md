@@ -3173,7 +3173,7 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   upgrade (404, the token kept), then spends the nonce (`Remote.spendConnect`, held until the token expires), so a
   token seen in a log or on the wire opens nothing (401). The token only keeps random traffic off the endpoint; trust
   rests on the handshake. Every engine names what it speaks in each heartbeat and pairing start (`features`:
-  `bound-connect-tokens`, `sealed-pairing`, `slack-linked-threads`, `MACHINE_FEATURES` in core), and app.shinsa.dev mints these tokens and
+  `bound-connect-tokens`, `sealed-pairing`, `slack-linked-threads`, `slack-task-owner`, `MACHINE_FEATURES` in core), and app.shinsa.dev mints these tokens and
   seals pairing credentials only for a machine that named them; an engine that predates them, which names nothing,
   still gets the old unlabelled token over the instance, user and expiry and its credentials in the clear, so the
   Worker can deploy before every machine has updated. This engine only accepts the new token and refuses clear
@@ -4505,7 +4505,9 @@ Slack ──a card's button──► app.shinsa.dev /slack/interactions
   owners), and the engine keeps a member's own (the sealed channel's GitHub user) and, for the owner or the keyboard,
   the owner's and those with no account (`Slack.snapshot(viewer)`). So a member who has not connected sees Not
   connected and Connect your Slack, even when others have, and never Disconnect (`describeSlackStatus`,
-  `resolveSlackConnectLabel`). Disconnect (`POST /api/slack/disconnect`) removes every
+  `resolveSlackConnectLabel`). The snapshot also counts everyone else's links (`othersLinked`), so an owner who has
+  not linked their own Slack while members have sees Not connected with how many members' accounts start tasks here,
+  and still gets Disconnect. Disconnect (`POST /api/slack/disconnect`) removes every
   link of this machine, its members' too; from another device only its owner may (`OwnerOnlyRoute`). Your user token is revoked
   (`auth.revoke`, best effort: a failure is logged as `[Cloud] A Slack user token could not be revoked` and the
   links still go) when you disconnect, when the machine is removed (`revokeMachineUserTokens`) and when connecting

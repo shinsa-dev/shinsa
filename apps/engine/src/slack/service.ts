@@ -405,15 +405,21 @@ export class Slack extends Context.Service<
           }
           const connectUrl = resolveSlackConnectUrl(input.appOrigin, credentials.instanceId);
           return yield* relay.links(token(credentials.machineToken)).pipe(
-            Effect.andThen((answer) => Effect.filter(answer.links, isViewers(viewer))),
-            Effect.andThen((links) => Effect.map(engine.state, (state) => ({ links, state }))),
-            Effect.map(({ links, state }): SlackSnapshot => ({
+            Effect.andThen((answer) =>
+              Effect.map(Effect.filter(answer.links, isViewers(viewer)), (links) => ({
+                links,
+                othersLinked: answer.links.length - links.length,
+              }))
+            ),
+            Effect.andThen((seen) => Effect.map(engine.state, (state) => ({ ...seen, state }))),
+            Effect.map(({ links, othersLinked, state }): SlackSnapshot => ({
               remote: true,
               connectUrl,
               links: links.map((link) => ({
                 ...link,
                 lastUsedAt: resolveSlackLastUsedAt(state, link),
               })),
+              othersLinked,
               problem: null,
             })),
             Effect.catch((failure) =>

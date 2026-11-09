@@ -872,6 +872,7 @@ describe('Settings → General → Slack', () => {
           lastUsedAt: 1,
         },
       ],
+      othersLinked: 1,
       problem: null,
     });
     expect(relay[0]).toMatchObject({ path: '/__remote/slack/links', method: 'GET', token: 'machine-token' });
@@ -887,6 +888,18 @@ describe('Settings → General → Slack', () => {
       });
     expect((await slack.snapshot(null)).links.map((link) => link.accountId)).toEqual([null]);
     expect((await slack.snapshot('gh-mia')).links).toEqual([]);
+  });
+
+  test('counts the links of other people, so an owner with none of their own still sees members linked', async () => {
+    const { slack, answers } = setUp();
+    expect((await slack.snapshot('gh-mia')).othersLinked).toBe(1);
+    answers['/__remote/slack/links'] = () =>
+      Response.json({
+        links: [
+          { teamId: 'T1', teamName: 'Acme', userId: 'U2', userName: 'Mia', linkedAt: 5, accountId: 'gh-mia' },
+        ],
+      });
+    expect(await slack.snapshot(null)).toMatchObject({ links: [], othersLinked: 1 });
   });
 
   test('says when each connected account last started a task here, or that it has not', async () => {
