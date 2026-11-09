@@ -119,7 +119,9 @@ export function createTask(decider: Decider, command: CommandOf<'task.create'>, 
   });
   const by = lineage.createdBy ? 'shinsa' : 'you';
   if (stacksOn.length > 0) changeStack(decider, taskId, stacksOn, by);
-  const waitsOn = dependencies.filter((id) => !isBundleMember(decider.state, decider.task(taskId), id));
+  const waitsOn = dependencies.filter(
+    (id) => !stacksOn.includes(id) && !isBundleMember(decider.state, decider.task(taskId), id)
+  );
   if (waitsOn.length > 0) decider.emit({ type: 'task.waits_on_changed', taskId, waitsOn, by });
   if (command.backlog) addToBacklog(decider, taskId);
   decider.run({ kind: 'task.triage', taskId });

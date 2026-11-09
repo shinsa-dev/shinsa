@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import {
   isBundleFollower,
+  isBundleMember,
   listBundleBlockers,
   listBundleFollowers,
   listOpenBlockers,
@@ -600,6 +601,27 @@ describe('a bundle on its way to the merge', () => {
     });
     reachReady(harness, parent);
     expect(harness.openGate(parent).type).toBe('merge');
+  });
+
+  test('a question stacked on a bundle is no member, so it keeps its wait on another member', () => {
+    const harness = createHarness();
+    const lead = createTask(harness, { request: 'Lead' });
+    const sibling = createTask(harness, { request: 'Sibling', stacksOn: [lead] });
+    const before = new Set(Object.keys(harness.state.tasks));
+    harness.send({
+      type: 'task.create',
+      request: 'Why is it slow?',
+      repoId: null,
+      mode: 'ask',
+      waitsOn: [sibling],
+    });
+    const question = Object.keys(harness.state.tasks).find((id) => !before.has(id)) ?? '';
+    stackOn(harness, question, [lead]);
+    expect(harness.task(question).waitsOn).toEqual([sibling]);
+    expect(isBundleMember(harness.state, harness.task(question), sibling)).toBe(false);
+    expect(listPendingDependencies(harness.state, harness.task(question)).map((task) => task.id)).toContain(
+      sibling
+    );
   });
 
   test('a loose task is in no bundle', () => {

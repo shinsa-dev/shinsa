@@ -69,9 +69,8 @@ export function isRunWaiting(state: ShinsaState, run: Run) {
 
 function listDependencies(state: ShinsaState, task: Task) {
   if (task.waitsOn.length === 0) return [];
-  const bundle = new Set(resolveBundleMembers(state, task).map((member) => member.id));
   return task.waitsOn
-    .filter((id) => !bundle.has(id))
+    .filter((id) => !isBundleMember(state, task, id))
     .map((id) => state.tasks[id])
     .filter((dependency) => dependency !== undefined);
 }
@@ -217,7 +216,8 @@ export function resolveBundleMembers(state: Pick<ShinsaState, 'tasks'>, task: Ta
 }
 
 export function isBundleMember(state: Pick<ShinsaState, 'tasks'>, task: Task, id: string) {
-  return resolveBundleMembers(state, task).some((member) => member.id === id);
+  const members = resolveBundleMembers(state, task);
+  return members.some((member) => member.id === task.id) && members.some((member) => member.id === id);
 }
 
 export function resolveBundleLead(state: Pick<ShinsaState, 'tasks'>, task: Task) {

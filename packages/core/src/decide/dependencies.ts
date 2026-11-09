@@ -27,7 +27,8 @@ import { holdForCheckout } from './workspaces.ts';
 export function resolveDependencies(decider: Decider, task: Task | null, ids: string[]) {
   const kept: string[] = [];
   for (const id of new Set(ids)) {
-    if (id === task?.id || (task && isBundleMember(decider.state, task, id))) continue;
+    if (id === task?.id || task?.stacksOn?.includes(id) || (task && isBundleMember(decider.state, task, id)))
+      continue;
     const dependency = decider.task(id);
     if (task?.waitsOn.includes(id)) {
       kept.push(id);
