@@ -3,7 +3,6 @@ import { Context, Effect, FileSystem, Layer, Option } from 'effect';
 import type { PlatformError } from 'effect/PlatformError';
 import { EngineConfig } from '../../config/service.ts';
 import { isEvidencePath, resolveFolderPath } from './folder.ts';
-import { writeImageFile } from './image-file.ts';
 import {
   EVIDENCE_COPY_LIMIT_BYTES,
   EVIDENCE_ROUTE,
@@ -83,7 +82,7 @@ export class Evidence extends Context.Service<
           Effect.suspend(() => {
             const extension = resolveExtension(mediaType.split('/')[1] ?? '', 'png');
             return writeEvidence(null, '', extension, (path) =>
-              Effect.sync(() => writeImageFile(path, base64))
+              fs.writeFile(path, Uint8Array.fromBase64(base64))
             );
           }),
         writeText: Effect.fn('Evidence.writeText')(function* (text, folder, title, extension) {

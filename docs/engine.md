@@ -623,7 +623,7 @@ every commit.
 - **Where they go.** `POST /api/tasks/<id>/file` (`writeFile` in the `tasks` group, `apps/engine/src/http/routes/tasks/`) takes `{ path, content, base }`
   (`FileWrite`): the file's new text and the text the editor last knew on disk (`null` for none). It writes into the
   task's checkout, `worktreePath`, which each strategy sets: the worktree, or the repository itself for the main
-  checkout. The path passes `assertRepoPath` and must stay inside the checkout with its nearest existing
+  checkout. The path passes `parseRepoPath` and must stay inside the checkout with its nearest existing
   folder's real path (`selectWritableInside`), so neither `..` nor a symlinked folder leads out. A text over 2 MB is
   refused (`file_too_large`), and so is a task core will not let you edit (`edit_refused`, `resolveEditRefusal`: merged,
   cancelled or done, or no checkout). Inspect mode refuses it with every other write.
