@@ -1352,6 +1352,14 @@ bundle with `create_task`'s `stack_on_this` (never with `this_task_waits` or `af
 `stacked` (Delegation, below). Triage stacks a new task on an open change when it is that change's next piece
 (`stacks_on`, Task shapes, above). Stacking on a task it already waits on moves that wait into the stack.
 
+- **No wait inside a bundle.** A bundle merges as one, so a task that waits for another task of its own bundle to
+  merge would hold the bundle while the bundle holds it. A wait on any member, below, above or beside it, is dropped:
+  `changeStack` drops it from every member of the bundle a stack change leaves (joining two bundles drops the waits
+  between them), and `task.wait_on`, `task.create` and triage never add one (`isBundleMember`, `state/queries.ts`). A
+  wait already in the log on a member holds nothing (`listDependencies` skips it), so the task starts and the lead's
+  merge gate opens as if it were gone. A task stacked on a bundle that opens no pull request of its own is not a member,
+  and keeps its waits.
+
 - **A graph, not a line.** A task can stack on several tasks and several tasks can stack on one, so a bundle fans out
   and back in: A, then B, C and D on A, then F on B, C and D, then E on F. A bundle is every task connected to a task
   by stacks, either way (`resolveBundleMembers`, `state/queries.ts`), in topological order: each task after every task
