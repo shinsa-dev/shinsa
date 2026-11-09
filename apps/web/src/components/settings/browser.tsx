@@ -52,7 +52,7 @@ function SiteFavicon({ site }: { site: string }) {
       src={url}
       alt=''
       referrerPolicy='no-referrer'
-      className='size-3.5 rounded-sm object-cover'
+      className='size-3.5 rounded-full object-cover'
       onError={() => setFailed(true)}
     />
   );

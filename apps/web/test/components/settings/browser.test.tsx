@@ -138,7 +138,7 @@ describe('Settings → Browser', () => {
     });
     expect(await screen.findByText('github.com')).toBeDefined();
     const favicon = container.querySelector('img[src="https://github.com/favicon.ico"]');
-    expect(favicon?.className).toContain('rounded-sm');
+    expect(favicon?.className).toContain('rounded-full');
     expect(favicon?.className).not.toContain('bg-white');
     if (favicon) fireEvent.error(favicon);
     expect(container.querySelector('img[src="https://github.com/favicon.ico"]')).toBeNull();
