@@ -25,6 +25,7 @@ import {
   FeedbackId,
   GateId,
   IdText,
+  InitiativeId,
   MemoryId,
   ProjectId,
   RepoId,
@@ -121,6 +122,12 @@ const TeammateFork = Strict(
   'teammateFork'
 );
 
+const InitiativePhaseInput = Strict(
+  { id: NullByDefault(IdText, FIELD_MESSAGES.text), name: Text() },
+  'A phase',
+  'phase'
+);
+
 const NamedAccount = OrNull(RunAccount, FIELD_MESSAGES.object).pipe(
   Schema.refine(Predicate.isNotNull, { message: 'account must name an account.' })
 );
@@ -135,6 +142,7 @@ export const UserCommand = Schema.Union([
     projectIds: Optional(List(ProjectId), FIELD_MESSAGES.list),
     except: Optional(Bool, FIELD_MESSAGES.boolean),
     teamId: Optional(OrNull(IdText, FIELD_MESSAGES.text), FIELD_MESSAGES.text),
+    initiativeId: Optional(OrNull(InitiativeId, FIELD_MESSAGES.text), FIELD_MESSAGES.text),
     until: NullByDefault(Time, FIELD_MESSAGES.time),
   }),
   Command('away.record', { from: Time, to: Time }),
@@ -153,6 +161,8 @@ export const UserCommand = Schema.Union([
     forkOf: Optional(TaskId, FIELD_MESSAGES.text),
     teammateFork: Optional(TeammateFork, FIELD_MESSAGES.object),
     backlog: Optional(Bool, FIELD_MESSAGES.boolean),
+    initiativeId: Optional(InitiativeId, FIELD_MESSAGES.text),
+    initiativePhaseId: Optional(IdText, FIELD_MESSAGES.text),
   }),
   Command('task.prioritize', { taskId: TaskId, priority: Choice(TASK_PRIORITIES) }),
   Command('task.wait_on', { taskId: TaskId, waitsOn: List(TaskId) }),
@@ -243,6 +253,19 @@ export const UserCommand = Schema.Union([
     memoryId: NullByDefault(MemoryId, FIELD_MESSAGES.text),
     projectId: NullByDefault(ProjectId, FIELD_MESSAGES.text),
     text: Text(),
+  }),
+  Command('initiative.write', {
+    initiativeId: NullByDefault(InitiativeId, FIELD_MESSAGES.text),
+    name: Text(),
+    description: Optional(Text(), FIELD_MESSAGES.text),
+    phases: Optional(List(InitiativePhaseInput, 50), FIELD_MESSAGES.list),
+  }),
+  Command('initiative.remove', { initiativeId: InitiativeId }),
+  Command('initiative.adopt_task', { taskId: TaskId }),
+  Command('task.join_initiative', {
+    taskId: TaskId,
+    initiativeId: OrNull(InitiativeId, FIELD_MESSAGES.text),
+    phaseId: NullByDefault(IdText, FIELD_MESSAGES.text),
   }),
   Command('memory.accept', { memoryId: MemoryId }),
   Command('memory.remove', { memoryId: MemoryId }),

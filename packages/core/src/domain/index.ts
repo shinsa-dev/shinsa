@@ -52,6 +52,7 @@ export {
   FeedbackId,
   GateId,
   IdText,
+  InitiativeId,
   MemoryId,
   ProjectId,
   RepoId,
@@ -103,6 +104,13 @@ export {
   resolveFeedbackText,
 } from './feedback.ts';
 export { isAgentQuestion, isDecisionGate, isPausingGate } from './gates.ts';
+export {
+  INITIATIVE_LIMITS,
+  type Initiative,
+  type InitiativePhase,
+  resolveInitiativeText,
+  selectInitiativePhase,
+} from './initiatives.ts';
 export { isReplyingRun, type ReplyingHandOver, selectOpenIteration } from './iterations.ts';
 export {
   isMemoryOf,

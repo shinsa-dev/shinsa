@@ -63,6 +63,7 @@ import {
   recordHandoff,
   removeHandoff,
 } from './handoffs.ts';
+import { adoptTask, joinInitiative, removeInitiative, writeInitiative } from './initiatives.ts';
 import { enforceLiveness } from './liveness.ts';
 import { acceptMemory, rememberRule, removeMemory, writeMemory } from './memory.ts';
 import { syncMergeSteps, tickMergeStep } from './merge-steps.ts';
@@ -179,6 +180,7 @@ import {
 
 export type { DecideContext, Decision } from './decider.ts';
 export { describeFeedbackLeaks } from './feedback.ts';
+export { listTaskDescendants } from './initiatives.ts';
 export { type MessageEffect, needsMessageKind, resolveMessageEffect } from './messages.ts';
 export { type RoundRelease, resolveRoundRelease } from './rounds.ts';
 export { isTaskPausable, PAUSED_TITLE } from './pause.ts';
@@ -298,6 +300,14 @@ function apply(decider: Decider, command: ShinsaCommand) {
       return suggestTasks(decider, command);
     case 'agent.remember':
       return rememberRule(decider, command);
+    case 'initiative.write':
+      return writeInitiative(decider, command);
+    case 'initiative.remove':
+      return removeInitiative(decider, command);
+    case 'initiative.adopt_task':
+      return adoptTask(decider, command);
+    case 'task.join_initiative':
+      return joinInitiative(decider, command);
     case 'memory.write':
       return writeMemory(decider, command);
     case 'memory.accept':

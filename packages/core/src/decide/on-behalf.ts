@@ -66,6 +66,11 @@ function quoteRunTask(state: ShinsaState, runId: string) {
   return quoteTask(state, state.runs[runId]?.taskId ?? null);
 }
 
+function quoteInitiative(state: ShinsaState, initiativeId: string) {
+  const name = state.initiatives[initiativeId]?.name;
+  return name ? quoteTitle(name) : 'an initiative';
+}
+
 function quoteSchedule(state: ShinsaState, scheduleId: string) {
   const name = state.schedules[scheduleId]?.name;
   return name ? quoteTitle(name) : 'a schedule';
@@ -79,10 +84,22 @@ const DESCRIPTIONS: Descriptions = {
   'project.remove': () => 'Removed a project',
   'focus.change': (state, command) => {
     const projectIds = command.projectIds ?? (command.projectId ? [command.projectId] : []);
+    if (command.initiativeId)
+      return `Focused on the initiative ${quoteInitiative(state, command.initiativeId)}`;
     if (projectIds.length === 0) return command.teamId ? 'Focused on a team' : 'Cleared the focus';
     const names = describeList(projectIds.map((id) => state.projects[id]?.name ?? 'a project'));
     return command.except ? `Focused on everything but ${names}` : `Focused on ${names}`;
   },
+  'initiative.write': (_state, command) =>
+    command.initiativeId
+      ? `Changed the initiative ${quoteTitle(command.name.trim())}`
+      : `Created the initiative ${quoteTitle(command.name.trim())}`,
+  'initiative.remove': () => 'Removed an initiative',
+  'initiative.adopt_task': (state, command) => `Made an initiative from ${quoteTask(state, command.taskId)}`,
+  'task.join_initiative': (state, command) =>
+    command.initiativeId
+      ? `Added ${quoteTask(state, command.taskId)} to the initiative ${quoteInitiative(state, command.initiativeId)}`
+      : `Took ${quoteTask(state, command.taskId)} out of its initiative`,
   'settings.change': (_state, command) => `Changed settings: ${Object.keys(command.patch).join(', ')}`,
   'task.prioritize': (state, command) =>
     `Set the priority of ${quoteTask(state, command.taskId)} to ${command.priority}`,

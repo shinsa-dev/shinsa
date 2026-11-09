@@ -249,6 +249,7 @@ export interface FocusProjects {
 
 export interface Focus extends FocusProjects {
   teamId: string | null;
+  initiativeId?: string | null;
   until: number | null;
 }
 
@@ -523,6 +524,8 @@ export interface Task {
   owner?: TaskOwner | null;
   forkOf?: string | null;
   teammateFork?: TeammateFork | null;
+  initiativeId?: string | null;
+  initiativePhaseId?: string | null;
   splits?: TaskSplit[];
   scheduleId?: string | null;
   sourceReport?: SourceReport | null;

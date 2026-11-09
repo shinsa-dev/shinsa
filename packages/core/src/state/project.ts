@@ -11,6 +11,7 @@ import {
   formatTaskHandle,
   type Gate,
   isTaskSettled,
+  type Initiative,
   type MemoryEntry,
   NO_FOCUS,
   NO_PROJECT_KEY,
@@ -66,6 +67,7 @@ import { recordFork } from './forks.ts';
 import { applyGateEvent } from './gates.ts';
 import { applyHandoffEvent } from './handoffs.ts';
 import { applyInboxEvent } from './inbox.ts';
+import { applyInitiativeEvent } from './initiatives.ts';
 import { applyIterationEvent } from './iterations.ts';
 import { applyMemoryEvent } from './memory.ts';
 import { applyMoveEvent } from './moves.ts';
@@ -100,6 +102,7 @@ export interface ShinsaState {
   briefings: Record<string, StoredBriefing>;
   schedules: Record<string, Schedule>;
   memories: Record<string, MemoryEntry>;
+  initiatives: Record<string, Initiative>;
   feedback: Record<string, Feedback>;
   watchSuggestions: Record<string, WatchSuggestion>;
   sessionUsage: Record<string, RunUsage>;
@@ -130,6 +133,7 @@ export function createState(): ShinsaState {
     briefings: {},
     schedules: {},
     memories: {},
+    initiatives: {},
     feedback: {},
     watchSuggestions: {},
     sessionUsage: {},
@@ -140,7 +144,8 @@ export function createState(): ShinsaState {
   };
 }
 
-export function briefingKey(focus: FocusProjects | SingleProjectFocus) {
+export function briefingKey(focus: FocusProjects | SingleProjectFocus, initiativeId: string | null = null) {
+  if (initiativeId !== null) return `@${initiativeId}`;
   const selection = resolveFocusSelection(focus);
   const { projectIds, except } = normaliseFocusProjects(selection.projectIds, selection.except);
   if (projectIds.length === 0) return '*';
@@ -1182,6 +1187,11 @@ function applyEventBody(state: ShinsaState, event: ShinsaEvent): ShinsaState {
     case 'slack.merge_announced':
     case 'slack.merge_posted':
       applySlackEvent(state, event);
+      break;
+    case 'initiative.written':
+    case 'initiative.removed':
+    case 'task.initiative_changed':
+      applyInitiativeEvent(state, event);
       break;
     case 'memory.written':
     case 'memory.proposed':

@@ -457,3 +457,40 @@ describe('a plan that splits the work into other tasks', () => {
     expect(harness.task(taskId).splits).toBeUndefined();
   });
 });
+
+describe('a task filed by a member of an initiative', () => {
+  function inInitiative() {
+    const { harness, taskId } = building();
+    harness.send({
+      type: 'initiative.write',
+      initiativeId: null,
+      name: 'Chat split',
+      phases: [{ id: null, name: 'Dock' }],
+    });
+    const initiative = Object.values(harness.state.initiatives)[0];
+    const phaseId = initiative?.phases[0]?.id ?? null;
+    harness.send({ type: 'task.join_initiative', taskId, initiativeId: initiative?.id ?? '', phaseId });
+    return { harness, taskId, initiativeId: initiative?.id, phaseId };
+  }
+
+  test('joins the same initiative and phase through create_task', () => {
+    const { harness, taskId, initiativeId, phaseId } = inInitiative();
+    const [task] = courier(harness, harness.activeRun(taskId).id);
+    expect(task).toMatchObject({ initiativeId, initiativePhaseId: phaseId });
+  });
+
+  test('joins the same initiative and phase through split_task', () => {
+    const { harness, taskId, initiativeId, phaseId } = inInitiative();
+    const tasks = split(harness, harness.activeRun(taskId).id, ['Port the header.', 'Port the footer.']);
+    expect(tasks.map((task) => [task.initiativeId, task.initiativePhaseId])).toEqual([
+      [initiativeId, phaseId],
+      [initiativeId, phaseId],
+    ]);
+  });
+
+  test('a task outside any initiative files tasks outside one', () => {
+    const { harness, taskId } = building();
+    const [task] = courier(harness, harness.activeRun(taskId).id);
+    expect(task?.initiativeId).toBeUndefined();
+  });
+});

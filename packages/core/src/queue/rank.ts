@@ -68,7 +68,8 @@ function isFocusOver(state: ShinsaState, now: number) {
 }
 
 export function resolveFocusProjects(state: ShinsaState, now: number): FocusProjects {
-  if (isFocusOver(state, now) || state.focus.teamId !== null) return NO_FOCUS_PROJECTS;
+  if (isFocusOver(state, now) || state.focus.teamId !== null || state.focus.initiativeId)
+    return NO_FOCUS_PROJECTS;
   return resolveFocusSelection(state.focus);
 }
 
@@ -80,8 +81,14 @@ export function resolveFocusTeam(state: ShinsaState, now: number) {
   return isFocusOver(state, now) ? null : state.focus.teamId;
 }
 
+export function resolveFocusInitiative(state: ShinsaState, now: number) {
+  return isFocusOver(state, now) ? null : (state.focus.initiativeId ?? null);
+}
+
 export function isInFocus(state: ShinsaState, task: Task, now: number) {
   if (state.teammateTasks?.[task.id]) return false;
+  const initiativeId = resolveFocusInitiative(state, now);
+  if (initiativeId !== null) return task.initiativeId === initiativeId;
   const teamId = resolveFocusTeam(state, now);
   if (teamId !== null) return isTeamTask(state, task, teamId);
   return isProjectInFocus(resolveFocusProjects(state, now), resolveTaskProject(state, task));
@@ -201,6 +208,7 @@ export function resolveQueue(state: ShinsaState, now: number): Queue {
   return {
     focus: resolveFocusProjects(state, now),
     focusTeamId: resolveFocusTeam(state, now),
+    focusInitiativeId: resolveFocusInitiative(state, now),
     ready,
     upNow: ready.slice(0, limit),
     later: ready.slice(limit),
