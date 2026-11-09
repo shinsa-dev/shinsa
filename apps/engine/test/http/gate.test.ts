@@ -176,6 +176,18 @@ describe('the request gate', () => {
     expect((await handle(post('/api/test/privacy', ''))).status).toBe(200);
   });
 
+  test('a write sent with no body and no content type is refused, as a route without a payload would be called', async () => {
+    const handle = createGate();
+    const bare = new Request(`${BASE}/api/test/privacy`, {
+      method: 'POST',
+      headers: { host: '127.0.0.1:5180' },
+    });
+    expect(await readFailure(await handle(bare))).toEqual([
+      415,
+      { code: 'content_type_invalid', message: 'Send the request body as application/json.' },
+    ]);
+  });
+
   test('a route only a page may call refuses a request without an Origin', async () => {
     const handle = createGate();
     expect(await readFailure(await handle(post('/api/test/install', '{}')))).toEqual([
