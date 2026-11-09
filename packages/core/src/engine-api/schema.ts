@@ -757,6 +757,42 @@ export const ServiceSuggestionsAnswer = Schema.Unknown.pipe(
   )
 );
 
+export const SourceBrowserId = Schema.Literals(['dia', 'arc', 'chrome', 'brave', 'edge']);
+export type SourceBrowserId = typeof SourceBrowserId.Type;
+
+export const BrowserSite = Schema.Struct({
+  site: Schema.String,
+  cookies: Schema.Number,
+  signedIn: Schema.Boolean,
+});
+export type BrowserSite = typeof BrowserSite.Type;
+
+export const BrowserProjectAnswer = Schema.Struct({
+  mode: Schema.Literals(['stopped', 'headless', 'window']),
+  sites: Schema.Array(BrowserSite),
+});
+export type BrowserProjectAnswer = typeof BrowserProjectAnswer.Type;
+
+export const SourceBrowserAnswer = Schema.Struct({
+  id: SourceBrowserId,
+  name: Schema.String,
+  isDefault: Schema.Boolean,
+});
+export type SourceBrowserAnswer = typeof SourceBrowserAnswer.Type;
+
+export const BrowserSourcesAnswer = Schema.Struct({ sources: Schema.Array(SourceBrowserAnswer) });
+export type BrowserSourcesAnswer = typeof BrowserSourcesAnswer.Type;
+
+export const BrowserSourceSitesAnswer = Schema.Struct({ sites: Schema.Array(BrowserSite) });
+export type BrowserSourceSitesAnswer = typeof BrowserSourceSitesAnswer.Type;
+
+export const BrowserCopyAnswer = Schema.Struct({
+  copied: Schema.Number,
+  skipped: Schema.Number,
+  sites: Schema.Array(BrowserSite),
+});
+export type BrowserCopyAnswer = typeof BrowserCopyAnswer.Type;
+
 export interface EngineRoute {
   readonly group: string;
   readonly name: string;

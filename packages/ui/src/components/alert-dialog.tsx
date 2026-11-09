@@ -2,7 +2,12 @@
 
 import { AlertDialog as AlertDialogPrimitive } from '@base-ui/react/alert-dialog';
 import { Button } from '@shinsa/ui/components/button';
-import { DIALOG_HEADER_STICKY, DIALOG_MOTION, DIALOG_SCRIM_MOTION } from '@shinsa/ui/components/dialog';
+import {
+  DIALOG_EDGE,
+  DIALOG_HEADER_STICKY,
+  DIALOG_MOTION,
+  DIALOG_SCRIM_MOTION,
+} from '@shinsa/ui/components/dialog';
 
 import { cn } from '@shinsa/ui/lib/utils';
 import type * as React from 'react';
@@ -51,6 +56,7 @@ function AlertDialogContent({
         data-size={size}
         className={cn(
           'group/alert-dialog-content corner-superellipse/1.125 fixed top-1/2 left-1/2 z-50 flex max-h-[calc(100dvh-2rem)] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-xl bg-background text-fg-3 shadow-md outline-none data-[size=default]:w-[min(26.25rem,calc(100vw-2rem))] data-[size=sm]:w-[min(20rem,calc(100vw-2rem))] max-sm:max-h-[calc(100dvh-1.5rem)] max-sm:data-[size=default]:w-[calc(100vw-1.5rem)]',
+          DIALOG_EDGE,
           DIALOG_MOTION,
           className
         )}

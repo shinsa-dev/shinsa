@@ -4,12 +4,15 @@ import { createState, type McpServerSummary, type ShinsaState } from '@shinsa/co
 import { Effect } from 'effect';
 import type { McpDefinition } from '../../src/extensions/definitions.ts';
 import { McpServerFailed } from '../../src/extensions/schema.ts';
+import { resolveSessionBrowser, type SessionExtensions } from '../../src/extensions/session.ts';
 import { serializeSignInPage } from '../../src/extensions/sign-in.ts';
 import { type FakeMcpHttp, startFakeMcpHttp } from '../helpers/mcp/http.ts';
 import { createFakeMachine, type FakeMachine, writeFile } from './fixtures.ts';
 import { disposeExtensionWorlds, type ExtensionsWorldOptions, openExtensions } from './harness.ts';
 
 const RETINA = { PLAYWRIGHT_MCP_DEVICE: 'Desktop Chrome HiDPI' };
+
+const SHARED_BROWSER = 'ws://127.0.0.1:7446/browser/cdp/key';
 
 let fake: FakeMcpHttp | null = null;
 
@@ -594,9 +597,20 @@ describe('what an agent run loads', () => {
       })
     );
     const session = await extensions.resolveSession({ repoPath: machine.repo, project: null });
-    const browser = session.servers.find((server) => server.name === 'browser');
-    expect(browser?.definition.env).toEqual({ ...RETINA, PLAYWRIGHT_MCP_HEADLESS: 'true' });
-    const linear = session.servers.find((server) => server.name === 'linear');
+    const findBrowser = (resolved: SessionExtensions) =>
+      resolved.servers.find((server) => server.name === 'browser')?.definition.env;
+    expect(findBrowser(session)).toEqual({ PLAYWRIGHT_MCP_HEADLESS: 'false' });
+    expect(findBrowser(resolveSessionBrowser(session, null))).toEqual({
+      ...RETINA,
+      PLAYWRIGHT_MCP_HEADLESS: 'true',
+    });
+    expect(findBrowser(resolveSessionBrowser(session, SHARED_BROWSER))).toEqual({
+      PLAYWRIGHT_MCP_CDP_ENDPOINT: SHARED_BROWSER,
+      PLAYWRIGHT_MCP_HEADLESS: 'true',
+    });
+    const linear = resolveSessionBrowser(session, SHARED_BROWSER).servers.find(
+      (server) => server.name === 'linear'
+    );
     expect(linear?.definition.env).toEqual({});
   });
 
@@ -618,15 +632,11 @@ describe('what an agent run loads', () => {
     writeFile(join(other, '.mcp.json'), database('postgres://other'));
     const inOther = await extensions.resolveSession({ repoPath: other, project: null });
     expect(inOther.servers.find((server) => server.name === 'db')?.definition.env).toEqual({
-      ...RETINA,
       DATABASE_URL: 'postgres://other',
-      PLAYWRIGHT_MCP_HEADLESS: 'true',
     });
     const inApp = await extensions.resolveSession({ repoPath: machine.repo, project: null });
     expect(inApp.servers.find((server) => server.name === 'db')?.definition.env).toEqual({
-      ...RETINA,
       DATABASE_URL: 'postgres://app',
-      PLAYWRIGHT_MCP_HEADLESS: 'true',
     });
   });
 

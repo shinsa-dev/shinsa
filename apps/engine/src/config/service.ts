@@ -5,6 +5,7 @@ import { MachineConfigFile } from './machine/service.ts';
 import { resolveShinsaPaths, resolveUserHome } from './paths.ts';
 import { createConfigProvider } from './provider.ts';
 import {
+  BROWSER_DIR,
   DATABASE_FILE,
   ENGINE_SETTINGS,
   type Env,
@@ -43,6 +44,7 @@ export class EngineConfig extends Context.Service<EngineConfig, ServerConfig>()(
             evidenceDir: join(dataDir, 'evidence'),
             attachmentsDir: join(dataDir, 'attachments'),
             transcriptsDir: join(dataDir, 'transcripts'),
+            browserDir: join(dataDir, BROWSER_DIR),
             pluginDir: Option.getOrElse(settings.pluginDir, () =>
               bundle ? resolveBundlePath(bundle, 'plugin') : resolve(import.meta.dirname, '../../plugin')
             ),
