@@ -7,6 +7,7 @@ import type {
   SourceBrowserId,
 } from '@shinsa/core/engine-api/schema';
 import { Clock, Context, Duration, Effect, FileSystem, Layer, Option, Schema } from 'effect';
+import { constFalse } from 'effect/Function';
 import { SqlClient, SqlSchema } from 'effect/sql';
 import { EngineConfig } from '../../config/service.ts';
 import { Shell } from '../../shell/service.ts';
@@ -22,7 +23,6 @@ import {
   CdpCookies,
   COOKIE_FILE_COMPANIONS,
   COOKIE_FILES,
-  type CdpCookie,
   type CookieParam,
   CookieSourceUnavailable,
   COPY_BATCH,
@@ -82,7 +82,7 @@ export class BrowserCookies extends Context.Service<
         message: SOURCE_NOT_INSTALLED_MESSAGE,
       });
 
-      const exists = (path: string) => fs.exists(path).pipe(Effect.orElseSucceed(() => false));
+      const exists = (path: string) => fs.exists(path).pipe(Effect.orElseSucceed(constFalse));
 
       const selectCookieFile = Effect.fn('BrowserCookies.selectCookieFile')(function* (dataDir: string) {
         for (const file of COOKIE_FILES) {
@@ -303,10 +303,9 @@ export class BrowserCookies extends Context.Service<
           Effect.gen(function* () {
             const endpoint = yield* host.acquire(profile);
             const reply = yield* sendCdpCommand(endpoint.webSocketUrl, 'Storage.getCookies');
-            const cookies = Option.match(decodeCdpCookies(reply), {
-              onNone: (): ReadonlyArray<CdpCookie> => [],
-              onSome: (decoded) => decoded.cookies,
-            }).filter((cookie) => isOnSites(cookie.domain, new Set([site])));
+            const cookies = (Option.getOrUndefined(decodeCdpCookies(reply))?.cookies ?? []).filter((cookie) =>
+              isOnSites(cookie.domain, new Set([site]))
+            );
             for (let start = 0; start < cookies.length; start += COPY_BATCH) {
               yield* sendCdpCommand(endpoint.webSocketUrl, 'Storage.setCookies', {
                 cookies: cookies.slice(start, start + COPY_BATCH).map((cookie) => ({

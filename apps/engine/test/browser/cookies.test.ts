@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test } from 'bun:test';
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { BunServices } from '@effect/platform-bun';
+import type { SourceBrowserId } from '@shinsa/core/engine-api/schema';
 import { Effect, Layer, type Scope } from 'effect';
 import { createCookieKey, decryptCookieValue } from '../../src/browser/cookies/decrypt.ts';
 import { resolveCookieParam } from '../../src/browser/cookies/params.ts';
@@ -11,7 +12,7 @@ import { isOnSites, listBrowserSites, resolveSite } from '../../src/browser/cook
 import { BrowserUnavailable } from '../../src/browser/host/schema.ts';
 import { BrowserHost } from '../../src/browser/host/service.ts';
 import { EngineConfig } from '../../src/config/service.ts';
-import type { CommandRequest } from '../../src/shell/schema.ts';
+import { CommandNotFound, type CommandRequest } from '../../src/shell/schema.ts';
 import { Shell } from '../../src/shell/service.ts';
 import { createConfigAt } from '../helpers/config.ts';
 import { createTempDir } from '../helpers/temp.ts';
@@ -52,7 +53,8 @@ function createRow(overrides: Partial<StoredCookieRow> = {}): StoredCookieRow {
 }
 
 interface CookiesOptions {
-  readonly keychain?: 'allowed' | 'refused' | 'empty';
+  readonly keychain?: 'allowed' | 'refused' | 'empty' | 'failed';
+  readonly plutilFails?: boolean;
   readonly defaultBundle?: string | null;
   readonly unavailable?: boolean;
   readonly inspect?: boolean;
@@ -69,9 +71,16 @@ function runCookies<A, E>(
   const profiles = join(userHome, 'profiles');
   const shell = Layer.succeed(Shell, {
     run: (request) =>
-      Effect.sync(() => {
+      Effect.suspend(() => {
         commands.push(request);
         const [program] = request.argv;
+        const failed =
+          (program === 'plutil' && options.plutilFails) ||
+          (program === 'security' && options.keychain === 'failed');
+        if (failed)
+          return Effect.fail(
+            new CommandNotFound({ command: program ?? '', message: `${program} could not run` })
+          );
         if (program === 'plutil') {
           const handlers =
             options.defaultBundle === null
@@ -83,16 +92,16 @@ function runCookies<A, E>(
                     LSHandlerRoleAll: options.defaultBundle ?? 'company.thebrowser.dia',
                   },
                 ]);
-          return { ok: true, code: 0, stdout: handlers, stderr: '', timedOut: false };
+          return Effect.succeed({ ok: true, code: 0, stdout: handlers, stderr: '', timedOut: false });
         }
         const keychain = options.keychain ?? 'allowed';
-        return {
+        return Effect.succeed({
           ok: keychain !== 'refused',
           code: keychain === 'refused' ? 51 : 0,
           stdout: keychain === 'allowed' ? `${DIA_PASSWORD}\n` : '',
           stderr: '',
           timedOut: false,
-        };
+        });
       }),
     stopTree: () => Effect.void,
   });
@@ -253,6 +262,12 @@ describe('copying sign-ins from your browser', () => {
       }
     );
     expect(value).toEqual([{ id: 'dia', name: 'Dia', isDefault: false }]);
+    const unrun = await runCookies(
+      home,
+      BrowserCookies.use((cookies) => cookies.listSources),
+      { plutilFails: true }
+    );
+    expect(unrun.value).toEqual([{ id: 'dia', name: 'Dia', isDefault: false }]);
   });
 
   test('lists the sites a browser is signed in to without asking for its key', async () => {
@@ -295,6 +310,11 @@ describe('copying sign-ins from your browser', () => {
       Effect.flip(BrowserCookies.use((cookies) => cookies.listSourceSites('arc')))
     );
     expect(missing.value).toMatchObject({ _tag: 'CookieSourceUnavailable', reason: 'not_installed' });
+    const unknown = await runCookies(
+      home,
+      Effect.flip(BrowserCookies.use((cookies) => cookies.listSourceSites('safari' as SourceBrowserId)))
+    );
+    expect(unknown.value).toMatchObject({ _tag: 'CookieSourceUnavailable', reason: 'not_installed' });
     mkdirSync(join(home, 'Library/Application Support/Dia/User Data/Default/Cookies'), { recursive: true });
     const broken = await runCookies(
       home,
@@ -360,7 +380,7 @@ describe('copying sign-ins from your browser', () => {
   test('copies nothing when macOS refuses the key, or it comes back empty', async () => {
     const home = createTempDir();
     writeDiaCookies(home, [{ host: '.github.com', name: 'user_session', value: 's' }]);
-    for (const keychain of ['refused', 'empty'] as const) {
+    for (const keychain of ['refused', 'empty', 'failed'] as const) {
       const { value, cdp } = await runCookies(
         home,
         Effect.flip(BrowserCookies.use((cookies) => cookies.copy(SHINSA, 'dia', ['github.com']))),
@@ -399,6 +419,14 @@ describe('copying sign-ins from your browser', () => {
       }
     );
     expect(offline.value).toEqual([{ site: 'vercel.com', cookies: 1, signedIn: true }]);
+    const broken = join(createTempDir(), 'profiles', SHINSA);
+    mkdirSync(join(broken, 'Default/Cookies'), { recursive: true });
+    const unreadable = await runCookies(
+      join(broken, '../..'),
+      BrowserCookies.use((cookies) => cookies.listSites(SHINSA)),
+      { unavailable: true }
+    );
+    expect(unreadable.value).toEqual([]);
     const live = await runCookies(
       home,
       BrowserCookies.use((cookies) => cookies.listSites(SHINSA))

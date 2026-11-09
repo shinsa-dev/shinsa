@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test';
+import { networkInterfaces } from 'node:os';
 import { join } from 'node:path';
 import { Context, Effect, Exit, Layer, ManagedRuntime, Scope } from 'effect';
 import { BrowserHostSettings } from '../../src/browser/host/schema.ts';
@@ -17,7 +18,11 @@ afterEach(async () => {
   for (const stop of stops.splice(0)) await stop();
 });
 
-async function startEngine() {
+const LAN_ADDRESS = Object.values(networkInterfaces())
+  .flat()
+  .find((address) => address?.family === 'IPv4' && !address.internal)?.address;
+
+async function startEngine(hostname = '127.0.0.1') {
   const chrome = createFakeChrome();
   const cdp: FakeCdp = startFakeCdp();
   chrome.listenOn(cdp.port);
@@ -28,7 +33,7 @@ async function startEngine() {
     stopTimeout: '2 seconds',
   });
   const runtime = ManagedRuntime.make(
-    EngineLayer(createTestConfig(chrome.home, { port: 0 }), {}, Effect.void).pipe(
+    EngineLayer(createTestConfig(chrome.home, { port: 0, hostname }), {}, Effect.void).pipe(
       Layer.provide(settings),
       Layer.provideMerge(JsonLogger)
     )
@@ -94,6 +99,14 @@ describe("the engine's browser route", () => {
     const agent = connect(engine.endpoint);
     await agent.opened;
     agent.socket.close();
+  });
+
+  test.skipIf(!LAN_ADDRESS)('refuses a socket that does not come from this Mac', async () => {
+    const engine = await startEngine(LAN_ADDRESS);
+    const key = engine.endpoint.split('/').at(-1);
+    const response = await fetch(`http://${LAN_ADDRESS}:${new URL(engine.url).port}/browser/cdp/${key}`);
+    expect(response.status).toBe(403);
+    expect(await response.json()).toMatchObject({ error: { code: 'local_only' } });
   });
 
   test('says why when Chrome is missing', async () => {

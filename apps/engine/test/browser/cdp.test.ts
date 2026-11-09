@@ -1,7 +1,8 @@
 import { describe, expect, test } from 'bun:test';
-import { Effect } from 'effect';
+import { Effect, Fiber } from 'effect';
+import { TestClock } from 'effect/testing';
 import { sendCdpCommand } from '../../src/browser/cdp/command.ts';
-import { CDP_UNREACHABLE_MESSAGE } from '../../src/browser/cdp/schema.ts';
+import { CDP_TIMEOUT, CDP_TIMEOUT_MESSAGE, CDP_UNREACHABLE_MESSAGE } from '../../src/browser/cdp/schema.ts';
 
 function startSilentCdp(reply: ((id: number) => unknown) | null) {
   return Bun.serve({
@@ -78,5 +79,28 @@ describe('one command to Chrome over its debugging socket', () => {
     await Bun.sleep(50);
     expect(server.pendingWebSockets).toBe(0);
     void server.stop(true);
+  });
+
+  test('fails with timeout when Chrome never answers', async () => {
+    const server = Bun.serve({
+      hostname: '127.0.0.1',
+      port: 0,
+      fetch(request, bunServer) {
+        if (bunServer.upgrade(request)) return undefined;
+        return new Response('', { status: 400 });
+      },
+      websocket: { message: () => undefined },
+    });
+    const error = await Effect.runPromise(
+      Effect.gen(function* () {
+        const fiber = yield* Effect.forkChild(
+          Effect.flip(Effect.asVoid(sendCdpCommand(`ws://127.0.0.1:${server.port}/`, 'Target.getTargets')))
+        );
+        yield* TestClock.adjust(CDP_TIMEOUT);
+        return yield* Fiber.join(fiber);
+      }).pipe(Effect.provide(TestClock.layer()))
+    );
+    void server.stop(true);
+    expect(error).toMatchObject({ reason: 'timeout', message: CDP_TIMEOUT_MESSAGE });
   });
 });

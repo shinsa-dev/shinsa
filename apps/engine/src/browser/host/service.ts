@@ -83,11 +83,11 @@ export class BrowserHost extends Context.Service<
 
       const forgetExited = (profile: BrowserProfile, generation: number) =>
         lock.withPermit(
-          Effect.flatMap(selectRunning(profile), (current) =>
-            Option.isSome(current) && current.value.generation === generation
-              ? stopRunning(profile)
-              : Effect.void
-          )
+          Effect.gen(function* () {
+            const current = yield* selectRunning(profile);
+            if (Option.isNone(current) || current.value.generation !== generation) return;
+            yield* stopRunning(profile);
+          })
         );
 
       const findExecutable = Effect.gen(function* () {
