@@ -22,7 +22,7 @@ function StatusAction({ snapshot, member }: { snapshot: SlackSnapshot; member: b
   return (
     <Button
       size='sm'
-      variant={connected && !member ? 'secondary' : 'primary'}
+      variant={connected ? 'secondary' : 'primary'}
       nativeButton={false}
       render={<a href={snapshot.connectUrl} target='_blank' rel='noreferrer' />}
     >
@@ -91,7 +91,7 @@ export function SlackGroup({
       <ConfirmDialog
         control={dialog.control}
         title='Disconnect Slack?'
-        body='Mentions of @Shinsa stop reaching this machine. Tasks already started keep running, and you can connect again later.'
+        body='Mentions of @Shinsa from you and every member stop reaching this machine. Started tasks keep running.'
         action='Disconnect Slack'
         onConfirm={() => void requestWithToast(actions.disconnect, 'Slack is disconnected.')}
       />

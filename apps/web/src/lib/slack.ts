@@ -26,8 +26,8 @@ export interface SlackStatusView {
 }
 
 export function resolveSlackConnectLabel(connected: boolean, member: boolean) {
-  if (member) return 'Connect your Slack';
-  return connected ? 'Connect another workspace' : 'Connect Slack';
+  if (connected) return 'Connect another workspace';
+  return member ? 'Connect your Slack' : 'Connect Slack';
 }
 
 export function describeSlackStatus(snapshot: SlackSnapshot, member = false): SlackStatusView {
@@ -42,19 +42,17 @@ export function describeSlackStatus(snapshot: SlackSnapshot, member = false): Sl
     return {
       label: 'Not connected',
       tone: 'neutral',
-      detail: 'Connect signs you in with Slack and adds Shinsa to your workspace if it is not there yet.',
-    };
-  if (member)
-    return {
-      label: 'Connected',
-      tone: 'green',
-      detail: 'Slack is connected here. Connect your own so your mentions start tasks as yours.',
+      detail: member
+        ? 'Connect your own Slack so your mentions start tasks here as yours.'
+        : 'Connect signs you in with Slack and adds Shinsa to your workspace if it is not there yet.',
     };
   const workspaces = snapshot.links.length === 1 ? 'workspace' : 'workspaces';
   return {
     label: 'Connected',
     tone: 'green',
-    detail: `Only your own mentions start tasks here, in ${snapshot.links.length} ${workspaces}.`,
+    detail: member
+      ? `Your mentions start tasks here as yours, in ${snapshot.links.length} ${workspaces}.`
+      : `Only your own mentions start tasks here, in ${snapshot.links.length} ${workspaces}.`,
   };
 }
 

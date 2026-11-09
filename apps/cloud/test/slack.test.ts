@@ -17,6 +17,7 @@ import {
   serializeSlackDecisionModal,
   serializeSlackDecisionValue,
   verifySlackForwardSignature,
+  type RemoteUserId,
 } from '@shinsa/core';
 import { Effect } from 'effect';
 import { SLACK_BOT_SCOPES } from '../src/integrations/slack/schema.ts';
@@ -373,7 +374,14 @@ describe('connecting Slack to a machine', () => {
       })
     );
     expect(links.links).toEqual([
-      { teamId: 'T1', teamName: 'Acme', userId: 'U1', userName: 'Christo', linkedAt: harness.clock.now },
+      {
+        teamId: 'T1',
+        teamName: 'Acme',
+        userId: 'U1',
+        userName: 'Christo',
+        linkedAt: harness.clock.now,
+        accountId: '42' as RemoteUserId,
+      },
     ]);
   });
 

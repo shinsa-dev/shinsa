@@ -94,6 +94,7 @@ export const SlackRelayHandlers = HttpApiBuilder.group(
               userId: link.slackUserId,
               userName: link.slackUserName,
               linkedAt: link.linkedAt,
+              accountId: link.userId,
             })),
           };
         })

@@ -2,7 +2,14 @@ import { describe, expect, it } from 'bun:test';
 import type { SlackSnapshot } from '@shinsa/core';
 import { describeSlackLink, describeSlackStatus, resolveSlackLinkedResult } from '@/lib/slack.ts';
 
-const LINK = { teamId: 'T1', teamName: 'Overclock', userId: 'U1', userName: 'Christo', linkedAt: 0 };
+const LINK = {
+  teamId: 'T1',
+  teamName: 'Overclock',
+  userId: 'U1',
+  userName: 'Christo',
+  linkedAt: 0,
+  accountId: null,
+};
 
 function snapshot(overrides: Partial<SlackSnapshot> = {}): SlackSnapshot {
   return {
@@ -43,13 +50,17 @@ describe('Slack’s status in Settings', () => {
     );
   });
 
-  it('asks a member to connect their own Slack, since the links listed may be someone else’s', () => {
+  it('shows a member their own Slack only: not connected until they link it', () => {
+    expect(describeSlackStatus(snapshot(), true)).toEqual({
+      label: 'Not connected',
+      tone: 'neutral',
+      detail: 'Connect your own Slack so your mentions start tasks here as yours.',
+    });
     expect(describeSlackStatus(snapshot({ links: [LINK] }), true)).toEqual({
       label: 'Connected',
       tone: 'green',
-      detail: 'Slack is connected here. Connect your own so your mentions start tasks as yours.',
+      detail: 'Your mentions start tasks here as yours, in 1 workspace.',
     });
-    expect(describeSlackStatus(snapshot(), true).label).toBe('Not connected');
   });
 
   it('says only since when a workspace is connected when the engine does not know its last use', () => {

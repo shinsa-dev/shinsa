@@ -15,6 +15,7 @@ export interface SlackInput {
   readonly credentials: Effect.Effect<MachineCredentials | null>;
   readonly appOrigin: string;
   readonly resolveActor: (userId: string) => Effect.Effect<TaskOwner | null>;
+  readonly isOwner: (userId: string) => Effect.Effect<boolean>;
 }
 
 export const SlackStatusInterval = Context.Reference<Duration.Duration>(

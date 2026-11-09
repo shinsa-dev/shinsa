@@ -9,7 +9,14 @@ import { connection, replaceConnection } from '@/lib/connection/socket.ts';
 
 const CONNECT_URL = 'https://app.shinsa.dev/slack/connect?instance=k3x9';
 
-const LINK = { teamId: 'T1', teamName: 'Overclock', userId: 'U1', userName: 'Christo', linkedAt: Date.now() };
+const LINK = {
+  teamId: 'T1',
+  teamName: 'Overclock',
+  userId: 'U1',
+  userName: 'Christo',
+  linkedAt: Date.now(),
+  accountId: null,
+};
 
 function snapshot(overrides: Partial<SlackSnapshot> = {}): SlackSnapshot {
   return { remote: true, connectUrl: CONNECT_URL, links: [], problem: null, ...overrides };
@@ -64,10 +71,18 @@ describe('Settings → General → Slack', () => {
   });
 
   it('lets a member connect their own Slack, and leaves Disconnect to the owner', () => {
-    renderGroup(snapshot({ links: [LINK] }), null, true);
+    renderGroup(snapshot(), null, true);
+    expect(screen.getByText('Not connected')).toBeTruthy();
     const connect = screen.getByText('Connect your Slack').closest('a') as HTMLAnchorElement;
     expect(connect.getAttribute('href')).toBe(CONNECT_URL);
+    expect(screen.queryByRole('button', { name: 'Disconnect' })).toBeNull();
+  });
+
+  it('shows a member their own linked workspace, still without Disconnect', () => {
+    renderGroup(snapshot({ links: [LINK] }), null, true);
+    expect(screen.getByText('Connected')).toBeTruthy();
     expect(screen.getByText('Overclock')).toBeTruthy();
+    expect(screen.getByText('Connect another workspace')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Disconnect' })).toBeNull();
   });
 
@@ -101,6 +116,8 @@ describe('SlackSettings', () => {
 
   it('offers a member of this machine their own connect link', async () => {
     const machines = [{ id: 'm2', name: 'Studio', current: true, member: true as const, state: {} }];
+    fetchSpy.mockImplementation((async (_input: RequestInfo | URL) =>
+      Response.json(snapshot())) as typeof fetch);
     replaceConnection({ ...connection, listMachines: () => machines } as never);
     try {
       render(

@@ -327,7 +327,7 @@ test/                gates.test.ts reads every RemoteApi route with HttpApi.refl
   buttons, or a private refusal. A write click opens a form (`views.open`), checked again when it is sent; its
   refusal comes as `chat.postEphemeral` in the thread. `/__remote/slack/session` sets the thread's status
   (`agents.sessions.setStatus`, best effort: `applied: false`, not logged, for `not_authorized` from an app not on
-  Agent Sessions (`agent_view` stays off) and `feature_disabled`; any other refusal is logged and answered 502); `/__remote/slack/links` and `/unlink` read and remove its links. Message
+  Agent Sessions (`agent_view` stays off) and `feature_disabled`; any other refusal is logged and answered 502); `/__remote/slack/links` (each with the GitHub account that linked it, `accountId`) and `/unlink` read and remove its links. Message
   text passes through the Worker on its way and is never stored: D1 keeps ids, names and the sealed tokens.
 - **Requests from a page.** Every signed-in route reads the session from `Authorization: Bearer` first, then the
   cookie (`PageSession`; a bearer that does not open a session is refused, never retried as the cookie). Every POST a page makes (sign-out, approve, connect, remove, accept, leave) needs an `Origin` of the

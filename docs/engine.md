@@ -4498,10 +4498,15 @@ Slack ──a card's button──► app.shinsa.dev /slack/interactions
   connect picks your own machine seen last, else one you are a member of. The link records the GitHub account that
   signed in (`slack_links.user_id`), which is whose tasks your mentions start. A machine can be linked in several
   workspaces, and by each of its people; a Slack user to one machine at a time (connecting again from another machine
-  moves it). A member sees Connect your Slack and no Disconnect (`describeSlackStatus`, `resolveSlackConnectLabel`). The section reads `GET /api/slack` (`SlackSnapshot`: remote access
+  moves it). The section reads `GET /api/slack` (`SlackSnapshot`: remote access
   on, the connect link, the links with workspace, user and when, or the problem when app.shinsa.dev cannot be
-  reached) when Settings opens and when the window comes back. Disconnect (`POST /api/slack/disconnect`) removes every
-  link of this machine; from another device only its owner may (`OwnerOnlyRoute`). Your user token is revoked
+  reached) when Settings opens and when the window comes back. Each shows only the links of the person reading it:
+  `/__remote/slack/links` names each link's GitHub account (`accountId`, null from an older Worker, which linked only
+  owners), and the engine keeps a member's own (the sealed channel's GitHub user) and, for the owner or the keyboard,
+  the owner's and those with no account (`Slack.snapshot(viewer)`). So a member who has not connected sees Not
+  connected and Connect your Slack, even when others have, and never Disconnect (`describeSlackStatus`,
+  `resolveSlackConnectLabel`). Disconnect (`POST /api/slack/disconnect`) removes every
+  link of this machine, its members' too; from another device only its owner may (`OwnerOnlyRoute`). Your user token is revoked
   (`auth.revoke`, best effort: a failure is logged as `[Cloud] A Slack user token could not be revoked` and the
   links still go) when you disconnect, when the machine is removed (`revokeMachineUserTokens`) and when connecting
   again brings a different token (`replaceUserToken`; Slack gives the same one back while it is valid, which is

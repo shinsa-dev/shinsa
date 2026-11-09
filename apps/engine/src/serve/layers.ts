@@ -276,6 +276,7 @@ function createSlackLayer(config: ServerConfig) {
         }),
         appOrigin: config.remoteOrigin,
         resolveActor: (userId) => remote.resolveActor(userId),
+        isOwner: (userId) => remote.isOwner(userId),
       });
     })
   );

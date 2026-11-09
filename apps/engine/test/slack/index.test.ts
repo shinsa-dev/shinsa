@@ -18,7 +18,13 @@ import { openEventLog } from '../helpers/event-log.ts';
 import { captureLogs, createTempDir, until } from '../helpers/index.ts';
 import { promised } from '../helpers/promised.ts';
 import { createGate, createStubEngine, createTask } from '../helpers/state.ts';
-import { createTestSlack, createTestSlackService, type Relay, type TestSlackOptions } from './harness.ts';
+import {
+  createTestSlack,
+  createTestSlackService,
+  OWNER_ACCOUNT,
+  type Relay,
+  type TestSlackOptions,
+} from './harness.ts';
 
 const ORIGIN = 'https://app.test';
 
@@ -108,7 +114,17 @@ function setUp(
     '/__remote/slack/react': () => Response.json({ applied: true }),
     '/__remote/slack/links': () =>
       Response.json({
-        links: [{ teamId: 'T1', teamName: 'Acme', userId: 'U1', userName: 'Christo', linkedAt: 5 }],
+        links: [
+          {
+            teamId: 'T1',
+            teamName: 'Acme',
+            userId: 'U1',
+            userName: 'Christo',
+            linkedAt: 5,
+            accountId: OWNER_ACCOUNT,
+          },
+          { teamId: 'T1', teamName: 'Acme', userId: 'U2', userName: 'Mia', linkedAt: 6, accountId: 'gh-mia' },
+        ],
       }),
     '/__remote/slack/unlink': () => Response.json({ ok: true }),
   };
@@ -840,26 +856,46 @@ describe('without injected clocks and networks', () => {
 });
 
 describe('Settings → General → Slack', () => {
-  test('shows the connect link and who is connected through app.shinsa.dev', async () => {
+  test('shows the connect link and the owner’s own Slack through app.shinsa.dev', async () => {
     const { slack, relay } = setUp();
-    expect(await slack.snapshot()).toEqual({
+    expect(await slack.snapshot(null)).toEqual({
       remote: true,
       connectUrl: 'https://app.test/slack/connect?instance=k3x9',
       links: [
-        { teamId: 'T1', teamName: 'Acme', userId: 'U1', userName: 'Christo', linkedAt: 5, lastUsedAt: 1 },
+        {
+          teamId: 'T1',
+          teamName: 'Acme',
+          userId: 'U1',
+          userName: 'Christo',
+          linkedAt: 5,
+          accountId: OWNER_ACCOUNT,
+          lastUsedAt: 1,
+        },
       ],
       problem: null,
     });
     expect(relay[0]).toMatchObject({ path: '/__remote/slack/links', method: 'GET', token: 'machine-token' });
   });
 
+  test('shows a member only their own Slack, and counts a link with no account as the owner’s', async () => {
+    const { slack, answers } = setUp();
+    expect((await slack.snapshot('gh-mia')).links.map((link) => link.userId)).toEqual(['U2']);
+    expect((await slack.snapshot('gh-kai')).links).toEqual([]);
+    answers['/__remote/slack/links'] = () =>
+      Response.json({
+        links: [{ teamId: 'T1', teamName: 'Acme', userId: 'U1', userName: 'Christo', linkedAt: 5 }],
+      });
+    expect((await slack.snapshot(null)).links.map((link) => link.accountId)).toEqual([null]);
+    expect((await slack.snapshot('gh-mia')).links).toEqual([]);
+  });
+
   test('says when each connected account last started a task here, or that it has not', async () => {
     const { slack } = setUp({ link: null });
-    expect((await slack.snapshot()).links[0]?.lastUsedAt).toBeNull();
+    expect((await slack.snapshot(null)).links[0]?.lastUsedAt).toBeNull();
   });
 
   test('says remote access comes first, and when app.shinsa.dev cannot be reached', async () => {
-    expect(await setUp({ enabled: false }).slack.snapshot()).toEqual({
+    expect(await setUp({ enabled: false }).slack.snapshot(null)).toEqual({
       remote: false,
       connectUrl: null,
       links: [],
@@ -867,7 +903,7 @@ describe('Settings → General → Slack', () => {
     });
     const { slack, answers } = setUp();
     answers['/__remote/slack/links'] = () => new Response('{', { status: 500 });
-    const snapshot = await slack.snapshot();
+    const snapshot = await slack.snapshot(null);
     expect(snapshot.links).toEqual([]);
     expect(snapshot.problem).toContain('app.shinsa.dev could not be reached');
   });
