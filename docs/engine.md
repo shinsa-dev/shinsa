@@ -1538,9 +1538,12 @@ says so in its plan instead of an agent splitting the request before anyone read
 lists the other parts (a title, a request that stands on its own, and when each starts: now, waiting on this task or
 an earlier part, or stacked on one), and the phases cover only the work that stays (`docs/protocol.md` → Plan
 parameters). The planning prompt says when (`describePlanSplit`, `prompts/roles.ts`): only for a task that opens a
-pull request, parts in parallel by default, waiting only on code on an unmerged branch, stacked only for pieces of one
-rewrite, and a small or cohesive request kept whole. Such a plan always waits for you. The plan card leads with
-Start N tasks (counting this task) over the list of parts, with Keep as one task beside it, and ⌘K offers both.
+pull request; parts that serve one goal (pieces of one feature, a change and its follow-ups, work on the same code)
+stacked as a bundle, which is how most splits end; in parallel only for a part with a different goal worth merging
+alone; waiting only on code on an unmerged branch that should ship apart; and a small or cohesive request kept whole. Such a plan always waits for you. The plan card leads with
+Start N tasks (counting this task) over the list of parts, with Keep as one task beside it, and ⌘K offers both; when
+every part stacks back onto this task the split is one bundle, and the card says so (Start N-task bundle,
+`countBundledTasks`, `lib/tasks/split.ts`), and a mixed split names how many of its tasks form the bundle.
 Start N tasks approves the plan, and `startPlanSplit` (`decide/couriers.ts`) creates each part as a task under this
 one (`createdBy` `split`, the planning run), forked from it (`forkOf`), so its agent starts from this conversation and
 then plans for itself, with its wait or stack set; it shares the creation with `split_task` and is recorded as the
@@ -2763,8 +2766,8 @@ and the run supervisor.
   `split_task` (the Agent) turns the accepted plan into one to eight tasks (`tasks[].request`), exactly once per plan
   version, recorded on the task (`splits`, `planVersion`); a second call returns the same tasks. With `stacked` the
   parts are a bundle chained on this task (the first stacks on this task, each next one on the one before, all
-  merging together, Scheduling → Bundles), for a rewrite whose pieces ship at once; it is refused next to
-  `this_task_waits`. Without it each part starts at once and ships on its own. These are the only
+  merging together, Scheduling → Bundles), the usual choice whenever the parts serve one goal; it is refused next to
+  `this_task_waits`. Without it each part starts at once and ships on its own, only for parts with different goals. These are the only
   ways a task agent files a task: its management tools leave out `tasks create`, which stays for you and the command
   line.
 - **In the web.** Delegated runs show in their parent's turn (spawn, report, Stop, the child's own

@@ -251,7 +251,7 @@ function listPlanCommands(task: Task, gate: Gate): Command[] {
       id: `${id}.approve`,
       label: task.backlog || splits ? describePlanCard(task).approve : 'Approve the plan',
       icon: splits ? 'IconSplit' : 'IconCheckmark1',
-      keywords: ['spec', 'go ahead', 'build', 'accept', ...(splits ? ['split', 'tasks'] : [])],
+      keywords: ['spec', 'go ahead', 'build', 'accept', ...(splits ? ['split', 'tasks', 'bundle'] : [])],
       run: () => void replyToGate(gate, resolvePlanReply(task), null, { planVersion: task.plan?.version }),
     },
     ...createKeepOneTaskCommand(task, gate),

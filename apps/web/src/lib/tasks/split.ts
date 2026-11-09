@@ -31,3 +31,15 @@ export function countSplitTasks(task: Task) {
   const parts = task.plan?.document?.split?.length ?? 0;
   return parts === 0 ? 0 : parts + 1;
 }
+
+function isInBundleWithThisTask(parts: readonly PlanSplitPart[], index: number): boolean {
+  const part = parts[index];
+  if (part?.order !== 'stacks_on' || part.on === undefined || part.on > index) return false;
+  return part.on === 0 || isInBundleWithThisTask(parts, part.on - 1);
+}
+
+export function countBundledTasks(task: Task) {
+  const parts = task.plan?.document?.split ?? [];
+  const bundled = parts.filter((_, index) => isInBundleWithThisTask(parts, index)).length;
+  return bundled === 0 ? 0 : bundled + 1;
+}

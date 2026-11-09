@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import type { PlanDocument } from '@shinsa/core';
-import { countSplitTasks, listSplitParts } from '@/lib/tasks/split.ts';
+import { countBundledTasks, countSplitTasks, listSplitParts } from '@/lib/tasks/split.ts';
 import { createTask } from '../../support/state.ts';
 
 const DOCUMENT: PlanDocument = {
@@ -56,5 +56,28 @@ describe('countSplitTasks', () => {
     expect(countSplitTasks(withSplit([{ title: 'A', request: 'a', order: 'parallel' }]))).toBe(2);
     expect(countSplitTasks(withSplit([]))).toBe(0);
     expect(countSplitTasks(createTask({ id: 't' }))).toBe(0);
+  });
+});
+
+describe('countBundledTasks', () => {
+  it('counts this task with the parts whose stack leads back to it', () => {
+    expect(
+      countBundledTasks(
+        withSplit([
+          { title: 'A', request: 'a', order: 'stacks_on', on: 0 },
+          { title: 'B', request: 'b', order: 'stacks_on', on: 1 },
+          { title: 'C', request: 'c', order: 'parallel' },
+          { title: 'D', request: 'd', order: 'stacks_on', on: 3 },
+          { title: 'E', request: 'e', order: 'waits_on', on: 0 },
+          { title: 'F', request: 'f', order: 'stacks_on', on: 9 },
+          { title: 'G', request: 'g', order: 'stacks_on' },
+        ])
+      )
+    ).toBe(3);
+  });
+
+  it('counts nothing when no part stacks on this task, or without a split', () => {
+    expect(countBundledTasks(withSplit([{ title: 'A', request: 'a', order: 'parallel' }]))).toBe(0);
+    expect(countBundledTasks(createTask({ id: 't' }))).toBe(0);
   });
 });
