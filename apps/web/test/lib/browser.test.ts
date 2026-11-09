@@ -1,0 +1,92 @@
+import { describe, expect, it } from 'bun:test';
+import {
+  describeCopyButton,
+  describeCopyDone,
+  describeCopyFrom,
+  describeNotInSource,
+  describeSignedInSites,
+  describeSignOut,
+  filterSites,
+  isCopyRefused,
+  resolveDefaultSource,
+  selectMatchingSite,
+  toggleSite,
+} from '@/lib/browser.ts';
+
+const site = (name: string, signedIn = true) => ({ site: name, cookies: 1, signedIn });
+
+const DIA = { id: 'dia' as const, name: 'Dia', isDefault: true };
+
+const CHROME = { id: 'chrome' as const, name: 'Chrome', isDefault: false };
+
+describe('describeSignedInSites', () => {
+  it('names up to three signed-in sites and counts the rest', () => {
+    expect(describeSignedInSites([])).toBe('Not signed in to any site yet');
+    expect(describeSignedInSites([site('ads.net', false)])).toBe('Not signed in to any site yet');
+    expect(describeSignedInSites([site('a.com'), site('b.com')])).toBe('Signed in to a.com, b.com');
+    expect(
+      describeSignedInSites([site('a.com'), site('b.com'), site('c.com'), site('d.com'), site('e.com')])
+    ).toBe('Signed in to a.com, b.com, c.com and 2 more');
+  });
+});
+
+describe('the copy words', () => {
+  it('says what was copied and what was skipped', () => {
+    expect(describeCopyDone({ copied: 1, skipped: 0, sites: [] })).toBe('Copied 1 cookie.');
+    expect(describeCopyDone({ copied: 40, skipped: 2, sites: [] })).toBe(
+      'Copied 40 cookies. Skipped 2 expired ones.'
+    );
+  });
+
+  it('labels the copy button by how many sites are ticked', () => {
+    expect(describeCopyButton(0)).toBe('Copy sites');
+    expect(describeCopyButton(1)).toBe('Copy 1 site');
+    expect(describeCopyButton(3)).toBe('Copy 3 sites');
+  });
+
+  it('names the browser it copies from', () => {
+    expect(describeCopyFrom(DIA)).toBe('Copy from Dia');
+    expect(describeCopyFrom(null)).toBe('Copy from your browser');
+    expect(describeNotInSource('linear.app', DIA)).toBe('No linear.app sign-in in Dia.');
+    expect(describeSignOut('Superwall')).toBe(
+      'Shinsa deletes Superwall’s browser profile, so its agents are signed out of every site.'
+    );
+  });
+});
+
+describe('resolveDefaultSource', () => {
+  it('takes your default browser, else the first, else none', () => {
+    expect(resolveDefaultSource([CHROME, DIA])).toBe(DIA);
+    expect(resolveDefaultSource([CHROME])).toBe(CHROME);
+    expect(resolveDefaultSource([])).toBeNull();
+  });
+});
+
+describe('selectMatchingSite', () => {
+  it('finds the most specific site a host belongs to', () => {
+    const sites = [site('vercel.app'), site('my-app.vercel.app'), site('stripe.com')];
+    expect(selectMatchingSite('App.Stripe.com', sites)?.site).toBe('stripe.com');
+    expect(selectMatchingSite('my-app.vercel.app', sites)?.site).toBe('my-app.vercel.app');
+    expect(selectMatchingSite('stripe.com.net', sites)).toBeNull();
+  });
+});
+
+describe('isCopyRefused', () => {
+  it('marks Google’s sites, whose sessions do not copy', () => {
+    expect(isCopyRefused('accounts.google.com')).toBe(true);
+    expect(isCopyRefused('YouTube.com')).toBe(true);
+    expect(isCopyRefused('google.com.evil.dev')).toBe(false);
+    expect(isCopyRefused('github.com')).toBe(false);
+  });
+});
+
+describe('the site list', () => {
+  it('filters by what you type and ticks sites on and off', () => {
+    const sites = [site('github.com'), site('gitlab.com'), site('vercel.com')];
+    expect(filterSites(sites, ' GIT').map((entry) => entry.site)).toEqual(['github.com', 'gitlab.com']);
+    expect(filterSites(sites, '  ')).toEqual(sites);
+    const on = toggleSite(new Set(), 'github.com', true);
+    expect([...on]).toEqual(['github.com']);
+    expect([...toggleSite(on, 'github.com', false)]).toEqual([]);
+  });
+});
