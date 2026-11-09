@@ -576,7 +576,11 @@ describe('Terminals services', () => {
     const { terminals } = await createTerminals();
     for (let index = 0; index < SERVICE_LIMITS.services; index++)
       await runAsync(terminals.addService('p1', SERVICE));
-    await expect(runAsync(terminals.addService('p1', SERVICE))).rejects.toThrow('services at most.');
+    const names = Array.from({ length: SERVICE_LIMITS.services }, () => SERVICE.name);
+    await expect(runAsync(terminals.addService('p1', SERVICE))).rejects.toThrow(
+      `This project keeps ${SERVICE_LIMITS.services} services at most, and has ${SERVICE_LIMITS.services}: ${new Intl.ListFormat('en').format(names)}. Remove one under Services to add another.`
+    );
+    expect((await runAsync(terminals.addService('p2', SERVICE))).projectId).toBe('p2');
     await expect(
       runAsync((await createTerminals({ readOnly: true })).terminals.addService('p1', SERVICE))
     ).rejects.toThrow('Terminals are off');

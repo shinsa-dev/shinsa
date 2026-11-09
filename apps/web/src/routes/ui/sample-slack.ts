@@ -27,6 +27,7 @@ export function createSampleSlack(now: number): { label: string; snapshot: Slack
             userName: 'Christo',
             linkedAt: now - 3 * 24 * HOUR_MS,
             lastUsedAt: now - 2 * HOUR_MS,
+            accountId: null,
           },
           {
             teamId: 'T2',
@@ -35,6 +36,7 @@ export function createSampleSlack(now: number): { label: string; snapshot: Slack
             userName: 'christo',
             linkedAt: now - 2 * HOUR_MS,
             lastUsedAt: null,
+            accountId: null,
           },
         ],
         problem: null,
