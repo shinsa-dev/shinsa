@@ -54,6 +54,17 @@ describe('Settings → Teams on a browser that reaches none of your machines', (
     expect(screen.getByText('Never connected')).toBeTruthy();
   });
 
+  it('says which people have no machine in the team', () => {
+    renderHosted(
+      createTeam({
+        machines: [{ id: 'm2', name: 'Studio', userId: MONA.id, online: true, lastSeenAt: Date.now() }],
+      })
+    );
+    fireEvent.click(screen.getByText('People'));
+    expect(screen.getAllByText(/No machines/)).toHaveLength(1);
+    expect(screen.getByText(/· No machines/)).toBeTruthy();
+  });
+
   it('says when no one in the team has turned on remote access', () => {
     renderHosted(createTeam({ machines: [] }));
     expect(screen.getByText('No one in this team has turned on remote access yet.')).toBeTruthy();

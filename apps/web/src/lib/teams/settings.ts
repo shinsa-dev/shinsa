@@ -77,6 +77,9 @@ export function listKeylessMachines(
   return new Set([snapshot.instanceId]);
 }
 
+export const TEAM_SHARES_NOTHING =
+  'Teammates see nothing from this machine until you share a project with the team.';
+
 export const TEAM_KEY_WAITING = 'Teammates cannot see this machine’s tasks until it gets access.';
 
 export const TEAM_KEY_UPDATE = 'Teammates cannot see this machine’s tasks. Update Shinsa to get access.';
@@ -192,6 +195,12 @@ export function listTeamPeople(team: RemoteTeam, query: string): TeamPerson[] {
   return people.filter((person) =>
     [person.user.login, person.user.name ?? ''].some((text) => text.toLowerCase().includes(words))
   );
+}
+
+export const NO_TEAM_MACHINES = 'No machines';
+
+export function hasNoTeamMachines(team: Pick<RemoteTeam, 'machines'>, userId: string) {
+  return !team.machines.some((machine) => machine.userId === userId);
 }
 
 export function describePeopleCount(team: RemoteTeam) {

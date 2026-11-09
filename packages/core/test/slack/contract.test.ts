@@ -28,11 +28,17 @@ const WIRE = {
       thread: [{ ts: '1730120000.123456', userId: 'U7', userName: 'Lee', text: 'Login fails.', bot: false }],
     },
   ],
+  linkedUserId: null,
 };
 
 describe('a forwarded mention', () => {
   test('reads every field it carries', () => {
     expect(parseSlackMention(WIRE)).toEqual(WIRE);
+  });
+
+  test('names the account its Slack user is linked to, or no one when an older Worker leaves it out', () => {
+    expect(parseSlackMention({ ...WIRE, linkedUserId: '7' })).toMatchObject({ linkedUserId: '7' });
+    expect(parseSlackMention({ ...WIRE, linkedUserId: undefined })?.linkedUserId).toBeNull();
   });
 
   test('is refused without its ids, with an id that is not Slack’s shape, or when it is not an object', () => {

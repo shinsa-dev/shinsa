@@ -275,6 +275,8 @@ function createSlackLayer(config: ServerConfig) {
           return (yield* remote.isEnabled) ? (yield* remoteStore.file).credentials : null;
         }),
         appOrigin: config.remoteOrigin,
+        resolveActor: remote.resolveActor,
+        isOwner: remote.isOwner,
       });
     })
   );
