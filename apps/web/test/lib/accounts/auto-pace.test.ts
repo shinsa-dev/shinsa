@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'bun:test';
-import { createSettings, type UsageWait } from '@shinsa/core';
+import type { UsageWait } from '@shinsa/core';
 import { selectPaceBudget } from '@/lib/accounts/auto-pace.ts';
-import { createProject, createShinsaState, createTask, NOW } from '../../support/state.ts';
+import { createShinsaState, createTask, NOW } from '../../support/state.ts';
 
 function admission(provider?: string): UsageWait {
   return {
