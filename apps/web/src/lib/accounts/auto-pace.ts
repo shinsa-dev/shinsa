@@ -11,8 +11,7 @@ export const AUTO_PACE_LABEL = {
   title: 'Auto pace',
   toggle: 'Auto pace',
   toggled: { on: 'Auto pace is on.', off: 'Auto pace is off.' },
-  on: 'Spreads your builds over the forecast below, so your accounts last until they reset.',
-  off: 'Turn it on to spread your builds over the forecast below. Until then every build starts at once.',
+  description: 'Starts each build only when it fits your usage, so your accounts last until they reset.',
   noPace: 'Auto pace waits for the first usage reading of these accounts.',
 } as const;
 

@@ -37,7 +37,7 @@ export function AutoPaceSettings({ state }: { state: ShinsaState }) {
   if (!available) return null;
   const on = resolveAutoPace(state.settings);
   return (
-    <SettingsGroup title={AUTO_PACE_LABEL.title}>
+    <SettingsGroup title={AUTO_PACE_LABEL.title} description={AUTO_PACE_LABEL.description}>
       <SettingRow title={AUTO_PACE_LABEL.toggle}>
         <Switch
           checked={on}
@@ -51,7 +51,6 @@ export function AutoPaceSettings({ state }: { state: ShinsaState }) {
         />
       </SettingRow>
       {on && <PaceBudgets state={state} />}
-      <SettingsEmpty>{on ? AUTO_PACE_LABEL.on : AUTO_PACE_LABEL.off}</SettingsEmpty>
     </SettingsGroup>
   );
 }
