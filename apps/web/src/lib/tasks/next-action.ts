@@ -24,6 +24,7 @@ function resolveGateAction(gate: Gate, task: Task): TaskAction {
       return { label: 'Confirm the operation', path };
     case 'question':
     case 'secret':
+    case 'browser_sign_in':
       return {
         label: 'Answer',
         path: gate.runId ? resolveTaskPath(task, { tab: 'chat', run: gate.runId }) : path,

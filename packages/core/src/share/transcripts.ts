@@ -9,6 +9,7 @@ export const SHARE_TRANSCRIPT_PAGE = 200;
 const PRIVATE_SHINSA_TOOLS: ReadonlySet<ShinsaToolName> = new Set<ShinsaToolName>([
   'ask',
   'request_secret',
+  'request_browser_sign_in',
   'delegate_task',
   'delegation_answer',
 ]);

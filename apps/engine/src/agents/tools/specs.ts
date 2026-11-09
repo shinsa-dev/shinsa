@@ -15,6 +15,7 @@ import {
   VERIFICATION_RULES,
   WATCHDOG_STARTS,
 } from '@shinsa/core';
+import { BROWSER_TOOL_SPECS } from './browser/schema.ts';
 import { limitedPath, limitedText, textList } from './fields.ts';
 import { ORCHESTRATION_TOOL_SPECS } from './orchestration/schema.ts';
 import { CHOICES_SPEC, PROCESS_TOOL_SPECS } from './process/schema.ts';
@@ -823,4 +824,5 @@ export const TOOL_SPECS = {
   ...SHAPE_TOOL_SPECS,
   ...ORCHESTRATION_TOOL_SPECS,
   ...SCHEDULE_TOOL_SPECS,
+  ...BROWSER_TOOL_SPECS,
 } satisfies Record<ShinsaToolName, ToolSpec>;

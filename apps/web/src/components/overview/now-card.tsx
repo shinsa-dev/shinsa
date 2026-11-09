@@ -517,6 +517,8 @@ function GateCard({
       return <PostMergeCard state={state} task={task} />;
     case 'result':
       return <ResultCard state={state} task={task} gate={gate} onOpen={onOpen} />;
+    case 'browser_sign_in':
+      return null;
   }
 }
 
