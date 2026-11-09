@@ -37,7 +37,7 @@ export interface PaceHold {
 
 export function listRecentSpends(state: ShinsaState, now: number) {
   const from = now - RECENT_USAGE_MS;
-  const rates = resolveUsageRates(state.runs);
+  const rates = resolveUsageRates(state.runs, state.accountPlans);
   const spends: UsageSpend[] = [];
   let unmetered = 0;
   for (const run of Object.values(state.runs)) {

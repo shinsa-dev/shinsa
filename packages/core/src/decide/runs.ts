@@ -25,7 +25,7 @@ import { resolveFreshSessionNudge, resolveRecoveryNudge } from '../prompts/sessi
 import { hasOutstandingDelegations, listLiveChildRuns } from '../state/delegations.ts';
 import { findRun, isWaitingOnAnswer, listLiveRuns } from '../state/queries.ts';
 import { requestSignIn, waitForUsageReset } from './accounts.ts';
-import { holdForBudget, holdForPace } from './costs.ts';
+import { admitBuilds, holdForAdmission, holdForBudget, holdForPace } from './costs.ts';
 import type { Decider } from './decider.ts';
 import { planDelivery, releaseWaits, settleDelegation, waitForDelegations } from './delegations.ts';
 import { resolveRecoveryFingerprint } from './fingerprints.ts';
@@ -287,12 +287,14 @@ export function recordSessionLost(decider: Decider, command: CommandOf<'run.reco
 }
 
 export function dispatchRuns(decider: Decider) {
+  admitBuilds(decider);
   for (const { id } of listLiveRuns(decider.state)) {
     const run = decider.state.runs[id];
     if (
       run?.endedAt !== null ||
       run.status !== 'queued' ||
       holdForBudget(decider, run) ||
+      holdForAdmission(decider, run) ||
       holdForPace(decider, run)
     ) {
       continue;

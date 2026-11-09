@@ -9,6 +9,7 @@ import {
   resolveStageLabel,
   resolveTaskGlyph,
   resolveTaskMenuIcon,
+  isPausedStatus,
   resolveTaskStatus,
   resolveTaskStatusIcon,
   resolveWorkingGlyph,
@@ -316,6 +317,17 @@ describe('resolveTaskStatus', () => {
       label: 'Held at a usage limit',
       tone: 'neutral',
     });
+    const queued = createTask({
+      id: 'q',
+      usageWait: {
+        ...(task.usageWait as NonNullable<typeof task.usageWait>),
+        cause: 'pace',
+        pace: { scope: 'admission', limit: 9, percent: 8, projectId: null, stageReason: 'building' },
+      },
+    });
+    const status = resolveTaskStatus(createShinsaState({ tasks: [queued] }), queued);
+    expect(status).toEqual({ label: 'Waiting to build', tone: 'neutral' });
+    expect(isPausedStatus(status)).toBe(true);
   });
 
   it('reads the lead gate first', () => {

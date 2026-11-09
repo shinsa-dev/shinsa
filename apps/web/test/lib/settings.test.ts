@@ -322,11 +322,15 @@ describe('the usage limit', () => {
       'While Shinsa learns an account’s rate, the usage limit counts an early estimate, and nothing before the first measured step. A cost limit holds from the start.'
     );
     expect(describeUsageLimitNote(usageOnly, [weekly], learned)).toBeNull();
+    expect(describeUsageLimitNote(usageOnly, [weekly], new Map([['account:weekly', rate(false)]]))).toBe(
+      'While Shinsa learns an account’s rate, the usage limit counts an estimate from its plan’s usual rate. A cost limit holds from the start.'
+    );
     expect(
       describeUsageLimitNote(settings({ taskUsageLimit: 10, taskBudgetUsd: 5 }), [weekly], null)
     ).toBeNull();
     expect(describeUsageLimitNote(settings(), [weekly], new Map())).toBeNull();
     expect(describeUsageLimitNote(usageOnly, null, new Map())).toBeNull();
+    expect(describeUsageLimitNote(usageOnly, [weekly], null)).toBeNull();
   });
 });
 
