@@ -141,6 +141,16 @@ describe('starting a lead', () => {
     expect(resolveTaskPipeline(lead)).toEqual(['lead']);
     expect(lead.request).toContain('Lead the initiative “Rewrite the dock as PR 1”');
   });
+
+  test('an adopted lead starts leading once triaged, with no plan first', () => {
+    const harness = createHarness();
+    registerRepo(harness);
+    const source = createTask(harness, { request: 'Rewrite the dock as PR 1' });
+    harness.send({ type: 'initiative.adopt_task', taskId: source });
+    const leadId = listInitiatives(harness.state).at(-1)?.leadTaskId ?? '';
+    triageLead(harness, leadId);
+    expect(harness.activeRun(leadId)).toMatchObject({ role: 'agent', purpose: 'lead' });
+  });
 });
 
 describe('planning the initiative', () => {
