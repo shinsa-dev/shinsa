@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'bun:test';
-import { Effect, Layer } from 'effect';
+import { Effect, Fiber, Layer } from 'effect';
+import { TestClock } from 'effect/testing';
 import { ShellLayer } from '../../src/shell/layers.ts';
 import { resolveDefaultShell } from '../../src/shell/login.ts';
 import {
@@ -19,8 +20,12 @@ function spawnTerminalProcess(command: string[], options: TerminalSpawnOptions) 
 }
 
 function pickFreePort(preferred: number | null, taken: ReadonlySet<number>, listen: PortListener) {
-  return Effect.runSync(
-    TerminalPty.use((pty) => pty.pickPort(preferred, taken, listen)).pipe(Effect.provide(PTY))
+  return Effect.runPromise(
+    Effect.gen(function* () {
+      const fiber = yield* Effect.forkChild(TerminalPty.use((pty) => pty.pickPort(preferred, taken, listen)));
+      yield* TestClock.adjust('10 seconds');
+      return yield* Fiber.join(fiber);
+    }).pipe(Effect.provide(Layer.merge(PTY, TestClock.layer())))
   );
 }
 import { createTempDir } from '../helpers/temp.ts';
@@ -166,22 +171,44 @@ describe('resolveTerminalEnv', () => {
 });
 
 describe('TerminalPty.pickPort', () => {
-  it('keeps the port it is given while it is free and no other run holds it', () => {
+  it('keeps the port it is given while it is free and no other run holds it', async () => {
     const listen = (port: number) => (port === 0 ? 6001 : port);
-    expect(pickFreePort(4100, new Set(), listen)).toBe(4100);
-    expect(pickFreePort(4100, new Set([4100]), listen)).toBe(6001);
-    expect(pickFreePort(null, new Set(), listen)).toBe(6001);
+    expect(await pickFreePort(4100, new Set(), listen)).toBe(4100);
+    expect(await pickFreePort(4100, new Set([4100]), listen)).toBe(6001);
+    expect(await pickFreePort(null, new Set(), listen)).toBe(6001);
   });
 
-  it('asks again when the system hands back a port another run holds', () => {
+  it('waits for the port it is given while the last run lets go of it', async () => {
+    const tries: number[] = [];
+    const listen = (port: number) => {
+      tries.push(port);
+      if (port === 0) return 6001;
+      return tries.length > 3 ? port : null;
+    };
+    expect(await pickFreePort(4100, new Set(), listen)).toBe(4100);
+    expect(tries).toEqual([4100, 4100, 4100, 4100]);
+  });
+
+  it('takes another port when the one it is given stays taken past the wait', async () => {
+    const tries: number[] = [];
+    const listen = (port: number) => {
+      tries.push(port);
+      return port === 0 ? 6001 : null;
+    };
+    expect(await pickFreePort(4100, new Set(), listen)).toBe(6001);
+    expect(tries.filter((port) => port === 4100).length).toBeGreaterThan(40);
+    expect(tries.at(-1)).toBe(0);
+  });
+
+  it('asks again when the system hands back a port another run holds', async () => {
     const ports = [6001, 6002];
-    expect(pickFreePort(4100, new Set([6001]), (port) => (port === 0 ? (ports.shift() ?? null) : null))).toBe(
-      6002
-    );
+    expect(
+      await pickFreePort(4100, new Set([6001]), (port) => (port === 0 ? (ports.shift() ?? null) : null))
+    ).toBe(6002);
   });
 
-  it('gives up when no port is free', () => {
-    expect(() => pickFreePort(null, new Set(), () => null)).toThrow('No free port for the service.');
+  it('gives up when no port is free', async () => {
+    await expect(pickFreePort(null, new Set(), () => null)).rejects.toThrow('No free port for the service.');
   });
 
   it('binds a free port on this machine, and no port another program listens on', () => {

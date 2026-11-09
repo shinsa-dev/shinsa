@@ -6,6 +6,7 @@ import {
   GROUP_POLL_SCHEDULE,
   HANG_UP_GRACE,
   NO_FREE_PORT,
+  PORT_RELEASE_SCHEDULE,
   PORT_RETRY,
   type PortListener,
   PortTaken,
@@ -110,8 +111,7 @@ export class TerminalPty extends Context.Service<
         taken: ReadonlySet<number>,
         listen: PortListener
       ) {
-        if (preferred !== null && !taken.has(preferred) && listen(preferred) === preferred) return preferred;
-        return yield* Effect.suspend(() => {
+        const pickAny = Effect.suspend(() => {
           const port = listen(0);
           return port !== null && !taken.has(port)
             ? Effect.succeed(port)
@@ -119,6 +119,15 @@ export class TerminalPty extends Context.Service<
         }).pipe(
           Effect.retry(PORT_RETRY),
           Effect.catchTag('PortTaken', () => Effect.fail(new PortUnavailable({ message: NO_FREE_PORT })))
+        );
+        if (preferred === null || taken.has(preferred)) return yield* pickAny;
+        return yield* Effect.suspend(() =>
+          listen(preferred) === preferred
+            ? Effect.succeed(preferred)
+            : Effect.fail(new PortTaken({ port: preferred }))
+        ).pipe(
+          Effect.retry(PORT_RELEASE_SCHEDULE),
+          Effect.catchTag('PortTaken', () => pickAny)
         );
       });
 
