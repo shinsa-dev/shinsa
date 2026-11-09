@@ -1,6 +1,8 @@
 import { Icon } from '@shinsa/ui/components/icon';
 import { cn } from '@shinsa/ui/lib/utils';
+import { Effect } from 'effect';
 import * as React from 'react';
+import { useAppEffect } from '@/hooks/use-app-effect.ts';
 import type { GuardedCommand } from '../../lib/guard.ts';
 import { FIRST_STEP_MS, useFocus } from './focus.ts';
 import { Stage } from './frame.tsx';
@@ -12,22 +14,16 @@ export function GuardDemo({ commands }: { commands: GuardedCommand[] }) {
   const { ref, focused } = useFocus<HTMLDivElement>();
   const started = React.useRef(false);
 
-  React.useEffect(() => {
-    if (!focused) return;
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-      setShown(commands.length);
-      return;
-    }
+  useAppEffect(() => {
+    if (!focused) return Effect.void;
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches)
+      return Effect.sync(() => setShown(commands.length));
     const last = shown >= commands.length;
     const delay = started.current ? STEP_MS : FIRST_STEP_MS;
-    const timer = setTimeout(
-      () => {
-        started.current = true;
-        setShown(last ? 1 : shown + 1);
-      },
-      last ? STEP_MS * 4 : delay
-    );
-    return () => clearTimeout(timer);
+    return Effect.sync(() => {
+      started.current = true;
+      setShown(last ? 1 : shown + 1);
+    }).pipe(Effect.delay(last ? STEP_MS * 4 : delay));
   }, [focused, shown, commands.length]);
 
   return (
