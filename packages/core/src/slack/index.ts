@@ -64,6 +64,7 @@ export {
   serializeSlackGate,
   serializeSlackLinkPrompt,
   serializeSlackMerged,
+  serializeSlackNoAccess,
   serializeSlackOffline,
   serializeSlackReconnectPrompt,
   serializeSlackUnreadLinks,

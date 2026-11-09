@@ -305,6 +305,7 @@ export const SlackEventRoutes = Layer.unwrap(
 
     const resolveForwardedMention = Effect.fn('slackEvents.resolveForwardedMention')(function* (
       mention: MentionEvent,
+      link: SlackLink,
       workspace: SlackWorkspace,
       token: Redacted.Redacted<string>,
       linked: ReadonlyArray<LinkedThreadRead>
@@ -352,6 +353,7 @@ export const SlackEventRoutes = Layer.unwrap(
         channelName,
         thread: entries.map(resolveThreadMessage),
         linkedThreads,
+        linkedUserId: link.userId,
       } satisfies SlackMention;
     });
 
@@ -370,6 +372,14 @@ export const SlackEventRoutes = Layer.unwrap(
           Effect.annotateLogs({ instanceId: machine.id, status: answer.value.status })
         );
       return true;
+    });
+
+    const hasMemberAccess = Effect.fn('slackEvents.hasMemberAccess')(function* (
+      machine: Machine,
+      userId: SlackLink['userId']
+    ) {
+      const role = yield* selectMachineRole(machine.id, machine.ownerId, userId);
+      return Option.isSome(role) && role.value !== 'guest';
     });
 
     const handleMention = Effect.fn('slackEvents.handleMention')(function* (mention: MentionEvent) {
@@ -422,6 +432,10 @@ export const SlackEventRoutes = Layer.unwrap(
         return;
       }
       const machine = yield* machines.select(link.value.machineId);
+      if (Option.isSome(machine) && !(yield* hasMemberAccess(machine.value, link.value.userId))) {
+        yield* postPrivately(serializeSlackLinkPrompt(connectUrl));
+        return;
+      }
       const now = yield* Clock.currentTimeMillis;
       if (Option.isNone(machine) || !isMachineOnline(machine.value, now)) {
         yield* postInThread(
@@ -430,7 +444,7 @@ export const SlackEventRoutes = Layer.unwrap(
         return;
       }
       const linked = yield* listLinkedThreads(mention, link.value, machine.value, workspace.botUserId);
-      const forwarded = yield* resolveForwardedMention(mention, workspace, token, linked.read);
+      const forwarded = yield* resolveForwardedMention(mention, link.value, workspace, token, linked.read);
       yield* store.recordThread(
         { workspaceId: mention.teamId, channelId: mention.channelId, threadTs: mention.threadTs },
         machine.value.id
@@ -455,8 +469,8 @@ export const SlackEventRoutes = Layer.unwrap(
       });
       const machine = Option.isSome(poster) ? yield* machines.select(poster.value) : Option.none<Machine>();
       if (Option.isNone(machine)) return refuse(SLACK_DECISION_REFUSALS.noAccess);
-      const role = yield* selectMachineRole(machine.value.id, machine.value.ownerId, link.value.userId);
-      if (Option.isNone(role) || role.value === 'guest') return refuse(SLACK_DECISION_REFUSALS.noAccess);
+      if (!(yield* hasMemberAccess(machine.value, link.value.userId)))
+        return refuse(SLACK_DECISION_REFUSALS.noAccess);
       if (!isMachineOnline(machine.value, yield* Clock.currentTimeMillis))
         return refuse(serializeOfflineRefusal(machine.value.name));
       return { allowed: true, machine: machine.value } satisfies DeciderCheck;

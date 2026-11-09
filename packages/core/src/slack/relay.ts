@@ -1,4 +1,6 @@
 import { Effect, Option, Schema } from 'effect';
+import { NullByDefault } from '../domain/salvage.ts';
+import { RemoteUserId } from '../remote/contract.ts';
 import type { ShinsaState } from '../state/index.ts';
 import { SLACK_BLOCK_LIMITS } from './blocks.ts';
 import { SlackId } from './schema.ts';
@@ -79,6 +81,7 @@ export const SlackLink = Schema.Struct({
   userId: Schema.String,
   userName: Schema.String,
   linkedAt: Schema.Number,
+  accountId: NullByDefault(RemoteUserId),
 });
 
 export type SlackLink = typeof SlackLink.Type;
@@ -95,6 +98,7 @@ export interface SlackSnapshot {
   remote: boolean;
   connectUrl: string | null;
   links: readonly SlackLinkUse[];
+  othersLinked?: number;
   problem: string | null;
 }
 

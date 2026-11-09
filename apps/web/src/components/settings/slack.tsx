@@ -7,10 +7,16 @@ import { requestWithToast } from '@/lib/connection/commands.ts';
 import { SLACK_ACTIONS, type SlackActions, useSlack } from '@/lib/connection/slack.ts';
 import { useGuestMachines, useMachines } from '@/lib/connection/socket.ts';
 import { TONE_TEXT } from '@/lib/format/tone.ts';
-import { describeSlackLink, describeSlackStatus, SLACK_DESCRIPTION, SLACK_SECTION } from '@/lib/slack.ts';
+import {
+  describeSlackLink,
+  describeSlackStatus,
+  resolveSlackConnectLabel,
+  SLACK_DESCRIPTION,
+  SLACK_SECTION,
+} from '@/lib/slack.ts';
 import { SETTING_ROW, SettingsEmpty, SettingsGroup } from './group.tsx';
 
-function StatusAction({ snapshot }: { snapshot: SlackSnapshot }) {
+function StatusAction({ snapshot, member }: { snapshot: SlackSnapshot; member: boolean }) {
   if (!snapshot.connectUrl) return null;
   const connected = snapshot.links.length > 0;
   return (
@@ -20,13 +26,13 @@ function StatusAction({ snapshot }: { snapshot: SlackSnapshot }) {
       nativeButton={false}
       render={<a href={snapshot.connectUrl} target='_blank' rel='noreferrer' />}
     >
-      {connected ? 'Connect another workspace' : 'Connect Slack'}
+      {resolveSlackConnectLabel(connected, member)}
     </Button>
   );
 }
 
-function StatusRow({ snapshot }: { snapshot: SlackSnapshot }) {
-  const status = describeSlackStatus(snapshot);
+function StatusRow({ snapshot, member }: { snapshot: SlackSnapshot; member: boolean }) {
+  const status = describeSlackStatus(snapshot, member);
   return (
     <div className={SETTING_ROW}>
       <div className='flex min-w-0 flex-1 flex-col'>
@@ -36,7 +42,7 @@ function StatusRow({ snapshot }: { snapshot: SlackSnapshot }) {
         </div>
         <p className='text-2xs text-pretty text-fg-2'>{status.detail}</p>
       </div>
-      <StatusAction snapshot={snapshot} />
+      <StatusAction snapshot={snapshot} member={member} />
     </div>
   );
 }
@@ -55,20 +61,22 @@ function LinkRow({ link }: { link: SlackLinkUse }) {
 export function SlackGroup({
   snapshot,
   failure,
+  member = false,
   actions = SLACK_ACTIONS,
 }: {
   snapshot: SlackSnapshot | null;
   failure: string | null;
+  member?: boolean;
   actions?: SlackActions;
 }) {
   const dialog = useDialogState<true>();
-  const connected = (snapshot?.links.length ?? 0) > 0;
+  const linked = (snapshot?.links.length ?? 0) + (snapshot?.othersLinked ?? 0) > 0;
   return (
     <SettingsGroup
       title={SLACK_SECTION}
       description={SLACK_DESCRIPTION}
       action={
-        connected ? (
+        linked && !member ? (
           <Button variant='secondary' size='sm' onClick={() => dialog.show(true)}>
             Disconnect
           </Button>
@@ -76,14 +84,14 @@ export function SlackGroup({
       }
     >
       {!snapshot && <SettingsEmpty>{failure ?? 'Reading Slack…'}</SettingsEmpty>}
-      {snapshot && <StatusRow snapshot={snapshot} />}
+      {snapshot && <StatusRow snapshot={snapshot} member={member} />}
       {snapshot?.links.map((link) => (
         <LinkRow key={`${link.teamId}:${link.userId}`} link={link} />
       ))}
       <ConfirmDialog
         control={dialog.control}
         title='Disconnect Slack?'
-        body='Mentions of @Shinsa stop reaching this machine. Tasks already started keep running, and you can connect again later.'
+        body='Mentions of @Shinsa from you and every member stop reaching this machine. Started tasks keep running.'
         action='Disconnect Slack'
         onConfirm={() => void requestWithToast(actions.disconnect, 'Slack is disconnected.')}
       />
@@ -91,13 +99,14 @@ export function SlackGroup({
   );
 }
 
-function SlackReader() {
+function SlackReader({ member }: { member: boolean }) {
   const { snapshot, failure } = useSlack();
-  return <SlackGroup snapshot={snapshot} failure={failure} />;
+  return <SlackGroup snapshot={snapshot} failure={failure} member={member} />;
 }
 
 export function SlackSettings() {
   const machines = useMachines();
   const handed = useGuestMachines();
-  return machines.length === 0 && handed.length > 0 ? null : <SlackReader />;
+  const here = machines.find((machine) => machine.current) ?? machines[0];
+  return machines.length === 0 && handed.length > 0 ? null : <SlackReader member={here?.member === true} />;
 }
