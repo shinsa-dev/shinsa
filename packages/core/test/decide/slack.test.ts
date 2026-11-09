@@ -37,6 +37,7 @@ function mention(overrides: Partial<SlackMention> = {}): SlackMention {
     channelName: 'support',
     thread: [{ ts: '100.1', userId: 'U2', userName: 'Mia', text: 'Export hangs on big files.', bot: false }],
     linkedThreads: [],
+    linkedUserId: null,
     ...overrides,
   };
 }

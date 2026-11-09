@@ -19,6 +19,7 @@ const MENTION: SlackMention = {
   channelName: null,
   thread: [{ ts: '100.1', userId: 'U2', userName: 'Mia', text: 'Export hangs.', bot: false }],
   linkedThreads: [],
+  linkedUserId: null,
 };
 
 describe('the evaluation prompt', () => {

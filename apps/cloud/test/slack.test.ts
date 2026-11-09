@@ -195,6 +195,34 @@ async function setUp(options: { online?: boolean } = {}): Promise<Setup> {
   return { harness, slack, session, machine, forwards, tunnel };
 }
 
+async function grantAccess(
+  harness: Harness,
+  machine: MachineCredentials,
+  session: string,
+  role: 'member' | 'guest'
+) {
+  const studio = { bearer: machine.machineToken, sameOrigin: false };
+  if (role === 'member') {
+    const invite = await readJson<{ token: string }>(
+      await harness.post(REMOTE_PATHS.machineInvites, {}, studio)
+    );
+    await harness.post(REMOTE_PATHS.inviteAccept, { token: invite.token }, { session });
+    await harness.post(REMOTE_PATHS.machineMemberAdd, { userId: '7' }, studio);
+    return;
+  }
+  const handoff = await readJson<{ token: string }>(
+    await harness.post(REMOTE_PATHS.machineHandoffs, {}, studio)
+  );
+  await harness.post(REMOTE_PATHS.handoffAccept, { token: handoff.token }, { session });
+  await harness.post(REMOTE_PATHS.machineGuestAdd, { userId: '7' }, studio);
+}
+
+function linkedAccounts(harness: Harness) {
+  return harness.db.sqlite
+    .query('SELECT slack_user_id, user_id, machine_id FROM slack_links ORDER BY slack_user_id')
+    .all() as { slack_user_id: string; user_id: string; machine_id: string }[];
+}
+
 async function sendEvent(harness: Harness, envelope: unknown, headers: Record<string, string> = {}) {
   const body = typeof envelope === 'string' ? envelope : JSON.stringify(envelope);
   const timestamp = String(Math.floor(harness.clock.now / 1000));
@@ -451,6 +479,60 @@ describe('connecting Slack to a machine', () => {
     expect(readSetCookie(start, '__Host-shinsa_slack')).toEndWith(`.${laptop.instanceId}`);
   });
 
+  test('a member links their own Slack to the machine as themselves, and a guest is refused', async () => {
+    const { harness, slack, machine } = await setUp();
+    await bringOnline(harness, machine, ['slack-task-owner']);
+    answerConnectAs(slack, 'U2', 'xoxp-user-2');
+    const mia = await harness.signIn('mia', 7);
+    await grantAccess(harness, machine, mia, 'member');
+    expect((await connectSlack(harness, mia, machine.instanceId)).headers.get('location')).toBe(
+      '/slack/linked?team=Acme'
+    );
+    expect(linkedAccounts(harness)).toEqual([
+      { slack_user_id: 'U1', user_id: '42', machine_id: machine.instanceId },
+      { slack_user_id: 'U2', user_id: '7', machine_id: machine.instanceId },
+    ]);
+    const guest = await harness.signIn('gus', 8);
+    await grantAccess(harness, machine, guest, 'guest');
+    const refused = await harness.call(`${SLACK_RELAY_PATHS.connect}?instance=${machine.instanceId}`, {
+      session: guest,
+    });
+    expect(refused.status).toBe(404);
+  });
+
+  test('a member of a machine whose Shinsa cannot start tasks as them is told to ask its owner', async () => {
+    const { harness, slack, machine } = await setUp();
+    answerConnectAs(slack, 'U2', 'xoxp-user-2');
+    const mia = await harness.signIn('mia', 7);
+    await grantAccess(harness, machine, mia, 'member');
+    const refused = await harness.call(`${SLACK_RELAY_PATHS.connect}?instance=${machine.instanceId}`, {
+      session: mia,
+    });
+    expect(refused.status).toBe(403);
+    await bringOnline(harness, machine, ['slack-task-owner']);
+    const start = await harness.call(`${SLACK_RELAY_PATHS.connect}?instance=${machine.instanceId}`, {
+      session: mia,
+    });
+    await bringOnline(harness, machine);
+    const callback = await followAuthorize(harness, mia, start, SLACK_RELAY_PATHS.connectCallback, 'connect');
+    expect(callback.headers.get('location')).toBe('/slack/linked?error=not_owner');
+    expect(linkedAccounts(harness).map((link) => link.slack_user_id)).toEqual(['U1']);
+  });
+
+  test('without a machine named it picks their own first, else one they are a member of', async () => {
+    const { harness, machine } = await setUp();
+    const mia = await harness.signIn('mia', 7);
+    await grantAccess(harness, machine, mia, 'member');
+    const none = await harness.call(SLACK_RELAY_PATHS.connect, { session: mia });
+    expect(none.headers.get('location')).toBe('/slack/linked?error=no_machine');
+    await bringOnline(harness, machine, ['slack-task-owner']);
+    const shared = await harness.call(SLACK_RELAY_PATHS.connect, { session: mia });
+    expect(readSetCookie(shared, '__Host-shinsa_slack')).toEndWith(`.${machine.instanceId}`);
+    const laptop = await pairMachine(harness, mia, 'Laptop');
+    const own = await harness.call(SLACK_RELAY_PATHS.connect, { session: mia });
+    expect(readSetCookie(own, '__Host-shinsa_slack')).toEndWith(`.${laptop.instanceId}`);
+  });
+
   test('refuses a machine that belongs to someone else', async () => {
     const harness = createHarness();
     const owner = await harness.signIn('mona', 1);
@@ -655,6 +737,38 @@ describe('a mention from someone', () => {
     expect(harness.db.sqlite.query('SELECT thread_ts FROM slack_threads').all()).toEqual([
       { thread_ts: '100.1' },
     ]);
+  });
+
+  test('linked carries the account it is linked to, so the machine starts the task as them', async () => {
+    const { harness, slack, machine, forwards } = await setUp();
+    await bringOnline(harness, machine, ['slack-task-owner']);
+    answerConnectAs(slack, 'U2', 'xoxp-user-2');
+    const mia = await harness.signIn('mia', 7);
+    await grantAccess(harness, machine, mia, 'member');
+    await connectSlack(harness, mia, machine.instanceId);
+    await sendEvent(harness, mentionEnvelope());
+    await sendEvent(harness, mentionEnvelope({ user: 'U2', ts: '100.2' }));
+    const linked = forwards.map((forward) => String((JSON.parse(forward.body) as SlackMention).linkedUserId));
+    expect(linked).toEqual(['42', '7']);
+  });
+
+  test('linked by someone no longer on the machine gets the link to connect, and nothing reaches it', async () => {
+    const { harness, slack, machine, forwards } = await setUp();
+    await bringOnline(harness, machine, ['slack-task-owner']);
+    answerConnectAs(slack, 'U2', 'xoxp-user-2');
+    const mia = await harness.signIn('mia', 7);
+    await grantAccess(harness, machine, mia, 'member');
+    await connectSlack(harness, mia, machine.instanceId);
+    await harness.post(
+      REMOTE_PATHS.machineMemberRemove,
+      { userId: '7' },
+      { bearer: machine.machineToken, sameOrigin: false }
+    );
+    await sendEvent(harness, mentionEnvelope({ user: 'U2' }));
+    expect(forwards).toHaveLength(0);
+    const [ephemeral] = slack.callsTo('chat.postEphemeral');
+    expect(ephemeral?.body).toMatchObject({ channel: 'C1', user: 'U2' });
+    expect(JSON.stringify(ephemeral?.body.blocks)).toContain(`${TEST_CONFIG.origin}/slack/connect`);
   });
 
   test('in a thread brings the whole thread, bots and unknown people named as well as Slack allows', async () => {
@@ -1371,21 +1485,7 @@ describe('deciding from the card', () => {
     const laptop = await pairMachine(harness, mia, 'Laptop');
     await connectSlack(harness, mia, laptop.instanceId);
     await bringOnline(harness, laptop);
-    const studio = { bearer: machine.machineToken, sameOrigin: false };
-    if (role === 'member') {
-      const invite = await readJson<{ token: string }>(
-        await harness.post(REMOTE_PATHS.machineInvites, {}, studio)
-      );
-      await harness.post(REMOTE_PATHS.inviteAccept, { token: invite.token }, { session: mia });
-      await harness.post(REMOTE_PATHS.machineMemberAdd, { userId: '7' }, studio);
-    }
-    if (role === 'guest') {
-      const handoff = await readJson<{ token: string }>(
-        await harness.post(REMOTE_PATHS.machineHandoffs, {}, studio)
-      );
-      await harness.post(REMOTE_PATHS.handoffAccept, { token: handoff.token }, { session: mia });
-      await harness.post(REMOTE_PATHS.machineGuestAdd, { userId: '7' }, studio);
-    }
+    if (role !== 'stranger') await grantAccess(harness, machine, mia, role);
     return laptop;
   }
 
