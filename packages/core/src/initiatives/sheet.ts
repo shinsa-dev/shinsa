@@ -111,10 +111,14 @@ export function resolveInitiativeSheet(
 ): InitiativeSheet | null {
   const initiative = state.initiatives[initiativeId];
   if (!initiative) return null;
-  const members = listInitiativeMembers(state, initiativeId);
+  const members = listInitiativeMembers(state, initiativeId).filter(
+    (task) => task.id !== initiative.leadTaskId
+  );
   const queue = resolveQueue({ ...state, focus: { ...NO_FOCUS, initiativeId } }, now);
-  const deciding = new Set(queue.ready.map((entry) => entry.task.id));
-  const working = new Set(queue.working.map((task) => task.id));
+  const needsYou = queue.ready.filter((entry) => entry.task.id !== initiative.leadTaskId);
+  const workingTasks = queue.working.filter((task) => task.id !== initiative.leadTaskId);
+  const deciding = new Set(needsYou.map((entry) => entry.task.id));
+  const working = new Set(workingTasks.map((task) => task.id));
   const open = members.filter(
     (task) => !isTaskSettled(task) && !deciding.has(task.id) && !working.has(task.id)
   );
@@ -128,8 +132,8 @@ export function resolveInitiativeSheet(
     .slice(0, DECISION_LIMIT);
   return {
     initiative,
-    needsYou: queue.ready,
-    now: queue.working,
+    needsYou,
+    now: workingTasks,
     next: listNext(state, initiative, open),
     shipped: members
       .filter((task) => isTaskSettled(task) && task.stage !== 'cancelled')

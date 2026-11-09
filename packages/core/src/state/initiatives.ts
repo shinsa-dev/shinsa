@@ -1,4 +1,4 @@
-import { type Initiative, selectInitiativePhase, type Task } from '../domain/index.ts';
+import { INITIATIVE_LIMITS, type Initiative, selectInitiativePhase, type Task } from '../domain/index.ts';
 import type { EventOf, ShinsaEvent } from '../events/index.ts';
 import { removeEntry, writeEntry } from './draft.ts';
 import type { ShinsaState } from './project.ts';
@@ -6,7 +6,15 @@ import { record, updateTask } from './write.ts';
 
 type InitiativeEvent = Extract<
   ShinsaEvent,
-  { type: 'initiative.written' | 'initiative.removed' | 'task.initiative_changed' }
+  {
+    type:
+      | 'initiative.written'
+      | 'initiative.removed'
+      | 'task.initiative_changed'
+      | 'initiative.milestones_queued'
+      | 'initiative.lead_woken'
+      | 'initiative.reported';
+  }
 >;
 
 function describeMembership(state: ShinsaState, task: Task, event: EventOf<'task.initiative_changed'>) {
@@ -33,6 +41,19 @@ function applyMembership(state: ShinsaState, event: EventOf<'task.initiative_cha
   if (text) record(state, event.taskId, event.at, { actor: 'you', kind: 'note', text });
 }
 
+function updateInitiative(state: ShinsaState, initiativeId: string, patch: Partial<Initiative>) {
+  const initiative = state.initiatives[initiativeId];
+  if (!initiative) return;
+  writeEntry(state, 'initiatives', initiativeId, { ...initiative, ...patch });
+}
+
+function queueMilestones(state: ShinsaState, event: EventOf<'initiative.milestones_queued'>) {
+  const queued = [...(state.initiatives[event.initiativeId]?.milestones ?? []), ...event.milestones];
+  updateInitiative(state, event.initiativeId, {
+    milestones: queued.slice(-INITIATIVE_LIMITS.milestones),
+  });
+}
+
 export function applyInitiativeEvent(state: ShinsaState, event: InitiativeEvent) {
   switch (event.type) {
     case 'initiative.written':
@@ -43,6 +64,15 @@ export function applyInitiativeEvent(state: ShinsaState, event: InitiativeEvent)
       return;
     case 'task.initiative_changed':
       applyMembership(state, event);
+      return;
+    case 'initiative.milestones_queued':
+      queueMilestones(state, event);
+      return;
+    case 'initiative.lead_woken':
+      updateInitiative(state, event.initiativeId, { milestones: [] });
+      return;
+    case 'initiative.reported':
+      updateInitiative(state, event.initiativeId, { report: event.report });
       return;
   }
 }

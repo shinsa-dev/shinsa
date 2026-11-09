@@ -283,6 +283,7 @@ export const STAGE_WORDS: Record<TaskStage, string> = {
   researching: 'researching',
   operating: 'running the operation',
   watching: 'checking a watchdog',
+  leading: 'leading an initiative',
   awaiting_proposal: 'change to approve',
   awaiting_operation: 'operation to confirm',
   answered: 'answered, to read',

@@ -45,6 +45,7 @@ import { listOpenGates } from '../state/queries.ts';
 import { assertEvidence } from './agents.ts';
 import type { Decider } from './decider.ts';
 import { answerIteration, suggestActions } from './iterations.ts';
+import { startLeadTurn } from './leads.ts';
 import { settleTask, startPhase, startPlanning, startWork } from './lifecycle.ts';
 import { findCurrentRun } from './runs.ts';
 import { requestWorkspace } from './workspaces.ts';
@@ -132,7 +133,7 @@ function reshapeTask(
   decider.emit({ type: 'task.reshaped', taskId, pipeline, by, reason });
 }
 
-type EntryStep = InquiryStep | 'your_ok' | 'plan' | null;
+type EntryStep = InquiryStep | 'lead' | 'your_ok' | 'plan' | null;
 
 function hasYourOk(task: Task) {
   return task.proposal?.status === 'accepted';
@@ -140,6 +141,7 @@ function hasYourOk(task: Task) {
 
 export function resolveNextStep(task: Task): EntryStep {
   const pipeline = resolveTaskPipeline(task);
+  if (pipeline.includes('lead')) return 'lead';
   const inquiry = resolveInquiryStep(pipeline);
   if (inquiry && !isInquiryDone(task, inquiry)) return inquiry;
   if (pipeline.includes('your_ok') && !hasYourOk(task)) return 'your_ok';
@@ -278,6 +280,10 @@ export function startStep(decider: Decider, taskId: string, step: EntryStep) {
   }
   if (step === 'your_ok') {
     requestYourOk(decider, taskId, null, null, 'go_on');
+    return;
+  }
+  if (step === 'lead') {
+    startLeadTurn(decider, taskId, null);
     return;
   }
   startInquiry(decider, taskId, step, null);

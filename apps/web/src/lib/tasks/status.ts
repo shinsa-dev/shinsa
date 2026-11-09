@@ -149,6 +149,7 @@ const STAGE_STATUS_ICON: Record<TaskStage, IconName> = {
   researching: 'IconBook',
   operating: 'IconConsole',
   watching: 'IconRadar',
+  leading: 'IconAgents',
   awaiting_proposal: GATE.proposal.icon,
   awaiting_operation: GATE.operation.icon,
   answered: GATE.result.icon,

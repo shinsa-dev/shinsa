@@ -1190,6 +1190,9 @@ function applyEventBody(state: ShinsaState, event: ShinsaEvent): ShinsaState {
       break;
     case 'initiative.written':
     case 'initiative.removed':
+    case 'initiative.milestones_queued':
+    case 'initiative.lead_woken':
+    case 'initiative.reported':
     case 'task.initiative_changed':
       applyInitiativeEvent(state, event);
       break;

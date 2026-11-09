@@ -19,6 +19,7 @@ export {
   resolveHandoff,
   resolveHandoffPrompt,
 } from './handoff.ts';
+export { describeInitiativeMembership, type LeadTurn, resolveLeadPrompt } from './initiatives.ts';
 export { MANAGE_RULES } from './manage.ts';
 export {
   type DeliveredQuestion,

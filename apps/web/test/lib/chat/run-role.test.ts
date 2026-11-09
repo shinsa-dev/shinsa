@@ -84,6 +84,15 @@ describe('resolveRunHeadline', () => {
     );
   });
 
+  it('describes a lead turn and once it reported on the initiative', () => {
+    expect(resolveRunHeadline(live({ role: 'agent', purpose: 'lead' }), task, [])).toBe(
+      'Leading the initiative'
+    );
+    expect(resolveRunHeadline(done({ role: 'agent', purpose: 'lead' }), task, [])).toBe(
+      'Reported on the initiative'
+    );
+  });
+
   it('describes the agent running the operation and once it reported the outcome', () => {
     expect(resolveRunHeadline(live({ role: 'agent', purpose: 'operate' }), task, [])).toBe(
       'Running the operation'

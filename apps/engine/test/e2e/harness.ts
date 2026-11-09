@@ -160,6 +160,9 @@ const DEFAULT_SCRIPTS: Record<ScriptKey, AgentScript> = {
   intake: async (agent) => {
     await agent.call('report_read', { summary: 'Read the channel; nothing new to file.' });
   },
+  lead: async (agent) => {
+    await agent.call('report_initiative', { narrative: 'Nothing moved yet.' });
+  },
   planner: async (agent) => {
     agent.say('Read the code; nothing to add.');
   },

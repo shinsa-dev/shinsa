@@ -87,6 +87,8 @@ function resolveAgentHeadline(
       return done ? 'Checked a watchdog' : 'Checking a watchdog';
     case 'intake':
       return done ? 'Checked for new reports' : 'Checking for new reports';
+    case 'lead':
+      return done ? 'Reported on the initiative' : 'Leading the initiative';
   }
 }
 

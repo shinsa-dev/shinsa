@@ -6,6 +6,7 @@ import type { Decider } from './decider.ts';
 import { changeStack } from './dependencies.ts';
 import { resetFixBudget } from './fixes.ts';
 import { restartIntakeRead } from './intake.ts';
+import { startLeadTurn } from './leads.ts';
 import { resolveCurrentPhase, startPhase, startPlanning, startReview, startWork } from './lifecycle.ts';
 import { recheckPullRequest, requestPush } from './pull-requests.ts';
 import { restartAnswer, startInquiry, startOperation } from './shapes.ts';
@@ -86,6 +87,9 @@ export function retryTask(decider: Decider, taskId: string, guidance: string | n
     case 'watching':
       if (isWatchHome(task)) restartIntakeRead(decider, task);
       else restartWatchCheck(decider, task, guidance);
+      return;
+    case 'leading':
+      startLeadTurn(decider, taskId, guidance);
       return;
     case 'awaiting_proposal':
     case 'awaiting_operation':

@@ -10,7 +10,7 @@ import {
   resolveCurrentRound,
   resolveTaskRounds,
   SHAPE_PIPELINES,
-  type TaskShape,
+  type PresetShape,
   type UserCommand,
 } from '@shinsa/core';
 import { Effect } from 'effect';
@@ -421,7 +421,7 @@ describe('new work the classifier reads', () => {
 });
 
 describe('a round that starts without a kind of task', () => {
-  function shapeAs(shape: TaskShape | null, asked: string[] = []): ShapeClassifier {
+  function shapeAs(shape: PresetShape | null, asked: string[] = []): ShapeClassifier {
     return (_task, request) => {
       asked.push(request);
       return Promise.resolve(shape);

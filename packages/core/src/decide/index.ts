@@ -64,6 +64,7 @@ import {
   removeHandoff,
 } from './handoffs.ts';
 import { adoptTask, joinInitiative, removeInitiative, writeInitiative } from './initiatives.ts';
+import { reportInitiative, startLead, syncInitiativeMilestones, wakeLead } from './leads.ts';
 import { enforceLiveness } from './liveness.ts';
 import { acceptMemory, rememberRule, removeMemory, writeMemory } from './memory.ts';
 import { syncMergeSteps, tickMergeStep } from './merge-steps.ts';
@@ -306,6 +307,10 @@ function apply(decider: Decider, command: ShinsaCommand) {
       return removeInitiative(decider, command);
     case 'initiative.adopt_task':
       return adoptTask(decider, command);
+    case 'initiative.start_lead':
+      return startLead(decider, command);
+    case 'initiative.wake_lead':
+      return wakeLead(decider, command);
     case 'task.join_initiative':
       return joinInitiative(decider, command);
     case 'memory.write':
@@ -506,6 +511,8 @@ function apply(decider: Decider, command: ShinsaCommand) {
       return writeWatchSource(decider, command);
     case 'watch_source.remove':
       return removeWatchSource(decider, command);
+    case 'agent.report_initiative':
+      return reportInitiative(decider, command);
     case 'agent.report_read':
       return reportRead(decider, command);
     case 'agent.file_report':
@@ -559,6 +566,7 @@ function resolveDecision(state: ShinsaState, command: ShinsaCommand, context: De
   reviewBundles(decider);
   syncMergeSteps(decider);
   enforceLiveness(decider);
+  syncInitiativeMilestones(decider, state);
   dispatchRuns(decider);
   syncSlackThreads(decider);
   assertGatesStayOpen(decider, state);

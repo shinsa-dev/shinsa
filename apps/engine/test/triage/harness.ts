@@ -1,5 +1,5 @@
 import { BunServices } from '@effect/platform-bun';
-import type { ShinsaState, Task, TaskShape, UserCommand } from '@shinsa/core';
+import type { PresetShape, ShinsaState, Task, TaskShape, UserCommand } from '@shinsa/core';
 import { Context, Duration, Effect, Layer, Scope } from 'effect';
 import type { QuickJson } from '../../src/agents/quick/schema.ts';
 import { QuickCalls } from '../../src/agents/quick/service.ts';
@@ -27,7 +27,7 @@ export { resolveMessageRoute } from '../../src/triage/index.ts';
 
 export type MessageClassifier = (task: Task, text: string) => Promise<MessageClass | null>;
 
-export type ShapeClassifier = (task: Task, request: string) => Promise<TaskShape | null>;
+export type ShapeClassifier = (task: Task, request: string) => Promise<PresetShape | null>;
 
 export interface Classifier {
   message: MessageClassifier;

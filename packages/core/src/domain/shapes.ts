@@ -3,7 +3,9 @@ import { isComposableStep, listComposedSteps, type PipelineStep, validatePipelin
 import type { Task, TeammateOwner } from './types.ts';
 import { validateVerification } from './verification.ts';
 
-export type TaskShape = 'answer' | 'investigate' | 'research' | 'change' | 'fix' | 'operation';
+export type TaskShape = 'answer' | 'investigate' | 'research' | 'change' | 'fix' | 'operation' | 'lead';
+
+export type PresetShape = Exclude<TaskShape, 'lead'>;
 
 export type InquiryStep = Extract<PipelineStep, 'answer' | 'research' | 'investigate'>;
 
@@ -82,7 +84,7 @@ export interface TriageDuplicateCheck {
   unreached: UnreachedTeammate[];
 }
 
-export const TASK_SHAPES: readonly TaskShape[] = [
+export const TASK_SHAPES: readonly PresetShape[] = [
   'answer',
   'investigate',
   'research',
@@ -93,7 +95,11 @@ export const TASK_SHAPES: readonly TaskShape[] = [
 
 const INQUIRY_STEPS: readonly InquiryStep[] = ['answer', 'research', 'investigate'];
 
-const REPOSITORY_FREE_STEPS: ReadonlySet<PipelineStep> = new Set<PipelineStep>(['answer', 'research']);
+const REPOSITORY_FREE_STEPS: ReadonlySet<PipelineStep> = new Set<PipelineStep>([
+  'lead',
+  'answer',
+  'research',
+]);
 
 const CHANGE_TAIL: readonly PipelineStep[] = [
   'plan',
@@ -114,6 +120,7 @@ export const SHAPE_PIPELINES: Record<TaskShape, readonly PipelineStep[]> = {
   change: CHANGE_TAIL,
   fix: ['investigate', ...CHANGE_TAIL],
   operation: ['plan', 'operate'],
+  lead: ['lead'],
 };
 
 export const SHAPE_LIMITS = {
@@ -152,7 +159,8 @@ export function validateComposition(
   steps: readonly PipelineStep[]
 ): string[] {
   const errors = [...validatePipeline(steps), ...validateVerification(steps)];
-  const handOver = steps.filter((step) => !isComposableStep(step));
+  if (steps.includes('lead')) errors.push('Only Shinsa starts a lead, for an initiative.');
+  const handOver = steps.filter((step) => step !== 'lead' && !isComposableStep(step));
   if (handOver.length > 0) {
     errors.push(
       `Shinsa adds ${handOver.map((step) => `\`${step}\``).join(' and ')} from the steps around the merge in your work report; leave them out.`
@@ -216,6 +224,7 @@ export function findWorkStep(steps: readonly PipelineStep[]): WorkStep {
 }
 
 export function resolveShapeOf(steps: readonly PipelineStep[]): TaskShape {
+  if (steps.includes('lead')) return 'lead';
   if (steps.includes('build')) return steps.includes('investigate') ? 'fix' : 'change';
   if (steps.includes('operate')) return 'operation';
   if (steps.includes('investigate')) return 'investigate';
@@ -230,6 +239,10 @@ export function resolveTaskPipeline(task: Pick<Task, 'pipeline' | 'mode'>): read
 
 export function resolveTaskShape(task: Pick<Task, 'pipeline' | 'mode'>) {
   return resolveShapeOf(resolveTaskPipeline(task));
+}
+
+export function isLeadTask(task: Pick<Task, 'pipeline' | 'mode'>) {
+  return resolveTaskPipeline(task).includes('lead');
 }
 
 export function hasStep(task: Pick<Task, 'pipeline' | 'mode'>, step: PipelineStep) {

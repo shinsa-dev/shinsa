@@ -96,6 +96,8 @@ const DESCRIPTIONS: Descriptions = {
       : `Created the initiative ${quoteTitle(command.name.trim())}`,
   'initiative.remove': () => 'Removed an initiative',
   'initiative.adopt_task': (state, command) => `Made an initiative from ${quoteTask(state, command.taskId)}`,
+  'initiative.start_lead': (state, command) =>
+    `Started a lead for the initiative ${quoteTitle(state.initiatives[command.initiativeId]?.name ?? 'removed')}`,
   'task.join_initiative': (state, command) =>
     command.initiativeId
       ? `Added ${quoteTask(state, command.taskId)} to the initiative ${quoteInitiative(state, command.initiativeId)}`

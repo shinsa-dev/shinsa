@@ -28,6 +28,7 @@ export const SHAPE_LABEL: Record<TaskShape, string> = {
   change: 'Change',
   fix: 'Find and fix',
   operation: 'Operation',
+  lead: 'Initiative lead',
 };
 
 export const SHAPE_ICON: Record<TaskShape, IconName> = {
@@ -37,6 +38,7 @@ export const SHAPE_ICON: Record<TaskShape, IconName> = {
   change: 'IconHammer',
   fix: 'IconBug',
   operation: 'IconConsole',
+  lead: 'IconAgents',
 };
 
 const STEP_LABEL: Record<PipelineStep, string> = {
@@ -46,6 +48,7 @@ const STEP_LABEL: Record<PipelineStep, string> = {
   your_ok: 'your OK',
   plan: 'plan',
   operate: 'run the operation',
+  lead: 'lead the initiative',
   build: 'build',
   checks: 'checks',
   agent_review: 'agent review',

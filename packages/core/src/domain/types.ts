@@ -51,6 +51,7 @@ export type TaskStage =
   | 'researching'
   | 'operating'
   | 'watching'
+  | 'leading'
   | 'awaiting_proposal'
   | 'awaiting_operation'
   | 'answered'
@@ -75,7 +76,7 @@ export type RunRole =
   | 'investigator'
   | 'researcher';
 
-export type RunPurpose = 'plan' | 'build' | 'fix' | 'operate' | 'watch' | 'intake';
+export type RunPurpose = 'plan' | 'build' | 'fix' | 'operate' | 'watch' | 'intake' | 'lead';
 
 export type AgentRole = 'classifier' | 'agent' | 'reviewer' | 'answerer' | 'writer';
 

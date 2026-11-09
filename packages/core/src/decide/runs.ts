@@ -68,6 +68,7 @@ const PURPOSE_REFUSAL: Record<RunPurpose, string> = {
   watch:
     'You are checking a watchdog: file what you found with `file_report` and end the check with `report_read`.',
   intake: 'You are reading a data source for an automation: report what you read with `report_read`.',
+  lead: 'You are leading an initiative: end your turn with `report_initiative`.',
 };
 
 const ROLE_REFUSAL: Partial<Record<RunRole, string>> = {
@@ -176,6 +177,10 @@ function describeStop(outcome: RunOutcome, summary: string | null) {
   return 'it ended its turn without calling the hand-over tool';
 }
 
+function isRecoveredStage(task: Task, run: Run) {
+  return RUN_STAGES.has(task.stage) || (task.stage === 'leading' && run.purpose === 'lead');
+}
+
 function finishRun(
   decider: Decider,
   run: Run,
@@ -195,7 +200,7 @@ function finishRun(
   if (held) decider.holdDelegations(run.id);
   decider.endRun(run, outcome, summary, failure);
   const task = decider.task(run.taskId);
-  if (!isTaskSettled(task) && outcome !== 'cancelled' && RUN_STAGES.has(task.stage)) {
+  if (!isTaskSettled(task) && outcome !== 'cancelled' && isRecoveredStage(task, run)) {
     recover(decider, run, failure?.message ?? describeStop(outcome, summary), failure);
   }
   if (held) decider.releaseDelegations(run.id);

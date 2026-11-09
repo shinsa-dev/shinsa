@@ -34,6 +34,7 @@ import { queueMessageForWake } from './delegations.ts';
 import { startFix } from './fixes.ts';
 import { answerGate } from './gates.ts';
 import { requestIteration } from './iterations.ts';
+import { startLeadTurn } from './leads.ts';
 import { resolveCurrentPhase, startPhase, startPlanning } from './lifecycle.ts';
 import { assertTakesMessages, findWaitingRound, isHeldByYourDecision, queueRound } from './rounds.ts';
 import {
@@ -50,6 +51,7 @@ import { findOpenSuggestion, hasRoomForSuggestion, suggestSplitOff } from './sug
 
 type StageEffect =
   | 'kept'
+  | 'lead'
   | 'revise_plan'
   | 'restart_step'
   | 'decline_proposal'
@@ -74,6 +76,7 @@ type Delivery =
   | { effect: StageEffect };
 
 const FEEDBACK_ONLY_EFFECTS: ReadonlySet<MessageEffect> = new Set<MessageEffect>([
+  'lead',
   'retry',
   'verify_setup',
   'supersede_question',
@@ -96,6 +99,7 @@ const STAGE_EFFECT: Record<TaskStage, StageEffect> = {
   investigating: 'restart_step',
   operating: 'restart_step',
   watching: 'restart_step',
+  leading: 'lead',
   awaiting_proposal: 'decline_proposal',
   awaiting_operation: 'operation_notes',
   answered: 'follow_up',
@@ -186,6 +190,9 @@ function deliverMessage(decider: Decider, task: Task, delivery: Delivery, sent: 
   const comments = sent.comments.length;
   switch (delivery.effect) {
     case 'kept':
+      return;
+    case 'lead':
+      startLeadTurn(decider, task.id, text);
       return;
     case 'steer':
       if (isReplyingRun(delivery.run)) requestIteration(decider, task.id, note, comments);

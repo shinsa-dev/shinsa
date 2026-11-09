@@ -107,10 +107,14 @@ export { isAgentQuestion, isDecisionGate, isPausingGate } from './gates.ts';
 export {
   INITIATIVE_LIMITS,
   type Initiative,
+  type InitiativeMilestone,
+  type InitiativeMilestoneKind,
   type InitiativePhase,
+  type InitiativeReport,
   resolveInitiativeText,
   selectInitiativeByReference,
   selectInitiativePhase,
+  selectLeadInitiative,
 } from './initiatives.ts';
 export { isReplyingRun, type ReplyingHandOver, selectOpenIteration } from './iterations.ts';
 export {
@@ -236,9 +240,11 @@ export {
   isComposedByAgent,
   isFollowUpOnWork,
   isInquiryDone,
+  isLeadTask,
   isSamePipeline,
   needsRepository,
   type OperationTiming,
+  type PresetShape,
   PROPOSAL_RECOMMENDATIONS,
   type ProposalRecommendation,
   type SuggestedAction,

@@ -3,6 +3,7 @@ import type { ShinsaToolName } from './tools.ts';
 import type { GateDecision, GateType, RunRole, TaskStage } from './types.ts';
 
 export type PipelineStep =
+  | 'lead'
   | 'answer'
   | 'research'
   | 'investigate'
@@ -19,6 +20,7 @@ export type PipelineStep =
   | 'post_merge';
 
 export const PIPELINE_ORDER: readonly PipelineStep[] = [
+  'lead',
   'answer',
   'research',
   'investigate',
@@ -36,6 +38,7 @@ export const PIPELINE_ORDER: readonly PipelineStep[] = [
 ];
 
 export type StepClass =
+  | 'supervision'
   | 'inquiry'
   | 'consent'
   | 'planning'
@@ -158,6 +161,25 @@ const RESULT_GATE: StepGate = {
 };
 
 export const STEP_SCHEMA: Record<PipelineStep, StepDefinition> = {
+  lead: {
+    step: 'lead',
+    title: 'Lead',
+    class: 'supervision',
+    actor: { by: 'agent', role: 'agent' },
+    inputs: [
+      'the initiative and its members',
+      'the milestones of its members since the last turn',
+      'your messages',
+    ],
+    outputs: [{ name: 'the narrative and open questions', tool: 'report_initiative', evidence: false }],
+    exit: 'You marked the lead done, or removed its initiative. Each turn ends with its report.',
+    gate: NO_GATE,
+    placement: 'canonical',
+    needs: [],
+    worktree: false,
+    stages: ['leading'],
+    composable: false,
+  },
   answer: {
     step: 'answer',
     title: 'Answer',
@@ -764,7 +786,12 @@ function listStepsOfClass(steps: readonly PipelineStep[], stepClass: StepClass) 
   return steps.filter((step) => STEP_SCHEMA[step].class === stepClass);
 }
 
-const WORKING_CLASSES: ReadonlySet<StepClass> = new Set<StepClass>(['inquiry', 'code', 'operation']);
+const WORKING_CLASSES: ReadonlySet<StepClass> = new Set<StepClass>([
+  'supervision',
+  'inquiry',
+  'code',
+  'operation',
+]);
 
 function rankOf(step: PipelineStep) {
   return PIPELINE_ORDER.indexOf(step);
@@ -799,6 +826,9 @@ function listOrderErrors(steps: readonly PipelineStep[]) {
   }
   if (listStepsOfClass(steps, 'inquiry').length > 1) {
     errors.push('A task answers, researches or investigates, not more than one of them.');
+  }
+  if (steps.includes('lead') && steps.length > 1) {
+    errors.push('A lead does nothing but lead its initiative, so it has no other step.');
   }
   return errors;
 }

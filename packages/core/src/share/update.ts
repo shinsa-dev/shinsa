@@ -28,6 +28,7 @@ const STAGE_UPDATE: Record<TaskStage, ShareUpdate> = {
   investigating: 'looking_into',
   researching: 'looking_into',
   watching: 'looking_into',
+  leading: 'working',
   awaiting_proposal: 'looking_into',
   awaiting_operation: 'looking_into',
   answered: 'answered',

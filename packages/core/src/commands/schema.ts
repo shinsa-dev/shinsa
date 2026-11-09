@@ -262,6 +262,10 @@ export const UserCommand = Schema.Union([
   }),
   Command('initiative.remove', { initiativeId: InitiativeId }),
   Command('initiative.adopt_task', { taskId: TaskId }),
+  Command('initiative.start_lead', {
+    initiativeId: InitiativeId,
+    forkOf: NullByDefault(TaskId, FIELD_MESSAGES.text),
+  }),
   Command('task.join_initiative', {
     taskId: TaskId,
     initiativeId: OrNull(InitiativeId, FIELD_MESSAGES.text),

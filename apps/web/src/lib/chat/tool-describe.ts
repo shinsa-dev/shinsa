@@ -33,6 +33,7 @@ const HANDOVER_TOOLS = new Set<ShinsaToolName>([
   'submit_report',
   'report_outcome',
   'report_read',
+  'report_initiative',
   'reshape_task',
   'move_to_repository',
 ]);
@@ -150,6 +151,7 @@ type PlainShinsaTool =
   | 'submit_report'
   | 'report_outcome'
   | 'report_read'
+  | 'report_initiative'
   | 'delegation_status'
   | 'delegation_cancel'
   | 'list_schedules'
@@ -168,6 +170,7 @@ const PLAIN_SHINSA: Record<PlainShinsaTool, { icon: IconName; verb: string }> = 
   submit_report: { icon: 'IconSend', verb: 'Wrote the report' },
   report_outcome: { icon: 'IconSend', verb: 'Reported the outcome' },
   report_read: { icon: 'IconSend', verb: 'Reported what it read' },
+  report_initiative: { icon: 'IconSend', verb: 'Reported on the initiative' },
   delegation_status: { icon: 'IconAgents', verb: 'Checked a delegation' },
   delegation_cancel: { icon: 'IconCircleX', verb: 'Stopped a delegation' },
   list_schedules: { icon: 'IconClock', verb: 'Listed the schedules' },
@@ -448,6 +451,7 @@ const GROUP_PHRASES: Record<ToolGroupKey, (count: number) => string> = {
   submit_report: () => 'wrote the report',
   report_outcome: () => 'reported the outcome',
   report_read: () => 'reported what it read',
+  report_initiative: () => 'reported on the initiative',
   reshape_task: () => 'changed the kind of task',
   move_to_repository: () => 'moved the task to another repository',
   delegate_task: (count) => `started ${describeCount(count, 'delegation', 'delegations')}`,

@@ -126,6 +126,7 @@ const GATED_COMMANDS: EngineCommand[] = [
   'initiative.write',
   'initiative.remove',
   'initiative.adopt_task',
+  'initiative.start_lead',
   'task.join_initiative',
   'feedback.write',
   'feedback.update',

@@ -3,6 +3,28 @@ export interface InitiativePhase {
   name: string;
 }
 
+export type InitiativeMilestoneKind =
+  | 'joined'
+  | 'plan_approved'
+  | 'gate_opened'
+  | 'merged'
+  | 'done'
+  | 'cancelled';
+
+export interface InitiativeMilestone {
+  taskId: string;
+  kind: InitiativeMilestoneKind;
+  text: string;
+  at: number;
+}
+
+export interface InitiativeReport {
+  narrative: string;
+  questions: string[];
+  runId: string;
+  at: number;
+}
+
 export interface Initiative {
   id: string;
   name: string;
@@ -11,6 +33,8 @@ export interface Initiative {
   leadTaskId: string | null;
   createdAt: number;
   updatedAt: number;
+  milestones?: InitiativeMilestone[];
+  report?: InitiativeReport | null;
 }
 
 export const INITIATIVE_LIMITS = {
@@ -19,7 +43,19 @@ export const INITIATIVE_LIMITS = {
   phases: 12,
   phaseName: 60,
   initiatives: 50,
+  milestones: 40,
+  narrative: 2_000,
+  questions: 5,
+  question: 280,
 } as const;
+
+export function selectLeadInitiative<T extends Pick<Initiative, 'leadTaskId'>>(
+  initiatives: Iterable<T>,
+  taskId: string
+) {
+  for (const initiative of initiatives) if (initiative.leadTaskId === taskId) return initiative;
+  return null;
+}
 
 export function resolveInitiativeText(text: string) {
   return text.trim().replace(/\s+/g, ' ');
