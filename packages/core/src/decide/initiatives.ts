@@ -12,7 +12,6 @@ import {
 import { listInitiativeMembers, listInitiatives, selectInitiativeLead } from '../state/initiatives.ts';
 import type { Decider } from './decider.ts';
 import { isSameValue } from './equality.ts';
-import { settleTask } from './lifecycle.ts';
 
 interface Membership {
   initiativeId: string | null;
@@ -62,10 +61,10 @@ function resolvePhaseName(name: string, seen: Set<string>) {
 
 function resolvePhases(
   decider: Decider,
-  existing: Initiative | null,
+  existing: Initiative,
   phases: CommandOf<'initiative.write'>['phases']
 ): InitiativePhase[] {
-  if (phases === undefined) return existing?.phases.map((phase) => ({ ...phase })) ?? [];
+  if (phases === undefined) return existing.phases.map((phase) => ({ ...phase }));
   if (phases.length > INITIATIVE_LIMITS.phases) {
     refuse(`An initiative can have at most ${INITIATIVE_LIMITS.phases} phases.`);
   }
@@ -73,13 +72,12 @@ function resolvePhases(
   return phases.map((phase) => {
     const name = resolvePhaseName(phase.name, seen);
     if (phase.id === null) return { id: decider.context.newId(), name };
-    if (!existing || !selectInitiativePhase(existing, phase.id))
-      refuse(`No phase ${phase.id} in this initiative.`);
+    if (!selectInitiativePhase(existing, phase.id)) refuse(`No phase ${phase.id} in this initiative.`);
     return { id: phase.id, name };
   });
 }
 
-function changeMembership(decider: Decider, task: Task, next: Membership) {
+export function changeMembership(decider: Decider, task: Task, next: Membership) {
   const current: Membership = {
     initiativeId: task.initiativeId ?? null,
     phaseId: task.initiativeId ? (task.initiativePhaseId ?? null) : null,
@@ -96,21 +94,24 @@ function dropRemovedPhases(decider: Decider, initiative: Initiative) {
 }
 
 function assertRoomForInitiative(decider: Decider) {
-  if (listInitiatives(decider.state).length < INITIATIVE_LIMITS.initiatives) return;
+  const open = listInitiatives(decider.state).filter((initiative) =>
+    selectInitiativeLead(decider.state, initiative)
+  );
+  if (open.length < INITIATIVE_LIMITS.initiatives) return;
   throw new DomainError({
     code: 'initiative_limit',
-    message: `${INITIATIVE_LIMITS.initiatives} initiatives already. Remove one you no longer need first.`,
+    message: `${INITIATIVE_LIMITS.initiatives} initiatives are open already. Mark one done first.`,
   });
 }
 
-function createInitiative(decider: Decider, name: string, description: string, phases: InitiativePhase[]) {
+export function createInitiative(decider: Decider, name: string, description: string) {
   assertRoomForInitiative(decider);
   const now = decider.context.now;
   const initiative: Initiative = {
     id: decider.context.newId(),
-    name,
-    description,
-    phases,
+    name: resolveName(name),
+    description: resolveDescription(description),
+    phases: [],
     leadTaskId: null,
     createdAt: now,
     updatedAt: now,
@@ -120,11 +121,10 @@ function createInitiative(decider: Decider, name: string, description: string, p
 }
 
 export function writeInitiative(decider: Decider, command: CommandOf<'initiative.write'>) {
-  const existing = command.initiativeId ? findInitiative(decider, command.initiativeId) : null;
+  const existing = findInitiative(decider, command.initiativeId);
   const name = resolveName(command.name);
-  const description = resolveDescription(command.description ?? existing?.description ?? '');
+  const description = resolveDescription(command.description ?? existing.description);
   const phases = resolvePhases(decider, existing, command.phases);
-  if (!existing) return createInitiative(decider, name, description, phases).id;
   const next = { ...existing, name, description, phases };
   if (isSameValue(next, existing)) return existing.id;
   const initiative = { ...next, updatedAt: decider.context.now };
@@ -133,10 +133,7 @@ export function writeInitiative(decider: Decider, command: CommandOf<'initiative
   return existing.id;
 }
 
-export function removeInitiative(decider: Decider, command: CommandOf<'initiative.remove'>) {
-  const initiative = findInitiative(decider, command.initiativeId);
-  const lead = selectInitiativeLead(decider.state, initiative);
-  if (lead) settleTask(decider, lead.id, 'done', 'its initiative was removed');
+export function dissolveInitiative(decider: Decider, initiative: Initiative) {
   for (const task of listInitiativeMembers(decider.state, initiative.id)) {
     changeMembership(decider, task, { initiativeId: null, phaseId: null });
   }
@@ -147,12 +144,14 @@ export function removeInitiative(decider: Decider, command: CommandOf<'initiativ
   decider.emit({ type: 'initiative.removed', initiativeId: initiative.id });
 }
 
-export function resolveMembership(
-  decider: Decider,
-  initiativeId: string,
-  phaseId: string | null | undefined
-) {
+function resolveMembership(decider: Decider, initiativeId: string, phaseId: string | null | undefined) {
   const initiative = findInitiative(decider, initiativeId);
+  if (!selectInitiativeLead(decider.state, initiative)) {
+    throw new DomainError({
+      code: 'initiative_finished',
+      message: `The initiative ${initiative.name} is finished. Pick one that is still open.`,
+    });
+  }
   if (phaseId && !selectInitiativePhase(initiative, phaseId)) {
     throw new DomainError({
       code: 'initiative_phase_not_found',
@@ -192,23 +191,21 @@ export function listTaskDescendants(tasks: readonly Task[], rootId: string): Tas
   return descendants;
 }
 
-export function adoptTask(decider: Decider, command: CommandOf<'initiative.adopt_task'>) {
-  const task = decider.task(command.taskId);
+export function assertNotInInitiative(decider: Decider, task: Task) {
   const current = task.initiativeId ? decider.state.initiatives[task.initiativeId] : undefined;
-  if (current) {
-    throw new DomainError({
-      code: 'initiative_exists',
-      message: `This task is already in the initiative ${current.name}. Take it out first.`,
-    });
-  }
-  const name = resolveInitiativeText(task.title).slice(0, INITIATIVE_LIMITS.name) || 'Untitled initiative';
-  const initiative = createInitiative(decider, name, '', []);
+  if (!current) return;
+  throw new DomainError({
+    code: 'initiative_exists',
+    message: `This task is already in the initiative ${current.name}. Take it out first.`,
+  });
+}
+
+export function adoptDescendants(decider: Decider, initiative: Initiative, task: Task) {
   const members = [task, ...listTaskDescendants(Object.values(decider.state.tasks), task.id)];
   for (const member of members) {
     if (member.initiativeId && decider.state.initiatives[member.initiativeId]) continue;
     changeMembership(decider, member, { initiativeId: initiative.id, phaseId: null });
   }
-  return initiative.id;
 }
 
 function resolveInheritedMembership(
@@ -221,7 +218,7 @@ function resolveInheritedMembership(
   }
   const source = sourceId ? decider.state.tasks[sourceId] : undefined;
   const initiative = source?.initiativeId ? decider.state.initiatives[source.initiativeId] : undefined;
-  if (!source || !initiative) return null;
+  if (!source || !initiative || !selectInitiativeLead(decider.state, initiative)) return null;
   const phase = selectInitiativePhase(initiative, source.initiativePhaseId);
   return { initiativeId: initiative.id, phaseId: phase?.id ?? null };
 }

@@ -1,4 +1,4 @@
-import { listInitiatives, type ShinsaState } from '@shinsa/core';
+import type { ShinsaState } from '@shinsa/core';
 import type { MenuItemIcon } from '@shinsa/ui/components/menu-icon';
 import { type Command, type CommandSection, RANK } from '@/lib/command/registry.ts';
 import { sendCommandWithToast } from '@/lib/connection/commands.ts';
@@ -14,6 +14,7 @@ import {
   selectFocusTeam,
   YOUR_WORK,
 } from '@/lib/focus.ts';
+import { listOpenInitiatives } from '@/lib/initiatives/membership.ts';
 import { INITIATIVE_ICON } from '@/lib/initiatives/view.ts';
 import {
   LAYOUT_NAMES,
@@ -117,7 +118,7 @@ function createFocusSwitch(state: ShinsaState, teams: readonly FocusTeam[]): Com
         keywords: ['focus', 'team', 'teammates'],
         icon: TEAM_FOCUS_ICON,
       })),
-      ...listInitiatives(state).map((initiative) => ({
+      ...listOpenInitiatives(state).map((initiative) => ({
         value: `${INITIATIVE_VALUE_PREFIX}${initiative.id}`,
         label: initiative.name,
         keywords: ['focus', 'initiative'],

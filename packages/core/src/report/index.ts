@@ -9,6 +9,7 @@ export {
 export {
   listRankedSpots,
   serializeMergeStepsMarkdown,
+  PLAN_INITIATIVE_NOTE,
   serializePlanMarkdown,
   serializeReportMarkdown,
   serializeTestingMarkdown,

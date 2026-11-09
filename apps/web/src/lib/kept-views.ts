@@ -12,13 +12,6 @@ const HUB_PAGES = ['home', 'tasks', 'settings', 'terminal'] as const;
 
 const WARM_PAGES: ReadonlySet<string> = new Set(HUB_PAGES);
 
-const SINGLE_PAGES: ReadonlySet<Route['name']> = new Set([
-  'automation',
-  'team-task',
-  'initiatives',
-  'initiative',
-]);
-
 type HubPage = (typeof HUB_PAGES)[number];
 
 export function isHubRoute(route: Route): route is { name: HubPage } {
@@ -28,16 +21,11 @@ export function isHubRoute(route: Route): route is { name: HubPage } {
 export function resolvePageKey(view: RouteView, taskId: string | null) {
   if (view.route.name === 'task') return `task:${taskId ?? view.route.reference}`;
   if (view.route.name === 'automation') return `automation:${view.route.scheduleId}`;
-  if (view.route.name === 'initiative') return `initiative:${view.route.reference}`;
   if (view.route.name === 'team-task') {
     const { route } = view;
     return `team-task:${route.teamId}/${route.instanceId}/${route.taskId}`;
   }
   return view.route.name;
-}
-
-export function isSinglePageRoute(route: Route) {
-  return SINGLE_PAGES.has(route.name);
 }
 
 export function listHubViews(visited: ReadonlyMap<string, RouteView>, warm: boolean): KeptView[] {

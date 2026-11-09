@@ -256,7 +256,7 @@ function readPlanDocument(reader: HandOverReader, input: Record<string, unknown>
   const outline = reader.read(PlanOutline, input, []);
   const checks = PLAN_CHECKS[Math.max(1, outline.phases.length) - 1] ?? AnyPlanChecks;
   const verification = reader.read(checks, input.verification, ['verification']);
-  const { operation, impact, evidence, approval, split } = reader.read(PlanParameters, input, []);
+  const { operation, impact, evidence, approval, split, initiative } = reader.read(PlanParameters, input, []);
   return {
     ...(outline.title === null ? {} : { title: outline.title }),
     goal: outline.goal,
@@ -274,6 +274,7 @@ function readPlanDocument(reader: HandOverReader, input: Record<string, unknown>
     ...(split.length > 0
       ? { split: split.map(({ on, ...part }) => (on === null ? part : { ...part, on })) }
       : {}),
+    ...(initiative ? { initiative: true } : {}),
   };
 }
 

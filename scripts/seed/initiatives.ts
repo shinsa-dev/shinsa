@@ -24,9 +24,9 @@ const MEMBERS: Record<string, string> = {
   'task-old-banner': EDITING,
 };
 
-export const SEED_INITIATIVE_ID = 'initiative-chat-split';
+const SEED_INITIATIVE_ID = 'initiative-chat-split';
 
-export const SEED_LEAD_ID = 'task-chat-split-lead';
+const SEED_LEAD_ID = 'task-chat-split-lead';
 
 const LEAD_NARRATIVE = [
   'The session is nearly done: the embedded chat is in review and the stream tools are being built. Webhook signing is being planned, and the embedded chat on MCP v2 waits on it.',

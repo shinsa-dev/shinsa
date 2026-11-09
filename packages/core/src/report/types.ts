@@ -219,6 +219,7 @@ export interface PlanDocument {
   evidence?: Exclude<EvidenceKind, 'check'>[];
   approval?: boolean;
   split?: PlanSplitPart[];
+  initiative?: boolean;
 }
 
 export type PlanSplitOrder = 'parallel' | 'waits_on' | 'stacks_on';

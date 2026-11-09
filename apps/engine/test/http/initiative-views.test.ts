@@ -84,7 +84,7 @@ describe('initiative views', () => {
         id: 'init-1',
         lead: { id: 'lead', handle: 'SW-100', title: 'Lead the chat split' },
         members: 2,
-        url: `${BASE}/initiatives/init-1`,
+        url: `${BASE}/tasks/SW-100`,
       },
     ]);
   });
@@ -92,7 +92,12 @@ describe('initiative views', () => {
   test('names no lead once it finished, and counts only the work', () => {
     const state = createState();
     state.tasks.lead = { ...state.tasks.lead, stage: 'done' } as Task;
-    expect(listInitiativeViews(state, BASE, 10)).toMatchObject([{ lead: null, members: 2 }]);
+    expect(listInitiativeViews(state, BASE, 10)).toMatchObject([
+      { lead: null, members: 2, url: `${BASE}/tasks/SW-100` },
+    ]);
+    const orphan = createState();
+    orphan.initiatives['init-1'] = { ...orphan.initiatives['init-1'], leadTaskId: null } as never;
+    expect(listInitiativeViews(orphan, BASE, 10)).toMatchObject([{ url: BASE }]);
   });
 
   test('carries the lead’s last report without its run', async () => {

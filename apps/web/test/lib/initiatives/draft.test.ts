@@ -26,11 +26,9 @@ const SPLIT = createInitiative({
 });
 
 describe('the initiative dialog', () => {
-  it('opens on a new initiative or one to edit, and closes', () => {
+  it('opens on the initiative to edit, and closes', () => {
     const { result } = renderHook(() => useInitiativeDialog());
     expect(result.current).toBeNull();
-    act(() => openInitiativeDialog());
-    expect(result.current).toEqual({ initiativeId: null });
     act(() => openInitiativeDialog('split'));
     expect(result.current).toEqual({ initiativeId: 'split' });
     act(() => closeInitiativeDialog());
@@ -39,8 +37,7 @@ describe('the initiative dialog', () => {
 });
 
 describe('the draft', () => {
-  it('starts empty, or from the initiative with its phases keyed by id', () => {
-    expect(createInitiativeDraft(null)).toEqual({ name: '', description: '', phases: [] });
+  it('starts from the initiative with its phases keyed by id', () => {
     expect(createInitiativeDraft(SPLIT).phases).toEqual([
       { key: 'p1', id: 'p1', name: 'Dock' },
       { key: 'p2', id: 'p2', name: 'Studio' },
@@ -112,11 +109,6 @@ describe('the draft', () => {
     });
     const spies = spyOnCommands();
     await writeInitiative(edited, SPLIT);
-    await writeInitiative({ name: 'Billing', description: '', phases: [] }, null);
-    expect(spies.sent.mock.calls.map((call) => call[1])).toEqual([
-      'Saved the initiative “Chat split”.',
-      'Created the initiative “Billing”.',
-    ]);
-    expect(spies.sent.mock.calls[1]?.[0]).toMatchObject({ initiativeId: null, phases: [] });
+    expect(spies.sent.mock.calls.map((call) => call[1])).toEqual(['Saved the initiative “Chat split”.']);
   });
 });

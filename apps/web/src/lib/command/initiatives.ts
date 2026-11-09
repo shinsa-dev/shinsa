@@ -1,7 +1,7 @@
-import { listInitiatives, NO_PHASE_NAME, type ShinsaState, type Task } from '@shinsa/core';
+import { NO_PHASE_NAME, type ShinsaState, type Task } from '@shinsa/core';
 import { type Command, type CommandSection, RANK } from '@/lib/command/registry.ts';
 import { openInitiativeDialog } from '@/lib/initiatives/draft.ts';
-import { canLeadFromTask, LEAD_FROM_TASK, startLead } from '@/lib/initiatives/lead.ts';
+import { selectLedInitiative } from '@/lib/initiatives/lead.ts';
 import {
   ADD_TO_INITIATIVE,
   ADOPT_TASK,
@@ -11,51 +11,35 @@ import {
   LEAVE_INITIATIVE,
   leaveInitiative,
   listInitiativeChoices,
+  listOpenInitiatives,
   MOVE_TO_INITIATIVE,
   PHASE_LABEL,
   selectTaskInitiative,
 } from '@/lib/initiatives/membership.ts';
 import { INITIATIVE_ICON, INITIATIVES_TITLE, NO_PHASE_VALUE } from '@/lib/initiatives/view.ts';
-import { resolveInitiativePath, type Route } from '@/router.ts';
+import { resolveTaskPath, type Route } from '@/router.ts';
 
 const KEYWORDS = ['initiative', 'group', 'effort', 'epic', 'phases'];
 
-export function listInitiativeSections(
-  state: ShinsaState,
-  route: Route,
-  commands: ReadonlySet<string>
-): CommandSection[] {
-  if (!commands.has('initiative.write')) return [];
-  const go: Command[] = [
-    {
-      kind: 'go',
-      id: 'go.initiatives',
-      label: INITIATIVES_TITLE,
-      icon: INITIATIVE_ICON,
-      current: route.name === 'initiatives',
-      keywords: KEYWORDS,
-      to: '/initiatives',
-    },
-    {
-      kind: 'run',
-      id: 'initiative.new',
-      label: 'New initiative…',
-      icon: 'IconPlusMedium',
-      keywords: KEYWORDS,
-      run: () => openInitiativeDialog(),
-    },
-    ...listInitiatives(state).map((initiative): Command => ({
-      kind: 'go',
-      id: `initiative.${initiative.id}`,
-      label: initiative.name,
-      hint: 'Initiative',
-      icon: INITIATIVE_ICON,
-      searchOnly: true,
-      current: route.name === 'initiative' && route.reference === initiative.id,
-      keywords: KEYWORDS,
-      to: resolveInitiativePath(initiative.id),
-    })),
-  ];
+export function listInitiativeSections(state: ShinsaState, route: Route): CommandSection[] {
+  const go = listOpenInitiatives(state).flatMap((initiative): Command[] => {
+    const lead = initiative.leadTaskId ? state.tasks[initiative.leadTaskId] : undefined;
+    if (!lead) return [];
+    return [
+      {
+        kind: 'go',
+        id: `initiative.${initiative.id}`,
+        label: initiative.name,
+        hint: 'Initiative',
+        icon: INITIATIVE_ICON,
+        searchOnly: true,
+        current: route.name === 'task' && route.reference === (lead.handle ?? lead.id),
+        keywords: KEYWORDS,
+        to: resolveTaskPath(lead),
+      },
+    ];
+  });
+  if (go.length === 0) return [];
   return [{ id: 'global.initiatives', heading: INITIATIVES_TITLE, rank: RANK.global + 1, commands: go }];
 }
 
@@ -81,7 +65,8 @@ function createJoinCommand(state: ShinsaState, task: Task, id: string): Command 
 
 function listMemberCommands(state: ShinsaState, task: Task, id: string): Command[] {
   const current = selectTaskInitiative(state, task);
-  if (!current) return [];
+  const lead = current?.leadTaskId ? state.tasks[current.leadTaskId] : undefined;
+  if (!current || !lead) return [];
   const phase: Command[] =
     current.phases.length === 0
       ? []
@@ -109,7 +94,7 @@ function listMemberCommands(state: ShinsaState, task: Task, id: string): Command
       label: `Open the initiative ${current.name}`,
       icon: INITIATIVE_ICON,
       keywords: KEYWORDS,
-      to: resolveInitiativePath(current.id),
+      to: resolveTaskPath(lead),
     },
     {
       kind: 'run',
@@ -122,6 +107,21 @@ function listMemberCommands(state: ShinsaState, task: Task, id: string): Command
   ];
 }
 
+function listLeadCommands(state: ShinsaState, task: Task, id: string, commands: ReadonlySet<string>) {
+  const led = selectLedInitiative(state, task);
+  if (!led || !commands.has('initiative.write')) return [];
+  return [
+    {
+      kind: 'run',
+      id: `${id}.edit`,
+      label: 'Edit the initiative',
+      icon: 'IconPencil',
+      keywords: [...KEYWORDS, 'rename', 'phase'],
+      run: () => openInitiativeDialog(led.id),
+    } satisfies Command,
+  ];
+}
+
 export function listTaskInitiativeCommands(
   state: ShinsaState,
   task: Task,
@@ -129,6 +129,7 @@ export function listTaskInitiativeCommands(
 ): Command[] {
   if (!commands.has('task.join_initiative')) return [];
   const id = `task.${task.id}.initiative`;
+  if (selectLedInitiative(state, task)) return listLeadCommands(state, task, id, commands);
   const join = createJoinCommand(state, task, id);
   const adopt: Command[] =
     !task.initiativeId && commands.has('initiative.adopt_task')
@@ -143,18 +144,5 @@ export function listTaskInitiativeCommands(
           },
         ]
       : [];
-  const unled = commands.has('initiative.start_lead') ? canLeadFromTask(state, task) : null;
-  const lead: Command[] = unled
-    ? [
-        {
-          kind: 'run',
-          id: `${id}.lead`,
-          label: LEAD_FROM_TASK,
-          icon: 'IconAgents',
-          keywords: [...KEYWORDS, 'lead', 'supervisor'],
-          run: () => void startLead(unled, task.id),
-        },
-      ]
-    : [];
-  return [...(join ? [join] : []), ...listMemberCommands(state, task, id), ...lead, ...adopt];
+  return [...(join ? [join] : []), ...listMemberCommands(state, task, id), ...adopt];
 }

@@ -581,6 +581,7 @@ export const PlanParameters = HandOverRecord({
   ),
   approval: Flag,
   split: PlanSplit,
+  initiative: Flag,
 });
 
 const Finding = HandOverRecord({

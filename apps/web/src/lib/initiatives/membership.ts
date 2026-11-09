@@ -1,6 +1,8 @@
 import {
   type Initiative,
+  isLeadTask,
   listInitiatives,
+  selectInitiativeLead,
   selectInitiativePhase,
   type ShinsaState,
   type Task,
@@ -28,8 +30,13 @@ export function describeTaskInitiative(state: ShinsaState, task: Task) {
   return { initiative, label: phase ? `${initiative.name} · ${phase.name}` : initiative.name };
 }
 
+export function listOpenInitiatives(state: ShinsaState) {
+  return listInitiatives(state).filter((initiative) => selectInitiativeLead(state, initiative) !== null);
+}
+
 export function listInitiativeChoices(state: ShinsaState, task: Task) {
-  return listInitiatives(state).filter((initiative) => initiative.id !== task.initiativeId);
+  if (isLeadTask(task)) return [];
+  return listOpenInitiatives(state).filter((initiative) => initiative.id !== task.initiativeId);
 }
 
 export function joinInitiative(task: Task, initiative: Initiative) {
@@ -65,12 +72,5 @@ export function focusInitiative(initiative: Initiative) {
   return sendCommandWithToast(
     { type: 'focus.change', projectId: null, teamId: null, initiativeId: initiative.id, until: null },
     `Focused on “${initiative.name}”.`
-  );
-}
-
-export function removeInitiative(initiative: Initiative) {
-  return sendCommandWithToast(
-    { type: 'initiative.remove', initiativeId: initiative.id },
-    `Removed “${initiative.name}”.`
   );
 }

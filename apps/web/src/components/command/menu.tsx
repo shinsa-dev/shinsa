@@ -459,7 +459,7 @@ function CommandMenuContent({ open, focus }: { open: boolean; focus: React.RefOb
       state
         ? [
             ...listGlobalSections(state, route, theme, layout, engineCommands, focusTeams),
-            ...listInitiativeSections(state, route, engineCommands),
+            ...listInitiativeSections(state, route),
             ...listAccountSections(accounts),
             ...listScheduleSections(state),
             ...listServiceSections(state, terminals, Date.now()),

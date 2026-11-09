@@ -413,6 +413,11 @@ export const TOOL_SPECS = {
           L.listItem
         ),
         split: SPLIT,
+        initiative: {
+          type: 'boolean',
+          description:
+            'Only with `split`, when the parts are one effort that will run for days and keep growing: true makes this task and its parts an initiative once the human approves the plan, with a lead agent that keeps track of them.',
+        },
         questions: {
           type: 'array',
           description: 'Decisions only the human can make. Empty when there are none.',

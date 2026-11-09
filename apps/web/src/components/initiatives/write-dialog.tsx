@@ -22,7 +22,6 @@ import {
   EDIT_INITIATIVE,
   type InitiativeDraft,
   movePhase,
-  NEW_INITIATIVE,
   PHASES_HINT,
   resolveDraftProblem,
   useInitiativeDialog,
@@ -90,14 +89,13 @@ function PhaseRows({
   );
 }
 
-function InitiativeForm({ initiative }: { initiative: Initiative | null }) {
+function InitiativeForm({ initiative }: { initiative: Initiative }) {
   const [draft, setDraft] = React.useState(() => createInitiativeDraft(initiative));
   const [problem, setProblem] = React.useState<string | null>(null);
   const [busy, setBusy] = React.useState(false);
   const formId = React.useId();
   const nameId = React.useId();
   const descriptionId = React.useId();
-  const copy = initiative ? EDIT_INITIATIVE : NEW_INITIATIVE;
 
   function update(patch: Partial<InitiativeDraft>) {
     setDraft((current) => ({ ...current, ...patch }));
@@ -117,8 +115,8 @@ function InitiativeForm({ initiative }: { initiative: Initiative | null }) {
   return (
     <>
       <DialogHeader>
-        <DialogTitle>{copy.title}</DialogTitle>
-        <DialogDescription>{copy.description}</DialogDescription>
+        <DialogTitle>{EDIT_INITIATIVE.title}</DialogTitle>
+        <DialogDescription>{EDIT_INITIATIVE.description}</DialogDescription>
       </DialogHeader>
       <form
         id={formId}
@@ -160,7 +158,7 @@ function InitiativeForm({ initiative }: { initiative: Initiative | null }) {
       <DialogFooter>
         <DialogClose render={<Button variant='secondary' />}>Cancel</DialogClose>
         <Button type='submit' form={formId} loading={busy}>
-          {copy.submit}
+          {EDIT_INITIATIVE.submit}
         </Button>
       </DialogFooter>
     </>
@@ -170,16 +168,16 @@ function InitiativeForm({ initiative }: { initiative: Initiative | null }) {
 export function InitiativeDialog() {
   const target = useInitiativeDialog();
   const state = useShinsaState();
-  const initiative = target?.initiativeId ? (state?.initiatives[target.initiativeId] ?? null) : null;
+  const initiative = target ? (state?.initiatives[target.initiativeId] ?? null) : null;
   return (
     <Dialog
-      open={target !== null}
+      open={initiative !== null}
       onOpenChange={(open) => {
         if (!open) closeInitiativeDialog();
       }}
     >
       <DialogContent>
-        {target && <InitiativeForm key={target.initiativeId ?? 'new'} initiative={initiative} />}
+        {initiative && <InitiativeForm key={initiative.id} initiative={initiative} />}
       </DialogContent>
     </Dialog>
   );

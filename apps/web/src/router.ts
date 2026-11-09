@@ -7,8 +7,6 @@ export type Route =
   | { name: 'tasks' }
   | { name: 'task'; reference: string }
   | { name: 'automation'; scheduleId: string }
-  | { name: 'initiatives' }
-  | { name: 'initiative'; reference: string }
   | { name: 'team-task'; teamId: string; instanceId: string; taskId: string }
   | { name: 'settings' }
   | { name: 'terminal' }
@@ -52,12 +50,9 @@ export function parseRoute(pathname: string): Route {
   if (reference) return { name: 'task', reference };
   const scheduleId = parseSegment(/^\/automations\/([^/]+)$/, pathname);
   if (scheduleId) return { name: 'automation', scheduleId };
-  const initiative = parseSegment(/^\/initiatives\/([^/]+)$/, pathname);
-  if (initiative) return { name: 'initiative', reference: initiative };
   const team = parseTeamTaskSegments(pathname);
   if (team) return { name: 'team-task', ...team };
   if (pathname === '/tasks') return { name: 'tasks' };
-  if (pathname === '/initiatives') return { name: 'initiatives' };
   if (pathname === '/settings') return { name: 'settings' };
   if (pathname === '/terminal') return { name: 'terminal' };
   if (pathname === '/onboarding') return { name: 'onboarding' };
@@ -185,10 +180,6 @@ export function resolveTaskTarget(state: ShinsaState, taskId: string): TaskPathT
 
 export function resolveAutomationPath(scheduleId: string) {
   return `/automations/${encodeURIComponent(scheduleId)}`;
-}
-
-export function resolveInitiativePath(initiativeId: string) {
-  return `/initiatives/${encodeURIComponent(initiativeId)}`;
 }
 
 export function resolveTaskPath(task: TaskPathTarget, options: TaskPathOptions = {}) {

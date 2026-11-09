@@ -27,13 +27,14 @@ function resolveProgress(state: ShinsaState, initiative: Initiative, now: number
   return resolveInitiativeSheet(state, initiative.id, now)?.progress ?? [];
 }
 
-export function resolveInitiativeView(
+function resolveInitiativeView(
   state: ShinsaState,
   initiative: Initiative,
   base: string,
   now: number
 ): InitiativeView {
   const lead = selectInitiativeLead(state, initiative);
+  const leadTask = initiative.leadTaskId ? state.tasks[initiative.leadTaskId] : undefined;
   return {
     id: initiative.id,
     name: initiative.name,
@@ -44,7 +45,7 @@ export function resolveInitiativeView(
     progress: resolveProgress(state, initiative, now),
     createdAt: initiative.createdAt,
     updatedAt: initiative.updatedAt,
-    url: `${base}/initiatives/${initiative.id}`,
+    url: leadTask ? `${base}/tasks/${leadTask.handle ?? leadTask.id}` : base,
   };
 }
 

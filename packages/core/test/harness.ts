@@ -419,3 +419,23 @@ export function learnUsageRate(harness: Harness) {
     });
   }
 }
+
+export function createInitiative(
+  harness: Harness,
+  options: { name?: string; description?: string; phases?: string[] } = {}
+) {
+  const name = options.name ?? 'Chat split';
+  const request = options.description ? `${name}\n${options.description}` : name;
+  harness.send({ type: 'task.create', request, repoId: null, initiative: true });
+  const initiative = Object.values(harness.state.initiatives).at(-1);
+  if (!initiative?.leadTaskId) throw new Error('no initiative');
+  if (options.phases) {
+    harness.send({
+      type: 'initiative.write',
+      initiativeId: initiative.id,
+      name: initiative.name,
+      phases: options.phases.map((phase) => ({ id: null, name: phase })),
+    });
+  }
+  return { initiativeId: initiative.id, leadId: initiative.leadTaskId };
+}

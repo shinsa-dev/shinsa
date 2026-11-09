@@ -23,10 +23,16 @@ async function start() {
   await engine.dispatch({ type: 'task.create', request: 'Old guided builder', repoId: null });
   const oldId = Object.keys(engine.state.tasks).find((id) => id !== dockId && id !== studioId) ?? '';
   await engine.dispatch({
+    type: 'task.create',
+    request: 'Chat split\nRestart the chat stack as small pull requests.',
+    repoId: null,
+    initiative: true,
+  });
+  const created = Object.values(engine.state.initiatives)[0];
+  await engine.dispatch({
     type: 'initiative.write',
-    initiativeId: null,
+    initiativeId: created?.id ?? '',
     name: 'Chat split',
-    description: 'Restart the chat stack as small pull requests.',
     phases: [
       { id: null, name: 'Dock' },
       { id: null, name: 'Studio' },
@@ -54,7 +60,7 @@ async function start() {
 
 describe('GET /api/initiatives', () => {
   test('lists every initiative with its phases, member count, progress and link', async () => {
-    const { read, base, initiativeId } = await start();
+    const { engine, read, base, initiativeId } = await start();
     const { status, body } = await read('/api/initiatives');
     expect(status).toBe(200);
     expect(body).toMatchObject({
@@ -64,14 +70,14 @@ describe('GET /api/initiatives', () => {
           name: 'Chat split',
           description: 'Restart the chat stack as small pull requests.',
           phases: [{ name: 'Dock' }, { name: 'Studio' }],
-          lead: null,
+          lead: { title: 'Chat split' },
           members: 3,
           progress: [
             { phase: { name: 'Dock' }, total: 1, shipped: 0, dropped: 0 },
             { phase: { name: 'Studio' }, total: 1, shipped: 0, dropped: 0 },
             { phase: null, total: 1, shipped: 0, dropped: 1 },
           ],
-          url: `${base}/initiatives/${initiativeId}`,
+          url: `${base}/tasks/${engine.state.initiatives[initiativeId]?.leadTaskId}`,
         },
       ],
     });

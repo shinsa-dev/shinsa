@@ -63,8 +63,15 @@ import {
   recordHandoff,
   removeHandoff,
 } from './handoffs.ts';
-import { adoptTask, joinInitiative, removeInitiative, writeInitiative } from './initiatives.ts';
-import { reportInitiative, startLead, syncInitiativeMilestones, wakeLead } from './leads.ts';
+import { joinInitiative, writeInitiative } from './initiatives.ts';
+import {
+  adoptTask,
+  createInitiativeTask,
+  reportInitiative,
+  syncCancelledLeads,
+  syncInitiativeMilestones,
+  wakeLead,
+} from './leads.ts';
 import { enforceLiveness } from './liveness.ts';
 import { acceptMemory, rememberRule, removeMemory, writeMemory } from './memory.ts';
 import { syncMergeSteps, tickMergeStep } from './merge-steps.ts';
@@ -218,7 +225,7 @@ function apply(decider: Decider, command: ShinsaCommand) {
     case 'settings.change':
       return changeSettings(decider, command);
     case 'task.create':
-      return createTask(decider, command);
+      return command.initiative ? createInitiativeTask(decider, command) : createTask(decider, command);
     case 'task.triage':
       return triageTask(decider, command);
     case 'task.prioritize':
@@ -303,12 +310,8 @@ function apply(decider: Decider, command: ShinsaCommand) {
       return rememberRule(decider, command);
     case 'initiative.write':
       return writeInitiative(decider, command);
-    case 'initiative.remove':
-      return removeInitiative(decider, command);
     case 'initiative.adopt_task':
       return adoptTask(decider, command);
-    case 'initiative.start_lead':
-      return startLead(decider, command);
     case 'initiative.wake_lead':
       return wakeLead(decider, command);
     case 'task.join_initiative':
@@ -566,6 +569,7 @@ function resolveDecision(state: ShinsaState, command: ShinsaCommand, context: De
   reviewBundles(decider);
   syncMergeSteps(decider);
   enforceLiveness(decider);
+  syncCancelledLeads(decider, state);
   syncInitiativeMilestones(decider, state);
   dispatchRuns(decider);
   syncSlackThreads(decider);

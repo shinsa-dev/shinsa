@@ -260,10 +260,8 @@ async function mergeRound(w: World, taskId: string) {
 }
 
 async function startLead(w: World) {
-  await w.engine.dispatch({ type: 'initiative.write', initiativeId: null, name: 'Chat split', phases: [] });
-  const initiativeId = Object.keys(w.state.initiatives)[0] ?? '';
-  await w.engine.dispatch({ type: 'initiative.start_lead', initiativeId, forkOf: null });
-  return initiativeId;
+  await w.engine.dispatch({ type: 'task.create', request: 'Chat split', repoId: null, initiative: true });
+  return Object.keys(w.state.initiatives)[0] ?? '';
 }
 
 describe('the prompt cache across a task', () => {

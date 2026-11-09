@@ -14,7 +14,8 @@ import { cn } from '@shinsa/ui/lib/utils';
 import { Hint } from '@/components/overlays/hint.tsx';
 import { FACT, FACT_INTERACTIVE } from '@/components/task/fact.ts';
 import { useEngineCommand } from '@/lib/connection/socket.ts';
-import { canLeadFromTask, LEAD_FROM_TASK, startLead } from '@/lib/initiatives/lead.ts';
+import { openInitiativeDialog } from '@/lib/initiatives/draft.ts';
+import { selectLedInitiative } from '@/lib/initiatives/lead.ts';
 import {
   ADD_TO_INITIATIVE,
   ADOPT_TASK,
@@ -30,15 +31,28 @@ import {
   selectTaskInitiative,
 } from '@/lib/initiatives/membership.ts';
 import { INITIATIVE_ICON, NO_PHASE_VALUE } from '@/lib/initiatives/view.ts';
-import { navigate, resolveInitiativePath } from '@/router.ts';
+import { navigate, resolveTaskPath } from '@/router.ts';
+
+function LeadItems({ initiativeId }: { initiativeId: string }) {
+  const writable = useEngineCommand('initiative.write');
+  if (!writable) return null;
+  return (
+    <>
+      <DropdownMenuSeparator />
+      <DropdownMenuItem icon='IconPencil' onClick={() => openInitiativeDialog(initiativeId)}>
+        Edit the initiative
+      </DropdownMenuItem>
+    </>
+  );
+}
 
 export function InitiativeItems({ state, task }: { state: ShinsaState; task: Task }) {
   const joinable = useEngineCommand('task.join_initiative', task.id);
   const adoptable = useEngineCommand('initiative.adopt_task', task.id);
-  const canStartLead = useEngineCommand('initiative.start_lead');
+  const led = selectLedInitiative(state, task);
+  if (led) return <LeadItems initiativeId={led.id} />;
   if (!joinable) return null;
   const current = selectTaskInitiative(state, task);
-  const unled = canStartLead ? canLeadFromTask(state, task) : null;
   const choices = listInitiativeChoices(state, task);
   return (
     <>
@@ -79,11 +93,6 @@ export function InitiativeItems({ state, task }: { state: ShinsaState; task: Tas
           </DropdownMenuSubContent>
         </DropdownMenuSub>
       )}
-      {unled && (
-        <DropdownMenuItem icon='IconAgents' onClick={() => void startLead(unled, task.id)}>
-          {LEAD_FROM_TASK}
-        </DropdownMenuItem>
-      )}
       {current ? (
         <DropdownMenuItem icon='IconCrossMedium' onClick={() => void leaveInitiative(task, current)}>
           {LEAVE_INITIATIVE}
@@ -101,13 +110,14 @@ export function InitiativeItems({ state, task }: { state: ShinsaState; task: Tas
 
 export function InitiativeFact({ state, task }: { state: ShinsaState; task: Task }) {
   const member = describeTaskInitiative(state, task);
-  if (!member) return null;
+  const lead = member?.initiative.leadTaskId ? state.tasks[member.initiative.leadTaskId] : undefined;
+  if (!member || !lead || lead.id === task.id) return null;
   return (
     <Hint label='Open the initiative'>
       <button
         type='button'
         className={cn(FACT, FACT_INTERACTIVE, 'max-w-72')}
-        onClick={() => navigate(resolveInitiativePath(member.initiative.id))}
+        onClick={() => navigate(resolveTaskPath(lead))}
       >
         <Icon size='sm' name={INITIATIVE_ICON} />
         <span className='truncate'>{member.label}</span>

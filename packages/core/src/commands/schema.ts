@@ -163,6 +163,7 @@ export const UserCommand = Schema.Union([
     backlog: Optional(Bool, FIELD_MESSAGES.boolean),
     initiativeId: Optional(InitiativeId, FIELD_MESSAGES.text),
     initiativePhaseId: Optional(IdText, FIELD_MESSAGES.text),
+    initiative: Optional(Bool, FIELD_MESSAGES.boolean),
   }),
   Command('task.prioritize', { taskId: TaskId, priority: Choice(TASK_PRIORITIES) }),
   Command('task.wait_on', { taskId: TaskId, waitsOn: List(TaskId) }),
@@ -255,17 +256,12 @@ export const UserCommand = Schema.Union([
     text: Text(),
   }),
   Command('initiative.write', {
-    initiativeId: NullByDefault(InitiativeId, FIELD_MESSAGES.text),
+    initiativeId: InitiativeId,
     name: Text(),
     description: Optional(Text(), FIELD_MESSAGES.text),
     phases: Optional(List(InitiativePhaseInput, 50), FIELD_MESSAGES.list),
   }),
-  Command('initiative.remove', { initiativeId: InitiativeId }),
   Command('initiative.adopt_task', { taskId: TaskId }),
-  Command('initiative.start_lead', {
-    initiativeId: InitiativeId,
-    forkOf: NullByDefault(TaskId, FIELD_MESSAGES.text),
-  }),
   Command('task.join_initiative', {
     taskId: TaskId,
     initiativeId: OrNull(InitiativeId, FIELD_MESSAGES.text),

@@ -10,25 +10,28 @@ import {
   resolveQueue,
   type Task,
 } from '../../src/index.ts';
-import { createHarness, createTask, decideOrThrow, type Harness, proposePlan } from '../harness.ts';
+import {
+  createHarness,
+  createInitiative,
+  createTask,
+  decideOrThrow,
+  type Harness,
+  proposePlan,
+} from '../harness.ts';
 
 function write(
   harness: Harness,
+  initiativeId: string,
   name: string,
-  options: {
-    initiativeId?: string;
-    description?: string;
-    phases?: { id: string | null; name: string }[];
-  } = {}
+  options: { description?: string; phases?: { id: string | null; name: string }[] } = {}
 ) {
   harness.send({
     type: 'initiative.write',
-    initiativeId: options.initiativeId ?? null,
+    initiativeId,
     name,
     ...(options.description !== undefined ? { description: options.description } : {}),
     ...(options.phases ? { phases: options.phases } : {}),
   });
-  return listInitiatives(harness.state).at(-1)?.id ?? '';
 }
 
 function initiativeOf(harness: Harness, id: string) {
@@ -51,28 +54,70 @@ function refusal(harness: Harness, command: Parameters<Harness['send']>[0]) {
 }
 
 function withPhases(harness: Harness) {
-  const id = write(harness, 'Chat split', {
+  const { initiativeId: id, leadId } = createInitiative(harness, {
     description: '  Restart the chat stack as small pull requests.  ',
-    phases: [
-      { id: null, name: 'Dock' },
-      { id: null, name: 'Studio' },
-    ],
+    phases: ['Dock', 'Studio'],
   });
   const [dock, studio] = initiativeOf(harness, id).phases;
-  return { id, dock: dock?.id ?? '', studio: studio?.id ?? '' };
+  return { id, leadId, dock: dock?.id ?? '', studio: studio?.id ?? '' };
 }
 
-describe('writing an initiative', () => {
-  test('creates one with its phases, trimmed, and changes it in place', () => {
+describe('starting an initiative', () => {
+  test('is a task of kind lead: its first line names it and the rest describes it', () => {
     const harness = createHarness();
-    const { id, dock } = withPhases(harness);
+    const { id, leadId } = withPhases(harness);
     expect(initiativeOf(harness, id)).toMatchObject({
       name: 'Chat split',
       description: 'Restart the chat stack as small pull requests.',
       phases: [{ name: 'Dock' }, { name: 'Studio' }],
-      leadTaskId: null,
+      leadTaskId: leadId,
     });
-    write(harness, '  Chat   rewrite ', { initiativeId: id, phases: [{ id: dock, name: 'Dock host' }] });
+    expect(harness.task(leadId)).toMatchObject({ initiativeId: id, repoId: null });
+    expect(listInitiativeMembers(harness.state, id).map((task) => task.id)).toEqual([leadId]);
+  });
+
+  test('ignores an initiative, phase or stack named on the new task', () => {
+    const harness = createHarness();
+    const { id, dock } = withPhases(harness);
+    const other = createTask(harness);
+    harness.send({
+      type: 'task.create',
+      request: 'Studio rewrite',
+      repoId: null,
+      initiative: true,
+      initiativeId: id,
+      initiativePhaseId: dock,
+      stacksOn: [other],
+    });
+    const created = listInitiatives(harness.state).at(-1);
+    const lead = harness.task(created?.leadTaskId ?? '');
+    expect(created?.id).not.toBe(id);
+    expect(lead).toMatchObject({ initiativeId: created?.id, initiativePhaseId: null });
+    expect(lead.stacksOn ?? []).toEqual([]);
+  });
+
+  test('names itself after the first written line, and refuses one past the limit of open initiatives', () => {
+    const harness = createHarness();
+    const { initiativeId } = createInitiative(harness, { name: '  \n Docs  rewrite ' });
+    expect(initiativeOf(harness, initiativeId)).toMatchObject({ name: 'Docs rewrite', description: '' });
+    for (let index = 1; index < INITIATIVE_LIMITS.initiatives; index += 1) {
+      createInitiative(harness, { name: `Effort ${index}` });
+    }
+    expect(
+      refusal(harness, { type: 'task.create', request: 'One more', repoId: null, initiative: true })
+    ).toBe('initiative_limit');
+    const first = listInitiatives(harness.state)[0];
+    harness.send({ type: 'task.complete', taskId: first?.leadTaskId ?? '' });
+    createInitiative(harness, { name: 'One more' });
+    expect(listInitiatives(harness.state)).toHaveLength(INITIATIVE_LIMITS.initiatives + 1);
+  });
+});
+
+describe('editing an initiative', () => {
+  test('changes its name and phases in place', () => {
+    const harness = createHarness();
+    const { id, dock } = withPhases(harness);
+    write(harness, id, '  Chat   rewrite ', { phases: [{ id: dock, name: 'Dock host' }] });
     expect(initiativeOf(harness, id)).toMatchObject({
       name: 'Chat rewrite',
       description: 'Restart the chat stack as small pull requests.',
@@ -84,7 +129,7 @@ describe('writing an initiative', () => {
     const harness = createHarness();
     const { id } = withPhases(harness);
     const before = harness.events.length;
-    write(harness, 'Chat split', { initiativeId: id });
+    write(harness, id, 'Chat split');
     expect(harness.events.length).toBe(before);
     expect(initiativeOf(harness, id).phases).toHaveLength(2);
   });
@@ -94,7 +139,7 @@ describe('writing an initiative', () => {
     const { id, dock, studio } = withPhases(harness);
     const taskId = createTask(harness);
     join(harness, taskId, id, studio);
-    write(harness, 'Chat split', { initiativeId: id, phases: [{ id: dock, name: 'Dock' }] });
+    write(harness, id, 'Chat split', { phases: [{ id: dock, name: 'Dock' }] });
     expect(harness.task(taskId)).toMatchObject({ initiativeId: id, initiativePhaseId: null });
     expect(harness.task(taskId).activity.at(-1)?.text).toBe('Taken out of its phase');
   });
@@ -128,10 +173,11 @@ describe('writing an initiative', () => {
     ['a phase it does not have', 'Chat', undefined, [{ id: 'nope', name: 'Dock' }]],
   ])('refuses %s', (_label, name, description, phases) => {
     const harness = createHarness();
+    const { id } = withPhases(harness);
     expect(
       refusal(harness, {
         type: 'initiative.write',
-        initiativeId: null,
+        initiativeId: id,
         name,
         ...(description !== undefined ? { description } : {}),
         ...(phases ? { phases } : {}),
@@ -139,14 +185,10 @@ describe('writing an initiative', () => {
     ).toBe('initiative_invalid');
   });
 
-  test('refuses an initiative that does not exist, and one past the limit', () => {
+  test('refuses an initiative that does not exist', () => {
     const harness = createHarness();
     expect(refusal(harness, { type: 'initiative.write', initiativeId: 'nope', name: 'Chat' })).toBe(
       'initiative_not_found'
-    );
-    for (let index = 0; index < INITIATIVE_LIMITS.initiatives; index += 1) write(harness, `Effort ${index}`);
-    expect(refusal(harness, { type: 'initiative.write', initiativeId: null, name: 'One more' })).toBe(
-      'initiative_limit'
     );
   });
 });
@@ -166,7 +208,7 @@ describe('membership', () => {
     expect(harness.task(taskId).activity.at(-1)?.text).toBe(
       'Added to the initiative Chat split, phase Studio'
     );
-    expect(listInitiativeMembers(harness.state, id).map((task) => task.id)).toEqual([taskId]);
+    expect(listInitiativeMembers(harness.state, id).map((task) => task.id)).toContain(taskId);
     join(harness, taskId, null);
     expect(harness.task(taskId)).toMatchObject({ initiativeId: null, initiativePhaseId: null });
     expect(harness.task(taskId).activity.at(-1)?.text).toBe('Removed from the initiative Chat split');
@@ -202,6 +244,21 @@ describe('membership', () => {
     expect(
       refusal(harness, { type: 'task.join_initiative', taskId, initiativeId: 'nope', phaseId: null })
     ).toBe('initiative_not_found');
+  });
+
+  test('a finished initiative takes no new tasks, and its members’ forks join none', () => {
+    const harness = createHarness();
+    const { id, leadId } = withPhases(harness);
+    const member = createTask(harness);
+    join(harness, member, id);
+    harness.send({ type: 'task.complete', taskId: leadId });
+    expect(harness.state.initiatives[id]).toBeDefined();
+    const taskId = createTask(harness);
+    expect(refusal(harness, { type: 'task.join_initiative', taskId, initiativeId: id, phaseId: null })).toBe(
+      'initiative_finished'
+    );
+    harness.send({ type: 'task.create', request: 'Try another dock', repoId: null, forkOf: member });
+    expect(Object.values(harness.state.tasks).at(-1)?.initiativeId).toBeUndefined();
   });
 
   test('a new task can start in an initiative and phase', () => {
@@ -245,26 +302,29 @@ describe('membership', () => {
   });
 });
 
-describe('removing an initiative', () => {
+describe('cancelling an initiative', () => {
   test('takes every member out and clears a focus on it', () => {
     const harness = createHarness();
-    const { id } = withPhases(harness);
+    const { id, leadId } = withPhases(harness);
     const taskId = createTask(harness);
     join(harness, taskId, id);
     harness.send({ type: 'focus.change', projectId: null, initiativeId: id, until: null });
-    harness.send({ type: 'initiative.remove', initiativeId: id });
+    harness.send({ type: 'task.cancel', taskId: leadId });
     expect(harness.state.initiatives[id]).toBeUndefined();
     expect(harness.task(taskId).initiativeId).toBeNull();
     expect(harness.state.focus.initiativeId).toBeUndefined();
     expect(harness.lastEffect('briefing.request')).toMatchObject({ projectId: null });
   });
 
-  test('leaves a focus on something else alone', () => {
+  test('leaves a focus on something else alone, and other cancellations change nothing', () => {
     const harness = createHarness();
-    const { id } = withPhases(harness);
-    harness.send({ type: 'initiative.remove', initiativeId: id });
+    const { id, leadId } = withPhases(harness);
+    const other = createTask(harness);
+    harness.send({ type: 'task.cancel', taskId: other });
+    expect(harness.state.initiatives[id]).toBeDefined();
+    harness.send({ type: 'task.cancel', taskId: leadId });
     expect(listInitiatives(harness.state)).toEqual([]);
-    expect(refusal(harness, { type: 'initiative.remove', initiativeId: id })).toBe('initiative_not_found');
+    expect(harness.state.focus.initiativeId).toBeUndefined();
   });
 });
 
@@ -285,16 +345,19 @@ describe('making an initiative from a task', () => {
     const childId = Object.values(harness.state.tasks).at(-1)?.id ?? '';
     harness.send({ type: 'task.create', request: 'Try the chat page again', repoId: null, forkOf: childId });
     const forkId = Object.values(harness.state.tasks).at(-1)?.id ?? '';
-    const elsewhere = write(harness, 'Elsewhere');
+    const elsewhere = createInitiative(harness, { name: 'Elsewhere' }).initiativeId;
     harness.send({ type: 'task.create', request: 'Another fork', repoId: null, forkOf: childId });
     const otherId = Object.values(harness.state.tasks).at(-1)?.id ?? '';
     join(harness, otherId, elsewhere);
     const unrelated = createTask(harness, { request: 'Something else' });
     harness.send({ type: 'initiative.adopt_task', taskId: rootId });
     const id = listInitiatives(harness.state).at(-1)?.id ?? '';
-    expect(initiativeOf(harness, id).name).toBe('Rewrite the agent dock');
+    const initiative = initiativeOf(harness, id);
+    expect(initiative.name).toBe('Rewrite the agent dock');
+    const lead = harness.task(initiative.leadTaskId ?? '');
+    expect(lead).toMatchObject({ forkOf: rootId, initiativeId: id });
     const members = listInitiativeMembers(harness.state, id).map((task) => task.id);
-    expect(members.sort()).toEqual([rootId, childId, forkId].sort());
+    expect(members.sort()).toEqual([rootId, childId, forkId, lead.id].sort());
     expect(harness.task(otherId).initiativeId).toBe(elsewhere);
     expect(harness.task(unrelated).initiativeId).toBeUndefined();
   });
@@ -378,21 +441,17 @@ describe('on your behalf', () => {
     const taskId = createTask(harness);
     const send = (command: Parameters<Harness['send']>[0]) =>
       harness.send(command, { onBehalf: true, byTask: taskId });
-    send({ type: 'initiative.write', initiativeId: null, name: 'Chat split' });
-    const id = listInitiatives(harness.state)[0]?.id ?? '';
+    const { initiativeId: id } = createInitiative(harness);
     send({ type: 'initiative.write', initiativeId: id, name: 'Chat rewrite' });
     send({ type: 'task.join_initiative', taskId, initiativeId: id, phaseId: null });
     send({ type: 'task.join_initiative', taskId, initiativeId: null, phaseId: null });
     send({ type: 'focus.change', projectId: null, initiativeId: id, until: null });
-    send({ type: 'initiative.remove', initiativeId: id });
     send({ type: 'initiative.adopt_task', taskId });
     expect(harness.state.onBehalfActions.map((action) => action.summary)).toEqual([
-      'Created the initiative “Chat split”',
       'Changed the initiative “Chat rewrite”',
       'Added “Fix tab group scroll” to the initiative “Chat rewrite”',
       'Took “Fix tab group scroll” out of its initiative',
       'Focused on the initiative “Chat rewrite”',
-      'Removed an initiative',
       'Made an initiative from “Fix tab group scroll”',
     ]);
   });

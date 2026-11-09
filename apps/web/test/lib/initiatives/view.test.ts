@@ -2,13 +2,9 @@ import { describe, expect, it } from 'bun:test';
 import { describePhaseProgress, resolveInitiativeSheet } from '@shinsa/core';
 import {
   describeSheetSummary,
-  isInitiativeRoute,
-  isInitiativesNavShown,
   isPhaseDone,
   listInitiativeRows,
   listInitiativeSections,
-  resolveCanonicalInitiativePath,
-  selectInitiativeView,
 } from '@/lib/initiatives/view.ts';
 import { createGate, createInitiative, createShinsaState, createTask, NOW } from '../../support/state.ts';
 
@@ -20,10 +16,14 @@ const PHASES = [
 function createSplitState() {
   return createShinsaState({
     initiatives: [
-      createInitiative({ id: 'split', name: 'Chat split', phases: PHASES }),
-      createInitiative({ id: 'empty', name: 'Billing', createdAt: NOW }),
+      createInitiative({ id: 'split', name: 'Chat split', phases: PHASES, leadTaskId: 'lead-split' }),
+      createInitiative({ id: 'empty', name: 'Billing', createdAt: NOW, leadTaskId: 'lead-empty' }),
+      createInitiative({ id: 'done', name: 'Docs', leadTaskId: 'lead-done' }),
     ],
     tasks: [
+      createTask({ id: 'lead-split', pipeline: ['lead'], stage: 'leading', initiativeId: 'split' }),
+      createTask({ id: 'lead-empty', pipeline: ['lead'], stage: 'leading', initiativeId: 'empty' }),
+      createTask({ id: 'lead-done', pipeline: ['lead'], stage: 'done', closedAt: NOW, initiativeId: 'done' }),
       createTask({
         id: 'merged',
         stage: 'merged',
@@ -55,27 +55,13 @@ function createSplitState() {
 describe('listInitiativeRows', () => {
   it('counts each initiative’s open, shipped and dropped tasks in creation order', () => {
     const rows = listInitiativeRows(createSplitState());
-    expect(rows.map((row) => row.initiative.id)).toEqual(['split', 'empty']);
+    expect(rows.map((row) => [row.initiative.id, row.lead.id])).toEqual([
+      ['split', 'lead-split'],
+      ['empty', 'lead-empty'],
+    ]);
     expect(rows[0]).toMatchObject({ total: 5, open: 3, shipped: 1, dropped: 1 });
     expect(rows[0]?.summary).toBe('5 tasks · 3 open · 1 shipped');
     expect(rows[1]?.summary).toBe('No tasks yet');
-  });
-});
-
-describe('selectInitiativeView', () => {
-  it('finds the initiative by its id or its name, and nothing for an unknown one', () => {
-    const state = createSplitState();
-    expect(selectInitiativeView(state, 'split', NOW)?.initiative.name).toBe('Chat split');
-    expect(selectInitiativeView(state, 'chat split', NOW)?.initiative.id).toBe('split');
-    expect(selectInitiativeView(state, 'nothing', NOW)).toBeNull();
-  });
-});
-
-describe('resolveCanonicalInitiativePath', () => {
-  it('replaces a name in the address with the id and keeps the query', () => {
-    const initiative = createInitiative({ id: 'split', name: 'Chat split' });
-    expect(resolveCanonicalInitiativePath(initiative, 'Chat split', '?x=1')).toBe('/initiatives/split?x=1');
-    expect(resolveCanonicalInitiativePath(initiative, 'split', '')).toBeNull();
   });
 });
 
@@ -117,16 +103,5 @@ describe('the sheet', () => {
       ['dropped', 1],
       ['decisions', 0],
     ]);
-  });
-});
-
-describe('the navigation entry', () => {
-  it('shows once an initiative exists, and always on the initiative pages', () => {
-    const none = createShinsaState({});
-    expect(isInitiativesNavShown(none, { name: 'home' })).toBe(false);
-    expect(isInitiativesNavShown(none, { name: 'initiatives' })).toBe(true);
-    expect(isInitiativesNavShown(createSplitState(), { name: 'home' })).toBe(true);
-    expect(isInitiativeRoute({ name: 'initiative', reference: 'x' })).toBe(true);
-    expect(isInitiativeRoute({ name: 'tasks' })).toBe(false);
   });
 });

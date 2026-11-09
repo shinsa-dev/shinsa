@@ -14,6 +14,7 @@ import {
 import {
   approve,
   createHarness,
+  createInitiative,
   createTask,
   type Harness,
   proposePlan,
@@ -23,15 +24,13 @@ import {
   verifySetup,
 } from '../harness.ts';
 
-function writeInitiative(harness: Harness, name = 'Chat split') {
-  harness.send({
-    type: 'initiative.write',
-    initiativeId: null,
-    name,
+function startInitiative(harness: Harness) {
+  const created = createInitiative(harness, {
     description: 'Restart the chat stack as small pull requests.',
-    phases: [{ id: null, name: 'Dock' }],
+    phases: ['Dock'],
   });
-  return listInitiatives(harness.state).at(-1)?.id ?? '';
+  triageLead(harness, created.leadId);
+  return created;
 }
 
 function initiativeOf(harness: Harness, id: string) {
@@ -53,13 +52,6 @@ function triageLead(harness: Harness, taskId: string) {
   });
   if (harness.task(taskId).stage === 'triage') verifySetup(harness, taskId);
   return repoId;
-}
-
-function startLead(harness: Harness, initiativeId: string, forkOf: string | null = null) {
-  harness.send({ type: 'initiative.start_lead', initiativeId, forkOf });
-  const leadId = initiativeOf(harness, initiativeId).leadTaskId ?? '';
-  triageLead(harness, leadId);
-  return leadId;
 }
 
 function report(
@@ -88,8 +80,7 @@ function refusal(harness: Harness, command: Parameters<Harness['send']>[0]) {
 function ledInitiative() {
   const harness = createHarness();
   registerRepo(harness);
-  const initiativeId = writeInitiative(harness);
-  const leadId = startLead(harness, initiativeId);
+  const { initiativeId, leadId } = startInitiative(harness);
   return { harness, initiativeId, leadId };
 }
 
@@ -119,18 +110,12 @@ describe('starting a lead', () => {
     expect(resolveRunBrief(harness.state, { ...run, resume: true })).not.toContain('git status');
   });
 
-  test('refuses a second live lead, and starts a new one once the first is done', () => {
+  test('marking the lead done finishes the initiative and keeps its record', () => {
     const { harness, initiativeId, leadId } = ledInitiative();
-    expect(refusal(harness, { type: 'initiative.start_lead', initiativeId, forkOf: null }).code).toBe(
-      'lead_exists'
-    );
     report(harness, leadId);
     harness.send({ type: 'task.complete', taskId: leadId });
     expect(selectInitiativeLead(harness.state, initiativeOf(harness, initiativeId))).toBeNull();
-    const next = startLead(harness, initiativeId);
-    expect(next).not.toBe(leadId);
-    expect(harness.task(next).stage).toBe('leading');
-    expect(selectInitiativeLead(harness.state, initiativeOf(harness, initiativeId))?.id).toBe(next);
+    expect(initiativeOf(harness, initiativeId).report?.narrative).toBe('Dock is in review.');
   });
 
   test('never counts a lead, live or finished, as the initiative’s work', () => {
@@ -138,29 +123,29 @@ describe('starting a lead', () => {
     const member = addMember(harness, initiativeId);
     report(harness, leadId);
     harness.send({ type: 'task.complete', taskId: leadId });
-    const next = startLead(harness, initiativeId);
     expect(listInitiativeWork(harness.state, initiativeId).map((task) => task.id)).toEqual([member]);
     const sheet = resolveInitiativeSheet(harness.state, initiativeId, harness.now);
     expect(sheet?.progress.reduce((sum, phase) => sum + phase.total, 0)).toBe(1);
-    expect(sheet?.now.map((task) => task.id)).not.toContain(next);
+    expect(sheet?.shipped.map((task) => task.id)).not.toContain(leadId);
   });
 
   test('finds no lead when the initiative names none, or names a task that is not a lead', () => {
-    const harness = createHarness();
-    const initiativeId = writeInitiative(harness);
-    expect(selectInitiativeLead(harness.state, initiativeOf(harness, initiativeId))).toBeNull();
+    const { harness, initiativeId } = ledInitiative();
+    expect(selectInitiativeLead(harness.state, { leadTaskId: null })).toBeNull();
     const member = addMember(harness, initiativeId);
     expect(selectInitiativeLead(harness.state, { leadTaskId: member })).toBeNull();
     expect(selectInitiativeLead(harness.state, { leadTaskId: 'gone' })).toBeNull();
   });
 
-  test('forks the lead from a task, so it starts from that conversation', () => {
+  test('making an initiative from a task forks its lead from that task’s conversation', () => {
     const harness = createHarness();
     registerRepo(harness);
-    const initiativeId = writeInitiative(harness);
     const source = createTask(harness, { request: 'Rewrite the dock as PR 1' });
-    const leadId = startLead(harness, initiativeId, source);
-    expect(harness.task(leadId).forkOf).toBe(source);
+    harness.send({ type: 'initiative.adopt_task', taskId: source });
+    const initiative = listInitiatives(harness.state).at(-1);
+    const lead = harness.task(initiative?.leadTaskId ?? '');
+    expect(lead.forkOf).toBe(source);
+    expect(lead.request).toContain('Lead the initiative “Rewrite the dock as PR 1”');
   });
 });
 
@@ -204,10 +189,10 @@ describe('the lead’s report', () => {
     expect(refused.code).toBe('wrong_step');
   });
 
-  test('refuses the report once its initiative is gone', () => {
-    const { harness, initiativeId, leadId } = ledInitiative();
+  test('refuses the report once its initiative is cancelled', () => {
+    const { harness, leadId } = ledInitiative();
     const runId = harness.activeRun(leadId).id;
-    harness.send({ type: 'initiative.remove', initiativeId });
+    harness.send({ type: 'task.cancel', taskId: leadId });
     const refused = refusal(harness, {
       type: 'agent.report_initiative',
       runId,
@@ -281,12 +266,7 @@ describe('member milestones', () => {
   });
 
   test('skip the lead itself, tasks it filed and initiatives with no live lead', () => {
-    const harness = createHarness();
-    registerRepo(harness);
-    const initiativeId = writeInitiative(harness);
-    addMember(harness, initiativeId);
-    expect(initiativeOf(harness, initiativeId).milestones).toBeUndefined();
-    const leadId = startLead(harness, initiativeId);
+    const { harness, initiativeId, leadId } = ledInitiative();
     expect(initiativeOf(harness, initiativeId).milestones ?? []).toEqual([]);
     harness.send({
       type: 'agent.create_task',
@@ -298,6 +278,10 @@ describe('member milestones', () => {
     });
     const filedId = Object.keys(harness.state.tasks).at(-1) ?? '';
     expect(harness.task(filedId).initiativeId).toBe(initiativeId);
+    expect(initiativeOf(harness, initiativeId).milestones ?? []).toEqual([]);
+    report(harness, leadId);
+    harness.send({ type: 'task.complete', taskId: leadId });
+    harness.send({ type: 'task.cancel', taskId: filedId });
     expect(initiativeOf(harness, initiativeId).milestones ?? []).toEqual([]);
   });
 
@@ -351,18 +335,13 @@ describe('waking the lead', () => {
     expect(harness.events).toHaveLength(settled);
   });
 
-  test('removing its initiative ends a resting lead at once', () => {
+  test('cancelling the lead mid-turn ends its run and dissolves the initiative', () => {
     const { harness, initiativeId, leadId } = ledInitiative();
-    report(harness, leadId);
-    expect(harness.task(leadId).stage).toBe('leading');
-    harness.send({ type: 'initiative.remove', initiativeId });
-    expect(harness.task(leadId).stage).toBe('done');
-  });
-
-  test('removing its initiative mid-turn ends the lead and its run', () => {
-    const { harness, initiativeId, leadId } = ledInitiative();
-    harness.send({ type: 'initiative.remove', initiativeId });
-    expect(harness.task(leadId).stage).toBe('done');
+    const member = addMember(harness, initiativeId);
+    harness.send({ type: 'task.cancel', taskId: leadId });
+    expect(harness.task(leadId).stage).toBe('cancelled');
+    expect(harness.state.initiatives[initiativeId]).toBeUndefined();
+    expect(harness.task(member).initiativeId).toBeNull();
     expect(
       Object.values(harness.state.runs).filter((run) => run.taskId === leadId && run.endedAt === null)
     ).toHaveLength(0);
@@ -476,12 +455,12 @@ describe('talking to the lead', () => {
   });
 
   test('a member without a live lead is told only its initiative', () => {
-    const harness = createHarness();
-    registerRepo(harness);
-    const initiativeId = writeInitiative(harness);
+    const { harness, initiativeId, leadId } = ledInitiative();
     const repoId = Object.keys(harness.state.repos)[0] ?? '';
     harness.send({ type: 'task.create', request: 'Dock host', repoId, initiativeId });
     const memberId = Object.keys(harness.state.tasks).at(-1) ?? '';
+    report(harness, leadId);
+    harness.send({ type: 'task.complete', taskId: leadId });
     harness.send({
       type: 'task.triage',
       taskId: memberId,

@@ -1,10 +1,4 @@
-import {
-  type FocusProjects,
-  listInitiatives,
-  NO_FOCUS_PROJECTS,
-  type Project,
-  type ShinsaState,
-} from '@shinsa/core';
+import { type FocusProjects, NO_FOCUS_PROJECTS, type Project, type ShinsaState } from '@shinsa/core';
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -36,6 +30,7 @@ import {
   toggleFocusProject,
   YOUR_WORK,
 } from '@/lib/focus.ts';
+import { listOpenInitiatives } from '@/lib/initiatives/membership.ts';
 import { INITIATIVE_ICON, INITIATIVES_TITLE } from '@/lib/initiatives/view.ts';
 import { listProjects } from '@/lib/projects.ts';
 import { resolveSettingsPath } from '@/lib/settings-tabs.ts';
@@ -176,7 +171,7 @@ export function FocusMenu({ state, compact = false }: { state: ShinsaState; comp
   const selection = selectFocusProjects(state);
   const single = selectFocus(state);
   const focusTeam = selectFocusTeam(state, teams);
-  const initiatives = listInitiatives(state);
+  const initiatives = listOpenInitiatives(state);
   const showInitiatives = useEngineFeature('initiatives') && initiatives.length > 0;
   const focusInitiative = selectFocusInitiative(state);
   const label = focusInitiative?.name ?? focusTeam?.name ?? resolveFocusLabel(state, selection);

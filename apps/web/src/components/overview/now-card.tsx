@@ -2,6 +2,7 @@ import {
   type Gate,
   listActiveRuns,
   listWaitsOn,
+  PLAN_INITIATIVE_NOTE,
   resolvePhaseChange,
   resolveTaskProgress,
   type ShinsaState,
@@ -109,6 +110,7 @@ function PlanSplitList({ task }: { task: Task }) {
           </li>
         ))}
       </ul>
+      {task.plan?.document?.initiative && <p className='text-2xs text-fg-2'>{PLAN_INITIATIVE_NOTE}</p>}
     </div>
   );
 }

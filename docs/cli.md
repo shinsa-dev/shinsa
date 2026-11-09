@@ -300,7 +300,7 @@ Every task agent's tool: `tasks_diff` (reads).
 Create a task. Shinsa classifies it, plans it and builds it.
 
 ```
-shinsa tasks create <request...> [--repo <text>] [--project <text>] [--priority <urgent|high|normal|low>] [--plan-first] [--backlog] [--ask] [--after <list>] [--fork-from <text>] [--account <text>] [--json]
+shinsa tasks create <request...> [--repo <text>] [--project <text>] [--priority <urgent|high|normal|low>] [--plan-first] [--backlog] [--ask] [--initiative] [--after <list>] [--fork-from <text>] [--account <text>] [--json]
 ```
 
 Not a task agent's tool: an agent uses `create_task` instead. Sends `task.create`.
@@ -314,6 +314,7 @@ Not a task agent's tool: an agent uses `create_task` instead. Sends `task.create
 | `--plan-first` | boolean, optional | Wait for you to approve the plan before building. |
 | `--backlog` | boolean, optional | Plan it now and keep it in the backlog until you start building it. |
 | `--ask` | boolean, optional | Only answer a question: no changes, branch or pull request. |
+| `--initiative` | boolean, optional | Start an initiative: a task whose agent leads a group of tasks, files and orders them, and reports where they stand. The first line names it. |
 | `--after` | list, optional | Tasks it waits on before it starts. |
 | `--fork-from` | text, optional | A task to fork: the new task’s agent starts from a copy of its conversation. |
 | `--account` | text, optional | Run it on this Claude account (id or email). |
@@ -849,38 +850,24 @@ Every task agent's tool: `initiatives_show` (reads).
 
 #### shinsa initiatives write
 
-Create an initiative, or change one with --id.
+Change an initiative’s name, description or phases. Start one with `shinsa tasks create --initiative`.
 
 ```
-shinsa initiatives write [--id <text>] [--description <text>] [--phases <list>] <name...> [--json]
+shinsa initiatives write <initiative> [--name <text>] [--description <text>] [--phases <list>] [--json]
 ```
 
 Every task agent's tool: `initiatives_write`. Sends `initiative.write`.
 
 | Argument | Kind | What it is |
 | --- | --- | --- |
-| `--id` | text, optional | The initiative to change. Leave out to create one. |
-| `--description` | text, optional | What the initiative is for. Left out, a change keeps the one it has. |
-| `--phases` | list, optional | Its phases in order, replacing the ones it has. A phase keeps its tasks while its name stays; tasks in a phase you leave out keep no phase. Left out, a change keeps them. |
-| `<name>` | text, required | Its name. |
-
-#### shinsa initiatives remove
-
-Remove an initiative. Its tasks stay as they are, in no initiative.
-
-```
-shinsa initiatives remove <initiative> [--json]
-```
-
-Every task agent's tool: `initiatives_remove`. Sends `initiative.remove`.
-
-| Argument | Kind | What it is |
-| --- | --- | --- |
 | `<initiative>` | text, required | The initiative: its name, its id or the start of its id. |
+| `--name` | text, optional | Its new name. Left out, it keeps the one it has. |
+| `--description` | text, optional | What the initiative is for. Left out, it keeps the one it has. |
+| `--phases` | list, optional | Its phases in order, replacing the ones it has. A phase keeps its tasks while its name stays; tasks in a phase you leave out keep no phase. Left out, it keeps them. |
 
 #### shinsa initiatives adopt
 
-Make an initiative from a task: named after it, holding the task and every task it filed, split off or forked, and theirs in turn.
+Make an initiative from a task: named after it, holding the task and every task it filed, split off or forked, and theirs in turn, with a lead forked from its conversation.
 
 ```
 shinsa initiatives adopt <task> [--json]
@@ -891,21 +878,6 @@ Every task agent's tool: `initiatives_adopt`. Sends `initiative.adopt_task`.
 | Argument | Kind | What it is |
 | --- | --- | --- |
 | `<task>` | text, required | The task: its handle (SW-142), its id, the start of its id, or its exact title. |
-
-#### shinsa initiatives start-lead
-
-Start a lead for an initiative: a task whose agent files and orders its tasks and reports where it stands. It never closes a gate.
-
-```
-shinsa initiatives start-lead <initiative> [--fork <text>] [--json]
-```
-
-Every task agent's tool: `initiatives_start_lead`. Sends `initiative.start_lead`.
-
-| Argument | Kind | What it is |
-| --- | --- | --- |
-| `<initiative>` | text, required | The initiative: its name, its id or the start of its id. |
-| `--fork` | text, optional | A task whose conversation the lead starts from, such as the one that began the work. |
 
 ### gates
 

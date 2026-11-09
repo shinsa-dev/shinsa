@@ -114,7 +114,7 @@ function describeReport(sheet: InitiativeSheetView) {
   ];
 }
 
-export function describeInitiativeSheet(sheet: InitiativeSheetView) {
+function describeInitiativeSheet(sheet: InitiativeSheetView) {
   const { initiative } = sheet;
   const phases = initiative.progress.map((phase) => {
     const { name, detail } = describePhaseProgress(phase);
@@ -158,16 +158,16 @@ function readList(values: Values, name: string) {
 }
 
 const buildWrite = Effect.fn('Surface.initiativesWrite')(function* (values: Values, client: SurfaceClient) {
-  const ref = readValue(values, 'id');
-  const existing = ref ? yield* findInitiative(client, ref) : null;
+  const existing = yield* findInitiative(client, readValue(values, 'initiative'));
   const names = readList(values, 'phases');
   const description = typeof values.description === 'string' ? values.description : undefined;
+  const name = readValue(values, 'name');
   return {
     type: 'initiative.write' as const,
-    initiativeId: existing?.id ?? null,
-    name: readValue(values, 'name'),
+    initiativeId: existing.id,
+    name: name || existing.name,
     ...(description === undefined ? {} : { description }),
-    ...(names ? { phases: resolvePhaseInputs(existing?.phases ?? [], names) } : {}),
+    ...(names ? { phases: resolvePhaseInputs(existing.phases, names) } : {}),
   };
 });
 
@@ -201,41 +201,31 @@ export const INITIATIVE_SPECS: SurfaceSpec[] = [
   }),
   defineCommand({
     path: ['initiatives', 'write'],
-    summary: 'Create an initiative, or change one with --id.',
+    summary:
+      'Change an initiative’s name, description or phases. Start one with `shinsa tasks create --initiative`.',
     command: 'initiative.write',
     fields: [
-      { name: 'id', kind: 'text', description: 'The initiative to change. Leave out to create one.' },
+      INITIATIVE_FIELD,
+      { name: 'name', kind: 'text', description: 'Its new name. Left out, it keeps the one it has.' },
       {
         name: 'description',
         kind: 'text',
-        description: 'What the initiative is for. Left out, a change keeps the one it has.',
+        description: 'What the initiative is for. Left out, it keeps the one it has.',
       },
       {
         name: 'phases',
         kind: 'list',
         description:
-          'Its phases in order, replacing the ones it has. A phase keeps its tasks while its name stays; tasks in a phase you leave out keep no phase. Left out, a change keeps them.',
+          'Its phases in order, replacing the ones it has. A phase keeps its tasks while its name stays; tasks in a phase you leave out keep no phase. Left out, it keeps them.',
       },
-      { name: 'name', kind: 'text', positional: 'rest', required: true, description: 'Its name.' },
     ],
     build: buildWrite,
-    done: (values) => (readValue(values, 'id') ? 'Changed.' : 'Created.'),
-  }),
-  defineCommand({
-    path: ['initiatives', 'remove'],
-    summary: 'Remove an initiative. Its tasks stay as they are, in no initiative.',
-    command: 'initiative.remove',
-    fields: [INITIATIVE_FIELD],
-    build: Effect.fn('Surface.initiativesRemove')(function* (values, client) {
-      const initiative = yield* findInitiative(client, readValue(values, 'initiative'));
-      return { type: 'initiative.remove' as const, initiativeId: initiative.id };
-    }),
-    done: () => 'Removed.',
+    done: () => 'Changed.',
   }),
   defineCommand({
     path: ['initiatives', 'adopt'],
     summary:
-      'Make an initiative from a task: named after it, holding the task and every task it filed, split off or forked, and theirs in turn.',
+      'Make an initiative from a task: named after it, holding the task and every task it filed, split off or forked, and theirs in turn, with a lead forked from its conversation.',
     command: 'initiative.adopt_task',
     fields: [TASK_FIELD],
     build: Effect.fn('Surface.initiativesAdopt')(function* (values, client) {
@@ -245,30 +235,6 @@ export const INITIATIVE_SPECS: SurfaceSpec[] = [
       };
     }),
     done: () => 'Made the initiative.',
-  }),
-  defineCommand({
-    path: ['initiatives', 'start-lead'],
-    summary:
-      'Start a lead for an initiative: a task whose agent files and orders its tasks and reports where it stands. It never closes a gate.',
-    command: 'initiative.start_lead',
-    fields: [
-      INITIATIVE_FIELD,
-      {
-        name: 'fork',
-        kind: 'text',
-        description: 'A task whose conversation the lead starts from, such as the one that began the work.',
-      },
-    ],
-    build: Effect.fn('Surface.initiativesStartLead')(function* (values, client) {
-      const initiative = yield* findInitiative(client, readValue(values, 'initiative'));
-      const fork = readValue(values, 'fork');
-      return {
-        type: 'initiative.start_lead' as const,
-        initiativeId: initiative.id,
-        forkOf: fork ? yield* findTaskId(client, fork) : null,
-      };
-    }),
-    done: () => 'Started the lead.',
   }),
   defineCommand({
     path: ['tasks', 'join-initiative'],

@@ -145,37 +145,25 @@ describe('shinsa initiatives', () => {
     );
   });
 
-  test('creates an initiative with its phases, and changes one keeping the ids of phases it names again', async () => {
+  test('changes an initiative found by name, keeping the ids of phases it names again', async () => {
     const fake = createFakeClient({ '/api/initiatives': LIST });
-    expect(
-      (await runSpec(fake, ['initiatives', 'write', '--phases', 'Dock,Studio', 'Chat', 'split'])).text
-    ).toContain('Created.');
     expect(
       (
         await runSpec(fake, [
           'initiatives',
           'write',
-          '--id',
           'chat split',
           '--phases',
           'studio',
           '--phases',
           'Polish',
+          '--name',
           'Chat',
         ])
       ).text
     ).toContain('Changed.');
-    await runSpec(fake, ['initiatives', 'write', '--id', 'init-2', '--description', 'Invoices.', 'Billing']);
+    await runSpec(fake, ['initiatives', 'write', 'init-2', '--description', 'Invoices.']);
     expect(fake.sent).toEqual([
-      {
-        type: 'initiative.write',
-        initiativeId: null,
-        name: 'Chat split',
-        phases: [
-          { id: null, name: 'Dock' },
-          { id: null, name: 'Studio' },
-        ],
-      },
       {
         type: 'initiative.write',
         initiativeId: 'init-1',
@@ -187,13 +175,7 @@ describe('shinsa initiatives', () => {
       },
       { type: 'initiative.write', initiativeId: 'init-2', name: 'Billing', description: 'Invoices.' },
     ]);
-  });
-
-  test('removes an initiative found by name, and refuses one that does not exist', async () => {
-    const fake = createFakeClient({ '/api/initiatives': LIST });
-    await runSpec(fake, ['initiatives', 'remove', 'billing']);
-    expect(fake.sent).toEqual([{ type: 'initiative.remove', initiativeId: 'init-2' }]);
-    await expect(runSpec(fake, ['initiatives', 'remove', 'Search'])).rejects.toMatchObject({
+    await expect(runSpec(fake, ['initiatives', 'write', 'Search', '--name', 'X'])).rejects.toMatchObject({
       code: 'initiative_not_found',
       message: 'No initiative Search. `shinsa initiatives list` lists them.',
     });
@@ -203,21 +185,6 @@ describe('shinsa initiatives', () => {
     const fake = createFakeClient({ '/api/tasks/SW-101': createTaskDetail({ task: { id: 'task-101' } }) });
     expect((await runSpec(fake, ['initiatives', 'adopt', 'SW-101'])).text).toContain('Made the initiative.');
     expect(fake.sent).toEqual([{ type: 'initiative.adopt_task', taskId: 'task-101' }]);
-  });
-
-  test('starts a lead, forked from a task when one is named', async () => {
-    const fake = createFakeClient({
-      '/api/initiatives': LIST,
-      '/api/tasks/SW-101': createTaskDetail({ task: { id: 'task-101' } }),
-    });
-    expect((await runSpec(fake, ['initiatives', 'start-lead', 'billing'])).text).toContain(
-      'Started the lead.'
-    );
-    await runSpec(fake, ['initiatives', 'start-lead', 'billing', '--fork', 'SW-101']);
-    expect(fake.sent).toEqual([
-      { type: 'initiative.start_lead', initiativeId: 'init-2', forkOf: null },
-      { type: 'initiative.start_lead', initiativeId: 'init-2', forkOf: 'task-101' },
-    ]);
   });
 });
 

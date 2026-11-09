@@ -198,6 +198,11 @@ export function validatePlanRules(steps: readonly PipelineStep[], document: Plan
       '`split` starts other changes, and this task opens no pull request: leave it out and suggest the work with `suggest_tasks`.'
     );
   }
+  if (document.initiative && split.length === 0) {
+    errors.push(
+      '`initiative` makes this task and its split parts an initiative: give the parts in `split`, or leave it out.'
+    );
+  }
   return errors;
 }
 

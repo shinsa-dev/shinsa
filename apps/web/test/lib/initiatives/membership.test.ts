@@ -7,18 +7,31 @@ import {
   joinInitiative,
   leaveInitiative,
   listInitiativeChoices,
-  removeInitiative,
+  listOpenInitiatives,
   selectTaskInitiative,
 } from '@/lib/initiatives/membership.ts';
 import { spyOnCommands } from '../../support/commands.ts';
 import { createInitiative, createShinsaState, createTask } from '../../support/state.ts';
 
-const SPLIT = createInitiative({ id: 'split', name: 'Chat split', phases: [{ id: 'p1', name: 'Dock' }] });
+const SPLIT = createInitiative({
+  id: 'split',
+  name: 'Chat split',
+  phases: [{ id: 'p1', name: 'Dock' }],
+  leadTaskId: 'lead-split',
+});
 
-const BILLING = createInitiative({ id: 'billing', name: 'Billing' });
+const BILLING = createInitiative({ id: 'billing', name: 'Billing', leadTaskId: 'lead-billing' });
+
+const DOCS = createInitiative({ id: 'docs', name: 'Docs', leadTaskId: 'lead-docs' });
+
+const LEADS = [
+  createTask({ id: 'lead-split', pipeline: ['lead'], stage: 'leading', initiativeId: 'split' }),
+  createTask({ id: 'lead-billing', pipeline: ['lead'], stage: 'leading', initiativeId: 'billing' }),
+  createTask({ id: 'lead-docs', pipeline: ['lead'], stage: 'done', initiativeId: 'docs' }),
+];
 
 describe('a task’s initiative', () => {
-  const state = createShinsaState({ initiatives: [SPLIT, BILLING] });
+  const state = createShinsaState({ initiatives: [SPLIT, BILLING, DOCS], tasks: LEADS });
 
   it('names the initiative with the phase, or alone, or nothing outside one', () => {
     const phased = createTask({ id: 't', initiativeId: 'split', initiativePhaseId: 'p1' });
@@ -29,9 +42,11 @@ describe('a task’s initiative', () => {
     expect(selectTaskInitiative(state, createTask({ id: 't', initiativeId: 'gone' }))).toBeNull();
   });
 
-  it('offers every initiative but the one the task is in', () => {
+  it('offers every open initiative but the one the task is in, and none to a lead', () => {
     const member = createTask({ id: 't', initiativeId: 'split' });
+    expect(listOpenInitiatives(state).map((each) => each.id)).toEqual(['billing', 'split']);
     expect(listInitiativeChoices(state, member).map((each) => each.id)).toEqual(['billing']);
+    expect(listInitiativeChoices(state, LEADS[0] ?? member)).toEqual([]);
   });
 });
 
@@ -64,18 +79,16 @@ describe('initiative commands', () => {
     ]);
   });
 
-  it('makes an initiative from a task, focuses on one and removes one', async () => {
+  it('makes an initiative from a task and focuses on one', async () => {
     const spies = spyOnCommands();
     await adoptTask(task);
     await focusInitiative(SPLIT);
-    await removeInitiative(SPLIT);
     expect(spies.sent.mock.calls).toEqual([
       [{ type: 'initiative.adopt_task', taskId: 't' }, 'Made an initiative from this task.'],
       [
         { type: 'focus.change', projectId: null, teamId: null, initiativeId: 'split', until: null },
         'Focused on “Chat split”.',
       ],
-      [{ type: 'initiative.remove', initiativeId: 'split' }, 'Removed “Chat split”.'],
     ]);
   });
 });

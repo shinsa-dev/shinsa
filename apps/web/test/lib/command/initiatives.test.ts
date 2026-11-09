@@ -12,9 +12,25 @@ const SPLIT = createInitiative({
   id: 'split',
   name: 'Chat split',
   phases: [{ id: 'p1', name: 'Dock' }],
+  leadTaskId: 'lead-split',
 });
 
-const BILLING = createInitiative({ id: 'billing', name: 'Billing' });
+const BILLING = createInitiative({ id: 'billing', name: 'Billing', leadTaskId: 'lead-billing' });
+
+const LEAD_SPLIT = createTask({
+  id: 'lead-split',
+  handle: 'SW-1',
+  pipeline: ['lead'],
+  stage: 'leading',
+  initiativeId: 'split',
+});
+
+const LEAD_BILLING = createTask({
+  id: 'lead-billing',
+  pipeline: ['lead'],
+  stage: 'leading',
+  initiativeId: 'billing',
+});
 
 function find(commands: Command[], id: string) {
   const command = commands.find((each) => each.id === id);
@@ -33,29 +49,21 @@ function run(command: Command) {
 }
 
 describe('the Initiatives section', () => {
-  it('goes to the list, starts a new one and finds each initiative by name', () => {
-    const state = createShinsaState({ initiatives: [SPLIT] });
-    const [section] = listInitiativeSections(state, { name: 'initiative', reference: 'split' }, ALL);
+  it('finds each open initiative by name and opens its lead task', () => {
+    const state = createShinsaState({ initiatives: [SPLIT, BILLING], tasks: [LEAD_SPLIT] });
+    const [section] = listInitiativeSections(state, { name: 'task', reference: 'SW-1' });
     const commands = section?.commands ?? [];
-    expect(commands.map((command) => command.label)).toEqual([
-      'Initiatives',
-      'New initiative…',
-      'Chat split',
-    ]);
+    expect(commands.map((command) => command.label)).toEqual(['Chat split']);
     expect(find(commands, 'initiative.split')).toMatchObject({
       kind: 'go',
-      to: '/initiatives/split',
+      to: '/tasks/SW-1',
       current: true,
       searchOnly: true,
     });
-    expect(find(commands, 'go.initiatives').current).toBe(false);
-    const { result } = renderHook(() => useInitiativeDialog());
-    act(() => run(find(commands, 'initiative.new')));
-    expect(result.current).toEqual({ initiativeId: null });
   });
 
-  it('is left out for an engine without initiatives', () => {
-    expect(listInitiativeSections(createShinsaState({}), { name: 'home' }, new Set())).toEqual([]);
+  it('is left out without an open initiative', () => {
+    expect(listInitiativeSections(createShinsaState({}), { name: 'home' })).toEqual([]);
   });
 });
 
@@ -63,7 +71,7 @@ describe('a task’s initiative commands', () => {
   it('offers adding to an initiative or making one from a task outside any', () => {
     const spies = spyOnCommands();
     const task = createTask({ id: 't' });
-    const state = createShinsaState({ initiatives: [SPLIT], tasks: [task] });
+    const state = createShinsaState({ initiatives: [SPLIT], tasks: [task, LEAD_SPLIT] });
     const commands = listTaskInitiativeCommands(state, task, ALL);
     expect(commands.map((command) => command.label)).toEqual([
       'Add to an initiative',
@@ -81,7 +89,10 @@ describe('a task’s initiative commands', () => {
   it('offers a member moving, changing phase, opening and leaving', () => {
     const spies = spyOnCommands();
     const task = createTask({ id: 't', initiativeId: 'split', initiativePhaseId: 'p1' });
-    const state = createShinsaState({ initiatives: [SPLIT, BILLING], tasks: [task] });
+    const state = createShinsaState({
+      initiatives: [SPLIT, BILLING],
+      tasks: [task, LEAD_SPLIT, LEAD_BILLING],
+    });
     const commands = listTaskInitiativeCommands(state, task, ALL);
     expect(commands.map((command) => command.label)).toEqual([
       'Move to another initiative',
@@ -99,28 +110,29 @@ describe('a task’s initiative commands', () => {
     ]);
   });
 
-  it('offers starting a lead from a member’s chat while its initiative has none', () => {
-    const spies = spyOnCommands();
-    const task = createTask({ id: 't', initiativeId: 'billing' });
-    const state = createShinsaState({ initiatives: [BILLING], tasks: [task] });
-    const commands = listTaskInitiativeCommands(state, task, new Set([...ALL, 'initiative.start_lead']));
-    expect(commands.map((command) => command.label)).toEqual([
-      'Open the initiative Billing',
-      'Take out of the initiative',
-      'Start a lead from this chat',
+  it('offers its own lead only editing the initiative', () => {
+    const state = createShinsaState({ initiatives: [SPLIT], tasks: [LEAD_SPLIT] });
+    const commands = listTaskInitiativeCommands(state, LEAD_SPLIT, ALL);
+    expect(commands.map((command) => command.label)).toEqual(['Edit the initiative']);
+    const { result } = renderHook(() => useInitiativeDialog());
+    act(() => run(find(commands, 'task.lead-split.initiative.edit')));
+    expect(result.current).toEqual({ initiativeId: 'split' });
+    expect(
+      listTaskInitiativeCommands(state, LEAD_SPLIT, new Set(['task.join_initiative'])).map((each) => each.id)
+    ).toEqual([]);
+  });
+
+  it('offers a member of an initiative whose lead is gone nothing but moving', () => {
+    const task = createTask({ id: 't', initiativeId: 'split' });
+    const state = createShinsaState({ initiatives: [SPLIT, BILLING], tasks: [task, LEAD_BILLING] });
+    expect(listTaskInitiativeCommands(state, task, ALL).map((command) => command.label)).toEqual([
+      'Move to another initiative',
     ]);
-    run(find(commands, 'task.t.initiative.lead'));
-    expect(spies.sent.mock.calls.map((call) => call[0])).toEqual([
-      { type: 'initiative.start_lead', initiativeId: 'billing', forkOf: 't' },
-    ]);
-    expect(listTaskInitiativeCommands(state, task, ALL).map((command) => command.id)).not.toContain(
-      'task.t.initiative.lead'
-    );
   });
 
   it('leaves out the phase for an initiative without phases and everything on an older engine', () => {
     const task = createTask({ id: 't', initiativeId: 'billing' });
-    const state = createShinsaState({ initiatives: [BILLING], tasks: [task] });
+    const state = createShinsaState({ initiatives: [BILLING], tasks: [task, LEAD_BILLING] });
     const withoutPhases = listTaskInitiativeCommands(state, task, ALL);
     expect(withoutPhases.map((command) => command.label)).toEqual([
       'Open the initiative Billing',

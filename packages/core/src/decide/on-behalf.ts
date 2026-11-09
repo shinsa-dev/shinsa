@@ -90,14 +90,8 @@ const DESCRIPTIONS: Descriptions = {
     const names = describeList(projectIds.map((id) => state.projects[id]?.name ?? 'a project'));
     return command.except ? `Focused on everything but ${names}` : `Focused on ${names}`;
   },
-  'initiative.write': (_state, command) =>
-    command.initiativeId
-      ? `Changed the initiative ${quoteTitle(command.name.trim())}`
-      : `Created the initiative ${quoteTitle(command.name.trim())}`,
-  'initiative.remove': () => 'Removed an initiative',
+  'initiative.write': (_state, command) => `Changed the initiative ${quoteTitle(command.name.trim())}`,
   'initiative.adopt_task': (state, command) => `Made an initiative from ${quoteTask(state, command.taskId)}`,
-  'initiative.start_lead': (state, command) =>
-    `Started a lead for the initiative ${quoteTitle(state.initiatives[command.initiativeId]?.name ?? 'removed')}`,
   'task.join_initiative': (state, command) =>
     command.initiativeId
       ? `Added ${quoteTask(state, command.taskId)} to the initiative ${quoteInitiative(state, command.initiativeId)}`

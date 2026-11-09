@@ -103,6 +103,7 @@ export {
   resolvePublicUrl,
   type SplitRequest,
   serializeMergeStepsMarkdown,
+  PLAN_INITIATIVE_NOTE,
   serializePlanMarkdown,
   serializePullRequestMarkdown,
   serializeReportMarkdown,

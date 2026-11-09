@@ -6,28 +6,23 @@ import {
   type InitiativeSheet,
   listInitiativeProgress,
   listInitiatives,
-  resolveInitiativeSheet,
-  selectInitiativeByReference,
   resolveInitiativeTotals,
+  selectInitiativeLead,
   type ShinsaState,
+  type Task,
 } from '@shinsa/core';
 import type { IconName } from '@shinsa/ui/components/icon';
 import type { Glyph } from '@/lib/tasks/status.ts';
-import { resolveInitiativePath, type Route } from '@/router.ts';
 
 export const INITIATIVE_ICON: IconName = 'IconTarget';
 
-export const INITIATIVE_ACTIVE_ICON: IconName = 'IconTargetFilled';
-
 export const INITIATIVES_TITLE = 'Initiatives';
-
-export const INITIATIVES_DESCRIPTION =
-  'Group the tasks of one large piece of work, see where each phase stands and what needs you.';
 
 export const NO_PHASE_VALUE = '';
 
 export interface InitiativeRow {
   initiative: Initiative;
+  lead: Task;
   total: number;
   open: number;
   shipped: number;
@@ -54,24 +49,19 @@ function describeOpenAndShipped(open: number, shipped: number, total: number) {
 }
 
 export function listInitiativeRows(state: ShinsaState): InitiativeRow[] {
-  return listInitiatives(state).map((initiative) => {
+  return listInitiatives(state).flatMap((initiative) => {
+    const lead = selectInitiativeLead(state, initiative);
+    if (!lead) return [];
     const totals = resolveInitiativeTotals(listInitiativeProgress(state, initiative));
-    return {
-      initiative,
-      ...totals,
-      summary: describeOpenAndShipped(totals.open, totals.shipped, totals.total),
-    };
+    return [
+      {
+        initiative,
+        lead,
+        ...totals,
+        summary: describeOpenAndShipped(totals.open, totals.shipped, totals.total),
+      },
+    ];
   });
-}
-
-export function selectInitiativeView(state: ShinsaState, reference: string, now: number) {
-  const initiative = selectInitiativeByReference(Object.values(state.initiatives), reference);
-  if (!initiative) return null;
-  return resolveInitiativeSheet(state, initiative.id, now);
-}
-
-export function resolveCanonicalInitiativePath(initiative: Initiative, reference: string, query: string) {
-  return reference === initiative.id ? null : `${resolveInitiativePath(initiative.id)}${query}`;
 }
 
 export function isPhaseDone(progress: InitiativePhaseProgress) {
@@ -130,12 +120,4 @@ export function listInitiativeSections(sheet: InitiativeSheet): InitiativeSectio
       empty: 'Approved plans and the agents’ judgement calls show here.',
     },
   ];
-}
-
-export function isInitiativesNavShown(state: ShinsaState, route: Route) {
-  return isInitiativeRoute(route) || Object.keys(state.initiatives).length > 0;
-}
-
-export function isInitiativeRoute(route: Route) {
-  return route.name === 'initiatives' || route.name === 'initiative';
 }

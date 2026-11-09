@@ -141,10 +141,11 @@ src/
 │   │                from the push, resolvePullRequestCi)
 │   ├── dependencies.ts   Resolving and changing what a task waits on and stacks on (task.stack_on_tasks), releasing
 │   │                waiting tasks (a stacked one once every task below is ready) and recording its bases (stackBases)
-│   ├── initiatives.ts  Initiatives: write, remove, join and leave, adopting a task with its descendants
+│   ├── initiatives.ts  Initiatives: create, write, dissolve, join and leave, adopting a task with its descendants
 │   │                (listTaskDescendants), the membership a filed or forked task inherits (resolveCreatedMembership)
-│   ├── leads.ts     An initiative's lead: start_lead, a lead turn (startLeadTurn), wake_lead, report_initiative, and
-│   │                syncInitiativeMilestones (after every command: members' milestones queued, a wake asked for)
+│   ├── leads.ts     An initiative's lead: a task.create with initiative (createInitiativeTask), adopt_task and a
+│   │                plan's initiative (startPlanInitiative) start one, a lead turn (startLeadTurn), wake_lead,
+│   │                report_initiative, syncCancelledLeads and syncInitiativeMilestones (after every command)
 │   ├── bundles.ts   Bundles, graphs of stacks (reviewBundles, after every command): ready in place of a merge gate
 │   │                for every follower (bundleReady), the lead's one merge gate for the bundle, held while the
 │   │                bundle conflicts with the default branch (bundleConflict) and the branch behind is pushed, the

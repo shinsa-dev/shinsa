@@ -7,7 +7,6 @@ import {
   RouteScope,
   replaceRoute,
   resolveCanonicalTaskPath,
-  resolveInitiativePath,
   resolveRouteBase,
   resolveRouteTaskId,
   resolveTaskPath,
@@ -21,22 +20,12 @@ import {
 } from '@/router.ts';
 import { createShinsaState, createTask } from './support/state.ts';
 
-describe('resolveInitiativePath', () => {
-  it('builds the path of an initiative that parses back to it', () => {
-    const path = resolveInitiativePath('i 1');
-    expect(path).toBe('/initiatives/i%201');
-    expect(parseRoute(path)).toEqual({ name: 'initiative', reference: 'i 1' });
-  });
-});
-
 describe('parseRoute', () => {
   it('reads every route the app has', () => {
     expect(parseRoute('/')).toEqual({ name: 'home' });
     expect(parseRoute('/tasks')).toEqual({ name: 'tasks' });
     expect(parseRoute('/tasks/t1')).toEqual({ name: 'task', reference: 't1' });
     expect(parseRoute('/automations/s%201')).toEqual({ name: 'automation', scheduleId: 's 1' });
-    expect(parseRoute('/initiatives')).toEqual({ name: 'initiatives' });
-    expect(parseRoute('/initiatives/Chat%20split')).toEqual({ name: 'initiative', reference: 'Chat split' });
     expect(parseRoute('/settings')).toEqual({ name: 'settings' });
     expect(parseRoute('/terminal')).toEqual({ name: 'terminal' });
     expect(parseRoute('/onboarding')).toEqual({ name: 'onboarding' });

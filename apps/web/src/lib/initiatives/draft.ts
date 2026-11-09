@@ -15,12 +15,6 @@ export interface InitiativeDraft {
   phases: PhaseDraft[];
 }
 
-export const NEW_INITIATIVE = {
-  title: 'New initiative',
-  description: 'Group the tasks of one large piece of work.',
-  submit: 'Create initiative',
-} as const;
-
 export const EDIT_INITIATIVE = {
   title: 'Edit initiative',
   description: 'Rename it, describe it or change its phases.',
@@ -29,8 +23,8 @@ export const EDIT_INITIATIVE = {
 
 export const PHASES_HINT = 'Phases run in this order. A task keeps its phase when you rename it.';
 
-export interface InitiativeDialogTarget {
-  initiativeId: string | null;
+interface InitiativeDialogTarget {
+  initiativeId: string;
 }
 
 const dialogSignal = createSignal();
@@ -39,7 +33,7 @@ let dialogTarget: InitiativeDialogTarget | null = null;
 
 let phaseKeys = 0;
 
-export function openInitiativeDialog(initiativeId: string | null = null) {
+export function openInitiativeDialog(initiativeId: string) {
   dialogTarget = { initiativeId };
   dialogSignal.publish();
 }
@@ -58,8 +52,7 @@ export function createPhaseDraft(name = ''): PhaseDraft {
   return { key: `new-${phaseKeys}`, id: null, name };
 }
 
-export function createInitiativeDraft(initiative: Initiative | null): InitiativeDraft {
-  if (!initiative) return { name: '', description: '', phases: [] };
+export function createInitiativeDraft(initiative: Initiative): InitiativeDraft {
   return {
     name: initiative.name,
     description: initiative.description,
@@ -105,21 +98,18 @@ export function resolveDraftProblem(draft: InitiativeDraft) {
 
 export function serializeInitiativeDraft(
   draft: InitiativeDraft,
-  initiative: Initiative | null
+  initiative: Initiative
 ): Extract<UserCommand, { type: 'initiative.write' }> {
   return {
     type: 'initiative.write',
-    initiativeId: initiative?.id ?? null,
+    initiativeId: initiative.id,
     name: resolveInitiativeText(draft.name),
     description: draft.description.trim(),
     phases: draft.phases.map((phase) => ({ id: phase.id, name: resolveInitiativeText(phase.name) })),
   };
 }
 
-export function writeInitiative(draft: InitiativeDraft, initiative: Initiative | null) {
+export function writeInitiative(draft: InitiativeDraft, initiative: Initiative) {
   const command = serializeInitiativeDraft(draft, initiative);
-  return sendCommandWithToast(
-    command,
-    initiative ? `Saved the initiative “${command.name}”.` : `Created the initiative “${command.name}”.`
-  );
+  return sendCommandWithToast(command, `Saved the initiative “${command.name}”.`);
 }

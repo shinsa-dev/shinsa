@@ -5,9 +5,9 @@ import {
   type ShinsaState,
   type Task,
 } from '@shinsa/core';
-import { Icon } from '@shinsa/ui/components/icon';
 import { cn } from '@shinsa/ui/lib/utils';
 import type * as React from 'react';
+import { LeadReport } from '@/components/initiatives/lead.tsx';
 import { Panel } from '@/components/layout/surface/panel.tsx';
 import { TaskLink } from '@/components/links/task.tsx';
 import { ActivityEntry } from '@/components/overview/activity-row.tsx';
@@ -48,11 +48,11 @@ function TaskRows({ state, tasks }: { state: ShinsaState; tasks: readonly Task[]
   );
 }
 
-function PhaseHeading({ name }: { name: string }) {
+function PhaseHeading({ name, count }: { name: string; count: number }) {
   return (
-    <div className='flex h-7 items-center gap-2 border-b border-border bg-bg-a1 px-3 text-2xs font-medium text-fg-3'>
-      <Icon size='sm' name='IconLayersThree' className='text-fg-2' />
+    <div className='flex h-8 items-end gap-1.5 border-b border-border px-3 pb-1.5 text-2xs font-medium text-fg-3'>
       {name}
+      <span className='font-normal text-fg-2 tabular-nums'>{count}</span>
     </div>
   );
 }
@@ -64,7 +64,7 @@ function NextRows({ state, sheet }: { state: ShinsaState; sheet: InitiativeSheet
       <ColumnHeader />
       {sheet.next.map((group) => (
         <div key={group.phase?.id ?? 'none'}>
-          {phased && <PhaseHeading name={group.phase?.name ?? NO_PHASE_NAME} />}
+          {phased && <PhaseHeading name={group.phase?.name ?? NO_PHASE_NAME} count={group.tasks.length} />}
           {group.tasks.map(({ task }) => (
             <TaskListRow key={task.id} state={state} task={task} depth={0} columns={FILED_COLUMNS} />
           ))}
@@ -142,7 +142,7 @@ function SectionBody({
   }
 }
 
-export function InitiativeSections({ state, sheet }: { state: ShinsaState; sheet: InitiativeSheet }) {
+function InitiativeSections({ state, sheet }: { state: ShinsaState; sheet: InitiativeSheet }) {
   return listInitiativeSections(sheet).map((section) => (
     <Panel
       key={section.key}
@@ -162,7 +162,7 @@ export function InitiativeSections({ state, sheet }: { state: ShinsaState; sheet
   ));
 }
 
-export function PhaseTrack({ sheet }: { sheet: InitiativeSheet }): React.ReactNode {
+function PhaseTrack({ sheet }: { sheet: InitiativeSheet }): React.ReactNode {
   if (sheet.progress.length === 0) return null;
   return (
     <ol aria-label='Phases' className='grid grid-cols-[repeat(auto-fit,minmax(10rem,1fr))] gap-2'>
@@ -189,5 +189,15 @@ export function PhaseTrack({ sheet }: { sheet: InitiativeSheet }): React.ReactNo
         );
       })}
     </ol>
+  );
+}
+
+export function InitiativeOverview({ state, sheet }: { state: ShinsaState; sheet: InitiativeSheet }) {
+  return (
+    <>
+      <LeadReport state={state} initiative={sheet.initiative} />
+      <PhaseTrack sheet={sheet} />
+      <InitiativeSections state={state} sheet={sheet} />
+    </>
   );
 }

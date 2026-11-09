@@ -13,15 +13,7 @@ import { ServicesMenu } from '@/components/services/menu.tsx';
 import { ConnectionStatus } from '@/components/status/connection-status.tsx';
 import { UpdateButton } from '@/components/status/update-button.tsx';
 import { requestNewTaskOnHome } from '@/lib/command/menu.ts';
-import { useEngineFeature } from '@/lib/connection/socket.ts';
 import { resolveResetKey } from '@/lib/errors.ts';
-import {
-  INITIATIVE_ACTIVE_ICON,
-  INITIATIVE_ICON,
-  INITIATIVES_TITLE,
-  isInitiativeRoute,
-  isInitiativesNavShown,
-} from '@/lib/initiatives/view.ts';
 import { navigate, useRoute, useRouteTaskId } from '@/router.ts';
 
 export function Rail({
@@ -38,7 +30,6 @@ export function Rail({
   const popoverSide = sheet ? 'bottom' : 'right';
   const activeTaskId = useRouteTaskId(state);
   const resetKey = resolveResetKey({ route, search: '' });
-  const initiatives = useEngineFeature('initiatives') && isInitiativesNavShown(state, route);
 
   function go(path: string) {
     navigate(path);
@@ -85,15 +76,6 @@ export function Rail({
             active={route.name === 'tasks'}
             onClick={() => go('/tasks')}
           />
-          {initiatives && (
-            <NavItem
-              label={INITIATIVES_TITLE}
-              icon={INITIATIVE_ICON}
-              activeIcon={INITIATIVE_ACTIVE_ICON}
-              active={isInitiativeRoute(route)}
-              onClick={() => go('/initiatives')}
-            />
-          )}
           {route.name !== 'onboarding' && (
             <ErrorBoundary size='inline' resetKey={resetKey}>
               <ServicesMenu state={state} variant='rail' side={popoverSide} onNavigate={onNavigate} />

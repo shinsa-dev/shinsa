@@ -11,6 +11,7 @@ import {
   approve,
   completePhase,
   createHarness,
+  createInitiative,
   createTask,
   type Harness,
   proposePlan,
@@ -19,15 +20,7 @@ import {
 
 function createInitiativeHarness() {
   const harness = createHarness();
-  harness.send({
-    type: 'initiative.write',
-    initiativeId: null,
-    name: 'Chat split',
-    phases: [
-      { id: null, name: 'Dock' },
-      { id: null, name: 'Studio' },
-    ],
-  });
+  createInitiative(harness, { phases: ['Dock', 'Studio'] });
   const initiative = listInitiatives(harness.state)[0];
   if (!initiative) throw new Error('no initiative');
   const [dock, studio] = initiative.phases.map((phase) => phase.id);

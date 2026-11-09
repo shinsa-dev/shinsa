@@ -140,6 +140,7 @@ const buildTaskCreate = Effect.fn('Surface.buildTaskCreate')(function* (
     ...(values.planFirst ? { planFirst: true } : {}),
     ...(values.backlog ? { backlog: true } : {}),
     ...(values.ask ? { mode: 'ask' as const } : {}),
+    ...(values.initiative ? { initiative: true } : {}),
     ...(waitsOn.length > 0 ? { waitsOn } : {}),
     ...(forkOf ? { forkOf } : {}),
     ...(account ? { account } : {}),
@@ -293,6 +294,12 @@ export const TASK_SPECS: SurfaceSpec[] = [
         name: 'ask',
         kind: 'boolean',
         description: 'Only answer a question: no changes, branch or pull request.',
+      },
+      {
+        name: 'initiative',
+        kind: 'boolean',
+        description:
+          'Start an initiative: a task whose agent leads a group of tasks, files and orders them, and reports where they stand. The first line names it.',
       },
       { name: 'after', kind: 'list', description: 'Tasks it waits on before it starts.' },
       {

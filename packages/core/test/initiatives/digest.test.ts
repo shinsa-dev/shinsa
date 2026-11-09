@@ -5,16 +5,18 @@ import {
   listInitiatives,
   resolveInitiativeSheet,
 } from '../../src/index.ts';
-import { createHarness, createTask, type Harness, proposePlan, shipAndMerge } from '../harness.ts';
+import {
+  createHarness,
+  createInitiative,
+  createTask,
+  type Harness,
+  proposePlan,
+  shipAndMerge,
+} from '../harness.ts';
 
 function withInitiative() {
   const harness = createHarness();
-  harness.send({
-    type: 'initiative.write',
-    initiativeId: null,
-    name: 'Chat split',
-    phases: [{ id: null, name: 'Studio' }],
-  });
+  createInitiative(harness, { phases: ['Studio'] });
   const initiative = listInitiatives(harness.state)[0];
   if (!initiative) throw new Error('no initiative');
   return { harness, id: initiative.id, studio: initiative.phases[0]?.id ?? '' };

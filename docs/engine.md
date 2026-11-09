@@ -1038,12 +1038,12 @@ folds in `state/shapes.ts`).
   **operation** `[plan, operate]` (something to run in the repository, a script, a migration or a cleanup: the plan always
   waits for you, then the Agent that planned it runs it in the same session and reports with `report_outcome`; no
   pull request). `resolveTaskShape` names a
-  pipeline back (an answer that became a change reads as a change). A seventh, **lead** `[lead]`, is an initiative's
-  supervisor (Initiatives, below): only `initiative.start_lead` makes one, no agent composes its step (`Only Shinsa
+  pipeline back (an answer that became a change reads as a change). A seventh, **lead** `[lead]`, is an initiative itself
+  (Initiatives, below): only `task.create` with `initiative` and `initiative.adopt_task` make one, no agent composes its step (`Only Shinsa
   starts a lead, for an initiative.`) and it is never one of the presets below (`PresetShape`).
 - **Who chooses.** Shinsa. The classifier picks one of the six presets from the request (`task.triage` `shape`, a
   typed choice with what each means) as the starting point; nothing lets you change the kind afterwards (the
-  Overview's facts, the All tasks row and the activity show it; neither the composer nor ⌘K asks for it). `task.create`
+  Overview's facts, the All tasks row and the activity show it; neither the composer nor ⌘K asks for it, but for Initiative, which only you start). `task.create`
   takes no `shape`: only triage and the Agent, while it plans, shape a task. The Agent of a task Shinsa
   shaped then keeps that preset (it plans) or replaces it with `reshape_task` before planning: `shape` makes it an
   answer, an investigation or research, and `steps` composes the task from the building blocks (`agent.reshape` with
@@ -1457,20 +1457,30 @@ bundle with `create_task`'s `stack_on_this` (never with `this_task_waits` or `af
 ### Initiatives
 
 An initiative groups the tasks of one effort that outgrows a task and a bundle: a rewrite split into twenty pull
-requests over three repositories and a week, each merging on its own as it is ready. It sits above tasks, bundles and
-projects (its tasks may sit in any repository of any project), so it is not called a project: projects are the
-directories you focus on. The record is core (`domain/initiatives.ts`, `decide/initiatives.ts`, the fold in
-`state/initiatives.ts`, the sheet in `initiatives/`); the engine serves it (`apps/engine/src/surface/initiatives.ts`,
-`http/initiative-views.ts`, `initiatives/service.ts`) and the web app draws it (`routes/initiatives.tsx`,
-`components/initiatives/`, `lib/initiatives/`).
+requests over three repositories and a week, each merging on its own as it is ready. **An initiative is a task**: a task
+of kind `lead` whose agent, the lead, supervises the group, and whose Overview is the initiative's report sheet. There
+is no separate page and no navigation entry; Home lists the open ones and ⌘K finds each by name. It sits above tasks,
+bundles and projects (its tasks may sit in any repository of any project), so it is not called a project: projects are
+the directories you focus on. The record is core (`domain/initiatives.ts`, `decide/initiatives.ts`, `decide/leads.ts`,
+the fold in `state/initiatives.ts`, the sheet in `initiatives/`); the engine serves it
+(`apps/engine/src/surface/initiatives.ts`, `http/initiative-views.ts`, `initiatives/service.ts`) and the web app draws
+it on the lead task's Overview (`components/initiatives/`, `lib/initiatives/`).
 
+- **Starting one.** You start one like any task: Home's composer with Kind of task set to Initiative, or `shinsa tasks
+  create --initiative` (`task.create` with `initiative: true`). The request's first line names it and the rest
+  describes it; Shinsa creates the `Initiative` record and its lead task in one command (`createInitiativeTask`), the
+  lead joins it, and an initiative, phase or stack named on the request is ignored. Nobody has to set one up by hand
+  either: **Make an initiative from this task** (`initiative.adopt_task`: the task's menus, ⌘K, `shinsa initiatives
+  adopt`) and a plan that asks for one (below) make it for you.
 - **The record.** `Initiative { id, name, description, phases, leadTaskId, createdAt, updatedAt }`, plus the lead's
-  `milestones` queue and its latest `report` (the lead, below). `initiative.write` creates one (no `initiativeId`) or
-  changes one, recorded as `initiative.written` with the whole record; `initiative.remove` takes every task out first
-  and clears a focus on it (`initiative.removed`). Limits are `INITIATIVE_LIMITS`: a name of 80 characters, a
-  description of 2,000, 12 phases of 60 characters each with distinct names, and 50 initiatives (`initiative_limit`).
-  You write one from the Initiatives page (New initiative, or Edit initiative on its page), ⌘K's New initiative… or `shinsa
-  initiatives write`; the nav shows Initiatives once one exists.
+  `milestones` queue and its latest `report`. `initiative.write` changes the name, description and phases (Edit the
+  initiative in the lead task's menu and ⌘K, `shinsa initiatives write <initiative>`), recorded as
+  `initiative.written` with the whole record. Limits are `INITIATIVE_LIMITS`: a name of 80 characters, a description of
+  2,000, 12 phases of 60 characters each with distinct names, and 50 open initiatives (`initiative_limit`).
+- **Finishing and cancelling.** Marking the lead task done finishes the initiative: the record stays with its last
+  report and its sheet stays on the lead task, but it takes no new tasks (`initiative_finished`), its members' new
+  tasks no longer inherit it, and Home and ⌘K leave it out. Cancelling the lead task dissolves it (`syncCancelledLeads`):
+  every member leaves, a focus on it is cleared and `initiative.removed` drops the record.
 - **Phases are labels, not gates.** A phase is `{ id, name }` in the initiative's order. A task carries
   `initiativeId` and `initiativePhaseId` and joins one initiative at a time. Order inside and between phases is the
   waits you already have (`waitsOn`, `after_this`): phase 2's first tasks wait on phase 1's last ones, and each piece
@@ -1480,37 +1490,38 @@ directories you focus on. The record is core (`domain/initiatives.ts`, `decide/i
 - **Membership.** `task.join_initiative` (`initiativeId` and `phaseId`, or `initiativeId: null` to leave) records
   `task.initiative_changed` and a line on the task's activity. You add a task from its `•••` and context menus (Add to
   an initiative, Move to another initiative, Phase, Take out of the initiative), ⌘K, or `shinsa tasks
-  join-initiative|leave-initiative`; the Overview's facts name the initiative and phase. A task created with an
+  join-initiative|leave-initiative`, and so can any agent with the same tools: the lead is told of every task that
+  joins. The Overview's facts name the initiative and phase and open the lead task. A task created with an
   `initiativeId` joins it, and every task a member files inherits its initiative and phase, by `create_task`,
   `split_task` or a fork (`resolveCreatedMembership`, from `parentTaskId`, `createdBy` or `forkOf`), so an effort's later
   pieces never fall out of it.
-- **Making one from a task** (`initiative.adopt_task`, Make an initiative from this task in the task's menus and ⌘K,
-  `shinsa initiatives adopt`) creates an initiative named after the task and adds the task and every descendant found
-  through `createdBy`, `parentTaskId` and `forkOf`, transitively (`listTaskDescendants`). A descendant already in
-  another initiative stays there; a task already in one is refused (`initiative_exists`). This is how an effort like
-  SW-101's chat split moves in after the fact.
-- **The sheet** (`resolveInitiativeSheet`, pure, no model call) is the page `/initiatives/<id>`, `shinsa initiatives
-  show` and `GET /api/initiatives/<ref>`: **Needs you** (members' open decisions, ranked like the queue), **Now**
-  (working), **Next** (every other open task, grouped by phase in order, each with the tasks it waits or stacks on), **Shipped**
-  (merged or done, with pull requests), **Dropped** (cancelled, with the reason), **Decisions** (each accepted plan's
-  goal and each judgement call the members handed over, newest first, at most 100) and a progress count per phase. A
-  lead is never one of the initiative's tasks there or in any count (`listInitiativeWork`). `/initiatives` lists
-  them with each phase's progress. Both routes are behind the `initiatives` engine feature.
+- **Making one from a task** (`initiative.adopt_task`) creates an initiative named after the task, adds the task and
+  every descendant found through `createdBy`, `parentTaskId` and `forkOf`, transitively (`listTaskDescendants`), and
+  starts its lead forked from the task's chat, so the lead begins with everything that task knows. A descendant
+  already in another initiative stays there; a task already in one is refused (`initiative_exists`). This is how an
+  effort like SW-101's chat split moves in after the fact.
+- **A plan can propose one.** A plan with a `split` may set `initiative: true` when the parts are one effort that will
+  run for days and keep growing (the planning prompt says when; `initiative` without `split` is refused). The plan card
+  and its markdown say so under the other tasks (`PLAN_INITIATIVE_NOTE`), and approving the plan splits the parts off
+  and then adopts the task (`startPlanInitiative`), so the task, its parts and a lead forked from it become the
+  initiative in one click. A task already in an initiative keeps it, and its parts join it.
+- **The sheet** (`resolveInitiativeSheet`, pure, no model call) is the lead task's Overview, `shinsa initiatives show`
+  and `GET /api/initiatives/<ref>`: the lead's report (Where it stands), the phases' progress, **Needs you** (members'
+  open decisions, ranked like the queue), **Now** (working), **Next** (every other open task, grouped by phase in order,
+  each with the tasks it waits or stacks on), **Shipped** (merged or done, with pull requests), **Dropped** (cancelled,
+  with the reason) and **Decisions** (each accepted plan's goal and each judgement call the members handed over, newest
+  first, at most 100). A lead is never one of the initiative's tasks there or in any count (`listInitiativeWork`).
+  Home's Initiatives section lists each open initiative with its progress and opens its lead task; both routes are
+  behind the `initiatives` engine feature, whose views link the lead task.
 - **Focus.** `Focus.initiativeId` is a third focus target beside projects and a team, one at a time (`focus_refused`
   for two), from the Focus menu, ⌘K or `shinsa focus initiative`. `resolveQueue` then keeps only the initiative's
   tasks and decisions (`resolveFocusInitiative`), so Home, the queue button, the guide and notifications narrow to it.
-  Removing the initiative clears the focus.
-- **The lead.** A task of the `lead` kind (`SHAPE_PIPELINES.lead`, one `lead` step that no agent may compose and
-  triage never picks: `PresetShape` is the six you see) that does no repository work, opens no pull request and has
-  no gate tools: it supervises one initiative (`Initiative.leadTaskId`). `initiative.start_lead` creates it (Start a
-  lead on the initiative's page, Start a lead from this chat in a member's menu and ⌘K, `shinsa initiatives
-  start-lead [--fork <task>]`), optionally forked from a member's chat so it keeps that context, and refuses a second
-  live lead (`lead_exists`). It is the task's one Agent session (the engine's first rule): every turn is a run of
-  purpose `lead` that resumes the same session, between turns it rests in the `leading` stage (never done), and each
-  turn ends with `report_initiative`, a hand-over of a `narrative` (at most 2,000 characters) and up to five
-  `questions` (280 each) that `initiative.reported` keeps as `Initiative.report` and the page shows above the sections
-  with a link to the lead's chat. Marking the lead done ends it; the initiative keeps its last report, and you can
-  start another. Removing the initiative ends its lead at once, as done, with any turn it is taking.
+- **The lead.** The `lead` kind (`SHAPE_PIPELINES.lead`, one `lead` step that no agent may compose and triage never
+  picks: `PresetShape` is the six you see) does no repository work, opens no pull request and has no gate tools. It is
+  the task's one Agent session (the engine's first rule): every turn is a run of purpose `lead` that resumes the same
+  session, between turns it rests in the `leading` stage (never done), and each turn ends with `report_initiative`, a
+  hand-over of a `narrative` (at most 2,000 characters) and up to five `questions` (280 each) that
+  `initiative.reported` keeps as `Initiative.report` and its Overview shows first. You talk to it in its chat.
 - **What wakes the lead.** After every command `syncInitiativeMilestones` reads the new events for member milestones:
   a task joined, a plan accepted (at its gate or without one), a decision gate opened, merged, done or cancelled. It
   skips the lead itself, tasks the lead filed (it knows), and initiatives without a live lead, queues them on the

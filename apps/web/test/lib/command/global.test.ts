@@ -6,7 +6,7 @@ import { isFeedbackOpen, registerFeedbackOpener } from '@/lib/feedback.ts';
 import { resolveEndOfDay } from '@/lib/format/time.ts';
 import { rememberTerminalPath } from '@/lib/terminal/tabs.ts';
 import { spyOnCommands } from '../../support/commands.ts';
-import { createInitiative, createProject, createShinsaState, NOW } from '../../support/state.ts';
+import { createInitiative, createProject, createShinsaState, createTask, NOW } from '../../support/state.ts';
 
 const ALL_COMMANDS: ReadonlySet<string> = new Set(USER_COMMAND_TYPES);
 
@@ -340,7 +340,8 @@ describe('the focus choice with initiatives', () => {
   function focusedOnInitiative(initiativeId: string | null): ShinsaState {
     return createShinsaState({
       projects: PROJECTS,
-      initiatives: [createInitiative({ id: 'split', name: 'Chat split' })],
+      initiatives: [createInitiative({ id: 'split', name: 'Chat split', leadTaskId: 'lead' })],
+      tasks: [createTask({ id: 'lead', pipeline: ['lead'], stage: 'leading', initiativeId: 'split' })],
       patch: { focus: { projectIds: [], except: false, teamId: null, initiativeId, until: null } },
     });
   }

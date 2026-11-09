@@ -2,19 +2,13 @@ import { Button } from '@shinsa/ui/components/button';
 import type { IconName } from '@shinsa/ui/components/icon';
 import { cn } from '@shinsa/ui/lib/utils';
 import { Hint } from '@/components/overlays/hint.tsx';
-import { isInitiativeRoute } from '@/lib/initiatives/view.ts';
 import { navigate, useRoute } from '@/router.ts';
 
 export const NAV_ICON_NUDGE = '-translate-y-[0.5px]';
 
-type PageName = 'home' | 'tasks' | 'initiatives' | 'settings';
+type PageName = 'home' | 'tasks' | 'settings';
 
-const PAGE_PATHS: Record<PageName, string> = {
-  home: '/',
-  tasks: '/tasks',
-  initiatives: '/initiatives',
-  settings: '/settings',
-};
+const PAGE_PATHS: Record<PageName, string> = { home: '/', tasks: '/tasks', settings: '/settings' };
 
 export function NavButton({
   page,
@@ -35,8 +29,7 @@ export function NavButton({
   className?: string;
   onNavigate?: () => void;
 }) {
-  const route = useRoute();
-  const active = page === 'initiatives' ? isInitiativeRoute(route) : route.name === page;
+  const active = useRoute().name === page;
   const button = (
     <Button
       variant='secondary'

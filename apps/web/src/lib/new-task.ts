@@ -60,7 +60,10 @@ export const NO_PROJECT = 'none';
 
 export type NewTaskStart = AutoChoice<'now' | 'after' | 'stack' | 'backlog'>;
 
+export type NewTaskKind = AutoChoice<'initiative'>;
+
 export interface NewTaskChoices {
+  kind: NewTaskKind;
   project: AutoChoice<string>;
   start: NewTaskStart;
   after: string[];
@@ -69,6 +72,7 @@ export interface NewTaskChoices {
 }
 
 export const AUTO_CHOICES: NewTaskChoices = {
+  kind: 'auto',
   project: 'auto',
   start: 'auto',
   after: [],
@@ -78,7 +82,13 @@ export const AUTO_CHOICES: NewTaskChoices = {
 
 const PLACEHOLDER = 'Describe the work or ask a question. Shinsa decides what kind of task it is.';
 
-export function describeNewTask(start: NewTaskStart): NewTaskCopy {
+const INITIATIVE_PLACEHOLDER =
+  'Name the initiative on the first line, then describe the work. Its lead agent files and orders the tasks.';
+
+export function describeNewTask(start: NewTaskStart, kind: NewTaskKind = 'auto'): NewTaskCopy {
+  if (kind === 'initiative') {
+    return { placeholder: INITIATIVE_PLACEHOLDER, submit: 'Start', done: 'Initiative started.' };
+  }
   if (start === 'after' || start === 'stack') {
     return {
       placeholder: PLACEHOLDER,
@@ -113,11 +123,12 @@ function resolveStartFields(start: NewTaskStart, after: string[]) {
 }
 
 export function createNewTaskCommand(request: string, choices: NewTaskChoices): UserCommand {
-  const { project, start, after, priority } = choices;
+  const { kind, project, start, after, priority } = choices;
   return {
     type: 'task.create',
     request: request.trim(),
     repoId: null,
+    ...(kind === 'initiative' ? { initiative: true } : {}),
     ...(project === 'auto' ? {} : { projectId: resolveProjectId(project) }),
     ...(priority === 'auto' ? {} : { priority }),
     ...resolveStartFields(start, after),
@@ -162,6 +173,23 @@ export function resolveProjectChoice(state: ShinsaState, project: AutoChoice<str
 export function resolveShownProject(state: ShinsaState, project: AutoChoice<string>, now = Date.now()) {
   if (project !== 'auto') return project;
   return selectFocus(state, now)?.id ?? NO_PROJECT;
+}
+
+export function listNewTaskKinds(): NewTaskItem<NewTaskKind>[] {
+  return [
+    {
+      value: 'auto',
+      label: 'Auto kind',
+      icon: 'IconListBullets',
+      hint: 'Shinsa decides from what you write',
+    },
+    {
+      value: 'initiative',
+      label: 'Initiative',
+      icon: 'IconTarget',
+      hint: 'A lead agent that keeps a group of tasks moving',
+    },
+  ];
 }
 
 export function listNewTaskPriorities(): NewTaskItem<AutoChoice<TaskPriority>>[] {

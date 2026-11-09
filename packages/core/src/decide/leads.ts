@@ -4,8 +4,10 @@ import {
   DomainError,
   type GateType,
   type Initiative,
+  INITIATIVE_LIMITS,
   type InitiativeMilestone,
   resolveGateDefinition,
+  resolveInitiativeText,
   selectLeadInitiative,
   type Task,
 } from '../domain/index.ts';
@@ -21,7 +23,14 @@ import { listInitiatives, selectInitiativeLead } from '../state/initiatives.ts';
 import type { ShinsaState } from '../state/project.ts';
 import { listActiveRuns, listOpenGates } from '../state/queries.ts';
 import type { Decider } from './decider.ts';
-import { findInitiative } from './initiatives.ts';
+import {
+  adoptDescendants,
+  assertNotInInitiative,
+  changeMembership,
+  createInitiative,
+  dissolveInitiative,
+  findInitiative,
+} from './initiatives.ts';
 import { findCurrentRun } from './runs.ts';
 import { createTask } from './tasks.ts';
 
@@ -43,30 +52,64 @@ function resolveLeadRequest(initiative: Initiative) {
   return `Lead the initiative ${quoteTitle(initiative.name)}: keep its tasks moving, file and order the next pieces, and report where it stands.${description}`;
 }
 
-export function startLead(decider: Decider, command: CommandOf<'initiative.start_lead'>) {
-  const initiative = findInitiative(decider, command.initiativeId);
-  if (selectInitiativeLead(decider.state, initiative)) {
-    throw new DomainError({
-      code: 'lead_exists',
-      message: `The initiative ${initiative.name} already has a lead. Mark it done first to start another.`,
-    });
-  }
-  const leadTaskId = createTask(
-    decider,
-    {
-      type: 'task.create',
-      request: resolveLeadRequest(initiative),
-      repoId: null,
-      initiativeId: initiative.id,
-      ...(command.forkOf ? { forkOf: decider.task(command.forkOf).id } : {}),
-    },
-    { shape: 'lead' }
-  );
+function startLead(decider: Decider, initiative: Initiative, command: CommandOf<'task.create'>) {
+  const leadTaskId = createTask(decider, command, { shape: 'lead' });
   decider.emit({
     type: 'initiative.written',
-    initiative: { ...findInitiative(decider, initiative.id), leadTaskId, updatedAt: decider.context.now },
+    initiative: { ...initiative, leadTaskId, updatedAt: decider.context.now },
   });
+  changeMembership(decider, decider.task(leadTaskId), { initiativeId: initiative.id, phaseId: null });
   return leadTaskId;
+}
+
+function splitRequest(request: string) {
+  const [first = '', ...rest] = request.trim().split('\n');
+  const name = resolveInitiativeText(first).slice(0, INITIATIVE_LIMITS.name);
+  return { name, description: rest.join('\n').trim().slice(0, INITIATIVE_LIMITS.description) };
+}
+
+export function createInitiativeTask(decider: Decider, command: CommandOf<'task.create'>) {
+  const { name, description } = splitRequest(command.request);
+  const initiative = createInitiative(decider, name, description);
+  const {
+    initiative: _initiative,
+    initiativeId: _id,
+    initiativePhaseId: _phase,
+    stacksOn: _stack,
+    ...rest
+  } = command;
+  return startLead(decider, initiative, rest);
+}
+
+export function adoptTask(decider: Decider, command: CommandOf<'initiative.adopt_task'>) {
+  const task = decider.task(command.taskId);
+  assertNotInInitiative(decider, task);
+  const name = resolveInitiativeText(task.title).slice(0, INITIATIVE_LIMITS.name) || 'Untitled initiative';
+  const initiative = createInitiative(decider, name, '');
+  adoptDescendants(decider, initiative, task);
+  startLead(decider, initiative, {
+    type: 'task.create',
+    request: resolveLeadRequest(initiative),
+    repoId: null,
+    forkOf: task.id,
+    ...(task.projectId ? { projectId: task.projectId } : {}),
+  });
+  return initiative.id;
+}
+
+export function startPlanInitiative(decider: Decider, taskId: string) {
+  const task = decider.task(taskId);
+  if (!task.plan?.document?.initiative || task.initiativeId) return;
+  adoptTask(decider, { type: 'initiative.adopt_task', taskId });
+}
+
+export function syncCancelledLeads(decider: Decider, before: ShinsaState) {
+  for (const event of [...decider.events]) {
+    if (event.type !== 'task.staged' || event.stage !== 'cancelled') continue;
+    if (before.tasks[event.taskId]?.stage === 'cancelled') continue;
+    const initiative = selectLeadInitiative(listInitiatives(decider.state), event.taskId);
+    if (initiative) dissolveInitiative(decider, initiative);
+  }
 }
 
 function isIdle(state: ShinsaState, task: Task) {
