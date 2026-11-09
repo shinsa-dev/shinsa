@@ -99,20 +99,38 @@ describe('your hours, read', () => {
 });
 
 describe('your hours, set by hand', () => {
-  test('starts from the learned hours, one span from first to last hour each day', () => {
+  test('starts from the learned hours as they are, never filling the gaps between them', () => {
     expect(
       resolveOverrideDays(
         createHours({
           1: [
-            [9, 12],
-            [14, 18],
+            [1, 2],
+            [7, 19],
           ],
           6: [[10, 11]],
         })
       )
     ).toEqual([
-      { weekday: 1, from: 9, to: 18 },
+      { weekday: 1, from: 1, to: 2 },
+      { weekday: 1, from: 7, to: 19 },
       { weekday: 6, from: 10, to: 11 },
+    ]);
+  });
+
+  test('keeps the two longest spans of a day, so the week fits the override', () => {
+    const days = resolveOverrideDays(
+      createHours({
+        2: [
+          [0, 1],
+          [9, 12],
+          [13, 18],
+          [20, 21],
+        ],
+      })
+    );
+    expect(days).toEqual([
+      { weekday: 2, from: 9, to: 12 },
+      { weekday: 2, from: 13, to: 18 },
     ]);
   });
 
