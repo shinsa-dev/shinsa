@@ -785,6 +785,22 @@ describe('following up in Slack once it merges', () => {
     expect(harness.send({ ...follow, escalatedAt: 1 }).events).toEqual([]);
   });
 
+  test('records each contact’s reply on its own message only', () => {
+    const { harness, taskId, escalatedAt } = escalateTo(ONCALL, KAI);
+    recordSent(harness, taskId, escalatedAt);
+    recordSent(harness, taskId, escalatedAt, null, KAI);
+    answerMerge(harness, taskId);
+    harness.send({ type: 'pull_request.record', taskId, pullRequest: pullRequest({ state: 'merged' }) });
+    harness.send({
+      type: 'slack.record_escalation_follow_up',
+      taskId,
+      escalatedAt,
+      contact: KAI,
+      ts: '600.1',
+    });
+    expect(harness.task(taskId).slackEscalations?.map((post) => post.followUpTs)).toEqual([null, '600.1']);
+  });
+
   test('replies nowhere when the escalation never reached Slack or the change is not merged', () => {
     const { harness, taskId } = escalateTo(ONCALL);
     answerMerge(harness, taskId);
