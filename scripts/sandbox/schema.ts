@@ -55,6 +55,7 @@ export interface SeedTask {
   request: string;
   title: string;
   branch: string;
+  owner?: RemoteUser;
 }
 
 export const LAPTOP_TASKS: SeedTask[] = [
@@ -62,11 +63,13 @@ export const LAPTOP_TASKS: SeedTask[] = [
     request: 'Add a dark mode toggle to the marketing site header',
     title: 'Add a dark mode toggle',
     branch: 'feat/dark-mode-toggle',
+    owner: USER,
   },
   {
     request: 'Find why the nightly backup job skips Sundays',
     title: 'Find why backups skip Sundays',
     branch: 'fix/sunday-backups',
+    owner: TEAMMATE,
   },
   {
     request: 'Compare three charting libraries for the stats page and recommend one',

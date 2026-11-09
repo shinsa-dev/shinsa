@@ -7,6 +7,7 @@ import { serveStatic } from '../../apps/engine/src/http/static.ts';
 import {
   REMOTE_NATIVE_CLIENT,
   REMOTE_PATHS,
+  type Task,
   resolveTeamJoinUrl,
   serializeShareUrl,
 } from '../../packages/core/src/index.ts';
@@ -22,6 +23,8 @@ import {
   type SandboxSection,
   type ServicePreview,
   TEAM_INVITE,
+  TEAMMATE,
+  USER,
 } from './schema.ts';
 import { createShareLink } from './shares.ts';
 import { TEAM, TEAM_KEY } from './team.ts';
@@ -42,6 +45,28 @@ export const respondStatic = Effect.fn('Sandbox.respondStatic')(function* (pathn
   );
   return HttpServerResponse.toWeb(HttpServerResponse.setHeaders(response, SECURITY_HEADERS));
 });
+
+export function listSharedMachineLinks(machine: Machine, tasks: readonly Task[]) {
+  const local = `http://${HOST}:${machine.port}`;
+  const owned = tasks.find((task) => task.owner?.login === TEAMMATE.login);
+  const yours = tasks.find((task) => task.owner?.login === USER.login);
+  const unowned = tasks.find((task) => !task.owner);
+  const task = (label: string, found: Task | undefined) =>
+    found ? [{ label, url: `${local}/tasks/${found.handle ?? found.id}` }] : [];
+  return [
+    { label: `${machine.name}: All tasks, opening on yours`, url: `${local}/tasks` },
+    { label: `${machine.name}: All tasks, everyone’s`, url: `${local}/tasks?owner=everyone` },
+    { label: `${machine.name}: Home, with Your tasks and Everyone’s`, url: `${local}/` },
+    ...task(`${machine.name}: a task of Kai’s, with its Owner`, owned),
+    ...task(`${machine.name}: a task of yours`, yours),
+    ...task(`${machine.name}: a task from before owners`, unowned),
+    { label: `${machine.name}: Settings, with the Shared switch in Teams`, url: `${local}/settings` },
+    {
+      label: 'The remote dashboard’s Settings → Machines, its switch per machine',
+      url: `${ORIGIN}/settings`,
+    },
+  ];
+}
 
 export function listSandboxSections(
   machines: Machine[],

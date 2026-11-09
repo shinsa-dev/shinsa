@@ -1,4 +1,5 @@
 import { Duration, Effect, Schema } from 'effect';
+import { GitHubIdentity } from '../github/identity/schema.ts';
 
 const StoredRef = Schema.Struct({
   value: Schema.String,
@@ -16,6 +17,9 @@ export interface WebhookCredentials {
   token: string;
   secret: string | null;
 }
+
+export const StoredGitHubToken = Schema.Struct({ ...GitHubIdentity.fields, savedAt: Schema.Number });
+export type StoredGitHubToken = typeof StoredGitHubToken.Type;
 
 export const McpCredentials = Schema.Record(Schema.String, Schema.Unknown);
 export type McpCredentials = Record<string, unknown>;
@@ -37,6 +41,11 @@ export const SecretFileFields = Schema.Struct({
       Schema.catchDecoding(() => Effect.succeedSome({}))
     )
   ),
+  github: Schema.optionalKey(
+    Schema.Record(Schema.String, StoredGitHubToken.pipe(Schema.catchDecoding(() => Effect.succeedNone))).pipe(
+      Schema.catchDecoding(() => Effect.succeedSome({}))
+    )
+  ),
 });
 
 export interface SecretFile {
@@ -45,6 +54,7 @@ export interface SecretFile {
   refs: Record<string, StoredRef>;
   hooks: Record<string, WebhookCredentials>;
   mcp: Record<string, McpCredentials>;
+  github: Record<string, StoredGitHubToken>;
 }
 
 export const SECRETS_FILE = 'secrets.json';

@@ -6,6 +6,7 @@ import type {
   PairingView,
   RemoteSnapshot,
   TaskGuest,
+  TaskOwner,
 } from '@shinsa/core';
 import type { NotFound, RateLimited, Revoked } from '@shinsa/core/remote/errors';
 import { type Effect, Schema, type Scope } from 'effect';
@@ -90,6 +91,9 @@ export interface RemoteHandle {
   createHandoff(taskId: string): Effect.Effect<string, RemoteCallFailure>;
   removeHandoff(taskId: string, guestId: string | null): Effect.Effect<void, RemoteCallFailure>;
   grantTeammate(userId: string, teamId: string): Effect.Effect<void, RemoteCallFailure>;
+  shareWithTeam(teamId: string): Effect.Effect<void, RemoteCallFailure>;
+  syncSharedTeams(teamIds: readonly string[]): Effect.Effect<string[]>;
+  unshareTeam(teamId: string): Effect.Effect<void, RemoteCallFailure>;
   acceptRequest(requestId: string): Effect.Effect<void, RemoteCallFailure>;
   declineRequest(requestId: string): Effect.Effect<void, DomainError>;
   removeMember(userId: string): Effect.Effect<void, RemoteCallFailure>;
@@ -102,6 +106,7 @@ export interface RemoteHandle {
   spendConnect(claim: ConnectClaim): Effect.Effect<boolean>;
   isOwner(userId: string | null): Effect.Effect<boolean>;
   hasAccess(userId: string): Effect.Effect<boolean>;
+  resolveActor(userId: string | null): Effect.Effect<TaskOwner | null>;
   resolveTeamScope(userId: string, teamId: string): Effect.Effect<TeamScope | null>;
   listTeamScopes(userId: string): Effect.Effect<TeamScope[]>;
   resolveTeamGrant(userId: string, teamId: string): Effect.Effect<string | null>;

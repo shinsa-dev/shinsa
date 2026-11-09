@@ -1,9 +1,12 @@
 import { describe, expect, setDefaultTimeout, test } from 'bun:test';
-import { chmodSync, mkdirSync } from 'node:fs';
+import { chmodSync, mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { Effect } from 'effect';
+import { Checkout } from '../../src/git/checkout/service.ts';
 import { classifyPushFailure, describeShortFailure, resolveOutputTail } from '../../src/git/remote/output.ts';
 import { PushError } from '../../src/git/remote/schema.ts';
 import { Remote } from '../../src/git/remote/service.ts';
+import { TaskGitHub } from '../../src/github/identity/schema.ts';
 import { commitWorktree, runGit } from '../helpers/git.ts';
 import { createGitRepo, git, writeFiles } from '../helpers/index.ts';
 
@@ -151,5 +154,35 @@ describe('pushBranch', () => {
     await commitWorktree(path, 'feat: a');
     const error = await captureError(pushBranch(path, 'main'));
     expect(error).toMatchObject({ kind: 'non_fast_forward' });
+  });
+});
+
+describe('a task owner’s GitHub identity', () => {
+  const KAI = { token: 'ghp_kai', login: 'kai', name: 'Kai Lane', email: '7+kai@users.noreply.github.com' };
+  const asKai = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+    Effect.provideService(effect, TaskGitHub, { identity: KAI, missing: null });
+
+  test('a push sends the owner’s token as GitHub’s header, and a push without one sends none', async () => {
+    const { path, origin } = await createGitRepo();
+    const seen = join(path, '.git', 'header');
+    writeHook(path, `git config --get http.https://github.com/.extraheader > "${seen}" || true`);
+    writeFiles(path, { 'a.txt': 'a' });
+    await commitWorktree(path, 'feat: a');
+    await runGit(asKai(Remote.use((remote) => remote.pushBranch(path, 'feat/a'))));
+    const basic = Buffer.from('x-access-token:ghp_kai').toString('base64');
+    expect(readFileSync(seen, 'utf8').trim()).toBe(`Authorization: Basic ${basic}`);
+    expect(await git(origin, 'branch', '--list', 'feat/a')).toContain('feat/a');
+    await pushBranch(path, 'feat/b');
+    expect(readFileSync(seen, 'utf8').trim()).toBe('');
+  });
+
+  test('a commit is authored as the owner, and the machine’s own name stays the committer', async () => {
+    const { path } = await createGitRepo({ remote: false });
+    writeFiles(path, { 'a.txt': 'a' });
+    await runGit(asKai(Checkout.use((checkout) => checkout.commit(path, 'feat: a'))));
+    expect(await git(path, 'log', '-1', '--format=%an <%ae>')).toBe(
+      'Kai Lane <7+kai@users.noreply.github.com>'
+    );
+    expect(await git(path, 'log', '-1', '--format=%cn')).not.toBe('Kai Lane');
   });
 });

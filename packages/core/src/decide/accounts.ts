@@ -5,11 +5,14 @@ import {
   type Gate,
   isTaskClosed,
   MINUTE_MS,
+  OWNER_SIGNED_OUT_CODE,
+  resolveFirstName,
   RUN_STAGES,
   type Run,
   type RunAccount,
   type RunFailure,
   type Task,
+  type TaskOwner,
   type UsageWait,
 } from '../domain/index.ts';
 import { resolveUsageResumeNudge } from '../prompts/session.ts';
@@ -165,6 +168,25 @@ function describeSignInReason(failure: RunFailure, provider: string) {
   return `${reason} Signing in starts the step again.`;
 }
 
+function describeOwnerSignIn(owner: TaskOwner | null) {
+  const who = owner ? resolveFirstName(owner) : 'You';
+  const verb = owner ? 'needs' : 'need';
+  return {
+    title: `Paused: ${who} ${verb} a Claude account on this machine`,
+    reason: owner
+      ? `This is a shared machine, so the task runs only on ${who}'s own Claude accounts, and ${who} has none signed in here. ${who} can sign one in from Settings → Accounts. Signing in starts the step again.`
+      : `This is a shared machine, so the task runs only on its owner's Claude accounts, and you have none signed in here. Signing in starts the step again.`,
+  };
+}
+
+function requestOwnerSignIn(decider: Decider, run: Run, task: Task) {
+  const { title, reason } = describeOwnerSignIn(task.owner ?? null);
+  decider.openGate(task.id, 'sign_in', title, reason, {
+    runId: run.id,
+    details: { provider: CLAUDE_PROVIDER, account: null, cause: 'owner_account' },
+  });
+}
+
 function resolveSignIn(run: Run, failure: RunFailure) {
   const provider = run.attempts?.at(-1)?.provider ?? run.provider;
   if (failure.account && provider === CLAUDE_PROVIDER) {
@@ -175,11 +197,16 @@ function resolveSignIn(run: Run, failure: RunFailure) {
 }
 
 export function requestSignIn(decider: Decider, run: Run, failure: RunFailure) {
-  const signIn = resolveSignIn(run, failure);
-  if (!signIn) return false;
+  const owned = failure.code === OWNER_SIGNED_OUT_CODE;
+  const signIn = owned ? null : resolveSignIn(run, failure);
+  if (!owned && !signIn) return false;
   const task = decider.task(run.taskId);
   decider.cancelRuns(task.id);
   decider.clearWaits(task.id);
+  if (!signIn) {
+    requestOwnerSignIn(decider, run, task);
+    return true;
+  }
   const title = describeSignIn(signIn.provider, signIn.email);
   decider.openGate(task.id, 'sign_in', title, describeSignInReason(failure, signIn.provider), {
     runId: run.id,
@@ -200,7 +227,10 @@ function retryAfterSignIn(decider: Decider, gate: Gate) {
 }
 
 export function recordSignedIn(decider: Decider, command: CommandOf<'account.signed_in'>) {
-  const gates = listSignInGates(decider, (gate) => gate.account?.id === command.account.id);
+  const gates = listSignInGates(
+    decider,
+    (gate) => gate.account?.id === command.account.id || gate.cause === 'owner_account'
+  );
   for (const gate of gates) retryAfterSignIn(decider, gate);
 }
 

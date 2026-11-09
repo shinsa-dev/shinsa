@@ -22,6 +22,7 @@ import { SIGN_IN_CALLBACK_PATH } from '../extensions/sign-in.ts';
 import { FeedbackDrafter } from '../feedback/draft/service.ts';
 import { JsonFile } from '../files/service.ts';
 import { GitCommands, GitLayer } from '../git/layers.ts';
+import { MachineGitHubLayer, resolveMachineOwner } from '../github/identity/resolve.ts';
 import { GitHubLayer } from '../github/layers.ts';
 import { EngineModels, ServedChangelog, ServedInstance } from '../http/schema.ts';
 import { EngineServer } from '../http/server/service.ts';
@@ -54,6 +55,7 @@ import {
   TeamFeeds,
 } from '../remote/index.ts';
 import { ShareClock } from '../remote/share-clock/service.ts';
+import { SharedTeams } from '../remote/shared-teams/service.ts';
 import { CurrentLogin } from '../repos/current-login/service.ts';
 import { RepoFolders } from '../repos/folders/service.ts';
 import { Roots } from '../repos/index.ts';
@@ -334,11 +336,13 @@ function createRunsLayer(options: ShinsaOptions) {
     AccountBroker,
     Effect.gen(function* () {
       const accounts = yield* Accounts;
+      const remote = yield* Remote;
       return {
         lease: accounts.lease,
         readWeeklyReading: accounts.readWeeklyReading,
         readProviderWeeklyReading: accounts.readProviderWeeklyReading,
         readFastMode: accounts.readFastMode,
+        machineOwner: resolveMachineOwner(remote),
       };
     })
   );
@@ -367,7 +371,9 @@ function createRunsLayer(options: ShinsaOptions) {
       return Effect.flatMap(feeds.listTasks({}), Effect.filter(remote.canForkTeamTask));
     })
   );
-  return RunSupervisorLayer.pipe(Layer.provide(Layer.mergeAll(access, broker, hooks, idle, teammates)));
+  return RunSupervisorLayer.pipe(
+    Layer.provide(Layer.mergeAll(access, broker, hooks, idle, teammates, MachineGitHubLayer))
+  );
 }
 
 function createEffectsLayer(options: ShinsaOptions, instance: ServerInstance) {
@@ -390,7 +396,7 @@ function createEffectsLayer(options: ShinsaOptions, instance: ServerInstance) {
         services: terminals,
         slack: yield* Slack,
         trackProcess: (yield* ProcessLedger).track,
-      });
+      }).pipe(Layer.provide(MachineGitHubLayer));
     })
   );
 }
@@ -453,7 +459,7 @@ function createServeLayer(
     Layer.provideMerge(createServedLayer(options, instance, stop)),
     Layer.provideMerge(createEffectsLayer(options, instance)),
     Layer.provideMerge(createRunsLayer(options)),
-    Layer.provideMerge(Previews.layer),
+    Layer.provideMerge(Layer.merge(Previews.layer, SharedTeams.layer)),
     Layer.provideMerge(
       Layer.mergeAll(
         createTriageLayer(),

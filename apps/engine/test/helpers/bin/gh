@@ -40,6 +40,7 @@ interface FakeState {
   defaultChecks: FakePullRequest['checks'];
   pulls: FakePullRequest[];
   calls: string[][];
+  tokens?: string[];
   mergeQueue?: boolean;
   failReads?: number;
   workflows?: Record<string, string>;
@@ -123,6 +124,7 @@ const state: FakeState = path !== '/dev/null' && existsSync(path)
   : { next: 1, defaultChecks: 'pending', pulls: [], calls: [] };
 const args = Bun.argv.slice(2);
 state.calls.push(args);
+if (Bun.env.FAKE_GH_TOKENS && Bun.env.GH_TOKEN) state.tokens = [...(state.tokens ?? []), Bun.env.GH_TOKEN];
 if (Bun.env.FAKE_GH_HOLD_MS) Bun.sleepSync(Number(Bun.env.FAKE_GH_HOLD_MS));
 
 function save() {

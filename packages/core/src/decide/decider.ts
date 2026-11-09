@@ -22,6 +22,7 @@ import {
   resolveRoundStamp,
   TASK_SESSION_ROLES,
   type Task,
+  type TaskOwner,
   type TaskStage,
 } from '../domain/index.ts';
 import type { EffectCancellation, ShinsaEffect, ShinsaEffectKind } from '../effects/index.ts';
@@ -46,6 +47,7 @@ export interface DecideContext {
   onBehalf?: boolean;
   byTask?: string | null;
   guest?: ScopedActor | null;
+  actor?: TaskOwner | null;
 }
 
 export interface Decision {

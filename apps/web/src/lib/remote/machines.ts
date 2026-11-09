@@ -130,6 +130,7 @@ export function createFleetMember(
     current: device.onMachine === true,
     online: instance.online,
     ...(instance.role === 'guest' ? { guest: true as const, handedBy: instance.owner } : {}),
+    ...(instance.role === 'member' ? { member: true as const } : {}),
     ...(instance.role === 'teammate'
       ? {
           teammate: {

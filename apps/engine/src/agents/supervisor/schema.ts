@@ -100,7 +100,7 @@ export class IsolationFailed extends Schema.TaggedError<IsolationFailed, { reado
 
 export class LeaseFailed extends Schema.TaggedError<LeaseFailed, { readonly brand: unique symbol }>()(
   'LeaseFailed',
-  { message: Schema.String }
+  { message: Schema.String, code: Schema.NullOr(Schema.String) }
 ) {}
 
 export class RunDispatchFailed extends Schema.TaggedError<

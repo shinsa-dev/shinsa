@@ -46,6 +46,7 @@ export class AccountRegistry extends Context.Service<
             organization: fields.organization ?? null,
             plan: fields.plan ?? null,
             origin: fields.origin,
+            owner: fields.owner ?? null,
             addedAt: fields.addedAt ?? 0,
             paused: fields.paused === true,
             switchAt: fields.switchAt === undefined ? null : Math.round(fields.switchAt),

@@ -32,6 +32,7 @@ function createSocket() {
       surface: null,
       origin: 'local',
       guest: null,
+      userId: null,
     } satisfies SocketData,
     send: (payload: string) => {
       payloads.push(payload);
@@ -325,6 +326,7 @@ describe('the socket hub', () => {
         surface: null,
         origin: 'local',
         guest: null,
+        userId: null,
       } satisfies SocketData,
       send: () => 0,
       close: () => {

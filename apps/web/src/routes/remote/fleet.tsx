@@ -15,6 +15,7 @@ import {
 import { serveRelayedRequests, startServiceWorker } from '@/lib/remote/relay.ts';
 import type { RemoteServices } from '@/lib/remote/services.ts';
 import { listAddDeviceSteps, PAIR_STEPS } from '@/lib/remote/setup-steps.ts';
+import { ViewerContext } from '@/lib/remote/viewer.ts';
 import { forkApp, runApp } from '@/lib/runtime/app.ts';
 import { admitTeamMachines } from '@/lib/teams/admit.ts';
 import { HostedTeamFeeds } from '@/lib/teams/feeds.ts';
@@ -239,9 +240,11 @@ export function FleetApp({
       );
     case 'ready':
       return (
-        <FleetReady fleet={state.fleet} shell={shell}>
-          {children}
-        </FleetReady>
+        <ViewerContext value={viewer}>
+          <FleetReady fleet={state.fleet} shell={shell}>
+            {children}
+          </FleetReady>
+        </ViewerContext>
       );
   }
 }

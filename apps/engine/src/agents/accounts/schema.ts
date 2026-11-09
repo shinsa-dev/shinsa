@@ -34,6 +34,10 @@ export interface AccountLease {
   reason: AccountSwitchReason | null;
 }
 
+export interface AccountOwnership {
+  owner: string | null;
+}
+
 export interface AccountLeaseRequest {
   runId: string;
   taskId: string;
@@ -41,6 +45,7 @@ export interface AccountLeaseRequest {
   bound: RunAccount | null;
   previous: RunAccount | null;
   exclude: string[];
+  ownership?: AccountOwnership | null;
 }
 
 export class AccountBrokerFailed extends Schema.TaggedError<
@@ -64,6 +69,7 @@ export interface AccountBrokerShape {
     provider: string,
     accountId: string | null
   ) => Effect.Effect<FastModeAvailability, AccountBrokerFailed>;
+  readonly machineOwner?: Effect.Effect<string | null>;
 }
 
 export const AccountBroker = Context.Reference<AccountBrokerShape | null>(

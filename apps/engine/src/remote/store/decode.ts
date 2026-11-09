@@ -199,7 +199,8 @@ function readGrants(value: unknown): TeamGrant[] {
   return value.flatMap((entry) => {
     if (!(isFields(entry) && typeof entry.userId === 'string' && typeof entry.teamId === 'string')) return [];
     if (typeof entry.secret !== 'string') return [];
-    return [{ userId: entry.userId, teamId: entry.teamId, secret: entry.secret }];
+    const grant: TeamGrant = { userId: entry.userId, teamId: entry.teamId, secret: entry.secret };
+    return [entry.joined === true ? { ...grant, joined: true } : grant];
   });
 }
 

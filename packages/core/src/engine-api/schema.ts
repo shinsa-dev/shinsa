@@ -80,6 +80,10 @@ export const OwnerOnlyRoute = Context.Reference<boolean>('shinsa/core/engine-api
   defaultValue: () => false,
 });
 
+export const SharedMemberRoute = Context.Reference<boolean>('shinsa/core/engine-api/SharedMember', {
+  defaultValue: () => false,
+});
+
 export const GuestRoute = Context.Reference<GuestAccess>('shinsa/core/engine-api/Guest', {
   defaultValue: () => 'none',
 });
@@ -354,6 +358,8 @@ export const RemoteRequestBody = Schema.Struct({ requestId: FilledText });
 export const RemoteGrantBody = Schema.Struct({ userId: FilledText, teamId: FilledText });
 
 export const RemoteMemberBody = Schema.Struct({ userId: FilledText });
+
+export const RemoteShareBody = Schema.Struct({ teamId: FilledText, shared: Schema.Boolean });
 
 export const RemoteDeviceBody = Schema.Struct({ publicKey: FilledText });
 
@@ -652,6 +658,14 @@ export const FileWrittenAnswer = Schema.Unknown.pipe(
   Schema.refine((value): value is FileWritten => Predicate.isObject(value))
 );
 
+export const GitHubTokenAnswer = Schema.Struct({
+  login: Schema.NullOr(Schema.String),
+  saved: Schema.Boolean,
+  savedAt: Schema.NullOr(Schema.Number),
+  machineLogin: Schema.Boolean,
+});
+export type GitHubTokenAnswer = typeof GitHubTokenAnswer.Type;
+
 export const AccountsAnswer = Schema.Unknown.pipe(
   Schema.refine((value): value is AccountsSnapshot => Predicate.isObject(value))
 );
@@ -752,6 +766,7 @@ export interface EngineRoute {
   readonly feature: EngineFeature | null;
   readonly localOnly: boolean;
   readonly ownerOnly: boolean;
+  readonly sharedMember: boolean;
   readonly guest: GuestAccess;
   readonly browserOnly: string | null;
   readonly bodyLimit: number;

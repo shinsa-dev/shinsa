@@ -29,7 +29,7 @@ import { isHeldByTasks } from '@/lib/tasks/groups.ts';
 import { describeTaskSteps, resolveShapeIcon, resolveShapeLabel } from '@/lib/tasks/shapes.ts';
 import { resolveTaskStatus } from '@/lib/tasks/status.ts';
 import { navigate, resolveTaskPath } from '@/router.ts';
-import { YourOwnerMark } from './owner.tsx';
+import { TaskOwnerMark } from './owner.tsx';
 import { PullRequestBadge } from './pull-request-badge.tsx';
 import { ChainArrow, WaitsOnLinks } from './waits-on.tsx';
 
@@ -198,7 +198,7 @@ export const TaskListRow = React.memo(function TaskListRowItem({
         )}
         {columns === TEAM_TASK_LIST_COLUMNS && (
           <span className='flex min-w-0 max-md:hidden'>
-            <YourOwnerMark />
+            <TaskOwnerMark task={task} />
           </span>
         )}
         <span className='flex min-w-0 items-center gap-1.5 max-md:hidden'>

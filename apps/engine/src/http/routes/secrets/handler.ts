@@ -1,11 +1,28 @@
+import { DomainError, OWNER_ONLY_CODE, OWNER_ONLY_MESSAGE } from '@shinsa/core';
 import { EngineApi } from '@shinsa/core/engine-api';
-import { RequestFailed, RouteNotFound, ROUTE_NOT_FOUND_MESSAGE } from '@shinsa/core/engine-api/schema';
+import {
+  type GitHubTokenAnswer,
+  RequestFailed,
+  RouteNotFound,
+  ROUTE_NOT_FOUND_MESSAGE,
+} from '@shinsa/core/engine-api/schema';
 import { Effect, Option, Predicate } from 'effect';
 import { HttpApiBuilder } from 'effect/http-api';
+import { EngineConfig } from '../../../config/service.ts';
+import { verifyGitHubToken } from '../../../github/identity/resolve.ts';
+import {
+  GITHUB_TOKEN_INVALID,
+  GITHUB_TOKEN_MACHINE,
+  GITHUB_TOKEN_NO_OWNER,
+  MAX_GITHUB_TOKEN,
+} from '../../../github/identity/schema.ts';
+import { GitHubCli } from '../../../github/service.ts';
+import { Remote } from '../../../remote/machine/service.ts';
 import { EngineCore } from '../../../runtime/engine/service.ts';
 import { Schedules } from '../../../schedules/service.ts';
 import { SecretStore } from '../../../secrets/store/service.ts';
 import { resolveRequestFailure } from '../../failures.ts';
+import { RequestSource } from '../../schema.ts';
 import { GATE_CLOSED, MAX_SECRET, NO_SECRET_GATE, NO_WEBHOOK, SECRET_INVALID } from './schema.ts';
 
 export const SecretsHandlers = HttpApiBuilder.group(
@@ -15,6 +32,9 @@ export const SecretsHandlers = HttpApiBuilder.group(
     const engine = yield* EngineCore;
     const schedules = Option.getOrUndefined(yield* Effect.serviceOption(Schedules));
     const store = Option.getOrUndefined(yield* Effect.serviceOption(SecretStore));
+    const remote = Option.getOrNull(yield* Effect.serviceOption(Remote));
+    const cli = Option.getOrNull(yield* Effect.serviceOption(GitHubCli));
+    const config = yield* EngineConfig;
 
     const findSchedules =
       schedules && store
@@ -51,7 +71,69 @@ export const SecretsHandlers = HttpApiBuilder.group(
       return { gate, secrets: context.secrets };
     });
 
+    const resolveTokenOwner = Effect.fn('SecretsHandlers.resolveTokenOwner')(function* () {
+      const { via, userId } = yield* RequestSource;
+      if (!remote) return yield* new DomainError(GITHUB_TOKEN_NO_OWNER);
+      if (via === 'local' || !userId || (yield* remote.isOwner(userId))) {
+        const owner = yield* remote.resolveActor(null);
+        if (!owner) return yield* new DomainError(GITHUB_TOKEN_NO_OWNER);
+        return { login: owner.login, machine: true };
+      }
+      const member = yield* remote.resolveActor(userId);
+      if (!member) return yield* new DomainError({ code: OWNER_ONLY_CODE, message: OWNER_ONLY_MESSAGE });
+      return { login: member.login, machine: false };
+    });
+
+    const describeToken = Effect.fn('SecretsHandlers.describeToken')(function* (
+      secrets: SecretStore['Service'],
+      owner: { login: string; machine: boolean }
+    ) {
+      const stored = owner.machine ? null : yield* secrets.selectGitHubToken(owner.login);
+      const answer: GitHubTokenAnswer = {
+        login: owner.login,
+        saved: stored !== null,
+        savedAt: stored?.savedAt ?? null,
+        machineLogin: owner.machine,
+      };
+      return answer;
+    });
+
+    const readToken = (value: unknown) =>
+      Predicate.isString(value) && value.trim().length > 0 && value.trim().length <= MAX_GITHUB_TOKEN
+        ? Effect.succeed(value.trim())
+        : Effect.fail(new DomainError(GITHUB_TOKEN_INVALID));
+
+    const writeToken = Effect.fn('SecretsHandlers.writeToken')(function* (
+      secrets: SecretStore['Service'],
+      github: GitHubCli['Service'],
+      value: unknown
+    ) {
+      const owner = yield* resolveTokenOwner();
+      if (owner.machine) return yield* new DomainError(GITHUB_TOKEN_MACHINE);
+      if (value === null) yield* secrets.removeGitHubToken(owner.login);
+      else {
+        const token = yield* readToken(value);
+        yield* secrets.writeGitHubToken(yield* verifyGitHubToken(github, token, owner.login, config.dataDir));
+      }
+      return yield* describeToken(secrets, owner);
+    });
+
+    const notFound = Effect.fail(new RouteNotFound({ message: ROUTE_NOT_FOUND_MESSAGE }));
+
     return handlers
+      .handle('githubToken', () =>
+        store
+          ? resolveTokenOwner().pipe(
+              Effect.flatMap((owner) => describeToken(store, owner)),
+              Effect.mapError(resolveRequestFailure)
+            )
+          : notFound
+      )
+      .handle('writeGitHubToken', ({ payload }) =>
+        store && cli
+          ? writeToken(store, cli, payload.token).pipe(Effect.mapError(resolveRequestFailure))
+          : notFound
+      )
       .handle('webhook', ({ params }) => serializeWebhook(params.scheduleId))
       .handle(
         'writeWebhookSecret',

@@ -12,6 +12,8 @@ import { resolveOutputTail } from '../../../git/remote/output.ts';
 import { PushError } from '../../../git/remote/schema.ts';
 import { Remote } from '../../../git/remote/service.ts';
 import { PullRequestDescriber } from '../../../github/description/service.ts';
+import { serializeMachineLoginNote } from '../../../github/identity/resolve.ts';
+import { TaskGitHub } from '../../../github/identity/schema.ts';
 import { PullRequests } from '../../../github/pulls/service.ts';
 import type { EffectAttempt } from '../../engine/schema.ts';
 import { createEffectFailed, resolveEffectFailure, resolveShippingFailure } from '../../failures/classify.ts';
@@ -152,7 +154,10 @@ export class Shipping extends Context.Service<
         const evidence = Object.values((yield* world.state).evidence).filter(
           (piece) => piece.taskId === taskId
         );
-        const { body, uploads } = yield* describer.describe(repo, task, evidence);
+        const described = yield* describer.describe(repo, task, evidence);
+        const { missing } = yield* TaskGitHub;
+        const body = missing ? `${described.body}\n\n${serializeMachineLoginNote(missing)}` : described.body;
+        const { uploads } = described;
         if (uploads.length === 0) return body;
         const ids = uploads.map((upload) => upload.evidenceId).join(',');
         yield* world.dispatch(

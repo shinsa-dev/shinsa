@@ -199,7 +199,14 @@ export const makeRemoteChannel = Effect.fn('RemoteChannel.make')(function* (defi
   });
 
   const createSocket = (guest: ScopedActor | null, owner: boolean): HubSocket => ({
-    data: { kind: 'hub', transcripts: new Map(), surface: null, origin: owner ? 'owner' : 'remote', guest },
+    data: {
+      kind: 'hub',
+      transcripts: new Map(),
+      surface: null,
+      origin: owner ? 'owner' : 'remote',
+      guest,
+      userId: definition.userId,
+    },
     send: (payload: string) => run(send({ t: 'socket', data: payload })),
   });
 

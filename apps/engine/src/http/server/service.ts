@@ -261,6 +261,7 @@ export class EngineServer extends Context.Service<
           surface: null,
           origin: 'local',
           guest: null,
+          userId: null,
         });
       }
 

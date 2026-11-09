@@ -5,6 +5,7 @@ import type {
   ShinsaEffect,
   ShinsaState,
   StateChanges,
+  TaskOwner,
 } from '@shinsa/core';
 import { Duration, Schema } from 'effect';
 import type { Effect } from 'effect';
@@ -56,6 +57,7 @@ export interface DispatchOptions {
   onBehalf?: boolean;
   byTask?: string | null;
   guest?: ScopedActor | null;
+  actor?: TaskOwner | null;
   receipt?: ShinsaCommand;
 }
 
@@ -63,6 +65,7 @@ export interface BehalfContext {
   onBehalf: boolean;
   byTask: string | null;
   guest: ScopedActor | null;
+  actor: TaskOwner | null;
 }
 
 export interface WrittenBriefing {

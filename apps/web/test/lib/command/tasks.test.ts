@@ -129,4 +129,10 @@ describe('the filter writers', () => {
     clearTaskFilters();
     expect(location.search).toBe('');
   });
+
+  it('writes everyone when the owner filter is emptied, so a shared machine shows every task', () => {
+    navigate('/tasks?owner=you');
+    applyFilterValues('owner', []);
+    expect(location.search).toBe('?owner=everyone');
+  });
 });

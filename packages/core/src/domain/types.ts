@@ -166,7 +166,7 @@ export type GateType =
   | 'post_merge'
   | 'result';
 
-export type GateCause = 'budget' | 'monitor' | 'push_hook' | 'paused';
+export type GateCause = 'budget' | 'monitor' | 'push_hook' | 'paused' | 'owner_account';
 
 export type EditsApproval = 'review' | 'merge';
 
@@ -559,6 +559,7 @@ export interface Task {
   usageWait?: UsageWait | null;
   parentTaskId?: string | null;
   createdBy?: TaskCreator | null;
+  owner?: TaskOwner | null;
   forkOf?: string | null;
   teammateFork?: TeammateFork | null;
   splits?: TaskSplit[];
@@ -702,6 +703,8 @@ export interface TaskGuest {
 }
 
 export type ActivityPerson = Pick<TaskGuest, 'login' | 'name' | 'avatarUrl'>;
+
+export type TaskOwner = ActivityPerson;
 
 export interface TaskHandoff {
   at: number;
