@@ -26,6 +26,7 @@ export const ENGINE_FEATURES = [
   'autopilot-slack',
   'shared-machine',
   'focus.projects',
+  'active-hours',
 ] as const;
 
 export type EngineFeature = (typeof ENGINE_FEATURES)[number];

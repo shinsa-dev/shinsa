@@ -36,6 +36,7 @@ import {
   isAskWaiting,
   isMergedAfterWait,
   isSlackTestSent,
+  listAutopilotQuietItems,
   listAutopilotUrgentItems,
   listAutopilotWaitItems,
   listContactOptions,
@@ -245,6 +246,7 @@ function AskBlock({
 
 export function AutopilotSettings({ settings }: { settings: Settings }) {
   const available = useEngineFeature('autopilot');
+  const yourHours = useEngineFeature('active-hours');
   const projects = useShinsaSelector((state) => state.projects);
   const { policy, enabled } = resolveAutopilotValue(settings);
   if (!available) return null;
@@ -340,6 +342,16 @@ export function AutopilotSettings({ settings }: { settings: Settings }) {
                   items={listAutopilotWaitItems(policy)}
                   value={String(policy.urgentWaitMinutes)}
                   onValueChange={(value) => updateAutopilot({ urgentWaitMinutes: Number(value) })}
+                />
+              </SettingRow>
+            )}
+            {yourHours && isMergedAfterWait(policy) && (
+              <SettingRow title={AUTOPILOT_ROWS.quiet}>
+                <SelectField
+                  label={AUTOPILOT_ROWS.quiet}
+                  items={listAutopilotQuietItems(policy)}
+                  value={String(policy.quietWaitMinutes)}
+                  onValueChange={(value) => updateAutopilot({ quietWaitMinutes: Number(value) })}
                 />
               </SettingRow>
             )}

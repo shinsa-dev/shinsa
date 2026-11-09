@@ -273,6 +273,27 @@ describe('Settings → Agents → Autopilot', () => {
     expect(screen.getByRole('combobox', { name: AUTOPILOT_ROWS.wait })).toBeTruthy();
   });
 
+  it('sets the shorter wait outside your hours, only on an engine that learns your hours', async () => {
+    spyOnEngine();
+    const merging = {
+      ...ESCALATING,
+      autopilot: { ...AUTOPILOT_DEFAULTS, enabled: true, urgent: 'merge' as const },
+    };
+    const { unmount } = renderAgents(merging);
+    await settle();
+    expect(screen.getByRole('combobox', { name: AUTOPILOT_ROWS.quiet }).textContent).toBe('15 minutes');
+    await choose(AUTOPILOT_ROWS.quiet, '5 minutes');
+    expect(listSentCommands()).toEqual([
+      { type: 'settings.change', patch: { autopilot: { ...merging.autopilot, quietWaitMinutes: 5 } } },
+    ]);
+    unmount();
+    const engine = resolveEngineInfo('1.0.0');
+    spyOnEngine({ ...engine, features: engine.features.filter((feature) => feature !== 'active-hours') });
+    renderAgents(merging);
+    await settle();
+    expect(screen.queryByRole('combobox', { name: AUTOPILOT_ROWS.quiet })).toBeNull();
+  });
+
   it('cannot ask for a review while no one can be asked, and says so', async () => {
     spyOnEngine();
     renderAgents(ESCALATING);

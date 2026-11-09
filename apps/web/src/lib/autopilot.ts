@@ -85,6 +85,7 @@ export const AUTOPILOT_ROWS = {
   merge: 'Merges',
   urgent: 'When ready to merge',
   wait: 'Merges after',
+  quiet: 'Outside your hours, after',
   usage: 'Usage limits',
 } as const;
 
@@ -235,6 +236,13 @@ function describeMinutes(minutes: number) {
 export function listAutopilotWaitItems(policy: AutopilotPolicy): SettingItem<string>[] {
   const values = [...new Set([...WAIT_CHOICES, policy.urgentWaitMinutes])].sort((a, b) => a - b);
   return values.map((value) => ({ value: String(value), label: describeMinutes(value), icon: 'IconClock' }));
+}
+
+const QUIET_WAIT_CHOICES = [5, 10, 15, 30, 60];
+
+export function listAutopilotQuietItems(policy: AutopilotPolicy): SettingItem<string>[] {
+  const values = [...new Set([...QUIET_WAIT_CHOICES, policy.quietWaitMinutes])].sort((a, b) => a - b);
+  return values.map((value) => ({ value: String(value), label: describeMinutes(value), icon: 'IconMoon' }));
 }
 
 const MERGES_AFTER_WAIT: ReadonlySet<AutopilotUrgent> = new Set(['merge', 'escalate_then_merge']);

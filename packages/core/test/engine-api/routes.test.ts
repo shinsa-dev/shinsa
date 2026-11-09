@@ -148,6 +148,7 @@ const FEATURE_ROUTES = {
   'autopilot-slack': ['GET /api/slack/directory', 'POST /api/slack/test'],
   'shared-machine': ['GET /api/github-token', 'POST /api/github-token', 'POST /api/remote/teams/share'],
   'focus.projects': [],
+  'active-hours': [],
 };
 
 const LOCAL_ONLY = [
