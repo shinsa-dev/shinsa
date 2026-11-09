@@ -331,6 +331,15 @@ describe('Settings → Teams', () => {
     expect(toasts.success).toHaveBeenCalledWith('Kai can reach “Studio” now.');
   });
 
+  it('says which people have no machine in the team', () => {
+    const team = createTeam({
+      machines: [{ id: 'k3x9', name: 'Studio', userId: MONA.id, online: true, lastSeenAt: Date.now() }],
+    });
+    renderTeams(createRemoteSnapshot({ access: ACCESS, teams: [createTeamEntry({ team })] }));
+    expect(screen.getAllByText(/No machines/)).toHaveLength(1);
+    expect(screen.getByText(/· No machines/)).toBeTruthy();
+  });
+
   it('says who can reach this machine already, with no grant offered to them', () => {
     renderOwnedTeam({ access: { owner: MONA, members: [{ user: KAI, addedAt: 1 }] } });
     expect(screen.getByText(/Can reach “Studio”/)).toBeTruthy();

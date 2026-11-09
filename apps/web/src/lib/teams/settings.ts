@@ -194,6 +194,12 @@ export function listTeamPeople(team: RemoteTeam, query: string): TeamPerson[] {
   );
 }
 
+export const NO_TEAM_MACHINES = 'No machines';
+
+export function hasNoTeamMachines(team: Pick<RemoteTeam, 'machines'>, userId: string) {
+  return !team.machines.some((machine) => machine.userId === userId);
+}
+
 export function describePeopleCount(team: RemoteTeam) {
   return String(team.members.length + 1);
 }

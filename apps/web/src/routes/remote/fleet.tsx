@@ -26,7 +26,7 @@ import { RemoteBenefits, RemoteCheckAgain, RemoteHero, RemoteLoading, RemoteStep
 
 type FleetState =
   | { kind: 'starting' }
-  | { kind: 'empty'; machines: string[] }
+  | { kind: 'empty'; machines: string[]; teams: string[] }
   | { kind: 'waiting'; machines: string[] }
   | { kind: 'ready'; fleet: Fleet }
   | { kind: 'failed'; title: string; message: string };
@@ -43,7 +43,20 @@ function WaitingPage({ machines }: { machines: string[] }) {
   );
 }
 
-function NoMachinePage({ machines }: { machines: string[] }) {
+function TeamReachPage({ teams }: { teams: string[] }) {
+  return (
+    <section className='flex flex-col items-center gap-6 pt-4'>
+      <RemoteHero icon='IconUserAdd' title='Reached through your team'>
+        {`You have no machine of your own, so you reach ${describeList(teams)} through a machine a teammate shares with it. It opens here once one is shared.`}
+      </RemoteHero>
+      <RemoteBenefits />
+      <RemoteCheckAgain />
+    </section>
+  );
+}
+
+export function NoMachinePage({ machines, teams }: { machines: string[]; teams: string[] }) {
+  if (machines.length === 0 && teams.length > 0) return <TeamReachPage teams={teams} />;
   if (machines.length === 0)
     return (
       <section className='flex flex-col items-center gap-6 pt-4'>
@@ -156,6 +169,7 @@ export function FleetApp({
                   machines: rows.flatMap((row) =>
                     row.instance.role === 'teammate' ? [] : [row.instance.name]
                   ),
+                  teams: teams.map((team) => team.name),
                 }
           );
           return;
@@ -225,7 +239,7 @@ export function FleetApp({
     case 'starting':
       return shell(<RemoteLoading label='Connecting to your machines' />);
     case 'empty':
-      return shell(<NoMachinePage machines={state.machines} />);
+      return shell(<NoMachinePage machines={state.machines} teams={state.teams} />);
     case 'waiting':
       return shell(<WaitingPage machines={state.machines} />);
     case 'failed':

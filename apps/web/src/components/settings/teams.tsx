@@ -54,6 +54,8 @@ import {
   describeTeamsUnavailable,
   type GrantMachine,
   hasMachineAccess,
+  hasNoTeamMachines,
+  NO_TEAM_MACHINES,
   listGrantMachines,
   listProjectChoices,
   listTeamPeople,
@@ -399,6 +401,7 @@ function describePerson(
   now: number
 ) {
   const parts = [presence ? describePresence(presence, now) : null, base];
+  if (hasNoTeamMachines(team, user.id)) parts.push(NO_TEAM_MACHINES);
   if (hasOwnScopes(team, user.id)) parts.push('Own scopes');
   const extra = snapshot.teams.find((entry) => entry.id === team.id)?.extras ?? [];
   if (selectExtra(extra, user.id).length > 0)

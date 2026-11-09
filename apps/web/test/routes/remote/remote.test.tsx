@@ -32,7 +32,7 @@ import { PairPage } from '@/routes/remote/pair.tsx';
 import { createRemoteSnapshot } from '../../support/remote-access.ts';
 import { createMachineResources, createTaskResources } from '../../support/resources.ts';
 import { createShinsaState, createTask } from '../../support/state.ts';
-import { KAI as TEAMMATE } from '../../support/teams.ts';
+import { createTeam, KAI as TEAMMATE } from '../../support/teams.ts';
 
 const USER: RemoteSession = { user: { id: '1', login: 'mona', name: null, avatarUrl: null } };
 
@@ -189,6 +189,18 @@ describe('the remote dashboard', () => {
     renderRoot('/', { dashboard: createDashboard({ listInstances: () => Promise.resolve([]) }) });
     expect(await screen.findByText('No machine yet')).toBeTruthy();
     expect(screen.getByText('Encrypted end to end')).toBeTruthy();
+  });
+
+  it('tells a team member with no machine they reach the team through a shared machine', async () => {
+    renderRoot('/', {
+      dashboard: createDashboard({
+        listInstances: () => Promise.resolve([]),
+        listTeams: () => Promise.resolve([createTeam({ role: 'member' })]),
+      }),
+    });
+    expect(await screen.findByText('Reached through your team')).toBeTruthy();
+    expect(screen.getByText(/you reach Platform through a machine a teammate shares/)).toBeTruthy();
+    expect(screen.queryByText('Pair a machine')).toBeNull();
   });
 
   it('says a device that asked and left is still waiting for an answer, on a machine listed or not yet', async () => {
