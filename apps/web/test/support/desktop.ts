@@ -1,6 +1,19 @@
-import type { DesktopBridge, DesktopNotice, DesktopUpdate, UpdateChannel } from '@/lib/desktop.ts';
+import type {
+  DesktopAction,
+  DesktopActions,
+  DesktopBridge,
+  DesktopNotice,
+  DesktopUpdate,
+  UpdateChannel,
+} from '@/lib/desktop.ts';
 
 type WindowState = DesktopBridge['windowState'];
+
+export const IGNORED_ACTIONS: DesktopActions = {
+  'new-task': () => undefined,
+  'command-menu': () => undefined,
+  'whats-new': () => undefined,
+};
 
 export function installDesktop(windowState: WindowState = 'window') {
   const badges: number[] = [];
@@ -11,6 +24,7 @@ export function installDesktop(windowState: WindowState = 'window') {
   const updateCalls: string[] = [];
   const failedListeners = new Set<() => void>();
   const awayListeners = new Set<(span: { from: number; to: number }) => void>();
+  const actionListeners = new Set<(action: DesktopAction) => void>();
   let settingsOpened = 0;
   const channels: UpdateChannel[] = [];
   const bridge: DesktopBridge = {
@@ -48,6 +62,10 @@ export function installDesktop(windowState: WindowState = 'window') {
       awayListeners.add(listener);
       return () => awayListeners.delete(listener);
     },
+    onAction: (listener) => {
+      actionListeners.add(listener);
+      return () => actionListeners.delete(listener);
+    },
   };
   window.shinsaDesktop = bridge;
   return {
@@ -64,7 +82,10 @@ export function installDesktop(windowState: WindowState = 'window') {
     changeUpdate: (update: DesktopUpdate) => {
       for (const listener of updateListeners) listener(update);
     },
-    listeners: () => navigateListeners.size + stateListeners.size,
+    listeners: () => navigateListeners.size + stateListeners.size + actionListeners.size,
+    act: (action: string) => {
+      for (const listener of actionListeners) listener(action as DesktopAction);
+    },
     navigate: (path: string) => {
       for (const listener of navigateListeners) listener(path);
     },

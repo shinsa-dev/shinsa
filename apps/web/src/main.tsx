@@ -1,6 +1,9 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { relayDesktopAway } from '@/lib/away.ts';
+import { openChangelog } from '@/lib/changelog.ts';
+import { requestNewTaskOnHome } from '@/lib/command/menu.ts';
+import { writeCommandMenuOpen } from '@/lib/command/registry.ts';
 import { applyDesktop } from '@/lib/desktop.ts';
 import { applyLayoutParam } from '@/lib/preferences/layout.ts';
 import { followSystemTheme } from '@/lib/preferences/theme.ts';
@@ -12,7 +15,11 @@ import './app.css';
 
 followSystemTheme();
 applyLayoutParam();
-applyDesktop(navigate);
+applyDesktop(navigate, {
+  'new-task': () => requestNewTaskOnHome(),
+  'command-menu': () => writeCommandMenuOpen(true),
+  'whats-new': () => openChangelog(),
+});
 relayDesktopAway();
 
 const root = document.getElementById('root');
