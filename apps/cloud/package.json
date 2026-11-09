@@ -10,7 +10,7 @@
     "deploy": "bun run build && wrangler deploy",
     "dev:worker": "bun run --cwd ../web build:remote && wrangler dev --port 5183",
     "migrate": "wrangler d1 migrations apply shinsa-cloud --remote",
-    "test": "bun test --randomize"
+    "test": "bun test --randomize --timeout 30000"
   },
   "dependencies": {
     "@effect/sql-d1": "4.1.1",

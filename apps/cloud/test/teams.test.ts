@@ -213,7 +213,7 @@ describe('the owner and the members', () => {
     });
     expect(full.status).toBe(409);
     expect(await readCode(full)).toBe('members_full');
-  }, 30_000);
+  });
 
   test('declining a request drops it, so it can no longer be accepted', async () => {
     const { harness, mona, kai, studio, team, invite } = await startTeam();
