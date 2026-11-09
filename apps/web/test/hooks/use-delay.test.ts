@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, jest } from 'bun:test';
+import { afterEach, describe, expect, it, jest, spyOn } from 'bun:test';
 import { act, renderHook } from '@testing-library/react';
 import { useDelay } from '@/hooks/use-delay.ts';
 
@@ -50,5 +50,19 @@ describe('useDelay', () => {
     unmount();
     advance(500);
     expect(runs).toBe(0);
+  });
+
+  it('reports a callback that throws instead of dropping it', () => {
+    jest.useFakeTimers();
+    const reported = spyOn(globalThis, 'reportError').mockImplementation(() => undefined);
+    const failure = new Error('delayed');
+    renderHook(() =>
+      useDelay(() => {
+        throw failure;
+      }, 100)
+    );
+    advance(100);
+    expect(reported).toHaveBeenCalledWith(failure);
+    reported.mockRestore();
   });
 });

@@ -1,7 +1,7 @@
 import { Effect, Schedule } from 'effect';
 import { forkApp } from './app.ts';
 
-function runReported(run: () => void) {
+export function runReported(run: () => void) {
   return Effect.sync(run).pipe(
     Effect.catchDefect((defect) => Effect.sync(() => globalThis.reportError(defect)))
   );
