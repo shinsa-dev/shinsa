@@ -1,4 +1,4 @@
-import type { ShinsaState, Task } from '@shinsa/core';
+import { NO_PHASE_NAME, type ShinsaState, type Task } from '@shinsa/core';
 import {
   DropdownMenuItem,
   DropdownMenuRadioGroup,
@@ -29,7 +29,7 @@ import {
   PHASE_LABEL,
   selectTaskInitiative,
 } from '@/lib/initiatives/membership.ts';
-import { INITIATIVE_ICON, NO_PHASE, NO_PHASE_VALUE } from '@/lib/initiatives/view.ts';
+import { INITIATIVE_ICON, NO_PHASE_VALUE } from '@/lib/initiatives/view.ts';
 import { navigate, resolveInitiativePath } from '@/router.ts';
 
 export function InitiativeItems({ state, task }: { state: ShinsaState; task: Task }) {
@@ -74,7 +74,7 @@ export function InitiativeItems({ state, task }: { state: ShinsaState; task: Tas
                   <Truncate>{phase.name}</Truncate>
                 </DropdownMenuRadioItem>
               ))}
-              <DropdownMenuRadioItem value={NO_PHASE_VALUE}>{NO_PHASE}</DropdownMenuRadioItem>
+              <DropdownMenuRadioItem value={NO_PHASE_VALUE}>{NO_PHASE_NAME}</DropdownMenuRadioItem>
             </DropdownMenuRadioGroup>
           </DropdownMenuSubContent>
         </DropdownMenuSub>

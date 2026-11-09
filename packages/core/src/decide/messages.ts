@@ -179,6 +179,12 @@ function restartStep(decider: Decider, task: Task, text: string) {
   }
 }
 
+function resolveLeadNote(decider: Decider, text: string) {
+  const byAgent = decider.context.onBehalf === true;
+  const byTask = byAgent ? decider.context.byTask : null;
+  return { text, byAgent, fromTask: byTask ? (decider.state.tasks[byTask] ?? null) : null };
+}
+
 interface Sent {
   texts: string[];
   comments: readonly ReviewComment[];
@@ -192,7 +198,7 @@ function deliverMessage(decider: Decider, task: Task, delivery: Delivery, sent: 
     case 'kept':
       return;
     case 'lead':
-      startLeadTurn(decider, task.id, text);
+      startLeadTurn(decider, task.id, resolveLeadNote(decider, text));
       return;
     case 'steer':
       if (isReplyingRun(delivery.run)) requestIteration(decider, task.id, note, comments);

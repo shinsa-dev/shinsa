@@ -29,7 +29,7 @@ export const SEED_INITIATIVE_ID = 'initiative-chat-split';
 export const SEED_LEAD_ID = 'task-chat-split-lead';
 
 const LEAD_NARRATIVE = [
-  'The session is nearly done: the embedded chat is in review and the stream tools are being built. Webhook signing shipped on Tuesday.',
+  'The session is nearly done: the embedded chat is in review and the stream tools are being built. Webhook signing is being planned, and the retry piece waits on it.',
   '',
   'Tools in the chat start once the session merges. I put tool retries after tool progress, so the retry can reuse its events, and dropped the old banner from editing: the new dock replaces it.',
 ].join('\n');

@@ -4,11 +4,11 @@ import {
   type InitiativeDecisionKind,
   type InitiativePhaseProgress,
   type InitiativeSheet,
-  isTaskSettled,
-  listInitiativeWork,
+  listInitiativeProgress,
   listInitiatives,
   resolveInitiativeSheet,
   selectInitiativeByReference,
+  resolveInitiativeTotals,
   type ShinsaState,
 } from '@shinsa/core';
 import type { IconName } from '@shinsa/ui/components/icon';
@@ -23,8 +23,6 @@ export const INITIATIVES_TITLE = 'Initiatives';
 
 export const INITIATIVES_DESCRIPTION =
   'Group the tasks of one large piece of work, see where each phase stands and what needs you.';
-
-export const NO_PHASE = 'No phase';
 
 export const NO_PHASE_VALUE = '';
 
@@ -57,18 +55,11 @@ function describeOpenAndShipped(open: number, shipped: number, total: number) {
 
 export function listInitiativeRows(state: ShinsaState): InitiativeRow[] {
   return listInitiatives(state).map((initiative) => {
-    const members = listInitiativeWork(state, initiative.id);
-    const dropped = members.filter((task) => task.stage === 'cancelled').length;
-    const settled = members.filter((task) => isTaskSettled(task)).length;
-    const shipped = settled - dropped;
-    const open = members.length - settled;
+    const totals = resolveInitiativeTotals(listInitiativeProgress(state, initiative));
     return {
       initiative,
-      total: members.length,
-      open,
-      shipped,
-      dropped,
-      summary: describeOpenAndShipped(open, shipped, members.length),
+      ...totals,
+      summary: describeOpenAndShipped(totals.open, totals.shipped, totals.total),
     };
   });
 }
@@ -83,22 +74,13 @@ export function resolveCanonicalInitiativePath(initiative: Initiative, reference
   return reference === initiative.id ? null : `${resolveInitiativePath(initiative.id)}${query}`;
 }
 
-export function describePhaseProgress(progress: InitiativePhaseProgress) {
-  const name = progress.phase?.name ?? NO_PHASE;
-  if (progress.total === 0) return { name, detail: 'No tasks yet' };
-  const done = `${progress.shipped} of ${progress.total - progress.dropped} shipped`;
-  return { name, detail: progress.dropped > 0 ? `${done} · ${progress.dropped} dropped` : done };
-}
-
 export function isPhaseDone(progress: InitiativePhaseProgress) {
   return progress.total > 0 && progress.shipped + progress.dropped === progress.total;
 }
 
 export function describeSheetSummary(sheet: InitiativeSheet) {
-  const total = sheet.progress.reduce((sum, phase) => sum + phase.total, 0);
-  const shipped = sheet.shipped.length;
+  const { total, shipped, open } = resolveInitiativeTotals(sheet.progress);
   if (total === 0) return 'No tasks yet. Add tasks from their menu, or make an initiative from a task.';
-  const open = total - shipped - sheet.dropped.length;
   return describeOpenAndShipped(open, shipped, total);
 }
 

@@ -1,4 +1,4 @@
-import { listInitiatives, type ShinsaState, type Task } from '@shinsa/core';
+import { listInitiatives, NO_PHASE_NAME, type ShinsaState, type Task } from '@shinsa/core';
 import { type Command, type CommandSection, RANK } from '@/lib/command/registry.ts';
 import { openInitiativeDialog } from '@/lib/initiatives/draft.ts';
 import { canLeadFromTask, LEAD_FROM_TASK, startLead } from '@/lib/initiatives/lead.ts';
@@ -15,7 +15,7 @@ import {
   PHASE_LABEL,
   selectTaskInitiative,
 } from '@/lib/initiatives/membership.ts';
-import { INITIATIVE_ICON, INITIATIVES_TITLE, NO_PHASE, NO_PHASE_VALUE } from '@/lib/initiatives/view.ts';
+import { INITIATIVE_ICON, INITIATIVES_TITLE, NO_PHASE_VALUE } from '@/lib/initiatives/view.ts';
 import { resolveInitiativePath, type Route } from '@/router.ts';
 
 const KEYWORDS = ['initiative', 'group', 'effort', 'epic', 'phases'];
@@ -96,7 +96,7 @@ function listMemberCommands(state: ShinsaState, task: Task, id: string): Command
             value: task.initiativePhaseId ?? NO_PHASE_VALUE,
             options: [
               ...current.phases.map((each) => ({ value: each.id, label: each.name })),
-              { value: NO_PHASE_VALUE, label: NO_PHASE },
+              { value: NO_PHASE_VALUE, label: NO_PHASE_NAME },
             ],
             pick: (value) => void changeTaskPhase(task, current, value || null),
           },

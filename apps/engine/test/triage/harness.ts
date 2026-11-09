@@ -1,5 +1,5 @@
 import { BunServices } from '@effect/platform-bun';
-import type { PresetShape, ShinsaState, Task, TaskShape, UserCommand } from '@shinsa/core';
+import type { PresetShape, ShinsaState, Task, UserCommand } from '@shinsa/core';
 import { Context, Duration, Effect, Layer, Scope } from 'effect';
 import type { QuickJson } from '../../src/agents/quick/schema.ts';
 import { QuickCalls } from '../../src/agents/quick/service.ts';

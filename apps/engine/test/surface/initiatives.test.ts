@@ -102,7 +102,7 @@ describe('shinsa initiatives', () => {
       '',
       'Phases:',
       '  Dock: 1 of 2 shipped',
-      '  No phase: 0 of 1 shipped, 1 dropped',
+      '  No phase: 1 dropped',
       '',
       'Needs you:',
       '  SW-104  Account tools (working): Its plan waits for you.',

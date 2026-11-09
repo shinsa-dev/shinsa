@@ -148,3 +148,7 @@ export function resolveInitiativeSheet(
     progress: listProgress(initiative, members),
   };
 }
+
+export function listInitiativeProgress(state: ShinsaState, initiative: Initiative) {
+  return listProgress(initiative, listInitiativeWork(state, initiative.id));
+}

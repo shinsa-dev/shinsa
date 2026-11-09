@@ -1,4 +1,9 @@
-import { DomainError, type InitiativePhase, selectInitiativeByReference } from '@shinsa/core';
+import {
+  describePhaseProgress,
+  DomainError,
+  type InitiativePhase,
+  selectInitiativeByReference,
+} from '@shinsa/core';
 import type {
   InitiativeSheetView,
   InitiativeTaskRef,
@@ -112,8 +117,8 @@ function describeReport(sheet: InitiativeSheetView) {
 export function describeInitiativeSheet(sheet: InitiativeSheetView) {
   const { initiative } = sheet;
   const phases = initiative.progress.map((phase) => {
-    const name = phase.phase?.name ?? 'No phase';
-    return `${name}: ${phase.shipped} of ${phase.total} shipped${phase.dropped > 0 ? `, ${phase.dropped} dropped` : ''}`;
+    const { name, detail } = describePhaseProgress(phase);
+    return `${name}: ${detail}`;
   });
   return [
     `${initiative.name}, ${describeProgress(initiative)}`,

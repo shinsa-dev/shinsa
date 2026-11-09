@@ -16,13 +16,12 @@ import {
   resolveInitiativeSheet,
   validateInitiativeReport,
 } from '../initiatives/index.ts';
-import { resolveAgentPrompt, resolveLeadPrompt } from '../prompts/index.ts';
+import { type LeadNote, resolveAgentPrompt, resolveLeadPrompt } from '../prompts/index.ts';
 import { listInitiatives, selectInitiativeLead } from '../state/initiatives.ts';
 import type { ShinsaState } from '../state/project.ts';
 import { listActiveRuns, listOpenGates } from '../state/queries.ts';
 import type { Decider } from './decider.ts';
 import { findInitiative } from './initiatives.ts';
-import { settleTask } from './lifecycle.ts';
 import { findCurrentRun } from './runs.ts';
 import { createTask } from './tasks.ts';
 
@@ -74,13 +73,25 @@ function isIdle(state: ShinsaState, task: Task) {
   return listActiveRuns(state, task.id).length === 0 && listOpenGates(state, task.id).length === 0;
 }
 
-export function startLeadTurn(decider: Decider, taskId: string, note: string | null) {
+function findLeadInitiative(decider: Decider, taskId: string) {
   const initiative = selectLeadInitiative(listInitiatives(decider.state), taskId);
   if (!initiative) {
-    settleTask(decider, taskId, 'done', 'its initiative is gone');
-    return;
+    throw new DomainError({
+      code: 'initiative_not_found',
+      message: 'This task leads no initiative any more. End your turn.',
+    });
   }
-  decider.stage(taskId, 'leading', note ? 'answering your message' : 'leading the initiative');
+  return initiative;
+}
+
+function resolveLeadReason(note: LeadNote | null) {
+  if (!note) return 'leading the initiative';
+  return note.byAgent ? 'answering a member' : 'answering your message';
+}
+
+export function startLeadTurn(decider: Decider, taskId: string, note: LeadNote | null) {
+  const initiative = findLeadInitiative(decider, taskId);
+  decider.stage(taskId, 'leading', resolveLeadReason(note));
   const now = decider.context.now;
   const sheet = resolveInitiativeSheet(decider.state, initiative.id, now);
   const milestones = initiative.milestones ?? [];
@@ -115,13 +126,7 @@ function requestWake(decider: Decider, initiative: Initiative) {
 
 export function reportInitiative(decider: Decider, command: CommandOf<'agent.report_initiative'>) {
   const { run, task } = findCurrentRun(decider, command.runId, 'report_initiative');
-  const initiative = selectLeadInitiative(listInitiatives(decider.state), task.id);
-  if (!initiative) {
-    throw new DomainError({
-      code: 'initiative_not_found',
-      message: 'This task leads no initiative any more. End your turn.',
-    });
-  }
+  const initiative = findLeadInitiative(decider, task.id);
   const validation = validateInitiativeReport({
     narrative: command.narrative,
     questions: command.questions,

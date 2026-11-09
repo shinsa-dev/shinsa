@@ -214,6 +214,19 @@ describe('the lead’s report', () => {
       narrative: 'x',
       questions: [],
     });
+    expect(refused.code).toBe('run_over');
+  });
+
+  test('refuses the report of a lead that leads no initiative', () => {
+    const { harness, initiativeId, leadId } = ledInitiative();
+    const runId = harness.activeRun(leadId).id;
+    harness.state.initiatives[initiativeId] = { ...initiativeOf(harness, initiativeId), leadTaskId: null };
+    const refused = refusal(harness, {
+      type: 'agent.report_initiative',
+      runId,
+      narrative: 'x',
+      questions: [],
+    });
     expect(refused.code).toBe('initiative_not_found');
   });
 });
@@ -338,12 +351,21 @@ describe('waking the lead', () => {
     expect(harness.events).toHaveLength(settled);
   });
 
-  test('settles the lead when its initiative is gone', () => {
+  test('removing its initiative ends a resting lead at once', () => {
     const { harness, initiativeId, leadId } = ledInitiative();
     report(harness, leadId);
+    expect(harness.task(leadId).stage).toBe('leading');
     harness.send({ type: 'initiative.remove', initiativeId });
-    harness.send({ type: 'task.message', taskId: leadId, text: 'What is next?' });
     expect(harness.task(leadId).stage).toBe('done');
+  });
+
+  test('removing its initiative mid-turn ends the lead and its run', () => {
+    const { harness, initiativeId, leadId } = ledInitiative();
+    harness.send({ type: 'initiative.remove', initiativeId });
+    expect(harness.task(leadId).stage).toBe('done');
+    expect(
+      Object.values(harness.state.runs).filter((run) => run.taskId === leadId && run.endedAt === null)
+    ).toHaveLength(0);
   });
 });
 
@@ -355,6 +377,54 @@ describe('talking to the lead', () => {
     const prompt = readInstruction(harness.activeRun(leadId));
     expect(prompt).toContain('The human wrote to you about the initiative “Chat split”.');
     expect(prompt).toContain('The human wrote: Why was SW-110 dropped?');
+  });
+
+  test('a member’s message reaches the lead as the agent’s, not the human’s', () => {
+    const { harness, initiativeId, leadId } = ledInitiative();
+    report(harness, leadId);
+    const memberId = addMember(harness, initiativeId);
+    harness.send(
+      { type: 'task.message', taskId: leadId, text: 'SW-120 should wait for me.' },
+      { onBehalf: true, byTask: memberId }
+    );
+    const prompt = readInstruction(harness.activeRun(leadId));
+    expect(prompt).toContain('An agent wrote to you about the initiative “Chat split”.');
+    expect(prompt).toContain(
+      `The agent of [Rewrite the dock](shinsa://task/${memberId}) wrote, not the human: SW-120 should wait for me.`
+    );
+    expect(prompt).not.toContain('The human wrote');
+    expect(harness.task(leadId).stageReason).toBe('answering a member');
+  });
+
+  test('a message sent for you by no task still says an agent wrote it', () => {
+    const { harness, leadId } = ledInitiative();
+    report(harness, leadId);
+    harness.send({ type: 'task.message', taskId: leadId, text: 'Check the dock.' }, { onBehalf: true });
+    expect(readInstruction(harness.activeRun(leadId))).toContain(
+      'An agent wrote, not the human: Check the dock.'
+    );
+  });
+
+  test('retrying a lead with guidance passes it on as the human’s', () => {
+    const { harness, leadId } = ledInitiative();
+    const failLead = () => {
+      while (listOpenGates(harness.state, leadId).length === 0) {
+        harness.send({
+          type: 'run.end',
+          runId: harness.activeRun(leadId).id,
+          outcome: 'completed',
+          summary: null,
+        });
+      }
+    };
+    failLead();
+    harness.send({
+      type: 'gate.answer',
+      gateId: harness.openGate(leadId).id,
+      decision: 'reply',
+      response: 'Report first.',
+    });
+    expect(readInstruction(harness.activeRun(leadId))).toContain('The human wrote: Report first.');
   });
 
   test('a lead turn that ends without its report resumes, and retry restarts it', () => {

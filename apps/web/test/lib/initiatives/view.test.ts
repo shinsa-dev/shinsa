@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'bun:test';
-import { resolveInitiativeSheet } from '@shinsa/core';
+import { describePhaseProgress, resolveInitiativeSheet } from '@shinsa/core';
 import {
-  describePhaseProgress,
   describeSheetSummary,
   isInitiativeRoute,
   isInitiativesNavShown,

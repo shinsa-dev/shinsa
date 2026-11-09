@@ -1510,7 +1510,7 @@ directories you focus on. The record is core (`domain/initiatives.ts`, `decide/i
   turn ends with `report_initiative`, a hand-over of a `narrative` (at most 2,000 characters) and up to five
   `questions` (280 each) that `initiative.reported` keeps as `Initiative.report` and the page shows above the sections
   with a link to the lead's chat. Marking the lead done ends it; the initiative keeps its last report, and you can
-  start another. A lead whose initiative is removed finishes as done on its next turn.
+  start another. Removing the initiative ends its lead at once, as done, with any turn it is taking.
 - **What wakes the lead.** After every command `syncInitiativeMilestones` reads the new events for member milestones:
   a task joined, a plan accepted (at its gate or without one), a decision gate opened, merged, done or cancelled. It
   skips the lead itself, tasks the lead filed (it knows), and initiatives without a live lead, queues them on the
@@ -1520,7 +1520,9 @@ directories you focus on. The record is core (`domain/initiatives.ts`, `decide/i
   the queue on the wake its next report asks for, and on start the engine reschedules every initiative with milestones queued. The
   turn's prompt carries the digest of the sheet and the milestones since the last turn at the tail of the user turn,
   and `initiative.lead_woken` empties the queue, so the session's cached prefix never changes (Caching). A message to
-  the lead, yours or a member's (`tasks_message`), starts a turn straight away as `answering your message`.
+  the lead, yours or a member's (`tasks_message`), starts a turn straight away (`answering your message`, or
+  `answering a member`). A message sent on your behalf reaches the lead as that agent's, naming the task it came
+  from and saying it is no instruction from you, so a member's scope note never reads as your decision.
 - **Members know their lead.** A member's first brief names its initiative and phase and links the lead, and tells
   it to message the lead with `tasks_message` when its scope changes or another task should wait for it
   (`describeInitiativeMembership`).

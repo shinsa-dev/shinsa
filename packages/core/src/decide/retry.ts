@@ -89,7 +89,7 @@ export function retryTask(decider: Decider, taskId: string, guidance: string | n
       else restartWatchCheck(decider, task, guidance);
       return;
     case 'leading':
-      startLeadTurn(decider, taskId, guidance);
+      startLeadTurn(decider, taskId, guidance ? { text: guidance, byAgent: false, fromTask: null } : null);
       return;
     case 'awaiting_proposal':
     case 'awaiting_operation':

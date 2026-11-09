@@ -1,4 +1,10 @@
-import type { InitiativeSheet, ShinsaState, Task } from '@shinsa/core';
+import {
+  describePhaseProgress,
+  type InitiativeSheet,
+  NO_PHASE_NAME,
+  type ShinsaState,
+  type Task,
+} from '@shinsa/core';
 import { Icon } from '@shinsa/ui/components/icon';
 import { cn } from '@shinsa/ui/lib/utils';
 import type * as React from 'react';
@@ -9,11 +15,9 @@ import { CheckMark } from '@/components/status/check-mark.tsx';
 import { FILED_COLUMNS, TaskListRow } from '@/components/tasks/row.tsx';
 import {
   DECISION_KIND,
-  describePhaseProgress,
   type InitiativeSection,
   isPhaseDone,
   listInitiativeSections,
-  NO_PHASE,
 } from '@/lib/initiatives/view.ts';
 import { createDisclosureId } from '@/lib/preferences/disclosure.ts';
 
@@ -60,7 +64,7 @@ function NextRows({ state, sheet }: { state: ShinsaState; sheet: InitiativeSheet
       <ColumnHeader />
       {sheet.next.map((group) => (
         <div key={group.phase?.id ?? 'none'}>
-          {phased && <PhaseHeading name={group.phase?.name ?? NO_PHASE} />}
+          {phased && <PhaseHeading name={group.phase?.name ?? NO_PHASE_NAME} />}
           {group.tasks.map(({ task }) => (
             <TaskListRow key={task.id} state={state} task={task} depth={0} columns={FILED_COLUMNS} />
           ))}

@@ -9,9 +9,10 @@ import {
   selectInitiativePhase,
   type Task,
 } from '../domain/index.ts';
-import { listInitiativeMembers, listInitiatives } from '../state/initiatives.ts';
+import { listInitiativeMembers, listInitiatives, selectInitiativeLead } from '../state/initiatives.ts';
 import type { Decider } from './decider.ts';
 import { isSameValue } from './equality.ts';
+import { settleTask } from './lifecycle.ts';
 
 interface Membership {
   initiativeId: string | null;
@@ -134,6 +135,8 @@ export function writeInitiative(decider: Decider, command: CommandOf<'initiative
 
 export function removeInitiative(decider: Decider, command: CommandOf<'initiative.remove'>) {
   const initiative = findInitiative(decider, command.initiativeId);
+  const lead = selectInitiativeLead(decider.state, initiative);
+  if (lead) settleTask(decider, lead.id, 'done', 'its initiative was removed');
   for (const task of listInitiativeMembers(decider.state, initiative.id)) {
     changeMembership(decider, task, { initiativeId: null, phaseId: null });
   }
