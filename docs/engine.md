@@ -2705,7 +2705,7 @@ Every `/api` route is declared once, in core, as `EngineApi` (`packages/core/src
 teams, placement, slack, projects, terminals, services), each endpoint with its params, query, payload, answer and
 failures as schemas, and the rules a route carries as annotations: the engine feature that adds it
 (`EngineFeatureRoute`), refused from off the machine (`LocalOnlyRoute`, writes only or reads too), the owner's alone
-(`OwnerOnlyRoute`), open to a guest's channel (`GuestRoute`), only Shinsa's own page (`BrowserOnlyRoute`) and its
+(`OwnerOnlyRoute`), which a shared machine opens to its members (`SharedMemberRoute`), open to a guest's channel (`GuestRoute`), only Shinsa's own page (`BrowserOnlyRoute`) and its
 body cap (`RequestBodyLimit`). The engine serves it and every client calls it from the same declaration, so a route
 is never a path written by hand on either side.
 
@@ -3258,7 +3258,72 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   who leaves in Shinsa Cloud loses their devices within one heartbeat (about two minutes). Remove member, or `shinsa
   remote remove-member <login>`, tells Shinsa Cloud first (`requestMemberRemoval`), so it stops minting that
   account's connect tokens, then forgets their devices at once. A member controls the machine exactly as its owner
-  does; the channel never checks the mirrored list, since Shinsa Cloud already refuses tokens to anyone else.
+  does, except on a shared machine (below); the channel never checks the mirrored list, since Shinsa Cloud already
+  refuses tokens to anyone else.
+- **Shared machines** (`sharedTeams`, a human-only setting listing the teams a machine is shared with, empty by
+  default; `isSharedMachine`, `isSharedWithTeam`). A team's always-on machine (a VPS, a Mac mini) where everything a
+  teammate starts belongs to them and runs as them. The machine gives the compute; the person who starts a task owns
+  it. Remote access stays personal (your own devices, and anyone you invite yourself); sharing is a team's:
+  - **Sharing with a team.** The machine's owner turns on Shared beside this machine in the team's Machines list
+    (Settings → Teams, `TeamMachines`, after a confirm), only once the machine holds the team's key, which sends
+    `POST /api/remote/teams/share { teamId, shared }` (owner-only, engine feature `shared-machine`). Turning it on
+    gives every person in the team this machine first (`Remote.shareWithTeam`, the same grant as Give machine access:
+    a member here, and a grant their browser adds itself with), then adds the team to `sharedTeams`. Someone who joins
+    the team later gets it on the next heartbeat (`SharedTeams`, `remote/shared-teams/service.ts`, which calls
+    `Remote.syncSharedTeams` whenever remote access changes; a grant that fails is logged and tried again then).
+    Turning it off takes the team out of `sharedTeams` first, then drops the team's grants and removes from the
+    machine's members everyone the sharing made a member and no other team still reaches (`Remote.unshareTeam`: a
+    grant that added its person as a member is marked `joined`, and that mark passes to their grant from another team;
+    someone who was a member before keeps their access); their tasks stay, with their owners. When the machine leaves
+    a shared team, or the team is deleted, the next sync finds the team gone (`Remote.syncSharedTeams` returns it),
+    takes it out of `sharedTeams` and drops its grants the same way, so the machine never stays shared with a team
+    whose card is no longer there to turn it off. Teammates on a shared machine are members, so they reach every project, Settings and terminals
+    as the owner does, except other people's accounts and the human-only settings.
+  - **Who owns a task.** Every task records its owner as `Task.owner` (`TaskOwner`: login, name, avatar), on any
+    machine, shared or not. The engine resolves who sent each command (`resolveRequestActor`, `http/commands.ts`)
+    and passes it to `EngineCore.dispatch` as `actor`, which core's `DecideContext.actor` stamps on `task.created`
+    (`resolveCreatedOwner`, `decide/tasks.ts`): a guest is themselves, a command at the keyboard is the machine's
+    owner, and a sealed channel's GitHub user is looked up in the owner and members the last heartbeat answered
+    (`Remote.resolveActor`). Anyone else gets no owner, never the machine's owner, so a stranger never runs on the
+    owner's accounts. A task an agent files (a courier, a split, a fork, a watchdog's) takes the owner of the task it
+    came from. Tasks from before, and those Slack, schedules and webhooks start, have none and count as the
+    machine owner's. Owners never change after creation.
+  - **Claude accounts.** Each account records the member who signed it in (`owner` in `accounts.json`, null for the
+    machine's owner and every account from before). A run leases only its task owner's accounts, on renewal and on
+    rotation after a usage limit too (`AccountOwnership`, `AccountRotation.listCandidates`), and a task bound to
+    someone else's account drops the binding. When the owner has none it can use, the lease fails with
+    `owner_signed_out` and the task stops at a Sign in gate with no account and `cause: 'owner_account'` ("Paused: Kai
+    needs a Claude account on this machine", `requestOwnerSignIn`); it never falls back to the machine's login. Any
+    Claude sign-in retries those gates (`recordSignedIn`), and a task whose owner still has none stops there again. Members sign in,
+    import, change and remove only their own accounts from their own device: the `accounts` group is
+    `SharedMemberRoute`, which opens an `OwnerOnlyRoute` to members on a shared machine, and the roster refuses a
+    member's change to an account that is not theirs (`not_owner`). Pasting a sign-in code and cancelling a sign-in
+    check no owner, since a machine runs one sign-in at a time.
+  - **GitHub.** Each member saves a token of their own (`GET` and `POST /api/github-token { token }`, `token: null`
+    removes it; `SharedMemberRoute`, engine feature `shared-machine`). The engine asks GitHub whose it is
+    (`verifyGitHubToken`, `gh api user`) and refuses one GitHub turns down (`github_token_refused`) or that belongs to
+    someone else (`github_token_other_account`); the machine's owner needs none (`github_token_machine`). It is kept
+    in `secrets.json` under `github`, by login, with the name and the no-reply address
+    (`<id>+<login>@users.noreply.github.com`). Every effect of a member's task runs with `TaskGitHub` set from it
+    (`provideTaskGitHub`, `github/identity/`): `gh` gets `GH_TOKEN`, pushes and fetches get the token as an
+    authorization header in git's config through `GIT_CONFIG_COUNT` (never on the command line, so it shows in no process list or push
+    error; an SSH remote still pushes with the machine's key), and commits and merges are authored as the owner while
+    the machine stays the committer. A member with no token yet ships with the machine's own login, and the pull
+    request's description says so (`serializeMachineLoginNote`).
+  - **The web app.** On a shared machine All tasks opens on your own tasks with an Owner column (removing the filter
+    writes `owner=everyone`, which sticks), Home, the queue and the "N need you" count only ever show yours
+    (`useOwnQueue`), a task's facts name its Owner ("You", the
+    teammate, or "The machine's owner" for a task with none), each Claude account shows Yours or the member's login
+    with a menu only on your own, and a member gets Your GitHub token with Save and Remove (`github-token.tsx`). The
+    page offers all of it only on an engine that announces `shared-machine`. Ownership is per machine
+    (`resolveTaskOwnership`): only a task on a shared machine is filtered by its owner and shows an Owner fact, so in a
+    fleet a teammate's task on a machine that is not shared stays in your lists; the accounts, the GitHub token and
+    who is a member are read from the machine Settings is on (`sharedHere`, `memberHere`).
+  - **What stays machine-wide.** Task capacity, routing policies, MCP servers, plugins, repository checks,
+    notifications and the Dock badge, and usage and cost limits (counted for the whole machine, not per member).
+  - **Trust.** A shared machine holds every member's Claude logins and GitHub token under one system user, and an
+    agent's shell can read what the engine can, so a shared machine trusts its members. Separate system users per
+    member would close that, and are not built.
 - **Pausing and removing**: `shinsa remote disable` stops the tunnel, marks the instance offline and closes every
   channel, keeping the pairing; `enable` starts it again; `remove` tells app.shinsa.dev (a failure there is only
   logged) and forgets the credentials and every device. Each needs a paired machine (`remote_not_paired`).
@@ -6390,8 +6455,9 @@ Agent usage glance in the top bar, which shows every connected provider (`docs/d
   Shinsa never runs on your Claude Code login (`~/.claude`) or on claude-swap's, since each login's single-use
   refresh token must have one holder. An account without a folder ran on your Claude Code login before (A shared
   login, below) and gets one when you sign in to it again. The list is `accounts.json` beside the folders
-  (`{ version, defaultAccountId, accounts: [{ id, configDir, email, organization, plan, origin, addedAt, paused,
-  switchAt }] }`, written atomically, mode 600; a file that cannot be read is copied aside and an empty list is used).
+  (`{ version, defaultAccountId, accounts: [{ id, configDir, email, organization, plan, origin, owner, addedAt,
+  paused, switchAt }] }`, `owner` the member who signed it in on a shared machine, null for the machine's owner:
+  Remote access → Shared machines, written atomically, mode 600; a file that cannot be read is copied aside and an empty list is used).
   An account's `plan` comes from the `account` notice a run reports (the SDK's `accountInfo()`, which carries
   Claude's current name for the plan, "Claude Ultra"); the keychain login's `subscriptionType` and `claude auth
   status` only fill a plan that is missing, since they can lag behind a rename ("max"). `resolvePlanLabel` (core)
@@ -6800,8 +6866,8 @@ update channel: a canary or a beta is the same app with the same identity (`APP_
     ├── extension-usage.json  When agents last used each MCP server and skill, and how far each session was read
     ├── eunoe/         eunoe's folder (`EUNOE_DIR`): the request log (requests.jsonl) and thread state (threads/)
     │                  the engine's forwarder keeps (The agent loop → Compaction and fast mode)
-    ├── secrets.json   Webhook tokens and signing secrets, one-use secret refs and MCP sign-ins (mode 600; never in
-    │                  the log)
+    ├── secrets.json   Webhook tokens and signing secrets, one-use secret refs, MCP sign-ins and members' GitHub
+    │                  tokens on a shared machine (mode 600; never in the log)
     ├── remote.json    Remote access: the machine's key, its credentials from app.shinsa.dev and the enrolled devices
     │                  (mode 600; never in the log; Remote access, above)
     ├── team-snapshots.json  The last list of each teammate machine this one watches, shown while it is offline

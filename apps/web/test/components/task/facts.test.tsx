@@ -6,6 +6,7 @@ import { TaskFacts } from '@/components/task/facts.tsx';
 import { ReadOnlyProvider } from '@/components/task/read-only.tsx';
 import { connection, type MachineChoice, replaceConnection } from '@/lib/connection/socket.ts';
 import { TONE_TEXT } from '@/lib/format/tone.ts';
+import { ViewerContext } from '@/lib/remote/viewer.ts';
 import { resolveSharedTaskId } from '@/lib/share/view.ts';
 import { createAccount, createSnapshot } from '../../support/accounts.ts';
 import { spyOnToasts } from '../../support/commands.ts';
@@ -689,5 +690,73 @@ describe('the Slack fact', () => {
     expect(screen.queryByText(/Filed in/)).toBeNull();
     renderFacts();
     expect(screen.queryByText(/Filed in/)).toBeNull();
+  });
+});
+
+describe('the owner of a task on a shared machine', () => {
+  const KAI = { login: 'kai', name: 'Kai Lane', avatarUrl: null };
+  const MONA = { login: 'mona', name: 'Mona Park', avatarUrl: null };
+
+  function renderOwned(task: Task, shared: boolean) {
+    const base = createShinsaState({ tasks: [task] });
+    const state = { ...base, settings: { ...base.settings, sharedTeams: shared ? ['team-1'] : [] } };
+    pushState(state);
+    return render(
+      <TooltipProvider>
+        <ViewerContext value={{ id: 'u-kai', ...KAI }}>
+          <TaskFacts state={state} task={task} />
+        </ViewerContext>
+      </TooltipProvider>
+    );
+  }
+
+  function ownerFact() {
+    return screen.getByText('Owner').closest('span.inline-flex')?.parentElement as HTMLElement;
+  }
+
+  it('names a teammate as the owner, says You for your own and the machine’s owner for none', () => {
+    const view = renderOwned(createTask({ id: 'm', handle: 'SW-1', owner: MONA }), true);
+    expect(ownerFact().textContent).toContain('Mona');
+    view.unmount();
+    const own = renderOwned(createTask({ id: 'k', handle: 'SW-2', owner: KAI }), true);
+    expect(ownerFact().textContent).toContain('You');
+    own.unmount();
+    renderOwned(createTask({ id: 'n', handle: 'SW-3' }), true);
+    expect(ownerFact().textContent).toContain('You');
+  });
+
+  it('gives an unowned task on a teammate’s shared machine to that machine’s owner', () => {
+    const local = connection;
+    const task = createTask({ id: 'n', handle: 'SW-3' });
+    const base = createShinsaState({ tasks: [task] });
+    const shared = { ...base, settings: { ...base.settings, sharedTeams: ['team-1'] } };
+    const machines: MachineChoice[] = [
+      { id: 'laptop', name: 'Laptop', current: true, state: base },
+      { id: 'vps', name: 'Team box', current: false, member: true, state: shared },
+    ];
+    const vps = { id: 'vps', name: 'Team box', current: false, member: true as const };
+    pushState(base);
+    replaceConnection({
+      ...local,
+      selectMachine: (id) => (id === 'n' ? vps : null),
+      listMachines: () => machines,
+    });
+    try {
+      render(
+        <TooltipProvider>
+          <ViewerContext value={{ id: 'u-kai', ...KAI }}>
+            <TaskFacts state={base} task={task} />
+          </ViewerContext>
+        </TooltipProvider>
+      );
+      expect(ownerFact().textContent).toContain("The machine's owner");
+    } finally {
+      replaceConnection(null);
+    }
+  });
+
+  it('shows no owner on a machine that is not shared', () => {
+    renderOwned(createTask({ id: 'm', handle: 'SW-1', owner: MONA }), false);
+    expect(screen.queryByText('Owner')).toBeNull();
   });
 });

@@ -364,6 +364,7 @@ describe('acting for the human', () => {
       shareLimit: 'week',
       sharePreset: 'status',
       watchdogsIgnoreUsageLimits: false,
+      sharedTeams: ['team-1'],
     };
     const fields: Required<Pick<Repo, (typeof HUMAN_ONLY_REPO_FIELDS)[number]>> = {
       checkCommands: ['bun test'],

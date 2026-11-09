@@ -21,6 +21,7 @@ export const ENGINE_FEATURES = [
   'usage.watchdog_limits',
   'share.scopes',
   'suggestion.bundle',
+  'shared-machine',
   'focus.projects',
 ] as const;
 

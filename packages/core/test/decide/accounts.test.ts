@@ -3,6 +3,7 @@ import { isTaskLive } from '../../src/decide/liveness.ts';
 import {
   listActiveRuns,
   listOpenGates,
+  OWNER_SIGNED_OUT_CODE,
   type RunAccount,
   type RunFailure,
   resolveMessageEffect,
@@ -43,6 +44,18 @@ function signedOut(account: RunAccount | null = WORK): RunFailure {
     retryable: null,
     resetAt: null,
     account,
+  };
+}
+
+const KAI = { login: 'kai', name: 'Kai Lee', avatarUrl: null };
+
+function ownerSignedOut(): RunFailure {
+  return {
+    class: 'auth',
+    message: 'The task owner has no Claude account on this machine.',
+    code: OWNER_SIGNED_OUT_CODE,
+    retryable: null,
+    resetAt: null,
   };
 }
 
@@ -686,5 +699,41 @@ describe('the sign-in gate', () => {
     expect(harness.openGate(cursor).provider).toBe('cursor');
     expect(harness.openGate(claude).provider).toBe('claude');
     expect(harness.send({ type: 'provider.record_sign_in', provider: 'codex' }).events).toEqual([]);
+  });
+
+  test('a shared machine with no account of the owner pauses at a Sign in gate that names them', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness, { owner: KAI });
+    const run = fail(harness, taskId, ownerSignedOut());
+    expect(harness.openGate(taskId)).toMatchObject({
+      type: 'sign_in',
+      title: 'Paused: Kai needs a Claude account on this machine',
+      body: "This is a shared machine, so the task runs only on Kai's own Claude accounts, and Kai has none signed in here. Kai can sign one in from Settings → Accounts. Signing in starts the step again.",
+      provider: 'claude',
+      account: null,
+      runId: run.id,
+    });
+    expect(listActiveRuns(harness.state, taskId)).toHaveLength(0);
+  });
+
+  test('a task with no owner asks you for a Claude account on the shared machine', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    fail(harness, taskId, ownerSignedOut());
+    expect(harness.openGate(taskId)).toMatchObject({
+      title: 'Paused: You need a Claude account on this machine',
+      body: "This is a shared machine, so the task runs only on its owner's Claude accounts, and you have none signed in here. Signing in starts the step again.",
+    });
+  });
+
+  test('any new Claude account starts a task waiting for its owner to sign in, and the lease decides again', () => {
+    const harness = createHarness();
+    const owned = createTask(harness, { owner: KAI, request: 'Owned' });
+    const bound = createTask(harness, { request: 'Bound' });
+    fail(harness, owned, ownerSignedOut());
+    fail(harness, bound, signedOut());
+    harness.send({ type: 'account.signed_in', account: { id: 'acc-kai', email: 'kai@example.com' } });
+    expect(harness.activeRun(owned)).toMatchObject({ role: 'agent', purpose: 'plan' });
+    expect(harness.openGate(bound).account).toEqual(WORK);
   });
 });

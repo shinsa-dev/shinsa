@@ -17,8 +17,15 @@ import type { MenuItemIcon } from '@shinsa/ui/components/menu-icon';
 import { type FocusTeam, UNNAMED_TEAM } from '@/lib/focus.ts';
 import { PRIORITY_ICON, PRIORITY_LABEL } from '@/lib/format/labels.ts';
 import { TONE_TEXT } from '@/lib/format/tone.ts';
-import { resolveSharedProfile, type UserProfile } from '@/lib/remote/users.ts';
+import { resolveFirstName, resolveSharedProfile, type UserProfile } from '@/lib/remote/users.ts';
 import { resolveTaskGroup, TASK_GROUPS, type TaskGroupKey, type TeamEntry } from '@/lib/tasks/groups.ts';
+import {
+  MACHINE_OWNER_KEY,
+  MACHINE_OWNER_LABEL,
+  PERSONAL_OWNERSHIP,
+  resolveOwnerLogin,
+  type TaskOwnership,
+} from '@/lib/tasks/owner.ts';
 import { SHAPE_ICON, SHAPE_LABEL } from '@/lib/tasks/shapes.ts';
 import { describeTeamTaskOwner } from '@/lib/teams/feeds.ts';
 
@@ -29,6 +36,8 @@ export type TaskFilterKey = (typeof TASK_FILTER_KEYS)[number];
 export type TaskFilters = Record<TaskFilterKey, readonly string[]> & { search: string };
 
 export const YOUR_TASKS_OWNER = 'you';
+
+const EVERYONE_OWNER = 'everyone';
 
 export const NO_TASK_FILTERS: TaskFilters = {
   search: '',
@@ -59,15 +68,21 @@ function parseFilterValues(key: TaskFilterKey, raw: string | null) {
   return [...new Set(values)];
 }
 
-export function resolveTaskFilters(search: string): TaskFilters {
+export function resolveTaskFilters(search: string, mineByDefault = false): TaskFilters {
   const params = new URLSearchParams(search);
   const filters: TaskFilters = { ...NO_TASK_FILTERS, search: params.get('q') ?? '' };
   for (const key of TASK_FILTER_KEYS) filters[key] = parseFilterValues(key, params.get(key));
+  filters.owner = filters.owner.filter((value) => value !== EVERYONE_OWNER);
+  if (mineByDefault && !params.has('owner')) filters.owner = [YOUR_TASKS_OWNER];
   return filters;
 }
 
 export function serializeFilterValues(values: readonly string[]) {
   return values.length > 0 ? values.join(VALUE_SEPARATOR) : null;
+}
+
+export function serializeOwnerValues(values: readonly string[]) {
+  return serializeFilterValues(values) ?? EVERYONE_OWNER;
 }
 
 export function toggleFilterValue(values: readonly string[], value: string) {
@@ -97,13 +112,18 @@ export interface TaskRow {
   team?: TeamEntry;
 }
 
-function resolveOwnRow(state: ShinsaState, task: Task, teams: readonly FocusTeam[]): TaskRow {
+function resolveOwnRow(
+  state: ShinsaState,
+  task: Task,
+  teams: readonly FocusTeam[],
+  ownership: TaskOwnership
+): TaskRow {
   const projectId = resolveTaskProject(state, task);
   return {
     task,
     state,
     group: resolveTaskGroup(state, task),
-    owner: YOUR_TASKS_OWNER,
+    owner: resolveOwnerLogin(task, ownership) ?? YOUR_TASKS_OWNER,
     teamIds: teams.filter((team) => isTeamTask(state, task, team.id)).map((team) => team.id),
     project: (projectId && state.projects[projectId]?.name) || null,
     repo: (task.repoId && state.repos[task.repoId]?.name) || null,
@@ -146,18 +166,21 @@ export function listTaskRows(
   state: ShinsaState,
   team: readonly TeamEntry[],
   teams: readonly FocusTeam[],
-  now = Date.now()
+  now = Date.now(),
+  ownership: TaskOwnership = PERSONAL_OWNERSHIP
 ): TaskRow[] {
   const own = Object.values(state.tasks)
     .filter((task) => !isWatchHome(task) && isListedInFocus(state, task, now))
-    .map((task) => resolveOwnRow(state, task, teams));
+    .map((task) => resolveOwnRow(state, task, teams, ownership));
   const theirs = team.filter((entry) => isTeamRowInFocus(state, entry, now)).map(resolveTeamRow);
   return [...own, ...theirs];
 }
 
 function matchesSearch(row: TaskRow, needle: string) {
   const { task } = row;
-  const people = row.team ? `${row.team.entry.owner ?? ''} ${row.team.entry.machine ?? ''}` : '';
+  const people = row.team
+    ? `${row.team.entry.owner ?? ''} ${row.team.entry.machine ?? ''}`
+    : `${row.task.owner?.login ?? ''} ${row.task.owner?.name ?? ''}`;
   return `${task.title} ${task.request} ${task.branch ?? ''} ${row.repo ?? ''} ${people}`
     .toLowerCase()
     .includes(needle);
@@ -240,13 +263,17 @@ function listRowValues(row: TaskRow, key: TaskFilterKey): readonly (string | nul
 
 function describeOwner(rows: readonly TaskRow[], owner: string) {
   if (owner === YOUR_TASKS_OWNER) return YOU_LABEL;
-  const entry = rows.find((row) => row.owner === owner)?.team?.entry;
-  return entry ? describeTeamTaskOwner(entry) : owner;
+  if (owner === MACHINE_OWNER_KEY) return MACHINE_OWNER_LABEL;
+  const row = rows.find((candidate) => candidate.owner === owner);
+  if (row?.team) return describeTeamTaskOwner(row.team.entry);
+  return row?.task.owner ? resolveFirstName(row.task.owner) : owner;
 }
 
 function selectOwnerProfile(rows: readonly TaskRow[], owner: string) {
-  const entry = rows.find((row) => row.owner === owner)?.team?.entry;
-  return entry?.owner ? { user: resolveSharedProfile(entry.owner, entry.ownerProfile) } : {};
+  const row = rows.find((candidate) => candidate.owner === owner);
+  const entry = row?.team?.entry;
+  if (entry?.owner) return { user: resolveSharedProfile(entry.owner, entry.ownerProfile) };
+  return !entry && row?.task.owner && owner !== YOUR_TASKS_OWNER ? { user: row.task.owner } : {};
 }
 
 function describeValue(

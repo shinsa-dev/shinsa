@@ -18,6 +18,7 @@ import { BriefingWriter } from '../../src/briefing/service.ts';
 import { resolveScratchPath, type ServerConfig } from '../../src/config/index.ts';
 import { NO_DRAFT, STOPPED_WHILE_FILING } from '../../src/feedback/effects/schema.ts';
 import { GitFailed } from '../../src/git/schema.ts';
+import type { MachineGitHubShape } from '../../src/github/identity/schema.ts';
 import { resolveEffectFailure } from '../../src/runtime/failures/classify.ts';
 import { EffectFailed, ShippingFailed } from '../../src/runtime/failures/schema.ts';
 import { type EffectRunnerOptions } from '../../src/runtime/index.ts';
@@ -58,6 +59,7 @@ afterEach(() => {
 interface FakeGitHub {
   pulls: Record<string, unknown>[];
   calls: string[][];
+  tokens?: string[];
   failReads?: number;
   mergeQueue?: boolean;
   workflows?: Record<string, string>;
@@ -214,7 +216,10 @@ function createBriefings() {
 
 function setup(
   patch: (state: ShinsaState) => void = () => undefined,
-  options: Partial<EffectRunnerOptions> & { config?: Partial<ServerConfig> } = {}
+  options: Partial<EffectRunnerOptions> & {
+    config?: Partial<ServerConfig>;
+    machineGitHub?: MachineGitHubShape | null;
+  } = {}
 ) {
   const stub = createStubEngine(patch);
   const config = createTestConfig(createTempDir(), options.config);
@@ -1666,6 +1671,41 @@ describe('pull requests', () => {
     await until('the follow-up sync', () => dispatched.length === 5, GH_WAIT_MS);
     expect(readGitHub().pulls).toHaveLength(1);
     await runner.stop();
+  });
+
+  test('on a shared machine a member’s pull request opens with their token, and one without a token says so', async () => {
+    const machineGitHub: MachineGitHubShape = {
+      machineOwner: Effect.succeed('owner'),
+      selectToken: (login) =>
+        Effect.succeed(
+          login === 'kai'
+            ? { token: 'ghp_kai', login, name: 'Kai Lane', email: 'kai@users.noreply.github.com' }
+            : null
+        ),
+    };
+    restores.push(overrideEnv({ FAKE_GH_TOKENS: '1', GH_TOKEN: undefined }));
+    const openAs = async (login: string) => {
+      const readGitHub = useFakeGitHub();
+      const { repo, worktree } = await createShippingRepo();
+      const owner = { login, name: null, avatarUrl: null };
+      const { runner, update } = setup(withTask({ stage: 'shipping', worktreePath: worktree, owner }, repo), {
+        machineGitHub,
+      });
+      update((state) => {
+        state.settings = { ...state.settings, sharedTeams: ['team-1'] };
+      });
+      await runner.apply({ kind: 'pull_request.open', taskId: 'task-1' }, createContext());
+      await runner.stop();
+      return readGitHub() as FakeGitHub & { pulls: { body: string }[] };
+    };
+    const kai = await openAs('kai');
+    expect(new Set(kai.tokens)).toEqual(new Set(['ghp_kai']));
+    expect(kai.pulls[0]?.body).not.toContain('GitHub token');
+    const mona = await openAs('mona');
+    expect(mona.tokens).toBeUndefined();
+    expect(mona.pulls[0]?.body).toContain(
+      "This machine's own GitHub login opened this pull request, because mona has not added a GitHub token on it."
+    );
   });
 
   test('pushing without a pull request opens one; with one it pushes and syncs later', async () => {

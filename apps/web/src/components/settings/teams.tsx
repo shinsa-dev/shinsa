@@ -1,6 +1,7 @@
 import {
   type TeamFeedMachine,
   type TeamFeedSnapshot,
+  isSharedWithTeam,
   listTeamProjectIds,
   type RemoteSnapshot,
   type RemoteTeam,
@@ -34,6 +35,7 @@ import { useNow } from '@/hooks/use-now.ts';
 import { useTeamPresence } from '@/hooks/use-team-presence.ts';
 import { confirmDone, requestWithToast } from '@/lib/connection/commands.ts';
 import { useRemoteAccess } from '@/lib/connection/remote-access.ts';
+import { useSettings } from '@/lib/connection/selectors.ts';
 import { type MachineAccess, useEngineFeature, useMachines, useTeamFeed } from '@/lib/connection/socket.ts';
 import { createTeamActions, TEAM_ACTIONS, type TeamActions } from '@/lib/connection/teams.ts';
 import { formatSince } from '@/lib/format/time.ts';
@@ -42,6 +44,7 @@ import { describeMemberSince } from '@/lib/remote-access.ts';
 import { MACHINE_ICON } from '@/lib/remote/mode.ts';
 import { describeMachineName } from '@/lib/remote/setup-steps.ts';
 import { resolveFirstName } from '@/lib/remote/users.ts';
+import { describeShareMachine } from '@/lib/shared-machine.ts';
 import { describePresence } from '@/lib/teams/presence.ts';
 import { hasOwnScopes, selectExtra } from '@/lib/teams/scopes.ts';
 import {
@@ -93,7 +96,8 @@ type TeamsDialog =
   | { kind: 'member'; team: RemoteTeam; user: RemoteUser }
   | { kind: 'scopes'; teamId: string; user: RemoteUser }
   | { kind: 'extra'; teamId: string; user: RemoteUser; machine: GrantMachine }
-  | { kind: 'grant'; team: RemoteTeam; user: RemoteUser; machine: GrantMachine };
+  | { kind: 'grant'; team: RemoteTeam; user: RemoteUser; machine: GrantMachine }
+  | { kind: 'share'; team: RemoteTeam; machineName: string; shared: boolean };
 
 function TeamLinkDialog({
   control,
@@ -513,6 +517,16 @@ function TeamHeader({
   );
 }
 
+function useMachineShare(entry: RemoteTeamEntry, snapshot: RemoteSnapshot) {
+  const machineId = React.useContext(GrantMachinesContext).currentId;
+  const supported = useEngineFeature('shared-machine', machineId);
+  const local = useSettings();
+  const machine = useMachines().find((candidate) => candidate.id === machineId);
+  const settings = machineId ? machine?.state.settings : local;
+  if (!(supported && entry.onMachine && snapshot.enabled && snapshot.instanceId && settings)) return null;
+  return { instanceId: snapshot.instanceId, shared: isSharedWithTeam(settings, entry.id) };
+}
+
 function TeamCard({
   state,
   snapshot,
@@ -535,6 +549,7 @@ function TeamCard({
   onDialog: (dialog: TeamsDialog) => void;
 }) {
   const { team } = entry;
+  const share = useMachineShare(entry, snapshot);
   return (
     <SettingsCard>
       <TeamHeader entry={entry} feed={feed} onDialog={onDialog} />
@@ -551,7 +566,19 @@ function TeamCard({
       {team && needsTeamLink(entry) && <TeamKeyRow team={team} actions={actions} keys={keys} />}
       {team && <TeamRequests team={team} actions={actions} />}
       {team && keys && <TeamKeyRequests team={team} feed={feed} actions={actions} />}
-      {team && <TeamMachines team={team} feed={feed} keyless={listKeylessMachines(entry, snapshot)} />}
+      {team && (
+        <TeamMachines
+          team={team}
+          feed={feed}
+          keyless={listKeylessMachines(entry, snapshot)}
+          share={
+            share && {
+              ...share,
+              onChange: (shared, machineName) => onDialog({ kind: 'share', team, machineName, shared }),
+            }
+          }
+        />
+      )}
       {team && rights && <TeamScopesBlock team={team} onUpdate={actions.updateScopes} />}
       {team && <TeamPeople team={team} snapshot={snapshot} rights={rights} onDialog={onDialog} />}
     </SettingsCard>
@@ -629,6 +656,24 @@ function TeamsDialogs({
       if (!team) return null;
       return (
         <MemberScopesDialog control={control} team={team} user={value.user} onUpdate={actions.updateScopes} />
+      );
+    }
+    case 'share': {
+      const copy = describeShareMachine(
+        describeMachineName(value.machineName),
+        value.team.name,
+        value.shared
+      );
+      return (
+        <ConfirmDialog
+          control={control}
+          title={copy.title}
+          body={copy.body}
+          action={copy.action}
+          onConfirm={() =>
+            void requestWithToast(() => actions.shareMachine(value.team.id, value.shared), copy.done)
+          }
+        />
       );
     }
     case 'leave':

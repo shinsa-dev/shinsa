@@ -50,6 +50,7 @@ import {
   serializeViewState,
   type Task,
   type WireState,
+  OWNER_SIGNED_OUT_CODE,
 } from '../../src/index.ts';
 import type { CheckChangeHandOver } from '../../src/report/types.ts';
 import { IMPACT, PLAN, resolveOwedReply } from '../harness.ts';
@@ -813,6 +814,25 @@ const RERUN_ACCOUNTS = [
   { id: 'acc-home', email: null },
 ];
 
+function selectOwnerSignedOut(state: ShinsaState, side: Random): ShinsaCommand | null {
+  const active = Object.values(state.runs).filter((run) => run.endedAt === null && run.role === 'agent');
+  const run = pick(side, active);
+  if (!run) return null;
+  return {
+    type: 'run.end',
+    runId: run.id,
+    outcome: 'failed',
+    summary: 'No account of its owner.',
+    failure: {
+      class: 'auth',
+      message: 'No account.',
+      code: OWNER_SIGNED_OUT_CODE,
+      retryable: null,
+      resetAt: null,
+    },
+  };
+}
+
 function selectMoveCommand(state: ShinsaState, random: Random): ShinsaCommand | null {
   if (!chance(random, 0.3)) return null;
   const planning = Object.values(state.runs).filter((run) => run.endedAt === null && run.purpose === 'plan');
@@ -837,6 +857,7 @@ function listMoveMarks(state: ShinsaState) {
 
 function selectRerun(state: ShinsaState, side: Random): ShinsaCommand | null {
   if (!chance(side, OUTAGE_ODDS)) return null;
+  if (chance(side, 0.3)) return selectOwnerSignedOut(state, side);
   const working = Object.values(state.tasks).filter(
     (task) => RUN_STAGES.has(task.stage) || chance(side, 0.05)
   );
@@ -916,7 +937,9 @@ function assertProcessInvariants(state: ShinsaState, task: Task, gates: Gate[], 
   expect(signIn.length, context).toBeLessThanOrEqual(1);
   for (const gate of signIn) {
     expect(gate.provider, `${context}: a Sign in gate without its provider`).toBeTruthy();
-    if (gate.provider === 'claude')
+    if (gate.provider === 'claude' && gate.cause === 'owner_account')
+      expect(gate.account ?? null, `${context}: an owner's Sign in gate names an account`).toBeNull();
+    else if (gate.provider === 'claude')
       expect(gate.account, `${context}: a Claude Sign in gate without its account`).toBeTruthy();
     else expect(gate.account ?? null, `${context}: a provider login names an account`).toBeNull();
   }
@@ -1894,11 +1917,14 @@ describe('decide under random command sequences', () => {
     'keeps every invariant while steps are rerun on chosen accounts',
     () => {
       let bound = 0;
+      let ownerGates = 0;
       for (let seed = 1; seed <= SEEDS; seed += 1) {
         const state = simulate(seed, STEPS, 'reruns');
         bound += Object.values(state.runs).filter((run) => run.account).length;
+        ownerGates += Object.values(state.gates).filter((gate) => gate.cause === 'owner_account').length;
       }
       expect(bound).toBeGreaterThan(0);
+      expect(ownerGates).toBeGreaterThan(0);
     },
     SEEDS * 2_000
   );

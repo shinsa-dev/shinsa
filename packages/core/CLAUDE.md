@@ -465,7 +465,8 @@ with a fixed clock and ids and has the steps a test needs (`createTask`, `reachR
     while an agent runs, the only other open gate a task may have is a Post-merge gate;
   - no failure gate while an agent runs (starting a step withdraws it), and at most one failure gate per task;
   - a task waiting for a usage limit to reset has no run, no failure or Sign in gate and is not settled; at most one
-    Sign in gate per task, and it names its provider, and its account for Claude (none for a provider's own login);
+    Sign in gate per task, and it names its provider, and its account for Claude (none for a provider's own login,
+    or for a shared machine's owner gate, `cause: 'owner_account'`);
   - a task has at most one armed wait (a monitor or a usage limit), and none while a run is active;
   - a plan gate exactly when `awaiting_plan` (for the current plan version), a review gate exactly when
     `awaiting_review`, a merge gate only in `awaiting_merge` and never while the task waits on an unfinished task;

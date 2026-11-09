@@ -9,10 +9,12 @@ import { SettingsBlock } from './group.tsx';
 
 export function UsageAccountBlock({
   header,
+  owner = null,
   menu,
   children,
 }: {
   header: UsageAccountHeader;
+  owner?: string | null;
   menu: React.ReactNode;
   children: React.ReactNode;
 }) {
@@ -24,6 +26,7 @@ export function UsageAccountBlock({
           <div className='flex min-w-0 flex-1 items-center gap-1.5 text-xs'>
             <AccountName name={header.name} className='font-medium text-fg-4' />
             {header.detail && <span className='shrink-0 text-fg-2'>{header.detail}</span>}
+            {owner && <span className='shrink-0 text-fg-2'>{owner}</span>}
             {header.isDefault && (
               <Badge size='sm' className='ms-0.5'>
                 {ACCOUNT_LABEL.default}

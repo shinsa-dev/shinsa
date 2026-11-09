@@ -11,6 +11,7 @@ import {
   OwnerOnlyRoute,
   RequestBodyLimit,
   RouteFieldFailures,
+  SharedMemberRoute,
 } from './schema.ts';
 
 export function resolveEngineRouteKey(method: string, path: string) {
@@ -38,6 +39,7 @@ export function listEngineRoutes(): readonly EngineRoute[] {
         feature: Context.get(mergedAnnotations, EngineFeatureRoute),
         localOnly: Context.get(mergedAnnotations, LocalOnlyRoute),
         ownerOnly: Context.get(mergedAnnotations, OwnerOnlyRoute),
+        sharedMember: Context.get(mergedAnnotations, SharedMemberRoute),
         guest: Context.get(mergedAnnotations, GuestRoute),
         browserOnly: Context.get(mergedAnnotations, BrowserOnlyRoute),
         bodyLimit: Context.get(mergedAnnotations, RequestBodyLimit),

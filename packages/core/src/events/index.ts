@@ -38,6 +38,7 @@ import type {
   TaskAuto,
   TaskDuplicate,
   TaskMode,
+  TaskOwner,
   TaskPriority,
   TaskShape,
   TaskSize,
@@ -106,6 +107,7 @@ type EventBody =
       account?: RunAccount | null;
       parentTaskId?: string | null;
       createdBy?: TaskCreator | null;
+      owner?: TaskOwner | null;
       scheduleId?: string | null;
       sourceReport?: SourceReport | null;
       watchHome?: boolean;

@@ -66,6 +66,7 @@ describe('the settings a command may change', () => {
       placementPolicies: [],
       shareLimit: 'until_done',
       sharePreset: 'standard',
+      sharedTeams: [],
     };
     expect(Object.keys(every).sort()).toEqual([...SETTINGS_KEYS].sort());
   });

@@ -14,6 +14,7 @@ import { connection } from '@/lib/connection/socket.ts';
 import type { TeamActions } from '@/lib/connection/teams.ts';
 import { TEAM_KEY_UPDATE, TEAM_KEY_WAITING, TEAM_MACHINE_NEEDS_KEY } from '@/lib/teams/settings.ts';
 import { spyOnToasts } from '../../support/commands.ts';
+import { spyOnEngine } from '../../support/engine.ts';
 import { createRemoteSnapshot } from '../../support/remote-access.ts';
 import { createProject, createShinsaState } from '../../support/state.ts';
 import { BOB, createTeam, createTeamEntry, KAI, MONA, TEAM_URL } from '../../support/teams.ts';
@@ -47,6 +48,7 @@ function createActions() {
     leave: mock((_teamId: string) => snapshot()),
     remove: mock((_teamId: string) => snapshot()),
     grantAccess: mock((_teamId: string, _userId: string) => snapshot()),
+    shareMachine: mock((_teamId: string, _shared: boolean) => snapshot()),
     updateScopes: mock((_teamId: string, _userId: string | null, _scopes: AccessScopes | null) => snapshot()),
     updateExtra: mock((_teamId: string, _userId: string, _scopes: AccessScopes) => snapshot()),
     requestKey: mock((_teamId: string) => snapshot()),
@@ -223,6 +225,50 @@ describe('Settings → Teams', () => {
     renderOwnedTeam();
     expect(screen.queryByText('What teammates can do')).toBeNull();
     expect(screen.queryByRole('button', { name: 'Scopes' })).toBeNull();
+  });
+
+  it('shares this machine with the team from its row, after asking, and stops the same way', async () => {
+    spyOnEngine();
+    const team = createTeam({
+      machines: [
+        { id: 'k3x9', name: 'Laptop', userId: MONA.id, online: true, lastSeenAt: Date.now() },
+        { id: 'kai1', name: 'Kai’s MacBook', userId: KAI.id, online: true, lastSeenAt: Date.now() },
+      ],
+    });
+    const state = createShinsaState({});
+    const read = spyOn(connection, 'snapshot').mockReturnValue({ ...connection.snapshot(), state });
+    const actions = renderTeams(createRemoteSnapshot({ access: ACCESS, teams: [createTeamEntry({ team })] }));
+    const toggle = screen.getByRole('switch', { name: 'Share Laptop with Platform' });
+    expect(screen.getAllByRole('switch', { name: /^Share / })).toHaveLength(1);
+    expect(toggle.getAttribute('aria-checked')).toBe('false');
+    fireEvent.click(toggle);
+    fireEvent.click(await screen.findByRole('button', { name: 'Share machine' }));
+    await waitFor(() => expect(actions.shareMachine).toHaveBeenCalledWith('team1', true));
+    await waitFor(() => expect(toasts.success).toHaveBeenCalledWith('Shared with Platform.'));
+    read.mockReturnValue({
+      ...connection.snapshot(),
+      state: { ...state, settings: { ...state.settings, sharedTeams: ['team1'] } },
+    });
+    cleanup();
+    renderTeams(createRemoteSnapshot({ access: ACCESS, teams: [createTeamEntry({ team })] }));
+    const shared = screen.getByRole('switch', { name: 'Share Laptop with Platform' });
+    expect(shared.getAttribute('aria-checked')).toBe('true');
+    read.mockRestore();
+  });
+
+  it('offers no share switch before this machine holds the team’s key, or on an engine without it', () => {
+    const team = createTeam({
+      machines: [{ id: 'k3x9', name: 'Laptop', userId: MONA.id, online: true, lastSeenAt: Date.now() }],
+    });
+    spyOnEngine();
+    renderTeams(
+      createRemoteSnapshot({ access: ACCESS, teams: [createTeamEntry({ team, onMachine: false })] })
+    );
+    expect(screen.queryByRole('switch', { name: /^Share / })).toBeNull();
+    cleanup();
+    spyOnEngine(null);
+    renderTeams(createRemoteSnapshot({ access: ACCESS, teams: [createTeamEntry({ team })] }));
+    expect(screen.queryByRole('switch', { name: /^Share / })).toBeNull();
   });
 
   it('says whether each teammate is online, away or offline, from the team’s live channels', () => {

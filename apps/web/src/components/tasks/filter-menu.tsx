@@ -1,8 +1,10 @@
 import { FilterBar, FilterChip, FilterClear, FilterMenu } from '@shinsa/ui/components/filter-bar';
+import * as React from 'react';
 import { Hint } from '@/components/overlays/hint.tsx';
 import { UserAvatar } from '@/components/people/user-tag.tsx';
 import { applyFilterValues, clearTaskFilters, toggleTaskFilter } from '@/lib/command/tasks.ts';
 import { useRemoteSnapshot } from '@/lib/connection/socket.ts';
+import { ViewerContext } from '@/lib/remote/viewer.ts';
 import {
   type TaskFilterField,
   type TaskFilterKey,
@@ -16,7 +18,9 @@ interface TaskFilterProps {
 }
 
 function useOwnerAvatars(fields: readonly TaskFilterField[]) {
-  const you = useRemoteSnapshot()?.access?.owner;
+  const signedIn = React.useContext(ViewerContext);
+  const remoteOwner = useRemoteSnapshot()?.access?.owner;
+  const you = signedIn ?? remoteOwner;
   return fields.map((field) => {
     if (field.key !== 'owner') return field;
     return {

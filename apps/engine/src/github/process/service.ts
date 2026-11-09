@@ -7,6 +7,7 @@ import {
   NOT_STARTED_EXIT_CODE,
 } from '../../shell/schema.ts';
 import { Shell } from '../../shell/service.ts';
+import { TaskGitHub } from '../identity/schema.ts';
 import { GITHUB_TIMEOUT, type GitHubAnswer, type GitHubRun } from '../schema.ts';
 
 export class GitHubProcess extends Context.Service<
@@ -31,11 +32,13 @@ export class GitHubProcess extends Context.Service<
         options: GitHubRun = {}
       ) {
         if (options.signal?.aborted) return notStarted(CANCELLED_BEFORE_START, CANCELLED_EXIT_CODE);
+        const { identity } = yield* TaskGitHub;
         return yield* shell
           .run({
             argv: ['gh', ...args],
             cwd,
             input: options.input,
+            ...(identity ? { env: { GH_TOKEN: identity.token } } : {}),
             timeout: GITHUB_TIMEOUT,
             cancel: resolveCancel(options.signal),
           })

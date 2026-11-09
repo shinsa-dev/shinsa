@@ -135,6 +135,7 @@ async function startMachine(options: MachineOptions = {}): Promise<Machine> {
             isEnrolled: (device) => Effect.sync(() => machine.enrolled.has(device)),
             resolveGuest: () => Effect.succeed(null),
             isOwner: Effect.succeed(false),
+            userId: 'u1',
             requestAccess: (proof, proofKeys) =>
               Effect.gen(function* () {
                 const answer = options.access?.(proof, proofKeys);
