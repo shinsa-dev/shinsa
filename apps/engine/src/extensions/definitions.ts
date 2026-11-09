@@ -7,7 +7,9 @@ export type { McpDefinition };
 
 const HEADLESS_BROWSER_ENV = { PLAYWRIGHT_MCP_HEADLESS: 'true' };
 
-const RETINA_BROWSER_ENV = { PLAYWRIGHT_MCP_DEVICE: 'Desktop Chrome HiDPI' };
+const RETINA_DEVICE = 'Desktop Chrome HiDPI';
+
+const RETINA_BROWSER_ENV = { PLAYWRIGHT_MCP_DEVICE: RETINA_DEVICE };
 
 const DEVICE_CHOICES = [
   'PLAYWRIGHT_MCP_DEVICE',
@@ -21,12 +23,17 @@ const DEVICE_FLAGS = ['--device', '--mobile', '--cdp-endpoint', '--extension', '
 
 export function resolveBrowserEnv<T extends string | undefined>(
   env: Record<string, T>,
-  args: string[] = []
+  args: readonly string[] = [],
+  endpoint: string | null = null
 ): Record<string, T | string> {
+  const { PLAYWRIGHT_MCP_DEVICE: device, ...withoutDevice } = env;
+  const given: Record<string, T> = device === RETINA_DEVICE ? withoutDevice : env;
   const chosen =
-    DEVICE_CHOICES.some((key) => env[key] !== undefined) ||
+    DEVICE_CHOICES.some((key) => given[key] !== undefined) ||
     args.some((arg) => DEVICE_FLAGS.some((flag) => arg === flag || arg.startsWith(`${flag}=`)));
-  return { ...(chosen ? {} : RETINA_BROWSER_ENV), ...env, ...HEADLESS_BROWSER_ENV };
+  if (chosen) return { ...given, ...HEADLESS_BROWSER_ENV };
+  if (endpoint) return { ...given, PLAYWRIGHT_MCP_CDP_ENDPOINT: endpoint, ...HEADLESS_BROWSER_ENV };
+  return { ...RETINA_BROWSER_ENV, ...given, ...HEADLESS_BROWSER_ENV };
 }
 
 const VARIABLE = /\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-([^}]*))?\}/g;

@@ -33,6 +33,8 @@ const GATE_FACTS: Record<GateType, (gate: Gate) => string> = {
   merge: () => 'merge: the pull request is open, CI and review clean, ready to merge',
   question: describeAsked,
   secret: describeAsked,
+  browser_sign_in: (gate) =>
+    `an agent waits for the developer to sign its project’s browser in: ${gate.title}`,
   proposal: () =>
     'proposal: an agent proposes turning this task into a change; the developer approves or keeps it as it is',
   operation: (gate) => `operation: merged, waiting for the developer to run it: ${gate.title}`,

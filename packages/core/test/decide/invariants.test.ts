@@ -13,6 +13,7 @@ import {
   type GateDecision,
   isAgentQuestion,
   isDecisionGate,
+  isBundleMember,
   isDependencyOf,
   isOverBudget,
   isTaskSettled,
@@ -974,6 +975,14 @@ function assertMoveInvariants(state: ShinsaState) {
   }
 }
 
+function assertNoWaitInsideBundle(state: ShinsaState, task: Task, context: string) {
+  if (isTaskSettled(task)) return;
+  expect(
+    task.waitsOn.filter((id) => isBundleMember(state, task, id)),
+    context
+  ).toEqual([]);
+}
+
 function assertInvariants(state: ShinsaState, now: number) {
   const queue = resolveQueue(state, now);
   const seen = new Map<string, string>();
@@ -1017,6 +1026,7 @@ function assertInvariants(state: ShinsaState, now: number) {
       task.waitsOn.some((id) => isDependencyOf(state, task.id, id)),
       context
     ).toBe(false);
+    assertNoWaitInsideBundle(state, task, context);
 
     assertShapeInvariants(task, gates, state, context);
     assertBundleInvariants(state, task, gates, context);

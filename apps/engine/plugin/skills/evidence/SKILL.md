@@ -84,13 +84,14 @@ comparison counts as the screenshots (or recordings) a plan asks for.
    code, capture them from a scratch checkout of the base: `git worktree add --detach /tmp/before <base commit>`,
    install, run it on another port, capture, then `git worktree remove /tmp/before`.
 3. Capture at a device scale factor of 2: the human reviews on a Retina screen, where a shot with one pixel per CSS
-   pixel looks soft. A 1280px wide view is a 2560px wide file. Shinsa starts the Playwright MCP at that scale; take
-   its screenshots with `scale: "device"` (its default, `"css"`, halves them again). On the command line pass
-   `--device="Desktop Chrome HiDPI"` with your `--viewport-size`; in a script set `deviceScaleFactor: 2` on every page
-   and context.
+   pixel looks soft. A 1280px wide view is a 2560px wide file. Your project's shared browser already renders at that
+   scale, and so does the Playwright MCP when your task has no project; take its screenshots with `scale: "device"`
+   (its default, `"css"`, halves them again). On the command line pass `--device="Desktop Chrome HiDPI"` with your
+   `--viewport-size`; in a script set `deviceScaleFactor: 2` on every page and context.
 4. Capture with the browser tools you have (the Playwright MCP tools), or the Playwright command line for a single
-   page. Every browser you start runs headless: the human works on this machine, and a window that opens takes their
-   screen. Shinsa starts the Playwright MCP headless for you. In a script, launch with `headless: true`, never with
+   page. Your browser tools open pages in your project's shared browser (The shared browser, below), which runs
+   headless and may already be signed in. Every browser you start yourself runs headless too: the human works on this
+   machine, and a window that opens takes their screen. In a script, launch with `headless: true`, never with
    `headless: false` or `--headed`, and never open a page with `open` or in a desktop browser.
 
    ```sh
@@ -135,6 +136,37 @@ comparison counts as the screenshots (or recordings) a plan asks for.
 6. Look at every image before you attach it: the right screen, the change visible, nothing half loaded, and twice the
    width you captured at (`sips -g pixelWidth` or `file` on the PNG).
 7. Attach each view's before and after as one comparison, each recording as a `recording`, with the fields above.
+
+## The shared browser
+
+Every task of a project shares one Chrome, kept by Shinsa on this machine. Your Playwright MCP tools already drive it
+(`PLAYWRIGHT_MCP_CDP_ENDPOINT` in your environment holds its address, valid only while your run lasts). It keeps its
+sign-ins across runs and tasks, so a site the human signed it in to once stays signed in for you and every later task.
+
+- **Open the page first.** It may be signed in already; sign in or ask only when it asks you to.
+- **The repository's own test users come first.** When the repository says how agents sign in (test accounts, a
+  test-user MCP server, a seeded user), do that and never use the human's own session.
+- **Ask with `request_browser_sign_in`**, with the full address of the sign-in page and one sentence on what you need
+  there. The human copies the sign-in from their everyday browser or signs in by hand in a window on their machine;
+  when the tool answers that they did, open the page again. Ask once per site, never per task, and never ask for a
+  password or a code with `ask`.
+- **Never launch a browser of your own to sign in.** A browser you start is a fresh one with no sign-ins, and Google
+  refuses to sign in to a browser a program drives.
+- **Share it politely.** Other agents use the same browser at the same time: open your own pages, close them when you
+  are done, and never sign out of a site or clear its cookies. Closing the whole browser is refused.
+- **A script** reaches the same browser with `chromium.connectOverCDP(process.env.PLAYWRIGHT_MCP_CDP_ENDPOINT)`. For a
+  recording or a clean viewport, make your own context with the shared one's sign-ins, which leaves them untouched:
+
+  ```ts
+  const shared = await chromium.connectOverCDP(process.env.PLAYWRIGHT_MCP_CDP_ENDPOINT!);
+  const storageState = await shared.contexts()[0].storageState();
+  const context = await shared.newContext({ storageState, viewport: { width: 1280, height: 800 }, deviceScaleFactor: 2 });
+  ```
+
+- **When it is not there.** A task with no project has no shared browser: your tools start a headless one of their
+  own with no sign-ins. When the browser tools fail because Chrome is not installed, or because the human has the
+  sign-in window open (it is back once they press Done), say so in your hand-over; never work around it with a
+  browser of your own.
 
 ## iOS
 
