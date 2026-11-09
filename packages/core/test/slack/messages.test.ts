@@ -21,6 +21,7 @@ import {
   serializeSlackReconnectPrompt,
   serializeSlackUnreadLinks,
   serializeSlackMerged,
+  serializeSlackNoAccess,
   serializeSlackOffline,
   type Task,
   type TaskShape,
@@ -710,6 +711,10 @@ describe("the bot's own replies", () => {
       '<https://app.shinsa.dev/slack/connect|Connect Slack>'
     );
     expect(readText(serializeSlackOffline('Studio & Co'))).toStartWith('*Studio &amp; Co is offline*\n');
+    expect(serializeSlackNoAccess().text).toBe(
+      'Your GitHub account no longer has access to this Shinsa, so nothing was started.'
+    );
+    expect(readText(serializeSlackNoAccess())).toStartWith('*No access to this Shinsa*\n');
   });
 
   test('asks to connect again, or says how many linked threads could not be read', () => {

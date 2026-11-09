@@ -12,6 +12,7 @@ import {
   type ShinsaEvent,
   type ShinsaState,
   type Task,
+  type TaskOwner,
   SHARE_PRESET_SCOPES,
 } from '@shinsa/core';
 import { Effect } from 'effect';
@@ -141,6 +142,7 @@ export interface StubEngine {
   state: ShinsaState;
   dispatched: ShinsaCommand[];
   commandIds: (string | null)[];
+  actors: (TaskOwner | null)[];
   reject: (predicate: (command: ShinsaCommand) => boolean, error?: Error) => void;
   respond: (predicate: (command: ShinsaCommand) => boolean, events: ShinsaEvent[]) => void;
   update: (patch: (state: ShinsaState) => void) => void;
@@ -160,6 +162,7 @@ export function createStubEngine(patch: (state: ShinsaState) => void = () => und
   patch(state);
   const dispatched: ShinsaCommand[] = [];
   const commandIds: (string | null)[] = [];
+  const actors: (TaskOwner | null)[] = [];
   const rejections: { predicate: (command: ShinsaCommand) => boolean; error: Error }[] = [];
   const responses: { predicate: (command: ShinsaCommand) => boolean; events: ShinsaEvent[] }[] = [];
   const listeners = new Set<(state: ShinsaState) => void>();
@@ -173,9 +176,13 @@ export function createStubEngine(patch: (state: ShinsaState) => void = () => und
         listeners.delete(listener);
       };
     },
-    dispatch: (command: ShinsaCommand, options: { id?: string } = {}): Promise<ShinsaEvent[]> => {
+    dispatch: (
+      command: ShinsaCommand,
+      options: { id?: string; actor?: TaskOwner | null } = {}
+    ): Promise<ShinsaEvent[]> => {
       dispatched.push(command);
       commandIds.push(options.id ?? null);
+      actors.push(options.actor ?? null);
       const rejection = rejections.find((candidate) => candidate.predicate(command));
       if (rejection) return Promise.reject(rejection.error);
       const response = responses.find((candidate) => candidate.predicate(command));
@@ -198,7 +205,7 @@ export function createStubEngine(patch: (state: ShinsaState) => void = () => und
           () => Effect.sync(() => listeners.delete(listener))
         )
       ),
-    dispatch: (command: ShinsaCommand, options: { id?: string } = {}) =>
+    dispatch: (command: ShinsaCommand, options: { id?: string; actor?: TaskOwner | null } = {}) =>
       Effect.tryPromise({
         try: () => stub.dispatch(command, options),
         catch: (error) => error as DomainError,
@@ -211,6 +218,7 @@ export function createStubEngine(patch: (state: ShinsaState) => void = () => und
     state,
     dispatched,
     commandIds,
+    actors,
     reject: (predicate, error = new Error('rejected')) => rejections.push({ predicate, error }),
     respond: (predicate, events) => responses.push({ predicate, events }),
     update: (change) => change(state),

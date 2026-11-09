@@ -25,6 +25,7 @@ function mention(overrides: Partial<SlackMention> = {}): SlackMention {
       { ts: '100.3', userId: 'U1', userName: 'Christo', text: 'take this', bot: false },
     ],
     linkedThreads: [],
+    linkedUserId: null,
     ...overrides,
   };
 }

@@ -141,6 +141,7 @@ describe('slack effects', () => {
     channelName: null,
     thread: [],
     linkedThreads: [],
+    linkedUserId: null,
   };
 
   test('a mention is read once per Slack event; posts and status edits run once per decision', () => {
