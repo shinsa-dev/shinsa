@@ -6,12 +6,15 @@ import {
   type ChatNotice,
   DomainError,
   type FastModeAvailability,
+  isPaceMoved,
   isSharedMachine,
   listActiveRuns,
   listOpenGates,
+  listProviderPaces,
   type ProviderLogin,
   resolveAgentModel,
   resolveCandidateSpentUntil,
+  resolvePlanKey,
   resolveSpentUntil,
   resolveWeeklyReading,
   type ShinsaCommand,
@@ -247,6 +250,50 @@ export class Accounts extends Context.Service<
         yield* Ref.set(duplicates, new Set(found.map((duplicate) => duplicate.id)));
       });
 
+      const recordPlan = Effect.fn('Accounts.recordPlan')(function* (account: AccountSummary, seq: number) {
+        const plan = resolvePlanKey(account.plan);
+        yield* dispatch(
+          { type: 'account.plan_recorded', accountId: account.id, provider: CLAUDE_PROVIDER, plan },
+          `account-plan:${account.id}:${plan ?? 'none'}:${seq}`
+        ).pipe(
+          Effect.catch((failure) =>
+            Effect.logWarning('[Accounts] Could not record the plan an account is on').pipe(
+              Effect.annotateLogs({ accountId: account.id, error: describeError(failure) })
+            )
+          )
+        );
+      });
+
+      const recordPlans = Effect.fn('Accounts.recordPlans')(function* (accounts: AccountSummary[]) {
+        if (inspect) return;
+        const state = yield* engine.state;
+        const changedPlans = accounts.filter(
+          (account) => (state.accountPlans[account.id]?.plan ?? null) !== resolvePlanKey(account.plan)
+        );
+        for (const account of changedPlans) yield* recordPlan(account, state.seq);
+      });
+
+      const recordPaces = Effect.fn('Accounts.recordPaces')(function* (next: AccountsSnapshot) {
+        if (inspect) return;
+        const state = yield* engine.state;
+        const now = yield* Clock.currentTimeMillis;
+        const moved = listProviderPaces(next, now).filter(({ provider, pace }) =>
+          isPaceMoved(state.usagePaces[provider]?.pace ?? null, pace)
+        );
+        for (const { provider, pace } of moved) {
+          yield* dispatch(
+            { type: 'usage.pace_recorded', provider, pace },
+            `usage-pace:${provider}:${pace ?? 'none'}:${state.seq}`
+          ).pipe(
+            Effect.catch((failure) =>
+              Effect.logWarning('[Accounts] Could not record the safe usage pace').pipe(
+                Effect.annotateLogs({ provider, error: describeError(failure) })
+              )
+            )
+          );
+        }
+      });
+
       const changed = Effect.gen(function* () {
         if (yield* Ref.get(stopped)) return;
         const next = yield* snapshot;
@@ -254,6 +301,8 @@ export class Accounts extends Context.Service<
         if (serialized === (yield* Ref.getAndSet(last, serialized))) return;
         yield* recordDuplicates(next.duplicates ?? []);
         for (const listener of yield* Ref.get(listeners)) yield* listener(next);
+        yield* recordPlans(next.accounts);
+        yield* recordPaces(next);
       });
 
       const subscribe = (listener: (snapshot: AccountsSnapshot) => Effect.Effect<void>) =>

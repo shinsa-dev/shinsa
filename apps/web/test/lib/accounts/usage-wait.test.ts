@@ -1,15 +1,20 @@
 import { describe, expect, it } from 'bun:test';
 import type { UsageWait } from '@shinsa/core';
+import { resolveAwayHours } from '@shinsa/core';
 import {
+  BUILD_NOW,
+  describeUsageWaitAction,
   describeUsageWaitBody,
   describeUsageWaitCountdown,
   describeUsageWaitNote,
   describeUsageWaitTitle,
   describeUsageWaitToggle,
   describeUsageWaitToggled,
+  isAdmissionWait,
   isPaceWait,
   isUsageWaitArmed,
 } from '@/lib/accounts/usage-wait.ts';
+import { createNights } from '../../support/away.ts';
 import { createProject, createTask, NOW } from '../../support/state.ts';
 
 function wait(overrides: Partial<UsageWait> = {}): UsageWait {
@@ -93,5 +98,36 @@ describe('usage waits', () => {
     expect(describeUsageWaitNote(daily)).toBe(
       'Starts by itself as older usage drops out. Resume now ignores the limits for this task.'
     );
+  });
+
+  it('says a build waiting for Auto pace builds tonight or after a time, and offers Build now', () => {
+    const pace = {
+      scope: 'admission' as const,
+      limit: 9,
+      percent: 8,
+      projectId: null,
+      stageReason: 'building',
+      need: 6,
+    };
+    const away = resolveAwayHours({ away: createNights(), presence: {} }, NOW);
+    const night = Math.floor(NOW / 86_400_000) * 86_400_000 + 86_400_000 + 3 * 3_600_000;
+    const tonight = wait({ cause: 'pace', pace, resetAt: night });
+    expect(isAdmissionWait(tonight)).toBe(true);
+    expect(isAdmissionWait(wait())).toBe(false);
+    expect(describeUsageWaitTitle(tonight, NOW, away)).toBe('Builds tonight');
+    expect(describeUsageWaitTitle(tonight, night, away)).toMatch(/^Builds after /);
+    expect(describeUsageWaitTitle(wait({ cause: 'pace', pace }), NOW)).toMatch(/^Builds after /);
+    expect(describeUsageWaitBody(tonight)).toBe(
+      'Its build needs about 6%, and 8% of today’s 9% is already used or set aside, so it waits its turn.'
+    );
+    const { need: _need, ...unknown } = pace;
+    expect(describeUsageWaitBody(wait({ cause: 'pace', pace: unknown }))).toBe(
+      '8% of today’s 9% is already used or set aside, so the build waits its turn.'
+    );
+    expect(describeUsageWaitNote(tonight)).toBe(
+      'Auto pace starts it by itself in queue order once it fits. Build now starts it at once.'
+    );
+    expect(describeUsageWaitAction(tonight)).toBe(BUILD_NOW);
+    expect(describeUsageWaitAction(wait())).toBe('Resume now');
   });
 });
