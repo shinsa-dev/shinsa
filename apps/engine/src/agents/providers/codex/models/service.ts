@@ -1,5 +1,5 @@
-import { KNOWN_CODEX_MODELS } from '@shinsa/core';
-import { Cache, Duration, Effect, Exit } from 'effect';
+import { type AgentModel, KNOWN_CODEX_MODELS } from '@shinsa/core';
+import { Cache, Duration, Effect, Exit, Option, Ref } from 'effect';
 import type { CodexParams } from '../client/schema.ts';
 import { makeCodexClient } from '../client/service.ts';
 import { CodexCallFailed } from '../complete/schema.ts';
@@ -49,14 +49,18 @@ export const makeCodexModelCatalog = Effect.fn('CodexModelCatalog.make')(functio
     timeToLive: (exit) => (Exit.isSuccess(exit) ? definition.timeToLive : Duration.zero),
   });
 
+  const lastGood = yield* Ref.make(Option.none<AgentModel[]>());
+
   const list = definition.executable.pipe(
     Effect.flatMap((executable) =>
       Cache.get(catalog, executable.ok ? `${executable.path}@${executable.version ?? ''}` : '')
     ),
+    Effect.tap((models) => Ref.set(lastGood, Option.some(models))),
     Effect.catch((failure) =>
       Effect.logWarning('[Models] Falling back to the built-in Codex list').pipe(
         Effect.annotateLogs({ error: failure.message }),
-        Effect.as(KNOWN_CODEX_MODELS)
+        Effect.andThen(Ref.get(lastGood)),
+        Effect.map(Option.getOrElse(() => KNOWN_CODEX_MODELS))
       )
     )
   );

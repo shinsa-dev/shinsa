@@ -1,6 +1,6 @@
 import type { SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
-import { KNOWN_AGENT_MODELS } from '@shinsa/core';
-import { Cache, Duration, Effect, Exit, Stream } from 'effect';
+import { type AgentModel, KNOWN_AGENT_MODELS } from '@shinsa/core';
+import { Cache, Duration, Effect, Exit, Option, Ref, Stream } from 'effect';
 import { describeError } from '../../../../log/index.ts';
 import { resolveClaudeLaunch } from '../sdk/launch.ts';
 import { resolveModels } from './families.ts';
@@ -41,14 +41,18 @@ export const makeModelCatalog = Effect.fn('ModelCatalog.make')(function* (
     timeToLive: (exit) => (Exit.isSuccess(exit) ? timeToLive : Duration.zero),
   });
 
+  const lastGood = yield* Ref.make(Option.none<AgentModel[]>());
+
   const list = runtime.resolveExecutable.pipe(
     Effect.flatMap((executable) =>
       Cache.get(catalog, executable.ok ? `${executable.path}@${executable.version ?? ''}` : '')
     ),
+    Effect.tap((models) => Ref.set(lastGood, Option.some(models))),
     Effect.catch((failure) =>
       Effect.logWarning('[Models] Falling back to the built-in list').pipe(
         Effect.annotateLogs({ error: failure.message }),
-        Effect.as(KNOWN_AGENT_MODELS)
+        Effect.andThen(Ref.get(lastGood)),
+        Effect.map(Option.getOrElse(() => KNOWN_AGENT_MODELS))
       )
     )
   );

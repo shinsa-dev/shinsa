@@ -75,6 +75,26 @@ describe('the model catalog', () => {
     }).pipe(Effect.provide(TestClock.layer()), Effect.runPromise);
   });
 
+  test('keeps the last list it had when a later ask fails', async () => {
+    let asked = 0;
+    const fake = createCatalogQuery(() => {
+      asked += 1;
+      return asked === 1 ? Promise.resolve(ROWS) : Promise.reject(new Error('no claude'));
+    });
+    await Effect.gen(function* () {
+      const catalog = yield* makeModelCatalog({
+        runtime: createFakeRuntime(fake.query),
+        timeout: Duration.millis(CATALOG_TIMEOUT_MS),
+        timeToLive: MODEL_CATALOG_TTL,
+      });
+      const first = yield* catalog.list;
+      yield* TestClock.adjust(MODEL_CATALOG_TTL);
+      expect(yield* catalog.list).toEqual(first);
+      expect(yield* catalog.list).toEqual(first);
+      expect(asked).toBe(3);
+    }).pipe(Effect.provide(TestClock.layer()), Effect.runPromise);
+  });
+
   test('asks again as soon as Claude Code changes version', async () => {
     let asked = 0;
     const fake = createCatalogQuery(() => {

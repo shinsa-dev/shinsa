@@ -60,6 +60,31 @@ describe('the Codex model list', () => {
     }).pipe(Effect.scoped, Effect.provide(TestClock.layer()), runProvider);
   });
 
+  test('keeps the last list it had when a later ask fails', async () => {
+    const codex = new FakeCodex({
+      models: [{ id: 'gpt-6-astra', model: 'gpt-6-astra', displayName: 'GPT-6-Astra', description: '' }],
+    });
+    let installed = true;
+    const runtime: CodexRuntime = {
+      ...codex.runtime,
+      resolveExecutable: Effect.suspend(() =>
+        installed
+          ? codex.runtime.resolveExecutable
+          : Effect.succeed({
+              ok: false as const,
+              reason: 'not_installed' as const,
+              message: 'No codex.',
+              version: null,
+            })
+      ),
+    };
+    const catalog = createCatalog(runtime);
+    const first = await catalog.list();
+    expect(first.map((model) => model.id)).toEqual(['gpt-6-astra']);
+    installed = false;
+    expect(await catalog.list()).toEqual(first);
+  });
+
   test('rows that are not models are skipped', () => {
     expect(resolveCodexModels([null, 'x', { hidden: true, model: 'internal' }, { id: 'only-id' }])).toEqual([
       { id: 'only-id', label: 'Only-id', description: '' },
