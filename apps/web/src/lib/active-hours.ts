@@ -4,12 +4,13 @@ import type { SettingItem } from '@/lib/settings.ts';
 export const ACTIVE_HOURS_LABEL = {
   title: 'Your hours',
   description:
-    'When you usually use Shinsa, learned from your answers, messages and visits on this machine. Autopilot and auto pace plan around them.',
+    'When you usually use Shinsa, learned from when you are away from this Mac and what you do in Shinsa. Autopilot and auto pace plan around them.',
   learning: `Shinsa has not seen enough of your days yet. It learns your hours after ${ACTIVE_HOURS_LIMITS.minDays} days.`,
   setByHand: 'Set by hand',
   useLearned: 'Use learned hours',
   inactive: 'Not active',
   off: 'Off',
+  split: 'This day has more than one span, so change it with shinsa settings set.',
   saved: { override: 'Your hours are set by hand.', learned: 'Shinsa learns your hours again.' },
 } as const;
 
@@ -35,6 +36,7 @@ export interface ActiveHourRow {
   cells: { hour: number; active: boolean }[];
   ranges: string;
   span: ActiveDay | null;
+  split: boolean;
 }
 
 export function formatHour(hour: number) {
@@ -74,6 +76,7 @@ export function listActiveHourRows(
       cells: cells.map((active, hour) => ({ hour, active })),
       ranges: describeRanges(cells),
       span: override?.find((day) => day.weekday === weekday) ?? null,
+      split: (override?.filter((day) => day.weekday === weekday).length ?? 0) > 1,
     };
   });
 }

@@ -109,10 +109,15 @@ export function ActiveHoursSettings({ state }: { state: ShinsaState }) {
             <div key={row.weekday} className={cn(SETTING_ROW, SETTING_ROW_WRAPS, 'gap-3')}>
               <span className='w-20 shrink-0 text-xs text-fg-4'>{row.name}</span>
               <HourCells cells={row.cells} name={row.name} />
-              {override ? (
+              {override && !row.split ? (
                 <OverrideFields row={row} days={override} onChange={saveOverride} />
               ) : (
-                <span className={cn(TOKEN_TEXT, 'w-60 truncate text-right')}>{row.ranges}</span>
+                <span
+                  title={row.split ? ACTIVE_HOURS_LABEL.split : undefined}
+                  className={cn(TOKEN_TEXT, 'w-60 truncate text-right')}
+                >
+                  {row.ranges}
+                </span>
               )}
             </div>
           ))}

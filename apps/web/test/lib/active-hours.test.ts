@@ -57,6 +57,27 @@ describe('your hours, read', () => {
       { weekday: 2, from: 8, to: 16 },
     ]);
     expect(rows[1]?.span).toEqual({ weekday: 2, from: 8, to: 16 });
+    expect(rows[1]?.split).toBe(false);
+  });
+
+  test('a day set with two spans is marked, so the one-span editor never rewrites it', () => {
+    const rows = listActiveHourRows(
+      createHours(
+        {
+          3: [
+            [9, 12],
+            [14, 18],
+          ],
+        },
+        'override'
+      ),
+      [
+        { weekday: 3, from: 9, to: 12 },
+        { weekday: 3, from: 14, to: 18 },
+      ]
+    );
+    expect(rows[2]?.split).toBe(true);
+    expect(rows[2]?.ranges).toBe('09:00 to 12:00, 14:00 to 18:00');
   });
 
   test('a day active until midnight ends at 24:00', () => {

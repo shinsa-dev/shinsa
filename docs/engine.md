@@ -2095,12 +2095,12 @@ action it takes is recorded with its reason. The rules are core's (`decide/autop
   and ready to merge.", `handoff.waitedMinutes` 0, with `mergesAt` the deadline, or the reason it will not merge
   as `blockedBy`), and with `merge` or `escalate_then_merge` its gate gets a merge deadline
   (`autopilot.scheduled`, `Gate.autopilotDue {at, action: 'merge', wait, waitedMinutes}`). The deadline follows your
-  hours (`resolveWait`, on `resolveActiveHours`): outside them it is `quietWaitMinutes` from now (`outside_hours`);
+  hours (`resolveWait`, on `resolveActiveHours`): outside them it is `quietWaitMinutes` from now (`outside_hours`), or the configured wait when that is shorter;
   inside them it is `urgentWaitMinutes` from now (`configured`), or `quietWaitMinutes` after your hours end when that
   comes first (`hours_ended`, `resolveNextActiveChange`). With nothing learned and no hours set by hand you count as
-  here, so it is the configured wait. The deadline is set once; coming back during the wait does not move it. Both follow you while the gate waits
+  here, so it is the configured wait. The deadline is never later than the configured wait: outside your hours it is the earlier of the two. The deadline is set once; coming back during the wait does not move it. Both follow you while the gate waits
   (`syncAutopilotDeadlines`, after `task.prioritize` and `settings.change`): a task you mark urgent, or a policy you
-  turn on or set to ask or merge, is asked for at once and gets its deadline a full wait from then; a task no longer
+  turn on or set to ask or merge, is asked for at once and gets its deadline from then, by the same rule (`resolveWait`); a task no longer
   urgent, or a policy off or set not to merge, loses the deadline; a deadline already set keeps its time, and an
   escalation already sent is not sent again.
 - **The idle clock.** `AutopilotClock` fires `autopilot.fire {taskId, gateId, dueAt}` (command id

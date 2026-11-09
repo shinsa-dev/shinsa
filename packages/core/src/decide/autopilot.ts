@@ -143,8 +143,11 @@ function resolveUrgentPolicy(decider: Decider, task: Task) {
 function resolveWait(state: ShinsaState, now: number, policy: AutopilotPolicy) {
   const hours = resolveActiveHours(state, now);
   const configured = now + policy.urgentWaitMinutes * MINUTE_MS;
-  if (!isActiveAt(hours, now))
-    return { wait: 'outside_hours' as const, at: now + policy.quietWaitMinutes * MINUTE_MS };
+  if (!isActiveAt(hours, now)) {
+    const quiet = now + policy.quietWaitMinutes * MINUTE_MS;
+    if (quiet < configured) return { wait: 'outside_hours' as const, at: quiet };
+    return { wait: 'configured' as const, at: configured };
+  }
   const ended = resolveNextActiveChange(hours, now);
   const quiet = ended === null ? null : ended + policy.quietWaitMinutes * MINUTE_MS;
   if (quiet !== null && quiet < configured) return { wait: 'hours_ended' as const, at: quiet };

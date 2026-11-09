@@ -586,6 +586,20 @@ describe('Autopilot and your hours', () => {
     });
   });
 
+  test('outside your hours, never waits longer than the wait you set', () => {
+    const { harness, taskId } = reachMerge({
+      policy: { urgent: 'merge', urgentWaitMinutes: 5 },
+      priority: 'urgent',
+      activeHours: [{ weekday: 1, from: 9, to: 17 }],
+    });
+    expect(harness.openGate(taskId).autopilotDue).toEqual({
+      at: harness.now + 5 * MINUTE_MS,
+      action: 'merge',
+      wait: 'configured',
+      waitedMinutes: 5,
+    });
+  });
+
   test('inside your hours, waits the configured time when your hours outlast it', () => {
     const { harness, taskId } = reachMerge({
       policy: { urgent: 'merge' },
