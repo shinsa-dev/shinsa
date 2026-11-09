@@ -4,6 +4,7 @@ import { Clock, Console, Effect, FileSystem } from 'effect';
 import { Briefings } from '../../apps/engine/src/store/briefings/service.ts';
 import { CommandLog } from '../../apps/engine/src/store/commands/service.ts';
 import { StoreLayer } from '../../apps/engine/src/store/layers.ts';
+import { briefingKey, NO_FOCUS_PROJECTS } from '../../packages/core/src/index.ts';
 import { reportFailure } from '../kit/script.ts';
 import { buildSyntheticLog, serializeSyntheticTranscript } from './synthetic/log.ts';
 import { DEFAULT_SYNTHETIC_DIR, LARGE, type SyntheticOptions } from './synthetic/schema.ts';
@@ -21,7 +22,7 @@ export const writeSyntheticData = Effect.fn('Synthetic.write')(function* (
     const commands = yield* CommandLog;
     const briefings = yield* Briefings;
     for (const commit of log.commits) yield* commands.commit(commit);
-    for (const briefing of log.briefings) yield* briefings.write(null, briefing);
+    for (const briefing of log.briefings) yield* briefings.write(briefingKey(NO_FOCUS_PROJECTS), briefing);
   }).pipe(Effect.provide(StoreLayer(join(dataDir, 'shinsa.sqlite'))));
   for (const [index, runId] of log.runIds.entries()) {
     const entries =

@@ -9,7 +9,7 @@ const NEEDS_SHOWN = 8;
 export function listHomeSections(state: ShinsaState): CommandSection[] {
   const now = Date.now();
   const queue = resolveQueue(state, now);
-  const briefing = reconcileBriefing(state.briefings[briefingKey(queue.focusProjectId)], queue, now);
+  const briefing = reconcileBriefing(state.briefings[briefingKey(queue.focus)], queue, now);
   const lead = briefing.now ? state.tasks[briefing.now.taskId] : undefined;
   const candidates = [...(lead ? [lead] : []), ...queue.ready.map((entry) => entry.task)];
   const tasks = [...new Map(candidates.map((task) => [task.id, task])).values()].slice(0, NEEDS_SHOWN);

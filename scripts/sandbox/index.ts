@@ -5,12 +5,13 @@ import { createSandboxCloud } from './cloud.ts';
 import { respondDashboard, respondEnroll } from './dashboard.ts';
 import { createPreviewHandoffs, createPreviewTeammateHandoff, respondSandboxSignIn } from './handoffs.ts';
 import { prepareMachine, seedStudio, startMachine } from './machine.ts';
-import { findRemoteStylesheet, listSandboxSections, respondStatic } from './page.ts';
+import { findRemoteStylesheet, listSandboxSections, listSharedMachineLinks, respondStatic } from './page.ts';
 import { upgradePreview } from './previews.ts';
 import {
   seedProject,
   seedTeammateDuplicate,
   selectBusiestProject,
+  shareMachine,
   shareProjectWithTeam,
 } from './projects.ts';
 import {
@@ -65,7 +66,12 @@ export const startSandbox = Effect.fn('Sandbox.start')(function* () {
   const laptopData = yield* prepareMachine('laptop');
   const studio = yield* startMachine('studio', 'Studio', studioData);
   const laptop = yield* startMachine('laptop', 'Laptop', laptopData);
-  yield* seedProject(laptop.engine, laptopData, { repo: 'website', project: 'Website', tasks: LAPTOP_TASKS });
+  const website = yield* seedProject(laptop.engine, laptopData, {
+    repo: 'website',
+    project: 'Website',
+    tasks: LAPTOP_TASKS,
+  });
+  yield* shareMachine(laptop.engine);
   const teammateData = yield* prepareMachine('kai');
   const teammate = yield* startMachine('kai', 'Kai’s MacBook', teammateData);
   teammateLink.signingKey = yield* Effect.tryPromise({
@@ -94,11 +100,16 @@ export const startSandbox = Effect.fn('Sandbox.start')(function* () {
   });
   const studioOrigin = `http://${HOST}:${studio.machine.port}`;
   yield* seedSlackSamples(yield* studio.engine.core.state, (taskId) => `${studioOrigin}/tasks/${taskId}`);
+  const laptopTasks = Object.values((yield* laptop.engine.core.state).tasks).filter(
+    (task) => task.repoId === website.id
+  );
+  const sharedLinks = listSharedMachineLinks(laptop.machine, laptopTasks);
   const sections = [
     ...listSandboxSections(machines, teammate.machine, shares, teamTaskPath, preview, {
       duplicate: keptOver.handle ?? keptOver.id,
       original: teamTask?.handle ?? null,
     }),
+    { title: 'A shared machine', links: sharedLinks },
     {
       title: 'Autopilot in Slack',
       links: [
@@ -177,6 +188,7 @@ export const startSandbox = Effect.fn('Sandbox.start')(function* () {
   page = serializeSandboxPage(
     [
       ...sections,
+      { title: 'A shared machine', links: sharedLinks },
       { title: 'Handing off a task', links: handoffs },
       { title: 'A task handed to a teammate', links: handedToTeammate },
     ],

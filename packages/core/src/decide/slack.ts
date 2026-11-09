@@ -205,10 +205,6 @@ const MERGE_EDIT_EVENTS: ReadonlySet<ShinsaEventInput['type']> = new Set<ShinsaE
   'merge_step.ticked',
 ]);
 
-function isQuietlyDone(task: Task) {
-  return !task.result && task.pullRequest?.state !== 'merged';
-}
-
 function isWatchEvent(event: ShinsaEventInput) {
   return event.type.startsWith('watchdog.') || event.type === 'merge_step.ticked';
 }
@@ -248,12 +244,10 @@ function isMergeAnnouncement(task: Task, event: ShinsaEventInput, merging: boole
   return task.slack?.merge?.round !== resolveCurrentRound(task).number;
 }
 
-function resolveEventPost(task: Task, event: ShinsaEventInput): SlackPost | null {
-  if (event.type === 'task.delivered') return { kind: 'result' };
+function resolveEventPost(event: ShinsaEventInput): SlackPost | null {
   if (event.type === 'watchdog.checked' && event.status === 'tripped')
     return { kind: 'tripped', watchdogId: event.watchdogId };
-  if (event.type !== 'task.staged') return null;
-  return event.stage === 'done' && isQuietlyDone(task) ? { kind: 'completed' } : null;
+  return null;
 }
 
 function announceMerge(decider: Decider, task: Task) {
@@ -341,7 +335,7 @@ export function syncSlackThreads(decider: Decider) {
     const task = taskId ? decider.state.tasks[taskId] : null;
     const link = task?.slack;
     if (!taskId || !task || !link) continue;
-    const post = resolveEventPost(task, event);
+    const post = resolveEventPost(event);
     if (post) requestPost(decider, link, taskId, post);
     if (MERGE_EDIT_EVENTS.has(event.type)) merges.add(taskId);
     if (isMergeAnnouncement(task, event, merging.has(taskId))) {

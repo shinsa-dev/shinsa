@@ -186,6 +186,7 @@ export function createSampleTeamActions(): TeamActions {
     leave: refuse,
     remove: refuse,
     grantAccess: refuse,
+    shareMachine: refuse,
     updateScopes: refuse,
     updateExtra: refuse,
     requestKey: refuse,

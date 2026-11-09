@@ -146,6 +146,7 @@ export interface Settings {
   shareLimit?: ShareLimit;
   sharePreset?: SharePreset;
   autopilot?: AutopilotPolicy;
+  sharedTeams?: string[];
 }
 
 export const SETTINGS_KEYS = [
@@ -178,6 +179,7 @@ export const SETTINGS_KEYS = [
   'shareLimit',
   'sharePreset',
   'autopilot',
+  'sharedTeams',
 ] as const satisfies readonly (keyof Settings)[];
 
 export const HUMAN_ONLY_SETTINGS = [
@@ -196,6 +198,7 @@ export const HUMAN_ONLY_SETTINGS = [
   'sharePreset',
   'autopilot',
   'watchdogsIgnoreUsageLimits',
+  'sharedTeams',
 ] as const satisfies readonly (keyof Settings)[];
 
 export const HUMAN_ONLY_REPO_FIELDS = ['checkCommands', 'workspace', 'coverage'] as const;
@@ -220,6 +223,21 @@ export function resolveWatchdogDefaults(settings: Settings) {
     firstCheckMinutes: settings.watchdogFirstCheckMinutes ?? WATCHDOG_DEFAULTS.firstCheckMinutes,
     maxGapHours: settings.watchdogMaxGapHours ?? WATCHDOG_DEFAULTS.maxGapHours,
   };
+}
+
+export const OWNER_SIGNED_OUT_CODE = 'owner_signed_out';
+
+export function isSharedMachine(settings: Pick<Settings, 'sharedTeams'>) {
+  return (settings.sharedTeams?.length ?? 0) > 0;
+}
+
+export function isSharedWithTeam(settings: Pick<Settings, 'sharedTeams'>, teamId: string) {
+  return settings.sharedTeams?.includes(teamId) ?? false;
+}
+
+export function resolveSharedTeams(settings: Pick<Settings, 'sharedTeams'>, teamId: string, shared: boolean) {
+  const others = (settings.sharedTeams ?? []).filter((id) => id !== teamId);
+  return shared ? [...others, teamId] : others;
 }
 
 export function resolveWatchdogsIgnoreUsageLimits(settings: Settings) {
@@ -255,6 +273,7 @@ const DEFAULT_SETTINGS: Settings = {
   shareLimit: DEFAULT_SHARE_LIMIT,
   sharePreset: DEFAULT_SHARE_PRESET,
   autopilot: AUTOPILOT_DEFAULTS,
+  sharedTeams: [],
 };
 
 export function createSettings(): Settings {

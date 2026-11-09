@@ -63,7 +63,7 @@ describe('booting from a snapshot', () => {
     other.log.close();
     const db = new Database(path);
     db.run(
-      `UPDATE events SET payload = '{"type":"focus.changed","focus":{"projectId":null,"until":9}}' WHERE seq = 2`
+      `UPDATE events SET payload = '{"type":"focus.changed","focus":{"projectIds":[],"except":false,"teamId":null,"until":9}}' WHERE seq = 2`
     );
     db.close();
     const changed = openEngine(path);
@@ -183,7 +183,7 @@ describe('the Home guide', () => {
     first.engine.subscribe((state, { previous, changes }) => {
       seen.push({ seq: state.seq, changes, before: previous.briefings['*'] });
     });
-    await first.engine.writeBriefing(null, { text: 'Nothing needs you.', briefing: guide });
+    await first.engine.writeBriefing('*', { text: 'Nothing needs you.', briefing: guide });
     await first.engine.writeBriefing('work', { text: 'Plain.', briefing: guide });
     expect(seen).toEqual([
       { seq: 1, changes: { briefings: ['*'] }, before: undefined },
@@ -206,13 +206,13 @@ describe('the Home guide', () => {
   test('is refused in inspect mode and once the engine stops', async () => {
     const path = join(createTempDir(), 'shinsa.sqlite');
     const inspect = openEngine(path, { readOnly: true });
-    await expect(inspect.engine.writeBriefing(null, { text: 'No.', briefing: guide })).rejects.toMatchObject({
+    await expect(inspect.engine.writeBriefing('*', { text: 'No.', briefing: guide })).rejects.toMatchObject({
       code: 'inspect_read_only',
     });
     inspect.log.close();
     const stopped = openEngine(path);
     stopped.engine.stop();
-    await expect(stopped.engine.writeBriefing(null, { text: 'No.', briefing: guide })).rejects.toThrow(
+    await expect(stopped.engine.writeBriefing('*', { text: 'No.', briefing: guide })).rejects.toThrow(
       'Shinsa is shutting down.'
     );
     stopped.log.close();
@@ -224,7 +224,7 @@ describe('the Home guide', () => {
     const db = new Database(path);
     db.run('DROP TABLE briefings');
     db.close();
-    await expect(engine.writeBriefing(null, { text: 'Lost.', briefing: guide })).rejects.toThrow();
+    await expect(engine.writeBriefing('*', { text: 'Lost.', briefing: guide })).rejects.toThrow();
     expect(engine.state.briefings['*']).toBeUndefined();
     await focus(engine, 2);
     expect(engine.state.focus.until).toBe(2);
@@ -234,7 +234,7 @@ describe('the Home guide', () => {
   test('a stored guide that cannot be read is left out', () => {
     const path = join(createTempDir(), 'shinsa.sqlite');
     const log = openEventLog(path);
-    log.writeBriefing(null, { text: 'Kept.', at: 5, briefing: null });
+    log.writeBriefing('*', { text: 'Kept.', at: 5, briefing: null });
     const db = new Database(path);
     db.run(
       "INSERT INTO briefings (project, at, payload) VALUES ('a', 1, 'not json'), ('b', 1, '{\"at\":1}')"
@@ -244,9 +244,9 @@ describe('the Home guide', () => {
     );
     db.close();
     expect(log.listBriefings()).toEqual([
-      { projectId: null, stored: { text: 'Kept.', at: 5, briefing: null } },
+      { key: '*', stored: { text: 'Kept.', at: 5, briefing: null } },
       {
-        projectId: 'c',
+        key: 'c',
         stored: { text: 'T', at: 2, briefing: { now: null, next: [], running: '', note: null } },
       },
     ]);

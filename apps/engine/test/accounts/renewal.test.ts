@@ -25,6 +25,7 @@ function account(overrides: Partial<StoredAccount> = {}): StoredAccount {
     organization: null,
     plan: 'max',
     origin: 'cswap',
+    owner: null,
     addedAt: 1,
     paused: false,
     switchAt: null,

@@ -20,6 +20,7 @@ import { PercentDialog } from '@/components/accounts/percent-dialog.tsx';
 import { RefreshButton } from '@/components/accounts/refresh-button.tsx';
 import { OptionsTrigger } from '@/components/controls/options-trigger.tsx';
 import { ConfirmDialog } from '@/components/overlays/confirm-dialog.tsx';
+import { useTaskOwnership } from '@/hooks/use-task-ownership.ts';
 import { useUsageRecheck } from '@/hooks/use-usage-recheck.ts';
 import {
   ACCOUNT_LABEL,
@@ -48,6 +49,8 @@ import {
   updateAccount,
   useAccounts,
 } from '@/lib/connection/accounts.ts';
+import { describeAccountOwner, isOwnAccount } from '@/lib/tasks/owner.ts';
+import { GitHubTokenBlock } from './github-token.tsx';
 import { SettingsEmpty, SettingsGroup } from './group.tsx';
 import { ProviderLoginBlock } from './providers.tsx';
 import { UsageAccountBlock } from './usage-account.tsx';
@@ -248,11 +251,13 @@ function AccountMenu(props: AccountProps) {
 
 function AccountBlock(props: AccountProps) {
   const { account, settings } = props;
+  const ownership = useTaskOwnership();
   const now = Date.now();
   return (
     <UsageAccountBlock
       header={resolveAccountHeader(account, resolveUsageModel(settings), now)}
-      menu={<AccountMenu {...props} />}
+      owner={describeAccountOwner(account.owner, ownership)}
+      menu={isOwnAccount(account.owner, ownership) && <AccountMenu {...props} />}
     >
       <UsageWindows account={account} />
       <UsageNotes usage={account.usage} now={now} />
@@ -312,6 +317,7 @@ export function AccountsGroup({
       {providers.map((login) => (
         <ProviderLoginBlock key={login.provider} login={login} onRefresh={actions.refresh} />
       ))}
+      <GitHubTokenBlock />
     </SettingsGroup>
   );
 }

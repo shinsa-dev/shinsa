@@ -97,6 +97,7 @@ function openChannel(peer: ChannelPeer, host: ChannelHost) {
       isEnrolled: (device) => Effect.sync(() => host.isEnrolled(device)),
       resolveGuest: (device) => Effect.sync(() => host.resolveGuest(device)),
       isOwner: Effect.sync(() => host.isOwner()),
+      userId: 'u1',
       requestAccess: (proof, keys, name) =>
         Effect.tryPromise({ try: () => host.requestAccess(proof, keys, name), catch: toBroken }),
       resumeAccess: (device) => Effect.sync(() => host.resumeAccess(device)),

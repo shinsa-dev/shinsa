@@ -172,9 +172,9 @@ describe('help text', () => {
       '  shinsa focus <command> [arguments] [--json]',
       '',
       'Commands',
-      '  show   Show the project you are focused on.',
-      '  set    Focus on one project: Shinsa shows only its work.',
-      '  clear  Stop focusing on one project.',
+      '  show   Show the projects you are focused on.',
+      '  set    Focus on projects, or with --except on everything but them.',
+      '  clear  Stop focusing: everything shows.',
       '',
       'Add --help to any of them for its arguments, --json for machine-readable output.',
     ]);

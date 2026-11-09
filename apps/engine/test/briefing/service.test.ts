@@ -1,5 +1,13 @@
 import { afterEach, describe, expect, test } from 'bun:test';
-import type { GateType, Queue, QueuedGate, ShinsaState, Task } from '@shinsa/core';
+import {
+  type GateType,
+  NO_FOCUS,
+  NO_FOCUS_PROJECTS,
+  type Queue,
+  type QueuedGate,
+  type ShinsaState,
+  type Task,
+} from '@shinsa/core';
 import { Context, Deferred, Duration, Effect, Exit, Layer, Scope } from 'effect';
 import { TestClock } from 'effect/testing';
 import type { JsonSchema } from '../../src/agents/providers/index.ts';
@@ -103,7 +111,7 @@ function entry(task: Task, type: GateType, unblocks = 0, ageHours = 3) {
 }
 
 const queue: Queue = {
-  focusProjectId: null,
+  focus: NO_FOCUS_PROJECTS,
   focusTeamId: null,
   ready: [entry(chat, 'review', 1), entry(dup, 'merge')],
   upNow: [],
@@ -161,7 +169,7 @@ describe('what the model is told', () => {
       { ...state, projects: { a1: { name: 'Superwall' } } } as unknown as ShinsaState,
       {
         ...queue,
-        focusProjectId: 'a1',
+        focus: { projectIds: ['a1'], except: false },
         ready: [
           entry(chat, 'plan', 0, 0),
           entry(chat, 'review'),
@@ -177,6 +185,13 @@ describe('what the model is told', () => {
       NOW
     );
     expect(prompt).toContain('Focus: Superwall.');
+    const allBut = describeBriefingPrompt(
+      { ...state, projects: { a1: { name: 'Superwall' }, a2: { name: 'Work' } } } as unknown as ShinsaState,
+      { ...queue, focus: { projectIds: ['a2'], except: true } },
+      NOW
+    );
+    expect(allBut).toContain('Focus: everything but Work.');
+    expect(describeBriefingPrompt(state, queue, NOW)).toContain('No focus set.');
     expect(prompt).toContain(
       'plan approval: the plan is written, nothing is built yet; opened under an hour ago'
     );
@@ -306,11 +321,11 @@ describe('the briefing writer', () => {
     briefings.schedule();
     briefings.schedule();
     await until('the briefing', () => stub.briefed.length === 1);
-    stub.state.focus = { projectId: 'a1', teamId: null, until: null };
+    stub.state.focus = { ...NO_FOCUS, projectIds: ['a1'] };
     briefings.schedule();
     await until('the next briefing', () => stub.briefed.length === 2);
     briefings.stop();
-    expect(stub.briefed.map((written) => written.projectId)).toEqual([null, 'a1']);
+    expect(stub.briefed.map((written) => written.key)).toEqual(['*', 'a1']);
     expect(stub.briefed[0]).toMatchObject({ text: expect.any(String), briefing: { now: null, next: [] } });
   });
 

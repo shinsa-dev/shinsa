@@ -3,6 +3,7 @@ import {
   type Gate,
   isDecisionHeld,
   listWaitsOn,
+  NO_FOCUS_PROJECTS,
   resolveFocusProject,
   resolveQueue,
   type ShinsaState,
@@ -17,6 +18,7 @@ import {
   pullRequest,
   reachReviewGate,
   reachShipping,
+  registerRepo,
   shipAndMerge,
 } from '../harness.ts';
 
@@ -47,11 +49,11 @@ describe('attention', () => {
       context: null,
     });
     const before = resolveQueue(harness.state, 2_000);
-    expect(before.focusProjectId).toBeNull();
+    expect(before.focus).toEqual(NO_FOCUS_PROJECTS);
     expect(before.ready.map((entry) => entry.projectId)).toEqual([superwall]);
     harness.send({ type: 'focus.change', projectId: side, until: null });
     const queue = resolveQueue(harness.state, 2_000);
-    expect(queue.focusProjectId).toBe(side);
+    expect(queue.focus).toEqual({ projectIds: [side], except: false });
     expect(queue.ready).toHaveLength(0);
     harness.send({ type: 'focus.change', projectId: superwall, until: null });
     expect(resolveQueue(harness.state, 2_000).ready.map((entry) => entry.task.id)).toEqual([taskId]);
@@ -149,6 +151,36 @@ describe('what is working and what is waiting', () => {
     expect(queue.working.map((task) => task.id)).toEqual([parent]);
     expect(queue.waiting.map((task) => task.id)).toEqual([child]);
     expect(listWaitsOn(harness.state, harness.task(child)).map((task) => task.id)).toEqual([parent]);
+  });
+
+  test('a focus on all but some projects shows every other project and tasks without one', () => {
+    const harness = createHarness();
+    const work = createTask(harness, { repoId: registerRepo(harness, 'work', 'Work') });
+    const home = createTask(harness, { repoId: registerRepo(harness, 'home', 'Home') });
+    const loose = createTask(harness, { repoId: registerRepo(harness, 'loose', null) });
+    const workProject = harness.task(work).projectId ?? '';
+    const homeProject = harness.task(home).projectId ?? '';
+    harness.send({
+      type: 'focus.change',
+      projectId: null,
+      projectIds: [workProject],
+      except: true,
+      until: null,
+    });
+    const ids = (queue: ReturnType<typeof resolveQueue>) => queue.working.map((task) => task.id).sort();
+    expect(ids(resolveQueue(harness.state, 0))).toEqual([home, loose].sort());
+    expect(resolveFocusProject(harness.state, 0)).toBeNull();
+    harness.send({
+      type: 'focus.change',
+      projectId: null,
+      projectIds: [workProject, homeProject],
+      until: null,
+    });
+    expect(ids(resolveQueue(harness.state, 0))).toEqual([work, home].sort());
+    expect(resolveFocusProject(harness.state, 0)).toBeNull();
+    const olderEngine = { ...harness.state, focus: { projectId: workProject, teamId: null, until: null } };
+    expect(ids(resolveQueue(olderEngine as unknown as ShinsaState, 0))).toEqual([work]);
+    expect(resolveFocusProject(olderEngine as unknown as ShinsaState, 0)).toBe(workProject);
   });
 
   test('settled tasks are neither working nor waiting', () => {

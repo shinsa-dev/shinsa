@@ -8,6 +8,7 @@ import {
   resolveOwnerOnlyRefusal,
   resolveScopedRefusal,
   SCOPE_REFUSAL_CODE,
+  type TaskOwner,
   type UserCommand,
 } from '@shinsa/core';
 import { Effect, Result } from 'effect';
@@ -23,6 +24,7 @@ export interface UserCommandSource {
   readonly router: CommandRouter['Service'] | null;
   readonly origin: RequestOrigin;
   readonly guest: ScopedActor | null;
+  readonly actor?: TaskOwner | null;
   readonly teams?: Pick<RemoteHandle, 'resolveTeamScope'> | null | undefined;
 }
 
@@ -45,6 +47,19 @@ export const resolveRequestOrigin = Effect.fn('resolveRequestOrigin')(function* 
   if (source.via === 'local') return 'local' as const;
   if (remote && (yield* remote.isOwner(source.userId))) return 'owner' as const;
   return 'remote' as const;
+});
+
+export const resolveRequestActor = Effect.fn('resolveRequestActor')(function* (
+  source: RequestSourceShape,
+  remote: Pick<RemoteHandle, 'resolveActor'> | null | undefined
+) {
+  if (source.guest) {
+    const { login, name, avatarUrl } = source.guest;
+    return { login, name, avatarUrl };
+  }
+  if (!remote) return null;
+  if (source.via === 'local') return yield* remote.resolveActor(null);
+  return source.userId ? yield* remote.resolveActor(source.userId) : null;
 });
 
 export const dispatchUserCommand = Effect.fn('dispatchUserCommand')(function* (
@@ -71,6 +86,7 @@ export const dispatchUserCommand = Effect.fn('dispatchUserCommand')(function* (
   const from = {
     ...(source.clientId ? { id: `client:${source.clientId}` } : {}),
     ...(source.guest ? { guest: source.guest } : {}),
+    ...(source.actor ? { actor: source.actor } : {}),
   };
   const events = yield* (
     source.router ? source.router.route(command, from) : engine.dispatch(command, from)

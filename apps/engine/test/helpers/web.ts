@@ -11,6 +11,7 @@ import type { ServerConfig } from '../../src/config/index.ts';
 import { EngineConfig } from '../../src/config/service.ts';
 import { Extensions } from '../../src/extensions/registry/service.ts';
 import { GitLayer } from '../../src/git/layers.ts';
+import { GitHubCli } from '../../src/github/service.ts';
 import type { EngineHandlerServices } from '../../src/http/app.ts';
 import { Ingress } from '../../src/http/ingress/middleware.ts';
 import {
@@ -81,6 +82,7 @@ export interface HttpContext {
   accounts?: Accounts['Service'];
   schedules?: Schedules['Service'];
   secrets?: SecretStore['Service'];
+  github?: GitHubCli['Service'];
   transcripts: Transcripts['Service'];
   extensions?: Extensions['Service'];
   versions?: Versions['Service'];
@@ -108,6 +110,7 @@ const OPTIONAL_SERVICES = [
   ['accounts', Accounts],
   ['schedules', Schedules],
   ['secrets', SecretStore],
+  ['github', GitHubCli],
   ['extensions', Extensions],
   ['versions', Versions],
   ['roots', Roots],

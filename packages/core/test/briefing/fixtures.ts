@@ -1,4 +1,11 @@
-import type { GateType, Queue, QueuedGate, ShinsaState, Task } from '../../src/index.ts';
+import {
+  type GateType,
+  NO_FOCUS_PROJECTS,
+  type Queue,
+  type QueuedGate,
+  type ShinsaState,
+  type Task,
+} from '../../src/index.ts';
 
 export const NOW = 10 * 24 * 60 * 60 * 1000;
 
@@ -27,7 +34,7 @@ export function entry(
 
 export function queueOf(entries: QueuedGate[], extra: Partial<Queue> = {}): Queue {
   return {
-    focusProjectId: null,
+    focus: NO_FOCUS_PROJECTS,
     focusTeamId: null,
     ready: entries,
     upNow: entries,

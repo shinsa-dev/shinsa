@@ -3,7 +3,16 @@ import type { MenuItemIcon } from '@shinsa/ui/components/menu-icon';
 import { type Command, type CommandSection, RANK } from '@/lib/command/registry.ts';
 import { sendCommandWithToast } from '@/lib/connection/commands.ts';
 import { FEEDBACK_ICON, openFeedback } from '@/lib/feedback.ts';
-import { type FocusTeam, resolveFocusUntil, selectFocus, selectFocusTeam, YOUR_WORK } from '@/lib/focus.ts';
+import {
+  resolveFocusLabel,
+  type FocusTarget,
+  type FocusTeam,
+  resolveFocusTarget,
+  resolveFocusUntil,
+  selectFocusProjects,
+  selectFocusTeam,
+  YOUR_WORK,
+} from '@/lib/focus.ts';
 import {
   LAYOUT_NAMES,
   LAYOUT_ORDER,
@@ -28,11 +37,6 @@ const YOUR_WORK_VALUE = 'all';
 
 const TEAM_VALUE_PREFIX = 'team:';
 
-interface FocusTarget {
-  projectId: string | null;
-  teamId: string | null;
-}
-
 function changeFocus(target: FocusTarget, until: number | null, done: string) {
   void sendCommandWithToast({ type: 'focus.change', ...target, until }, done);
 }
@@ -53,18 +57,24 @@ function describeFocusDone(state: ShinsaState, teams: readonly FocusTeam[], targ
   return 'Focused on your work.';
 }
 
+function resolveFocusValue(target: FocusTarget) {
+  if (target.teamId) return `${TEAM_VALUE_PREFIX}${target.teamId}`;
+  if (target.projectIds) return '';
+  return target.projectId ?? YOUR_WORK_VALUE;
+}
+
 function createFocusSwitch(state: ShinsaState, teams: readonly FocusTeam[]): Command {
-  const focus = selectFocus(state);
   const team = selectFocusTeam(state, teams);
+  const selection = selectFocusProjects(state);
   return {
     kind: 'choice',
     id: 'focus.switch',
     label: 'Switch focus',
-    hint: team?.name ?? focus?.name ?? YOUR_WORK,
+    hint: team?.name ?? resolveFocusLabel(state, selection) ?? YOUR_WORK,
     icon: FOCUS_ICON,
     keywords: ['focus', 'project', 'team', 'filter', 'scope'],
     heading: 'Focus on',
-    value: team ? `${TEAM_VALUE_PREFIX}${team.id}` : (focus?.id ?? YOUR_WORK_VALUE),
+    value: resolveFocusValue(resolveFocusTarget(selection, team?.id ?? null)),
     options: [
       {
         value: YOUR_WORK_VALUE,
@@ -94,16 +104,16 @@ function createFocusSwitch(state: ShinsaState, teams: readonly FocusTeam[]): Com
 
 function listFocusCommands(state: ShinsaState, teams: readonly FocusTeam[]): Command[] {
   const team = selectFocusTeam(state, teams);
-  const focus = selectFocus(state);
-  const kept = team ?? focus;
+  const selection = selectFocusProjects(state);
+  const kept = team?.name ?? resolveFocusLabel(state, selection);
   if (!kept) return [createFocusSwitch(state, teams)];
-  const target: FocusTarget = { projectId: team ? null : (focus?.id ?? null), teamId: team?.id ?? null };
+  const target = resolveFocusTarget(selection, team?.id ?? null);
   return [
     createFocusSwitch(state, teams),
     {
       kind: 'run',
       id: 'focus.hours',
-      label: `Keep ${kept.name} in focus for 2 hours`,
+      label: `Keep ${kept} in focus for 2 hours`,
       icon: 'IconClock',
       searchOnly: true,
       keywords: ['focus', 'timer'],
@@ -112,7 +122,7 @@ function listFocusCommands(state: ShinsaState, teams: readonly FocusTeam[]): Com
     {
       kind: 'run',
       id: 'focus.tonight',
-      label: `Keep ${kept.name} in focus until tonight`,
+      label: `Keep ${kept} in focus until tonight`,
       icon: 'IconMoon',
       searchOnly: true,
       keywords: ['focus', 'today', 'evening'],

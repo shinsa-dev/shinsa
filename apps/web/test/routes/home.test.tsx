@@ -196,7 +196,7 @@ describe('HomePage', () => {
         createGate({ id: 'g-w', taskId: 'w-review', type: 'review' }),
         createGate({ id: 'g-h', taskId: 'h-review', type: 'review' }),
       ],
-      patch: { focus: { projectId: 'work', teamId: null, until: null } },
+      patch: { focus: { projectIds: ['work'], except: false, teamId: null, until: null } },
     });
     const view = renderHome(state);
     const shows = (title: string) => document.body.textContent?.includes(title) ?? false;
@@ -218,7 +218,9 @@ describe('HomePage', () => {
 
     view.rerender(
       <TooltipProvider>
-        <HomePage state={{ ...state, focus: { projectId: 'home', teamId: null, until: null } }} />
+        <HomePage
+          state={{ ...state, focus: { projectIds: ['home'], except: false, teamId: null, until: null } }}
+        />
       </TooltipProvider>
     );
     expect(['Review the garden plan', 'Water the beds', 'Order the seeds'].every(shows)).toBe(true);
@@ -226,7 +228,7 @@ describe('HomePage', () => {
 
     view.rerender(
       <TooltipProvider>
-        <HomePage state={{ ...state, focus: { projectId: null, teamId: null, until: null } }} />
+        <HomePage state={{ ...state, focus: { projectIds: [], except: false, teamId: null, until: null } }} />
       </TooltipProvider>
     );
     expect(headers()).toEqual([

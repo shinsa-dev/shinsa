@@ -31,7 +31,7 @@ const PROJECTS = [
 function focused(projectId: string | null): ShinsaState {
   return createShinsaState({
     projects: PROJECTS,
-    patch: { focus: { projectId, teamId: null, until: null } },
+    patch: { focus: { projectIds: projectId ? [projectId] : [], except: false, teamId: null, until: null } },
   });
 }
 
@@ -183,10 +183,41 @@ describe('the focus choice', () => {
     ] as never);
   });
 
+  it('names a focus on several projects or all but some, and keeps the whole set in focus', () => {
+    const allBut = createShinsaState({
+      projects: PROJECTS,
+      patch: { focus: { projectIds: ['web'], except: true, teamId: null, until: null } },
+    });
+    const both = createShinsaState({
+      projects: PROJECTS,
+      patch: { focus: { projectIds: ['api', 'web'], except: false, teamId: null, until: null } },
+    });
+    const sectionsOf = (state: ShinsaState) =>
+      listGlobalSections(state, { name: 'home' }, 'system', 'cards', ALL_COMMANDS, []);
+    expect(find(sectionsOf(both), 'focus.switch')).toMatchObject({ hint: 'API and Web', value: '' });
+    expect(find(sectionsOf(allBut), 'focus.switch')).toMatchObject({ hint: 'All but Web', value: '' });
+    const keep = find(sectionsOf(allBut), 'focus.hours');
+    expect(keep.label).toBe('Keep All but Web in focus for 2 hours');
+    if (keep.kind === 'run') keep.run();
+    expect(spies.sent.mock.calls).toEqual([
+      [
+        {
+          type: 'focus.change',
+          projectId: null,
+          projectIds: ['web'],
+          except: true,
+          teamId: null,
+          until: NOW + 2 * 60 * 60 * 1000,
+        },
+        'In focus for 2 hours.',
+      ],
+    ] as never);
+  });
+
   it('offers no timed focus while on your work, or when the focus has expired', () => {
     const expired = createShinsaState({
       projects: PROJECTS,
-      patch: { focus: { projectId: 'web', teamId: null, until: NOW - 1 } },
+      patch: { focus: { projectIds: ['web'], except: false, teamId: null, until: NOW - 1 } },
     });
     for (const state of [focused(null), expired]) {
       const ids = listGlobalSections(state, { name: 'home' }, 'system', 'cards', ALL_COMMANDS, []).flatMap(
@@ -200,7 +231,10 @@ describe('the focus choice', () => {
 const TEAMS = [{ id: 'team-1', name: 'Platform' }];
 
 function focusedOnTeam(teamId: string, until: number | null = null): ShinsaState {
-  return createShinsaState({ projects: PROJECTS, patch: { focus: { projectId: null, teamId, until } } });
+  return createShinsaState({
+    projects: PROJECTS,
+    patch: { focus: { projectIds: [], except: false, teamId, until } },
+  });
 }
 
 describe('the focus choice with teams', () => {

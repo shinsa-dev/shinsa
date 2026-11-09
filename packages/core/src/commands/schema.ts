@@ -132,6 +132,8 @@ export const UserCommand = Schema.Union([
   Command('project.remove', { projectId: ProjectId }),
   Command('focus.change', {
     projectId: NullByDefault(ProjectId, FIELD_MESSAGES.text),
+    projectIds: Optional(List(ProjectId), FIELD_MESSAGES.list),
+    except: Optional(Bool, FIELD_MESSAGES.boolean),
     teamId: Optional(OrNull(IdText, FIELD_MESSAGES.text), FIELD_MESSAGES.text),
     until: NullByDefault(Time, FIELD_MESSAGES.time),
   }),

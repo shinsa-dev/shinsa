@@ -1,6 +1,7 @@
 import { addUsage, resolveUsageDelta } from '../costs/index.ts';
+import { isProjectInFocus } from '../domain/focus.ts';
 import { type Round, resolveTaskRounds } from '../domain/rounds.ts';
-import type { PullRequestChanges, Run, RunRole, RunUsage, Task } from '../domain/types.ts';
+import type { FocusProjects, PullRequestChanges, Run, RunRole, RunUsage, Task } from '../domain/types.ts';
 import type { ShinsaState } from '../state/project.ts';
 import { resolveTaskProject } from '../state/queries.ts';
 
@@ -271,11 +272,11 @@ export type StatsSource = Pick<ShinsaState, 'tasks' | 'runs'>;
 
 export function resolveProjectStatsSource(
   state: Pick<ShinsaState, 'tasks' | 'runs' | 'repos'>,
-  projectId: string | null
+  focus: FocusProjects
 ): StatsSource {
-  if (projectId === null) return { tasks: state.tasks, runs: state.runs };
+  if (focus.projectIds.length === 0) return { tasks: state.tasks, runs: state.runs };
   const tasks = Object.fromEntries(
-    Object.entries(state.tasks).filter(([, task]) => resolveTaskProject(state, task) === projectId)
+    Object.entries(state.tasks).filter(([, task]) => isProjectInFocus(focus, resolveTaskProject(state, task)))
   );
   const runs = Object.fromEntries(Object.entries(state.runs).filter(([, run]) => run.taskId in tasks));
   return { tasks, runs };

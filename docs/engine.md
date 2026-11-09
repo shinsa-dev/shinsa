@@ -2832,7 +2832,7 @@ Every `/api` route is declared once, in core, as `EngineApi` (`packages/core/src
 teams, placement, slack, projects, terminals, services), each endpoint with its params, query, payload, answer and
 failures as schemas, and the rules a route carries as annotations: the engine feature that adds it
 (`EngineFeatureRoute`), refused from off the machine (`LocalOnlyRoute`, writes only or reads too), the owner's alone
-(`OwnerOnlyRoute`), open to a guest's channel (`GuestRoute`), only Shinsa's own page (`BrowserOnlyRoute`) and its
+(`OwnerOnlyRoute`), which a shared machine opens to its members (`SharedMemberRoute`), open to a guest's channel (`GuestRoute`), only Shinsa's own page (`BrowserOnlyRoute`) and its
 body cap (`RequestBodyLimit`). The engine serves it and every client calls it from the same declaration, so a route
 is never a path written by hand on either side.
 
@@ -3069,6 +3069,12 @@ beside your run (Runs for a task, below).
   `SERVICE_PORT_VARIABLE`). It runs as `<login shell> -l -c
   <command>` in its own terminal tab (`TerminalInfo.serviceId`), with the terminal's environment and its variables
   over it, so the shell that started it is the program: it ends when the command ends.
+- **32 per project.** A project keeps at most 32 services (`SERVICE_LIMITS.services`), counting only its own, so a
+  project with none can always add one however many the other projects on this machine hold. `Terminals.addService`
+  and `POST /api/services/batch` (its services plus the batch, before any is added) refuse past it with
+  `service_limit`, whose message from `resolveServiceLimitMessage` (`terminals/limit.ts`) names the project's
+  services and says how many to remove under Services; an agent's `add_service` adds that it can remove one with
+  `remove_service`, so the tool name never reaches the screen.
 - **Kept beside the terminals, not in the event log.** The definitions are in `data/terminals/services.json` (mode
   600: a variable can be a secret). They are not events because nothing `decide` reads depends on them, no agent may
   change them (an event would need a user command, and every user command has a surface spec that agents' tools are
@@ -3385,7 +3391,72 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   who leaves in Shinsa Cloud loses their devices within one heartbeat (about two minutes). Remove member, or `shinsa
   remote remove-member <login>`, tells Shinsa Cloud first (`requestMemberRemoval`), so it stops minting that
   account's connect tokens, then forgets their devices at once. A member controls the machine exactly as its owner
-  does; the channel never checks the mirrored list, since Shinsa Cloud already refuses tokens to anyone else.
+  does, except on a shared machine (below); the channel never checks the mirrored list, since Shinsa Cloud already
+  refuses tokens to anyone else.
+- **Shared machines** (`sharedTeams`, a human-only setting listing the teams a machine is shared with, empty by
+  default; `isSharedMachine`, `isSharedWithTeam`). A team's always-on machine (a VPS, a Mac mini) where everything a
+  teammate starts belongs to them and runs as them. The machine gives the compute; the person who starts a task owns
+  it. Remote access stays personal (your own devices, and anyone you invite yourself); sharing is a team's:
+  - **Sharing with a team.** The machine's owner turns on Shared beside this machine in the team's Machines list
+    (Settings → Teams, `TeamMachines`, after a confirm), only once the machine holds the team's key, which sends
+    `POST /api/remote/teams/share { teamId, shared }` (owner-only, engine feature `shared-machine`). Turning it on
+    gives every person in the team this machine first (`Remote.shareWithTeam`, the same grant as Give machine access:
+    a member here, and a grant their browser adds itself with), then adds the team to `sharedTeams`. Someone who joins
+    the team later gets it on the next heartbeat (`SharedTeams`, `remote/shared-teams/service.ts`, which calls
+    `Remote.syncSharedTeams` whenever remote access changes; a grant that fails is logged and tried again then).
+    Turning it off takes the team out of `sharedTeams` first, then drops the team's grants and removes from the
+    machine's members everyone the sharing made a member and no other team still reaches (`Remote.unshareTeam`: a
+    grant that added its person as a member is marked `joined`, and that mark passes to their grant from another team;
+    someone who was a member before keeps their access); their tasks stay, with their owners. When the machine leaves
+    a shared team, or the team is deleted, the next sync finds the team gone (`Remote.syncSharedTeams` returns it),
+    takes it out of `sharedTeams` and drops its grants the same way, so the machine never stays shared with a team
+    whose card is no longer there to turn it off. Teammates on a shared machine are members, so they reach every project, Settings and terminals
+    as the owner does, except other people's accounts and the human-only settings.
+  - **Who owns a task.** Every task records its owner as `Task.owner` (`TaskOwner`: login, name, avatar), on any
+    machine, shared or not. The engine resolves who sent each command (`resolveRequestActor`, `http/commands.ts`)
+    and passes it to `EngineCore.dispatch` as `actor`, which core's `DecideContext.actor` stamps on `task.created`
+    (`resolveCreatedOwner`, `decide/tasks.ts`): a guest is themselves, a command at the keyboard is the machine's
+    owner, and a sealed channel's GitHub user is looked up in the owner and members the last heartbeat answered
+    (`Remote.resolveActor`). Anyone else gets no owner, never the machine's owner, so a stranger never runs on the
+    owner's accounts. A task an agent files (a courier, a split, a fork, a watchdog's) takes the owner of the task it
+    came from. Tasks from before, and those Slack, schedules and webhooks start, have none and count as the
+    machine owner's. Owners never change after creation.
+  - **Claude accounts.** Each account records the member who signed it in (`owner` in `accounts.json`, null for the
+    machine's owner and every account from before). A run leases only its task owner's accounts, on renewal and on
+    rotation after a usage limit too (`AccountOwnership`, `AccountRotation.listCandidates`), and a task bound to
+    someone else's account drops the binding. When the owner has none it can use, the lease fails with
+    `owner_signed_out` and the task stops at a Sign in gate with no account and `cause: 'owner_account'` ("Paused: Kai
+    needs a Claude account on this machine", `requestOwnerSignIn`); it never falls back to the machine's login. Any
+    Claude sign-in retries those gates (`recordSignedIn`), and a task whose owner still has none stops there again. Members sign in,
+    import, change and remove only their own accounts from their own device: the `accounts` group is
+    `SharedMemberRoute`, which opens an `OwnerOnlyRoute` to members on a shared machine, and the roster refuses a
+    member's change to an account that is not theirs (`not_owner`). Pasting a sign-in code and cancelling a sign-in
+    check no owner, since a machine runs one sign-in at a time.
+  - **GitHub.** Each member saves a token of their own (`GET` and `POST /api/github-token { token }`, `token: null`
+    removes it; `SharedMemberRoute`, engine feature `shared-machine`). The engine asks GitHub whose it is
+    (`verifyGitHubToken`, `gh api user`) and refuses one GitHub turns down (`github_token_refused`) or that belongs to
+    someone else (`github_token_other_account`); the machine's owner needs none (`github_token_machine`). It is kept
+    in `secrets.json` under `github`, by login, with the name and the no-reply address
+    (`<id>+<login>@users.noreply.github.com`). Every effect of a member's task runs with `TaskGitHub` set from it
+    (`provideTaskGitHub`, `github/identity/`): `gh` gets `GH_TOKEN`, pushes and fetches get the token as an
+    authorization header in git's config through `GIT_CONFIG_COUNT` (never on the command line, so it shows in no process list or push
+    error; an SSH remote still pushes with the machine's key), and commits and merges are authored as the owner while
+    the machine stays the committer. A member with no token yet ships with the machine's own login, and the pull
+    request's description says so (`serializeMachineLoginNote`).
+  - **The web app.** On a shared machine All tasks opens on your own tasks with an Owner column (removing the filter
+    writes `owner=everyone`, which sticks), Home, the queue and the "N need you" count only ever show yours
+    (`useOwnQueue`), a task's facts name its Owner ("You", the
+    teammate, or "The machine's owner" for a task with none), each Claude account shows Yours or the member's login
+    with a menu only on your own, and a member gets Your GitHub token with Save and Remove (`github-token.tsx`). The
+    page offers all of it only on an engine that announces `shared-machine`. Ownership is per machine
+    (`resolveTaskOwnership`): only a task on a shared machine is filtered by its owner and shows an Owner fact, so in a
+    fleet a teammate's task on a machine that is not shared stays in your lists; the accounts, the GitHub token and
+    who is a member are read from the machine Settings is on (`sharedHere`, `memberHere`).
+  - **What stays machine-wide.** Task capacity, routing policies, MCP servers, plugins, repository checks,
+    notifications and the Dock badge, and usage and cost limits (counted for the whole machine, not per member).
+  - **Trust.** A shared machine holds every member's Claude logins and GitHub token under one system user, and an
+    agent's shell can read what the engine can, so a shared machine trusts its members. Separate system users per
+    member would close that, and are not built.
 - **Pausing and removing**: `shinsa remote disable` stops the tunnel, marks the instance offline and closes every
   channel, keeping the pairing; `enable` starts it again; `remove` tells app.shinsa.dev (a failure there is only
   logged) and forgets the credentials and every device. Each needs a paired machine (`remote_not_paired`).
@@ -3544,10 +3615,11 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   `comments`, `changelog` for `GET /api/changelog`, `remote.terminals` for terminal streams on the sealed channel,
   `attention` for routing notifications to the device you use, `worktree-root` for the worktree folder and
   `usage.pace_limits` for `dailyUsageLimit` and `Project.usageLimit`, `usage.watchdog_limits` for
-  `watchdogsIgnoreUsageLimits`, `autopilot` for the `autopilot` setting and `autopilot-slack` for its Slack
-  `contacts`, `GET /api/slack/directory` and `POST /api/slack/test`, today;
-  Settings → Teams, Settings → Agents → Autopilot, the review's Fix and approve choice and
-  What's new show only on an engine that has them). `ENGINE_PROTOCOL` is the hard floor: a machine whose protocol differs from the page's is left out of the
+  `watchdogsIgnoreUsageLimits`, `focus.projects` for `focus.change`'s `projectIds` and `except`, `autopilot` for
+  the `autopilot` setting and `autopilot-slack` for its Slack `contacts`, `GET /api/slack/directory` and
+  `POST /api/slack/test`, today; Settings → Teams, Settings → Agents → Autopilot, the review's Fix and approve choice and
+  What's new show only on an engine that has them, and the Focus menu stays a single choice on an engine without
+  `focus.projects`). `ENGINE_PROTOCOL` is the hard floor: a machine whose protocol differs from the page's is left out of the
   dashboard, merges nothing and gets no command, and Settings → Machines says "Update Shinsa on <name> to reach it from
   here." in its row, as do New task's machine picker and a routing policy's on that machine's disabled entry. When every
   machine of the dashboard is on another protocol, the dashboard opens on that message instead of the app
@@ -4518,9 +4590,8 @@ Slack ──event──► app.shinsa.dev /slack/events
                               task.create, as from Home
    the task moves or a gate opens or closes
                   ──► slack.status: the one card, edited
-                      (the open gate with its buttons, else the status)
-                      + the mention's one reaction
-   the result, or done ──► slack.post, a new message
+                      (the open gate with its buttons, the result,
+                      else the status) + the mention's one reaction
    the round merged ──► slack.merge_announced + slack.merge:
                   "Merged", posted once, its ts kept (slack.record_merge)
                   └─ a watchdog moves or a post-merge step is ticked
@@ -4648,10 +4719,10 @@ Slack ──a card's button──► app.shinsa.dev /slack/interactions
   moving, a gate opening (any gate a person decides: a failure, a sign-in, a question, a secret, a proposal, an
   operation, a plan, a review, a merge), a gate answered, withdrawn or superseded, and a decision made in Slack
   (`slack.decided`). Nothing else is posted while the task runs, since the mention's reaction (below) already tells
-  its author in Slack's Activity. Three things are a new message, so the thread is notified once for each: the
-  result (`task.delivered`: an answer, a diagnosis, a report, an outcome), the end of the task (done without a result
-  or merge) and a watchdog that found a problem (`watchdog.checked` with `tripped`), each a `slack.post` (`SlackPost`
-  is `result`, `completed` or `tripped`); and the merge, once per round. The `task.staged` to `merged` that comes with
+  its author in Slack's Activity. The result (`task.delivered`: an answer, a diagnosis, a report, an outcome) and the
+  end of the task edit the card too, so the card stays the one place the thread reads the task. Two things are a new
+  message, so the thread is notified once for each: a watchdog that found a problem (`watchdog.checked` with
+  `tripped`), a `slack.post` (`SlackPost` is only `tripped`), and the merge, once per round. The `task.staged` to `merged` that comes with
   the pull request recorded merged, in a round with no merge message yet, emits `slack.merge_announced`
   (`SlackThreadLink.merge`, the round and later its ts) and a `slack.merge` effect, in the thread's lane: the engine
   posts "Merged" the first time and records its ts with `slack.record_merge` (`slack.merge_posted`), and every later
@@ -4666,8 +4737,10 @@ Slack ──a card's button──► app.shinsa.dev /slack/interactions
   their markup), details as fields, a numbered list or a context line, the decision buttons with a button to open the
   task on app.shinsa.dev (`resolveSlackTaskUrl`), and a small last line naming the task (its handle and title,
   linked) and its pull request as `PR #<number>`, linked. The card shows the first open gate in the order failure,
-  sign-in, question, secret, proposal, operation, plan, review, merge (`SLACK_CARD_GATES`); with none open it shows
-  the status:
+  sign-in, question, secret, proposal, operation, plan, review, merge, result (`SLACK_CARD_GATES`); with none open it
+  shows the result while the task rests at done with one, is not cancelled and never went on to a change (its
+  proposal accepted, a plan or a pull request, merged or closed), so closing it or "Keep as is" leaves the result in
+  place, with "@someone closed it" under it; else the status:
   - the status: what the task is doing now in bold (its stage reason, else its stage), "@someone approved the plan"
     under it while the last decision on the task was made in Slack (`SlackThreadLink.decided`, cleared by any
     `gate.answered` before `slack.decided` sets it again, so a decision made in Shinsa drops it), then the task
@@ -4678,7 +4751,9 @@ Slack ──a card's button──► app.shinsa.dev /slack/interactions
     recommendation, a button per choice (the recommended one primary) when it has one to five choices of at most 75
     characters, otherwise the choices numbered, and Answer… for any other answer;
   - a secret: "Secret needed", what is needed in bold, to give it in Shinsa and never in Slack, "Give it in Shinsa";
-  - a proposal: "Proposed change", the change quoted, Approve and Keep as is;
+  - a proposal: "Proposed change", the change quoted, Approve and Keep as is; after a diagnosis or a report, its
+    header ("Diagnosis", "Report") and the whole result first, then the change under "Proposed change", so Approve
+    shows what it approves;
   - an operation: "Ready to run", the operation and its whole detail quoted, Run and Finish without it;
   - a plan: "Plan ready for your approval", the whole plan (`serializePlanMarkdown`: goal, every phase with its detail,
     behaviour, approach, files, checks), Approve and Request changes…, "Read the plan";
@@ -4686,8 +4761,10 @@ Slack ──a card's button──► app.shinsa.dev /slack/interactions
     (`serializeReportMarkdown`), the fields Checks (how they went) and Pull request (`PR #<number>`, or "Opens once
     you approve"), Approve and Request changes…, "Review in Shinsa";
   - a merge: "Ready to merge", the same report and fields, Merge;
-  - the result, a new message: "Result", the whole result in mrkdwn (`serializeSlackResult`); the end, a new message:
-    "Done" (`serializeSlackCompleted`); the merge, a new message edited afterwards: "Merged", the round's watchdogs
+  - a result: "Answer", "Diagnosis", "Report" or "Outcome" (from its step), the whole result in mrkdwn, Close (the
+    result gate's approve, which closes the task) and Open in Shinsa;
+  - the end of a task with no result: the status, "Done";
+  - the merge, a new message edited afterwards: "Merged", the round's watchdogs
     each with its state (waits for a data source or for production, watching with the next check in the reader's
     time, passed with its number of checks, found a problem, stopped) and the open post-merge steps under "Still to do
     after the merge" (`serializeSlackMerged`, `resolveSlackMergeMessage`); a trip, a new message: "Watchdog found a
@@ -4901,10 +4978,21 @@ description, folders }` (`packages/core/src/domain/types.ts`; the rules in `doma
   repository with its path (the task's own marked) and its folders, and the repository the task works in when it is
   outside the project (`resolveProjectContext`, appended in `Decider.startRun`), so you never have to say which
   repository "the server" is.
-- **The focus is a project or a team** (`focus.change` `projectId` or `teamId`, or neither for your work). It filters:
-  `resolveQueue` keeps only the focus project's decisions and tasks, or those of the team's projects, and every list
-  built on it (Home, the queue button, the guide, ⌘K's decisions, the tab count and notifications) shows nothing from
-  other projects. To see other work, you switch the focus. A team focus also shows your teammates' tasks (Teams).
+- **The focus is projects or a team** (`Focus { projectIds, except, teamId, until }`, `domain/focus.ts`; neither for
+  your work). `projectIds` with `except` false shows only those projects; with `except` true it shows every project
+  but those, so you can leave the work project out on a weekend. One predicate, `isProjectInFocus`, decides it
+  everywhere: `resolveQueue` keeps only the decisions and tasks in focus, or those of the team's projects, and every
+  list built on it (Home, the queue button, the guide, ⌘K's decisions, the tab count and notifications) shows nothing
+  else. A task with no project shows under all but some and hides under a list of projects. `focus.change` takes
+  `projectIds` and `except`, or the older `projectId` a page from before them sends; `changeFocus` sorts and dedupes
+  the list, drops `except` when it is empty, and refuses projects with a team (`focus_refused`). Removing a project
+  drops it from the focus, and the focus clears when none are left. `resolveFocusProject` names a project only when
+  exactly one is included, for the new task's default project and the terminal's default folder. `shinsa focus set`
+  takes several projects and `--except`; `focus show` names them (`describeFocusProjects`). The page offers the
+  multi-select only to an engine that lists the `focus.projects` feature. The `focus-projects` log migration
+  (`apps/engine/src/store/migrations/focus-projects.ts`) turns every older `focus.changed` event's `projectId` into a
+  list of one, or an empty list, with `except` false. To see other work, you switch the focus. A team focus also
+  shows your teammates' tasks (Teams).
 
 **Task identity.** Every id Shinsa makes for the log (tasks, runs, gates, schedules, projects) is a UUIDv7 from the
 engine (`Bun.randomUUIDv7()` behind `DecideContext.newId`); accounts use 8 hex characters and webhook deliveries
@@ -4944,9 +5032,10 @@ finishing), so a burst of changes costs one call: each request interrupts the fi
   first), `next` (up to three more, each with a why), `running` (one line on what agents are
   doing) and `note` (a heads-up, or null). It is stored beside a plain `text` rendering, which
   `shinsa status` prints.
-- **Kept beside the log, not in it.** Only the newest guide per focus project matters and the writer rewrites it
+- **Kept beside the log, not in it.** Only the newest guide per focus matters and the writer rewrites it
   after every gate change, so it is not an event: `Engine.writeBriefing` keeps it in the `briefings` table of
-  `shinsa.sqlite` (one row per project, `*` for the whole queue) and puts it into the state as `state.briefings`
+  `shinsa.sqlite` (one row per focus, `briefingKey`: the project's id for one project, `+a,b` for several, `-a,b` for
+  all but some, `*` for the whole queue) and puts it into the state as `state.briefings`
   (the state's shape is unchanged), and every socket gets a `state.patch` at the same log position (`from` equal to
   `to`), which the page applies like any other. On boot the engine reads the table after the events, so a snapshot's
   older guide never wins. Inspect mode writes none.
@@ -4970,8 +5059,8 @@ finishing), so a burst of changes costs one call: each request interrupts the fi
   Used when the model is off, fails or answers badly. A task is paused when its gate is a failure,
   a setup to fix or a sign-in (`isPausingGate`); the fallback, the ranking and `shinsa status`
   (`Paused`) all read that one predicate.
-- **Only the focus.** The queue the guide is written from (`resolveQueue`) holds only the focus project's decisions
-  and tasks, so the writer is never told about others.
+- **Only the focus.** The queue the guide is written from (`resolveQueue`) holds only the decisions and tasks
+  in focus, so the writer is never told about others; its prompt names the focus (`Focus: everything but Work.`).
 - **Showing it** (`reconcileBriefing`): Home checks the stored guide against the live queue.
   A `now` that no longer needs you means the plain guide until the next write; `next` drops
   decisions that are gone; `running` is always recomputed. Briefings stored as text only, before
@@ -6514,8 +6603,9 @@ Agent usage glance in the top bar, which shows every connected provider (`docs/d
   Shinsa never runs on your Claude Code login (`~/.claude`) or on claude-swap's, since each login's single-use
   refresh token must have one holder. An account without a folder ran on your Claude Code login before (A shared
   login, below) and gets one when you sign in to it again. The list is `accounts.json` beside the folders
-  (`{ version, defaultAccountId, accounts: [{ id, configDir, email, organization, plan, origin, addedAt, paused,
-  switchAt }] }`, written atomically, mode 600; a file that cannot be read is copied aside and an empty list is used).
+  (`{ version, defaultAccountId, accounts: [{ id, configDir, email, organization, plan, origin, owner, addedAt,
+  paused, switchAt }] }`, `owner` the member who signed it in on a shared machine, null for the machine's owner:
+  Remote access → Shared machines, written atomically, mode 600; a file that cannot be read is copied aside and an empty list is used).
   An account's `plan` comes from the `account` notice a run reports (the SDK's `accountInfo()`, which carries
   Claude's current name for the plan, "Claude Ultra"); the keychain login's `subscriptionType` and `claude auth
   status` only fill a plan that is missing, since they can lag behind a rename ("max"). `resolvePlanLabel` (core)
@@ -6924,8 +7014,8 @@ update channel: a canary or a beta is the same app with the same identity (`APP_
     ├── extension-usage.json  When agents last used each MCP server and skill, and how far each session was read
     ├── eunoe/         eunoe's folder (`EUNOE_DIR`): the request log (requests.jsonl) and thread state (threads/)
     │                  the engine's forwarder keeps (The agent loop → Compaction and fast mode)
-    ├── secrets.json   Webhook tokens and signing secrets, one-use secret refs and MCP sign-ins (mode 600; never in
-    │                  the log)
+    ├── secrets.json   Webhook tokens and signing secrets, one-use secret refs, MCP sign-ins and members' GitHub
+    │                  tokens on a shared machine (mode 600; never in the log)
     ├── remote.json    Remote access: the machine's key, its credentials from app.shinsa.dev and the enrolled devices
     │                  (mode 600; never in the log; Remote access, above)
     ├── team-snapshots.json  The last list of each teammate machine this one watches, shown while it is offline

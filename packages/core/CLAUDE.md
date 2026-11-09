@@ -233,7 +233,7 @@ src/
 │   │                the thread with `slack.thread_linked`; the card's ts; `slack.decide` (decideSlackGate: a
 │   │                decision from Slack through answerGate, then `slack.decided`); and syncSlackThreads (after every
 │   │                command): one `slack.status` per changed task, the card edited (never for a watchdog check's
-│   │                stage moves), `slack.post` only for the result, the finished task and a tripped watchdog, and
+│   │                stage moves), `slack.post` only for a tripped watchdog (the result and the end edit the card), and
 │   │                the merge once per round, when its pull request merges (`slack.merge_announced`), then
 │   │                `slack.merge` to edit it on every watchdog event and ticked post-merge step; its ts
 │   │                (`slack.record_merge`)
@@ -369,7 +369,7 @@ src/
 │                    thread as text with its budget, the request of a task from Slack with the thread fenced as
 │                    untrusted data, and a mention sent to a linked task (thread.ts), whether a mention is work
 │                    or not, task or none (evaluation.ts: SLACK_EVALUATION_SYSTEM, parseSlackEvaluation), and
-│                    what is posted as a new message (posts.ts: SlackPost, result, completed or tripped); deciding a gate
+│                    what is posted as a new message (posts.ts: SlackPost, only tripped); deciding a gate
 │                    from Slack (decisions.ts: SLACK_DECIDABLE, the action ids, the button value, the form
 │                    (serializeSlackDecisionModal) and the decided line; schema.ts: SlackDecisionValue,
 │                    SlackDecisionModal, SlackDecision, SlackDecisionReply); the thread key is
@@ -465,7 +465,8 @@ with a fixed clock and ids and has the steps a test needs (`createTask`, `reachR
     while an agent runs, the only other open gate a task may have is a Post-merge gate;
   - no failure gate while an agent runs (starting a step withdraws it), and at most one failure gate per task;
   - a task waiting for a usage limit to reset has no run, no failure or Sign in gate and is not settled; at most one
-    Sign in gate per task, and it names its provider, and its account for Claude (none for a provider's own login);
+    Sign in gate per task, and it names its provider, and its account for Claude (none for a provider's own login,
+    or for a shared machine's owner gate, `cause: 'owner_account'`);
   - a task has at most one armed wait (a monitor or a usage limit), and none while a run is active;
   - a plan gate exactly when `awaiting_plan` (for the current plan version), a review gate exactly when
     `awaiting_review`, a merge gate only in `awaiting_merge` and never while the task waits on an unfinished task;

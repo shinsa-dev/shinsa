@@ -1066,6 +1066,48 @@ describe('managing remote access on the machine', () => {
   });
 });
 
+describe('who owns a task made over remote access', () => {
+  const person = ({ login, name, avatarUrl }: RemoteUser) => ({ login, name, avatarUrl });
+
+  test('a task is owned by the member whose device created it, and by the owner when made at the keyboard', async () => {
+    const { remote, port, engine, local } = await start({
+      access: { owner: OWNER, members: [{ user: KAI, addedAt: 1 }] },
+    });
+    const machine = await remote.store.resolveMachineKey();
+    const ownerOf = (request: string) =>
+      Object.values(engine.state.tasks).find((task) => task.request === request)?.owner ?? null;
+    const createFrom = async (userId: string, request: string) => {
+      const channel = await openChannel(remote.appOrigin, port, '', machine.publicKey, {
+        userId,
+        device: await addDevice(remote, userId),
+      });
+      expect(await channel.next()).toEqual({ t: 'ready' });
+      await channel.send({ t: 'ready' });
+      expect(
+        await sendCommand(channel, `c-${userId}`, { type: 'task.create', request, repoId: null })
+      ).toBeNull();
+    };
+    await createFrom(KAI.id, 'From Kai');
+    await createFrom(OWNER.id, 'From Mona');
+    expect(
+      (await local('/api/commands', { type: 'task.create', request: 'At the keyboard', repoId: null })).status
+    ).toBe(200);
+    expect([ownerOf('From Kai'), ownerOf('From Mona'), ownerOf('At the keyboard')]).toEqual([
+      person(KAI),
+      person(OWNER),
+      person(OWNER),
+    ]);
+    expect(remote.resolveActor('nobody')).toBeNull();
+  });
+
+  test('a machine nobody has paired records no owner', async () => {
+    const { local, engine, remote } = await start({ paired: false });
+    await local('/api/commands', { type: 'task.create', request: 'Unpaired', repoId: null });
+    expect(Object.values(engine.state.tasks).map((task) => task.owner ?? null)).toEqual([null]);
+    expect(remote.resolveActor(null)).toBeNull();
+  });
+});
+
 describe('links, access requests and members', () => {
   function answerAccess(access: RemoteAccess) {
     return () => Response.json({ ok: true, ...access, guests: [], teams: [] });

@@ -150,6 +150,10 @@ describe('parseUserCommand', () => {
       ],
       [{ type: 'focus.change' }, { type: 'focus.change', projectId: null, until: null }],
       [
+        { type: 'focus.change', projectIds: ['p1', 'p2'], except: true },
+        { type: 'focus.change', projectId: null, projectIds: ['p1', 'p2'], except: true, until: null },
+      ],
+      [
         { type: 'task.create', request: 'Fix it', projectId: 'p1' },
         { type: 'task.create', request: 'Fix it', repoId: null, projectId: 'p1' },
       ],
@@ -417,6 +421,8 @@ describe('parseUserCommand', () => {
         'folders must be a list.',
       ],
       [{ type: 'focus.change', projectId: null, until: 'soon' }, 'until must be a time.'],
+      [{ type: 'focus.change', projectIds: 'p1' }, 'projectIds must be a list.'],
+      [{ type: 'focus.change', projectIds: ['p1'], except: 'yes' }, 'except must be true or false.'],
       [{ type: 'task.create', request: 'x', projectId: 4 }, 'projectId must be text.'],
       [{ type: 'settings.change', patch: { tasks: {} } }, 'Settings cannot change tasks.'],
       [

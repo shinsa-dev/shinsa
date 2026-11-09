@@ -1,15 +1,22 @@
-import type {
-  DomainError,
-  FastModeAvailability,
-  Run,
-  RunAccount,
-  ShinsaState,
-  WeeklyReading,
+import {
+  type DomainError,
+  type FastModeAvailability,
+  isSharedMachine,
+  type Run,
+  type RunAccount,
+  type ShinsaState,
+  type WeeklyReading,
 } from '@shinsa/core';
 import { Context, Effect, Layer } from 'effect';
 import { EngineCore } from '../../runtime/engine/service.ts';
 import { Transcripts } from '../transcripts/service.ts';
-import { type AccountBrokerFailed, type AccountLease, AccountBroker } from './schema.ts';
+import {
+  type AccountBrokerFailed,
+  type AccountBrokerShape,
+  type AccountLease,
+  type AccountOwnership,
+  AccountBroker,
+} from './schema.ts';
 
 export class AccountLeasing extends Context.Service<
   AccountLeasing,
@@ -52,6 +59,18 @@ export class AccountLeasing extends Context.Service<
         return latest?.account ?? null;
       };
 
+      const resolveOwnership = Effect.fn('AccountLeasing.resolveOwnership')(function* (
+        found: AccountBrokerShape,
+        state: ShinsaState,
+        taskId: string
+      ) {
+        if (!isSharedMachine(state.settings)) return null;
+        const login = state.tasks[taskId]?.owner?.login ?? null;
+        const machineOwner = found.machineOwner ? yield* found.machineOwner : null;
+        const ownership: AccountOwnership = { owner: login === machineOwner ? null : login };
+        return ownership;
+      });
+
       const leaseAttempt = Effect.fn('AccountLeasing.leaseAttempt')(function* (
         run: Run,
         exclude: string[],
@@ -67,6 +86,7 @@ export class AccountLeasing extends Context.Service<
           bound: renewed ?? run.account ?? state.tasks[run.taskId]?.account ?? null,
           previous,
           exclude,
+          ownership: yield* resolveOwnership(broker, state, run.taskId),
         });
         if (lease && previous && previous.id !== lease.id) {
           yield* transcripts.record(run.id, {

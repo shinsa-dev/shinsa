@@ -1,3 +1,4 @@
+import { FOCUS_PROJECTS } from './focus-projects.ts';
 import { PROPOSAL_RECOMMEND } from './proposal-recommend.ts';
 import { REVIEW_RATINGS } from './review-ratings.ts';
 import { REVIEW_SEEN } from './review-seen.ts';
@@ -14,6 +15,7 @@ export const LOG_MIGRATIONS: readonly LogMigration[] = [
   SHARE_SCOPES,
   PROPOSAL_RECOMMEND,
   TASK_AUTO_PROJECT,
+  FOCUS_PROJECTS,
   REVIEW_RATINGS,
 ];
 

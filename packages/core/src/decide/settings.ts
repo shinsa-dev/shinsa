@@ -9,6 +9,8 @@ import {
   isSameAutopilotContact,
   MAX_COMPACTION_LEAD_MINUTES,
   MAX_URGENT_WAIT_MINUTES,
+  NO_FOCUS,
+  normaliseFocusProjects,
   PROJECT_COLORS,
   PROJECT_LIMITS,
   type Project,
@@ -16,6 +18,7 @@ import {
   resolveProjectKey,
   type Settings,
   selectFolderProject,
+  selectSingleFocusProject,
   WATCHDOG_SETTING_LIMITS,
 } from '../domain/index.ts';
 import { isPlacementPoliciesValid } from '../remote/placement.ts';
@@ -316,28 +319,39 @@ export function removeProject(decider: Decider, command: CommandOf<'project.remo
       decider.emit({ type: 'repo.updated', repo: { ...repo, projectId: null } });
     }
   }
-  if (decider.state.focus.projectId === command.projectId) {
-    decider.emit({ type: 'focus.changed', focus: { projectId: null, teamId: null, until: null } });
-    decider.run({ kind: 'briefing.request', projectId: null });
-  }
+  dropFromFocus(decider, command.projectId);
   removeProjectMemory(decider, command.projectId);
   removeProjectSuggestions(decider, command.projectId);
   decider.emit({ type: 'project.removed', projectId: command.projectId });
 }
 
+function dropFromFocus(decider: Decider, projectId: string) {
+  const { focus } = decider.state;
+  if (!focus.projectIds.includes(projectId)) return;
+  const projectIds = focus.projectIds.filter((id) => id !== projectId);
+  const next = projectIds.length === 0 ? NO_FOCUS : { ...focus, projectIds };
+  decider.emit({ type: 'focus.changed', focus: next });
+  decider.run({ kind: 'briefing.request', projectId: selectSingleFocusProject(next) });
+}
+
 export function changeFocus(decider: Decider, command: CommandOf<'focus.change'>) {
-  assertProject(decider, command.projectId);
+  const projectIds = command.projectIds ?? (command.projectId ? [command.projectId] : []);
+  for (const projectId of projectIds) assertProject(decider, projectId);
   const teamId = command.teamId ?? null;
-  if (command.projectId && teamId) {
+  if (projectIds.length > 0 && teamId) {
     throw new DomainError({
       code: 'focus_refused',
-      message: 'Focus on a project or on a team, not both at once.',
+      message: 'Focus on projects or on a team, not both at once.',
     });
   }
-  const focus = { projectId: command.projectId, teamId, until: command.until };
+  const focus = {
+    ...normaliseFocusProjects(projectIds, command.except ?? false),
+    teamId,
+    until: command.until,
+  };
   if (isSameValue(focus, decider.state.focus)) return;
   decider.emit({ type: 'focus.changed', focus });
-  decider.run({ kind: 'briefing.request', projectId: command.projectId });
+  decider.run({ kind: 'briefing.request', projectId: selectSingleFocusProject(focus) });
 }
 
 function dropStaleModels(previous: Settings, patch: Partial<Settings>): Settings {

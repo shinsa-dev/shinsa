@@ -1,4 +1,4 @@
-import { resolveQueue, serializeBriefing } from '@shinsa/core';
+import { briefingKey, resolveQueue, serializeBriefing } from '@shinsa/core';
 import { Clock, Context, Effect, FiberHandle, Layer, Ref } from 'effect';
 import { QuickCalls } from '../agents/quick/service.ts';
 import { EngineCore } from '../runtime/engine/service.ts';
@@ -31,7 +31,7 @@ export class BriefingWriter extends Context.Service<
           return yield* Effect.logInfo(
             '[Briefing] Dropped a briefing that was written after the server stopped'
           ).pipe(Effect.annotateLogs({ seq: state.seq }));
-        yield* engine.writeBriefing(queue.focusProjectId, {
+        yield* engine.writeBriefing(briefingKey(queue.focus), {
           text: serializeBriefing(briefing, yield* engine.state),
           briefing,
         });

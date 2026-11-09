@@ -125,7 +125,7 @@ export class CommandRouter extends Context.Service<
           const { taskId, text } = command;
           return yield* dispatch(
             { type: 'message.receive', taskId, text },
-            { ...(id ? { id } : {}), receipt: command }
+            { ...(id ? { id } : {}), ...(from.actor ? { actor: from.actor } : {}), receipt: command }
           );
         }
         return yield* routeResolved(command, id, from, classifyCommand(command));

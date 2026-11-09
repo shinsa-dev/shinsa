@@ -64,7 +64,6 @@ export {
   type SlackReaction,
   type SlackTaskRef,
   serializeSlackCard,
-  serializeSlackCompleted,
   serializeSlackDeclined,
   serializeSlackEscalation,
   serializeSlackEscalationCleared,
@@ -73,7 +72,6 @@ export {
   serializeSlackMerged,
   serializeSlackOffline,
   serializeSlackReconnectPrompt,
-  serializeSlackResult,
   serializeSlackUnreadLinks,
 } from './messages.ts';
 export {

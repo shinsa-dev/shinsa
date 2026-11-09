@@ -10,6 +10,7 @@ import {
   ATTACHMENT_LIMIT_BYTES,
   ATTACHMENT_UPLOAD_LIMIT_BYTES,
   FilledText,
+  GitHubTokenAnswer,
   ModelsAnswer,
   IdempotencyKey,
   OpenRequest,
@@ -21,6 +22,7 @@ import {
 
 const STRUCT_ANSWERS = new Set([
   'OkAnswer',
+  'GitHubTokenAnswer',
   'OpenAnswer',
   'CommandAnswer',
   'RestartAnswer',
@@ -55,6 +57,9 @@ describe('EngineApi shapes', () => {
       ok: true,
       taskId: 't',
     });
+    const token = { login: 'kai', saved: true, savedAt: 1, machineLogin: false };
+    expect(Schema.decodeUnknownSync(GitHubTokenAnswer)(token)).toEqual(token);
+    expect(() => Schema.decodeUnknownSync(GitHubTokenAnswer)({ login: 'kai', saved: 'yes' })).toThrow();
     expect(Schema.decodeUnknownSync(TeamCreateAnswer)({ teamId: 't', url: 'u' })).toEqual({
       teamId: 't',
       url: 'u',
