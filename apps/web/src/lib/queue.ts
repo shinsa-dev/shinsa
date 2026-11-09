@@ -67,21 +67,20 @@ function createGroupSection(
   };
 }
 
-function isInitiativeLeadItem(state: ShinsaState, task: Task) {
-  const initiative = task.initiativeId ? state.initiatives[task.initiativeId] : undefined;
-  return initiative?.leadTaskId === task.id && selectInitiativeLead(state, initiative) !== null;
+function isLeadRowShown(state: ShinsaState, lead: Task, now: number) {
+  return !lead.snoozed && !lead.backlog && isListedInFocus(state, lead, now);
 }
 
-function isNestedInInitiative(state: ShinsaState, task: Task) {
+function selectShownLead(state: ShinsaState, task: Task, now: number) {
   const initiative = task.initiativeId ? state.initiatives[task.initiativeId] : undefined;
   const lead = initiative ? selectInitiativeLead(state, initiative) : null;
-  return lead !== null && lead.id !== task.id;
+  return lead && isLeadRowShown(state, lead, now) ? lead : null;
 }
 
 function listInitiativeItems(state: ShinsaState, queue: Queue, now: number): QueueItem[] {
   const running = new Set(queue.working.map((task) => task.id));
   return listInitiativeRows(state)
-    .filter(({ lead }) => !lead.snoozed && !lead.backlog && isListedInFocus(state, lead, now))
+    .filter(({ lead }) => isLeadRowShown(state, lead, now))
     .map(({ initiative, lead, summary }) => ({
       kind: running.has(lead.id) ? 'working' : 'idle',
       key: lead.id,
@@ -93,7 +92,7 @@ function listInitiativeItems(state: ShinsaState, queue: Queue, now: number): Que
 }
 
 export function listQueueSections(state: ShinsaState, queue: Queue, now: number): QueueSection[] {
-  const nested = (task: Task) => isNestedInInitiative(state, task) || isInitiativeLeadItem(state, task);
+  const nested = (task: Task) => selectShownLead(state, task, now) !== null;
   return [
     {
       key: 'needs',

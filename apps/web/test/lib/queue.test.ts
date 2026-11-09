@@ -10,6 +10,7 @@ import {
 } from '@/lib/queue.ts';
 import {
   createGate,
+  createInitiative,
   createProject,
   createRepo,
   createShinsaState,
@@ -149,5 +150,45 @@ describe('isQueueButtonShown', () => {
     expect(isQueueButtonShown({ name: 'home' })).toBe(false);
     expect(isQueueButtonShown({ name: 'tasks' })).toBe(false);
     expect(isQueueButtonShown({ name: 'onboarding' })).toBe(false);
+  });
+});
+
+describe('initiative members on Home', () => {
+  function createInitiativeWorld(lead: Partial<Parameters<typeof createTask>[0]>) {
+    return createShinsaState({
+      initiatives: [createInitiative({ id: 'split', name: 'Chat split', leadTaskId: 'lead' })],
+      tasks: [
+        createTask({
+          id: 'lead',
+          title: 'Chat split',
+          pipeline: ['lead'],
+          stage: 'leading',
+          initiativeId: 'split',
+          ...lead,
+        }),
+        createTask({ id: 'build', stage: 'building', initiativeId: 'split' }),
+        createTask({ id: 'later', stage: 'waiting_on_tasks', waitsOn: ['build'], initiativeId: 'split' }),
+      ],
+    });
+  }
+
+  function listKeys(sections: QueueSection[], key: QueueSection['key']) {
+    return sections.find((section) => section.key === key)?.items.map((item) => item.key);
+  }
+
+  it('nests members under a lead shown on Home', () => {
+    const state = createInitiativeWorld({});
+    const sections = listQueueSections(state, resolveQueue(state, NOW), NOW);
+    expect(listKeys(sections, 'working')).toEqual(['lead']);
+    expect(listKeys(sections, 'waiting')).toEqual([]);
+  });
+
+  it('lists members on their own when the lead is snoozed or in the backlog', () => {
+    for (const lead of [{ snoozed: { at: NOW } }, { backlog: { at: NOW } }]) {
+      const state = createInitiativeWorld(lead);
+      const sections = listQueueSections(state, resolveQueue(state, NOW), NOW);
+      expect(listKeys(sections, 'working')).toEqual(['build']);
+      expect(listKeys(sections, 'waiting')).toEqual(['later']);
+    }
   });
 });
