@@ -671,7 +671,7 @@ describe('events from Slack', () => {
   });
 
   test('answers Slack’s URL check with its challenge', async () => {
-    const { harness } = await setUp();
+    const harness = createHarness();
     const response = await sendEvent(harness, { type: 'url_verification', challenge: 'c-1' });
     expect(await response.json()).toEqual({ challenge: 'c-1' });
   });

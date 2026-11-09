@@ -10,7 +10,7 @@ import {
   useSlack,
   useSlackDirectory,
 } from '@/lib/connection/slack.ts';
-import { readFetchCall } from '../../support/fetch.ts';
+import { type FetchRequest, readFetchRequest } from '../../support/fetch.ts';
 
 const SNAPSHOT: SlackSnapshot = {
   remote: true,
@@ -22,7 +22,7 @@ const SNAPSHOT: SlackSnapshot = {
 };
 
 let answers: Record<string, () => Response> = {};
-let sent: { path: string; method: string }[] = [];
+let sent: FetchRequest[] = [];
 let fetchSpy: Mock<typeof fetch>;
 
 beforeEach(() => {
@@ -32,8 +32,9 @@ beforeEach(() => {
     input: RequestInfo | URL,
     init?: RequestInit
   ) => {
-    const { path, method } = readFetchCall(input, init);
-    sent.push({ path, method });
+    const call = await readFetchRequest(input, init);
+    sent.push(call);
+    const { path, method } = call;
     const answer = answers[`${method} ${path}`];
     return answer ? answer() : new Response('offline', { status: 503 });
   }) as typeof fetch);
@@ -60,10 +61,12 @@ describe('Slack on this machine', () => {
     expect(sent.filter((entry) => entry.path === '/api/slack')).toHaveLength(1);
   });
 
-  it('disconnecting shows the snapshot the engine answers with', async () => {
+  it('disconnecting sends an empty JSON body and shows the snapshot the engine answers with', async () => {
     const disconnected = { ...SNAPSHOT, links: [] };
     answers['POST /api/slack/disconnect'] = () => Response.json(disconnected);
     await act(() => SLACK_ACTIONS.disconnect());
+    const request = sent.find((entry) => entry.path === '/api/slack/disconnect');
+    expect([request?.headers.get('content-type'), request?.body]).toEqual(['application/json', {}]);
     expect(selectSlack().snapshot).toEqual(disconnected);
   });
 

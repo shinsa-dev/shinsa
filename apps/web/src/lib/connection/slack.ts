@@ -33,7 +33,7 @@ const read = createSharedRun(
 
 const disconnect = Effect.gen(function* () {
   const engine = yield* EngineClient;
-  const snapshot = yield* engine.slack.disconnect();
+  const snapshot = yield* engine.slack.disconnect({ payload: {} });
   publish({ snapshot, failure: null });
   return snapshot;
 });

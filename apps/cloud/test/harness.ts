@@ -1,5 +1,5 @@
 import { Database as Sqlite } from 'bun:sqlite';
-import { mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { SqliteClient } from '@effect/sql-sqlite-bun';
@@ -80,14 +80,28 @@ export function removeTestDatabases() {
 
 let databases = 0;
 
+let template: Uint8Array | null = null;
+
+function resolveTemplate() {
+  if (template) return template;
+  const sqlite = new Sqlite(':memory:');
+  const migrations = join(import.meta.dirname, '../migrations');
+  const files = readdirSync(migrations)
+    .filter((name) => name.endsWith('.sql'))
+    .sort();
+  sqlite.transaction(() => {
+    for (const file of files) sqlite.exec(readFileSync(join(migrations, file), 'utf8'));
+  })();
+  template = sqlite.serialize();
+  sqlite.close();
+  return template;
+}
+
 function createTestDatabase() {
   const filename = join(DATABASES, `cloud-test-${++databases}.sqlite`);
+  writeFileSync(filename, resolveTemplate());
   const sqlite = new Sqlite(filename);
-  const migrations = join(import.meta.dirname, '../migrations');
-  for (const file of readdirSync(migrations)
-    .filter((name) => name.endsWith('.sql'))
-    .sort())
-    sqlite.exec(readFileSync(join(migrations, file), 'utf8'));
+  sqlite.exec('PRAGMA synchronous = OFF');
   return { sqlite, filename };
 }
 
@@ -252,7 +266,9 @@ export function createHarness(overrides: Partial<CloudConfig> = {}): Harness {
   const world: World = { config, fetch: upstreamFetch };
 
   const Sql = Layer.effectDiscard(
-    Effect.flatMap(SqlClient.SqlClient, (sql) => sql.unsafe('PRAGMA foreign_keys = ON'))
+    Effect.flatMap(SqlClient.SqlClient, (sql) =>
+      Effect.andThen(sql.unsafe('PRAGMA foreign_keys = ON'), sql.unsafe('PRAGMA synchronous = OFF'))
+    )
   ).pipe(
     Layer.provideMerge(SqliteClient.layer({ filename: db.filename, disableWAL: true, ...SQL_NAMES })),
     Layer.orDie
