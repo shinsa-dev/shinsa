@@ -766,6 +766,7 @@ export interface EngineRoute {
   readonly feature: EngineFeature | null;
   readonly localOnly: boolean;
   readonly ownerOnly: boolean;
+  readonly sharedMember: boolean;
   readonly guest: GuestAccess;
   readonly browserOnly: string | null;
   readonly bodyLimit: number;

@@ -271,6 +271,24 @@ describe('EngineApi routes', () => {
     ]);
   });
 
+  test('opens to a shared machine’s members only their own Claude accounts and GitHub token, each still owner-only elsewhere', () => {
+    const shared = listEngineRoutes().filter((route) => route.sharedMember);
+    expect(sorted(shared.map((route) => route.key))).toEqual(
+      sorted([
+        'POST /api/accounts/refresh',
+        'POST /api/accounts/login',
+        'POST /api/accounts/login/code',
+        'POST /api/accounts/login/cancel',
+        'POST /api/accounts/import',
+        'POST /api/accounts/update',
+        'POST /api/accounts/remove',
+        'GET /api/github-token',
+        'POST /api/github-token',
+      ])
+    );
+    expect(shared.every((route) => route.ownerOnly)).toBe(true);
+  });
+
   test('marks the routes only Shinsa’s own page may call', () => {
     const browserOnly = listEngineRoutes()
       .filter((route) => route.browserOnly)
