@@ -243,13 +243,15 @@ describe('machine members', () => {
 });
 
 describe('a shared machine and Slack', () => {
-  test('a member cannot connect Slack to a machine they do not own, named or picked for them', async () => {
+  test('a member connects Slack to the machine they are a member of, named or picked for them', async () => {
     const { harness, kai, studio } = await joinMachine();
     const named = await harness.call(`${SLACK_RELAY_PATHS.connect}?instance=${studio.instanceId}`, {
       session: kai,
     });
-    expect(named.status).toBe(403);
     const picked = await harness.call(SLACK_RELAY_PATHS.connect, { session: kai });
-    expect(picked.headers.get('location')).toBe('/slack/linked?error=no_machine');
+    for (const response of [named, picked]) {
+      const authorize = new URL(response.headers.get('location') ?? '');
+      expect(authorize.origin + authorize.pathname).toBe('https://slack.com/oauth/v2/authorize');
+    }
   });
 });
