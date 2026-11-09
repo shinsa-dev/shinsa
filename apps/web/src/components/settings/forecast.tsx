@@ -2,11 +2,9 @@ import {
   type ForecastTimeline,
   MINUTE_MS,
   resolveForecastTimeline,
-  type Settings,
   type ShinsaState,
   type UsageForecast,
 } from '@shinsa/core';
-import { Button } from '@shinsa/ui/components/button';
 import { Truncate } from '@shinsa/ui/components/truncate';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
@@ -14,7 +12,6 @@ import { Choice } from '@/components/controls/choice.tsx';
 import { Hint } from '@/components/overlays/hint.tsx';
 import { useMinute } from '@/hooks/use-minute.ts';
 import {
-  APPLY_PACE_LABEL,
   describeOutage,
   describeOutages,
   describeRecentPace,
@@ -26,7 +23,6 @@ import {
   type ForecastLane,
   formatForecastDay,
   formatPace,
-  isPaceApplied,
   listForecastDays,
   listForecastLanes,
   listForecastPaces,
@@ -40,8 +36,7 @@ import {
   selectForecastPace,
 } from '@/lib/accounts/forecast.ts';
 import { useAccounts } from '@/lib/connection/accounts.ts';
-import { useEngineFeature } from '@/lib/connection/socket.ts';
-import { updateSettings } from '@/lib/settings.ts';
+import { AutoPaceToggle, PaceBudget } from './auto-pace.tsx';
 import { ROW_INSET, SETTING_ROW, SettingsBlock, SettingsGroup } from './group.tsx';
 
 const LANE_LABEL = 'w-24 shrink-0 sm:w-36';
@@ -172,22 +167,7 @@ function Timeline({ forecast, timeline }: { forecast: UsageForecast; timeline: F
   );
 }
 
-function ApplyPaceButton({ forecast, settings }: { forecast: UsageForecast; settings: Settings }) {
-  const applied = isPaceApplied(forecast, settings.dailyUsageLimit);
-  return (
-    <Button
-      variant='secondary'
-      size='xs'
-      icon='IconGauge'
-      disabled={applied || forecast.safePace <= 0}
-      onClick={() => void updateSettings({ dailyUsageLimit: forecast.safePace })}
-    >
-      {applied ? 'Daily limit set' : APPLY_PACE_LABEL}
-    </Button>
-  );
-}
-
-function ForecastBlock({ entry, settings }: { entry: ProviderForecast; settings: Settings }) {
+function ForecastBlock({ entry, state }: { entry: ProviderForecast; state: ShinsaState }) {
   const { forecast } = entry;
   const [choice, setChoice] = React.useState<ForecastPaceChoice>(() => resolveDefaultPace(forecast));
   const paces = listForecastPaces(forecast);
@@ -198,22 +178,19 @@ function ForecastBlock({ entry, settings }: { entry: ProviderForecast; settings:
   );
   const tightest = describeTightest(forecast, forecast.from);
   const outages = describeOutages(timeline, forecast.from);
-  const paced = useEngineFeature('usage.pace_limits');
   return (
     <SettingsBlock
       header={
-        <>
-          <div className='flex min-w-0 flex-1 items-center gap-1.5 text-xs'>
-            <span className='font-medium text-fg-4'>{entry.title}</span>
-            <span className='shrink-0 text-fg-2 tabular-nums'>{formatPace(forecast.safePace)} a day</span>
-          </div>
-          {paced && <ApplyPaceButton forecast={forecast} settings={settings} />}
-        </>
+        <div className='flex min-w-0 flex-1 items-center gap-1.5 text-xs'>
+          <span className='font-medium text-fg-4'>{entry.title}</span>
+          <span className='shrink-0 text-fg-2 tabular-nums'>{formatPace(forecast.safePace)} a day</span>
+        </div>
       }
     >
       <div className={SETTING_ROW}>
         <span className='min-w-0 flex-1 text-xs text-fg-4'>{describeSafePace(forecast)}</span>
       </div>
+      <PaceBudget state={state} provider={entry.provider} safePace={forecast.safePace} />
       {paces.length > 1 && (
         <div className={cn(SETTING_ROW, 'flex-wrap gap-y-1.5')}>
           <span className='min-w-0 flex-1 text-xs text-fg-2'>Timeline at</span>
@@ -258,8 +235,9 @@ export function ForecastSettings({ state }: { state: ShinsaState }) {
       title={FORECAST_TITLE}
       description='The highest steady pace your accounts can keep up for the next 7 days, spending first from the account that resets soonest.'
     >
+      <AutoPaceToggle state={state} />
       {forecasts.map((entry) => (
-        <ForecastBlock key={entry.provider} entry={entry} settings={state.settings} />
+        <ForecastBlock key={entry.provider} entry={entry} state={state} />
       ))}
     </SettingsGroup>
   );

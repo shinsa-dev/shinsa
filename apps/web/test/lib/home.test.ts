@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'bun:test';
 import { type Activity, createSettings, resolveQueue, type Task } from '@shinsa/core';
+import { formatMoment } from '@/lib/format/time.ts';
 import {
   dropPullRequestNumbers,
-  listOvernightLines,
+  describeOvernightReviews,
+  listWaitingBuilds,
   listRecentConversations,
   listRecentlyFinished,
   resolveGreeting,
@@ -286,54 +288,38 @@ describe('dropPullRequestNumbers', () => {
   });
 });
 
-describe('listOvernightLines', () => {
+describe('Auto pace on Home', () => {
   const HOUR = 3_600_000;
   const tonight = Math.floor(NOW / DAY) * DAY + DAY + 3 * HOUR;
   const wait = (resetAt: number) =>
     ({ id: 'w', status: 'armed', cause: 'pace', pace: { scope: 'admission' }, resetAt }) as Task['usageWait'];
+  const settings = { ...createSettings(), autoPace: true };
 
-  it('says nothing while Auto pace is off', () => {
+  it('names nothing while Auto pace is off', () => {
     const task = createTask({ id: 'a', usageWait: wait(tonight) });
-    expect(listOvernightLines(createShinsaState({ tasks: [task] }), NOW)).toEqual([]);
+    const state = createShinsaState({ tasks: [task] });
+    expect(listWaitingBuilds(state, [task], NOW)).toEqual([]);
+    expect(describeOvernightReviews(state, NOW)).toBeNull();
   });
 
-  it('counts the builds that wait, tonight when they will start while you are away', () => {
-    const settings = { ...createSettings(), autoPace: true };
+  it('names each waiting build, soonest first, with when it builds', () => {
     const away = createNights();
-    const one = createShinsaState({
-      tasks: [createTask({ id: 'a', usageWait: wait(tonight) })],
-      patch: { settings, away },
-    });
-    expect(listOvernightLines(one, NOW)).toEqual([
-      '1 task builds tonight, when there is room in today’s usage',
+    const night = createTask({ id: 'night', usageWait: wait(tonight) });
+    const soon = createTask({ id: 'soon', usageWait: wait(NOW + HOUR) });
+    const due = createTask({ id: 'due', usageWait: wait(NOW - HOUR) });
+    const building = createTask({ id: 'building', stage: 'building' });
+    const state = createShinsaState({ tasks: [night, soon, due, building], patch: { settings, away } });
+    const builds = listWaitingBuilds(state, [night, soon, building, due], NOW);
+    expect(builds.map((build) => [build.task.id, build.when])).toEqual([
+      ['due', 'next'],
+      ['soon', `after ${formatMoment(NOW + HOUR, NOW)}`],
+      ['night', 'tonight'],
     ]);
-    const soon = createShinsaState({
-      tasks: [
-        createTask({ id: 'a', usageWait: wait(NOW + HOUR) }),
-        createTask({ id: 'b', usageWait: wait(NOW + HOUR) }),
-      ],
-      patch: { settings, away },
-    });
-    expect(listOvernightLines(soon, NOW)).toEqual(['2 tasks wait for room in today’s usage to build']);
-    const unknown = createShinsaState({
-      tasks: [createTask({ id: 'a', usageWait: wait(tonight) })],
-      patch: { settings },
-    });
-    expect(listOvernightLines(unknown, NOW)).toEqual(['1 task waits for room in today’s usage to build']);
-    const many = createShinsaState({
-      tasks: [
-        createTask({ id: 'a', usageWait: wait(tonight) }),
-        createTask({ id: 'b', usageWait: wait(tonight) }),
-      ],
-      patch: { settings, away },
-    });
-    expect(listOvernightLines(many, NOW)).toEqual([
-      '2 tasks build tonight, when there is room in today’s usage',
-    ]);
+    const unknown = createShinsaState({ tasks: [night], patch: { settings } });
+    expect(listWaitingBuilds(unknown, [night], NOW)[0]?.when).toStartWith('after ');
   });
 
   it('counts the reviews that opened overnight, once you are back', () => {
-    const settings = { ...createSettings(), autoPace: true };
     const away = createNights();
     const night = Math.floor(NOW / DAY) * DAY + 3 * HOUR;
     const gates = [
@@ -344,9 +330,9 @@ describe('listOvernightLines', () => {
       createGate({ id: 'g5', taskId: 'e', type: 'question', status: 'open', openedAt: night }),
     ];
     const state = createShinsaState({ gates, patch: { settings, away } });
-    expect(listOvernightLines(state, NOW)).toEqual(['2 tasks built overnight are ready for your review']);
+    expect(describeOvernightReviews(state, NOW)).toBe('2 tasks built overnight are ready for your review');
     const single = createShinsaState({ gates: gates.slice(1, 2), patch: { settings, away } });
-    expect(listOvernightLines(single, NOW)).toEqual(['1 task built overnight is ready for your review']);
-    expect(listOvernightLines(state, night + HOUR)).toEqual([]);
+    expect(describeOvernightReviews(single, NOW)).toBe('1 task built overnight is ready for your review');
+    expect(describeOvernightReviews(state, night + HOUR)).toBeNull();
   });
 });

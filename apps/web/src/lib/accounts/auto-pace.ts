@@ -3,18 +3,16 @@ import {
   CLAUDE_PROVIDER,
   describeCount,
   resolveAdmissionRoom,
-  resolveProviderLabel,
   type ShinsaState,
 } from '@shinsa/core';
 import { isAdmissionWait, isUsageWaitArmed } from '@/lib/accounts/usage-wait.ts';
 
 export const AUTO_PACE_LABEL = {
-  title: 'Auto pace',
-  description:
-    'Starts each build only when its estimate fits today’s usage, in order of priority, then the projects you work on most. Planning, questions and watchdog checks never wait.',
   toggle: 'Auto pace',
   toggled: { on: 'Auto pace is on.', off: 'Auto pace is off.' },
-  noPace: 'Auto pace waits for the first usage reading of your accounts.',
+  on: 'Each build starts only when its estimate fits the safe pace below, in order of priority, then the projects you work on most. Planning, questions and watchdog checks never wait.',
+  off: 'Turn it on to start each build only when its estimate fits the safe pace below. Until then every build starts at once.',
+  noPace: 'Auto pace waits for the first usage reading of these accounts.',
 } as const;
 
 export interface PaceBudgetRow {
@@ -37,20 +35,30 @@ function countWaitingBuilds(state: ShinsaState, provider: string) {
   ).length;
 }
 
-export function listPaceBudgets(state: ShinsaState, now: number): PaceBudgetRow[] {
-  return Object.values(state.usagePaces)
-    .sort((a, b) => a.provider.localeCompare(b.provider))
-    .map((recorded) => {
-      const room = resolveAdmissionRoom(state, recorded.provider, now) ?? 0;
-      const waiting = countWaitingBuilds(state, recorded.provider);
-      const reserve = Math.round(ADMISSION_LIMITS.reserve * 100);
-      const budget = `Of ${formatShare(recorded.pace)} of a weekly limit, with ${reserve}% kept for urgent tasks`;
-      const queued = waiting > 0 ? `. ${describeCount(waiting, 'build')} waiting` : '';
-      return {
-        provider: recorded.provider,
-        label: `${resolveProviderLabel(recorded.provider)} for the next 24 hours`,
-        value: `${formatShare(room)} left`,
-        detail: `${budget}${queued}`,
-      };
-    });
+const PACE_STEP = 0.5;
+
+function describeResetsCounted(pace: number, safePace: number | null) {
+  return safePace !== null && pace - safePace >= PACE_STEP ? ', counting your usable usage resets' : '';
+}
+
+export function selectPaceBudget(
+  state: ShinsaState,
+  provider: string,
+  now: number,
+  safePace: number | null = null
+): PaceBudgetRow | null {
+  const recorded = state.usagePaces[provider];
+  if (!recorded) return null;
+  const room = resolveAdmissionRoom(state, provider, now) ?? 0;
+  const waiting = countWaitingBuilds(state, provider);
+  const reserve = Math.round(ADMISSION_LIMITS.reserve * 100);
+  const counted = describeResetsCounted(recorded.pace, safePace);
+  const budget = `Of ${formatShare(recorded.pace)} of a weekly limit${counted}, with ${reserve}% kept for urgent tasks`;
+  const queued = waiting > 0 ? `. ${describeCount(waiting, 'build')} waiting` : '';
+  return {
+    provider,
+    label: 'Left for builds in the next 24 hours',
+    value: `${formatShare(room)} left`,
+    detail: `${budget}${queued}`,
+  };
 }

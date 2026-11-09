@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import { createSettings, type UsageWait } from '@shinsa/core';
-import { listPaceBudgets } from '@/lib/accounts/auto-pace.ts';
+import { selectPaceBudget } from '@/lib/accounts/auto-pace.ts';
 import { createProject, createShinsaState, createTask, NOW } from '../../support/state.ts';
 
 function admission(provider?: string): UsageWait {
@@ -35,24 +35,29 @@ describe('Auto pace in Settings', () => {
         },
       },
     });
-    expect(listPaceBudgets(state, NOW)).toEqual([
-      {
-        provider: 'claude',
-        label: 'Claude for the next 24 hours',
-        value: '126% left',
-        detail: 'Of 140% of a weekly limit, with 10% kept for urgent tasks. 1 build waiting',
-      },
-      {
-        provider: 'codex',
-        label: 'Codex for the next 24 hours',
-        value: '45% left',
-        detail: 'Of 50% of a weekly limit, with 10% kept for urgent tasks. 2 builds waiting',
-      },
-    ]);
+    expect(selectPaceBudget(state, 'claude', NOW)).toEqual({
+      provider: 'claude',
+      label: 'Left for builds in the next 24 hours',
+      value: '126% left',
+      detail: 'Of 140% of a weekly limit, with 10% kept for urgent tasks. 1 build waiting',
+    });
+    expect(selectPaceBudget(state, 'codex', NOW)).toEqual({
+      provider: 'codex',
+      label: 'Left for builds in the next 24 hours',
+      value: '45% left',
+      detail: 'Of 50% of a weekly limit, with 10% kept for urgent tasks. 2 builds waiting',
+    });
+    expect(selectPaceBudget(state, 'gemini', NOW)).toBeNull();
+    expect(selectPaceBudget(state, 'claude', NOW, 139.8)?.detail).toBe(
+      'Of 140% of a weekly limit, with 10% kept for urgent tasks. 1 build waiting'
+    );
+    expect(selectPaceBudget(state, 'claude', NOW, 100)?.detail).toBe(
+      'Of 140% of a weekly limit, counting your usable usage resets, with 10% kept for urgent tasks. 1 build waiting'
+    );
     const idle = createShinsaState({
       patch: { usagePaces: { claude: { provider: 'claude', pace: 2, at: NOW } } },
     });
-    expect(listPaceBudgets(idle, NOW)[0]?.detail).toBe(
+    expect(selectPaceBudget(idle, 'claude', NOW)?.detail).toBe(
       'Of 2% of a weekly limit, with 10% kept for urgent tasks'
     );
   });

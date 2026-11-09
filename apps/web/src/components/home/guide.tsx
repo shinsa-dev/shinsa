@@ -13,7 +13,13 @@ import { GuideText } from '@/components/home/guide-text.tsx';
 import { TaskLink, TaskPopoverRows } from '@/components/links/task.tsx';
 import { InfoPopover } from '@/components/overlays/info-popover.tsx';
 import { endSentence } from '@/lib/format/count.ts';
-import { listOvernightLines, resolveRunningVerb } from '@/lib/home.ts';
+import {
+  describeOvernightReviews,
+  isWaitingToBuild,
+  listWaitingBuilds,
+  resolveRunningVerb,
+  type WaitingBuild,
+} from '@/lib/home.ts';
 
 const NEXT_LEAD = ['Then', 'After that,', 'Finally,'];
 
@@ -67,8 +73,7 @@ function Aside({ marker, children }: { marker?: React.ReactNode; children: React
   );
 }
 
-function Running({ state, queue }: { state: ShinsaState; queue: Queue }) {
-  const working = queue.working;
+function Running({ state, working }: { state: ShinsaState; working: Task[] }) {
   const named = working.slice(0, NAMED_RUNNING);
   const rest = working.slice(NAMED_RUNNING);
   return (
@@ -108,6 +113,29 @@ function Clear() {
   );
 }
 
+function WaitingBuilds({ state, builds }: { state: ShinsaState; builds: WaitingBuild[] }) {
+  const named = builds.slice(0, NAMED_RUNNING);
+  const rest = builds.slice(NAMED_RUNNING).map((build) => build.task);
+  return (
+    <Aside marker={<Icon size='sm' name='IconMoon' />}>
+      Waiting to build within today’s usage:{' '}
+      {named.map((build, index) => (
+        <span key={build.task.id}>
+          {index > 0 && (index === named.length - 1 && rest.length === 0 ? ' and ' : ', ')}
+          <TaskLink state={state} task={build.task} /> {build.when}
+        </span>
+      ))}
+      {rest.length > 0 && (
+        <>
+          {' '}
+          and <RunningMore state={state} tasks={rest} />
+        </>
+      )}
+      .
+    </Aside>
+  );
+}
+
 export function HomeGuide({
   state,
   queue,
@@ -117,6 +145,11 @@ export function HomeGuide({
   queue: Queue;
   briefing: Briefing;
 }) {
+  const now = Date.now();
+  const waiting = listWaitingBuilds(state, queue.working, now);
+  const working =
+    waiting.length > 0 ? queue.working.filter((task) => !isWaitingToBuild(task)) : queue.working;
+  const built = describeOvernightReviews(state, now);
   return (
     <section
       aria-label='What to do now'
@@ -124,12 +157,9 @@ export function HomeGuide({
     >
       {briefing.now ? <Lead state={state} item={briefing.now} /> : <Clear />}
       {briefing.now && <UpNext state={state} items={briefing.next} />}
-      {queue.working.length > 0 && <Running state={state} queue={queue} />}
-      {listOvernightLines(state, Date.now()).map((line) => (
-        <Aside key={line} marker={<Icon size='sm' name='IconMoon' />}>
-          {endSentence(line)}
-        </Aside>
-      ))}
+      {working.length > 0 && <Running state={state} working={working} />}
+      {waiting.length > 0 && <WaitingBuilds state={state} builds={waiting} />}
+      {built && <Aside marker={<Icon size='sm' name='IconMoon' />}>{endSentence(built)}</Aside>}
       {briefing.note && <Note state={state} note={briefing.note} />}
     </section>
   );

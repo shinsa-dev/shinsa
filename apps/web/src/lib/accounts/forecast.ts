@@ -48,8 +48,6 @@ const WHAT_IF_PACES = [
 
 export const FORECAST_TITLE = 'Forecast';
 
-export const APPLY_PACE_LABEL = 'Use as daily limit';
-
 export const FORECAST_LEGEND = [
   { key: 'usable', label: 'Has usage' },
   { key: 'empty', label: 'Out of usage' },
@@ -102,10 +100,6 @@ export function describeRecentPace(forecast: UsageForecast, now: number) {
   const pace = `In the last 24 hours you used ${formatPace(forecast.currentPace)}.`;
   if (forecast.runsOutAt === null) return `${pace} At that pace your accounts last the week.`;
   return `${pace} At that pace every account runs out in ${formatDaysAndHours(forecast.runsOutAt - now)}.`;
-}
-
-export function isPaceApplied(forecast: UsageForecast, dailyUsageLimit: number | null | undefined) {
-  return dailyUsageLimit === forecast.safePace;
 }
 
 export function listForecastLanes(forecast: UsageForecast, timeline: ForecastTimeline): ForecastLane[] {

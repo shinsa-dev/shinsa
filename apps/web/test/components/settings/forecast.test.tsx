@@ -6,6 +6,8 @@ import {
   MINUTE_MS,
   resolveEngineInfo,
   resolveUsageForecast,
+  type Settings,
+  type ShinsaState,
 } from '@shinsa/core';
 import { TooltipProvider } from '@shinsa/ui/components/tooltip';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
@@ -57,9 +59,9 @@ function expectedPace() {
   return forecast?.safePace ?? 0;
 }
 
-function renderForecast(dailyUsageLimit: number | null = null) {
-  const state = createShinsaState({});
-  state.settings = { ...createSettings(), dailyUsageLimit };
+function renderForecast(settings: Partial<Settings> = {}, usagePaces: ShinsaState['usagePaces'] = {}) {
+  const state = createShinsaState({ patch: { usagePaces } });
+  state.settings = { ...createSettings(), ...settings };
   return render(
     <TooltipProvider>
       <ForecastSettings state={state} />
@@ -75,7 +77,7 @@ describe('the usage forecast', () => {
     expect(screen.queryByText('Forecast')).toBeNull();
   });
 
-  it('shows the safe pace, a lane per account and the tightest point, and applies it as the daily limit', async () => {
+  it('shows the safe pace, a lane per account and the tightest point, with nothing to apply as a daily limit', async () => {
     pushAccounts(createSnapshot({ accounts: ACCOUNTS }));
     await settle();
     const { container } = renderForecast();
@@ -100,10 +102,7 @@ describe('the usage forecast', () => {
     expect(
       screen.getByText(/^At .+% a day every account is out of usage for .+ in all, starting in .+\.$/)
     ).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Use as daily limit' }));
-    await waitFor(() =>
-      expect(listSentCommands()).toEqual([{ type: 'settings.change', patch: { dailyUsageLimit: pace } }])
-    );
+    expect(screen.queryByRole('button', { name: 'Use as daily limit' })).toBeNull();
   });
 
   it('marks where every account is out of usage at once', async () => {
@@ -129,24 +128,45 @@ describe('the usage forecast', () => {
     expect(overlay?.compareDocumentPosition(lane as Node)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
   });
 
-  it('still forecasts on an engine without the daily limit, but offers nothing to apply', async () => {
-    const engine = resolveEngineInfo('1.0.0');
-    spyOnEngine({
-      ...engine,
-      features: engine.features.filter((feature) => feature !== 'usage.pace_limits'),
-    });
+  it('carries the Auto pace switch, off by default, and turns it on', async () => {
     pushAccounts(createSnapshot({ accounts: ACCOUNTS }));
     await settle();
     renderForecast();
-    expect(screen.getByText('Forecast')).toBeTruthy();
-    expect(screen.queryByRole('button', { name: 'Use as daily limit' })).toBeNull();
+    const toggle = screen.getByRole('switch', { name: 'Auto pace' });
+    expect(toggle.getAttribute('aria-checked')).toBe('false');
+    expect(screen.getByText(/^Turn it on to start each build only when/)).toBeTruthy();
+    expect(screen.queryByText('Left for builds in the next 24 hours')).toBeNull();
+    fireEvent.click(toggle);
+    await waitFor(() =>
+      expect(listSentCommands()).toEqual([{ type: 'settings.change', patch: { autoPace: true } }])
+    );
   });
 
-  it('says when the daily limit already is the safe pace', async () => {
+  it('shows what is left for builds under each provider while Auto pace is on', async () => {
     pushAccounts(createSnapshot({ accounts: ACCOUNTS }));
     await settle();
-    renderForecast(expectedPace());
-    const button = screen.getByRole('button', { name: 'Daily limit set' }) as HTMLButtonElement;
-    expect(button.disabled).toBe(true);
+    renderForecast({ autoPace: true }, { claude: { provider: 'claude', pace: 140, at: Date.now() } });
+    expect(screen.getByText(/^Each build starts only when its estimate fits/)).toBeTruthy();
+    expect(screen.getByText('Left for builds in the next 24 hours')).toBeTruthy();
+    expect(screen.getByText('126% left')).toBeTruthy();
+    expect(screen.getByText(/counting your usable usage resets/)).toBeTruthy();
+  });
+
+  it('waits for the first usage reading before it shows a budget', async () => {
+    pushAccounts(createSnapshot({ accounts: ACCOUNTS }));
+    await settle();
+    renderForecast({ autoPace: true });
+    expect(screen.getByText('Auto pace waits for the first usage reading of these accounts.')).toBeTruthy();
+  });
+
+  it('leaves Auto pace out on an engine that cannot pace builds', async () => {
+    const engine = resolveEngineInfo('1.0.0');
+    spyOnEngine({ ...engine, features: engine.features.filter((feature) => feature !== 'usage.auto_pace') });
+    pushAccounts(createSnapshot({ accounts: ACCOUNTS }));
+    await settle();
+    renderForecast({ autoPace: true }, { claude: { provider: 'claude', pace: 140, at: Date.now() } });
+    expect(screen.getByText('Forecast')).toBeTruthy();
+    expect(screen.queryByRole('switch', { name: 'Auto pace' })).toBeNull();
+    expect(screen.queryByText('Left for builds in the next 24 hours')).toBeNull();
   });
 });

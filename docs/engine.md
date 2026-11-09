@@ -2268,9 +2268,12 @@ checks it ran.
     `paceLimitsIgnored`, as for the other pace holds. Switching Auto pace off releases every admission hold. A build
     admitted still stops at the daily and project limits.
   - **On screen** a held task's status is "Waiting to build", its card "Builds tonight" (when you are here now and
-    its time falls in your away hours) or "Builds after 3:40 AM", with Build now. Settings → Agent usage → Auto pace has the switch, the
-    budget for the next 24 hours with the reserve and how many builds wait. Home adds "1 task
-    builds tonight" and, once you are back, how many tasks built overnight are ready for your review.
+    its time falls in your away hours) or "Builds after 3:40 AM", with Build now. Auto pace lives in Settings → Agent usage → Forecast: its switch at the top
+    (`AutoPaceToggle`), and under each provider's safe pace what is left for builds in the next 24 hours, with the
+    reserve and how many builds wait (`PaceBudget`, `selectPaceBudget`). Home's guide leaves waiting builds out of the
+    running line and names them on a line of their own, soonest first, each with when it builds ("tonight", "after
+    3:40 PM" or "next", `listWaitingBuilds`), the first two by name and the rest in a popover; once you are back it
+    adds how many tasks built overnight are ready for your review (`describeOvernightReviews`).
 - **The night shift** (`costs/away.ts`, `prompts/night.ts`), on top of Auto pace and needing no setting of its own.
   Your away hours are learned from the last 14 days (`AWAY_LIMITS`): an hour of the day is away when the `away`
   spans cover at least half of it on at least half the days observed, given at least 3 days of spans; with fewer,
@@ -2287,7 +2290,7 @@ checks it ran.
   horizon). For a steady pace (percent of one weekly limit per day) it simulates 7 days, spending each moment
   from the account that resets soonest, which is the best order for budgets that expire. A binary search finds
   the highest pace that never runs every account dry, rounded down to a tenth (`FORECAST_LIMITS`). That pace is
-  the recommendation, which you can apply as the daily limit; the forecast also names the tightest reset (the one
+  the recommendation, which Auto pace builds within; the forecast also names the tightest reset (the one
   the pool must reach before it runs dry at a faster pace), the timeline of each account, and when the pool would
   run dry at the pace of the last 24 hours, shown only to compare. An account out of usage only until a shorter
   limit resets (its 5-hour window) keeps its weekly budget; only one spent until its weekly reset counts as empty.
@@ -2299,8 +2302,9 @@ checks it ran.
   pace you pick (`resolveForecastTimeline`: the safe pace, the last 24 hours, or one and a half or twice the safe pace;
   the last 24 hours first when it is faster), a dashed amber line at the tightest point when the safe pace is drawn,
   the tightest point in words and the last 24 hours of that provider (meters on an account's window for
-  Claude, `provider:<id>` for the rest). Use as daily limit sends `settings.change` with `dailyUsageLimit` set to the
-  pace; the forecast is worked out again on every accounts refresh and every minute.
+  Claude, `provider:<id>` for the rest). The daily limit stays its own setting under Limits; the forecast offers no
+  button to copy its pace there, since Auto pace follows the pace itself. The forecast is worked out again on every
+  accounts refresh and every minute.
 
 ### Silent runs
 

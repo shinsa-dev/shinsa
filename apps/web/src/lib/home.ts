@@ -13,6 +13,7 @@ import {
   type TaskStage,
 } from '@shinsa/core';
 import { isAdmissionWait, isPaceWait, isUsageWaitArmed } from '@/lib/accounts/usage-wait.ts';
+import { formatMoment } from '@/lib/format/time.ts';
 import { createDisclosureId } from '@/lib/preferences/disclosure.ts';
 import type { QueueSection } from '@/lib/queue.ts';
 import { isResolvingConflicts } from '@/lib/tasks/status.ts';
@@ -121,31 +122,34 @@ function listOvernightReviews(state: ShinsaState, now: number) {
   );
 }
 
-function listWaitingBuilds(state: ShinsaState) {
-  return Object.values(state.tasks).filter(
-    (task) => isUsageWaitArmed(task) && isAdmissionWait(task.usageWait)
-  );
+export interface WaitingBuild {
+  task: Task;
+  when: string;
 }
 
-function describeWaitingBuilds(state: ShinsaState, tasks: readonly Task[], now: number) {
+export function isWaitingToBuild(task: Task) {
+  return isUsageWaitArmed(task) && isAdmissionWait(task.usageWait);
+}
+
+function describeBuildTime(state: ShinsaState, task: Task, now: number) {
+  const at = task.usageWait?.resetAt ?? now;
   const away = resolveAwayHours(state, now);
-  const tonight =
-    !isAwayAt(away, now) && tasks.some((task) => isAwayAt(away, task.usageWait?.resetAt ?? now));
-  const count = describeCount(tasks.length, 'task');
-  if (tonight)
-    return `${count} ${tasks.length === 1 ? 'builds' : 'build'} tonight, when there is room in today’s usage`;
-  return `${count} ${tasks.length === 1 ? 'waits' : 'wait'} for room in today’s usage to build`;
+  if (isAwayAt(away, at) && !isAwayAt(away, now)) return 'tonight';
+  return at <= now ? 'next' : `after ${formatMoment(at, now)}`;
 }
 
-export function listOvernightLines(state: ShinsaState, now: number) {
+export function listWaitingBuilds(state: ShinsaState, working: readonly Task[], now: number): WaitingBuild[] {
   if (!resolveAutoPace(state.settings)) return [];
-  const lines: string[] = [];
+  return working
+    .filter(isWaitingToBuild)
+    .sort((a, b) => (a.usageWait?.resetAt ?? now) - (b.usageWait?.resetAt ?? now))
+    .map((task) => ({ task, when: describeBuildTime(state, task, now) }));
+}
+
+export function describeOvernightReviews(state: ShinsaState, now: number) {
+  if (!resolveAutoPace(state.settings)) return null;
   const built = listOvernightReviews(state, now);
-  if (built.length > 0) {
-    const verb = built.length === 1 ? 'is' : 'are';
-    lines.push(`${describeCount(built.length, 'task')} built overnight ${verb} ready for your review`);
-  }
-  const waiting = listWaitingBuilds(state);
-  if (waiting.length > 0) lines.push(describeWaitingBuilds(state, waiting, now));
-  return lines;
+  if (built.length === 0) return null;
+  const verb = built.length === 1 ? 'is' : 'are';
+  return `${describeCount(built.length, 'task')} built overnight ${verb} ready for your review`;
 }
