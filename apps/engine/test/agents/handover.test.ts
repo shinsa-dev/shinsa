@@ -2,8 +2,14 @@ import { describe, expect, test } from 'bun:test';
 import { readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Run, Task } from '@shinsa/core';
+import { Result } from 'effect';
 import { storeEvidence as storeEvidenceEffect } from '../../src/agents/evidence.ts';
-import { assertProtocol, HANDED_OVER, resolveCommitMessage } from '../../src/agents/handover.ts';
+import {
+  assertHeldSourcesUsed,
+  HANDED_OVER,
+  resolveCommitMessage,
+  resolveHandOver,
+} from '../../src/agents/handover.ts';
 import { runFiles } from '../harness.ts';
 import { createTestEvidence } from '../helpers/evidence.ts';
 import { createTempDir, writeFiles } from '../helpers/index.ts';
@@ -71,12 +77,23 @@ describe('the reply to a hand-over', () => {
   });
 });
 
-describe('assertProtocol', () => {
+describe('resolveHandOver', () => {
   test('passes a valid hand-over and lists every problem of an invalid one', () => {
-    expect(assertProtocol({ ok: true, value: 3 })).toBe(3);
-    expect(() => assertProtocol({ ok: false, errors: ['goal is empty', 'plan is too long'] })).toThrow(
-      'Shinsa rejected this hand-over. Fix these and call the tool again:\n- goal is empty\n- plan is too long'
-    );
+    expect(resolveHandOver({ ok: true, value: 3 })).toEqual(Result.succeed(3));
+    expect(
+      Result.flip(resolveHandOver({ ok: false, errors: ['goal is empty', 'plan is too long'] }))
+    ).toMatchObject({
+      success: {
+        _tag: 'HandOverRejected',
+        errors: ['goal is empty', 'plan is too long'],
+        message:
+          'Shinsa rejected this hand-over. Fix these and call the tool again:\n- goal is empty\n- plan is too long',
+      },
+    });
+  });
+
+  test('passes when no watchdog asks for a source', () => {
+    expect(Result.isSuccess(assertHeldSourcesUsed([], ['maple']))).toBe(true);
   });
 });
 

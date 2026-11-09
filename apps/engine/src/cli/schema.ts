@@ -21,6 +21,11 @@ export class CliFailed extends Schema.TaggedError<CliFailed, { readonly brand: u
   }
 ) {}
 
+export class FlagValueMissing extends Schema.TaggedError<
+  FlagValueMissing,
+  { readonly brand: unique symbol }
+>()('FlagValueMissing', { flag: Schema.String, message: Schema.String }) {}
+
 export type CliServices = Shell | Remote | MachineConfigFile | FileSystem.FileSystem;
 
 export const PLUTIL = '/usr/bin/plutil';

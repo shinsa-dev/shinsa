@@ -19,7 +19,7 @@ import { listNewServiceSuggestions, resolveServicePlaceIn } from '../../../termi
 import { ServiceRefiner } from '../../../terminals/refine/service.ts';
 import { selectServiceRunIn } from '../../../terminals/runs.ts';
 import { Terminals } from '../../../terminals/service.ts';
-import { requestSync, resolveRequestFailure } from '../../failures.ts';
+import { requestResult, resolveRequestFailure } from '../../failures.ts';
 import { PROJECT_GONE, PROJECT_ID_LIMIT } from '../../schema.ts';
 import { NO_MAIN_PLACE, NO_TASK_PLACE, PLACE_GONE, TASK_GONE, TASK_ID_LIMIT } from './schema.ts';
 
@@ -49,7 +49,7 @@ export const ServicesHandlers = HttpApiBuilder.group(
       );
 
     const readProjectId = (payload: Readonly<Record<string, unknown>>) =>
-      requestSync(() => readText(payload, 'projectId', PROJECT_ID_LIMIT));
+      requestResult(readText(payload, 'projectId', PROJECT_ID_LIMIT));
 
     const resolveRun = Effect.fn('ServicesHandlers.resolveRun')(function* (
       found: Found,
@@ -66,7 +66,7 @@ export const ServicesHandlers = HttpApiBuilder.group(
     });
 
     const readTaskId = (payload: { readonly taskId?: unknown } | null) =>
-      requestSync(() => readOptionalText(payload ?? {}, 'taskId', TASK_ID_LIMIT));
+      requestResult(readOptionalText(payload ?? {}, 'taskId', TASK_ID_LIMIT));
 
     return handlers
       .handle(
@@ -93,7 +93,7 @@ export const ServicesHandlers = HttpApiBuilder.group(
           const projectId = yield* readProjectId(payload);
           const places = yield* findPlaces(projectId);
           const others = yield* listOthers(found, projectId, null);
-          const input = yield* requestSync(() => readServiceInput(payload, others, places, found.home));
+          const input = yield* requestResult(readServiceInput(payload, others, places, found.home));
           yield* request(withFiles(assertFolderPresent(input.cwd)));
           const service = yield* request(found.addService(projectId, input));
           return { service, ...(yield* found.snapshot) };
@@ -106,7 +106,7 @@ export const ServicesHandlers = HttpApiBuilder.group(
           const projectId = yield* readProjectId(payload);
           const places = yield* findPlaces(projectId);
           const others = yield* listOthers(found, projectId, null);
-          const inputs = yield* requestSync(() => readServiceBatch(payload, others, places, found.home));
+          const inputs = yield* requestResult(readServiceBatch(payload, others, places, found.home));
           yield* request(withFiles(Effect.forEach(inputs, (input) => assertFolderPresent(input.cwd))));
           if (others.length + inputs.length > SERVICE_LIMITS.services)
             return yield* new RequestFailed({
@@ -124,7 +124,7 @@ export const ServicesHandlers = HttpApiBuilder.group(
         'remove',
         Effect.fn('ServicesHandlers.remove')(function* ({ payload }) {
           const found = yield* terminals;
-          const ids = yield* requestSync(() => readServiceIds(payload));
+          const ids = yield* requestResult(readServiceIds(payload));
           yield* request(found.removeServices(ids));
           return yield* found.snapshot;
         })
@@ -150,7 +150,7 @@ export const ServicesHandlers = HttpApiBuilder.group(
           const service: ServiceDefinition = yield* request(found.findService(params.serviceId));
           const places = yield* findPlaces(service.projectId);
           const others = yield* listOthers(found, service.projectId, service.id);
-          const input = yield* requestSync(() => readServiceInput(payload, others, places, found.home));
+          const input = yield* requestResult(readServiceInput(payload, others, places, found.home));
           yield* request(withFiles(assertFolderPresent(input.cwd)));
           yield* request(found.updateService(service.id, input));
           return yield* found.snapshot;
