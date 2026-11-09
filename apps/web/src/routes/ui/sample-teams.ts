@@ -72,6 +72,21 @@ export function createSampleTeams(now: number) {
     overrides: [],
     createdAt: now - 240 * HOUR_MS,
   };
+  const design: RemoteTeam = {
+    id: 'tm5d3n',
+    name: 'Design',
+    owner: LEE,
+    role: 'member',
+    members: [{ user: MONA, addedAt: now - 10 * 24 * HOUR_MS }],
+    requests: [],
+    machines: [
+      { id: 'w2c8', name: 'Lee’s iMac', userId: LEE.id, online: true, lastSeenAt: now },
+      { id: 'k3x9', name: 'Studio', userId: MONA.id, online: true, lastSeenAt: now },
+    ],
+    scopes: DEFAULT_TEAM_SCOPES,
+    overrides: [],
+    createdAt: now - 300 * HOUR_MS,
+  };
   const state: ShinsaState = {
     ...createState(),
     projects: {
@@ -158,6 +173,24 @@ export function createSampleTeams(now: number) {
               onMachine: true,
               invite: false,
               team: null,
+              extras: [],
+            },
+          ],
+        },
+      },
+      {
+        label:
+          'TeamsGroup · a team you joined with no machine, on a machine you added later that shares no project yet',
+        snapshot: {
+          ...base,
+          teams: [
+            {
+              id: design.id,
+              name: design.name,
+              status: 'member',
+              onMachine: true,
+              invite: false,
+              team: design,
               extras: [],
             },
           ],

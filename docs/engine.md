@@ -3859,15 +3859,27 @@ engine enrols and relays (Teammates act on team tasks, below). Teams need remote
   the fragment, which no browser sends to a server, so app.shinsa.dev never sees it and cannot read a team view. The
   invite only lets someone ask; turning the link off (`invite/remove`) or making a new one (`invite`) stops the old
   one, and a member already in keeps their key.
-- **Joining works like a machine invite, after remote access.** Whoever opens the join link signs in with GitHub; the
+- **Joining works like a machine invite, with or without a machine.** Whoever opens the join link signs in with GitHub; the
   page names the team and its owner first (`POST /__remote/teams/preview { invite }`, which records nothing) and keeps
-  the key in the browser (and the link in `sessionStorage`, so it survives sign-in and pairing). Teams reach teammates
-  only through machines, so the page then reads your machines (`resolveJoinSetup`, `lib/teams/join-machines.ts`):
-  with none paired it shows the fleet page's steps to turn on remote access (`PAIR_STEPS`, `lib/remote/setup-steps.ts`),
-  and with paired machines this browser reaches none of, the steps to add this device (`listAddDeviceSteps`), each with
-  Check again and no Ask to join. app.shinsa.dev enforces it too: `POST /__remote/teams/join { invite }` from an
-  account with no paired machine of its own is 409 `no_machine` (`NoMachine`) and records nothing; otherwise it
-  records that the account asked (`team_requesters`) and makes it no member. The page reads the projects of each
+  the key in the browser (and the link in `sessionStorage`, so it survives sign-in and pairing). The page then reads
+  your machines (`resolveJoinSetup`, `lib/teams/join-machines.ts`): with paired machines this browser reaches none of,
+  it shows the steps to add this device (`listAddDeviceSteps`), or that it waits for an answer or the machines are
+  offline, each with Check again and no Ask to join. With no machine paired at all it shows the fleet page's steps to
+  turn on remote access first (`kind: 'pair'`, `PAIR_STEPS`, `lib/remote/setup-steps.ts`), since a team works only
+  when its people share their machines; Join without a machine, below Check again and meant only for someone who runs
+  Shinsa nowhere, then offers Ask to join: such a person shares no projects and reaches the team only through the
+  machines shared with it (Remote access → Shared machines), and the page says so. If they pair a machine later, its
+  heartbeat lists the team, the team's card says the machine waits for the team's key with Request access for the
+  team's owner to answer (Handing a machine the team's key, below), and while it shares no project the card says
+  teammates see nothing from it (`TEAM_SHARES_NOTHING`). Nothing is shared by itself: which projects a team sees
+  stays yours alone. `POST /__remote/teams/join
+  { invite }` records that the account asked (`team_requesters`), machine or not, and makes it no member. Once the
+  owner accepts, every machine shared with the team grants the new member on its next heartbeat (`Remote.syncSharedTeams`
+  grants every member it has not), and the hosted dashboard adds this browser to each such machine by itself
+  (`admitTeamMachines`, Giving a teammate this machine, below). Until one is shared, app.shinsa.dev shows a team member
+  with no machine of their own Reached through your team instead of the pairing steps, and Settings → Teams, local
+  and hosted, reads No machines in the line of each person with no machine in the team (`hasNoTeamMachines`).
+  For a person with a machine, the page reads the projects of each
   machine it reaches with one `GET /api/projects` over the sealed channel, never the whole state (giving up on one
   after 4 s), and offers them to share, none required: with none picked it says teammates see nothing of yours until
   you share a project. Ask to join then sends every machine it reaches `POST /api/remote/teams/join { url }`, picks or
