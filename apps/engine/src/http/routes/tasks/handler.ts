@@ -192,7 +192,7 @@ export const TasksHandlers = HttpApiBuilder.group(
           if (Option.isSome(refusal) || !root)
             return yield* new RequestFailed({
               code: 'edit_refused',
-              message: Option.getOrElse(refusal, () => ''),
+              message: Option.getOrUndefined(refusal) ?? '',
             });
           const path = yield* requestSync(() =>
             assertRepoPath(Predicate.isString(payload.path) ? payload.path : null)
