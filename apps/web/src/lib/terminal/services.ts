@@ -23,6 +23,7 @@ import {
   type TerminalsSnapshot,
 } from '@shinsa/core';
 import type { IconName } from '@shinsa/ui/components/icon';
+import { Result } from 'effect';
 import { selectRelayedAppOrigin } from '@/lib/connection/socket.ts';
 import { formatDuration } from '@/lib/format/time.ts';
 import type { Tone } from '@/lib/format/tone.ts';
@@ -111,11 +112,10 @@ export function listTaskPreviews(
 }
 
 function resolveOrigin(url: string) {
-  try {
-    return new URL(url).origin;
-  } catch {
-    return null;
-  }
+  return Result.getOrElse(
+    Result.try(() => new URL(url).origin),
+    () => ''
+  );
 }
 
 export function listUnattachedPreviews(views: ServiceView[], attached: readonly string[]) {

@@ -2,7 +2,8 @@ import { afterEach, describe, expect, it } from 'bun:test';
 import { getChunks } from '@codemirror/merge';
 import { EditorState } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
-import { findConfigBase, mapToOriginal, revealSplitLines, SplitView } from '@/lib/code/editor/merge.ts';
+import { Option } from 'effect';
+import { mapToOriginal, revealSplitLines, selectConfigBase, SplitView } from '@/lib/code/editor/merge.ts';
 
 const views: SplitView[] = [];
 
@@ -26,15 +27,13 @@ function listLines(count: number, changed: number) {
 
 const SIDES = { a: [], b: [] };
 
-describe('findConfigBase', () => {
-  it('reads the extensions a state was made from, and refuses a state without them', () => {
+describe('selectConfigBase', () => {
+  it('reads the extensions a state was made from, and finds none on a state without them', () => {
     const marker = EditorView.editorAttributes.of({ class: 'marked' });
     const state = EditorState.create({ extensions: [marker] });
-    const copy = EditorState.create({ doc: 'x', extensions: findConfigBase(state) });
+    const copy = EditorState.create({ doc: 'x', extensions: Option.getOrThrow(selectConfigBase(state)) });
     expect(copy.facet(EditorView.editorAttributes)).toEqual(state.facet(EditorView.editorAttributes));
-    expect(() => findConfigBase(Object.create(EditorState.prototype))).toThrow(
-      'CodeMirror no longer keeps a state’s extensions on its config.'
-    );
+    expect(selectConfigBase(Object.create(EditorState.prototype))).toEqual(Option.none());
   });
 });
 

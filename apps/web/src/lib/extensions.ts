@@ -16,7 +16,7 @@ import {
 } from '@shinsa/core';
 import type { IconName } from '@shinsa/ui/components/icon';
 import type { MenuItemIcon } from '@shinsa/ui/components/menu-icon';
-import { Option } from 'effect';
+import { Option, Result } from 'effect';
 import type { Tone } from '@/lib/format/tone.ts';
 import { listProjects, resolveProjectMark, selectProject } from '@/lib/projects.ts';
 import { resolveSettingsPath } from '@/lib/settings-tabs.ts';
@@ -553,11 +553,11 @@ const ENV_KEY = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const HEADER_KEY = /^[A-Za-z0-9-]+$/;
 
 function isWebUrl(text: string) {
-  try {
-    return ['http:', 'https:'].includes(new URL(text).protocol);
-  } catch {
-    return false;
-  }
+  const protocol = Result.getOrElse(
+    Result.try(() => new URL(text).protocol),
+    () => ''
+  );
+  return ['http:', 'https:'].includes(protocol);
 }
 
 export type DraftCheck =
