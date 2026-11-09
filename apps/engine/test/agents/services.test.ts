@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { BunServices } from '@effect/platform-bun';
-import { DomainError, type ShinsaState, type Task } from '@shinsa/core';
+import { DomainError, SERVICE_LIMITS, type ShinsaState, type Task } from '@shinsa/core';
 import { Effect } from 'effect';
 import { SERVICE_OUTPUT_LINES, type ServiceToolName } from '../../src/agents/services/schema.ts';
 import { runServiceTool } from '../../src/agents/services/service.ts';
@@ -213,6 +213,27 @@ describe('the service tools', () => {
       env: {},
       portVariable: 'PORT',
     });
+  });
+
+  test('counts the service limit per project and names the project’s services when it is reached', async () => {
+    const { call, runner, root } = await setup({ services: false });
+    const add = (projectId: string, name: string) =>
+      runAsync(runner.addService(projectId, { name, cwd: root, command: 'x', env: {}, ...NO_PREVIEW }));
+    for (let index = 0; index < SERVICE_LIMITS.services; index++) await add('p2', `other-${index}`);
+    expect(await call('list_services')).toBe(
+      'The project has no services. Add the one you need with add_service.'
+    );
+    expect(await call('add_service', { name: 'web', command: 'bun dev' })).toStartWith(
+      'Added web to the project'
+    );
+    const names = ['web'];
+    for (let index = 1; index < SERVICE_LIMITS.services; index++) {
+      names.push(`s${index}`);
+      await add('p1', `s${index}`);
+    }
+    expect(call('add_service', { name: 'api', command: 'bun dev' })).rejects.toThrow(
+      `This project keeps ${SERVICE_LIMITS.services} services at most, and has ${SERVICE_LIMITS.services}: ${new Intl.ListFormat('en').format(names)}. Remove one with remove_service, or under Services, to add another.`
+    );
   });
 
   test('refuses a folder outside the repository or not in its checkout, and what the Services form refuses', async () => {
