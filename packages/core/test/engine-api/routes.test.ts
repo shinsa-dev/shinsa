@@ -1,4 +1,6 @@
 import { describe, expect, test } from 'bun:test';
+import { HttpApi } from 'effect/http-api';
+import { EngineApi } from '../../src/engine-api/api.ts';
 import {
   listEngineBaselineRoutes,
   listEngineRoutes,
@@ -249,6 +251,18 @@ describe('EngineApi routes', () => {
     for (const feature of ENGINE_FEATURES)
       expect(sorted(features[feature])).toEqual(sorted(FEATURE_ROUTES[feature]));
     expect(sorted(listEngineBaselineRoutes())).toEqual(sorted(BASELINE_ROUTES));
+  });
+
+  test('every write declares a JSON body, so the client sends one the gate admits', () => {
+    const bodiless: string[] = [];
+    HttpApi.reflect(EngineApi, {
+      onGroup: () => undefined,
+      onEndpoint: ({ endpoint }) => {
+        if (endpoint.method !== 'GET' && endpoint.payload.size === 0)
+          bodiless.push(resolveEngineRouteKey(endpoint.method, endpoint.path));
+      },
+    });
+    expect(bodiless).toEqual([]);
   });
 
   test('keeps at the machine only what needs its screen or ends the channel', () => {
