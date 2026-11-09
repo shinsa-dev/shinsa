@@ -44,6 +44,7 @@ const WIRE = [
   ['SlackFailed', 'slack_failed', 502],
   ['SlackBlocksRefused', 'slack_blocks_refused', 422],
   ['SlackNotInstalled', 'slack_not_installed', 410],
+  ['SlackNotLinked', 'slack_not_linked', 403],
   ['ThreadNotForwarded', 'thread_not_forwarded', 403],
   ['PostNotYours', 'post_not_yours', 403],
 ] as const;
