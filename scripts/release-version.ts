@@ -155,5 +155,7 @@ export function listChannelTagsBefore(tags: readonly string[], version: string) 
     .filter(
       (tag) => pattern.test(tag) && Option.contains(resolveVersionOrder(tag.replace(/^v/, ''), version), -1)
     )
-    .sort((a, b) => Option.getOrElse(resolveVersionOrder(a.replace(/^v/, ''), b.replace(/^v/, '')), () => 0));
+    .sort(
+      (a, b) => Option.getOrUndefined(resolveVersionOrder(a.replace(/^v/, ''), b.replace(/^v/, ''))) ?? 0
+    );
 }
