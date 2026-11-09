@@ -9,12 +9,14 @@ import {
 } from '../domain/index.ts';
 import {
   canChangeStack,
+  isBundleMember,
   isDependencyOf,
   isTriaged,
   listOpenGates,
   listPendingDependencies,
   listPendingStackParents,
   listStackParents,
+  resolveBundleMembers,
   selectStackRefusal,
 } from '../state/queries.ts';
 import { type Decider, describeWaiting, quoteTitles } from './decider.ts';
@@ -25,7 +27,7 @@ import { holdForCheckout } from './workspaces.ts';
 export function resolveDependencies(decider: Decider, task: Task | null, ids: string[]) {
   const kept: string[] = [];
   for (const id of new Set(ids)) {
-    if (id === task?.id || task?.stacksOn?.includes(id)) continue;
+    if (id === task?.id || (task && isBundleMember(decider.state, task, id))) continue;
     const dependency = decider.task(id);
     if (task?.waitsOn.includes(id)) {
       kept.push(id);
@@ -145,11 +147,14 @@ function restartForStack(decider: Decider, taskId: string) {
 }
 
 export function changeStack(decider: Decider, taskId: string, stacksOn: string[], by: 'you' | 'shinsa') {
-  const task = decider.task(taskId);
   decider.emit({ type: 'task.stack_changed', taskId, stacksOn, by });
-  const waitsOn = task.waitsOn.filter((id) => !stacksOn.includes(id));
-  if (waitsOn.length !== task.waitsOn.length) {
-    decider.emit({ type: 'task.waits_on_changed', taskId, waitsOn, by });
+  const members = resolveBundleMembers(decider.state, decider.task(taskId));
+  const bundle = new Set([...stacksOn, ...members.map((member) => member.id)]);
+  for (const member of members) {
+    const waitsOn = member.waitsOn.filter((id) => !bundle.has(id));
+    if (waitsOn.length === member.waitsOn.length) continue;
+    if (member.id === taskId) decider.emit({ type: 'task.waits_on_changed', taskId, waitsOn, by });
+    else changeDependencies(decider, member.id, waitsOn, by);
   }
 }
 

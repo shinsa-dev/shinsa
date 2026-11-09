@@ -68,7 +68,12 @@ export function isRunWaiting(state: ShinsaState, run: Run) {
 }
 
 function listDependencies(state: ShinsaState, task: Task) {
-  return task.waitsOn.map((id) => state.tasks[id]).filter((dependency) => dependency !== undefined);
+  if (task.waitsOn.length === 0) return [];
+  const bundle = new Set(resolveBundleMembers(state, task).map((member) => member.id));
+  return task.waitsOn
+    .filter((id) => !bundle.has(id))
+    .map((id) => state.tasks[id])
+    .filter((dependency) => dependency !== undefined);
 }
 
 export function listOpenBlockers(state: ShinsaState, task: Task) {
@@ -209,6 +214,10 @@ function collectBundle(state: Pick<ShinsaState, 'tasks'>, task: Task, edges: Sta
 
 export function resolveBundleMembers(state: Pick<ShinsaState, 'tasks'>, task: Task) {
   return collectBundle(state, task, OPEN_EDGES);
+}
+
+export function isBundleMember(state: Pick<ShinsaState, 'tasks'>, task: Task, id: string) {
+  return resolveBundleMembers(state, task).some((member) => member.id === id);
 }
 
 export function resolveBundleLead(state: Pick<ShinsaState, 'tasks'>, task: Task) {
