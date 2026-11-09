@@ -95,6 +95,26 @@ describe('resolveHandOver', () => {
   test('passes when no watchdog asks for a source', () => {
     expect(Result.isSuccess(assertHeldSourcesUsed([], ['maple']))).toBe(true);
   });
+
+  test('refuses a watchdog whose source request suggests a server the run already has', () => {
+    const watchdog = {
+      title: 'Errors',
+      check: 'No new errors',
+      source: null,
+      sourceRequest: { data: 'Error logs', evidence: 'The logs go to Maple.', suggestions: ['maple'] },
+      firstCheckMinutes: null,
+      maxGapHours: null,
+      forHours: null,
+      startsOn: 'merge' as const,
+      productionCheck: null,
+    };
+    expect(Result.flip(assertHeldSourcesUsed([watchdog], ['maple']))).toMatchObject({
+      success: {
+        _tag: 'HandOverRejected',
+        errors: [expect.stringContaining('watchdogs[0].source_request suggests `maple`')],
+      },
+    });
+  });
 });
 
 const FOLDER = { taskId: 'task-1', round: 2 };

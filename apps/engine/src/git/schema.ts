@@ -14,7 +14,7 @@ export class RefNameInvalid extends Schema.TaggedError<RefNameInvalid, { readonl
   { ref: Schema.String, message: Schema.String }
 ) {}
 
-export const SAFE_REF = /^(?!-)(?!.*\.\.)(?!.*\/\/)[A-Za-z0-9._/-]+(?<!\.lock)(?<![./])$/;
+const SAFE_REF = /^(?!-)(?!.*\.\.)(?!.*\/\/)[A-Za-z0-9._/-]+(?<!\.lock)(?<![./])$/;
 
 export const RefName = Schema.String.check(Schema.isPattern(SAFE_REF)).pipe(Schema.brand('RefName'));
 export type RefName = typeof RefName.Type;

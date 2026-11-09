@@ -7,7 +7,7 @@ interface ProgressStream {
   write: (text: string) => unknown;
 }
 
-export const SPINNER_FRAMES = Schedule.spaced('80 millis');
+const SPINNER_FRAMES = Schedule.spaced('80 millis');
 
 const CLEAR_LINE = '\r\u001b[2K';
 
