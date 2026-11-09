@@ -1,4 +1,5 @@
 import * as React from 'react';
+import { scheduleAfter } from '@/lib/runtime/timers.ts';
 import { createSignal } from '@/lib/signal.ts';
 
 export const DISCLOSURE_STORE_KEY = 'shinsa.disclosures';
@@ -48,7 +49,7 @@ const signal = createSignal();
 
 let entries: Map<string, boolean> | null = null;
 
-let timer: ReturnType<typeof setTimeout> | null = null;
+let timer: (() => void) | null = null;
 
 const pending = new Map<string, boolean>();
 
@@ -161,7 +162,7 @@ export function listMarkedDisclosures(prefix: DisclosureId, marked: boolean): st
 }
 
 export function flushDisclosures() {
-  if (timer !== null) clearTimeout(timer);
+  timer?.();
   timer = null;
   pending.clear();
   if (entries === null) return;
@@ -176,12 +177,12 @@ export function writeDisclosure(id: DisclosureId, open: boolean) {
   pending.set(id, open);
   pruneDisclosures(store);
   signal.publish();
-  if (timer !== null) clearTimeout(timer);
-  timer = setTimeout(flushDisclosures, DISCLOSURE_WRITE_DELAY_MS);
+  timer?.();
+  timer = scheduleAfter(DISCLOSURE_WRITE_DELAY_MS, flushDisclosures);
 }
 
 export function resetDisclosures() {
-  if (timer !== null) clearTimeout(timer);
+  timer?.();
   timer = null;
   pending.clear();
   entries = null;

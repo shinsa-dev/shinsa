@@ -1,6 +1,7 @@
 import * as React from 'react';
 import { useOnHide } from '@/hooks/use-on-hide.ts';
 import { SPOTLIGHT_FADE_MS, SPOTLIGHT_HOLD_MS } from '@/lib/review/selection.ts';
+import { scheduleAfter } from '@/lib/runtime/timers.ts';
 
 const NEAR_BOTTOM = 80;
 
@@ -63,19 +64,18 @@ export function useStickToBottom(focusRunId: string | null) {
     if (!focusRunId) return;
     pinned.current = false;
     focus.current = { runId: focusRunId, until: Date.now() + SPOTLIGHT_HOLD_MS };
-    let clear: ReturnType<typeof setTimeout> | undefined;
+    let clear: (() => void) | undefined;
     let target: HTMLElement | null = null;
     const frame = requestAnimationFrame(() => {
       target = revealRun(focusRunId);
       target?.setAttribute('data-focused', '');
-      clear = setTimeout(
-        () => target?.removeAttribute('data-focused'),
-        SPOTLIGHT_HOLD_MS + SPOTLIGHT_FADE_MS
+      clear = scheduleAfter(SPOTLIGHT_HOLD_MS + SPOTLIGHT_FADE_MS, () =>
+        target?.removeAttribute('data-focused')
       );
     });
     return () => {
       cancelAnimationFrame(frame);
-      clearTimeout(clear);
+      clear?.();
       target?.removeAttribute('data-focused');
     };
   }, [focusRunId]);

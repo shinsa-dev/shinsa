@@ -1,8 +1,9 @@
+import { scheduleAfter } from '@/lib/runtime/timers.ts';
+
 export function scheduleIdle(run: () => void, timeoutMs: number, fallbackMs = timeoutMs) {
   if (typeof requestIdleCallback === 'function') {
     const handle = requestIdleCallback(run, { timeout: timeoutMs });
     return () => cancelIdleCallback(handle);
   }
-  const timer = setTimeout(run, fallbackMs);
-  return () => clearTimeout(timer);
+  return scheduleAfter(fallbackMs, run);
 }
