@@ -47,6 +47,13 @@ function openWith(machines: JoinMachines['machines'], setup: JoinSetup | null = 
   return () => Promise.resolve({ machines, setup, close });
 }
 
+function openMachineless() {
+  return () => Promise.resolve({ machines: [], setup: { kind: 'pair' as const }, close: () => {} });
+}
+
+const NO_MACHINE_HINT =
+  'You have no machine paired, so you share no projects. You reach the team through the machines shared with it.';
+
 function requested() {
   return mock(() => Promise.resolve({ name: 'Platform', owner: KAI, status: 'requested' as const }));
 }
@@ -61,22 +68,37 @@ describe('the team join page on app.shinsa.dev', () => {
     expect(screen.getByText('This link cannot add you to a team')).toBeTruthy();
   });
 
-  it('asks you to turn on remote access first when you have no paired machine, without a join button', async () => {
+  it('asks you to turn on remote access first, and joins without a machine only when you say you have none', async () => {
+    stashTeamJoinFragment(sessionStorage, `#team1.invite-1.${KEY}`);
     const request = requested();
     render(
       <TeamJoinPage
         link={LINK}
         dashboard={DASHBOARD}
         teamKeys={TEAM_KEYS}
-        openMachines={openWith([], { kind: 'pair' })}
+        openMachines={openMachineless()}
         request={request}
       />
     );
     expect(await screen.findByText('Turn on remote access first')).toBeTruthy();
-    await waitFor(() => expect(screen.getByText(/so Platform needs one of them/)).toBeTruthy());
-    expect(screen.getByText('Go to Settings, Remote access and choose Turn on.')).toBeTruthy();
+    expect(screen.getByText(/check again to join Platform and share your projects/)).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Check again' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Ask to join' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Join without a machine' }));
+    expect(await screen.findByText('Join Platform')).toBeTruthy();
+    expect(screen.getByText(/you see your teammates’ tasks here\./)).toBeTruthy();
+    expect(screen.getByText('No machine of your own needed')).toBeTruthy();
+    expect(screen.queryByText('You choose what you share')).toBeNull();
+    expect(screen.queryByText('Turn on remote access first')).toBeNull();
+    expect(screen.queryByText(NO_SHARE_HINT)).toBeNull();
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Ask to join' }).hasAttribute('disabled')).toBe(false)
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Ask to join' }));
+    expect(await screen.findByText('Request sent')).toBeTruthy();
+    expect(request).toHaveBeenCalledTimes(1);
+    expect(screen.getByText(NO_MACHINE_HINT)).toBeTruthy();
+    expect(sessionStorage.length).toBe(0);
   });
 
   it('walks you through adding this browser, waiting on a request, or opening an offline machine', async () => {
@@ -150,6 +172,7 @@ describe('the team join page on app.shinsa.dev', () => {
     );
     expect(screen.getByText('Pick up their work here')).toBeTruthy();
     expect(await screen.findByText('Join Platform')).toBeTruthy();
+    expect(await screen.findByText(/you see your teammates’ tasks next to your own\./)).toBeTruthy();
     const owns = screen.getByText(/owns this team/);
     expect(owns.textContent).toStartWith('MMona owns this team.');
     expect(owns.querySelector('a')?.getAttribute('href')).toBe('https://github.com/mona');

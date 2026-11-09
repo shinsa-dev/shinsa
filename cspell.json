@@ -130,6 +130,7 @@
     "lockfiles",
     "Mcpjson",
     "messageable",
+    "machineless",
     "minmax",
     "mitchellh",
     "modelcontextprotocol",

@@ -93,7 +93,7 @@ describe('what the join page needs set up first', () => {
   const row = (instance: RemoteInstance, device: EnrolledDevice | null) =>
     describeMachine(instance, device, at);
 
-  it('asks to pair a machine when the account has none of its own', () => {
+  it('asks to pair a machine first when the account has none of its own', () => {
     expect(resolveJoinSetup([], 0)).toEqual({ kind: 'pair' });
     expect(resolveJoinSetup([row(SHARED, createDevice(SHARED.id))], 0)).toEqual({ kind: 'pair' });
   });
@@ -291,7 +291,7 @@ describe('opening your machines for the join page', () => {
     expect((await silent()).setup).toEqual({ kind: 'offline', machines: ['Studio'] });
   });
 
-  it('asks to pair when the account has none of its own here', async () => {
+  it('asks to pair a machine when the account has none of its own here', async () => {
     const open = createJoinMachinesSource(
       {
         dashboard: {

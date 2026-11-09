@@ -41,6 +41,7 @@ import type { Fleet } from '@/lib/remote/fleet.ts';
 import type { PolicyActions } from '@/lib/remote/policies.ts';
 import { RemoteServicesContext } from '@/lib/remote/services.ts';
 import { describePresence } from '@/lib/teams/presence.ts';
+import { NoMachinePage } from '../remote/fleet.tsx';
 import { SlackLinkedPage } from '../remote/slack.tsx';
 import { TeamJoinPage } from '../remote/team-join.tsx';
 import { createSampleAccounts, createSampleProviderLogins } from './sample-accounts.ts';
@@ -549,7 +550,7 @@ export function SettingsSpecimens() {
           />
         </div>
       </Specimen>
-      <Specimen label='TeamJoinPage · with no paired machine, remote access comes first'>
+      <Specimen label='TeamJoinPage · with no paired machine, turn on remote access first or join without one'>
         <div className='w-full max-w-sm'>
           <TeamJoinPage
             link={SAMPLE_TEAM_LINK}
@@ -599,6 +600,11 @@ export function SettingsSpecimens() {
       <Specimen label='HostedTeamsGroup · in Shinsa Cloud, in no team yet'>
         <div className='w-full max-w-xl'>
           <HostedTeamsGroup teams={{ viewerId: null, teams: [] }} failure={null} />
+        </div>
+      </Specimen>
+      <Specimen label='NoMachinePage · on app.shinsa.dev, a team member with no machine of their own and none shared yet'>
+        <div className='w-full max-w-xl'>
+          <NoMachinePage machines={[]} teams={['Paywalls']} />
         </div>
       </Specimen>
       <Specimen label='MachineAccessRequests · in Shinsa Cloud: requests waiting on a machine, accepted from any device'>
