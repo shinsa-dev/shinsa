@@ -1,3 +1,4 @@
+import { Option } from 'effect';
 import {
   applyStatePatch,
   type ShinsaState,
@@ -15,7 +16,7 @@ export function measurePushes(initial: string, payloads: readonly string[]) {
     const message = JSON.parse(payload) as { type: string; state?: WireState; patch?: StatePatch };
     if (message.type === 'state' && message.state) state = message.state;
     if (message.type === 'state.patch' && state && message.patch)
-      state = applyStatePatch(state, message.patch);
+      state = Option.getOrNull(applyStatePatch(state, message.patch));
     sample.push(performance.now() - started);
   }
   return summarize(sample);

@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { Option } from 'effect';
 import {
   concatBytes,
   decodeText,
@@ -25,14 +26,14 @@ describe('bytes', () => {
     const bytes = new Uint8Array([251, 255, 191, 0, 1]);
     const text = serializeBase64Url(bytes);
     expect(text).toBe('-_-_AAE');
-    expect([...(parseBase64Url(text) ?? [])]).toEqual([...bytes]);
-    expect(parseBase64Url('')?.length).toBe(0);
+    expect([...(Option.getOrNull(parseBase64Url(text)) ?? [])]).toEqual([...bytes]);
+    expect(Option.getOrNull(parseBase64Url(''))?.length).toBe(0);
   });
 
   test('refuses text that is not base64url', () => {
-    expect(parseBase64Url('a+b/')).toBeNull();
-    expect(parseBase64Url('abcde')).toBeNull();
-    expect(parseBase64Url('ab=')).toBeNull();
+    expect(Option.getOrNull(parseBase64Url('a+b/'))).toBeNull();
+    expect(Option.getOrNull(parseBase64Url('abcde'))).toBeNull();
+    expect(Option.getOrNull(parseBase64Url('ab='))).toBeNull();
   });
 
   test('writes bytes as two hex digits each', () => {

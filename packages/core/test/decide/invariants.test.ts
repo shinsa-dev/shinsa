@@ -1479,7 +1479,7 @@ function openDetail(state: ShinsaState, view: ViewClient): ViewClient {
   const [taskId] = view.summarized;
   if (taskId === undefined) return view;
   const detail = JSON.parse(JSON.stringify(resolveTaskDetail(state, taskId)));
-  const client = applyTaskDetail(view.client, detail) ?? createState();
+  const client = Option.getOrNull(applyTaskDetail(view.client, detail)) ?? createState();
   return { client, summarized: new Set([...view.summarized].filter((id) => id !== taskId)) };
 }
 
@@ -1548,11 +1548,13 @@ function simulate(
     state = freezeState(decision.state);
     const shared = resolveStatePatch(prior, state, decision.changes);
     const patch = JSON.parse(JSON.stringify(shared)) as StatePatch;
-    client = applyStatePatch(client, patch) ?? createState();
+    client = Option.getOrNull(applyStatePatch(client, patch)) ?? createState();
     const viewed = resolveViewPatch(shared, prior, state, view.summarized);
     view = {
       summarized: viewed.summarized,
-      client: applyStatePatch(view.client, JSON.parse(JSON.stringify(viewed.patch))) ?? createState(),
+      client:
+        Option.getOrNull(applyStatePatch(view.client, JSON.parse(JSON.stringify(viewed.patch)))) ??
+        createState(),
     };
     assertSameChanges(state, [replayed], decision.changes, command.type);
     assertSameChanges(serializeState(state), [client], decision.changes, command.type);

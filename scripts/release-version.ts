@@ -1,3 +1,4 @@
+import { Option } from 'effect';
 import { resolveVersionOrder } from '../packages/core/src/protocol/engine.ts';
 
 export type ReleaseChannel = 'stable' | 'beta' | 'canary';
@@ -54,7 +55,8 @@ export function parseReleaseOptions(channel: string | undefined, bump: string | 
 function selectNewest(tags: readonly string[], pattern: RegExp) {
   const versions = tags.filter((tag) => pattern.test(tag)).map((tag) => tag.slice(1));
   return versions.reduce<string | null>(
-    (last, version) => (last === null || resolveVersionOrder(version, last) === 1 ? version : last),
+    (last, version) =>
+      last === null || Option.contains(resolveVersionOrder(version, last), 1) ? version : last,
     null
   );
 }
@@ -150,6 +152,8 @@ export function listChannelTagsBefore(tags: readonly string[], version: string) 
   const channel = resolveVersionChannel(version);
   const pattern = { stable: STABLE_TAG, beta: RELEASE_TAG, canary: CANARY_TAG }[channel];
   return tags
-    .filter((tag) => pattern.test(tag) && resolveVersionOrder(tag.replace(/^v/, ''), version) === -1)
-    .sort((a, b) => resolveVersionOrder(a.replace(/^v/, ''), b.replace(/^v/, '')) ?? 0);
+    .filter(
+      (tag) => pattern.test(tag) && Option.contains(resolveVersionOrder(tag.replace(/^v/, ''), version), -1)
+    )
+    .sort((a, b) => Option.getOrElse(resolveVersionOrder(a.replace(/^v/, ''), b.replace(/^v/, '')), () => 0));
 }

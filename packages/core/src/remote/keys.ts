@@ -19,7 +19,7 @@ export const serializePublicKey = Effect.fn('serializePublicKey')(function* (key
 });
 
 export const parsePublicKey = Effect.fn('parsePublicKey')(function* (text: string) {
-  const raw = parseBase64Url(text);
+  const raw = Option.getOrNull(parseBase64Url(text));
   if (!raw || raw.length !== RAW_PUBLIC_KEY_BYTES) return null;
   return yield* importKeyOrNull(() => crypto.subtle.importKey('raw', raw, REMOTE_KEY_ALGORITHM, true, []));
 });
@@ -41,7 +41,7 @@ export function isSigningPublicKey(text: string) {
 }
 
 export const parseSigningPublicKey = Effect.fn('parseSigningPublicKey')(function* (text: string) {
-  const raw = isSigningPublicKey(text) ? parseBase64Url(text) : null;
+  const raw = isSigningPublicKey(text) ? Option.getOrNull(parseBase64Url(text)) : null;
   if (!raw) return null;
   return yield* importKeyOrNull(() =>
     crypto.subtle.importKey('raw', raw, SIGNING_KEY_ALGORITHM, true, ['verify'])
@@ -57,7 +57,7 @@ export const parseSigningPrivateKey = Effect.fn('parseSigningPrivateKey')(functi
 });
 
 export const resolveKeyFingerprint = Effect.fn('resolveKeyFingerprint')(function* (publicKey: string) {
-  const raw = parseBase64Url(publicKey) ?? new Uint8Array();
+  const raw = Option.getOrElse(parseBase64Url(publicKey), () => new Uint8Array());
   const digest = new Uint8Array(yield* Effect.promise(() => crypto.subtle.digest('SHA-256', raw))) as Bytes;
   const hex = serializeHex(digest.slice(0, FINGERPRINT_BYTES));
   return hex.match(/.{4}/g)?.join(' ') ?? hex;

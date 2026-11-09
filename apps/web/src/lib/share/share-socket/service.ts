@@ -83,7 +83,7 @@ export class ShareSocket extends Context.Service<
         yield* socket.send(JSON.stringify(hello));
 
         const readWelcome = Effect.fn('ShareSocket.readWelcome')(function* (text: string) {
-          const welcome = parseShareWelcome(text);
+          const welcome = Option.getOrNull(parseShareWelcome(text));
           if (welcome?.type === 'refused') return yield* gone(welcome.reason);
           if (welcome?.type !== 'welcome' || open) return yield* offline;
           const keys = {
@@ -109,7 +109,7 @@ export class ShareSocket extends Context.Service<
           const opened = yield* Effect.option(opener(frame));
           if (Option.isNone(opened)) return yield* unreadable;
           const plain = opened.value;
-          const message = parseShareMessage(decodeText(plain));
+          const message = Option.getOrNull(parseShareMessage(decodeText(plain)));
           if (!message) return yield* unreadable;
           if (message.t === 'closed') return yield* gone(message.reason);
           if (!session.received(message)) return yield* unreadable;

@@ -324,7 +324,7 @@ export const CodeHandlers = HttpApiBuilder.group(
         Effect.fn('CodeHandlers.raw')(function* ({ params, query }) {
           const found = yield* findCodeTask(params.taskRef);
           const path = yield* requestSync(() => assertRepoPath(query.path ?? null));
-          const type = resolveImageType(path);
+          const type = Option.getOrNull(resolveImageType(path));
           if (!type) return yield* new RequestFailed(NOT_AN_IMAGE);
           const ref = yield* resolveRef(found, query.ref ?? null);
           const bytes = yield* readBytes(found, ref, path);

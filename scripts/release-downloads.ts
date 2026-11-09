@@ -1,3 +1,4 @@
+import { Option } from 'effect';
 import { resolveChannelKey, resolveReleaseKey } from '../apps/marketing/src/worker/download/paths.ts';
 import { parseDownloadPointer } from '../apps/marketing/src/worker/releases/pointer.ts';
 import {
@@ -120,7 +121,7 @@ export function resolveR2Credentials(token: string, tokenId: string) {
 export function resolveChannelUpdates(release: DownloadRelease, current: ChannelPointers): Channel[] {
   return REACHED_CHANNELS[release.channel].filter((channel) => {
     const pointer = current[channel];
-    return !pointer || resolveVersionOrder(release.pointer.version, pointer.version) !== -1;
+    return !pointer || !Option.contains(resolveVersionOrder(release.pointer.version, pointer.version), -1);
   });
 }
 

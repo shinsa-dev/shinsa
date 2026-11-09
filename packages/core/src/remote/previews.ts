@@ -73,17 +73,22 @@ export function isPreviewKey(value: string) {
 }
 
 export function serializePreviewLabel(address: PreviewAddress) {
-  const id = parseBase64Url(address.previewId) ?? new Uint8Array();
+  const id = Option.getOrElse(parseBase64Url(address.previewId), () => new Uint8Array());
   return serializeBase32(concatBytes(id, encodeText(address.instanceId)));
 }
 
-export function parsePreviewLabel(label: string): PreviewAddress | null {
-  if (label.length > LABEL_LIMIT) return null;
-  const bytes = parseBase32(label);
-  if (!bytes || bytes.length <= PREVIEW_ID_BYTES) return null;
-  const instanceId = Option.getOrNull(selectText(bytes.slice(PREVIEW_ID_BYTES)));
-  if (instanceId === null || !URL_SAFE_SEGMENT.test(instanceId)) return null;
-  return { instanceId, previewId: serializeBase64Url(bytes.slice(0, PREVIEW_ID_BYTES)) };
+export function parsePreviewLabel(label: string): Option.Option<PreviewAddress> {
+  if (label.length > LABEL_LIMIT) return Option.none();
+  return Option.flatMap(
+    Option.filter(parseBase32(label), (bytes) => bytes.length > PREVIEW_ID_BYTES),
+    (bytes) =>
+      Option.map(
+        Option.filter(selectText(bytes.slice(PREVIEW_ID_BYTES)), (instanceId) =>
+          URL_SAFE_SEGMENT.test(instanceId)
+        ),
+        (instanceId) => ({ instanceId, previewId: serializeBase64Url(bytes.slice(0, PREVIEW_ID_BYTES)) })
+      )
+  );
 }
 
 export function resolvePreviewOrigin(address: PreviewAddress, zoneOrigin = PREVIEW_ORIGIN) {
@@ -95,22 +100,21 @@ export function serializePreviewUrl(link: PreviewLink, zoneOrigin = PREVIEW_ORIG
   return `${resolvePreviewOrigin(link, zoneOrigin)}/?${PREVIEW_KEY_PARAM}=${link.key}`;
 }
 
-export function parsePreviewHost(host: string, zoneOrigin = PREVIEW_ORIGIN): PreviewAddress | null {
+export function parsePreviewHost(host: string, zoneOrigin = PREVIEW_ORIGIN): Option.Option<PreviewAddress> {
   const suffix = `.${new URL(zoneOrigin).host}`;
   const lower = host.toLowerCase();
-  if (!lower.endsWith(suffix)) return null;
+  if (!lower.endsWith(suffix)) return Option.none();
   const label = lower.slice(0, -suffix.length);
-  return label.includes('.') ? null : parsePreviewLabel(label);
+  return label.includes('.') ? Option.none() : parsePreviewLabel(label);
 }
 
-export function parsePreviewUrl(url: string | null, zoneOrigin = PREVIEW_ORIGIN): PreviewLink | null {
-  if (!url || !URL.canParse(url)) return null;
+export function parsePreviewUrl(url: string | null, zoneOrigin = PREVIEW_ORIGIN): Option.Option<PreviewLink> {
+  if (!url || !URL.canParse(url)) return Option.none();
   const parsed = new URL(url);
-  if (parsed.protocol !== new URL(zoneOrigin).protocol) return null;
-  const address = parsePreviewHost(parsed.host, zoneOrigin);
+  if (parsed.protocol !== new URL(zoneOrigin).protocol) return Option.none();
   const key = parsed.searchParams.get(PREVIEW_KEY_PARAM);
-  if (!(address && key && isPreviewKey(key))) return null;
-  return { ...address, key };
+  if (!(key && isPreviewKey(key))) return Option.none();
+  return Option.map(parsePreviewHost(parsed.host, zoneOrigin), (address) => ({ ...address, key }));
 }
 
 export function resolvePreviewTunnelPath(previewId: string, path: string) {
@@ -118,12 +122,12 @@ export function resolvePreviewTunnelPath(previewId: string, path: string) {
 }
 
 export function parsePreviewTunnelPath(pathname: string) {
-  if (!pathname.startsWith(PREVIEW_TUNNEL_PREFIX)) return null;
+  if (!pathname.startsWith(PREVIEW_TUNNEL_PREFIX)) return Option.none();
   const rest = pathname.slice(PREVIEW_TUNNEL_PREFIX.length);
   const slash = rest.indexOf('/');
   const previewId = slash === -1 ? rest : rest.slice(0, slash);
-  if (!isPreviewId(previewId)) return null;
-  return { previewId, path: slash === -1 ? '/' : rest.slice(slash) };
+  if (!isPreviewId(previewId)) return Option.none();
+  return Option.some({ previewId, path: slash === -1 ? '/' : rest.slice(slash) });
 }
 
 export const resolvePrivatePreviewId = Effect.fn('resolvePrivatePreviewId')(function* (

@@ -1,5 +1,5 @@
 import {
-  findForkRepo,
+  selectForkRepo,
   hasEngineFeature,
   listOwnRepos,
   resolveTaskProject,
@@ -77,7 +77,7 @@ export function forkTask(state: ShinsaState, task: Task, request: string) {
 
 export function resolveForkRepo(state: ShinsaState, task: Task, canFork: ForkTarget = canForkOnto) {
   const repo = task.repoId ? state.repos[task.repoId] : undefined;
-  const match = findForkRepo(state, repo ?? null, null);
+  const match = Option.getOrNull(selectForkRepo(state, repo ?? null, null));
   if (match && canFork(match)) return match;
   return listForkRepos(state, canFork)[0]?.id ?? null;
 }

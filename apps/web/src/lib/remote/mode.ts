@@ -6,6 +6,7 @@ import {
   SLACK_RELAY_PATHS,
 } from '@shinsa/core';
 import type { IconName } from '@shinsa/ui/components/icon';
+import { Option } from 'effect';
 
 export const SERVICE_WORKER_PATH = `${REMOTE_PATHS.app}sw.js`;
 
@@ -80,13 +81,13 @@ export function resolveRemoteView(location: Pick<Location, 'pathname' | 'search'
   if (location.pathname === REMOTE_PATHS.claimPage) return { kind: 'claim' };
   if (location.pathname === REMOTE_PATHS.teamJoinPage) return { kind: 'team-join' };
   if (location.pathname.startsWith(`${REMOTE_PATHS.sharePage}/`))
-    return { kind: 'share', link: parseShareLocation(location.pathname, location.hash) };
+    return { kind: 'share', link: Option.getOrNull(parseShareLocation(location.pathname, location.hash)) };
   if (location.pathname === SLACK_RELAY_PATHS.linkedPage) return { kind: 'slack' };
   return { kind: 'app' };
 }
 
 export function stashEnrollFragment(storage: Storage, hash: string, search = '') {
-  if (!parseEnrollFragment(hash)) return;
+  if (Option.isNone(parseEnrollFragment(hash))) return;
   storage.setItem(ENROLL_KEY, hash.replace(/^#/, ''));
   if (new URLSearchParams(search).get(ON_MACHINE_PARAM) === ON_MACHINE_VALUE)
     storage.setItem(ENROLL_ON_MACHINE_KEY, ON_MACHINE_VALUE);
@@ -94,7 +95,9 @@ export function stashEnrollFragment(storage: Storage, hash: string, search = '')
 }
 
 export function selectEnrollFragment(storage: Storage, hash: string) {
-  const link = parseEnrollFragment(hash) ?? parseEnrollFragment(storage.getItem(ENROLL_KEY) ?? '');
+  const link = Option.getOrNull(
+    Option.orElse(parseEnrollFragment(hash), () => parseEnrollFragment(storage.getItem(ENROLL_KEY) ?? ''))
+  );
   return link ? { ...link, onMachine: storage.getItem(ENROLL_ON_MACHINE_KEY) === ON_MACHINE_VALUE } : null;
 }
 

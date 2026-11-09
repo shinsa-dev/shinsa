@@ -56,13 +56,13 @@ interface ServerSessionInput {
   serverEphemeralPrivateKey: CryptoKey;
 }
 
-export function parseClientHello(text: string): ClientHello | null {
+export function parseClientHello(text: string): Option.Option<ClientHello> {
   const fields = Option.getOrUndefined(parseJsonRecord(text));
-  if (fields?.type !== 'hello' || fields.version !== REMOTE_PROTOCOL_VERSION) return null;
-  if (typeof fields.device !== 'string' || typeof fields.ephemeral !== 'string') return null;
-  if (fields.enroll !== null && typeof fields.enroll !== 'string') return null;
+  if (fields?.type !== 'hello' || fields.version !== REMOTE_PROTOCOL_VERSION) return Option.none();
+  if (typeof fields.device !== 'string' || typeof fields.ephemeral !== 'string') return Option.none();
+  if (fields.enroll !== null && typeof fields.enroll !== 'string') return Option.none();
   const name = typeof fields.name === 'string' ? fields.name.trim().slice(0, DEVICE_NAME_LIMIT) : '';
-  return {
+  return Option.some({
     type: 'hello',
     version: REMOTE_PROTOCOL_VERSION,
     device: fields.device,
@@ -73,25 +73,27 @@ export function parseClientHello(text: string): ClientHello | null {
       Array.isArray(fields.compression) && fields.compression.includes(CHANNEL_COMPRESSION)
         ? [CHANNEL_COMPRESSION]
         : [],
-  };
+  });
 }
 
-export function resolveCompression(hello: ClientHello): ChannelCompression | null {
-  return hello.compression.includes(CHANNEL_COMPRESSION) ? CHANNEL_COMPRESSION : null;
+export function resolveCompression(hello: ClientHello): Option.Option<ChannelCompression> {
+  return hello.compression.includes(CHANNEL_COMPRESSION)
+    ? Option.some(CHANNEL_COMPRESSION)
+    : Option.none<ChannelCompression>();
 }
 
-export function parseServerHello(text: string): ServerHello | null {
+export function parseServerHello(text: string): Option.Option<ServerHello> {
   const fields = Option.getOrUndefined(parseJsonRecord(text));
   if (fields?.type === 'welcome' && typeof fields.ephemeral === 'string')
-    return {
+    return Option.some({
       type: 'welcome',
       ephemeral: fields.ephemeral,
       compression: fields.compression === CHANNEL_COMPRESSION ? CHANNEL_COMPRESSION : null,
-    };
-  if (fields?.type === 'pending') return { type: 'pending' };
+    });
+  if (fields?.type === 'pending') return Option.some({ type: 'pending' });
   if (fields?.type === 'refused' && typeof fields.reason === 'string')
-    return { type: 'refused', reason: fields.reason };
-  return null;
+    return Option.some({ type: 'refused', reason: fields.reason });
+  return Option.none();
 }
 
 function deriveShared(privateKey: CryptoKey, publicKey: CryptoKey) {
@@ -181,7 +183,7 @@ export const verifyEnrollProof = Effect.fn('verifyEnrollProof')(function* (
   keys: Pick<HandshakeKeys, 'machine' | 'device' | 'clientEphemeral'>
 ) {
   const key = yield* importHmacKey(secret);
-  const signature = parseBase64Url(proof);
+  const signature = Option.getOrNull(parseBase64Url(proof));
   if (!key || !signature) return false;
   return yield* verifyHmac(
     key,

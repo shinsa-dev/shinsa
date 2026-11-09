@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { Option } from 'effect';
 import {
   createContextOptimizer,
   isScopeMatch,
@@ -69,10 +70,14 @@ describe('the context optimizer', () => {
   });
 
   test('counts idle days from the last use, else from when Shinsa first saw it', () => {
-    expect(resolveIdleDays({ lastUsedAt: now - 3 * day - 5, firstSeenAt: now - 90 * day }, now)).toBe(3);
-    expect(resolveIdleDays({ lastUsedAt: null, firstSeenAt: now - 20 * day }, now)).toBe(20);
-    expect(resolveIdleDays({ lastUsedAt: now + day, firstSeenAt: null }, now)).toBe(0);
-    expect(resolveIdleDays({ lastUsedAt: null, firstSeenAt: null }, now)).toBeNull();
+    expect(
+      Option.getOrNull(resolveIdleDays({ lastUsedAt: now - 3 * day - 5, firstSeenAt: now - 90 * day }, now))
+    ).toBe(3);
+    expect(Option.getOrNull(resolveIdleDays({ lastUsedAt: null, firstSeenAt: now - 20 * day }, now))).toBe(
+      20
+    );
+    expect(Option.getOrNull(resolveIdleDays({ lastUsedAt: now + day, firstSeenAt: null }, now))).toBe(0);
+    expect(Option.getOrNull(resolveIdleDays({ lastUsedAt: null, firstSeenAt: null }, now))).toBeNull();
   });
 
   test('calls something unused only once it has been idle for the whole window', () => {

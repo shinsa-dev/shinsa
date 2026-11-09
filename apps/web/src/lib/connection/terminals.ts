@@ -94,7 +94,7 @@ export function openTerminal(projectKey: string, projectId: string, place: Termi
 export function selectTaskTerminal(state: ShinsaState | null, task: Task) {
   const projectId = state ? Option.getOrNull(resolveTaskProject(state, task)) : null;
   const project = projectId ? state?.projects[projectId] : undefined;
-  const place = state ? resolveTaskTerminalPlace(state, task) : null;
+  const place = state ? Option.getOrNull(resolveTaskTerminalPlace(state, task)) : null;
   return project && place ? { project, place } : null;
 }
 

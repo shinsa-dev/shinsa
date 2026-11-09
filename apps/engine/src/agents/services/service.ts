@@ -130,7 +130,7 @@ export const runServiceTool = Effect.fn('ServiceTools.run')(function* (
       action === 'start'
         ? yield* runner.startService(view.service.id, run)
         : yield* runner.restartService(view.service.id, run);
-    const url = resolveServiceUrl(view.service, terminal);
+    const url = Option.getOrNull(resolveServiceUrl(view.service, terminal));
     const preview = url ? ` Its preview is at ${url} once it is up.` : '';
     return `${action === 'start' ? 'Started' : 'Restarted'} ${serviceName} for this task in ${run.cwd}.${preview} Read its output with list_services and the service’s name.`;
   });
@@ -212,7 +212,7 @@ export const runServiceTool = Effect.fn('ServiceTools.run')(function* (
     const snapshot = yield* runner.snapshot;
     const removed = new Map<string, ServiceDefinition>();
     for (const reference of yield* readServiceReferences()) {
-      const service = selectService(snapshot, reference, projectId);
+      const service = Option.getOrNull(selectService(snapshot, reference, projectId));
       if (!service)
         return yield* refuse(`No service ${reference} in the project. Call list_services to see them.`);
       removed.set(service.id, service);

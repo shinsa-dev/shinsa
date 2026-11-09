@@ -8,6 +8,7 @@ import {
   type ShinsaState,
   type UserCommand,
 } from '@shinsa/core';
+import { Option } from 'effect';
 import { createHomeScene } from '../scene.ts';
 import {
   type CommandListener,
@@ -41,7 +42,7 @@ class DemoSocket extends EventTarget {
   }
 
   send(data: string | Uint8Array<ArrayBuffer>) {
-    const message = typeof data === 'string' ? parseClientMessage(data) : null;
+    const message = typeof data === 'string' ? Option.getOrNull(parseClientMessage(data)) : null;
     if (message?.type === 'command') {
       setTimeout(() => {
         this.receive({ type: 'ack', id: message.id, error: null });

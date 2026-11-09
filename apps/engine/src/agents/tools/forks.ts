@@ -1,11 +1,12 @@
 import {
-  findForkRepo,
+  selectForkRepo,
   resolveTeammateFork,
   type ShinsaState,
   selectTaskByReference,
   type TeamFeedTask,
   type TeammateFork,
 } from '@shinsa/core';
+import { Option } from 'effect';
 
 export function findForkSource(state: ShinsaState, reference: string) {
   const task = selectTaskByReference(state, reference);
@@ -46,6 +47,6 @@ export function resolveForkReference(
   return {
     kind: 'teammate',
     teammateFork: resolveTeammateFork({ ...entry, owner }),
-    repoId: findForkRepo(state, entry.repo, entry.project),
+    repoId: Option.getOrNull(selectForkRepo(state, entry.repo, entry.project)),
   };
 }

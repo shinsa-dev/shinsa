@@ -25,7 +25,7 @@ import {
   type UserCommand,
   type WireState,
 } from '@shinsa/core';
-import { Deferred, Effect, Exit, type Fiber, Layer } from 'effect';
+import { Deferred, Effect, Exit, type Fiber, Layer, Option } from 'effect';
 import { Socket } from 'effect/socket';
 import { useEffect, useMemo, useSyncExternalStore } from 'react';
 import { applyOptimistic, isOptimistic } from '@/lib/connection/optimistic.ts';
@@ -494,10 +494,10 @@ export class Connection implements ShinsaConnection {
   }
 
   #applyIncoming(base: WireState, entry: Incoming) {
-    if ('detail' in entry) return applyTaskDetail(base, entry.detail);
+    if ('detail' in entry) return Option.getOrNull(applyTaskDetail(base, entry.detail));
     const { patch } = entry;
     if (patch.to < base.seq || (patch.to === base.seq && patch.from < patch.to)) return base;
-    return applyStatePatch(base, patch);
+    return Option.getOrNull(applyStatePatch(base, patch));
   }
 
   #flushTranscripts() {

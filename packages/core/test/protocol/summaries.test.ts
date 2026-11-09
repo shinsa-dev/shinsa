@@ -151,7 +151,7 @@ describe('view patches', () => {
       const decision = decideNext(state, command, harness.now + index + 1);
       const shared = resolveStatePatch(state, decision.state, decision.changes);
       const view = resolveViewPatch(shared, state, decision.state, summarized);
-      const next = applyStatePatch(client, plain(view.patch));
+      const next = Option.getOrNull(applyStatePatch(client, plain(view.patch)));
       expect(next).toEqual(plain(serializeViewState(decision.state, view.summarized)));
       client = next ?? client;
       summarized = view.summarized;
@@ -207,7 +207,9 @@ describe('view patches', () => {
     };
     const shared = resolveStatePatch(state, next, { tasks: [cancelled], runs });
     const view = resolveViewPatch(shared, state, next, summarized);
-    const client = applyStatePatch(plain(serializeViewState(state, summarized)), plain(view.patch));
+    const client = Option.getOrNull(
+      applyStatePatch(plain(serializeViewState(state, summarized)), plain(view.patch))
+    );
     expect(client).toEqual(plain(serializeViewState(next, view.summarized)));
     expect(view.summarized.has(cancelled)).toBe(false);
   });
@@ -220,7 +222,9 @@ describe('task detail', () => {
     const view = plain(serializeViewState(harness.state, summarized));
     const detail = plain(resolveTaskDetail(harness.state, merged));
     const rest = new Set([...summarized].filter((id) => id !== merged));
-    expect(applyTaskDetail(view, detail)).toEqual(plain(serializeViewState(harness.state, rest)));
+    expect(Option.getOrNull(applyTaskDetail(view, detail))).toEqual(
+      plain(serializeViewState(harness.state, rest))
+    );
     expect(detail.task).toEqual(plain(harness.task(merged)));
     expect(Object.keys(detail.evidence)).toHaveLength(1);
   });
@@ -229,7 +233,7 @@ describe('task detail', () => {
     const { harness, merged } = seed();
     const view: WireState = serializeViewState(harness.state, listSummarizedTasks(harness.state));
     const detail = { ...resolveTaskDetail(harness.state, merged), seq: harness.state.seq + 1 };
-    expect(applyTaskDetail(view, detail)).toBeNull();
+    expect(Option.getOrNull(applyTaskDetail(view, detail))).toBeNull();
   });
 
   test('removes a task the engine no longer has', () => {
@@ -237,9 +241,11 @@ describe('task detail', () => {
     const view = serializeViewState(harness.state, listSummarizedTasks(harness.state));
     const detail = resolveTaskDetail(harness.state, 'missing');
     expect(detail.task).toBeNull();
-    const next = applyTaskDetail(
-      { ...view, tasks: { ...view.tasks, missing: summarizeTask(harness.task(merged)) } },
-      detail
+    const next = Option.getOrNull(
+      applyTaskDetail(
+        { ...view, tasks: { ...view.tasks, missing: summarizeTask(harness.task(merged)) } },
+        detail
+      )
     );
     expect(next?.tasks.missing).toBeUndefined();
   });

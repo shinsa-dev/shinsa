@@ -297,7 +297,7 @@ export class HostedTeamFeeds implements TeamFeedSource {
     return Effect.gen({ self: this }, function* () {
       let adopted = false;
       for (const snapshot of held) {
-        const instanceId = selectTeamSnapshotSigner(snapshot);
+        const instanceId = Option.getOrNull(selectTeamSnapshotSigner(snapshot));
         const feed = this.#feeds.find(
           (candidate) => candidate.target.teamId === teamId && candidate.target.instanceId === instanceId
         );

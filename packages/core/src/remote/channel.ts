@@ -72,8 +72,8 @@ function readTerminalMessage(id: string, fields: Record<string, unknown>): Chann
   }
 }
 
-export function parseChannelMessage(text: string): ChannelMessage | null {
-  return Option.getOrNull(Option.flatMapNullishOr(parseJsonRecord(text), readMessage));
+export function parseChannelMessage(text: string): Option.Option<ChannelMessage> {
+  return Option.flatMapNullishOr(parseJsonRecord(text), readMessage);
 }
 
 export function serializeChannelMessage(message: ChannelMessage) {

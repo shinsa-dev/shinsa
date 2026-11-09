@@ -9,7 +9,7 @@ import {
   resolveInstanceRemovePath,
   verifyConnectToken,
 } from '@shinsa/core';
-import { Effect, Duration } from 'effect';
+import { Effect, Duration, Option } from 'effect';
 import { ONLINE_WINDOW } from '../src/domain/schema.ts';
 import { createHarness, type Harness, heartbeat, pairMachine, readJson } from './harness.ts';
 
@@ -148,14 +148,19 @@ describe('instances', () => {
     const [encoded = '', signature = ''] = legacy.split('.');
     const key = await crypto.subtle.importKey(
       'raw',
-      parseBase64Url(studio.connectKey) ?? new Uint8Array(),
+      Option.getOrNull(parseBase64Url(studio.connectKey)) ?? new Uint8Array(),
       { name: 'HMAC', hash: 'SHA-256' },
       false,
       ['verify']
     );
-    const payload = parseBase64Url(encoded) ?? new Uint8Array();
+    const payload = Option.getOrNull(parseBase64Url(encoded)) ?? new Uint8Array();
     expect(
-      await crypto.subtle.verify('HMAC', key, parseBase64Url(signature) ?? new Uint8Array(), payload)
+      await crypto.subtle.verify(
+        'HMAC',
+        key,
+        Option.getOrNull(parseBase64Url(signature)) ?? new Uint8Array(),
+        payload
+      )
     ).toBe(true);
     expect(JSON.parse(new TextDecoder().decode(payload))).toEqual({
       i: studio.instanceId,

@@ -14,6 +14,7 @@ import {
   type UserCommand,
 } from '@shinsa/core';
 import type { MenuItemIcon } from '@shinsa/ui/components/menu-icon';
+import { Option } from 'effect';
 import * as React from 'react';
 import { requestPlacement, requestPlacementAnswer } from '@/lib/connection/placement.ts';
 import type { MachineChoice, UnreachableMachine } from '@/lib/connection/socket.ts';
@@ -271,9 +272,11 @@ export function resolveNewTaskMachine(
   const chosen = selectChosenMachine(machines, choices.machine);
   if (chosen) return { id: chosen.id, byRouter: false };
   const named = choices.project === 'auto' || choices.project === NO_PROJECT ? null : choices.project;
-  const owner = named ? resolveProjectMachine(machines, named) : null;
+  const owner = named ? Option.getOrNull(resolveProjectMachine(machines, named)) : null;
   if (owner) return { id: owner, byRouter: false };
-  const placed = resolvePlacement(machines, shownProject === NO_PROJECT ? null : shownProject);
+  const placed = Option.getOrNull(
+    resolvePlacement(machines, shownProject === NO_PROJECT ? null : shownProject)
+  );
   return placed ? { id: placed, byRouter: true } : null;
 }
 

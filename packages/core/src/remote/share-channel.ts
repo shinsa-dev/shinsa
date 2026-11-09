@@ -49,7 +49,7 @@ export const verifyChannelProof = Effect.fn('verifyChannelProof')(function* (
   parts: string[]
 ) {
   const hmac = yield* importHmacKey(key);
-  const signature = parseBase64Url(proof);
+  const signature = Option.getOrNull(parseBase64Url(proof));
   if (!hmac || !signature) return false;
   return yield* verifyHmac(hmac, signature, encodeText(parts.join('\n')));
 });
@@ -62,7 +62,7 @@ export const deriveChannelSessionKey = Effect.fn('deriveChannelSessionKey')(func
   peerEphemeral: string
 ) {
   const peer = yield* parsePublicKey(peerEphemeral);
-  const raw = parseBase64Url(key);
+  const raw = Option.getOrNull(parseBase64Url(key));
   if (!(peer && raw))
     return yield* new RemoteKeyInvalid({ message: 'A channel handshake key is not valid.' });
   const shared = new Uint8Array(
@@ -105,17 +105,17 @@ export const createShareHello = Effect.fn('createShareHello')(function* (
   return hello;
 });
 
-export function parseShareHello(text: string): ShareHello | null {
+export function parseShareHello(text: string): Option.Option<ShareHello> {
   const fields = Option.getOrUndefined(parseJsonRecord(text));
-  if (fields?.type !== 'share-hello' || fields.version !== REMOTE_PROTOCOL_VERSION) return null;
-  if (!(isText(fields.share) && isText(fields.ephemeral) && isText(fields.proof))) return null;
-  return {
+  if (fields?.type !== 'share-hello' || fields.version !== REMOTE_PROTOCOL_VERSION) return Option.none();
+  if (!(isText(fields.share) && isText(fields.ephemeral) && isText(fields.proof))) return Option.none();
+  return Option.some({
     type: 'share-hello',
     version: REMOTE_PROTOCOL_VERSION,
     share: fields.share,
     ephemeral: fields.ephemeral,
     proof: fields.proof,
-  };
+  });
 }
 
 export function verifyShareHello(key: string, hello: ShareHello) {
@@ -131,12 +131,13 @@ export const createShareWelcome = Effect.fn('createShareWelcome')(function* (key
   return welcome;
 });
 
-export function parseShareWelcome(text: string): ShareWelcome | null {
+export function parseShareWelcome(text: string): Option.Option<ShareWelcome> {
   const fields = Option.getOrUndefined(parseJsonRecord(text));
   if (fields?.type === 'welcome' && isText(fields.ephemeral) && isText(fields.proof))
-    return { type: 'welcome', ephemeral: fields.ephemeral, proof: fields.proof };
-  if (fields?.type === 'refused' && isText(fields.reason)) return { type: 'refused', reason: fields.reason };
-  return null;
+    return Option.some({ type: 'welcome', ephemeral: fields.ephemeral, proof: fields.proof });
+  if (fields?.type === 'refused' && isText(fields.reason))
+    return Option.some({ type: 'refused', reason: fields.reason });
+  return Option.none();
 }
 
 export function verifyShareWelcome(key: string, keys: ShareKeys, proof: string) {
@@ -173,8 +174,8 @@ function readShareMessage(fields: Record<string, unknown>): ShareMessage | null 
   }
 }
 
-export function parseShareMessage(text: string): ShareMessage | null {
-  return Option.getOrNull(Option.flatMapNullishOr(parseJsonRecord(text), readShareMessage));
+export function parseShareMessage(text: string): Option.Option<ShareMessage> {
+  return Option.flatMapNullishOr(parseJsonRecord(text), readShareMessage);
 }
 
 export function serializeShareMessage(message: ShareMessage) {

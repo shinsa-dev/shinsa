@@ -20,7 +20,7 @@ import {
   type TerminalInfo,
   verifyPreviewAccessToken,
 } from '@shinsa/core';
-import { Clock, Context, Deferred, Effect, Layer, Redacted, Ref } from 'effect';
+import { Clock, Context, Deferred, Effect, Layer, Redacted, Ref, Option } from 'effect';
 import { EngineConfig } from '../../config/service.ts';
 import { describeError } from '../../log/redact.ts';
 import type { EffectAttempt } from '../../runtime/engine/schema.ts';
@@ -154,7 +154,7 @@ export class Previews extends Context.Service<Previews, PreviewsHandle>()(
         for (const task of Object.values((yield* engine.state).tasks)) {
           for (const preview of task.previews ?? []) {
             if ((preview.endsAt ?? Number.POSITIVE_INFINITY) <= now) continue;
-            const link = parsePreviewUrl(preview.url, origin);
+            const link = Option.getOrNull(parsePreviewUrl(preview.url, origin));
             if (link?.previewId === previewId && link.instanceId === instanceId) {
               const share: PreviewShareTarget = {
                 taskId: task.id,
@@ -270,7 +270,7 @@ export class Previews extends Context.Service<Previews, PreviewsHandle>()(
         service: ServiceDefinition
       ) {
         const instanceId = (yield* readRemote).credentials?.instanceId;
-        const local = resolveServiceUrl(service, info);
+        const local = Option.getOrNull(resolveServiceUrl(service, info));
         if (!(instanceId && local && info.status === 'running' && (yield* selectConnectKey))) return null;
         const run = { serviceId: service.id, taskId: info.taskId };
         const previewId = (yield* Ref.get(addresses)).ids.get(resolvePrivateRunKey(run));
@@ -332,7 +332,7 @@ export class Previews extends Context.Service<Previews, PreviewsHandle>()(
         if (!credentials) return yield* createFinalFailure(PREVIEW_NOT_PAIRED);
         const service = (yield* terminals.snapshot).services.find((each) => each.id === serviceId);
         if (!service?.previewUrl) return yield* createFinalFailure(PREVIEW_NO_URL);
-        const current = parsePreviewUrl(preview.url, origin);
+        const current = Option.getOrNull(parsePreviewUrl(preview.url, origin));
         const url =
           current?.instanceId === credentials.instanceId
             ? null
@@ -382,11 +382,13 @@ export class Previews extends Context.Service<Previews, PreviewsHandle>()(
       });
 
       const answer = Effect.fn('Previews.answer')(function* (request: Request, url: URL) {
-        const parsed = parsePreviewTunnelPath(url.pathname);
+        const parsed = Option.getOrNull(parsePreviewTunnelPath(url.pathname));
         const target = parsed ? yield* resolveTarget(request, parsed.previewId) : null;
         if (!(parsed && target))
           return { kind: 'response', response: respondPreviewPage('gone', 404) } satisfies PreviewAnswer;
-        const run = selectServiceTerminal(yield* terminals.snapshot, target.serviceId, target.taskId);
+        const run = Option.getOrNull(
+          selectServiceTerminal(yield* terminals.snapshot, target.serviceId, target.taskId)
+        );
         if (!(run?.status === 'running' && run.port))
           return { kind: 'response', response: respondPreviewPage('stopped', 503) } satisfies PreviewAnswer;
         const path = `${parsed.path}${url.search}`;

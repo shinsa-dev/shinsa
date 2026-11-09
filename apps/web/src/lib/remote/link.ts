@@ -5,7 +5,7 @@ import {
   serializeBase64Url,
   TERMINAL_STREAM_CLOSE,
 } from '@shinsa/core';
-import { Deferred, Effect, Predicate, Schema } from 'effect';
+import { Deferred, Effect, Predicate, Schema, Option } from 'effect';
 import { forkApp, runApp } from '@/lib/runtime/app.ts';
 import { CloudAnswerInvalid, CloudRefused, CloudUnreachable } from '@/lib/runtime/remote/schema.ts';
 import { openRemoteChannel } from './channel.ts';
@@ -115,7 +115,8 @@ export class ChannelTerminalSocket extends EventTarget {
       this.#finish(message.code, message.reason);
       return;
     }
-    const data = message.t === 'terminal-text' ? message.data : parseBase64Url(message.chunk);
+    const data =
+      message.t === 'terminal-text' ? message.data : Option.getOrNull(parseBase64Url(message.chunk));
     if (data === null) return;
     this.dispatchEvent(
       new MessageEvent('message', { data: typeof data === 'string' ? data : toArrayBuffer(data) })
