@@ -9,7 +9,7 @@ import {
   resolveAccountSwitchAt,
   resolvePoolResetAt,
 } from '@shinsa/core';
-import { Clock, Context, Effect, Layer, Ref } from 'effect';
+import { Clock, Context, Effect, Layer, Option, Ref } from 'effect';
 import type {
   AccountLease,
   AccountLeaseRequest,
@@ -121,7 +121,7 @@ export class AccountRotation extends Context.Service<
         const ownership = request.ownership ?? null;
         const accounts = yield* listCandidates(false, ownership);
         const bound = yield* resolveKept(request.bound?.id ?? null);
-        const picked = pickAccount({
+        const chosen = pickAccount({
           accounts,
           bound: ownership && !accounts.some((account) => account.id === bound) ? null : bound,
           previous: yield* resolveKept(request.previous?.id ?? null),
@@ -129,18 +129,19 @@ export class AccountRotation extends Context.Service<
           exclude: new Set(request.exclude),
           now: yield* Clock.currentTimeMillis,
         });
-        if (!picked && ownership) {
+        if (Option.isNone(chosen) && ownership) {
           return yield* new DomainError({
             code: OWNER_SIGNED_OUT_CODE,
             message: 'The task’s owner has no Claude account it can use on this shared machine.',
           });
         }
-        if (!picked) {
+        if (Option.isNone(chosen)) {
           yield* Effect.logWarning(
             '[Accounts] The account a task is bound to is gone; using the default login'
           ).pipe(Effect.annotateLogs({ taskId: request.taskId, accountId: request.bound?.id }));
           return null;
         }
+        const picked = chosen.value;
         const account = yield* store.find(picked.account.id);
         if (account.configDir) yield* store.linkSharedEntries(account.configDir);
         const leased: AccountLease = {
@@ -177,12 +178,12 @@ export class AccountRotation extends Context.Service<
             exclude: new Set(rejection.tried),
             now,
           });
-          if (next?.usable) {
+          if (Option.isSome(next) && next.value.usable) {
             yield* Effect.logInfo('[Accounts] Moving a run to another account').pipe(
               Effect.annotateLogs({
                 runId: rejection.runId,
                 from: account.id,
-                to: next.account.id,
+                to: next.value.account.id,
                 reason: failure.class,
               })
             );
@@ -198,7 +199,7 @@ export class AccountRotation extends Context.Service<
         const candidates = (yield* listCandidates(true, ownership)).filter(
           (candidate) => !bound || candidate.id === kept
         );
-        const resetAt = resolvePoolResetAt(candidates, model, now) ?? failure.resetAt;
+        const resetAt = Option.getOrElse(resolvePoolResetAt(candidates, model, now), () => failure.resetAt);
         const spentVerdict: RejectionVerdict = { retry: false, failure: { ...refined, resetAt } };
         return spentVerdict;
       });

@@ -14,6 +14,7 @@ import {
   type ShinsaState,
   type UsageForecast,
 } from '@shinsa/core';
+import { Option } from 'effect';
 import { formatDaysAndHours } from '@/lib/format/time.ts';
 
 export interface ProviderForecast {
@@ -71,7 +72,13 @@ export function listProviderForecasts(
   return listForecastProviders(snapshot).flatMap((provider) => {
     const accounts = listProviderForecastAccounts(snapshot, provider, now);
     const forecast = resolveUsageForecast(accounts, now, resolveRecentPace(state, provider, now));
-    return forecast ? [{ provider, title: resolveProviderLabel(provider), forecast }] : [];
+    return Option.toArray(
+      Option.map(forecast, (resolved) => ({
+        provider,
+        title: resolveProviderLabel(provider),
+        forecast: resolved,
+      }))
+    );
   });
 }
 

@@ -1,5 +1,5 @@
 import { type Queue, parseBriefing, resolveFallbackBriefing, type ShinsaState } from '@shinsa/core';
-import { Effect } from 'effect';
+import { Effect, Option } from 'effect';
 import type { JsonSchema } from '../agents/providers/index.ts';
 import { describeBriefingPrompt, resolveBriefingSchema, resolveTaskQuestion } from './prompt.ts';
 import { BRIEFING_SYSTEM } from './schema.ts';
@@ -17,5 +17,5 @@ export const resolveBriefingAnswer = Effect.fn('Briefings.resolve')(function* <E
     describeBriefingPrompt(state, queue, now),
     resolveBriefingSchema(resolveTaskQuestion(queue))
   );
-  return parseBriefing(answer, queue, now) ?? fallback;
+  return Option.getOrElse(parseBriefing(answer, queue, now), () => fallback);
 });

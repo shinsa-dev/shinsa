@@ -1,4 +1,5 @@
 import { type ProviderLogin, resolvePlanLabel } from '@shinsa/core';
+import { Option } from 'effect';
 import { resolveAccountProvider } from '@/lib/accounts/account.ts';
 import { resolveProviderStatus, type UsageAccountHeader } from '@/lib/accounts/usage.ts';
 
@@ -46,7 +47,7 @@ export function selectSignInCommand(login: ProviderLogin) {
 }
 
 export function resolveProviderHeader(login: ProviderLogin, now: number): UsageAccountHeader {
-  const plan = login.status === 'signed_in' ? resolvePlanLabel(login.plan ?? null) : null;
+  const plan = login.status === 'signed_in' ? Option.getOrNull(resolvePlanLabel(login.plan ?? null)) : null;
   return {
     name: resolveAccountProvider(login.provider, login.email ?? null),
     detail: plan ?? resolveTitle(login),

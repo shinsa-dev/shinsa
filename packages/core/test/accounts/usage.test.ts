@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { Option } from 'effect';
 import {
   type AccountUsage,
   listRelevantWindows,
@@ -49,21 +50,21 @@ describe('usage headroom', () => {
       'seven_day',
       'weekly:fable',
     ]);
-    expect(resolveUsedPercent(all, 'opus')).toBe(40);
-    expect(resolveUsedPercent(all, 'fable')).toBe(85);
-    expect(resolveHeadroom(all, 'fable')).toBe(15);
+    expect(Option.getOrNull(resolveUsedPercent(all, 'opus'))).toBe(40);
+    expect(Option.getOrNull(resolveUsedPercent(all, 'fable'))).toBe(85);
+    expect(Option.getOrNull(resolveHeadroom(all, 'fable'))).toBe(15);
   });
 
   test('an unknown model, or a model window without a model, counts against every run', () => {
     const anonymous = window({ id: 'weekly:x', kind: 'model', model: null, usedPercent: 70 });
-    expect(resolveUsedPercent(usage([SESSION, FABLE]), null)).toBe(85);
-    expect(resolveUsedPercent(usage([SESSION, anonymous]), 'opus')).toBe(70);
+    expect(Option.getOrNull(resolveUsedPercent(usage([SESSION, FABLE]), null))).toBe(85);
+    expect(Option.getOrNull(resolveUsedPercent(usage([SESSION, anonymous]), 'opus'))).toBe(70);
   });
 
   test('no windows means no figure, and usage over the limit leaves no headroom', () => {
-    expect(resolveUsedPercent(usage([]), 'opus')).toBeNull();
-    expect(resolveHeadroom(usage([]), 'opus')).toBeNull();
-    expect(resolveHeadroom(usage([window({ usedPercent: 120 })]), 'opus')).toBe(0);
+    expect(Option.getOrNull(resolveUsedPercent(usage([]), 'opus'))).toBeNull();
+    expect(Option.getOrNull(resolveHeadroom(usage([]), 'opus'))).toBeNull();
+    expect(Option.getOrNull(resolveHeadroom(usage([window({ usedPercent: 120 })]), 'opus'))).toBe(0);
   });
 
   test('a spent account is spent until the last of its full windows resets', () => {
@@ -72,27 +73,33 @@ describe('usage headroom', () => {
       window({ id: 'seven_day', kind: 'weekly', usedPercent: 100, resetsAt: 9_000 }),
       window({ id: 'weekly:fable', kind: 'model', model: 'Fable', usedPercent: 100, resetsAt: 20_000 }),
     ]);
-    expect(resolveSpentUntil(full, 'opus', 1_000)).toBe(9_000);
-    expect(resolveSpentUntil(full, 'fable', 1_000)).toBe(20_000);
-    expect(resolveSpentUntil(full, 'opus', 10_000)).toBeNull();
+    expect(Option.getOrNull(resolveSpentUntil(full, 'opus', 1_000))).toBe(9_000);
+    expect(Option.getOrNull(resolveSpentUntil(full, 'fable', 1_000))).toBe(20_000);
+    expect(Option.getOrNull(resolveSpentUntil(full, 'opus', 10_000))).toBeNull();
     expect(
-      resolveSpentUntil(usage([window({ usedPercent: 100, resetsAt: null })]), 'opus', 1_000)
+      Option.getOrNull(
+        resolveSpentUntil(usage([window({ usedPercent: 100, resetsAt: null })]), 'opus', 1_000)
+      )
     ).toBeNull();
-    expect(resolveSpentUntil(usage([SESSION]), 'opus', 1_000)).toBeNull();
+    expect(Option.getOrNull(resolveSpentUntil(usage([SESSION]), 'opus', 1_000))).toBeNull();
   });
 });
 
 describe('the weekly window a task budget counts', () => {
   test('reads the all-models weekly window and nothing else', () => {
-    expect(resolveWeeklyPercent(usage([SESSION, WEEKLY, FABLE]))).toBe(20);
-    expect(resolveWeeklyPercent(usage([SESSION, FABLE]))).toBeNull();
+    expect(Option.getOrNull(resolveWeeklyPercent(usage([SESSION, WEEKLY, FABLE])))).toBe(20);
+    expect(Option.getOrNull(resolveWeeklyPercent(usage([SESSION, FABLE])))).toBeNull();
   });
 
   test('a reading is the weekly window when it was read, with its reset; a pushed value has no time', () => {
     const read = { ...usage([SESSION, WEEKLY]), checkedAt: 5_000, source: 'read' as const };
-    expect(resolveWeeklyReading(read)).toEqual({ percent: 20, at: 5_000, resetsAt: WEEKLY.resetsAt });
-    expect(resolveWeeklyReading({ ...read, source: 'push' })).toBeNull();
-    expect(resolveWeeklyReading({ ...read, checkedAt: null })).toBeNull();
-    expect(resolveWeeklyReading({ ...read, windows: [SESSION] })).toBeNull();
+    expect(Option.getOrNull(resolveWeeklyReading(read))).toEqual({
+      percent: 20,
+      at: 5_000,
+      resetsAt: WEEKLY.resetsAt,
+    });
+    expect(Option.getOrNull(resolveWeeklyReading({ ...read, source: 'push' }))).toBeNull();
+    expect(Option.getOrNull(resolveWeeklyReading({ ...read, checkedAt: null }))).toBeNull();
+    expect(Option.getOrNull(resolveWeeklyReading({ ...read, windows: [SESSION] }))).toBeNull();
   });
 });

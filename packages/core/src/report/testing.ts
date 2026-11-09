@@ -1,3 +1,4 @@
+import { Option } from 'effect';
 import { parseReference, REFERENCE_SCHEME } from '../chat/references.ts';
 import type { ManualTestStep, ManualTestTargetKind, ReportTesting } from './types.ts';
 
@@ -38,7 +39,7 @@ function resolveFileHref(text: string) {
 }
 
 export function parseTestFile(value: string): TestFile | null {
-  const reference = parseReference(resolveFileHref(value.trim()));
+  const reference = Option.getOrNull(parseReference(resolveFileHref(value.trim())));
   if (reference?.kind !== 'file') return null;
   return { path: reference.path, line: reference.line, end: reference.end };
 }

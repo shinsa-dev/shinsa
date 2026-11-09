@@ -1,4 +1,4 @@
-import { Schema } from 'effect';
+import { Option, Schema } from 'effect';
 import {
   SCHEDULE_LIMITS,
   SECRET_REF_PATTERN,
@@ -106,7 +106,7 @@ export const DailyAt = HandOverRecord({
 }).check(
   Schema.makeFilter(
     ({ daily_at: text }: { daily_at: string }) =>
-      parseTimeOfDay(text) !== null ||
+      Option.isSome(parseTimeOfDay(text)) ||
       `daily_at “${text}” is not a time of day. Use 24-hour HH:MM, such as 09:00.`,
     { after: 'daily_at' }
   )

@@ -20,7 +20,7 @@ import {
   type ShinsaCommand,
   type WeeklyReading,
 } from '@shinsa/core';
-import { Clock, Context, Effect, Exit, Fiber, FileSystem, Layer, Ref } from 'effect';
+import { Clock, Context, Effect, Exit, Fiber, FileSystem, Layer, Option, Ref } from 'effect';
 import type {
   AccountLease,
   AccountLeaseRequest,
@@ -218,7 +218,9 @@ export class Accounts extends Context.Service<
             signIn: signIn?.signIn ?? 'unknown',
             signInDetail: signIn?.detail ?? null,
             usage: accountUsage,
-            spentUntil: resolveCandidateSpentUntil({ spentUntil: marked, usage: accountUsage }, model, now),
+            spentUntil: Option.getOrNull(
+              resolveCandidateSpentUntil({ spentUntil: marked, usage: accountUsage }, model, now)
+            ),
             runs: runs.get(account.id) ?? 0,
           });
         }
@@ -251,7 +253,7 @@ export class Accounts extends Context.Service<
       });
 
       const recordPlan = Effect.fn('Accounts.recordPlan')(function* (account: AccountSummary, seq: number) {
-        const plan = resolvePlanKey(account.plan);
+        const plan = Option.getOrNull(resolvePlanKey(account.plan));
         yield* dispatch(
           { type: 'account.plan_recorded', accountId: account.id, provider: CLAUDE_PROVIDER, plan },
           `account-plan:${account.id}:${plan ?? 'none'}:${seq}`
@@ -268,7 +270,8 @@ export class Accounts extends Context.Service<
         if (inspect) return;
         const state = yield* engine.state;
         const changedPlans = accounts.filter(
-          (account) => (state.accountPlans[account.id]?.plan ?? null) !== resolvePlanKey(account.plan)
+          (account) =>
+            (state.accountPlans[account.id]?.plan ?? null) !== Option.getOrNull(resolvePlanKey(account.plan))
         );
         for (const account of changedPlans) yield* recordPlan(account, state.seq);
       });
@@ -453,7 +456,7 @@ export class Accounts extends Context.Service<
       ) {
         const pushed = (yield* limits.snapshot(accountId)).source === 'push';
         yield* limits.refresh([accountId], force || pushed);
-        return resolveWeeklyReading(yield* limits.snapshot(accountId));
+        return Option.getOrNull(resolveWeeklyReading(yield* limits.snapshot(accountId)));
       });
 
       const readProviderWeeklyReading = Effect.fn('Accounts.readProviderWeeklyReading')(function* (
@@ -463,7 +466,7 @@ export class Accounts extends Context.Service<
         if (!providerIds.has(provider)) return null;
         const pushed = (yield* providerLimits.snapshot(provider)).source === 'push';
         yield* providerLimits.refresh([provider], force || pushed);
-        return resolveWeeklyReading(yield* providerLimits.snapshot(provider));
+        return Option.getOrNull(resolveWeeklyReading(yield* providerLimits.snapshot(provider)));
       });
 
       const readFastMode = Effect.fn('Accounts.readFastMode')(function* (
@@ -517,8 +520,8 @@ export class Accounts extends Context.Service<
           model,
           yield* Clock.currentTimeMillis
         );
-        if (pushed !== null) {
-          const verdict: RejectionVerdict = { retry: false, failure: { ...failure, resetAt: pushed } };
+        if (Option.isSome(pushed)) {
+          const verdict: RejectionVerdict = { retry: false, failure: { ...failure, resetAt: pushed.value } };
           return verdict;
         }
         yield* refreshProviderUsage(true);
@@ -527,7 +530,10 @@ export class Accounts extends Context.Service<
           model,
           yield* Clock.currentTimeMillis
         );
-        const verdict: RejectionVerdict = { retry: false, failure: { ...failure, resetAt } };
+        const verdict: RejectionVerdict = {
+          retry: false,
+          failure: { ...failure, resetAt: Option.getOrNull(resetAt) },
+        };
         return verdict;
       });
 

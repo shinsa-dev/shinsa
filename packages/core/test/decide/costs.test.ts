@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { Option } from 'effect';
 import {
   ADMISSION_LIMITS,
   isOverBudget,
@@ -629,7 +630,9 @@ describe('the daily usage limit', () => {
     expect(next.id).not.toBe(started);
     expect(isDispatched(harness, next.id)).toBe(true);
     expect(harness.task(taskId).usageWait?.status).not.toBe('armed');
-    expect(resolvePaceHold(harness.state, harness.task(taskId), 'claude', harness.now)).toBeNull();
+    expect(
+      Option.getOrNull(resolvePaceHold(harness.state, harness.task(taskId), 'claude', harness.now))
+    ).toBeNull();
   });
 
   test('another task is still held after one task ignores the limit', () => {
@@ -791,7 +794,7 @@ function plannedTask(
 }
 
 function needOf(harness: Harness, taskId: string) {
-  const need = resolveBuildEstimate(harness.state, harness.task(taskId))?.remainingPercent;
+  const need = Option.getOrNull(resolveBuildEstimate(harness.state, harness.task(taskId)))?.remainingPercent;
   if (need === undefined || need === null) throw new Error('no estimate');
   return need;
 }

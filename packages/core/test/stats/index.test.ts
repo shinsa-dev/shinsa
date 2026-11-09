@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { Option } from 'effect';
 import {
   NO_FOCUS_PROJECTS,
   type Repo,
@@ -348,9 +349,9 @@ describe('cache rates', () => {
       tokens: 510,
       knownUsd: 0,
     };
-    expect(resolveCacheHitRate(line)).toBe(0.6);
+    expect(Option.getOrNull(resolveCacheHitRate(line))).toBe(0.6);
     const empty = { ...line, inputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 };
-    expect(resolveCacheHitRate(empty)).toBeNull();
+    expect(Option.getOrNull(resolveCacheHitRate(empty))).toBeNull();
   });
 });
 

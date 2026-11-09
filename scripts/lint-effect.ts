@@ -7,9 +7,18 @@ const EFFECT_VALUE_IMPORT = /import\s*\{[^}]*\bEffect\b[^}]*\}\s*from\s*['"]effe
 
 const PURE_CORE_SOURCE = /^packages\/core\/src\//;
 
+const PURE_DATA_IMPORT =
+  /^import\s*\{\s*(?:(?:type\s+)?(?:Match|Option|Order|Predicate|Result)\s*,?\s*)+\}\s*from\s*['"]effect['"];?$/;
+
+function isPureDataImport(source: string) {
+  const imports = source.split('\n').filter((line) => EFFECT_IMPORT.test(line));
+  return imports.every((line) => PURE_DATA_IMPORT.test(line.trim()));
+}
+
 export function isEffectCode(file: string, source: string) {
   if (!EFFECT_IMPORT.test(source)) return false;
-  return !PURE_CORE_SOURCE.test(file) || EFFECT_VALUE_IMPORT.test(source);
+  if (PURE_CORE_SOURCE.test(file)) return EFFECT_VALUE_IMPORT.test(source);
+  return !isPureDataImport(source);
 }
 
 const PROMISE_BRIDGES = new Set(['try', 'tryPromise', 'promise']);

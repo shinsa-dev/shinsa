@@ -1,3 +1,4 @@
+import { Option } from 'effect';
 import { describeCount } from '../chat/text.ts';
 import {
   DAY_MS,
@@ -370,8 +371,9 @@ function describeTestingForReview(task: Task) {
 }
 
 function describeCoverageForReview(task: Task) {
-  const summary = describeCoverage(task.coverage);
-  if (!summary) return '';
+  const described = describeCoverage(task.coverage);
+  if (Option.isNone(described)) return '';
+  const summary = described.value;
   const gaps = listCoverageGaps(task.coverage);
   return [
     '',

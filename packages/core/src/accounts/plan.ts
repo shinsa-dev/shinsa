@@ -1,3 +1,4 @@
+import { Option } from 'effect';
 import { capitalise } from '../chat/text.ts';
 
 const PLAN_LABEL: Record<string, string> = {
@@ -8,18 +9,16 @@ const PLAN_LABEL: Record<string, string> = {
   enterprise: 'Enterprise',
 };
 
-export function resolvePlanKey(plan: string | null) {
-  if (!plan) return null;
+export function resolvePlanKey(plan: string | null): Option.Option<string> {
+  if (!plan) return Option.none();
   const key = plan
     .trim()
     .toLowerCase()
     .replace(/^claude[_\s-]*/, '')
     .replace(/[_\s-]+/g, '_');
-  return key || null;
+  return key ? Option.some(key) : Option.none();
 }
 
 export function resolvePlanLabel(plan: string | null) {
-  const key = resolvePlanKey(plan);
-  if (!key) return null;
-  return PLAN_LABEL[key] ?? capitalise(key.replace(/_/g, ' '));
+  return Option.map(resolvePlanKey(plan), (key) => PLAN_LABEL[key] ?? capitalise(key.replace(/_/g, ' ')));
 }

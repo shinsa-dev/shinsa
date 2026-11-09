@@ -1,3 +1,4 @@
+import { Option } from 'effect';
 import type { RunRole, RunUsage, Task } from '../domain/index.ts';
 import type { ShinsaState } from '../state/project.ts';
 import { resolveUsageShares, type UsageShareState } from './rate.ts';
@@ -227,11 +228,11 @@ export function listSpentBudgets(state: ShinsaState, task: Task) {
 }
 
 export function selectSpentBudget(state: ShinsaState, task: Task) {
-  return listSpentBudgets(state, task)[0] ?? null;
+  return Option.fromNullishOr(listSpentBudgets(state, task)[0]);
 }
 
 export function isOverBudget(state: ShinsaState, task: Task) {
-  return selectSpentBudget(state, task) !== null;
+  return Option.isSome(selectSpentBudget(state, task));
 }
 
 export function describeUsd(value: number) {

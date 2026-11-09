@@ -1,3 +1,4 @@
+import { Option } from 'effect';
 import { addUsage, resolveUsageDelta } from '../costs/index.ts';
 import { isProjectInFocus } from '../domain/focus.ts';
 import { type Round, resolveTaskRounds } from '../domain/rounds.ts';
@@ -130,7 +131,7 @@ function resolvePromptTokens(line: TokenLine) {
 
 export function resolveCacheHitRate(line: TokenLine) {
   const prompt = resolvePromptTokens(line);
-  return prompt === 0 ? null : line.cacheReadTokens / prompt;
+  return prompt === 0 ? Option.none() : Option.some(line.cacheReadTokens / prompt);
 }
 
 export function listUsageSlices(run: Run): UsageSlice[] {
@@ -249,7 +250,7 @@ function listTaskTokens(state: Pick<ShinsaState, 'tasks'>, fold: UsageFold): Tas
         title: task?.title ?? taskId,
         handle: task?.handle ?? null,
         usage,
-        cacheHitRate: resolveCacheHitRate(usage),
+        cacheHitRate: Option.getOrNull(resolveCacheHitRate(usage)),
       };
     })
     .sort((a, b) => b.usage.tokens - a.usage.tokens || a.taskId.localeCompare(b.taskId));
@@ -299,7 +300,7 @@ export function resolveStats(state: StatsSource, window: StatsWindow): Stats {
     days: series,
     total,
     streak: resolveStreak(series),
-    cacheHitRate: resolveCacheHitRate(total.usage),
+    cacheHitRate: Option.getOrNull(resolveCacheHitRate(total.usage)),
     byRole: listBreakdown(fold.byRole),
     byWork: listBreakdown(fold.byWork),
     byModel: listBreakdown(fold.byModel),

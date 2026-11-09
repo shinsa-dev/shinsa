@@ -26,6 +26,7 @@ import {
   type UsageRate,
 } from '@shinsa/core';
 import type { MenuItemIcon } from '@shinsa/ui/components/menu-icon';
+import { Option } from 'effect';
 import { resolveProviderIcon } from '@/lib/accounts/account.ts';
 import { sendCommandWithToast } from '@/lib/connection/commands.ts';
 import { resolveToggledRoots } from '@/lib/onboarding.ts';
@@ -295,7 +296,7 @@ function isLearningRate(account: AccountSummary, rates: UsageRates) {
 }
 
 function listWeeklyAccounts(accounts: AccountSummary[]) {
-  return accounts.filter((account) => resolveWeeklyPercent(account.usage) !== null);
+  return accounts.filter((account) => Option.isSome(resolveWeeklyPercent(account.usage)));
 }
 
 function hasLearningAccount(accounts: AccountSummary[], rates: UsageRates | null) {

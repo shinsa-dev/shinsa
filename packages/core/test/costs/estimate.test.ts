@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { Option } from 'effect';
 import {
   BUILD_ESTIMATE_LIMITS,
   DEFAULT_BUILD_COSTS,
@@ -102,7 +103,7 @@ describe('resolveBuildEstimate', () => {
   test('a task without a plan to build has no estimate', () => {
     const harness = createHarness();
     const taskId = createTask(harness);
-    expect(resolveBuildEstimate(harness.state, harness.task(taskId))).toBeNull();
+    expect(Option.getOrNull(resolveBuildEstimate(harness.state, harness.task(taskId)))).toBeNull();
   });
 
   test('without enough past builds it uses the measured cost per phase for a plan of its size', () => {
@@ -112,7 +113,7 @@ describe('resolveBuildEstimate', () => {
     const huge = writeTask(harness, base, 'huge', { phases: 12 });
     const [perSmall] = DEFAULT_BUILD_COSTS.usdPerPhase.slice(1);
     const perHuge = DEFAULT_BUILD_COSTS.usdPerPhase.at(-1) as number;
-    expect(resolveBuildEstimate(harness.state, small)).toEqual({
+    expect(Option.getOrNull(resolveBuildEstimate(harness.state, small))).toEqual({
       phases: 2,
       donePhases: 0,
       usd: (perSmall as number) * 2,
@@ -123,14 +124,14 @@ describe('resolveBuildEstimate', () => {
       samples: 0,
       trusted: false,
     });
-    expect(resolveBuildEstimate(harness.state, huge)?.usd).toBeCloseTo(perHuge * 12);
+    expect(Option.getOrNull(resolveBuildEstimate(harness.state, huge))?.usd).toBeCloseTo(perHuge * 12);
   });
 
   test('turns the cost into a share of the weekly limit at the learned rate', () => {
     const harness = createHarness();
     learnUsageRate(harness);
     const task = writeTask(harness, createPlanned(harness), 'target', { phases: 1 });
-    const estimate = resolveBuildEstimate(harness.state, task);
+    const estimate = Option.getOrNull(resolveBuildEstimate(harness.state, task));
     expect(estimate?.percent).toBeCloseTo(DEFAULT_BUILD_COSTS.usdPerPhase[0]);
     expect(estimate?.trusted).toBe(true);
   });
@@ -142,7 +143,7 @@ describe('resolveBuildEstimate', () => {
       writeFinished(harness, base, `past-${index}`, 2, index % 2 === 0 ? 5 : 15);
     }
     const target = writeTask(harness, base, 'target', { phases: 2 });
-    const estimate = resolveBuildEstimate(harness.state, target);
+    const estimate = Option.getOrNull(resolveBuildEstimate(harness.state, target));
     expect(estimate?.samples).toBe(BUILD_ESTIMATE_LIMITS.minSamples);
     expect(estimate?.usd).toBeCloseTo(30, 0);
   });
@@ -154,8 +155,12 @@ describe('resolveBuildEstimate', () => {
       const phases = (index % 5) + 1;
       writeFinished(harness, base, `past-${index}`, phases, 4 * phases);
     }
-    const small = resolveBuildEstimate(harness.state, writeTask(harness, base, 'small', { phases: 1 }));
-    const large = resolveBuildEstimate(harness.state, writeTask(harness, base, 'large', { phases: 4 }));
+    const small = Option.getOrNull(
+      resolveBuildEstimate(harness.state, writeTask(harness, base, 'small', { phases: 1 }))
+    );
+    const large = Option.getOrNull(
+      resolveBuildEstimate(harness.state, writeTask(harness, base, 'large', { phases: 4 }))
+    );
     expect(small?.usd).toBeLessThan(8);
     expect(large?.usd).toBeGreaterThan(40);
     expect(large?.usd).toBeLessThan(90);
@@ -178,9 +183,9 @@ describe('resolveBuildEstimate', () => {
     writeBuildRun(harness, 'skipped', 1000, { round: 2 });
     writeBuildRun(harness, 'skipped', 1000, { usage: undefined });
     const target = writeTask(harness, base, 'target', { phases: 2 });
-    expect(resolveBuildEstimate(harness.state, target)?.samples).toBe(0);
+    expect(Option.getOrNull(resolveBuildEstimate(harness.state, target))?.samples).toBe(0);
     writeFinished(harness, base, 'last', 2, 5);
-    const estimate = resolveBuildEstimate(harness.state, target);
+    const estimate = Option.getOrNull(resolveBuildEstimate(harness.state, target));
     expect(estimate?.samples).toBe(BUILD_ESTIMATE_LIMITS.minSamples);
     expect(estimate?.usd).toBeCloseTo(10, 0);
   });
@@ -202,9 +207,9 @@ describe('resolveBuildEstimate', () => {
     writeBuildRun(harness, 'dear', 9, { purpose: 'plan' });
     const unpriced = writeTask(harness, base, 'unpriced-plan', { phases: 2 });
     writeBuildRun(harness, 'unpriced-plan', null, { purpose: 'plan' });
-    const cheapUsd = resolveBuildEstimate(harness.state, cheap)?.usd as number;
-    expect(resolveBuildEstimate(harness.state, dear)?.usd).toBeGreaterThan(cheapUsd * 3);
-    expect(resolveBuildEstimate(harness.state, unpriced)?.usd).toBeLessThan(cheapUsd);
+    const cheapUsd = Option.getOrNull(resolveBuildEstimate(harness.state, cheap))?.usd as number;
+    expect(Option.getOrNull(resolveBuildEstimate(harness.state, dear))?.usd).toBeGreaterThan(cheapUsd * 3);
+    expect(Option.getOrNull(resolveBuildEstimate(harness.state, unpriced))?.usd).toBeLessThan(cheapUsd);
   });
 
   test('before a phase is done it subtracts what the build has spent, and never goes below nothing', () => {
@@ -213,9 +218,11 @@ describe('resolveBuildEstimate', () => {
     const perPhase = DEFAULT_BUILD_COSTS.usdPerPhase[1];
     const started = writeTask(harness, base, 'started', { phases: 2 });
     writeBuildRun(harness, 'started', 2);
-    expect(resolveBuildEstimate(harness.state, started)?.remainingUsd).toBeCloseTo(perPhase * 2 - 2);
+    expect(Option.getOrNull(resolveBuildEstimate(harness.state, started))?.remainingUsd).toBeCloseTo(
+      perPhase * 2 - 2
+    );
     writeBuildRun(harness, 'started', 100);
-    const over = resolveBuildEstimate(harness.state, started);
+    const over = Option.getOrNull(resolveBuildEstimate(harness.state, started));
     expect(over?.remainingUsd).toBe(0);
     expect(over?.usd).toBe(102);
   });
@@ -227,14 +234,17 @@ describe('resolveBuildEstimate', () => {
     const halfway = writeTask(harness, base, 'halfway', { phases: 3, done: 1 });
     writeBuildRun(harness, 'halfway', 20);
     const corrected = (perPhase + 20) / 2;
-    expect(resolveBuildEstimate(harness.state, halfway)).toMatchObject({
+    expect(Option.getOrNull(resolveBuildEstimate(harness.state, halfway))).toMatchObject({
       donePhases: 1,
       spentUsd: 20,
       remainingUsd: 2 * corrected,
       usd: 20 + 2 * corrected,
     });
     const finished = writeTask(harness, base, 'halfway', { phases: 3, done: 3 });
-    expect(resolveBuildEstimate(harness.state, finished)).toMatchObject({ remainingUsd: 0, usd: 20 });
+    expect(Option.getOrNull(resolveBuildEstimate(harness.state, finished))).toMatchObject({
+      remainingUsd: 0,
+      usd: 20,
+    });
   });
 
   test('reads the rate of the account the task runs on, else the best rate there is', () => {
@@ -267,25 +277,27 @@ describe('resolveBuildEstimate', () => {
     const base = createPlanned(harness);
     const perPhase = DEFAULT_BUILD_COSTS.usdPerPhase[0];
     const free = writeTask(harness, base, 'free', { phases: 1 });
-    expect(resolveBuildEstimate(harness.state, free)).toMatchObject({ trusted: true });
-    expect(resolveBuildEstimate(harness.state, free)?.percent).toBeCloseTo(perPhase);
+    expect(Option.getOrNull(resolveBuildEstimate(harness.state, free))).toMatchObject({ trusted: true });
+    expect(Option.getOrNull(resolveBuildEstimate(harness.state, free))?.percent).toBeCloseTo(perPhase);
     const bound = {
       ...writeTask(harness, base, 'bound', { phases: 1 }),
       account: { id: 'acc-2', email: null },
     };
     harness.state.tasks = { ...harness.state.tasks, bound };
-    expect(resolveBuildEstimate(harness.state, bound)).toMatchObject({ trusted: false });
-    expect(resolveBuildEstimate(harness.state, bound)?.percent).toBeCloseTo(perPhase * 0.05);
+    expect(Option.getOrNull(resolveBuildEstimate(harness.state, bound))).toMatchObject({ trusted: false });
+    expect(Option.getOrNull(resolveBuildEstimate(harness.state, bound))?.percent).toBeCloseTo(
+      perPhase * 0.05
+    );
     const ran = writeTask(harness, base, 'ran', { phases: 1 });
     const slow = harness.state.runs['slow-0'] as Run;
     writeBuildRun(harness, 'ran', 0, { startedAt: 5, meters: slow.meters });
     writeBuildRun(harness, 'ran', 0, { startedAt: 1 });
     writeBuildRun(harness, 'ran', 0, { startedAt: 2, meters: harness.state.runs['learned-0']?.meters });
-    expect(resolveBuildEstimate(harness.state, ran)?.trusted).toBe(false);
+    expect(Option.getOrNull(resolveBuildEstimate(harness.state, ran))?.trusted).toBe(false);
     const unknown = {
       ...writeTask(harness, base, 'unknown', { phases: 1 }),
       account: { id: 'acc-9', email: null },
     };
-    expect(resolveBuildEstimate(harness.state, unknown)?.trusted).toBe(true);
+    expect(Option.getOrNull(resolveBuildEstimate(harness.state, unknown))?.trusted).toBe(true);
   });
 });

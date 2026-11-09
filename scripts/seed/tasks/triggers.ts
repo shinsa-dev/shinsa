@@ -1,4 +1,5 @@
 import { join } from 'node:path';
+import { Option } from 'effect';
 import {
   type AccountUsage,
   type ChatNotice,
@@ -119,7 +120,10 @@ function schedule(fields: Partial<Schedule> & Pick<Schedule, 'id' | 'name' | 'te
     stopped: null,
     replayKeys: {},
     ...fields,
-    nextRunAt: fields.enabled === false ? null : resolveNextRun(fields.trigger, NOW, 'Europe/Berlin'),
+    nextRunAt:
+      fields.enabled === false
+        ? null
+        : Option.getOrNull(resolveNextRun(fields.trigger, NOW, 'Europe/Berlin')),
   };
 }
 

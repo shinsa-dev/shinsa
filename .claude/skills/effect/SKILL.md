@@ -305,7 +305,10 @@ Three tools check Effect code, and each catches what the others cannot:
   `.oxlintrc.json`.
 - **`scripts/lint-effect.ts`**, in `bun lint:conventions`, for what no diagnostic expresses: it checks every source
   file that imports `effect` or `@effect/*` (never tests), wherever it is, while the language service's matching
-  rules only look inside a generator or at every file of the repository:
+  rules only look inside a generator or at every file of the repository. Pure code that only reads Effect's data
+  types is not Effect code (`isEffectCode`): a file whose one `effect` import names only `Option`, `Result`,
+  `Match`, `Predicate` or `Order`, and in `packages/core/src` any file that does not import `Effect` itself, is held
+  to the plain-file rules instead, so a web helper or a component can unwrap an `Option` and keep its `Date.now()`:
 
 | Caught | Write instead |
 |---|---|

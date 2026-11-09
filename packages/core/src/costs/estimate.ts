@@ -1,3 +1,4 @@
+import { Option } from 'effect';
 import { CLAUDE_PROVIDER } from '../agent-models/index.ts';
 import type { Run, Task } from '../domain/index.ts';
 import { isOfCurrentRound } from '../domain/rounds.ts';
@@ -218,16 +219,16 @@ function resolveRemainingUsd(perPhase: number, shape: BuildShape, done: number, 
   return (shape.phases - done) * corrected;
 }
 
-export function resolveBuildEstimate(state: EstimateState, task: Task): BuildEstimate | null {
+export function resolveBuildEstimate(state: EstimateState, task: Task): Option.Option<BuildEstimate> {
   const shape = resolveBuildShape(state.runs, task);
-  if (!shape) return null;
+  if (!shape) return Option.none();
   const prior = resolvePriorPerPhase(resolveBuildModel(state), shape);
   const done = countDonePhases(task);
   const spentUsd = resolveSpentUsd(listBuildRuns(state.runs, task));
   const remainingUsd = resolveRemainingUsd(prior.perPhase, shape, done, spentUsd);
   const rate = resolveEstimateRate(state, task);
   const percentOf = (usd: number) => (rate ? usd * rate.percentPerUsd : null);
-  return {
+  return Option.some({
     phases: shape.phases,
     donePhases: done,
     usd: spentUsd + remainingUsd,
@@ -237,5 +238,5 @@ export function resolveBuildEstimate(state: EstimateState, task: Task): BuildEst
     remainingPercent: percentOf(remainingUsd),
     samples: prior.samples,
     trusted: rate?.trusted ?? false,
-  };
+  });
 }
