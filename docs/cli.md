@@ -892,6 +892,21 @@ Every task agent's tool: `initiatives_adopt`. Sends `initiative.adopt_task`.
 | --- | --- | --- |
 | `<task>` | text, required | The task: its handle (SW-142), its id, the start of its id, or its exact title. |
 
+#### shinsa initiatives start-lead
+
+Start a lead for an initiative: a task whose agent files and orders its tasks and reports where it stands. It never closes a gate.
+
+```
+shinsa initiatives start-lead <initiative> [--fork <text>] [--json]
+```
+
+Every task agent's tool: `initiatives_start_lead`. Sends `initiative.start_lead`.
+
+| Argument | Kind | What it is |
+| --- | --- | --- |
+| `<initiative>` | text, required | The initiative: its name, its id or the start of its id. |
+| `--fork` | text, optional | A task whose conversation the lead starts from, such as the one that began the work. |
+
 ### gates
 
 #### shinsa gates answer

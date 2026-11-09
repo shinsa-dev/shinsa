@@ -27,6 +27,7 @@ import { GitHubLayer } from '../github/layers.ts';
 import { EngineModels, ServedChangelog, ServedInstance } from '../http/schema.ts';
 import { EngineServer } from '../http/server/service.ts';
 import { resolveServerUrl } from '../http/server/url.ts';
+import { LeadWakes } from '../initiatives/service.ts';
 import {
   BUNDLE,
   createServiceRestart,
@@ -184,6 +185,7 @@ function createAgentsLayer(options: ShinsaOptions) {
   return Layer.mergeAll(
     RemoteQuickLayer,
     BriefingWriter.layer,
+    LeadWakes.layer,
     FeedbackDrafter.layer,
     Layer.unwrap(
       Effect.gen(function* () {

@@ -231,6 +231,30 @@ export const INITIATIVE_SPECS: SurfaceSpec[] = [
     done: () => 'Made the initiative.',
   }),
   defineCommand({
+    path: ['initiatives', 'start-lead'],
+    summary:
+      'Start a lead for an initiative: a task whose agent files and orders its tasks and reports where it stands. It never closes a gate.',
+    command: 'initiative.start_lead',
+    fields: [
+      INITIATIVE_FIELD,
+      {
+        name: 'fork',
+        kind: 'text',
+        description: 'A task whose conversation the lead starts from, such as the one that began the work.',
+      },
+    ],
+    build: Effect.fn('Surface.initiativesStartLead')(function* (values, client) {
+      const initiative = yield* findInitiative(client, readValue(values, 'initiative'));
+      const fork = readValue(values, 'fork');
+      return {
+        type: 'initiative.start_lead' as const,
+        initiativeId: initiative.id,
+        forkOf: fork ? yield* findTaskId(client, fork) : null,
+      };
+    }),
+    done: () => 'Started the lead.',
+  }),
+  defineCommand({
     path: ['tasks', 'join-initiative'],
     summary:
       'Add a task to an initiative, or move it to another phase. Tasks it files later join the same initiative and phase.',

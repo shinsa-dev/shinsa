@@ -13,7 +13,9 @@ export function listTaskBases(state: ShinsaState, task: Task) {
 }
 
 export function needsRoundBrief(run: Pick<Run, 'role' | 'purpose'>) {
-  return run.role === 'agent' && run.purpose !== undefined && run.purpose !== 'plan';
+  return (
+    run.role === 'agent' && run.purpose !== undefined && run.purpose !== 'plan' && run.purpose !== 'lead'
+  );
 }
 
 function resolveBrief(state: ShinsaState, task: Task, purpose: RunPurpose, phaseIndex: number | null) {

@@ -4,6 +4,7 @@ import {
   listInitiatives,
   listOpenGates,
   resolveInitiativeSheet,
+  resolveRunBrief,
   resolveTaskPipeline,
   validateComposition,
   validatePipeline,
@@ -111,6 +112,9 @@ describe('starting a lead', () => {
     expect(prompt).toContain('Its phases, in order: Dock.');
     expect(prompt).toContain('The initiative has no tasks yet.');
     expect(prompt).toContain('`report_initiative`');
+    expect(run.prompt).not.toContain('Your role: the agent for this task');
+    expect(run.prompt).not.toContain('git status');
+    expect(resolveRunBrief(harness.state, { ...run, resume: true })).not.toContain('git status');
   });
 
   test('refuses a second live lead, and starts a new one once the first is done', () => {

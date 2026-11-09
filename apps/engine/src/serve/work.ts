@@ -7,6 +7,7 @@ import { EngineConfig } from '../config/service.ts';
 import { EunoeServer } from '../eunoe/service.ts';
 import { Extensions } from '../extensions/registry/service.ts';
 import { EngineServer } from '../http/server/service.ts';
+import { LeadWakes } from '../initiatives/service.ts';
 import { ServeLock } from '../instance/lock/service.ts';
 import { describeError } from '../log/redact.ts';
 import { Remote, TeamFeeds } from '../remote/index.ts';
@@ -32,6 +33,7 @@ export const WorkLayer = Layer.effectDiscard(
     const runs = yield* RunSupervisor;
     const transcripts = yield* Transcripts;
     const briefings = yield* BriefingWriter;
+    const leads = yield* LeadWakes;
     const inbox = yield* MessageInbox;
     const schedules = yield* Schedules;
     const versions = yield* Versions;
@@ -52,6 +54,7 @@ export const WorkLayer = Layer.effectDiscard(
     const stopWork = Effect.gen(function* () {
       yield* runs.interruptForShutdown;
       yield* briefings.stop;
+      yield* leads.stop;
       yield* inbox.stop;
       yield* schedules.stop;
       yield* accounts.stop;
@@ -98,6 +101,7 @@ export const WorkLayer = Layer.effectDiscard(
     yield* remote.start;
     yield* teamFeeds.start;
     yield* briefings.schedule;
+    yield* leads.recover;
     yield* extensions.syncSnapshot;
     yield* Effect.forkDetach(extensions.syncUsage);
     yield* Effect.logInfo('[Serve] Ready').pipe(

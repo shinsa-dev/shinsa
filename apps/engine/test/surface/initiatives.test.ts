@@ -191,6 +191,21 @@ describe('shinsa initiatives', () => {
     expect((await runSpec(fake, ['initiatives', 'adopt', 'SW-101'])).text).toContain('Made the initiative.');
     expect(fake.sent).toEqual([{ type: 'initiative.adopt_task', taskId: 'task-101' }]);
   });
+
+  test('starts a lead, forked from a task when one is named', async () => {
+    const fake = createFakeClient({
+      '/api/initiatives': LIST,
+      '/api/tasks/SW-101': createTaskDetail({ task: { id: 'task-101' } }),
+    });
+    expect((await runSpec(fake, ['initiatives', 'start-lead', 'billing'])).text).toContain(
+      'Started the lead.'
+    );
+    await runSpec(fake, ['initiatives', 'start-lead', 'billing', '--fork', 'SW-101']);
+    expect(fake.sent).toEqual([
+      { type: 'initiative.start_lead', initiativeId: 'init-2', forkOf: null },
+      { type: 'initiative.start_lead', initiativeId: 'init-2', forkOf: 'task-101' },
+    ]);
+  });
 });
 
 describe('shinsa tasks join-initiative and leave-initiative', () => {

@@ -21,7 +21,7 @@ afterEach(async () => {
   world = null;
 });
 
-type Purpose = 'plan' | 'build' | 'fix' | 'review' | 'answer' | 'steer';
+type Purpose = 'plan' | 'build' | 'fix' | 'review' | 'answer' | 'lead' | 'steer';
 
 interface CachedTurn {
   sessionId: string;
@@ -88,6 +88,7 @@ async function awaitSteer(params: QueryParams, wait: SteerWait, cwd: string, cal
 function resolvePurpose(params: QueryParams, brief: string): Purpose {
   if (brief.includes('Your role: reviewer')) return 'review';
   if (brief.includes('Your role: answerer')) return 'answer';
+  if (brief.includes('call `report_initiative`')) return 'lead';
   if (brief.includes('The checks failed after the last change')) return 'fix';
   if ((params.options?.hooks?.PreToolUse?.length ?? 0) > 1) return 'plan';
   return 'build';
@@ -146,6 +147,12 @@ async function hand(params: QueryParams, purpose: Purpose, turn: number) {
   }
   if (purpose === 'review') await callTool(params, 'report_review', { findings: [] });
   if (purpose === 'answer') await callTool(params, 'answer', { answer: 'Two files.' });
+  if (purpose === 'lead') {
+    await callTool(params, 'report_initiative', {
+      narrative: `Turn ${turn}: the export grows.`,
+      questions: [],
+    });
+  }
 }
 
 const REPLY_CHARACTERS = 200;
@@ -252,6 +259,13 @@ async function mergeRound(w: World, taskId: string) {
   await w.until('the merge', () => w.task(taskId).pullRequest?.state === 'merged');
 }
 
+async function startLead(w: World) {
+  await w.engine.dispatch({ type: 'initiative.write', initiativeId: null, name: 'Chat split', phases: [] });
+  const initiativeId = Object.keys(w.state.initiatives)[0] ?? '';
+  await w.engine.dispatch({ type: 'initiative.start_lead', initiativeId, forkOf: null });
+  return initiativeId;
+}
+
 describe('the prompt cache across a task', () => {
   test('one session holds a change, an answer and a change after a merge; only its first turn writes the prefix', async () => {
     const { w, turns } = await openWorld();
@@ -332,5 +346,32 @@ describe('the prompt cache across a task', () => {
     expect(
       new Set(turns.filter((turn) => turn.sessionId === other[0]?.sessionId).map((turn) => turn.prefix)).size
     ).toBe(1);
+  });
+
+  test('a lead woken by its members resumes its one session; each wake writes only its new brief', async () => {
+    const { w, turns } = await openWorld();
+    const initiativeId = await startLead(w);
+    const initiative = () => w.state.initiatives[initiativeId];
+    await w.until('the first report', () => initiative()?.report != null);
+    const first = initiative()?.report?.runId;
+    const member = await w.createTask('Grow the export');
+    await w.engine.dispatch({ type: 'task.join_initiative', taskId: member, initiativeId, phaseId: null });
+    await w.until('a report after the wake', () => (initiative()?.report?.runId ?? first) !== first);
+
+    const isMemberTurn = (turn: CachedTurn) => turn.purpose !== 'lead' && turn.purpose !== 'review';
+    await w.until('the member at work', () => turns.some(isMemberTurn));
+
+    const leads = turns.filter((turn) => turn.purpose === 'lead');
+    const woken = leads.find((turn) => turn.brief.includes('Shinsa woke you because members'));
+    expect(leads[0]?.brief).toContain('Shinsa started you to lead the initiative “Chat split”.');
+    expect(leads[0]?.brief).not.toContain('git status');
+    expect(woken?.brief).toContain('What happened since your last turn:');
+    expect(woken?.brief).toContain('Grow the export');
+    expect(new Set(leads.map((turn) => turn.sessionId)).size).toBe(1);
+    expect(leads.slice(1).every((turn) => turn.resume === leads[0]?.sessionId)).toBe(true);
+    expect(new Set(leads.map((turn) => turn.prefix)).size).toBe(1);
+    expect(leads.filter((turn) => turn.wholePrefixWritten)).toEqual([leads[0]] as CachedTurn[]);
+    for (const turn of leads.slice(1)) expect(turn.written).toBe(countTokens(turn.brief));
+    expect(turns.find(isMemberTurn)?.prefix).toBe(leads[0]?.prefix ?? '');
   });
 });
