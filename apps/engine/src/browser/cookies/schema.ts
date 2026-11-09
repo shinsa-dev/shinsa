@@ -87,7 +87,7 @@ export const StoredCookieRow = Schema.Struct({
 });
 export type StoredCookieRow = typeof StoredCookieRow.Type;
 
-export const CdpCookie = Schema.Struct({
+const CdpCookie = Schema.Struct({
   domain: Schema.String,
   name: Schema.String,
   path: Schema.String,
@@ -96,7 +96,6 @@ export const CdpCookie = Schema.Struct({
   sameSite: Schema.optional(Schema.String),
   partitionKey: Schema.optional(Schema.Unknown),
 });
-export type CdpCookie = typeof CdpCookie.Type;
 
 export const CdpCookies = Schema.Struct({ cookies: Schema.Array(CdpCookie) });
 
