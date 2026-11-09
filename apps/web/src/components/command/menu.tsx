@@ -23,6 +23,7 @@ import { useChangelogAvailable } from '@/lib/changelog.ts';
 import { listAccountSections } from '@/lib/command/accounts.ts';
 import { listExtensionSections } from '@/lib/command/extensions.ts';
 import { listGlobalSections } from '@/lib/command/global.ts';
+import { listInitiativeSections } from '@/lib/command/initiatives.ts';
 import {
   arrangeByScore,
   type ChoiceCommand,
@@ -458,6 +459,7 @@ function CommandMenuContent({ open, focus }: { open: boolean; focus: React.RefOb
       state
         ? [
             ...listGlobalSections(state, route, theme, layout, engineCommands, focusTeams),
+            ...listInitiativeSections(state, route, engineCommands),
             ...listAccountSections(accounts),
             ...listScheduleSections(state),
             ...listServiceSections(state, terminals, Date.now()),

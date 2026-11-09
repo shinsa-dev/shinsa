@@ -17,6 +17,7 @@ export type DisclosureScope =
   | 'tasks'
   | 'settings'
   | 'automation'
+  | 'initiative'
   | 'ui'
   | 'feedback';
 

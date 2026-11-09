@@ -9,6 +9,7 @@ import {
 import { DAY } from '../kit/time.ts';
 import { listSeedEvidenceEvents } from './evidence.ts';
 import { pushSeedFeedback } from './feedback.ts';
+import { applySeedInitiative, pushSeedInitiative } from './initiatives.ts';
 import { NOW, type SeedTask } from './kit.ts';
 import { pushSeedMemory } from './memory.ts';
 import { type Timeline, pushTask } from './timeline.ts';
@@ -20,6 +21,7 @@ export function buildEvents(tasks: SeedTask[], projects: Project[], repos: Repo[
   for (const project of projects) push(start, { type: 'project.written', project });
   for (const repo of repos) push(start, { type: 'repo.registered', repo });
   pushSeedMemory(start, push);
+  pushSeedInitiative(start, push);
 
   push(start, { type: 'settings.changed', settings: { ...createSettings(), taskUsageLimit: 10 } });
   for (const task of tasks) pushTask(task, push);
@@ -28,11 +30,7 @@ export function buildEvents(tasks: SeedTask[], projects: Project[], repos: Repo[
     timeline.flatMap(({ at, event }) => (event.type === 'run.ended' ? [[event.runId, at] as const] : []))
   );
   for (const { at, event } of listSeedEvidenceEvents(runEnds)) push(at, event);
-  return stampTaskHandles(
-    timeline.sort((a, b) => a.at - b.at),
-    projects,
-    repos
-  );
+  return stampTaskHandles(applySeedInitiative(timeline.sort((a, b) => a.at - b.at)), projects, repos);
 }
 
 function stampTaskHandles(timeline: Timeline, projects: Project[], repos: Repo[]): Timeline {

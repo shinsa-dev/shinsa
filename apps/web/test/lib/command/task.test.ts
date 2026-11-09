@@ -390,6 +390,7 @@ describe('the This task section', () => {
       createTask({ id: 't1', branch: 'feat/login', worktreePath: '/tmp/t1', pullRequest: PULL_REQUEST })
     );
     expect(labels(section(sections(state, task), 'task.actions'))).toEqual([
+      'Make an initiative from this task',
       'Set priority',
       'Message the agent',
       'Open the pull request on GitHub',
@@ -435,6 +436,7 @@ describe('the This task section', () => {
     ).toEqual([
       'Resume now',
       'Don’t resume automatically',
+      'Make an initiative from this task',
       'Run on account…',
       'Set priority',
       'Message the agent',
@@ -456,6 +458,7 @@ describe('the This task section', () => {
       [createTask({ id: 't2' })]
     );
     expect(labels(section(sections(state, task), 'task.actions'))).toEqual([
+      'Make an initiative from this task',
       'Set priority',
       'Copy branch name',
       'Fork into a new task',

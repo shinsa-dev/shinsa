@@ -10,6 +10,7 @@ import { Truncate } from '@shinsa/ui/components/truncate';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
 import { LazyMenu, LazyMenuTrigger } from '@/components/controls/lazy-menu.tsx';
+import { InitiativeItems } from '@/components/initiatives/task-items.tsx';
 import { RepoIcon } from '@/components/links/repo.tsx';
 import { Hint } from '@/components/overlays/hint.tsx';
 import { SharedMark } from '@/components/share/shared-mark.tsx';
@@ -85,6 +86,7 @@ function TaskMenuItems({ state, task }: { state: ShinsaState; task: Task }) {
           <DependencyItems state={state} task={task} />
         </>
       )}
+      <InitiativeItems state={state} task={task} />
       {listTaskActions(task, commands, Date.now(), teammate).length > 0 && <DropdownMenuSeparator />}
       <TaskActionItems state={state} task={task} />
     </DropdownMenuContent>

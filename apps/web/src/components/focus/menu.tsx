@@ -1,4 +1,10 @@
-import { type FocusProjects, NO_FOCUS_PROJECTS, type Project, type ShinsaState } from '@shinsa/core';
+import {
+  type FocusProjects,
+  listInitiatives,
+  NO_FOCUS_PROJECTS,
+  type Project,
+  type ShinsaState,
+} from '@shinsa/core';
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -11,7 +17,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@shinsa/ui/components/dropdown-menu';
-import { Icon } from '@shinsa/ui/components/icon';
+import { Icon, type IconName } from '@shinsa/ui/components/icon';
 import { cn } from '@shinsa/ui/lib/utils';
 import { ProjectDot, ProjectOption } from '@/components/status/project-dot.tsx';
 import { sendCommandWithToast } from '@/lib/connection/commands.ts';
@@ -24,11 +30,13 @@ import {
   resolveFocusUntil,
   resolveKeptUntil,
   selectFocus,
+  selectFocusInitiative,
   selectFocusProjects,
   selectFocusTeam,
   toggleFocusProject,
   YOUR_WORK,
 } from '@/lib/focus.ts';
+import { INITIATIVE_ICON, INITIATIVES_TITLE } from '@/lib/initiatives/view.ts';
 import { listProjects } from '@/lib/projects.ts';
 import { resolveSettingsPath } from '@/lib/settings-tabs.ts';
 import { TEAMS_SECTION } from '@/lib/teams/settings.ts';
@@ -38,6 +46,8 @@ const YOUR_WORK_VALUE = 'all';
 
 const TEAM_VALUE_PREFIX = 'team:';
 
+const INITIATIVE_VALUE_PREFIX = 'initiative:';
+
 export const TEAM_ICON = 'IconUserDuo';
 
 export function ProjectMenuTrigger({
@@ -45,13 +55,13 @@ export function ProjectMenuTrigger({
   prefix,
   value,
   compact = false,
-  team = false,
+  icon = null,
 }: {
   color: string;
   prefix?: string;
   value: string;
   compact?: boolean;
-  team?: boolean;
+  icon?: IconName | null;
 }) {
   return (
     <DropdownMenuTrigger
@@ -68,7 +78,7 @@ export function ProjectMenuTrigger({
       }
     >
       <span className={cn('grid shrink-0 place-items-center', compact ? 'size-4' : 'size-5')}>
-        {team ? <Icon size='sm' name={TEAM_ICON} className='text-fg-3' /> : <ProjectDot color={color} />}
+        {icon ? <Icon size='sm' name={icon} className='text-fg-3' /> : <ProjectDot color={color} />}
       </span>
       {prefix && <span className='text-fg-2'>{prefix}</span>}
       <span className={cn('truncate text-fg-4', !compact && 'flex-1')}>{value}</span>
@@ -91,13 +101,16 @@ export function ProjectRadioItems({
   ));
 }
 
-function resolveRadioValue(projectId: string | null, teamId: string | null) {
+function resolveRadioValue(projectId: string | null, teamId: string | null, initiativeId: string | null) {
+  if (initiativeId) return `${INITIATIVE_VALUE_PREFIX}${initiativeId}`;
   if (teamId) return `${TEAM_VALUE_PREFIX}${teamId}`;
   return projectId ?? YOUR_WORK_VALUE;
 }
 
 function parseRadioValue(value: string): FocusTarget {
   if (value === YOUR_WORK_VALUE) return { projectId: null, teamId: null };
+  if (value.startsWith(INITIATIVE_VALUE_PREFIX))
+    return { projectId: null, teamId: null, initiativeId: value.slice(INITIATIVE_VALUE_PREFIX.length) };
   if (value.startsWith(TEAM_VALUE_PREFIX))
     return { projectId: null, teamId: value.slice(TEAM_VALUE_PREFIX.length) };
   return { projectId: value, teamId: null };
@@ -163,9 +176,19 @@ export function FocusMenu({ state, compact = false }: { state: ShinsaState; comp
   const selection = selectFocusProjects(state);
   const single = selectFocus(state);
   const focusTeam = selectFocusTeam(state, teams);
-  const label = focusTeam?.name ?? resolveFocusLabel(state, selection);
-  const keptTarget = resolveFocusTarget(selection, focusTeam?.id ?? null);
-  const radioValue = resolveRadioValue(single?.id ?? null, focusTeam?.id ?? null);
+  const initiatives = listInitiatives(state);
+  const showInitiatives = useEngineFeature('initiatives') && initiatives.length > 0;
+  const focusInitiative = selectFocusInitiative(state);
+  const label = focusInitiative?.name ?? focusTeam?.name ?? resolveFocusLabel(state, selection);
+  const keptTarget: FocusTarget = focusInitiative
+    ? { projectId: null, teamId: null, initiativeId: focusInitiative.id }
+    : resolveFocusTarget(selection, focusTeam?.id ?? null);
+  const radioValue = resolveRadioValue(
+    single?.id ?? null,
+    focusTeam?.id ?? null,
+    focusInitiative?.id ?? null
+  );
+  const triggerIcon = focusInitiative ? INITIATIVE_ICON : focusTeam ? TEAM_ICON : null;
 
   return (
     <DropdownMenu>
@@ -174,7 +197,7 @@ export function FocusMenu({ state, compact = false }: { state: ShinsaState; comp
         prefix='Focus'
         value={label ?? YOUR_WORK}
         compact={compact}
-        team={focusTeam !== null}
+        icon={triggerIcon}
       />
       <DropdownMenuContent align={compact ? 'end' : 'start'} className='min-w-52'>
         {multiple ? (
@@ -182,7 +205,7 @@ export function FocusMenu({ state, compact = false }: { state: ShinsaState; comp
             state={state}
             projects={projects}
             selection={selection}
-            team={focusTeam !== null}
+            team={focusTeam !== null || focusInitiative !== null}
           />
         ) : (
           <DropdownMenuRadioGroup
@@ -209,6 +232,28 @@ export function FocusMenu({ state, compact = false }: { state: ShinsaState; comp
                   <span className='flex min-w-0 items-center gap-2'>
                     <Icon size='sm' name={TEAM_ICON} className='text-fg-3' />
                     <span className='truncate'>{team.name}</span>
+                  </span>
+                </DropdownMenuRadioItem>
+              ))}
+            </DropdownMenuRadioGroup>
+          </>
+        )}
+        {showInitiatives && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuRadioGroup
+              value={radioValue}
+              onValueChange={(value) => changeFocus(parseRadioValue(String(value)), null)}
+            >
+              <DropdownMenuLabel>{INITIATIVES_TITLE}</DropdownMenuLabel>
+              {initiatives.map((initiative) => (
+                <DropdownMenuRadioItem
+                  key={initiative.id}
+                  value={`${INITIATIVE_VALUE_PREFIX}${initiative.id}`}
+                >
+                  <span className='flex min-w-0 items-center gap-2'>
+                    <Icon size='sm' name={INITIATIVE_ICON} className='text-fg-3' />
+                    <span className='truncate'>{initiative.name}</span>
                   </span>
                 </DropdownMenuRadioItem>
               ))}

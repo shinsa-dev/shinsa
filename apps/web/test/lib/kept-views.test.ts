@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 import {
   isHubRoute,
+  isSinglePageRoute,
   type KeptView,
   listHubViews,
   resolvePageKey,
@@ -37,6 +38,21 @@ describe('resolvePageKey', () => {
     expect(resolvePageKey({ route: { name: 'automation', scheduleId: 's1' }, search: '' }, null)).toBe(
       'automation:s1'
     );
+  });
+});
+
+describe('initiative pages', () => {
+  it('keys an initiative’s page by its reference', () => {
+    expect(resolvePageKey({ route: { name: 'initiative', reference: 'i1' }, search: '' }, null)).toBe(
+      'initiative:i1'
+    );
+  });
+
+  it('shows the initiative pages and automations one at a time, never kept or warmed', () => {
+    expect(isSinglePageRoute({ name: 'initiatives' })).toBe(true);
+    expect(isSinglePageRoute({ name: 'initiative', reference: 'i1' })).toBe(true);
+    expect(isSinglePageRoute({ name: 'automation', scheduleId: 's1' })).toBe(true);
+    expect(isSinglePageRoute({ name: 'tasks' })).toBe(false);
   });
 });
 

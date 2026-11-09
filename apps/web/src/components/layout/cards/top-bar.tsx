@@ -19,7 +19,14 @@ import { QueueMenu } from '@/components/queue/menu.tsx';
 import { ServicesMenu } from '@/components/services/menu.tsx';
 import { ConnectionStatus } from '@/components/status/connection-status.tsx';
 import { UpdateButton } from '@/components/status/update-button.tsx';
+import { useEngineFeature } from '@/lib/connection/socket.ts';
 import { resolveResetKey } from '@/lib/errors.ts';
+import {
+  INITIATIVE_ACTIVE_ICON,
+  INITIATIVE_ICON,
+  INITIATIVES_TITLE,
+  isInitiativesNavShown,
+} from '@/lib/initiatives/view.ts';
 import { isQueueButtonShown } from '@/lib/queue.ts';
 import { useRoute, useRouteTaskId } from '@/router.ts';
 
@@ -28,6 +35,7 @@ export function CardsTopBar({ state, onMore }: { state: ShinsaState; onMore: () 
   const activeTaskId = useRouteTaskId(state);
   const resetKey = resolveResetKey({ route, search: '' });
   const compact = useMediaQuery(COMPACT_BAR_QUERY);
+  const initiatives = useEngineFeature('initiatives') && isInitiativesNavShown(state, route);
   return (
     <header
       data-window-drag
@@ -46,6 +54,14 @@ export function CardsTopBar({ state, onMore }: { state: ShinsaState; onMore: () 
                 icon='IconListBullets'
                 activeIcon='IconListBulletsFilled'
               />
+              {initiatives && (
+                <NavButton
+                  page='initiatives'
+                  label={INITIATIVES_TITLE}
+                  icon={INITIATIVE_ICON}
+                  activeIcon={INITIATIVE_ACTIVE_ICON}
+                />
+              )}
               <ErrorBoundary size='icon' resetKey={resetKey}>
                 <ServicesMenu state={state} />
               </ErrorBoundary>

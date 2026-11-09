@@ -16,6 +16,7 @@ import {
   listUsageWaitCommands,
 } from '@/lib/command/accounts.ts';
 import { type GateContext, listOpenGateCommands } from '@/lib/command/gates.ts';
+import { listTaskInitiativeCommands } from '@/lib/command/initiatives.ts';
 import { listProcessCommands } from '@/lib/command/process.ts';
 import {
   type ChoiceOption,
@@ -25,6 +26,7 @@ import {
   RANK,
 } from '@/lib/command/registry.ts';
 import { listTaskActionCommands } from '@/lib/command/task-actions.ts';
+import { connection, selectEngineCommands } from '@/lib/connection/socket.ts';
 import type { LineComment } from '@/lib/review/draft.ts';
 import { BUNDLE_ICON, listStackChoices, STACK_LABEL, toggleStack, unstackTask } from '@/lib/tasks/bundles.ts';
 import {
@@ -142,6 +144,7 @@ function listThisTaskCommands(state: ShinsaState, task: Task, accounts: Accounts
     ...listProcessCommands(state, task, Date.now()),
     ...listUsageWaitCommands(task),
     ...listDependencyCommands(state, task),
+    ...listTaskInitiativeCommands(state, task, selectEngineCommands(connection.selectEngine(task.id))),
     ...listAccountBindingCommands(accounts, task),
     ...listRerunCommands(state, accounts, task),
     ...listTaskActionCommands(state, task),

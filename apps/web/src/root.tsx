@@ -6,6 +6,7 @@ import * as React from 'react';
 import { SignInDialog } from '@/components/accounts/sign-in-dialog.tsx';
 import { CommandMenu } from '@/components/command/menu.tsx';
 import { ErrorBoundary } from '@/components/errors/boundary.tsx';
+import { InitiativeDialog } from '@/components/initiatives/write-dialog.tsx';
 import { AppFrame } from '@/components/layout/frame.tsx';
 import { OnboardingShell } from '@/components/onboarding/shell.tsx';
 import { PreviewShareDialog } from '@/components/services/preview-share-dialog.tsx';
@@ -25,6 +26,7 @@ import { connection } from '@/lib/connection/socket.ts';
 import { ERROR_COPY, recordCommandMenuError, resolveResetKey } from '@/lib/errors.ts';
 import {
   isHubRoute,
+  isSinglePageRoute,
   KEPT_TASK_PAGES,
   type KeptView,
   listHubViews,
@@ -37,6 +39,7 @@ import { isRemoteBuild } from '@/lib/remote/mode.ts';
 import { type Route, replaceRoute, resolveRouteTaskId, useRoute, useSearchString } from '@/router.ts';
 import { AutomationPage } from '@/routes/automation.tsx';
 import { HomePage } from '@/routes/home.tsx';
+import { InitiativePage, InitiativesPage } from '@/routes/initiatives.tsx';
 import { OnboardingPage } from '@/routes/onboarding.tsx';
 import { SettingsPage } from '@/routes/settings.tsx';
 import { TaskPage } from '@/routes/task/index.tsx';
@@ -66,6 +69,10 @@ const PageView = React.memo(function PageContent({ state, route }: { state: Shin
       return <TaskPage state={state} taskId={route.reference} />;
     case 'automation':
       return <AutomationPage state={state} scheduleId={route.scheduleId} />;
+    case 'initiatives':
+      return <InitiativesPage state={state} />;
+    case 'initiative':
+      return <InitiativePage state={state} reference={route.reference} />;
     case 'team-task':
       return (
         <TeamTaskPage target={{ teamId: route.teamId, instanceId: route.instanceId, taskId: route.taskId }} />
@@ -94,7 +101,7 @@ function Pages({ state, route }: { state: ShinsaState; route: PageRoute }) {
   const pages = [
     ...listHubViews(hubs.current, warm),
     ...tasks.current,
-    ...(route.name === 'automation' || route.name === 'team-task' ? [{ key, view, shownAt: 0 }] : []),
+    ...(isSinglePageRoute(route) ? [{ key, view, shownAt: 0 }] : []),
   ];
   return (
     <>
@@ -202,6 +209,7 @@ function AppContent({ route }: { route: PageRoute }) {
         <HandoffRemoveConfirm />
         <PreviewShareDialog />
         <DuplicateDialog />
+        <InitiativeDialog />
       </ErrorBoundary>
     </>
   );
