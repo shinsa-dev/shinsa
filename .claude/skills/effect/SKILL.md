@@ -9,7 +9,7 @@ Shinsa is written in Effect 4 (`effect` pinned at **4.1.1**, the same exact vers
 
 `conventions` still applies (no comments, the verb catalog, where things live, tests and coverage). `CLAUDE.md` wins over both; fix the drift in the same change.
 
-**Every pattern below is real code.** `scripts/effect-guide/` compiles and runs each one: `domain.ts` (schemas, ids, errors, decoding), `machines.ts` (a service over SQL), `tunnel.ts` (a resource with a timeout and a retry schedule), `api.ts` and `handlers.ts` (an HttpApi with an auth middleware, served as a web handler), `harness.ts` and the tests beside them. When a pattern here changes, change that code and its test in the same change.
+**Every pattern below is real code.** `scripts/effect-guide/` compiles and runs each one: `domain.ts` (schemas, ids, errors, decoding), `budget.ts` (pure code: `Option`, `Result`, `Match`, the branded `Usd` and `Percent`, text decoded without an effect), `watch.ts` (a timer as a named `Schedule`), `machines.ts` (a service over SQL), `tunnel.ts` (a resource with a timeout and a retry schedule), `api.ts` and `handlers.ts` (an HttpApi with an auth middleware, served as a web handler), `harness.ts` and the tests beside them. When a pattern here changes, change that code and its test in the same change.
 
 ## What is Effect code
 
@@ -17,7 +17,7 @@ All code that does I/O, holds a resource, reads time, config or randomness, or c
 
 **I/O is Effect code whether it is synchronous or not.** A file is read and written through `FileSystem` and `Path` from `effect` (`BunServices.layer` provides them), a process runs through the engine's `Shell` (`scripts/kit`'s `Command` in a script), and a promise API is entered with `Effect.tryPromise`. `existsSync`, `readFileSync`, `Bun.spawnSync` or `Bun.which` in a plain function is I/O outside Effect even though it returns at once: its failure is a throw, not a type, and a test cannot replace it. `node:path`, `node:url` and other pure helpers stay plain.
 
-**Pure logic stays plain functions.** Core's `decide`, the folds and the derivations take values and return values: they use Schema types and return a `Result` instead of throwing (`decide` returns `Result<Decision, DomainError>`), but they are not wrapped in `Effect.succeed`, take no services and never `yield*`. Wrapping pure code in an Effect adds a runtime and hides nothing. Effect code calls pure code directly.
+**Pure logic stays plain functions.** Core's `decide`, the folds and the derivations take values and return values: they use Schema types and return a `Result` instead of throwing (`decide` returns `Result<Decision, DomainError>`), but they are not wrapped in `Effect.succeed`, take no services and never `yield*`. Wrapping pure code in an Effect adds a runtime and hides nothing. Effect code calls pure code directly. How pure code says "nothing", "failed" and "one of these" is under Pure code below.
 
 **React components stay plain React.** A component renders synchronously and is never an effect. It reaches I/O through its app's one `ManagedRuntime`: the web app's `runApp` and `forkApp` (`apps/web/src/lib/runtime/app.ts`), the promise methods `lib/` exports and `useAppEffect`, which interrupts its effect on unmount. That is the bridge Effect's integration guide gives for framework hooks (`node_modules/effect/ai-docs/src/04_integration`). Effect's `effect/reactivity` atoms with `@effect/atom-react` are the other documented path; Shinsa does not use them, and moving to them is a decision for the whole web app, never one screen.
 
@@ -154,6 +154,39 @@ machines.find(id).pipe(Effect.catchTag('MachineNotFound', () => Effect.succeed(n
 - Handle errors with `Effect.catchTag` / `catchTags` by tag, never with `instanceof` or by reading `message`.
 - **The verb catalog in Effect**: `find*` fails with a `*NotFound` error; `select*` succeeds with an `Option`; `assert*` fails with a tagged error and succeeds with `void`; `parse*` decodes text with a schema and fails with the edge's invalid-input error. The other verbs keep their meaning.
 
+## Pure code
+
+```ts
+// right: plain functions over schemas; the empty case, the failure and every variant are values the caller must handle
+export function selectBudgetShare(spend: Spend): Option.Option<Percent> {
+  if (spend.budget === 0) return Option.none();
+  return Option.some(Percent.make(Math.min(100, (spend.spent / spend.budget) * 100)));
+}
+
+export function applyCharge(spend: Spend, cost: Usd): Result.Result<Spend, BudgetExceeded> { … }
+
+export const resolveBudgetLabel = Match.type<BudgetState>().pipe(
+  Match.tagsExhaustive({ Unlimited: () => 'No budget', Within: ({ share }) => `${Math.round(share)}% used`, Over: () => 'Over budget' })
+);
+
+const decodeSpendText = Schema.decodeUnknownResult(Schema.fromJsonString(Spend));
+```
+
+```ts
+// wrong: null for nothing, a throw for a failure the caller expects, a switch that compiles when a variant is added, JSON.parse
+export function selectBudgetShare(spend: Spend): number | null { … }
+if (spent > budget) throw new Error('Over budget');
+const spend = JSON.parse(text) as Spend;
+```
+
+Pure code (core's `decide`, the folds, costs, forecast, queue, the briefing and the report validators, and the pure helpers of the engine and the web app) runs on every command and on every replay of the log, so it stays synchronous and plain: never `Effect.gen`, `Effect.runSync` or a service. It still says what can go wrong in its type (`budget.ts`):
+
+- **Nothing is `Option`, never `null`.** An exported function that may find nothing returns `Option<A>` (`Option.none()`, `Option.some(value)`), so a caller cannot forget the empty case; `select*` names it. A React prop or a stored field may stay `null` where its schema says so (`Schema.NullOr`); the rule is about what a function returns.
+- **A failure the caller must handle is a `Result`.** `Result.succeed(value)` or `Result.fail(new SomeError(…))` with a `Schema.TaggedError`, never a `throw` and never an ad hoc `{ ok, error }` object. Code that throws (a third-party parser) is entered with `Result.try({ try, catch })`. `decide` returns `Result<Decision, DomainError>` this way.
+- **A union is matched exhaustively.** `Match.type<Union>().pipe(Match.tagsExhaustive({ … }))` or `Match.valueTags`, so adding a variant breaks the build where it is not handled. A `switch` over `_tag` is fine only when TypeScript's `never` check closes it.
+- **Numbers that must not mix are branded.** Money is `Usd`, a share is `Percent` (`Schema.Finite` with its check and `Schema.brand`), ids are branded already, so a percent never lands where dollars belong. `X.make(value)` throws on a value that breaks the check: use it on values the code computes or a test writes, and decode anything from outside.
+- **Text from outside is decoded, not parsed.** `Schema.decodeUnknownResult(Schema.fromJsonString(Shape))` in pure code, `Schema.fromJsonString` with `decodeUnknownEffect` in an effect; never `JSON.parse` and a cast.
+
 ## Services and layers
 
 ```ts
@@ -198,7 +231,7 @@ const connect = connector.open(token).pipe(
 const connection = yield* Effect.acquireRelease(connect, (open) => open.close);
 ```
 
-- Anything that must be closed (a process, a socket, a tunnel, a database, a timer) is acquired with `Effect.acquireRelease` in a layer or a scope, so closing the scope, a failure or an interruption releases it. No `stop()` methods, no `finally` blocks, no `setInterval`.
+- Anything that must be closed (a process, a socket, a tunnel, a database, a timer) is acquired with `Effect.acquireRelease` in a layer or a scope, so closing the scope, a failure or an interruption releases it. No `stop()` methods, no `finally` blocks, no `setTimeout` or `setInterval`: a wait is `Effect.sleep`, a repeat is `Effect.repeat` on a named `Schedule` (`watch.ts`, tested on `TestClock`), and a component's timer runs through `useAppEffect`, so it stops when its scope closes.
 - A background loop is a fiber forked in a layer (`Layer.effectDiscard` with `Effect.forkScoped`), so it stops with the app. Work a task owns is forked in that task's scope, so cancelling the task stops everything it started.
 - Every retry and repeat is a named `Schedule` constant: exponential, capped with `Schedule.min` against `Schedule.spaced`, bounded with `Schedule.upTo` or `Schedule.recurs`, retried only `while` the error says it is retryable, and `Schedule.jittered` in production loops. Every wait on the outside world has a timeout.
 - Concurrency is explicit: `Effect.forEach(items, f, { concurrency: 4 })`, `Effect.all`. Fan-out of events is a `PubSub` exposed as a `Stream`; a work queue is a `Queue`.
@@ -290,3 +323,28 @@ Three tools check Effect code, and each catches what the others cannot:
 It also checks every `.ts` file that does not import `effect` under `apps/*/src`, `apps/*/scripts`, `packages/*/src`, `packages/*/scripts` and `scripts/` (never tests, never `.tsx` components): an `await`, an `async` function, a `new Promise` or a promise chain there fails as Promise I/O outside Effect (`isPromiseIoSource`, `PROMISE_IO_MESSAGE`), and a value import of `node:fs`, `node:fs/promises` or `node:child_process`, or any use of `Bun.spawn`, `spawnSync`, `file`, `write`, `which` or `build`, fails as file or process I/O outside Effect (`listSyncIoLines`, `SYNC_IO_MESSAGE`; a `type` import is fine). `SYNC_IO_EXEMPT` names the few synchronous edges a caller outside Effect needs, each one small file doing nothing else: `apps/engine/src/agents/transcripts/file.ts`, whose file watcher reads a run's appended bytes and moves its offset in one synchronous step, so two reads never interleave; `apps/engine/src/eunoe/files.ts`, the thread store and request log `@chroxify/eunoe` calls synchronously; `apps/engine/src/store/evidence/image-file.ts`, the tool image a provider's result mapper stores while it maps a result synchronously; `apps/engine/src/git/blobs/spawn.ts`, the `git cat-file --batch-command` process the object reader keeps open and talks to over stdin and stdout, which `Shell` (one command, one result) does not model; `apps/engine/src/agents/providers/claude/process/spawn.ts` and `apps/engine/src/agents/providers/codex/client/spawn.ts`, the Claude Code process the Agent SDK drives and the Codex app server, each kept open and talked to over stdio for a whole session; and `apps/engine/src/terminals/pty/spawn.ts`, a terminal's shell on a PTY (`Bun.spawn` with `terminal`), which `Shell` cannot open; `apps/engine/src/cli/log-file.ts`, the engine log that replaces the process's `stdout` and `stderr` writes, which Node calls synchronously; `scripts/kit/bundle.ts`, `Bun.build` for the engine and the desktop app, which Effect has no service for. A listing that needs file types uses `FileSystem.readDirectoryEntries`, never `readdir` with `withFileTypes`. A file that does import `effect` is held to the same line: every call of a `node:fs` or `node:child_process` import, or of one of those `Bun` functions, must sit inside a function passed to `Effect.try`, `Effect.tryPromise`, `Effect.promise`, `Effect.sync` or `Effect.callback`, or to a local helper that only hands its argument to one of them (`const attempt = (run) => Effect.try({ try: run, catch })`); anywhere else, such as a plain helper beside the service, it fails (`listUnbridgedIoLines`, `EFFECT_SYNC_IO_MESSAGE`). On top of that, a raw `node:fs`, `node:child_process` or `Bun` I/O call in Effect code fails even inside a bridge (`listRawIoViolations`, `RAW_IO_MESSAGE`): Effect code reads and writes through `FileSystem` and `Path` and runs processes through `Shell` or the kit's `Command`, and only the `SYNC_IO_EXEMPT` edges above touch the platform directly. The lint walks `src`, `test` and `scripts` of every folder under `apps/` and all of `packages/` and `scripts/`, so a new app is checked the day it lands. Write the module as a service with Effect.fn steps and enter the promise API with `Effect.tryPromise`; a runtime runs it only at an edge: the engine's `main.ts` (`BunRuntime.runMain`), a script's last line (`BunRuntime.runMain`), the web app's `runApp`/`forkApp`, a Worker's `fetch`, an Astro endpoint, or a test. React components stay plain React and reach I/O through those edges.
 
 Every engine source file but `main.ts` is also checked for running effects itself: `ManagedRuntime`, `edgeRuntime`, a `.runPromise`, `.runSync`, `.runFork` or `.runCallback` call, and an exported class that is not a `Context.Service`, a `Context.Reference`, a schema class or an `Error` fail (`listEngineRuntimeLines`). A module is a service with its layer, its dependencies are yielded, and a callback from outside Effect (a Bun socket handler, a PTY event, an SDK callback) enters with `Effect.runForkWith(context)` or `Effect.runPromiseWith(context)` on the context its layer captured.
+
+### Code outside Effect, and the baseline
+
+Five more rules (`listBaselineRuleViolations` in `scripts/lint-effect.ts`) reach the code that does not import `effect`, over every source file under `apps/*/src`, `apps/*/scripts`, `packages/*/src`, `packages/*/scripts` and `scripts/` (never tests):
+
+| Rule | Where | Caught | Write instead |
+|---|---|---|---|
+| `throw` | plain `.ts` | `throw` | `Option` or `Result` in pure code, a `Schema.TaggedError` in an effect (Pure code) |
+| `try-catch` | plain `.ts` | `try` / `catch` | `Result.try` in pure code, `Effect.try` in an effect (Pure code) |
+| `null-return` | `packages/core/src` | an exported function with a `return null` of its own | `Option` (Pure code) |
+| `json-parse` | every file without `effect`, `.tsx` too | `JSON.parse` | `Schema.decodeUnknownResult(Schema.fromJsonString(Shape))` (Schemas) |
+| `timer` | every source file, `.tsx` too | `setTimeout`, `setInterval` outside `Effect.callback` | `Effect.sleep`, a named `Schedule`, `useAppEffect` (Resources, concurrency and retries) |
+
+Effect files already fail on `throw`, `try` and `JSON.parse` through the table above, and a promise in any non-`.tsx` source already fails as Promise I/O outside Effect, so those need no baseline: their count is zero and stays zero.
+
+The code written before these rules is frozen in `scripts/lint-baseline.json`: per rule, per file, how many are left. `bun lint:conventions` fails when a file has **more** than its entry (each new line is reported with the rule's message) and when it has **fewer** (lower the entry, so the fix cannot come back). `bun scripts/lint-conventions.ts --write-baseline` rewrites the file from the current counts after a fix. `bun lint:conventions` passes `--base origin/main` and fails when any entry is higher than on that branch, or a file is added that it does not list: **the baseline only shrinks**, and a new violation is fixed, never added to the baseline (a base branch without the file, as before the first baseline merged, skips this comparison). The stacked parts of the Effect migration empty it package by package.
+
+### What stays plain, and why
+
+- **Pure code** (core's `decide`, the folds in `state/`, `costs`, `forecast`, `queue`, `briefing`, `report`, `prompts`; the pure helpers of the engine and the web app): plain synchronous functions, because they run on every command and every replay and an effect would only add a runtime. They use `Option`, `Result`, `Match` and branded schemas (Pure code). `decide`'s guards throw a `DomainError` that `Result.try` catches at `decide`'s one boundary, so a caller still gets a `Result`; those throws stay in the baseline until they are threaded as `Result`.
+- **React components** (`.tsx`): plain props and plain promises, reaching I/O through `runApp`, `forkApp` and `useAppEffect`. They are held to the `json-parse` and `timer` rules, never to `throw` or `try-catch`, since an error boundary and an event handler are React's own failure paths.
+- **The kit** (`packages/ui`): reusable React with no I/O; its timers count toward the baseline like any component's.
+- **`node:path`, `node:url` and other pure helpers**: no I/O, so nothing for Effect to type.
+- **The `SYNC_IO_EXEMPT` edges** above: a process, a PTY, a synchronous callback or `Bun.build` that no Effect service models, each one small file doing nothing else.
+- **A brand's `make`** throws on a value that breaks its check; it is kept for values the code computes and tests, while outside input is decoded.
