@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import {
+  listInitiativeProgress,
   listInitiatives,
   resolveInitiativeSheet,
   type Round,
@@ -146,5 +147,23 @@ describe('resolveInitiativeSheet', () => {
       ['Studio', 0],
     ]);
     expect(sheet?.next).toEqual([]);
+  });
+
+  test('lists the same progress per phase as the sheet', () => {
+    const { harness, id, dock, studio } = createInitiativeHarness();
+    const shipped = member(harness, id, dock, 'Ship the ask box');
+    shipAndMerge(harness, shipped);
+    member(harness, id, dock, 'Build the dock');
+    const dropped = member(harness, id, studio, 'Port the old studio');
+    harness.send({ type: 'task.cancel', taskId: dropped });
+    const initiative = harness.state.initiatives[id];
+    if (!initiative) throw new Error('no initiative');
+
+    const progress = listInitiativeProgress(harness.state, initiative);
+    expect(progress).toEqual(resolveInitiativeSheet(harness.state, id, harness.now)?.progress ?? []);
+    expect(progress.map((entry) => [entry.phase?.name, entry.shipped, entry.total, entry.dropped])).toEqual([
+      ['Dock', 1, 2, 0],
+      ['Studio', 0, 1, 1],
+    ]);
   });
 });
