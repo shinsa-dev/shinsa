@@ -110,8 +110,14 @@ another provider drops the model it had, unless the same change names one (switc
 `defaultModel` the same way). Model names come from `KNOWN_AGENT_PROVIDERS` (Claude's `KNOWN_AGENT_MODELS`, "opus"
 is "Opus 5.5", and the curated `KNOWN_CODEX_MODELS`), so Settings shows the right names from the first paint;
 `GET /api/providers` then replaces them with each provider's live catalog (`listModels`: the Claude SDK's
-`supportedModels`, Codex's `model/list`), labelled the same way (`resolveModelLabel`). `GET /api/models` still
-serves the default provider's list, the one setup's Model step offers.
+`supportedModels`, Codex's `model/list`), labelled the same way (`resolveModelLabel`). Each provider keeps its
+catalog in an Effect `Cache` keyed by the program's path and version, for `MODEL_CATALOG_TTL` (5 minutes): an
+update to Claude Code or Codex is a new key, so the next read asks the new program straight away, and a failed or
+empty answer is not kept, so the next read asks again; meanwhile the read serves the last list the provider gave
+(the built-in list until it gave one), so a failed ask never swaps a live list for older built-in names. The web asks
+`GET /api/providers` on every mount of `useAgentProviders()` (Settings and its Agents section), showing the last
+list until the answer comes; readers that open at once share one request. `GET /api/models` still serves the
+default provider's list, the one setup's Model step offers.
 
 **The agent chooses the checks; Shinsa runs them.** A check is not an agent: it is a command the Agent chose for its
 task and Shinsa ran, so its result is a fact, never an agent's claim (Checks, below).
@@ -6329,8 +6335,8 @@ to resume, `thread/resume` with the stored thread id, and runs Shinsa's brief as
   update`"; a missing codex says how to install it.
 - **One-shot calls** (`complete.ts`): an ephemeral read-only thread with `approvalPolicy: never`, the system prompt as
   its instructions, one turn at low effort with the schema as `outputSchema`, the last agent message as the answer.
-- **Models and sign-in.** `model/list` on a short-lived app server (paged, hidden models left out; the built-in list
-  when it fails), and `codex login status` for the sign-in (`login.ts`, like Kanna's provider check).
+- **Models and sign-in.** `model/list` on a short-lived app server (paged, hidden models left out; the last list it gave, or
+  the built-in one, when it fails), and `codex login status` for the sign-in (`login.ts`, like Kanna's provider check).
 
 **Resume fallback** (`agents/turns/plan.ts`). Before resuming, the supervisor checks the session: a session owned by another
 provider is handed over; one marked lost (`run.session_lost`, recorded for every run that used it, so no retry or
