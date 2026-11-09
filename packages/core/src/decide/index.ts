@@ -85,7 +85,7 @@ import { recordWelcome } from './onboarding.ts';
 import { applyOrchestration } from './orchestration.ts';
 import { recordOverlaps } from './overlaps.ts';
 import { pauseTask } from './pause.ts';
-import { recordAway } from './presence.ts';
+import { recordAway, recordClock } from './presence.ts';
 import {
   recordBundleCheck,
   recordClosedPullRequests,
@@ -218,6 +218,8 @@ function apply(decider: Decider, command: ShinsaCommand) {
       return changeFocus(decider, command);
     case 'away.record':
       return recordAway(decider, command);
+    case 'clock.record':
+      return recordClock(decider, command);
     case 'settings.change':
       return changeSettings(decider, command);
     case 'task.create':

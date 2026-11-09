@@ -112,6 +112,7 @@ export interface ShinsaState {
   accountPlans: Record<string, AccountPlan>;
   usagePaces: Record<string, RecordedPace>;
   onBehalfActions: OnBehalfAction[];
+  timeZone: string | null;
   teammateTasks?: Readonly<Record<string, true>>;
   teammateRepos?: Readonly<Record<string, true>>;
 }
@@ -144,6 +145,7 @@ export function createState(): ShinsaState {
     accountPlans: {},
     usagePaces: {},
     onBehalfActions: [],
+    timeZone: null,
   };
 }
 
@@ -891,6 +893,9 @@ function applyEventBody(state: ShinsaState, event: ShinsaEvent): ShinsaState {
       break;
     case 'away.recorded':
       recordAway(state, event);
+      break;
+    case 'clock.recorded':
+      state.timeZone = event.timeZone;
       break;
     case 'account.plan_recorded':
       applyAccountPlan(state, event);

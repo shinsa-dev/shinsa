@@ -183,6 +183,8 @@ export {
   AUTOPILOT_MERGES,
   AUTOPILOT_RISKS,
   AUTOPILOT_URGENT_ACTIONS,
+  ACTIVE_DAY_LIMIT,
+  type ActiveDay,
   type AutopilotContact,
   type AutopilotContactKind,
   type AutopilotMerge,

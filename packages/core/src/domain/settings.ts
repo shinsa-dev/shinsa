@@ -88,6 +88,14 @@ export function isSameAutopilotContact(left: AutopilotContact, right: AutopilotC
   return left.kind === right.kind && left.teamId === right.teamId && left.id === right.id;
 }
 
+export interface ActiveDay {
+  weekday: number;
+  from: number;
+  to: number;
+}
+
+export const ACTIVE_DAY_LIMIT = 14;
+
 export interface AutopilotPolicy {
   enabled: boolean;
   approveUpTo: AutopilotRisk;
@@ -148,6 +156,7 @@ export interface Settings {
   autopilot?: AutopilotPolicy;
   autoPace?: boolean;
   sharedTeams?: string[];
+  activeHours?: ActiveDay[] | null;
 }
 
 export const SETTINGS_KEYS = [
@@ -182,6 +191,7 @@ export const SETTINGS_KEYS = [
   'autopilot',
   'autoPace',
   'sharedTeams',
+  'activeHours',
 ] as const satisfies readonly (keyof Settings)[];
 
 export const HUMAN_ONLY_SETTINGS = [
@@ -202,6 +212,7 @@ export const HUMAN_ONLY_SETTINGS = [
   'watchdogsIgnoreUsageLimits',
   'autoPace',
   'sharedTeams',
+  'activeHours',
 ] as const satisfies readonly (keyof Settings)[];
 
 export const HUMAN_ONLY_REPO_FIELDS = ['checkCommands', 'workspace', 'coverage'] as const;
@@ -282,6 +293,7 @@ const DEFAULT_SETTINGS: Settings = {
   autopilot: AUTOPILOT_DEFAULTS,
   autoPace: false,
   sharedTeams: [],
+  activeHours: null,
 };
 
 export function createSettings(): Settings {

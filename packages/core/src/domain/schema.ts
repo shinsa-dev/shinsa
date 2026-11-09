@@ -25,6 +25,7 @@ import {
 } from './fields.ts';
 import { SCHEDULE_TRIGGER_KINDS, WEBHOOK_ENCODINGS } from './schedules.ts';
 import {
+  ACTIVE_DAY_LIMIT,
   AUTOPILOT_CONTACT_KINDS,
   AUTOPILOT_MERGES,
   AUTOPILOT_RISKS,
@@ -131,6 +132,12 @@ const AutopilotPatch = Strict(
   'autopilot'
 );
 
+const ActiveDayPatch = Strict(
+  { weekday: WholeNumber, from: WholeNumber, to: WholeNumber },
+  'Active hours',
+  'activeHours day'
+);
+
 export const SettingsPatch = Strict(
   {
     defaultProvider: Schema.optionalKey(Id()),
@@ -164,6 +171,7 @@ export const SettingsPatch = Strict(
     watchdogsIgnoreUsageLimits: Schema.optionalKey(Bool),
     autoPace: Schema.optionalKey(Bool),
     sharedTeams: Schema.optionalKey(List(Id())),
+    activeHours: Schema.optionalKey(OrNull(List(ActiveDayPatch, ACTIVE_DAY_LIMIT), FIELD_MESSAGES.list)),
   } satisfies Record<(typeof SETTINGS_KEYS)[number], Schema.Top>,
   'Settings',
   'patch'

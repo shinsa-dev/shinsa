@@ -79,6 +79,15 @@ export const WorkLayer = Layer.effectDiscard(
       return;
     }
     yield* engine.start;
+    yield* engine
+      .dispatch({ type: 'clock.record', timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone })
+      .pipe(
+        Effect.catchCause((cause) =>
+          Effect.logWarning('[Serve] Could not record the time zone of this Mac').pipe(
+            Effect.annotateLogs({ error: describeError(Cause.squash(cause)) })
+          )
+        )
+      );
     yield* effects.startWatching;
     yield* schedules.start;
     for (const clock of clocks) yield* clock.start;

@@ -374,6 +374,7 @@ describe('acting for the human', () => {
       watchdogsIgnoreUsageLimits: false,
       autoPace: true,
       sharedTeams: ['team-1'],
+      activeHours: [{ weekday: 1, from: 9, to: 17 }],
     };
     const fields: Required<Pick<Repo, (typeof HUMAN_ONLY_REPO_FIELDS)[number]>> = {
       checkCommands: ['bun test'],

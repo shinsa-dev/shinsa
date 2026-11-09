@@ -320,6 +320,7 @@ type SystemCommand =
   | { type: 'account.removed'; accountId: string }
   | { type: 'account.plan_recorded'; accountId: string; provider: string; plan: string | null }
   | { type: 'usage.pace_recorded'; provider: string; pace: number | null }
+  | { type: 'clock.record'; timeZone: string }
   | { type: 'onboarding.welcome'; body: string }
   | DelegationSystemCommand
   | ScheduleSystemCommand

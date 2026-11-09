@@ -72,6 +72,7 @@ describe('the settings a command may change', () => {
       autopilot: AUTOPILOT_DEFAULTS,
       autoPace: false,
       sharedTeams: [],
+      activeHours: null,
     };
     expect(Object.keys(every).sort()).toEqual([...SETTINGS_KEYS].sort());
   });

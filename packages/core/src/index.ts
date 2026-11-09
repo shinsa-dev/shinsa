@@ -22,6 +22,7 @@ export * from './domain/index.ts';
 export * from './effects/index.ts';
 export * from './forecast/index.ts';
 export type { ShinsaEvent, ShinsaEventInput } from './events/index.ts';
+export * from './presence/index.ts';
 export * from './progress/index.ts';
 export {
   type DeliveredQuestion,

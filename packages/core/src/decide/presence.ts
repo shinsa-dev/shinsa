@@ -1,5 +1,6 @@
 import type { CommandOf } from '../commands/index.ts';
 import { DAY_MS, DomainError } from '../domain/index.ts';
+import { isTimeZone } from '../schedules/time.ts';
 import type { Decider } from './decider.ts';
 
 const AWAY_SPAN_LIMIT_MS = 30 * DAY_MS;
@@ -19,4 +20,12 @@ export function recordAway(decider: Decider, command: CommandOf<'away.record'>) 
     });
   }
   decider.emit({ type: 'away.recorded', from, to });
+}
+
+export function recordClock(decider: Decider, command: CommandOf<'clock.record'>) {
+  if (!isTimeZone(command.timeZone)) {
+    throw new DomainError({ code: 'clock_refused', message: `${command.timeZone} is not a time zone.` });
+  }
+  if (decider.state.timeZone === command.timeZone) return;
+  decider.emit({ type: 'clock.recorded', timeZone: command.timeZone });
 }

@@ -1,6 +1,7 @@
 import { AGENT_ROLES, resolveAgentProvider } from '../agent-models/index.ts';
 import type { CommandOf } from '../commands/index.ts';
 import {
+  type ActiveDay,
   type AutopilotContact,
   DomainError,
   HUMAN_ONLY_REPO_FIELDS,
@@ -87,6 +88,7 @@ function assertSettings(patch: Partial<Settings>) {
     });
   }
   assertAutopilotContacts(patch.autopilot?.contacts);
+  assertActiveHours(patch.activeHours);
   const budget = patch.taskBudgetUsd;
   if (budget !== undefined && budget !== null && !(Number.isFinite(budget) && budget > 0)) {
     throw new DomainError({ code: 'settings_invalid', message: 'The cost limit must be above zero.' });
@@ -98,6 +100,27 @@ function assertSettings(patch: Partial<Settings>) {
   if (!isPaceLimit(patch.dailyUsageLimit)) {
     throw new DomainError({ code: 'settings_invalid', message: 'The daily usage limit must be above zero.' });
   }
+}
+
+function isActiveDay(day: ActiveDay) {
+  return isWholeBetween(day.weekday, 0, 6) && isWholeBetween(day.from, 0, 23) && isWholeBetween(day.to, day.from + 1, 24);
+}
+
+function hasOverlap(days: readonly ActiveDay[]) {
+  return days.some((day, index) =>
+    days
+      .slice(0, index)
+      .some((earlier) => earlier.weekday === day.weekday && earlier.from < day.to && day.from < earlier.to)
+  );
+}
+
+function assertActiveHours(days: readonly ActiveDay[] | null | undefined) {
+  if (!days) return;
+  if (days.every(isActiveDay) && !hasOverlap(days)) return;
+  throw new DomainError({
+    code: 'settings_invalid',
+    message: 'Active hours run from 0 to 24 on weekdays 0 to 6, each span ending after it starts, without overlaps.',
+  });
 }
 
 function assertAutopilotContacts(contacts: readonly AutopilotContact[] | undefined) {
