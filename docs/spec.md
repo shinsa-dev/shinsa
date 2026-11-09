@@ -1329,7 +1329,8 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
   signed in, you could not sign in to it, and Google refuses to sign in to a browser a program drives. You signed in
   again for every task that needed a signed-in screen, or the agent went without.
 - **One browser per project.** The engine keeps one Chrome per project, headless, started when an agent needs it and
-  stopped when idle, and every agent of the project drives it through a key that lasts as long as its run. Its
+  stopped when idle, and every agent of the project drives it through a key that lasts as long as its run. The
+  agents share its sign-ins but each sees only the pages it opened, so two tasks never drive the same tab. Its
   sign-ins stay until the site signs you out (`docs/engine.md` → The shared browser).
 - **Sign in from your own browser.** Settings → Projects → Browser copies the sign-ins of the sites you tick from your
   everyday Chromium browser (Dia, Chrome, Arc, Brave, Edge), or opens the project's browser as a plain window, with

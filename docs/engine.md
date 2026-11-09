@@ -6059,15 +6059,22 @@ you: Settings → Browser ─────────┤
   The route refuses a connection from outside this machine, from another site's Origin, or with a key that is not a
   live run's, and answers `browser_unavailable` (503) when Chrome is not installed, fails to start or the sign-in
   window is open. It relays the debugging protocol both ways and refuses `Browser.close` and `Browser.crash`, so one
-  agent cannot take every other agent's pages down. A key names its project, so one project's agents never reach
+  agent cannot take every other agent's pages down. Every agent shares the default context, so the cookies are one
+  jar, but each connection sees only its own pages (`createTargetFilter`): a page counts as its own when it opened it
+  (`Target.createTarget`) or a page of its own opened it (a popup, by `openerId`). Every other page is hidden from its
+  `Target.attachedToTarget`, events and `Target.getTargets`, resumed if it waits for this connection and detached, and
+  closing or attaching to it is refused; otherwise the Playwright MCP would adopt the pages already open, so two tasks
+  would drive the same tab. A page that appears while the agent's own new page is on the way is held until Chrome says
+  which page it opened. A key names its project, so one project's agents never reach
   another's browser. Since Playwright will not start with both a device and an endpoint, Shinsa's default
   `Desktop Chrome HiDPI` is left out on the shared browser; a device or endpoint you set on the server yourself wins.
   A task with no project gets no key, and its MCP starts a headless browser of its own as before.
 - **Copying sign-ins** (`BrowserCookies`). It finds your Chromium browsers (Dia, Chrome, Arc, Brave, Edge;
   `SOURCE_BROWSERS`), your default one first (Launch Services), and lists the sites each is signed in to from its
   Default profile's cookie file, copied to a temporary folder first so the browser is never locked or written to.
-  Listing reads only host names, so it asks for nothing; a site counts as signed in only by a cookie that is not an
-  analytics, bot or load-balancer one (`NOT_SIGN_IN_COOKIES`), and sites group by registrable domain with a short list
+  Listing reads only host names, so it asks for nothing; a site counts as signed in only by an HttpOnly cookie that is
+  not cross-site (`SameSite=None`, which ad and tracking cookies need) and not an analytics, bot or load-balancer one
+  (`NOT_SIGN_IN_COOKIES`), and sites group by registrable domain with a short list
   of shared hosting suffixes (`MULTI_PART_SUFFIXES`), not the full public suffix list. Copying the sites you tick reads
   that browser's key from your Keychain (`security find-generic-password`, the `<Browser> Safe Storage` item; macOS
   asks you once), decrypts their cookies and writes them into the project's Chrome with `Storage.setCookies`. Expired
@@ -6076,13 +6083,15 @@ you: Settings → Browser ─────────┤
   Google sites are signed in in the window instead. Safari and Firefox are not read, and all of this is macOS only.
 - **The sign-in window.** Open sign-in window stops the headless Chrome and opens the same profile as a normal Chrome
   window, with no debugging port and nothing attached, so Google lets you sign in. While it is open, agents are
-  refused with `signing_in`; Done (or closing the window) hands the profile back, and the next agent starts it
-  headless again with your sign-in in it.
+  refused with `signing_in`; Done, or quitting that Chrome (⌘Q), hands the profile back, and the next agent starts it
+  headless again with your sign-in in it. Closing its last window does not, since Chrome on macOS keeps running
+  without one; Open sign-in window then opens a new window in that Chrome (`BrowserHost.reveal`, a second launch on the
+  profile that Chrome hands to the one running).
 - **Agents ask with `request_browser_sign_in {url, reason}`** (`agent.request_browser_sign_in`), the building Agent and
   the investigator only. It opens a `browser_sign_in` gate naming the site (`browserSignIn: {url, site}`) and the run
   waits on it like a question (Gates, above); a task with no project is refused (`browser_no_project`). The task
   overview shows it as a card (`BrowserSignInCard`): Copy from your default browser copies that site and answers the
-  gate in one click (not offered for Google sites), Open sign-in window then Done answers it the same way, Choose
+  gate in one click when that browser is signed in to it (not offered for Google sites), Open sign-in window then Done answers it the same way, Choose
   sites… opens the copy dialog, and Skip rejects it. Approve tells the agent the browser is signed in and to open the
   page again; reject to carry on without it (`resolveBrowserSignInReply`). Only you answer it, and copying and the
   window happen on this machine, so on app.shinsa.dev the card offers only I signed in and Skip, and a guest or a

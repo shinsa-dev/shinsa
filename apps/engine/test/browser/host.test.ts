@@ -141,7 +141,7 @@ describe('the browser host', () => {
     expect(chrome.launches()).toHaveLength(1);
   });
 
-  test('opens a plain window for signing in, refuses agents meanwhile and hands back after', async () => {
+  test('opens a plain window for signing in, shows it again on a second open, refuses agents meanwhile and hands back after', async () => {
     const chrome = createFakeChrome();
     const [refused, during, after] = await runHost(
       chrome,
@@ -150,8 +150,9 @@ describe('the browser host', () => {
         const scope = yield* Scope.make();
         yield* Scope.provide(host.acquire(SHINSA), scope);
         yield* host.openWindow(SHINSA, SIGN_IN);
+        yield* awaitPid(chrome, SHINSA);
         yield* host.openWindow(SHINSA, SIGN_IN);
-        yield* awaitLaunches(chrome, 2);
+        yield* awaitLaunches(chrome, 3);
         const refusal = yield* Effect.flip(host.acquire(SHINSA));
         const signingIn = yield* host.resolveMode(SHINSA);
         yield* Scope.close(scope, Exit.void);
@@ -165,7 +166,10 @@ describe('the browser host', () => {
     expect(during).toBe('window');
     expect(after).toBe('headless');
     const launches = chrome.launches();
-    expect(launches).toHaveLength(3);
+    expect(launches).toHaveLength(4);
+    expect(launches[2]).not.toContain('--headless');
+    expect(launches[2]?.endsWith(SIGN_IN)).toBe(true);
+    expect(launches[3]).toContain('--headless=new');
     expect(launches[1]).not.toContain('--headless');
     expect(launches[1]).not.toContain('remote-debugging');
     expect(launches[1]).toContain('--use-mock-keychain');

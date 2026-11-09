@@ -152,6 +152,28 @@ export class BrowserHost extends Context.Service<
         return started;
       });
 
+      const reveal = Effect.fn('BrowserHost.reveal')(function* (
+        profile: BrowserProfile,
+        url: SignInUrl | null
+      ) {
+        const executable = yield* findExecutable;
+        const handOff = spawner
+          .spawn(
+            ChildProcess.make(
+              executable,
+              [`--user-data-dir=${resolveProfilePath(profile)}`, ...SHARED_ARGS, ...(url ? [url] : [])],
+              { stdin: 'ignore', stdout: 'ignore', stderr: 'ignore', forceKillAfter: settings.stopTimeout }
+            )
+          )
+          .pipe(
+            Effect.flatMap((handle) => handle.exitCode),
+            Effect.timeoutOption(settings.stopTimeout),
+            Effect.ignore,
+            Effect.scoped
+          );
+        yield* Effect.forkIn(handOff, layerScope);
+      });
+
       const ensureHeadless = Effect.fn('BrowserHost.ensureHeadless')(function* (profile: BrowserProfile) {
         const current = yield* selectRunning(profile);
         if (Option.isSome(current) && current.value.mode === 'window') {
@@ -207,7 +229,7 @@ export class BrowserHost extends Context.Service<
         yield* lock.withPermit(
           Effect.gen(function* () {
             const current = yield* selectRunning(profile);
-            if (Option.isSome(current) && current.value.mode === 'window') return;
+            if (Option.isSome(current) && current.value.mode === 'window') return yield* reveal(profile, url);
             yield* stopRunning(profile);
             yield* launch(profile, 'window', url ? [url] : []);
           })

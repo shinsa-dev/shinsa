@@ -16,6 +16,7 @@ const FAKE_CHROME = `#!/bin/sh
 here="$(dirname "$0")"
 for arg in "$@"; do case "$arg" in --user-data-dir=*) profile="\${arg#--user-data-dir=}";; esac; done
 echo "$*" >> "$here/launches"
+case "$*" in *--headless=new*) ;; *) [ -f "$profile/pid" ] && kill -0 "$(cat "$profile/pid")" 2>/dev/null && exit 0;; esac
 echo $$ > "$profile/pid"
 [ -f "$here/fail" ] && exit 3
 case "$*" in *--headless=new*)

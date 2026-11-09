@@ -12,8 +12,68 @@ export class BrowserKeyRefused extends Schema.TaggedError<
 >()('BrowserKeyRefused', { message: Schema.String }) {}
 
 export const CdpCommand = Schema.fromJsonString(
-  Schema.Struct({ id: Schema.Number, method: Schema.String, sessionId: Schema.optional(Schema.String) })
+  Schema.Struct({
+    id: Schema.Number,
+    method: Schema.String,
+    sessionId: Schema.optional(Schema.String),
+    params: Schema.optional(Schema.Unknown),
+  })
 );
+
+export const CdpMessage = Schema.fromJsonString(
+  Schema.Struct({
+    id: Schema.optional(Schema.Number),
+    method: Schema.optional(Schema.String),
+    sessionId: Schema.optional(Schema.String),
+    params: Schema.optional(Schema.Unknown),
+    result: Schema.optional(Schema.Unknown),
+  })
+);
+export type CdpMessage = typeof CdpMessage.Type;
+
+export const TargetInfo = Schema.Struct({
+  targetId: Schema.String,
+  type: Schema.String,
+  openerId: Schema.optional(Schema.String),
+});
+export type TargetInfo = typeof TargetInfo.Type;
+
+export const AttachedToTarget = Schema.Struct({
+  sessionId: Schema.String,
+  targetInfo: TargetInfo,
+  waitingForDebugger: Schema.optional(Schema.Boolean),
+});
+
+export const TargetEventParams = Schema.Struct({
+  targetId: Schema.optional(Schema.String),
+  targetInfo: Schema.optional(TargetInfo),
+});
+
+export const CreatedTarget = Schema.Struct({ targetId: Schema.String });
+
+export const TargetList = Schema.Struct({ targetInfos: Schema.Array(Schema.Unknown) });
+
+export interface AgentMessage {
+  readonly forward: string | null;
+  readonly reply: string | null;
+}
+
+export interface BrowserMessage {
+  readonly toAgent: ReadonlyArray<string>;
+  readonly toBrowser: ReadonlyArray<string>;
+}
+
+export interface HeldPage {
+  readonly targetId: string;
+  readonly sessionId: string;
+  readonly waiting: boolean;
+  readonly messages: string[];
+}
+
+export interface TargetFilter {
+  fromAgent(text: string): AgentMessage;
+  fromBrowser(text: string): BrowserMessage;
+}
 
 export interface BrowserPeer {
   send(data: string | Uint8Array): void;
@@ -51,6 +111,26 @@ export const REFUSED_METHODS: ReadonlySet<string> = new Set(['Browser.close', 'B
 
 export const REFUSED_METHOD_MESSAGE =
   'This browser is shared by every agent of the project, so it stays open. Close your own pages instead.';
+
+export const PAGE_TARGET = 'page';
+
+export const TARGET_EVENTS: ReadonlySet<string> = new Set([
+  'Target.targetCreated',
+  'Target.targetInfoChanged',
+  'Target.targetDestroyed',
+  'Target.detachedFromTarget',
+]);
+
+export const FOREIGN_TARGET_METHODS: ReadonlySet<string> = new Set([
+  'Target.attachToTarget',
+  'Target.activateTarget',
+  'Target.closeTarget',
+]);
+
+export const FIRST_PROXY_COMMAND_ID = 1_000_000_000;
+
+export const FOREIGN_PAGE_MESSAGE =
+  'This page belongs to another agent of the project. Open a page of your own with a new tab.';
 
 export const KEY_REFUSED_MESSAGE =
   'This browser key is not valid. It works only while the run it was made for is going.';

@@ -68,7 +68,9 @@ function isOnSite(host: string, site: string) {
 export function selectMatchingSite(host: string, sites: ReadonlyArray<BrowserSite>) {
   const name = host.toLowerCase();
   return (
-    sites.filter((site) => isOnSite(name, site.site)).sort((a, b) => b.site.length - a.site.length)[0] ?? null
+    sites
+      .filter((site) => site.signedIn && isOnSite(name, site.site))
+      .sort((a, b) => b.site.length - a.site.length)[0] ?? null
   );
 }
 

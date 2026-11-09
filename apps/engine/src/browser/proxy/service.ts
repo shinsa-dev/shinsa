@@ -3,7 +3,7 @@ import { Context, Effect, Exit, Layer, Ref, Schema, Scope } from 'effect';
 import { ServerAddress } from '../../serve/address/service.ts';
 import type { BrowserProfile, BrowserUnavailable } from '../host/schema.ts';
 import { BrowserHost } from '../host/service.ts';
-import { resolveBrowserEndpoint, resolveRefusedReply } from './endpoint.ts';
+import { resolveBrowserEndpoint } from './endpoint.ts';
 import {
   type BrowserAdmission,
   BROWSER_GONE_REASON,
@@ -19,6 +19,7 @@ import {
   KEY_REVOKED_REASON,
   type LiveRelay,
 } from './schema.ts';
+import { createTargetFilter } from './targets.ts';
 
 export class BrowserProxy extends Context.Service<
   BrowserProxy,
@@ -96,6 +97,11 @@ export class BrowserProxy extends Context.Service<
         const ended = yield* Ref.make(false);
         const upstream = yield* Effect.sync(() => new WebSocket(admission.webSocketUrl));
         const waiting: (string | Uint8Array)[] = [];
+        const targets = createTargetFilter();
+        const sendUpstream = (data: string | Uint8Array) => {
+          if (upstream.readyState === WebSocket.OPEN) upstream.send(data);
+          else if (upstream.readyState === WebSocket.CONNECTING) waiting.push(data);
+        };
         const finish = (live: LiveRelay) => {
           if (runSync(Ref.getAndSet(ended, true))) return false;
           runSync(
@@ -120,7 +126,10 @@ export class BrowserProxy extends Context.Service<
           };
           upstream.onmessage = (event) => {
             const { data } = event as MessageEvent<string | ArrayBuffer>;
-            peer.send(typeof data === 'string' ? data : new Uint8Array(data));
+            if (typeof data !== 'string') return peer.send(new Uint8Array(data));
+            const { toAgent, toBrowser } = targets.fromBrowser(data);
+            for (const message of toAgent) peer.send(message);
+            for (const command of toBrowser) upstream.send(command);
           };
           upstream.onclose = () => {
             if (finish(live)) peer.close(CLOSE_GOING_AWAY, BROWSER_GONE_REASON);
@@ -130,10 +139,10 @@ export class BrowserProxy extends Context.Service<
         if (!registered) live.end(CLOSE_POLICY, KEY_REVOKED_REASON);
         const relay: BrowserRelay = {
           send: (data) => {
-            const refused = typeof data === 'string' ? resolveRefusedReply(data) : null;
-            if (refused) peer.send(refused);
-            else if (upstream.readyState === WebSocket.OPEN) upstream.send(data);
-            else if (upstream.readyState === WebSocket.CONNECTING) waiting.push(data);
+            if (typeof data !== 'string') return sendUpstream(data);
+            const { forward, reply } = targets.fromAgent(data);
+            if (reply) peer.send(reply);
+            if (forward) sendUpstream(forward);
           },
           close: () => {
             if (finish(live)) upstream.close();

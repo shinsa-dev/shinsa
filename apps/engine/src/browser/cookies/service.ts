@@ -18,6 +18,7 @@ import { BrowserHost } from '../host/service.ts';
 import { createCookieKey, decryptCookieValue } from './decrypt.ts';
 import { resolveCookieParam } from './params.ts';
 import {
+  CDP_SAME_SITE_NONE,
   CdpCookies,
   COOKIE_FILE_COMPANIONS,
   COOKIE_FILES,
@@ -30,6 +31,7 @@ import {
   LAUNCH_SERVICES_PLIST,
   LaunchServicesHandlers,
   SiteCookieRow,
+  STORED_SAME_SITE_NONE,
   SOURCE_BROWSERS,
   SOURCE_NOT_INSTALLED_MESSAGE,
   SOURCE_UNREADABLE_MESSAGE,
@@ -119,13 +121,18 @@ export class BrowserCookies extends Context.Service<
             SqlSchema.findAll({
               Request: Schema.Void,
               Result: SiteCookieRow,
-              execute: () => sql`SELECT host_key, name, is_httponly FROM cookies`,
+              execute: () => sql`SELECT host_key, name, is_httponly, samesite FROM cookies`,
             })(undefined)
           )
         ).pipe(
           Effect.map((rows) =>
             listBrowserSites(
-              rows.map((row) => ({ host: row.hostKey, name: row.name, httpOnly: row.isHttponly === 1 }))
+              rows.map((row) => ({
+                host: row.hostKey,
+                name: row.name,
+                httpOnly: row.isHttponly === 1,
+                crossSite: row.samesite === STORED_SAME_SITE_NONE,
+              }))
             )
           )
         );
@@ -230,6 +237,7 @@ export class BrowserCookies extends Context.Service<
               host: cookie.domain,
               name: cookie.name,
               httpOnly: cookie.httpOnly,
+              crossSite: cookie.sameSite === CDP_SAME_SITE_NONE,
             }))
           );
         }

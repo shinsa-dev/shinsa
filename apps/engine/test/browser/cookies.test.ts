@@ -152,20 +152,22 @@ describe('grouping cookies into sites', () => {
     expect(isOnSites('.gitlab.com', new Set(['github.com']))).toBe(false);
   });
 
-  test('puts signed-in sites first and does not count bot or load balancer cookies as a sign-in', () => {
+  test('puts signed-in sites first and does not count bot, load balancer or cross-site ad cookies as a sign-in', () => {
     const sites = listBrowserSites([
-      { host: '.workos.com', name: '__cf_bm', httpOnly: true },
-      { host: '.workos.com', name: '_ga', httpOnly: false },
-      { host: '.workos.com', name: '_gid', httpOnly: false },
-      { host: '.github.com', name: 'user_session', httpOnly: true },
-      { host: 'a.com', name: 'x', httpOnly: false },
-      { host: 'b.com', name: 'x', httpOnly: false },
+      { host: '.workos.com', name: '__cf_bm', httpOnly: true, crossSite: false },
+      { host: '.workos.com', name: '_ga', httpOnly: false, crossSite: false },
+      { host: '.workos.com', name: '_gid', httpOnly: false, crossSite: false },
+      { host: '.github.com', name: 'user_session', httpOnly: true, crossSite: false },
+      { host: 'a.com', name: 'x', httpOnly: false, crossSite: false },
+      { host: 'b.com', name: 'x', httpOnly: false, crossSite: false },
+      { host: '.rubiconproject.com', name: 'audit', httpOnly: true, crossSite: true },
     ]);
     expect(sites).toEqual([
       { site: 'github.com', cookies: 1, signedIn: true },
       { site: 'workos.com', cookies: 3, signedIn: false },
       { site: 'a.com', cookies: 1, signedIn: false },
       { site: 'b.com', cookies: 1, signedIn: false },
+      { site: 'rubiconproject.com', cookies: 1, signedIn: false },
     ]);
   });
 });

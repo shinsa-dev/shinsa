@@ -10,6 +10,10 @@ export function resolveSite(hostKey: string) {
   return labels.slice(-take).join('.');
 }
 
+function isSignInCookie(cookie: SiteCookie) {
+  return cookie.httpOnly && !cookie.crossSite && !NOT_SIGN_IN_COOKIES.has(cookie.name);
+}
+
 export function listBrowserSites(cookies: ReadonlyArray<SiteCookie>) {
   const bySite = new Map<string, { cookies: number; signedIn: boolean }>();
   for (const cookie of cookies) {
@@ -17,7 +21,7 @@ export function listBrowserSites(cookies: ReadonlyArray<SiteCookie>) {
     const current = bySite.get(site) ?? { cookies: 0, signedIn: false };
     bySite.set(site, {
       cookies: current.cookies + 1,
-      signedIn: current.signedIn || (cookie.httpOnly && !NOT_SIGN_IN_COOKIES.has(cookie.name)),
+      signedIn: current.signedIn || isSignInCookie(cookie),
     });
   }
   return [...bySite.entries()]

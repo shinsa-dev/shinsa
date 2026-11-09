@@ -69,6 +69,11 @@ describe('selectMatchingSite', () => {
     expect(selectMatchingSite('my-app.vercel.app', sites)?.site).toBe('my-app.vercel.app');
     expect(selectMatchingSite('stripe.com.net', sites)).toBeNull();
   });
+
+  it('skips a site your browser only has tracking cookies for', () => {
+    const sites = [site('workos.com', false), site('dashboard.workos.com', false)];
+    expect(selectMatchingSite('dashboard.workos.com', sites)).toBeNull();
+  });
 });
 
 describe('isCopyRefused', () => {

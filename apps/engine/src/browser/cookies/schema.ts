@@ -69,6 +69,7 @@ export const SiteCookieRow = Schema.Struct({
   hostKey: Schema.String,
   name: Schema.String,
   isHttponly: Schema.Number,
+  samesite: Schema.Number,
 });
 export type SiteCookieRow = typeof SiteCookieRow.Type;
 
@@ -92,6 +93,7 @@ export const CdpCookie = Schema.Struct({
   domain: Schema.String,
   name: Schema.String,
   httpOnly: Schema.Boolean,
+  sameSite: Schema.optional(Schema.String),
 });
 
 export const CdpCookies = Schema.Struct({ cookies: Schema.Array(CdpCookie) });
@@ -170,7 +172,12 @@ export interface SiteCookie {
   readonly host: string;
   readonly name: string;
   readonly httpOnly: boolean;
+  readonly crossSite: boolean;
 }
+
+export const STORED_SAME_SITE_NONE = 0;
+
+export const CDP_SAME_SITE_NONE = 'None';
 
 export const MULTI_PART_SUFFIXES: ReadonlySet<string> = new Set([
   'co.uk',
