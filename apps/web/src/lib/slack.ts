@@ -25,7 +25,12 @@ export interface SlackStatusView {
   detail: string;
 }
 
-export function describeSlackStatus(snapshot: SlackSnapshot): SlackStatusView {
+export function resolveSlackConnectLabel(connected: boolean, member: boolean) {
+  if (member) return 'Connect your Slack';
+  return connected ? 'Connect another workspace' : 'Connect Slack';
+}
+
+export function describeSlackStatus(snapshot: SlackSnapshot, member = false): SlackStatusView {
   if (!snapshot.remote)
     return {
       label: 'Needs remote access',
@@ -38,6 +43,12 @@ export function describeSlackStatus(snapshot: SlackSnapshot): SlackStatusView {
       label: 'Not connected',
       tone: 'neutral',
       detail: 'Connect signs you in with Slack and adds Shinsa to your workspace if it is not there yet.',
+    };
+  if (member)
+    return {
+      label: 'Connected',
+      tone: 'green',
+      detail: 'Slack is connected here. Connect your own so your mentions start tasks as yours.',
     };
   const workspaces = snapshot.links.length === 1 ? 'workspace' : 'workspaces';
   return {

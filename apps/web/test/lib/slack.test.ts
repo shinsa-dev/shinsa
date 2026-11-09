@@ -43,6 +43,15 @@ describe('Slack’s status in Settings', () => {
     );
   });
 
+  it('asks a member to connect their own Slack, since the links listed may be someone else’s', () => {
+    expect(describeSlackStatus(snapshot({ links: [LINK] }), true)).toEqual({
+      label: 'Connected',
+      tone: 'green',
+      detail: 'Slack is connected here. Connect your own so your mentions start tasks as yours.',
+    });
+    expect(describeSlackStatus(snapshot(), true).label).toBe('Not connected');
+  });
+
   it('says only since when a workspace is connected when the engine does not know its last use', () => {
     expect(describeSlackLink({ ...LINK, linkedAt: 1_000 }, 1_000 + 2 * 3_600_000)).toBe('Connected 2h ago');
   });

@@ -15,11 +15,11 @@ function snapshot(overrides: Partial<SlackSnapshot> = {}): SlackSnapshot {
   return { remote: true, connectUrl: CONNECT_URL, links: [], problem: null, ...overrides };
 }
 
-function renderGroup(current: SlackSnapshot | null, failure: string | null = null) {
+function renderGroup(current: SlackSnapshot | null, failure: string | null = null, member = false) {
   const actions = { disconnect: mock(() => Promise.resolve(snapshot())) } satisfies SlackActions;
   render(
     <TooltipProvider>
-      <SlackGroup snapshot={current} failure={failure} actions={actions} />
+      <SlackGroup snapshot={current} failure={failure} member={member} actions={actions} />
     </TooltipProvider>
   );
   return actions;
@@ -63,6 +63,14 @@ describe('Settings → General → Slack', () => {
     await waitFor(() => expect(actions.disconnect).toHaveBeenCalled());
   });
 
+  it('lets a member connect their own Slack, and leaves Disconnect to the owner', () => {
+    renderGroup(snapshot({ links: [LINK] }), null, true);
+    const connect = screen.getByText('Connect your Slack').closest('a') as HTMLAnchorElement;
+    expect(connect.getAttribute('href')).toBe(CONNECT_URL);
+    expect(screen.getByText('Overclock')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Disconnect' })).toBeNull();
+  });
+
   it('shows nothing to connect when the engine has no link to give', () => {
     renderGroup(snapshot({ connectUrl: null }));
     expect(screen.queryByText('Connect Slack')).toBeNull();
@@ -89,6 +97,22 @@ describe('SlackSettings', () => {
       </TooltipProvider>
     );
     expect(await screen.findByText('Overclock')).toBeTruthy();
+  });
+
+  it('offers a member of this machine their own connect link', async () => {
+    const machines = [{ id: 'm2', name: 'Studio', current: true, member: true as const, state: {} }];
+    replaceConnection({ ...connection, listMachines: () => machines } as never);
+    try {
+      render(
+        <TooltipProvider>
+          <SlackSettings />
+        </TooltipProvider>
+      );
+      expect(await screen.findByText('Connect your Slack')).toBeTruthy();
+      expect(screen.queryByRole('button', { name: 'Disconnect' })).toBeNull();
+    } finally {
+      replaceConnection(null);
+    }
   });
 
   it('leaves Slack out, and reads nothing, when this browser reaches only tasks handed to it', () => {

@@ -3286,8 +3286,9 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
     owner, and a sealed channel's GitHub user is looked up in the owner and members the last heartbeat answered
     (`Remote.resolveActor`). Anyone else gets no owner, never the machine's owner, so a stranger never runs on the
     owner's accounts. A task an agent files (a courier, a split, a fork, a watchdog's) takes the owner of the task it
-    came from. Tasks from before, and those Slack, schedules and webhooks start, have none and count as the
-    machine owner's. Owners never change after creation.
+    came from. A task a Slack mention starts is owned by the GitHub account its Slack user is linked as (Slack below),
+    so each member connects their own Slack from Settings → Slack on the shared machine. Tasks from before, and those
+    schedules and webhooks start, have none and count as the machine owner's. Owners never change after creation.
   - **Claude accounts.** Each account records the member who signed it in (`owner` in `accounts.json`, null for the
     machine's owner and every account from before). A run leases only its task owner's accounts, on renewal and on
     rotation after a usage limit too (`AccountOwnership`, `AccountRotation.listCandidates`), and a task bound to
@@ -4426,8 +4427,9 @@ Open (remote build) ──► app.shinsa.dev/__remote/previews/open?url=…
 ## Slack
 
 Mention the Shinsa bot in Slack and the machine of the person who mentioned it does the work. There is one Slack app
-for everyone, on app.shinsa.dev; each person connects their own Slack user to one of their own machines, so the same
-mention from a teammate who connected their Shinsa runs on their machine, and from one who did not, runs nowhere. It
+for everyone, on app.shinsa.dev; each person connects their own Slack user to one machine they own or are a member
+of (a shared machine's teammates included), so the same mention from a teammate who connected their Shinsa runs on
+that machine as them, and from one who did not, runs nowhere. It
 needs remote access (above): the relay reaches the machine through its tunnel, and the machine posts back through the
 relay with its machine token. No machine holds a Slack token. A thread the mention links to is read with the token of
 the person who mentioned the bot, never the bot's, so a thread in a channel the bot is not in, such as a shared
@@ -4439,7 +4441,9 @@ the machine side is `apps/engine/src/slack/`.
 Slack ──event──► app.shinsa.dev /slack/events
                   ├─ Slack's signature, the event id seen once
                   ├─ author of another org ─► nothing
-                  ├─ author not connected ──► private "Connect Slack"
+                  ├─ author not connected, or no longer owner
+                  │  or member of the linked machine
+                  │                    ──► private "Connect Slack"
                   ├─ machine offline ───────► "<machine> is offline"
                   ├─ linked threads, read with the author's token
                   │  └─ one unreadable ──► a private note after
@@ -4452,7 +4456,10 @@ Slack ──event──► app.shinsa.dev /slack/events
                   the model reads the thread
                   ├─ not work ──► ⏳ off, "Not a task", once per thread
                   └─ work ──► slack.start_task:
-                              task.create, as from Home
+                              task.create, as from Home, owned
+                              by the linked GitHub account
+   linked account not in the machine's owner and members
+                  ──► "No access to this Shinsa", nothing starts
    the task moves or a gate opens or closes
                   ──► slack.status: the one card, edited
                       (the open gate with its buttons, the result,
@@ -4484,8 +4491,14 @@ Slack ──a card's button──► app.shinsa.dev /slack/interactions
   `groups:history`, `groups:read`, `chat:write`, `reactions:write` and `users:read` (`SLACK_BOT_SCOPES`, `apps/cloud/slack-manifest.json`) and the same user scopes, so its installer is linked in that one step. Either way your Slack user is
   linked to that machine with your user token kept sealed (`slack_links.sealed_user_token`, AES-GCM under
   `SLACK_TOKEN_KEY`, as a bot token is) and you land on `/slack/linked` (`routes/remote/slack.tsx`), which names the workspace or
-  says what went wrong. A machine can be linked in several workspaces; a Slack user to one machine at a time
-  (connecting again from another machine moves it). The section reads `GET /api/slack` (`SlackSnapshot`: remote access
+  says what went wrong. The machine is one you own or are a member of (a shared machine's teammates are members);
+  a guest, or someone with no access, gets not found. A member links only to a machine that announces
+  `slack-task-owner` (`MACHINE_FEATURES`), so an older engine never starts their mention as its owner's; one that
+  does not gets "Only this machine's owner can connect Slack until Shinsa on it is updated." Without `?instance=`,
+  connect picks your own machine seen last, else one you are a member of. The link records the GitHub account that
+  signed in (`slack_links.user_id`), which is whose tasks your mentions start. A machine can be linked in several
+  workspaces, and by each of its people; a Slack user to one machine at a time (connecting again from another machine
+  moves it). A member sees Connect your Slack and no Disconnect (`describeSlackStatus`, `resolveSlackConnectLabel`). The section reads `GET /api/slack` (`SlackSnapshot`: remote access
   on, the connect link, the links with workspace, user and when, or the problem when app.shinsa.dev cannot be
   reached) when Settings opens and when the window comes back. Disconnect (`POST /api/slack/disconnect`) removes every
   link of this machine; from another device only its owner may (`OwnerOnlyRoute`). Your user token is revoked
@@ -4509,7 +4522,9 @@ Slack ──a card's button──► app.shinsa.dev /slack/interactions
   thread (`threadTs`, the mention's own `ts` for a mention outside a thread: the bot always answers in a thread), the
   author with their Slack name, the text with Slack's markup turned into words and the bot's own mention dropped
   (`resolveSlackReadableText`), a permalink, the channel's name (`conversations.info`; null without `channels:read` or
-  `groups:read`, in a direct message, or when Slack refuses), the thread's last 100 messages, bots marked, and
+  `groups:read`, in a direct message, or when Slack refuses), the thread's last 100 messages, bots marked,
+  `linkedUserId` (the GitHub account the author's link records; the Worker checks first that it is still the
+  machine's owner or a member, else the author gets the private Connect Slack prompt and nothing is sent), and
   `linkedThreads` (below). Each
   message is read from its `text`, its `blocks` (section, header, context and rich text) and its `attachments`
   (pretext, title, text and fields, else the fallback), taking the longer of the text and the blocks and adding the
@@ -4564,7 +4579,12 @@ Slack ──a card's button──► app.shinsa.dev /slack/interactions
   asks for work there still starts a task. Anything someone wants done or wants to know about their code, product or work is a
   task, and so is a mention the model does not answer: `slack.start_task` (command id `<effect
   key>:slack.start_task`) starts it, messaging the thread's task instead when one opened meanwhile. Nothing is
-  posted while it reads; a mention that is not a task loses its ⏳.
+  posted while it reads; a mention that is not a task loses its ⏳. Before any of it, `linkedUserId` is looked up in
+  the owner and members the last heartbeat answered (`Remote.resolveActor`) and `slack.start_task` is dispatched
+  with that person as the actor, so the task's owner is the person who mentioned the bot and it runs on their Claude
+  accounts and GitHub token (Shared machines above). An account the machine no longer lists starts nothing and gets
+  one reply, "No access to this Shinsa" (`serializeSlackNoAccess`), with no ⏳ and no model call; a mention without
+  `linkedUserId` (from an older app.shinsa.dev) starts a task with no owner, as before.
 - **This one check is the only thing Slack adds.** A task it starts is the same `task.create` Home sends with
   everything on Auto, through the same `createTask` and the same triage (repository, kind, priority, and whatever
   triage learns next, such as finding a duplicate of an open task), so a change to triage reaches Slack with no
