@@ -63,7 +63,7 @@ function resolveSheetView(
   const report = sheet.initiative.report;
   return {
     initiative: resolveInitiativeView(state, sheet.initiative, base, now),
-    report: report ? { narrative: report.narrative, questions: report.questions, at: report.at } : null,
+    report: report ? { narrative: report.narrative, at: report.at } : null,
     needsYou: sheet.needsYou.map((entry) => ({ task: view(entry.task), reason: entry.reason })),
     now: sheet.now.map(view),
     next: sheet.next.map((group) => ({

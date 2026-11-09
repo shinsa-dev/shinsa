@@ -229,6 +229,7 @@ export interface PlanSplitPart {
   request: string;
   order: PlanSplitOrder;
   on?: number;
+  phase?: number;
 }
 
 export interface ReviewFinding {

@@ -48,7 +48,7 @@ function InitiativeTasks({ state, sheet }: { state: ShinsaState; sheet: Initiati
 export function InitiativeOverview({ state, sheet }: { state: ShinsaState; sheet: InitiativeSheet }) {
   return (
     <>
-      <LeadReport state={state} initiative={sheet.initiative} />
+      <LeadReport initiative={sheet.initiative} />
       <InitiativeTasks state={state} sheet={sheet} />
     </>
   );

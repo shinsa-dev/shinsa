@@ -16,7 +16,6 @@ const INITIATIVE: Initiative = {
   updatedAt: 1,
   report: {
     narrative: 'The dock is in review.',
-    questions: ['Ship the studio first?'],
     runId: 'run-1',
     at: 7,
   },
@@ -104,7 +103,6 @@ describe('initiative views', () => {
     const sheet = await Effect.runPromise(findInitiativeSheet(createState(), 'init', BASE, 10));
     expect(sheet.report).toEqual({
       narrative: 'The dock is in review.',
-      questions: ['Ship the studio first?'],
       at: 7,
     });
     const bare = createState();

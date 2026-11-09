@@ -120,7 +120,7 @@ export const SHAPE_PIPELINES: Record<TaskShape, readonly PipelineStep[]> = {
   change: CHANGE_TAIL,
   fix: ['investigate', ...CHANGE_TAIL],
   operation: ['plan', 'operate'],
-  lead: ['lead'],
+  lead: ['plan', 'lead'],
 };
 
 export const SHAPE_LIMITS = {
@@ -250,6 +250,7 @@ export function hasStep(task: Pick<Task, 'pipeline' | 'mode'>, step: PipelineSte
 }
 
 export function needsRepository(steps: readonly PipelineStep[]) {
+  if (steps.includes('lead')) return false;
   return steps.some((step) => !REPOSITORY_FREE_STEPS.has(step));
 }
 

@@ -1,4 +1,4 @@
-import type { ChatEvent, Initiative, ShinsaEventInput } from '../../packages/core/src/index.ts';
+import type { ChatEvent, Initiative, PlanDocument, ShinsaEventInput } from '../../packages/core/src/index.ts';
 import { HOUR, MINUTE } from '../kit/time.ts';
 import {
   CHOSEN_BY_YOU,
@@ -52,10 +52,49 @@ const LEAD_NARRATIVE = [
   'Tools in the chat start once the session merges. The tool summary waits on both progress and retries, since it reports what each did, and I dropped the old banner from editing: the new dock replaces it.',
 ].join('\n');
 
-const LEAD_QUESTIONS = [
-  'Should editing a paywall from the chat wait for the tool summary, or start beside it?',
-  'The docs gate has waited two days for its plan. Is it still wanted in this initiative?',
-];
+const LEAD_PLAN: PlanDocument = {
+  goal: 'Move the embedded chat onto MCP v2 and ship it as small pull requests, each merged on its own.',
+  phases: [
+    { title: 'Session and transport', detail: 'The embedded chat runs on MCP v2 with signed webhooks.' },
+    { title: 'Tools in the chat', detail: 'Tool calls stream, show their progress, retry and summarise.' },
+    { title: 'Editing from the chat', detail: 'A paywall can be edited from the chat.' },
+  ],
+  behaviour: [],
+  approach:
+    'The session lands first, since every tool needs it. The tools split into four small pieces in embedded, and editing comes last, in pwn.',
+  files: [],
+  outOfScope: ['The old editor banner: the new dock replaces it.'],
+  verification: [],
+  questions: [],
+  split: [
+    {
+      title: 'Run the embedded chat on MCP v2',
+      request: 'In embedded, move the chat onto MCP v2.',
+      order: 'parallel',
+      phase: 1,
+    },
+    {
+      title: 'Sign outgoing webhooks',
+      request: 'In superwall, sign the webhooks the chat sends.',
+      order: 'parallel',
+      phase: 1,
+    },
+    {
+      title: 'Stream MCP tool results',
+      request: 'In embedded, stream tool results into the chat.',
+      order: 'waits_on',
+      on: 1,
+      phase: 2,
+    },
+    {
+      title: 'Edit a paywall from the chat',
+      request: 'In pwn, let the chat edit a paywall.',
+      order: 'waits_on',
+      on: 3,
+      phase: 3,
+    },
+  ],
+};
 
 function createSeedInitiative(at: number): Initiative {
   return {
@@ -91,10 +130,23 @@ function pushSeedLead(push: (at: number, event: ShinsaEventInput) => void) {
     repoId: null,
     size: 'small',
     branch: 'lead/chat-split',
-    pipeline: ['lead'],
+    pipeline: ['plan', 'lead'],
     decisions: NO_TRIAGE_DECISIONS,
   });
   push(started + 2 * MINUTE, {
+    type: 'task.staged',
+    taskId: SEED_LEAD_ID,
+    stage: 'planning',
+    reason: 'planning the initiative',
+  });
+  push(started + 8 * MINUTE, {
+    type: 'plan.proposed',
+    taskId: SEED_LEAD_ID,
+    body: LEAD_PLAN.goal,
+    document: LEAD_PLAN,
+  });
+  push(started + 20 * MINUTE, { type: 'plan.approved', taskId: SEED_LEAD_ID, version: 1 });
+  push(started + 20 * MINUTE, {
     type: 'task.staged',
     taskId: SEED_LEAD_ID,
     stage: 'leading',
@@ -119,7 +171,7 @@ function pushSeedLead(push: (at: number, event: ShinsaEventInput) => void) {
   push(LEAD_TURN_END, {
     type: 'initiative.reported',
     initiativeId: SEED_INITIATIVE_ID,
-    report: { narrative: LEAD_NARRATIVE, questions: LEAD_QUESTIONS, runId: SEED_LEAD_RUN, at: LEAD_TURN_END },
+    report: { narrative: LEAD_NARRATIVE, runId: SEED_LEAD_RUN, at: LEAD_TURN_END },
   });
   push(LEAD_TURN_END, {
     type: 'run.ended',
@@ -173,7 +225,7 @@ const LEAD_TURN: ChatEvent[] = [
   callTool('lead-report', {
     kind: 'shinsa',
     name: 'report_initiative',
-    args: { narrative: LEAD_NARRATIVE, questions: LEAD_QUESTIONS },
+    args: { narrative: LEAD_NARRATIVE },
   }),
   resolveToolOutput('lead-report', 'Reported.'),
   { type: 'status', status: 'ended', outcome: 'completed' },

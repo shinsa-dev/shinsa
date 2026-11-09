@@ -133,7 +133,7 @@ export const SHAPE_TOOL_SPECS = {
   report_initiative: {
     name: 'report_initiative',
     description:
-      'End a turn leading an initiative, then stop without restating it: where the initiative stands and what comes next, and the questions only the human can settle. The human reads both at the top of the initiative’s page.',
+      'End a turn leading an initiative, then stop without restating it: where the initiative stands and what comes next. The human reads it at the top of the initiative’s overview. Ask what only the human can settle with `ask` before, never here.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -141,13 +141,6 @@ export const SHAPE_TOOL_SPECS = {
           'Where the initiative stands now and what comes next, in markdown, naming tasks by their links.',
           INITIATIVE_LIMITS.narrative
         ),
-        questions: {
-          type: 'array',
-          maxItems: INITIATIVE_LIMITS.questions,
-          description:
-            'Open questions only the human can settle about the whole initiative. Leave it out when there are none.',
-          items: { type: 'string', maxLength: INITIATIVE_LIMITS.question },
-        },
       },
       required: ['narrative'],
     },

@@ -3183,9 +3183,8 @@ Only these, and they win over anything below:
 
 45. **An initiative is a task whose Overview is its report sheet** (since 2026-11-09; `components/initiatives/`,
     `components/home/initiatives.tsx`, `lib/initiatives/`). There is no Initiatives page or nav entry. The lead task's
-    Overview shows, in order: Where it stands (a `Panel` with no time or other text in its header: the lead's
-    narrative, "To discuss with you" with each open question as a `ListRow` whose click quotes it into the lead's
-    composer and focuses it, then "Reported 25m ago" as the last line), then the members in one card laid out as All
+    Overview shows, in order: Where it stands (a `Panel` like a task's result panel, the lead's narrative alone; it
+    is left out until the first report, and the lead's questions are questions in Needs you, never rows here), then the members in one card laid out as All
     tasks: its column header and its `TaskGroupSection`s in the same order and words (a gate's group, In progress),
     then one Up next section per phase ("Up next: Tools in the chat") where the waiting rows sit, then Done and
     Cancelled, closed at first. There is no phase track and no Decisions panel: approved plans and the members'

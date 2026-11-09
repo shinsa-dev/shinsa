@@ -20,7 +20,6 @@ export interface InitiativeMilestone {
 
 export interface InitiativeReport {
   narrative: string;
-  questions: string[];
   runId: string;
   at: number;
 }
@@ -45,8 +44,6 @@ export const INITIATIVE_LIMITS = {
   initiatives: 50,
   milestones: 40,
   narrative: 2_000,
-  questions: 5,
-  question: 280,
 } as const;
 
 export function selectLeadInitiative<T extends Pick<Initiative, 'leadTaskId'>>(

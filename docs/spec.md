@@ -1345,14 +1345,18 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
   Shinsa, and an unscoped chat would mix every project. Instead an initiative gets a lead, a task with one session
   for the effort's life that files and orders its tasks with the tools agents already have, wakes on batched member
   milestones (30 s debounce, the milestones in the user turn so its cached prefix holds), answers your messages and
-  its members', and writes the narrative and open questions at the top of the page. It opens no pull request and
-  closes no gate.
+  its members', and writes where it stands at the top of the page. It opens no pull request and closes no gate.
 - **An initiative is a kind of task, set up for you** (same day, after a first look). A separate Initiatives page and
   navigation entry, created by hand, was one more thing to keep up with. Now an initiative is its lead task: you start
   one from the composer's Kind of task, its Overview is the sheet, Home lists the open ones, marking it done finishes
   it and cancelling it dissolves it. You rarely start one by hand: a plan whose split is one long effort asks for
   `initiative`, so approving the plan makes it, Make an initiative from this task forks the lead from that task's chat,
   and any agent can add a task, the lead being told.
+- **A lead plans, then leads** (same day, after a second look). The lead keeps a task's notions instead of a page of
+  its own: a new initiative's lead first proposes a plan whose phases are the initiative's and whose split is the
+  tasks to file, each in its phase; approving it files them. Where it stands is its report, shown like a result, and
+  what only you can settle reaches you as its questions in Needs you, not as a list to read. Each task still merges on
+  its own: an initiative with one phase is also the smaller form, a few tasks across repositories with one overview.
 - **Not yet.** Triage suggesting membership from a request, a lead that rewrites what you filed into its
   initiative, and initiatives in the iOS app.
 

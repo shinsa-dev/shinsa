@@ -38,7 +38,6 @@ const SHEET = {
   initiative: VIEW,
   report: {
     narrative: 'The dock is in review.\nThe studio waits on it.',
-    questions: ['Ship the studio first?'],
     at: 7,
   },
   needsYou: [{ task: createTaskView('sw-104', 'Account tools'), reason: 'Its plan waits for you.' }],
@@ -96,9 +95,6 @@ describe('shinsa initiatives', () => {
       'From the lead:',
       '  The dock is in review.',
       '  The studio waits on it.',
-      '',
-      'Open questions:',
-      '  Ship the studio first?',
       '',
       'Phases:',
       '  Dock: 1 of 2 shipped',

@@ -106,12 +106,7 @@ function describeNext(sheet: InitiativeSheetView) {
 
 function describeReport(sheet: InitiativeSheetView) {
   if (!sheet.report) return [];
-  return [
-    '',
-    'From the lead:',
-    ...sheet.report.narrative.split('\n').map((line) => `  ${line}`),
-    ...describeSection('Open questions', [...sheet.report.questions]),
-  ];
+  return ['', 'From the lead:', ...sheet.report.narrative.split('\n').map((line) => `  ${line}`)];
 }
 
 function describeInitiativeSheet(sheet: InitiativeSheetView) {

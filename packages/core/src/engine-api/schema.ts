@@ -591,7 +591,6 @@ export interface InitiativeView {
 
 export interface InitiativeReportView {
   readonly narrative: string;
-  readonly questions: readonly string[];
   readonly at: number;
 }
 

@@ -185,7 +185,7 @@ export function OverviewTab({
         <TaskScrollHeader />
         <div className={cn(PAGE_COLUMN, 'flex flex-col gap-5 py-5')}>
           <PostMergePanel state={state} task={task} gate={gate} />
-          {(!sheet || gate) && (
+          {(!sheet || gate || task.stage !== 'leading') && (
             <NowCard key={gate?.id ?? 'now'} state={state} task={task} gate={gate} onOpen={onOpen} />
           )}
           {sheet && <InitiativeOverview state={state} sheet={sheet} />}

@@ -1,5 +1,9 @@
 import { quoteTitle } from '../chat/text.ts';
 import { INITIATIVE_LIMITS, type Initiative, selectInitiativePhase, type Task } from '../domain/index.ts';
+import { PROTOCOL_LIMITS } from '../report/schema.ts';
+import { describeTaskLink, resolveLaterMessages, resolveRequest } from './context.ts';
+import { describeOwedReply } from './replies.ts';
+import { resolveHouseRules } from './rules.ts';
 
 export interface LeadNote {
   text: string;
@@ -20,6 +24,7 @@ const LEAD_RULES = [
   '- File the next pieces with `create_task`: they join the initiative by themselves. Order them with `tasks_wait_on`, set their phase with `tasks_join_initiative`, and change priorities with `tasks_prioritize`.',
   '- Read a member with `read_task` only when you need more than the overview below. Tell a member something with `tasks_message`.',
   '- Plans, reviews and merges stay the human’s. Never ask a member to skip a gate.',
+  '- When only the human can settle something, ask it with `ask`, with `choices` when the answer is one of a few. Your turn waits for the answer; never leave a question in your report.',
   '- Members may message you when their scope changes; keep the order of the work in line with it.',
 ];
 
@@ -59,7 +64,7 @@ export function resolveLeadPrompt(turn: LeadTurn) {
     ...(turn.milestones ? ['', 'What happened since your last turn:', turn.milestones] : []),
     ...(turn.note ? ['', describeNote(turn.note)] : []),
     '',
-    `When you are done, call \`report_initiative\` with a \`narrative\` of where the initiative stands and what comes next (at most ${INITIATIVE_LIMITS.narrative} characters) and up to ${INITIATIVE_LIMITS.questions} \`questions\` only the human can settle. The human reads both at the top of the initiative's page. Then stop.`,
+    `When you are done, call \`report_initiative\` with a \`narrative\` of where the initiative stands and what comes next, in a few short paragraphs (at most ${INITIATIVE_LIMITS.narrative} characters). The human reads it at the top of the initiative's overview. Then stop.`,
   ].join('\n');
 }
 
@@ -69,4 +74,27 @@ export function describeInitiativeMembership(initiative: Initiative, task: Task,
   const opening = `This task is part of the initiative ${quoteTitle(initiative.name)}${where}.`;
   if (!lead) return `\n\n${opening}`;
   return `\n\n${opening} Its lead is [${lead.title}](shinsa://task/${lead.id}): tell it with \`tasks_message\` when your scope changes or another task of the initiative should wait for yours.`;
+}
+
+export function resolveLeadPlanningPrompt(task: Task, feedback: string | null) {
+  return [
+    resolveHouseRules('agent'),
+    '',
+    'Your role: the lead of this initiative, in one conversation for its whole life. You plan it now. Once the human approves the plan, Shinsa files its tasks and you lead them: you do no repository work and open no pull request yourself.',
+    describeTaskLink(task),
+    '',
+    'The human asked for:',
+    resolveRequest(task),
+    resolveLaterMessages(task),
+    feedback ? ['', 'Feedback on the previous plan:', feedback, '', task.plan?.body ?? ''].join('\n') : '',
+    describeOwedReply(task, 'propose_plan'),
+    '',
+    'Read what you need (the repositories, `find_tasks`, `read_task`), then call `propose_plan` with the plan of the whole initiative:',
+    `- \`phases\`: its phases in order, ${PROTOCOL_LIMITS.minPlanPhases} to ${PROTOCOL_LIMITS.planPhases}, each a title of a few words and one sentence on what is true when it ends. Its tasks are grouped by them.`,
+    `- \`split\`: the first tasks to file, at most ${PROTOCOL_LIMITS.splitParts}. Each has a \`title\`, a \`request\` that stands on its own and names the repository it works in, the \`phase\` it belongs to (its number, from 1) and an \`order\`: \`waits_on\` for a task that needs another merged first. Each merges on its own pull request.`,
+    '- `approach`: how the pieces fit together and the order they ship in. `out_of_scope`: what the initiative leaves out. `files` and `verification` stay empty: each task plans its own changes and checks.',
+    'File the later pieces yourself with `create_task` once the first ones move; they join the initiative by themselves.',
+    'If the human must decide something before you can plan, ask it with `ask` first, then plan with the answer.',
+    'Then stop.',
+  ].join('\n');
 }

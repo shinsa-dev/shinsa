@@ -4,7 +4,6 @@ import { TooltipProvider } from '@shinsa/ui/components/tooltip';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { HomeInitiatives } from '@/components/home/initiatives.tsx';
 import { InitiativeOverview } from '@/components/initiatives/sheet.tsx';
-import { resolveTaskDraft } from '@/lib/chat/task-drafts.ts';
 import { createGate, createInitiative, createShinsaState, createTask, NOW } from '../../support/state.ts';
 
 const LEAD = createTask({
@@ -16,7 +15,7 @@ const LEAD = createTask({
   initiativeId: 'split',
 });
 
-function createSplitState(report: { narrative: string; questions: string[] } | null) {
+function createSplitState(report: { narrative: string } | null) {
   return createShinsaState({
     initiatives: [
       createInitiative({
@@ -64,25 +63,19 @@ function renderOverview(state: ShinsaState) {
 
 describe('the lead task’s overview', () => {
   it('shows where it stands and the tasks grouped as All tasks does, by phase', () => {
-    renderOverview(createSplitState({ narrative: 'The dock is in review.', questions: ['Merge it first?'] }));
+    renderOverview(createSplitState({ narrative: 'The dock is in review.' }));
     expect(screen.getByRole('heading', { name: /Where it stands/ })).toBeTruthy();
     expect(screen.getByText('The dock is in review.')).toBeTruthy();
-    expect(screen.getByText(/Reported/)).toBeTruthy();
     expect(screen.getByText('Rewrite the agent dock')).toBeTruthy();
     expect(screen.getAllByText('Changes to review').length).toBeGreaterThan(0);
     expect(screen.getByText('Up next: Studio chat')).toBeTruthy();
     expect(screen.getByText('Up next: No phase')).toBeTruthy();
   });
 
-  it('puts a question in the lead’s reply box when you click it', () => {
-    renderOverview(createSplitState({ narrative: 'The dock is in review.', questions: ['Merge it first?'] }));
-    fireEvent.click(screen.getByText('Merge it first?'));
-    expect(resolveTaskDraft('lead').text).toBe('> Merge it first?\n\n');
-  });
-
-  it('says the lead has not reported before its first report', () => {
+  it('leaves where it stands out before the lead’s first report', () => {
     renderOverview(createSplitState(null));
-    expect(screen.getByText(/The lead hasn’t reported yet/)).toBeTruthy();
+    expect(screen.queryByRole('heading', { name: /Where it stands/ })).toBeNull();
+    expect(screen.getByText('Rewrite the agent dock')).toBeTruthy();
   });
 });
 
@@ -91,7 +84,7 @@ describe('Home’s initiatives', () => {
     history.replaceState(null, '', '/');
     render(
       <TooltipProvider>
-        <HomeInitiatives state={createSplitState({ narrative: 'Going.', questions: [] })} />
+        <HomeInitiatives state={createSplitState({ narrative: 'Going.' })} />
       </TooltipProvider>
     );
     expect(screen.getByText('3 tasks · 3 open · 0 shipped')).toBeTruthy();

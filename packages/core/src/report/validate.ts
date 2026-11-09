@@ -272,7 +272,13 @@ function readPlanDocument(reader: HandOverReader, input: Record<string, unknown>
     ...(evidence.length > 0 ? { evidence } : {}),
     ...(approval ? { approval: true } : {}),
     ...(split.length > 0
-      ? { split: split.map(({ on, ...part }) => (on === null ? part : { ...part, on })) }
+      ? {
+          split: split.map(({ on, phase, ...part }) => ({
+            ...part,
+            ...(on === null ? {} : { on }),
+            ...(phase === null ? {} : { phase }),
+          })),
+        }
       : {}),
     ...(initiative ? { initiative: true } : {}),
   };

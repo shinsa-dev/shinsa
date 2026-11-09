@@ -311,7 +311,7 @@ const WALKTHROUGH_REVISION = {
 
 const SPLIT = {
   type: 'array',
-  description: `Only when the request holds work that ships better as separate pull requests, each reviewed on its own: the other parts, each a task of its own. The plan's phases cover only what stays in this task. Shinsa holds the plan for the human, who starts the parts as tasks forked from this one or keeps it as one task. Leave it out for small or cohesive work. ${CODE_ONLY}`,
+  description: `Only when the request holds work that ships better as separate pull requests, each reviewed on its own: the other parts, each a task of its own. The plan's phases cover only what stays in this task. Shinsa holds the plan for the human, who starts the parts as tasks forked from this one or keeps it as one task. Leave it out for small or cohesive work. Only for a task that changes code, or for the plan of an initiative, where these are the tasks Shinsa files once you approve it; a plan for any other task that sets it is refused.`,
   maxItems: L.splitParts,
   items: {
     type: 'object',
@@ -333,6 +333,13 @@ const SPLIT = {
         maximum: L.splitParts - 1,
         description:
           'With waits_on or stacks_on: 0 for this task, or the number of an earlier part, counted from 1. Leave it out with parallel.',
+      },
+      phase: {
+        type: 'integer',
+        minimum: 1,
+        maximum: L.planPhases,
+        description:
+          "Only when you plan an initiative: the number of the plan's phase the task belongs to, from 1.",
       },
     },
     required: ['title', 'request', 'order'],

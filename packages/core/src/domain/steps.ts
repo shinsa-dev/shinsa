@@ -20,12 +20,12 @@ export type PipelineStep =
   | 'post_merge';
 
 export const PIPELINE_ORDER: readonly PipelineStep[] = [
-  'lead',
   'answer',
   'research',
   'investigate',
   'your_ok',
   'plan',
+  'lead',
   'operate',
   'build',
   'checks',
@@ -171,7 +171,7 @@ export const STEP_SCHEMA: Record<PipelineStep, StepDefinition> = {
       'the milestones of its members since the last turn',
       'your messages',
     ],
-    outputs: [{ name: 'the narrative and open questions', tool: 'report_initiative', evidence: false }],
+    outputs: [{ name: 'where the initiative stands', tool: 'report_initiative', evidence: false }],
     exit: 'You marked the lead done, or removed its initiative. Each turn ends with its report.',
     gate: NO_GATE,
     placement: 'canonical',
@@ -282,7 +282,7 @@ export const STEP_SCHEMA: Record<PipelineStep, StepDefinition> = {
     placement: 'canonical',
     needs: [
       {
-        steps: ['build', 'operate'],
+        steps: ['build', 'operate', 'lead'],
         match: 'any',
         where: 'anywhere',
         rule: 'A plan needs something to carry it out.',
@@ -827,8 +827,8 @@ function listOrderErrors(steps: readonly PipelineStep[]) {
   if (listStepsOfClass(steps, 'inquiry').length > 1) {
     errors.push('A task answers, researches or investigates, not more than one of them.');
   }
-  if (steps.includes('lead') && steps.length > 1) {
-    errors.push('A lead does nothing but lead its initiative, so it has no other step.');
+  if (steps.includes('lead') && steps.some((step) => step !== 'lead' && step !== 'plan')) {
+    errors.push('A lead plans and leads its initiative, so it has no other step.');
   }
   return errors;
 }

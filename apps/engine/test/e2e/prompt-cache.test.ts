@@ -130,9 +130,15 @@ async function callTool(params: QueryParams, name: string, input: Record<string,
   if (result.isError) throw new Error(JSON.stringify(result.content));
 }
 
-async function hand(params: QueryParams, purpose: Purpose, turn: number) {
+function resolvePlan(brief: string) {
+  return brief.includes('Your role: the lead of this initiative')
+    ? { ...PLAN, files: [], verification: [] }
+    : PLAN;
+}
+
+async function hand(params: QueryParams, purpose: Purpose, turn: number, brief: string) {
   const cwd = params.options?.cwd ?? '';
-  if (purpose === 'plan') await callTool(params, 'propose_plan', PLAN);
+  if (purpose === 'plan') await callTool(params, 'propose_plan', resolvePlan(brief));
   if (purpose === 'build') {
     writeFileSync(join(cwd, `turn-${turn}.txt`), `turn ${turn}\n`);
     await callTool(params, 'complete_phase', {
@@ -150,7 +156,6 @@ async function hand(params: QueryParams, purpose: Purpose, turn: number) {
   if (purpose === 'lead') {
     await callTool(params, 'report_initiative', {
       narrative: `Turn ${turn}: the export grows.`,
-      questions: [],
     });
   }
 }
@@ -221,7 +226,7 @@ async function* cachedTurn(
     record(steer, 'steer', steered);
     results.push(resolveUsage({ ...steered.session }));
   }
-  await hand(params, purpose, call);
+  await hand(params, purpose, call, brief);
   for (const modelUsage of results) {
     yield sdkMessage({
       type: 'result',
@@ -359,17 +364,19 @@ describe('the prompt cache across a task', () => {
     const isMemberTurn = (turn: CachedTurn) => turn.purpose !== 'lead' && turn.purpose !== 'review';
     await w.until('the member at work', () => turns.some(isMemberTurn));
 
+    const plan = turns.find((turn) => turn.brief.includes('Your role: the lead of this initiative'));
     const leads = turns.filter((turn) => turn.purpose === 'lead');
     const woken = leads.find((turn) => turn.brief.includes('Shinsa woke you because members'));
     expect(leads[0]?.brief).toContain('Shinsa started you to lead the initiative “Chat split”.');
     expect(leads[0]?.brief).not.toContain('git status');
     expect(woken?.brief).toContain('What happened since your last turn:');
     expect(woken?.brief).toContain('Grow the export');
-    expect(new Set(leads.map((turn) => turn.sessionId)).size).toBe(1);
-    expect(leads.slice(1).every((turn) => turn.resume === leads[0]?.sessionId)).toBe(true);
-    expect(new Set(leads.map((turn) => turn.prefix)).size).toBe(1);
-    expect(leads.filter((turn) => turn.wholePrefixWritten)).toEqual([leads[0]] as CachedTurn[]);
-    for (const turn of leads.slice(1)) expect(turn.written).toBe(countTokens(turn.brief));
+    expect(plan?.purpose).toBe('plan');
+    expect(new Set([plan, ...leads].map((turn) => turn?.sessionId)).size).toBe(1);
+    expect(leads.every((turn) => turn.resume === plan?.sessionId)).toBe(true);
+    expect(new Set([plan, ...leads].map((turn) => turn?.prefix)).size).toBe(1);
+    expect(plan?.wholePrefixWritten).toBe(true);
+    for (const turn of leads) expect(turn.written).toBe(countTokens(turn.brief));
     expect(turns.find(isMemberTurn)?.prefix).toBe(leads[0]?.prefix ?? '');
   });
 });

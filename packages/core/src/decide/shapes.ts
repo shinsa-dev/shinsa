@@ -11,6 +11,7 @@ import {
   isComposedByAgent,
   isFollowUpOnWork,
   isInquiryDone,
+  isLeadTask,
   isLaterRound,
   isSamePipeline,
   isWorktreeStep,
@@ -45,7 +46,7 @@ import { listOpenGates } from '../state/queries.ts';
 import { assertEvidence } from './agents.ts';
 import type { Decider } from './decider.ts';
 import { answerIteration, suggestActions } from './iterations.ts';
-import { startLeadTurn } from './leads.ts';
+import { startLeadPlan, startLeadTurn } from './leads.ts';
 import { settleTask, startPhase, startPlanning, startWork } from './lifecycle.ts';
 import { findCurrentRun } from './runs.ts';
 import { requestWorkspace } from './workspaces.ts';
@@ -141,7 +142,7 @@ function hasYourOk(task: Task) {
 
 export function resolveNextStep(task: Task): EntryStep {
   const pipeline = resolveTaskPipeline(task);
-  if (pipeline.includes('lead')) return 'lead';
+  if (pipeline.includes('lead')) return pipeline.includes('plan') && !task.plan ? 'plan' : 'lead';
   const inquiry = resolveInquiryStep(pipeline);
   if (inquiry && !isInquiryDone(task, inquiry)) return inquiry;
   if (pipeline.includes('your_ok') && !hasYourOk(task)) return 'your_ok';
@@ -187,6 +188,10 @@ function retitleFromPlan(decider: Decider, taskId: string) {
 }
 
 export function startAfterPlan(decider: Decider, taskId: string, addition = '') {
+  if (isLeadTask(decider.task(taskId))) {
+    startLeadPlan(decider, taskId);
+    return;
+  }
   retitleFromPlan(decider, taskId);
   if (resolveWorkStep(resolveTaskPipeline(decider.task(taskId))) === 'operate') {
     startOperation(decider, taskId, null);
@@ -292,7 +297,7 @@ export function startStep(decider: Decider, taskId: string, step: EntryStep) {
 export function proceedAfterSetup(decider: Decider, taskId: string) {
   const task = decider.task(taskId);
   const step = resolveNextStep(task);
-  if (step !== null && isWorktreeStep(step)) {
+  if (step !== null && isWorktreeStep(step) && !isLeadTask(task)) {
     requestWorkspace(decider, taskId);
     return;
   }

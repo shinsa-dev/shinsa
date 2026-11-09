@@ -4,6 +4,7 @@ import {
   listInitiatives,
   listInitiativeWork,
   listOpenGates,
+  needsRepository,
   resolveInitiativeSheet,
   resolveRunBrief,
   resolveTaskPipeline,
@@ -17,6 +18,7 @@ import {
   createInitiative,
   createTask,
   type Harness,
+  planLead,
   proposePlan,
   readInstruction,
   registerRepo,
@@ -51,21 +53,12 @@ function triageLead(harness: Harness, taskId: string) {
     waitsOn: [],
   });
   if (harness.task(taskId).stage === 'triage') verifySetup(harness, taskId);
+  if (harness.task(taskId).stage === 'planning') planLead(harness, taskId);
   return repoId;
 }
 
-function report(
-  harness: Harness,
-  leadId: string,
-  narrative = 'Dock is in review.',
-  questions: string[] = []
-) {
-  harness.send({
-    type: 'agent.report_initiative',
-    runId: harness.activeRun(leadId).id,
-    narrative,
-    questions,
-  });
+function report(harness: Harness, leadId: string, narrative = 'Dock is in review.') {
+  harness.send({ type: 'agent.report_initiative', runId: harness.activeRun(leadId).id, narrative });
 }
 
 function refusal(harness: Harness, command: Parameters<Harness['send']>[0]) {
@@ -94,7 +87,7 @@ describe('starting a lead', () => {
   test('files a lead task in the initiative that leads on its own step', () => {
     const { harness, initiativeId, leadId } = ledInitiative();
     const lead = harness.task(leadId);
-    expect(resolveTaskPipeline(lead)).toEqual(['lead']);
+    expect(resolveTaskPipeline(lead)).toEqual(['plan', 'lead']);
     expect(lead.initiativeId).toBe(initiativeId);
     expect(lead.stage).toBe('leading');
     const run = harness.activeRun(leadId);
@@ -102,7 +95,7 @@ describe('starting a lead', () => {
     const prompt = readInstruction(run);
     expect(prompt).toContain('Shinsa started you to lead the initiative “Chat split”.');
     expect(prompt).toContain('Restart the chat stack as small pull requests.');
-    expect(prompt).toContain('Its phases, in order: Dock.');
+    expect(prompt).toContain('Its phases, in order: Dock, Wrap up.');
     expect(prompt).toContain('The initiative has no tasks yet.');
     expect(prompt).toContain('`report_initiative`');
     expect(run.prompt).not.toContain('Your role: the agent for this task');
@@ -145,18 +138,119 @@ describe('starting a lead', () => {
     const initiative = listInitiatives(harness.state).at(-1);
     const lead = harness.task(initiative?.leadTaskId ?? '');
     expect(lead.forkOf).toBe(source);
+    expect(resolveTaskPipeline(lead)).toEqual(['lead']);
     expect(lead.request).toContain('Lead the initiative “Rewrite the dock as PR 1”');
   });
 });
 
+describe('planning the initiative', () => {
+  function plannedHarness() {
+    const harness = createHarness();
+    registerRepo(harness);
+    const { initiativeId, leadId } = createInitiative(harness);
+    harness.send({
+      type: 'task.triage',
+      taskId: leadId,
+      title: 'Lead the chat split',
+      repoId: null,
+      size: 'small',
+      branch: `lead/${leadId}`,
+      waitsOn: [],
+    });
+    if (harness.task(leadId).stage === 'triage') verifySetup(harness, leadId);
+    return { harness, initiativeId, leadId };
+  }
+
+  test('a new lead plans the initiative first, without a repository', () => {
+    const { harness, leadId } = plannedHarness();
+    expect(harness.task(leadId).stage).toBe('planning');
+    const run = harness.activeRun(leadId);
+    expect(run).toMatchObject({ role: 'agent', purpose: 'plan' });
+    const prompt = readInstruction(run);
+    expect(prompt).toContain('Your role: the lead of this initiative');
+    expect(prompt).toContain('`split`: the first tasks to file');
+    expect(prompt).toContain('`files` and `verification` stay empty');
+  });
+
+  test('approving the plan files its tasks in their phases, then the lead reports', () => {
+    const { harness, initiativeId, leadId } = plannedHarness();
+    planLead(harness, leadId, [
+      { title: 'Dock', request: 'In pwn, rewrite the dock.', order: 'parallel', phase: 1 },
+      { title: 'Tools', request: 'In embedded, add the tools.', order: 'waits_on', on: 1, phase: 2 },
+      { title: 'Docs', request: 'In pwn, write the docs.', order: 'parallel' },
+    ]);
+    const initiative = initiativeOf(harness, initiativeId);
+    expect(initiative.phases.map((phase) => phase.name)).toEqual(['Start', 'Wrap up']);
+    const filed = listInitiativeWork(harness.state, initiativeId);
+    expect(filed.map((task) => task.request)).toEqual([
+      'In pwn, rewrite the dock.',
+      'In embedded, add the tools.',
+      'In pwn, write the docs.',
+    ]);
+    expect(filed.map((task) => task.initiativePhaseId ?? null)).toEqual([
+      initiative.phases[0]?.id ?? 'missing',
+      initiative.phases[1]?.id ?? 'missing',
+      null,
+    ]);
+    expect(filed[1]?.waitsOn).toEqual([filed[0]?.id ?? 'missing']);
+    expect(harness.task(leadId).stage).toBe('leading');
+    expect(harness.activeRun(leadId).purpose).toBe('lead');
+    expect(initiative.milestones ?? []).toEqual([]);
+  });
+
+  test('keeps phases written before the plan and adds only the new ones', () => {
+    const { harness, initiativeId, leadId } = plannedHarness();
+    harness.send({
+      type: 'initiative.write',
+      initiativeId,
+      name: 'Chat split',
+      phases: [{ id: null, name: 'Start' }],
+    });
+    const kept = initiativeOf(harness, initiativeId).phases[0]?.id;
+    planLead(harness, leadId);
+    expect(
+      initiativeOf(harness, initiativeId).phases.map((phase) => [phase.id === kept, phase.name])
+    ).toEqual([
+      [true, 'Start'],
+      [false, 'Wrap up'],
+    ]);
+  });
+
+  test('a lead plan may split but changes no files and starts no initiative of its own', () => {
+    const { harness, leadId } = plannedHarness();
+    const runId = harness.activeRun(leadId).id;
+    const refused = refusal(harness, {
+      type: 'agent.propose_plan',
+      runId,
+      document: {
+        goal: 'Ship it.',
+        phases: [
+          { title: 'Start', detail: 'Start.' },
+          { title: 'End', detail: 'End.' },
+        ],
+        behaviour: [],
+        approach: 'Carefully.',
+        files: [{ path: 'src/a.ts', change: 'Edit.' }],
+        outOfScope: [],
+        verification: [],
+        questions: [],
+        initiative: true,
+        split: [{ title: 'A', request: 'Do A.', order: 'parallel' }],
+      },
+    });
+    expect(refused.message).toContain('`files` is for a change');
+    expect(refused.message).toContain('this task already leads one');
+    expect(refused.message).not.toContain('`split` starts other changes');
+  });
+});
+
 describe('the lead’s report', () => {
-  test('stores the narrative and questions and keeps the lead leading', () => {
+  test('stores the narrative and keeps the lead leading', () => {
     const { harness, initiativeId, leadId } = ledInitiative();
     const runId = harness.activeRun(leadId).id;
-    report(harness, leadId, '  Dock is in review.  ', [' Merge SW-103 first? ']);
+    report(harness, leadId, '  Dock is in review.  ');
     expect(initiativeOf(harness, initiativeId).report).toMatchObject({
       narrative: 'Dock is in review.',
-      questions: ['Merge SW-103 first?'],
       runId,
     });
     expect(harness.state.runs[runId]?.outcome).toBe('completed');
@@ -166,14 +260,12 @@ describe('the lead’s report', () => {
   test('refuses an empty or oversized report', () => {
     const { harness, leadId } = ledInitiative();
     const runId = harness.activeRun(leadId).id;
-    const send = (narrative: string, questions: string[]) =>
-      refusal(harness, { type: 'agent.report_initiative', runId, narrative, questions });
-    expect(send(' ', []).message).toBe('narrative is required.');
-    expect(send('x'.repeat(INITIATIVE_LIMITS.narrative + 1), []).message).toBe(
+    const send = (narrative: string) =>
+      refusal(harness, { type: 'agent.report_initiative', runId, narrative });
+    expect(send(' ').message).toBe('narrative is required.');
+    expect(send('x'.repeat(INITIATIVE_LIMITS.narrative + 1)).message).toBe(
       `narrative is ${INITIATIVE_LIMITS.narrative + 1} characters; the limit is ${INITIATIVE_LIMITS.narrative}.`
     );
-    expect(send('ok', ['a', 'b', 'c', 'd', 'e', 'f']).code).toBe('report_invalid');
-    expect(send('ok', ['ok', 'x'.repeat(INITIATIVE_LIMITS.question + 1)]).message).toContain('questions[1]');
   });
 
   test('refuses the report outside a lead turn', () => {
@@ -184,7 +276,6 @@ describe('the lead’s report', () => {
       type: 'agent.report_initiative',
       runId,
       narrative: 'x',
-      questions: [],
     });
     expect(refused.code).toBe('wrong_step');
   });
@@ -197,7 +288,6 @@ describe('the lead’s report', () => {
       type: 'agent.report_initiative',
       runId,
       narrative: 'x',
-      questions: [],
     });
     expect(refused.code).toBe('run_over');
   });
@@ -210,7 +300,6 @@ describe('the lead’s report', () => {
       type: 'agent.report_initiative',
       runId,
       narrative: 'x',
-      questions: [],
     });
     expect(refused.code).toBe('initiative_not_found');
   });
@@ -489,9 +578,11 @@ describe('the lead in the sheet and the rules', () => {
 
   test('a lead stands alone and only Shinsa composes it', () => {
     expect(validatePipeline(['lead', 'answer'])).toContain(
-      'A lead does nothing but lead its initiative, so it has no other step.'
+      'A lead plans and leads its initiative, so it has no other step.'
     );
     expect(validatePipeline(['lead'])).toEqual([]);
+    expect(validatePipeline(['plan', 'lead'])).toEqual([]);
+    expect(needsRepository(['plan', 'lead'])).toBe(false);
     expect(
       validateComposition({ pipeline: ['plan', 'build'], mode: 'build', result: null }, ['lead'])
     ).toContain('Only Shinsa starts a lead, for an initiative.');

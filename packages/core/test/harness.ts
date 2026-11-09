@@ -420,6 +420,19 @@ export function learnUsageRate(harness: Harness) {
   }
 }
 
+export function planLead(harness: Harness, leadId: string, split: PlanDocument['split'] = undefined) {
+  const initiative = Object.values(harness.state.initiatives).find((entry) => entry.leadTaskId === leadId);
+  const names = (initiative?.phases ?? []).map((phase) => phase.name);
+  const titles = names.length >= 2 ? names : [...(names.length === 1 ? names : ['Start']), 'Wrap up'];
+  proposePlan(harness, leadId, {
+    ...PLAN,
+    phases: titles.map((title) => ({ title, detail: `Finish ${title}.` })),
+    verification: [],
+    ...(split ? { split } : {}),
+  });
+  if (harness.task(leadId).stage === 'awaiting_plan') approve(harness, leadId);
+}
+
 export function createInitiative(
   harness: Harness,
   options: { name?: string; description?: string; phases?: string[] } = {}

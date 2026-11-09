@@ -355,23 +355,6 @@ function DeliveryCard({ title, args, field }: { title: string; args: ChatToolArg
   );
 }
 
-function InitiativeReportCard({ args }: { args: ChatToolArgs }) {
-  const questions = readStrings(args, 'questions');
-  return (
-    <Card icon='IconSend' title='Reported on the initiative'>
-      <Markdown text={readString(args, 'narrative') ?? ''} />
-      {questions.length > 0 && (
-        <div className='flex flex-col border-t border-border pt-2.5 text-xs'>
-          <span className='text-2xs text-fg-2'>To discuss with you</span>
-          {questions.map((question) => (
-            <InlineMarkdown key={question} text={question} className='selectable text-fg-4' />
-          ))}
-        </div>
-      )}
-    </Card>
-  );
-}
-
 function ReshapeCard({ args }: { args: ChatToolArgs }) {
   const steps = readStrings(args, 'steps');
   return (
@@ -467,7 +450,7 @@ export function HandoverCard({
     case 'report_read':
       return <DeliveryCard title='Reported what it read' args={tool.args} field='summary' />;
     case 'report_initiative':
-      return <InitiativeReportCard args={tool.args} />;
+      return <DeliveryCard title='Where it stands' args={tool.args} field='narrative' />;
     case 'reshape_task':
       return <ReshapeCard args={tool.args} />;
     case 'move_to_repository':

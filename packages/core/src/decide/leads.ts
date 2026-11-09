@@ -87,14 +87,66 @@ export function adoptTask(decider: Decider, command: CommandOf<'initiative.adopt
   const name = resolveInitiativeText(task.title).slice(0, INITIATIVE_LIMITS.name) || 'Untitled initiative';
   const initiative = createInitiative(decider, name, '');
   adoptDescendants(decider, initiative, task);
-  startLead(decider, initiative, {
+  const leadTaskId = startLead(decider, initiative, {
     type: 'task.create',
     request: resolveLeadRequest(initiative),
     repoId: null,
     forkOf: task.id,
     ...(task.projectId ? { projectId: task.projectId } : {}),
   });
+  decider.emit({
+    type: 'task.reshaped',
+    taskId: leadTaskId,
+    pipeline: ['lead'],
+    by: 'shinsa',
+    reason: 'its tasks exist already, so it leads them without a plan',
+  });
   return initiative.id;
+}
+
+function resolvePlanPhases(initiative: Initiative, titles: readonly string[], newId: () => string) {
+  const phases = [...initiative.phases];
+  for (const title of titles) {
+    const name = resolveInitiativeText(title).slice(0, INITIATIVE_LIMITS.phaseName);
+    if (phases.length >= INITIATIVE_LIMITS.phases) break;
+    if (phases.some((phase) => phase.name.toLowerCase() === name.toLowerCase())) continue;
+    phases.push({ id: newId(), name });
+  }
+  return phases;
+}
+
+function findPlannedPhase(initiative: Initiative, lead: Task, number: number | undefined) {
+  const title = lead.plan?.document?.phases[(number ?? 0) - 1]?.title;
+  if (!title) return null;
+  const name = resolveInitiativeText(title).slice(0, INITIATIVE_LIMITS.phaseName).toLowerCase();
+  return initiative.phases.find((phase) => phase.name.toLowerCase() === name) ?? null;
+}
+
+function placePlannedTasks(decider: Decider, lead: Task, initiative: Initiative) {
+  const parts = lead.plan?.document?.split ?? [];
+  const version = lead.plan?.version ?? 0;
+  const split = (lead.splits ?? []).filter((entry) => entry.planVersion === version).at(-1);
+  for (const [index, taskId] of (split?.taskIds ?? []).entries()) {
+    const phase = findPlannedPhase(initiative, lead, parts[index]?.phase);
+    const member = decider.state.tasks[taskId];
+    if (!phase || !member || member.initiativePhaseId === phase.id) continue;
+    changeMembership(decider, member, { initiativeId: initiative.id, phaseId: phase.id });
+  }
+}
+
+export function startLeadPlan(decider: Decider, taskId: string) {
+  const lead = decider.task(taskId);
+  const initiative = findLeadInitiative(decider, taskId);
+  const titles = (lead.plan?.document?.phases ?? []).map((phase) => phase.title);
+  const phases = resolvePlanPhases(initiative, titles, decider.context.newId);
+  if (phases.length > initiative.phases.length) {
+    decider.emit({
+      type: 'initiative.written',
+      initiative: { ...initiative, phases, updatedAt: decider.context.now },
+    });
+  }
+  placePlannedTasks(decider, lead, findInitiative(decider, initiative.id));
+  startLeadTurn(decider, taskId, null);
 }
 
 export function startPlanInitiative(decider: Decider, taskId: string) {
@@ -170,10 +222,7 @@ function requestWake(decider: Decider, initiative: Initiative) {
 export function reportInitiative(decider: Decider, command: CommandOf<'agent.report_initiative'>) {
   const { run, task } = findCurrentRun(decider, command.runId, 'report_initiative');
   const initiative = findLeadInitiative(decider, task.id);
-  const validation = validateInitiativeReport({
-    narrative: command.narrative,
-    questions: command.questions,
-  });
+  const validation = validateInitiativeReport({ narrative: command.narrative });
   if (!validation.ok) {
     throw new DomainError({ code: 'report_invalid', message: validation.errors.join(' ') });
   }

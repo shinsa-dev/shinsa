@@ -1038,7 +1038,7 @@ folds in `state/shapes.ts`).
   **operation** `[plan, operate]` (something to run in the repository, a script, a migration or a cleanup: the plan always
   waits for you, then the Agent that planned it runs it in the same session and reports with `report_outcome`; no
   pull request). `resolveTaskShape` names a
-  pipeline back (an answer that became a change reads as a change). A seventh, **lead** `[lead]`, is an initiative itself
+  pipeline back (an answer that became a change reads as a change). A seventh, **lead** `[plan, lead]`, is an initiative itself
   (Initiatives, below): only `task.create` with `initiative` and `initiative.adopt_task` make one, no agent composes its step (`Only Shinsa
   starts a lead, for an initiative.`) and it is never one of the presets below (`PresetShape`).
 - **Who chooses.** Shinsa. The classifier picks one of the six presets from the request (`task.triage` `shape`, a
@@ -1513,17 +1513,33 @@ it on the lead task's Overview (`components/initiatives/`, `lib/initiatives/`).
   first, at most 100). A lead is never one of the initiative's tasks there or in any count (`listInitiativeWork`).
   The Overview shows these as the All tasks list does (a gate's group, In progress, one Up next per phase, Done and
   Cancelled) and puts Decisions into the lead's Activity (`listInitiativeTaskSections`, `listInitiativeActivity` in
-  `apps/web/src/lib/initiatives/view.ts`); a question in the report quotes itself into the lead's composer. Home's Initiatives section lists each open initiative with its progress and opens its lead task; both routes are
+  `apps/web/src/lib/initiatives/view.ts`). Home's Initiatives section lists each open initiative with its progress and opens its lead task; both routes are
   behind the `initiatives` engine feature, whose views link the lead task.
 - **Focus.** `Focus.initiativeId` is a third focus target beside projects and a team, one at a time (`focus_refused`
   for two), from the Focus menu, ⌘K or `shinsa focus initiative`. `resolveQueue` then keeps only the initiative's
   tasks and decisions (`resolveFocusInitiative`), so Home, the queue button, the guide and notifications narrow to it.
-- **The lead.** The `lead` kind (`SHAPE_PIPELINES.lead`, one `lead` step that no agent may compose and triage never
-  picks: `PresetShape` is the six you see) does no repository work, opens no pull request and has no gate tools. It is
-  the task's one Agent session (the engine's first rule): every turn is a run of purpose `lead` that resumes the same
-  session, between turns it rests in the `leading` stage (never done), and each turn ends with `report_initiative`, a
-  hand-over of a `narrative` (at most 2,000 characters) and up to five `questions` (280 each) that
-  `initiative.reported` keeps as `Initiative.report` and its Overview shows first. You talk to it in its chat.
+- **The lead.** The `lead` kind (`SHAPE_PIPELINES.lead`, `plan` then `lead`; no agent may compose `lead` and triage
+  never picks it: `PresetShape` is the six you see) does no repository work, opens no pull request and has no gate
+  tools. It is the task's one Agent session (the engine's first rule), and it keeps a task's notions: a plan, your
+  answers, its chat.
+  - **It plans first.** A new initiative's lead plans like any task (`purpose: plan`, `resolveLeadPlanningPrompt`,
+    in a scratch folder, since no step needs a repository: `needsRepository` is false for a lead): its `phases` are the
+    initiative's phases and its `split` the first tasks to file, each with the `phase` it belongs to (its number) and a
+    request naming its repository. `validatePlanRules` lets a lead's plan split but refuses `files` and `initiative`.
+    The split always opens the plan gate. Approving it files the parts (`startPlanSplit`, forked from the lead's chat,
+    so each starts knowing the plan; triage picks each one's repository), adds the plan's phases the initiative does
+    not have yet (`startLeadPlan`, matched by name), puts each part in its phase and starts the lead's first turn. A
+    lead made from tasks that exist already (Make an initiative from this task, a plan's `initiative`) has nothing to
+    plan: `task.reshaped` drops its `plan` step and it starts leading at once.
+  - **Its turns.** Every turn after the plan is a run of purpose `lead` on the same session; between turns it rests in
+    the `leading` stage (never done), and each turn ends with `report_initiative`, a `narrative` of at most 2,000
+    characters that `initiative.reported` keeps as `Initiative.report` and its Overview shows as Where it stands.
+  - **Its questions are questions.** What only you can settle it asks with `ask`, so it waits in Needs you like any
+    agent's question and its turn waits for your answer; a report carries none. Milestones that arrive meanwhile
+    stay queued, since a lead with an open gate is not idle.
+  - **Its context.** One session for the initiative's life: each wake adds a short digest and the milestones since
+    the last turn, never a member's transcript; it reads a member with `read_task` only when it needs to, boundary
+    folds keep the session small, and every member works in its own session. You talk to it in its chat.
 - **What wakes the lead.** After every command `syncInitiativeMilestones` reads the new events for member milestones:
   a task joined, a plan accepted (at its gate or without one), a decision gate opened, merged, done or cancelled. It
   skips the lead itself, tasks the lead filed (it knows), and initiatives without a live lead, queues them on the
