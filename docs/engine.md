@@ -1083,12 +1083,12 @@ folds in `state/shapes.ts`).
   (a veto, `closeProposal`) leads, and going on drops to the quiet link; ⌘K orders them the same way. A find-and-fix
   diagnosis with `close` reshapes the task to `[investigate, your_ok, …]` (`by: agent`) so it stops for your OK instead
   of planning a fix.
-- **Suggested replies.** Any hand-over but the reviewer's can carry up to three `actions` (`label`, `message`).
+- **Suggested replies.** Any hand-over but the reviewer's can carry at most two `actions` (`label`, `message`), and agents are told to add them rarely: only for a real fork the gate's own buttons do not cover.
   `task.actions_suggested` keeps them on `task.suggestedActions`; the next hand-over replaces them, and your message
   that reaches the agent or your answer to a gate clears them (a message only kept for a later agent does not). The
-  plan, proposal, review, merge and result cards show them as outline buttons before the main one, ⌘K lists them as
-  "Suggested reply" while one of those gates is open, and both show them only while a message can reach the agent. A
-  click sends the message as yours (`task.message`), so it does what typing it does there: at review it asks for
+  plan, proposal, review, merge and result cards list them in one outline Replies menu before the main button, each label with its message under it, ⌘K lists them as
+  "Suggested reply" while one of those gates is open, and both show them only while a message can reach the agent.
+  Choosing one sends the message as yours (`task.message`), so it does what typing it does there: at review it asks for
   changes in this round, at your OK it declines the proposal and resumes the inquiry.
 - **Changing shape mid-task.** An answerer, investigator or researcher can end with `propose_change` (`request` at most 2,000
   characters, `why` at most 240). On a task without `your_ok` whose pipeline does not already go on to a plan (a fix
