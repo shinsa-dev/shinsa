@@ -1,12 +1,15 @@
 import { describe, expect, test } from 'bun:test';
 import type { UsageShareState } from '../../src/costs/rate.ts';
 import {
+  type AccountPlan,
   DAY_MS,
   type Run,
   type RunMeter,
   resolveMeterWindow,
+  resolveRatePool,
   resolveUsageRates,
   resolveUsageShares,
+  STARTING_RATES,
   USAGE_RATE_LIMITS,
 } from '../../src/index.ts';
 
@@ -295,5 +298,76 @@ describe('resolveUsageShares', () => {
     const runs = toRuns(LEARNED);
     expect(resolveUsageShares(runs)).toBe(resolveUsageShares(runs));
     expect(resolveUsageRates(runs)).toBe(resolveUsageRates(runs));
+  });
+});
+
+function onPlan(plan: string, ...accountIds: string[]): Record<string, AccountPlan> {
+  return Object.fromEntries(accountIds.map((id) => [id, { provider: 'claude', plan, at: 0 }]));
+}
+
+const ULTRA_START = STARTING_RATES['claude:ultra']?.percentPerUsd as number;
+
+describe('the rate a plan’s accounts share', () => {
+  test('pools an account by its provider and plan, and keeps one without a known plan on its own', () => {
+    const plans = onPlan('ultra', 'work');
+    expect(resolveRatePool(WORK, plans)).toBe('plan:claude:ultra');
+    expect(resolveRatePool(SPARE, plans)).toBe(SPARE);
+    expect(resolveRatePool('provider:codex', plans)).toBe('provider:codex');
+  });
+
+  test('every account on one plan learns from the others, so the pool is trusted sooner', () => {
+    const half = USAGE_RATE_LIMITS.minTasks - 2;
+    const work = createSequence({ count: half, costUsd: 10, movement: 2 });
+    const spare = createSequence({ window: SPARE, count: half, costUsd: 10, movement: 2, start: 100_000 });
+    const runs = toRuns([...work, ...spare]);
+    expect(resolveUsageRates(runs).get(WORK)?.trusted).toBe(false);
+    const pooled = resolveUsageRates(runs, onPlan('max', 'work', 'spare'));
+    expect(pooled.get(WORK)).toEqual({ percentPerUsd: expect.closeTo(0.2, 9), tasks: 6, trusted: true });
+    expect(pooled.get(SPARE)).toBe(pooled.get(WORK));
+  });
+
+  test('a new account on a plan with a starting rate has an estimate before its first task', () => {
+    const rates = resolveUsageRates({}, onPlan('ultra', 'fresh'));
+    expect(rates.get('account:fresh')).toEqual({ percentPerUsd: ULTRA_START, tasks: 0, trusted: false });
+    expect(resolveUsageRates({}, onPlan('team', 'fresh')).has('account:fresh')).toBe(false);
+  });
+
+  test('the starting rate counts as a little movement, so the account’s own readings soon outweigh it', () => {
+    const runs = toRuns(LEARNED);
+    const learned = resolveUsageRates(runs, onPlan('ultra', 'work')).get(WORK);
+    const start = USAGE_RATE_LIMITS.startingMovement;
+    const expected = (10 + start) / (50 + start / ULTRA_START);
+    expect(learned).toEqual({ percentPerUsd: expect.closeTo(expected, 4), tasks: 5, trusted: true });
+    const shares = resolveUsageShares(runs, onPlan('ultra', 'work'));
+    expect(shares.get(`${WORK}-0`)).toEqual({
+      percent: expect.closeTo(10 * expected, 4),
+      tasks: 5,
+      trusted: true,
+    });
+  });
+
+  test('a run on a new account on a known plan carries an estimate, not learning', () => {
+    const idle = createRun('idle', [
+      createMeter(WORK, 30 * 60_000, 30 * 60_000 + 100, 4, [
+        [10, 0],
+        [60, 30 * 60_000 + 100],
+      ]),
+    ]);
+    expect(resolveUsageShares(toRuns([idle])).get('idle')).toBe('learning');
+    const shares = resolveUsageShares(toRuns([idle]), onPlan('ultra', 'work'));
+    expect(shares.get('idle')).toEqual({
+      percent: expect.closeTo(4 * ULTRA_START, 9),
+      tasks: 0,
+      trusted: false,
+    });
+  });
+
+  test('an account that changes plan moves to the other plan’s pool, and each set of plans is worked out once', () => {
+    const runs = toRuns(LEARNED);
+    const ultra = onPlan('ultra', 'work');
+    expect(resolveUsageRates(runs, ultra)).toBe(resolveUsageRates(runs, ultra));
+    expect(resolveUsageShares(runs, ultra)).toBe(resolveUsageShares(runs, ultra));
+    const max = resolveUsageRates(runs, onPlan('max', 'work')).get(WORK);
+    expect(max).toEqual({ percentPerUsd: expect.closeTo(0.2, 9), tasks: 5, trusted: true });
   });
 });

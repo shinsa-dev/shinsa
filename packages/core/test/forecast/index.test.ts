@@ -5,7 +5,13 @@ import {
   type ForecastAccount,
   FORECAST_LIMITS,
   HOUR_MS,
+  type AccountsSnapshot,
   listForecastAccounts,
+  listForecastProviders,
+  listProviderForecastAccounts,
+  listProviderPaces,
+  resolveGrantRefill,
+  type UsageResetGrant,
   resolveForecastAccount,
   resolveForecastTimeline,
   resolveUsageForecast,
@@ -229,5 +235,95 @@ describe('listForecastAccounts', () => {
       ['work', 'work@example.com'],
       ['nameless', 'nameless'],
     ]);
+  });
+});
+
+function grant(overrides: Partial<UsageResetGrant>): UsageResetGrant {
+  return {
+    id: 'launch',
+    label: null,
+    left: 1,
+    total: 1,
+    clears: ['five_hour', 'seven_day'],
+    usableNow: true,
+    endsAt: null,
+    ...overrides,
+  };
+}
+
+function snapshot(overrides: Partial<AccountsSnapshot>): AccountsSnapshot {
+  return { accounts: [], login: null, imports: [], ...overrides };
+}
+
+describe('resolveGrantRefill', () => {
+  test('counts each usable reset that clears the weekly limit as a full refill', () => {
+    const usage = {
+      ...weekly(60, null),
+      resetGrants: [
+        grant({ left: 2 }),
+        grant({ id: 'session', clears: ['five_hour'] }),
+        grant({ id: 'later', usableNow: false }),
+        grant({ id: 'ended', endsAt: NOW - HOUR_MS }),
+        grant({ id: 'open', endsAt: NOW + HOUR_MS }),
+        grant({ id: 'spent', left: -1 }),
+      ],
+    };
+    expect(resolveGrantRefill(usage, NOW)).toBe(3 * FORECAST_LIMITS.fullPercent);
+    expect(resolveGrantRefill(weekly(60, null), NOW)).toBe(0);
+  });
+
+  test('adds the refill to an account only when the forecast asks for grants', () => {
+    const usage = { ...weekly(60, NOW + 10 * HOUR_MS), resetGrants: [grant({})] };
+    expect(resolveForecastAccount('work', 'work', usage, null, NOW)?.left).toBe(40);
+    expect(resolveForecastAccount('work', 'work', usage, null, NOW, { grants: true })?.left).toBe(140);
+  });
+});
+
+describe('the forecast of each provider in a snapshot', () => {
+  const codex = {
+    provider: 'codex',
+    label: 'Codex',
+    status: 'signed_in' as const,
+    method: null,
+    version: null,
+    detail: null,
+    fix: null,
+    email: 'me@example.com',
+    usage: weekly(20, NOW + 10 * HOUR_MS),
+  };
+
+  test('lists Claude first, then every other provider signed in', () => {
+    expect(listForecastProviders(snapshot({ providers: [{ ...codex, provider: 'claude' }, codex] }))).toEqual(
+      ['claude', 'codex']
+    );
+  });
+
+  test('reads Claude from its accounts, and another provider from its own sign-in', () => {
+    const both = snapshot({ accounts: [summary({})], providers: [codex] });
+    expect(listProviderForecastAccounts(both, 'claude', NOW).map((entry) => entry.id)).toEqual(['work']);
+    expect(listProviderForecastAccounts(both, 'codex', NOW)).toEqual([
+      { id: 'codex', label: 'me@example.com', left: 80, resetsAt: NOW + 10 * HOUR_MS },
+    ]);
+    expect(listProviderForecastAccounts(both, 'gemini', NOW)).toEqual([]);
+    const signedOut = snapshot({ providers: [{ ...codex, status: 'signed_out', email: null }] });
+    expect(listProviderForecastAccounts(signedOut, 'codex', NOW)).toEqual([]);
+    const unread = snapshot({ providers: [{ ...codex, usage: undefined }] });
+    expect(listProviderForecastAccounts(unread, 'codex', NOW)).toEqual([]);
+    const unlabelled = snapshot({
+      providers: [{ ...codex, email: null, usage: { ...codex.usage, windows: [] } }],
+    });
+    expect(listProviderForecastAccounts(unlabelled, 'codex', NOW)).toEqual([]);
+  });
+
+  test('gives each provider its safe pace with usable resets counted, or none with nothing to forecast', () => {
+    const out = weekly(100, NOW + 144 * HOUR_MS);
+    const [claude] = listProviderPaces(
+      snapshot({ accounts: [summary({ usage: { ...out, resetGrants: [grant({})] } })] }),
+      NOW
+    );
+    const [plain] = listProviderPaces(snapshot({ accounts: [summary({ usage: out })] }), NOW);
+    expect(plain?.pace).toBe(0);
+    expect(claude?.pace ?? 0).toBeGreaterThan(10);
+    expect(listProviderPaces(snapshot({}), NOW)).toEqual([{ provider: 'claude', pace: null }]);
   });
 });

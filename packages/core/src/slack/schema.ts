@@ -1,5 +1,6 @@
 import { Schema } from 'effect';
 import { NullByDefault, Salvaged, SalvagedItems, SalvagedOrNull, Truncated } from '../domain/salvage.ts';
+import { RemoteUserId } from '../remote/contract.ts';
 
 export const SLACK_LIMITS = {
   text: 4000,
@@ -70,6 +71,7 @@ export const SlackMention = Schema.Struct({
   channelName: SalvagedOrNull(SlackChannelName),
   thread: SalvagedItems(SlackThreadMessage, SLACK_LIMITS.threadMessages),
   linkedThreads: SalvagedItems(SlackLinkedThread, SLACK_LIMITS.linkedThreads),
+  linkedUserId: NullByDefault(RemoteUserId),
 });
 
 export type SlackMention = typeof SlackMention.Type;

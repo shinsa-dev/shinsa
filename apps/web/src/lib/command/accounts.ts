@@ -16,7 +16,12 @@ import {
   resolveRunAccount,
   selectRerunRun,
 } from '@/lib/accounts/account.ts';
-import { describeUsageWaitToggle, isPaceWait, isUsageWaitArmed } from '@/lib/accounts/usage-wait.ts';
+import {
+  describeUsageWaitAction,
+  describeUsageWaitToggle,
+  isPaceWait,
+  isUsageWaitArmed,
+} from '@/lib/accounts/usage-wait.ts';
 import { listChatRuns } from '@/lib/chat/delegations.ts';
 import { listTaskRuns } from '@/lib/chat/runs.ts';
 import { type Command, type CommandSection, RANK } from '@/lib/command/registry.ts';
@@ -81,7 +86,7 @@ export function listUsageWaitCommands(task: Task): Command[] {
   const resume: Command = {
     kind: 'run',
     id: `task.${task.id}.usage.resume`,
-    label: ACCOUNT_LABEL.resumeNow,
+    label: describeUsageWaitAction(wait),
     icon: 'IconPlay',
     keywords: ['usage limit', 'resume', 'continue', 'wait'],
     run: () => void resumeUsageWaitNow(task.id),

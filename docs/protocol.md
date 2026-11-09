@@ -96,6 +96,10 @@ One definition per term. **Code** is the name in `packages/core`; **UI** is the 
 | usage forecast | The highest steady daily pace the accounts allow without all of them running out, with each account's timeline | `UsageForecast` (`resolveUsageForecast`) | forecast |
 | usage reset | A reset of usage limits Claude grants an account, which you claim in the Claude app; Shinsa shows it and never claims it | `UsageResetGrant`, `AccountUsage.resetGrants` | "Usage reset", "1 usage reset available" |
 | extra usage | Paid usage past a plan's limits, on or off per account, with the credit left | `ExtraUsage`, `UsageMoney`, `AccountUsage.extraUsage` | "Extra usage", "credit left" |
+| rate pool | The accounts that learn one usage rate together: every account on one provider and plan, or one account whose plan is unknown | `resolveRatePool`, `plan:<provider>:<plan>`, `state.accountPlans`, `STARTING_RATES` | "an estimate from its plan's usual rate" |
+| build estimate | What a task's build will cost, from the nearest past builds or a measured table, corrected after each phase | `BuildEstimate` (`resolveBuildEstimate`) | "About 6% to build", Build estimate |
+| Auto pace | Your switch that starts each build only when its estimate fits the safe pace, in queue order | `autoPace`, `usage.pace_recorded`, `state.usagePaces`, a pace hold with scope `admission` | Auto pace, "Waiting to build", "Builds tonight", Build now |
+| night shift | What Auto pace does in your away hours: queued builds run, and the Agent records judgement calls instead of asking | `AwayHours` (`resolveAwayHours`), `NightShift`, `resolveNightShiftTold` | "built overnight" |
 | account | A Claude login a run is leased on | `RunAccount` | account |
 | provider sign-in | A provider's own login (Codex), named on a Sign in gate with no account | `ProviderSignIn`, `Gate.provider` | "Paused: ‹email› needs signing in" |
 | command | A request to change state; `decide` turns it into events and effects or refuses it | `ShinsaCommand` (`UserCommand`, `AgentCommand`, `SystemCommand`) | not shown |
@@ -890,7 +894,7 @@ your behalf (`onBehalf`, `byTask`). **Human** = only you: its specs are `humanOn
 | `repo.remove` | forgets a repository | `repos remove` | agent |
 | `focus.change` | sets or clears the focus: `projectIds` with `except`, or `teamId`, never both (`focus_refused`), and `until`; `projectId` alone, from a page older than `focus.projects`, focuses on that one project | `focus set`, `focus clear` | agent |
 | `away.record` | records a span you were away from your Mac (`from`, `to`), sent by the Mac app's page; refused when it ends before it starts, after now or lasts over 30 days (`away_refused`) | none | **human** |
-| `settings.change` | changes settings (`SETTINGS_KEYS`) | `settings set` | agent; **human** for `approvePlans`, `mergeMethod`, `taskBudgetUsd`, `taskUsageLimit`, `dailyUsageLimit`, `autoResume`, `snoozeLimited`, `accountSwitchAt`, `fastMode`, `agentFastModes`, `delegationLimit`, `shareLimit`, `sharePreset`, `autopilot`, `watchdogsIgnoreUsageLimits`, `sharedTeams` (`HUMAN_ONLY_SETTINGS`); a partial `autopilot` is merged into the current policy, `urgentWaitMinutes` 1 to 1,440, `ignoreUsageLimits` (true by default) lets an urgent task's runs skip the usage and cost limits |
+| `settings.change` | changes settings (`SETTINGS_KEYS`) | `settings set` | agent; **human** for `approvePlans`, `mergeMethod`, `taskBudgetUsd`, `taskUsageLimit`, `dailyUsageLimit`, `autoResume`, `snoozeLimited`, `accountSwitchAt`, `fastMode`, `agentFastModes`, `delegationLimit`, `shareLimit`, `sharePreset`, `autopilot`, `watchdogsIgnoreUsageLimits`, `autoPace`, `sharedTeams` (`HUMAN_ONLY_SETTINGS`); a partial `autopilot` is merged into the current policy, `urgentWaitMinutes` 1 to 1,440, `ignoreUsageLimits` (true by default) lets an urgent task's runs skip the usage and cost limits |
 
 Core refuses a command sent on your behalf with `human_only`, recording nothing, when it is a `gate.answer`
 (`assertHumanDecides`), when a gate that was open before it is no longer open after it (`assertGatesStayOpen` in
@@ -1029,6 +1033,8 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `feedback.record_issue_state` | `FeedbackEffects.syncIssues`, with the pull request sync | an opened issue's `closedAt` as GitHub reports it, or null when it opened again; nothing when it did not change |
 | `feedback.record_failure` | either feedback effect, and the start after a restart | fails a `drafting` or `filing` entry with `detail` |
 | `account.signed_in`, `account.removed` | the accounts service | answers that account's Sign in gates; releases bound tasks |
+| `account.plan_recorded` | the account roster, when an account's plan differs from `state.accountPlans` | records the account's `provider` and `plan` under its plan key, or forgets it with `plan: null`; nothing when unchanged |
+| `usage.pace_recorded` | the account roster, on an accounts refresh | records a provider's safe `pace` (the forecast with usable reset grants), or clears it with null; nothing when unchanged |
 | `provider.record_sign_in` | the accounts service | a provider's own sign-in is back: answers its open Sign in gates that name no account |
 | `onboarding.welcome` | `Onboarding.complete` (`onboarding/index.ts`), when setup ends | records the welcome task, "Welcome to Shinsa", with `body` as its answer: `task.created` (origin `onboarding`, no repository, mode `ask`), `task.triaged`, `task.delivered`, then done; no triage, agent or effect; refused with an empty body (`welcome_invalid`) or once a task with that origin exists (`welcome_recorded`) |
 | `delegation.record_delivery`, `delegation.release` | `agents/deliveries/service.ts` | a delivery claim was taken, or released |
@@ -1146,7 +1152,9 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `run.silenced`, `run.silence_snoozed`, `run.silence_dismissed` | a run went quiet; the warning snoozed or dismissed |
 | `run.waiting` | a step's turn ended while its delegations work |
 | `monitor.armed`, `monitor.fired`, `monitor.ended` | a monitor was armed, fired, ran out or was cleared |
-| `usage_wait.armed`, `usage_wait.ended` | a usage wait was armed; resumed, reset or cleared |
+| `usage_wait.armed`, `usage_wait.ended` | a usage wait was armed; resumed, reset or cleared (a pace hold's `pace.scope` is `daily`, `project` or `admission`, the last with the build's estimate as `need`) |
+| `account.plan_recorded` | an account's plan was recorded or forgotten, folded into `state.accountPlans` |
+| `usage.pace_recorded` | a provider's safe pace was recorded or cleared, folded into `state.usagePaces` |
 | `task.pace_limits_ignored` | you resumed a pace hold, so the daily and project usage limits no longer hold the task |
 | `pull_request.opened`, `pull_request.updated` | the pull request was opened; a read changed it |
 | `pull_request.push_requested`, `pull_request.pushed`, `pull_request.head_moved` | a push was asked for, made; someone else moved the head |
@@ -1416,7 +1424,7 @@ A **state patch** (`StatePatch`, `packages/core/src/protocol/patch.ts`; `resolve
 | --- | --- |
 | `from`, `to` | The log position the patch applies to and the one it reaches; equal for a change that is not an event (a new Home guide, `docs/engine.md` → The briefing) |
 | `fields` | `focus`, `settings`, `onBehalfActions` when they changed, each a `ValueChange` |
-| `records` | Per record of the state (`tasks`, `runs`, `gates`, `repos`, `projects`, `taskNumbers`, `evidence`, `briefings`, `schedules`, `sessionUsage`, `presence`, `away`, `focusHistory`), the entries that changed by id, each an `EntryChange` |
+| `records` | Per record of the state (`tasks`, `runs`, `gates`, `repos`, `projects`, `taskNumbers`, `evidence`, `briefings`, `schedules`, `sessionUsage`, `presence`, `away`, `focusHistory`, `accountPlans`, `usagePaces`), the entries that changed by id, each an `EntryChange` |
 
 An `EntryChange` is `{ put }` (a new or replaced entry), `{ remove: true }` or `{ fields, unset }` (the fields whose
 value changed, each a `ValueChange`, and the ones that went away). A `ValueChange` is `{ put }` or `{ drop, append }`:

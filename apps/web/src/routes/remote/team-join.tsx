@@ -53,8 +53,20 @@ const PICK_POINT: RemotePoint = {
   detail: 'Teammates see the projects you pick below. Your other tasks stay private.',
 };
 
+const NO_MACHINE_POINT: RemotePoint = {
+  icon: MACHINE_ICON,
+  title: 'No machine of your own needed',
+  detail: 'You reach the team through the machines its people share with it. You share no projects yourself.',
+};
+
 const NO_SHARE_HINT =
   'Your teammates see nothing of yours until you share a project. You can do this later in Settings → Teams.';
+
+const WITHOUT_MACHINE_HINT =
+  'Only if you do not run Shinsa on any machine. You share nothing with the team and see its work through the machines its people share with it.';
+
+const NO_MACHINE_HINT =
+  'You have no machine paired, so you share no projects. You reach the team through the machines shared with it.';
 
 type TeamPreview = { name: string; owner: UserProfile } | { failure: string } | null;
 
@@ -82,7 +94,7 @@ function useTeamPreview(link: TeamJoinFragment | null, dashboard: Pick<Dashboard
 type JoinState =
   | { kind: 'ready' }
   | { kind: 'requesting' }
-  | { kind: 'done'; result: TeamJoinResult; shared: string | null }
+  | { kind: 'done'; result: TeamJoinResult; note: string }
   | { kind: 'failed'; message: string };
 
 type MachinesLoad =
@@ -98,7 +110,12 @@ function useJoinMachines(open: OpenJoinMachines): MachinesLoad {
     open().then(
       (opened: JoinMachines) => {
         close = opened.close;
-        if (live) setLoad({ status: 'ready', machines: opened.machines, setup: opened.setup });
+        if (live)
+          setLoad({
+            status: 'ready',
+            machines: opened.machines,
+            setup: opened.setup,
+          });
         else opened.close();
       },
       (error: unknown) => {
@@ -119,7 +136,7 @@ function describeSetup(setup: JoinSetup, team: string) {
       return {
         icon: MACHINE_ICON,
         title: 'Turn on remote access first',
-        detail: `Teammates reach your work through your machines, so ${team} needs one of them. Turn on remote access where Shinsa runs, then check again.`,
+        detail: `Teammates reach your work through your machines. If Shinsa runs on your Mac, turn on remote access there, then check again to join ${team} and share your projects.`,
         steps: { title: 'Pair a machine', items: PAIR_STEPS },
       };
     case 'add':
@@ -146,7 +163,15 @@ function describeSetup(setup: JoinSetup, team: string) {
   }
 }
 
-function SetupPage({ setup, team }: { setup: JoinSetup; team: string }) {
+function SetupPage({
+  setup,
+  team,
+  onWithoutMachine,
+}: {
+  setup: JoinSetup;
+  team: string;
+  onWithoutMachine: () => void;
+}) {
   const described = describeSetup(setup, team);
   return (
     <section className='flex flex-col items-center gap-6 pt-4'>
@@ -155,6 +180,14 @@ function SetupPage({ setup, team }: { setup: JoinSetup; team: string }) {
       </RemoteHero>
       {described.steps && <RemoteSteps title={described.steps.title} steps={described.steps.items} />}
       <RemoteCheckAgain />
+      {setup.kind === 'pair' && (
+        <div className='flex w-full flex-col gap-2'>
+          <Button className='w-full' variant='secondary' onClick={onWithoutMachine}>
+            Join without a machine
+          </Button>
+          <p className='w-full text-center text-xs text-pretty text-fg-2'>{WITHOUT_MACHINE_HINT}</p>
+        </div>
+      )}
     </section>
   );
 }
@@ -201,7 +234,7 @@ function ReadingMachines() {
   );
 }
 
-function JoinedPage({ result, shared }: { result: TeamJoinResult; shared: string | null }) {
+function JoinedPage({ result, note }: { result: TeamJoinResult; note: string }) {
   const member = result.status === 'member';
   return (
     <section className='flex flex-col items-center gap-6 pt-4'>
@@ -219,11 +252,33 @@ function JoinedPage({ result, shared }: { result: TeamJoinResult; shared: string
           </>
         )}
       </RemoteHero>
-      <p className='w-full text-center text-xs text-pretty text-fg-2'>{shared ?? NO_SHARE_HINT}</p>
+      <p className='w-full text-center text-xs text-pretty text-fg-2'>{note}</p>
       <Button className='w-full' nativeButton={false} render={<a href={REMOTE_PATHS.app} />}>
         Open Shinsa
       </Button>
     </section>
+  );
+}
+
+function JoinHero({
+  team,
+  machineless,
+}: {
+  team: { name: string; owner: UserProfile } | null;
+  machineless: boolean;
+}) {
+  const where = machineless ? 'here' : 'next to your own';
+  return (
+    <RemoteHero icon='IconUserAdd' title={team ? `Join ${team.name}` : 'Join a team'}>
+      {team ? (
+        <>
+          <UserTag user={team.owner} /> owns this team. Ask to join with your GitHub account. Once they
+          accept, you see your teammates’ tasks {where}.
+        </>
+      ) : (
+        `Ask to join with your GitHub account. Once the team’s owner accepts, you see your teammates’ tasks ${where}.`
+      )}
+    </RemoteHero>
   );
 }
 
@@ -242,6 +297,7 @@ export function TeamJoinPage({
 }) {
   const [state, setState] = React.useState<JoinState>({ kind: 'ready' });
   const [picks, setPicks] = React.useState<JoinPicks>({});
+  const [withoutMachine, setWithoutMachine] = React.useState(false);
   const preview = useTeamPreview(link, dashboard);
   const load = useJoinMachines(openMachines);
   if (!link)
@@ -260,12 +316,20 @@ export function TeamJoinPage({
         </Button>
       </section>
     );
-  if (state.kind === 'done') return <JoinedPage result={state.result} shared={state.shared} />;
+  if (state.kind === 'done') return <JoinedPage result={state.result} note={state.note} />;
   const named = preview && 'name' in preview ? preview : null;
-  if (load.status === 'ready' && load.setup)
-    return <SetupPage setup={load.setup} team={named?.name ?? 'the team'} />;
+  const machineless = load.status === 'ready' && load.setup?.kind === 'pair';
+  if (load.status === 'ready' && load.setup && !(machineless && withoutMachine))
+    return (
+      <SetupPage
+        setup={load.setup}
+        team={named?.name ?? 'the team'}
+        onWithoutMachine={() => setWithoutMachine(true)}
+      />
+    );
   const reached = load.status === 'ready' ? load.machines : [];
   const sharing = reached.filter((machine) => machine.projects.length > 0);
+  const noShareHint = machineless ? NO_MACHINE_HINT : NO_SHARE_HINT;
 
   async function join(fragment: TeamJoinFragment, joinUrl: string) {
     setState({ kind: 'requesting' });
@@ -273,7 +337,7 @@ export function TeamJoinPage({
       const result = await request(fragment, { dashboard, teamKeys });
       await joinFromMachines(reached, picks, joinUrl);
       clearTeamJoinFragment(sessionStorage);
-      setState({ kind: 'done', result, shared: describeJoinPicks(sharing, picks) });
+      setState({ kind: 'done', result, note: describeJoinPicks(sharing, picks) ?? noShareHint });
     } catch (error) {
       setState({ kind: 'failed', message: describeFailure(error) });
     }
@@ -289,20 +353,11 @@ export function TeamJoinPage({
           : null;
   return (
     <section className='flex flex-col items-center gap-6 pt-4'>
-      <RemoteHero icon='IconUserAdd' title={named ? `Join ${named.name}` : 'Join a team'}>
-        {named ? (
-          <>
-            <UserTag user={named.owner} /> owns this team. Ask to join with your GitHub account. Once they
-            accept, you see your teammates’ tasks next to your own.
-          </>
-        ) : (
-          'Ask to join with your GitHub account. Once the team’s owner accepts, you see your teammates’ tasks next to your own.'
-        )}
-      </RemoteHero>
-      <RemoteBenefits points={[...TEAM_POINTS, PICK_POINT]} />
+      <JoinHero team={named} machineless={machineless} />
+      <RemoteBenefits points={[...TEAM_POINTS, machineless ? NO_MACHINE_POINT : PICK_POINT]} />
       {load.status === 'loading' && <ReadingMachines />}
       {sharing.length > 0 && <ProjectPicks machines={sharing} picks={picks} onChange={setPicks} />}
-      {load.status === 'ready' && countJoinPicks(picks) === 0 && (
+      {load.status === 'ready' && !machineless && countJoinPicks(picks) === 0 && (
         <p className='w-full text-xs text-pretty text-fg-2'>{NO_SHARE_HINT}</p>
       )}
       {failure && (

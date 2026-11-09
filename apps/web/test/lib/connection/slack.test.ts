@@ -7,7 +7,9 @@ import { readFetchCall } from '../../support/fetch.ts';
 const SNAPSHOT: SlackSnapshot = {
   remote: true,
   connectUrl: 'https://app.shinsa.dev/slack/connect?instance=k3x9',
-  links: [{ teamId: 'T1', teamName: 'Overclock', userId: 'U1', userName: 'Christo', linkedAt: 1 }],
+  links: [
+    { teamId: 'T1', teamName: 'Overclock', userId: 'U1', userName: 'Christo', linkedAt: 1, accountId: null },
+  ],
   problem: null,
 };
 

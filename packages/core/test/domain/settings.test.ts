@@ -9,6 +9,7 @@ import {
   resolveAccountSwitchAt,
   resolveAgentFastMode,
   resolveAttentionLimit,
+  resolveAutoPace,
   resolveAutopilotPolicy,
   resolveCompaction,
   resolveDelegationLimit,
@@ -69,6 +70,7 @@ describe('the settings a command may change', () => {
       shareLimit: 'until_done',
       sharePreset: 'standard',
       autopilot: AUTOPILOT_DEFAULTS,
+      autoPace: false,
       sharedTeams: [],
     };
     expect(Object.keys(every).sort()).toEqual([...SETTINGS_KEYS].sort());
@@ -92,6 +94,13 @@ describe('resolveWatchdogsIgnoreUsageLimits', () => {
     expect(
       resolveWatchdogsIgnoreUsageLimits({ ...createSettings(), watchdogsIgnoreUsageLimits: false })
     ).toBe(false);
+  });
+});
+
+describe('resolveAutoPace', () => {
+  test('Auto pace is off unless you switch it on', () => {
+    expect(resolveAutoPace({ ...createSettings(), autoPace: undefined })).toBe(false);
+    expect(resolveAutoPace({ ...createSettings(), autoPace: true })).toBe(true);
   });
 });
 

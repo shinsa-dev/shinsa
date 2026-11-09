@@ -8,8 +8,18 @@ const PLAN_LABEL: Record<string, string> = {
   enterprise: 'Enterprise',
 };
 
-export function resolvePlanLabel(plan: string | null) {
+export function resolvePlanKey(plan: string | null) {
   if (!plan) return null;
-  const key = plan.toLowerCase().replace(/^claude[_\s-]*/, '');
-  return PLAN_LABEL[key] ?? capitalise(key.replace(/[_-]+/g, ' '));
+  const key = plan
+    .trim()
+    .toLowerCase()
+    .replace(/^claude[_\s-]*/, '')
+    .replace(/[_\s-]+/g, '_');
+  return key || null;
+}
+
+export function resolvePlanLabel(plan: string | null) {
+  const key = resolvePlanKey(plan);
+  if (!key) return null;
+  return PLAN_LABEL[key] ?? capitalise(key.replace(/_/g, ' '));
 }

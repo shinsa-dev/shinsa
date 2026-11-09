@@ -372,6 +372,7 @@ describe('acting for the human', () => {
       sharePreset: 'status',
       autopilot: { ...AUTOPILOT_DEFAULTS, enabled: true },
       watchdogsIgnoreUsageLimits: false,
+      autoPace: true,
       sharedTeams: ['team-1'],
     };
     const fields: Required<Pick<Repo, (typeof HUMAN_ONLY_REPO_FIELDS)[number]>> = {

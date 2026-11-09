@@ -1271,10 +1271,12 @@ and only the order in which finished work reaches you is managed.
   OK, an operation and a secret rank as questions), paused (a failure, a setup to fix, a sign-in),
   then the oldest first), and the guide never leads with a low priority decision while anything else waits
   (`parseBriefing` drops such an answer; low ones go to the end of next).
-- **No hold but the one you choose.** Shinsa never parks new work on its own while decisions pile up or usage runs
-  low: holding the compute only delays work you asked for, and priority already keeps finished work out of your way.
-  Work you want planned now and built later goes in the backlog, and only you (or an agent you asked) put it there;
-  triage never does.
+- **No hold but the one you choose.** Shinsa never parks new work on its own while decisions pile up, and never
+  because usage runs low unless you switched Auto pace on (Agent usage → Auto pace, below): holding the compute only
+  delays work you asked for, and priority already keeps finished work out of your way. With Auto pace on, a build
+  waits its turn within the forecast's safe pace, ordered by priority and then the projects you work on most; planning, questions
+  and answers still never wait. Work you want planned now and built later goes in the backlog, and only you (or an
+  agent you asked) put it there; triage and Auto pace never do.
 
 ### Dependencies
 
@@ -2198,9 +2200,21 @@ action it takes is recorded with its reason. The rules are core's (`decide/autop
 - **A run's share is its cost at the account's learned rate** (`resolveUsageShares` over `resolveUsageRates` in
   `costs/rate.ts`, each worked out once per `state.runs`), the way its cost is its tokens at the model's prices. The subscription meter tracks
   model-weighted compute, which the API-equivalent cost already weighs by model and token type, so the rate is
-  "percent of the weekly window per dollar", learned per window (each account, or a provider's own login), so plans
-  of different sizes (Max 5x, Max 20x) and providers (Claude, Codex) each have their own. It is derived from the log
-  every time state is built, never stored.
+  "percent of the weekly window per dollar", learned per pool, so plans of different sizes (Max 5x, Max 20x) and
+  providers (Claude, Codex) each have their own. It is derived from the log every time state is built, never stored.
+  - **One pool per provider and plan.** A meter's window stays the account (`account:<id>`), so overlapping runs line
+    up per account, but its observations are learned in the pool `resolveRatePool` gives it: `plan:<provider>:<plan>`
+    for an account whose plan is known, so every account on one plan teaches and reads one rate, and the window
+    itself otherwise (an account with no known plan, a provider's own login). The plan is each account's current one
+    (`state.accountPlans`, `account.plan_recorded`, which the account roster sends whenever an account's plan differs
+    from state, under one key per plan, `resolvePlanKey`: `Claude Ultra`, `ultra` and `claude_ultra` are `ultra`), so
+    the whole log pools at once and an account that changes plan moves to that plan's pool; removing an account
+    forgets its plan. A plan of none is recorded as no plan.
+  - **A starting rate.** A known plan with a measured rate (`STARTING_RATES`, dated: Claude Ultra 0.0255% per dollar,
+    measured on 2026-11-08 from 276 tasks on four Ultra accounts) starts from it, counted as 2 points of movement at
+    that rate (`USAGE_RATE_LIMITS.startingMovement`), so a pool with no observation has an early estimate from its
+    first task and real readings outweigh it within a few. It never makes a rate trusted: trust counts only the
+    pool's own tasks and movement. Update the table when the provider changes its limits.
   - **What it learns from.** Every attempt with two readings is an observation: the window moved from its first
     reading to its last, while every run on that window cost something in that interval (each attempt's cost spread
     evenly over its time, counted for the part inside the interval). An observation is left out when the window's
@@ -2290,6 +2304,63 @@ action it takes is recorded with its reason. The rules are core's (`decide/autop
   ⌘K) changes it, shown only on an engine with `usage.watchdog_limits`; turning it on starts a check a pace hold
   held (`releasePaceHolds`) and retries one a budget gate held, over the limit or not (`releaseBudgetHolds`). An account out of usage still holds a check as it holds any run, and the tasks a
   watchdog files are ordinary tasks that follow every limit.
+- **What a build will cost** (`costs/estimate.ts`, `resolveBuildEstimate`, pure, derived every time). A task with a
+  plan has an estimate of its build: the build, fix and review runs of the current round. A finished build is a
+  sample, described by the log of its plan's phases, files and length, and of what planning it cost. With at least
+  20 samples (`BUILD_ESTIMATE_LIMITS`) a ridge-regularised linear fit of the log cost over those four, fitted once
+  per state change on every sample, predicts the build, raised by the 70th percentile of how far the fit missed past
+  builds, so it errs toward starting one task fewer. Tested on 303 past builds, each estimated only from those
+  before it, its typical miss was a factor of 1.5 (a factor of 1.8 for the 20 nearest builds by plan shape it
+  replaced) and it came in under the real cost about 25% of the time. With fewer samples it uses `DEFAULT_BUILD_COSTS`, measured on 2026-11-08 from those builds ($3.80 a phase
+  for one or two phases, rising to $20 a phase at six or more). Before a phase is done, what is left is the estimate
+  minus what was spent; after each phase, the rest is the remaining phases times the average of the estimate (worth
+  one phase) and the real cost per finished phase. In percent it uses the rate of the task's account, or its last
+  meter's window, else the best learned rate, and stays in dollars with none. The task's cost popover shows it
+  under Build estimate, and the task's facts "About 16% to build" while a build waits for admission.
+- **The safe pace, recorded** (`usage.pace_recorded`, `state.usagePaces`). The forecast below runs where the account
+  readings are, so the engine's account roster works out each provider's safe pace (`listProviderPaces`, the forecast
+  with every usable reset grant that clears the weekly limit counted as a full refill) on every accounts refresh and
+  records it when it moved by a whole point (`isPaceMoved`, `FORECAST_LIMITS.paceStep`) or appeared or went away. Settings'
+  own forecast still leaves grants out, since you claim them in the Claude app, so it can read lower.
+- **Auto pace** (`autoPace`, off by default, only yours, in
+  `HUMAN_ONLY_SETTINGS`, offered only on an engine with `usage.auto_pace`). With it off everything starts at once,
+  as above. With it on, a task's first build run in a round waits for admission (`holdForAdmission` in
+  `dispatchRuns`, after the task limits and before the daily and project limits) unless its build already started, it is delegated, or
+  you started it with Build now (`Task.paceLimitsIgnored`). Planning, answers, research, investigations, operations,
+  later phases, checks, fixes, reviews and watchdog checks never wait, and a build that started finishes. A task
+  with no recorded pace or no estimate does not wait either.
+  - **The budget** is the recorded safe pace for the next 24 hours, less 10% kept for urgent tasks
+    (`ADMISSION_LIMITS.reserve`; an urgent build may use all of it), minus the provider's last 24 hours and the
+    estimated rest of every build already started (`resolveAdmission`). A build fits when its estimate does; one
+    larger than the whole budget counts as the budget, so it starts once nothing else is using it.
+  - **The queue** (`sortAdmissionQueue`), with nothing to set: task priority (urgent first), then the focus project,
+    then the projects you act on most, learned as the median time from a gate opening to your answer over the last 14
+    days (`resolveProjectResponses`, `ENGAGEMENT_LIMITS`, at least 3 answers; a project without them comes after),
+    then how many open tasks wait on it, then age. A build that fits still waits behind one ranked ahead of it on the same
+    provider, so smaller tasks never starve a larger one.
+  - **The hold** is a pace hold with scope `admission` (`usage_wait.armed`, `cause: pace`, stage reason "waiting its
+    turn to build within today's usage", `resetAt` the time the last 24 hours free enough room, else 30 minutes).
+    Each time runs are dispatched, `admitBuilds` first walks the queue: it releases the first build that fits, counts its estimate,
+    and goes on, so held builds start one at a time in order; a hold whose time passed with no room is armed again
+    for a new time. Build now is Resume now (`usage_wait.resume_now`), and from you it also sets
+    `paceLimitsIgnored`, as for the other pace holds. Switching Auto pace off releases every admission hold. A build
+    admitted still stops at the daily and project limits.
+  - **On screen** a held task's status is "Waiting to build", its card "Builds tonight" (when you are here now and
+    its time falls in your away hours) or "Builds after 3:40 AM", with Build now. Auto pace has its own section in Settings → Agent usage, right above the Forecast
+    it follows (`AutoPaceSettings`): its switch, and while it is on, one row per provider with what is left for its
+    builds in the next 24 hours, the reserve and how many builds wait (`selectPaceBudget`). Home's guide leaves waiting builds out of the
+    running line and names them on a line of their own, soonest first, each with when it builds ("tonight", "after
+    3:40 PM" or "next", `listWaitingBuilds`), the first two by name and the rest in a popover; once you are back it
+    adds how many tasks built overnight are ready for your review (`describeOvernightReviews`).
+- **The night shift** (`costs/away.ts`, `prompts/night.ts`), on top of Auto pace and needing no setting of its own.
+  Your away hours are learned from the last 14 days (`AWAY_LIMITS`): an hour of the day is away when the `away`
+  spans cover at least half of it on at least half the days observed, given at least 3 days of spans; with fewer,
+  it falls back to activity, an hour with any presence on under 15% of the days. With neither, there is no night
+  shift. Only the Agent is told, in its user turn, never its system prompt (`resolveNightShiftTold`): while it plans
+  a task whose build will probably wait (you are away, admission holds are queued, or the budget has no room), that
+  it builds unattended and should ask every question now; while it builds or fixes during your away hours, that it
+  should decide what it can, record each choice as a judgement call (a summary line for a fix), and use `ask` only
+  for what it must not decide alone. A night build stops at your review like any other.
 - **The usage forecast** (`forecast/`, `resolveUsageForecast`, pure; the web runs it on the accounts it reads).
   It answers how fast you can go without every account running out, not how fast you went. Each unpaused,
   signed-in account is a budget that expires: what is left of its weekly window now lasts until its reset, and
@@ -2297,7 +2368,7 @@ action it takes is recorded with its reason. The rules are core's (`decide/autop
   horizon). For a steady pace (percent of one weekly limit per day) it simulates 7 days, spending each moment
   from the account that resets soonest, which is the best order for budgets that expire. A binary search finds
   the highest pace that never runs every account dry, rounded down to a tenth (`FORECAST_LIMITS`). That pace is
-  the recommendation, which you can apply as the daily limit; the forecast also names the tightest reset (the one
+  the recommendation, which Auto pace builds within; the forecast also names the tightest reset (the one
   the pool must reach before it runs dry at a faster pace), the timeline of each account, and when the pool would
   run dry at the pace of the last 24 hours, shown only to compare. An account out of usage only until a shorter
   limit resets (its 5-hour window) keeps its weekly budget; only one spent until its weekly reset counts as empty.
@@ -2309,8 +2380,9 @@ action it takes is recorded with its reason. The rules are core's (`decide/autop
   pace you pick (`resolveForecastTimeline`: the safe pace, the last 24 hours, or one and a half or twice the safe pace;
   the last 24 hours first when it is faster), a dashed amber line at the tightest point when the safe pace is drawn,
   the tightest point in words and the last 24 hours of that provider (meters on an account's window for
-  Claude, `provider:<id>` for the rest). Use as daily limit sends `settings.change` with `dailyUsageLimit` set to the
-  pace; the forecast is worked out again on every accounts refresh and every minute.
+  Claude, `provider:<id>` for the rest). The daily limit stays its own setting under Limits; the forecast offers no
+  button to copy its pace there, since Auto pace follows the pace itself. The forecast is worked out again on every
+  accounts refresh and every minute.
 
 ### Silent runs
 
@@ -3257,7 +3329,7 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   upgrade (404, the token kept), then spends the nonce (`Remote.spendConnect`, held until the token expires), so a
   token seen in a log or on the wire opens nothing (401). The token only keeps random traffic off the endpoint; trust
   rests on the handshake. Every engine names what it speaks in each heartbeat and pairing start (`features`:
-  `bound-connect-tokens`, `sealed-pairing`, `slack-linked-threads`, `MACHINE_FEATURES` in core), and app.shinsa.dev mints these tokens and
+  `bound-connect-tokens`, `sealed-pairing`, `slack-linked-threads`, `slack-task-owner`, `MACHINE_FEATURES` in core), and app.shinsa.dev mints these tokens and
   seals pairing credentials only for a machine that named them; an engine that predates them, which names nothing,
   still gets the old unlabelled token over the instance, user and expiry and its credentials in the clear, so the
   Worker can deploy before every machine has updated. This engine only accepts the new token and refuses clear
@@ -3370,8 +3442,9 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
     owner, and a sealed channel's GitHub user is looked up in the owner and members the last heartbeat answered
     (`Remote.resolveActor`). Anyone else gets no owner, never the machine's owner, so a stranger never runs on the
     owner's accounts. A task an agent files (a courier, a split, a fork, a watchdog's) takes the owner of the task it
-    came from. Tasks from before, and those Slack, schedules and webhooks start, have none and count as the
-    machine owner's. Owners never change after creation.
+    came from. A task a Slack mention starts is owned by the GitHub account its Slack user is linked as (Slack below),
+    so each member connects their own Slack from Settings → Slack on the shared machine. Tasks from before, and those
+    schedules and webhooks start, have none and count as the machine owner's. Owners never change after creation.
   - **Claude accounts.** Each account records the member who signed it in (`owner` in `accounts.json`, null for the
     machine's owner and every account from before). A run leases only its task owner's accounts, on renewal and on
     rotation after a usage limit too (`AccountOwnership`, `AccountRotation.listCandidates`), and a task bound to
@@ -3566,8 +3639,9 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   `comments`, `changelog` for `GET /api/changelog`, `remote.terminals` for terminal streams on the sealed channel,
   `attention` for routing notifications to the device you use, `worktree-root` for the worktree folder and
   `usage.pace_limits` for `dailyUsageLimit` and `Project.usageLimit`, `usage.watchdog_limits` for
-  `watchdogsIgnoreUsageLimits`, `focus.projects` for `focus.change`'s `projectIds` and `except`, and `autopilot` for
-  the `autopilot` setting, today; Settings → Teams, Settings → Agents → Autopilot, the review's Fix and approve choice and
+  `watchdogsIgnoreUsageLimits`, `usage.auto_pace` for `autoPace`, `focus.projects` for `focus.change`'s `projectIds`
+  and `except`, and `autopilot` for the `autopilot` setting, today; Settings → Teams, Settings → Agents → Autopilot,
+  the review's Fix and approve choice and
   What's new show only on an engine that has them, and the Focus menu stays a single choice on an engine without
   `focus.projects`). `ENGINE_PROTOCOL` is the hard floor: a machine whose protocol differs from the page's is left out of the
   dashboard, merges nothing and gets no command, and Settings → Machines says "Update Shinsa on <name> to reach it from
@@ -3936,15 +4010,27 @@ engine enrols and relays (Teammates act on team tasks, below). Teams need remote
   the fragment, which no browser sends to a server, so app.shinsa.dev never sees it and cannot read a team view. The
   invite only lets someone ask; turning the link off (`invite/remove`) or making a new one (`invite`) stops the old
   one, and a member already in keeps their key.
-- **Joining works like a machine invite, after remote access.** Whoever opens the join link signs in with GitHub; the
+- **Joining works like a machine invite, with or without a machine.** Whoever opens the join link signs in with GitHub; the
   page names the team and its owner first (`POST /__remote/teams/preview { invite }`, which records nothing) and keeps
-  the key in the browser (and the link in `sessionStorage`, so it survives sign-in and pairing). Teams reach teammates
-  only through machines, so the page then reads your machines (`resolveJoinSetup`, `lib/teams/join-machines.ts`):
-  with none paired it shows the fleet page's steps to turn on remote access (`PAIR_STEPS`, `lib/remote/setup-steps.ts`),
-  and with paired machines this browser reaches none of, the steps to add this device (`listAddDeviceSteps`), each with
-  Check again and no Ask to join. app.shinsa.dev enforces it too: `POST /__remote/teams/join { invite }` from an
-  account with no paired machine of its own is 409 `no_machine` (`NoMachine`) and records nothing; otherwise it
-  records that the account asked (`team_requesters`) and makes it no member. The page reads the projects of each
+  the key in the browser (and the link in `sessionStorage`, so it survives sign-in and pairing). The page then reads
+  your machines (`resolveJoinSetup`, `lib/teams/join-machines.ts`): with paired machines this browser reaches none of,
+  it shows the steps to add this device (`listAddDeviceSteps`), or that it waits for an answer or the machines are
+  offline, each with Check again and no Ask to join. With no machine paired at all it shows the fleet page's steps to
+  turn on remote access first (`kind: 'pair'`, `PAIR_STEPS`, `lib/remote/setup-steps.ts`), since a team works only
+  when its people share their machines; Join without a machine, below Check again and meant only for someone who runs
+  Shinsa nowhere, then offers Ask to join: such a person shares no projects and reaches the team only through the
+  machines shared with it (Remote access → Shared machines), and the page says so. If they pair a machine later, its
+  heartbeat lists the team, the team's card says the machine waits for the team's key with Request access for the
+  team's owner to answer (Handing a machine the team's key, below), and while it shares no project the card says
+  teammates see nothing from it (`TEAM_SHARES_NOTHING`). Nothing is shared by itself: which projects a team sees
+  stays yours alone. `POST /__remote/teams/join
+  { invite }` records that the account asked (`team_requesters`), machine or not, and makes it no member. Once the
+  owner accepts, every machine shared with the team grants the new member on its next heartbeat (`Remote.syncSharedTeams`
+  grants every member it has not), and the hosted dashboard adds this browser to each such machine by itself
+  (`admitTeamMachines`, Giving a teammate this machine, below). Until one is shared, app.shinsa.dev shows a team member
+  with no machine of their own Reached through your team instead of the pairing steps, and Settings → Teams, local
+  and hosted, reads No machines in the line of each person with no machine in the team (`hasNoTeamMachines`).
+  For a person with a machine, the page reads the projects of each
   machine it reaches with one `GET /api/projects` over the sealed channel, never the whole state (giving up on one
   after 4 s), and offers them to share, none required: with none picked it says teammates see nothing of yours until
   you share a project. Ask to join then sends every machine it reaches `POST /api/remote/teams/join { url }`, picks or
@@ -4511,8 +4597,9 @@ Open (remote build) ──► app.shinsa.dev/__remote/previews/open?url=…
 ## Slack
 
 Mention the Shinsa bot in Slack and the machine of the person who mentioned it does the work. There is one Slack app
-for everyone, on app.shinsa.dev; each person connects their own Slack user to one of their own machines, so the same
-mention from a teammate who connected their Shinsa runs on their machine, and from one who did not, runs nowhere. It
+for everyone, on app.shinsa.dev; each person connects their own Slack user to one machine they own or are a member
+of (a shared machine's teammates included), so the same mention from a teammate who connected their Shinsa runs on
+that machine as them, and from one who did not, runs nowhere. It
 needs remote access (above): the relay reaches the machine through its tunnel, and the machine posts back through the
 relay with its machine token. No machine holds a Slack token. A thread the mention links to is read with the token of
 the person who mentioned the bot, never the bot's, so a thread in a channel the bot is not in, such as a shared
@@ -4524,7 +4611,9 @@ the machine side is `apps/engine/src/slack/`.
 Slack ──event──► app.shinsa.dev /slack/events
                   ├─ Slack's signature, the event id seen once
                   ├─ author of another org ─► nothing
-                  ├─ author not connected ──► private "Connect Slack"
+                  ├─ author not connected, or no longer owner
+                  │  or member of the linked machine
+                  │                    ──► private "Connect Slack"
                   ├─ machine offline ───────► "<machine> is offline"
                   ├─ linked threads, read with the author's token
                   │  └─ one unreadable ──► a private note after
@@ -4537,7 +4626,10 @@ Slack ──event──► app.shinsa.dev /slack/events
                   the model reads the thread
                   ├─ not work ──► ⏳ off, "Not a task", once per thread
                   └─ work ──► slack.start_task:
-                              task.create, as from Home
+                              task.create, as from Home, owned
+                              by the linked GitHub account
+   linked account not in the machine's owner and members
+                  ──► "No access to this Shinsa", nothing starts
    the task moves or a gate opens or closes
                   ──► slack.status: the one card, edited
                       (the open gate with its buttons, the result,
@@ -4569,11 +4661,24 @@ Slack ──a card's button──► app.shinsa.dev /slack/interactions
   `groups:history`, `groups:read`, `chat:write`, `reactions:write` and `users:read` (`SLACK_BOT_SCOPES`, `apps/cloud/slack-manifest.json`) and the same user scopes, so its installer is linked in that one step. Either way your Slack user is
   linked to that machine with your user token kept sealed (`slack_links.sealed_user_token`, AES-GCM under
   `SLACK_TOKEN_KEY`, as a bot token is) and you land on `/slack/linked` (`routes/remote/slack.tsx`), which names the workspace or
-  says what went wrong. A machine can be linked in several workspaces; a Slack user to one machine at a time
-  (connecting again from another machine moves it). The section reads `GET /api/slack` (`SlackSnapshot`: remote access
+  says what went wrong. The machine is one you own or are a member of (a shared machine's teammates are members);
+  a guest, or someone with no access, gets not found. A member links only to a machine that announces
+  `slack-task-owner` (`MACHINE_FEATURES`), so an older engine never starts their mention as its owner's; one that
+  does not gets "Only this machine's owner can connect Slack until Shinsa on it is updated." Without `?instance=`,
+  connect picks your own machine seen last, else one you are a member of. The link records the GitHub account that
+  signed in (`slack_links.user_id`), which is whose tasks your mentions start. A machine can be linked in several
+  workspaces, and by each of its people; a Slack user to one machine at a time (connecting again from another machine
+  moves it). The section reads `GET /api/slack` (`SlackSnapshot`: remote access
   on, the connect link, the links with workspace, user and when, or the problem when app.shinsa.dev cannot be
-  reached) when Settings opens and when the window comes back. Disconnect (`POST /api/slack/disconnect`) removes every
-  link of this machine; from another device only its owner may (`OwnerOnlyRoute`). Your user token is revoked
+  reached) when Settings opens and when the window comes back. Each shows only the links of the person reading it:
+  `/__remote/slack/links` names each link's GitHub account (`accountId`, null from an older Worker, which linked only
+  owners), and the engine keeps a member's own (the sealed channel's GitHub user) and, for the owner or the keyboard,
+  the owner's and those with no account (`Slack.snapshot(viewer)`). So a member who has not connected sees Not
+  connected and Connect your Slack, even when others have, and never Disconnect (`describeSlackStatus`,
+  `resolveSlackConnectLabel`). The snapshot also counts everyone else's links (`othersLinked`), so an owner who has
+  not linked their own Slack while members have sees Not connected with how many members' accounts start tasks here,
+  and still gets Disconnect. Disconnect (`POST /api/slack/disconnect`) removes every
+  link of this machine, its members' too; from another device only its owner may (`OwnerOnlyRoute`). Your user token is revoked
   (`auth.revoke`, best effort: a failure is logged as `[Cloud] A Slack user token could not be revoked` and the
   links still go) when you disconnect, when the machine is removed (`revokeMachineUserTokens`) and when connecting
   again brings a different token (`replaceUserToken`; Slack gives the same one back while it is valid, which is
@@ -4594,7 +4699,9 @@ Slack ──a card's button──► app.shinsa.dev /slack/interactions
   thread (`threadTs`, the mention's own `ts` for a mention outside a thread: the bot always answers in a thread), the
   author with their Slack name, the text with Slack's markup turned into words and the bot's own mention dropped
   (`resolveSlackReadableText`), a permalink, the channel's name (`conversations.info`; null without `channels:read` or
-  `groups:read`, in a direct message, or when Slack refuses), the thread's last 100 messages, bots marked, and
+  `groups:read`, in a direct message, or when Slack refuses), the thread's last 100 messages, bots marked,
+  `linkedUserId` (the GitHub account the author's link records; the Worker checks first that it is still the
+  machine's owner or a member, else the author gets the private Connect Slack prompt and nothing is sent), and
   `linkedThreads` (below). Each
   message is read from its `text`, its `blocks` (section, header, context and rich text) and its `attachments`
   (pretext, title, text and fields, else the fallback), taking the longer of the text and the blocks and adding the
@@ -4649,7 +4756,12 @@ Slack ──a card's button──► app.shinsa.dev /slack/interactions
   asks for work there still starts a task. Anything someone wants done or wants to know about their code, product or work is a
   task, and so is a mention the model does not answer: `slack.start_task` (command id `<effect
   key>:slack.start_task`) starts it, messaging the thread's task instead when one opened meanwhile. Nothing is
-  posted while it reads; a mention that is not a task loses its ⏳.
+  posted while it reads; a mention that is not a task loses its ⏳. Before any of it, `linkedUserId` is looked up in
+  the owner and members the last heartbeat answered (`Remote.resolveActor`) and `slack.start_task` is dispatched
+  with that person as the actor, so the task's owner is the person who mentioned the bot and it runs on their Claude
+  accounts and GitHub token (Shared machines above). An account the machine no longer lists starts nothing and gets
+  one reply, "No access to this Shinsa" (`serializeSlackNoAccess`), with no ⏳ and no model call; a mention without
+  `linkedUserId` (from an older app.shinsa.dev) starts a task with no owner, as before.
 - **This one check is the only thing Slack adds.** A task it starts is the same `task.create` Home sends with
   everything on Auto, through the same `createTask` and the same triage (repository, kind, priority, and whatever
   triage learns next, such as finding a duplicate of an open task), so a change to triage reaches Slack with no
@@ -4833,7 +4945,7 @@ plainly what protects what.
   - the settings that spend money, merge, share or decide for you (`HUMAN_ONLY_SETTINGS` in `domain/settings.ts`:
     `approvePlans`, `mergeMethod`, `taskBudgetUsd`, `taskUsageLimit`, `dailyUsageLimit`, `autoResume`,
     `snoozeLimited`, `accountSwitchAt`, `fastMode`, `agentFastModes`, `delegationLimit`, `shareLimit`, `sharePreset`,
-    `watchdogsIgnoreUsageLimits`, `autopilot`), a
+    `watchdogsIgnoreUsageLimits`, `autopilot`, `autoPace`), a
     project's usage limit (`Project.usageLimit`) and a repository's own check commands,
     workspace and coverage (`HUMAN_ONLY_REPO_FIELDS`: `checkCommands`, `workspace`, `coverage`); agents keep the rest
     (models, providers, fix rounds, attention, compaction), and a task's own checks are the agent's (Checks, above);

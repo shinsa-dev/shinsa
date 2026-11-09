@@ -12,6 +12,8 @@ import type { ShinsaState } from '../state/project.ts';
 import {
   bindAccount,
   changeUsageWait,
+  recordAccountPlan,
+  recordUsagePace,
   recordAccountRemoved,
   recordProviderSignIn,
   recordSignedIn,
@@ -447,6 +449,10 @@ function apply(decider: Decider, command: ShinsaCommand) {
       return recordSignedIn(decider, command);
     case 'account.removed':
       return recordAccountRemoved(decider, command);
+    case 'account.plan_recorded':
+      return recordAccountPlan(decider, command);
+    case 'usage.pace_recorded':
+      return recordUsagePace(decider, command);
     case 'provider.record_sign_in':
       return recordProviderSignIn(decider, command);
     case 'agent.delegate':
