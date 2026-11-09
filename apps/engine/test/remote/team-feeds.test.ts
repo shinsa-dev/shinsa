@@ -487,6 +487,17 @@ function createHeldTask(id: string): TeamTask {
   return { owner: 'lee', machine: 'Desk', task: { id } } as unknown as TeamTask;
 }
 
+function watchPublished(feeds: Feeds, predicate: () => boolean) {
+  let published = false;
+  const stop = feeds.subscribe(() => {
+    published ||= predicate();
+  });
+  return async (awaited: string) => {
+    await until(awaited, () => published);
+    stop();
+  };
+}
+
 async function releaseWait(waits: (() => void)[]) {
   await until('the fetch waits', () => waits.length > 0);
   waits.shift()?.();
@@ -495,8 +506,9 @@ async function releaseWait(waits: (() => void)[]) {
 describe('keeping a teammate’s last list', () => {
   test('keeps it on disk, signed, and shows it after a restart while the machine is offline', async () => {
     const { feeds, laptop, restart } = await setUp();
+    const listKept = watchPublished(feeds, () => feeds.snapshot().tasks.length === 2);
     await feeds.start();
-    await until('the list arrives', () => feeds.snapshot().tasks.length === 2);
+    await listKept('the list is kept');
     const kept = readKeptFile(resolveKeptPath(laptop));
     expect(kept?.lists.map((list) => [list.teamId, list.instanceId, list.updatedAt])).toEqual([
       ['team1', 'inst1', 50],
@@ -556,8 +568,9 @@ describe('keeping a teammate’s last list', () => {
 
   test('drops it when the machine leaves the team or this machine leaves it, and keeps it while remote access is paused', async () => {
     const { feeds, laptop } = await setUp();
+    const listKept = watchPublished(feeds, () => feeds.snapshot().tasks.length === 2);
     await feeds.start();
-    await until('the list arrives', () => feeds.snapshot().tasks.length === 2);
+    await listKept('the list is kept');
     await laptop.store.update((file) => ({ ...file, enabled: false }));
     await laptop.publish();
     expect(readKeptFile(resolveKeptPath(laptop))?.lists).toHaveLength(1);
@@ -566,8 +579,9 @@ describe('keeping a teammate’s last list', () => {
     await laptop.publish();
     expect(readKeptFile(resolveKeptPath(laptop))).toBeNull();
     const other = await setUp();
+    const otherListKept = watchPublished(other.feeds, () => other.feeds.snapshot().tasks.length === 2);
     await other.feeds.start();
-    await until('the list arrives', () => other.feeds.snapshot().tasks.length === 2);
+    await otherListKept('the list is kept');
     await other.laptop.store.removeTeam('team1');
     await other.laptop.publish();
     expect(readKeptFile(resolveKeptPath(other.laptop))).toBeNull();
@@ -976,8 +990,9 @@ async function listKeptViewKinds(remote: Remote, taskId: string) {
 describe('keeping a teammate’s full tasks', () => {
   test('fetches each listed task’s full view a while after the list, with its files, and only the ones that changed', async () => {
     const { feeds, laptop, stub, sockets, viewWaits } = await setUp({ live: createFullLive() });
+    const listKept = watchPublished(feeds, () => feeds.snapshot().tasks.length === 2);
     await feeds.start();
-    await until('the list arrives', () => feeds.snapshot().tasks.length === 2);
+    await listKept('the list is kept');
     expect(viewWaits).toHaveLength(1);
     await releaseWait(viewWaits);
     await until('both views are kept', async () => (await (await readKeptViews(laptop)).list()).length === 2);
@@ -1069,8 +1084,9 @@ describe('keeping a teammate’s full tasks', () => {
     expect(await (await readKeptViews(laptop)).selectEntry('team1', 'inst1', 'task-3')).toBeNull();
     if (stub.state.projects.p1) stub.state.projects.p1.teamIds = ['team1'];
     delete stub.state.tasks['task-1'];
+    const shorterListKept = watchPublished(feeds, () => feeds.snapshot().tasks.length === 2);
     stub.notify();
-    await until('the list loses a task', () => feeds.snapshot().tasks.length === 2);
+    await shorterListKept('the shorter list is kept');
     expect((await (await readKeptViews(laptop)).list()).map((entry) => entry.taskId)).toEqual(['task-2']);
     await laptop.store.recordTeams([createTeam({ role: 'member', machines: [LAPTOP] })]);
     await laptop.publish();
