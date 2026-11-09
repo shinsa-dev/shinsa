@@ -713,7 +713,7 @@ The agent composes steps and sets plan parameters while it plans; it cannot add 
   a change; the plan gate shows it and the round takes it once the plan is accepted, `task.retitled`), `split` (the
   other parts of the request that ship as their own pull requests, only for a task that opens one: up to 8
   (`PROTOCOL_LIMITS.splitParts`), each a `title` (named once), a `request` that stands on its own, an `order`
-  (`PLAN_SPLIT_ORDERS`: `parallel`, `waits_on`, `stacks_on`) and, for `waits_on` and `stacks_on` only, `on`: 0 for this
+  (`PLAN_SPLIT_ORDERS`: `parallel`, `waits_on`, `stacks_on`, the usual one for parts of one goal) and, for `waits_on` and `stacks_on` only, `on`: 0 for this
   task or an earlier part's number, so the parts cannot wait on each other in a loop; the phases cover only the work
   that stays here, and the plan gate always opens for it, `splits`). A refusal is `plan_invalid`.
 - **Checks later**: `check_changes` on `complete_phase` and `complete_fix` (Checks, below).
