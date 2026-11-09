@@ -14,9 +14,9 @@ export const ACTIVE_HOURS_LABEL = {
   saved: { override: 'Your hours are set by hand.', learned: 'Shinsa learns your hours again.' },
 } as const;
 
-export const WEEKDAY_ORDER = [1, 2, 3, 4, 5, 6, 0] as const;
+const WEEKDAY_ORDER = [1, 2, 3, 4, 5, 6, 0] as const;
 
-export const WEEKDAY_NAMES = [
+const WEEKDAY_NAMES = [
   'Sunday',
   'Monday',
   'Tuesday',
