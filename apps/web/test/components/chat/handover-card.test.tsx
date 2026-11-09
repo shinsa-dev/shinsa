@@ -318,6 +318,23 @@ describe('HandoverCard for the process tools', () => {
     expect(diagnosed.getByText('dry')).toBeTruthy();
   });
 
+  it('shows a lead’s report with its open questions, or the narrative alone', () => {
+    const view = renderCard(
+      call('report_initiative', {
+        narrative: 'The dock is in review.',
+        questions: ['Ship the studio first?'],
+      })
+    );
+    expect(view.getByText('Reported on the initiative')).toBeTruthy();
+    expect(view.getByText('The dock is in review.')).toBeTruthy();
+    expect(view.getByText('Anything to discuss')).toBeTruthy();
+    expect(view.getByText('Ship the studio first?')).toBeTruthy();
+    view.unmount();
+    const plain = renderCard(call('report_initiative', { questions: [] }));
+    expect(plain.getByText('Reported on the initiative')).toBeTruthy();
+    expect(plain.queryByText('Anything to discuss')).toBeNull();
+  });
+
   it('shows the reply to your message first, then the plan, the summary or the report below it', () => {
     const reply = {
       headline: 'Split the work as you asked.',

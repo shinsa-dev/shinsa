@@ -12,6 +12,7 @@ import { useDialogState } from '@shinsa/ui/hooks/use-dialog-state';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
 import { OptionsTrigger } from '@/components/controls/options-trigger.tsx';
+import { LeadPanel } from '@/components/initiatives/lead.tsx';
 import { InitiativeSections, PhaseTrack } from '@/components/initiatives/sheet.tsx';
 import { PAGE_BOTTOM, PAGE_COLUMN, PAGE_TOP } from '@/components/layout/page/column.ts';
 import { PAGE_DESCRIPTION, PageHeading } from '@/components/layout/page/heading.tsx';
@@ -173,6 +174,7 @@ export function InitiativePage({ state, reference }: { state: ShinsaState; refer
           </div>
         </div>
       </div>
+      <LeadPanel state={state} initiative={initiative} />
       <PhaseTrack sheet={sheet} />
       <InitiativeSections state={state} sheet={sheet} />
     </div>

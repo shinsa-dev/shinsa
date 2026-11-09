@@ -5,7 +5,7 @@ import {
   type InitiativePhaseProgress,
   type InitiativeSheet,
   isTaskSettled,
-  listInitiativeMembers,
+  listInitiativeWork,
   listInitiatives,
   resolveInitiativeSheet,
   selectInitiativeByReference,
@@ -57,7 +57,7 @@ function describeOpenAndShipped(open: number, shipped: number, total: number) {
 
 export function listInitiativeRows(state: ShinsaState): InitiativeRow[] {
   return listInitiatives(state).map((initiative) => {
-    const members = listInitiativeMembers(state, initiative.id);
+    const members = listInitiativeWork(state, initiative.id);
     const dropped = members.filter((task) => task.stage === 'cancelled').length;
     const settled = members.filter((task) => isTaskSettled(task)).length;
     const shipped = settled - dropped;

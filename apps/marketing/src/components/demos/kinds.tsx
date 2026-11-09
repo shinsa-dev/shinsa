@@ -1,4 +1,4 @@
-import type { TaskShape } from '@shinsa/core';
+import type { PresetShape } from '@shinsa/core';
 import { Tabs, TabsList, TabsTrigger } from '@shinsa/ui/components/tabs';
 import * as React from 'react';
 import { NowCard } from '@/components/overview/now-card.tsx';
@@ -17,13 +17,13 @@ function centreSelectedTab(root: HTMLElement | null) {
   list.scrollTo({ left: offset - (list.clientWidth - tab.offsetWidth) / 2, behavior: 'smooth' });
 }
 
-function nextKind(kind: TaskShape) {
+function nextKind(kind: PresetShape) {
   return KIND_ORDER[(KIND_ORDER.indexOf(kind) + 1) % KIND_ORDER.length]!;
 }
 
 export function KindsDemo() {
   const [{ state, scenes }] = React.useState(() => createKindsState(Date.now()));
-  const [kind, setKind] = React.useState<TaskShape>('answer');
+  const [kind, setKind] = React.useState<PresetShape>('answer');
   const [picked, setPicked] = React.useState(false);
   const [hovered, setHovered] = React.useState(false);
   const { ref, focused } = useFocus<HTMLDivElement>();
@@ -48,7 +48,7 @@ export function KindsDemo() {
           value={kind}
           onValueChange={(value) => {
             setPicked(true);
-            setKind(value as TaskShape);
+            setKind(value as PresetShape);
           }}
         >
           <TabsList className='max-w-full [scrollbar-width:none] justify-center-safe overflow-x-auto'>

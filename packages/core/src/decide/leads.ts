@@ -5,10 +5,7 @@ import {
   type GateType,
   type Initiative,
   type InitiativeMilestone,
-  isLeadTask,
   resolveGateDefinition,
-  isTaskClosed,
-  isTaskSettled,
   selectLeadInitiative,
   type Task,
 } from '../domain/index.ts';
@@ -20,7 +17,7 @@ import {
   validateInitiativeReport,
 } from '../initiatives/index.ts';
 import { resolveAgentPrompt, resolveLeadPrompt } from '../prompts/index.ts';
-import { listInitiatives } from '../state/initiatives.ts';
+import { listInitiatives, selectInitiativeLead } from '../state/initiatives.ts';
 import type { ShinsaState } from '../state/project.ts';
 import { listActiveRuns, listOpenGates } from '../state/queries.ts';
 import type { Decider } from './decider.ts';
@@ -42,15 +39,6 @@ const MILESTONE_GATES: ReadonlySet<GateType> = new Set<GateType>([
 
 const MILESTONE_TEXT_LIMIT = 280;
 
-function isLiveLead(task: Task | undefined): task is Task {
-  return task !== undefined && isLeadTask(task) && !isTaskSettled(task) && !isTaskClosed(task);
-}
-
-function selectLiveLead(state: ShinsaState, initiative: Initiative) {
-  const lead = initiative.leadTaskId ? state.tasks[initiative.leadTaskId] : undefined;
-  return isLiveLead(lead) ? lead : null;
-}
-
 function resolveLeadRequest(initiative: Initiative) {
   const description = initiative.description ? `\n\n${initiative.description}` : '';
   return `Lead the initiative ${quoteTitle(initiative.name)}: keep its tasks moving, file and order the next pieces, and report where it stands.${description}`;
@@ -58,7 +46,7 @@ function resolveLeadRequest(initiative: Initiative) {
 
 export function startLead(decider: Decider, command: CommandOf<'initiative.start_lead'>) {
   const initiative = findInitiative(decider, command.initiativeId);
-  if (selectLiveLead(decider.state, initiative)) {
+  if (selectInitiativeLead(decider.state, initiative)) {
     throw new DomainError({
       code: 'lead_exists',
       message: `The initiative ${initiative.name} already has a lead. Mark it done first to start another.`,
@@ -115,7 +103,7 @@ export function startLeadTurn(decider: Decider, taskId: string, note: string | n
 export function wakeLead(decider: Decider, command: CommandOf<'initiative.wake_lead'>) {
   const initiative = decider.state.initiatives[command.initiativeId];
   if (!initiative || (initiative.milestones ?? []).length === 0) return;
-  const lead = selectLiveLead(decider.state, initiative);
+  const lead = selectInitiativeLead(decider.state, initiative);
   if (!lead || lead.stage !== 'leading' || !isIdle(decider.state, lead)) return;
   startLeadTurn(decider, lead.id, null);
 }
@@ -171,7 +159,7 @@ function resolveMemberMilestone(
   const task = decider.state.tasks[taskId];
   const initiative = task?.initiativeId ? decider.state.initiatives[task.initiativeId] : undefined;
   if (!task || !initiative || initiative.leadTaskId === task.id) return null;
-  if (!selectLiveLead(decider.state, initiative)) return null;
+  if (!selectInitiativeLead(decider.state, initiative)) return null;
   if (kind === 'joined' && task.createdBy?.taskId === initiative.leadTaskId) return null;
   return {
     initiativeId: initiative.id,

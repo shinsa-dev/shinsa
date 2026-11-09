@@ -99,11 +99,30 @@ describe('a task’s initiative commands', () => {
     ]);
   });
 
+  it('offers starting a lead from a member’s chat while its initiative has none', () => {
+    const spies = spyOnCommands();
+    const task = createTask({ id: 't', initiativeId: 'billing' });
+    const state = createShinsaState({ initiatives: [BILLING], tasks: [task] });
+    const commands = listTaskInitiativeCommands(state, task, new Set([...ALL, 'initiative.start_lead']));
+    expect(commands.map((command) => command.label)).toEqual([
+      'Open the initiative Billing',
+      'Take out of the initiative',
+      'Start a lead from this chat',
+    ]);
+    run(find(commands, 'task.t.initiative.lead'));
+    expect(spies.sent.mock.calls.map((call) => call[0])).toEqual([
+      { type: 'initiative.start_lead', initiativeId: 'billing', forkOf: 't' },
+    ]);
+    expect(listTaskInitiativeCommands(state, task, ALL).map((command) => command.id)).not.toContain(
+      'task.t.initiative.lead'
+    );
+  });
+
   it('leaves out the phase for an initiative without phases and everything on an older engine', () => {
     const task = createTask({ id: 't', initiativeId: 'billing' });
     const state = createShinsaState({ initiatives: [BILLING], tasks: [task] });
-    const phaseless = listTaskInitiativeCommands(state, task, ALL);
-    expect(phaseless.map((command) => command.label)).toEqual([
+    const withoutPhases = listTaskInitiativeCommands(state, task, ALL);
+    expect(withoutPhases.map((command) => command.label)).toEqual([
       'Open the initiative Billing',
       'Take out of the initiative',
     ]);

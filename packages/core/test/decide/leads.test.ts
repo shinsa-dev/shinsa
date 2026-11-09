@@ -2,10 +2,12 @@ import { describe, expect, test } from 'bun:test';
 import {
   INITIATIVE_LIMITS,
   listInitiatives,
+  listInitiativeWork,
   listOpenGates,
   resolveInitiativeSheet,
   resolveRunBrief,
   resolveTaskPipeline,
+  selectInitiativeLead,
   validateComposition,
   validatePipeline,
 } from '../../src/index.ts';
@@ -124,9 +126,32 @@ describe('starting a lead', () => {
     );
     report(harness, leadId);
     harness.send({ type: 'task.complete', taskId: leadId });
+    expect(selectInitiativeLead(harness.state, initiativeOf(harness, initiativeId))).toBeNull();
     const next = startLead(harness, initiativeId);
     expect(next).not.toBe(leadId);
     expect(harness.task(next).stage).toBe('leading');
+    expect(selectInitiativeLead(harness.state, initiativeOf(harness, initiativeId))?.id).toBe(next);
+  });
+
+  test('never counts a lead, live or finished, as the initiative’s work', () => {
+    const { harness, initiativeId, leadId } = ledInitiative();
+    const member = addMember(harness, initiativeId);
+    report(harness, leadId);
+    harness.send({ type: 'task.complete', taskId: leadId });
+    const next = startLead(harness, initiativeId);
+    expect(listInitiativeWork(harness.state, initiativeId).map((task) => task.id)).toEqual([member]);
+    const sheet = resolveInitiativeSheet(harness.state, initiativeId, harness.now);
+    expect(sheet?.progress.reduce((sum, phase) => sum + phase.total, 0)).toBe(1);
+    expect(sheet?.now.map((task) => task.id)).not.toContain(next);
+  });
+
+  test('finds no lead when the initiative names none, or names a task that is not a lead', () => {
+    const harness = createHarness();
+    const initiativeId = writeInitiative(harness);
+    expect(selectInitiativeLead(harness.state, initiativeOf(harness, initiativeId))).toBeNull();
+    const member = addMember(harness, initiativeId);
+    expect(selectInitiativeLead(harness.state, { leadTaskId: member })).toBeNull();
+    expect(selectInitiativeLead(harness.state, { leadTaskId: 'gone' })).toBeNull();
   });
 
   test('forks the lead from a task, so it starts from that conversation', () => {

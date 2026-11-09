@@ -14,6 +14,7 @@ import { cn } from '@shinsa/ui/lib/utils';
 import { Hint } from '@/components/overlays/hint.tsx';
 import { FACT, FACT_INTERACTIVE } from '@/components/task/fact.ts';
 import { useEngineCommand } from '@/lib/connection/socket.ts';
+import { canLeadFromTask, LEAD_FROM_TASK, startLead } from '@/lib/initiatives/lead.ts';
 import {
   ADD_TO_INITIATIVE,
   ADOPT_TASK,
@@ -34,8 +35,10 @@ import { navigate, resolveInitiativePath } from '@/router.ts';
 export function InitiativeItems({ state, task }: { state: ShinsaState; task: Task }) {
   const joinable = useEngineCommand('task.join_initiative', task.id);
   const adoptable = useEngineCommand('initiative.adopt_task', task.id);
+  const canStartLead = useEngineCommand('initiative.start_lead');
   if (!joinable) return null;
   const current = selectTaskInitiative(state, task);
+  const unled = canStartLead ? canLeadFromTask(state, task) : null;
   const choices = listInitiativeChoices(state, task);
   return (
     <>
@@ -75,6 +78,11 @@ export function InitiativeItems({ state, task }: { state: ShinsaState; task: Tas
             </DropdownMenuRadioGroup>
           </DropdownMenuSubContent>
         </DropdownMenuSub>
+      )}
+      {unled && (
+        <DropdownMenuItem icon='IconAgents' onClick={() => void startLead(unled, task.id)}>
+          {LEAD_FROM_TASK}
+        </DropdownMenuItem>
       )}
       {current ? (
         <DropdownMenuItem icon='IconCrossMedium' onClick={() => void leaveInitiative(task, current)}>

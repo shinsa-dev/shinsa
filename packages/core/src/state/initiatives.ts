@@ -1,4 +1,12 @@
-import { INITIATIVE_LIMITS, type Initiative, selectInitiativePhase, type Task } from '../domain/index.ts';
+import {
+  INITIATIVE_LIMITS,
+  type Initiative,
+  isLeadTask,
+  isTaskClosed,
+  isTaskSettled,
+  selectInitiativePhase,
+  type Task,
+} from '../domain/index.ts';
 import type { EventOf, ShinsaEvent } from '../events/index.ts';
 import { removeEntry, writeEntry } from './draft.ts';
 import type { ShinsaState } from './project.ts';
@@ -87,4 +95,14 @@ export function listInitiatives(state: ShinsaState): Initiative[] {
 
 export function listInitiativeMembers(state: ShinsaState, initiativeId: string): Task[] {
   return Object.values(state.tasks).filter((task) => task.initiativeId === initiativeId);
+}
+
+export function listInitiativeWork(state: ShinsaState, initiativeId: string): Task[] {
+  return listInitiativeMembers(state, initiativeId).filter((task) => !isLeadTask(task));
+}
+
+export function selectInitiativeLead(state: ShinsaState, initiative: Pick<Initiative, 'leadTaskId'>) {
+  const lead = initiative.leadTaskId ? state.tasks[initiative.leadTaskId] : undefined;
+  if (!lead || !isLeadTask(lead) || isTaskSettled(lead) || isTaskClosed(lead)) return null;
+  return lead;
 }

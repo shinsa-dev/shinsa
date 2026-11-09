@@ -1,12 +1,13 @@
 import {
   type Initiative,
   type InitiativeSheet,
-  listInitiativeMembers,
   listInitiatives,
+  listInitiativeWork,
   resolveInitiativeSheet,
   STAGE_WORDS,
   type ShinsaState,
   selectInitiativeByReference,
+  selectInitiativeLead,
   type Task,
 } from '@shinsa/core';
 import {
@@ -32,14 +33,14 @@ export function resolveInitiativeView(
   base: string,
   now: number
 ): InitiativeView {
-  const lead = initiative.leadTaskId ? state.tasks[initiative.leadTaskId] : undefined;
+  const lead = selectInitiativeLead(state, initiative);
   return {
     id: initiative.id,
     name: initiative.name,
     description: initiative.description,
     phases: initiative.phases,
     lead: lead ? resolveTaskRef(lead) : null,
-    members: listInitiativeMembers(state, initiative.id).length,
+    members: listInitiativeWork(state, initiative.id).length,
     progress: resolveProgress(state, initiative, now),
     createdAt: initiative.createdAt,
     updatedAt: initiative.updatedAt,
@@ -58,8 +59,10 @@ function resolveSheetView(
   now: number
 ): InitiativeSheetView {
   const view = (task: Task) => resolveTaskView(state, task, base);
+  const report = sheet.initiative.report;
   return {
     initiative: resolveInitiativeView(state, sheet.initiative, base, now),
+    report: report ? { narrative: report.narrative, questions: report.questions, at: report.at } : null,
     needsYou: sheet.needsYou.map((entry) => ({ task: view(entry.task), reason: entry.reason })),
     now: sheet.now.map(view),
     next: sheet.next.map((group) => ({

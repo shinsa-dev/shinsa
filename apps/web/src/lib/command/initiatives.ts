@@ -1,6 +1,7 @@
 import { listInitiatives, type ShinsaState, type Task } from '@shinsa/core';
 import { type Command, type CommandSection, RANK } from '@/lib/command/registry.ts';
 import { openInitiativeDialog } from '@/lib/initiatives/draft.ts';
+import { canLeadFromTask, LEAD_FROM_TASK, startLead } from '@/lib/initiatives/lead.ts';
 import {
   ADD_TO_INITIATIVE,
   ADOPT_TASK,
@@ -142,5 +143,18 @@ export function listTaskInitiativeCommands(
           },
         ]
       : [];
-  return [...(join ? [join] : []), ...listMemberCommands(state, task, id), ...adopt];
+  const unled = commands.has('initiative.start_lead') ? canLeadFromTask(state, task) : null;
+  const lead: Command[] = unled
+    ? [
+        {
+          kind: 'run',
+          id: `${id}.lead`,
+          label: LEAD_FROM_TASK,
+          icon: 'IconAgents',
+          keywords: [...KEYWORDS, 'lead', 'supervisor'],
+          run: () => void startLead(unled, task.id),
+        },
+      ]
+    : [];
+  return [...(join ? [join] : []), ...listMemberCommands(state, task, id), ...lead, ...adopt];
 }

@@ -14,6 +14,12 @@ const INITIATIVE: Initiative = {
   leadTaskId: 'lead',
   createdAt: 1,
   updatedAt: 1,
+  report: {
+    narrative: 'The dock is in review.',
+    questions: ['Ship the studio first?'],
+    runId: 'run-1',
+    at: 7,
+  },
 };
 
 function createMember(overrides: Partial<Task>) {
@@ -35,7 +41,19 @@ function createState() {
       type: 'plan',
       title: 'Approve the plan',
     });
-    state.tasks.lead = createTask({ id: 'lead', handle: 'SW-100', title: 'Lead the chat split' });
+    state.tasks.lead = createMember({
+      id: 'lead',
+      handle: 'SW-100',
+      title: 'Lead the chat split',
+      pipeline: ['lead'],
+      stage: 'leading',
+    });
+    state.tasks.earlier = createMember({
+      id: 'earlier',
+      title: 'Lead it before',
+      pipeline: ['lead'],
+      stage: 'done',
+    });
     state.tasks.dock = createMember({
       id: 'dock',
       handle: 'SW-101',
@@ -69,6 +87,24 @@ describe('initiative views', () => {
         url: `${BASE}/initiatives/init-1`,
       },
     ]);
+  });
+
+  test('names no lead once it finished, and counts only the work', () => {
+    const state = createState();
+    state.tasks.lead = { ...state.tasks.lead, stage: 'done' } as Task;
+    expect(listInitiativeViews(state, BASE, 10)).toMatchObject([{ lead: null, members: 2 }]);
+  });
+
+  test('carries the lead’s last report without its run', async () => {
+    const sheet = await Effect.runPromise(findInitiativeSheet(createState(), 'init', BASE, 10));
+    expect(sheet.report).toEqual({
+      narrative: 'The dock is in review.',
+      questions: ['Ship the studio first?'],
+      at: 7,
+    });
+    const bare = createState();
+    bare.initiatives['init-1'] = { ...INITIATIVE, report: null };
+    expect((await Effect.runPromise(findInitiativeSheet(bare, 'init', BASE, 10))).report).toBeNull();
   });
 
   test('gives each decision its task as a reference, and each decision waiting for you its reason', async () => {

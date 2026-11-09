@@ -589,8 +589,15 @@ export interface InitiativeView {
   readonly url: string;
 }
 
+export interface InitiativeReportView {
+  readonly narrative: string;
+  readonly questions: readonly string[];
+  readonly at: number;
+}
+
 export interface InitiativeSheetView {
   readonly initiative: InitiativeView;
+  readonly report: InitiativeReportView | null;
   readonly needsYou: readonly { readonly task: TaskView; readonly reason: string }[];
   readonly now: readonly TaskView[];
   readonly next: readonly {

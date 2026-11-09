@@ -1,7 +1,14 @@
 import { capitalise, quoteTitle } from '../chat/text.ts';
-import { compareTasks, type Initiative, isTaskSettled, NO_FOCUS, type Task } from '../domain/index.ts';
+import {
+  compareTasks,
+  type Initiative,
+  isLeadTask,
+  isTaskSettled,
+  NO_FOCUS,
+  type Task,
+} from '../domain/index.ts';
 import { listWaitsOn, resolveQueue } from '../queue/rank.ts';
-import { listInitiativeMembers } from '../state/initiatives.ts';
+import { listInitiativeWork } from '../state/initiatives.ts';
 import type { ShinsaState } from '../state/project.ts';
 import { listBundleBlockers } from '../state/queries.ts';
 import type {
@@ -111,12 +118,10 @@ export function resolveInitiativeSheet(
 ): InitiativeSheet | null {
   const initiative = state.initiatives[initiativeId];
   if (!initiative) return null;
-  const members = listInitiativeMembers(state, initiativeId).filter(
-    (task) => task.id !== initiative.leadTaskId
-  );
+  const members = listInitiativeWork(state, initiativeId);
   const queue = resolveQueue({ ...state, focus: { ...NO_FOCUS, initiativeId } }, now);
-  const needsYou = queue.ready.filter((entry) => entry.task.id !== initiative.leadTaskId);
-  const workingTasks = queue.working.filter((task) => task.id !== initiative.leadTaskId);
+  const needsYou = queue.ready.filter((entry) => !isLeadTask(entry.task));
+  const workingTasks = queue.working.filter((task) => !isLeadTask(task));
   const deciding = new Set(needsYou.map((entry) => entry.task.id));
   const working = new Set(workingTasks.map((task) => task.id));
   const open = members.filter(

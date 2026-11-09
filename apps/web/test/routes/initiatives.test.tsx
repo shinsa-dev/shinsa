@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'bun:test';
 import { TooltipProvider } from '@shinsa/ui/components/tooltip';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { InitiativePage, InitiativesPage } from '@/routes/initiatives.tsx';
+import { spyOnCommands } from '../support/commands.ts';
+import { spyOnEngine } from '../support/engine.ts';
 import { createGate, createInitiative, createShinsaState, createTask, NOW } from '../support/state.ts';
 
 const state = createShinsaState({
@@ -89,5 +91,81 @@ describe('an initiative’s page', () => {
   it('says when there is no such initiative', () => {
     render(<InitiativePage state={state} reference='nothing' />);
     expect(screen.getByText('No such initiative')).toBeTruthy();
+  });
+});
+
+function renderPage(shown = state) {
+  return render(
+    <TooltipProvider>
+      <InitiativePage state={shown} reference='split' />
+    </TooltipProvider>
+  );
+}
+
+function withLead(report: { narrative: string; questions: string[] } | null) {
+  const initiative = state.initiatives.split;
+  if (!initiative) throw new Error('no initiative');
+  return createShinsaState({
+    initiatives: [
+      {
+        ...initiative,
+        leadTaskId: 'lead',
+        report: report ? { ...report, runId: 'r', at: NOW - 60_000 } : null,
+      },
+    ],
+    tasks: [
+      ...Object.values(state.tasks),
+      createTask({
+        id: 'lead',
+        handle: 'SW-130',
+        title: 'Lead the chat split',
+        pipeline: ['lead'],
+        stage: 'leading',
+        initiativeId: 'split',
+      }),
+    ],
+    gates: Object.values(state.gates),
+  });
+}
+
+describe('an initiative’s lead', () => {
+  it('offers to start one, fresh or from a member’s chat', async () => {
+    spyOnEngine();
+    const spies = spyOnCommands();
+    renderPage();
+    expect(screen.getByText('No lead yet')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Start a lead' }));
+    expect(await screen.findByRole('dialog', { name: 'Start a lead' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Start lead' }));
+    await waitFor(() =>
+      expect(spies.sent.mock.calls.map((call) => call[0])).toEqual([
+        { type: 'initiative.start_lead', initiativeId: 'split', forkOf: null },
+      ])
+    );
+  });
+
+  it('hides the start button on an engine without leads', () => {
+    spyOnEngine(null);
+    renderPage();
+    expect(screen.getByText('No lead yet')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Start a lead' })).toBeNull();
+  });
+
+  it('says the lead has not reported yet before its first turn', () => {
+    renderPage(withLead(null));
+    const lead = screen.getByRole('region', { name: 'From the lead' });
+    expect(lead.textContent).toContain('The lead hasn’t reported yet.');
+    expect(lead.textContent).toContain('Lead the chat split');
+  });
+
+  it('shows the lead’s narrative and open questions above the sections, and opens its chat', async () => {
+    renderPage(withLead({ narrative: 'The dock is in **review**.', questions: ['Ship the studio first?'] }));
+    const lead = screen.getByRole('region', { name: 'From the lead' });
+    expect(lead.textContent).toContain('The dock is in review.');
+    expect(lead.textContent).toContain('Anything to discuss');
+    expect(lead.textContent).toContain('Ship the studio first?');
+    expect(screen.queryByText('No lead yet')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Open the chat' }));
+    await waitFor(() => expect(location.pathname).toBe('/tasks/SW-130'));
   });
 });

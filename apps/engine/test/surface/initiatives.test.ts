@@ -36,6 +36,11 @@ function createTaskView(id: string, title: string, pullRequest: number | null = 
 
 const SHEET = {
   initiative: VIEW,
+  report: {
+    narrative: 'The dock is in review.\nThe studio waits on it.',
+    questions: ['Ship the studio first?'],
+    at: 7,
+  },
   needsYou: [{ task: createTaskView('sw-104', 'Account tools'), reason: 'Its plan waits for you.' }],
   now: [createTaskView('sw-103', 'Write guard')],
   next: [
@@ -88,6 +93,13 @@ describe('shinsa initiatives', () => {
       'Chat split, 3 tasks, 1 shipped, led by SW-100',
       'Restart the chat stack.',
       '',
+      'From the lead:',
+      '  The dock is in review.',
+      '  The studio waits on it.',
+      '',
+      'Open questions:',
+      '  Ship the studio first?',
+      '',
       'Phases:',
       '  Dock: 1 of 2 shipped',
       '  No phase: 0 of 1 shipped, 1 dropped',
@@ -119,6 +131,7 @@ describe('shinsa initiatives', () => {
     const bare = createFakeClient({
       '/api/initiatives/init-2': {
         initiative: { ...BARE, description: '' },
+        report: null,
         needsYou: [],
         now: [],
         next: [],

@@ -99,6 +99,16 @@ function describeNext(sheet: InitiativeSheetView) {
   );
 }
 
+function describeReport(sheet: InitiativeSheetView) {
+  if (!sheet.report) return [];
+  return [
+    '',
+    'From the lead:',
+    ...sheet.report.narrative.split('\n').map((line) => `  ${line}`),
+    ...describeSection('Open questions', [...sheet.report.questions]),
+  ];
+}
+
 export function describeInitiativeSheet(sheet: InitiativeSheetView) {
   const { initiative } = sheet;
   const phases = initiative.progress.map((phase) => {
@@ -108,6 +118,7 @@ export function describeInitiativeSheet(sheet: InitiativeSheetView) {
   return [
     `${initiative.name}, ${describeProgress(initiative)}`,
     initiative.description || 'No description.',
+    ...describeReport(sheet),
     ...describeSection('Phases', phases),
     ...describeSection(
       'Needs you',
