@@ -7,7 +7,7 @@ function role(name: MenuRole, label?: string): MenuEntry {
   return label === undefined ? { kind: 'role', role: name } : { kind: 'role', role: name, label };
 }
 
-export function listMenuSections(update: MenuUpdate): MenuSection[] {
+export function listMenuSections(update: MenuUpdate, { devTools }: { devTools: boolean }): MenuSection[] {
   return [
     {
       label: APP_NAME,
@@ -56,13 +56,7 @@ export function listMenuSections(update: MenuUpdate): MenuSection[] {
       label: 'View',
       entries: [
         { kind: 'command', label: 'Reload', accelerator: 'CmdOrCtrl+R', command: { _tag: 'Reload' } },
-        separator,
-        role('resetZoom'),
-        role('zoomIn'),
-        role('zoomOut'),
-        separator,
-        role('togglefullscreen'),
-        role('toggleDevTools'),
+        ...(devTools ? [separator, role('toggleDevTools')] : []),
       ],
     },
     {

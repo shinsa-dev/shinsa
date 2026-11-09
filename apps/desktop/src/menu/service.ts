@@ -41,7 +41,10 @@ export class AppMenu extends Context.Service<
       });
       const refresh = Effect.fn('AppMenu.refresh')(function* (snapshot: UpdateSnapshot) {
         yield* shell.applyMenu(
-          listMenuSections({ ...describeUpdateItem(snapshot.state), visible: snapshot.supported })
+          listMenuSections(
+            { ...describeUpdateItem(snapshot.state), visible: snapshot.supported },
+            { devTools: !host.packaged }
+          )
         );
         yield* applyAbout;
       });

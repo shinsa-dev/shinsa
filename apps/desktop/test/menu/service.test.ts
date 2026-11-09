@@ -56,7 +56,7 @@ describe('the app menu', () => {
         ],
       ],
       ['Edit', ['undo', 'redo', '-', 'cut', 'copy', 'paste', 'pasteAndMatchStyle', 'delete', 'selectAll']],
-      ['View', ['Reload', '-', 'resetZoom', 'zoomIn', 'zoomOut', '-', 'togglefullscreen', 'toggleDevTools']],
+      ['View', ['Reload']],
       ['Go', ['Back', 'Forward', '-', 'Home']],
       ['Window', ['minimize', 'zoom', '-', 'Shinsa', '-', 'front']],
     ]);
@@ -66,6 +66,15 @@ describe('the app menu', () => {
       applicationName: 'Shinsa',
       applicationVersion: '1.2.0, Stable channel',
     });
+  });
+
+  it('offers the developer tools only in the unpackaged app', async () => {
+    const world = createWorld({ packaged: false });
+    await run(world, () => Effect.void);
+    const view = (world.menus.at(-1) ?? []).find((section) => section.label === 'View');
+    expect(listLabels(view ? [view] : [])).toEqual([
+      ['View', ['Reload', '-', 'toggleDevTools']],
+    ]);
   });
 
   it('names the server in the About panel', async () => {

@@ -58,3 +58,39 @@ export interface WindowGuards {
   openWindow(url: string): Effect.Effect<void>;
   readonly close: Effect.Effect<boolean>;
 }
+
+export const ContextMenuParams = Schema.Struct({
+  x: Schema.Finite,
+  y: Schema.Finite,
+  isEditable: Schema.Boolean,
+  selectionText: Schema.String,
+  misspelledWord: Schema.String,
+  dictionarySuggestions: Schema.Array(Schema.String),
+  editFlags: Schema.Struct({
+    canCut: Schema.Boolean,
+    canCopy: Schema.Boolean,
+    canPaste: Schema.Boolean,
+    canSelectAll: Schema.Boolean,
+  }),
+});
+
+export type ContextMenuParams = typeof ContextMenuParams.Type;
+
+export const ContextAction = Schema.Union([
+  Schema.TaggedStruct('Replace', { word: Schema.String }),
+  Schema.TaggedStruct('Learn', { word: Schema.String }),
+  Schema.TaggedStruct('LookUp', {}),
+  Schema.TaggedStruct('Inspect', { x: Schema.Finite, y: Schema.Finite }),
+]);
+
+export type ContextAction = typeof ContextAction.Type;
+
+export type ContextMenuEntry =
+  | { kind: 'separator' }
+  | { kind: 'role'; role: 'cut' | 'copy' | 'paste' | 'selectAll'; enabled: boolean }
+  | { kind: 'action'; label: string; action: ContextAction }
+  | { kind: 'note'; label: string };
+
+export const SUGGESTION_LIMIT = 5;
+
+export const LOOK_UP_LENGTH = 24;
