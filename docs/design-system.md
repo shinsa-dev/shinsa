@@ -915,7 +915,8 @@ Shinsa's controls are a step denser than a usual web app: 22 / 24 / 26 / 30. Pri
 
 | Height | Button | Field | Also on this step |
 | --- | --- | --- | --- |
-| 18 | `icon-2xs` (only a close mark inside a 24px row, such as a terminal tab) | | `Badge` `sm`, `Switch` (18 × 28) |
+| 16 | | | `Switch` (16 × 24) |
+| 18 | `icon-2xs` (only a close mark inside a 24px row, such as a terminal tab) | | `Badge` `sm` |
 | 20 | | | `Badge` default, `Kbd`, `StepNumber` tile, a 20px icon slot |
 | 22 | `xs`, `icon-xs` | | |
 | 24 | `sm`, `icon-sm` | `Input` `sm`, `SelectTrigger` `sm` | menu, select and command rows, tooltip minimum height, `SectionLabel` row, disclosure `line` strip |
