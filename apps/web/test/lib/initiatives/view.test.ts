@@ -91,14 +91,14 @@ describe('the sheet', () => {
       ])
     ).toEqual([
       ['Changes to review', ['review']],
-      ['Up next: Studio chat', ['waiting']],
-      ['Up next: No phase', ['loose']],
+      ['Studio chat', ['waiting']],
+      ['No phase', ['loose']],
       ['Done', ['merged']],
       ['Cancelled', ['dropped']],
     ]);
   });
 
-  it('says only Up next when the initiative has no phases', () => {
+  it('says Waiting when the initiative has no phases', () => {
     const flat = createShinsaState({
       initiatives: [createInitiative({ id: 'flat', leadTaskId: 'lead' })],
       tasks: [
@@ -111,7 +111,7 @@ describe('the sheet', () => {
     if (!flatSheet) throw new Error('No sheet');
     expect(listInitiativeTaskSections(flat, flatSheet).map((section) => section.group.title)).toEqual([
       'In progress',
-      'Up next',
+      'Waiting',
     ]);
   });
 

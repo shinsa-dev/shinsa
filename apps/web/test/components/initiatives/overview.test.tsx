@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'bun:test';
-import { resolveInitiativeSheet, type ShinsaState } from '@shinsa/core';
+import { resolveInitiativeSheet, resolveQueue, type ShinsaState } from '@shinsa/core';
 import { TooltipProvider } from '@shinsa/ui/components/tooltip';
 import { fireEvent, render, screen } from '@testing-library/react';
-import { HomeInitiatives } from '@/components/home/initiatives.tsx';
 import { InitiativeOverview } from '@/components/initiatives/sheet.tsx';
+import { TaskQueue } from '@/components/queue/queue.tsx';
+import { listQueueSections } from '@/lib/queue.ts';
 import { createGate, createInitiative, createShinsaState, createTask, NOW } from '../../support/state.ts';
 
 const LEAD = createTask({
@@ -68,8 +69,8 @@ describe('the lead task’s overview', () => {
     expect(screen.getByText('The dock is in review.')).toBeTruthy();
     expect(screen.getByText('Rewrite the agent dock')).toBeTruthy();
     expect(screen.getAllByText('Changes to review').length).toBeGreaterThan(0);
-    expect(screen.getByText('Up next: Studio chat')).toBeTruthy();
-    expect(screen.getByText('Up next: No phase')).toBeTruthy();
+    expect(screen.getByText('Studio chat')).toBeTruthy();
+    expect(screen.getByText('No phase')).toBeTruthy();
   });
 
   it('leaves where it stands out before the lead’s first report', () => {
@@ -80,22 +81,22 @@ describe('the lead task’s overview', () => {
 });
 
 describe('Home’s initiatives', () => {
-  it('lists each open initiative with how far it is, and opens its lead task', () => {
+  it('lists the initiative in In progress with how far it is, and opens its lead task', () => {
     history.replaceState(null, '', '/');
+    const state = createSplitState({ narrative: 'Going.' });
     render(
       <TooltipProvider>
-        <HomeInitiatives state={createSplitState({ narrative: 'Going.' })} />
+        <TaskQueue
+          state={state}
+          variant='wide'
+          sections={listQueueSections(state, resolveQueue(state, NOW), NOW)}
+        />
       </TooltipProvider>
     );
     expect(screen.getByText('3 tasks · 3 open · 0 shipped')).toBeTruthy();
+    expect(screen.queryByText('Add the studio chat')).toBeNull();
+    expect(screen.getByText('Rewrite the agent dock')).toBeTruthy();
     fireEvent.click(screen.getByText('Chat split'));
     expect(location.pathname).toBe('/tasks/SW-130');
-  });
-
-  it('shows nothing without an open initiative', () => {
-    const { container } = render(<HomeInitiatives state={createSplitState(null)} />);
-    expect(container.textContent).not.toBe('');
-    const none = render(<HomeInitiatives state={createShinsaState({})} />);
-    expect(none.container.textContent).toBe('');
   });
 });

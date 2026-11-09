@@ -3182,14 +3182,15 @@ Only these, and they win over anything below:
     functions that return them, as for a toast (42), with an inserted value counted as 12.
 
 45. **An initiative is a task whose Overview is its report sheet** (since 2026-11-09; `components/initiatives/`,
-    `components/home/initiatives.tsx`, `lib/initiatives/`). There is no Initiatives page or nav entry. The lead task's
+    `lib/queue.ts`, `lib/initiatives/`). There is no Initiatives page or nav entry. The lead task's
     Overview shows, in order: Where it stands (a `Panel` like a task's result panel, the lead's narrative alone; it
     is left out until the first report, and the lead's questions are questions in Needs you, never rows here), then the members in one card laid out as All
     tasks: its column header and its `TaskGroupSection`s in the same order and words (a gate's group, In progress),
-    then one Up next section per phase ("Up next: Tools in the chat") where the waiting rows sit, then Done and
+    then one section per phase titled with its name ("Tools in the chat", or Waiting without phases) where the waiting rows sit, then Done and
     Cancelled, closed at first. There is no phase track and no Decisions panel: approved plans and the members'
-    judgement calls are entries of the lead's Activity, among its own. Home's Initiatives section (only when one is
-    open) lists each with its progress and opens its lead task. The composer's Kind of task stays on Auto unless you
+    judgement calls are entries of the lead's Activity, among its own. On Home and in the queue an open initiative is
+    one row in In progress, its lead task with its progress ("5 tasks · 3 open · 1 shipped"); its members sit under it
+    and leave In progress and Waiting, and only a member at a gate stays in Needs you. The composer's Kind of task stays on Auto unless you
     pick Initiative. A member's Overview facts name its initiative and phase and open the lead task, and its menus
     carry Add to an initiative, Phase, Take out of the initiative and Make an initiative from this task; the lead's
     menu carries Edit the initiative.

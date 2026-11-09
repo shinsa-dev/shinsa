@@ -54,7 +54,7 @@ function createWorld() {
 
 function sectionsFor() {
   const state = createWorld();
-  return listQueueSections(state, resolveQueue(state, NOW));
+  return listQueueSections(state, resolveQueue(state, NOW), NOW);
 }
 
 function sectionOf(key: QueueSection['key']) {
@@ -111,7 +111,7 @@ describe('listQueueSections', () => {
 
   it('says so when nothing waits on you and no agent is working', () => {
     const state = createShinsaState({});
-    const [needs, working, waiting] = listQueueSections(state, resolveQueue(state, NOW));
+    const [needs, working, waiting] = listQueueSections(state, resolveQueue(state, NOW), NOW);
     expect(needs?.empty).toBe('Nothing is waiting on you.');
     expect(working?.empty).toBe('No agent is working right now.');
     expect(waiting?.empty).toBeNull();

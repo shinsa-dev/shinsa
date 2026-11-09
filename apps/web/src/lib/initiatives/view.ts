@@ -29,7 +29,7 @@ export const INITIATIVES_TITLE = 'Initiatives';
 
 export const NO_PHASE_VALUE = '';
 
-const UP_NEXT = 'Up next';
+const WAITING = 'Waiting';
 
 const NEXT_ICON: IconName = 'IconHourglass';
 
@@ -89,8 +89,8 @@ export function listInitiativeActivity(state: ShinsaState, sheet: InitiativeShee
 }
 
 function resolveNextTitle(group: InitiativePhaseGroup, phased: boolean) {
-  if (!phased) return UP_NEXT;
-  return `${UP_NEXT}: ${group.phase?.name ?? NO_PHASE_NAME}`;
+  if (!phased) return WAITING;
+  return group.phase?.name ?? NO_PHASE_NAME;
 }
 
 export function listInitiativeTaskSections(

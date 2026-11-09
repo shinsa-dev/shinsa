@@ -162,8 +162,8 @@ src/
     │                    (Add to an initiative, Phase and Take out of the initiative choices, the open initiatives),
     │                    lead.ts (the initiative a task leads, its report); the pieces are components/initiatives/
     │                    (sheet.tsx: the lead task's Overview, lead.tsx: Where it stands, write-dialog.tsx,
-    │                    task-items.tsx: the task's initiative fact and menu items), components/home/initiatives.tsx
-    │                    and ⌘K's lib/command/initiatives.ts
+    │                    task-items.tsx: the task's initiative fact and menu items), lib/queue.ts (an initiative as
+    │                    one In progress row with its members under it) and ⌘K's lib/command/initiatives.ts
     ├── teams/           Teams (docs/engine.md → Teams): settings.ts (Settings → Teams' words, the new team draft,
     │                    the shared projects dropdown's label, who can reach this machine), admit.ts (adding this
     │                    browser to a teammate's machine with the team key), join.ts (the join page's fragment and the

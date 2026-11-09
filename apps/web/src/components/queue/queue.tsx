@@ -1,6 +1,7 @@
 import { resolveBundle, type ShinsaState, type Task } from '@shinsa/core';
 import { HoverHighlight } from '@shinsa/ui/components/highlight-list';
 import { Icon } from '@shinsa/ui/components/icon';
+import { Truncate } from '@shinsa/ui/components/truncate';
 import { cn } from '@shinsa/ui/lib/utils';
 import type * as React from 'react';
 import { CompactSection, CompactSections } from '@/components/layout/compact-section.tsx';
@@ -10,12 +11,15 @@ import { CARD } from '@/components/layout/surface/card.ts';
 import { RowSummary } from '@/components/queue/row-summary.tsx';
 import { SharedMark } from '@/components/share/shared-mark.tsx';
 import { GateGlyph, TaskGlyph, WorkingGlyph } from '@/components/status/glyphs.tsx';
+import { StatusTile } from '@/components/status/tile.tsx';
 import { BundleMark } from '@/components/task/bundle.tsx';
+import { TaskHandlePrefix } from '@/components/task/handle.tsx';
 import { TimeAgo } from '@/components/text/time-ago.tsx';
 import { useOwnQueue } from '@/hooks/use-own-queue.ts';
 import { useProgressiveCount } from '@/hooks/use-progressive-count.ts';
 import { TONE_TEXT } from '@/lib/format/tone.ts';
 import { resolveHomeSectionId } from '@/lib/home.ts';
+import { INITIATIVE_ICON } from '@/lib/initiatives/view.ts';
 import { type DisclosureId, useDisclosure } from '@/lib/preferences/disclosure.ts';
 import {
   listQueueSections,
@@ -44,6 +48,7 @@ function renderMarks(state: ShinsaState, task: Task) {
 }
 
 function QueueItemGlyph({ state, item }: { state: ShinsaState; item: QueueItem }) {
+  if (item.kind !== 'gate' && item.initiative) return <StatusTile icon={INITIATIVE_ICON} tone='neutral' />;
   switch (item.kind) {
     case 'gate':
       return <GateGlyph gate={item.gate} />;
@@ -145,12 +150,19 @@ function QueueSectionView({
       title={item.task.title}
       mark={renderMarks(state, item.task)}
       summary={
-        <RowSummary
-          state={state}
-          task={item.task}
-          gate={item.kind === 'gate' ? item.gate : null}
-          detail={variant === 'wide'}
-        />
+        item.kind !== 'gate' && item.initiative ? (
+          <span className='flex min-w-0 items-center gap-1.5'>
+            <TaskHandlePrefix task={item.task} />
+            <Truncate className='tabular-nums'>{item.initiative}</Truncate>
+          </span>
+        ) : (
+          <RowSummary
+            state={state}
+            task={item.task}
+            gate={item.kind === 'gate' ? item.gate : null}
+            detail={variant === 'wide'}
+          />
+        )
       }
       trailing={variant === 'wide' ? <TimeAgo at={item.since} compact detail={item.sinceLabel} /> : undefined}
       onClick={() => {
@@ -195,7 +207,7 @@ export function TaskQueue({
   onNavigate?: () => void;
 }) {
   const own = useOwnQueue(state);
-  const sections = given ?? listQueueSections(state, own);
+  const sections = given ?? listQueueSections(state, own, Date.now());
   const views = sections.map((section) => (
     <QueueSectionView
       key={section.key}

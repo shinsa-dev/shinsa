@@ -1,7 +1,6 @@
 import { briefingKey, reconcileBriefing, type ShinsaState } from '@shinsa/core';
 import { cn } from '@shinsa/ui/lib/utils';
 import { HomeGuide } from '@/components/home/guide.tsx';
-import { HomeInitiatives } from '@/components/home/initiatives.tsx';
 import { NewTaskForm } from '@/components/home/new-task-form.tsx';
 import { RecentConversations, RecentlyFinished } from '@/components/home/recent.tsx';
 import { PAGE_COLUMN, PAGE_TOP } from '@/components/layout/page/column.ts';
@@ -21,7 +20,7 @@ export function HomePage({ state }: { state: ShinsaState }) {
   const briefing = reconcileBriefing(state.briefings[briefingKey(queue.focus)], queue, now);
   const { first, finished, conversations, last } = resolveHomeSections(
     state,
-    listQueueSections(state, queue),
+    listQueueSections(state, queue, now),
     now
   );
   useRegisterCommands(listHomeSections(state));
@@ -40,7 +39,6 @@ export function HomePage({ state }: { state: ShinsaState }) {
 
         <WideSections>
           <TaskQueue state={state} variant='wide' sections={first} />
-          <HomeInitiatives state={state} />
           <RecentlyFinished state={state} finished={finished} />
           <RecentConversations conversations={conversations} />
           <TaskQueue state={state} variant='wide' sections={last} />
