@@ -1,6 +1,6 @@
 import type { SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
 import { KNOWN_AGENT_MODELS } from '@shinsa/core';
-import { Duration, Effect, Stream } from 'effect';
+import { Cache, Duration, Effect, Exit, Stream } from 'effect';
 import { describeError } from '../../../../log/index.ts';
 import { resolveClaudeLaunch } from '../sdk/launch.ts';
 import { resolveModels } from './families.ts';
@@ -9,7 +9,7 @@ import { type ModelCatalogDefinition, type ModelCatalogHandle, ModelsUnavailable
 export const makeModelCatalog = Effect.fn('ModelCatalog.make')(function* (
   definition: ModelCatalogDefinition
 ) {
-  const { runtime, timeout } = definition;
+  const { runtime, timeout, timeToLive } = definition;
   const unavailable = (error: unknown) => new ModelsUnavailable({ message: describeError(error) });
 
   const request = Effect.gen(function* () {
@@ -36,13 +36,18 @@ export const makeModelCatalog = Effect.fn('ModelCatalog.make')(function* (
     return models;
   });
 
-  const [cached, invalidate] = yield* Effect.cachedInvalidateWithTTL(request, Duration.infinity);
+  const catalog = yield* Cache.makeWith((_version: string) => request, {
+    capacity: 1,
+    timeToLive: (exit) => (Exit.isSuccess(exit) ? timeToLive : Duration.zero),
+  });
 
-  const list = cached.pipe(
+  const list = runtime.resolveExecutable.pipe(
+    Effect.flatMap((executable) =>
+      Cache.get(catalog, executable.ok ? `${executable.path}@${executable.version ?? ''}` : '')
+    ),
     Effect.catch((failure) =>
       Effect.logWarning('[Models] Falling back to the built-in list').pipe(
         Effect.annotateLogs({ error: failure.message }),
-        Effect.andThen(invalidate),
         Effect.as(KNOWN_AGENT_MODELS)
       )
     )

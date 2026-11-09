@@ -2,23 +2,28 @@ import { describe, expect, test } from 'bun:test';
 import { tmpdir } from 'node:os';
 import { KNOWN_CODEX_MODELS } from '@shinsa/core';
 import { Duration, Effect } from 'effect';
+import { TestClock } from 'effect/testing';
 import { resolveCodexModels } from '../../../../src/agents/providers/codex/models/rows.ts';
 import { CATALOG_TIMEOUT_MS } from '../../../../src/agents/providers/codex/models/schema.ts';
 import { makeCodexModelCatalog } from '../../../../src/agents/providers/codex/models/service.ts';
 import type { CodexRuntime } from '../../../../src/agents/providers/codex/session/schema.ts';
+import { MODEL_CATALOG_TTL } from '../../../../src/agents/providers/schema.ts';
 import { FakeCodex } from '../../../helpers/codex.ts';
 import { captureLogs } from '../../../helpers/logs.ts';
 import { runProvider } from '../../../helpers/providers.ts';
 
+function makeCatalog(runtime: CodexRuntime, timeoutMs = CATALOG_TIMEOUT_MS) {
+  return makeCodexModelCatalog({
+    executable: runtime.resolveExecutable,
+    env: runtime.env,
+    cwd: tmpdir(),
+    timeout: Duration.millis(timeoutMs),
+    timeToLive: MODEL_CATALOG_TTL,
+  });
+}
+
 function createCatalog(runtime: CodexRuntime, timeoutMs = CATALOG_TIMEOUT_MS) {
-  const catalog = Effect.runSync(
-    makeCodexModelCatalog({
-      executable: runtime.resolveExecutable,
-      env: runtime.env,
-      cwd: tmpdir(),
-      timeout: Duration.millis(timeoutMs),
-    })
-  );
+  const catalog = Effect.runSync(makeCatalog(runtime, timeoutMs));
   return { list: () => runProvider(catalog.list) };
 }
 
@@ -38,6 +43,21 @@ describe('the Codex model list', () => {
     ]);
     await catalog.list();
     expect(codex.requests('model/list')).toEqual([{}, { cursor: 'next' }]);
+  });
+
+  test('asks again once the list is older than its time to live', async () => {
+    const codex = new FakeCodex({
+      models: [{ id: 'gpt-6-astra', model: 'gpt-6-astra', displayName: 'GPT-6-Astra', description: '' }],
+    });
+    await Effect.gen(function* () {
+      const catalog = yield* makeCatalog(codex.runtime);
+      yield* catalog.list;
+      yield* catalog.list;
+      expect(codex.requests('model/list')).toHaveLength(1);
+      yield* TestClock.adjust(MODEL_CATALOG_TTL);
+      yield* catalog.list;
+      expect(codex.requests('model/list')).toHaveLength(2);
+    }).pipe(Effect.scoped, Effect.provide(TestClock.layer()), runProvider);
   });
 
   test('rows that are not models are skipped', () => {
