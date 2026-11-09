@@ -384,6 +384,9 @@ describe('a task’s previews', () => {
     const previews = listTaskPreviews(state, snapshot, task, LATER);
     expect(listUnattachedPreviews(previews, ['https://preview.dev', 'not a url'])).toEqual(previews);
     expect(listUnattachedPreviews(previews, ['http://localhost:4123/editor'])).toEqual([]);
+    const stopped = previews.map((view) => ({ ...view, state: 'stopped' as const }));
+    expect(listUnattachedPreviews(stopped, ['http://localhost:4123/editor'])).toEqual(stopped);
+    expect(selectPreviewView(stopped, 'http://localhost:4123/cart')).toBeNull();
     expect(selectPreviewView(previews, 'http://localhost:4123/cart')?.service.id).toBe('web');
     expect(selectPreviewView(previews, 'http://localhost:4000/')).toBeNull();
     expect(selectPreviewView(previews, 'not a url')).toBeNull();
