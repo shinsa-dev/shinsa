@@ -1,6 +1,8 @@
 import { Context, Effect, Layer, Ref, Stream } from 'effect';
 import { APP_NAME } from '../app/schema.ts';
+import { CHANNELS } from '../bridge/schema.ts';
 import { EngineActions } from '../engine-actions/service.ts';
+import { resolveEngineLog } from '../engine/launchd.ts';
 import { DesktopHost } from '../host/service.ts';
 import type { ServerHealth } from '../server/schema.ts';
 import { EngineServer } from '../server/service.ts';
@@ -64,6 +66,14 @@ export class AppMenu extends Context.Service<
           case 'Update':
             if (command.install) return yield* updater.install;
             return yield* Effect.asVoid(Effect.forkIn(updater.check(true), scope));
+          case 'PageAction':
+            yield* window.show;
+            if ((yield* window.page) !== 'app') return;
+            return yield* window.sendToPage(CHANNELS.action, command.action);
+          case 'OpenExternal':
+            return yield* shell.openExternal(command.url);
+          case 'ShowEngineLog':
+            return yield* shell.openPath(resolveEngineLog(host.env, host.home));
         }
       });
       yield* Effect.forkIn(Stream.runForEach(updater.changes, refresh), scope, { startImmediately: true });

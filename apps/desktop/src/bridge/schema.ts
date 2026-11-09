@@ -2,6 +2,10 @@ import type { AwaySpan } from '../away/schema.ts';
 import type { DesktopNotice } from '../notifications/schema.ts';
 import type { UpdateChannel } from '../updates/schema.ts';
 
+export const PAGE_ACTIONS = ['new-task', 'command-menu', 'whats-new'] as const;
+
+export type PageAction = (typeof PAGE_ACTIONS)[number];
+
 export type DesktopWindowState = 'window' | 'fullscreen';
 
 export type DesktopUpdate =
@@ -36,6 +40,7 @@ export interface DesktopBridge extends DesktopStart {
   onWindowState: (listener: (state: DesktopWindowState) => void) => () => void;
   onUpdate: (listener: (update: DesktopUpdate) => void) => () => void;
   onAway: (listener: (span: AwaySpan) => void) => () => void;
+  onAction: (listener: (action: PageAction) => void) => () => void;
 }
 
 export const CHANNELS = {
@@ -52,4 +57,5 @@ export const CHANNELS = {
   updateChannel: 'shinsa:update-channel',
   downgrade: 'shinsa:downgrade',
   away: 'shinsa:away',
+  action: 'shinsa:action',
 } as const;

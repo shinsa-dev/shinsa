@@ -55,13 +55,24 @@ describe('the app menu', () => {
           'quit',
         ],
       ],
+      ['File', ['New Task', 'Command Menu…', '-', 'close']],
       ['Edit', ['undo', 'redo', '-', 'cut', 'copy', 'paste', 'pasteAndMatchStyle', 'delete', 'selectAll']],
       ['View', ['Reload']],
-      ['Go', ['Back', 'Forward', '-', 'Home']],
+      ['Go', ['Back', 'Forward', '-', 'Home', 'Tasks', 'Terminal', 'Settings']],
       ['Window', ['minimize', 'zoom', '-', 'Shinsa', '-', 'front']],
+      ['Help', ["What's New", '-', 'Shinsa Website', 'Report an Issue…', '-', 'Show Engine Log']],
     ]);
     expect(sections[0]?.entries[1]).toMatchObject({ enabled: true, visible: false });
-    expect(sections[4]?.role).toBe('window');
+    expect(sections[1]?.entries[3]).toEqual({ kind: 'role', role: 'close', label: 'Close Window' });
+    expect(sections.map((section) => section.role)).toEqual([
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      'window',
+      'help',
+    ]);
     expect(world.about.at(-1)).toEqual({
       applicationName: 'Shinsa',
       applicationVersion: '1.2.0, Stable channel',
@@ -72,9 +83,7 @@ describe('the app menu', () => {
     const world = createWorld({ packaged: false });
     await run(world, () => Effect.void);
     const view = (world.menus.at(-1) ?? []).find((section) => section.label === 'View');
-    expect(listLabels(view ? [view] : [])).toEqual([
-      ['View', ['Reload', '-', 'toggleDevTools']],
-    ]);
+    expect(listLabels(view ? [view] : [])).toEqual([['View', ['Reload', '-', 'toggleDevTools']]]);
   });
 
   it('names the server in the About panel', async () => {
@@ -105,6 +114,34 @@ describe('the app menu', () => {
     expect(world.window.slice(-4)).toEqual(['load http://127.0.0.1:7446/', 'show', 'show', 'go 0']);
     expect(world.actions).toEqual(['retry', 'restart']);
     expect(world.checks).toBe(1);
+  });
+
+  it('hands the page its actions once it shows the app, and drops them on the waiting page', async () => {
+    const world = createWorld();
+    await run(world, (_menu, window) =>
+      Effect.gen(function* () {
+        yield* offer(world.menuCommands, { _tag: 'PageAction', action: 'new-task' });
+        yield* window.showServerPage;
+        yield* offer(world.menuCommands, { _tag: 'PageAction', action: 'command-menu' });
+        yield* offer(world.menuCommands, { _tag: 'PageAction', action: 'whats-new' });
+      })
+    );
+    expect(world.sent.filter(([channel]) => channel === CHANNELS.action)).toEqual([
+      [CHANNELS.action, 'command-menu'],
+      [CHANNELS.action, 'whats-new'],
+    ]);
+    expect(world.window.filter((entry) => entry === 'show')).toHaveLength(3);
+  });
+
+  it('opens the help links in the browser and the engine log in its viewer', async () => {
+    const world = createWorld({ env: { SHINSA_HOME: '/h' } });
+    await run(world, () =>
+      Effect.gen(function* () {
+        yield* offer(world.menuCommands, { _tag: 'OpenExternal', url: 'https://shinsa.dev' });
+        yield* offer(world.menuCommands, { _tag: 'ShowEngineLog' });
+      })
+    );
+    expect(world.shell).toEqual(['open https://shinsa.dev', 'open path /h/data/engine.log']);
   });
 
   it('carries out menu commands while an update check waits on the network', async () => {
