@@ -47,10 +47,14 @@ export function listJoinRows(rows: readonly MachineRow[]) {
   );
 }
 
+function listOwnRows(rows: readonly MachineRow[]) {
+  return rows.filter((row) => row.instance.role === 'owner');
+}
+
 export function resolveJoinSetup(rows: readonly MachineRow[], reached: number): JoinSetup | null {
-  const own = rows.filter((row) => row.instance.role === 'owner');
-  if (own.length === 0) return { kind: 'pair' };
+  const own = listOwnRows(rows);
   if (reached > 0) return null;
+  if (own.length === 0) return { kind: 'pair' };
   const names = (keep: (row: MachineRow) => boolean) => own.filter(keep).map((row) => row.instance.name);
   const waiting = names((row) => Boolean(row.device?.waiting));
   if (waiting.length > 0) return { kind: 'waiting', machines: waiting };

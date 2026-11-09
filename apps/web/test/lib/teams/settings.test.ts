@@ -6,6 +6,7 @@ import {
   describeHostedTeam,
   describeHostedTeamsNotice,
   describePeopleCount,
+  hasNoTeamMachines,
   describeTeamEntry,
   describeTeamFacts,
   describeTeamsUnavailable,
@@ -173,6 +174,14 @@ describe('Settings → Teams', () => {
     expect(listTeamPeople(team, 'bo').map((person) => person.user.login)).toEqual(['bob']);
     expect(listTeamPeople(team, 'nobody')).toEqual([]);
     expect(describePeopleCount(team)).toBe('3');
+  });
+
+  it('knows who has no machine in the team', () => {
+    const team = createTeam({
+      machines: [{ id: 'm1', name: 'Studio', userId: MONA.id, online: true, lastSeenAt: NOW }],
+    });
+    expect(hasNoTeamMachines(team, MONA.id)).toBe(false);
+    expect(hasNoTeamMachines(team, KAI.id)).toBe(true);
   });
 
   it('describes a hosted team with your role, its people and its machines', () => {

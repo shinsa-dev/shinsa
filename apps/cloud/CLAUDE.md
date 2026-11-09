@@ -212,9 +212,9 @@ test/                gates.test.ts reads every RemoteApi route with HttpApi.refl
   whoever opens the join link and signs in sees the team's name and owner (`POST /__remote/teams/preview { invite }`,
   which records nothing), then sends `POST /__remote/teams/join { invite }` (or the engine
   `/__remote/machine/teams/join`), which records that the account asked (`team_requesters`) and makes it no member
-  (404 `invite_invalid` for a link turned off). A page's join needs at least one machine the account paired (409
-  `no_machine` otherwise): a teammate reaches your work only through your machines, so the join page turns on remote
-  access first; the engine's join comes from a paired machine already. Only the owner's machine answers a request (`members/add` and
+  (404 `invite_invalid` for a link turned off). An account with no paired machine may join too: it shares
+  nothing and reaches the team only through machines shared with it, whose grant makes it a member there
+  (`/__remote/machine/members/add`, allowed by `sharesTeam`). Only the owner's machine answers a request (`members/add` and
   `requests/decline` with `{ userId }`, only of an account that asked), removes a member (`members/remove`) or the
   team (`remove`), each 403 `not_owner` for anyone else; a member leaves with `…/leave` from the engine or
   `/__remote/teams/<team>/leave` from a page, and the owner cannot (409). The team key lives in the join link's

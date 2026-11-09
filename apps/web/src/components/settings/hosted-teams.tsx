@@ -20,6 +20,8 @@ import {
   describePeopleCount,
   type HostedTeam,
   type HostedTeams,
+  hasNoTeamMachines,
+  NO_TEAM_MACHINES,
   showsKeyNote,
   replaceHostedTeam,
   listTeamPeople,
@@ -58,6 +60,7 @@ function TeamPeople({
         const parts = [
           seen ? describePresence(seen, now) : null,
           base,
+          hasNoTeamMachines(team, user.id) ? NO_TEAM_MACHINES : null,
           hasOwnScopes(team, user.id) ? 'Own scopes' : null,
         ];
         return (
