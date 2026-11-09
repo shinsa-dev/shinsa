@@ -17,5 +17,5 @@ export const resolveBriefingAnswer = Effect.fn('Briefings.resolve')(function* <E
     describeBriefingPrompt(state, queue, now),
     resolveBriefingSchema(resolveTaskQuestion(queue))
   );
-  return Option.getOrElse(parseBriefing(answer, queue, now), () => fallback);
+  return Option.getOrUndefined(parseBriefing(answer, queue, now)) ?? fallback;
 });

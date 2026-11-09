@@ -93,10 +93,7 @@ export function resolveRunOpening(run: Pick<Run, 'prompt' | 'resume'>) {
   const prompt = run.prompt;
   if (!prompt) return null;
   if (!run.resume) return prompt;
-  return Option.match(splitHouseRules(prompt), {
-    onNone: () => prompt,
-    onSome: ({ instruction }) => instruction,
-  });
+  return Option.getOrUndefined(splitHouseRules(prompt))?.instruction ?? prompt;
 }
 
 export function listRunOpenings(timeline: TimedSeedEvent[]) {

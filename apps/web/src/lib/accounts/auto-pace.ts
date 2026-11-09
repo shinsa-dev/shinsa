@@ -51,7 +51,7 @@ export function selectPaceBudget(
 ): PaceBudgetRow | null {
   const recorded = state.usagePaces[provider];
   if (!recorded) return null;
-  const room = Option.getOrElse(resolveAdmissionRoom(state, provider, now), () => 0);
+  const room = Option.getOrUndefined(resolveAdmissionRoom(state, provider, now)) ?? 0;
   const waiting = countWaitingBuilds(state, provider);
   const reserve = Math.round(ADMISSION_LIMITS.reserve * 100);
   const counted = describeResetsCounted(recorded.pace, safePace);

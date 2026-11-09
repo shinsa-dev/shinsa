@@ -70,7 +70,7 @@ export function listAccountSections(snapshot: AccountsSnapshot | null): CommandS
       options: accounts.map((account) => ({
         value: account.id,
         label: resolveAccountLabel(account),
-        keywords: ['account', Option.getOrElse(resolvePlanLabel(account.plan), () => '')],
+        keywords: ['account', Option.getOrUndefined(resolvePlanLabel(account.plan)) ?? ''],
       })),
       pick: (accountId) => {
         const account = accounts.find((candidate) => candidate.id === accountId);

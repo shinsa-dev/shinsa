@@ -163,10 +163,7 @@ const resolveResumedPrompt = Effect.fn('TurnPlan.resolveResumedPrompt')(function
   const split = splitHouseRules(brief);
   if (Option.isNone(split)) return prompt;
   if (!(yield* hasHouseRules(context, resume, split.value.rules))) return brief;
-  return Option.match(splitHouseRules(prompt), {
-    onNone: () => prompt,
-    onSome: ({ instruction }) => instruction,
-  });
+  return Option.getOrUndefined(splitHouseRules(prompt))?.instruction ?? prompt;
 });
 
 export function resolveTurnFold({ run, plan, stepPrompt, firstAttempt, folds }: TurnFoldInput) {

@@ -176,7 +176,7 @@ export function isCodeTask(task: Task) {
 }
 
 function resolveChangeStep(task: Task) {
-  return Option.getOrElse(resolveInquiryStep(resolveTaskPipeline(task)), () => 'investigate' as const);
+  return Option.getOrUndefined(resolveInquiryStep(resolveTaskPipeline(task))) ?? 'investigate';
 }
 
 function isAddedByProposal(task: Task) {
@@ -205,7 +205,7 @@ export function describeChangeGate(task: Task, gate: Gate): ChangeGate {
   const open = task.proposal?.status === 'open' ? task.proposal : null;
   const close = open?.recommend === 'close';
   const composed = close || (pipeline.includes('your_ok') && !isAddedByProposal(task));
-  const goOn = GO_ON[Option.getOrElse(resolveWorkStep(pipeline), () => 'build' as const)];
+  const goOn = GO_ON[Option.getOrUndefined(resolveWorkStep(pipeline)) ?? 'build'];
   const [why = '', ...rest] = gate.body.split('\n\n');
   return {
     eyebrow: composed ? RESULT_IN[step] : CHANGE_EYEBROW[step],

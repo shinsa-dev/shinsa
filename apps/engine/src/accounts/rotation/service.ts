@@ -199,7 +199,7 @@ export class AccountRotation extends Context.Service<
         const candidates = (yield* listCandidates(true, ownership)).filter(
           (candidate) => !bound || candidate.id === kept
         );
-        const resetAt = Option.getOrElse(resolvePoolResetAt(candidates, model, now), () => failure.resetAt);
+        const resetAt = Option.getOrUndefined(resolvePoolResetAt(candidates, model, now)) ?? failure.resetAt;
         const spentVerdict: RejectionVerdict = { retry: false, failure: { ...refined, resetAt } };
         return spentVerdict;
       });
