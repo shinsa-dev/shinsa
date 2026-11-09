@@ -917,6 +917,25 @@ describe('an escalation the outbox asks to send to Slack', () => {
     expect([...stub.dispatched, ...off.stub.dispatched]).toEqual([]);
   });
 
+  test('edits nothing for an escalation whose post Slack refused, open or cleared', async () => {
+    const { slack, stub, relay } = setUpEscalated();
+    stub.update((state) => {
+      const task = state.tasks.t1;
+      if (!task) return;
+      task.slackEscalations = [
+        { escalatedAt: ESCALATED_AT, contact: CONTACT, channelId: null, ts: null, followUpTs: null },
+      ];
+    });
+    await slack.escalate(effect, context());
+    stub.update((state) => {
+      const task = state.tasks.t1;
+      if (task) task.escalation = null;
+    });
+    await slack.escalate(effect, context());
+    expect(relay).toEqual([]);
+    expect(stub.dispatched).toEqual([]);
+  });
+
   test('edits the same message once the escalation clears', async () => {
     const { slack, stub, relay } = setUpEscalated();
     markSent(stub);

@@ -403,4 +403,21 @@ describe('Slack over HTTP', () => {
     expect((await send('/api/slack/directory')).status).toBe(400);
     expect((await startRoutes().send('/api/slack/directory?teamId=T1')).status).toBe(404);
   });
+
+  test('sends a test escalation to one Slack contact, and refuses a contact it cannot read', async () => {
+    const tested: unknown[] = [];
+    const slack = {
+      testContact: (contact: unknown) =>
+        Effect.sync(() => {
+          tested.push(contact);
+          return { sent: true, problem: null };
+        }),
+    } as unknown as Slack['Service'];
+    const contact = { kind: 'slack_channel', teamId: 'T1', id: 'C1', name: 'oncall' };
+    const { post } = startRoutes({ slack });
+    expect(await (await post('/api/slack/test', { contact })).json()).toEqual({ sent: true, problem: null });
+    expect(tested).toEqual([contact]);
+    expect((await post('/api/slack/test', { contact: { kind: 'team' } })).status).toBe(400);
+    expect((await startRoutes().post('/api/slack/test', { contact })).status).toBe(404);
+  });
 });
