@@ -141,6 +141,10 @@ src/
 │   │                from the push, resolvePullRequestCi)
 │   ├── dependencies.ts   Resolving and changing what a task waits on and stacks on (task.stack_on_tasks), releasing
 │   │                waiting tasks (a stacked one once every task below is ready) and recording its bases (stackBases)
+│   ├── initiatives.ts  Initiatives: write, remove, join and leave, adopting a task with its descendants
+│   │                (listTaskDescendants), the membership a filed or forked task inherits (resolveCreatedMembership)
+│   ├── leads.ts     An initiative's lead: start_lead, a lead turn (startLeadTurn), wake_lead, report_initiative, and
+│   │                syncInitiativeMilestones (after every command: members' milestones queued, a wake asked for)
 │   ├── bundles.ts   Bundles, graphs of stacks (reviewBundles, after every command): ready in place of a merge gate
 │   │                for every follower (bundleReady), the lead's one merge gate for the bundle, held while the
 │   │                bundle conflicts with the default branch (bundleConflict) and the branch behind is pushed, the
@@ -270,6 +274,9 @@ src/
 ├── queue/           Needs you (rank.ts), the one table of gate words (reasons.ts), stepping through decisions
 │                    (step.ts), the stalled leaf of a chain (stalls.ts), silent runs (silence.ts), the `shinsa status`
 │                    summary (summary.ts)
+├── initiatives/     Initiatives (docs/engine.md → Initiatives): the sheet built from state (sheet.ts,
+│                    resolveInitiativeSheet), the lead's digest and milestones in words (digest.ts), the
+│                    report_initiative input and its validator (schema.ts, report.ts)
 ├── briefing/        The Home guide: fallback, parsing the writer's answer, the note rule, reconciling a stored one,
 │                    plain text
 ├── report/          The hand-over protocol: types, the shapes (schema.ts: PROTOCOL_LIMITS with minPlanPhases and

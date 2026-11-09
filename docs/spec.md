@@ -173,6 +173,9 @@ not chat text.
   One stacked on another as a bundle starts once that one is ready to merge, and the bundle merges as one.
   Priority and what a decision unblocks only decide how high it sits in Needs you (`docs/engine.md`
   → Scheduling).
+- **Initiatives.** An effort of many tasks, in any repositories, is an initiative: phases, a report sheet of what
+  needs you, what runs, what comes next, what shipped or was dropped and the decisions taken, a focus target, and a
+  lead task you talk to that files and orders its tasks and is woken as they move (`docs/engine.md` → Initiatives).
 - **The pull request loop.** CI failures, review-bot comments and conflicts go back to the task’s agent until
   the pull request is clean; you are asked only when it cannot go on (`docs/engine.md` → The pull
   request watch, Merge queues). A conflict is resolved by the agent merging the base in, never by rebasing, in every workspace
@@ -1321,6 +1324,29 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
 - **Your click.** Agents propose with `report_feedback`, like memory rules; nothing opens an issue but you, with no
   setting to change that. Feedback is an entry, not a task: no worktree, no pipeline. Issue-scoped tasks,
   automations over the issues and shared task views are later work.
+
+### Initiatives and their lead (2026-11-09)
+
+- **Why.** One effort (SW-101's restart of the chat stack) grew past twenty tasks across three repositories and a
+  week, each merging on its own. Nothing named the effort, so what was being worked on, what came next and why a
+  piece was dropped lived only in your head, and its steering happened in PR 1's own chat. A bundle is the wrong
+  shape: one repository, one merge (`docs/engine.md` → Initiatives).
+- **A layer above tasks, not a new chat.** An initiative is a named group of tasks with phases, in any repository of
+  any project, so it is not a project (projects are the directories you focus on). A phase is a label; order is the
+  waits you already have, and each task still ships its own pull request. A task a member files, splits off or forks
+  joins the same initiative and phase by itself, and Make an initiative from this task gathers a task and everything
+  it filed after the fact.
+- **A report sheet from state.** The page answers what needs you, what is being worked on, what comes next by phase
+  and what it waits on, what shipped, what was dropped and why, and the decisions taken (accepted plans' goals and
+  judgement calls), with no model call. An initiative is also a focus target, so Home and the queue narrow to it.
+- **A lead you talk to.** A global manager chat was the alternative: any task's agent can already manage all of
+  Shinsa, and an unscoped chat would mix every project. Instead an initiative gets a lead, a task with one session
+  for the effort's life that files and orders its tasks with the tools agents already have, wakes on batched member
+  milestones (30 s debounce, the milestones in the user turn so its cached prefix holds), answers your messages and
+  its members', and writes the narrative and open questions at the top of the page. It opens no pull request and
+  closes no gate.
+- **Not yet.** Triage suggesting membership from a request, a lead that rewrites what you filed into its
+  initiative, and initiatives in the iOS app.
 
 ## 11. Open questions
 

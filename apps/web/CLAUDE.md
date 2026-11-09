@@ -29,7 +29,8 @@ src/
 ├── app.css              Tailwind entry, prose styles, code tokens, chat motion; imports desktop.css (in the Mac app
 │                        the arrow where a browser shows the pointer hand, every other cursor kept, and no
 │                        rubber-band on the page root, docs/design.md 31)
-├── routes/              One file per page: home.tsx, tasks.tsx (All tasks), settings.tsx, automation.tsx (a
+├── routes/              One file per page: home.tsx, tasks.tsx (All tasks), initiatives.tsx (/initiatives and an
+│   │                    initiative's sheet at /initiatives/<id>), settings.tsx, automation.tsx (a
 │   │                    automation's own page at /automations/<id>, laid out like a task page: facts row, the question, sign-in, secret or cost-limit pause a read waits on, the tasks it filed in task list rows, an Activity log of its runs), onboarding.tsx
 │   │                    (the setup steps), terminal.tsx (a project's terminals: tabs, panes, find, the ended bar;
 │   │                    in the remote build, a note that terminals stay on the machine)
@@ -157,6 +158,12 @@ src/
     │                    components/task/share-dialog.tsx is Share task (Hand off is its last Share as choice, lib/share/handoff.ts)
     │                    and Stop sharing's confirmation,
     │                    components/task/sharing-banner.tsx the banner a shared task's page shows
+    ├── initiatives/     Initiatives (docs/engine.md → Initiatives): view.ts (the page's words, the sheet's sections and
+    │                    progress, whether the nav shows it), draft.ts (the New and Edit initiative draft and its phases),
+    │                    membership.ts (Add to an initiative, Phase and Take out of the initiative choices), lead.ts (the
+    │                    lead panel's state, Start a lead's choices, Start a lead from this chat); the pieces are
+    │                    components/initiatives/ (sheet.tsx, lead.tsx, write-dialog.tsx, task-items.tsx: the task's
+    │                    initiative fact and menu items) and ⌘K's lib/command/initiatives.ts
     ├── teams/           Teams (docs/engine.md → Teams): settings.ts (Settings → Teams' words, the new team draft,
     │                    the shared projects dropdown's label, who can reach this machine), admit.ts (adding this
     │                    browser to a teammate's machine with the team key), join.ts (the join page's fragment and the

@@ -3181,6 +3181,18 @@ Only these, and they win over anything below:
     `ConfirmDialog`'s `body` and a `PercentDialog`'s `description`, followed through constants, lookup tables and the
     functions that return them, as for a toast (42), with an inserted value counted as 12.
 
+45. **An initiative is a report sheet, its lead on top** (since 2026-11-09; `routes/initiatives.tsx`,
+    `components/initiatives/`, `lib/initiatives/`). `/initiatives` lists each initiative with its description and
+    each phase's progress; the nav shows Initiatives once one exists. An initiative's page is the page heading with
+    its description and Edit initiative, the phase track (one bordered cell per phase with its progress and a
+    checkmark once every task in it finished), then the lead panel (a `CARD`: the lead's narrative, "Anything to discuss"
+    with its open questions, when it last reported, the lead task and Open the chat; with no lead, what a lead does
+    and Start a lead, whose dialog starts a fresh lead or one forked from a member's chat), then the sections in
+    reading order, each a `Panel` with its count that remembers whether it is open (40): Needs you, Now, Next under
+    a heading per phase, Shipped and Dropped with the reason (both closed at first), and Decisions. Tasks are the All
+    tasks rows (`TaskListRow`), so a member reads the same everywhere; an empty section says so in one line. A member's Overview facts name its initiative and phase, and its menus carry Add to an
+    initiative, Phase, Take out of the initiative and Make an initiative from this task.
+
 `bun lint:conventions` (`scripts/lint-conventions.ts`) checks the app (`apps/web/src`) for raw `text-[N]` sizes, a
 weight other than normal, `font-medium` and `font-semibold`, `gap-0.5` (outside `SectionLabel`), Tailwind's own
 shadows (`shadow-2xs` … `shadow-2xl`, `shadow-inner`) and raw `shadow-[…]` or `ring-[…]` (the tokens `shadow-1…4`

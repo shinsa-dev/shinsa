@@ -24,7 +24,7 @@ One definition per term. **Code** is the name in `packages/core`; **UI** is the 
 | repository | A git repository Shinsa registered, inside at most one project | `Repo` | repository |
 | handle | A task's name for people, `<project key>-<number>` (`SW-142`), given once, never reused, never a key | `Task.handle` | the handle |
 | id | A UUIDv7, the key of everything stored (events, receipts, references, transcripts) | `id` | not shown |
-| focus | The projects (or every project but some) or the one team whose work Home, the queue and the guide show, or none for your work | `Focus` | Focus |
+| focus | The projects (or every project but some) or the one team or initiative whose work Home, the queue and the guide show, or none for your work | `Focus` | Focus |
 | team | People who work as if on one Shinsa: a project in a team shows every task in it to every member, live, and on app.shinsa.dev each member acts on it with the scopes the team's owner sets | `RemoteTeam`, `Project.teamIds` | team |
 | teammate | Another member of a team you are in, whose team tasks you see and, on app.shinsa.dev, act on | `TeamTask.owner`, `role: 'teammate'` | teammate |
 | scope | One thing a person outside your machine may see (a view scope: the plan, the code, your messages…) or do (an action scope: answer gates, act, message agents, fork, share, open services); share links and teams read the same list | `AccessScope`, `VIEW_SCOPES`, `ACTION_SCOPES` | scope, the scope's own label (Answer gates, Fork tasks…) |
@@ -37,7 +37,7 @@ One definition per term. **Code** is the name in `packages/core`; **UI** is the 
 | attempt | One execution of a run; a resume, a retry on another account or a restart is a new attempt | `RunAttempt`, `attemptId` (`<run>:<n>`) | not shown |
 | session | The provider's own conversation a run executes in; several runs and attempts can share one | `Run.sessionId` | not shown |
 | role | Which agent a run is (the round's agent, a reviewer, an answerer…); picks its prompt, tools, model and where it works | `RunRole` (runs), `AgentRole` (settings), `RUN_AGENT_ROLE` (which settings a run role uses) | Agent, Reviewer… |
-| purpose | What one run of the round's agent does: plan, build a phase, fix, run the operation, check a watchdog or read an integration for a watch; picks its instruction, its hand-over and whether it may edit | `RunPurpose`, `Run.purpose`, `PURPOSE_HAND_OVERS` | planning, phase 2 of 3, fixing… |
+| purpose | What one run of the round's agent does: plan, build a phase, fix, run the operation, check a watchdog, read an integration for a watch or lead an initiative; picks its instruction, its hand-over and whether it may edit | `RunPurpose`, `Run.purpose`, `PURPOSE_HAND_OVERS` | planning, phase 2 of 3, fixing… |
 | step | One fixed building block of a task's path (`answer` … `merge`); a task's pipeline is a list of steps | `PipelineStep` | step |
 | pipeline | The ordered steps one task takes | `Task.pipeline` | "the steps a task takes" |
 | phase | One part of an approved plan's build, built by its own run of the round's agent, on the session that planned it, and committed on its own | `PlanDocument.phases[i]` (`PlanPhase`), `PhaseProgress` | phase |
@@ -85,6 +85,9 @@ One definition per term. **Code** is the name in `packages/core`; **UI** is the 
 | follow-up | A message to a finished answer, investigation or report, answered on the same session | message effect `follow_up`, `acceptsFollowUp` | follow-up |
 | waits on | The tasks a task waits for before it starts (or before its merge gate opens) | `Task.waitsOn`, stage `waiting_on_tasks` | "Waits on", "Wait for another task" |
 | bundle | Tasks in one repository connected by stacks, a graph that fans out and back in: each task starts once every task it stacks on is ready to merge, branches off the first one's branch with the others merged in and opens its pull request on the first, and the lead's one merge gate (the earliest task that stacks on nothing) merges them all once the whole bundle merges cleanly (`docs/engine.md` → Bundles). Never a round stack, which is one task's own rounds | `Task.stacksOn`, `Task.stackBases`, `Task.bundleReady`, `Task.bundleConflict`, `resolveBundle`, `resolveBundleMembers`, `resolveBundleLead`, `listBundleFollowers`, `listStackParents`, `listStackChildren`, `decide/bundles.ts` | "Bundle", "Stack on another task", "Take out of the bundle", "Ready, merges with its bundle" |
+| initiative | A named group of tasks of one effort, in any repositories and projects, with phases, a report sheet built from state, an optional lead and a focus of its own; each task still merges on its own (`docs/engine.md` → Initiatives). Never a project, which is the directories you focus on | `Initiative`, `Task.initiativeId`, `decide/initiatives.ts`, `state/initiatives.ts`, `resolveInitiativeSheet` | Initiatives, "Add to an initiative", "Make an initiative from this task" |
+| phase (of an initiative) | A named label in an initiative's order that a task carries; never a gate, and never a build phase of a plan | `InitiativePhase`, `Task.initiativePhaseId` | Phase, No phase |
+| lead | The task that supervises an initiative: one session, kind `lead`, no repository work, no pull request and no gate power; woken on batched member milestones, it reports a narrative and open questions | `Initiative.leadTaskId`, shape and step `lead`, stage `leading`, purpose `lead`, `report_initiative`, `InitiativeMilestone` | Lead, "Start a lead", "Anything to discuss" |
 | backlog | Where work you want planned now and built later waits: a status of a task, never a kind; it is triaged and planned, then its plan waits out of Needs you until you start building it. Only you, or an agent you asked, put work there | `Task.backlog` (`TaskBacklog`), `task.backlog_changed`, `task.move_to_backlog`, `task.remove_from_backlog`, `isHeldInBacklog`, `queue.backlog`, plan gate reason `backlog` | Backlog, "Move to the backlog", "Remove from the backlog", "Start building" |
 | All tasks | Every task in to-do order, in status groups (the Backlog one of them), a waiting or stacked task nested under the task it builds on | `resolveTaskGroup`, `TASK_GROUPS` (web) | All tasks |
 | schedule (automation) | A trigger (once, interval, daily, webhook) that starts a task, messages one, or watches an integration; on screen a Schedule, a Trigger or a Watch | `Schedule`, `ScheduleSource` | Settings → Automations: Schedule, Trigger, Watch |
@@ -340,6 +343,8 @@ one reads as its empty value. The fields under Triage and shape, Plan and build,
 | `suggestions?` | `TaskSuggestion[]` | tasks agents suggested |
 | `parentTaskId?` | string \| null | the task whose agent filed this one |
 | `createdBy?` | `TaskCreator` \| null | `courier` (`create_task`), `split` (`split_task`), `watchdog` (`file_report` in a watchdog check) or `intake` (`file_report` in a watch's read), with the task, the run and request key |
+| `initiativeId?` | string \| null | the initiative it belongs to (`docs/engine.md` → Initiatives); absent or null for none |
+| `initiativePhaseId?` | string \| null | its phase in that initiative; null for no phase |
 | `owner?` | `TaskOwner` \| null | the person who created it (`login`, `name`, `avatarUrl`): the remote member or guest who sent `task.create`, the machine's owner at the keyboard, or the owner of the task an agent filed it from; null for tasks from before and those Slack, schedules and webhooks start, which count as the machine owner's. On a shared machine its runs use only this person's Claude accounts and GitHub token (`docs/engine.md` → Remote access, Shared machines) |
 | `forkOf?` | string \| null | the task this one was forked from: its first Agent run forks that task's session (`docs/engine.md` → Forking a task) |
 | `teammateFork?` | `TeammateFork` \| null | the teammate's task this one was forked from, as a brief (`instanceId`, `taskId`, `handle`, `title`, `owner`, `request`, `rounds`, `branch`, `pullRequest`): its first Agent run starts fresh from it (`docs/engine.md` → Forking a teammate's task) |
@@ -435,6 +440,7 @@ holds an active run; Shinsa's own stages hold an effect.
 | `awaiting_plan` | plan | you | `building`, `operating`, `planning` (revise), `cancelled` |
 | `operating` | operate | the agent (`purpose: operate`) | `done`, `building` (operation before the build) |
 | `watching` | merge | the agent, read-only (`purpose: watch`), checking a watchdog of the merged change; or (`purpose: intake`) a watch's read, in its home | `merged`, `done` |
+| `leading` | lead | the agent (`purpose: lead`), one turn per wake or message; at rest between turns | `done`, `cancelled` (marked by you or settled when its initiative is gone) |
 | `building` | build | the agent, one run per phase on one session (`purpose: build`) | `checking` |
 | `checking` | checks | Shinsa | `reviewing`, `fixing`, a failure gate |
 | `reviewing` | agent review | reviewer | `awaiting_review`, `fixing` |
@@ -502,7 +508,20 @@ executable changed line (`selectMeasuredCoverage`).
   (`state.taskNumbers`); a key change starts the new key's counter and never reuses a handle. Parsed by
   `parseTaskHandle` (any case). Core finds a task by id or handle (`selectTaskByReference`); the server's reads also
   take the start of an id or the exact title.
-- **Focus**: `{ projectIds, except, teamId, until }`, projects or a team, never both (`focus_refused`). `projectIds` are the projects in focus, or with `except` the ones left out, so every other project and tasks without one show; `except` with no project is dropped (`normaliseFocusProjects`). `until` ends it at a time.
+- **Focus**: `{ projectIds, except, teamId, initiativeId, until }`, projects, a team or an initiative, one kind at a time (`focus_refused`). `projectIds` are the projects in focus, or with `except` the ones left out, so every other project and tasks without one show; `except` with no project is dropped (`normaliseFocusProjects`). `until` ends it at a time.
+
+| `Initiative` field | Type | Meaning |
+| --- | --- | --- |
+| `id` | string | UUIDv7 |
+| `name` | string | at most 80 characters, spaces collapsed |
+| `description` | string | at most 2,000 characters, given to its lead |
+| `phases` | `InitiativePhase[]` | at most 12, in order, each `{ id, name }` (name at most 60, distinct ignoring case) |
+| `leadTaskId` | string \| null | its lead task; a lead marked done no longer counts (`selectInitiativeLead`) |
+| `createdAt`, `updatedAt` | number | |
+| `milestones?` | `InitiativeMilestone[]` | members' milestones since the lead's last turn, the last 40: `taskId`, `kind` (`joined`, `plan_approved`, `gate_opened`, `merged`, `done`, `cancelled`), `text` (at most 280), `at` |
+| `report?` | `InitiativeReport` \| null | the lead's last `report_initiative`: `narrative`, `questions`, `runId`, `at` |
+
+At most 50 initiatives (`INITIATIVE_LIMITS`, `initiative_limit`). An initiative is found by id, exact name (any case) or the start of its id (`selectInitiativeByReference`).
 
 ## Runs, attempts and roles
 
@@ -540,7 +559,7 @@ Which agent role's settings (provider, model, speed) each run role uses is one t
 
 | Run role | Settings role (`RUN_AGENT_ROLE`) | Read-only | Works in | Hands over with |
 | --- | --- | --- | --- | --- |
-| `agent` | agent | while it plans (`purpose: plan`) | worktree | by purpose: `propose_plan`, `reshape_task` or `move_to_repository` (plan), `complete_phase` (build), `complete_fix` (fix), `report_outcome` (operate), `report_read` after any `file_report` (watch and intake, read-only, in the repository) |
+| `agent` | agent | while it plans (`purpose: plan`) | worktree | by purpose: `propose_plan`, `reshape_task` or `move_to_repository` (plan), `complete_phase` (build), `complete_fix` (fix), `report_outcome` (operate), `report_initiative` (lead), `report_read` after any `file_report` (watch and intake, read-only, in the repository) |
 | `reviewer` | reviewer | yes | worktree | `report_review` |
 | `answerer` | answerer | yes | the repository itself | `answer` |
 | `investigator` | answerer | no (scratch) | worktree | `report_diagnosis` |
@@ -820,7 +839,7 @@ your behalf (`onBehalf`, `byTask`). **Human** = only you: its specs are `humanOn
 
 | Command | Does | Command line | Who |
 | --- | --- | --- | --- |
-| `task.create` | creates a task (request, project, priority, plan first, backlog, waits on, stacks on: `stacksOn`, a list, mode, account, the task it forks: `forkOf`, or a teammate's: `teammateFork`, never both) | `tasks create` | you; task agents file tasks with `create_task` |
+| `task.create` | creates a task (request, project, initiative and phase: `initiativeId`, `initiativePhaseId`, else the ones of the task it was filed from, split from or forked from, priority, plan first, backlog, waits on, stacks on: `stacksOn`, a list, mode, account, the task it forks: `forkOf`, or a teammate's: `teammateFork`, never both) | `tasks create` | you; task agents file tasks with `create_task` |
 | `task.message` | your message; what it does: Messages, above; `kind` says whether it is feedback, a new round or work for another task; `comments` carries line comments (Line comments, below) | `tasks message [--as]` | agent |
 | `round.ship` | how a round ships: onto the open pull request or stacked | `rounds ship` | agent |
 | `round.update` | replaces what a round waiting to start asks for (`request`; its title becomes the request's first line); a round that started is refused (`round_started`) | `rounds update` | agent |
@@ -829,6 +848,11 @@ your behalf (`onBehalf`, `byTask`). **Human** = only you: its specs are `humanOn
 | `task.prioritize` | sets the priority | `tasks prioritize` | agent |
 | `task.wait_on` | replaces the tasks it waits on (`waitsOn`) | `tasks wait-on`, `tasks stop-waiting` | agent |
 | `task.stack_on_tasks` | stacks it on tasks as a bundle (`stacksOn`, the whole list, replacing the one it has), or takes it out (`[]`); refused, for any task in the list, on itself (`stack_self`), a cancelled (`dependency_cancelled`) or finished task (`stack_parent_settled`), one with no pull request (`stack_no_pull_request`), one in another repository than the task or the others (`stack_repository`), a cycle (`dependency_cycle`), and once it builds (`stack_started`) | `tasks stack-on`, `tasks unstack` | agent |
+| `task.join_initiative` | adds a task to an initiative in a phase (`phaseId`, null for none), moves it to another phase or initiative, or takes it out (`initiativeId: null`); refused for an unknown initiative (`initiative_not_found`) or phase (`initiative_phase_not_found`) | `tasks join-initiative`, `tasks leave-initiative` | agent |
+| `initiative.write` | creates an initiative (no `initiativeId`) or changes its name, description and phases (`phases` replaces the list; a phase with an `id` keeps it, one without gets a new one; a removed phase drops its tasks to no phase); refused past the limits (`initiative_invalid`, `initiative_limit`) | `initiatives write` | agent |
+| `initiative.remove` | takes every task out of the initiative, clears a focus on it and removes it | `initiatives remove` | agent |
+| `initiative.adopt_task` | creates an initiative named after a task and adds it and every descendant by `createdBy`, `parentTaskId` and `forkOf` not already in one; refused for a task already in one (`initiative_exists`) | `initiatives adopt` | agent |
+| `initiative.start_lead` | creates the initiative's lead task (kind `lead`, no repository), forked from a task's chat with `forkOf`; refused while it has a live lead (`lead_exists`) | `initiatives start-lead` | agent |
 | `task.move_to_backlog` | puts a task in the backlog; its open plan gate becomes held ("in the backlog"); refused for a settled task (`task_settled`), an inquiry (`backlog_inquiry`) or once a plan was approved or building started (`backlog_started`); a task already there records nothing | `tasks move-to-backlog` | agent |
 | `task.remove_from_backlog` | takes it out; its plan waits in Needs you ("plan ready for you"); a task not there records nothing | `tasks remove-from-backlog` | agent |
 | `task.snooze` | snoozes an open task in any step: its gates leave `ready` and it is listed in `queue.snoozed`, nothing else changes; refused for a settled task (`task_settled`); a snoozed task records nothing | `tasks snooze` | agent |
@@ -880,7 +904,7 @@ your behalf (`onBehalf`, `byTask`). **Human** = only you: its specs are `humanOn
 | `project.remove_from_team` | stops showing them: every open view of its tasks for that team closes | `projects remove-from-team --team` | **human** |
 | `repo.update` | changes a repository's fields | `repos update` | agent; **human** for `checkCommands`, `workspace`, `coverage` (`HUMAN_ONLY_REPO_FIELDS`) |
 | `repo.remove` | forgets a repository | `repos remove` | agent |
-| `focus.change` | sets or clears the focus: `projectIds` with `except`, or `teamId`, never both (`focus_refused`), and `until`; `projectId` alone, from a page older than `focus.projects`, focuses on that one project | `focus set`, `focus clear` | agent |
+| `focus.change` | sets or clears the focus: `projectIds` with `except`, or `teamId`, or `initiativeId`, one kind at a time (`focus_refused`), and `until`; `projectId` alone, from a page older than `focus.projects`, focuses on that one project | `focus set`, `focus clear` | agent |
 | `away.record` | records a span you were away from your Mac (`from`, `to`), sent by the Mac app's page; refused when it ends before it starts, after now or lasts over 30 days (`away_refused`) | none | **human** |
 | `settings.change` | changes settings (`SETTINGS_KEYS`) | `settings set` | agent; **human** for `approvePlans`, `mergeMethod`, `taskBudgetUsd`, `taskUsageLimit`, `dailyUsageLimit`, `autoResume`, `snoozeLimited`, `accountSwitchAt`, `fastMode`, `agentFastModes`, `delegationLimit`, `shareLimit`, `sharePreset`, `watchdogsIgnoreUsageLimits`, `sharedTeams` (`HUMAN_ONLY_SETTINGS`) |
 
@@ -953,6 +977,7 @@ role without the tool (`hasTool`).
 | `agent.acknowledge_delegation` | `delegation_status` | marks a finished result read |
 | `agent.file_report` | `file_report` | in a watch's read or a watchdog check only: files a task from one report (`title`, `request`, `reportId` or `link`, `author`, `postedAt`, `text`, `repoId`, `forkOf`); refuses a report the project already has a task for (`report_filed`) and a repository of another project (`repo_project`); a watchdog's always forks the shipped task (`fork_watchdog`), and links a report another watch or watchdog filed first (`watchdog.report_linked`) rather than refusing it |
 | `agent.report_read` | `report_read` | ends a read with its `summary`, as not finished with `reached: false`: a watch's next read covers the same time, a watchdog's check is missed; a watchdog check that filed a report trips it, one that filed none is healthy, and `live` answers a watchdog waiting for production; the task rests again |
+| `agent.report_initiative` | `report_initiative` | ends a lead's turn with its `narrative` and `questions`, kept as the initiative's report; refused when the task leads no initiative (`initiative_not_found`) or the report breaks a limit (`report_invalid`) |
 | `agent.create_task` | `create_task` | files a courier task from its `request`, optionally waiting on it (`thisWaits`), waiting on this task (`afterThis`, never with `thisWaits`), in the backlog (`backlog`), stacked on this task as a bundle (`stackOnThis`, never with `thisWaits` or `afterThis`) or forked from a task (`forkOf`) or a teammate's task (`teammateFork`), in another project (`projectId`, from `project`; without a repository, triage picks one there); `new_repository` makes the engine create and register the named repository first |
 | `agent.split_task` | `split_task` | splits the approved plan into tasks (`requests`); `stacked` chains them as a bundle on this task |
 | `agent.set_schedule` | `set_schedule` | writes one of its task's schedules; `source` names an integration of the task's project to watch: a new watch is recorded as a suggested watch for you to accept (origin the task and run, in its activity), at most 10 open at once (`suggestion_limit`) |
@@ -1026,6 +1051,7 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `delegation.wake_policy` | `agents/tools/orchestration/handler.ts` | a `wait` call that timed out switches to waking |
 | `delegations.recover` | the supervisor at boot | releases claims and waits, claims again |
 | `schedule.fire`, `schedule.fail` | `ScheduleClock`, the webhook | fires a slot, or records a failed one |
+| `initiative.wake_lead` | `LeadWakes` (`apps/engine/src/initiatives/service.ts`), after the debounce | starts a lead turn with the queued milestones when the lead rests idle in `leading`; otherwise does nothing |
 | `schedule.deliver` | the webhook receiver | starts the schedule's work from a delivery |
 | `slack.mention` | `POST /api/slack/events`, command id `slack:<event id>` | a signed `SlackMention`: messages the open task of its thread with 👀 on the mention (kept with 📥 while a gate is open, `slack.react`), else asks for `slack.evaluate` |
 | `slack.start_task` | the `slack.evaluate` effect, when the mention is work | the mention: starts a task as Home does and links it to the thread, or messages the thread's task when one opened meanwhile |
@@ -1065,6 +1091,11 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `task.duplicate_cleared` | a triage-closed duplicate is not one after all: the mark, `closedAt` and `cancelledFrom` are cleared |
 | `task.waits_on_changed` | the tasks it waits on changed (`waitsOn`) |
 | `task.stack_changed` | the tasks it stacks on changed (`stacksOn`, a list, empty when taken out; `by` you or Shinsa) |
+| `initiative.written`, `initiative.removed` | an initiative is created or changed (the whole record), removed |
+| `task.initiative_changed` | a task joined, moved within or left an initiative (`initiativeId`, `phaseId`) |
+| `initiative.milestones_queued` | members' milestones were queued for the lead (`milestones`) |
+| `initiative.lead_woken` | a lead turn took the queued milestones (`runId`); the queue empties |
+| `initiative.reported` | the lead reported (`report`: `narrative`, `questions`, `runId`, `at`) |
 | `task.stack_based` | its bases became the branches of the tasks below (`bases`, in the order of `stacksOn`), or the default branch again (`[]`) once they all merged or left |
 | `task.bundle_ready` | it is ready to merge with its bundle (`ready: { commit }`), or no longer is (`null`) |
 | `task.bundle_conflict` | its bundle conflicts with the default branch once it merges (`conflict`), or no longer does (`null`) |
@@ -1186,6 +1217,7 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `feedback.draft` | replay_safe | `feedback:<id>` | `feedback.record_draft`, after one quick call rewrites the note without anything private (`feedback/draft.ts`); `feedback.record_failure` when no usable draft comes back |
 | `feedback.file` | process_bound | `feedback:<id>` | `feedback.record_filed`, after `gh issue create --repo shinsa-dev/shinsa` (`feedback/file.ts`); `feedback.record_failure` with what `gh` said; never retried, and one a restart cut short is failed on start |
 | `briefing.request` | replay_safe | `briefing` | none: `Engine.writeBriefing` stores the Home guide beside the log (`docs/engine.md` → The briefing) |
+| `initiative.wake` | replay_safe | `initiative:<id>` | `initiative.wake_lead`, through `LeadWakes`, 30 s after the first milestone of a batch (`LeadWakeDebounce`) |
 | `run.execute` | process_bound | `run:<id>` | `run.attempt`, `run.link`, `run.meter`, `run.end`, agent commands |
 | `run.wake` | process_bound | `run:<id>` | as `run.execute`, on the waiting step's session |
 | `run.cancel` | process_bound | `cancel:<id>` | `run.end` |
@@ -1223,6 +1255,7 @@ non-delegated task run also gets one management tool per surface spec that is no
 | `submit_report` | | | | | ✓ | | |
 | `report_outcome` | ✓ operate | | | | | | |
 | `report_read` | ✓ watch, intake | | | | | | |
+| `report_initiative` | ✓ lead | | | | | | |
 | `ask` | ✓ | | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `attach_evidence` | ✓ | ✓ | | ✓ | | ✓ | ✓ |
 | `remove_evidence` | ✓ | ✓ | | ✓ | | | |
@@ -1272,6 +1305,7 @@ The fields each hand-over tool takes, checked by `validate*` in `packages/core/s
 | `submit_report` | **`report`**; `propose_change`; `recommend`; `reply`; `actions` | 40,000; the rest as in `answer` |
 | `report_outcome` | **`outcome`**; `reply`; `actions` | 8,000; reply and actions as in `complete_fix` |
 | `report_read` | **`summary`**: what it read, filed and skipped; `reached` (false when the source still failed after 3 tries; true when left out); `live` (only for a watchdog waiting for production: false while it is not live, true once it is; a report filed counts as true) | 1,000 |
+| `report_initiative` | **`narrative`**: where the initiative stands and what comes next; `questions`: what only you can settle | narrative 2,000; 5 questions of 280 (`INITIATIVE_LIMITS`) |
 | `file_report` | **`title`**, **`request`**, **`text`**; `report_id` or `link` (one is required), `author`, `posted_at`, `fork_from` (a task id or handle; a watchdog's is always the shipped task), `repository` (a name or id) | title 100; request 2,000; report_id 200; link 2,000; author 120; posted_at 60; text 4,000 |
 | `reshape_task` | **`reason`**; `shape` (answer, investigate, research) or `steps` (`PIPELINE_ORDER` names) | reason 240 |
 | `move_to_repository` | **`repository`** (a repository of the task's project by name, or the folder name of one in its folders, registered when named), **`reason`** | reason 240 |
