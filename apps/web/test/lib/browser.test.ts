@@ -39,8 +39,8 @@ describe('one site', () => {
 
   it('loads a favicon from the site itself, and none for a local address', () => {
     expect(resolveFaviconUrl('github.com')).toBe('https://github.com/favicon.ico');
-    for (const site of ['localhost', '127.0.0.1', '[::1]', 'intranet'])
-      expect(resolveFaviconUrl(site)).toBeNull();
+    for (const host of ['localhost', '127.0.0.1', '[::1]', 'intranet'])
+      expect(resolveFaviconUrl(host)).toBeNull();
   });
 });
 
