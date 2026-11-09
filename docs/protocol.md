@@ -1136,6 +1136,7 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `gate.opened`, `gate.answered`, `gate.withdrawn`, `gate.superseded` | a gate opened (`type`), was answered (`thenApprove` when you asked to approve after the fix, `ahead` when that approval was made for you, `autopilot` with the reason when Autopilot made it), withdrawn, or replaced by your message |
 | `autopilot.scheduled` | an open merge gate's Autopilot deadline was set or cleared (`gateId`, `due` or null) |
 | `task.escalated` | Autopilot sent the urgent change to your team (`reason`, `handoff`; sets `Task.escalation`) |
+| `task.escalation_revised` | the wait ended without the merge an escalation promised (`reason`, `handoff` with `mergesAt` null and `blockedBy`; keeps `Task.escalation.at`) |
 | `gate.noted` | the open operation gate's notes were replaced (`notes`, null clears them; the same gate, no new notification) |
 | `run.started`, `run.dispatched` | a run was created; it started |
 | `run.attempted`, `run.linked` | an attempt began; it linked its session |

@@ -314,6 +314,11 @@ export function syncSlackEscalations(decider: Decider, before: ShinsaState) {
     cleared.add(taskId);
     requestEscalationEdits(decider, taskId, escalation.at, 'message');
   }
+  for (const event of decider.events) {
+    if (event.type !== 'task.escalation_revised') continue;
+    const escalation = decider.state.tasks[event.taskId]?.escalation;
+    if (escalation) requestEscalationEdits(decider, event.taskId, escalation.at, 'message');
+  }
   const { merged, followUps } = listFollowUpTasks(decider.state, decider.events);
   for (const taskId of followUps) {
     const task = decider.state.tasks[taskId];

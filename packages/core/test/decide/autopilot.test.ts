@@ -10,6 +10,7 @@ import {
   type ReviewRatings,
   type TaskPriority,
 } from '../../src/index.ts';
+import { applyEvent } from '../../src/state/project.ts';
 import { listOpenGates } from '../../src/state/queries.ts';
 import {
   approve,
@@ -440,6 +441,25 @@ describe('Autopilot at the merge', () => {
     expect(harness.openGate(taskId).autopilotDue).toBeNull();
   });
 
+  test('stops promising a merge when the wait ends on something that refuses it', () => {
+    const { harness, taskId } = reachMerge({ policy: { urgent: 'escalate_then_merge' }, priority: 'urgent' });
+    const escalatedAt = harness.task(taskId).escalation?.at;
+    harness.send({ type: 'task.record_edit', taskId, path: 'src/a.ts', changed: true });
+    fire(harness, taskId);
+    expectMergeWaits(harness, taskId);
+    expect(harness.task(taskId).escalation).toMatchObject({
+      at: escalatedAt,
+      reason: `${WAITED} Your edits are not pushed yet.`,
+      handoff: { mergesAt: null, blockedBy: 'edits_not_pushed', waitedMinutes: 60 },
+    });
+    expect(harness.task(taskId).activity.at(-1)).toMatchObject({
+      actor: 'shinsa',
+      text: 'Autopilot could not merge it',
+      detail: `${WAITED} Your edits are not pushed yet.`,
+    });
+    expect(harness.openGate(taskId).autopilotDue).toBeNull();
+  });
+
   test('does nothing but clear the deadline once Autopilot is off or the task is no longer urgent', () => {
     const off = reachMerge({ policy: { urgent: 'merge' }, priority: 'urgent' });
     const dueAt = off.harness.openGate(off.taskId).autopilotDue?.at ?? 0;
@@ -685,6 +705,40 @@ describe('escalating to Slack', () => {
       { kind: 'slack.escalate', taskId, escalatedAt, contact: ONCALL, part: 'message' },
       { kind: 'slack.escalate', taskId, escalatedAt, contact: KAI, part: 'message' },
     ]);
+  });
+
+  test('edits every Slack message when the wait ends without the merge it promised', () => {
+    const policy: Partial<AutopilotPolicy> = { urgent: 'escalate_then_merge', contacts: [ONCALL] };
+    const { harness, taskId } = reachMerge({ policy, priority: 'urgent' });
+    const escalatedAt = harness.task(taskId).escalation?.at ?? 0;
+    recordSent(harness, taskId, escalatedAt);
+    harness.send({ type: 'task.record_edit', taskId, path: 'src/a.ts', changed: true });
+    fire(harness, taskId);
+    expect(harness.effectsOf('slack.escalate')).toEqual([
+      { kind: 'slack.escalate', taskId, escalatedAt, contact: ONCALL, part: 'message' },
+      { kind: 'slack.escalate', taskId, escalatedAt, contact: ONCALL, part: 'message' },
+    ]);
+  });
+
+  test('revises nothing once the escalation it would revise is gone', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness, {});
+    const next = applyEvent(harness.state, {
+      type: 'task.escalation_revised',
+      taskId,
+      reason: 'x',
+      handoff: {
+        waitedMinutes: 0,
+        mergesAt: null,
+        blockedBy: null,
+        ownerActiveAt: null,
+        foundBy: null,
+        ratings: null,
+      },
+      seq: 1,
+      at: 0,
+    });
+    expect(next.tasks[taskId]?.escalation ?? null).toBeNull();
   });
 
   test('edits nothing when the escalation never reached Slack, or another gate closes', () => {

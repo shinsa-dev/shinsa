@@ -891,13 +891,25 @@ describe('an escalation the outbox asks to send to Slack', () => {
     );
   });
 
-  test('sends nothing again once it was sent, or for a task that is gone', async () => {
+  test('edits the message it sent in place while the escalation is open, and posts no second one', async () => {
     const { slack, stub, relay } = setUpEscalated();
     markSent(stub);
     await slack.escalate(effect, context());
-    await slack.escalate({ ...effect, taskId: 'gone' }, context());
-    expect(relay).toEqual([]);
+    const [call] = callsTo(relay, 'notify');
+    expect(call?.body).toMatchObject({ replace: { channelId: 'C9', ts: '300.1' } });
+    expect(JSON.stringify(call?.body?.message)).toContain('Urgent change needs a review');
+    expect(callsTo(relay, 'notify')).toHaveLength(1);
     expect(stub.dispatched).toEqual([]);
+  });
+
+  test('sends nothing for a task that is gone, or for a sent one while remote access is off', async () => {
+    const { slack, stub, relay } = setUpEscalated();
+    await slack.escalate({ ...effect, taskId: 'gone' }, context());
+    const off = setUpEscalated({ enabled: false });
+    markSent(off.stub);
+    await off.slack.escalate(effect, context());
+    expect([...relay, ...off.relay]).toEqual([]);
+    expect([...stub.dispatched, ...off.stub.dispatched]).toEqual([]);
   });
 
   test('edits the same message once the escalation clears', async () => {
@@ -942,7 +954,7 @@ describe('an escalation the outbox asks to send to Slack', () => {
     answers['/__remote/slack/notify'] = () =>
       Response.json({ error: { code: 'post_not_yours', message: 'Refused.' } }, { status: 403 });
     await slack.escalate(effect, context());
-    expect(logs.fieldsOf('[Slack] The escalation could not be marked as handled')).toHaveLength(1);
+    expect(logs.fieldsOf('[Slack] The escalation could not be edited')).toHaveLength(1);
   });
 
   test('records Slack’s reason when it will not take the post', async () => {

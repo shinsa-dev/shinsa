@@ -448,7 +448,7 @@ export class Slack extends Context.Service<
               )
             : Effect.succeed({ channelId: null, ts: null, problem: SLACK_REMOTE_OFF_PROBLEM });
 
-        const markHandled = (
+        const replaceEscalation = (
           machineToken: Redacted.Redacted<string>,
           target: Omit<SlackRelayNotify, 'replace'>,
           sent: SlackEscalationPost,
@@ -457,9 +457,7 @@ export class Slack extends Context.Service<
           sent.channelId && sent.ts
             ? relay
                 .notify(machineToken, { ...target, replace: { channelId: sent.channelId, ts: sent.ts } })
-                .pipe(
-                  Effect.catch(logEscalation('[Slack] The escalation could not be marked as handled', taskId))
-                )
+                .pipe(Effect.catch(logEscalation('[Slack] The escalation could not be edited', taskId)))
             : Effect.void;
 
         const resolveEscalationLink = Effect.fn('Slack.resolveEscalationLink')(function* (taskId: string) {
@@ -483,10 +481,13 @@ export class Slack extends Context.Service<
           const sent = selectSlackEscalationPost(task.slackEscalations, effect.escalatedAt, contact);
           const target = { teamId: contact.teamId, kind: contact.kind, id: contact.id, message, reply: null };
           if (task.escalation?.at !== effect.escalatedAt) {
-            if (machineToken && sent) yield* markHandled(machineToken, target, sent, task.id);
+            if (machineToken && sent) yield* replaceEscalation(machineToken, target, sent, task.id);
             return;
           }
-          if (sent) return;
+          if (sent) {
+            if (machineToken) yield* replaceEscalation(machineToken, target, sent, task.id);
+            return;
+          }
           const outcome = yield* postEscalation(machineToken, { ...target, replace: null }, task.id);
           yield* dispatch(
             {

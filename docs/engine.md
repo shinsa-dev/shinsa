@@ -2101,8 +2101,11 @@ action it takes is recorded with its reason. The rules are core's (`decide/autop
   gate no longer open, or a closed task, and clears the deadline once the policy is off or the task is no longer
   urgent. It acts on the urgent rule as it is at the fire, not the one the deadline was set under: only `merge` and
   `escalate_then_merge` merge, and only when nothing refuses it; otherwise it escalates the task with why
-  (`task.escalated`, `Task.escalation {at, reason, handoff}`, "Escalated by Autopilot" in the activity), unless it
-  was already asked for at once, and clears the deadline.
+  (`task.escalated`, `Task.escalation {at, reason, handoff}`, "Escalated by Autopilot" in the activity), and clears
+  the deadline. When it was already asked for at once with a merge promised (`mergesAt`), it revises that escalation
+  instead (`task.escalation_revised`, keeping its `at`, "Autopilot could not merge it" in the activity): the new
+  reason, `mergesAt` null and `blockedBy`, so the card stops promising the merge, and each Slack message it sent is
+  edited in place to match (`slack.escalate` `part: 'message'` on an open escalation replaces the message).
 - **Escalating to your team.** `Task.escalation` is a shared status field, so it travels in your team listing
   (Teams, below). On every teammate's machine `listTeamEscalations` (`queue/escalations.ts`) picks the open escalated
   tasks out of the team feed: they show in Needs you as "Sent by your team" (an amber megaphone tile and a line such as

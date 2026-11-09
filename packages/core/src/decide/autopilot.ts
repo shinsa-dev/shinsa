@@ -230,6 +230,15 @@ function escalate(decider: Decider, task: Task, reason: string, timing: HandoffT
     });
 }
 
+function reviseEscalation(decider: Decider, task: Task, reason: string, timing: HandoffTiming) {
+  decider.emit({
+    type: 'task.escalation_revised',
+    taskId: task.id,
+    reason,
+    handoff: resolveEscalationHandoff(decider.state, task, timing),
+  });
+}
+
 function selectDueGate(decider: Decider, command: CommandOf<'autopilot.fire'>) {
   const gate = decider.state.gates[command.gateId];
   const task = decider.state.tasks[command.taskId];
@@ -251,10 +260,9 @@ export function fireAutopilot(decider: Decider, command: CommandOf<'autopilot.fi
     mergeForYou(decider, gate, waited);
     return;
   }
-  escalate(decider, task, `${waited} ${MERGE_BLOCK_TEXT[refusal]}`, {
-    waitedMinutes: policy.urgentWaitMinutes,
-    mergesAt: null,
-    blockedBy: refusal,
-  });
+  const reason = `${waited} ${MERGE_BLOCK_TEXT[refusal]}`;
+  const timing = { waitedMinutes: policy.urgentWaitMinutes, mergesAt: null, blockedBy: refusal };
+  if (!task.escalation) escalate(decider, task, reason, timing);
+  else if (task.escalation.handoff.mergesAt !== null) reviseEscalation(decider, task, reason, timing);
   scheduleAutopilot(decider, gate, null);
 }

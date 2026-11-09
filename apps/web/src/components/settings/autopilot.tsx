@@ -17,6 +17,7 @@ import * as React from 'react';
 import { HintButton } from '@/components/controls/hint-button.tsx';
 import { SelectField } from '@/components/controls/select-field.tsx';
 import { Hint } from '@/components/overlays/hint.tsx';
+import { SelectedMark } from '@/components/status/check-mark.tsx';
 import {
   AUTOPILOT_BLOCKS,
   AUTOPILOT_ENABLED_ITEMS,
@@ -141,10 +142,7 @@ function ContactPicker({
               >
                 <ContactFace contact={contact} />
                 <Truncate className='min-w-0 flex-1'>{contact.name}</Truncate>
-                <Icon
-                  name='IconCheckmark1'
-                  className={cn('shrink-0 rotate-[4deg] text-primary-text', !chosen && 'invisible')}
-                />
+                <SelectedMark className={cn('shrink-0', !chosen && 'invisible')} />
               </CommandItem>
             ))}
           </CommandGroup>
