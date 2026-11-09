@@ -34,8 +34,6 @@ const runContextAction = (contents: WebContents, action: ContextAction) => {
       return void contents.session.addWordToSpellCheckerDictionary(action.word);
     case 'LookUp':
       return contents.showDefinitionForSelection();
-    case 'Inspect':
-      return contents.inspectElement(action.x, action.y);
   }
 };
 
@@ -70,7 +68,6 @@ export const NativeWindowLive = Layer.effect(
       Queue.offerUnsafe(events, event);
     };
     let guards: WindowGuards | null = null;
-    const devTools = !app.isPackaged;
     const win = new BrowserWindow({
       ...resolveWindowBounds(
         stored.windowBounds,
@@ -91,7 +88,7 @@ export const NativeWindowLive = Layer.effect(
         spellcheck: true,
         backgroundThrottling: false,
         v8CacheOptions: 'bypassHeatCheck',
-        devTools,
+        devTools: false,
       },
     });
     const contents = win.webContents;
@@ -114,7 +111,7 @@ export const NativeWindowLive = Layer.effect(
     contents.on('did-finish-load', () => Effect.runFork(lockZoom(contents)));
     contents.on('zoom-changed', () => Effect.runFork(lockZoom(contents)));
     contents.on('context-menu', (_event, params) => {
-      const entries = listContextMenuEntries(params, { inspect: devTools });
+      const entries = listContextMenuEntries(params);
       if (entries.length === 0) return;
       Menu.buildFromTemplate(entries.map((entry) => toContextItem(contents, entry))).popup({ window: win });
     });

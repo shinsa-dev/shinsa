@@ -2159,8 +2159,8 @@ Only these, and they win over anything below:
       notification or opening Shinsa again brings both back, and ⌘Q quits the app and never stops the engine. Its
       size and place are kept and restored onto a connected display, 900 × 1100 by default. The menu is macOS's own
       (`menu/template.ts`): Shinsa (About, Check for Updates…, Settings… ⌘, opening `/settings`, Restart Engine);
-      File (New Task ⌘N, which opens Home's new task field, Command Menu… ⌘K, Close Window ⌘W); Edit; View (Reload
-      ⌘R, and the Enter Full Screen macOS adds); Go (Back ⌘[, Forward ⌘], Home ⇧⌘H, Tasks, Terminal, Settings);
+      File (New Task ⌘N, which opens Home's new task field, Command Menu… ⌘K, Close Window ⌘W); Edit; no View menu, so
+      macOS puts its own Enter Full Screen in Window; Go (Back ⌘[, Forward ⌘], Home ⇧⌘H, Tasks, Terminal, Settings);
       Window; and Help, with macOS's menu search field, What's New (the changelog), Shinsa Website, Report an
       Issue… (a new issue on `shinsa-dev/shinsa` in the browser) and Show Engine Log (`engine.log` in Console). The
       items that act on the page reach it as one bridge message, `onAction` (`new-task`, `command-menu`,
@@ -2168,9 +2168,8 @@ Only these, and they win over anything below:
       none, so either side ignores what it does not know, and the page's own ⌘K handler takes the key first. No
       other shortcut. Like a native app it never zooms: the menu has no zoom items, so ⌘+, ⌘− and ⌘0 do nothing,
       pinch never zooms the page (the image viewer's own pinch zoom stays) and a zoom level Electron kept from
-      before is reset to 100%. The developer tools exist only in the dev app (`bun run dev`, View → Toggle
-      Developer Tools ⌥⌘I, and Inspect Element in the right-click menu); the released app has neither the items nor
-      the tools. A right click on selected text or in a field opens macOS's own text menu
+      before is reset to 100%. Nothing of a browser shows either: no Reload, no developer tools
+      (`devTools` is off, so ⌥⌘I does nothing) and no Inspect Element, in the dev app too. A right click on selected text or in a field opens macOS's own text menu
       (`window/context-menu.ts`): spelling guesses and Learn Spelling on a misspelled word, Look Up on a selection,
       Copy on selected text, Cut, Copy, Paste and Select All in a field as it allows; anywhere else nothing opens.
     - **The menu bar item** shows while the app runs (`main/tray.ts`, its text in `lib/tray.ts`): the Shinsa mark at

@@ -27,7 +27,7 @@ src/
 │                   EngineSupervisor (register, wait 25 s kicking after 3 s, restart, the log tail)
 │   engine-actions/ EngineActions, the status page's and the menu's requests as a Stream
 │   first-health/   FirstHealth, the health check sent before the app is ready
-│   menu/           template.ts (the app menu: File, Go and Help, no zoom, the developer tools only unpackaged);
+│   menu/           template.ts (the app menu: File, Go and Help; no View menu, so no zoom, Reload or developer tools);
 │                   AppMenu (the page's actions over `shinsa:action`, the help links, the engine log)
 │   navigation/     origin.ts (what stays in the window, what opens in the browser, the page's permissions,
 │                   resolveHistoryStep)

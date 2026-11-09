@@ -43,10 +43,7 @@ export class AppMenu extends Context.Service<
       });
       const refresh = Effect.fn('AppMenu.refresh')(function* (snapshot: UpdateSnapshot) {
         yield* shell.applyMenu(
-          listMenuSections(
-            { ...describeUpdateItem(snapshot.state), visible: snapshot.supported },
-            { devTools: !host.packaged }
-          )
+          listMenuSections({ ...describeUpdateItem(snapshot.state), visible: snapshot.supported })
         );
         yield* applyAbout;
       });
@@ -59,8 +56,6 @@ export class AppMenu extends Context.Service<
             return yield* window.show;
           case 'Step':
             return yield* window.step(command.offset);
-          case 'Reload':
-            return yield* window.reload;
           case 'RestartEngine':
             return yield* actions.request('restart');
           case 'Update':

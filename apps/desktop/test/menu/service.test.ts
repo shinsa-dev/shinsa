@@ -57,7 +57,6 @@ describe('the app menu', () => {
       ],
       ['File', ['New Task', 'Command Menu…', '-', 'close']],
       ['Edit', ['undo', 'redo', '-', 'cut', 'copy', 'paste', 'pasteAndMatchStyle', 'delete', 'selectAll']],
-      ['View', ['Reload']],
       ['Go', ['Back', 'Forward', '-', 'Home', 'Tasks', 'Terminal', 'Settings']],
       ['Window', ['minimize', 'zoom', '-', 'Shinsa', '-', 'front']],
       ['Help', ["What's New", '-', 'Shinsa Website', 'Report an Issue…', '-', 'Show Engine Log']],
@@ -69,7 +68,6 @@ describe('the app menu', () => {
       undefined,
       undefined,
       undefined,
-      undefined,
       'window',
       'help',
     ]);
@@ -77,13 +75,6 @@ describe('the app menu', () => {
       applicationName: 'Shinsa',
       applicationVersion: '1.2.0, Stable channel',
     });
-  });
-
-  it('offers the developer tools only in the unpackaged app', async () => {
-    const world = createWorld({ packaged: false });
-    await run(world, () => Effect.void);
-    const view = (world.menus.at(-1) ?? []).find((section) => section.label === 'View');
-    expect(listLabels(view ? [view] : [])).toEqual([['View', ['Reload', '-', 'toggleDevTools']]]);
   });
 
   it('names the server in the About panel', async () => {
@@ -100,7 +91,6 @@ describe('the app menu', () => {
     const world = createWorld({ history: { urls: ['http://127.0.0.1:7446/'], active: 1 } });
     await run(world, (_menu, window) =>
       Effect.gen(function* () {
-        yield* offer(world.menuCommands, { _tag: 'Reload' });
         yield* window.showServerPage;
         yield* offer(world.menuCommands, { _tag: 'Open', path: '/settings' });
         yield* offer(world.menuCommands, { _tag: 'Show' });
@@ -112,7 +102,7 @@ describe('the app menu', () => {
     );
     expect(world.sent).toContainEqual([CHANNELS.navigate, '/settings']);
     expect(world.window.slice(-4)).toEqual(['load http://127.0.0.1:7446/', 'show', 'show', 'go 0']);
-    expect(world.actions).toEqual(['retry', 'restart']);
+    expect(world.actions).toEqual(['restart']);
     expect(world.checks).toBe(1);
   });
 

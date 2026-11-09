@@ -12,7 +12,7 @@ function open(label: string, path: string, accelerator?: string): MenuEntry {
   return accelerator === undefined ? entry : { ...entry, accelerator };
 }
 
-export function listMenuSections(update: MenuUpdate, { devTools }: { devTools: boolean }): MenuSection[] {
+export function listMenuSections(update: MenuUpdate): MenuSection[] {
   return [
     {
       label: APP_NAME,
@@ -69,13 +69,6 @@ export function listMenuSections(update: MenuUpdate, { devTools }: { devTools: b
         role('pasteAndMatchStyle'),
         role('delete'),
         role('selectAll'),
-      ],
-    },
-    {
-      label: 'View',
-      entries: [
-        { kind: 'command', label: 'Reload', accelerator: 'CmdOrCtrl+R', command: { _tag: 'Reload' } },
-        ...(devTools ? [separator, role('toggleDevTools')] : []),
       ],
     },
     {

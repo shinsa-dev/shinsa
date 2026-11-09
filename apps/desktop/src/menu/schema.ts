@@ -6,7 +6,6 @@ export const MenuCommand = Schema.Union([
   Schema.TaggedStruct('Show', {}),
   Schema.TaggedStruct('Open', { path: Schema.String }),
   Schema.TaggedStruct('Step', { offset: Schema.Literals([-1, 1]) }),
-  Schema.TaggedStruct('Reload', {}),
   Schema.TaggedStruct('RestartEngine', {}),
   Schema.TaggedStruct('Update', { install: Schema.Boolean }),
   Schema.TaggedStruct('PageAction', { action: Schema.Literals(PAGE_ACTIONS) }),
@@ -36,7 +35,6 @@ export type MenuRole =
   | 'pasteAndMatchStyle'
   | 'delete'
   | 'selectAll'
-  | 'toggleDevTools'
   | 'close'
   | 'minimize'
   | 'zoom'

@@ -60,8 +60,6 @@ export interface WindowGuards {
 }
 
 export const ContextMenuParams = Schema.Struct({
-  x: Schema.Finite,
-  y: Schema.Finite,
   isEditable: Schema.Boolean,
   selectionText: Schema.String,
   misspelledWord: Schema.String,
@@ -80,7 +78,6 @@ export const ContextAction = Schema.Union([
   Schema.TaggedStruct('Replace', { word: Schema.String }),
   Schema.TaggedStruct('Learn', { word: Schema.String }),
   Schema.TaggedStruct('LookUp', {}),
-  Schema.TaggedStruct('Inspect', { x: Schema.Finite, y: Schema.Finite }),
 ]);
 
 export type ContextAction = typeof ContextAction.Type;

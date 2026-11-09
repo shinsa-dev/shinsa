@@ -47,10 +47,7 @@ function trimSeparators(entries: readonly ContextMenuEntry[]) {
   return kept.at(-1)?.kind === 'separator' ? kept.slice(0, -1) : kept;
 }
 
-export function listContextMenuEntries(
-  params: ContextMenuParams,
-  { inspect }: { inspect: boolean }
-): ContextMenuEntry[] {
+export function listContextMenuEntries(params: ContextMenuParams): ContextMenuEntry[] {
   const selection = params.selectionText.trim();
   return trimSeparators([
     ...listSpellingEntries(params),
@@ -65,15 +62,5 @@ export function listContextMenuEntries(
           separator,
         ]),
     ...listEditEntries(params),
-    ...(inspect
-      ? [
-          separator,
-          {
-            kind: 'action' as const,
-            label: 'Inspect Element',
-            action: { _tag: 'Inspect' as const, x: params.x, y: params.y },
-          },
-        ]
-      : []),
   ]);
 }
