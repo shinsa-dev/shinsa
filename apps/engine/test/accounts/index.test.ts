@@ -485,7 +485,7 @@ describe('signing in an account', () => {
     const [created] = world.accounts.store.list();
     world.processes[0]?.exit(1);
     await until('the account to be removed', () => world.accounts.store.list().length === 0);
-    expect(existsSync(created?.configDir as string)).toBe(false);
+    await until('its folder to be removed', () => !existsSync(created?.configDir as string));
     expect(world.calls.some((call) => call.command[2] === 'logout')).toBe(true);
 
     const first = await addAccount(world, 'work@example.com', 10);
