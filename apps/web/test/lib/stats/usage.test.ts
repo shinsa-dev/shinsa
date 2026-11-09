@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'bun:test';
+import { createUsd } from '@shinsa/core';
 import { resolveStats, type Stats, type TaskTokens, type TokenLine, UNKNOWN_MODEL } from '@shinsa/core';
 import { formatPercent } from '@/lib/format/count.ts';
 import { listCalendarDays, resolveDayKey } from '@/lib/stats/days.ts';
@@ -19,7 +20,7 @@ function line(overrides: Partial<TokenLine> = {}): TokenLine {
     cacheReadTokens: 6_000,
     cacheWriteTokens: 1_000,
     tokens: 10_000,
-    knownUsd: 0.5,
+    knownUsd: createUsd(0.5),
     ...overrides,
   };
 }
@@ -51,7 +52,11 @@ describe('usage', () => {
     const stats = {
       ...range,
       cacheHitRate: 0.6,
-      total: { ...range.total, pullRequests: 4, usage: line({ tokens: 2_400_000, knownUsd: 12.5, runs: 9 }) },
+      total: {
+        ...range.total,
+        pullRequests: 4,
+        usage: line({ tokens: 2_400_000, knownUsd: createUsd(12.5), runs: 9 }),
+      },
     };
     expect(listUsageTiles(stats)).toEqual([
       { key: 'tokens', label: 'Tokens', value: '2.4M', detail: '1k in, 2k out' },
@@ -62,7 +67,7 @@ describe('usage', () => {
     expect(listUsageTiles(range).at(-1)).toMatchObject({ value: 'None', detail: 'No pull requests merged' });
     const large = {
       ...stats,
-      total: { ...stats.total, usage: line({ tokens: 3_337_200_000, knownUsd: 15_400, runs: 9 }) },
+      total: { ...stats.total, usage: line({ tokens: 3_337_200_000, knownUsd: createUsd(15_400), runs: 9 }) },
     };
     expect(listUsageTiles(large).slice(0, 2)).toMatchObject([{ value: '3.3B' }, { value: '$15.4K' }]);
     expect(formatPercent(null)).toBe('None');

@@ -141,7 +141,8 @@ function resolveCommitted(state: ShinsaState, provider: string, skip: string | n
   for (const [taskId, buildProvider] of listBuildingTasks(state)) {
     const task = state.tasks[taskId];
     if (taskId === skip || buildProvider !== provider || !task) continue;
-    committed += Option.getOrNull(resolveBuildEstimate(state, task))?.remainingPercent ?? 0;
+    const estimate = Option.flatMap(resolveBuildEstimate(state, task), (found) => found.remainingPercent);
+    committed += Option.getOrUndefined(estimate) ?? 0;
   }
   return committed;
 }
@@ -153,7 +154,9 @@ export function resolveAdmission(
   now: number
 ): Option.Option<AdmissionVerdict> {
   const pace = state.usagePaces[provider]?.pace ?? null;
-  const estimate = Option.getOrNull(resolveBuildEstimate(state, task))?.remainingPercent ?? null;
+  const estimate = Option.getOrNull(
+    Option.flatMap(resolveBuildEstimate(state, task), (found) => found.remainingPercent)
+  );
   if (pace === null || estimate === null) return Option.none();
   const limit = task.priority === 'urgent' ? pace : pace * (1 - ADMISSION_LIMITS.reserve);
   const need = Math.min(estimate, limit);

@@ -108,7 +108,7 @@ const BUDGET_TITLE: Record<TaskBudget['unit'], string> = {
 };
 
 function describeLimit(budget: TaskBudget) {
-  const limit = describeBudgetAmount(budget, budget.limit);
+  const limit = describeBudgetAmount(budget, 'limit');
   return budget.unit === 'usd'
     ? `its ${limit} cost limit`
     : `its usage limit of ${limit} of the weekly limit`;
@@ -131,7 +131,7 @@ export function holdForBudget(decider: Decider, run: Run) {
   decider.fail(
     task.id,
     BUDGET_TITLE[budget.unit],
-    `This task reached ${describeLimit(budget)}, so the next step did not start.${describeEstimate(budget)} Continue to allow another ${describeBudgetAmount(budget, budget.cap)}, or cancel the task.`,
+    `This task reached ${describeLimit(budget)}, so the next step did not start.${describeEstimate(budget)} Continue to allow another ${describeBudgetAmount(budget, 'cap')}, or cancel the task.`,
     null,
     'budget'
   );

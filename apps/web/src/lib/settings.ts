@@ -4,6 +4,7 @@ import {
   type AgentProviderInfo,
   type AgentRole,
   type CompactionMode,
+  createUsd,
   describeUsd,
   type FastModeAvailability,
   listAgentProviders,
@@ -233,7 +234,7 @@ export const MERGE_ITEMS: SettingItem<Settings['mergeMethod']>[] = [
 const BUDGETS = [1, 2, 5, 10, 20];
 
 function createBudgetItem(limit: number): SettingItem<string> {
-  return { value: String(limit), label: `${describeUsd(limit)} per task`, icon: 'IconCoins' };
+  return { value: String(limit), label: `${describeUsd(createUsd(limit))} per task`, icon: 'IconCoins' };
 }
 
 export function listBudgetItems(settings: Settings): SettingItem<string>[] {

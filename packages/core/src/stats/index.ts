@@ -1,5 +1,5 @@
 import { Option } from 'effect';
-import { addUsage, resolveUsageDelta } from '../costs/index.ts';
+import { addUsage, createUsd, resolveUsageDelta, type Usd } from '../costs/index.ts';
 import { isProjectInFocus } from '../domain/focus.ts';
 import { type Round, resolveTaskRounds } from '../domain/rounds.ts';
 import type { FocusProjects, PullRequestChanges, Run, RunRole, RunUsage, Task } from '../domain/types.ts';
@@ -13,7 +13,7 @@ export interface TokenLine {
   cacheReadTokens: number;
   cacheWriteTokens: number;
   tokens: number;
-  knownUsd: number;
+  knownUsd: Usd;
 }
 
 export interface StatsDay {
@@ -81,7 +81,7 @@ function createTokenLine(): TokenLine {
     cacheReadTokens: 0,
     cacheWriteTokens: 0,
     tokens: 0,
-    knownUsd: 0,
+    knownUsd: createUsd(0),
   };
 }
 
@@ -106,7 +106,7 @@ function addTokens(line: TokenLine, usage: RunUsage, runs: number): TokenLine {
     cacheWriteTokens: line.cacheWriteTokens + usage.cacheWriteTokens,
     tokens:
       line.tokens + usage.inputTokens + usage.outputTokens + usage.cacheReadTokens + usage.cacheWriteTokens,
-    knownUsd: line.knownUsd + (usage.costUsd ?? 0),
+    knownUsd: createUsd(line.knownUsd + (usage.costUsd ?? 0)),
   };
 }
 
@@ -119,7 +119,7 @@ export function sumTokenLines(lines: TokenLine[]) {
       cacheReadTokens: total.cacheReadTokens + line.cacheReadTokens,
       cacheWriteTokens: total.cacheWriteTokens + line.cacheWriteTokens,
       tokens: total.tokens + line.tokens,
-      knownUsd: total.knownUsd + line.knownUsd,
+      knownUsd: createUsd(total.knownUsd + line.knownUsd),
     }),
     createTokenLine()
   );

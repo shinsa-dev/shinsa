@@ -2,6 +2,8 @@ import { describe, expect, test } from 'bun:test';
 import { Option } from 'effect';
 import {
   ADMISSION_LIMITS,
+  createPercent,
+  createUsd,
   isOverBudget,
   listActiveRuns,
   listOpenGates,
@@ -232,9 +234,9 @@ describe('metering the weekly usage a run used', () => {
     const runId = harness.activeRun(taskId).id;
     meterWeekly(harness, taskId, 1.5);
     meterWeekly(harness, taskId, 2);
-    expect(weeklyShare(harness, taskId)).toBe(3.5);
+    expect(weeklyShare(harness, taskId)).toBe(createPercent(3.5));
     meterWeekly(harness, taskId, 0);
-    expect(weeklyShare(harness, taskId)).toBe(3.5);
+    expect(weeklyShare(harness, taskId)).toBe(createPercent(3.5));
     expect(harness.state.runs[runId]?.meters).toEqual([
       expect.objectContaining({
         attemptId: `${runId}-attempt`,
@@ -355,7 +357,7 @@ describe('the usage limit per task', () => {
     harness.send({ type: 'settings.change', patch: { taskUsageLimit: 10 } });
     const taskId = createTask(harness);
     meterWeekly(harness, taskId, 12);
-    expect(weeklyShare(harness, taskId)).toBe(0);
+    expect(weeklyShare(harness, taskId)).toBe(createPercent(0));
     proposePlan(harness, taskId);
     const gate = harness.openGate(taskId);
     expect(gate).toMatchObject({ cause: 'budget', title: 'Reached its usage limit' });
@@ -439,10 +441,10 @@ describe('delegated work', () => {
     harness.send({ type: 'run.meter', runId: delegated, usage: usage(0.7) });
     const task = harness.task(taskId);
     const cost = resolveTaskCost(harness.state, task);
-    expect(cost.total).toMatchObject({ runs: 2, knownUsd: 1.1 });
+    expect(cost.total).toMatchObject({ runs: 2, knownUsd: createUsd(1.1) });
     expect(cost.byRole.map(({ role, cost: line }) => [role, line.knownUsd])).toEqual([
-      ['agent', 0.4],
-      ['reviewer', 0.7],
+      ['agent', createUsd(0.4)],
+      ['reviewer', createUsd(0.7)],
     ]);
     expect(isOverBudget(harness.state, task)).toBe(true);
   });
@@ -794,8 +796,13 @@ function plannedTask(
 }
 
 function needOf(harness: Harness, taskId: string) {
-  const need = Option.getOrNull(resolveBuildEstimate(harness.state, harness.task(taskId)))?.remainingPercent;
-  if (need === undefined || need === null) throw new Error('no estimate');
+  const need = Option.getOrNull(
+    Option.flatMap(
+      resolveBuildEstimate(harness.state, harness.task(taskId)),
+      (found) => found.remainingPercent
+    )
+  );
+  if (need === null) throw new Error('no estimate');
   return need;
 }
 

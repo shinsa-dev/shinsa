@@ -14,6 +14,8 @@ import {
   selectSpentBudget,
   type Task,
   type TaskBudget,
+  type Percent,
+  type Usd,
 } from '@shinsa/core';
 import type { IconName } from '@shinsa/ui/components/icon';
 import { Option } from 'effect';
@@ -50,7 +52,7 @@ export function describeBudgetRetry(state: ShinsaState, task: Task) {
   return Option.getOrNull(
     Option.map(
       selectSpentBudget(state, task),
-      (budget) => `Allow another ${describeBudgetAmount(budget, budget.cap)}`
+      (budget) => `Allow another ${describeBudgetAmount(budget, 'cap')}`
     )
   );
 }
@@ -64,8 +66,8 @@ function toRow(key: string, label: string, line: CostLine, unit: BudgetUnit): Co
 }
 
 function describeBudgetHeading(budget: TaskBudget) {
-  const spent = describeBudgetAmount(budget, budget.spent);
-  const limit = describeBudgetAmount(budget, budget.limit);
+  const spent = describeBudgetAmount(budget, 'spent');
+  const limit = describeBudgetAmount(budget, 'limit');
   return budget.unit === 'usd' ? `${spent} of ${limit}` : `${spent} of the weekly limit, ${limit} allowed`;
 }
 
@@ -94,8 +96,9 @@ function describeDetail(line: CostLine, unit: BudgetUnit) {
   return `${provider}${describeShareBasis(line, unit)}`;
 }
 
-function describeEstimateAmount(usd: number, percent: number | null) {
-  return `About ${percent === null ? describeUsd(usd) : describeWeeklyPercent(percent)}`;
+function describeEstimateAmount(usd: Usd, percent: Option.Option<Percent>) {
+  const amount = Option.match(percent, { onNone: () => describeUsd(usd), onSome: describeWeeklyPercent });
+  return `About ${amount}`;
 }
 
 function describeEstimateBasis(estimate: BuildEstimate) {

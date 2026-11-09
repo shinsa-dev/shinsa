@@ -133,7 +133,7 @@ log. Use a scratch directory when testing: `SHINSA_HOME=/tmp/shinsa-dev bun --cw
 ## Key conventions
 
 - **No comments.** Names and structure carry the meaning; the reasons live here and in `docs/`. `bun lint:conventions` enforces it (`oxlint-disable`, `stylelint-disable` and `@ts-` are allowed, each with its reason; `packages/ui`, a reusable kit, is exempt).
-- **The verb catalog**: `find*` throws, `select*` returns null, `list*`, `count*`, `resolve*` derives, `create*`/`update*`, `upsert*`/`write*`/`replace*`, `remove*`, `assert*`, `serialize*`, `request*`/`sync*`/`apply*`/`record*`. No `get*`, `fetch*`, `load*`, `set*`, `delete*`, `destroy*` (lint-enforced). The `conventions` skill has the examples.
+- **The verb catalog**: `find*` throws, `select*` returns an `Option`, `parse*` decodes text into an `Option`, `list*`, `count*`, `resolve*` derives, `create*`/`update*`, `upsert*`/`write*`/`replace*`, `remove*`, `assert*`, `serialize*`, `request*`/`sync*`/`apply*`/`record*`. No `get*`, `fetch*`, `load*`, `set*`, `delete*`, `destroy*` (lint-enforced). The `conventions` skill has the examples.
 - **Effect 4 for everything that does I/O** (`effect` pinned at the same exact version in every workspace): every
   shape that crosses a boundary is a `Schema`, every expected failure a `Schema.TaggedError` in the type, every
   dependency a service provided by a `Layer`, every resource scoped and every retry a named `Schedule`. All I/O,

@@ -1,4 +1,4 @@
-import { type CostLine, describeUsd } from '@shinsa/core';
+import { type CostLine, describeUsd, type Usd } from '@shinsa/core';
 
 const LARGE_UNITS = [
   { size: 1e6, suffix: 'M' },
@@ -27,7 +27,7 @@ export function formatTokens(count: number) {
   return `${formatCompactCount(count)} tokens`;
 }
 
-export function formatCompactUsd(value: number) {
+export function formatCompactUsd(value: Usd) {
   if (Number(value.toFixed(2)) < 1_000) return describeUsd(value);
   return `$${formatCompact(value, 'K')}`;
 }

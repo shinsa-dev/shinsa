@@ -10480,19 +10480,19 @@ record*, is*, has*, needs*`. The linter enforces only the ban; the contracts are
 | Verb | Contract |
 | --- | --- |
 | `find*` | one value, throws a `DomainError` when absent (`findTask`) |
-| `select*` | one value, returns `null` when absent (`selectTask`) |
+| `select*` | one value, returns an `Option` (`Option.none()` when absent, `selectLeadGate`) |
 | `list*` / `count*` | many values / a total |
 | `resolve*` | derives a value: a queue, a label, a fallback (`resolveQueue`, `resolveModelLabel`) |
 | `create*` / `update*` | plain writes; in the core, `create*` also builds a fresh value (`createState`) |
 | `upsert*` / `write*` / `replace*` | idempotent writes |
 | `remove*` | takes something away |
 | `assert*` | invariant check that throws and returns `void` |
-| `serialize*` / `parse*` / `validate*` | to text or wire shape / from untrusted text / check a hand-over and return `{ ok, errors }` |
+| `serialize*` / `parse*` / `validate*` | to text or wire shape / from untrusted text into an `Option` / check a hand-over and return `{ ok, errors }` |
 | `describe*` | a sentence for a person (`describeError`) |
 | `request*` / `sync*` / `apply*` / `record*` | ask for an effect / reconcile with the outside / fold an event / store a fact reported from outside |
 | `is*` / `has*` / `needs*` | boolean predicates |
 
-If the caller null-checks the result it must be `select*`; if absence is an error it must be `find*`. The decider
+If absence is a case the caller handles it must be `select*`, returning an `Option`; if absence is an error it must be `find*`. The decider
 adds its own unenforced verbs: `start*`, `reactTo*`, `answer*`, `settle*`, `retry*`, `open*`, `withdraw*`, `request*`.
 
 ```ts

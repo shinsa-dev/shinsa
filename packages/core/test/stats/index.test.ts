@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { Option } from 'effect';
 import {
   NO_FOCUS_PROJECTS,
+  createUsd,
   type Repo,
   type Round,
   type Run,
@@ -195,7 +196,7 @@ describe('resolveStats', () => {
       cacheReadTokens: 2400,
       cacheWriteTokens: 300,
       tokens: 3250,
-      knownUsd: 4,
+      knownUsd: createUsd(4),
     });
   });
 
@@ -208,7 +209,7 @@ describe('resolveStats', () => {
     });
     const stats = resolveStats(stateOf([task('a')], [covered]), windowOf(2));
     expect(stats.days.map((day) => day.usage.tokens)).toEqual([1050, 0]);
-    expect(stats.total.usage.knownUsd).toBe(0);
+    expect(stats.total.usage.knownUsd).toBe(createUsd(0));
   });
 
   test('tokens break down by role, kind of work and model, the largest first', () => {
@@ -347,7 +348,7 @@ describe('cache rates', () => {
       cacheReadTokens: 300,
       cacheWriteTokens: 100,
       tokens: 510,
-      knownUsd: 0,
+      knownUsd: createUsd(0),
     };
     expect(Option.getOrNull(resolveCacheHitRate(line))).toBe(0.6);
     const empty = { ...line, inputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 };
