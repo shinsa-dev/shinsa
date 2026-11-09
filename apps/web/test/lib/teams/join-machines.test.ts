@@ -16,7 +16,6 @@ import {
   listJoinRows,
   PROJECTS_PATH,
   joinFromMachines,
-  isMachineless,
   resolveJoinSetup,
 } from '@/lib/teams/join-machines.ts';
 import { createProject } from '../../support/state.ts';
@@ -94,12 +93,9 @@ describe('what the join page needs set up first', () => {
   const row = (instance: RemoteInstance, device: EnrolledDevice | null) =>
     describeMachine(instance, device, at);
 
-  it('needs nothing set up when the account has no machine of its own, which joins without one', () => {
-    expect(resolveJoinSetup([], 0)).toBeNull();
-    expect(resolveJoinSetup([row(SHARED, createDevice(SHARED.id))], 0)).toBeNull();
-    expect(isMachineless([])).toBe(true);
-    expect(isMachineless([row(SHARED, createDevice(SHARED.id))])).toBe(true);
-    expect(isMachineless([row(STUDIO, null)])).toBe(false);
+  it('asks to pair a machine first when the account has none of its own', () => {
+    expect(resolveJoinSetup([], 0)).toEqual({ kind: 'pair' });
+    expect(resolveJoinSetup([row(SHARED, createDevice(SHARED.id))], 0)).toEqual({ kind: 'pair' });
   });
 
   it('needs nothing once a machine is reached', () => {
@@ -215,7 +211,7 @@ describe('opening your machines for the join page', () => {
     );
     const opened = await open();
     expect(opened.machines.map((machine) => [machine.name, machine.projects])).toEqual([['Studio', CHOICES]]);
-    expect(opened).toMatchObject({ setup: null, machineless: false });
+    expect(opened.setup).toBeNull();
     opened.close();
     opened.close();
     expect(closed).toEqual(['k3x9', 'p7m2', 'f4n1']);
@@ -295,7 +291,7 @@ describe('opening your machines for the join page', () => {
     expect((await silent()).setup).toEqual({ kind: 'offline', machines: ['Studio'] });
   });
 
-  it('joins without a machine when the account has none of its own here', async () => {
+  it('asks to pair a machine when the account has none of its own here', async () => {
     const open = createJoinMachinesSource(
       {
         dashboard: {
@@ -308,8 +304,7 @@ describe('opening your machines for the join page', () => {
     );
     const opened = await open();
     expect(opened.machines).toEqual([]);
-    expect(opened.setup).toBeNull();
-    expect(opened.machineless).toBe(true);
+    expect(opened.setup).toEqual({ kind: 'pair' });
   });
 });
 

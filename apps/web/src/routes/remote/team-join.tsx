@@ -8,7 +8,12 @@ import { ProjectsSelect } from '@/components/teams/projects-select.tsx';
 import { describeFailure } from '@/lib/connection/commands.ts';
 import type { DashboardClient } from '@/lib/remote/dashboard.ts';
 import { MACHINE_ICON, type RemotePoint } from '@/lib/remote/mode.ts';
-import { describeMachineName, describeMachineNames, listAddDeviceSteps } from '@/lib/remote/setup-steps.ts';
+import {
+  describeMachineName,
+  describeMachineNames,
+  listAddDeviceSteps,
+  PAIR_STEPS,
+} from '@/lib/remote/setup-steps.ts';
 import type { UserProfile } from '@/lib/remote/users.ts';
 import {
   countJoinPicks,
@@ -57,6 +62,9 @@ const NO_MACHINE_POINT: RemotePoint = {
 const NO_SHARE_HINT =
   'Your teammates see nothing of yours until you share a project. You can do this later in Settings → Teams.';
 
+const WITHOUT_MACHINE_HINT =
+  'Only if you do not run Shinsa on any machine. You share nothing with the team and see its work through the machines its people share with it.';
+
 const NO_MACHINE_HINT =
   'You have no machine paired, so you share no projects. You reach the team through the machines shared with it.';
 
@@ -91,7 +99,7 @@ type JoinState =
 
 type MachinesLoad =
   | { status: 'loading' }
-  | { status: 'ready'; machines: JoinMachine[]; setup: JoinSetup | null; machineless: boolean }
+  | { status: 'ready'; machines: JoinMachine[]; setup: JoinSetup | null }
   | { status: 'failed'; message: string };
 
 function useJoinMachines(open: OpenJoinMachines): MachinesLoad {
@@ -107,7 +115,6 @@ function useJoinMachines(open: OpenJoinMachines): MachinesLoad {
             status: 'ready',
             machines: opened.machines,
             setup: opened.setup,
-            machineless: opened.machineless,
           });
         else opened.close();
       },
@@ -125,6 +132,13 @@ function useJoinMachines(open: OpenJoinMachines): MachinesLoad {
 
 function describeSetup(setup: JoinSetup, team: string) {
   switch (setup.kind) {
+    case 'pair':
+      return {
+        icon: MACHINE_ICON,
+        title: 'Turn on remote access first',
+        detail: `Teammates reach your work through your machines. If Shinsa runs on your Mac, turn on remote access there, then check again to join ${team} and share your projects.`,
+        steps: { title: 'Pair a machine', items: PAIR_STEPS },
+      };
     case 'add':
       return {
         icon: 'IconKey1' as const,
@@ -149,7 +163,15 @@ function describeSetup(setup: JoinSetup, team: string) {
   }
 }
 
-function SetupPage({ setup, team }: { setup: JoinSetup; team: string }) {
+function SetupPage({
+  setup,
+  team,
+  onWithoutMachine,
+}: {
+  setup: JoinSetup;
+  team: string;
+  onWithoutMachine: () => void;
+}) {
   const described = describeSetup(setup, team);
   return (
     <section className='flex flex-col items-center gap-6 pt-4'>
@@ -158,6 +180,14 @@ function SetupPage({ setup, team }: { setup: JoinSetup; team: string }) {
       </RemoteHero>
       {described.steps && <RemoteSteps title={described.steps.title} steps={described.steps.items} />}
       <RemoteCheckAgain />
+      {setup.kind === 'pair' && (
+        <div className='flex w-full flex-col gap-2'>
+          <Button className='w-full' variant='secondary' onClick={onWithoutMachine}>
+            Join without a machine
+          </Button>
+          <p className='w-full text-center text-xs text-pretty text-fg-2'>{WITHOUT_MACHINE_HINT}</p>
+        </div>
+      )}
     </section>
   );
 }
@@ -267,6 +297,7 @@ export function TeamJoinPage({
 }) {
   const [state, setState] = React.useState<JoinState>({ kind: 'ready' });
   const [picks, setPicks] = React.useState<JoinPicks>({});
+  const [withoutMachine, setWithoutMachine] = React.useState(false);
   const preview = useTeamPreview(link, dashboard);
   const load = useJoinMachines(openMachines);
   if (!link)
@@ -287,11 +318,17 @@ export function TeamJoinPage({
     );
   if (state.kind === 'done') return <JoinedPage result={state.result} note={state.note} />;
   const named = preview && 'name' in preview ? preview : null;
-  if (load.status === 'ready' && load.setup)
-    return <SetupPage setup={load.setup} team={named?.name ?? 'the team'} />;
+  const machineless = load.status === 'ready' && load.setup?.kind === 'pair';
+  if (load.status === 'ready' && load.setup && !(machineless && withoutMachine))
+    return (
+      <SetupPage
+        setup={load.setup}
+        team={named?.name ?? 'the team'}
+        onWithoutMachine={() => setWithoutMachine(true)}
+      />
+    );
   const reached = load.status === 'ready' ? load.machines : [];
   const sharing = reached.filter((machine) => machine.projects.length > 0);
-  const machineless = load.status === 'ready' && load.machineless;
   const noShareHint = machineless ? NO_MACHINE_HINT : NO_SHARE_HINT;
 
   async function join(fragment: TeamJoinFragment, joinUrl: string) {

@@ -12,7 +12,12 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import { TeamsGroup } from '@/components/settings/teams.tsx';
 import { connection } from '@/lib/connection/socket.ts';
 import type { TeamActions } from '@/lib/connection/teams.ts';
-import { TEAM_KEY_UPDATE, TEAM_KEY_WAITING, TEAM_MACHINE_NEEDS_KEY } from '@/lib/teams/settings.ts';
+import {
+  TEAM_KEY_UPDATE,
+  TEAM_KEY_WAITING,
+  TEAM_MACHINE_NEEDS_KEY,
+  TEAM_SHARES_NOTHING,
+} from '@/lib/teams/settings.ts';
 import { spyOnToasts } from '../../support/commands.ts';
 import { spyOnEngine } from '../../support/engine.ts';
 import { createRemoteSnapshot } from '../../support/remote-access.ts';
@@ -93,13 +98,14 @@ function renderTeams(
   snapshot: RemoteSnapshot | null,
   failure: string | null = null,
   rights = false,
-  keys = false
+  keys = false,
+  state = STATE
 ) {
   const actions = createActions();
   render(
     <TooltipProvider>
       <TeamsGroup
-        state={STATE}
+        state={state}
         snapshot={snapshot}
         failure={failure}
         actions={actions}
@@ -296,8 +302,22 @@ describe('Settings → Teams', () => {
     const actions = renderOwnedTeam();
     const picker = screen.getByRole('combobox', { name: 'Projects shared with Platform' });
     expect(picker.textContent).toBe('Web');
+    expect(screen.queryByText(TEAM_SHARES_NOTHING)).toBeNull();
     await toggleProject('Projects shared with Platform', 'Api');
     await waitFor(() => expect(actions.writeProjects).toHaveBeenCalledWith(STATE, 'team1', ['web', 'api']));
+  });
+
+  it('tells a machine that shares no project with the team that teammates see nothing from it', () => {
+    const unshared = createShinsaState({ projects: [createProject({ id: 'web', name: 'Web' })] });
+    renderTeams(
+      createRemoteSnapshot({ access: ACCESS, teams: [createTeamEntry({ onMachine: false })] }),
+      null,
+      false,
+      true,
+      unshared
+    );
+    expect(screen.getByText(TEAM_SHARES_NOTHING)).toBeTruthy();
+    expect(screen.getByRole('combobox', { name: 'Projects shared with Platform' })).toBeTruthy();
   });
 
   it('gives a teammate more on this machine than the team does, with the team’s scopes locked on', async () => {

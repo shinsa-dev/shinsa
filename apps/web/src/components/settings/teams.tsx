@@ -73,6 +73,7 @@ import {
   listKeyRequests,
   TEAM_KEY_UPDATE,
   TEAM_KEY_WAITING,
+  TEAM_SHARES_NOTHING,
   listKeylessMachines,
 } from '@/lib/teams/settings.ts';
 import {
@@ -553,6 +554,7 @@ function TeamCard({
 }) {
   const { team } = entry;
   const share = useMachineShare(entry, snapshot);
+  const chosen = listTeamProjectIds(state, entry.id);
   return (
     <SettingsCard>
       <TeamHeader entry={entry} feed={feed} onDialog={onDialog} />
@@ -560,12 +562,15 @@ function TeamCard({
         <ProjectsSelect
           label={`Projects shared with ${entry.name}`}
           projects={projects}
-          chosen={listTeamProjectIds(state, entry.id)}
+          chosen={chosen}
           onChange={(projectIds) =>
             void requestWithToast(() => actions.writeProjects(state, entry.id, projectIds))
           }
         />
       </SettingRow>
+      {team && chosen.length === 0 && projects.length > 0 && (
+        <p className={`py-2 text-xs text-pretty text-fg-3 ${ROW_INSET}`}>{TEAM_SHARES_NOTHING}</p>
+      )}
       {team && needsTeamLink(entry) && <TeamKeyRow team={team} actions={actions} keys={keys} />}
       {team && <TeamRequests team={team} actions={actions} />}
       {team && keys && <TeamKeyRequests team={team} feed={feed} actions={actions} />}

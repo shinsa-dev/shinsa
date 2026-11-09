@@ -77,6 +77,9 @@ export function listKeylessMachines(
   return new Set([snapshot.instanceId]);
 }
 
+export const TEAM_SHARES_NOTHING =
+  'Teammates see nothing from this machine until you share a project with the team.';
+
 export const TEAM_KEY_WAITING = 'Teammates cannot see this machine’s tasks until it gets access.';
 
 export const TEAM_KEY_UPDATE = 'Teammates cannot see this machine’s tasks. Update Shinsa to get access.';

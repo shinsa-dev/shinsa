@@ -25,6 +25,7 @@ export interface JoinMachine {
 }
 
 export type JoinSetup =
+  | { kind: 'pair' }
   | { kind: 'add'; machines: string[] }
   | { kind: 'waiting'; machines: string[] }
   | { kind: 'offline'; machines: string[] };
@@ -32,7 +33,6 @@ export type JoinSetup =
 export interface JoinMachines {
   machines: JoinMachine[];
   setup: JoinSetup | null;
-  machineless: boolean;
   close: () => void;
 }
 
@@ -51,13 +51,10 @@ function listOwnRows(rows: readonly MachineRow[]) {
   return rows.filter((row) => row.instance.role === 'owner');
 }
 
-export function isMachineless(rows: readonly MachineRow[]) {
-  return listOwnRows(rows).length === 0;
-}
-
 export function resolveJoinSetup(rows: readonly MachineRow[], reached: number): JoinSetup | null {
   const own = listOwnRows(rows);
-  if (own.length === 0 || reached > 0) return null;
+  if (reached > 0) return null;
+  if (own.length === 0) return { kind: 'pair' };
   const names = (keep: (row: MachineRow) => boolean) => own.filter(keep).map((row) => row.instance.name);
   const waiting = names((row) => Boolean(row.device?.waiting));
   if (waiting.length > 0) return { kind: 'waiting', machines: waiting };
@@ -171,7 +168,6 @@ export function createJoinMachinesSource(
     return {
       machines: reached,
       setup: resolveJoinSetup(all, reached.length),
-      machineless: isMachineless(all),
       close: () => {
         for (const close of closers.splice(0)) close();
       },

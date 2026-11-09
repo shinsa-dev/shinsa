@@ -3857,9 +3857,15 @@ engine enrols and relays (Teammates act on team tasks, below). Teams need remote
   the key in the browser (and the link in `sessionStorage`, so it survives sign-in and pairing). The page then reads
   your machines (`resolveJoinSetup`, `lib/teams/join-machines.ts`): with paired machines this browser reaches none of,
   it shows the steps to add this device (`listAddDeviceSteps`), or that it waits for an answer or the machines are
-  offline, each with Check again and no Ask to join. With no machine paired at all it offers Ask to join at once
-  (`isMachineless`): such a person shares no projects and reaches the team only through the machines shared with it
-  (Remote access → Shared machines), and the page says so. `POST /__remote/teams/join
+  offline, each with Check again and no Ask to join. With no machine paired at all it shows the fleet page's steps to
+  turn on remote access first (`kind: 'pair'`, `PAIR_STEPS`, `lib/remote/setup-steps.ts`), since a team works only
+  when its people share their machines; Join without a machine, below Check again and meant only for someone who runs
+  Shinsa nowhere, then offers Ask to join: such a person shares no projects and reaches the team only through the
+  machines shared with it (Remote access → Shared machines), and the page says so. If they pair a machine later, its
+  heartbeat lists the team, the team's card says the machine waits for the team's key with Request access for the
+  team's owner to answer (Handing a machine the team's key, below), and while it shares no project the card says
+  teammates see nothing from it (`TEAM_SHARES_NOTHING`). Nothing is shared by itself: which projects a team sees
+  stays yours alone. `POST /__remote/teams/join
   { invite }` records that the account asked (`team_requesters`), machine or not, and makes it no member. Once the
   owner accepts, every machine shared with the team grants the new member on its next heartbeat (`Remote.syncSharedTeams`
   grants every member it has not), and the hosted dashboard adds this browser to each such machine by itself

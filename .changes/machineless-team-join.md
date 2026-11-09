@@ -2,4 +2,4 @@
 kind: added
 ---
 
-You can join a team without a machine of your own. Sign in on the team's join link and ask to join; once accepted, you reach the team through the machines shared with it, and Settings → Teams shows you with no machines.
+Someone who runs Shinsa nowhere can join a team: the join link asks you to turn on remote access first, then offers Join without a machine. You reach the team through the machines shared with it.

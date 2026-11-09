@@ -221,20 +221,18 @@ export function openSampleJoinMachines(): Promise<JoinMachines> {
       },
     ],
     setup: null,
-    machineless: false,
     close: () => undefined,
   });
 }
 
 export function openUnpairedSampleJoinMachines(): Promise<JoinMachines> {
-  return Promise.resolve({ machines: [], setup: null, machineless: true, close: () => undefined });
+  return Promise.resolve({ machines: [], setup: { kind: 'pair' }, close: () => undefined });
 }
 
 export function openUnreachedSampleJoinMachines(): Promise<JoinMachines> {
   return Promise.resolve({
     machines: [],
     setup: { kind: 'add', machines: ['Studio'] },
-    machineless: false,
     close: () => undefined,
   });
 }

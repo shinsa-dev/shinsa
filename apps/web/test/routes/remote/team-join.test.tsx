@@ -44,11 +44,11 @@ function createMachine(
 }
 
 function openWith(machines: JoinMachines['machines'], setup: JoinSetup | null = null, close = () => {}) {
-  return () => Promise.resolve({ machines, setup, machineless: false, close });
+  return () => Promise.resolve({ machines, setup, close });
 }
 
 function openMachineless() {
-  return () => Promise.resolve({ machines: [], setup: null, machineless: true, close: () => {} });
+  return () => Promise.resolve({ machines: [], setup: { kind: 'pair' as const }, close: () => {} });
 }
 
 const NO_MACHINE_HINT =
@@ -68,7 +68,7 @@ describe('the team join page on app.shinsa.dev', () => {
     expect(screen.getByText('This link cannot add you to a team')).toBeTruthy();
   });
 
-  it('lets you ask to join with no paired machine, sharing no projects', async () => {
+  it('asks you to turn on remote access first, and joins without a machine only when you say you have none', async () => {
     stashTeamJoinFragment(sessionStorage, `#team1.invite-1.${KEY}`);
     const request = requested();
     render(
@@ -80,6 +80,11 @@ describe('the team join page on app.shinsa.dev', () => {
         request={request}
       />
     );
+    expect(await screen.findByText('Turn on remote access first')).toBeTruthy();
+    expect(screen.getByText(/check again to join Platform and share your projects/)).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Check again' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Ask to join' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Join without a machine' }));
     expect(await screen.findByText('Join Platform')).toBeTruthy();
     expect(screen.getByText(/you see your teammates’ tasks here\./)).toBeTruthy();
     expect(screen.getByText('No machine of your own needed')).toBeTruthy();
@@ -251,7 +256,7 @@ describe('the team join page on app.shinsa.dev', () => {
     expect(screen.getByText('Reading your machines').className).toContain('text-xs');
     expect(screen.getByRole('button', { name: 'Ask to join' }).hasAttribute('disabled')).toBe(true);
     unmount();
-    resolve({ machines: [], setup: null, machineless: false, close });
+    resolve({ machines: [], setup: null, close });
     await waitFor(() => expect(close).toHaveBeenCalled());
   });
 

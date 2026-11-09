@@ -58,7 +58,7 @@ describe('the /ui teams samples', () => {
     );
     machines.close();
     const unpaired = await openUnpairedSampleJoinMachines();
-    expect(unpaired).toMatchObject({ setup: null, machineless: true });
+    expect(unpaired.setup).toEqual({ kind: 'pair' });
     unpaired.close();
     const unreached = await openUnreachedSampleJoinMachines();
     expect(unreached.setup).toEqual({ kind: 'add', machines: ['Studio'] });

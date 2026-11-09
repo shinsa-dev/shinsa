@@ -41,8 +41,8 @@ import type { Fleet } from '@/lib/remote/fleet.ts';
 import type { PolicyActions } from '@/lib/remote/policies.ts';
 import { RemoteServicesContext } from '@/lib/remote/services.ts';
 import { describePresence } from '@/lib/teams/presence.ts';
-import { SlackLinkedPage } from '../remote/slack.tsx';
 import { NoMachinePage } from '../remote/fleet.tsx';
+import { SlackLinkedPage } from '../remote/slack.tsx';
 import { TeamJoinPage } from '../remote/team-join.tsx';
 import { createSampleAccounts, createSampleProviderLogins } from './sample-accounts.ts';
 import { createSampleExtensions, SAMPLE_PLACES } from './sample-extensions.ts';
@@ -550,7 +550,7 @@ export function SettingsSpecimens() {
           />
         </div>
       </Specimen>
-      <Specimen label='TeamJoinPage · with no paired machine, ask to join and share no projects'>
+      <Specimen label='TeamJoinPage · with no paired machine, turn on remote access first or join without one'>
         <div className='w-full max-w-sm'>
           <TeamJoinPage
             link={SAMPLE_TEAM_LINK}
