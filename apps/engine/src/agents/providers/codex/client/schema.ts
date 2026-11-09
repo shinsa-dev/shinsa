@@ -16,6 +16,7 @@ export interface CodexClientOptions {
   readonly path: string;
   readonly cwd: string;
   readonly env?: Record<string, string | undefined>;
+  readonly browserEndpoint?: string | null;
 }
 
 export interface CodexHandlers {

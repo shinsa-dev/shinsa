@@ -26,6 +26,7 @@ export const ENGINE_FEATURES = [
   'autopilot-slack',
   'shared-machine',
   'focus.projects',
+  'browser',
   'active-hours',
 ] as const;
 

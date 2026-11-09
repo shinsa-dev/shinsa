@@ -273,6 +273,28 @@ describe('the decision on a task page', () => {
     decline.mockRestore();
   });
 
+  it('says the browser is signed in, or skips signing in', () => {
+    const gate = createGate({
+      id: 'g1',
+      taskId: 't1',
+      type: 'browser_sign_in',
+      title: 'Sign in to vercel.com',
+      browserSignIn: { url: 'https://vercel.com/login', site: 'vercel.com' },
+    });
+    const { state, task } = setup(createTask({ id: 't1' }), [gate]);
+    const all = sections(state, task);
+    expect(find(all, 'task.t1.gate.g1.signed-in')).toMatchObject({
+      label: 'I signed in',
+      hint: 'Sign in to vercel.com',
+    });
+    run(find(all, 'task.t1.gate.g1.signed-in'));
+    run(find(all, 'task.t1.gate.g1.skip-sign-in'));
+    expect(spies.sent.mock.calls).toEqual([
+      answered('g1', 'approve', null, 'Done. The agent carries on signed in.'),
+      answered('g1', 'reject', null, 'Skipped. The agent carries on.'),
+    ] as never);
+  });
+
   it('retries a paused task, with or without guidance', async () => {
     const gate = createGate({
       id: 'g1',

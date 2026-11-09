@@ -441,5 +441,25 @@ export function listTriggerTasks({ paywall, kanna }: { paywall: Repo; kanna: Rep
         details: { secret: { label: 'Stripe webhook signing secret' } },
       },
     },
+    {
+      id: 'task-browser-sign-in',
+      request: 'Show the dispute count on the Stripe dashboard card',
+      title: 'Show dispute count on the Stripe card',
+      repo: paywall,
+      size: 'small',
+      stage: 'building',
+      reason: 'waiting for your answer',
+      branch: 'feat/stripe-dispute-count',
+      ageHours: 0.3,
+      runs: [{ role: 'agent', purpose: 'build', minutes: 6, summary: 'Asked to sign the browser in.' }],
+      gate: {
+        type: 'browser_sign_in',
+        title: 'Sign in to dashboard.stripe.com',
+        body: 'To screenshot the new dispute count on the Stripe card, the dashboard has to be signed in.',
+        details: {
+          browserSignIn: { url: 'https://dashboard.stripe.com/login', site: 'dashboard.stripe.com' },
+        },
+      },
+    },
   ];
 }

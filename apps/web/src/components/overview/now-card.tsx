@@ -17,6 +17,7 @@ import { StepNumber } from '@/components/layout/surface/step-number.tsx';
 import { PrLink } from '@/components/links/pull-request.tsx';
 import { TaskLink } from '@/components/links/task.tsx';
 import { AnswerBox } from '@/components/overview/answer-box.tsx';
+import { BrowserSignInCard } from '@/components/overview/browser-sign-in-card.tsx';
 import { FindingVerdicts } from '@/components/overview/finding-verdicts.tsx';
 import { LiveFeed } from '@/components/overview/live-feed.tsx';
 import { PostMergeCard } from '@/components/overview/merge-steps-card.tsx';
@@ -519,6 +520,8 @@ function GateCard({
       return <PostMergeCard state={state} task={task} />;
     case 'result':
       return <ResultCard state={state} task={task} gate={gate} onOpen={onOpen} />;
+    case 'browser_sign_in':
+      return <BrowserSignInCard state={state} task={task} gate={gate} />;
   }
 }
 

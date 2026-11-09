@@ -98,6 +98,8 @@ export const NativeWindowLive = Layer.effect(
     });
     win.on('enter-full-screen', () => emit({ _tag: 'FullScreen', on: true }));
     win.on('leave-full-screen', () => emit({ _tag: 'FullScreen', on: false }));
+    win.on('resized', () => emit({ _tag: 'BoundsChanged' }));
+    win.on('moved', () => emit({ _tag: 'BoundsChanged' }));
     contents.on('will-navigate', (details) => {
       if (!guards || !Effect.runSync(guards.navigate(details.url))) details.preventDefault();
     });

@@ -245,7 +245,7 @@ one reads as its empty value. The fields under Triage and shape, Plan and build,
 | `triageDecisions?` | `{ shape, start, priority }` each `{ value, why }` \| null, `stack?` `{ value, why }`, and `duplicate?` `{ unreached }` | triage's choice and why, per Auto part; `stack` is the tasks triage stacked it on, present only when it did; `duplicate.unreached` lists the team machines (`UnreachedTeammate`: `{ teamId, machineId, name, owner }`, `owner` a `TeammateOwner` `{ login, name, avatarUrl }` or null) whose tasks the team-wide duplicate check could not read |
 | `shapeChanges?` | `ShapeChange[]` (last 20) | each pipeline change: from, to, by (`you`, `agent`, `shinsa`), reason |
 | `proposal?` | `ChangeProposal` \| null | an inquiry's proposal: request, why, status (`open`, `accepted`, `declined`), `recommend` (`go_on` or `close`, the agent's advice; `close` puts Close first on the card) |
-| `suggestedActions?` | `SuggestedAction[]` (at most 3) | the replies the agent's last hand-over suggested, each a `label` and the `message` it sends as yours; cleared when your message reaches the agent or you answer a gate, replaced by the next hand-over |
+| `suggestedActions?` | `SuggestedAction[]` (at most 2) | the replies the agent's last hand-over suggested, each a `label` and the `message` it sends as yours; cleared when your message reaches the agent or you answer a gate, replaced by the next hand-over |
 | `planFirst` | boolean | plan first: the plan always waits at a gate |
 | `backlog?` | `{ at }` \| null | in the backlog since `at`: its plan gate opens and is held out of Needs you until you start it |
 | `share?` | `TaskShare` \| null | shared by link since `at`: `url` once the engine made the link (null while `share.link` runs), which holds the share id and, in its fragment, the key; `limit` how long (`ShareLimit`: `until_done`, `hour`, `day`, `week`, `none`), `scopes` the view scopes it shows (`ViewScope`s in order, identity always among them; a preset is a list in `SHARE_PRESET_SCOPES`, and the label Status, Standard, Full access or Custom comes from `resolveShareScopesPreset`) and `endsAt` when a time limit runs out (null otherwise); `failure` the reason the link could not be made, cleared once it is; `description` the summary the writer wrote of what the task addresses when sharing started (`share.describe`) (`docs/engine.md` → Sharing a task) |
@@ -636,8 +636,8 @@ Hard gates, decided by you; the stored `Gate.type` is the key. The plan, your OK
 `STEP_SCHEMA` says; the operation gate opens when a task that operates after the merge merges; the post-merge gate
 opens when a round rests with a step after the merge unticked, stays open across later rounds and is the only gate a
 merged or done task keeps (`syncMergeSteps`, `docs/engine.md` → Steps around the merge); the others as
-`docs/engine.md` → Gates says. `isDecisionGate` is true for plan, review and merge; `isAgentQuestion` for question and
-secret.
+`docs/engine.md` → Gates says. `isDecisionGate` is true for plan, review and merge; `isAgentQuestion` for question,
+secret and browser sign-in.
 
 | Type | Title | Shows | Decisions | Refusal | Pauses |
 | --- | --- | --- | --- | --- | --- |
@@ -646,6 +646,7 @@ secret.
 | `merge` | Merge | the final diff, CI and bots, what changed since review | approve (merge) · revise (the agent) · reject | same | no |
 | `question` | Question | the question, context, choices, recommendation | reply | "Answer the question." | no |
 | `secret` | Secret | what it is for, why | reply (a secret ref only) · reject | "Paste the secret into the secret field." | no |
+| `browser_sign_in` | Browser sign-in | the site the agent needs signed in, why it needs it | approve (the project's browser is signed in; the agent opens the page again) · reject (carry on without it) | "Say you signed in, or skip it." | no |
 | `proposal` | Your OK | the answer, report or diagnosis, the proposal and why | approve (setup verified again, then planned) · reject (keeps the inquiry, finishes) | "Approve the proposal or keep the task." | no |
 | `operation` | Run the operation | the merged commit and pull request, the steps, the impact, your notes | approve (runs with the notes on the gate) · reply (replaces the notes with your words, then runs; empty clears them) · reject (finishes without it) | "Run the operation or finish without it." | no |
 | `failure` | Paused | what stopped, why, what Retry does | approve (retry) · reply (retry with guidance) · reject (cancel) | "Retry or cancel the task." | yes |
@@ -682,6 +683,7 @@ Soft gates, decided by Shinsa or the reviewer:
 | `provider?` | string | the provider a Sign in gate is for, set on every one (`claude` for a Claude account) |
 | `account?` | `RunAccount` \| null | the Claude account a Sign in gate names, or null for a provider with its own login |
 | `secret?` | `{ label }` | what a secret gate asks for |
+| `browserSignIn?` | `{ url, site }` \| null | the page and its site a browser sign-in gate asks for (`resolveSignInSite`) |
 | `commit?` | string \| null | the merged commit an operation gate shows; on a merge gate, the head it was opened for, which approving merges and nothing newer |
 | `notes?` | string \| null | the notes for the operation, kept only here: a message at the operation gate replaces them (`gate.noted`, null clears them), `reply` replaces them with its words, and the agent runs the operation with them |
 | `round?` | number | the round it belongs to (Rounds, above) |
@@ -726,7 +728,7 @@ The agent composes steps and sets plan parameters while it plans; it cannot add 
   a change; the plan gate shows it and the round takes it once the plan is accepted, `task.retitled`), `split` (the
   other parts of the request that ship as their own pull requests, only for a task that opens one: up to 8
   (`PROTOCOL_LIMITS.splitParts`), each a `title` (named once), a `request` that stands on its own, an `order`
-  (`PLAN_SPLIT_ORDERS`: `parallel`, `waits_on`, `stacks_on`) and, for `waits_on` and `stacks_on` only, `on`: 0 for this
+  (`PLAN_SPLIT_ORDERS`: `parallel`, `waits_on`, `stacks_on`, the usual one for parts of one goal) and, for `waits_on` and `stacks_on` only, `on`: 0 for this
   task or an earlier part's number, so the parts cannot wait on each other in a loop; the phases cover only the work
   that stays here, and the plan gate always opens for it, `splits`). A refusal is `plan_invalid`.
 - **Checks later**: `check_changes` on `complete_phase` and `complete_fix` (Checks, below).
@@ -904,7 +906,9 @@ cannot step past an open gate), when it is a `merge_step.tick`, or when a `setti
 a human-only field. A `task.complete` on your behalf also needs no waiting round, no open pull request and no unticked
 step after the merge (`task_open`).
 
-Not commands, human-only all the same: `gates secret` and `gates decline-secret` (`/api/secrets`), `schedules
+Not commands, human-only all the same: the shared browser's routes (`/api/browser`, owner-only behind the `browser`
+feature: list a project's sites, your browsers and one browser's sites, copy, open and close the sign-in window, sign
+out; `docs/engine.md` → The shared browser), `gates secret` and `gates decline-secret` (`/api/secrets`), `schedules
 webhook-secret`, `accounts sign-in`, `sign-in-code`, `import` and `remove`, `mcp check|add|remove|on|off|sign-in|sign-out`,
 `skills on|off`, `plugins on|off`, `tasks open`, `versions update`.
 
@@ -960,6 +964,7 @@ role without the tool (`hasTool`).
 | `agent.remember` | `remember` | proposes a rule for every later agent (`scope`, `text`, `why`); a known one is dropped, at most ten wait at once |
 | `agent.report_feedback` | `report_feedback` | reports a problem with Shinsa itself (`feedback`), drafted like yours and waiting for you; a known note is dropped, at most 3 per task and 10 agent reports waiting (`feedback_full`) |
 | `agent.request_secret` | `request_secret` | opens a secret gate |
+| `agent.request_browser_sign_in` | `request_browser_sign_in` | opens a browser sign-in gate (`url`, `reason`, `BROWSER_SIGN_IN_LIMITS` 2,000 and 300); refused for a task with no project (`browser_no_project`) or without a full http or https address and a reason (`browser_sign_in_invalid`) (`docs/engine.md` → The shared browser) |
 | `agent.delegate` | `delegate_task` | starts a delegation from its `brief` |
 | `agent.cancel_delegation` | `delegation_cancel` | stops one |
 | `agent.answer_delegation` | `delegation_answer` | answers a delegation's question |
@@ -1268,6 +1273,7 @@ non-delegated task run also gets one management tool per surface spec that is no
 | `file_report` | ✓ watch, intake | | | | | | |
 | `set_schedule`, `list_schedules`, `delete_schedule` | ✓ | ✓ | ✓ | ✓ | ✓ | | |
 | `request_secret` | ✓ | | ✓ | ✓ | ✓ | | |
+| `request_browser_sign_in` | ✓ | | | ✓ | | | |
 
 Hand-over tools (the first ten rows, `isHandOverTool`) end the step. Every task-session role is served every tool of
 the union in every run, since the session's tool list must not change between turns (the prompt cache); the agent

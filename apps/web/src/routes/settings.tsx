@@ -11,6 +11,7 @@ import { AgentSettings } from '@/components/settings/agents.tsx';
 import { AppearanceSettings } from '@/components/settings/appearance.tsx';
 import { AttentionSettings } from '@/components/settings/attention.tsx';
 import { AutoPaceSettings } from '@/components/settings/auto-pace.tsx';
+import { BrowserSettings } from '@/components/settings/browser.tsx';
 import { ContextSettings } from '@/components/settings/context.tsx';
 import { FolderSettings, SetupSettings } from '@/components/settings/folders.tsx';
 import { ForecastSettings } from '@/components/settings/forecast.tsx';
@@ -122,6 +123,7 @@ function TabSections({ state, tab }: { state: ShinsaState; tab: SettingsTabId })
           <FolderSettings />
           <WorktreeSettings />
           <ProjectSettings state={state} />
+          <BrowserSettings state={state} />
         </>
       );
     case 'integrations':

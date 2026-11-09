@@ -189,7 +189,7 @@ export const ORCHESTRATION_TOOL_SPECS = {
   },
   split_task: {
     name: 'split_task',
-    description: `Split the rest of the accepted plan into separate tasks when it has parts that belong apart: different owners, parallel work, or separate reviews. Each becomes a task under this one that ends at its own review. Set stacked when the parts build on each other and ship at once, such as a large rewrite done piece by piece: the parts become a bundle in this repository, each built on the one before and merged together with this task. Leave it out for independent parts, which start at once and merge on their own. A plan is split once: calling it again for the same plan returns the tasks it already made. Keep the work here when it is small and cohesive. At most ${L.splitTasks} tasks.`,
+    description: `Split the rest of the accepted plan into separate tasks when it has parts that belong apart: different owners, parallel work, or separate reviews. Each becomes a task under this one that ends at its own review. Set stacked when the parts serve the same goal as this task, which is the usual case: pieces of one feature, a change and its follow-ups, work on the same code. They become a bundle in this repository, each built on the one before and merged together with this task. Leave it out only for parts with different goals, each worth merging alone, which start at once and merge on their own. A plan is split once: calling it again for the same plan returns the tasks it already made. Keep the work here when it is small and cohesive. At most ${L.splitTasks} tasks.`,
     inputSchema: {
       type: 'object',
       properties: {
@@ -213,7 +213,7 @@ export const ORCHESTRATION_TOOL_SPECS = {
         stacked: {
           type: 'boolean',
           description:
-            'The parts stack as a bundle: the first on this task, each next one on the one before, all merging together with this task. Never with this_task_waits.',
+            'The parts stack as a bundle: the first on this task, each next one on the one before, all merging together with this task. Set it whenever the parts serve one goal. Never with this_task_waits.',
         },
       },
       required: ['tasks'],

@@ -48,8 +48,11 @@ describe('splitting the work in the plan', () => {
     const task = harness.task(createTask(harness));
     const prompt = resolvePlanningPrompt(task, null, [], null);
     expect(prompt).toContain('give the rest in `split`: up to 8 parts');
-    expect(prompt).toContain('`parallel` starts the part at once, and is the default.');
-    expect(prompt).toContain('only for pieces of one rewrite');
+    expect(prompt).toContain('Most splits are parts of one goal, so they usually become a bundle');
+    expect(prompt).toContain('Stack parts that serve the same goal');
+    expect(prompt).toContain('only when it serves a different goal and is worth merging alone');
+    expect(prompt).not.toContain('is the default');
+    expect(prompt).not.toContain('only for pieces of one rewrite');
     expect(prompt).toContain('Keep a small or cohesive request whole');
   });
 

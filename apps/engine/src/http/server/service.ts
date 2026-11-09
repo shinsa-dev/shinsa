@@ -5,10 +5,18 @@ import {
   TEAM_VIEW_PATH,
   type ScopedActor,
 } from '@shinsa/core';
-import { ENGINE_BODY_LIMIT_BYTES, RequestForbidden } from '@shinsa/core/engine-api/schema';
+import {
+  ConnectRefused,
+  ENGINE_BODY_LIMIT_BYTES,
+  LocalOnly,
+  RequestForbidden,
+} from '@shinsa/core/engine-api/schema';
 import { Context, Effect, Layer, Option, Predicate } from 'effect';
 import { Accounts } from '../../accounts/roster/service.ts';
 import { Transcripts } from '../../agents/transcripts/service.ts';
+import { isLoopbackAddress, readBrowserKey } from '../../browser/proxy/endpoint.ts';
+import { BROWSER_UNAVAILABLE, NOT_LOCAL_MESSAGE } from '../../browser/proxy/schema.ts';
+import { BrowserProxy } from '../../browser/proxy/service.ts';
 import { EngineConfig } from '../../config/service.ts';
 import { createServerInstance } from '../../instance/index.ts';
 import type { ChannelPeer } from '../../remote/channel/schema.ts';
@@ -33,6 +41,7 @@ import { PORT_TAKEN, PortInUse, RequestSource, ServedInstance } from '../schema.
 import { makeSocketHub } from '../socket.ts';
 import {
   createSocketHandlers,
+  makeBrowserSockets,
   makeRemoteSockets,
   type PreviewSocketData,
   type PreviewSocketHandlers,
@@ -66,6 +75,7 @@ export class EngineServer extends Context.Service<
       const teams = Option.getOrUndefined(yield* Effect.serviceOption(Teams));
       const previews = Option.getOrUndefined(yield* Effect.serviceOption(Previews));
       const presence = Option.getOrUndefined(yield* Effect.serviceOption(Presence));
+      const browser = Option.getOrUndefined(yield* Effect.serviceOption(BrowserProxy));
       const allowedHosts = resolveAllowedHosts(config.allowedHosts);
       const handle = (request: Request, context: Context.Context<never>): Promise<Response> =>
         (web.handler as (request: Request, context: Context.Context<never>) => Promise<Response>)(
@@ -142,6 +152,40 @@ export class EngineServer extends Context.Service<
             },
           }
         : null;
+
+      const browserSockets = browser ? yield* makeBrowserSockets(browser) : null;
+
+      function respondBrowserSocket(request: Request, url: URL, bunServer: Bun.Server<ServerSocketData>) {
+        const key = readBrowserKey(url.pathname);
+        if (key === null) return null;
+        if (!browser) return respondNotFound();
+        if (!isLoopbackAddress(bunServer.requestIP(request)?.address)) {
+          return respondRefusal(LocalOnly, NOT_LOCAL_MESSAGE);
+        }
+        const refusal = resolveRefusal(request, allowedHosts);
+        if (refusal) return respondRefusal(RequestForbidden, refusal);
+        return run(
+          browser.admit(key).pipe(
+            Effect.matchEffect({
+              onFailure: (failure) =>
+                Effect.succeed(
+                  respondRefusal(
+                    failure._tag === 'BrowserKeyRefused' ? ConnectRefused : BROWSER_UNAVAILABLE,
+                    failure.message
+                  )
+                ),
+              onSuccess: (admission) => {
+                const refused = upgradeAdmitted(request, bunServer, {
+                  kind: 'browser',
+                  admission,
+                  relay: null,
+                });
+                return refused ? Effect.as(browser.dismiss(admission), refused) : Effect.succeed(refused);
+              },
+            })
+          )
+        );
+      }
 
       const respondPreview = Effect.fn('serveHttp.respondPreview')(function* (
         request: Request,
@@ -275,13 +319,14 @@ export class EngineServer extends Context.Service<
               const url = new URL(request.url);
               if (gate.isTunnel(request)) return run(respondTunnelSocket(request, url, bunServer));
               return (
+                respondBrowserSocket(request, url, bunServer) ??
                 respondLocalSocket(request, url, bunServer) ??
                 respondLocalRelay(request, url) ??
                 handle(request, Context.empty())
               );
             },
             websocket: {
-              ...createSocketHandlers(hub, terminalSockets, remoteSockets, previewSockets),
+              ...createSocketHandlers(hub, terminalSockets, remoteSockets, previewSockets, browserSockets),
               maxPayloadLength: ENGINE_BODY_LIMIT_BYTES,
               backpressureLimit: SOCKET_BACKPRESSURE_LIMIT_BYTES,
             },

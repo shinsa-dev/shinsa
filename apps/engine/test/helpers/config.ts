@@ -35,6 +35,7 @@ export function createConfigAt(root: string, overrides: Partial<ServerConfig> = 
     evidenceDir: join(dataDir, 'evidence'),
     attachmentsDir: join(dataDir, 'attachments'),
     transcriptsDir: join(dataDir, 'transcripts'),
+    browserDir: join(dataDir, 'browser'),
     pluginDir: resolve(import.meta.dirname, '../../plugin'),
     webDir: join(root, 'web'),
     port: 0,

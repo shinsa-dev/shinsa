@@ -3,7 +3,11 @@ import type { Gate, GateType } from './types.ts';
 
 const DECISION_GATES: ReadonlySet<GateType> = new Set<GateType>(['plan', 'review', 'merge']);
 
-const AGENT_QUESTION_GATES: ReadonlySet<GateType> = new Set<GateType>(['question', 'secret']);
+const AGENT_QUESTION_GATES: ReadonlySet<GateType> = new Set<GateType>([
+  'question',
+  'secret',
+  'browser_sign_in',
+]);
 
 export function isPausingGate(gate: Pick<Gate, 'type'>) {
   return resolveGateDefinition(gate).pauses;

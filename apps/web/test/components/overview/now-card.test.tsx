@@ -249,23 +249,35 @@ describe('NowCard on the Overview', () => {
     expect(actions.indexOf('Review')).toBeLessThan(actions.indexOf('Approve changes'));
   });
 
-  it('puts the agent’s suggested replies beside Approve changes and sends one as your message', async () => {
+  it('puts the agent’s suggested replies in one Replies menu beside Approve changes and sends one as your message', async () => {
     const { gate } = reviewing();
     const task = createTask({
       id: 'task-1',
       stage: 'awaiting_review',
-      suggestedActions: [{ label: 'Do the renames', message: 'Do the renames too.' }],
+      suggestedActions: [
+        { label: 'Do the renames', message: 'Do the renames too.' },
+        { label: 'Keep the old names', message: 'Keep the old names.' },
+      ],
     });
     const { view } = renderOverview(createShinsaState({ tasks: [task], gates: [gate] }), task, gate);
     const actions = view.getAllByRole('button').map((button) => button.textContent);
-    expect(actions.indexOf('Review')).toBeLessThan(actions.indexOf('Do the renames'));
-    expect(actions.indexOf('Do the renames')).toBeLessThan(actions.indexOf('Approve changes'));
-    fireEvent.click(view.getByRole('button', { name: 'Do the renames' }));
+    expect(actions.indexOf('Review')).toBeLessThan(actions.indexOf('Replies'));
+    expect(actions.indexOf('Replies')).toBeLessThan(actions.indexOf('Approve changes'));
+    expect(view.queryByRole('button', { name: 'Do the renames' })).toBeNull();
+    fireEvent.click(view.getByRole('button', { name: 'Replies' }));
+    expect(await screen.findByRole('menuitem', { name: /Keep the old names/ })).toBeTruthy();
+    fireEvent.click(screen.getByRole('menuitem', { name: /Do the renames/ }));
     await waitFor(() =>
       expect(listSentCommands()).toEqual([
         { type: 'task.message', taskId: 'task-1', text: 'Do the renames too.' },
       ])
     );
+  });
+
+  it('shows no Replies menu when the agent suggested no replies', () => {
+    const { task, gate, state } = reviewing();
+    const { view } = renderOverview(state, task, gate);
+    expect(view.queryByRole('button', { name: 'Replies' })).toBeNull();
   });
 
   it('leads a proposal the agent recommends closing with Close, and keeps Make it a change as the quiet link', async () => {
