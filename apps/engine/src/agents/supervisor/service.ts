@@ -1,4 +1,5 @@
 import { Context, Deferred, Effect, type FileSystem, Layer, Option } from 'effect';
+import { BrowserProxy } from '../../browser/proxy/service.ts';
 import { Extensions } from '../../extensions/registry/service.ts';
 import { describeError } from '../../log/index.ts';
 import { ProcessLedger } from '../../resources/index.ts';
@@ -40,6 +41,7 @@ export class RunSupervisor extends Context.Service<RunSupervisor, RunSupervisorS
       const hooks = yield* RunHooks;
       const extensions = yield* Effect.serviceOption(Extensions);
       const ledger = yield* Effect.serviceOption(ProcessLedger);
+      const browser = yield* Effect.serviceOption(BrowserProxy);
       const manage = yield* Effect.serviceOption(ManageAccess);
       const evidence = yield* Evidence;
       const extensionSets = yield* SessionExtensionSets;
@@ -79,6 +81,7 @@ export class RunSupervisor extends Context.Service<RunSupervisor, RunSupervisorS
         hooks: {
           ...hooks,
           trackProcess: Option.isSome(ledger) ? ledger.value.track : null,
+          browser: Option.getOrNull(browser),
           extensions: Option.getOrNull(extensions),
           manages: Option.isSome(manage),
         },

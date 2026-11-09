@@ -37,6 +37,12 @@ const GATE_WORDS: Record<GateType, GateWords> = {
     reason: 'An agent needs a secret from you',
     why: (gate) => `An agent needs a secret from you: ${gate.title}`,
   },
+  browser_sign_in: {
+    label: 'Sign-in',
+    reason: 'An agent needs its project’s browser signed in',
+    why: (gate) =>
+      `An agent needs its project’s browser signed in to ${gate.browserSignIn?.site ?? 'a site'}`,
+  },
   proposal: {
     label: 'Proposal',
     reason: 'An agent proposes what comes next and waits for your OK',

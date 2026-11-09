@@ -158,6 +158,7 @@ export type GateType =
   | 'merge'
   | 'question'
   | 'secret'
+  | 'browser_sign_in'
   | 'proposal'
   | 'operation'
   | 'failure'
@@ -781,6 +782,11 @@ export interface RunFork {
   sessionId: string;
 }
 
+export interface GateBrowserSignIn {
+  url: string;
+  site: string;
+}
+
 export interface Gate {
   id: string;
   taskId: string;
@@ -805,6 +811,7 @@ export interface Gate {
   provider?: string;
   account?: RunAccount | null;
   secret?: GateSecret | null;
+  browserSignIn?: GateBrowserSignIn | null;
   commit?: string | null;
   notes?: string | null;
   round?: number;

@@ -192,6 +192,7 @@ type AgentCommand =
       | { steps: PipelineStep[] }
     ))
   | { type: 'agent.request_secret'; runId: string; gateId: string; label: string; reason: string }
+  | { type: 'agent.request_browser_sign_in'; runId: string; gateId: string; url: string; reason: string }
   | DelegationAgentCommand
   | ScheduleAgentCommand
   | MemoryAgentCommand

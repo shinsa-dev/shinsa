@@ -218,6 +218,45 @@ describe('starting and ending runs', () => {
     await ran;
   });
 
+  test("hands each run a key to its project's shared browser that ends with the turn", async () => {
+    const issued: string[] = [];
+    const revoked: string[] = [];
+    const browser = {
+      issue: (profile: string) =>
+        Effect.acquireRelease(
+          Effect.sync(() => {
+            issued.push(profile);
+            return `ws://127.0.0.1:7446/browser/cdp/${profile}`;
+          }),
+          () => Effect.sync(() => revoked.push(profile))
+        ),
+    };
+    const sessions = createSessions();
+    const { supervisor } = setup(
+      (state) => {
+        withTask(createTempDir())(state);
+        state.repos['repo-1'] = { ...createRepo(), projectId: 'project-1' };
+      },
+      { startSession: sessions.startSession, browser }
+    );
+    const running = supervisor.execute('run-1');
+    await until('the session', () => sessions.started.length === 1);
+    expect(sessions.started[0]?.input.browserEndpoint).toBe('ws://127.0.0.1:7446/browser/cdp/project-1');
+    expect(revoked).toEqual([]);
+    sessions.started[0]?.finish();
+    await running;
+    expect(issued).toEqual(['project-1']);
+    expect(revoked).toEqual(['project-1']);
+    const unfiled = createSessions();
+    const plain = setup(withTask(createTempDir()), { startSession: unfiled.startSession, browser });
+    const ran = plain.supervisor.execute('run-1');
+    await until('the session', () => unfiled.started.length === 1);
+    expect(unfiled.started[0]?.input.browserEndpoint).toBeNull();
+    unfiled.started[0]?.finish();
+    await ran;
+    expect(issued).toEqual(['project-1']);
+  });
+
   test('the round agent plans, builds and fixes as separate runs on one session, read-only only while it plans', async () => {
     const sessions = createSessions();
     const runs = [

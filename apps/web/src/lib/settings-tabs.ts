@@ -1,4 +1,5 @@
 import { ACCOUNT_LABEL } from '@/lib/accounts/account.ts';
+import { BROWSER_SECTION } from '@/lib/browser.ts';
 import { REMOTE_ACCESS_SECTION } from '@/lib/remote-access.ts';
 import { isRemoteBuild, MACHINES_SECTION } from '@/lib/remote/mode.ts';
 import {
@@ -66,7 +67,7 @@ const SETTINGS_TABS: Record<SettingsTabId, SettingsTab> = {
   projects: {
     id: 'projects',
     label: 'Projects',
-    sections: [FOLDERS_TITLE, WORKTREES_TITLE, 'Projects'],
+    sections: [FOLDERS_TITLE, WORKTREES_TITLE, 'Projects', BROWSER_SECTION],
   },
   integrations: {
     id: 'integrations',

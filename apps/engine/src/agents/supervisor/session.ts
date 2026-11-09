@@ -7,8 +7,9 @@ import {
   type Run,
   resolveTaskProject,
 } from '@shinsa/core';
-import { Clock, Effect, FiberSet, Scope } from 'effect';
-import { isSameExtensionSet } from '../../extensions/index.ts';
+import { Clock, Effect, FiberSet, Option, Schema, Scope } from 'effect';
+import { BrowserProfile } from '../../browser/host/schema.ts';
+import { isSameExtensionSet, resolveSessionBrowser } from '../../extensions/index.ts';
 import { describeError } from '../../log/index.ts';
 import type { AccountLease } from '../accounts/schema.ts';
 import type { ActiveRun } from '../active/schema.ts';
@@ -90,6 +91,18 @@ const resolveExtensions = Effect.fn('RunSupervisor.resolveExtensions')(function*
       )
     )
   );
+});
+
+const decodeProfile = Schema.decodeUnknownOption(BrowserProfile);
+
+const issueBrowser = Effect.fn('RunSupervisor.issueBrowser')(function* (run: Run) {
+  const browser = (yield* RunHost).hooks.browser;
+  if (!browser) return null;
+  const state = yield* (yield* RunWorld).state;
+  const task = state.tasks[run.taskId];
+  const profile = Option.getOrNull(decodeProfile(task ? resolveTaskProject(state, task) : null));
+  if (!profile) return null;
+  return yield* browser.issue(profile);
 });
 
 export const listServerNames = Effect.fn('RunSupervisor.listServerNames')(function* (run: Run) {
@@ -194,27 +207,7 @@ export const attemptTurn = Effect.fn('RunSupervisor.attempt')(function* (turn: T
     world.leasing.readWeeklyReading(run.id, active.lease, provider.id, false)
   );
   const pin = plan.resume ? yield* host.extensionSets.select(plan.resume) : null;
-  const extensions = yield* resolveExtensions(run, pin);
-  const createLoader = host.hooks.extensions?.createLoader;
-  const loader = yield* Effect.suspend(() =>
-    extensions && createLoader ? createLoader(extensions) : Effect.succeed(null)
-  );
-  const context = yield* Effect.context<never>();
-  const runSync = Effect.runSyncWith(context);
-  const handleTool: ToolHandler = (name, input, signal, requestId) => {
-    if (loader?.specs.some((spec) => spec.name === name))
-      return loader.handle(name, input).pipe(
-        Effect.catchTags({
-          ExtensionLoadFailed: (failure) => Effect.fail(new ToolCallFailed({ message: failure.message })),
-          McpServerFailed: (failure) => Effect.fail(new ToolCallFailed({ message: failure.message })),
-        })
-      );
-    return host.tools.handle(name, { runId: run.id, attemptId, input, signal, requestId });
-  };
-  const tools = yield* createShinsaTools(run.role, handleTool, run.delegation?.depth ?? 0, [
-    ...(host.hooks.manages && !isDelegatedRun(run) ? listSurfaceToolSpecs() : []),
-    ...(loader?.specs ?? []),
-  ]);
+  const resolved = yield* resolveExtensions(run, pin);
   const startSession = host.hooks.startSession ?? provider.startSession;
   let sessionId = plan.fork ? null : plan.resume;
   const options = yield* resolveSpeed(run, provider, active.lease, true);
@@ -238,6 +231,28 @@ export const attemptTurn = Effect.fn('RunSupervisor.attempt')(function* (turn: T
     parentRunId: run.delegation?.parentRunId ?? null,
     fiber: active.fiber,
   });
+  const browserEndpoint = yield* issueBrowser(run).pipe(Scope.provide(scope));
+  const extensions = resolved ? resolveSessionBrowser(resolved, browserEndpoint) : null;
+  const createLoader = host.hooks.extensions?.createLoader;
+  const loader = yield* Effect.suspend(() =>
+    extensions && createLoader ? createLoader(extensions) : Effect.succeed(null)
+  );
+  const context = yield* Effect.context<never>();
+  const runSync = Effect.runSyncWith(context);
+  const handleTool: ToolHandler = (name, input, signal, requestId) => {
+    if (loader?.specs.some((spec) => spec.name === name))
+      return loader.handle(name, input).pipe(
+        Effect.catchTags({
+          ExtensionLoadFailed: (failure) => Effect.fail(new ToolCallFailed({ message: failure.message })),
+          McpServerFailed: (failure) => Effect.fail(new ToolCallFailed({ message: failure.message })),
+        })
+      );
+    return host.tools.handle(name, { runId: run.id, attemptId, input, signal, requestId });
+  };
+  const tools = yield* createShinsaTools(run.role, handleTool, run.delegation?.depth ?? 0, [
+    ...(host.hooks.manages && !isDelegatedRun(run) ? listSurfaceToolSpecs() : []),
+    ...(loader?.specs ?? []),
+  ]);
   const start = startSession({
     role: run.role,
     readOnly: isReadOnlyRun(run),
@@ -249,6 +264,7 @@ export const attemptTurn = Effect.fn('RunSupervisor.attempt')(function* (turn: T
     defaultBranch: turn.defaultBranch,
     pluginDir: world.config.pluginDir,
     tools,
+    browserEndpoint,
     ...(extensions
       ? { extensions, announceExtensions: !pin || !isSameExtensionSet(pin, extensions.loaded) }
       : {}),
