@@ -110,8 +110,13 @@ another provider drops the model it had, unless the same change names one (switc
 `defaultModel` the same way). Model names come from `KNOWN_AGENT_PROVIDERS` (Claude's `KNOWN_AGENT_MODELS`, "opus"
 is "Opus 5.5", and the curated `KNOWN_CODEX_MODELS`), so Settings shows the right names from the first paint;
 `GET /api/providers` then replaces them with each provider's live catalog (`listModels`: the Claude SDK's
-`supportedModels`, Codex's `model/list`), labelled the same way (`resolveModelLabel`). `GET /api/models` still
-serves the default provider's list, the one setup's Model step offers.
+`supportedModels`, Codex's `model/list`), labelled the same way (`resolveModelLabel`). Each provider keeps its
+catalog in an Effect `Cache` keyed by the program's path and version, for `MODEL_CATALOG_TTL` (5 minutes): an
+update to Claude Code or Codex is a new key, so the next read asks the new program straight away, and a failed or
+empty answer falls back to the built-in list without being kept, so the next read asks again. The web asks
+`GET /api/providers` on every mount of `useAgentProviders()` (Settings and its Agents section), showing the last
+list until the answer comes; readers that open at once share one request. `GET /api/models` still serves the
+default provider's list, the one setup's Model step offers.
 
 **The agent chooses the checks; Shinsa runs them.** A check is not an agent: it is a command the Agent chose for its
 task and Shinsa ran, so its result is a fact, never an agent's claim (Checks, below).
