@@ -47,6 +47,6 @@ describe('the app', () => {
   it('lets the window close once the app quits', async () => {
     const world = createWorld();
     await run(world, () => Effect.suspend(() => world.shellGuards?.beforeQuit ?? Effect.void));
-    expect(await closeWindow(world)).toBe(true);
+    expect(closeWindow(world)).toBe(true);
   });
 });
