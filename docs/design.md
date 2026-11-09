@@ -3004,12 +3004,12 @@ Only these, and they win over anything below:
       finds, ⌘L clears the scrollback (the engine's copy too, and `^L` to the shell outside a full-screen program, so
       the prompt is drawn again at the top; ⌘K stays the command menu, where Clear the scrollback is a command), ⌘+,
       ⌘− and ⌘0 set the font size, ⌘Home, ⌘End, ⌘PageUp and ⌘PageDown scroll; Home, End, PageUp and PageDown go to
-      the program, as in Ghostty. Every other ⌘ key is Shinsa's and the app's (⌘K, ⌘,, ⌘R, ⌘[…). Elsewhere it is
+      the program, as in Ghostty. Every other ⌘ key is Shinsa's and the app's (⌘K, ⌘,, ⌘N, ⌘[…). Elsewhere it is
       Ctrl+Shift+C, V, A, F and L, and Ctrl K goes to the shell, so ⌘K's menu opens from outside the terminal.
     - **⌘T and ⌘W.** While the Terminal page is open, ⌘T opens a tab (as New terminal does) and ⌘W closes the one in
       front with the rule above (`hooks/use-terminal-keys.ts`, the one page-level listener besides 14's, 32's and
-      34's). The Mac app's menu has no Close Window item, so ⌘W reaches the page there; a browser keeps both for its
-      own tabs.
+      34's). The page sees the key before the Mac app's menu, so there ⌘W closes the tab and File's Close Window
+      takes ⌘W only on other pages; a browser keeps both for its own tabs.
     - **Run in terminal.** Every shell fence marked `run` (```` ```bash run ````) in a task's prose, notes, chat and
       Overview, How to test's commands and the steps around the merge has Run in terminal in its code block's corner
       beside Copy; a plain ```` ```bash ```` fence is an example with Copy alone (`CodeBlock`, How
