@@ -27,7 +27,8 @@ src/
 │                   EngineSupervisor (register, wait 25 s kicking after 3 s, restart, the log tail)
 │   engine-actions/ EngineActions, the status page's and the menu's requests as a Stream
 │   first-health/   FirstHealth, the health check sent before the app is ready
-│   menu/           template.ts (the app menu, Go: Back ⌘[, Forward ⌘], Home ⇧⌘H); AppMenu
+│   menu/           template.ts (the app menu: File, Go and Help; no View menu, so no zoom, Reload or developer tools);
+│                   AppMenu (the page's actions over `shinsa:action`, the help links, the engine log)
 │   navigation/     origin.ts (what stays in the window, what opens in the browser, the page's permissions,
 │                   resolveHistoryStep)
 │   notifications/  notice.ts (the badge text, the settings pane); Notifications (the Dock badge, banners)
@@ -41,8 +42,8 @@ src/
 │   updates/        state.ts (states, menu item, notices, the go-back dialog), channel.ts (the channels, their
 │                   options, when a version ahead is offered the latest there); Updater (start, every four hours,
 │                   download, install with a 15 s timeout, channel switches)
-│   window/         bounds.ts, close.ts (close or hide); AppWindow (the page, navigation, Back and Forward, the
-│                   waiting page)
+│   window/         bounds.ts, close.ts (close or hide), context-menu.ts (the right-click text menu); AppWindow
+│                   (the page, navigation, Back and Forward, the waiting page)
 │   dialogs/ files/ host/ launchctl/ login-items/ login-shell/ native-notices/ native-tray/ native-window/
 │   power-monitor/ shell/ update-client/
 │                   The outside world as services with no logic: Electron, the file system, launchctl, a login
@@ -51,7 +52,7 @@ src/
 │                   and the Electron and Node layers of the outside-world services (`*Live`)
 └── preload/        index.ts: exposes `window.shinsaDesktop` (version, protocol, update, channel, windowState,
                     updateBadge, notify, openNotificationSettings, onNotifyFailed, installUpdate, checkForUpdates, applyUpdateChannel, answerDowngrade, onNavigate,
-                    onWindowState, onUpdate, onAway) to the server's page
+                    onWindowState, onUpdate, onAway, onAction) to the server's page
                     only; `protocol` is core's ENGINE_PROTOCOL, and the page compares both with the engine's
 static/waiting.html The "Shinsa is not running" page; trayTemplate.png and @2x, the menu bar item's icon (scripts/icon.ts)
 resources/          The app icons: icon.svg (the source), icon.png (1024px), icon.icns (electron-builder's `mac.icon`),

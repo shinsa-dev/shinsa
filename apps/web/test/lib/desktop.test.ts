@@ -19,7 +19,7 @@ import {
   subscribeDesktopUpdate,
   updateDesktopBadge,
 } from '@/lib/desktop.ts';
-import { installDesktop } from '../support/desktop.ts';
+import { IGNORED_ACTIONS, installDesktop } from '../support/desktop.ts';
 
 const NOTICE = { title: 'Paint it', body: 'Which colour?', tag: 'g-1', path: '/tasks/SW-1' };
 
@@ -33,7 +33,7 @@ afterEach(() => {
 describe('in a browser', () => {
   it('finds no app, marks nothing and sends nothing', () => {
     expect(isDesktop()).toBe(false);
-    const stop = applyDesktop(() => undefined);
+    const stop = applyDesktop(() => undefined, IGNORED_ACTIONS);
     expect(document.documentElement.dataset.desktop).toBeUndefined();
     stop();
     updateDesktopBadge(3);
@@ -70,7 +70,7 @@ describe('in the desktop app', () => {
 
   it('marks the page for the title bar and follows full screen', () => {
     fake = installDesktop();
-    const stop = applyDesktop(() => undefined);
+    const stop = applyDesktop(() => undefined, IGNORED_ACTIONS);
     expect(isDesktop()).toBe(true);
     expect(document.documentElement.dataset.desktop).toBe('window');
     fake.changeWindowState('fullscreen');
@@ -83,9 +83,36 @@ describe('in the desktop app', () => {
   it('opens the pages the app asks for', () => {
     fake = installDesktop();
     const opened: string[] = [];
-    const stop = applyDesktop((path) => opened.push(path));
+    const stop = applyDesktop((path) => opened.push(path), IGNORED_ACTIONS);
     fake.navigate('/settings');
     expect(opened).toEqual(['/settings']);
+    stop();
+  });
+
+  it('carries out the actions the app’s menu sends and ignores any it does not know', () => {
+    fake = installDesktop();
+    const done: string[] = [];
+    const stop = applyDesktop(() => undefined, {
+      'new-task': () => done.push('new-task'),
+      'command-menu': () => done.push('command-menu'),
+      'whats-new': () => done.push('whats-new'),
+    });
+    fake.act('new-task');
+    fake.act('command-menu');
+    fake.act('whats-new');
+    fake.act('format-disk');
+    expect(done).toEqual(['new-task', 'command-menu', 'whats-new']);
+    stop();
+    expect(fake.listeners()).toBe(0);
+    fake.act('new-task');
+    expect(done).toHaveLength(3);
+  });
+
+  it('listens to an older app that sends no actions', () => {
+    fake = installDesktop();
+    delete fake.bridge.onAction;
+    const stop = applyDesktop(() => undefined, IGNORED_ACTIONS);
+    expect(document.documentElement.dataset.desktop).toBe('window');
     stop();
   });
 

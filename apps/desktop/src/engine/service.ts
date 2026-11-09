@@ -13,6 +13,7 @@ import {
   listEngineVariables,
   parseLaunchdJob,
   resolveDataDir,
+  resolveEngineLog,
   resolveEngineProgram,
   resolveEngineTarget,
   resolveLaunchAgentPath,
@@ -73,7 +74,10 @@ export class EngineSupervisor extends Context.Service<
       const readDataText = (file: string) => files.readText(join(dataDir, file));
       const readDetails = Effect.gen(function* () {
         const log = yield* readDataText(ENGINE_LOG);
-        return [`Engine log: ${join(dataDir, ENGINE_LOG)}`, resolveLogTail(Option.getOrElse(log, () => ''))]
+        return [
+          `Engine log: ${resolveEngineLog(host.env, host.home)}`,
+          resolveLogTail(Option.getOrElse(log, () => '')),
+        ]
           .filter(Boolean)
           .join('\n\n');
       });
