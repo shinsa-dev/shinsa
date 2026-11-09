@@ -1083,12 +1083,12 @@ folds in `state/shapes.ts`).
   (a veto, `closeProposal`) leads, and going on drops to the quiet link; ⌘K orders them the same way. A find-and-fix
   diagnosis with `close` reshapes the task to `[investigate, your_ok, …]` (`by: agent`) so it stops for your OK instead
   of planning a fix.
-- **Suggested replies.** Any hand-over but the reviewer's can carry up to three `actions` (`label`, `message`).
+- **Suggested replies.** Any hand-over but the reviewer's can carry at most two `actions` (`label`, `message`), and agents are told to add them rarely: only for a real fork the gate's own buttons do not cover.
   `task.actions_suggested` keeps them on `task.suggestedActions`; the next hand-over replaces them, and your message
   that reaches the agent or your answer to a gate clears them (a message only kept for a later agent does not). The
-  plan, proposal, review, merge and result cards show them as outline buttons before the main one, ⌘K lists them as
-  "Suggested reply" while one of those gates is open, and both show them only while a message can reach the agent. A
-  click sends the message as yours (`task.message`), so it does what typing it does there: at review it asks for
+  plan, proposal, review, merge and result cards list them in one outline Replies menu before the main button, each label with its message under it, ⌘K lists them as
+  "Suggested reply" while one of those gates is open, and both show them only while a message can reach the agent.
+  Choosing one sends the message as yours (`task.message`), so it does what typing it does there: at review it asks for
   changes in this round, at your OK it declines the proposal and resumes the inquiry.
 - **Changing shape mid-task.** An answerer, investigator or researcher can end with `propose_change` (`request` at most 2,000
   characters, `why` at most 240). On a task without `your_ok` whose pipeline does not already go on to a plan (a fix
@@ -1352,6 +1352,14 @@ bundle with `create_task`'s `stack_on_this` (never with `this_task_waits` or `af
 `stacked` (Delegation, below). Triage stacks a new task on an open change when it is that change's next piece
 (`stacks_on`, Task shapes, above). Stacking on a task it already waits on moves that wait into the stack.
 
+- **No wait inside a bundle.** A bundle merges as one, so a task that waits for another task of its own bundle to
+  merge would hold the bundle while the bundle holds it. A wait on any member, below, above or beside it, is dropped:
+  `changeStack` drops it from every member of the bundle a stack change leaves (joining two bundles drops the waits
+  between them), and `task.wait_on`, `task.create` and triage never add one (`isBundleMember`, `state/queries.ts`). A
+  wait already in the log on a member holds nothing (`listDependencies` skips it), so the task starts and the lead's
+  merge gate opens as if it were gone. A task stacked on a bundle that opens no pull request of its own is not a member,
+  and keeps its waits.
+
 - **A graph, not a line.** A task can stack on several tasks and several tasks can stack on one, so a bundle fans out
   and back in: A, then B, C and D on A, then F on B, C and D, then E on F. A bundle is every task connected to a task
   by stacks, either way (`resolveBundleMembers`, `state/queries.ts`), in topological order: each task after every task
@@ -1538,9 +1546,12 @@ says so in its plan instead of an agent splitting the request before anyone read
 lists the other parts (a title, a request that stands on its own, and when each starts: now, waiting on this task or
 an earlier part, or stacked on one), and the phases cover only the work that stays (`docs/protocol.md` → Plan
 parameters). The planning prompt says when (`describePlanSplit`, `prompts/roles.ts`): only for a task that opens a
-pull request, parts in parallel by default, waiting only on code on an unmerged branch, stacked only for pieces of one
-rewrite, and a small or cohesive request kept whole. Such a plan always waits for you. The plan card leads with
-Start N tasks (counting this task) over the list of parts, with Keep as one task beside it, and ⌘K offers both.
+pull request; parts that serve one goal (pieces of one feature, a change and its follow-ups, work on the same code)
+stacked as a bundle, which is how most splits end; in parallel only for a part with a different goal worth merging
+alone; waiting only on code on an unmerged branch that should ship apart; and a small or cohesive request kept whole. Such a plan always waits for you. The plan card leads with
+Start N tasks (counting this task) over the list of parts, with Keep as one task beside it, and ⌘K offers both; when
+every part stacks back onto this task the split is one bundle, and the card says so (Start N-task bundle,
+`countBundledTasks`, `lib/tasks/split.ts`), and a mixed split names how many of its tasks form the bundle.
 Start N tasks approves the plan, and `startPlanSplit` (`decide/couriers.ts`) creates each part as a task under this
 one (`createdBy` `split`, the planning run), forked from it (`forkOf`), so its agent starts from this conversation and
 then plans for itself, with its wait or stack set; it shares the creation with `split_task` and is recorded as the
@@ -2841,8 +2852,8 @@ and the run supervisor.
   `split_task` (the Agent) turns the accepted plan into one to eight tasks (`tasks[].request`), exactly once per plan
   version, recorded on the task (`splits`, `planVersion`); a second call returns the same tasks. With `stacked` the
   parts are a bundle chained on this task (the first stacks on this task, each next one on the one before, all
-  merging together, Scheduling → Bundles), for a rewrite whose pieces ship at once; it is refused next to
-  `this_task_waits`. Without it each part starts at once and ships on its own. These are the only
+  merging together, Scheduling → Bundles), the usual choice whenever the parts serve one goal; it is refused next to
+  `this_task_waits`. Without it each part starts at once and ships on its own, only for parts with different goals. These are the only
   ways a task agent files a task: its management tools leave out `tasks create`, which stays for you and the command
   line.
 - **In the web.** Delegated runs show in their parent's turn (spawn, report, Stop, the child's own
@@ -3040,8 +3051,9 @@ running when the window closes or the app quits, and a page that comes back find
   would not free enough. When all of them run, `terminal_limit` names who holds them, each task by its handle with
   its services and shells, and how many are yours (`resolveLimitMessage`), so an agent's `run_service` or you can free
   one. On start, `resumeServices` drops the ended terminals of finished and unknown tasks before anything resumes.
-- **When the engine stops.** `stop()` hangs up every shell (`SIGHUP` and the PTY closed, as closing a terminal window
-  does, then `SIGKILL` after 3 s), so nothing it started outlives the engine, and saves each screen. A restarted
+- **When the engine stops.** `stop()` hangs up every shell and its process group (`SIGHUP` and the PTY closed, as
+  closing a terminal window does, then `SIGKILL` after 3 s) and waits until each group is empty, so nothing it started
+  outlives the engine, and saves each screen. A restarted
   engine cannot have the shell back: a terminal that was running shows as `stopped`, with its last screen and Start
   again, which starts a new shell in the same folder below the old output. Closing a terminal hangs it up and deletes
   its screen.
@@ -3110,8 +3122,12 @@ beside your run (Runs for a task, below).
   adds how long it has been so, `resolveServicesSummary` the counts the header shows.
 - **Start, stop, restart.** `POST /api/services/<id>/start` opens the service's terminal the first time and starts its
   command again in the same tab after that, below the old output (a start of a running one does nothing). `/stop`
-  hangs it up as closing a terminal window does (`SIGHUP` and the PTY closed, `SIGKILL` 3 s later): the whole
-  process group, so a dev server and the watchers it started end together, and the tab stays with its last screen.
+  hangs it up as closing a terminal window does, but to the whole process group the shell leads, not the shell alone
+  (`SIGHUP` to `-pid` and the PTY closed, `SIGKILL` to the group 3 s later), so a dev server and the watchers it
+  started end together, and the tab stays with its last screen. The stop counts as done only once no process in the
+  group is alive (`TerminalPty`'s `hangUpGroup` polls signal 0 on `GROUP_POLL_SCHEDULE`, 3 s after each signal), so a
+  server that takes a moment to let go of its port has let go by the time a start runs. A shell that exits on its own
+  has whatever it left in its group stopped the same way, so no server outlives its run as an orphan.
   `/restart` stops and starts. `POST /api/services/start-all { projectId }` starts every service of a project that is
   not running. Closing a service's tab stops it and forgets the tab; the service stays.
 - **Runs for a task.** A run is a service's terminal with its `taskId`: `null` for yours, in the service's own
@@ -3127,8 +3143,10 @@ beside your run (Runs for a task, below).
   `service_place_invalid`, a worktree without the folder `terminal_place_missing`. Renaming a service renames every
   run's tab and removing one closes them all.
 - **A port per run.** Every task run gets a port of its own, chosen as it starts (`Terminals.#resolvePort`,
-  `pickFreePort` in `pty.ts`: the run's last port while it is still free, else a port the system hands out for
-  `Bun.listen` on port 0, never one another running service holds; `service_port_unavailable` when none is), kept on
+  `TerminalPty.pickPort`: the run's last port, tried again every 100 ms for up to 5 s while something still holds it
+  (`PORT_RELEASE_SCHEDULE`), so a restart comes back on the same port and every link to it keeps working; only after
+  that a port the system hands out for `Bun.listen` on port 0, never one another running service holds;
+  `service_port_unavailable` when none is), kept on
   `TerminalInfo.port` and put in the service's port variable over its own variables, so a task's run never meets
   yours or another task's. Your run is unchanged unless the service has a preview URL; with one it uses the port its
   own variables set, else a free port it keeps across restarts. The command must listen on that variable: Next and
@@ -6921,8 +6939,9 @@ main.ts ──► BunRuntime.runMain(the CLI's program)       the one run in the
   scope, a report it cannot place or read the typed `CoverageReportUnreadable`, answered as unavailable with its
   reason. `TerminalFiles` keeps data/terminals/ on `JsonFile`, every saved terminal and service decoded by a schema
   (`StoredTerminal`, `StoredService`) and one that breaks it dropped; `TerminalPty` spawns your shell in Bun's PTY as
-  a scoped resource whose release hangs it up and kills it after `HANG_UP_GRACE` (3 s), reads the program in front
-  through `Shell`, and picks a free port with `PORT_RETRY` (20 tries), `PortUnavailable` when none is free. Every
+  a scoped resource whose release hangs up its process group and kills it after `HANG_UP_GRACE` (3 s), waiting until
+  the group is empty, reads the program in front through `Shell`, and picks a port: the run's last one on
+  `PORT_RELEASE_SCHEDULE` (5 s), else a free one with `PORT_RETRY` (20 tries), `PortUnavailable` when none is free. Every
   `package.json` and `deno.json` a check, the coverage detection or the service detection reads goes through one
   lenient schema (`files/schema.ts`: `PackageManifest`), which keeps the fields it can read and drops the rest.
 - **Accounts and secrets.** `AccountRegistry` keeps `accounts.json`, `usage-limits.json`, `provider-usage.json` and

@@ -230,11 +230,23 @@ const PORT_ATTEMPTS = 20;
 
 export const PORT_RETRY = Schedule.recurs(PORT_ATTEMPTS - 1);
 
+const PORT_RELEASE = Duration.seconds(5);
+
+const PORT_RELEASE_POLL = Duration.millis(100);
+
+export const PORT_RELEASE_SCHEDULE = Schedule.spaced(PORT_RELEASE_POLL).pipe(
+  Schedule.upTo({ duration: PORT_RELEASE })
+);
+
 export const NO_FREE_PORT = 'No free port for the service.';
 
 export const FOLDER_GONE_MESSAGE = 'That folder is not there anymore.';
 
 export const HANG_UP_GRACE = Duration.seconds(3);
+
+const GROUP_POLL = Duration.millis(50);
+
+export const GROUP_POLL_SCHEDULE = Schedule.spaced(GROUP_POLL);
 
 export const FOREGROUND_TIMEOUT = Duration.seconds(5);
 

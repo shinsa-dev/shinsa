@@ -61,7 +61,7 @@ const SUGGESTING_TOOLS: readonly ShinsaToolName[] = [
 ];
 
 const ACTIONS_RULE =
-  'When your hand-over leaves the human a plain choice the usual buttons do not cover, such as doing the renames or leaving them, add `actions`: up to three replies, each a short `label` for its button and the `message` it sends you as their feedback. Leave it out when approving or closing is the only sensible next step.';
+  'Suggest replies rarely. Only when your hand-over leaves the human a real fork the gate’s own buttons do not cover, such as doing the renames or leaving them, add `actions`: at most two replies, each a short `label` and the `message` it sends you as their feedback, listed in one Replies menu. Leave it out when approving, closing or typing a message is enough.';
 
 function listToolRules(tools: readonly ShinsaToolName[]) {
   return [

@@ -285,6 +285,37 @@ const CHECKOUT_SPLIT_PLAN: PlanDocument = {
   ],
 };
 
+const ONBOARDING_BUNDLE_PLAN: PlanDocument = {
+  goal: 'Add the welcome screen of the new onboarding. The goals step and the paywall step stack on it as one bundle.',
+  phases: [
+    {
+      title: 'Add the welcome screen',
+      detail: 'The first onboarding screen shows the app name and a Continue button.',
+    },
+    { title: 'Route new users to it', detail: 'A first launch opens onboarding instead of the home screen.' },
+  ],
+  behaviour: ['A first launch opens the welcome screen.', 'Continue moves to the next onboarding step.'],
+  approach: 'A new onboarding route that the app opens until onboarding is finished.',
+  files: [{ path: 'app/onboarding/welcome.tsx', change: 'New welcome screen.' }],
+  outOfScope: ['The goals and paywall steps, which stack on this task.'],
+  verification: [createPlanCheck('Onboarding tests', 'bun test app/onboarding', [1, 2])],
+  questions: [],
+  split: [
+    {
+      title: 'Add the goals step to onboarding',
+      request: 'Add the onboarding step after the welcome screen where people pick their goals.',
+      order: 'stacks_on',
+      on: 0,
+    },
+    {
+      title: 'Add the paywall step to onboarding',
+      request: 'End onboarding on the paywall, after the goals step.',
+      order: 'stacks_on',
+      on: 1,
+    },
+  ],
+};
+
 const RATE_LIMIT_REVISED: PlanDocument = {
   ...RATE_LIMIT_PLAN,
   phases: [
@@ -671,6 +702,32 @@ function listLimitTasks({ paywall, kanna }: SeedRepoPair, exportBackoffPath: str
         type: 'plan',
         title: 'Checkout price, coupons and receipts',
         body: serializePlanMarkdown(CHECKOUT_SPLIT_PLAN),
+      },
+    },
+    {
+      id: 'task-onboarding-bundle',
+      request: 'Build the new onboarding: a welcome screen, a goals step and a paywall at the end.',
+      title: 'New onboarding flow',
+      repo: paywall,
+      size: 'small',
+      stage: 'awaiting_plan',
+      reason: 'the plan splits the work into a bundle',
+      branch: 'feat/onboarding-welcome',
+      ageHours: 0.4,
+      plan: ONBOARDING_BUNDLE_PLAN,
+      runs: [
+        {
+          role: 'agent',
+          purpose: 'plan',
+          minutes: 4,
+          summary: 'Planned the welcome screen here and stacked the goals and paywall steps on it.',
+          handover: createPlanHandover(ONBOARDING_BUNDLE_PLAN),
+        },
+      ],
+      gate: {
+        type: 'plan',
+        title: 'New onboarding flow',
+        body: serializePlanMarkdown(ONBOARDING_BUNDLE_PLAN),
       },
     },
     {

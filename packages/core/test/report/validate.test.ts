@@ -1278,7 +1278,7 @@ describe('the shape hand-overs', () => {
     });
   });
 
-  test('every hand-over carries up to three suggested replies, each with a short label and its message', () => {
+  test('every hand-over carries at most two suggested replies, each with a short label and its message', () => {
     const actions = [
       { label: ' Do the renames ', message: 'Rename them as you listed.' },
       { label: 'Leave them', message: 'Keep the names as they are.' },
@@ -1299,14 +1299,13 @@ describe('the shape hand-overs', () => {
       errorsOf(
         validateDelivery('research', {
           report: 'Done.',
-          actions: [action, { label: 'x'.repeat(41), message: '' }, action, action],
+          actions: [action, { label: 'x'.repeat(41), message: '' }, action],
         })
       )
     ).toEqual([
-      'actions has 4 items; the limit is 3.',
+      'actions has 3 items; the limit is 2.',
       'actions[1].label is 41 characters; the limit is 40.',
       'actions[1].message is required.',
-      'actions names a label twice.',
     ]);
     expect(
       errorsOf(validateFixHandOver({ summary: 'Fixed.', actions: [action, { ...action, label: 'go' }] }))

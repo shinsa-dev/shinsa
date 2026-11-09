@@ -244,7 +244,7 @@ one reads as its empty value. The fields under Triage and shape, Plan and build,
 | `triageDecisions?` | `{ shape, start, priority }` each `{ value, why }` \| null, `stack?` `{ value, why }`, and `duplicate?` `{ unreached }` | triage's choice and why, per Auto part; `stack` is the tasks triage stacked it on, present only when it did; `duplicate.unreached` lists the team machines (`UnreachedTeammate`: `{ teamId, machineId, name, owner }`, `owner` a `TeammateOwner` `{ login, name, avatarUrl }` or null) whose tasks the team-wide duplicate check could not read |
 | `shapeChanges?` | `ShapeChange[]` (last 20) | each pipeline change: from, to, by (`you`, `agent`, `shinsa`), reason |
 | `proposal?` | `ChangeProposal` \| null | an inquiry's proposal: request, why, status (`open`, `accepted`, `declined`), `recommend` (`go_on` or `close`, the agent's advice; `close` puts Close first on the card) |
-| `suggestedActions?` | `SuggestedAction[]` (at most 3) | the replies the agent's last hand-over suggested, each a `label` and the `message` it sends as yours; cleared when your message reaches the agent or you answer a gate, replaced by the next hand-over |
+| `suggestedActions?` | `SuggestedAction[]` (at most 2) | the replies the agent's last hand-over suggested, each a `label` and the `message` it sends as yours; cleared when your message reaches the agent or you answer a gate, replaced by the next hand-over |
 | `planFirst` | boolean | plan first: the plan always waits at a gate |
 | `backlog?` | `{ at }` \| null | in the backlog since `at`: its plan gate opens and is held out of Needs you until you start it |
 | `share?` | `TaskShare` \| null | shared by link since `at`: `url` once the engine made the link (null while `share.link` runs), which holds the share id and, in its fragment, the key; `limit` how long (`ShareLimit`: `until_done`, `hour`, `day`, `week`, `none`), `scopes` the view scopes it shows (`ViewScope`s in order, identity always among them; a preset is a list in `SHARE_PRESET_SCOPES`, and the label Status, Standard, Full access or Custom comes from `resolveShareScopesPreset`) and `endsAt` when a time limit runs out (null otherwise); `failure` the reason the link could not be made, cleared once it is; `description` the summary the writer wrote of what the task addresses when sharing started (`share.describe`) (`docs/engine.md` → Sharing a task) |
@@ -725,7 +725,7 @@ The agent composes steps and sets plan parameters while it plans; it cannot add 
   a change; the plan gate shows it and the round takes it once the plan is accepted, `task.retitled`), `split` (the
   other parts of the request that ship as their own pull requests, only for a task that opens one: up to 8
   (`PROTOCOL_LIMITS.splitParts`), each a `title` (named once), a `request` that stands on its own, an `order`
-  (`PLAN_SPLIT_ORDERS`: `parallel`, `waits_on`, `stacks_on`) and, for `waits_on` and `stacks_on` only, `on`: 0 for this
+  (`PLAN_SPLIT_ORDERS`: `parallel`, `waits_on`, `stacks_on`, the usual one for parts of one goal) and, for `waits_on` and `stacks_on` only, `on`: 0 for this
   task or an earlier part's number, so the parts cannot wait on each other in a loop; the phases cover only the work
   that stays here, and the plan gate always opens for it, `splits`). A refusal is `plan_invalid`.
 - **Checks later**: `check_changes` on `complete_phase` and `complete_fix` (Checks, below).

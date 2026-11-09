@@ -23,6 +23,7 @@ import { resolveFocusProject } from '../queue/rank.ts';
 import { resolveNextHandle } from '../state/project.ts';
 import { findProject, findRepo } from '../state/queries.ts';
 import {
+  isBundleMember,
   isDependencyOf,
   isTriaged,
   isWaitingForCheckout,
@@ -86,9 +87,7 @@ export function createTask(decider: Decider, command: CommandOf<'task.create'>, 
     throw new DomainError({ code: 'intent_required', message: 'Describe what you want done.' });
   assertRepo(decider, command.repoId);
   const stacksOn = resolveStackParents(decider, null, command.stacksOn ?? [], command.repoId);
-  const waitsOn = resolveDependencies(decider, null, command.waitsOn ?? []).filter(
-    (id) => !stacksOn.includes(id)
-  );
+  const dependencies = resolveDependencies(decider, null, command.waitsOn ?? []);
   const created = resolveCreatedProject(decider, command);
   const projectId = created.projectId;
   if (command.forkOf !== undefined) decider.task(command.forkOf);
@@ -121,21 +120,24 @@ export function createTask(decider: Decider, command: CommandOf<'task.create'>, 
     ...lineage,
   });
   const by = lineage.createdBy ? 'shinsa' : 'you';
-  if (waitsOn.length > 0) decider.emit({ type: 'task.waits_on_changed', taskId, waitsOn, by });
   if (stacksOn.length > 0) changeStack(decider, taskId, stacksOn, by);
+  const waitsOn = dependencies.filter(
+    (id) => !stacksOn.includes(id) && !isBundleMember(decider.state, decider.task(taskId), id)
+  );
+  if (waitsOn.length > 0) decider.emit({ type: 'task.waits_on_changed', taskId, waitsOn, by });
   if (command.backlog) addToBacklog(decider, taskId);
   decider.run({ kind: 'task.triage', taskId });
   return taskId;
 }
 
 function inferDependencies(decider: Decider, taskId: string, ids: string[], stacked: string[]) {
+  const bundled = [decider.task(taskId), ...stacked.map((id) => decider.task(id))];
   return [...new Set(ids)].filter((id) => {
     const dependency = decider.state.tasks[id];
     return (
       dependency !== undefined &&
       id !== taskId &&
-      !stacked.includes(id) &&
-      !decider.state.tasks[taskId]?.stacksOn?.includes(id) &&
+      !bundled.some((member) => isBundleMember(decider.state, member, id)) &&
       !isTaskSettled(dependency) &&
       !isDependencyOf(decider.state, taskId, id)
     );

@@ -326,7 +326,7 @@ const SPLIT = {
         type: 'string',
         enum: [...PLAN_SPLIT_ORDERS],
         description:
-          'When it starts. parallel: now, beside this task (the default choice). waits_on: once the task named in on is merged, only when it needs code that exists only on that branch. stacks_on: on top of the branch of the task named in on, merging together with it, only for pieces of one rewrite.',
+          'When it starts. stacks_on (the usual choice): on top of the branch of the task named in on, merging together with it as a bundle, for every part that serves the same goal as this task, such as the next piece of one feature or a follow-up on the same code. parallel: now, beside this task, only for a part with a different goal that is worth merging alone. waits_on: once the task named in on is merged, only when it needs code that exists only on that branch and should ship apart.',
       },
       on: {
         type: 'integer',

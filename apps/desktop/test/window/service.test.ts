@@ -5,6 +5,7 @@ import { describeEngineScreen } from '../../src/engine/screen.ts';
 import type { NativeWindowEvent, WindowGuards } from '../../src/window/schema.ts';
 import { AppWindow } from '../../src/window/service.ts';
 import {
+  closeWindow,
   CONTENTS_ID,
   createWorld,
   type DesktopWorld,
@@ -104,17 +105,23 @@ describe('the window', () => {
     expect(world.shell).toEqual(['open https://github.com/shinsa']);
   });
 
-  it('hides on close, keeps its bounds, and closes once the app quits', async () => {
+  it('hides on close and closes once the app quits, deciding synchronously as Electron asks', async () => {
     const world = createWorld();
-    const answers = await run(world, (window, guards) =>
+    const answers = await run(world, (window) =>
       Effect.gen(function* () {
-        const hidden = yield* guards.close;
+        const hidden = closeWindow(world);
         yield* window.markQuitting;
-        return [hidden, yield* guards.close];
+        return [hidden, closeWindow(world)];
       })
     );
     expect(answers).toEqual([false, true]);
     expect(world.window).toEqual(['hide']);
+    expect(world.files.has(`${USER_DATA}/prefs.json`)).toBe(false);
+  });
+
+  it('saves its bounds once you finish moving or resizing it', async () => {
+    const world = createWorld();
+    await run(world, () => emit(world, { _tag: 'BoundsChanged' }));
     expect(JSON.parse(world.files.get(`${USER_DATA}/prefs.json`) ?? '{}')).toMatchObject({
       windowBounds: world.bounds,
     });
@@ -122,10 +129,10 @@ describe('the window', () => {
 
   it('leaves full screen before it hides, and tells the page each change', async () => {
     const world = createWorld({ fullScreen: true });
-    const states = await run(world, (window, guards) =>
+    const states = await run(world, (window) =>
       Effect.gen(function* () {
         const full = yield* window.windowState;
-        const closed = yield* guards.close;
+        const closed = closeWindow(world);
         world.fullScreen = false;
         yield* emit(world, { _tag: 'FullScreen', on: false });
         yield* emit(world, { _tag: 'FullScreen', on: true });
