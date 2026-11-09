@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { DomainError, SECRET_REF_PATTERN } from '@shinsa/core';
 import { Clock, Context, Effect, Layer, Ref, Semaphore } from 'effect';
 import { EngineConfig } from '../../config/service.ts';
+import type { GitHubIdentity } from '../../github/identity/schema.ts';
 import { SecretFiles } from '../files/service.ts';
 import {
   HOOK_TOKEN_BYTES,
@@ -12,6 +13,7 @@ import {
   SECRET_REF_TTL_MS,
   SECRETS_FILE,
   type SecretFile,
+  type StoredGitHubToken,
   type WebhookCredentials,
 } from '../schema.ts';
 
@@ -30,6 +32,9 @@ export class SecretStore extends Context.Service<
     selectMcpCredentials(serverId: string): Effect.Effect<McpCredentials>;
     updateMcpCredentials(serverId: string, patch: McpCredentials): Effect.Effect<void>;
     removeMcpCredentials(serverId: string): Effect.Effect<void>;
+    selectGitHubToken(login: string): Effect.Effect<StoredGitHubToken | null>;
+    writeGitHubToken(identity: GitHubIdentity): Effect.Effect<StoredGitHubToken>;
+    removeGitHubToken(login: string): Effect.Effect<void>;
   }
 >()('shinsa/engine/secrets/store/SecretStore') {
   static readonly layer = Layer.effect(
@@ -155,6 +160,26 @@ export class SecretStore extends Context.Service<
         yield* write({ ...known, mcp });
       });
 
+      const selectGitHubToken = (login: string) =>
+        Effect.map(file, (known) => known.github[login.toLowerCase()] ?? null);
+
+      const writeGitHubToken = Effect.fn('SecretStore.writeGitHubToken')(function* (
+        identity: GitHubIdentity
+      ) {
+        const stored = { ...identity, savedAt: yield* clock.currentTimeMillis };
+        const known = yield* file;
+        yield* write({ ...known, github: { ...known.github, [identity.login.toLowerCase()]: stored } });
+        return stored;
+      });
+
+      const removeGitHubToken = Effect.fn('SecretStore.removeGitHubToken')(function* (login: string) {
+        const key = login.toLowerCase();
+        const known = yield* file;
+        if (!(key in known.github)) return;
+        const { [key]: _removed, ...github } = known.github;
+        yield* write({ ...known, github });
+      });
+
       return SecretStore.of({
         resolveRef,
         writeRef: serially(writeRef),
@@ -168,6 +193,9 @@ export class SecretStore extends Context.Service<
         selectMcpCredentials,
         updateMcpCredentials: serially(updateMcpCredentials),
         removeMcpCredentials: serially(removeMcpCredentials),
+        selectGitHubToken,
+        writeGitHubToken: serially(writeGitHubToken),
+        removeGitHubToken: serially(removeGitHubToken),
       });
     })
   );

@@ -1,5 +1,5 @@
-import { DAY_MS } from '../domain/time.ts';
 import { CLAUDE_PROVIDER } from '../agent-models/index.ts';
+import { DAY_MS } from '../domain/time.ts';
 import type { AccountSummary, AccountsSnapshot, AccountUsage } from '../protocol/accounts.ts';
 import type {
   ForecastAccount,
@@ -119,7 +119,14 @@ export function listProviderForecastAccounts(
   if (provider === CLAUDE_PROVIDER) return listForecastAccounts(snapshot.accounts, now, options);
   const login = snapshot.providers?.find((entry) => entry.provider === provider);
   if (!login?.usage || login.status === 'signed_out') return [];
-  const account = resolveForecastAccount(provider, login.email ?? login.label, login.usage, null, now, options);
+  const account = resolveForecastAccount(
+    provider,
+    login.email ?? login.label,
+    login.usage,
+    null,
+    now,
+    options
+  );
   return account ? [account] : [];
 }
 

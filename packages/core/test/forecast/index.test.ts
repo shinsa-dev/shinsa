@@ -293,10 +293,9 @@ describe('the forecast of each provider in a snapshot', () => {
   };
 
   test('lists Claude first, then every other provider signed in', () => {
-    expect(listForecastProviders(snapshot({ providers: [{ ...codex, provider: 'claude' }, codex] }))).toEqual([
-      'claude',
-      'codex',
-    ]);
+    expect(listForecastProviders(snapshot({ providers: [{ ...codex, provider: 'claude' }, codex] }))).toEqual(
+      ['claude', 'codex']
+    );
   });
 
   test('reads Claude from its accounts, and another provider from its own sign-in', () => {
@@ -310,13 +309,18 @@ describe('the forecast of each provider in a snapshot', () => {
     expect(listProviderForecastAccounts(signedOut, 'codex', NOW)).toEqual([]);
     const unread = snapshot({ providers: [{ ...codex, usage: undefined }] });
     expect(listProviderForecastAccounts(unread, 'codex', NOW)).toEqual([]);
-    const unlabelled = snapshot({ providers: [{ ...codex, email: null, usage: { ...codex.usage, windows: [] } }] });
+    const unlabelled = snapshot({
+      providers: [{ ...codex, email: null, usage: { ...codex.usage, windows: [] } }],
+    });
     expect(listProviderForecastAccounts(unlabelled, 'codex', NOW)).toEqual([]);
   });
 
   test('gives each provider its safe pace with usable resets counted, or none with nothing to forecast', () => {
     const out = weekly(100, NOW + 144 * HOUR_MS);
-    const [claude] = listProviderPaces(snapshot({ accounts: [summary({ usage: { ...out, resetGrants: [grant({})] } })] }), NOW);
+    const [claude] = listProviderPaces(
+      snapshot({ accounts: [summary({ usage: { ...out, resetGrants: [grant({})] } })] }),
+      NOW
+    );
     const [plain] = listProviderPaces(snapshot({ accounts: [summary({ usage: out })] }), NOW);
     expect(plain?.pace).toBe(0);
     expect(claude?.pace ?? 0).toBeGreaterThan(10);

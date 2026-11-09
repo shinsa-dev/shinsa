@@ -1,5 +1,4 @@
 import {
-  briefingKey,
   DomainError,
   decide,
   PROCESS_BOUND_EFFECTS,
@@ -73,10 +72,7 @@ export class EngineCore extends Context.Service<
       command: ShinsaCommand,
       options?: DispatchOptions
     ): Effect.Effect<ShinsaEvent[], DomainError | EngineStopped>;
-    writeBriefing(
-      projectId: string | null,
-      written: WrittenBriefing
-    ): Effect.Effect<void, DomainError | EngineStopped>;
+    writeBriefing(key: string, written: WrittenBriefing): Effect.Effect<void, DomainError | EngineStopped>;
     hasReceipt(id: string): Effect.Effect<boolean>;
     readonly writeSnapshot: Effect.Effect<boolean>;
     replaceHandlers(handlers: Partial<EffectHandlers>): Effect.Effect<void>;
@@ -133,7 +129,7 @@ export class EngineCore extends Context.Service<
         replay.state.seq = Math.max(replay.state.seq, read.lastSeq);
         const storedBriefings = yield* briefings.list;
         const booted = storedBriefings.reduce(
-          (state, { projectId, stored: briefing }) => replaceBriefing(state, projectId, briefing),
+          (state, { key, stored: briefing }) => replaceBriefing(state, key, briefing),
           replay.state
         );
         const found: LogProblem[] = [
@@ -330,6 +326,7 @@ export class EngineCore extends Context.Service<
             onBehalf: dispatchOptions.onBehalf === true,
             byTask: dispatchOptions.byTask ?? null,
             guest: dispatchOptions.guest ?? null,
+            actor: dispatchOptions.actor ?? null,
           };
           return yield* Semaphore.withPermit(
             queue,
@@ -338,7 +335,7 @@ export class EngineCore extends Context.Service<
         });
 
         const writeBriefing = Effect.fn('Engine.writeBriefing')(function* (
-          projectId: string | null,
+          key: string,
           written: WrittenBriefing
         ) {
           yield* assertOpen;
@@ -346,10 +343,10 @@ export class EngineCore extends Context.Service<
             queue,
             Effect.gen(function* () {
               const briefing = { ...written, at: yield* Clock.currentTimeMillis };
-              yield* briefings.write(projectId, briefing);
+              yield* briefings.write(key, briefing);
               const previous = yield* Ref.get(state);
-              yield* Ref.set(state, replaceBriefing(previous, projectId, briefing));
-              yield* notify({ previous, changes: { briefings: [briefingKey(projectId)] } });
+              yield* Ref.set(state, replaceBriefing(previous, key, briefing));
+              yield* notify({ previous, changes: { briefings: [key] } });
             })
           );
         });

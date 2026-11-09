@@ -22,6 +22,7 @@ export class SecretFiles extends Context.Service<
         refs: {},
         hooks: {},
         mcp: {},
+        github: {},
       }));
 
       const replaceUnreadable = Effect.fn('SecretFiles.replaceUnreadable')(function* (
@@ -53,6 +54,7 @@ export class SecretFiles extends Context.Service<
             ])
           ),
           mcp: fields.mcp ?? {},
+          github: fields.github ?? {},
         } satisfies SecretFile;
       });
 

@@ -27,7 +27,9 @@ and changed the rest: one URL instead of a URL per machine, GitHub sign-in, and 
 3. **GitHub is the only sign-in.** On the machine, turning remote access on opens GitHub sign-in in your browser and
    that is what creates the instance and its tunnel. On app.shinsa.dev, GitHub sign-in shows your instances. An
    instance has one owner, the GitHub account that paired it, and may have members, who reach it exactly as the owner
-   does, so a team can share one machine, such as a server everyone uses. Nobody gets in by holding a link: the
+   does. A team shares one machine, such as a server everyone uses, from its Machines list in Settings → Teams: the
+   machine then runs each teammate's tasks as that person, on their own Claude accounts and GitHub token, in their
+   own queue (`docs/engine.md` → Remote access, Shared machines). Nobody gets in by holding a link: the
    machine's one reusable invite link lets any device, yours or someone else's with their own GitHub account, ask
    for access, and you accept or decline each request on the machine or from any device that already reaches it.
    Accepting a request from an account not yet on the machine makes it a member. Only the machine invites or removes a member; a member

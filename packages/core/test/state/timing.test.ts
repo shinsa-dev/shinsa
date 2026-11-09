@@ -280,7 +280,8 @@ describe('time away and focus', () => {
     const started = harness.now + 1;
     harness.send({ type: 'focus.change', projectId, until: started + 8 * HOUR_MS });
     expect(harness.state.focusHistory[String(started)]).toEqual({
-      projectId,
+      projectIds: [projectId],
+      except: false,
       from: started,
       to: null,
       until: started + 8 * HOUR_MS,
@@ -288,6 +289,26 @@ describe('time away and focus', () => {
     harness.advance(HOUR_MS);
     harness.send({ type: 'focus.change', projectId: null, until: null });
     expect(harness.state.focusHistory[String(started)]?.to).toBe(started + HOUR_MS + 1);
+    expect(Object.keys(harness.state.focusHistory)).toEqual([String(started)]);
+  });
+
+  test('keeps a focus on all but some projects with the projects it leaves out, and no span for a team', () => {
+    const harness = createHarness();
+    const repoId = registerRepo(harness, 'paywall-next', 'Superwall');
+    const projectId = harness.state.repos[repoId]?.projectId ?? '';
+    const started = harness.now + 1;
+    harness.send({
+      type: 'focus.change',
+      projectId: null,
+      projectIds: [projectId],
+      except: true,
+      until: null,
+    });
+    expect(harness.state.focusHistory[String(started)]).toMatchObject({
+      projectIds: [projectId],
+      except: true,
+    });
+    harness.send({ type: 'focus.change', projectId: null, teamId: 'team-1', until: null });
     expect(Object.keys(harness.state.focusHistory)).toEqual([String(started)]);
   });
 

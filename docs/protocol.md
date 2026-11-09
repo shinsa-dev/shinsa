@@ -24,7 +24,7 @@ One definition per term. **Code** is the name in `packages/core`; **UI** is the 
 | repository | A git repository Shinsa registered, inside at most one project | `Repo` | repository |
 | handle | A task's name for people, `<project key>-<number>` (`SW-142`), given once, never reused, never a key | `Task.handle` | the handle |
 | id | A UUIDv7, the key of everything stored (events, receipts, references, transcripts) | `id` | not shown |
-| focus | The one project or team whose work Home, the queue and the guide show, or none for your work | `Focus` | Focus |
+| focus | The projects (or every project but some) or the one team whose work Home, the queue and the guide show, or none for your work | `Focus` | Focus |
 | team | People who work as if on one Shinsa: a project in a team shows every task in it to every member, live, and on app.shinsa.dev each member acts on it with the scopes the team's owner sets | `RemoteTeam`, `Project.teamIds` | team |
 | teammate | Another member of a team you are in, whose team tasks you see and, on app.shinsa.dev, act on | `TeamTask.owner`, `role: 'teammate'` | teammate |
 | scope | One thing a person outside your machine may see (a view scope: the plan, the code, your messages…) or do (an action scope: answer gates, act, message agents, fork, share, open services); share links and teams read the same list | `AccessScope`, `VIEW_SCOPES`, `ACTION_SCOPES` | scope, the scope's own label (Answer gates, Fork tasks…) |
@@ -344,6 +344,7 @@ one reads as its empty value. The fields under Triage and shape, Plan and build,
 | `suggestions?` | `TaskSuggestion[]` | tasks agents suggested |
 | `parentTaskId?` | string \| null | the task whose agent filed this one |
 | `createdBy?` | `TaskCreator` \| null | `courier` (`create_task`), `split` (`split_task`), `watchdog` (`file_report` in a watchdog check) or `intake` (`file_report` in a watch's read), with the task, the run and request key |
+| `owner?` | `TaskOwner` \| null | the person who created it (`login`, `name`, `avatarUrl`): the remote member or guest who sent `task.create`, the machine's owner at the keyboard, or the owner of the task an agent filed it from; null for tasks from before and those Slack, schedules and webhooks start, which count as the machine owner's. On a shared machine its runs use only this person's Claude accounts and GitHub token (`docs/engine.md` → Remote access, Shared machines) |
 | `forkOf?` | string \| null | the task this one was forked from: its first Agent run forks that task's session (`docs/engine.md` → Forking a task) |
 | `teammateFork?` | `TeammateFork` \| null | the teammate's task this one was forked from, as a brief (`instanceId`, `taskId`, `handle`, `title`, `owner`, `request`, `rounds`, `branch`, `pullRequest`): its first Agent run starts fresh from it (`docs/engine.md` → Forking a teammate's task) |
 | `watchdogs?` | `Watchdog[]` | the watchdogs of its merged rounds: `id`, `round`, `title`, `check`, `source` or `sourceRequest`, `firstCheckMinutes`, `maxGapMinutes`, `forMinutes`, `startsOn` (`merge` or `production`) and its `productionCheck`, `status` (`needs_source`, `awaiting_production`, `watching`, `passed`, `tripped`, `stopped`), `armedAt`, `awaitingSince` (when it began waiting for production), `startedAt`, `endsAt`, `nextCheckAt`, the `runId` of a check running now, the last 20 `checks` (`at`, `healthy`, `summary`), the `forkTaskIds` its checks filed (forks of this task), the `linkedTaskIds` they found already filed by a watch or another watchdog, `endedAt` (`docs/engine.md` → Watchdogs) |
@@ -505,7 +506,7 @@ executable changed line (`selectMeasuredCoverage`).
   (`state.taskNumbers`); a key change starts the new key's counter and never reuses a handle. Parsed by
   `parseTaskHandle` (any case). Core finds a task by id or handle (`selectTaskByReference`); the server's reads also
   take the start of an id or the exact title.
-- **Focus**: `{ projectId, teamId, until }`, a project or a team, never both (`focus_refused`); `until` ends it at a time.
+- **Focus**: `{ projectIds, except, teamId, until }`, projects or a team, never both (`focus_refused`). `projectIds` are the projects in focus, or with `except` the ones left out, so every other project and tasks without one show; `except` with no project is dropped (`normaliseFocusProjects`). `until` ends it at a time.
 
 ## Runs, attempts and roles
 
@@ -883,9 +884,9 @@ your behalf (`onBehalf`, `byTask`). **Human** = only you: its specs are `humanOn
 | `project.remove_from_team` | stops showing them: every open view of its tasks for that team closes | `projects remove-from-team --team` | **human** |
 | `repo.update` | changes a repository's fields | `repos update` | agent; **human** for `checkCommands`, `workspace`, `coverage` (`HUMAN_ONLY_REPO_FIELDS`) |
 | `repo.remove` | forgets a repository | `repos remove` | agent |
-| `focus.change` | sets or clears the focus: `projectId` or `teamId`, never both (`focus_refused`), and `until` | `focus set`, `focus clear` | agent |
+| `focus.change` | sets or clears the focus: `projectIds` with `except`, or `teamId`, never both (`focus_refused`), and `until`; `projectId` alone, from a page older than `focus.projects`, focuses on that one project | `focus set`, `focus clear` | agent |
 | `away.record` | records a span you were away from your Mac (`from`, `to`), sent by the Mac app's page; refused when it ends before it starts, after now or lasts over 30 days (`away_refused`) | none | **human** |
-| `settings.change` | changes settings (`SETTINGS_KEYS`) | `settings set` | agent; **human** for `approvePlans`, `mergeMethod`, `taskBudgetUsd`, `taskUsageLimit`, `dailyUsageLimit`, `autoResume`, `snoozeLimited`, `accountSwitchAt`, `fastMode`, `agentFastModes`, `delegationLimit`, `shareLimit`, `sharePreset`, `watchdogsIgnoreUsageLimits`, `autoPace` (`HUMAN_ONLY_SETTINGS`) |
+| `settings.change` | changes settings (`SETTINGS_KEYS`) | `settings set` | agent; **human** for `approvePlans`, `mergeMethod`, `taskBudgetUsd`, `taskUsageLimit`, `dailyUsageLimit`, `autoResume`, `snoozeLimited`, `accountSwitchAt`, `fastMode`, `agentFastModes`, `delegationLimit`, `shareLimit`, `sharePreset`, `watchdogsIgnoreUsageLimits`, `autoPace`, `sharedTeams` (`HUMAN_ONLY_SETTINGS`) |
 
 Core refuses a command sent on your behalf with `human_only`, recording nothing, when it is a `gate.answer`
 (`assertHumanDecides`), when a gate that was open before it is no longer open after it (`assertGatesStayOpen` in
@@ -1046,7 +1047,7 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | --- | --- |
 | `repo.registered`, `repo.updated`, `repo.removed` | a repository is registered, changed, forgotten |
 | `project.written`, `project.removed` | a project is written, removed |
-| `focus.changed` | the focus changes; closes the open entry of `state.focusHistory` and, with a project, opens one (`{ projectId, from, to, until }`, kept a year) |
+| `focus.changed` | the focus changes; closes the open entry of `state.focusHistory` and, with projects, opens one (`{ projectIds, except, from, to, until }`, kept a year) |
 | `away.recorded` | the Mac app reported a span you were away (`from`, `to`), kept in `state.away` for a year; never counted as something you did |
 | `settings.changed` | settings change (the whole settings object) |
 | `task.created` | a task is created (`request`, `planFirst`, `auto`; with its handle when it has a project you chose (`auto.project` false); `createdBy`, `scheduleId` and `sourceReport` for one a watch's read filed; `watchHome` for a watch's home) |
@@ -1201,7 +1202,7 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `delegation.steer` | process_bound | `steer:<id>` | `delegation.record_delivery`, `delegation.release` |
 | `delegation.reply` | process_bound | `reply:<id>` | none: answers the child's question |
 | `slack.evaluate` | replay_safe | `slack:<thread key>` | ⏳ on the mention first; `slack.start_task` for work; otherwise ⏳ off and "Not a task, so nothing was started.", once per thread; key `slack.evaluate:<event id>` |
-| `slack.post` | replay_safe | `slack:<thread key>` | none: posts the result, or "Merged" or "Done" when the task ends, as a new message through app.shinsa.dev |
+| `slack.post` | replay_safe | `slack:<thread key>` | none: posts a watchdog that found a problem as a new message through app.shinsa.dev |
 | `slack.status` | replay_safe | `slack:<thread key>` | `slack.record_status` for a new card or reaction; edits the card (the open gate with its buttons, else the status) at most every 5 s and moves the mention's reaction |
 | `slack.react` | replay_safe | `slack:<thread key>` | none: 👀 or 📥 on a later mention in the thread, through `/__remote/slack/react`; key `slack.react:<thread key>:<message ts>` |
 
@@ -1620,7 +1621,7 @@ What the engine, the Worker on app.shinsa.dev and the web share for the Slack bo
 | Shape | Fields |
 | --- | --- |
 | `SlackMention` (`contract.ts`, `parseSlackMention`) | `eventId`, `teamId`, `channelId`, `threadTs`, `messageTs`, `userId`, `userName`, `text`, `permalink`, `thread` (`SlackThreadMessage`: `ts`, `userId`, `userName`, `text`, `bot`; the last 100, at most 4,000 characters each, `SLACK_LIMITS`), `linkedThreads` (`SlackLinkedThread`: `channelId`, `threadTs`, `permalink`, `channelName`, `thread`; at most 3, read with the mentioning person's own token, sent only to a machine that names `slack-linked-threads`) |
-| `SlackPost` (`posts.ts`) | `result` or `completed`, the only new messages; everything else edits the card |
+| `SlackPost` (`posts.ts`) | only `tripped`, a watchdog that found a problem; the merge has its own message, and everything else, the result and the end included, edits the card |
 | `SlackMessage` (`blocks.ts`) | `text`, the notification's fallback, and `blocks` (`header`, `section` with text or fields, `context`, `actions` of buttons) within Slack's limits (`SLACK_BLOCK_LIMITS`: 50 blocks, 3,000 characters a section, 150 a header, 75 a button, 10 fields) |
 | `SlackDecisionValue` (`schema.ts`, `serializeSlackDecisionValue`, `parseSlackDecisionValue`) | a button's value: `gateId`, `decision` (`approve`, `revise`, `reject`, `reply`), `choice` (the index into a question's choices, or null), `planVersion` (the plan a plan's Approve shows, or null) |
 | `SlackDecisionModal` (`parseSlackDecisionModal`) | a form's `private_metadata`: the value with the card's `channelId`, `threadTs` and `messageTs` |

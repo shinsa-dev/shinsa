@@ -174,7 +174,12 @@ export const runServiceTool = Effect.fn('ServiceTools.run')(function* (
         ),
       catch: (error) => (error instanceof DomainError ? error : refuse(describeError(error))),
     });
-    const added = yield* runner.addService(projectId, serviceInput);
+    const added = yield* runner.addService(projectId, serviceInput).pipe(
+      Effect.catchIf(
+        (error) => error.code === 'service_limit',
+        (error) => Effect.fail(refuse(`${error.message} You can remove one with remove_service.`))
+      )
+    );
     return `Added ${added.name} to the project: \`${added.command}\` in ${describeFolder(relative)}. The human sees it under Services. Start it for this task with run_service.`;
   });
 

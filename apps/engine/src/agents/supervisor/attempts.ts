@@ -22,7 +22,12 @@ export const leaseAttempt = Effect.fn('RunSupervisor.leaseAttempt')(function* ({
   active.renewing = null;
   return yield* leasing
     .leaseAttempt(run, [...active.rejected], renewing)
-    .pipe(Effect.mapError((error) => new LeaseFailed({ message: error.message })));
+    .pipe(
+      Effect.mapError(
+        (error) =>
+          new LeaseFailed({ message: error.message, code: error._tag === 'DomainError' ? error.code : null })
+      )
+    );
 });
 
 export const recordAttempt = Effect.fn('RunSupervisor.recordAttempt')(function* (turn: Turn, plan: TurnPlan) {

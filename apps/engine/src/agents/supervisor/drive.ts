@@ -3,6 +3,7 @@ import {
   DomainError,
   isDelegatedRun,
   isReadOnlyRun,
+  OWNER_SIGNED_OUT_CODE,
   type Repo,
   type RunFailure,
 } from '@shinsa/core';
@@ -24,6 +25,7 @@ import {
   type DriveAttempt,
   type DriveStep,
   DRIVE_TIMED_OUT,
+  LeaseFailed,
   type Turn,
   UNGUARDED,
   UNREADONLY,
@@ -42,6 +44,9 @@ function failSetup(message: string, code: string): AgentSessionResult {
 
 function resolveDriveFailure(error: unknown): AgentSessionResult {
   const summary = describeError(error);
+  if (error instanceof LeaseFailed && error.code === OWNER_SIGNED_OUT_CODE) {
+    return { outcome: 'failed', summary, failure: createFailure('auth', summary, error.code) };
+  }
   if (error instanceof DomainError && error.code === 'handoff_too_large') {
     return { outcome: 'failed', summary, failure: createFailure('context_window_full', summary, error.code) };
   }

@@ -4,6 +4,7 @@ import {
   isFiltering,
   resolveClearedFilters,
   serializeFilterValues,
+  serializeOwnerValues,
   type TaskFilterField,
   type TaskFilterKey,
   type TaskFilters,
@@ -18,7 +19,9 @@ export function applySearch(text: string) {
 }
 
 export function applyFilterValues(key: TaskFilterKey, values: readonly string[]) {
-  updateSearchParams({ [key]: serializeFilterValues(values) });
+  updateSearchParams({
+    [key]: key === 'owner' ? serializeOwnerValues(values) : serializeFilterValues(values),
+  });
 }
 
 export function toggleTaskFilter(filters: TaskFilters, key: TaskFilterKey, value: string) {

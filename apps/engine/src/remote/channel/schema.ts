@@ -75,6 +75,7 @@ export interface ChannelDefinition {
   readonly isEnrolled: (device: string) => Effect.Effect<boolean>;
   readonly resolveGuest: (device: string) => Effect.Effect<ScopedActor | null>;
   readonly isOwner: Effect.Effect<boolean>;
+  readonly userId: string;
   readonly requestAccess: (
     proof: string,
     keys: ProofKeys,

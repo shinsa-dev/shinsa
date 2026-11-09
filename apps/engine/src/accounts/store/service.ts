@@ -139,6 +139,7 @@ export class AccountStore extends Context.Service<
           organization: details.organization ?? null,
           plan: details.plan ?? null,
           origin: 'login',
+          owner: details.owner ?? null,
           addedAt: yield* Clock.currentTimeMillis,
           paused: false,
           switchAt: null,

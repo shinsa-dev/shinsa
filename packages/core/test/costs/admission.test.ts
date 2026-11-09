@@ -42,7 +42,7 @@ describe('the admission queue', () => {
     const { harness, make, answer } = queueOf();
     answer('p-fast', HOUR_MS);
     answer('p-slow', 10 * HOUR_MS);
-    harness.state.focus = { projectId: 'p-focus', teamId: null, until: null };
+    harness.state.focus = { projectIds: ['p-focus'], except: false, teamId: null, until: null };
     const tasks = [
       make('slow-high', { projectId: 'p-slow', priority: 'high', createdAt: 1 }),
       make('fast-high', { projectId: 'p-fast', priority: 'high', createdAt: 9 }),

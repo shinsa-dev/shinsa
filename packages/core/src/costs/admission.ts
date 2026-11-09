@@ -1,4 +1,5 @@
 import { CLAUDE_PROVIDER } from '../agent-models/index.ts';
+import { isProjectInFocus } from '../domain/focus.ts';
 import {
   DAY_MS,
   type Gate,
@@ -9,6 +10,7 @@ import {
   type TaskPriority,
 } from '../domain/index.ts';
 import { isOfCurrentRound } from '../domain/rounds.ts';
+import { resolveFocusProjects } from '../queue/rank.ts';
 import type { ShinsaState } from '../state/project.ts';
 import { resolveBuildEstimate } from './estimate.ts';
 import { resolveRecentUsage, resolveRecentUsageFreesAt } from './window.ts';
@@ -96,9 +98,10 @@ export function resolveProjectResponses(state: Pick<ShinsaState, 'gates' | 'task
   return responses;
 }
 
-function resolveProjectRank(state: ShinsaState, responses: Map<string, number>, task: Task) {
+function resolveProjectRank(state: ShinsaState, responses: Map<string, number>, task: Task, now: number) {
   if (!task.projectId) return Number.POSITIVE_INFINITY;
-  if (task.projectId === state.focus.projectId) return Number.NEGATIVE_INFINITY;
+  const focus = resolveFocusProjects(state, now);
+  if (focus.projectIds.length > 0 && isProjectInFocus(focus, task.projectId)) return Number.NEGATIVE_INFINITY;
   return responses.get(task.projectId) ?? Number.POSITIVE_INFINITY;
 }
 
@@ -118,7 +121,7 @@ export function sortAdmissionQueue(state: ShinsaState, tasks: readonly Task[], n
   const keyed = tasks.map((task) => ({
     task,
     priority: PRIORITY_RANK[task.priority],
-    project: resolveProjectRank(state, responses, task),
+    project: resolveProjectRank(state, responses, task, now),
     unblocks: countUnblocked(state, task),
   }));
   keyed.sort(

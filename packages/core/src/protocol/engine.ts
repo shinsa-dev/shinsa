@@ -22,6 +22,8 @@ export const ENGINE_FEATURES = [
   'share.scopes',
   'suggestion.bundle',
   'usage.auto_pace',
+  'shared-machine',
+  'focus.projects',
 ] as const;
 
 export type EngineFeature = (typeof ENGINE_FEATURES)[number];

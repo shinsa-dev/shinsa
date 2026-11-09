@@ -336,9 +336,9 @@ describe('watching teammates’ machines', () => {
       owner: 'mona',
       task: { id: 'task-1' },
     });
+    await until('the list is published', () => changes.length > 1);
     expect(feeds.listTasks({ open: true }).map((task) => task.task.id)).toEqual(['task-1']);
     expect(feeds.listTasks({ teamId: 'other' })).toEqual([]);
-    expect(changes.length).toBeGreaterThan(1);
     unsubscribe();
     feeds.subscribeHeld(() => undefined)();
     const heard = changes.length;
@@ -668,8 +668,8 @@ describe('keeping a teammate’s last list', () => {
         .map((task) => task.task.id)
     ).toEqual(['desk-1']);
     expect(feeds.snapshot().machines.find((machine) => machine.instanceId === 'inst3')?.updatedAt).toBe(40);
+    await until('the kept list is published', () => heard.length > 0);
     expect(feeds.listHeld('team1')).toEqual([signed]);
-    expect(heard.length).toBeGreaterThan(0);
     stopHearing();
     expect(
       readKeptFile(resolveKeptPath(laptop))

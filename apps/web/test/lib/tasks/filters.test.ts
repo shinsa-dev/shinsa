@@ -11,6 +11,7 @@ import {
   resolveClearedFilters,
   resolveTaskFilters,
   serializeFilterValues,
+  serializeOwnerValues,
   type TaskFilterKey,
   type TaskFilters,
   toggleFilterValue,
@@ -82,7 +83,7 @@ const NOBODY = teamEntry({ task: createTask({ id: 'nobody' }), owner: null, inst
 const TEAM = [KAI, LEE, NOBODY];
 
 function focused(focus: Partial<ShinsaState['focus']>): ShinsaState {
-  return { ...STATE, focus: { projectId: null, teamId: null, until: null, ...focus } };
+  return { ...STATE, focus: { projectIds: [], except: false, teamId: null, until: null, ...focus } };
 }
 
 function ids(state: ShinsaState, filters: Partial<TaskFilters> = {}) {
@@ -102,12 +103,28 @@ describe('listTaskRows', () => {
   });
 
   it('lists only the focused project’s tasks, and a teammate’s only in that same project', () => {
-    expect(ids(focused({ projectId: 'apps' }))).toEqual(['@kai-task', 'web']);
-    expect(ids(focused({ projectId: 'core' }))).toEqual(['api', 'ask', 'shipped']);
+    expect(ids(focused({ projectIds: ['apps'] }))).toEqual(['@kai-task', 'web']);
+    expect(ids(focused({ projectIds: ['core'] }))).toEqual(['api', 'ask', 'shipped']);
+  });
+
+  it('lists the tasks of every project in focus, or of every project but those, teammates’ included', () => {
+    expect(ids(focused({ projectIds: ['apps', 'core'] }))).toEqual([
+      '@kai-task',
+      'api',
+      'ask',
+      'shipped',
+      'web',
+    ]);
+    expect(ids(focused({ projectIds: ['core'], except: true }))).toEqual([
+      '@kai-task',
+      '@lee-task',
+      '@nobody',
+      'web',
+    ]);
   });
 
   it('matches a teammate’s row to your project by its repository’s remote, then by project name, never by id', () => {
-    const state = focused({ projectId: 'apps' });
+    const state = focused({ projectIds: ['apps'] });
     const renamed = teamEntry({
       task: createTask({ id: 'same-repo' }),
       project: createProject({ id: 'p9', name: 'Billing' }),
@@ -212,12 +229,60 @@ describe('resolveTaskFilters', () => {
     expect(resolveTaskFilters('')).toEqual(NO_TASK_FILTERS);
     expect(resolveTaskFilters('?owner=,%20')).toEqual(NO_TASK_FILTERS);
   });
+
+  it('starts on your own tasks on a shared machine until you choose everyone or someone', () => {
+    expect(resolveTaskFilters('', true).owner).toEqual([YOUR_TASKS_OWNER]);
+    expect(resolveTaskFilters('?owner=everyone', true).owner).toEqual([]);
+    expect(resolveTaskFilters('?owner=mona', true).owner).toEqual(['mona']);
+    expect(resolveTaskFilters('?owner=everyone').owner).toEqual([]);
+  });
+});
+
+describe('a shared machine’s rows', () => {
+  const KAI_PERSON = { login: 'kai', name: 'Kai Lane', avatarUrl: 'https://example.com/kai.png' };
+  const MONA_PERSON = { login: 'mona', name: 'Mona Park', avatarUrl: null };
+  const state = createShinsaState({
+    tasks: [
+      createTask({ id: 'kai-task', title: 'Kai’s page', owner: KAI_PERSON }),
+      createTask({ id: 'mona-task', title: 'Mona’s export', owner: MONA_PERSON }),
+      createTask({ id: 'old', title: 'Old setup' }),
+    ],
+  });
+  const ownership = {
+    shared: true,
+    sharedHere: true,
+    viewer: 'kai',
+    memberHere: true,
+    isSharedTask: () => true,
+    isMemberTask: () => true,
+  };
+  const rows = listTaskRows(state, [], [], NOW, ownership);
+
+  it('keys your tasks as yours, a teammate’s by login and an unowned one as the machine owner’s', () => {
+    expect(Object.fromEntries(rows.map((row) => [row.task.id, row.owner]))).toEqual({
+      'kai-task': YOUR_TASKS_OWNER,
+      'mona-task': 'mona',
+      old: 'machine',
+    });
+  });
+
+  it('names each owner in the filter, with a teammate’s avatar, and finds a task by its owner', () => {
+    const owner = listTaskFilterFields(rows, [], NO_TASK_FILTERS).find((entry) => entry.key === 'owner');
+    expect(owner?.options.map((option) => option.label)).toEqual(['You', 'Mona', "The machine's owner"]);
+    expect(owner?.options.find((option) => option.value === 'mona')?.user).toEqual(MONA_PERSON);
+    expect(owner?.options.find((option) => option.value === YOUR_TASKS_OWNER)?.user).toBeUndefined();
+    expect(filterTaskRows(rows, { ...NO_TASK_FILTERS, search: 'park' }).map((row) => row.task.id)).toEqual([
+      'mona-task',
+    ]);
+  });
 });
 
 describe('the filter helpers', () => {
   it('writes values back for the address, or removes the parameter when none is left', () => {
     expect(serializeFilterValues(['you', 'kai'])).toBe('you,kai');
     expect(serializeFilterValues([])).toBeNull();
+    expect(serializeOwnerValues(['kai'])).toBe('kai');
+    expect(serializeOwnerValues([])).toBe('everyone');
   });
 
   it('toggles a value on and off', () => {

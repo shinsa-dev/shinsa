@@ -20,6 +20,7 @@ import {
   type ShinsaEvent,
   type ShinsaEventInput,
   type ShinsaState,
+  type TaskOwner,
   type UserCommand,
   selectOpenIteration,
   splitHouseRules,
@@ -50,7 +51,12 @@ export function createHarness() {
 
   function send(
     command: ShinsaCommand,
-    options: { onBehalf?: boolean; byTask?: string | null; guest?: ScopedActor | null } = {}
+    options: {
+      onBehalf?: boolean;
+      byTask?: string | null;
+      guest?: ScopedActor | null;
+      actor?: TaskOwner | null;
+    } = {}
   ) {
     clock += 1;
     const decision = decideOrThrow(state, command, { now: clock, newId: () => `id${++counter}`, ...options });
@@ -249,20 +255,24 @@ export function createTask(
     triageWaitsOn?: string | string[];
     planFirst?: boolean;
     backlog?: boolean;
+    owner?: TaskOwner;
   } = {}
 ) {
   const repoId = options.repoId ?? (Object.keys(harness.state.repos)[0] || registerRepo(harness));
   const before = new Set(Object.keys(harness.state.tasks));
-  harness.send({
-    type: 'task.create',
-    request: options.request ?? 'Fix the scroll in tab groups',
-    repoId,
-    priority: options.priority,
-    waitsOn: options.waitsOn,
-    stacksOn: options.stacksOn,
-    planFirst: options.planFirst,
-    backlog: options.backlog,
-  });
+  harness.send(
+    {
+      type: 'task.create',
+      request: options.request ?? 'Fix the scroll in tab groups',
+      repoId,
+      priority: options.priority,
+      waitsOn: options.waitsOn,
+      stacksOn: options.stacksOn,
+      planFirst: options.planFirst,
+      backlog: options.backlog,
+    },
+    { actor: options.owner ?? null }
+  );
   const taskId = Object.keys(harness.state.tasks).find((id) => !before.has(id)) ?? '';
   harness.send({
     type: 'task.triage',

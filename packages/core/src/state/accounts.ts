@@ -34,5 +34,9 @@ export function applyUsagePace(state: ShinsaState, event: EventOf<'usage.pace_re
     removeEntry(state, 'usagePaces', event.provider);
     return;
   }
-  writeEntry(state, 'usagePaces', event.provider, { provider: event.provider, pace: event.pace, at: event.at });
+  writeEntry(state, 'usagePaces', event.provider, {
+    provider: event.provider,
+    pace: event.pace,
+    at: event.at,
+  });
 }

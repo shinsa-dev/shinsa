@@ -365,6 +365,7 @@ describe('acting for the human', () => {
       sharePreset: 'status',
       watchdogsIgnoreUsageLimits: false,
       autoPace: true,
+      sharedTeams: ['team-1'],
     };
     const fields: Required<Pick<Repo, (typeof HUMAN_ONLY_REPO_FIELDS)[number]>> = {
       checkCommands: ['bun test'],
@@ -441,6 +442,11 @@ describe('the summary of each action', () => {
       [{ type: 'focus.change', projectId, until: null }, 'Focused on Superwall'],
       [{ type: 'focus.change', projectId: null, until: null }, 'Cleared the focus'],
       [
+        { type: 'focus.change', projectId: null, projectIds: [projectId], except: true, until: null },
+        'Focused on everything but Superwall',
+      ],
+      [{ type: 'focus.change', projectId: null, teamId: 'team-1', until: null }, 'Focused on a team'],
+      [
         { type: 'settings.change', patch: { maxFixRounds: 2, attentionLimit: 2 } },
         'Changed settings: maxFixRounds, attentionLimit',
       ],
@@ -451,6 +457,29 @@ describe('the summary of each action', () => {
       actOnBehalf(harness, command);
       expect(lastAction(harness)).toMatchObject({ command: command.type, taskId: null, summary });
     }
+  });
+
+  test('names every project in a focus on several, or the ones a focus leaves out', () => {
+    const harness = createHarness();
+    createTask(harness);
+    const [superwall = ''] = Object.keys(harness.state.projects);
+    const personalRepo = registerRepo(harness, 'shinsa', 'Personal');
+    const personal = harness.state.repos[personalRepo]?.projectId ?? '';
+    actOnBehalf(harness, {
+      type: 'focus.change',
+      projectId: null,
+      projectIds: [superwall, personal],
+      until: null,
+    });
+    expect(lastAction(harness).summary).toBe('Focused on Superwall and Personal');
+    actOnBehalf(harness, {
+      type: 'focus.change',
+      projectId: null,
+      projectIds: [personal],
+      except: true,
+      until: null,
+    });
+    expect(lastAction(harness).summary).toBe('Focused on everything but Personal');
   });
 
   test('names the task it changed', () => {

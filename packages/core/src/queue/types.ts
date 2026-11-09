@@ -1,4 +1,4 @@
-import type { Gate, GateType, Task, TaskStage } from '../domain/index.ts';
+import type { FocusProjects, Gate, GateType, Task, TaskStage } from '../domain/index.ts';
 
 export interface QueuedGate {
   gate: Gate;
@@ -9,7 +9,7 @@ export interface QueuedGate {
 }
 
 export interface Queue {
-  focusProjectId: string | null;
+  focus: FocusProjects;
   focusTeamId: string | null;
   ready: QueuedGate[];
   upNow: QueuedGate[];

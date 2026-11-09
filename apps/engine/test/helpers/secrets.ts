@@ -2,6 +2,7 @@ import { dirname } from 'node:path';
 import { Effect, Layer, ManagedRuntime } from 'effect';
 import { TestClock } from 'effect/testing';
 import { EngineConfig } from '../../src/config/service.ts';
+import type { GitHubIdentity } from '../../src/github/identity/schema.ts';
 import { JsonLogger } from '../../src/log/service.ts';
 import { SecretFiles } from '../../src/secrets/files/service.ts';
 import { SecretStore } from '../../src/secrets/index.ts';
@@ -38,5 +39,8 @@ export async function openTestSecrets(path: string) {
     updateMcpCredentials: (serverId: string, patch: Record<string, unknown>) =>
       run(store.updateMcpCredentials(serverId, patch)),
     removeMcpCredentials: (serverId: string) => run(store.removeMcpCredentials(serverId)),
+    selectGitHubToken: (login: string) => run(store.selectGitHubToken(login)),
+    writeGitHubToken: (identity: GitHubIdentity) => run(store.writeGitHubToken(identity)),
+    removeGitHubToken: (login: string) => run(store.removeGitHubToken(login)),
   };
 }

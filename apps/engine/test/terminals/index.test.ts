@@ -356,9 +356,10 @@ describe('Terminals services', () => {
       terminals.create({ ...START, cwd: '/wt/a', place: 'worktree', taskId: 'a' })
     );
     fake.spawned[4]?.exit(0);
-    await until(
-      'the shell ends',
-      async () => (await runAsync(terminals.find(ended.id))).info.status === 'exited'
+    await until('the shell’s exit is published', async () =>
+      seen.some((snapshot) =>
+        snapshot.terminals.some((each) => each.id === ended.id && each.status === 'exited')
+      )
     );
     const before = seen.length;
     await runAsync(terminals.closeTaskTerminals('a'));
@@ -575,7 +576,11 @@ describe('Terminals services', () => {
     const { terminals } = await createTerminals();
     for (let index = 0; index < SERVICE_LIMITS.services; index++)
       await runAsync(terminals.addService('p1', SERVICE));
-    await expect(runAsync(terminals.addService('p1', SERVICE))).rejects.toThrow('services at most.');
+    const names = Array.from({ length: SERVICE_LIMITS.services }, () => SERVICE.name);
+    await expect(runAsync(terminals.addService('p1', SERVICE))).rejects.toThrow(
+      `This project keeps ${SERVICE_LIMITS.services} services at most, and has ${SERVICE_LIMITS.services}: ${new Intl.ListFormat('en').format(names)}. Remove one under Services to add another.`
+    );
+    expect((await runAsync(terminals.addService('p2', SERVICE))).projectId).toBe('p2');
     await expect(
       runAsync((await createTerminals({ readOnly: true })).terminals.addService('p1', SERVICE))
     ).rejects.toThrow('Terminals are off');

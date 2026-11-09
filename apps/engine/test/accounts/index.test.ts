@@ -9,14 +9,17 @@ import type {
   RunFailure,
   ShinsaCommand,
 } from '@shinsa/core';
+import { OWNER_SIGNED_OUT_CODE } from '@shinsa/core';
 import { Effect } from 'effect';
 import { Accounts } from '../../src/accounts/index.ts';
 import { UsageLimits } from '../../src/accounts/limits/service.ts';
 import { AccountLogins } from '../../src/accounts/login/service.ts';
 import { resolveKeychainService } from '../../src/accounts/paths.ts';
+import { ACCOUNT_NOT_YOURS_CODE, ACCOUNT_NOT_YOURS_MESSAGE } from '../../src/accounts/roster/schema.ts';
 import type { AccountDetails } from '../../src/accounts/schema.ts';
 import type { AccountChange } from '../../src/accounts/store/schema.ts';
 import { AccountStore } from '../../src/accounts/store/service.ts';
+import type { AccountOwnership } from '../../src/agents/accounts/schema.ts';
 import type { AccountLeaseRequest, RunRejection } from '../../src/agents/index.ts';
 import type { ProviderUsageReading } from '../../src/agents/providers/types.ts';
 import { log } from '../../src/log/index.ts';
@@ -103,12 +106,14 @@ async function openAccounts(stub: StubEngine, options: AccountsHarnessOptions) {
     onNotice: (runId: string, notice: ChatNotice) => run(roster.onNotice(runId, notice)),
     refresh: () => run(roster.refresh),
     refreshUsage: () => run(roster.refreshUsage),
-    startLogin: (accountId: string | null) => run(roster.startLogin(accountId)),
+    startLogin: (accountId: string | null, requester: string | null = null) =>
+      run(roster.startLogin(accountId, requester)),
     submitLoginCode: (loginId: unknown, code: unknown) => runSync(roster.submitLoginCode(loginId, code)),
     cancelLogin: (loginId: unknown) => runSync(roster.cancelLogin(loginId)),
     importAccount: (origin: unknown, email: unknown) => run(roster.importAccount(origin, email)),
-    update: (accountId: unknown, patch: unknown) => run(roster.update(accountId, patch)),
-    remove: (accountId: unknown) => run(roster.remove(accountId)),
+    update: (accountId: unknown, patch: unknown, requester: string | null = null) =>
+      run(roster.update(accountId, patch, requester)),
+    remove: (accountId: unknown, requester: string | null = null) => run(roster.remove(accountId, requester)),
     snapshotEffect: roster.snapshot,
     store: {
       get exists() {
@@ -253,9 +258,15 @@ function windows(session: number, weekly: number, fable = 0, resetsAt = '2030-01
   };
 }
 
-async function addAccount(world: World, email: string, used: number, orgName?: string) {
+async function addAccount(
+  world: World,
+  email: string,
+  used: number,
+  orgName?: string,
+  requester: string | null = null
+) {
   const before = new Set(world.accounts.store.list().map((existing) => existing.id));
-  await world.accounts.startLogin(null);
+  await world.accounts.startLogin(null, requester);
   const account = world.accounts.store.list().find((candidate) => !before.has(candidate.id));
   if (!account?.configDir) throw new Error('no account was created');
   world.statuses.set(account.configDir, { loggedIn: true, email, orgName, subscriptionType: 'max' });
@@ -328,6 +339,7 @@ function lease(
     previous?: RunAccount | null;
     model?: string | null;
     exclude?: string[];
+    ownership?: AccountOwnership | null;
   } = {}
 ) {
   return world.accounts.lease({
@@ -337,6 +349,7 @@ function lease(
     bound: overrides.bound ?? null,
     previous: overrides.previous ?? null,
     exclude: overrides.exclude ?? [],
+    ownership: overrides.ownership ?? null,
   });
 }
 
@@ -1489,6 +1502,78 @@ describe('what runs report back', () => {
       'the new reading',
       () => world.accounts.snapshot().accounts[0]?.usage.windows[0]?.usedPercent === 70
     );
+  });
+});
+
+describe('on a shared machine', () => {
+  async function createShared() {
+    const world = await createWorld({ registry: true });
+    const mine = await addAccount(world, 'me@example.com', 10);
+    const kais = await addAccount(world, 'kai@example.com', 50, undefined, 'kai');
+    world.stub.update((state) => {
+      state.settings.sharedTeams = ['team-1'];
+    });
+    return { world, mine, kais };
+  }
+
+  test('an account records the member who signed it in, and the snapshot shows it', async () => {
+    const { world, mine, kais } = await createShared();
+    expect([mine.owner, kais.owner]).toEqual([null, 'kai']);
+    expect(world.accounts.snapshot().accounts.map((account) => account.owner)).toEqual([null, 'kai']);
+  });
+
+  test('a run leases only its owner’s accounts, even past a bound account of someone else', async () => {
+    const { world, mine, kais } = await createShared();
+    expect((await lease(world, { ownership: { owner: 'kai' } }))?.id).toBe(kais.id);
+    expect((await lease(world, { ownership: { owner: null } }))?.id).toBe(mine.id);
+    const bound = { id: mine.id, email: mine.email };
+    expect((await lease(world, { ownership: { owner: 'kai' }, bound }))?.id).toBe(kais.id);
+    expect((await lease(world, { bound }))?.id).toBe(mine.id);
+  });
+
+  test('an owner with no account here is refused instead of falling back to the machine’s login', async () => {
+    const { world } = await createShared();
+    await expect(lease(world, { ownership: { owner: 'mona' } })).rejects.toMatchObject({
+      code: OWNER_SIGNED_OUT_CODE,
+    });
+  });
+
+  test('a rejected account moves the run only to another account of the same owner', async () => {
+    const { world, kais } = await createShared();
+    const second = await addAccount(world, 'kai2@example.com', 10, undefined, 'kai');
+    world.stub.update((state) => {
+      state.tasks['task-1'] = createTask();
+      state.runs['run-1'] = createRun({ model: 'opus' });
+    });
+    expect(await reject(world, kais.id, { resetAt: world.now + HOUR })).toEqual({ retry: true });
+    expect(
+      await reject(world, second.id, { resetAt: world.now + 2 * HOUR }, [kais.id, second.id])
+    ).toMatchObject({
+      retry: false,
+      failure: { resetAt: world.now + HOUR, account: { id: second.id } },
+    });
+  });
+
+  test('a member changes, signs in and removes only their own accounts', async () => {
+    const { world, mine, kais } = await createShared();
+    const refusal = { code: ACCOUNT_NOT_YOURS_CODE, message: ACCOUNT_NOT_YOURS_MESSAGE };
+    await expect(world.accounts.update(mine.id, { paused: true }, 'kai')).rejects.toThrow(refusal.message);
+    await expect(world.accounts.startLogin(mine.id, 'kai')).rejects.toMatchObject(refusal);
+    await expect(world.accounts.remove(mine.id, 'kai')).rejects.toMatchObject(refusal);
+    await world.accounts.update(kais.id, { paused: true }, 'kai');
+    await world.accounts.update(kais.id, { switchAt: 70 });
+    expect(world.accounts.store.find(kais.id)).toMatchObject({ paused: true, switchAt: 70 });
+    await world.accounts.remove(kais.id, 'kai');
+    expect(world.accounts.store.select(kais.id)).toBeNull();
+  });
+
+  test('a machine that is not shared lets a member change any account, as before', async () => {
+    const { world, mine } = await createShared();
+    world.stub.update((state) => {
+      state.settings.sharedTeams = [];
+    });
+    await world.accounts.update(mine.id, { paused: true }, 'kai');
+    expect(world.accounts.store.find(mine.id).paused).toBe(true);
   });
 });
 

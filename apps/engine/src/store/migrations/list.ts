@@ -1,3 +1,4 @@
+import { FOCUS_PROJECTS } from './focus-projects.ts';
 import { PROPOSAL_RECOMMEND } from './proposal-recommend.ts';
 import { REVIEW_SEEN } from './review-seen.ts';
 import { LOG_BASELINE, type LogMigration } from './schema.ts';
@@ -13,6 +14,7 @@ export const LOG_MIGRATIONS: readonly LogMigration[] = [
   SHARE_SCOPES,
   PROPOSAL_RECOMMEND,
   TASK_AUTO_PROJECT,
+  FOCUS_PROJECTS,
 ];
 
 export function resolveLogVersion(migrations: readonly LogMigration[] = LOG_MIGRATIONS) {

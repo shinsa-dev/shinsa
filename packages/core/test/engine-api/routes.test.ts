@@ -142,6 +142,8 @@ const FEATURE_ROUTES = {
   'usage.watchdog_limits': [],
   'share.scopes': [],
   'suggestion.bundle': [],
+  'shared-machine': ['GET /api/github-token', 'POST /api/github-token', 'POST /api/remote/teams/share'],
+  'focus.projects': [],
 };
 
 const LOCAL_ONLY = [
@@ -153,10 +155,13 @@ const LOCAL_ONLY = [
 ];
 
 const OWNER_ONLY = [
+  'GET /api/github-token',
+  'POST /api/github-token',
   'POST /api/remote/link/create',
   'POST /api/remote/link/remove',
   'POST /api/remote/members/grant',
   'POST /api/remote/members/remove',
+  'POST /api/remote/teams/share',
   'POST /api/remote/devices/remove',
   'POST /api/remote/teams/create',
   'POST /api/remote/teams/join',
@@ -265,6 +270,24 @@ describe('EngineApi routes', () => {
     expect(larger.map((route) => [route.key, route.bodyLimit])).toEqual([
       ['POST /api/attachments', ATTACHMENT_UPLOAD_LIMIT_BYTES],
     ]);
+  });
+
+  test('opens to a shared machine’s members only their own Claude accounts and GitHub token, each still owner-only elsewhere', () => {
+    const shared = listEngineRoutes().filter((route) => route.sharedMember);
+    expect(sorted(shared.map((route) => route.key))).toEqual(
+      sorted([
+        'POST /api/accounts/refresh',
+        'POST /api/accounts/login',
+        'POST /api/accounts/login/code',
+        'POST /api/accounts/login/cancel',
+        'POST /api/accounts/import',
+        'POST /api/accounts/update',
+        'POST /api/accounts/remove',
+        'GET /api/github-token',
+        'POST /api/github-token',
+      ])
+    );
+    expect(shared.every((route) => route.ownerOnly)).toBe(true);
   });
 
   test('marks the routes only Shinsa’s own page may call', () => {

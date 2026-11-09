@@ -4,6 +4,8 @@ import { Clock, Context, Effect, FileSystem, Layer, Option } from 'effect';
 import { constFalse, constNull } from 'effect/Function';
 import type { PlatformError } from 'effect/PlatformError';
 import { selectInstallCommand } from '../../checks/install.ts';
+import { resolveAuthorEnv } from '../../github/identity/resolve.ts';
+import { TaskGitHub } from '../../github/identity/schema.ts';
 import { describeError } from '../../log/redact.ts';
 import { resolveCancel } from '../../shell/abort.ts';
 import { describeFailure } from '../../shell/failure.ts';
@@ -136,6 +138,7 @@ export class Checkout extends Context.Service<
           mergeHead === null ? null : { mergeHead, mergeMessage: yield* resolveMergeMessage(path, message) };
         yield* git.run(['commit', '--no-verify', '-q', '-F', '-'], path, {
           input: merge?.mergeMessage ?? message,
+          env: resolveAuthorEnv((yield* TaskGitHub).identity),
         });
         return { merge };
       });

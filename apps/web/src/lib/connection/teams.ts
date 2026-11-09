@@ -66,6 +66,11 @@ export function createTeamActions(machineId: string | null = null) {
     return record(yield* engine.remote.grantMember({ payload: { teamId, userId } }));
   });
 
+  const shareMachine = Effect.fn('Teams.shareMachine')(function* (teamId: string, shared: boolean) {
+    const engine = yield* EngineClient;
+    return record(yield* engine.remote.shareMachine({ payload: { teamId, shared } }));
+  });
+
   const act = (call: (teams: TeamEndpoints) => Effect.Effect<RemoteSnapshot, Error>) =>
     run(
       Effect.gen(function* () {
@@ -98,6 +103,7 @@ export function createTeamActions(machineId: string | null = null) {
     updateExtra: (teamId: string, userId: string, scopes: AccessScopes) =>
       act((teams) => teams.extra({ payload: { teamId, userId, scopes } })),
     grantAccess: (teamId: string, userId: string) => run(grantAccess(teamId, userId)),
+    shareMachine: (teamId: string, shared: boolean) => run(shareMachine(teamId, shared)),
     requestKey: (teamId: string) => act((teams) => teams.requestKey({ payload: { teamId } })),
     answerKey: (teamId: string, instanceId: string, approve: boolean) =>
       act((teams) => teams.answerKey({ payload: { teamId, instanceId, approve } })),

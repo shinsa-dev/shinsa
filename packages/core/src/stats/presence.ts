@@ -1,3 +1,4 @@
+import { isProjectInFocus } from '../domain/focus.ts';
 import { HOUR_MS, MINUTE_MS } from '../domain/time.ts';
 import type { FocusSpan, Task, TimingSpan } from '../domain/types.ts';
 import { resolvePresenceHour } from '../state/presence.ts';
@@ -99,7 +100,7 @@ export function resolveYourClock(you: YourActivity, now: number, hourOf: HourOfW
 export function listSetAside(clock: YourClock, task: Task, now: number): TimingSpan[] {
   const inputs = resolveTaskTiming(task).inputs;
   return clock.focus.flatMap((focus) => {
-    if (focus.projectId === task.projectId) return [];
+    if (isProjectInFocus(focus, task.projectId ?? null)) return [];
     const span = { from: focus.from, to: Math.min(focus.to ?? now, focus.until ?? now) };
     if (inputs.some((input) => isWithin(input.at, span))) return [];
     const from = span.from + FOCUS_GRACE_MS;

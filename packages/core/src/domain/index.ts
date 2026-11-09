@@ -203,6 +203,10 @@ export {
   resolveWatchdogDefaults,
   resolveWatchdogsIgnoreUsageLimits,
   resolveAutoPace,
+  isSharedMachine,
+  isSharedWithTeam,
+  resolveSharedTeams,
+  OWNER_SIGNED_OUT_CODE,
   SETTINGS_KEYS,
   type Settings,
   SHARE_LIMITS,
@@ -323,6 +327,17 @@ export {
   type ShinsaToolName,
   TASK_SESSION_ROLES,
 } from './tools.ts';
+export {
+  describeFocusProjects,
+  isProjectInFocus,
+  NO_FOCUS,
+  NO_FOCUS_PROJECTS,
+  normaliseFocusProjects,
+  resolveFocusSelection,
+  type SingleProjectFocus,
+  selectSingleFocusProject,
+  serializeNames,
+} from './focus.ts';
 export type * from './types.ts';
 export {
   EVIDENCE_KINDS,

@@ -4,7 +4,7 @@ import { HttpApiBuilder } from 'effect/http-api';
 import { Remote } from '../../../remote/machine/service.ts';
 import { EngineCore } from '../../../runtime/engine/service.ts';
 import { CommandRouter } from '../../../triage/router/service.ts';
-import { dispatchUserCommand, resolveRequestOrigin } from '../../commands.ts';
+import { dispatchUserCommand, resolveRequestActor, resolveRequestOrigin } from '../../commands.ts';
 import { RequestSource } from '../../schema.ts';
 
 export const CommandsHandlers = HttpApiBuilder.group(
@@ -23,6 +23,7 @@ export const CommandsHandlers = HttpApiBuilder.group(
           router,
           origin: yield* resolveRequestOrigin(source, remote),
           guest: null,
+          actor: yield* resolveRequestActor(source, remote),
           teams: remote,
         });
         const handle = taskId ? ((yield* engine.state).tasks[taskId]?.handle ?? null) : null;

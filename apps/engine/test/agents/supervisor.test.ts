@@ -6,12 +6,13 @@ import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import {
   DomainError,
   type FastModeAvailability,
+  OWNER_SIGNED_OUT_CODE,
   resolveHouseRules,
   type ShinsaCommand,
   type ShinsaState,
 } from '@shinsa/core';
 import { Effect } from 'effect';
-import type { RunRejection } from '../../src/agents/accounts/schema.ts';
+import type { AccountLeaseRequest, RunRejection } from '../../src/agents/accounts/schema.ts';
 import { CLAUDE_CAPABILITIES } from '../../src/agents/providers/claude/index.ts';
 import type {
   AgentProvider,
@@ -802,6 +803,55 @@ describe('a session that never settles', () => {
     const index = dispatched.findIndex((command) => command.type === 'run.interrupt');
     expect(dispatched[index]).toEqual({ type: 'run.interrupt', runId: 'run-1', attemptId: null });
     expect(commandIds[index]).toBe('run.interrupt:run-1:0:2');
+  });
+});
+
+describe('a shared machine’s accounts', () => {
+  const KAI = { login: 'kai', name: 'Kai Lane', avatarUrl: null };
+
+  function withOwnedTask(owner: typeof KAI | null, shared: boolean) {
+    return (state: ShinsaState) => {
+      withTask(createTempDir())(state);
+      state.settings.sharedTeams = shared ? ['team-1'] : [];
+      state.tasks['task-1'] = { ...state.tasks['task-1']!, owner };
+    };
+  }
+
+  async function leaseFor(owner: typeof KAI | null, shared: boolean) {
+    const requests: AccountLeaseRequest[] = [];
+    const { supervisor } = setup(withOwnedTask(owner, shared), {
+      accounts: {
+        ...createBroker((request) => {
+          requests.push(request);
+          return Promise.reject(new DomainError({ code: OWNER_SIGNED_OUT_CODE, message: 'No account.' }));
+        }),
+        machineOwner: 'mona',
+      },
+    });
+    await supervisor.execute('run-1');
+    return requests[0]?.ownership;
+  }
+
+  test('a run asks only for its owner’s accounts, and the machine’s owner and a task with none count as the machine’s', async () => {
+    expect(await leaseFor(KAI, true)).toEqual({ owner: 'kai' });
+    expect(await leaseFor({ ...KAI, login: 'mona' }, true)).toEqual({ owner: null });
+    expect(await leaseFor(null, true)).toEqual({ owner: null });
+    expect(await leaseFor(KAI, false)).toBeNull();
+  });
+
+  test('an owner with no account here ends the run signed out, so the task asks them to sign in', async () => {
+    const { supervisor, dispatched } = setup(withOwnedTask(KAI, true), {
+      accounts: createBroker(() =>
+        Promise.reject(new DomainError({ code: OWNER_SIGNED_OUT_CODE, message: 'No account.' }))
+      ),
+    });
+    await supervisor.execute('run-1');
+    expect(endedRuns(dispatched)).toEqual([
+      expect.objectContaining({
+        outcome: 'failed',
+        failure: expect.objectContaining({ class: 'auth', code: OWNER_SIGNED_OUT_CODE }),
+      }),
+    ]);
   });
 });
 
@@ -2788,6 +2838,7 @@ describe('accounts', () => {
         bound: { id: 'acc-work', email: null },
         previous: null,
         exclude: [],
+        ownership: null,
       },
     ]);
     expect(dispatched.find((command) => command.type === 'run.attempt')).toMatchObject({

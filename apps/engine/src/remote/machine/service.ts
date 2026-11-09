@@ -418,6 +418,14 @@ export class Remote extends Context.Service<Remote, RemoteHandle>()('shinsa/engi
           return userId !== null && (yield* file).access?.owner.id === userId;
         });
 
+        const resolveActor = Effect.fn('Remote.resolveActor')(function* (userId: string | null) {
+          const known = (yield* file).access;
+          if (!known) return null;
+          const people = [known.owner, ...known.members.map((member) => member.user)];
+          const person = userId === null ? known.owner : people.find((user) => user.id === userId);
+          return person ? { login: person.login, name: person.name, avatarUrl: person.avatarUrl } : null;
+        });
+
         const resolveRequester = Effect.fn('Remote.resolveRequester')(function* (userId: string) {
           const { access: known, credentials } = yield* file;
           if (!(known && credentials)) return 'This machine is still connecting. Try again in a moment.';
@@ -821,11 +829,14 @@ export class Remote extends Context.Service<Remote, RemoteHandle>()('shinsa/engi
               code: 'teammate_not_found',
               message: 'No one else in that team has that GitHub account.',
             });
-          if (!known.members.some((member) => member.user.id === userId)) {
+          const joins = !known.members.some((member) => member.user.id === userId);
+          if (joins) {
             const member = yield* requestMemberAddition(credentials.machineToken, userId);
             yield* recordAccess({ ...known, members: [...known.members, member] });
           }
-          yield* resolveTeamGrant(userId, teamId);
+          const secret = yield* resolveTeamGrant(userId, teamId);
+          if (joins && secret)
+            yield* Effect.orDie(store.writeGrant({ userId, teamId, secret, joined: true }));
           yield* publish;
         });
 
@@ -871,6 +882,73 @@ export class Remote extends Context.Service<Remote, RemoteHandle>()('shinsa/engi
             ...known,
             members: known.members.filter((member) => member.user.id !== userId),
           });
+        });
+
+        const findSharedTeam = Effect.fn('Remote.findSharedTeam')(function* (teamId: string) {
+          const team = yield* store.selectTeam(teamId);
+          if (!(team && (yield* store.selectTeamKey(teamId))))
+            return yield* new DomainError({
+              code: 'team_not_found',
+              message: 'This machine is not in that team.',
+            });
+          return team;
+        });
+
+        const listWithoutGrant = Effect.fn('Remote.listWithoutGrant')(function* (team: RemoteTeam) {
+          const people = [team.owner.id, ...team.members.map((member) => member.user.id)];
+          const missing: string[] = [];
+          for (const userId of people) {
+            if ((yield* isOwner(userId)) || (yield* store.selectGrant(userId, team.id))) continue;
+            missing.push(userId);
+          }
+          return missing;
+        });
+
+        const shareWithTeam = Effect.fn('Remote.shareWithTeam')(function* (teamId: string) {
+          yield* assertPaired;
+          const team = yield* findSharedTeam(teamId);
+          for (const userId of yield* listWithoutGrant(team)) yield* grantTeammate(userId, teamId);
+        });
+
+        const syncSharedTeams = Effect.fn('Remote.syncSharedTeams')(function* (teamIds: readonly string[]) {
+          const gone: string[] = [];
+          if (!(yield* isEnabled)) return gone;
+          for (const teamId of teamIds) {
+            const team = yield* store.selectTeam(teamId);
+            if (!(team && (yield* store.selectTeamKey(teamId)))) {
+              gone.push(teamId);
+              continue;
+            }
+            for (const userId of yield* listWithoutGrant(team)) {
+              yield* grantTeammate(userId, teamId).pipe(
+                Effect.catch((error) =>
+                  Effect.logWarning(
+                    '[Remote] A teammate of a shared team could not be given this machine'
+                  ).pipe(Effect.annotateLogs({ teamId, userId, error: describeError(error) }))
+                )
+              );
+            }
+          }
+          return gone;
+        });
+
+        const unshareTeam = Effect.fn('Remote.unshareTeam')(function* (teamId: string) {
+          const leaving = new Set(
+            (yield* file).grants
+              .filter((grant) => grant.teamId === teamId && grant.joined)
+              .map((grant) => grant.userId)
+          );
+          yield* Effect.orDie(store.removeGrantsWhere((grant) => grant.teamId === teamId));
+          const { grants, access: known } = yield* file;
+          for (const userId of leaving) {
+            const kept = grants.find((grant) => grant.userId === userId);
+            if (kept) {
+              yield* Effect.orDie(store.writeGrant({ ...kept, joined: true }));
+              continue;
+            }
+            if (known?.members.some((member) => member.user.id === userId)) yield* removeMember(userId);
+          }
+          yield* publish;
         });
 
         const admits = Effect.fn('Remote.admits')(function* (device: string, userId: string) {
@@ -967,6 +1045,7 @@ export class Remote extends Context.Service<Remote, RemoteHandle>()('shinsa/engi
             isEnrolled: (device) => admits(device, userId),
             resolveGuest,
             isOwner: isOwner(userId),
+            userId,
             requestAccess: (proof, keys, name) =>
               requestAccess(proof, keys, name, userId).pipe(Effect.mapError(toBroken)),
             resumeAccess: (device) => resumeAccess(device, userId),
@@ -1041,6 +1120,9 @@ export class Remote extends Context.Service<Remote, RemoteHandle>()('shinsa/engi
           createHandoff,
           removeHandoff,
           grantTeammate,
+          shareWithTeam,
+          syncSharedTeams,
+          unshareTeam,
           acceptRequest,
           declineRequest,
           removeMember,
@@ -1053,6 +1135,7 @@ export class Remote extends Context.Service<Remote, RemoteHandle>()('shinsa/engi
           spendConnect,
           isOwner,
           hasAccess,
+          resolveActor,
           resolveTeamScope,
           listTeamScopes,
           resolveTeamGrant,

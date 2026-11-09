@@ -68,6 +68,7 @@ describe('the settings a command may change', () => {
       shareLimit: 'until_done',
       sharePreset: 'standard',
       autoPace: false,
+      sharedTeams: [],
     };
     expect(Object.keys(every).sort()).toEqual([...SETTINGS_KEYS].sort());
   });

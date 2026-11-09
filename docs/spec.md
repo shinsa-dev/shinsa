@@ -215,6 +215,13 @@ You can say "I'm on Superwall now". Gates from other projects are held silently 
 notification) until you switch or a date you set comes. Side work started in passing still
 runs; its gates queue up behind your focus.
 
+The focus can take several projects ("Shinsa and Superwall"), or every project but the ones you tick: on a weekend,
+tick the work project and turn on Show all but these, and the button reads All but Work. Ticking a project in the
+Focus menu adds or removes it without closing the menu, and Your work clears the focus. A task with no project shows
+under all but some and hides under a list of projects. A new task defaults to the focus project only when exactly one
+project is in focus. `shinsa focus set Shinsa Superwall` and `shinsa focus set Work --except` do the same from the
+command line.
+
 ### Projects
 
 A project is what you work on, not a folder: Superwall is one project with about ten repositories
@@ -347,7 +354,7 @@ Desktop-first and responsive: built for a full window, still right in a ~900px f
   Claude's subagents. Agent usage shows every connected provider in Settings and at a glance in the
   top bar.
 - **Statistics.** Settings → Statistics, between General and Agents, shows what shipped and where the tokens went over the last
-  7, 30 or 90 days or all time (back to the first task), picked beside the page title (the range stays in the URL). With a project in focus it counts only that project's tasks and their runs, and each section says so beside its title; it counts everything again once the focus ends. Shipping: pull requests merged, tasks finished, lines merged and the
+  7, 30 or 90 days or all time (back to the first task), picked beside the page title (the range stays in the URL). With a project in focus it counts only that project's tasks and their runs, with several only theirs and with all but some everything else, and each section says so beside its title; it counts everything again once the focus ends. Shipping: pull requests merged, tasks finished, lines merged and the
   shipping streak, each pull request on the local day it merged (`mergedAt`, the first time Shinsa saw it merged, which a
   later watchdog check, follow-up or marking the task done never moves) and each task on the day it first finished (its
   first merge, or else its first round's end, never moved by closing it or a later round) (a task with a merged pull request stays counted while a watchdog check or a later round runs, unless it is
@@ -480,8 +487,8 @@ can be tested from a laptop (`docs/engine.md` → Private service addresses).
 Slack: mention the Shinsa bot in a channel or a thread and the machine of whoever mentioned it reads the thread
 and starts a task from it exactly as a request typed on Home, its project, kind and priority picked for it (anything
 that is not work gets "Not a task" once and no task: Shinsa never chats), or messages the task the thread already has; the task's status and every gate come back as one card in the thread, edited in place, with buttons to approve a plan,
-a review, a merge, a proposal or an operation, retry a failure, answer a question or request changes in a Slack form,
-pressed only by the owner or a member of the machine; only the result and the end of the task post a new message.
+a review, a merge, a proposal or an operation, retry a failure, answer a question, close a result or request changes in a Slack form,
+pressed only by the owner or a member of the machine; the result and the end of the task show on the card, and only the merge and a watchdog that found a problem post a new message.
 Secrets, sign-in and cancelling stay in Shinsa. One bot for everyone through app.shinsa.dev, each person connecting their Slack user to their
 own machine in Settings → General → Slack (`docs/engine.md` → Slack).
 
@@ -1172,8 +1179,9 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
 ### Slack: one card and its buttons (2026-11-03)
 
 - **One message per thread, always edited.** The status message is the task's card: every change, and every gate
-  that opens or closes, edits it. The reaction on your mention already notifies you, so only the result and the end
-  of the task (merged or done) post a new message, and the thread's people are pinged once. A later mention in the
+  that opens or closes, edits it. The reaction on your mention already notifies you, so the result and the end of the
+  task edit the card too, and only the merge and a watchdog that found a problem post a new message, pinging the
+  thread's people once each. A later mention in the
   thread gets 👀 (sent to the task) or 📥 (kept while a gate is open) instead of a reply.
 - **Decide from Slack.** A plan and a review have Approve and Request changes…, a merge Merge, a proposal Approve and
   Keep as is, a failure Retry, an operation Run and Finish without it, a question a button per choice and Answer….

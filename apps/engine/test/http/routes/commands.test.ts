@@ -1,7 +1,11 @@
 import { afterEach, describe, expect, test } from 'bun:test';
-import { OWNER_ONLY_MESSAGE, SCOPE_MESSAGES } from '@shinsa/core';
+import { OWNER_ONLY_MESSAGE, SCOPE_MESSAGES, type TaskOwner } from '@shinsa/core';
 import { Effect } from 'effect';
-import { dispatchUserCommand, resolveTeammateRefusal } from '../../../src/http/commands.ts';
+import {
+  dispatchUserCommand,
+  resolveRequestActor,
+  resolveTeammateRefusal,
+} from '../../../src/http/commands.ts';
 import { Engine } from '../../helpers/engine.ts';
 import { openEventLog } from '../../helpers/event-log.ts';
 import { disposeWebHandlers } from '../../helpers/web.ts';
@@ -26,6 +30,7 @@ describe('POST /api/commands', () => {
   test('a command for the machine’s owner is refused to a member and taken from the owner over the channel', async () => {
     const remote = {
       isOwner: (userId: string | null) => Effect.succeed(userId === 'u-owner'),
+      resolveActor: () => Effect.succeed(null),
       tunnelHost: Effect.succeed(null),
       isEnabled: Effect.succeed(true),
     };
@@ -80,6 +85,55 @@ describe('POST /api/commands', () => {
       )
     );
     expect([refusal.code, refusal.message]).toEqual(['handoff_scope', SCOPE_MESSAGES.command]);
+  });
+});
+
+describe('who sent a command', () => {
+  const MONA = { login: 'mona', name: 'Mona Lisa', avatarUrl: null };
+  const KAI = { login: 'kai', name: 'Kai Lane', avatarUrl: 'https://avatars/kai' };
+  const people: Record<string, TaskOwner> = { 'u-owner': MONA, 'u-kai': KAI };
+  const remote = {
+    isOwner: (userId: string | null) => Effect.succeed(userId === 'u-owner'),
+    resolveActor: (userId: string | null) => Effect.succeed(people[userId ?? 'u-owner'] ?? null),
+    tunnelHost: Effect.succeed(null),
+    isEnabled: Effect.succeed(true),
+  };
+
+  test('a task created by a member over the channel is theirs, and one made at the machine is its owner’s', async () => {
+    const { send, context } = startRoutes({ remote: remote as never });
+    const create = (request: string) => ({
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ ...TASK, request }),
+    });
+    const owners = async (response: Response) => {
+      const { taskId } = (await response.json()) as { taskId: string };
+      return context.engine.state.tasks[taskId]?.owner ?? null;
+    };
+    const member = await send('/api/commands', create('From Kai'), {
+      via: 'channel',
+      guest: null,
+      userId: 'u-kai',
+    });
+    expect(await owners(member)).toEqual(KAI);
+    expect(await owners(await send('/api/commands', create('At the keyboard')))).toEqual(MONA);
+    const stranger = await send('/api/commands', create('From nobody'), {
+      via: 'channel',
+      guest: null,
+      userId: 'u-gone',
+    });
+    expect(await owners(stranger)).toBeNull();
+  });
+
+  test('a guest is the person they are, and with no remote access or no user nobody is', async () => {
+    const actor = (source: Parameters<typeof resolveRequestActor>[0], given: typeof remote | null) =>
+      Effect.runPromise(resolveRequestActor(source, given));
+    const guest = { id: '7', ...KAI, scope: { kind: 'task', taskId: 't1' } } as const;
+    expect(await actor({ via: 'channel', guest, userId: '7' }, null)).toEqual(KAI);
+    expect(await actor({ via: 'local', guest: null, userId: null }, null)).toBeNull();
+    expect(await actor({ via: 'local', guest: null, userId: null }, remote)).toEqual(MONA);
+    expect(await actor({ via: 'tunnel', guest: null, userId: null }, remote)).toBeNull();
+    expect(await actor({ via: 'channel', guest: null, userId: 'u-kai' }, remote)).toEqual(KAI);
   });
 });
 

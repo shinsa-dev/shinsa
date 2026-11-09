@@ -52,6 +52,7 @@ const program = Effect.gen(function* () {
     surface: null,
     origin: 'local',
     guest: null,
+    userId: null,
   });
 
   const toUnreadable = (error: PlatformError.PlatformError) => new DataUnreadable({ message: error.message });

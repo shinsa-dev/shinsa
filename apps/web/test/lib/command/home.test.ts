@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { briefingKey, type Gate, type ShinsaState, type Task } from '@shinsa/core';
+import { briefingKey, type Gate, NO_FOCUS_PROJECTS, type ShinsaState, type Task } from '@shinsa/core';
 import { listHomeSections } from '@/lib/command/home.ts';
 import { resolveTaskStatus } from '@/lib/tasks/status.ts';
 import { createGate, createRepo, createShinsaState, createTask, NOW } from '../../support/state.ts';
@@ -57,7 +57,7 @@ describe('listHomeSections', () => {
     const state = waiting(['a', 'b', 'c'], {
       patch: {
         briefings: {
-          [briefingKey(null)]: {
+          [briefingKey(NO_FOCUS_PROJECTS)]: {
             text: '',
             at: NOW,
             briefing: {

@@ -371,6 +371,9 @@ export function adaptRemote(test: RemoteTest) {
     removeHandoff: (taskId: string, guestId: string | null) =>
       runPromise(remote.removeHandoff(taskId, guestId)),
     grantTeammate: (userId: string, teamId: string) => runPromise(remote.grantTeammate(userId, teamId)),
+    shareWithTeam: (teamId: string) => runPromise(remote.shareWithTeam(teamId)),
+    syncSharedTeams: (teamIds: readonly string[]) => runPromise(remote.syncSharedTeams(teamIds)),
+    unshareTeam: (teamId: string) => runPromise(remote.unshareTeam(teamId)),
     acceptRequest: (requestId: string) => runPromise(remote.acceptRequest(requestId)),
     declineRequest: (requestId: string) => runPromise(remote.declineRequest(requestId)),
     removeMember: (userId: string) => runPromise(remote.removeMember(userId)),
@@ -414,6 +417,7 @@ export function adaptRemote(test: RemoteTest) {
     removeDevice: (publicKey: string) => runPromise(remote.removeDevice(publicKey)),
     isOwner: (userId: string | null) => runSync(remote.isOwner(userId)),
     hasAccess: (userId: string) => runSync(remote.hasAccess(userId)),
+    resolveActor: (userId: string | null) => runSync(remote.resolveActor(userId)),
     resolveTeamScope: (userId: string, teamId: string) => runSync(remote.resolveTeamScope(userId, teamId)),
     listTeamScopes: (userId: string) => runSync(remote.listTeamScopes(userId)),
     resolveTeamGrant: (userId: string, teamId: string) => runPromise(remote.resolveTeamGrant(userId, teamId)),
