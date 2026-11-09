@@ -99,7 +99,8 @@ One definition per term. **Code** is the name in `packages/core`; **UI** is the 
 | rate pool | The accounts that learn one usage rate together: every account on one provider and plan, or one account whose plan is unknown | `resolveRatePool`, `plan:<provider>:<plan>`, `state.accountPlans`, `STARTING_RATES` | "an estimate from its plan's usual rate" |
 | build estimate | What a task's build will cost, from the nearest past builds or a measured table, corrected after each phase | `BuildEstimate` (`resolveBuildEstimate`) | "About 6% to build", Build estimate |
 | Auto pace | Your switch that starts each build only when its estimate fits the safe pace, in queue order | `autoPace`, `usage.pace_recorded`, `state.usagePaces`, a pace hold with scope `admission` | Auto pace, "Waiting to build", "Builds tonight", Build now |
-| night shift | What Auto pace does in your away hours: queued builds run, and the Agent records judgement calls instead of asking | `AwayHours` (`resolveAwayHours`), `NightShift`, `resolveNightShiftTold` | "built overnight" |
+| your hours | When you are usually active, per hour of the week on your clock, learned or set by hand; Autopilot and Auto pace read it | `ActiveHours` (`resolveActiveHours`, `isActiveAt`, `resolveNextActiveChange`), `activeHours` (`ActiveDay`), `clock.record`, `state.timeZone` | Your hours, "Outside your usual hours" |
+| night shift | What Auto pace does outside your hours: queued builds run, and the Agent records judgement calls instead of asking | `ActiveHours`, `NightShift`, `resolveNightShiftTold` | "built overnight" |
 | account | A Claude login a run is leased on | `RunAccount` | account |
 | provider sign-in | A provider's own login (Codex), named on a Sign in gate with no account | `ProviderSignIn`, `Gate.provider` | "Paused: ‹email› needs signing in" |
 | command | A request to change state; `decide` turns it into events and effects or refuses it | `ShinsaCommand` (`UserCommand`, `AgentCommand`, `SystemCommand`) | not shown |
@@ -675,7 +676,7 @@ Soft gates, decided by Shinsa or the reviewer:
 | `cause?` | `budget` \| `monitor` \| `push_hook` \| `paused` | why a failure gate opened, when not plain recovery; `push_hook` is the same pre-push hook failure after a fix round, whose approve (Send to the agent again) starts another fix round; `paused` is your `task.pause`, whose approve (Resume) restarts the step |
 | `escalation?` | reason (`rounds`, `stalled`, `exhausted`), rounds | an escalated review |
 | `autopilotHeld?` | string | why Autopilot left this review gate for you ("The reviewer’s confidence is medium.") |
-| `autopilotDue?` | `{ at, action: 'escalate' \| 'merge' }` \| null | an open merge gate's Autopilot deadline (`autopilot.scheduled`); `AutopilotClock` fires `autopilot.fire` at `at` |
+| `autopilotDue?` | `{ at, action: 'escalate' \| 'merge', wait, waitedMinutes }` \| null | an open merge gate's Autopilot deadline (`autopilot.scheduled`); `wait` (`AutopilotWait`) is `configured`, `outside_hours` or `hours_ended`, and `waitedMinutes` the wait it set; `AutopilotClock` fires `autopilot.fire` at `at` |
 | `verdicts?` | `{ index, verdict: fix \| dismiss, note }[]` | your per-finding decisions |
 | `supersededBy?` | string \| null | the message that withdrew a question |
 | `provider?` | string | the provider a Sign in gate is for, set on every one (`claude` for a Claude account) |
@@ -894,7 +895,7 @@ your behalf (`onBehalf`, `byTask`). **Human** = only you: its specs are `humanOn
 | `repo.remove` | forgets a repository | `repos remove` | agent |
 | `focus.change` | sets or clears the focus: `projectIds` with `except`, or `teamId`, never both (`focus_refused`), and `until`; `projectId` alone, from a page older than `focus.projects`, focuses on that one project | `focus set`, `focus clear` | agent |
 | `away.record` | records a span you were away from your Mac (`from`, `to`), sent by the Mac app's page; refused when it ends before it starts, after now or lasts over 30 days (`away_refused`) | none | **human** |
-| `settings.change` | changes settings (`SETTINGS_KEYS`) | `settings set` | agent; **human** for `approvePlans`, `mergeMethod`, `taskBudgetUsd`, `taskUsageLimit`, `dailyUsageLimit`, `autoResume`, `snoozeLimited`, `accountSwitchAt`, `fastMode`, `agentFastModes`, `delegationLimit`, `shareLimit`, `sharePreset`, `autopilot`, `watchdogsIgnoreUsageLimits`, `autoPace`, `sharedTeams` (`HUMAN_ONLY_SETTINGS`); a partial `autopilot` is merged into the current policy, `urgentWaitMinutes` 1 to 1,440, `ignoreUsageLimits` (true by default) lets an urgent task's runs skip the usage and cost limits, `contacts` (none by default, at most 5, each `slack_channel` or `slack_person` with `teamId`, `id`, `name` and, for a person, `image`) is replaced whole |
+| `settings.change` | changes settings (`SETTINGS_KEYS`) | `settings set` | agent; **human** for `approvePlans`, `mergeMethod`, `taskBudgetUsd`, `taskUsageLimit`, `dailyUsageLimit`, `autoResume`, `snoozeLimited`, `accountSwitchAt`, `fastMode`, `agentFastModes`, `delegationLimit`, `shareLimit`, `sharePreset`, `autopilot`, `watchdogsIgnoreUsageLimits`, `autoPace`, `sharedTeams`, `activeHours` (`HUMAN_ONLY_SETTINGS`); a partial `autopilot` is merged into the current policy, `urgentWaitMinutes` 1 to 1,440, `ignoreUsageLimits` (true by default) lets an urgent task's runs skip the usage and cost limits, `contacts` (none by default, at most 5, each `slack_channel` or `slack_person` with `teamId`, `id`, `name` and, for a person, `image`) is replaced whole |
 
 Core refuses a command sent on your behalf with `human_only`, recording nothing, when it is a `gate.answer`
 (`assertHumanDecides`), when a gate that was open before it is no longer open after it (`assertGatesStayOpen` in
@@ -1035,6 +1036,7 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `account.signed_in`, `account.removed` | the accounts service | answers that account's Sign in gates; releases bound tasks |
 | `account.plan_recorded` | the account roster, when an account's plan differs from `state.accountPlans` | records the account's `provider` and `plan` under its plan key, or forgets it with `plan: null`; nothing when unchanged |
 | `usage.pace_recorded` | the account roster, on an accounts refresh | records a provider's safe `pace` (the forecast with usable reset grants), or clears it with null; nothing when unchanged |
+| `clock.record` | the engine, on start | records this Mac's time zone (`timeZone`, an IANA name); refused for a name that is not one (`clock_refused`); nothing when unchanged |
 | `provider.record_sign_in` | the accounts service | a provider's own sign-in is back: answers its open Sign in gates that name no account |
 | `onboarding.welcome` | `Onboarding.complete` (`onboarding/index.ts`), when setup ends | records the welcome task, "Welcome to Shinsa", with `body` as its answer: `task.created` (origin `onboarding`, no repository, mode `ask`), `task.triaged`, `task.delivered`, then done; no triage, agent or effect; refused with an empty body (`welcome_invalid`) or once a task with that origin exists (`welcome_recorded`) |
 | `delegation.record_delivery`, `delegation.release` | `agents/deliveries/service.ts` | a delivery claim was taken, or released |
@@ -1060,6 +1062,7 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `project.written`, `project.removed` | a project is written, removed |
 | `focus.changed` | the focus changes; closes the open entry of `state.focusHistory` and, with projects, opens one (`{ projectIds, except, from, to, until }`, kept a year) |
 | `away.recorded` | the Mac app reported a span you were away (`from`, `to`), kept in `state.away` for a year; never counted as something you did |
+| `clock.recorded` | the engine recorded this Mac's time zone (`timeZone`), kept as `state.timeZone`, the clock your hours are learned and read on |
 | `settings.changed` | settings change (the whole settings object) |
 | `task.created` | a task is created (`request`, `planFirst`, `auto`; with its handle when it has a project you chose (`auto.project` false); `createdBy`, `scheduleId` and `sourceReport` for one a watch's read filed; `watchHome` for a watch's home) |
 | `task.triaged` | triage set title, repository (or none), size, branch, handle, pipeline, decisions (always) |

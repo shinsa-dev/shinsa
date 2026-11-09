@@ -206,6 +206,10 @@ not chat text.
   whose merge waits too long is sent to your team's Needs you, merged for you, or both; it can also post that to
   Slack channels and send it to on-call teammates in Slack, up to five at once, with the task's link and why. It never closes any other
   gate, and the activity says why it acted (`docs/engine.md` → Autopilot).
+- **Your hours.** Shinsa learns when you are usually active, per weekday on your own clock, from when you are away
+  and when you use it, and shows it in Settings → Agents → Your hours, where you can set it by hand. Outside those
+  hours Autopilot acts on an urgent merge after 15 minutes instead of the full wait, and Auto pace builds while you are
+  away (`docs/engine.md` → Your hours).
 - **Forks.** A follow-up on what a task did (a bug in a change it shipped) is its own task, kept apart on screen, whose
   agent starts from a copy of that task's conversation (Fork into a new task, `create_task`'s `fork_from`;
   `docs/engine.md` → Forking a task).

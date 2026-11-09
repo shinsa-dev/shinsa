@@ -2072,7 +2072,8 @@ action it takes is recorded with its reason. The rules are core's (`decide/autop
   a change it approved (`never` by default, `low_risk`, or `approved`); `urgent`, what an urgent change's merge gate
   does once it is ready (`wait`; `escalate` by default, which asks for a review at once; `merge`, which merges after
   the wait; or `escalate_then_merge`, which asks at once and merges after the wait); `urgentWaitMinutes`, how long it
-  waits before it merges (60, 1 to 1440); `ignoreUsageLimits` (`true` by default), whether an urgent task's runs skip the usage and
+  waits before it merges inside your usual hours (60, 1 to 1440); `quietWaitMinutes`, how long it waits outside
+  them (15, 1 to 1440; Your hours, below); `ignoreUsageLimits` (`true` by default), whether an urgent task's runs skip the usage and
   cost limits; `contacts`, who in Slack also hears of an escalation (none by default, at most
   `MAX_AUTOPILOT_CONTACTS`, 5; each an `AutopilotContact`, a `slack_channel` or `slack_person` with its workspace
   `teamId`, Slack `id` and `name`, listed once, `isSameAutopilotContact`; Escalating in Slack, below).
@@ -2092,8 +2093,12 @@ action it takes is recorded with its reason. The rules are core's (`decide/autop
   risk is `low`), no pre-merge step of it or its bundle is open, and your edits are pushed. Otherwise an urgent task
   asks first and waits after: with `escalate` or `escalate_then_merge` it is escalated at once (`askAtOnce`, "Urgent,
   and ready to merge.", `handoff.waitedMinutes` 0, with `mergesAt` the deadline, or the reason it will not merge
-  as `blockedBy`), and with `merge` or `escalate_then_merge` its gate gets a merge deadline a full wait later
-  (`autopilot.scheduled`, `Gate.autopilotDue {at, action: 'merge'}`). Both follow you while the gate waits
+  as `blockedBy`), and with `merge` or `escalate_then_merge` its gate gets a merge deadline
+  (`autopilot.scheduled`, `Gate.autopilotDue {at, action: 'merge', wait, waitedMinutes}`). The deadline follows your
+  hours (`resolveWait`, on `resolveActiveHours`): outside them it is `quietWaitMinutes` from now (`outside_hours`);
+  inside them it is `urgentWaitMinutes` from now (`configured`), or `quietWaitMinutes` after your hours end when that
+  comes first (`hours_ended`, `resolveNextActiveChange`). With nothing learned and no hours set by hand you count as
+  here, so it is the configured wait. The deadline is set once; coming back during the wait does not move it. Both follow you while the gate waits
   (`syncAutopilotDeadlines`, after `task.prioritize` and `settings.change`): a task you mark urgent, or a policy you
   turn on or set to ask or merge, is asked for at once and gets its deadline a full wait from then; a task no longer
   urgent, or a policy off or set not to merge, loses the deadline; a deadline already set keeps its time, and an
@@ -2102,7 +2107,8 @@ action it takes is recorded with its reason. The rules are core's (`decide/autop
   `autopilot:<gate>:<dueAt>`) for each open merge gate at its deadline. Core ignores a fire for another deadline, a
   gate no longer open, or a closed task, and clears the deadline once the policy is off or the task is no longer
   urgent. It acts on the urgent rule as it is at the fire, not the one the deadline was set under: only `merge` and
-  `escalate_then_merge` merge, and only when nothing refuses it; otherwise it escalates the task with why
+  `escalate_then_merge` merge, and only when nothing refuses it; otherwise it escalates the task with why, its first sentence naming the wait it kept ("Urgent,
+  outside your usual hours, and the merge waited 15 minutes for you."; `waitedMinutes` from the deadline)
   (`task.escalated`, `Task.escalation {at, reason, handoff}`, "Escalated by Autopilot" in the activity), and clears
   the deadline. When it was already asked for at once with a merge promised (`mergesAt`), it revises that escalation
   instead (`task.escalation_revised`, keeping its `at`, "Autopilot could not merge it" in the activity): the new
@@ -2401,11 +2407,32 @@ action it takes is recorded with its reason. The rules are core's (`decide/autop
     running line and names them on a line of their own, soonest first, each with when it builds ("tonight", "after
     3:40 PM" or "next", `listWaitingBuilds`), the first two by name and the rest in a popover; once you are back it
     adds how many tasks built overnight are ready for your review (`describeOvernightReviews`).
+- **Your hours** (`presence/hours.ts`, `presence/schema.ts`; pure, one model for Autopilot, Auto pace and Home).
+  `resolveActiveHours(state, now)` gives `ActiveHours {source, timeZone, week, observedDays}`, `week` 168 booleans,
+  one per hour of the week from Sunday 0:00 on your clock, or null when it has too little to go on.
+  - **Your clock.** The engine sends `clock.record {timeZone}` on every start with the Mac's time zone, kept as
+    `state.timeZone` (`clock.recorded` only when it changed); every hour is read on it (`resolveLocalSlot`), so 9:00
+    is your 9:00 through daylight saving. Before the first record it is UTC.
+  - **Learned** (`resolveLearnedHours`, `ACTIVE_HOURS_LIMITS`), over the last 28 days. Away spans first: an hour is
+    covered when an `away` span covers at least half of it, and an hour of the week is yours when it was covered less
+    than half the time (`source: 'away'`). With fewer than 3 days of spans, your own activity (`state.presence`, the
+    commands you sent): an hour of the week is yours when you were active in it at least 15% of the time
+    (`source: 'activity'`). With fewer than 3 days of either, null. Each day counts half as much every 14 days back,
+    so a new routine takes over within weeks, and each hour of the week is learned on its own weekday once it has 2
+    days of it, or from the same hour on every day until then, so a weekend away never counts on a Friday.
+  - **Set by hand.** `activeHours`, a human-only setting (null by default), is a list of `ActiveDay {weekday, from,
+    to}` (weekday 0 for Sunday, whole hours 0 to 24, no overlaps, at most 14), which wins over what was learned
+    (`source: 'override'`) until you clear it with null.
+  - **Reading it.** `isActiveAt(hours, at)` (true with null: unknown counts as here) and
+    `resolveNextActiveChange(hours, at)`, the next 15-minute step where you go from here to away or back, or null
+    when the week never changes. Settings → Agents → Your hours (`ActiveHoursSettings`, `lib/active-hours.ts`) shows
+    each weekday's hours as a strip with its ranges and where they come from, says when it is still learning, and
+    sets them by hand (Set by hand fills the week from what was learned, or weekdays 9:00 to 17:00) or clears them
+    (Use learned hours); it and the Autopilot row "Outside your hours, after" show only on an engine with
+    `active-hours`.
 - **The night shift** (`costs/away.ts`, `prompts/night.ts`), on top of Auto pace and needing no setting of its own.
-  Your away hours are learned from the last 14 days (`AWAY_LIMITS`): an hour of the day is away when the `away`
-  spans cover at least half of it on at least half the days observed, given at least 3 days of spans; with fewer,
-  it falls back to activity, an hour with any presence on under 15% of the days. With neither, there is no night
-  shift. Only the Agent is told, in its user turn, never its system prompt (`resolveNightShiftTold`): while it plans
+  Your away hours are the hours outside Your hours (above, `isActiveAt`). With nothing learned and none set, there
+  is no night shift. Only the Agent is told, in its user turn, never its system prompt (`resolveNightShiftTold`): while it plans
   a task whose build will probably wait (you are away, admission holds are queued, or the budget has no room), that
   it builds unattended and should ask every question now; while it builds or fixes during your away hours, that it
   should decide what it can, record each choice as a judgement call (a summary line for a fix), and use `ask` only
