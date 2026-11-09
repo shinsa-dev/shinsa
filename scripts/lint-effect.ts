@@ -533,13 +533,12 @@ function isNullValue(node: AstNode | undefined | null): boolean {
   return false;
 }
 
-function hasNullType(node: AstNode | undefined) {
+function hasNullType(node: AstNode | undefined): boolean {
   if (!node) return false;
-  let found = false;
-  walk(node, (child) => {
-    if (child.type === 'TSNullKeyword') found = true;
-  });
-  return found;
+  if (node.type === 'TSTypeAnnotation' || node.type === 'TSParenthesizedType')
+    return hasNullType(node.typeAnnotation as AstNode);
+  if (node.type === 'TSUnionType') return (node.types as AstNode[]).some((member) => hasNullType(member));
+  return node.type === 'TSNullKeyword';
 }
 
 function returnsNull(fn: AstNode) {

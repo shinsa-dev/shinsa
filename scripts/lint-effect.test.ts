@@ -418,6 +418,17 @@ describe('the baseline rules', () => {
     );
   });
 
+  test('a null inside the return type is not a null return, only null in its top-level union', () => {
+    const source = [
+      'export function a(): Validation<{ live: boolean | null }> { return v; }',
+      'export function b(): Map<string, Rate | null> { return m; }',
+      'export const c = (): readonly (string | null)[] => list;',
+      'export function d(): (string | null) { return x; }',
+      'export function e(): Option<string> | (number | null) { return x; }',
+    ].join('\n');
+    expect(rules('packages/core/src/a.ts', source)).toEqual(['null-return:4', 'null-return:5']);
+  });
+
   test('null returns are only checked in core, never in other packages or components', () => {
     const source = 'export function a() { return null; }';
     expect(rules('apps/engine/src/a.ts', source)).toEqual([]);
