@@ -222,6 +222,14 @@ export class BrowserCookies extends Context.Service<
           })
         );
 
+      const listSavedSites = Effect.fn('BrowserCookies.listSavedSites')(function* (profile: BrowserProfile) {
+        const file = yield* selectCookieFile(host.resolveProfilePath(profile));
+        if (Option.isNone(file)) return [];
+        return yield* listFileSites(file.value).pipe(
+          Effect.orElseSucceed((): ReadonlyArray<BrowserSite> => [])
+        );
+      });
+
       const listProfileSites = Effect.fn('BrowserCookies.listProfileSites')(function* (
         profile: BrowserProfile
       ) {
@@ -241,15 +249,12 @@ export class BrowserCookies extends Context.Service<
             }))
           );
         }
-        const file = yield* selectCookieFile(host.resolveProfilePath(profile));
-        if (Option.isNone(file)) return [];
-        return yield* listFileSites(file.value).pipe(
-          Effect.orElseSucceed((): ReadonlyArray<BrowserSite> => [])
-        );
+        return yield* listSavedSites(profile);
       });
 
       const listSites = Effect.fn('BrowserCookies.listSites')(function* (profile: BrowserProfile) {
         if (!(yield* exists(host.resolveProfilePath(profile)))) return [];
+        if (config.inspect) return yield* listSavedSites(profile);
         return yield* listProfileSites(profile);
       });
 

@@ -20,7 +20,9 @@ export const SIGN_OUT_TITLE = 'Sign out of everything?';
 
 export const BROWSER_REMOTE_NOTE = 'Signing in happens on the Mac this task runs on. Open Shinsa there.';
 
-const SHOWN_SITES = 3;
+export const NO_SIGNED_IN_SITES = 'Not signed in to any site yet.';
+
+export const READING_SITES = 'Reading its sites…';
 
 const COPY_REFUSING_SITES: ReadonlyArray<string> = ['google.com', 'youtube.com'];
 
@@ -28,14 +30,12 @@ export function describeSignOut(project: string) {
   return `Shinsa deletes ${project}’s browser profile, so its agents are signed out of every site.`;
 }
 
-export function describeSignedInSites(sites: ReadonlyArray<BrowserSite>) {
-  const names = sites.filter((site) => site.signedIn).map((site) => site.site);
-  if (names.length === 0) return 'Not signed in to any site yet';
-  const shown = names.slice(0, SHOWN_SITES).join(', ');
-  const rest = names.length - SHOWN_SITES;
-  return rest > 0
-    ? `Signed in to ${shown} and ${describeCount(rest, 'more', 'more')}`
-    : `Signed in to ${shown}`;
+export function listSignedInSites(sites: ReadonlyArray<BrowserSite>) {
+  return sites.filter((site) => site.signedIn);
+}
+
+export function describeSiteCookies(site: BrowserSite) {
+  return describeCount(site.cookies, 'cookie');
 }
 
 export function describeCopyDone(answer: BrowserCopyAnswer) {

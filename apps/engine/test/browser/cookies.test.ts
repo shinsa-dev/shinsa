@@ -55,6 +55,7 @@ interface CookiesOptions {
   readonly keychain?: 'allowed' | 'refused' | 'empty';
   readonly defaultBundle?: string | null;
   readonly unavailable?: boolean;
+  readonly inspect?: boolean;
 }
 
 function runCookies<A, E>(
@@ -95,11 +96,16 @@ function runCookies<A, E>(
       }),
     stopTree: () => Effect.void,
   });
+  const acquired: string[] = [];
   const host = Layer.succeed(BrowserHost, {
-    acquire: () =>
-      options.unavailable
-        ? Effect.fail(new BrowserUnavailable({ reason: 'not_installed', message: 'No Chrome.' }))
-        : Effect.succeed({ webSocketUrl: cdp.url }),
+    acquire: (profile) =>
+      Effect.sync(() => acquired.push(profile)).pipe(
+        Effect.andThen(() =>
+          options.unavailable
+            ? Effect.fail(new BrowserUnavailable({ reason: 'not_installed', message: 'No Chrome.' }))
+            : Effect.succeed({ webSocketUrl: cdp.url })
+        )
+      ),
     openWindow: () => Effect.void,
     closeWindow: () => Effect.void,
     stop: () => Effect.void,
@@ -109,13 +115,19 @@ function runCookies<A, E>(
   });
   const layer = BrowserCookies.layer.pipe(
     Layer.provide(Layer.mergeAll(shell, host)),
-    Layer.provide(Layer.succeed(EngineConfig, createConfigAt(createTempDir(), { userHome }))),
+    Layer.provide(
+      Layer.succeed(
+        EngineConfig,
+        createConfigAt(createTempDir(), { userHome, inspect: options.inspect ?? false })
+      )
+    ),
     Layer.provide(BunServices.layer)
   );
   return Effect.runPromise(Effect.scoped(Effect.provide(effect, layer))).then((value) => ({
     value,
     cdp,
     commands,
+    acquired,
   }));
 }
 
@@ -368,5 +380,21 @@ describe('copying sign-ins from your browser', () => {
       BrowserCookies.use((cookies) => cookies.listSites(SHINSA))
     );
     expect(live.value).toEqual([]);
+  });
+
+  test('reads a profile’s saved cookies without starting its Chrome in inspect mode', async () => {
+    const home = createTempDir();
+    const profile = join(home, 'profiles', SHINSA);
+    mkdirSync(profile, { recursive: true });
+    writeCookieDatabase(join(profile, 'Default/Cookies'), [
+      { host: '.vercel.com', name: 'authorization', value: 'v' },
+    ]);
+    const inspected = await runCookies(
+      home,
+      BrowserCookies.use((cookies) => cookies.listSites(SHINSA)),
+      { inspect: true }
+    );
+    expect(inspected.value).toEqual([{ site: 'vercel.com', cookies: 1, signedIn: true }]);
+    expect(inspected.acquired).toEqual([]);
   });
 });

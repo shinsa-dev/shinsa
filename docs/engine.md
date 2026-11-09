@@ -6038,14 +6038,15 @@ agent's Playwright MCP ──ws──► engine /browser/cdp/<run key>   Browser
                                  │ loopback only, key of a live run
                                  ▼
                         BrowserHost.acquire(project) ──► Chrome, headless
-                                 ▲                      ~/.config/shinsa/browser/<project id>/
+                                 ▲                ~/.config/shinsa/data/browser/<project id>/
 you: Settings → Browser ─────────┤
   Copy sign-ins ── BrowserCookies: your browser's cookie file ──► Storage.setCookies
   Open sign-in window ── the same profile, a normal window, nothing attached
 ```
 
 - **The host** (`BrowserHost`) runs installed Google Chrome (`CHROME_EXECUTABLES`: Chrome, Chrome Beta, Chromium) on
-  one profile per project at `~/.config/shinsa/browser/<project id>/`, never Playwright's Chromium. It starts it
+  one profile per project at `~/.config/shinsa/data/browser/<project id>/` (`browserDir`, in the data directory so a
+  seeded or inspected copy carries its own), never Playwright's Chromium. It starts it
   headless the first time an agent connects (`--headless=new`, `--force-device-scale-factor=2`, a debugging port on
   127.0.0.1 only), shares it between every agent of the project, and stops it after 10 idle minutes with no
   connection (`BrowserHostSettings`). Stopping asks Chrome to close and waits for it to exit, so it writes its cookies
@@ -7049,8 +7050,6 @@ update channel: a canary or a beta is the same app with the same identity (`APP_
 │                    (MCP servers, plugins and skills, above)
 ├── accounts.json    The Claude accounts Shinsa runs on (Accounts and usage limits, above)
 ├── accounts/<id>/   One Claude config folder per account Shinsa signed in or imported
-├── browser/<project id>/  Each project's shared Chrome profile, its sign-ins included (The shared browser, above);
-│                    Sign out of everything removes it
 └── data/
     ├── shinsa.sqlite  The event log, the effect outbox, the command receipts, the latest state snapshot and the
     │                  Home guide per project (`briefings`)
@@ -7062,6 +7061,8 @@ update channel: a canary or a beta is the same app with the same identity (`APP_
     ├── check-bases/   The detached checkouts of base commits that checks compare with (Checks, above)
     ├── caches/        Build caches a repository's checkouts share (`<repo id>/turbo`; Where agents work, above)
     ├── transcripts/   One JSONL chat transcript per run
+    ├── browser/       Each project's shared Chrome profile (`<project id>/`), its sign-ins included; Sign out of
+    │                  everything removes it (The shared browser, above)
     ├── evidence/      What agents attached as evidence, per task and round (`<task id>/round-<n>/`), and the
     │                  chat's tool images at the top (Evidence, above)
     ├── attachments/   The files and images you attached to a request or a message, one folder per upload
@@ -7122,7 +7123,7 @@ scratch copy is one directory, and the event log, worktrees and config.json only
   `command` with that error in its ack, and HTTP answers 403 to every request under `/api/` that is not a `GET`, to a
   schedule's webhook and to an MCP sign-in's callback. Setup shows its first step without writing
   `onboarding.json`. It lists the Claude accounts without reading their logins or usage (Accounts and usage limits,
-  above). It takes no lock on the data directory (One server per data directory, below), so it can serve the data of
+  above). It reads each project's signed-in sites from its saved cookie file without starting its Chrome. It takes no lock on the data directory (One server per data directory, below), so it can serve the data of
   a Shinsa that is running, on another port; it shows the log as it was when it started.
 - **The seeded copy.** `bun run seed` writes a data folder full of tasks to look at to `~/.shinsa-seed`
   (`SHINSA_SEED_DIR` moves it): `data/` and the throwaway repositories under `repos/`, then prints the command that
@@ -7130,7 +7131,8 @@ scratch copy is one directory, and the event log, worktrees and config.json only
   that is revised and then fixed, and operation-gate notes. Every seeded project has services to start
   (`scripts/seed/services.ts`, written to `data/terminals/services.json`): `web` in each, `api` for Superwall, each
   running `scripts/sandbox/service.ts` in the project's seeded repository with a preview URL; the command names the
-  script by its path in the checkout that seeded it. The evidence (`scripts/seed/evidence.ts`) is real files in
+  script by its path in the checkout that seeded it. Superwall's and Basket's shared browsers have a few signed-in sites
+  (`scripts/seed/browser.ts`, a cookie file under `data/browser/`) and Personal's has none. The evidence (`scripts/seed/evidence.ts`) is real files in
   `scripts/seed-media/`, taken at a device scale factor of 2 like an agent's: before and after screenshots of a
   settings page in dark mode at 1280px and 390px and of a
   crowded tab row, a WebM recording of it scrolling, a reviewer's own dark-mode shot and contrast note, screenshots of

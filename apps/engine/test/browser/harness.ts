@@ -51,7 +51,7 @@ export function createFakeChrome(): FakeChrome {
       const file = join(dir, 'launches');
       return existsSync(file) ? readFileSync(file, 'utf8').trim().split('\n') : [];
     },
-    pidOf: (profile) => Number(readFileSync(join(home, 'browser', profile, 'pid'), 'utf8').trim()),
+    pidOf: (profile) => Number(readFileSync(join(home, 'data', 'browser', profile, 'pid'), 'utf8').trim()),
     fail: () => writeFileSync(join(dir, 'fail'), ''),
     writeGarbage: () => writeFileSync(join(dir, 'garbage'), ''),
     listenOn: (port) => writeFileSync(join(dir, 'port'), String(port)),
@@ -90,7 +90,9 @@ export function awaitLaunches(chrome: FakeChrome, count: number) {
 
 export function awaitPid(chrome: FakeChrome, profile: BrowserProfile) {
   return Effect.promise(async () => {
-    await until('Chrome to write its pid', () => existsSync(join(chrome.home, 'browser', profile, 'pid')));
+    await until('Chrome to write its pid', () =>
+      existsSync(join(chrome.home, 'data', 'browser', profile, 'pid'))
+    );
     return chrome.pidOf(profile);
   });
 }

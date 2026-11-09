@@ -4,10 +4,11 @@ import {
   describeCopyDone,
   describeCopyFrom,
   describeNotInSource,
-  describeSignedInSites,
+  describeSiteCookies,
   describeSignOut,
   filterSites,
   isCopyRefused,
+  listSignedInSites,
   resolveDefaultSource,
   selectMatchingSite,
   toggleSite,
@@ -19,14 +20,11 @@ const DIA = { id: 'dia' as const, name: 'Dia', isDefault: true };
 
 const CHROME = { id: 'chrome' as const, name: 'Chrome', isDefault: false };
 
-describe('describeSignedInSites', () => {
-  it('names up to three signed-in sites and counts the rest', () => {
-    expect(describeSignedInSites([])).toBe('Not signed in to any site yet');
-    expect(describeSignedInSites([site('ads.net', false)])).toBe('Not signed in to any site yet');
-    expect(describeSignedInSites([site('a.com'), site('b.com')])).toBe('Signed in to a.com, b.com');
-    expect(
-      describeSignedInSites([site('a.com'), site('b.com'), site('c.com'), site('d.com'), site('e.com')])
-    ).toBe('Signed in to a.com, b.com, c.com and 2 more');
+describe('the signed-in sites', () => {
+  it('keeps only the sites signed in and counts their cookies', () => {
+    expect(listSignedInSites([site('a.com'), site('ads.net', false)])).toEqual([site('a.com')]);
+    expect(describeSiteCookies({ site: 'a.com', cookies: 12, signedIn: true })).toBe('12 cookies');
+    expect(describeSiteCookies(site('a.com'))).toBe('1 cookie');
   });
 });
 

@@ -6,7 +6,6 @@ import { EngineConfig } from '../../config/service.ts';
 import { sendCdpCommand } from '../cdp/command.ts';
 import {
   ACTIVE_PORT_FILE,
-  BROWSER_DIR,
   type BrowserEndpoint,
   type BrowserMode,
   type BrowserProfile,
@@ -43,7 +42,7 @@ export class BrowserHost extends Context.Service<
       const fs = yield* FileSystem.FileSystem;
       const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
       const layerScope = yield* Effect.scope;
-      const root = join(config.home, BROWSER_DIR);
+      const root = config.browserDir;
       const running = yield* Ref.make<ReadonlyMap<BrowserProfile, RunningBrowser>>(new Map());
       const generations = yield* Ref.make(0);
       const lock = yield* Semaphore.make(1);

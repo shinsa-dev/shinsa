@@ -75,7 +75,7 @@ describe("the engine's browser route", () => {
     expect(engine.cdp.received.map((text) => JSON.parse(text).method)).toEqual(['Target.getTargets']);
     expect(engine.chrome.launches()).toHaveLength(1);
     expect(engine.chrome.launches()[0]).toContain(
-      `--user-data-dir=${join(engine.chrome.home, 'browser', SHINSA)}`
+      `--user-data-dir=${join(engine.chrome.home, 'data', 'browser', SHINSA)}`
     );
     await engine.endRun();
     await until('the socket to close', () => agent.closed.length > 0);

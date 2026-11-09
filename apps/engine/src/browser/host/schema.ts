@@ -73,8 +73,6 @@ export const BrowserHostSettings = Context.Reference<BrowserHostSettings>(
   }
 );
 
-export const BROWSER_DIR = 'browser';
-
 export const ACTIVE_PORT_FILE = 'DevToolsActivePort';
 
 export const SHARED_ARGS: ReadonlyArray<string> = [

@@ -70,10 +70,13 @@ describe('Settings → Browser', () => {
   it('lists the sites each project’s browser is signed in to', async () => {
     renderBrowser({ [`GET ${PROJECT}`]: { answer: { mode: 'stopped', sites: SITES } } });
     expect(screen.getByText('Reading its sites…')).toBeDefined();
-    expect(
-      await screen.findByText('Signed in to github.com, vercel.com, stripe.com and 1 more')
-    ).toBeDefined();
+    expect(await screen.findByText('github.com')).toBeDefined();
+    expect(screen.getByText('12 cookies')).toBeDefined();
+    for (const site of ['vercel.com', 'stripe.com', 'linear.app'])
+      expect(screen.getByText(site)).toBeDefined();
+    expect(screen.queryByText('tracker.net')).toBeNull();
     expect(screen.getByText('Superwall')).toBeDefined();
+    expect(screen.getByText('P-')).toBeDefined();
   });
 
   it('says so when a project’s browser is signed in nowhere, and toasts a failed read', async () => {
@@ -89,7 +92,7 @@ describe('Settings → Browser', () => {
       [`POST ${PROJECT}/window`]: { answer: { mode: 'window', sites: [] } },
       [`POST ${PROJECT}/window/close`]: { answer: { mode: 'stopped', sites: SITES.slice(0, 1) } },
     });
-    expect(await screen.findByText('Not signed in to any site yet')).toBeDefined();
+    expect(await screen.findByText('Not signed in to any site yet.')).toBeDefined();
     fireEvent.click(screen.getByRole('button', { name: 'Open sign-in window' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Done' }));
     expect(
@@ -97,9 +100,22 @@ describe('Settings → Browser', () => {
         'The window has nothing automating it, so Google lets you sign in. Agents wait until you press Done.'
       )
     ).toBeDefined();
-    expect(await screen.findByText('Signed in to github.com')).toBeDefined();
+    expect(await screen.findByText('github.com')).toBeDefined();
     expect(sent(`${PROJECT}/window`).map((request) => request.body)).toEqual([{ url: null }]);
     expect(toasts.success).toHaveBeenCalledWith('Done. Agents use the browser again.');
+  });
+
+  it('offers copying and the sign-in window in its menu, for a narrow window', async () => {
+    renderBrowser({
+      [`GET ${PROJECT}`]: { answer: { mode: 'stopped', sites: [] } },
+      [`POST ${PROJECT}/window`]: { answer: { mode: 'window', sites: [] } },
+    });
+    fireEvent.click(await screen.findByRole('button', { name: 'Browser options' }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Open sign-in window' }));
+    expect(await screen.findByRole('button', { name: 'Done' })).toBeDefined();
+    expect(sent(`${PROJECT}/window`)).toHaveLength(1);
+    fireEvent.click(screen.getByRole('button', { name: 'Browser options' }));
+    expect(screen.queryByRole('menuitem', { name: 'Copy sign-ins…' })).toBeNull();
   });
 
   it('toasts a sign-in window Chrome could not open', async () => {
@@ -128,7 +144,7 @@ describe('Settings → Browser', () => {
       )
     ).toBeDefined();
     fireEvent.click(screen.getByRole('button', { name: 'Sign out' }));
-    expect(await screen.findByText('Not signed in to any site yet')).toBeDefined();
+    expect(await screen.findByText('Not signed in to any site yet.')).toBeDefined();
     expect(sent(`${PROJECT}/sign-out`)).toHaveLength(1);
     expect(toasts.success).toHaveBeenCalledWith('Signed Superwall’s browser out.');
   });

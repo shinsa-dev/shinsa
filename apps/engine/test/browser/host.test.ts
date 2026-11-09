@@ -49,7 +49,7 @@ describe('the browser host', () => {
     expect(mode).toBe('headless');
     const launches = chrome.launches();
     expect(launches).toHaveLength(1);
-    expect(launches[0]).toContain(`--user-data-dir=${join(chrome.home, 'browser', SHINSA)}`);
+    expect(launches[0]).toContain(`--user-data-dir=${join(chrome.home, 'data', 'browser', SHINSA)}`);
     expect(launches[0]).toContain('--headless=new');
     expect(launches[0]).toContain('--use-mock-keychain');
     expect(launches[0]).toContain('--force-device-scale-factor=2');
@@ -196,7 +196,7 @@ describe('the browser host', () => {
 
   test('stops a browser, and signs out of everything by removing its profile', async () => {
     const chrome = createFakeChrome();
-    const profile = join(chrome.home, 'browser', SHINSA);
+    const profile = join(chrome.home, 'data', 'browser', SHINSA);
     await runHost(
       chrome,
       Effect.gen(function* () {

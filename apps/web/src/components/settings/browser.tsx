@@ -1,7 +1,13 @@
 import type { Project, ShinsaState } from '@shinsa/core';
 import type { BrowserProjectAnswer } from '@shinsa/core/engine-api/schema';
+import { Badge } from '@shinsa/ui/components/badge';
 import { Button } from '@shinsa/ui/components/button';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem } from '@shinsa/ui/components/dropdown-menu';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+} from '@shinsa/ui/components/dropdown-menu';
 import { toast } from '@shinsa/ui/components/sonner';
 import { Truncate } from '@shinsa/ui/components/truncate';
 import { useDialogState } from '@shinsa/ui/hooks/use-dialog-state';
@@ -9,22 +15,26 @@ import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
 import { OptionsTrigger } from '@/components/controls/options-trigger.tsx';
 import { ConfirmDialog } from '@/components/overlays/confirm-dialog.tsx';
+import { Hint } from '@/components/overlays/hint.tsx';
 import { ProjectDotIcon } from '@/components/status/project-dot.tsx';
 import {
   BROWSER_DESCRIPTION,
   BROWSER_SECTION,
-  describeSignedInSites,
   describeSignOut,
+  describeSiteCookies,
+  listSignedInSites,
+  NO_SIGNED_IN_SITES,
+  READING_SITES,
   SIGN_IN_WINDOW_NOTE,
   SIGN_OUT_TITLE,
 } from '@/lib/browser.ts';
 import { BROWSER_ACTIONS, type BrowserActions } from '@/lib/connection/browser.ts';
 import { describeFailure } from '@/lib/connection/commands.ts';
 import { useEngineFeature } from '@/lib/connection/socket.ts';
-import { listProjects } from '@/lib/projects.ts';
+import { describeProjectKey, listProjects } from '@/lib/projects.ts';
 import { isRemoteBuild } from '@/lib/remote/mode.ts';
 import { BrowserCopyDialog } from './browser-copy-dialog.tsx';
-import { SETTING_LABEL, SETTING_ROW, SETTING_ROW_WRAPS, SettingsEmpty, SettingsGroup } from './group.tsx';
+import { PathRow, SETTING_ROW, SettingsBlock, SettingsEmpty, SettingsGroup } from './group.tsx';
 
 type BrowserBusy = 'window' | 'done' | 'signOut' | null;
 
@@ -43,11 +53,28 @@ function useBrowserProject(projectId: string, actions: BrowserActions) {
   return { answer, replaceAnswer: setAnswer, refresh };
 }
 
-function SignOutMenu({ onSignOut }: { onSignOut: () => void }) {
+function BrowserMenu({
+  narrow,
+  onSignOut,
+}: {
+  narrow: { onCopy: () => void; onOpenWindow: () => void } | null;
+  onSignOut: () => void;
+}) {
   return (
     <DropdownMenu>
       <OptionsTrigger label='Browser options' />
       <DropdownMenuContent align='end' className='min-w-44'>
+        {narrow && (
+          <>
+            <DropdownMenuItem className='sm:hidden' onClick={narrow.onCopy}>
+              Copy sign-ins…
+            </DropdownMenuItem>
+            <DropdownMenuItem className='sm:hidden' onClick={narrow.onOpenWindow}>
+              Open sign-in window
+            </DropdownMenuItem>
+            <DropdownMenuSeparator className='sm:hidden' />
+          </>
+        )}
         <DropdownMenuItem icon='IconTrashCan' variant='destructive' onClick={onSignOut}>
           Sign out of everything…
         </DropdownMenuItem>
@@ -78,22 +105,25 @@ export function BrowserProjectRow({ project, actions }: { project: Project; acti
     setBusy(null);
   }
 
+  const sites = answer ? listSignedInSites(answer.sites) : [];
+  const showCopy = () => copy.show('copy');
+  const openWindow = () =>
+    void act('window', () => actions.openWindow(project.id, null), 'Opened the sign-in window.');
   return (
-    <div className='flex flex-col'>
-      <div className={cn(SETTING_ROW, SETTING_ROW_WRAPS, 'gap-2')}>
-        <span className={cn(SETTING_LABEL, 'flex items-center gap-2')}>
+    <SettingsBlock
+      header={
+        <>
           <ProjectDotIcon color={project.color} />
-          <span className='flex min-w-0 flex-1 flex-col'>
-            <Truncate className='text-xs text-fg-4'>{project.name}</Truncate>
-            <Truncate className='text-2xs text-fg-2'>
-              {answer ? describeSignedInSites(answer.sites) : 'Reading its sites…'}
-            </Truncate>
-          </span>
-        </span>
-        <span className='flex shrink-0 items-center gap-1.5'>
+          <Truncate className='min-w-0 text-xs font-medium text-fg-4'>{project.name}</Truncate>
+          <Hint label={describeProjectKey(project.key)}>
+            <Badge size='sm' className='font-mono'>
+              {project.key}
+            </Badge>
+          </Hint>
+          <span className='flex-1' />
           {windowOpen ? (
             <Button
-              size='sm'
+              size='xs'
               loading={busy === 'done'}
               onClick={() =>
                 void act('done', () => actions.closeWindow(project.id), 'Done. Agents use the browser again.')
@@ -103,27 +133,39 @@ export function BrowserProjectRow({ project, actions }: { project: Project; acti
             </Button>
           ) : (
             <>
-              <Button variant='secondary' size='sm' onClick={() => copy.show('copy')}>
+              <Button variant='secondary' size='xs' className='max-sm:hidden' onClick={showCopy}>
                 Copy sign-ins
               </Button>
               <Button
                 variant='secondary'
-                size='sm'
+                size='xs'
+                className='max-sm:hidden'
                 loading={busy === 'window'}
-                onClick={() =>
-                  void act('window', () => actions.openWindow(project.id, null), 'Opened the sign-in window.')
-                }
+                onClick={openWindow}
               >
                 Open sign-in window
               </Button>
             </>
           )}
-          <SignOutMenu onSignOut={() => signOut.show('signOut')} />
-        </span>
-      </div>
-      {windowOpen && (
-        <p className={cn(SETTING_ROW, 'min-h-0 pb-2 text-2xs text-fg-2')}>{SIGN_IN_WINDOW_NOTE}</p>
-      )}
+          <BrowserMenu
+            narrow={windowOpen ? null : { onCopy: showCopy, onOpenWindow: openWindow }}
+            onSignOut={() => signOut.show('signOut')}
+          />
+        </>
+      }
+    >
+      {windowOpen && <p className={cn(SETTING_ROW, 'text-2xs text-fg-2')}>{SIGN_IN_WINDOW_NOTE}</p>}
+      {!answer && <SettingsEmpty>{READING_SITES}</SettingsEmpty>}
+      {answer && sites.length === 0 && <SettingsEmpty>{NO_SIGNED_IN_SITES}</SettingsEmpty>}
+      {sites.map((site) => (
+        <PathRow
+          key={site.site}
+          icon='IconGlobe'
+          iconLabel='Signed in'
+          title={site.site}
+          path={describeSiteCookies(site)}
+        />
+      ))}
       {copy.value && (
         <BrowserCopyDialog
           control={copy.control}
@@ -141,7 +183,7 @@ export function BrowserProjectRow({ project, actions }: { project: Project; acti
           void act('signOut', () => actions.signOut(project.id), `Signed ${project.name}’s browser out.`)
         }
       />
-    </div>
+    </SettingsBlock>
   );
 }
 
@@ -156,11 +198,7 @@ export function BrowserSettings({
   if (!supported || isRemoteBuild()) return null;
   const projects = listProjects(state);
   return (
-    <SettingsGroup
-      title={BROWSER_SECTION}
-      description={BROWSER_DESCRIPTION}
-      className='divide-y divide-border'
-    >
+    <SettingsGroup title={BROWSER_SECTION} description={BROWSER_DESCRIPTION} className='gap-1.5'>
       {projects.length === 0 && (
         <SettingsEmpty>Create a project first. Each project gets its own browser.</SettingsEmpty>
       )}
