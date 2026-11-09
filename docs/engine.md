@@ -3020,6 +3020,12 @@ beside your run (Runs for a task, below).
   `SERVICE_PORT_VARIABLE`). It runs as `<login shell> -l -c
   <command>` in its own terminal tab (`TerminalInfo.serviceId`), with the terminal's environment and its variables
   over it, so the shell that started it is the program: it ends when the command ends.
+- **32 per project.** A project keeps at most 32 services (`SERVICE_LIMITS.services`), counting only its own, so a
+  project with none can always add one however many the other projects on this machine hold. `Terminals.addService`
+  and `POST /api/services/batch` (its services plus the batch, before any is added) refuse past it with
+  `service_limit`, whose message from `resolveServiceLimitMessage` (`terminals/limit.ts`) names the project's
+  services and says how many to remove under Services; an agent's `add_service` adds that it can remove one with
+  `remove_service`, so the tool name never reaches the screen.
 - **Kept beside the terminals, not in the event log.** The definitions are in `data/terminals/services.json` (mode
   600: a variable can be a secret). They are not events because nothing `decide` reads depends on them, no agent may
   change them (an event would need a user command, and every user command has a surface spec that agents' tools are
