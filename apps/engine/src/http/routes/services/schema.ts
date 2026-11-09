@@ -1,12 +1,6 @@
-import { SERVICE_LIMITS } from '@shinsa/core';
 import type { FieldFailure } from '@shinsa/core/engine-api/schema';
 
 export const TASK_ID_LIMIT = 200;
-
-export const SERVICE_LIMIT: FieldFailure = {
-  code: 'service_limit',
-  message: `Shinsa keeps ${SERVICE_LIMITS.services} services at most.`,
-};
 
 export const TASK_GONE: FieldFailure = { code: 'task_not_found', message: 'That task is not there anymore.' };
 
