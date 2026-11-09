@@ -9,11 +9,10 @@ import { isAdmissionWait, isUsageWaitArmed } from '@/lib/accounts/usage-wait.ts'
 
 export const AUTO_PACE_LABEL = {
   title: 'Auto pace',
-  description: 'Spreads your builds over the forecast below, so your accounts last until they reset.',
   toggle: 'Auto pace',
   toggled: { on: 'Auto pace is on.', off: 'Auto pace is off.' },
-  on: 'Each build starts only when its estimate fits the safe pace in the forecast below, in order of priority, then the projects you work on most. Planning, questions and watchdog checks never wait.',
-  off: 'Turn it on to start each build only when its estimate fits the safe pace in the forecast below. Until then every build starts at once.',
+  on: 'Spreads your builds over the forecast below, so your accounts last until they reset.',
+  off: 'Turn it on to spread your builds over the forecast below. Until then every build starts at once.',
   noPace: 'Auto pace waits for the first usage reading of these accounts.',
 } as const;
 

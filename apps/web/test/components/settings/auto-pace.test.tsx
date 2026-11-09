@@ -73,7 +73,7 @@ describe('Auto pace settings', () => {
     expect(toggle.compareDocumentPosition(forecast)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
     expect(toggle.closest('section')?.contains(forecast)).toBe(false);
     expect(toggle.getAttribute('aria-checked')).toBe('false');
-    expect(screen.getByText(/^Turn it on to start each build only when/)).toBeTruthy();
+    expect(screen.getByText(/^Turn it on to spread your builds over the forecast below/)).toBeTruthy();
     expect(screen.queryByText(/^Left for .*builds/)).toBeNull();
     fireEvent.click(toggle);
     await waitFor(() =>
@@ -85,7 +85,7 @@ describe('Auto pace settings', () => {
     pushAccounts(createSnapshot({ accounts: ACCOUNTS }));
     await settle();
     renderForecast({ autoPace: true }, { claude: { provider: 'claude', pace: 140, at: Date.now() } });
-    expect(screen.getByText(/^Each build starts only when its estimate fits/)).toBeTruthy();
+    expect(screen.getByText(/^Spreads your builds over the forecast below/)).toBeTruthy();
     expect(screen.getByText('Left for Claude builds in the next 24 hours')).toBeTruthy();
     expect(screen.getByText('126% left')).toBeTruthy();
     expect(screen.getByText(/counting your usable usage resets/)).toBeTruthy();
