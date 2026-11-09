@@ -1,4 +1,4 @@
-import { isTaskSettled, type Task, TERMINAL_LIMITS, type TerminalInfo } from '@shinsa/core';
+import { isTaskSettled, SERVICE_LIMITS, type Task, TERMINAL_LIMITS, type TerminalInfo } from '@shinsa/core';
 import type { TerminalHolder } from './schema.ts';
 
 const LIST = new Intl.ListFormat('en', { type: 'conjunction' });
@@ -33,5 +33,13 @@ export function resolveLimitMessage(holders: TerminalHolder[], tasks: Readonly<R
     ...[...byTask].map(([taskId, held]) => describeHolder(taskId, held)),
     ...(yours === 0 ? [] : [yours === 1 ? '1 is yours.' : `${yours} are yours.`]),
     'Stop a service or close a terminal to free one.',
+  ].join(' ');
+}
+
+export function resolveServiceLimitMessage(names: readonly string[], adding: number) {
+  const over = names.length + adding - SERVICE_LIMITS.services;
+  return [
+    `This project keeps ${SERVICE_LIMITS.services} services at most, and has ${names.length}: ${LIST.format(names)}.`,
+    `Remove ${over === 1 ? 'one' : over} with remove_service, or under Services, to add ${adding === 1 ? 'another' : `these ${adding}`}.`,
   ].join(' ');
 }

@@ -14,20 +14,14 @@ import {
   readServiceInput,
   readText,
 } from '../../../terminals/input.ts';
+import { resolveServiceLimitMessage } from '../../../terminals/limit.ts';
 import { listNewServiceSuggestions, resolveServicePlaceIn } from '../../../terminals/places.ts';
 import { ServiceRefiner } from '../../../terminals/refine/service.ts';
 import { selectServiceRunIn } from '../../../terminals/runs.ts';
 import { Terminals } from '../../../terminals/service.ts';
 import { requestSync, resolveRequestFailure } from '../../failures.ts';
 import { PROJECT_GONE, PROJECT_ID_LIMIT } from '../../schema.ts';
-import {
-  NO_MAIN_PLACE,
-  NO_TASK_PLACE,
-  PLACE_GONE,
-  SERVICE_LIMIT,
-  TASK_GONE,
-  TASK_ID_LIMIT,
-} from './schema.ts';
+import { NO_MAIN_PLACE, NO_TASK_PLACE, PLACE_GONE, TASK_GONE, TASK_ID_LIMIT } from './schema.ts';
 
 export const ServicesHandlers = HttpApiBuilder.group(
   EngineApi,
@@ -114,8 +108,14 @@ export const ServicesHandlers = HttpApiBuilder.group(
           const others = yield* listOthers(found, projectId, null);
           const inputs = yield* requestSync(() => readServiceBatch(payload, others, places, found.home));
           yield* request(withFiles(Effect.forEach(inputs, (input) => assertFolderPresent(input.cwd))));
-          if ((yield* found.snapshot).services.length + inputs.length > SERVICE_LIMITS.services)
-            return yield* new RequestFailed(SERVICE_LIMIT);
+          if (others.length + inputs.length > SERVICE_LIMITS.services)
+            return yield* new RequestFailed({
+              code: 'service_limit',
+              message: resolveServiceLimitMessage(
+                others.map((each) => each.name),
+                inputs.length
+              ),
+            });
           const added = yield* request(Effect.forEach(inputs, (input) => found.addService(projectId, input)));
           return { added, ...(yield* found.snapshot) };
         })

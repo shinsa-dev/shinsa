@@ -224,14 +224,33 @@ describe('services over HTTP', () => {
           ...NO_PREVIEW,
         })
       );
-    expect(await refusal({ projectId, services: [one, { ...one, name: 'web' }] })).toBe('service_limit');
+    const limited = (await (
+      await post('/api/services/batch', { projectId, services: [one, { ...one, name: 'web' }] })
+    ).json()) as { error: { code: string; message: string } };
+    const names = Array.from({ length: 31 }, (_, index) => `s${index}`);
+    expect(limited.error).toEqual({
+      code: 'service_limit',
+      message: `This project keeps 32 services at most, and has 31: ${new Intl.ListFormat('en').format(names)}. Remove one with remove_service, or under Services, to add these 2.`,
+    });
     for (const service of (await runAsync(terminals.snapshot)).services)
       await runAsync(terminals.removeServices([service.id]));
+    for (let index = 0; index < 32; index += 1)
+      await runAsync(
+        terminals.addService('elsewhere', {
+          name: `s${index}`,
+          cwd: repoPath,
+          command: 'x',
+          env: {},
+          ...NO_PREVIEW,
+        })
+      );
     const added = (await (
       await post('/api/services/batch', { projectId, services: [one, { ...one, name: 'web' }] })
     ).json()) as { added: ServiceDefinition[] } & TerminalsSnapshot;
     expect(added.added.map((service) => service.name)).toEqual(['api', 'web']);
-    expect(added.services.map((service) => service.name)).toEqual(['api', 'web']);
+    expect(
+      added.services.filter((service) => service.projectId === projectId).map((service) => service.name)
+    ).toEqual(['api', 'web']);
   });
 
   test('removes several services at once, finding every one before it removes any', async () => {

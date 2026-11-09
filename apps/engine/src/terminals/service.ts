@@ -12,7 +12,7 @@ import {
 import { Clock, Context, Effect, Fiber, FileSystem, Layer, Option, Ref } from 'effect';
 import { EngineConfig } from '../config/service.ts';
 import { EngineCore } from '../runtime/engine/service.ts';
-import { listReclaimable, resolveLimitMessage } from './limit.ts';
+import { listReclaimable, resolveLimitMessage, resolveServiceLimitMessage } from './limit.ts';
 import {
   listenOnce,
   resolveLoginShell,
@@ -439,10 +439,13 @@ export class Terminals extends Context.Service<
           serviceInput: ServiceInput
         ) {
           yield* assertWritable;
-          if ((yield* Ref.get(services)).size >= SERVICE_LIMITS.services)
+          const names = [...(yield* Ref.get(services)).values()].flatMap((each) =>
+            each.projectId === projectId ? [each.name] : []
+          );
+          if (names.length >= SERVICE_LIMITS.services)
             return yield* new DomainError({
               code: 'service_limit',
-              message: `Shinsa keeps ${SERVICE_LIMITS.services} services at most.`,
+              message: resolveServiceLimitMessage(names, 1),
             });
           const service: ServiceDefinition = { id: yield* newId, projectId, ...serviceInput };
           yield* Ref.update(services, (known) => new Map(known).set(service.id, service));
