@@ -13,6 +13,11 @@ export const SITES_INVALID = {
   message: 'Pick at least one site to copy, as a list of site names.',
 } as const;
 
+export const SITE_INVALID = {
+  code: 'browser_site_invalid',
+  message: 'Name the site to sign out of, such as github.com.',
+} as const;
+
 export const URL_INVALID = {
   code: 'browser_url_invalid',
   message: 'The sign-in page must be an http or https address.',

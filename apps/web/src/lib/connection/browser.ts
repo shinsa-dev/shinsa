@@ -46,6 +46,11 @@ const writeCloseWindow = Effect.fn('Browser.writeCloseWindow')(function* (projec
   return yield* engine.browser.closeWindow({ params: { projectId }, payload: {} });
 });
 
+const writeRemoveSite = Effect.fn('Browser.writeRemoveSite')(function* (projectId: string, site: string) {
+  const engine = yield* EngineClient;
+  return yield* engine.browser.removeSite({ params: { projectId }, payload: { site } });
+});
+
 const writeSignOut = Effect.fn('Browser.writeSignOut')(function* (projectId: string) {
   const engine = yield* EngineClient;
   return yield* engine.browser.signOut({ params: { projectId }, payload: {} });
@@ -79,6 +84,10 @@ export function requestSignInWindowClose(projectId: string): Promise<BrowserProj
   return runApp(writeCloseWindow(projectId));
 }
 
+export function requestSiteSignOut(projectId: string, site: string): Promise<BrowserProjectAnswer> {
+  return runApp(writeRemoveSite(projectId, site));
+}
+
 export function requestBrowserSignOut(projectId: string): Promise<BrowserProjectAnswer> {
   return runApp(writeSignOut(projectId));
 }
@@ -90,6 +99,7 @@ export interface BrowserActions {
   copy: typeof requestBrowserCopy;
   openWindow: typeof requestSignInWindow;
   closeWindow: typeof requestSignInWindowClose;
+  removeSite: typeof requestSiteSignOut;
   signOut: typeof requestBrowserSignOut;
 }
 
@@ -100,5 +110,6 @@ export const BROWSER_ACTIONS: BrowserActions = {
   copy: requestBrowserCopy,
   openWindow: requestSignInWindow,
   closeWindow: requestSignInWindowClose,
+  removeSite: requestSiteSignOut,
   signOut: requestBrowserSignOut,
 };

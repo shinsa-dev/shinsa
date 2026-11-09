@@ -131,6 +131,22 @@ describe('Settings → Browser', () => {
     expect(screen.getByRole('button', { name: 'Open sign-in window' })).toBeDefined();
   });
 
+  it('signs out of one site with its remove button, and shows each site’s favicon', async () => {
+    const { container } = renderBrowser({
+      [`GET ${PROJECT}`]: { answer: { mode: 'headless', sites: SITES } },
+      [`POST ${PROJECT}/sites/remove`]: { answer: { mode: 'headless', sites: SITES.slice(1) } },
+    });
+    expect(await screen.findByText('github.com')).toBeDefined();
+    const favicon = container.querySelector('img[src="https://github.com/favicon.ico"]');
+    expect(favicon?.className).toContain('rounded-full');
+    if (favicon) fireEvent.error(favicon);
+    expect(container.querySelector('img[src="https://github.com/favicon.ico"]')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Sign out of github.com' }));
+    await waitForGone(() => screen.queryByText('github.com'));
+    expect(sent(`${PROJECT}/sites/remove`).map((request) => request.body)).toEqual([{ site: 'github.com' }]);
+    expect(toasts.success).toHaveBeenCalledWith('Signed out of github.com.');
+  });
+
   it('signs a project’s browser out of everything after you confirm', async () => {
     renderBrowser({
       [`GET ${PROJECT}`]: { answer: { mode: 'headless', sites: SITES } },

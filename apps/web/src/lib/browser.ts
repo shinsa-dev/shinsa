@@ -30,6 +30,19 @@ export function describeSignOut(project: string) {
   return `Shinsa deletes ${project}’s browser profile, so its agents are signed out of every site.`;
 }
 
+export function describeRemoveSite(site: string) {
+  return `Sign out of ${site}`;
+}
+
+export function describeSiteRemoved(site: string) {
+  return `Signed out of ${site}.`;
+}
+
+export function resolveFaviconUrl(site: string) {
+  const local = site === 'localhost' || /^[\d.]+$/.test(site) || site.includes(':') || !site.includes('.');
+  return local ? null : `https://${site}/favicon.ico`;
+}
+
 export function listSignedInSites(sites: ReadonlyArray<BrowserSite>) {
   return sites.filter((site) => site.signedIn);
 }

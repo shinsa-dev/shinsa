@@ -758,6 +758,11 @@ class BrowserGroup extends HttpApiGroup.make('browser')
       payload: EmptyBody,
       success: BrowserProjectAnswer,
     }),
+    HttpApiEndpoint.post('removeSite', '/api/browser/projects/:projectId/sites/remove', {
+      params: BrowserProjectParams,
+      payload: Schema.Struct({ site: Field }),
+      success: BrowserProjectAnswer,
+    }),
     HttpApiEndpoint.post('signOut', '/api/browser/projects/:projectId/sign-out', {
       params: BrowserProjectParams,
       payload: EmptyBody,

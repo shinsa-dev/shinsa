@@ -333,6 +333,30 @@ describe('copying sign-ins from your browser', () => {
     ]);
   });
 
+  test('signs the project browser out of one site by expiring its cookies, and leaves the rest', async () => {
+    const home = createTempDir();
+    writeDiaCookies(home, [
+      { host: '.github.com', name: 'user_session', value: 'gh' },
+      { host: 'github.com', name: 'logged_in', plain: 'yes', httpOnly: false },
+      { host: '.vercel.com', name: 'authorization', value: 'v' },
+    ]);
+    const { value, cdp } = await runCookies(
+      home,
+      BrowserCookies.use((cookies) =>
+        Effect.andThen(cookies.copy(SHINSA, 'dia', ['github.com', 'vercel.com']), () =>
+          cookies.removeSite(SHINSA, 'github.com')
+        )
+      )
+    );
+    expect(value.map((site) => site.site)).toEqual(['vercel.com']);
+    expect(cdp.cookies.map((cookie) => cookie.name)).toEqual(['authorization']);
+    const expiring = cdp.received
+      .map((text) => JSON.parse(text) as { method: string; params?: { cookies?: { expires: number }[] } })
+      .filter((message) => message.method === 'Storage.setCookies')
+      .at(-1);
+    expect(expiring?.params?.cookies?.map((cookie) => cookie.expires)).toEqual([1, 1]);
+  });
+
   test('copies nothing when macOS refuses the key, or it comes back empty', async () => {
     const home = createTempDir();
     writeDiaCookies(home, [{ host: '.github.com', name: 'user_session', value: 's' }]);

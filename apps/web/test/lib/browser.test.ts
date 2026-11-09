@@ -4,7 +4,9 @@ import {
   describeCopyDone,
   describeCopyFrom,
   describeNotInSource,
+  describeRemoveSite,
   describeSiteCookies,
+  describeSiteRemoved,
   describeSignOut,
   filterSites,
   isCopyRefused,
@@ -12,6 +14,7 @@ import {
   resolveDefaultSource,
   selectMatchingSite,
   toggleSite,
+  resolveFaviconUrl,
 } from '@/lib/browser.ts';
 
 const site = (name: string, signedIn = true) => ({ site: name, cookies: 1, signedIn });
@@ -25,6 +28,19 @@ describe('the signed-in sites', () => {
     expect(listSignedInSites([site('a.com'), site('ads.net', false)])).toEqual([site('a.com')]);
     expect(describeSiteCookies({ site: 'a.com', cookies: 12, signedIn: true })).toBe('12 cookies');
     expect(describeSiteCookies(site('a.com'))).toBe('1 cookie');
+  });
+});
+
+describe('one site', () => {
+  it('names its remove button and its toast', () => {
+    expect(describeRemoveSite('github.com')).toBe('Sign out of github.com');
+    expect(describeSiteRemoved('github.com')).toBe('Signed out of github.com.');
+  });
+
+  it('loads a favicon from the site itself, and none for a local address', () => {
+    expect(resolveFaviconUrl('github.com')).toBe('https://github.com/favicon.ico');
+    for (const site of ['localhost', '127.0.0.1', '[::1]', 'intranet'])
+      expect(resolveFaviconUrl(site)).toBeNull();
   });
 });
 

@@ -153,6 +153,7 @@ const FEATURE_ROUTES = {
     'POST /api/browser/projects/([^/]+)/copy',
     'POST /api/browser/projects/([^/]+)/window',
     'POST /api/browser/projects/([^/]+)/window/close',
+    'POST /api/browser/projects/([^/]+)/sites/remove',
     'POST /api/browser/projects/([^/]+)/sign-out',
   ],
 };
@@ -172,6 +173,7 @@ const OWNER_ONLY = [
   'POST /api/browser/projects/([^/]+)/copy',
   'POST /api/browser/projects/([^/]+)/window',
   'POST /api/browser/projects/([^/]+)/window/close',
+  'POST /api/browser/projects/([^/]+)/sites/remove',
   'POST /api/browser/projects/([^/]+)/sign-out',
   'GET /api/github-token',
   'POST /api/github-token',

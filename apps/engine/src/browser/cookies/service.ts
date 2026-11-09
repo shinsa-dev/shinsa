@@ -22,9 +22,11 @@ import {
   CdpCookies,
   COOKIE_FILE_COMPANIONS,
   COOKIE_FILES,
+  type CdpCookie,
   type CookieParam,
   CookieSourceUnavailable,
   COPY_BATCH,
+  EXPIRED_COOKIE_TIME,
   KEYCHAIN_REFUSED_MESSAGE,
   KEYCHAIN_TIMEOUT,
   KeychainRefused,
@@ -56,6 +58,10 @@ export class BrowserCookies extends Context.Service<
       CookieSourceUnavailable | KeychainRefused | BrowserUnavailable | CdpFailed
     >;
     listSites(profile: BrowserProfile): Effect.Effect<ReadonlyArray<BrowserSite>>;
+    removeSite(
+      profile: BrowserProfile,
+      site: string
+    ): Effect.Effect<ReadonlyArray<BrowserSite>, BrowserUnavailable | CdpFailed>;
   }
 >()('shinsa/engine/browser/cookies/BrowserCookies') {
   static readonly layer = Layer.effect(
@@ -289,7 +295,42 @@ export class BrowserCookies extends Context.Service<
         return answer;
       });
 
-      return BrowserCookies.of({ listSources, listSourceSites, copy, listSites });
+      const removeSite = Effect.fn('BrowserCookies.removeSite')(function* (
+        profile: BrowserProfile,
+        site: string
+      ) {
+        const removed = yield* Effect.scoped(
+          Effect.gen(function* () {
+            const endpoint = yield* host.acquire(profile);
+            const reply = yield* sendCdpCommand(endpoint.webSocketUrl, 'Storage.getCookies');
+            const cookies = Option.match(decodeCdpCookies(reply), {
+              onNone: (): ReadonlyArray<CdpCookie> => [],
+              onSome: (decoded) => decoded.cookies,
+            }).filter((cookie) => isOnSites(cookie.domain, new Set([site])));
+            for (let start = 0; start < cookies.length; start += COPY_BATCH) {
+              yield* sendCdpCommand(endpoint.webSocketUrl, 'Storage.setCookies', {
+                cookies: cookies.slice(start, start + COPY_BATCH).map((cookie) => ({
+                  name: cookie.name,
+                  value: '',
+                  domain: cookie.domain,
+                  path: cookie.path,
+                  secure: cookie.secure,
+                  httpOnly: cookie.httpOnly,
+                  expires: EXPIRED_COOKIE_TIME,
+                  ...(cookie.partitionKey === undefined ? {} : { partitionKey: cookie.partitionKey }),
+                })),
+              });
+            }
+            return cookies.length;
+          })
+        );
+        yield* Effect.logInfo('Removed a browser sign-in').pipe(
+          Effect.annotateLogs({ site, cookies: removed })
+        );
+        return yield* listProfileSites(profile);
+      });
+
+      return BrowserCookies.of({ listSources, listSourceSites, copy, listSites, removeSite });
     })
   );
 }

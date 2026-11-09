@@ -92,9 +92,13 @@ export type StoredCookieRow = typeof StoredCookieRow.Type;
 export const CdpCookie = Schema.Struct({
   domain: Schema.String,
   name: Schema.String,
+  path: Schema.String,
+  secure: Schema.Boolean,
   httpOnly: Schema.Boolean,
   sameSite: Schema.optional(Schema.String),
+  partitionKey: Schema.optional(Schema.Unknown),
 });
+export type CdpCookie = typeof CdpCookie.Type;
 
 export const CdpCookies = Schema.Struct({ cookies: Schema.Array(CdpCookie) });
 
@@ -136,6 +140,8 @@ export const ENCRYPTED_PREFIX = 'v10';
 export const HOST_DIGEST_BYTES = 32;
 
 export const CHROMIUM_EPOCH_OFFSET_SECONDS = 11_644_473_600;
+
+export const EXPIRED_COOKIE_TIME = 1;
 
 export const SESSION_COOKIE_LIFETIME = Duration.days(14);
 

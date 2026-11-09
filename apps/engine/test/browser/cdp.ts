@@ -13,6 +13,10 @@ export interface FakeCdpOptions {
   readonly onBrowserClose?: () => void;
 }
 
+function resolveCookieDomain(cookie: Record<string, unknown>) {
+  return cookie.domain ?? new URL(String(cookie.url)).hostname;
+}
+
 function answerCdp(
   method: string,
   params: { cookies?: Record<string, unknown>[] },
@@ -20,15 +24,27 @@ function answerCdp(
   text: string
 ) {
   if (method === 'Storage.setCookies') {
-    cookies.push(...(params.cookies ?? []));
+    for (const cookie of params.cookies ?? []) {
+      if (cookie.expires !== 1) {
+        cookies.push(cookie);
+        continue;
+      }
+      const index = cookies.findIndex(
+        (each) => each.name === cookie.name && resolveCookieDomain(each) === cookie.domain
+      );
+      if (index >= 0) cookies.splice(index, 1);
+    }
     return {};
   }
   if (method === 'Storage.getCookies') {
     return {
       cookies: cookies.map((cookie) => ({
-        domain: cookie.domain ?? new URL(String(cookie.url)).hostname,
+        domain: resolveCookieDomain(cookie),
         name: cookie.name,
+        path: cookie.path ?? '/',
+        secure: cookie.secure ?? false,
         httpOnly: cookie.httpOnly,
+        ...(cookie.partitionKey === undefined ? {} : { partitionKey: cookie.partitionKey }),
       })),
     };
   }

@@ -18,13 +18,14 @@ interface Calls {
   windows: [string, string | null][];
   closed: string[];
   removed: string[];
+  signedOut: [string, string][];
   copied: [string, string, readonly string[]][];
 }
 
 type Failure = 'unavailable' | 'source' | 'keychain' | 'cdp' | null;
 
 async function setup(failure: Failure = null) {
-  const calls: Calls = { windows: [], closed: [], removed: [], copied: [] };
+  const calls: Calls = { windows: [], closed: [], removed: [], signedOut: [], copied: [] };
   let mode: BrowserMode = 'stopped';
   const host: BrowserHost['Service'] = {
     acquire: () => Effect.succeed({ webSocketUrl: 'ws://127.0.0.1:1/' }),
@@ -63,6 +64,13 @@ async function setup(failure: Failure = null) {
             return { copied: 3, skipped: 0, sites };
           }),
     listSites: () => Effect.succeed(mode === 'stopped' && calls.removed.length > 0 ? [] : sites),
+    removeSite: (profile, site) =>
+      failure === 'cdp'
+        ? Effect.fail(copyFailure.cdp)
+        : Effect.sync(() => {
+            calls.signedOut.push([profile, site]);
+            return sites.filter((each) => each.site !== site);
+          }),
   };
   const routes = startRoutes({ browserHost: host, browserCookies: cookies });
   const { engine } = routes.context;
@@ -173,6 +181,23 @@ describe("a project's shared browser over HTTP", () => {
       sites: [],
     });
     expect(calls.removed).toEqual([projectId]);
+  });
+
+  test('signs out of one site and says why when it cannot', async () => {
+    const { call, calls, projectId } = await setup();
+    expect(
+      await call('POST', `/api/browser/projects/${projectId}/sites/remove`, { site: 'github.com' })
+    ).toEqual({ mode: 'stopped', sites: [] });
+    expect(calls.signedOut).toEqual([[projectId, 'github.com']]);
+    for (const site of ['', 42, 'x'.repeat(254)]) {
+      await expect(
+        call('POST', `/api/browser/projects/${projectId}/sites/remove`, { site })
+      ).rejects.toMatchObject({ code: 'browser_site_invalid' });
+    }
+    const broken = await setup('cdp');
+    await expect(
+      broken.call('POST', `/api/browser/projects/${broken.projectId}/sites/remove`, { site: 'github.com' })
+    ).rejects.toMatchObject({ code: 'browser_failed' });
   });
 
   test('is not there when the engine runs without a shared browser', async () => {

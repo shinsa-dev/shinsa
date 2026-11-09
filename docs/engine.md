@@ -6100,11 +6100,13 @@ you: Settings → Browser ─────────┤
   repository's own test users where it has them, and never to launch a browser of their own to sign in.
 - **Settings → Projects → Browser** lists each project with the sites its browser is signed in to (asked of its Chrome,
   started headless if needed, or read from the profile's cookie file when Chrome cannot run; nothing for a project
-  never signed in), Copy sign-ins, Open sign-in window (Done while it is open) and Sign out of
-  everything, which stops the browser and removes the profile. The routes are owner-only, behind the `browser` engine
-  feature (`docs/protocol.md` → The socket): `GET /api/browser/projects/:projectId`, `GET /api/browser/sources`,
-  `GET /api/browser/sources/:sourceId/sites`, and `POST` `copy`, `window`, `window/close` and `sign-out` under
-  `/api/browser/projects/:projectId/`. The section is hidden on app.shinsa.dev.
+  never signed in), each with its favicon (loaded from the site itself, the globe when it has none) and a remove
+  button that signs the browser out of that one site (`sites/remove {site}`: every cookie on the site set to expire
+  through `Storage.setCookies`, since Chrome's browser connection has no delete), Copy sign-ins, Open sign-in window
+  (Done while it is open) and Sign out of everything, which stops the browser and removes the profile. The routes are
+  owner-only, behind the `browser` engine feature (`docs/protocol.md` → The socket): `GET
+  /api/browser/projects/:projectId`, `GET /api/browser/sources`, `GET /api/browser/sources/:sourceId/sites`, and
+  `POST` `copy`, `window`, `window/close`, `sites/remove` and `sign-out` under `/api/browser/projects/:projectId/`. The section is hidden on app.shinsa.dev.
 - **Limits.** Agents of one project share one cookie jar, so two tasks that need different users of the same site
   collide. A copied `localhost` cookie works on any port, but a token a dev app keeps in localStorage does not carry
   across a task's ports.

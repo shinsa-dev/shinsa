@@ -18,6 +18,7 @@ import {
   MAX_COPY_SITES,
   MAX_SITE_LENGTH,
   PROJECT_NOT_FOUND,
+  SITE_INVALID,
   SITES_INVALID,
   SOURCE_INVALID,
   URL_INVALID,
@@ -33,11 +34,10 @@ export const BrowserHandlers = HttpApiBuilder.group(
     const decodeProfile = Schema.decodeUnknownOption(BrowserProfile);
     const decodeSource = Schema.decodeUnknownOption(SourceBrowserId);
     const decodeUrl = Schema.decodeUnknownOption(SignInUrl);
+    const SiteName = Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(MAX_SITE_LENGTH));
+    const decodeSite = Schema.decodeUnknownOption(SiteName);
     const decodeSites = Schema.decodeUnknownOption(
-      Schema.Array(Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(MAX_SITE_LENGTH))).check(
-        Schema.isMinLength(1),
-        Schema.isMaxLength(MAX_COPY_SITES)
-      )
+      Schema.Array(SiteName).check(Schema.isMinLength(1), Schema.isMaxLength(MAX_COPY_SITES))
     );
 
     const findBrowser = Effect.fromNullishOr(host && cookies ? { host, cookies } : null).pipe(
@@ -138,6 +138,19 @@ export const BrowserHandlers = HttpApiBuilder.group(
           const profile = yield* findProfile(params.projectId);
           yield* browser.host.closeWindow(profile);
           return yield* describeProject(profile);
+        })
+      )
+      .handle(
+        'removeSite',
+        Effect.fn('BrowserHandlers.removeSite')(function* ({ params, payload }) {
+          const browser = yield* findBrowser;
+          const profile = yield* findProfile(params.projectId);
+          const site = yield* readOrFail(decodeSite(payload.site), SITE_INVALID);
+          const answer: BrowserProjectAnswer = {
+            mode: yield* browser.host.resolveMode(profile),
+            sites: yield* failBrowser(browser.cookies.removeSite(profile, site)),
+          };
+          return answer;
         })
       )
       .handle(

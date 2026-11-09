@@ -8,11 +8,13 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
 } from '@shinsa/ui/components/dropdown-menu';
+import { Icon } from '@shinsa/ui/components/icon';
 import { toast } from '@shinsa/ui/components/sonner';
 import { Truncate } from '@shinsa/ui/components/truncate';
 import { useDialogState } from '@shinsa/ui/hooks/use-dialog-state';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
+import { HintButton } from '@/components/controls/hint-button.tsx';
 import { OptionsTrigger } from '@/components/controls/options-trigger.tsx';
 import { ConfirmDialog } from '@/components/overlays/confirm-dialog.tsx';
 import { Hint } from '@/components/overlays/hint.tsx';
@@ -20,11 +22,14 @@ import { ProjectDotIcon } from '@/components/status/project-dot.tsx';
 import {
   BROWSER_DESCRIPTION,
   BROWSER_SECTION,
+  describeRemoveSite,
   describeSignOut,
   describeSiteCookies,
+  describeSiteRemoved,
   listSignedInSites,
   NO_SIGNED_IN_SITES,
   READING_SITES,
+  resolveFaviconUrl,
   SIGN_IN_WINDOW_NOTE,
   SIGN_OUT_TITLE,
 } from '@/lib/browser.ts';
@@ -36,7 +41,22 @@ import { isRemoteBuild } from '@/lib/remote/mode.ts';
 import { BrowserCopyDialog } from './browser-copy-dialog.tsx';
 import { PathRow, SETTING_ROW, SettingsBlock, SettingsEmpty, SettingsGroup } from './group.tsx';
 
-type BrowserBusy = 'window' | 'done' | 'signOut' | null;
+type BrowserBusy = 'window' | 'done' | 'signOut' | `site:${string}` | null;
+
+function SiteFavicon({ site }: { site: string }) {
+  const url = resolveFaviconUrl(site);
+  const [failed, setFailed] = React.useState(false);
+  if (!url || failed) return <Icon size='sm' name='IconGlobe' />;
+  return (
+    <img
+      src={url}
+      alt=''
+      referrerPolicy='no-referrer'
+      className='size-3.5 rounded-full bg-white object-cover'
+      onError={() => setFailed(true)}
+    />
+  );
+}
 
 function useBrowserProject(projectId: string, actions: BrowserActions) {
   const [answer, setAnswer] = React.useState<BrowserProjectAnswer | null>(null);
@@ -162,8 +182,25 @@ export function BrowserProjectRow({ project, actions }: { project: Project; acti
           key={site.site}
           icon='IconGlobe'
           iconLabel='Signed in'
+          media={<SiteFavicon site={site.site} />}
           title={site.site}
           path={describeSiteCookies(site)}
+          action={
+            <HintButton
+              size='icon-sm'
+              icon='IconCrossSmall'
+              label={describeRemoveSite(site.site)}
+              loading={busy === `site:${site.site}`}
+              disabled={windowOpen}
+              onClick={() =>
+                void act(
+                  `site:${site.site}`,
+                  () => actions.removeSite(project.id, site.site),
+                  describeSiteRemoved(site.site)
+                )
+              }
+            />
+          }
         />
       ))}
       {copy.value && (
