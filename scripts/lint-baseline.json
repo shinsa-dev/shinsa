@@ -14,14 +14,6 @@
     "scripts/seed/tasks/delegation.ts": 2
   },
   "try-catch": {
-    "apps/engine/src/accounts/paths.ts": 1,
-    "apps/engine/src/agents/providers/claude/import.ts": 1,
-    "apps/engine/src/agents/quick/json.ts": 1,
-    "apps/engine/src/agents/transcripts/file.ts": 1,
-    "apps/engine/src/agents/transcripts/lines.ts": 1,
-    "apps/engine/src/github/ci/workflows.ts": 1,
-    "apps/engine/src/http/guard.ts": 1,
-    "apps/engine/src/instance/lock/liveness.ts": 1,
     "apps/web/src/lib/chat/tool-output.ts": 1,
     "apps/web/src/lib/code/editor/merge.ts": 1,
     "apps/web/src/lib/code/search.ts": 1,
@@ -38,9 +30,6 @@
   },
   "null-return": {},
   "json-parse": {
-    "apps/engine/src/agents/providers/claude/import.ts": 1,
-    "apps/engine/src/agents/quick/json.ts": 1,
-    "apps/engine/src/agents/transcripts/lines.ts": 1,
     "apps/web/src/components/code/editor/code-editor.tsx": 2,
     "apps/web/src/components/code/search-panel.tsx": 1,
     "apps/web/src/lib/chat/tool-output.ts": 1,
@@ -53,7 +42,6 @@
     "scripts/seed/tasks/triggers.ts": 1
   },
   "timer": {
-    "apps/engine/src/terminal/spinner.ts": 1,
     "apps/marketing/src/components/demos/gates.tsx": 2,
     "apps/marketing/src/components/demos/guard.tsx": 1,
     "apps/marketing/src/components/demos/kinds.tsx": 1,

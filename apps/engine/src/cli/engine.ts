@@ -77,11 +77,9 @@ function writeOutcome(io: EngineIo, tone: Tone, symbol: 'check' | 'dot', text: s
 }
 
 function withProgress<A, E, R>(io: EngineIo, text: string, work: Effect.Effect<A, E, R>) {
-  return Effect.acquireUseRelease(
-    Effect.sync(() => io.startProgress(text)),
-    () => Effect.timed(work),
-    (progress) => Effect.sync(() => progress.stop())
-  ).pipe(Effect.map(([elapsed, result]) => ({ result, took: describeDuration(Duration.toMillis(elapsed)) })));
+  return Effect.scoped(Effect.andThen(io.startProgress(text), Effect.timed(work))).pipe(
+    Effect.map(([elapsed, result]) => ({ result, took: describeDuration(Duration.toMillis(elapsed)) }))
+  );
 }
 
 function describeWait(io: EngineControl, fallbackMs = ENGINE_WAIT_MS) {
