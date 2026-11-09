@@ -76,7 +76,7 @@ const readRootSuggestions = Effect.gen(function* () {
 
 const openPrivacy = Effect.gen(function* () {
   const engine = yield* EngineClient;
-  const opened = yield* decodeOpened(yield* engine.onboarding.privacy());
+  const opened = yield* decodeOpened(yield* engine.onboarding.privacy({ payload: {} }));
   if (!opened.ok) return yield* new PrivacyNotOpened({ message: PRIVACY_NOT_OPENED_MESSAGE });
 });
 

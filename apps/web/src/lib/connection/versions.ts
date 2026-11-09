@@ -42,7 +42,7 @@ const read = createSharedRun(
 
 const check = Effect.gen(function* () {
   const engine = yield* EngineClient;
-  publishVersions(yield* engine.versions.refresh());
+  publishVersions(yield* engine.versions.refresh({ payload: {} }));
   return true;
 }).pipe(
   Effect.catch((error) =>
