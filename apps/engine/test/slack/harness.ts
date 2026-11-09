@@ -1,4 +1,4 @@
-import type { MachineCredentials } from '@shinsa/core';
+import type { MachineCredentials, TaskOwner } from '@shinsa/core';
 import { Clock, Context, Duration, Effect, Layer, Scope } from 'effect';
 import { FetchHttpClient } from 'effect/http';
 import type { QuickJson } from '../../src/agents/quick/schema.ts';
@@ -22,6 +22,7 @@ export interface TestSlackOptions {
   ask?: QuickJson;
   statusIntervalMs?: number;
   startAt?: number;
+  actors?: Record<string, TaskOwner>;
 }
 
 export function createTestSlackService(options: TestSlackOptions) {
@@ -42,6 +43,7 @@ export function createTestSlackService(options: TestSlackOptions) {
   const layer = Slack.layer({
     credentials: Effect.succeed(options.credentials),
     appOrigin: options.origin,
+    resolveActor: (userId) => Effect.succeed(options.actors?.[userId] ?? null),
   }).pipe(
     Layer.provide(
       Layer.mergeAll(

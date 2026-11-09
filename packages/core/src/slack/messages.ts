@@ -644,6 +644,15 @@ export function serializeSlackDeclined() {
   return serializeNote('Not a task, so nothing was started.', 'Not a task', 'Nothing was started.', null);
 }
 
+export function serializeSlackNoAccess() {
+  return serializeNote(
+    'Your GitHub account no longer has access to this Shinsa, so nothing was started.',
+    'No access to this Shinsa',
+    'Nothing was started. Ask its owner to add you, or connect Slack to your own Shinsa.',
+    null
+  );
+}
+
 export function serializeSlackLinkPrompt(linkUrl: string) {
   return createSlackMessage('Connect Slack to your own Shinsa first.', [
     createSlackSection(

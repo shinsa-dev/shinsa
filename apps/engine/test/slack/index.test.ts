@@ -5,6 +5,7 @@ import {
   DomainError,
   SLACK_FORWARD_HEADERS,
   type SlackDecision,
+  type RemoteUserId,
   type SlackMention,
   type SlackThreadLink,
   type Watchdog,
@@ -85,6 +86,8 @@ function createRemote(options: { enabled?: boolean; paired?: boolean; fetch?: Re
   };
 }
 
+const MIA = { login: 'mia', name: 'Mia', avatarUrl: null };
+
 function setUp(
   options: { enabled?: boolean; link?: SlackThreadLink | null; statusIntervalMs?: number } = {}
 ): Setup {
@@ -136,6 +139,7 @@ function setUp(
       return Effect.succeed(answer.value as T);
     },
     statusIntervalMs: options.statusIntervalMs ?? 5000,
+    actors: { 'gh-mia': MIA },
   });
   return { slack, stub, relay, answers, asked, answer, adjust };
 }
@@ -705,6 +709,33 @@ describe('reading a mention', () => {
     await slack.evaluate({ ...effect, mention: { ...MENTION, eventId: 'Ev2' } }, context('read-2'));
     expect(stub.dispatched).toHaveLength(2);
     expect(logs.fieldsOf('[Slack] The reaction could not be set')).toHaveLength(1);
+  });
+
+  test('starts the task as the GitHub account the Slack user linked, and as nobody without one', async () => {
+    const { slack, stub } = setUp();
+    const mention = { ...MENTION, linkedUserId: 'gh-mia' as RemoteUserId };
+    await slack.evaluate({ ...effect, mention }, context('read-1'));
+    await slack.evaluate(effect, context('read-2'));
+    expect(stub.dispatched).toEqual([
+      { type: 'slack.start_task', mention },
+      { type: 'slack.start_task', mention: MENTION },
+    ]);
+    expect(stub.actors).toEqual([MIA, null]);
+  });
+
+  test('starts nothing for an account this machine no longer lists, and says so once in the thread', async () => {
+    const { slack, stub, relay, asked } = setUp();
+    await slack.evaluate(
+      { ...effect, mention: { ...MENTION, linkedUserId: 'gh-gone' as RemoteUserId } },
+      context()
+    );
+    expect(stub.dispatched).toEqual([]);
+    expect(asked).toEqual([]);
+    expect(callsTo(relay, 'react')).toEqual([]);
+    const posts = callsTo(relay, 'post');
+    expect(posts).toHaveLength(1);
+    expect(posts[0]?.body).toMatchObject({ ...THREAD, replaceTs: null });
+    expect(JSON.stringify(posts[0]?.body?.message)).toContain('No access to this Shinsa');
   });
 
   test('starts a task when the model does not answer', async () => {
