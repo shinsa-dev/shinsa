@@ -143,6 +143,7 @@ const FEATURE_ROUTES = {
   'suggestion.bundle': [],
   'shared-machine': ['GET /api/github-token', 'POST /api/github-token', 'POST /api/remote/teams/share'],
   'focus.projects': [],
+  initiatives: ['GET /api/initiatives', 'GET /api/initiatives/([^/]+)'],
 };
 
 const LOCAL_ONLY = [

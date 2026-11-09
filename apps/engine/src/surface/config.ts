@@ -23,6 +23,7 @@ import {
 import { Clock, DateTime, Effect, Option, Schema } from 'effect';
 import { resolveProjectFolder } from '../projects/folders.ts';
 import type { FieldSpec, Values } from './fields.ts';
+import { findInitiative } from './initiatives.ts';
 import {
   findProject,
   findProjectId,
@@ -237,6 +238,14 @@ const saveFolders = Effect.fn('Surface.saveFolders')(function* (
   return { data, text: formatFolders(data) };
 });
 
+const readFocus = Effect.fn('Surface.readFocus')(function* (_values: Values, client: SurfaceClient) {
+  const { projects, focus } = yield* client.api.state.projects();
+  if (!focus.initiativeId) return { projects, focus, initiative: null };
+  const { initiatives } = yield* client.api.state.initiatives();
+  const initiative = initiatives.find((candidate) => candidate.id === focus.initiativeId);
+  return { projects, focus, initiative: initiative?.name ?? 'that is gone' };
+});
+
 function formatFolders(status: OnboardingStatus) {
   return [
     `Folders Shinsa looks in (${status.roots.source}):`,
@@ -391,12 +400,14 @@ export const CONFIG_SPECS: SurfaceSpec[] = [
   }),
   defineRead({
     path: ['focus', 'show'],
-    summary: 'Show the projects you are focused on.',
+    summary: 'Show the projects or the initiative you are focused on.',
     fields: [],
-    read: (_values, client) => client.api.state.projects(),
-    format: ({ projects, focus }) => {
+    read: readFocus,
+    format: ({ projects, focus, initiative }) => {
       const names = new Map(projects.map((project) => [project.id, project.name]));
-      const described = describeFocusProjects(focus, (projectId) => names.get(projectId));
+      const described = initiative
+        ? `the initiative ${initiative}`
+        : describeFocusProjects(focus, (projectId) => names.get(projectId));
       if (!described) return 'No focus: everything shows.';
       const until = focus.until ? ` until ${DateTime.formatIso(DateTime.makeUnsafe(focus.until))}` : '';
       return `Focused on ${described}${until}.`;
@@ -426,6 +437,34 @@ export const CONFIG_SPECS: SurfaceSpec[] = [
         projectId: null,
         projectIds,
         except: values.except === true,
+        until: typeof values.hours === 'number' ? now + values.hours * HOUR_MS : null,
+      };
+    }),
+    done: () => 'Focused.',
+  }),
+  defineCommand({
+    path: ['focus', 'initiative'],
+    summary: 'Focus on one initiative: Home, the queue and the guide show only its tasks.',
+    command: 'focus.change',
+    fields: [
+      {
+        name: 'initiative',
+        kind: 'text',
+        positional: 'one',
+        required: true,
+        description: 'The initiative: its name, its id or the start of its id.',
+      },
+      { name: 'hours', kind: 'number', description: 'Only for this many hours.' },
+    ],
+    build: Effect.fn('Surface.focusInitiative')(function* (values, client) {
+      const initiative = yield* findInitiative(client, readValue(values, 'initiative'));
+      const now = yield* Clock.currentTimeMillis;
+      return {
+        type: 'focus.change' as const,
+        projectId: null,
+        projectIds: [],
+        except: false,
+        initiativeId: initiative.id,
         until: typeof values.hours === 'number' ? now + values.hours * HOUR_MS : null,
       };
     }),

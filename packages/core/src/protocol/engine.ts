@@ -23,6 +23,7 @@ export const ENGINE_FEATURES = [
   'suggestion.bundle',
   'shared-machine',
   'focus.projects',
+  'initiatives',
 ] as const;
 
 export type EngineFeature = (typeof ENGINE_FEATURES)[number];

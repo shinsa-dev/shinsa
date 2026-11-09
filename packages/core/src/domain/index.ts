@@ -109,6 +109,7 @@ export {
   type Initiative,
   type InitiativePhase,
   resolveInitiativeText,
+  selectInitiativeByReference,
   selectInitiativePhase,
 } from './initiatives.ts';
 export { isReplyingRun, type ReplyingHandOver, selectOpenIteration } from './iterations.ts';

@@ -166,15 +166,16 @@ describe('help text', () => {
 
   test('a group lists its commands with their summaries and how to learn more', () => {
     expect(describeGroup('focus').split('\n')).toEqual([
-      'Show only one project’s work, for a while or until you clear it.',
+      'Show only some projects’ or one initiative’s work, for a while or until you clear it.',
       '',
       'Usage',
       '  shinsa focus <command> [arguments] [--json]',
       '',
       'Commands',
-      '  show   Show the projects you are focused on.',
-      '  set    Focus on projects, or with --except on everything but them.',
-      '  clear  Stop focusing: everything shows.',
+      '  show        Show the projects or the initiative you are focused on.',
+      '  set         Focus on projects, or with --except on everything but them.',
+      '  initiative  Focus on one initiative: Home, the queue and the guide show only its tasks.',
+      '  clear       Stop focusing: everything shows.',
       '',
       'Add --help to any of them for its arguments, --json for machine-readable output.',
     ]);

@@ -29,3 +29,19 @@ export function selectInitiativePhase(initiative: Initiative, phaseId: string | 
   if (!phaseId) return null;
   return initiative.phases.find((phase) => phase.id === phaseId) ?? null;
 }
+
+export function selectInitiativeByReference<T extends Pick<Initiative, 'id' | 'name'>>(
+  initiatives: Iterable<T>,
+  reference: string
+) {
+  const trimmed = reference.trim();
+  const lower = trimmed.toLowerCase();
+  if (!lower) return null;
+  const list = [...initiatives];
+  return (
+    list.find((initiative) => initiative.id === trimmed) ??
+    list.find((initiative) => initiative.name.toLowerCase() === lower) ??
+    list.find((initiative) => initiative.id.startsWith(trimmed)) ??
+    null
+  );
+}
