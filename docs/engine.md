@@ -2268,9 +2268,9 @@ checks it ran.
     `paceLimitsIgnored`, as for the other pace holds. Switching Auto pace off releases every admission hold. A build
     admitted still stops at the daily and project limits.
   - **On screen** a held task's status is "Waiting to build", its card "Builds tonight" (when you are here now and
-    its time falls in your away hours) or "Builds after 3:40 AM", with Build now. Auto pace lives in Settings → Agent usage → Forecast: its switch at the top
-    (`AutoPaceToggle`), and under each provider's safe pace what is left for builds in the next 24 hours, with the
-    reserve and how many builds wait (`PaceBudget`, `selectPaceBudget`). Home's guide leaves waiting builds out of the
+    its time falls in your away hours) or "Builds after 3:40 AM", with Build now. Auto pace has its own section in Settings → Agent usage, right above the Forecast
+    it follows (`AutoPaceSettings`): its switch, and while it is on, one row per provider with what is left for its
+    builds in the next 24 hours, the reserve and how many builds wait (`selectPaceBudget`). Home's guide leaves waiting builds out of the
     running line and names them on a line of their own, soonest first, each with when it builds ("tonight", "after
     3:40 PM" or "next", `listWaitingBuilds`), the first two by name and the rest in a popover; once you are back it
     adds how many tasks built overnight are ready for your review (`describeOvernightReviews`).

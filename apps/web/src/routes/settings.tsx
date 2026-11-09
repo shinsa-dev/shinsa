@@ -9,6 +9,7 @@ import { AccountSettings } from '@/components/settings/accounts.tsx';
 import { AgentSettings } from '@/components/settings/agents.tsx';
 import { AppearanceSettings } from '@/components/settings/appearance.tsx';
 import { AttentionSettings } from '@/components/settings/attention.tsx';
+import { AutoPaceSettings } from '@/components/settings/auto-pace.tsx';
 import { ContextSettings } from '@/components/settings/context.tsx';
 import { FolderSettings, SetupSettings } from '@/components/settings/folders.tsx';
 import { ForecastSettings } from '@/components/settings/forecast.tsx';
@@ -104,6 +105,7 @@ function TabSections({ state, tab }: { state: ShinsaState; tab: SettingsTabId })
       return (
         <>
           <AccountSettings settings={state.settings} />
+          <AutoPaceSettings state={state} />
           <ForecastSettings state={state} />
           <LimitSettings
             settings={state.settings}

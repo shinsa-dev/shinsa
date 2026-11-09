@@ -36,7 +36,6 @@ import {
   selectForecastPace,
 } from '@/lib/accounts/forecast.ts';
 import { useAccounts } from '@/lib/connection/accounts.ts';
-import { AutoPaceToggle, PaceBudget } from './auto-pace.tsx';
 import { ROW_INSET, SETTING_ROW, SettingsBlock, SettingsGroup } from './group.tsx';
 
 const LANE_LABEL = 'w-24 shrink-0 sm:w-36';
@@ -167,7 +166,7 @@ function Timeline({ forecast, timeline }: { forecast: UsageForecast; timeline: F
   );
 }
 
-function ForecastBlock({ entry, state }: { entry: ProviderForecast; state: ShinsaState }) {
+function ForecastBlock({ entry }: { entry: ProviderForecast }) {
   const { forecast } = entry;
   const [choice, setChoice] = React.useState<ForecastPaceChoice>(() => resolveDefaultPace(forecast));
   const paces = listForecastPaces(forecast);
@@ -190,7 +189,6 @@ function ForecastBlock({ entry, state }: { entry: ProviderForecast; state: Shins
       <div className={SETTING_ROW}>
         <span className='min-w-0 flex-1 text-xs text-fg-4'>{describeSafePace(forecast)}</span>
       </div>
-      <PaceBudget state={state} provider={entry.provider} safePace={forecast.safePace} />
       {paces.length > 1 && (
         <div className={cn(SETTING_ROW, 'flex-wrap gap-y-1.5')}>
           <span className='min-w-0 flex-1 text-xs text-fg-2'>Timeline at</span>
@@ -235,9 +233,8 @@ export function ForecastSettings({ state }: { state: ShinsaState }) {
       title={FORECAST_TITLE}
       description='The highest steady pace your accounts can keep up for the next 7 days, spending first from the account that resets soonest.'
     >
-      <AutoPaceToggle state={state} />
       {forecasts.map((entry) => (
-        <ForecastBlock key={entry.provider} entry={entry} state={state} />
+        <ForecastBlock key={entry.provider} entry={entry} />
       ))}
     </SettingsGroup>
   );
