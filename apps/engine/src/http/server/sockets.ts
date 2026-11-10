@@ -2,6 +2,8 @@ import { serializeEngineFailure } from '@shinsa/core/engine-api/errors';
 import { RouteNotFound, ROUTE_NOT_FOUND_MESSAGE } from '@shinsa/core/engine-api/schema';
 import type { ServerWebSocket } from 'bun';
 import { Effect } from 'effect';
+import type { BrowserAdmission, BrowserRelay } from '../../browser/proxy/schema.ts';
+import type { BrowserProxy } from '../../browser/proxy/service.ts';
 import type { ChannelPeer, RemoteChannelHandle } from '../../remote/channel/schema.ts';
 import type { UpgradeRefusal } from '../../remote/gate/schema.ts';
 import type { ChannelParts, RemoteHandle } from '../../remote/machine/schema.ts';
@@ -35,12 +37,19 @@ export interface PreviewSocketData {
   relay: PreviewRelay | null;
 }
 
+export interface BrowserSocketData {
+  kind: 'browser';
+  admission: BrowserAdmission;
+  relay: BrowserRelay | null;
+}
+
 export type ServerSocketData =
   | SocketData
   | TerminalSocketData
   | RemoteSocketData
   | LiveSocketData
-  | PreviewSocketData;
+  | PreviewSocketData
+  | BrowserSocketData;
 
 type ServerSocket = ServerWebSocket<ServerSocketData>;
 
@@ -58,6 +67,10 @@ function isLiveSocket(socket: ServerSocket): socket is ServerWebSocket<LiveSocke
 
 function isPreviewSocket(socket: ServerSocket): socket is ServerWebSocket<PreviewSocketData> {
   return socket.data.kind === 'preview';
+}
+
+function isBrowserSocket(socket: ServerSocket): socket is ServerWebSocket<BrowserSocketData> {
+  return socket.data.kind === 'browser';
 }
 
 export interface RemoteSocketHandlers {
@@ -116,6 +129,38 @@ const LIVE_SOCKETS = {
   },
 };
 
+export interface BrowserSocketHandlers {
+  open: (socket: ServerWebSocket<BrowserSocketData>) => void;
+  close: (socket: ServerWebSocket<BrowserSocketData>) => void;
+  message: (socket: ServerWebSocket<BrowserSocketData>, raw: string | Buffer) => void;
+}
+
+export const makeBrowserSockets = Effect.fn('BrowserSockets.make')(function* (
+  proxy: Pick<BrowserProxy['Service'], 'open'>
+) {
+  const runSync = Effect.runSyncWith(yield* Effect.context<never>());
+  const handlers: BrowserSocketHandlers = {
+    open: (socket) => {
+      socket.data.relay = runSync(
+        proxy.open(
+          {
+            send: (data) => socket.send(data),
+            close: (code, reason) => socket.close(code, reason),
+          },
+          socket.data.admission
+        )
+      );
+    },
+    close: (socket) => {
+      socket.data.relay?.close();
+    },
+    message: (socket, raw) => {
+      socket.data.relay?.send(typeof raw === 'string' ? raw : new Uint8Array(raw));
+    },
+  };
+  return handlers;
+});
+
 export interface PreviewSocketHandlers {
   open: (socket: ServerWebSocket<PreviewSocketData>) => void;
   close: (socket: ServerWebSocket<PreviewSocketData>) => void;
@@ -130,7 +175,8 @@ export function createSocketHandlers(
   hub: Pick<Hub, 'open' | 'close' | 'message'>,
   terminals: TerminalSockets | null,
   remote: RemoteSocketHandlers | null = null,
-  previews: PreviewSocketHandlers | null = null
+  previews: PreviewSocketHandlers | null = null,
+  browser: BrowserSocketHandlers | null = null
 ) {
   return {
     open: (socket: ServerSocket) => {
@@ -138,6 +184,7 @@ export function createSocketHandlers(
       else if (isRemoteSocket(socket)) remote?.open(socket);
       else if (isLiveSocket(socket)) LIVE_SOCKETS.open(socket);
       else if (isPreviewSocket(socket)) previews?.open(socket);
+      else if (isBrowserSocket(socket)) browser?.open(socket);
       else hub.open(socket as ServerWebSocket<SocketData>);
     },
     close: (socket: ServerSocket) => {
@@ -145,6 +192,7 @@ export function createSocketHandlers(
       else if (isRemoteSocket(socket)) remote?.close(socket);
       else if (isLiveSocket(socket)) LIVE_SOCKETS.close(socket);
       else if (isPreviewSocket(socket)) previews?.close(socket);
+      else if (isBrowserSocket(socket)) browser?.close(socket);
       else hub.close(socket as ServerWebSocket<SocketData>);
     },
     message: (socket: ServerSocket, raw: string | Buffer) => {
@@ -152,6 +200,7 @@ export function createSocketHandlers(
       else if (isRemoteSocket(socket)) remote?.message(socket, raw);
       else if (isLiveSocket(socket)) LIVE_SOCKETS.message(socket, raw);
       else if (isPreviewSocket(socket)) previews?.message(socket, raw);
+      else if (isBrowserSocket(socket)) browser?.message(socket, raw);
       else hub.message(socket as ServerWebSocket<SocketData>, raw);
     },
     drain: (socket: ServerSocket) => {

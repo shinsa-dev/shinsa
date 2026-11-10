@@ -10,6 +10,7 @@ import {
   Schema,
   type Scope,
 } from 'effect';
+import type { BrowserProxy } from '../../browser/proxy/service.ts';
 import type { SessionExtensionSource } from '../../extensions/index.ts';
 import type { ProcessTracker } from '../../resources/index.ts';
 import type { EngineStopped } from '../../runtime/engine/schema.ts';
@@ -169,6 +170,7 @@ export const RunHooks = Context.Reference<RunHooksShape>('shinsa/engine/agents/s
 
 interface RunSurroundings {
   readonly trackProcess: ProcessTracker | null;
+  readonly browser: Pick<BrowserProxy['Service'], 'issue'> | null;
   readonly extensions: SessionExtensionSource | null;
   readonly manages: boolean;
 }

@@ -42,6 +42,8 @@ export const RETRY_DEFAULTS = {
 
 export const INSPECT_ON = '1';
 
+export const BROWSER_DIR = 'browser';
+
 export const DATABASE_FILE = 'shinsa.sqlite';
 
 export const NEVER_INDEX_MARKER = '.metadata_never_index';
@@ -72,6 +74,7 @@ export interface ServerConfig extends ServerAddress {
   evidenceDir: string;
   attachmentsDir: string;
   transcriptsDir: string;
+  browserDir: string;
   pluginDir: string;
   webDir: string;
   allowedHosts: string[];

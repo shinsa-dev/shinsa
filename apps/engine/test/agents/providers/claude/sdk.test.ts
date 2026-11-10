@@ -43,6 +43,15 @@ describe('resolveClaudeLaunch', () => {
       expect(process.options.env.EUNOE_DIR).toBeUndefined();
       expect(process.options.env.PLAYWRIGHT_MCP_HEADLESS).toBe('true');
       expect(process.options.env.PLAYWRIGHT_MCP_DEVICE).toBe('Desktop Chrome HiDPI');
+      const shared = await Effect.runPromise(
+        resolveClaudeLaunch(
+          Effect.succeed({ ok: true, path: '/usr/local/bin/claude', version: '2.1.300' }),
+          'ws://127.0.0.1:7446/browser/cdp/key'
+        )
+      );
+      expect(shared.options.env.PLAYWRIGHT_MCP_CDP_ENDPOINT).toBe('ws://127.0.0.1:7446/browser/cdp/key');
+      expect(shared.options.env.PLAYWRIGHT_MCP_DEVICE).toBeUndefined();
+      expect(shared.options.env.PLAYWRIGHT_MCP_HEADLESS).toBe('true');
     } finally {
       restore();
     }

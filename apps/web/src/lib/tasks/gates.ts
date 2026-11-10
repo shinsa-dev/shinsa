@@ -57,6 +57,8 @@ const GATE_REPLY = {
   runOperationWithoutNotes: { decision: 'reply', done: 'Running the operation without notes.' },
   skipOperation: { decision: 'reject', done: 'Finished without running the operation.' },
   closeResult: { decision: 'approve', done: 'Closed. The task is done.' },
+  signedIn: { decision: 'approve', done: 'Done. The agent carries on signed in.' },
+  skipSignIn: { decision: 'reject', done: 'Skipped. The agent carries on.' },
 } as const satisfies Record<string, { decision: GateDecision; done: string }>;
 
 export type GateReply = keyof typeof GATE_REPLY;
