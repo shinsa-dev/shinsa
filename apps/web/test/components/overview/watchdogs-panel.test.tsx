@@ -105,6 +105,27 @@ describe('the watchdogs panel', () => {
     expect(screen.getByText('First check after 6 h, then up to every 6 h, for 48 h · maple')).toBeTruthy();
   });
 
+  it('shows a watchdog whose change left production as waiting, with why and its earlier checks', () => {
+    renderPanel([
+      watchdog({
+        status: 'awaiting_production',
+        awaitingSince: NOW + HOUR_MS,
+        startedAt: null,
+        endsAt: null,
+        checks: [
+          { at: NOW, healthy: true, summary: 'p95 is 210 ms.' },
+          { at: NOW + HOUR_MS, healthy: true, summary: 'Production was rolled back.' },
+        ],
+      }),
+    ]);
+    const row = rowOf('Checkout latency');
+    expect(within(row).getByRole('button', { name: 'Waiting for production' })).toBeTruthy();
+    expect(row.textContent).toContain('2 checks');
+    expect(row.textContent).toContain(
+      'Production was rolled back. Starts over once the change is live in production.'
+    );
+  });
+
   it('links the task a watchdog filed when it found an issue', async () => {
     renderPanel([watchdog({ status: 'tripped', forkTaskIds: ['fork'] })]);
     const row = rowOf('Checkout latency');

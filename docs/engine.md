@@ -1866,7 +1866,7 @@ stops when its window ends. The rules are core (`domain/watchdogs.ts`, `decide/w
   to the project's sources for the repository and starts its window then (`watchdog.started`).
 - **Checks back off.** The first check comes `firstCheckMinutes` after the window starts, and each gap after that
   doubles, up to `maxGapMinutes` (`resolveNextGapMinutes`: the first check's minutes times two to the number of checks
-  so far), so a change is watched closely right after it goes live and less often as it proves itself. What the agent
+  of the current window, `countWindowChecks`, so a window that starts again backs off from the start), so a change is watched closely right after it goes live and less often as it proves itself. What the agent
   leaves out comes from three settings (Settings → Agents → Watchdogs, `settings.change`): `watchdogHours` (72 by
   default, 1 to 720), `watchdogFirstCheckMinutes` (30, 1 to 720) and `watchdogMaxGapHours` (6, 1 to 24),
   read when the watchdog is armed (`resolveWatchdogDefaults`), so a change to them applies to later watchdogs.
@@ -1883,6 +1883,16 @@ stops when its window ends. The rules are core (`domain/watchdogs.ts`, `decide/w
   connected it) stops the watchdog (`watchdog.missed`). A check on such a watchdog that leaves out `live` is refused
   (`live_required`), unless it filed a report, which says the change is live; one that filed a report with `live:
   false` is refused (`live_filed`). An unreached read (`reached: false`) leaves it waiting.
+- **The status follows production, both ways.** Every watching check is told to make sure the change is live in
+  production first (with the watchdog's `production_check` when it has one). `report_read {live: false}` from a
+  watching check that filed nothing moves every watching watchdog of the task to `awaiting_production`
+  (`watchdog.not_live`, `leaveProduction`): a merge that never deployed, or a release that was rolled back. The window
+  ends (`startedAt` and `endsAt` cleared), `awaitingSince` is that moment, so the week of `productionWaitHours` counts
+  from it, and the production polls start over at 30 minutes. The check that found it is kept in `checks` with its
+  summary, which is what the page shows and what the waiting prompt points at when the watchdog has no
+  `production_check`. Once a later check reports `live: true`, `watchdog.live` gives each one a full new window, as
+  above; a watchdog can swap as often as production does. `live` left out on a watching check counts as live, and
+  `live: false` after a filed report is refused (`live_filed`) there too.
 - **A check is a turn of the task's session.** `WatchdogClock` fires `watchdog.fire {dueAt}` (command id
   `watchdog:<id>:<dueAt>`) for each watching watchdog at its `nextCheckAt`. Core ignores a fire for another slot. A
   slot due exactly as the window ends still checks, however late the fire arrives, and a last check deferred past the

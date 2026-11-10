@@ -207,7 +207,8 @@ src/
 │   ├── watchdogs.ts Watchdogs after a merge: arming them from the walkthrough (syncWatchdogs, after every command),
 │   │                firing a check as a read-only `watch` turn of the task's watch session, deferring it while the task
 │   │                works, ending a check (endWatchCheck: tripped by the reports it filed, missed when the source
-│   │                was out of reach, healthy otherwise; `live` while it waits for production), stopping them,
+│   │                was out of reach, healthy otherwise; `live` while it waits for production, and `live` false from a watching
+│   │                check sends the task's watching watchdogs back to waiting: leaveProduction), stopping them,
 │   │                connecting a source;
 │   │                a project's data sources (watch_source.write, watch_source.remove)
 │   ├── costs.ts     Metering runs (cost and the weekly usage they used) and the per-task usage and cost limits
